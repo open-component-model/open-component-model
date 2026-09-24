@@ -3,6 +3,7 @@ package integration_test
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"net"
 	"testing"
@@ -21,6 +22,7 @@ import (
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
+	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/s3/repository"
 	accessspec "ocm.software/open-component-model/bindings/go/s3/spec/access"
 	accessv2 "ocm.software/open-component-model/bindings/go/s3/spec/access/v2"
@@ -145,6 +147,73 @@ func Test_Integration_S3(t *testing.T) {
 		got, err := io.ReadAll(rc)
 		r.NoError(err)
 		r.Equal(v1Content, got, "pinned versionId must return the exact original object")
+	})
+
+	t.Run("ocmv1 access compatibility", func(t *testing.T) {
+		r := require.New(t)
+		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+		defer cancel()
+		const bucket, key = "ocmv1-compatibility", "path/to/blob.txt"
+		content := []byte("object referenced by an OCM v1 access record")
+		createBucket(t, ctx, setup, bucket)
+		enableVersioning(t, ctx, setup, bucket)
+		version := putObjectReturningVersion(t, ctx, setup, bucket, key, content)
+		r.NotEmpty(version)
+
+		for _, tt := range []struct {
+			name, typ, bucketField, keyField string
+		}{
+			{"explicit v1", "s3/v1", "bucket", "key"},
+			{"explicit v2", "s3/v2", "bucketName", "objectKey"},
+			{"unversioned legacy fields", "s3", "bucket", "key"},
+			{"unversioned modern fields", "s3", "bucketName", "objectKey"},
+		} {
+			t.Run(tt.name, func(t *testing.T) {
+				r := require.New(t)
+				// Endpoint and path style route the legacy wire format to the test store.
+				data, err := json.Marshal(map[string]any{
+					"type": tt.typ, tt.bucketField: bucket, tt.keyField: key,
+					"region": "us-east-1", "mediaType": "text/plain",
+					"endpoint": endpoint, "usePathStyle": true,
+				})
+				r.NoError(err)
+				for _, wire := range []runtime.Typed{&runtime.Raw{}, &runtime.Unstructured{}} {
+					r.NoError(json.Unmarshal(data, wire))
+					res := &descriptor.Resource{}
+					res.Access = wire
+					before := res.DeepCopy()
+
+					b, err := repo.DownloadResource(ctx, res, creds)
+					r.NoError(err)
+					reader, err := b.ReadCloser()
+					r.NoError(err)
+					got, err := io.ReadAll(reader)
+					r.NoError(reader.Close())
+					r.NoError(err)
+					r.Equal(content, got)
+
+					pinned, err := repo.ProcessResourceDigest(ctx, res, creds)
+					r.NoError(err)
+					r.Equal(before, res, "compatibility decoding must not modify the original access")
+					r.NotNil(pinned.Digest)
+					r.Equal(godigest.FromBytes(content).Encoded(), pinned.Digest.Value)
+					r.Equal("SHA-256", pinned.Digest.HashAlgorithm)
+					var normalized accessv2.S3
+					r.NoError(accessspec.Scheme.Convert(pinned.Access, &normalized))
+					r.Equal(bucket, normalized.BucketName)
+					r.Equal(key, normalized.ObjectKey)
+					r.Equal(version, normalized.Version)
+					encoded, err := json.Marshal(pinned.Access)
+					r.NoError(err)
+					var fields map[string]any
+					r.NoError(json.Unmarshal(encoded, &fields))
+					r.NotContains(fields, "bucket")
+					r.NotContains(fields, "key")
+					r.Equal(bucket, fields["bucketName"])
+					r.Equal(key, fields["objectKey"])
+				}
+			})
+		}
 	})
 
 	t.Run("missing object errors", func(t *testing.T) {

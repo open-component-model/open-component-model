@@ -5,6 +5,7 @@ import (
 
 	"cel.dev/cel-go/cel"
 	"cel.dev/cel-go/common/types"
+	"cel.dev/cel-go/ext"
 
 	"ocm.software/open-component-model/bindings/go/cel/jsonschema/decl"
 	"ocm.software/open-component-model/bindings/go/cel/jsonschema/provider"
@@ -62,6 +63,10 @@ func (envBuilder *Builder) RegisterEnvOption(envOptions ...cel.EnvOption) *Build
 func (envBuilder *Builder) CurrentEnv() (*cel.Env, *provider.DeclTypeProvider, error) {
 	baseEnv, err := cel.NewEnv(
 		cel.OptionalTypes(),
+		ext.Encoders(),
+		URL(),
+		ContentDigestAlgorithm(),
+		Hex(),
 	)
 	if err != nil {
 		return nil, nil, err
