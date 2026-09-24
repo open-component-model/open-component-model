@@ -418,6 +418,7 @@ Publish label/config schemas and examples with implementation. Do not advertise 
 | --- | --- | --- |
 | **Chosen: artifact coordinates + typed configs** | Coordinate producers, config compiler, output cleanup. | Small UI; survives offline transfer. Adds a public metadata contract. |
 | [Unified coordinates + typed configs](#alternative-unified-coordinates-with-source-normalization-and-target-rendering) | One shared coordinate contract; source normalizers, format inspectors/converters, and target renderers. | Avoids source-to-target naming mappings; requires shared semantics, capability checks, and explicit handling of non-portable names. |
+| [Hybrid: specialized coordinates through a shared hub](#alternative-hybrid-specialized-coordinates-through-a-shared-hub) | Keep native coordinate types; each technology maps to/from a shared semantic contract. | Preserves native validation and round-trip details while avoiding pairwise mappings; adds projection and consistency rules. |
 | Matchers + target templates | Rule matching and template compiler in transfer planning. | Flexible routing, but larger UI and cannot recover lost coordinates. |
 | Extend `LocalBlob` | New access fields, schemas, specification change. | Dedicated schema location, but expands generic transport access. |
 | Graph-only coordinates | Pass coordinates between nodes without persistence. | No persistent metadata, but fails disconnected/multi-hop transfers. |
@@ -606,3 +607,93 @@ Keep typed destination configs, current transformation execution, security check
 - A test-only new downloader using the shared contract works with an existing compatible byte-storage renderer without changing that renderer.
 
 These tests evaluate the architectural promise without requiring general cross-technology publishing in the first increment. If the common model cannot satisfy them without technology-family dispatch, revise the model or document the limitation before committing to a public schema.
+
+### Alternative: Hybrid Specialized Coordinates Through a Shared Hub
+
+**Status: alternative for discussion.** A single public coordinate type is not the only way to meet the epic's extensibility goal. Native coordinate types can remain useful at the boundaries, provided cross-technology naming passes through a shared semantic contract:
+
+```text
+specialized source coordinates
+              │ normalize
+              ▼
+      central coordinates
+              │ project using target policy and payload capabilities
+              ▼
+specialized target coordinates
+              │ validate and upload
+              ▼
+         target access
+```
+
+The architectural requirement is **one mapping to/from the hub per supported technology, rather than mappings between every source-target pair**. Existing uploaders could continue consuming their native coordinate types. A target projector understands only the central contract, its own native type, target policy, and payload capabilities; it must not inspect foreign coordinate families. Native coordinate types need not be eliminated merely to achieve this separation.
+
+#### Hybrid Adapter Sketch
+
+These signatures illustrate the boundary; `CentralCoordinates` represents the shared semantics discussed in the unified alternative, not an unstructured container of native coordinate payloads. `PayloadFacts` represents validated format and integrity information, separate from naming.
+
+```go
+type CoordinateAdapter[T any] interface {
+    Normalize(native T, facts PayloadFacts) (CentralCoordinates, error)
+    Project(central CentralCoordinates, facts PayloadFacts, policy NamingPolicy) (T, error)
+}
+
+// Illustrative cross-technology planning, not implemented APIs.
+central, err := httpAdapter.Normalize(httpCoordinates, payloadFacts)
+if err != nil {
+    return err
+}
+
+s3Coordinates, err := s3Adapter.Project(central, payloadFacts, namingPolicy)
+if err != nil {
+    return err // Missing naming data or an unrepresentable target name.
+}
+
+// The existing uploader still accepts its native coordinate type.
+return s3Uploader.Upload(ctx, s3Coordinates, payload)
+```
+
+These functions are partial mappings, not guaranteed mathematical inverses. A target can reject incomplete or incompatible information. An HTTP path cannot manufacture a Helm chart version, and an S3 object version ID cannot become a portable release version. Payload inspection can enrich the hub with verified chart identity; format conversion remains a separate operation before native publication.
+
+For same-technology transfers, validated native coordinates may be used directly to avoid losing details through normalization. For cross-technology transfers, the planner normalizes to the hub and projects to the selected target. This fast path must obey the same security, policy, payload verification, and collision rules; it must not bypass an explicit naming override. The hub must still be sufficiently complete to support the intended cross-technology cases without consulting the source's native metadata inside a target projector.
+
+#### Persistence and Authority Choices
+
+Two persistence strategies are possible and should be chosen explicitly:
+
+| Strategy                                                    | Benefit                                                                                                                | Cost                                                                                                                                                                                                               |
+| ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Persist native coordinates; derive the hub during planning. | Minimal change to the proposed typed label and no duplicated shared fields.                                            | Disconnected execution needs a normalizer for the stored family/version; opaque copying alone cannot enable cross-technology upload. Retain original compatible naming metadata through intermediate storage hops. |
+| Persist the shared hub plus optional native details.        | Compatible targets can plan without the original source adapter; native details preserve exact round-trip information. | Requires a new envelope or explicitly versioned schema, plus consistency and invalidation rules for duplicated information.                                                                                        |
+
+With a persisted hub, shared fields are authoritative for cross-technology projection. Native details supply only information outside the common model and validated same-technology fidelity; conflicting overlapping values must fail rather than silently selecting whichever representation is convenient. A configured naming override updates or invalidates affected native fields on the copied output resource. Payload metadata remains authoritative for format-defined identity such as a chart name/version.
+
+With an ephemeral hub, normalization must deterministically select the relevant valid native metadata. Array order is not precedence. A resource carrying several native families must either produce consistent shared semantics or require explicit policy to resolve different placement alternatives. Publishing to S3 must not discard retained Helm identity just because the current access has changed to S3.
+
+Under either strategy, distinguish an intermediate physical destination from persistent logical naming. Do not normalize a newly prefixed target access back into the retained logical name and accumulate prefixes on every hop. Unknown native metadata may survive opaque copies, but it cannot silently override known hub fields or authorize unsupported publication. Content conversion revalidates both the hub and retained native details.
+
+#### Hybrid Pros and Cons
+
+**Pros:**
+
+- Retains specialized validation and native naming fidelity where those are valuable.
+- Allows existing native uploaders to remain focused on their technology; target projectors provide the bridge rather than changing every uploader for each new source.
+- Supports an incremental implementation: same-technology behavior first, then hub adapters for supported cross-technology cases.
+- Avoids forcing every technology-specific round-trip detail into the central schema.
+
+**Cons:**
+
+- Adds an abstraction layer and potentially two representations of the same information.
+- Still requires a well-defined shared semantic model; wrapping the native list in a central object does not solve the mapping problem.
+- Projection can be lossy or impossible. Exact round trips need retained native information, explicit policy, or rejection.
+- Persistence, conflict resolution, and conversion invalidation become more complex, especially when several native families coexist.
+- A new semantic concept can still require evolving the hub. The guarantee applies to new adapters expressing already-supported concepts, not all conceivable future package ecosystems.
+
+#### Choosing Between the Alternatives
+
+| Priority                                                                                                                                   | Better fit                                        |
+| ------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------- |
+| Same-technology delivery with independently versioned native contracts; cross-technology normalization deliberately deferred.              | The main proposal's technology-specific families. |
+| One persistent portable naming contract and targets that consume it directly.                                                              | Unified coordinates.                              |
+| Native coordinate fidelity and existing typed uploaders, combined with cross-technology extensibility through a mandatory common boundary. | Hybrid coordinates.                               |
+
+The unified and hybrid alternatives share the epic's hub-and-spoke goal. The decision depends on whether specialized coordinate contracts are valuable public boundary types or unnecessary duplication. A useful prototype would compare both approaches for HTTP → S3 and Helm → S3 → Helm, including opaque keys, conflicting fields, disconnected execution, and prefix handling. In either design, adding a source that expresses existing hub semantics must not require changing existing compatible target adapters or uploaders.
