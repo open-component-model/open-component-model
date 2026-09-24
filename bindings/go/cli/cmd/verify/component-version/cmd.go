@@ -543,10 +543,19 @@ func withVerifiedTime(creds runtime.Typed, verifiedTime time.Time) runtime.Typed
 }
 
 // credentialProperties flattens a resolved credential into a string property map
-// so its material survives being re-wrapped as DirectCredentials. DirectCredentials
-// properties are copied directly; any other typed credential is JSON-marshalled and
-// its string-valued fields are retained (the "type" discriminator is dropped, since
-// the result is always re-typed as DirectCredentials). It never returns nil.
+// so its material survives being re-wrapped as DirectCredentials. It never returns
+// nil. Three shapes are handled:
+//
+//   - *DirectCredentials: its Properties are copied directly.
+//   - any other typed credential (including plugin-returned *runtime.Raw): the
+//     value is JSON-marshalled and every string-valued top-level field is kept
+//     (the "type" discriminator is dropped, since the result is re-typed as
+//     DirectCredentials). A top-level object field whose values are all strings —
+//     most importantly a nested "properties" object as produced by a Raw carrying
+//     DirectCredentials — is flattened so the public key or trust root is not lost.
+//
+// Because the retained keys mirror the credential's JSON field names, the RSA
+// handler's credential conversion reconstructs the same typed values.
 func credentialProperties(creds runtime.Typed) map[string]string {
 	properties := map[string]string{}
 	if creds == nil {
@@ -573,6 +582,16 @@ func credentialProperties(creds runtime.Typed) map[string]string {
 		var s string
 		if err := json.Unmarshal(v, &s); err == nil {
 			properties[k] = s
+			continue
+		}
+		// A nested string→string object (e.g. the "properties" of a Raw that
+		// wraps DirectCredentials) carries the actual credential material; flatten
+		// its entries so they are not silently dropped.
+		var nested map[string]string
+		if err := json.Unmarshal(v, &nested); err == nil {
+			for nk, nv := range nested {
+				properties[nk] = nv
+			}
 		}
 	}
 	return properties

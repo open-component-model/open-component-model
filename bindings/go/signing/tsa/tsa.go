@@ -37,13 +37,22 @@ type HTTPClient interface {
 	Do(*http.Request) (*http.Response, error)
 }
 
+// maxTSARedirects mirrors net/http's default redirect limit. A custom
+// CheckRedirect replaces that default, so the policy must re-impose the cap.
+const maxTSARedirects = 10
+
 // RejectInsecureRedirect is an http.Client.CheckRedirect policy for TSA
 // requests. The initial request URL is left unrestricted so local development
 // TSA servers reachable only over plain HTTP keep working, but any redirect to a
 // non-HTTPS target is refused. This blocks an HTTPS-to-HTTP downgrade in which
 // net/http would forward the Authorization header (and other sensitive headers)
-// derived from URL userinfo over an unencrypted connection.
-func RejectInsecureRedirect(req *http.Request, _ []*http.Request) error {
+// derived from URL userinfo over an unencrypted connection. Setting a custom
+// CheckRedirect disables net/http's built-in 10-redirect limit, so this policy
+// re-imposes it to avoid an unbounded redirect loop against a hostile server.
+func RejectInsecureRedirect(req *http.Request, via []*http.Request) error {
+	if len(via) >= maxTSARedirects {
+		return fmt.Errorf("tsa: stopped after %d redirects", len(via))
+	}
 	if req.URL.Scheme != "https" {
 		return fmt.Errorf("tsa: refusing insecure redirect to %s", RedactURL(req.URL.String()))
 	}
@@ -212,10 +221,23 @@ func Verify(raw []byte, hash crypto.Hash, digest []byte, roots *x509.CertPool) (
 	// requiring the timestamping EKU across the chain. GenTime (not the optional
 	// CMS signing-time attribute or the current time) is the authoritative
 	// timestamp creation time per RFC 3161.
+	//
+	// VerifyWithOpts does not treat the token's embedded certificates as
+	// intermediates, so a root→intermediate→TSA chain would fail even with the
+	// correct root trusted. Feed every embedded certificate except the signer
+	// leaf as an intermediate to complete such chains.
+	intermediates := x509.NewCertPool()
+	for _, cert := range p7.Certificates {
+		if cert.Equal(signer) {
+			continue
+		}
+		intermediates.AddCert(cert)
+	}
 	opts := x509.VerifyOptions{
-		Roots:       roots,
-		CurrentTime: info.GenTime,
-		KeyUsages:   []x509.ExtKeyUsage{x509.ExtKeyUsageTimeStamping},
+		Roots:         roots,
+		Intermediates: intermediates,
+		CurrentTime:   info.GenTime,
+		KeyUsages:     []x509.ExtKeyUsage{x509.ExtKeyUsageTimeStamping},
 	}
 	if err := p7.VerifyWithOpts(opts); err != nil {
 		return time.Time{}, false, fmt.Errorf("tsa: verifying PKCS#7 signer certificate chain: %w", err)

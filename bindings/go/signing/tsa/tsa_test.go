@@ -1131,4 +1131,122 @@ func TestRejectInsecureRedirect(t *testing.T) {
 	err = RejectInsecureRedirect(httpReq, nil)
 	r.Error(err)
 	assert.Contains(t, err.Error(), "insecure redirect")
+
+	// A custom CheckRedirect disables net/http's default 10-redirect cap, so the
+	// policy must stop once the limit is reached even for HTTPS targets.
+	via := make([]*http.Request, maxTSARedirects)
+	err = RejectInsecureRedirect(httpsReq, via)
+	r.Error(err)
+	assert.Contains(t, err.Error(), "stopped after")
+}
+
+// issueTimestampingCert issues a certificate signed by parent (self-signed when
+// parent/parentKey are nil) carrying the critical id-kp-timeStamping EKU.
+func issueTimestampingCert(t *testing.T, cn string, isCA bool, parent *x509.Certificate, parentKey *rsa.PrivateKey) (*rsa.PrivateKey, *x509.Certificate) {
+	t.Helper()
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+
+	serial, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
+	require.NoError(t, err)
+
+	ekuVal, err := asn1.Marshal([]asn1.ObjectIdentifier{{1, 3, 6, 1, 5, 5, 7, 3, 8}})
+	require.NoError(t, err)
+
+	tmpl := &x509.Certificate{
+		SerialNumber:          serial,
+		Subject:               pkix.Name{CommonName: cn},
+		NotBefore:             time.Now().Add(-time.Hour),
+		NotAfter:              time.Now().Add(7 * 24 * time.Hour),
+		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
+		BasicConstraintsValid: true,
+		IsCA:                  isCA,
+		ExtraExtensions: []pkix.Extension{{
+			Id:       asn1.ObjectIdentifier{2, 5, 29, 37},
+			Critical: true,
+			Value:    ekuVal,
+		}},
+	}
+	signerCert, signerKey := tmpl, key
+	if parent != nil {
+		signerCert, signerKey = parent, parentKey
+	}
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, signerCert, &key.PublicKey, signerKey)
+	require.NoError(t, err)
+	cert, err := x509.ParseCertificate(der)
+	require.NoError(t, err)
+	return key, cert
+}
+
+// newChainMockTSAHandler serves timestamp tokens whose SignedData embeds the
+// signer leaf together with the supplied intermediate certificates.
+func newChainMockTSAHandler(t *testing.T, leaf *x509.Certificate, leafKey *rsa.PrivateKey, chain []*x509.Certificate) http.Handler {
+	t.Helper()
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		require.NoError(t, err)
+		var req Request
+		_, err = asn1.Unmarshal(body, &req)
+		require.NoError(t, err)
+
+		tstInfo := Info{
+			Version:        1,
+			Policy:         asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 0},
+			MessageImprint: req.MessageImprint,
+			SerialNumber:   big.NewInt(time.Now().UnixNano()),
+			GenTime:        time.Now().UTC().Truncate(time.Second),
+			Nonce:          req.Nonce,
+		}
+		tstInfoDER, err := asn1.Marshal(tstInfo)
+		require.NoError(t, err)
+
+		sd, err := pkcs7.NewSignedData(tstInfoDER)
+		require.NoError(t, err)
+		sd.SetContentType(asn1.ObjectIdentifier{1, 2, 840, 113549, 1, 9, 16, 1, 4})
+		require.NoError(t, sd.AddSigner(leaf, leafKey, pkcs7.SignerInfoConfig{}))
+		for _, c := range chain {
+			sd.AddCertificate(c)
+		}
+		p7DER, err := sd.Finish()
+		require.NoError(t, err)
+
+		type mockResp struct {
+			Status         PKIStatusInfo
+			TimeStampToken asn1.RawValue `asn1:"optional"`
+		}
+		resp := mockResp{Status: PKIStatusInfo{Status: StatusGranted}}
+		resp.TimeStampToken.FullBytes = p7DER
+		resp.TimeStampToken.Class = asn1.ClassUniversal
+		resp.TimeStampToken.Tag = asn1.TagSequence
+		resp.TimeStampToken.IsCompound = true
+		respDER, err := asn1.Marshal(resp)
+		require.NoError(t, err)
+		w.Header().Set("Content-Type", "application/timestamp-reply")
+		_, _ = w.Write(respDER)
+	})
+}
+
+// TestVerify_RootIntermediateLeafChain proves the token's embedded intermediate
+// is used to complete a root→intermediate→TSA chain when only the root is
+// trusted; without loading intermediates this would fail.
+func TestVerify_RootIntermediateLeafChain(t *testing.T) {
+	r := require.New(t)
+
+	rootKey, rootCert := issueTimestampingCert(t, "Test Root", true, nil, nil)
+	interKey, interCert := issueTimestampingCert(t, "Test Intermediate", true, rootCert, rootKey)
+	leafKey, leafCert := issueTimestampingCert(t, "Test TSA Leaf", false, interCert, interKey)
+
+	// The token embeds the intermediate (and leaf); only the root is trusted.
+	server := httptest.NewServer(newChainMockTSAHandler(t, leafCert, leafKey, []*x509.Certificate{interCert}))
+	t.Cleanup(server.Close)
+
+	digest := sha256.Sum256([]byte("chain test"))
+	token, err := RequestTimestamp(t.Context(), server.Client(), server.URL, crypto.SHA256, digest[:])
+	r.NoError(err)
+
+	roots := x509.NewCertPool()
+	roots.AddCert(rootCert)
+	_, trusted, err := Verify(token.Raw, crypto.SHA256, digest[:], roots)
+	r.NoError(err)
+	r.True(trusted)
 }
