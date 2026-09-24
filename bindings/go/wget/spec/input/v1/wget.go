@@ -13,8 +13,8 @@ const (
 )
 
 // Wget describes an input sourced by downloading a resource from an HTTP/S URL
-// during component construction. The downloaded content is stored as a local
-// blob in the component version.
+// during component construction. The downloaded content is stored as a local blob
+// in the component version.
 //
 // Verification against a source-side checksum is a deployment concern, not a
 // descriptor concern: configure it with `checksum.http.config.ocm.software/v1alpha1`
@@ -30,22 +30,22 @@ type Wget struct {
 	// +ocm:jsonschema-gen:enum:deprecated=wget,Wget
 	Type runtime.Type `json:"type"`
 
-	// URL is the HTTP endpoint to download from.
+	// URL is the HTTP endpoint to download the resource from.
 	URL string `json:"url"`
 
-	// MediaType overrides the resulting blob's media type.
+	// MediaType is the media type of the resource with optional format qualifiers.
 	MediaType string `json:"mediaType,omitempty"`
 
-	// Header carries additional HTTP request headers.
+	// Header contains HTTP headers to be sent with the request.
 	Header map[string][]string `json:"header,omitempty"`
 
-	// Verb is the HTTP method; defaults to GET.
+	// Verb is the HTTP method to use (GET, POST, etc.). Defaults to GET.
 	Verb string `json:"verb,omitempty"`
 
-	// Body is the optional request body.
+	// Body is the HTTP body to send with the request.
 	Body []byte `json:"body,omitempty"`
 
-	// NoRedirect disables following redirects.
+	// NoRedirect disables following HTTP redirects when set to true.
 	NoRedirect bool `json:"noRedirect,omitempty"`
 }
 
@@ -53,7 +53,7 @@ func (t *Wget) String() string {
 	return t.URL
 }
 
-// Validate rejects an empty or non-http(s) URL.
+// Validate verifies that the URL of the Wget input is set and uses a supported scheme.
 func (t *Wget) Validate() error {
 	if t.URL == "" {
 		return errors.New("url is required")
