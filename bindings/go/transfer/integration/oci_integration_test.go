@@ -16,6 +16,9 @@ import (
 	"oras.land/oras-go/v2/registry/remote/auth"
 	"oras.land/oras-go/v2/registry/remote/retry"
 
+	"ocm.software/open-component-model/bindings/go/blob/inmemory"
+	"ocm.software/open-component-model/bindings/go/descriptor/normalisation"
+	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/oci"
@@ -23,8 +26,10 @@ import (
 	ociresource "ocm.software/open-component-model/bindings/go/oci/repository/resource"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
 	ociaccessv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
+	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	ctfrepospec "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ocirepospec "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
+	ocitar "ocm.software/open-component-model/bindings/go/oci/tar"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/transfer"
 	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
@@ -581,4 +586,114 @@ func Test_Integration_TransferDockerManifestLocalBlob_CTFToOCI(t *testing.T) {
 	r.NoError(json.Unmarshal(rawAccess, &typedOCIAccess))
 	r.Contains(typedOCIAccess.ImageReference, targetAddr,
 		"OCIImage access should reference the target registry after transfer")
+}
+
+func Test_Integration_Transfer_PreservesNormalizedDigest(t *testing.T) {
+	r := require.New(t)
+	ctx := t.Context()
+
+	// A real OCI layout exercises unpacking/repacking rather than copying an opaque blob.
+	var archive bytes.Buffer
+	writer, err := ocitar.NewOCILayoutWriterWithTempFile(&archive, t.TempDir())
+	r.NoError(err)
+	root, err := oras.PackManifest(ctx, writer, oras.PackManifestVersion1_1, "application/vnd.ocm.test", oras.PackManifestOptions{
+		ManifestAnnotations: map[string]string{"org.opencontainers.image.created": "2025-07-28T11:40:51Z"},
+	})
+	r.NoError(err)
+	r.NoError(writer.Close())
+
+	resourceDigest := descriptor.Digest{
+		HashAlgorithm:          "SHA-256",
+		NormalisationAlgorithm: "ociArtifactDigest/v1",
+		Value:                  root.Digest.Encoded(),
+	}
+	desc := &descriptor.Descriptor{
+		Meta: descriptor.Meta{Version: "v2"},
+		Component: descriptor.Component{
+			ComponentMeta: descriptor.ComponentMeta{
+				ObjectMeta:   descriptor.ObjectMeta{Name: "ocm.software/issue3674", Version: "1.0.0"},
+				CreationTime: "2025-07-28T11:40:51Z",
+			},
+			Provider: descriptor.Provider{Name: "test-provider"},
+			Resources: []descriptor.Resource{{
+				ElementMeta: descriptor.ElementMeta{
+					ObjectMeta: descriptor.ObjectMeta{Name: "artifact", Version: "1.0.0"},
+				},
+				Type:     "ociImage",
+				Relation: descriptor.LocalRelation,
+				Digest:   resourceDigest.DeepCopy(),
+				Access: &descriptorv2.LocalBlob{
+					Type:      runtime.NewVersionedType(descriptorv2.LocalBlobAccessType, descriptorv2.LocalBlobAccessTypeVersion),
+					MediaType: layout.MediaTypeOCIImageLayoutTarV1,
+				},
+			}},
+		},
+	}
+	before, err := normalisation.Normalise(desc, v4alpha1.Algorithm)
+	r.NoError(err)
+	wantDigest := digestOf(before)
+	creationTime := desc.Component.CreationTime
+
+	sourcePath, targetPath := t.TempDir(), t.TempDir()
+	sourceRepo := createCTFRepository(t, sourcePath)
+	artifact := inmemory.New(bytes.NewReader(archive.Bytes()),
+		inmemory.WithMediaType(layout.MediaTypeOCIImageLayoutTarV1))
+	seed := desc.Component.Resources[0].DeepCopy()
+	seed.Digest = nil
+	resource, err := sourceRepo.AddLocalResource(ctx, desc.Component.Name, desc.Component.Version, seed, artifact)
+	r.NoError(err)
+	// Seed v1 metadata independently of digest defaults used when packing a new resource.
+	resource.Digest = resourceDigest.DeepCopy()
+	desc.Component.Resources[0] = *resource
+	r.NoError(sourceRepo.AddComponentVersion(ctx, desc))
+
+	source, err := sourceRepo.GetComponentVersion(ctx, desc.Component.Name, desc.Component.Version)
+	r.NoError(err)
+	sourceNormalized, err := normalisation.Normalise(source, v4alpha1.Algorithm)
+	r.NoError(err)
+	r.Equal(wantDigest, digestOf(sourceNormalized))
+
+	sourceSpec := &ctfrepospec.Repository{
+		Type:     runtime.NewVersionedType(ctfrepospec.Type, ctfrepospec.Version),
+		FilePath: sourcePath,
+	}
+	targetSpec := &ctfrepospec.Repository{
+		Type:       runtime.NewVersionedType(ctfrepospec.Type, ctfrepospec.Version),
+		FilePath:   targetPath,
+		AccessMode: "readwrite|create",
+	}
+	definition, err := transfer.BuildGraphDefinition(ctx, nil, transfer.Mapping{
+		Components: []transfer.ComponentID{{Component: desc.Component.Name, Version: desc.Component.Version}},
+		Target:     targetSpec,
+		Resolver:   transfer.NewRepositoryResolver(sourceRepo, sourceSpec),
+	})
+	r.NoError(err)
+	builder := transfer.NewDefaultBuilder(
+		provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir())),
+		ociresource.NewResourceRepository(nil), newCredResolver(t),
+	)
+	graph, err := builder.BuildAndCheck(definition)
+	r.NoError(err)
+	r.NoError(graph.Process(ctx))
+
+	targetRepo := createCTFRepository(t, targetPath)
+	got, err := targetRepo.GetComponentVersion(ctx, desc.Component.Name, desc.Component.Version)
+	r.NoError(err)
+	after, err := normalisation.Normalise(got, v4alpha1.Algorithm)
+	r.NoError(err)
+	r.Equal(wantDigest, digestOf(after), "issue3674: transfer must not change the normalized component digest")
+	r.Equal(creationTime, got.Component.CreationTime)
+	r.Len(got.Component.Resources, 1)
+	r.Equal(&resourceDigest, got.Component.Resources[0].Digest)
+
+	// Ensure the graph copied the artifact, not just its descriptor and digest metadata.
+	blob, _, err := targetRepo.GetLocalResource(ctx, got.Component.Name, got.Component.Version, got.Component.Resources[0].ToIdentity())
+	r.NoError(err)
+	store := memory.New()
+	copied, err := ocitar.CopyOCILayoutWithIndex(ctx, store, blob, ocitar.CopyOCILayoutWithIndexOptions{})
+	r.NoError(err)
+	r.Equal(root.Digest, copied.Digest)
+	exists, err := store.Exists(ctx, root)
+	r.NoError(err)
+	r.True(exists)
 }

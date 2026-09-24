@@ -2,6 +2,7 @@ package blob
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
@@ -9,7 +10,9 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory/cache"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	internaldigest "ocm.software/open-component-model/bindings/go/oci/internal/digest"
+	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 )
 
 // ArtifactBlob represents a blob of data that is associated with an OCM Source or Resource .
@@ -21,6 +24,11 @@ type ArtifactBlob struct {
 	blob.ReadOnlyBlob
 	descriptor.Artifact
 	mediaType string
+	// Packing changes access metadata, not the representation of these bytes.
+	ociLayout bool
+
+	digestMu   sync.RWMutex
+	byteDigest string
 }
 
 // NewArtifactBlobWithMediaType creates a new ArtifactBlob instance with the given artifact,
@@ -32,14 +40,18 @@ func NewArtifactBlobWithMediaType(artifact descriptor.Artifact, b blob.ReadOnlyB
 		}
 	}
 
-	// lets do additional defaulting and verification of the resulting blob
-	// if we have a resource, because a resource contains more data than a generic artifact
-	if resource, ok := artifact.(*descriptor.Resource); ok {
+	result := &ArtifactBlob{
+		ReadOnlyBlob: b,
+		Artifact:     artifact,
+		mediaType:    mediaType,
+		ociLayout:    isOCILayout(artifact, b, mediaType),
+	}
+
+	// Normalized OCI manifest digests do not describe the bytes of a layout archive.
+	if resource, ok := artifact.(*descriptor.Resource); ok && !result.ociLayout {
 		if digAware, ok := b.(blob.DigestAware); ok {
 			if blobDig, ok := digAware.Digest(); ok {
-				if resource.Digest != nil {
-					// if we have a digest in the resource and in the blob, we need to verify that
-					// they don't mismatch with each other
+				if isByteDigest(resource.Digest) {
 					dig, err := digestSpecToDigest(resource.Digest)
 					if err != nil {
 						return nil, fmt.Errorf("failed to parse digest spec from resource: %w", err)
@@ -47,18 +59,15 @@ func NewArtifactBlobWithMediaType(artifact descriptor.Artifact, b blob.ReadOnlyB
 					if dig != digest.Digest(blobDig) {
 						return nil, fmt.Errorf("resource blob digest mismatch: resource %s vs blob %s", resource.Digest.Value, blobDig)
 					}
-				} else {
+				} else if resource.Digest == nil {
 					resource.Digest = digestSpecFromDigest(digest.Digest(blobDig))
+					resource.Digest.NormalisationAlgorithm = internaldigest.GenericBlobDigestV1
 				}
 			}
 		}
 	}
 
-	return &ArtifactBlob{
-		ReadOnlyBlob: b,
-		Artifact:     artifact,
-		mediaType:    mediaType,
-	}, nil
+	return result, nil
 }
 
 func NewArtifactBlob(artifact descriptor.Artifact, blob blob.ReadOnlyBlob) (*ArtifactBlob, error) {
@@ -72,61 +81,96 @@ func (r *ArtifactBlob) MediaType() (string, bool) {
 	return r.mediaType, r.mediaType != ""
 }
 
-// Digest returns the digest of the blob's content and a boolean indicating whether
-// the digest is available. The digest is calculated from the resource's digest value
-// and hash algorithm. If the resource's digest is nil or the hash algorithm is not
-// supported, it returns an empty string and false. The method converts the OCM hash
-// algorithm to the corresponding OCI digest algorithm using HashAlgorithmConversionTable.
+// Digest returns a checksum of the blob's bytes, not its normalized resource digest.
 func (r *ArtifactBlob) Digest() (string, bool) {
-	switch typed := r.Artifact.(type) {
-	case *descriptor.Resource:
-		if typed.Digest == nil {
-			if digAware, ok := r.ReadOnlyBlob.(blob.DigestAware); ok {
-				return digAware.Digest()
-			}
-			return "", false
-		}
-		dig, err := digestSpecToDigest(typed.Digest)
-		if err != nil {
-			return "", false
-		}
-		return dig.String(), true
-	case *descriptor.Source:
-		if digAware, ok := r.ReadOnlyBlob.(blob.DigestAware); ok {
-			return digAware.Digest()
+	r.digestMu.RLock()
+	dig := r.byteDigest
+	r.digestMu.RUnlock()
+	if dig != "" {
+		return dig, true
+	}
+	if expected, known := r.resourceByteDigest(); known {
+		return expected, true
+	}
+	if digAware, ok := r.ReadOnlyBlob.(blob.DigestAware); ok {
+		if dig, known := digAware.Digest(); known && dig != "" {
+			return dig, true
 		}
 	}
 	return "", false
 }
 
-// HasPrecalculatedDigest indicates whether the blob has a pre-calculated digest.
-// This is always true for ArtifactBlob as it uses the digest from the associated resource.
-func (r *ArtifactBlob) HasPrecalculatedDigest() bool {
-	switch typed := r.Artifact.(type) {
-	case *descriptor.Resource:
-		return typed.Digest != nil && typed.Digest.Value != ""
-	default:
-		return false
+func (r *ArtifactBlob) resourceByteDigest() (string, bool) {
+	if resource, ok := r.Artifact.(*descriptor.Resource); ok && !r.ociLayout && isByteDigest(resource.Digest) {
+		dig, err := digestSpecToDigest(resource.Digest)
+		if err == nil {
+			return dig.String(), true
+		}
 	}
+	return "", false
 }
 
-// SetPrecalculatedDigest sets the pre-calculated digest value for the resource.
-// This method allows updating the digest value when it's known beforehand.
-// Note that this method only updates the digest value and assumes the normalisation algorithm
-// is already set correctly in the resource.
+func isByteDigest(dig *descriptor.Digest) bool {
+	return dig != nil && dig.Value != "" &&
+		(dig.NormalisationAlgorithm == "" || dig.NormalisationAlgorithm == internaldigest.GenericBlobDigestV1)
+}
+
+func isOCILayout(artifact descriptor.Artifact, b blob.ReadOnlyBlob, mediaType string) bool {
+	isLayout := func(mediaType string) bool {
+		return mediaType == layout.MediaTypeOCIImageLayoutTarV1 || mediaType == layout.MediaTypeOCIImageLayoutTarGzipV1
+	}
+	if isLayout(mediaType) {
+		return true
+	}
+	if wrapped, ok := b.(*ArtifactBlob); ok && wrapped.ociLayout {
+		return true
+	}
+	if aware, ok := b.(blob.MediaTypeAware); ok {
+		if mediaType, _ := aware.MediaType(); isLayout(mediaType) {
+			return true
+		}
+	}
+	if resource, ok := artifact.(*descriptor.Resource); ok {
+		switch access := resource.Access.(type) {
+		case *descriptor.LocalBlob:
+			return isLayout(access.MediaType)
+		case *v2.LocalBlob:
+			return isLayout(access.MediaType)
+		}
+		var access v2.LocalBlob
+		if err := v2.Scheme.Convert(resource.Access, &access); err == nil {
+			return isLayout(access.MediaType)
+		}
+	}
+	return false
+}
+
+// HasPrecalculatedDigest reports whether a byte checksum is known without reading the blob.
+func (r *ArtifactBlob) HasPrecalculatedDigest() bool {
+	r.digestMu.RLock()
+	known := r.byteDigest != ""
+	r.digestMu.RUnlock()
+	if known {
+		return true
+	}
+	if precalculated, ok := r.ReadOnlyBlob.(blob.DigestPrecalculatable); ok && precalculated.HasPrecalculatedDigest() {
+		return true
+	}
+	_, ok := r.resourceByteDigest()
+	return ok
+}
+
+// SetPrecalculatedDigest stores a byte checksum without modifying signed resource metadata.
+// It panics if dig is neither empty nor a valid digest.
 func (r *ArtifactBlob) SetPrecalculatedDigest(dig string) {
-	resource, ok := r.Artifact.(*descriptor.Resource)
-	if !ok {
-		return
+	if dig != "" {
+		if _, err := digest.Parse(dig); err != nil {
+			panic(err)
+		}
 	}
-	if resource.Digest == nil {
-		resource.Digest = &descriptor.Digest{}
-	}
-	d, err := digestSpec(dig)
-	if err != nil {
-		panic(err)
-	}
-	resource.Digest = d
+	r.digestMu.Lock()
+	r.byteDigest = dig
+	r.digestMu.Unlock()
 }
 
 func digestSpec(dig string) (*descriptor.Digest, error) {
@@ -190,8 +234,26 @@ func (r *ArtifactBlob) Buffer() (result *ArtifactBlob, err error) {
 		return nil, fmt.Errorf("failed to create in-memory eagerly cached blob from ReadOnlyBlob: %w", err)
 	}
 
-	// Reuse existing Artifact, but replace the ReadOnlyBlob with the in-memory buffered one.
-	return NewArtifactBlob(r.Artifact, inMemoryBlob)
+	// A separately supplied byte checksum must not override the expected checksum
+	// of an ordinary resource. Normalized artifact digests are not byte checksums.
+	if expected, known := r.resourceByteDigest(); known {
+		actual, _ := inMemoryBlob.Digest()
+		algorithm := digest.Digest(expected).Algorithm()
+		if digest.Digest(actual).Algorithm() != algorithm {
+			actual = algorithm.FromBytes(inMemoryBlob.Data()).String()
+		}
+		if actual != expected {
+			return nil, fmt.Errorf("resource blob digest mismatch: expected %s, got %s", expected, actual)
+		}
+	}
+
+	// Do not re-default or re-interpret shared resource metadata from the cache.
+	return &ArtifactBlob{
+		ReadOnlyBlob: inMemoryBlob,
+		Artifact:     r.Artifact,
+		mediaType:    r.mediaType,
+		ociLayout:    r.ociLayout,
+	}, nil
 }
 
 // Interface implementations

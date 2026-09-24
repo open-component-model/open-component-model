@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"testing"
@@ -755,6 +756,111 @@ func TestResourceLocalBlobOCISingleLayerArtifact(t *testing.T) {
 			layerData, err := io.ReadAll(data)
 			require.NoError(t, err)
 			assert.Equal(t, tt.blob.content, layerData)
+		})
+	}
+}
+
+func TestPackingPreservesResourceDigest(t *testing.T) {
+	for _, storageForm := range []string{"layer", "manifest", "wrapper index"} {
+		t.Run(storageForm, func(t *testing.T) {
+			r := require.New(t)
+			ctx := t.Context()
+			data := []byte("test content")
+			mediaType := "application/vnd.test"
+			root := ociImageSpecV1.Descriptor{
+				MediaType: mediaType,
+				Digest:    digest.FromBytes(data),
+				Size:      int64(len(data)),
+			}
+			resourceDigest := root.Digest
+			if storageForm != "layer" {
+				var buf bytes.Buffer
+				writer, err := tar.NewOCILayoutWriterWithTempFile(&buf, t.TempDir())
+				r.NoError(err)
+				root, err = oras.PackManifest(ctx, writer, oras.PackManifestVersion1_1, "application/custom", oras.PackManifestOptions{})
+				r.NoError(err)
+				resourceDigest = root.Digest
+				if storageForm == "wrapper index" {
+					index := ociImageSpecV1.Index{
+						MediaType: ociImageSpecV1.MediaTypeImageIndex,
+						Manifests: []ociImageSpecV1.Descriptor{root},
+					}
+					index.SchemaVersion = 2
+					indexData, err := json.Marshal(index)
+					r.NoError(err)
+					root = content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageIndex, indexData)
+					r.NoError(writer.Push(ctx, root, bytes.NewReader(indexData)))
+					r.NotEqual(resourceDigest, root.Digest)
+				}
+				r.NoError(writer.Close())
+				data = buf.Bytes()
+				mediaType = layout.MediaTypeOCIImageLayoutTarV1
+			}
+
+			for _, tc := range []struct {
+				name          string
+				normalization string
+				hasDigest     bool
+			}{
+				{name: "legacy OCI digest", normalization: "ociArtifactDigest/v1", hasDigest: true},
+				{name: "generic blob digest", normalization: "genericBlobDigest/v1", hasDigest: true},
+				{name: "normalized JSON digest", normalization: "jsonNormalisation/v1", hasDigest: true},
+				{name: "intermediate blob digest", hasDigest: true},
+				{name: "missing digest"},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					r := require.New(t)
+					store, err := file.New(t.TempDir())
+					r.NoError(err)
+					t.Cleanup(func() { r.NoError(store.Close()) })
+					scheme := runtime.NewScheme()
+					v2.MustAddToScheme(scheme)
+					oci.MustAddToScheme(scheme)
+
+					access := &v2.LocalBlob{MediaType: mediaType, ReferenceName: "original"}
+					resource := &descriptor.Resource{Access: access}
+					var original descriptor.Digest
+					if tc.hasDigest {
+						original = descriptor.Digest{
+							HashAlgorithm:          "SHA-256",
+							NormalisationAlgorithm: tc.normalization,
+							Value:                  resourceDigest.Encoded(),
+						}
+						resource.Digest = &original
+					}
+					before := original
+					// Isolate packing from constructor digest defaulting and validation:
+					// a layout's tar digest need not equal the OCM resource digest.
+					b := &resourceblob.ArtifactBlob{
+						Artifact: resource,
+						ReadOnlyBlob: &testBlob{
+							content: data, mediaType: mediaType, digest: digest.FromBytes(data),
+						},
+					}
+					packed, err := ArtifactBlob(t.Context(), store, b, Options{AccessScheme: scheme})
+					r.NoError(err)
+					r.True(content.Equal(root, packed))
+					updated, ok := resource.Access.(*v2.LocalBlob)
+					r.True(ok)
+					r.Equal(root.Digest.String(), updated.LocalReference)
+					r.Equal(root.MediaType, updated.MediaType)
+					r.Equal(access.ReferenceName, updated.ReferenceName)
+					if tc.normalization != "" {
+						r.Same(&original, resource.Digest)
+						r.Equal(before, *resource.Digest)
+					} else {
+						normalization := "genericBlobDigest/v1"
+						if storageForm != "layer" {
+							normalization = "ociArtifactDigest/v1"
+						}
+						r.Equal(&descriptor.Digest{
+							HashAlgorithm:          "SHA-256",
+							NormalisationAlgorithm: normalization,
+							Value:                  root.Digest.Encoded(),
+						}, resource.Digest)
+					}
+				})
+			}
 		})
 	}
 }

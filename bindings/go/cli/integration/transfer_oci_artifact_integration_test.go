@@ -4,11 +4,15 @@ import (
 	"bytes"
 	"context"
 	"crypto"
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -16,7 +20,9 @@ import (
 	"github.com/opencontainers/image-spec/specs-go"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/require"
+	"oras.land/oras-go/v2/content/memory"
 
+	"ocm.software/open-component-model/bindings/go/blob"
 	blobfs "ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	"ocm.software/open-component-model/bindings/go/cli/cmd"
@@ -585,6 +591,208 @@ components:
 	r.Equal(srcDesc.Signatures[0].Digest.HashAlgorithm, desc.Signatures[0].Digest.HashAlgorithm)
 	r.Equal(srcDesc.Signatures[0].Digest.Value, desc.Signatures[0].Digest.Value)
 	r.Equal("RSASSA-PSS", desc.Signatures[0].Signature.Algorithm)
+}
+
+// Regression for #3674 and legacy v2 OCI-root digests labeled genericBlobDigest/v1:
+// copying resources must preserve signed descriptors and parent reference digests.
+func Test_Integration_Transfer_OCIArtifact_PreservesV1DescriptorDigest(t *testing.T) {
+	r := require.New(t)
+	t.Parallel()
+	ctx := t.Context()
+
+	sourceRegistry, err := internal.CreateOCIRegistry(t)
+	r.NoError(err)
+
+	targetRegistry, err := internal.CreateOCIRegistry(t)
+	r.NoError(err)
+	cfgPath, err := internal.CreateOCMConfigForRegistry(t, []internal.ConfigOpts{
+		{Host: sourceRegistry.Host, Port: sourceRegistry.Port, User: sourceRegistry.User, Password: sourceRegistry.Password},
+		{Host: targetRegistry.Host, Port: targetRegistry.Port, User: targetRegistry.User, Password: targetRegistry.Password},
+	})
+	r.NoError(err)
+	key := mustRSAKey(t)
+	cfg, err := os.ReadFile(cfgPath)
+	r.NoError(err)
+	cfg = append(cfg, []byte(fmt.Sprintf(`
+  - identity:
+      type: RSA/v1alpha1
+      algorithm: RSASSA-PSS
+      signature: default
+    credentials:
+    - type: Credentials/v1
+      properties:
+        public_key_pem: %q
+        private_key_pem: %q
+`, pem.EncodeToMemory(&pem.Block{Type: "RSA PUBLIC KEY", Bytes: x509.MarshalPKCS1PublicKey(&key.PublicKey)}),
+		pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)})))...)
+	r.NoError(os.WriteFile(cfgPath, cfg, 0o600))
+
+	sourceRepo := sourceRegistry.Connect(t)
+	resourceRepo := ocires.NewResourceRepository(&filesystemv1alpha1.Config{})
+	originalData := []byte("issue-3674-artifact")
+	data, access := createSingleLayerOCIImage(t, originalData,
+		"http://"+sourceRegistry.Reference("issue-3674-artifact:1.0.0"))
+	access.Type = ocmruntime.NewVersionedType("ociArtifact", "v1")
+
+	resource, err := resourceRepo.UploadResource(ctx, &descriptor.Resource{
+		ElementMeta: descriptor.ElementMeta{
+			ObjectMeta: descriptor.ObjectMeta{Name: "artifact", Version: "1.0.0"},
+		},
+		Type:     "ociImage",
+		Relation: descriptor.LocalRelation,
+		Access:   access,
+	}, inmemory.New(bytes.NewReader(data)), &ocicredsv1.OCICredentials{
+		Type:     ocicredsv1.OCICredentialsVersionedType,
+		Username: sourceRegistry.User,
+		Password: sourceRegistry.Password,
+	})
+	r.NoError(err)
+	r.NotNil(resource.Digest)
+
+	r.Equal("ociArtifactDigest/v1", resource.Digest.NormalisationAlgorithm, "new OCI resources must use the OCI digest by default")
+	fixtureRoot, err := tar.CopyOCILayoutWithIndex(ctx, memory.New(), inmemory.New(bytes.NewReader(data)), tar.CopyOCILayoutWithIndexOptions{})
+	r.NoError(err)
+	r.Equal(fixtureRoot.Digest.Encoded(), resource.Digest.Value)
+	r.NotEqual(digest.FromBytes(data).Encoded(), resource.Digest.Value, "legacy compatibility must verify the OCI root, not the tar blob hash")
+
+	for _, algorithm := range []string{"ociArtifactDigest/v1", "genericBlobDigest/v1"} {
+		for _, route := range []string{"registry-to-registry", "registry-ctf-registry"} {
+			for _, uploadAs := range []string{"ociArtifact", "localBlob"} {
+				t.Run(algorithm+"/"+route+"/"+uploadAs, func(t *testing.T) {
+					r := require.New(t)
+					ctx := t.Context()
+					run := func(args ...string) {
+						t.Helper()
+						command := cmd.New()
+						command.SetArgs(append(args, "--config", cfgPath))
+						ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+						defer cancel()
+						r.NoError(command.ExecuteContext(ctx))
+					}
+					// Distinct identities prevent an earlier transfer from satisfying a later case.
+					name := fmt.Sprintf("ocm.software/issue3674/%s/%s/%s", algorithm, route, uploadAs)
+					name = strings.ToLower(name)
+					const version = "1.0.0"
+					const creationTime = "2026-06-19T07:16:30Z"
+					child := &descriptor.Descriptor{
+						Meta: descriptor.Meta{Version: "v2"},
+						Component: descriptor.Component{
+							ComponentMeta: descriptor.ComponentMeta{
+								ObjectMeta:   descriptor.ObjectMeta{Name: name + "/child", Version: version},
+								CreationTime: creationTime,
+							},
+							Provider:  descriptor.Provider{Name: "ocm.software"},
+							Resources: []descriptor.Resource{*resource.DeepCopy()},
+						},
+					}
+					// Legacy v2 writers stored the OCI root under the generic blob label.
+					// Finalize this metadata before signing; transfer must not migrate it.
+					child.Component.Resources[0].Digest.NormalisationAlgorithm = algorithm
+					child.Component.Resources[0].CreationTime = descriptor.CreationTime(time.Date(2026, time.June, 19, 7, 16, 30, 0, time.UTC))
+					wantResourceDigest := child.Component.Resources[0].Digest.DeepCopy()
+					sourceRef := "http://" + sourceRegistry.RegistryAddress
+					ref := func(d *descriptor.Descriptor) string { return "//" + d.Component.Name + ":" + version }
+					r.NoError(sourceRepo.AddComponentVersion(ctx, child))
+					run("sign", "cv", sourceRef+ref(child))
+					child, err := sourceRepo.GetComponentVersion(ctx, child.Component.Name, version)
+					r.NoError(err)
+					r.Len(child.Signatures, 1)
+					childDigest, err := signing.GenerateDigest(ctx, child, slog.Default(), v4alpha1.Algorithm, crypto.SHA256.String())
+					r.NoError(err)
+					parent := &descriptor.Descriptor{
+						Meta: descriptor.Meta{Version: "v2"},
+						Component: descriptor.Component{
+							ComponentMeta: descriptor.ComponentMeta{
+								ObjectMeta:   descriptor.ObjectMeta{Name: name + "/parent", Version: version},
+								CreationTime: creationTime,
+							},
+							Provider: descriptor.Provider{Name: "ocm.software"},
+							References: []descriptor.Reference{{
+								ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "child", Version: version}},
+								Component:   child.Component.Name,
+								Digest:      *childDigest,
+							}},
+						},
+					}
+					r.NoError(sourceRepo.AddComponentVersion(ctx, parent))
+					run("sign", "cv", sourceRef+ref(parent))
+					parent, err = sourceRepo.GetComponentVersion(ctx, parent.Component.Name, version)
+					r.NoError(err)
+					r.Len(parent.Signatures, 1)
+
+					assertPreserved := func(repo repository.ComponentVersionRepository, repoRef string, registry *internal.OCIRegistry, local bool) {
+						t.Helper()
+						got, err := repo.GetComponentVersion(ctx, child.Component.Name, version)
+						r.NoError(err)
+						gotParent, err := repo.GetComponentVersion(ctx, parent.Component.Name, version)
+						r.NoError(err)
+						r.Equal(creationTime, got.Component.CreationTime)
+						r.Equal(creationTime, gotParent.Component.CreationTime)
+						r.Len(got.Component.Resources, 1)
+						r.Equal(child.Component.Resources[0].CreationTime, got.Component.Resources[0].CreationTime)
+						r.Equal(wantResourceDigest, got.Component.Resources[0].Digest)
+						r.Equal(child.Signatures, got.Signatures)
+						r.Equal(parent.Signatures, gotParent.Signatures)
+						r.Equal(parent.Component.References, gotParent.Component.References)
+						gotDigest, err := signing.GenerateDigest(ctx, got, slog.Default(), v4alpha1.Algorithm, crypto.SHA256.String())
+						r.NoError(err)
+						r.Equal(gotParent.Component.References[0].Digest, *gotDigest, "the signed parent reference must still verify")
+						run("verify", "cv", repoRef+ref(child))
+						run("verify", "cv", repoRef+ref(parent))
+
+						var content blob.ReadOnlyBlob
+						if local {
+							var localAccess v2.LocalBlob
+							r.NoError(v2.Scheme.Convert(got.Component.Resources[0].Access, &localAccess))
+							r.NotEmpty(localAccess.ReferenceName)
+							content, _, err = repo.GetLocalResource(ctx, got.Component.Name, version, got.Component.Resources[0].ToIdentity())
+						} else {
+							var targetAccess v1.OCIImage
+							r.NoError(ociaccess.Scheme.Convert(got.Component.Resources[0].Access, &targetAccess))
+							r.Contains(targetAccess.ImageReference, registry.RegistryAddress+"/")
+							content, err = resourceRepo.DownloadResource(ctx, &got.Component.Resources[0], &ocicredsv1.OCICredentials{
+								Type:     ocicredsv1.OCICredentialsVersionedType,
+								Username: registry.User, Password: registry.Password,
+							})
+						}
+						r.NoError(err)
+						store := memory.New()
+						root, err := tar.CopyOCILayoutWithIndex(ctx, store, content, tar.CopyOCILayoutWithIndexOptions{})
+						r.NoError(err)
+						r.Equal(fixtureRoot.Digest, root.Digest)
+						reader, err := store.Fetch(ctx, ociImageSpecV1.Descriptor{
+							Digest: digest.FromBytes(originalData), Size: int64(len(originalData)), MediaType: ociImageSpecV1.MediaTypeImageLayer,
+						})
+						r.NoError(err)
+						copiedData, err := io.ReadAll(reader)
+						r.NoError(reader.Close())
+						r.NoError(err)
+						r.Equal(originalData, copiedData)
+					}
+					assertPreserved(sourceRepo, sourceRef, sourceRegistry, false)
+					transfer := func(from, to string) {
+						t.Helper()
+						run("transfer", "cv", from+ref(parent), to, "--recursive", "--copy-resources", "--upload-as", uploadAs)
+					}
+					from := sourceRef
+					if route == "registry-ctf-registry" {
+						ctfPath := filepath.Join(t.TempDir(), "intermediary")
+						ctfRef := "ctf::" + ctfPath
+						transfer(from, ctfRef)
+						fs, err := blobfs.NewFS(ctfPath, os.O_RDONLY)
+						r.NoError(err)
+						ctfRepo, err := oci.NewRepository(ocictf.WithCTF(ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))))
+						r.NoError(err)
+						assertPreserved(ctfRepo, ctfRef, nil, true)
+						from = ctfRef
+					}
+					targetRef := "http://" + targetRegistry.RegistryAddress
+					transfer(from, targetRef)
+					assertPreserved(targetRegistry.Connect(t), targetRef, targetRegistry, uploadAs == "localBlob")
+				})
+			}
+		}
+	}
 }
 
 func createSingleLayerOCIImage(t *testing.T, data []byte, ref ...string) ([]byte, *v1.OCIImage) {

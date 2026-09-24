@@ -194,9 +194,16 @@ func finishResourceLayer(b *ociblob.ArtifactBlob, access *v2.LocalBlob, layer oc
 	annotations := maps.Clone(layer.Annotations)
 	maps.Copy(annotations, opts.ManifestAnnotations)
 
+	if resource, ok := b.Artifact.(*descriptor.Resource); ok && resource.Digest != nil && resource.Digest.NormalisationAlgorithm == internaldigest.GenericBlobDigestV1 {
+		if err := internaldigest.Verify(resource.Digest, layer.Digest, internaldigest.GenericBlobDigestV1); err != nil {
+			return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to verify resource blob digest: %w", err)
+		}
+	}
 	global := resolveGlobalAccess(opts.GlobalAccessPolicy, storage)
 
-	if err := updateArtifactAccess(b.Artifact, access, layer, updateAccessOptions{opts, global}); err != nil {
+	if err := updateArtifactAccess(b.Artifact, access, layer, updateAccessOptions{
+		Options: opts, BackedByGlobalStore: global, NormalisationAlgorithm: internaldigest.GenericBlobDigestV1,
+	}); err != nil {
 		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to update resource access: %w", err)
 	}
 
@@ -216,7 +223,9 @@ func ResourceLocalBlobOCILayout(ctx context.Context, storage content.Storage, b 
 		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to copy OCI layout: %w", err)
 	}
 	global := resolveGlobalAccess(opts.GlobalAccessPolicy, storage)
-	if err := updateArtifactAccess(b.Artifact, access, index, updateAccessOptions{opts, global}); err != nil {
+	if err := updateArtifactAccess(b.Artifact, access, index, updateAccessOptions{
+		Options: opts, BackedByGlobalStore: global, NormalisationAlgorithm: internaldigest.OCIArtifactDigestV1,
+	}); err != nil {
 		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to update resource access: %w", err)
 	}
 	return index, nil
@@ -317,7 +326,8 @@ type updateAccessOptions struct {
 	Options
 	// BackedByGlobalStore indicates if the resource is backed by a global store.
 	// This is used to determine if the resource access should be updated with a global reference.
-	BackedByGlobalStore bool
+	BackedByGlobalStore    bool
+	NormalisationAlgorithm string
 }
 
 // updateArtifactAccess updates the resource access with the new layer information.
@@ -357,11 +367,13 @@ func updateArtifactAccess(artifact descriptor.Artifact, access *v2.LocalBlob, de
 		typed.Access = access
 	case *descriptor.Resource:
 		typed.Access = access
-		if typed.Digest == nil {
+		// Packing may introduce a storage wrapper, so its digest is not necessarily
+		// the normalized artifact digest. Preserve complete signed digest metadata.
+		if typed.Digest == nil || typed.Digest.NormalisationAlgorithm == "" {
 			typed.Digest = &descriptor.Digest{}
-		}
-		if err := internaldigest.Apply(typed.Digest, desc.Digest); err != nil {
-			return fmt.Errorf("failed to apply digest to artifact: %w", err)
+			if err := internaldigest.Apply(typed.Digest, desc.Digest, opts.NormalisationAlgorithm); err != nil {
+				return fmt.Errorf("failed to apply digest to artifact: %w", err)
+			}
 		}
 	}
 

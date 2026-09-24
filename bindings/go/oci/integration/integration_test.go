@@ -697,7 +697,7 @@ func processResourceDigest(t *testing.T, repo *oci.Repository, from, to string) 
 
 	r.Equal(resource.Digest.Value, "0aa67467eee1b66c5e549e6b67226e226778f689ccdb46c39fe706b6428c98a5")
 	r.Equal(resource.Digest.HashAlgorithm, "SHA-256")
-	r.Equal(resource.Digest.NormalisationAlgorithm, "genericBlobDigest/v1")
+	r.Equal("ociArtifactDigest/v1", resource.Digest.NormalisationAlgorithm)
 
 	r.NotNil(resource.Digest)
 }
