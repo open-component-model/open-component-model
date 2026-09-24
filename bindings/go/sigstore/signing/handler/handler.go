@@ -21,7 +21,9 @@ import (
 	"ocm.software/open-component-model/bindings/go/signing"
 	"ocm.software/open-component-model/bindings/go/sigstore/signing/handler/internal"
 	"ocm.software/open-component-model/bindings/go/sigstore/signing/v1alpha1"
+	"ocm.software/open-component-model/bindings/go/sigstore/spec/credentials/oidcidentitytoken"
 	oidcv1 "ocm.software/open-component-model/bindings/go/sigstore/spec/credentials/oidcidentitytoken/v1alpha1"
+	"ocm.software/open-component-model/bindings/go/sigstore/spec/credentials/trustedroot"
 	trustedrootv1 "ocm.software/open-component-model/bindings/go/sigstore/spec/credentials/trustedroot/v1alpha1"
 	signerv1 "ocm.software/open-component-model/bindings/go/sigstore/spec/identity/signer/v1alpha1"
 	verifierv1 "ocm.software/open-component-model/bindings/go/sigstore/spec/identity/verifier/v1alpha1"
@@ -479,4 +481,11 @@ func writeTemp(dir, pattern string, r io.Reader) (path string, err error) {
 		return "", fmt.Errorf("write temp file %q: %w", pattern, err)
 	}
 	return f.Name(), nil
+}
+
+func (h *Handler) GetCredentialTypeScheme() *runtime.Scheme {
+	scheme := runtime.NewScheme()
+	oidcidentitytoken.MustRegisterCredentialType(scheme)
+	trustedroot.MustRegisterCredentialType(scheme)
+	return scheme
 }
