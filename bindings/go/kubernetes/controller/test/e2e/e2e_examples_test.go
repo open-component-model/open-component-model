@@ -94,27 +94,6 @@ var _ = Describe("controller", func() {
 					)
 				}
 
-				if slices.Contains(files, OCMConfig) {
-					// Every signature configured in the example's .ocmconfig must produce a
-					// "verified signature" log entry naming it. Ready alone doesn't prove the
-					// handler ran (the resolver cache could serve a warmed descriptor).
-					sigNames, err := utils.SigningConfigSignatureNames(filepath.Join(examplesDir, example.Name(), OCMConfig))
-					Expect(err).ToNot(HaveOccurred())
-					for _, sig := range sigNames {
-						By(fmt.Sprintf("confirming signature %q was verified by the controller", sig))
-						expected := fmt.Sprintf(`"verified signature","signature":%q`, sig)
-						Eventually(func() (string, error) {
-							out, err := utils.Run(exec.CommandContext(ctx,
-								"kubectl", "logs",
-								"-n", "ocm-k8s-toolkit-system",
-								"-l", "app.kubernetes.io/name=ocm-k8s-toolkit",
-								"--tail=500",
-							))
-							return string(out), err
-						}, timeout).Should(ContainSubstring(expected))
-					}
-				}
-
 				if slices.Contains(files, Instance) {
 					By("creating an instance of the example")
 					Expect(utils.DeployAndWaitForResource(
@@ -153,6 +132,30 @@ var _ = Describe("controller", func() {
 					timeout,
 					"pod", "-l", "app.kubernetes.io/name="+example.Name()+"-podinfo",
 				)).To(Succeed())
+
+				// Check for verifications
+				if slices.Contains(files, OCMConfig) {
+					// Every signature configured in the example's .ocmconfig must produce a
+					// "verified signature" log entry naming it. Ready alone doesn't prove the
+					// handler ran (the resolver cache could serve a warmed descriptor).
+					sigNames, err := utils.SigningConfigSignatureNames(filepath.Join(examplesDir, example.Name(), OCMConfig))
+					Expect(err).ToNot(HaveOccurred())
+					for _, sig := range sigNames {
+						By(fmt.Sprintf("confirming signature %q was verified by the controller", sig))
+						// signature names are based on the example names, so this should be enough to make sure it got
+						// verified
+						expected := fmt.Sprintf(`"verified signature","signature":%q`, sig)
+						Eventually(func() (string, error) {
+							out, err := utils.Run(exec.CommandContext(ctx,
+								"kubectl", "logs",
+								"-n", "ocm-k8s-toolkit-system",
+								"-l", "app.kubernetes.io/name=ocm-k8s-toolkit",
+								"--tail=500",
+							))
+							return string(out), err
+						}, timeout).Should(ContainSubstring(expected))
+					}
+				}
 
 				// Check for configuration and localization
 				if strings.HasSuffix(example.Name(), "-configuration-localization") {
