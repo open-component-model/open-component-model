@@ -970,3 +970,4 @@ RGW
 Cloudflare
 unversioned
 BuildKit
+artifactory
