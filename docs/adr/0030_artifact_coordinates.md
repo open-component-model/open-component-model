@@ -1,35 +1,357 @@
 # ADR: Portable Artifact Coordinates and Typed Upload Configuration
 
-* **Status**: proposed
-* **Deciders**: SIG Runtime, Fabian Burth (@fabianburth)
-* **Date**: 2026-09-18
+- **Status**: proposed — decision pending
+- **Deciders**: SIG Runtime, Fabian Burth (@fabianburth)
+- **Date**: 2026-09-18
 
-## Problem
+## Context and Problem
 
-Converting external access to `localBlob` loses upload coordinates. The receiving environment knows the destination endpoint, but cannot infer artifact coordinates from OCM resource name/version.
+Converting external access to `localBlob` loses upload coordinates. A receiving environment knows its destination endpoint, but cannot reliably reconstruct artifact naming from the OCM resource name/version. Naming information must survive local storage, air-gapped transfer, and intermediate external storage.
 
-Refines [ADR-0018](../../docs/adr/0018_transfer_configuration.md); replaces this draft's earlier user-facing template proposal.
+[EPIC #1264](https://github.com/open-component-model/ocm-project/issues/1264) scopes initial delivery to same-technology uploads, while proposing a hub-and-spoke model for future cross-technology uploads. Its extensibility goal is that adding a new type should not require new source-to-target upload migration logic.
 
-## Decision
+This ADR refines [ADR-0018](0018_transfer_configuration.md). It compares three coordinate architectures; typed destination configuration is compatible with all three. The question is not whether uploaders need technology-specific configuration, but what naming contract connects downloaders, intermediate storage, and uploaders.
+
+## Decision Status
+
+**No option has been selected.** The API sketches are proposals, not implemented APIs or finalized wire schemas. Review the trade-offs and evaluation cases before selecting a coordinate contract and its persistence rules.
+
+1. [Specialized coordinate families](#option-1-specialized-coordinate-families).
+2. [Unified coordinates](#option-2-unified-coordinates).
+3. [Hybrid coordinates through a shared hub](#option-3-hybrid-coordinates-through-a-shared-hub).
+
+The [detailed native API draft](#appendix-detailed-native-api-draft) preserves the earlier proposal for reference. It is not a decision or an implementation mandate; list/family-specific rules apply to Option 1 and are candidates for native boundaries in Option 3, not requirements for Option 2.
+
+## Decision Drivers
+
+- Preserve enough naming information for low-configuration same-technology uploads.
+- Prepare for cross-technology publishing without coupling every target to every source.
+- Preserve native naming semantics where they matter, without promising impossible lossless mappings.
+- Support disconnected and multi-hop transfers, including deployments with different installed adapters.
+- Keep naming separate from payload representation, integrity, provenance, and destination infrastructure.
+- Make missing information, incompatible representations, ambiguous policy, and collisions explicit errors.
+- Prefer a public contract that is small enough to understand and precise enough to validate.
+
+## Common Requirements and Boundaries
+
+### Separate Naming from Content and Destination
 
 ```text
-artifact coordinates          + uploader config       = target access
-acme/payments:1.4.0              registry.internal/mirror
-                                ↓
-registry.internal/mirror/acme/payments:1.4.0
+portable naming + compatible payload + destination configuration
+                              ↓
+                         target access
 ```
 
-| Concern | Decision |
-| --- | --- |
-| Portable coordinates | List of typed, versioned artifact coordinates in one resource label. No endpoints or credentials. |
-| Destination policy | Flat OCM config type per uploader kind. |
-| User interface | Destination settings; no CEL or templates initially. |
-| Execution | Planner generates CEL; registered transformations perform uploads. |
-| Coordinate cleanup | Remove after successful external upload **only if returned access preserves the required coordinates**. |
+| Concern        | Responsibility                                                                                                                            |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| Naming         | Retain artifact names, publication aliases, and distribution names where known. Do not invent them from OCM resource metadata.            |
+| Representation | Identify and validate actual content: chart archive, OCI layout, arbitrary bytes, etc. A downloader type alone does not establish format. |
+| Integrity      | Verify resource digests independently. An archive digest, OCI root digest, Git commit, and S3 version ID have different meanings.         |
+| Destination    | Typed config provides endpoint, registry prefix, bucket, repository, and upload policy. Credentials use the existing resolver.            |
+| Provenance     | Retain separately where needed; it is not destination authority or a substitute for portable naming.                                      |
 
-The following names, fields, and derivation rules define the proposed API. Package locations are implementation suggestions.
+A chart downloaded through S3 or HTTP can be eligible for Helm publication after inspection. An arbitrary blob cannot become a chart because its coordinates contain a name and version. Helm-to-OCI conversion and OCI-layout extraction remain explicit format operations under every option.
 
-## Access-Type Coverage
+An OCI tag is not necessarily a release version. S3 version IDs are bucket-assigned and cannot be replayed on upload. Digest-only OCI publication must remain possible without inventing `latest`. A GitHub archive cannot recreate Git history. Wget defines a download mechanism, not a generic upload protocol: HTTP PUT, WebDAV, and Artifactory need concrete backends.
+
+### Destination Configuration and Execution
+
+All options can use the same destination-facing configuration shape:
+
+```yaml
+type: generic.config.ocm.software/v1
+configurations:
+  - type: transfer.config.ocm.software/v1alpha1
+    copyMode: allResources
+  - type: oci.upload.config.ocm.software/v1alpha1
+    baseUrl: registry.internal/mirror
+```
+
+Keep configuration separate from coordinates and resource destinations independent of the component repository. Select an uploader by explicit policy and capabilities, not coordinate list order. Ambiguous selection fails. A selected upload failure is not a fallback signal.
+
+Reuse the transformation planner and execution graph, preserve OCI streaming, and validate output-dependent facts before upload. Unsupported backends must not be advertised through accepted but ineffective configuration. CLI and controller should share planning behavior; destination-policy changes must participate in replication skip decisions.
+
+### Persistence, Integrity, and Safety
+
+All options must define a versioned persistent contract. The examples use an unsigned `ocm.software/artifact-coordinates` label; its exact wire shape depends on the option. A list and an object are alternative schemas, not interchangeable values to accept silently. Schema selection or explicit migration is required before publishing both.
+
+- Local copies preserve unknown metadata opaquely; consumption requires understood semantics.
+- Apply changes to copied output resources and leave source metadata unchanged on failure.
+- Remove metadata only after successful publication and only if the resulting access can reconstruct all information being removed.
+- Intermediate storage must not erase known semantic identity. An S3 access alone generally does not preserve a chart's name/version.
+- Revalidate naming metadata after content conversion. Do not claim automatic signature preservation or transactional rollback of already uploaded content.
+- Never automatically mutate signing-relevant labels. Preserve unrelated metadata.
+- Treat coordinates as untrusted data, not CEL source or permission to choose an endpoint. Validate target names and detect collisions.
+- Do not silently normalize opaque S3 keys, decode HTTP escapes, lowercase names, or resolve traversal. Target-specific rendering may reject unrepresentable names or require explicit policy.
+
+Prefix semantics need an explicit decision: preserve a logical name independently of destination prefixes, or deliberately rebase naming after publication. These produce different multi-hop behavior. No option may guess which part of a newly encountered external path was a previous destination prefix.
+
+## Option 1: Specialized Coordinate Families
+
+### Model and Example
+
+Persist a list of independently typed native coordinate payloads. Each uploader consumes its own family; multiple entries can describe valid publication alternatives for one payload.
+
+```yaml
+labels:
+  - name: ocm.software/artifact-coordinates
+    signing: false
+    value:
+      - type: HelmChartCoordinates/v1alpha1
+        name: payments
+        version: 1.4.0+build.1
+      - type: OCIArtifactCoordinates/v1alpha1
+        repository: team/charts/payments
+        tag: 1.4.0_build.1
+```
+
+```go
+// Sketch: policy selects the uploader; it consumes its native family.
+helmCoordinates, err := coordinates.Find[HelmChartCoordinates](resource)
+if err != nil {
+    return err
+}
+return helmUploader.Upload(ctx, helmCoordinates, chartArchive)
+```
+
+The list does not imply format compatibility. In this example, publishing to OCI still requires a chart-to-OCI conversion. Reject duplicate family names across versions and never use list order as precedence.
+
+### Extensibility and Persistence
+
+Same-technology transfer has a direct contract: download produces native coordinates and upload consumes them. A Helm-to-OCI converter can produce an additional OCI family.
+
+Cross-technology upload requires something to produce the target's family. Without a common mapping boundary, source adapters, target uploaders, or separate converters may accumulate pairwise naming logic. Option 1 does not inherently forbid adding normalization later, but it does not establish it. Adding a mandatory shared boundary would move the architecture toward Option 3.
+
+Persist compatible native entries across local hops and intermediate external storage. Regenerate current-access metadata without discarding valid alternatives. Consumption and cleanup operate per family, subject to the common integrity and persistence requirements.
+
+### Pros
+
+- Precise schemas express native naming semantics and validation directly.
+- Families can evolve independently.
+- Straightforward initial same-technology implementation.
+- Native details need not be squeezed into a common naming model.
+
+### Cons
+
+- A shared label is not a normalized contract; generic targets cannot consume arbitrary source families directly.
+- Cross-technology naming needs additional mappings or a later architectural extension.
+- Multiple families add selection, compatibility, and cleanup rules.
+- The epic's no-pairwise-mappings goal remains unresolved if this is the final architecture.
+
+## Option 2: Unified Coordinates
+
+### Model and Example
+
+Every source normalizes to one shared semantic contract. Uploaders consume it directly, applying target-specific validation and rendering. They do not inspect source access types or foreign native coordinate families.
+
+```text
+source access → normalizer → shared coordinates → target renderer → target access
+                                    ↑
+                          verified payload metadata
+```
+
+A candidate model, not a complete schema:
+
+```go
+type ArtifactCoordinates struct {
+    Type      runtime.Type `json:"type"`
+    Namespace []string     `json:"namespace,omitempty"`
+    Name      string       `json:"name,omitempty"`
+    Version   string       `json:"version,omitempty"`
+    Tag       string       `json:"tag,omitempty"`
+    Path      *string      `json:"path,omitempty"`
+}
+```
+
+| Field       | Shared meaning                                                                                                                                   |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `namespace` | Logical naming segments without an endpoint; not pre-escaped URL segments.                                                                       |
+| `name`      | Artifact name, from authoritative payload metadata when available.                                                                               |
+| `version`   | Known artifact release version; not an arbitrary tag, Git commit, or S3 version ID.                                                              |
+| `tag`       | Publication alias independent of release version. Never implicitly `latest`.                                                                     |
+| `path`      | Optional opaque distribution name for byte storage, not a URL or filesystem path. Presence distinguishes an empty path from missing information. |
+
+```yaml
+labels:
+  - name: ocm.software/artifact-coordinates
+    signing: false
+    value:
+      type: ArtifactCoordinates/v1alpha1
+      namespace: [team, charts]
+      name: payments
+      version: 1.4.0+build.1
+      path: team/charts/payments-1.4.0+build.1.tgz
+```
+
+A chart inspector supplies verified name/version regardless of the downloader. Namespace and distribution naming come from normalization or explicit policy. Changing from a chart archive to an OCI-layout serialization must revalidate the distribution filename. OCI root-digest verification remains representation-specific, outside this naming sketch.
+
+```go
+// Sketch: no source-type dispatch in a generic byte-storage uploader.
+func (u *S3Uploader) Upload(ctx context.Context, c ArtifactCoordinates, p Payload) (Access, error) {
+    key, err := u.naming.ObjectKey(c, p)
+    if err != nil {
+        return nil, err
+    }
+    // Validate the destination key and collisions before upload.
+    // Literal prefixing: do not filesystem-normalize opaque S3 keys.
+    return u.put(ctx, u.config.KeyPrefix+key, p)
+}
+```
+
+`ObjectKey` uses an existing distribution name or a documented policy based on shared fields. It cannot silently invent missing identity. A Helm uploader requires a validated chart archive and checks that shared name/version agree with `Chart.yaml`. Helm's version-to-OCI-tag mapping belongs to format adaptation, not a generic rule for all versions.
+
+### Extensibility and Persistence
+
+A new downloader expressing supported semantics implements one normalizer. Existing compatible targets require no changes. New semantic concepts may still require evolving the shared schema; new formats may require inspectors or converters.
+
+Persist the shared object so a receiver does not need the original source adapter merely to interpret naming. Retain it through intermediate external storage when target access cannot reconstruct the shared meaning. Verified payload facts and retained semantic fields must agree; current storage paths must not silently overwrite artifact identity.
+
+An S3 normalizer can preserve an exact opaque key. An HTTP normalizer needs a documented mapping from escaped root-relative URL path to distribution name, including empty paths and the leading delimiter. Query-selected resources can collide. HTTP publication must encode the distribution name safely rather than concatenate it as a raw URL. Exact original URL spelling may require separate metadata. A universal unchanged spelling across all target grammars is not promised.
+
+### Pros
+
+- Establishes the hub-and-spoke boundary directly, avoiding pairwise naming mappings.
+- Generic byte-storage targets consume naming from any compatible source.
+- One persistent naming contract simplifies source-independent offline consumption.
+- Keeps uploader eligibility based on naming information and content capabilities.
+
+### Cons
+
+- Requires precise shared semantics before stabilizing the public API.
+- A weak common denominator loses native details; a large optional-field model risks ambiguity.
+- Native round trips may need separate metadata or explicit policy.
+- New identity concepts can require shared schema evolution, rather than independent family evolution.
+- The candidate fields need evaluation against package variants, Maven classifiers, multiple aliases, and multi-file publications; completeness is not established.
+
+## Option 3: Hybrid Coordinates Through a Shared Hub
+
+### Model and Example
+
+Keep specialized coordinates at the boundaries, but require cross-technology naming to pass through a central semantic contract. The central model has defined field meanings, as in Option 2; it is not a container of opaque native payloads.
+
+```text
+specialized source coordinates
+              ↓ normalize
+       central coordinates
+              ↓ project with target policy and validated payload facts
+specialized target coordinates
+              ↓ upload
+         target access
+```
+
+```go
+// Sketch: each technology implements only its mappings to/from the hub.
+// The helper types represent naming policy and verified payload facts.
+type CoordinateAdapter[T any] interface {
+    Normalize(native T, facts PayloadFacts) (CentralCoordinates, error)
+    Project(central CentralCoordinates, facts PayloadFacts, policy NamingPolicy) (T, error)
+}
+
+central, err := httpAdapter.Normalize(httpCoordinates, payloadFacts)
+if err != nil {
+    return err
+}
+s3Coordinates, err := s3Adapter.Project(central, payloadFacts, namingPolicy)
+if err != nil {
+    return err
+}
+return s3Uploader.Upload(ctx, s3Coordinates, payload)
+```
+
+The S3 projector understands the central contract, not HTTP coordinates. Each technology supplies the applicable direction(s); a download-only technology need not implement an uploader. These mappings are partial, not guaranteed inverses. Missing or incompatible information causes an error or requires explicit policy.
+
+Validated native coordinates can support a same-technology direct path, preserving details that do not fit the hub. That path must obey the same policy, collision, and integrity rules and cannot bypass naming overrides. Format conversion remains independent of coordinate projection.
+
+### Extensibility and Persistence
+
+As in Option 2, a new source expressing existing central semantics must not require changing compatible target projectors or uploaders. Native schemas remain independently useful and existing or proposed native uploader contracts can remain in place.
+
+Two persistence variants require an explicit choice:
+
+| Variant                                                 | Benefit                                                                                                  | Cost                                                                                                                                                   |
+| ------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Native metadata persisted; hub derived during planning. | Reuses a native-family label and avoids duplicated shared fields.                                        | Offline consumption requires the relevant source-family normalizer. Multiple families need deterministic reconciliation; array order is not authority. |
+| Hub persisted with optional native details.             | Compatible targets need not have the original source adapter; native details retain round-trip fidelity. | Requires an envelope/versioning design and consistency rules for duplicated information.                                                               |
+
+For a persisted hub, shared fields govern cross-technology projection. Native details preserve additional information, but conflicting overlapping values must fail rather than silently override the hub. Payload-defined identity remains subject to content verification. Overrides and conversions update or invalidate affected fields on the output copy.
+
+For an ephemeral hub, valid native families must normalize consistently or explicit policy must resolve different publication alternatives. A new S3 access must not erase retained Helm identity. Under either variant, retain sufficient metadata through intermediate storage and choose explicit logical-name versus rebased-path semantics.
+
+### Pros
+
+- Combines native validation and round-trip details with a common cross-technology boundary.
+- Targets remain technology-focused without learning every source's naming scheme.
+- Can reuse specialized uploader contracts and introduce adapters incrementally.
+- Does not force every native detail into the central schema.
+
+### Cons
+
+- Introduces more concepts: native types, shared semantics, adapters, and potentially duplicate persisted data.
+- Still requires solving the central semantic model; native types do not remove that work.
+- Projection may be lossy or impossible without retained information or explicit policy.
+- Conflict resolution, precedence, and conversion invalidation are more involved.
+- An ephemeral hub requires source adapters offline; a persisted hub increases schema and consistency complexity.
+
+## Comparison
+
+| Criterion                          | Option 1: specialized                                                 | Option 2: unified                                  | Option 3: hybrid                                                            |
+| ---------------------------------- | --------------------------------------------------------------------- | -------------------------------------------------- | --------------------------------------------------------------------------- |
+| Native validation and fidelity     | Directly represented.                                                 | Target validation; extra metadata may be needed.   | Directly represented at native boundaries.                                  |
+| Cross-technology naming            | Additional mappings or later normalization.                           | Mandatory shared contract.                         | Mandatory shared boundary between native types.                             |
+| New source with existing semantics | Same-family straightforward; other targets need coordinates supplied. | One normalizer; compatible targets unchanged.      | One source adapter; compatible target projectors unchanged.                 |
+| Offline requirements               | Relevant native consumers/converters.                                 | Shared-schema support plus target support.         | Source normalizer if hub is ephemeral; shared-schema support if persisted.  |
+| Schema evolution                   | Per family.                                                           | Shared schema.                                     | Shared schema plus native families.                                         |
+| Primary complexity                 | Multiple families and cross-family mappings.                          | Defining sufficiently expressive common semantics. | Common semantics plus native/shared consistency.                            |
+| Initial same-technology scope      | Most direct.                                                          | Requires shared-model design first.                | Native path can ship first, but the common boundary needs early validation. |
+| Universal format conversion        | Not provided.                                                         | Not provided.                                      | Not provided.                                                               |
+
+Options 2 and 3 aim for source and target adapters rather than up to N × M naming mappings. This is an architectural property, not a claim that every format can be published to every technology. Option 1 can remain an intentional same-technology solution, but accepting it means explicitly deferring the epic's normalization goal.
+
+## Evaluation Before Selection
+
+Use the same cases to evaluate all three options. A design should document where policy or additional metadata is necessary, not merely demonstrate happy-path uploads.
+
+| Case                                        | Question to answer                                                                                                                              |
+| ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| OCI → local → OCI                           | Are repository, tag-only, digest-only, and tag-plus-digest semantics preserved?                                                                 |
+| HTTP → S3                                   | Can a generic target consume the source's naming without HTTP-specific logic? How are escaped paths, empty paths, and query collisions handled? |
+| Chart downloaded through S3 → Helm          | Can content inspection supply verified chart identity independently of storage origin?                                                          |
+| Helm → local → S3 → local → Helm            | What is persisted, which adapters are needed offline, and when may metadata be removed?                                                         |
+| OCI → S3 → OCI                              | Is a defined OCI-layout serialization preserved along with enough naming information to restore native publication?                             |
+| Repeated uploads with destination prefixes  | Are names deliberately retained or rebased, without guessing or unintended prefix accumulation?                                                 |
+| New test-only downloader                    | Does producing supported shared semantics require edits to compatible target code? Option 1 must identify the missing bridge.                   |
+| Conflicting fields and invalid target names | Is rejection deterministic, with no source-type fallback or silent renaming?                                                                    |
+| Content conversion                          | Which coordinates become invalid, and how are representation digests and signatures handled?                                                    |
+
+Golden schema tests, unknown-version copies, signing guards, failure isolation, collision checks, and streaming/buffered parity remain necessary. Prototype normalization and rendering independently of live backends before finalizing the public schema.
+
+## Open Questions for Discussion
+
+1. Is source-independent cross-technology naming a constraint on the first public API, or an explicitly deferred redesign?
+2. Do uploaders benefit enough from public native coordinate types to justify Option 3 over Option 2?
+3. Must an offline destination interpret portable naming without the original source adapter? If so, Option 3 needs a persisted hub rather than only native metadata.
+4. What fidelity is required: semantic identity and usable target names, or exact original native naming as well?
+5. Which shared fields are sufficient for the supported cases, and how are aliases, package variants, and multi-file artifacts represented?
+6. Should logical naming survive every content-preserving hop, or should publication intentionally rebase it to the new access?
+7. What naming decisions may defaults make, and when must we require an explicit override?
+
+Record the selected option, persistence strategy, naming semantics, and reasons for rejecting the other options only after this discussion. No recommendation in this document is treated as approval.
+
+## Delivery Scope and Orthogonal Choices
+
+Initial production support can remain OCI → local → configured OCI upload, Helm-to-OCI support, and streaming parity. S3 and JFrog Helm publication are separate backend increments. Prototype cross-technology naming now without promising general cross-technology publishing in the first increment.
+
+Storage location is a separate choice from coordinate architecture: a label avoids extending `LocalBlob`, while a dedicated access/spec field needs a specification change. Graph-only metadata is insufficient for disconnected transfers. Matchers and target templates are routing features, not substitutes for preserving naming.
+
+Per-resource routing, user CEL, multiple destinations per uploader, general HTTP publishing, Maven APIs, arbitrary reverse conversions, and blob-to-OCI wrapping remain outside the initial backend increment. Existing blobs with missing information cannot gain round-trip support automatically. Constructor metadata propagation also needs explicit integration; returning blob data alone is insufficient.
+
+## Appendix: Detailed Native API Draft
+
+The following material preserves the earlier specialized-coordinate proposal as a design reference, including backend behavior, validation edge cases, and candidate acceptance tests. **Normative wording below is conditional on adopting these details, not an approved decision.** Native schemas and family-list operations describe Option 1; Option 3 may reuse them at its boundaries but must revise lifecycle and reconciliation rules around its hub. Option 2 requires a different coordinate schema and corresponding lifecycle operations.
+
+Backend protocol constraints can inform any option. Exact config spellings, package locations, cleanup behavior, prefix rebasing, and implementation scope below remain candidates to reconcile with the selected architecture. In particular, preserving logical naming across hops may require different rules from the draft's regeneration of coordinates from current accesses.
+
+### Access-Type Coverage
 
 **A downloader needs an artifact-coordinate contract; it does not necessarily have an inverse uploader.**
 
@@ -46,7 +368,7 @@ The following names, fields, and derivation rules define the proposed API. Packa
 
 Access aliases resolve through existing schemes. New coordinate/config types accept **only their canonical, versioned spelling**; no legacy aliases exist to support. Classic Helm repositories have no standard upload protocol; JFrog support is therefore a vendor-specific uploader, not generic `Helm/v1` upload behavior. Maven is absent from the current Go implementation and outside this API contract.
 
-## Shared Artifact Coordinates Label
+### Shared Artifact Coordinates Label
 
 The label value is a list. This allows one resource to retain coordinates for several target access families without making list order a policy mechanism.
 
@@ -85,7 +407,7 @@ The same envelope can later carry Maven coordinates; Maven remains outside the c
 * Blob media type stays in `File.mediaType` / `LocalBlob.mediaType`; integrity stays in `resource.digest`. Do not duplicate these in every coordinate entry.
 * Construct allowlisted relative fields rather than copying/redacting entire accesses. Coordinates are untrusted data, not CEL source or authority to choose an endpoint.
 
-## OCI API
+### OCI API
 
 Suggested package: `bindings/go/oci/spec/coordinates/v1alpha1`.
 
@@ -115,7 +437,7 @@ coordinates: repository=team/app, tag=1.4.0, digest=sha256:<digest>
 
 Parse a **full source reference** with the existing OCI parser; copy its repository/tag/digest. Do not parse a relative multi-segment repository as a full reference: that loses its first segment. A tagless/digestless source needs its selected root digest before valid coordinates can be produced; never invent `latest`.
 
-### OCI Upload Config
+#### OCI Upload Config
 
 Suggested package: `bindings/go/oci/spec/config/upload/v1alpha1`.
 
@@ -137,7 +459,7 @@ baseUrl: registry.internal/mirror
 * Initially accept only the `OCIArtifactCoordinates` entry. Preserve other entries; no implicit wrapping of arbitrary S3/Wget/GitHub blobs as OCI artifacts.
 * Reuse `AddOCIArtifact` and streaming `TransferOCIArtifact`. Buffered upload currently requires a tag: remove that limitation for digest-only and tag-plus-digest targets.
 
-## Helm API
+### Helm API
 
 Suggested package: `bindings/go/helm/spec/coordinates/v1alpha1`.
 
@@ -153,7 +475,7 @@ Wire type: **`HelmChartCoordinates/v1alpha1`**. `name` and `version` are require
 
 `GetHelmChart` attaches the coordinates before access metadata is lost. They are compatible with either a native chart `.tgz` or a Helm OCI layout from which exactly one chart layer can be extracted. The OCI layout may also contain one provenance layer.
 
-### Helm → OCI Derivation
+#### Helm → OCI Derivation
 
 Conversion preserves Helm coordinates and adds OCI coordinates:
 
@@ -175,7 +497,7 @@ Example: `https://charts.example/team/charts` + chart `payments`, version `1.4.0
 
 Reject invalid OCI repository names; do not silently lowercase/slugify. Preserve provenance inside the OCI layout. Never label a raw `.tgz` as an OCI layout.
 
-### JFrog Helm Upload Config
+#### JFrog Helm Upload Config
 
 Classic Helm repositories have no standard upload API. This config selects the JFrog Artifactory implementation while keeping chart identity in `HelmChartCoordinates`.
 
@@ -215,7 +537,7 @@ The direct path uploads a native `.tgz` unchanged. For a Helm OCI layout, an exp
 
 The implementation should port the behavior of the [OCM v1 JFrog Helm uploader](https://github.com/open-component-model/ocm/tree/main/cmds/jfrogplugin/uploaders/helm), not depend on its legacy uploader-plugin protocol. A dedicated JFrog transformation/backend returns the standard `Helm/v1` access; generic Helm `ResourceRepository.UploadResource` remains unsupported.
 
-## S3 API
+### S3 API
 
 Suggested package: `bindings/go/s3/spec/coordinates/v1alpha1`.
 
@@ -236,7 +558,7 @@ type Coordinates struct {
 * Omit source `version`: bucket-assigned S3 version IDs cannot be reused on upload. They are not portable artifact versions.
 * Removing original buckets can collapse names. Detect target collisions; do not silently add source buckets as prefixes.
 
-### S3 Upload Config — Backend Required
+#### S3 Upload Config — Backend Required
 
 Suggested package: `bindings/go/s3/spec/config/upload/v1alpha1`.
 
@@ -274,7 +596,7 @@ Upload exact bytes with existing media type. Construct `S3/v2` access from confi
 
 Initially consume only the `S3ObjectCoordinates` entry and preserve other entries. Ship this config with an S3 Add transformation and implementation of the currently unsupported `UploadResource`. If an intermediate build recognizes the config before execution support exists, reject it at config loading—including before controller allowlist filtering—rather than silently dropping it.
 
-## Wget API
+### Wget API
 
 Suggested package: `bindings/go/wget/spec/coordinates/v1alpha1`.
 
@@ -296,7 +618,7 @@ type Coordinates struct {
 * Intentionally **partial naming coordinates**: query-/body-/header-selected resources can share a path. They cannot authorize HTTP re-upload or uniquely identify downloaded bytes.
 * **No `wget.upload` config.** WebDAV, HTTP PUT, Artifactory, etc. require a specific upload protocol and mapping policy; do not infer one from a download URL.
 
-## GitHub API
+### GitHub API
 
 Suggested package: `bindings/go/github/spec/coordinates/v1alpha1`.
 
@@ -324,7 +646,7 @@ type Coordinates struct {
 * Transfer already rejects ref-only accesses in `transfer/internal/github.go`. Preserve that requirement; do not resolve a branch again merely to construct coordinates. Direct transformation calls must also avoid coordinate entries with unknown commits.
 * **No `github.upload` config.** Git replication and release-asset publication are different operations/access models; neither is the inverse of this downloader.
 
-## LocalBlob, OCI Layers, and Files
+### LocalBlob, OCI Layers, and Files
 
 * `LocalBlob`: preserve the existing coordinate list, even with `globalAccess`; no `LocalBlobArtifactCoordinates` or extra local-upload config. Existing transfer settings and component target control local storage.
 * Legacy OCI layout: parse `referenceName` as a **relative** OCI repository/tag only when no OCI-coordinate family entry exists. A malformed or unsupported OCI-coordinate entry is an error, not permission to fall back. Other-family entries do not disable the legacy OCI fallback. Never treat arbitrary tarballs as OCI layouts.
@@ -332,7 +654,7 @@ type Coordinates struct {
 * `File`: carries staging URI/media type/digest between transformations. Never persist temporary paths as artifact coordinates.
 * `File`, `Dir`, `UTF8` constructor inputs do not imply external coordinates.
 
-## Configuration and Execution
+### Configuration and Execution
 
 ```yaml
 type: generic.config.ocm.software/v1
@@ -360,7 +682,7 @@ copyMode permits copying?
 * `BuildAndCheck` checks graph/schema/expression types; coordinate-specific and output-dependent validation must still run before upload.
 * Dry-run may contain expressions; replay needs the graph and credentials/plugins, not original uploader config.
 
-## Artifact Coordinate Lifecycle and Integrity
+### Artifact Coordinate Lifecycle and Integrity
 
 | Transition | Action |
 | --- | --- |
@@ -379,7 +701,7 @@ copyMode permits copying?
 * Verify resource digests independently. Helm → OCI conversion is not automatically signature-preserving; component signatures and OCI artifact signatures are separate.
 * Reject endpoint overrides, namespace escapes, and conflicting target coordinates within a transfer. Do not assume identical content when equality cannot be established. Apply technology-specific path/key semantics above.
 
-## Implementation Scope
+### Implementation Scope
 
 | Area | Required work / existing constraint |
 | --- | --- |
@@ -398,7 +720,7 @@ copyMode permits copying?
 
 **Constructor integration is separate:** S3/Wget inputs return only `ProcessedBlobData`; `constructor/construct.go` ignores `ProcessedResource` when blob data is also present. Metadata propagation must be explicit before claiming constructor-produced blobs automatically carry artifact coordinates.
 
-### Acceptance Tests
+#### Acceptance Tests
 
 * Golden JSON/YAML, list decode/encode, multi-family round trip, duplicate-family/version rejection, order-independent selection, strict validation, canonical new type versions, config last-wins behavior, ambiguous-uploader errors, capability errors, allowlisting.
 * OCI host:port removal, relative paths, tag/digest variants, root-digest verification, offline round trips, buffered/streaming parity.
@@ -411,289 +733,3 @@ copyMode permits copying?
 * Config-only controller retransfer; CLI/controller graph parity.
 
 Publish label/config schemas and examples with implementation. Do not advertise unsupported upload configs or reverse conversions.
-
-## Alternatives and Trade-offs
-
-| Option | Implementation | Trade-off |
-| --- | --- | --- |
-| **Chosen: artifact coordinates + typed configs** | Coordinate producers, config compiler, output cleanup. | Small UI; survives offline transfer. Adds a public metadata contract. |
-| [Unified coordinates + typed configs](#alternative-unified-coordinates-with-source-normalization-and-target-rendering) | One shared coordinate contract; source normalizers, format inspectors/converters, and target renderers. | Avoids source-to-target naming mappings; requires shared semantics, capability checks, and explicit handling of non-portable names. |
-| [Hybrid: specialized coordinates through a shared hub](#alternative-hybrid-specialized-coordinates-through-a-shared-hub) | Keep native coordinate types; each technology maps to/from a shared semantic contract. | Preserves native validation and round-trip details while avoiding pairwise mappings; adds projection and consistency rules. |
-| Matchers + target templates | Rule matching and template compiler in transfer planning. | Flexible routing, but larger UI and cannot recover lost coordinates. |
-| Extend `LocalBlob` | New access fields, schemas, specification change. | Dedicated schema location, but expands generic transport access. |
-| Graph-only coordinates | Pass coordinates between nodes without persistence. | No persistent metadata, but fails disconnected/multi-hop transfers. |
-
-**Deferred:** per-resource routing, coordinate overrides, user CEL, multiple destinations per uploader kind, arbitrary reverse conversions beyond Helm OCI layout → chart archive, general HTTP publishing, Maven API, and blob-to-OCI wrapping. Existing blobs with insufficient metadata cannot gain round-trip support automatically.
-
-### Alternative: Unified Coordinates with Source Normalization and Target Rendering
-
-**Status: alternative for discussion, not the decision above.** The types and functions below are illustrative design sketches, not implemented APIs or finalized wire schemas.
-
-[EPIC #1264](https://github.com/open-component-model/ocm-project/issues/1264) proposes a hub-and-spoke model and states that adding new types should not require new transfer upload migration logic. Its initial same-technology scope does not require implementing arbitrary cross-technology uploads now, but the coordinate contract should prepare for them.
-
-The chosen proposal provides one label containing multiple technology-specific coordinate families. That is a shared envelope, rather than a shared naming model: an S3 uploader consumes `S3ObjectCoordinates`, not the naming information emitted by an HTTP or Helm downloader. Future cross-technology support would need to produce additional target-family entries or introduce a normalization layer.
-
-This alternative introduces that normalization boundary from the start:
-
-```text
-source access ── source normalizer ──┐
-                                    ├── shared coordinates + payload
-payload ── optional format inspector┘                │
-                                                    ├── optional format conversion
-                                                    │
-                                      target renderer + target config
-                                                    │
-                                               target access
-```
-
-The invariant is: **an uploader does not switch on the source access type or require a coordinate family named after its storage technology.** Each source normalizes once; each target renders the shared contract once. For N sources and M targets, this avoids up to N × M naming adapters in favor of N normalizers and M renderers. It does not eliminate format conversions or guarantee that every source can be published natively into every target.
-
-#### Separate Naming, Representation, and Destination
-
-| Concern                | Contract                                                                                                                              |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| Portable naming        | One shared coordinate object, populated from source access and authoritative payload metadata.                                        |
-| Payload representation | Existing blob media type plus inspected/validated format capabilities; not inferred from the source downloader.                       |
-| Integrity              | Existing resource digest and representation-specific verification; do not confuse an archive digest, OCI root digest, and Git commit. |
-| Destination            | Typed uploader configuration still supplies registry, bucket, repository, prefix, and upload policy.                                  |
-| Source provenance      | Optional, separate metadata; not required to render a destination and never an authority for destination endpoints or credentials.    |
-
-For example, a Helm chart obtained through S3 or HTTP is still eligible for a Helm uploader after chart inspection. Conversely, an arbitrary object obtained through S3 is not a chart merely because coordinates contain a name and version.
-
-#### Shared Coordinate Sketch
-
-A possible starting point is one versioned object, not a list of target-specific payloads:
-
-```go
-// Illustrative schema: optional fields represent genuinely missing information.
-// Presence is significant for Path: an empty HTTP path differs from no path.
-type ArtifactCoordinates struct {
-    Type      runtime.Type `json:"type"`
-    Namespace []string     `json:"namespace,omitempty"`
-    Name      string       `json:"name,omitempty"`
-    Version   string       `json:"version,omitempty"`
-    Tag       string       `json:"tag,omitempty"`
-    Path      *string      `json:"path,omitempty"`
-}
-```
-
-| Field       | Proposed meaning                                                                                                                                                                         |
-| ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `namespace` | Ordered logical naming segments, without an endpoint. Targets validate and encode segments for their own grammar; these are not pre-escaped URL segments.                                |
-| `name`      | Logical artifact name, from authoritative artifact metadata when available. Do not substitute the OCM resource name without explicit policy.                                             |
-| `version`   | Artifact release version, if known. Not an S3 version ID, an arbitrary OCI tag, or the OCM resource version.                                                                             |
-| `tag`       | Publication alias, if known; independent of a release version. Do not invent `latest`. Conflicts with format-required publication names must fail or require explicit policy.            |
-| `path`      | Optional endpoint-independent distribution name for byte storage, kept as an opaque string. Not a URL to resolve, a filesystem path to clean, or an instruction to choose a destination. |
-
-Not all fields are required for all artifacts. A path-only blob can be published to byte storage but cannot necessarily be published to a versioned package repository. At least one usable naming form is required for automatic placement; missing information is an explicit planning error unless configured policy supplies it.
-
-The opaque `path` deliberately does not pretend that all technologies share a path grammar. An S3 normalizer can retain the exact object key. An HTTP normalizer can retain the original escaped path spelling, with the leading root delimiter removed under a documented rule. The latter does not preserve query-, header-, or body-based selection and is therefore only a naming hint, not a unique identity. An HTTP publisher must treat this field as opaque naming data and encode it for its own protocol, not concatenate it as a raw URL. Exact original URL spelling may need separate round-trip metadata.
-
-No automatic lowercasing, percent-decoding, slash cleanup, or traversal resolution is permitted. A target can reject names it cannot safely represent. A shared name encoder or explicit naming policy can support additional cases, but must define collision behavior. Keeping an opaque S3 key does not imply that it can be published unchanged to HTTP or OCI.
-
-A chart inspected from any supported source could produce:
-
-```yaml
-labels:
-  - name: ocm.software/artifact-coordinates
-    signing: false
-    value:
-      type: ArtifactCoordinates/v1alpha1
-      namespace: [team, charts]
-      name: payments
-      version: 1.4.0+build.1
-      path: team/charts/payments-1.4.0+build.1.tgz
-```
-
-Here `name` and `version` come from `Chart.yaml`. The namespace comes from source normalization or explicit policy, and the distribution path names the chart archive. A chart inspector verifies semantic identity but does not silently overwrite an existing storage path or namespace. An OCI-layout serialization would need a different distribution filename; changing representation must revalidate that field.
-
-`tag` and `version` remain separate because a generic OCI tag is not necessarily a release version. Digest-only OCI publication additionally requires the verified root digest from the OCI representation. A Git commit remains source revision metadata, not an invented release version. The shared naming object is not intended to replace these integrity and provenance contracts.
-
-#### Adapter and Uploader Sketches
-
-The following pseudocode shows the dependency boundaries. `Payload`, validation helpers, and backend calls stand for existing or future implementation responsibilities; they are not new APIs mandated by this alternative.
-
-```go
-type Normalizer interface {
-    Normalize(ctx context.Context, resource Resource, payload Payload) (ArtifactCoordinates, error)
-}
-
-type Uploader interface {
-    // Eligibility depends on available naming fields and validated content,
-    // not on which downloader produced them.
-    Upload(ctx context.Context, coordinates ArtifactCoordinates, payload Payload) (Access, error)
-}
-
-func (u *S3Uploader) Upload(ctx context.Context, c ArtifactCoordinates, p Payload) (Access, error) {
-    // Require c.Path or derive a distribution name from the shared fields
-    // using an explicit, deterministic naming policy. No source-type switch.
-    key, err := u.naming.ObjectKey(c, p)
-    if err != nil {
-        return nil, err
-    }
-    // Literal prefixing, destination-key validation, and collision checks
-    // apply before upload. Do not use path.Join on an opaque object key.
-    return u.put(ctx, u.config.KeyPrefix+key, p)
-}
-
-func (u *HelmUploader) Upload(ctx context.Context, c ArtifactCoordinates, p Payload) (Access, error) {
-    // Works for charts downloaded through Helm, S3, HTTP, or extracted from OCI.
-    chart, err := inspectChartArchive(p)
-    if err != nil {
-        return nil, err
-    }
-    if chart.Name != c.Name || chart.Version != c.Version {
-        return nil, errors.New("chart metadata does not match artifact coordinates")
-    }
-    return u.putChart(ctx, chart, p)
-}
-```
-
-A planner performs capability checks and detects target collisions before execution where possible. Output-dependent checks still run before upload. Unknown formats, unavailable naming fields, ambiguous uploader selection, and unsupported conversions are errors, not silent fallback signals. Backend validation and digest verification remain mandatory even when planning succeeded.
-
-OCI rendering would use the common namespace/name, a validated publication tag where applicable, and the verified OCI root digest. Helm's `+` to `_` tag mapping belongs to the Helm-to-OCI format adaptation, independent of whether the chart was downloaded through HTTP, Helm, or S3. Generic OCI upload must not interpret every `version` as a Helm version or assume every blob is already an OCI artifact.
-
-#### Example Transfers
-
-| Transfer                              | Shared naming and format behavior                                                                                                    | Remaining limitation                                                                                          |
-| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------- |
-| HTTP file → S3                        | HTTP normalizer supplies a distribution path; S3 renders an object key without understanding `Wget/v1`.                              | URL queries may distinguish resources sharing a path; collision detection or explicit overrides are required. |
-| Helm chart → S3                       | Chart inspector supplies semantic name/version; byte-storage policy chooses the archive key.                                         | Preserve chart coordinates for a later native Helm upload.                                                    |
-| Chart downloaded from S3 → JFrog Helm | Inspect chart content and render the JFrog destination from the shared name/version.                                                 | Non-chart blobs are rejected; no S3-to-Helm naming adapter is needed.                                         |
-| Helm chart → OCI                      | Shared identity plus explicit chart-to-OCI conversion produces an OCI publication.                                                   | Representation and digest change; signature handling remains separate.                                        |
-| OCI image → S3 → OCI                  | Store a defined OCI-layout serialization and retain portable naming alongside the OCM resource. Restore the graph on the return hop. | An S3 object alone does not retain all metadata, and storing image bytes is not native image publication.     |
-| Arbitrary blob → Helm                 | No automatic native publication.                                                                                                     | Coordinates cannot manufacture a valid chart.                                                                 |
-
-There is no generic `wget.upload` protocol in this alternative either. HTTP PUT, WebDAV, and Artifactory are distinct upload backends even if all consume the same naming contract.
-
-#### Persistence and Round Trips
-
-The same unsigned label can carry this alternative object through local and disconnected transfers. It is an **alternative wire shape**, not an additional payload to silently accept under the array contract above. Adoption requires choosing one schema before release or defining explicit version negotiation/migration if the family-list schema has shipped.
-
-- Preserve semantic naming across content-preserving storage changes. A destination storage key must not erase known chart identity.
-- Keep the coordinate object after an external upload whenever the returned access cannot reconstruct its shared meaning. An S3 access generally does not preserve a chart's semantic name/version.
-- During subsequent download, merge verified information under explicit rules. Validate existing semantic identity against the payload, and do not replace it solely because the current storage technology differs from the original one.
-- Treat destination prefixes separately from persistent logical naming. Define whether `path` is retained as the portable distribution name or intentionally rebased; do not repeatedly add destination prefixes on every hop.
-- Revalidate representation-dependent fields after conversion. Update distribution filenames where needed and verify digests independently; a content conversion does not automatically preserve signatures.
-- Preserve unknown versions opaquely during local copies, but reject consumption when their semantics are unknown. Keep signing guards, copied-output mutation, failure isolation, and untrusted-coordinate validation from the main proposal.
-- Exact source reconstruction may need separate technology-specific metadata. Such metadata must not become a hidden mandatory coordinate family consumed by every uploader.
-
-#### Pros and Cons Compared with Coordinate Families
-
-| Aspect                       | Unified coordinates                                                                     | Technology-specific coordinate families                                                                             |
-| ---------------------------- | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| Adding a downloader          | Implement one normalizer; existing compatible targets consume the common fields.        | Same-family upload is straightforward; cross-family upload needs target entries or a later normalization mechanism. |
-| Adding an uploader           | Implement one renderer plus naming/format capability checks.                            | Implement its family consumer and arrange for other sources to produce that family.                                 |
-| Generic byte-storage targets | Natural fit for any source with a usable distribution name and serializable payload.    | Need a target-family entry even when the source already provides sufficient generic naming information.             |
-| Same-technology fidelity     | Requires careful shared semantics and sometimes separate round-trip metadata.           | Native fields retain technology-specific naming semantics directly.                                                 |
-| Validation                   | Shared-field validation plus target constraints and payload verification.               | Narrow schemas give stronger per-family structural validation, though payload verification is still needed.         |
-| Schema evolution             | One public contract; genuinely new naming concepts may require extending/versioning it. | Families evolve independently, but consumers and producers must agree on the relevant families.                     |
-| Initial effort               | More design work on field meaning, encoding, merge rules, and fallback policy.          | Smaller initial conceptual step for same-technology upload.                                                         |
-| Format conversion            | Still explicit and capability-based; no promise of universal native publication.        | Also required; multiple coordinate entries alone do not make representations compatible.                            |
-
-The main benefit is extensibility without source-target naming coupling. The main risk is designing an overly weak common denominator or a bag of optional fields whose meaning varies by source. The model must define semantics centrally and must not reintroduce source-type switches through a generic `properties` map.
-
-This sketch is not proof that these six fields cover every future ecosystem. Maven classifiers, package variants, multi-file publications, and multiple aliases need evaluation before stabilizing the schema. A new format may require a new inspector or converter; a genuinely new identity concept may require a shared schema revision. The guarantee is that a new downloader producing already-supported semantics does not require edits to existing compatible uploaders.
-
-#### Suggested Evaluation and Incremental Scope
-
-Keep typed destination configs, current transformation execution, security checks, and the initial OCI/Helm backend scope. Before finalizing the coordinate API, prototype normalization and rendering independently of live upload backends and require:
-
-- An HTTP-derived naming object renders to an S3 key without an HTTP import or source-type branch in the S3 renderer.
-- A chart downloaded through S3 and the same chart downloaded through Helm produce equivalent verified semantic identity and can use the same Helm uploader.
-- Helm → local → S3 → local → Helm retains name/version, with no prefix accumulation and no loss of coordinates during the intermediate external upload.
-- OCI tag-only, digest-only, and tag-plus-digest publication preserve their distinct semantics without inventing versions or tags.
-- Escaped HTTP names, opaque S3 keys, invalid OCI names, missing metadata, and target collisions produce deterministic results or explicit errors; never silent normalization.
-- A test-only new downloader using the shared contract works with an existing compatible byte-storage renderer without changing that renderer.
-
-These tests evaluate the architectural promise without requiring general cross-technology publishing in the first increment. If the common model cannot satisfy them without technology-family dispatch, revise the model or document the limitation before committing to a public schema.
-
-### Alternative: Hybrid Specialized Coordinates Through a Shared Hub
-
-**Status: alternative for discussion.** A single public coordinate type is not the only way to meet the epic's extensibility goal. Native coordinate types can remain useful at the boundaries, provided cross-technology naming passes through a shared semantic contract:
-
-```text
-specialized source coordinates
-              │ normalize
-              ▼
-      central coordinates
-              │ project using target policy and payload capabilities
-              ▼
-specialized target coordinates
-              │ validate and upload
-              ▼
-         target access
-```
-
-The architectural requirement is **one mapping to/from the hub per supported technology, rather than mappings between every source-target pair**. Existing uploaders could continue consuming their native coordinate types. A target projector understands only the central contract, its own native type, target policy, and payload capabilities; it must not inspect foreign coordinate families. Native coordinate types need not be eliminated merely to achieve this separation.
-
-#### Hybrid Adapter Sketch
-
-These signatures illustrate the boundary; `CentralCoordinates` represents the shared semantics discussed in the unified alternative, not an unstructured container of native coordinate payloads. `PayloadFacts` represents validated format and integrity information, separate from naming.
-
-```go
-type CoordinateAdapter[T any] interface {
-    Normalize(native T, facts PayloadFacts) (CentralCoordinates, error)
-    Project(central CentralCoordinates, facts PayloadFacts, policy NamingPolicy) (T, error)
-}
-
-// Illustrative cross-technology planning, not implemented APIs.
-central, err := httpAdapter.Normalize(httpCoordinates, payloadFacts)
-if err != nil {
-    return err
-}
-
-s3Coordinates, err := s3Adapter.Project(central, payloadFacts, namingPolicy)
-if err != nil {
-    return err // Missing naming data or an unrepresentable target name.
-}
-
-// The existing uploader still accepts its native coordinate type.
-return s3Uploader.Upload(ctx, s3Coordinates, payload)
-```
-
-These functions are partial mappings, not guaranteed mathematical inverses. A target can reject incomplete or incompatible information. An HTTP path cannot manufacture a Helm chart version, and an S3 object version ID cannot become a portable release version. Payload inspection can enrich the hub with verified chart identity; format conversion remains a separate operation before native publication.
-
-For same-technology transfers, validated native coordinates may be used directly to avoid losing details through normalization. For cross-technology transfers, the planner normalizes to the hub and projects to the selected target. This fast path must obey the same security, policy, payload verification, and collision rules; it must not bypass an explicit naming override. The hub must still be sufficiently complete to support the intended cross-technology cases without consulting the source's native metadata inside a target projector.
-
-#### Persistence and Authority Choices
-
-Two persistence strategies are possible and should be chosen explicitly:
-
-| Strategy                                                    | Benefit                                                                                                                | Cost                                                                                                                                                                                                               |
-| ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Persist native coordinates; derive the hub during planning. | Minimal change to the proposed typed label and no duplicated shared fields.                                            | Disconnected execution needs a normalizer for the stored family/version; opaque copying alone cannot enable cross-technology upload. Retain original compatible naming metadata through intermediate storage hops. |
-| Persist the shared hub plus optional native details.        | Compatible targets can plan without the original source adapter; native details preserve exact round-trip information. | Requires a new envelope or explicitly versioned schema, plus consistency and invalidation rules for duplicated information.                                                                                        |
-
-With a persisted hub, shared fields are authoritative for cross-technology projection. Native details supply only information outside the common model and validated same-technology fidelity; conflicting overlapping values must fail rather than silently selecting whichever representation is convenient. A configured naming override updates or invalidates affected native fields on the copied output resource. Payload metadata remains authoritative for format-defined identity such as a chart name/version.
-
-With an ephemeral hub, normalization must deterministically select the relevant valid native metadata. Array order is not precedence. A resource carrying several native families must either produce consistent shared semantics or require explicit policy to resolve different placement alternatives. Publishing to S3 must not discard retained Helm identity just because the current access has changed to S3.
-
-Under either strategy, distinguish an intermediate physical destination from persistent logical naming. Do not normalize a newly prefixed target access back into the retained logical name and accumulate prefixes on every hop. Unknown native metadata may survive opaque copies, but it cannot silently override known hub fields or authorize unsupported publication. Content conversion revalidates both the hub and retained native details.
-
-#### Hybrid Pros and Cons
-
-**Pros:**
-
-- Retains specialized validation and native naming fidelity where those are valuable.
-- Allows existing native uploaders to remain focused on their technology; target projectors provide the bridge rather than changing every uploader for each new source.
-- Supports an incremental implementation: same-technology behavior first, then hub adapters for supported cross-technology cases.
-- Avoids forcing every technology-specific round-trip detail into the central schema.
-
-**Cons:**
-
-- Adds an abstraction layer and potentially two representations of the same information.
-- Still requires a well-defined shared semantic model; wrapping the native list in a central object does not solve the mapping problem.
-- Projection can be lossy or impossible. Exact round trips need retained native information, explicit policy, or rejection.
-- Persistence, conflict resolution, and conversion invalidation become more complex, especially when several native families coexist.
-- A new semantic concept can still require evolving the hub. The guarantee applies to new adapters expressing already-supported concepts, not all conceivable future package ecosystems.
-
-#### Choosing Between the Alternatives
-
-| Priority                                                                                                                                   | Better fit                                        |
-| ------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------- |
-| Same-technology delivery with independently versioned native contracts; cross-technology normalization deliberately deferred.              | The main proposal's technology-specific families. |
-| One persistent portable naming contract and targets that consume it directly.                                                              | Unified coordinates.                              |
-| Native coordinate fidelity and existing typed uploaders, combined with cross-technology extensibility through a mandatory common boundary. | Hybrid coordinates.                               |
-
-The unified and hybrid alternatives share the epic's hub-and-spoke goal. The decision depends on whether specialized coordinate contracts are valuable public boundary types or unnecessary duplication. A useful prototype would compare both approaches for HTTP → S3 and Helm → S3 → Helm, including opaque keys, conflicting fields, disconnected execution, and prefix handling. In either design, adding a source that expresses existing hub semantics must not require changing existing compatible target adapters or uploaders.
