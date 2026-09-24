@@ -223,6 +223,12 @@ mounts:
       matrix:
         versions:
           - main
+  - source: ../bindings/go/configuration/checksum/http/v1alpha1/spec/schemas
+    target: static/main/schemas/bindings/go/configuration/checksum/http/v1alpha1
+    sites:
+      matrix:
+        versions:
+          - main
   - source: ../bindings/go/s3/spec/credentials/v1/schemas
     target: static/main/schemas/bindings/go/credentials/s3/v1
     sites:

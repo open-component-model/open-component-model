@@ -34,7 +34,7 @@ import (
 // the typed consumer credential structs declared by each built-in binding
 func TestCredentialTypeSchemePopulatedByBuiltinRegister(t *testing.T) {
 	pm := manager.NewPluginManager(context.Background())
-	require.NoError(t, builtin.Register(pm, &filesystemv1alpha1.Config{}, &httpv1alpha1.Config{}, slog.Default()))
+	require.NoError(t, builtin.Register(pm, &filesystemv1alpha1.Config{}, &httpv1alpha1.Config{}, nil, slog.Default()))
 
 	scheme := pm.CredentialTypeRegistry.GetCredentialTypeScheme()
 	require.NotNil(t, scheme)
@@ -66,7 +66,7 @@ func TestCredentialGraphResolvesTypedCredentials(t *testing.T) {
 	ctx := t.Context()
 
 	pm := manager.NewPluginManager(ctx)
-	require.NoError(t, builtin.Register(pm, &filesystemv1alpha1.Config{}, &httpv1alpha1.Config{}, slog.Default()))
+	require.NoError(t, builtin.Register(pm, &filesystemv1alpha1.Config{}, &httpv1alpha1.Config{}, nil, slog.Default()))
 
 	tests := []struct {
 		name       string
