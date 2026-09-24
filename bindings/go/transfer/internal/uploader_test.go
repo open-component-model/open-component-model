@@ -100,18 +100,24 @@ func TestBuildGraphDefinition_UploaderMatch_EmitsHTTPStreaming(t *testing.T) {
 	srcAccess := streaming.spec["resource"].(map[string]any)["access"].(map[string]any)
 	assert.Equal(t, "https://source.example/artifacts/blob.tar", srcAccess["url"])
 
-	// Target reference carries a CEL expression referencing the source resource inside
-	// the shared descriptor environment node (selected by identity), resolved to the
-	// concrete URL by the graph runtime at execution time.
+	// The upload request carries the HTTP verb and the templated target URL.
+	request := streaming.spec["request"].(map[string]any)
+	assert.Equal(t, "Wget/v1", request["type"])
+	assert.Equal(t, "PUT", request["verb"], "the upload request must carry the configured write verb")
+	requestURL := request["url"].(string)
+	assert.True(t, strings.HasPrefix(requestURL, "${") && strings.HasSuffix(requestURL, "}"),
+		"request url must be a CEL expression field, got %q", requestURL)
+	assert.Contains(t, requestURL, ".component.resources[0].access.url", "resource alias must be rewritten to the selected node path")
+
+	// The published (download) target access resolves to the same URL but must not carry
+	// the upload write verb, so a later download does not re-issue the write request.
 	tgtResource := streaming.spec["targetResource"].(map[string]any)
 	tgtAccess := tgtResource["access"].(map[string]any)
 	assert.Equal(t, "Wget/v1", tgtAccess["type"])
-	assert.Equal(t, "PUT", tgtAccess["verb"])
+	assert.NotContains(t, tgtAccess, "verb", "the published download access must not carry the upload write verb")
 	targetURL := tgtAccess["url"].(string)
-	assert.True(t, strings.HasPrefix(targetURL, "${") && strings.HasSuffix(targetURL, "}"),
-		"target url must be a CEL expression field, got %q", targetURL)
+	assert.Equal(t, requestURL, targetURL, "request and published access must resolve to the same target URL")
 	assert.Contains(t, targetURL, ".component.resources[0]", "target url must select the resource by index from the descriptor node")
-	assert.Contains(t, targetURL, ".component.resources[0].access.url", "resource alias must be rewritten to the selected node path")
 	assert.NotContains(t, targetURL, "resource.access", "the bare resource alias must not survive the rewrite")
 
 	// No second copy of the resource is injected; the descriptor environment node the
@@ -214,11 +220,11 @@ func TestBuildGraphDefinition_UploaderTemplatesHeaders(t *testing.T) {
 	var header map[string]any
 	for i := range tgd.Transformations {
 		if tgd.Transformations[i].Type == wgetv1alpha1.HTTPStreamingV1alpha1 {
-			tgt := tgd.Transformations[i].Spec.Data["targetResource"].(map[string]any)
-			header, _ = tgt["access"].(map[string]any)["header"].(map[string]any)
+			req := tgd.Transformations[i].Spec.Data["request"].(map[string]any)
+			header, _ = req["header"].(map[string]any)
 		}
 	}
-	r.NotNil(header, "target access must carry the templated header map")
+	r.NotNil(header, "the upload request must carry the templated header map")
 
 	reprDigest := header["Repr-Digest"].([]any)[0].(string)
 	assert.True(t, strings.HasPrefix(reprDigest, "${") && strings.HasSuffix(reprDigest, "}"),

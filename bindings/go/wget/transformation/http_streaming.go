@@ -21,7 +21,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/wget/internal/download"
-	wgetaccess "ocm.software/open-component-model/bindings/go/wget/spec/access"
 	wgetaccessv1 "ocm.software/open-component-model/bindings/go/wget/spec/access/v1"
 	identityv1 "ocm.software/open-component-model/bindings/go/wget/spec/identity/v1"
 	"ocm.software/open-component-model/bindings/go/wget/transformation/spec/v1alpha1"
@@ -65,6 +64,9 @@ func (t *HTTPStreamingTransformer) Transform(ctx context.Context, step runtime.T
 	if transformation.Spec.TargetResource == nil {
 		return nil, fmt.Errorf("target resource is required")
 	}
+	if transformation.Spec.Request == nil {
+		return nil, fmt.Errorf("upload request is required")
+	}
 	if transformation.Output == nil {
 		transformation.Output = &v1alpha1.HTTPStreamingOutput{}
 	}
@@ -72,14 +74,10 @@ func (t *HTTPStreamingTransformer) Transform(ctx context.Context, step runtime.T
 	srcResource := descriptor.ConvertFromV2Resource(transformation.Spec.Resource)
 	targetResource := descriptor.ConvertFromV2Resource(transformation.Spec.TargetResource)
 
-	// The target Wget access is the single source of truth for the HTTP request.
-	tw := wgetaccessv1.Wget{}
-	if targetResource.Access == nil {
-		return nil, fmt.Errorf("target resource access is required")
-	}
-	if err := wgetaccess.Scheme.Convert(targetResource.Access, &tw); err != nil {
-		return nil, fmt.Errorf("target resource access must be a wget access: %w", err)
-	}
+	// Request is the single source of truth for the outbound HTTP call. TargetResource is
+	// published verbatim on success (only its digest is filled), so the published access
+	// never carries the upload-only request fields.
+	tw := *transformation.Spec.Request
 	parsedTarget, err := url.Parse(tw.URL)
 	if err != nil {
 		return nil, fmt.Errorf("invalid target url %q: %w", tw.URL, err)
@@ -200,22 +198,9 @@ func (t *HTTPStreamingTransformer) Transform(ctx context.Context, step runtime.T
 		targetResource.Digest = srcResource.Digest.DeepCopy()
 	}
 
-	// The target Wget access encoded the upload request, including the write Verb (e.g.
-	// PUT). That access is also published as the download access on the output resource.
-	// A subsequent read (ocm download) must not re-issue the write method, which would
-	// send an empty-body request and overwrite the uploaded object. Publish a plain read
-	// access: keep the resolved URL but clear the upload-only request fields so the verb
-	// defaults to GET.
-	published := tw
-	published.Verb = ""
-	published.Body = nil
-	published.NoRedirect = false
-	publishedRaw := &runtime.Raw{}
-	if err := wgetaccess.Scheme.Convert(&published, publishedRaw); err != nil {
-		return nil, fmt.Errorf("failed building published target access: %w", err)
-	}
-	targetResource.Access = publishedRaw
-
+	// TargetResource already carries the published read access built at graph-build time,
+	// so publish it verbatim (only the digest was filled above); no upload-only request
+	// field can leak into the download access.
 	v2Out, err := descriptor.ConvertToV2Resource(t.Scheme, targetResource)
 	if err != nil {
 		return nil, fmt.Errorf("failed converting target resource to v2 format: %w", err)

@@ -152,9 +152,9 @@ func processHTTPUploader(resource descriptorv2.Resource, u *transferv1alpha1.HTT
 	if mediaType == "" {
 		mediaType = mediaTypeFromAccess(resource)
 	}
-	// Build the target access from the raw user strings; expression templating is applied
-	// generically to the whole object below rather than to hand-picked fields.
-	targetAccess := &wgetaccessv1.Wget{
+	// Build the upload request access from the raw user strings; expression templating is
+	// applied generically to the whole object below rather than to hand-picked fields.
+	requestAccess := &wgetaccessv1.Wget{
 		Type:       wgetaccess.V1VersionedType,
 		URL:        u.TargetURL,
 		Verb:       u.Method,
@@ -162,27 +162,47 @@ func processHTTPUploader(resource descriptorv2.Resource, u *transferv1alpha1.HTT
 		NoRedirect: u.NoRedirect,
 		MediaType:  mediaType,
 	}
-	targetAccessRaw := &runtime.Raw{}
-	if err := wgetaccess.Scheme.Convert(targetAccess, targetAccessRaw); err != nil {
-		return fmt.Errorf("cannot convert target wget access: %w", err)
+	// The published (download) access is the target URL as a plain read access. It
+	// deliberately omits the upload-only request fields (write verb, body, request
+	// headers, redirect handling) so a later `ocm download` does not re-issue the write
+	// request and overwrite the uploaded object.
+	publishedAccess := &wgetaccessv1.Wget{
+		Type:      wgetaccess.V1VersionedType,
+		URL:       u.TargetURL,
+		MediaType: mediaType,
 	}
 
-	// Rewrite the `resource` alias in every ${...} string across the entire target
-	// access object, rather than templating hand-picked fields. Point it at the resource
-	// already present in the descriptor environment node (selected by index, see
-	// resourceNodePath) so no second copy of the resource is injected; every access field
-	// stays addressable generically under resource.access.<field>, so an uploader works
-	// with any source access type, not only wget.
+	// Rewrite the `resource` alias in every ${...} string across each access object,
+	// rather than templating hand-picked fields. Point it at the resource already present
+	// in the descriptor environment node (selected by index, see resourceNodePath) so no
+	// second copy of the resource is injected; every access field stays addressable
+	// generically under resource.access.<field>, so an uploader works with any source
+	// access type, not only wget. Both objects share the same targetURL expression, so
+	// the request and the published read access resolve to the same URL at runtime.
 	nodePath := resourceNodePath(baseID, i)
-	if err := templateExpressions(targetAccessRaw, nodePath); err != nil {
-		return fmt.Errorf("cannot template uploader target access: %w", err)
+
+	requestRaw := &runtime.Raw{}
+	if err := wgetaccess.Scheme.Convert(requestAccess, requestRaw); err != nil {
+		return fmt.Errorf("cannot convert uploader request access: %w", err)
+	}
+	if err := templateExpressions(requestRaw, nodePath); err != nil {
+		return fmt.Errorf("cannot template uploader request access: %w", err)
+	}
+
+	publishedRaw := &runtime.Raw{}
+	if err := wgetaccess.Scheme.Convert(publishedAccess, publishedRaw); err != nil {
+		return fmt.Errorf("cannot convert uploader published access: %w", err)
+	}
+	if err := templateExpressions(publishedRaw, nodePath); err != nil {
+		return fmt.Errorf("cannot template uploader published access: %w", err)
 	}
 
 	targetResource := *resource.DeepCopy()
-	targetResource.Access = targetAccessRaw
+	targetResource.Access = publishedRaw
 
 	spec, err := runtime.UnstructuredFromMixedData(map[string]any{
 		"resource":       resource,
+		"request":        requestRaw,
 		"targetResource": targetResource,
 	})
 	if err != nil {

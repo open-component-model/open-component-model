@@ -73,6 +73,16 @@ func wgetResourceV2(name, url, verb, mediaType string, header map[string][]strin
 	}
 }
 
+func wgetRequest(url, verb, mediaType string, header map[string][]string) *wgetaccessv1.Wget {
+	return &wgetaccessv1.Wget{
+		Type:      wgetaccess.V1VersionedType,
+		URL:       url,
+		Verb:      verb,
+		Header:    header,
+		MediaType: mediaType,
+	}
+}
+
 func runStreaming(t *testing.T, payload []byte, srcDigest *v2.Digest, recordedBody *[]byte, recordedMethod, recordedHeader, recordedContentType *string) (runtime.Typed, error) {
 	t.Helper()
 	scheme := newTransformerScheme()
@@ -88,12 +98,15 @@ func runStreaming(t *testing.T, payload []byte, srcDigest *v2.Digest, recordedBo
 	t.Cleanup(srv.Close)
 
 	source := wgetResourceV2("blob", "https://source.example/blob.tar", "", "", nil, srcDigest)
-	target := wgetResourceV2("blob", srv.URL+"/target/blob.tar", http.MethodPut, "application/x-tar", map[string][]string{"X-Custom": {"hello"}}, nil)
+	// The published (download) access is a plain read access; the upload request carries
+	// the write verb and custom header.
+	target := wgetResourceV2("blob", srv.URL+"/target/blob.tar", "", "application/x-tar", nil, nil)
+	request := wgetRequest(srv.URL+"/target/blob.tar", http.MethodPut, "application/x-tar", map[string][]string{"X-Custom": {"hello"}})
 
 	step := &v1alpha1.HTTPStreaming{
 		Type: v1alpha1.HTTPStreamingV1alpha1,
 		ID:   "upload",
-		Spec: &v1alpha1.HTTPStreamingSpec{Resource: source, TargetResource: target},
+		Spec: &v1alpha1.HTTPStreamingSpec{Resource: source, Request: request, TargetResource: target},
 	}
 
 	tr := &HTTPStreamingTransformer{
@@ -205,12 +218,13 @@ func TestHTTPStreamingTransformer_UploadErrorRedactsQueryToken(t *testing.T) {
 
 	const token = "supersecrettoken"
 	source := wgetResourceV2("blob", "https://source.example/blob.tar", "", "", nil, nil)
-	target := wgetResourceV2("blob", "http://"+addr+"/target/blob.tar?access_token="+token, http.MethodPut, "application/x-tar", nil, nil)
+	target := wgetResourceV2("blob", "http://"+addr+"/target/blob.tar", "", "application/x-tar", nil, nil)
+	request := wgetRequest("http://"+addr+"/target/blob.tar?access_token="+token, http.MethodPut, "application/x-tar", nil)
 
 	step := &v1alpha1.HTTPStreaming{
 		Type: v1alpha1.HTTPStreamingV1alpha1,
 		ID:   "upload",
-		Spec: &v1alpha1.HTTPStreamingSpec{Resource: source, TargetResource: target},
+		Spec: &v1alpha1.HTTPStreamingSpec{Resource: source, Request: request, TargetResource: target},
 	}
 	tr := &HTTPStreamingTransformer{
 		Scheme:             scheme,

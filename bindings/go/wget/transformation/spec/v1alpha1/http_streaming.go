@@ -3,6 +3,7 @@ package v1alpha1
 import (
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	wgetaccessv1 "ocm.software/open-component-model/bindings/go/wget/spec/access/v1"
 )
 
 const HTTPStreamingType = "HTTPStreaming"
@@ -27,17 +28,24 @@ type HTTPStreaming struct {
 
 // HTTPStreamingSpec is the input specification for the HTTPStreaming transformation.
 //
-// Resource is the source resource descriptor with its original access. TargetResource
-// is the fully-resolved target resource carrying a Wget access whose fields (URL, Verb,
-// Header, Body, NoRedirect, MediaType) encode the entire HTTP request. Building the
-// target resource at graph-build time keeps the transfer plan literal and deterministic.
+// Resource is the source resource descriptor with its original access. Request is the
+// HTTP upload request (URL, method, headers, body, redirect handling) and is the single
+// source of truth for the outbound call. TargetResource is the resource as it will be
+// published after a successful upload: its access is the read (download) access at the
+// resolved target URL and MUST NOT carry the upload-only request fields (write verb,
+// body, request headers), so a later download does not re-issue the write request.
+// Building both at graph-build time keeps the transfer plan literal and deterministic.
 //
 // +k8s:deepcopy-gen=true
 // +ocm:jsonschema-gen=true
 type HTTPStreamingSpec struct {
 	// Resource is the source resource descriptor.
 	Resource *v2.Resource `json:"resource"`
-	// TargetResource is the target resource descriptor with the destination Wget access.
+	// Request is the resolved HTTP upload request (a Wget access carrying URL, verb,
+	// headers, body and redirect handling).
+	Request *wgetaccessv1.Wget `json:"request"`
+	// TargetResource is the resource to publish after upload; its access is the read
+	// access at the resolved target URL, without the upload-only request fields.
 	TargetResource *v2.Resource `json:"targetResource"`
 }
 
