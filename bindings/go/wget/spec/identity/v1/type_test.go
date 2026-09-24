@@ -20,6 +20,24 @@ func TestMustRegisterIdentityType(t *testing.T) {
 	require.NoError(t, err)
 	_, ok := obj.(*WgetIdentity)
 	assert.True(t, ok, "expected *WgetIdentity, got %T", obj)
+
+	for _, alias := range []runtime.Type{
+		runtime.NewVersionedType(HTTPIdentityType, Version),
+		runtime.NewUnversionedType(HTTPIdentityType),
+		runtime.NewVersionedType("http", Version),
+		runtime.NewUnversionedType("http"),
+	} {
+		assert.True(t, scheme.IsRegistered(alias), "expected alias %q to be registered", alias)
+
+		canonical, ok := scheme.ResolveCanonicalType(alias)
+		assert.True(t, ok, "expected alias %q to resolve canonically", alias)
+		assert.Equal(t, VersionedType, canonical, "expected alias %q to resolve to %q", alias, VersionedType)
+
+		obj, err := scheme.NewObject(alias)
+		require.NoError(t, err)
+		_, ok = obj.(*WgetIdentity)
+		assert.True(t, ok, "expected *WgetIdentity for alias %q, got %T", alias, obj)
+	}
 }
 
 func TestWgetIdentity_SchemeConvert(t *testing.T) {

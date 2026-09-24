@@ -10,6 +10,7 @@ import (
 	credentialruntime "ocm.software/open-component-model/bindings/go/credentials/spec/config/runtime"
 	v1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	wgetidentityv1 "ocm.software/open-component-model/bindings/go/wget/spec/identity/v1"
 )
 
 type ingestTestCredentials struct {
@@ -169,4 +170,87 @@ func TestIngestDirectCredentialsWithArbitraryProperties(t *testing.T) {
 	r.True(ok, "expected *v1.DirectCredentials, got %T", resolved)
 	r.Equal("alice", creds.Properties["username"])
 	r.Equal("yes", creds.Properties["anything-goes"])
+}
+
+func TestIngestConsumerIdentityAliasCanonicalization(t *testing.T) {
+	ctx := t.Context()
+
+	identityScheme := runtime.NewScheme()
+	wgetidentityv1.MustRegisterIdentityType(identityScheme)
+
+	for _, tc := range []struct {
+		name         string
+		consumerType string
+	}{
+		{"canonical consumer matches", "Wget"},
+		{"HTTP alias matches", "HTTP"},
+		{"lowercase HTTP alias matches", "http"},
+		{"versioned HTTP alias matches", "HTTP/v1"},
+		{"versioned consumer matches", "Wget/v1"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+
+			config := &credentialruntime.Config{
+				Consumers: []credentialruntime.Consumer{
+					{
+						Identities: []runtime.Identity{{
+							runtime.IdentityAttributeType: tc.consumerType,
+							"hostname":                    "localhost",
+							"port":                        "8080",
+							"scheme":                      "http",
+						}},
+						Credentials: []runtime.Typed{&v1.DirectCredentials{
+							Type:       runtime.NewVersionedType(v1.CredentialsType, v1.Version),
+							Properties: map[string]string{"username": "alice"},
+						}},
+					},
+				},
+			}
+
+			graph, err := credentials.ToGraph(ctx, config, credentials.Options{
+				ConsumerIdentityTypeScheme: identityScheme,
+			})
+			r.NoError(err)
+
+			resolved, err := graph.Resolve(ctx, runtime.Identity{
+				runtime.IdentityAttributeType: "Wget",
+				"hostname":                    "localhost",
+				"port":                        "8080",
+				"scheme":                      "http",
+			})
+			r.NoError(err)
+			dc, ok := resolved.(*v1.DirectCredentials)
+			r.True(ok, "expected *v1.DirectCredentials, got %T", resolved)
+			r.Equal("alice", dc.Properties["username"])
+		})
+	}
+
+	t.Run("without scheme an HTTP entry is not canonicalized", func(t *testing.T) {
+		r := require.New(t)
+
+		config := &credentialruntime.Config{
+			Consumers: []credentialruntime.Consumer{
+				{
+					Identities: []runtime.Identity{{
+						runtime.IdentityAttributeType: "HTTP",
+						"hostname":                    "localhost",
+					}},
+					Credentials: []runtime.Typed{&v1.DirectCredentials{
+						Type:       runtime.NewVersionedType(v1.CredentialsType, v1.Version),
+						Properties: map[string]string{"username": "alice"},
+					}},
+				},
+			},
+		}
+
+		graph, err := credentials.ToGraph(ctx, config, credentials.Options{})
+		r.NoError(err)
+
+		_, err = graph.Resolve(ctx, runtime.Identity{
+			runtime.IdentityAttributeType: "Wget",
+			"hostname":                    "localhost",
+		})
+		r.ErrorIs(err, credentials.ErrNotFound)
+	})
 }

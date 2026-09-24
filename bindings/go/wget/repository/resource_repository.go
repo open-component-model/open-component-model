@@ -17,6 +17,7 @@ import (
 	accessspec "ocm.software/open-component-model/bindings/go/wget/spec/access"
 	"ocm.software/open-component-model/bindings/go/wget/spec/access/v1"
 	wgetcreds "ocm.software/open-component-model/bindings/go/wget/spec/credentials"
+	wgetidentity "ocm.software/open-component-model/bindings/go/wget/spec/identity"
 	identityv1 "ocm.software/open-component-model/bindings/go/wget/spec/identity/v1"
 )
 
@@ -206,4 +207,10 @@ func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, resource
 
 func (r *ResourceRepository) GetCredentialTypeScheme() *runtime.Scheme {
 	return wgetcreds.Scheme
+}
+
+// GetConsumerIdentityTypeScheme returns the scheme with the consumer identity types the
+// wget resource repository resolves credentials for, including the HTTP aliases.
+func (r *ResourceRepository) GetConsumerIdentityTypeScheme() *runtime.Scheme {
+	return wgetidentity.Scheme
 }
