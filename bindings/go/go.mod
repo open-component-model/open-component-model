@@ -38,7 +38,6 @@ require (
 	github.com/spf13/pflag v1.0.10
 	github.com/stretchr/testify v1.12.1
 	github.com/testcontainers/testcontainers-go v0.44.0
-	github.com/testcontainers/testcontainers-go/modules/minio v0.44.0
 	github.com/testcontainers/testcontainers-go/modules/registry v0.44.0
 	github.com/testcontainers/testcontainers-go/modules/toxiproxy v0.44.0
 	github.com/veqryn/slog-context v0.9.0
