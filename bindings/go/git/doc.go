@@ -52,6 +52,12 @@
 // [ocm.software/open-component-model/bindings/go/git/repository.WithHTTPConfig]
 // for configuration and the process-global registration constraints.
 //
+// Independent HTTP configurations within one process are not isolated: the last
+// registration controls subsequent Git HTTP sessions. Per-host routing within
+// one configuration remains supported. Per-operation isolation is deferred and
+// required before integration with the controller's object-scoped configuration:
+// https://github.com/open-component-model/open-component-model/issues/3685.
+//
 // # Credential consumer identity
 //
 // GetResourceCredentialConsumerIdentity derives the identity from the repository URL:
