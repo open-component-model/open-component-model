@@ -28,22 +28,25 @@ const genericBlobDigestV1 = "genericBlobDigest/v1"
 
 var _ constructor.ResourceInputMethod = (*InputMethod)(nil)
 
-// InputMethod implements [constructor.ResourceInputMethod] for wget-based
-// inputs: it downloads a resource from an HTTP/S URL declared in the component
-// constructor and returns it as a local blob.
+// InputMethod implements the [constructor.ResourceInputMethod] interface for wget-based inputs.
+// It downloads a resource from an HTTP/S URL declared in the component constructor
+// and returns it as a local blob to be stored in the component version.
 type InputMethod struct {
-	// HTTPConfig configures the HTTP client. When nil, a default client is used.
+	// HTTPConfig configures the HTTP client (timeouts, retries, TLS, routing) used for
+	// downloads. When nil, a default client is used.
 	HTTPConfig *httpv1alpha1.Config
 	// ChecksumConfig steers the [checksumhttpv1alpha1.ChecksumMode] applied to
 	// each downloaded resource. When nil (or when no entry matches the URL),
 	// the digest is computed from the stream without verification.
 	ChecksumConfig *checksumhttpv1alpha1.Config
-	// MaxDownloadSize limits response body bytes; zero uses the download
-	// package default, negative disables the limit.
+	// MaxDownloadSize limits the number of bytes read from a response body. When zero,
+	// the download package default [download.DefaultMaxDownloadSize] is used. A negative value disables the limit.
 	MaxDownloadSize int64
-	// TempFolder is the directory the downloaded body is streamed into. Empty
-	// uses the OS temp directory. The backing file outlives ProcessResource
-	// because it holds the local-blob content; see [download.Blob].
+	// TempFolder is the directory the downloaded body is streamed into. When empty,
+	// the OS temporary directory is used. The file backing the returned blob is
+	// created here and outlives ProcessResource, because it holds the content the
+	// constructor stores as a local blob. It is removed once the constructor releases
+	// the blob; see [download.Blob].
 	TempFolder string
 }
 
@@ -51,9 +54,9 @@ func (i *InputMethod) GetInputMethodScheme() *runtime.Scheme {
 	return input.Scheme
 }
 
-// GetResourceCredentialConsumerIdentity resolves the credential consumer
-// identity from the wget URL, using the same consumer type as the access type
-// so credentials configured for a host resolve for both.
+// GetResourceCredentialConsumerIdentity resolves the credential consumer identity for a
+// wget input from its URL, using the same wget consumer type as the access type so that
+// credentials configured for a host resolve for both.
 func (i *InputMethod) GetResourceCredentialConsumerIdentity(_ context.Context, resource *constructorruntime.Resource) (runtime.Identity, error) {
 	wget := v1.Wget{}
 	if err := i.GetInputMethodScheme().Convert(resource.Input, &wget); err != nil {
@@ -80,8 +83,8 @@ func (i *InputMethod) GetResourceCredentialConsumerIdentity(_ context.Context, r
 	return identity, nil
 }
 
-// ProcessResource downloads the resource described by the wget input
-// specification and returns it as a local blob.
+// ProcessResource downloads the resource described by the wget input specification and
+// returns it as local blob data to be stored in the component version.
 func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructorruntime.Resource, credentials runtime.Typed) (*constructor.ResourceInputMethodResult, error) {
 	wget := v1.Wget{}
 	if err := i.GetInputMethodScheme().Convert(resource.Input, &wget); err != nil {
@@ -97,9 +100,6 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 		client = httpclient.New(httpclient.WithConfig(i.HTTPConfig))
 	}
 
-	// Verification behaviour is a deployment concern: the input spec carries
-	// no checksum mode. Operators configure it centrally via
-	// checksum.http.config.ocm.software/v1alpha1.
 	policy, hasPolicy := httpverify.PolicyForMode(i.ChecksumConfig.ModeForURL(wget.URL))
 
 	opts := []download.Option{
@@ -146,9 +146,7 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 		}
 	}
 
-	// Record SHA-256 as the blob's precalculated digest so the resource is
-	// stored with SHA-256/genericBlobDigest regardless of which algorithm
-	// verified it.
+	// Record SHA-256 regardless of which algorithm verified the bytes.
 	if needsDigest {
 		if sha, ok := data.Digests()[checksum.StorageAlgorithm.OCMName]; ok && sha != "" {
 			data.SetPrecalculatedDigest("sha256:" + sha)

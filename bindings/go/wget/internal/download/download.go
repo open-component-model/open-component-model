@@ -1,7 +1,6 @@
-// Package download contains the shared HTTP download logic for the wget
-// bindings. Callers convert their own specification into a [Request] and
-// invoke [Download], so transport, credential handling and size limiting
-// live in one place.
+// Package download contains the shared HTTP download logic for the wget bindings.
+// Callers convert their own specification into a [Request] and invoke [Download],
+// so the transport, credential handling and size limiting live in exactly one place.
 package download
 
 import (
@@ -24,28 +23,34 @@ import (
 
 const tempFilePattern = "ocm-wget-download-*"
 
-// Request describes a single HTTP download.
+// Request describes a single HTTP download and carries the primitive parameters
+// of the request.
 type Request struct {
-	// URL is the http/https endpoint.
+	// URL is the http/https endpoint to download from.
 	URL string
-	// MediaType overrides the resulting blob's media type. Empty falls back to
-	// the response Content-Type, then to application/octet-stream.
+	// MediaType overrides the media type of the resulting blob. When empty the
+	// response Content-Type is used, falling back to application/octet-stream.
 	MediaType string
-	// Header carries additional HTTP request headers.
+	// Header contains additional HTTP headers to send with the request.
 	Header map[string][]string
-	// Verb is the HTTP method; defaults to GET.
+	// Verb is the HTTP method to use. Defaults to GET when empty.
 	Verb string
 	// Body is the optional request body.
 	Body []byte
-	// NoRedirect disables following redirects.
+	// NoRedirect disables following HTTP redirects when set.
 	NoRedirect bool
 }
 
-// Download performs the request and returns the response body as a file-backed
-// blob. Bodies are streamed, so memory use is flat regardless of size.
+// Download performs the HTTP request described by req and returns the response body
+// as a blob backed by a file on disk. Bodies are streamed rather than buffered, so
+// memory use stays flat regardless of response size; the file is created under the
+// directory given by [WithTempDir] and outlives this call.
 //
-// The returned [Blob] owns the temp file: callers should Close it; unclosed
-// blobs have their file removed when unreachable.
+// The returned [Blob] owns that file: callers should [Blob.Close] it once they are
+// done, and an unclosed blob has its file removed when it becomes unreachable.
+//
+// The HTTP client, credentials and maximum download size are supplied via options;
+// see [WithClient], [WithCredentials] and [WithMaxDownloadSize].
 func Download(ctx context.Context, req Request, opts ...Option) (_ *Blob, err error) {
 	o := &option{}
 	for _, opt := range opts {
@@ -68,8 +73,8 @@ func Download(ctx context.Context, req Request, opts ...Option) (_ *Blob, err er
 		return nil, fmt.Errorf("unsupported url scheme %q: only http and https are allowed", parsedURL.Scheme)
 	}
 
-	// safeURL strips userinfo and query params so presigned URLs and
-	// credentials never leak into error messages or logs.
+	// safeURL strips userinfo and query params so presigned URLs and credentials
+	// are never leaked into error messages or logs.
 	safeURL := *parsedURL
 	safeURL.User = nil
 	safeURL.RawQuery = ""
@@ -126,13 +131,14 @@ func Download(ctx context.Context, req Request, opts ...Option) (_ *Blob, err er
 		return nil, fmt.Errorf("HTTP request to %s returned status %d", safeURL.String(), resp.StatusCode)
 	}
 
-	// nil option means "use the default"; zero or negative disables the limit.
+	// A nil option means "use the default"; a zero or negative value disables the limit.
 	maxDownloadSize := DefaultMaxDownloadSize
 	if o.MaxDownloadSize != nil {
 		maxDownloadSize = *o.MaxDownloadSize
 	}
 
-	// Reject an oversized body up-front when Content-Length is known.
+	// When the server announces the size up front, an oversized body is rejected
+	// before any of it is transferred. ContentLength is negative when unknown.
 	if maxDownloadSize > 0 && resp.ContentLength > maxDownloadSize {
 		return nil, fmt.Errorf("response body from %s exceeds maximum allowed size of %d bytes", safeURL.String(), maxDownloadSize)
 	}
@@ -203,14 +209,18 @@ func Download(ctx context.Context, req Request, opts ...Option) (_ *Blob, err er
 	return b, nil
 }
 
-// ApplyCredentials applies OCM credentials to req and/or client. Supported:
-//   - certificate + privateKey (+ optional certificateAuthority): mTLS
-//   - identityToken: Bearer in Authorization
-//   - username + password: HTTP Basic
+// ApplyCredentials applies OCM credentials to the HTTP request or client.
+// Supported credential types:
+//   - certificate + privateKey (+ optional certificateAuthority): mTLS client
+//     certificate, applied to the transport independently of the header auth below
+//   - identityToken: Bearer token in the Authorization header
+//   - username + password: HTTP Basic Authentication
 //
-// mTLS composes with header auth. Bearer and Basic are mutually exclusive on
-// the Authorization header; Bearer wins when both are set. Both
-// WgetCredentials/v1 and legacy DirectCredentials/v1 are accepted.
+// The mTLS client certificate composes with the header-based auth. Bearer and
+// Basic both use the Authorization header and are mutually exclusive; the bearer
+// token takes precedence when both are set.
+//
+// Both WgetCredentials/v1 and legacy DirectCredentials/v1 are accepted.
 func ApplyCredentials(ctx context.Context, req *http.Request, client **http.Client, credentials runtime.Typed) error {
 	if credentials == nil {
 		return nil
@@ -221,8 +231,12 @@ func ApplyCredentials(ctx context.Context, req *http.Request, client **http.Clie
 		return fmt.Errorf("error converting credentials: %w", err)
 	}
 
+	// The mTLS client certificate is a transport-layer credential and is applied
+	// independently of the header-based authentication below, so it can be
+	// combined with a bearer token or basic auth.
 	if creds.Certificate != "" {
-		// mTLS is silently unused over plain HTTP; warn the user.
+		// A client certificate only takes effect during a TLS handshake. Over
+		// plain HTTP it is silently unused, so warn the user it has no effect.
 		if req.URL.Scheme != "https" {
 			slog.WarnContext(ctx, "client certificate credentials provided for a non-HTTPS URL", "scheme", req.URL.Scheme)
 		}
@@ -245,7 +259,8 @@ func ApplyCredentials(ctx context.Context, req *http.Request, client **http.Clie
 			tlsCfg.RootCAs = pool
 		}
 
-		// Clone the client so we don't mutate the caller's transport.
+		// Clone the client and install an mTLS transport, preserving the
+		// original transport's settings (proxy, timeouts, connection pooling).
 		existing := *client
 		var baseTransport *http.Transport
 		if t, ok := existing.Transport.(*http.Transport); ok && t != nil {
@@ -267,6 +282,9 @@ func ApplyCredentials(ctx context.Context, req *http.Request, client **http.Clie
 		*client = cloned
 	}
 
+	// IdentityToken (Bearer) and Username/Password (Basic) both set the
+	// Authorization header, so at most one applies. IdentityToken takes
+	// precedence when both are set.
 	if creds.IdentityToken != "" && creds.Username != "" {
 		slog.WarnContext(ctx, "both bearer token and basic auth credentials provided; using the bearer token and ignoring basic auth")
 	}

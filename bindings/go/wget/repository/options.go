@@ -7,9 +7,11 @@ import (
 	"ocm.software/open-component-model/bindings/go/wget/internal/download"
 )
 
-// DefaultMaxDownloadSize mirrors [download.DefaultMaxDownloadSize]: zero means
-// unlimited.
-const DefaultMaxDownloadSize int64 = download.DefaultMaxDownloadSize
+const (
+	// DefaultMaxDownloadSize is the default maximum download size. Zero means
+	// unlimited; see [download.DefaultMaxDownloadSize].
+	DefaultMaxDownloadSize int64 = download.DefaultMaxDownloadSize
+)
 
 // Options holds configuration options for the wget resource repository.
 type Options struct {
@@ -20,18 +22,20 @@ type Options struct {
 	ChecksumConfig *checksumhttpv1alpha1.Config
 }
 
-// Option configures Options.
+// Option is a function that configures Options.
 type Option func(*Options)
 
-// WithHTTPClient sets the HTTP client.
+// WithHTTPClient sets the HTTP client to use for requests.
 func WithHTTPClient(client *http.Client) Option {
 	return func(o *Options) {
 		o.Client = client
 	}
 }
 
-// WithMaxDownloadSize caps response body bytes. Zero or negative disables the
-// limit; bodies are streamed to disk, bounded by free disk rather than RAM.
+// WithMaxDownloadSize caps the number of bytes read from a response body.
+// Zero or negative (the default) means unlimited: bodies are streamed to disk
+// rather than held in memory, so a download is bounded by free disk rather than
+// by RAM.
 func WithMaxDownloadSize(size int64) Option {
 	return func(o *Options) {
 		o.MaxDownloadSize = &size
