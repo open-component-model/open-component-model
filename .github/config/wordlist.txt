@@ -973,3 +973,4 @@ unversioned
 BuildKit
 retryable
 lexicographically
+artifactory

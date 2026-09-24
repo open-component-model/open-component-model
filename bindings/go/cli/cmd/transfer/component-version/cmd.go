@@ -372,6 +372,11 @@ func buildGraphDefinitionFromArgs(
 		transferCfg = &transferv1alpha1.Config{}
 	}
 
+	uploaderCfgs, err := transferv1alpha1.LookupUploaderConfigs(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("looking up uploader configs failed: %w", err)
+	}
+
 	if cmd.Flags().Changed(FlagRecursive) {
 		recursive, err := cmd.Flags().GetBool(FlagRecursive)
 		if err != nil {
@@ -448,7 +453,7 @@ func buildGraphDefinitionFromArgs(
 		}
 	}
 
-	tgd, err := transfer.BuildGraphDefinition(ctx, transferCfg,
+	tgd, err := transfer.BuildGraphDefinition(ctx, transferCfg, uploaderCfgs,
 		transfer.Mapping{
 			Components: componentIDs,
 			Target:     toSpec,

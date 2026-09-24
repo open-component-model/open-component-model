@@ -6,7 +6,7 @@
 #
 # Prerequisites (applied before this file):
 #   - Namespace: sovereign-product
-#   - Secret: acme-signing-key
+#   - Secret: acme-signing-key (an .ocmconfig requesting verification of the "default" signature)
 # OCM Repository pointing to local air-gapped registry
 apiVersion: delivery.ocm.software/v1alpha1
 kind: Repository
@@ -30,10 +30,10 @@ spec:
     name: sovereign-repo
   semver: "1.0.0"
   interval: 1m
-  verify:
-    - signature: default
-      secretRef:
-        name: acme-signing-key
+  ocmConfig:
+    - apiVersion: v1
+      kind: Secret
+      name: acme-signing-key
 ---
 apiVersion: delivery.ocm.software/v1alpha1
 kind: Resource
