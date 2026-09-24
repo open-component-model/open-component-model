@@ -155,6 +155,7 @@ func Test_Integration_TransferOCIImageResource_CopyModeAllResources(t *testing.T
 
 	tgd, err := transfer.BuildGraphDefinition(t.Context(),
 		&transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeAllResources},
+		nil,
 		transfer.Mapping{
 			Components: []transfer.ComponentID{{Component: componentName, Version: componentVersion}},
 			Target:     targetSpec,
@@ -295,7 +296,7 @@ func Test_Integration_TransferOCIArtifact_OCIToOCI(t *testing.T) {
 	r.NoError(ctfRepo.AddComponentVersion(t.Context(), desc))
 
 	// CTF → source OCI (seed).
-	seedTGD, err := transfer.BuildGraphDefinition(t.Context(), nil,
+	seedTGD, err := transfer.BuildGraphDefinition(t.Context(), nil, nil,
 		transfer.Mapping{
 			Components: []transfer.ComponentID{{Component: componentName, Version: componentVersion}},
 			Target:     sourceSpec,
@@ -329,6 +330,7 @@ func Test_Integration_TransferOCIArtifact_OCIToOCI(t *testing.T) {
 			CopyMode:   transferv1alpha1.CopyModeAllResources,
 			UploadType: transferv1alpha1.UploadAsOciArtifact,
 		},
+		nil,
 		transfer.Mapping{
 			Components: []transfer.ComponentID{{Component: componentName, Version: componentVersion}},
 			Target:     targetSpec,
@@ -463,8 +465,6 @@ func Test_Integration_TransferDockerManifestLocalBlob_CTFToOCI(t *testing.T) {
 	t.Parallel()
 	r := require.New(t)
 
-	const dockerManifestMediaType = "application/vnd.docker.distribution.manifest.v2+json"
-
 	// 1. Start source and target registries.
 	sourceAddr, sourceUser, sourcePwd := startRegistry(t)
 	targetAddr, targetUser, targetPwd := startRegistry(t)
@@ -523,6 +523,7 @@ func Test_Integration_TransferDockerManifestLocalBlob_CTFToOCI(t *testing.T) {
 			CopyMode:   transferv1alpha1.CopyModeAllResources,
 			UploadType: transferv1alpha1.UploadAsOciArtifact,
 		},
+		nil,
 		transfer.Mapping{
 			Components: []transfer.ComponentID{{Component: componentName, Version: componentVersion}},
 			Target:     targetSpec,
