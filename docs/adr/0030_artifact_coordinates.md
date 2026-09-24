@@ -121,7 +121,7 @@ Unsigned coordinate edits preserve descriptor normalization only when other sign
 
 ### Model
 
-Persist independently typed coordinates in one label. Each family defines native field meanings and validation.
+This is the typed-coordinate approach from Fabian's proposal. Persist independently typed coordinates in one label. Each family defines native field meanings and validation.
 
 ```yaml
 labels:
@@ -138,17 +138,35 @@ labels:
 
 This example could describe a chart converted to OCI while retaining its Helm identity. Multiple entries do not imply conversion support. The Helm version and OCI tag are distinct values with a defined mapping.
 
+Excerpt of the proposed native types, with descriptive Go names shown together here. The original uses `Coordinates` in separate technology packages.
+
 ```go
-// Sketch of a native coordinate type.
 type OCIArtifactCoordinates struct {
     Type       runtime.Type `json:"type"`
     Repository string       `json:"repository"`
     Tag        string       `json:"tag,omitempty"`
     Digest     string       `json:"digest,omitempty"`
 }
+
+type HelmChartCoordinates struct {
+    Type    runtime.Type `json:"type"`
+    Name    string       `json:"name"`
+    Version string       `json:"version"`
+}
+
+type S3ObjectCoordinates struct {
+    Type      runtime.Type `json:"type"`
+    ObjectKey string       `json:"objectKey"`
+}
 ```
 
-Require a repository and at least one of tag or digest. Use at most one entry per family name across versions. Producers upsert their family rather than append duplicates. List order does not choose a destination or give one family precedence.
+| Wire type                         | Native contract                                                                                 |
+| --------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `OCIArtifactCoordinates/v1alpha1` | Registry-relative repository and at least one of tag or root digest. Preserve both when present |
+| `HelmChartCoordinates/v1alpha1`   | Required name/version from the archive's `Chart.yaml`                                           |
+| `S3ObjectCoordinates/v1alpha1`    | Required original object key, unchanged. No bucket, endpoint, or S3 version ID                  |
+
+The proposed envelope is `type List []*runtime.Raw`. Each technology decodes its own payload. Use at most one entry per family name across versions, keyed by `runtime.Type.Name`. Producers upsert their family rather than append duplicates. List order does not choose a destination or give one family precedence.
 
 ### Offline Consumption and Extensibility
 
@@ -217,6 +235,19 @@ The chart supplies name/version. Source normalization or policy supplies namespa
 
 This sketch is incomplete. OCI root-digest pins and Git revisions need a defined place alongside shared naming. An OCI root digest must not be replaced by the digest of its offline archive. Package variants, multiple aliases, and multi-file artifacts also need evaluation before stabilizing the schema.
 
+### Compared with Specialized Coordinates
+
+The shared schema replaces the native payloads rather than wrapping them:
+
+| Native field               | Candidate shared representation                                                       |
+| -------------------------- | ------------------------------------------------------------------------------------- |
+| Helm `name` and `version`  | Shared `name` and `version`, still verified against `Chart.yaml`                      |
+| S3 `objectKey`             | Shared opaque `path`, preserving the exact key                                        |
+| OCI `repository` and `tag` | Defined namespace/name decomposition and shared `tag`                                 |
+| OCI root `digest`          | Not covered by this sketch. Must be retained explicitly before the schema is complete |
+
+A generic byte-storage consumer reads `path` instead of decoding an S3 family. This reduces source-specific dependencies, but moves responsibility for preserving native meaning into the shared schema and normalizers.
+
 ### Offline Consumption and Extensibility
 
 Persist the shared object so receivers can interpret naming without the original source adapter. Keep it when the current access cannot reconstruct its meaning.
@@ -262,6 +293,12 @@ type CoordinateAdapter[T any] interface {
 
 Mappings are partial, not guaranteed inverses. Missing information requires explicit policy or an error. Same-technology consumers can retain native details that do not fit the hub, while cross-technology projection uses the shared contract.
 
+### Compared with Specialized and Unified Coordinates
+
+The hybrid retains types such as `HelmChartCoordinates` and `S3ObjectCoordinates` from Option 1, while adding the common mapping boundary from Option 2. For example, a Helm adapter supplies shared name/version, a naming policy derives a distribution path, and an S3 adapter projects that path into `objectKey`. The S3 adapter does not decode Helm coordinates.
+
+Unlike the unified option, native consumers can keep their typed contracts. Unlike the specialized option alone, cross-technology mapping must pass through the shared model. Native details remain available when the shared projection is insufficient for a lossless round trip.
+
 ### Offline Consumption and Extensibility
 
 Two persistence variants are possible:
@@ -298,6 +335,12 @@ A new source expressing existing shared semantics needs one adapter. Compatible 
 | New source using supported shared semantics | No shared contract defined           | One normalizer                       | One source adapter                         |
 | Schema evolution                            | Per family                           | Shared schema                        | Shared schema and native families          |
 | Main risk                                   | Pairwise mappings                    | Incomplete or ambiguous common model | Consistency between native and shared data |
+
+For a chart taken offline and later stored in S3, all options must retain its Helm identity in resource labels. The difference is how they obtain the object key:
+
+- **Specialized:** produce an `S3ObjectCoordinates` entry through an additional mapping while preserving the Helm entry
+- **Unified:** derive a shared distribution `path` and retain shared name/version
+- **Hybrid:** normalize Helm coordinates to the hub and project the chosen path into S3 coordinates, retaining the original identity
 
 Options 2 and 3 avoid up to N × M naming mappings for supported semantics. Option 1 defers that normalization boundary. None provides universal format conversion.
 
