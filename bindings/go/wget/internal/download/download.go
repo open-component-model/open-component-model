@@ -100,10 +100,10 @@ func Download(ctx context.Context, req Request, opts ...Option) (_ *Blob, err er
 	}
 
 	if req.NoRedirect {
-		client = cloneClientWithNoRedirect(client)
+		client = CloneClientWithNoRedirect(client)
 	}
 
-	if err := applyCredentials(ctx, httpReq, &client, o.Credentials); err != nil {
+	if err := ApplyCredentials(ctx, httpReq, &client, o.Credentials); err != nil {
 		return nil, fmt.Errorf("error applying credentials: %w", err)
 	}
 
@@ -179,7 +179,7 @@ func Download(ctx context.Context, req Request, opts ...Option) (_ *Blob, err er
 	return b, nil
 }
 
-// applyCredentials applies OCM credentials to the HTTP request or client.
+// ApplyCredentials applies OCM credentials to the HTTP request or client.
 // Supported credential types:
 //   - certificate + privateKey (+ optional certificateAuthority): mTLS client
 //     certificate, applied to the transport independently of the header auth below
@@ -191,7 +191,7 @@ func Download(ctx context.Context, req Request, opts ...Option) (_ *Blob, err er
 // token takes precedence when both are set.
 //
 // Both WgetCredentials/v1 and legacy DirectCredentials/v1 are accepted.
-func applyCredentials(ctx context.Context, req *http.Request, client **http.Client, credentials runtime.Typed) error {
+func ApplyCredentials(ctx context.Context, req *http.Request, client **http.Client, credentials runtime.Typed) error {
 	if credentials == nil {
 		return nil
 	}
@@ -268,7 +268,7 @@ func applyCredentials(ctx context.Context, req *http.Request, client **http.Clie
 	return nil
 }
 
-func cloneClientWithNoRedirect(original *http.Client) *http.Client {
+func CloneClientWithNoRedirect(original *http.Client) *http.Client {
 	c := *original
 	c.CheckRedirect = func(req *http.Request, via []*http.Request) error {
 		return http.ErrUseLastResponse
