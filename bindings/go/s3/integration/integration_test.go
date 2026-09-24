@@ -17,7 +17,7 @@ import (
 	godigest "github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/modules/minio"
+	"github.com/testcontainers/testcontainers-go/wait"
 
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
@@ -29,33 +29,49 @@ import (
 	credv1 "ocm.software/open-component-model/bindings/go/s3/spec/credentials/v1"
 )
 
-const minioImage = "quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z"
+const (
+	rustfsImage     = "rustfs/rustfs:1.0.0-rc.6"
+	rustfsAccessKey = "ocm-test"
+	rustfsSecretKey = "ocm-test-secret"
+)
 
-// Test_Integration_S3 exercises the S3 ResourceRepository end to end against a MinIO
-// container.
-func Test_Integration_S3(t *testing.T) {
+// startRustFS starts a RustFS S3 server and returns its host:port.
+func startRustFS(t *testing.T, ctx context.Context) string {
+	t.Helper()
 	r := require.New(t)
-	ctx := context.Background()
 
-	container, err := minio.Run(ctx, minioImage)
+	container, err := testcontainers.Run(ctx, rustfsImage,
+		testcontainers.WithExposedPorts("9000/tcp"),
+		testcontainers.WithEnv(map[string]string{"RUSTFS_ACCESS_KEY": rustfsAccessKey, "RUSTFS_SECRET_KEY": rustfsSecretKey}),
+		testcontainers.WithWaitStrategy(wait.ForHTTP("/health/ready").WithPort("9000/tcp")),
+	)
 	r.NoError(err)
 	t.Cleanup(func() { r.NoError(testcontainers.TerminateContainer(container)) })
 
-	hostPort, err := container.ConnectionString(ctx)
+	hostPort, err := container.PortEndpoint(ctx, "9000/tcp", "")
 	r.NoError(err)
+	return hostPort
+}
+
+// Test_Integration_S3 exercises the S3 ResourceRepository end to end against a RustFS
+// container.
+func Test_Integration_S3(t *testing.T) {
+	ctx := context.Background()
+
+	hostPort := startRustFS(t, ctx)
 	endpoint := "http://" + hostPort
 
-	setup := newSetupClient(t, ctx, endpoint, container.Username, container.Password)
+	setup := newSetupClient(t, ctx, endpoint, rustfsAccessKey, rustfsSecretKey)
 
 	creds := &credv1.S3Credentials{
 		Type:            credv1.S3CredentialsVersionedType,
-		AccessKeyID:     container.Username,
-		SecretAccessKey: container.Password,
+		AccessKeyID:     rustfsAccessKey,
+		SecretAccessKey: rustfsSecretKey,
 	}
 	tempDir := t.TempDir()
 	fsConfig := &filesystemv1alpha1.Config{TempFolder: &tempDir}
 	// A real http configuration: the retry section drives the SDK's attempt count, and
-	// the per-host entry routes MinIO requests through the host-specific transport.
+	// the per-host entry routes S3 requests through the host-specific transport.
 	httpConfig := &httpv1alpha1.Config{
 		TimeoutConfig: httpv1alpha1.TimeoutConfig{Timeout: httpv1alpha1.NewTimeout(30 * time.Second)},
 		Retry: &httpv1alpha1.RetryConfig{
