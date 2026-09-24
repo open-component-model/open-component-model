@@ -128,8 +128,12 @@ func (t *HTTPStreamingTransformer) Transform(ctx context.Context, step runtime.T
 			req.Header.Add(k, v)
 		}
 	}
-	if contentType := targetContentType(tw, srcBlob); contentType != "" {
-		req.Header.Set("Content-Type", contentType)
+	// Only derive the Content-Type from the media type when the user did not already set
+	// one via the request headers above, so an explicit Content-Type is never overridden.
+	if req.Header.Get("Content-Type") == "" {
+		if contentType := targetContentType(tw, srcBlob); contentType != "" {
+			req.Header.Set("Content-Type", contentType)
+		}
 	}
 	if sizer, ok := srcBlob.(blob.SizeAware); ok {
 		if size := sizer.Size(); size != blob.SizeUnknown {

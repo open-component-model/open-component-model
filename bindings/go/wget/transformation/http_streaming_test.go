@@ -235,3 +235,41 @@ func TestHTTPStreamingTransformer_UploadErrorRedactsQueryToken(t *testing.T) {
 	r.Error(err)
 	assert.NotContains(t, err.Error(), token, "the upload error must not leak the target URL query token")
 }
+
+// TestHTTPStreamingTransformer_UserContentTypeHeaderPreserved asserts that an explicit
+// Content-Type supplied via the request headers is not overridden by the media-type
+// derived default.
+func TestHTTPStreamingTransformer_UserContentTypeHeaderPreserved(t *testing.T) {
+	r := require.New(t)
+	scheme := newTransformerScheme()
+
+	var gotContentType string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		gotContentType = req.Header.Get("Content-Type")
+		_, _ = io.ReadAll(req.Body)
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(srv.Close)
+
+	source := wgetResourceV2("blob", "https://source.example/blob.tar", "", "", nil, nil)
+	target := wgetResourceV2("blob", srv.URL+"/target/blob.tar", "", "application/x-tar", nil, nil)
+	// The request sets an explicit Content-Type that differs from the media type
+	// (application/x-tar); it must reach the target unchanged.
+	request := wgetRequest(srv.URL+"/target/blob.tar", http.MethodPut, "application/x-tar",
+		map[string][]string{"Content-Type": {"application/vnd.custom+json"}})
+
+	step := &v1alpha1.HTTPStreaming{
+		Type: v1alpha1.HTTPStreamingV1alpha1,
+		ID:   "upload",
+		Spec: &v1alpha1.HTTPStreamingSpec{Resource: source, Request: request, TargetResource: target},
+	}
+	tr := &HTTPStreamingTransformer{
+		Scheme:             scheme,
+		ResourceRepository: &stubResourceRepository{payload: []byte("payload"), mediaType: "application/x-tar"},
+	}
+
+	_, err := tr.Transform(context.Background(), step)
+	r.NoError(err)
+	assert.Equal(t, "application/vnd.custom+json", gotContentType,
+		"an explicit request Content-Type must not be overridden by the media-type default")
+}
