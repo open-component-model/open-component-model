@@ -61,9 +61,18 @@ func WithHTTPConfig(cfg *httpv1alpha1.Config) Option {
 }
 
 type ResourceRepository struct {
-	filesystemConfig *filesystemv1alpha1.Config
-	userAgent        string
-	httpClient       *http.Client
+	filesystemConfig      *filesystemv1alpha1.Config
+	userAgent             string
+	httpClient            *http.Client
+	weakEdgeFailurePolicy oci.WeakEdgeFailurePolicy
+}
+
+// WithWeakEdgeFailurePolicy returns a copy of the repository that uses the
+// given policy for all copy traversals.
+func (p *ResourceRepository) WithWeakEdgeFailurePolicy(policy oci.WeakEdgeFailurePolicy) ocistream.ResourceRepository {
+	c := *p
+	c.weakEdgeFailurePolicy = policy
+	return &c
 }
 
 // make sure that ResourceRepository implements the oci ResourceRepository interface
@@ -212,7 +221,7 @@ func (p *ResourceRepository) UploadResource(ctx context.Context, resource *descr
 }
 
 func (p *ResourceRepository) getRepository(spec *ociv1.Repository, credentials *ocicredsv1.OCICredentials) (*oci.Repository, error) {
-	repo, err := createRepository(spec, credentials, p.filesystemConfig, p.userAgent, p.httpClient)
+	repo, err := createRepository(spec, credentials, p.filesystemConfig, p.userAgent, p.httpClient, p.weakEdgeFailurePolicy)
 	if err != nil {
 		return nil, fmt.Errorf("error creating repository: %w", err)
 	}
@@ -235,6 +244,7 @@ func createRepository(
 	filesystemConfig *filesystemv1alpha1.Config,
 	userAgent string,
 	httpClient *http.Client,
+	weakEdgeFailurePolicy oci.WeakEdgeFailurePolicy,
 ) (*oci.Repository, error) {
 	url, err := runtime.ParseURLAndAllowNoScheme(spec.BaseUrl)
 	if err != nil {
@@ -262,6 +272,7 @@ func createRepository(
 		oci.WithResolver(urlResolver),
 		oci.WithCreator(userAgent),
 		oci.WithTempDir(tempDir), // the filesystem config being empty is a valid config
+		oci.WithWeakEdgeFailurePolicy(weakEdgeFailurePolicy),
 	}
 
 	repo, err := oci.NewRepository(options...)

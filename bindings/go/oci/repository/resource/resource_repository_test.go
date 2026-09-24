@@ -11,6 +11,7 @@ import (
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
+	"ocm.software/open-component-model/bindings/go/oci"
 	ociaccess "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	v1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	ocicredsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
@@ -104,7 +105,7 @@ func TestCreateRepositoryWithFilesystemConfig(t *testing.T) {
 			}
 			credentials := ocicredsv1.OCICredentials{}
 
-			repo, err := createRepository(spec, &credentials, tt.filesystemConfig, "test", http.DefaultClient)
+			repo, err := createRepository(spec, &credentials, tt.filesystemConfig, "test", http.DefaultClient, oci.WeakEdgeFailurePolicyAbort)
 
 			if tt.expectError {
 				r.Error(err, "expected error")

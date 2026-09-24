@@ -50,4 +50,11 @@ type CTFAddLocalResourceSpec struct {
 	Resource *v2.Resource `json:"resource"`
 	// File is the access specification to the data that should be added
 	File v1alpha1.File `json:"file"`
+	// WeakEdgeFailurePolicy defines how the copy treats subject and referrer
+	// references whose target does not exist in the source.
+	// "abort" (default) fails the copy. "skip" logs a warning and continues
+	// without the missing content.
+	// +optional
+	// +ocm:jsonschema-gen:enum=abort,skip
+	WeakEdgeFailurePolicy WeakEdgeFailurePolicy `json:"weakEdgeFailurePolicy,omitempty"`
 }

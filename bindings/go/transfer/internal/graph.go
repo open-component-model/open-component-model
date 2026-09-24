@@ -14,6 +14,7 @@ import (
 	helmv1 "ocm.software/open-component-model/bindings/go/helm/spec/access/v1"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
+	ociv1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	s3v2 "ocm.software/open-component-model/bindings/go/s3/spec/access/v2"
@@ -138,7 +139,7 @@ func BuildGraphDefinition(
 	// Phase 2: walk the discovered DAG and generate transformation nodes per (component, target) pair.
 	g := dr.Graph()
 	err := g.WithReadLock(func(d *dag.DirectedAcyclicGraph[string]) error {
-		return fillGraphDefinitionWithPrefetchedComponents(ctx, d, targetMap, tgd, cfg.CopyMode, cfg.UploadType)
+		return fillGraphDefinitionWithPrefetchedComponents(ctx, d, targetMap, tgd, cfg.CopyMode, cfg.UploadType, cfg.WeakEdgeFailurePolicy)
 	})
 	if err != nil {
 		return nil, err
@@ -167,6 +168,7 @@ func fillGraphDefinitionWithPrefetchedComponents(
 	tgd *transformv1alpha1.TransformationGraphDefinition,
 	copyMode transferv1alpha1.CopyMode,
 	uploadType transferv1alpha1.UploadType,
+	weakEdgeFailurePolicy ociv1alpha1.WeakEdgeFailurePolicy,
 ) error {
 	slog.DebugContext(ctx, "building transformations for discovered components",
 		"components", len(d.Vertices))
@@ -209,7 +211,7 @@ func fillGraphDefinitionWithPrefetchedComponents(
 				"targetIndex", targetIdx, "targetType", fmt.Sprintf("%T", target),
 				"transformID", id)
 
-			resourceTransformIDs, fileRefs, err := processResources(ctx, v2desc, id, val, tgd, target, copyMode, uploadType)
+			resourceTransformIDs, fileRefs, err := processResources(ctx, v2desc, id, val, tgd, target, copyMode, uploadType, weakEdgeFailurePolicy)
 			if err != nil {
 				return err
 			}
@@ -239,6 +241,7 @@ func processResources(
 	toSpec runtime.Typed,
 	copyMode transferv1alpha1.CopyMode,
 	uploadType transferv1alpha1.UploadType,
+	weakEdgeFailurePolicy ociv1alpha1.WeakEdgeFailurePolicy,
 ) (map[int]string, []string, error) {
 	component := val.Descriptor.Component.Name
 	version := val.Descriptor.Component.Version
@@ -259,7 +262,7 @@ func processResources(
 			continue
 		}
 
-		exprs, err := processResource(resource, access, id, val, tgd, toSpec, resourceTransformIDs, i, uploadType)
+		exprs, err := processResource(resource, access, id, val, tgd, toSpec, resourceTransformIDs, i, uploadType, weakEdgeFailurePolicy)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -289,7 +292,7 @@ func logSkippedResource(ctx context.Context, component, version string, resource
 // target repository. wget and s3 resources are always downloaded and embedded as local blobs.
 // It returns CEL spec-field expressions for the file buffers produced, referencing consumer spec
 // fields (not producer outputs) so the DAG edge points from consumer to the cleanup node.
-func processResource(resource descriptorv2.Resource, access runtime.Typed, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int, uploadType transferv1alpha1.UploadType) ([]string, error) {
+func processResource(resource descriptorv2.Resource, access runtime.Typed, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int, uploadType transferv1alpha1.UploadType, weakEdgeFailurePolicy ociv1alpha1.WeakEdgeFailurePolicy) ([]string, error) {
 	_, isOCITarget := toSpec.(*oci.Repository)
 	uploadAsArtifact := isOCITarget && uploadType == transferv1alpha1.UploadAsOciArtifact
 
@@ -305,7 +308,7 @@ func processResource(resource descriptorv2.Resource, access runtime.Typed, id st
 		}
 		return []string{fmt.Sprintf("${%s.spec.file}", addResourceID)}, nil
 	case *ociv1.OCIImage:
-		if err := processOCIArtifact(resource, id, val, tgd, toSpec, resourceTransformIDs, i, uploadAsArtifact); err != nil {
+		if err := processOCIArtifact(resource, id, val, tgd, toSpec, resourceTransformIDs, i, uploadAsArtifact, weakEdgeFailurePolicy); err != nil {
 			return nil, fmt.Errorf("cannot process OCI artifact resource: %w", err)
 		}
 		// Streaming path (TransferOCIArtifact) produces no temp file — skip cleanup.

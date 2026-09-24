@@ -48,4 +48,11 @@ type GetOCIArtifactSpec struct {
 	// OutputPath is the path where the artifact should be downloaded to.
 	// If empty, a temporary file will be created.
 	OutputPath string `json:"outputPath,omitempty"`
+	// WeakEdgeFailurePolicy defines how the copy treats subject and referrer
+	// references whose target does not exist in the source.
+	// "abort" (default) fails the copy. "skip" logs a warning and continues
+	// without the missing content.
+	// +optional
+	// +ocm:jsonschema-gen:enum=abort,skip
+	WeakEdgeFailurePolicy WeakEdgeFailurePolicy `json:"weakEdgeFailurePolicy,omitempty"`
 }

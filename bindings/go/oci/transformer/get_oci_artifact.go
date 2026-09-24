@@ -6,9 +6,11 @@ import (
 	"fmt"
 
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
+	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	ociresource "ocm.software/open-component-model/bindings/go/oci/repository/resource"
 	"ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -48,9 +50,25 @@ func (t *GetOCIArtifact) Transform(ctx context.Context, step runtime.Typed) (run
 	}
 	targetResource := descriptor.ConvertFromV2Resource(resource)
 
+	repo := t.Repository
+	if transformation.Spec.WeakEdgeFailurePolicy != "" {
+		policy, err := parseWeakEdgeFailurePolicy(transformation.Spec.WeakEdgeFailurePolicy)
+		if err != nil {
+			return nil, err
+		}
+		if configurable, ok := repo.(weakEdgeFailurePolicyConfigurable); ok {
+			repo = configurable.WithWeakEdgeFailurePolicy(policy)
+		} else {
+			// The injected plugin registry cannot carry the policy, so use a
+			// dedicated OCI resource repository instead (see
+			// https://github.com/open-component-model/ocm-project/issues/774).
+			repo = ociresource.NewResourceRepository(&filesystemv1alpha1.Config{}).WithWeakEdgeFailurePolicy(policy)
+		}
+	}
+
 	var creds runtime.Typed
 	if t.CredentialProvider != nil {
-		if consumerId, err := t.Repository.GetResourceCredentialConsumerIdentity(ctx, targetResource); err == nil {
+		if consumerId, err := repo.GetResourceCredentialConsumerIdentity(ctx, targetResource); err == nil {
 			if creds, err = t.CredentialProvider.Resolve(ctx, consumerId); err != nil {
 				if !errors.Is(err, credentials.ErrNotFound) {
 					return nil, fmt.Errorf("failed resolving credentials: %w", err)
@@ -59,7 +77,7 @@ func (t *GetOCIArtifact) Transform(ctx context.Context, step runtime.Typed) (run
 		}
 	}
 
-	blobContent, err := t.Repository.DownloadResource(ctx, targetResource, creds)
+	blobContent, err := repo.DownloadResource(ctx, targetResource, creds)
 	if err != nil {
 		return nil, fmt.Errorf("failed downloading OCI artifact %v %w", resource.ToIdentity(), err)
 	}

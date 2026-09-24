@@ -32,7 +32,26 @@ type TransferOCIArtifactSpec struct {
 	Resource *v2.Resource `json:"resource"`
 	// TargetResource is the target resource descriptor with the destination OCI image reference.
 	TargetResource *v2.Resource `json:"targetResource"`
+	// WeakEdgeFailurePolicy defines how the copy treats subject and referrer
+	// references whose target does not exist in the source.
+	// "abort" (default) fails the copy. "skip" logs a warning and continues
+	// without the missing content.
+	// +optional
+	// +ocm:jsonschema-gen:enum=abort,skip
+	WeakEdgeFailurePolicy WeakEdgeFailurePolicy `json:"weakEdgeFailurePolicy,omitempty"`
 }
+
+// WeakEdgeFailurePolicy defines how OCI copies treat subject and referrer
+// references whose target does not exist in the source.
+// +ocm:jsonschema-gen:enum=abort,skip
+type WeakEdgeFailurePolicy string
+
+const (
+	// WeakEdgeFailurePolicyAbort fails the copy. This is the default.
+	WeakEdgeFailurePolicyAbort WeakEdgeFailurePolicy = "abort"
+	// WeakEdgeFailurePolicySkip logs a warning and continues without the missing content.
+	WeakEdgeFailurePolicySkip WeakEdgeFailurePolicy = "skip"
+)
 
 // TransferOCIArtifactOutput is the output specification for the
 // TransferOCIArtifact transformation.

@@ -78,6 +78,9 @@ type Repository struct {
 	// These options are used in copyResource.
 	resourceCopyOptions oras.CopyOptions
 
+	// weakEdgeFailurePolicy defines how copy traversals treat missing weak-edge targets.
+	weakEdgeFailurePolicy WeakEdgeFailurePolicy
+
 	// referrerTrackingPolicy defines how OCI referrers are used to track component versions.
 	referrerTrackingPolicy ReferrerTrackingPolicy
 
@@ -461,7 +464,7 @@ func (repo *Repository) uploadAndUpdateLocalArtifact(
 
 	packOptions := pack.Options{
 		AccessScheme:       repo.scheme,
-		CopyGraphOptions:   repo.resourceCopyOptions.CopyGraphOptions,
+		CopyGraphOptions:   repo.copyGraphOptions(),
 		BaseReference:      reference,
 		GlobalAccessPolicy: repo.globalAccessPolicy,
 	}
@@ -595,11 +598,9 @@ func (repo *Repository) getLocalBlobFromIndexOrManifest(
 			return nil, fmt.Errorf("store %T does not support predecessor walks", store)
 		}
 		return tar.CopyToOCILayoutInMemory(ctx, graph, artifact, tar.CopyToOCILayoutOptions{
-			ExtendedCopyGraphOptions: oras.ExtendedCopyGraphOptions{
-				CopyGraphOptions: repo.resourceCopyOptions.CopyGraphOptions,
-			},
-			Tags:    []string{version},
-			TempDir: repo.tempDir,
+			ExtendedCopyGraphOptions: repo.extendedCopyGraphOptions(),
+			Tags:                     []string{version},
+			TempDir:                  repo.tempDir,
 		})
 	}
 
@@ -705,10 +706,7 @@ func (repo *Repository) uploadOCIImage(ctx context.Context, newAccess runtime.Ty
 		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to parse target access image reference %q: %w", access.ImageReference, err)
 	}
 
-	extendedOpts := oras.ExtendedCopyGraphOptions{
-		CopyGraphOptions: repo.resourceCopyOptions.CopyGraphOptions,
-	}
-	if err := oras.ExtendedCopyGraph(ctx, ociStore, store, main, extendedOpts); err != nil {
+	if err := oras.ExtendedCopyGraph(ctx, ociStore, store, main, repo.extendedCopyGraphOptions()); err != nil {
 		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to upload resource via copy: %w", err)
 	}
 
@@ -1112,11 +1110,9 @@ func (repo *Repository) downloadStream(ctx context.Context, access runtime.Typed
 		return &ocistream.OCIResourceStream{
 			ReadOnlyGraphStorage: graph,
 			Descriptor:           desc,
-			ExtendedCopyOpts: oras.ExtendedCopyGraphOptions{
-				CopyGraphOptions: repo.resourceCopyOptions.CopyGraphOptions,
-			},
-			TempDir: repo.tempDir,
-			Tags:    tags,
+			ExtendedCopyOpts:     repo.extendedCopyGraphOptions(),
+			TempDir:              repo.tempDir,
+			Tags:                 tags,
 		}, nil
 	default:
 		return nil, fmt.Errorf("unsupported resource access type: %T", typed)
@@ -1146,10 +1142,7 @@ func (repo *Repository) UploadResourceStream(ctx context.Context, res *descripto
 	// ExtendedCopyGraph copies the root together with its referrers, which a
 	// plain CopyGraph would miss because a referrer's subject edge points back
 	// at the root. The defaults walk every predecessor at unbounded depth.
-	extendedOpts := oras.ExtendedCopyGraphOptions{
-		CopyGraphOptions: repo.resourceCopyOptions.CopyGraphOptions,
-	}
-	if err := oras.ExtendedCopyGraph(ctx, rs, store, rs.Root(), extendedOpts); err != nil {
+	if err := oras.ExtendedCopyGraph(ctx, rs, store, rs.Root(), repo.extendedCopyGraphOptions()); err != nil {
 		return nil, fmt.Errorf("failed to stream resource via copy: %w", err)
 	}
 

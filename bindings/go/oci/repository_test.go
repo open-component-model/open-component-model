@@ -2422,6 +2422,84 @@ func TestRepository_UploadResourceStream(t *testing.T) {
 	}
 }
 
+// TestRepository_UploadResourceStream_WeakEdgeFailurePolicy verifies that a
+// streamed OCI artifact whose manifest references a subject that does not
+// exist in the source store fails the upload under the default weak edge
+// failure policy and succeeds with WeakEdgeFailurePolicySkip.
+func TestRepository_UploadResourceStream_WeakEdgeFailurePolicy(t *testing.T) {
+	newDanglingSubjectStream := func(t *testing.T) (*memory.Store, ociImageSpecV1.Descriptor) {
+		t.Helper()
+		ctx := t.Context()
+		r := require.New(t)
+
+		store := memory.New()
+		layerBytes := []byte("stream layer content")
+		layerDesc := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageLayer, layerBytes)
+		r.NoError(store.Push(ctx, layerDesc, bytes.NewReader(layerBytes)))
+		danglingSubject := &ociImageSpecV1.Descriptor{
+			MediaType: ociImageSpecV1.MediaTypeImageManifest,
+			Digest:    digest.FromString("subject that was never pushed"),
+			Size:      42,
+		}
+		manifestDesc, err := oras.PackManifest(ctx, store, oras.PackManifestVersion1_1, "application/custom", oras.PackManifestOptions{
+			Layers:  []ociImageSpecV1.Descriptor{layerDesc},
+			Subject: danglingSubject,
+		})
+		r.NoError(err)
+		return store, manifestDesc
+	}
+
+	tests := []struct {
+		name      string
+		policy    oci.WeakEdgeFailurePolicy
+		wantError bool
+	}{
+		{name: "default policy aborts on dangling subject", policy: oci.WeakEdgeFailurePolicyAbort, wantError: true},
+		{name: "skip policy ignores dangling subject", policy: oci.WeakEdgeFailurePolicySkip, wantError: false},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			ctx := t.Context()
+
+			fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
+			r.NoError(err)
+			store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
+			repo := Repository(t, ocictf.WithCTF(store), oci.WithScheme(testScheme), oci.WithWeakEdgeFailurePolicy(tc.policy))
+
+			src, manifestDesc := newDanglingSubjectStream(t)
+			resource := &descriptor.Resource{
+				ElementMeta: descriptor.ElementMeta{
+					ObjectMeta: descriptor.ObjectMeta{Name: "stream-res", Version: "1.0.0"},
+				},
+				Type:   "ociImage",
+				Access: &v1.OCIImage{ImageReference: "test-repo:v1.0.0"},
+			}
+
+			stream := &ocistream.OCIResourceStream{
+				ReadOnlyGraphStorage: src,
+				Descriptor:           manifestDesc,
+			}
+
+			res, err := repo.UploadResourceStream(ctx, resource, stream)
+			if tc.wantError {
+				r.Error(err)
+				r.ErrorIs(err, errdef.ErrNotFound)
+				return
+			}
+			r.NoError(err)
+			r.NotNil(res)
+
+			targetStore, err := store.StoreForReference(ctx, "test-repo")
+			r.NoError(err)
+			exists, err := targetStore.Exists(ctx, manifestDesc)
+			r.NoError(err)
+			r.True(exists, "manifest must have been copied into the target store")
+		})
+	}
+}
+
 // ownershipArtifactAnnotation is a representative software.ocm.artifact value in
 // the shape pack.OwnershipReferrer marshals for a resource subject.
 const ownershipArtifactAnnotation = `[{"identity":{"name":"backend","version":"1.0.0"},"kind":"resource"}]`

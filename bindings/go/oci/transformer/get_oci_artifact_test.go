@@ -15,8 +15,10 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/oci"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	"ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
+	ocistream "ocm.software/open-component-model/bindings/go/oci/stream"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -253,6 +255,113 @@ func TestGetOCIArtifact_Transform_OCI_Should_Default_No_Ext(t *testing.T) {
 	// Verify resource in output
 	assert.Equal(t, "test-image", transformed.Output.Resource.Name)
 	assert.Equal(t, "1.21.0", transformed.Output.Resource.Version)
+}
+
+// mockRepositoryForGetOCIConfigurable additionally supports configuring the
+// weak edge failure policy.
+type mockRepositoryForGetOCIConfigurable struct {
+	ocistream.ResourceRepository
+	returnBlob           blob.ReadOnlyBlob
+	policy               oci.WeakEdgeFailurePolicy
+	withPolicyConfigured bool
+}
+
+func (m *mockRepositoryForGetOCIConfigurable) DownloadResource(ctx context.Context, res *descriptor.Resource, credentials runtime.Typed) (blob.ReadOnlyBlob, error) {
+	return m.returnBlob, nil
+}
+
+func (m *mockRepositoryForGetOCIConfigurable) WithWeakEdgeFailurePolicy(policy oci.WeakEdgeFailurePolicy) ocistream.ResourceRepository {
+	m.withPolicyConfigured = true
+	m.policy = policy
+	return m
+}
+
+func testGetOCIArtifactSpec(weakEdgeFailurePolicy v1alpha1.WeakEdgeFailurePolicy) *v1alpha1.GetOCIArtifact {
+	return &v1alpha1.GetOCIArtifact{
+		Type: runtime.NewVersionedType(v1alpha1.GetOCIArtifactType, v1alpha1.Version),
+		ID:   "test-get-oci-transform",
+		Spec: &v1alpha1.GetOCIArtifactSpec{
+			Resource: &v2.Resource{
+				ElementMeta: v2.ElementMeta{
+					ObjectMeta: v2.ObjectMeta{
+						Name:    "test-image",
+						Version: "1.21.0",
+					},
+				},
+				Type:     "ociImage",
+				Relation: "external",
+				Access: &runtime.Raw{
+					Type: runtime.Type{
+						Name:    "ociArtifact",
+						Version: "v1",
+					},
+					Data: []byte(`{ "imageReference": "ghcr.io/open-component-model/helmexample/charts/mariadb:12.2.7" }`),
+				},
+			},
+			WeakEdgeFailurePolicy: weakEdgeFailurePolicy,
+		},
+	}
+}
+
+func TestGetOCIArtifact_WeakEdgeFailurePolicy(t *testing.T) {
+	ctx := t.Context()
+
+	newScheme := func() *runtime.Scheme {
+		combinedScheme := runtime.NewScheme()
+		v2.MustAddToScheme(combinedScheme)
+		filesystemaccess.MustAddToScheme(combinedScheme)
+		combinedScheme.MustRegisterWithAlias(&v1alpha1.GetOCIArtifact{}, v1alpha1.GetOCIArtifactV1alpha1)
+		return combinedScheme
+	}
+
+	testBlob := func() blob.ReadOnlyBlob {
+		b := inmemory.New(bytes.NewReader([]byte("test oci artifact content")))
+		b.SetMediaType(layout.MediaTypeOCIImageLayoutTarGzipV1)
+		return b
+	}
+
+	t.Run("skip policy is applied to the download repository", func(t *testing.T) {
+		mockRepo := &mockRepositoryForGetOCIConfigurable{returnBlob: testBlob()}
+		transformer := &GetOCIArtifact{Scheme: newScheme(), Repository: mockRepo}
+
+		result, err := transformer.Transform(ctx, testGetOCIArtifactSpec(v1alpha1.WeakEdgeFailurePolicySkip))
+		require.NoError(t, err)
+		require.True(t, mockRepo.withPolicyConfigured)
+		require.Equal(t, oci.WeakEdgeFailurePolicySkip, mockRepo.policy)
+		transformed, ok := result.(*v1alpha1.GetOCIArtifact)
+		require.True(t, ok)
+		require.NotNil(t, transformed.Output)
+	})
+
+	t.Run("unset policy leaves the repository untouched", func(t *testing.T) {
+		mockRepo := &mockRepositoryForGetOCIConfigurable{returnBlob: testBlob()}
+		transformer := &GetOCIArtifact{Scheme: newScheme(), Repository: mockRepo}
+
+		result, err := transformer.Transform(ctx, testGetOCIArtifactSpec(""))
+		require.NoError(t, err)
+		require.False(t, mockRepo.withPolicyConfigured)
+		require.NotNil(t, result)
+	})
+
+	t.Run("invalid policy fails", func(t *testing.T) {
+		mockRepo := &mockRepositoryForGetOCIConfigurable{returnBlob: testBlob()}
+		transformer := &GetOCIArtifact{Scheme: newScheme(), Repository: mockRepo}
+
+		_, err := transformer.Transform(ctx, testGetOCIArtifactSpec("garbage"))
+		require.ErrorContains(t, err, "garbage")
+		require.False(t, mockRepo.withPolicyConfigured)
+	})
+
+	t.Run("repository without policy support falls back to a dedicated OCI repository", func(t *testing.T) {
+		// The mock repository would answer the download successfully; the
+		// fallback repository cannot resolve example.com/image:1.0.0, so the
+		// observed failure proves that the injected repository is bypassed.
+		mockRepo := &mockRepositoryForGetOCI{returnBlob: testBlob()}
+		transformer := &GetOCIArtifact{Scheme: newScheme(), Repository: mockRepo}
+
+		_, err := transformer.Transform(ctx, testGetOCIArtifactSpec(v1alpha1.WeakEdgeFailurePolicySkip))
+		require.Error(t, err)
+	})
 }
 
 func TestGetOCIArtifact_Transform_ValidationErrors(t *testing.T) {
