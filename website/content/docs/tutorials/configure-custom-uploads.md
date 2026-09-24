@@ -222,6 +222,10 @@ The digest was computed while the bytes were streamed to the target. If the sour
 resource already carried a digest, transfer instead verified it as the bytes passed
 through and failed the transfer on any mismatch.
 
+Note the published access carries only `url` (and `mediaType`) — not the `PUT`
+method or any upload headers. Those apply to the upload request only, so a later
+`ocm download` reads the object with a plain GET instead of re-issuing the write.
+
 {{< /step >}}
 {{< /steps >}}
 
@@ -229,7 +233,7 @@ through and failed the transfer on any mismatch.
 
 - An uploader configuration matches a resource by access type and streams it to a dedicated target during transfer.
 - The `http.uploader.transfer.config.ocm.software/v1alpha1` uploader streams the resource straight to an HTTP `PUT` target without buffering it, and computes or verifies its digest inline.
-- The transferred resource is rewritten to a `Wget/v1` access at the upload target, with the request fields mapping field-for-field onto the `Wget` access.
+- The transferred resource is rewritten to a `Wget/v1` **read** access at the upload target (`url` + `mediaType`); the upload request fields (`method`, `header`, `body`, `noRedirect`) drive the `PUT` only and are not recorded on the published access, so a later download reads the object with a plain GET.
 - `targetURL` and `header` values are `${…}` CEL expressions over the source resource, so you can template the upload URL and forward headers such as a checksum from `resource.digest`.
 
 ## Troubleshooting

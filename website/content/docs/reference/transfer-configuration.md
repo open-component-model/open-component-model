@@ -97,26 +97,33 @@ the request body, so it is never buffered in memory or on disk. The digest is
 computed during the stream, or — when the source resource already carries one —
 verified as the bytes pass through.
 
+The upload request and the published access are kept separate. `method`, `header`,
+`body` and `noRedirect` describe the **upload request** only. The **published**
+`Wget/v1` access — the download access recorded on the transferred resource —
+carries just the resolved `url` and `mediaType`, never the write verb, body or
+request headers. This ensures a later `ocm download` issues a plain read (GET) and
+cannot re-send the write request that would overwrite the uploaded object.
+
 #### Schema
 
 {{< schema-renderer url="/schemas/bindings/go/transfer/HTTPUploaderConfig.schema.json" >}}
 
 #### Fields
 
-The request fields map field-for-field onto the resulting
-[`Wget/v1`]({{< relref "docs/reference/input-and-access-types.md" >}}) access:
+`targetURL` and `mediaType` also become the published `Wget/v1` download access;
+`method`, `header`, `body` and `noRedirect` apply to the upload request only:
 
-| Field                 | Type                  | Maps to (`Wget/v1`) | Description                                                                                        |
-|-----------------------|-----------------------|---------------------|----------------------------------------------------------------------------------------------------|
-| `match.accessType`    | `runtime.Type`        | —                   | Access type this uploader applies to (matched by name; omitted version = any).                     |
-| `match.name`          | string (optional)     | —                   | Restrict the match to resources with this exact name.                                              |
-| `match.version`       | string (optional)     | —                   | Restrict the match to resources with this exact version.                                           |
-| `match.extraIdentity` | `map[string]string`   | —                   | Restrict the match to resources whose identity contains these key/value pairs.                     |
-| `targetURL`           | CEL expression        | `url`               | The upload URL. See CEL Expressions below.                                                         |
-| `method`              | string                | `verb`              | HTTP method for the upload request. Defaults to PUT.                                               |
-| `header`              | `map[string][]string` | `header`            | HTTP headers to send with the upload request. Values may be CEL-templated; see Templating Headers. |
-| `noRedirect`          | bool                  | `noRedirect`        | Disable following HTTP redirects.                                                                  |
-| `mediaType`           | string                | `mediaType`         | Media type recorded on the resource. Defaults to the source's.                                     |
+| Field                 | Type                  | Applies to                        | Description                                                                            |
+|-----------------------|-----------------------|-----------------------------------|----------------------------------------------------------------------------------------|
+| `match.accessType`    | `runtime.Type`        | —                                 | Access type this uploader applies to (matched by name; omitted version = any).         |
+| `match.name`          | string (optional)     | —                                 | Restrict the match to resources with this exact name.                                  |
+| `match.version`       | string (optional)     | —                                 | Restrict the match to resources with this exact version.                               |
+| `match.extraIdentity` | `map[string]string`   | —                                 | Restrict the match to resources whose identity contains these key/value pairs.         |
+| `targetURL`           | CEL expression        | request + published (`url`)       | The upload URL; also the published download URL. See CEL Expressions below.            |
+| `method`              | string                | request (`verb`)                  | HTTP method for the upload request. Defaults to PUT. Not on the published access.      |
+| `header`              | `map[string][]string` | request                           | HTTP headers sent with the upload request. May be CEL-templated. Request only.         |
+| `noRedirect`          | bool                  | request                           | Disable following HTTP redirects on the upload. Not on the published access.           |
+| `mediaType`           | string                | request + published (`mediaType`) | Media type recorded on the resource. Defaults to the source's.                         |
 
 ### Routing Resources to Different Targets
 
