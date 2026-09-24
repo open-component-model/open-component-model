@@ -15,8 +15,9 @@ import (
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	gitrepository "ocm.software/open-component-model/bindings/go/git/repository"
 	accessv1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
+	gitcreds "ocm.software/open-component-model/bindings/go/git/spec/credentials"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
-	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/credentialrepository"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/credentialtyperepository"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/digestprocessor"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/resource"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -33,14 +34,22 @@ func TestRegister(t *testing.T) {
 	})
 
 	resources := resource.NewResourceRegistry(ctx)
+	credentialTypes := credentialtyperepository.NewCredentialTypeRegistry(ctx)
 	maxRetries := -1
 	r.NoError(Register(
 		resources,
 		digestprocessor.NewDigestProcessorRegistry(ctx),
-		credentialrepository.NewCredentialRepositoryRegistry(ctx),
+		credentialTypes,
 		&filesystemv1alpha1.Config{},
 		&httpv1alpha1.Config{Retry: &httpv1alpha1.RetryConfig{MaxRetries: &maxRetries}},
 	))
+
+	for typ, aliases := range gitcreds.Scheme.GetTypes() {
+		r.True(credentialTypes.GetCredentialTypeScheme().IsRegistered(typ), typ.String())
+		for _, alias := range aliases {
+			r.True(credentialTypes.GetCredentialTypeScheme().IsRegistered(alias), alias.String())
+		}
+	}
 
 	for _, typ := range []runtime.Type{
 		runtime.NewVersionedType(accessv1.Type, accessv1.Version),

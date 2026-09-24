@@ -17,6 +17,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/git/internal/download"
 	"ocm.software/open-component-model/bindings/go/git/spec/access"
 	accessv1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
+	gitcreds "ocm.software/open-component-model/bindings/go/git/spec/credentials"
 	credsv1 "ocm.software/open-component-model/bindings/go/git/spec/credentials/v1"
 	identityv1 "ocm.software/open-component-model/bindings/go/git/spec/identity/v1"
 	"ocm.software/open-component-model/bindings/go/repository"
@@ -86,6 +87,10 @@ func (r *ResourceRepository) downloadOptions(tempDir string) download.Options {
 
 		HostKeyCallback: r.hostKeyCallback,
 	}
+}
+
+func (r *ResourceRepository) GetCredentialTypeScheme() *runtime.Scheme {
+	return gitcreds.Scheme
 }
 
 func (r *ResourceRepository) GetResourceRepositoryScheme() *runtime.Scheme {
