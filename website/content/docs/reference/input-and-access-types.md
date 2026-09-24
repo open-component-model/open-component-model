@@ -498,8 +498,8 @@ repository. It does not make S3 a component version repository.
 
 `S3/v2` and `s3/v2` use `bucketName` and `objectKey`. Explicit `S3/v1` and `s3/v1` use `bucket` and `key`;
 both versions support `region`, `version`, `mediaType` and the `endpoint` and `usePathStyle` extensions.
-Unversioned `S3` and `s3` resolve to v2 and require `bucketName` and `objectKey`.
-Legacy `bucket` and `key` fields require an explicit `S3/v1` or `s3/v1` type. See
+Unversioned `S3` and `s3` accept either legacy `bucket` and `key` or v2 `bucketName` and `objectKey` fields.
+Records containing fields from both formats are rejected as ambiguous. See
 [Migrating from OCM v1](#s3-migration-from-ocm-v1). The table below describes the v2 fields.
 
 | Field          | Type    | Required | Description                                                                                                                                                        |
@@ -584,9 +584,9 @@ updates the access specification.
 an access specification that OCM v1 wrote in the `v2` format without changes.
 
 OCM v2 also reads the OCM v1 `v1` format when the type is explicitly `s3/v1` or `S3/v1`.
-For legacy descriptors using the unversioned `s3` that OCM v1 writes by default, change the type to `s3/v1` to
-keep `bucket` and `key`. Unversioned `S3` and `s3` resolve to v2, not v1. Alternatively, set the type to `S3/v2`
-and rename the fields as shown below. The `endpoint` and `usePathStyle` extensions are available for both access formats.
+Legacy descriptors using the unversioned `s3` that OCM v1 writes by default are also accepted with
+`bucket` and `key`; no type change is required. Unversioned records using `bucketName` and `objectKey` retain v2 semantics.
+Alternatively, set the type to `S3/v2` and rename the fields as shown below. The `endpoint` and `usePathStyle` extensions are available for both access formats.
 
 | OCM v1 (`s3/v1`) | OCM v1 (`s3/v2`) | OCM v2 (`S3/v2`)     |
 |------------------|------------------|----------------------|

@@ -160,8 +160,10 @@
 //
 // S3/v1 and s3/v1 use the legacy bucket and key fields, with the same optional
 // region, version and mediaType. They also support our endpoint and usePathStyle
-// extensions. Legacy bucket and key fields require explicit S3/v1 or s3/v1.
-// Unversioned S3 and s3 resolve to v2 and require bucketName and objectKey.
+// extensions. The v2 access decoder also accepts bucket/key as read aliases for
+// bucketName/objectKey, including for unversioned S3 and s3 records. It always
+// writes v2 field names; the v2 schema is unchanged. Records containing fields
+// from both shapes are rejected as ambiguous.
 //
 // Access specs are normalized to v2 for processing without modifying the original
 // descriptor. When digest processing pins a previously unpinned v1 access, the

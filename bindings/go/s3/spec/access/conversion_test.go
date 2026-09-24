@@ -79,8 +79,8 @@ func TestConvertToV2_WithoutType(t *testing.T) {
 	}
 }
 
-func TestS3_V2RequiresV2Fields(t *testing.T) {
-	for _, typ := range []string{"S3/v2", "s3/v2", "S3", "s3"} {
+func TestS3_V2AcceptsLegacyFields(t *testing.T) {
+	for _, typ := range []string{"S3/v2", "s3/v2"} {
 		t.Run(typ, func(t *testing.T) {
 			r := require.New(t)
 			data := []byte(fmt.Sprintf(`{"type":%q,"bucket":"b","key":"k"}`, typ))
@@ -88,11 +88,67 @@ func TestS3_V2RequiresV2Fields(t *testing.T) {
 				r.NoError(json.Unmarshal(data, input))
 				out, err := accessspec.ConvertToV2(input)
 				r.NoError(err)
-				r.Empty(out.BucketName)
-				r.Empty(out.ObjectKey)
-				r.ErrorContains(out.Validate(), "bucketName is required")
+				r.Equal("b", out.BucketName)
+				r.Equal("k", out.ObjectKey)
+				r.NoError(out.Validate())
 			}
 		})
+	}
+}
+
+func TestScheme_V2FieldAliases(t *testing.T) {
+	for _, typ := range []string{"S3", "s3", "S3/v2", "s3/v2"} {
+		for _, tt := range []struct {
+			name   string
+			fields string
+			bad    bool
+		}{
+			{"legacy", `"bucket":"b","key":"k"`, false},
+			{"modern", `"bucketName":"b","objectKey":"k"`, false},
+			{"legacy case insensitive", `"BUCKET":"b","KEY":"k"`, false},
+			{"modern case insensitive", `"BUCKETNAME":"b","OBJECTKEY":"k"`, false},
+			{"both shapes", `"bucket":"b","key":"k","bucketName":"b","objectKey":"k"`, true},
+			{"crossed fields", `"bucket":"b","objectKey":"k"`, true},
+			{"reverse crossed fields", `"bucketName":"b","key":"k"`, true},
+			{"empty mixed field", `"bucket":"b","key":"k","bucketName":""`, true},
+			{"null mixed field", `"bucketName":"b","objectKey":"k","key":null`, true},
+			{"mixed case insensitive", `"BUCKET":"b","OBJECTKEY":"k"`, true},
+		} {
+			for _, source := range []runtime.Typed{&runtime.Raw{}, &runtime.Unstructured{}} {
+				t.Run(fmt.Sprintf("%s/%s/%T", typ, tt.name, source), func(t *testing.T) {
+					r := require.New(t)
+					data := []byte(fmt.Sprintf(`{"type":%q,%s,"region":"r","version":"ver","mediaType":"m","endpoint":"https://store.example","usePathStyle":true}`, typ, tt.fields))
+					r.NoError(json.Unmarshal(data, source))
+					before := source.DeepCopyTyped()
+					obj, err := accessspec.Scheme.NewObject(source.GetType())
+					r.NoError(err)
+					r.IsType(&v2.S3{}, obj)
+					err = accessspec.Scheme.Convert(source, obj)
+					r.Equal(before, source)
+					direct := &v2.S3{}
+					directErr := json.Unmarshal(data, direct)
+					if tt.bad {
+						r.ErrorContains(err, "ambiguous S3 access spec")
+						r.ErrorContains(directErr, "ambiguous S3 access spec")
+						return
+					}
+					r.NoError(err)
+					r.NoError(directErr)
+					wantType, err := runtime.TypeFromString(typ)
+					r.NoError(err)
+					expected := &v2.S3{Type: wantType, BucketName: "b", ObjectKey: "k", Region: "r", Version: "ver", MediaType: "m", Endpoint: "https://store.example", UsePathStyle: true}
+					r.Equal(expected, obj)
+					r.Equal(expected, direct)
+					out, err := accessspec.ConvertToV2(source)
+					r.NoError(err)
+					r.Equal(expected, out)
+					r.NoError(out.Validate())
+					wire, err := json.Marshal(obj)
+					r.NoError(err)
+					r.JSONEq(fmt.Sprintf(`{"type":%q,"bucketName":"b","objectKey":"k","region":"r","version":"ver","mediaType":"m","endpoint":"https://store.example","usePathStyle":true}`, typ), string(wire))
+				})
+			}
+		}
 	}
 }
 
