@@ -16,6 +16,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/wget/internal/download"
 	accessspec "ocm.software/open-component-model/bindings/go/wget/spec/access"
 	"ocm.software/open-component-model/bindings/go/wget/spec/access/v1"
+	wgetcreds "ocm.software/open-component-model/bindings/go/wget/spec/credentials"
 	identityv1 "ocm.software/open-component-model/bindings/go/wget/spec/identity/v1"
 )
 
@@ -201,4 +202,8 @@ func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, resource
 	}
 
 	return resource, nil
+}
+
+func (r *ResourceRepository) GetCredentialTypeScheme() *runtime.Scheme {
+	return wgetcreds.Scheme
 }
