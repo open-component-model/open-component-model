@@ -34,16 +34,21 @@ No option has been selected. Type names and code examples are illustrative, not 
 
 ## Air-Gapped Transfer
 
-```text
-connected environment
-  external access + payload
-          ↓ derive naming before replacing access
-  local payload + descriptor containing coordinates
-          ↓ offline transport
-isolated environment
-  local payload + descriptor containing coordinates
-          ↓ interpret naming without querying the source
-  coordinates available to destination mapping
+```mermaid
+flowchart TD
+    subgraph connected[Connected environment]
+        source[External access and payload]
+        exported[Local payload and descriptor with coordinate labels]
+        source -->|Persist coordinates before replacing access| exported
+    end
+
+    subgraph isolated[Isolated environment]
+        imported[Local payload and descriptor with coordinate labels]
+        destination[Coordinates available to destination mapping]
+        imported -->|Read labels without querying the source| destination
+    end
+
+    exported -->|Offline transport preserves payload and labels| imported
 ```
 
 For example, a source reference `registry.example/team/payments:1.4.0` provides repository `team/payments` and tag `1.4.0`. Both must survive when access becomes a local blob. The source registry is not needed to reconstruct that naming at the destination.
@@ -169,8 +174,10 @@ Same-technology naming is direct. Cross-technology mapping needs something to pr
 
 Sources normalize to one shared contract. Destination mapping consumes it without inspecting source-specific coordinate types.
 
-```text
-source naming → normalizer → shared coordinates → destination naming
+```mermaid
+flowchart TD
+    source[Source naming] -->|Normalize| shared[Shared coordinates]
+    shared -->|Map to destination| destination[Destination naming]
 ```
 
 A candidate naming schema:
@@ -237,12 +244,10 @@ Normalizers must define encoding precisely. An opaque S3 key and an escaped HTTP
 
 Keep native types and map them through a shared semantic model. Each technology knows its own type and the shared contract, not every other type.
 
-```text
-specialized source coordinates
-              ↓ normalize
-       central coordinates
-              ↓ project
-specialized target coordinates
+```mermaid
+flowchart TD
+    source[Specialized source coordinates] -->|Normalize| shared[Central coordinates]
+    shared -->|Project| target[Specialized target coordinates]
 ```
 
 ```go
