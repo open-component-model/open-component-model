@@ -197,3 +197,44 @@ configurations:
 	r.Equal(v1alpha1.ChecksumModeRequire, cfg2.ModeForURL("https://repo.example.com/artifact"),
 		"undotted URL host must match a trailing-dot config key")
 }
+
+func TestLookupConfig_RejectsInvalidTopLevelMode(t *testing.T) {
+	r := require.New(t)
+	_, err := v1alpha1.LookupConfig(decodeGeneric(t, `
+type: generic.config.ocm.software/v1
+configurations:
+  - type: checksum.http.config.ocm.software/v1alpha1
+    mode: Requre
+`))
+	r.Error(err, "a typo such as Requre must not silently disable verification")
+	r.Contains(err.Error(), "Requre")
+}
+
+func TestLookupConfig_RejectsInvalidHostMode(t *testing.T) {
+	r := require.New(t)
+	_, err := v1alpha1.LookupConfig(decodeGeneric(t, `
+type: generic.config.ocm.software/v1
+configurations:
+  - type: checksum.http.config.ocm.software/v1alpha1
+    mode: Require
+    hosts:
+      "repo.example.com":
+        mode: Prefr
+`))
+	r.Error(err, "an unknown host-override mode must be rejected")
+	r.Contains(err.Error(), "Prefr")
+	r.Contains(err.Error(), "repo.example.com")
+}
+
+func TestLookupConfig_AllowsEmptyModesForDefaulting(t *testing.T) {
+	r := require.New(t)
+	cfg, err := v1alpha1.LookupConfig(decodeGeneric(t, `
+type: generic.config.ocm.software/v1
+configurations:
+  - type: checksum.http.config.ocm.software/v1alpha1
+    hosts:
+      "repo.example.com": {}
+`))
+	r.NoError(err, "empty modes are valid and resolve to the default")
+	r.Equal(v1alpha1.ChecksumModePrefer, cfg.ModeForURL("https://repo.example.com/artifact"))
+}

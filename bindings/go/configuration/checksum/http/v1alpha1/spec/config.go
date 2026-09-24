@@ -56,14 +56,23 @@ type Config struct {
 	Hosts map[string]*ChecksumPolicy `json:"hosts,omitempty"`
 }
 
-// Validate rejects an unknown [Config.Type]. Nested policies are validated by
-// their consumer.
+// Validate rejects an unknown [Config.Type] and any explicitly supplied but
+// unrecognised [ChecksumMode] on the top level or a host override. An empty
+// mode is allowed and resolves to the default via [ChecksumMode.Normalize].
 func (c *Config) Validate() error {
 	if c == nil {
 		return nil
 	}
 	if c.Type.Name != "" && c.Type.Name != ConfigType {
 		return fmt.Errorf("invalid config type %q, expected %s", c.Type.Name, ConfigType)
+	}
+	if !c.Mode.Valid() {
+		return fmt.Errorf("invalid mode %q, expected one of %s, %s, %s (or empty)", c.Mode, ChecksumModeRequire, ChecksumModePrefer, ChecksumModeSkip)
+	}
+	for host, policy := range c.Hosts {
+		if policy != nil && !policy.Mode.Valid() {
+			return fmt.Errorf("invalid mode %q for host %q, expected one of %s, %s, %s (or empty)", policy.Mode, host, ChecksumModeRequire, ChecksumModePrefer, ChecksumModeSkip)
+		}
 	}
 	return nil
 }

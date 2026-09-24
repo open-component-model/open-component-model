@@ -43,6 +43,18 @@ func (m ChecksumMode) Normalize() ChecksumMode {
 	return m
 }
 
+// Valid reports whether m is empty (defaulting/inheritance) or one of the
+// known modes. Explicitly supplied unknown values are rejected so a typo such
+// as "Requre" cannot silently disable verification.
+func (m ChecksumMode) Valid() bool {
+	switch m {
+	case "", ChecksumModeRequire, ChecksumModePrefer, ChecksumModeSkip:
+		return true
+	default:
+		return false
+	}
+}
+
 // ChecksumPolicy is a per-host verification override carried in
 // [Config.Hosts]. Its only field is the [ChecksumMode]; the top-level default
 // lives on [Config.Mode].

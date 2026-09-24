@@ -100,7 +100,7 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 	// Verification behaviour is a deployment concern: the input spec carries
 	// no checksum mode. Operators configure it centrally via
 	// checksum.http.config.ocm.software/v1alpha1.
-	policy, hasPolicy := checksumPolicyForMode(i.ChecksumConfig.ModeForURL(wget.URL))
+	policy, hasPolicy := httpverify.PolicyForMode(i.ChecksumConfig.ModeForURL(wget.URL))
 
 	opts := []download.Option{
 		download.WithClient(client),
@@ -115,7 +115,7 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 	provided := resource.Digest
 	needsDigest := hasPolicy || provided != nil
 	if needsDigest {
-		opts = append(opts, download.WithDigestAlgorithms(digestAlgorithms(policy)...))
+		opts = append(opts, download.WithDigestAlgorithms(httpverify.DigestAlgorithms(policy)...))
 	}
 
 	data, err := download.Download(ctx, download.Request{
@@ -183,35 +183,4 @@ func verifyProvidedDigest(provided *constructorruntime.Digest, data *download.Bl
 		return fmt.Errorf("digest mismatch: expected %s, computed %s", want, computed)
 	}
 	return nil
-}
-
-// checksumPolicyForMode adapts a wire [checksumhttpv1alpha1.ChecksumMode] to
-// the checksum package's Policy for the input side. Require and Prefer verify
-// the downloaded bytes against the built-in source set (Require fails when no
-// checksum is advertised, Prefer records SHA-256 unverified); Skip skips
-// verification entirely (ok=false). The input method always records SHA-256
-// because a local blob's identity is its bytes.
-func checksumPolicyForMode(mode checksumhttpv1alpha1.ChecksumMode) (checksum.Policy, bool) {
-	switch mode {
-	case checksumhttpv1alpha1.ChecksumModeRequire:
-		return checksum.Policy{Sources: checksum.BuiltinSources(), OnMissing: checksum.Fail}, true
-	case checksumhttpv1alpha1.ChecksumModePrefer:
-		return checksum.Policy{Sources: checksum.BuiltinSources(), OnMissing: checksum.Compute}, true
-	default: // Skip
-		return checksum.Policy{}, false
-	}
-}
-
-// digestAlgorithms maps a policy's required algorithms to download digest
-// options keyed by OCM name, so the download computes them all in one pass.
-func digestAlgorithms(policy checksum.Policy) []download.DigestAlgorithm {
-	required := checksum.RequiredAlgorithms(policy)
-	out := make([]download.DigestAlgorithm, 0, len(required))
-	for _, alg := range required {
-		out = append(out, download.DigestAlgorithm{
-			Name: alg.OCMName,
-			New:  alg.New,
-		})
-	}
-	return out
 }

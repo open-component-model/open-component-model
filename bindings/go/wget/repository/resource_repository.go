@@ -99,12 +99,29 @@ func (r *ResourceRepository) GetResourceCredentialConsumerIdentity(ctx context.C
 	return identity, nil
 }
 
-// DownloadResource downloads the resource. The returned blob owns a temp file
-// callers should close; unclosed blobs have their file removed on GC.
+// DownloadResource downloads the resource and enforces the configured checksum
+// policy over the transferred bytes. This is the by-value transfer path
+// (access → local blob), so it re-runs the source-side verification rules:
+// under Require the advertised checksum must verify (and must exist), under
+// Prefer it verifies when advertised, and Skip performs no verification. The
+// returned blob owns a temp file callers should close; unclosed blobs have
+// their file removed on GC.
 func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) (blob.ReadOnlyBlob, error) {
-	b, _, err := r.download(ctx, resource, credentials)
+	policy, hasPolicy := httpverify.PolicyForMode(r.checksumConfig.ModeForURL(policyURL(resource)))
+
+	var extra []download.Option
+	if hasPolicy {
+		extra = append(extra, download.WithDigestAlgorithms(httpverify.DigestAlgorithms(policy)...))
+	}
+	b, wget, err := r.download(ctx, resource, credentials, extra...)
 	if err != nil {
 		return nil, err
+	}
+	if hasPolicy {
+		if err := httpverify.Verify(ctx, r.client, credentials, wget.URL, policy, b); err != nil {
+			_ = b.Close()
+			return nil, fmt.Errorf("checksum verification failed for wget access %q: %w", wget.URL, err)
+		}
 	}
 	return b, nil
 }
@@ -273,7 +290,19 @@ func (r *ResourceRepository) processDigestViaPeek(
 	}
 	slog.DebugContext(ctx, "wget: peeking source-advertised checksum", "url", url, "prefer", names)
 
-	exp, ok, err := httpverify.Peek(ctx, r.client, credentials, url, policy, prefer)
+	// Mirror the download's representation-selecting inputs and redirect policy
+	// so the HEAD probes the same bytes the body download would fetch and never
+	// forwards credentials across an origin-changing redirect.
+	wget := v1.Wget{}
+	if err := accessspec.Scheme.Convert(resource.Access, &wget); err != nil {
+		return nil, false, fmt.Errorf("error converting resource access spec: %w", err)
+	}
+	exp, ok, err := httpverify.Peek(ctx, r.client, credentials, httpverify.PeekRequest{
+		URL:        wget.URL,
+		Header:     wget.Header,
+		Body:       wget.Body,
+		NoRedirect: wget.NoRedirect,
+	}, policy, prefer)
 	if err != nil {
 		return nil, false, fmt.Errorf("checksum peek failed for wget access %q: %w", url, err)
 	}

@@ -54,7 +54,7 @@ func TestDownloadResource(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			assert.Equal(t, http.MethodGet, r.Method)
 			w.Header().Set("Content-Type", "text/plain")
-			w.Write(content)
+			_, _ = w.Write(content)
 		}))
 		defer server.Close()
 
@@ -83,7 +83,7 @@ func TestDownloadResource(t *testing.T) {
 			assert.True(t, ok)
 			assert.Equal(t, "myuser", user)
 			assert.Equal(t, "mypass", pass)
-			w.Write([]byte("authenticated"))
+			_, _ = w.Write([]byte("authenticated"))
 		}))
 		defer server.Close()
 
@@ -567,6 +567,145 @@ func TestProcessResourceDigest_AccessFastPath(t *testing.T) {
 		_, err = repo.ProcessResourceDigest(t.Context(), resource, nil)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "does not match source-advertised")
+	})
+}
+
+// TestDownloadResource_ChecksumPolicy proves the by-value transfer path
+// (DownloadResource) enforces the configured checksum policy over the
+// transferred bytes, not just the target-side SHA-256 re-hash.
+func TestDownloadResource_ChecksumPolicy(t *testing.T) {
+	t.Parallel()
+	content := []byte("transfer me by value")
+	sha256 := godigest.FromBytes(content).Encoded()
+
+	t.Run("Require verifies the advertised checksum over the downloaded bytes", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("x-checksum-sha256", sha256)
+			_, _ = w.Write(content)
+		}))
+		defer server.Close()
+
+		repo := repository.NewResourceRepository(nil, repository.WithHTTPClient(server.Client()),
+			repository.WithChecksumConfig(&checksumhttpv1alpha1.Config{Mode: checksumhttpv1alpha1.ChecksumModeRequire}))
+		b, err := repo.DownloadResource(t.Context(),
+			wgetResource(t, server.URL, map[string]any{"url": server.URL + "/resource"}), nil)
+		require.NoError(t, err)
+		assert.Equal(t, content, readBlob(t, b))
+	})
+
+	t.Run("Require aborts a transfer whose advertised checksum mismatches the bytes", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("x-checksum-sha256", strings.Repeat("0", 64))
+			_, _ = w.Write(content)
+		}))
+		defer server.Close()
+
+		repo := repository.NewResourceRepository(nil, repository.WithHTTPClient(server.Client()),
+			repository.WithChecksumConfig(&checksumhttpv1alpha1.Config{Mode: checksumhttpv1alpha1.ChecksumModeRequire}))
+		_, err := repo.DownloadResource(t.Context(),
+			wgetResource(t, server.URL, map[string]any{"url": server.URL + "/resource"}), nil)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "checksum verification failed")
+	})
+
+	t.Run("Require aborts a transfer when no checksum is advertised", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, _ = w.Write(content)
+		}))
+		defer server.Close()
+
+		repo := repository.NewResourceRepository(nil, repository.WithHTTPClient(server.Client()),
+			repository.WithChecksumConfig(&checksumhttpv1alpha1.Config{Mode: checksumhttpv1alpha1.ChecksumModeRequire}))
+		_, err := repo.DownloadResource(t.Context(),
+			wgetResource(t, server.URL, map[string]any{"url": server.URL + "/resource"}), nil)
+		require.Error(t, err, "Require must not transfer bytes with no source-advertised checksum")
+		assert.Contains(t, err.Error(), "checksum verification failed")
+	})
+
+	t.Run("Skip performs no verification", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, _ = w.Write(content)
+		}))
+		defer server.Close()
+
+		repo := repository.NewResourceRepository(nil, repository.WithHTTPClient(server.Client()),
+			repository.WithChecksumConfig(&checksumhttpv1alpha1.Config{Mode: checksumhttpv1alpha1.ChecksumModeSkip}))
+		b, err := repo.DownloadResource(t.Context(),
+			wgetResource(t, server.URL, map[string]any{"url": server.URL + "/resource"}), nil)
+		require.NoError(t, err)
+		assert.Equal(t, content, readBlob(t, b))
+	})
+}
+
+// TestProcessResourceDigest_PeekRedirectSafety proves the HEAD fast path never
+// forwards the Authorization header across an origin-changing redirect and
+// mirrors the access spec's representation-selecting headers.
+func TestProcessResourceDigest_PeekRedirectSafety(t *testing.T) {
+	t.Parallel()
+	content := []byte("peek redirect safety")
+	sha256 := godigest.FromBytes(content).Encoded()
+
+	t.Run("credentialed HEAD does not follow a redirect that would leak Authorization", func(t *testing.T) {
+		var leaked, downstreamHit bool
+		// downstream records whether the redirect was followed and whether
+		// Authorization survived it.
+		downstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			downstreamHit = true
+			if r.Header.Get("Authorization") != "" {
+				leaked = true
+			}
+			w.Header().Set("x-checksum-sha256", sha256)
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer downstream.Close()
+
+		origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, downstream.URL+"/elsewhere", http.StatusFound)
+		}))
+		defer origin.Close()
+
+		repo := repository.NewResourceRepository(nil, repository.WithHTTPClient(downstream.Client()),
+			repository.WithChecksumConfig(&checksumhttpv1alpha1.Config{Mode: checksumhttpv1alpha1.ChecksumModeRequire}))
+		creds := &credv1.WgetCredentials{
+			Type:          runtime.NewVersionedType(credv1.WgetCredentialsType, credv1.Version),
+			IdentityToken: "secret-token",
+		}
+		// The origin only redirects, never advertises a checksum; a
+		// credential-safe peek must stop at the redirect and report "nothing
+		// advertised", so Require aborts — and Authorization must never reach
+		// the downstream origin.
+		_, err := repo.ProcessResourceDigest(t.Context(),
+			wgetResource(t, origin.URL, map[string]any{"url": origin.URL + "/resource"}), creds)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "no advertised checksum")
+		assert.False(t, leaked, "Authorization must not be forwarded across an origin-changing redirect")
+		assert.False(t, downstreamHit, "a credentialed peek must refuse the redirect rather than follow it")
+	})
+
+	t.Run("HEAD mirrors representation-selecting headers from the access spec", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodHead {
+				http.Error(w, "fast path must not download the body", http.StatusInternalServerError)
+				return
+			}
+			// The advertised checksum is served only to the selected variant.
+			if r.Header.Get("Accept") == "application/vnd.custom" {
+				w.Header().Set("x-checksum-sha256", sha256)
+			}
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer server.Close()
+
+		repo := repository.NewResourceRepository(nil, repository.WithHTTPClient(server.Client()),
+			repository.WithChecksumConfig(&checksumhttpv1alpha1.Config{Mode: checksumhttpv1alpha1.ChecksumModeRequire}))
+		resource := wgetResource(t, server.URL, map[string]any{
+			"url":    server.URL + "/resource",
+			"header": map[string][]string{"Accept": {"application/vnd.custom"}},
+		})
+		processed, err := repo.ProcessResourceDigest(t.Context(), resource, nil)
+		require.NoError(t, err, "HEAD must carry the access spec's Accept header to select the variant")
+		require.NotNil(t, processed.Digest)
+		assert.Equal(t, sha256, processed.Digest.Value)
 	})
 }
 
