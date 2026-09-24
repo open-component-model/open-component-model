@@ -872,6 +872,7 @@ walkthrough
 warroom
 wasm
 wasmstep
+weakEdgeFailurePolicy
 webhook
 webhooks
 webserver
