@@ -180,20 +180,10 @@ func (r *ResourceRepository) GetResourceDigestProcessorCredentialConsumerIdentit
 	return r.GetResourceCredentialConsumerIdentity(ctx, resource)
 }
 
-// ProcessResourceDigest establishes a wget access resource's digest.
-//
-// A Wget/v1 access references remote bytes, so OCM can pin the digest from
-// what the source advertises in its response headers (RFC 9530 Content-Digest,
-// x-checksum-*) via a single HEAD, without fetching the body.
-//
-// Modes (resolved from the checksum-http config for the access URL):
-//   - Require — HEAD-pin from advertised headers; abort if nothing advertised.
-//   - Prefer — HEAD-pin; else download the body and hash SHA-256.
-//   - Skip — never consult source checksums; download the body and hash SHA-256.
-//
-// A pinned Digest is honoured: it must agree with the source-advertised digest
-// (fast path) or the computed SHA-256 (download path). Pinned and policy are
-// each checked against the same authority, never against each other.
+// ProcessResourceDigest establishes a wget access resource's digest, either by
+// pinning from source-advertised response headers via a single HEAD (Require,
+// Prefer) or by downloading and hashing SHA-256 (Skip, or Prefer with nothing
+// advertised). A pinned Digest must agree with whichever authority was used.
 func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) (*descriptor.Resource, error) {
 	url := policyURL(resource)
 	mode := r.checksumConfig.ModeForURL(url)
@@ -211,8 +201,7 @@ func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, resource
 		if done {
 			return result, nil
 		}
-		slog.InfoContext(ctx, "wget: no source-advertised checksum; Prefer is downloading and hashing SHA-256",
-			"url", url)
+		slog.DebugContext(ctx, "wget: no source-advertised checksum; downloading and hashing SHA-256", "url", url)
 	case checksumhttpv1alpha1.ChecksumModeSkip:
 		// Never consult source checksums; always download and hash.
 	}
@@ -246,8 +235,7 @@ func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, resource
 			NormalisationAlgorithm: genericBlobDigestV1,
 			Value:                  sha,
 		}
-		slog.InfoContext(ctx, "wget: digest recorded from downloaded bytes",
-			"url", wget.URL, "algorithm", hashAlgorithmSHA256, "value", sha)
+		slog.DebugContext(ctx, "wget: digest recorded from downloaded bytes", "url", wget.URL, "value", sha)
 		return resource, nil
 	}
 
@@ -261,8 +249,7 @@ func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, resource
 	if !strings.EqualFold(want, sha) {
 		return nil, fmt.Errorf("digest mismatch: expected %s, got %s", resource.Digest.Value, sha)
 	}
-	slog.InfoContext(ctx, "wget: pinned digest matches downloaded bytes",
-		"url", wget.URL, "algorithm", hashAlgorithmSHA256, "value", sha)
+	slog.DebugContext(ctx, "wget: pinned digest matches downloaded bytes", "url", wget.URL, "value", sha)
 
 	return resource, nil
 }
@@ -272,8 +259,7 @@ func (r *ResourceRepository) GetCredentialTypeScheme() *runtime.Scheme {
 }
 
 // processDigestViaPeek runs the no-download fast path. done=true means the
-// digest is established; done=false signals "no advertised digest, fall back
-// to download" (permitted only under onMissing=compute).
+// digest is established; done=false signals "fall back to download".
 func (r *ResourceRepository) processDigestViaPeek(
 	ctx context.Context,
 	resource *descriptor.Resource,
@@ -281,8 +267,6 @@ func (r *ResourceRepository) processDigestViaPeek(
 	policy checksum.Policy,
 ) (*descriptor.Resource, bool, error) {
 	url := policyURL(resource)
-	// The reduced configuration accepts every supported algorithm, strongest
-	// first; there is no operator-facing preference knob.
 	prefer := checksum.All
 	names := make([]string, 0, len(prefer))
 	for _, alg := range prefer {
@@ -290,9 +274,8 @@ func (r *ResourceRepository) processDigestViaPeek(
 	}
 	slog.DebugContext(ctx, "wget: peeking source-advertised checksum", "url", url, "prefer", names)
 
-	// Mirror the download's representation-selecting inputs and redirect policy
-	// so the HEAD probes the same bytes the body download would fetch and never
-	// forwards credentials across an origin-changing redirect.
+	// HEAD must mirror the download's inputs and redirect policy so it probes
+	// the same bytes and never forwards credentials across a redirect.
 	wget := v1.Wget{}
 	if err := accessspec.Scheme.Convert(resource.Access, &wget); err != nil {
 		return nil, false, fmt.Errorf("error converting resource access spec: %w", err)
@@ -317,8 +300,6 @@ func (r *ResourceRepository) processDigestViaPeek(
 
 	out := resource.DeepCopy()
 	if out.Digest != nil {
-		// A pinned digest must match the same algorithm the source advertises:
-		// the operator has explicitly asked us not to hash the body.
 		if !strings.EqualFold(out.Digest.HashAlgorithm, exp.Algorithm.OCMName) {
 			return nil, false, fmt.Errorf("pinned digest algorithm %q does not match the source-advertised algorithm %q", out.Digest.HashAlgorithm, exp.Algorithm.OCMName)
 		}
@@ -339,8 +320,7 @@ func (r *ResourceRepository) processDigestViaPeek(
 		NormalisationAlgorithm: genericBlobDigestV1,
 		Value:                  exp.Value,
 	}
-	slog.InfoContext(ctx, "wget: digest pinned from source-advertised checksum",
-		"url", url, "algorithm", exp.Algorithm.OCMName, "value", exp.Value)
+	slog.DebugContext(ctx, "wget: digest pinned from source-advertised checksum", "url", url, "algorithm", exp.Algorithm.OCMName, "value", exp.Value)
 	return out, true, nil
 }
 

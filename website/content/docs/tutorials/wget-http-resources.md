@@ -29,7 +29,6 @@ type is decided, how digest pinning protects you, and what changed since OCM v1.
 - How OCM resolves a resource's media type
 - How credentials are matched to a request, and how the three authentication methods interact
 - How to pin a resource by digest so a changed file is rejected instead of silently accepted
-- How to verify downloads against a source-side checksum, and how to pin an access-type resource's digest without downloading the body
 - How to send a non-GET request and tune timeouts, retries, and the download directory
 - What changed between OCM v1 and OCM v2, and how to migrate
 
@@ -232,82 +231,14 @@ defaults, and how per-host settings are merged.
 
 ## Verifying downloads against the source {#checksum-verification}
 
-Pinning a digest on the resource protects consumers against the file changing
-*after* the component version was built. It does **not** protect against
-trusting the wrong bytes at build time — the very first `ocm add cv` accepts
-whatever the server sends and records its SHA-256. If the mirror is
-compromised, that SHA-256 is the compromise.
-
-OCM closes that gap with a **source-side checksum** — an expected digest
-published by the artifact source in response headers (RFC 9530
-`Content-Digest`, `x-checksum-sha256`, and related headers). When the download
-completes, OCM compares what it just hashed against what the source claims. If
-they disagree, construction fails.
-
-Because the same configuration makes sense across dozens of resources, it lives
-in the OCM configuration, not in the constructor. The configuration selects a
-**mode** — globally or per host:
-
-```yaml
-type: generic.config.ocm.software/v1
-configurations:
-  - type: checksum.http.config.ocm.software/v1alpha1
-    mode: Prefer   # default when omitted
-    hosts:
-      "repo.example.com":
-        mode: Require
-```
-
-The three modes are:
-
-| Mode | Behaviour |
-| ---- | --------- |
-| `Require` | HEAD-pins from advertised headers; aborts if none advertised. Input side verifies against the header, fails if none. |
-| `Prefer` (default) | HEAD-pins; falls back to download+hash SHA-256 when nothing is advertised. Input side verifies when present, otherwise records SHA-256 unverified. |
-| `Skip` | Never consult source checksums; always download and hash SHA-256, no verification. |
-
-The wget spec itself carries no checksum field: two operators pointing at two
-mirrors trust each mirror independently without editing anything the resource
-authored.
-
-### Input side: always downloads, always SHA-256 {#checksum-verification-input}
-
-The input embeds the bytes as a `LocalBlob/v1`, so the resource identity *is*
-those bytes. Verification is layered on top of the download — the file is
-always streamed to disk in a single pass and recorded as `SHA-256` with the
-`genericBlobDigest/v1` normalisation; when the mode enables it, the bytes are
-simultaneously verified against whatever algorithm the source advertises in
-response headers.
-
-That decoupling matters: a Maven repository often ships SHA-1 or MD5 as the
-strongest checksum. Verifying against SHA-1 is fine on the wire, but the
-recorded digest is still SHA-256, so no weak algorithm leaks into the
-descriptor, OCI storage, or signing.
-
-### Access side: pin from source without downloading the body {#checksum-verification-access}
-
-A `Wget/v1` access references bytes on a remote server. Any downstream
-consumer will re-fetch and re-verify from that same server, so pinning "what
-the source claims" is a legitimate identity for the descriptor — and it means
-OCM can establish the digest without transferring the body.
-
-When the mode enables it, the access-side digest processor issues a single
-`HEAD` to the artifact URL and pins the digest from the source-advertised
-response headers. The artifact body is never downloaded (unless the mode falls
-through to the download-and-hash path). The recorded digest carries the
-algorithm the source actually offered (`SHA-256`, `SHA-1`, and so on), still
-with `genericBlobDigest/v1`.
-
-{{< callout context="caution" >}}
-The fast path applies to the access-side digest processor only. Transferring
-an access **by value** (`ocm transfer cv --copy-resources`) promotes it to a
-`LocalBlob/v1` and re-runs the input-side rules — the bytes are streamed and
-re-digested as SHA-256, regardless of this configuration. Every local blob is
-self-describing.
-{{< /callout >}}
-
-For the full schema, precedence rules, and credential scoping, see
-[HTTP Checksum Configuration]({{< relref "docs/reference/checksum-http-configuration.md" >}}).
+A pinned resource `digest` protects consumers after the build, but the first
+`ocm add cv` still trusts whatever the server sends. A **source-side checksum**
+closes that gap: OCM compares the downloaded bytes against a digest the source
+advertises in response headers (RFC 9530 `Content-Digest`, `x-checksum-*`) and
+fails on a mismatch. It is configured centrally via
+`checksum.http.config.ocm.software/v1alpha1`, not in the constructor. See
+[HTTP Checksum Configuration]({{< relref "docs/reference/checksum-http-configuration.md" >}})
+for the schema, checksum modes, precedence, and the access-side fast path.
 
 ## Migrate from OCM v1 {#migrating-from-ocm-v1}
 
@@ -400,5 +331,3 @@ isn't, the content changed.
   Identity attributes and matching rules for `Wget` consumers
 - [Reference: HTTP Client Configuration]({{< relref "docs/reference/http-client-configuration.md" >}}) - Timeouts,
   retries, and per-host settings
-- [Reference: HTTP Checksum Configuration]({{< relref "docs/reference/checksum-http-configuration.md" >}}) - Source-side
-  checksum verification and the access-side pin-from-source fast path

@@ -3,19 +3,12 @@
 // controls whether downloaded HTTP bytes are verified against a source-side
 // checksum, with per-host overrides.
 //
-// The same config is honored by both the wget input method (Wget/v1 in the
-// constructor) and the wget access resource repository, so descriptor authors
-// and operators steer both paths through a single knob. The name is
-// transport-scoped ("http"), not plugin-scoped.
+// Both the wget input method (Wget/v1) and the wget access resource repository
+// honor it, so a single knob steers both paths. The name is transport-scoped
+// ("http"), not plugin-scoped. The surface is a single [ChecksumMode] per
+// policy: Require, Prefer (the default), or Skip.
 //
-// The reduced initial surface is a single [ChecksumMode] per policy:
-// Require, Prefer (the default), or Skip.
-//
-// Precedence for the effective ChecksumPolicy at a given wget URL (tightest
-// wins):
-//
-//  1. Per-host [HostConfig.ChecksumPolicy] whose key matches the URL's host
-//     (port-qualified entries win over bare hostnames).
-//  2. Top-level [Config.DefaultChecksumPolicy].
-//  3. Nil — compute the storage digest without external verification.
+// The effective mode for a wget URL is resolved tightest-first: a matching
+// per-host entry (port-qualified keys win over bare hostnames), then the
+// top-level [Config.Mode], then the default Prefer.
 package spec

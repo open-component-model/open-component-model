@@ -17,24 +17,6 @@ input side is also trusted when the descriptor is refreshed.
 For a task-oriented walkthrough, see
 [Working with HTTP Resources]({{< relref "docs/tutorials/wget-http-resources.md" >}}#checksum-verification).
 
-## Design Rationale
-
-**Verification is a deployment concern, not a descriptor concern.** The wget
-input spec has no checksum field, and the `Wget/v1` access carries no
-verification hints. Instead, operators steer verification centrally via the
-`checksum.http.config.ocm.software/v1alpha1` configuration:
-
-- **The same descriptor behaves identically wherever it is constructed.** Two
-  operators pointing at two mirrors trust each mirror independently without
-  editing the constructor.
-- **How a mirror is trusted is up to the operator.** Verification is
-  header-only: RFC 9530 `Content-Digest` and the `x-checksum-*` header
-  family are understood automatically.
-- **The transport identifier is stable.** The config type is named for the
-  transport (`checksum.http.config.ocm.software`), not for one input plugin, so
-  a future rename of the wget package leaves the on-the-wire identifier and any
-  operator configuration unchanged.
-
 ## Configuration Type
 
 Checksum policy is controlled by the
@@ -139,13 +121,11 @@ The wget input embeds the download as a local blob, so the resource identity
   whatever algorithm the source advertises in response headers.
 
 {{< callout context="note" >}}
-Verification and storage are decoupled on the input side. The mode may verify
-the transferred bytes against any supported algorithm — Maven repositories
-commonly ship SHA-1 or MD5 — but the digest recorded on the resource is
-**always SHA-256** with the `genericBlobDigest/v1` normalisation, so a
-non-SHA-256 transport checksum never leaks a weak algorithm into the component
-descriptor, OCI storage, or signing. A mismatch fails construction before
-anything is stored.
+Verification and storage are decoupled: the mode may verify against any
+advertised algorithm (Maven repos often ship SHA-1/MD5), but the recorded
+digest is **always SHA-256** with `genericBlobDigest/v1`, so no weak algorithm
+leaks into the descriptor, OCI storage, or signing. A mismatch fails
+construction before anything is stored.
 {{< /callout >}}
 
 ## Access Side — Pin From Source, No Body Download {#access-digest}
@@ -187,11 +167,10 @@ Semantics:
   mismatch is a hard error.
 
 {{< callout context="caution" >}}
-The fast path applies to the access-side digest processor only. Transferring
-a `Wget/v1` access resource **by value** (`--copy-resources`) promotes it to
-a `LocalBlob/v1` and re-runs the input-side rules — the bytes are streamed
-into the target and re-digested as SHA-256, regardless of this configuration.
-This preserves the OCM invariant that every local blob is self-describing.
+The fast path applies to the access side only. Transferring a `Wget/v1` access
+**by value** (`--copy-resources`) promotes it to a `LocalBlob/v1` and re-runs
+the input-side rules, re-digesting the streamed bytes as SHA-256 regardless of
+this configuration — every local blob stays self-describing.
 {{< /callout >}}
 
 ## Credential Scoping

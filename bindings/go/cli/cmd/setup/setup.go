@@ -95,20 +95,6 @@ func PluginManager(cmd *cobra.Command) error {
 	if err != nil {
 		return fmt.Errorf("could not get checksum-http configuration: %w", err)
 	}
-	slog.DebugContext(cmd.Context(), "checksum-http config resolved",
-		slog.String("mode", func() string {
-			if checksumHTTPConfig == nil {
-				return ""
-			}
-			return string(checksumHTTPConfig.Mode)
-		}()),
-		slog.Int("hosts", func() int {
-			if checksumHTTPConfig == nil {
-				return 0
-			}
-			return len(checksumHTTPConfig.Hosts)
-		}()),
-	)
 	if err := builtin.Register(pluginManager, filesystemConfig, httpConfig, checksumHTTPConfig, slog.Default()); err != nil {
 		return fmt.Errorf("could not register builtin plugins: %w", err)
 	}

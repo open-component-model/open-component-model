@@ -154,14 +154,14 @@ want the bytes captured in the component version rather than fetched again at co
 
 Alternative type names `wget/v1`, `Wget`, and `wget` are also accepted; `Wget/v1` is canonical.
 
-| Field            | Type                  | Required | Description                                                                                                                               |
-|------------------|-----------------------|----------|-------------------------------------------------------------------------------------------------------------------------------------------|
-| `url`            | string                | yes      | HTTP or HTTPS endpoint to download from. Other URL schemes are rejected.                                                                  |
-| `mediaType`      | string                | no       | Media type of the downloaded content. If omitted, the response `Content-Type` header is used, falling back to `application/octet-stream`. |
-| `header`         | `map[string][]string` | no       | Additional HTTP headers to send with the request.                                                                                         |
-| `verb`           | string                | no       | HTTP method to use. Defaults to `GET`.                                                                                                    |
-| `body`           | string (base64)       | no       | Request body. Encoded as base64 in YAML because the underlying field is a byte slice.                                                     |
-| `noRedirect`     | boolean               | no       | Do not follow HTTP redirects. Defaults to `false`.                                                                                        |
+| Field        | Type                  | Required | Description                                                                                                                               |
+|--------------|-----------------------|----------|-------------------------------------------------------------------------------------------------------------------------------------------|
+| `url`        | string                | yes      | HTTP or HTTPS endpoint to download from. Other URL schemes are rejected.                                                                  |
+| `mediaType`  | string                | no       | Media type of the downloaded content. If omitted, the response `Content-Type` header is used, falling back to `application/octet-stream`. |
+| `header`     | `map[string][]string` | no       | Additional HTTP headers to send with the request.                                                                                         |
+| `verb`       | string                | no       | HTTP method to use. Defaults to `GET`.                                                                                                    |
+| `body`       | string (base64)       | no       | Request body. Encoded as base64 in YAML because the underlying field is a byte slice.                                                     |
+| `noRedirect` | boolean               | no       | Do not follow HTTP redirects. Defaults to `false`.                                                                                        |
 
 {{< callout context="caution" >}}
 Do not put credentials in `url`, `header`, or `body`. That includes userinfo (`https://user:token@host/...`) and
@@ -230,40 +230,12 @@ resources:
 
 #### Checksum verification (via OCM config) {#checksum-verification-via-ocm-config}
 
-HTTP downloads — both the wget input method and the `Wget/v1` access-type
-digest processor — can be tied to a source-side checksum through the central
-`checksum.http.config.ocm.software/v1alpha1` configuration. Verification is a
-*deployment* concern, not a *descriptor* concern; the wget spec itself carries
-no checksum field. The configuration selects a **mode** per host (or globally):
-
-```yaml
-type: generic.config.ocm.software/v1
-configurations:
-  - type: checksum.http.config.ocm.software/v1alpha1
-    mode: Prefer   # default when omitted
-    hosts:
-      "repo.example.com":
-        mode: Require
-```
-
-- **Input side** — always downloads, always records `SHA-256` with
-  `genericBlobDigest/v1`. When the mode enables verification, the bytes are
-  also verified against whatever algorithm the source advertises in response
-  headers. Verification and storage are decoupled: a SHA-1/MD5 header still
-  records SHA-256, so weak algorithms never leak into the descriptor.
-- **Access side** — pins the resource digest from the source-advertised
-  response headers via a single HEAD, never downloading the body. See
-  [Access side — pin from source]({{< relref "checksum-http-configuration.md" >}}#access-digest)
-  for details.
-- **By-value transfer** (`--copy-resources`) promotes an access to a local
-  blob and re-runs the input-side rules, so every local blob is
-  self-describing.
-
-For the full schema, checksum modes (`Require`, `Prefer`, `Skip`),
-precedence rules, and
-credential scoping, see the
+HTTP downloads can additionally be verified against a source-side checksum
+advertised in response headers, steered centrally by the
+`checksum.http.config.ocm.software/v1alpha1` configuration (the wget spec itself
+carries no checksum field). See
 [HTTP Checksum Configuration]({{< relref "checksum-http-configuration.md" >}})
-reference.
+for the schema, checksum modes, and the access-side pin-from-source fast path.
 
 ### `S3/v2` {#s3v2-input}
 
@@ -544,13 +516,10 @@ resources:
 Upload is not supported for this access type: a plain HTTP endpoint has no standardized write API. A `Wget/v1` access therefore has no by-reference form in a target repository. It is copied only when resource copying is requested using `--copy-resources`, and then always by value.  The content is downloaded and stored as a [`LocalBlob/v1`]({{< relref "input-and-access-types.md" >}}#localblobv1).
 {{< /callout >}}
 
-The same `checksum.http.config.ocm.software/v1alpha1` config that steers the
-wget input's checksum verification also drives the access-side digest
-processor. Depending on the configured mode, the processor pins the resource
-digest from the source-advertised response headers via a single HEAD — no body
-download. See
-[HTTP Checksum Configuration]({{< relref "checksum-http-configuration.md" >}})
-for the full schema and checksum modes.
+The `checksum.http.config.ocm.software/v1alpha1` configuration can pin the
+access digest from source-advertised response headers via a single HEAD, with
+no body download. See
+[HTTP Checksum Configuration]({{< relref "checksum-http-configuration.md" >}}).
 
 For guidance on choosing between the input and the access type, and for media type resolution, redirects, download
 tuning, and credential configuration, see
