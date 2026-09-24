@@ -151,17 +151,17 @@ Semantics:
 - The digest processor issues **one HEAD** to the artifact URL to harvest
   response headers. It **never fetches the artifact body** unless the mode
   falls through to the download-and-hash path.
-- Among competing offers, the algorithm preference is fixed at
-  `[sha256, sha512, sha1, md5]` — the strongest advertised algorithm wins.
-- The recorded digest carries the algorithm the source actually offered
-  (`SHA-256`, `SHA-1`, `MD5`, `SHA-512`), still with
-  `normalisationAlgorithm: genericBlobDigest/v1`. It is a legitimate pin
+- The processor pins only a source-advertised **SHA-256** digest — the sole
+  algorithm OCM/OCI storage accepts on a resource. Recording a weaker algorithm
+  would make the component un-transferable by value, so SHA-1/MD5/SHA-512
+  offers are ignored on this fast path. The recorded digest carries
+  `normalisationAlgorithm: genericBlobDigest/v1`; it is a legitimate pin
   because any downstream consumer re-fetches from the same source and
   re-verifies against the same authority.
-- If no header advertises an acceptable digest and the mode is `Require`, the
-  processor aborts without downloading. `Prefer` falls through to a
-  download-and-hash path (SHA-256) and logs an info-level message noting
-  verification was skipped for that resource.
+- If no SHA-256 digest is advertised and the mode is `Require`, the processor
+  aborts without downloading. `Prefer` falls through to a download-and-hash
+  path (also SHA-256), so a source that ships only SHA-1/MD5 still yields a
+  self-describing SHA-256 pin.
 - When the resource already carries a pinned `digest`, its algorithm and value
   MUST agree with the source-advertised digest for the same algorithm; a
   mismatch is a hard error.

@@ -483,7 +483,11 @@ func TestProcessResourceDigest_AccessFastPath(t *testing.T) {
 		assert.Equal(t, sha256, processed.Digest.Value)
 	})
 
-	t.Run("SHA-1 accepted when policy allows it and no SHA-256 is advertised", func(t *testing.T) {
+	t.Run("Require aborts when only a weak (SHA-1) digest is advertised", func(t *testing.T) {
+		// The access-side pin becomes the resource digest, which OCM/OCI
+		// storage accepts only as SHA-256. A source advertising only SHA-1 has
+		// no usable pin, so Require must abort rather than leak SHA-1 into the
+		// descriptor (which would make the component un-transferable by value).
 		server := httptest.NewServer(noBodyGET(map[string]string{"x-checksum-sha1": sha1}))
 		defer server.Close()
 
@@ -494,12 +498,34 @@ func TestProcessResourceDigest_AccessFastPath(t *testing.T) {
 			repository.WithHTTPClient(server.Client()),
 			repository.WithChecksumConfig(cfg),
 		)
+		_, err := repo.ProcessResourceDigest(t.Context(),
+			wgetResource(t, server.URL, map[string]any{"url": server.URL + "/resource"}), nil)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "no advertised checksum")
+	})
+
+	t.Run("Prefer falls back to SHA-256 download when only a weak digest is advertised", func(t *testing.T) {
+		// Under Prefer, a SHA-1/MD5-only source is treated as "not advertised"
+		// on the access fast path, so the processor downloads the body and pins
+		// SHA-256 — keeping the descriptor transferable by value.
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("x-checksum-sha1", sha1)
+			if r.Method != http.MethodHead {
+				_, _ = w.Write(content)
+			}
+		}))
+		defer server.Close()
+
+		repo := repository.NewResourceRepository(nil,
+			repository.WithHTTPClient(server.Client()),
+			repository.WithChecksumConfig(&checksumhttpv1alpha1.Config{Mode: checksumhttpv1alpha1.ChecksumModePrefer}),
+		)
 		processed, err := repo.ProcessResourceDigest(t.Context(),
 			wgetResource(t, server.URL, map[string]any{"url": server.URL + "/resource"}), nil)
 		require.NoError(t, err)
 		require.NotNil(t, processed.Digest)
-		assert.Equal(t, "SHA-1", processed.Digest.HashAlgorithm)
-		assert.Equal(t, sha1, processed.Digest.Value)
+		assert.Equal(t, "SHA-256", processed.Digest.HashAlgorithm)
+		assert.Equal(t, sha256, processed.Digest.Value)
 	})
 
 	t.Run("SHA-256 preferred over SHA-1 when both are advertised", func(t *testing.T) {
