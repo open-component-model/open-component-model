@@ -173,7 +173,6 @@ func processHTTPUploader(resource descriptorv2.Resource, u *transferv1alpha1.HTT
 		URL:        u.TargetURL,
 		Verb:       u.Method,
 		Header:     u.Header,
-		Body:       u.Body,
 		NoRedirect: u.NoRedirect,
 		MediaType:  mediaType,
 	}

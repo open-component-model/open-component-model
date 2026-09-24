@@ -54,11 +54,6 @@ func (in *HTTPUploaderConfig) DeepCopyInto(out *HTTPUploaderConfig) {
 			(*out)[key] = outVal
 		}
 	}
-	if in.Body != nil {
-		in, out := &in.Body, &out.Body
-		*out = make([]byte, len(*in))
-		copy(*out, *in)
-	}
 	return
 }
 

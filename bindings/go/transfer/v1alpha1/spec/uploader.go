@@ -74,8 +74,6 @@ type HTTPUploaderConfig struct {
 	Method string `json:"method,omitempty"`
 	// Header carries additional HTTP request headers.
 	Header map[string][]string `json:"header,omitempty"`
-	// Body is an optional static request body.
-	Body []byte `json:"body,omitempty"`
 	// NoRedirect disables following HTTP redirects for the upload request.
 	NoRedirect bool `json:"noRedirect,omitempty"`
 	// MediaType overrides the media type recorded on the uploaded resource; when

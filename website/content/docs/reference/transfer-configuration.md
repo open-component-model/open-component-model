@@ -115,7 +115,6 @@ The request fields map field-for-field onto the resulting
 | `targetURL`           | CEL expression        | `url`               | The upload URL. See CEL Expressions below.                                                         |
 | `method`              | string                | `verb`              | HTTP method for the upload request. Defaults to PUT.                                               |
 | `header`              | `map[string][]string` | `header`            | HTTP headers to send with the upload request. Values may be CEL-templated; see Templating Headers. |
-| `body`                | bytes                 | `body`              | Optional request body carried on the resulting Wget/v1 access.                                     |
 | `noRedirect`          | bool                  | `noRedirect`        | Disable following HTTP redirects.                                                                  |
 | `mediaType`           | string                | `mediaType`         | Media type recorded on the resource. Defaults to the source's.                                     |
 
