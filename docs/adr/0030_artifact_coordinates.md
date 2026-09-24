@@ -8,7 +8,7 @@
 
 Changing access to `localBlob` must preserve the naming information needed to publish an artifact elsewhere. Store that information in resource labels before replacing the external access. The OCM resource name/version may differ from the artifact's repository, tag, chart name, or object key.
 
-During air-gapped transfer, the receiver has the descriptor and payload but cannot query the original source. Coordinates, also called reference hints here, must travel with the resource.
+During air-gapped transfer, the receiver has the descriptor and payload but cannot query the original source. Artifact coordinates must travel with the resource.
 
 [EPIC #1264](https://github.com/open-component-model/ocm-project/issues/1264) starts with same-technology uploads and proposes a shared model for future cross-technology transfer. Adding a source should not require new naming mappings in every target.
 
@@ -22,7 +22,7 @@ This ADR covers:
 - How coordinates survive local copies, conversions, and later publication
 - Three coordinate models and their trade-offs
 
-Upload configuration, routing, CEL expressions, execution, and backend protocols are outside this ADR.
+Upload configuration, routing, execution, and backend protocols are outside this ADR. CEL examples only illustrate how destination mappings consume coordinates.
 
 ## Decision Status
 
@@ -51,7 +51,7 @@ flowchart TD
     exported -->|Offline transport preserves payload and labels| imported
 ```
 
-For example, a source reference `registry.example/team/payments:1.4.0` provides repository `team/payments` and tag `1.4.0`. Both must survive when access becomes a local blob. The source registry is not needed to reconstruct that naming at the destination.
+For example, a source reference `registry.example/team/payments:1.4.0` provides repository `team/payments` and tag `1.4.0`. Both must survive when access becomes a local blob. Option 2 also retains the source registry and workspace so destination mappings can choose whether to use them.
 
 The offline bundle must contain the payload and coordinate metadata. A temporary file path, in-memory graph value, or remote `globalAccess` alone is insufficient. Receivers still need the schema support and adapters required by the chosen option.
 
@@ -59,18 +59,18 @@ The offline bundle must contain the payload and coordinate metadata. A temporary
 
 ### Meaning and Boundaries
 
-Coordinates describe portable naming, not a complete source access or a destination instruction. They exclude endpoints, credentials, headers, and signed URLs. Source provenance can be retained separately when needed.
+Coordinates describe publication addresses, not complete source access methods or destination instructions. They exclude credentials, headers, and signed URLs. Option 2 retains source hosting authorities and workspaces as mapping inputs, not as instructions to contact those endpoints.
 
-| Source                     | Naming information to consider                               | Constraints                                                                                                            |
-| -------------------------- | ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------- |
-| OCI artifact               | Registry-relative repository, tag, root digest               | Preserve tag and digest when both exist. Do not invent `latest`. The root digest is not the digest of a layout archive |
-| Helm chart                 | Name and version from `Chart.yaml`                           | Requested access values and the OCM resource version are not authoritative. Verify against the archive                 |
-| S3 object                  | Original object key                                          | Keep it opaque. Omit bucket, endpoint, region, and bucket-assigned version ID                                          |
-| HTTP resource              | Original escaped URL path before redirects                   | A partial naming hint. Queries, headers, or request bodies can select different content at the same path               |
-| GitHub source archive      | Owner, repository, pinned commit, optional informational ref | A commit is a source revision, not an archive digest or release version. Naming cannot recreate Git history            |
-| Local blob or staging file | Previously retained coordinates                              | Do not derive artifact names from local storage references or temporary paths                                          |
+| Source                     | Naming information to consider                               | Constraints                                                                                                             |
+| -------------------------- | ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------- |
+| OCI artifact               | Repository and tag, optionally source registry and workspace | Do not invent `latest`. Option 1 also retains root-digest pins, while Option 2 leaves digests outside its naming model  |
+| Helm chart                 | Name and version from `Chart.yaml`                           | Requested access values and the OCM resource version are not authoritative. Verify against the archive                  |
+| S3 object                  | Original object key                                          | Keep the key opaque. Option 2 also retains endpoint authority and bucket. Exclude region and bucket-assigned version ID |
+| HTTP resource              | Original escaped URL path before redirects                   | A partial naming hint. Queries, headers, or request bodies can select different content at the same path                |
+| GitHub source archive      | Owner, repository, pinned commit, optional informational ref | A commit is a source revision, not an archive digest or release version. Naming cannot recreate Git history             |
+| Local blob or staging file | Previously retained coordinates                              | Do not derive artifact names from local storage references or temporary paths                                           |
 
-An OCI tag is not necessarily a release version. A digest can pin an OCI reference but does not replace resource integrity verification. The unified model must account for such constraints even when they are kept outside its naming fields.
+An OCI tag is not necessarily a release version. A digest can pin an OCI reference but does not replace resource integrity verification. Option 2 leaves digests outside its naming fields and does not claim to reconstruct digest-pinned source access.
 
 Naming also does not establish payload compatibility. A chart downloaded through HTTP may retain Helm identity after inspection. Adding Helm coordinates to arbitrary bytes does not make them a chart. Format conversion itself is outside this ADR, but its effects on coordinates are in scope.
 
@@ -79,10 +79,11 @@ Naming also does not establish payload compatibility. A chart downloaded through
 - Derive coordinates before replacing external access, without requiring a later source lookup
 - Use authoritative payload metadata where available, such as `Chart.yaml`
 - Do not substitute the OCM resource name/version for missing artifact identity without explicit policy
-- Parse full OCI references before removing the registry. Parse legacy relative `referenceName` values as relative names, not full references
+- Let each source adapter extract coordinates using its own addressing rules, without a generic workspace splitter
+- Use `looseref` for full OCI references, not arbitrary relative paths. Interpret legacy `referenceName` values only when their convention is known
 - Preserve opaque S3 keys and escaped HTTP paths without cleaning, decoding, or silently renaming them
 - Define HTTP path handling explicitly, including empty paths and the leading slash. Exclude query strings and request credentials
-- Do not resolve a Git ref again just to recreate coordinates. Retain the pinned commit associated with the downloaded payload
+- Do not resolve a Git ref again just to recreate coordinates. Source revisions are separate from the publication naming in Option 2
 - Reject invalid known coordinates rather than silently falling back to legacy hints
 
 ### Persistence and Lifecycle
@@ -190,34 +191,42 @@ Same-technology naming is direct. Cross-technology mapping needs something to pr
 
 ### Model
 
-Sources normalize to one shared contract. Destination mapping consumes it without inspecting source-specific coordinate types.
+Each source adapter translates its native address into one shared coordinate structure. The adapter knows its own addressing rules. The shared contract generalizes its output, not how it discovers workspace or resource boundaries.
+
+Preserve the source authority, workspace, and resource path. Target mappings use CEL to decide what to retain, replace, or omit without inspecting the source access type.
 
 ```mermaid
 flowchart TD
-    source[Source naming] -->|Normalize| shared[Shared coordinates]
-    shared -->|Map to destination| destination[Destination naming]
+    oci[OCI source adapter] --> shared[Common artifact coordinates]
+    s3[S3 source adapter] --> shared
+    http[Wget source adapter] --> shared
+    shared --> label[Resource label through offline transport]
+    label --> mapping[Target CEL mapping]
+    mapping --> destination[Target address]
 ```
 
-A candidate naming schema:
+Proposed schema:
 
 ```go
 type ArtifactCoordinates struct {
     Type      runtime.Type `json:"type"`
-    Namespace []string     `json:"namespace,omitempty"`
-    Name      string       `json:"name,omitempty"`
-    Version   string       `json:"version,omitempty"`
-    Tag       string       `json:"tag,omitempty"`
+    Authority string       `json:"authority,omitempty"`
+    Workspace string       `json:"workspace,omitempty"`
     Path      *string      `json:"path,omitempty"`
+    Tag       string       `json:"tag,omitempty"`
 }
 ```
 
-| Field       | Meaning                                                                                       |
-| ----------- | --------------------------------------------------------------------------------------------- |
-| `namespace` | Logical naming segments without an endpoint or URL escaping                                   |
-| `name`      | Artifact name, verified against payload metadata when available                               |
-| `version`   | Artifact release version, excluding arbitrary tags, Git commits, and S3 version IDs           |
-| `tag`       | Publication alias independent of release version                                              |
-| `path`      | Optional opaque distribution name for byte storage. An empty path differs from a missing path |
+| Field       | Meaning                                                                                                             |
+| ----------- | ------------------------------------------------------------------------------------------------------------------- |
+| `authority` | Source hosting authority, such as a registry or endpoint host, including a port when present                        |
+| `workspace` | Source-defined scope, such as an owner, group, or bucket                                                            |
+| `path`      | Complete resource path within that scope. An empty path differs from a missing path                                 |
+| `tag`       | Optional publication selector, such as an OCI tag or Helm chart version, not a promise of release-version semantics |
+
+Fields are absent where the source has no equivalent. There is no invented `namespace`, generic path splitting, or substitution of OCM resource identity. A workspace may contain multiple segments when the source defines that scope. If no workspace boundary is known, retain the complete resource path rather than guessing one.
+
+For `ghcr.io/stefanprodan/podinfo:sha256-ec73780a8425f59ea49f5bc8cdff0d598805a224fbaa1f86c67a244f250fa9da`:
 
 ```yaml
 labels:
@@ -225,49 +234,79 @@ labels:
     signing: false
     value:
       type: ArtifactCoordinates/v1alpha1
-      namespace: [team, charts]
-      name: payments
-      version: 1.4.0+build.1
-      path: team/charts/payments-1.4.0+build.1.tgz
+      authority: ghcr.io
+      workspace: stefanprodan
+      path: podinfo
+      tag: sha256-ec73780a8425f59ea49f5bc8cdff0d598805a224fbaa1f86c67a244f250fa9da
 ```
 
-The chart supplies name/version. Source normalization or policy supplies namespace and distribution naming. A format change must revalidate fields such as the filename.
+Here the source adapter uses GHCR's owner/repository boundary. The full repository remains available as `workspace + "/" + path`. The `sha256-...` value is a tag, not a digest.
 
-This sketch is incomplete. OCI root-digest pins and Git revisions need a defined place alongside shared naming. An OCI root digest must not be replaced by the digest of its offline archive. Package variants, multiple aliases, and multi-file artifacts also need evaluation before stabilizing the schema.
+Digest handling remains outside this model. Existing resource integrity metadata keeps its own meaning and must not be treated as an interchangeable OCI manifest digest. Source-only selectors such as S3 version IDs and Git commits are also outside this publication-address contract. It is not a lossless serialization of source access.
 
-### Compared with Specialized Coordinates
+### Source Normalization
 
-The shared schema replaces the native payloads rather than wrapping them:
+| Source                     | `authority`                 | `workspace`                             | `path`                      | `tag`                       |
+| -------------------------- | --------------------------- | --------------------------------------- | --------------------------- | --------------------------- |
+| OCI image on GHCR          | `ghcr.io`                   | `stefanprodan`                          | `podinfo`                   | `6.9.0`                     |
+| S3 object                  | `s3.example.com`            | `artifacts`                             | `apps/podinfo.tar.gz`       | Absent                      |
+| Wget download              | `downloads.example.com`     | Absent                                  | `/releases/podinfo.tar.gz`  | Absent                      |
+| GitHub source archive      | `github.com`                | `matthiasbruns`                         | `test`                      | Absent                      |
+| Helm chart                 | Repository host             | Source-defined repository scope, if any | Chart name                  | Chart version               |
+| Local blob or staging file | Retain existing coordinates | Retain existing coordinates             | Retain existing coordinates | Retain existing coordinates |
 
-| Native field               | Candidate shared representation                                                       |
-| -------------------------- | ------------------------------------------------------------------------------------- |
-| Helm `name` and `version`  | Shared `name` and `version`, still verified against `Chart.yaml`                      |
-| S3 `objectKey`             | Shared opaque `path`, preserving the exact key                                        |
-| OCI `repository` and `tag` | Defined namespace/name decomposition and shared `tag`                                 |
-| OCI root `digest`          | Not covered by this sketch. Must be retained explicitly before the schema is complete |
+The OCI adapter can use `looseref` to separate registry, repository, and tag. Workspace extraction belongs to the adapter. Existing `referenceName` values are compatibility inputs when their convention is known, not the common schema.
 
-A generic byte-storage consumer reads `path` instead of decoding an S3 family. This reduces source-specific dependencies, but moves responsibility for preserving native meaning into the shared schema and normalizers.
+Preserve opaque object keys and escaped HTTP paths without cleaning or silently decoding them. HTTP paths include their leading slash. Source adapters must not invent a tag from a query, Git ref, temporary filename, or object version ID. Sources without usable naming, including some HTTP downloads and OCI layers, need explicit naming input.
+
+### Target Mapping
+
+The following CEL expressions assume the shared object is exposed as `coordinates`. They illustrate naming only, not an upload configuration API.
+
+Replace the registry and workspace for an OCI destination:
+
+```cel
+"registry.example/appetizers/" + coordinates.path + ":" + coordinates.tag
+```
+
+Replace only the registry:
+
+```cel
+"registry.example/" + coordinates.workspace + "/" +
+coordinates.path + ":" + coordinates.tag
+```
+
+Build an S3 key retaining the source grouping:
+
+```cel
+coordinates.authority + "/" + coordinates.workspace + "/" +
+coordinates.path + "/" + coordinates.tag
+```
+
+These examples require the referenced fields to be present. A target mapping must handle absent tags, path encoding, target grammar, and collisions explicitly. It must not guess that the final path segment is a tag. The target configuration supplies the destination bucket or endpoint. Wget describes download access, so HTTP publication requires an appropriate uploader.
+
+The same boundary allows `github.com/matthiasbruns/test` to map to `gitlab.com/appetizers/test` by retaining `path` and replacing authority and workspace. This illustrates address mapping, not Git repository conversion support.
 
 ### Offline Consumption and Extensibility
 
-Persist the shared object so receivers can interpret naming without the original source adapter. Keep it when the current access cannot reconstruct its meaning.
+Persist the shared object in the resource label before replacing external access with `localBlob`. Preserve it through local copies and offline export/import. The destination reads it without contacting the source or loading its normalizer. Publication must not silently replace retained source coordinates with the destination address.
 
-A new source using supported semantics implements one normalizer. Compatible consumers remain unchanged. New naming concepts may require a schema revision.
-
-Normalizers must define encoding precisely. An opaque S3 key and an escaped HTTP path do not share the same grammar. Preserving original spelling across all technologies is not guaranteed, and missing identity must not be invented.
+A new source fitting the contract implements one normalizer. Compatible target mappings remain unchanged. New addressing concepts may require a schema revision. Payload compatibility and format conversion remain separate from address mapping.
 
 ### Pros
 
-- One persistent naming contract for offline receivers
-- No pairwise source-to-target naming mappings for supported semantics
-- Generic consumers can use naming from any compatible source
+- One structured contract for destination CEL mappings across technologies
+- Source authority, workspace, and path remain available for relocation decisions
+- No pairwise source-to-target mappings for supported addressing concepts
+- Offline receivers need the shared schema, not the original source adapter
 
 ### Cons
 
-- Shared semantics must be defined before the API is stable
-- A minimal schema loses native detail, while many optional fields risk ambiguity
-- Exact native round trips may need separate metadata or explicit policy
-- New identity concepts can require shared schema changes
+- Workspace boundaries, path encoding, and selector semantics need precise adapter contracts
+- Some sources lack usable naming and require explicit input
+- Target mappings must handle missing fields, encoding, and collisions
+- The model does not retain source-only selectors or guarantee exact access reconstruction
+- New addressing concepts can require shared schema changes
 
 ## Option 3: Hybrid Coordinates Through a Shared Hub
 
@@ -295,7 +334,7 @@ Mappings are partial, not guaranteed inverses. Missing information requires expl
 
 ### Compared with Specialized and Unified Coordinates
 
-The hybrid retains types such as `HelmChartCoordinates` and `S3ObjectCoordinates` from Option 1, while adding the common mapping boundary from Option 2. For example, a Helm adapter supplies shared name/version, a naming policy derives a distribution path, and an S3 adapter projects that path into `objectKey`. The S3 adapter does not decode Helm coordinates.
+The hybrid retains types such as `HelmChartCoordinates` and `S3ObjectCoordinates` from Option 1, while adding the common mapping boundary from Option 2. For example, a Helm adapter maps chart name/version into shared `path`/`tag`, a naming policy derives an object key, and an S3 adapter projects that key into `objectKey`. The S3 adapter does not decode Helm coordinates.
 
 Unlike the unified option, native consumers can keep their typed contracts. Unlike the specialized option alone, cross-technology mapping must pass through the shared model. Native details remain available when the shared projection is insufficient for a lossless round trip.
 
@@ -339,7 +378,7 @@ A new source expressing existing shared semantics needs one adapter. Compatible 
 For a chart taken offline and later stored in S3, all options must retain its Helm identity in resource labels. The difference is how they obtain the object key:
 
 - **Specialized:** produce an `S3ObjectCoordinates` entry through an additional mapping while preserving the Helm entry
-- **Unified:** derive a shared distribution `path` and retain shared name/version
+- **Unified:** retain chart name/version as `path`/`tag` and let the target CEL mapping compose the object key
 - **Hybrid:** normalize Helm coordinates to the hub and project the chosen path into S3 coordinates, retaining the original identity
 
 Options 2 and 3 avoid up to N × M naming mappings for supported semantics. Option 1 defers that normalization boundary. None provides universal format conversion.
@@ -350,7 +389,9 @@ Test the coordinate contract with the source unreachable and only the transporte
 
 - External → `localBlob` → offline export/import → local copy preserves coordinate labels with the source unreachable
 - Local copies retain unknown coordinate families or versions, including when `localBlob` has `globalAccess`
-- OCI repository, tag-only, digest-only, and tag-plus-digest naming survive offline transport
+- OCI repository and tag survive offline transport, including tags that resemble digests
+- Option 2 retains authority and workspace for CEL mapping, without adding a digest field
+- Digest-only OCI inputs require an explicit destination naming policy under Option 2
 - Helm name/version remain available after storage as an S3 object
 - HTTP paths preserve defined escaping and empty-path semantics without retaining request secrets
 - Opaque S3 keys are not cleaned or decoded, and names collapsing across buckets are detected
