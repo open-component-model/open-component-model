@@ -302,10 +302,10 @@ conversion, and the inverted authentication precedence, see
 ## S3
 
 Used when OCM reads an object from an S3 or S3-compatible bucket. This applies to the
-[`S3/v2` access type]({{< relref "input-and-access-types.md#s3v2-access" >}}) and to the
+[S3 access types (v1, v2 and unversioned)]({{< relref "input-and-access-types.md#s3v2-access" >}}) and to the
 [`S3/v2` input type]({{< relref "input-and-access-types.md#s3v2-input" >}}). OCM derives the identity from
-`bucketName`, `objectKey` and the optional `endpoint`. The access type and the input type derive it the same way, so
-one consumer entry covers both.
+the bucket, object key and optional `endpoint`, normalizing v1 `bucket`/`key` to v2 `bucketName`/`objectKey`.
+All access variants and the input type derive the same identity, so one consumer entry covers them all.
 
 Credentials are optional. If no consumer entry matches, OCM gives no credentials to the AWS SDK. The SDK then uses its
 default credential chain:
@@ -315,6 +315,11 @@ default credential chain:
 - IAM instance roles and task roles
 
 Use this path for in-cluster and CI setups. Short-lived role credentials are safer than static keys in `.ocmconfig`.
+
+Public objects require explicit `anonymous: true` in an `S3Credentials/v1` entry to disable signing, even when AWS
+credentials are available. The optional boolean defaults to `false`. Missing credentials, provider errors and S3
+authentication errors never trigger anonymous access. Authentication settings belong only in credentials, not in
+access or input specifications.
 
 ### Identity Attributes
 
@@ -354,12 +359,14 @@ URL attributes. The path still names the object:
 | `accessKeyId`     | AWS access key ID                                        |
 | `secretAccessKey` | Secret access key paired with `accessKeyId`              |
 | `sessionToken`    | Session token for temporary (STS) credentials. Optional. |
+| `anonymous`       | Optional boolean; default `false`. Disables signing.     |
 
 Use [`S3Credentials/v1`]({{< relref "credential-types.md#s3credentialsv1" >}}) for the typed field reference.
 
-If an entry sets none of the three properties, OCM treats it as no credentials, and the AWS default credential chain
-applies. If an entry sets any of them, OCM passes the entry to the AWS SDK unchanged. An incomplete pair therefore
-fails in the SDK. It does not fall back to the default chain.
+When `anonymous` is false or omitted and no key or token is set, the AWS default credential chain applies. If any
+key or token is set, OCM passes the static credentials to the AWS SDK. An incomplete pair therefore fails in the
+SDK rather than falling back to the default chain. `anonymous: true` cannot be combined with keys or a token,
+including their legacy aliases.
 
 ### Matching Behavior
 
@@ -384,11 +391,22 @@ Write the identity type as `type: S3`. OCM matches the type as an exact string, 
 [access and input type]({{< relref "input-and-access-types.md#s3v2-access" >}})) does not match.
 
 A wrong type gives no error message. OCM resolves no credentials, the AWS default credential chain takes over, and the
-request uses what that chain finds, which is often nothing. AWS then reports an access-denied error or a
-missing-credentials error, not a configuration error.
+request uses what that chain finds. Missing credentials or access-denied errors may then occur rather than an
+identity configuration error.
 {{< /callout >}}
 
 ### Examples
+
+**Anonymous access to one public object:**
+
+```yaml
+- identity:
+    type: S3
+    path: public-bucket/path/to/object
+  credentials:
+    - type: S3Credentials/v1
+      anonymous: true
+```
 
 **All objects in every bucket.** Use this form when one account owns everything that OCM reads:
 
