@@ -22,10 +22,6 @@ vars:
     sh: 'source {{.PROJECT_ROOT}}/.env && [ -f .env ] && source .env; echo "${HELM_DOCS_VERSION:-v1.14.2}"'
   YQ_VERSION:
     sh: 'source {{.PROJECT_ROOT}}/.env && [ -f .env ] && source .env; echo "${YQ_VERSION:-v4.49.2}"'
-  # cosign is pinned in the sigstore handler's per-area .env; the Dockerfile takes it as a
-  # build arg so the controller image and the sigstore integration stay on the same version.
-  COSIGN_VERSION:
-    sh: '. {{.PROJECT_ROOT}}/bindings/go/sigstore/signing/handler/internal/.env && echo "$COSIGN_VERSION"'
 
   CONTAINER_TOOL: '{{.CONTAINER_TOOL | default "docker"}}'
   LOCALBIN: '{{.TASKFILE_DIR}}/bin'
@@ -134,7 +130,10 @@ tasks:
         LOAD: '{{.LOAD | default ""}}'
         PUSH: '{{.PUSH | default ""}}'
         OCI_OUTPUT: '{{.OCI_OUTPUT | default ""}}'
-        COSIGN_VERSION: '{{.COSIGN_VERSION}}'
+        # cosign is pinned in the sigstore handler's per-area .env; the Dockerfile takes it as a
+        # build arg so the controller image and the sigstore integration stay on the same version.
+        COSIGN_VERSION:
+          sh: 'source {{.PROJECT_ROOT}}/bindings/go/sigstore/signing/handler/internal/.env && echo "$COSIGN_VERSION"'
 
 
   # Multi-arch capable build task.

@@ -202,7 +202,7 @@ func PrepareOCMComponent(ctx context.Context, name, componentConstructorPath, im
 			return fmt.Errorf("could not create ocmconfig secret: %w", err)
 		}
 		DeferCleanup(func() {
-			_, _ = Run(exec.Command("kubectl", "delete", "secret", secretName,
+			_, _ = Run(exec.CommandContext(ctx, "kubectl", "delete", "secret", secretName,
 				"--namespace", "default", "--ignore-not-found"))
 		})
 	}

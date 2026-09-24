@@ -7,7 +7,7 @@ type: generic.config.ocm.software/v1
 configurations:
   # --- RSA ---
   - type: signing.config.ocm.software/v1alpha1
-    signature: ocm.software.rsa
+    signature: ocm.software.helm.signing.rsa
     signer:
       type: RSASigningConfiguration/v1alpha1
       signatureAlgorithm: RSASSA-PSS
@@ -20,7 +20,7 @@ configurations:
       - identity:
           type: RSA/v1alpha1
           algorithm: RSASSA-PSS
-          signature: ocm.software.rsa
+          signature: ocm.software.helm.signing.rsa
         credentials:
           - type: Credentials/v1
             properties:
@@ -63,7 +63,7 @@ configurations:
                 -----END RSA PUBLIC KEY-----
   # --- GPG ---
   - type: signing.config.ocm.software/v1alpha1
-    signature: ocm.software.gpg
+    signature: ocm.software.helm.signing.gpg
     signer:
       type: GPGSigningConfiguration/v1alpha1
     verifier:
@@ -73,7 +73,7 @@ configurations:
     consumers:
       - identity:
           type: GPG/v1alpha1
-          signature: ocm.software.gpg
+          signature: ocm.software.helm.signing.gpg
         credentials:
           - type: Credentials/v1
             properties:
