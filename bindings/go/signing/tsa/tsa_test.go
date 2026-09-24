@@ -1183,11 +1183,22 @@ func issueTimestampingCert(t *testing.T, cn string, isCA bool, parent *x509.Cert
 func newChainMockTSAHandler(t *testing.T, leaf *x509.Certificate, leafKey *rsa.PrivateKey, chain []*x509.Certificate) http.Handler {
 	t.Helper()
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// require's FailNow must only run on the test goroutine; this handler runs
+		// on a server goroutine, so report with t.Errorf and abort the response.
+		fail := func(status int, msg string, err error) {
+			t.Errorf("%s: %v", msg, err)
+			http.Error(w, msg, status)
+		}
 		body, err := io.ReadAll(r.Body)
-		require.NoError(t, err)
+		if err != nil {
+			fail(http.StatusBadRequest, "read body", err)
+			return
+		}
 		var req Request
-		_, err = asn1.Unmarshal(body, &req)
-		require.NoError(t, err)
+		if _, err = asn1.Unmarshal(body, &req); err != nil {
+			fail(http.StatusBadRequest, "unmarshal request", err)
+			return
+		}
 
 		tstInfo := Info{
 			Version:        1,
@@ -1198,17 +1209,29 @@ func newChainMockTSAHandler(t *testing.T, leaf *x509.Certificate, leafKey *rsa.P
 			Nonce:          req.Nonce,
 		}
 		tstInfoDER, err := asn1.Marshal(tstInfo)
-		require.NoError(t, err)
+		if err != nil {
+			fail(http.StatusInternalServerError, "marshal tstinfo", err)
+			return
+		}
 
 		sd, err := pkcs7.NewSignedData(tstInfoDER)
-		require.NoError(t, err)
+		if err != nil {
+			fail(http.StatusInternalServerError, "new signed data", err)
+			return
+		}
 		sd.SetContentType(asn1.ObjectIdentifier{1, 2, 840, 113549, 1, 9, 16, 1, 4})
-		require.NoError(t, sd.AddSigner(leaf, leafKey, pkcs7.SignerInfoConfig{}))
+		if err := sd.AddSigner(leaf, leafKey, pkcs7.SignerInfoConfig{}); err != nil {
+			fail(http.StatusInternalServerError, "add signer", err)
+			return
+		}
 		for _, c := range chain {
 			sd.AddCertificate(c)
 		}
 		p7DER, err := sd.Finish()
-		require.NoError(t, err)
+		if err != nil {
+			fail(http.StatusInternalServerError, "finish", err)
+			return
+		}
 
 		type mockResp struct {
 			Status         PKIStatusInfo
@@ -1220,7 +1243,10 @@ func newChainMockTSAHandler(t *testing.T, leaf *x509.Certificate, leafKey *rsa.P
 		resp.TimeStampToken.Tag = asn1.TagSequence
 		resp.TimeStampToken.IsCompound = true
 		respDER, err := asn1.Marshal(resp)
-		require.NoError(t, err)
+		if err != nil {
+			fail(http.StatusInternalServerError, "marshal response", err)
+			return
+		}
 		w.Header().Set("Content-Type", "application/timestamp-reply")
 		_, _ = w.Write(respDER)
 	})
