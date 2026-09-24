@@ -34,7 +34,6 @@ var _ = Describe("Replication E2E Tests", func() {
 				replicationExample,
 				filepath.Join(exampleDir, ComponentConstructor),
 				imageRegistry,
-				"",
 			)).To(Succeed())
 
 			By("bootstrapping the replication example")

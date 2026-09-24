@@ -8,6 +8,8 @@ import (
 
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
+	gpghandler "ocm.software/open-component-model/bindings/go/gpg/signing/handler"
+	gpgcredsv1alpha1 "ocm.software/open-component-model/bindings/go/gpg/spec/credentials/v1alpha1"
 	helmdigest "ocm.software/open-component-model/bindings/go/helm/digest"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	ocicache "ocm.software/open-component-model/bindings/go/oci/cache"
@@ -21,6 +23,9 @@ import (
 	"ocm.software/open-component-model/bindings/go/rsa/signing/handler"
 	signingv1alpha1 "ocm.software/open-component-model/bindings/go/rsa/signing/v1alpha1"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
+	sigstorehandler "ocm.software/open-component-model/bindings/go/sigstore/signing/handler"
+	sigstoreoidccredspec "ocm.software/open-component-model/bindings/go/sigstore/spec/credentials/oidcidentitytoken"
+	sigstoretrustedrootcredspec "ocm.software/open-component-model/bindings/go/sigstore/spec/credentials/trustedroot"
 )
 
 // creator controller user-agent.
@@ -76,6 +81,13 @@ func NewPluginManager(ctx context.Context, cfg *genericv1.Config, logger *slog.L
 		return nil, fmt.Errorf("failed to create signing handler: %w", err)
 	}
 
+	gpgSigningHandler, err := gpghandler.New(nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create GPG signing handler: %w", err)
+	}
+
+	sigstoreSigningHandler := sigstorehandler.New(sigstorehandler.WithTempDir(options.TempDir))
+
 	ociResourceRepoPlugin := ocires.NewResourceRepository(
 		fsCfg,
 		ocires.WithUserAgent(creator),
@@ -87,6 +99,8 @@ func NewPluginManager(ctx context.Context, cfg *genericv1.Config, logger *slog.L
 	if err := errors.Join(
 		pm.ComponentVersionRepositoryRegistry.RegisterInternalComponentVersionRepositoryPlugin(repositoryProvider),
 		pm.SigningRegistry.RegisterInternalComponentSignatureHandler(signingHandler),
+		pm.SigningRegistry.RegisterInternalComponentSignatureHandler(gpgSigningHandler),
+		pm.SigningRegistry.RegisterInternalComponentSignatureHandler(sigstoreSigningHandler),
 		pm.CredentialRepositoryRegistry.RegisterInternalCredentialRepositoryPlugin(
 			&ocicredentials.OCICredentialRepository{},
 			[]ocmruntime.Type{ociidentityv1.Type},
@@ -97,6 +111,18 @@ func NewPluginManager(ctx context.Context, cfg *genericv1.Config, logger *slog.L
 		pm.BlobTransformerRegistry.RegisterInternalBlobTransformerPlugin(transformer.New(logger)),
 	); err != nil {
 		return nil, fmt.Errorf("failed to register internal plugins: %w", err)
+	}
+
+	// Register GPG + Sigstore credential schemes so credentials of these types resolve
+	// through the credential graph during verification.
+	gpgCredScheme := ocmruntime.NewScheme()
+	gpgcredsv1alpha1.MustRegisterCredentialType(gpgCredScheme)
+	if err := errors.Join(
+		pm.CredentialTypeRegistry.Register(gpgCredScheme),
+		pm.CredentialTypeRegistry.Register(sigstoreoidccredspec.Scheme),
+		pm.CredentialTypeRegistry.Register(sigstoretrustedrootcredspec.Scheme),
+	); err != nil {
+		return nil, fmt.Errorf("failed to register GPG/Sigstore credential schemes: %w", err)
 	}
 
 	// Each internal plugin declares the credential types it consumes.
