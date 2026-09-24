@@ -626,12 +626,12 @@ func serializeVertexToDescriptorTree(vertex *dag.Vertex[string]) (tree.Row, erro
 		return tree.Row{}, fmt.Errorf("converting descriptor to v2 failed: %w", err)
 	}
 	identity := descriptorV2.Component.ToIdentity()
-	return tree.Row{
-		Component: descriptorV2.Component.Name,
-		Version:   descriptorV2.Component.Version,
-		Provider:  descriptorV2.Component.Provider,
-		Identity:  identity.String(),
-	}, nil
+	return tree.Row{Cells: []string{
+		descriptorV2.Component.Name,
+		descriptorV2.Component.Version,
+		descriptorV2.Component.Provider,
+		identity.String(),
+	}}, nil
 }
 
 func serializeVertexToDescriptor(vertex *dag.Vertex[string]) (any, error) {

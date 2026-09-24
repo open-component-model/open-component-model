@@ -1,9 +1,11 @@
 {{- $currentVer := .Site.Version.Name -}}
 {{- $isDefault := .Site.Version.IsDefault -}}
+{{- $unversioned := in (slice "community" "governance" "blog") .Section -}}
 
-{{/* Show a warning banner on all non-default versions. The wording differs
-     for "main" (development, tracks HEAD) vs everything else (older releases). */}}
-{{- if not $isDefault -}}
+{{/* Show a warning banner on all non-default versions. Suppressed on
+     unversioned sections (community, governance, blog) which are mounted
+     into every version but represent a single canonical page. */}}
+{{- if and (not $isDefault) (not $unversioned) -}}
   {{/* Find the default version's home page to build link */}}
   {{- $defaultLink := "/" -}}
   {{- $defaultName := "" -}}

@@ -7,8 +7,8 @@
 // access spec. Besides the bucket and object key, the spec carries a region, a media
 // type, a pinned object version (versionId) and — for S3-compatible stores such as
 // MinIO, Ceph or R2 — a custom endpoint and path-style addressing. It addresses one
-// object rather than a component-version storage backend. On the wire it is the v2
-// format of the ocmv1 "s3" access type; see "Wire types" below.
+// object rather than a component-version storage backend. Both v1 and v2 wire
+// formats of the ocmv1 "s3" access type are supported; see "Wire types" below.
 //
 // [ocm.software/open-component-model/bindings/go/s3/repository.ResourceRepository]
 // is the entry point. It resolves the access spec of a resource, builds an
@@ -32,8 +32,13 @@
 // [ocm.software/open-component-model/bindings/go/s3/spec/credentials/v1.S3Credentials]
 // (access key ID, secret access key and an optional session token) they are used as
 // static credentials; otherwise the AWS default credential chain applies
-// (environment, shared config, IAM instance/task roles). The legacy ocmv1 names
-// awsAccessKeyID, awsSecretAccessKey and token are accepted as well.
+// (environment, shared config, IAM instance/task roles). Missing credentials and
+// credential-provider or authorization errors never trigger anonymous access.
+// To read public objects without signing, supply S3Credentials with Anonymous: true,
+// even when AWS credentials are available. Anonymous is optional and defaults to
+// false; it cannot be combined with access keys or a session token. Authentication
+// belongs only in credentials, never in access or input specs. The legacy ocmv1
+// names awsAccessKeyID, awsSecretAccessKey and token are accepted as well.
 //
 // # Input method
 //
@@ -81,6 +86,13 @@
 //
 // # Retries
 //
+// On AWS (no custom endpoint), a 301 PermanentRedirect triggers one region
+// correction: the download uses x-amz-bucket-region, or HeadBucket if that header
+// is absent, and retries GetObject once using the SDK's regional endpoint. This
+// can correct an explicitly configured region too. Credentials, object version and
+// HTTP settings are preserved; invalid region hints fail rather than following
+// Location. Custom endpoints and other GetObject errors do not trigger discovery.
+//
 // Retrying is left to the aws-sdk-go-v2 client, which retries the whole operation,
 // re-signs every attempt and classifies S3's error codes; transport retry is switched
 // off for the client handed to the SDK, globally and per host. retry.maxRetries counts
@@ -105,8 +117,9 @@
 // On AWS the request host is derived by the SDK's endpoint resolver and is not known
 // when the client is built, so a per-host entry does not reach it and the global
 // setting stands. A download's wall-clock ceiling is roughly the attempt count times
-// the ocm timeout (30s by default), and SDK retry ends once the response headers are
-// deserialised, so it does not cover a body that fails mid-stream.
+// the configured OCM timeout; by default there is no wall-clock limit. SDK
+// retry ends once the response headers are deserialised, so it does not cover a
+// body that fails mid-stream.
 //
 // # Credential consumer identity
 //
@@ -145,15 +158,21 @@
 //	s3/v2
 //	s3
 //
-// Matching is exact. The ocmv1 v1 format (bucket, key) is not supported: S3/v1 and
-// s3/v1 do not resolve, and an unversioned S3 or s3 is always read as v2, so a
-// v1-shaped spec fails validation for its missing bucketName. ocmv1 writes an
-// unversioned "s3" in the v1 format by default, so such descriptors need their fields
-// renamed. Field names within the spec are matched case-insensitively, as JSON
+// S3/v1 and s3/v1 use the legacy bucket and key fields, with the same optional
+// region, version and mediaType. They also support our endpoint and usePathStyle
+// extensions. The v2 access decoder also accepts bucket/key as read aliases for
+// bucketName/objectKey, including for unversioned S3 and s3 records. It always
+// writes v2 field names; the v2 schema is unchanged. Records containing fields
+// from both shapes are rejected as ambiguous.
+//
+// Access specs are normalized to v2 for processing without modifying the original
+// descriptor. When digest processing pins a previously unpinned v1 access, the
+// updated access is emitted explicitly as S3/v2 with v2 field names. Unversioned
+// v2 aliases retain their type.
+// Type matching is exact; field names are matched case-insensitively, as JSON
 // decoding is. ocmv1 reads S3/v2 as well, but drops endpoint and usePathStyle and so
 // always targets AWS.
 //
-// The input type resolves under the same four names in its own scheme, so a
-// constructor spells an input exactly as a descriptor spells an access. ocmv1 has no
-// S3 input type.
+// The input type resolves under the four v2 names listed above in its own scheme.
+// It does not support the legacy v1 access format; ocmv1 has no S3 input type.
 package s3

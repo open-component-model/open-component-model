@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/google/cel-go/cel"
+	"cel.dev/cel-go/cel"
 
 	"ocm.software/open-component-model/bindings/go/cel/jsonschema/decl"
 	"ocm.software/open-component-model/bindings/go/cel/jsonschema/provider"

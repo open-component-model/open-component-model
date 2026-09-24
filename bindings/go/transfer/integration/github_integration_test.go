@@ -144,6 +144,7 @@ func Test_Integration_TransferGitHub_CTFToOCI(t *testing.T) {
 
 	tgd, err := transfer.BuildGraphDefinition(t.Context(),
 		&transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeAllResources},
+		nil,
 		transfer.Mapping{
 			Components: []transfer.ComponentID{{Component: componentName, Version: componentVersion}},
 			Target:     targetSpec,

@@ -39,7 +39,7 @@ func TestOciUploadAsArtifact_WithSubPath(t *testing.T) {
 		SubPath: "my-org/components",
 	}
 
-	transform, err := ociUploadAsArtifact(toSpec, "addRes1", "getRes1", staticReferenceName("my/image:v1"))
+	transform, err := ociUploadAsArtifact(toSpec, "addRes1", "getRes1", staticReferenceName("my/image:v1"), "")
 	require.NoError(t, err)
 
 	spec := transform.Spec
@@ -54,7 +54,7 @@ func TestOciUploadAsArtifact_NoSubPath(t *testing.T) {
 		BaseUrl: "ghcr.io",
 	}
 
-	transform, err := ociUploadAsArtifact(toSpec, "addRes1", "getRes1", staticReferenceName("my/image:v1"))
+	transform, err := ociUploadAsArtifact(toSpec, "addRes1", "getRes1", staticReferenceName("my/image:v1"), "")
 	require.NoError(t, err)
 
 	spec := transform.Spec

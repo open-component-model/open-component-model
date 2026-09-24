@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/google/cel-go/cel"
+	"cel.dev/cel-go/cel"
 
 	"ocm.software/open-component-model/bindings/go/dag"
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
@@ -62,7 +62,10 @@ func (b *Builder) BuildAndCheck(original *v1alpha1.TransformationGraphDefinition
 	}
 
 	staticAnalysisProcessor := syncdag.NewGraphProcessor(synced, &syncdag.GraphProcessorOptions[string, graph.Transformation]{
-		Processor:   pluginProcessor,
+		Processor: pluginProcessor,
+		// Concurrency must stay 1 until synchronization is added: ProcessValue
+		// mutates the shared env.Builder (envOptions, and registeredTypes via
+		// copy-on-write) and the unsynchronized AnalyzedTransformations map.
 		Concurrency: 1,
 	})
 
@@ -122,6 +125,9 @@ func (g *Graph) Process(ctx context.Context) error {
 			EvaluatedTransformations: make(map[string]any),
 			Events:                   g.events,
 		},
+		// Concurrency must stay 1 until synchronization is added:
+		// Runtime.EvaluatedExpressionCache and Runtime.EvaluatedTransformations
+		// are unsynchronized maps.
 		Concurrency: 1,
 	})
 

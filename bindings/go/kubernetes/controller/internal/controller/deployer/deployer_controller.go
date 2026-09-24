@@ -324,7 +324,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		// Finalizers will be persisted by the defer block's Update() call.
 		// Return early to avoid doing work whose status update would be skipped
 		// by the defer's early-return path for finalizer changes.
-		return ctrl.Result{Requeue: true}, nil
+		return ctrl.Result{Requeue: true}, nil //nolint:staticcheck // SA1019: pending replacement, see https://github.com/open-component-model/open-component-model/issues/2120
 	}
 
 	return r.reconcileDeployment(ctx, deployer)
@@ -600,7 +600,7 @@ func (r *Reconciler) reconcileDeletionTimestamp(ctx context.Context, deployer *d
 		// so an explicit requeue is needed.
 		if controllerutil.ContainsFinalizer(deployer, applySetPruneFinalizer) ||
 			controllerutil.ContainsFinalizer(deployer, resourceWatchFinalizer) {
-			return ctrl.Result{Requeue: true}, nil, true
+			return ctrl.Result{Requeue: true}, nil, true //nolint:staticcheck // SA1019: pending replacement, see https://github.com/open-component-model/open-component-model/issues/2120
 		}
 
 		logger.Info("successfully cleaned up deployer before deletion")
@@ -963,8 +963,8 @@ func (r *Reconciler) getEffectiveComponentDescriptor(
 	cfg *configuration.Configuration,
 	pm *manager.PluginManager,
 ) (*descriptor.Descriptor, error) {
-	// We get the (ready) component CR to (1) get any verifications needed to resolve the component version and (2) to
-	// compare the component version used in the component and resource controller.
+	// We get the (ready) component CR to compare the component version used in the component and resource
+	// controller.
 	component, err := util.GetReadyObject[deliveryv1alpha1.Component, *deliveryv1alpha1.Component](ctx, r.Client, client.ObjectKey{
 		Namespace: resource.GetNamespace(),
 		Name:      resource.Spec.ComponentRef.Name,
@@ -979,9 +979,9 @@ func (r *Reconciler) getEffectiveComponentDescriptor(
 		return nil, fmt.Errorf("failed to decode repository spec: %w", err)
 	}
 
-	// Add verifications from the component to the cache-backed repository to make sure they are included in the
-	// cache key and used for verification (if any).
-	verifications, err := verification.GetVerifications(ctx, r.Client, component)
+	// The verifications apply to the parent component version only; component versions resolved through a
+	// reference path are integrity-checked against their reference digest instead.
+	verifications, err := verification.GetVerifications(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get verifications: %w", err)
 	}

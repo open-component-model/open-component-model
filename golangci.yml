@@ -44,6 +44,7 @@ linters:
     - errcheck
     - exhaustive
     - exhaustruct
+    - exhaustruct_v5
     - forcetypeassert
     - funcorder
     - funlen
@@ -474,6 +475,7 @@ linters:
           files: ["**/bindings/go/transfer/**"]
           allow:
             - "ocm.software/open-component-model/bindings/go/blob"
+            - "ocm.software/open-component-model/bindings/go/cel"
             - "ocm.software/open-component-model/bindings/go/configuration"
             - "ocm.software/open-component-model/bindings/go/credentials"
             - "ocm.software/open-component-model/bindings/go/ctf"
