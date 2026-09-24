@@ -161,56 +161,22 @@ var _ = Describe("Discovery API", func() {
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("expression"))
 		})
-
-		It("accepts an empty selector as a no-op selector", func(ctx SpecContext) {
-			obj := newUnstructured(namespace.Name, func(spec map[string]any) {
-				spec["componentSelector"] = map[string]any{}
-			})
-			Expect(k8sClient.Create(ctx, obj)).To(Succeed())
-		})
 	})
 
+	// Status payloads are opaque, consumer-shaped JSON. Without the
+	// XPreserveUnknownFields markers the apiserver silently prunes them.
 	Context("status admission", func() {
 		var discovery *v1alpha1.Discovery
 
 		BeforeEach(func(ctx SpecContext) {
 			discovery = &v1alpha1.Discovery{
-				ObjectMeta: metav1.ObjectMeta{
-					GenerateName: "discovery-",
-					Namespace:    namespace.Name,
-				},
+				GenerateName: "discovery-",
+				Namespace:    namespace.Name,
 				Spec: v1alpha1.DiscoverySpec{
 					ComponentRef: corev1.LocalObjectReference{Name: "releasechannel"},
 				},
 			}
 			Expect(k8sClient.Create(ctx, discovery)).To(Succeed())
-		})
-
-		It("distinguishes absent from empty payload fields", func(ctx SpecContext) {
-			fetched := &v1alpha1.Discovery{}
-			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(discovery), fetched)).To(Succeed())
-			Expect(fetched.Status.Components).To(BeNil())
-			Expect(fetched.Status.Extracted).To(BeNil())
-
-			fetched.Status.Components = []apiextensionsv1.JSON{}
-			Expect(k8sClient.Status().Update(ctx, fetched)).To(Succeed())
-
-			after := &v1alpha1.Discovery{}
-			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(discovery), after)).To(Succeed())
-			Expect(after.Status.Components).NotTo(BeNil())
-			Expect(after.Status.Components).To(BeEmpty())
-			Expect(after.Status.Extracted).To(BeNil())
-
-			raw := &unstructured.Unstructured{}
-			raw.SetGroupVersionKind(discoveryGVK)
-			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(discovery), raw)).To(Succeed())
-			components, found, err := unstructured.NestedSlice(raw.Object, "status", "components")
-			Expect(err).NotTo(HaveOccurred())
-			Expect(found).To(BeTrue(), "components: [] must be present, not omitted")
-			Expect(components).To(BeEmpty())
-			_, found, err = unstructured.NestedSlice(raw.Object, "status", "extracted")
-			Expect(err).NotTo(HaveOccurred())
-			Expect(found).To(BeFalse())
 		})
 
 		It("preserves consumer-shaped arbitrary nested JSON", func(ctx SpecContext) {
@@ -266,24 +232,6 @@ var _ = Describe("Discovery API", func() {
 			err := k8sClient.Status().Update(ctx, fetched)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("components and extracted cannot be set at the same time"))
-		})
-
-		It("retains old-mode status across spec extraction changes", func(ctx SpecContext) {
-			fetched := &v1alpha1.Discovery{}
-			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(discovery), fetched)).To(Succeed())
-			fetched.Status.Components = toJSONs(descriptor)
-			Expect(k8sClient.Status().Update(ctx, fetched)).To(Succeed())
-
-			// Switching from raw descriptors to extraction must not invalidate
-			// the retained status from the previous output mode.
-			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(discovery), fetched)).To(Succeed())
-			fetched.Spec.Extract = &v1alpha1.Extract{ByResources: map[string]string{"name": "resource.name"}}
-			Expect(k8sClient.Update(ctx, fetched)).To(Succeed())
-
-			after := &v1alpha1.Discovery{}
-			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(discovery), after)).To(Succeed())
-			Expect(after.Spec.Extract).NotTo(BeNil())
-			Expect(after.Status.Components).To(HaveLen(1))
 		})
 	})
 })

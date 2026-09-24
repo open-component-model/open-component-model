@@ -13,8 +13,10 @@ into free-form records with CEL expressions.
 
 Discovery is read-only: it creates no external resources, downloads no artifacts,
 and provides no signature-verification guarantees for the descriptors it filters.
-See the [Discover Component Graphs]({{< relref "docs/how-to/discover-component-graphs.md" >}})
-how-to guide for usage, bindings, and status semantics.
+See [Component Discovery]({{< relref "docs/concepts/component-discovery.md" >}})
+for selectors, extraction, and status semantics, and the
+[Discover Component Graphs]({{< relref "docs/how-to/discover-component-graphs.md" >}})
+how-to guide for a worked example.
 
 ---
 
