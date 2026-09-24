@@ -663,7 +663,7 @@ func Test_Integration_Transfer_PreservesNormalizedDigest(t *testing.T) {
 		FilePath:   targetPath,
 		AccessMode: "readwrite|create",
 	}
-	definition, err := transfer.BuildGraphDefinition(ctx, nil, transfer.Mapping{
+	definition, err := transfer.BuildGraphDefinition(ctx, nil, nil, transfer.Mapping{
 		Components: []transfer.ComponentID{{Component: desc.Component.Name, Version: desc.Component.Version}},
 		Target:     targetSpec,
 		Resolver:   transfer.NewRepositoryResolver(sourceRepo, sourceSpec),
