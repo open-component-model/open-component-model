@@ -124,7 +124,7 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 			return nil, fmt.Errorf("checksum verification failed for wget access %q: %w", wget.URL, err)
 		}
 	}
-  
+
 	return repository.VerifyDownload(ctx, resource, b)
 }
 
