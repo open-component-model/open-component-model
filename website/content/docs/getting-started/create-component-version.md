@@ -70,7 +70,8 @@ echo "My first local Resource for an OCM component" > my-local-resource.txt
 
 Create a `component-constructor.yaml` file that describes your component and its resources:
 
-```yaml
+```shell
+cat > component-constructor.yaml << 'EOF'
 # yaml-language-server: $schema=https://ocm.software/{{< site-version >}}/schemas/bindings/go/constructor/schema-2020-12.json
 components:
 - name: github.com/acme.org/helloworld # Must at least be a DNS domain as per RFC 1123.
@@ -89,6 +90,7 @@ components:
       access: # Reference externally
         type: OCIImage/v1
         imageReference: ghcr.io/stefanprodan/podinfo:6.9.1
+EOF
 ```
 
 ### Referencing Artifacts
@@ -363,7 +365,7 @@ ocm get cv <repository>//<component>:<version>
 OCM uses a double-slash (`//`) notation to separate the repository from the component path:
 
 - Local Archive (CTF): `./transport-archive//github.com/acme.org/helloworld:1.0.0`
-- Remote Registry (OCI): `ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.17.0`
+- Remote Registry (OCI): `ghcr.io/open-component-model//ocm.software/cli:0.12.0`
 
 {{< tabs "explore-repos" >}}
 
@@ -423,40 +425,37 @@ meta:
 ### List available versions in an OCI Registry
 
 ```shell
-ocm get cv ghcr.io/open-component-model/ocm//ocm.software/ocmcli
+ocm get cv ghcr.io/open-component-model//ocm.software/cli
 ```
 
 Output:
 
 ```text
- COMPONENT           │ VERSION       │ PROVIDER     
-─────────────────────┼───────────────┼──────────────
- ocm.software/ocmcli │ 0.36.0-rc.1   │ ocm.software 
-                     │ 0.35.0        │              
-                     │ 0.35.0-rc.3   │              
-                     │ 0.35.0-rc.2   │              
-                     │ 0.35.0-rc.1   │
-...
+ COMPONENT        │ VERSION     │ PROVIDER     
+──────────────────┼─────────────┼──────────────
+ ocm.software/cli │ 0.13.0-rc.1 │ ocm.software 
+                  │ 0.12.0      │              
+                  │ 0.11.0      │              
 ```
 
 #### Get a specific version
 
 ```shell
-ocm get cv ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.35.0
+ocm get cv ghcr.io/open-component-model//ocm.software/cli:0.12.0
 ```
 
 Output:
 
 ```text
-COMPONENT            │ VERSION │ PROVIDER     
-─────────────────────┼─────────┼──────────────
- ocm.software/ocmcli │ 0.35.0  │ ocm.software
+ COMPONENT        │ VERSION │ PROVIDER     
+──────────────────┼─────────┼──────────────
+ ocm.software/cli │ 0.12.0  │ ocm.software 
 ```
 
 #### View the full component descriptor
 
 ```shell
-ocm get cv ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.35.0 -o yaml
+ocm get cv ghcr.io/open-component-model//ocm.software/cli:0.12.0 -o yaml
 ```
 
 #### Explore nested components recursively
@@ -464,7 +463,7 @@ ocm get cv ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.35.0 -o yaml
 Components can reference other components. Use `--recursive` to see the full tree:
 
 ```shell
-ocm get cv ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.35.0 --recursive -o tree
+ocm get cv ghcr.io/open-component-model//ocm.software/cli:0.12.0 --recursive -o tree
 ```
 
 {{< /tab >}}

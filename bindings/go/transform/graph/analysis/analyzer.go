@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/google/cel-go/cel"
+	"cel.dev/cel-go/cel"
 	"github.com/santhosh-tekuri/jsonschema/v6"
 
 	"ocm.software/open-component-model/bindings/go/cel/expression/fieldpath"
@@ -69,10 +69,7 @@ func (b *StaticPluginAnalysisProcessor) ProcessValue(_ context.Context, transfor
 	b.Builder.RegisterDeclTypes(declType)
 	b.Builder.RegisterEnvOption(cel.Variable(transformation.ID, declType.CelType()))
 
-	_, provider, err := b.Builder.CurrentEnv()
-	if err != nil {
-		return err
-	}
+	provider := b.Builder.Provider()
 
 	specDeclType := declType.DeclTypeFromProperty("spec")
 	specFieldDescriptors, err := stv6jsonschema.ParseResourceFromDeclType(transformation.Spec.Data, specDeclType)

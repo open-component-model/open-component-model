@@ -12,7 +12,8 @@ Configure the OCM Kubernetes controller to automatically verify component versio
 
 ## You'll end up with
 
-- A `Component` resource that ensures signature verification
+- A Secret holding an OCM configuration that requests signature verification
+- A `Component` resource that reconciles only if the signature verifies
 
 **Estimated time:** ~5 minutes
 
@@ -59,16 +60,51 @@ github.com/acme.org/helloworld     │ 1.0.0   │ acme.org
 
 {{< step >}}
 
-### Prepare the public key
+### Prepare the verification configuration
 
-Base64-encode your public key for use in the `Component` resource's `value` field. The controller
-expects the PEM file content encoded as a base64 string:
+The controller takes verification from the central OCM configuration, the same
+`signing.config.ocm.software` and `credentials.config.ocm.software` entries the CLI uses. Two
+entries are needed: one naming the signature to verify, and one supplying the public key to
+verify it with.
 
 ```bash
-cat /tmp/keys/public-key.pem | base64 | tr -d '\n'
+cat > ocmconfig.yaml <<EOF
+type: generic.config.ocm.software/v1
+configurations:
+- type: signing.config.ocm.software/v1alpha1
+  signature: default
+  verifier:
+    type: RSASigningConfiguration/v1alpha1
+- type: credentials.config.ocm.software
+  consumers:
+  - identity:
+      type: RSA/v1alpha1
+      algorithm: RSASSA-PSS
+      signature: default
+    credentials:
+    - type: Credentials/v1
+      properties:
+        public_key_pem: |
+$(sed 's/^/          /' /tmp/keys/public-key.pem)
+EOF
 ```
 
-Save the output - you will need it in the next step.
+The public key is embedded as PEM, indented under `public_key_pem`. No base64 encoding is needed.
+
+{{< callout context="note" title="Note" icon="outline/info-circle" >}}
+Only an entry that names a `signature` requests verification of that signature. An entry without
+one merely supplies the verifier that named entries fall back to, so it does not turn verification
+on by itself.
+
+The `verifier` field is optional and defaults to RSASSA-PSS. Set it to select a different
+verification handler, for example `SigstoreVerificationConfiguration/v1alpha1`.
+{{< /callout >}}
+
+Store the configuration in a Secret. The controller reads it from the `.ocmconfig` key:
+
+```bash
+kubectl create secret generic signing-verification-secret --from-file=.ocmconfig=ocmconfig.yaml
+```
 
 {{< /step >}}
 
@@ -102,13 +138,7 @@ kubectl apply -f repository.yaml
 
 ### Create the `Component` resource with verification
 
-Create and apply a `Component` that references the repository and configures signature verification.
-Choose one of the following approaches:
-
-{{< tabs "verification-method" >}}
-{{< tab "Inline Value" >}}
-
-Embed the base64-encoded public key directly in the `Component` resource:
+Create and apply a `Component` that references the repository and the configuration Secret:
 
 ```bash
 cat <<EOF > component.yaml
@@ -122,64 +152,22 @@ spec:
     name: helloworld-repository
   semver: ">=1.0.0"
   interval: 10m
-  verify:
-    - signature: default
-      value: <base64-encoded-public-key>
+  ocmConfig:
+    - apiVersion: v1
+      kind: Secret
+      name: signing-verification-secret
 EOF
 ```
-
-Replace `<base64-encoded-public-key>` with the output from the previous step.
 
 ```bash
 kubectl apply -f component.yaml
 ```
 
-{{< /tab >}}
-{{< tab "Kubernetes Secret" >}}
-
-Store the public key in a Kubernetes Secret and reference it from the `Component` resource:
-
-```bash
-cat <<EOF > signing-secret.yaml
-apiVersion: v1
-kind: Secret
-metadata:
-  name: signing-verification-secret
-data:
-  default: <base64-encoded-public-key>
-EOF
-```
-
 {{< callout context="note" title="Note" icon="outline/info-circle" >}}
-The key in the Secret's `data` field must match the signature name used during signing.
-If you signed with `--signature prod`, use `prod` as the key name.
+The Secret is looked up in the `Component`'s own namespace unless the reference sets a
+`namespace` field. The configuration also propagates: a `Resource` or `Deployer` that references
+this `Component` inherits it and verifies the same signature.
 {{< /callout >}}
-
-```bash
-cat <<EOF > component.yaml
-apiVersion: delivery.ocm.software/v1alpha1
-kind: Component
-metadata:
-  name: helloworld-component
-spec:
-  component: github.com/acme.org/helloworld
-  repositoryRef:
-    name: helloworld-repository
-  semver: ">=1.0.0"
-  interval: 10m
-  verify:
-    - signature: default
-      secretRef:
-        name: signing-verification-secret
-EOF
-```
-
-```bash
-kubectl apply -f signing-secret.yaml -f component.yaml
-```
-
-{{< /tab >}}
-{{< /tabs >}}
 
 {{< /step >}}
 
@@ -268,11 +256,11 @@ ocm get cv ghcr.io/<your-namespace>//github.com/acme.org/helloworld:1.0.0 -o yam
 
 ### Symptom: "signature ... not found in component"
 
-**Cause:** The component version does not contain a signature with the name specified in the
-`verify` section of the `Component` resource spec.
+**Cause:** The component version does not contain a signature with the name given in the
+`signing.config.ocm.software` entry.
 
 **Fix:** Check which signatures exist on the component version and ensure the `signature` field
-in the `verify` section of your `Component` resource matches:
+of your signing configuration entry matches:
 
 ```bash
 ocm get cv ghcr.io/<your-namespace>//github.com/acme.org/helloworld:1.0.0 -o yaml | grep -A 5 "signatures:"
@@ -311,28 +299,51 @@ be reliably computed.
 **Fix:** Rebuild the component version with consistent digests, re-sign it, and then publish it.
 The `ocm sign cv` command warns when a component version is not safely digestible.
 
-### Symptom: "secret not found" or "failed to get secret"
+### Symptom: "failed to get Secret" or "secret does not contain supported keys"
 
-**Cause:** The Secret referenced in `secretRef` does not exist in the same namespace as the
-`Component` resource.
+**Cause:** The Secret named in `ocmConfig` does not exist in the `Component`'s namespace, or it
+does not carry the configuration under the `.ocmconfig` key.
 
-**Fix:** Ensure the Secret is created in the same namespace:
+**Fix:** Check that the Secret exists and holds an `.ocmconfig` entry:
 
 ```bash
-kubectl get secret signing-verification-secret -n <component-namespace>
+kubectl get secret signing-verification-secret -n <component-namespace> -o jsonpath='{.data.\.ocmconfig}' | base64 -d
 ```
 
-### Symptom: "secret ... does not contain key ... for signature verification"
+### Symptom: "missing public key, required for plain RSA signatures"
 
-**Cause:** The Secret does not contain a data entry matching the signature name.
+**Cause:** No credentials entry matched the consumer identity the verifier asked for, so
+verification ran without a key. Consumer identities are matched exactly, and the identity is built
+from the signature being verified: its name and its algorithm. An entry for `signature: default`
+therefore does not serve a signature named `prod`, and an `RSASSA-PSS` entry does not serve an
+`RSASSA-PKCS1-V1_5` signature.
 
-**Fix:** The key in the Secret's `data` field must exactly match the `signature` field in the
-`verify` configuration. If your signature is named `default`, the Secret must have a `default`
-key:
+**Fix:** Check the signature's name and algorithm on the component version, then make the consumer
+identity match exactly:
+
+```bash
+ocm get cv ghcr.io/<your-namespace>//github.com/acme.org/helloworld:1.0.0 -o yaml | grep -A 8 "signatures:"
+```
 
 ```yaml
-data:
-  default: <base64-encoded-public-key>
+- type: credentials.config.ocm.software
+  consumers:
+  - identity:
+      type: RSA/v1alpha1
+      algorithm: RSASSA-PSS
+      signature: default
+```
+
+### Symptom: the `Component` becomes ready without verifying anything
+
+**Cause:** The signing configuration contains no entry naming a signature. An entry without a
+`signature` field only supplies the verifier, so nothing is requested.
+
+**Fix:** Add the signature name to the entry:
+
+```yaml
+- type: signing.config.ocm.software/v1alpha1
+  signature: default
 ```
 
 ## Next Steps

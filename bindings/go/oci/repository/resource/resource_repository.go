@@ -3,13 +3,15 @@ package resource
 import (
 	"context"
 	"fmt"
+	"net/http"
 
 	"oras.land/oras-go/v2/registry/remote/auth"
-	"oras.land/oras-go/v2/registry/remote/retry"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	ocmhttp "ocm.software/open-component-model/bindings/go/http"
+	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/oci"
 	ocicredentials "ocm.software/open-component-model/bindings/go/oci/credentials"
 	"ocm.software/open-component-model/bindings/go/oci/looseref"
@@ -17,6 +19,7 @@ import (
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
 	ociaccess "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	v1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
+	ocicreds "ocm.software/open-component-model/bindings/go/oci/spec/credentials"
 	ocicredsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 	credidentityv1 "ocm.software/open-component-model/bindings/go/oci/spec/identity/v1"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
@@ -30,6 +33,13 @@ type Options struct {
 	// UserAgent is the User-Agent string to be used in HTTP requests by all the
 	// repositories provided by the provider.
 	UserAgent string
+
+	// HTTPConfig is the HTTP client configuration (timeouts, per-host overrides)
+	// used to build the repositories's internal HTTP client. When nil, default
+	// transport timeouts and retry behaviour are used.
+	// Accepts the serialisable config type so that external plugins can
+	// round-trip it over the wire and reconstruct an equivalent client.
+	HTTPConfig *httpv1alpha1.Config
 }
 
 type Option func(*Options)
@@ -41,9 +51,20 @@ func WithUserAgent(userAgent string) Option {
 	}
 }
 
+// WithHTTPConfig sets the HTTP client configuration used for OCI registry
+// traffic. The repository builds its internal client from cfg on construction,
+// applying timeouts and per-host overrides.
+// When nil, the default ocmhttp transport timeouts and retry behaviour are used.
+func WithHTTPConfig(cfg *httpv1alpha1.Config) Option {
+	return func(o *Options) {
+		o.HTTPConfig = cfg
+	}
+}
+
 type ResourceRepository struct {
 	filesystemConfig *filesystemv1alpha1.Config
 	userAgent        string
+	httpClient       *http.Client
 }
 
 // make sure that ResourceRepository implements the oci ResourceRepository interface
@@ -65,6 +86,10 @@ func NewResourceRepository(filesystemConfig *filesystemv1alpha1.Config, opts ...
 	return &ResourceRepository{
 		filesystemConfig: filesystemConfig,
 		userAgent:        options.UserAgent,
+		httpClient: ocmhttp.New(
+			ocmhttp.WithConfig(options.HTTPConfig),
+			ocmhttp.WithUserAgent(options.UserAgent),
+		),
 	}
 }
 
@@ -188,7 +213,7 @@ func (p *ResourceRepository) UploadResource(ctx context.Context, resource *descr
 }
 
 func (p *ResourceRepository) getRepository(spec *ociv1.Repository, credentials *ocicredsv1.OCICredentials) (*oci.Repository, error) {
-	repo, err := createRepository(spec, credentials, p.filesystemConfig, p.userAgent)
+	repo, err := createRepository(spec, credentials, p.filesystemConfig, p.userAgent, p.httpClient)
 	if err != nil {
 		return nil, fmt.Errorf("error creating repository: %w", err)
 	}
@@ -210,6 +235,7 @@ func createRepository(
 	credentials *ocicredsv1.OCICredentials,
 	filesystemConfig *filesystemv1alpha1.Config,
 	userAgent string,
+	httpClient *http.Client,
 ) (*oci.Repository, error) {
 	url, err := runtime.ParseURLAndAllowNoScheme(spec.BaseUrl)
 	if err != nil {
@@ -220,7 +246,7 @@ func createRepository(
 	urlResolver, err := urlresolver.New(
 		urlresolver.WithBaseURL(urlString),
 		urlresolver.WithBaseClient(&auth.Client{
-			Client: retry.DefaultClient,
+			Client: httpClient,
 			Header: map[string][]string{
 				"User-Agent": {userAgent},
 			},
@@ -229,9 +255,9 @@ func createRepository(
 	if err != nil {
 		return nil, fmt.Errorf("failed to create URL resolver: %w", err)
 	}
-	tempDir := ""
-	if filesystemConfig != nil {
-		tempDir = filesystemConfig.TempFolder
+	var tempDir string
+	if filesystemConfig != nil && filesystemConfig.TempFolder != nil {
+		tempDir = *filesystemConfig.TempFolder
 	}
 	options := []oci.RepositoryOption{
 		oci.WithResolver(urlResolver),
@@ -297,4 +323,11 @@ func (p *ResourceRepository) UploadResourceStream(ctx context.Context, resource 
 		return nil, fmt.Errorf("error streaming resource upload: %w", err)
 	}
 	return res, nil
+}
+
+// GetCredentialTypeScheme returns the credential payload types this repository consumes
+// (currently OCICredentials/v1). ocicreds.Scheme must NOT be used here: it holds the
+// credential repository configuration types (DockerConfig) instead of payload types.
+func (p *ResourceRepository) GetCredentialTypeScheme() *runtime.Scheme {
+	return ocicreds.CredentialTypeScheme
 }

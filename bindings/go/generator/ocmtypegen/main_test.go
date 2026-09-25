@@ -43,10 +43,10 @@ func TestHasRuntimeTypeField(t *testing.T) {
 }
 
 func TestReadModulePath(t *testing.T) {
-	path := filepath.Join("..", "go.mod")
+	path := filepath.Join("..", "..", "go.mod")
 	modulePath, err := readModulePath(path)
 	require.NoError(t, err)
-	assert.Equal(t, "ocm.software/open-component-model/bindings/go/generator", modulePath)
+	assert.Equal(t, "ocm.software/open-component-model/bindings/go", modulePath)
 }
 
 func TestGetImportPath(t *testing.T) {

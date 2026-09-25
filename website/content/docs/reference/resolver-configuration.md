@@ -156,6 +156,10 @@ changes.
 Resolvers are evaluated **in the order they are defined**.
 The first matching resolver wins. Place more specific patterns before broader ones.
 
+There is no fallback to a later resolver. Once a resolver matches, its repository is the only one used. If the
+component version does not exist in that repository, the lookup fails instead of continuing with the next matching
+resolver. This differs from the deprecated fallback resolvers, which tried every matching entry in turn.
+
 This is especially important when mixing constrained and unconstrained resolvers for the same component pattern.
 Resolvers with a `versionConstraint` should be listed **before** unconstrained catch-all entries, otherwise the
 catch-all matches first and the version constraint is never evaluated:

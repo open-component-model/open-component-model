@@ -8,6 +8,8 @@ import (
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/oci/spec/annotations"
+	"ocm.software/open-component-model/bindings/go/repository"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // platformAttributeMapper defines the mapping between resource identity attributes and OCI platform fields
@@ -49,10 +51,29 @@ var mappings = []platformAttributeMapper{
 	},
 }
 
+// PlatformFromIdentity derives an OCI platform from identity attributes, using the
+// same attribute mapping Adopt applies in the opposite direction. Returns nil
+// if it doesn't find anything.
+func PlatformFromIdentity(id runtime.Identity) *ociImageSpecV1.Platform {
+	var platform *ociImageSpecV1.Platform
+	for _, mapping := range mappings {
+		value, exists := id[mapping.attribute]
+		if !exists || value == "" {
+			continue
+		}
+		if platform == nil {
+			platform = &ociImageSpecV1.Platform{}
+		}
+		// if the attribute exists, set it as a platform
+		mapping.setter(platform, value)
+	}
+	return platform
+}
+
 // Adopt modifies the provided OCI descriptor to represent an artifact.
 // It sets the platform fields based on the resource's extra identity attributes
-// and adds a annotations.ArtifactOCIAnnotation to indicate that the descriptor
-// is a annotations.ArtifactKindResource.
+// and adds an annotations.ArtifactOCIAnnotation to indicate that the descriptor
+// is an annotations.ArtifactKindResource.
 func Adopt(desc *ociImageSpecV1.Descriptor, src descriptor.Artifact) error {
 	var kind annotations.ArtifactKind
 	switch src.(type) {
@@ -83,4 +104,16 @@ func Adopt(desc *ociImageSpecV1.Descriptor, src descriptor.Artifact) error {
 	}
 
 	return nil
+}
+
+// ToRepositoryPlatform converts an OCI platform to its technology-agnostic repository.SBOM equivalent,
+// so that the repository layer does not have to depend on the image spec.
+func ToRepositoryPlatform(platform ociImageSpecV1.Platform) repository.Platform {
+	return repository.Platform{
+		OS:           platform.OS,
+		Architecture: platform.Architecture,
+		Variant:      platform.Variant,
+		OSVersion:    platform.OSVersion,
+		OSFeatures:   platform.OSFeatures,
+	}
 }

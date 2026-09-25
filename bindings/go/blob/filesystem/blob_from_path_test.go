@@ -2,11 +2,13 @@ package filesystem_test
 
 import (
 	"archive/tar"
-	"context"
+	"bytes"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
+	"testing/fstest"
 	"time"
 
 	"github.com/stretchr/testify/require"
@@ -26,7 +28,7 @@ func TestGetBlobFromPath_SingleFile(t *testing.T) {
 
 	// Test: create blob from single file (should be raw, not TAR)
 	opt := filesystem.DirOptions{Reproducible: true}
-	b, err := filesystem.GetBlobFromPath(context.Background(), testFile, opt)
+	b, err := filesystem.GetBlobFromPath(t.Context(), testFile, opt)
 	r.NoError(err)
 	r.NotNil(b)
 
@@ -50,7 +52,7 @@ func TestGetBlobFromPath_SimpleDirectory(t *testing.T) {
 
 	// Test: create blob from directory (should be TAR archive)
 	opt := filesystem.DirOptions{Reproducible: true}
-	b, err := filesystem.GetBlobFromPath(context.Background(), tmpDir, opt)
+	b, err := filesystem.GetBlobFromPath(t.Context(), tmpDir, opt)
 	r.NoError(err)
 	r.NotNil(b)
 
@@ -78,6 +80,29 @@ func TestGetBlobFromPath_SimpleDirectory(t *testing.T) {
 
 	r.Equal("content1", foundFiles["file1.txt"])
 	r.Equal("content2", foundFiles["file2.txt"])
+}
+
+func TestGetBlobFromPath_RelativeDirectory(t *testing.T) {
+	r := require.New(t)
+
+	// Change working directory to explicitly not be in the working directory we pass via options
+	wd := t.TempDir()
+	t.Chdir(wd)
+
+	// Setup: create directory with multiple files
+	tmpDir := t.TempDir()
+	createTestFile(t, filepath.Join(tmpDir, "testFolder"), "file.txt", "content")
+
+	// Test: create blob from directory (should be TAR archive)
+	opt := filesystem.DirOptions{Reproducible: true}
+	opt.WorkingDir = tmpDir
+	b, err := filesystem.GetBlobFromPath(t.Context(), "testFolder", opt)
+	r.NoError(err)
+	r.NotNil(b)
+
+	reader, err := b.ReadCloser()
+	r.NoError(err)
+	defer func() { r.NoError(reader.Close()) }()
 }
 
 // PATTERN FILTERING: Include/exclude pattern functionality
@@ -138,7 +163,7 @@ func TestGetBlobFromPath_PatternSemantics(t *testing.T) {
 
 			// Test with patterns
 			opt := filesystem.DirOptions{IncludePatterns: tt.includePatterns, ExcludePatterns: tt.excludePatterns, Reproducible: true}
-			resultBlob, err := filesystem.GetBlobFromPath(context.Background(), tmpDir, opt)
+			resultBlob, err := filesystem.GetBlobFromPath(t.Context(), tmpDir, opt)
 			if tt.expectError {
 				r.Error(err)
 				return
@@ -161,13 +186,13 @@ func TestGetBlobFromPath_SingleFileWithPatterns(t *testing.T) {
 
 	// Test: patterns with single file should error
 	opt := filesystem.DirOptions{IncludePatterns: []string{"*.txt"}}
-	_, err := filesystem.GetBlobFromPath(context.Background(), testFile, opt)
+	_, err := filesystem.GetBlobFromPath(t.Context(), testFile, opt)
 	r.Error(err)
 	r.Contains(err.Error(), "include/exclude patterns are not supported for single files")
 
 	// Test: exclude patterns with single file should also error
 	opt = filesystem.DirOptions{ExcludePatterns: []string{"*.log"}}
-	_, err = filesystem.GetBlobFromPath(context.Background(), testFile, opt)
+	_, err = filesystem.GetBlobFromPath(t.Context(), testFile, opt)
 	r.Error(err)
 	r.Contains(err.Error(), "include/exclude patterns are not supported for single files")
 }
@@ -185,7 +210,7 @@ func TestGetBlobFromPath_PreserveDirectory(t *testing.T) {
 
 	// Test: preserve directory structure
 	opt := filesystem.DirOptions{Reproducible: true, PreserveDir: true}
-	b, err := filesystem.GetBlobFromPath(context.Background(), targetDir, opt)
+	b, err := filesystem.GetBlobFromPath(t.Context(), targetDir, opt)
 	r.NoError(err)
 
 	// Verify: entries are prefixed with directory name
@@ -207,7 +232,7 @@ func TestGetBlobFromPath_PreserveDirectory(t *testing.T) {
 
 		foundHeaders = append(foundHeaders, header.Name)
 
-		// Expect exact directory header for preserved directory in canonical form (base + "/")
+		// Expect exact directory header for the preserved directory
 		if header.Typeflag == tar.TypeDir && header.Name == expectedDirHeader {
 			foundPrefixed = true
 		}
@@ -219,7 +244,7 @@ func TestGetBlobFromPath_PreserveDirectory(t *testing.T) {
 
 	// Debug output to understand what we got
 	if !foundPrefixed {
-		t.Logf("Expected prefix: %s/", targetDirName)
+		t.Logf("Expected entry: %s", targetDirName)
 		t.Logf("Found headers: %v", foundHeaders)
 	}
 
@@ -236,7 +261,7 @@ func TestGetBlobFromPath_Compression(t *testing.T) {
 
 	// Test: compression enabled
 	opt := filesystem.DirOptions{Compress: true, MediaType: filesystem.DefaultTarMediaType}
-	b, err := filesystem.GetBlobFromPath(context.Background(), testFile, opt)
+	b, err := filesystem.GetBlobFromPath(t.Context(), testFile, opt)
 	r.NoError(err)
 
 	// Verify: content is gzip compressed
@@ -261,7 +286,7 @@ func TestGetBlobFromPath_MediaTypeHandling(t *testing.T) {
 		createTestFile(t, tmpDir, "file.txt", "content")
 
 		opt := filesystem.DirOptions{MediaType: "application/custom-tar"}
-		b, err := filesystem.GetBlobFromPath(context.Background(), tmpDir, opt)
+		b, err := filesystem.GetBlobFromPath(t.Context(), tmpDir, opt)
 		r.NoError(err)
 
 		mt, ok := b.(blob.MediaTypeAware)
@@ -275,7 +300,37 @@ func TestGetBlobFromPath_MediaTypeHandling(t *testing.T) {
 		testFile := createTestFile(t, tmpDir, "single.txt", "content")
 
 		opt := filesystem.DirOptions{MediaType: "text/plain"}
-		b, err := filesystem.GetBlobFromPath(context.Background(), testFile, opt)
+		b, err := filesystem.GetBlobFromPath(t.Context(), testFile, opt)
+		r.NoError(err)
+
+		mt, ok := b.(blob.MediaTypeAware)
+		r.True(ok)
+		media, known := mt.MediaType()
+		r.True(known)
+		r.Equal("text/plain", media)
+	})
+
+	// A declared media type is used as-is when compression is enabled; only
+	// the default media type gets a +gzip suffix.
+	t.Run("Directory with custom media type and compression", func(t *testing.T) {
+		createTestFile(t, tmpDir, "file2.txt", "content")
+
+		opt := filesystem.DirOptions{MediaType: "application/custom+tar", Compress: true}
+		b, err := filesystem.GetBlobFromPath(t.Context(), tmpDir, opt)
+		r.NoError(err)
+
+		mt, ok := b.(blob.MediaTypeAware)
+		r.True(ok)
+		media, known := mt.MediaType()
+		r.True(known)
+		r.Equal("application/custom+tar", media)
+	})
+
+	t.Run("Single file with custom media type and compression", func(t *testing.T) {
+		testFile := createTestFile(t, tmpDir, "single2.txt", "content")
+
+		opt := filesystem.DirOptions{MediaType: "text/plain", Compress: true}
+		b, err := filesystem.GetBlobFromPath(t.Context(), testFile, opt)
 		r.NoError(err)
 
 		mt, ok := b.(blob.MediaTypeAware)
@@ -297,7 +352,7 @@ func TestGetBlobFromPath_ReproducibleBuilds(t *testing.T) {
 
 	// Test: create blob with reproducible option
 	opt := filesystem.DirOptions{Reproducible: true}
-	blob1, err := filesystem.GetBlobFromPath(context.Background(), testFile, opt)
+	blob1, err := filesystem.GetBlobFromPath(t.Context(), testFile, opt)
 	r.NoError(err)
 
 	data1, err := readAllFromBlob(blob1)
@@ -308,7 +363,7 @@ func TestGetBlobFromPath_ReproducibleBuilds(t *testing.T) {
 	r.NoError(os.Chtimes(testFile, newTime, newTime))
 
 	// Test: create blob again after timestamp change
-	blob2, err := filesystem.GetBlobFromPath(context.Background(), testFile, opt)
+	blob2, err := filesystem.GetBlobFromPath(t.Context(), testFile, opt)
 	r.NoError(err)
 
 	data2, err := readAllFromBlob(blob2)
@@ -363,7 +418,7 @@ func TestGetBlobFromPath_ErrorCases(t *testing.T) {
 			r := require.New(t)
 
 			path, opt := tt.setupFunc(t)
-			_, err := filesystem.GetBlobFromPath(context.Background(), path, opt)
+			_, err := filesystem.GetBlobFromPath(t.Context(), path, opt)
 
 			if tt.expectError {
 				r.Error(err)
@@ -393,7 +448,7 @@ func TestGetBlobFromPath_SymlinkRejection(t *testing.T) {
 	}
 
 	// Test: symlinks should be rejected during blob reading
-	b, err := filesystem.GetBlobFromPath(context.Background(), tmpDir, filesystem.DirOptions{})
+	b, err := filesystem.GetBlobFromPath(t.Context(), tmpDir, filesystem.DirOptions{})
 	r.NoError(err, "blob creation should succeed initially")
 
 	// Verify: error occurs when reading blob content
@@ -412,7 +467,7 @@ func TestGetBlobFromPath_IncludeDirectoryOnly(t *testing.T) {
 
 	// Only include the directory itself
 	opt := filesystem.DirOptions{IncludePatterns: []string{"sub/dir"}, Reproducible: true}
-	b, err := filesystem.GetBlobFromPath(context.Background(), tmpDir, opt)
+	b, err := filesystem.GetBlobFromPath(t.Context(), tmpDir, opt)
 	r.NoError(err)
 	r.NotNil(b)
 
@@ -452,7 +507,7 @@ func TestGetBlobFromPath_PatternNormalization(t *testing.T) {
 
 	for _, inc := range cases {
 		opt := filesystem.DirOptions{IncludePatterns: inc, Reproducible: true}
-		resultBlob, err := filesystem.GetBlobFromPath(context.Background(), tmpDir, opt)
+		resultBlob, err := filesystem.GetBlobFromPath(t.Context(), tmpDir, opt)
 		r.NoError(err)
 		files := extractTarContents(t, resultBlob)
 		r.Contains(files, "sub/dir/file.txt")
@@ -514,4 +569,171 @@ func extractTarContents(t *testing.T, b blob.ReadOnlyBlob) []string {
 	}
 
 	return files
+}
+
+func readTarHeaders(t *testing.T, b blob.ReadOnlyBlob) []*tar.Header {
+	t.Helper()
+	r := require.New(t)
+	data, err := readAllFromBlob(b)
+	r.NoError(err)
+
+	tr := tar.NewReader(bytes.NewReader(data))
+	var headers []*tar.Header
+	for {
+		header, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		r.NoError(err)
+		headers = append(headers, header)
+		_, err = io.ReadAll(tr)
+		r.NoError(err)
+	}
+	return headers
+}
+
+// Git-style directory layout is explicitly opt-in.
+func TestGetBlobFromPath_ArchiveLayout(t *testing.T) {
+	r := require.New(t)
+
+	tmpDir := t.TempDir()
+	r.NoError(os.MkdirAll(filepath.Join(tmpDir, "sub", "nested"), 0755))
+	createTestFile(t, tmpDir, "root.txt", "root")
+	createTestFile(t, filepath.Join(tmpDir, "sub"), "file.txt", "content")
+
+	b, err := filesystem.GetBlobFromPath(t.Context(), tmpDir, filesystem.DirOptions{
+		Reproducible: true, OmitRoot: true, OmitDirTrailingSlash: true,
+	})
+	r.NoError(err)
+
+	names := map[string]byte{}
+	for _, header := range readTarHeaders(t, b) {
+		names[header.Name] = header.Typeflag
+	}
+
+	r.Equal(map[string]byte{
+		"root.txt":     tar.TypeReg,
+		"sub":          tar.TypeDir,
+		"sub/file.txt": tar.TypeReg,
+		"sub/nested":   tar.TypeDir,
+	}, names)
+}
+
+// PreserveSymlinks stores a link as a link. The target is recorded as written,
+// so an absolute or dangling one is kept verbatim rather than resolved, and the
+// walk does not descend through a link to a directory.
+func TestGetBlobFromPath_PreserveSymlinks(t *testing.T) {
+	r := require.New(t)
+
+	tmpDir := t.TempDir()
+	createTestFile(t, tmpDir, "target.txt", "target content")
+	r.NoError(os.MkdirAll(filepath.Join(tmpDir, "realdir"), 0755))
+	createTestFile(t, filepath.Join(tmpDir, "realdir"), "inner.txt", "inner")
+
+	links := map[string]string{
+		"relative.txt": "target.txt",
+		"absolute.txt": "/etc/hosts",
+		"dangling.txt": "nonexistent.txt",
+		"escaping.txt": "../../outside.txt",
+		"dirlink":      "realdir",
+	}
+	for name, target := range links {
+		if err := os.Symlink(target, filepath.Join(tmpDir, name)); err != nil {
+			t.Skipf("symlink creation failed (may not be supported on this system): %v", err)
+			return
+		}
+	}
+
+	b, err := filesystem.GetBlobFromPath(t.Context(), tmpDir, filesystem.DirOptions{PreserveSymlinks: true})
+	r.NoError(err)
+
+	targets := map[string]string{}
+	var names []string
+	for _, header := range readTarHeaders(t, b) {
+		names = append(names, header.Name)
+		if header.Typeflag == tar.TypeSymlink {
+			targets[header.Name] = header.Linkname
+		}
+	}
+
+	r.Equal(links, targets, "every link is stored as a link, with its target as written")
+
+	// The link to a directory contributes the link alone; the directory itself is
+	// still walked under its own name.
+	r.NotContains(names, "dirlink/inner.txt")
+	r.Contains(names, "realdir/inner.txt")
+}
+
+func TestGetBlobFromPath_DefaultTarBytes(t *testing.T) {
+	for _, reproducible := range []bool{false, true} {
+		name := "default"
+		if reproducible {
+			name = "reproducible"
+		}
+		t.Run(name, func(t *testing.T) {
+			r := require.New(t)
+			dir := t.TempDir()
+			createTestFile(t, dir, "sub/file", "content")
+			var expected bytes.Buffer
+			tw := tar.NewWriter(&expected)
+			for _, name := range []string{".", "sub", "sub/file"} {
+				info, err := os.Stat(filepath.Join(dir, name))
+				r.NoError(err)
+				h, err := tar.FileInfoHeader(info, "")
+				r.NoError(err)
+				h.Name = name
+				if info.IsDir() {
+					h.Name += "/"
+				}
+				if reproducible {
+					h.ModTime, h.AccessTime, h.ChangeTime = time.Unix(0, 0), time.Unix(0, 0), time.Unix(0, 0)
+					h.Uid, h.Gid, h.Uname, h.Gname = 0, 0, "", ""
+					h.Mode &= 0o777
+				}
+				r.NoError(tw.WriteHeader(h))
+				if !info.IsDir() {
+					_, err = tw.Write([]byte("content"))
+					r.NoError(err)
+				}
+			}
+			r.NoError(tw.Close())
+			b, err := filesystem.GetBlobFromPath(t.Context(), dir, filesystem.DirOptions{Reproducible: reproducible})
+			r.NoError(err)
+			actual, err := readAllFromBlob(b)
+			r.NoError(err)
+			r.Equal(expected.Bytes(), actual, "default bytes retain ./ and sub/ entries")
+		})
+	}
+}
+
+func TestWriteTarLayoutOptions(t *testing.T) {
+	for _, tt := range []struct {
+		name  string
+		opt   filesystem.DirOptions
+		names []string
+	}{
+		{name: "defaults", names: []string{"./", "sub/"}},
+		{name: "omit root", opt: filesystem.DirOptions{OmitRoot: true}, names: []string{"sub/"}},
+		{name: "omit slash", opt: filesystem.DirOptions{OmitDirTrailingSlash: true}, names: []string{".", "sub"}},
+		{name: "git layout", opt: filesystem.DirOptions{OmitRoot: true, OmitDirTrailingSlash: true}, names: []string{"sub"}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+			source := fstest.MapFS{"sub": &fstest.MapFile{Mode: fs.ModeDir | 0o755}}
+			var output bytes.Buffer
+			writer := tar.NewWriter(&output)
+			r.NoError(filesystem.WriteTar(t.Context(), source, writer, tt.opt))
+			r.NoError(writer.Close())
+			reader := tar.NewReader(&output)
+			var names []string
+			for range tt.names {
+				h, err := reader.Next()
+				r.NoError(err)
+				names = append(names, h.Name)
+			}
+			r.Equal(tt.names, names)
+			_, err := reader.Next()
+			r.ErrorIs(err, io.EOF)
+		})
+	}
 }

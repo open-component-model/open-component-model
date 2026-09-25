@@ -43,8 +43,12 @@ type Config struct {
 
 	// Resolvers define a list of OCM repository specifications to be used to resolve
 	// dedicated component versions using glob patterns.
-	// All matching entries are tried to lookup a component version in the order
-	// they are defined in the configuration.
+	//
+	// The list is evaluated in the order the entries are defined in the configuration.
+	// The first entry whose componentNamePattern (and versionConstraint, if set) matches
+	// wins, and its repository is used to look up the component version. Later entries
+	// are not consulted, even if the component version does not exist in the repository
+	// of the first match. List more specific entries before broader ones.
 	//
 	// Repositories with a specified componentName pattern are only tried if the pattern
 	// matches the component name using glob syntax.
@@ -75,6 +79,8 @@ type Resolver struct {
 	//   - "ocm.software/core/*" (matches any component in the core namespace)
 	//   - "*.software/*/test" (matches test components in any software namespace)
 	//   - "ocm.software/core/[tc]est" (matches "test" or "cest" in core namespace)
+	//
+	// An empty pattern matches any component name and is equivalent to "*".
 	ComponentNamePattern string `json:"componentNamePattern,omitempty"`
 
 	// VersionConstraint specifies an optional semver constraint for matching component versions.

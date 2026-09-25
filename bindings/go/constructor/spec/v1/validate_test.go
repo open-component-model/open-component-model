@@ -246,6 +246,52 @@ resources:
 			wantErr: false,
 		},
 		{
+			name: "valid YAML - label with array value",
+			yaml: `
+name: chrisschneider.dev/ocm-examples/temp-array-label-test
+version: 1.0.0
+provider:
+  name: acme
+labels:
+  - name: cloud.gardener.cnudie/responsibles
+    value:
+      - github_hostname: github.com
+        teamname: open-component-model/odg-maintainers
+        type: githubTeam
+resources:
+  - name: nginx
+    type: ociImage
+    version: 1.25.4
+    relation: external
+    access:
+      type: ociArtifact/v1
+      imageReference: docker.io/library/nginx:1.25.4
+`,
+			wantErr: false,
+		},
+		{
+			name: "valid YAML - label with scalar values",
+			yaml: `
+name: github.com/acme.org/helloworld
+version: 1.0.0
+provider:
+  name: test-provider
+labels:
+  - name: count
+    value: 42
+  - name: enabled
+    value: true
+resources:
+- name: test-resource
+  version: 1.0.0
+  type: blob
+  relation: local
+  input:
+    type: typ/v1alpha1
+`,
+			wantErr: false,
+		},
+		{
 			name: "invalid YAML - missing required fields",
 			yaml: `
 components:

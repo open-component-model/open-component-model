@@ -158,6 +158,8 @@ The chain file must start with the **leaf** certificate. The root CA is always o
 ### Configure `.ocmconfig`
 
 Create separate credential entries for the signer and verifier roles.
+The signer configuration also carries the signer itself, whose `signatureEncodingPolicy: PEM`
+is what turns on PEM encoding; it controls **how** the signature is encoded and never holds credentials.
 The file paths must be **absolute** -- `~` and `$HOME` are not expanded in YAML values.
 Use the shell commands below to generate the files with the correct paths automatically:
 
@@ -176,6 +178,11 @@ configurations:
           - type: RSACredentials/v1
             privateKeyPEMFile: $(realpath ~/.ocm/keys/pem-demo/leaf.key)
             publicKeyPEMFile: $(realpath ~/.ocm/keys/pem-demo/chain.pem)
+  - type: signing.config.ocm.software/v1alpha1
+    signer:
+      type: RSASigningConfiguration/v1alpha1
+      signatureAlgorithm: RSASSA-PSS
+      signatureEncodingPolicy: PEM
 EOF
 
 # Verifier configuration
@@ -206,25 +213,6 @@ For the full credential property and consumer identity reference, see [Credentia
 
 {{< step >}}
 
-### Create a signer spec file
-
-The `--signer-spec` flag enables the PEM encoding policy. Create the spec file:
-
-```bash
-cat > ~/.ocm/keys/pem-demo/pem-signer.yaml <<EOF
-type: RSASigningConfiguration/v1alpha1
-signatureAlgorithm: RSASSA-PSS
-signatureEncodingPolicy: PEM
-EOF
-```
-
-This controls **how** the signature is encoded. It does **not** contain credentials --
-those are always resolved from `.ocmconfig`.
-
-{{< /step >}}
-
-{{< step >}}
-
 ### Sign the component version
 
 Use `--dry-run` first to compute and print the signature without writing it to the repository:
@@ -232,7 +220,6 @@ Use `--dry-run` first to compute and print the signature without writing it to t
 ```bash
 ocm sign cv \
   --config ~/.ocmconfig-pem-sign \
-  --signer-spec ~/.ocm/keys/pem-demo/pem-signer.yaml \
   --dry-run \
   /tmp/helloworld/transport-archive//github.com/acme.org/helloworld:1.0.0
 ```
@@ -242,7 +229,6 @@ Once satisfied, sign for real:
 ```bash
 ocm sign cv \
   --config ~/.ocmconfig-pem-sign \
-  --signer-spec ~/.ocm/keys/pem-demo/pem-signer.yaml \
   /tmp/helloworld/transport-archive//github.com/acme.org/helloworld:1.0.0
 ```
 
@@ -277,8 +263,9 @@ ocm verify cv \
   /tmp/helloworld/transport-archive//github.com/acme.org/helloworld:1.0.0
 ```
 
-No `--verifier-spec` is needed -- OCM infers the PEM encoding from the `application/x-pem-file`
-media type stored alongside the signature and selects the correct handler automatically.
+No `verifier` entry is needed in `.ocmconfig` -- OCM infers the PEM encoding from the
+`application/x-pem-file` media type stored alongside the signature and selects the correct
+handler automatically.
 
 <details>
 <summary>Expected output</summary>
@@ -387,6 +374,8 @@ The root CA is always omitted.
 ### Configure `.ocmconfig` file
 
 Create separate credential entries for the signer and verifier roles.
+The signer configuration also carries the signer itself, whose `signatureEncodingPolicy: PEM`
+is what turns on PEM encoding; it controls **how** the signature is encoded and never holds credentials.
 The file paths must be **absolute** -- `~` and `$HOME` are not expanded in YAML values.
 Use the shell commands below to generate the files with the correct paths automatically:
 
@@ -405,6 +394,11 @@ configurations:
           - type: RSACredentials/v1
             privateKeyPEMFile: $(realpath ~/.ocm/keys/pem-demo/leaf.key)
             publicKeyPEMFile: $(realpath ~/.ocm/keys/pem-demo/chain.pem)
+  - type: signing.config.ocm.software/v1alpha1
+    signer:
+      type: RSASigningConfiguration/v1alpha1
+      signatureAlgorithm: RSASSA-PSS
+      signatureEncodingPolicy: PEM
 EOF
 
 # Verifier configuration
@@ -435,25 +429,6 @@ For the full credential property and consumer identity reference, see [Credentia
 
 {{< step >}}
 
-### Create signer spec file
-
-The `--signer-spec` flag enables the PEM encoding policy. Create the spec file:
-
-```bash
-cat > ~/.ocm/keys/pem-demo/pem-signer.yaml <<EOF
-type: RSASigningConfiguration/v1alpha1
-signatureAlgorithm: RSASSA-PSS
-signatureEncodingPolicy: PEM
-EOF
-```
-
-This controls **how** the signature is encoded. It does **not** contain credentials --
-those are always resolved from `.ocmconfig`.
-
-{{< /step >}}
-
-{{< step >}}
-
 ### Sign component version
 
 Use `--dry-run` first to compute and print the signature without writing it to the repository:
@@ -461,7 +436,6 @@ Use `--dry-run` first to compute and print the signature without writing it to t
 ```bash
 ocm sign cv \
   --config ~/.ocmconfig-pem-sign \
-  --signer-spec ~/.ocm/keys/pem-demo/pem-signer.yaml \
   --dry-run \
   /tmp/helloworld/transport-archive//github.com/acme.org/helloworld:1.0.0
 ```
@@ -471,7 +445,6 @@ Once satisfied, sign for real:
 ```bash
 ocm sign cv \
   --config ~/.ocmconfig-pem-sign \
-  --signer-spec ~/.ocm/keys/pem-demo/pem-signer.yaml \
   /tmp/helloworld/transport-archive//github.com/acme.org/helloworld:1.0.0
 ```
 
@@ -506,8 +479,9 @@ ocm verify cv \
   /tmp/helloworld/transport-archive//github.com/acme.org/helloworld:1.0.0
 ```
 
-No `--verifier-spec` is needed -- OCM infers the PEM encoding from the `application/x-pem-file`
-media type stored alongside the signature and selects the correct handler automatically.
+No `verifier` entry is needed in `.ocmconfig` -- OCM infers the PEM encoding from the
+`application/x-pem-file` media type stored alongside the signature and selects the correct
+handler automatically.
 
 <details>
 <summary>Expected output</summary>
@@ -561,7 +535,7 @@ openssl verify -CAfile root.crt -untrusted intermediate.crt leaf.crt
 The consumer identity in `.ocmconfig` doesn't match what OCM looks up. Confirm:
 
 - `type: RSA/v1alpha1` is spelled correctly
-- `algorithm` matches the value in the signer spec (`RSASSA-PSS`)
+- `algorithm` matches the value on the configured signer (`RSASSA-PSS`)
 - `signature` matches the `--signature` flag value (default: `default`)
 
 ### "signature already exists"

@@ -19,13 +19,16 @@ import (
 
 // DirOptions contains options for creating a blob from a path.
 type DirOptions struct {
-	MediaType       string   // Media type of the resulting blob. If empty, defaults are used.
-	Compress        bool     // Compress resulting blob using gzip.
-	PreserveDir     bool     // Add parent directory to the tar archive.
-	Reproducible    bool     // Create a reproducible tar archive (fixed timestamps, uid/gid etc).
-	ExcludePatterns []string // Patterns to exclude (glob patterns). Applies to files and directories.
-	IncludePatterns []string // Patterns to include (glob patterns). Applies to files and directories.
-	WorkingDir      string   // Working directory to ensure the path is within and avoid path traversal.
+	MediaType            string   // Media type of the resulting blob. If empty, defaults are used.
+	Compress             bool     // Compress resulting blob using gzip.
+	PreserveDir          bool     // Add parent directory to the tar archive.
+	Reproducible         bool     // Create a reproducible tar archive (fixed timestamps, uid/gid etc).
+	PreserveSymlinks     bool     // PreserveSymlinks stores symbolic links as links
+	OmitRoot             bool     // Omit the unnamed archive root ("."); PreserveDir still retains a named root.
+	OmitDirTrailingSlash bool     // Store directory names without the default trailing slash.
+	ExcludePatterns      []string // Patterns to exclude (glob patterns). Applies to files and directories.
+	IncludePatterns      []string // Patterns to include (glob patterns). Applies to files and directories.
+	WorkingDir           string   // Working directory to ensure the path is within and avoid path traversal.
 }
 
 // DefaultTarMediaType is used as blob media type for directories, if not set in the DirOptions.
@@ -48,19 +51,21 @@ const DefaultFileMediaType = "application/octet-stream"
 //
 // Paths and patterns are normalized to use forward slashes (`/`) as separators for matching
 // and have any leading `./` or `/` removed.
-// Symlinks are not supported so far and will result in an error.
+// Symlinks result in an error unless PreserveSymlinks is enabled.
 func GetBlobFromPath(ctx context.Context, path string, opt DirOptions) (blob.ReadOnlyBlob, error) {
 	// Validate the input path
 	if path == "" {
 		return nil, fmt.Errorf("path must not be empty")
 	}
 
-	// Ensure the path is within the working directory if specified
+	// Resolve path from within the working directory if specified
 	// Provides full path-traversal protection
 	if opt.WorkingDir != "" {
-		if _, err := ensurePathInWorkingDirectory(path, opt.WorkingDir); err != nil {
+		resolved, err := ensurePathInWorkingDirectory(path, opt.WorkingDir)
+		if err != nil {
 			return nil, fmt.Errorf("error ensuring path %q in working directory %q: %w", path, opt.WorkingDir, err)
 		}
+		path = resolved
 	}
 
 	// Check if path is a valid directory or single file.
@@ -141,7 +146,11 @@ func createDirBlob(ctx context.Context, path string, opt DirOptions) (blob.ReadO
 
 	// Apply compression if requested
 	if opt.Compress {
-		tarBlob = compression.Compress(tarBlob)
+		compressed := compression.Compress(tarBlob)
+		if opt.MediaType != "" {
+			compressed.SetMediaType(opt.MediaType)
+		}
+		return compressed, nil
 	}
 	return tarBlob, nil
 }
@@ -169,16 +178,30 @@ func createSingleFileBlob(path string, opt DirOptions) (blob.ReadOnlyBlob, error
 	var fileBlob blob.ReadOnlyBlob = direct.New(fr, direct.WithMediaType(mediaType))
 	// Apply compression if requested
 	if opt.Compress {
-		fileBlob = compression.Compress(fileBlob)
+		compressed := compression.Compress(fileBlob)
+		if opt.MediaType != "" {
+			// A declared media type is used as-is; only the default gets the
+			// compression suffix appended.
+			compressed.SetMediaType(opt.MediaType)
+		}
+		return compressed, nil
 	}
 	return fileBlob, nil
+}
+
+// WriteTar writes every entry of fsys to tw in lexical, depth-first order, using
+// the entry options in opt; MediaType, Compress, PreserveDir and WorkingDir do not
+// apply. The caller closes tw. With PreserveSymlinks, fsys must implement
+// [fs.ReadLinkFS].
+func WriteTar(ctx context.Context, fsys fs.FS, tw *tar.Writer, opt DirOptions) error {
+	return createTarFromDir(ctx, fsys, ".", opt, tw)
 }
 
 // createTarFromDir creates a TAR archive from the filesystem.
 // Uses the virtual filesystem to read the directory contents.
 // Uses fs.WalkDir to traverse the directory structure in a deterministic order.
 // This is required to ensure reproducible TAR archives.
-func createTarFromDir(ctx context.Context, fileSystem FileSystem, subPath string, opt DirOptions, tw *tar.Writer) error {
+func createTarFromDir(ctx context.Context, fileSystem fs.FS, subPath string, opt DirOptions, tw *tar.Writer) error {
 	return fs.WalkDir(fileSystem, subPath, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return fmt.Errorf("error walking path %q: %w", path, err)
@@ -197,22 +220,31 @@ func createTarFromDir(ctx context.Context, fileSystem FileSystem, subPath string
 			return fmt.Errorf("error getting file info for %q: %w", path, err)
 		}
 
-		// Reject symlinks
-		if (fi.Mode() & fs.ModeSymlink) != 0 {
-			return fmt.Errorf("symlinks are not supported yet: found symlink %q", path)
-		}
-
-		// Process directory or file
-		if fi.IsDir() {
-			return processDirectory(path, fi, opt, tw)
-		}
-		return processFile(path, fi, fileSystem, opt, tw)
+		return writeTarEntry(ctx, path, fi, fileSystem, opt, tw)
 	})
+}
+
+// writeTarEntry writes one slash-separated path. The caller supplies metadata
+// without following symlinks and skips descendants on fs.SkipDir.
+func writeTarEntry(ctx context.Context, name string, info fs.FileInfo, source fs.FS, opt DirOptions, tw *tar.Writer) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if info.Mode()&fs.ModeSymlink != 0 {
+		if !opt.PreserveSymlinks {
+			return fmt.Errorf("symlinks are not supported yet: found symlink %q", name)
+		}
+		return processSymlink(name, info, source, opt, tw)
+	}
+	if info.IsDir() {
+		return processDirectory(name, info, opt, tw, name == ".")
+	}
+	return processFile(name, info, source, opt, tw)
 }
 
 // processDirectory handles directory entries during DirWalk
 // Prune on exclude, optionally write header if included, always traverse
-func processDirectory(path string, fi fs.FileInfo, opt DirOptions, tw *tar.Writer) error {
+func processDirectory(path string, fi fs.FileInfo, opt DirOptions, tw *tar.Writer, isRoot bool) error {
 	// Exclude precedence: if directory matches any exclude pattern -> prune subtree by skipping dir
 	if len(opt.ExcludePatterns) > 0 {
 		inc, err := isPathIncluded(path, nil, opt.ExcludePatterns)
@@ -229,16 +261,15 @@ func processDirectory(path string, fi fs.FileInfo, opt DirOptions, tw *tar.Write
 	if err != nil {
 		return fmt.Errorf("error checking include/exclude pattern for directory %q: %w", path, err)
 	}
-	if inc {
+	if inc && (!isRoot || !opt.OmitRoot || opt.PreserveDir) {
 		header, err := createTarHeader(fi, "", opt.Reproducible)
 		if err != nil {
 			return fmt.Errorf("error creating tar header for directory %q: %w", path, err)
 		}
-		name := filepath.ToSlash(path)
-		if !strings.HasSuffix(name, "/") {
-			name += "/"
+		header.Name = path
+		if !opt.OmitDirTrailingSlash {
+			header.Name += "/"
 		}
-		header.Name = name
 		if err := tw.WriteHeader(header); err != nil {
 			return fmt.Errorf("error writing tar header for directory %q: %w", path, err)
 		}
@@ -247,9 +278,44 @@ func processDirectory(path string, fi fs.FileInfo, opt DirOptions, tw *tar.Write
 	return nil
 }
 
+// processSymlink writes a symbolic link as a link entry rather than as the
+// content it points at. Links are not followed: a link to a directory adds the
+// link and nothing else, never the files below it.
+func processSymlink(path string, fi fs.FileInfo, fileSystem fs.FS, opt DirOptions, tw *tar.Writer) error {
+	inc, err := isPathIncluded(path, opt.IncludePatterns, opt.ExcludePatterns)
+	if err != nil {
+		return fmt.Errorf("error checking include/exclude pattern for symlink %q: %w", path, err)
+	}
+	if !inc {
+		return nil
+	}
+
+	reader, ok := fileSystem.(fs.ReadLinkFS)
+	if !ok {
+		return fmt.Errorf("filesystem %T cannot read symlink %q", fileSystem, path)
+	}
+
+	target, err := reader.ReadLink(path)
+	if err != nil {
+		return fmt.Errorf("error reading symlink %q: %w", path, err)
+	}
+
+	header, err := createTarHeader(fi, target, opt.Reproducible)
+	if err != nil {
+		return fmt.Errorf("error creating tar header for symlink %q: %w", path, err)
+	}
+	header.Name = path
+
+	if err := tw.WriteHeader(header); err != nil {
+		return fmt.Errorf("error writing tar header for symlink %q: %w", path, err)
+	}
+
+	return nil
+}
+
 // processFile handles file entries during DirWalk
 // Write only if included (exclude precedence handled in isPathIncluded)
-func processFile(path string, fi fs.FileInfo, fileSystem FileSystem, opt DirOptions, tw *tar.Writer) error {
+func processFile(path string, fi fs.FileInfo, fileSystem fs.FS, opt DirOptions, tw *tar.Writer) error {
 	inc, err := isPathIncluded(path, opt.IncludePatterns, opt.ExcludePatterns)
 	if err != nil {
 		return fmt.Errorf("error checking include/exclude pattern for file %q: %w", path, err)
@@ -262,7 +328,7 @@ func processFile(path string, fi fs.FileInfo, fileSystem FileSystem, opt DirOpti
 	if err != nil {
 		return fmt.Errorf("error creating tar header for %q: %w", path, err)
 	}
-	header.Name = filepath.ToSlash(path)
+	header.Name = path
 
 	if err := tw.WriteHeader(header); err != nil {
 		return fmt.Errorf("error writing tar header for %q: %w", path, err)

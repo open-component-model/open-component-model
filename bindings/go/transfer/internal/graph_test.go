@@ -9,6 +9,8 @@ import (
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	githubv1 "ocm.software/open-component-model/bindings/go/github/spec/access/v1"
+	githubv1alpha1 "ocm.software/open-component-model/bindings/go/github/transformation/spec/v1alpha1"
 	helmv1 "ocm.software/open-component-model/bindings/go/helm/spec/access/v1"
 	helmv1alpha1 "ocm.software/open-component-model/bindings/go/helm/transformation/spec/v1alpha1"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
@@ -142,6 +144,21 @@ func helmResource(name, version, helmRepo, chart string) descriptor.Resource {
 	}
 }
 
+func githubResource(name, version, repoURL, commit string) descriptor.Resource {
+	return descriptor.Resource{
+		ElementMeta: descriptor.ElementMeta{
+			ObjectMeta: descriptor.ObjectMeta{Name: name, Version: version},
+		},
+		Type:     "directoryTree",
+		Relation: descriptor.ExternalRelation,
+		Access: &githubv1.GitHub{
+			Type:    runtime.NewVersionedType(githubv1.Type, githubv1.Version),
+			RepoURL: repoURL,
+			Commit:  commit,
+		},
+	}
+}
+
 // --- BuildGraphDefinition tests ---
 
 func TestBuildGraphDefinition_NoResources(t *testing.T) {
@@ -151,7 +168,7 @@ func TestBuildGraphDefinition_NoResources(t *testing.T) {
 	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
 	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
 
-	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeLocalBlobResources, UploadType: transferv1alpha1.UploadAsDefault})
+	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeLocalBlobResources}, nil)
 	require.NoError(t, err)
 	require.NotNil(t, tgd)
 
@@ -168,7 +185,7 @@ func TestBuildGraphDefinition_LocalBlobResource(t *testing.T) {
 	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
 	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
 
-	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeLocalBlobResources, UploadType: transferv1alpha1.UploadAsDefault})
+	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeLocalBlobResources}, nil)
 	require.NoError(t, err)
 
 	assert.Len(t, tgd.Transformations, 4)
@@ -187,7 +204,7 @@ func TestBuildGraphDefinition_OCIImageSkippedInDefaultMode(t *testing.T) {
 	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
 	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
 
-	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeLocalBlobResources, UploadType: transferv1alpha1.UploadAsDefault})
+	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeLocalBlobResources}, nil)
 	require.NoError(t, err)
 
 	assert.Len(t, tgd.Transformations, 1)
@@ -202,7 +219,7 @@ func TestBuildGraphDefinition_OCIImageWithCopyAllResources(t *testing.T) {
 	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
 	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
 
-	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeAllResources, UploadType: transferv1alpha1.UploadAsDefault})
+	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeAllResources}, nil)
 	require.NoError(t, err)
 
 	assert.Len(t, tgd.Transformations, 4)
@@ -217,7 +234,7 @@ func TestBuildGraphDefinition_OCIImageUploadAsOCIArtifact(t *testing.T) {
 	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
 	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
 
-	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeAllResources, UploadType: transferv1alpha1.UploadAsOciArtifact})
+	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeAllResources, UploadType: transferv1alpha1.UploadAsOciArtifact}, nil)
 	require.NoError(t, err)
 
 	assert.Len(t, tgd.Transformations, 2)
@@ -234,12 +251,56 @@ func TestBuildGraphDefinition_HelmResource(t *testing.T) {
 	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
 	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
 
-	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeAllResources, UploadType: transferv1alpha1.UploadAsDefault})
+	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeAllResources}, nil)
 	require.NoError(t, err)
 
 	assert.Len(t, tgd.Transformations, 5)
 	assert.Equal(t, helmv1alpha1.GetHelmChartV1alpha1, tgd.Transformations[0].Type)
 	assert.Equal(t, helmv1alpha1.ConvertHelmToOCIV1alpha1, tgd.Transformations[1].Type)
+}
+
+func TestBuildGraphDefinition_GitHubResource(t *testing.T) {
+	sourceRepo := testOCIRepo("ghcr.io/source")
+	targetRepo := testOCIRepo("ghcr.io/target")
+	desc := testDescriptor("ocm.software/test", "1.0.0",
+		[]descriptor.Resource{githubResource("my-source", "1.0.0",
+			"https://github.com/open-component-model/open-component-model",
+			"f58349914e3c775747dc1ee9af1bc83db4652266")}, nil)
+	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
+	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
+
+	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{
+		CopyMode: transferv1alpha1.CopyModeAllResources,
+	}, nil)
+	require.NoError(t, err)
+
+	// get -> add, plus the component Upload node and the FileCleanup node.
+	require.Len(t, tgd.Transformations, 4)
+	assert.Equal(t, githubv1alpha1.GetGitHubCommitV1alpha1, tgd.Transformations[0].Type)
+	assert.Equal(t, ociv1alpha1.OCIAddLocalResourceV1alpha1, tgd.Transformations[1].Type)
+	assert.Equal(t, FileCleanupVersionedType, tgd.Transformations[3].Type)
+}
+
+func TestBuildGraphDefinition_GitHubResource_UploadAsOciArtifact(t *testing.T) {
+	sourceRepo := testOCIRepo("ghcr.io/source")
+	targetRepo := testOCIRepo("ghcr.io/target")
+	desc := testDescriptor("ocm.software/test", "1.0.0",
+		[]descriptor.Resource{githubResource("my-source", "1.0.0",
+			"https://github.com/open-component-model/open-component-model",
+			"f58349914e3c775747dc1ee9af1bc83db4652266")}, nil)
+	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
+	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
+
+	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{
+		CopyMode:   transferv1alpha1.CopyModeAllResources,
+		UploadType: transferv1alpha1.UploadAsOciArtifact,
+	}, nil)
+	require.NoError(t, err)
+
+	require.Len(t, tgd.Transformations, 4)
+	assert.Equal(t, githubv1alpha1.GetGitHubCommitV1alpha1, tgd.Transformations[0].Type)
+	assert.Equal(t, ociv1alpha1.OCIAddLocalResourceV1alpha1, tgd.Transformations[1].Type,
+		"a github resource must stay on the local-resource path even when uploadType requests an OCI artifact")
 }
 
 func TestBuildGraphDefinition_CTFTarget(t *testing.T) {
@@ -250,7 +311,7 @@ func TestBuildGraphDefinition_CTFTarget(t *testing.T) {
 	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
 	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
 
-	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeLocalBlobResources, UploadType: transferv1alpha1.UploadAsDefault})
+	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeLocalBlobResources}, nil)
 	require.NoError(t, err)
 
 	assert.Len(t, tgd.Transformations, 4)
@@ -283,7 +344,7 @@ func TestBuildGraphDefinition_Recursive(t *testing.T) {
 
 	roots := testTransferRoots("ocm.software/root", "1.0.0", targetRepo, resolver)
 
-	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{Recursive: transferv1alpha1.RecursiveInfinite, CopyMode: transferv1alpha1.CopyModeLocalBlobResources, UploadType: transferv1alpha1.UploadAsDefault})
+	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{Recursive: transferv1alpha1.RecursiveInfinite, CopyMode: transferv1alpha1.CopyModeLocalBlobResources}, nil)
 	require.NoError(t, err)
 
 	assert.Len(t, tgd.Transformations, 2)
@@ -297,7 +358,7 @@ func TestBuildGraphDefinition_ResolverError(t *testing.T) {
 	}
 	roots := testTransferRoots("ocm.software/missing", "1.0.0", targetRepo, resolver)
 
-	_, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeLocalBlobResources, UploadType: transferv1alpha1.UploadAsDefault})
+	_, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeLocalBlobResources}, nil)
 	require.Error(t, err)
 }
 
@@ -316,7 +377,7 @@ func TestBuildGraphDefinition_MultiTarget(t *testing.T) {
 		},
 	}
 
-	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeLocalBlobResources, UploadType: transferv1alpha1.UploadAsDefault})
+	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeLocalBlobResources}, nil)
 	require.NoError(t, err)
 
 	// Should have 2 upload transformations (one per target)
@@ -344,7 +405,7 @@ func TestBuildGraphDefinition_MultipleRootsDifferentResolvers(t *testing.T) {
 		"ocm.software/b:2.0.0": {RootComponentKey: "ocm.software/b:2.0.0", Targets: []runtime.Typed{targetB}, SourceResolver: resolverB},
 	}
 
-	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeLocalBlobResources, UploadType: transferv1alpha1.UploadAsDefault})
+	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeLocalBlobResources}, nil)
 	require.NoError(t, err)
 	require.NotNil(t, tgd)
 
@@ -376,7 +437,7 @@ func TestBuildGraphDefinition_MultiTargetWithResources(t *testing.T) {
 		},
 	}
 
-	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeLocalBlobResources, UploadType: transferv1alpha1.UploadAsDefault})
+	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeLocalBlobResources}, nil)
 	require.NoError(t, err)
 
 	// With 1 resource and 2 targets: each target needs get + add + upload = 3, total 6, plus 1 cleanup = 7
@@ -407,7 +468,7 @@ func TestBuildGraphDefinition_RecursiveTargetPropagation(t *testing.T) {
 
 	roots := testTransferRoots("ocm.software/root", "1.0.0", targetRepo, resolver)
 
-	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{Recursive: transferv1alpha1.RecursiveInfinite, CopyMode: transferv1alpha1.CopyModeLocalBlobResources, UploadType: transferv1alpha1.UploadAsDefault})
+	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{Recursive: transferv1alpha1.RecursiveInfinite, CopyMode: transferv1alpha1.CopyModeLocalBlobResources}, nil)
 	require.NoError(t, err)
 
 	// Both root and child should produce upload transformations to the same target
@@ -446,7 +507,7 @@ func TestBuildGraphDefinition_RecursiveResolverPropagation(t *testing.T) {
 
 	roots := testTransferRoots("ocm.software/root", "1.0.0", targetRepo, resolver)
 
-	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{Recursive: transferv1alpha1.RecursiveInfinite, CopyMode: transferv1alpha1.CopyModeLocalBlobResources, UploadType: transferv1alpha1.UploadAsDefault})
+	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{Recursive: transferv1alpha1.RecursiveInfinite, CopyMode: transferv1alpha1.CopyModeLocalBlobResources}, nil)
 	require.NoError(t, err)
 	require.NotNil(t, tgd)
 
@@ -501,7 +562,7 @@ func TestBuildGraphDefinition_CleanupReferencesAddSpec_LocalBlob(t *testing.T) {
 	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
 	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
 
-	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeLocalBlobResources, UploadType: transferv1alpha1.UploadAsDefault})
+	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeLocalBlobResources}, nil)
 	require.NoError(t, err)
 
 	cleanup := findCleanupTransformation(tgd)
@@ -525,7 +586,7 @@ func TestBuildGraphDefinition_CleanupReferencesAddSpec_OCIArtifact(t *testing.T)
 	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
 	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
 
-	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeAllResources, UploadType: transferv1alpha1.UploadAsDefault})
+	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeAllResources}, nil)
 	require.NoError(t, err)
 
 	cleanup := findCleanupTransformation(tgd)
@@ -547,7 +608,7 @@ func TestBuildGraphDefinition_NoCleanupForStreamingOCIArtifact(t *testing.T) {
 	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
 	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
 
-	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeAllResources, UploadType: transferv1alpha1.UploadAsOciArtifact})
+	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeAllResources, UploadType: transferv1alpha1.UploadAsOciArtifact}, nil)
 	require.NoError(t, err)
 
 	// TransferOCIArtifact streams blobs directly — no temp file is ever created.
@@ -563,7 +624,7 @@ func TestBuildGraphDefinition_CleanupReferencesConvertAndAddSpec_Helm(t *testing
 	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
 	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
 
-	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeAllResources, UploadType: transferv1alpha1.UploadAsDefault})
+	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeAllResources}, nil)
 	require.NoError(t, err)
 
 	cleanup := findCleanupTransformation(tgd)
@@ -596,7 +657,7 @@ func TestBuildGraphDefinition_NoCleanupWhenNoResources(t *testing.T) {
 	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
 	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
 
-	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeLocalBlobResources, UploadType: transferv1alpha1.UploadAsDefault})
+	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeLocalBlobResources}, nil)
 	require.NoError(t, err)
 
 	cleanup := findCleanupTransformation(tgd)
@@ -612,7 +673,7 @@ func TestBuildGraphDefinition_NoCleanupWhenResourcesSkipped(t *testing.T) {
 	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
 	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
 
-	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeLocalBlobResources, UploadType: transferv1alpha1.UploadAsDefault})
+	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeLocalBlobResources}, nil)
 	require.NoError(t, err)
 
 	cleanup := findCleanupTransformation(tgd)
@@ -636,7 +697,7 @@ func TestBuildGraphDefinition_CleanupMultiTarget_AggregatesAllRefs(t *testing.T)
 		},
 	}
 
-	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeLocalBlobResources, UploadType: transferv1alpha1.UploadAsDefault})
+	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeLocalBlobResources}, nil)
 	require.NoError(t, err)
 
 	cleanup := findCleanupTransformation(tgd)
@@ -651,6 +712,44 @@ func TestBuildGraphDefinition_CleanupMultiTarget_AggregatesAllRefs(t *testing.T)
 		assert.Contains(t, expr, ".spec.file")
 	}
 	assert.NotEqual(t, exprs[0], exprs[1], "multi-target refs should have different Add IDs")
+}
+
+func TestBuildDescriptorSpec_CreationTime(t *testing.T) {
+	for _, tt := range []struct {
+		name         string
+		creationTime string
+		want         any
+	}{
+		{
+			name:         "preserved when resources are transformed",
+			creationTime: "2025-07-28T11:40:51Z",
+			want:         "${environment.envID.component.creationTime}",
+		},
+		{
+			name: "empty does not produce a CEL reference",
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+			v2desc := &descriptorv2.Descriptor{
+				Component: descriptorv2.Component{
+					ComponentMeta: descriptorv2.ComponentMeta{
+						CreationTime: tt.creationTime,
+					},
+					Resources: []descriptorv2.Resource{{}},
+				},
+			}
+
+			spec := buildDescriptorSpec(v2desc, "envID", map[int]string{0: "resourceAdd"})
+			specMap, ok := spec.(map[string]any)
+			r.True(ok, "spec should be a map when resources are transformed")
+			componentMap, ok := specMap["component"].(map[string]any)
+			r.True(ok)
+			r.Contains(componentMap, "creationTime")
+			r.Equal(tt.want, componentMap["creationTime"])
+			r.Equal([]any{"${resourceAdd.output.resource}"}, componentMap["resources"])
+		})
+	}
 }
 
 // Regression test for https://github.com/open-component-model/open-component-model/issues/2585:
@@ -817,7 +916,7 @@ func TestBuildGraphDefinition_DockerManifestLocalBlob_UploadedAsOCIArtifact(t *t
 	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
 	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
 
-	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeLocalBlobResources, UploadType: transferv1alpha1.UploadAsOciArtifact})
+	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeLocalBlobResources, UploadType: transferv1alpha1.UploadAsOciArtifact}, nil)
 	require.NoError(t, err)
 
 	addOCIType := runtime.NewVersionedType(ociv1alpha1.AddOCIArtifactType, ociv1alpha1.Version)
@@ -834,7 +933,7 @@ func TestBuildGraphDefinition_DockerManifestLocalBlob_FallsBackToLocalBlobWithou
 	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
 	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
 
-	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeLocalBlobResources, UploadType: transferv1alpha1.UploadAsDefault})
+	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeLocalBlobResources}, nil)
 	require.NoError(t, err)
 
 	require.Len(t, tgd.Transformations, 4)

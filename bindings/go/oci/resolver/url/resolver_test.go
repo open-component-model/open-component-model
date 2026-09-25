@@ -12,6 +12,8 @@ import (
 	"oras.land/oras-go/v2/registry/remote"
 	"oras.land/oras-go/v2/registry/remote/auth"
 
+	"ocm.software/open-component-model/bindings/go/oci/cache"
+	"ocm.software/open-component-model/bindings/go/oci/internal/remotestore"
 	"ocm.software/open-component-model/bindings/go/oci/resolver/url"
 )
 
@@ -476,4 +478,47 @@ func TestURLPathResolver_Ping(t *testing.T) {
 		assert.True(t, tokenFetched, "Expected token to be fetched from auth server")
 		assert.True(t, authUsed, "Expected bearer token to be used in request")
 	})
+}
+
+func TestURLPathResolver_DynamicCacheSwapping(t *testing.T) {
+	ctx := context.Background()
+	resolver, err := url.New(url.WithBaseURL("http://example.com"))
+	require.NoError(t, err)
+
+	ref := "example.com/test-component:v1.0.0"
+
+	// 1. Initially, no caches are set. StoreForReference should return the base *remotestore.RemoteStore.
+	store, err := resolver.StoreForReference(ctx, ref)
+	require.NoError(t, err)
+	assert.IsType(t, &remotestore.RemoteStore{}, store)
+
+	// 2. Set blob cache. StoreForReference for the same ref should return a wrapped *cache.Repository.
+	dummyBlobCache := &cache.BlobCache{}
+	resolver.SetBlobCache(dummyBlobCache)
+
+	store, err = resolver.StoreForReference(ctx, ref)
+	require.NoError(t, err)
+	require.IsType(t, &cache.Repository{}, store)
+	wrapped := store.(*cache.Repository)
+	assert.Equal(t, dummyBlobCache, wrapped.BlobCache)
+	assert.Nil(t, wrapped.ReferenceCache)
+
+	// 3. Set reference cache too.
+	dummyRefCache := &cache.ReferenceCache{}
+	resolver.SetReferenceCache(dummyRefCache)
+
+	store, err = resolver.StoreForReference(ctx, ref)
+	require.NoError(t, err)
+	require.IsType(t, &cache.Repository{}, store)
+	wrapped = store.(*cache.Repository)
+	assert.Equal(t, dummyBlobCache, wrapped.BlobCache)
+	assert.Equal(t, dummyRefCache, wrapped.ReferenceCache)
+
+	// 4. Set both back to nil. StoreForReference should return the base *remotestore.RemoteStore again.
+	resolver.SetBlobCache(nil)
+	resolver.SetReferenceCache(nil)
+
+	store, err = resolver.StoreForReference(ctx, ref)
+	require.NoError(t, err)
+	assert.IsType(t, &remotestore.RemoteStore{}, store)
 }

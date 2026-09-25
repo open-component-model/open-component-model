@@ -202,6 +202,23 @@ func TestGetV1DirBlob_Standard_Cases(t *testing.T) {
 			},
 		},
 		{
+			// https://github.com/open-component-model/ocm-project/issues/1255:
+			// a declared media type is used as-is, even when it already carries
+			// the +gzip suffix.
+			name:           "compressed dir with declared gzip media type",
+			mediaType:      "application/vnd.gardener.landscaper.blueprint.v1+tar+gzip",
+			compress:       true,
+			preserveDir:    false,
+			followSymlinks: false,
+			excludeFiles:   []string{},
+			includeFiles:   []string{},
+			expectGzip:     true,
+			testDirBase:    "input-dir",
+			testFiles: []TestFile{
+				{relPath: "blueprint.yaml", content: "blueprint", expectedInTar: true},
+			},
+		},
+		{
 			name:           "preserve root folder",
 			mediaType:      "application/vnd.gardener.landscaper.blueprint.v1+tar",
 			compress:       false,
@@ -357,10 +374,10 @@ func TestGetV1DirBlob_Standard_Cases(t *testing.T) {
 					actualType, known := mediaTypeAware.MediaType()
 					expectedType := tt.mediaType
 					if expectedType == "" {
-						// If media type isn't set in the spec, expect the default.
-						expectedType = "application/x-tar"
+						// If media type isn't set in the spec, expect the default
+						// with the +gzip suffix. A declared media type is used as-is.
+						expectedType = "application/x-tar+gzip"
 					}
-					expectedType += "+gzip"
 					r.True(known)
 					r.Equal(expectedType, actualType)
 				}

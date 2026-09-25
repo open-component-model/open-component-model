@@ -1,6 +1,10 @@
 package v1
 
 import (
+	"errors"
+	"fmt"
+
+	"ocm.software/open-component-model/bindings/go/oci/looseref"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -26,6 +30,17 @@ type OCIImage struct {
 	Type runtime.Type `json:"type"`
 	// ImageReference is the actual reference to the oci image repository and tag.
 	ImageReference string `json:"imageReference"`
+}
+
+// Validate verifies that the image reference of the OCIImage access is set and well formed.
+func (t *OCIImage) Validate() error {
+	if t.ImageReference == "" {
+		return errors.New("imageReference is required")
+	}
+	if _, err := looseref.ParseReference(t.ImageReference); err != nil {
+		return fmt.Errorf("invalid imageReference %q: %w", t.ImageReference, err)
+	}
+	return nil
 }
 
 func (t *OCIImage) String() string {

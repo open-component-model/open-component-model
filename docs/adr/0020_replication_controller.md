@@ -6,7 +6,7 @@
 
 Technical Story: [ocm-project#953](https://github.com/open-component-model/ocm-project/issues/953)
 
-Supersedes: [previous replication ADR](../../kubernetes/controller/docs/adr/replication.md)
+Supersedes: [previous replication ADR](../../bindings/go/kubernetes/controller/docs/adr/replication.md)
 
 ## Context and Problem Statement
 
@@ -315,6 +315,6 @@ a stream and is reconciled by the next replication run, which is digest-idempote
 ## Links
 
 * [ocm-project#953](https://github.com/open-component-model/ocm-project/issues/953)
-* [Previous replication ADR](../../kubernetes/controller/docs/adr/replication.md)
-* [Transfer CLI](../../cli/cmd/transfer/)
-* [Resolution service](../../kubernetes/controller/internal/resolution/)
+* [Previous replication ADR](../../bindings/go/kubernetes/controller/docs/adr/replication.md)
+* [Transfer CLI](../../bindings/go/cli/cmd/transfer/)
+* [Resolution service](../../bindings/go/kubernetes/controller/internal/resolution/)

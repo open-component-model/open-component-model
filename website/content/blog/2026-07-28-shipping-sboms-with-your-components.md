@@ -21,13 +21,13 @@ The idea explored here: make SBOMs travel *with* the component, related to the a
 
 To explore the idea, we built a proof of concept across three areas. None of this is a shipped feature yet: it is a spike to see what the workflow could feel like, and one we are now actively driving forward.
 
-**Linking an SBOM to what it describes.** A resource of `type: sbom` carries an `ocm.software/artefactReference` label whose `identitySelector` points at the resource the SBOM is about. Because it is an ordinary, signed resource, the link travels and is verified with the component, with no side channel.
+**Linking an SBOM to what it describes.** A resource of `type: sbom` carries an `ocm.software/artifactReference` label whose `identitySelector` points at the resource the SBOM is about. Because it is an ordinary, signed resource, the link travels and is verified with the component, with no side channel.
 
 ```yaml
 - name: cli-sbom
   type: sbom
   labels:
-    - name: ocm.software/artefactReference
+    - name: ocm.software/artifactReference
       version: v1
       value:
         identitySelector:
@@ -77,7 +77,7 @@ The proof of concept showed the workflow holds up end to end. We are now activel
 
 - **Whether to track SBOMs as explicit resources.** A consumer has to be able to discover SBOMs directly anyway, so the feature works with components built *without* the core tooling, so we are weighing whether an explicit baked resource is needed at all, or whether to start with the smaller API surface and add it later.
 - **How a discovered SBOM is referenced.** The prototype bakes a referrer SBOM as a local blob; referencing the original OCI artifact directly (image or layer) instead of duplicating it is the cleaner target we are working towards.
-- **The label convention.** `ocm.software/artefactReference` follows an OCM spec convention still being finalized in [ocm-spec#146](https://github.com/open-component-model/ocm-spec/pull/146); the exact value shape may still change.
+- **The label convention.** `ocm.software/artifactReference` follows an OCM spec convention still being finalized in [ocm-spec#146](https://github.com/open-component-model/ocm-spec/pull/146); the exact value shape may still change.
 
 You can follow along, or chime in, on the epic and the pull request:
 

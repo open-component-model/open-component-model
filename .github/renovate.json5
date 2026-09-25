@@ -14,25 +14,22 @@
   'git-submodules': {
     enabled: true,
   },
-  // config:recommended transitively pulls in :ignoreModulesAndTests, which
-  // adds **/examples/** to ignorePaths and hides bindings/go/examples/go.mod.
-  // Re-list that preset minus **/examples/** so Renovate scans it again.
-  // ignorePaths is append-only via presets and has no working list-level
-  // negation, so we override for gomod only. Keep in sync if
-  // :ignoreModulesAndTests gains new patterns upstream.
-  gomod: {
-    ignorePaths: [
-      '**/node_modules/**',
-      '**/bower_components/**',
-      '**/vendor/**',
-      '**/__tests__/**',
-      '**/test/**',
-      '**/tests/**',
-      '**/__fixtures__/**',
-    ],
-  },
   'updateNotScheduled': true, // Update branches that have already been created
   'minimumReleaseAge': '28 days',
+  'internalChecksFilter': 'strict',
+  'prCreation': 'not-pending',
+  // CI runs only on pull_request, so renovate/* branches never get real check
+  // statuses. Count internal checks (e.g. renovate/stability-days) as success
+  // so prCreation='not-pending' does not defer PR creation indefinitely.
+  // See https://docs.renovatebot.com/configuration-options/#suppress-branchpr-creation-for-x-days
+  'internalChecksAsSuccess': true,
+  // config:best-practices this is usually disabled by default.
+  // https://github.com/google/docsy/blob/9f8acf7a4547cb1c5d1b88b3db588793bfd6eb25/renovate.json5#L7
+  // Also, disabling this means that transitive dependencies that aren't 28 days old at least,
+  // will not get in. Because lock file maintenance doesn't care about that when it's refreshing the lock file.
+  lockFileMaintenance: {
+    enabled: false,
+  },
   'branchPrefix': 'renovate/',
   'gitAuthor': 'ocmbot[bot] <125909804+ocmbot[bot]@users.noreply.github.com>',
   'gitIgnoredAuthors': [
@@ -44,9 +41,12 @@
   automergeType: "pr",
   separateMinorPatch: true,
   separateMultipleMajor: true,
+  // Grouped fast-moving deps inherit the youngest member's release age, so
+  // under global 'strict' + 28d the PR is never created. Below groups opt into
+  // internalChecksFilter='flexible' to unblock. See renovatebot/renovate#7603.
   packageRules: [
     {
-      matchFileNames: ['kubernetes/controller/chart/**'],
+      matchFileNames: ['bindings/go/kubernetes/controller/chart/**'],
       groupName: 'Kubernetes Controller chart',
       groupSlug: 'kubernetes-controller-chart',
       enabled: true,
@@ -60,10 +60,10 @@
     },
     {
       // Collapse digest-only re-pins (same tag, new SHA) for Actions and
-      // Docker base images into one weekly PR. gomod is excluded so Go
-      // module digests keep their own per-module PRs (no cross-module PR,
-      // go.sum post-upgrade step intact). Placed before the golang digest
-      // rules so their 'Golang versions' groupName wins (last write wins).
+      // Docker base images into one weekly PR, regardless of image name
+      // or file location. gomod is excluded so Go module digests keep
+      // their own per-module PRs (no cross-module PR, go.sum post-upgrade
+      // step intact).
       matchManagers: [
         'github-actions',
         'dockerfile',
@@ -77,26 +77,14 @@
       ],
     },
     {
+      // Actual Go toolchain version bumps (go.mod `toolchain go1.X.Y`, setup-go,
+      // golang image tags). The go.mod `go 1.X` directive is deliberately NOT
+      // bumped here. See the depType 'golang' rule at the end of packageRules.
+      // Docker image digests for `golang` are handled by 'Digest pins' above.
       matchDatasources: ["golang-version"],
       rangeStrategy: "bump",
       groupName: "Golang versions",
       groupSlug: "golang-versions",
-      schedule: [
-        '* * * * 0' // At every minute on Sunday it is allowed to create branches
-      ],
-    },
-    {
-      matchDatasources: ['docker'],
-      matchPackageNames: ['golang'],
-      matchFileNames: ['kubernetes/controller/Dockerfile'],
-      groupName: 'Golang versions',
-      groupSlug: 'golang-versions',
-    },
-    {
-      matchManagers: ['github-actions'],
-      matchDepNames: ['go'],
-      groupName: 'Golang versions',
-      groupSlug: 'golang-versions',
       schedule: [
         '* * * * 0' // At every minute on Sunday it is allowed to create branches
       ],
@@ -114,6 +102,7 @@
       ],
       groupName: 'Kubernetes dependencies',
       groupSlug: 'kubernetes-deps',
+      internalChecksFilter: 'flexible',
       schedule: [
         '* * * * 0' // At every minute on Sunday it is allowed to create branches
       ],
@@ -124,6 +113,7 @@
       matchPackageNames: [
         'github.com/docker/{/,}**',
       ],
+      internalChecksFilter: 'flexible',
       schedule: [
         '* * * * 0' // At every minute on Sunday it is allowed to create branches
       ]
@@ -134,6 +124,7 @@
       matchPackageNames: [
         'golang.org/x/{/,}**'
       ],
+      internalChecksFilter: 'flexible',
       schedule: [
         '* * * * 0' // At every minute on Sunday it is allowed to create branches
       ]
@@ -144,19 +135,21 @@
       matchPackageNames: [
         'google.golang.org/{/,}**'
       ],
+      internalChecksFilter: 'flexible',
       schedule: [
         '* * * * 0' // At every minute on Sunday it is allowed to create branches
       ]
     },
     {
-      groupName: 'Sigstore Repositories',
-      groupSlug: 'sigstore',
+      // Monorepos grouped by the extends presets (aws-sdk-go-v2, opentelemetry,
+      // moby, go-openapi). Same 'flexible' rationale as the local groups above.
       matchPackageNames: [
-        'github.com/sigstore/{/,}**'
+        'github.com/aws/aws-sdk-go-v2{/,}**',
+        'go.opentelemetry.io/{/,}**',
+        'github.com/moby/{/,}**',
+        'github.com/go-openapi/{/,}**',
       ],
-      schedule: [
-        '* * * * 0' // At every minute on Sunday it is allowed to create branches
-      ]
+      internalChecksFilter: 'flexible',
     },
     {
       groupName: 'spf13 repositories',
@@ -216,20 +209,12 @@
       enabled: false,
     },
     {
-      matchManagers: [
-        'gomod',
-      ],
-      groupName: 'OCM Monorepo Go Module Dependencies',
-      groupSlug: 'ocm-monorepo',
-      matchPackageNames: [
-        'ocm.software/open-component-model/**',
-      ],
-      // Combine minor and patch updates into a single PR.
-      separateMinorPatch: false,
-      'schedule': [
-        '* 22,0-6 * * *' // At every minute past hour 22 and every hour from 0 through 6.
-      ],
-      minimumReleaseAge: null,
+      // Renamed to github.com/ThalesGroup/crypto11 at v1.5.0. Pinned to v1.2.5
+      // on the old path (indirect via cosign). Bumps past v1.4.x fail the
+      // go.sum artifact step with a module-path mismatch (#2966, #3379).
+      matchManagers: ['gomod'],
+      matchDepNames: ['github.com/ThalesIgnite/crypto11'],
+      enabled: false,
     },
     {
       // The internal org workflows repo is tracked on @main intentionally
@@ -245,8 +230,8 @@
       // by this later rule (Renovate merges matching rules in order; last write
       // wins on conflicting fields like groupName).
       matchFileNames: [
-        'kubernetes/controller/**',
-        '!kubernetes/controller/chart/**',
+        'bindings/go/kubernetes/controller/**',
+        '!bindings/go/kubernetes/controller/chart/**',
       ],
       matchUpdateTypes: ['minor', 'patch'],
       groupName: 'Kubernetes Controller dependencies (non-major)',
@@ -266,6 +251,34 @@
       schedule: [
         '* * * * 0' // At every minute on Sunday it is allowed to create branches
       ],
+    },
+    {
+      // Go mod updates are disabled as we are using go toolchain directives instead.
+      matchManagers: ['gomod'],
+      matchDepTypes: ['golang'],
+      enabled: false,
+    },
+    {
+      matchDatasources: ['npm'],
+      minimumReleaseAge: '28 days',
+    },
+    {
+      // Renovate has no release timestamp for these types and
+      // minimumReleaseAge requires that to work, otherwise, it will just never update them.
+      matchUpdateTypes: [
+        'lockFileMaintenance',
+        'replacement',
+        'pin',
+        // 'digest'/'pinDigest' re-pin the same tag to a new SHA (weekly
+        // base-image rebuilds, action version re-pins), so the release-age
+        // gate does not apply.
+        'pinDigest',
+        'digest',
+        'bump',
+        'lockfileUpdate',
+        'rollback',
+      ],
+      minimumReleaseAge: null,
     },
   ],
   customDatasources: {
@@ -291,6 +304,20 @@
       versioningTemplate: 'semver',
     },
     {
+      // Keeps the envtest fallback version in the Go test helper
+      // (internal/test/envtest.go) in sync with controller .env
+      customType: 'regex',
+      managerFilePatterns: [
+        '/(^|/)envtest\\.go$/',
+      ],
+      matchStrings: [
+        '// renovate: datasource=custom\\.envtest depName=envtest\\s+const DefaultEnvTestVersion = "(?<currentValue>\\d+\\.\\d+\\.\\d+)"',
+      ],
+      datasourceTemplate: 'custom.envtest',
+      depNameTemplate: 'envtest',
+      versioningTemplate: 'semver',
+    },
+    {
       customType: 'regex',
       managerFilePatterns: [
         '/(^|/)\\.env(\\.local)?$/',
@@ -300,18 +327,16 @@
       ],
       versioningTemplate: 'semver',
     },
-    // Track pinned pip install commands in GitHub Actions workflows (e.g. pip install foo==1.2.3)
     {
+      // Automatic version bump for GO_VERSION, NPM_VERSION and NODE_VERSION in Netlify.
       customType: 'regex',
       managerFilePatterns: [
-        '/.github/workflows/**/*.yml',
-        '/.github/workflows/**/*.yaml',
+        '/(^|/)netlify\\.toml$/',
       ],
       matchStrings: [
-        'pip install (?<depName>\\S+)==(?<currentValue>\\S+)',
+        '# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s+.*?_VERSION = "v?(?<currentValue>\\d+\\.\\d+\\.\\d+)"',
       ],
-      datasourceTemplate: 'pypi',
-      versioningTemplate: 'pep440',
+      versioningTemplate: 'semver',
     },
   ],
   postUpgradeTasks: {

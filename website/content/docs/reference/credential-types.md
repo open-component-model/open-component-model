@@ -26,9 +26,12 @@ consumers:
 OCM ships with the following built-in credential types:
 
 | Credential Type                                            | Used With                                | Purpose                                                         |
-|------------------------------------------------------------|------------------------------------------|-----------------------------------------------------------------|
+| ---------------------------------------------------------- | ---------------------------------------- | --------------------------------------------------------------- |
 | [`OCICredentials/v1`](#ocicredentialsv1)                   | `OCIRegistry` consumers                  | OCI registry username/password and token auth                   |
 | [`HelmHTTPCredentials/v1`](#helmhttpcredentialsv1)         | `HelmChartRepository` consumers (HTTP/S) | Helm HTTP repository auth and TLS client certs                  |
+| [`WgetCredentials/v1`](#wgetcredentialsv1)                 | `Wget` consumers                         | HTTP/S Basic Auth, bearer token, and mutual TLS                 |
+| [`S3Credentials/v1`](#s3credentialsv1)                     | `S3` consumers                           | S3 access keys and temporary STS credentials                    |
+| [`GitHubCredentials/v1`](#githubcredentialsv1)             | `GitHubRepository` consumers             | GitHub and GitHub Enterprise REST API token auth                |
 | [`RSACredentials/v1`](#rsacredentialsv1)                   | `RSA/v1alpha1` consumers                 | RSA signing and verification key material                       |
 | [`GPGCredentials/v1alpha1`](#gpgcredentialsv1alpha1)       | `GPG/v1alpha1` consumers                 | GPG signing and verification key material                       |
 | [`OIDCIdentityToken/v1alpha1`](#oidcidentitytokenv1alpha1) | `SigstoreSigner/v1alpha1` consumers      | OIDC token for Sigstore keyless signing via Fulcio              |
@@ -139,6 +142,200 @@ consumers:
 
 [`HelmChartRepository`]({{< relref "credential-consumer-identities.md#helmchartrepository" >}}) consumer identities that
 use HTTP/S transport. For OCI-based Helm repositories, use `OCICredentials/v1` instead.
+
+---
+
+## WgetCredentials/v1
+
+{{< schema-renderer url="/schemas/bindings/go/credentials/wget/v1/WgetCredentials.schema.json" >}}
+
+### Example
+
+HTTP Basic Auth:
+
+```yaml
+consumers:
+  - identity:
+      type: Wget
+      hostname: downloads.example.com
+      scheme: https
+    credentials:
+      - type: WgetCredentials/v1
+        username: my-user
+        password: my-password
+```
+
+Bearer token:
+
+```yaml
+consumers:
+  - identity:
+      type: Wget
+      hostname: api.example.com
+      scheme: https
+      path: artifacts/*
+    credentials:
+      - type: WgetCredentials/v1
+        identityToken: eyJhbGciOi...
+```
+
+Mutual TLS with a private CA:
+
+```yaml
+consumers:
+  - identity:
+      type: Wget
+      hostname: artifacts.internal
+      scheme: https
+    credentials:
+      - type: WgetCredentials/v1
+        certificate: |
+          -----BEGIN CERTIFICATE-----
+          MIIDdzCCAl+gAwIBAgIEbGVnYWw...
+          -----END CERTIFICATE-----
+        privateKey: |
+          -----BEGIN PRIVATE KEY-----
+          MIIEvQIBADANBgkqhkiG9w0BAQ...
+          -----END PRIVATE KEY-----
+        certificateAuthority: |
+          -----BEGIN CERTIFICATE-----
+          MIIDQTCCAimgAwIBAgITBmyf...
+          -----END CERTIFICATE-----
+```
+
+{{< callout context="note" >}}
+`username`/`password` and `identityToken` both set the `Authorization` header and are mutually exclusive. When both are
+present, the bearer token is used and a warning is logged. The mutual TLS pair (`certificate` + `privateKey`) is a
+transport-layer credential and can be combined with either. `certificateAuthority` is only evaluated when `certificate`
+is set, and a client certificate has no effect on a plain `http://` URL.
+{{< /callout >}}
+
+### Used With
+
+[`Wget`]({{< relref "credential-consumer-identities.md#wget" >}}) consumer identities, covering both the
+[`Wget/v1` access type]({{< relref "input-and-access-types.md#wgetv1-access" >}}) and the
+[`Wget/v1` input type]({{< relref "input-and-access-types.md#wgetv1-input" >}}).
+
+---
+
+## S3Credentials/v1
+
+{{< schema-renderer url="/schemas/bindings/go/credentials/s3/v1/S3Credentials.schema.json" >}}
+
+Authentication fields are optional. `anonymous` is an optional boolean that defaults to `false`. When false or
+omitted, an entry with no access key, secret or session token uses the AWS default credential chain (environment,
+shared config and IAM roles). If any key or token field is set, OCM passes those static credentials to the AWS SDK.
+Incomplete or invalid credentials do not fall back to the default chain.
+
+Set `anonymous: true` to read public objects without signing, even when AWS credentials are available. It cannot
+be combined with `accessKeyId`, `secretAccessKey` or `sessionToken`, including their legacy aliases during conversion.
+Missing credentials and credential-provider or S3 authorization errors never trigger anonymous access.
+Authentication settings belong only in credentials, never in an access or input specification.
+
+### Example
+
+Explicit anonymous access to a public object:
+
+```yaml
+consumers:
+  - identity:
+      type: S3
+      path: public-bucket/path/to/object
+    credentials:
+      - type: S3Credentials/v1
+        anonymous: true
+```
+
+Static access keys for every bucket the account owns (`anonymous: false` is optional):
+
+```yaml
+consumers:
+  - identity:
+      type: S3
+    credentials:
+      - type: S3Credentials/v1
+        anonymous: false
+        accessKeyId: <access-key-id>
+        secretAccessKey: <secret-access-key>
+```
+
+Temporary STS credentials, scoped to one object:
+
+```yaml
+consumers:
+  - identity:
+      type: S3
+      path: acme-artifacts/datasets/reference/1.0.0/reference.parquet
+    credentials:
+      - type: S3Credentials/v1
+        accessKeyId: <temporary-access-key-id>
+        secretAccessKey: <temporary-secret-access-key>
+        sessionToken: <session-token>
+```
+
+A self-hosted MinIO, addressed by its endpoint:
+
+```yaml
+consumers:
+  - identity:
+      type: S3
+      scheme: https
+      hostname: minio.internal
+      port: "9000"
+    credentials:
+      - type: S3Credentials/v1
+        accessKeyId: minio-user
+        secretAccessKey: minio-password
+```
+
+{{< callout context="note" >}}
+OCM still accepts the OCM v1 property names `awsAccessKeyID`, `awsSecretAccessKey` and `token`, but only in an untyped
+[`Credentials/v1`](#directcredentialsv1) entry. There, OCM maps them to `accessKeyId`, `secretAccessKey` and
+`sessionToken`. `S3Credentials/v1` accepts the new names only.
+{{< /callout >}}
+
+### Used With
+
+[`S3`]({{< relref "credential-consumer-identities.md#s3" >}}) consumer identities. They cover both the
+[S3 access types (v1, v2 and unversioned)]({{< relref "input-and-access-types.md#s3v2-access" >}}) and the
+[`S3/v2` input type]({{< relref "input-and-access-types.md#s3v2-input" >}}).
+
+---
+
+## GitHubCredentials/v1
+
+{{< schema-renderer url="/schemas/bindings/go/credentials/github/v1/GitHubCredentials.schema.json" >}}
+
+### Example
+
+```yaml
+consumers:
+  - identity:
+      type: GitHubRepository
+      hostname: github.com
+    credentials:
+      - type: GitHubCredentials/v1
+        token: ghp_example_token
+```
+
+The legacy [`Credentials/v1`](#directcredentialsv1) fallback works as well, with `token` in its `properties` map:
+
+```yaml
+consumers:
+  - identity:
+      type: GitHubRepository
+      hostname: github.com
+    credentials:
+      - type: Credentials/v1
+        properties:
+          token: ghp_example_token
+```
+
+Configuring no consumer at all is valid: the GitHub REST API is then called anonymously.
+
+### Used With
+
+[`GitHubRepository`]({{< relref "credential-consumer-identities.md#githubrepository" >}}) consumer identities.
 
 ---
 

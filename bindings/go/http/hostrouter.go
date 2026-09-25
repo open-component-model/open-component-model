@@ -6,6 +6,8 @@ import (
 	nethttp "net/http"
 	"net/url"
 	"time"
+
+	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 )
 
 // hostRouter dispatches each request to a per-host [nethttp.RoundTripper] when the
@@ -17,8 +19,9 @@ import (
 // per-host timeout exceed the global one — http.Client.Timeout would
 // otherwise cap every request at the global value.
 //
-// Map keys may be either "host" or "host:port". pick checks the full host
-// first so an entry with an explicit port wins over the bare hostname.
+// Map keys may be either "host" or "host:port", resolved in the order given by
+// [httpv1alpha1.HostKeys], so an entry with an explicit port wins over the bare
+// hostname.
 //
 // The per-host timeout deadline covers the entire request lifecycle including
 // reading the response body: the cancel function is deferred until the response
@@ -61,12 +64,9 @@ func (b *cancelOnCloseBody) Close() error {
 }
 
 func (r *hostRouter) pick(u *url.URL) (nethttp.RoundTripper, time.Duration) {
-	if rt, ok := r.hosts[u.Host]; ok {
-		return rt, r.hostTimeouts[u.Host]
-	}
-	if name := u.Hostname(); name != u.Host {
-		if rt, ok := r.hosts[name]; ok {
-			return rt, r.hostTimeouts[name]
+	for _, key := range httpv1alpha1.HostKeys(u.Host) {
+		if rt, ok := r.hosts[key]; ok {
+			return rt, r.hostTimeouts[key]
 		}
 	}
 	return r.globalRT, r.globalTimeout

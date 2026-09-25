@@ -68,16 +68,16 @@ function FieldRow({field, depth = 0, parentPath = ""}: {field: SchemaFieldType; 
             <tr className="sr-field-row" id={fieldPath}>
                 <td className={`sr-field-name sr-depth-${Math.min(depth, 8)}`}>
                     <div className="sr-field-name-inner">
-            <span className="sr-expand-space">
-              {expandable && (
-                  <button className="sr-expand-btn" type="button"
-                           aria-expanded={expanded}
-                           aria-label={`${expanded ? "Collapse" : "Expand"} ${field.name}`}
-                           onClick={() => setExpanded(!expanded)}>
-                       {expanded ? "−" : "+"}
-                   </button>
-              )}
-            </span>
+                        <span className="sr-expand-space">
+                            {expandable && (
+                                <button className="sr-expand-btn" type="button"
+                                    aria-expanded={expanded}
+                                    aria-label={`${expanded ? "Collapse" : "Expand"} ${field.name}`}
+                                    onClick={() => setExpanded(!expanded)}>
+                                    {expanded ? "−" : "+"}
+                                </button>
+                            )}
+                        </span>
                         <code className="sr-field-code">{field.name}</code>
                         <a className="sr-field-anchor" href={`#${fieldPath}`}>#</a>
                         {field.required && <span className="badge sr-badge--required">required</span>}
@@ -152,7 +152,9 @@ function VariantRows({variants, depth, parentPath = ""}: {variants: FieldVariant
 }
 
 function FieldTable({title, description, fields, footer}: {title: string; description: string; fields: SchemaFieldType[]; footer?: ComponentChildren}) {
-    if (!fields?.length) return null;
+    if (!fields?.length) {
+        return null;
+    }
     return (
         <div className="sr-section">
             <h3 id={slugify(title)}>{title}<a className="sr-anchor" href={`#${slugify(title)}`}>#</a></h3>
@@ -160,14 +162,14 @@ function FieldTable({title, description, fields, footer}: {title: string; descri
             <div className="sr-table-wrap">
                 <table className="sr-table">
                     <thead>
-                    <tr>
-                        <th>Field</th>
-                        <th>Type</th>
-                        <th className="sr-col-hidden">Description</th>
-                    </tr>
+                        <tr>
+                            <th>Field</th>
+                            <th>Type</th>
+                            <th className="sr-col-hidden">Description</th>
+                        </tr>
                     </thead>
                     <tbody>
-                    {fields.map((f) => <FieldRow key={f.name} field={f}/>)}
+                        {fields.map((f) => <FieldRow key={f.name} field={f}/>)}
                     </tbody>
                 </table>
             </div>
@@ -212,8 +214,8 @@ function SchemaView({model, schemaUrl}: {model: SchemaModelType; schemaUrl: stri
             <SchemaHeader meta={model.meta}/>
             {model.sections.map((section, i) => (
                 <FieldTable key={section.title} title={section.title}
-                            description={section.description} fields={section.fields}
-                            footer={i === lastWithFields ? footer : undefined}/>
+                    description={section.description} fields={section.fields}
+                    footer={i === lastWithFields ? footer : undefined}/>
             ))}
             {lastWithFields === -1 && footer}
         </>
@@ -248,7 +250,9 @@ function SchemaRenderer({schemaUrl}: {schemaUrl: string}) {
 
         fetch(schemaUrl, {signal: controller.signal})
             .then((res) => {
-                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                if (!res.ok) {
+                    throw new Error(`HTTP ${res.status}`);
+                }
                 return res.text();
             })
             .then((text) => {
@@ -256,7 +260,9 @@ function SchemaRenderer({schemaUrl}: {schemaUrl: string}) {
                 setState("done");
             })
             .catch((err) => {
-                if (err.name === "AbortError") return;
+                if (err.name === "AbortError") {
+                    return;
+                }
                 setError(err.message);
                 setState("error");
             })
@@ -269,7 +275,9 @@ function SchemaRenderer({schemaUrl}: {schemaUrl: string}) {
     }, [schemaUrl]);
 
     useEffect(() => {
-        if (state !== "done") return;
+        if (state !== "done") {
+            return;
+        }
         document.getElementById(window.location.hash.slice(1))?.scrollIntoView();
     }, [state]);
 
@@ -293,7 +301,7 @@ function SchemaRenderer({schemaUrl}: {schemaUrl: string}) {
 
             {state === "done" && models.map((model, i) => (
                 <SchemaView key={`${model.meta.kind}-${model.meta.apiVersions[0] ?? i}`}
-                            model={model} schemaUrl={schemaUrl}/>
+                    model={model} schemaUrl={schemaUrl}/>
             ))}
         </div>
     );

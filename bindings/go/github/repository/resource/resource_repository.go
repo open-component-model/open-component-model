@@ -12,6 +12,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/github/internal/download"
 	githubaccess "ocm.software/open-component-model/bindings/go/github/spec/access"
 	v1 "ocm.software/open-component-model/bindings/go/github/spec/access/v1"
+	ghcreds "ocm.software/open-component-model/bindings/go/github/spec/credentials"
 	credsv1 "ocm.software/open-component-model/bindings/go/github/spec/credentials/v1"
 	ocmhttp "ocm.software/open-component-model/bindings/go/http"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
@@ -99,6 +100,9 @@ func (r *ResourceRepository) GetResourceCredentialConsumerIdentity(_ context.Con
 //
 // The blob is buffered eagerly in memory and can be read any number of times;
 // it needs no cleanup and holds the whole archive until released.
+//
+// The archive is compared to the digest the resource declares, which is the generic
+// blob digest, so an archive that differs fails the read.
 func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) (blob.ReadOnlyBlob, error) {
 	gitHub, err := githubinternal.AccessFrom(resource.Access)
 	if err != nil {
@@ -130,11 +134,20 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 		}
 	}
 
-	return download.Download(ctx, gitHub, gitHubCredentials, r.httpClient)
+	archive, err := download.Download(ctx, gitHub, gitHubCredentials, r.httpClient)
+	if err != nil {
+		return nil, err
+	}
+
+	return repository.VerifyDownload(ctx, resource, archive)
 }
 
 // UploadResource is not supported: the GitHub access type is a read-only
 // reference; content reaches GitHub through git, not through OCM.
 func (r *ResourceRepository) UploadResource(_ context.Context, _ *descriptor.Resource, _ blob.ReadOnlyBlob, _ runtime.Typed) (*descriptor.Resource, error) {
 	return nil, fmt.Errorf("github repositories do not support upload operations")
+}
+
+func (r *ResourceRepository) GetCredentialTypeScheme() *runtime.Scheme {
+	return ghcreds.Scheme
 }

@@ -22,16 +22,18 @@
 import { Tab } from 'bootstrap';
 
 function toggleTabs(event) {
-  event.preventDefault();
-  const targetKey = event.currentTarget.getAttribute('data-toggle-tab');
-  if (!targetKey) return;
+    event.preventDefault();
+    const targetKey = event.currentTarget.getAttribute('data-toggle-tab');
+    if (!targetKey) {
+        return;
+    }
 
-  const selectedTabs = document.querySelectorAll(`[data-toggle-tab="${CSS.escape(targetKey)}"]`);
-  for (const tab of selectedTabs) {
-    Tab.getOrCreateInstance(tab).show();
-  }
+    const selectedTabs = document.querySelectorAll(`[data-toggle-tab="${CSS.escape(targetKey)}"]`);
+    for (const tab of selectedTabs) {
+        Tab.getOrCreateInstance(tab).show();
+    }
 }
 
 for (const tab of document.querySelectorAll('[data-toggle-tab]')) {
-  tab.addEventListener('click', toggleTabs);
+    tab.addEventListener('click', toggleTabs);
 }

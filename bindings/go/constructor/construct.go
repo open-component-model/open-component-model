@@ -24,6 +24,7 @@ import (
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/repository"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
+	"ocm.software/open-component-model/bindings/go/runtime/versioning"
 )
 
 // ErrShouldSkipConstruction is an error that indicates that the construction of a component should be skipped,
@@ -103,6 +104,10 @@ func (c *DefaultConstructor) Construct(ctx context.Context) error {
 
 	if len(c.constructor.Components) == 0 {
 		return nil
+	}
+
+	if err := validateSpecifications(c.constructor, c.opts); err != nil {
+		return fmt.Errorf("component constructor contains invalid access or input specifications: %w", err)
 	}
 
 	err := c.discover(ctx)
@@ -218,6 +223,15 @@ func (c *DefaultConstructor) constructComponent(ctx context.Context, component *
 		return nil, err
 	}
 
+	// Validate the component version before processing so an invalid version
+	// fails fast, before processDescriptor uploads any resource or source
+	// content to the target repository. Resource, source, and reference
+	// versions are defaulted during processing, so their validation must run
+	// afterwards in validateVersions.
+	if err := c.validateComponentVersion(component.Name, component.Version); err != nil {
+		return nil, fmt.Errorf("component %q failed version validation: %w", component.Name, err)
+	}
+
 	if err := c.processDescriptor(ctx, repo, component, desc, referencedComponents); err != nil {
 		return nil, err
 	}
@@ -226,11 +240,61 @@ func (c *DefaultConstructor) constructComponent(ctx context.Context, component *
 		return nil, fmt.Errorf("component %q failed validation: %w", component.Name, err)
 	}
 
+	if err := c.validateVersions(desc); err != nil {
+		return nil, fmt.Errorf("component %q failed version validation: %w", component.Name, err)
+	}
+
 	if err := repo.AddComponentVersion(ctx, desc); err != nil {
 		return nil, fmt.Errorf("error adding component version to target: %w", err)
 	}
 
 	return desc, nil
+}
+
+// versioningRegistry returns the configured versioning registry, falling back to
+// the loose-semver default when none is configured.
+func (c *DefaultConstructor) versioningRegistry() *versioning.Registry {
+	if c.opts.VersioningRegistry != nil {
+		return c.opts.VersioningRegistry
+	}
+	return versioning.Default()
+}
+
+// validateComponentVersion checks the component version against the configured
+// versioning registry (loose semver by default). It is called before
+// processDescriptor so an invalid version fails before any content is uploaded.
+func (c *DefaultConstructor) validateComponentVersion(name, version string) error {
+	if !c.versioningRegistry().Valid(version) {
+		return fmt.Errorf("component %q has an invalid version %q for the configured versioning schemes", name, version)
+	}
+	return nil
+}
+
+// validateVersions checks every resource, source, and reference version against
+// the configured versioning registry (loose semver by default). The component
+// version is validated earlier by validateComponentVersion. It returns a joined
+// error naming each offending element.
+func (c *DefaultConstructor) validateVersions(desc *descriptor.Descriptor) error {
+	registry := c.versioningRegistry()
+
+	var errs []error
+	check := func(kind, name, version string) {
+		if !registry.Valid(version) {
+			errs = append(errs, fmt.Errorf("%s %q has an invalid version %q for the configured versioning schemes", kind, name, version))
+		}
+	}
+
+	for _, r := range desc.Component.Resources {
+		check("resource", r.Name, r.Version)
+	}
+	for _, s := range desc.Component.Sources {
+		check("source", s.Name, s.Version)
+	}
+	for _, ref := range desc.Component.References {
+		check("reference", ref.Name, ref.Version)
+	}
+
+	return errors.Join(errs...)
 }
 
 // ProcessConflictStrategy checks for existing component versions in the target repository
@@ -422,8 +486,16 @@ func (c *DefaultConstructor) processResource(ctx context.Context, targetRepo Tar
 		res = constructor.ConvertToDescriptorResource(resource)
 
 		if c.opts.ResourceDigestProcessorProvider != nil {
-			var digestProcessor ResourceDigestProcessor
-			if digestProcessor, err = c.opts.GetDigestProcessor(ctx, res); err == nil {
+			digestProcessor, digestProcessorErr := c.opts.GetDigestProcessor(ctx, res)
+			switch {
+			case digestProcessorErr != nil:
+				logger.WarnContext(ctx, "error getting digest processor for access type, the resource is added without a digest",
+					"access_type", res.Access.GetType(),
+					"error", digestProcessorErr)
+			case digestProcessor == nil:
+				logger.WarnContext(ctx, "no digest processor available for access type, the resource is added without a digest",
+					"access_type", res.Access.GetType())
+			default:
 				logger.Debug("processing resource digest")
 				var creds ocmruntime.Typed
 				if c.opts.Resolver != nil {
@@ -501,6 +573,12 @@ func (c *DefaultConstructor) processSource(ctx context.Context, targetRepo Targe
 		res, err = c.processSourceWithInput(ctx, targetRepo, src, component, version)
 	} else {
 		logger.Debug("processing source with existing access")
+		// Sources with existing access may omit their version; default it to the
+		// component version so validateVersions does not reject an otherwise
+		// schema-valid source for an empty version. Explicit versions are kept.
+		if src.Version == "" {
+			src.Version = version
+		}
 		res = constructor.ConvertToDescriptorSource(src)
 	}
 

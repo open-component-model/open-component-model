@@ -57,7 +57,7 @@ func SingleFileDecodeDescriptor(raw io.Reader, mediaType string, unmarshal Unmar
 	}
 }
 
-const maxDescriptorSize = 1 ^ 1024*1024*1024 // 1 GB
+const maxDescriptorSize = 1024 * 1024 * 1024 // 1 GiB
 
 // descriptorFileFromTar reads the component descriptor from a tar.
 // The component is expected to be inside the tar in a file called LegacyComponentDescriptorTarFileName.

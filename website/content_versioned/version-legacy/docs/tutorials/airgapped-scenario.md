@@ -79,7 +79,7 @@ sudo cp -r ./ctf-copy-resources /media/....
 
 **Physical Transport Phase** ✈️
 
-Transport your portable storage device containing the OCM artefact to the air-gapped environment following your organization's security protocols.
+Transport your portable storage device containing the OCM artifact to the air-gapped environment following your organization's security protocols.
 
 ```shell
                                                    ___

@@ -167,8 +167,8 @@ func newIntegrationEnv(t *testing.T, ctx context.Context) *integrationEnv {
 	r := require.New(t)
 
 	nw, err := network.New(ctx)
+	testcontainers.CleanupNetwork(t, nw)
 	r.NoError(err, "create docker network")
-	t.Cleanup(func() { _ = nw.Remove(ctx) })
 
 	t.Log("starting registry container")
 	registryContainer, err := registry.Run(ctx, registryImage,

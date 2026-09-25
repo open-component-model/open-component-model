@@ -1,6 +1,7 @@
 package v1
 
 import (
+	"errors"
 	"fmt"
 	"net/url"
 	"strings"
@@ -41,6 +42,21 @@ type Helm struct {
 
 	// Version can either be specified as part of the chart name or separately.
 	Version string `json:"version,omitempty"`
+}
+
+// Validate verifies that the required fields of the Helm access are set and that the helm
+// repository is a well formed URL.
+func (h *Helm) Validate() error {
+	if h.HelmRepository == "" {
+		return errors.New("helmRepository is required")
+	}
+	if h.HelmChart == "" {
+		return errors.New("helmChart is required")
+	}
+	if _, err := url.Parse(h.HelmRepository); err != nil {
+		return fmt.Errorf("invalid helmRepository %q: %w", h.HelmRepository, err)
+	}
+	return nil
 }
 
 func (h *Helm) ChartReference() (string, error) {

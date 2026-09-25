@@ -82,7 +82,7 @@ func LookupConfig(cfg *v1.Config) (*Config, error) {
 	return merged, nil
 }
 
-// Merge merges the provided configs into a single config.
+// Merge merges the provided configs into a single config. Later entries win.
 func Merge(configs ...*Config) *Config {
 	if len(configs) == 0 {
 		return nil
@@ -90,6 +90,13 @@ func Merge(configs ...*Config) *Config {
 
 	merged := new(Config)
 	_, _ = Scheme.DefaultType(merged)
+
+	for _, config := range configs {
+		if config == nil || len(config.Rules) == 0 {
+			continue
+		}
+		merged.Rules = config.DeepCopy().Rules
+	}
 
 	return merged
 }

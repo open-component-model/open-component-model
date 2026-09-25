@@ -188,7 +188,7 @@ The [OCM TSC](https://github.com/open-component-model/open-component-model/blob/
 
 ### SIG Runtime
 
-The [SIG Runtime](https://github.com/open-component-model/open-component-model/blob/main/docs/community/SIGs/Runtime/SIG-Runtime-CHARTER.md) is the primary governance body for the OCM runtime implementation. It oversees the development of the CLI, controllers, and library, ensuring that technical decisions are made openly and aligned with the broader project direction. Technical decisions are centrally tracked and aligned with the TSC via ADRs.
+The [SIG Overview](https://github.com/open-component-model/open-component-model/blob/main/docs/community/SIGs/Runtime/SIG-Runtime-OVERVIEW.md) is the primary governance body for the OCM runtime implementation. It oversees the development of the CLI, controllers, and library, ensuring that technical decisions are made openly and aligned with the broader project direction. Technical decisions are centrally tracked and aligned with the TSC via ADRs.
 
 ### How to Get Involved
 

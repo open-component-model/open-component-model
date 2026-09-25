@@ -1,17 +1,26 @@
 package env
 
 import (
-	"github.com/google/cel-go/cel"
-	"github.com/google/cel-go/common/types"
+	"maps"
+
+	"cel.dev/cel-go/cel"
+	"cel.dev/cel-go/common/types"
+	"cel.dev/cel-go/ext"
 
 	"ocm.software/open-component-model/bindings/go/cel/jsonschema/decl"
 	"ocm.software/open-component-model/bindings/go/cel/jsonschema/provider"
 	stv6jsonschema "ocm.software/open-component-model/bindings/go/cel/jsonschema/santhosh-tekuri/v6"
 )
 
+// Builder constructs CEL environments for transformation graph analysis and
+// evaluation. Declaration types are merged incrementally into registeredTypes
+// using copy-on-write, so CurrentEnv does not re-walk previously registered
+// schemas, and providers and environments created earlier keep their own
+// snapshot of the type map.
+// A Builder is not safe for concurrent use.
 type Builder struct {
-	declTypes  []*stv6jsonschema.DeclType
-	envOptions []cel.EnvOption
+	envOptions      []cel.EnvOption
+	registeredTypes map[string]*decl.Type
 }
 
 func NewEnvBuilder(staticEnvironment map[string]interface{}) (*Builder, error) {
@@ -24,14 +33,25 @@ func NewEnvBuilder(staticEnvironment map[string]interface{}) (*Builder, error) {
 	staticEnvVal := types.DefaultTypeAdapter.NativeToValue(staticEnvironment)
 	staticEnvConstant := cel.Constant("environment", declType.CelType(), staticEnvVal)
 
-	return &Builder{
-		declTypes:  []*stv6jsonschema.DeclType{declType},
-		envOptions: []cel.EnvOption{staticEnvConstant},
-	}, nil
+	b := &Builder{envOptions: []cel.EnvOption{staticEnvConstant}}
+	return b.RegisterDeclTypes(declType), nil
 }
 
+// RegisterDeclTypes merges the given declaration types into the builder's type
+// map using copy-on-write: the merge works on a clone of the current map.
+// On type name collisions the later registration wins.
 func (envBuilder *Builder) RegisterDeclTypes(declTypes ...*stv6jsonschema.DeclType) *Builder {
-	envBuilder.declTypes = append(envBuilder.declTypes, declTypes...)
+	merged := maps.Clone(envBuilder.registeredTypes)
+	if merged == nil {
+		// Support the zero value of Builder: cloning a nil map leaves nil.
+		merged = make(map[string]*decl.Type, len(declTypes))
+	}
+	for _, declType := range declTypes {
+		for name, t := range provider.FieldTypeMap(declType.TypeName(), declType.Type) {
+			merged[name] = t
+		}
+	}
+	envBuilder.registeredTypes = merged
 	return envBuilder
 }
 
@@ -43,15 +63,15 @@ func (envBuilder *Builder) RegisterEnvOption(envOptions ...cel.EnvOption) *Build
 func (envBuilder *Builder) CurrentEnv() (*cel.Env, *provider.DeclTypeProvider, error) {
 	baseEnv, err := cel.NewEnv(
 		cel.OptionalTypes(),
+		ext.Encoders(),
+		URL(),
+		ContentDigestAlgorithm(),
+		Hex(),
 	)
 	if err != nil {
 		return nil, nil, err
 	}
-	declTypes := make([]*decl.Type, len(envBuilder.declTypes))
-	for i, t := range envBuilder.declTypes {
-		declTypes[i] = t.Type
-	}
-	provider := provider.New(declTypes...)
+	provider := envBuilder.Provider()
 	opts, err := provider.EnvOptions(baseEnv.CELTypeProvider())
 	if err != nil {
 		return nil, nil, err
@@ -61,4 +81,11 @@ func (envBuilder *Builder) CurrentEnv() (*cel.Env, *provider.DeclTypeProvider, e
 		return nil, nil, err
 	}
 	return newEnv, provider, nil
+}
+
+// Provider returns a DeclTypeProvider over all declaration types registered so
+// far. The provider holds its own snapshot of the type map: registrations made
+// after this call are not visible to it.
+func (envBuilder *Builder) Provider() *provider.DeclTypeProvider {
+	return provider.NewFromTypeMap(envBuilder.registeredTypes)
 }

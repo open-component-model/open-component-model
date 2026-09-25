@@ -1,0 +1,4 @@
+# Built at e2e test time by utils.PrepareOCMComponent (via `oras push --oci-layout`)
+# from ./kustomize/. Referenced by component-constructor.yaml as a dir/v1 input.
+oci-layout/
+kustomize.tar.gz

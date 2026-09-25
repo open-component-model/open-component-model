@@ -61,60 +61,46 @@ function mockCore() {
 
 // Returns fallback when file does not exist
 {
-  const result = prepareReleaseNotes("/nonexistent/path.md", "rc-tag", "final-tag");
+  const result = prepareReleaseNotes("/nonexistent/path.md", "rc-tag");
   assert.strictEqual(result, "Promoted from rc-tag");
 }
 
 // Returns fallback when file is empty
 {
   const dir = tmpDir({ "empty.md": "" });
-  const result = prepareReleaseNotes(path.join(dir, "empty.md"), "rc-tag", "final-tag");
+  const result = prepareReleaseNotes(path.join(dir, "empty.md"), "rc-tag");
   assert.strictEqual(result, "Promoted from rc-tag");
 }
 
-// Rewrites git-cliff header line for canonical v* tags (cliff strips leading "v")
+// Prepends the promotion provenance and keeps the rendered changelog verbatim
 {
-  const dir = tmpDir({ "notes.md": "## [0.1.0-rc.1] - 2025-01-01\n\n- Some change" });
-  const result = prepareReleaseNotes(
-    path.join(dir, "notes.md"),
-    "v0.1.0-rc.1",
-    "v0.1.0",
-  );
+  const body = "## [0.1.0] - 2025-01-01\n\n- Some change\n\ncurl -sfL https://ocm.software/install-cli.sh | OCM_VERSION=0.1.0 bash";
+  const dir = tmpDir({ "notes.md": body });
   const today = new Date().toISOString().split("T")[0];
-  assert.ok(
-    result.startsWith(`## [0.1.0] - promoted from [0.1.0-rc.1] on ${today}`),
-    `Expected header rewrite, got: ${result.split("\n")[0]}`,
+  const result = prepareReleaseNotes(path.join(dir, "notes.md"), "v0.1.0-rc.1");
+  assert.strictEqual(
+    result,
+    `> Promoted from \`v0.1.0-rc.1\` on ${today}\n\n${body}`,
+    "Expected provenance line followed by the git-cliff output as-is",
   );
-  assert.ok(result.includes("- Some change"), "Body should be preserved");
-}
-
-// Prepends header when notes don't match the RC header pattern
-{
-  const dir = tmpDir({ "notes.md": "Just some plain notes\n\n- Fix bug" });
-  const today = new Date().toISOString().split("T")[0];
-  const result = prepareReleaseNotes(path.join(dir, "notes.md"), "rc-tag", "final-tag");
-  assert.ok(
-    result.startsWith(`## [final-tag] - promoted from [rc-tag] on ${today}`),
-    `Expected prepended header, got: ${result.split("\n")[0]}`,
-  );
-  assert.ok(result.includes("- Fix bug"), "Original body should be preserved");
 }
 
 // Truncates body when it exceeds GitHub's 125000-char release body limit
 {
-  const oversize = "## [0.7.0-rc.1] - 2026-05-08\n\n" + "x".repeat(130000);
+  const oversize = "## [0.7.0] - 2026-05-08\n\n" + "x".repeat(130000);
   const dir = tmpDir({ "huge.md": oversize });
-  const result = prepareReleaseNotes(path.join(dir, "huge.md"), "v0.7.0-rc.1", "v0.7.0");
+  const result = prepareReleaseNotes(path.join(dir, "huge.md"), "v0.7.0-rc.1");
   assert.strictEqual(result.length, 120000, `Expected exact MAX_RELEASE_BODY_LENGTH (120000), got: ${result.length}`)
   assert.ok(result.endsWith("complete history.*"), "Expected truncation notice as suffix");
-  assert.ok(result.startsWith("## [0.7.0]"), "Expected rewritten header to remain intact");
+  assert.ok(result.includes("## [0.7.0] - 2026-05-08"), "Expected header to remain intact");
+  assert.ok(result.startsWith("> Promoted from `v0.7.0-rc.1`"), "Expected provenance line to survive truncation");
 }
 
 // Does not truncate body when within limit
 {
-  const fits = "## [0.7.0-rc.1] - 2026-05-08\n\nSmall body";
+  const fits = "## [0.7.0] - 2026-05-08\n\nSmall body";
   const dir = tmpDir({ "small.md": fits });
-  const result = prepareReleaseNotes(path.join(dir, "small.md"), "v0.7.0-rc.1", "v0.7.0");
+  const result = prepareReleaseNotes(path.join(dir, "small.md"), "v0.7.0-rc.1");
   assert.ok(!result.includes("Release notes truncated"), "Expected no truncation notice for small body");
 }
 

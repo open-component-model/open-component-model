@@ -1,6 +1,6 @@
 ---
 title: "Deploy Manifests with Deployer"
-description: "Deploy raw Kubernetes manifests from an OCM component version using the Deployer controller."
+description: "Apply raw Kubernetes manifests to the cluster with the OCM Deployer alone — no kro, no Helm chart, no GitOps tool."
 icon: "🚀"
 weight: 35
 toc: true
@@ -268,6 +268,10 @@ For details on how the Deployer uses ApplySets, see [OCM Controllers]({{< relref
 ### Substitute and apply
 
 Replace the `$OCM_REPO` placeholder with your actual repository URL and apply:
+
+{{< callout context="caution" title="RBAC required before you apply" icon="outline/alert-triangle" >}}
+Please make sure that you updated your RBAC permissions before applying this command. Follow our [Configure Custom RBAC for Deployers]({{< relref "custom-rbac.md" >}}) guide to know how to do that.
+{{< /callout >}}
 
 ```shell
 envsubst < bootstrap.yaml > deployment-subst.yaml

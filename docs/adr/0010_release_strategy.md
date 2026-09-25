@@ -190,7 +190,7 @@ All three carry the same bare semver as the GitHub release, and are published on
 
 **Conflict policy:** both phases use `--component-version-conflict-policy replace`, so reruns after a transient failure are idempotent. The `concurrency` group and `create-tag.js` tag-existence checks prevent diverging runs for the same version, so `replace` cannot overwrite a different commit's artifact.
 
-**Resource form:** OCI artefacts (images, chart) are pinned by digest via `access.ociArtifact`. CLI binaries use `wget` access (`relation: external`) pointing at the release download URLs.
+**Resource form:** OCI artifacts (images, chart) are pinned by digest via `access.ociArtifact`. CLI binaries use `wget` access (`relation: external`) pointing at the release download URLs.
 
 See also [RELEASE_PROCESS.md § OCM components produced](../../RELEASE_PROCESS.md#ocm-components-produced).
 

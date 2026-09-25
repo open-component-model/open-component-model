@@ -108,7 +108,7 @@ When a signing or verification operation requires credentials:
 
 ### TLS Configuration in the Kubernetes Controller
 
-The Kubernetes controller (`kubernetes/controller/cmd/main.go`) disables HTTP/2 by default for both metrics and webhook servers to mitigate the HTTP/2 Stream Cancellation and Rapid Reset vulnerabilities:
+The Kubernetes controller (`bindings/go/kubernetes/controller/cmd/main.go`) disables HTTP/2 by default for both metrics and webhook servers to mitigate the HTTP/2 Stream Cancellation and Rapid Reset vulnerabilities:
 
 - [GHSA-qppj-fm5r-hxr3](https://github.com/advisories/GHSA-qppj-fm5r-hxr3)
 - [GHSA-4374-p667-p6c8](https://github.com/advisories/GHSA-4374-p667-p6c8)
@@ -131,7 +131,7 @@ No hardcoded `InsecureSkipVerify: true` exists in the codebase (verify with `rg 
 
 ### Allowlist-Based Enum Flags
 
-The CLI uses an allowlist pattern for enum-type flags (`cli/internal/flags/enum/flag.go`). The `Flag` type:
+The CLI uses an allowlist pattern for enum-type flags (`bindings/go/cli/internal/flags/enum/flag.go`). The `Flag` type:
 
 - Accepts a fixed set of valid options at construction time.
 - Rejects any value not in the allowlist via `Set()`, returning an error with the valid options.
@@ -153,14 +153,14 @@ The RSA verification handler rejects unknown media types, returning an error for
 
 ### Static Compilation
 
-CLI builds (`cli/Taskfile.yml`) use:
+CLI builds (`bindings/go/cli/Taskfile.yml`) use:
 
 - `CGO_ENABLED=0`: Produces statically linked binaries with no C library dependencies, reducing the attack surface from native code vulnerabilities.
 - `-ldflags "-s -w"`: Strips symbol tables and debug information from release binaries.
 
 ### Container Hardening
 
-The Kubernetes controller Dockerfile (`kubernetes/controller/Dockerfile`):
+The Kubernetes controller Dockerfile (`bindings/go/kubernetes/controller/Dockerfile`):
 
 - Uses `gcr.io/distroless/static:nonroot` as the runtime base image, which contains no shell, package manager, or unnecessary system utilities.
 - Runs as user `65532:65532` (the distroless `nonroot` user), not as root.

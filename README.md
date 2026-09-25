@@ -49,13 +49,13 @@ Additionally, OCM provides a generic solution for how to:
 - Verify signatures based on public keys or verified certificates.
 - Transport component versions, per reference or as values to any of the repository implementations.
 
-### [OCM CLI](cli)
+### [OCM CLI](bindings/go/cli)
 
 > **Work In Progress**: This OCM CLI is a completely new take on interacting and working with OCM. As such, expect
 > heavy changes, especially in the commands available. We are working on a stable API and will release it as soon as
 > possible. Until then, please use the CLI at your own risk.
 
-The [`ocm` CLI](cli/docs/reference/ocm.md) makes it easy to create, sign, verify, and transfer component versions as
+The [`ocm` CLI](bindings/go/cli/docs/reference/ocm.md) makes it easy to create, sign, verify, and transfer component versions as
 well as embed them in build processes. To install the CLI, run:
 
 ```bash
@@ -73,10 +73,10 @@ docker run -t ghcr.io/open-component-model/cli:latest --help
 See the [guide](https://ocm.software/docs/how-to/how-to-use-the-ocm-cli-container-image/) on using the OCM CLI
 container image for more details.
 
-### [OCM Kubernetes Controller Toolkit](kubernetes/controller)
+### [OCM Kubernetes Controller Toolkit](bindings/go/kubernetes/controller)
 
 The OCM Kubernetes Controller Toolkit provides a Kubernetes operator to deploy OCM resources into a Kubernetes
-cluster. You can install the operator using the provided [Helm chart](kubernetes/controller/chart):
+cluster. You can install the operator using the provided [Helm chart](bindings/go/kubernetes/controller/chart):
 
 ```bash
 helm install ocm-k8s-toolkit oci://ghcr.io/open-component-model/kubernetes/controller/chart \

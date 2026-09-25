@@ -2,6 +2,7 @@ package spec
 
 import (
 	"fmt"
+	"slices"
 
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -54,9 +55,9 @@ type Config struct {
 	// UploadType determines how resources are stored in the target repository during transfer.
 	//
 	// This option is only relevant when resources are being copied (i.e., when [CopyModeAllResources]
-	// is set or for local blob resources in the default mode). It controls whether resources are
-	// embedded as local blobs within the component descriptor or uploaded as separate OCI artifacts
-	// with their own repository references.
+	// is set or for local blob resources with [CopyModeLocalBlobResources]). It controls whether
+	// resources are embedded as local blobs within the component descriptor or uploaded as separate
+	// OCI artifacts with their own repository references.
 	UploadType UploadType `json:"uploadType,omitempty"`
 }
 
@@ -64,7 +65,7 @@ type Config struct {
 // An empty Type is allowed so callers constructing a Config programmatically
 // (without going through [Scheme.Decode]) do not need to set it explicitly.
 // Empty enum fields are allowed; consumers resolve them to their defaults
-// ([CopyModeLocalBlobResources], [UploadAsDefault]) at the point of use.
+// ([CopyModeLocalBlobResources], [UploadAsLocalBlob]) at the point of use.
 func (cfg *Config) Validate() error {
 	if cfg == nil {
 		return nil
@@ -84,17 +85,12 @@ func (cfg *Config) Validate() error {
 		return fmt.Errorf("recursive depth %d is not implemented yet (use -1 for infinite recursion or 0 for none)", cfg.Recursive)
 	}
 
-	switch cfg.CopyMode {
-	case "", CopyModeLocalBlobResources, CopyModeAllResources:
-	default:
+	if cfg.UploadType != "" && !slices.Contains(AllUploadTypes, cfg.UploadType) {
+		return fmt.Errorf("invalid uploadType %q (must be one of %q)", cfg.UploadType, AllUploadTypes)
+	}
+	if cfg.CopyMode != "" && !slices.Contains([]CopyMode{CopyModeLocalBlobResources, CopyModeAllResources}, cfg.CopyMode) {
 		return fmt.Errorf("invalid copyMode %q (must be one of %q, %q)",
 			cfg.CopyMode, CopyModeLocalBlobResources, CopyModeAllResources)
-	}
-	switch cfg.UploadType {
-	case "", UploadAsDefault, UploadAsLocalBlob, UploadAsOciArtifact:
-	default:
-		return fmt.Errorf("invalid uploadType %q (must be one of %q, %q, %q)",
-			cfg.UploadType, UploadAsDefault, UploadAsLocalBlob, UploadAsOciArtifact)
 	}
 	return nil
 }

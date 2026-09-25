@@ -39,12 +39,26 @@ func Compress(b blob.ReadOnlyBlob) *Blob {
 type Blob struct {
 	blob.ReadOnlyBlob
 	CompressionMethod Method
+	mediaType         string
+}
+
+var _ blob.MediaTypeOverrideable = (*Blob)(nil)
+
+// SetMediaType overrides the computed media type of the compressed blob.
+// Use it when the media type of the compressed content is known in advance,
+// e.g. declared by a user, and must not be derived from the base blob.
+func (b *Blob) SetMediaType(mediaType string) {
+	b.mediaType = mediaType
 }
 
 // MediaType returns the media type of the compressed blob.
-// It appends the appropriate compression suffix to the base blob's media type.
+// If a media type was set with SetMediaType, it is returned as-is. Otherwise
+// the appropriate compression suffix is appended to the base blob's media type.
 // Returns the media type and true if the media type is known.
 func (b *Blob) MediaType() (mediaType string, known bool) {
+	if b.mediaType != "" {
+		return b.mediaType, true
+	}
 	return mediaTypeForBlob(b.ReadOnlyBlob, b.CompressionMethod), true
 }
 
@@ -123,6 +137,8 @@ func Decompress(b blob.ReadOnlyBlob) (blob.ReadOnlyBlob, error) {
 	var mediaType string
 	if mediaTypeAware, ok := b.(blob.MediaTypeAware); ok {
 		if mediaType, ok = mediaTypeAware.MediaType(); ok {
+			// TODO(matthiasbruns): application/x-tgz (Git and GitHub archives) stays compressed, as
+			// extracting it fails on symlinks: https://github.com/open-component-model/ocm-project/issues/1343
 			if isGzip := mediaType == MediaTypeGzip || strings.HasSuffix(mediaType, MediaTypeGzipSuffix); isGzip {
 				method = MethodGzip
 				if mediaType == MediaTypeGzip {

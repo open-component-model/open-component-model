@@ -9,6 +9,10 @@ on:
         type: choice
         default: enabled
         options: [ enabled, disabled, reset ]
+      ignoreSchedule:
+        description: 'Ignore renovate.json5 schedule'
+        type: boolean
+        default: false
   push:
     branches:
       - main
@@ -36,7 +40,7 @@ jobs:
       deployment: false
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           sparse-checkout:
             ${{ env.RENOVATE_CONFIG_FILE }}
@@ -45,7 +49,7 @@ jobs:
       # Restore previous cache artifact if enabled
       - name: Restore renovate cache artifact
         if: ${{ github.event_name != 'workflow_dispatch' || inputs.repoCache != 'disabled' }}
-        uses: dawidd6/action-download-artifact@b6e2e70617bc3265edd6dab6c906732b2f1ae151 # v21
+        uses: dawidd6/action-download-artifact@7f871e041ed7fe12467d2d4196da8a466c5311ff # v22
         continue-on-error: true
         with:
           name: ${{ env.cache_key }}
@@ -91,7 +95,7 @@ jobs:
         run: echo "RENOVATE_DRY_RUN=extract" >> $GITHUB_ENV
 
       - name: Run
-        uses: renovatebot/github-action@b50d2ba2bd928235abdcc14d06dfafc217f1c565 # v46.1.18
+        uses: renovatebot/github-action@5402b206248e5a8c8427a15102702eb9c1793efc # v46.2.4
         with:
           env-regex: |
             ^(?:RENOVATE_\w+|LOG_LEVEL|GITHUB_COM_TOKEN|NODE_OPTIONS|(?:HTTPS?|NO)_PROXY|(?:https?|no)_proxy)$
@@ -105,6 +109,7 @@ jobs:
           RENOVATE_REPOSITORY_CACHE: ${{ github.event_name == 'workflow_dispatch' && inputs.repoCache || 'enabled' }}
           RENOVATE_ALLOWED_COMMANDS: |
             ^./.github/scripts/renovate-post-upgrade.sh$
+          RENOVATE_FORCE: ${{ (github.event_name == 'workflow_dispatch' && inputs.ignoreSchedule) && '{"schedule":null}' || '' }}
 
       - name: Compress renovate cache
         if: ${{ env.RENOVATE_DRY_RUN == '' && (github.event_name != 'workflow_dispatch' || inputs.repoCache != 'disabled') }}

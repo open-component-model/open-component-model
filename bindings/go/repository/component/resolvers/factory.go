@@ -14,6 +14,7 @@ import (
 	v1 "ocm.software/open-component-model/bindings/go/repository/component/fallback/v1"
 	pathmatcher "ocm.software/open-component-model/bindings/go/repository/component/pathmatcher/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	"ocm.software/open-component-model/bindings/go/runtime/versioning"
 )
 
 // Options configures the creation of a provider.
@@ -24,9 +25,14 @@ type Options struct {
 	//nolint:staticcheck // compatibility mode for deprecated resolvers
 	FallbackResolvers []*resolverruntime.Resolver
 	// ComponentPatterns specifies high-priority patterns for the base repository.
-	// These patterns are prepended to the resolver list, giving them highest priority.
+	// These patterns are placed at the head of the resolver list, so they win over the
+	// configured path matchers because the first match wins.
 	// Used by CLI to route specific component references to the provided repository.
+	// They have no effect if no base repository is provided.
 	ComponentPatterns []string
+	// VersioningRegistry defines the versioning schemes used to evaluate resolver
+	// version constraints. When nil, the loose-semver default is used.
+	VersioningRegistry *versioning.Registry
 }
 
 // New creates a ComponentVersionRepositoryForComponentProvider based on the provided options.
@@ -92,7 +98,8 @@ func newPathMatcherProviderWithBaseRepo(ctx context.Context, opts Options, baseR
 			return nil, fmt.Errorf("converting repository spec to raw failed: %w", err)
 		}
 
-		// Component patterns get highest priority - prepend them
+		// Component patterns are added first so that they take precedence over the
+		// config resolvers and the catch-all below, because the first match wins.
 		for _, pattern := range opts.ComponentPatterns {
 			finalResolvers = append(finalResolvers, &resolverspec.Resolver{
 				Repository:           &raw,
@@ -116,7 +123,11 @@ func newPathMatcherProviderWithBaseRepo(ctx context.Context, opts Options, baseR
 		return nil, nil
 	}
 
-	specProvider, err := pathmatcher.NewSpecProvider(ctx, finalResolvers)
+	var spOpts []pathmatcher.SpecProviderOption
+	if opts.VersioningRegistry != nil {
+		spOpts = append(spOpts, pathmatcher.WithVersioningRegistry(opts.VersioningRegistry))
+	}
+	specProvider, err := pathmatcher.NewSpecProvider(ctx, finalResolvers, spOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create spec provider: %w", err)
 	}

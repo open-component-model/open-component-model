@@ -412,6 +412,27 @@ func TestNormalise(t *testing.T) {
 			excludes: v4alpha1.LabelExcludes,
 			expected: `[{"name":"test","signing":true,"value":"value"}]`,
 		},
+		{
+			// Regression test for #3431: label values may be arbitrary JSON,
+			// including arrays (e.g. cloud.gardener.cnudie/responsibles). The
+			// normalisation used during signing must preserve such values.
+			name: "signed label with array value",
+			input: []interface{}{
+				map[string]interface{}{
+					"name": "cloud.gardener.cnudie/responsibles",
+					"value": []interface{}{
+						map[string]interface{}{
+							"github_hostname": "github.com",
+							"teamname":        "open-component-model/odg-maintainers",
+							"type":            "githubTeam",
+						},
+					},
+					"signing": true,
+				},
+			},
+			excludes: v4alpha1.LabelExcludes,
+			expected: `[{"name":"cloud.gardener.cnudie/responsibles","signing":true,"value":[{"github_hostname":"github.com","teamname":"open-component-model/odg-maintainers","type":"githubTeam"}]}]`,
+		},
 	}
 
 	for _, tt := range tests {

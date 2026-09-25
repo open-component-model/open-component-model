@@ -34,13 +34,13 @@ type Config struct {
 
 	// TempFolder defines places where plugins and other functionalities can put ephemeral files under.
 	// If not defined, os.TempDir is used as a default.
-	TempFolder string `json:"tempFolder,omitempty"`
+	TempFolder *string `json:"tempFolder,omitempty"`
 
 	// WorkingDirectory defines the working directory for the filesystem operations.
 	// This is typically the directory where the plugin operates, and it can be used
 	// to resolve relative paths for file operations.
 	// If not defined, the current working directory is used as a default for file operations.
-	WorkingDirectory string `json:"workingDirectory,omitempty"`
+	WorkingDirectory *string `json:"workingDirectory,omitempty"`
 }
 
 type Duration time.Duration
@@ -84,8 +84,9 @@ func LookupConfig(cfg *genericv1.Config) (*Config, error) {
 		merged = new(Config)
 	}
 
-	if len(merged.TempFolder) == 0 {
-		merged.TempFolder = os.TempDir()
+	if merged.TempFolder == nil {
+		tempFolder := os.TempDir()
+		merged.TempFolder = &tempFolder
 	}
 
 	return merged, nil
@@ -101,11 +102,13 @@ func Merge(configs ...*Config) *Config {
 	_, _ = Scheme.DefaultType(merged)
 
 	for _, config := range configs {
-		if config.TempFolder != merged.TempFolder {
-			merged.TempFolder = config.TempFolder
+		if config.TempFolder != nil {
+			tempFolder := *config.TempFolder
+			merged.TempFolder = &tempFolder
 		}
-		if config.WorkingDirectory != merged.WorkingDirectory {
-			merged.WorkingDirectory = config.WorkingDirectory
+		if config.WorkingDirectory != nil {
+			workingDirectory := *config.WorkingDirectory
+			merged.WorkingDirectory = &workingDirectory
 		}
 	}
 

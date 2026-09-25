@@ -3,6 +3,18 @@
 #
 # Static mounts (data, layouts, i18n, archetypes, assets, static) are fixed.
 # Per-version imports are auto-generated at the end.
+#
+# Unversioned top-level content mounts (blog, community, governance) list
+# every registered version explicitly. The register-docs-version script
+# keeps the lists in sync (syncUnversionedMountVersions), adding new
+# versions on release and removing retired ones. Reason for enumerating
+# rather than mounting once: ref/relref links from frozen module-cache
+# snapshots (immutable git tags) must keep resolving inside their own
+# version site, e.g. a v0.14 docs page containing
+# {{< relref "community/_index.md" >}} would fail the build if community
+# were only mounted under the default version. Once every version with
+# such refs in its snapshot has been retired, the enumeration becomes
+# redundant and this can collapse to a single unfiltered mount.
 
 mounts:
   - source: node_modules/@thulite/doks-core/data
@@ -58,9 +70,56 @@ mounts:
       - quicksand-latin-ext-wght-normal.woff2
   - source: content/blog
     target: content/blog
+    sites:
+      matrix:
+        versions:
+          - main
+          - '0.17'
+          - '0.16'
+          - '0.15'
+          - '0.14'
+          - '0.13'
+          - '0.12'
+          - '0.11'
+          - '0.10'
+          - '0.9'
+          - legacy
+  - source: content/community
+    target: content/community
+    sites:
+      matrix:
+        versions:
+          - main
+          - '0.17'
+          - '0.16'
+          - '0.15'
+          - '0.14'
+          - '0.13'
+          - '0.12'
+          - '0.11'
+          - '0.10'
+          - '0.9'
+          - legacy
+  - source: content/governance
+    target: content/governance
+    sites:
+      matrix:
+        versions:
+          - main
+          - '0.17'
+          - '0.16'
+          - '0.15'
+          - '0.14'
+          - '0.13'
+          - '0.12'
+          - '0.11'
+          - '0.10'
+          - '0.9'
+          - legacy
   - files:
-      - '**'
-      - '!blog/**'
+      - '! blog/**'
+      - '! community/**'
+      - '! governance/**'
     source: content_versioned/version-legacy
     target: content
     sites:
@@ -68,15 +127,16 @@ mounts:
         versions:
           - legacy
   - files:
-      - '**'
-      - '!blog/**'
+      - '! blog/**'
+      - '! community/**'
+      - '! governance/**'
     source: content
     target: content
     sites:
       matrix:
         versions:
           - main
-  - source: ../cli/docs/reference
+  - source: ../bindings/go/cli/docs/reference
     target: content/docs/reference/ocm-cli
     sites:
       matrix:
@@ -112,6 +172,12 @@ mounts:
       matrix:
         versions:
           - main
+  - source: ../bindings/go/github/spec/credentials/v1/schemas
+    target: static/main/schemas/bindings/go/credentials/github/v1
+    sites:
+      matrix:
+        versions:
+          - main
   - source: ../bindings/go/rsa/spec/credentials/v1/schemas
     target: static/main/schemas/bindings/go/credentials/rsa/v1
     sites:
@@ -142,7 +208,37 @@ mounts:
       matrix:
         versions:
           - main
-  - source: ../kubernetes/controller/config/crd/bases
+  - source: ../bindings/go/wget/spec/credentials/v1/schemas
+    target: static/main/schemas/bindings/go/credentials/wget/v1
+    sites:
+      matrix:
+        versions:
+          - main
+  - source: ../bindings/go/transfer/v1alpha1/spec/schemas
+    target: static/main/schemas/bindings/go/transfer
+    sites:
+      matrix:
+        versions:
+          - main
+  - source: ../bindings/go/wget/transformation/spec/v1alpha1/schemas
+    target: static/main/schemas/bindings/go/wget/transformation
+    sites:
+      matrix:
+        versions:
+          - main
+  - source: ../bindings/go/configuration/checksum/http/v1alpha1/spec/schemas
+    target: static/main/schemas/bindings/go/configuration/checksum/http/v1alpha1
+    sites:
+      matrix:
+        versions:
+          - main
+  - source: ../bindings/go/s3/spec/credentials/v1/schemas
+    target: static/main/schemas/bindings/go/credentials/s3/v1
+    sites:
+      matrix:
+        versions:
+          - main
+  - source: ../bindings/go/kubernetes/controller/config/crd/bases
     target: static/main/schemas/kubernetes/controller
     sites:
       matrix:
@@ -155,8 +251,9 @@ imports:
     ignoreConfig: true
     mounts:
       - files:
-          - '**'
-          - '!blog/**'
+          - '! blog/**'
+          - '! community/**'
+          - '! governance/**'
         source: content/
         target: content
         sites:
@@ -265,8 +362,9 @@ imports:
     ignoreConfig: true
     mounts:
       - files:
-          - '**'
-          - '!blog/**'
+          - '! blog/**'
+          - '! community/**'
+          - '! governance/**'
         source: content/
         target: content
         sites:
@@ -384,8 +482,9 @@ imports:
     ignoreConfig: true
     mounts:
       - files:
-          - '**'
-          - '!blog/**'
+          - '! blog/**'
+          - '! community/**'
+          - '! governance/**'
         source: content/
         target: content
         sites:
@@ -503,8 +602,9 @@ imports:
     ignoreConfig: true
     mounts:
       - files:
-          - '**'
-          - '!blog/**'
+          - '! blog/**'
+          - '! community/**'
+          - '! governance/**'
         source: content/
         target: content
         sites:
@@ -616,3 +716,600 @@ imports:
           matrix:
             versions:
               - '0.12'
+  - path: ocm.software/open-component-model/website
+    version: v0.13.0
+    ignoreImports: true
+    ignoreConfig: true
+    mounts:
+      - files:
+          - '! blog/**'
+          - '! community/**'
+          - '! governance/**'
+        source: content/
+        target: content
+        sites:
+          matrix:
+            versions:
+              - '0.13'
+  - path: ocm.software/open-component-model/cli
+    version: v0.13.0
+    mounts:
+      - source: docs/reference
+        target: content/docs/reference/ocm-cli
+        sites:
+          matrix:
+            versions:
+              - '0.13'
+  - path: ocm.software/open-component-model/bindings/go/constructor
+    version: v0.0.11
+    mounts:
+      - source: spec/v1/resources
+        target: static/0.13/schemas/bindings/go/constructor
+        sites:
+          matrix:
+            versions:
+              - '0.13'
+  - path: ocm.software/open-component-model/bindings/go/descriptor/v2
+    version: v2.0.3-alpha3
+    mounts:
+      - source: resources
+        target: static/0.13/schemas/bindings/go/descriptor/v2
+        sites:
+          matrix:
+            versions:
+              - '0.13'
+  - path: ocm.software/open-component-model/bindings/go/http
+    version: v0.0.0-20260728010257-ba2ab4bca27b
+    mounts:
+      - source: spec/config/v1alpha1/schemas
+        target: static/0.13/schemas/bindings/go/http
+        sites:
+          matrix:
+            versions:
+              - '0.13'
+  - path: ocm.software/open-component-model/bindings/go/oci
+    version: v0.0.48
+    mounts:
+      - source: spec/credentials/v1/schemas
+        target: static/0.13/schemas/bindings/go/credentials/oci/v1
+        sites:
+          matrix:
+            versions:
+              - '0.13'
+  - path: ocm.software/open-component-model/bindings/go/helm
+    version: v0.0.0-20260728010257-ba2ab4bca27b
+    mounts:
+      - source: spec/credentials/v1/schemas
+        target: static/0.13/schemas/bindings/go/credentials/helm/v1
+        sites:
+          matrix:
+            versions:
+              - '0.13'
+  - path: ocm.software/open-component-model/bindings/go/rsa
+    version: v0.0.0-20260728010257-ba2ab4bca27b
+    mounts:
+      - source: spec/credentials/v1/schemas
+        target: static/0.13/schemas/bindings/go/credentials/rsa/v1
+        sites:
+          matrix:
+            versions:
+              - '0.13'
+  - path: ocm.software/open-component-model/bindings/go/gpg
+    version: v0.0.0-20260728064351-657389b11d79
+    mounts:
+      - source: spec/credentials/v1alpha1/schemas
+        target: static/0.13/schemas/bindings/go/credentials/gpg/v1alpha1
+        sites:
+          matrix:
+            versions:
+              - '0.13'
+  - path: ocm.software/open-component-model/bindings/go/sigstore
+    version: v0.0.0-20260728010257-ba2ab4bca27b
+    mounts:
+      - source: spec/credentials/oidcidentitytoken/v1alpha1/schemas
+        target: static/0.13/schemas/bindings/go/credentials/sigstore/oidcidentitytoken/v1alpha1
+        sites:
+          matrix:
+            versions:
+              - '0.13'
+      - source: spec/credentials/trustedroot/v1alpha1/schemas
+        target: static/0.13/schemas/bindings/go/credentials/sigstore/trustedroot/v1alpha1
+        sites:
+          matrix:
+            versions:
+              - '0.13'
+  - path: ocm.software/open-component-model/bindings/go/credentials
+    version: v0.0.14
+    mounts:
+      - source: spec/config/v1/schemas
+        target: static/0.13/schemas/bindings/go/credentials/direct/v1
+        sites:
+          matrix:
+            versions:
+              - '0.13'
+  - path: ocm.software/open-component-model/bindings/go/wget
+    version: v0.0.0-20260728064351-657389b11d79
+    mounts:
+      - source: spec/credentials/v1/schemas
+        target: static/0.13/schemas/bindings/go/credentials/wget/v1
+        sites:
+          matrix:
+            versions:
+              - '0.13'
+  - path: ocm.software/open-component-model/kubernetes/controller
+    version: v0.13.0
+    mounts:
+      - source: config/crd/bases
+        target: static/0.13/schemas/kubernetes/controller
+        sites:
+          matrix:
+            versions:
+              - '0.13'
+  - path: ocm.software/open-component-model/website
+    version: v0.14.0
+    ignoreImports: true
+    ignoreConfig: true
+    mounts:
+      - files:
+          - '! blog/**'
+          - '! community/**'
+          - '! governance/**'
+        source: content/
+        target: content
+        sites:
+          matrix:
+            versions:
+              - '0.14'
+  - path: ocm.software/open-component-model/cli
+    version: v0.14.0
+    mounts:
+      - source: docs/reference
+        target: content/docs/reference/ocm-cli
+        sites:
+          matrix:
+            versions:
+              - '0.14'
+  - path: ocm.software/open-component-model/bindings/go/constructor
+    version: v0.0.13
+    mounts:
+      - source: spec/v1/resources
+        target: static/0.14/schemas/bindings/go/constructor
+        sites:
+          matrix:
+            versions:
+              - '0.14'
+  - path: ocm.software/open-component-model/bindings/go/descriptor/v2
+    version: v2.0.3-alpha3
+    mounts:
+      - source: resources
+        target: static/0.14/schemas/bindings/go/descriptor/v2
+        sites:
+          matrix:
+            versions:
+              - '0.14'
+  - path: ocm.software/open-component-model/bindings/go/github
+    version: v0.0.0-20260811140339-29bc20eb921b
+    mounts:
+      - source: spec/credentials/v1/schemas
+        target: static/0.14/schemas/bindings/go/credentials/github/v1
+        sites:
+          matrix:
+            versions:
+              - '0.14'
+  - path: ocm.software/open-component-model/bindings/go/http
+    version: v0.0.0-20260811140339-29bc20eb921b
+    mounts:
+      - source: spec/config/v1alpha1/schemas
+        target: static/0.14/schemas/bindings/go/http
+        sites:
+          matrix:
+            versions:
+              - '0.14'
+  - path: ocm.software/open-component-model/bindings/go/oci
+    version: v0.0.49
+    mounts:
+      - source: spec/credentials/v1/schemas
+        target: static/0.14/schemas/bindings/go/credentials/oci/v1
+        sites:
+          matrix:
+            versions:
+              - '0.14'
+  - path: ocm.software/open-component-model/bindings/go/helm
+    version: v0.0.0-20260811140339-29bc20eb921b
+    mounts:
+      - source: spec/credentials/v1/schemas
+        target: static/0.14/schemas/bindings/go/credentials/helm/v1
+        sites:
+          matrix:
+            versions:
+              - '0.14'
+  - path: ocm.software/open-component-model/bindings/go/rsa
+    version: v0.0.0-20260811140339-29bc20eb921b
+    mounts:
+      - source: spec/credentials/v1/schemas
+        target: static/0.14/schemas/bindings/go/credentials/rsa/v1
+        sites:
+          matrix:
+            versions:
+              - '0.14'
+  - path: ocm.software/open-component-model/bindings/go/gpg
+    version: v0.0.0-20260811140339-29bc20eb921b
+    mounts:
+      - source: spec/credentials/v1alpha1/schemas
+        target: static/0.14/schemas/bindings/go/credentials/gpg/v1alpha1
+        sites:
+          matrix:
+            versions:
+              - '0.14'
+  - path: ocm.software/open-component-model/bindings/go/sigstore
+    version: v0.0.0-20260811140339-29bc20eb921b
+    mounts:
+      - source: spec/credentials/oidcidentitytoken/v1alpha1/schemas
+        target: static/0.14/schemas/bindings/go/credentials/sigstore/oidcidentitytoken/v1alpha1
+        sites:
+          matrix:
+            versions:
+              - '0.14'
+      - source: spec/credentials/trustedroot/v1alpha1/schemas
+        target: static/0.14/schemas/bindings/go/credentials/sigstore/trustedroot/v1alpha1
+        sites:
+          matrix:
+            versions:
+              - '0.14'
+  - path: ocm.software/open-component-model/bindings/go/credentials
+    version: v0.0.14
+    mounts:
+      - source: spec/config/v1/schemas
+        target: static/0.14/schemas/bindings/go/credentials/direct/v1
+        sites:
+          matrix:
+            versions:
+              - '0.14'
+  - path: ocm.software/open-component-model/bindings/go/wget
+    version: v0.0.0-20260811140339-29bc20eb921b
+    mounts:
+      - source: spec/credentials/v1/schemas
+        target: static/0.14/schemas/bindings/go/credentials/wget/v1
+        sites:
+          matrix:
+            versions:
+              - '0.14'
+  - path: ocm.software/open-component-model/kubernetes/controller
+    version: v0.14.0
+    mounts:
+      - source: config/crd/bases
+        target: static/0.14/schemas/kubernetes/controller
+        sites:
+          matrix:
+            versions:
+              - '0.14'
+  - path: ocm.software/open-component-model/website
+    version: v0.15.0
+    ignoreImports: true
+    ignoreConfig: true
+    mounts:
+      - files:
+          - '! blog/**'
+          - '! community/**'
+          - '! governance/**'
+        source: content/
+        target: content
+        sites:
+          matrix:
+            versions:
+              - '0.15'
+  - path: ocm.software/open-component-model/cli
+    version: v0.15.0
+    mounts:
+      - source: docs/reference
+        target: content/docs/reference/ocm-cli
+        sites:
+          matrix:
+            versions:
+              - '0.15'
+  - path: ocm.software/open-component-model/bindings/go
+    version: v0.0.8
+    mounts:
+      - source: constructor/spec/v1/resources
+        target: static/0.15/schemas/bindings/go/constructor
+        sites:
+          matrix:
+            versions:
+              - '0.15'
+      - source: descriptor/v2/resources
+        target: static/0.15/schemas/bindings/go/descriptor/v2
+        sites:
+          matrix:
+            versions:
+              - '0.15'
+      - source: github/spec/credentials/v1/schemas
+        target: static/0.15/schemas/bindings/go/credentials/github/v1
+        sites:
+          matrix:
+            versions:
+              - '0.15'
+      - source: http/spec/config/v1alpha1/schemas
+        target: static/0.15/schemas/bindings/go/http
+        sites:
+          matrix:
+            versions:
+              - '0.15'
+      - source: oci/spec/credentials/v1/schemas
+        target: static/0.15/schemas/bindings/go/credentials/oci/v1
+        sites:
+          matrix:
+            versions:
+              - '0.15'
+      - source: helm/spec/credentials/v1/schemas
+        target: static/0.15/schemas/bindings/go/credentials/helm/v1
+        sites:
+          matrix:
+            versions:
+              - '0.15'
+      - source: rsa/spec/credentials/v1/schemas
+        target: static/0.15/schemas/bindings/go/credentials/rsa/v1
+        sites:
+          matrix:
+            versions:
+              - '0.15'
+      - source: gpg/spec/credentials/v1alpha1/schemas
+        target: static/0.15/schemas/bindings/go/credentials/gpg/v1alpha1
+        sites:
+          matrix:
+            versions:
+              - '0.15'
+      - source: sigstore/spec/credentials/oidcidentitytoken/v1alpha1/schemas
+        target: static/0.15/schemas/bindings/go/credentials/sigstore/oidcidentitytoken/v1alpha1
+        sites:
+          matrix:
+            versions:
+              - '0.15'
+      - source: sigstore/spec/credentials/trustedroot/v1alpha1/schemas
+        target: static/0.15/schemas/bindings/go/credentials/sigstore/trustedroot/v1alpha1
+        sites:
+          matrix:
+            versions:
+              - '0.15'
+      - source: credentials/spec/config/v1/schemas
+        target: static/0.15/schemas/bindings/go/credentials/direct/v1
+        sites:
+          matrix:
+            versions:
+              - '0.15'
+      - source: wget/spec/credentials/v1/schemas
+        target: static/0.15/schemas/bindings/go/credentials/wget/v1
+        sites:
+          matrix:
+            versions:
+              - '0.15'
+  - path: ocm.software/open-component-model/kubernetes/controller
+    version: v0.15.0
+    mounts:
+      - source: config/crd/bases
+        target: static/0.15/schemas/kubernetes/controller
+        sites:
+          matrix:
+            versions:
+              - '0.15'
+  - path: ocm.software/open-component-model/website
+    version: v0.16.0
+    ignoreImports: true
+    ignoreConfig: true
+    mounts:
+      - files:
+          - '! blog/**'
+          - '! community/**'
+          - '! governance/**'
+        source: content/
+        target: content
+        sites:
+          matrix:
+            versions:
+              - '0.16'
+  - path: ocm.software/open-component-model/bindings/go
+    version: v0.16.0
+    mounts:
+      - source: constructor/spec/v1/resources
+        target: static/0.16/schemas/bindings/go/constructor
+        sites:
+          matrix:
+            versions:
+              - '0.16'
+      - source: descriptor/v2/resources
+        target: static/0.16/schemas/bindings/go/descriptor/v2
+        sites:
+          matrix:
+            versions:
+              - '0.16'
+      - source: github/spec/credentials/v1/schemas
+        target: static/0.16/schemas/bindings/go/credentials/github/v1
+        sites:
+          matrix:
+            versions:
+              - '0.16'
+      - source: http/spec/config/v1alpha1/schemas
+        target: static/0.16/schemas/bindings/go/http
+        sites:
+          matrix:
+            versions:
+              - '0.16'
+      - source: oci/spec/credentials/v1/schemas
+        target: static/0.16/schemas/bindings/go/credentials/oci/v1
+        sites:
+          matrix:
+            versions:
+              - '0.16'
+      - source: helm/spec/credentials/v1/schemas
+        target: static/0.16/schemas/bindings/go/credentials/helm/v1
+        sites:
+          matrix:
+            versions:
+              - '0.16'
+      - source: rsa/spec/credentials/v1/schemas
+        target: static/0.16/schemas/bindings/go/credentials/rsa/v1
+        sites:
+          matrix:
+            versions:
+              - '0.16'
+      - source: gpg/spec/credentials/v1alpha1/schemas
+        target: static/0.16/schemas/bindings/go/credentials/gpg/v1alpha1
+        sites:
+          matrix:
+            versions:
+              - '0.16'
+      - source: sigstore/spec/credentials/oidcidentitytoken/v1alpha1/schemas
+        target: static/0.16/schemas/bindings/go/credentials/sigstore/oidcidentitytoken/v1alpha1
+        sites:
+          matrix:
+            versions:
+              - '0.16'
+      - source: sigstore/spec/credentials/trustedroot/v1alpha1/schemas
+        target: static/0.16/schemas/bindings/go/credentials/sigstore/trustedroot/v1alpha1
+        sites:
+          matrix:
+            versions:
+              - '0.16'
+      - source: credentials/spec/config/v1/schemas
+        target: static/0.16/schemas/bindings/go/credentials/direct/v1
+        sites:
+          matrix:
+            versions:
+              - '0.16'
+      - source: wget/spec/credentials/v1/schemas
+        target: static/0.16/schemas/bindings/go/credentials/wget/v1
+        sites:
+          matrix:
+            versions:
+              - '0.16'
+      - source: cli/docs/reference
+        target: content/docs/reference/ocm-cli
+        sites:
+          matrix:
+            versions:
+              - '0.16'
+      - source: kubernetes/controller/config/crd/bases
+        target: static/0.16/schemas/kubernetes/controller
+        sites:
+          matrix:
+            versions:
+              - '0.16'
+  - path: ocm.software/open-component-model/website
+    version: v0.17.0
+    ignoreImports: true
+    ignoreConfig: true
+    mounts:
+      - files:
+          - '! blog/**'
+          - '! community/**'
+          - '! governance/**'
+        source: content/
+        target: content
+        sites:
+          matrix:
+            versions:
+              - '0.17'
+  - path: ocm.software/open-component-model/bindings/go
+    version: v0.17.0
+    mounts:
+      - source: constructor/spec/v1/resources
+        target: static/0.17/schemas/bindings/go/constructor
+        sites:
+          matrix:
+            versions:
+              - '0.17'
+      - source: descriptor/v2/resources
+        target: static/0.17/schemas/bindings/go/descriptor/v2
+        sites:
+          matrix:
+            versions:
+              - '0.17'
+      - source: github/spec/credentials/v1/schemas
+        target: static/0.17/schemas/bindings/go/credentials/github/v1
+        sites:
+          matrix:
+            versions:
+              - '0.17'
+      - source: http/spec/config/v1alpha1/schemas
+        target: static/0.17/schemas/bindings/go/http
+        sites:
+          matrix:
+            versions:
+              - '0.17'
+      - source: oci/spec/credentials/v1/schemas
+        target: static/0.17/schemas/bindings/go/credentials/oci/v1
+        sites:
+          matrix:
+            versions:
+              - '0.17'
+      - source: helm/spec/credentials/v1/schemas
+        target: static/0.17/schemas/bindings/go/credentials/helm/v1
+        sites:
+          matrix:
+            versions:
+              - '0.17'
+      - source: rsa/spec/credentials/v1/schemas
+        target: static/0.17/schemas/bindings/go/credentials/rsa/v1
+        sites:
+          matrix:
+            versions:
+              - '0.17'
+      - source: gpg/spec/credentials/v1alpha1/schemas
+        target: static/0.17/schemas/bindings/go/credentials/gpg/v1alpha1
+        sites:
+          matrix:
+            versions:
+              - '0.17'
+      - source: sigstore/spec/credentials/oidcidentitytoken/v1alpha1/schemas
+        target: static/0.17/schemas/bindings/go/credentials/sigstore/oidcidentitytoken/v1alpha1
+        sites:
+          matrix:
+            versions:
+              - '0.17'
+      - source: sigstore/spec/credentials/trustedroot/v1alpha1/schemas
+        target: static/0.17/schemas/bindings/go/credentials/sigstore/trustedroot/v1alpha1
+        sites:
+          matrix:
+            versions:
+              - '0.17'
+      - source: credentials/spec/config/v1/schemas
+        target: static/0.17/schemas/bindings/go/credentials/direct/v1
+        sites:
+          matrix:
+            versions:
+              - '0.17'
+      - source: wget/spec/credentials/v1/schemas
+        target: static/0.17/schemas/bindings/go/credentials/wget/v1
+        sites:
+          matrix:
+            versions:
+              - '0.17'
+      - source: transfer/v1alpha1/spec/schemas
+        target: static/0.17/schemas/bindings/go/transfer
+        sites:
+          matrix:
+            versions:
+              - '0.17'
+      - source: wget/transformation/spec/v1alpha1/schemas
+        target: static/0.17/schemas/bindings/go/wget/transformation
+        sites:
+          matrix:
+            versions:
+              - '0.17'
+      - source: configuration/checksum/http/v1alpha1/spec/schemas
+        target: static/0.17/schemas/bindings/go/configuration/checksum/http/v1alpha1
+        sites:
+          matrix:
+            versions:
+              - '0.17'
+      - source: cli/docs/reference
+        target: content/docs/reference/ocm-cli
+        sites:
+          matrix:
+            versions:
+              - '0.17'
+      - source: kubernetes/controller/config/crd/bases
+        target: static/0.17/schemas/kubernetes/controller
+        sites:
+          matrix:
+            versions:
+              - '0.17'

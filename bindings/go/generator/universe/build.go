@@ -326,6 +326,25 @@ func findModuleRoots(roots []string) ([]string, error) {
 		}
 	}
 
+	// If no go.mod found walking down, walk up from the first root.
+	if len(modules) == 0 && len(roots) > 0 {
+		dir, err := filepath.Abs(roots[0])
+		if err != nil {
+			return nil, err
+		}
+		for {
+			if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
+				modules = append(modules, dir)
+				break
+			}
+			parent := filepath.Dir(dir)
+			if parent == dir {
+				break
+			}
+			dir = parent
+		}
+	}
+
 	if len(modules) == 0 {
 		return nil, fmt.Errorf("no go.mod found in provided roots")
 	}

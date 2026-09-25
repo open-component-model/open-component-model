@@ -4,21 +4,25 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { parseArguments, hasAnyImportForVersion, hasAllImportsForVersion, buildModuleBlocks, compareSemver, assignVersionWeights, retireOldestVersion, updateImportTags } = require('./register-docs-version');
+const { parseArguments, hasAnyImportForVersion, hasAllImportsForVersion, buildModuleBlocks, compareSemver, assignVersionWeights, retireOldestVersion, updateImportTags, syncUnversionedMountVersions, MONOLITHIC_BINDINGS_MODULE, BINDING_SCHEMA_MOUNTS } = require('./register-docs-version');
+
+const MODULE_PREFIX = 'ocm.software/open-component-model';
 
 // Resolved CLI-derived versions for tests that need every binding import emitted.
 // buildModuleBlocks now drops bindings whose version is undefined (filter at the
-// end), so tests asserting "all 12 imports" / "all schema targets" must pass deps.
+// end), so tests asserting "all 14 imports" / "all schema targets" must pass deps.
 const ALL_DEPS = {
     'ocm.software/open-component-model/bindings/go/constructor': 'v0.0.7',
     'ocm.software/open-component-model/bindings/go/credentials': 'v0.0.13',
     'ocm.software/open-component-model/bindings/go/descriptor/v2': 'v2.0.3-alpha3',
+    'ocm.software/open-component-model/bindings/go/github': 'v0.0.1',
     'ocm.software/open-component-model/bindings/go/gpg': 'v0.0.1',
     'ocm.software/open-component-model/bindings/go/helm': 'v0.0.1',
     'ocm.software/open-component-model/bindings/go/http': 'v0.0.5',
     'ocm.software/open-component-model/bindings/go/oci': 'v0.0.46',
     'ocm.software/open-component-model/bindings/go/rsa': 'v0.0.1',
     'ocm.software/open-component-model/bindings/go/sigstore': 'v0.0.1',
+    'ocm.software/open-component-model/bindings/go/wget': 'v0.0.1',
 };
 
 // --- parseArguments ---
@@ -120,9 +124,9 @@ test('hasAllImportsForVersion: returns true when the full import set (built with
 
 // --- buildModuleBlocks ---
 
-test('buildModuleBlocks: returns 12 imports (website + CLI + 9 bindings + controller)', () => {
+test('buildModuleBlocks: returns 14 imports (website + CLI + 11 bindings + controller)', () => {
     const { imports } = buildModuleBlocks('0.3', '0.3.0', ALL_DEPS);
-    assert.equal(imports.length, 12);
+    assert.equal(imports.length, 14);
 });
 
 test('buildModuleBlocks: does not return a mount field', () => {
@@ -139,7 +143,7 @@ test('buildModuleBlocks: website import has correct tag format', () => {
     // project owns the module graph (ignoreImports) and config (ignoreConfig).
     assert.equal(website.ignoreImports, true);
     assert.equal(website.ignoreConfig, true);
-    assert.deepEqual(website.mounts[0].files, ['**', '!blog/**']);
+    assert.deepEqual(website.mounts[0].files, ['! blog/**', '! community/**', '! governance/**']);
     assert.equal(website.mounts[0].source, 'content/');
     assert.equal(website.mounts[0].target, 'content');
     assert.deepEqual(website.mounts[0].sites.matrix.versions, ['0.3']);
@@ -214,22 +218,24 @@ test('buildModuleBlocks: version matrix uses X.Y not X.Y.Z', () => {
 });
 
 test('buildModuleBlocks: schema imports have correct targets with version prefix', () => {
-    const { imports } = buildModuleBlocks('2.0', '2.0.0', ALL_DEPS);
+    const { imports } = buildModuleBlocks('0.15', '0.15.0', ALL_DEPS);
     const targets = imports.flatMap(i => i.mounts.map(m => m.target)).sort();
     assert.deepEqual(targets, [
         'content',
         'content/docs/reference/ocm-cli',
-        'static/2.0/schemas/bindings/go/constructor',
-        'static/2.0/schemas/bindings/go/credentials/direct/v1',
-        'static/2.0/schemas/bindings/go/credentials/gpg/v1alpha1',
-        'static/2.0/schemas/bindings/go/credentials/helm/v1',
-        'static/2.0/schemas/bindings/go/credentials/oci/v1',
-        'static/2.0/schemas/bindings/go/credentials/rsa/v1',
-        'static/2.0/schemas/bindings/go/credentials/sigstore/oidcidentitytoken/v1alpha1',
-        'static/2.0/schemas/bindings/go/credentials/sigstore/trustedroot/v1alpha1',
-        'static/2.0/schemas/bindings/go/descriptor/v2',
-        'static/2.0/schemas/bindings/go/http',
-        'static/2.0/schemas/kubernetes/controller',
+        'static/0.15/schemas/bindings/go/constructor',
+        'static/0.15/schemas/bindings/go/credentials/direct/v1',
+        'static/0.15/schemas/bindings/go/credentials/github/v1',
+        'static/0.15/schemas/bindings/go/credentials/gpg/v1alpha1',
+        'static/0.15/schemas/bindings/go/credentials/helm/v1',
+        'static/0.15/schemas/bindings/go/credentials/oci/v1',
+        'static/0.15/schemas/bindings/go/credentials/rsa/v1',
+        'static/0.15/schemas/bindings/go/credentials/sigstore/oidcidentitytoken/v1alpha1',
+        'static/0.15/schemas/bindings/go/credentials/sigstore/trustedroot/v1alpha1',
+        'static/0.15/schemas/bindings/go/credentials/wget/v1',
+        'static/0.15/schemas/bindings/go/descriptor/v2',
+        'static/0.15/schemas/bindings/go/http',
+        'static/0.15/schemas/kubernetes/controller',
     ]);
 });
 
@@ -244,6 +250,8 @@ test('buildModuleBlocks: schema imports have correct sources', () => {
         'spec/config/v1alpha1/schemas',
         'spec/credentials/oidcidentitytoken/v1alpha1/schemas',
         'spec/credentials/trustedroot/v1alpha1/schemas',
+        'spec/credentials/v1/schemas',
+        'spec/credentials/v1/schemas',
         'spec/credentials/v1/schemas',
         'spec/credentials/v1/schemas',
         'spec/credentials/v1/schemas',
@@ -484,12 +492,14 @@ test('updateImportTags: updates versioned tags for matching version', () => {
         'ocm.software/open-component-model/bindings/go/constructor': 'v0.0.8',
         'ocm.software/open-component-model/bindings/go/credentials': 'v0.0.14',
         'ocm.software/open-component-model/bindings/go/descriptor/v2': 'v2.0.4',
+        'ocm.software/open-component-model/bindings/go/github': 'v0.0.2',
         'ocm.software/open-component-model/bindings/go/gpg': 'v0.0.2',
         'ocm.software/open-component-model/bindings/go/helm': 'v0.0.2',
         'ocm.software/open-component-model/bindings/go/http': 'v0.0.5',
         'ocm.software/open-component-model/bindings/go/oci': 'v0.0.47',
         'ocm.software/open-component-model/bindings/go/rsa': 'v0.0.2',
         'ocm.software/open-component-model/bindings/go/sigstore': 'v0.0.2',
+        'ocm.software/open-component-model/bindings/go/wget': 'v0.0.2',
     };
     const parsed = {
         imports: [
@@ -549,6 +559,16 @@ test('updateImportTags: updates versioned tags for matching version', () => {
                 mounts: [{ sites: { matrix: { versions: ['0.3'] } } }]
             },
             {
+                path: 'ocm.software/open-component-model/bindings/go/wget',
+                version: 'bindings/go/wget/v0.0.1',
+                mounts: [{ sites: { matrix: { versions: ['0.3'] } } }]
+            },
+            {
+                path: 'ocm.software/open-component-model/bindings/go/github',
+                version: 'bindings/go/github/v0.0.1',
+                mounts: [{ sites: { matrix: { versions: ['0.3'] } } }]
+            },
+            {
                 path: 'ocm.software/open-component-model/kubernetes/controller',
                 version: 'kubernetes/controller/v0.3.0',
                 mounts: [{ sites: { matrix: { versions: ['0.3'] } } }]
@@ -570,6 +590,8 @@ test('updateImportTags: updates versioned tags for matching version', () => {
     assert.equal(byPath['ocm.software/open-component-model/bindings/go/oci'], 'v0.0.47');
     assert.equal(byPath['ocm.software/open-component-model/bindings/go/rsa'], 'v0.0.2');
     assert.equal(byPath['ocm.software/open-component-model/bindings/go/sigstore'], 'v0.0.2');
+    assert.equal(byPath['ocm.software/open-component-model/bindings/go/wget'], 'v0.0.2');
+    assert.equal(byPath['ocm.software/open-component-model/bindings/go/github'], 'v0.0.2');
     assert.equal(byPath['ocm.software/open-component-model/kubernetes/controller'], 'v0.3.1');
 });
 
@@ -645,11 +667,13 @@ test('updateImportTags: patching freshly-built blocks equals building directly w
         'ocm.software/open-component-model/bindings/go/constructor': 'v0.0.8',
         'ocm.software/open-component-model/bindings/go/credentials': 'v0.0.14',
         'ocm.software/open-component-model/bindings/go/descriptor/v2': 'v2.0.4',
+        'ocm.software/open-component-model/bindings/go/github': 'v0.0.2',
         'ocm.software/open-component-model/bindings/go/gpg': 'v0.0.2',
         'ocm.software/open-component-model/bindings/go/helm': 'v0.0.2',
         'ocm.software/open-component-model/bindings/go/oci': 'v0.0.47',
         'ocm.software/open-component-model/bindings/go/rsa': 'v0.0.2',
         'ocm.software/open-component-model/bindings/go/sigstore': 'v0.0.2',
+        'ocm.software/open-component-model/bindings/go/wget': 'v0.0.2',
     };
 
     // Path A: build at 0.3.0 with old deps, then patch to 0.3.1 with new deps
@@ -661,4 +685,209 @@ test('updateImportTags: patching freshly-built blocks equals building directly w
     const { imports: directImports } = buildModuleBlocks('0.3', '0.3.1', deps);
 
     assert.deepEqual(parsed.imports, directImports);
+});
+
+// --- monolithic bindings layout ---
+
+// Deps as resolved from a CLI go.mod of the monolithic era: a single module.
+const MONOLITH_DEPS = { [MONOLITHIC_BINDINGS_MODULE]: 'v0.15.0' };
+
+test('buildModuleBlocks: monolithic bindings yield one import (website + CLI + bindings + controller)', () => {
+    const { imports } = buildModuleBlocks('0.15', '0.15.0', MONOLITH_DEPS);
+    assert.equal(imports.length, 4);
+    const monolith = imports.find(i => i.path === MONOLITHIC_BINDINGS_MODULE);
+    assert.ok(monolith, 'monolithic bindings import should exist');
+    assert.equal(monolith.version, 'v0.15.0');
+});
+
+test('buildModuleBlocks: monolithic import mounts cover every schema directory', () => {
+    const { imports } = buildModuleBlocks('0.15', '0.15.0', MONOLITH_DEPS);
+    const monolith = imports.find(i => i.path === MONOLITHIC_BINDINGS_MODULE);
+    // Entries introduced after 0.15 (since > 0.15) are not mounted for 0.15.
+    const applicable = BINDING_SCHEMA_MOUNTS.filter(m => !m.since || compareSemver('0.15', m.since) >= 0);
+    assert.equal(monolith.mounts.length, applicable.length);
+    for (const m of monolith.mounts) {
+        assert.deepEqual(m.sites.matrix.versions, ['0.15']);
+        assert.match(m.target, /^static\/0\.15\/schemas\/bindings\/go\//);
+    }
+});
+
+test('buildModuleBlocks: monolithic and legacy layouts mount the same schema set', () => {
+    const { imports: legacy } = buildModuleBlocks('0.15', '0.15.0', ALL_DEPS);
+    const { imports: monolith } = buildModuleBlocks('0.15', '0.15.0', MONOLITH_DEPS);
+    // Bindings introduced after the monorepo merge (sinceMonolith) never
+    // existed as stand-alone modules, so they only appear in the monolithic
+    // layout. Strip them for the schema-set parity check.
+    const sinceMonolithTargets = new Set(
+        BINDING_SCHEMA_MOUNTS.filter(m => m.sinceMonolith).map(m => `static/0.15/${m.target}`)
+    );
+    const legacyTargets = legacy.flatMap(i => i.mounts.map(m => m.target)).sort();
+    const monolithTargets = monolith
+        .flatMap(i => i.mounts.map(m => m.target))
+        .filter(t => !sinceMonolithTargets.has(t))
+        .sort();
+    assert.deepEqual(monolithTargets, legacyTargets);
+
+    // The module merge kept the package directory layout intact, so each
+    // monolithic mount source is the legacy package-relative source prefixed
+    // with the package directory.
+    const monolithByTarget = new Map(
+        monolith.find(i => i.path === MONOLITHIC_BINDINGS_MODULE).mounts.map(m => [m.target, m.source])
+    );
+    for (const { pkg, source, target, since } of BINDING_SCHEMA_MOUNTS) {
+        if (since && compareSemver('0.15', since) < 0) {
+            continue;
+        }
+        assert.equal(monolithByTarget.get(`static/0.15/${target}`), `${pkg}/${source}`);
+    }
+});
+
+test('buildModuleBlocks: monolithic layout wins if both layouts resolve (impossible in Go, defensive)', () => {
+    const { imports } = buildModuleBlocks('0.15', '0.15.0', { ...ALL_DEPS, ...MONOLITH_DEPS });
+    assert.equal(imports.filter(i => i.path === MONOLITHIC_BINDINGS_MODULE).length, 1);
+    assert.equal(imports.some(i => i.path.endsWith('/bindings/go/oci')), false);
+});
+
+test('hasAllImportsForVersion: monolithic layout is consistent', () => {
+    const { imports } = buildModuleBlocks('0.15', '0.15.0', MONOLITH_DEPS);
+    assert.equal(hasAllImportsForVersion({ imports }, '0.15', MONOLITH_DEPS), true);
+});
+
+test('hasAllImportsForVersion: detects a truncated monolithic mount list', () => {
+    const { imports } = buildModuleBlocks('0.15', '0.15.0', MONOLITH_DEPS);
+    const truncated = imports.map(i =>
+        i.path === MONOLITHIC_BINDINGS_MODULE ? { ...i, mounts: i.mounts.slice(1) } : i
+    );
+    assert.equal(hasAllImportsForVersion({ imports: truncated }, '0.15', MONOLITH_DEPS), false);
+});
+
+test('updateImportTags: updates monolithic bindings import on patch releases', () => {
+    const { imports } = buildModuleBlocks('0.15', '0.15.0', MONOLITH_DEPS);
+    const parsed = { imports };
+    const changed = updateImportTags(parsed, '0.15', '0.15.1', { [MONOLITHIC_BINDINGS_MODULE]: 'v0.15.1' });
+    assert.equal(changed, true);
+    assert.equal(parsed.imports.find(i => i.path === MONOLITHIC_BINDINGS_MODULE).version, 'v0.15.1');
+});
+
+test('updateImportTags: monolithic bindings untouched when deps not provided', () => {
+    const { imports } = buildModuleBlocks('0.15', '0.15.0', MONOLITH_DEPS);
+    const parsed = { imports };
+    const changed = updateImportTags(parsed, '0.15', '0.15.1');
+    assert.equal(changed, true); // website/cli/controller still bump
+    assert.equal(parsed.imports.find(i => i.path === MONOLITHIC_BINDINGS_MODULE).version, 'v0.15.0');
+});
+
+test('updateImportTags: monolithic patch roundtrip equals fresh build with patch version', () => {
+    const { imports } = buildModuleBlocks('0.15', '0.15.0', MONOLITH_DEPS);
+    const parsed = { imports };
+    updateImportTags(parsed, '0.15', '0.15.1', { [MONOLITHIC_BINDINGS_MODULE]: 'v0.15.1' });
+    const { imports: direct } = buildModuleBlocks('0.15', '0.15.1', { [MONOLITHIC_BINDINGS_MODULE]: 'v0.15.1' });
+    assert.deepEqual(parsed.imports, direct);
+});
+
+// --- cli/controller merged into bindings/go (>= 0.16) ---
+
+test('buildModuleBlocks: pre-merge (<0.16) keeps legacy top-level cli/controller paths', () => {
+    const { imports } = buildModuleBlocks('0.15', '0.15.0', MONOLITH_DEPS);
+    const cli = imports.find(i => i.path.endsWith('/cli'));
+    const controller = imports.find(i => i.path.endsWith('/kubernetes/controller'));
+    assert.equal(cli.path, `${MODULE_PREFIX}/cli`);
+    assert.equal(controller.path, `${MODULE_PREFIX}/kubernetes/controller`);
+});
+
+test('buildModuleBlocks: post-merge (>=0.16) folds cli/controller into bindings/go', () => {
+    const { imports } = buildModuleBlocks('0.16', '0.16.0', { [MONOLITHIC_BINDINGS_MODULE]: 'v0.16.0' });
+    const bindings = imports.find(i => i.path === MONOLITHIC_BINDINGS_MODULE)
+    const cli = bindings.mounts.find(i => i.target.endsWith('cli'));
+    const controller = bindings.mounts.find(i => i.target.endsWith('controller'));
+    // Mount targets and the pinned release version are unchanged by the merge.
+    assert.equal(cli.sites.matrix.versions[0], '0.16');
+    assert.equal(cli.target, 'content/docs/reference/ocm-cli');
+    assert.equal(cli.source, 'cli/docs/reference');
+    assert.equal(controller.sites.matrix.versions[0], '0.16');
+    assert.equal(controller.target, 'static/0.16/schemas/kubernetes/controller');
+    assert.equal(controller.source, 'kubernetes/controller/config/crd/bases');
+});
+
+test('updateImportTags: bumps merged cli/controller paths on post-merge patch', () => {
+    const { imports } = buildModuleBlocks('0.16', '0.16.0', { [MONOLITHIC_BINDINGS_MODULE]: 'v0.16.0' });
+    const parsed = { imports };
+    const changed = updateImportTags(parsed, '0.16', '0.16.1', { [MONOLITHIC_BINDINGS_MODULE]: 'v0.16.1' });
+    assert.equal(changed, true);
+    const bindings = imports.find(i => i.path === MONOLITHIC_BINDINGS_MODULE)
+    const cli = bindings.mounts.find(i => i.target.endsWith('cli'));
+    const controller = bindings.mounts.find(i => i.target.endsWith('controller'));
+    assert.equal(cli.sites.matrix.versions[0], '0.16');
+    assert.equal(controller.sites.matrix.versions[0], '0.16');
+});
+
+test('hasAllImportsForVersion: consistent for post-merge layout', () => {
+    const deps = { [MONOLITHIC_BINDINGS_MODULE]: 'v0.16.0' };
+    const { imports } = buildModuleBlocks('0.16', '0.16.0', deps);
+    assert.equal(hasAllImportsForVersion({ imports }, '0.16', deps), true);
+});
+
+// syncUnversionedMountVersions - keeps blog/community/governance mounts in sync
+// with the registered version set. See register-docs-version.js for rationale.
+
+function unversionedFixture(versions) {
+    return {
+        mounts: [
+            { source: 'content/blog',       target: 'content/blog',       sites: { matrix: { versions: [...versions] } } },
+            { source: 'content/community',  target: 'content/community',  sites: { matrix: { versions: [...versions] } } },
+            { source: 'content/governance', target: 'content/governance', sites: { matrix: { versions: [...versions] } } },
+            { source: 'content', target: 'content', sites: { matrix: { versions: ['main'] } } }, // untouched
+        ],
+    };
+}
+
+test('syncUnversionedMountVersions: appends added version to all three target mounts', () => {
+    const parsed = unversionedFixture(['main', '0.15', 'legacy']);
+    syncUnversionedMountVersions(parsed, { added: '0.16' });
+    for (const src of ['content/blog', 'content/community', 'content/governance']) {
+        const m = parsed.mounts.find(x => x.source === src);
+        assert.deepEqual(m.sites.matrix.versions, ['main', '0.16', '0.15', 'legacy'], `${src}: added between main and legacy, semver descending`);
+    }
+});
+
+test('syncUnversionedMountVersions: drops retired version from all three target mounts', () => {
+    const parsed = unversionedFixture(['main', '0.15', '0.14', '0.9', 'legacy']);
+    syncUnversionedMountVersions(parsed, { retired: '0.9' });
+    for (const src of ['content/blog', 'content/community', 'content/governance']) {
+        const m = parsed.mounts.find(x => x.source === src);
+        assert.deepEqual(m.sites.matrix.versions, ['main', '0.15', '0.14', 'legacy']);
+    }
+});
+
+test('syncUnversionedMountVersions: adds and retires in one pass, preserves main and legacy', () => {
+    const parsed = unversionedFixture(['main', '0.15', '0.14', '0.9', 'legacy']);
+    syncUnversionedMountVersions(parsed, { added: '0.16', retired: '0.9' });
+    for (const src of ['content/blog', 'content/community', 'content/governance']) {
+        const m = parsed.mounts.find(x => x.source === src);
+        assert.deepEqual(m.sites.matrix.versions, ['main', '0.16', '0.15', '0.14', 'legacy']);
+        assert.ok(m.sites.matrix.versions.includes('main'), `${src}: main preserved`);
+        assert.ok(m.sites.matrix.versions.includes('legacy'), `${src}: legacy preserved`);
+    }
+});
+
+test('syncUnversionedMountVersions: re-registering an existing version is a no-op', () => {
+    const parsed = unversionedFixture(['main', '0.15', 'legacy']);
+    const before = JSON.stringify(parsed);
+    syncUnversionedMountVersions(parsed, { added: '0.15' });
+    assert.equal(JSON.stringify(parsed), before);
+});
+
+test('syncUnversionedMountVersions: leaves non-target mounts untouched', () => {
+    const parsed = unversionedFixture(['main', '0.15', 'legacy']);
+    const other = parsed.mounts.find(m => m.source === 'content');
+    const otherBefore = JSON.stringify(other);
+    syncUnversionedMountVersions(parsed, { added: '0.16', retired: '0.15' });
+    assert.equal(JSON.stringify(parsed.mounts.find(m => m.source === 'content')), otherBefore);
+});
+
+test('syncUnversionedMountVersions: sorts semver descending regardless of input order', () => {
+    const parsed = unversionedFixture(['main', '0.9', '0.15', '0.14', 'legacy']);
+    syncUnversionedMountVersions(parsed, { added: '0.16' });
+    const m = parsed.mounts.find(x => x.source === 'content/community');
+    assert.deepEqual(m.sites.matrix.versions, ['main', '0.16', '0.15', '0.14', '0.9', 'legacy']);
 });

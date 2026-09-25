@@ -548,6 +548,133 @@ func TestParseRepository(t *testing.T) {
 			},
 		},
 		{
+			name:         "CTF Archive - parent relative path",
+			repoRef:      "../relative/path",
+			expectedType: runtime.NewVersionedType(ctfv1.Type, ctfv1.Version),
+			validateResult: func(t *testing.T, result runtime.Typed, repoSpec string) {
+				repo, ok := result.(*ctfv1.Repository)
+				require.True(t, ok, "expected *ctfv1.Repository")
+				require.Equal(t, repoSpec, repo.FilePath)
+			},
+		},
+		{
+			name:         "CTF Archive - deep parent relative path",
+			repoRef:      "../../../relative/path",
+			expectedType: runtime.NewVersionedType(ctfv1.Type, ctfv1.Version),
+			validateResult: func(t *testing.T, result runtime.Typed, repoSpec string) {
+				repo, ok := result.(*ctfv1.Repository)
+				require.True(t, ok, "expected *ctfv1.Repository")
+				require.Equal(t, repoSpec, repo.FilePath)
+			},
+		},
+		{
+			name:         "CTF Archive - relative in the middle",
+			repoRef:      "../a/../b",
+			expectedType: runtime.NewVersionedType(ctfv1.Type, ctfv1.Version),
+			validateResult: func(t *testing.T, result runtime.Typed, repoSpec string) {
+				repo, ok := result.(*ctfv1.Repository)
+				require.True(t, ok, "expected *ctfv1.Repository")
+				require.Equal(t, repoSpec, repo.FilePath)
+			},
+		},
+		{
+			name:         "CTF Archive - file URL with relative",
+			repoRef:      "file://../rel/archive",
+			expectedType: runtime.NewVersionedType(ctfv1.Type, ctfv1.Version),
+			validateResult: func(t *testing.T, result runtime.Typed, repoSpec string) {
+				repo, ok := result.(*ctfv1.Repository)
+				require.True(t, ok, "expected *ctfv1.Repository")
+				require.Equal(t, repoSpec, repo.FilePath)
+			},
+		},
+		{
+			name:         "OCI Registry - HTTPS URL with relative",
+			repoRef:      "https://ghcr.io/a/../b",
+			expectedType: runtime.NewVersionedType(ociv1.Type, ociv1.Version),
+			validateResult: func(t *testing.T, result runtime.Typed, repoSpec string) {
+				repo, ok := result.(*ociv1.Repository)
+				require.True(t, ok, "expected *ociv1.Repository")
+				require.Equal(t, "https://ghcr.io", repo.BaseUrl)
+				require.Equal(t, "a/../b", repo.SubPath)
+			},
+		},
+		{
+			name:         "OCI Registry - explicit type, HTTP URL with relative",
+			repoRef:      "oci::http://github.com/open-component-model/ocm/../ocm",
+			expectedType: runtime.NewUnversionedType("oci"),
+			validateResult: func(t *testing.T, result runtime.Typed, repoSpec string) {
+				repo, ok := result.(*ociv1.Repository)
+				require.True(t, ok, "expected *ociv1.Repository")
+				require.Equal(t, "http://github.com", repo.BaseUrl)
+				require.Equal(t, "open-component-model/ocm/../ocm", repo.SubPath)
+			},
+		},
+		{
+			name:         "OCI Registry - relative resolves to domain",
+			repoRef:      "ghcr.io/my-org/repo/../repo",
+			expectedType: runtime.NewVersionedType(ociv1.Type, ociv1.Version),
+			validateResult: func(t *testing.T, result runtime.Typed, repoSpec string) {
+				repo, ok := result.(*ociv1.Repository)
+				require.True(t, ok, "expected *ociv1.Repository")
+				require.Equal(t, "ghcr.io", repo.BaseUrl)
+				require.Equal(t, "my-org/repo/../repo", repo.SubPath)
+			},
+		},
+		{
+			name:         "OCI Registry - dots inside a registry path segment",
+			repoRef:      "ghcr.io/team..name",
+			expectedType: runtime.NewVersionedType(ociv1.Type, ociv1.Version),
+			validateResult: func(t *testing.T, result runtime.Typed, repoSpec string) {
+				repo, ok := result.(*ociv1.Repository)
+				require.True(t, ok, "expected *ociv1.Repository")
+				require.Equal(t, "ghcr.io", repo.BaseUrl)
+				require.Equal(t, "team..name", repo.SubPath)
+			},
+		},
+		{
+			name:         "OCI Registry - dots inside a path segment behind a port",
+			repoRef:      "localhost:5000/a..b",
+			expectedType: runtime.NewVersionedType(ociv1.Type, ociv1.Version),
+			validateResult: func(t *testing.T, result runtime.Typed, repoSpec string) {
+				repo, ok := result.(*ociv1.Repository)
+				require.True(t, ok, "expected *ociv1.Repository")
+				require.Equal(t, "localhost:5000", repo.BaseUrl)
+				require.Equal(t, "a..b", repo.SubPath)
+			},
+		},
+		{
+			name:         "OCI Registry - relative behind a port",
+			repoRef:      "registry.io:5000/x/../y",
+			expectedType: runtime.NewVersionedType(ociv1.Type, ociv1.Version),
+			validateResult: func(t *testing.T, result runtime.Typed, repoSpec string) {
+				repo, ok := result.(*ociv1.Repository)
+				require.True(t, ok, "expected *ociv1.Repository")
+				require.Equal(t, "registry.io:5000", repo.BaseUrl)
+				require.Equal(t, "x/../y", repo.SubPath)
+			},
+		},
+		{
+			name:         "CTF Archive - relative path",
+			repoRef:      "./test.path.with.dot",
+			expectedType: runtime.NewVersionedType(ctfv1.Type, ctfv1.Version),
+			validateResult: func(t *testing.T, result runtime.Typed, repoSpec string) {
+				repo, ok := result.(*ctfv1.Repository)
+				require.True(t, ok, "expected *ctfv1.Repository")
+				require.Equal(t, repoSpec, repo.FilePath)
+			},
+		},
+		{
+			name: "CTF Archive - relative path with addition traversal",
+			// resolves to ../neighbour
+			repoRef:      "test/../../neighbour",
+			expectedType: runtime.NewVersionedType(ctfv1.Type, ctfv1.Version),
+			validateResult: func(t *testing.T, result runtime.Typed, repoSpec string) {
+				repo, ok := result.(*ctfv1.Repository)
+				require.True(t, ok, "expected *ctfv1.Repository")
+				require.Equal(t, repoSpec, repo.FilePath)
+			},
+		},
+		{
 			name:         "CTF Archive - absolute path",
 			repoRef:      "/tmp/test-archive",
 			expectedType: runtime.NewVersionedType(ctfv1.Type, ctfv1.Version),

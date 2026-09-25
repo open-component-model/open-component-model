@@ -1,6 +1,8 @@
 package v1
 
 import (
+	"errors"
+
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -20,6 +22,14 @@ type File struct {
 	MediaType string `json:"mediaType,omitempty"`
 	// Compress indicates whether the file should be compressed with gzip.
 	Compress bool `json:"compress,omitempty"`
+}
+
+// Validate verifies that the path of the File input is set.
+func (t *File) Validate() error {
+	if t.Path == "" {
+		return errors.New("path is required")
+	}
+	return nil
 }
 
 func (t *File) String() string {

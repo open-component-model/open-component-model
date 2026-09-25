@@ -106,9 +106,43 @@ tasks:
         --config={{ .GOLANGCI_LINT_CONFIG }}
 
   markdownlint:
-    desc: "Run markdownlint-cli2 on all markdown files (add -- --fix to fix automatically)"
+    desc: "Run markdownlint-cli2 on non-website markdown files (add -- --fix to fix automatically)"
+    dir: '{{ .ROOT_DIR }}'
     vars:
       MARKDOWNLINT_CLI2_CONFIG: '{{ .ROOT_DIR }}/.github/config/.markdownlint-cli2.yaml'
+    # Keep the glob in `cmd` relative: ignore patterns match against glob results as given,
+    # so a relative 'website/**' never matches an absolute result path. An absolute glob 
+    # silently disables the config's ignores here (--fix then rewrites files that should
+    # have been excluded)
     cmd: |
-      npx markdownlint-cli2@{{ .MARKDOWNLINT_CLI2_TARGET_VERSION }} --config {{ .MARKDOWNLINT_CLI2_CONFIG }} \
-        {{ .CLI_ARGS }} '{{ .ROOT_DIR }}/**/*.md'
+      npx --yes markdownlint-cli2@{{ .MARKDOWNLINT_CLI2_TARGET_VERSION }} --config {{ .MARKDOWNLINT_CLI2_CONFIG }} \
+        {{ .CLI_ARGS }} '**/*.md'
+
+  markdownlint/website:
+    desc: "Run markdownlint-cli2 on website markdown files with the website config (add -- --fix to fix automatically)"
+    dir: '{{ .ROOT_DIR }}'
+    vars:
+      MARKDOWNLINT_CLI2_CONFIG: '{{ .ROOT_DIR }}/.github/config/website.markdownlint-cli2.yaml'
+    cmd: |
+      npx --yes markdownlint-cli2@{{ .MARKDOWNLINT_CLI2_TARGET_VERSION }} --config {{ .MARKDOWNLINT_CLI2_CONFIG }} \
+        {{ .CLI_ARGS }} 'website/**/*.md' \
+        '!website/content/docs/reference/ocm-cli' '!website/content/docs/reference/ocm-controller' \
+        '!website/node_modules/**'
+
+  dependency-list/generate:
+    desc: "Regenerate the generated documents derived from the golangci.yml depguard rules"
+    deps: [github-scripts/install]
+    cmd: node {{ .ROOT_DIR }}/.github/scripts/dependency-list.js generate {{ .ROOT_DIR }}/golangci.yml {{ .ROOT_DIR }}/docs/dependency-table.md {{ .ROOT_DIR }}/bindings/go/README.md
+  dependency-list/verify:
+    desc: "Verify the generated documents derived from the golangci.yml depguard rules are in sync"
+    deps: [github-scripts/install]
+    cmd: node {{ .ROOT_DIR }}/.github/scripts/dependency-list.js verify {{ .ROOT_DIR }}/golangci.yml {{ .ROOT_DIR }}/docs/dependency-table.md {{ .ROOT_DIR }}/bindings/go/README.md
+
+  github-scripts/install:
+    desc: "Install dependencies of the Node.js scripts in .github/scripts"
+    internal: true
+    dir: '{{ .ROOT_DIR }}/.github/scripts'
+    sources:
+      - package.json
+      - package-lock.json
+    cmd: npm ci --omit=dev

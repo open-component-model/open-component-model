@@ -6,10 +6,9 @@ For OCM release managers. CLI and Kubernetes Controller ship together in lockste
 
 * Development happens on `main`. Releases are cut from `releases/vX.Y` branches.
 * Minor and patch releases only (no majors).
-* One workflow run produces four tags on the same commit:
+* One workflow run produces three tags on the same commit:
   * `v0.X.Y` (canonical, the GitHub release)
-  * `cli/v0.X.Y` (website install scripts)
-  * `kubernetes/controller/v0.X.Y` (Go module side tag)
+  * `bindings/go/v0.X.Y` (Go-module side tag for the merged `bindings/go` module; cli and kubernetes/controller are packages inside it, so this one tag resolves the CLI docs, the controller CRDs and every binding for Go and Hugo module consumers)
   * `website/v0.X.Y` (Hugo module imports for versioned docs; final-only, no RC)
 * Cadence: one release per sprint (two weeks). RC at sprint start, promote previous RC at the next sprint start.
 
@@ -46,8 +45,8 @@ Two things to notice. First, **promotion does not create a new commit.** The
 canonical final tag (`v0.7.0`) lands on the same commit as the most recent 
 RC tag (`v0.7.0-rc.2`). The workflow just stamps additional tags on the RC 
 commit. Second, **each tagged release commit carries multiple tags, not one.**
-The same commit also receives `cli/v0.7.0-rc.2` + `cli/v0.7.0`, 
-`kubernetes/controller/v0.7.0-rc.2` + `kubernetes/controller/v0.7.0` and `website/v0.7.0`. 
+The same commit also receives `bindings/go/v0.7.0-rc.2` + `bindings/go/v0.7.0` 
+and `website/v0.7.0`. 
 The side tags exist so the website install script, Go module consumers, and 
 Hugo docs imports can address each component directly.
 
@@ -59,7 +58,7 @@ The `website/v0.X.Y` tag is asymmetric: only the final form is created, no `webs
 flowchart TD
     Start([workflow_dispatch<br/>release.yml on releases/vX.Y])
     Start --> Prepare[prepare<br/>compute RC version<br/>generate changelog<br/>decide set_latest]
-    Prepare --> TagRC[tag_rc<br/>GPG-signed tags pushed:<br/>v0.X.Y-rc.N<br/>cli/v0.X.Y-rc.N<br/>kubernetes/controller/v0.X.Y-rc.N]
+    Prepare --> TagRC[tag_rc<br/>GPG-signed tags pushed:<br/>v0.X.Y-rc.N<br/>bindings/go/v0.X.Y-rc.N]
     TagRC --> Pipeline
 
     subgraph Pipeline["build_and_test - calls monorepo shared build & publish"]
@@ -80,7 +79,7 @@ flowchart TD
     ReleaseRC --> PubCompRC[publish_components_rc<br/>ocm.software/cli, /controller, /ocm<br/>conflict: replace]
     ReleaseRC --> Gate{{release environment<br/>manual approval}}
     Gate --> Verify[verify_attestations<br/>CLI binaries, CLI OCI,<br/>controller image, chart]
-    Verify --> Promote[promote_and_release_final<br/>tag v0.X.Y + cli/v0.X.Y + kubernetes/controller/v0.X.Y + website/v0.X.Y<br/>oras retag images, set :latest if applicable<br/>repackage chart, diff vs RC, push + attest<br/>publish final GitHub release]
+    Verify --> Promote[promote_and_release_final<br/>tag v0.X.Y + bindings/go/v0.X.Y + website/v0.X.Y<br/>oras retag images, set :latest if applicable<br/>repackage chart, diff vs RC, push + attest<br/>publish final GitHub release]
     Promote --> PubCompFinal[publish_components_final<br/>ocm.software/cli, /controller, /ocm<br/>conflict: replace]
     Promote --> WebsiteDocs[create_website_update_pr<br/>open docs PR to main<br/>pin Hugo module imports to website/v0.X.Y]
     PubCompFinal --> End([Final release live])
@@ -101,10 +100,11 @@ Phase 1 (RC, blue) runs end-to-end without human intervention once you trigger t
 
 The website integrates into the same workflow run, after `promote_and_release_final` succeeds:
 
-* The `website/v0.X.Y` tag is created at the same commit as the canonical tag — same `ADDITIONAL_TAGS` step that emits `cli/` and `kubernetes/controller/` tags.
+* The `website/v0.X.Y` tag is created at the same commit as the canonical tag — same `ADDITIONAL_TAGS` step that emits the `bindings/go/` tag.
 * A separate `create_website_update_pr` job then opens a PR to `main` updating `website/config/_default/{hugo.yaml,module.yaml}` to pin the new minor's Hugo module imports to the just-created `website/v0.X.Y` tag. The PR uses the OCMBot app token, signed commits, and `add-paths: website/config/`.
 
-* Binding versions (constructor, descriptor) referenced by the docs are resolved from the released `cli/v0.X.Y` go.mod, not from `main`. This guarantees the docs site for `v0.X.Y` matches what the released CLI was built against.
+* Binding schema versions referenced by the docs are resolved from the released `bindings/go/v0.X.Y` `go.mod`, not from `main`. For releases `>=v0.15` this is a single `bindings/go` module; older releases resolve individual per-package modules. From `>=0.16` the cli and kubernetes/controller docs also resolve from that single `bindings/go` module (they were folded in from the former `cli/` and `kubernetes/controller/` leaf modules); older releases keep the legacy top-level `cli/` and `kubernetes/controller/` module paths, whose git tags exist only at the old locations. The script auto-detects both cutovers and ensures the docs site for `v0.X.Y` matches what the released CLI was built against.
+  * With cli, kubernetes/controller, and bindings all behind the `bindings/go/v0.X.Y` tag, we could in principle rely solely on the `v0.X.Y` tag instead. But since this would break existing installations, we chose to keep the redundant `bindings/go` tag
 * On a **minor release** (`Z=0`) the script adds a new version entry under `versions` in `hugo.yaml` and a new set of import blocks in `module.yaml`.
 * On a **patch release** (`Z>0`) the script updates the existing minor's import tags in `module.yaml` in place; `hugo.yaml` is unchanged.
 * When more than 10 minors would be live, the oldest is retired (entry removed from `hugo.yaml`, imports removed from `module.yaml`). Retirement logic lives in `website/scripts/register-docs-version.js`.

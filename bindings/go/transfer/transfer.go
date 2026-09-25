@@ -18,7 +18,7 @@ import (
 // cfg carries the declarative transfer settings. A nil cfg and empty enum
 // fields resolve to the defaults: no recursion,
 // [transferv1alpha1.CopyModeLocalBlobResources], and
-// [transferv1alpha1.UploadAsDefault].
+// [transferv1alpha1.UploadAsLocalBlob].
 //
 // Each [Mapping] pairs source components with a target repository and a
 // resolver, enabling N:M routing where different sources feed different
@@ -26,10 +26,16 @@ import (
 func BuildGraphDefinition(
 	ctx context.Context,
 	cfg *transferv1alpha1.Config,
+	uploaders []transferv1alpha1.UploaderConfig,
 	mappings ...Mapping,
 ) (*transformv1alpha1.TransformationGraphDefinition, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid transfer config: %w", err)
+	}
+	for i, u := range uploaders {
+		if err := u.Validate(); err != nil {
+			return nil, fmt.Errorf("invalid uploader config at index %d: %w", i, err)
+		}
 	}
 
 	resolved := transferv1alpha1.Config{}
@@ -40,7 +46,7 @@ func BuildGraphDefinition(
 		resolved.CopyMode = transferv1alpha1.CopyModeLocalBlobResources
 	}
 	if resolved.UploadType == "" {
-		resolved.UploadType = transferv1alpha1.UploadAsDefault
+		resolved.UploadType = transferv1alpha1.UploadAsLocalBlob
 	}
 
 	roots, err := collectTransferRoots(ctx, mappings)
@@ -54,7 +60,7 @@ func BuildGraphDefinition(
 		"copyMode", resolved.CopyMode,
 		"uploadType", resolved.UploadType)
 
-	return internal.BuildGraphDefinition(ctx, roots, resolved)
+	return internal.BuildGraphDefinition(ctx, roots, resolved, uploaders)
 }
 
 func collectTransferRoots(ctx context.Context, mappings []Mapping) (map[string]internal.TransferRoot, error) {

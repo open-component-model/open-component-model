@@ -3,9 +3,9 @@ package provider
 import (
 	"fmt"
 
-	"github.com/google/cel-go/cel"
-	"github.com/google/cel-go/common/types"
-	"github.com/google/cel-go/common/types/ref"
+	"cel.dev/cel-go/cel"
+	"cel.dev/cel-go/common/types"
+	"cel.dev/cel-go/common/types/ref"
 
 	"ocm.software/open-component-model/bindings/go/cel/jsonschema"
 	"ocm.software/open-component-model/bindings/go/cel/jsonschema/decl"
@@ -31,9 +31,17 @@ func New(rootTypes ...*decl.Type) *DeclTypeProvider {
 	// then prefer the proto definition. For expressions in the proto, a new field
 	// annotation will be needed to indicate the expected environment and type of
 	// the expression.
-	allTypes := allTypesForDecl(rootTypes)
+	return NewFromTypeMap(allTypesForDecl(rootTypes))
+}
+
+// NewFromTypeMap returns a JSON Schema-based, CEL-compatible type-system that is
+// backed by registeredTypes, keyed by fully qualified type name. Unlike New, it
+// does not walk any schemas, so callers can build the map incrementally with
+// FieldTypeMap instead of rebuilding it on every call. NewFromTypeMap takes
+// ownership of the map: the caller must not modify it after this call.
+func NewFromTypeMap(registeredTypes map[string]*decl.Type) *DeclTypeProvider {
 	return &DeclTypeProvider{
-		registeredTypes: allTypes,
+		registeredTypes: registeredTypes,
 		typeProvider:    types.NewEmptyRegistry(),
 	}
 }

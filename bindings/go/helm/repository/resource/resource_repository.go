@@ -106,8 +106,8 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 	slog.DebugContext(ctx, "Resolved helm chart reference for download", "chartReference", helmURL)
 
 	tempDir := ""
-	if r.filesystemConfig != nil {
-		tempDir = r.filesystemConfig.TempFolder
+	if r.filesystemConfig != nil && r.filesystemConfig.TempFolder != nil {
+		tempDir = *r.filesystemConfig.TempFolder
 	}
 
 	downloadDir, err := os.MkdirTemp(tempDir, "helm-resource-download-*")

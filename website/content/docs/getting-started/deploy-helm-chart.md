@@ -1,18 +1,18 @@
 ---
 title: "Deploy Helm Charts"
-description: "Deploy a Helm chart from an OCM component version with OCM Controllers, kro, and Flux."
+description: "Deploy a Helm chart from an OCM component version with OCM Controllers, kro, and a GitOps deployer (Flux or Argo CD)."
 icon: "🚀"
 weight: 26
 toc: true
 ---
 
 This tutorial walks you through deploying a Helm chart from an OCM component version to a Kubernetes cluster,
-using the OCM Controllers with kro and Flux.
+using the OCM Controllers with kro and a GitOps deployer (Flux or Argo CD).
 
 ## What You'll Learn
 
 - Create and publish an OCM component version that references a Helm chart
-- Define a ResourceGraphDefinition to orchestrate OCM and Flux resources
+- Define a ResourceGraphDefinition to orchestrate OCM and Flux or Argo CD resources
 - Deploy the Helm chart to your cluster using the OCM Controllers
 
 ## Estimated time
@@ -23,11 +23,11 @@ using the OCM Controllers with kro and Flux.
 
 You as a developer create an application, packaged as a Helm chart, and publish it as OCM component version in an OCI registry.
 Then, you as an operator deploy the Helm chart into a Kubernetes cluster using the OCM Controllers.
-You define a ResourceGraphDefinition that tells kro how to orchestrate the OCM and Flux resources to deploy the Helm chart.
+You define a ResourceGraphDefinition that tells kro how to orchestrate the OCM and Flux or Argo CD resources to deploy the Helm chart.
 
 ## Prerequisites
 
-- [Controller environment]({{< relref "setup-controller-environment.md" >}}) set up (OCM Controllers, kro and Flux in a Kubernetes cluster)
+- [Controller environment]({{< relref "setup-controller-environment.md" >}}) set up (OCM Controllers, kro, and a deployer (Flux or Argo CD) in a Kubernetes cluster)
 - [Custom RBAC]({{< relref "custom-rbac.md" >}}) configured to allow the controller to manage `ResourceGraphDefinitions`
 - [OCM CLI]({{< relref "ocm-cli-installation.md" >}}) installed
 - Access to an OCI registry (e.g., [ghcr.io](https://docs.github.com/en/packages/learn-github-packages/introduction-to-github-packages))
@@ -52,6 +52,7 @@ export OCM_REPO=ghcr.io/$GITHUB_USERNAME/ocm-tutorial
 ```shell
 mkdir /tmp/helm-deploy && cd /tmp/helm-deploy
 ```
+
 {{< /step >}}
 
 {{< step >}}
@@ -60,7 +61,8 @@ mkdir /tmp/helm-deploy && cd /tmp/helm-deploy
 
 Create a `component-constructor.yaml` file that includes a Helm chart resource:
 
-```yaml
+```shell
+cat > component-constructor.yaml << 'EOF'
 components:
   - name: ocm.software/ocm-k8s-toolkit/simple
     provider:
@@ -73,6 +75,7 @@ components:
         access:
           type: OCIImage/v1
           imageReference: "ghcr.io/stefanprodan/charts/podinfo:6.11.1@sha256:a9b2804ec61795a7457b2303bf9efbc5fba51f856c3945f3bb0af68bf3b35afd"
+EOF
 ```
 
 This component references the `podinfo` Helm chart, a simple web application that displays pod information.
@@ -103,6 +106,7 @@ COMPONENT                           │ VERSION │ PROVIDER
 ────────────────────────────────────┼─────────┼──────────────
 ocm.software/ocm-k8s-toolkit/simple │ 1.0.0   │ ocm.software
 ```
+
 </details>
 {{< /step >}}
 
@@ -125,9 +129,10 @@ ocm transfer cv transport-archive//ocm.software/ocm-k8s-toolkit/simple:1.0.0 $OC
 
 ```text
 Transferring component versions...
-  ✓ transformOcmSoftwareOcmK8sToolkitSimple100Upload [OCIAddComponentVersion]
+  ✓ simple@1.0.0 [Upload]
   [████████████████████████████████████████] 100% 1/1
 ```
+
 </details>
 
 To make your component public in GitHub Container Registry, go to the `packages` tab in your GitHub repository `https://github.com/$GITHUB_USERNAME?tab=packages`,
@@ -187,6 +192,7 @@ ocm get cv $OCM_REPO//ocm.software/ocm-k8s-toolkit/simple:1.0.0
 ─────────────────────────────────────┼─────────┼──────────────
  ocm.software/ocm-k8s-toolkit/simple │ 1.0.0   │ ocm.software
 ```
+
 </details>
 
 {{< /step >}}
@@ -206,7 +212,9 @@ Create `rgd.yaml` with the following content:
 {{< tab "Flux" >}}
 
 {{< details "ResourceGraphDefinition (rgd.yaml)" >}}
-```yaml
+
+```shell
+cat > rgd.yaml << 'EOF'
 apiVersion: kro.run/v1alpha1
 kind: ResourceGraphDefinition
 metadata:
@@ -322,14 +330,18 @@ spec:
             # the instance of the CRD created by the ResourceGraphDefinition (see below).
             ui:
               message: ${schema.spec.message}
+EOF
 ```
+
 {{< /details >}}
 
 {{< /tab >}}
 {{< tab "Argo CD" >}}
 
 {{< details "ResourceGraphDefinition (rgd.yaml)" >}}
-```yaml
+
+```shell
+cat > rgd.yaml << 'EOF'
 apiVersion: kro.run/v1alpha1
 kind: ResourceGraphDefinition
 metadata:
@@ -419,7 +431,9 @@ spec:
               selfHeal: true
             syncOptions:
               - CreateNamespace=true
+EOF
 ```
+
 {{< /details >}}
 
 {{< callout context="note" title="Argo CD and OCI Helm" icon="outline/info-circle" >}}
@@ -435,6 +449,10 @@ Values are injected via `helm.valuesObject` (a structured YAML object), which av
 
 ### Apply the ResourceGraphDefinition
 
+{{< callout context="caution" title="RBAC required before you apply" icon="outline/alert-triangle" >}}
+Please make sure that you updated your RBAC permissions before applying this command. Follow our [Configure Custom RBAC for Deployers]({{< relref "custom-rbac.md" >}}) guide to know how to do that.
+{{< /callout >}}
+
 ```shell
 envsubst < rgd.yaml | kubectl apply -f -
 ```
@@ -445,6 +463,7 @@ envsubst < rgd.yaml | kubectl apply -f -
 ```text
 resourcegraphdefinition.kro.run/simple created
 ```
+
 </details>
 
 Verify it's active:
@@ -460,6 +479,7 @@ kubectl get rgd
 NAME     APIVERSION   KIND     STATE    AGE
 simple   v1alpha1     Simple   Active   19s
 ```
+
 </details>
 <br>
 
@@ -472,14 +492,17 @@ A new Custom Resource Definition called `Simple` that you can now instantiate ha
 
 Create the file `instance.yaml` to deploy the application:
 
-```yaml
+```shell
+cat > instance.yaml << 'EOF'
 apiVersion: kro.run/v1alpha1
 kind: Simple
 metadata:
   name: simple
 spec:
   message: "Deployed with OCM!"
+EOF
 ```
+
 {{< /step >}}
 
 {{< step >}}
@@ -495,6 +518,7 @@ kubectl apply -f instance.yaml
 ```text
 simple.kro.run/simple created
 ```
+
 </details>
 
 Wait for the deployment to complete:
@@ -510,6 +534,7 @@ kubectl get simple -w
 NAME     STATE    SYNCED   AGE
 simple   ACTIVE   True     2m
 ```
+
 </details>
 {{< /step >}}
 
@@ -542,6 +567,7 @@ Output:
 ```text
 Deployed with OCM!
 ```
+
 {{< /step >}}
 {{< /steps >}}
 

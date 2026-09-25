@@ -7,17 +7,23 @@ import type {SchemaField, FieldVariant, SchemaSection, SchemaMeta, SchemaModel} 
  * Follow a `$ref` pointer. Does NOT collapse oneOf/anyOf.
  */
 function resolveRef(node: SchemaNode, root: SchemaNode, seen = new Set<string>()): SchemaNode {
-    if (!node || typeof node !== "object") return node || {};
+    if (!node || typeof node !== "object") {
+        return node || {};
+    }
 
     if (node.$ref) {
-        if (seen.has(node.$ref)) return {type: "object", description: "(circular)"};
+        if (seen.has(node.$ref)) {
+            return {type: "object", description: "(circular)"};
+        }
         seen.add(node.$ref);
 
         let target: Record<string, unknown> = root as Record<string, unknown>;
         for (const raw of node.$ref.replace("#/", "").split("/")) {
             const p = raw.replace(/~1/g, "/").replace(/~0/g, "~");
             target = target?.[p] as Record<string, unknown>;
-            if (!target) return {};
+            if (!target) {
+                return {};
+            }
         }
 
         const {$ref: _, ...siblings} = node;
@@ -35,7 +41,9 @@ function classifyUnion(branches: SchemaNode[]): { kind: "nullable"; resolved: Sc
     branches: SchemaNode[]
 } {
     const nonNull = branches.filter((b) => b && b.type !== "null");
-    if (nonNull.length === 1) return {kind: "nullable", resolved: nonNull[0]};
+    if (nonNull.length === 1) {
+        return {kind: "nullable", resolved: nonNull[0]};
+    }
     return {kind: "polymorphic", branches: nonNull.length ? nonNull : branches};
 }
 
@@ -61,7 +69,9 @@ function resolve(node: SchemaNode, root: SchemaNode, seen = new Set<string>()): 
 }
 
 function normalizeType(type: string | string[] | undefined): string {
-    if (Array.isArray(type)) return type.find((t) => t !== "null") || type[0] || "object";
+    if (Array.isArray(type)) {
+        return type.find((t) => t !== "null") || type[0] || "object";
+    }
     return type || "object";
 }
 
@@ -83,7 +93,9 @@ function constStrings(branches: SchemaNode[]): string[] {
 function constAliasUnion(node: SchemaNode): { kw: "oneOf" | "anyOf"; branches: SchemaNode[] } | null {
     for (const kw of ["oneOf", "anyOf"] as const) {
         const branches = node[kw];
-        if (Array.isArray(branches) && branches.length && branches.every(isConstAliasBranch)) return {kw, branches};
+        if (Array.isArray(branches) && branches.length && branches.every(isConstAliasBranch)) {
+            return {kw, branches};
+        }
     }
     return null;
 }
@@ -105,7 +117,9 @@ function constAliasesFrom(node: SchemaNode): { constValues: string[]; deprecated
 
 function withoutConstAliasUnion(node: SchemaNode): SchemaNode {
     const union = constAliasUnion(node);
-    if (!union) return node;
+    if (!union) {
+        return node;
+    }
 
     const {[union.kw]: _, ...rest} = node;
     return rest;
@@ -115,7 +129,9 @@ function withoutConstAliasUnion(node: SchemaNode): SchemaNode {
  * Merge shared parent properties into a oneOf/anyOf branch.
  */
 function mergeParentInto(branch: SchemaNode, parent: SchemaNode, _kw: "oneOf" | "anyOf"): SchemaNode {
-    if (!parent.properties && !parent.required) return branch;
+    if (!parent.properties && !parent.required) {
+        return branch;
+    }
     return {
         ...branch,
         properties: {...parent.properties, ...branch.properties},
@@ -129,7 +145,9 @@ function mergeParentInto(branch: SchemaNode, parent: SchemaNode, _kw: "oneOf" | 
 function variantTitle(branch: SchemaNode, index: number): string {
     if (branch.required?.length) {
         const distinctive = branch.required.find((r) => !["type", "name", "version"].includes(r));
-        if (distinctive) return distinctive;
+        if (distinctive) {
+            return distinctive;
+        }
     }
     const t = normalizeType(branch.type);
     return t !== "object" ? t : `Variant ${index + 1}`;

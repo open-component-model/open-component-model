@@ -1,6 +1,10 @@
 package v1
 
 import (
+	"errors"
+	"fmt"
+	"net/url"
+
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -11,6 +15,11 @@ const (
 // Wget describes an input sourced by downloading a resource from an HTTP/S URL
 // during component construction. The downloaded content is stored as a local blob
 // in the component version.
+//
+// Verification against a source-side checksum is a deployment concern, not a
+// descriptor concern: configure it with `checksum.http.config.ocm.software/v1alpha1`
+// (see `bindings/go/configuration/checksum/http/v1alpha1/spec`), which steers
+// both this input method and the wget access-type digest processor.
 //
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
@@ -42,4 +51,19 @@ type Wget struct {
 
 func (t *Wget) String() string {
 	return t.URL
+}
+
+// Validate verifies that the URL of the Wget input is set and uses a supported scheme.
+func (t *Wget) Validate() error {
+	if t.URL == "" {
+		return errors.New("url is required")
+	}
+	parsed, err := url.Parse(t.URL)
+	if err != nil {
+		return fmt.Errorf("invalid url %q: %w", t.URL, err)
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return fmt.Errorf("url must use the http or https scheme, got %q", parsed.Scheme)
+	}
+	return nil
 }

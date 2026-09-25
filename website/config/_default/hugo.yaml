@@ -5,7 +5,6 @@
 title: Open Component Model
 baseurl: https://ocm.software
 canonifyURLs: false
-disableAliases: true
 disableHugoGeneratorInject: true
 enableEmoji: true
 enableGitInfo: false
@@ -20,7 +19,7 @@ defaultContentLanguageInSubdir: false
 editPage: false
 lastMod: false
 defaultContentVersionInSubdir: false
-defaultContentVersion: '0.12'
+defaultContentVersion: '0.17'
 pagination:
   pagerSize: 10
 params:
@@ -62,7 +61,7 @@ taxonomies:
   category: categories
   tag: tags
 permalinks:
-  docs: /docs/:sections[1:]/:title/
+  docs: /docs/:sections[1:]/:slug/
 minify:
   disableSVG: true
   tdewolff:
@@ -88,16 +87,26 @@ imaging:
 versions:
   main:
     weight: 1
-  '0.12':
+  '0.17':
     weight: 2
-  '0.11':
+  '0.16':
     weight: 3
-  '0.10':
+  '0.15':
     weight: 4
-  '0.9':
+  '0.14':
     weight: 5
-  legacy:
+  '0.13':
     weight: 6
+  '0.12':
+    weight: 7
+  '0.11':
+    weight: 8
+  '0.10':
+    weight: 9
+  '0.9':
+    weight: 10
+  legacy:
+    weight: 11
 services:
   rss:
     limit: 20
