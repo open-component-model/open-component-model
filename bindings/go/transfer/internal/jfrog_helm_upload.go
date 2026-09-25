@@ -167,29 +167,27 @@ func (t *JFrogHelmUpload) Transform(ctx context.Context, step runtime.Typed) (ru
 		// upload on mismatch, so a corrupted stream is never stored.
 		header.Set("X-Checksum-Sha256", expected)
 	}
-	rc, err := chart.Archive.ReadCloser()
-	if err != nil {
-		return nil, fmt.Errorf("failed opening chart archive of resource %s: %w", src.ToIdentity(), err)
-	}
-	defer func() { _ = rc.Close() }()
-	size := blob.SizeUnknown
-	if sized, ok := chart.Archive.(blob.SizeAware); ok {
-		size = sized.Size()
-	}
-	slog.InfoContext(ctx, "uploading helm chart to artifactory",
-		"resource", src.ToIdentity(), "chart", chart.Name+":"+chart.Version, "url", redactURL(putURL))
-	hasher := sha256.New()
-	if err := t.send(ctx, http.MethodPut, putURL, io.TeeReader(rc, hasher), size, header, creds); err != nil {
-		return nil, err
-	}
+	defer func() { _ = chart.Close() }()
 
-	computed := godigest.NewDigestFromBytes(godigest.SHA256, hasher.Sum(nil)).Encoded()
-	digest := &descriptor.Digest{HashAlgorithm: hashAlgorithmSHA256, NormalisationAlgorithm: genericBlobDigestV1, Value: computed}
+	digest := src.Digest.DeepCopy()
+	deployed := false
 	if expected != "" {
-		if computed != expected {
-			return nil, fmt.Errorf("digest mismatch: expected %s, got %s", expected, computed)
+		if deployed, err = t.deployByChecksum(ctx, putURL, expected, creds); err != nil {
+			return nil, err
 		}
-		digest = src.Digest.DeepCopy()
+	}
+	if deployed {
+		slog.InfoContext(ctx, "deployed helm chart to artifactory by checksum without uploading it",
+			"resource", src.ToIdentity(), "chart", chart.Name+":"+chart.Version, "url", redactURL(putURL))
+	} else {
+		if digest, err = t.upload(ctx, chart, putURL, header, expected, creds); err != nil {
+			return nil, err
+		}
+		if expected != "" {
+			digest = src.Digest.DeepCopy()
+		}
+		slog.InfoContext(ctx, "uploaded helm chart to artifactory",
+			"resource", src.ToIdentity(), "chart", chart.Name+":"+chart.Version, "url", redactURL(putURL))
 	}
 
 	if spec.Reindex {
@@ -322,13 +320,70 @@ func (t *JFrogHelmUpload) resolveTargetCredentials(ctx context.Context, helmRepo
 	}, nil
 }
 
-// send issues a single request to Artifactory. Errors never carry userinfo, query or fragment
-// of target.
+// upload streams the chart archive into putURL and returns the digest of the uploaded bytes,
+// which must equal expected when set.
+func (t *JFrogHelmUpload) upload(ctx context.Context, chart *chartarchive.Chart, putURL string, header http.Header, expected string, creds runtime.Typed) (*descriptor.Digest, error) {
+	rc, err := chart.Archive.ReadCloser()
+	if err != nil {
+		return nil, fmt.Errorf("failed opening chart archive: %w", err)
+	}
+	defer func() { _ = rc.Close() }()
+	size := blob.SizeUnknown
+	if sized, ok := chart.Archive.(blob.SizeAware); ok {
+		size = sized.Size()
+	}
+	hasher := sha256.New()
+	if err := t.send(ctx, http.MethodPut, putURL, io.TeeReader(rc, hasher), size, header, creds); err != nil {
+		return nil, err
+	}
+	computed := godigest.NewDigestFromBytes(godigest.SHA256, hasher.Sum(nil)).Encoded()
+	if expected != "" && computed != expected {
+		return nil, fmt.Errorf("digest mismatch: expected %s, got %s", expected, computed)
+	}
+	return &descriptor.Digest{HashAlgorithm: hashAlgorithmSHA256, NormalisationAlgorithm: genericBlobDigestV1, Value: computed}, nil
+}
+
+// deployByChecksum asks Artifactory to deploy putURL from content it already stores under the
+// checksum ("Deploy Artifact by Checksum"), so the chart is not uploaded again. It reports
+// false when Artifactory does not have the content (404) or declines the request otherwise;
+// the caller then uploads the chart, which surfaces real errors such as missing permissions.
+func (t *JFrogHelmUpload) deployByChecksum(ctx context.Context, putURL, checksum string, creds runtime.Typed) (bool, error) {
+	resp, err := t.do(ctx, http.MethodPut, putURL, nil, 0, http.Header{
+		"X-Checksum-Deploy": {"true"},
+		"X-Checksum-Sha256": {checksum},
+	}, creds)
+	if err != nil {
+		return false, err
+	}
+	_ = resp.Body.Close()
+	return resp.StatusCode >= 200 && resp.StatusCode < 300, nil
+}
+
+// send issues a single request to Artifactory and fails on a non-2xx response. Errors never
+// carry userinfo, query or fragment of target.
 func (t *JFrogHelmUpload) send(ctx context.Context, method, target string, body io.Reader, size int64, header http.Header, creds runtime.Typed) error {
+	resp, err := t.do(ctx, method, target, body, size, header, creds)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		safe := redactURL(target)
+		excerpt, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorBodyBytes))
+		if msg := strings.TrimSpace(string(excerpt)); msg != "" {
+			return fmt.Errorf("%s %s returned status %d: %s", method, safe, resp.StatusCode, msg)
+		}
+		return fmt.Errorf("%s %s returned status %d", method, safe, resp.StatusCode)
+	}
+	return nil
+}
+
+// do sends a single authenticated request to Artifactory. The caller closes the response body.
+func (t *JFrogHelmUpload) do(ctx context.Context, method, target string, body io.Reader, size int64, header http.Header, creds runtime.Typed) (*http.Response, error) {
 	safe := redactURL(target)
 	req, err := http.NewRequestWithContext(ctx, method, target, body)
 	if err != nil {
-		return fmt.Errorf("failed creating %s request for %s: %w", method, safe, err)
+		return nil, fmt.Errorf("failed creating %s request for %s: %w", method, safe, err)
 	}
 	if size >= 0 {
 		req.ContentLength = size
@@ -338,7 +393,7 @@ func (t *JFrogHelmUpload) send(ctx context.Context, method, target string, body 
 	}
 	client := ocmhttp.New(ocmhttp.WithConfig(t.HTTPConfig))
 	if err := httpauth.Apply(ctx, req, &client, creds); err != nil {
-		return fmt.Errorf("failed applying target credentials: %w", err)
+		return nil, fmt.Errorf("failed applying target credentials: %w", err)
 	}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -347,17 +402,9 @@ func (t *JFrogHelmUpload) send(ctx context.Context, method, target string, body 
 		if errors.As(err, &urlErr) {
 			urlErr.URL = safe
 		}
-		return fmt.Errorf("%s %s failed: %w", method, safe, err)
+		return nil, fmt.Errorf("%s %s failed: %w", method, safe, err)
 	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		excerpt, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorBodyBytes))
-		if msg := strings.TrimSpace(string(excerpt)); msg != "" {
-			return fmt.Errorf("%s %s returned status %d: %s", method, safe, resp.StatusCode, msg)
-		}
-		return fmt.Errorf("%s %s returned status %d", method, safe, resp.StatusCode)
-	}
-	return nil
+	return resp, nil
 }
 
 // redactURL strips userinfo, query and fragment so credentials or presigned parameters never

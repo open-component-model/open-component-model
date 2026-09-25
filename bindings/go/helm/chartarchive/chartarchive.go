@@ -72,6 +72,15 @@ type Chart struct {
 	FromOCI bool
 }
 
+// Close releases the source stream when Archive was never read, e.g. because the target
+// already had the chart. It is a no-op once Archive was read.
+func (c *Chart) Close() error {
+	if closer, ok := c.Archive.(io.Closer); ok {
+		return closer.Close()
+	}
+	return nil
+}
+
 // content is the fetched resource: either a lazy OCI stream or a blob, with an optional media
 // type hint for the blob.
 type content struct {
@@ -246,6 +255,15 @@ func (b *readerBlob) ReadCloser() (io.ReadCloser, error) {
 }
 
 func (b *readerBlob) Size() int64 { return b.size }
+
+// Close closes the stream if it was never handed out; once handed out, the reader owns it.
+func (b *readerBlob) Close() error {
+	if b.used {
+		return nil
+	}
+	b.used = true
+	return b.rc.Close()
+}
 
 type readCloser struct {
 	io.Reader

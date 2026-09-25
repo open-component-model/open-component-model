@@ -87,6 +87,7 @@ type artifactoryRequest struct {
 	basic                     bool
 	authorization             string
 	checksum                  string
+	deploy                    bool
 	body                      []byte
 }
 
@@ -95,19 +96,31 @@ func artifactoryServer(t *testing.T) (*httptest.Server, func() []artifactoryRequ
 	t.Helper()
 	var mu sync.Mutex
 	var requests []artifactoryRequest
+	stored := map[string]bool{}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
-		req := artifactoryRequest{method: r.Method, path: r.URL.Path, contentType: r.Header.Get("Content-Type"), authorization: r.Header.Get("Authorization"), checksum: r.Header.Get("X-Checksum-Sha256"), body: body}
+		req := artifactoryRequest{method: r.Method, path: r.URL.Path, contentType: r.Header.Get("Content-Type"), authorization: r.Header.Get("Authorization"), checksum: r.Header.Get("X-Checksum-Sha256"), deploy: r.Header.Get("X-Checksum-Deploy") == "true", body: body}
 		req.username, req.password, req.basic = r.BasicAuth()
 		mu.Lock()
+		defer mu.Unlock()
 		requests = append(requests, req)
-		mu.Unlock()
+		if req.deploy {
+			// Deploy by checksum succeeds only for content Artifactory already stores.
+			if !stored[req.checksum] {
+				http.NotFound(w, r)
+				return
+			}
+			w.WriteHeader(http.StatusCreated)
+			return
+		}
 		if r.Method == http.MethodPut {
 			// Like Artifactory, reject a body that does not match the announced checksum.
 			if sum := sha256.Sum256(body); req.checksum != "" && req.checksum != hex.EncodeToString(sum[:]) {
 				http.Error(w, "checksum mismatch", http.StatusConflict)
 				return
 			}
+			sum := sha256.Sum256(body)
+			stored[hex.EncodeToString(sum[:])] = true
 			w.WriteHeader(http.StatusCreated)
 		}
 	}))
@@ -237,7 +250,24 @@ func TestJFrogHelmUpload_Transform(t *testing.T) {
 		res.Digest = &descriptorv2.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: "genericBlobDigest/v1", Value: chartDigest}
 		out, err := transformer(nil).Transform(t.Context(), step(srv.URL, false, res))
 		r.NoError(err)
-		r.Equal(chartDigest, requests()[0].checksum)
+		got := requests()
+		r.Len(got, 2)
+		r.True(got[0].deploy, "deploy by checksum is tried first")
+		r.Empty(got[0].body)
+		r.False(got[1].deploy)
+		r.Equal(chartDigest, got[1].checksum)
+		r.Equal(chartTGZ, got[1].body)
+		r.Equal(res.Digest, out.(*JFrogHelmUploadTransformation).Output.Resource.Digest)
+
+		// Artifactory now stores the chart, so a second transfer does not upload it again.
+		out, err = transformer(nil).Transform(t.Context(), step(srv.URL, true, res))
+		r.NoError(err)
+		got = requests()[2:]
+		r.Len(got, 2)
+		r.True(got[0].deploy)
+		r.Equal("/artifactory/helm-local/mychart-0.1.0.tgz", got[0].path)
+		r.Empty(got[0].body)
+		r.Equal("/artifactory/api/helm/helm-local/reindex", got[1].path)
 		r.Equal(res.Digest, out.(*JFrogHelmUploadTransformation).Output.Resource.Digest)
 	})
 
@@ -249,8 +279,8 @@ func TestJFrogHelmUpload_Transform(t *testing.T) {
 		_, err := transformer(nil).Transform(t.Context(), step(srv.URL, true, res))
 		r.ErrorContains(err, "returned status 409")
 		got := requests()
-		r.Len(got, 1, "no reindex after a rejected upload")
-		r.Equal("0000", got[0].checksum)
+		r.Len(got, 2, "deploy by checksum, the rejected upload and no reindex")
+		r.Equal("0000", got[1].checksum)
 	})
 
 	t.Run("unsupported source digest fails before uploading", func(t *testing.T) {
