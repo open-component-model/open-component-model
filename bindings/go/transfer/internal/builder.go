@@ -144,9 +144,9 @@ func NewDefaultBuilder(
 		HTTPConfig:         httpConfig,
 	}
 
-	// JFrog Artifactory Helm upload transformer (JFrog helm uploader configurations)
-	transformerScheme.MustRegisterWithAlias(&JFrogHelmUploadTransformation{}, JFrogHelmUploadVersionedType)
-	jfrogHelmUpload := &JFrogHelmUpload{
+	// Helm repository upload transformer (helm uploader configurations)
+	transformerScheme.MustRegisterWithAlias(&HelmRepositoryUploadTransformation{}, HelmRepositoryUploadVersionedType)
+	helmRepositoryUpload := &HelmRepositoryUpload{
 		Scheme: transformerScheme,
 		Charts: &chartarchive.Source{
 			ResourceRepository: resourceRepo,
@@ -184,6 +184,6 @@ func NewDefaultBuilder(
 		WithTransformer(&s3v1alpha1.DownloadS3Resource{}, downloadS3).
 		WithTransformer(&githubv1alpha1.GetGitHubCommit{}, getGitHubCommit).
 		WithTransformer(&wgetv1alpha1.HTTPStreaming{}, httpStreaming).
-		WithTransformer(&JFrogHelmUploadTransformation{}, jfrogHelmUpload).
+		WithTransformer(&HelmRepositoryUploadTransformation{}, helmRepositoryUpload).
 		WithTransformer(&FileCleanupTransformation{}, fileCleanup)
 }

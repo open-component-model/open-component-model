@@ -264,36 +264,51 @@ field fails the transfer deliberately rather than producing a partial URL.
 **Fix:** Add a `credentials.config.ocm.software` consumer with `type: Wget` and the
 target `hostname`, as in Step 2.
 
-## Deploy Helm Charts to JFrog Artifactory
+## Deploy Helm Charts to JFrog Artifactory or Sonatype Nexus
 
-The `jfrog.helm.uploader.transfer.config.ocm.software/v1alpha1` uploader
-deploys Helm charts into a JFrog Artifactory Helm repository and rewrites the
-resource to a `Helm/v1` access. It extracts the chart archive from `Helm/v1`,
-`OCIImage/v1`, `LocalBlob` (for example charts added with the `helm` input) or
-other remote sources and streams it as a `PUT` to Artifactory under the path of
-its component version. It then publishes a `Helm/v1` access with the chart name
-and version Artifactory recorded, so downstream consumers can pull the chart with
-`helm pull`.
+The `helm.uploader.transfer.config.ocm.software/v1alpha1` uploader uploads Helm
+charts into a JFrog Artifactory or Sonatype Nexus Repository 3 Helm repository and
+rewrites the resource to a `Helm/v1` access. It extracts the chart archive from
+`Helm/v1`, `OCIImage/v1`, `LocalBlob` (for example charts added with the `helm`
+input) or other remote sources and streams it as a `PUT` to the server. It then
+publishes a `Helm/v1` access with the chart name and version the server recorded,
+so downstream consumers can pull the chart with `helm pull`.
 
 ### Uploader configuration
+
+For Artifactory, the chart is stored under the path of its component version:
 
 ```yaml
 type: generic.config.ocm.software/v1
 configurations:
   - type: transfer.config.ocm.software/v1alpha1
     copyMode: allResources
-  - type: jfrog.helm.uploader.transfer.config.ocm.software/v1alpha1
+  - type: helm.uploader.transfer.config.ocm.software/v1alpha1
     match:
       accessType: Helm/v1
+    server: Artifactory
     url: https://myorg.jfrog.io
     repository: helm-local
 ```
 
+For a Nexus Helm hosted repository, Nexus stores the chart as
+`<name>-<version>.tgz` and the published `helmRepository` is
+`https://nexus.example.com/repository/helm-hosted`:
+
+```yaml
+  - type: helm.uploader.transfer.config.ocm.software/v1alpha1
+    match:
+      accessType: Helm/v1
+    server: Nexus
+    url: https://nexus.example.com
+    repository: helm-hosted
+```
+
 ### Credentials
 
-Add credentials for the Artifactory host. The uploader resolves them using the
-`HelmChartRepository` consumer identity of the Artifactory Helm API, falling back
-to the `Wget` consumer identity of the upload URL, so either entry works:
+Add credentials for the server host. The uploader resolves them using the
+`HelmChartRepository` consumer identity of the published Helm repository, falling
+back to the `Wget` consumer identity of the upload URL, so either entry works:
 
 ```yaml
   - type: credentials.config.ocm.software
@@ -344,7 +359,7 @@ resources:
 {{< /details >}}
 
 For the full field reference, see
-[`jfrog.helm.uploader.transfer.config.ocm.software/v1alpha1`]({{< relref "docs/reference/transfer-configuration.md" >}}#jfroghelmuploadertransferconfigocmsoftwarev1alpha1).
+[`helm.uploader.transfer.config.ocm.software/v1alpha1`]({{< relref "docs/reference/transfer-configuration.md" >}}#helmuploadertransferconfigocmsoftwarev1alpha1).
 
 ## Next steps
 
