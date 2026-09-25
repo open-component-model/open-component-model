@@ -1,15 +1,21 @@
 // Package handler implements OpenPGP (GPG) signing and verification for OCM.
 // It supports passphrase-protected private keys via the credential map.
 // Signatures are stored as ASCII-armored OpenPGP detached signatures.
+//
+// In FIPS 140-3 mode (crypto/fips140.Enabled) Sign and Verify delegate to the
+// GnuPG gpg binary on PATH so that all OpenPGP cryptography, including
+// passphrase unwrapping, runs in libgcrypt; see ADR 0030.
 package handler
 
 import (
 	"bytes"
 	"context"
 	gocrypto "crypto"
+	"crypto/fips140"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/ProtonMail/go-crypto/openpgp"
@@ -17,6 +23,7 @@ import (
 
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	gpgcredentials "ocm.software/open-component-model/bindings/go/gpg/signing/handler/internal/credentials"
+	"ocm.software/open-component-model/bindings/go/gpg/signing/handler/internal/gpgbinary"
 	gpgcredentialsspec "ocm.software/open-component-model/bindings/go/gpg/spec/credentials"
 	gpgcredentialsv1 "ocm.software/open-component-model/bindings/go/gpg/spec/credentials/v1alpha1"
 	identityv1 "ocm.software/open-component-model/bindings/go/gpg/spec/identity/v1alpha1"
@@ -33,11 +40,14 @@ var (
 )
 
 // Handler implements OpenPGP signing and verification.
-type Handler struct{}
+type Handler struct {
+	fipsEnabled func() bool
+	gpgBinary   *gpgbinary.Binary
+}
 
 // New returns a Handler.
 func New(_ *runtime.Scheme) (*Handler, error) {
-	return &Handler{}, nil
+	return &Handler{fipsEnabled: fips140.Enabled, gpgBinary: gpgbinary.New()}, nil
 }
 
 // GetSigningHandlerScheme returns the scheme for this handler's config types.
@@ -47,7 +57,7 @@ func (h *Handler) GetSigningHandlerScheme() *runtime.Scheme {
 
 // Sign produces an ASCII-armored OpenPGP detached signature over the digest bytes.
 func (h *Handler) Sign(
-	_ context.Context,
+	ctx context.Context,
 	unsigned descruntime.Digest,
 	cfg runtime.Typed,
 	creds runtime.Typed,
@@ -64,6 +74,10 @@ func (h *Handler) Sign(
 		if err != nil {
 			return descruntime.SignatureInfo{}, fmt.Errorf("parse GPG credentials: %w", err)
 		}
+	}
+
+	if h.fipsEnabled() {
+		return h.signWithGPGBinary(ctx, unsigned, &sigCfg, typedCreds)
 	}
 
 	keyring, err := gpgcredentials.PrivateKeyRingFromCredentials(typedCreds)
@@ -105,7 +119,7 @@ func (h *Handler) Sign(
 
 // Verify validates an OpenPGP detached signature stored in SignatureInfo.Value.
 func (h *Handler) Verify(
-	_ context.Context,
+	ctx context.Context,
 	signed descruntime.Signature,
 	cfg runtime.Typed,
 	creds runtime.Typed,
@@ -126,6 +140,10 @@ func (h *Handler) Verify(
 		if err != nil {
 			return fmt.Errorf("parse GPG credentials: %w", err)
 		}
+	}
+
+	if h.fipsEnabled() {
+		return h.verifyWithGPGBinary(ctx, signed, &sigCfg, typedCreds)
 	}
 
 	keyring, err := gpgcredentials.PublicKeyRingFromCredentials(typedCreds)
@@ -156,6 +174,82 @@ func (h *Handler) Verify(
 		nil,
 	)
 	if err != nil {
+		return fmt.Errorf("gpg verify: %w", err)
+	}
+	return nil
+}
+
+// signWithGPGBinary signs with the system gpg binary so the cryptography runs in libgcrypt.
+func (h *Handler) signWithGPGBinary(
+	ctx context.Context,
+	unsigned descruntime.Digest,
+	sigCfg *v1alpha1.Config,
+	typedCreds *gpgcredentialsv1.GPGCredentials,
+) (descruntime.SignatureInfo, error) {
+	keyBytes, err := gpgcredentials.PrivateKeyBytes(typedCreds)
+	if err != nil {
+		return descruntime.SignatureInfo{}, fmt.Errorf("load GPG private key: %w", err)
+	}
+	if len(keyBytes) == 0 {
+		return descruntime.SignatureInfo{}, ErrMissingPrivateKey
+	}
+	digestBytes, err := parseDigest(unsigned)
+	if err != nil {
+		return descruntime.SignatureInfo{}, err
+	}
+	algo, err := gpgDigestAlgoForHash(sigCfg.GetHashAlgorithm())
+	if err != nil {
+		return descruntime.SignatureInfo{}, err
+	}
+	var passphrase string
+	if typedCreds != nil {
+		passphrase = typedCreds.Passphrase
+	}
+
+	slog.DebugContext(ctx, "FIPS 140-3 mode: signing with the system gpg binary")
+	sig, err := h.gpgBinary.Sign(ctx, gpgbinary.SignRequest{
+		PrivateKey:     keyBytes,
+		Passphrase:     passphrase,
+		KeyFingerprint: sigCfg.GetKeyFingerprint(),
+		DigestAlgo:     algo,
+		Data:           digestBytes,
+	})
+	if err != nil {
+		return descruntime.SignatureInfo{}, fmt.Errorf("gpg sign: %w", err)
+	}
+	return descruntime.SignatureInfo{
+		Algorithm: v1alpha1.AlgorithmGPG,
+		MediaType: v1alpha1.MediaTypeGPG,
+		Value:     sig,
+	}, nil
+}
+
+// verifyWithGPGBinary verifies with the system gpg binary so the cryptography runs in libgcrypt.
+func (h *Handler) verifyWithGPGBinary(
+	ctx context.Context,
+	signed descruntime.Signature,
+	sigCfg *v1alpha1.Config,
+	typedCreds *gpgcredentialsv1.GPGCredentials,
+) error {
+	keyBytes, err := gpgcredentials.PublicKeyBytes(typedCreds)
+	if err != nil {
+		return fmt.Errorf("load GPG public key: %w", err)
+	}
+	if len(keyBytes) == 0 {
+		return ErrMissingPublicKey
+	}
+	digestBytes, err := parseDigest(signed.Digest)
+	if err != nil {
+		return err
+	}
+
+	slog.DebugContext(ctx, "FIPS 140-3 mode: verifying with the system gpg binary")
+	if err := h.gpgBinary.Verify(ctx, gpgbinary.VerifyRequest{
+		PublicKey:      keyBytes,
+		KeyFingerprint: sigCfg.GetKeyFingerprint(),
+		Data:           digestBytes,
+		Signature:      signed.Signature.Value,
+	}); err != nil {
 		return fmt.Errorf("gpg verify: %w", err)
 	}
 	return nil
@@ -211,6 +305,20 @@ func packetConfigForHash(alg v1alpha1.HashAlgorithm) (*packet.Config, error) {
 		return &packet.Config{DefaultHash: gocrypto.SHA512}, nil
 	default:
 		return nil, fmt.Errorf("unsupported GPG hash algorithm %q", alg)
+	}
+}
+
+// gpgDigestAlgoForHash maps a HashAlgorithm to a gpg --digest-algo name.
+func gpgDigestAlgoForHash(alg v1alpha1.HashAlgorithm) (string, error) {
+	switch alg {
+	case "", v1alpha1.HashAlgorithmSHA256:
+		return "SHA256", nil
+	case v1alpha1.HashAlgorithmSHA384:
+		return "SHA384", nil
+	case v1alpha1.HashAlgorithmSHA512:
+		return "SHA512", nil
+	default:
+		return "", fmt.Errorf("unsupported GPG hash algorithm %q", alg)
 	}
 }
 

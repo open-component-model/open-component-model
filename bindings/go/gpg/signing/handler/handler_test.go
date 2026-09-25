@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto"
+	"crypto/rsa"
 	"encoding/hex"
 	"fmt"
 	"testing"
@@ -215,10 +216,13 @@ func TestGPGHandler_InvalidHashAlgorithm(t *testing.T) {
 
 // ---- helpers ----
 
+// mustHandler returns a Handler pinned to the go-crypto backend so the suite
+// stays deterministic when run with GODEBUG=fips140=on.
 func mustHandler(t *testing.T) *Handler {
 	t.Helper()
 	h, err := New(v1alpha1.Scheme)
 	require.NoError(t, err)
+	h.fipsEnabled = func() bool { return false }
 	return h
 }
 
@@ -227,10 +231,29 @@ func mustEntity(t *testing.T, passphrase string) *openpgp.Entity {
 	cfg := &packet.Config{RSABits: 2048}
 	entity, err := openpgp.NewEntity("test", "", "test@example.com", cfg)
 	require.NoError(t, err)
+	orderRSAPrimes(t, entity.PrivateKey)
+	for _, sub := range entity.Subkeys {
+		orderRSAPrimes(t, sub.PrivateKey)
+	}
 	if passphrase != "" {
 		require.NoError(t, entity.EncryptPrivateKeys([]byte(passphrase), cfg))
 	}
 	return entity
+}
+
+// orderRSAPrimes makes go-crypto serialize the RSA primes as p < q, as RFC 4880 requires.
+// go-crypto writes Primes[1] as p and Primes[0] as q without ordering them, and
+// GnuPG >= 2.5 rejects such keys with "Bad secret key".
+func orderRSAPrimes(t *testing.T, key *packet.PrivateKey) {
+	t.Helper()
+	rsaKey, ok := key.PrivateKey.(*rsa.PrivateKey)
+	if !ok || rsaKey.Primes[1].Cmp(rsaKey.Primes[0]) < 0 {
+		return
+	}
+	rsaKey.Primes[0], rsaKey.Primes[1] = rsaKey.Primes[1], rsaKey.Primes[0]
+	rsaKey.Precomputed = rsa.PrecomputedValues{}
+	rsaKey.Precompute()
+	require.NoError(t, rsaKey.Validate())
 }
 
 func makeDigest(t *testing.T, h crypto.Hash, data []byte) descruntime.Digest {
