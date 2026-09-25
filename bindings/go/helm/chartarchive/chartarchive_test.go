@@ -69,6 +69,18 @@ func (s *stubOCIRepo) UploadResourceStream(_ context.Context, _ *descriptor.Reso
 	return nil, errors.New("not implemented")
 }
 
+// stubStreamer streams data for Wget/v1 resources and reports errors.ErrUnsupported otherwise.
+type stubStreamer struct {
+	data []byte
+}
+
+func (s *stubStreamer) OpenResource(_ context.Context, res *descriptor.Resource, _ runtime.Typed) (io.ReadCloser, int64, error) {
+	if res.Access.GetType().Name != "Wget" {
+		return nil, 0, errors.ErrUnsupported
+	}
+	return io.NopCloser(bytes.NewReader(s.data)), -1, nil
+}
+
 // localRepo serves a local blob through GetLocalResource only.
 type localRepo struct {
 	repository.ComponentVersionRepository
@@ -279,6 +291,27 @@ func TestSource_Open(t *testing.T) {
 			name: "Wget/v1 serving a packaged chart yields it unchanged",
 			setup: func(t *testing.T) opened {
 				return opened{&chartarchive.Source{ResourceRepository: &stubResourceRepo{blob: fromBytes(chartTGZ)}}, chartarchive.Request{Resource: wgetSource}}
+			},
+			want: chartTGZ,
+		},
+		{
+			name: "Wget/v1 is streamed by a streamer instead of downloaded",
+			setup: func(t *testing.T) opened {
+				return opened{&chartarchive.Source{
+					ResourceRepository: &stubResourceRepo{},
+					Streamers:          []chartarchive.Streamer{&stubStreamer{data: chartTGZ}},
+				}, chartarchive.Request{Resource: wgetSource}}
+			},
+			want: chartTGZ,
+		},
+		{
+			name: "access types without a streamer are downloaded",
+			setup: func(t *testing.T) opened {
+				s3 := resourceWith(rawAccess(t, `{"type":"S3/v1","bucket":"b","key":"mychart-0.1.0.tgz"}`))
+				return opened{&chartarchive.Source{
+					ResourceRepository: &stubResourceRepo{blob: fromBytes(chartTGZ)},
+					Streamers:          []chartarchive.Streamer{&stubStreamer{data: []byte("unused")}},
+				}, chartarchive.Request{Resource: s3}}
 			},
 			want: chartTGZ,
 		},

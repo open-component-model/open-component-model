@@ -157,6 +157,16 @@ func (t *JFrogHelmUpload) Transform(ctx context.Context, step runtime.Typed) (ru
 		return nil, err
 	}
 
+	expected, err := expectedDigest(src.Digest, chart.FromOCI)
+	if err != nil {
+		return nil, err
+	}
+	header := http.Header{"Content-Type": {compression.MediaTypeGzip}}
+	if expected != "" {
+		// Artifactory verifies the uploaded bytes against this checksum and rejects the
+		// upload on mismatch, so a corrupted stream is never stored.
+		header.Set("X-Checksum-Sha256", expected)
+	}
 	rc, err := chart.Archive.ReadCloser()
 	if err != nil {
 		return nil, fmt.Errorf("failed opening chart archive of resource %s: %w", src.ToIdentity(), err)
@@ -169,18 +179,21 @@ func (t *JFrogHelmUpload) Transform(ctx context.Context, step runtime.Typed) (ru
 	slog.InfoContext(ctx, "uploading helm chart to artifactory",
 		"resource", src.ToIdentity(), "chart", chart.Name+":"+chart.Version, "url", redactURL(putURL))
 	hasher := sha256.New()
-	if err := t.send(ctx, http.MethodPut, putURL, io.TeeReader(rc, hasher), size, compression.MediaTypeGzip, creds); err != nil {
+	if err := t.send(ctx, http.MethodPut, putURL, io.TeeReader(rc, hasher), size, header, creds); err != nil {
 		return nil, err
 	}
 
 	computed := godigest.NewDigestFromBytes(godigest.SHA256, hasher.Sum(nil)).Encoded()
-	digest, err := uploadedDigest(src.Digest, chart.FromOCI, computed)
-	if err != nil {
-		return nil, err
+	digest := &descriptor.Digest{HashAlgorithm: hashAlgorithmSHA256, NormalisationAlgorithm: genericBlobDigestV1, Value: computed}
+	if expected != "" {
+		if computed != expected {
+			return nil, fmt.Errorf("digest mismatch: expected %s, got %s", expected, computed)
+		}
+		digest = src.Digest.DeepCopy()
 	}
 
 	if spec.Reindex {
-		if err := t.send(ctx, http.MethodPost, helmRepo+"/reindex", nil, -1, "", creds); err != nil {
+		if err := t.send(ctx, http.MethodPost, helmRepo+"/reindex", nil, -1, nil, creds); err != nil {
 			return nil, err
 		}
 	}
@@ -201,23 +214,20 @@ func (t *JFrogHelmUpload) Transform(ctx context.Context, step runtime.Typed) (ru
 	return &transformation, nil
 }
 
-// uploadedDigest records the digest of the uploaded chart. A source digest that describes the
-// uploaded bytes is verified against them; a chart extracted from an OCI artifact has a
-// different byte representation, so its computed digest is recorded instead.
-func uploadedDigest(src *descriptor.Digest, fromOCI bool, computed string) (*descriptor.Digest, error) {
+// expectedDigest returns the SHA-256 the uploaded chart must have: the source digest, if it
+// describes the uploaded bytes. It is empty when there is no source digest or the chart was
+// extracted from an OCI artifact, whose digest describes a different byte representation.
+func expectedDigest(src *descriptor.Digest, fromOCI bool) (string, error) {
 	if src == nil || fromOCI {
-		return &descriptor.Digest{HashAlgorithm: hashAlgorithmSHA256, NormalisationAlgorithm: genericBlobDigestV1, Value: computed}, nil
+		return "", nil
 	}
 	if src.HashAlgorithm != hashAlgorithmSHA256 {
-		return nil, fmt.Errorf("unsupported hash algorithm: expected %s, got %s", hashAlgorithmSHA256, src.HashAlgorithm)
+		return "", fmt.Errorf("unsupported hash algorithm: expected %s, got %s", hashAlgorithmSHA256, src.HashAlgorithm)
 	}
 	if src.NormalisationAlgorithm != genericBlobDigestV1 {
-		return nil, fmt.Errorf("unsupported normalisation algorithm: expected %s, got %s", genericBlobDigestV1, src.NormalisationAlgorithm)
+		return "", fmt.Errorf("unsupported normalisation algorithm: expected %s, got %s", genericBlobDigestV1, src.NormalisationAlgorithm)
 	}
-	if src.Value != computed {
-		return nil, fmt.Errorf("digest mismatch: expected %s, got %s", src.Value, computed)
-	}
-	return src.DeepCopy(), nil
+	return src.Value, nil
 }
 
 // localSource resolves the source component version repository of a local blob resource.
@@ -314,7 +324,7 @@ func (t *JFrogHelmUpload) resolveTargetCredentials(ctx context.Context, helmRepo
 
 // send issues a single request to Artifactory. Errors never carry userinfo, query or fragment
 // of target.
-func (t *JFrogHelmUpload) send(ctx context.Context, method, target string, body io.Reader, size int64, contentType string, creds runtime.Typed) error {
+func (t *JFrogHelmUpload) send(ctx context.Context, method, target string, body io.Reader, size int64, header http.Header, creds runtime.Typed) error {
 	safe := redactURL(target)
 	req, err := http.NewRequestWithContext(ctx, method, target, body)
 	if err != nil {
@@ -323,8 +333,8 @@ func (t *JFrogHelmUpload) send(ctx context.Context, method, target string, body 
 	if size >= 0 {
 		req.ContentLength = size
 	}
-	if contentType != "" {
-		req.Header.Set("Content-Type", contentType)
+	for k, v := range header {
+		req.Header[k] = v
 	}
 	client := ocmhttp.New(ocmhttp.WithConfig(t.HTTPConfig))
 	if err := httpauth.Apply(ctx, req, &client, creds); err != nil {

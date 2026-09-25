@@ -86,6 +86,7 @@ type artifactoryRequest struct {
 	username, password        string
 	basic                     bool
 	authorization             string
+	checksum                  string
 	body                      []byte
 }
 
@@ -96,12 +97,17 @@ func artifactoryServer(t *testing.T) (*httptest.Server, func() []artifactoryRequ
 	var requests []artifactoryRequest
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
-		req := artifactoryRequest{method: r.Method, path: r.URL.Path, contentType: r.Header.Get("Content-Type"), authorization: r.Header.Get("Authorization"), body: body}
+		req := artifactoryRequest{method: r.Method, path: r.URL.Path, contentType: r.Header.Get("Content-Type"), authorization: r.Header.Get("Authorization"), checksum: r.Header.Get("X-Checksum-Sha256"), body: body}
 		req.username, req.password, req.basic = r.BasicAuth()
 		mu.Lock()
 		requests = append(requests, req)
 		mu.Unlock()
 		if r.Method == http.MethodPut {
+			// Like Artifactory, reject a body that does not match the announced checksum.
+			if sum := sha256.Sum256(body); req.checksum != "" && req.checksum != hex.EncodeToString(sum[:]) {
+				http.Error(w, "checksum mismatch", http.StatusConflict)
+				return
+			}
 			w.WriteHeader(http.StatusCreated)
 		}
 	}))
@@ -163,6 +169,7 @@ func TestJFrogHelmUpload_Transform(t *testing.T) {
 		r.Equal("/artifactory/helm-local/mychart-0.1.0.tgz", got[0].path)
 		r.Equal("application/gzip", got[0].contentType)
 		r.Equal(chartTGZ, got[0].body)
+		r.Empty(got[0].checksum, "without a source digest there is no checksum to announce")
 		r.Equal(http.MethodPost, got[1].method)
 		r.Equal("/artifactory/api/helm/helm-local/reindex", got[1].path)
 
@@ -223,13 +230,37 @@ func TestJFrogHelmUpload_Transform(t *testing.T) {
 		})
 	}
 
-	t.Run("source digest mismatch", func(t *testing.T) {
+	t.Run("source digest is announced as checksum and kept", func(t *testing.T) {
 		r := require.New(t)
-		srv, _ := artifactoryServer(t)
+		srv, requests := artifactoryServer(t)
+		res := source()
+		res.Digest = &descriptorv2.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: "genericBlobDigest/v1", Value: chartDigest}
+		out, err := transformer(nil).Transform(t.Context(), step(srv.URL, false, res))
+		r.NoError(err)
+		r.Equal(chartDigest, requests()[0].checksum)
+		r.Equal(res.Digest, out.(*JFrogHelmUploadTransformation).Output.Resource.Digest)
+	})
+
+	t.Run("source digest mismatch is rejected by artifactory", func(t *testing.T) {
+		r := require.New(t)
+		srv, requests := artifactoryServer(t)
 		res := source()
 		res.Digest = &descriptorv2.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: "genericBlobDigest/v1", Value: "0000"}
 		_, err := transformer(nil).Transform(t.Context(), step(srv.URL, true, res))
-		r.ErrorContains(err, "digest mismatch: expected 0000, got "+chartDigest)
+		r.ErrorContains(err, "returned status 409")
+		got := requests()
+		r.Len(got, 1, "no reindex after a rejected upload")
+		r.Equal("0000", got[0].checksum)
+	})
+
+	t.Run("unsupported source digest fails before uploading", func(t *testing.T) {
+		r := require.New(t)
+		srv, requests := artifactoryServer(t)
+		res := source()
+		res.Digest = &descriptorv2.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: "ociArtifactDigest/v1", Value: chartDigest}
+		_, err := transformer(nil).Transform(t.Context(), step(srv.URL, true, res))
+		r.ErrorContains(err, "unsupported normalisation algorithm")
+		r.Empty(requests())
 	})
 
 	t.Run("local blob without repository provider", func(t *testing.T) {

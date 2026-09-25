@@ -20,6 +20,7 @@ import (
 	s3v1alpha1 "ocm.software/open-component-model/bindings/go/s3/transformation/spec/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/transform/graph/builder"
 	wgetaccess "ocm.software/open-component-model/bindings/go/wget/spec/access"
+	wgetstream "ocm.software/open-component-model/bindings/go/wget/stream"
 	wgettransformer "ocm.software/open-component-model/bindings/go/wget/transformation"
 	wgetv1alpha1 "ocm.software/open-component-model/bindings/go/wget/transformation/spec/v1alpha1"
 )
@@ -151,6 +152,7 @@ func NewDefaultBuilder(
 			ResourceRepository: resourceRepo,
 			OCIRepository:      streamingOCIRepo,
 			HTTPConfig:         httpConfig,
+			Streamers:          []chartarchive.Streamer{&wgetstream.Streamer{HTTPConfig: httpConfig}},
 		},
 		ResourceRepository: resourceRepo,
 		RepoProvider:       repoProvider,

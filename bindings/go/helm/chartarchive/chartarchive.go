@@ -34,6 +34,15 @@ type Source struct {
 	OCIRepository ocistream.ResourceRepository
 	// HTTPConfig configures the client streaming charts from HTTP/S Helm repositories.
 	HTTPConfig *httpv1alpha1.Config
+	// Streamers open other remote resources as streams. The first one that does not
+	// return errors.ErrUnsupported wins; without one, ResourceRepository downloads the resource.
+	Streamers []Streamer
+}
+
+// Streamer opens a remote resource as a stream, returning the content and its size (-1 when
+// unknown). It returns errors.ErrUnsupported for access types it does not handle.
+type Streamer interface {
+	OpenResource(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) (io.ReadCloser, int64, error)
 }
 
 // Local locates a local resource in its component version.
@@ -104,7 +113,7 @@ func (s *Source) fetch(ctx context.Context, req Request) (content, error) {
 		stream, err := s.OCIRepository.DownloadResourceStream(ctx, req.Resource, req.Credentials)
 		return content{stream: stream}, err
 	default:
-		return s.download(ctx, req)
+		return s.openRemote(ctx, req)
 	}
 }
 
@@ -177,6 +186,24 @@ func (s *Source) fetchHelm(ctx context.Context, req Request) (content, error) {
 		size = blob.SizeUnknown
 	}
 	return content{blob: &readerBlob{rc: rc, size: size}}, nil
+}
+
+// openRemote streams the resource with the first Streamer supporting it, else downloads it.
+func (s *Source) openRemote(ctx context.Context, req Request) (content, error) {
+	for _, streamer := range s.Streamers {
+		rc, size, err := streamer.OpenResource(ctx, req.Resource, req.Credentials)
+		switch {
+		case errors.Is(err, errors.ErrUnsupported):
+			continue
+		case err != nil:
+			return content{}, err
+		}
+		if size < 0 {
+			size = blob.SizeUnknown
+		}
+		return content{blob: &readerBlob{rc: rc, size: size}}, nil
+	}
+	return s.download(ctx, req)
 }
 
 func (s *Source) download(ctx context.Context, req Request) (content, error) {

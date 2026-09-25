@@ -178,12 +178,14 @@ Other content fails the transfer.
 | `Helm/v1`          | Streamed from the chart URL listed in the repository `index.yaml`; `oci://` charts are streamed from the registry. The provenance file is not transferred. |
 | `OCIImage/v1`      | Streamed from the OCI registry.                                                                                                                            |
 | `LocalBlob`        | Streamed from the source component version (for example a chart added with the `helm` input, stored as an OCI artifact).                                   |
-| Other remote types | Downloaded with the resource repository of the access type, for example a `Wget/v1` URL serving the `.tgz`.                                                |
+| `Wget/v1`          | Streamed from the URL. Checksums advertised by the source server are not checked; the source digest is (see below).                                        |
+| Other remote types | Downloaded with the resource repository of the access type, for example `S3/v1`.                                                                           |
 
 #### Digest
 
-A `genericBlobDigest/v1` source digest is verified as the bytes pass through. A
-chart extracted from an OCI artifact gets the SHA-256 of the uploaded `.tgz`
+A `genericBlobDigest/v1` SHA-256 source digest is sent with the upload as
+`X-Checksum-Sha256`, so Artifactory rejects the upload if the streamed bytes do not
+match and never stores them; the uploader verifies it as well. A chart extracted from an OCI artifact gets the SHA-256 of the uploaded `.tgz`
 instead of its source digest (for example an `ociArtifactDigest/v1`), so
 signatures over the old digest do not carry over.
 
