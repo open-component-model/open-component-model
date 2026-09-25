@@ -183,14 +183,14 @@ Artifactory host (the `hostname` of the `url` field):
           type: Wget
           hostname: myorg.jfrog.io
         credentials:
-          - type: Credentials/v1
-            properties:
-              username: <USERNAME>
-              password: <PASSWORD>
+          - type: WgetCredentials/v1
+            username: <USERNAME>
+            password: <PASSWORD>
 ```
 
-See
-[Credential Types]({{< relref "docs/reference/credential-types.md" >}}) and
+An Artifactory access token can be used as `password`, or as `identityToken`
+(sent as a bearer token) instead of `username`/`password`. See
+[`WgetCredentials/v1`]({{< relref "docs/reference/credential-types.md#wgetcredentialsv1" >}}) and
 [Credential Consumer Identities]({{< relref "docs/reference/credential-consumer-identities.md" >}}).
 
 #### Example

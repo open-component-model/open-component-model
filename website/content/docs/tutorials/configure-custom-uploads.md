@@ -298,10 +298,9 @@ Add credentials for the Artifactory host. The uploader resolves them using the
           type: Wget
           hostname: myorg.jfrog.io
         credentials:
-          - type: Credentials/v1
-            properties:
-              username: <USERNAME>
-              password: <PASSWORD>
+          - type: WgetCredentials/v1
+            username: <USERNAME>
+            password: <PASSWORD>
 ```
 
 ### Transfer and verify
