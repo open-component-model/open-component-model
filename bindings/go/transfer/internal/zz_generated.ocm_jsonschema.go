@@ -18,6 +18,18 @@ var schemaFileCleanupSpec []byte
 //go:embed schemas/FileCleanupTransformation.schema.json
 var schemaFileCleanupTransformation []byte
 
+//go:embed schemas/HelmRepositoryUploadComponentVersion.schema.json
+var schemaHelmRepositoryUploadComponentVersion []byte
+
+//go:embed schemas/HelmRepositoryUploadOutput.schema.json
+var schemaHelmRepositoryUploadOutput []byte
+
+//go:embed schemas/HelmRepositoryUploadSpec.schema.json
+var schemaHelmRepositoryUploadSpec []byte
+
+//go:embed schemas/HelmRepositoryUploadTransformation.schema.json
+var schemaHelmRepositoryUploadTransformation []byte
+
 // JSONSchema returns the JSON Schema for FileCleanupOutput.
 func (FileCleanupOutput) JSONSchema() []byte {
 	return schemaFileCleanupOutput
@@ -31,4 +43,24 @@ func (FileCleanupSpec) JSONSchema() []byte {
 // JSONSchema returns the JSON Schema for FileCleanupTransformation.
 func (FileCleanupTransformation) JSONSchema() []byte {
 	return schemaFileCleanupTransformation
+}
+
+// JSONSchema returns the JSON Schema for HelmRepositoryUploadComponentVersion.
+func (HelmRepositoryUploadComponentVersion) JSONSchema() []byte {
+	return schemaHelmRepositoryUploadComponentVersion
+}
+
+// JSONSchema returns the JSON Schema for HelmRepositoryUploadOutput.
+func (HelmRepositoryUploadOutput) JSONSchema() []byte {
+	return schemaHelmRepositoryUploadOutput
+}
+
+// JSONSchema returns the JSON Schema for HelmRepositoryUploadSpec.
+func (HelmRepositoryUploadSpec) JSONSchema() []byte {
+	return schemaHelmRepositoryUploadSpec
+}
+
+// JSONSchema returns the JSON Schema for HelmRepositoryUploadTransformation.
+func (HelmRepositoryUploadTransformation) JSONSchema() []byte {
+	return schemaHelmRepositoryUploadTransformation
 }

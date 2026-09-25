@@ -9,6 +9,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	helmv1 "ocm.software/open-component-model/bindings/go/helm/spec/access/v1"
+	helmv1alpha1 "ocm.software/open-component-model/bindings/go/helm/transformation/spec/v1alpha1"
+	ociv1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/transform/graph/env"
@@ -131,6 +135,84 @@ func TestBuildGraphDefinition_UploaderMatch_EmitsHTTPStreaming(t *testing.T) {
 	// ADR 28: the node carries a human-readable label; the host is parsed from the
 	// leading string literal of the targetURL expression.
 	assert.Equal(t, "test@1.0.0 [Stream blob to target.example]", streaming.label)
+}
+
+func TestBuildGraphDefinition_HelmUploader_EmitsHelmTarget(t *testing.T) {
+	chartResource := helmResource("chart-resource", "1.0.0", "https://charts.example", "chart:1.0.0")
+	build := func(t *testing.T, resource descriptor.Resource, u *transferv1alpha1.HelmUploaderConfig) (*transformv1alpha1.TransformationGraphDefinition, transformv1alpha1.GenericTransformation) {
+		t.Helper()
+		r := require.New(t)
+		desc := testDescriptor("ocm.software/test", "1.0.0", []descriptor.Resource{resource}, nil)
+		resolver := testResolverFor("ocm.software/test", "1.0.0", testOCIRepo("ghcr.io/source"), desc)
+		roots := testTransferRoots("ocm.software/test", "1.0.0", testOCIRepo("ghcr.io/target"), resolver)
+
+		tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeAllResources}, []transferv1alpha1.UploaderConfig{u})
+		r.NoError(err)
+
+		var uploads []transformv1alpha1.GenericTransformation
+		for _, tr := range tgd.Transformations {
+			r.NotEqual(wgetv1alpha1.HTTPStreamingV1alpha1, tr.Type, "the helm uploader must not emit an HTTPStreaming node")
+			r.NotEqual(helmv1alpha1.GetHelmChartV1alpha1, tr.Type, "the helm uploader must not emit a GetHelmChart node")
+			r.NotEqual(ociv1alpha1.OCIGetLocalResourceV1alpha1, tr.Type, "the helm uploader must not buffer local blobs")
+			if tr.Type == HelmRepositoryUploadVersionedType {
+				uploads = append(uploads, tr)
+			}
+		}
+		r.Len(uploads, 1)
+		return tgd, uploads[0]
+	}
+	uploader := func(accessType runtime.Type) *transferv1alpha1.HelmUploaderConfig {
+		return &transferv1alpha1.HelmUploaderConfig{
+			Type:       runtime.NewVersionedType(transferv1alpha1.HelmUploaderConfigType, transferv1alpha1.Version),
+			MatchSpec:  transferv1alpha1.UploaderMatch{AccessType: accessType},
+			Server:     transferv1alpha1.HelmRepositoryServerArtifactory,
+			URL:        "https://artifactory.example",
+			Repository: "helm-local",
+		}
+	}
+	helmMatch := runtime.NewVersionedType(helmv1.LegacyType, helmv1.LegacyTypeVersion)
+
+	t.Run("emits one HelmRepositoryUpload node that reindexes", func(t *testing.T) {
+		r := require.New(t)
+		_, tr := build(t, chartResource, uploader(helmMatch))
+		r.Equal("Artifactory", tr.Spec.Data["server"])
+		r.Equal("https://artifactory.example", tr.Spec.Data["url"])
+		r.Equal("helm-local", tr.Spec.Data["repository"])
+		r.Equal(true, tr.Spec.Data["reindex"])
+		r.Equal("chart-resource", tr.Spec.Data["resource"].(map[string]any)["name"])
+		cv := tr.Spec.Data["componentVersion"].(map[string]any)
+		r.Equal("ocm.software/test", cv["component"])
+		r.Equal("1.0.0", cv["version"])
+		r.NotContains(cv, "repository", "remote resources are not read from the source component version")
+		r.Equal("test@1.0.0 [Stream chart-resource to artifactory.example]", tr.Label)
+	})
+
+	t.Run("LocalBlob carries its source component version", func(t *testing.T) {
+		r := require.New(t)
+		tgd, tr := build(t, localBlobResource("chart", "1.0.0"), uploader(runtime.NewVersionedType(descriptorv2.LocalBlobAccessType, descriptorv2.LocalBlobAccessTypeVersion)))
+		cv := tr.Spec.Data["componentVersion"].(map[string]any)
+		r.Equal("ocm.software/test", cv["component"])
+		r.Equal("1.0.0", cv["version"])
+		r.Equal("OCIRepository/v1", cv["repository"].(map[string]any)["type"])
+		r.Nil(findCleanupTransformation(tgd), "nothing is buffered, so there is nothing to clean up")
+	})
+
+	t.Run("reindex disabled", func(t *testing.T) {
+		r := require.New(t)
+		u := uploader(helmMatch)
+		u.Reindex = new(bool)
+		_, tr := build(t, chartResource, u)
+		r.Equal(false, tr.Spec.Data["reindex"])
+	})
+
+	t.Run("nexus never reindexes", func(t *testing.T) {
+		r := require.New(t)
+		u := uploader(helmMatch)
+		u.Server = transferv1alpha1.HelmRepositoryServerNexus
+		_, tr := build(t, chartResource, u)
+		r.Equal("Nexus", tr.Spec.Data["server"])
+		r.Equal(false, tr.Spec.Data["reindex"])
+	})
 }
 
 func TestBuildGraphDefinition_NoUploader_KeepsDownloadWgetPath(t *testing.T) {
