@@ -352,11 +352,11 @@
       // must sit on consecutive lines.
       customType: 'regex',
       managerFilePatterns: [
-        '/\.ya?ml$/',
-        '/(^|/)Dockerfile(\..*)?$/',
+        '/\\.ya?ml$/',
+        '/(^|/)Dockerfile(\\..*)?$/',
       ],
       matchStrings: [
-        '# renovate: datasource=(?<datasource>\S+) depName=(?<depName>\S+)\s+[^\n]*?[:= ]v?(?<currentValue>\d+\.\d+\.\d+)',
+        '# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s+[^\\n]*?[:= ]v?(?<currentValue>\\d+\\.\\d+\\.\\d+)',
       ],
       versioningTemplate: 'semver',
     },
