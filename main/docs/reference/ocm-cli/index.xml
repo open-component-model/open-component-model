@@ -56,6 +56,7 @@ Component Repositories, and Component Versions.&lt;/p&gt;</description></item><i
  If multiple configuration files are found, they will be merged in the order they are discovered.
  Later entries have higher priority.
  Using the option, the specified configuration file(s) will be used instead of the lookup above.
+ Configuration documents piped into stdin are applied last, on top of these files.
  --logformat enum set the log output format that is used to print individual logs
  json: Output logs in JSON format, suitable for machine processing
  text: Output logs in human-readable text format, suitable for console output
@@ -158,6 +159,7 @@ to enable it. You can execute the following once:&lt;/p&gt;</description></item>
  If multiple configuration files are found, they will be merged in the order they are discovered.
  Later entries have higher priority.
  Using the option, the specified configuration file(s) will be used instead of the lookup above.
+ Configuration documents piped into stdin are applied last, on top of these files.
  --logformat enum set the log output format that is used to print individual logs
  json: Output logs in JSON format, suitable for machine processing
  text: Output logs in human-readable text format, suitable for console output
@@ -242,6 +244,7 @@ use OCM commands or configure OCM resources, you specify types from these subsys
  If multiple configuration files are found, they will be merged in the order they are discovered.
  Later entries have higher priority.
  Using the option, the specified configuration file(s) will be used instead of the lookup above.
+ Configuration documents piped into stdin are applied last, on top of these files.
  --logformat enum set the log output format that is used to print individual logs
  json: Output logs in JSON format, suitable for machine processing
  text: Output logs in human-readable text format, suitable for console output
@@ -333,6 +336,7 @@ and usage of using your command. For example:&lt;/p&gt;</description></item><ite
  If multiple configuration files are found, they will be merged in the order they are discovered.
  Later entries have higher priority.
  Using the option, the specified configuration file(s) will be used instead of the lookup above.
+ Configuration documents piped into stdin are applied last, on top of these files.
  --logformat enum set the log output format that is used to print individual logs
  json: Output logs in JSON format, suitable for machine processing
  text: Output logs in human-readable text format, suitable for console output
@@ -428,6 +432,7 @@ use OCM commands or configure OCM resources, you specify types from these subsys
  If multiple configuration files are found, they will be merged in the order they are discovered.
  Later entries have higher priority.
  Using the option, the specified configuration file(s) will be used instead of the lookup above.
+ Configuration documents piped into stdin are applied last, on top of these files.
  --logformat enum set the log output format that is used to print individual logs
  json: Output logs in JSON format, suitable for machine processing
  text: Output logs in human-readable text format, suitable for console output
