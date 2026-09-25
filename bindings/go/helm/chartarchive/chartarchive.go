@@ -58,7 +58,8 @@ type Chart struct {
 	// (blob.SizeUnknown when the size is unknown).
 	Archive blob.ReadOnlyBlob
 	// FromOCI reports that Archive was extracted from an OCI artifact, so the source
-	// resource digest does not describe Archive.
+	// resource digest does not describe Archive. This includes oci:// Helm charts, whose
+	// resource digest is the manifest digest (see helm/digest), not that of the chart layer.
 	FromOCI bool
 }
 

@@ -225,6 +225,9 @@ func (t *JFrogHelmUpload) localSource(ctx context.Context, cv *JFrogHelmUploadCo
 	if cv.Repository == nil || cv.Component == "" || cv.Version == "" {
 		return nil, fmt.Errorf("component version repository, component and version are required for local resources")
 	}
+	if t.RepoProvider == nil {
+		return nil, fmt.Errorf("no component version repository provider configured for local resources")
+	}
 	var creds runtime.Typed
 	if t.CredentialProvider != nil {
 		if consumerID, err := t.RepoProvider.GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, cv.Repository); err == nil {
