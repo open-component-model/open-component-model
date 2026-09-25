@@ -278,6 +278,10 @@ func processResources(
 				if err := processHTTPUploader(resource, cfg, baseID, id, val, tgd, resourceTransformIDs, i); err != nil {
 					return nil, nil, fmt.Errorf("cannot process uploader for resource %v: %w", resource.ToIdentity(), err)
 				}
+			case *transferv1alpha1.JFrogHelmUploaderConfig:
+				if err := processJFrogHelmUploader(resource, cfg, baseID, id, val, tgd, resourceTransformIDs, i); err != nil {
+					return nil, nil, fmt.Errorf("cannot process uploader for resource %v: %w", resource.ToIdentity(), err)
+				}
 			default:
 				return nil, nil, fmt.Errorf("unsupported uploader config type %T for resource %v", matched, resource.ToIdentity())
 			}

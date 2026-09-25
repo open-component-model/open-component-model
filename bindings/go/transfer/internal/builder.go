@@ -77,25 +77,27 @@ func NewDefaultBuilder(
 		CredentialProvider: credentialProvider,
 	}
 
+	// TODO(jakobmoellerdev): This is an ultra-super-duper hack.
+	// Because the PluginRegistry does not implement our streaming interface, the transformer would break.
+	// But I can also not ask the PluginRegistry for a Plugin that would implement the interface, because
+	// ResourceRepository does not follow our Provider Pattern and the registry is implementing it directly.
+	//
+	// This means that I now have to initialize a raw repository here, until either the builder and/or the
+	// ResourceRepository plugin is refactored (see https://github.com/open-component-model/ocm-project/issues/774).
+	//
+	// Note that I dont care about configuring a user agent here, but this is not nice and we should take it over
+	// from the CLI or upstream.
+	//
+	// Filesystem config can be empty here because a streaming transfer does not need working dir or temp dir.
+	streamingOCIRepo := resource.NewResourceRepository(
+		&filesystemv1alpha1.Config{},
+		resource.WithHTTPConfig(httpConfig),
+	)
+
 	// Streaming OCI-to-OCI transfer transformer
 	ociTransferOCIArtifact := &ocitransformer.TransferOCIArtifact{
-		Scheme: transformerScheme,
-		// TODO(jakobmoellerdev): This is an ultra-super-duper hack.
-		// Because the PluginRegistry does not implement our streaming interface, the transformer would break.
-		// But I can also not ask the PluginRegistry for a Plugin that would implement the interface, because
-		// ResourceRepository does not follow our Provider Pattern and the registry is implementing it directly.
-		//
-		// This means that I now have to initialize a raw repository here, until either the builder and/or the
-		// ResourceRepository plugin is refactored (see https://github.com/open-component-model/ocm-project/issues/774).
-		//
-		// Note that I dont care about configuring a user agent here, but this is not nice and we should take it over
-		// from the CLI or upstream.
-		//
-		// Filesystem config can be empty here because a streaming transfer does not need working dir or temp dir.
-		Repository: resource.NewResourceRepository(
-			&filesystemv1alpha1.Config{},
-			resource.WithHTTPConfig(httpConfig),
-		),
+		Scheme:             transformerScheme,
+		Repository:         streamingOCIRepo,
 		CredentialProvider: credentialProvider,
 	}
 
@@ -131,11 +133,18 @@ func NewDefaultBuilder(
 	}
 
 	// HTTP streaming transformer (uploader configurations)
+	helmChartArchive := &helmtransformer.ChartArchiveSource{
+		ResourceRepository: resourceRepo,
+		OCIRepository:      streamingOCIRepo,
+	}
 	httpStreaming := &wgettransformer.HTTPStreamingTransformer{
 		Scheme:             transformerScheme,
 		ResourceRepository: resourceRepo,
 		CredentialProvider: credentialProvider,
 		HTTPConfig:         httpConfig,
+		Openers: map[string]wgettransformer.SourceOpener{
+			helmtransformer.ChartArchiveOpener: helmChartArchive.Open,
+		},
 	}
 
 	// File cleanup transformer

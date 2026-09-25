@@ -36,18 +36,25 @@ const (
 	maxErrorBodyBytes = 4 << 10
 )
 
+// SourceOpener opens the content uploaded for resource in place of
+// ResourceRepository.DownloadResource. credentials are the resolved source credentials.
+type SourceOpener func(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) (blob.ReadOnlyBlob, error)
+
 // HTTPStreamingTransformer streams a resource's content from its source access
 // directly to an HTTP target (e.g. a PUT upload). The source blob is read through
-// the injected ResourceRepository (dispatched by the source access type) and the
-// body is piped straight into the request via an io.TeeReader, so the content is
-// never buffered in memory or on disk by the transformer. The digest is computed
-// during the stream (or verified against an existing one) and recorded on the
-// target resource, which carries a Wget access at the resolved target URL.
+// the injected ResourceRepository (dispatched by the source access type), or through
+// a named SourceOpener when the spec selects one, and the body is piped straight into
+// the request via an io.TeeReader, so the content is never buffered in memory or on
+// disk by the transformer. The digest is computed during the stream (or verified
+// against an existing one) and recorded on the target resource, whose published
+// access is taken verbatim from the spec's TargetResource and may be of any type.
 type HTTPStreamingTransformer struct {
 	Scheme             *runtime.Scheme
 	ResourceRepository repository.ResourceRepository
 	CredentialProvider credentials.Resolver
 	HTTPConfig         *httpv1alpha1.Config
+	// Openers maps HTTPStreamingSpec.Opener names to implementations.
+	Openers map[string]SourceOpener
 }
 
 func (t *HTTPStreamingTransformer) Transform(ctx context.Context, step runtime.Typed) (runtime.Typed, error) {
@@ -66,6 +73,10 @@ func (t *HTTPStreamingTransformer) Transform(ctx context.Context, step runtime.T
 	}
 	if transformation.Spec.Request == nil {
 		return nil, fmt.Errorf("upload request is required")
+	}
+	open, err := t.sourceOpener(transformation.Spec.Opener)
+	if err != nil {
+		return nil, err
 	}
 	if transformation.Output == nil {
 		transformation.Output = &v1alpha1.HTTPStreamingOutput{}
@@ -100,7 +111,7 @@ func (t *HTTPStreamingTransformer) Transform(ctx context.Context, step runtime.T
 		return nil, err
 	}
 
-	srcBlob, err := t.ResourceRepository.DownloadResource(ctx, srcResource, srcCreds)
+	srcBlob, err := open(ctx, srcResource, srcCreds)
 	if err != nil {
 		return nil, fmt.Errorf("failed downloading source resource %v: %w", srcResource.ToIdentity(), err)
 	}
@@ -183,23 +194,9 @@ func (t *HTTPStreamingTransformer) Transform(ctx context.Context, step runtime.T
 		"digest", computed,
 		"status", resp.StatusCode)
 
-	if srcResource.Digest == nil {
-		targetResource.Digest = &descriptor.Digest{
-			HashAlgorithm:          hashAlgorithmSHA256,
-			NormalisationAlgorithm: genericBlobDigestV1,
-			Value:                  computed,
-		}
-	} else {
-		if srcResource.Digest.HashAlgorithm != hashAlgorithmSHA256 {
-			return nil, fmt.Errorf("unsupported hash algorithm: expected %s, got %s", hashAlgorithmSHA256, srcResource.Digest.HashAlgorithm)
-		}
-		if srcResource.Digest.NormalisationAlgorithm != genericBlobDigestV1 {
-			return nil, fmt.Errorf("unsupported normalisation algorithm: expected %s, got %s", genericBlobDigestV1, srcResource.Digest.NormalisationAlgorithm)
-		}
-		if srcResource.Digest.Value != computed {
-			return nil, fmt.Errorf("digest mismatch: expected %s, got %s", srcResource.Digest.Value, computed)
-		}
-		targetResource.Digest = srcResource.Digest.DeepCopy()
+	targetResource.Digest, err = targetDigest(srcResource.Digest, computed, transformation.Spec.Opener != "")
+	if err != nil {
+		return nil, err
 	}
 
 	// TargetResource already carries the published read access built at graph-build time,
@@ -211,6 +208,44 @@ func (t *HTTPStreamingTransformer) Transform(ctx context.Context, step runtime.T
 	}
 	transformation.Output.Resource = v2Out
 	return &transformation, nil
+}
+
+// sourceOpener returns the opener registered under name, or the plain resource download
+// when name is empty.
+func (t *HTTPStreamingTransformer) sourceOpener(name string) (SourceOpener, error) {
+	if name == "" {
+		return t.ResourceRepository.DownloadResource, nil
+	}
+	opener, ok := t.Openers[name]
+	if !ok {
+		return nil, fmt.Errorf("unknown source opener %q", name)
+	}
+	return opener, nil
+}
+
+// targetDigest verifies the source digest against the computed SHA-256 of the uploaded
+// bytes and returns the digest to record on the target resource.
+func targetDigest(src *descriptor.Digest, computed string, opened bool) (*descriptor.Digest, error) {
+	// An opener may upload a different representation than the source digest describes
+	// (e.g. the chart layer of an OCI artifact digested with ociArtifactDigest/v1), so the
+	// digest of the uploaded bytes is recorded instead.
+	if src == nil || opened && src.NormalisationAlgorithm != genericBlobDigestV1 {
+		return &descriptor.Digest{
+			HashAlgorithm:          hashAlgorithmSHA256,
+			NormalisationAlgorithm: genericBlobDigestV1,
+			Value:                  computed,
+		}, nil
+	}
+	if src.HashAlgorithm != hashAlgorithmSHA256 {
+		return nil, fmt.Errorf("unsupported hash algorithm: expected %s, got %s", hashAlgorithmSHA256, src.HashAlgorithm)
+	}
+	if src.NormalisationAlgorithm != genericBlobDigestV1 {
+		return nil, fmt.Errorf("unsupported normalisation algorithm: expected %s, got %s", genericBlobDigestV1, src.NormalisationAlgorithm)
+	}
+	if src.Value != computed {
+		return nil, fmt.Errorf("digest mismatch: expected %s, got %s", src.Value, computed)
+	}
+	return src.DeepCopy(), nil
 }
 
 // resolveSourceCredentials resolves credentials for the source resource by its consumer

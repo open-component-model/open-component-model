@@ -9,6 +9,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	helmv1 "ocm.software/open-component-model/bindings/go/helm/spec/access/v1"
+	helmv1alpha1 "ocm.software/open-component-model/bindings/go/helm/transformation/spec/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/transform/graph/env"
@@ -95,6 +97,7 @@ func TestBuildGraphDefinition_UploaderMatch_EmitsHTTPStreaming(t *testing.T) {
 	r.NotNil(streaming, "expected an HTTPStreaming transformation")
 	assert.Contains(t, streaming.id, "Upload")
 	assert.False(t, sawDownloadWget, "uploader path must not emit a DownloadWgetResource node")
+	assert.NotContains(t, streaming.spec, "opener", "the plain HTTP uploader must not select a source opener")
 
 	// Source reference preserves the original wget URL.
 	srcAccess := streaming.spec["resource"].(map[string]any)["access"].(map[string]any)
@@ -131,6 +134,72 @@ func TestBuildGraphDefinition_UploaderMatch_EmitsHTTPStreaming(t *testing.T) {
 	// ADR 28: the node carries a human-readable label; the host is parsed from the
 	// leading string literal of the targetURL expression.
 	assert.Equal(t, "test@1.0.0 [Stream blob to target.example]", streaming.label)
+}
+
+func TestBuildGraphDefinition_JFrogHelmUploader_EmitsHelmTarget(t *testing.T) {
+	build := func(t *testing.T, u *transferv1alpha1.JFrogHelmUploaderConfig) transformv1alpha1.GenericTransformation {
+		t.Helper()
+		r := require.New(t)
+		desc := testDescriptor("ocm.software/test", "1.0.0",
+			[]descriptor.Resource{helmResource("chart", "1.0.0", "https://charts.example", "chart:1.0.0")}, nil)
+		resolver := testResolverFor("ocm.software/test", "1.0.0", testOCIRepo("ghcr.io/source"), desc)
+		roots := testTransferRoots("ocm.software/test", "1.0.0", testOCIRepo("ghcr.io/target"), resolver)
+
+		tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeAllResources}, []transferv1alpha1.UploaderConfig{u})
+		r.NoError(err)
+
+		var streaming []transformv1alpha1.GenericTransformation
+		for _, tr := range tgd.Transformations {
+			r.NotEqual(helmv1alpha1.GetHelmChartV1alpha1, tr.Type, "the uploader path must not emit a GetHelmChart node")
+			if tr.Type == wgetv1alpha1.HTTPStreamingV1alpha1 {
+				streaming = append(streaming, tr)
+			}
+		}
+		r.Len(streaming, 1)
+		return streaming[0]
+	}
+	uploader := func() *transferv1alpha1.JFrogHelmUploaderConfig {
+		return &transferv1alpha1.JFrogHelmUploaderConfig{
+			Type:       runtime.NewVersionedType(transferv1alpha1.JFrogHelmUploaderConfigType, transferv1alpha1.Version),
+			MatchSpec:  transferv1alpha1.UploaderMatch{AccessType: runtime.NewVersionedType(helmv1.LegacyType, helmv1.LegacyTypeVersion)},
+			URL:        "https://artifactory.example",
+			Repository: "helm-local",
+		}
+	}
+
+	t.Run("defaults to resource name and version", func(t *testing.T) {
+		r := require.New(t)
+		tr := build(t, uploader())
+		r.Equal("HelmChartArchive", tr.Spec.Data["opener"])
+
+		request := tr.Spec.Data["request"].(map[string]any)
+		r.Equal("PUT", request["verb"])
+		requestURL := request["url"].(string)
+		r.True(strings.HasPrefix(requestURL, `${"https://artifactory.example/artifactory/helm-local/" + `), "got %q", requestURL)
+		r.Contains(requestURL, ".component.resources[0].name")
+		r.Contains(requestURL, ".component.resources[0].version")
+
+		access := tr.Spec.Data["targetResource"].(map[string]any)["access"].(map[string]any)
+		r.Equal("Helm/v1", access["type"])
+		r.Equal("https://artifactory.example/artifactory/api/helm/helm-local", access["helmRepository"])
+		helmChart := access["helmChart"].(string)
+		r.Contains(helmChart, ".component.resources[0].name")
+		r.NotContains(helmChart, "resource.name", "the bare resource alias must not survive the rewrite")
+
+		r.Equal("test@1.0.0 [Stream chart to artifactory.example]", tr.Label)
+	})
+
+	t.Run("literal chart name and expression chart version", func(t *testing.T) {
+		r := require.New(t)
+		u := uploader()
+		u.ChartName = "renamed"
+		u.ChartVersion = `${resource.version + "-ocm"}`
+		tr := build(t, u)
+
+		requestURL := tr.Spec.Data["request"].(map[string]any)["url"].(string)
+		r.Contains(requestURL, `"renamed"`)
+		r.Contains(requestURL, `.component.resources[0].version + "-ocm")`)
+	})
 }
 
 func TestBuildGraphDefinition_NoUploader_KeepsDownloadWgetPath(t *testing.T) {
