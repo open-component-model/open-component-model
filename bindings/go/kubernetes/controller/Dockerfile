@@ -1,4 +1,8 @@
 # syntax=docker/dockerfile:1@sha256:ecfaec9ed6d810b56388c508f4121597bfbba70d41a6dfeee4d8cad5f295fc32
+
+# renovate: datasource=github-releases depName=sigstore/cosign
+ARG COSIGN_VERSION=v3.1.3
+
 # Build the manager binary
 FROM --platform=${BUILDPLATFORM} golang:1.27.1@sha256:3680233e3204827fbdc66088528ae6d4b3d034f51d03a99d454f6de034888244 AS builder
 ARG TARGETOS
@@ -33,11 +37,18 @@ RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked \
     --mount=type=cache,target=/root/.cache/go-build,sharing=locked \
     CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -o manager ./kubernetes/controller/cmd/main.go
 
+# Pull the pinned cosign binary from the official multi-arch image published by the sigstore
+# project. The sigstore signing handler in bindings/go/sigstore shells out to this binary; the
+# version is pinned once in bindings/go/sigstore/signing/handler/internal/.env and passed in
+# via --build-arg COSIGN_VERSION by the controller Taskfile.
+FROM ghcr.io/sigstore/cosign/cosign:${COSIGN_VERSION} AS cosign
+
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
 FROM gcr.io/distroless/static:nonroot@sha256:e2e927ec666bae08560abb3c55d0659eceabb657f56b6782ab500a9fc7f555e3
 WORKDIR /
 COPY --from=builder /workspace/manager .
+COPY --from=cosign /ko-app/cosign /usr/local/bin/cosign
 USER 65532:65532
 
 ENTRYPOINT ["/manager"]

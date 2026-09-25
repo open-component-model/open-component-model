@@ -5,7 +5,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"slices"
 	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -55,17 +54,11 @@ var _ = Describe("ApplySet Pruning Tests", func() {
 			Expect(files).To(ContainElements(reqFiles), "required files %s not found in example directory %q", reqFiles, example.Name())
 
 			By("creating and transferring a component version for " + example.Name())
-			// If directory contains a private key, the component version must signed.
-			signingKey := ""
-			if slices.Contains(files, PrivateKey) {
-				signingKey = filepath.Join(examplesDir, example.Name(), PrivateKey)
-			}
 			Expect(utils.PrepareOCMComponent(
 				ctx,
 				example.Name(),
 				filepath.Join(examplesDir, example.Name(), ComponentConstructor),
 				imageRegistry,
-				signingKey,
 			)).To(Succeed())
 
 			By("bootstrapping the example")
@@ -102,7 +95,6 @@ var _ = Describe("ApplySet Pruning Tests", func() {
 				example.Name()+"-2",
 				filepath.Join(examplesDir, example.Name(), "component-constructor-2.yaml"),
 				imageRegistry,
-				"", // No signing
 			)).To(Succeed())
 
 			// inline update semver of

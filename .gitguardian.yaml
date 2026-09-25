@@ -1,11 +1,21 @@
 secret:
   ignored_matches:
-  - match: 4132766f296d24c64452646571d72a1f88e66b72f27838c6749b071b0468939d
-    name: bindings/go/kubernetes/controller/examples public keys
   - match: c41c71837a9ffbb3eb165eb1fb62ebed35c129c9597ee17460a831a66a372422
     name: bindings/go/cli/cmd/cmd_test.go
   - match: 57d4c1be78223b477215a9133e64eed43804b319138ad69e0d4f4d5b0ada836b
     name: bindings/go/kubernetes/controller/test/e2e/testdata/docker-config-json/.docker-config-json
   - match: 79b637493a4c76f72d00e49a2b21ed8df753a17214279912d3d51d1aa40899f2
     name: bindings/go/kubernetes/controller/test/e2e/testdata/docker-config-json/bootstrap.yaml
+  - match: 70eb8187c66c0026d118f0536cb97d08c3e17117dcc8e9c3e28bc5c7c5d087cb
+    name: bindings/go/kubernetes/controller/examples helm-signing/helm-nested-signed RSA test-only private key
+  - match: 43a3cc3d7713e757c81de72e90b271574b50425c5c16f737a9ec7e5486b5e6a2
+    name: bindings/go/kubernetes/controller/examples helm-signing PGP test-only private key
+  - match: eeb6db2d2ad62d8d0b8a27df2fd5cfd11709fe28bfe7b335e1e26de282d47ef9
+    name: bindings/go/kubernetes/controller/examples helm-signing PGP test-only passphrase
+  - match: ff23874604e921b1606054779953b91c594d4fc8e84e1f677bc5a1df3bdf40c0
+    name: bindings/go/kubernetes/controller/internal/controller/deployer/deployer_controller_test.go test passphrase
+  - match: 2941b658c5907413e35ac1e3d0d9e4a0ee92ca7e9c97069a81850b468b5b6661
+    name: bindings/go/kubernetes/controller/test/e2e/hacks/image-registries.yaml e2e test passphrase
+  - match: cdf813a2529ed038a81a04e73067019bc0ad1c336a021af63eab3b8ba57efcf8
+    name: bindings/go/kubernetes/controller/test/e2e/hacks/image-registries.yaml e2e test passphrase
 version: 2

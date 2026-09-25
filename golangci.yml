@@ -599,6 +599,7 @@ linters:
             - "ocm.software/open-component-model/bindings/go/plugin"
             - "ocm.software/open-component-model/bindings/go/repository"
             - "ocm.software/open-component-model/bindings/go/rsa"
+            - "ocm.software/open-component-model/bindings/go/gpg"
             - "ocm.software/open-component-model/bindings/go/runtime"
             - "ocm.software/open-component-model/bindings/go/signing"
             - "ocm.software/open-component-model/bindings/go/sigstore"

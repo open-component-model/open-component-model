@@ -463,6 +463,8 @@ func verifySignatures(
 		if err := handler.Verify(ctx, *descSig, v.Verifier, creds); err != nil {
 			return nil, fmt.Errorf("signature verification failed for signature %s: %w", v.Signature, err)
 		}
+
+		logger.Info("verified signature", "signature", v.Signature, "verifier", v.Verifier.GetType())
 	}
 
 	return desc, nil
