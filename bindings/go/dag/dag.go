@@ -140,16 +140,20 @@ func (d *DirectedAcyclicGraph[T]) DeleteVertex(id T) error {
 	return nil
 }
 
-type CycleError struct {
-	Cycle []string
+type CycleError[T cmp.Ordered] struct {
+	Cycle []T
 }
 
-func (e *CycleError) Error() string {
+func (e *CycleError[T]) Error() string {
 	return fmt.Sprintf("The current graph would create a cycle: %s", formatCycle(e.Cycle))
 }
 
-func formatCycle(cycle []string) string {
-	return strings.Join(cycle, " -> ")
+func formatCycle[T cmp.Ordered](cycle []T) string {
+	parts := make([]string, len(cycle))
+	for i, node := range cycle {
+		parts[i] = fmt.Sprintf("%v", node)
+	}
+	return strings.Join(parts, " -> ")
 }
 
 // AddEdge adds a directed edge from one node to another.
@@ -176,20 +180,17 @@ func (d *DirectedAcyclicGraph[T]) AddEdge(from, to T, attributes ...map[string]a
 		toNode.InDegree++
 
 		// The new edge closes a cycle exactly if `from` is already reachable
-		// from `to`. A single reachability walk from `to` replaces the former
-		// full-graph cycle check, which made graph construction O(E*(V+E))
+		// from `to`. A single reachability walk from `to` suffices
 		if path, closes := d.findPath(to, from); closes {
 			// Ehmmm, we have a cycle, let's remove the edge we just added
 			delete(fromNode.Edges, to)
 			fromNode.OutDegree--
 			toNode.InDegree--
 
-			cycle := make([]string, 0, len(path)+1)
-			cycle = append(cycle, fmt.Sprintf("%v", from))
-			for _, node := range path {
-				cycle = append(cycle, fmt.Sprintf("%v", node))
-			}
-			return fmt.Errorf("adding an edge from %v to %v would create a cycle: %w", fmt.Sprintf("%v", from), fmt.Sprintf("%v", to), &CycleError{
+			cycle := make([]T, 0, len(path)+1)
+			cycle = append(cycle, from)
+			cycle = append(cycle, path...)
+			return fmt.Errorf("adding an edge from %v to %v would create a cycle: %w", from, to, &CycleError[T]{
 				Cycle: cycle,
 			})
 		}
@@ -213,8 +214,8 @@ func (d *DirectedAcyclicGraph[T]) Roots() []T {
 }
 
 func (d *DirectedAcyclicGraph[T]) TopologicalSort() ([]T, error) {
-	if cyclic, nodes := d.HasCycle(); cyclic {
-		return nil, &CycleError{
+	if cyclic, nodes := d.hasCycle(); cyclic {
+		return nil, &CycleError[T]{
 			Cycle: nodes,
 		}
 	}
@@ -312,7 +313,8 @@ func (d *DirectedAcyclicGraph[T]) hasCycle() (bool, []T) {
 		recStack[node] = true
 		cyclePath = append(cyclePath, node)
 
-		for neighbor := range d.Vertices[node].Edges {
+		// Sorted iteration keeps the reported cycle deterministic
+		for _, neighbor := range slices.Sorted(maps.Keys(d.Vertices[node].Edges)) {
 			if !visited[neighbor] {
 				if dfs(neighbor) {
 					return true
@@ -329,7 +331,7 @@ func (d *DirectedAcyclicGraph[T]) hasCycle() (bool, []T) {
 		return false
 	}
 
-	for node := range d.Vertices {
+	for _, node := range slices.Sorted(maps.Keys(d.Vertices)) {
 		if !visited[node] {
 			cyclePath = []T{}
 			if dfs(node) {
@@ -359,7 +361,8 @@ func (d *DirectedAcyclicGraph[T]) findPath(from, to T) ([]T, bool) {
 	for len(stack) > 0 {
 		node := stack[len(stack)-1]
 		stack = stack[:len(stack)-1]
-		for neighbor := range d.Vertices[node].Edges {
+		// Sorted iteration keeps the reported cycle deterministic
+		for _, neighbor := range slices.Sorted(maps.Keys(d.Vertices[node].Edges)) {
 			if neighbor == to {
 				path := []T{to}
 				for cur := node; ; cur = parent[cur] {
