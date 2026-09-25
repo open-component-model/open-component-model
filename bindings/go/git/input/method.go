@@ -5,6 +5,7 @@ package input
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"reflect"
 
 	"golang.org/x/crypto/ssh"
@@ -29,13 +30,13 @@ type InputMethod struct {
 	// and is owned by the caller.
 	TempFolder string
 	// MaxArchiveSize caps compressed output, not the preceding clone or fetch.
-	// Zero uses the default 1 GiB limit; a negative value disables the limit.
+	// Non-positive values disable the limit; output is streamed to disk.
 	MaxArchiveSize int64
-	// CABundle extends system TLS trust.
-	CABundle []byte
 	// HostKeyCallback overrides SSH host key verification. If nil, verification
 	// uses the user's known_hosts.
 	HostKeyCallback ssh.HostKeyCallback
+	// HTTPClient serves http(s) repositories. Nil uses the shared OCM client defaults.
+	HTTPClient *http.Client
 }
 
 func (i *InputMethod) GetInputMethodScheme() *runtime.Scheme {
@@ -72,19 +73,15 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 	if ref == "" && spec.Commit == "" {
 		ref = "HEAD"
 	}
-	maxArchiveSize := i.MaxArchiveSize
-	if maxArchiveSize == 0 {
-		maxArchiveSize = download.DefaultMaxArchiveSize
-	}
 	result, err := download.Download(ctx, &accessv1.Git{
 		Repository: spec.Repository,
 		Ref:        ref,
 		Commit:     spec.Commit,
 	}, creds, download.Options{
 		TempDir:         i.TempFolder,
-		MaxArchiveSize:  maxArchiveSize,
-		CABundle:        i.CABundle,
+		MaxArchiveSize:  i.MaxArchiveSize,
 		HostKeyCallback: i.HostKeyCallback,
+		HTTPClient:      i.HTTPClient,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("error downloading git input: %w", err)

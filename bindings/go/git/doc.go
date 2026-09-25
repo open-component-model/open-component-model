@@ -55,7 +55,8 @@
 // SSH uses the current user's known_hosts unless WithHostKeyCallback overrides it.
 // HTTP(S) uses the client from
 // [ocm.software/open-component-model/bindings/go/git/repository.WithHTTPClient],
-// which also decides TLS trust; without one, the shared OCM client defaults apply.
+// or the HTTPClient field of the input method, which also decides TLS trust;
+// without one, the shared OCM client defaults apply.
 // Each repository hands its client to every Git operation it runs, so repositories
 // with different clients are isolated within one process.
 //
