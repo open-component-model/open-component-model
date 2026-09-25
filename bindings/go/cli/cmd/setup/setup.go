@@ -33,6 +33,9 @@ func OCMConfig(cmd *cobra.Command) error {
 		slog.DebugContext(cmd.Context(), "could not get configuration", slog.String("error", err.Error()))
 		cfg = &genericv1.Config{}
 	}
+	if cfg, err = configuration.AddStdinConfig(cmd, cfg); err != nil {
+		return err
+	}
 
 	ctx := ocmctx.WithConfiguration(cmd.Context(), cfg)
 	cmd.SetContext(ctx)

@@ -13,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 	"sigs.k8s.io/yaml"
 
+	"ocm.software/open-component-model/bindings/go/cli/cmd/configuration"
 	ocmctx "ocm.software/open-component-model/bindings/go/cli/internal/context"
 	"ocm.software/open-component-model/bindings/go/cli/internal/flags/enum"
 	"ocm.software/open-component-model/bindings/go/cli/internal/render"
@@ -154,7 +155,7 @@ transfer component-version --transfer-spec spec.yaml
 	}
 	enum.VarP(cmd.Flags(), FlagUploadAs, "u", uploadAsValues,
 		"Define whether copied resources should be uploaded as OCI artifacts (instead of local blob resources). This option is only relevant if --copy-resources is set.")
-	cmd.Flags().String(FlagTransferSpec, "", "path to a transfer specification file (use \"-\" for stdin)")
+	cmd.Flags().String(FlagTransferSpec, "", "path to a transfer specification file (use \"-\" for stdin). The input must hold exactly one transfer spec document; with \"-\", OCM configuration documents in stdin are applied as configuration")
 	cmd.Flags().String(FlagConstraint, "", "version constraint evaluated by each version's configured scheme; versions with no applicable scheme are retained (e.g. \">= 1.0.0, < 2.0.0\"); only used when no version is specified in the reference")
 	cmd.Flags().Bool(FlagLatest, false, "if set, only the latest version of the component is transferred; only used when no version is specified in the reference")
 
@@ -322,12 +323,39 @@ func loadTransferSpec(path string, stdin io.Reader) (*transformv1alpha1.Transfor
 		}
 	}
 
+	spec, err := transferSpecDocument(data)
+	if err != nil {
+		return nil, fmt.Errorf("parsing transfer spec: %w", err)
+	}
+
 	tgd := &transformv1alpha1.TransformationGraphDefinition{}
-	if err := yaml.Unmarshal(data, tgd); err != nil {
+	if err := yaml.Unmarshal(spec, tgd); err != nil {
 		return nil, fmt.Errorf("parsing transfer spec: %w", err)
 	}
 
 	return tgd, nil
+}
+
+// transferSpecDocument returns the only document of a transfer spec. OCM configuration
+// piped with --transfer-spec - is taken out of stdin before the command runs, so any
+// configuration left here came from a spec file, where it would not be applied.
+// A plain yaml.Unmarshal would silently take the first document and run an empty graph.
+func transferSpecDocument(data []byte) ([]byte, error) {
+	configs, specs, err := configuration.SplitConfigStream(bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+	if len(configs) > 0 {
+		return nil, errors.New("OCM configuration is not allowed in a transfer spec file, pass it with --config or on stdin")
+	}
+	switch len(specs) {
+	case 0:
+		return nil, errors.New("no transfer spec document found")
+	case 1:
+		return specs[0], nil
+	default:
+		return nil, fmt.Errorf("expected exactly one transfer spec document, found %d", len(specs))
+	}
 }
 
 func buildGraphDefinitionFromArgs(
