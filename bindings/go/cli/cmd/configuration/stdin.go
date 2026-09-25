@@ -6,13 +6,20 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 
+	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	k8syaml "k8s.io/apimachinery/pkg/util/yaml"
 	"sigs.k8s.io/yaml"
 
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
+
+// StdinFlagAnnotation marks a command flag that reads stdin when set to "-". Set it with
+// cmd.Flags().SetAnnotation so AddStdinConfig picks up configuration documents from stdin.
+const StdinFlagAnnotation = "ocm.software/reads-stdin"
 
 var documentSeparator = []byte("---\n")
 
@@ -36,15 +43,73 @@ func readConfigStream(r io.Reader) (cfg *genericv1.Config, rest []byte, err erro
 		}
 		return nil, nil, fmt.Errorf("no configuration document of type %q was read", genericv1.ConfigType)
 	}
-	cfgs := make([]*genericv1.Config, 0, len(configs))
-	for _, doc := range configs {
+	cfg, err = decodeConfigs(configs)
+	if err != nil {
+		return nil, nil, err
+	}
+	return cfg, bytes.Join(others, documentSeparator), nil
+}
+
+// AddStdinConfig applies the configuration documents found in stdin on top of cfg, when a
+// flag marked with StdinFlagAnnotation is "-" and --config does not read stdin itself.
+// A user who pipes configuration and data together should not have to also pass
+// --config -. The other documents are put back on stdin for the command. In every other
+// case cfg is returned unchanged and stdin is not read.
+func AddStdinConfig(cmd *cobra.Command, cfg *genericv1.Config) (*genericv1.Config, error) {
+	if !flagReadsStdin(cmd) || configFlagReadsStdin(cmd) {
+		return cfg, nil
+	}
+	data, err := io.ReadAll(cmd.InOrStdin())
+	if err != nil {
+		return nil, fmt.Errorf("reading stdin: %w", err)
+	}
+	configs, others, err := SplitConfigStream(bytes.NewReader(data))
+	if err != nil {
+		// Not valid YAML: hand stdin back unchanged, so the command reports the error in
+		// terms of its own input.
+		cmd.SetIn(bytes.NewReader(data))
+		return cfg, nil
+	}
+	cmd.SetIn(bytes.NewReader(bytes.Join(others, documentSeparator)))
+	if len(configs) == 0 {
+		return cfg, nil
+	}
+	stdinCfg, err := decodeConfigs(configs)
+	if err != nil {
+		return nil, fmt.Errorf("could not load configuration from stdin: %w", err)
+	}
+	return genericv1.FlatMap(cfg, stdinCfg), nil
+}
+
+// flagReadsStdin reports whether a flag marked with StdinFlagAnnotation is set to "-".
+func flagReadsStdin(cmd *cobra.Command) bool {
+	found := false
+	cmd.Flags().VisitAll(func(f *pflag.Flag) {
+		if _, ok := f.Annotations[StdinFlagAnnotation]; ok && f.Value.String() == StdinConfigPath {
+			found = true
+		}
+	})
+	return found
+}
+
+func configFlagReadsStdin(cmd *cobra.Command) bool {
+	flag := cmd.Flag(OCMConfigCommandArgument)
+	if flag == nil || !flag.Changed {
+		return false
+	}
+	return slices.Contains(flag.Value.(pflag.SliceValue).GetSlice(), StdinConfigPath)
+}
+
+func decodeConfigs(docs [][]byte) (*genericv1.Config, error) {
+	cfgs := make([]*genericv1.Config, 0, len(docs))
+	for _, doc := range docs {
 		cfg, err := decodeConfig(bytes.NewReader(doc))
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		cfgs = append(cfgs, cfg)
 	}
-	return genericv1.FlatMap(cfgs...), bytes.Join(others, documentSeparator), nil
+	return genericv1.FlatMap(cfgs...), nil
 }
 
 // SplitConfigStream splits a YAML stream on "---" into the documents typed as OCM

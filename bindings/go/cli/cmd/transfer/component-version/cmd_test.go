@@ -253,12 +253,17 @@ configurations:
 	componentVersion := "0.0.1"
 	sourceRef := setupSourceRef(t, componentName, componentVersion)
 
+	configBeforeSpec := func(spec string) string { return config + "---\n" + spec }
+	specBeforeConfig := func(spec string) string { return spec + "---\n" + config }
 	tests := []struct {
 		name  string
+		args  []string
 		stdin func(spec string) string
 	}{
-		{name: "config before spec", stdin: func(spec string) string { return config + "---\n" + spec }},
-		{name: "spec before config", stdin: func(spec string) string { return spec + "---\n" + config }},
+		{name: "config before spec", args: []string{"--config", "-"}, stdin: configBeforeSpec},
+		{name: "spec before config", args: []string{"--config", "-"}, stdin: specBeforeConfig},
+		{name: "config before spec without --config -", stdin: configBeforeSpec},
+		{name: "spec before config without --config -", stdin: specBeforeConfig},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -266,7 +271,7 @@ configurations:
 			spec := dryRunTransferSpec(t, sourceRef, fmt.Sprintf("ctf::%s", toPath))
 
 			_, err := test.OCM(t,
-				test.WithArgs("transfer", "component-version", "--transfer-spec", "-", "--config", "-"),
+				test.WithArgs(append([]string{"transfer", "component-version", "--transfer-spec", "-"}, tt.args...)...),
 				test.WithInput(bytes.NewBufferString(tt.stdin(spec))),
 				test.WithOutput(new(bytes.Buffer)),
 				test.WithErrorOutput(test.NewJSONLogReader()),
@@ -278,6 +283,18 @@ configurations:
 			require.Equal(t, componentName, desc.Component.Name)
 		})
 	}
+}
+
+// TestTransferComponentVersionWithTransferSpecStdinAppliesConfig proves that configuration in
+// stdin is loaded without --config -: a broken configuration document fails the command.
+func TestTransferComponentVersionWithTransferSpecStdinAppliesConfig(t *testing.T) {
+	_, err := test.OCM(t,
+		test.WithArgs("transfer", "component-version", "--transfer-spec", "-"),
+		test.WithInput(bytes.NewBufferString("type: generic.config.ocm.software/v1\nconfigurations: notalist\n")),
+		test.WithOutput(new(bytes.Buffer)),
+		test.WithErrorOutput(test.NewJSONLogReader()),
+	)
+	require.ErrorContains(t, err, "could not load configuration from stdin")
 }
 
 func TestTransferComponentVersionWithTransferSpecStdinMissingAfterConfig(t *testing.T) {
