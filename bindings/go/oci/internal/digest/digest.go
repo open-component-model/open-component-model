@@ -10,10 +10,12 @@ import (
 
 const (
 	HashAlgorithmSHA256 = "SHA-256"
+	HashAlgorithmSHA512 = "SHA-512"
 )
 
 var SHAMapping = map[string]digest.Algorithm{
 	HashAlgorithmSHA256: digest.SHA256,
+	HashAlgorithmSHA512: digest.SHA512,
 }
 
 var ReverseSHAMapping = reverseMap(SHAMapping)

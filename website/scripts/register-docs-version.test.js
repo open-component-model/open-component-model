@@ -715,8 +715,17 @@ test('buildModuleBlocks: monolithic import mounts cover every schema directory',
 test('buildModuleBlocks: monolithic and legacy layouts mount the same schema set', () => {
     const { imports: legacy } = buildModuleBlocks('0.15', '0.15.0', ALL_DEPS);
     const { imports: monolith } = buildModuleBlocks('0.15', '0.15.0', MONOLITH_DEPS);
+    // Bindings introduced after the monorepo merge (sinceMonolith) never
+    // existed as stand-alone modules, so they only appear in the monolithic
+    // layout. Strip them for the schema-set parity check.
+    const sinceMonolithTargets = new Set(
+        BINDING_SCHEMA_MOUNTS.filter(m => m.sinceMonolith).map(m => `static/0.15/${m.target}`)
+    );
     const legacyTargets = legacy.flatMap(i => i.mounts.map(m => m.target)).sort();
-    const monolithTargets = monolith.flatMap(i => i.mounts.map(m => m.target)).sort();
+    const monolithTargets = monolith
+        .flatMap(i => i.mounts.map(m => m.target))
+        .filter(t => !sinceMonolithTargets.has(t))
+        .sort();
     assert.deepEqual(monolithTargets, legacyTargets);
 
     // The module merge kept the package directory layout intact, so each
