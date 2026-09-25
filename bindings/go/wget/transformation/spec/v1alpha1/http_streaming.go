@@ -47,31 +47,6 @@ type HTTPStreamingSpec struct {
 	// TargetResource is the resource to publish after upload; its access is the read
 	// access at the resolved target URL, without the upload-only request fields.
 	TargetResource *v2.Resource `json:"targetResource"`
-	// Opener names a source opener registered on the transformer that produces the bytes
-	// to upload instead of the plain source download (e.g. the Helm chart archive of a Helm
-	// or OCI resource). Empty uploads the downloaded source bytes unchanged.
-	Opener string `json:"opener,omitempty"`
-	// AfterUpload is an optional body-less request (POST unless a verb is set) sent after a
-	// successful upload, e.g. to refresh a repository index. Credentials are resolved for its
-	// URL like for Request; a non-2xx response fails the transformation.
-	AfterUpload *wgetaccessv1.Wget `json:"afterUpload,omitempty"`
-	// ComponentVersion is set when Resource is a local resource: it names the source component
-	// version (and its repository) the local blob is streamed from, instead of downloading it
-	// through its access.
-	ComponentVersion *SourceComponentVersion `json:"componentVersion,omitempty"`
-}
-
-// SourceComponentVersion identifies the component version holding a local resource.
-//
-// +k8s:deepcopy-gen=true
-// +ocm:jsonschema-gen=true
-type SourceComponentVersion struct {
-	// Repository is the specification of the repository holding the component version.
-	Repository *runtime.Raw `json:"repository"`
-	// Component is the component name.
-	Component string `json:"component"`
-	// Version is the component version.
-	Version string `json:"version"`
 }
 
 // HTTPStreamingOutput is the output specification for the HTTPStreaming transformation.

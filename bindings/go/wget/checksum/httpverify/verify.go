@@ -16,6 +16,7 @@ import (
 	checksumhttpv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/checksum/http/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/wget/checksum"
+	"ocm.software/open-component-model/bindings/go/wget/httpauth"
 	"ocm.software/open-component-model/bindings/go/wget/internal/download"
 )
 
@@ -85,7 +86,7 @@ func Peek(
 	client := baseClient
 	if credentials != nil {
 		credentialedClient := baseClient
-		if err := download.ApplyCredentials(ctx, httpReq, &credentialedClient, credentials); err != nil {
+		if err := httpauth.Apply(ctx, httpReq, &credentialedClient, credentials); err != nil {
 			return checksum.Expected{}, false, fmt.Errorf("cannot apply credentials for checksum peek: %w", err)
 		}
 		client = credentialedClient

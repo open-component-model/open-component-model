@@ -1,12 +1,12 @@
 package internal
 
 import (
-	"context"
-
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	githubtransformer "ocm.software/open-component-model/bindings/go/github/transformation"
 	githubv1alpha1 "ocm.software/open-component-model/bindings/go/github/transformation/spec/v1alpha1"
+	"ocm.software/open-component-model/bindings/go/helm/chartarchive"
+	helmaccess "ocm.software/open-component-model/bindings/go/helm/spec/access"
 	helmtransformer "ocm.software/open-component-model/bindings/go/helm/transformation"
 	helmv1alpha1 "ocm.software/open-component-model/bindings/go/helm/transformation/spec/v1alpha1"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
@@ -42,6 +42,7 @@ func NewDefaultBuilder(
 	transformerScheme.MustRegisterScheme(s3v1alpha1.Scheme)
 	transformerScheme.MustRegisterScheme(githubv1alpha1.Scheme)
 	transformerScheme.MustRegisterScheme(wgetaccess.Scheme)
+	transformerScheme.MustRegisterScheme(helmaccess.Scheme)
 
 	ociGet := &ocitransformer.GetComponentVersion{
 		Scheme:             transformerScheme,
@@ -135,27 +136,26 @@ func NewDefaultBuilder(
 	}
 
 	// HTTP streaming transformer (uploader configurations)
-	helmChartArchive := &helmtransformer.ChartArchiveSource{
-		ResourceRepository: resourceRepo,
-		OCIRepository:      streamingOCIRepo,
-		HTTPConfig:         httpConfig,
-	}
 	httpStreaming := &wgettransformer.HTTPStreamingTransformer{
 		Scheme:             transformerScheme,
 		ResourceRepository: resourceRepo,
 		CredentialProvider: credentialProvider,
 		HTTPConfig:         httpConfig,
-		RepoProvider:       repoProvider,
-		Openers: map[string]wgettransformer.SourceOpener{
-			helmtransformer.ChartArchiveOpener: func(ctx context.Context, src wgettransformer.SourceRequest) (wgettransformer.OpenedSource, error) {
-				req := helmtransformer.ChartRequest{Resource: src.Resource, Target: src.Target, Credentials: src.Credentials}
-				if l := src.Local; l != nil {
-					req.Local = &helmtransformer.LocalSource{Repository: l.Repository, Component: l.Component, Version: l.Version}
-				}
-				chart, err := helmChartArchive.Open(ctx, req)
-				return wgettransformer.OpenedSource{Blob: chart.Archive, Derived: chart.Derived}, err
-			},
+	}
+
+	// JFrog Artifactory Helm upload transformer (JFrog helm uploader configurations)
+	transformerScheme.MustRegisterWithAlias(&JFrogHelmUploadTransformation{}, JFrogHelmUploadVersionedType)
+	jfrogHelmUpload := &JFrogHelmUpload{
+		Scheme: transformerScheme,
+		Charts: &chartarchive.Source{
+			ResourceRepository: resourceRepo,
+			OCIRepository:      streamingOCIRepo,
+			HTTPConfig:         httpConfig,
 		},
+		ResourceRepository: resourceRepo,
+		RepoProvider:       repoProvider,
+		CredentialProvider: credentialProvider,
+		HTTPConfig:         httpConfig,
 	}
 
 	// File cleanup transformer
@@ -182,5 +182,6 @@ func NewDefaultBuilder(
 		WithTransformer(&s3v1alpha1.DownloadS3Resource{}, downloadS3).
 		WithTransformer(&githubv1alpha1.GetGitHubCommit{}, getGitHubCommit).
 		WithTransformer(&wgetv1alpha1.HTTPStreaming{}, httpStreaming).
+		WithTransformer(&JFrogHelmUploadTransformation{}, jfrogHelmUpload).
 		WithTransformer(&FileCleanupTransformation{}, fileCleanup)
 }

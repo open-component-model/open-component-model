@@ -269,10 +269,10 @@ target `hostname`, as in Step 2.
 The `jfrog.helm.uploader.transfer.config.ocm.software/v1alpha1` uploader
 deploys Helm charts into a JFrog Artifactory Helm repository and rewrites the
 resource to a `Helm/v1` access. It extracts the chart archive from `Helm/v1`,
-`OCIImage/v1` or `LocalBlob` sources (for example charts added with the `helm`
-input), streams it as a `PUT` to Artifactory under the chart's own name and
-version, and publishes a `Helm/v1` access so downstream consumers can pull the
-chart with `helm pull`.
+`OCIImage/v1`, `LocalBlob` (for example charts added with the `helm` input) or
+other remote sources, streams it as a `PUT` to Artifactory under the name and
+version from the chart's `Chart.yaml`, and publishes a `Helm/v1` access so
+downstream consumers can pull the chart with `helm pull`.
 
 ### Uploader configuration
 
@@ -291,19 +291,23 @@ configurations:
 ### Credentials
 
 Add credentials for the Artifactory host. The uploader resolves them using the
-`Wget` consumer identity of the upload URL:
+`HelmChartRepository` consumer identity of the Artifactory Helm API, falling back
+to the `Wget` consumer identity of the upload URL, so either entry works:
 
 ```yaml
   - type: credentials.config.ocm.software
     consumers:
       - identity:
-          type: Wget
+          type: HelmChartRepository
           hostname: myorg.jfrog.io
         credentials:
-          - type: WgetCredentials/v1
+          - type: HelmHTTPCredentials/v1
             username: <USERNAME>
             password: <PASSWORD>
 ```
+
+A `type: Wget` identity with `WgetCredentials/v1` works as well, for example to
+send the access token as a bearer `identityToken`.
 
 ### Transfer and verify
 

@@ -42,13 +42,6 @@ func TestJFrogHelmUploaderConfig_Validate(t *testing.T) {
 		}, wantErr: "url must not carry a query or fragment"},
 		{name: "empty repository", mutate: func(u *spec.JFrogHelmUploaderConfig) { u.Repository = "" }, wantErr: "repository is required"},
 		{name: "nested repository", mutate: func(u *spec.JFrogHelmUploaderConfig) { u.Repository = "a/b" }, wantErr: "repository must be a single repository key"},
-		{name: "standalone chartName expression", mutate: func(u *spec.JFrogHelmUploaderConfig) { u.ChartName = "${resource.name}" }},
-		{name: "embedded chartName expression", mutate: func(u *spec.JFrogHelmUploaderConfig) {
-			u.ChartName = "chart-${resource.name}"
-		}, wantErr: "chartName must be a literal or a single standalone ${...} expression"},
-		{name: "two chartName expressions", mutate: func(u *spec.JFrogHelmUploaderConfig) { u.ChartName = "${a}${b}" }, wantErr: "chartName must be a literal or a single standalone ${...} expression"},
-		{name: "chartName literal with slash", mutate: func(u *spec.JFrogHelmUploaderConfig) { u.ChartName = "a/b" }, wantErr: "chartName must not contain '/'"},
-		{name: "chartVersion literal with slash", mutate: func(u *spec.JFrogHelmUploaderConfig) { u.ChartVersion = "1/0" }, wantErr: "chartVersion must not contain '/'"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
