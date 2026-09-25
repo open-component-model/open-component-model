@@ -1,7 +1,6 @@
 package v1alpha1
 
 import (
-	filev1alpha1 "ocm.software/open-component-model/bindings/go/blob/filesystem/spec/access/v1alpha1"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	wgetaccessv1 "ocm.software/open-component-model/bindings/go/wget/spec/access/v1"
@@ -56,11 +55,23 @@ type HTTPStreamingSpec struct {
 	// successful upload, e.g. to refresh a repository index. Credentials are resolved for its
 	// URL like for Request; a non-2xx response fails the transformation.
 	AfterUpload *wgetaccessv1.Wget `json:"afterUpload,omitempty"`
-	// SourceFile is the source content already buffered to a file by a preceding step (e.g. a
-	// local blob fetched from the source component version). When set, it is uploaded (or
-	// handed to the Opener) instead of downloading Resource, and no source credentials are
-	// resolved.
-	SourceFile *filev1alpha1.File `json:"sourceFile,omitempty"`
+	// ComponentVersion is set when Resource is a local resource: it names the source component
+	// version (and its repository) the local blob is streamed from, instead of downloading it
+	// through its access.
+	ComponentVersion *SourceComponentVersion `json:"componentVersion,omitempty"`
+}
+
+// SourceComponentVersion identifies the component version holding a local resource.
+//
+// +k8s:deepcopy-gen=true
+// +ocm:jsonschema-gen=true
+type SourceComponentVersion struct {
+	// Repository is the specification of the repository holding the component version.
+	Repository *runtime.Raw `json:"repository"`
+	// Component is the component name.
+	Component string `json:"component"`
+	// Version is the component version.
+	Version string `json:"version"`
 }
 
 // HTTPStreamingOutput is the output specification for the HTTPStreaming transformation.

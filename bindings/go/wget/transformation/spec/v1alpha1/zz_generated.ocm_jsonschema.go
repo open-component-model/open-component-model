@@ -27,6 +27,9 @@ var schemaHTTPStreamingOutput []byte
 //go:embed schemas/HTTPStreamingSpec.schema.json
 var schemaHTTPStreamingSpec []byte
 
+//go:embed schemas/SourceComponentVersion.schema.json
+var schemaSourceComponentVersion []byte
+
 // JSONSchema returns the JSON Schema for DownloadWgetResource.
 func (DownloadWgetResource) JSONSchema() []byte {
 	return schemaDownloadWgetResource
@@ -55,4 +58,9 @@ func (HTTPStreamingOutput) JSONSchema() []byte {
 // JSONSchema returns the JSON Schema for HTTPStreamingSpec.
 func (HTTPStreamingSpec) JSONSchema() []byte {
 	return schemaHTTPStreamingSpec
+}
+
+// JSONSchema returns the JSON Schema for SourceComponentVersion.
+func (SourceComponentVersion) JSONSchema() []byte {
+	return schemaSourceComponentVersion
 }

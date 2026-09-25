@@ -8,8 +8,6 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -18,10 +16,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/blob"
-	filev1alpha1 "ocm.software/open-component-model/bindings/go/blob/filesystem/spec/access/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	wgetaccess "ocm.software/open-component-model/bindings/go/wget/spec/access"
 	wgetaccessv1 "ocm.software/open-component-model/bindings/go/wget/spec/access/v1"
@@ -364,33 +362,81 @@ func TestHTTPStreamingTransformer_OpenerDigest(t *testing.T) {
 	}
 }
 
-func TestHTTPStreamingTransformer_SourceFile(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "buffered.tgz")
-	require.NoError(t, os.WriteFile(path, []byte("buffered"), 0o600))
-	withFile := func(opener string) func(*v1alpha1.HTTPStreamingSpec) {
-		return func(s *v1alpha1.HTTPStreamingSpec) {
-			s.Opener = opener
-			s.SourceFile = &filev1alpha1.File{Type: runtime.NewVersionedType(filev1alpha1.FileType, filev1alpha1.Version), URI: "file://" + path}
+// stubLocalRepository serves one local resource of one component version.
+type stubLocalRepository struct {
+	repository.ComponentVersionRepository
+	payload string
+	got     []string
+}
+
+func (s *stubLocalRepository) GetLocalResource(_ context.Context, component, version string, identity runtime.Identity) (blob.ReadOnlyBlob, *descriptor.Resource, error) {
+	s.got = append(s.got, component+":"+version+" "+identity.String())
+	return inmemory.New(strings.NewReader(s.payload)), nil, nil
+}
+
+type stubRepoProvider struct {
+	repository.ComponentVersionRepositoryProvider
+	repo *stubLocalRepository
+	spec runtime.Typed
+}
+
+func (p *stubRepoProvider) GetComponentVersionRepository(_ context.Context, spec runtime.Typed, _ runtime.Typed) (repository.ComponentVersionRepository, error) {
+	p.spec = spec
+	return p.repo, nil
+}
+
+func TestHTTPStreamingTransformer_LocalResource(t *testing.T) {
+	run := func(t *testing.T, opener string, conv SourceOpener) (*stubRepoProvider, [][]byte, error) {
+		t.Helper()
+		var bodies [][]byte
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			body, _ := io.ReadAll(r.Body)
+			bodies = append(bodies, body)
+			w.WriteHeader(http.StatusCreated)
+		}))
+		t.Cleanup(srv.Close)
+		provider := &stubRepoProvider{repo: &stubLocalRepository{payload: "local"}}
+		tr := &HTTPStreamingTransformer{
+			Scheme:             newTransformerScheme(),
+			ResourceRepository: &stubResourceRepository{payload: []byte("downloaded")},
+			RepoProvider:       provider,
+			Openers:            map[string]SourceOpener{"conv": conv},
 		}
+		_, err := tr.Transform(t.Context(), &v1alpha1.HTTPStreaming{Type: v1alpha1.HTTPStreamingV1alpha1, ID: "upload", Spec: &v1alpha1.HTTPStreamingSpec{
+			Resource:       wgetResourceV2("blob", "https://source.example/blob.tar", "", "", nil, nil),
+			Request:        wgetRequest(srv.URL+"/blob", http.MethodPut, "", nil),
+			TargetResource: wgetResourceV2("blob", srv.URL+"/blob", "", "", nil, nil),
+			Opener:         opener,
+			ComponentVersion: &v1alpha1.SourceComponentVersion{
+				Repository: &runtime.Raw{Type: runtime.NewVersionedType("CommonTransportFormat", "v1"), Data: []byte(`{"type":"CommonTransportFormat/v1","filePath":"/ctf"}`)},
+				Component:  "ocm.software/c",
+				Version:    "1.0.0",
+			},
+		}})
+		return provider, bodies, err
 	}
 
-	t.Run("uploaded instead of downloading", func(t *testing.T) {
+	t.Run("streamed from the source component version instead of downloading", func(t *testing.T) {
 		r := require.New(t)
-		_, bodies, err := runWithOpener(t, withFile(""), nil)
+		provider, bodies, err := run(t, "", nil)
 		r.NoError(err)
-		r.Equal([][]byte{[]byte("buffered")}, bodies)
+		r.Equal([][]byte{[]byte("local")}, bodies)
+		r.Equal([]string{"ocm.software/c:1.0.0 name=blob,version=1.0.0"}, provider.repo.got)
+		r.Equal("CommonTransportFormat/v1", provider.spec.GetType().String())
 	})
 
 	t.Run("handed to the opener without source credentials", func(t *testing.T) {
 		r := require.New(t)
 		var got SourceRequest
-		_, bodies, err := runWithOpener(t, withFile("conv"), func(_ context.Context, src SourceRequest) (OpenedSource, error) {
+		_, bodies, err := run(t, "conv", func(ctx context.Context, src SourceRequest) (OpenedSource, error) {
 			got = src
-			return OpenedSource{Blob: src.Buffered}, nil
+			b, _, err := src.Local.Repository.GetLocalResource(ctx, src.Local.Component, src.Local.Version, src.Resource.ToIdentity())
+			return OpenedSource{Blob: b}, err
 		})
 		r.NoError(err)
-		r.Equal([][]byte{[]byte("buffered")}, bodies)
+		r.Equal([][]byte{[]byte("local")}, bodies)
 		r.Nil(got.Credentials)
+		r.Equal("ocm.software/c", got.Local.Component)
 		r.NotNil(got.Target, "the opener sees the resource as it will be published")
 	})
 }

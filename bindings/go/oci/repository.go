@@ -533,13 +533,34 @@ func (repo *Repository) GetLocalSource(ctx context.Context, component, version s
 }
 
 func (repo *Repository) localArtifact(ctx context.Context, component, version string, identity runtime.Identity, kind annotations.ArtifactKind) (fetch.LocalBlob, descriptor.Artifact, error) {
-	reference, store, err := repo.getStore(ctx, component, version)
+	local, err := repo.resolveLocalArtifact(ctx, component, version, identity, kind)
 	if err != nil {
 		return nil, nil, err
 	}
+	b, err := repo.getLocalBlobFromIndexOrManifest(
+		ctx, local.store, local.index, local.manifest, local.access.LocalReference,
+		local.artifact.GetElementMeta().Version,
+	)
+	return b, local.artifact, err
+}
+
+// localArtifactRef locates the local blob of an artifact within a component version.
+type localArtifactRef struct {
+	store    spec.Store
+	index    *ociImageSpecV1.Index
+	manifest *ociImageSpecV1.Manifest
+	access   *v2.LocalBlob
+	artifact descriptor.Artifact
+}
+
+func (repo *Repository) resolveLocalArtifact(ctx context.Context, component, version string, identity runtime.Identity, kind annotations.ArtifactKind) (*localArtifactRef, error) {
+	reference, store, err := repo.getStore(ctx, component, version)
+	if err != nil {
+		return nil, err
+	}
 	desc, manifest, index, err := getDescriptorFromStore(ctx, store, reference, repo.unmarshalDescriptorFunc)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get component version: %w", err)
+		return nil, fmt.Errorf("failed to get component version: %w", err)
 	}
 
 	var artifacts []descriptor.Artifact
@@ -555,7 +576,7 @@ func (repo *Repository) localArtifact(ctx context.Context, component, version st
 	}
 	candidates := descriptor.FindArtifactsByIdentity(identity, artifacts)
 	if len(candidates) != 1 {
-		return nil, nil, fmt.Errorf("found %d candidates while looking for %s %q, but expected exactly one", len(candidates), kind, identity)
+		return nil, fmt.Errorf("found %d candidates while looking for %s %q, but expected exactly one", len(candidates), kind, identity)
 	}
 	artifact := candidates[0]
 	meta := artifact.GetElementMeta()
@@ -568,22 +589,47 @@ func (repo *Repository) localArtifact(ctx context.Context, component, version st
 	access := artifact.GetAccess()
 	typed, err := repo.scheme.NewObject(access.GetType())
 	if err != nil {
-		return nil, nil, fmt.Errorf("error creating resource access: %w", err)
+		return nil, fmt.Errorf("error creating resource access: %w", err)
 	}
 	if err := repo.scheme.Convert(access, typed); err != nil {
-		return nil, nil, fmt.Errorf("error converting resource access: %w", err)
+		return nil, fmt.Errorf("error converting resource access: %w", err)
 	}
+	localBlob, ok := typed.(*v2.LocalBlob)
+	if !ok {
+		return nil, fmt.Errorf("unsupported resource access type: %T", typed)
+	}
+	return &localArtifactRef{store: store, index: index, manifest: manifest, access: localBlob, artifact: artifact}, nil
+}
 
-	switch typed := typed.(type) {
-	case *v2.LocalBlob:
-		b, err := repo.getLocalBlobFromIndexOrManifest(
-			ctx, store, index, manifest, typed.LocalReference,
-			artifact.GetElementMeta().Version,
-		)
-		return b, artifact, err
-	default:
-		return nil, nil, fmt.Errorf("unsupported resource access type: %T", typed)
+// GetLocalResourceStream returns a lazy stream of a local resource without materializing it:
+// its root is the OCI descriptor of the local blob, i.e. a plain layer or, for a local blob
+// holding an OCI artifact, the artifact's manifest, whose children stream on demand via Fetch.
+// Unlike GetLocalResource, no OCI layout is assembled for nested artifacts.
+func (repo *Repository) GetLocalResourceStream(ctx context.Context, component, version string, identity runtime.Identity) (ocistream.ResourceStream, *descriptor.Resource, error) {
+	ctx = slogcontext.NewCtx(ctx, repo.logger)
+	local, err := repo.resolveLocalArtifact(ctx, component, version, identity, annotations.ArtifactKindResource)
+	if err != nil {
+		if errors.Is(err, errdef.ErrNotFound) {
+			return nil, nil, errors.Join(repository.ErrNotFound, fmt.Errorf("component version %s/%s not found: %w", component, version, err))
+		}
+		return nil, nil, err
 	}
+	root, err := findDescriptorFromReference(collectDescriptors(local.index, local.manifest), local.access.LocalReference)
+	if err != nil {
+		return nil, nil, fmt.Errorf("resolve artifact %q: %w", local.access.LocalReference, err)
+	}
+	graph, ok := local.store.(content.ReadOnlyGraphStorage)
+	if !ok {
+		return nil, nil, fmt.Errorf("store %T does not support predecessor walks", local.store)
+	}
+	return &ocistream.OCIResourceStream{
+		ReadOnlyGraphStorage: graph,
+		Descriptor:           root,
+		ExtendedCopyOpts: oras.ExtendedCopyGraphOptions{
+			CopyGraphOptions: repo.resourceCopyOptions.CopyGraphOptions,
+		},
+		TempDir: repo.tempDir,
+	}, local.artifact.(*descriptor.Resource), nil
 }
 
 // getLocalBlobFromIndexOrManifest resolves and fetches a blob from either an
