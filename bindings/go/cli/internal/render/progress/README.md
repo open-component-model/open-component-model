@@ -42,6 +42,19 @@ err := graph.Process(ctx)
 op.Finish(err)
 ```
 
+When the item count is not known up front (e.g. recursive discovery), pass
+`progress.IndeterminateTotal` as the total. The `bar` visualizer then shows the
+scrolling item log without a progress bar:
+
+```go
+op := tracker.StartOperation("Resolving component versions",
+    progress.WithEvents(resolutionEvents, mapResolutionEvent, progress.IndeterminateTotal))
+
+result, err := doWork(resolutionEvents)
+close(resolutionEvents) // Finish blocks until the channel is closed and drained
+op.Finish(err)
+```
+
 ## Non-Terminal Mode
 
 When the output is not a terminal (e.g. piped to a file or CI), the tracker
@@ -56,7 +69,8 @@ detects this automatically:
 The `bar` subpackage provides an ANSI terminal visualizer:
 
 - `NewVisualizer[T]` — for simple operations (total=0) shows an animated spinner header;
-  for tracked operations shows a progress bar with scrolling item log
+  for tracked operations shows a progress bar with scrolling item log;
+  for indeterminate operations (total=IndeterminateTotal) shows only the scrolling item log
 
 ## Package Layout
 

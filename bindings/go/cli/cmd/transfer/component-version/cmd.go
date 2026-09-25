@@ -235,8 +235,14 @@ func TransferComponentVersion(cmd *cobra.Command, args []string) error {
 		if dryRun {
 			opName += " (dry run)"
 		}
-		op := tracker.StartOperation(opName)
-		tgd, err = buildGraphDefinitionFromArgs(cmd, args, octx, pm, credGraph)
+		// Graph construction discovers component references recursively, so the number
+		// of resolutions is not known up front: track them as an indeterminate log
+		// instead of a progress bar.
+		resolutionEvents := make(chan resolutionEvent, eventBufferSize)
+		op := tracker.StartOperation(opName,
+			progress.WithEvents(resolutionEvents, mapResolutionEvent, progress.IndeterminateTotal))
+		tgd, err = buildGraphDefinitionFromArgs(cmd, args, octx, pm, credGraph, resolutionEvents)
+		close(resolutionEvents)
 		op.Finish(err)
 		if err != nil {
 			return err
@@ -250,9 +256,17 @@ func TransferComponentVersion(cmd *cobra.Command, args []string) error {
 		credGraph,
 		transfer.WithHTTPConfig(httpConfig),
 	)
+	// BuildAndCheck wires and checks every transformation node; the node count
+	// is known from the TGD, so track it as a determinate operation.
+	buildEvents := make(chan graphRuntime.ProgressEvent, eventBufferSize)
+	buildOp := tracker.StartOperation("Building transformation graph",
+		progress.WithEvents(buildEvents, mapEvent, len(tgd.Transformations)),
+		progress.WithErrorFormatter(formatError))
 	graph, err := b.
 		WithEvents(make(chan graphRuntime.ProgressEvent, eventBufferSize)).
+		WithBuildEvents(buildEvents).
 		BuildAndCheck(tgd)
+	buildOp.Finish(err)
 	if err != nil {
 		reader, rerr := renderTGD(tgd, output)
 		if rerr != nil {
@@ -336,6 +350,7 @@ func buildGraphDefinitionFromArgs(
 	octx *ocmctx.Context,
 	pm *manager.PluginManager,
 	credGraph credentials.Resolver,
+	resolutionEvents chan<- resolutionEvent,
 ) (*transformv1alpha1.TransformationGraphDefinition, error) {
 	ctx := cmd.Context()
 	cfg := octx.Configuration()
@@ -355,6 +370,7 @@ func buildGraphDefinitionFromArgs(
 	if err != nil {
 		return nil, fmt.Errorf("could not initialize ocm repositoryProvider: %w", err)
 	}
+	repoProvider = &resolutionProgressResolver{ComponentVersionRepositoryResolver: repoProvider, events: resolutionEvents}
 
 	toSpec, err := compref.ParseRepository(args[1],
 		compref.WithCTFAccessMode(ctfv1.AccessModeReadWrite+"|"+ctfv1.AccessModeCreate),

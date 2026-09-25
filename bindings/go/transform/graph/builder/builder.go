@@ -20,6 +20,7 @@ type Builder struct {
 	scheme       *runtime.Scheme
 	transformers map[runtime.Type]graphRuntime.Transformer
 	events       chan graphRuntime.ProgressEvent
+	buildEvents  chan graphRuntime.ProgressEvent
 }
 
 func NewBuilder(scheme *runtime.Scheme) *Builder {
@@ -27,6 +28,14 @@ func NewBuilder(scheme *runtime.Scheme) *Builder {
 }
 
 func (b *Builder) BuildAndCheck(original *v1alpha1.TransformationGraphDefinition) (*Graph, error) {
+	if b.buildEvents != nil {
+		// Reset after closing so a reused builder cannot send to or close the
+		// stale channel.
+		defer func() {
+			close(b.buildEvents)
+			b.buildEvents = nil
+		}()
+	}
 	tgd := original.DeepCopy()
 
 	nodes, err := getTransformationNodes(tgd)
@@ -61,8 +70,13 @@ func (b *Builder) BuildAndCheck(original *v1alpha1.TransformationGraphDefinition
 		AnalyzedTransformations: make(map[string]graph.Transformation),
 	}
 
+	var processor syncdag.Processor[graph.Transformation] = pluginProcessor
+	if b.buildEvents != nil {
+		processor = &progressProcessor{inner: pluginProcessor, events: b.buildEvents}
+	}
+
 	staticAnalysisProcessor := syncdag.NewGraphProcessor(synced, &syncdag.GraphProcessorOptions[string, graph.Transformation]{
-		Processor: pluginProcessor,
+		Processor: processor,
 		// Concurrency must stay 1 until synchronization is added: ProcessValue
 		// mutates the shared env.Builder (envOptions, and registeredTypes via
 		// copy-on-write) and the unsynchronized AnalyzedTransformations map.
@@ -144,6 +158,35 @@ func (g *Graph) Process(ctx context.Context) error {
 func (b *Builder) WithEvents(events chan graphRuntime.ProgressEvent) *Builder {
 	b.events = events
 	return b
+}
+
+// WithBuildEvents sets the channel where progress events are sent during
+// BuildAndCheck. This is optional - if not set, no events are emitted.
+// Unlike the channel passed to [Builder.WithEvents], which [Graph.Process]
+// closes, BuildAndCheck closes the build events channel before it returns.
+// The channel is single-use: to report progress for a later build on the same
+// builder, call WithBuildEvents again.
+func (b *Builder) WithBuildEvents(events chan graphRuntime.ProgressEvent) *Builder {
+	b.buildEvents = events
+	return b
+}
+
+// progressProcessor wraps the static analysis processor to report the build
+// progress of each transformation on the build events channel.
+type progressProcessor struct {
+	inner  syncdag.Processor[graph.Transformation]
+	events chan<- graphRuntime.ProgressEvent
+}
+
+func (p *progressProcessor) ProcessValue(ctx context.Context, transformation graph.Transformation) error {
+	t := &transformation
+	p.events <- graphRuntime.ProgressEvent{Transformation: t, State: graphRuntime.Running}
+	if err := p.inner.ProcessValue(ctx, transformation); err != nil {
+		p.events <- graphRuntime.ProgressEvent{Transformation: t, State: graphRuntime.Failed, Err: err}
+		return err
+	}
+	p.events <- graphRuntime.ProgressEvent{Transformation: t, State: graphRuntime.Completed}
+	return nil
 }
 
 // Events returns the channel where progress events are sent during Process().
