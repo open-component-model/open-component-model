@@ -12,6 +12,7 @@ import (
 	"github.com/go-logr/logr"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/resolution/workerpool"
@@ -32,6 +33,8 @@ type CacheBackedRepository struct {
 	cfg      *configuration.Configuration
 	// verifications are used to verify against component version signatures and used as a cache key.
 	verifications []verification.Verification
+	// credentialGraph resolves the public keys and trust material used during signature verification.
+	credentialGraph credentials.Resolver
 	// digest is used to verify the integrity of a referenced component version and is used as part of the cache key.
 	digest *v2.Digest
 	// signingRegistry holds all plugins that implement capabilities to verify signatures and is used during resolution
@@ -85,6 +88,7 @@ func (c *CacheBackedRepository) GetComponentVersion(ctx context.Context, compone
 		Component:       component,
 		Version:         version,
 		Verifications:   c.verifications,
+		CredentialGraph: c.credentialGraph,
 		Digest:          c.digest,
 		SigningRegistry: c.signingRegistry,
 		Repository:      repo,

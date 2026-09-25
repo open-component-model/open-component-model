@@ -26,7 +26,7 @@ consumers:
 OCM ships with the following built-in credential types:
 
 | Credential Type                                            | Used With                                | Purpose                                                         |
-|------------------------------------------------------------|------------------------------------------|-----------------------------------------------------------------|
+| ---------------------------------------------------------- | ---------------------------------------- | --------------------------------------------------------------- |
 | [`OCICredentials/v1`](#ocicredentialsv1)                   | `OCIRegistry` consumers                  | OCI registry username/password and token auth                   |
 | [`HelmHTTPCredentials/v1`](#helmhttpcredentialsv1)         | `HelmChartRepository` consumers (HTTP/S) | Helm HTTP repository auth and TLS client certs                  |
 | [`WgetCredentials/v1`](#wgetcredentialsv1)                 | `Wget` consumers                         | HTTP/S Basic Auth, bearer token, and mutual TLS                 |
@@ -222,13 +222,31 @@ is set, and a client certificate has no effect on a plain `http://` URL.
 
 {{< schema-renderer url="/schemas/bindings/go/credentials/s3/v1/S3Credentials.schema.json" >}}
 
-All fields are optional, because credentials are optional for S3. If an entry leaves all three fields empty, OCM treats
-it as no credentials, and the AWS default credential chain takes over. If an entry sets any of them, OCM passes the
-entry to the AWS SDK unchanged.
+Authentication fields are optional. `anonymous` is an optional boolean that defaults to `false`. When false or
+omitted, an entry with no access key, secret or session token uses the AWS default credential chain (environment,
+shared config and IAM roles). If any key or token field is set, OCM passes those static credentials to the AWS SDK.
+Incomplete or invalid credentials do not fall back to the default chain.
+
+Set `anonymous: true` to read public objects without signing, even when AWS credentials are available. It cannot
+be combined with `accessKeyId`, `secretAccessKey` or `sessionToken`, including their legacy aliases during conversion.
+Missing credentials and credential-provider or S3 authorization errors never trigger anonymous access.
+Authentication settings belong only in credentials, never in an access or input specification.
 
 ### Example
 
-Static access keys for every bucket the account owns:
+Explicit anonymous access to a public object:
+
+```yaml
+consumers:
+  - identity:
+      type: S3
+      path: public-bucket/path/to/object
+    credentials:
+      - type: S3Credentials/v1
+        anonymous: true
+```
+
+Static access keys for every bucket the account owns (`anonymous: false` is optional):
 
 ```yaml
 consumers:
@@ -236,6 +254,7 @@ consumers:
       type: S3
     credentials:
       - type: S3Credentials/v1
+        anonymous: false
         accessKeyId: <access-key-id>
         secretAccessKey: <secret-access-key>
 ```
@@ -278,7 +297,7 @@ OCM still accepts the OCM v1 property names `awsAccessKeyID`, `awsSecretAccessKe
 ### Used With
 
 [`S3`]({{< relref "credential-consumer-identities.md#s3" >}}) consumer identities. They cover both the
-[`S3/v2` access type]({{< relref "input-and-access-types.md#s3v2-access" >}}) and the
+[S3 access types (v1, v2 and unversioned)]({{< relref "input-and-access-types.md#s3v2-access" >}}) and the
 [`S3/v2` input type]({{< relref "input-and-access-types.md#s3v2-input" >}}).
 
 ---

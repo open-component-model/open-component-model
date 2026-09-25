@@ -106,7 +106,7 @@ func (r *Resolver) resolveField(field variable.FieldDescriptor) ResolutionResult
 		Original: fmt.Sprintf("%v", field.Expressions),
 	}
 
-	value, err := r.getValueFromPath(field.Path)
+	value, err := r.GetValueFromPath(field.Path)
 	if err != nil {
 		// Not sure if these kinds of errors should be fatal, these paths are produced
 		// by the parser, so they should be valid.
@@ -170,11 +170,9 @@ func (r *Resolver) resolveField(field variable.FieldDescriptor) ResolutionResult
 	return result
 }
 
-// getValueFromPath retrieves a value from the resource using a dot separated path.
-// NOTE(a-hilaly): this is very similar to the `setValueAtPath` function maybe
-// we can refactor something here.
-// getValueFromPath retrieves a value from the resource using a dot-separated path.
-func (r *Resolver) getValueFromPath(path fieldpath.Path) (interface{}, error) {
+// GetValueFromPath retrieves a value from the resource at the given field path,
+// navigating named (map) and indexed (slice) segments.
+func (r *Resolver) GetValueFromPath(path fieldpath.Path) (interface{}, error) {
 	current := interface{}(r.resource)
 	for _, segment := range path {
 		if segment.Index != nil {

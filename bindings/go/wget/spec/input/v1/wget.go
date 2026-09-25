@@ -16,6 +16,11 @@ const (
 // during component construction. The downloaded content is stored as a local blob
 // in the component version.
 //
+// Verification against a source-side checksum is a deployment concern, not a
+// descriptor concern: configure it with `checksum.http.config.ocm.software/v1alpha1`
+// (see `bindings/go/configuration/checksum/http/v1alpha1/spec`), which steers
+// both this input method and the wget access-type digest processor.
+//
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
 // +ocm:typegen=true
