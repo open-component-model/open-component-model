@@ -352,8 +352,35 @@ func (d *DirectedAcyclicGraph[T]) hasCycle() (bool, []T) {
 }
 
 // findPath reports whether vertex `to` is reachable from vertex `from` along
-// existing edges and returns one such path.
+// existing edges and returns one such path. It runs for every added edge, so
+// the reachability check skips path bookkeeping and sorting. Only when the
+// edge would close a cycle does it build the deterministic cycle path.
 func (d *DirectedAcyclicGraph[T]) findPath(from, to T) ([]T, bool) {
+	visited := make(map[T]struct{})
+	stack := []T{from}
+	visited[from] = struct{}{}
+	for len(stack) > 0 {
+		node := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+		for neighbor := range d.Vertices[node].Edges {
+			if neighbor == to {
+				// The edge closes a cycle: build the deterministic path.
+				return d.findSortedPath(from, to)
+			}
+			if _, seen := visited[neighbor]; !seen {
+				visited[neighbor] = struct{}{}
+				stack = append(stack, neighbor)
+			}
+		}
+	}
+	return nil, false
+}
+
+// findSortedPath returns a deterministic path from vertex `from` to vertex
+// `to`. Sorted iteration keeps the reported cycle stable for a given graph:
+// an unstable cycle string churns every surface that repeats the error. It
+// runs only on the cycle-closing edge, not for every added edge.
+func (d *DirectedAcyclicGraph[T]) findSortedPath(from, to T) ([]T, bool) {
 	visited := make(map[T]struct{})
 	parent := make(map[T]T)
 	stack := []T{from}
@@ -361,7 +388,6 @@ func (d *DirectedAcyclicGraph[T]) findPath(from, to T) ([]T, bool) {
 	for len(stack) > 0 {
 		node := stack[len(stack)-1]
 		stack = stack[:len(stack)-1]
-		// Sorted iteration keeps the reported cycle deterministic
 		for _, neighbor := range slices.Sorted(maps.Keys(d.Vertices[node].Edges)) {
 			if neighbor == to {
 				path := []T{to}
