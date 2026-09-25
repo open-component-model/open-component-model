@@ -196,6 +196,48 @@ func runningOrDone(s string) Event[any] {
 	return Event[any]{ID: s, State: Running}
 }
 
+// concurrencyRecordingVisualizer records the runner count passed via
+// [ConcurrencyAware] so tests can assert the tracker wires WithConcurrency.
+type concurrencyRecordingVisualizer struct {
+	recordingVisualizer
+	runners int
+}
+
+func (v *concurrencyRecordingVisualizer) SetConcurrency(runners int) { v.runners = runners }
+
+func TestOperation_InFlightCount(t *testing.T) {
+	vis := newSignalVisualizer()
+	tracker := &Tracker[any]{out: &bytes.Buffer{}, isTerminal: true, factory: testFactory(vis)}
+
+	events := make(chan string, 4)
+
+	op := tracker.StartOperation("Transferring",
+		WithEvents(events, runningOrDone, 3))
+	events <- "item1"
+	<-vis.handled
+	events <- "item2"
+	<-vis.handled
+	events <- "done:item1"
+	<-vis.handled
+	close(events)
+	op.Finish(nil)
+
+	require.Len(t, vis.events, 3)
+	assert.Equal(t, 1, vis.events[0].InFlight, "first Running item is the only one in flight")
+	assert.Equal(t, 2, vis.events[1].InFlight, "two Running items run in parallel")
+	assert.Equal(t, 1, vis.events[2].InFlight, "one item remains in flight after a completion")
+}
+
+func TestOperation_WithConcurrency_WiredToVisualizer(t *testing.T) {
+	vis := &concurrencyRecordingVisualizer{}
+	tracker := &Tracker[any]{out: &bytes.Buffer{}, isTerminal: true, factory: testFactory(vis)}
+
+	op := tracker.StartOperation("Transferring", WithConcurrency[any](8))
+	op.Finish(nil)
+
+	assert.Equal(t, 8, vis.runners)
+}
+
 func TestOperation_EventDuration(t *testing.T) {
 	vis := newSignalVisualizer()
 	tracker := &Tracker[any]{out: &bytes.Buffer{}, isTerminal: true, factory: testFactory(vis)}

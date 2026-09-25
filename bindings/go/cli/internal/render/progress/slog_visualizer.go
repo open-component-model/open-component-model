@@ -7,19 +7,36 @@ import (
 
 // SlogVisualizer is a slog-based visualizer for non-terminal environments.
 type SlogVisualizer[T any] struct {
-	name  string
-	start time.Time
+	name        string
+	start       time.Time
+	concurrency int
+}
+
+// SetConcurrency implements [ConcurrencyAware]. It records how many items may
+// be processed in parallel so the count is logged with the operation.
+func (v *SlogVisualizer[T]) SetConcurrency(runners int) {
+	v.concurrency = runners
 }
 
 func (v *SlogVisualizer[T]) Begin(name string) {
 	v.name = name
 	v.start = time.Now()
+	if v.concurrency > 0 {
+		slog.Info(v.name+": operation starting", "runners", v.concurrency)
+		return
+	}
 	slog.Info(v.name + ": operation starting")
 }
 
 func (v *SlogVisualizer[T]) HandleEvent(event Event[T]) {
 	var attrs []any
 	attrs = append(attrs, "item", event.Name)
+	if event.InFlight > 0 {
+		attrs = append(attrs, "inFlight", event.InFlight)
+		if v.concurrency > 0 {
+			attrs = append(attrs, "runners", v.concurrency)
+		}
+	}
 	if event.Duration > 0 {
 		attrs = append(attrs, "duration", event.Duration.Round(time.Second).String())
 	}

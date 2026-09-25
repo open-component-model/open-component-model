@@ -25,6 +25,7 @@ type barVisualizer[T any] struct {
 	logBuffer      *progress.SyncBuffer
 	buf            strings.Builder
 	start          time.Time
+	concurrency    int
 }
 
 // NewVisualizer is a [progress.VisualizerFactory] that creates an animated
@@ -41,6 +42,12 @@ func NewVisualizer[T any](out io.Writer, total int) progress.Visualizer[T] {
 // SetErrorFormatter implements [progress.ErrorFormatterSetter].
 func (v *barVisualizer[T]) SetErrorFormatter(f func(T, error) string) {
 	v.errorFormatter = f
+}
+
+// SetConcurrency implements [progress.ConcurrencyAware]. The runner count is
+// shown in the operation header so it is visible while the bar animates.
+func (v *barVisualizer[T]) SetConcurrency(runners int) {
+	v.concurrency = runners
 }
 
 // SetLogBuffer sets the shared slog buffer from the tracker.
@@ -65,6 +72,9 @@ func (v *barVisualizer[T]) Begin(name string) {
 	defer v.mu.Unlock()
 
 	v.header = name
+	if v.concurrency > 1 {
+		v.header = fmt.Sprintf("%s (%d runners)", name, v.concurrency)
+	}
 	v.events = nil
 	v.start = time.Now()
 	v.done = make(chan struct{})

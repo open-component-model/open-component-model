@@ -315,6 +315,7 @@ func TransferComponentVersion(cmd *cobra.Command, args []string) error {
 	// Execute graph with progress tracking
 	op := tracker.StartOperation("Transferring component versions",
 		progress.WithEvents(graph.Events(), mapEvent, graph.NodeCount()),
+		progress.WithConcurrency[*graphPkg.Transformation](graph.Concurrency()),
 		progress.WithErrorFormatter(formatError))
 
 	if err := graph.Process(ctx); err != nil {

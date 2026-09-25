@@ -229,3 +229,9 @@ func (g *Graph) Events() <-chan graphRuntime.ProgressEvent {
 func (g *Graph) NodeCount() int {
 	return len(g.checked.Vertices)
 }
+
+// Concurrency returns the maximum number of transformation nodes that
+// [Graph.Process] evaluates in parallel.
+func (g *Graph) Concurrency() int {
+	return g.concurrency
+}

@@ -57,13 +57,32 @@ close(resolutionEvents) // Finish blocks until the channel is closed and drained
 op.Finish(err)
 ```
 
+## Reporting Concurrency
+
+Operations that process items in parallel can report how many "runners" they
+use with `progress.WithConcurrency`. Visualizers that implement
+`ConcurrencyAware` surface it: the `bar` visualizer appends `(N runners)` to the
+header, and the slog visualizer logs a `runners` attribute on start.
+
+The tracker also computes, per event, how many items are being processed at the
+same time and exposes it as `Event.InFlight`. The slog visualizer logs it as an
+`inFlight` attribute so parallelism is visible in non-terminal / CI logs.
+
+```go
+op := tracker.StartOperation("Transferring component versions",
+    progress.WithEvents(graph.Events(), mapEvent, graph.NodeCount()),
+    progress.WithConcurrency[myType](graph.Concurrency()),
+    progress.WithErrorFormatter(formatError))
+```
+
 ## Non-Terminal Mode
 
 When the output is not a terminal (e.g. piped to a file or CI), the tracker
 detects this automatically:
 
 - A slog-based visualizer logs operation start/finish via the default logger
-- Events (if configured via `WithEvents`) are logged via slog
+- Events (if configured via `WithEvents`) are logged via slog, including the
+  `inFlight` count (and `runners` when set via `WithConcurrency`)
 - slog output is not intercepted — logs flow to their original destination
 
 ## Visualizer Implementations
@@ -81,7 +100,7 @@ progress/
   README.md               this file
   doc.go                  Go package documentation
   tracker.go              Tracker[T], Operation, WithEvents, terminal detection
-  visualizer.go           Visualizer[T], VisualizerFactory[T], ErrorFormatterSetter[T]
+  visualizer.go           Visualizer[T], VisualizerFactory[T], ErrorFormatterSetter[T], ConcurrencyAware
   slog.go                 slog buffering (SyncBuffer, LogBufferAware)
   slog_visualizer.go      SlogVisualizer[T] for non-terminal mode
   bar/                    ANSI terminal visualizer implementation
