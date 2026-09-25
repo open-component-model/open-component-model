@@ -524,4 +524,29 @@ transformations:
 		require.NoError(t, err)
 		require.NoError(t, graph.Process(t.Context()))
 	})
+
+	t.Run("builder reuse does not send on the closed channel", func(t *testing.T) {
+		r := require.New(t)
+		tgd := &v1alpha1.TransformationGraphDefinition{}
+		r.NoError(yaml.Unmarshal([]byte(`
+environment:
+  name: "my-object"
+  version: "1.0.0"
+transformations:
+- id: get1
+  type: MockGetObjectTransformer/v1alpha1
+  spec:
+    name: "${environment.name}"
+    version: "${environment.version}"
+`), tgd))
+
+		builder := newTestBuilder(t).WithBuildEvents(make(chan graphRuntime.ProgressEvent, 100))
+		_, err := builder.BuildAndCheck(tgd)
+		r.NoError(err)
+
+		// a second build without re-subscribing must not emit events or panic
+		graph, err := builder.BuildAndCheck(tgd)
+		r.NoError(err)
+		r.NotNil(graph)
+	})
 }

@@ -29,11 +29,16 @@ func NewBuilder(scheme *runtime.Scheme) *Builder {
 
 func (b *Builder) BuildAndCheck(original *v1alpha1.TransformationGraphDefinition) (*Graph, error) {
 	if b.buildEvents != nil {
-		defer close(b.buildEvents)
+		// Reset after closing so a reused builder cannot send to or close the
+		// stale channel.
+		defer func() {
+			close(b.buildEvents)
+			b.buildEvents = nil
+		}()
 	}
 	tgd := original.DeepCopy()
 
-	nodes, err := getTransformationNodes(tgd, b.buildEvents)
+	nodes, err := getTransformationNodes(tgd)
 	if err != nil {
 		return nil, err
 	}
@@ -159,6 +164,8 @@ func (b *Builder) WithEvents(events chan graphRuntime.ProgressEvent) *Builder {
 // BuildAndCheck. This is optional - if not set, no events are emitted.
 // Unlike the channel passed to [Builder.WithEvents], which [Graph.Process]
 // closes, BuildAndCheck closes the build events channel before it returns.
+// The channel is single-use: to report progress for a later build on the same
+// builder, call WithBuildEvents again.
 func (b *Builder) WithBuildEvents(events chan graphRuntime.ProgressEvent) *Builder {
 	b.buildEvents = events
 	return b

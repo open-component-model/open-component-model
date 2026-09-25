@@ -13,11 +13,10 @@ import (
 	"ocm.software/open-component-model/bindings/go/dag"
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
 	"ocm.software/open-component-model/bindings/go/transform/graph"
-	graphRuntime "ocm.software/open-component-model/bindings/go/transform/graph/runtime"
 	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
 )
 
-func getTransformationNodes(tgd *v1alpha1.TransformationGraphDefinition, events chan<- graphRuntime.ProgressEvent) (map[string]graph.Transformation, error) {
+func getTransformationNodes(tgd *v1alpha1.TransformationGraphDefinition) (map[string]graph.Transformation, error) {
 	transformations := make(map[string]graph.Transformation, len(tgd.Transformations))
 	for _, transformation := range tgd.Transformations {
 		typ := transformation.GetType()
@@ -34,12 +33,6 @@ func getTransformationNodes(tgd *v1alpha1.TransformationGraphDefinition, events 
 		transformations[transformation.ID] = graph.Transformation{
 			GenericTransformation: transformation,
 			FieldDescriptors:      fieldDescriptors,
-		}
-		if events != nil {
-			// Report running already during decoding: dependency discovery and
-			// static analysis follow per node and can be long-running.
-			node := transformations[transformation.ID]
-			events <- graphRuntime.ProgressEvent{Transformation: &node, State: graphRuntime.Running}
 		}
 	}
 
