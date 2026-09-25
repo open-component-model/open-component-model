@@ -59,7 +59,7 @@ Consumers verify using the corresponding public key to confirm authenticity and 
 ## Prerequisites
 
 - [OCM CLI installed]({{< relref "docs/getting-started/ocm-cli-installation.md" >}})
-- [GnuPG installed](https://gnupg.org/download/) (`gpg` binary available in `$PATH`)
+- [GnuPG](https://gnupg.org/download/) 2.2 or later installed (`gpg` binary available in `$PATH`); OCM runs it to sign and verify
 - A component version to sign (we'll create one if you don't have one)
 
 ## Steps

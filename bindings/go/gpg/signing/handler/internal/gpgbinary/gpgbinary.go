@@ -1,7 +1,7 @@
 // Package gpgbinary signs and verifies OpenPGP detached signatures by invoking
-// the GnuPG "gpg" binary. It is used in FIPS 140-3 mode so that all OpenPGP
-// cryptography, including passphrase unwrapping, runs in the system libgcrypt
-// instead of the non-validated go-crypto implementation.
+// the GnuPG "gpg" binary, so that all OpenPGP cryptography, including passphrase
+// unwrapping, runs in the system libgcrypt. With a FIPS 140-3 validated libgcrypt
+// this keeps GPG signing compliant in FIPS 140-3 mode.
 //
 // Every operation runs in a fresh temporary GnuPG home directory that only
 // contains the key material of the request and is removed afterwards.
@@ -34,7 +34,7 @@ const (
 )
 
 // ErrGPGNotFound is returned when no gpg binary is found on PATH.
-var ErrGPGNotFound = errors.New(`GPG signing in FIPS 140-3 mode requires the GnuPG "gpg" binary (>= 2.2.0) on PATH backed by a FIPS 140-3 validated libgcrypt; install it or set GODEBUG=fips140=off to use the built-in non-FIPS OpenPGP implementation`)
+var ErrGPGNotFound = errors.New(`GPG signing requires the GnuPG "gpg" binary (>= 2.2.0) on PATH; install GnuPG, in FIPS 140-3 mode one backed by a FIPS 140-3 validated libgcrypt`)
 
 var (
 	gpgVersionRegexp       = regexp.MustCompile(`^gpg \(GnuPG[^)]*\) (\d+\.\d+\.\d+)`)
@@ -96,8 +96,7 @@ func (b *Binary) Sign(ctx context.Context, req SignRequest) (string, error) {
 		return "", err
 	}
 
-	// No "!" suffix: gpg picks the signing-capable (sub)key of the selected primary key,
-	// matching go-crypto's entity.SigningKey.
+	// No "!" suffix: gpg picks the signing-capable (sub)key of the selected primary key.
 	selector := req.KeyFingerprint
 	if selector == "" {
 		out, err := b.run(ctx, "list-secret-keys", gpgPath, homeArgs(dir, "--list-secret-keys", "--with-colons"), nil)
@@ -210,17 +209,17 @@ func (b *Binary) resolve(ctx context.Context) (string, error) {
 
 	version, libgcrypt, err := parseVersion(string(out))
 	if err != nil {
-		slog.WarnContext(ctx, "could not parse gpg version; FIPS 140-3 mode requires GnuPG >= 2.2.0", "path", path, "error", err)
+		slog.WarnContext(ctx, "could not parse gpg version; GnuPG >= 2.2.0 is required", "path", path, "error", err)
 	} else {
 		v, err := semver.NewVersion(version)
 		if err != nil {
 			return "", fmt.Errorf("parse gpg version %q: %w", version, err)
 		}
 		if v.LessThan(semver.MustParse(minimumVersion)) {
-			return "", fmt.Errorf("gpg on PATH (%s) is version %s, minimum required in FIPS 140-3 mode is %s", path, version, minimumVersion)
+			return "", fmt.Errorf("gpg on PATH (%s) is version %s, minimum required is %s", path, version, minimumVersion)
 		}
 	}
-	slog.DebugContext(ctx, "gpg resolved for FIPS 140-3 mode", "path", path, "version", version, "libgcrypt", libgcrypt)
+	slog.DebugContext(ctx, "gpg resolved", "path", path, "version", version, "libgcrypt", libgcrypt)
 
 	if b.gpgconfPath, err = b.LookPath("gpgconf"); err != nil {
 		b.gpgconfPath = ""
