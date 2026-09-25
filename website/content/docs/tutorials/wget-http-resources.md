@@ -229,6 +229,17 @@ configurations:
 See [HTTP Client Configuration]({{< relref "docs/reference/http-client-configuration.md" >}}) for the full schema,
 defaults, and how per-host settings are merged.
 
+## Verifying downloads against the source {#checksum-verification}
+
+A pinned resource `digest` protects consumers after the build, but the first
+`ocm add cv` still trusts whatever the server sends. A **source-side checksum**
+closes that gap: OCM compares the downloaded bytes against a digest the source
+advertises in response headers (RFC 9530 `Content-Digest`, `x-checksum-*`) and
+fails on a mismatch. It is configured centrally via
+`checksum.http.config.ocm.software/v1alpha1`, not in the constructor. See
+[HTTP Checksum Configuration]({{< relref "docs/reference/checksum-http-configuration.md" >}})
+for the schema, checksum modes, precedence, and the access-side fast path.
+
 ## Migrate from OCM v1 {#migrating-from-ocm-v1}
 
 Three things changed between OCM v1 and v2: credential matching, constructor syntax, and behavior. The credential changes are the most likely to break existing configurations.

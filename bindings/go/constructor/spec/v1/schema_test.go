@@ -62,13 +62,15 @@ func TestComponentConstructorSchema(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "invalid version format",
+			// Version validity is now scheme-driven and checked at runtime, not by
+			// the structural JSON schema; any non-empty string is structurally valid.
+			name: "non-semver version is structurally valid",
 			json: `{
 				"name": "github.com/acme.org/component",
 				"version": "invalid-version",
 				"provider": { "name": "acme" }
 			}`,
-			wantErr: true,
+			wantErr: false,
 		},
 		{
 			name: "valid version format with suffix",
@@ -80,13 +82,13 @@ func TestComponentConstructorSchema(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "invalid version format with suffix",
+			name: "version with underscore suffix is structurally valid",
 			json: `{
 				"name": "github.com/acme.org/component",
 				"version": "0.0.0_main",
 				"provider": { "name": "acme" }
 			}`,
-			wantErr: true,
+			wantErr: false,
 		},
 		{
 			name: "missing provider",

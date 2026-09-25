@@ -46,6 +46,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/tar"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	"ocm.software/open-component-model/bindings/go/runtime/versioning"
 )
 
 var (
@@ -113,6 +114,12 @@ func (repo *Repository) AddComponentVersion(ctx context.Context, descriptor *des
 		done(err)
 	}()
 
+	// Fail fast if the component version does not map to a valid OCI tag, rather
+	// than storing it under a mangled tag or hitting an opaque registry error.
+	if _, tagErr := VersionToOCITag(ctx, version); tagErr != nil {
+		return fmt.Errorf("cannot add component version: %w", tagErr)
+	}
+
 	reference, store, err := repo.getStore(ctx, component, version)
 	if err != nil {
 		return err
@@ -164,8 +171,15 @@ func (repo *Repository) ListComponentVersions(ctx context.Context, component str
 		return nil, fmt.Errorf("failed to create lister: %w", err)
 	}
 
+	// The OCI binding is versioning-config-agnostic. We use the loose-semver
+	// default comparator (via the lister's Comparator hook) rather than
+	// SortPolicyLooseSemverDescending: the comparator preserves versions that are
+	// not loose semver (e.g. calver or build numbers) instead of dropping them,
+	// so a configured, non-semver history survives listing. The CLI layer then
+	// re-sorts the returned versions with the configured versioning registry.
+	defaultRegistry := versioning.Default()
 	opts := lister.Options{
-		SortPolicy: lister.SortPolicyLooseSemverDescending,
+		Comparator: defaultRegistry.Compare,
 		TagListerOptions: lister.TagListerOptions{
 			VersionResolver: complister.ReferenceTagVersionResolver(component, store),
 		},
@@ -614,6 +628,13 @@ func (repo *Repository) getLocalBlobFromIndexOrManifest(
 }
 
 func (repo *Repository) getStore(ctx context.Context, component string, version string) (ref string, store spec.Store, err error) {
+	// Validate the version maps to a valid OCI tag before resolving. Both
+	// resolver implementations discard VersionToOCITag's error and would
+	// otherwise return a reference ending in ":", surfacing later as an opaque
+	// lookup failure instead of the specific version-validation error.
+	if _, err = VersionToOCITag(ctx, version); err != nil {
+		return "", nil, err
+	}
 	reference := repo.resolver.ComponentVersionReference(ctx, component, version)
 	if store, err = repo.resolver.StoreForReference(ctx, reference); err != nil {
 		return "", nil, fmt.Errorf("failed to get store for reference: %w", err)
@@ -636,16 +657,16 @@ func (repo *Repository) UploadResource(ctx context.Context, res *descriptor.Reso
 
 	res = res.DeepCopy()
 
-	desc, access, err := repo.uploadOCIImage(ctx, res.Access, b)
+	desc, access, err := repo.uploadOCIImage(ctx, res.Access, b, res.Digest)
 	if err != nil {
 		return nil, fmt.Errorf("failed to upload resource as OCI image: %w", err)
 	}
 
-	if res.Digest == nil {
+	if res.Digest == nil || res.Digest.HashAlgorithm == "" || res.Digest.NormalisationAlgorithm == "" || res.Digest.Value == "" {
 		res.Digest = &descriptor.Digest{}
-	}
-	if err := internaldigest.Apply(res.Digest, desc.Digest); err != nil {
-		return nil, fmt.Errorf("failed to apply digest to resource: %w", err)
+		if err := internaldigest.Apply(res.Digest, desc.Digest); err != nil {
+			return nil, fmt.Errorf("failed to apply digest to resource: %w", err)
+		}
 	}
 	res.Access = access
 
@@ -664,7 +685,7 @@ func (repo *Repository) UploadSource(ctx context.Context, src *descriptor.Source
 
 	src = src.DeepCopy()
 
-	_, access, err := repo.uploadOCIImage(ctx, src.Access, b)
+	_, access, err := repo.uploadOCIImage(ctx, src.Access, b, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to upload source as OCI image: %w", err)
 	}
@@ -673,7 +694,7 @@ func (repo *Repository) UploadSource(ctx context.Context, src *descriptor.Source
 	return src, nil
 }
 
-func (repo *Repository) uploadOCIImage(ctx context.Context, newAccess runtime.Typed, b blob.ReadOnlyBlob) (_ ociImageSpecV1.Descriptor, _ *accessv1.OCIImage, err error) {
+func (repo *Repository) uploadOCIImage(ctx context.Context, newAccess runtime.Typed, b blob.ReadOnlyBlob, expectedDigest *descriptor.Digest) (_ ociImageSpecV1.Descriptor, _ *accessv1.OCIImage, err error) {
 	var access accessv1.OCIImage
 	if err := repo.scheme.Convert(newAccess, &access); err != nil {
 		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("error converting resource target to OCI image: %w", err)
@@ -697,6 +718,11 @@ func (repo *Repository) uploadOCIImage(ctx context.Context, newAccess runtime.Ty
 		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("expected exactly one main artifact in OCI layout, but got %d", len(mainArtifacts))
 	}
 	main := mainArtifacts[0]
+	if expectedDigest != nil && expectedDigest.HashAlgorithm != "" && expectedDigest.NormalisationAlgorithm != "" && expectedDigest.Value != "" {
+		if err := internaldigest.Verify(expectedDigest, main.Digest); err != nil {
+			return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to verify resource digest: %w", err)
+		}
+	}
 
 	ref, err := looseref.ParseReference(access.ImageReference)
 	if err != nil {
@@ -1136,6 +1162,16 @@ func (repo *Repository) UploadResourceStream(ctx context.Context, res *descripto
 		return nil, err
 	}
 
+	res = res.DeepCopy()
+	if res.Digest == nil || res.Digest.HashAlgorithm == "" || res.Digest.NormalisationAlgorithm == "" || res.Digest.Value == "" {
+		res.Digest = &descriptor.Digest{}
+		if err := internaldigest.Apply(res.Digest, rs.Root().Digest); err != nil {
+			return nil, fmt.Errorf("failed to apply digest to resource: %w", err)
+		}
+	} else if err := internaldigest.Verify(res.Digest, rs.Root().Digest); err != nil {
+		return nil, fmt.Errorf("failed to verify resource digest: %w", err)
+	}
+
 	// ExtendedCopyGraph copies the root together with its referrers, which a
 	// plain CopyGraph would miss because a referrer's subject edge points back
 	// at the root. The defaults walk every predecessor at unbounded depth.
@@ -1151,14 +1187,6 @@ func (repo *Repository) UploadResourceStream(ctx context.Context, res *descripto
 	} else {
 		slogcontext.Warn(ctx, "uploading OCI artifact without a tag, retention depends on the target registry's garbage collection policy",
 			"imageReference", access.ImageReference)
-	}
-
-	res = res.DeepCopy()
-	if res.Digest == nil {
-		res.Digest = &descriptor.Digest{}
-	}
-	if err := internaldigest.Apply(res.Digest, rs.Root().Digest); err != nil {
-		return nil, fmt.Errorf("failed to apply digest to resource: %w", err)
 	}
 
 	// if we don't have a pinned access we can pin it now.
