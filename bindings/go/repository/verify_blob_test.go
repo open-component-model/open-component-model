@@ -171,6 +171,51 @@ func TestVerifyingBlob_UnreadContentCannotMatchEmptyDigest(t *testing.T) {
 	require.ErrorContains(t, rc.Close(), "incomplete read for digest")
 }
 
+func TestVerifyingBlob_CopyOfKnownSizeVerifies(t *testing.T) {
+	b := newVerifying(t, verifyTestContent, digest.FromString(verifyTestContent))
+	require.Equal(t, int64(len(verifyTestContent)), b.Size())
+
+	var buf strings.Builder
+	require.NoError(t, blob.Copy(&buf, b), "a size-bounded copy must not be mistaken for a partial read")
+	require.Equal(t, verifyTestContent, buf.String())
+}
+
+func TestVerifyingBlob_ExactSizeReadVerifies(t *testing.T) {
+	b := newVerifying(t, verifyTestContent, digest.FromString(verifyTestContent))
+
+	rc, err := b.ReadCloser()
+	require.NoError(t, err)
+
+	// io.CopyN stops at the declared size, so the base never reports EOF.
+	_, err = io.CopyN(io.Discard, rc, int64(len(verifyTestContent)))
+	require.NoError(t, err)
+	require.NoError(t, rc.Close())
+}
+
+func TestVerifyingBlob_EmptyContentVerifies(t *testing.T) {
+	b, err := newVerifyingBlob(sizedBlob{plainBlob{content: ""}, 0}, digest.FromString(""))
+	require.NoError(t, err)
+
+	rc, err := b.ReadCloser()
+	require.NoError(t, err)
+	require.NoError(t, rc.Close(), "a zero byte blob is complete without a single read")
+	require.NoError(t, blob.Copy(io.Discard, b))
+}
+
+func TestVerifyingBlob_ContentShorterThanDeclaredSizeFails(t *testing.T) {
+	b, err := newVerifyingBlob(
+		sizedBlob{plainBlob{content: verifyTestContent[:10]}, int64(len(verifyTestContent))},
+		digest.FromString(verifyTestContent),
+	)
+	require.NoError(t, err)
+
+	rc, err := b.ReadCloser()
+	require.NoError(t, err)
+	_, err = io.ReadAll(rc)
+	require.ErrorContains(t, err, "digest mismatch")
+	require.ErrorContains(t, rc.Close(), "digest mismatch")
+}
+
 // sizedBlob gives a plainBlob a size without giving it anything else.
 type sizedBlob struct {
 	plainBlob

@@ -59,10 +59,13 @@ func (b *verifyingBlob) ReadCloser() (io.ReadCloser, error) {
 	if err != nil {
 		return nil, err
 	}
+	size := b.Size()
 	return &verifyingReadCloser{
 		base:     rc,
 		digester: b.expected.Algorithm().Digester(),
 		expected: b.expected,
+		size:     size,
+		complete: size == 0,
 	}, nil
 }
 
@@ -116,7 +119,9 @@ type verifyingReadCloser struct {
 	base     io.ReadCloser
 	digester digest.Digester
 	expected digest.Digest
-	eof      bool
+	size     int64
+	read     int64
+	complete bool
 }
 
 // Read is a tee reader implementation that will not only error on Close but
@@ -129,9 +134,12 @@ func (v *verifyingReadCloser) Read(p []byte) (int, error) {
 		if _, writeErr := v.digester.Hash().Write(p[:n]); writeErr != nil {
 			return n, writeErr
 		}
+		v.read += int64(n)
 	}
-	if errors.Is(err, io.EOF) {
-		v.eof = true
+	// A reader handed the exact size, such as the io.CopyN in blob.Copy, stops before
+	// the base can report EOF, so a fully read content of known size counts as complete.
+	if errors.Is(err, io.EOF) || (v.size > blob.SizeUnknown && v.read >= v.size) {
+		v.complete = true
 		if mismatch := v.verify(); mismatch != nil {
 			return n, mismatch
 		}
@@ -146,9 +154,9 @@ func (v *verifyingReadCloser) Close() error {
 	return errors.Join(v.verify(), v.base.Close())
 }
 
-// verify refuses content that has not reached EOF before comparing digests.
+// verify refuses content that has not been read in full before comparing digests.
 func (v *verifyingReadCloser) verify() error {
-	if !v.eof {
+	if !v.complete {
 		return fmt.Errorf("digest mismatch: incomplete read for digest %s", v.expected)
 	}
 	if actual := v.digester.Digest(); actual != v.expected {

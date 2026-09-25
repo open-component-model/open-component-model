@@ -67,6 +67,20 @@ func TestDigest_Parse(t *testing.T) {
 			noDigest: true,
 		},
 		{
+			name:     "value carrying its own algorithm prefix",
+			digest:   &descruntime.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: "genericBlobDigest/v1", Value: digest.FromString("content").String()},
+			expected: digest.NewDigestFromEncoded(digest.SHA256, value),
+		},
+		{
+			name:     "prefix is folded like the rest of the value",
+			digest:   &descruntime.Digest{HashAlgorithm: "SHA-256", Value: "SHA256:" + strings.ToUpper(value)},
+			expected: digest.NewDigestFromEncoded(digest.SHA256, value),
+		},
+		{
+			name:   "prefix disagreeing with the hash algorithm",
+			digest: &descruntime.Digest{HashAlgorithm: "SHA-256", Value: "sha512:" + value},
+		},
+		{
 			name:   "unsupported algorithm",
 			digest: &descruntime.Digest{HashAlgorithm: "md5", Value: value},
 		},

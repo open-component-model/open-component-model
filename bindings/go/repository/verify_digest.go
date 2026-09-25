@@ -35,7 +35,17 @@ func parseDigest(d *descriptor.Digest) (digest.Digest, error) {
 		return "", fmt.Errorf("unsupported hash algorithm %q: only SHA-256 is supported", d.HashAlgorithm)
 	}
 
-	parsed := digest.NewDigestFromEncoded(digest.SHA256, strings.ToLower(d.Value))
+	value := strings.ToLower(d.Value)
+	// a value spelled "<algorithm>:<hex>", as digest.Digest.String() writes it, would
+	// otherwise be prefixed a second time and fail to parse.
+	if algorithm, encoded, prefixed := strings.Cut(value, ":"); prefixed {
+		if !strings.EqualFold(strings.ReplaceAll(algorithm, "-", ""), "sha256") {
+			return "", fmt.Errorf("digest value %q carries algorithm %q but hashAlgorithm is %q", d.Value, algorithm, d.HashAlgorithm)
+		}
+		value = encoded
+	}
+
+	parsed := digest.NewDigestFromEncoded(digest.SHA256, value)
 	if err := parsed.Validate(); err != nil {
 		return "", fmt.Errorf("invalid digest %q: %w", d.Value, err)
 	}
