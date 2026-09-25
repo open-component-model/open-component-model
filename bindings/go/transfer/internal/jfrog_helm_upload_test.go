@@ -232,6 +232,20 @@ func TestJFrogHelmUpload_Transform(t *testing.T) {
 		r.ErrorContains(err, "digest mismatch: expected 0000, got "+chartDigest)
 	})
 
+	t.Run("local blob without repository provider", func(t *testing.T) {
+		r := require.New(t)
+		srv, requests := artifactoryServer(t)
+		s := step(srv.URL, false, source())
+		s.Spec.ComponentVersion = &JFrogHelmUploadComponentVersion{
+			Repository: &runtime.Raw{Type: runtime.NewVersionedType("OCIRepository", "v1"), Data: []byte(`{"type":"OCIRepository/v1","baseUrl":"ghcr.io/source"}`)},
+			Component:  "ocm.software/test",
+			Version:    "1.0.0",
+		}
+		_, err := transformer(nil).Transform(t.Context(), s)
+		r.ErrorContains(err, "no component version repository provider configured")
+		r.Empty(requests())
+	})
+
 	t.Run("local blob is read from the source component version", func(t *testing.T) {
 		r := require.New(t)
 		srv, requests := artifactoryServer(t)
