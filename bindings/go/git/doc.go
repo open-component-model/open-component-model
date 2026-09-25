@@ -22,8 +22,8 @@
 // # Archive and digests
 //
 // The shared filesystem archiver reads Git objects without a host checkout.
-// Layout follows OCM v1: lexical depth-first order, no root or directory trailing
-// slash, preserved symlinks, and empty submodule directories without their contents.
+// Entries are in lexical depth-first order, without a root entry or trailing slashes
+// on directories; symlinks are kept and submodules are empty directories.
 // Metadata is normalized: uid/gid 0, empty owner names, epoch modification time,
 // files 0644, executables/directories 0755, and symlinks 0777. Standard-library gzip
 // defaults are used; byte stability across Go releases is not guaranteed.
@@ -44,12 +44,11 @@
 // HTTPS-to-HTTP redirects are rejected before transmission.
 //
 // SSH uses the current user's known_hosts unless WithHostKeyCallback overrides it.
-// HTTPS uses Go's system trust store and SSL_CERT_FILE / SSL_CERT_DIR overrides;
-// CA bundles are not configured through repository options.
-// Each repository hands its HTTP client to every Git operation it runs, so
-// repositories with different HTTP clients are isolated within one process.
-// go-git rejects HTTPS-to-HTTP redirects on that client. See
-// [ocm.software/open-component-model/bindings/go/git/repository.WithHTTPClient].
+// HTTP(S) uses the client from
+// [ocm.software/open-component-model/bindings/go/git/repository.WithHTTPClient],
+// which also decides TLS trust; without one, the shared OCM client defaults apply.
+// Each repository hands its client to every Git operation it runs, so repositories
+// with different clients are isolated within one process.
 //
 // # Credential consumer identity
 //
