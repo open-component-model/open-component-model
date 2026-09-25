@@ -26,6 +26,10 @@
           "const": "GPGSigningConfiguration"
         }
       ]
+    },
+    "useKeyring": {
+      "type": "boolean",
+      "description": "UseKeyring signs and verifies with the keys of the user's GnuPG keyring\n($GNUPGHOME, or ~/.gnupg) and the running gpg-agent instead of key material\nfrom the credentials. This enables hardware tokens and the agent's passphrase cache.\nKey material in the credentials is rejected in this mode; a passphrase is still used if set.\nVerification requires KeyFingerprint to be a full fingerprint, so that only the pinned key\nis accepted out of all keys in the keyring."
     }
   },
   "required": [

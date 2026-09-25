@@ -36,6 +36,14 @@ type Config struct {
 	// When empty the first available key is used.
 	// Accepts a full 40-hex-character v4 fingerprint or a 16-hex-character long key ID.
 	KeyFingerprint string `json:"keyFingerprint,omitempty"`
+
+	// UseKeyring signs and verifies with the keys of the user's GnuPG keyring
+	// ($GNUPGHOME, or ~/.gnupg) and the running gpg-agent instead of key material
+	// from the credentials. This enables hardware tokens and the agent's passphrase cache.
+	// Key material in the credentials is rejected in this mode; a passphrase is still used if set.
+	// Verification requires KeyFingerprint to be a full fingerprint, so that only the pinned key
+	// is accepted out of all keys in the keyring.
+	UseKeyring bool `json:"useKeyring,omitempty"`
 }
 
 // GetHashAlgorithm returns the configured hash algorithm, defaulting to SHA-256.
