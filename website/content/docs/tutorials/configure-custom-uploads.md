@@ -150,13 +150,14 @@ identity, independently of the source resource:
           type: Wget
           hostname: mytarget.example.com
         credentials:
-          - type: WgetCredentials/v1
-            username: uploader
-            password: <token>
+          - type: Credentials/v1
+            properties:
+              username: uploader
+              password: <token>
 ```
 
 Add this entry to the `configurations` list in `ocmconfig.yaml`. See
-[`WgetCredentials/v1`]({{< relref "docs/reference/credential-types.md#wgetcredentialsv1" >}}) and
+[Credential Types]({{< relref "docs/reference/credential-types.md" >}}) and
 [Credential Consumer Identities]({{< relref "docs/reference/credential-consumer-identities.md" >}})
 for details.
 
