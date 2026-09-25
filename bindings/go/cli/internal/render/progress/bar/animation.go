@@ -69,13 +69,11 @@ func WriteRunningLine(out io.Writer, text string, spinFrame, dotFrame int) {
 }
 
 // WriteCompletedLine writes a completed status line: "✓ text... (took 1m2s)".
-// A negative took omits the suffix.
 func WriteCompletedLine(out io.Writer, text string, took time.Duration) {
 	fmt.Fprintf(out, "%s✓%s %s...%s\n", Blue, Reset, text, formatTook(took))
 }
 
 // WriteFailedLine writes a failed status line: "✗ text... (took 1m2s)".
-// A negative took omits the suffix.
 func WriteFailedLine(out io.Writer, text string, took time.Duration) {
 	fmt.Fprintf(out, "%s✗%s %s...%s\n", Red, Reset, text, formatTook(took))
 }
