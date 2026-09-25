@@ -149,7 +149,7 @@ func TestBinary_Resolve(t *testing.T) {
 			lookPath: func(string) (string, error) { return "", exec.ErrNotFound },
 			check: func(r *require.Assertions, _ string, err error) {
 				r.True(errors.Is(err, ErrGPGNotFound))
-				r.EqualError(err, `GPG signing in FIPS 140-3 mode requires the GnuPG "gpg" binary (>= 2.2.0) on PATH backed by a FIPS 140-3 validated libgcrypt; install it or set GODEBUG=fips140=off to use the built-in non-FIPS OpenPGP implementation`)
+				r.EqualError(err, `GPG signing requires the GnuPG "gpg" binary (>= 2.2.0) on PATH; install GnuPG, in FIPS 140-3 mode one backed by a FIPS 140-3 validated libgcrypt`)
 			},
 		},
 		{
@@ -157,7 +157,7 @@ func TestBinary_Resolve(t *testing.T) {
 			lookPath: func(file string) (string, error) { return "/fake/bin/" + file, nil },
 			exec:     versionExec("gpg (GnuPG) 2.1.23\nlibgcrypt 1.8.5\n"),
 			check: func(r *require.Assertions, _ string, err error) {
-				r.EqualError(err, "gpg on PATH (/fake/bin/gpg) is version 2.1.23, minimum required in FIPS 140-3 mode is 2.2.0")
+				r.EqualError(err, "gpg on PATH (/fake/bin/gpg) is version 2.1.23, minimum required is 2.2.0")
 			},
 		},
 		{

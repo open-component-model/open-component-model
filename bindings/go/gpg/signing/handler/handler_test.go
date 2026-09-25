@@ -1,259 +1,127 @@
 package handler
 
 import (
-	"bytes"
-	"context"
 	"crypto"
-	"crypto/rsa"
+	_ "crypto/sha256" // registers crypto.SHA256 for makeDigest
+	_ "crypto/sha512" // registers crypto.SHA384 and crypto.SHA512 for makeDigest
 	"encoding/hex"
-	"fmt"
+	"os/exec"
 	"testing"
 
-	"github.com/ProtonMail/go-crypto/openpgp"
-	"github.com/ProtonMail/go-crypto/openpgp/armor"
-	"github.com/ProtonMail/go-crypto/openpgp/packet"
 	"github.com/stretchr/testify/require"
 
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/gpg/signing/handler/internal/gpgbinary"
 	gpgcredentialsv1 "ocm.software/open-component-model/bindings/go/gpg/spec/credentials/v1alpha1"
 	identityv1 "ocm.software/open-component-model/bindings/go/gpg/spec/identity/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/gpg/spec/signing/v1alpha1"
 )
 
-func TestGPGHandler_RoundTrip_Unprotected(t *testing.T) {
-	h := mustHandler(t)
-	entity := mustEntity(t, "")
+// Key material is never parsed by the handler itself, so these tests only need placeholder keys.
+const placeholderKey = "-----BEGIN PGP PRIVATE KEY BLOCK-----\n\n-----END PGP PRIVATE KEY BLOCK-----\n"
 
-	privCreds := armoredPrivKey(t, entity)
-	pubCreds := armoredPubKey(t, entity)
+func TestGPGHandler_RequiresGPG(t *testing.T) {
+	r := require.New(t)
+	h := handlerWithoutGPG(t)
+	digest := makeDigest(t, crypto.SHA256, []byte("no gpg"))
 
-	digest := makeDigest(t, crypto.SHA256, []byte("hello world"))
+	_, err := h.Sign(t.Context(), digest, &v1alpha1.Config{}, &gpgcredentialsv1.GPGCredentials{PrivateKeyPGP: placeholderKey})
+	r.ErrorIs(err, gpgbinary.ErrGPGNotFound)
 
-	sig, err := h.Sign(context.Background(), digest, &v1alpha1.Config{}, privCreds)
-	require.NoError(t, err)
-	require.Equal(t, v1alpha1.AlgorithmGPG, sig.Algorithm)
-	require.Equal(t, v1alpha1.MediaTypeGPG, sig.MediaType)
-	require.NotEmpty(t, sig.Value)
+	signed := gpgSignature(digest, "irrelevant")
+	err = h.Verify(t.Context(), signed, &v1alpha1.Config{}, &gpgcredentialsv1.GPGCredentials{PublicKeyPGP: placeholderKey})
+	r.ErrorIs(err, gpgbinary.ErrGPGNotFound)
+}
 
-	signed := descruntime.Signature{
-		Name:      "test",
-		Digest:    digest,
-		Signature: sig,
+func TestGPGHandler_MissingKeys(t *testing.T) {
+	r := require.New(t)
+	h := handlerWithoutGPG(t)
+	digest := makeDigest(t, crypto.SHA256, []byte("missing keys"))
+
+	_, err := h.Sign(t.Context(), digest, &v1alpha1.Config{}, &gpgcredentialsv1.GPGCredentials{})
+	r.ErrorIs(err, ErrMissingPrivateKey)
+	_, err = h.Sign(t.Context(), digest, &v1alpha1.Config{}, nil)
+	r.ErrorIs(err, ErrMissingPrivateKey)
+
+	err = h.Verify(t.Context(), gpgSignature(digest, "irrelevant"), &v1alpha1.Config{}, &gpgcredentialsv1.GPGCredentials{})
+	r.ErrorIs(err, ErrMissingPublicKey)
+}
+
+func TestGPGHandler_InvalidInput(t *testing.T) {
+	h := handlerWithoutGPG(t)
+	creds := &gpgcredentialsv1.GPGCredentials{PrivateKeyPGP: placeholderKey}
+	valid := makeDigest(t, crypto.SHA256, []byte("invalid input"))
+
+	tests := []struct {
+		name    string
+		digest  descruntime.Digest
+		cfg     *v1alpha1.Config
+		wantErr error
+		wantMsg string
+	}{
+		{name: "unsupported config hash algorithm", digest: valid, cfg: &v1alpha1.Config{HashAlgorithm: "SHA521"}, wantMsg: "SHA521"},
+		{name: "missing digest hash algorithm", digest: descruntime.Digest{Value: valid.Value}, cfg: &v1alpha1.Config{}, wantErr: ErrMissingHashAlg},
+		{name: "missing digest value", digest: descruntime.Digest{HashAlgorithm: "SHA-256"}, cfg: &v1alpha1.Config{}, wantErr: ErrMissingDigestVal},
+		{name: "unsupported digest hash algorithm", digest: descruntime.Digest{HashAlgorithm: "MD5", Value: valid.Value}, cfg: &v1alpha1.Config{}, wantMsg: `unsupported hash algorithm "MD5"`},
+		{name: "non-hex digest", digest: descruntime.Digest{HashAlgorithm: "SHA-256", Value: "zz"}, cfg: &v1alpha1.Config{}, wantMsg: "invalid hex digest"},
 	}
-
-	err = h.Verify(context.Background(), signed, &v1alpha1.Config{}, pubCreds)
-	require.NoError(t, err)
-}
-
-func TestGPGHandler_RoundTrip_PassphraseProtected(t *testing.T) {
-	const passphrase = "test-passphrase-for-unit-test"
-
-	h := mustHandler(t)
-	entity := mustEntity(t, passphrase)
-
-	privCreds := armoredPrivKeyWithPassphrase(t, entity, passphrase)
-	pubCreds := armoredPubKey(t, entity)
-
-	digest := makeDigest(t, crypto.SHA256, []byte("hello world"))
-
-	sig, err := h.Sign(context.Background(), digest, &v1alpha1.Config{}, privCreds)
-	require.NoError(t, err)
-
-	signed := descruntime.Signature{
-		Name:      "test",
-		Digest:    digest,
-		Signature: sig,
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+			_, err := h.Sign(t.Context(), tt.digest, tt.cfg, creds)
+			if tt.wantErr != nil {
+				r.ErrorIs(err, tt.wantErr)
+			}
+			if tt.wantMsg != "" {
+				r.ErrorContains(err, tt.wantMsg)
+			}
+			r.NotErrorIs(err, gpgbinary.ErrGPGNotFound, "input must be validated before gpg is invoked")
+		})
 	}
-
-	err = h.Verify(context.Background(), signed, &v1alpha1.Config{}, pubCreds)
-	require.NoError(t, err)
 }
 
-func TestGPGHandler_WrongPassphrase(t *testing.T) {
-	const passphrase = "test-correct-passphrase"
+func TestGPGHandler_Verify_UnsupportedMediaType(t *testing.T) {
+	r := require.New(t)
+	h := handlerWithoutGPG(t)
+	signed := gpgSignature(makeDigest(t, crypto.SHA256, []byte("media type")), "irrelevant")
+	signed.Signature.MediaType = "application/vnd.ocm.signature.rsa"
 
-	h := mustHandler(t)
-	entity := mustEntity(t, passphrase)
-
-	privCreds := armoredPrivKeyWithPassphrase(t, entity, "test-wrong-passphrase")
-
-	digest := makeDigest(t, crypto.SHA256, []byte("hello world"))
-
-	_, err := h.Sign(context.Background(), digest, &v1alpha1.Config{}, privCreds)
-	require.Error(t, err)
-}
-
-func TestGPGHandler_WrongPublicKey(t *testing.T) {
-	h := mustHandler(t)
-	signingEntity := mustEntity(t, "")
-	otherEntity := mustEntity(t, "")
-
-	privCreds := armoredPrivKey(t, signingEntity)
-	wrongPubCreds := armoredPubKey(t, otherEntity)
-
-	digest := makeDigest(t, crypto.SHA256, []byte("hello world"))
-
-	sig, err := h.Sign(context.Background(), digest, &v1alpha1.Config{}, privCreds)
-	require.NoError(t, err)
-
-	signed := descruntime.Signature{
-		Name:      "test",
-		Digest:    digest,
-		Signature: sig,
-	}
-
-	err = h.Verify(context.Background(), signed, &v1alpha1.Config{}, wrongPubCreds)
-	require.Error(t, err)
-}
-
-func TestGPGHandler_MissingPrivateKey(t *testing.T) {
-	h := mustHandler(t)
-	digest := makeDigest(t, crypto.SHA256, []byte("hello world"))
-
-	_, err := h.Sign(context.Background(), digest, &v1alpha1.Config{}, &gpgcredentialsv1.GPGCredentials{})
-	require.ErrorIs(t, err, ErrMissingPrivateKey)
-}
-
-func TestGPGHandler_MissingPublicKey(t *testing.T) {
-	h := mustHandler(t)
-	entity := mustEntity(t, "")
-	privCreds := armoredPrivKey(t, entity)
-	digest := makeDigest(t, crypto.SHA256, []byte("hello world"))
-
-	sig, err := h.Sign(context.Background(), digest, &v1alpha1.Config{}, privCreds)
-	require.NoError(t, err)
-
-	signed := descruntime.Signature{
-		Name:      "test",
-		Digest:    digest,
-		Signature: sig,
-	}
-
-	err = h.Verify(context.Background(), signed, &v1alpha1.Config{}, &gpgcredentialsv1.GPGCredentials{})
-	require.ErrorIs(t, err, ErrMissingPublicKey)
+	err := h.Verify(t.Context(), signed, &v1alpha1.Config{}, &gpgcredentialsv1.GPGCredentials{PublicKeyPGP: placeholderKey})
+	r.ErrorContains(err, `unsupported media type "application/vnd.ocm.signature.rsa"`)
 }
 
 func TestGPGHandler_CredentialIdentities(t *testing.T) {
+	r := require.New(t)
 	h := mustHandler(t)
 	digest := makeDigest(t, crypto.SHA256, []byte("data"))
 
-	sigIdentity, err := h.GetSigningCredentialConsumerIdentity(context.Background(), "mysig", digest, &v1alpha1.Config{})
-	require.NoError(t, err)
-	require.Equal(t, "mysig", sigIdentity[identityv1.IdentityAttributeSignature])
-	require.Equal(t, identityv1.V1Alpha1Type, sigIdentity.GetType())
+	sigIdentity, err := h.GetSigningCredentialConsumerIdentity(t.Context(), "mysig", digest, &v1alpha1.Config{})
+	r.NoError(err)
+	r.Equal("mysig", sigIdentity[identityv1.IdentityAttributeSignature])
+	r.Equal(identityv1.V1Alpha1Type, sigIdentity.GetType())
 
-	signed := descruntime.Signature{
-		Name:   "mysig",
-		Digest: digest,
-		Signature: descruntime.SignatureInfo{
-			Algorithm: v1alpha1.AlgorithmGPG,
-			MediaType: v1alpha1.MediaTypeGPG,
-		},
-	}
-	verIdentity, err := h.GetVerifyingCredentialConsumerIdentity(context.Background(), signed, &v1alpha1.Config{})
-	require.NoError(t, err)
-	require.Equal(t, "mysig", verIdentity[identityv1.IdentityAttributeSignature])
-}
-
-func TestGPGHandler_HashAlgorithm_SHA512(t *testing.T) {
-	h := mustHandler(t)
-	entity := mustEntity(t, "")
-
-	privCreds := armoredPrivKey(t, entity)
-	pubCreds := armoredPubKey(t, entity)
-
-	digest := makeDigest(t, crypto.SHA512, []byte("hello world"))
-	cfg := &v1alpha1.Config{HashAlgorithm: v1alpha1.HashAlgorithmSHA512}
-
-	sig, err := h.Sign(context.Background(), digest, cfg, privCreds)
-	require.NoError(t, err)
-
-	signed := descruntime.Signature{Name: "test", Digest: digest, Signature: sig}
-	require.NoError(t, h.Verify(context.Background(), signed, cfg, pubCreds))
-}
-
-func TestGPGHandler_KeyFingerprint_Match(t *testing.T) {
-	h := mustHandler(t)
-	entity := mustEntity(t, "")
-	fp := fmt.Sprintf("%X", entity.PrimaryKey.Fingerprint)
-
-	privCreds := armoredPrivKey(t, entity)
-	pubCreds := armoredPubKey(t, entity)
-	digest := makeDigest(t, crypto.SHA256, []byte("fingerprint test"))
-	cfg := &v1alpha1.Config{KeyFingerprint: fp}
-
-	sig, err := h.Sign(context.Background(), digest, cfg, privCreds)
-	require.NoError(t, err)
-
-	signed := descruntime.Signature{Name: "test", Digest: digest, Signature: sig}
-	require.NoError(t, h.Verify(context.Background(), signed, cfg, pubCreds))
-}
-
-func TestGPGHandler_KeyFingerprint_NoMatch(t *testing.T) {
-	h := mustHandler(t)
-	entity := mustEntity(t, "")
-
-	privCreds := armoredPrivKey(t, entity)
-	digest := makeDigest(t, crypto.SHA256, []byte("fingerprint test"))
-	cfg := &v1alpha1.Config{KeyFingerprint: "DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF"}
-
-	_, err := h.Sign(context.Background(), digest, cfg, privCreds)
-	require.Error(t, err)
-}
-
-func TestGPGHandler_InvalidHashAlgorithm(t *testing.T) {
-	h := mustHandler(t)
-	entity := mustEntity(t, "")
-
-	privCreds := armoredPrivKey(t, entity)
-	digest := makeDigest(t, crypto.SHA256, []byte("hash alg test"))
-	cfg := &v1alpha1.Config{HashAlgorithm: "SHA521"}
-
-	_, err := h.Sign(context.Background(), digest, cfg, privCreds)
-	require.Error(t, err)
-	require.ErrorContains(t, err, "SHA521")
+	signed := gpgSignature(digest, "")
+	signed.Name = "mysig"
+	verIdentity, err := h.GetVerifyingCredentialConsumerIdentity(t.Context(), signed, &v1alpha1.Config{})
+	r.NoError(err)
+	r.Equal("mysig", verIdentity[identityv1.IdentityAttributeSignature])
 }
 
 // ---- helpers ----
 
-// mustHandler returns a Handler pinned to the go-crypto backend so the suite
-// stays deterministic when run with GODEBUG=fips140=on.
 func mustHandler(t *testing.T) *Handler {
 	t.Helper()
 	h, err := New(v1alpha1.Scheme)
 	require.NoError(t, err)
-	h.fipsEnabled = func() bool { return false }
 	return h
 }
 
-func mustEntity(t *testing.T, passphrase string) *openpgp.Entity {
+// handlerWithoutGPG returns a handler whose gpg lookup always fails.
+func handlerWithoutGPG(t *testing.T) *Handler {
 	t.Helper()
-	cfg := &packet.Config{RSABits: 2048}
-	entity, err := openpgp.NewEntity("test", "", "test@example.com", cfg)
-	require.NoError(t, err)
-	orderRSAPrimes(t, entity.PrivateKey)
-	for _, sub := range entity.Subkeys {
-		orderRSAPrimes(t, sub.PrivateKey)
-	}
-	if passphrase != "" {
-		require.NoError(t, entity.EncryptPrivateKeys([]byte(passphrase), cfg))
-	}
-	return entity
-}
-
-// orderRSAPrimes makes go-crypto serialize the RSA primes as p < q, as RFC 4880 requires.
-// go-crypto writes Primes[1] as p and Primes[0] as q without ordering them, and
-// GnuPG >= 2.5 rejects such keys with "Bad secret key".
-func orderRSAPrimes(t *testing.T, key *packet.PrivateKey) {
-	t.Helper()
-	rsaKey, ok := key.PrivateKey.(*rsa.PrivateKey)
-	if !ok || rsaKey.Primes[1].Cmp(rsaKey.Primes[0]) < 0 {
-		return
-	}
-	rsaKey.Primes[0], rsaKey.Primes[1] = rsaKey.Primes[1], rsaKey.Primes[0]
-	rsaKey.Precomputed = rsa.PrecomputedValues{}
-	rsaKey.Precompute()
-	require.NoError(t, rsaKey.Validate())
+	h := mustHandler(t)
+	h.gpgBinary.LookPath = func(string) (string, error) { return "", exec.ErrNotFound }
+	return h
 }
 
 func makeDigest(t *testing.T, h crypto.Hash, data []byte) descruntime.Digest {
@@ -268,32 +136,14 @@ func makeDigest(t *testing.T, h crypto.Hash, data []byte) descruntime.Digest {
 	}
 }
 
-func armoredPrivKey(t *testing.T, entity *openpgp.Entity) *gpgcredentialsv1.GPGCredentials {
-	t.Helper()
-	return armoredPrivKeyWithPassphrase(t, entity, "")
-}
-
-func armoredPrivKeyWithPassphrase(t *testing.T, entity *openpgp.Entity, passphrase string) *gpgcredentialsv1.GPGCredentials {
-	t.Helper()
-	var buf bytes.Buffer
-	w, err := armor.Encode(&buf, openpgp.PrivateKeyType, nil)
-	require.NoError(t, err)
-	require.NoError(t, entity.SerializePrivateWithoutSigning(w, nil))
-	require.NoError(t, w.Close())
-	return &gpgcredentialsv1.GPGCredentials{
-		PrivateKeyPGP: buf.String(),
-		Passphrase:    passphrase,
-	}
-}
-
-func armoredPubKey(t *testing.T, entity *openpgp.Entity) *gpgcredentialsv1.GPGCredentials {
-	t.Helper()
-	var buf bytes.Buffer
-	w, err := armor.Encode(&buf, openpgp.PublicKeyType, nil)
-	require.NoError(t, err)
-	require.NoError(t, entity.Serialize(w))
-	require.NoError(t, w.Close())
-	return &gpgcredentialsv1.GPGCredentials{
-		PublicKeyPGP: buf.String(),
+func gpgSignature(digest descruntime.Digest, value string) descruntime.Signature {
+	return descruntime.Signature{
+		Name:   "test",
+		Digest: digest,
+		Signature: descruntime.SignatureInfo{
+			Algorithm: v1alpha1.AlgorithmGPG,
+			MediaType: v1alpha1.MediaTypeGPG,
+			Value:     value,
+		},
 	}
 }

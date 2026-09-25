@@ -23,11 +23,11 @@ import (
 const gpgFIPSTestImage = "debian:trixie-slim"
 
 // errGPGNotFoundText mirrors gpgbinary.ErrGPGNotFound, which is internal to the GPG handler.
-const errGPGNotFoundText = `GPG signing in FIPS 140-3 mode requires the GnuPG "gpg" binary (>= 2.2.0) on PATH backed by a FIPS 140-3 validated libgcrypt; install it or set GODEBUG=fips140=off to use the built-in non-FIPS OpenPGP implementation`
+const errGPGNotFoundText = `GPG signing requires the GnuPG "gpg" binary (>= 2.2.0) on PATH; install GnuPG, in FIPS 140-3 mode one backed by a FIPS 140-3 validated libgcrypt`
 
 // Test_Integration_Signing_GPG_FIPS runs a GOFIPS140 build of the CLI against a GnuPG whose
-// libgcrypt runs in FIPS mode and checks that GPG signing is delegated to it and that its
-// signatures interoperate with the built-in go-crypto implementation.
+// libgcrypt runs in FIPS mode and checks that GPG signing and verification work through it,
+// including passphrase-protected keys, and that there is no built-in fallback without gpg.
 func Test_Integration_Signing_GPG_FIPS(t *testing.T) {
 	r := require.New(t)
 	t.Parallel()
@@ -51,14 +51,9 @@ func Test_Integration_Signing_GPG_FIPS(t *testing.T) {
 	}
 	r.True(strings.HasPrefix(fipsSetting, "v1.0.0"), "GOFIPS140 build setting %q", fipsSetting)
 
-	protected := mustGPGEntity(t)
-	writeArmoredPubKey(t, protected, filepath.Join(dir, "protected.pub.asc"))
-	r.NoError(protected.EncryptPrivateKeys([]byte("fips-test-passphrase"), nil))
-	writeArmoredPrivKey(t, protected, filepath.Join(dir, "protected.asc"))
-	plain := mustGPGEntity(t)
-	writeArmoredPrivKey(t, plain, filepath.Join(dir, "plain.asc"))
-	writeArmoredPubKey(t, plain, filepath.Join(dir, "plain.pub.asc"))
-	writeArmoredPubKey(t, mustGPGEntity(t), filepath.Join(dir, "other.pub.asc"))
+	writeGPGKeyPair(t, dir, "protected", "fips-test-passphrase")
+	writeGPGKeyPair(t, dir, "plain", "")
+	writeGPGKeyPair(t, dir, "other", "")
 
 	hostFiles := map[string]string{
 		"constructor.yaml": `
@@ -91,7 +86,7 @@ configurations:
         passphrase: fips-test-passphrase
   - identity:
       type: GPG/v1alpha1
-      signature: gocrypto
+      signature: plain
     credentials:
     - type: Credentials/v1
       properties:
@@ -167,11 +162,10 @@ configurations:
 		wantOut string
 	}{
 		{name: "add component version", cmd: []string{ocm, "add", "cv", "--repository", "ctf::/work/ctf", "--constructor", "/work/constructor.yaml"}, wantOK: true},
-		{name: "sign with gpg backend and protected key", cmd: []string{ocm, "sign", "cv", ref, "--signature", "fips", "--config", cfg}, wantOK: true},
-		{name: "verify with gpg backend", cmd: []string{ocm, "verify", "cv", ref, "--signature", "fips", "--config", cfg}, wantOK: true},
-		{name: "verify gpg signature with go-crypto", env: []string{fipsOff}, cmd: []string{ocm, "verify", "cv", ref, "--signature", "fips", "--config", cfg}, wantOK: true},
-		{name: "sign with go-crypto", env: []string{fipsOff}, cmd: []string{ocm, "sign", "cv", ref, "--signature", "gocrypto", "--config", cfg}, wantOK: true},
-		{name: "verify go-crypto signature with gpg backend", cmd: []string{ocm, "verify", "cv", ref, "--signature", "gocrypto", "--config", cfg}, wantOK: true},
+		{name: "sign with protected key", cmd: []string{ocm, "sign", "cv", ref, "--signature", "fips", "--config", cfg}, wantOK: true},
+		{name: "verify protected key signature", cmd: []string{ocm, "verify", "cv", ref, "--signature", "fips", "--config", cfg}, wantOK: true},
+		{name: "sign with unprotected key", cmd: []string{ocm, "sign", "cv", ref, "--signature", "plain", "--config", cfg}, wantOK: true},
+		{name: "verify unprotected key signature", cmd: []string{ocm, "verify", "cv", ref, "--signature", "plain", "--config", cfg}, wantOK: true},
 		{name: "verify with wrong public key fails", cmd: []string{ocm, "verify", "cv", ref, "--signature", "fips", "--config", "/work/ocmconfig-wrongkey.yaml"}},
 		{
 			name:    "missing gpg is reported",
@@ -180,10 +174,10 @@ configurations:
 			wantOut: errGPGNotFoundText,
 		},
 		{
-			name:   "fips140=off opts out of the gpg backend",
-			env:    []string{noPath, fipsOff},
-			cmd:    []string{ocm, "sign", "cv", ref, "--signature", "fips", "--config", cfg, "--dry-run", "--force"},
-			wantOK: true,
+			name:    "no built-in fallback without FIPS mode",
+			env:     []string{noPath, fipsOff},
+			cmd:     []string{ocm, "verify", "cv", ref, "--signature", "fips", "--config", cfg},
+			wantOut: errGPGNotFoundText,
 		},
 	}
 	for _, s := range scenarios {
