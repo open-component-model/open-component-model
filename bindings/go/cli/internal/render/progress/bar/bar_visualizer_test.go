@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 
@@ -180,6 +181,25 @@ func TestRenderFinalHeader(t *testing.T) {
 		v.End(nil)
 
 		assert.Contains(t, buf.String(), "✗")
+	})
+
+	t.Run("shows elapsed time measured from Begin", func(t *testing.T) {
+		v, buf := newTestVisualizer(0)
+		v.start = time.Now().Add(-90 * time.Second)
+		v.header = "Transferring"
+
+		v.End(nil)
+
+		assert.Contains(t, stripANSI(buf.String()), "Transferring... (took 1m30s)")
+	})
+
+	t.Run("omits elapsed time when Begin never ran", func(t *testing.T) {
+		v, buf := newTestVisualizer(0)
+		v.header = "Transferring"
+
+		v.End(nil)
+
+		assert.NotContains(t, buf.String(), "took")
 	})
 }
 

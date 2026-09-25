@@ -38,6 +38,17 @@ func TestSlogVisualizer_End_Success(t *testing.T) {
 		v.End(nil)
 	})
 	assert.Contains(t, output, "Resolving: operation finished")
+	assert.Contains(t, output, "duration=")
+}
+
+func TestSlogVisualizer_End_WithoutBegin(t *testing.T) {
+	output := captureSlog(t, func() {
+		v := &SlogVisualizer[any]{}
+		v.name = "Resolving"
+		v.End(nil)
+	})
+	assert.Contains(t, output, "Resolving: operation finished")
+	assert.NotContains(t, output, "duration=")
 }
 
 func TestSlogVisualizer_End_Error(t *testing.T) {
@@ -48,6 +59,7 @@ func TestSlogVisualizer_End_Error(t *testing.T) {
 	})
 	assert.Contains(t, output, "Resolving: operation failed")
 	assert.Contains(t, output, "connection refused")
+	assert.Contains(t, output, "duration=")
 	assert.Contains(t, output, "level=ERROR")
 }
 

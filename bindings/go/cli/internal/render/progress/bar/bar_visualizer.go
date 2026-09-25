@@ -5,6 +5,7 @@ import (
 	"io"
 	"strings"
 	"sync"
+	"time"
 
 	"ocm.software/open-component-model/bindings/go/cli/internal/render/progress"
 )
@@ -23,6 +24,7 @@ type barVisualizer[T any] struct {
 	errorFormatter func(T, error) string
 	logBuffer      *progress.SyncBuffer
 	buf            strings.Builder
+	start          time.Time
 }
 
 // NewVisualizer is a [progress.VisualizerFactory] that creates an animated
@@ -53,6 +55,7 @@ func (v *barVisualizer[T]) Begin(name string) {
 
 	v.header = name
 	v.events = nil
+	v.start = time.Now()
 	v.done = make(chan struct{})
 	v.spinnerFrame = 0
 	v.dotFrame = 0
@@ -111,10 +114,15 @@ func (v *barVisualizer[T]) End(err error) {
 		}
 	}
 
+	// took is negative when Begin never ran (e.g. in tests), omitting the suffix.
+	took := time.Duration(-1)
+	if !v.start.IsZero() {
+		took = time.Since(v.start)
+	}
 	if err != nil || hasFailures {
-		WriteFailedLine(&v.buf, v.header)
+		WriteFailedLine(&v.buf, v.header, took)
 	} else {
-		WriteCompletedLine(&v.buf, v.header)
+		WriteCompletedLine(&v.buf, v.header, took)
 	}
 
 	v.writeEvents()

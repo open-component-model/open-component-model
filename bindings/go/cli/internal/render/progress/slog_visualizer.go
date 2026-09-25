@@ -1,14 +1,19 @@
 package progress
 
-import "log/slog"
+import (
+	"log/slog"
+	"time"
+)
 
 // SlogVisualizer is a slog-based visualizer for non-terminal environments.
 type SlogVisualizer[T any] struct {
-	name string
+	name  string
+	start time.Time
 }
 
 func (v *SlogVisualizer[T]) Begin(name string) {
 	v.name = name
+	v.start = time.Now()
 	slog.Info(v.name + ": operation starting")
 }
 
@@ -26,9 +31,13 @@ func (v *SlogVisualizer[T]) HandleEvent(event Event[T]) {
 }
 
 func (v *SlogVisualizer[T]) End(err error) {
+	var attrs []any
+	if !v.start.IsZero() {
+		attrs = append(attrs, "duration", time.Since(v.start).Round(time.Second).String())
+	}
 	if err != nil {
-		slog.Error(v.name+": operation failed", "error", err)
+		slog.Error(v.name+": operation failed", append(attrs, "error", err)...)
 	} else {
-		slog.Info(v.name + ": operation finished")
+		slog.Info(v.name+": operation finished", attrs...)
 	}
 }
