@@ -2,6 +2,8 @@ package configuration
 
 import (
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -25,155 +27,82 @@ configurations:
   attributes:
     source: b
 `
-	streamOther = `environment: {}
-transformations: []
+	// streamTransferSpec carries nested "type" fields, which must not make it look like a
+	// configuration document.
+	streamTransferSpec = `environment: {}
+transformations:
+- id: upload
+  spec:
+    repository:
+      type: OCIRepository/v1
+  type: OCIAddComponentVersion/v1alpha1
 `
 )
-
-func TestStdinConfigReader(t *testing.T) {
-	tests := []struct {
-		name     string
-		in       string
-		wantData []string
-		wantRest string
-		wantErr  string
-	}{
-		{
-			name:     "single configuration",
-			in:       streamConfigA,
-			wantData: []string{`{"attributes":{"source":"a"},"type":"attributes.config.ocm.software"}`},
-		},
-		{
-			name:     "unversioned configuration type is accepted",
-			in:       streamConfigB,
-			wantData: []string{`{"attributes":{"source":"b"},"type":"attributes.config.ocm.software"}`},
-		},
-		{
-			name: "configurations are merged in stream order",
-			in:   streamConfigA + "---\n" + streamConfigB,
-			wantData: []string{
-				`{"attributes":{"source":"a"},"type":"attributes.config.ocm.software"}`,
-				`{"attributes":{"source":"b"},"type":"attributes.config.ocm.software"}`,
-			},
-		},
-		{
-			name:     "other documents are returned in stream order",
-			in:       streamOther + "---\n" + streamConfigA + "---\n" + "kind: second\n",
-			wantData: []string{`{"attributes":{"source":"a"},"type":"attributes.config.ocm.software"}`},
-			wantRest: streamOther + "---\n" + "kind: second\n",
-		},
-		{
-			name:     "leading separator and empty documents are ignored",
-			in:       "---\n" + streamConfigA + "---\n---\n" + streamOther,
-			wantData: []string{`{"attributes":{"source":"a"},"type":"attributes.config.ocm.software"}`},
-			wantRest: streamOther,
-		},
-		{
-			name:    "other type is not a configuration",
-			in:      "type: something.else/v1\n",
-			wantErr: "no configuration document",
-		},
-		{
-			name:    "empty input",
-			in:      "",
-			wantErr: "no configuration document",
-		},
-		{
-			name:    "malformed document fails the whole stream",
-			in:      streamConfigA + "---\n" + "this is: [not valid\n",
-			wantErr: "error converting YAML to JSON",
-		},
-		{
-			name:    "malformed configuration document reports the decoding error",
-			in:      "type: generic.config.ocm.software/v1\nconfigurations: notalist\n",
-			wantErr: "configurations",
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			r := require.New(t)
-			cmd := &cobra.Command{}
-			cmd.SetIn(strings.NewReader(tt.in))
-			cfg, err := stdinConfigReader(cmd)()
-			if tt.wantErr != "" {
-				r.ErrorContains(err, tt.wantErr)
-				return
-			}
-			r.NoError(err)
-			rest, err := io.ReadAll(cmd.InOrStdin())
-			r.NoError(err)
-			got := make([]string, 0, len(cfg.Configurations))
-			for _, c := range cfg.Configurations {
-				got = append(got, string(c.Data))
-			}
-			r.Equal(tt.wantData, got)
-			r.Equal(strings.TrimSpace(tt.wantRest), strings.TrimSpace(string(rest)))
-		})
-	}
-}
 
 func TestAddStdinConfig(t *testing.T) {
 	base := &genericv1.Config{Configurations: []*runtime.Raw{{
 		Type: runtime.NewUnversionedType("attributes.config.ocm.software"),
 		Data: []byte(`{"attributes":{"source":"base"},"type":"attributes.config.ocm.software"}`),
 	}}}
-	baseData := `{"attributes":{"source":"base"},"type":"attributes.config.ocm.software"}`
-	stdinData := `{"attributes":{"source":"a"},"type":"attributes.config.ocm.software"}`
+	const (
+		baseData = `{"attributes":{"source":"base"},"type":"attributes.config.ocm.software"}`
+		aData    = `{"attributes":{"source":"a"},"type":"attributes.config.ocm.software"}`
+		bData    = `{"attributes":{"source":"b"},"type":"attributes.config.ocm.software"}`
+	)
 
 	tests := []struct {
-		name        string
-		args        []string
-		stdin       string
-		configFirst bool // run the --config - loader first, as the command would
-		wantData    []string
-		wantRest    string
-		wantErr     string
+		name     string
+		stdin    string
+		wantData []string
+		wantRest string
+		wantErr  string
 	}{
 		{
-			name:     "configuration in stdin is applied after the base",
-			args:     []string{"--spec", "-"},
-			stdin:    streamConfigA + "---\n" + streamOther,
-			wantData: []string{baseData, stdinData},
-			wantRest: streamOther,
-		},
-		{
-			name:     "stdin without configuration keeps the base",
-			args:     []string{"--spec", "-"},
-			stdin:    streamOther,
-			wantData: []string{baseData},
-			wantRest: streamOther,
-		},
-		{
-			name:     "stdin flag not set to - leaves stdin alone",
-			args:     []string{"--spec", "spec.yaml"},
-			stdin:    streamConfigA + "---\n" + streamOther,
-			wantData: []string{baseData},
-			wantRest: streamConfigA + "---\n" + streamOther,
-		},
-		{
-			name:        "nothing is added twice after --config - took the configuration",
-			args:        []string{"--spec", "-", "--config", "-"},
-			stdin:       streamConfigA + "---\n" + streamOther,
-			configFirst: true,
-			wantData:    []string{baseData},
-			wantRest:    streamOther,
-		},
-		{
-			name:     "--config with a file still applies stdin",
-			args:     []string{"--spec", "-", "--config", "some.yaml"},
+			name:     "configuration is applied after the base",
 			stdin:    streamConfigA,
-			wantData: []string{baseData, stdinData},
+			wantData: []string{baseData, aData},
 		},
 		{
-			name:     "invalid YAML is handed back to the command",
-			args:     []string{"--spec", "-"},
-			stdin:    "this is: [not valid\n",
+			name:     "unversioned configuration type is accepted",
+			stdin:    streamConfigB,
+			wantData: []string{baseData, bData},
+		},
+		{
+			name:     "configurations are merged in stream order",
+			stdin:    streamConfigA + "---\n" + streamConfigB,
+			wantData: []string{baseData, aData, bData},
+		},
+		{
+			name:     "other documents stay on stdin in stream order",
+			stdin:    streamTransferSpec + "---\n" + streamConfigA + "---\n" + "kind: second\n",
+			wantData: []string{baseData, aData},
+			wantRest: streamTransferSpec + "---\n" + "kind: second\n",
+		},
+		{
+			name:     "leading separator and empty documents are ignored",
+			stdin:    "---\n" + streamConfigA + "---\n---\n" + streamTransferSpec,
+			wantData: []string{baseData, aData},
+			wantRest: streamTransferSpec,
+		},
+		{
+			name:     "stdin without configuration is left unchanged",
+			stdin:    "---\n" + streamTransferSpec,
 			wantData: []string{baseData},
-			wantRest: "this is: [not valid\n",
+			wantRest: "---\n" + streamTransferSpec,
 		},
 		{
-			name:    "malformed configuration in stdin fails",
-			args:    []string{"--spec", "-"},
+			name:     "empty stdin keeps the base",
+			stdin:    "",
+			wantData: []string{baseData},
+		},
+		{
+			name:     "invalid YAML is left unchanged for the command",
+			stdin:    streamConfigA + "---\n" + "this is: [not valid\n",
+			wantData: []string{baseData},
+			wantRest: streamConfigA + "---\n" + "this is: [not valid\n",
+		},
+		{
+			name:    "malformed configuration fails",
 			stdin:   "type: generic.config.ocm.software/v1\nconfigurations: notalist\n",
 			wantErr: "could not load configuration from stdin",
 		},
@@ -182,15 +111,7 @@ func TestAddStdinConfig(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			r := require.New(t)
 			cmd := &cobra.Command{}
-			cmd.Flags().StringSlice(OCMConfigCommandArgument, nil, "")
-			cmd.Flags().String("spec", "", "")
-			r.NoError(cmd.Flags().SetAnnotation("spec", StdinFlagAnnotation, []string{"true"}))
-			r.NoError(cmd.Flags().Parse(tt.args))
 			cmd.SetIn(strings.NewReader(tt.stdin))
-			if tt.configFirst {
-				_, err := stdinConfigReader(cmd)()
-				r.NoError(err)
-			}
 
 			cfg, err := AddStdinConfig(cmd, base)
 			if tt.wantErr != "" {
@@ -206,6 +127,63 @@ func TestAddStdinConfig(t *testing.T) {
 			rest, err := io.ReadAll(cmd.InOrStdin())
 			r.NoError(err)
 			r.Equal(strings.TrimSpace(tt.wantRest), strings.TrimSpace(string(rest)))
+		})
+	}
+}
+
+func TestIsPiped(t *testing.T) {
+	r := require.New(t)
+
+	r.True(isPiped(strings.NewReader("")), "a reader set with cmd.SetIn counts as piped")
+
+	file, err := os.Create(filepath.Join(t.TempDir(), "stdin"))
+	r.NoError(err)
+	t.Cleanup(func() { _ = file.Close() })
+	r.True(isPiped(file), "a redirected file counts as piped")
+
+	devNull, err := os.Open(os.DevNull)
+	r.NoError(err)
+	t.Cleanup(func() { _ = devNull.Close() })
+	r.False(isPiped(devNull), "a character device, like a terminal, is not read")
+}
+
+func TestAddStdinConfigSkipsCommands(t *testing.T) {
+	newTree := func() (root, skipped, child, help, normal *cobra.Command) {
+		root = &cobra.Command{Use: "ocm"}
+		skipped = &cobra.Command{Use: "generate", Annotations: map[string]string{SkipStdinConfigAnnotation: ""}}
+		child = &cobra.Command{Use: "docs"}
+		help = &cobra.Command{Use: "help"}
+		normal = &cobra.Command{Use: "transfer"}
+		skipped.AddCommand(child)
+		root.AddCommand(skipped, help, normal)
+		return root, skipped, child, help, normal
+	}
+	_, skipped, child, help, normal := newTree()
+
+	tests := []struct {
+		name     string
+		cmd      *cobra.Command
+		wantRead bool
+	}{
+		{name: "annotated command", cmd: skipped},
+		{name: "child of an annotated command", cmd: child},
+		{name: "cobra help command", cmd: help},
+		{name: "other command reads stdin", cmd: normal, wantRead: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+			tt.cmd.SetIn(strings.NewReader(streamConfigA))
+			cfg, err := AddStdinConfig(tt.cmd, &genericv1.Config{})
+			r.NoError(err)
+			if tt.wantRead {
+				r.Len(cfg.Configurations, 1)
+				return
+			}
+			r.Empty(cfg.Configurations)
+			rest, err := io.ReadAll(tt.cmd.InOrStdin())
+			r.NoError(err)
+			r.Equal(streamConfigA, string(rest), "stdin must not be touched")
 		})
 	}
 }

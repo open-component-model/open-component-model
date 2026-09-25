@@ -44,8 +44,8 @@ configuration files and display the merged effective configuration as a single o
   # Display effective config from a specific config file
   ocm get config --config ./my-ocm-config.yaml
 
-  # Read the config from stdin instead of a file (skips the well known locations)
-  cat ./my-ocm-config.yaml | ocm get config --config -`,
+  # Add config piped into stdin on top of the config files
+  cat ./my-ocm-config.yaml | ocm get config`,
 		RunE:              GetConfig,
 		DisableAutoGenTag: true,
 	}

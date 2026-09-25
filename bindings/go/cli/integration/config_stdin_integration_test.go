@@ -15,8 +15,8 @@ import (
 	"ocm.software/open-component-model/bindings/go/cli/integration/internal"
 )
 
-// Test_Integration_ConfigFromStdin proves that a configuration piped through `--config -`
-// reaches the credential graph. The control run without valid stdin credentials shows
+// Test_Integration_ConfigFromStdin proves that a configuration piped into stdin reaches
+// the credential graph. The control run without valid stdin credentials shows
 // that a success cannot come from configuration found elsewhere.
 func Test_Integration_ConfigFromStdin(t *testing.T) {
 	r := require.New(t)
@@ -30,14 +30,14 @@ func Test_Integration_ConfigFromStdin(t *testing.T) {
 
 		t.Run("wrong password on stdin fails", func(t *testing.T) {
 			err := runOCM(t, registryConfig(registry, registry.Password+"-invalid"),
-				"add", "component-version", "--repository", repo, "--constructor", constructor, "--config", "-")
+				"add", "component-version", "--repository", repo, "--constructor", constructor)
 			require.ErrorContains(t, err, "401")
 		})
 
 		t.Run("credentials on stdin authenticate", func(t *testing.T) {
 			r := require.New(t)
 			err := runOCM(t, registryConfig(registry, registry.Password),
-				"add", "component-version", "--repository", repo, "--constructor", constructor, "--config", "-")
+				"add", "component-version", "--repository", repo, "--constructor", constructor)
 			r.NoError(err)
 
 			desc, err := registry.Connect(t).GetComponentVersion(t.Context(), "ocm.software/config-stdin-test", "v1.0.0")

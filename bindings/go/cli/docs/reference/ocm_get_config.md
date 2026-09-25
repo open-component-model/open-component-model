@@ -32,8 +32,8 @@ ocm get config [flags]
   # Display effective config from a specific config file
   ocm get config --config ./my-ocm-config.yaml
 
-  # Read the config from stdin instead of a file (skips the well known locations)
-  cat ./my-ocm-config.yaml | ocm get config --config -
+  # Add config piped into stdin on top of the config files
+  cat ./my-ocm-config.yaml | ocm get config
 ```
 
 ### Options
@@ -66,7 +66,7 @@ ocm get config [flags]
                                            If multiple configuration files are found, they will be merged in the order they are discovered.
                                            Later entries have higher priority.
                                            Using the option, the specified configuration file(s) will be used instead of the lookup above.
-                                           Use "-" to read the configuration from stdin.
+                                           Configuration documents piped into stdin are applied last, on top of these files.
       --logformat enum                     set the log output format that is used to print individual logs
                                               json: Output logs in JSON format, suitable for machine processing
                                               text: Output logs in human-readable text format, suitable for console output

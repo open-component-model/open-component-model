@@ -1,13 +1,10 @@
 package configuration
 
 import (
-	"io"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
-	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -164,160 +161,6 @@ func TestGetFlattenedGetConfigFromPath(t *testing.T) {
 			}
 
 			assert.Equal(t, tt.want, got)
-		})
-	}
-}
-
-func TestLoadAndMergeConfigsWithStdin(t *testing.T) {
-	const stdinConfig = `type: generic.config.ocm.software/v1
-configurations:
-- type: attributes.config.ocm.software
-  attributes:
-    source: stdin
-`
-	fileConfigData := []byte(`{"consumers":[{"credentials":[{"properties":{"password":"ghcr-token","username":"ghcr-user"},"type":"Credentials/v1"}],"identity":{"hostname":"ghcr.io","type":"OCIRegistry"}}],"type":"credentials.config.ocm.software"}`)
-	stdinConfigData := []byte(`{"attributes":{"source":"stdin"},"type":"attributes.config.ocm.software"}`)
-
-	tests := []struct {
-		name     string
-		paths    []string
-		stdin    string
-		wantData [][]byte
-		wantErr  string
-	}{
-		{
-			name:     "stdin only",
-			paths:    []string{StdinConfigPath},
-			stdin:    stdinConfig,
-			wantData: [][]byte{stdinConfigData},
-		},
-		{
-			name:     "stdin before file keeps command line order",
-			paths:    []string{StdinConfigPath, "testdata/.ocmconfig-2"},
-			stdin:    stdinConfig,
-			wantData: [][]byte{stdinConfigData, fileConfigData},
-		},
-		{
-			name:     "file before stdin keeps command line order",
-			paths:    []string{"testdata/.ocmconfig-2", StdinConfigPath},
-			stdin:    stdinConfig,
-			wantData: [][]byte{fileConfigData, stdinConfigData},
-		},
-		{
-			name:    "stdin given twice is rejected",
-			paths:   []string{StdinConfigPath, StdinConfigPath},
-			wantErr: "can only be given once",
-		},
-		{
-			name:    "stdin given twice after a file is rejected before the file is read",
-			paths:   []string{"testdata/.ocmconfig-2", StdinConfigPath, StdinConfigPath},
-			wantErr: "can only be given once",
-		},
-		{
-			name:    "empty stdin is rejected",
-			paths:   []string{StdinConfigPath},
-			stdin:   "",
-			wantErr: "no configuration document",
-		},
-		{
-			name:    "missing file is still rejected",
-			paths:   []string{"testdata/does-not-exist"},
-			wantErr: "does-not-exist",
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			r := require.New(t)
-			cmd := &cobra.Command{}
-			cmd.SetIn(strings.NewReader(tt.stdin))
-			got, err := loadAndMergeConfigs(tt.paths, true, stdinConfigReader(cmd))
-			if tt.wantErr != "" {
-				r.ErrorContains(err, tt.wantErr)
-				return
-			}
-			r.NoError(err)
-			gotData := make([][]byte, 0, len(got.Configurations))
-			for _, cfg := range got.Configurations {
-				gotData = append(gotData, cfg.Data)
-			}
-			r.Equal(tt.wantData, gotData)
-		})
-	}
-}
-
-func TestLoadAndMergeConfigsWithoutStdin(t *testing.T) {
-	_, err := loadAndMergeConfigs([]string{StdinConfigPath}, true, nil)
-	require.ErrorContains(t, err, "stdin is not available")
-}
-
-// streamTransferSpec carries nested "type" fields, which must not make it look like a
-// configuration document.
-const (
-	streamCredentials = `---
-type: generic.config.ocm.software/v1
-configurations:
-  - type: credentials.config.ocm.software
-    consumers: []
-`
-	streamTransferSpec = `---
-environment: {}
-transformations:
-- id: upload
-  spec:
-    repository:
-      type: OCIRepository/v1
-  type: OCIAddComponentVersion/v1alpha1
-`
-	streamTransferConfig = `---
-type: generic.config.ocm.software/v1
-configurations:
-  - type: transfer.config.ocm.software/v1alpha1
-    copyMode: localBlob
-`
-)
-
-func TestGetOCMConfigForCommandWithStdinStream(t *testing.T) {
-	tests := []struct {
-		name      string
-		stdin     string
-		wantTypes []string
-	}{
-		{
-			name:      "credentials then transfer spec",
-			stdin:     streamCredentials + streamTransferSpec,
-			wantTypes: []string{"credentials.config.ocm.software"},
-		},
-		{
-			name:      "transfer spec then credentials",
-			stdin:     streamTransferSpec + streamCredentials,
-			wantTypes: []string{"credentials.config.ocm.software"},
-		},
-		{
-			name:      "two configurations around the transfer spec are merged in order",
-			stdin:     streamTransferConfig + streamTransferSpec + streamCredentials,
-			wantTypes: []string{"transfer.config.ocm.software/v1alpha1", "credentials.config.ocm.software"},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			r := require.New(t)
-			cmd := &cobra.Command{Use: "test"}
-			RegisterConfigFlag(cmd)
-			r.NoError(cmd.PersistentFlags().Set(OCMConfigCommandArgument, StdinConfigPath))
-			cmd.SetIn(strings.NewReader(tt.stdin))
-
-			cfg, err := GetOCMConfigForCommand(cmd)
-			r.NoError(err)
-			types := make([]string, 0, len(cfg.Configurations))
-			for _, c := range cfg.Configurations {
-				types = append(types, c.Type.String())
-			}
-			r.Equal(tt.wantTypes, types)
-
-			rest, err := io.ReadAll(cmd.InOrStdin())
-			r.NoError(err)
-			r.Equal(strings.TrimSpace(strings.TrimPrefix(streamTransferSpec, "---\n")), strings.TrimSpace(string(rest)),
-				"the transfer spec must stay on stdin for the command")
 		})
 	}
 }

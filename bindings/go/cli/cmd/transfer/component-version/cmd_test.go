@@ -257,13 +257,10 @@ configurations:
 	specBeforeConfig := func(spec string) string { return spec + "---\n" + config }
 	tests := []struct {
 		name  string
-		args  []string
 		stdin func(spec string) string
 	}{
-		{name: "config before spec", args: []string{"--config", "-"}, stdin: configBeforeSpec},
-		{name: "spec before config", args: []string{"--config", "-"}, stdin: specBeforeConfig},
-		{name: "config before spec without --config -", stdin: configBeforeSpec},
-		{name: "spec before config without --config -", stdin: specBeforeConfig},
+		{name: "config before spec", stdin: configBeforeSpec},
+		{name: "spec before config", stdin: specBeforeConfig},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -271,7 +268,7 @@ configurations:
 			spec := dryRunTransferSpec(t, sourceRef, fmt.Sprintf("ctf::%s", toPath))
 
 			_, err := test.OCM(t,
-				test.WithArgs(append([]string{"transfer", "component-version", "--transfer-spec", "-"}, tt.args...)...),
+				test.WithArgs("transfer", "component-version", "--transfer-spec", "-"),
 				test.WithInput(bytes.NewBufferString(tt.stdin(spec))),
 				test.WithOutput(new(bytes.Buffer)),
 				test.WithErrorOutput(test.NewJSONLogReader()),
@@ -286,7 +283,7 @@ configurations:
 }
 
 // TestTransferComponentVersionWithTransferSpecStdinAppliesConfig proves that configuration in
-// stdin is loaded without --config -: a broken configuration document fails the command.
+// stdin is loaded: a broken configuration document fails the command.
 func TestTransferComponentVersionWithTransferSpecStdinAppliesConfig(t *testing.T) {
 	_, err := test.OCM(t,
 		test.WithArgs("transfer", "component-version", "--transfer-spec", "-"),
@@ -299,7 +296,7 @@ func TestTransferComponentVersionWithTransferSpecStdinAppliesConfig(t *testing.T
 
 func TestTransferComponentVersionWithTransferSpecStdinMissingAfterConfig(t *testing.T) {
 	_, err := test.OCM(t,
-		test.WithArgs("transfer", "component-version", "--transfer-spec", "-", "--config", "-"),
+		test.WithArgs("transfer", "component-version", "--transfer-spec", "-"),
 		test.WithInput(bytes.NewBufferString("type: generic.config.ocm.software/v1\n")),
 		test.WithOutput(new(bytes.Buffer)),
 		test.WithErrorOutput(test.NewJSONLogReader()),

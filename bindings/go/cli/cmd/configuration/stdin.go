@@ -6,9 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"slices"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
 	k8syaml "k8s.io/apimachinery/pkg/util/yaml"
 	"sigs.k8s.io/yaml"
 
@@ -16,85 +17,76 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// StdinFlagAnnotation marks a command flag that reads stdin when set to "-". Set it with
-// cmd.Flags().SetAnnotation so AddStdinConfig picks up configuration documents from stdin.
-const StdinFlagAnnotation = "ocm.software/reads-stdin"
+// SkipStdinConfigAnnotation marks a command that never uses configuration, together with
+// its subcommands. Piped stdin is not read for it: reading waits until stdin is closed,
+// which would hang the command in a shell or CI job that keeps stdin open.
+const SkipStdinConfigAnnotation = "ocm.software/skip-stdin-config"
+
+// builtinCommands are the commands cobra adds itself. They cannot carry
+// SkipStdinConfigAnnotation, so they are matched by name.
+var builtinCommands = []string{"help", "completion", cobra.ShellCompRequestCmd, cobra.ShellCompNoDescRequestCmd}
 
 var documentSeparator = []byte("---\n")
 
-// errStdinNotYAML marks stdin that is not a valid YAML stream.
-var errStdinNotYAML = errors.New("stdin is not a valid YAML stream")
-
-// takeStdinConfigDocuments reads the command's stdin, gives every document that is not
-// configuration back to the command, and returns the configuration documents.
+// AddStdinConfig applies the configuration documents found in piped stdin on top of cfg,
+// so configuration such as credentials can be passed without writing a file.
 //
-// Stdin can be read only once, but configuration and a command flag such as
-// --transfer-spec - may share it. Configuration is loaded first, so this is the one place
-// that reads the stream. If stdin is not valid YAML, it is given back unchanged and the
-// error wraps errStdinNotYAML.
-func takeStdinConfigDocuments(cmd *cobra.Command) ([][]byte, error) {
-	data, err := io.ReadAll(cmd.InOrStdin())
+// Stdin can be read only once, but the command may read it too (for example
+// --transfer-spec -). So the configuration is taken out here, before the command runs,
+// and every other document is put back for the command. If stdin holds no configuration
+// or is not valid YAML, it is put back unchanged. A terminal is never read.
+func AddStdinConfig(cmd *cobra.Command, cfg *genericv1.Config) (*genericv1.Config, error) {
+	in := cmd.InOrStdin()
+	if skipsStdinConfig(cmd) || !isPiped(in) {
+		return cfg, nil
+	}
+	data, err := io.ReadAll(in)
 	if err != nil {
 		return nil, fmt.Errorf("reading stdin: %w", err)
 	}
 	configs, others, err := SplitConfigStream(bytes.NewReader(data))
-	if err != nil {
+	if err != nil || len(configs) == 0 {
 		cmd.SetIn(bytes.NewReader(data))
-		return nil, fmt.Errorf("%w: %w", errStdinNotYAML, err)
+		return cfg, nil
 	}
 	cmd.SetIn(bytes.NewReader(bytes.Join(others, documentSeparator)))
-	return configs, nil
-}
 
-// AddStdinConfig applies the configuration documents found in stdin on top of cfg, when a
-// flag marked with StdinFlagAnnotation is "-". A user who pipes configuration and data
-// together should not have to also pass --config -. If --config - is set, it has already
-// taken the configuration out of stdin, so nothing is added twice. Without such a flag,
-// cfg is returned unchanged and stdin is not read.
-func AddStdinConfig(cmd *cobra.Command, cfg *genericv1.Config) (*genericv1.Config, error) {
-	if !flagReadsStdin(cmd) {
-		return cfg, nil
-	}
-	docs, err := takeStdinConfigDocuments(cmd)
-	if errors.Is(err, errStdinNotYAML) {
-		// Stdin was given back unchanged, so the command reports the error in terms of
-		// its own input.
-		return cfg, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	if len(docs) == 0 {
-		return cfg, nil
-	}
-	stdinCfg, err := decodeConfigs(docs)
-	if err != nil {
-		return nil, fmt.Errorf("could not load configuration from stdin: %w", err)
-	}
-	return genericv1.FlatMap(cfg, stdinCfg), nil
-}
-
-// flagReadsStdin reports whether a flag marked with StdinFlagAnnotation is set to "-".
-func flagReadsStdin(cmd *cobra.Command) bool {
-	found := false
-	cmd.Flags().VisitAll(func(f *pflag.Flag) {
-		if _, ok := f.Annotations[StdinFlagAnnotation]; ok && f.Value.String() == StdinConfigPath {
-			found = true
-		}
-	})
-	return found
-}
-
-func decodeConfigs(docs [][]byte) (*genericv1.Config, error) {
-	cfgs := make([]*genericv1.Config, 0, len(docs))
-	for _, doc := range docs {
-		cfg, err := decodeConfig(bytes.NewReader(doc))
+	cfgs := []*genericv1.Config{cfg}
+	for _, doc := range configs {
+		stdinCfg, err := decodeConfig(bytes.NewReader(doc))
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("could not load configuration from stdin: %w", err)
 		}
-		cfgs = append(cfgs, cfg)
+		cfgs = append(cfgs, stdinCfg)
 	}
 	return genericv1.FlatMap(cfgs...), nil
+}
+
+// skipsStdinConfig reports whether cmd or one of its parents never uses configuration.
+func skipsStdinConfig(cmd *cobra.Command) bool {
+	for c := cmd; c != nil; c = c.Parent() {
+		if _, ok := c.Annotations[SkipStdinConfigAnnotation]; ok {
+			return true
+		}
+		if c.HasParent() && slices.Contains(builtinCommands, c.Name()) {
+			return true
+		}
+	}
+	return false
+}
+
+// isPiped reports whether r is piped input and not a terminal. A reader that is not a
+// file, as set with cmd.SetIn, counts as piped.
+func isPiped(r io.Reader) bool {
+	f, ok := r.(*os.File)
+	if !ok {
+		return true
+	}
+	info, err := f.Stat()
+	if err != nil {
+		return false
+	}
+	return info.Mode()&os.ModeCharDevice == 0
 }
 
 // SplitConfigStream splits a YAML stream on "---" into the documents typed as OCM

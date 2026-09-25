@@ -23,8 +23,6 @@ const (
 	NestedOCMConfigFileName  = ".ocmconfig"
 	OCMConfigEnvironmentKey  = "OCM_CONFIG"
 	OCMConfigCommandArgument = "config"
-	// StdinConfigPath is the --config value that reads the configuration from stdin.
-	StdinConfigPath = "-"
 )
 
 type OCMConfigOptions struct {
@@ -55,7 +53,7 @@ By default (without specifying custom locations with this flag), the file will b
 If multiple configuration files are found, they will be merged in the order they are discovered.
 Later entries have higher priority.
 Using the option, the specified configuration file(s) will be used instead of the lookup above.
-Use "-" to read the configuration from stdin.`)
+Configuration documents piped into stdin are applied last, on top of these files.`)
 }
 
 func GetFlattenedOCMConfigForCommand(cmd *cobra.Command) (*genericv1.Config, error) {
@@ -66,14 +64,11 @@ func GetFlattenedOCMConfigForCommand(cmd *cobra.Command) (*genericv1.Config, err
 	return genericv1.FlatMap(cfg), nil
 }
 
-// GetOCMConfigForCommand returns the configuration for a command. With --config set, only
-// the given values are loaded, in command line order; "-" reads stdin and may be given
-// once. Without the flag the well known locations are searched and stdin is never read.
 func GetOCMConfigForCommand(cmd *cobra.Command) (*genericv1.Config, error) {
 	flag := cmd.Flag(OCMConfigCommandArgument)
 	if flag != nil && flag.Changed {
 		paths := flag.Value.(pflag.SliceValue).GetSlice()
-		return loadAndMergeConfigs(paths, true, stdinConfigReader(cmd))
+		return loadAndMergeConfigs(paths, true)
 	}
 	syscalls := ocmctx.FromContext(cmd.Context()).Syscalls()
 	options := OCMConfigOptions{
@@ -102,36 +97,13 @@ func GetOCMConfig(options OCMConfigOptions, additional ...string) (*genericv1.Co
 	if err != nil && len(additional) == 0 {
 		return nil, err
 	}
-	return loadAndMergeConfigs(paths, false, nil)
+	return loadAndMergeConfigs(paths, false)
 }
 
-// stdinConfigReader loads the configuration for --config - from the command's stdin. A
-// caller who passes "-" expects to supply configuration, so stdin without it is an error:
-// a silent empty config would hide a broken pipe.
-func stdinConfigReader(cmd *cobra.Command) configReader {
-	return func() (*genericv1.Config, error) {
-		docs, err := takeStdinConfigDocuments(cmd)
-		if err != nil {
-			return nil, err
-		}
-		if len(docs) == 0 {
-			return nil, fmt.Errorf("no configuration document of type %q was read", genericv1.ConfigType)
-		}
-		return decodeConfigs(docs)
-	}
-}
-
-type configReader func() (*genericv1.Config, error)
-
-// loadAndMergeConfigs merges the configurations at the given paths in order. The path "-"
-// is read through readStdin, which may be nil when stdin is not available.
-func loadAndMergeConfigs(paths []string, strict bool, readStdin configReader) (*genericv1.Config, error) {
-	if countStdinPaths(paths) > 1 {
-		return nil, fmt.Errorf("configuration from stdin (%q) can only be given once", StdinConfigPath)
-	}
+func loadAndMergeConfigs(paths []string, strict bool) (*genericv1.Config, error) {
 	cfgs := make([]*genericv1.Config, 0, len(paths))
 	for _, path := range paths {
-		cfg, err := loadConfig(path, readStdin)
+		cfg, err := GetConfigFromPath(path)
 		if err != nil {
 			if strict {
 				return nil, err
@@ -146,30 +118,6 @@ func loadAndMergeConfigs(paths []string, strict bool, readStdin configReader) (*
 		cfgs = append(cfgs, cfg)
 	}
 	return genericv1.FlatMap(cfgs...), nil
-}
-
-func countStdinPaths(paths []string) int {
-	n := 0
-	for _, path := range paths {
-		if path == StdinConfigPath {
-			n++
-		}
-	}
-	return n
-}
-
-func loadConfig(path string, readStdin configReader) (*genericv1.Config, error) {
-	if path != StdinConfigPath {
-		return GetConfigFromPath(path)
-	}
-	if readStdin == nil {
-		return nil, errors.New("could not load configuration from stdin: stdin is not available")
-	}
-	cfg, err := readStdin()
-	if err != nil {
-		return nil, fmt.Errorf("could not load configuration from stdin: %w", err)
-	}
-	return cfg, nil
 }
 
 // GetConfigFromPath reads and decodes the YAML configuration file from the specified path.
