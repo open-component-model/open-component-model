@@ -116,7 +116,8 @@ jobs:
 
       - name: Verify installed binary
         run: |
-          version_json=$(ocm version 2>/dev/null)
+          # --output legacyjson added in 0.17; older builds emit JSON by default
+          version_json=$(ocm version --output legacyjson 2>/dev/null || ocm version 2>/dev/null)
           actual=$(echo "${version_json}" | jq -r '"\(.major).\(.minor).\(.patch)"')
           if [[ "${actual}" != "${EXPECTED_VERSION}" ]]; then
             echo "::error::Version mismatch: expected ${EXPECTED_VERSION}, got ${actual}"
@@ -165,7 +166,8 @@ jobs:
 
       - name: Verify installed binary
         run: |
-          version_json=$(ocm version 2>/dev/null)
+          # --output legacyjson added in 0.17; older builds emit JSON by default
+          version_json=$(ocm version --output legacyjson 2>/dev/null || ocm version 2>/dev/null)
           actual=$(echo "${version_json}" | jq -r '"\(.major).\(.minor).\(.patch)"')
           if [[ "${actual}" != "${EXPECTED_VERSION}" ]]; then
             echo "::error::Version mismatch: expected ${EXPECTED_VERSION}, got ${actual}"
@@ -208,7 +210,8 @@ jobs:
             echo "::error::Unexpected default-named binary at ${INSTALL_DIR}/ocm; OCM_BIN_NAME was not honored"
             exit 1
           fi
-          version_json=$("${INSTALL_DIR}/ocm-custom" version 2>/dev/null)
+          # --output legacyjson added in 0.17; older builds emit JSON by default
+          version_json=$("${INSTALL_DIR}/ocm-custom" version --output legacyjson 2>/dev/null || "${INSTALL_DIR}/ocm-custom" version 2>/dev/null)
           actual=$(echo "${version_json}" | jq -r '"\(.major).\(.minor).\(.patch)"')
           if [[ "${actual}" != "${EXPECTED_VERSION}" ]]; then
             echo "::error::Version mismatch: expected ${EXPECTED_VERSION}, got ${actual}"
