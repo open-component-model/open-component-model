@@ -51,6 +51,7 @@ func Test_Integration_TransferHelmResource_JFrogHelmUploaderDeploysChart(t *test
 	var mu sync.Mutex
 	stored := map[string][]byte{}
 	putHeaders := map[string]http.Header{}
+	var reindexed []string
 	targetSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		switch req.Method {
 		case http.MethodPut:
@@ -64,6 +65,12 @@ func Test_Integration_TransferHelmResource_JFrogHelmUploaderDeploysChart(t *test
 			putHeaders[req.URL.Path] = req.Header.Clone()
 			mu.Unlock()
 			w.WriteHeader(http.StatusCreated)
+		case http.MethodPost:
+			mu.Lock()
+			_, uploaded := stored["/artifactory/helm-local/mychart-0.1.0.tgz"]
+			reindexed = append(reindexed, fmt.Sprintf("%s uploaded=%t", req.URL.Path, uploaded))
+			mu.Unlock()
+			w.WriteHeader(http.StatusOK)
 		default:
 			w.WriteHeader(http.StatusMethodNotAllowed)
 		}
@@ -159,6 +166,10 @@ func Test_Integration_TransferHelmResource_JFrogHelmUploaderDeploysChart(t *test
 	r.Equal(chartTgzBytes, got, "uploaded bytes must equal the chart .tgz")
 	r.Equal("application/gzip", gotHeaders.Get("Content-Type"),
 		"Content-Type must be application/gzip")
+	mu.Lock()
+	r.Equal([]string{"/artifactory/api/helm/helm-local/reindex uploaded=true"}, reindexed,
+		"the helm index must be recalculated once, after the chart was deployed")
+	mu.Unlock()
 
 	// Verify the transferred descriptor in the target OCI registry.
 	client := createAuthClient(registryAddr, user, password)
