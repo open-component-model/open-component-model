@@ -175,7 +175,7 @@ configurations:
   attributes:
     source: stdin
 `
-	fileConfigData := []byte(`{"attributes":{"source":"file"},"type":"attributes.config.ocm.software"}`)
+	fileConfigData := []byte(`{"consumers":[{"credentials":[{"properties":{"password":"ghcr-token","username":"ghcr-user"},"type":"Credentials/v1"}],"identity":{"hostname":"ghcr.io","type":"OCIRegistry"}}],"type":"credentials.config.ocm.software"}`)
 	stdinConfigData := []byte(`{"attributes":{"source":"stdin"},"type":"attributes.config.ocm.software"}`)
 
 	tests := []struct {
@@ -193,13 +193,13 @@ configurations:
 		},
 		{
 			name:     "stdin before file keeps command line order",
-			paths:    []string{StdinConfigPath, "testdata/.ocmconfig-attributes-file"},
+			paths:    []string{StdinConfigPath, "testdata/.ocmconfig-2"},
 			stdin:    stdinConfig,
 			wantData: [][]byte{stdinConfigData, fileConfigData},
 		},
 		{
 			name:     "file before stdin keeps command line order",
-			paths:    []string{"testdata/.ocmconfig-attributes-file", StdinConfigPath},
+			paths:    []string{"testdata/.ocmconfig-2", StdinConfigPath},
 			stdin:    stdinConfig,
 			wantData: [][]byte{fileConfigData, stdinConfigData},
 		},
@@ -210,7 +210,7 @@ configurations:
 		},
 		{
 			name:    "stdin given twice after a file is rejected before the file is read",
-			paths:   []string{"testdata/.ocmconfig-attributes-file", StdinConfigPath, StdinConfigPath},
+			paths:   []string{"testdata/.ocmconfig-2", StdinConfigPath, StdinConfigPath},
 			wantErr: "can only be given once",
 		},
 		{
