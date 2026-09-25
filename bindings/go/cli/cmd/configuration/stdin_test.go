@@ -30,7 +30,7 @@ transformations: []
 `
 )
 
-func TestReadConfigStream(t *testing.T) {
+func TestStdinConfigReader(t *testing.T) {
 	tests := []struct {
 		name     string
 		in       string
@@ -76,7 +76,7 @@ func TestReadConfigStream(t *testing.T) {
 		{
 			name:    "empty input",
 			in:      "",
-			wantErr: "no data was read",
+			wantErr: "no configuration document",
 		},
 		{
 			name:    "malformed document fails the whole stream",
@@ -92,11 +92,15 @@ func TestReadConfigStream(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := require.New(t)
-			cfg, rest, err := readConfigStream(strings.NewReader(tt.in))
+			cmd := &cobra.Command{}
+			cmd.SetIn(strings.NewReader(tt.in))
+			cfg, err := stdinConfigReader(cmd)()
 			if tt.wantErr != "" {
 				r.ErrorContains(err, tt.wantErr)
 				return
 			}
+			r.NoError(err)
+			rest, err := io.ReadAll(cmd.InOrStdin())
 			r.NoError(err)
 			got := make([]string, 0, len(cfg.Configurations))
 			for _, c := range cfg.Configurations {
@@ -117,12 +121,13 @@ func TestAddStdinConfig(t *testing.T) {
 	stdinData := `{"attributes":{"source":"a"},"type":"attributes.config.ocm.software"}`
 
 	tests := []struct {
-		name     string
-		args     []string
-		stdin    string
-		wantData []string
-		wantRest string
-		wantErr  string
+		name        string
+		args        []string
+		stdin       string
+		configFirst bool // run the --config - loader first, as the command would
+		wantData    []string
+		wantRest    string
+		wantErr     string
 	}{
 		{
 			name:     "configuration in stdin is applied after the base",
@@ -146,11 +151,12 @@ func TestAddStdinConfig(t *testing.T) {
 			wantRest: streamConfigA + "---\n" + streamOther,
 		},
 		{
-			name:     "--config - already read stdin",
-			args:     []string{"--spec", "-", "--config", "-"},
-			stdin:    streamConfigA + "---\n" + streamOther,
-			wantData: []string{baseData},
-			wantRest: streamConfigA + "---\n" + streamOther,
+			name:        "nothing is added twice after --config - took the configuration",
+			args:        []string{"--spec", "-", "--config", "-"},
+			stdin:       streamConfigA + "---\n" + streamOther,
+			configFirst: true,
+			wantData:    []string{baseData},
+			wantRest:    streamOther,
 		},
 		{
 			name:     "--config with a file still applies stdin",
@@ -181,6 +187,10 @@ func TestAddStdinConfig(t *testing.T) {
 			r.NoError(cmd.Flags().SetAnnotation("spec", StdinFlagAnnotation, []string{"true"}))
 			r.NoError(cmd.Flags().Parse(tt.args))
 			cmd.SetIn(strings.NewReader(tt.stdin))
+			if tt.configFirst {
+				_, err := stdinConfigReader(cmd)()
+				r.NoError(err)
+			}
 
 			cfg, err := AddStdinConfig(cmd, base)
 			if tt.wantErr != "" {

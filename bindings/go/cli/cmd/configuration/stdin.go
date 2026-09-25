@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"slices"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -23,58 +22,52 @@ const StdinFlagAnnotation = "ocm.software/reads-stdin"
 
 var documentSeparator = []byte("---\n")
 
-// readConfigStream reads r as a YAML stream and returns the merged configuration together
-// with the documents that were not configuration, joined again with "---".
-//
-// Stdin can be read only once, but --config - and a command flag such as --transfer-spec -
-// may both point at it. The configuration is loaded first, so this is the one place that
-// reads the stream; the caller hands the rest back to the command.
-//
-// A stream without a configuration document is an error: a caller who passes "-" expects
-// to supply one, and a silent empty config would hide a broken pipe.
-func readConfigStream(r io.Reader) (cfg *genericv1.Config, rest []byte, err error) {
-	configs, others, err := SplitConfigStream(r)
-	if err != nil {
-		return nil, nil, err
-	}
-	if len(configs) == 0 {
-		if len(others) == 0 {
-			return nil, nil, errors.New("no data was read")
-		}
-		return nil, nil, fmt.Errorf("no configuration document of type %q was read", genericv1.ConfigType)
-	}
-	cfg, err = decodeConfigs(configs)
-	if err != nil {
-		return nil, nil, err
-	}
-	return cfg, bytes.Join(others, documentSeparator), nil
-}
+// errStdinNotYAML marks stdin that is not a valid YAML stream.
+var errStdinNotYAML = errors.New("stdin is not a valid YAML stream")
 
-// AddStdinConfig applies the configuration documents found in stdin on top of cfg, when a
-// flag marked with StdinFlagAnnotation is "-" and --config does not read stdin itself.
-// A user who pipes configuration and data together should not have to also pass
-// --config -. The other documents are put back on stdin for the command. In every other
-// case cfg is returned unchanged and stdin is not read.
-func AddStdinConfig(cmd *cobra.Command, cfg *genericv1.Config) (*genericv1.Config, error) {
-	if !flagReadsStdin(cmd) || configFlagReadsStdin(cmd) {
-		return cfg, nil
-	}
+// takeStdinConfigDocuments reads the command's stdin, gives every document that is not
+// configuration back to the command, and returns the configuration documents.
+//
+// Stdin can be read only once, but configuration and a command flag such as
+// --transfer-spec - may share it. Configuration is loaded first, so this is the one place
+// that reads the stream. If stdin is not valid YAML, it is given back unchanged and the
+// error wraps errStdinNotYAML.
+func takeStdinConfigDocuments(cmd *cobra.Command) ([][]byte, error) {
 	data, err := io.ReadAll(cmd.InOrStdin())
 	if err != nil {
 		return nil, fmt.Errorf("reading stdin: %w", err)
 	}
 	configs, others, err := SplitConfigStream(bytes.NewReader(data))
 	if err != nil {
-		// Not valid YAML: hand stdin back unchanged, so the command reports the error in
-		// terms of its own input.
 		cmd.SetIn(bytes.NewReader(data))
-		return cfg, nil
+		return nil, fmt.Errorf("%w: %w", errStdinNotYAML, err)
 	}
 	cmd.SetIn(bytes.NewReader(bytes.Join(others, documentSeparator)))
-	if len(configs) == 0 {
+	return configs, nil
+}
+
+// AddStdinConfig applies the configuration documents found in stdin on top of cfg, when a
+// flag marked with StdinFlagAnnotation is "-". A user who pipes configuration and data
+// together should not have to also pass --config -. If --config - is set, it has already
+// taken the configuration out of stdin, so nothing is added twice. Without such a flag,
+// cfg is returned unchanged and stdin is not read.
+func AddStdinConfig(cmd *cobra.Command, cfg *genericv1.Config) (*genericv1.Config, error) {
+	if !flagReadsStdin(cmd) {
 		return cfg, nil
 	}
-	stdinCfg, err := decodeConfigs(configs)
+	docs, err := takeStdinConfigDocuments(cmd)
+	if errors.Is(err, errStdinNotYAML) {
+		// Stdin was given back unchanged, so the command reports the error in terms of
+		// its own input.
+		return cfg, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if len(docs) == 0 {
+		return cfg, nil
+	}
+	stdinCfg, err := decodeConfigs(docs)
 	if err != nil {
 		return nil, fmt.Errorf("could not load configuration from stdin: %w", err)
 	}
@@ -90,14 +83,6 @@ func flagReadsStdin(cmd *cobra.Command) bool {
 		}
 	})
 	return found
-}
-
-func configFlagReadsStdin(cmd *cobra.Command) bool {
-	flag := cmd.Flag(OCMConfigCommandArgument)
-	if flag == nil || !flag.Changed {
-		return false
-	}
-	return slices.Contains(flag.Value.(pflag.SliceValue).GetSlice(), StdinConfigPath)
 }
 
 func decodeConfigs(docs [][]byte) (*genericv1.Config, error) {

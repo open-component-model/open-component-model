@@ -1,7 +1,6 @@
 package configuration
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -106,16 +105,19 @@ func GetOCMConfig(options OCMConfigOptions, additional ...string) (*genericv1.Co
 	return loadAndMergeConfigs(paths, false, nil)
 }
 
-// stdinConfigReader loads the configuration from the command's stdin and puts every other
-// document of the stream back, so the command still finds them in cmd.InOrStdin().
+// stdinConfigReader loads the configuration for --config - from the command's stdin. A
+// caller who passes "-" expects to supply configuration, so stdin without it is an error:
+// a silent empty config would hide a broken pipe.
 func stdinConfigReader(cmd *cobra.Command) configReader {
 	return func() (*genericv1.Config, error) {
-		cfg, rest, err := readConfigStream(cmd.InOrStdin())
+		docs, err := takeStdinConfigDocuments(cmd)
 		if err != nil {
 			return nil, err
 		}
-		cmd.SetIn(bytes.NewReader(rest))
-		return cfg, nil
+		if len(docs) == 0 {
+			return nil, fmt.Errorf("no configuration document of type %q was read", genericv1.ConfigType)
+		}
+		return decodeConfigs(docs)
 	}
 }
 

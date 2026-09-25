@@ -217,7 +217,7 @@ configurations:
 			name:    "empty stdin is rejected",
 			paths:   []string{StdinConfigPath},
 			stdin:   "",
-			wantErr: "no data was read",
+			wantErr: "no configuration document",
 		},
 		{
 			name:    "missing file is still rejected",
@@ -228,11 +228,9 @@ configurations:
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := require.New(t)
-			readStdin := func() (*genericv1.Config, error) {
-				cfg, _, err := readConfigStream(strings.NewReader(tt.stdin))
-				return cfg, err
-			}
-			got, err := loadAndMergeConfigs(tt.paths, true, readStdin)
+			cmd := &cobra.Command{}
+			cmd.SetIn(strings.NewReader(tt.stdin))
+			got, err := loadAndMergeConfigs(tt.paths, true, stdinConfigReader(cmd))
 			if tt.wantErr != "" {
 				r.ErrorContains(err, tt.wantErr)
 				return
