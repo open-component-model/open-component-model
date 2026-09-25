@@ -140,29 +140,36 @@ sends `POST <url>/artifactory/api/helm/<repository>/reindex` so the chart shows
 up in `index.yaml` and can be pulled right away; Artifactory does not reliably
 add deployed charts to the index on its own. Set `reindex: false` to skip it.
 
+By default the chart is deployed under the name and version it already has in the
+source (see `chartName` and `chartVersion`). Helm repositories index charts by
+their `Chart.yaml`, so before uploading, the uploader checks that the published
+name and version match it whenever the chart metadata is available without an
+extra download (`Helm/v1`, `OCIImage/v1` and `LocalBlob` sources), and fails the
+transfer otherwise.
+
 #### Schema
 
 {{< schema-renderer url="/schemas/bindings/go/transfer/JFrogHelmUploaderConfig.schema.json" >}}
 
 #### Fields
 
-| Field          | Type              | Description                                                                                                                                                 |
-|----------------|-------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `match`        | `UploaderMatch`   | Selects resources this uploader applies to. `match.accessType` is required.                                                                                 |
-| `url`          | string (required) | Base URL of the Artifactory instance (scheme, host, optional port and context path) **without** the `/artifactory` segment, e.g. `https://myorg.jfrog.io`.  |
-| `repository`   | string (required) | Artifactory Helm repository key, e.g. `helm-local`. Must be a single key — no `/`, `?` or `#`.                                                              |
-| `chartName`    | string            | Chart name as a literal or a standalone `${…}` CEL expression over `resource`. Defaults to `${resource.name}`.                                              |
-| `chartVersion` | string            | Chart version as a literal or a standalone `${…}` CEL expression over `resource`. Defaults to `${resource.version}`.                                        |
-| `reindex`      | bool              | Recalculate the repository's Helm index after each upload. Defaults to `true`. The credentials must be allowed to trigger a reindex.                        |
+| Field          | Type              | Description                                                                                                                                                                                                                           |
+|----------------|-------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `match`        | `UploaderMatch`   | Selects resources this uploader applies to. `match.accessType` is required.                                                                                                                                                           |
+| `url`          | string (required) | Base URL of the Artifactory instance (scheme, host, optional port and context path) **without** the `/artifactory` segment, e.g. `https://myorg.jfrog.io`.                                                                            |
+| `repository`   | string (required) | Artifactory Helm repository key, e.g. `helm-local`. Must be a single key — no `/`, `?` or `#`.                                                                                                                                        |
+| `chartName`    | string            | Chart name as a literal or a standalone `${…}` CEL expression over `resource`. Defaults to the source chart name (`helmChart` of a `Helm/v1` access, last repository segment of an `OCIImage/v1` reference), else `${resource.name}`. |
+| `chartVersion` | string            | Chart version as a literal or a standalone `${…}` CEL expression over `resource`. Defaults to the source chart version (`Helm/v1` version, `OCIImage/v1` tag), else `${resource.version}`.                                            |
+| `reindex`      | bool              | Recalculate the repository's Helm index after each upload. Defaults to `true`. The credentials must be allowed to trigger a reindex.                                                                                                  |
 
 #### Supported Sources
 
-| Source access type | Behaviour                                                                                                                                               |
-|--------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `Helm/v1`          | The chart archive (`.tgz`) is extracted from the Helm download; the provenance file is dropped.                                                         |
-| `OCIImage/v1`      | The chart layer (`application/vnd.cncf.helm.chart.content.v1.tar+gzip` or legacy `application/tar+gzip`) is streamed directly from the OCI registry.    |
-| Other remote types | Bytes are uploaded unchanged — they must already be the `.tgz`.                                                                                         |
-| `LocalBlob`        | Not supported.                                                                                                                                          |
+| Source access type | Behaviour                                                                                                                                                                                                                                                                                                                                                                |
+|--------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `Helm/v1`          | The chart archive (`.tgz`) is extracted from the Helm download; the provenance file is dropped.                                                                                                                                                                                                                                                                          |
+| `OCIImage/v1`      | The chart layer (`application/vnd.cncf.helm.chart.content.v1.tar+gzip` or legacy `application/tar+gzip`) is streamed directly from the OCI registry.                                                                                                                                                                                                                     |
+| `LocalBlob`        | Fetched from the source component version, then chosen by `mediaType`: a packaged chart (`application/vnd.cncf.helm.chart.content.v1.tar+gzip`, `application/tar+gzip`, `application/gzip`) is uploaded as is; an OCM OCI layout (`application/vnd.ocm.software.oci.layout.v1+tar+gzip`, as created by the `helm` input) yields its chart layer. Other media types fail. |
+| Other remote types | Bytes are uploaded unchanged — they must already be the `.tgz`.                                                                                                                                                                                                                                                                                                          |
 
 #### Digest
 

@@ -8,6 +8,8 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -16,6 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	filev1alpha1 "ocm.software/open-component-model/bindings/go/blob/filesystem/spec/access/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
@@ -274,9 +277,9 @@ func TestHTTPStreamingTransformer_UserContentTypeHeaderPreserved(t *testing.T) {
 		"an explicit request Content-Type must not be overridden by the media-type default")
 }
 
-// runWithOpener streams through the spec-selected opener and returns the transform result
-// and the bodies the target received.
-func runWithOpener(t *testing.T, opener, openerPayload string, srcDigest *v2.Digest) (runtime.Typed, [][]byte, error) {
+// runWithOpener streams through the "conv" opener (when selected by mutate) and returns the
+// transform result and the bodies the target received.
+func runWithOpener(t *testing.T, mutate func(*v1alpha1.HTTPStreamingSpec), conv SourceOpener) (runtime.Typed, [][]byte, error) {
 	t.Helper()
 	var bodies [][]byte
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -286,63 +289,110 @@ func runWithOpener(t *testing.T, opener, openerPayload string, srcDigest *v2.Dig
 	}))
 	t.Cleanup(srv.Close)
 
-	step := &v1alpha1.HTTPStreaming{
-		Type: v1alpha1.HTTPStreamingV1alpha1,
-		ID:   "upload",
-		Spec: &v1alpha1.HTTPStreamingSpec{
-			Resource:       wgetResourceV2("blob", "https://source.example/blob.tar", "", "", nil, srcDigest),
-			Request:        wgetRequest(srv.URL+"/target/blob.tgz", http.MethodPut, "application/gzip", nil),
-			TargetResource: wgetResourceV2("blob", srv.URL+"/target/blob.tgz", "", "application/gzip", nil, nil),
-			Opener:         opener,
-		},
+	spec := &v1alpha1.HTTPStreamingSpec{
+		Resource:       wgetResourceV2("blob", "https://source.example/blob.tar", "", "", nil, nil),
+		Request:        wgetRequest(srv.URL+"/target/blob.tgz", http.MethodPut, "application/gzip", nil),
+		TargetResource: wgetResourceV2("blob", srv.URL+"/target/blob.tgz", "", "application/gzip", nil, nil),
 	}
+	mutate(spec)
 	tr := &HTTPStreamingTransformer{
 		Scheme:             newTransformerScheme(),
 		ResourceRepository: &stubResourceRepository{payload: []byte("raw"), mediaType: "application/x-tar"},
-		Openers: map[string]SourceOpener{
-			"conv": func(context.Context, *descriptor.Resource, runtime.Typed) (blob.ReadOnlyBlob, error) {
-				return inmemory.New(strings.NewReader(openerPayload)), nil
-			},
-		},
+		Openers:            map[string]SourceOpener{"conv": conv},
 	}
-	out, err := tr.Transform(t.Context(), step)
+	out, err := tr.Transform(t.Context(), &v1alpha1.HTTPStreaming{Type: v1alpha1.HTTPStreamingV1alpha1, ID: "upload", Spec: spec})
 	return out, bodies, err
+}
+
+func returning(payload string, derived bool) SourceOpener {
+	return func(context.Context, SourceRequest) (OpenedSource, error) {
+		return OpenedSource{Blob: inmemory.New(strings.NewReader(payload)), Derived: derived}, nil
+	}
+}
+
+func withSource(opener string, digest *v2.Digest) func(*v1alpha1.HTTPStreamingSpec) {
+	return func(s *v1alpha1.HTTPStreamingSpec) {
+		s.Opener = opener
+		s.Resource.Digest = digest
+	}
+}
+
+func genericDigestOf(content string) *v2.Digest {
+	return &v2.Digest{HashAlgorithm: hashAlgorithmSHA256, NormalisationAlgorithm: genericBlobDigestV1, Value: godigest.FromString(content).Encoded()}
 }
 
 func TestHTTPStreamingTransformer_OpenerReplacesDownload(t *testing.T) {
 	r := require.New(t)
-	out, bodies, err := runWithOpener(t, "conv", "converted", &v2.Digest{
+	out, bodies, err := runWithOpener(t, withSource("conv", &v2.Digest{
 		HashAlgorithm:          hashAlgorithmSHA256,
 		NormalisationAlgorithm: "ociArtifactDigest/v1",
 		Value:                  "abc",
-	})
+	}), returning("converted", false))
 	r.NoError(err)
 	r.Equal([][]byte{[]byte("converted")}, bodies, "the opener output, not the repository download, must be uploaded")
-
-	sum := sha256.Sum256([]byte("converted"))
-	r.Equal(&v2.Digest{
-		HashAlgorithm:          hashAlgorithmSHA256,
-		NormalisationAlgorithm: genericBlobDigestV1,
-		Value:                  hex.EncodeToString(sum[:]),
-	}, out.(*v1alpha1.HTTPStreaming).Output.Resource.Digest,
+	r.Equal(genericDigestOf("converted"), out.(*v1alpha1.HTTPStreaming).Output.Resource.Digest,
 		"a non-generic source digest describes another representation and is replaced by the uploaded digest")
 }
 
 func TestHTTPStreamingTransformer_UnknownOpener(t *testing.T) {
 	r := require.New(t)
-	_, bodies, err := runWithOpener(t, "nope", "", nil)
+	_, bodies, err := runWithOpener(t, withSource("nope", nil), returning("", false))
 	r.ErrorContains(err, `unknown source opener "nope"`)
 	r.Empty(bodies, "an unknown opener must fail before any upload request")
 }
 
-func TestHTTPStreamingTransformer_OpenerVerifiesGenericDigest(t *testing.T) {
-	r := require.New(t)
-	_, _, err := runWithOpener(t, "conv", "x", &v2.Digest{
-		HashAlgorithm:          hashAlgorithmSHA256,
-		NormalisationAlgorithm: genericBlobDigestV1,
-		Value:                  godigest.FromString("y").Encoded(),
+func TestHTTPStreamingTransformer_OpenerDigest(t *testing.T) {
+	tests := []struct {
+		name    string
+		derived bool
+		wantErr string
+	}{
+		{name: "same representation verifies the generic source digest", wantErr: "digest mismatch"},
+		{name: "derived representation replaces the generic source digest", derived: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+			out, _, err := runWithOpener(t, withSource("conv", genericDigestOf("y")), returning("x", tt.derived))
+			if tt.wantErr != "" {
+				r.ErrorContains(err, tt.wantErr)
+				return
+			}
+			r.NoError(err)
+			r.Equal(genericDigestOf("x"), out.(*v1alpha1.HTTPStreaming).Output.Resource.Digest)
+		})
+	}
+}
+
+func TestHTTPStreamingTransformer_SourceFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "buffered.tgz")
+	require.NoError(t, os.WriteFile(path, []byte("buffered"), 0o600))
+	withFile := func(opener string) func(*v1alpha1.HTTPStreamingSpec) {
+		return func(s *v1alpha1.HTTPStreamingSpec) {
+			s.Opener = opener
+			s.SourceFile = &filev1alpha1.File{Type: runtime.NewVersionedType(filev1alpha1.FileType, filev1alpha1.Version), URI: "file://" + path}
+		}
+	}
+
+	t.Run("uploaded instead of downloading", func(t *testing.T) {
+		r := require.New(t)
+		_, bodies, err := runWithOpener(t, withFile(""), nil)
+		r.NoError(err)
+		r.Equal([][]byte{[]byte("buffered")}, bodies)
 	})
-	r.ErrorContains(err, "digest mismatch")
+
+	t.Run("handed to the opener without source credentials", func(t *testing.T) {
+		r := require.New(t)
+		var got SourceRequest
+		_, bodies, err := runWithOpener(t, withFile("conv"), func(_ context.Context, src SourceRequest) (OpenedSource, error) {
+			got = src
+			return OpenedSource{Blob: src.Buffered}, nil
+		})
+		r.NoError(err)
+		r.Equal([][]byte{[]byte("buffered")}, bodies)
+		r.Nil(got.Credentials)
+		r.NotNil(got.Target, "the opener sees the resource as it will be published")
+	})
 }
 
 func TestHTTPStreamingTransformer_AfterUpload(t *testing.T) {

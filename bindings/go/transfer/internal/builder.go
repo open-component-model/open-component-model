@@ -1,6 +1,8 @@
 package internal
 
 import (
+	"context"
+
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	githubtransformer "ocm.software/open-component-model/bindings/go/github/transformation"
@@ -143,7 +145,15 @@ func NewDefaultBuilder(
 		CredentialProvider: credentialProvider,
 		HTTPConfig:         httpConfig,
 		Openers: map[string]wgettransformer.SourceOpener{
-			helmtransformer.ChartArchiveOpener: helmChartArchive.Open,
+			helmtransformer.ChartArchiveOpener: func(ctx context.Context, src wgettransformer.SourceRequest) (wgettransformer.OpenedSource, error) {
+				chart, err := helmChartArchive.Open(ctx, helmtransformer.ChartRequest{
+					Resource:    src.Resource,
+					Target:      src.Target,
+					Credentials: src.Credentials,
+					Buffered:    src.Buffered,
+				})
+				return wgettransformer.OpenedSource{Blob: chart.Archive, Derived: chart.Derived}, err
+			},
 		},
 	}
 
