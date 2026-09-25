@@ -4,7 +4,7 @@
   "$id": "ocm.software/open-component-model/bindings/go/transfer/internal/schemas/JFrogHelmUploadComponentVersion.schema.json",
   "title": "JFrogHelmUploadComponentVersion",
   "type": "object",
-  "description": "JFrogHelmUploadComponentVersion identifies the component version holding a local resource.",
+  "description": "JFrogHelmUploadComponentVersion identifies the component version holding the resource.",
   "properties": {
     "component": {
       "type": "string",
@@ -12,7 +12,7 @@
     },
     "repository": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Raw",
-      "description": "Repository is the specification of the repository holding the component version."
+      "description": "Repository is the specification of the repository holding the component version. It is\nset for local blob resources only, which are read from it."
     },
     "version": {
       "type": "string",
@@ -20,7 +20,6 @@
     }
   },
   "required": [
-    "repository",
     "component",
     "version"
   ],

@@ -270,9 +270,10 @@ The `jfrog.helm.uploader.transfer.config.ocm.software/v1alpha1` uploader
 deploys Helm charts into a JFrog Artifactory Helm repository and rewrites the
 resource to a `Helm/v1` access. It extracts the chart archive from `Helm/v1`,
 `OCIImage/v1`, `LocalBlob` (for example charts added with the `helm` input) or
-other remote sources, streams it as a `PUT` to Artifactory under the name and
-version from the chart's `Chart.yaml`, and publishes a `Helm/v1` access so
-downstream consumers can pull the chart with `helm pull`.
+other remote sources and streams it as a `PUT` to Artifactory under the path of
+its component version. It then publishes a `Helm/v1` access with the chart name
+and version Artifactory recorded, so downstream consumers can pull the chart with
+`helm pull`.
 
 ### Uploader configuration
 

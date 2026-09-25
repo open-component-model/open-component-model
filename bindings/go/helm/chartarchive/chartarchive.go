@@ -1,6 +1,6 @@
-// Package chartarchive opens the packaged Helm chart (.tgz) of an OCM resource as a stream,
-// together with the chart name and version from the chart's own metadata. It is used to deploy
-// charts to classic (index.yaml based) Helm repositories without buffering them on disk.
+// Package chartarchive opens the packaged Helm chart (.tgz) of an OCM resource as a stream. It
+// is used to deploy charts to classic (index.yaml based) Helm repositories without buffering
+// them on disk. The chart is located, not parsed: the target repository reads its metadata.
 package chartarchive
 
 import (
@@ -61,10 +61,9 @@ type Request struct {
 
 // Chart is an opened chart archive.
 type Chart struct {
-	Name    string
-	Version string
 	// Archive yields the chart .tgz exactly once; it implements blob.SizeAware
-	// (blob.SizeUnknown when the size is unknown).
+	// (blob.SizeUnknown when the size is unknown), and blob.DigestAware when the digest of the
+	// archive is known up front (OCI chart layers).
 	Archive blob.ReadOnlyBlob
 	// FromOCI reports that Archive was extracted from an OCI artifact, so the source
 	// resource digest does not describe Archive. This includes oci:// Helm charts, whose

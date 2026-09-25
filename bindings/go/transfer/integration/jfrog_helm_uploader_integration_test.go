@@ -2,12 +2,15 @@ package integration_test
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 
@@ -51,40 +54,8 @@ func Test_Integration_TransferHelmResource_JFrogHelmUploaderDeploysChart(t *test
 	srcSrv := httptest.NewServer(http.FileServer(http.Dir("../../helm/testdata/provenance")))
 	t.Cleanup(srcSrv.Close)
 
-	// Target "Artifactory" HTTP server: stores PUT body + headers per path, returns 201.
-	var mu sync.Mutex
-	stored := map[string][]byte{}
-	putHeaders := map[string]http.Header{}
-	var reindexed []string
-	targetSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		switch req.Method {
-		case http.MethodPut:
-			if req.Header.Get("X-Checksum-Deploy") == "true" {
-				// Artifactory has no content with this checksum yet.
-				w.WriteHeader(http.StatusNotFound)
-				return
-			}
-			body, err := io.ReadAll(req.Body)
-			if err != nil {
-				w.WriteHeader(http.StatusInternalServerError)
-				return
-			}
-			mu.Lock()
-			stored[req.URL.Path] = body
-			putHeaders[req.URL.Path] = req.Header.Clone()
-			mu.Unlock()
-			w.WriteHeader(http.StatusCreated)
-		case http.MethodPost:
-			mu.Lock()
-			_, uploaded := stored["/artifactory/helm-local/mychart-0.1.0.tgz"]
-			reindexed = append(reindexed, fmt.Sprintf("%s uploaded=%t", req.URL.Path, uploaded))
-			mu.Unlock()
-			w.WriteHeader(http.StatusOK)
-		default:
-			w.WriteHeader(http.StatusMethodNotAllowed)
-		}
-	}))
-	t.Cleanup(targetSrv.Close)
+	// Target "Artifactory": records chart properties for the chart .tgz like Artifactory does.
+	targetSrv := newFakeArtifactory(t, chartTgzBytes)
 
 	// Target OCI registry for the component descriptor.
 	registryAddr, user, password := startRegistry(t)
@@ -166,20 +137,15 @@ func Test_Integration_TransferHelmResource_JFrogHelmUploaderDeploysChart(t *test
 	r.NoError(err)
 	r.NoError(graph.Process(ctx))
 
-	// The target server must have received the chart at the expected Artifactory path.
-	expectedPath := "/artifactory/helm-local/mychart-0.1.0.tgz"
-	mu.Lock()
-	got, ok := stored[expectedPath]
-	gotHeaders := putHeaders[expectedPath]
-	mu.Unlock()
-	r.True(ok, "target server should have received a PUT at %s; stored paths: %v", expectedPath, storedKeys(stored))
+	// The target server must have received the chart under the component version path.
+	expectedPath := "/artifactory/helm-local/ocm.software/jfrog-helm-uploader-test/1.0.0/chart-resource-9.9.9.tgz"
+	got, gotHeaders, ok := targetSrv.stored(expectedPath)
+	r.True(ok, "target server should have received a PUT at %s; stored paths: %v", expectedPath, targetSrv.storedPaths())
 	r.Equal(chartTgzBytes, got, "uploaded bytes must equal the chart .tgz")
 	r.Equal("application/gzip", gotHeaders.Get("Content-Type"),
 		"Content-Type must be application/gzip")
-	mu.Lock()
-	r.Equal([]string{"/artifactory/api/helm/helm-local/reindex uploaded=true"}, reindexed,
-		"the helm index must be recalculated once, after the chart was deployed")
-	mu.Unlock()
+	r.Equal([]string{"/artifactory/api/helm/helm-local/" + strings.TrimPrefix(expectedPath, "/artifactory/helm-local/") + "/reindex uploaded=true"}, targetSrv.reindexed(),
+		"the index of the uploaded chart must be recalculated once, after the chart was deployed")
 
 	// Verify the transferred descriptor in the target OCI registry.
 	client := createAuthClient(registryAddr, user, password)
@@ -271,40 +237,8 @@ func Test_Integration_TransferLocalBlobHelmResource_JFrogHelmUploaderDeploysChar
 			t.Parallel()
 			r := require.New(t)
 
-			// Target "Artifactory" HTTP server.
-			var mu sync.Mutex
-			stored := map[string][]byte{}
-			putHeaders := map[string]http.Header{}
-			var reindexed []string
-			targetSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-				switch req.Method {
-				case http.MethodPut:
-					if req.Header.Get("X-Checksum-Deploy") == "true" {
-						// Artifactory has no content with this checksum yet.
-						w.WriteHeader(http.StatusNotFound)
-						return
-					}
-					body, err := io.ReadAll(req.Body)
-					if err != nil {
-						w.WriteHeader(http.StatusInternalServerError)
-						return
-					}
-					mu.Lock()
-					stored[req.URL.Path] = body
-					putHeaders[req.URL.Path] = req.Header.Clone()
-					mu.Unlock()
-					w.WriteHeader(http.StatusCreated)
-				case http.MethodPost:
-					mu.Lock()
-					_, uploaded := stored["/artifactory/helm-local/mychart-0.1.0.tgz"]
-					reindexed = append(reindexed, fmt.Sprintf("%s uploaded=%t", req.URL.Path, uploaded))
-					mu.Unlock()
-					w.WriteHeader(http.StatusOK)
-				default:
-					w.WriteHeader(http.StatusMethodNotAllowed)
-				}
-			}))
-			t.Cleanup(targetSrv.Close)
+			// Target "Artifactory": records chart properties for the chart .tgz like Artifactory does.
+			targetSrv := newFakeArtifactory(t, chartTgzBytes)
 
 			// Target OCI registry for the component descriptor.
 			registryAddr, user, password := startRegistry(t)
@@ -379,20 +313,15 @@ func Test_Integration_TransferLocalBlobHelmResource_JFrogHelmUploaderDeploysChar
 			r.NoError(err)
 			r.NoError(graph.Process(ctx))
 
-			// The target server must have received the chart at the expected Artifactory path.
-			expectedPath := "/artifactory/helm-local/mychart-0.1.0.tgz"
-			mu.Lock()
-			got, ok := stored[expectedPath]
-			gotHeaders := putHeaders[expectedPath]
-			mu.Unlock()
-			r.True(ok, "target server should have received a PUT at %s; stored paths: %v", expectedPath, storedKeys(stored))
+			// The target server must have received the chart under the component version path.
+			expectedPath := "/artifactory/helm-local/ocm.software/jfrog-helm-local-blob-test/1.0.0/mychart-0.1.0.tgz"
+			got, gotHeaders, ok := targetSrv.stored(expectedPath)
+			r.True(ok, "target server should have received a PUT at %s; stored paths: %v", expectedPath, targetSrv.storedPaths())
 			r.Equal(tt.wantBody, got, "uploaded bytes must equal the chart .tgz")
 			r.Equal("application/gzip", gotHeaders.Get("Content-Type"),
 				"Content-Type must be application/gzip")
-			mu.Lock()
-			r.Equal([]string{"/artifactory/api/helm/helm-local/reindex uploaded=true"}, reindexed,
-				"the helm index must be recalculated once, after the chart was deployed")
-			mu.Unlock()
+			r.Equal([]string{"/artifactory/api/helm/helm-local/" + strings.TrimPrefix(expectedPath, "/artifactory/helm-local/") + "/reindex uploaded=true"}, targetSrv.reindexed(),
+				"the index of the uploaded chart must be recalculated once, after the chart was deployed")
 
 			// Verify the transferred descriptor in the target OCI registry.
 			client := createAuthClient(registryAddr, user, password)
@@ -439,4 +368,80 @@ func storedKeys(m map[string][]byte) []string {
 		keys = append(keys, k)
 	}
 	return keys
+}
+
+// fakeArtifactory emulates the Artifactory Helm repository endpoints the JFrog helm uploader
+// uses. Like Artifactory, it records chart name and version properties for deployed content it
+// recognizes as a chart; here, only the given chart archive is recognized.
+type fakeArtifactory struct {
+	*httptest.Server
+	chartSHA string
+
+	mu        sync.Mutex
+	files     map[string][]byte
+	headers   map[string]http.Header
+	reindexes []string
+}
+
+func newFakeArtifactory(t *testing.T, chart []byte) *fakeArtifactory {
+	t.Helper()
+	sum := sha256.Sum256(chart)
+	f := &fakeArtifactory{chartSHA: hex.EncodeToString(sum[:]), files: map[string][]byte{}, headers: map[string]http.Header{}}
+	f.Server = httptest.NewServer(http.HandlerFunc(f.handle))
+	t.Cleanup(f.Close)
+	return f
+}
+
+func (f *fakeArtifactory) handle(w http.ResponseWriter, req *http.Request) {
+	const storagePrefix = "/artifactory/api/storage/helm-local/"
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	switch {
+	case req.Method == http.MethodPut && req.Header.Get("X-Checksum-Deploy") == "true":
+		// Artifactory has no content with this checksum yet.
+		w.WriteHeader(http.StatusNotFound)
+	case req.Method == http.MethodPut:
+		body, err := io.ReadAll(req.Body)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		f.files[req.URL.Path] = body
+		f.headers[req.URL.Path] = req.Header.Clone()
+		w.WriteHeader(http.StatusCreated)
+	case req.Method == http.MethodGet && strings.HasPrefix(req.URL.Path, storagePrefix):
+		body, ok := f.files["/artifactory/helm-local/"+strings.TrimPrefix(req.URL.Path, storagePrefix)]
+		sum := sha256.Sum256(body)
+		if !ok || hex.EncodeToString(sum[:]) != f.chartSHA {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		_, _ = io.WriteString(w, `{"properties":{"chart.name":["mychart"],"chart.version":["0.1.0"]}}`)
+	case req.Method == http.MethodPost && strings.HasSuffix(req.URL.Path, "/reindex"):
+		chartPath := "/artifactory/helm-local/" + strings.TrimSuffix(strings.TrimPrefix(req.URL.Path, "/artifactory/api/helm/helm-local/"), "/reindex")
+		_, uploaded := f.files[chartPath]
+		f.reindexes = append(f.reindexes, fmt.Sprintf("%s uploaded=%t", req.URL.Path, uploaded))
+		w.WriteHeader(http.StatusOK)
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
+func (f *fakeArtifactory) stored(path string) ([]byte, http.Header, bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	body, ok := f.files[path]
+	return body, f.headers[path], ok
+}
+
+func (f *fakeArtifactory) storedPaths() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return storedKeys(f.files)
+}
+
+func (f *fakeArtifactory) reindexed() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string(nil), f.reindexes...)
 }

@@ -131,19 +131,31 @@ cannot re-send the write request that would overwrite the uploaded object.
 ### `jfrog.helm.uploader.transfer.config.ocm.software/v1alpha1`
 
 Deploys a matched Helm chart resource into a JFrog Artifactory Helm repository.
-The chart archive is extracted from the source, streamed directly into an HTTP
-`PUT` to `<url>/artifactory/<repository>/<name>-<version>.tgz` with
-`Content-Type: application/gzip`, and the transferred resource is rewritten to a
+The chart archive is located in the source and streamed directly into an HTTP
+`PUT` to
+`<url>/artifactory/<repository>/<component>/<component-version>/<resource>-<resource-version>.tgz`
+with `Content-Type: application/gzip`. A resource with an extra identity gets a
+hash of it appended to the file name. The transferred resource is rewritten to a
 `Helm/v1` access with `helmRepository: <url>/artifactory/api/helm/<repository>`
-and `helmChart: <name>:<version>`. After each upload the uploader
-sends `POST <url>/artifactory/api/helm/<repository>/reindex` so the chart shows
-up in `index.yaml` and can be pulled right away; Artifactory does not reliably
-add deployed charts to the index on its own. Set `reindex: false` to skip it.
+and `helmChart: <name>:<version>`.
 
-`<name>` and `<version>` always come from the chart's own metadata, because Helm
-repositories index charts by their `Chart.yaml`: the `Chart.yaml` at the start of
-a packaged chart, read as the stream is opened, or the Helm config blob of an OCI
-chart. The resource name and version do not matter.
+The uploader does not parse the chart. Artifactory reads it when the chart is
+deployed and records its name and version, which the uploader reads back
+(`GET <url>/artifactory/api/storage/<repository>/<path>?properties=chart.name,chart.version`)
+and publishes. If Artifactory records no chart metadata, the content is not a Helm
+chart: the uploader deletes the file again and fails the transfer.
+
+Artifactory indexes deployed charts on its own. After each upload the uploader
+additionally requests an index recalculation for the uploaded chart only
+(`POST <url>/artifactory/api/helm/<repository>/<path>/reindex`, available from
+Artifactory 7.105.2). If that request fails, for example because the credentials
+may not trigger it, the uploader logs a warning and the transfer continues. Set
+`reindex: false` to skip it.
+
+The file name is derived from the resource, not from the chart, so the target
+repository must not enable **Enforce Chart Name and Version** of Artifactory's
+[Helm Enforce Layout](https://docs.jfrog.com/artifactory/docs/kubernetes-helm-chart-repositories);
+such repositories reject the upload with `403`.
 
 The chart streams from its source straight into the upload; it is not written to
 disk. Only `Helm/v1` charts whose credentials use client certificates, a custom CA
@@ -160,18 +172,19 @@ or a provenance keyring go through the Helm downloader, which buffers the chart.
 | `match`      | `UploaderMatch`   | Selects resources this uploader applies to. `match.accessType` is required.                                                                                |
 | `url`        | string (required) | Base URL of the Artifactory instance (scheme, host, optional port and context path) **without** the `/artifactory` segment, e.g. `https://myorg.jfrog.io`. |
 | `repository` | string (required) | Artifactory Helm repository key, e.g. `helm-local`. Must be a single key — no `/`, `?` or `#`.                                                             |
-| `reindex`    | bool              | Recalculate the repository's Helm index after each upload. Defaults to `true`. The credentials must be allowed to trigger a reindex.                       |
+| `reindex`    | bool              | Request an index recalculation for each uploaded chart. Defaults to `true`. A failing request only logs a warning.                                         |
 
 #### Supported Sources
 
-The access type only decides how the bytes are fetched. The chart is then detected
-from the content itself, whatever media type the resource declares:
+The access type only decides how the bytes are fetched. The chart archive is then
+located in the content itself, whatever media type the resource declares:
 
 - a packaged chart (gzip-compressed `.tgz`), uploaded as is;
 - a tar containing a packaged chart (as the Helm downloader produces it, with a provenance file), whose `.tgz` is uploaded;
 - a Helm chart OCI artifact (config media type `application/vnd.cncf.helm.config.v1+json`), whose chart layer (`application/vnd.cncf.helm.chart.content.v1.tar+gzip` or legacy `application/tar+gzip`) is uploaded.
 
-Other content fails the transfer.
+Other content fails the transfer before anything is uploaded; a gzip archive that
+is not a chart is rejected after the upload, as described above.
 
 | Source access type | How the bytes are fetched                                                                                                                                  |
 |--------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------|
@@ -188,8 +201,9 @@ A `genericBlobDigest/v1` SHA-256 source digest is sent with the upload as
 match and never stores them; the uploader verifies it as well. Before uploading, the
 uploader asks Artifactory to deploy the chart by that checksum
 (`X-Checksum-Deploy: true`); if Artifactory already stores the same content, the
-chart is not uploaded again. A chart extracted from an OCI artifact gets the SHA-256 of the uploaded `.tgz`
-instead of its source digest (for example an `ociArtifactDigest/v1`), so
+chart is not uploaded again. The same applies to charts extracted from an OCI
+artifact, whose chart layer digest is known up front. A chart extracted from an OCI
+artifact gets the SHA-256 of the uploaded `.tgz` instead of its source digest (for example an `ociArtifactDigest/v1`), so
 signatures over the old digest do not carry over.
 
 #### Credentials
