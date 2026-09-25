@@ -42,6 +42,7 @@ const (
 	FlagTransferSpec  = "transfer-spec"
 	FlagConstraint    = "constraint"
 	FlagLatest        = "latest"
+	FlagConcurrency   = "concurrency-limit"
 
 	// Each node emits 2 events (Running + Completed/Failed) and since the tracker consumes
 	// them faster than the transfer produces, 16 is enough to avoid blocking with room to grow.
@@ -158,6 +159,7 @@ transfer component-version --transfer-spec spec.yaml
 	cmd.Flags().String(FlagTransferSpec, "", "path to a transfer specification file (use \"-\" for stdin). The input must hold exactly one transfer spec document; with \"-\", OCM configuration documents in stdin are applied as configuration")
 	cmd.Flags().String(FlagConstraint, "", "version constraint evaluated by each version's configured scheme; versions with no applicable scheme are retained (e.g. \">= 1.0.0, < 2.0.0\"); only used when no version is specified in the reference")
 	cmd.Flags().Bool(FlagLatest, false, "if set, only the latest version of the component is transferred; only used when no version is specified in the reference")
+	cmd.Flags().Int(FlagConcurrency, 0, "maximum number of transformation nodes processed in parallel; independent nodes run concurrently while dependency ordering is preserved. 0 uses a sensible default based on the number of CPUs")
 
 	return cmd
 }
@@ -194,6 +196,11 @@ func TransferComponentVersion(cmd *cobra.Command, args []string) error {
 	output, err := enum.Get(cmd.Flags(), FlagOutput)
 	if err != nil {
 		return fmt.Errorf("getting output flag failed: %w", err)
+	}
+
+	concurrency, err := cmd.Flags().GetInt(FlagConcurrency)
+	if err != nil {
+		return fmt.Errorf("getting concurrency-limit flag failed: %w", err)
 	}
 
 	octx := ocmctx.FromContext(ctx)
@@ -252,6 +259,7 @@ func TransferComponentVersion(cmd *cobra.Command, args []string) error {
 		transfer.WithHTTPConfig(httpConfig),
 	)
 	graph, err := b.
+		WithConcurrency(concurrency).
 		WithEvents(make(chan graphRuntime.ProgressEvent, eventBufferSize)).
 		BuildAndCheck(tgd)
 	if err != nil {
