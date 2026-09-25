@@ -89,18 +89,10 @@ func (t *HTTPStreamingTransformer) Transform(ctx context.Context, step runtime.T
 	// published verbatim on success (only its digest is filled), so the published access
 	// never carries the upload-only request fields.
 	tw := *transformation.Spec.Request
-	parsedTarget, err := url.Parse(tw.URL)
+	safeURL, err := redactedHTTPURL(tw.URL)
 	if err != nil {
-		return nil, fmt.Errorf("invalid target url %q: %w", tw.URL, err)
+		return nil, err
 	}
-	if parsedTarget.Scheme != "http" && parsedTarget.Scheme != "https" {
-		return nil, fmt.Errorf("target url must use the http or https scheme, got %q", parsedTarget.Scheme)
-	}
-	// safeURL strips userinfo and query so credentials/presigned params never leak into logs or errors.
-	safeURL := *parsedTarget
-	safeURL.User = nil
-	safeURL.RawQuery = ""
-	safeURL.Fragment = ""
 
 	srcCreds, err := t.resolveSourceCredentials(ctx, srcResource)
 	if err != nil {
@@ -152,40 +144,16 @@ func (t *HTTPStreamingTransformer) Transform(ctx context.Context, step runtime.T
 		}
 	}
 
-	client := ocmhttp.New(ocmhttp.WithConfig(t.HTTPConfig))
-	if tw.NoRedirect {
-		client = download.CloneClientWithNoRedirect(client)
-	}
-	if err := download.ApplyCredentials(ctx, req, &client, dstCreds); err != nil {
-		return nil, fmt.Errorf("failed applying target credentials: %w", err)
-	}
-
 	slog.InfoContext(ctx, "streaming resource to HTTP target",
 		"resource", srcResource.ToIdentity(),
-		"targetURL", safeURL.String(),
+		"targetURL", safeURL,
 		"method", method)
 
-	resp, err := client.Do(req)
+	resp, err := t.send(ctx, req, tw.NoRedirect, dstCreds, safeURL, "upload")
 	if err != nil {
-		// client.Do wraps errors in a *url.Error whose URL field carries the full
-		// request URL including any query token. Redact it so the token never reaches
-		// logs or the returned error.
-		var urlErr *url.Error
-		if errors.As(err, &urlErr) {
-			urlErr.URL = safeURL.String()
-		}
-		return nil, fmt.Errorf("failed uploading to %s: %w", safeURL.String(), err)
+		return nil, err
 	}
 	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		// Include a bounded excerpt of the response body to aid debugging without
-		// risking unbounded memory use on a hostile or verbose server.
-		excerpt, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorBodyBytes))
-		if len(excerpt) > 0 {
-			return nil, fmt.Errorf("upload to %s returned status %d: %s", safeURL.String(), resp.StatusCode, strings.TrimSpace(string(excerpt)))
-		}
-		return nil, fmt.Errorf("upload to %s returned status %d", safeURL.String(), resp.StatusCode)
-	}
 
 	// Finalize the digest only after the whole body has been streamed to the target.
 	computed := godigest.NewDigestFromBytes(godigest.SHA256, hasher.Sum(nil)).Encoded()
@@ -198,6 +166,11 @@ func (t *HTTPStreamingTransformer) Transform(ctx context.Context, step runtime.T
 	if err != nil {
 		return nil, err
 	}
+	if after := transformation.Spec.AfterUpload; after != nil {
+		if err := t.sendAfterUpload(ctx, *after); err != nil {
+			return nil, err
+		}
+	}
 
 	// TargetResource already carries the published read access built at graph-build time,
 	// so publish it verbatim (only the digest was filled above); no upload-only request
@@ -208,6 +181,89 @@ func (t *HTTPStreamingTransformer) Transform(ctx context.Context, step runtime.T
 	}
 	transformation.Output.Resource = v2Out
 	return &transformation, nil
+}
+
+// sendAfterUpload issues the body-less follow-up request (POST unless a verb is set) with
+// credentials resolved for its own URL.
+func (t *HTTPStreamingTransformer) sendAfterUpload(ctx context.Context, tw wgetaccessv1.Wget) error {
+	safeURL, err := redactedHTTPURL(tw.URL)
+	if err != nil {
+		return fmt.Errorf("after-upload request: %w", err)
+	}
+	creds, err := t.resolveTargetCredentials(ctx, tw.URL)
+	if err != nil {
+		return err
+	}
+	method := tw.Verb
+	if method == "" {
+		method = http.MethodPost
+	}
+	req, err := http.NewRequestWithContext(ctx, method, tw.URL, nil)
+	if err != nil {
+		return fmt.Errorf("failed creating after-upload request: %w", err)
+	}
+	for k, vals := range tw.Header {
+		for _, v := range vals {
+			req.Header.Add(k, v)
+		}
+	}
+	slog.InfoContext(ctx, "sending after-upload request", "url", safeURL, "method", method)
+	resp, err := t.send(ctx, req, tw.NoRedirect, creds, safeURL, "after-upload request")
+	if err != nil {
+		return err
+	}
+	return resp.Body.Close()
+}
+
+// send applies credentials to req, executes it and rejects non-2xx responses. safeURL is
+// the redacted URL used in errors; op names the request in errors. On success the caller
+// owns the response body.
+func (t *HTTPStreamingTransformer) send(ctx context.Context, req *http.Request, noRedirect bool, creds runtime.Typed, safeURL, op string) (*http.Response, error) {
+	client := ocmhttp.New(ocmhttp.WithConfig(t.HTTPConfig))
+	if noRedirect {
+		client = download.CloneClientWithNoRedirect(client)
+	}
+	if err := download.ApplyCredentials(ctx, req, &client, creds); err != nil {
+		return nil, fmt.Errorf("failed applying target credentials: %w", err)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		// client.Do wraps errors in a *url.Error whose URL field carries the full
+		// request URL including any query token. Redact it so the token never reaches
+		// logs or the returned error.
+		var urlErr *url.Error
+		if errors.As(err, &urlErr) {
+			urlErr.URL = safeURL
+		}
+		return nil, fmt.Errorf("failed sending %s to %s: %w", op, safeURL, err)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		defer func() { _ = resp.Body.Close() }()
+		// Include a bounded excerpt of the response body to aid debugging without
+		// risking unbounded memory use on a hostile or verbose server.
+		excerpt, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorBodyBytes))
+		if len(excerpt) > 0 {
+			return nil, fmt.Errorf("%s to %s returned status %d: %s", op, safeURL, resp.StatusCode, strings.TrimSpace(string(excerpt)))
+		}
+		return nil, fmt.Errorf("%s to %s returned status %d", op, safeURL, resp.StatusCode)
+	}
+	return resp, nil
+}
+
+// redactedHTTPURL validates that raw is an http(s) URL and returns it without userinfo,
+// query and fragment, so credentials and presigned params never leak into logs or errors.
+func redactedHTTPURL(raw string) (string, error) {
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return "", fmt.Errorf("invalid target url %q: %w", raw, err)
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return "", fmt.Errorf("target url must use the http or https scheme, got %q", parsed.Scheme)
+	}
+	parsed.User = nil
+	parsed.RawQuery = ""
+	parsed.Fragment = ""
+	return parsed.String(), nil
 }
 
 // sourceOpener returns the opener registered under name, or the plain resource download

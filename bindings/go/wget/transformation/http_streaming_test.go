@@ -344,3 +344,52 @@ func TestHTTPStreamingTransformer_OpenerVerifiesGenericDigest(t *testing.T) {
 	})
 	r.ErrorContains(err, "digest mismatch")
 }
+
+func TestHTTPStreamingTransformer_AfterUpload(t *testing.T) {
+	tests := []struct {
+		name          string
+		reindexStatus int
+		wantErr       string
+	}{
+		{name: "sent after the upload", reindexStatus: http.StatusOK},
+		{name: "non-2xx fails the transformation", reindexStatus: http.StatusForbidden, wantErr: "after-upload request to"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+			var calls []string
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+				body, _ := io.ReadAll(req.Body)
+				calls = append(calls, req.Method+" "+req.URL.Path+" "+string(body))
+				if req.URL.Path == "/reindex" {
+					w.WriteHeader(tt.reindexStatus)
+					return
+				}
+				w.WriteHeader(http.StatusCreated)
+			}))
+			t.Cleanup(srv.Close)
+
+			step := &v1alpha1.HTTPStreaming{
+				Type: v1alpha1.HTTPStreamingV1alpha1,
+				ID:   "upload",
+				Spec: &v1alpha1.HTTPStreamingSpec{
+					Resource:       wgetResourceV2("blob", "https://source.example/blob.tar", "", "", nil, nil),
+					Request:        wgetRequest(srv.URL+"/upload", http.MethodPut, "", nil),
+					TargetResource: wgetResourceV2("blob", srv.URL+"/upload", "", "", nil, nil),
+					AfterUpload:    &wgetaccessv1.Wget{Type: wgetaccess.V1VersionedType, URL: srv.URL + "/reindex"},
+				},
+			}
+			tr := &HTTPStreamingTransformer{
+				Scheme:             newTransformerScheme(),
+				ResourceRepository: &stubResourceRepository{payload: []byte("payload")},
+			}
+			_, err := tr.Transform(t.Context(), step)
+			r.Equal([]string{"PUT /upload payload", "POST /reindex "}, calls, "the after-upload request is a body-less POST issued after the upload")
+			if tt.wantErr != "" {
+				r.ErrorContains(err, tt.wantErr)
+				return
+			}
+			r.NoError(err)
+		})
+	}
+}

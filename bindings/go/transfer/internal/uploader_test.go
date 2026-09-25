@@ -187,6 +187,9 @@ func TestBuildGraphDefinition_JFrogHelmUploader_EmitsHelmTarget(t *testing.T) {
 		r.NotContains(helmChart, "resource.name", "the bare resource alias must not survive the rewrite")
 
 		r.Equal("test@1.0.0 [Stream chart to artifactory.example]", tr.Label)
+		afterUpload := tr.Spec.Data["afterUpload"].(map[string]any)
+		r.Equal("POST", afterUpload["verb"])
+		r.Equal("https://artifactory.example/artifactory/api/helm/helm-local/reindex", afterUpload["url"])
 	})
 
 	t.Run("literal chart name and expression chart version", func(t *testing.T) {
@@ -199,6 +202,13 @@ func TestBuildGraphDefinition_JFrogHelmUploader_EmitsHelmTarget(t *testing.T) {
 		requestURL := tr.Spec.Data["request"].(map[string]any)["url"].(string)
 		r.Contains(requestURL, `"renamed"`)
 		r.Contains(requestURL, `.component.resources[0].version + "-ocm")`)
+	})
+
+	t.Run("reindex disabled", func(t *testing.T) {
+		r := require.New(t)
+		u := uploader()
+		u.Reindex = new(bool)
+		r.NotContains(build(t, u).Spec.Data, "afterUpload")
 	})
 }
 

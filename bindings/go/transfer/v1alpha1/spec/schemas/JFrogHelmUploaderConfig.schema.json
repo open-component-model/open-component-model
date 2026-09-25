@@ -4,7 +4,7 @@
   "$id": "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec/schemas/JFrogHelmUploaderConfig.schema.json",
   "title": "JFrogHelmUploaderConfig",
   "type": "object",
-  "description": "JFrogHelmUploaderConfig deploys matching Helm chart resources into a JFrog Artifactory Helm\nrepository via Artifactory's deploy REST API (PUT \u003curl\u003e/artifactory/\u003crepository\u003e/\u003cname\u003e-\u003cversion\u003e.tgz)\nand re-describes them with a Helm/v1 access (helmRepository \u003curl\u003e/artifactory/api/helm/\u003crepository\u003e,\nhelmChart \u003cname\u003e:\u003cversion\u003e). The chart archive is extracted from Helm/v1 and OCIImage sources;\nother sources must already serve the chart .tgz. Upload credentials are resolved for the Wget\nconsumer identity of the upload URL.\n\ntype: generic.config.ocm.software/v1\nconfigurations:\n- type: jfrog.helm.uploader.transfer.config.ocm.software/v1alpha1\nmatch:\naccessType: Helm/v1\nurl: https://common.repositories.cloud.sap\nrepository: open-component-model-helm-test",
+  "description": "JFrogHelmUploaderConfig deploys matching Helm chart resources into a JFrog Artifactory Helm\nrepository via Artifactory's deploy REST API (PUT \u003curl\u003e/artifactory/\u003crepository\u003e/\u003cname\u003e-\u003cversion\u003e.tgz)\nand re-describes them with a Helm/v1 access (helmRepository \u003curl\u003e/artifactory/api/helm/\u003crepository\u003e,\nhelmChart \u003cname\u003e:\u003cversion\u003e). The chart archive is extracted from Helm/v1 and OCIImage sources;\nother sources must already serve the chart .tgz. Upload credentials are resolved for the Wget\nconsumer identity of the upload URL. By default the Helm index is recalculated after each upload.\n\ntype: generic.config.ocm.software/v1\nconfigurations:\n- type: jfrog.helm.uploader.transfer.config.ocm.software/v1alpha1\nmatch:\naccessType: Helm/v1\nurl: https://common.repositories.cloud.sap\nrepository: open-component-model-helm-test",
   "properties": {
     "chartName": {
       "type": "string",
@@ -17,6 +17,10 @@
     "match": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.transfer.v1alpha1.spec.UploaderMatch",
       "description": "MatchSpec selects the resources this uploader applies to (exposed as `match`)."
+    },
+    "reindex": {
+      "type": "boolean",
+      "description": "Reindex triggers Artifactory's Helm index recalculation\n(POST \u003curl\u003e/artifactory/api/helm/\u003crepository\u003e/reindex) after each upload, so the chart\nbecomes pullable right away. Defaults to true; set to false on large repositories that\nare reindexed by other means."
     },
     "repository": {
       "type": "string",

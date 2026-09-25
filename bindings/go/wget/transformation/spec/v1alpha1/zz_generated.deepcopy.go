@@ -163,6 +163,11 @@ func (in *HTTPStreamingSpec) DeepCopyInto(out *HTTPStreamingSpec) {
 		*out = new(v2.Resource)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.AfterUpload != nil {
+		in, out := &in.AfterUpload, &out.AfterUpload
+		*out = new(v1.Wget)
+		(*in).DeepCopyInto(*out)
+	}
 	return
 }
 

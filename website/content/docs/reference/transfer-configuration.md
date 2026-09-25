@@ -135,8 +135,10 @@ The chart archive is extracted from the source, streamed directly into an HTTP
 `PUT` to `<url>/artifactory/<repository>/<chartName>-<chartVersion>.tgz` with
 `Content-Type: application/gzip`, and the transferred resource is rewritten to a
 `Helm/v1` access with `helmRepository: <url>/artifactory/api/helm/<repository>`
-and `helmChart: <chartName>:<chartVersion>`. The uploader does not trigger an
-Artifactory index recalculation; the Helm index is maintained by Artifactory.
+and `helmChart: <chartName>:<chartVersion>`. After each upload the uploader
+sends `POST <url>/artifactory/api/helm/<repository>/reindex` so the chart shows
+up in `index.yaml` and can be pulled right away; Artifactory does not reliably
+add deployed charts to the index on its own. Set `reindex: false` to skip it.
 
 #### Schema
 
@@ -151,6 +153,7 @@ Artifactory index recalculation; the Helm index is maintained by Artifactory.
 | `repository`   | string (required) | Artifactory Helm repository key, e.g. `helm-local`. Must be a single key — no `/`, `?` or `#`.                                                              |
 | `chartName`    | string            | Chart name as a literal or a standalone `${…}` CEL expression over `resource`. Defaults to `${resource.name}`.                                              |
 | `chartVersion` | string            | Chart version as a literal or a standalone `${…}` CEL expression over `resource`. Defaults to `${resource.version}`.                                        |
+| `reindex`      | bool              | Recalculate the repository's Helm index after each upload. Defaults to `true`. The credentials must be allowed to trigger a reindex.                        |
 
 #### Supported Sources
 

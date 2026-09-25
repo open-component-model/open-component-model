@@ -6,6 +6,10 @@
   "type": "object",
   "description": "HTTPStreamingSpec is the input specification for the HTTPStreaming transformation.\n\nResource is the source resource descriptor with its original access. Request is the\nHTTP upload request (URL, method, headers, body, redirect handling) and is the single\nsource of truth for the outbound call. TargetResource is the resource as it will be\npublished after a successful upload: its access is the read (download) access at the\nresolved target URL and MUST NOT carry the upload-only request fields (write verb,\nbody, request headers), so a later download does not re-issue the write request.\nBuilding both at graph-build time keeps the transfer plan literal and deterministic.",
   "properties": {
+    "afterUpload": {
+      "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.wget.spec.access.v1.Wget",
+      "description": "AfterUpload is an optional body-less request (POST unless a verb is set) sent after a\nsuccessful upload, e.g. to refresh a repository index. Credentials are resolved for its\nURL like for Request; a non-2xx response fails the transformation."
+    },
     "opener": {
       "type": "string",
       "description": "Opener names a source opener registered on the transformer that produces the bytes\nto upload instead of the plain source download (e.g. the Helm chart archive of a Helm\nor OCI resource). Empty uploads the downloaded source bytes unchanged."

@@ -197,7 +197,7 @@ func processHTTPUploader(resource descriptorv2.Resource, u *transferv1alpha1.HTT
 	}
 
 	label := uploaderLabel(&val.Descriptor.Component, resource.Name, targetHostFromExpression(u.TargetURL))
-	if err := appendHTTPStreaming(tgd, uploadID, label, resource, requestRaw, publishedRaw, ""); err != nil {
+	if err := appendHTTPStreaming(tgd, uploadID, label, resource, requestRaw, publishedRaw, nil); err != nil {
 		return err
 	}
 	resourceTransformIDs[i] = uploadID
@@ -208,6 +208,8 @@ func processHTTPUploader(resource descriptorv2.Resource, u *transferv1alpha1.HTT
 // [transferv1alpha1.JFrogHelmUploaderConfig]: the chart archive (opened by the helm
 // [helmtransformer.ChartArchiveOpener]) is PUT to <url>/artifactory/<repository>/<name>-<version>.tgz
 // and the resource is published with a Helm/v1 access on <url>/artifactory/api/helm/<repository>.
+// Unless disabled, a POST to <url>/artifactory/api/helm/<repository>/reindex follows the upload,
+// because Artifactory does not reliably add deployed charts to index.yaml on its own.
 // Chart name and version are CEL operands (see celOperand) templated like the HTTP uploader.
 func processJFrogHelmUploader(resource descriptorv2.Resource, u *transferv1alpha1.JFrogHelmUploaderConfig, baseID, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, resourceTransformIDs map[int]string, i int) error {
 	if resource.Access == nil {
@@ -253,9 +255,22 @@ func processJFrogHelmUploader(resource descriptorv2.Resource, u *transferv1alpha
 		return err
 	}
 
+	extra := map[string]any{"opener": helmtransformer.ChartArchiveOpener}
+	if u.ReindexEnabled() {
+		reindexURL, err := url.JoinPath(helmRepo, "reindex")
+		if err != nil {
+			return fmt.Errorf("invalid artifactory url: %w", err)
+		}
+		reindex := &runtime.Raw{}
+		if err := wgetaccess.Scheme.Convert(&wgetaccessv1.Wget{Type: wgetaccess.V1VersionedType, URL: reindexURL, Verb: http.MethodPost}, reindex); err != nil {
+			return fmt.Errorf("cannot convert uploader reindex request: %w", err)
+		}
+		extra["afterUpload"] = reindex
+	}
+
 	uploadID := fmt.Sprintf("%sUpload%s", id, identityToTransformationID(resource.ToIdentity()))
 	label := uploaderLabel(&val.Descriptor.Component, resource.Name, base.Host)
-	if err := appendHTTPStreaming(tgd, uploadID, label, resource, requestRaw, publishedRaw, helmtransformer.ChartArchiveOpener); err != nil {
+	if err := appendHTTPStreaming(tgd, uploadID, label, resource, requestRaw, publishedRaw, extra); err != nil {
 		return err
 	}
 	resourceTransformIDs[i] = uploadID
@@ -291,8 +306,9 @@ func templatedAccess(scheme *runtime.Scheme, access runtime.Typed, nodePath, rol
 }
 
 // appendHTTPStreaming appends the HTTPStreaming transformation uploading resource with request and
-// publishing it with published; opener is set on the spec only when non-empty.
-func appendHTTPStreaming(tgd *transformv1alpha1.TransformationGraphDefinition, uploadID, label string, resource descriptorv2.Resource, request, published *runtime.Raw, opener string) error {
+// publishing it with published. extra carries optional spec fields (opener, afterUpload) and is
+// merged into the spec, so uploaders without extras emit exactly resource/request/targetResource.
+func appendHTTPStreaming(tgd *transformv1alpha1.TransformationGraphDefinition, uploadID, label string, resource descriptorv2.Resource, request, published *runtime.Raw, extra map[string]any) error {
 	targetResource := *resource.DeepCopy()
 	targetResource.Access = published
 
@@ -301,8 +317,8 @@ func appendHTTPStreaming(tgd *transformv1alpha1.TransformationGraphDefinition, u
 		"request":        request,
 		"targetResource": targetResource,
 	}
-	if opener != "" {
-		data["opener"] = opener
+	for k, v := range extra {
+		data[k] = v
 	}
 	spec, err := runtime.UnstructuredFromMixedData(data)
 	if err != nil {

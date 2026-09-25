@@ -51,6 +51,10 @@ type HTTPStreamingSpec struct {
 	// to upload instead of the plain source download (e.g. the Helm chart archive of a Helm
 	// or OCI resource). Empty uploads the downloaded source bytes unchanged.
 	Opener string `json:"opener,omitempty"`
+	// AfterUpload is an optional body-less request (POST unless a verb is set) sent after a
+	// successful upload, e.g. to refresh a repository index. Credentials are resolved for its
+	// URL like for Request; a non-2xx response fails the transformation.
+	AfterUpload *wgetaccessv1.Wget `json:"afterUpload,omitempty"`
 }
 
 // HTTPStreamingOutput is the output specification for the HTTPStreaming transformation.

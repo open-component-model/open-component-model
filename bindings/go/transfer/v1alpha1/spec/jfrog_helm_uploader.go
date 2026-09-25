@@ -24,7 +24,7 @@ func init() {
 // and re-describes them with a Helm/v1 access (helmRepository <url>/artifactory/api/helm/<repository>,
 // helmChart <name>:<version>). The chart archive is extracted from Helm/v1 and OCIImage sources;
 // other sources must already serve the chart .tgz. Upload credentials are resolved for the Wget
-// consumer identity of the upload URL.
+// consumer identity of the upload URL. By default the Helm index is recalculated after each upload.
 //
 //	type: generic.config.ocm.software/v1
 //	configurations:
@@ -55,6 +55,16 @@ type JFrogHelmUploaderConfig struct {
 	// ChartVersion is the chart version, as a literal or a standalone ${...} CEL expression over
 	// the `resource` alias. Defaults to ${resource.version}.
 	ChartVersion string `json:"chartVersion,omitempty"`
+	// Reindex triggers Artifactory's Helm index recalculation
+	// (POST <url>/artifactory/api/helm/<repository>/reindex) after each upload, so the chart
+	// becomes pullable right away. Defaults to true; set to false on large repositories that
+	// are reindexed by other means.
+	Reindex *bool `json:"reindex,omitempty"`
+}
+
+// ReindexEnabled reports whether a Helm index recalculation follows each upload (default true).
+func (u *JFrogHelmUploaderConfig) ReindexEnabled() bool {
+	return u.Reindex == nil || *u.Reindex
 }
 
 // Match reports whether this uploader applies to resource, delegating to the
