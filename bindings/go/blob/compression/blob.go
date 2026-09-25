@@ -127,7 +127,7 @@ func compress(reader io.ReadCloser, writer *io.PipeWriter, method Method) {
 // it returns the original blob unchanged.
 //
 // The function supports GZIP compression and handles both standalone GZIP files
-// (MediaTypeGzip), application/x-tgz archives, and content with MediaTypeGzipSuffix.
+// (MediaTypeGzip) and compressed content with MediaTypeGzipSuffix suffix.
 //
 // Returns:
 //   - A ReadOnlyBlob that provides access to the decompressed data
@@ -137,13 +137,12 @@ func Decompress(b blob.ReadOnlyBlob) (blob.ReadOnlyBlob, error) {
 	var mediaType string
 	if mediaTypeAware, ok := b.(blob.MediaTypeAware); ok {
 		if mediaType, ok = mediaTypeAware.MediaType(); ok {
-			if isGzip := mediaType == MediaTypeGzip || mediaType == "application/x-tgz" || strings.HasSuffix(mediaType, MediaTypeGzipSuffix); isGzip {
+			// TODO(matthiasbruns): application/x-tgz (Git and GitHub archives) stays compressed, as
+			// extracting it fails on symlinks: https://github.com/open-component-model/ocm-project/issues/1343
+			if isGzip := mediaType == MediaTypeGzip || strings.HasSuffix(mediaType, MediaTypeGzipSuffix); isGzip {
 				method = MethodGzip
-				switch mediaType {
-				case MediaTypeGzip:
+				if mediaType == MediaTypeGzip {
 					mediaType = "application/octet-stream"
-				case "application/x-tgz":
-					mediaType = "application/x-tar"
 				}
 				mediaType = strings.TrimSuffix(mediaType, MediaTypeGzipSuffix)
 			}
@@ -169,8 +168,8 @@ type DecompressedBlob struct {
 }
 
 // MediaType returns the media type of the decompressed blob.
-// It removes the "+gzip" suffix, maps "application/x-tgz" to "application/x-tar",
-// or maps standalone "application/gzip" to "application/octet-stream".
+// For GZIP compressed blobs, it removes the "+gzip" suffix or changes "application/gzip"
+// to "application/octet-stream" to indicate the decompressed content type.
 func (d *DecompressedBlob) MediaType() (string, bool) {
 	return d.mediaType, true
 }

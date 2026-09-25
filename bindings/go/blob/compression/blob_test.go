@@ -33,7 +33,6 @@ func TestDecompressMediaTypes(t *testing.T) {
 	}{
 		{"application/gzip", "application/octet-stream"},
 		{"application/x-tar+gzip", "application/x-tar"},
-		{"application/x-tgz", "application/x-tar"},
 	} {
 		t.Run(tt.mediaType, func(t *testing.T) {
 			r := require.New(t)
