@@ -8,10 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"slices"
-	"strings"
 
-	"github.com/go-git/go-git/v6/plumbing/filemode"
 	"github.com/go-git/go-git/v6/plumbing/object"
 	"github.com/opencontainers/go-digest"
 
@@ -37,7 +34,12 @@ func archive(ctx context.Context, commit *object.Commit, file *os.File, opts Opt
 	limited := &limitedWriter{Writer: file, limit: opts.MaxArchiveSize}
 	gz := gzip.NewWriter(io.MultiWriter(limited, digester.Hash()))
 	tw := tar.NewWriter(gz)
-	err = walkTree(ctx, tree, "", treeFS{tree: tree}, tw)
+	err = filesystem.WriteTar(ctx, treeFS{tree: tree}, tw, filesystem.DirOptions{
+		Reproducible:         true,
+		PreserveSymlinks:     true,
+		OmitRoot:             true,
+		OmitDirTrailingSlash: true,
+	})
 	err = errors.Join(err, tw.Close(), gz.Close(), file.Close())
 	if err != nil {
 		return nil, "", fmt.Errorf("cannot create git archive: %w", err)
@@ -51,51 +53,6 @@ func archive(ctx context.Context, commit *object.Commit, file *os.File, opts Opt
 	b.SetMediaType(mediaTypeTGZ)
 
 	return b, digester.Digest(), nil
-}
-
-// walkTree follows the lexical, depth-first filesystem order used by OCM v1,
-// not Git's tree order (which compares directories as if suffixed with a slash).
-func walkTree(ctx context.Context, tree *object.Tree, prefix string, source treeFS, tw *tar.Writer) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	opt := filesystem.DirOptions{
-		Reproducible:         true,
-		PreserveSymlinks:     true,
-		OmitRoot:             true,
-		OmitDirTrailingSlash: true,
-	}
-	entries := slices.Clone(tree.Entries)
-	slices.SortFunc(entries, func(a, b object.TreeEntry) int { return strings.Compare(a.Name, b.Name) })
-	for _, entry := range entries {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-
-		name := prefix + entry.Name
-		var size int64
-		if entry.Mode != filemode.Dir && entry.Mode != filemode.Submodule {
-			file, err := tree.TreeEntryFile(&entry)
-			if err != nil {
-				return err
-			}
-			size = file.Size
-		}
-		if err := filesystem.WriteTarEntry(ctx, name, treeInfo(name, entry.Mode, size), source, opt, tw); err != nil {
-			return err
-		}
-		// Gitlinks are placeholders only: their target objects need not be present.
-		if entry.Mode == filemode.Dir {
-			subtree, err := tree.Tree(entry.Name)
-			if err != nil {
-				return err
-			}
-			if err := walkTree(ctx, subtree, name+"/", source, tw); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
 }
 
 type limitedWriter struct {

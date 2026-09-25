@@ -1,45 +1,128 @@
 package download
 
 import (
+	"errors"
 	"io"
 	"io/fs"
 	"path"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/go-git/go-git/v6/plumbing/filemode"
 	"github.com/go-git/go-git/v6/plumbing/object"
 )
 
-// treeFS provides object contents to the shared archiver without a host checkout.
-// Traversal and directory metadata come from Git tree objects, not Open.
+// treeFS serves a Git tree as a read-only file system without a host checkout.
+// Directory listings are sorted by name; gitlinks are empty directories, as their
+// target objects need not be present.
 type treeFS struct{ tree *object.Tree }
 
+var (
+	_ fs.ReadDirFS  = treeFS{}
+	_ fs.ReadLinkFS = treeFS{}
+)
+
 func (f treeFS) Open(name string) (fs.File, error) {
-	if !fs.ValidPath(name) {
-		return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrInvalid}
+	info, err := f.Lstat(name)
+	if err != nil {
+		return nil, err
+	}
+	if info.IsDir() {
+		return &treeFile{info: info}, nil
 	}
 	file, err := f.tree.File(name)
 	if err != nil {
-		return nil, err
+		return nil, &fs.PathError{Op: "open", Path: name, Err: err}
 	}
 	reader, err := file.Reader()
 	if err != nil {
 		return nil, err
 	}
-	return &treeFile{ReadCloser: reader, info: treeInfo(name, file.Mode, file.Size)}, nil
+	return &treeFile{ReadCloser: reader, info: info}, nil
 }
 
-func (f treeFS) Readlink(name string) (string, error) {
+func (f treeFS) ReadDir(name string) ([]fs.DirEntry, error) {
+	tree := f.tree
+	if name != "." {
+		info, err := f.Lstat(name)
+		if err != nil {
+			return nil, err
+		}
+		if !info.IsDir() {
+			return nil, &fs.PathError{Op: "readdir", Path: name, Err: fs.ErrInvalid}
+		}
+		if tree, err = f.tree.Tree(name); errors.Is(err, object.ErrDirectoryNotFound) {
+			return nil, nil // gitlink
+		} else if err != nil {
+			return nil, &fs.PathError{Op: "readdir", Path: name, Err: err}
+		}
+	}
+
+	entries := make([]fs.DirEntry, 0, len(tree.Entries))
+	for i := range tree.Entries {
+		info, err := entryInfo(tree, path.Join(name, tree.Entries[i].Name), &tree.Entries[i])
+		if err != nil {
+			return nil, err
+		}
+		entries = append(entries, fs.FileInfoToDirEntry(info))
+	}
+	slices.SortFunc(entries, func(a, b fs.DirEntry) int { return strings.Compare(a.Name(), b.Name()) })
+	return entries, nil
+}
+
+func (f treeFS) ReadLink(name string) (string, error) {
 	file, err := f.tree.File(name)
 	if err != nil {
-		return "", err
+		return "", &fs.PathError{Op: "readlink", Path: name, Err: err}
 	}
 	return file.Contents()
 }
 
+func (f treeFS) Lstat(name string) (fs.FileInfo, error) {
+	if !fs.ValidPath(name) {
+		return nil, &fs.PathError{Op: "lstat", Path: name, Err: fs.ErrInvalid}
+	}
+	if name == "." {
+		return treeInfo(name, filemode.Dir, 0), nil
+	}
+	entry, err := f.tree.FindEntry(name)
+	if err != nil {
+		return nil, &fs.PathError{Op: "lstat", Path: name, Err: err}
+	}
+	return entryInfo(f.tree, name, entry)
+}
+
+// entryInfo describes a tree entry; gitlinks and directories have no size.
+func entryInfo(tree *object.Tree, name string, entry *object.TreeEntry) (fs.FileInfo, error) {
+	var size int64
+	if entry.Mode != filemode.Dir && entry.Mode != filemode.Submodule {
+		file, err := tree.TreeEntryFile(entry)
+		if err != nil {
+			return nil, err
+		}
+		size = file.Size
+	}
+	return treeInfo(name, entry.Mode, size), nil
+}
+
 type treeFile struct {
-	io.ReadCloser
-	info fs.FileInfo
+	io.ReadCloser // nil for directories
+	info          fs.FileInfo
+}
+
+func (f *treeFile) Read(p []byte) (int, error) {
+	if f.ReadCloser == nil {
+		return 0, &fs.PathError{Op: "read", Path: f.info.Name(), Err: fs.ErrInvalid}
+	}
+	return f.ReadCloser.Read(p)
+}
+
+func (f *treeFile) Close() error {
+	if f.ReadCloser == nil {
+		return nil
+	}
+	return f.ReadCloser.Close()
 }
 
 func (f *treeFile) Stat() (fs.FileInfo, error) { return f.info, nil }

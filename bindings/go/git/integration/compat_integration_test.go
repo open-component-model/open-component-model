@@ -47,7 +47,6 @@ meta:
 // writes them into a component descriptor and downloads them over HTTPS.
 // The v1 digest is not part of the descriptor: v1 archives carry the owner of
 // the machine that built them, so their digest cannot be reproduced.
-//
 func Test_Integration_GitOCMv1Compatibility(t *testing.T) {
 	path, first := newRepository(t)
 	url, ca := newHTTPSServer(t, path, "")

@@ -189,6 +189,14 @@ func createSingleFileBlob(path string, opt DirOptions) (blob.ReadOnlyBlob, error
 	return fileBlob, nil
 }
 
+// WriteTar writes every entry of fsys to tw in lexical, depth-first order, using
+// the entry options in opt; MediaType, Compress, PreserveDir and WorkingDir do not
+// apply. The caller closes tw. With PreserveSymlinks, fsys must implement
+// [fs.ReadLinkFS].
+func WriteTar(ctx context.Context, fsys fs.FS, tw *tar.Writer, opt DirOptions) error {
+	return createTarFromDir(ctx, fsys, ".", opt, tw)
+}
+
 // createTarFromDir creates a TAR archive from the filesystem.
 // Uses the virtual filesystem to read the directory contents.
 // Uses fs.WalkDir to traverse the directory structure in a deterministic order.
@@ -212,15 +220,13 @@ func createTarFromDir(ctx context.Context, fileSystem fs.FS, subPath string, opt
 			return fmt.Errorf("error getting file info for %q: %w", path, err)
 		}
 
-		return WriteTarEntry(ctx, path, fi, fileSystem, opt, tw)
+		return writeTarEntry(ctx, path, fi, fileSystem, opt, tw)
 	})
 }
 
-// WriteTarEntry writes one slash-separated path using the entry options in opt;
-// compression, media type and host-path options do not apply. The caller supplies
-// metadata without following symlinks, skips descendants on fs.SkipDir, and closes tw.
-// Symlinks require source to implement ReadlinkFS.
-func WriteTarEntry(ctx context.Context, name string, info fs.FileInfo, source fs.FS, opt DirOptions, tw *tar.Writer) error {
+// writeTarEntry writes one slash-separated path. The caller supplies metadata
+// without following symlinks and skips descendants on fs.SkipDir.
+func writeTarEntry(ctx context.Context, name string, info fs.FileInfo, source fs.FS, opt DirOptions, tw *tar.Writer) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -284,12 +290,12 @@ func processSymlink(path string, fi fs.FileInfo, fileSystem fs.FS, opt DirOption
 		return nil
 	}
 
-	reader, ok := fileSystem.(ReadlinkFS)
+	reader, ok := fileSystem.(fs.ReadLinkFS)
 	if !ok {
 		return fmt.Errorf("filesystem %T cannot read symlink %q", fileSystem, path)
 	}
 
-	target, err := reader.Readlink(path)
+	target, err := reader.ReadLink(path)
 	if err != nil {
 		return fmt.Errorf("error reading symlink %q: %w", path, err)
 	}

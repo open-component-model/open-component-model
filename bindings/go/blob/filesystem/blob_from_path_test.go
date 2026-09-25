@@ -706,7 +706,7 @@ func TestGetBlobFromPath_DefaultTarBytes(t *testing.T) {
 	}
 }
 
-func TestWriteTarEntryLayoutOptions(t *testing.T) {
+func TestWriteTarLayoutOptions(t *testing.T) {
 	for _, tt := range []struct {
 		name  string
 		opt   filesystem.DirOptions
@@ -722,11 +722,7 @@ func TestWriteTarEntryLayoutOptions(t *testing.T) {
 			source := fstest.MapFS{"sub": &fstest.MapFile{Mode: fs.ModeDir | 0o755}}
 			var output bytes.Buffer
 			writer := tar.NewWriter(&output)
-			for _, name := range []string{".", "sub"} {
-				info, err := fs.Stat(source, name)
-				r.NoError(err)
-				r.NoError(filesystem.WriteTarEntry(t.Context(), name, info, source, tt.opt, writer))
-			}
+			r.NoError(filesystem.WriteTar(t.Context(), source, writer, tt.opt))
 			r.NoError(writer.Close())
 			reader := tar.NewReader(&output)
 			var names []string
