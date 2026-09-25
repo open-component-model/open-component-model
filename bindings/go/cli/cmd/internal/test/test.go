@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -115,9 +116,12 @@ func OCM(tb testing.TB, opts ...Option) (*cobra.Command, error) {
 		opt.args = []string{"help"}
 	}
 
-	if opt.in != nil {
-		instance.SetIn(opt.in)
+	// Default to empty stdin: piped stdin is read for configuration, and the test
+	// process's own stdin may be open without ever being closed.
+	if opt.in == nil {
+		opt.in = strings.NewReader("")
 	}
+	instance.SetIn(opt.in)
 	// if and output is set, mirror it towards stdout (for logging) and the given output for testing
 	if opt.out != nil {
 		instance.SetOut(io.MultiWriter(os.Stdout, opt.out))
