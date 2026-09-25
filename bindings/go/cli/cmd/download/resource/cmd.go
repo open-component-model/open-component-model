@@ -73,22 +73,22 @@ and signatures over them still apply. The directory is --output, or the values o
 identity joined by "-" when that is not given, so --identity name=image,architecture=amd64 writes
 into "image-amd64". The paths written are printed to standard output, one per line.`,
 		Example: ` # Download a resource with identity 'name=example' and write to default output
-  ocm download resource ghcr.io/org/component:v1 --identity name=example
+  ocm download resource ghcr.io/org//component:v1 --identity name=example
 
   # Download a resource with identity 'name=example' and 'architecture=amd64' and write to default output
-  ocm download resource ghcr.io/org/component:v1 --identity name=example,architecture=amd64
+  ocm download resource ghcr.io/org//component:v1 --identity name=example,architecture=amd64
 
   # Download a resource and specify an output file
-  ocm download resource ghcr.io/org/component:v1 --identity name=example --output ./my-resource.tar.gz
+  ocm download resource ghcr.io/org//component:v1 --identity name=example --output ./my-resource.tar.gz
 
   # Download a resource and apply a transformer
-  ocm download resource ghcr.io/org/component:v1 --identity name=example --transformer my-transformer
+  ocm download resource ghcr.io/org//component:v1 --identity name=example --transformer my-transformer
 
   # Download every SBOM describing a resource into a directory
-  ocm download resource ghcr.io/org/component:v1 --identity name=example --sbom --output ./sboms
+  ocm download resource ghcr.io/org//component:v1 --identity name=example --sbom --output ./sboms
 
   # Scan every SBOM found for a resource
-  ocm download resource ghcr.io/org/component:v1 --identity name=example --sbom | xargs -n1 grype sbom:`,
+  ocm download resource ghcr.io/org//component:v1 --identity name=example --sbom | xargs -n1 grype sbom:`,
 		RunE:              DownloadResource,
 		DisableAutoGenTag: true,
 	}
