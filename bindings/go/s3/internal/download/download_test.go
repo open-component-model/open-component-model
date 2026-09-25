@@ -607,8 +607,15 @@ func TestHTTPConfig(t *testing.T) {
 func withoutAWSEnvironment(t *testing.T) {
 	t.Helper()
 
+	for _, entry := range os.Environ() {
+		key, _, _ := strings.Cut(entry, "=")
+		if strings.HasPrefix(key, "AWS_") {
+			t.Setenv(key, "")
+		}
+	}
 	missing := filepath.Join(t.TempDir(), "absent")
 	for k, v := range map[string]string{
+		"AWS_EC2_METADATA_DISABLED":   "true",
 		"AWS_REGION":                  "",
 		"AWS_DEFAULT_REGION":          "",
 		"AWS_PROFILE":                 "",
@@ -620,6 +627,7 @@ func withoutAWSEnvironment(t *testing.T) {
 }
 
 func TestNewClient(t *testing.T) {
+	withoutAWSEnvironment(t)
 	ctx := t.Context()
 
 	t.Run("the request addresses the client", func(t *testing.T) {
@@ -708,12 +716,28 @@ func TestNewClient(t *testing.T) {
 		}
 	})
 
+	t.Run("explicit anonymous credentials disable the signing provider", func(t *testing.T) {
+		r := require.New(t)
+		t.Setenv("AWS_ACCESS_KEY_ID", "env-key")
+		t.Setenv("AWS_SECRET_ACCESS_KEY", "env-secret")
+		client, err := newClient(t.Context(), Request{}, &option{Credentials: &credv1.S3Credentials{
+			Type: credv1.S3CredentialsVersionedType, Anonymous: true,
+		}})
+		r.NoError(err)
+		// The S3 SDK normalizes the anonymous sentinel to a nil signing provider.
+		r.Nil(client.Options().Credentials)
+	})
+
 	t.Run("empty credentials fall through to the default chain", func(t *testing.T) {
+		t.Setenv("AWS_ACCESS_KEY_ID", "env-key")
+		t.Setenv("AWS_SECRET_ACCESS_KEY", "env-secret")
 		client, err := newClient(ctx, Request{Region: "us-east-1"}, &option{Credentials: &credv1.S3Credentials{
 			Type: credv1.S3CredentialsVersionedType,
 		}})
 		require.NoError(t, err)
-		require.NotNil(t, client.Options().Credentials)
+		creds, err := client.Options().Credentials.Retrieve(ctx)
+		require.NoError(t, err)
+		require.Equal(t, "env-key", creds.AccessKeyID)
 	})
 
 	// What matters is that a half-filled credential reaches the SDK at all: dropping it

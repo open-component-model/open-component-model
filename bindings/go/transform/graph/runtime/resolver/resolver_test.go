@@ -122,7 +122,7 @@ func TestGetValueFromPath(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := NewResolver(tt.resource, nil, nil)
-			got, err := r.getValueFromPath(fieldpath.MustParse(tt.path))
+			got, err := r.GetValueFromPath(fieldpath.MustParse(tt.path))
 
 			if (err != nil) != tt.wantErr {
 				t.Errorf("getValueFromPath() error = %v, wantErr %v", err, tt.wantErr)
@@ -601,7 +601,7 @@ func TestResolveField(t *testing.T) {
 			}
 
 			if tt.want.Resolved {
-				value, err := r.getValueFromPath(tt.field.Path)
+				value, err := r.GetValueFromPath(tt.field.Path)
 				assert.NoError(t, err)
 				assert.Equal(t, tt.want.Replaced, value)
 			}
@@ -1128,7 +1128,7 @@ func TestResolveFieldWithEmptyBraces(t *testing.T) {
 			}
 
 			if tt.want.Resolved {
-				value, err := r.getValueFromPath(tt.field.Path)
+				value, err := r.GetValueFromPath(tt.field.Path)
 				assert.NoError(t, err)
 				assert.Equal(t, tt.want.Replaced, value)
 			}
