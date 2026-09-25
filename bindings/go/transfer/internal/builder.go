@@ -138,20 +138,21 @@ func NewDefaultBuilder(
 	helmChartArchive := &helmtransformer.ChartArchiveSource{
 		ResourceRepository: resourceRepo,
 		OCIRepository:      streamingOCIRepo,
+		HTTPConfig:         httpConfig,
 	}
 	httpStreaming := &wgettransformer.HTTPStreamingTransformer{
 		Scheme:             transformerScheme,
 		ResourceRepository: resourceRepo,
 		CredentialProvider: credentialProvider,
 		HTTPConfig:         httpConfig,
+		RepoProvider:       repoProvider,
 		Openers: map[string]wgettransformer.SourceOpener{
 			helmtransformer.ChartArchiveOpener: func(ctx context.Context, src wgettransformer.SourceRequest) (wgettransformer.OpenedSource, error) {
-				chart, err := helmChartArchive.Open(ctx, helmtransformer.ChartRequest{
-					Resource:    src.Resource,
-					Target:      src.Target,
-					Credentials: src.Credentials,
-					Buffered:    src.Buffered,
-				})
+				req := helmtransformer.ChartRequest{Resource: src.Resource, Target: src.Target, Credentials: src.Credentials}
+				if l := src.Local; l != nil {
+					req.Local = &helmtransformer.LocalSource{Repository: l.Repository, Component: l.Component, Version: l.Version}
+				}
+				chart, err := helmChartArchive.Open(ctx, req)
 				return wgettransformer.OpenedSource{Blob: chart.Archive, Derived: chart.Derived}, err
 			},
 		},

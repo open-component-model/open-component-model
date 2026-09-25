@@ -14,7 +14,6 @@ import (
 	godigest "github.com/opencontainers/go-digest"
 
 	"ocm.software/open-component-model/bindings/go/blob"
-	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	ocmhttp "ocm.software/open-component-model/bindings/go/http"
@@ -44,11 +43,18 @@ type SourceRequest struct {
 	// Target is the resource as it will be published (its access resolved), so an opener can
 	// check the content against what will be published.
 	Target *descriptor.Resource
-	// Credentials are the resolved source credentials; nil when Buffered is set.
+	// Credentials are the resolved source credentials; nil for a local resource.
 	Credentials runtime.Typed
-	// Buffered is the source content already buffered by a preceding step
-	// (HTTPStreamingSpec.SourceFile); nil when the source must be downloaded.
-	Buffered blob.ReadOnlyBlob
+	// Local is set when Resource is a local resource of a component version
+	// (HTTPStreamingSpec.ComponentVersion).
+	Local *LocalSource
+}
+
+// LocalSource locates a local resource in its source component version.
+type LocalSource struct {
+	Repository repository.ComponentVersionRepository
+	Component  string
+	Version    string
 }
 
 // OpenedSource is the content to upload.
@@ -76,6 +82,8 @@ type HTTPStreamingTransformer struct {
 	ResourceRepository repository.ResourceRepository
 	CredentialProvider credentials.Resolver
 	HTTPConfig         *httpv1alpha1.Config
+	// RepoProvider resolves the source component version repository of local resources.
+	RepoProvider repository.ComponentVersionRepositoryProvider
 	// Openers maps HTTPStreamingSpec.Opener names to implementations.
 	Openers map[string]SourceOpener
 }
@@ -299,25 +307,25 @@ func (t *HTTPStreamingTransformer) sourceOpener(name string) (SourceOpener, erro
 	return opener, nil
 }
 
-// openPlain uploads the buffered source file, or else the downloaded source bytes, unchanged.
+// openPlain streams the local resource from its component version, or else the downloaded
+// source bytes, unchanged.
 func (t *HTTPStreamingTransformer) openPlain(ctx context.Context, src SourceRequest) (OpenedSource, error) {
-	if src.Buffered != nil {
-		return OpenedSource{Blob: src.Buffered}, nil
+	if l := src.Local; l != nil {
+		b, _, err := l.Repository.GetLocalResource(ctx, l.Component, l.Version, src.Resource.ToIdentity())
+		return OpenedSource{Blob: b}, err
 	}
 	b, err := t.ResourceRepository.DownloadResource(ctx, src.Resource, src.Credentials)
 	return OpenedSource{Blob: b}, err
 }
 
-// openSource prepares the SourceRequest (buffered file or resolved source credentials) and
-// runs open on it.
+// openSource prepares the SourceRequest (source component version of a local resource, or
+// resolved source credentials) and runs open on it.
 func (t *HTTPStreamingTransformer) openSource(ctx context.Context, open SourceOpener, spec *v1alpha1.HTTPStreamingSpec, srcResource, targetResource *descriptor.Resource) (OpenedSource, error) {
 	req := SourceRequest{Resource: srcResource, Target: targetResource}
 	var err error
-	if spec.SourceFile != nil {
-		// The content was buffered by a preceding step (e.g. a local blob fetched from the
-		// source component version), so there is nothing to download or authenticate.
-		if req.Buffered, err = filesystem.GetBlobFromSpec(ctx, spec.SourceFile); err != nil {
-			return OpenedSource{}, fmt.Errorf("failed opening buffered source file: %w", err)
+	if cv := spec.ComponentVersion; cv != nil {
+		if req.Local, err = t.localSource(ctx, cv); err != nil {
+			return OpenedSource{}, err
 		}
 	} else if req.Credentials, err = t.resolveSourceCredentials(ctx, srcResource); err != nil {
 		return OpenedSource{}, err
@@ -330,6 +338,29 @@ func (t *HTTPStreamingTransformer) openSource(ctx context.Context, open SourceOp
 		return OpenedSource{}, fmt.Errorf("source opener returned no content for resource %v", srcResource.ToIdentity())
 	}
 	return opened, nil
+}
+
+// localSource resolves the repository of the source component version with its credentials.
+func (t *HTTPStreamingTransformer) localSource(ctx context.Context, cv *v1alpha1.SourceComponentVersion) (*LocalSource, error) {
+	if t.RepoProvider == nil {
+		return nil, errors.New("streaming a local resource requires a component version repository provider")
+	}
+	if cv.Repository == nil || cv.Component == "" || cv.Version == "" {
+		return nil, errors.New("componentVersion requires repository, component and version")
+	}
+	var creds runtime.Typed
+	if t.CredentialProvider != nil {
+		if consumerID, err := t.RepoProvider.GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, cv.Repository); err == nil {
+			if creds, err = t.CredentialProvider.Resolve(ctx, consumerID); err != nil && !errors.Is(err, credentials.ErrNotFound) {
+				return nil, fmt.Errorf("failed resolving source repository credentials: %w", err)
+			}
+		}
+	}
+	repo, err := t.RepoProvider.GetComponentVersionRepository(ctx, cv.Repository, creds)
+	if err != nil {
+		return nil, fmt.Errorf("failed getting source component version repository: %w", err)
+	}
+	return &LocalSource{Repository: repo, Component: cv.Component, Version: cv.Version}, nil
 }
 
 // targetDigest verifies the source digest against the computed SHA-256 of the uploaded

@@ -142,10 +142,14 @@ add deployed charts to the index on its own. Set `reindex: false` to skip it.
 
 By default the chart is deployed under the name and version it already has in the
 source (see `chartName` and `chartVersion`). Helm repositories index charts by
-their `Chart.yaml`, so before uploading, the uploader checks that the published
-name and version match it whenever the chart metadata is available without an
-extra download (`Helm/v1`, `OCIImage/v1` and `LocalBlob` sources), and fails the
-transfer otherwise.
+their `Chart.yaml`, so the uploader checks that the published name and version
+match it and fails the transfer before uploading otherwise. The metadata comes
+from the Helm config blob of OCI charts and from the `Chart.yaml` at the start of
+a packaged chart, which is read as the stream is opened.
+
+The chart streams from its source straight into the upload; it is not written to
+disk. Only `Helm/v1` charts whose credentials use client certificates, a custom CA
+or a provenance keyring go through the Helm downloader, which buffers the chart.
 
 #### Schema
 
@@ -164,12 +168,12 @@ transfer otherwise.
 
 #### Supported Sources
 
-| Source access type | Behaviour                                                                                                                                                                                                                                                                                                                                                                |
-|--------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `Helm/v1`          | The chart archive (`.tgz`) is extracted from the Helm download; the provenance file is dropped.                                                                                                                                                                                                                                                                          |
-| `OCIImage/v1`      | The chart layer (`application/vnd.cncf.helm.chart.content.v1.tar+gzip` or legacy `application/tar+gzip`) is streamed directly from the OCI registry.                                                                                                                                                                                                                     |
-| `LocalBlob`        | Fetched from the source component version, then chosen by `mediaType`: a packaged chart (`application/vnd.cncf.helm.chart.content.v1.tar+gzip`, `application/tar+gzip`, `application/gzip`) is uploaded as is; an OCM OCI layout (`application/vnd.ocm.software.oci.layout.v1+tar+gzip`, as created by the `helm` input) yields its chart layer. Other media types fail. |
-| Other remote types | Bytes are uploaded unchanged — they must already be the `.tgz`.                                                                                                                                                                                                                                                                                                          |
+| Source access type | Behaviour                                                                                                                                                                                                                                                                             |
+|--------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `Helm/v1`          | Streamed from the chart URL listed in the repository `index.yaml` (`oci://` charts: the chart layer, streamed from the registry). The provenance file is not transferred.                                                                                                             |
+| `OCIImage/v1`      | The chart layer (`application/vnd.cncf.helm.chart.content.v1.tar+gzip` or legacy `application/tar+gzip`) is streamed directly from the OCI registry.                                                                                                                                  |
+| `LocalBlob`        | Streamed from the source component version: a packaged chart (`mediaType` `application/vnd.cncf.helm.chart.content.v1.tar+gzip`, `application/tar+gzip`, `application/gzip`) as is; a local OCI artifact (as stored by the `helm` input) via its chart layer. Other media types fail. |
+| Other remote types | Bytes are uploaded unchanged — they must already be the `.tgz`.                                                                                                                                                                                                                       |
 
 #### Digest
 

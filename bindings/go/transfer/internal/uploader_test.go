@@ -212,8 +212,12 @@ func TestBuildGraphDefinition_JFrogHelmUploader_EmitsHelmTarget(t *testing.T) {
 			wantChart: []string{`"my-chart"`, `"1.2.3-rc.1"`},
 		},
 		{
-			name:      "Helm chart without version falls back to the resource version",
-			resource:  func() descriptor.Resource { res := helmResource("r", "9.9.9", "https://charts.example", "chart"); res.Access.(*helmv1.Helm).Version = ""; return res }(),
+			name: "Helm chart without version falls back to the resource version",
+			resource: func() descriptor.Resource {
+				res := helmResource("r", "9.9.9", "https://charts.example", "chart")
+				res.Access.(*helmv1.Helm).Version = ""
+				return res
+			}(),
 			match:     helmMatch,
 			wantChart: []string{`"chart"`, ".component.resources[0].version"},
 		},
@@ -241,19 +245,17 @@ func TestBuildGraphDefinition_JFrogHelmUploader_EmitsHelmTarget(t *testing.T) {
 		})
 	}
 
-	t.Run("LocalBlob is buffered from the source component version and cleaned up", func(t *testing.T) {
+	t.Run("LocalBlob streams from the source component version", func(t *testing.T) {
 		r := require.New(t)
 		tgd, tr := build(t, localBlobResource("chart", "1.0.0"), uploader(runtime.NewVersionedType(descriptorv2.LocalBlobAccessType, descriptorv2.LocalBlobAccessTypeVersion)))
-
-		var getID string
 		for _, other := range tgd.Transformations {
-			if other.Type == ociv1alpha1.OCIGetLocalResourceV1alpha1 {
-				getID = other.ID
-			}
+			r.NotEqual(ociv1alpha1.OCIGetLocalResourceV1alpha1, other.Type, "the local blob must not be buffered by a GetLocalResource transformation")
 		}
-		r.NotEmpty(getID, "the local blob must be fetched by a GetLocalResource transformation")
-		r.Equal("${"+getID+".output.file}", tr.Spec.Data["sourceFile"])
-		r.Contains(cleanupFileExpressions(t, findCleanupTransformation(tgd)), "${"+tr.ID+".spec.sourceFile}")
+		cv := tr.Spec.Data["componentVersion"].(map[string]any)
+		r.Equal("ocm.software/test", cv["component"])
+		r.Equal("1.0.0", cv["version"])
+		r.Equal("OCIRepository/v1", cv["repository"].(map[string]any)["type"])
+		r.Nil(findCleanupTransformation(tgd), "nothing is buffered, so there is nothing to clean up")
 	})
 
 	t.Run("literal chart name and expression chart version", func(t *testing.T) {
