@@ -39,6 +39,23 @@ func (n *noopVisualizer) Begin(string)           {}
 func (n *noopVisualizer) HandleEvent(Event[any]) {}
 func (n *noopVisualizer) End(error)              {}
 
+// signalVisualizer signals each handled event on a buffered channel, so tests
+// can wait until the tracker goroutine has processed an event before sending
+// the next one. That removes the need to race processEvents with time.Sleep.
+type signalVisualizer struct {
+	recordingVisualizer
+	handled chan struct{}
+}
+
+func newSignalVisualizer() *signalVisualizer {
+	return &signalVisualizer{handled: make(chan struct{}, 8)}
+}
+
+func (v *signalVisualizer) HandleEvent(event Event[any]) {
+	v.recordingVisualizer.HandleEvent(event)
+	v.handled <- struct{}{}
+}
+
 type logBufferAwareVisualizer struct {
 	noopVisualizer
 	buf *SyncBuffer
@@ -170,22 +187,25 @@ func TestOperation_WithEvents_CancelledContext(t *testing.T) {
 	assert.Nil(t, vis.events[0].Err)
 }
 
+// runningOrDone maps test input strings to events: "done:<id>" is a terminal
+// event, any other string is a Running event for that ID.
+func runningOrDone(s string) Event[any] {
+	if id, ok := strings.CutPrefix(s, "done:"); ok {
+		return Event[any]{ID: id, State: Completed}
+	}
+	return Event[any]{ID: s, State: Running}
+}
+
 func TestOperation_EventDuration(t *testing.T) {
-	vis := &recordingVisualizer{}
+	vis := newSignalVisualizer()
 	tracker := &Tracker[any]{out: &bytes.Buffer{}, isTerminal: true, factory: testFactory(vis)}
 
-	// Input strings encode events: "done:<id>" maps to a terminal event.
 	events := make(chan string, 3)
-	mapper := func(s string) Event[any] {
-		if id, ok := strings.CutPrefix(s, "done:"); ok {
-			return Event[any]{ID: id, State: Completed}
-		}
-		return Event[any]{ID: s, State: Running}
-	}
 
 	op := tracker.StartOperation("Transferring",
-		WithEvents(events, mapper, 2))
+		WithEvents(events, runningOrDone, 2))
 	events <- "item1"
+	<-vis.handled // the tracker records the start time before handling the event
 	time.Sleep(50 * time.Millisecond)
 	events <- "done:item1"
 	events <- "done:item2" // no Running event seen for item2
@@ -204,6 +224,29 @@ func TestOperation_EventDuration(t *testing.T) {
 
 	assert.Equal(t, Completed, vis.events[2].State)
 	assert.Zero(t, vis.events[2].Duration, "duration stays zero when no Running event was seen")
+}
+
+func TestOperation_EventDuration_RepeatedRunning(t *testing.T) {
+	vis := newSignalVisualizer()
+	tracker := &Tracker[any]{out: &bytes.Buffer{}, isTerminal: true, factory: testFactory(vis)}
+
+	events := make(chan string, 3)
+
+	op := tracker.StartOperation("Transferring",
+		WithEvents(events, runningOrDone, 1))
+	events <- "item1"
+	<-vis.handled
+	time.Sleep(25 * time.Millisecond)
+	events <- "item1" // repeated Running must keep the first start time
+	<-vis.handled
+	time.Sleep(25 * time.Millisecond)
+	events <- "done:item1"
+	close(events)
+	op.Finish(nil)
+
+	require.Len(t, vis.events, 3)
+	assert.GreaterOrEqual(t, vis.events[2].Duration, 40*time.Millisecond,
+		"repeated Running events must not reset the start time")
 }
 
 func TestOperation_EventDuration_ProducerSet(t *testing.T) {

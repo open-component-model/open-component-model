@@ -217,7 +217,8 @@ func TestRenderFinalHeader(t *testing.T) {
 
 		v.End(nil)
 
-		assert.Contains(t, stripANSI(buf.String()), "Transferring... (took 1m30s)")
+		// Depending on how much time passes before End, rounding yields 1m30s or 1m31s.
+		assert.Regexp(t, `Transferring\.\.\. \(took 1m3[01]s\)`, stripANSI(buf.String()))
 	})
 
 	t.Run("omits elapsed time when Begin never ran", func(t *testing.T) {

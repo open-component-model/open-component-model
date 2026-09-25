@@ -196,7 +196,11 @@ func (op *operation[T]) processEvents(events <-chan Event[T]) {
 			}
 			switch event.State {
 			case Running:
-				starts[event.ID] = time.Now()
+				// Repeated Running updates for one item keep the first start
+				// time, so the duration spans the whole processing.
+				if _, ok := starts[event.ID]; !ok {
+					starts[event.ID] = time.Now()
+				}
 			case Completed, Failed, Cancelled:
 				if start, ok := starts[event.ID]; ok {
 					// Producers may set their own measurement; tracker timing is the fallback.
