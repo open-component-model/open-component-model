@@ -15,15 +15,10 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 )
 
-// mediaTypeTGZ matches the media type of OCM v1 Git access archives.
 const mediaTypeTGZ = "application/x-tgz"
 
-// archive writes the commit tree as tar.gz without a host checkout. Content and
-// layout match OCM v1, including empty submodule directories, but metadata remains
-// normalized. Default gzip output is repeatable within a Go version, not guaranteed
-// across Go releases; normalized metadata also precludes legacy digest equivalence.
-// It writes into file, which it closes but never removes; the caller owns it.
-// The digest is taken while writing, so no caller has to read the archive back.
+// archive writes the commit tree as a reproducible tar.gz into file and closes it.
+// The file belongs to the caller.
 func archive(ctx context.Context, commit *object.Commit, file *os.File, opts Options) (_ *filesystem.Blob, _ digest.Digest, err error) {
 	tree, err := commit.Tree()
 	if err != nil {

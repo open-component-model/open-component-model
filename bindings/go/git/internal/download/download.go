@@ -69,9 +69,7 @@ func Download(ctx context.Context, access *accessv1.Git, creds *credsv1.GitCrede
 		return nil, fmt.Errorf("cannot create git storage: %w", err)
 	}
 
-	// The git storage always goes, and failing to remove it does not invalidate the
-	// download, so it is logged rather than returned. The archive file is removed
-	// only when this call fails; on success it belongs to the caller.
+	// Cleanup failures are logged, not returned; on success the archive belongs to the caller.
 	var archivePath string
 	defer func() {
 		if rmErr := os.RemoveAll(dir); rmErr != nil {
