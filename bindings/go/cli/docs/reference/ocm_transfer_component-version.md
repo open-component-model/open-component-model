@@ -44,6 +44,9 @@ Two-step workflow (generate, review, replay):
   configuration entry are baked into the spec during step 1 and are therefore ignored in
   step 2 - the spec is the full graph definition. Only --dry-run and --output remain
   meaningful when replaying a spec.
+  --transfer-spec - can share stdin with --config -: pipe one YAML stream that holds the
+  configuration and the spec as documents separated by "---", in any order:
+    { cat config.yaml; echo ---; cat spec.yaml; } | transfer cv --config - --transfer-spec -
 
 How the graph is built:
   Internally the command assembles a TransformationGraphDefinition from these node types,
@@ -145,9 +148,9 @@ transfer component-version --transfer-spec spec.yaml
                                            If multiple configuration files are found, they will be merged in the order they are discovered.
                                            Later entries have higher priority.
                                            Using the option, the specified configuration file(s) will be used instead of the lookup above.
-                                           Use "-" to read one configuration from stdin, for example to pass credentials without writing them to disk.
-                                           Like every other --config value it replaces the lookup above. It can be combined with files that hold
-                                           other settings and is merged in command line order, for example: --config ./signing.yaml --config -
+                                           Use "-" to read the configuration from stdin, for example to pass credentials without writing them to disk.
+                                           Stdin may be a YAML stream: documents typed generic.config.ocm.software are merged in stream order, all other
+                                           documents stay on stdin for flags that also read it, such as --transfer-spec -.
       --logformat enum                     set the log output format that is used to print individual logs
                                               json: Output logs in JSON format, suitable for machine processing
                                               text: Output logs in human-readable text format, suitable for console output

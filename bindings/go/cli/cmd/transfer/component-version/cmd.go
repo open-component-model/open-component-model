@@ -8,7 +8,6 @@ import (
 	"io"
 	"log/slog"
 	"os"
-	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -85,6 +84,9 @@ Two-step workflow (generate, review, replay):
   configuration entry are baked into the spec during step 1 and are therefore ignored in
   step 2 - the spec is the full graph definition. Only --dry-run and --output remain
   meaningful when replaying a spec.
+  --transfer-spec - can share stdin with --config -: pipe one YAML stream that holds the
+  configuration and the spec as documents separated by "---", in any order:
+    { cat config.yaml; echo ---; cat spec.yaml; } | transfer cv --config - --transfer-spec -
 
 How the graph is built:
   Internally the command assembles a TransformationGraphDefinition from these node types,
@@ -172,9 +174,6 @@ func transferArgs(cmd *cobra.Command, args []string) error {
 		if len(args) > 0 {
 			return fmt.Errorf("positional arguments are not allowed when --%s is set", FlagTransferSpec)
 		}
-		if specPath == configuration.StdinConfigPath && configFromStdin(cmd) {
-			return fmt.Errorf("--%s - and --%s - cannot both read stdin; pass one of them as a file", FlagTransferSpec, configuration.OCMConfigCommandArgument)
-		}
 		ignoredFlags := []string{FlagRecursive, FlagCopyResources, FlagUploadAs}
 		for _, name := range ignoredFlags {
 			if cmd.Flags().Changed(name) {
@@ -184,11 +183,6 @@ func transferArgs(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	return cobra.ExactArgs(2)(cmd, args)
-}
-
-func configFromStdin(cmd *cobra.Command) bool {
-	paths, err := cmd.Flags().GetStringArray(configuration.OCMConfigCommandArgument)
-	return err == nil && slices.Contains(paths, configuration.StdinConfigPath)
 }
 
 func TransferComponentVersion(cmd *cobra.Command, args []string) error {
@@ -331,12 +325,36 @@ func loadTransferSpec(path string, stdin io.Reader) (*transformv1alpha1.Transfor
 		}
 	}
 
+	spec, err := transferSpecDocument(data)
+	if err != nil {
+		return nil, fmt.Errorf("parsing transfer spec: %w", err)
+	}
+
 	tgd := &transformv1alpha1.TransformationGraphDefinition{}
-	if err := yaml.Unmarshal(data, tgd); err != nil {
+	if err := yaml.Unmarshal(spec, tgd); err != nil {
 		return nil, fmt.Errorf("parsing transfer spec: %w", err)
 	}
 
 	return tgd, nil
+}
+
+// transferSpecDocument picks the transfer spec out of a YAML stream. --config - and
+// --transfer-spec - can share stdin, so OCM configuration documents are skipped here; the
+// configuration loader owns them. Exactly one other document must remain: a plain
+// yaml.Unmarshal would silently take the first document and run an empty graph.
+func transferSpecDocument(data []byte) ([]byte, error) {
+	_, specs, err := configuration.SplitConfigStream(bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+	switch len(specs) {
+	case 0:
+		return nil, errors.New("no transfer spec document found")
+	case 1:
+		return specs[0], nil
+	default:
+		return nil, fmt.Errorf("expected exactly one transfer spec document, found %d", len(specs))
+	}
 }
 
 func buildGraphDefinitionFromArgs(
