@@ -703,7 +703,9 @@ test('buildModuleBlocks: monolithic bindings yield one import (website + CLI + b
 test('buildModuleBlocks: monolithic import mounts cover every schema directory', () => {
     const { imports } = buildModuleBlocks('0.15', '0.15.0', MONOLITH_DEPS);
     const monolith = imports.find(i => i.path === MONOLITHIC_BINDINGS_MODULE);
-    assert.equal(monolith.mounts.length, BINDING_SCHEMA_MOUNTS.length);
+    // Entries introduced after 0.15 (since > 0.15) are not mounted for 0.15.
+    const applicable = BINDING_SCHEMA_MOUNTS.filter(m => !m.since || compareSemver('0.15', m.since) >= 0);
+    assert.equal(monolith.mounts.length, applicable.length);
     for (const m of monolith.mounts) {
         assert.deepEqual(m.sites.matrix.versions, ['0.15']);
         assert.match(m.target, /^static\/0\.15\/schemas\/bindings\/go\//);
@@ -713,8 +715,17 @@ test('buildModuleBlocks: monolithic import mounts cover every schema directory',
 test('buildModuleBlocks: monolithic and legacy layouts mount the same schema set', () => {
     const { imports: legacy } = buildModuleBlocks('0.15', '0.15.0', ALL_DEPS);
     const { imports: monolith } = buildModuleBlocks('0.15', '0.15.0', MONOLITH_DEPS);
+    // Bindings introduced after the monorepo merge (sinceMonolith) never
+    // existed as stand-alone modules, so they only appear in the monolithic
+    // layout. Strip them for the schema-set parity check.
+    const sinceMonolithTargets = new Set(
+        BINDING_SCHEMA_MOUNTS.filter(m => m.sinceMonolith).map(m => `static/0.15/${m.target}`)
+    );
     const legacyTargets = legacy.flatMap(i => i.mounts.map(m => m.target)).sort();
-    const monolithTargets = monolith.flatMap(i => i.mounts.map(m => m.target)).sort();
+    const monolithTargets = monolith
+        .flatMap(i => i.mounts.map(m => m.target))
+        .filter(t => !sinceMonolithTargets.has(t))
+        .sort();
     assert.deepEqual(monolithTargets, legacyTargets);
 
     // The module merge kept the package directory layout intact, so each
@@ -723,7 +734,10 @@ test('buildModuleBlocks: monolithic and legacy layouts mount the same schema set
     const monolithByTarget = new Map(
         monolith.find(i => i.path === MONOLITHIC_BINDINGS_MODULE).mounts.map(m => [m.target, m.source])
     );
-    for (const { pkg, source, target } of BINDING_SCHEMA_MOUNTS) {
+    for (const { pkg, source, target, since } of BINDING_SCHEMA_MOUNTS) {
+        if (since && compareSemver('0.15', since) < 0) {
+            continue;
+        }
         assert.equal(monolithByTarget.get(`static/0.15/${target}`), `${pkg}/${source}`);
     }
 });

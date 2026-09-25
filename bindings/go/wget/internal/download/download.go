@@ -8,7 +8,9 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/hex"
 	"fmt"
+	"hash"
 	"io"
 	"log/slog"
 	"net/http"
@@ -98,12 +100,20 @@ func Download(ctx context.Context, req Request, opts ...Option) (_ *Blob, err er
 			httpReq.Header.Add(k, v)
 		}
 	}
-
-	if req.NoRedirect {
-		client = cloneClientWithNoRedirect(client)
+	// When digests are computed over the response body, force
+	// Accept-Encoding: identity. Go's default transport otherwise auto-adds
+	// gzip and transparently decompresses; hashing decoded bytes then breaks
+	// RFC 9530 Content-Digest (computed over encoded bytes) and lets a mirror
+	// serving compressed bytes yield a different OCM SHA-256.
+	if len(o.DigestAlgorithms) > 0 {
+		httpReq.Header.Set("Accept-Encoding", "identity")
 	}
 
-	if err := applyCredentials(ctx, httpReq, &client, o.Credentials); err != nil {
+	if req.NoRedirect {
+		client = CloneClientWithNoRedirect(client)
+	}
+
+	if err := ApplyCredentials(ctx, httpReq, &client, o.Credentials); err != nil {
 		return nil, fmt.Errorf("error applying credentials: %w", err)
 	}
 
@@ -150,7 +160,20 @@ func Download(ctx context.Context, req Request, opts ...Option) (_ *Blob, err er
 		}
 	}()
 
-	written, err := io.Copy(file, respBody)
+	// Hash the stream while writing it to disk so no second read is needed.
+	hashers := make(map[string]hash.Hash, len(o.DigestAlgorithms))
+	writers := []io.Writer{file}
+	for _, alg := range o.DigestAlgorithms {
+		h := alg.New()
+		hashers[alg.Name] = h
+		writers = append(writers, h)
+	}
+	dst := io.Writer(file)
+	if len(writers) > 1 {
+		dst = io.MultiWriter(writers...)
+	}
+
+	written, err := io.Copy(dst, respBody)
 	if closeErr := file.Close(); err == nil {
 		err = closeErr
 	}
@@ -160,6 +183,11 @@ func Download(ctx context.Context, req Request, opts ...Option) (_ *Blob, err er
 
 	if maxDownloadSize > 0 && written > maxDownloadSize {
 		return nil, fmt.Errorf("response body from %s exceeds maximum allowed size of %d bytes", safeURL.String(), maxDownloadSize)
+	}
+
+	digests := make(map[string]string, len(hashers))
+	for name, h := range hashers {
+		digests[name] = hex.EncodeToString(h.Sum(nil))
 	}
 
 	mediaType := req.MediaType
@@ -175,11 +203,13 @@ func Download(ctx context.Context, req Request, opts ...Option) (_ *Blob, err er
 		return nil, fmt.Errorf("error creating blob for %s from %s: %w", safeURL.String(), path, err)
 	}
 	b.SetMediaType(mediaType)
+	b.headers = resp.Header
+	b.digests = digests
 
 	return b, nil
 }
 
-// applyCredentials applies OCM credentials to the HTTP request or client.
+// ApplyCredentials applies OCM credentials to the HTTP request or client.
 // Supported credential types:
 //   - certificate + privateKey (+ optional certificateAuthority): mTLS client
 //     certificate, applied to the transport independently of the header auth below
@@ -191,7 +221,7 @@ func Download(ctx context.Context, req Request, opts ...Option) (_ *Blob, err er
 // token takes precedence when both are set.
 //
 // Both WgetCredentials/v1 and legacy DirectCredentials/v1 are accepted.
-func applyCredentials(ctx context.Context, req *http.Request, client **http.Client, credentials runtime.Typed) error {
+func ApplyCredentials(ctx context.Context, req *http.Request, client **http.Client, credentials runtime.Typed) error {
 	if credentials == nil {
 		return nil
 	}
@@ -268,7 +298,7 @@ func applyCredentials(ctx context.Context, req *http.Request, client **http.Clie
 	return nil
 }
 
-func cloneClientWithNoRedirect(original *http.Client) *http.Client {
+func CloneClientWithNoRedirect(original *http.Client) *http.Client {
 	c := *original
 	c.CheckRedirect = func(req *http.Request, via []*http.Request) error {
 		return http.ErrUseLastResponse
