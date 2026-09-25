@@ -178,7 +178,10 @@ func TestBuildGraphDefinition_JFrogHelmUploader_EmitsHelmTarget(t *testing.T) {
 		r.Equal("helm-local", tr.Spec.Data["repository"])
 		r.Equal(true, tr.Spec.Data["reindex"])
 		r.Equal("chart-resource", tr.Spec.Data["resource"].(map[string]any)["name"])
-		r.NotContains(tr.Spec.Data, "componentVersion")
+		cv := tr.Spec.Data["componentVersion"].(map[string]any)
+		r.Equal("ocm.software/test", cv["component"])
+		r.Equal("1.0.0", cv["version"])
+		r.NotContains(cv, "repository", "remote resources are not read from the source component version")
 		r.Equal("test@1.0.0 [Stream chart-resource to artifactory.example]", tr.Label)
 	})
 

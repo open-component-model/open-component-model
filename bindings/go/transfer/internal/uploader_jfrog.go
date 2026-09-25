@@ -12,10 +12,10 @@ import (
 )
 
 // processJFrogHelmUploader emits a single JFrogHelmUpload transformation for resource from a
-// [transferv1alpha1.JFrogHelmUploaderConfig]. The upload URL and the published Helm/v1 access
-// depend on the chart's own metadata, so the transformation computes them at runtime and the
-// descriptor picks the published resource up from its output. A local blob is read from the
-// source component version, which the spec carries for that purpose.
+// [transferv1alpha1.JFrogHelmUploaderConfig]. The chart is stored under the component version's
+// path in the repository and published with the chart name and version Artifactory records, so
+// the transformation computes the published access at runtime and the descriptor picks it up
+// from its output. A local blob is read from the source component version.
 func processJFrogHelmUploader(resource descriptorv2.Resource, access runtime.Typed, u *transferv1alpha1.JFrogHelmUploaderConfig, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, resourceTransformIDs map[int]string, i int) error {
 	if resource.Access == nil {
 		return fmt.Errorf("resource access is required")
@@ -28,24 +28,24 @@ func processJFrogHelmUploader(resource descriptorv2.Resource, access runtime.Typ
 		return fmt.Errorf("invalid artifactory url: %w", err)
 	}
 
-	specData := map[string]any{
-		"resource":   resource,
-		"url":        u.URL,
-		"repository": u.Repository,
-		"reindex":    u.ReindexEnabled(),
+	cv := map[string]any{
+		"component": val.Descriptor.Component.Name,
+		"version":   val.Descriptor.Component.Version,
 	}
 	if _, ok := access.(*descriptorv2.LocalBlob); ok {
 		sourceRepo, err := asUnstructured(val.SourceRepository)
 		if err != nil {
 			return fmt.Errorf("cannot convert source repository spec to unstructured: %w", err)
 		}
-		specData["componentVersion"] = map[string]any{
-			"repository": sourceRepo.Data,
-			"component":  val.Descriptor.Component.Name,
-			"version":    val.Descriptor.Component.Version,
-		}
+		cv["repository"] = sourceRepo.Data
 	}
-	spec, err := runtime.UnstructuredFromMixedData(specData)
+	spec, err := runtime.UnstructuredFromMixedData(map[string]any{
+		"resource":         resource,
+		"componentVersion": cv,
+		"url":              u.URL,
+		"repository":       u.Repository,
+		"reindex":          u.ReindexEnabled(),
+	})
 	if err != nil {
 		return fmt.Errorf("cannot create unstructured spec for jfrog helm upload transformation: %w", err)
 	}

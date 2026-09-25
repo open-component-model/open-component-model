@@ -3,7 +3,6 @@ package chartarchive_test
 import (
 	"archive/tar"
 	"bytes"
-	"compress/gzip"
 	"context"
 	"encoding/json"
 	"errors"
@@ -122,22 +121,6 @@ func buildHelmTar(t *testing.T, chartName string, chartData []byte) []byte {
 		require.NoError(t, err)
 	}
 	require.NoError(t, tw.Close())
-	return buf.Bytes()
-}
-
-// buildGzipTar creates a gzip-compressed tar with the given files.
-func buildGzipTar(t *testing.T, files map[string]string) []byte {
-	t.Helper()
-	var buf bytes.Buffer
-	gw := gzip.NewWriter(&buf)
-	tw := tar.NewWriter(gw)
-	for name, data := range files {
-		require.NoError(t, tw.WriteHeader(&tar.Header{Name: name, Size: int64(len(data)), Mode: 0o644}))
-		_, err := io.WriteString(tw, data)
-		require.NoError(t, err)
-	}
-	require.NoError(t, tw.Close())
-	require.NoError(t, gw.Close())
 	return buf.Bytes()
 }
 
@@ -359,14 +342,6 @@ func TestSource_Open(t *testing.T) {
 			},
 			wantErr: "is neither a packaged helm chart, a tar containing one, nor a helm chart OCI artifact",
 		},
-		{
-			name: "gzip tar without Chart.yaml",
-			setup: func(t *testing.T) opened {
-				data := buildGzipTar(t, map[string]string{"mychart/values.yaml": "a: b\n"})
-				return opened{&chartarchive.Source{ResourceRepository: &stubResourceRepo{blob: fromBytes(data)}}, chartarchive.Request{Resource: wgetSource}}
-			},
-			wantErr: "has no Chart.yaml within its first 1 MiB",
-		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -378,8 +353,6 @@ func TestSource_Open(t *testing.T) {
 				return
 			}
 			r.NoError(err)
-			r.Equal("mychart", got.Name)
-			r.Equal("0.1.0", got.Version)
 			r.Equal(tt.wantFromOCI, got.FromOCI)
 			rc, err := got.Archive.ReadCloser()
 			r.NoError(err)

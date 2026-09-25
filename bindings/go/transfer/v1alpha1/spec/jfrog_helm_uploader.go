@@ -20,14 +20,18 @@ func init() {
 }
 
 // JFrogHelmUploaderConfig deploys matching Helm chart resources into a JFrog Artifactory Helm
-// repository via Artifactory's deploy REST API (PUT <url>/artifactory/<repository>/<name>-<version>.tgz,
-// name and version from the chart's Chart.yaml) and re-describes them with a Helm/v1 access
-// (helmRepository <url>/artifactory/api/helm/<repository>, helmChart <name>:<version>). The chart
-// is detected from the resource content: a packaged chart, a tar containing one (as the helm
-// downloader produces), or a helm chart OCI artifact (OCIImage and oci:// Helm sources, LocalBlob
-// sources stored by the helm input). Upload credentials are resolved for the HelmChartRepository
-// consumer identity of <url>/artifactory/api/helm/<repository>, falling back to the Wget consumer
-// identity of the upload URL. By default the Helm index is recalculated after each upload.
+// repository via Artifactory's deploy REST API
+// (PUT <url>/artifactory/<repository>/<component>/<component version>/<resource>-<resource version>.tgz)
+// and re-describes them with a Helm/v1 access (helmRepository <url>/artifactory/api/helm/<repository>,
+// helmChart <name>:<version>). The chart is not parsed: name and version are the chart metadata
+// Artifactory records when it indexes the deployed chart, and content it does not recognize as a
+// chart is deleted again and fails the transfer. The chart is located in the resource content: a
+// packaged chart, a tar containing one (as the helm downloader produces), or a helm chart OCI
+// artifact (OCIImage and oci:// Helm sources, LocalBlob sources stored by the helm input). Upload
+// credentials are resolved for the HelmChartRepository consumer identity of
+// <url>/artifactory/api/helm/<repository>, falling back to the Wget consumer identity of the
+// upload URL. The target repository must not enforce chart name and version in file names
+// (Artifactory's Helm Enforce Layout), because the file name is derived from the resource.
 //
 //	type: generic.config.ocm.software/v1
 //	configurations:
@@ -52,10 +56,10 @@ type JFrogHelmUploaderConfig struct {
 	URL string `json:"url"`
 	// Repository is the key of the Artifactory Helm repository to deploy into.
 	Repository string `json:"repository"`
-	// Reindex triggers Artifactory's Helm index recalculation
-	// (POST <url>/artifactory/api/helm/<repository>/reindex) after each upload, so the chart
-	// becomes pullable right away. Defaults to true; set to false on large repositories that
-	// are reindexed by other means.
+	// Reindex requests Artifactory's Helm index recalculation for the uploaded chart only
+	// (POST <url>/artifactory/api/helm/<repository>/<chart path>/reindex, Artifactory 7.105.2 or
+	// later) after each upload. Artifactory also indexes deployed charts on its own, so a failing
+	// request is only logged. Defaults to true.
 	Reindex *bool `json:"reindex,omitempty"`
 }
 
