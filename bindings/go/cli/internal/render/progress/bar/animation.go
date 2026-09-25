@@ -68,12 +68,21 @@ func WriteRunningLine(out io.Writer, text string, spinFrame, dotFrame int) {
 		DarkGray, SpinnerIcon(spinFrame), Reset, Bold, shimmer, Reset)
 }
 
-// WriteCompletedLine writes a completed status line: "✓ text..."
-func WriteCompletedLine(out io.Writer, text string) {
-	fmt.Fprintf(out, "%s✓%s %s...\n", Blue, Reset, text)
+// WriteCompletedLine writes a completed status line: "✓ text... (took 1m2s)".
+func WriteCompletedLine(out io.Writer, text string, took time.Duration) {
+	fmt.Fprintf(out, "%s✓%s %s...%s\n", Blue, Reset, text, formatTook(took))
 }
 
-// WriteFailedLine writes a failed status line: "✗ text..."
-func WriteFailedLine(out io.Writer, text string) {
-	fmt.Fprintf(out, "%s✗%s %s...\n", Red, Reset, text)
+// WriteFailedLine writes a failed status line: "✗ text... (took 1m2s)".
+func WriteFailedLine(out io.Writer, text string, took time.Duration) {
+	fmt.Fprintf(out, "%s✗%s %s...%s\n", Red, Reset, text, formatTook(took))
+}
+
+// formatTook renders the elapsed-time suffix shared by the final status
+// lines, rounded to whole seconds.
+func formatTook(took time.Duration) string {
+	if took < 0 {
+		return ""
+	}
+	return fmt.Sprintf(" %s(took %s)%s", DarkGray, took.Round(time.Second), Reset)
 }
