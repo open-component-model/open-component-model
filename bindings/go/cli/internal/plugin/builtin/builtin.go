@@ -5,6 +5,7 @@ import (
 	"log/slog"
 
 	ocicredentialplugin "ocm.software/open-component-model/bindings/go/cli/internal/plugin/builtin/credentials/oci"
+	"ocm.software/open-component-model/bindings/go/cli/internal/plugin/builtin/git"
 	"ocm.software/open-component-model/bindings/go/cli/internal/plugin/builtin/github"
 	"ocm.software/open-component-model/bindings/go/cli/internal/plugin/builtin/gpg"
 	"ocm.software/open-component-model/bindings/go/cli/internal/plugin/builtin/input/dir"
@@ -16,6 +17,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/cli/internal/plugin/builtin/rsa"
 	"ocm.software/open-component-model/bindings/go/cli/internal/plugin/builtin/s3"
 	"ocm.software/open-component-model/bindings/go/cli/internal/plugin/builtin/wget"
+	checksumhttpv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/checksum/http/v1alpha1/spec"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	helmdigest "ocm.software/open-component-model/bindings/go/helm/digest"
 	helmresource "ocm.software/open-component-model/bindings/go/helm/repository/resource"
@@ -23,7 +25,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 )
 
-func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alpha1.Config, httpConfig *httpv1alpha1.Config, logger *slog.Logger) error {
+func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alpha1.Config, httpConfig *httpv1alpha1.Config, checksumHTTPConfig *checksumhttpv1alpha1.Config, logger *slog.Logger) error {
 	if err := ocicredentialplugin.Register(manager.CredentialRepositoryRegistry); err != nil {
 		return fmt.Errorf("could not register OCI inbuilt credential plugin: %w", err)
 	}
@@ -60,7 +62,8 @@ func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alph
 		manager.DigestProcessorRegistry,
 		manager.CredentialTypeRegistry,
 		httpConfig,
-		filesystemConfig); err != nil {
+		filesystemConfig,
+		checksumHTTPConfig); err != nil {
 		return fmt.Errorf("could not register wget inbuilt plugin: %w", err)
 	}
 
@@ -78,6 +81,14 @@ func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alph
 		httpConfig,
 		filesystemConfig); err != nil {
 		return fmt.Errorf("could not register s3 inbuilt plugin: %w", err)
+	}
+
+	if err := git.Register(manager.ResourcePluginRegistry,
+		manager.DigestProcessorRegistry,
+		manager.CredentialTypeRegistry,
+		filesystemConfig,
+		httpConfig); err != nil {
+		return fmt.Errorf("could not register git inbuilt plugin: %w", err)
 	}
 
 	var tempFolder string

@@ -15,6 +15,7 @@ import (
 	v1 "ocm.software/open-component-model/bindings/go/repository/component/fallback/v1"
 	pathmatcher "ocm.software/open-component-model/bindings/go/repository/component/pathmatcher/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	"ocm.software/open-component-model/bindings/go/runtime/versioning"
 )
 
 // Options configures the creation of a provider.
@@ -30,6 +31,9 @@ type Options struct {
 	// Used by CLI to route specific component references to the provided repository.
 	// They have no effect if no base repository is provided.
 	ComponentPatterns []string
+	// VersioningRegistry defines the versioning schemes used to evaluate resolver
+	// version constraints. When nil, the loose-semver default is used.
+	VersioningRegistry *versioning.Registry
 }
 
 // NewFromConfig creates a ComponentVersionRepositoryResolver whose resolver
@@ -160,7 +164,11 @@ func newPathMatcherProviderWithBaseRepo(ctx context.Context, opts Options, baseR
 		return nil, nil
 	}
 
-	specProvider, err := pathmatcher.NewSpecProvider(ctx, finalResolvers)
+	var spOpts []pathmatcher.SpecProviderOption
+	if opts.VersioningRegistry != nil {
+		spOpts = append(spOpts, pathmatcher.WithVersioningRegistry(opts.VersioningRegistry))
+	}
+	specProvider, err := pathmatcher.NewSpecProvider(ctx, finalResolvers, spOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create spec provider: %w", err)
 	}
