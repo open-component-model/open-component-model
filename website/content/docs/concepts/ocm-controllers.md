@@ -119,18 +119,9 @@ A few more things about replication:
 
 ## Discovery
 
-A `Discovery` also sits alongside the chain. It references a `Component` and, once that `Component` is `Ready`, resolves
-the entire transitive component graph from the `Component`'s resolved repository, filters it with reference, component,
-and resource selectors, and publishes either the filtered raw v2 descriptors (`status.components`) or CEL-projected
-free-form records (`status.extracted`). It is a read-only, query-style resource: it downloads no artifacts, creates no
-external resources, and provides no signature-verification guarantees for the descriptors it filters.
+A `Discovery` publishes a filtered, optionally projected view of the transitive reference graph of a `Component`. It is a read-only, query-style resource: it downloads no artifacts, creates no external resources, and provides no signature-verification guarantees for the descriptors it filters.
 
-A few things about discovery:
-
-- Traversal is full and fail-fast: the whole reachable graph is resolved before filtering, and the first resolution failure retains the last successful payload and reports `Ready=False` with reason `ResolutionFailed`. There is no partial resolution or identity short-circuiting.
-- Results are gated on freshness: consumers must check `Ready=True` **and** `status.observedGeneration == metadata.generation`, because failures retain the last successful (possibly stale) payload.
-- A referencing `Discovery` blocks deletion of its `Component`, like a referencing `Resource`. See [Component Discovery]({{< relref "docs/concepts/component-discovery.md" >}}) for the full
-semantics, and [Discover Component Graphs]({{< relref "docs/how-to/discover-component-graphs.md" >}}) for a concrete example.
+See [Kubernetes Component Discovery]({{< relref "/docs/concepts/component-discovery.md" >}}) for a full description and its querying behaviour.
 
 [API reference]({{< relref "/docs/reference/kubernetes-api/discovery.md" >}})
 

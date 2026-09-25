@@ -1,5 +1,5 @@
 ---
-title: "Component Discovery"
+title: "Kubernetes Component Discovery"
 description: "How the Discovery controller resolves a Component's transitive reference graph, filters it with CEL selectors, and projects it into status."
 icon: "🔎"
 weight: 7
@@ -7,10 +7,11 @@ toc: true
 hasMermaid: true
 ---
 
-A `Discovery` publishes a filtered, optionally projected view of the transitive
-reference graph of a `Component`. It is a read-only, query-style resource: it
-downloads no artifacts, creates no external resources, and provides no
-signature-verification guarantees for the descriptors it filters.
+The `Discovery` is a Kubernetes controller that publishes a filtered, 
+optionally projected view of the transitive reference graph of a `Component`.
+It is a read-only, query-style resource: it downloads no artifacts, creates no
+external resources, and provides no signature-verification guarantees for the
+descriptors it filters.
 
 For a worked example, see the
 [Discover Component Graphs]({{< relref "docs/how-to/discover-component-graphs.md" >}})
@@ -60,7 +61,7 @@ short-circuiting.
 are all optional `Selector` objects. A `Selector` has three clauses, all ANDed
 together. A nil or empty selector matches everything.
 
-- **`matchIdentity`** — Matches elements whose identity contains all specified
+- **`matchIdentity`** — Matches elements whose [identity]({{< relref "/docs/concepts/component-identity.md" >}}) contains all specified
   key-value pairs. Keys must be present, including comparisons against an empty
   value.
 - **`matchLabels`** — Matches elements carrying labels with the specified
@@ -77,16 +78,14 @@ Selector CEL bindings:
 
 The stages run in order. The `referenceSelector` scans the references of **all**
 resolved descriptors and keeps each target with at least one matching incoming
-reference; the root survives only if something in the graph references it, so in
-a plain tree a nonempty reference selector drops it. The `componentSelector`
-then filters the surviving components. The `resourceSelector` filters each
-surviving component's resources **and drops the component when none of them
-match**, so selecting by resource selects the components that carry such a
-resource.
+reference. The `componentSelector` then filters the surviving components.
+The `resourceSelector` filters each surviving component's resources **and drops
+the component when none of them match**, so selecting by resource selects the
+components that carry such a resource.
 
 ### semverCheck
 
-Selector and extraction expressions can call `semverCheck(version, constraint)`,
+Selector and extraction expressions (see below) can call `semverCheck(version, constraint)`,
 which returns a boolean using SemVer semantics (SemVer applies only to
 `semverCheck`; graph ordering is lexicographic):
 
