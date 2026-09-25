@@ -176,34 +176,6 @@ configurations:
 3. `ghcr.io/other-org/repo` → uses `my-user` (hostname-only match)
 4. `docker.io/library/nginx` → uses Docker config (no consumer matched)
 
-## Pass the Configuration Through stdin
-
-In CI pipelines and other automation you may not want to write credentials to disk. Pass `-` to `--config` and the CLI reads the configuration from stdin. The well known file locations are not searched, the same as for any other `--config` value:
-
-```bash
-cat ./credentials.yaml | ocm get config --config -
-```
-
-Stdin can be combined with config files that hold other settings, for example signing or HTTP client configuration. Entries are merged in command line order, so later entries win:
-
-```bash
-ocm get config --config ./signing.yaml --config - < ./credentials.yaml
-```
-
-Stdin can be given only once per command, and empty input is an error.
-
-Stdin may hold several YAML documents separated by `---`. Every document with `type: generic.config.ocm.software/v1` is configuration. All other documents stay on stdin for the command, so a flag that also reads stdin, such as `--transfer-spec -`, can share it with `--config -`. The order of the documents does not matter:
-
-```bash
-cat ./stream.yaml | ocm transfer component-version --config - --transfer-spec -
-```
-
-The documents must be separated. `cat` only glues files together, so when you combine separate files either start each file with `---` or insert the separator yourself:
-
-```bash
-{ cat ./credentials.yaml; echo ---; cat ./transfer-spec.yaml; } | ocm transfer component-version --config - --transfer-spec -
-```
-
 ## Troubleshooting
 
 {{< callout context="tip" >}}

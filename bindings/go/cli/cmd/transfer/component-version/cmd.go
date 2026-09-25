@@ -84,9 +84,6 @@ Two-step workflow (generate, review, replay):
   configuration entry are baked into the spec during step 1 and are therefore ignored in
   step 2 - the spec is the full graph definition. Only --dry-run and --output remain
   meaningful when replaying a spec.
-  --transfer-spec - can share stdin with --config -: pipe one YAML stream that holds the
-  configuration and the spec as documents separated by "---", in any order:
-    { cat config.yaml; echo ---; cat spec.yaml; } | transfer cv --config - --transfer-spec -
 
 How the graph is built:
   Internally the command assembles a TransformationGraphDefinition from these node types,
@@ -157,7 +154,7 @@ transfer component-version --transfer-spec spec.yaml
 	}
 	enum.VarP(cmd.Flags(), FlagUploadAs, "u", uploadAsValues,
 		"Define whether copied resources should be uploaded as OCI artifacts (instead of local blob resources). This option is only relevant if --copy-resources is set.")
-	cmd.Flags().String(FlagTransferSpec, "", "path to a transfer specification file (use \"-\" for stdin)")
+	cmd.Flags().String(FlagTransferSpec, "", "path to a transfer specification file (use \"-\" for stdin). The input must hold exactly one transfer spec document; OCM configuration documents in it are ignored")
 	cmd.Flags().String(FlagSemverConstraint, "", "semantic version constraint restricting which versions to transfer (e.g. \">= 1.0.0, < 2.0.0\"); only used when no version is specified in the reference")
 	cmd.Flags().Bool(FlagLatest, false, "if set, only the latest version of the component is transferred; only used when no version is specified in the reference")
 

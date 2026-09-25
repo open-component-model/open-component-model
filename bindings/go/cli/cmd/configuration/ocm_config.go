@@ -56,9 +56,7 @@ By default (without specifying custom locations with this flag), the file will b
 If multiple configuration files are found, they will be merged in the order they are discovered.
 Later entries have higher priority.
 Using the option, the specified configuration file(s) will be used instead of the lookup above.
-Use "-" to read the configuration from stdin, for example to pass credentials without writing them to disk.
-Stdin may be a YAML stream: documents typed generic.config.ocm.software are merged in stream order, all other
-documents stay on stdin for flags that also read it, such as --transfer-spec -.`)
+Use "-" to read the configuration from stdin.`)
 }
 
 func GetFlattenedOCMConfigForCommand(cmd *cobra.Command) (*genericv1.Config, error) {

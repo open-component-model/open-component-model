@@ -44,9 +44,6 @@ Two-step workflow (generate, review, replay):
   configuration entry are baked into the spec during step 1 and are therefore ignored in
   step 2 - the spec is the full graph definition. Only --dry-run and --output remain
   meaningful when replaying a spec.
-  --transfer-spec - can share stdin with --config -: pipe one YAML stream that holds the
-  configuration and the spec as documents separated by "---", in any order:
-    { cat config.yaml; echo ---; cat spec.yaml; } | transfer cv --config - --transfer-spec -
 
 How the graph is built:
   Internally the command assembles a TransformationGraphDefinition from these node types,
@@ -121,7 +118,7 @@ transfer component-version --transfer-spec spec.yaml
                                    (must be one of [json ndjson yaml]) (default yaml)
   -r, --recursive                  recursively discover and transfer component versions
       --semver-constraint string   semantic version constraint restricting which versions to transfer (e.g. ">= 1.0.0, < 2.0.0"); only used when no version is specified in the reference
-      --transfer-spec string       path to a transfer specification file (use "-" for stdin)
+      --transfer-spec string       path to a transfer specification file (use "-" for stdin). The input must hold exactly one transfer spec document; OCM configuration documents in it are ignored
   -u, --upload-as enum             Define whether copied resources should be uploaded as OCI artifacts (instead of local blob resources). This option is only relevant if --copy-resources is set.
                                    (must be one of [localBlob ociArtifact]) (default localBlob)
 ```
@@ -148,9 +145,7 @@ transfer component-version --transfer-spec spec.yaml
                                            If multiple configuration files are found, they will be merged in the order they are discovered.
                                            Later entries have higher priority.
                                            Using the option, the specified configuration file(s) will be used instead of the lookup above.
-                                           Use "-" to read the configuration from stdin, for example to pass credentials without writing them to disk.
-                                           Stdin may be a YAML stream: documents typed generic.config.ocm.software are merged in stream order, all other
-                                           documents stay on stdin for flags that also read it, such as --transfer-spec -.
+                                           Use "-" to read the configuration from stdin.
       --logformat enum                     set the log output format that is used to print individual logs
                                               json: Output logs in JSON format, suitable for machine processing
                                               text: Output logs in human-readable text format, suitable for console output
