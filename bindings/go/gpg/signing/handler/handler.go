@@ -39,15 +39,34 @@ var (
 	ErrMissingDigestVal  = errors.New("missing digest value")
 )
 
+// defaultGPGBinary serves zero-value Handlers in FIPS 140-3 mode.
+var defaultGPGBinary = gpgbinary.New()
+
 // Handler implements OpenPGP signing and verification.
+// The zero value is usable and behaves like a Handler returned by New.
 type Handler struct {
-	fipsEnabled func() bool
-	gpgBinary   *gpgbinary.Binary
+	fipsEnabled func() bool       // nil means crypto/fips140.Enabled
+	gpgBinary   *gpgbinary.Binary // nil means defaultGPGBinary
 }
 
 // New returns a Handler.
 func New(_ *runtime.Scheme) (*Handler, error) {
 	return &Handler{fipsEnabled: fips140.Enabled, gpgBinary: gpgbinary.New()}, nil
+}
+
+// useGPGBinary reports whether operations must be delegated to the system gpg binary.
+func (h *Handler) useGPGBinary() bool {
+	if h.fipsEnabled == nil {
+		return fips140.Enabled()
+	}
+	return h.fipsEnabled()
+}
+
+func (h *Handler) binary() *gpgbinary.Binary {
+	if h.gpgBinary == nil {
+		return defaultGPGBinary
+	}
+	return h.gpgBinary
 }
 
 // GetSigningHandlerScheme returns the scheme for this handler's config types.
@@ -76,7 +95,7 @@ func (h *Handler) Sign(
 		}
 	}
 
-	if h.fipsEnabled() {
+	if h.useGPGBinary() {
 		return h.signWithGPGBinary(ctx, unsigned, &sigCfg, typedCreds)
 	}
 
@@ -142,7 +161,7 @@ func (h *Handler) Verify(
 		}
 	}
 
-	if h.fipsEnabled() {
+	if h.useGPGBinary() {
 		return h.verifyWithGPGBinary(ctx, signed, &sigCfg, typedCreds)
 	}
 
@@ -207,7 +226,7 @@ func (h *Handler) signWithGPGBinary(
 	}
 
 	slog.DebugContext(ctx, "FIPS 140-3 mode: signing with the system gpg binary")
-	sig, err := h.gpgBinary.Sign(ctx, gpgbinary.SignRequest{
+	sig, err := h.binary().Sign(ctx, gpgbinary.SignRequest{
 		PrivateKey:     keyBytes,
 		Passphrase:     passphrase,
 		KeyFingerprint: sigCfg.GetKeyFingerprint(),
@@ -244,7 +263,7 @@ func (h *Handler) verifyWithGPGBinary(
 	}
 
 	slog.DebugContext(ctx, "FIPS 140-3 mode: verifying with the system gpg binary")
-	if err := h.gpgBinary.Verify(ctx, gpgbinary.VerifyRequest{
+	if err := h.binary().Verify(ctx, gpgbinary.VerifyRequest{
 		PublicKey:      keyBytes,
 		KeyFingerprint: sigCfg.GetKeyFingerprint(),
 		Data:           digestBytes,
