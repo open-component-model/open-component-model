@@ -31,6 +31,7 @@ func Apply(target *runtime.Digest, digest digest.Digest) error {
 		return fmt.Errorf("unknown algorithm: %s", digest.Algorithm())
 	}
 	target.HashAlgorithm = algo
+	// TODO(matthiasbruns): #3674 regression tests. also implications for existing resoufces etc need to be documented
 	target.NormalisationAlgorithm = "genericBlobDigest/v1" // TODO use a constant from blob package for this
 	target.Value = digest.Encoded()
 
