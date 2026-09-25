@@ -214,12 +214,6 @@ func (r *Reconciler) reconcile(ctx context.Context, discovery *v1alpha1.Discover
 		return ctrl.Result{}, fmt.Errorf("failed to load configurations: %w", err)
 	}
 
-	if r.NewPluginManager == nil {
-		err := errors.New("no plugin manager factory configured on the reconciler")
-		status.MarkNotReady(r.EventRecorder, discovery, v1alpha1.GetConfigurationFailedReason, err.Error())
-
-		return ctrl.Result{}, err
-	}
 	var genericCfg *genericv1.Config
 	if cfg != nil {
 		genericCfg = cfg.Config
