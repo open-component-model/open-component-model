@@ -57,8 +57,4 @@ type OCIAddLocalResourceSpec struct {
 	// Experimental: This policy is carried over from OCM v1 for backwards compatibility.
 	// Its future availability is being evaluated by the community.
 	GlobalAccessPolicy oci.GlobalAccessPolicy `json:"globalAccessPolicy,omitempty"`
-	// AllowMissingSubjects makes the copy skip subjects and referrers whose
-	// target does not exist in the source, with a warning, instead of failing.
-	// +optional
-	AllowMissingSubjects bool `json:"allowMissingSubjects,omitempty"`
 }

@@ -72,14 +72,6 @@ func (t *TransferOCIArtifact) Transform(ctx context.Context, step runtime.Typed)
 		return nil, fmt.Errorf("repository does not support streaming transfers")
 	}
 
-	if transformation.Spec.AllowMissingSubjects {
-		configurable, ok := streamingRepo.(missingSubjectsConfigurable)
-		if !ok {
-			return nil, fmt.Errorf("repository %T does not support allowing missing subjects", streamingRepo)
-		}
-		streamingRepo = configurable.WithAllowMissingSubjects(true)
-	}
-
 	stream, err := streamingRepo.DownloadResourceStream(ctx, srcResource, srcCreds)
 	if err != nil {
 		return nil, fmt.Errorf("failed creating resource stream for %v: %w", srcResource.ToIdentity(), err)

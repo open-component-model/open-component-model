@@ -104,7 +104,7 @@ func TestCreateRepositoryWithFilesystemConfig(t *testing.T) {
 			}
 			credentials := ocicredsv1.OCICredentials{}
 
-			repo, err := createRepository(spec, &credentials, tt.filesystemConfig, "test", http.DefaultClient, false)
+			repo, err := createRepository(spec, &credentials, tt.filesystemConfig, "test", http.DefaultClient)
 
 			if tt.expectError {
 				r.Error(err, "expected error")

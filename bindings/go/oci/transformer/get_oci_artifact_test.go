@@ -17,7 +17,6 @@ import (
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	"ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
-	ocistream "ocm.software/open-component-model/bindings/go/oci/stream"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -254,110 +253,6 @@ func TestGetOCIArtifact_Transform_OCI_Should_Default_No_Ext(t *testing.T) {
 	// Verify resource in output
 	assert.Equal(t, "test-image", transformed.Output.Resource.Name)
 	assert.Equal(t, "1.21.0", transformed.Output.Resource.Version)
-}
-
-// mockRepositoryForGetOCIConfigurable additionally supports allowing missing
-// subjects.
-type mockRepositoryForGetOCIConfigurable struct {
-	ocistream.ResourceRepository
-	returnBlob blob.ReadOnlyBlob
-	configured bool
-}
-
-func (m *mockRepositoryForGetOCIConfigurable) DownloadResource(ctx context.Context, res *descriptor.Resource, credentials runtime.Typed) (blob.ReadOnlyBlob, error) {
-	return m.returnBlob, nil
-}
-
-func (m *mockRepositoryForGetOCIConfigurable) WithAllowMissingSubjects(allow bool) ocistream.ResourceRepository {
-	m.configured = allow
-	return m
-}
-
-func testGetOCIArtifactSpec(allowMissingSubjects bool) *v1alpha1.GetOCIArtifact {
-	return &v1alpha1.GetOCIArtifact{
-		Type: runtime.NewVersionedType(v1alpha1.GetOCIArtifactType, v1alpha1.Version),
-		ID:   "test-get-oci-transform",
-		Spec: &v1alpha1.GetOCIArtifactSpec{
-			Resource: &v2.Resource{
-				ElementMeta: v2.ElementMeta{
-					ObjectMeta: v2.ObjectMeta{
-						Name:    "test-image",
-						Version: "1.21.0",
-					},
-				},
-				Type:     "ociImage",
-				Relation: "external",
-				Access: &runtime.Raw{
-					Type: runtime.Type{
-						Name:    "ociArtifact",
-						Version: "v1",
-					},
-					Data: []byte(`{ "imageReference": "ghcr.io/open-component-model/helmexample/charts/mariadb:12.2.7" }`),
-				},
-			},
-			AllowMissingSubjects: allowMissingSubjects,
-		},
-	}
-}
-
-func TestGetOCIArtifact_AllowMissingSubjects(t *testing.T) {
-	ctx := t.Context()
-
-	newScheme := func() *runtime.Scheme {
-		combinedScheme := runtime.NewScheme()
-		v2.MustAddToScheme(combinedScheme)
-		filesystemaccess.MustAddToScheme(combinedScheme)
-		combinedScheme.MustRegisterWithAlias(&v1alpha1.GetOCIArtifact{}, v1alpha1.GetOCIArtifactV1alpha1)
-		return combinedScheme
-	}
-
-	testBlob := func() blob.ReadOnlyBlob {
-		b := inmemory.New(bytes.NewReader([]byte("test oci artifact content")))
-		b.SetMediaType(layout.MediaTypeOCIImageLayoutTarGzipV1)
-		return b
-	}
-
-	t.Run("allowMissingSubjects is applied to the download repository", func(t *testing.T) {
-		mockRepo := &mockRepositoryForGetOCIConfigurable{returnBlob: testBlob()}
-		transformer := &GetOCIArtifact{Scheme: newScheme(), Repository: mockRepo}
-
-		result, err := transformer.Transform(ctx, testGetOCIArtifactSpec(true))
-		require.NoError(t, err)
-		require.True(t, mockRepo.configured)
-		transformed, ok := result.(*v1alpha1.GetOCIArtifact)
-		require.True(t, ok)
-		require.NotNil(t, transformed.Output)
-	})
-
-	t.Run("unset leaves the repository untouched", func(t *testing.T) {
-		mockRepo := &mockRepositoryForGetOCIConfigurable{returnBlob: testBlob()}
-		fallbackRepo := &mockRepositoryForGetOCIConfigurable{returnBlob: testBlob()}
-		transformer := &GetOCIArtifact{Scheme: newScheme(), Repository: mockRepo, FallbackRepository: fallbackRepo}
-
-		result, err := transformer.Transform(ctx, testGetOCIArtifactSpec(false))
-		require.NoError(t, err)
-		require.False(t, mockRepo.configured)
-		require.False(t, fallbackRepo.configured)
-		require.NotNil(t, result)
-	})
-
-	t.Run("repository without support uses the fallback repository", func(t *testing.T) {
-		mockRepo := &mockRepositoryForGetOCI{returnBlob: testBlob()}
-		fallbackRepo := &mockRepositoryForGetOCIConfigurable{returnBlob: testBlob()}
-		transformer := &GetOCIArtifact{Scheme: newScheme(), Repository: mockRepo, FallbackRepository: fallbackRepo}
-
-		_, err := transformer.Transform(ctx, testGetOCIArtifactSpec(true))
-		require.NoError(t, err)
-		require.True(t, fallbackRepo.configured)
-	})
-
-	t.Run("repository without support and no fallback repository fails", func(t *testing.T) {
-		mockRepo := &mockRepositoryForGetOCI{returnBlob: testBlob()}
-		transformer := &GetOCIArtifact{Scheme: newScheme(), Repository: mockRepo}
-
-		_, err := transformer.Transform(ctx, testGetOCIArtifactSpec(true))
-		require.ErrorContains(t, err, "does not support allowing missing subjects")
-	})
 }
 
 func TestGetOCIArtifact_Transform_ValidationErrors(t *testing.T) {

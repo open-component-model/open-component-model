@@ -40,10 +40,6 @@ type RepositoryOptions struct {
 	// CopyOptions are the options for copying resources between sources and targets
 	ResourceCopyOptions *oras.CopyOptions
 
-	// AllowMissingSubjects makes copy traversals skip missing subjects and
-	// referrers instead of failing. See [WithAllowMissingSubjects].
-	AllowMissingSubjects bool
-
 	// ReferrerTrackingPolicy defines how OCI referrers are used to track component versions.
 	ReferrerTrackingPolicy ReferrerTrackingPolicy
 
@@ -233,6 +229,5 @@ func NewRepository(opts ...RepositoryOption) (*Repository, error) {
 		unmarshalDescriptorFunc:     options.DescriptorUnmarshalFunc,
 		tempDir:                     options.TempDir,
 		globalAccessPolicy:          options.GlobalAccessPolicy,
-		allowMissingSubjects:        options.AllowMissingSubjects,
 	}, nil
 }

@@ -13,12 +13,11 @@ import (
 
 func TestConfig_ParseYAML(t *testing.T) {
 	tests := []struct {
-		name                     string
-		yaml                     string
-		wantRecursive            spec.Recursive
-		wantCopyMode             spec.CopyMode
-		wantUploadType           spec.UploadType
-		wantAllowMissingSubjects bool
+		name           string
+		yaml           string
+		wantRecursive  spec.Recursive
+		wantCopyMode   spec.CopyMode
+		wantUploadType spec.UploadType
 	}{
 		{
 			name: "all fields",
@@ -55,16 +54,6 @@ configurations:
 `,
 			wantCopyMode: spec.CopyModeLocalBlobResources,
 		},
-		{
-			name: "allowMissingSubjects",
-			yaml: `
-type: generic.config.ocm.software/v1
-configurations:
-  - type: transfer.config.ocm.software/v1alpha1
-    allowMissingSubjects: true
-`,
-			wantAllowMissingSubjects: true,
-		},
 	}
 
 	for _, tt := range tests {
@@ -81,7 +70,6 @@ configurations:
 			assert.Equal(t, tt.wantRecursive, cfg.Recursive)
 			assert.Equal(t, tt.wantCopyMode, cfg.CopyMode)
 			assert.Equal(t, tt.wantUploadType, cfg.UploadType)
-			assert.Equal(t, tt.wantAllowMissingSubjects, cfg.AllowMissingSubjects)
 		})
 	}
 }
@@ -122,14 +110,13 @@ func TestMerge(t *testing.T) {
 
 	t.Run("later non-empty fields win", func(t *testing.T) {
 		a := &spec.Config{Recursive: spec.RecursiveInfinite, CopyMode: spec.CopyModeLocalBlobResources, UploadType: spec.UploadAsLocalBlob}
-		b := &spec.Config{CopyMode: spec.CopyModeAllResources, AllowMissingSubjects: true}
+		b := &spec.Config{CopyMode: spec.CopyModeAllResources}
 
 		merged := spec.Merge(a, b)
 
 		assert.Equal(t, spec.RecursiveInfinite, merged.Recursive)
 		assert.Equal(t, spec.CopyModeAllResources, merged.CopyMode)
 		assert.Equal(t, spec.UploadAsLocalBlob, merged.UploadType)
-		assert.True(t, merged.AllowMissingSubjects)
 	})
 
 	t.Run("nil element is skipped", func(t *testing.T) {

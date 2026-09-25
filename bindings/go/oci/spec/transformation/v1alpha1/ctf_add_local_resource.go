@@ -50,8 +50,4 @@ type CTFAddLocalResourceSpec struct {
 	Resource *v2.Resource `json:"resource"`
 	// File is the access specification to the data that should be added
 	File v1alpha1.File `json:"file"`
-	// AllowMissingSubjects makes the copy skip subjects and referrers whose
-	// target does not exist in the source, with a warning, instead of failing.
-	// +optional
-	AllowMissingSubjects bool `json:"allowMissingSubjects,omitempty"`
 }

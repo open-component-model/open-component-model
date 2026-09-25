@@ -139,7 +139,7 @@ func BuildGraphDefinition(
 	// Phase 2: walk the discovered DAG and generate transformation nodes per (component, target) pair.
 	g := dr.Graph()
 	err := g.WithReadLock(func(d *dag.DirectedAcyclicGraph[string]) error {
-		return fillGraphDefinitionWithPrefetchedComponents(ctx, d, targetMap, tgd, cfg.CopyMode, cfg.UploadType, uploaders, cfg.AllowMissingSubjects)
+		return fillGraphDefinitionWithPrefetchedComponents(ctx, d, targetMap, tgd, cfg.CopyMode, cfg.UploadType, uploaders)
 	})
 	if err != nil {
 		return nil, err
@@ -169,7 +169,6 @@ func fillGraphDefinitionWithPrefetchedComponents(
 	copyMode transferv1alpha1.CopyMode,
 	uploadType transferv1alpha1.UploadType,
 	uploaders []transferv1alpha1.UploaderConfig,
-	allowMissingSubjects bool,
 ) error {
 	slog.DebugContext(ctx, "building transformations for discovered components",
 		"components", len(d.Vertices))
@@ -215,7 +214,7 @@ func fillGraphDefinitionWithPrefetchedComponents(
 				"targetIndex", targetIdx, "targetType", fmt.Sprintf("%T", target),
 				"transformID", id)
 
-			resourceTransformIDs, fileRefs, err := processResources(ctx, v2desc, baseID, id, val, tgd, target, copyMode, uploadType, uploaders, allowMissingSubjects)
+			resourceTransformIDs, fileRefs, err := processResources(ctx, v2desc, baseID, id, val, tgd, target, copyMode, uploadType, uploaders)
 			if err != nil {
 				return err
 			}
@@ -247,7 +246,6 @@ func processResources(
 	copyMode transferv1alpha1.CopyMode,
 	uploadType transferv1alpha1.UploadType,
 	uploaders []transferv1alpha1.UploaderConfig,
-	allowMissingSubjects bool,
 ) (map[int]string, []string, error) {
 	component := val.Descriptor.Component.Name
 	version := val.Descriptor.Component.Version
@@ -290,7 +288,7 @@ func processResources(
 			continue
 		}
 
-		exprs, err := processResource(resource, access, id, val, tgd, toSpec, resourceTransformIDs, i, uploadType, allowMissingSubjects)
+		exprs, err := processResource(resource, access, id, val, tgd, toSpec, resourceTransformIDs, i, uploadType)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -320,7 +318,7 @@ func logSkippedResource(ctx context.Context, component, version string, resource
 // target repository. wget and s3 resources are always downloaded and embedded as local blobs.
 // It returns CEL spec-field expressions for the file buffers produced, referencing consumer spec
 // fields (not producer outputs) so the DAG edge points from consumer to the cleanup node.
-func processResource(resource descriptorv2.Resource, access runtime.Typed, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int, uploadType transferv1alpha1.UploadType, allowMissingSubjects bool) ([]string, error) {
+func processResource(resource descriptorv2.Resource, access runtime.Typed, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int, uploadType transferv1alpha1.UploadType) ([]string, error) {
 	_, isOCITarget := toSpec.(*oci.Repository)
 	uploadAsArtifact := isOCITarget && uploadType == transferv1alpha1.UploadAsOciArtifact
 
@@ -331,12 +329,12 @@ func processResource(resource descriptorv2.Resource, access runtime.Typed, id st
 	switch acc := access.(type) {
 	case *descriptorv2.LocalBlob:
 		shouldUpload := uploadAsArtifact && isOCICompliantManifest(acc.MediaType) && acc.ReferenceName != ""
-		if err := processLocalBlob(resource, acc, id, val, tgd, toSpec, resourceTransformIDs, i, shouldUpload, allowMissingSubjects); err != nil {
+		if err := processLocalBlob(resource, acc, id, val, tgd, toSpec, resourceTransformIDs, i, shouldUpload); err != nil {
 			return nil, fmt.Errorf("failed processing local blob resource: %w", err)
 		}
 		return []string{fmt.Sprintf("${%s.spec.file}", addResourceID)}, nil
 	case *ociv1.OCIImage:
-		if err := processOCIArtifact(resource, id, val, tgd, toSpec, resourceTransformIDs, i, uploadAsArtifact, allowMissingSubjects); err != nil {
+		if err := processOCIArtifact(resource, id, val, tgd, toSpec, resourceTransformIDs, i, uploadAsArtifact); err != nil {
 			return nil, fmt.Errorf("cannot process OCI artifact resource: %w", err)
 		}
 		// Streaming path (TransferOCIArtifact) produces no temp file — skip cleanup.

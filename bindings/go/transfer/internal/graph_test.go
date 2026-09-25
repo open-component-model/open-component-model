@@ -1,7 +1,6 @@
 package internal
 
 import (
-	"fmt"
 	"strings"
 	"testing"
 
@@ -242,105 +241,6 @@ func TestBuildGraphDefinition_OCIImageUploadAsOCIArtifact(t *testing.T) {
 	assert.Equal(t, ociv1alpha1.TransferOCIArtifactV1alpha1, tgd.Transformations[0].Type)
 	assert.Contains(t, tgd.Transformations[0].ID, "Transfer")
 	assert.Nil(t, findCleanupTransformation(tgd), "streaming OCI path should produce no FileCleanup node")
-}
-
-func TestBuildGraphDefinition_OCIImageUploadAsOCIArtifact_AllowMissingSubjects(t *testing.T) {
-	sourceRepo := testOCIRepo("ghcr.io/source")
-	targetRepo := testOCIRepo("ghcr.io/target")
-	desc := testDescriptor("ocm.software/test", "1.0.0",
-		[]descriptor.Resource{ociImageResource("my-image", "1.0.0", "oci://ghcr.io/org/image:v1")}, nil)
-	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
-	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
-
-	t.Run("allowMissingSubjects is baked into the streaming transformation", func(t *testing.T) {
-		tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{
-			CopyMode:             transferv1alpha1.CopyModeAllResources,
-			UploadType:           transferv1alpha1.UploadAsOciArtifact,
-			AllowMissingSubjects: true,
-		}, nil)
-		require.NoError(t, err)
-		require.Len(t, tgd.Transformations, 2)
-		assert.Equal(t, true, tgd.Transformations[0].Spec.Data["allowMissingSubjects"])
-	})
-
-	t.Run("unset is not baked", func(t *testing.T) {
-		tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{
-			CopyMode:   transferv1alpha1.CopyModeAllResources,
-			UploadType: transferv1alpha1.UploadAsOciArtifact,
-		}, nil)
-		require.NoError(t, err)
-		require.Len(t, tgd.Transformations, 2)
-		_, found := tgd.Transformations[0].Spec.Data["allowMissingSubjects"]
-		assert.False(t, found, "allowMissingSubjects must stay absent when not configured")
-	})
-
-	t.Run("allowMissingSubjects is baked into the non-streaming download and upload nodes", func(t *testing.T) {
-		ctfTarget := testCTFRepo(t.TempDir())
-		ctfRoots := testTransferRoots("ocm.software/test", "1.0.0", ctfTarget, resolver)
-		tgd, err := BuildGraphDefinition(t.Context(), ctfRoots, transferv1alpha1.Config{
-			CopyMode:             transferv1alpha1.CopyModeAllResources,
-			UploadType:           transferv1alpha1.UploadAsOciArtifact,
-			AllowMissingSubjects: true,
-		}, nil)
-		require.NoError(t, err)
-
-		withAllow := map[string]bool{
-			ociv1alpha1.GetOCIArtifactType:      true,
-			ociv1alpha1.CTFAddLocalResourceType: true,
-		}
-		for _, transformation := range tgd.Transformations {
-			got, found := transformation.Spec.Data["allowMissingSubjects"]
-			if withAllow[transformation.Type.Name] {
-				assert.Equal(t, true, got, "transformation %s", transformation.Type)
-				delete(withAllow, transformation.Type.Name)
-				continue
-			}
-			assert.False(t, found, "allowMissingSubjects must not leak into transformation %s", transformation.Type)
-		}
-		assert.Empty(t, withAllow, "expected transformations are missing")
-	})
-}
-
-func TestBuildGraphDefinition_LocalBlob_AllowMissingSubjects(t *testing.T) {
-	sourceRepo := testOCIRepo("ghcr.io/source")
-	targetRepo := testOCIRepo("ghcr.io/target")
-
-	for _, tc := range []struct {
-		resource   descriptor.Resource
-		uploadType transferv1alpha1.UploadType
-		addType    string
-	}{
-		{localBlobResource("my-blob", "1.0.0"), transferv1alpha1.UploadAsLocalBlob, ociv1alpha1.OCIAddLocalResourceType},
-		{dockerManifestLocalBlobResource("my-image", "1.0.0"), transferv1alpha1.UploadAsOciArtifact, ociv1alpha1.AddOCIArtifactType},
-	} {
-		desc := testDescriptor("ocm.software/test", "1.0.0", []descriptor.Resource{tc.resource}, nil)
-		resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
-		roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
-		for _, allow := range []bool{true, false} {
-			t.Run(fmt.Sprintf("%s/allow=%t", tc.addType, allow), func(t *testing.T) {
-				tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{
-					CopyMode:             transferv1alpha1.CopyModeLocalBlobResources,
-					UploadType:           tc.uploadType,
-					AllowMissingSubjects: allow,
-				}, nil)
-				require.NoError(t, err)
-
-				expected := map[string]bool{ociv1alpha1.OCIGetLocalResourceType: true, tc.addType: true}
-				for _, transformation := range tgd.Transformations {
-					got, found := transformation.Spec.Data["allowMissingSubjects"]
-					if allow && expected[transformation.Type.Name] {
-						assert.Equal(t, true, got, "transformation %s", transformation.Type)
-						delete(expected, transformation.Type.Name)
-						continue
-					}
-					assert.False(t, found, "allowMissingSubjects must not be set on transformation %s", transformation.Type)
-				}
-				if allow {
-					assert.Empty(t, expected, "expected transformations are missing")
-				}
-			})
-		}
-	}
 }
 
 func TestBuildGraphDefinition_HelmResource(t *testing.T) {

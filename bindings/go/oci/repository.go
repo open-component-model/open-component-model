@@ -78,9 +78,6 @@ type Repository struct {
 	// These options are used in copyResource.
 	resourceCopyOptions oras.CopyOptions
 
-	// allowMissingSubjects makes copy traversals skip missing subjects and referrers.
-	allowMissingSubjects bool
-
 	// referrerTrackingPolicy defines how OCI referrers are used to track component versions.
 	referrerTrackingPolicy ReferrerTrackingPolicy
 

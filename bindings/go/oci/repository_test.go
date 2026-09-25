@@ -2422,11 +2422,10 @@ func TestRepository_UploadResourceStream(t *testing.T) {
 	}
 }
 
-// TestRepository_UploadResourceStream_AllowMissingSubjects verifies that a
-// streamed OCI artifact whose manifest references a subject that does not
-// exist in the source store fails the upload by default and succeeds with
-// WithAllowMissingSubjects(true).
-func TestRepository_UploadResourceStream_AllowMissingSubjects(t *testing.T) {
+// TestRepository_UploadResourceStream_MissingSubject verifies that a streamed
+// OCI artifact whose manifest references a subject that does not exist in the
+// source store is uploaded without the subject.
+func TestRepository_UploadResourceStream_MissingSubject(t *testing.T) {
 	newDanglingSubjectStream := func(t *testing.T) (*memory.Store, ociImageSpecV1.Descriptor) {
 		t.Helper()
 		ctx := t.Context()
@@ -2449,55 +2448,37 @@ func TestRepository_UploadResourceStream_AllowMissingSubjects(t *testing.T) {
 		return store, manifestDesc
 	}
 
-	tests := []struct {
-		name      string
-		allow     bool
-		wantError bool
-	}{
-		{name: "default fails on dangling subject", allow: false, wantError: true},
-		{name: "allowMissingSubjects ignores dangling subject", allow: true, wantError: false},
+	r := require.New(t)
+	ctx := t.Context()
+
+	fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
+	r.NoError(err)
+	store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
+	repo := Repository(t, ocictf.WithCTF(store), oci.WithScheme(testScheme))
+
+	src, manifestDesc := newDanglingSubjectStream(t)
+	resource := &descriptor.Resource{
+		ElementMeta: descriptor.ElementMeta{
+			ObjectMeta: descriptor.ObjectMeta{Name: "stream-res", Version: "1.0.0"},
+		},
+		Type:   "ociImage",
+		Access: &v1.OCIImage{ImageReference: "test-repo:v1.0.0"},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			r := require.New(t)
-			ctx := t.Context()
-
-			fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
-			r.NoError(err)
-			store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
-			repo := Repository(t, ocictf.WithCTF(store), oci.WithScheme(testScheme), oci.WithAllowMissingSubjects(tc.allow))
-
-			src, manifestDesc := newDanglingSubjectStream(t)
-			resource := &descriptor.Resource{
-				ElementMeta: descriptor.ElementMeta{
-					ObjectMeta: descriptor.ObjectMeta{Name: "stream-res", Version: "1.0.0"},
-				},
-				Type:   "ociImage",
-				Access: &v1.OCIImage{ImageReference: "test-repo:v1.0.0"},
-			}
-
-			stream := &ocistream.OCIResourceStream{
-				ReadOnlyGraphStorage: src,
-				Descriptor:           manifestDesc,
-			}
-
-			res, err := repo.UploadResourceStream(ctx, resource, stream)
-			if tc.wantError {
-				r.Error(err)
-				r.ErrorIs(err, errdef.ErrNotFound)
-				return
-			}
-			r.NoError(err)
-			r.NotNil(res)
-
-			targetStore, err := store.StoreForReference(ctx, "test-repo")
-			r.NoError(err)
-			exists, err := targetStore.Exists(ctx, manifestDesc)
-			r.NoError(err)
-			r.True(exists, "manifest must have been copied into the target store")
-		})
+	stream := &ocistream.OCIResourceStream{
+		ReadOnlyGraphStorage: src,
+		Descriptor:           manifestDesc,
 	}
+
+	res, err := repo.UploadResourceStream(ctx, resource, stream)
+	r.NoError(err)
+	r.NotNil(res)
+
+	targetStore, err := store.StoreForReference(ctx, "test-repo")
+	r.NoError(err)
+	exists, err := targetStore.Exists(ctx, manifestDesc)
+	r.NoError(err)
+	r.True(exists, "manifest must have been copied into the target store")
 }
 
 // ownershipArtifactAnnotation is a representative software.ocm.artifact value in

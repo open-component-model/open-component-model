@@ -59,11 +59,6 @@ type Config struct {
 	// resources are embedded as local blobs within the component descriptor or uploaded as separate
 	// OCI artifacts with their own repository references.
 	UploadType UploadType `json:"uploadType,omitempty"`
-
-	// AllowMissingSubjects makes copies of OCI artifacts skip subjects and
-	// referrers whose target does not exist in the source, with a warning,
-	// instead of failing the transfer.
-	AllowMissingSubjects bool `json:"allowMissingSubjects,omitempty"`
 }
 
 // Validate rejects a non-matching [Config.Type] and unknown enum values.
@@ -150,9 +145,6 @@ func Merge(configs ...*Config) *Config {
 		}
 		if cfg.UploadType != "" {
 			merged.UploadType = cfg.UploadType
-		}
-		if cfg.AllowMissingSubjects {
-			merged.AllowMissingSubjects = true
 		}
 	}
 	return merged

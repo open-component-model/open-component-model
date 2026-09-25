@@ -20,10 +20,6 @@ type GetOCIArtifact struct {
 	Scheme             *runtime.Scheme
 	Repository         repository.ResourceRepository
 	CredentialProvider credentials.Resolver
-	// FallbackRepository is used instead of Repository if missing subjects are
-	// allowed and Repository cannot carry that setting (see
-	// https://github.com/open-component-model/ocm-project/issues/774).
-	FallbackRepository missingSubjectsConfigurable
 }
 
 func (t *GetOCIArtifact) Transform(ctx context.Context, step runtime.Typed) (runtime.Typed, error) {
@@ -52,14 +48,9 @@ func (t *GetOCIArtifact) Transform(ctx context.Context, step runtime.Typed) (run
 	}
 	targetResource := descriptor.ConvertFromV2Resource(resource)
 
-	repo, err := withAllowMissingSubjects(t.Repository, t.FallbackRepository, transformation.Spec.AllowMissingSubjects)
-	if err != nil {
-		return nil, err
-	}
-
 	var creds runtime.Typed
 	if t.CredentialProvider != nil {
-		if consumerId, err := repo.GetResourceCredentialConsumerIdentity(ctx, targetResource); err == nil {
+		if consumerId, err := t.Repository.GetResourceCredentialConsumerIdentity(ctx, targetResource); err == nil {
 			if creds, err = t.CredentialProvider.Resolve(ctx, consumerId); err != nil {
 				if !errors.Is(err, credentials.ErrNotFound) {
 					return nil, fmt.Errorf("failed resolving credentials: %w", err)
@@ -68,7 +59,7 @@ func (t *GetOCIArtifact) Transform(ctx context.Context, step runtime.Typed) (run
 		}
 	}
 
-	blobContent, err := repo.DownloadResource(ctx, targetResource, creds)
+	blobContent, err := t.Repository.DownloadResource(ctx, targetResource, creds)
 	if err != nil {
 		return nil, fmt.Errorf("failed downloading OCI artifact %v %w", resource.ToIdentity(), err)
 	}

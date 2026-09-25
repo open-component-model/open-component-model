@@ -32,8 +32,6 @@ component's references and transfers them too.
 Driving defaults from the OCM configuration:
   A transfer.config.ocm.software/v1alpha1 entry inside the central OCM configuration
   (passed via --config) sets defaults for --recursive, --copy-resources, and --upload-as.
-  Set allowMissingSubjects to true to let copies of OCI image resources skip subjects and
-  referrers that do not exist in the source, with a warning. By default, the transfer fails.
   Explicit command-line flags always override the values from the configuration.
 
 Two-step workflow (generate, review, replay):

@@ -48,8 +48,4 @@ type GetOCIArtifactSpec struct {
 	// OutputPath is the path where the artifact should be downloaded to.
 	// If empty, a temporary file will be created.
 	OutputPath string `json:"outputPath,omitempty"`
-	// AllowMissingSubjects makes the copy skip subjects and referrers whose
-	// target does not exist in the source, with a warning, instead of failing.
-	// +optional
-	AllowMissingSubjects bool `json:"allowMissingSubjects,omitempty"`
 }

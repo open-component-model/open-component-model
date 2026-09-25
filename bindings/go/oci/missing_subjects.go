@@ -17,36 +17,25 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/internal/log"
 )
 
-// WithAllowMissingSubjects configures copies to skip subjects and referrers
-// whose target does not exist in the source, instead of failing.
-// Registries accept referrers of absent subjects, and retention or mirroring
-// can remove targets later. Content reachable only through a skipped edge is
-// not copied. Missing config, layers or index children always fail the copy.
-func WithAllowMissingSubjects(allow bool) RepositoryOption {
-	return func(o *RepositoryOptions) {
-		o.AllowMissingSubjects = allow
-	}
-}
-
-// SetAllowMissingSubjects overrides [WithAllowMissingSubjects] for this repository.
-func (repo *Repository) SetAllowMissingSubjects(allow bool) {
-	repo.allowMissingSubjects = allow
-}
-
+// copyGraphOptions returns the copy options of the repository. Copies skip
+// subjects and referrers whose target does not exist in the source, with a
+// warning, instead of failing. Registries accept referrers of absent subjects,
+// and retention or mirroring can remove targets later. Content reachable only
+// through a skipped edge is not copied. Missing config, layers or index
+// children still fail the copy.
 func (repo *Repository) copyGraphOptions() oras.CopyGraphOptions {
 	opts := repo.resourceCopyOptions.CopyGraphOptions
-	if repo.allowMissingSubjects {
-		opts.FindSuccessors = skipMissingSubject(opts.FindSuccessors)
-	}
+	opts.FindSuccessors = skipMissingSubject(opts.FindSuccessors)
 	return opts
 }
 
+// extendedCopyGraphOptions is [Repository.copyGraphOptions] for copies that
+// also walk referrers.
 func (repo *Repository) extendedCopyGraphOptions() oras.ExtendedCopyGraphOptions {
-	opts := oras.ExtendedCopyGraphOptions{CopyGraphOptions: repo.copyGraphOptions()}
-	if repo.allowMissingSubjects {
-		opts.FindPredecessors = skipMissingReferrers
+	return oras.ExtendedCopyGraphOptions{
+		CopyGraphOptions: repo.copyGraphOptions(),
+		FindPredecessors: skipMissingReferrers,
 	}
-	return opts
 }
 
 // mediaTypeArtifactManifest is the deprecated OCI artifact manifest, which

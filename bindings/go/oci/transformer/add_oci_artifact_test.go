@@ -17,7 +17,6 @@ import (
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	ociaccess "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	ocicredsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
-	ocistream "ocm.software/open-component-model/bindings/go/oci/stream"
 	"ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -218,82 +217,4 @@ func TestAddOCIArtifact_ValidationErrors(t *testing.T) {
 			assert.Contains(t, err.Error(), tt.expectedErr)
 		})
 	}
-}
-
-// mockResourceRepositoryForAddOCIConfigurable additionally supports allowing
-// missing subjects.
-type mockResourceRepositoryForAddOCIConfigurable struct {
-	ocistream.ResourceRepository
-	mockResourceRepositoryForAddOCI
-	configured bool
-}
-
-func (m *mockResourceRepositoryForAddOCIConfigurable) UploadResource(ctx context.Context, res *descriptor.Resource, content blob.ReadOnlyBlob, credentials runtime.Typed) (*descriptor.Resource, error) {
-	return m.mockResourceRepositoryForAddOCI.UploadResource(ctx, res, content, credentials)
-}
-
-func (m *mockResourceRepositoryForAddOCIConfigurable) GetResourceCredentialConsumerIdentity(ctx context.Context, res *descriptor.Resource) (runtime.Identity, error) {
-	return m.mockResourceRepositoryForAddOCI.GetResourceCredentialConsumerIdentity(ctx, res)
-}
-
-func (m *mockResourceRepositoryForAddOCIConfigurable) WithAllowMissingSubjects(allow bool) ocistream.ResourceRepository {
-	m.configured = allow
-	return m
-}
-
-func TestAddOCIArtifact_AllowMissingSubjects(t *testing.T) {
-	testFile := filepath.Join(t.TempDir(), "test-artifact.tar")
-	require.NoError(t, os.WriteFile(testFile, []byte("test artifact content"), 0o644))
-
-	scheme := runtime.NewScheme()
-	v2.MustAddToScheme(scheme)
-	scheme.MustRegisterWithAlias(&v1alpha1.AddOCIArtifact{}, runtime.NewVersionedType(v1alpha1.AddOCIArtifactType, v1alpha1.Version))
-
-	spec := func(allow bool) *v1alpha1.AddOCIArtifact {
-		return &v1alpha1.AddOCIArtifact{
-			Type: runtime.NewVersionedType(v1alpha1.AddOCIArtifactType, v1alpha1.Version),
-			Spec: &v1alpha1.AddOCIArtifactSpec{
-				Resource: &v2.Resource{
-					ElementMeta: v2.ElementMeta{ObjectMeta: v2.ObjectMeta{Name: "test-artifact", Version: "0.1.0"}},
-					Type:        "ociImage",
-					Relation:    v2.LocalRelation,
-				},
-				File: blobv1alpha1.File{
-					Type: runtime.Type{Name: blobv1alpha1.FileType, Version: blobv1alpha1.Version},
-					URI:  "file://" + testFile,
-				},
-				AllowMissingSubjects: allow,
-			},
-		}
-	}
-
-	t.Run("allowMissingSubjects uses the fallback repository", func(t *testing.T) {
-		repo := &mockResourceRepositoryForAddOCI{}
-		fallback := &mockResourceRepositoryForAddOCIConfigurable{}
-		transformer := &AddOCIArtifact{Scheme: scheme, Repository: repo, FallbackRepository: fallback}
-
-		_, err := transformer.Transform(t.Context(), spec(true))
-		require.NoError(t, err)
-		require.True(t, fallback.configured)
-		require.NotNil(t, fallback.uploadedResource)
-		require.Nil(t, repo.uploadedResource)
-	})
-
-	t.Run("unset uses the repository", func(t *testing.T) {
-		repo := &mockResourceRepositoryForAddOCI{}
-		fallback := &mockResourceRepositoryForAddOCIConfigurable{}
-		transformer := &AddOCIArtifact{Scheme: scheme, Repository: repo, FallbackRepository: fallback}
-
-		_, err := transformer.Transform(t.Context(), spec(false))
-		require.NoError(t, err)
-		require.False(t, fallback.configured)
-		require.NotNil(t, repo.uploadedResource)
-	})
-
-	t.Run("repository without support and no fallback repository fails", func(t *testing.T) {
-		transformer := &AddOCIArtifact{Scheme: scheme, Repository: &mockResourceRepositoryForAddOCI{}}
-
-		_, err := transformer.Transform(t.Context(), spec(true))
-		require.ErrorContains(t, err, "does not support allowing missing subjects")
-	})
 }

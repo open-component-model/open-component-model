@@ -62,18 +62,9 @@ func WithHTTPConfig(cfg *httpv1alpha1.Config) Option {
 }
 
 type ResourceRepository struct {
-	filesystemConfig     *filesystemv1alpha1.Config
-	userAgent            string
-	httpClient           *http.Client
-	allowMissingSubjects bool
-}
-
-// WithAllowMissingSubjects returns a copy of the repository whose copy
-// traversals skip missing subjects and referrers (see [oci.WithAllowMissingSubjects]).
-func (p *ResourceRepository) WithAllowMissingSubjects(allow bool) ocistream.ResourceRepository {
-	c := *p
-	c.allowMissingSubjects = allow
-	return &c
+	filesystemConfig *filesystemv1alpha1.Config
+	userAgent        string
+	httpClient       *http.Client
 }
 
 // make sure that ResourceRepository implements the oci ResourceRepository interface
@@ -222,7 +213,7 @@ func (p *ResourceRepository) UploadResource(ctx context.Context, resource *descr
 }
 
 func (p *ResourceRepository) getRepository(spec *ociv1.Repository, credentials *ocicredsv1.OCICredentials) (*oci.Repository, error) {
-	repo, err := createRepository(spec, credentials, p.filesystemConfig, p.userAgent, p.httpClient, p.allowMissingSubjects)
+	repo, err := createRepository(spec, credentials, p.filesystemConfig, p.userAgent, p.httpClient)
 	if err != nil {
 		return nil, fmt.Errorf("error creating repository: %w", err)
 	}
@@ -245,7 +236,6 @@ func createRepository(
 	filesystemConfig *filesystemv1alpha1.Config,
 	userAgent string,
 	httpClient *http.Client,
-	allowMissingSubjects bool,
 ) (*oci.Repository, error) {
 	url, err := runtime.ParseURLAndAllowNoScheme(spec.BaseUrl)
 	if err != nil {
@@ -273,7 +263,6 @@ func createRepository(
 		oci.WithResolver(urlResolver),
 		oci.WithCreator(userAgent),
 		oci.WithTempDir(tempDir), // the filesystem config being empty is a valid config
-		oci.WithAllowMissingSubjects(allowMissingSubjects),
 	}
 
 	repo, err := oci.NewRepository(options...)

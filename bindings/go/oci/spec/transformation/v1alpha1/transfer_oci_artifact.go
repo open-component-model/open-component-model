@@ -32,10 +32,6 @@ type TransferOCIArtifactSpec struct {
 	Resource *v2.Resource `json:"resource"`
 	// TargetResource is the target resource descriptor with the destination OCI image reference.
 	TargetResource *v2.Resource `json:"targetResource"`
-	// AllowMissingSubjects makes the copy skip subjects and referrers whose
-	// target does not exist in the source, with a warning, instead of failing.
-	// +optional
-	AllowMissingSubjects bool `json:"allowMissingSubjects,omitempty"`
 }
 
 // TransferOCIArtifactOutput is the output specification for the

@@ -14,7 +14,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	"ocm.software/open-component-model/bindings/go/cli/cmd/internal/test"
-	ocictx "ocm.software/open-component-model/bindings/go/cli/internal/context"
 	"ocm.software/open-component-model/bindings/go/ctf"
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
@@ -22,7 +21,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci"
 	"ocm.software/open-component-model/bindings/go/oci/compref"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
-	v1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	"ocm.software/open-component-model/bindings/go/signing"
 )
@@ -171,65 +169,6 @@ func TestTransferComponentVersionWithTransferSpecDryRun(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.Equal(t, originalSpec, reRendered.String(), "re-rendered spec should match original")
-}
-
-// TestTransferComponentVersionAllowMissingSubjectsFromConfig verifies that the
-// allowMissingSubjects entry of the transfer configuration is baked into the
-// TransferOCIArtifact transformations of the generated transfer specification.
-func TestTransferComponentVersionAllowMissingSubjectsFromConfig(t *testing.T) {
-	componentName := "ocm.software/allow-missing-subjects-test"
-	componentVersion := "0.0.1"
-
-	fromDesc := createTestDescriptor(componentName, componentVersion)
-	fromDesc.Component.Resources = []descriptor.Resource{
-		{
-			ElementMeta: descriptor.ElementMeta{
-				ObjectMeta: descriptor.ObjectMeta{Name: "remote-image", Version: "1.0.0"},
-			},
-			Type:     "ociImage",
-			Relation: "external",
-			Access:   &v1.OCIImage{ImageReference: "ghcr.io/org/image:v1"},
-		},
-	}
-	fromPath, err := setupTestRepositoryWithDescriptorLibrary(t, fromDesc)
-	require.NoError(t, err)
-	ref := &compref.Ref{
-		Repository: &ctfv1.Repository{FilePath: fromPath},
-		Component:  componentName,
-		Version:    componentVersion,
-	}
-
-	configPath := t.TempDir() + "/ocmconfig"
-	require.NoError(t, os.WriteFile(configPath, []byte(`type: generic.config.ocm.software/v1
-configurations:
-  - type: transfer.config.ocm.software/v1alpha1
-    allowMissingSubjects: true
-`), 0o644))
-
-	specOutput := new(bytes.Buffer)
-	_, err = test.OCM(t,
-		test.WithArgs("transfer", "component-version", ref.String(), "ghcr.io/ocm/allow-missing-subjects-test",
-			"--copy-resources", "--upload-as", "ociArtifact", "--dry-run", "-o", "yaml"),
-		test.WithOutput(specOutput),
-		test.WithErrorOutput(test.NewJSONLogReader()),
-		test.WithSyscalls(&ocictx.Syscalls{
-			Getenv: func(name string) string {
-				if name == "OCM_CONFIG" {
-					return configPath
-				}
-				return ""
-			},
-			Stat: func(name string) (os.FileInfo, error) {
-				if name == configPath {
-					return os.Stat(configPath)
-				}
-				return nil, os.ErrNotExist
-			},
-		}),
-	)
-	require.NoError(t, err)
-	require.Contains(t, specOutput.String(), "TransferOCIArtifact")
-	require.Contains(t, specOutput.String(), "allowMissingSubjects: true")
 }
 
 func TestTransferComponentVersionWithTransferSpecRejectsArgs(t *testing.T) {

@@ -6,10 +6,6 @@
   "type": "object",
   "description": "OCIGetLocalResourceSpec is the input specification for the\nOCIGetLocalResource transformation.",
   "properties": {
-    "allowMissingSubjects": {
-      "type": "boolean",
-      "description": "AllowMissingSubjects makes the copy skip subjects and referrers whose\ntarget does not exist in the source, with a warning, instead of failing."
-    },
     "component": {
       "type": "string",
       "description": "Component is the component name"

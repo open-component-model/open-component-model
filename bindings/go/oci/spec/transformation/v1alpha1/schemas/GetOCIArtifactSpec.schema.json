@@ -6,10 +6,6 @@
   "type": "object",
   "description": "GetOCIArtifactSpec is the input specification for the\nGetOCIArtifact transformation.",
   "properties": {
-    "allowMissingSubjects": {
-      "type": "boolean",
-      "description": "AllowMissingSubjects makes the copy skip subjects and referrers whose\ntarget does not exist in the source, with a warning, instead of failing."
-    },
     "outputPath": {
       "type": "string",
       "description": "OutputPath is the path where the artifact should be downloaded to.\nIf empty, a temporary file will be created."

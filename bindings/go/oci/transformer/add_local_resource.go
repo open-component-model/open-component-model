@@ -41,7 +41,6 @@ func (t *AddLocalResource) Transform(ctx context.Context, step runtime.Typed) (r
 	var resource *v2.Resource
 	var output any
 	var globalAccessPolicy ocirepospecv1.GlobalAccessPolicy
-	var allowMissingSubjects bool
 
 	switch tr := transformation.(type) {
 	case *v1alpha1.OCIAddLocalResource:
@@ -51,7 +50,6 @@ func (t *AddLocalResource) Transform(ctx context.Context, step runtime.Typed) (r
 		resource = tr.Spec.Resource
 		contentSpec = tr.Spec.File
 		globalAccessPolicy = tr.Spec.GlobalAccessPolicy
-		allowMissingSubjects = tr.Spec.AllowMissingSubjects
 		if tr.Output == nil {
 			tr.Output = &v1alpha1.OCIAddLocalResourceOutput{}
 		}
@@ -62,7 +60,6 @@ func (t *AddLocalResource) Transform(ctx context.Context, step runtime.Typed) (r
 		version = tr.Spec.Version
 		resource = tr.Spec.Resource
 		contentSpec = tr.Spec.File
-		allowMissingSubjects = tr.Spec.AllowMissingSubjects
 		if tr.Output == nil {
 			tr.Output = &v1alpha1.CTFAddLocalResourceOutput{}
 		}
@@ -100,10 +97,6 @@ func (t *AddLocalResource) Transform(ctx context.Context, step runtime.Typed) (r
 	repo, err := t.RepoProvider.GetComponentVersionRepository(ctx, repoSpec, creds)
 	if err != nil {
 		return nil, fmt.Errorf("failed getting component version repository: %w", err)
-	}
-
-	if err := setAllowMissingSubjects(repo, allowMissingSubjects); err != nil {
-		return nil, err
 	}
 
 	// Apply global access policy from transformer spec.

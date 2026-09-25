@@ -17,7 +17,6 @@ aggregative
 agpl
 algo
 allowlist
-allowMissingSubjects
 alpn
 aml
 anchore

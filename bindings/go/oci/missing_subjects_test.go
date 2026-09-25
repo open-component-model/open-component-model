@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"testing"
 
 	"github.com/opencontainers/go-digest"
@@ -54,7 +53,7 @@ func (g *ghostReferrers) Predecessors(ctx context.Context, desc ociImageSpecV1.D
 	return append(predecessors, g.ghost), nil
 }
 
-func TestAllowMissingSubjects(t *testing.T) {
+func TestCopySkipsMissingSubjects(t *testing.T) {
 	newStore := func(t *testing.T) *memory.Store {
 		store := memory.New()
 		pushTestBlob(t, store, ociImageSpecV1.MediaTypeEmptyJSON, ociImageSpecV1.DescriptorEmptyJSON.Data)
@@ -67,9 +66,8 @@ func TestAllowMissingSubjects(t *testing.T) {
 	tests := []struct {
 		name string
 		// setup returns the source store and the copy root.
-		setup      func(t *testing.T) (oras.ReadOnlyGraphTarget, ociImageSpecV1.Descriptor)
-		abortFails bool
-		skipFails  bool
+		setup   func(t *testing.T) (oras.ReadOnlyGraphTarget, ociImageSpecV1.Descriptor)
+		wantErr bool
 	}{
 		{
 			name: "missing subject",
@@ -78,7 +76,6 @@ func TestAllowMissingSubjects(t *testing.T) {
 				subject := missingDescriptor("subject")
 				return store, pushTestManifest(t, store, layer(t, store), &subject)
 			},
-			abortFails: true,
 		},
 		{
 			name: "missing subject of artifact manifest",
@@ -92,7 +89,6 @@ func TestAllowMissingSubjects(t *testing.T) {
 				require.NoError(t, err)
 				return store, pushTestBlob(t, store, mediaTypeArtifactManifest, data)
 			},
-			abortFails: true,
 		},
 		{
 			name: "missing referrer",
@@ -101,7 +97,6 @@ func TestAllowMissingSubjects(t *testing.T) {
 				root := pushTestManifest(t, store, layer(t, store), nil)
 				return &ghostReferrers{Store: store, subject: root, ghost: missingDescriptor("referrer")}, root
 			},
-			abortFails: true,
 		},
 		{
 			name: "missing layer",
@@ -109,8 +104,7 @@ func TestAllowMissingSubjects(t *testing.T) {
 				store := newStore(t)
 				return store, pushTestManifest(t, store, []ociImageSpecV1.Descriptor{missingDescriptor("layer")}, nil)
 			},
-			abortFails: true,
-			skipFails:  true,
+			wantErr: true,
 		},
 		{
 			name: "complete graph with subject",
@@ -124,27 +118,21 @@ func TestAllowMissingSubjects(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		for _, allow := range []bool{false, true} {
-			wantErr := tc.abortFails
-			if allow {
-				wantErr = tc.skipFails
-			}
-			t.Run(fmt.Sprintf("%s/allowMissingSubjects=%t", tc.name, allow), func(t *testing.T) {
-				r := require.New(t)
-				src, root := tc.setup(t)
-				dst := memory.New()
-				repo := &Repository{allowMissingSubjects: allow}
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			src, root := tc.setup(t)
+			dst := memory.New()
+			repo := &Repository{}
 
-				err := oras.ExtendedCopyGraph(t.Context(), src, dst, root, repo.extendedCopyGraphOptions())
-				if wantErr {
-					r.ErrorIs(err, errdef.ErrNotFound)
-					return
-				}
-				r.NoError(err)
-				exists, err := dst.Exists(t.Context(), root)
-				r.NoError(err)
-				r.True(exists)
-			})
-		}
+			err := oras.ExtendedCopyGraph(t.Context(), src, dst, root, repo.extendedCopyGraphOptions())
+			if tc.wantErr {
+				r.ErrorIs(err, errdef.ErrNotFound)
+				return
+			}
+			r.NoError(err)
+			exists, err := dst.Exists(t.Context(), root)
+			r.NoError(err)
+			r.True(exists)
+		})
 	}
 }
