@@ -1,6 +1,7 @@
 package test
 
 import (
+	"bytes"
 	"context"
 	"crypto"
 	"crypto/rand"
@@ -13,6 +14,9 @@ import (
 	"math/big"
 	"time"
 
+	"github.com/ProtonMail/go-crypto/openpgp"
+	"github.com/ProtonMail/go-crypto/openpgp/armor"
+	"github.com/ProtonMail/go-crypto/openpgp/packet"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -24,6 +28,8 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	gpgcredentialsv1 "ocm.software/open-component-model/bindings/go/gpg/spec/credentials/v1alpha1"
+	gpgsigningv1alpha1 "ocm.software/open-component-model/bindings/go/gpg/spec/signing/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/status"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
@@ -143,4 +149,55 @@ func SignComponent(ctx context.Context, signatureName string, signAlgo signingv1
 		Digest:    *unsignedDigest,
 		Signature: sigBytes,
 	}, pubKey
+}
+
+// SignComponentGPG generates an ephemeral OpenPGP entity, signs the normalised descriptor bytes
+// through the GPG signing handler, and returns the resulting Signature plus the armored public key.
+func SignComponentGPG(ctx context.Context, signatureName string, normalised []byte, pm *manager.PluginManager) (descruntime.Signature, string) {
+	GinkgoHelper()
+
+	cfg := &gpgsigningv1alpha1.Config{}
+
+	handler, err := pm.SigningRegistry.GetPlugin(ctx, cfg)
+	Expect(err).ToNot(HaveOccurred())
+
+	h := crypto.SHA256.New()
+	_, err = h.Write(normalised)
+	Expect(err).ToNot(HaveOccurred())
+	freshDigest := h.Sum(nil)
+
+	unsignedDigest := &descruntime.Digest{
+		HashAlgorithm:          crypto.SHA256.String(),
+		NormalisationAlgorithm: v4alpha1.Algorithm,
+		Value:                  hex.EncodeToString(freshDigest),
+	}
+
+	entity, err := openpgp.NewEntity("ocm-e2e", "", "ocm@e2e.test", &packet.Config{RSABits: 2048})
+	Expect(err).ToNot(HaveOccurred())
+
+	var privBuf bytes.Buffer
+	privWriter, err := armor.Encode(&privBuf, openpgp.PrivateKeyType, nil)
+	Expect(err).ToNot(HaveOccurred())
+	Expect(entity.SerializePrivateWithoutSigning(privWriter, nil)).To(Succeed())
+	Expect(privWriter.Close()).To(Succeed())
+
+	var pubBuf bytes.Buffer
+	pubWriter, err := armor.Encode(&pubBuf, openpgp.PublicKeyType, nil)
+	Expect(err).ToNot(HaveOccurred())
+	Expect(entity.Serialize(pubWriter)).To(Succeed())
+	Expect(pubWriter.Close()).To(Succeed())
+
+	credentials := &gpgcredentialsv1.GPGCredentials{
+		PrivateKeyPGP: privBuf.String(),
+		PublicKeyPGP:  pubBuf.String(),
+	}
+
+	sigBytes, err := handler.Sign(ctx, *unsignedDigest, cfg, credentials)
+	Expect(err).ToNot(HaveOccurred())
+
+	return descruntime.Signature{
+		Name:      signatureName,
+		Digest:    *unsignedDigest,
+		Signature: sigBytes,
+	}, pubBuf.String()
 }

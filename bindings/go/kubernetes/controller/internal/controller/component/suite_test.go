@@ -32,6 +32,7 @@ import (
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/rsa/signing/handler"
+	gpghandler "ocm.software/open-component-model/bindings/go/gpg/signing/handler"
 	signingv1alpha1 "ocm.software/open-component-model/bindings/go/rsa/signing/v1alpha1"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -136,6 +137,10 @@ var _ = BeforeSuite(func() {
 	signingHandler, err := handler.New(signingv1alpha1.Scheme, true)
 	Expect(err).ToNot(HaveOccurred())
 	Expect(pm.SigningRegistry.RegisterInternalComponentSignatureHandler(signingHandler)).To(Succeed())
+	gpgSigningHandler, err := gpghandler.New(nil)
+	Expect(err).ToNot(HaveOccurred())
+	Expect(pm.SigningRegistry.RegisterInternalComponentSignatureHandler(gpgSigningHandler)).To(Succeed())
+	Expect(pm.CredentialTypeRegistry.RegisterInternalCredentialTypeSchemeProvider(gpgSigningHandler)).To(Succeed())
 	Expect(pm.CredentialRepositoryRegistry.RegisterInternalCredentialRepositoryPlugin(
 		&ocicredentials.OCICredentialRepository{},
 		[]ocmruntime.Type{v1.Type},
