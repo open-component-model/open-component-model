@@ -175,14 +175,20 @@ func (d *DirectedAcyclicGraph[T]) AddEdge(from, to T, attributes ...map[string]a
 		fromNode.OutDegree++
 		toNode.InDegree++
 
-		// Check if the graph is still a DAG
-		hasCycle, cycle := d.HasCycle()
-		if hasCycle {
+		// The new edge closes a cycle exactly if `from` is already reachable
+		// from `to`. A single reachability walk from `to` replaces the former
+		// full-graph cycle check, which made graph construction O(E*(V+E))
+		if path, closes := d.findPath(to, from); closes {
 			// Ehmmm, we have a cycle, let's remove the edge we just added
 			delete(fromNode.Edges, to)
 			fromNode.OutDegree--
 			toNode.InDegree--
 
+			cycle := make([]string, 0, len(path)+1)
+			cycle = append(cycle, fmt.Sprintf("%v", from))
+			for _, node := range path {
+				cycle = append(cycle, fmt.Sprintf("%v", node))
+			}
 			return fmt.Errorf("adding an edge from %v to %v would create a cycle: %w", fmt.Sprintf("%v", from), fmt.Sprintf("%v", to), &CycleError{
 				Cycle: cycle,
 			})
@@ -281,15 +287,30 @@ func (d *DirectedAcyclicGraph[T]) GetEdges() [][2]T {
 }
 
 func (d *DirectedAcyclicGraph[T]) HasCycle() (bool, []string) {
+	cyclic, cycle := d.hasCycle()
+	if !cyclic {
+		return false, nil
+	}
+	cycleStrings := make([]string, len(cycle))
+	for i, node := range cycle {
+		cycleStrings[i] = fmt.Sprintf("%v", node)
+	}
+	return true, cycleStrings
+}
+
+// hasCycle works on the vertex IDs directly. The string conversion of the
+// cycle path is deferred to the error path above, so verifying an acyclic
+// graph does not stringify every vertex.
+func (d *DirectedAcyclicGraph[T]) hasCycle() (bool, []T) {
 	visited := make(map[T]bool)
 	recStack := make(map[T]bool)
-	var cyclePath []string
+	var cyclePath []T
 
 	var dfs func(T) bool
 	dfs = func(node T) bool {
 		visited[node] = true
 		recStack[node] = true
-		cyclePath = append(cyclePath, fmt.Sprintf("%v", node))
+		cyclePath = append(cyclePath, node)
 
 		for neighbor := range d.Vertices[node].Edges {
 			if !visited[neighbor] {
@@ -298,7 +319,7 @@ func (d *DirectedAcyclicGraph[T]) HasCycle() (bool, []string) {
 				}
 			} else if recStack[neighbor] {
 				// Found a cycle, add the closing node to complete the cycle
-				cyclePath = append(cyclePath, fmt.Sprintf("%v", neighbor))
+				cyclePath = append(cyclePath, neighbor)
 				return true
 			}
 		}
@@ -310,7 +331,7 @@ func (d *DirectedAcyclicGraph[T]) HasCycle() (bool, []string) {
 
 	for node := range d.Vertices {
 		if !visited[node] {
-			cyclePath = []string{}
+			cyclePath = []T{}
 			if dfs(node) {
 				// Trim the cycle path to start from the repeated node
 				start := 0
@@ -326,6 +347,38 @@ func (d *DirectedAcyclicGraph[T]) HasCycle() (bool, []string) {
 	}
 
 	return false, nil
+}
+
+// findPath reports whether vertex `to` is reachable from vertex `from` along
+// existing edges and returns one such path.
+func (d *DirectedAcyclicGraph[T]) findPath(from, to T) ([]T, bool) {
+	visited := make(map[T]struct{})
+	parent := make(map[T]T)
+	stack := []T{from}
+	visited[from] = struct{}{}
+	for len(stack) > 0 {
+		node := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+		for neighbor := range d.Vertices[node].Edges {
+			if neighbor == to {
+				path := []T{to}
+				for cur := node; ; cur = parent[cur] {
+					path = append(path, cur)
+					if cur == from {
+						break
+					}
+				}
+				slices.Reverse(path)
+				return path, true
+			}
+			if _, seen := visited[neighbor]; !seen {
+				visited[neighbor] = struct{}{}
+				parent[neighbor] = node
+				stack = append(stack, neighbor)
+			}
+		}
+	}
+	return nil, false
 }
 
 func (d *DirectedAcyclicGraph[T]) Contains(v T) (ok bool) {

@@ -125,6 +125,35 @@ func TestDAGAddEdge(t *testing.T) {
 	})
 }
 
+func TestDAGAddEdgeCycleRollback(t *testing.T) {
+	r := require.New(t)
+	d := NewDirectedAcyclicGraph[string]()
+	for _, v := range []string{"A", "B", "C", "D"} {
+		r.NoError(d.AddVertex(v))
+	}
+	r.NoError(d.AddEdge("A", "B"))
+	r.NoError(d.AddEdge("B", "C"))
+	r.NoError(d.AddEdge("C", "D"))
+
+	err := d.AddEdge("D", "B")
+	r.Error(err, "expected error when creating a cycle, but got nil")
+
+	var cerr *CycleError
+	r.True(errors.As(err, &cerr))
+	r.Len(cerr.Cycle, 4, "expected 3-cycle plus closing node, but got %v", cerr.Cycle)
+	r.Contains(cerr.Cycle, "B")
+
+	// The rejected edge must be fully rolled back.
+	_, hasEdge := d.Vertices["D"].Edges["B"]
+	r.False(hasEdge)
+	r.Zero(d.Vertices["D"].OutDegree)
+	r.Equal(1, d.Vertices["B"].InDegree)
+
+	// A rejected edge must not leave the graph in a state that rejects
+	// valid successors.
+	r.NoError(d.AddEdge("A", "D"))
+}
+
 func TestDAGHasCycle(t *testing.T) {
 	r := require.New(t)
 	d := NewDirectedAcyclicGraph[string]()
