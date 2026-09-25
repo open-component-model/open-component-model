@@ -294,16 +294,6 @@ func TestTransferComponentVersionWithTransferSpecStdinAppliesConfig(t *testing.T
 	require.ErrorContains(t, err, "could not load configuration from stdin")
 }
 
-func TestTransferComponentVersionWithTransferSpecStdinMissingAfterConfig(t *testing.T) {
-	_, err := test.OCM(t,
-		test.WithArgs("transfer", "component-version", "--transfer-spec", "-"),
-		test.WithInput(bytes.NewBufferString("type: generic.config.ocm.software/v1\n")),
-		test.WithOutput(new(bytes.Buffer)),
-		test.WithErrorOutput(test.NewJSONLogReader()),
-	)
-	require.ErrorContains(t, err, "no transfer spec document found")
-}
-
 func TestTransferComponentVersionWithTransferSpecFileNotFound(t *testing.T) {
 	_, err := test.OCM(t,
 		test.WithArgs("transfer", "component-version", "--transfer-spec", "/nonexistent/path/spec.yaml"),

@@ -118,7 +118,7 @@ transfer component-version --transfer-spec spec.yaml
   -o, --output enum            output format of the component descriptors
                                (must be one of [json ndjson yaml]) (default yaml)
   -r, --recursive              recursively discover and transfer component versions
-      --transfer-spec string   path to a transfer specification file (use "-" for stdin). The input must hold exactly one transfer spec document; OCM configuration documents in stdin are applied as configuration
+      --transfer-spec string   path to a transfer specification file (use "-" for stdin). The input must hold exactly one transfer spec document; with "-", OCM configuration documents in stdin are applied as configuration
   -u, --upload-as enum         Define whether copied resources should be uploaded as OCI artifacts (instead of local blob resources). This option is only relevant if --copy-resources is set.
                                (must be one of [localBlob ociArtifact]) (default localBlob)
 ```

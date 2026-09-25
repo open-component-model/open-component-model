@@ -40,15 +40,15 @@ transformations:
 )
 
 func TestAddStdinConfig(t *testing.T) {
-	base := &genericv1.Config{Configurations: []*runtime.Raw{{
-		Type: runtime.NewUnversionedType("attributes.config.ocm.software"),
-		Data: []byte(`{"attributes":{"source":"base"},"type":"attributes.config.ocm.software"}`),
-	}}}
 	const (
 		baseData = `{"attributes":{"source":"base"},"type":"attributes.config.ocm.software"}`
 		aData    = `{"attributes":{"source":"a"},"type":"attributes.config.ocm.software"}`
 		bData    = `{"attributes":{"source":"b"},"type":"attributes.config.ocm.software"}`
 	)
+	base := &genericv1.Config{Configurations: []*runtime.Raw{{
+		Type: runtime.NewUnversionedType("attributes.config.ocm.software"),
+		Data: []byte(baseData),
+	}}}
 
 	tests := []struct {
 		name     string

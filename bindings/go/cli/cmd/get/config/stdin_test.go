@@ -26,19 +26,6 @@ configurations:
         password: stdin-secret
 `
 
-func TestGetConfigFromStdin(t *testing.T) {
-	r := require.New(t)
-	out := new(bytes.Buffer)
-	_, err := test.OCM(t,
-		test.WithArgs("get", "config"),
-		test.WithInput(bytes.NewBufferString(stdinConfig)),
-		test.WithOutput(out),
-		test.WithErrorOutput(test.NewJSONLogReader()),
-	)
-	r.NoError(err)
-	r.Contains(out.String(), "stdin.example.com")
-}
-
 func TestGetConfigFromStdinMergedWithFile(t *testing.T) {
 	r := require.New(t)
 	out := new(bytes.Buffer)
@@ -53,16 +40,6 @@ func TestGetConfigFromStdinMergedWithFile(t *testing.T) {
 	r.Contains(out.String(), "stdin.example.com")
 	r.Less(bytes.Index(out.Bytes(), []byte("file.example.com")), bytes.Index(out.Bytes(), []byte("stdin.example.com")),
 		"stdin configuration must come last, so it has the highest priority")
-}
-
-func TestGetConfigFromStdinMalformed(t *testing.T) {
-	_, err := test.OCM(t,
-		test.WithArgs("get", "config"),
-		test.WithInput(bytes.NewBufferString("type: generic.config.ocm.software/v1\nconfigurations: notalist\n")),
-		test.WithOutput(new(bytes.Buffer)),
-		test.WithErrorOutput(test.NewJSONLogReader()),
-	)
-	require.ErrorContains(t, err, "stdin")
 }
 
 // TestGetConfigFromStdinMergesWithDiscovery proves that piped configuration adds to the

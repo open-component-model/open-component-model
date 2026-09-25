@@ -26,8 +26,6 @@ const SkipStdinConfigAnnotation = "ocm.software/skip-stdin-config"
 // SkipStdinConfigAnnotation, so they are matched by name.
 var builtinCommands = []string{"help", "completion", cobra.ShellCompRequestCmd, cobra.ShellCompNoDescRequestCmd}
 
-var documentSeparator = []byte("---\n")
-
 // AddStdinConfig applies the configuration documents found in piped stdin on top of cfg,
 // so configuration such as credentials can be passed without writing a file.
 //
@@ -49,7 +47,7 @@ func AddStdinConfig(cmd *cobra.Command, cfg *genericv1.Config) (*genericv1.Confi
 		cmd.SetIn(bytes.NewReader(data))
 		return cfg, nil
 	}
-	cmd.SetIn(bytes.NewReader(bytes.Join(others, documentSeparator)))
+	cmd.SetIn(bytes.NewReader(bytes.Join(others, []byte("---\n"))))
 
 	cfgs := []*genericv1.Config{cfg}
 	for _, doc := range configs {
@@ -68,7 +66,7 @@ func skipsStdinConfig(cmd *cobra.Command) bool {
 		if _, ok := c.Annotations[SkipStdinConfigAnnotation]; ok {
 			return true
 		}
-		if c.HasParent() && slices.Contains(builtinCommands, c.Name()) {
+		if slices.Contains(builtinCommands, c.Name()) {
 			return true
 		}
 	}
