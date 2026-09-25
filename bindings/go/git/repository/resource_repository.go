@@ -21,7 +21,6 @@ import (
 	gitcreds "ocm.software/open-component-model/bindings/go/git/spec/credentials"
 	credsv1 "ocm.software/open-component-model/bindings/go/git/spec/credentials/v1"
 	identityv1 "ocm.software/open-component-model/bindings/go/git/spec/identity/v1"
-	ocmhttp "ocm.software/open-component-model/bindings/go/http"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -60,7 +59,7 @@ func NewResourceRepository(filesystemConfig *filesystemv1alpha1.Config, opts ...
 		maxArchiveSize: options.MaxArchiveSize,
 
 		hostKeyCallback:  options.HostKeyCallback,
-		httpClient:       ocmhttp.New(ocmhttp.WithConfig(options.HTTPConfig)),
+		httpClient:       options.HTTPClient,
 		filesystemConfig: filesystemConfig,
 	}
 }

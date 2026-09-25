@@ -46,11 +46,10 @@
 // SSH uses the current user's known_hosts unless WithHostKeyCallback overrides it.
 // HTTPS uses Go's system trust store and SSL_CERT_FILE / SSL_CERT_DIR overrides;
 // CA bundles are not configured through repository options.
-// Each repository builds its own HTTP client from the shared HTTP factory and
-// hands it to every Git operation it runs, so repositories with different HTTP
-// configurations are isolated within one process. go-git rejects HTTPS-to-HTTP
-// redirects on that client. See
-// [ocm.software/open-component-model/bindings/go/git/repository.WithHTTPConfig].
+// Each repository hands its HTTP client to every Git operation it runs, so
+// repositories with different HTTP clients are isolated within one process.
+// go-git rejects HTTPS-to-HTTP redirects on that client. See
+// [ocm.software/open-component-model/bindings/go/git/repository.WithHTTPClient].
 //
 // # Credential consumer identity
 //

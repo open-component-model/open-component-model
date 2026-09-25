@@ -5,6 +5,7 @@ import (
 
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	gitrepository "ocm.software/open-component-model/bindings/go/git/repository"
+	httpclient "ocm.software/open-component-model/bindings/go/http"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/credentialtyperepository"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/digestprocessor"
@@ -19,7 +20,7 @@ func Register(resourcePluginRegistry *resource.ResourceRegistry,
 	filesystemConfig *filesystemv1alpha1.Config,
 	httpConfig *httpv1alpha1.Config,
 ) error {
-	repository := gitrepository.NewResourceRepository(filesystemConfig, gitrepository.WithHTTPConfig(httpConfig))
+	repository := gitrepository.NewResourceRepository(filesystemConfig, gitrepository.WithHTTPClient(httpclient.New(httpclient.WithConfig(httpConfig))))
 	if err := resourcePluginRegistry.RegisterInternalResourcePlugin(repository); err != nil {
 		return fmt.Errorf("could not register git resource repository plugin: %w", err)
 	}

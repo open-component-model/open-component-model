@@ -1,9 +1,9 @@
 package repository
 
 import (
-	"golang.org/x/crypto/ssh"
+	"net/http"
 
-	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
+	"golang.org/x/crypto/ssh"
 )
 
 // Options holds configuration for the Git resource repository.
@@ -15,9 +15,9 @@ type Options struct {
 	// HostKeyCallback verifies the host key of SSH repositories. Nil uses the
 	// known_hosts files of the current user.
 	HostKeyCallback ssh.HostKeyCallback
-	// HTTPConfig configures the HTTP client used for http(s) repositories. Nil
-	// uses the shared OCM client defaults.
-	HTTPConfig *httpv1alpha1.Config
+	// HTTPClient serves http(s) repositories. Nil uses the shared OCM client
+	// defaults.
+	HTTPClient *http.Client
 }
 
 // Option configures Options.
@@ -38,11 +38,10 @@ func WithHostKeyCallback(callback ssh.HostKeyCallback) Option {
 	}
 }
 
-// WithHTTPConfig configures the OCM HTTP client this repository uses for Git
-// sessions. Nil uses the shared OCM client defaults. CA trust uses Go's
-// system/environment configuration, not repository options.
-func WithHTTPConfig(cfg *httpv1alpha1.Config) Option {
+// WithHTTPClient sets the HTTP client this repository uses for Git sessions.
+// Nil uses the shared OCM client defaults.
+func WithHTTPClient(client *http.Client) Option {
 	return func(o *Options) {
-		o.HTTPConfig = cfg
+		o.HTTPClient = client
 	}
 }
