@@ -34,12 +34,9 @@ func PrivateEntityFromCredentials(creds *gpgcredentialsv1.GPGCredentials) (*open
 // PrivateKeyRingFromCredentials loads all signing-capable OpenPGP entities from
 // the credential map, decrypting each with the passphrase credential if present.
 func PrivateKeyRingFromCredentials(creds *gpgcredentialsv1.GPGCredentials) (openpgp.EntityList, error) {
-	if creds == nil {
-		return nil, nil
-	}
-	b, err := loadBytes(creds.PrivateKeyPGP, creds.PrivateKeyPGPFile)
+	b, err := PrivateKeyBytes(creds)
 	if err != nil {
-		return nil, fmt.Errorf("load private key: %w", err)
+		return nil, err
 	}
 	if len(b) == 0 {
 		return nil, nil
@@ -78,6 +75,35 @@ func PrivateKeyRingFromCredentials(creds *gpgcredentialsv1.GPGCredentials) (open
 // PublicKeyRingFromCredentials loads a public OpenPGP key ring from credentials.
 // Falls back to the private key if no public key is provided.
 func PublicKeyRingFromCredentials(creds *gpgcredentialsv1.GPGCredentials) (openpgp.EntityList, error) {
+	b, err := PublicKeyBytes(creds)
+	if err != nil {
+		return nil, err
+	}
+	if len(b) == 0 {
+		return nil, nil
+	}
+
+	entities, err := openpgp.ReadArmoredKeyRing(bytes.NewReader(b))
+	if err != nil {
+		return nil, fmt.Errorf("parse armored public key: %w", err)
+	}
+	return entities, nil
+}
+
+// PrivateKeyBytes returns the private key material from the inline value or the file.
+func PrivateKeyBytes(creds *gpgcredentialsv1.GPGCredentials) ([]byte, error) {
+	if creds == nil {
+		return nil, nil
+	}
+	b, err := loadBytes(creds.PrivateKeyPGP, creds.PrivateKeyPGPFile)
+	if err != nil {
+		return nil, fmt.Errorf("load private key: %w", err)
+	}
+	return b, nil
+}
+
+// PublicKeyBytes returns the public key material, falling back to the private key material.
+func PublicKeyBytes(creds *gpgcredentialsv1.GPGCredentials) ([]byte, error) {
 	if creds == nil {
 		return nil, nil
 	}
@@ -92,15 +118,7 @@ func PublicKeyRingFromCredentials(creds *gpgcredentialsv1.GPGCredentials) (openp
 			return nil, fmt.Errorf("load private key as fallback for verification: %w", err)
 		}
 	}
-	if len(b) == 0 {
-		return nil, nil
-	}
-
-	entities, err := openpgp.ReadArmoredKeyRing(bytes.NewReader(b))
-	if err != nil {
-		return nil, fmt.Errorf("parse armored public key: %w", err)
-	}
-	return entities, nil
+	return b, nil
 }
 
 func loadBytes(val string, file string) ([]byte, error) {
