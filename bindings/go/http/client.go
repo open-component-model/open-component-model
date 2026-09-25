@@ -103,7 +103,11 @@ func New(opts ...Option) *nethttp.Client {
 	}
 
 	build := func(tc *httpv1alpha1.TimeoutConfig, rc *httpv1alpha1.RetryConfig, tlsc *httpv1alpha1.TLSConfig) nethttp.RoundTripper {
-		rt := nethttp.RoundTripper(retry.NewTransport(NewTransportWithTLS(tc, tlsc)))
+		base, err := NewTransportWithTLS(tc, tlsc)
+		if err != nil {
+			return errorRoundTripper{err: err}
+		}
+		rt := nethttp.RoundTripper(retry.NewTransport(base))
 		if p := retryPolicyFromConfig(rc); p != nil {
 			rt.(*retry.Transport).Policy = func() retry.Policy { return p }
 		}

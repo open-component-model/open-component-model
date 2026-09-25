@@ -1,6 +1,9 @@
 package componentversion
 
 import (
+	"context"
+	"crypto/x509"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -15,6 +18,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/cli/internal/repository/ocm"
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
+	credconfigv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/oci/compref"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
@@ -22,6 +26,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/rsa/signing/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/signing"
+	"ocm.software/open-component-model/bindings/go/signing/tsa"
 	signingv1alpha1 "ocm.software/open-component-model/bindings/go/signing/v1alpha1/spec"
 )
 
@@ -68,6 +73,14 @@ func New() *cobra.Command {
 - An entry with a "signature" field only applies to that signature, one without applies to all
 - The verifier is resolved per signature, so a component carrying several signatures can be verified with a different handler for each
 - --verifier-spec is no longer supported and fails with an error
+
+## Timestamp Verification (RFC 3161 TSA)
+
+- If a signature carries an RFC 3161 timestamp, the verifier checks it automatically
+- Full certificate-chain verification of the timestamp token requires the TSA's root CA certificate, supplied via the credential graph under a TSA/v1alpha1 identity
+- Without TSA root certificates the token structure and digest are still checked, but the certificate chain is not verified and a warning is logged
+- Only a timestamp validated against trusted TSA roots is used to validate an (RSA/PEM) signing certificate as of the signing time; a merely structural token never relaxes certificate validity
+- The TSA URL stored as a signed label in the descriptor is used as a hint for URL-specific credential lookup
 
 Use to validate component versions before promotion, deployment, or further usage to ensure integrity and provenance.`,
 			compref.DefaultPrefix,
@@ -233,6 +246,23 @@ verify component-version ./repo//ocm.software/cli:0.12.0 --config ./sigstore-ver
 
 # Verify a specific signature
 verify component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0 --signature my-signature
+
+## Example Credential Config (TSA timestamp verification)
+# TSA/v1alpha1 identity supplying the TSA root CA for full timestamp chain verification
+# (see "Timestamp Verification (RFC 3161 TSA)" above):
+
+    type: generic.config.ocm.software/v1
+    configurations:
+    - type: credentials.config.ocm.software
+      consumers:
+      - identity:
+          type: TSA/v1alpha1
+          hostname: timestamp.digicert.com
+          scheme: https
+        credentials:
+        - type: Credentials/v1
+          properties:
+            root_certs_pem_file: /path/to/digicert-tsa-root.pem
 `),
 		RunE:              VerifyComponentVersion,
 		DisableAutoGenTag: true,
@@ -375,6 +405,23 @@ func VerifyComponentVersion(cmd *cobra.Command, args []string) error {
 				logger.DebugContext(egctx, "using discovered credentials for verification", "type", creds.GetType())
 			}
 
+			// Verify an optional RFC 3161 timestamp attached to the signature.
+			if signature.Timestamp != nil {
+				verifiedTime, trusted, err := verifyTSATimestamp(egctx, logger, credentialGraph, desc, signature)
+				if err != nil {
+					return err
+				}
+				// Only a timestamp validated against trusted TSA roots may relax
+				// certificate validity. A merely structural token proves nothing
+				// about the signing time, so it must never override the handler's
+				// current-time certificate validation.
+				if trusted {
+					creds = withVerifiedTime(creds, verifiedTime)
+				} else {
+					logger.WarnContext(egctx, "TSA timestamp is structurally valid but not trusted; not using it for certificate validation. Configure TSA root certs (type: TSA/v1alpha1) in the credential graph for full trust verification.", "name", signature.Name)
+				}
+			}
+
 			return handler.Verify(egctx, signature, verifierSpec, creds)
 		})
 	}
@@ -404,4 +451,148 @@ func loadVerifierConfig(config *genericv1.Config, signatureName string, logger *
 	logger.Info("no verifier configured, using default RSASSA-PSS", "signature", signatureName)
 	_, _ = v1alpha1.Scheme.DefaultType(spec)
 	return spec, nil
+}
+
+// verifyTSATimestamp verifies the RFC 3161 timestamp attached to a signature and
+// returns its generation time together with a trusted flag. The token's message
+// imprint is checked against the signature value (not the descriptor digest), so
+// the timestamp attests to the existence of the signature itself.
+//
+// TSA root certificates are resolved from the credential graph: if the descriptor
+// carries a signed TSA URL label for this signature, a URL-specific TSA/v1alpha1
+// identity is used; otherwise a generic TSA/v1alpha1 identity is tried. trusted is
+// true only when the token's signer certificate chain validated against those
+// roots as of GenTime; without roots only structural validity is checked and
+// trusted is false.
+func verifyTSATimestamp(
+	ctx context.Context,
+	logger *slog.Logger,
+	credentialGraph credentials.Resolver,
+	desc *descruntime.Descriptor,
+	signature descruntime.Signature,
+) (time.Time, bool, error) {
+	// The TSA URL stored as a signed label enables URL-specific credential lookup.
+	var tsaURL string
+	labelName := tsa.TSAURLLabelPrefix + signature.Name
+	for _, lbl := range desc.Component.Labels {
+		if lbl.Name == labelName {
+			if err := json.Unmarshal(lbl.Value, &tsaURL); err != nil {
+				logger.DebugContext(ctx, "failed to parse TSA URL label", "label", labelName, "error", err.Error())
+			}
+			break
+		}
+	}
+
+	var tsaRootPool *x509.CertPool
+	if tsaID, err := tsa.TSAConsumerIdentity(tsaURL); err == nil {
+		if tsaCreds, err := credentialGraph.Resolve(ctx, tsaID); err == nil {
+			pool, err := tsa.RootCertPoolFromCredentials(tsaCreds)
+			if err != nil {
+				return time.Time{}, false, fmt.Errorf("loading TSA root certificates from credential graph: %w", err)
+			}
+			if pool != nil {
+				tsaRootPool = pool
+				logger.DebugContext(ctx, "TSA root certificates resolved from credential graph", "name", signature.Name, "tsaURL", tsa.RedactURL(tsaURL))
+			}
+		}
+	}
+
+	if tsaRootPool == nil {
+		logger.WarnContext(ctx, "verifying TSA timestamp without root certificates; only structural validity is checked. Configure TSA root certs in the credential graph (type: TSA/v1alpha1) for full trust verification.", "name", signature.Name)
+	}
+	logger.InfoContext(ctx, "verifying TSA timestamp", "name", signature.Name)
+
+	tsaDER, err := tsa.FromPEM([]byte(signature.Timestamp.Value))
+	if err != nil {
+		return time.Time{}, false, fmt.Errorf("parsing TSA timestamp PEM failed: %w", err)
+	}
+
+	hash, err := signing.GetSupportedHash(signature.Digest.HashAlgorithm)
+	if err != nil {
+		return time.Time{}, false, fmt.Errorf("preparing TSA verification: %w", err)
+	}
+	// The token covers the signature value, so recompute the imprint over it.
+	h := hash.New()
+	h.Write([]byte(signature.Signature.Value))
+	imprint := h.Sum(nil)
+
+	verifiedTime, trusted, err := tsa.Verify(tsaDER, hash, imprint, tsaRootPool)
+	if err != nil {
+		return time.Time{}, false, fmt.Errorf("TSA timestamp verification failed: %w", err)
+	}
+
+	logger.InfoContext(ctx, "TSA timestamp verified", "name", signature.Name, "time", verifiedTime, "trusted", trusted)
+	return verifiedTime, trusted, nil
+}
+
+// withVerifiedTime returns credentials that carry the TSA-verified signing time
+// alongside the resolved credential material. It preserves every string field of
+// the resolved credential (e.g. an RSACredentials public key or trust anchor) by
+// flattening it into DirectCredentials properties, then adds the verified time.
+// The RSA verification handler reads the time property to validate the signing
+// certificate chain as of the signing time instead of the current time. Because
+// the flattened property keys mirror the credential's JSON field names, the
+// handler's credential conversion reconstructs the same typed values.
+func withVerifiedTime(creds runtime.Typed, verifiedTime time.Time) runtime.Typed {
+	properties := credentialProperties(creds)
+	properties[tsa.VerifiedTimeKey] = verifiedTime.Format(time.RFC3339)
+	return &credconfigv1.DirectCredentials{
+		Type:       runtime.NewVersionedType(credconfigv1.CredentialsType, credconfigv1.Version),
+		Properties: properties,
+	}
+}
+
+// credentialProperties flattens a resolved credential into a string property map
+// so its material survives being re-wrapped as DirectCredentials. It never returns
+// nil. Three shapes are handled:
+//
+//   - *DirectCredentials: its Properties are copied directly.
+//   - any other typed credential (including plugin-returned *runtime.Raw): the
+//     value is JSON-marshalled and every string-valued top-level field is kept
+//     (the "type" discriminator is dropped, since the result is re-typed as
+//     DirectCredentials). A top-level object field whose values are all strings —
+//     most importantly a nested "properties" object as produced by a Raw carrying
+//     DirectCredentials — is flattened so the public key or trust root is not lost.
+//
+// Because the retained keys mirror the credential's JSON field names, the RSA
+// handler's credential conversion reconstructs the same typed values.
+func credentialProperties(creds runtime.Typed) map[string]string {
+	properties := map[string]string{}
+	if creds == nil {
+		return properties
+	}
+	if dc, ok := creds.(*credconfigv1.DirectCredentials); ok {
+		for k, v := range dc.Properties {
+			properties[k] = v
+		}
+		return properties
+	}
+	raw, err := json.Marshal(creds)
+	if err != nil {
+		return properties
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return properties
+	}
+	for k, v := range fields {
+		if k == "type" {
+			continue
+		}
+		var s string
+		if err := json.Unmarshal(v, &s); err == nil {
+			properties[k] = s
+			continue
+		}
+		// A nested string→string object (e.g. the "properties" of a Raw that
+		// wraps DirectCredentials) carries the actual credential material; flatten
+		// its entries so they are not silently dropped.
+		var nested map[string]string
+		if err := json.Unmarshal(v, &nested); err == nil {
+			for nk, nv := range nested {
+				properties[nk] = nv
+			}
+		}
+	}
+	return properties
 }

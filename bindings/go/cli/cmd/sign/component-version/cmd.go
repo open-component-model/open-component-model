@@ -1,6 +1,7 @@
 package componentversion
 
 import (
+	"context"
 	"crypto"
 	"encoding/json"
 	"errors"
@@ -21,12 +22,15 @@ import (
 	"ocm.software/open-component-model/bindings/go/credentials"
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	ocmhttp "ocm.software/open-component-model/bindings/go/http"
+	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/oci/compref"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/rsa/signing/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/signing"
+	"ocm.software/open-component-model/bindings/go/signing/tsa"
 	signingv1alpha1 "ocm.software/open-component-model/bindings/go/signing/v1alpha1/spec"
 )
 
@@ -39,9 +43,18 @@ const (
 	FlagHashAlgorithm          = "hash"
 	FlagDryRun                 = "dry-run"
 	FlagForce                  = "force"
+	FlagTSA                    = "tsa"
+	FlagTSAURL                 = "tsa-url"
 )
 
 const (
+	// DefaultTSAURL is a well-known public TSA server used when --tsa is set
+	// without an explicit --tsa-url. DigiCert's TSA is widely used in the
+	// software supply-chain ecosystem (e.g. by sigstore, Authenticode, Java
+	// jarsigner) and offers free, unauthenticated RFC 3161 timestamps. HTTPS is
+	// used so the timestamp exchange is protected against on-path tampering.
+	DefaultTSAURL = "https://timestamp.digicert.com"
+
 	// DefaultSignatureName is the default name of the signature to create or update if not provided by FlagSignature.
 	DefaultSignatureName = "default"
 )
@@ -264,6 +277,8 @@ sign component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0 --s
 	cmd.Flags().String(FlagNormalisationAlgorithm, v4alpha1.Algorithm, "normalisation algorithm to use (default jsonNormalisation/v4alpha1)")
 	cmd.Flags().String(FlagHashAlgorithm, crypto.SHA256.String(), "hash algorithm to use (SHA256, SHA512)")
 	cmd.Flags().Bool(FlagForce, false, "overwrite existing signatures under the same name")
+	cmd.Flags().Bool(FlagTSA, false, fmt.Sprintf("request an RFC 3161 timestamp from a TSA server (default: %s)", DefaultTSAURL))
+	cmd.Flags().String(FlagTSAURL, "", "custom TSA server URL (implies --tsa)")
 
 	return cmd
 }
@@ -358,6 +373,27 @@ func SignComponentVersion(cmd *cobra.Command, args []string) error {
 		logger.InfoContext(ctx, "overwriting existing signature", "name", signatureName)
 	}
 
+	// Resolve the TSA URL from flags. --tsa uses the default server; --tsa-url
+	// selects a custom one and implies --tsa. A dry run never contacts a TSA.
+	tsaURL := tsaURLFromFlags(cmd)
+	useTSA := tsaURL != "" && !dryRun
+	if useTSA {
+		// The TSA URL is stored as a signing-relevant label so it is covered by
+		// the digest and tamper-evident. That label changes the normalized
+		// component, which would invalidate any pre-existing signature made over
+		// the descriptor without it. We cannot re-sign those foreign signatures
+		// (their keys are not available here), so refuse rather than silently
+		// corrupt them.
+		for _, sig := range desc.Signatures {
+			if sig.Name != signatureName {
+				return fmt.Errorf("cannot add a TSA timestamp: the signing-relevant TSA URL label would invalidate the existing signature %q; timestamp before adding other signatures, or omit --tsa/--tsa-url", sig.Name)
+			}
+		}
+		if err := addSignedTSALabel(desc, signatureName, tsaURL); err != nil {
+			return err
+		}
+	}
+
 	// digest
 	unsignedDigest, err := signing.GenerateDigest(
 		ctx, desc, logger,
@@ -389,10 +425,31 @@ func SignComponentVersion(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("signing failed: %w", err)
 	}
 
+	// TSA timestamp (optional). Requested after signing so the token covers the
+	// signature value itself, proving the signature (not merely the descriptor
+	// digest) existed at the timestamped time. Never performed on a dry run
+	// (useTSA already excludes dryRun).
+	var tsSpec *descruntime.TimestampSpec
+	if useTSA {
+		httpConfig, err := httpv1alpha1.ResolveHTTPConfig(config)
+		if err != nil {
+			return fmt.Errorf("resolving HTTP configuration for TSA request failed: %w", err)
+		}
+		tsaClient := ocmhttp.New(ocmhttp.WithConfig(httpConfig))
+		// Reject HTTPS-to-HTTP redirects so net/http never forwards credentials
+		// derived from the TSA URL over an unencrypted connection.
+		tsaClient.CheckRedirect = tsa.RejectInsecureRedirect
+		tsSpec, err = requestTSATimestamp(ctx, logger, tsaClient, tsaURL, unsignedDigest.HashAlgorithm, []byte(sigBytes.Value))
+		if err != nil {
+			return err
+		}
+	}
+
 	out := descruntime.Signature{
 		Name:      signatureName,
 		Digest:    *unsignedDigest,
 		Signature: sigBytes,
+		Timestamp: tsSpec,
 	}
 
 	if err := printSignature(cmd, out); err != nil {
@@ -471,4 +528,78 @@ func printSignature(cmd *cobra.Command, sig descruntime.Signature) error {
 	}
 
 	return err
+}
+
+// tsaURLFromFlags resolves the effective TSA URL from the --tsa / --tsa-url
+// flags. --tsa selects the default server; --tsa-url overrides it and implies
+// --tsa. It returns an empty string when timestamping was not requested.
+func tsaURLFromFlags(cmd *cobra.Command) string {
+	tsaURL := ""
+	if tsaEnabled, _ := cmd.Flags().GetBool(FlagTSA); tsaEnabled {
+		tsaURL = DefaultTSAURL
+	}
+	if customTSAURL, _ := cmd.Flags().GetString(FlagTSAURL); customTSAURL != "" {
+		tsaURL = customTSAURL
+	}
+	return tsaURL
+}
+
+// addSignedTSALabel records the TSA URL as a signed (signing-relevant) label on
+// the component so it is covered by the digest and therefore tamper-evident.
+// Verifiers use it for URL-specific credential lookup of the TSA root certs. Any
+// pre-existing label for this signature (e.g. from a --force re-sign) is
+// replaced so verification always resolves credentials for the current URL. The
+// URL is sanitized to scheme/host/port/path before storage: verification needs
+// only those components, and userinfo or query parameters must not be persisted
+// where anyone reading the component version could see them.
+func addSignedTSALabel(desc *descruntime.Descriptor, signatureName, tsaURL string) error {
+	sanitizedURL, err := tsa.SanitizeURL(tsaURL)
+	if err != nil {
+		return fmt.Errorf("sanitizing TSA URL label: %w", err)
+	}
+	tsaURLJSON, err := json.Marshal(sanitizedURL)
+	if err != nil {
+		return fmt.Errorf("marshalling TSA URL label: %w", err)
+	}
+	labelName := tsa.TSAURLLabelPrefix + signatureName
+	label := descruntime.Label{
+		Name:    labelName,
+		Value:   tsaURLJSON,
+		Signing: true,
+		Version: "v1alpha1",
+	}
+	if idx := slices.IndexFunc(desc.Component.Labels, func(l descruntime.Label) bool {
+		return l.Name == labelName
+	}); idx >= 0 {
+		desc.Component.Labels[idx] = label
+	} else {
+		desc.Component.Labels = append(desc.Component.Labels, label)
+	}
+	return nil
+}
+
+// requestTSATimestamp obtains an RFC 3161 timestamp over the signature value
+// from the TSA at tsaURL and returns it as a TimestampSpec ready to attach to
+// the signature. The token proves that this signature (not merely the descriptor
+// digest) existed at the timestamped time. hashAlgorithm selects the imprint
+// hash and matches the signature's declared digest algorithm.
+func requestTSATimestamp(ctx context.Context, logger *slog.Logger, client tsa.HTTPClient, tsaURL, hashAlgorithm string, signatureValue []byte) (*descruntime.TimestampSpec, error) {
+	hash, err := signing.GetSupportedHash(hashAlgorithm)
+	if err != nil {
+		return nil, fmt.Errorf("preparing TSA request: %w", err)
+	}
+	h := hash.New()
+	h.Write(signatureValue)
+	imprint := h.Sum(nil)
+
+	token, err := tsa.RequestTimestamp(ctx, client, tsaURL, hash, imprint)
+	if err != nil {
+		return nil, fmt.Errorf("TSA timestamp request failed: %w", err)
+	}
+
+	logger.InfoContext(ctx, "obtained TSA timestamp", "time", token.Time, "server", tsa.RedactURL(tsaURL))
+	return &descruntime.TimestampSpec{
+		Value: string(tsa.ToPEM(token.Raw)),
+		Time:  descruntime.CreationTime(token.Time),
+	}, nil
 }

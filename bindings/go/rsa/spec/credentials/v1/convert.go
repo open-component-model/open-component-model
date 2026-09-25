@@ -2,6 +2,7 @@ package v1
 
 import (
 	"fmt"
+	"time"
 
 	v1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -75,4 +76,42 @@ func lookupProperty(properties map[string]string, key, deprecated string) string
 		return v
 	}
 	return properties[deprecated]
+}
+
+// verifiedTimeKey is the DirectCredentials property carrying an RFC 3339
+// formatted, TSA-verified signing time. It mirrors tsa.VerifiedTimeKey; the
+// literal is duplicated here to avoid a dependency from the RSA credential
+// package on the signing/tsa package.
+const verifiedTimeKey = "tsa_verified_time"
+
+// VerifiedTimeFromCredentials extracts an optional TSA-verified signing time
+// from resolved credentials. It returns (zero, false, nil) when no such time is
+// present, and an error when the value is present but not valid RFC 3339.
+//
+// The value is only carried by DirectCredentials properties; other credential
+// types never provide it, so they yield (zero, false, nil).
+func VerifiedTimeFromCredentials(creds runtime.Typed) (time.Time, bool, error) {
+	if creds == nil {
+		return time.Time{}, false, nil
+	}
+	typed, err := convertScheme.NewObject(creds.GetType())
+	if err != nil {
+		return time.Time{}, false, nil //nolint:nilerr // unknown types simply carry no verified time
+	}
+	if err := convertScheme.Convert(creds, typed); err != nil {
+		return time.Time{}, false, nil //nolint:nilerr // conversion failure means no verified time to read
+	}
+	dc, ok := typed.(*v1.DirectCredentials)
+	if !ok {
+		return time.Time{}, false, nil
+	}
+	raw := dc.Properties[verifiedTimeKey]
+	if raw == "" {
+		return time.Time{}, false, nil
+	}
+	t, err := time.Parse(time.RFC3339, raw)
+	if err != nil {
+		return time.Time{}, false, fmt.Errorf("invalid TSA verified time %q: %w", raw, err)
+	}
+	return t, true, nil
 }

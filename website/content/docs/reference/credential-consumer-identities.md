@@ -45,6 +45,7 @@ The following types are defined by the core OCM modules:
 | [`S3`](#s3)                                   | Authenticating against S3 and S3-compatible buckets |
 | [`GitHubRepository`](#githubrepository)       | Authenticating against the GitHub REST API          |
 | [`RSA/v1alpha1`](#rsav1alpha1)                | Providing signing and verification keys             |
+| [`TSA/v1alpha1`](#tsav1alpha1)                | Providing RFC 3161 timestamp verification roots     |
 
 ---
 
@@ -638,6 +639,74 @@ ocm sign cv --signature prod <component-version>
   credentials:
     - type: RSACredentials/v1
       privateKeyPEMFile: /path/to/private-key.pem
+```
+
+---
+
+## TSA/v1alpha1
+
+Used **only during verification** when a signature carries an RFC 3161 timestamp. OCM resolves the root
+certificates that anchor the timestamp token's PKCS#7 chain from the credential graph using a `TSA/v1alpha1`
+consumer identity. The signing path does **not** consult this identity — the TSA server is selected there via the
+`--tsa` / `--tsa-url` flags. See [Concept: Signing and Verification → RFC 3161 Timestamping]({{< relref "docs/concepts/signing-and-verification-concept.md#rfc-3161-timestamping" >}}).
+
+### Identity Attributes
+
+| Attribute  | Required | Description                                                                                                                        |
+|------------|----------|------------------------------------------------------------------------------------------------------------------------------------|
+| `type`     | Yes      | Must be `TSA/v1alpha1`                                                                                                             |
+| `hostname` | No       | TSA server hostname (e.g. `timestamp.digicert.com`). Derived from the signed TSA URL label during verification.                    |
+| `scheme`   | No       | URL scheme (`https`, `http`). If omitted, matches any scheme.                                                                      |
+| `port`     | No       | Port number as string. Default ports are applied when `scheme` is set: `https` → `443`, `http` → `80`.                             |
+| `path`     | No       | URL path of the TSA endpoint. Supports glob patterns (`*` matches one path segment). If omitted, matches any path on the hostname. |
+
+The verifier reads the TSA URL from the signed `url.tsa.ocm.software/{signature}` label on the descriptor and
+decomposes it into these URL attributes for URL-specific matching. A consumer entry with only `type: TSA/v1alpha1`
+(no URL attributes) acts as a generic fallback that matches any TSA.
+
+### Credential Properties
+
+| Property           | Description                                                                      |
+|--------------------|----------------------------------------------------------------------------------|
+| `rootCertsPEM`     | Inline PEM bundle of root CA certificates for the TSA's PKCS#7 timestamp chain   |
+| `rootCertsPEMFile` | Path to a PEM file containing root CA certificates for the TSA's timestamp chain |
+
+`rootCertsPEM` takes precedence over `rootCertsPEMFile` when both are set. Without a matching entry, timestamp
+verification degrades to structural-only mode (PKCS#7 parsing and imprint match, no chain verification) and a warning
+is logged. Use [`TSACredentials/v1alpha1`]({{< relref "credential-types.md#tsacredentialsv1alpha1" >}}) for the typed
+field reference.
+
+When using the legacy `Credentials/v1` `properties:` map instead of `TSACredentials/v1alpha1`, the snake_case keys
+(`root_certs_pem`, `root_certs_pem_file`) are accepted as a deprecated backward-compatibility fallback.
+
+### Matching Behavior
+
+The same three chained checks as [`OCIRegistry`](#ociregistry) apply: path glob, URL (scheme, hostname, port with
+default-port handling), then exact equality on the remaining attributes. A generic entry with no URL attributes matches
+any TSA URL; a URL-specific entry is preferred when its attributes match.
+
+### Examples
+
+**URL-specific TSA roots** (matches only DigiCert's timestamp endpoint):
+
+```yaml
+- identity:
+    type: TSA/v1alpha1
+    hostname: timestamp.digicert.com
+    scheme: https
+  credentials:
+    - type: TSACredentials/v1alpha1
+      rootCertsPEMFile: /path/to/digicert-tsa-root.pem
+```
+
+**Generic fallback** (matches any TSA — useful when a single trust bundle covers all TSAs you use):
+
+```yaml
+- identity:
+    type: TSA/v1alpha1
+  credentials:
+    - type: TSACredentials/v1alpha1
+      rootCertsPEMFile: /path/to/tsa-roots.pem
 ```
 
 ---

@@ -755,6 +755,40 @@ OCM checks `SIGSTORE_ID_TOKEN` first, then `ACTIONS_ID_TOKEN_REQUEST_TOKEN`, the
 {{< /tab >}}
 {{< /tabs >}}
 
+## Optional: Add an RFC 3161 timestamp
+
+{{< callout context="note" title="Early access" >}}
+RFC 3161 timestamping is currently being rolled out and we are awaiting feedback. The interface may evolve.
+{{< /callout >}}
+
+A timestamp from a trusted Timestamping Authority (TSA) proves *when* a signature was created, so an RSA/PEM
+certificate-chain signature keeps verifying after its signing certificate expires. It is entirely optional. Plain
+signatures have no certificate and Sigstore verification does not use the TSA-attested time, so they do not gain
+post-expiry verification.
+
+Add `--tsa` (uses the default public TSA, `https://timestamp.digicert.com`) or `--tsa-url <url>` (a specific TSA) to
+the sign command:
+
+```bash
+ocm sign cv --tsa-url https://timestamp.digicert.com \
+  /tmp/helloworld/transport-archive//github.com/acme.org/helloworld:1.0.0
+```
+
+OCM records the TSA URL as a signed label, requests a timestamp token over the signature value, and stores it in the
+signature's `timestamp` field. For full certificate-chain verification of the token, verifiers need the TSA's root
+certificates in their credential graph; without them the token structure and digest are still checked but the chain is
+not verified and the attested time is not used. See
+[How-To: Verify a Component Version]({{< relref "verify-component-version.md" >}}) and, for the trust model and
+the transport-vs-token certificate distinction,
+[Concept: RFC 3161 Timestamping]({{< relref "signing-and-verification-concept.md#rfc-3161-timestamping" >}}).
+
+{{< callout context="note" title="Reaching a private TSA over HTTPS" >}}
+If your TSA presents a certificate issued by an internal CA, add that CA to the
+[HTTP client configuration]({{< relref "docs/reference/http-client-configuration.md#tls-trust-custom-root-cas" >}})
+(`rootCAsPEM` / `rootCAsPEMFile`) so the signing-time request can establish TLS. This is separate from the TSA
+*token* roots that verifiers configure.
+{{< /callout >}}
+
 ## Next Steps
 
 - [How-to: Verify a Component Version]({{< relref "verify-component-version.md" >}}) — Verify signatures (RSA or Sigstore)

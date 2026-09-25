@@ -10,6 +10,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/rsa/signing/handler"
 	"ocm.software/open-component-model/bindings/go/rsa/signing/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	tsacredentialsv1alpha1 "ocm.software/open-component-model/bindings/go/signing/tsa/spec/credentials/v1alpha1"
 )
 
 func Register(
@@ -30,6 +31,15 @@ func Register(
 
 	if err := credentialTypeRegistry.RegisterInternalCredentialTypeSchemeProvider(hdlr); err != nil {
 		return fmt.Errorf("could not register RSA credential types: %w", err)
+	}
+
+	// TSA/v1alpha1 consumer credentials (RFC 3161 timestamp verification roots)
+	// are resolved by the verify path; register the type so the credential graph
+	// deserializes them into TSACredentials instead of falling back to DirectCredentials.
+	tsaCredScheme := runtime.NewScheme()
+	tsacredentialsv1alpha1.MustRegisterCredentialType(tsaCredScheme)
+	if err := credentialTypeRegistry.Register(tsaCredScheme); err != nil {
+		return fmt.Errorf("could not register TSA credential types: %w", err)
 	}
 
 	return errors.Join(
