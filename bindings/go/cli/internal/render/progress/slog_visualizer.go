@@ -18,15 +18,20 @@ func (v *SlogVisualizer[T]) Begin(name string) {
 }
 
 func (v *SlogVisualizer[T]) HandleEvent(event Event[T]) {
+	var attrs []any
+	attrs = append(attrs, "item", event.Name)
+	if event.Duration > 0 {
+		attrs = append(attrs, "duration", event.Duration.Round(time.Second).String())
+	}
 	switch event.State {
 	case Running:
-		slog.Info(v.name+": item in-progress", "item", event.Name)
+		slog.Info(v.name+": item in-progress", attrs...)
 	case Completed:
-		slog.Info(v.name+": item completed", "item", event.Name)
+		slog.Info(v.name+": item completed", attrs...)
 	case Failed:
-		slog.Error(v.name+": item failed", "item", event.Name, "error", event.Err)
+		slog.Error(v.name+": item failed", append(attrs, "error", event.Err)...)
 	case Cancelled:
-		slog.Warn(v.name+": item cancelled", "item", event.Name)
+		slog.Warn(v.name+": item cancelled", attrs...)
 	}
 }
 

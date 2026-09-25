@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -89,6 +90,29 @@ func TestSlogVisualizer_HandleEvent(t *testing.T) {
 			assert.Contains(t, output, "item=component-a")
 		})
 	}
+}
+
+func TestSlogVisualizer_HandleEvent_Duration(t *testing.T) {
+	t.Run("terminal event with duration", func(t *testing.T) {
+		output := captureSlog(t, func() {
+			v := &SlogVisualizer[any]{}
+			v.Begin("Transfer")
+			v.HandleEvent(Event[any]{ID: "1", Name: "component-a", State: Completed, Duration: 90 * time.Second})
+		})
+		assert.Contains(t, output, "item completed")
+		assert.Contains(t, output, "component-a")
+		assert.Contains(t, output, "duration=1m30s")
+	})
+
+	t.Run("event without duration", func(t *testing.T) {
+		output := captureSlog(t, func() {
+			v := &SlogVisualizer[any]{}
+			v.Begin("Transfer")
+			v.HandleEvent(Event[any]{ID: "1", Name: "component-a", State: Completed})
+		})
+		assert.Contains(t, output, "item completed")
+		assert.NotContains(t, output, "duration=")
+	})
 }
 
 // --- SyncBuffer tests ---

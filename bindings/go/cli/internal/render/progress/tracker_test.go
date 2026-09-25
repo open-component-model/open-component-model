@@ -7,7 +7,9 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -166,6 +168,60 @@ func TestOperation_WithEvents_CancelledContext(t *testing.T) {
 	require.Len(t, vis.events, 1)
 	assert.Equal(t, Cancelled, vis.events[0].State)
 	assert.Nil(t, vis.events[0].Err)
+}
+
+func TestOperation_EventDuration(t *testing.T) {
+	vis := &recordingVisualizer{}
+	tracker := &Tracker[any]{out: &bytes.Buffer{}, isTerminal: true, factory: testFactory(vis)}
+
+	// Input strings encode events: "done:<id>" maps to a terminal event.
+	events := make(chan string, 3)
+	mapper := func(s string) Event[any] {
+		if id, ok := strings.CutPrefix(s, "done:"); ok {
+			return Event[any]{ID: id, State: Completed}
+		}
+		return Event[any]{ID: s, State: Running}
+	}
+
+	op := tracker.StartOperation("Transferring",
+		WithEvents(events, mapper, 2))
+	events <- "item1"
+	time.Sleep(50 * time.Millisecond)
+	events <- "done:item1"
+	events <- "done:item2" // no Running event seen for item2
+	close(events)
+	op.Finish(nil)
+
+	require.Len(t, vis.events, 3)
+
+	assert.Equal(t, Running, vis.events[0].State)
+	assert.Zero(t, vis.events[0].Duration, "running items have no duration yet")
+
+	completed := vis.events[1]
+	assert.Equal(t, Completed, completed.State)
+	assert.GreaterOrEqual(t, completed.Duration, 50*time.Millisecond)
+	assert.Less(t, completed.Duration, 10*time.Second, "duration must reflect the measured span")
+
+	assert.Equal(t, Completed, vis.events[2].State)
+	assert.Zero(t, vis.events[2].Duration, "duration stays zero when no Running event was seen")
+}
+
+func TestOperation_EventDuration_ProducerSet(t *testing.T) {
+	vis := &recordingVisualizer{}
+	tracker := &Tracker[any]{out: &bytes.Buffer{}, isTerminal: true, factory: testFactory(vis)}
+
+	events := make(chan Event[any], 2)
+	mapper := func(e Event[any]) Event[any] { return e }
+
+	op := tracker.StartOperation("Transferring",
+		WithEvents(events, mapper, 1))
+	events <- Event[any]{ID: "item1", State: Running}
+	events <- Event[any]{ID: "item1", State: Completed, Duration: 42 * time.Second}
+	close(events)
+	op.Finish(nil)
+
+	require.Len(t, vis.events, 2)
+	assert.Equal(t, 42*time.Second, vis.events[1].Duration, "producer-set duration must not be overwritten")
 }
 
 func TestOperation_NonTerminal(t *testing.T) {

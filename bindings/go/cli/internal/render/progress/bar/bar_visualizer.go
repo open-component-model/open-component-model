@@ -271,7 +271,16 @@ func (v *barVisualizer[T]) formatItem(item progress.Event[T]) string {
 	if displayName == "" {
 		displayName = item.ID
 	}
-	return fmt.Sprintf("    %s%s%s %s", color, symbol, Reset, displayName)
+	var suffix string
+	switch item.State {
+	case progress.Completed, progress.Failed, progress.Cancelled:
+		// Duration 0 means unknown (no Running event seen); omit the suffix.
+		// Real sub-second items round to "0s", which reads as intended.
+		if item.Duration > 0 {
+			suffix = formatTook(item.Duration)
+		}
+	}
+	return fmt.Sprintf("    %s%s%s %s%s", color, symbol, Reset, displayName, suffix)
 }
 
 func (v *barVisualizer[T]) writeFailureSummary() {

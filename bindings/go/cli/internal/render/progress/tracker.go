@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"time"
 
 	"golang.org/x/term"
 )
@@ -28,6 +29,12 @@ type Event[T any] struct {
 	State State
 	Err   error
 	Data  T
+
+	// Duration is the elapsed time from the item's Running event to its
+	// terminal (Completed, Failed, Cancelled) event. The tracker populates
+	// it; zero means unknown, either because no Running event was seen or
+	// the item never reached a terminal state.
+	Duration time.Duration
 }
 
 // Operation represents a running unit of work created by [Tracker.StartOperation].
@@ -181,10 +188,23 @@ func (op *operation[T]) processEvents(events <-chan Event[T]) {
 	op.finished = make(chan struct{})
 	go func() {
 		defer close(op.finished)
+		starts := make(map[string]time.Time)
 		for event := range events {
 			if event.Err != nil && (errors.Is(event.Err, context.Canceled) || errors.Is(event.Err, context.DeadlineExceeded)) {
 				event.State = Cancelled
 				event.Err = nil
+			}
+			switch event.State {
+			case Running:
+				starts[event.ID] = time.Now()
+			case Completed, Failed, Cancelled:
+				if start, ok := starts[event.ID]; ok {
+					// Producers may set their own measurement; tracker timing is the fallback.
+					if event.Duration == 0 {
+						event.Duration = time.Since(start)
+					}
+					delete(starts, event.ID)
+				}
 			}
 			op.vis.HandleEvent(event)
 		}
