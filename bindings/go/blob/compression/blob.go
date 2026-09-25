@@ -137,6 +137,8 @@ func Decompress(b blob.ReadOnlyBlob) (blob.ReadOnlyBlob, error) {
 	var mediaType string
 	if mediaTypeAware, ok := b.(blob.MediaTypeAware); ok {
 		if mediaType, ok = mediaTypeAware.MediaType(); ok {
+			// TODO(matthiasbruns): application/x-tgz (Git and GitHub archives) stays compressed, as
+			// extracting it fails on symlinks: https://github.com/open-component-model/ocm-project/issues/1343
 			if isGzip := mediaType == MediaTypeGzip || strings.HasSuffix(mediaType, MediaTypeGzipSuffix); isGzip {
 				method = MethodGzip
 				if mediaType == MediaTypeGzip {

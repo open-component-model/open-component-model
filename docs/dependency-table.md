@@ -12,6 +12,7 @@
 | 3 | `gpg`, `rsa` | `credentials`, `descriptor/runtime`, `runtime` |
 | 3 | `repository` | `blob`, `configuration`, `credentials`, `descriptor/runtime`, `runtime` |
 | 3 | `transform` | `cel`, `credentials`, `dag`, `runtime` |
+| 4 | `git` | `blob`, `configuration`, `credentials`, `descriptor/runtime`, `http`, `repository`, `runtime` |
 | 4 | `oci` | `blob`, `configuration`, `credentials`, `ctf`, `descriptor/runtime`, `descriptor/v2`, `http`, `repository`, `runtime` |
 | 4 | `signing` | `configuration`, `descriptor/normalisation`, `descriptor/runtime`, `runtime` |
 | 5 | `constructor` | `blob`, `credentials`, `ctf`, `dag`, `descriptor/normalisation`, `descriptor/runtime`, `descriptor/v2`, `oci`, `repository`, `runtime` |
@@ -22,5 +23,5 @@
 | 7 | `github` | `blob`, `credentials`, `descriptor/runtime`, `descriptor/v2`, `http`, `plugin`, `repository`, `runtime` |
 | 7 | `helm` | `blob`, `configuration`, `constructor`, `credentials`, `descriptor/runtime`, `descriptor/v2`, `http`, `oci`, `plugin`, `repository`, `runtime` |
 | 8 | `transfer` | `blob`, `cel`, `configuration`, `credentials`, `ctf`, `dag`, `descriptor/runtime`, `descriptor/v2`, `github`, `helm`, `http`, `oci`, `repository`, `runtime`, `s3`, `signing`, `transform`, `wget` |
-| 9 | `cli` | `blob`, `cel`, `configuration`, `constructor`, `credentials`, `ctf`, `dag`, `descriptor/normalisation`, `descriptor/runtime`, `descriptor/v2`, `github`, `gpg`, `helm`, `http`, `input/dir`, `input/file`, `input/utf8`, `oci`, `plugin`, `repository`, `rsa`, `runtime`, `s3`, `signing`, `sigstore`, `transfer`, `transform`, `wget` |
+| 9 | `cli` | `blob`, `cel`, `configuration`, `constructor`, `credentials`, `ctf`, `dag`, `descriptor/normalisation`, `descriptor/runtime`, `descriptor/v2`, `git`, `github`, `gpg`, `helm`, `http`, `input/dir`, `input/file`, `input/utf8`, `oci`, `plugin`, `repository`, `rsa`, `runtime`, `s3`, `signing`, `sigstore`, `transfer`, `transform`, `wget` |
 | 9 | `kubernetes/controller` | `blob`, `cel`, `configuration`, `constructor`, `credentials`, `ctf`, `dag`, `descriptor/normalisation`, `descriptor/runtime`, `descriptor/v2`, `github`, `helm`, `http`, `oci`, `plugin`, `repository`, `rsa`, `runtime`, `signing`, `sigstore`, `transfer`, `transform`, `wget` |
