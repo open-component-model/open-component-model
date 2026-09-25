@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os/exec"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -179,6 +180,78 @@ func TestBinary_Resolve(t *testing.T) {
 			}
 			path, err := b.resolve(t.Context())
 			tt.check(require.New(t), path, err)
+		})
+	}
+}
+
+// TestBinary_KeyringInvocations pins what keyring mode must never do: switch to an isolated
+// home, import key material, or fetch keys from the network during verification.
+func TestBinary_KeyringInvocations(t *testing.T) {
+	const fpr = "0123456789ABCDEF0123456789ABCDEF01234567"
+	status := "[GNUPG:] GOODSIG 89ABCDEF01234567 T\n[GNUPG:] VALIDSIG " + fpr + " 2026-09-25 1 0 4 0 22 8 00 " + fpr + "\n"
+
+	tests := []struct {
+		name      string
+		run       func(t *testing.T, b *Binary) error
+		wantArgs  []string
+		denyArgs  []string
+		wantStdin []byte
+	}{
+		{
+			name: "sign with agent unlocking",
+			run: func(t *testing.T, b *Binary) error {
+				_, err := b.Sign(t.Context(), SignRequest{UseKeyring: true, KeyFingerprint: fpr, DigestAlgo: "SHA256", Data: []byte("d")})
+				return err
+			},
+			wantArgs: []string{"--local-user", fpr, "--detach-sign"},
+			denyArgs: []string{"--homedir", "--pinentry-mode", "--passphrase-fd"},
+		},
+		{
+			name: "sign with passphrase",
+			run: func(t *testing.T, b *Binary) error {
+				_, err := b.Sign(t.Context(), SignRequest{UseKeyring: true, Passphrase: "pw", DigestAlgo: "SHA256", Data: []byte("d")})
+				return err
+			},
+			wantArgs:  []string{"--pinentry-mode", "loopback", "--passphrase-fd", "0"},
+			denyArgs:  []string{"--homedir", "--local-user"},
+			wantStdin: []byte("pw"),
+		},
+		{
+			name: "verify",
+			run: func(t *testing.T, b *Binary) error {
+				return b.Verify(t.Context(), VerifyRequest{UseKeyring: true, KeyFingerprint: fpr, Data: []byte("d"), Signature: "sig"})
+			},
+			wantArgs: []string{"--no-auto-key-retrieve", "--verify"},
+			denyArgs: []string{"--homedir"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+			var calls [][]string
+			var stdin []byte
+			b := New()
+			b.LookPath = func(file string) (string, error) { return "/fake/bin/" + file, nil }
+			b.Exec = func(_ context.Context, _ string, args []string, in []byte) ([]byte, []byte, error) {
+				if args[0] == "--version" {
+					return []byte("gpg (GnuPG) 2.4.4\n"), nil, nil
+				}
+				calls = append(calls, args)
+				stdin = in
+				if slices.Contains(args, "--verify") {
+					return []byte(status), nil, nil
+				}
+				return []byte("-----BEGIN PGP SIGNATURE-----"), nil, nil
+			}
+			r.NoError(tt.run(t, b))
+			r.Len(calls, 1, "keyring mode runs exactly one gpg operation: no import, no key listing, no agent shutdown")
+			for _, want := range tt.wantArgs {
+				r.Contains(calls[0], want)
+			}
+			for _, deny := range tt.denyArgs {
+				r.NotContains(calls[0], deny)
+			}
+			r.Equal(tt.wantStdin, stdin)
 		})
 	}
 }

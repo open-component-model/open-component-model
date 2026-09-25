@@ -18,6 +18,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -65,16 +66,21 @@ func New() *Binary {
 
 // SignRequest describes a detached signing operation.
 type SignRequest struct {
-	PrivateKey     []byte // armored or binary key material
-	Passphrase     string
-	KeyFingerprint string // "" selects the first secret key
+	// UseKeyring signs with the user's GnuPG keyring and gpg-agent instead of PrivateKey.
+	UseKeyring     bool
+	PrivateKey     []byte // armored or binary key material; ignored with UseKeyring
+	Passphrase     string // with UseKeyring, "" leaves unlocking to gpg-agent (cache, pinentry, token)
+	KeyFingerprint string // "" selects the first secret key, or gpg's default key with UseKeyring
 	DigestAlgo     string // "SHA256" | "SHA384" | "SHA512"
 	Data           []byte // hex-decoded digest bytes
 }
 
 // VerifyRequest describes a detached signature verification.
 type VerifyRequest struct {
-	PublicKey      []byte
+	// UseKeyring verifies against the user's GnuPG keyring instead of PublicKey.
+	// It requires KeyFingerprint, because the keyring may contain arbitrary keys.
+	UseKeyring     bool
+	PublicKey      []byte // ignored with UseKeyring
 	KeyFingerprint string // "" accepts any key in PublicKey
 	Data           []byte
 	Signature      string
@@ -86,44 +92,46 @@ func (b *Binary) Sign(ctx context.Context, req SignRequest) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	dir, cleanup, err := b.newHome(ctx)
+	ws, err := b.newWorkspace(ctx, req.UseKeyring)
 	if err != nil {
 		return "", err
 	}
-	defer cleanup()
-
-	if _, err := b.run(ctx, "import", gpgPath, homeArgs(dir, "--import"), req.PrivateKey); err != nil {
-		return "", err
-	}
+	defer ws.cleanup()
 
 	// No "!" suffix: gpg picks the signing-capable (sub)key of the selected primary key.
 	selector := req.KeyFingerprint
-	if selector == "" {
-		out, err := b.run(ctx, "list-secret-keys", gpgPath, homeArgs(dir, "--list-secret-keys", "--with-colons"), nil)
-		if err != nil {
+	if !req.UseKeyring {
+		if _, err := b.run(ctx, "import", gpgPath, ws.args("--import"), req.PrivateKey); err != nil {
 			return "", err
 		}
-		if selector, err = firstSecretKeyFingerprint(string(out)); err != nil {
-			return "", err
+		if selector == "" {
+			out, err := b.run(ctx, "list-secret-keys", gpgPath, ws.args("--list-secret-keys", "--with-colons"), nil)
+			if err != nil {
+				return "", err
+			}
+			if selector, err = firstSecretKeyFingerprint(string(out)); err != nil {
+				return "", err
+			}
 		}
 	}
 
-	digestPath := filepath.Join(dir, "digest.bin")
+	digestPath := filepath.Join(ws.dir, "digest.bin")
 	if err := os.WriteFile(digestPath, req.Data, 0o600); err != nil {
 		return "", fmt.Errorf("write data to sign: %w", err)
 	}
 
-	// The passphrase is passed on stdin, never argv; an unprotected key never reads it.
-	args := homeArgs(dir,
-		"--pinentry-mode", "loopback",
-		"--passphrase-fd", "0",
-		"--local-user", selector,
-		"--digest-algo", req.DigestAlgo,
-		"--armor", "--detach-sign",
-		"--output", "-",
-		digestPath,
-	)
-	out, err := b.run(ctx, "sign", gpgPath, args, []byte(req.Passphrase))
+	var args []string
+	var stdin []byte
+	if !req.UseKeyring || req.Passphrase != "" {
+		// The passphrase is passed on stdin, never argv; an unprotected key never reads it.
+		args = append(args, "--pinentry-mode", "loopback", "--passphrase-fd", "0")
+		stdin = []byte(req.Passphrase)
+	}
+	if selector != "" {
+		args = append(args, "--local-user", selector)
+	}
+	args = append(args, "--digest-algo", req.DigestAlgo, "--armor", "--detach-sign", "--output", "-", digestPath)
+	out, err := b.run(ctx, "sign", gpgPath, ws.args(args...), stdin)
 	if err != nil {
 		return "", err
 	}
@@ -133,32 +141,40 @@ func (b *Binary) Sign(ctx context.Context, req SignRequest) (string, error) {
 	return string(out), nil
 }
 
-// Verify checks req.Signature over req.Data against the keys in req.PublicKey.
+// Verify checks req.Signature over req.Data against the keys in req.PublicKey or the user's keyring.
 func (b *Binary) Verify(ctx context.Context, req VerifyRequest) error {
+	// A 16-hex long key ID is not collision resistant enough to pick a key out of an arbitrary keyring.
+	if req.UseKeyring && len(req.KeyFingerprint) < 40 {
+		return ErrKeyringRequiresFingerprint
+	}
 	gpgPath, err := b.resolve(ctx)
 	if err != nil {
 		return err
 	}
-	dir, cleanup, err := b.newHome(ctx)
+	ws, err := b.newWorkspace(ctx, req.UseKeyring)
 	if err != nil {
 		return err
 	}
-	defer cleanup()
+	defer ws.cleanup()
 
-	if _, err := b.run(ctx, "import", gpgPath, homeArgs(dir, "--import"), req.PublicKey); err != nil {
-		return err
+	if !req.UseKeyring {
+		if _, err := b.run(ctx, "import", gpgPath, ws.args("--import"), req.PublicKey); err != nil {
+			return err
+		}
 	}
 
-	sigPath := filepath.Join(dir, "sig.asc")
+	sigPath := filepath.Join(ws.dir, "sig.asc")
 	if err := os.WriteFile(sigPath, []byte(req.Signature), 0o600); err != nil {
 		return fmt.Errorf("write signature: %w", err)
 	}
-	digestPath := filepath.Join(dir, "digest.bin")
+	digestPath := filepath.Join(ws.dir, "digest.bin")
 	if err := os.WriteFile(digestPath, req.Data, 0o600); err != nil {
 		return fmt.Errorf("write signed data: %w", err)
 	}
 
-	args := homeArgs(dir, "--status-fd", "1", "--trust-model", "always", "--verify", sigPath, digestPath)
+	// Trust is established by the configured key material or fingerprint, not the web of trust.
+	// Key retrieval stays off so verification never fetches keys from the network.
+	args := ws.args("--status-fd", "1", "--trust-model", "always", "--no-auto-key-retrieve", "--verify", sigPath, digestPath)
 	out, err := b.run(ctx, "verify", gpgPath, args, nil)
 	if err != nil {
 		return fmt.Errorf("%w\nstatus: %s", err, strings.TrimSpace(string(out)))
@@ -183,10 +199,41 @@ func (b *Binary) Verify(ctx context.Context, req VerifyRequest) error {
 		signingFpr, primaryFpr, want)
 }
 
-// homeArgs prefixes args with the options every gpg invocation on the isolated home directory needs.
-func homeArgs(dir string, args ...string) []string {
-	return append([]string{"--batch", "--no-tty", "--homedir", dir}, args...)
+// workspace holds the files of one operation and the gpg options selecting its keyring.
+type workspace struct {
+	dir     string
+	base    []string
+	cleanup func()
 }
+
+func (w workspace) args(args ...string) []string {
+	return append(slices.Clone(w.base), args...)
+}
+
+// newWorkspace returns an isolated GnuPG home directory, or with useKeyring a scratch
+// directory for the operation's files while gpg uses the user's keyring.
+func (b *Binary) newWorkspace(ctx context.Context, useKeyring bool) (workspace, error) {
+	if !useKeyring {
+		dir, cleanup, err := b.newHome(ctx)
+		if err != nil {
+			return workspace{}, err
+		}
+		return workspace{dir: dir, base: []string{"--batch", "--no-tty", "--homedir", dir}, cleanup: cleanup}, nil
+	}
+	dir, err := os.MkdirTemp("", "ocm-gpg-")
+	if err != nil {
+		return workspace{}, fmt.Errorf("create temporary directory: %w", err)
+	}
+	cleanup := func() {
+		if err := os.RemoveAll(dir); err != nil {
+			slog.WarnContext(ctx, "failed to remove temporary directory", "path", dir, "error", err)
+		}
+	}
+	return workspace{dir: dir, base: []string{"--batch", "--no-tty"}, cleanup: cleanup}, nil
+}
+
+// ErrKeyringRequiresFingerprint is returned when verifying against the user's keyring without a pinned key.
+var ErrKeyringRequiresFingerprint = errors.New("verifying with the GnuPG keyring requires the full key fingerprint, because any key in the keyring would otherwise be accepted")
 
 func (b *Binary) resolve(ctx context.Context) (string, error) {
 	b.mu.Lock()

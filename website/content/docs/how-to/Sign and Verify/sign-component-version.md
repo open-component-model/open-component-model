@@ -249,6 +249,18 @@ To use GPG for one signature only and keep RSA elsewhere, add `signature` to tha
     type: GPGSigningConfiguration/v1alpha1
 ```
 
+To sign with a key from your own GnuPG keyring (`$GNUPGHOME`, or `~/.gnupg`), including keys on a hardware token such as a YubiKey, set `useKeyring`. OCM then uses your running `gpg-agent`, and the GPG consumer entry needs no key material. The agent unlocks the key from its cache, via pinentry, or with a `passphrase` from the credentials:
+
+```yaml
+- type: signing.config.ocm.software/v1alpha1
+  signer:
+    type: GPGSigningConfiguration/v1alpha1
+    useKeyring: true                                            # added
+    keyFingerprint: B118BE3A32BE4AF28E37E881167C7102F8AC81E4
+```
+
+With `useKeyring`, key material (`privateKeyPGP`, `privateKeyPGPFile`) in the GPG credentials is rejected, so it is never ambiguous which key signs. Without `keyFingerprint`, gpg signs with its default key.
+
 {{< callout context="caution" >}}
 These are in the same file. Just append this signature in that relevant configuration value.
 {{< /callout >}}

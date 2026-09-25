@@ -30,6 +30,11 @@ var (
 	ErrMissingPublicKey  = errors.New("public key not found in credentials")
 	ErrMissingHashAlg    = errors.New("missing hash algorithm in digest")
 	ErrMissingDigestVal  = errors.New("missing digest value")
+	// ErrKeyMaterialWithKeyring rejects credentials carrying keys when the keyring is used,
+	// so that it is never ambiguous which key signs or verifies.
+	ErrKeyMaterialWithKeyring = errors.New("useKeyring takes keys from the GnuPG keyring; remove the key material from the GPG credentials")
+	// ErrKeyringRequiresFingerprint is returned when verifying against the keyring without a full key fingerprint.
+	ErrKeyringRequiresFingerprint = gpgbinary.ErrKeyringRequiresFingerprint
 )
 
 // defaultGPGBinary serves zero-value Handlers.
@@ -79,7 +84,10 @@ func (h *Handler) Sign(
 	if err != nil {
 		return descruntime.SignatureInfo{}, fmt.Errorf("load GPG private key: %w", err)
 	}
-	if len(keyBytes) == 0 {
+	switch {
+	case sigCfg.UseKeyring && len(keyBytes) > 0:
+		return descruntime.SignatureInfo{}, ErrKeyMaterialWithKeyring
+	case !sigCfg.UseKeyring && len(keyBytes) == 0:
 		return descruntime.SignatureInfo{}, ErrMissingPrivateKey
 	}
 	digestBytes, err := parseDigest(unsigned)
@@ -93,6 +101,7 @@ func (h *Handler) Sign(
 
 	slog.DebugContext(ctx, "signing with the system gpg binary")
 	sig, err := h.binary().Sign(ctx, gpgbinary.SignRequest{
+		UseKeyring:     sigCfg.UseKeyring,
 		PrivateKey:     keyBytes,
 		Passphrase:     typedCreds.Passphrase,
 		KeyFingerprint: sigCfg.GetKeyFingerprint(),
@@ -134,7 +143,10 @@ func (h *Handler) Verify(
 	if err != nil {
 		return fmt.Errorf("load GPG public key: %w", err)
 	}
-	if len(keyBytes) == 0 {
+	switch {
+	case sigCfg.UseKeyring && len(keyBytes) > 0:
+		return ErrKeyMaterialWithKeyring
+	case !sigCfg.UseKeyring && len(keyBytes) == 0:
 		return ErrMissingPublicKey
 	}
 	digestBytes, err := parseDigest(signed.Digest)
@@ -144,6 +156,7 @@ func (h *Handler) Verify(
 
 	slog.DebugContext(ctx, "verifying with the system gpg binary")
 	if err := h.binary().Verify(ctx, gpgbinary.VerifyRequest{
+		UseKeyring:     sigCfg.UseKeyring,
 		PublicKey:      keyBytes,
 		KeyFingerprint: sigCfg.GetKeyFingerprint(),
 		Data:           digestBytes,

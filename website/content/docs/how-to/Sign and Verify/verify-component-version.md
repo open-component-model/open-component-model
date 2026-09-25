@@ -189,6 +189,18 @@ If you are only verifying, the `signer` field can be left out entirely:
     type: GPGSigningConfiguration/v1alpha1
 ```
 
+If the signer's public key is already in your GnuPG keyring (`$GNUPGHOME`, or `~/.gnupg`), verify against the keyring instead of a key file. The keyring may hold many keys, so `useKeyring` requires the **full** fingerprint of the key you trust; a signature by any other key in the keyring fails. Keys revoked or expired in your keyring are rejected, and gpg never fetches keys from the network during verification:
+
+```yaml
+- type: signing.config.ocm.software/v1alpha1
+  verifier:
+    type: GPGSigningConfiguration/v1alpha1
+    useKeyring: true
+    keyFingerprint: B118BE3A32BE4AF28E37E881167C7102F8AC81E4
+```
+
+With `useKeyring`, key material in the GPG credentials is rejected.
+
 {{< callout context="note" >}}
 Give the entry a `signature` field to scope it to a single signature; without one it applies to every signature. Because the verifier is resolved per signature, a component carrying a GPG signature next to an RSA one can be verified in a single run, each with its own handler.
 {{< /callout >}}
@@ -266,6 +278,12 @@ Without `--signature`, **every** signature on the descriptor is verified. Config
 **Cause:** The verifier contains a `keyFingerprint` that matches neither the key that made the signature nor its primary key.
 
 **Fix:** Either remove `keyFingerprint` from the verifier (any key in the file will be tried) or correct it. Run `gpg --show-keys /tmp/keys/verify-key.asc` to confirm the actual fingerprint.
+
+### Symptom: `SIGNATURE VERIFICATION FAILED: gpg verify: verifying with the GnuPG keyring requires the full key fingerprint ...`
+
+**Cause:** The verifier sets `useKeyring` without a full 40-character `keyFingerprint`. A long key ID is not accepted, because it does not identify a key reliably among all keys in a keyring.
+
+**Fix:** Set `keyFingerprint` to the full fingerprint of the key you trust (`gpg --list-keys --with-colons <key> | grep '^fpr'`).
 
 ### Symptom: `GPG signing requires the GnuPG "gpg" binary (>= 2.2.0) on PATH`
 
