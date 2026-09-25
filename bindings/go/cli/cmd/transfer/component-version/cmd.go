@@ -20,6 +20,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/cli/internal/render/progress"
 	"ocm.software/open-component-model/bindings/go/cli/internal/render/progress/bar"
 	"ocm.software/open-component-model/bindings/go/cli/internal/repository/ocm"
+	versioningspec "ocm.software/open-component-model/bindings/go/configuration/versioning/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/oci/compref"
@@ -33,14 +34,14 @@ import (
 )
 
 const (
-	FlagDryRun           = "dry-run"
-	FlagOutput           = "output"
-	FlagRecursive        = "recursive"
-	FlagCopyResources    = "copy-resources"
-	FlagUploadAs         = "upload-as"
-	FlagTransferSpec     = "transfer-spec"
-	FlagSemverConstraint = "semver-constraint"
-	FlagLatest           = "latest"
+	FlagDryRun        = "dry-run"
+	FlagOutput        = "output"
+	FlagRecursive     = "recursive"
+	FlagCopyResources = "copy-resources"
+	FlagUploadAs      = "upload-as"
+	FlagTransferSpec  = "transfer-spec"
+	FlagConstraint    = "constraint"
+	FlagLatest        = "latest"
 
 	// Each node emits 2 events (Running + Completed/Failed) and since the tracker consumes
 	// them faster than the transfer produces, 16 is enough to avoid blocking with room to grow.
@@ -58,7 +59,7 @@ a target repository using an internally generated transformation graph.
 
 When a version is included in the source reference, exactly that version is transferred.
 When the version is omitted, all versions of the component are discovered and transferred.
-Use --semver-constraint to restrict which versions are selected, and --latest to transfer
+Use --constraint to restrict which versions are selected, and --latest to transfer
 only the newest matching version.
 
 OCI, CTF, and Helm repositories are supported as transfer sources.
@@ -102,8 +103,8 @@ transfer component-version ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.
 # Transfer all versions of a component (omit version from reference)
 transfer component-version ctf::./my-archive//ocm.software/mycomponent ghcr.io/my-org/ocm
 
-# Transfer all versions matching a semver constraint
-transfer component-version ctf::./my-archive//ocm.software/mycomponent ghcr.io/my-org/ocm --semver-constraint ">= 1.0.0, < 2.0.0"
+# Transfer all versions matching a version constraint
+transfer component-version ctf::./my-archive//ocm.software/mycomponent ghcr.io/my-org/ocm --constraint ">= 1.0.0, < 2.0.0"
 
 # Transfer only the latest version
 transfer component-version ctf::./my-archive//ocm.software/mycomponent ghcr.io/my-org/ocm --latest
@@ -155,7 +156,7 @@ transfer component-version --transfer-spec spec.yaml
 	enum.VarP(cmd.Flags(), FlagUploadAs, "u", uploadAsValues,
 		"Define whether copied resources should be uploaded as OCI artifacts (instead of local blob resources). This option is only relevant if --copy-resources is set.")
 	cmd.Flags().String(FlagTransferSpec, "", "path to a transfer specification file (use \"-\" for stdin). The input must hold exactly one transfer spec document; OCM configuration documents in it are ignored")
-	cmd.Flags().String(FlagSemverConstraint, "", "semantic version constraint restricting which versions to transfer (e.g. \">= 1.0.0, < 2.0.0\"); only used when no version is specified in the reference")
+	cmd.Flags().String(FlagConstraint, "", "version constraint evaluated by each version's configured scheme; versions with no applicable scheme are retained (e.g. \">= 1.0.0, < 2.0.0\"); only used when no version is specified in the reference")
 	cmd.Flags().Bool(FlagLatest, false, "if set, only the latest version of the component is transferred; only used when no version is specified in the reference")
 
 	return cmd
@@ -397,6 +398,11 @@ func buildGraphDefinitionFromArgs(
 		transferCfg = &transferv1alpha1.Config{}
 	}
 
+	uploaderCfgs, err := transferv1alpha1.LookupUploaderConfigs(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("looking up uploader configs failed: %w", err)
+	}
+
 	if cmd.Flags().Changed(FlagRecursive) {
 		recursive, err := cmd.Flags().GetBool(FlagRecursive)
 		if err != nil {
@@ -427,9 +433,9 @@ func buildGraphDefinitionFromArgs(
 		transferCfg.UploadType = transferv1alpha1.UploadType(uploadAs)
 	}
 
-	constraint, err := cmd.Flags().GetString(FlagSemverConstraint)
+	constraint, err := cmd.Flags().GetString(FlagConstraint)
 	if err != nil {
-		return nil, fmt.Errorf("getting semver-constraint flag failed: %w", err)
+		return nil, fmt.Errorf("getting constraint flag failed: %w", err)
 	}
 	latestOnly, err := cmd.Flags().GetBool(FlagLatest)
 	if err != nil {
@@ -438,8 +444,8 @@ func buildGraphDefinitionFromArgs(
 
 	var componentIDs []transfer.ComponentID
 	if fromSpec.Version != "" {
-		if cmd.Flags().Changed(FlagSemverConstraint) {
-			slog.WarnContext(ctx, fmt.Sprintf("--%s has no effect when a version is already specified in the reference", FlagSemverConstraint))
+		if cmd.Flags().Changed(FlagConstraint) {
+			slog.WarnContext(ctx, fmt.Sprintf("--%s has no effect when a version is already specified in the reference", FlagConstraint))
 		}
 		if cmd.Flags().Changed(FlagLatest) {
 			slog.WarnContext(ctx, fmt.Sprintf("--%s has no effect when a version is already specified in the reference", FlagLatest))
@@ -450,9 +456,14 @@ func buildGraphDefinitionFromArgs(
 		if err != nil {
 			return nil, fmt.Errorf("could not access ocm repository: %w", err)
 		}
+		registry, err := versioningspec.RegistryFromConfig(cfg)
+		if err != nil {
+			return nil, fmt.Errorf("could not build versioning registry: %w", err)
+		}
 		versions, err := ocm.VersionsWithFiltering(ctx, fromSpec.Component, repo, ocm.VersionOptions{
 			SemverConstraint: constraint,
 			LatestOnly:       latestOnly,
+			Registry:         registry,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("listing and filtering component versions failed: %w", err)
@@ -473,7 +484,7 @@ func buildGraphDefinitionFromArgs(
 		}
 	}
 
-	tgd, err := transfer.BuildGraphDefinition(ctx, transferCfg,
+	tgd, err := transfer.BuildGraphDefinition(ctx, transferCfg, uploaderCfgs,
 		transfer.Mapping{
 			Components: componentIDs,
 			Target:     toSpec,

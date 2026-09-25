@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Masterminds/semver/v3"
 	"github.com/go-logr/logr"
 	"golang.org/x/time/rate"
 	"k8s.io/apimachinery/pkg/api/equality"
@@ -39,6 +38,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/pkg/configuration"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	"ocm.software/open-component-model/bindings/go/runtime/versioning"
 	"ocm.software/open-component-model/bindings/go/signing"
 )
 
@@ -253,13 +253,6 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, fmt.Errorf("failed to decode repository spec: %w", err)
 	}
 
-	verifications, err := verification.GetVerifications(ctx, r.Client, component)
-	if err != nil {
-		status.MarkNotReady(r.EventRecorder, component, v1alpha1.GetComponentVersionFailedReason, err.Error())
-
-		return ctrl.Result{}, fmt.Errorf("failed to get verifications: %w", err)
-	}
-
 	cfg, err := configuration.LoadConfigurations(ctx, r.Client, component.GetNamespace(), configs)
 	if err != nil {
 		status.MarkNotReady(r.EventRecorder, component, v1alpha1.GetComponentVersionFailedReason, err.Error())
@@ -272,6 +265,13 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		status.MarkNotReady(r.EventRecorder, component, v1alpha1.GetConfigurationFailedReason, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to create plugin manager: %w", err)
+	}
+
+	verifications, err := verification.GetVerifications(cfg)
+	if err != nil {
+		status.MarkNotReady(r.EventRecorder, component, v1alpha1.GetComponentVersionFailedReason, err.Error())
+
+		return ctrl.Result{}, fmt.Errorf("failed to get verifications: %w", err)
 	}
 
 	cacheBackedRepo, err := r.Resolver.NewCacheBackedRepository(ctx, &resolution.RepositoryOptions{
@@ -398,11 +398,15 @@ func (r *Reconciler) reconcileDelete(ctx context.Context, component *v1alpha1.Co
 func (r *Reconciler) DetermineEffectiveVersionFromRepo(ctx context.Context, component *v1alpha1.Component,
 	repo repository.ComponentVersionRepository,
 ) (string, error) {
+	// The controller resolves versions with the loose-semver default; Spec.Semver
+	// is a semver constraint by CRD contract.
+	registry := versioning.Default()
+
 	// Fast path: if Spec.Semver is a single version (not a constraint),
 	// skip the ListComponentVersions call. Any not-found error will be
 	// surfaced by the subsequent GetComponentVersion call.
-	if pinned, err := semver.NewVersion(component.Spec.Semver); err == nil {
-		return ocm.ApplyDowngradePolicy(component, pinned)
+	if registry.Valid(component.Spec.Semver) {
+		return ocm.ApplyDowngradePolicy(registry, component, component.Spec.Semver)
 	}
 
 	versions, err := repo.ListComponentVersions(ctx, component.Spec.Component)
@@ -416,10 +420,10 @@ func (r *Reconciler) DetermineEffectiveVersionFromRepo(ctx context.Context, comp
 	if err != nil {
 		return "", reconcile.TerminalError(fmt.Errorf("failed to parse regexp filter: %w", err))
 	}
-	latestSemver, err := ocm.GetLatestValidVersion(ctx, versions, component.Spec.Semver, filter)
+	latestVersion, err := ocm.GetLatestValidVersion(ctx, registry, versions, component.Spec.Semver, filter)
 	if err != nil {
 		return "", reconcile.TerminalError(fmt.Errorf("failed to get valid latest version: %w", err))
 	}
 
-	return ocm.ApplyDowngradePolicy(component, latestSemver)
+	return ocm.ApplyDowngradePolicy(registry, component, latestVersion)
 }

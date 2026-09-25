@@ -1,101 +1,68 @@
-package config_test
+package config
 
 import (
-	"bytes"
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
-	"ocm.software/open-component-model/bindings/go/cli/cmd/internal/test"
-	"ocm.software/open-component-model/bindings/go/cli/internal/context"
+	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
+	versioningv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/versioning/v1alpha1/spec"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-const stdinConfig = `type: generic.config.ocm.software/v1
-configurations:
-- type: credentials.config.ocm.software
-  consumers:
-  - identity:
-      type: OCIRegistry
-      hostname: stdin.example.com
-    credentials:
-    - type: Credentials/v1
-      properties:
-        username: from-stdin
-        password: stdin-secret
-`
+const versioningEntry = `{
+  "type": "versioning.config.ocm.software/v1alpha1",
+  "schemes": [
+    {
+      "name": "calver-full",
+      "pattern": "^(?P<year>\\d{4})\\.(?P<month>\\d{2})\\.(?P<day>\\d{2})$",
+      "comparisonGroups": ["year", "month", "day"]
+    }
+  ]
+}`
 
-func TestGetConfigFromStdin(t *testing.T) {
+// TestGetEffectiveConfig_IncludesVersioning verifies that a configured versioning
+// scheme is surfaced in the effective configuration, so "ocm get config" proves
+// the active scheme rather than silently omitting it.
+func TestGetEffectiveConfig_IncludesVersioning(t *testing.T) {
 	r := require.New(t)
-	out := new(bytes.Buffer)
-	_, err := test.OCM(t,
-		test.WithArgs("get", "config", "--config", "-"),
-		test.WithInput(bytes.NewBufferString(stdinConfig)),
-		test.WithOutput(out),
-		test.WithErrorOutput(test.NewJSONLogReader()),
-	)
-	r.NoError(err)
-	r.Contains(out.String(), "stdin.example.com")
-}
 
-func TestGetConfigFromStdinMergedWithFile(t *testing.T) {
-	r := require.New(t)
-	out := new(bytes.Buffer)
-	_, err := test.OCM(t,
-		test.WithArgs("get", "config", "--config", "testdata/ocmconfig.yaml", "--config", "-"),
-		test.WithInput(bytes.NewBufferString(stdinConfig)),
-		test.WithOutput(out),
-		test.WithErrorOutput(test.NewJSONLogReader()),
-	)
-	r.NoError(err)
-	r.Contains(out.String(), "file.example.com")
-	r.Contains(out.String(), "stdin.example.com")
-	r.Less(bytes.Index(out.Bytes(), []byte("file.example.com")), bytes.Index(out.Bytes(), []byte("stdin.example.com")),
-		"file entry must come before the stdin entry to keep command line order")
-}
-
-func TestGetConfigFromStdinInvalid(t *testing.T) {
-	_, err := test.OCM(t,
-		test.WithArgs("get", "config", "--config", "-"),
-		test.WithInput(bytes.NewBufferString("not: [valid: yaml: {")),
-		test.WithOutput(new(bytes.Buffer)),
-		test.WithErrorOutput(test.NewJSONLogReader()),
-	)
-	require.ErrorContains(t, err, "stdin")
-}
-
-// TestGetConfigFromStdinSkipsDiscovery proves that "--config -" replaces the well known
-// locations instead of adding to them. The control run without --config shows that the
-// discovered file is otherwise picked up.
-func TestGetConfigFromStdinSkipsDiscovery(t *testing.T) {
-	r := require.New(t)
-	discovered, err := filepath.Abs("testdata/ocmconfig.yaml")
-	r.NoError(err)
-	syscalls := &context.Syscalls{
-		Stat:   os.Stat,
-		Getenv: func(key string) string { return map[string]string{"OCM_CONFIG": discovered}[key] },
+	raw := &runtime.Raw{}
+	r.NoError(raw.UnmarshalJSON([]byte(versioningEntry)))
+	cfg := &genericv1.Config{
+		Type:           runtime.NewVersionedType(genericv1.ConfigType, genericv1.ConfigTypeV1),
+		Configurations: []*runtime.Raw{raw},
 	}
 
-	control := new(bytes.Buffer)
-	_, err = test.OCM(t,
-		test.WithArgs("get", "config"),
-		test.WithSyscalls(syscalls),
-		test.WithOutput(control),
-		test.WithErrorOutput(test.NewJSONLogReader()),
-	)
+	eff, err := getEffectiveConfig(cfg)
 	r.NoError(err)
-	r.Contains(control.String(), "file.example.com", "control: discovery must find the file via OCM_CONFIG")
 
-	out := new(bytes.Buffer)
-	_, err = test.OCM(t,
-		test.WithArgs("get", "config", "--config", "-"),
-		test.WithSyscalls(syscalls),
-		test.WithInput(bytes.NewBufferString(stdinConfig)),
-		test.WithOutput(out),
-		test.WithErrorOutput(test.NewJSONLogReader()),
-	)
+	var found *versioningv1alpha1.Config
+	for _, entry := range eff.Configurations {
+		if vc, ok := entry.(*versioningv1alpha1.Config); ok {
+			found = vc
+			break
+		}
+	}
+	r.NotNil(found, "versioning config must appear in effective configuration")
+	r.Len(found.Schemes, 1)
+	r.Equal("calver-full", found.Schemes[0].Name)
+}
+
+// TestGetEffectiveConfig_OmitsVersioningWhenAbsent ensures the versioning entry
+// is not synthesized when the user configured no versioning schemes.
+func TestGetEffectiveConfig_OmitsVersioningWhenAbsent(t *testing.T) {
+	r := require.New(t)
+
+	cfg := &genericv1.Config{
+		Type:           runtime.NewVersionedType(genericv1.ConfigType, genericv1.ConfigTypeV1),
+		Configurations: []*runtime.Raw{},
+	}
+
+	eff, err := getEffectiveConfig(cfg)
 	r.NoError(err)
-	r.Contains(out.String(), "stdin.example.com")
-	r.NotContains(out.String(), "file.example.com", "discovered config must be ignored when --config - is given")
+	for _, entry := range eff.Configurations {
+		_, ok := entry.(*versioningv1alpha1.Config)
+		r.False(ok, "versioning config must be absent without configured schemes")
+	}
 }

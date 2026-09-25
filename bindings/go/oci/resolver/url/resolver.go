@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"sync"
 	"sync/atomic"
@@ -43,6 +44,12 @@ type CachingResolver struct {
 	plainHTTP  bool
 
 	DisableCacheProxy bool
+
+	// chunkSize and chunkThreshold configure chunked blob upload on the
+	// RemoteStores this resolver hands out. See WithChunkedPush. Zero disables
+	// chunking (monolithic push).
+	chunkSize      int64
+	chunkThreshold int64
 
 	cacheMu sync.RWMutex
 	cache   map[string]*remotestore.RemoteStore
@@ -95,7 +102,10 @@ func (resolver *CachingResolver) BasePath() string {
 }
 
 func (resolver *CachingResolver) ComponentVersionReference(ctx context.Context, component, version string) string {
-	tag := oci.LooseSemverToOCITag(ctx, version) // Remove prohibited characters.
+	tag, err := oci.VersionToOCITag(ctx, version)
+	if err != nil {
+		slog.WarnContext(ctx, "building component version reference with an invalid OCI tag", "component", component, "version", version, "error", err)
+	}
 	return fmt.Sprintf("%s/%s:%s", resolver.BasePath(), component, tag)
 }
 
@@ -177,7 +187,11 @@ func (resolver *CachingResolver) StoreForReference(_ context.Context, reference 
 		repo.Client = resolver.baseClient
 	}
 
-	store := &remotestore.RemoteStore{Repository: repo}
+	store := &remotestore.RemoteStore{
+		Repository:     repo,
+		ChunkSize:      resolver.chunkSize,
+		ChunkThreshold: resolver.chunkThreshold,
+	}
 	resolver.addToCache(key, store)
 
 	blobCache := resolver.blobCache.Load()

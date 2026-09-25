@@ -16,6 +16,7 @@ import (
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	ocmv1 "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/spec"
 	resolversv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/resolvers/v1alpha1/spec"
+	versioningv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/versioning/v1alpha1/spec"
 	credentialsruntime "ocm.software/open-component-model/bindings/go/credentials/spec/config/runtime"
 	credentialsv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
@@ -142,6 +143,12 @@ func getEffectiveConfig(cfg *genericv1.Config) (*effectiveConfig, error) {
 		return nil, fmt.Errorf("config lookup failed for transfer: %w", err)
 	} else if transferCfg != nil {
 		result.Configurations = append(result.Configurations, transferCfg)
+	}
+
+	if versioningCfg, err := versioningv1alpha1.Lookup(cfg); err != nil {
+		return nil, fmt.Errorf("config lookup failed for versioning: %w", err)
+	} else if versioningCfg != nil && len(versioningCfg.Schemes) > 0 {
+		result.Configurations = append(result.Configurations, versioningCfg)
 	}
 
 	if pluginsCfg, err := pluginsv2alpha1.LookupConfig(cfg); err != nil {
