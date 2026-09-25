@@ -18,7 +18,7 @@ func newTestVisualizer(total int) (*barVisualizer[string], *bytes.Buffer) {
 		total:          total,
 		events:         make([]progress.Event[string], 0, total),
 		done:           make(chan struct{}),
-		maxLogs:        min(4, total),
+		maxLogs:        maxLogLines(total),
 		errorFormatter: func(_ string, err error) string { return err.Error() },
 	}
 	return v, buf
@@ -248,6 +248,34 @@ func TestNewVisualizer(t *testing.T) {
 	output := buf.String()
 	assert.Contains(t, output, "✓")
 	assert.Contains(t, output, "Transfer")
+}
+
+func TestMaxLogLines(t *testing.T) {
+	assert.Equal(t, 0, maxLogLines(0))
+	assert.Equal(t, 2, maxLogLines(2))
+	assert.Equal(t, 4, maxLogLines(4))
+	assert.Equal(t, 4, maxLogLines(6))
+	assert.Equal(t, 4, maxLogLines(progress.IndeterminateTotal))
+}
+
+func TestNewVisualizer_Indeterminate(t *testing.T) {
+	buf := &bytes.Buffer{}
+	vis := NewVisualizer[any](buf, progress.IndeterminateTotal)
+
+	vis.Begin("Resolving")
+	bv := vis.(*barVisualizer[any])
+	close(bv.done)
+	bv.done = make(chan struct{})
+	bv.HandleEvent(progress.Event[any]{ID: "a", Name: "ocm.software/a:1.0.0", State: progress.Completed})
+	buf.Reset()
+	vis.End(nil)
+
+	output := stripANSI(buf.String())
+	// unknown total: the item log is shown ...
+	assert.Contains(t, output, "✓")
+	assert.Contains(t, output, "ocm.software/a:1.0.0")
+	// ... but no progress bar
+	assert.NotContains(t, output, "%")
 }
 
 func TestNewVisualizer_Simple(t *testing.T) {

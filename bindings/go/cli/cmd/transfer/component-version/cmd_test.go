@@ -129,6 +129,20 @@ func executeTransferSpec(t *testing.T, specFile string) {
 	require.NoError(t, err)
 }
 
+// completedOperationItems returns the IDs of items the given progress operation
+// reported as completed via the non-terminal slog progress visualizer.
+func completedOperationItems(entries []*test.JSONLogEntry, name string) []string {
+	var items []string
+	for _, e := range entries {
+		if strings.HasPrefix(e.Msg, name) && strings.HasSuffix(e.Msg, ": item completed") {
+			if item, ok := e.Extras["item"].(string); ok {
+				items = append(items, item)
+			}
+		}
+	}
+	return items
+}
+
 // openCTFRepo opens a CTF repository at the given path for verification.
 func openCTFRepo(t *testing.T, path string) *oci.Repository {
 	t.Helper()
@@ -415,6 +429,18 @@ func TestTransferComponentVersionRecursive(t *testing.T) {
 		}
 	}
 	require.True(t, found, "expected success log message")
+
+	// the resolution phase must report one completed item per resolved component version
+	for _, id := range []string{"ocm.software/parent-component:1.0.0", "ocm.software/child-component:0.0.1"} {
+		require.Contains(t, completedOperationItems(logEntries, "Resolving component versions"), id, "expected resolution progress for %s", id)
+	}
+
+	// the graph construction phase must report one completed item per
+	// transformation node of the graph (the upload of parent and child)
+	for _, label := range []string{"parent-component@1.0.0 [Upload to CTF]", "child-component@0.0.1 [Upload to CTF]"} {
+		require.Contains(t, completedOperationItems(logEntries, "Building transformation graph"), label,
+			"expected build progress for %s", label)
+	}
 }
 
 // TestTransferComponentVersionPreservesSignatures verifies that signatures on a component

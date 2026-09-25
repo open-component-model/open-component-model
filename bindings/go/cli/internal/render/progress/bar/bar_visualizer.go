@@ -48,6 +48,17 @@ func (v *barVisualizer[T]) SetLogBuffer(buf *progress.SyncBuffer) {
 	v.logBuffer = buf
 }
 
+// maxLogLines returns the number of item log lines shown for an operation.
+// A negative total means the item count is not known up front ([progress.IndeterminateTotal]):
+// the log is still shown, just without a progress bar. Simple operations (total 0)
+// show only the spinner header.
+func maxLogLines(total int) int {
+	if total < 0 {
+		return 4
+	}
+	return min(4, total)
+}
+
 // Begin starts the animation.
 func (v *barVisualizer[T]) Begin(name string) {
 	v.mu.Lock()
@@ -59,7 +70,7 @@ func (v *barVisualizer[T]) Begin(name string) {
 	v.done = make(chan struct{})
 	v.spinnerFrame = 0
 	v.dotFrame = 0
-	v.maxLogs = min(4, v.total)
+	v.maxLogs = maxLogLines(v.total)
 
 	v.reserveSpace()
 
