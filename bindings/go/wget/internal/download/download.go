@@ -54,79 +54,15 @@ func Download(ctx context.Context, req Request, opts ...Option) (_ *Blob, err er
 		opt(o)
 	}
 
-	if req.URL == "" {
-		return nil, fmt.Errorf("url is required")
-	}
-	client := o.Client
-	if client == nil {
-		client = http.DefaultClient
-	}
-
-	parsedURL, err := url.Parse(req.URL)
+	resp, safeURL, err := open(ctx, req, o)
 	if err != nil {
-		return nil, fmt.Errorf("invalid url: %w", err)
-	}
-	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
-		return nil, fmt.Errorf("unsupported url scheme %q: only http and https are allowed", parsedURL.Scheme)
-	}
-
-	// safeURL strips userinfo and query params so presigned URLs and credentials
-	// are never leaked into error messages or logs.
-	safeURL := *parsedURL
-	safeURL.User = nil
-	safeURL.RawQuery = ""
-	safeURL.Fragment = ""
-
-	method := http.MethodGet
-	if req.Verb != "" {
-		method = req.Verb
-	}
-
-	var body io.Reader
-	if len(req.Body) > 0 {
-		body = bytes.NewReader(req.Body)
-	}
-
-	httpReq, err := http.NewRequestWithContext(ctx, method, req.URL, body)
-	if err != nil {
-		return nil, fmt.Errorf("error creating HTTP request: %w", err)
-	}
-
-	for k, vals := range req.Header {
-		for _, v := range vals {
-			httpReq.Header.Add(k, v)
-		}
-	}
-	// When digests are computed over the response body, force
-	// Accept-Encoding: identity. Go's default transport otherwise auto-adds
-	// gzip and transparently decompresses; hashing decoded bytes then breaks
-	// RFC 9530 Content-Digest (computed over encoded bytes) and lets a mirror
-	// serving compressed bytes yield a different OCM SHA-256.
-	if len(o.DigestAlgorithms) > 0 {
-		httpReq.Header.Set("Accept-Encoding", "identity")
-	}
-
-	if req.NoRedirect {
-		client = CloneClientWithNoRedirect(client)
-	}
-
-	if err := httpauth.Apply(ctx, httpReq, &client, o.Credentials); err != nil {
-		return nil, fmt.Errorf("error applying credentials: %w", err)
-	}
-
-	resp, err := client.Do(httpReq)
-	if err != nil {
-		return nil, fmt.Errorf("error performing HTTP request to %s: %w", safeURL.String(), err)
+		return nil, err
 	}
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
 			slog.WarnContext(ctx, "failed to close HTTP response body", "error", err)
 		}
 	}()
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("HTTP request to %s returned status %d", safeURL.String(), resp.StatusCode)
-	}
 
 	// A nil option means "use the default"; a zero or negative value disables the limit.
 	maxDownloadSize := DefaultMaxDownloadSize
@@ -137,7 +73,7 @@ func Download(ctx context.Context, req Request, opts ...Option) (_ *Blob, err er
 	// When the server announces the size up front, an oversized body is rejected
 	// before any of it is transferred. ContentLength is negative when unknown.
 	if maxDownloadSize > 0 && resp.ContentLength > maxDownloadSize {
-		return nil, fmt.Errorf("response body from %s exceeds maximum allowed size of %d bytes", safeURL.String(), maxDownloadSize)
+		return nil, fmt.Errorf("response body from %s exceeds maximum allowed size of %d bytes", safeURL, maxDownloadSize)
 	}
 
 	respBody := io.Reader(resp.Body)
@@ -147,7 +83,7 @@ func Download(ctx context.Context, req Request, opts ...Option) (_ *Blob, err er
 
 	file, err := os.CreateTemp(o.TempDir, tempFilePattern)
 	if err != nil {
-		return nil, fmt.Errorf("error creating temporary file for %s: %w", safeURL.String(), err)
+		return nil, fmt.Errorf("error creating temporary file for %s: %w", safeURL, err)
 	}
 	path := file.Name()
 
@@ -175,11 +111,11 @@ func Download(ctx context.Context, req Request, opts ...Option) (_ *Blob, err er
 		err = closeErr
 	}
 	if err != nil {
-		return nil, fmt.Errorf("error writing response body from %s to %s: %w", safeURL.String(), path, err)
+		return nil, fmt.Errorf("error writing response body from %s to %s: %w", safeURL, path, err)
 	}
 
 	if maxDownloadSize > 0 && written > maxDownloadSize {
-		return nil, fmt.Errorf("response body from %s exceeds maximum allowed size of %d bytes", safeURL.String(), maxDownloadSize)
+		return nil, fmt.Errorf("response body from %s exceeds maximum allowed size of %d bytes", safeURL, maxDownloadSize)
 	}
 
 	digests := make(map[string]string, len(hashers))
@@ -197,13 +133,99 @@ func Download(ctx context.Context, req Request, opts ...Option) (_ *Blob, err er
 
 	b, err := newBlob(path)
 	if err != nil {
-		return nil, fmt.Errorf("error creating blob for %s from %s: %w", safeURL.String(), path, err)
+		return nil, fmt.Errorf("error creating blob for %s from %s: %w", safeURL, path, err)
 	}
 	b.SetMediaType(mediaType)
 	b.headers = resp.Header
 	b.digests = digests
 
 	return b, nil
+}
+
+// Open performs the HTTP request described by req and returns the response with its body
+// unread, so callers can stream it. Only the client and credentials options apply. The
+// caller must close the response body.
+func Open(ctx context.Context, req Request, opts ...Option) (*http.Response, error) {
+	o := &option{}
+	for _, opt := range opts {
+		opt(o)
+	}
+	resp, _, err := open(ctx, req, o)
+	return resp, err
+}
+
+// open sends the request and checks the response status. It also returns the request URL
+// without userinfo, query and fragment for use in errors and logs.
+func open(ctx context.Context, req Request, o *option) (*http.Response, string, error) {
+	if req.URL == "" {
+		return nil, "", fmt.Errorf("url is required")
+	}
+	client := o.Client
+	if client == nil {
+		client = http.DefaultClient
+	}
+
+	parsedURL, err := url.Parse(req.URL)
+	if err != nil {
+		return nil, "", fmt.Errorf("invalid url: %w", err)
+	}
+	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
+		return nil, "", fmt.Errorf("unsupported url scheme %q: only http and https are allowed", parsedURL.Scheme)
+	}
+
+	// safeURL strips userinfo and query params so presigned URLs and credentials
+	// are never leaked into error messages or logs.
+	safeURL := *parsedURL
+	safeURL.User = nil
+	safeURL.RawQuery = ""
+	safeURL.Fragment = ""
+
+	method := http.MethodGet
+	if req.Verb != "" {
+		method = req.Verb
+	}
+
+	var body io.Reader
+	if len(req.Body) > 0 {
+		body = bytes.NewReader(req.Body)
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, method, req.URL, body)
+	if err != nil {
+		return nil, "", fmt.Errorf("error creating HTTP request: %w", err)
+	}
+
+	for k, vals := range req.Header {
+		for _, v := range vals {
+			httpReq.Header.Add(k, v)
+		}
+	}
+	// When digests are computed over the response body, force
+	// Accept-Encoding: identity. Go's default transport otherwise auto-adds
+	// gzip and transparently decompresses; hashing decoded bytes then breaks
+	// RFC 9530 Content-Digest (computed over encoded bytes) and lets a mirror
+	// serving compressed bytes yield a different OCM SHA-256.
+	if len(o.DigestAlgorithms) > 0 {
+		httpReq.Header.Set("Accept-Encoding", "identity")
+	}
+
+	if req.NoRedirect {
+		client = CloneClientWithNoRedirect(client)
+	}
+
+	if err := httpauth.Apply(ctx, httpReq, &client, o.Credentials); err != nil {
+		return nil, "", fmt.Errorf("error applying credentials: %w", err)
+	}
+
+	resp, err := client.Do(httpReq)
+	if err != nil {
+		return nil, "", fmt.Errorf("error performing HTTP request to %s: %w", safeURL.String(), err)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		_ = resp.Body.Close()
+		return nil, "", fmt.Errorf("HTTP request to %s returned status %d", safeURL.String(), resp.StatusCode)
+	}
+	return resp, safeURL.String(), nil
 }
 
 func CloneClientWithNoRedirect(original *http.Client) *http.Client {
