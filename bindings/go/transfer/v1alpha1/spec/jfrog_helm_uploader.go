@@ -22,8 +22,9 @@ func init() {
 // JFrogHelmUploaderConfig deploys matching Helm chart resources into a JFrog Artifactory Helm
 // repository via Artifactory's deploy REST API (PUT <url>/artifactory/<repository>/<name>-<version>.tgz)
 // and re-describes them with a Helm/v1 access (helmRepository <url>/artifactory/api/helm/<repository>,
-// helmChart <name>:<version>). The chart archive is extracted from Helm/v1 and OCIImage sources;
-// other sources must already serve the chart .tgz. Upload credentials are resolved for the Wget
+// helmChart <name>:<version>). The chart archive is extracted from Helm/v1 and OCIImage sources
+// and from LocalBlob sources by media type (packaged chart or OCM OCI layout); other sources
+// must already serve the chart .tgz. Upload credentials are resolved for the Wget
 // consumer identity of the upload URL. By default the Helm index is recalculated after each upload.
 //
 //	type: generic.config.ocm.software/v1
@@ -50,10 +51,13 @@ type JFrogHelmUploaderConfig struct {
 	// Repository is the key of the Artifactory Helm repository to deploy into.
 	Repository string `json:"repository"`
 	// ChartName is the chart name, as a literal or a standalone ${...} CEL expression over the
-	// `resource` alias. Defaults to ${resource.name}.
+	// `resource` alias. Defaults to the name of the source chart (the chart of a Helm access,
+	// the last repository segment of an OCIImage reference), else ${resource.name}. It must
+	// match the chart's Chart.yaml, which Helm repositories index by.
 	ChartName string `json:"chartName,omitempty"`
 	// ChartVersion is the chart version, as a literal or a standalone ${...} CEL expression over
-	// the `resource` alias. Defaults to ${resource.version}.
+	// the `resource` alias. Defaults to the version of the source chart (Helm access version,
+	// OCIImage tag), else ${resource.version}. It must match the chart's Chart.yaml.
 	ChartVersion string `json:"chartVersion,omitempty"`
 	// Reindex triggers Artifactory's Helm index recalculation
 	// (POST <url>/artifactory/api/helm/<repository>/reindex) after each upload, so the chart

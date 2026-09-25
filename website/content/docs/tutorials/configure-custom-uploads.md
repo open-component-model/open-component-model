@@ -268,9 +268,11 @@ target `hostname`, as in Step 2.
 
 The `jfrog.helm.uploader.transfer.config.ocm.software/v1alpha1` uploader
 deploys Helm charts into a JFrog Artifactory Helm repository and rewrites the
-resource to a `Helm/v1` access. It extracts the chart archive from `Helm/v1` or
-`OCIImage/v1` sources, streams it as a `PUT` to Artifactory, and publishes a
-`Helm/v1` access so downstream consumers can pull the chart with `helm pull`.
+resource to a `Helm/v1` access. It extracts the chart archive from `Helm/v1`,
+`OCIImage/v1` or `LocalBlob` sources (for example charts added with the `helm`
+input), streams it as a `PUT` to Artifactory under the chart's own name and
+version, and publishes a `Helm/v1` access so downstream consumers can pull the
+chart with `helm pull`.
 
 ### Uploader configuration
 

@@ -14,6 +14,7 @@ import (
 	godigest "github.com/opencontainers/go-digest"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	ocmhttp "ocm.software/open-component-model/bindings/go/http"
@@ -36,9 +37,31 @@ const (
 	maxErrorBodyBytes = 4 << 10
 )
 
-// SourceOpener opens the content uploaded for resource in place of
-// ResourceRepository.DownloadResource. credentials are the resolved source credentials.
-type SourceOpener func(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) (blob.ReadOnlyBlob, error)
+// SourceRequest describes the source content an HTTPStreaming upload reads.
+type SourceRequest struct {
+	// Resource is the source resource with its original access.
+	Resource *descriptor.Resource
+	// Target is the resource as it will be published (its access resolved), so an opener can
+	// check the content against what will be published.
+	Target *descriptor.Resource
+	// Credentials are the resolved source credentials; nil when Buffered is set.
+	Credentials runtime.Typed
+	// Buffered is the source content already buffered by a preceding step
+	// (HTTPStreamingSpec.SourceFile); nil when the source must be downloaded.
+	Buffered blob.ReadOnlyBlob
+}
+
+// OpenedSource is the content to upload.
+type OpenedSource struct {
+	Blob blob.ReadOnlyBlob
+	// Derived reports that Blob is a different representation than the source resource
+	// digest describes (e.g. one layer of an OCI artifact), so the digest of the uploaded
+	// bytes is recorded instead of verifying the source digest.
+	Derived bool
+}
+
+// SourceOpener produces the content to upload for a source.
+type SourceOpener func(ctx context.Context, src SourceRequest) (OpenedSource, error)
 
 // HTTPStreamingTransformer streams a resource's content from its source access
 // directly to an HTTP target (e.g. a PUT upload). The source blob is read through
@@ -94,7 +117,7 @@ func (t *HTTPStreamingTransformer) Transform(ctx context.Context, step runtime.T
 		return nil, err
 	}
 
-	srcCreds, err := t.resolveSourceCredentials(ctx, srcResource)
+	opened, err := t.openSource(ctx, open, transformation.Spec, srcResource, targetResource)
 	if err != nil {
 		return nil, err
 	}
@@ -102,11 +125,7 @@ func (t *HTTPStreamingTransformer) Transform(ctx context.Context, step runtime.T
 	if err != nil {
 		return nil, err
 	}
-
-	srcBlob, err := open(ctx, srcResource, srcCreds)
-	if err != nil {
-		return nil, fmt.Errorf("failed downloading source resource %v: %w", srcResource.ToIdentity(), err)
-	}
+	srcBlob := opened.Blob
 	rc, err := srcBlob.ReadCloser()
 	if err != nil {
 		return nil, fmt.Errorf("failed opening source resource stream: %w", err)
@@ -162,7 +181,8 @@ func (t *HTTPStreamingTransformer) Transform(ctx context.Context, step runtime.T
 		"digest", computed,
 		"status", resp.StatusCode)
 
-	targetResource.Digest, err = targetDigest(srcResource.Digest, computed, transformation.Spec.Opener != "")
+	replaceDigest := opened.Derived || transformation.Spec.Opener != "" && srcResource.Digest != nil && srcResource.Digest.NormalisationAlgorithm != genericBlobDigestV1
+	targetResource.Digest, err = targetDigest(srcResource.Digest, computed, replaceDigest)
 	if err != nil {
 		return nil, err
 	}
@@ -270,7 +290,7 @@ func redactedHTTPURL(raw string) (string, error) {
 // when name is empty.
 func (t *HTTPStreamingTransformer) sourceOpener(name string) (SourceOpener, error) {
 	if name == "" {
-		return t.ResourceRepository.DownloadResource, nil
+		return t.openPlain, nil
 	}
 	opener, ok := t.Openers[name]
 	if !ok {
@@ -279,13 +299,45 @@ func (t *HTTPStreamingTransformer) sourceOpener(name string) (SourceOpener, erro
 	return opener, nil
 }
 
+// openPlain uploads the buffered source file, or else the downloaded source bytes, unchanged.
+func (t *HTTPStreamingTransformer) openPlain(ctx context.Context, src SourceRequest) (OpenedSource, error) {
+	if src.Buffered != nil {
+		return OpenedSource{Blob: src.Buffered}, nil
+	}
+	b, err := t.ResourceRepository.DownloadResource(ctx, src.Resource, src.Credentials)
+	return OpenedSource{Blob: b}, err
+}
+
+// openSource prepares the SourceRequest (buffered file or resolved source credentials) and
+// runs open on it.
+func (t *HTTPStreamingTransformer) openSource(ctx context.Context, open SourceOpener, spec *v1alpha1.HTTPStreamingSpec, srcResource, targetResource *descriptor.Resource) (OpenedSource, error) {
+	req := SourceRequest{Resource: srcResource, Target: targetResource}
+	var err error
+	if spec.SourceFile != nil {
+		// The content was buffered by a preceding step (e.g. a local blob fetched from the
+		// source component version), so there is nothing to download or authenticate.
+		if req.Buffered, err = filesystem.GetBlobFromSpec(ctx, spec.SourceFile); err != nil {
+			return OpenedSource{}, fmt.Errorf("failed opening buffered source file: %w", err)
+		}
+	} else if req.Credentials, err = t.resolveSourceCredentials(ctx, srcResource); err != nil {
+		return OpenedSource{}, err
+	}
+	opened, err := open(ctx, req)
+	if err != nil {
+		return OpenedSource{}, fmt.Errorf("failed downloading source resource %v: %w", srcResource.ToIdentity(), err)
+	}
+	if opened.Blob == nil {
+		return OpenedSource{}, fmt.Errorf("source opener returned no content for resource %v", srcResource.ToIdentity())
+	}
+	return opened, nil
+}
+
 // targetDigest verifies the source digest against the computed SHA-256 of the uploaded
-// bytes and returns the digest to record on the target resource.
-func targetDigest(src *descriptor.Digest, computed string, opened bool) (*descriptor.Digest, error) {
-	// An opener may upload a different representation than the source digest describes
-	// (e.g. the chart layer of an OCI artifact digested with ociArtifactDigest/v1), so the
-	// digest of the uploaded bytes is recorded instead.
-	if src == nil || opened && src.NormalisationAlgorithm != genericBlobDigestV1 {
+// bytes and returns the digest to record on the target resource. With replace set, the
+// uploaded bytes are a different representation than the source digest describes (e.g. the
+// chart layer of an OCI artifact), so the digest of the uploaded bytes is recorded instead.
+func targetDigest(src *descriptor.Digest, computed string, replace bool) (*descriptor.Digest, error) {
+	if src == nil || replace {
 		return &descriptor.Digest{
 			HashAlgorithm:          hashAlgorithmSHA256,
 			NormalisationAlgorithm: genericBlobDigestV1,

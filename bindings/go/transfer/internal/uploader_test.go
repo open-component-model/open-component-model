@@ -9,8 +9,11 @@ import (
 	"github.com/stretchr/testify/require"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	helmv1 "ocm.software/open-component-model/bindings/go/helm/spec/access/v1"
 	helmv1alpha1 "ocm.software/open-component-model/bindings/go/helm/transformation/spec/v1alpha1"
+	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
+	ociv1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/transform/graph/env"
@@ -137,11 +140,11 @@ func TestBuildGraphDefinition_UploaderMatch_EmitsHTTPStreaming(t *testing.T) {
 }
 
 func TestBuildGraphDefinition_JFrogHelmUploader_EmitsHelmTarget(t *testing.T) {
-	build := func(t *testing.T, u *transferv1alpha1.JFrogHelmUploaderConfig) transformv1alpha1.GenericTransformation {
+	chartResource := helmResource("chart-resource", "1.0.0", "https://charts.example", "chart:1.0.0")
+	build := func(t *testing.T, resource descriptor.Resource, u *transferv1alpha1.JFrogHelmUploaderConfig) (*transformv1alpha1.TransformationGraphDefinition, transformv1alpha1.GenericTransformation) {
 		t.Helper()
 		r := require.New(t)
-		desc := testDescriptor("ocm.software/test", "1.0.0",
-			[]descriptor.Resource{helmResource("chart", "1.0.0", "https://charts.example", "chart:1.0.0")}, nil)
+		desc := testDescriptor("ocm.software/test", "1.0.0", []descriptor.Resource{resource}, nil)
 		resolver := testResolverFor("ocm.software/test", "1.0.0", testOCIRepo("ghcr.io/source"), desc)
 		roots := testTransferRoots("ocm.software/test", "1.0.0", testOCIRepo("ghcr.io/target"), resolver)
 
@@ -156,59 +159,119 @@ func TestBuildGraphDefinition_JFrogHelmUploader_EmitsHelmTarget(t *testing.T) {
 			}
 		}
 		r.Len(streaming, 1)
-		return streaming[0]
+		return tgd, streaming[0]
 	}
-	uploader := func() *transferv1alpha1.JFrogHelmUploaderConfig {
+	uploader := func(accessType runtime.Type) *transferv1alpha1.JFrogHelmUploaderConfig {
 		return &transferv1alpha1.JFrogHelmUploaderConfig{
 			Type:       runtime.NewVersionedType(transferv1alpha1.JFrogHelmUploaderConfigType, transferv1alpha1.Version),
-			MatchSpec:  transferv1alpha1.UploaderMatch{AccessType: runtime.NewVersionedType(helmv1.LegacyType, helmv1.LegacyTypeVersion)},
+			MatchSpec:  transferv1alpha1.UploaderMatch{AccessType: accessType},
 			URL:        "https://artifactory.example",
 			Repository: "helm-local",
 		}
 	}
+	helmMatch := runtime.NewVersionedType(helmv1.LegacyType, helmv1.LegacyTypeVersion)
+	requestURL := func(tr transformv1alpha1.GenericTransformation) string {
+		return tr.Spec.Data["request"].(map[string]any)["url"].(string)
+	}
+	helmChart := func(tr transformv1alpha1.GenericTransformation) string {
+		return tr.Spec.Data["targetResource"].(map[string]any)["access"].(map[string]any)["helmChart"].(string)
+	}
 
-	t.Run("defaults to resource name and version", func(t *testing.T) {
+	t.Run("publishes the source chart as Helm/v1 and reindexes", func(t *testing.T) {
 		r := require.New(t)
-		tr := build(t, uploader())
+		_, tr := build(t, chartResource, uploader(helmMatch))
 		r.Equal("HelmChartArchive", tr.Spec.Data["opener"])
+		r.NotContains(tr.Spec.Data, "sourceFile")
 
 		request := tr.Spec.Data["request"].(map[string]any)
 		r.Equal("PUT", request["verb"])
-		requestURL := request["url"].(string)
-		r.True(strings.HasPrefix(requestURL, `${"https://artifactory.example/artifactory/helm-local/" + `), "got %q", requestURL)
-		r.Contains(requestURL, ".component.resources[0].name")
-		r.Contains(requestURL, ".component.resources[0].version")
+		r.Equal(`${"https://artifactory.example/artifactory/helm-local/" + "chart" + "-" + "1.0.0" + ".tgz"}`, request["url"],
+			"the chart is deployed under the name and version of the source chart, not of the resource")
 
 		access := tr.Spec.Data["targetResource"].(map[string]any)["access"].(map[string]any)
 		r.Equal("Helm/v1", access["type"])
 		r.Equal("https://artifactory.example/artifactory/api/helm/helm-local", access["helmRepository"])
-		helmChart := access["helmChart"].(string)
-		r.Contains(helmChart, ".component.resources[0].name")
-		r.NotContains(helmChart, "resource.name", "the bare resource alias must not survive the rewrite")
+		r.Equal(`${"chart" + ":" + "1.0.0"}`, access["helmChart"])
 
-		r.Equal("test@1.0.0 [Stream chart to artifactory.example]", tr.Label)
+		r.Equal("test@1.0.0 [Stream chart-resource to artifactory.example]", tr.Label)
 		afterUpload := tr.Spec.Data["afterUpload"].(map[string]any)
 		r.Equal("POST", afterUpload["verb"])
 		r.Equal("https://artifactory.example/artifactory/api/helm/helm-local/reindex", afterUpload["url"])
 	})
 
+	sourceDefaults := []struct {
+		name      string
+		resource  descriptor.Resource
+		match     runtime.Type
+		wantChart []string
+	}{
+		{
+			name:      "Helm packaged file name",
+			resource:  helmResource("r", "9.9.9", "https://charts.example", "my-chart-1.2.3-rc.1.tgz"),
+			match:     helmMatch,
+			wantChart: []string{`"my-chart"`, `"1.2.3-rc.1"`},
+		},
+		{
+			name:      "Helm chart without version falls back to the resource version",
+			resource:  func() descriptor.Resource { res := helmResource("r", "9.9.9", "https://charts.example", "chart"); res.Access.(*helmv1.Helm).Version = ""; return res }(),
+			match:     helmMatch,
+			wantChart: []string{`"chart"`, ".component.resources[0].version"},
+		},
+		{
+			name:      "OCIImage repository and tag",
+			resource:  ociImageResource("r", "9.9.9", "ghcr.io/org/charts/podinfo:6.5.0@sha256:0000000000000000000000000000000000000000000000000000000000000000"),
+			match:     runtime.NewVersionedType(ociv1.LegacyType, ociv1.LegacyTypeVersion),
+			wantChart: []string{`"podinfo"`, `"6.5.0"`},
+		},
+		{
+			name:      "LocalBlob has no chart reference and uses the resource",
+			resource:  localBlobResource("r", "9.9.9"),
+			match:     runtime.NewVersionedType(descriptorv2.LocalBlobAccessType, descriptorv2.LocalBlobAccessTypeVersion),
+			wantChart: []string{".component.resources[0].name", ".component.resources[0].version"},
+		},
+	}
+	for _, tt := range sourceDefaults {
+		t.Run("defaults from "+tt.name, func(t *testing.T) {
+			r := require.New(t)
+			_, tr := build(t, tt.resource, uploader(tt.match))
+			for _, want := range tt.wantChart {
+				r.Contains(requestURL(tr), want)
+				r.Contains(helmChart(tr), want)
+			}
+		})
+	}
+
+	t.Run("LocalBlob is buffered from the source component version and cleaned up", func(t *testing.T) {
+		r := require.New(t)
+		tgd, tr := build(t, localBlobResource("chart", "1.0.0"), uploader(runtime.NewVersionedType(descriptorv2.LocalBlobAccessType, descriptorv2.LocalBlobAccessTypeVersion)))
+
+		var getID string
+		for _, other := range tgd.Transformations {
+			if other.Type == ociv1alpha1.OCIGetLocalResourceV1alpha1 {
+				getID = other.ID
+			}
+		}
+		r.NotEmpty(getID, "the local blob must be fetched by a GetLocalResource transformation")
+		r.Equal("${"+getID+".output.file}", tr.Spec.Data["sourceFile"])
+		r.Contains(cleanupFileExpressions(t, findCleanupTransformation(tgd)), "${"+tr.ID+".spec.sourceFile}")
+	})
+
 	t.Run("literal chart name and expression chart version", func(t *testing.T) {
 		r := require.New(t)
-		u := uploader()
+		u := uploader(helmMatch)
 		u.ChartName = "renamed"
 		u.ChartVersion = `${resource.version + "-ocm"}`
-		tr := build(t, u)
-
-		requestURL := tr.Spec.Data["request"].(map[string]any)["url"].(string)
-		r.Contains(requestURL, `"renamed"`)
-		r.Contains(requestURL, `.component.resources[0].version + "-ocm")`)
+		_, tr := build(t, chartResource, u)
+		r.Contains(requestURL(tr), `"renamed"`)
+		r.Contains(requestURL(tr), `.component.resources[0].version + "-ocm")`)
 	})
 
 	t.Run("reindex disabled", func(t *testing.T) {
 		r := require.New(t)
-		u := uploader()
+		u := uploader(helmMatch)
 		u.Reindex = new(bool)
-		r.NotContains(build(t, u).Spec.Data, "afterUpload")
+		_, tr := build(t, chartResource, u)
+		r.NotContains(tr.Spec.Data, "afterUpload")
 	})
 }
 

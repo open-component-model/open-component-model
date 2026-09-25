@@ -6,6 +6,7 @@
 package v1alpha1
 
 import (
+	accessv1alpha1 "ocm.software/open-component-model/bindings/go/blob/filesystem/spec/access/v1alpha1"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	runtime "ocm.software/open-component-model/bindings/go/runtime"
 	v1 "ocm.software/open-component-model/bindings/go/wget/spec/access/v1"
@@ -167,6 +168,11 @@ func (in *HTTPStreamingSpec) DeepCopyInto(out *HTTPStreamingSpec) {
 		in, out := &in.AfterUpload, &out.AfterUpload
 		*out = new(v1.Wget)
 		(*in).DeepCopyInto(*out)
+	}
+	if in.SourceFile != nil {
+		in, out := &in.SourceFile, &out.SourceFile
+		*out = new(accessv1alpha1.File)
+		**out = **in
 	}
 	return
 }
