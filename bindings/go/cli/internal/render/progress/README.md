@@ -16,6 +16,8 @@ via `StartOperation`.
 **`Operation`** represents a running unit of work. It is created by `StartOperation` and
 exposes `Finish(err)` — pass `nil` for success or an error for failure. The operation
 drives the visualizer lifecycle internally — `Begin` on start, `End` on finish.
+Visualizers measure the elapsed time between the two and report it when the operation
+ends (`(took 1m2s)` suffix in the terminal, `duration` log attribute in non-terminal mode).
 
 **`Visualizer[T]`** is the rendering interface with three methods: `Begin(name)`,
 `HandleEvent(Event[T])`, and `End(err)`.
