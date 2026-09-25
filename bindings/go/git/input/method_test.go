@@ -9,9 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-git/go-git/v5"
-	"github.com/go-git/go-git/v5/plumbing"
-	"github.com/go-git/go-git/v5/plumbing/object"
+	"github.com/go-git/go-git/v6"
+	"github.com/go-git/go-git/v6/config"
+	"github.com/go-git/go-git/v6/plumbing"
+	"github.com/go-git/go-git/v6/plumbing/object"
 	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/blob"
@@ -159,6 +160,11 @@ func newRepository(t *testing.T) (path, firstCommit string) {
 	work := t.TempDir()
 	repo, err := git.PlainInit(work, false)
 	r.NoError(err)
+	// go-git reads the global Git config; a host commit.gpgSign must not sign fixtures.
+	cfg, err := repo.Config()
+	r.NoError(err)
+	cfg.Commit.GpgSign = config.OptBoolFalse
+	r.NoError(repo.SetConfig(cfg))
 	r.NoError(repo.Storer.SetReference(plumbing.NewSymbolicReference(plumbing.HEAD, "refs/heads/main")))
 	tree, err := repo.Worktree()
 	r.NoError(err)
@@ -178,7 +184,7 @@ func newRepository(t *testing.T) (path, firstCommit string) {
 		}
 	}
 	path = filepath.Join(t.TempDir(), "fixture.git")
-	_, err = git.PlainClone(path, true, &git.CloneOptions{URL: work})
+	_, err = git.PlainClone(path, &git.CloneOptions{URL: work, Bare: true})
 	r.NoError(err)
 	return path, firstCommit
 }

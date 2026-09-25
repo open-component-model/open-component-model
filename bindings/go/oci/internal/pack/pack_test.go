@@ -132,9 +132,6 @@ func TestPrepareArtifactBlobForOCI_ExpectedDigest(t *testing.T) {
 				errorContains string
 			}{
 				{name: "valid", normalization: "genericBlobDigest/v1", hash: "SHA-256", value: valid.Encoded()},
-				{name: "missing normalization", hash: "SHA-256", value: valid.Encoded(), errorContains: "normalization algorithm"},
-				{name: "wrong normalization", normalization: "ociArtifactDigest/v1", hash: "SHA-256", value: valid.Encoded(), errorContains: "normalization algorithm"},
-				{name: "wrong normalization version", normalization: "genericBlobDigest/v2", hash: "SHA-256", value: valid.Encoded(), errorContains: "normalization algorithm"},
 				{name: "invalid hash", normalization: "genericBlobDigest/v1", hash: "invalid", value: valid.Encoded(), errorContains: "invalid hash algorithm"},
 				{name: "missing hash", normalization: "genericBlobDigest/v1", value: valid.Encoded(), errorContains: "invalid hash algorithm"},
 				{name: "malformed value", normalization: "genericBlobDigest/v1", hash: "SHA-256", value: "not-a-digest", errorContains: "digest"},

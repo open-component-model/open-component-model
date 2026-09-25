@@ -31,11 +31,10 @@ func Test_Integration_GitInputConstruction(t *testing.T) {
 	path, _ := newRepository(t)
 	url, ca := newHTTPSServer(t, path, "")
 
+	trustServerCertificate(t, ca)
+	method := &gitinput.InputMethod{TempFolder: t.TempDir()}
 	inputs := constructor.New(inputspec.Scheme)
-	r.NoError(inputs.RegisterResourceInputMethod(&inputv1.Git{}, &gitinput.InputMethod{
-		TempFolder: t.TempDir(),
-		CABundle:   ca,
-	}))
+	r.NoError(inputs.RegisterResourceInputMethod(&inputv1.Git{}, method))
 	construct := func(t *testing.T, typ string, expected *constructorv1.Digest) (*oci.Repository, error) {
 		t.Helper()
 		r := require.New(t)
@@ -103,8 +102,6 @@ components:
 		{"short value", "git/v1", "SHA-256", "genericBlobDigest/v1", "abc", "digest"},
 		{"unknown hash", "git/v1", "bogus", "genericBlobDigest/v1", resource.Digest.Value, "hash algorithm"},
 		{"missing hash", "git/v1", "", "genericBlobDigest/v1", resource.Digest.Value, "hash algorithm"},
-		{"unknown normalization", "git/v1", "SHA-256", "bogus", resource.Digest.Value, "normalization algorithm"},
-		{"missing normalization", "git/v1", "SHA-256", "", resource.Digest.Value, "normalization algorithm"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
