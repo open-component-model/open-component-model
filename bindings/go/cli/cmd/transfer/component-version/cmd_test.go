@@ -526,7 +526,7 @@ func TestTransferComponentVersion_SemverConstraint(t *testing.T) {
 	targetArg := fmt.Sprintf("ctf::%s", toPath)
 
 	_, err := test.OCM(t,
-		test.WithArgs("transfer", "component-version", sourceRef, targetArg, "--semver-constraint", "< 2.0.0"),
+		test.WithArgs("transfer", "component-version", sourceRef, targetArg, "--constraint", "< 2.0.0"),
 		test.WithOutput(new(bytes.Buffer)),
 		test.WithErrorOutput(test.NewJSONLogReader()),
 	)
@@ -586,7 +586,7 @@ func TestTransferComponentVersion_ExactVersionIgnoresConstraintFlags(t *testing.
 	targetArg := fmt.Sprintf("ctf::%s", toPath)
 
 	_, err := test.OCM(t,
-		test.WithArgs("transfer", "component-version", exactRef.String(), targetArg, "--semver-constraint", "< 2.0.0", "--latest"),
+		test.WithArgs("transfer", "component-version", exactRef.String(), targetArg, "--constraint", "< 2.0.0", "--latest"),
 		test.WithOutput(new(bytes.Buffer)),
 		test.WithErrorOutput(test.NewJSONLogReader()),
 	)
