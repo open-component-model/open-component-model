@@ -111,7 +111,8 @@ func Test_Integration_TransferHelmResource_JFrogHelmUploaderDeploysChart(t *test
 			Resources: []descriptor.Resource{
 				{
 					ElementMeta: descriptor.ElementMeta{
-						ObjectMeta: descriptor.ObjectMeta{Name: "mychart", Version: "0.1.0"},
+						// Deliberately differs from Chart.yaml: name and version come from the chart.
+						ObjectMeta: descriptor.ObjectMeta{Name: "chart-resource", Version: "9.9.9"},
 					},
 					Type:     "helmChart",
 					Relation: descriptor.ExternalRelation,

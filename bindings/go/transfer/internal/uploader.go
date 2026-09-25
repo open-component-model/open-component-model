@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
-	"strconv"
 	"strings"
 
 	celparser "ocm.software/open-component-model/bindings/go/cel/expression/parser"
@@ -182,71 +181,35 @@ func processHTTPUploader(resource descriptorv2.Resource, u *transferv1alpha1.HTT
 	// the request and the published read access resolve to the same URL at runtime.
 	nodePath := resourceNodePath(baseID, i)
 
-	requestRaw, err := templatedAccess(wgetaccess.Scheme, requestAccess, nodePath, "request")
-	if err != nil {
-		return err
+	requestRaw := &runtime.Raw{}
+	if err := wgetaccess.Scheme.Convert(requestAccess, requestRaw); err != nil {
+		return fmt.Errorf("cannot convert uploader request access: %w", err)
 	}
-	publishedRaw, err := templatedAccess(wgetaccess.Scheme, publishedAccess, nodePath, "published")
-	if err != nil {
-		return err
+	if err := templateExpressions(requestRaw, nodePath); err != nil {
+		return fmt.Errorf("cannot template uploader request access: %w", err)
 	}
 
-	label := uploaderLabel(&val.Descriptor.Component, resource.Name, targetHostFromExpression(u.TargetURL))
-	if err := appendHTTPStreaming(tgd, uploadID, label, resource, requestRaw, publishedRaw, nil); err != nil {
-		return err
+	publishedRaw := &runtime.Raw{}
+	if err := wgetaccess.Scheme.Convert(publishedAccess, publishedRaw); err != nil {
+		return fmt.Errorf("cannot convert uploader published access: %w", err)
 	}
-	resourceTransformIDs[i] = uploadID
-	return nil
-}
+	if err := templateExpressions(publishedRaw, nodePath); err != nil {
+		return fmt.Errorf("cannot template uploader published access: %w", err)
+	}
 
-// celOperand renders a chart field as a CEL operand: the parenthesised inner expression of a
-// standalone ${...} value, a quoted string literal otherwise, or fallback when empty.
-func celOperand(value, fallback string) string {
-	switch {
-	case value == "":
-		return fallback
-	case strings.HasPrefix(value, "${") && strings.HasSuffix(value, "}"):
-		return "(" + value[2:len(value)-1] + ")"
-	default:
-		// Go quoting is valid CEL string-literal syntax.
-		return strconv.Quote(value)
-	}
-}
-
-// templatedAccess converts access to raw JSON via scheme and rewrites the `resource` alias in
-// every ${...} expression to nodePath (see templateExpressions). role ("request" or
-// "published") names the access in errors.
-func templatedAccess(scheme *runtime.Scheme, access runtime.Typed, nodePath, role string) (*runtime.Raw, error) {
-	raw := &runtime.Raw{}
-	if err := scheme.Convert(access, raw); err != nil {
-		return nil, fmt.Errorf("cannot convert uploader %s access: %w", role, err)
-	}
-	if err := templateExpressions(raw, nodePath); err != nil {
-		return nil, fmt.Errorf("cannot template uploader %s access: %w", role, err)
-	}
-	return raw, nil
-}
-
-// appendHTTPStreaming appends the HTTPStreaming transformation uploading resource with request and
-// publishing it with published. extra carries optional spec fields (opener, afterUpload) and is
-// merged into the spec, so uploaders without extras emit exactly resource/request/targetResource.
-func appendHTTPStreaming(tgd *transformv1alpha1.TransformationGraphDefinition, uploadID, label string, resource descriptorv2.Resource, request, published *runtime.Raw, extra map[string]any) error {
 	targetResource := *resource.DeepCopy()
-	targetResource.Access = published
+	targetResource.Access = publishedRaw
 
-	data := map[string]any{
+	spec, err := runtime.UnstructuredFromMixedData(map[string]any{
 		"resource":       resource,
-		"request":        request,
+		"request":        requestRaw,
 		"targetResource": targetResource,
-	}
-	for k, v := range extra {
-		data[k] = v
-	}
-	spec, err := runtime.UnstructuredFromMixedData(data)
+	})
 	if err != nil {
 		return fmt.Errorf("cannot create unstructured spec for uploader transformation: %w", err)
 	}
 
+	label := uploaderLabel(&val.Descriptor.Component, resource.Name, targetHostFromExpression(u.TargetURL))
 	tgd.Transformations = append(tgd.Transformations, transformv1alpha1.GenericTransformation{
 		TransformationMeta: meta.TransformationMeta{
 			Type:  wgettransformv1alpha1.HTTPStreamingV1alpha1,
@@ -255,5 +218,6 @@ func appendHTTPStreaming(tgd *transformv1alpha1.TransformationGraphDefinition, u
 		},
 		Spec: spec,
 	})
+	resourceTransformIDs[i] = uploadID
 	return nil
 }

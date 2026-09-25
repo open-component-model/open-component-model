@@ -18,6 +18,18 @@ var schemaFileCleanupSpec []byte
 //go:embed schemas/FileCleanupTransformation.schema.json
 var schemaFileCleanupTransformation []byte
 
+//go:embed schemas/JFrogHelmUploadComponentVersion.schema.json
+var schemaJFrogHelmUploadComponentVersion []byte
+
+//go:embed schemas/JFrogHelmUploadOutput.schema.json
+var schemaJFrogHelmUploadOutput []byte
+
+//go:embed schemas/JFrogHelmUploadSpec.schema.json
+var schemaJFrogHelmUploadSpec []byte
+
+//go:embed schemas/JFrogHelmUploadTransformation.schema.json
+var schemaJFrogHelmUploadTransformation []byte
+
 // JSONSchema returns the JSON Schema for FileCleanupOutput.
 func (FileCleanupOutput) JSONSchema() []byte {
 	return schemaFileCleanupOutput
@@ -31,4 +43,24 @@ func (FileCleanupSpec) JSONSchema() []byte {
 // JSONSchema returns the JSON Schema for FileCleanupTransformation.
 func (FileCleanupTransformation) JSONSchema() []byte {
 	return schemaFileCleanupTransformation
+}
+
+// JSONSchema returns the JSON Schema for JFrogHelmUploadComponentVersion.
+func (JFrogHelmUploadComponentVersion) JSONSchema() []byte {
+	return schemaJFrogHelmUploadComponentVersion
+}
+
+// JSONSchema returns the JSON Schema for JFrogHelmUploadOutput.
+func (JFrogHelmUploadOutput) JSONSchema() []byte {
+	return schemaJFrogHelmUploadOutput
+}
+
+// JSONSchema returns the JSON Schema for JFrogHelmUploadSpec.
+func (JFrogHelmUploadSpec) JSONSchema() []byte {
+	return schemaJFrogHelmUploadSpec
+}
+
+// JSONSchema returns the JSON Schema for JFrogHelmUploadTransformation.
+func (JFrogHelmUploadTransformation) JSONSchema() []byte {
+	return schemaJFrogHelmUploadTransformation
 }

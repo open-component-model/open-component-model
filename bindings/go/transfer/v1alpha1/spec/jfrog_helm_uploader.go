@@ -20,12 +20,14 @@ func init() {
 }
 
 // JFrogHelmUploaderConfig deploys matching Helm chart resources into a JFrog Artifactory Helm
-// repository via Artifactory's deploy REST API (PUT <url>/artifactory/<repository>/<name>-<version>.tgz)
-// and re-describes them with a Helm/v1 access (helmRepository <url>/artifactory/api/helm/<repository>,
-// helmChart <name>:<version>). The chart archive is extracted from Helm/v1 and OCIImage sources
-// and from LocalBlob sources by media type (packaged chart or OCM OCI layout); other sources
-// must already serve the chart .tgz. Upload credentials are resolved for the Wget
-// consumer identity of the upload URL. By default the Helm index is recalculated after each upload.
+// repository via Artifactory's deploy REST API (PUT <url>/artifactory/<repository>/<name>-<version>.tgz,
+// name and version from the chart's Chart.yaml) and re-describes them with a Helm/v1 access
+// (helmRepository <url>/artifactory/api/helm/<repository>, helmChart <name>:<version>). The chart
+// is detected from the resource content: a packaged chart, a tar containing one (as the helm
+// downloader produces), or a helm chart OCI artifact (OCIImage and oci:// Helm sources, LocalBlob
+// sources stored by the helm input). Upload credentials are resolved for the HelmChartRepository
+// consumer identity of <url>/artifactory/api/helm/<repository>, falling back to the Wget consumer
+// identity of the upload URL. By default the Helm index is recalculated after each upload.
 //
 //	type: generic.config.ocm.software/v1
 //	configurations:
@@ -50,15 +52,6 @@ type JFrogHelmUploaderConfig struct {
 	URL string `json:"url"`
 	// Repository is the key of the Artifactory Helm repository to deploy into.
 	Repository string `json:"repository"`
-	// ChartName is the chart name, as a literal or a standalone ${...} CEL expression over the
-	// `resource` alias. Defaults to the name of the source chart (the chart of a Helm access,
-	// the last repository segment of an OCIImage reference), else ${resource.name}. It must
-	// match the chart's Chart.yaml, which Helm repositories index by.
-	ChartName string `json:"chartName,omitempty"`
-	// ChartVersion is the chart version, as a literal or a standalone ${...} CEL expression over
-	// the `resource` alias. Defaults to the version of the source chart (Helm access version,
-	// OCIImage tag), else ${resource.version}. It must match the chart's Chart.yaml.
-	ChartVersion string `json:"chartVersion,omitempty"`
 	// Reindex triggers Artifactory's Helm index recalculation
 	// (POST <url>/artifactory/api/helm/<repository>/reindex) after each upload, so the chart
 	// becomes pullable right away. Defaults to true; set to false on large repositories that
@@ -81,8 +74,7 @@ func (u *JFrogHelmUploaderConfig) Match(resource descriptorv2.Resource) bool {
 }
 
 // Validate rejects a non-matching Type, an empty match access type, a URL that is not an
-// absolute http(s) URL without query or fragment, a repository that is not a single key,
-// and chart fields that are neither a literal nor a single standalone ${...} expression.
+// absolute http(s) URL without query or fragment and a repository that is not a single key.
 // An empty Type is allowed for programmatically constructed configs.
 func (u *JFrogHelmUploaderConfig) Validate() error {
 	if u == nil {
@@ -116,26 +108,5 @@ func (u *JFrogHelmUploaderConfig) Validate() error {
 	if strings.ContainsAny(u.Repository, "/?#") {
 		return fmt.Errorf("repository must be a single repository key, got %q", u.Repository)
 	}
-	if err := validateChartField("chartName", u.ChartName); err != nil {
-		return err
-	}
-	return validateChartField("chartVersion", u.ChartVersion)
-}
-
-// validateChartField accepts an empty value, a literal without '/', or a single standalone
-// ${...} expression, which is the only form the uploader can splice into its CEL templates.
-func validateChartField(field, value string) error {
-	switch {
-	case value == "":
-		return nil
-	case strings.Contains(value, "${"):
-		if !strings.HasPrefix(value, "${") || !strings.HasSuffix(value, "}") || strings.Count(value, "${") != 1 {
-			return fmt.Errorf("%s must be a literal or a single standalone ${...} expression, got %q", field, value)
-		}
-		return nil
-	case strings.Contains(value, "/"):
-		return fmt.Errorf("%s must not contain '/', got %q", field, value)
-	default:
-		return nil
-	}
+	return nil
 }

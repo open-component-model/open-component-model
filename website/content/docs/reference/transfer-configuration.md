@@ -132,20 +132,18 @@ cannot re-send the write request that would overwrite the uploaded object.
 
 Deploys a matched Helm chart resource into a JFrog Artifactory Helm repository.
 The chart archive is extracted from the source, streamed directly into an HTTP
-`PUT` to `<url>/artifactory/<repository>/<chartName>-<chartVersion>.tgz` with
+`PUT` to `<url>/artifactory/<repository>/<name>-<version>.tgz` with
 `Content-Type: application/gzip`, and the transferred resource is rewritten to a
 `Helm/v1` access with `helmRepository: <url>/artifactory/api/helm/<repository>`
-and `helmChart: <chartName>:<chartVersion>`. After each upload the uploader
+and `helmChart: <name>:<version>`. After each upload the uploader
 sends `POST <url>/artifactory/api/helm/<repository>/reindex` so the chart shows
 up in `index.yaml` and can be pulled right away; Artifactory does not reliably
 add deployed charts to the index on its own. Set `reindex: false` to skip it.
 
-By default the chart is deployed under the name and version it already has in the
-source (see `chartName` and `chartVersion`). Helm repositories index charts by
-their `Chart.yaml`, so the uploader checks that the published name and version
-match it and fails the transfer before uploading otherwise. The metadata comes
-from the Helm config blob of OCI charts and from the `Chart.yaml` at the start of
-a packaged chart, which is read as the stream is opened.
+`<name>` and `<version>` always come from the chart's own metadata, because Helm
+repositories index charts by their `Chart.yaml`: the `Chart.yaml` at the start of
+a packaged chart, read as the stream is opened, or the Helm config blob of an OCI
+chart. The resource name and version do not matter.
 
 The chart streams from its source straight into the upload; it is not written to
 disk. Only `Helm/v1` charts whose credentials use client certificates, a custom CA
@@ -157,35 +155,55 @@ or a provenance keyring go through the Helm downloader, which buffers the chart.
 
 #### Fields
 
-| Field          | Type              | Description                                                                                                                                                                                                                           |
-|----------------|-------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `match`        | `UploaderMatch`   | Selects resources this uploader applies to. `match.accessType` is required.                                                                                                                                                           |
-| `url`          | string (required) | Base URL of the Artifactory instance (scheme, host, optional port and context path) **without** the `/artifactory` segment, e.g. `https://myorg.jfrog.io`.                                                                            |
-| `repository`   | string (required) | Artifactory Helm repository key, e.g. `helm-local`. Must be a single key — no `/`, `?` or `#`.                                                                                                                                        |
-| `chartName`    | string            | Chart name as a literal or a standalone `${…}` CEL expression over `resource`. Defaults to the source chart name (`helmChart` of a `Helm/v1` access, last repository segment of an `OCIImage/v1` reference), else `${resource.name}`. |
-| `chartVersion` | string            | Chart version as a literal or a standalone `${…}` CEL expression over `resource`. Defaults to the source chart version (`Helm/v1` version, `OCIImage/v1` tag), else `${resource.version}`.                                            |
-| `reindex`      | bool              | Recalculate the repository's Helm index after each upload. Defaults to `true`. The credentials must be allowed to trigger a reindex.                                                                                                  |
+| Field        | Type              | Description                                                                                                                                                |
+|--------------|-------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `match`      | `UploaderMatch`   | Selects resources this uploader applies to. `match.accessType` is required.                                                                                |
+| `url`        | string (required) | Base URL of the Artifactory instance (scheme, host, optional port and context path) **without** the `/artifactory` segment, e.g. `https://myorg.jfrog.io`. |
+| `repository` | string (required) | Artifactory Helm repository key, e.g. `helm-local`. Must be a single key — no `/`, `?` or `#`.                                                             |
+| `reindex`    | bool              | Recalculate the repository's Helm index after each upload. Defaults to `true`. The credentials must be allowed to trigger a reindex.                       |
 
 #### Supported Sources
 
-| Source access type | Behaviour                                                                                                                                                                                                                                                                             |
-|--------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `Helm/v1`          | Streamed from the chart URL listed in the repository `index.yaml` (`oci://` charts: the chart layer, streamed from the registry). The provenance file is not transferred.                                                                                                             |
-| `OCIImage/v1`      | The chart layer (`application/vnd.cncf.helm.chart.content.v1.tar+gzip` or legacy `application/tar+gzip`) is streamed directly from the OCI registry.                                                                                                                                  |
-| `LocalBlob`        | Streamed from the source component version: a packaged chart (`mediaType` `application/vnd.cncf.helm.chart.content.v1.tar+gzip`, `application/tar+gzip`, `application/gzip`) as is; a local OCI artifact (as stored by the `helm` input) via its chart layer. Other media types fail. |
-| Other remote types | Bytes are uploaded unchanged — they must already be the `.tgz`.                                                                                                                                                                                                                       |
+The access type only decides how the bytes are fetched. The chart is then detected
+from the content itself, whatever media type the resource declares:
+
+- a packaged chart (gzip-compressed `.tgz`), uploaded as is;
+- a tar containing a packaged chart (as the Helm downloader produces it, with a provenance file), whose `.tgz` is uploaded;
+- a Helm chart OCI artifact (config media type `application/vnd.cncf.helm.config.v1+json`), whose chart layer (`application/vnd.cncf.helm.chart.content.v1.tar+gzip` or legacy `application/tar+gzip`) is uploaded.
+
+Other content fails the transfer.
+
+| Source access type | How the bytes are fetched                                                                                                                                  |
+|--------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `Helm/v1`          | Streamed from the chart URL listed in the repository `index.yaml`; `oci://` charts are streamed from the registry. The provenance file is not transferred. |
+| `OCIImage/v1`      | Streamed from the OCI registry.                                                                                                                            |
+| `LocalBlob`        | Streamed from the source component version (for example a chart added with the `helm` input, stored as an OCI artifact).                                   |
+| Other remote types | Downloaded with the resource repository of the access type, for example a `Wget/v1` URL serving the `.tgz`.                                                |
 
 #### Digest
 
-A `genericBlobDigest/v1` source digest is verified as the bytes pass through. Any
-other digest algorithm (for example an `ociArtifactDigest/v1` from an OCI source)
-is replaced by the SHA-256 of the uploaded `.tgz`, so signatures over the old
-digest do not carry over.
+A `genericBlobDigest/v1` source digest is verified as the bytes pass through. A
+chart extracted from an OCI artifact gets the SHA-256 of the uploaded `.tgz`
+instead of its source digest (for example an `ociArtifactDigest/v1`), so
+signatures over the old digest do not carry over.
 
 #### Credentials
 
-Upload credentials are resolved for the `Wget` consumer identity of the
-Artifactory host (the `hostname` of the `url` field):
+Upload credentials are resolved for the `HelmChartRepository` consumer identity of
+the Artifactory Helm API (`<url>/artifactory/api/helm/<repository>`), falling back to
+the `Wget` consumer identity of the upload URL. Configure either one:
+
+```yaml
+  - type: credentials.config.ocm.software
+    consumers:
+      - identity:
+          type: HelmChartRepository
+          hostname: myorg.jfrog.io
+        credentials:
+          - type: HelmHTTPCredentials/v1
+            username: <USERNAME>
+            password: <PASSWORD>
+```
 
 ```yaml
   - type: credentials.config.ocm.software
@@ -199,8 +217,12 @@ Artifactory host (the `hostname` of the `url` field):
             password: <PASSWORD>
 ```
 
-An Artifactory access token can be used as `password`, or as `identityToken`
-(sent as a bearer token) instead of `username`/`password`. See
+When both match, the `HelmChartRepository` credentials win. An Artifactory access
+token can be used as `password`; with `WgetCredentials/v1` it can also be set as
+`identityToken` (sent as a bearer token). `HelmHTTPCredentials/v1` client
+certificates (`certFile`/`keyFile`) are not supported for uploads; use the
+`certificate` and `privateKey` of `WgetCredentials/v1` for mutual TLS. See
+[`HelmHTTPCredentials/v1`]({{< relref "docs/reference/credential-types.md#helmhttpcredentialsv1" >}}),
 [`WgetCredentials/v1`]({{< relref "docs/reference/credential-types.md#wgetcredentialsv1" >}}) and
 [Credential Consumer Identities]({{< relref "docs/reference/credential-consumer-identities.md" >}}).
 

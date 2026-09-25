@@ -1,8 +1,9 @@
-package transformation_test
+package chartarchive_test
 
 import (
 	"archive/tar"
 	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"errors"
@@ -24,8 +25,8 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/helm/chartarchive"
 	helmcredsv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/v1"
-	"ocm.software/open-component-model/bindings/go/helm/transformation"
 	ocistream "ocm.software/open-component-model/bindings/go/oci/stream"
 	ocitar "ocm.software/open-component-model/bindings/go/oci/tar"
 	"ocm.software/open-component-model/bindings/go/repository"
@@ -100,20 +101,39 @@ func buildHelmTar(t *testing.T, chartName string, chartData []byte) []byte {
 	t.Helper()
 	var buf bytes.Buffer
 	tw := tar.NewWriter(&buf)
-	for name, data := range map[string][]byte{chartName: chartData, chartName + ".prov": []byte("provenance data")} {
-		require.NoError(t, tw.WriteHeader(&tar.Header{Name: name, Size: int64(len(data))}))
-		_, err := tw.Write(data)
+	for _, f := range []struct {
+		name string
+		data []byte
+	}{{chartName + ".prov", []byte("provenance data")}, {chartName, chartData}} {
+		require.NoError(t, tw.WriteHeader(&tar.Header{Name: f.name, Size: int64(len(f.data)), Mode: 0o644}))
+		_, err := tw.Write(f.data)
 		require.NoError(t, err)
 	}
 	require.NoError(t, tw.Close())
 	return buf.Bytes()
 }
 
-// buildOCIManifest pushes a helm chart manifest with the given config JSON and layers into
-// store and returns the manifest descriptor.
-func buildOCIManifest(t *testing.T, ctx context.Context, store *memory.Store, config string, layers []ocispec.Descriptor) ocispec.Descriptor {
+// buildGzipTar creates a gzip-compressed tar with the given files.
+func buildGzipTar(t *testing.T, files map[string]string) []byte {
 	t.Helper()
-	configDesc := pushBlob(t, ctx, store, registry.ConfigMediaType, []byte(config))
+	var buf bytes.Buffer
+	gw := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gw)
+	for name, data := range files {
+		require.NoError(t, tw.WriteHeader(&tar.Header{Name: name, Size: int64(len(data)), Mode: 0o644}))
+		_, err := io.WriteString(tw, data)
+		require.NoError(t, err)
+	}
+	require.NoError(t, tw.Close())
+	require.NoError(t, gw.Close())
+	return buf.Bytes()
+}
+
+// buildOCIManifest pushes a manifest with the given config and layers into store and returns
+// the manifest descriptor.
+func buildOCIManifest(t *testing.T, ctx context.Context, store *memory.Store, configMediaType, config string, layers []ocispec.Descriptor) ocispec.Descriptor {
+	t.Helper()
+	configDesc := pushBlob(t, ctx, store, configMediaType, []byte(config))
 	manifestBytes, err := json.Marshal(ocispec.Manifest{
 		Versioned: specs.Versioned{SchemaVersion: 2},
 		MediaType: ocispec.MediaTypeImageManifest,
@@ -133,7 +153,7 @@ func rawAccess(t *testing.T, data string) *runtime.Raw {
 
 func resourceWith(access *runtime.Raw) *descriptor.Resource {
 	return &descriptor.Resource{
-		ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "mychart", Version: "0.1.0"}},
+		ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "renamed", Version: "9.9.9"}},
 		Type:        "helmChart",
 		Access:      access,
 	}
@@ -159,50 +179,49 @@ func helmRepoServer(t *testing.T, chart []byte) (*httptest.Server, *atomic.Int32
 	return srv, &downloads
 }
 
-func TestChartArchiveSource_Open(t *testing.T) {
+func TestSource_Open(t *testing.T) {
 	chartTGZ, err := os.ReadFile("../testdata/mychart-0.1.0.tgz")
 	require.NoError(t, err)
 	const chartConfig = `{"name":"mychart","version":"0.1.0","apiVersion":"v2"}`
 
-	target := func(helmChart string) *descriptor.Resource {
-		return resourceWith(rawAccess(t, `{"type":"Helm/v1","helmRepository":"https://artifactory.example/artifactory/api/helm/r","helmChart":"`+helmChart+`"}`))
-	}
 	helmSource := func(repoURL string) *descriptor.Resource {
 		return resourceWith(rawAccess(t, `{"type":"Helm/v1","helmRepository":"`+repoURL+`","helmChart":"mychart:0.1.0"}`))
 	}
 	ociSource := resourceWith(rawAccess(t, `{"type":"OCIImage/v1","imageReference":"registry.example.com/charts/mychart:0.1.0"}`))
+	wgetSource := resourceWith(rawAccess(t, `{"type":"Wget/v1","url":"https://example.com/mychart-0.1.0.tgz"}`))
 	localBlob := func(mediaType string) *descriptor.Resource {
 		return resourceWith(rawAccess(t, `{"type":"LocalBlob/v1","localReference":"sha256:abc","mediaType":"`+mediaType+`"}`))
 	}
-	// ociStore builds a helm chart OCI artifact; an empty layerMediaType omits the chart layer.
-	ociStore := func(t *testing.T, layerMediaType string, layerContent []byte) (*memory.Store, ocispec.Descriptor) {
+	// ociStore builds an OCI artifact; an empty layerMediaType omits the chart layer.
+	ociStore := func(t *testing.T, configMediaType, layerMediaType string, layerContent []byte) (*memory.Store, ocispec.Descriptor) {
 		ctx := t.Context()
 		store := memory.New()
 		layers := []ocispec.Descriptor{pushBlob(t, ctx, store, registry.ProvLayerMediaType, []byte("prov"))}
 		if layerMediaType != "" {
 			layers = append([]ocispec.Descriptor{pushBlob(t, ctx, store, layerMediaType, layerContent)}, layers...)
 		}
-		return store, buildOCIManifest(t, ctx, store, chartConfig, layers)
+		return store, buildOCIManifest(t, ctx, store, configMediaType, chartConfig, layers)
 	}
-	ociStream := func(t *testing.T, layerMediaType string, layerContent []byte) ocistream.ResourceStream {
-		store, manifest := ociStore(t, layerMediaType, layerContent)
+	ociStream := func(t *testing.T, configMediaType, layerMediaType string, layerContent []byte) ocistream.ResourceStream {
+		store, manifest := ociStore(t, configMediaType, layerMediaType, layerContent)
 		return &ocistream.OCIResourceStream{ReadOnlyGraphStorage: store, Descriptor: manifest}
 	}
-	local := func(repo repository.ComponentVersionRepository) *transformation.LocalSource {
-		return &transformation.LocalSource{Repository: repo, Component: "ocm.software/c", Version: "1.0.0"}
+	local := func(repo repository.ComponentVersionRepository) *chartarchive.Local {
+		return &chartarchive.Local{Repository: repo, Component: "ocm.software/c", Version: "1.0.0"}
 	}
-	passBlob := inmemory.New(bytes.NewReader(chartTGZ))
+	fromBytes := func(data []byte) blob.ReadOnlyBlob {
+		return inmemory.New(bytes.NewReader(data), inmemory.WithSize(int64(len(data))))
+	}
 
 	type opened struct {
-		source *transformation.ChartArchiveSource
-		req    transformation.ChartRequest
+		source *chartarchive.Source
+		req    chartarchive.Request
 	}
 	tests := []struct {
 		name        string
 		setup       func(t *testing.T) opened
 		want        []byte
-		wantSame    blob.ReadOnlyBlob
-		wantDerived bool
+		wantFromOCI bool
 		wantErr     string
 	}{
 		{
@@ -210,130 +229,110 @@ func TestChartArchiveSource_Open(t *testing.T) {
 			setup: func(t *testing.T) opened {
 				srv, downloads := helmRepoServer(t, chartTGZ)
 				t.Cleanup(func() { assert.Equal(t, int32(1), downloads.Load(), "the chart is fetched exactly once") })
-				return opened{&transformation.ChartArchiveSource{ResourceRepository: &stubResourceRepo{}}, transformation.ChartRequest{Resource: helmSource(srv.URL), Target: target("mychart:0.1.0")}}
+				return opened{&chartarchive.Source{ResourceRepository: &stubResourceRepo{}}, chartarchive.Request{Resource: helmSource(srv.URL)}}
 			},
 			want: chartTGZ,
 		},
 		{
-			name: "Helm/v1 published under another name than Chart.yaml",
+			name: "Helm/v1 with a keyring falls back to the helm downloader tar",
 			setup: func(t *testing.T) opened {
-				srv, _ := helmRepoServer(t, chartTGZ)
-				return opened{&transformation.ChartArchiveSource{ResourceRepository: &stubResourceRepo{}}, transformation.ChartRequest{Resource: helmSource(srv.URL), Target: target("renamed:0.1.0")}}
-			},
-			wantErr: "chart is mychart:0.1.0 according to its Chart.yaml, but it would be published as renamed:0.1.0",
-		},
-		{
-			name: "Helm/v1 with a keyring falls back to the helm downloader",
-			setup: func(t *testing.T) opened {
-				repo := &stubResourceRepo{blob: inmemory.New(bytes.NewReader(buildHelmTar(t, "mychart-0.1.0.tgz", chartTGZ)))}
+				repo := &stubResourceRepo{blob: fromBytes(buildHelmTar(t, "mychart-0.1.0.tgz", chartTGZ))}
 				creds := &helmcredsv1.HelmHTTPCredentials{Type: runtime.NewVersionedType(helmcredsv1.HelmHTTPCredentialsType, helmcredsv1.Version), Keyring: "/keyring"}
-				return opened{&transformation.ChartArchiveSource{ResourceRepository: repo}, transformation.ChartRequest{Resource: helmSource("https://charts.example"), Target: target("mychart:0.1.0"), Credentials: creds}}
+				return opened{&chartarchive.Source{ResourceRepository: repo}, chartarchive.Request{Resource: helmSource("https://charts.example"), Credentials: creds}}
 			},
 			want: chartTGZ,
 		},
 		{
 			name: "OCIImage/v1 streams the chart layer",
 			setup: func(t *testing.T) opened {
-				return opened{&transformation.ChartArchiveSource{OCIRepository: &stubOCIRepo{stream: ociStream(t, registry.ChartLayerMediaType, []byte("chart"))}},
-					transformation.ChartRequest{Resource: ociSource, Target: target("mychart:0.1.0")}}
+				return opened{&chartarchive.Source{OCIRepository: &stubOCIRepo{stream: ociStream(t, registry.ConfigMediaType, registry.ChartLayerMediaType, []byte("chart"))}},
+					chartarchive.Request{Resource: ociSource}}
 			},
 			want:        []byte("chart"),
-			wantDerived: true,
+			wantFromOCI: true,
 		},
 		{
 			name: "OCIImage/v1 with legacy chart layer media type",
 			setup: func(t *testing.T) opened {
-				return opened{&transformation.ChartArchiveSource{OCIRepository: &stubOCIRepo{stream: ociStream(t, registry.LegacyChartLayerMediaType, []byte("legacy"))}},
-					transformation.ChartRequest{Resource: ociSource}}
+				return opened{&chartarchive.Source{OCIRepository: &stubOCIRepo{stream: ociStream(t, registry.ConfigMediaType, registry.LegacyChartLayerMediaType, []byte("legacy"))}},
+					chartarchive.Request{Resource: ociSource}}
 			},
 			want:        []byte("legacy"),
-			wantDerived: true,
+			wantFromOCI: true,
 		},
 		{
 			name: "OCIImage/v1 without chart layer",
 			setup: func(t *testing.T) opened {
-				return opened{&transformation.ChartArchiveSource{OCIRepository: &stubOCIRepo{stream: ociStream(t, "", nil)}}, transformation.ChartRequest{Resource: ociSource}}
+				return opened{&chartarchive.Source{OCIRepository: &stubOCIRepo{stream: ociStream(t, registry.ConfigMediaType, "", nil)}}, chartarchive.Request{Resource: ociSource}}
 			},
 			wantErr: "has no helm chart layer",
 		},
 		{
-			name: "OCIImage/v1 config version differs from the published version",
+			name: "OCIImage/v1 that is not a helm chart",
 			setup: func(t *testing.T) opened {
-				return opened{&transformation.ChartArchiveSource{OCIRepository: &stubOCIRepo{stream: ociStream(t, registry.ChartLayerMediaType, []byte("chart"))}},
-					transformation.ChartRequest{Resource: ociSource, Target: target("mychart:9.9.9")}}
+				return opened{&chartarchive.Source{OCIRepository: &stubOCIRepo{stream: ociStream(t, ocispec.MediaTypeImageConfig, registry.ChartLayerMediaType, []byte("chart"))}},
+					chartarchive.Request{Resource: ociSource}}
 			},
-			wantErr: "it would be published as mychart:9.9.9",
+			wantErr: `is not a helm chart: config media type "` + ocispec.MediaTypeImageConfig + `"`,
 		},
 		{
-			name: "Wget/v1 passes through unchanged",
+			name: "Wget/v1 serving a packaged chart yields it unchanged",
 			setup: func(t *testing.T) opened {
-				wget := resourceWith(rawAccess(t, `{"type":"Wget/v1","url":"https://example.com/mychart-0.1.0.tgz"}`))
-				return opened{&transformation.ChartArchiveSource{ResourceRepository: &stubResourceRepo{blob: passBlob}}, transformation.ChartRequest{Resource: wget}}
+				return opened{&chartarchive.Source{ResourceRepository: &stubResourceRepo{blob: fromBytes(chartTGZ)}}, chartarchive.Request{Resource: wgetSource}}
 			},
-			wantSame: passBlob,
+			want: chartTGZ,
 		},
 		{
-			name: "Wget/v1 chart is checked against the published name",
-			setup: func(t *testing.T) opened {
-				wget := resourceWith(rawAccess(t, `{"type":"Wget/v1","url":"https://example.com/mychart-0.1.0.tgz"}`))
-				return opened{&transformation.ChartArchiveSource{ResourceRepository: &stubResourceRepo{blob: inmemory.New(bytes.NewReader(chartTGZ))}},
-					transformation.ChartRequest{Resource: wget, Target: target("other:0.1.0")}}
-			},
-			wantErr: "it would be published as other:0.1.0",
-		},
-		{
-			name: "LocalBlob packaged chart streams from the component version",
+			name: "LocalBlob streamed as a plain layer",
 			setup: func(t *testing.T) opened {
 				store := memory.New()
 				root := pushBlob(t, t.Context(), store, registry.ChartLayerMediaType, chartTGZ)
 				repo := &streamingLocalRepo{stream: &ocistream.OCIResourceStream{ReadOnlyGraphStorage: store, Descriptor: root}}
-				return opened{&transformation.ChartArchiveSource{}, transformation.ChartRequest{Resource: localBlob(registry.ChartLayerMediaType), Target: target("mychart:0.1.0"), Local: local(repo)}}
+				return opened{&chartarchive.Source{}, chartarchive.Request{Resource: localBlob(registry.ChartLayerMediaType), Local: local(repo)}}
 			},
 			want: chartTGZ,
 		},
 		{
-			name: "LocalBlob packaged chart published under another version",
+			name: "LocalBlob streamed as an OCI manifest",
 			setup: func(t *testing.T) opened {
-				store := memory.New()
-				root := pushBlob(t, t.Context(), store, "application/gzip", chartTGZ)
-				repo := &streamingLocalRepo{stream: &ocistream.OCIResourceStream{ReadOnlyGraphStorage: store, Descriptor: root}}
-				return opened{&transformation.ChartArchiveSource{}, transformation.ChartRequest{Resource: localBlob("application/gzip"), Target: target("mychart:1.0.0"), Local: local(repo)}}
-			},
-			wantErr: "it would be published as mychart:1.0.0",
-		},
-		{
-			name: "LocalBlob OCI artifact streams its chart layer from the component version",
-			setup: func(t *testing.T) opened {
-				repo := &streamingLocalRepo{stream: ociStream(t, registry.ChartLayerMediaType, chartTGZ)}
-				return opened{&transformation.ChartArchiveSource{}, transformation.ChartRequest{Resource: localBlob(ocispec.MediaTypeImageManifest), Target: target("mychart:0.1.0"), Local: local(repo)}}
+				repo := &streamingLocalRepo{stream: ociStream(t, registry.ConfigMediaType, registry.ChartLayerMediaType, chartTGZ)}
+				return opened{&chartarchive.Source{}, chartarchive.Request{Resource: localBlob(ocispec.MediaTypeImageManifest), Local: local(repo)}}
 			},
 			want:        chartTGZ,
-			wantDerived: true,
+			wantFromOCI: true,
 		},
 		{
-			name: "LocalBlob from a repository without streaming access: packaged chart",
+			name: "LocalBlob from a non-streaming repository as an OCM OCI layout",
 			setup: func(t *testing.T) opened {
-				return opened{&transformation.ChartArchiveSource{}, transformation.ChartRequest{Resource: localBlob(registry.ChartLayerMediaType), Target: target("mychart:0.1.0"), Local: local(&localRepo{blob: inmemory.New(bytes.NewReader(chartTGZ))})}}
-			},
-			want: chartTGZ,
-		},
-		{
-			name: "LocalBlob from a repository without streaming access: OCI layout",
-			setup: func(t *testing.T) opened {
-				store, manifest := ociStore(t, registry.ChartLayerMediaType, chartTGZ)
+				store, manifest := ociStore(t, registry.ConfigMediaType, registry.ChartLayerMediaType, chartTGZ)
 				layoutBlob, err := ocitar.CopyToOCILayoutInMemory(t.Context(), store, manifest, ocitar.CopyToOCILayoutOptions{})
 				require.NoError(t, err)
-				return opened{&transformation.ChartArchiveSource{}, transformation.ChartRequest{Resource: localBlob(ocispec.MediaTypeImageManifest), Target: target("mychart:0.1.0"), Local: local(&localRepo{blob: layoutBlob})}}
+				return opened{&chartarchive.Source{}, chartarchive.Request{Resource: localBlob(ocispec.MediaTypeImageManifest), Local: local(&localRepo{blob: layoutBlob})}}
 			},
 			want:        chartTGZ,
-			wantDerived: true,
+			wantFromOCI: true,
 		},
 		{
-			name: "LocalBlob with unsupported media type",
+			name: "LocalBlob content wins over its descriptor media type",
 			setup: func(t *testing.T) opened {
-				return opened{&transformation.ChartArchiveSource{}, transformation.ChartRequest{Resource: localBlob("application/json"), Local: local(&localRepo{blob: passBlob})}}
+				return opened{&chartarchive.Source{}, chartarchive.Request{Resource: localBlob("application/json"), Local: local(&localRepo{blob: fromBytes(chartTGZ)})}}
 			},
-			wantErr: `has media type "application/json", which is neither a packaged helm chart`,
+			want: chartTGZ,
+		},
+		{
+			name: "JSON content is not a chart",
+			setup: func(t *testing.T) opened {
+				return opened{&chartarchive.Source{}, chartarchive.Request{Resource: localBlob("application/json"), Local: local(&localRepo{blob: fromBytes([]byte(`{"not":"a chart"}`))})}}
+			},
+			wantErr: "is neither a packaged helm chart, a tar containing one, nor a helm chart OCI artifact",
+		},
+		{
+			name: "gzip tar without Chart.yaml",
+			setup: func(t *testing.T) opened {
+				data := buildGzipTar(t, map[string]string{"mychart/values.yaml": "a: b\n"})
+				return opened{&chartarchive.Source{ResourceRepository: &stubResourceRepo{blob: fromBytes(data)}}, chartarchive.Request{Resource: wgetSource}}
+			},
+			wantErr: "has no Chart.yaml within its first 1 MiB",
 		},
 	}
 	for _, tt := range tests {
@@ -346,19 +345,19 @@ func TestChartArchiveSource_Open(t *testing.T) {
 				return
 			}
 			r.NoError(err)
-			r.Equal(tt.wantDerived, got.Derived)
-			if tt.wantSame != nil {
-				assert.Same(t, tt.wantSame, got.Archive, "the source content must be passed through, not copied")
-				return
-			}
+			r.Equal("mychart", got.Name)
+			r.Equal("0.1.0", got.Version)
+			r.Equal(tt.wantFromOCI, got.FromOCI)
 			rc, err := got.Archive.ReadCloser()
 			r.NoError(err)
 			defer func() { _ = rc.Close() }()
 			data, err := io.ReadAll(rc)
 			r.NoError(err)
 			r.Equal(tt.want, data)
-			if sized, ok := got.Archive.(blob.SizeAware); ok && sized.Size() != blob.SizeUnknown {
-				r.Equal(int64(len(tt.want)), sized.Size())
+			sized, ok := got.Archive.(blob.SizeAware)
+			r.True(ok, "the archive must report its size")
+			if size := sized.Size(); size != blob.SizeUnknown {
+				r.Equal(int64(len(tt.want)), size)
 			}
 		})
 	}
