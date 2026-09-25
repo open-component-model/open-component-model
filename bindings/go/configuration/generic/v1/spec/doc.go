@@ -25,4 +25,9 @@
 //				 type: DockerConfig/v1
 //				 dockerConfigFile: "~/.docker/config.json"
 //				 propagateConsumerIdentity: true
+//
+// A generic configuration must be a flat list. Entries in the configurations
+// list that are themselves generic configurations (nested configurations) are
+// not supported: they are ignored, and a warning is logged. Move such entries
+// to the top-level configurations list instead.
 package spec
