@@ -114,6 +114,8 @@ type RootFileSystem struct {
 	flag int
 }
 
+var _ fs.ReadLinkFS = (*RootFileSystem)(nil)
+
 func (s *RootFileSystem) String() string {
 	return s.root.Name()
 }
@@ -156,6 +158,18 @@ func (s *RootFileSystem) RemoveAll(path string) error {
 
 func (s *RootFileSystem) Stat(name string) (fs.FileInfo, error) {
 	return s.root.Stat(name)
+}
+
+// ReadLink returns the destination of the named symbolic link. The link is read
+// rather than followed, so the result is the target as stored, which may not
+// exist and may point outside this filesystem.
+func (s *RootFileSystem) ReadLink(name string) (string, error) {
+	return s.root.Readlink(name)
+}
+
+// Lstat describes the named file without following a symbolic link.
+func (s *RootFileSystem) Lstat(name string) (fs.FileInfo, error) {
+	return s.root.Lstat(name)
 }
 
 func (s *RootFileSystem) ReadOnly() bool {
