@@ -47,6 +47,10 @@ type HTTPStreamingSpec struct {
 	// TargetResource is the resource to publish after upload; its access is the read
 	// access at the resolved target URL, without the upload-only request fields.
 	TargetResource *v2.Resource `json:"targetResource"`
+	// Opener names a source opener registered on the transformer that produces the bytes
+	// to upload instead of the plain source download (e.g. the Helm chart archive of a Helm
+	// or OCI resource). Empty uploads the downloaded source bytes unchanged.
+	Opener string `json:"opener,omitempty"`
 }
 
 // HTTPStreamingOutput is the output specification for the HTTPStreaming transformation.

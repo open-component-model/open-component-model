@@ -1,0 +1,206 @@
+package integration_test
+
+import (
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"sync"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+
+	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/oci"
+	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
+	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
+	ctfrepospec "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
+	ocirepospec "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
+	"ocm.software/open-component-model/bindings/go/runtime"
+	"ocm.software/open-component-model/bindings/go/transfer"
+	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
+
+	helmaccess "ocm.software/open-component-model/bindings/go/helm/spec/access"
+	helmaccessv1 "ocm.software/open-component-model/bindings/go/helm/spec/access/v1"
+	helmresource "ocm.software/open-component-model/bindings/go/helm/repository/resource"
+)
+
+// Test_Integration_TransferHelmResource_JFrogHelmUploaderDeploysChart verifies that a Helm/v1
+// resource routed through a JFrog Helm uploader configuration is streamed as a chart archive
+// to a fake Artifactory PUT endpoint and re-described with a Helm/v1 access pointing at the
+// Artifactory Helm API, with the correct digest computed during the stream.
+func Test_Integration_TransferHelmResource_JFrogHelmUploaderDeploysChart(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
+
+	// Read the expected chart .tgz bytes for later comparison.
+	// helm/testdata/mychart-0.1.0.tgz is a symlink to provenance/mychart-0.1.0.tgz.
+	chartTgzBytes, err := os.ReadFile("../../helm/testdata/mychart-0.1.0.tgz")
+	r.NoError(err)
+	r.NotEmpty(chartTgzBytes)
+
+	// Source HTTP server: serves the provenance directory which contains the .tgz and .prov files.
+	// Using the provenance dir because that's where the actual tgz lives (the root-level one is a symlink).
+	// The helm downloader with helmChart "mychart-0.1.0.tgz" will GET /mychart-0.1.0.tgz directly.
+	srcSrv := httptest.NewServer(http.FileServer(http.Dir("../../helm/testdata/provenance")))
+	t.Cleanup(srcSrv.Close)
+
+	// Target "Artifactory" HTTP server: stores PUT body + headers per path, returns 201.
+	var mu sync.Mutex
+	stored := map[string][]byte{}
+	putHeaders := map[string]http.Header{}
+	targetSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		switch req.Method {
+		case http.MethodPut:
+			body, err := io.ReadAll(req.Body)
+			if err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+			mu.Lock()
+			stored[req.URL.Path] = body
+			putHeaders[req.URL.Path] = req.Header.Clone()
+			mu.Unlock()
+			w.WriteHeader(http.StatusCreated)
+		default:
+			w.WriteHeader(http.StatusMethodNotAllowed)
+		}
+	}))
+	t.Cleanup(targetSrv.Close)
+
+	// Target OCI registry for the component descriptor.
+	registryAddr, user, password := startRegistry(t)
+
+	componentName := "ocm.software/jfrog-helm-uploader-test"
+	componentVersion := "1.0.0"
+	sourceCTFPath := t.TempDir()
+	ctfRepo := createCTFRepository(t, sourceCTFPath)
+
+	// Build the Helm/v1 access as raw JSON.
+	// helmChart is "mychart-0.1.0.tgz" (the file name) so the downloader GETs it directly
+	// from the file server, without needing an index.yaml.
+	helmAccessData, err := json.Marshal(map[string]string{
+		"type":           "Helm/v1",
+		"helmRepository": srcSrv.URL,
+		"helmChart":      "mychart-0.1.0.tgz",
+	})
+	r.NoError(err)
+	rawHelmAccess := &runtime.Raw{}
+	r.NoError(rawHelmAccess.UnmarshalJSON(helmAccessData))
+
+	desc := &descriptor.Descriptor{
+		Meta: descriptor.Meta{Version: "v2"},
+		Component: descriptor.Component{
+			ComponentMeta: descriptor.ComponentMeta{
+				ObjectMeta: descriptor.ObjectMeta{Name: componentName, Version: componentVersion},
+			},
+			Provider: descriptor.Provider{Name: "test-provider"},
+			Resources: []descriptor.Resource{
+				{
+					ElementMeta: descriptor.ElementMeta{
+						ObjectMeta: descriptor.ObjectMeta{Name: "mychart", Version: "0.1.0"},
+					},
+					Type:     "helmChart",
+					Relation: descriptor.ExternalRelation,
+					Access:   rawHelmAccess,
+				},
+			},
+		},
+	}
+	r.NoError(ctfRepo.AddComponentVersion(t.Context(), desc))
+
+	sourceSpec := &ctfrepospec.Repository{
+		Type:     runtime.Type{Name: ctfrepospec.Type, Version: ctfrepospec.Version},
+		FilePath: sourceCTFPath,
+	}
+	targetSpec := &ocirepospec.Repository{
+		Type:    runtime.Type{Name: ocirepospec.Type, Version: "v1"},
+		BaseUrl: fmt.Sprintf("http://%s", registryAddr),
+	}
+
+	// JFrog Helm uploader routes Helm/v1 resources to the fake Artifactory server.
+	uploaders := []transferv1alpha1.UploaderConfig{&transferv1alpha1.JFrogHelmUploaderConfig{
+		Type:       runtime.NewVersionedType(transferv1alpha1.JFrogHelmUploaderConfigType, transferv1alpha1.Version),
+		MatchSpec:  transferv1alpha1.UploaderMatch{AccessType: runtime.NewVersionedType(helmaccessv1.Type, helmaccessv1.LegacyTypeVersion)},
+		URL:        targetSrv.URL,
+		Repository: "helm-local",
+	}}
+
+	tgd, err := transfer.BuildGraphDefinition(t.Context(),
+		&transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeAllResources},
+		uploaders,
+		transfer.Mapping{
+			Components: []transfer.ComponentID{{Component: componentName, Version: componentVersion}},
+			Target:     targetSpec,
+			Resolver:   transfer.NewRepositoryResolver(ctfRepo, sourceSpec),
+		},
+	)
+	r.NoError(err)
+	r.NotNil(tgd)
+
+	ctx := t.Context()
+	credResolver := newCredResolver(t, registryCreds{registryAddr, user, password})
+	repoProvider := provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()))
+	resourceRepo := helmresource.NewResourceRepository(nil)
+	b := transfer.NewDefaultBuilder(repoProvider, resourceRepo, credResolver)
+	graph, err := b.BuildAndCheck(tgd)
+	r.NoError(err)
+	r.NoError(graph.Process(ctx))
+
+	// The target server must have received the chart at the expected Artifactory path.
+	expectedPath := "/artifactory/helm-local/mychart-0.1.0.tgz"
+	mu.Lock()
+	got, ok := stored[expectedPath]
+	gotHeaders := putHeaders[expectedPath]
+	mu.Unlock()
+	r.True(ok, "target server should have received a PUT at %s; stored paths: %v", expectedPath, storedKeys(stored))
+	r.Equal(chartTgzBytes, got, "uploaded bytes must equal the chart .tgz")
+	r.Equal("application/gzip", gotHeaders.Get("Content-Type"),
+		"Content-Type must be application/gzip")
+
+	// Verify the transferred descriptor in the target OCI registry.
+	client := createAuthClient(registryAddr, user, password)
+	urlRes, err := urlresolver.New(
+		urlresolver.WithBaseURL(registryAddr),
+		urlresolver.WithPlainHTTP(true),
+		urlresolver.WithBaseClient(client),
+	)
+	r.NoError(err)
+	targetRepo, err := oci.NewRepository(oci.WithResolver(urlRes), oci.WithTempDir(t.TempDir()))
+	r.NoError(err)
+
+	gotDesc, err := targetRepo.GetComponentVersion(ctx, componentName, componentVersion)
+	r.NoError(err)
+	r.Len(gotDesc.Component.Resources, 1)
+	gotResource := gotDesc.Component.Resources[0]
+
+	// The published access must be Helm/v1.
+	r.NotNil(gotResource.Access)
+	r.Equal(helmaccessv1.Type, gotResource.Access.GetType().Name,
+		"uploaded resource should carry a Helm access")
+
+	var typedHelm helmaccessv1.Helm
+	r.NoError(helmaccess.Scheme.Convert(gotResource.Access, &typedHelm))
+	r.Equal(targetSrv.URL+"/artifactory/api/helm/helm-local", typedHelm.HelmRepository,
+		"helmRepository should point at the Artifactory Helm API")
+	r.Equal("mychart:0.1.0", typedHelm.HelmChart,
+		"helmChart should be <name>:<version>")
+
+	// The digest must be genericBlobDigest/v1 of the chart .tgz.
+	r.NotNil(gotResource.Digest, "transferred resource should carry a digest")
+	r.Equal("SHA-256", gotResource.Digest.HashAlgorithm)
+	r.Equal("genericBlobDigest/v1", gotResource.Digest.NormalisationAlgorithm)
+	r.Equal(digestOf(chartTgzBytes).Encoded(), gotResource.Digest.Value,
+		"digest value should be the sha256 of the chart .tgz")
+}
+
+// storedKeys returns the keys of a map for diagnostic messages.
+func storedKeys(m map[string][]byte) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
+}

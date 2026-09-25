@@ -264,6 +264,82 @@ field fails the transfer deliberately rather than producing a partial URL.
 **Fix:** Add a `credentials.config.ocm.software` consumer with `type: Wget` and the
 target `hostname`, as in Step 2.
 
+## Deploy Helm Charts to JFrog Artifactory
+
+The `jfrog.helm.uploader.transfer.config.ocm.software/v1alpha1` uploader
+deploys Helm charts into a JFrog Artifactory Helm repository and rewrites the
+resource to a `Helm/v1` access. It extracts the chart archive from `Helm/v1` or
+`OCIImage/v1` sources, streams it as a `PUT` to Artifactory, and publishes a
+`Helm/v1` access so downstream consumers can pull the chart with `helm pull`.
+
+### Uploader configuration
+
+```yaml
+type: generic.config.ocm.software/v1
+configurations:
+  - type: transfer.config.ocm.software/v1alpha1
+    copyMode: allResources
+  - type: jfrog.helm.uploader.transfer.config.ocm.software/v1alpha1
+    match:
+      accessType: Helm/v1
+    url: https://myorg.jfrog.io
+    repository: helm-local
+```
+
+### Credentials
+
+Add credentials for the Artifactory host. The uploader resolves them using the
+`Wget` consumer identity of the upload URL:
+
+```yaml
+  - type: credentials.config.ocm.software
+    consumers:
+      - identity:
+          type: Wget
+          hostname: myorg.jfrog.io
+        credentials:
+          - type: Credentials/v1
+            properties:
+              username: <USERNAME>
+              password: <PASSWORD>
+```
+
+### Transfer and verify
+
+```bash
+ocm transfer cv \
+  --config ./ocmconfig.yaml \
+  ghcr.io/source-org/ocm//ocm.software/demo:1.0.0 \
+  ghcr.io/target-org/ocm
+```
+
+Inspect the transferred component version:
+
+```bash
+ocm get cv ghcr.io/target-org/ocm//ocm.software/demo:1.0.0 -o yaml
+```
+
+The resource now carries a `Helm/v1` access:
+
+{{< details "Expected resource access" >}}
+```yaml
+resources:
+  - name: mychart
+    type: helmChart
+    access:
+      type: Helm/v1
+      helmRepository: https://myorg.jfrog.io/artifactory/api/helm/helm-local
+      helmChart: mychart:0.1.0
+    digest:
+      hashAlgorithm: SHA-256
+      normalisationAlgorithm: genericBlobDigest/v1
+      value: <sha256-of-the-chart-tgz>
+```
+{{< /details >}}
+
+For the full field reference, see
+[`jfrog.helm.uploader.transfer.config.ocm.software/v1alpha1`]({{< relref "docs/reference/transfer-configuration.md" >}}#jfroghelmuploadertransferconfigocmsoftwarev1alpha1).
+
 ## Next steps
 
 - [How-to: Transfer Helm Charts with OCM]({{< relref "docs/how-to/transfer-helm-charts.md" >}})

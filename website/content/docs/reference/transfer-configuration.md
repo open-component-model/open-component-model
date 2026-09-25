@@ -31,10 +31,11 @@ configurations:
     method: PUT
 ```
 
-| Type                                                  | Purpose                                                                  |
-|-------------------------------------------------------|--------------------------------------------------------------------------|
-| `transfer.config.ocm.software/v1alpha1`               | Global transfer settings: recursion, which resources are copied and how. |
-| `http.uploader.transfer.config.ocm.software/v1alpha1` | Per-match rule that streams a resource to a custom HTTP target.          |
+| Type                                                        | Purpose                                                                            |
+|-------------------------------------------------------------|------------------------------------------------------------------------------------|
+| `transfer.config.ocm.software/v1alpha1`                     | Global transfer settings: recursion, which resources are copied and how.           |
+| `http.uploader.transfer.config.ocm.software/v1alpha1`       | Per-match rule that streams a resource to a custom HTTP target.                    |
+| `jfrog.helm.uploader.transfer.config.ocm.software/v1alpha1` | Per-match rule that deploys a Helm chart into a JFrog Artifactory Helm repository. |
 
 By default the CLI looks for configuration in `$HOME/.ocmconfig`. Pass
 `--config <file>` to use a different file. The corresponding CLI flags
@@ -78,9 +79,11 @@ Only relevant when a resource is being copied.
 
 An **uploader configuration** streams resources that match a rule to a custom
 target instead of the default download-and-embed path. The config type dedicates
-each uploader to a specific target: `http.uploader.transfer.config.ocm.software/v1alpha1`
-streams to an HTTP endpoint. Each entry is an independent rule; you may declare
-several.
+each uploader to a specific target:
+`http.uploader.transfer.config.ocm.software/v1alpha1` streams to an HTTP endpoint;
+`jfrog.helm.uploader.transfer.config.ocm.software/v1alpha1` deploys a Helm chart
+into a JFrog Artifactory Helm repository. Each entry is an independent rule; you
+may declare several.
 
 During transfer, the **first** uploader whose `match` applies to a resource wins,
 and it takes precedence over `copyMode`/`uploadType` for that resource. Because
@@ -124,6 +127,80 @@ cannot re-send the write request that would overwrite the uploaded object.
 | `header`              | `map[string][]string` | request                           | HTTP headers sent with the upload request. May be CEL-templated. Request only.         |
 | `noRedirect`          | bool                  | request                           | Disable following HTTP redirects on the upload. Not on the published access.           |
 | `mediaType`           | string                | request + published (`mediaType`) | Media type recorded on the resource. Defaults to the source's.                         |
+
+### `jfrog.helm.uploader.transfer.config.ocm.software/v1alpha1`
+
+Deploys a matched Helm chart resource into a JFrog Artifactory Helm repository.
+The chart archive is extracted from the source, streamed directly into an HTTP
+`PUT` to `<url>/artifactory/<repository>/<chartName>-<chartVersion>.tgz` with
+`Content-Type: application/gzip`, and the transferred resource is rewritten to a
+`Helm/v1` access with `helmRepository: <url>/artifactory/api/helm/<repository>`
+and `helmChart: <chartName>:<chartVersion>`. The uploader does not trigger an
+Artifactory index recalculation; the Helm index is maintained by Artifactory.
+
+#### Schema
+
+{{< schema-renderer url="/schemas/bindings/go/transfer/JFrogHelmUploaderConfig.schema.json" >}}
+
+#### Fields
+
+| Field          | Type              | Description                                                                                                                                                 |
+|----------------|-------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `match`        | `UploaderMatch`   | Selects resources this uploader applies to. `match.accessType` is required.                                                                                 |
+| `url`          | string (required) | Base URL of the Artifactory instance (scheme, host, optional port and context path) **without** the `/artifactory` segment, e.g. `https://myorg.jfrog.io`.  |
+| `repository`   | string (required) | Artifactory Helm repository key, e.g. `helm-local`. Must be a single key — no `/`, `?` or `#`.                                                              |
+| `chartName`    | string            | Chart name as a literal or a standalone `${…}` CEL expression over `resource`. Defaults to `${resource.name}`.                                              |
+| `chartVersion` | string            | Chart version as a literal or a standalone `${…}` CEL expression over `resource`. Defaults to `${resource.version}`.                                        |
+
+#### Supported Sources
+
+| Source access type | Behaviour                                                                                                                                               |
+|--------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `Helm/v1`          | The chart archive (`.tgz`) is extracted from the Helm download; the provenance file is dropped.                                                         |
+| `OCIImage/v1`      | The chart layer (`application/vnd.cncf.helm.chart.content.v1.tar+gzip` or legacy `application/tar+gzip`) is streamed directly from the OCI registry.    |
+| Other remote types | Bytes are uploaded unchanged — they must already be the `.tgz`.                                                                                         |
+| `LocalBlob`        | Not supported.                                                                                                                                          |
+
+#### Digest
+
+A `genericBlobDigest/v1` source digest is verified as the bytes pass through. Any
+other digest algorithm (for example an `ociArtifactDigest/v1` from an OCI source)
+is replaced by the SHA-256 of the uploaded `.tgz`, so signatures over the old
+digest do not carry over.
+
+#### Credentials
+
+Upload credentials are resolved for the `Wget` consumer identity of the
+Artifactory host (the `hostname` of the `url` field):
+
+```yaml
+  - type: credentials.config.ocm.software
+    consumers:
+      - identity:
+          type: Wget
+          hostname: myorg.jfrog.io
+        credentials:
+          - type: Credentials/v1
+            properties:
+              username: <USERNAME>
+              password: <PASSWORD>
+```
+
+See
+[Credential Types]({{< relref "docs/reference/credential-types.md" >}}) and
+[Credential Consumer Identities]({{< relref "docs/reference/credential-consumer-identities.md" >}}).
+
+#### Example
+
+```yaml
+type: generic.config.ocm.software/v1
+configurations:
+  - type: jfrog.helm.uploader.transfer.config.ocm.software/v1alpha1
+    match:
+      accessType: Helm/v1
+    url: https://myorg.jfrog.io
+    repository: helm-local
+```
 
 ### Routing Resources to Different Targets
 
@@ -297,6 +374,10 @@ it finds a matching artifact and `404` when the content must still be uploaded:
 ```
 
 Both require the source resource to carry a SHA-256 digest (`resource.digest.hashAlgorithm == "SHA-256"`).
+To deploy Helm charts into an Artifactory Helm repository and publish a `Helm/v1`
+access, use
+[`jfrog.helm.uploader.transfer.config.ocm.software/v1alpha1`]({{< relref "docs/reference/transfer-configuration.md" >}}#jfroghelmuploadertransferconfigocmsoftwarev1alpha1)
+instead.
 
 #### Credentials
 

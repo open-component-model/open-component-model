@@ -3,11 +3,17 @@ package internal
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 
+	"ocm.software/open-component-model/bindings/go/blob/compression"
 	celparser "ocm.software/open-component-model/bindings/go/cel/expression/parser"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	helmaccess "ocm.software/open-component-model/bindings/go/helm/spec/access"
+	helmaccessv1 "ocm.software/open-component-model/bindings/go/helm/spec/access/v1"
+	helmtransformer "ocm.software/open-component-model/bindings/go/helm/transformation"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/transform/graph/runtime/resolver"
@@ -181,35 +187,128 @@ func processHTTPUploader(resource descriptorv2.Resource, u *transferv1alpha1.HTT
 	// the request and the published read access resolve to the same URL at runtime.
 	nodePath := resourceNodePath(baseID, i)
 
-	requestRaw := &runtime.Raw{}
-	if err := wgetaccess.Scheme.Convert(requestAccess, requestRaw); err != nil {
-		return fmt.Errorf("cannot convert uploader request access: %w", err)
+	requestRaw, err := templatedAccess(wgetaccess.Scheme, requestAccess, nodePath, "request")
+	if err != nil {
+		return err
 	}
-	if err := templateExpressions(requestRaw, nodePath); err != nil {
-		return fmt.Errorf("cannot template uploader request access: %w", err)
-	}
-
-	publishedRaw := &runtime.Raw{}
-	if err := wgetaccess.Scheme.Convert(publishedAccess, publishedRaw); err != nil {
-		return fmt.Errorf("cannot convert uploader published access: %w", err)
-	}
-	if err := templateExpressions(publishedRaw, nodePath); err != nil {
-		return fmt.Errorf("cannot template uploader published access: %w", err)
+	publishedRaw, err := templatedAccess(wgetaccess.Scheme, publishedAccess, nodePath, "published")
+	if err != nil {
+		return err
 	}
 
+	label := uploaderLabel(&val.Descriptor.Component, resource.Name, targetHostFromExpression(u.TargetURL))
+	if err := appendHTTPStreaming(tgd, uploadID, label, resource, requestRaw, publishedRaw, ""); err != nil {
+		return err
+	}
+	resourceTransformIDs[i] = uploadID
+	return nil
+}
+
+// processJFrogHelmUploader emits a single HTTPStreaming transformation for resource from a
+// [transferv1alpha1.JFrogHelmUploaderConfig]: the chart archive (opened by the helm
+// [helmtransformer.ChartArchiveOpener]) is PUT to <url>/artifactory/<repository>/<name>-<version>.tgz
+// and the resource is published with a Helm/v1 access on <url>/artifactory/api/helm/<repository>.
+// Chart name and version are CEL operands (see celOperand) templated like the HTTP uploader.
+func processJFrogHelmUploader(resource descriptorv2.Resource, u *transferv1alpha1.JFrogHelmUploaderConfig, baseID, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, resourceTransformIDs map[int]string, i int) error {
+	if resource.Access == nil {
+		return fmt.Errorf("resource access is required")
+	}
+	if err := u.Validate(); err != nil {
+		return fmt.Errorf("invalid jfrog helm uploader: %w", err)
+	}
+	base, err := url.Parse(u.URL)
+	if err != nil {
+		return fmt.Errorf("invalid artifactory url: %w", err)
+	}
+	uploadBase, err := url.JoinPath(u.URL, "artifactory", u.Repository)
+	if err != nil {
+		return fmt.Errorf("invalid artifactory url: %w", err)
+	}
+	helmRepo, err := url.JoinPath(u.URL, "artifactory", "api", "helm", u.Repository)
+	if err != nil {
+		return fmt.Errorf("invalid artifactory url: %w", err)
+	}
+
+	name := celOperand(u.ChartName, resourceAlias+".name")
+	version := celOperand(u.ChartVersion, resourceAlias+".version")
+	request := &wgetaccessv1.Wget{
+		Type:      wgetaccess.V1VersionedType,
+		URL:       fmt.Sprintf(`${%s + %s + "-" + %s + ".tgz"}`, strconv.Quote(uploadBase+"/"), name, version),
+		Verb:      http.MethodPut,
+		MediaType: compression.MediaTypeGzip,
+	}
+	published := &helmaccessv1.Helm{
+		Type:           runtime.NewVersionedType(helmaccessv1.Type, helmaccessv1.Version),
+		HelmRepository: helmRepo,
+		HelmChart:      fmt.Sprintf(`${%s + ":" + %s}`, name, version),
+	}
+
+	nodePath := resourceNodePath(baseID, i)
+	requestRaw, err := templatedAccess(wgetaccess.Scheme, request, nodePath, "request")
+	if err != nil {
+		return err
+	}
+	publishedRaw, err := templatedAccess(helmaccess.Scheme, published, nodePath, "published")
+	if err != nil {
+		return err
+	}
+
+	uploadID := fmt.Sprintf("%sUpload%s", id, identityToTransformationID(resource.ToIdentity()))
+	label := uploaderLabel(&val.Descriptor.Component, resource.Name, base.Host)
+	if err := appendHTTPStreaming(tgd, uploadID, label, resource, requestRaw, publishedRaw, helmtransformer.ChartArchiveOpener); err != nil {
+		return err
+	}
+	resourceTransformIDs[i] = uploadID
+	return nil
+}
+
+// celOperand renders a chart field as a CEL operand: the parenthesised inner expression of a
+// standalone ${...} value, a quoted string literal otherwise, or fallback when empty.
+func celOperand(value, fallback string) string {
+	switch {
+	case value == "":
+		return fallback
+	case strings.HasPrefix(value, "${") && strings.HasSuffix(value, "}"):
+		return "(" + value[2:len(value)-1] + ")"
+	default:
+		// Go quoting is valid CEL string-literal syntax.
+		return strconv.Quote(value)
+	}
+}
+
+// templatedAccess converts access to raw JSON via scheme and rewrites the `resource` alias in
+// every ${...} expression to nodePath (see templateExpressions). role ("request" or
+// "published") names the access in errors.
+func templatedAccess(scheme *runtime.Scheme, access runtime.Typed, nodePath, role string) (*runtime.Raw, error) {
+	raw := &runtime.Raw{}
+	if err := scheme.Convert(access, raw); err != nil {
+		return nil, fmt.Errorf("cannot convert uploader %s access: %w", role, err)
+	}
+	if err := templateExpressions(raw, nodePath); err != nil {
+		return nil, fmt.Errorf("cannot template uploader %s access: %w", role, err)
+	}
+	return raw, nil
+}
+
+// appendHTTPStreaming appends the HTTPStreaming transformation uploading resource with request and
+// publishing it with published; opener is set on the spec only when non-empty.
+func appendHTTPStreaming(tgd *transformv1alpha1.TransformationGraphDefinition, uploadID, label string, resource descriptorv2.Resource, request, published *runtime.Raw, opener string) error {
 	targetResource := *resource.DeepCopy()
-	targetResource.Access = publishedRaw
+	targetResource.Access = published
 
-	spec, err := runtime.UnstructuredFromMixedData(map[string]any{
+	data := map[string]any{
 		"resource":       resource,
-		"request":        requestRaw,
+		"request":        request,
 		"targetResource": targetResource,
-	})
+	}
+	if opener != "" {
+		data["opener"] = opener
+	}
+	spec, err := runtime.UnstructuredFromMixedData(data)
 	if err != nil {
 		return fmt.Errorf("cannot create unstructured spec for uploader transformation: %w", err)
 	}
 
-	label := uploaderLabel(&val.Descriptor.Component, resource.Name, targetHostFromExpression(u.TargetURL))
 	tgd.Transformations = append(tgd.Transformations, transformv1alpha1.GenericTransformation{
 		TransformationMeta: meta.TransformationMeta{
 			Type:  wgettransformv1alpha1.HTTPStreamingV1alpha1,
@@ -218,6 +317,5 @@ func processHTTPUploader(resource descriptorv2.Resource, u *transferv1alpha1.HTT
 		},
 		Spec: spec,
 	})
-	resourceTransformIDs[i] = uploadID
 	return nil
 }
