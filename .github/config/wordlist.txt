@@ -74,6 +74,7 @@ callout
 callouts
 camelcase
 canonicalized
+calver
 cas
 ccwienk
 cel

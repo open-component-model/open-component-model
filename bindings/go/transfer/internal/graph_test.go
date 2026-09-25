@@ -714,6 +714,44 @@ func TestBuildGraphDefinition_CleanupMultiTarget_AggregatesAllRefs(t *testing.T)
 	assert.NotEqual(t, exprs[0], exprs[1], "multi-target refs should have different Add IDs")
 }
 
+func TestBuildDescriptorSpec_CreationTime(t *testing.T) {
+	for _, tt := range []struct {
+		name         string
+		creationTime string
+		want         any
+	}{
+		{
+			name:         "preserved when resources are transformed",
+			creationTime: "2025-07-28T11:40:51Z",
+			want:         "${environment.envID.component.creationTime}",
+		},
+		{
+			name: "empty does not produce a CEL reference",
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+			v2desc := &descriptorv2.Descriptor{
+				Component: descriptorv2.Component{
+					ComponentMeta: descriptorv2.ComponentMeta{
+						CreationTime: tt.creationTime,
+					},
+					Resources: []descriptorv2.Resource{{}},
+				},
+			}
+
+			spec := buildDescriptorSpec(v2desc, "envID", map[int]string{0: "resourceAdd"})
+			specMap, ok := spec.(map[string]any)
+			r.True(ok, "spec should be a map when resources are transformed")
+			componentMap, ok := specMap["component"].(map[string]any)
+			r.True(ok)
+			r.Contains(componentMap, "creationTime")
+			r.Equal(tt.want, componentMap["creationTime"])
+			r.Equal([]any{"${resourceAdd.output.resource}"}, componentMap["resources"])
+		})
+	}
+}
+
 // Regression test for https://github.com/open-component-model/open-component-model/issues/2585:
 // labels on the component descriptor must be forwarded into the upload transformation spec.
 func TestBuildDescriptorSpec_LabelsIncluded(t *testing.T) {

@@ -162,7 +162,7 @@ configurations:
 		"transfer", "component-version",
 		sourceRef, targetRef,
 		"--config", cfgPath,
-		"--semver-constraint", "< 2.0.0",
+		"--constraint", "< 2.0.0",
 	})
 
 	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)

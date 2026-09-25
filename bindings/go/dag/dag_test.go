@@ -125,6 +125,62 @@ func TestDAGAddEdge(t *testing.T) {
 	})
 }
 
+func TestDAGAddEdgeCycleRollback(t *testing.T) {
+	r := require.New(t)
+	d := NewDirectedAcyclicGraph[string]()
+	for _, v := range []string{"A", "B", "C", "D"} {
+		r.NoError(d.AddVertex(v))
+	}
+	r.NoError(d.AddEdge("A", "B"))
+	r.NoError(d.AddEdge("B", "C"))
+	r.NoError(d.AddEdge("C", "D"))
+
+	err := d.AddEdge("D", "B")
+	r.Error(err, "expected error when creating a cycle, but got nil")
+
+	var cerr *CycleError[string]
+	r.True(errors.As(err, &cerr))
+	r.Len(cerr.Cycle, 4, "expected 3-cycle plus closing node, but got %v", cerr.Cycle)
+	r.Contains(cerr.Cycle, "B")
+
+	// The rejected edge must be fully rolled back.
+	_, hasEdge := d.Vertices["D"].Edges["B"]
+	r.False(hasEdge)
+	r.Zero(d.Vertices["D"].OutDegree)
+	r.Equal(1, d.Vertices["B"].InDegree)
+
+	// A rejected edge must not leave the graph in a state that rejects
+	// valid successors.
+	r.NoError(d.AddEdge("A", "D"))
+}
+
+func TestDAGAddEdgeCycleErrorDeterministic(t *testing.T) {
+	r := require.New(t)
+	// Map iteration order varies between iterations of the same loop. The
+	// reported cycle must not: an unstable cycle string churns every surface
+	// that repeats the error. Rebuild the same graph many times and require
+	// one message.
+	var first string
+	for range 200 {
+		graph := NewDirectedAcyclicGraph[string]()
+		for _, v := range []string{"A", "B", "C", "D"} {
+			r.NoError(graph.AddVertex(v))
+		}
+		r.NoError(graph.AddEdge("B", "A"))
+		r.NoError(graph.AddEdge("C", "A"))
+		r.NoError(graph.AddEdge("D", "B"))
+		r.NoError(graph.AddEdge("D", "C"))
+
+		err := graph.AddEdge("A", "D")
+		r.Error(err)
+		if first == "" {
+			first = err.Error()
+		} else {
+			r.Equal(first, err.Error())
+		}
+	}
+}
+
 func TestDAGHasCycle(t *testing.T) {
 	r := require.New(t)
 	d := NewDirectedAcyclicGraph[string]()
@@ -148,9 +204,9 @@ func TestDAGHasCycle(t *testing.T) {
 
 	_, err := d.TopologicalSort()
 	r.Errorf(err, "expected error when sorting a cyclic graph, but got nil")
-	r.IsType(&CycleError{}, err, "expected CycleError, but got %T", err)
+	r.IsType(&CycleError[string]{}, err, "expected CycleError, but got %T", err)
 
-	var cerr *CycleError
+	var cerr *CycleError[string]
 	r.True(errors.As(err, &cerr))
 	cycle := cerr.Cycle
 
