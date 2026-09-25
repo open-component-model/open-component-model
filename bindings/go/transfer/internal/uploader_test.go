@@ -137,9 +137,9 @@ func TestBuildGraphDefinition_UploaderMatch_EmitsHTTPStreaming(t *testing.T) {
 	assert.Equal(t, "test@1.0.0 [Stream blob to target.example]", streaming.label)
 }
 
-func TestBuildGraphDefinition_JFrogHelmUploader_EmitsHelmTarget(t *testing.T) {
+func TestBuildGraphDefinition_HelmUploader_EmitsHelmTarget(t *testing.T) {
 	chartResource := helmResource("chart-resource", "1.0.0", "https://charts.example", "chart:1.0.0")
-	build := func(t *testing.T, resource descriptor.Resource, u *transferv1alpha1.JFrogHelmUploaderConfig) (*transformv1alpha1.TransformationGraphDefinition, transformv1alpha1.GenericTransformation) {
+	build := func(t *testing.T, resource descriptor.Resource, u *transferv1alpha1.HelmUploaderConfig) (*transformv1alpha1.TransformationGraphDefinition, transformv1alpha1.GenericTransformation) {
 		t.Helper()
 		r := require.New(t)
 		desc := testDescriptor("ocm.software/test", "1.0.0", []descriptor.Resource{resource}, nil)
@@ -151,29 +151,31 @@ func TestBuildGraphDefinition_JFrogHelmUploader_EmitsHelmTarget(t *testing.T) {
 
 		var uploads []transformv1alpha1.GenericTransformation
 		for _, tr := range tgd.Transformations {
-			r.NotEqual(wgetv1alpha1.HTTPStreamingV1alpha1, tr.Type, "the jfrog uploader must not emit an HTTPStreaming node")
-			r.NotEqual(helmv1alpha1.GetHelmChartV1alpha1, tr.Type, "the jfrog uploader must not emit a GetHelmChart node")
-			r.NotEqual(ociv1alpha1.OCIGetLocalResourceV1alpha1, tr.Type, "the jfrog uploader must not buffer local blobs")
-			if tr.Type == JFrogHelmUploadVersionedType {
+			r.NotEqual(wgetv1alpha1.HTTPStreamingV1alpha1, tr.Type, "the helm uploader must not emit an HTTPStreaming node")
+			r.NotEqual(helmv1alpha1.GetHelmChartV1alpha1, tr.Type, "the helm uploader must not emit a GetHelmChart node")
+			r.NotEqual(ociv1alpha1.OCIGetLocalResourceV1alpha1, tr.Type, "the helm uploader must not buffer local blobs")
+			if tr.Type == HelmRepositoryUploadVersionedType {
 				uploads = append(uploads, tr)
 			}
 		}
 		r.Len(uploads, 1)
 		return tgd, uploads[0]
 	}
-	uploader := func(accessType runtime.Type) *transferv1alpha1.JFrogHelmUploaderConfig {
-		return &transferv1alpha1.JFrogHelmUploaderConfig{
-			Type:       runtime.NewVersionedType(transferv1alpha1.JFrogHelmUploaderConfigType, transferv1alpha1.Version),
+	uploader := func(accessType runtime.Type) *transferv1alpha1.HelmUploaderConfig {
+		return &transferv1alpha1.HelmUploaderConfig{
+			Type:       runtime.NewVersionedType(transferv1alpha1.HelmUploaderConfigType, transferv1alpha1.Version),
 			MatchSpec:  transferv1alpha1.UploaderMatch{AccessType: accessType},
+			Server:     transferv1alpha1.HelmRepositoryServerArtifactory,
 			URL:        "https://artifactory.example",
 			Repository: "helm-local",
 		}
 	}
 	helmMatch := runtime.NewVersionedType(helmv1.LegacyType, helmv1.LegacyTypeVersion)
 
-	t.Run("emits one JFrogHelmUpload node that reindexes", func(t *testing.T) {
+	t.Run("emits one HelmRepositoryUpload node that reindexes", func(t *testing.T) {
 		r := require.New(t)
 		_, tr := build(t, chartResource, uploader(helmMatch))
+		r.Equal("Artifactory", tr.Spec.Data["server"])
 		r.Equal("https://artifactory.example", tr.Spec.Data["url"])
 		r.Equal("helm-local", tr.Spec.Data["repository"])
 		r.Equal(true, tr.Spec.Data["reindex"])
@@ -200,6 +202,15 @@ func TestBuildGraphDefinition_JFrogHelmUploader_EmitsHelmTarget(t *testing.T) {
 		u := uploader(helmMatch)
 		u.Reindex = new(bool)
 		_, tr := build(t, chartResource, u)
+		r.Equal(false, tr.Spec.Data["reindex"])
+	})
+
+	t.Run("nexus never reindexes", func(t *testing.T) {
+		r := require.New(t)
+		u := uploader(helmMatch)
+		u.Server = transferv1alpha1.HelmRepositoryServerNexus
+		_, tr := build(t, chartResource, u)
+		r.Equal("Nexus", tr.Spec.Data["server"])
 		r.Equal(false, tr.Spec.Data["reindex"])
 	})
 }

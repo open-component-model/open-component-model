@@ -11,21 +11,20 @@ import (
 	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1/meta"
 )
 
-// processJFrogHelmUploader emits a single JFrogHelmUpload transformation for resource from a
-// [transferv1alpha1.JFrogHelmUploaderConfig]. The chart is stored under the component version's
-// path in the repository and published with the chart name and version Artifactory records, so
-// the transformation computes the published access at runtime and the descriptor picks it up
-// from its output. A local blob is read from the source component version.
-func processJFrogHelmUploader(resource descriptorv2.Resource, access runtime.Typed, u *transferv1alpha1.JFrogHelmUploaderConfig, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, resourceTransformIDs map[int]string, i int) error {
+// processHelmUploader emits a single HelmRepositoryUpload transformation for resource from a
+// [transferv1alpha1.HelmUploaderConfig]. The chart is published with the chart name and version
+// the server records, so the transformation computes the published access at runtime and the
+// descriptor picks it up from its output. A local blob is read from the source component version.
+func processHelmUploader(resource descriptorv2.Resource, access runtime.Typed, u *transferv1alpha1.HelmUploaderConfig, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, resourceTransformIDs map[int]string, i int) error {
 	if resource.Access == nil {
 		return fmt.Errorf("resource access is required")
 	}
 	if err := u.Validate(); err != nil {
-		return fmt.Errorf("invalid jfrog helm uploader: %w", err)
+		return fmt.Errorf("invalid helm uploader: %w", err)
 	}
 	base, err := url.Parse(u.URL)
 	if err != nil {
-		return fmt.Errorf("invalid artifactory url: %w", err)
+		return fmt.Errorf("invalid helm repository url: %w", err)
 	}
 
 	cv := map[string]any{
@@ -42,18 +41,19 @@ func processJFrogHelmUploader(resource descriptorv2.Resource, access runtime.Typ
 	spec, err := runtime.UnstructuredFromMixedData(map[string]any{
 		"resource":         resource,
 		"componentVersion": cv,
+		"server":           string(u.Server),
 		"url":              u.URL,
 		"repository":       u.Repository,
 		"reindex":          u.ReindexEnabled(),
 	})
 	if err != nil {
-		return fmt.Errorf("cannot create unstructured spec for jfrog helm upload transformation: %w", err)
+		return fmt.Errorf("cannot create unstructured spec for helm repository upload transformation: %w", err)
 	}
 
 	uploadID := fmt.Sprintf("%sUpload%s", id, identityToTransformationID(resource.ToIdentity()))
 	tgd.Transformations = append(tgd.Transformations, transformv1alpha1.GenericTransformation{
 		TransformationMeta: meta.TransformationMeta{
-			Type:  JFrogHelmUploadVersionedType,
+			Type:  HelmRepositoryUploadVersionedType,
 			ID:    uploadID,
 			Label: uploaderLabel(&val.Descriptor.Component, resource.Name, base.Host),
 		},

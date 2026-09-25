@@ -24,21 +24,18 @@ import (
 	helmaccess "ocm.software/open-component-model/bindings/go/helm/spec/access"
 	helmaccessv1 "ocm.software/open-component-model/bindings/go/helm/spec/access/v1"
 	helminputv1 "ocm.software/open-component-model/bindings/go/helm/spec/input/v1"
-	"ocm.software/open-component-model/bindings/go/oci"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
-	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
 	ctfrepospec "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
-	ocirepospec "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/transfer"
 	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
 )
 
-// Test_Integration_TransferHelmResource_JFrogHelmUploaderDeploysChart verifies that a Helm/v1
-// resource routed through a JFrog Helm uploader configuration is streamed as a chart archive
+// Test_Integration_TransferHelmResource_ArtifactoryHelmUploaderDeploysChart verifies that a Helm/v1
+// resource routed through an Artifactory helm uploader configuration is streamed as a chart archive
 // to a fake Artifactory PUT endpoint and re-described with a Helm/v1 access pointing at the
 // Artifactory Helm API, with the correct digest computed during the stream.
-func Test_Integration_TransferHelmResource_JFrogHelmUploaderDeploysChart(t *testing.T) {
+func Test_Integration_TransferHelmResource_ArtifactoryHelmUploaderDeploysChart(t *testing.T) {
 	t.Parallel()
 	r := require.New(t)
 
@@ -56,9 +53,6 @@ func Test_Integration_TransferHelmResource_JFrogHelmUploaderDeploysChart(t *test
 
 	// Target "Artifactory": records chart properties for the chart .tgz like Artifactory does.
 	targetSrv := newFakeArtifactory(t, chartTgzBytes)
-
-	// Target OCI registry for the component descriptor.
-	registryAddr, user, password := startRegistry(t)
 
 	componentName := "ocm.software/jfrog-helm-uploader-test"
 	componentVersion := "1.0.0"
@@ -103,15 +97,18 @@ func Test_Integration_TransferHelmResource_JFrogHelmUploaderDeploysChart(t *test
 		Type:     runtime.Type{Name: ctfrepospec.Type, Version: ctfrepospec.Version},
 		FilePath: sourceCTFPath,
 	}
-	targetSpec := &ocirepospec.Repository{
-		Type:    runtime.Type{Name: ocirepospec.Type, Version: "v1"},
-		BaseUrl: fmt.Sprintf("http://%s", registryAddr),
+	targetCTFPath := t.TempDir()
+	targetSpec := &ctfrepospec.Repository{
+		Type:       runtime.Type{Name: ctfrepospec.Type, Version: ctfrepospec.Version},
+		FilePath:   targetCTFPath,
+		AccessMode: "readwrite|create",
 	}
 
-	// JFrog Helm uploader routes Helm/v1 resources to the fake Artifactory server.
-	uploaders := []transferv1alpha1.UploaderConfig{&transferv1alpha1.JFrogHelmUploaderConfig{
-		Type:       runtime.NewVersionedType(transferv1alpha1.JFrogHelmUploaderConfigType, transferv1alpha1.Version),
+	// The Artifactory helm uploader routes Helm/v1 resources to the fake Artifactory server.
+	uploaders := []transferv1alpha1.UploaderConfig{&transferv1alpha1.HelmUploaderConfig{
+		Type:       runtime.NewVersionedType(transferv1alpha1.HelmUploaderConfigType, transferv1alpha1.Version),
 		MatchSpec:  transferv1alpha1.UploaderMatch{AccessType: runtime.NewVersionedType(helmaccessv1.Type, helmaccessv1.LegacyTypeVersion)},
+		Server:     transferv1alpha1.HelmRepositoryServerArtifactory,
 		URL:        targetSrv.URL,
 		Repository: "helm-local",
 	}}
@@ -129,10 +126,9 @@ func Test_Integration_TransferHelmResource_JFrogHelmUploaderDeploysChart(t *test
 	r.NotNil(tgd)
 
 	ctx := t.Context()
-	credResolver := newCredResolver(t, registryCreds{registryAddr, user, password})
 	repoProvider := provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()))
 	resourceRepo := helmresource.NewResourceRepository(nil)
-	b := transfer.NewDefaultBuilder(repoProvider, resourceRepo, credResolver)
+	b := transfer.NewDefaultBuilder(repoProvider, resourceRepo, nil)
 	graph, err := b.BuildAndCheck(tgd)
 	r.NoError(err)
 	r.NoError(graph.Process(ctx))
@@ -147,18 +143,8 @@ func Test_Integration_TransferHelmResource_JFrogHelmUploaderDeploysChart(t *test
 	r.Equal([]string{"/artifactory/api/helm/helm-local/" + strings.TrimPrefix(expectedPath, "/artifactory/helm-local/") + "/reindex uploaded=true"}, targetSrv.reindexed(),
 		"the index of the uploaded chart must be recalculated once, after the chart was deployed")
 
-	// Verify the transferred descriptor in the target OCI registry.
-	client := createAuthClient(registryAddr, user, password)
-	urlRes, err := urlresolver.New(
-		urlresolver.WithBaseURL(registryAddr),
-		urlresolver.WithPlainHTTP(true),
-		urlresolver.WithBaseClient(client),
-	)
-	r.NoError(err)
-	targetRepo, err := oci.NewRepository(oci.WithResolver(urlRes), oci.WithTempDir(t.TempDir()))
-	r.NoError(err)
-
-	gotDesc, err := targetRepo.GetComponentVersion(ctx, componentName, componentVersion)
+	// Verify the transferred descriptor in the target CTF.
+	gotDesc, err := createCTFRepository(t, targetCTFPath).GetComponentVersion(ctx, componentName, componentVersion)
 	r.NoError(err)
 	r.Len(gotDesc.Component.Resources, 1)
 	gotResource := gotDesc.Component.Resources[0]
@@ -183,13 +169,13 @@ func Test_Integration_TransferHelmResource_JFrogHelmUploaderDeploysChart(t *test
 		"digest value should be the sha256 of the chart .tgz")
 }
 
-// Test_Integration_TransferLocalBlobHelmResource_JFrogHelmUploaderDeploysChart verifies that a
+// Test_Integration_TransferLocalBlobHelmResource_ArtifactoryHelmUploaderDeploysChart verifies that a
 // LocalBlob/v1 resource containing a Helm chart is correctly streamed to the fake Artifactory
-// endpoint by the JFrog Helm uploader. Two media types are tested:
+// endpoint by the Artifactory helm uploader. Two media types are tested:
 //   - packaged chart: the blob is the chart .tgz itself, uploaded unchanged.
 //   - OCI layout: the blob is an OCI image layout (as produced by the helm input), and only
 //     the chart layer is extracted and uploaded.
-func Test_Integration_TransferLocalBlobHelmResource_JFrogHelmUploaderDeploysChart(t *testing.T) {
+func Test_Integration_TransferLocalBlobHelmResource_ArtifactoryHelmUploaderDeploysChart(t *testing.T) {
 	t.Parallel()
 
 	// Read the expected chart .tgz bytes for comparison.
@@ -240,9 +226,6 @@ func Test_Integration_TransferLocalBlobHelmResource_JFrogHelmUploaderDeploysChar
 			// Target "Artifactory": records chart properties for the chart .tgz like Artifactory does.
 			targetSrv := newFakeArtifactory(t, chartTgzBytes)
 
-			// Target OCI registry for the component descriptor.
-			registryAddr, user, password := startRegistry(t)
-
 			componentName := "ocm.software/jfrog-helm-local-blob-test"
 			componentVersion := "1.0.0"
 			sourceCTFPath := t.TempDir()
@@ -279,15 +262,18 @@ func Test_Integration_TransferLocalBlobHelmResource_JFrogHelmUploaderDeploysChar
 				Type:     runtime.Type{Name: ctfrepospec.Type, Version: ctfrepospec.Version},
 				FilePath: sourceCTFPath,
 			}
-			targetSpec := &ocirepospec.Repository{
-				Type:    runtime.Type{Name: ocirepospec.Type, Version: "v1"},
-				BaseUrl: fmt.Sprintf("http://%s", registryAddr),
+			targetCTFPath := t.TempDir()
+			targetSpec := &ctfrepospec.Repository{
+				Type:       runtime.Type{Name: ctfrepospec.Type, Version: ctfrepospec.Version},
+				FilePath:   targetCTFPath,
+				AccessMode: "readwrite|create",
 			}
 
-			// JFrog Helm uploader routes LocalBlob/v1 resources to the fake Artifactory server.
-			uploaders := []transferv1alpha1.UploaderConfig{&transferv1alpha1.JFrogHelmUploaderConfig{
-				Type:       runtime.NewVersionedType(transferv1alpha1.JFrogHelmUploaderConfigType, transferv1alpha1.Version),
+			// The Artifactory helm uploader routes LocalBlob/v1 resources to the fake Artifactory server.
+			uploaders := []transferv1alpha1.UploaderConfig{&transferv1alpha1.HelmUploaderConfig{
+				Type:       runtime.NewVersionedType(transferv1alpha1.HelmUploaderConfigType, transferv1alpha1.Version),
 				MatchSpec:  transferv1alpha1.UploaderMatch{AccessType: runtime.NewVersionedType(descriptorv2.LocalBlobAccessType, descriptorv2.LocalBlobAccessTypeVersion)},
+				Server:     transferv1alpha1.HelmRepositoryServerArtifactory,
 				URL:        targetSrv.URL,
 				Repository: "helm-local",
 			}}
@@ -305,10 +291,9 @@ func Test_Integration_TransferLocalBlobHelmResource_JFrogHelmUploaderDeploysChar
 			r.NotNil(tgd)
 
 			ctx := t.Context()
-			credResolver := newCredResolver(t, registryCreds{registryAddr, user, password})
-			repoProvider := provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()))
+					repoProvider := provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()))
 			resourceRepo := helmresource.NewResourceRepository(nil)
-			b := transfer.NewDefaultBuilder(repoProvider, resourceRepo, credResolver)
+			b := transfer.NewDefaultBuilder(repoProvider, resourceRepo, nil)
 			graph, err := b.BuildAndCheck(tgd)
 			r.NoError(err)
 			r.NoError(graph.Process(ctx))
@@ -323,18 +308,8 @@ func Test_Integration_TransferLocalBlobHelmResource_JFrogHelmUploaderDeploysChar
 			r.Equal([]string{"/artifactory/api/helm/helm-local/" + strings.TrimPrefix(expectedPath, "/artifactory/helm-local/") + "/reindex uploaded=true"}, targetSrv.reindexed(),
 				"the index of the uploaded chart must be recalculated once, after the chart was deployed")
 
-			// Verify the transferred descriptor in the target OCI registry.
-			client := createAuthClient(registryAddr, user, password)
-			urlRes, err := urlresolver.New(
-				urlresolver.WithBaseURL(registryAddr),
-				urlresolver.WithPlainHTTP(true),
-				urlresolver.WithBaseClient(client),
-			)
-			r.NoError(err)
-			targetRepo, err := oci.NewRepository(oci.WithResolver(urlRes), oci.WithTempDir(t.TempDir()))
-			r.NoError(err)
-
-			gotDesc, err := targetRepo.GetComponentVersion(ctx, componentName, componentVersion)
+			// Verify the transferred descriptor in the target CTF.
+			gotDesc, err := createCTFRepository(t, targetCTFPath).GetComponentVersion(ctx, componentName, componentVersion)
 			r.NoError(err)
 			r.Len(gotDesc.Component.Resources, 1)
 			gotResource := gotDesc.Component.Resources[0]
@@ -370,8 +345,7 @@ func storedKeys(m map[string][]byte) []string {
 	return keys
 }
 
-// fakeArtifactory emulates the Artifactory Helm repository endpoints the JFrog helm uploader
-// uses. Like Artifactory, it records chart name and version properties for deployed content it
+// fakeArtifactory emulates the Artifactory Helm repository endpoints the helm uploader uses. Like Artifactory, it records chart name and version properties for deployed content it
 // recognizes as a chart; here, only the given chart archive is recognized.
 type fakeArtifactory struct {
 	*httptest.Server

@@ -3,7 +3,6 @@ package internal
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -16,7 +15,6 @@ import (
 	godigest "github.com/opencontainers/go-digest"
 
 	"ocm.software/open-component-model/bindings/go/blob"
-	"ocm.software/open-component-model/bindings/go/blob/compression"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
@@ -28,14 +26,15 @@ import (
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/wget/httpauth"
 	wgetcredsv1 "ocm.software/open-component-model/bindings/go/wget/spec/credentials/v1"
 	wgetidentityv1 "ocm.software/open-component-model/bindings/go/wget/spec/identity/v1"
 )
 
 const (
-	JFrogHelmUploadType    = "JFrogHelmUpload"
-	jfrogHelmUploadVersion = "v1alpha1"
+	HelmRepositoryUploadType    = "HelmRepositoryUpload"
+	helmRepositoryUploadVersion = "v1alpha1"
 
 	// hashAlgorithmSHA256 is the hash algorithm recorded for uploaded chart digests.
 	hashAlgorithmSHA256 = "SHA-256"
@@ -43,38 +42,41 @@ const (
 	genericBlobDigestV1 = "genericBlobDigest/v1"
 	// maxErrorBodyBytes bounds how much of a non-2xx response body is read into an error.
 	maxErrorBodyBytes = 4 << 10
-	// chartPropertiesAttempts bounds how often the chart metadata Artifactory records on
+	// chartMetadataAttempts bounds how often the chart metadata Artifactory records on
 	// deployment is polled before the content is considered not to be a helm chart.
-	chartPropertiesAttempts = 6
-	// defaultChartPropertiesInterval is the wait between two chart metadata polls.
-	defaultChartPropertiesInterval = 500 * time.Millisecond
+	chartMetadataAttempts = 6
+	// defaultChartMetadataInterval is the wait between two chart metadata polls.
+	defaultChartMetadataInterval = 500 * time.Millisecond
 )
 
-// JFrogHelmUploadVersionedType is the versioned type identifier for JFrogHelmUpload transformations.
-var JFrogHelmUploadVersionedType = runtime.NewVersionedType(JFrogHelmUploadType, jfrogHelmUploadVersion)
+// HelmRepositoryUploadVersionedType is the versioned type identifier for HelmRepositoryUpload transformations.
+var HelmRepositoryUploadVersionedType = runtime.NewVersionedType(HelmRepositoryUploadType, helmRepositoryUploadVersion)
 
-// JFrogHelmUploadSpec is the input specification for a JFrogHelmUpload transformation.
+// HelmRepositoryUploadSpec is the input specification for a HelmRepositoryUpload transformation.
 // +k8s:deepcopy-gen=true
 // +ocm:jsonschema-gen=true
-type JFrogHelmUploadSpec struct {
+type HelmRepositoryUploadSpec struct {
 	// Resource is the source resource holding the helm chart.
 	Resource *descriptorv2.Resource `json:"resource"`
 	// ComponentVersion is the component version holding the resource. It determines where the
-	// chart is stored in the repository and, for local blob resources, where it is read from.
-	ComponentVersion *JFrogHelmUploadComponentVersion `json:"componentVersion"`
-	// URL is the Artifactory base URL.
+	// chart is stored in an Artifactory repository and, for local blob resources, where it is
+	// read from.
+	ComponentVersion *HelmRepositoryUploadComponentVersion `json:"componentVersion"`
+	// Server selects the API of the Helm repository server.
+	Server transferv1alpha1.HelmRepositoryServer `json:"server"`
+	// URL is the base URL of the Helm repository server.
 	URL string `json:"url"`
-	// Repository is the Artifactory Helm repository key.
+	// Repository is the name of the Helm repository.
 	Repository string `json:"repository"`
-	// Reindex requests an index recalculation for the uploaded chart. A failure is only logged,
-	// because Artifactory indexes deployed charts on its own.
+	// Reindex requests an index recalculation for the uploaded chart (Artifactory only). A
+	// failure is only logged, because Artifactory indexes deployed charts on its own.
 	Reindex bool `json:"reindex,omitempty"`
 }
 
-// JFrogHelmUploadComponentVersion identifies the component version holding the resource.
+// HelmRepositoryUploadComponentVersion identifies the component version holding the resource.
 // +k8s:deepcopy-gen=true
 // +ocm:jsonschema-gen=true
-type JFrogHelmUploadComponentVersion struct {
+type HelmRepositoryUploadComponentVersion struct {
 	// Repository is the specification of the repository holding the component version. It is
 	// set for local blob resources only, which are read from it.
 	Repository *runtime.Raw `json:"repository,omitempty"`
@@ -84,36 +86,35 @@ type JFrogHelmUploadComponentVersion struct {
 	Version string `json:"version"`
 }
 
-// JFrogHelmUploadOutput is the output of a JFrogHelmUpload transformation.
+// HelmRepositoryUploadOutput is the output of a HelmRepositoryUpload transformation.
 // +k8s:deepcopy-gen=true
 // +ocm:jsonschema-gen=true
-type JFrogHelmUploadOutput struct {
-	// Resource is the uploaded resource with its Helm/v1 access on the Artifactory Helm repository.
+type HelmRepositoryUploadOutput struct {
+	// Resource is the uploaded resource with its Helm/v1 access on the Helm repository.
 	Resource *descriptorv2.Resource `json:"resource"`
 }
 
-// JFrogHelmUploadTransformation deploys the packaged Helm chart of a resource to a JFrog
-// Artifactory Helm repository and publishes the resource with a Helm/v1 access on it.
+// HelmRepositoryUploadTransformation uploads the packaged Helm chart of a resource to a Helm
+// repository of a JFrog Artifactory or Sonatype Nexus server and publishes the resource with a
+// Helm/v1 access on it.
 // +k8s:deepcopy-gen=true
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +ocm:typegen=true
 // +ocm:jsonschema-gen=true
-type JFrogHelmUploadTransformation struct {
-	// +ocm:jsonschema-gen:enum=JFrogHelmUpload/v1alpha1
-	Type   runtime.Type           `json:"type"`
-	ID     string                 `json:"id"`
-	Spec   *JFrogHelmUploadSpec   `json:"spec"`
-	Output *JFrogHelmUploadOutput `json:"output,omitempty"`
+type HelmRepositoryUploadTransformation struct {
+	// +ocm:jsonschema-gen:enum=HelmRepositoryUpload/v1alpha1
+	Type   runtime.Type                `json:"type"`
+	ID     string                      `json:"id"`
+	Spec   *HelmRepositoryUploadSpec   `json:"spec"`
+	Output *HelmRepositoryUploadOutput `json:"output,omitempty"`
 }
 
-// JFrogHelmUpload deploys the packaged chart of a resource to a JFrog Artifactory Helm
-// repository and outputs the resource with a Helm/v1 access on
-// <url>/artifactory/api/helm/<repository>. The chart is streamed to
-// <url>/artifactory/<repository>/<component>/<component version>/<resource>-<resource version>.tgz
-// and never buffered on disk. The chart is not parsed: its name and version are the chart
-// metadata Artifactory records when it indexes the deployed chart. Content Artifactory does not
-// recognize as a chart is deleted again and fails the transformation.
-type JFrogHelmUpload struct {
+// HelmRepositoryUpload uploads the packaged chart of a resource to a Helm repository and outputs
+// the resource with a Helm/v1 access on it. The chart is streamed and never buffered on disk.
+// The chart is not parsed: its name and version are the chart metadata the server records for
+// the uploaded chart. Where the chart is stored and how the metadata is read depends on the
+// server, see [helmRepositoryServer].
+type HelmRepositoryUpload struct {
 	Scheme *runtime.Scheme
 	Charts *chartarchive.Source
 	// ResourceRepository derives the source credential identities of remote resources.
@@ -123,23 +124,25 @@ type JFrogHelmUpload struct {
 	CredentialProvider credentials.Resolver
 	HTTPConfig         *httpv1alpha1.Config
 
-	// chartPropertiesInterval overrides defaultChartPropertiesInterval (tests).
-	chartPropertiesInterval time.Duration
+	// chartMetadataInterval overrides defaultChartMetadataInterval (tests).
+	chartMetadataInterval time.Duration
 }
 
-func (t *JFrogHelmUpload) Transform(ctx context.Context, step runtime.Typed) (runtime.Typed, error) {
-	var transformation JFrogHelmUploadTransformation
+func (t *HelmRepositoryUpload) Transform(ctx context.Context, step runtime.Typed) (runtime.Typed, error) {
+	var transformation HelmRepositoryUploadTransformation
 	if err := t.Scheme.Convert(step, &transformation); err != nil {
-		return nil, fmt.Errorf("failed converting generic transformation to JFrogHelmUpload transformation: %w", err)
+		return nil, fmt.Errorf("failed converting generic transformation to HelmRepositoryUpload transformation: %w", err)
 	}
 	spec := transformation.Spec
 	switch {
 	case spec == nil:
-		return nil, fmt.Errorf("spec is required for JFrogHelmUpload transformation")
+		return nil, fmt.Errorf("spec is required for HelmRepositoryUpload transformation")
 	case spec.Resource == nil:
 		return nil, fmt.Errorf("source resource is required")
 	case spec.ComponentVersion == nil || spec.ComponentVersion.Component == "" || spec.ComponentVersion.Version == "":
 		return nil, fmt.Errorf("component and version are required")
+	case spec.Server == "":
+		return nil, fmt.Errorf("server is required")
 	case spec.URL == "":
 		return nil, fmt.Errorf("url is required")
 	case spec.Repository == "":
@@ -147,23 +150,18 @@ func (t *JFrogHelmUpload) Transform(ctx context.Context, step runtime.Typed) (ru
 	}
 	src := descriptor.ConvertFromV2Resource(spec.Resource)
 	cv := spec.ComponentVersion
+	file, err := chartFile(src)
+	if err != nil {
+		return nil, err
+	}
 	path, err := chartPath(cv.Component, cv.Version, src)
 	if err != nil {
 		return nil, err
 	}
-	uploadBase, err := url.JoinPath(spec.URL, "artifactory", spec.Repository)
+	srv, err := t.newServer(spec, path, file)
 	if err != nil {
-		return nil, fmt.Errorf("invalid artifactory url: %w", err)
+		return nil, err
 	}
-	storageBase, err := url.JoinPath(spec.URL, "artifactory", "api", "storage", spec.Repository)
-	if err != nil {
-		return nil, fmt.Errorf("invalid artifactory url: %w", err)
-	}
-	helmRepo, err := url.JoinPath(spec.URL, "artifactory", "api", "helm", spec.Repository)
-	if err != nil {
-		return nil, fmt.Errorf("invalid artifactory url: %w", err)
-	}
-	putURL := uploadBase + "/" + path
 
 	req := chartarchive.Request{Resource: src}
 	if cv.Repository != nil {
@@ -180,10 +178,11 @@ func (t *JFrogHelmUpload) Transform(ctx context.Context, step runtime.Typed) (ru
 	}
 	defer func() { _ = chart.Close() }()
 
-	creds, err := t.resolveTargetCredentials(ctx, helmRepo, putURL)
+	creds, err := t.resolveTargetCredentials(ctx, srv.helmRepository(), srv.uploadURL())
 	if err != nil {
 		return nil, err
 	}
+	c := &helmClient{httpConfig: t.HTTPConfig, creds: creds}
 
 	expected, err := expectedDigest(src.Digest, chart.FromOCI)
 	if err != nil {
@@ -201,63 +200,68 @@ func (t *JFrogHelmUpload) Transform(ctx context.Context, step runtime.Typed) (ru
 		}
 	}
 
-	var digest *descriptor.Digest
-	deployed := false
+	reused := false
 	if known != "" {
-		if deployed, err = t.deployByChecksum(ctx, putURL, known, creds); err != nil {
+		if reused, err = srv.reuse(ctx, c, known); err != nil {
 			return nil, err
 		}
 	}
-	if deployed {
-		digest = &descriptor.Digest{HashAlgorithm: hashAlgorithmSHA256, NormalisationAlgorithm: genericBlobDigestV1, Value: known}
-		slog.InfoContext(ctx, "deployed helm chart to artifactory by checksum without uploading it",
-			"resource", src.ToIdentity(), "url", redactURL(putURL))
+	digestHex := known
+	uploadURL := redactURL(srv.uploadURL())
+	if reused {
+		slog.InfoContext(ctx, "reused helm chart content already stored in the helm repository",
+			"server", srv.name(), "resource", src.ToIdentity(), "url", uploadURL)
 	} else {
-		header := http.Header{"Content-Type": {compression.MediaTypeGzip}}
-		if known != "" {
-			// Artifactory verifies the uploaded bytes against this checksum and rejects the
-			// upload on mismatch, so a corrupted stream is never stored.
-			header.Set("X-Checksum-Sha256", known)
+		computed, complete, err := uploadChart(ctx, c, chart, srv.uploadURL(), srv.uploadHeader(known))
+		switch {
+		case err != nil:
+			// A repository that rejects redeploying a chart still stores its content, e.g.
+			// from an earlier transfer of the same resource without a source digest.
+			if known != "" || !complete || !srv.rejectedUploadStored(ctx, c, computed) {
+				return nil, err
+			}
+			slog.InfoContext(ctx, "helm repository already stores the chart the upload was rejected for",
+				"server", srv.name(), "resource", src.ToIdentity(), "url", uploadURL)
+		case known != "" && computed != known:
+			if err := srv.discard(ctx, c, computed); err != nil {
+				slog.WarnContext(ctx, "failed removing uploaded content that must not be published", "url", uploadURL, "error", err)
+			}
+			return nil, fmt.Errorf("digest mismatch: expected %s, got %s", known, computed)
+		default:
+			slog.InfoContext(ctx, "uploaded helm chart", "server", srv.name(), "resource", src.ToIdentity(), "url", uploadURL)
 		}
-		if digest, err = t.upload(ctx, chart, putURL, header, known, creds); err != nil {
-			return nil, err
-		}
-		slog.InfoContext(ctx, "uploaded helm chart to artifactory", "resource", src.ToIdentity(), "url", redactURL(putURL))
-	}
-	if expected != "" {
-		digest = src.Digest.DeepCopy()
+		digestHex = computed
 	}
 
-	name, version, err := t.chartMetadata(ctx, storageBase+"/"+path, creds)
+	name, version, found, err := srv.chart(ctx, c, digestHex)
 	if err != nil {
 		return nil, err
 	}
-	if name == "" || version == "" {
-		if err := t.send(ctx, http.MethodDelete, putURL, nil, -1, nil, creds); err != nil {
-			slog.WarnContext(ctx, "failed deleting content that is not a helm chart from artifactory", "url", redactURL(putURL), "error", err)
+	if !found {
+		if err := srv.discard(ctx, c, digestHex); err != nil {
+			slog.WarnContext(ctx, "failed removing uploaded content that must not be published", "url", uploadURL, "error", err)
 		}
-		return nil, fmt.Errorf("content of resource %s is not a helm chart: artifactory recorded no chart name and version for %s", src.ToIdentity(), redactURL(putURL))
+		return nil, fmt.Errorf("content of resource %s is not a helm chart: %s recorded no chart name and version for %s", src.ToIdentity(), srv.name(), uploadURL)
 	}
 	if strings.ContainsAny(name, ":/") || strings.Contains(version, "/") {
-		return nil, fmt.Errorf("artifactory recorded an invalid chart name %q or version %q for %s", name, version, redactURL(putURL))
+		return nil, fmt.Errorf("%s recorded an invalid chart name %q or version %q for %s", srv.name(), name, version, uploadURL)
 	}
 
-	if spec.Reindex {
-		if err := t.send(ctx, http.MethodPost, helmRepo+"/"+path+"/reindex", nil, -1, nil, creds); err != nil {
-			slog.WarnContext(ctx, "failed requesting a helm index recalculation for the uploaded chart; artifactory also indexes deployed charts on its own",
-				"url", redactURL(putURL), "error", err)
-		}
-	}
+	srv.afterUpload(ctx, c)
 
 	out := src.DeepCopy()
 	out.Access = &helmaccessv1.Helm{
 		Type:           runtime.NewVersionedType(helmaccessv1.Type, helmaccessv1.Version),
-		HelmRepository: helmRepo,
+		HelmRepository: srv.helmRepository(),
 		HelmChart:      name + ":" + version,
 	}
-	out.Digest = digest
+	if expected != "" {
+		out.Digest = src.Digest.DeepCopy()
+	} else {
+		out.Digest = &descriptor.Digest{HashAlgorithm: hashAlgorithmSHA256, NormalisationAlgorithm: genericBlobDigestV1, Value: digestHex}
+	}
 	if transformation.Output == nil {
-		transformation.Output = &JFrogHelmUploadOutput{}
+		transformation.Output = &HelmRepositoryUploadOutput{}
 	}
 	if transformation.Output.Resource, err = descriptor.ConvertToV2Resource(t.Scheme, out); err != nil {
 		return nil, fmt.Errorf("failed converting uploaded resource to v2 format: %w", err)
@@ -265,11 +269,10 @@ func (t *JFrogHelmUpload) Transform(ctx context.Context, step runtime.Typed) (ru
 	return &transformation, nil
 }
 
-// chartPath returns the path-escaped location of the chart in the repository:
-// <component>/<component version>/<resource name>-<resource version>.tgz, with a hash of the
-// extra identity appended to the file name when the resource has one, so every resource of a
-// component version has its own path.
-func chartPath(component, version string, res *descriptor.Resource) (string, error) {
+// chartFile returns the path-escaped file name of the chart:
+// <resource name>-<resource version>.tgz, with a hash of the extra identity appended when the
+// resource has one, so every resource of a component version has its own file.
+func chartFile(res *descriptor.Resource) (string, error) {
 	if strings.ContainsAny(res.Name+res.Version, "/\\") {
 		return "", fmt.Errorf("resource name %q and version %q must not contain path separators", res.Name, res.Version)
 	}
@@ -277,14 +280,24 @@ func chartPath(component, version string, res *descriptor.Resource) (string, err
 	if len(res.ExtraIdentity) > 0 {
 		file += fmt.Sprintf("-%016x", res.ExtraIdentity.CanonicalHashV1())
 	}
-	segments := append(strings.Split(component, "/"), version, file+".tgz")
+	return url.PathEscape(file + ".tgz"), nil
+}
+
+// chartPath returns the path-escaped location of the chart in the repository:
+// <component>/<component version>/<chart file>.
+func chartPath(component, version string, res *descriptor.Resource) (string, error) {
+	file, err := chartFile(res)
+	if err != nil {
+		return "", err
+	}
+	segments := append(strings.Split(component, "/"), version)
 	for i, segment := range segments {
 		if segment == "" || segment == "." || segment == ".." || strings.Contains(segment, "\\") {
 			return "", fmt.Errorf("component %q version %q cannot be used as a repository path", component, version)
 		}
 		segments[i] = url.PathEscape(segment)
 	}
-	return strings.Join(segments, "/"), nil
+	return strings.Join(append(segments, file), "/"), nil
 }
 
 // expectedDigest returns the SHA-256 the uploaded chart must have: the source digest, if it
@@ -303,52 +316,8 @@ func expectedDigest(src *descriptor.Digest, fromOCI bool) (string, error) {
 	return src.Value, nil
 }
 
-// chartMetadata reads the chart name and version Artifactory records as properties of a
-// deployed chart. It polls briefly in case the metadata is calculated asynchronously and
-// returns empty strings when Artifactory recorded none, i.e. the content is not a helm chart.
-func (t *JFrogHelmUpload) chartMetadata(ctx context.Context, storageURL string, creds runtime.Typed) (name, version string, err error) {
-	interval := t.chartPropertiesInterval
-	if interval == 0 {
-		interval = defaultChartPropertiesInterval
-	}
-	target := storageURL + "?properties=chart.name,chart.version"
-	for attempt := 1; ; attempt++ {
-		resp, err := t.do(ctx, http.MethodGet, target, nil, -1, nil, creds)
-		if err != nil {
-			return "", "", err
-		}
-		var props struct {
-			Properties map[string][]string `json:"properties"`
-		}
-		switch resp.StatusCode {
-		case http.StatusOK:
-			err = json.NewDecoder(io.LimitReader(resp.Body, maxErrorBodyBytes)).Decode(&props)
-			_ = resp.Body.Close()
-			if err != nil {
-				return "", "", fmt.Errorf("failed decoding chart properties of %s: %w", redactURL(storageURL), err)
-			}
-			if names, versions := props.Properties["chart.name"], props.Properties["chart.version"]; len(names) == 1 && len(versions) == 1 {
-				return names[0], versions[0], nil
-			}
-		case http.StatusNotFound:
-			_ = resp.Body.Close()
-		default:
-			_ = resp.Body.Close()
-			return "", "", fmt.Errorf("GET %s returned status %d", redactURL(target), resp.StatusCode)
-		}
-		if attempt == chartPropertiesAttempts {
-			return "", "", nil
-		}
-		select {
-		case <-ctx.Done():
-			return "", "", ctx.Err()
-		case <-time.After(interval):
-		}
-	}
-}
-
 // localSource resolves the source component version repository of a local blob resource.
-func (t *JFrogHelmUpload) localSource(ctx context.Context, cv *JFrogHelmUploadComponentVersion) (*chartarchive.Local, error) {
+func (t *HelmRepositoryUpload) localSource(ctx context.Context, cv *HelmRepositoryUploadComponentVersion) (*chartarchive.Local, error) {
 	if t.RepoProvider == nil {
 		return nil, fmt.Errorf("no component version repository provider configured for local resources")
 	}
@@ -369,7 +338,7 @@ func (t *JFrogHelmUpload) localSource(ctx context.Context, cv *JFrogHelmUploadCo
 
 // resolveSourceCredentials resolves credentials for a remote source resource by its consumer
 // identity. A missing provider or ErrNotFound yields nil credentials.
-func (t *JFrogHelmUpload) resolveSourceCredentials(ctx context.Context, resource *descriptor.Resource) (runtime.Typed, error) {
+func (t *HelmRepositoryUpload) resolveSourceCredentials(ctx context.Context, resource *descriptor.Resource) (runtime.Typed, error) {
 	if t.CredentialProvider == nil {
 		return nil, nil
 	}
@@ -391,10 +360,10 @@ func (t *JFrogHelmUpload) resolveSourceCredentials(ctx context.Context, resource
 }
 
 // resolveTargetCredentials resolves the upload credentials: those of the HelmChartRepository
-// identity of the Artifactory Helm repository, falling back to the Wget identity of the upload
+// identity of the published Helm repository, falling back to the Wget identity of the upload
 // URL. Without either, the upload is anonymous. HelmHTTPCredentials are mapped to their
 // username and password, which is all an HTTP upload uses.
-func (t *JFrogHelmUpload) resolveTargetCredentials(ctx context.Context, helmRepo, putURL string) (runtime.Typed, error) {
+func (t *HelmRepositoryUpload) resolveTargetCredentials(ctx context.Context, helmRepo, putURL string) (runtime.Typed, error) {
 	if t.CredentialProvider == nil {
 		return nil, nil
 	}
@@ -427,7 +396,7 @@ func (t *JFrogHelmUpload) resolveTargetCredentials(ctx context.Context, helmRepo
 		return nil, fmt.Errorf("failed converting target credentials: %w", err)
 	}
 	if helmCreds.CertFile != "" || helmCreds.KeyFile != "" {
-		return nil, fmt.Errorf("HelmHTTPCredentials certFile/keyFile are not supported for JFrog uploads; use WgetCredentials/v1 certificate and privateKey")
+		return nil, fmt.Errorf("HelmHTTPCredentials certFile/keyFile are not supported for helm repository uploads; use WgetCredentials/v1 certificate and privateKey")
 	}
 	return &wgetcredsv1.WgetCredentials{
 		Type:     wgetcredsv1.WgetCredentialsVersionedType,
@@ -436,12 +405,12 @@ func (t *JFrogHelmUpload) resolveTargetCredentials(ctx context.Context, helmRepo
 	}, nil
 }
 
-// upload streams the chart archive into putURL and returns the digest of the uploaded bytes,
-// which must equal expected when set.
-func (t *JFrogHelmUpload) upload(ctx context.Context, chart *chartarchive.Chart, putURL string, header http.Header, expected string, creds runtime.Typed) (*descriptor.Digest, error) {
+// uploadChart streams the chart archive to putURL and returns the hex SHA-256 of the bytes read
+// and whether the archive was read to its end.
+func uploadChart(ctx context.Context, c *helmClient, chart *chartarchive.Chart, putURL string, header http.Header) (sha256Hex string, complete bool, err error) {
 	rc, err := chart.Archive.ReadCloser()
 	if err != nil {
-		return nil, fmt.Errorf("failed opening chart archive: %w", err)
+		return "", false, fmt.Errorf("failed opening chart archive: %w", err)
 	}
 	defer func() { _ = rc.Close() }()
 	size := blob.SizeUnknown
@@ -449,36 +418,35 @@ func (t *JFrogHelmUpload) upload(ctx context.Context, chart *chartarchive.Chart,
 		size = sized.Size()
 	}
 	hasher := sha256.New()
-	if err := t.send(ctx, http.MethodPut, putURL, io.TeeReader(rc, hasher), size, header, creds); err != nil {
-		return nil, err
-	}
-	computed := godigest.NewDigestFromBytes(godigest.SHA256, hasher.Sum(nil)).Encoded()
-	if expected != "" && computed != expected {
-		return nil, fmt.Errorf("digest mismatch: expected %s, got %s", expected, computed)
-	}
-	return &descriptor.Digest{HashAlgorithm: hashAlgorithmSHA256, NormalisationAlgorithm: genericBlobDigestV1, Value: computed}, nil
+	body := &eofReader{r: rc}
+	err = c.send(ctx, http.MethodPut, putURL, io.TeeReader(body, hasher), size, header)
+	return godigest.NewDigestFromBytes(godigest.SHA256, hasher.Sum(nil)).Encoded(), body.eof, err
 }
 
-// deployByChecksum asks Artifactory to deploy putURL from content it already stores under the
-// checksum ("Deploy Artifact by Checksum"), so the chart is not uploaded again. It reports
-// false when Artifactory does not have the content (404) or declines the request otherwise;
-// the caller then uploads the chart, which surfaces real errors such as missing permissions.
-func (t *JFrogHelmUpload) deployByChecksum(ctx context.Context, putURL, checksum string, creds runtime.Typed) (bool, error) {
-	resp, err := t.do(ctx, http.MethodPut, putURL, nil, 0, http.Header{
-		"X-Checksum-Deploy": {"true"},
-		"X-Checksum-Sha256": {checksum},
-	}, creds)
-	if err != nil {
-		return false, err
-	}
-	_ = resp.Body.Close()
-	return resp.StatusCode >= 200 && resp.StatusCode < 300, nil
+// eofReader records whether its reader returned io.EOF, i.e. was read to its end.
+type eofReader struct {
+	r   io.Reader
+	eof bool
 }
 
-// send issues a single request to Artifactory and fails on a non-2xx response. Errors never
-// carry userinfo, query or fragment of target.
-func (t *JFrogHelmUpload) send(ctx context.Context, method, target string, body io.Reader, size int64, header http.Header, creds runtime.Typed) error {
-	resp, err := t.do(ctx, method, target, body, size, header, creds)
+func (e *eofReader) Read(p []byte) (int, error) {
+	n, err := e.r.Read(p)
+	if errors.Is(err, io.EOF) {
+		e.eof = true
+	}
+	return n, err
+}
+
+// helmClient sends authenticated requests to the Helm repository server.
+type helmClient struct {
+	httpConfig *httpv1alpha1.Config
+	creds      runtime.Typed
+}
+
+// send issues a single request and fails on a non-2xx response. Errors never carry userinfo,
+// query or fragment of target.
+func (c *helmClient) send(ctx context.Context, method, target string, body io.Reader, size int64, header http.Header) error {
+	resp, err := c.do(ctx, method, target, body, size, header)
 	if err != nil {
 		return err
 	}
@@ -494,8 +462,8 @@ func (t *JFrogHelmUpload) send(ctx context.Context, method, target string, body 
 	return nil
 }
 
-// do sends a single authenticated request to Artifactory. The caller closes the response body.
-func (t *JFrogHelmUpload) do(ctx context.Context, method, target string, body io.Reader, size int64, header http.Header, creds runtime.Typed) (*http.Response, error) {
+// do sends a single authenticated request. The caller closes the response body.
+func (c *helmClient) do(ctx context.Context, method, target string, body io.Reader, size int64, header http.Header) (*http.Response, error) {
 	safe := redactURL(target)
 	req, err := http.NewRequestWithContext(ctx, method, target, body)
 	if err != nil {
@@ -507,8 +475,8 @@ func (t *JFrogHelmUpload) do(ctx context.Context, method, target string, body io
 	for k, v := range header {
 		req.Header[k] = v
 	}
-	client := ocmhttp.New(ocmhttp.WithConfig(t.HTTPConfig))
-	if err := httpauth.Apply(ctx, req, &client, creds); err != nil {
+	client := ocmhttp.New(ocmhttp.WithConfig(c.httpConfig))
+	if err := httpauth.Apply(ctx, req, &client, c.creds); err != nil {
 		return nil, fmt.Errorf("failed applying target credentials: %w", err)
 	}
 	resp, err := client.Do(req)
