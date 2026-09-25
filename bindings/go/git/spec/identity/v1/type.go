@@ -39,7 +39,7 @@ func IdentityFromURL(repository string) (runtime.Identity, error) {
 		return nil, err
 	}
 
-	hostname := endpoint.Hostname(ep)
+	hostname := ep.Host
 	if ep.Protocol == "file" {
 		hostname = "localhost"
 	}

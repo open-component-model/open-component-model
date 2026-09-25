@@ -3,14 +3,17 @@ package download
 import (
 	"fmt"
 
-	"github.com/go-git/go-git/v5/plumbing/transport"
-	githttp "github.com/go-git/go-git/v5/plumbing/transport/http"
-	gitssh "github.com/go-git/go-git/v5/plumbing/transport/ssh"
+	"github.com/go-git/go-git/v6/plumbing/client"
+	githttp "github.com/go-git/go-git/v6/plumbing/transport/http"
+	gitssh "github.com/go-git/go-git/v6/plumbing/transport/ssh"
 
+	"ocm.software/open-component-model/bindings/go/git/internal/endpoint"
 	credsv1 "ocm.software/open-component-model/bindings/go/git/spec/credentials/v1"
 )
 
-func authMethod(ep *transport.Endpoint, creds *credsv1.GitCredentials, opts Options) (transport.AuthMethod, error) {
+// authMethod returns a client.SSHAuth or client.HTTPAuth, or nil to leave the
+// authentication to go-git.
+func authMethod(ep *endpoint.Endpoint, creds *credsv1.GitCredentials, opts Options) (any, error) {
 	if creds == nil {
 		creds = &credsv1.GitCredentials{}
 	}
@@ -73,5 +76,17 @@ func authMethod(ep *transport.Endpoint, creds *credsv1.GitCredentials, opts Opti
 		return auth, nil
 	default:
 		return nil, nil
+	}
+}
+
+// authOption configures the client with an authentication from authMethod.
+func authOption(auth any) (client.Option, bool) {
+	switch auth := auth.(type) {
+	case client.SSHAuth:
+		return client.WithSSHAuth(auth), true
+	case client.HTTPAuth:
+		return client.WithHTTPAuth(auth), true
+	default:
+		return nil, false
 	}
 }

@@ -8,11 +8,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-git/go-git/v5/plumbing/transport"
-	gitclient "github.com/go-git/go-git/v5/plumbing/transport/client"
 	"github.com/stretchr/testify/require"
 
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
+	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	gitrepository "ocm.software/open-component-model/bindings/go/git/repository"
 	accessv1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
 	gitcreds "ocm.software/open-component-model/bindings/go/git/spec/credentials"
@@ -27,11 +26,6 @@ func TestRegister(t *testing.T) {
 	r := require.New(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
-
-	previousHTTP, previousHTTPS := gitclient.Protocols["http"], gitclient.Protocols["https"]
-	t.Cleanup(func() {
-		gitclient.Protocols["http"], gitclient.Protocols["https"] = previousHTTP, previousHTTPS
-	})
 
 	resources := resource.NewResourceRegistry(ctx)
 	credentialTypes := credentialtyperepository.NewCredentialTypeRegistry(ctx)
@@ -67,16 +61,14 @@ func TestRegister(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	endpoint, err := transport.NewEndpoint(server.URL + "/repo.git")
+	access := &accessv1.Git{
+		Type:       runtime.NewVersionedType(accessv1.Type, accessv1.Version),
+		Repository: server.URL + "/repo.git",
+		Ref:        "HEAD",
+	}
+	plugin, err := resources.GetResourcePlugin(ctx, access)
 	r.NoError(err)
-	installed, err := gitclient.NewClient(endpoint)
-	r.NoError(err)
-	r.Same(installed, gitclient.Protocols["https"])
-	session, err := installed.NewUploadPackSession(endpoint, nil)
-	r.NoError(err)
-	t.Cleanup(func() { r.NoError(session.Close()) })
-
-	_, err = session.AdvertisedReferencesContext(ctx)
+	_, err = plugin.DownloadResource(ctx, &descriptor.Resource{Access: access}, nil)
 	r.ErrorContains(err, "503")
 	r.Equal(int32(1), requests.Load(), "configured client must not retry HTTP 503 responses")
 }

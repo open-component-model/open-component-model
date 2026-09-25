@@ -10,17 +10,19 @@ import (
 	"regexp"
 	"strings"
 
-	git "github.com/go-git/go-git/v5"
-	"github.com/go-git/go-git/v5/config"
-	"github.com/go-git/go-git/v5/plumbing"
-	"github.com/go-git/go-git/v5/plumbing/object"
-	"github.com/go-git/go-git/v5/plumbing/transport"
+	git "github.com/go-git/go-git/v6"
+	"github.com/go-git/go-git/v6/config"
+	"github.com/go-git/go-git/v6/plumbing"
+	"github.com/go-git/go-git/v6/plumbing/client"
+	"github.com/go-git/go-git/v6/plumbing/object"
+	"github.com/go-git/go-git/v6/plumbing/transport"
 	"github.com/opencontainers/go-digest"
 
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/git/internal/endpoint"
 	accessv1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
 	credsv1 "ocm.software/open-component-model/bindings/go/git/spec/credentials/v1"
+	ocmhttp "ocm.software/open-component-model/bindings/go/http"
 )
 
 // Result is one downloaded snapshot of a Git repository, archived as tar.gz.
@@ -53,6 +55,15 @@ func Download(ctx context.Context, access *accessv1.Git, creds *credsv1.GitCrede
 		return nil, fmt.Errorf("cannot authenticate against git repository: %w", err)
 	}
 
+	httpClient := opts.HTTPClient
+	if httpClient == nil {
+		httpClient = ocmhttp.New()
+	}
+	clientOptions := []client.Option{client.WithHTTPClient(httpClient)}
+	if option, ok := authOption(auth); ok {
+		clientOptions = append(clientOptions, option)
+	}
+
 	dir, err := os.MkdirTemp(opts.TempDir, "ocm-git-repository-*")
 	if err != nil {
 		return nil, fmt.Errorf("cannot create git storage: %w", err)
@@ -76,16 +87,17 @@ func Download(ctx context.Context, access *accessv1.Git, creds *credsv1.GitCrede
 
 	var repo *git.Repository
 	if access.Commit == "" && access.Ref == "HEAD" {
-		repo, err = git.PlainCloneContext(ctx, dir, true, &git.CloneOptions{
-			URL:  access.Repository,
-			Auth: auth,
-			Tags: git.AllTags,
+		repo, err = git.PlainCloneContext(ctx, dir, &git.CloneOptions{
+			URL:           ep.URL,
+			ClientOptions: clientOptions,
+			Bare:          true,
+			Tags:          git.AllTags,
 		})
 		if err != nil {
 			err = transportError(ctx, "cannot fetch git repository", err)
 		}
 	} else {
-		repo, err = fetchRepository(ctx, dir, access, auth)
+		repo, err = fetchRepository(ctx, dir, ep.URL, access.Commit, clientOptions)
 	}
 
 	if repo != nil {
@@ -131,13 +143,13 @@ func Download(ctx context.Context, access *accessv1.Git, creds *credsv1.GitCrede
 
 // fetchRepository fetches explicit refs or a pinned commit without depending on a valid remote HEAD.
 // The repository is returned also with a fetch error, so the caller can close its storage.
-func fetchRepository(ctx context.Context, dir string, access *accessv1.Git, auth transport.AuthMethod) (*git.Repository, error) {
+func fetchRepository(ctx context.Context, dir, url, commit string, clientOptions []client.Option) (*git.Repository, error) {
 	repo, err := git.PlainInit(dir, true)
 	if err != nil {
 		return nil, fmt.Errorf("cannot create git repository: %w", err)
 	}
 
-	if _, err := repo.CreateRemote(&config.RemoteConfig{Name: "origin", URLs: []string{access.Repository}}); err != nil {
+	if _, err := repo.CreateRemote(&config.RemoteConfig{Name: "origin", URLs: []string{url}}); err != nil {
 		return repo, fmt.Errorf("cannot configure git remote: %w", err)
 	}
 
@@ -145,18 +157,18 @@ func fetchRepository(ctx context.Context, dir string, access *accessv1.Git, auth
 	// history. Servers that do not advertise allow-tip-sha1-in-want or
 	// allow-reachable-sha1-in-want reject the request before any transfer; the
 	// fetch of all refs below is the fallback.
-	if access.Commit != "" {
+	if commit != "" {
 		err = repo.FetchContext(ctx, &git.FetchOptions{
-			Auth:     auth,
-			Tags:     git.NoTags,
-			RefSpecs: []config.RefSpec{config.RefSpec("+" + access.Commit + ":refs/ocm/commit")},
+			ClientOptions: clientOptions,
+			Tags:          git.NoTags,
+			RefSpecs:      []config.RefSpec{config.RefSpec("+" + commit + ":refs/ocm/commit")},
 		})
 	}
-	if access.Commit == "" || errors.Is(err, git.ErrExactSHA1NotSupported) {
+	if commit == "" || errors.Is(err, git.ErrExactSHA1NotSupported) {
 		err = repo.FetchContext(ctx, &git.FetchOptions{
-			Auth:     auth,
-			Tags:     git.AllTags,
-			RefSpecs: []config.RefSpec{"+refs/*:refs/*", "+refs/heads/*:refs/remotes/origin/*"},
+			ClientOptions: clientOptions,
+			Tags:          git.AllTags,
+			RefSpecs:      []config.RefSpec{"+refs/*:refs/*", "+refs/heads/*:refs/remotes/origin/*"},
 		})
 	}
 
@@ -230,7 +242,7 @@ func transportError(ctx context.Context, operation string, err error) error {
 	// The cause is added with %s and not %w: %w prints the error itself, and a
 	// transport error quotes the remote URL with its credentials.
 	switch {
-	case errors.Is(err, git.ErrRepositoryNotExists):
+	case errors.Is(err, git.ErrRepositoryNotExists), errors.Is(err, transport.ErrRepositoryNotFound):
 		return fmt.Errorf("%s: repository not found: %s", operation, redact(err))
 	case errors.Is(err, transport.ErrAuthenticationRequired):
 		return fmt.Errorf("%s: authentication required: %s", operation, redact(err))

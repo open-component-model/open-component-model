@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"reflect"
 	"strings"
@@ -20,6 +21,7 @@ import (
 	gitcreds "ocm.software/open-component-model/bindings/go/git/spec/credentials"
 	credsv1 "ocm.software/open-component-model/bindings/go/git/spec/credentials/v1"
 	identityv1 "ocm.software/open-component-model/bindings/go/git/spec/identity/v1"
+	ocmhttp "ocm.software/open-component-model/bindings/go/http"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -33,6 +35,7 @@ type ResourceRepository struct {
 	maxArchiveSize *int64
 
 	hostKeyCallback  ssh.HostKeyCallback
+	httpClient       *http.Client
 	filesystemConfig *filesystemv1alpha1.Config
 }
 
@@ -53,12 +56,11 @@ func NewResourceRepository(filesystemConfig *filesystemv1alpha1.Config, opts ...
 		opt(options)
 	}
 
-	download.InstallHTTPClient(options.HTTPConfig)
-
 	return &ResourceRepository{
 		maxArchiveSize: options.MaxArchiveSize,
 
 		hostKeyCallback:  options.HostKeyCallback,
+		httpClient:       ocmhttp.New(ocmhttp.WithConfig(options.HTTPConfig)),
 		filesystemConfig: filesystemConfig,
 	}
 }
@@ -86,6 +88,7 @@ func (r *ResourceRepository) downloadOptions(tempDir string) download.Options {
 		MaxArchiveSize: maxArchiveSize,
 
 		HostKeyCallback: r.hostKeyCallback,
+		HTTPClient:      r.httpClient,
 	}
 }
 

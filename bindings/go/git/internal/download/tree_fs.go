@@ -6,8 +6,8 @@ import (
 	"path"
 	"time"
 
-	"github.com/go-git/go-git/v5/plumbing/filemode"
-	"github.com/go-git/go-git/v5/plumbing/object"
+	"github.com/go-git/go-git/v6/plumbing/filemode"
+	"github.com/go-git/go-git/v6/plumbing/object"
 )
 
 // treeFS provides object contents to the shared archiver without a host checkout.

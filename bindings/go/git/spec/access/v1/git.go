@@ -5,7 +5,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v6/plumbing"
 
 	"ocm.software/open-component-model/bindings/go/git/internal/endpoint"
 	"ocm.software/open-component-model/bindings/go/runtime"

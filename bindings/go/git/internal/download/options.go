@@ -1,6 +1,10 @@
 package download
 
-import "golang.org/x/crypto/ssh"
+import (
+	"net/http"
+
+	"golang.org/x/crypto/ssh"
+)
 
 const DefaultMaxArchiveSize int64 = 1 << 30
 
@@ -11,4 +15,6 @@ type Options struct {
 	MaxArchiveSize int64
 
 	HostKeyCallback ssh.HostKeyCallback
+	// HTTPClient serves http(s) repositories. Nil uses the shared OCM client defaults.
+	HTTPClient *http.Client
 }

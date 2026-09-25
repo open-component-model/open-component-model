@@ -46,17 +46,11 @@
 // SSH uses the current user's known_hosts unless WithHostKeyCallback overrides it.
 // HTTPS uses Go's system trust store and SSL_CERT_FILE / SSL_CERT_DIR overrides;
 // CA bundles are not configured through repository options.
-// Repository construction explicitly installs go-git's process-global HTTP(S)
-// adapter; importing the downloader does not change protocol registrations.
-// Clients use the shared HTTP factory and HTTPS downgrade protection. See
-// [ocm.software/open-component-model/bindings/go/git/repository.WithHTTPConfig]
-// for configuration and the process-global registration constraints.
-//
-// Independent HTTP configurations within one process are not isolated: the last
-// registration controls subsequent Git HTTP sessions. Per-host routing within
-// one configuration remains supported. Per-operation isolation is deferred and
-// required before integration with the controller's object-scoped configuration:
-// https://github.com/open-component-model/open-component-model/issues/3685.
+// Each repository builds its own HTTP client from the shared HTTP factory and
+// hands it to every Git operation it runs, so repositories with different HTTP
+// configurations are isolated within one process. go-git rejects HTTPS-to-HTTP
+// redirects on that client. See
+// [ocm.software/open-component-model/bindings/go/git/repository.WithHTTPConfig].
 //
 // # Credential consumer identity
 //

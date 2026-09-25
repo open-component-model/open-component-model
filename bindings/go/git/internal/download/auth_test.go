@@ -8,9 +8,8 @@ import (
 	"net"
 	"testing"
 
-	"github.com/go-git/go-git/v5/plumbing/transport"
-	githttp "github.com/go-git/go-git/v5/plumbing/transport/http"
-	gitssh "github.com/go-git/go-git/v5/plumbing/transport/ssh"
+	githttp "github.com/go-git/go-git/v6/plumbing/transport/http"
+	gitssh "github.com/go-git/go-git/v6/plumbing/transport/ssh"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/ssh"
 
@@ -23,7 +22,7 @@ func TestAuthModes(t *testing.T) {
 		name       string
 		repository string
 		creds      *credsv1.GitCredentials
-		want       transport.AuthMethod
+		want       any
 		wantErr    string
 	}{
 		{name: "anonymous HTTPS", repository: "https://example.com/repo"},

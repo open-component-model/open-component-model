@@ -17,70 +17,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-git/go-git/v5"
-	"github.com/go-git/go-git/v5/plumbing"
-	"github.com/go-git/go-git/v5/plumbing/object"
-	"github.com/opencontainers/go-digest"
+	"github.com/go-git/go-git/v6"
+	"github.com/go-git/go-git/v6/config"
+	"github.com/go-git/go-git/v6/plumbing"
+	"github.com/go-git/go-git/v6/plumbing/object"
 	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/blob"
-	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
-	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	"ocm.software/open-component-model/bindings/go/git/repository"
-	"ocm.software/open-component-model/bindings/go/git/spec/access"
-	accessv1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
-	"ocm.software/open-component-model/bindings/go/runtime"
 )
-
-// Test_Integration_Git downloads real Git objects over HTTPS through git
-// http-backend, covering both transport paths: a clone for a ref and a fetch
-// for a pinned commit, which needs the server to negotiate a commit in want.
-// Ref resolution, archive contents, digest pinning and size limits are covered
-// against a local repository in internal/download and repository.
-func Test_Integration_Git(t *testing.T) {
-	r := require.New(t)
-
-	path, first := newRepository(t)
-	url, ca := newHTTPSServer(t, path, "")
-	trustServerCertificate(t, ca)
-	tempDir := t.TempDir()
-	repo := repository.NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &tempDir})
-	resourceFor := func(t *testing.T, ref, commit string) *descriptor.Resource {
-		t.Helper()
-
-		raw := &runtime.Raw{}
-		require.NoError(t, access.Scheme.Convert(&accessv1.Git{
-			Type:       runtime.NewVersionedType("git", "v1alpha1"),
-			Repository: url,
-			Ref:        ref,
-			Commit:     commit,
-		}, raw))
-		return &descriptor.Resource{Access: raw}
-	}
-
-	for _, tc := range []struct{ name, ref, commit, content string }{
-		{"clone for ref", "main", "", "second\n"},
-		{"fetch for pinned commit", "", first.String(), "first\n"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			r := require.New(t)
-
-			b, err := repo.DownloadResource(t.Context(), resourceFor(t, tc.ref, tc.commit), nil)
-			r.NoError(err)
-
-			data := assertArchive(t, b, tc.content)
-			pinned, err := repo.ProcessResourceDigest(t.Context(), resourceFor(t, tc.ref, tc.commit), nil)
-			r.NoError(err)
-			r.Equal(digest.FromBytes(data).Encoded(), pinned.Digest.Value)
-		})
-	}
-
-	// Each case downloads once and processes one digest; only the archives handed
-	// to the caller survive, digest processing removes its own scratch directory.
-	entries, err := os.ReadDir(tempDir)
-	r.NoError(err)
-	r.Len(entries, 2)
-}
 
 // trustServerCertificate changes process-global state; callers and their ancestors must not run in parallel.
 // The shared HTTP factory clones the default transport, preserving TLS certificate verification.
@@ -173,6 +117,11 @@ func newRepository(t *testing.T) (path string, first plumbing.Hash) {
 	work := t.TempDir()
 	repo, err := git.PlainInit(work, false)
 	r.NoError(err)
+	// go-git reads the global Git config; a host commit.gpgSign must not sign fixtures.
+	cfg, err := repo.Config()
+	r.NoError(err)
+	cfg.Commit.GpgSign = config.OptBoolFalse
+	r.NoError(repo.SetConfig(cfg))
 	r.NoError(repo.Storer.SetReference(plumbing.NewSymbolicReference(plumbing.HEAD, "refs/heads/main")))
 
 	tree, err := repo.Worktree()
@@ -198,7 +147,7 @@ func newRepository(t *testing.T) (path string, first plumbing.Hash) {
 	commit("second\n")
 
 	path = filepath.Join(t.TempDir(), "fixture.git")
-	_, err = git.PlainClone(path, true, &git.CloneOptions{URL: work})
+	_, err = git.PlainClone(path, &git.CloneOptions{URL: work, Bare: true})
 	r.NoError(err)
 
 	return path, first

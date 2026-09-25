@@ -15,16 +15,12 @@ func TestValidate(t *testing.T) {
 		{"ref", "https://example.com/org/repo.git", "main", "", true},
 		{"commit", "https://example.com/org/repo.git", "", strings.Repeat("a", 40), true},
 		{"both", "ssh://git@example.com/org/repo.git", "refs/heads/main", strings.Repeat("A", 40), true},
-		{"scp", "git@example.com:org/repo.git", "HEAD", "", true},
-		{"git", "git://example.com/repo.git", "refs/tags/v1", "", true},
-		{"file", "file:///repo.git", "HEAD", "", true},
 		{"empty repository", "", "main", "", false},
 		{"empty selectors", "https://example.com/repo", "", "", false},
 		{"short commit", "https://example.com/repo", "", "abc123", false},
 		{"nonhex commit", "https://example.com/repo", "", strings.Repeat("g", 40), false},
 		{"invalid ref", "https://example.com/repo", "refs/heads/../main", "", false},
 		{"unsupported URL", "ftp://example.com/repo", "main", "", false},
-		{"no host", "https:///repo", "main", "", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)

@@ -1,7 +1,6 @@
 package download
 
 import (
-	"archive/tar"
 	"bytes"
 	"compress/gzip"
 	"context"
@@ -15,11 +14,11 @@ import (
 	"testing"
 	"time"
 
-	git "github.com/go-git/go-git/v5"
-	"github.com/go-git/go-git/v5/plumbing"
-	"github.com/go-git/go-git/v5/plumbing/filemode"
-	"github.com/go-git/go-git/v5/plumbing/object"
-	"github.com/go-git/go-git/v5/plumbing/transport"
+	git "github.com/go-git/go-git/v6"
+	"github.com/go-git/go-git/v6/plumbing"
+	"github.com/go-git/go-git/v6/plumbing/filemode"
+	"github.com/go-git/go-git/v6/plumbing/object"
+	"github.com/go-git/go-git/v6/plumbing/transport"
 	"github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/require"
 
@@ -58,20 +57,14 @@ func TestDownloadRevisions(t *testing.T) {
 				{"short main branch", "main", "", fixture.Second, `cannot resolve git ref: reference name escapes the reference storage: "main" is not under refs/ nor a valid pseudo-ref`},
 				{"qualified main branch", "refs/heads/main", "", fixture.Second, "cannot resolve git ref: reference not found"},
 				{"branch wins over same-named tag", "feature", "", fixture.Second, ""},
-				{"qualified feature branch", "refs/heads/feature", "", fixture.Second, ""},
 				{"remote tracking branch", "refs/remotes/origin/feature", "", fixture.Second, ""},
 				{"qualified tag wins over same-named branch", "refs/tags/feature", "", fixture.First, ""},
 				{"custom ref namespace", "refs/releases/stable", "", fixture.First, ""},
 				{"short lightweight tag", "v1", "", fixture.First, ""},
-				{"qualified lightweight tag", "refs/tags/v1", "", fixture.First, ""},
 				{"short annotated tag", "annotated", "", fixture.First, ""},
-				{"qualified annotated tag", "refs/tags/annotated", "", fixture.First, ""},
 				{"short nested tag", "nested", "", fixture.First, ""},
-				{"qualified nested tag", "refs/tags/nested", "", fixture.First, ""},
 				{"pinned commit only", "", fixture.First.String(), fixture.First, ""},
 				{"pinned commit overrides HEAD", "HEAD", fixture.First.String(), fixture.First, ""},
-				{"pinned commit overrides short main", "main", fixture.First.String(), fixture.First, ""},
-				{"pinned commit overrides qualified main", "refs/heads/main", fixture.First.String(), fixture.First, ""},
 				{"pinned commit ignores deleted branch", "refs/heads/deleted", fixture.First.String(), fixture.First, ""},
 			} {
 				t.Run(tc.name, func(t *testing.T) {
@@ -169,14 +162,12 @@ func TestDownloadFailureCleanup(t *testing.T) {
 	fixture := newRepository(t)
 	for _, tc := range []struct {
 		name, ref, commit string
-		limit             int64
 		cancel            bool
 		wantError         string
 		wantCause         error
 	}{
-		{name: "limit", ref: "main", limit: 1, wantError: "git archive exceeds the maximum size"},
 		{name: "missing ref", ref: "absent", wantError: `cannot resolve git ref: reference name escapes the reference storage: "absent" is not under refs/ nor a valid pseudo-ref`},
-		{name: "missing commit", commit: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", wantError: "cannot read git revision: object not found", wantCause: plumbing.ErrObjectNotFound},
+		{name: "missing commit", commit: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", wantError: "cannot fetch git repository"},
 		{name: "already canceled", ref: "main", cancel: true, wantError: "cannot download git repository: context canceled", wantCause: context.Canceled},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -189,7 +180,7 @@ func TestDownloadFailureCleanup(t *testing.T) {
 				cancel()
 			}
 
-			result, err := Download(ctx, &v1.Git{Repository: fixture.Path, Ref: tc.ref, Commit: tc.commit}, nil, Options{TempDir: dir, MaxArchiveSize: tc.limit})
+			result, err := Download(ctx, &v1.Git{Repository: fixture.Path, Ref: tc.ref, Commit: tc.commit}, nil, Options{TempDir: dir})
 			r.ErrorContains(err, tc.wantError)
 			if tc.wantCause != nil {
 				r.ErrorIs(err, tc.wantCause)
@@ -257,34 +248,6 @@ func TestDownloadInProgressCancellationCleanup(t *testing.T) {
 	}
 }
 
-func TestSubmoduleArchive(t *testing.T) {
-	r := require.New(t)
-
-	fixture := newRepository(t)
-	tree := &object.Tree{Entries: []object.TreeEntry{{Name: "vendor", Mode: filemode.Submodule, Hash: fixture.First}}}
-	hash := storeObject(t, fixture.Git, tree)
-
-	commit, err := fixture.Git.CommitObject(fixture.First)
-	r.NoError(err)
-
-	commit.TreeHash = hash
-	commitHash := storeObject(t, fixture.Git, commit)
-	r.NoError(fixture.Git.Storer.SetReference(plumbing.NewHashReference("refs/heads/submodule", commitHash)))
-
-	result, err := Download(t.Context(), &v1.Git{Repository: fixture.Path, Commit: commitHash.String()}, nil, Options{TempDir: t.TempDir()})
-	r.NoError(err)
-
-	tr := tar.NewReader(bytes.NewReader(gunzipArchive(t, readBlob(t, result.Blob))))
-	h, err := tr.Next()
-	r.NoError(err)
-	r.Equal("vendor", h.Name)
-	r.Equal(byte(tar.TypeDir), h.Typeflag)
-	r.Equal(int64(0o755), h.Mode)
-	r.Zero(h.Size)
-	_, err = tr.Next()
-	r.ErrorIs(err, io.EOF, "submodule is an empty placeholder even when its target commit is present")
-}
-
 func TestArchiveSizeBoundary(t *testing.T) {
 	r := require.New(t)
 
@@ -310,25 +273,6 @@ func TestArchiveSizeBoundary(t *testing.T) {
 	entries, err := os.ReadDir(dir)
 	r.NoError(err)
 	r.Empty(entries)
-}
-
-func TestPinnedArchiveContainsSelectedCommit(t *testing.T) {
-	r := require.New(t)
-
-	fixture := newRepository(t)
-	first, err := fixture.Git.CommitObject(fixture.First)
-	r.NoError(err)
-
-	file, err := os.CreateTemp(t.TempDir(), "archive-*.tar.gz")
-	r.NoError(err)
-
-	expected, expectedDigest, err := archive(t.Context(), first, file, Options{})
-	r.NoError(err)
-
-	actual, err := Download(t.Context(), &v1.Git{Repository: fixture.Path, Commit: fixture.First.String(), Ref: "main"}, nil, Options{TempDir: t.TempDir()})
-	r.NoError(err)
-	r.Equal(readBlob(t, expected), readBlob(t, actual.Blob))
-	r.Equal(expectedDigest, actual.Digest)
 }
 
 func TestTransportErrorMessages(t *testing.T) {

@@ -38,14 +38,9 @@ func WithHostKeyCallback(callback ssh.HostKeyCallback) Option {
 	}
 }
 
-// WithHTTPConfig configures the shared OCM HTTP client used for Git sessions.
-// Repository construction updates go-git's process-global HTTP(S) registry: the
-// last constructed repository determines HTTP configuration for all Git downloads.
-// Nil restores the shared defaults. Construct repositories before starting Git
-// operations; go-git's registry does not support concurrent updates.
-// CA trust uses Go's system/environment configuration, not repository options.
-// Other go-git callers sharing this registry cannot use endpoint-level CA, proxy,
-// client-certificate, or InsecureSkipTLS options with the wrapped HTTP transport.
+// WithHTTPConfig configures the OCM HTTP client this repository uses for Git
+// sessions. Nil uses the shared OCM client defaults. CA trust uses Go's
+// system/environment configuration, not repository options.
 func WithHTTPConfig(cfg *httpv1alpha1.Config) Option {
 	return func(o *Options) {
 		o.HTTPConfig = cfg
