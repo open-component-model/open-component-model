@@ -59,6 +59,11 @@ func Test_Integration_TransferHelmResource_JFrogHelmUploaderDeploysChart(t *test
 	targetSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		switch req.Method {
 		case http.MethodPut:
+			if req.Header.Get("X-Checksum-Deploy") == "true" {
+				// Artifactory has no content with this checksum yet.
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
 			body, err := io.ReadAll(req.Body)
 			if err != nil {
 				w.WriteHeader(http.StatusInternalServerError)
@@ -274,6 +279,11 @@ func Test_Integration_TransferLocalBlobHelmResource_JFrogHelmUploaderDeploysChar
 			targetSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 				switch req.Method {
 				case http.MethodPut:
+					if req.Header.Get("X-Checksum-Deploy") == "true" {
+						// Artifactory has no content with this checksum yet.
+						w.WriteHeader(http.StatusNotFound)
+						return
+					}
 					body, err := io.ReadAll(req.Body)
 					if err != nil {
 						w.WriteHeader(http.StatusInternalServerError)

@@ -185,7 +185,10 @@ Other content fails the transfer.
 
 A `genericBlobDigest/v1` SHA-256 source digest is sent with the upload as
 `X-Checksum-Sha256`, so Artifactory rejects the upload if the streamed bytes do not
-match and never stores them; the uploader verifies it as well. A chart extracted from an OCI artifact gets the SHA-256 of the uploaded `.tgz`
+match and never stores them; the uploader verifies it as well. Before uploading, the
+uploader asks Artifactory to deploy the chart by that checksum
+(`X-Checksum-Deploy: true`); if Artifactory already stores the same content, the
+chart is not uploaded again. A chart extracted from an OCI artifact gets the SHA-256 of the uploaded `.tgz`
 instead of its source digest (for example an `ociArtifactDigest/v1`), so
 signatures over the old digest do not carry over.
 
