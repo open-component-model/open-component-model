@@ -1,6 +1,7 @@
 package download
 
 import (
+	"hash"
 	"net/http"
 
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -27,6 +28,9 @@ type option struct {
 	// TempDir is the directory the response body is written to. Empty uses the OS
 	// temporary directory.
 	TempDir string
+
+	// DigestAlgorithms are hashes computed over the response body during download.
+	DigestAlgorithms []DigestAlgorithm
 }
 
 // Option configures the behavior of [Download].
@@ -54,6 +58,21 @@ func WithMaxDownloadSize(size int64) Option {
 func WithTempDir(dir string) Option {
 	return func(o *option) {
 		o.TempDir = dir
+	}
+}
+
+// DigestAlgorithm pairs a caller-defined name with the hash used to compute
+// it. The name is echoed back as the [Blob.Digests] key.
+type DigestAlgorithm struct {
+	Name string
+	New  func() hash.Hash
+}
+
+// WithDigestAlgorithms computes hashes over the response body while it is
+// streamed, exposing hex results on [Blob.Digests].
+func WithDigestAlgorithms(algs ...DigestAlgorithm) Option {
+	return func(o *option) {
+		o.DigestAlgorithms = algs
 	}
 }
 

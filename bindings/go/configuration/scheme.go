@@ -1,6 +1,7 @@
 package configuration
 
 import (
+	checksumhttpv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/checksum/http/v1alpha1/spec"
 	extractv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/extract/v1alpha1/spec"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	genericspecv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
@@ -22,5 +23,6 @@ func Register(scheme *runtime.Scheme) error {
 		filesystemv1alpha1.Scheme,
 		extractv1alpha1.Scheme,
 		ocmv1.Scheme,
+		checksumhttpv1alpha1.Scheme,
 	)
 }
