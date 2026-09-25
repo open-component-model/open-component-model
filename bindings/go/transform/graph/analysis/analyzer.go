@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"sync"
 
 	"cel.dev/cel-go/cel"
 	"github.com/santhosh-tekuri/jsonschema/v6"
@@ -18,10 +19,15 @@ import (
 	"ocm.software/open-component-model/bindings/go/transform/graph/env"
 )
 
+// StaticPluginAnalysisProcessor compiles and type-checks every transformation
+// in the graph. It is safe for concurrent use: the shared env.Builder is
+// concurrency-safe, and writes to AnalyzedTransformations are guarded by mu.
 type StaticPluginAnalysisProcessor struct {
 	Scheme                  *runtime.Scheme
 	Builder                 *env.Builder
 	AnalyzedTransformations map[string]graph.Transformation
+
+	mu sync.Mutex
 }
 
 func (b *StaticPluginAnalysisProcessor) ProcessValue(_ context.Context, transformation graph.Transformation) error {
@@ -101,7 +107,9 @@ func (b *StaticPluginAnalysisProcessor) ProcessValue(_ context.Context, transfor
 	}
 	transformation.FieldDescriptors = specFieldDescriptors
 
+	b.mu.Lock()
 	b.AnalyzedTransformations[transformation.ID] = transformation
+	b.mu.Unlock()
 
 	return nil
 }

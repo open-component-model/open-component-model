@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"time"
 
 	"golang.org/x/term"
 )
@@ -28,6 +29,18 @@ type Event[T any] struct {
 	State State
 	Err   error
 	Data  T
+
+	// Duration is the elapsed time from the item's Running event to its
+	// terminal (Completed, Failed, Cancelled) event. The tracker populates
+	// it; zero means unknown, either because no Running event was seen or
+	// the item never reached a terminal state.
+	Duration time.Duration
+
+	// InFlight is the number of items currently being processed in parallel
+	// at the time this event was handled, including this item while it runs.
+	// The tracker populates it from the set of items that started but have
+	// not yet reached a terminal state.
+	InFlight int
 }
 
 // Operation represents a running unit of work created by [Tracker.StartOperation].
@@ -40,6 +53,7 @@ type OperationOption[T any] func(*operationConfig[T])
 
 type operationConfig[T any] struct {
 	total          int
+	concurrency    int
 	errorFormatter func(T, error) string
 	events         <-chan Event[T]
 }
@@ -70,6 +84,16 @@ func mapChannel[T, E any](in <-chan E, mapper func(E) Event[T]) <-chan Event[T] 
 func WithErrorFormatter[T any](f func(T, error) string) OperationOption[T] {
 	return func(cfg *operationConfig[T]) {
 		cfg.errorFormatter = f
+	}
+}
+
+// WithConcurrency records how many items the operation may process in parallel
+// ("runners"). Visualizers that implement [ConcurrencyAware] surface it, for
+// example the slog visualizer logs it alongside the operation. A value <= 0 is
+// ignored.
+func WithConcurrency[T any](runners int) OperationOption[T] {
+	return func(cfg *operationConfig[T]) {
+		cfg.concurrency = runners
 	}
 }
 
@@ -119,6 +143,12 @@ func (t *Tracker[T]) StartOperation(name string, opts ...OperationOption[T]) Ope
 		t.interceptSlog(vis)
 	} else {
 		vis = &SlogVisualizer[T]{}
+	}
+
+	if cfg.concurrency > 0 {
+		if setter, ok := vis.(ConcurrencyAware); ok {
+			setter.SetConcurrency(cfg.concurrency)
+		}
 	}
 
 	vis.Begin(name)
@@ -181,11 +211,32 @@ func (op *operation[T]) processEvents(events <-chan Event[T]) {
 	op.finished = make(chan struct{})
 	go func() {
 		defer close(op.finished)
+		starts := make(map[string]time.Time)
 		for event := range events {
 			if event.Err != nil && (errors.Is(event.Err, context.Canceled) || errors.Is(event.Err, context.DeadlineExceeded)) {
 				event.State = Cancelled
 				event.Err = nil
 			}
+			switch event.State {
+			case Running:
+				// Repeated Running updates for one item keep the first start
+				// time, so the duration spans the whole processing.
+				if _, ok := starts[event.ID]; !ok {
+					starts[event.ID] = time.Now()
+				}
+			case Completed, Failed, Cancelled:
+				if start, ok := starts[event.ID]; ok {
+					// Producers may set their own measurement; tracker timing is the fallback.
+					if event.Duration == 0 {
+						event.Duration = time.Since(start)
+					}
+					delete(starts, event.ID)
+				}
+			}
+			// After updating the running set, expose how many items run in
+			// parallel right now: for Running this includes the current item,
+			// for terminal states it is what remains in flight.
+			event.InFlight = len(starts)
 			op.vis.HandleEvent(event)
 		}
 	}()

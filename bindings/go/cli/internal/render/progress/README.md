@@ -16,6 +16,8 @@ via `StartOperation`.
 **`Operation`** represents a running unit of work. It is created by `StartOperation` and
 exposes `Finish(err)` — pass `nil` for success or an error for failure. The operation
 drives the visualizer lifecycle internally — `Begin` on start, `End` on finish.
+Visualizers measure the elapsed time between the two and report it when the operation
+ends (`(took 1m2s)` suffix in the terminal, `duration` log attribute in non-terminal mode).
 
 **`Visualizer[T]`** is the rendering interface with three methods: `Begin(name)`,
 `HandleEvent(Event[T])`, and `End(err)`.
@@ -42,13 +44,45 @@ err := graph.Process(ctx)
 op.Finish(err)
 ```
 
+When the item count is not known up front (e.g. recursive discovery), pass
+`progress.IndeterminateTotal` as the total. The `bar` visualizer then shows the
+scrolling item log without a progress bar:
+
+```go
+op := tracker.StartOperation("Resolving component versions",
+    progress.WithEvents(resolutionEvents, mapResolutionEvent, progress.IndeterminateTotal))
+
+result, err := doWork(resolutionEvents)
+close(resolutionEvents) // Finish blocks until the channel is closed and drained
+op.Finish(err)
+```
+
+## Reporting Concurrency
+
+Operations that process items in parallel can report how many "runners" they
+use with `progress.WithConcurrency`. Visualizers that implement
+`ConcurrencyAware` surface it: the `bar` visualizer appends `(N runners)` to the
+header, and the slog visualizer logs a `runners` attribute on start.
+
+The tracker also computes, per event, how many items are being processed at the
+same time and exposes it as `Event.InFlight`. The slog visualizer logs it as an
+`inFlight` attribute so parallelism is visible in non-terminal / CI logs.
+
+```go
+op := tracker.StartOperation("Transferring component versions",
+    progress.WithEvents(graph.Events(), mapEvent, graph.NodeCount()),
+    progress.WithConcurrency[myType](graph.Concurrency()),
+    progress.WithErrorFormatter(formatError))
+```
+
 ## Non-Terminal Mode
 
 When the output is not a terminal (e.g. piped to a file or CI), the tracker
 detects this automatically:
 
 - A slog-based visualizer logs operation start/finish via the default logger
-- Events (if configured via `WithEvents`) are logged via slog
+- Events (if configured via `WithEvents`) are logged via slog, including the
+  `inFlight` count (and `runners` when set via `WithConcurrency`)
 - slog output is not intercepted — logs flow to their original destination
 
 ## Visualizer Implementations
@@ -56,7 +90,8 @@ detects this automatically:
 The `bar` subpackage provides an ANSI terminal visualizer:
 
 - `NewVisualizer[T]` — for simple operations (total=0) shows an animated spinner header;
-  for tracked operations shows a progress bar with scrolling item log
+  for tracked operations shows a progress bar with scrolling item log;
+  for indeterminate operations (total=IndeterminateTotal) shows only the scrolling item log
 
 ## Package Layout
 
@@ -65,7 +100,7 @@ progress/
   README.md               this file
   doc.go                  Go package documentation
   tracker.go              Tracker[T], Operation, WithEvents, terminal detection
-  visualizer.go           Visualizer[T], VisualizerFactory[T], ErrorFormatterSetter[T]
+  visualizer.go           Visualizer[T], VisualizerFactory[T], ErrorFormatterSetter[T], ConcurrencyAware
   slog.go                 slog buffering (SyncBuffer, LogBufferAware)
   slog_visualizer.go      SlogVisualizer[T] for non-terminal mode
   bar/                    ANSI terminal visualizer implementation

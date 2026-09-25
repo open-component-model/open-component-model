@@ -2,6 +2,8 @@ package env
 
 import (
 	"maps"
+	"slices"
+	"sync"
 
 	"cel.dev/cel-go/cel"
 	"cel.dev/cel-go/common/types"
@@ -17,8 +19,14 @@ import (
 // using copy-on-write, so CurrentEnv does not re-walk previously registered
 // schemas, and providers and environments created earlier keep their own
 // snapshot of the type map.
-// A Builder is not safe for concurrent use.
+//
+// A Builder is safe for concurrent use: all mutations and reads of the shared
+// envOptions and registeredTypes are guarded by mu. Combined with the
+// copy-on-write of registeredTypes, environments and providers returned by
+// CurrentEnv and Provider keep a stable snapshot that later registrations do
+// not disturb.
 type Builder struct {
+	mu              sync.Mutex
 	envOptions      []cel.EnvOption
 	registeredTypes map[string]*decl.Type
 }
@@ -41,6 +49,8 @@ func NewEnvBuilder(staticEnvironment map[string]interface{}) (*Builder, error) {
 // map using copy-on-write: the merge works on a clone of the current map.
 // On type name collisions the later registration wins.
 func (envBuilder *Builder) RegisterDeclTypes(declTypes ...*stv6jsonschema.DeclType) *Builder {
+	envBuilder.mu.Lock()
+	defer envBuilder.mu.Unlock()
 	merged := maps.Clone(envBuilder.registeredTypes)
 	if merged == nil {
 		// Support the zero value of Builder: cloning a nil map leaves nil.
@@ -56,6 +66,8 @@ func (envBuilder *Builder) RegisterDeclTypes(declTypes ...*stv6jsonschema.DeclTy
 }
 
 func (envBuilder *Builder) RegisterEnvOption(envOptions ...cel.EnvOption) *Builder {
+	envBuilder.mu.Lock()
+	defer envBuilder.mu.Unlock()
 	envBuilder.envOptions = append(envBuilder.envOptions, envOptions...)
 	return envBuilder
 }
@@ -71,12 +83,16 @@ func (envBuilder *Builder) CurrentEnv() (*cel.Env, *provider.DeclTypeProvider, e
 	if err != nil {
 		return nil, nil, err
 	}
-	provider := envBuilder.Provider()
+	envBuilder.mu.Lock()
+	provider := provider.NewFromTypeMap(envBuilder.registeredTypes)
+	envOptions := slices.Clone(envBuilder.envOptions)
+	envBuilder.mu.Unlock()
+
 	opts, err := provider.EnvOptions(baseEnv.CELTypeProvider())
 	if err != nil {
 		return nil, nil, err
 	}
-	newEnv, err := baseEnv.Extend(append(opts, envBuilder.envOptions...)...)
+	newEnv, err := baseEnv.Extend(append(opts, envOptions...)...)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -87,5 +103,7 @@ func (envBuilder *Builder) CurrentEnv() (*cel.Env, *provider.DeclTypeProvider, e
 // far. The provider holds its own snapshot of the type map: registrations made
 // after this call are not visible to it.
 func (envBuilder *Builder) Provider() *provider.DeclTypeProvider {
+	envBuilder.mu.Lock()
+	defer envBuilder.mu.Unlock()
 	return provider.NewFromTypeMap(envBuilder.registeredTypes)
 }

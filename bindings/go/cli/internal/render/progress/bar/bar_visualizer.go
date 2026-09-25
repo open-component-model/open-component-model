@@ -5,6 +5,7 @@ import (
 	"io"
 	"strings"
 	"sync"
+	"time"
 
 	"ocm.software/open-component-model/bindings/go/cli/internal/render/progress"
 )
@@ -23,6 +24,8 @@ type barVisualizer[T any] struct {
 	errorFormatter func(T, error) string
 	logBuffer      *progress.SyncBuffer
 	buf            strings.Builder
+	start          time.Time
+	concurrency    int
 }
 
 // NewVisualizer is a [progress.VisualizerFactory] that creates an animated
@@ -41,9 +44,26 @@ func (v *barVisualizer[T]) SetErrorFormatter(f func(T, error) string) {
 	v.errorFormatter = f
 }
 
+// SetConcurrency implements [progress.ConcurrencyAware]. The runner count is
+// shown in the operation header so it is visible while the bar animates.
+func (v *barVisualizer[T]) SetConcurrency(runners int) {
+	v.concurrency = runners
+}
+
 // SetLogBuffer sets the shared slog buffer from the tracker.
 func (v *barVisualizer[T]) SetLogBuffer(buf *progress.SyncBuffer) {
 	v.logBuffer = buf
+}
+
+// maxLogLines returns the number of item log lines shown for an operation.
+// A negative total means the item count is not known up front ([progress.IndeterminateTotal]):
+// the log is still shown, just without a progress bar. Simple operations (total 0)
+// show only the spinner header.
+func maxLogLines(total int) int {
+	if total < 0 {
+		return 4
+	}
+	return min(4, total)
 }
 
 // Begin starts the animation.
@@ -52,11 +72,15 @@ func (v *barVisualizer[T]) Begin(name string) {
 	defer v.mu.Unlock()
 
 	v.header = name
+	if v.concurrency > 1 {
+		v.header = fmt.Sprintf("%s (%d runners)", name, v.concurrency)
+	}
 	v.events = nil
+	v.start = time.Now()
 	v.done = make(chan struct{})
 	v.spinnerFrame = 0
 	v.dotFrame = 0
-	v.maxLogs = min(4, v.total)
+	v.maxLogs = maxLogLines(v.total)
 
 	v.reserveSpace()
 
@@ -111,10 +135,15 @@ func (v *barVisualizer[T]) End(err error) {
 		}
 	}
 
+	// took is negative when Begin never ran (e.g. in tests), omitting the suffix.
+	took := time.Duration(-1)
+	if !v.start.IsZero() {
+		took = time.Since(v.start)
+	}
 	if err != nil || hasFailures {
-		WriteFailedLine(&v.buf, v.header)
+		WriteFailedLine(&v.buf, v.header, took)
 	} else {
-		WriteCompletedLine(&v.buf, v.header)
+		WriteCompletedLine(&v.buf, v.header, took)
 	}
 
 	v.writeEvents()
@@ -263,7 +292,16 @@ func (v *barVisualizer[T]) formatItem(item progress.Event[T]) string {
 	if displayName == "" {
 		displayName = item.ID
 	}
-	return fmt.Sprintf("    %s%s%s %s", color, symbol, Reset, displayName)
+	var suffix string
+	switch item.State {
+	case progress.Completed, progress.Failed, progress.Cancelled:
+		// Duration 0 means unknown (no Running event seen); omit the suffix.
+		// Real sub-second items round to "0s", which reads as intended.
+		if item.Duration > 0 {
+			suffix = formatTook(item.Duration)
+		}
+	}
+	return fmt.Sprintf("    %s%s%s %s%s", color, symbol, Reset, displayName, suffix)
 }
 
 func (v *barVisualizer[T]) writeFailureSummary() {
