@@ -240,7 +240,7 @@ func processOCIImageLayer(resource descriptorv2.Resource, id string, val *discov
 
 	// A layer carries no repository or tag that would name it in the target, so the
 	// resource name is used, as it is for other by-value resources.
-	addResourceTransform, err := uploadAsLocalResource(toSpec, val.Descriptor.Component.Name, val.Descriptor.Component.Version, addResourceID, getResourceID, staticReferenceName(resource.Name))
+	addResourceTransform, err := uploadAsLocalResource(toSpec, val.Descriptor.Component.Name, val.Descriptor.Component.Version, addResourceID, getResourceID, staticReferenceName(resource.Name), addLabel(&val.Descriptor.Component, resource.Name, "LocalBlob", toSpec))
 	if err != nil {
 		return fmt.Errorf("failed to create local resource upload transformation: %w", err)
 	}
