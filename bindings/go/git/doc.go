@@ -16,8 +16,8 @@
 //
 // The archive is streamed to TempFolder (the OS temporary directory by default).
 // Its file outlives the call and belongs to the caller; temporary Git storage is
-// removed. Upload is not supported. WithMaxArchiveSize caps compressed output at
-// 1 GiB by default, not the preceding clone or fetch.
+// removed. Upload is not supported. WithMaxArchiveSize caps the compressed output,
+// not the preceding clone or fetch; by default it is unlimited.
 //
 // # Archive and digests
 //

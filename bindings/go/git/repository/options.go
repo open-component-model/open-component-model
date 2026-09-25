@@ -9,7 +9,7 @@ import (
 // Options holds configuration for the Git resource repository.
 type Options struct {
 	// MaxArchiveSize caps compressed output, not the Git transfer.
-	// Nil uses 1 GiB; non-positive values disable the limit.
+	// Nil, zero and negative values disable the limit.
 	MaxArchiveSize *int64
 
 	// HostKeyCallback verifies the host key of SSH repositories. Nil uses the

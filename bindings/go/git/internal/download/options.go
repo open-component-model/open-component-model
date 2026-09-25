@@ -6,7 +6,9 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-const DefaultMaxArchiveSize int64 = 1 << 30
+// DefaultMaxArchiveSize is the default maximum archive size. Zero means unlimited:
+// the archive is streamed to disk, so it is bounded by free disk rather than by RAM.
+const DefaultMaxArchiveSize int64 = 0
 
 type Options struct {
 	TempDir string
