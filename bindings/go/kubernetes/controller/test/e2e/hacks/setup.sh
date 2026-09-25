@@ -193,11 +193,136 @@ install_kro() {
   helm install kro oci://registry.k8s.io/kro/charts/kro --namespace kro --create-namespace --version=0.9.2
 }
 
+install_crossplane() {
+  CROSSPLANE_VERSION="${CROSSPLANE_VERSION:-2.3.1}"
+  if kubectl get deployment crossplane -n crossplane-system >/dev/null 2>&1 \
+     && kubectl get deployment crossplane -n crossplane-system -o jsonpath='{.status.availableReplicas}' | grep -q '[1-9]'; then
+    echo "crossplane already installed, skipping"
+  else
+    helm repo add crossplane-stable https://charts.crossplane.io/stable 2>/dev/null || true
+    helm repo update crossplane-stable || return 1
+    helm upgrade --install crossplane crossplane-stable/crossplane \
+      --namespace crossplane-system --create-namespace \
+      --version "${CROSSPLANE_VERSION}" --wait || return 1
+  fi
+
+  # function-patch-and-transform
+  if ! kubectl get functions.pkg.crossplane.io crossplane-contrib-function-patch-and-transform >/dev/null 2>&1; then
+    kubectl apply -f - <<EOF || return 1
+apiVersion: pkg.crossplane.io/v1beta1
+kind: Function
+metadata:
+  name: crossplane-contrib-function-patch-and-transform
+spec:
+  package: xpkg.upbound.io/crossplane-contrib/function-patch-and-transform:v0.10.6
+EOF
+  fi
+  # Always wait — covers both fresh installs and pre-existing objects that may be unhealthy
+  kubectl wait functions.pkg.crossplane.io/crossplane-contrib-function-patch-and-transform \
+    --for=condition=Healthy=True --timeout=120s || return 1
+
+  # function-auto-ready
+  if ! kubectl get functions.pkg.crossplane.io crossplane-contrib-function-auto-ready >/dev/null 2>&1; then
+    kubectl apply -f - <<EOF || return 1
+apiVersion: pkg.crossplane.io/v1
+kind: Function
+metadata:
+  name: crossplane-contrib-function-auto-ready
+spec:
+  package: xpkg.upbound.io/crossplane-contrib/function-auto-ready:v0.6.5
+EOF
+  fi
+  # Always wait — covers both fresh installs and pre-existing objects that may be unhealthy
+  kubectl wait functions.pkg.crossplane.io/crossplane-contrib-function-auto-ready \
+    --for=condition=Healthy=True --timeout=120s || return 1
+
+  # Grant OCM controller permission to manage Crossplane XRDs/Compositions
+  kubectl apply -f - <<EOF
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: controller-manager-crossplane-e2e
+rules:
+  - apiGroups: ["apiextensions.crossplane.io"]
+    resources: ["compositeresourcedefinitions","compositions"]
+    verbs: ["create","delete","get","list","patch","update","watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: controller-manager-crossplane-e2e
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: controller-manager-crossplane-e2e
+subjects:
+  - kind: ServiceAccount
+    name: ocm-k8s-toolkit-controller-manager
+    namespace: ocm-k8s-toolkit-system
+EOF
+
+  # Grant Crossplane SA permission to manage OCM, Flux, and ArgoCD resources
+  # (needed so Crossplane Compositions can create OCM Resources, HelmReleases, etc.)
+  kubectl apply -f - <<EOF
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: crossplane-ocm-resources-e2e
+rules:
+  - apiGroups: ["delivery.ocm.software"]
+    resources: ["resources","resources/status","components","repositories","deployers"]
+    verbs: ["create","delete","get","list","patch","update","watch"]
+  - apiGroups: ["examples.ocm.software"]
+    resources: ["*","*/status"]
+    verbs: ["create","delete","get","list","patch","update","watch"]
+  - apiGroups: ["source.toolkit.fluxcd.io"]
+    resources: ["ocirepositories","ocirepositories/status","helmrepositories","helmrepositories/status"]
+    verbs: ["create","delete","get","list","patch","update","watch"]
+  - apiGroups: ["helm.toolkit.fluxcd.io"]
+    resources: ["helmreleases","helmreleases/status"]
+    verbs: ["create","delete","get","list","patch","update","watch"]
+  - apiGroups: ["argoproj.io"]
+    resources: ["applications","applications/status"]
+    verbs: ["create","delete","get","list","patch","update","watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: crossplane-ocm-resources-e2e
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: crossplane-ocm-resources-e2e
+subjects:
+  - kind: ServiceAccount
+    name: crossplane
+    namespace: crossplane-system
+EOF
+
+  # Register image-registry:5000 (Docker network alias used by OCM controller) as
+  # an insecure OCI Helm source in ArgoCD so ArgoCD Applications can pull from it.
+  kubectl apply -n argocd -f - <<EOF
+apiVersion: v1
+kind: Secret
+metadata:
+  name: image-registry-alias-creds
+  namespace: argocd
+  labels:
+    argocd.argoproj.io/secret-type: repo-creds
+stringData:
+  url: oci://image-registry:5000
+  type: helm
+  enableOCI: "true"
+  insecureOCIForceHttp: "true"
+EOF
+}
+
 pids=()
 run_step "image-registries"   install_registries & pids+=($!)
 run_step "flux"               install_flux       & pids+=($!)
 run_step "argocd"             install_argocd     & pids+=($!)
 run_step "kro"                install_kro        & pids+=($!)
+run_step "crossplane"         install_crossplane & pids+=($!)
 
 fail=0
 for pid in "${pids[@]}"; do

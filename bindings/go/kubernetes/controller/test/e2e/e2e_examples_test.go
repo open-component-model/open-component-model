@@ -1,6 +1,7 @@
 package e2e
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -14,20 +15,23 @@ import (
 )
 
 const (
-	ComponentConstructor = "component-constructor.yaml"
-	Bootstrap            = "bootstrap.yaml"
-	Manifests            = "manifests.yaml"
-	Rgd                  = "rgd.yaml"
-	Instance             = "instance.yaml"
-	K8sManifest          = "k8s-manifest.yaml"
-	PublicKey            = "ocm.software.pub"
-	PrivateKey           = "ocm.software"
+	ComponentConstructor     = "component-constructor.yaml"
+	Bootstrap                = "bootstrap.yaml"
+	Manifests                = "manifests.yaml"
+	Rgd                      = "rgd.yaml"
+	Instance                 = "instance.yaml"
+	K8sManifest              = "k8s-manifest.yaml"
+	PublicKey                = "ocm.software.pub"
+	PrivateKey               = "ocm.software"
+	CrossplaneComposition    = "crossplane-composition.yaml"
+	CrossplaneInstance       = "crossplane-instance.yaml"
 )
 
 // ignoreExamples lists examples that are tested elsewhere or should be skipped.
 var ignoreExamples = map[string]struct{}{
 	"applyset-pruning":   {}, // tested in e2e_applyset_test.go
 	"replication-simple": {}, // tested in e2e_replication_test.go
+	"kustomize":          {}, // container dir for argocd/fluxcd sub-examples, not a standalone example
 }
 
 var _ = Describe("controller", func() {
@@ -128,6 +132,53 @@ var _ = Describe("controller", func() {
 
 				}
 
+				// Crossplane flow: apply XRD+Composition directly, then XR instance
+				// Crossplane flow: the bootstrap already deployed the OCM Resource and
+				// Deployer for crossplane-xrd alongside the kro ones. Here we just wait
+				// for the XRD to be Established, then create the XR instance.
+				if slices.Contains(files, CrossplaneComposition) &&
+					slices.Contains(files, CrossplaneInstance) {
+					crossplaneName := example.Name() + "-crossplane"
+
+					By("waiting for XRD to be Established")
+					xrdName, xrdErr := xrdNameFromComposition(filepath.Join(examplesDir, example.Name(), CrossplaneComposition))
+					Expect(xrdErr).NotTo(HaveOccurred())
+					Expect(utils.WaitForResource(ctx, "condition=Established=true", timeout,
+						"compositeresourcedefinitions.apiextensions.crossplane.io/"+xrdName)).To(Succeed())
+
+					By("creating the Crossplane XR instance")
+					Expect(utils.DeployAndWaitForResource(
+						ctx, filepath.Join(examplesDir, example.Name(), CrossplaneInstance),
+						"condition=Ready=true",
+						timeout,
+					)).To(Succeed())
+
+					By("validating the Crossplane FluxCD-managed deployment")
+					name = "deployment.apps/" + crossplaneName + "-podinfo"
+					Expect(utils.WaitForResource(ctx, "create", timeout, name)).To(Succeed())
+					Expect(utils.WaitForResource(ctx, "condition=Available", timeout, name)).To(Succeed())
+					Expect(utils.WaitForResource(
+						ctx, "condition=Ready=true",
+						timeout,
+						"pod", "-l", "app.kubernetes.io/name="+crossplaneName+"-podinfo",
+					)).To(Succeed())
+
+					By("checking for Crossplane ArgoCD Application")
+					argoCDAppName := "applications.argoproj.io/" + crossplaneName
+					Expect(utils.WaitForResource(ctx, "create", timeout, argoCDAppName, "-n", "argocd")).To(Succeed())
+					Expect(utils.WaitForResource(ctx, "jsonpath={.status.sync.status}=Synced", timeout, argoCDAppName, "-n", "argocd")).To(Succeed())
+
+					By("validating the Crossplane ArgoCD-managed deployment")
+					name = "deployment.apps/" + crossplaneName + "-podinfo"
+					Expect(utils.WaitForResource(ctx, "create", timeout, name, "-n", "default-argocd")).To(Succeed())
+					Expect(utils.WaitForResource(ctx, "condition=Available", timeout, name, "-n", "default-argocd")).To(Succeed())
+					Expect(utils.WaitForResource(
+						ctx, "condition=Ready=true",
+						timeout,
+						"pod", "-l", "app.kubernetes.io/name="+crossplaneName+"-podinfo", "-n", "default-argocd",
+					)).To(Succeed())
+				}
+
 				By("validating the example")
 				name = "deployment.apps/" + example.Name() + "-podinfo"
 				Expect(utils.WaitForResource(ctx, "create", timeout, name)).To(Succeed())
@@ -175,3 +226,31 @@ var _ = Describe("controller", func() {
 		}
 	})
 })
+
+// xrdNameFromComposition reads the metadata.name of the first
+// CompositeResourceDefinition in a crossplane-composition.yaml file.
+func xrdNameFromComposition(compositionPath string) (string, error) {
+	data, err := os.ReadFile(compositionPath)
+	if err != nil {
+		return "", err
+	}
+	// Simple line-by-line parse: find the first "kind: CompositeResourceDefinition"
+	// and the "  name:" line that follows it.
+	inXRD := false
+	for _, line := range strings.Split(string(data), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "kind: CompositeResourceDefinition" {
+			inXRD = true
+			continue
+		}
+		if inXRD && strings.HasPrefix(trimmed, "name:") {
+			name := strings.TrimSpace(strings.TrimPrefix(trimmed, "name:"))
+			return name, nil
+		}
+		// Reset on next document separator
+		if trimmed == "---" {
+			inXRD = false
+		}
+	}
+	return "", fmt.Errorf("no CompositeResourceDefinition name found in %s", compositionPath)
+}
