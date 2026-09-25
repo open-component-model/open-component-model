@@ -18,6 +18,7 @@ aggregative
 agpl
 algo
 allowlist
+AlmaLinux
 alpn
 aml
 anchore
@@ -95,6 +96,7 @@ chocolateyinstall
 cdn
 cidrs
 cicd
+CIQ
 cli
 cli's
 cliconfig
@@ -707,7 +709,6 @@ rgd
 rgd's
 rgds
 rhel
-RHTAS
 roadmap
 roadmaps
 rollout
@@ -806,6 +807,7 @@ suppresstitle
 svg
 tac
 taskfile
+toolchains
 trivy
 taskfiles
 tbd
@@ -841,9 +843,9 @@ transportarchive
 tsc
 ttl
 tuf
+TuxCare
 typehandler
 typename
-UBI
 ui
 uis
 uncomment
