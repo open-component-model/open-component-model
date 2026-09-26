@@ -16,5 +16,6 @@ OCM Kubernetes controller. All resources belong to the API group
 | [Repository]({{< relref "repository" >}})   | Namespaced | Represents an OCM repository to be validated                 |
 | [Component]({{< relref "component" >}})     | Namespaced | Tracks an OCM component version from a repository            |
 | [Resource]({{< relref "resource" >}})       | Namespaced | References a specific resource within a component version    |
+| [Discovery]({{< relref "discovery" >}})     | Namespaced | Publishes a filtered view of a Component's reference graph   |
 | [Deployer]({{< relref "deployer" >}})       | Cluster    | Deploys OCM resources into the cluster                       |
 | [Replication]({{< relref "replication" >}}) | Namespaced | Replicates an OCM component version into a target repository |

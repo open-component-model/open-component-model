@@ -32,6 +32,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/controller/deployer"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/controller/deployer/cache"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/controller/deployer/dynamic"
+	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/controller/discovery"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/controller/replication"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/controller/repository"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/controller/resource"
@@ -284,6 +285,18 @@ func main() {
 		RepositoryScheme: ocirepository.Scheme,
 	}).SetupWithManager(ctx, mgr, replicationConcurrency); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Replication")
+		os.Exit(1)
+	}
+
+	if err = (&discovery.Reconciler{
+		BaseReconciler: &ocm.BaseReconciler{
+			Client:           mgr.GetClient(),
+			Scheme:           mgr.GetScheme(),
+			EventRecorder:    eventsRecorder,
+			NewPluginManager: newPluginManager,
+		},
+	}).SetupWithManager(ctx, mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "Discovery")
 		os.Exit(1)
 	}
 

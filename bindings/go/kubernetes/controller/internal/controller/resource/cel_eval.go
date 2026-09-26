@@ -11,7 +11,7 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
 	ocmcel "ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/cel"
-	celconv "ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/controller/resource/conversion"
+	celconv "ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/cel/conversion"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 

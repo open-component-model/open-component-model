@@ -528,6 +528,140 @@ func TestNewCacheBackedRepositoryRequiresPluginManager(t *testing.T) {
 	assert.Contains(t, err.Error(), "plugin manager is required")
 }
 
+// routingPlugin is a spec-aware OCI repository plugin: the repository it hands
+// out tags every descriptor with the BaseUrl of the spec it was built from, so
+// tests can assert which repository actually served a component.
+type routingPlugin struct{}
+
+var _ repository.ComponentVersionRepositoryProvider = (*routingPlugin)(nil)
+
+func (p *routingPlugin) GetJSONSchemaForRepositorySpecification(ocmruntime.Type) ([]byte, error) {
+	return nil, nil
+}
+
+func (p *routingPlugin) GetComponentVersionRepositoryScheme() *ocmruntime.Scheme {
+	return ocirepository.Scheme
+}
+
+func (p *routingPlugin) GetComponentVersionRepositoryCredentialConsumerIdentity(_ context.Context, spec ocmruntime.Typed) (ocmruntime.Identity, error) {
+	ociRepoSpec, err := asOCIRepository(spec)
+	if err != nil {
+		return nil, err
+	}
+	identity, err := ocmruntime.ParseURLToIdentity(ociRepoSpec.BaseUrl)
+	if err != nil {
+		return nil, err
+	}
+	identity.SetType(ocmruntime.NewVersionedType(ociv1.Type, ociv1.Version))
+	return identity, nil
+}
+
+func (p *routingPlugin) GetComponentVersionRepository(_ context.Context, spec ocmruntime.Typed, _ ocmruntime.Typed) (repository.ComponentVersionRepository, error) {
+	ociRepoSpec, err := asOCIRepository(spec)
+	if err != nil {
+		return nil, err
+	}
+	return &routingRepo{baseURL: ociRepoSpec.BaseUrl}, nil
+}
+
+// asOCIRepository decodes both typed and raw OCI repository specs.
+func asOCIRepository(spec ocmruntime.Typed) (*ociv1.Repository, error) {
+	if r, ok := spec.(*ociv1.Repository); ok {
+		return r, nil
+	}
+	r := &ociv1.Repository{}
+	if err := ocirepository.Scheme.Convert(spec, r); err != nil {
+		return nil, fmt.Errorf("invalid repository specification: %w", err)
+	}
+	return r, nil
+}
+
+type routingRepo struct {
+	repository.ComponentVersionRepository
+	baseURL string
+}
+
+func (r *routingRepo) GetComponentVersion(_ context.Context, component, version string) (*descriptor.Descriptor, error) {
+	d := &descriptor.Descriptor{}
+	d.Component.Name = component
+	d.Component.Version = version
+	// Tag the resolved descriptor with the repository that served it.
+	d.Component.Provider.Name = r.baseURL
+	return d, nil
+}
+
+// A configured path matcher must still override the base repository: the
+// migrated createResolver caller must not inject a high-priority root pattern
+// for the base repository (that would shadow the configured matcher).
+func TestNewCacheBackedRepository_ConfiguredMatcherOverridesBaseRepository(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		ctx := context.Background()
+
+		const routedURL = "localhost:5000/routed"
+		const baseURL = "localhost:5000/base"
+
+		ocmConfig := fmt.Sprintf(`{
+			"type": "generic.config.ocm.software/v1",
+			"configurations": [{
+				"type": "resolvers.config.ocm.software/v1alpha1",
+				"resolvers": [{
+					"repository": {"type": "OCIRepository/v1", "baseUrl": %q},
+					"componentNamePattern": "test-component"
+				}]
+			}]
+		}`, routedURL)
+
+		configMap := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{Name: "ocm-config", Namespace: "default"},
+			Data:       map[string]string{".ocmconfig": ocmConfig},
+		}
+
+		scheme := runtime.NewScheme()
+		require.NoError(t, corev1.AddToScheme(scheme))
+		require.NoError(t, v1alpha1.AddToScheme(scheme))
+		k8sClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(configMap).Build()
+
+		logr := logr.Discard()
+		pm := manager.NewPluginManager(t.Context())
+		require.NoError(t, pm.ComponentVersionRepositoryRegistry.RegisterInternalComponentVersionRepositoryPlugin(&routingPlugin{}))
+
+		cache := expirable.NewLRU[string, *workerpool.Result](0, nil, 0)
+		wp := workerpool.NewWorkerPool(workerpool.PoolOptions{Logger: &logr, Client: k8sClient, Cache: cache})
+		resolver := resolution.NewResolver(&logr, wp)
+		wpCtx, cancel := context.WithCancel(t.Context())
+		t.Cleanup(cancel)
+		go func() { _ = wp.Start(wpCtx) }()
+		t.Cleanup(func() { require.NoError(t, pm.Shutdown(ctx)) })
+
+		baseSpec := &ociv1.Repository{
+			Type:    ocmruntime.NewVersionedType(ociv1.Type, ociv1.Version),
+			BaseUrl: baseURL,
+		}
+
+		cfg, err := configuration.LoadConfigurations(ctx, k8sClient, "default", []v1alpha1.OCMConfiguration{{
+			NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{Kind: "ConfigMap", Name: "ocm-config"},
+		}})
+		require.NoError(t, err)
+
+		repo, err := resolver.NewCacheBackedRepository(ctx, &resolution.RepositoryOptions{
+			RepositorySpec: baseSpec,
+			Configuration:  cfg,
+			PluginManager:  pm,
+		})
+		require.NoError(t, err)
+
+		_, err = repo.GetComponentVersion(ctx, "test-component", "v1.0.0")
+		assert.True(t, errors.Is(err, resolution.ErrResolutionInProgress))
+		synctest.Wait()
+
+		result, err := repo.GetComponentVersion(ctx, "test-component", "v1.0.0")
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		assert.Equal(t, routedURL, result.Component.Provider.Name,
+			"configured matcher must route to the configured repository, not the base repository")
+	})
+}
+
 // mockPlugin is a minimal OCI repository plugin for testing.
 // It implements both the plugin interface and the repository interface.
 type mockPlugin struct {

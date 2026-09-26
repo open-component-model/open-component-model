@@ -1,4 +1,4 @@
-package resource
+package ocm_test
 
 import (
 	. "github.com/onsi/ginkgo/v2"
@@ -8,13 +8,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/event"
 
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
+	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/ocm"
 )
 
 var _ = Describe("ComponentInfoChangedPredicate", func() {
-	var predicate ComponentInfoChangedPredicate
+	var predicate ocm.ComponentInfoChangedPredicate
 
 	BeforeEach(func() {
-		predicate = ComponentInfoChangedPredicate{}
+		predicate = ocm.ComponentInfoChangedPredicate{}
 	})
 
 	Describe("Create / Delete / Generic", func() {
@@ -118,6 +119,15 @@ var _ = Describe("ComponentInfoChangedPredicate", func() {
 					Reason:             "Ready",
 				},
 			}
+			Expect(predicate.Update(event.UpdateEvent{
+				ObjectOld: oldComponent,
+				ObjectNew: newComponent,
+			})).To(BeTrue())
+		})
+
+		It("allows the event when the component starts terminating", func() {
+			now := metav1.Now()
+			newComponent.SetDeletionTimestamp(&now)
 			Expect(predicate.Update(event.UpdateEvent{
 				ObjectOld: oldComponent,
 				ObjectNew: newComponent,

@@ -16,6 +16,8 @@ The OCM controllers reconcile OCM component versions into a Kubernetes cluster. 
 
 A fifth resource, **Replication**, sits alongside the chain rather than within it. Instead of delivering content into the cluster, it transfers a resolved component version from one OCM repository to another, mirroring `ocm transfer` as a controller.
 
+A sixth resource, **Discovery**, also sits alongside the chain. It publishes a filtered, optionally projected view of a `Component`'s transitive reference graph without downloading artifacts or applying anything to the cluster.
+
 ## Architecture
 
 The OCM controllers act as a bridge between an OCM repository and a Kubernetes cluster. Rather than pulling manifests from a Git repository or a plain OCI image, they consume structured OCM component versions — complete with provenance, signatures, and access metadata — and translate them into running workloads.
@@ -115,6 +117,14 @@ A few more things about replication:
 
 [API reference]({{< relref "/docs/reference/kubernetes-api/replication.md" >}})
 
+## Discovery
+
+A `Discovery` publishes a filtered, optionally projected view of the transitive reference graph of a `Component`. It is a read-only, query-style resource: it downloads no artifacts, creates no external resources, and provides no signature-verification guarantees for the descriptors it filters.
+
+See [Kubernetes Component Discovery]({{< relref "/docs/concepts/component-discovery.md" >}}) for a full description and its querying behaviour.
+
+[API reference]({{< relref "/docs/reference/kubernetes-api/discovery.md" >}})
+
 ## Asynchronous Component Resolution
 
 Component version resolution happens in a background worker pool. When a controller needs a component version, it submits a request and receives a sentinel error (`ErrResolutionInProgress`). The controller returns early without blocking. Once the worker finishes, it broadcasts an event that re-triggers reconciliation for all waiting objects.
@@ -181,3 +191,4 @@ deployer. Please refer to the respective installation guides for these tools:
 - [Getting-Started: Setup Controller Environment]({{< relref "setup-controller-environment.md" >}}), prerequisites for running the controllers
 - [How-To: Configuring Credentials for OCM Controllers]({{< relref "docs/how-to/configure-credentials-ocm-controllers.md" >}}), setting up access to private OCM repositories
 - [How-To: Replicate Component Versions with the Controller]({{< relref "docs/how-to/replicate-component-versions-controller.md" >}}), transferring component versions between repositories
+- [How-To: Discover Component Graphs]({{< relref "docs/how-to/discover-component-graphs.md" >}}), publishing a filtered view of a Component's reference graph

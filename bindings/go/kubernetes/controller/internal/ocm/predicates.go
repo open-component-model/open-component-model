@@ -1,4 +1,4 @@
-package replication
+package ocm
 
 import (
 	"reflect"
@@ -10,10 +10,11 @@ import (
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
 )
 
-// ComponentInfoChangedPredicate filters Component Update events to only those
-// where Status.Component (ComponentInfo), Status.EffectiveOCMConfig, or the
-// readiness condition changed. This keeps condition-only patches from
-// triggering spurious Replication reconciles.
+// ComponentInfoChangedPredicate filters Component Update events to only
+// those where Status.Component (ComponentInfo), Status.EffectiveOCMConfig,
+// the readiness condition, or the termination state changed. This prevents
+// condition-only patches that don't affect readiness (e.g. MarkReady when
+// already ready) from triggering spurious dependent reconciles.
 // Create, Delete, and Generic events always pass through.
 type ComponentInfoChangedPredicate struct {
 	predicate.Funcs
@@ -43,6 +44,10 @@ func (ComponentInfoChangedPredicate) Update(e event.UpdateEvent) bool {
 	}
 
 	if apimeta.IsStatusConditionTrue(oldComponent.GetConditions(), v1alpha1.ReadyCondition) != apimeta.IsStatusConditionTrue(newComponent.GetConditions(), v1alpha1.ReadyCondition) {
+		return true
+	}
+
+	if oldComponent.GetDeletionTimestamp().IsZero() != newComponent.GetDeletionTimestamp().IsZero() {
 		return true
 	}
 
