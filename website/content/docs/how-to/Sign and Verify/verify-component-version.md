@@ -154,6 +154,7 @@ To run this you need the signer's public key on disk and pointed at by `publicKe
 ## Prerequisites
 
 - [OCM CLI installed]({{< relref "ocm-cli-installation.md" >}})
+- [GnuPG](https://gnupg.org/download/) 2.2 or later installed (`gpg` binary available in `$PATH`); OCM runs it to verify GPG signatures
 - [Verification credentials configured]({{< relref "configure-signing-credentials.md" >}}) with the public key
 - A GPG-signed component version (see the [Sign Component Versions]({{< relref "sign-component-version.md" >}}) how-to)
 
@@ -187,6 +188,18 @@ If you are only verifying, the `signer` field can be left out entirely:
   verifier:
     type: GPGSigningConfiguration/v1alpha1
 ```
+
+If the signer's public key is already in your GnuPG keyring (`$GNUPGHOME`, or `~/.gnupg`), verify against the keyring instead of a key file. The keyring may hold many keys, so `useKeyring` requires the **full** fingerprint of the key you trust; a signature by any other key in the keyring fails. Keys revoked or expired in your keyring are rejected, and gpg never fetches keys from the network during verification:
+
+```yaml
+- type: signing.config.ocm.software/v1alpha1
+  verifier:
+    type: GPGSigningConfiguration/v1alpha1
+    useKeyring: true
+    keyFingerprint: B118BE3A32BE4AF28E37E881167C7102F8AC81E4
+```
+
+With `useKeyring`, key material in the GPG credentials is rejected.
 
 {{< callout context="note" >}}
 Give the entry a `signature` field to scope it to a single signature; without one it applies to every signature. Because the verifier is resolved per signature, a component carrying a GPG signature next to an RSA one can be verified in a single run, each with its own handler.
@@ -248,7 +261,7 @@ Without `--signature`, **every** signature on the descriptor is verified. Config
 <!-- markdownlint-disable-next-line MD024 -->
 ## Troubleshooting
 
-### Symptom: `SIGNATURE VERIFICATION FAILED: gpg verify: openpgp: signature made by unknown entity`
+### Symptom: `SIGNATURE VERIFICATION FAILED: gpg verify: gpg verify failed: exit status 2` with `Can't check signature: No public key`
 
 **Cause:** The public key in `.ocmconfig` doesn't match the key that signed — most often because you exported a different key, or the signer rotated their key after signing.
 
@@ -260,11 +273,23 @@ Without `--signature`, **every** signature on the descriptor is verified. Config
 
 **Fix:** Check the path is correct and readable. Absolute paths avoid working-directory surprises.
 
-### Symptom: `SIGNATURE VERIFICATION FAILED: no key matching fingerprint "..." found in keyring`
+### Symptom: `SIGNATURE VERIFICATION FAILED: gpg verify: signature was made by key ... which does not match the configured key fingerprint "..."`
 
-**Cause:** The verifier contains a `keyFingerprint` that doesn't match any key resolved from the public-key file.
+**Cause:** The verifier contains a `keyFingerprint` that matches neither the key that made the signature nor its primary key.
 
 **Fix:** Either remove `keyFingerprint` from the verifier (any key in the file will be tried) or correct it. Run `gpg --show-keys /tmp/keys/verify-key.asc` to confirm the actual fingerprint.
+
+### Symptom: `SIGNATURE VERIFICATION FAILED: gpg verify: verifying with the GnuPG keyring requires the full key fingerprint ...`
+
+**Cause:** The verifier sets `useKeyring` without a full 40-character `keyFingerprint`. A long key ID is not accepted, because it does not identify a key reliably among all keys in a keyring.
+
+**Fix:** Set `keyFingerprint` to the full fingerprint of the key you trust (`gpg --list-keys --with-colons <key> | grep '^fpr'`).
+
+### Symptom: `GPG signing requires the GnuPG "gpg" binary (>= 2.2.0) on PATH`
+
+**Cause:** OCM delegates all OpenPGP operations to GnuPG, and no `gpg` binary was found on `PATH`.
+
+**Fix:** Install GnuPG 2.2 or later (`brew install gnupg`, `sudo apt-get install gnupg`, `sudo dnf install gnupg2`) and make sure `gpg` is on `PATH`.
 
 {{< /tab >}}
 {{< tab "Sigstore (interactive)" >}}

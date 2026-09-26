@@ -187,6 +187,7 @@ With Sigstore (other tabs) you skip the key-pair setup entirely.
 ## Prerequisites
 
 - [OCM CLI installed]({{< relref "ocm-cli-installation.md" >}})
+- [GnuPG](https://gnupg.org/download/) 2.2 or later installed (`gpg` binary available in `$PATH`); OCM runs it to create GPG signatures, so all OpenPGP cryptography happens in GnuPG
 - [Signing credentials configured]({{< relref "configure-signing-credentials.md" >}})
 - A component version in a CTF archive or OCI registry (we'll use `github.com/acme.org/helloworld:1.0.0` from the [getting started guide]({{< relref "create-component-version.md" >}}); any component you can write to works)
 
@@ -247,6 +248,18 @@ To use GPG for one signature only and keep RSA elsewhere, add `signature` to tha
   signer:
     type: GPGSigningConfiguration/v1alpha1
 ```
+
+To sign with a key from your own GnuPG keyring (`$GNUPGHOME`, or `~/.gnupg`), including keys on a hardware token such as a YubiKey, set `useKeyring`. OCM then uses your running `gpg-agent`, and the GPG consumer entry needs no key material. The agent unlocks the key from its cache, via pinentry, or with a `passphrase` from the credentials:
+
+```yaml
+- type: signing.config.ocm.software/v1alpha1
+  signer:
+    type: GPGSigningConfiguration/v1alpha1
+    useKeyring: true                                            # added
+    keyFingerprint: B118BE3A32BE4AF28E37E881167C7102F8AC81E4
+```
+
+With `useKeyring`, key material (`privateKeyPGP`, `privateKeyPGPFile`) in the GPG credentials is rejected, so it is never ambiguous which key signs. Without `keyFingerprint`, gpg signs with its default key.
 
 {{< callout context="caution" >}}
 These are in the same file. Just append this signature in that relevant configuration value.
@@ -358,6 +371,12 @@ signatures:
 **Cause:** The signer used to be passed as a file. It now lives in the OCM configuration.
 
 **Fix:** Move the contents of the old spec file under the `signer` field of a `signing.config.ocm.software/v1alpha1` entry and drop the flag.
+
+### Symptom: `GPG signing requires the GnuPG "gpg" binary (>= 2.2.0) on PATH`
+
+**Cause:** OCM delegates all OpenPGP operations to GnuPG, and no `gpg` binary was found on `PATH`.
+
+**Fix:** Install GnuPG 2.2 or later (`brew install gnupg`, `sudo apt-get install gnupg`, `sudo dnf install gnupg2`) and make sure `gpg` is on `PATH`. In FIPS 140-3 mode, use a GnuPG backed by a FIPS 140-3 validated libgcrypt.
 
 {{< /tab >}}
 {{< tab "Sigstore (interactive)" >}}
