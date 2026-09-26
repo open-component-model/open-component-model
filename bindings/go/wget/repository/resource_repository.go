@@ -117,13 +117,15 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 	if err != nil {
 		return nil, err
 	}
+
 	if hasPolicy {
 		if err := httpverify.Verify(ctx, r.client, credentials, wget.URL, policy, b); err != nil {
 			_ = b.Close()
 			return nil, fmt.Errorf("checksum verification failed for wget access %q: %w", wget.URL, err)
 		}
 	}
-	return b, nil
+
+	return repository.VerifyDownload(ctx, resource, b)
 }
 
 // download streams the resource body into the temp folder and returns the
