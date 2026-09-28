@@ -73,23 +73,23 @@ themselves may change in a future release. They are looked for in two ways, in o
 or the OCI referrers API, are not discovered.</li></ol><p>Every SBOM found is written to its own file in a directory, byte for byte as published, so digests
 and signatures over them still apply. The directory is &ndash;output, or the values of the resource
 identity joined by &ldquo;-&rdquo; when that is not given, so &ndash;identity name=image,architecture=amd64 writes
-into &ldquo;image-amd64&rdquo;. The paths written are printed to standard output, one per line.</p><div class=expressive-code><figure class="frame not-content"><figcaption class=header><span class=title></span></figcaption><pre tabindex=0><code>ocm download resource [flags]</code></pre></figure></div><h3 id=examples>Examples<a href=#examples class=anchor aria-hidden=true>#</a></h3><div class=expressive-code><figure class="frame not-content"><figcaption class=header><span class=title></span></figcaption><pre tabindex=0><code> # Download a resource with identity &#39;name=example&#39; and write to default output
-  ocm download resource ghcr.io/org/component:v1 --identity name=example
+into &ldquo;image-amd64&rdquo;. The paths written are printed to standard output, one per line.</p><div class=expressive-code><figure class="frame not-content"><figcaption class=header><span class=title></span></figcaption><pre tabindex=0><code>ocm download resource [flags]</code></pre></figure></div><h3 id=examples>Examples<a href=#examples class=anchor aria-hidden=true>#</a></h3><div class=expressive-code><figure class="frame not-content"><figcaption class=header><span class=title></span></figcaption><pre tabindex=0><code> # Download a resource with identity &#39;name=image&#39; and write to default output
+  ocm download resource ghcr.io/open-component-model//ocm.software/cli:0.17.0 --identity name=image
 
-  # Download a resource with identity &#39;name=example&#39; and &#39;architecture=amd64&#39; and write to default output
-  ocm download resource ghcr.io/org/component:v1 --identity name=example,architecture=amd64
+  # Download a resource with identity &#39;name=cli&#39;, &#39;architecture=amd64&#39; and &#39;os=windows&#39; and write to default output
+  ocm download resource ghcr.io/open-component-model//ocm.software/cli:0.17.0 --identity name=cli,architecture=amd64,os=windows
 
   # Download a resource and specify an output file
-  ocm download resource ghcr.io/org/component:v1 --identity name=example --output ./my-resource.tar.gz
+  ocm download resource ghcr.io/open-component-model//ocm.software/cli:0.17.0 --identity name=image --output ./ocmcli-image-0.17.0/
 
   # Download a resource and apply a transformer
-  ocm download resource ghcr.io/org/component:v1 --identity name=example --transformer my-transformer
+  ocm download resource ghcr.io/open-component-model//ocm.software/cli:0.17.0 --identity name=image --transformer my-transformer
 
   # Download every SBOM describing a resource into a directory
-  ocm download resource ghcr.io/org/component:v1 --identity name=example --sbom --output ./sboms
+  ocm download resource ghcr.io/open-component-model//ocm.software/cli:0.17.0 --identity name=image --sbom --output ./sboms
 
   # Scan every SBOM found for a resource
-  ocm download resource ghcr.io/org/component:v1 --identity name=example --sbom | xargs -n1 grype sbom:</code></pre></figure></div><h3 id=options>Options<a href=#options class=anchor aria-hidden=true>#</a></h3><div class=expressive-code><figure class="frame not-content"><figcaption class=header><span class=title></span></figcaption><pre tabindex=0><code>      --extraction-policy enum   policy to apply when extracting a resource. If set to &#39;disable&#39;, the resource will not be extracted, even if they could be. If set to &#39;auto&#39;, the resource will be automatically extracted if the returned resource is a recognized archive format.
+  ocm download resource ghcr.io/open-component-model//ocm.software/cli:0.17.0 --identity name=image --sbom | xargs -n1 grype sbom:</code></pre></figure></div><h3 id=options>Options<a href=#options class=anchor aria-hidden=true>#</a></h3><div class=expressive-code><figure class="frame not-content"><figcaption class=header><span class=title></span></figcaption><pre tabindex=0><code>      --extraction-policy enum   policy to apply when extracting a resource. If set to &#39;disable&#39;, the resource will not be extracted, even if they could be. If set to &#39;auto&#39;, the resource will be automatically extracted if the returned resource is a recognized archive format.
                                  (must be one of [auto disable]) (default auto)
   -h, --help                     help for resource
       --identity string          resource identity to download
