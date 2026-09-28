@@ -1,7 +1,6 @@
 package bar
 
 import (
-	"fmt"
 	"io"
 	"strings"
 	"time"
@@ -22,6 +21,7 @@ func RenderShimmer(text string, frame int) string {
 	pos := frame % (textLen + windowSize)
 
 	var result strings.Builder
+	result.Grow(len(text) * 2)
 	for i, ch := range runes {
 		dist := pos - i
 		if dist >= 0 && dist < windowSize {
@@ -64,16 +64,24 @@ func WriteRunningLine(out io.Writer, text string, spinFrame, dotFrame int) {
 	dots := DotFrames[dotFrame%len(DotFrames)]
 	fullText := text + dots
 	shimmer := RenderShimmer(fullText, spinFrame)
-	fmt.Fprintf(out, "%s%s%s %s%s%s\n",
-		DarkGray, SpinnerIcon(spinFrame), Reset, Bold, shimmer, Reset)
+	_, _ = io.WriteString(out, DarkGray+SpinnerIcon(spinFrame)+Reset+" "+Bold+shimmer+Reset+"\n")
 }
 
-// WriteCompletedLine writes a completed status line: "✓ text..."
-func WriteCompletedLine(out io.Writer, text string) {
-	fmt.Fprintf(out, "%s✓%s %s...\n", Blue, Reset, text)
+// WriteCompletedLine writes a completed status line: "✓ text... (took 1m2s)".
+func WriteCompletedLine(out io.Writer, text string, took time.Duration) {
+	_, _ = io.WriteString(out, Blue+"✓"+Reset+" "+text+"..."+formatTook(took)+"\n")
 }
 
-// WriteFailedLine writes a failed status line: "✗ text..."
-func WriteFailedLine(out io.Writer, text string) {
-	fmt.Fprintf(out, "%s✗%s %s...\n", Red, Reset, text)
+// WriteFailedLine writes a failed status line: "✗ text... (took 1m2s)".
+func WriteFailedLine(out io.Writer, text string, took time.Duration) {
+	_, _ = io.WriteString(out, Red+"✗"+Reset+" "+text+"..."+formatTook(took)+"\n")
+}
+
+// formatTook renders the elapsed-time suffix shared by the final status
+// lines, rounded to whole seconds.
+func formatTook(took time.Duration) string {
+	if took < 0 {
+		return ""
+	}
+	return " " + DarkGray + "(took " + took.Round(time.Second).String() + ")" + Reset
 }
