@@ -92,6 +92,9 @@ func TestBuildGraphDefinition_OCIUploader(t *testing.T) {
 	manifestBlobWithRegistrylessName := dockerManifestLocalBlobResource("my-image", "1.0.0")
 	manifestBlobWithRegistrylessName.Access.(*descriptorv2.LocalBlob).ReferenceName = "stefanprodan/podinfo:6.5.0"
 
+	manifestBlobWithDottedName := dockerManifestLocalBlobResource("my-image", "1.0.0")
+	manifestBlobWithDottedName.Access.(*descriptorv2.LocalBlob).ReferenceName = "ocm.software/podinfo@sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+
 	tests := []struct {
 		name      string
 		target    runtime.Typed
@@ -143,22 +146,31 @@ func TestBuildGraphDefinition_OCIUploader(t *testing.T) {
 			wantCleanup:    3,
 		},
 		{
-			name:           "OCI manifest local blob uses the repository of its reference name",
+			name:           "reference name is relative to the target: a host-like first component stays in the repository",
 			target:         testOCIRepo("ghcr.io/target"),
 			resource:       dockerManifestLocalBlobResource("my-image", "1.0.0"),
 			uploaders:      ociUploaders(),
 			wantTypes:      []runtime.Type{ociv1alpha1.OCIGetLocalResourceV1alpha1, addOCIArtifact, ociv1alpha1.OCIAddComponentVersionV1alpha1, FileCleanupVersionedType},
-			wantImageRef:   "ghcr.io/target/org/image:v1",
+			wantImageRef:   "ghcr.io/target/ghcr.io/org/image:v1",
 			wantImageRefAt: 1,
 			wantCleanup:    1,
 		},
 		{
-			name:           "reference name without registry keeps its full repository",
+			name:           "reference name without host-like component keeps its full repository",
 			target:         testOCIRepo("ghcr.io/target"),
 			resource:       manifestBlobWithRegistrylessName,
 			uploaders:      ociUploaders(),
 			wantTypes:      []runtime.Type{ociv1alpha1.OCIGetLocalResourceV1alpha1, addOCIArtifact, ociv1alpha1.OCIAddComponentVersionV1alpha1, FileCleanupVersionedType},
 			wantImageRef:   "ghcr.io/target/stefanprodan/podinfo:6.5.0",
+			wantImageRefAt: 1,
+		},
+		{
+			name:           "dotted reference name without tag keeps its full repository",
+			target:         testOCIRepo("ghcr.io/target"),
+			resource:       manifestBlobWithDottedName,
+			uploaders:      ociUploaders(),
+			wantTypes:      []runtime.Type{ociv1alpha1.OCIGetLocalResourceV1alpha1, addOCIArtifact, ociv1alpha1.OCIAddComponentVersionV1alpha1, FileCleanupVersionedType},
+			wantImageRef:   "ghcr.io/target/ocm.software/podinfo",
 			wantImageRefAt: 1,
 		},
 		{

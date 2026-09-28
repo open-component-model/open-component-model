@@ -267,9 +267,10 @@ configs (`LookupUploaderConfigs`).
   - the target is a CTF (no `target`);
   - `toOCI()` fails because the resource has no OCI reference (e.g. a local blob
     without `access.referenceName`).
-- For local blobs whose `access.referenceName` contains a registry prefix (e.g.
-  `ghcr.io/org/image:v1`), `toOCI()` strips the registry: the artifact lands at
-  `<target>/org/image:v1` instead of the old `<target>/ghcr.io/org/image:v1`.
+- A local blob's `access.referenceName` is relative to the repository the blob is
+  stored in, so `toOCI()` never reads a registry from it: every path component
+  belongs to `repository`. `ghcr.io/org/image:v1` therefore still lands at
+  `<target>/ghcr.io/org/image:v1`, as with the old flag.
 - A local blob that is not an OCI manifest is never OCI-uploaded.
 - Wget, S3 and GitHub resources are never OCI-uploaded.
 
@@ -279,7 +280,7 @@ The following table shows which access types the OCI uploader supports:
 | --- | --- | --- |
 | `OCIImage` (all aliases) | always | Parsed from `imageReference`: `repository`, `tag`, `host`, `digest`, etc. E.g. `ghcr.io/org/image:v1` → repository `org/image`, tag `v1`. |
 | `Helm` | always | Parsed from the chart reference: repository = repo URL path + chart name, tag = version. E.g. chart `podinfo:6.5.0` from `https://stefanprodan.github.io/podinfo` → repository `podinfo/podinfo`, tag `6.5.0`. |
-| `LocalBlob` (OCI manifest media type) | media type is an OCI-compliant manifest | Parsed from `access.referenceName`. E.g. `stefanprodan/podinfo:6.5.0` → repository `stefanprodan/podinfo`, tag `6.5.0`. May have no tag or no reference. |
+| `LocalBlob` (OCI manifest media type) | media type is an OCI-compliant manifest | Parsed from `access.referenceName`, a repository name relative to the blob's repository: no registry, every path component belongs to `repository`. E.g. `stefanprodan/podinfo:6.5.0` → repository `stefanprodan/podinfo`, tag `6.5.0`. May have no tag or no reference. |
 | anything else (Wget, S3, GitHub, …) | never | — (falls through) |
 
 ## Beyond the old flag

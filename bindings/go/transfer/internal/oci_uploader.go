@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"strconv"
-	"strings"
 
 	"cel.dev/cel-go/cel"
 	celast "cel.dev/cel-go/common/ast"
@@ -86,21 +85,35 @@ func ociReference(access runtime.Typed) (ocifunctions.Reference, bool, error) {
 		if !isOCICompliantManifest(acc.MediaType) || acc.ReferenceName == "" {
 			return ocifunctions.Reference{}, false, nil
 		}
-		ref, err := ocifunctions.ParseReference(acc.ReferenceName)
+		ref, err := parseRelativeReference(acc.ReferenceName)
 		if err != nil {
 			return ocifunctions.Reference{}, false, fmt.Errorf("cannot parse referenceName %q: %w", acc.ReferenceName, err)
-		}
-		// A referenceName is repository[:tag], usually without registry. Like Docker
-		// references, the first path component only names a registry if it contains a
-		// "." or ":" or is "localhost"; otherwise it belongs to the repository.
-		if ref.Host != "" && !strings.ContainsAny(ref.Host, ".:") && ref.Host != "localhost" {
-			ref.Repository = ref.Host + "/" + ref.Repository
-			ref.Host = ""
 		}
 		return ref, true, nil
 	default:
 		return ocifunctions.Reference{}, false, nil
 	}
+}
+
+// relativeReferenceHost is a placeholder registry that parseRelativeReference prepends
+// so the whole name is parsed as the repository path.
+const relativeReferenceHost = "relative.invalid"
+
+// parseRelativeReference parses a local blob referenceName. By the LocalBlob access
+// spec it is an OCI repository name optionally followed by ":" and a tag, relative to
+// the repository the blob is stored in: it never names a registry, so every path
+// component (including one that looks like a host, e.g. "ocm.software/podinfo")
+// belongs to the repository.
+func parseRelativeReference(name string) (ocifunctions.Reference, error) {
+	ref, err := ocifunctions.ParseReference(relativeReferenceHost + "/" + name)
+	if err != nil {
+		return ocifunctions.Reference{}, err
+	}
+	if ref.Host != relativeReferenceHost {
+		return ocifunctions.Reference{}, fmt.Errorf("not a registry-relative repository name")
+	}
+	ref.Host = ""
+	return ref, nil
 }
 
 // ociTarget returns the CEL map literal the target alias is rewritten to for an OCI
