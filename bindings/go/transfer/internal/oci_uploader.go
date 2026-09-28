@@ -5,10 +5,14 @@ import (
 	"fmt"
 	"log/slog"
 	"strconv"
+	"strings"
 
-	celparser "ocm.software/open-component-model/bindings/go/cel/expression/parser"
+	"cel.dev/cel-go/cel"
+	celast "cel.dev/cel-go/common/ast"
+
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	helmv1 "ocm.software/open-component-model/bindings/go/helm/spec/access/v1"
+	ocifunctions "ocm.software/open-component-model/bindings/go/oci/cel/functions"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -16,18 +20,92 @@ import (
 	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
 )
 
-const (
-	// referenceNameAlias is the imageReference alias for the source reference name
-	// (repository[:tag] without registry).
-	referenceNameAlias = "referenceName"
-	// targetRepositoryAlias is the imageReference alias for the target OCI registry
-	// base URL including its sub path.
-	targetRepositoryAlias = "targetRepository"
-)
+// targetAlias is the imageReference alias for the OCI registry target of the transfer.
+// It is rewritten to a map literal holding the target's baseUrl and subPath.
+const targetAlias = "target"
 
-// ociTargetRepository returns the image reference prefix of an OCI registry target:
-// its base URL plus the sub path, if any. It reports false for any other target.
-func ociTargetRepository(toSpec runtime.Typed) (string, bool) {
+// ToOCIEnvOption registers the toOCI() CEL function for the transfer graph. Besides
+// OCIImage accesses (handled by the function itself) it resolves Helm accesses to their
+// chart reference and local blobs holding an OCI manifest to their referenceName, the
+// same way the OCI uploader derives references at graph build time.
+func ToOCIEnvOption() cel.EnvOption {
+	return ocifunctions.ToOCI(ocifunctions.WithReferenceResolver(func(raw *runtime.Raw) (ocifunctions.Reference, bool, error) {
+		access, err := scheme.NewObject(raw.GetType())
+		if err != nil {
+			return ocifunctions.Reference{}, false, nil //nolint:nilerr // unknown access types are not resolvable here
+		}
+		if err := scheme.Convert(raw, access); err != nil {
+			return ocifunctions.Reference{}, false, fmt.Errorf("cannot convert access of type %s: %w", raw.GetType(), err)
+		}
+		ref, ok, err := ociReference(access)
+		if err != nil {
+			return ocifunctions.Reference{}, false, err
+		}
+		if !ok {
+			return ocifunctions.Reference{}, false, nil
+		}
+		return ref, true, nil
+	}))
+}
+
+// ociUploadable reports whether access can be uploaded as an OCI artifact: OCI images,
+// Helm charts, and local blobs holding an OCI manifest.
+func ociUploadable(access runtime.Typed) bool {
+	switch acc := access.(type) {
+	case *ociv1.OCIImage, *helmv1.Helm:
+		return true
+	case *descriptorv2.LocalBlob:
+		return isOCICompliantManifest(acc.MediaType)
+	default:
+		return false
+	}
+}
+
+// ociReference returns the OCI reference toOCI() yields for access and reports whether
+// one can be derived: an OCI image's imageReference, a Helm chart's chart reference, or
+// a local blob's referenceName. A local blob without referenceName has none.
+func ociReference(access runtime.Typed) (ocifunctions.Reference, bool, error) {
+	switch acc := access.(type) {
+	case *ociv1.OCIImage:
+		ref, err := ocifunctions.ParseReference(acc.ImageReference)
+		if err != nil {
+			return ocifunctions.Reference{}, false, fmt.Errorf("cannot parse imageReference %q: %w", acc.ImageReference, err)
+		}
+		return ref, true, nil
+	case *helmv1.Helm:
+		chartRef, err := acc.ChartReference()
+		if err != nil {
+			return ocifunctions.Reference{}, false, fmt.Errorf("cannot derive Helm chart reference: %w", err)
+		}
+		ref, err := ocifunctions.ParseReference(chartRef)
+		if err != nil {
+			return ocifunctions.Reference{}, false, fmt.Errorf("cannot parse Helm chart reference %q: %w", chartRef, err)
+		}
+		return ref, true, nil
+	case *descriptorv2.LocalBlob:
+		if !isOCICompliantManifest(acc.MediaType) || acc.ReferenceName == "" {
+			return ocifunctions.Reference{}, false, nil
+		}
+		ref, err := ocifunctions.ParseReference(acc.ReferenceName)
+		if err != nil {
+			return ocifunctions.Reference{}, false, fmt.Errorf("cannot parse referenceName %q: %w", acc.ReferenceName, err)
+		}
+		// A referenceName is repository[:tag], usually without registry. Like Docker
+		// references, the first path component only names a registry if it contains a
+		// "." or ":" or is "localhost"; otherwise it belongs to the repository.
+		if ref.Host != "" && !strings.ContainsAny(ref.Host, ".:") && ref.Host != "localhost" {
+			ref.Repository = ref.Host + "/" + ref.Repository
+			ref.Host = ""
+		}
+		return ref, true, nil
+	default:
+		return ocifunctions.Reference{}, false, nil
+	}
+}
+
+// ociTarget returns the CEL map literal the target alias is rewritten to for an OCI
+// registry target, and reports false for any other target.
+func ociTarget(toSpec runtime.Typed) (string, bool) {
 	repo, err := convertToConcreteRepo(toSpec)
 	if err != nil {
 		return "", false
@@ -36,86 +114,72 @@ func ociTargetRepository(toSpec runtime.Typed) (string, bool) {
 	if !ok {
 		return "", false
 	}
-	if ociRepo.SubPath == "" {
-		return ociRepo.BaseUrl, true
-	}
-	return ociRepo.BaseUrl + "/" + ociRepo.SubPath, true
+	return fmt.Sprintf("{%q: %s, %q: %s}",
+		"baseUrl", strconv.Quote(ociRepo.BaseUrl),
+		"subPath", strconv.Quote(ociRepo.SubPath)), true
 }
 
-// ociReferenceName returns the reference name an OCI uploader uses for access and
-// reports whether the uploader supports the access at all. OCI images and Helm charts
-// use their repository[:tag] without registry; local blobs holding an OCI manifest use
-// their recorded reference name, which may be empty.
-func ociReferenceName(access runtime.Typed) (string, bool, error) {
-	switch acc := access.(type) {
-	case *ociv1.OCIImage:
-		name, err := getReferenceName(acc.ImageReference)
-		if err != nil {
-			return "", true, fmt.Errorf("cannot derive reference name: %w", err)
-		}
-		return name, true, nil
-	case *helmv1.Helm:
-		ref, err := acc.ChartReference()
-		if err != nil {
-			return "", true, fmt.Errorf("cannot derive reference name: %w", err)
-		}
-		name, err := getReferenceName(ref)
-		if err != nil {
-			return "", true, fmt.Errorf("cannot derive reference name: %w", err)
-		}
-		return name, true, nil
-	case *descriptorv2.LocalBlob:
-		if !isOCICompliantManifest(acc.MediaType) {
-			return "", false, nil
-		}
-		return acc.ReferenceName, true, nil
-	default:
-		return "", false, nil
+// expressionUses reports which identifiers and function names the CEL source expr uses.
+func expressionUses(expr string) (idents, functions map[string]bool, err error) {
+	env, err := cel.NewEnv()
+	if err != nil {
+		return nil, nil, err
 	}
-}
-
-// identifierUsed reports whether the CEL source expr references ident as an identifier.
-func identifierUsed(expr, ident string) bool {
-	return celparser.RewriteIdentifier(expr, ident, "") != expr
+	parsed, issues := env.Parse(expr)
+	if issues != nil && issues.Err() != nil {
+		return nil, nil, fmt.Errorf("cannot parse expression %q: %w", expr, issues.Err())
+	}
+	idents, functions = map[string]bool{}, map[string]bool{}
+	celast.PreOrderVisit(celast.NavigateAST(parsed.NativeRep()), celast.NewExprVisitor(func(e celast.Expr) {
+		switch e.Kind() {
+		case celast.IdentKind:
+			idents[e.AsIdent()] = true
+		case celast.CallKind:
+			functions[e.AsCall().FunctionName()] = true
+		}
+	}))
+	return idents, functions, nil
 }
 
 // ociImageReference templates the target image reference for resource under u (see
 // [transferv1alpha1.DefaultOCIImageReference] for the template used when none is set)
-// and reports whether the uploader applies. Only available aliases are rewritten:
-// referenceName when the resource has one, targetRepository when the target is an OCI
-// registry. A template that references an unavailable alias does not apply, and
-// reason says why, so the resource falls through instead of failing the transfer.
+// and reports whether the uploader applies. The `resource` alias points at the resource
+// in the descriptor environment node and `target` at the OCI registry target. A
+// template that uses `target` on a non-OCI target, or calls toOCI() for a resource
+// without an OCI reference (a local blob without referenceName), does not apply; reason
+// says why, so the resource falls through instead of failing the transfer.
 func ociImageReference(u *transferv1alpha1.OCIUploaderConfig, access runtime.Typed, baseID string, i int, toSpec runtime.Typed) (imageReference string, applies bool, reason string, err error) {
-	referenceName, supported, err := ociReferenceName(access)
+	if !ociUploadable(access) {
+		return "", false, "access type is not uploadable as an OCI artifact", nil
+	}
+	_, hasReference, err := ociReference(access)
 	if err != nil {
 		return "", false, "", err
 	}
-	if !supported {
-		return "", false, "access type is not uploadable as an OCI artifact", nil
-	}
-	targetRepository, isOCITarget := ociTargetRepository(toSpec)
+	targetLiteral, isOCITarget := ociTarget(toSpec)
 
 	template := u.ImageReference
 	if template == "" {
 		template = transferv1alpha1.DefaultOCIImageReference
 	}
 	aliases := map[string]string{resourceAlias: resourceNodePath(baseID, i)}
-	if referenceName != "" {
-		aliases[referenceNameAlias] = strconv.Quote(referenceName)
-	}
 	if isOCITarget {
-		aliases[targetRepositoryAlias] = strconv.Quote(targetRepository)
+		aliases[targetAlias] = targetLiteral
 	}
 	imageReference, exprs, err := templateString(template, aliases)
 	if err != nil {
 		return "", false, "", fmt.Errorf("cannot template imageReference: %w", err)
 	}
 	for _, expr := range exprs {
-		if !isOCITarget && identifierUsed(expr, targetRepositoryAlias) {
-			return "", false, fmt.Sprintf("imageReference uses %s, but target %s is not an OCI registry", targetRepositoryAlias, targetKind(toSpec)), nil
+		idents, functions, err := expressionUses(expr)
+		if err != nil {
+			return "", false, "", fmt.Errorf("invalid imageReference: %w", err)
 		}
-		if referenceName == "" && identifierUsed(expr, referenceNameAlias) {
-			return "", false, fmt.Sprintf("imageReference uses %s, but the resource has no reference name", referenceNameAlias), nil
+		if !isOCITarget && idents[targetAlias] {
+			return "", false, fmt.Sprintf("imageReference uses %s, but target %s is not an OCI registry", targetAlias, targetKind(toSpec)), nil
+		}
+		if !hasReference && functions[ocifunctions.ToOCIFunctionName] {
+			return "", false, fmt.Sprintf("imageReference calls %s(), but the resource has no OCI reference", ocifunctions.ToOCIFunctionName), nil
 		}
 	}
 	return imageReference, true, "", nil
@@ -158,7 +222,7 @@ func processOCIUploader(ctx context.Context, resource descriptorv2.Resource, acc
 		}
 		return true, []string{fmt.Sprintf("${%sAdd%s.spec.file}", id, resourceID)}, nil
 	default:
-		// ociReferenceName only supports the access types above.
+		// ociUploadable only admits the access types above.
 		return false, nil, fmt.Errorf("unsupported access type %T for oci uploader", access)
 	}
 }

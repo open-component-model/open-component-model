@@ -21,6 +21,7 @@ import (
 	v1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	ocicredsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
+	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
 )
 
 // writeOCMConfigWithCredsAndTransfer composes the central OCM config used by these tests:
@@ -61,7 +62,7 @@ func writeOCIUploaderConfig(t *testing.T) string {
 	t.Helper()
 	cfgPath := filepath.Join(t.TempDir(), "oci-uploader.yaml")
 	require.NoError(t, os.WriteFile(cfgPath, []byte(
-		"type: generic.config.ocm.software/v1\nconfigurations:\n- type: oci.uploader.transfer.config.ocm.software/v1alpha1\n  imageReference: '${targetRepository + \"/\" + referenceName}'\n"), 0o600))
+		"type: generic.config.ocm.software/v1\nconfigurations:\n- type: oci.uploader.transfer.config.ocm.software/v1alpha1\n  imageReference: '"+transferv1alpha1.DefaultOCIImageReference+"'\n"), 0o600))
 	return cfgPath
 }
 

@@ -35,7 +35,11 @@ converted into native OCI artifacts there:
 type: generic.config.ocm.software/v1
 configurations:
   - type: oci.uploader.transfer.config.ocm.software/v1alpha1
-    imageReference: '${targetRepository + "/" + referenceName}'
+    imageReference: >-
+      ${target.baseUrl
+      + (target.subPath == "" ? "" : "/" + target.subPath)
+      + "/" + resource.access.toOCI().repository
+      + (resource.access.toOCI().tag == "" ? "" : ":" + resource.access.toOCI().tag)}
 ```
 
 ```bash

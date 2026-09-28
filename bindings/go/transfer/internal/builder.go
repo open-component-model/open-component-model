@@ -161,6 +161,7 @@ func NewDefaultBuilder(
 	}
 
 	return builder.NewBuilder(transformerScheme).
+		WithEnvOptions(ToOCIEnvOption()).
 		WithTransformer(&ociv1alpha1.OCIGetComponentVersion{}, ociGet).
 		WithTransformer(&ociv1alpha1.OCIAddComponentVersion{}, ociAdd).
 		WithTransformer(&ociv1alpha1.CTFGetComponentVersion{}, ociGet).
