@@ -53,6 +53,73 @@ func examplesResource(t *testing.T, name string) descriptor.Resource {
 	return descriptor.Resource{}
 }
 
+// customAccessResource returns a resource whose access type the transfer does not know.
+func customAccessResource(name, version string) descriptor.Resource {
+	return descriptor.Resource{
+		ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: name, Version: version}},
+		Type:        "blob",
+		Relation:    descriptor.ExternalRelation,
+		Access:      &runtime.Raw{Type: runtime.NewVersionedType("Custom", "v1"), Data: []byte(`{"type":"Custom/v1"}`)},
+	}
+}
+
+// completeExampleConfig is the complete config example of the transfer configuration
+// reference ("Complete Example").
+const completeExampleConfig = `
+type: generic.config.ocm.software/v1
+configurations:
+  - type: transfer.config.ocm.software/v1alpha1
+    recursive: -1
+  # 1. Keep the large base image by reference (not copied at all).
+  #    Declared first, so the catch-all below never sees it.
+  - type: reference.uploader.transfer.config.ocm.software/v1alpha1
+    match:
+      name: base-os-image
+      when: accessType != "LocalBlob"          # default
+  # 2. Stream wget-hosted documentation to an HTTP artifact store.
+  - type: http.uploader.transfer.config.ocm.software/v1alpha1
+    match:
+      accessType: Wget/v1
+    targetURL: '${"https://artifacts.example.com/ocm" + url(resource.access.url).path}'
+    method: PUT
+  # 3. OCI images, Helm charts and OCI-manifest local blobs become separate OCI
+  #    artifacts next to the component version (former uploadType: ociArtifact).
+  - type: oci.uploader.transfer.config.ocm.software/v1alpha1
+    match:
+      when: >-                                   # default
+        target.type == "OCIRepository"
+        && (accessType in ["OCIImage", "Helm"]
+          || (accessType == "LocalBlob"
+            && isOCIManifest(resource.access.mediaType)
+            && has(resource.access.referenceName)))
+    # imageReference omitted = default
+  # 4. Everything the rules above did not select is embedded as a local blob
+  #    (former copyMode: allResources).
+  - type: localblob.uploader.transfer.config.ocm.software/v1alpha1
+    match:
+      when: accessType in ["LocalBlob", "OCIImage", "Helm", "Wget", "S3", "GitHub"]   # default
+`
+
+// completeExampleResources returns the resources of the complete config example.
+func completeExampleResources() []descriptor.Resource {
+	config := localBlobResource("config", "1.0.0")
+	config.Access.(*descriptorv2.LocalBlob).MediaType = "application/json"
+	return []descriptor.Resource{
+		ociImageResource("base-os-image", "1.0.0", "ghcr.io/acme/base-os:1.2"),
+		wgetResource("docs", "1.0.0", "https://docs.example.com/demo/guide.tar"),
+		ociImageResource("app-image", "1.0.0", "ghcr.io/acme/app:1.0.0"),
+		helmResource("chart", "1.0.0", "https://charts.acme.io/stable", "app"),
+		config,
+		githubResource("sources", "1.0.0", "https://github.com/open-component-model/open-component-model", "f58349914e3c775747dc1ee9af1bc83db4652266"),
+		{
+			ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "models", Version: "1.0.0"}},
+			Type:        "blob",
+			Relation:    descriptor.ExternalRelation,
+			Access:      &runtime.Raw{Type: runtime.NewVersionedType("S3", "v2"), Data: []byte(`{"type":"S3/v2","bucketName":"models","objectKey":"m.bin"}`)},
+		},
+	}
+}
+
 // indentBlock indents every line of s by n spaces, for embedding s in a YAML block scalar.
 func indentBlock(s string, n int) string {
 	pad := strings.Repeat(" ", n)
@@ -107,10 +174,12 @@ func TestUploaderExamples(t *testing.T) {
 		name       string
 		configYAML string
 		target     func(t *testing.T) runtime.Typed
-		// resources defaults to examplesResources().
+		// resources selects fixture resources by name; nil means all of examplesResources().
 		resources []string
-		want      map[string]string
-		wantErr   string
+		// fixture replaces examplesResources() entirely.
+		fixture []descriptor.Resource
+		want    map[string]string
+		wantErr string
 	}{
 		{
 			name: "E1 default OCI uploader",
@@ -330,6 +399,157 @@ configurations:
 			resources: []string{"app"},
 			wantErr:   "imageReference does not evaluate",
 		},
+		{
+			name: "E10 copy everything as local blobs",
+			configYAML: `
+type: generic.config.ocm.software/v1
+configurations:
+  - type: localblob.uploader.transfer.config.ocm.software/v1alpha1
+`,
+			target: oci,
+			want: map[string]string{
+				"app":    "local blob",
+				"nginx":  "local blob",
+				"chart":  "local blob",
+				"bundle": "local blob",
+				"notes":  "local blob",
+				"docs":   "local blob",
+			},
+		},
+		{
+			name: "E11 OCI artifacts plus everything else copied",
+			configYAML: `
+type: generic.config.ocm.software/v1
+configurations:
+  - type: oci.uploader.transfer.config.ocm.software/v1alpha1
+  - type: localblob.uploader.transfer.config.ocm.software/v1alpha1
+`,
+			target: oci,
+			want: map[string]string{
+				"app":    e1["app"],
+				"nginx":  e1["nginx"],
+				"chart":  e1["chart"],
+				"bundle": e1["bundle"],
+				"notes":  "local blob",
+				"docs":   "local blob",
+			},
+		},
+		{
+			name: "E12 exclude one resource from a catch-all",
+			configYAML: `
+type: generic.config.ocm.software/v1
+configurations:
+  - type: reference.uploader.transfer.config.ocm.software/v1alpha1
+    match:
+      name: nginx
+  - type: oci.uploader.transfer.config.ocm.software/v1alpha1
+  - type: localblob.uploader.transfer.config.ocm.software/v1alpha1
+`,
+			target: oci,
+			want: map[string]string{
+				"app":    e1["app"],
+				"nginx":  "by reference",
+				"chart":  e1["chart"],
+				"bundle": e1["bundle"],
+				"notes":  "local blob",
+				"docs":   "local blob",
+			},
+		},
+		{
+			name: "E13 keep Docker Hub images by reference, copy the rest",
+			configYAML: `
+type: generic.config.ocm.software/v1
+configurations:
+  - type: reference.uploader.transfer.config.ocm.software/v1alpha1
+    match:
+      when: accessType == "OCIImage" && resource.access.toOCI().host.endsWith("docker.io")
+  - type: localblob.uploader.transfer.config.ocm.software/v1alpha1
+`,
+			target: oci,
+			want: map[string]string{
+				"app":    "local blob",
+				"nginx":  "by reference",
+				"chart":  "local blob",
+				"bundle": "local blob",
+				"notes":  "local blob",
+				"docs":   "local blob",
+			},
+		},
+		{
+			name: "E14 copy only wget downloads",
+			configYAML: `
+type: generic.config.ocm.software/v1
+configurations:
+  - type: localblob.uploader.transfer.config.ocm.software/v1alpha1
+    match:
+      when: accessType == "Wget"
+`,
+			target: oci,
+			want: map[string]string{
+				"app":    "by reference",
+				"nginx":  "by reference",
+				"chart":  "by reference",
+				"bundle": "local blob",
+				"notes":  "local blob",
+				"docs":   "local blob",
+			},
+		},
+		{
+			name: "E15 a local blob cannot be kept by reference",
+			configYAML: `
+type: generic.config.ocm.software/v1
+configurations:
+  - type: reference.uploader.transfer.config.ocm.software/v1alpha1
+    match:
+      when: "true"
+`,
+			target:    oci,
+			resources: []string{"bundle"},
+			wantErr:   "local blobs cannot be kept by reference",
+		},
+		{
+			name: "E15 the local blob uploader cannot copy an unknown access type",
+			configYAML: `
+type: generic.config.ocm.software/v1
+configurations:
+  - type: localblob.uploader.transfer.config.ocm.software/v1alpha1
+    match:
+      when: "true"
+`,
+			target:  oci,
+			fixture: []descriptor.Resource{customAccessResource("custom", "1.0.0")},
+			wantErr: "local blob uploader cannot copy access type Custom/v1",
+		},
+		{
+			name:       "E16 complete config to an OCI registry",
+			configYAML: completeExampleConfig,
+			target:     oci,
+			fixture:    completeExampleResources(),
+			want: map[string]string{
+				"base-os-image": "by reference",
+				"docs":          "http",
+				"app-image":     "oci ghcr.io/target-org/ocm/acme/app:1.0.0",
+				"chart":         "oci ghcr.io/target-org/ocm/stable/app:1.0.0",
+				"config":        "local blob",
+				"sources":       "local blob",
+				"models":        "local blob",
+			},
+		},
+		{
+			name:       "E16 complete config to a CTF archive",
+			configYAML: completeExampleConfig,
+			target:     ctf,
+			fixture:    completeExampleResources(),
+			want: map[string]string{
+				"base-os-image": "by reference",
+				"docs":          "http",
+				"app-image":     "local blob",
+				"chart":         "local blob",
+				"config":        "local blob",
+				"sources":       "local blob",
+				"models":        "local blob",
+			},
+		},
 	}
 
 	for _, tc := range tests {
@@ -343,13 +563,13 @@ configurations:
 			if cfg == nil {
 				cfg = &transferv1alpha1.Config{}
 			}
-			if cfg.CopyMode == "" {
-				cfg.CopyMode = transferv1alpha1.CopyModeLocalBlobResources
-			}
 			uploaders, err := transferv1alpha1.LookupUploaderConfigs(&generic)
 			r.NoError(err)
 
 			resources := examplesResources()
+			if tc.fixture != nil {
+				resources = tc.fixture
+			}
 			if tc.resources != nil {
 				resources = nil
 				for _, name := range tc.resources {

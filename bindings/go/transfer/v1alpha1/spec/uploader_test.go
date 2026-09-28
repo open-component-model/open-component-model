@@ -27,7 +27,7 @@ func TestLookupUploaderConfigs(t *testing.T) {
 type: generic.config.ocm.software/v1
 configurations:
   - type: transfer.config.ocm.software/v1alpha1
-    copyMode: allResources
+    recursive: -1
   - type: http.uploader.transfer.config.ocm.software/v1alpha1
     match:
       accessType: Wget/v1alpha1
@@ -49,7 +49,7 @@ configurations:
 		cfg, err := spec.LookupConfig(generic)
 		r.NoError(err)
 		r.NotNil(cfg)
-		assert.Equal(t, spec.CopyModeAllResources, cfg.CopyMode)
+		assert.Equal(t, spec.RecursiveInfinite, cfg.Recursive)
 	})
 
 	t.Run("no uploader entries returns nil", func(t *testing.T) {
@@ -57,7 +57,7 @@ configurations:
 type: generic.config.ocm.software/v1
 configurations:
   - type: transfer.config.ocm.software/v1alpha1
-    copyMode: allResources
+    recursive: -1
 `)
 		uploaders, err := spec.LookupUploaderConfigs(generic)
 		require.NoError(t, err)
@@ -177,6 +177,31 @@ configurations:
 		_, err := spec.LookupUploaderConfigs(generic)
 		require.ErrorContains(t, err, `unknown field "headers"`)
 	})
+	t.Run("localblob and reference uploaders are decoded", func(t *testing.T) {
+		r := require.New(t)
+		generic := decode(t, `
+type: generic.config.ocm.software/v1
+configurations:
+  - type: oci.uploader.transfer.config.ocm.software/v1alpha1
+  - type: localblob.uploader.transfer.config.ocm.software/v1alpha1
+  - type: reference.uploader.transfer.config.ocm.software/v1alpha1
+    match:
+      name: keep-this
+`)
+		uploaders, err := spec.LookupUploaderConfigs(generic)
+		r.NoError(err)
+		r.Len(uploaders, 3)
+		r.IsType(&spec.OCIUploaderConfig{}, uploaders[0])
+
+		lb, ok := uploaders[1].(*spec.LocalBlobUploaderConfig)
+		r.True(ok)
+		r.Nil(lb.MatchSpec)
+
+		ref, ok := uploaders[2].(*spec.ReferenceUploaderConfig)
+		r.True(ok)
+		r.NotNil(ref.MatchSpec)
+		r.Equal("keep-this", ref.MatchSpec.Name)
+	})
 }
 
 func TestUploaderConfig_MatchWhen(t *testing.T) {
@@ -191,6 +216,10 @@ func TestUploaderConfig_MatchWhen(t *testing.T) {
 		{"oci with when replaces the default", &spec.OCIUploaderConfig{MatchSpec: &spec.UploaderMatch{When: when}}, when},
 		{"http with when", &spec.HTTPUploaderConfig{MatchSpec: spec.UploaderMatch{When: when}}, when},
 		{"http without when has no predicate", &spec.HTTPUploaderConfig{}, ""},
+		{"localblob without match uses the default", &spec.LocalBlobUploaderConfig{}, spec.DefaultLocalBlobUploaderWhen},
+		{"localblob with when replaces the default", &spec.LocalBlobUploaderConfig{MatchSpec: &spec.UploaderMatch{When: when}}, when},
+		{"reference without match uses the default", &spec.ReferenceUploaderConfig{}, spec.DefaultReferenceUploaderWhen},
+		{"reference with when replaces the default", &spec.ReferenceUploaderConfig{MatchSpec: &spec.UploaderMatch{When: when}}, when},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			require.New(t).Equal(tc.want, tc.uploader.MatchWhen())
@@ -220,6 +249,44 @@ func TestHTTPUploaderConfig_Validate(t *testing.T) {
 		u := valid()
 		u.TargetURL = ""
 		require.Error(t, u.Validate())
+	})
+}
+
+func TestLocalBlobUploaderConfig_Validate(t *testing.T) {
+	t.Run("empty is valid", func(t *testing.T) {
+		require.NoError(t, (&spec.LocalBlobUploaderConfig{}).Validate())
+	})
+
+	t.Run("unversioned type is valid", func(t *testing.T) {
+		require.NoError(t, (&spec.LocalBlobUploaderConfig{
+			Type: runtime.NewUnversionedType(spec.LocalBlobUploaderConfigType),
+		}).Validate())
+	})
+
+	t.Run("wrong type is rejected", func(t *testing.T) {
+		err := (&spec.LocalBlobUploaderConfig{
+			Type: runtime.NewVersionedType("other.config.ocm.software", "v1alpha1"),
+		}).Validate()
+		require.ErrorContains(t, err, "invalid type")
+	})
+}
+
+func TestReferenceUploaderConfig_Validate(t *testing.T) {
+	t.Run("empty is valid", func(t *testing.T) {
+		require.NoError(t, (&spec.ReferenceUploaderConfig{}).Validate())
+	})
+
+	t.Run("unversioned type is valid", func(t *testing.T) {
+		require.NoError(t, (&spec.ReferenceUploaderConfig{
+			Type: runtime.NewUnversionedType(spec.ReferenceUploaderConfigType),
+		}).Validate())
+	})
+
+	t.Run("wrong type is rejected", func(t *testing.T) {
+		err := (&spec.ReferenceUploaderConfig{
+			Type: runtime.NewVersionedType("other.config.ocm.software", "v1alpha1"),
+		}).Validate()
+		require.ErrorContains(t, err, "invalid type")
 	})
 }
 

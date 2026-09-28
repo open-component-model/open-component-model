@@ -11,8 +11,8 @@ import (
 	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1/meta"
 )
 
-// processGitHub emits the transformation nodes for a gitHub resource under
-// CopyModeAllResources. The archive at the pinned commit is downloaded (GetGitHubCommit),
+// processGitHub emits the transformation nodes for a gitHub resource selected by a
+// local blob uploader. The archive at the pinned commit is downloaded (GetGitHubCommit),
 // then embedded as a local blob (AddLocalResource).
 func processGitHub(resource descriptorv2.Resource, access *githubv1.GitHub, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int) error {
 	if access.Commit == "" {

@@ -137,8 +137,8 @@ func Test_Integration_TransferWgetResource_UploaderStreamsToHTTPTarget(t *testin
 	}}
 
 	tgd, err := transfer.BuildGraphDefinition(t.Context(),
-		&transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeAllResources},
-		uploaders,
+		&transferv1alpha1.Config{},
+		append(uploaders, &transferv1alpha1.LocalBlobUploaderConfig{}),
 		transfer.Mapping{
 			Components: []transfer.ComponentID{{Component: componentName, Version: componentVersion}},
 			Target:     targetSpec,

@@ -26,6 +26,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/compref"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
+	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/transfer"
 	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
 	graphPkg "ocm.software/open-component-model/bindings/go/transform/graph"
@@ -65,20 +66,22 @@ only the newest matching version.
 OCI, CTF, and Helm repositories are supported as transfer sources.
 OCI and CTF repositories are supported as transfer targets, while Helm repositories are not supported.
 
-By default, only the component version itself is transferred. Use --copy-resources to also
-copy (and, when needed, transform) the resources it references; copied resources are stored
-as local blobs in the target. To upload resources as separate OCI artifacts or to other
-custom targets, declare uploader configurations (e.g.
-oci.uploader.transfer.config.ocm.software/v1alpha1,
-http.uploader.transfer.config.ocm.software/v1alpha1) in the OCM configuration; the first
-uploader whose match (including match.when) selects a resource handles it, regardless of
---copy-resources. The former --upload-as flag is replaced by
-these uploader configurations (see the "Migrate from --upload-as to Uploader Configurations"
-guide on ocm.software). --recursive walks the component's references and transfers them too.
+By default, local blobs are copied and all other resources stay by reference (their access
+is unchanged in the target). Uploader configurations in the OCM configuration select which
+resources are moved and how: oci.uploader.transfer.config.ocm.software/v1alpha1 (separate
+OCI artifacts), http.uploader.transfer.config.ocm.software/v1alpha1 (custom HTTP targets),
+localblob.uploader.transfer.config.ocm.software/v1alpha1 (copy as local blobs) and
+reference.uploader.transfer.config.ocm.software/v1alpha1 (keep by reference). The first
+uploader whose match (including match.when) selects a resource handles it. --copy-resources
+appends a catch-all localblob.uploader.transfer.config.ocm.software/v1alpha1 entry after all
+configured uploaders, so every resource they do not select is copied as a local blob. The
+former --upload-as flag and copyMode field are replaced by these uploader configurations (see
+the "Migrate from --upload-as to Uploader Configurations" guide on ocm.software). --recursive
+walks the component's references and transfers them too.
 
 Driving defaults from the OCM configuration:
   A transfer.config.ocm.software/v1alpha1 entry inside the central OCM configuration
-  (passed via --config) sets defaults for --recursive and --copy-resources.
+  (passed via --config) sets defaults for --recursive.
   Explicit command-line flags always override the values from the configuration.
 
 Two-step workflow (generate, review, replay):
@@ -148,7 +151,7 @@ transfer component-version ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.
 #   configurations:
 #   - type: transfer.config.ocm.software/v1alpha1
 #     recursive: -1
-#     copyMode: allResources
+#   - type: localblob.uploader.transfer.config.ocm.software/v1alpha1
 # the following invocation transfers recursively with all resources copied.
 # Any explicit flag still overrides the corresponding configuration value.
 transfer component-version --config ./ocmconfig.yaml ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm
@@ -166,7 +169,7 @@ transfer component-version --transfer-spec spec.yaml
 	enum.VarP(cmd.Flags(), FlagOutput, "o", []string{render.OutputFormatYAML.String(), render.OutputFormatJSON.String(), render.OutputFormatNDJSON.String()}, "output format of the component descriptors")
 	cmd.Flags().Bool(FlagDryRun, false, "build and validate the graph but do not execute")
 	cmd.Flags().BoolP(FlagRecursive, "r", false, "recursively discover and transfer component versions")
-	cmd.Flags().Bool(FlagCopyResources, false, "copy all resources in the component version")
+	cmd.Flags().Bool(FlagCopyResources, false, "copy every resource that no configured uploader selects into the target as a local blob (appends a localblob.uploader.transfer.config.ocm.software/v1alpha1 entry after all configured uploaders)")
 	cmd.Flags().String(FlagTransferSpec, "", "path to a transfer specification file (use \"-\" for stdin). The input must hold exactly one transfer spec document; with \"-\", OCM configuration documents in stdin are applied as configuration")
 	cmd.Flags().String(FlagConstraint, "", "version constraint evaluated by each version's configured scheme; versions with no applicable scheme are retained (e.g. \">= 1.0.0, < 2.0.0\"); only used when no version is specified in the reference")
 	cmd.Flags().Bool(FlagLatest, false, "if set, only the latest version of the component is transferred; only used when no version is specified in the reference")
@@ -453,16 +456,15 @@ func buildGraphDefinitionFromArgs(
 			transferCfg.Recursive = transferv1alpha1.RecursiveNone
 		}
 	}
-	if cmd.Flags().Changed(FlagCopyResources) {
-		copyResources, err := cmd.Flags().GetBool(FlagCopyResources)
-		if err != nil {
-			return nil, fmt.Errorf("getting copy-resources flag failed: %w", err)
-		}
-		if copyResources {
-			transferCfg.CopyMode = transferv1alpha1.CopyModeAllResources
-		} else {
-			transferCfg.CopyMode = transferv1alpha1.CopyModeLocalBlobResources
-		}
+	copyResources, err := cmd.Flags().GetBool(FlagCopyResources)
+	if err != nil {
+		return nil, fmt.Errorf("getting copy-resources flag failed: %w", err)
+	}
+	if copyResources {
+		// Appended after all configured uploaders so explicit rules still win.
+		uploaderCfgs = append(uploaderCfgs, &transferv1alpha1.LocalBlobUploaderConfig{
+			Type: runtime.NewVersionedType(transferv1alpha1.LocalBlobUploaderConfigType, transferv1alpha1.Version),
+		})
 	}
 
 	constraint, err := cmd.Flags().GetString(FlagConstraint)

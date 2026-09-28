@@ -84,8 +84,6 @@ and convert the hex digest to base64 with `base64.encode(hex.decode(...))`:
 ```yaml
 type: generic.config.ocm.software/v1
 configurations:
-  - type: transfer.config.ocm.software/v1alpha1
-    copyMode: allResources
   - type: http.uploader.transfer.config.ocm.software/v1alpha1
     match:
       accessType: Wget/v1

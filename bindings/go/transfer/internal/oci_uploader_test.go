@@ -106,7 +106,6 @@ func TestBuildGraphDefinition_OCIUploader(t *testing.T) {
 		name      string
 		target    runtime.Typed
 		resource  descriptor.Resource
-		copyMode  transferv1alpha1.CopyMode
 		uploaders []transferv1alpha1.UploaderConfig
 		wantTypes []runtime.Type
 		// wantImageRef is the evaluated image reference of the node at wantImageRefAt.
@@ -116,7 +115,7 @@ func TestBuildGraphDefinition_OCIUploader(t *testing.T) {
 		wantErr        string
 	}{
 		{
-			name:           "OCI image streams to target repository regardless of copy mode",
+			name:           "OCI image streams to the target repository",
 			target:         testOCIRepo("ghcr.io/target"),
 			resource:       ociImageResource("my-image", "1.0.0", "oci://ghcr.io/org/image:v1"),
 			uploaders:      ociUploaders(),
@@ -216,8 +215,7 @@ func TestBuildGraphDefinition_OCIUploader(t *testing.T) {
 			name:      "CTF target is not selected by the default when",
 			target:    testCTFRepo("/tmp/target"),
 			resource:  ociImageResource("my-image", "1.0.0", "oci://ghcr.io/org/image:v1"),
-			copyMode:  transferv1alpha1.CopyModeAllResources,
-			uploaders: ociUploaders(),
+			uploaders: withLocalBlobUploader(ociUploaders()...),
 			wantTypes: []runtime.Type{ociv1alpha1.GetOCIArtifactV1alpha1, ociv1alpha1.CTFAddLocalResourceV1alpha1, ociv1alpha1.CTFAddComponentVersionV1alpha1, FileCleanupVersionedType},
 		},
 		{
@@ -385,12 +383,7 @@ func TestBuildGraphDefinition_OCIUploader(t *testing.T) {
 			desc := testDescriptor("ocm.software/test", "1.0.0", []descriptor.Resource{tc.resource}, nil)
 			resolver := testResolverFor("ocm.software/test", "1.0.0", testOCIRepo("ghcr.io/source"), desc)
 			roots := testTransferRoots("ocm.software/test", "1.0.0", tc.target, resolver)
-			copyMode := tc.copyMode
-			if copyMode == "" {
-				copyMode = transferv1alpha1.CopyModeLocalBlobResources
-			}
-
-			tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: copyMode}, tc.uploaders)
+			tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{}, tc.uploaders)
 			if tc.wantErr != "" {
 				r.ErrorContains(err, tc.wantErr)
 				return
@@ -433,7 +426,7 @@ func TestBuildGraphDefinition_OCIUploader_ReferenceNameAsIs(t *testing.T) {
 			resolver := testResolverFor("ocm.software/test", "1.0.0", testOCIRepo("ghcr.io/source"), desc)
 			roots := testTransferRoots("ocm.software/test", "1.0.0", testOCIRepo("ghcr.io/target"), resolver)
 
-			tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeLocalBlobResources}, asIs)
+			tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{}, asIs)
 			r.NoError(err)
 
 			addOCIArtifact := runtime.NewVersionedType(ociv1alpha1.AddOCIArtifactType, ociv1alpha1.Version)

@@ -1,8 +1,6 @@
 package spec
 
 import (
-	"fmt"
-
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -105,25 +103,13 @@ func (u *OCIUploaderConfig) Validate() error {
 	if u == nil {
 		return nil
 	}
-	if !u.Type.IsEmpty() {
-		if u.Type.Name != OCIUploaderConfigType || (u.Type.Version != "" && u.Type.Version != Version) {
-			return fmt.Errorf("invalid type %q (must be %q or %q)",
-				u.Type, OCIUploaderConfigType, runtime.NewVersionedType(OCIUploaderConfigType, Version))
-		}
-	}
-	return nil
+	return validateUploaderType(u.Type, OCIUploaderConfigType)
 }
 
 // Match reports whether the static match fields select resource. Without a match every
 // resource with an access matches. It implements [UploaderConfig].
 func (u *OCIUploaderConfig) Match(resource descriptorv2.Resource) bool {
-	if u == nil || resource.Access == nil {
-		return false
-	}
-	if u.MatchSpec == nil {
-		return true
-	}
-	return u.MatchSpec.Matches(resource)
+	return u != nil && matchOptional(u.MatchSpec, resource)
 }
 
 // MatchWhen returns the configured match.when, or [DefaultOCIUploaderWhen]. It
@@ -132,8 +118,5 @@ func (u *OCIUploaderConfig) MatchWhen() string {
 	if u == nil {
 		return ""
 	}
-	if u.MatchSpec != nil && u.MatchSpec.When != "" {
-		return u.MatchSpec.When
-	}
-	return DefaultOCIUploaderWhen
+	return whenOrDefault(u.MatchSpec, DefaultOCIUploaderWhen)
 }

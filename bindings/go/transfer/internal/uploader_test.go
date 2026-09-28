@@ -75,7 +75,7 @@ func TestBuildGraphDefinition_UploaderMatch_EmitsHTTPStreaming(t *testing.T) {
 	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
 
 	uploaders := []transferv1alpha1.UploaderConfig{wgetUploader(t, `${"https://target.example" + url(resource.access.url).path}`)}
-	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeLocalBlobResources}, uploaders)
+	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{}, uploaders)
 	r.NoError(err)
 
 	// Exactly one HTTPStreaming node for the resource, plus the component-version upload.
@@ -250,7 +250,7 @@ func TestBuildGraphDefinition_NoUploader_KeepsDownloadWgetPath(t *testing.T) {
 	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
 	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
 
-	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeAllResources}, nil)
+	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{}, withLocalBlobUploader())
 	r.NoError(err)
 
 	var sawDownloadWget, sawStreaming bool
@@ -279,7 +279,7 @@ func TestBuildGraphDefinition_UploaderPreservesResourceInStringLiteral(t *testin
 	uploaders := []transferv1alpha1.UploaderConfig{
 		wgetUploader(t, `${"https://uploads.example/resource/" + resource.name}`),
 	}
-	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeLocalBlobResources}, uploaders)
+	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{}, uploaders)
 	r.NoError(err)
 
 	var targetURL string
@@ -322,7 +322,7 @@ func TestBuildGraphDefinition_UploaderTemplatesHeaders(t *testing.T) {
 	}
 	uploaders := []transferv1alpha1.UploaderConfig{u}
 
-	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeLocalBlobResources}, uploaders)
+	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{}, uploaders)
 	r.NoError(err)
 
 	var header map[string]any
@@ -382,7 +382,7 @@ func TestBuildGraphDefinition_UploaderUsesLabelValueAndIdentityMatch(t *testing.
 	}
 	uploaders := []transferv1alpha1.UploaderConfig{u}
 
-	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeLocalBlobResources}, uploaders)
+	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{}, uploaders)
 	r.NoError(err)
 
 	// The uploader matched (via the extra-identity criterion) → an HTTPStreaming node exists.
@@ -426,7 +426,7 @@ func TestBuildGraphDefinition_UploaderMatchesNonWgetSource(t *testing.T) {
 		uploaderFor(t, runtime.NewVersionedType("OCIImage", "v1"),
 			`${"https://mirror.example/" + resource.access.imageReference}`),
 	}
-	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeAllResources}, uploaders)
+	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{}, withLocalBlobUploader(uploaders...))
 	r.NoError(err)
 
 	var streamID string
@@ -465,7 +465,7 @@ func TestBuildGraphDefinition_UploaderLiteralTargetURL(t *testing.T) {
 	// A targetURL without ${...} is a literal, templated like any other string: it
 	// passes through unchanged with no special-case handling.
 	uploaders := []transferv1alpha1.UploaderConfig{wgetUploader(t, `https://target.example/uploads/blob.tar`)}
-	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeLocalBlobResources}, uploaders)
+	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{}, uploaders)
 	r.NoError(err)
 
 	var targetURL string
@@ -506,10 +506,10 @@ func TestBuildGraphDefinition_DeterministicOrder(t *testing.T) {
 
 	uploaders := []transferv1alpha1.UploaderConfig{wgetUploader(t, `${"https://target.example" + url(resource.access.url).path}`)}
 
-	first, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeAllResources}, uploaders)
+	first, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{}, withLocalBlobUploader(uploaders...))
 	r.NoError(err)
 	for i := 0; i < 20; i++ {
-		next, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeAllResources}, uploaders)
+		next, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{}, withLocalBlobUploader(uploaders...))
 		r.NoError(err)
 		r.Equal(len(first.Transformations), len(next.Transformations))
 		for j := range first.Transformations {

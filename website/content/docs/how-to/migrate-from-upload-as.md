@@ -39,7 +39,7 @@ a Before / After pair showing the exact change.
 | Before | After | Behaviour difference |
 | -------- | ------- | ---------------------- |
 | `--upload-as localBlob`, `uploadType: localBlob`, or nothing | Drop the flag/field. | None. Local blob is the default. |
-| `--copy-resources --upload-as ociArtifact`, or `copyMode: allResources` + `uploadType: ociArtifact` | Keep `--copy-resources` / `copyMode: allResources`; add an `oci.uploader.transfer.config.ocm.software/v1alpha1` entry (no other fields needed). | None. Same target references: `<baseUrl>[/<subPath>]/<repository>[:<tag>]`. |
+| `--copy-resources --upload-as ociArtifact`, or `copyMode: allResources` + `uploadType: ociArtifact` | Keep `--copy-resources` or add a `localblob.uploader.transfer.config.ocm.software/v1alpha1` catch-all entry; add an `oci.uploader.transfer.config.ocm.software/v1alpha1` entry. | None. Same target references: `<baseUrl>[/<subPath>]/<repository>[:<tag>]`. |
 | `--upload-as ociArtifact` without `--copy-resources` (only OCI-manifest local blobs became OCI artifacts; OCI image / Helm references stayed by reference) | One OCI uploader entry whose `match.when` selects only OCI-manifest local blobs with a `referenceName` (see step 3). | None. |
 | Controller: `uploadType: ociArtifact` in the transfer config referenced by a `Replication` | Remove `uploadType` from that config entry; add the OCI uploader entry to the same config (ConfigMap/Secret). | None. The controller reads uploader entries from the same configs (`LookupUploaderConfigs`). |
 
@@ -138,10 +138,12 @@ Or in config:
 
 ```yaml
 - type: transfer.config.ocm.software/v1alpha1
-  copyMode: allResources
+- type: localblob.uploader.transfer.config.ocm.software/v1alpha1
 ```
 
-No uploader entry needed. Local blob is the default when no uploader matches.
+No uploader entry needed for the default local-blob handling. The local-blob
+uploader catch-all is the replacement for `copyMode: allResources`; omit it
+entirely if only local blobs should be copied (the baseline).
 
 {{< /tab >}}
 {{< /tabs >}}
@@ -203,7 +205,6 @@ Or add the entry to the same config that already holds the transfer settings:
 type: generic.config.ocm.software/v1
 configurations:
   - type: transfer.config.ocm.software/v1alpha1
-    copyMode: allResources
   - type: oci.uploader.transfer.config.ocm.software/v1alpha1
     imageReference: |-
       ${target.baseUrl
@@ -217,6 +218,7 @@ configurations:
                 : (resource.access.helmChart.contains(":") ? ":" + resource.access.helmChart.split(":")[1] : ""))
             : resource.access.toOCI().repository
               + (resource.access.toOCI().tag == "" ? "" : ":" + resource.access.toOCI().tag))}
+  - type: localblob.uploader.transfer.config.ocm.software/v1alpha1
 ```
 
 {{< /tab >}}
@@ -278,7 +280,6 @@ type: generic.config.ocm.software/v1
 configurations:
   - type: transfer.config.ocm.software/v1alpha1
     recursive: -1
-    copyMode: allResources
   - type: oci.uploader.transfer.config.ocm.software/v1alpha1
     imageReference: |-
       ${target.baseUrl
@@ -292,6 +293,7 @@ configurations:
                 : (resource.access.helmChart.contains(":") ? ":" + resource.access.helmChart.split(":")[1] : ""))
             : resource.access.toOCI().repository
               + (resource.access.toOCI().tag == "" ? "" : ":" + resource.access.toOCI().tag))}
+  - type: localblob.uploader.transfer.config.ocm.software/v1alpha1
 ```
 
 Remove `uploadType` from the transfer config entry and add the OCI uploader
@@ -303,14 +305,14 @@ configs (`LookupUploaderConfigs`).
 
 ## Behaviour to know after migrating
 
-- An uploader runs regardless of `--copy-resources`. An entry without an
-  explicit `match.when` therefore now also uploads OCI image and Helm resources
-  without `--copy-resources` (they previously stayed by reference), which is why
-  the local-blob-only row above exists.
-- An uploader handles exactly the resources its `match` selects. There is no
-  fall-through: if a selected resource cannot be uploaded (an explicit `when`
-  selects a `Wget` resource, or `imageReference` does not evaluate for it), the
-  transfer fails instead of silently copying the resource as a local blob.
+- An uploader handles exactly the resources its `match` selects. An entry
+  without an explicit `match.when` therefore also uploads OCI image and Helm
+  resources (they previously stayed by reference when using the old
+  `--upload-as` flag), which is why the local-blob-only row above exists.
+- There is no fall-through: if a selected resource cannot be uploaded (an
+  explicit `when` selects a `Wget` resource, or `imageReference` does not
+  evaluate for it), the transfer fails instead of silently copying the resource
+  as a local blob.
 - The default `when` selects nothing on a CTF target, so resources keep the
   default handling there. To push to a registry from a CTF transfer, use a
   `when` without the target check and an absolute `imageReference`.
@@ -548,6 +550,28 @@ for it, for example the default template on a CTF target (it reads
 
 **Fix:** Narrow `match.when` to the resources the template works for, or use a
 template that does not read the missing field.
+
+### Symptom: `unknown field "copyMode"`
+
+The full error is: `looking up transfer config failed: failed to decode transfer config: type "transfer.config.ocm.software/v1alpha1" has unknown or invalid fields: json: unknown field "copyMode"`.
+
+**Cause:** The `copyMode` field has been removed from the transfer config type.
+Strict decoding now rejects unknown fields.
+
+**Fix:** Delete the `copyMode` field and apply the mapping below.
+
+## Migrate `copyMode`
+
+The `copyMode` field of `transfer.config.ocm.software/v1alpha1` has been removed.
+The following table maps old values to their replacements:
+
+| Old | New |
+| --- | --- |
+| `copyMode: localBlob` or omitted | Delete the field; nothing else (baseline). |
+| `copyMode: allResources` | Delete the field; append `- type: localblob.uploader.transfer.config.ocm.software/v1alpha1` as the last uploader entry. |
+| `--copy-resources` | Unchanged: appends the same catch-all after all configured uploaders. |
+| `--copy-resources=false` overriding a config's `allResources` | No equivalent: the flag only adds; remove the catch-all from the config. |
+| Exclude a resource from copying | Add a `reference.uploader.transfer.config.ocm.software/v1alpha1` entry with `match` before the catch-all. |
 
 ## Related documentation
 

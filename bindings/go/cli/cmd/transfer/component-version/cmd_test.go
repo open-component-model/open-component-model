@@ -21,7 +21,9 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci"
 	"ocm.software/open-component-model/bindings/go/oci/compref"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
+	ociaccessv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
+	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/signing"
 )
 
@@ -682,4 +684,80 @@ func TestTransferComponentVersion_ExactVersionIgnoresConstraintFlags(t *testing.
 		_, err = targetRepo.GetComponentVersion(ctx, componentName, v)
 		require.Error(t, err, "version %s should NOT be in target", v)
 	}
+}
+
+// TestTransferCopyResourcesAppendsLocalBlobUploader verifies that --copy-resources
+// appends a catch-all local blob uploader after all configured uploaders.
+func TestTransferCopyResourcesAppendsLocalBlobUploader(t *testing.T) {
+	r := require.New(t)
+
+	// Build a component with an OCIImage resource (external, no blob).
+	fromDesc := createTestDescriptor("ocm.software/copy-resources-test", "1.0.0")
+	fromDesc.Component.Resources = []descriptor.Resource{
+		{
+			ElementMeta: descriptor.ElementMeta{
+				ObjectMeta: descriptor.ObjectMeta{
+					Name:    "image",
+					Version: "1.0.0",
+				},
+			},
+			Type:     "ociImage",
+			Relation: descriptor.ExternalRelation,
+			Access: &ociaccessv1.OCIImage{
+				Type:           runtime.NewVersionedType(ociaccessv1.OCIImageType, "v1"),
+				ImageReference: "ghcr.io/org/image:v1",
+			},
+		},
+	}
+
+	archivePath := t.TempDir()
+	fs, err := filesystem.NewFS(archivePath, os.O_RDWR)
+	r.NoError(err)
+	archive := ctf.NewFileSystemCTF(fs)
+	sourceRepo, err := oci.NewRepository(ocictf.WithCTF(ocictf.NewFromCTF(archive)))
+	r.NoError(err)
+	r.NoError(sourceRepo.AddComponentVersion(t.Context(), fromDesc))
+
+	fromRef := compref.Ref{
+		Repository: &ctfv1.Repository{FilePath: archivePath},
+		Component:  fromDesc.Component.Name,
+		Version:    fromDesc.Component.Version,
+	}
+
+	// Write a config with only an OCI uploader.
+	cfgPath := t.TempDir() + "/oci.yaml"
+	r.NoError(os.WriteFile(cfgPath, []byte(`type: generic.config.ocm.software/v1
+configurations:
+  - type: oci.uploader.transfer.config.ocm.software/v1alpha1
+`), 0o644))
+
+	toPath := t.TempDir()
+	targetArg := fmt.Sprintf("ctf::%s", toPath)
+
+	t.Run("without copy-resources the OCI default when does not select for CTF target", func(t *testing.T) {
+		r := require.New(t)
+		result := new(bytes.Buffer)
+		_, err := test.OCM(t,
+			test.WithArgs("transfer", "component-version", fromRef.String(), targetArg, "--dry-run", "-o", "yaml", "--config", cfgPath),
+			test.WithOutput(result),
+			test.WithErrorOutput(test.NewJSONLogReader()),
+		)
+		r.NoError(err, "dry-run should succeed")
+		out := result.String()
+		r.NotContains(out, "GetOCIArtifact", "CTF target: the OCI default when should not select; baseline keeps the image by reference")
+	})
+
+	t.Run("with copy-resources GetOCIArtifact and CTFAddLocalResource appear", func(t *testing.T) {
+		r := require.New(t)
+		result := new(bytes.Buffer)
+		_, err := test.OCM(t,
+			test.WithArgs("transfer", "component-version", fromRef.String(), targetArg, "--dry-run", "-o", "yaml", "--config", cfgPath, "--copy-resources"),
+			test.WithOutput(result),
+			test.WithErrorOutput(test.NewJSONLogReader()),
+		)
+		r.NoError(err, "dry-run should succeed")
+		out := result.String()
+		r.Contains(out, "GetOCIArtifact", "with --copy-resources the local blob catch-all should generate GetOCIArtifact")
+		r.Contains(out, "CTFAddLocalResource", "with --copy-resources the local blob catch-all should generate CTFAddLocalResource")
+	})
 }

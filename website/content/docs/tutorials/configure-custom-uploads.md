@@ -65,19 +65,19 @@ computes (or verifies) its digest as the bytes pass through, and records a new
 
 ### Write the uploader configuration
 
-Create `ocmconfig.yaml` with a transfer config that copies external resources and
-an uploader config that matches `Wget/v1` resources and streams them to your target:
+Create `ocmconfig.yaml` with an uploader config that matches `Wget/v1` resources
+and streams them to your target, followed by a catch-all that copies every other
+resource as a local blob:
 
 ```yaml
 type: generic.config.ocm.software/v1
 configurations:
-  - type: transfer.config.ocm.software/v1alpha1
-    copyMode: allResources
   - type: http.uploader.transfer.config.ocm.software/v1alpha1
     match:
       accessType: Wget/v1
     targetURL: '${"https://mytarget.example.com/uploads" + url(resource.access.url).path}'
     method: PUT
+  - type: localblob.uploader.transfer.config.ocm.software/v1alpha1
 ```
 
 The `targetURL` is a [CEL](https://cel.dev/) expression wrapped in `${…}`,
@@ -93,11 +93,11 @@ wget sources: every field of the source access is exposed under
 source), so you can route any access type to an HTTP target — see the
 [Transfer Configuration reference]({{< relref "docs/reference/transfer-configuration/cel-expressions.md" >}}).
 
-{{< callout context="note" title="Why copyMode: allResources" >}}
-An uploader only applies to a resource that transfer actually processes. A `Wget/v1`
-resource is external, so it is only picked up under `copyMode: allResources`. The
-uploader then takes precedence over the default local-blob path for that resource.
-{{< /callout >}}
+Uploaders are evaluated in declaration order and the first one that selects a
+resource handles it, so the HTTP uploader takes the `Wget/v1` resource and the
+`localblob.uploader` catch-all copies everything else as a local blob (the same
+as passing `--copy-resources`). Without the catch-all, local blobs are still
+copied and all other resources stay by reference.
 
 {{< /step >}}
 
@@ -237,14 +237,6 @@ method or any upload headers. Those apply to the upload request only, so a later
 - `targetURL` and `header` values are `${…}` CEL expressions over the source resource, so you can template the upload URL and forward headers such as a checksum from `resource.digest`.
 
 ## Troubleshooting
-
-### Problem: The resource is not uploaded and keeps its original access
-
-**Cause:** The resource was not processed because `copyMode` left external resources
-in place.
-
-**Fix:** Set `copyMode: allResources` in the transfer config (or pass
-`--copy-resources`), so the `Wget/v1` resource is processed and the uploader applies.
 
 ### Problem: `targetURL` fails to evaluate
 

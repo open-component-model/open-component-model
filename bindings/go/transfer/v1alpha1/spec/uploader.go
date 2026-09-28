@@ -204,11 +204,8 @@ func (u *HTTPUploaderConfig) Validate() error {
 	if u == nil {
 		return nil
 	}
-	if !u.Type.IsEmpty() {
-		if u.Type.Name != HTTPUploaderConfigType || (u.Type.Version != "" && u.Type.Version != Version) {
-			return fmt.Errorf("invalid type %q (must be %q or %q)",
-				u.Type, HTTPUploaderConfigType, runtime.NewVersionedType(HTTPUploaderConfigType, Version))
-		}
+	if err := validateUploaderType(u.Type, HTTPUploaderConfigType); err != nil {
+		return err
 	}
 	if u.MatchSpec.AccessType.IsEmpty() {
 		return fmt.Errorf("match.accessType is required")
@@ -217,6 +214,32 @@ func (u *HTTPUploaderConfig) Validate() error {
 		return fmt.Errorf("targetURL is required")
 	}
 	return nil
+}
+
+// validateUploaderType rejects a non-empty t that is not configType or
+// configType/Version.
+func validateUploaderType(t runtime.Type, configType string) error {
+	if t.IsEmpty() || (t.Name == configType && (t.Version == "" || t.Version == Version)) {
+		return nil
+	}
+	return fmt.Errorf("invalid type %q (must be %q or %q)", t, configType, runtime.NewVersionedType(configType, Version))
+}
+
+// matchOptional reports whether resource satisfies the static fields of m; a nil m
+// matches every resource with an access.
+func matchOptional(m *UploaderMatch, resource descriptorv2.Resource) bool {
+	if resource.Access == nil {
+		return false
+	}
+	return m == nil || m.Matches(resource)
+}
+
+// whenOrDefault returns m.When if m is set and has one, else def.
+func whenOrDefault(m *UploaderMatch, def string) string {
+	if m != nil && m.When != "" {
+		return m.When
+	}
+	return def
 }
 
 // Match reports whether the static match fields select resource, delegating to the
