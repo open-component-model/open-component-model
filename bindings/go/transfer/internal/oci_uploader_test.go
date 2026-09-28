@@ -11,6 +11,7 @@ import (
 	celparser "ocm.software/open-component-model/bindings/go/cel/expression/parser"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	helmv1 "ocm.software/open-component-model/bindings/go/helm/spec/access/v1"
 	helmv1alpha1 "ocm.software/open-component-model/bindings/go/helm/transformation/spec/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	ociv1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
@@ -56,7 +57,7 @@ func evaluateTemplate(t *testing.T, tgd *transformv1alpha1.TransformationGraphDe
 	r.NoError(err)
 	builder, err := env.NewEnvBuilder(tgd.GetEnvironmentData())
 	r.NoError(err)
-	builder.RegisterEnvOption(ToOCIEnvOption())
+	builder.RegisterEnvOption(EnvOptions()...)
 	celEnv, _, err := builder.CurrentEnv()
 	r.NoError(err)
 
@@ -94,6 +95,9 @@ func TestBuildGraphDefinition_OCIUploader(t *testing.T) {
 
 	manifestBlobWithHostPortName := dockerManifestLocalBlobResource("my-image", "1.0.0")
 	manifestBlobWithHostPortName.Access.(*descriptorv2.LocalBlob).ReferenceName = "127.0.0.1:5000/org/image:v1"
+
+	helmChartWithPathAndInlineVersion := helmResource("my-chart", "2.0.0", "https://charts.example.com/charts/sub/", "my-chart:2.0.0")
+	helmChartWithPathAndInlineVersion.Access.(*helmv1.Helm).Version = ""
 
 	manifestBlobWithDottedName := dockerManifestLocalBlobResource("my-image", "1.0.0")
 	manifestBlobWithDottedName.Access.(*descriptorv2.LocalBlob).ReferenceName = "ocm.software/podinfo@sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
@@ -168,31 +172,31 @@ func TestBuildGraphDefinition_OCIUploader(t *testing.T) {
 			wantImageRefAt: 1,
 		},
 		{
-			name:           "dotted reference name without tag keeps its full repository",
+			name:           "reference name is used verbatim, including a digest",
 			target:         testOCIRepo("ghcr.io/target"),
 			resource:       manifestBlobWithDottedName,
 			uploaders:      ociUploaders(),
 			wantTypes:      []runtime.Type{ociv1alpha1.OCIGetLocalResourceV1alpha1, addOCIArtifact, ociv1alpha1.OCIAddComponentVersionV1alpha1, FileCleanupVersionedType},
-			wantImageRef:   "ghcr.io/target/ocm.software/podinfo",
+			wantImageRef:   "ghcr.io/target/ocm.software/podinfo@sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
 			wantImageRefAt: 1,
 		},
 		{
-			name:     "a malformed reference name only matters when the template calls toOCI()",
-			target:   testOCIRepo("ghcr.io/target"),
-			resource: manifestBlobWithHostPortName,
-			uploaders: []transferv1alpha1.UploaderConfig{&transferv1alpha1.OCIUploaderConfig{
-				ImageReference: `${target.baseUrl + "/" + resource.name + ":" + resource.version}`,
-			}},
+			name:           "reference name with a registry host and port is used verbatim",
+			target:         testOCIRepo("ghcr.io/target"),
+			resource:       manifestBlobWithHostPortName,
+			uploaders:      ociUploaders(),
 			wantTypes:      []runtime.Type{ociv1alpha1.OCIGetLocalResourceV1alpha1, addOCIArtifact, ociv1alpha1.OCIAddComponentVersionV1alpha1, FileCleanupVersionedType},
-			wantImageRef:   "ghcr.io/target/my-image:1.0.0",
+			wantImageRef:   "ghcr.io/target/127.0.0.1:5000/org/image:v1",
 			wantImageRefAt: 1,
 		},
 		{
-			name:      "a malformed reference name fails the build when the template calls toOCI()",
-			target:    testOCIRepo("ghcr.io/target"),
-			resource:  manifestBlobWithHostPortName,
-			uploaders: ociUploaders(),
-			wantErr:   "cannot parse referenceName",
+			name:           "Helm chart name carries the version and the repository path is normalized",
+			target:         testOCIRepo("ghcr.io/target"),
+			resource:       helmChartWithPathAndInlineVersion,
+			uploaders:      ociUploaders(),
+			wantTypes:      []runtime.Type{helmv1alpha1.GetHelmChartV1alpha1, helmv1alpha1.ConvertHelmToOCIV1alpha1, addOCIArtifact, ociv1alpha1.OCIAddComponentVersionV1alpha1, FileCleanupVersionedType},
+			wantImageRef:   "ghcr.io/target/charts/sub/my-chart:2.0.0",
+			wantImageRefAt: 2,
 		},
 		{
 			name:      "non-manifest local blob falls through to local blob",
@@ -250,7 +254,7 @@ func TestBuildGraphDefinition_OCIUploader(t *testing.T) {
 			wantImageRefAt: 0,
 		},
 		{
-			name:     "toOCI() for a local blob without reference name falls through",
+			name:     "toOCI() for a local blob falls through (toOCI only resolves OCI image accesses)",
 			target:   testOCIRepo("ghcr.io/target"),
 			resource: manifestBlobWithoutReferenceName,
 			uploaders: []transferv1alpha1.UploaderConfig{&transferv1alpha1.OCIUploaderConfig{
@@ -259,7 +263,7 @@ func TestBuildGraphDefinition_OCIUploader(t *testing.T) {
 			wantTypes: []runtime.Type{ociv1alpha1.OCIGetLocalResourceV1alpha1, ociv1alpha1.OCIAddLocalResourceV1alpha1, ociv1alpha1.OCIAddComponentVersionV1alpha1, FileCleanupVersionedType},
 		},
 		{
-			name:     "a template without toOCI() still applies to a resource without reference name",
+			name:     "a template built from resource metadata applies to a local blob without reference name",
 			target:   testOCIRepo("ghcr.io/target"),
 			resource: manifestBlobWithoutReferenceName,
 			uploaders: []transferv1alpha1.UploaderConfig{&transferv1alpha1.OCIUploaderConfig{
@@ -270,11 +274,11 @@ func TestBuildGraphDefinition_OCIUploader(t *testing.T) {
 			wantImageRefAt: 1,
 		},
 		{
-			name:      "an unparsable image reference fails the build",
+			name:      "an image reference toOCI() cannot parse falls through",
 			target:    testOCIRepo("ghcr.io/target"),
 			resource:  ociImageResource("my-image", "1.0.0", "oci://"),
 			uploaders: ociUploaders(),
-			wantErr:   "cannot parse imageReference",
+			wantTypes: []runtime.Type{ociv1alpha1.OCIAddComponentVersionV1alpha1},
 		},
 		{
 			name:     "an invalid template fails the build",
@@ -334,22 +338,17 @@ func TestBuildGraphDefinition_OCIUploader(t *testing.T) {
 	}
 }
 
-// referenceNameAsIsTemplate rebuilds a local blob's referenceName (repository[:tag][@digest])
-// through toOCI(), so it can be used verbatim as the full target reference.
-const referenceNameAsIsTemplate = `${resource.access.toOCI().repository` +
-	` + (resource.access.toOCI().tag == "" ? "" : ":" + resource.access.toOCI().tag)` +
-	` + (resource.access.toOCI().digest == "" ? "" : "@" + resource.access.toOCI().digest)}`
-
 // TestBuildGraphDefinition_OCIUploader_ReferenceNameAsIs covers uploading a local blob to
 // its referenceName verbatim, scoped by match so other resources are unaffected, in
-// descriptors that mix access types in either order.
+// descriptors that mix access types in either order: reading a field only some access
+// types carry must compile regardless of which resource comes first.
 func TestBuildGraphDefinition_OCIUploader_ReferenceNameAsIs(t *testing.T) {
 	blob := dockerManifestLocalBlobResource("my-blob", "1.0.0")
 	blob.Access.(*descriptorv2.LocalBlob).ReferenceName = "ghcr.io/org/image:v1@sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
 	image := ociImageResource("my-image", "1.0.0", "oci://ghcr.io/other/image:v2")
 	asIs := []transferv1alpha1.UploaderConfig{&transferv1alpha1.OCIUploaderConfig{
 		MatchSpec:      &transferv1alpha1.UploaderMatch{Name: "my-blob"},
-		ImageReference: referenceNameAsIsTemplate,
+		ImageReference: `${resource.access.referenceName}`,
 	}}
 
 	for _, tc := range []struct {

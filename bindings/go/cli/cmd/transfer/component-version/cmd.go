@@ -119,13 +119,20 @@ transfer component-version ctf::./my-archive//ocm.software/mycomponent ghcr.io/m
 #   configurations:
 #   - type: oci.uploader.transfer.config.ocm.software/v1alpha1
 #     # CEL template for the target image reference; this is also the default when omitted.
-#     # "target" is the OCI target repository, resource.access.toOCI() splits the source reference.
-#     imageReference: >-
+#     # "target" is the OCI target repository; "resource" is the source resource.
+#     imageReference: |-
 #       ${target.baseUrl
-#       + (target.subPath == "" ? "" : "/" + target.subPath)
-#       + "/" + resource.access.toOCI().repository
-#       + (resource.access.toOCI().tag == "" ? "" : ":" + resource.access.toOCI().tag)}
-#     # Relocate instead: '${"ghcr.io/target-org/images/" + resource.access.toOCI().repository}'
+#         + (target.subPath == "" ? "" : "/" + target.subPath)
+#         + "/" + (has(resource.access.referenceName)
+#           ? resource.access.referenceName
+#           : has(resource.access.helmChart)
+#             ? (url(resource.access.helmRepository).path.split("/") + [resource.access.helmChart.split(":")[0]]).filter(s, s != "").join("/")
+#               + (has(resource.access.version) && resource.access.version != ""
+#                 ? ":" + resource.access.version
+#                 : (resource.access.helmChart.contains(":") ? ":" + resource.access.helmChart.split(":")[1] : ""))
+#             : resource.access.toOCI().repository
+#               + (resource.access.toOCI().tag == "" ? "" : ":" + resource.access.toOCI().tag))}
+#     # Relocate OCI images instead: '${"ghcr.io/target-org/images/" + resource.access.toOCI().repository}'
 # OCI images, Helm charts and OCI-manifest local blobs are uploaded as OCI artifacts.
 transfer component-version --config ./oci-uploader.yaml ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm
 

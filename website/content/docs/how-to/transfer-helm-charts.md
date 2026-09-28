@@ -78,13 +78,19 @@ Create an OCM config file (e.g. `oci-uploader.yaml`):
 type: generic.config.ocm.software/v1
 configurations:
   - type: oci.uploader.transfer.config.ocm.software/v1alpha1
-    imageReference: >-
+    imageReference: |-
       ${target.baseUrl
-      + (target.subPath == "" ? "" : "/" + target.subPath)
-      + "/" + resource.access.toOCI().repository
-      + (resource.access.toOCI().tag == "" ? "" : ":" + resource.access.toOCI().tag)}
+        + (target.subPath == "" ? "" : "/" + target.subPath)
+        + "/" + (has(resource.access.referenceName)
+          ? resource.access.referenceName
+          : has(resource.access.helmChart)
+            ? (url(resource.access.helmRepository).path.split("/") + [resource.access.helmChart.split(":")[0]]).filter(s, s != "").join("/")
+              + (has(resource.access.version) && resource.access.version != ""
+                ? ":" + resource.access.version
+                : (resource.access.helmChart.contains(":") ? ":" + resource.access.helmChart.split(":")[1] : ""))
+            : resource.access.toOCI().repository
+              + (resource.access.toOCI().tag == "" ? "" : ":" + resource.access.toOCI().tag))}
 ```
-
 Then transfer:
 
 ```bash

@@ -5,10 +5,13 @@ import (
 	"fmt"
 	"log/slog"
 	"strconv"
+	"strings"
 
 	"cel.dev/cel-go/cel"
 	celast "cel.dev/cel-go/common/ast"
+	"cel.dev/cel-go/ext"
 
+	celparser "ocm.software/open-component-model/bindings/go/cel/expression/parser"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	helmv1 "ocm.software/open-component-model/bindings/go/helm/spec/access/v1"
 	ocifunctions "ocm.software/open-component-model/bindings/go/oci/cel/functions"
@@ -16,6 +19,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
+	graphenv "ocm.software/open-component-model/bindings/go/transform/graph/env"
 	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
 )
 
@@ -23,28 +27,37 @@ import (
 // It is rewritten to a map literal holding the target's baseUrl and subPath.
 const targetAlias = "target"
 
-// ToOCIEnvOption registers the toOCI() CEL function for the transfer graph. Besides
-// OCIImage accesses (handled by the function itself) it resolves Helm accesses to their
-// chart reference and local blobs holding an OCI manifest to their referenceName, the
-// same way the OCI uploader derives references at graph build time.
-func ToOCIEnvOption() cel.EnvOption {
-	return ocifunctions.ToOCI(ocifunctions.WithReferenceResolver(func(raw *runtime.Raw) (ocifunctions.Reference, bool, error) {
-		access, err := scheme.NewObject(raw.GetType())
-		if err != nil {
-			return ocifunctions.Reference{}, false, nil //nolint:nilerr // unknown access types are not resolvable here
-		}
-		if err := scheme.Convert(raw, access); err != nil {
-			return ocifunctions.Reference{}, false, fmt.Errorf("cannot convert access of type %s: %w", raw.GetType(), err)
-		}
-		ref, ok, err := ociReference(access)
-		if err != nil {
-			return ocifunctions.Reference{}, false, err
-		}
-		if !ok {
-			return ocifunctions.Reference{}, false, nil
-		}
-		return ref, true, nil
-	}))
+// EnvOptions are the CEL functions the transfer graph offers beyond the graph's base
+// environment: toOCI() exactly as the controller offers it (OCI image accesses), and the
+// string extensions (split, join, ...) used to compose image references.
+func EnvOptions() []cel.EnvOption {
+	return []cel.EnvOption{ocifunctions.ToOCI(), ext.Strings()}
+}
+
+// imageReferenceEnv lazily builds the CEL environment an OCI uploader template is
+// evaluated in while the graph is built: the component's descriptor environment node plus
+// [EnvOptions], i.e. what the graph evaluates the template against at runtime.
+type imageReferenceEnv struct {
+	baseID string
+	node   any
+	env    *cel.Env
+}
+
+func (e *imageReferenceEnv) get() (*cel.Env, error) {
+	if e.env != nil {
+		return e.env, nil
+	}
+	builder, err := graphenv.NewEnvBuilder(map[string]any{e.baseID: e.node})
+	if err != nil {
+		return nil, fmt.Errorf("cannot build CEL environment: %w", err)
+	}
+	builder.RegisterEnvOption(EnvOptions()...)
+	env, _, err := builder.CurrentEnv()
+	if err != nil {
+		return nil, fmt.Errorf("cannot build CEL environment: %w", err)
+	}
+	e.env = env
+	return env, nil
 }
 
 // ociUploadable reports whether access can be uploaded as an OCI artifact: OCI images,
@@ -58,62 +71,6 @@ func ociUploadable(access runtime.Typed) bool {
 	default:
 		return false
 	}
-}
-
-// ociReference returns the OCI reference toOCI() yields for access and reports whether
-// one can be derived: an OCI image's imageReference, a Helm chart's chart reference, or
-// a local blob's referenceName. A local blob without referenceName has none.
-func ociReference(access runtime.Typed) (ocifunctions.Reference, bool, error) {
-	switch acc := access.(type) {
-	case *ociv1.OCIImage:
-		ref, err := ocifunctions.ParseReference(acc.ImageReference)
-		if err != nil {
-			return ocifunctions.Reference{}, false, fmt.Errorf("cannot parse imageReference %q: %w", acc.ImageReference, err)
-		}
-		return ref, true, nil
-	case *helmv1.Helm:
-		chartRef, err := acc.ChartReference()
-		if err != nil {
-			return ocifunctions.Reference{}, false, fmt.Errorf("cannot derive Helm chart reference: %w", err)
-		}
-		ref, err := ocifunctions.ParseReference(chartRef)
-		if err != nil {
-			return ocifunctions.Reference{}, false, fmt.Errorf("cannot parse Helm chart reference %q: %w", chartRef, err)
-		}
-		return ref, true, nil
-	case *descriptorv2.LocalBlob:
-		if !isOCICompliantManifest(acc.MediaType) || acc.ReferenceName == "" {
-			return ocifunctions.Reference{}, false, nil
-		}
-		ref, err := parseRelativeReference(acc.ReferenceName)
-		if err != nil {
-			return ocifunctions.Reference{}, false, fmt.Errorf("cannot parse referenceName %q: %w", acc.ReferenceName, err)
-		}
-		return ref, true, nil
-	default:
-		return ocifunctions.Reference{}, false, nil
-	}
-}
-
-// relativeReferenceHost is a placeholder registry that parseRelativeReference prepends
-// so the whole name is parsed as the repository path.
-const relativeReferenceHost = "relative.invalid"
-
-// parseRelativeReference parses a local blob referenceName. By the LocalBlob access
-// spec it is an OCI repository name optionally followed by ":" and a tag, relative to
-// the repository the blob is stored in: it never names a registry, so every path
-// component (including one that looks like a host, e.g. "ocm.software/podinfo")
-// belongs to the repository.
-func parseRelativeReference(name string) (ocifunctions.Reference, error) {
-	ref, err := ocifunctions.ParseReference(relativeReferenceHost + "/" + name)
-	if err != nil {
-		return ocifunctions.Reference{}, err
-	}
-	if ref.Host != relativeReferenceHost {
-		return ocifunctions.Reference{}, fmt.Errorf("not a registry-relative repository name")
-	}
-	ref.Host = ""
-	return ref, nil
 }
 
 // ociTarget returns the CEL map literal the target alias is rewritten to for an OCI
@@ -132,40 +89,42 @@ func ociTarget(toSpec runtime.Typed) (string, bool) {
 		"subPath", strconv.Quote(ociRepo.SubPath)), true
 }
 
-// expressionUses reports which identifiers and function names the CEL source expr uses.
-// It parses with the same syntax options as the graph environment (optional field
-// selection such as `a.?b`), so every template the graph accepts is analyzable here.
-func expressionUses(expr string) (idents, functions map[string]bool, err error) {
+// expressionIdents reports the identifiers the CEL source expr uses. It parses with the
+// same syntax options as the graph environment (e.g. optional field selection `a.?b`).
+func expressionIdents(expr string) (map[string]bool, error) {
 	env, err := cel.NewEnv(cel.OptionalTypes())
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	parsed, issues := env.Parse(expr)
 	if issues != nil && issues.Err() != nil {
-		return nil, nil, fmt.Errorf("cannot parse expression %q: %w", expr, issues.Err())
+		return nil, fmt.Errorf("cannot parse expression %q: %w", expr, issues.Err())
 	}
-	idents, functions = map[string]bool{}, map[string]bool{}
+	idents := map[string]bool{}
 	celast.PreOrderVisit(celast.NavigateAST(parsed.NativeRep()), celast.NewExprVisitor(func(e celast.Expr) {
-		switch e.Kind() {
-		case celast.IdentKind:
+		if e.Kind() == celast.IdentKind {
 			idents[e.AsIdent()] = true
-		case celast.CallKind:
-			functions[e.AsCall().FunctionName()] = true
 		}
 	}))
-	return idents, functions, nil
+	return idents, nil
 }
 
 // ociImageReference templates the target image reference for resource under u (see
 // [transferv1alpha1.DefaultOCIImageReference] for the template used when none is set)
-// and reports whether the uploader applies. The `resource` alias points at the resource
-// in the descriptor environment node and `target` at the OCI registry target. A
-// template that uses `target` on a non-OCI target, or calls toOCI() for a resource
-// without an OCI reference (a local blob without referenceName), does not apply; reason
-// says why, so the resource falls through instead of failing the transfer. The OCI
-// reference is only derived (and a malformed one only rejected) when the template
-// calls toOCI().
-func ociImageReference(u *transferv1alpha1.OCIUploaderConfig, access runtime.Typed, baseID string, i int, toSpec runtime.Typed) (imageReference string, applies bool, reason string, err error) {
+// and reports whether the uploader applies.
+//
+// `resource` is rewritten to dyn(<resource's path in the descriptor environment node>):
+// fields are resolved dynamically, so a template may test and read fields of any access
+// type even if no resource in the descriptor carries them. `target` is rewritten to a map
+// literal of the OCI registry target.
+//
+// The template is evaluated once here, against the same environment the graph uses. The
+// uploader applies only if it evaluates to a string: a template that uses `target` on a
+// non-OCI target, or that reads a field the resource does not have, does not apply and
+// reason says why, so the resource falls through instead of failing the transfer. A
+// template that does not compile fails the build. The emitted spec keeps the template, so
+// the graph evaluates it again when it runs.
+func ociImageReference(u *transferv1alpha1.OCIUploaderConfig, access runtime.Typed, refEnv *imageReferenceEnv, i int, toSpec runtime.Typed) (imageReference string, applies bool, reason string, err error) {
 	if !ociUploadable(access) {
 		return "", false, "access type is not uploadable as an OCI artifact", nil
 	}
@@ -175,7 +134,7 @@ func ociImageReference(u *transferv1alpha1.OCIUploaderConfig, access runtime.Typ
 	if template == "" {
 		template = transferv1alpha1.DefaultOCIImageReference
 	}
-	aliases := map[string]string{resourceAlias: resourceNodePath(baseID, i)}
+	aliases := map[string]string{resourceAlias: "dyn(" + resourceNodePath(refEnv.baseID, i) + ")"}
 	if isOCITarget {
 		aliases[targetAlias] = targetLiteral
 	}
@@ -183,21 +142,42 @@ func ociImageReference(u *transferv1alpha1.OCIUploaderConfig, access runtime.Typ
 	if err != nil {
 		return "", false, "", fmt.Errorf("cannot template imageReference: %w", err)
 	}
-	for _, expr := range exprs {
-		idents, functions, err := expressionUses(expr)
-		if err != nil {
-			return "", false, "", fmt.Errorf("invalid imageReference: %w", err)
-		}
-		if !isOCITarget && idents[targetAlias] {
-			return "", false, fmt.Sprintf("imageReference uses %s, but target %s is not an OCI registry", targetAlias, targetKind(toSpec)), nil
-		}
-		if functions[ocifunctions.ToOCIFunctionName] {
-			_, hasReference, err := ociReference(access)
+	if !isOCITarget {
+		for _, expr := range exprs {
+			idents, err := expressionIdents(expr)
 			if err != nil {
-				return "", false, "", err
+				return "", false, "", fmt.Errorf("invalid imageReference: %w", err)
 			}
-			if !hasReference {
-				return "", false, fmt.Sprintf("imageReference calls %s(), but the resource has no OCI reference", ocifunctions.ToOCIFunctionName), nil
+			if idents[targetAlias] {
+				return "", false, fmt.Sprintf("imageReference uses %s, but target %s is not an OCI registry", targetAlias, targetKind(toSpec)), nil
+			}
+		}
+	}
+
+	env, err := refEnv.get()
+	if err != nil {
+		return "", false, "", err
+	}
+	fields, err := celparser.ParseSchemaless(map[string]any{"imageReference": imageReference})
+	if err != nil {
+		return "", false, "", fmt.Errorf("invalid imageReference: %w", err)
+	}
+	for _, field := range fields {
+		for _, expr := range field.Expressions {
+			ast, issues := env.Compile(expr.Value)
+			if issues != nil && issues.Err() != nil {
+				return "", false, "", fmt.Errorf("invalid imageReference: %w", issues.Err())
+			}
+			prg, err := env.Program(ast)
+			if err != nil {
+				return "", false, "", fmt.Errorf("invalid imageReference: %w", err)
+			}
+			out, _, err := prg.Eval(map[string]any{})
+			if err != nil {
+				return "", false, fmt.Sprintf("imageReference does not evaluate for the resource: %v", err), nil
+			}
+			if _, ok := out.Value().(string); !ok {
+				return "", false, "", fmt.Errorf("invalid imageReference: expression %q evaluates to %T, not a string", strings.TrimSpace(expr.Value), out.Value())
 			}
 		}
 	}
@@ -209,8 +189,8 @@ func ociImageReference(u *transferv1alpha1.OCIUploaderConfig, access runtime.Typ
 // uploader does not apply to the resource, so the caller falls through to the next
 // uploader or the default handling. It returns the CEL spec-field expressions of the
 // file buffers produced, for cleanup.
-func processOCIUploader(ctx context.Context, resource descriptorv2.Resource, access runtime.Typed, u *transferv1alpha1.OCIUploaderConfig, baseID, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int) (bool, []string, error) {
-	imageReference, ok, reason, err := ociImageReference(u, access, baseID, i, toSpec)
+func processOCIUploader(ctx context.Context, resource descriptorv2.Resource, access runtime.Typed, u *transferv1alpha1.OCIUploaderConfig, refEnv *imageReferenceEnv, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int) (bool, []string, error) {
+	imageReference, ok, reason, err := ociImageReference(u, access, refEnv, i, toSpec)
 	if err != nil {
 		return false, nil, err
 	}

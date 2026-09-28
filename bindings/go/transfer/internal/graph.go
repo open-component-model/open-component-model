@@ -255,6 +255,7 @@ func processResources(
 	version := val.Descriptor.Component.Version
 	resourceTransformIDs := make(map[int]string)
 	var fileExpressions []string
+	refEnv := &imageReferenceEnv{baseID: baseID, node: tgd.Environment.Data[baseID]}
 
 	for i, resource := range v2desc.Component.Resources {
 		access, err := scheme.NewObject(resource.Access.Type)
@@ -282,7 +283,7 @@ func processResources(
 				err = processHTTPUploader(resource, cfg, baseID, id, val, tgd, resourceTransformIDs, i)
 				handled = err == nil
 			case *transferv1alpha1.OCIUploaderConfig:
-				handled, exprs, err = processOCIUploader(ctx, resource, access, cfg, baseID, id, val, tgd, toSpec, resourceTransformIDs, i)
+				handled, exprs, err = processOCIUploader(ctx, resource, access, cfg, refEnv, id, val, tgd, toSpec, resourceTransformIDs, i)
 			default:
 				return nil, nil, fmt.Errorf("unsupported uploader config type %T for resource %v", u, resource.ToIdentity())
 			}
