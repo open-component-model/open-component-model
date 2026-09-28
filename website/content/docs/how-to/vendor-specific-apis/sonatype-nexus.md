@@ -22,7 +22,7 @@ tools (`helm`, `mvn`, `npm`, `curl`).
 ## How the Nexus uploader works
 
 The
-[`nexus.uploader.transfer.config.ocm.software/v1alpha1`]({{< relref "docs/reference/transfer-configuration.md#nexusuploadertransferconfigocmsoftwarev1alpha1" >}})
+[`nexus.uploader.transfer.config.ocm.software/v1alpha1`]({{< relref "docs/reference/transfer-configuration/nexus-uploader.md" >}})
 uploader routes the resources it matches to one hosted repository. At upload time it
 reads the repository format from `GET <url>/service/rest/v1/repositories/<repository>`
 and picks the upload method for it:
@@ -257,7 +257,7 @@ repository.
 ## Related documentation
 
 - [How-to: Upload Resources to JFrog Artifactory]({{< relref "docs/how-to/vendor-specific-apis/jfrog-artifactory.md" >}})
-- [Reference: Transfer Configuration]({{< relref "docs/reference/transfer-configuration.md" >}})
+- [Reference: Transfer Configuration]({{< relref "docs/reference/transfer-configuration/_index.md" >}})
 - [Tutorial: Configure Custom Uploads During Transfer]({{< relref "docs/tutorials/configure-custom-uploads.md" >}})
 - [Concept: Transfer and Transport]({{< relref "docs/concepts/transfer-concept.md" >}})
 - [Credential Consumer Identities]({{< relref "docs/reference/credential-consumer-identities.md" >}})

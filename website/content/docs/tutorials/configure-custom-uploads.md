@@ -91,7 +91,7 @@ conditionals. The uploader is not limited to
 wget sources: every field of the source access is exposed under
 `resource.access.<field>` (e.g. `resource.access.imageReference` for an OCI
 source), so you can route any access type to an HTTP target — see the
-[Transfer Configuration reference]({{< relref "docs/reference/transfer-configuration.md" >}}#cel-expressions).
+[Transfer Configuration reference]({{< relref "docs/reference/transfer-configuration/cel-expressions.md" >}}).
 
 {{< callout context="note" title="Why copyMode: allResources" >}}
 An uploader only applies to a resource that transfer actually processes. A `Wget/v1`
@@ -131,7 +131,7 @@ every matched resource has one.
 OCM algorithm name (e.g. `SHA-256`). `contentDigestAlgorithm()` maps that name to the
 RFC 9530 field key (`sha-256`), and `base64.encode(hex.decode(...))` converts the hex
 digest to the base64 value RFC 9530 expects — see the
-[Templating Headers reference]({{< relref "docs/reference/transfer-configuration.md" >}}#templating-headers).
+[Templating Headers reference]({{< relref "docs/reference/transfer-configuration/http-uploader.md" >}}#templating-headers).
 
 {{< /step >}}
 
@@ -277,119 +277,13 @@ version.
 `match.accessType` to the resource's `access.type` there, for example
 `OCIImage/v1` for an `ociArtifact` access.
 
-## Deploy Resources to JFrog Artifactory or Sonatype Nexus
+## Upload to JFrog Artifactory or Sonatype Nexus
 
-Two dedicated uploaders stream resources into Artifactory or Nexus repositories
-and rewrite the resource access so consumers can fetch the artifact from the
-repository server. Each uploader detects the repository type through the server
-API:
-
-| Config type                                                  | Repository types                  | Published access       |
-|--------------------------------------------------------------|-----------------------------------|------------------------|
-| `artifactory.uploader.transfer.config.ocm.software/v1alpha1` | `helm`, `generic`, `maven`, `npm` | `Helm/v1` or `Wget/v1` |
-| `nexus.uploader.transfer.config.ocm.software/v1alpha1`       | `helm`, `raw`, `maven2`, `npm`    | `Helm/v1` or `Wget/v1` |
-
-For guidance per repository type, see
-[Upload Resources to JFrog Artifactory]({{< relref "docs/how-to/vendor-specific-apis/jfrog-artifactory.md" >}})
-and [Upload Resources to Sonatype Nexus]({{< relref "docs/how-to/vendor-specific-apis/sonatype-nexus.md" >}}).
-
-### Artifactory Helm example
-
-```yaml
-type: generic.config.ocm.software/v1
-configurations:
-  - type: transfer.config.ocm.software/v1alpha1
-    copyMode: allResources
-  - type: artifactory.uploader.transfer.config.ocm.software/v1alpha1
-    match:
-      accessType: Helm/v1
-    url: https://myorg.jfrog.io
-    repository: helm-local
-```
-
-### Nexus Helm example
-
-```yaml
-type: generic.config.ocm.software/v1
-configurations:
-  - type: transfer.config.ocm.software/v1alpha1
-    copyMode: allResources
-  - type: nexus.uploader.transfer.config.ocm.software/v1alpha1
-    match:
-      accessType: Helm/v1
-    url: https://nexus.example.com
-    repository: helm-hosted
-```
-
-### Generic / raw repository example
-
-Upload any resource (not just Helm charts) into an Artifactory generic or maven
-repository, or a Nexus raw repository, and publish a `Wget/v1` access:
-
-```yaml
-  - type: artifactory.uploader.transfer.config.ocm.software/v1alpha1
-    match:
-      accessType: localBlob
-    url: https://myorg.jfrog.io
-    repository: generic-local
-```
-
-### Credentials
-
-Add credentials for the server host. The uploader resolves them for the
-`HelmChartRepository` identity of the repository URL, falling back to `Wget`:
-
-```yaml
-  - type: credentials.config.ocm.software
-    consumers:
-      - identity:
-          type: HelmChartRepository
-          hostname: myorg.jfrog.io
-        credentials:
-          - type: HelmHTTPCredentials/v1
-            username: <USERNAME>
-            password: <PASSWORD>
-```
-
-A `type: Wget` identity with `WgetCredentials/v1` works as well.
-
-### Transfer and verify
-
-```bash
-ocm transfer cv \
-  --config ./ocmconfig.yaml \
-  ghcr.io/source-org/ocm//ocm.software/demo:1.0.0 \
-  ghcr.io/target-org/ocm
-```
-
-Inspect the transferred component version:
-
-```bash
-ocm get cv ghcr.io/target-org/ocm//ocm.software/demo:1.0.0 -o yaml
-```
-
-The resource now carries a `Helm/v1` access (helm repository) or `Wget/v1` access
-(other Artifactory repository, Nexus raw repository):
-
-{{< details "Expected resource access (Helm)" >}}
-```yaml
-resources:
-  - name: mychart
-    type: helmChart
-    access:
-      type: Helm/v1
-      helmRepository: https://myorg.jfrog.io/artifactory/api/helm/helm-local
-      helmChart: mychart:0.1.0
-    digest:
-      hashAlgorithm: SHA-256
-      normalisationAlgorithm: genericBlobDigest/v1
-      value: <sha256-of-the-chart-tgz>
-```
-{{< /details >}}
-
-For the full field reference, see
-[`artifactory.uploader.transfer.config.ocm.software/v1alpha1`]({{< relref "docs/reference/transfer-configuration.md" >}}#artifactoryuploadertransferconfigocmsoftwarev1alpha1) and
-[`nexus.uploader.transfer.config.ocm.software/v1alpha1`]({{< relref "docs/reference/transfer-configuration.md" >}}#nexusuploadertransferconfigocmsoftwarev1alpha1).
+To upload into Artifactory or Nexus repositories, use the vendor uploaders instead
+of the HTTP uploader. They detect the repository type (Helm, Maven, npm, generic or
+raw) through the server API and publish an access consumers can use with their own
+tools. See
+[Using Vendor-Specific APIs]({{< relref "docs/how-to/vendor-specific-apis/_index.md" >}}).
 
 ## Next steps
 
@@ -398,6 +292,6 @@ For the full field reference, see
 
 ## Related documentation
 
-- [Reference: Transfer Configuration]({{< relref "docs/reference/transfer-configuration.md" >}}) — full field reference for transfer and uploader configuration
+- [Reference: Transfer Configuration]({{< relref "docs/reference/transfer-configuration/_index.md" >}}) — full field reference for transfer and uploader configuration
 - [Concept: Transfer and Transport]({{< relref "docs/concepts/transfer-concept.md" >}}) — how OCM moves component versions between repositories
 - [Tutorial: Working with HTTP Resources]({{< relref "docs/tutorials/wget-http-resources.md" >}}) — the `Wget/v1` type produced by the uploader

@@ -20,5 +20,5 @@ type expects, so consumers fetch it with their usual tools.
 
 ## Related Documentation
 
-- [Reference: Transfer Configuration]({{< relref "docs/reference/transfer-configuration.md" >}}) — uploader configuration fields and schemas
+- [Reference: Transfer Configuration]({{< relref "docs/reference/transfer-configuration/_index.md" >}}) — uploader configuration fields and schemas
 - [Tutorial: Configure Custom Uploads During Transfer]({{< relref "docs/tutorials/configure-custom-uploads.md" >}}) — route resources to custom upload targets

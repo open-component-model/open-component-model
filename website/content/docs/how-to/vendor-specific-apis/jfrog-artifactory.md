@@ -22,7 +22,7 @@ repositories, so that consumers fetch them with their usual tools (`helm`, `mvn`
 ## How the Artifactory uploader works
 
 The
-[`artifactory.uploader.transfer.config.ocm.software/v1alpha1`]({{< relref "docs/reference/transfer-configuration.md#artifactoryuploadertransferconfigocmsoftwarev1alpha1" >}})
+[`artifactory.uploader.transfer.config.ocm.software/v1alpha1`]({{< relref "docs/reference/transfer-configuration/artifactory-uploader.md" >}})
 uploader routes the resources it matches to one repository. At upload time it reads
 the repository's package type from `GET <url>/artifactory/api/repositories/<repository>`
 and picks the upload method for it:
@@ -304,7 +304,7 @@ ones.
 ## Related documentation
 
 - [How-to: Upload Resources to Sonatype Nexus]({{< relref "docs/how-to/vendor-specific-apis/sonatype-nexus.md" >}})
-- [Reference: Transfer Configuration]({{< relref "docs/reference/transfer-configuration.md" >}})
+- [Reference: Transfer Configuration]({{< relref "docs/reference/transfer-configuration/_index.md" >}})
 - [Tutorial: Configure Custom Uploads During Transfer]({{< relref "docs/tutorials/configure-custom-uploads.md" >}})
 - [Concept: Transfer and Transport]({{< relref "docs/concepts/transfer-concept.md" >}})
 - [Credential Consumer Identities]({{< relref "docs/reference/credential-consumer-identities.md" >}})
