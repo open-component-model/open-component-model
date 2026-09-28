@@ -194,13 +194,16 @@ Nexus does not accept plain uploads of package tarballs, so the uploader uses th
 components API (`POST /service/rest/v1/components` with the tarball as `npm.asset`).
 Nexus reads name and version from `package.json` and stores the tarball under
 `<name>/-/<name>-<version>.tgz` (`@scope/<name>/-/<name>-<version>.tgz` for scoped
-packages). The resource is published as `Wget/v1` on the stored tarball, for example
-`https://nexus.example.com/repository/npm-hosted/@ocm/demo/-/demo-2.0.0.tgz`.
+packages). The uploader does not change the package: its name, including any scope,
+is the one in `package.json`. The resource is published as `Wget/v1` on the stored
+tarball, for example
+`https://nexus.example.com/repository/npm-hosted/@acme/demo/-/demo-2.0.0.tgz` for a
+package named `@acme/demo`.
 
 Install it with npm:
 
 ```bash
-npm install @ocm/demo@2.0.0 --registry https://nexus.example.com/repository/npm-hosted/
+npm install @acme/demo@2.0.0 --registry https://nexus.example.com/repository/npm-hosted/
 ```
 
 Behavior to plan for:

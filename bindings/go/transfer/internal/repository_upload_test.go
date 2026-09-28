@@ -1534,7 +1534,7 @@ func TestNexusUpload_Transform_Npm(t *testing.T) {
 	const content = "npm tarball"
 	contentSum := sha256.Sum256([]byte(content))
 	contentDigest := hex.EncodeToString(contentSum[:])
-	const stored = "/@ocm/demo/-/demo-2.0.0.tgz"
+	const stored = "/@acme/demo/-/demo-2.0.0.tgz"
 
 	scheme := runtime.NewScheme()
 	scheme.MustRegisterWithAlias(&NexusUploadTransformation{}, NexusUploadVersionedType)
@@ -1572,7 +1572,7 @@ func TestNexusUpload_Transform_Npm(t *testing.T) {
 	newServer := func(t *testing.T) *fakeNexus {
 		srv := newFakeNexus(t, nil, "", false)
 		srv.format = "npm"
-		srv.npm = map[string][2]string{contentDigest: {"@ocm/demo", "2.0.0"}}
+		srv.npm = map[string][2]string{contentDigest: {"@acme/demo", "2.0.0"}}
 		return srv
 	}
 	accessURL := func(r *require.Assertions, out runtime.Typed) string {
