@@ -153,6 +153,10 @@ The repository **must** be a local or federated repository. Remote or virtual
 repositories cannot receive uploads. The uploading user must be allowed to read
 the repository configuration.
 
+For step-by-step guidance per repository type, including Maven POMs and npm
+packages, see
+[Upload Resources to Artifactory and Nexus Repositories]({{< relref "docs/how-to/upload-to-artifactory-and-nexus.md" >}}).
+
 #### Helm repositories
 
 Artifactory reads the chart name and version from the deployed file's
@@ -294,6 +298,9 @@ which the uploader reads from the Nexus repository settings
 The repository **must** be a hosted repository. Proxy and group repositories
 cannot receive uploads. The uploading user must be allowed to read the
 repository settings.
+
+For step-by-step guidance, see
+[Upload Resources to Artifactory and Nexus Repositories]({{< relref "docs/how-to/upload-to-artifactory-and-nexus.md" >}}).
 
 #### Helm repositories
 
