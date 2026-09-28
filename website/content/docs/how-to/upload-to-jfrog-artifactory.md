@@ -1,72 +1,63 @@
 ---
-title: "Upload Resources to Artifactory and Nexus Repositories"
-description: "Transfer component versions and upload their resources into JFrog Artifactory and Sonatype Nexus repositories: Helm charts, Maven artifacts, npm packages and plain files."
+title: "Upload Resources to JFrog Artifactory"
+description: "Transfer component versions and upload their resources into JFrog Artifactory repositories: Helm charts, Maven artifacts, npm packages, Python packages and plain files."
 weight: 16
 toc: true
 ---
 
 ## Goal
 
-Transfer a component version and upload its resources into the repositories of a
-JFrog Artifactory or Sonatype Nexus Repository 3 server, so that consumers fetch
-them from there with their usual tools (`helm`, `mvn`, `npm`, `curl`).
+Transfer a component version and upload its resources into JFrog Artifactory
+repositories, so that consumers fetch them with their usual tools (`helm`, `mvn`,
+`npm`, `pip`, `curl`).
 
 ## You'll end up with
 
-- Resources stored in Artifactory or Nexus repositories of the right type
+- Resources stored in Artifactory repositories of the right package type
 - A transferred component version whose resources point at those repositories
   (`Helm/v1` for charts, `Wget/v1` for files)
 
 **Estimated time:** ~15 minutes
 
-## How the vendor uploaders work
+## How the Artifactory uploader works
 
-OCM has one uploader per server:
+The
 [`artifactory.uploader.transfer.config.ocm.software/v1alpha1`]({{< relref "docs/reference/transfer-configuration.md#artifactoryuploadertransferconfigocmsoftwarev1alpha1" >}})
-and
-[`nexus.uploader.transfer.config.ocm.software/v1alpha1`]({{< relref "docs/reference/transfer-configuration.md#nexusuploadertransferconfigocmsoftwarev1alpha1" >}}).
-Each one routes the resources it matches to a single repository. At upload time it
-reads the repository type from the server API and picks the upload method for it:
+uploader routes the resources it matches to one repository. At upload time it reads
+the repository's package type from `GET <url>/artifactory/api/repositories/<repository>`
+and picks the upload method for it:
 
 ```mermaid
 flowchart LR
-    R[Matched resource] --> D{Repository type}
+    R[Matched resource] --> D{Package type}
     D -->|helm| H[Upload chart, publish Helm/v1]
-    D -->|generic / maven / npm / raw| F[Upload file, publish Wget/v1]
+    D -->|generic / maven / npm| F[Upload file, publish Wget/v1]
     D -->|anything else| X[Transfer fails]
 ```
 
-| Server      | Repository type | Uploaded content                     | Published access                          |
-|-------------|-----------------|--------------------------------------|-------------------------------------------|
-| Artifactory | `helm`          | The Helm chart found in the resource | `Helm/v1` (`helmRepository`, `helmChart`) |
-| Artifactory | `generic`       | The resource content as is           | `Wget/v1` on the stored file              |
-| Artifactory | `maven`         | The resource content as is           | `Wget/v1` on the stored file              |
-| Artifactory | `npm`           | The npm package tarball, as is       | `Wget/v1` on the stored tarball           |
-| Nexus       | `helm`          | The Helm chart found in the resource | `Helm/v1` (`helmRepository`, `helmChart`) |
-| Nexus       | `raw`           | The resource content as is           | `Wget/v1` on the stored file              |
+| Repository type | Uploaded content                     | Published access                          |
+|-----------------|--------------------------------------|-------------------------------------------|
+| `helm`          | The Helm chart found in the resource | `Helm/v1` (`helmRepository`, `helmChart`) |
+| `generic`       | The resource content as is           | `Wget/v1` on the stored file              |
+| `maven`         | The resource content as is           | `Wget/v1` on the stored file              |
+| `npm`           | The npm package tarball, as is       | `Wget/v1` on the stored tarball           |
 
-Every other repository type, for example Artifactory `docker` and Nexus `maven2` or
-`npm`, fails the transfer before anything is uploaded. See
+Every other package type fails the transfer before anything is uploaded. See
 [Other repository types](#other-repository-types) for alternatives.
 
 ## Prerequisites
 
 - [OCM CLI]({{< relref "docs/getting-started/ocm-cli-installation.md" >}}) installed
 - A component version in a CTF or OCI repository
-- An Artifactory **local** (or federated) repository or a Nexus **hosted** repository
-- A user that may deploy into the repository **and read its settings**: the uploader
-  reads the repository type from
-  `GET <url>/artifactory/api/repositories/<repository>` (Artifactory) or
-  `GET <url>/service/rest/v1/repositories/<repository>` (Nexus)
+- An Artifactory **local** (or federated) repository
+- A user that may deploy into the repository **and read its configuration**
 
 ## Configure credentials
 
-The uploaders resolve credentials for the `HelmChartRepository` identity of the
-repository's Helm URL, falling back to the `Wget` identity of the repository URL.
-A `Wget` consumer without a path covers every repository on the server:
-
-{{< tabs "vendor-credentials" >}}
-{{< tab "Artifactory (identity token)" >}}
+The uploader resolves credentials for the `HelmChartRepository` identity of
+`<url>/artifactory/api/helm/<repository>`, falling back to the `Wget` identity of
+`<url>/artifactory/<repository>`. A `Wget` consumer without a path covers every
+repository on the server:
 
 ```yaml
 type: generic.config.ocm.software/v1
@@ -82,27 +73,6 @@ configurations:
             identityToken: <ARTIFACTORY_IDENTITY_TOKEN>
 ```
 
-{{< /tab >}}
-{{< tab "Nexus (user and password)" >}}
-
-```yaml
-type: generic.config.ocm.software/v1
-configurations:
-  - type: credentials.config.ocm.software
-    consumers:
-      - identity:
-          type: Wget
-          hostname: nexus.example.com
-          scheme: https
-        credentials:
-          - type: WgetCredentials/v1
-            username: <USERNAME>
-            password: <PASSWORD_OR_USER_TOKEN>
-```
-
-{{< /tab >}}
-{{< /tabs >}}
-
 {{< callout context="caution" >}}
 `hostname` is the bare host name. A value such as `https://common.repositories.cloud.sap`
 matches no request, so the upload is sent without credentials and fails with `401`.
@@ -110,9 +80,9 @@ matches no request, so the upload is sent without credentials and fails with `40
 
 ## Upload to Artifactory
 
-All Artifactory examples below go into the same configuration file as the
-credentials. Resources are matched by their access type **in the source component
-version**, for example `localBlob` for resources added from files.
+All examples below go into the same configuration file as the credentials.
+Resources are matched by their access type **in the source component version**,
+for example `localBlob` for resources added from files.
 
 ### Helm charts
 
@@ -278,6 +248,34 @@ access:
 OCI images are uploaded as a single OCI layout tar
 (`application/vnd.ocm.software.oci.layout.v1+tar`).
 
+### Python packages (PyPI)
+
+The uploader refuses Artifactory PyPI repositories
+(`has package type "pypi"; supported: helm, generic, maven, npm`). Publish wheels and
+source distributions with `twine` instead:
+
+1. Transfer the component version with the package as a local blob or with its
+   original access, without an uploader rule for it.
+2. Download the package from the transferred component version:
+
+   ```bash
+   ocm download resource ctf::./target//ocm.software/demo:1.0.0 \
+     --identity name=wheel --output demo-1.0.0-py3-none-any.whl
+   ```
+
+   The output file name must be the wheel file name: `twine` reads the package name
+   and version from it.
+3. Upload it to the repository's PyPI API:
+
+   ```bash
+   twine upload --repository-url https://common.repositories.cloud.sap/artifactory/api/pypi/<repository> \
+     -u <USERNAME> -p <IDENTITY_TOKEN> demo-1.0.0-py3-none-any.whl
+   ```
+
+To keep the file inside OCM's transfer instead, upload the wheel into a
+[generic repository](#generic-files): it is then downloadable from its `Wget/v1` URL,
+for example with `pip install <url>`, but not listed in a PyPI index.
+
 ### Owner properties and overwrites
 
 Every file the Artifactory uploader deploys carries the properties
@@ -287,89 +285,13 @@ A file already stored at the upload path is reused when it has the same content,
 replaced when these properties name the same resource of the same component version,
 and never touched otherwise: the transfer fails and asks for a different `path`.
 
-## Upload to Nexus
-
-### Helm charts
-
-```yaml
-  - type: nexus.uploader.transfer.config.ocm.software/v1alpha1
-    match:
-      accessType: localBlob
-      name: chart
-    url: https://nexus.example.com
-    repository: helm-hosted
-```
-
-Nexus stores the chart as `<name>-<version>.tgz` from its `Chart.yaml`, adds it to
-`index.yaml` and the resource is published as:
-
-```yaml
-access:
-  type: Helm/v1
-  helmRepository: https://nexus.example.com/repository/helm-hosted
-  helmChart: mychart:0.1.0
-```
-
-- `helm pull mychart --version 0.1.0 --repo https://nexus.example.com/repository/helm-hosted`
-  returns the chart.
-- A second transfer reuses the stored chart, whether the repository allows redeploys
-  or not.
-- `path` is not supported: Nexus decides where charts are stored.
-
-### Raw files
-
-```yaml
-  - type: nexus.uploader.transfer.config.ocm.software/v1alpha1
-    match:
-      accessType: localBlob
-    url: https://nexus.example.com
-    repository: raw-hosted
-    # optional, defaults to <component>/<component version>/<resource>-<resource version>
-    path: '${"files/" + resource.name + ".txt"}'
-```
-
-The resource is published as `Wget/v1` on
-`https://nexus.example.com/repository/raw-hosted/files/notes.txt`.
-
-Nexus records no owner of a file, so the uploader **never overwrites** a stored file,
-even when the repository allows redeploys. A file with the same content is reused; a
-file with different content fails the transfer:
-
-```text
-nexus repository "raw-hosted" already stores a different file at …; the uploader never overwrites files in raw repositories, configure a different path
-```
-
 ## Other repository types
 
-The uploaders refuse repository types whose clients expect a package format that
-OCM does not build:
-
-| Repository                                   | Error                                                                  | Alternative                                                |
-|----------------------------------------------|------------------------------------------------------------------------|------------------------------------------------------------|
-| Artifactory `docker`                         | `has package type "docker"; supported: helm, generic, maven, npm`      | Transfer images to the OCI registry host of the repository |
-| Nexus `maven2`                               | `has format "maven2"; supported: helm, raw`                            | HTTP uploader with a Maven-layout `targetURL`, see below   |
-| Nexus `npm`                                  | `has format "npm"; supported: helm, raw`                               | None: Nexus only accepts `npm publish`                     |
-| Remote, virtual, proxy or group repositories | `uploads need a local repository` / `uploads need a hosted repository` | Upload into the local or hosted repository behind it       |
-
-### Maven artifacts in Nexus
-
-A Nexus `maven2` hosted repository accepts plain `PUT`s at Maven-layout paths
-(`com/example/demo/1.0.0/demo-1.0.0.jar` returns `201`) and rejects other paths with
-`400 Invalid mavenPath for a Maven 2 repository`. The
-[HTTP uploader]({{< relref "docs/reference/transfer-configuration.md#httpuploadertransferconfigocmsoftwarev1alpha1" >}})
-can deploy there:
-
-```yaml
-  - type: http.uploader.transfer.config.ocm.software/v1alpha1
-    match:
-      accessType: Wget/v1
-      name: jar
-    method: PUT
-    targetURL: '${"https://nexus.example.com/repository/maven-releases/com/example/demo/" + resource.version + "/demo-" + resource.version + ".jar"}'
-```
-
-The HTTP uploader reads remote sources such as `Wget/v1`; it cannot upload local
-blobs (`failed to get plugin for typ "LocalBlob/v1"`).
+| Repository                   | Error                                                             | Alternative                                                |
+|------------------------------|-------------------------------------------------------------------|------------------------------------------------------------|
+| `pypi`                       | `has package type "pypi"; supported: helm, generic, maven, npm`   | `twine`, see [Python packages](#python-packages-pypi)      |
+| `docker`                     | `has package type "docker"; supported: helm, generic, maven, npm` | Transfer images to the OCI registry host of the repository |
+| Remote or virtual repository | `uploads need a local repository`                                 | Upload into the local repository behind it                 |
 
 ## Troubleshooting
 
@@ -398,7 +320,7 @@ resource, component version or was not uploaded by OCM.
 chart or npm package tarball.
 
 **Fix:** Narrow `match` to the chart or package resources, or route other resources
-to a generic or raw repository.
+to a generic repository.
 
 ### Symptom: `npm error notarget No matching version found for … with a date before …`
 
@@ -410,6 +332,7 @@ ones.
 
 ## Related documentation
 
+- [How-to: Upload Resources to Sonatype Nexus]({{< relref "docs/how-to/upload-to-sonatype-nexus.md" >}})
 - [Reference: Transfer Configuration]({{< relref "docs/reference/transfer-configuration.md" >}})
 - [Tutorial: Configure Custom Uploads During Transfer]({{< relref "docs/tutorials/configure-custom-uploads.md" >}})
 - [Concept: Transfer and Transport]({{< relref "docs/concepts/transfer-concept.md" >}})

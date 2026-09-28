@@ -289,8 +289,9 @@ API:
 | `artifactory.uploader.transfer.config.ocm.software/v1alpha1` | `helm`, `generic`, `maven`, `npm` | `Helm/v1` or `Wget/v1` |
 | `nexus.uploader.transfer.config.ocm.software/v1alpha1`       | `helm`, `raw`                     | `Helm/v1` or `Wget/v1` |
 
-For guidance per repository type (Helm, Maven, npm, generic, raw), see
-[Upload Resources to Artifactory and Nexus Repositories]({{< relref "docs/how-to/upload-to-artifactory-and-nexus.md" >}}).
+For guidance per repository type, see
+[Upload Resources to JFrog Artifactory]({{< relref "docs/how-to/upload-to-jfrog-artifactory.md" >}})
+and [Upload Resources to Sonatype Nexus]({{< relref "docs/how-to/upload-to-sonatype-nexus.md" >}}).
 
 ### Artifactory Helm example
 
