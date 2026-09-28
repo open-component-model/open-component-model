@@ -25,7 +25,8 @@ type Options struct {
 // Option is a function that configures Options.
 type Option func(*Options)
 
-// WithHTTPClient sets the HTTP client to use for requests.
+// WithHTTPClient sets the HTTP client to use for requests. When unset, a client
+// from ocmhttp.New is used, which returns response bytes unmodified.
 func WithHTTPClient(client *http.Client) Option {
 	return func(o *Options) {
 		o.Client = client
