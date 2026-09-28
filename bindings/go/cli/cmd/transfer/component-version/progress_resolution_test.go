@@ -13,7 +13,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// stubResolver implements resolvers.ComponentVersionRepositoryResolver with canned results.
 type stubResolver struct {
 	repo    repository.ComponentVersionRepository
 	repoErr error
@@ -33,7 +32,6 @@ func (s *stubResolver) GetRepositorySpecificationForComponent(context.Context, s
 	return s.spec, s.specErr
 }
 
-// stubRepository embeds the repository interface and only implements the lookups the wrapper reports on.
 type stubRepository struct {
 	repository.ComponentVersionRepository
 	desc     *descriptor.Descriptor

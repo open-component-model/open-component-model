@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -38,6 +39,17 @@ func TestSlogVisualizer_End_Success(t *testing.T) {
 		v.End(nil)
 	})
 	assert.Contains(t, output, "Resolving: operation finished")
+	assert.Contains(t, output, "duration=")
+}
+
+func TestSlogVisualizer_End_WithoutBegin(t *testing.T) {
+	output := captureSlog(t, func() {
+		v := &SlogVisualizer[any]{}
+		v.name = "Resolving"
+		v.End(nil)
+	})
+	assert.Contains(t, output, "Resolving: operation finished")
+	assert.NotContains(t, output, "duration=")
 }
 
 func TestSlogVisualizer_End_Error(t *testing.T) {
@@ -48,6 +60,7 @@ func TestSlogVisualizer_End_Error(t *testing.T) {
 	})
 	assert.Contains(t, output, "Resolving: operation failed")
 	assert.Contains(t, output, "connection refused")
+	assert.Contains(t, output, "duration=")
 	assert.Contains(t, output, "level=ERROR")
 }
 
@@ -77,6 +90,29 @@ func TestSlogVisualizer_HandleEvent(t *testing.T) {
 			assert.Contains(t, output, "item=component-a")
 		})
 	}
+}
+
+func TestSlogVisualizer_HandleEvent_Duration(t *testing.T) {
+	t.Run("terminal event with duration", func(t *testing.T) {
+		output := captureSlog(t, func() {
+			v := &SlogVisualizer[any]{}
+			v.Begin("Transfer")
+			v.HandleEvent(Event[any]{ID: "1", Name: "component-a", State: Completed, Duration: 90 * time.Second})
+		})
+		assert.Contains(t, output, "item completed")
+		assert.Contains(t, output, "component-a")
+		assert.Contains(t, output, "duration=1m30s")
+	})
+
+	t.Run("event without duration", func(t *testing.T) {
+		output := captureSlog(t, func() {
+			v := &SlogVisualizer[any]{}
+			v.Begin("Transfer")
+			v.HandleEvent(Event[any]{ID: "1", Name: "component-a", State: Completed})
+		})
+		assert.Contains(t, output, "item completed")
+		assert.NotContains(t, output, "duration=")
+	})
 }
 
 // --- SyncBuffer tests ---

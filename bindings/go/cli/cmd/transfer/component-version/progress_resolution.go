@@ -11,10 +11,6 @@ import (
 	graphPkg "ocm.software/open-component-model/bindings/go/transform/graph"
 )
 
-// resolutionEvent reports the state of a single component version lookup during graph
-// construction (the "Resolving component versions" operation). Because references are
-// discovered recursively, the total number of lookups is not known up front, so the
-// operation is tracked with [progress.IndeterminateTotal].
 type resolutionEvent struct {
 	// id is "component:version", or only the component name when its versions are listed.
 	id    string
@@ -22,7 +18,6 @@ type resolutionEvent struct {
 	err   error
 }
 
-// mapResolutionEvent converts a resolution event to a typed progress.Event.
 func mapResolutionEvent(e resolutionEvent) progress.Event[*graphPkg.Transformation] {
 	return progress.Event[*graphPkg.Transformation]{
 		ID:    e.id,
@@ -58,10 +53,6 @@ func (r *resolutionProgressResolver) GetComponentVersionRepositoryForSpecificati
 	return &resolutionProgressRepository{ComponentVersionRepository: repo, events: r.events}, nil
 }
 
-// resolutionProgressRepository reports GetComponentVersion and ListComponentVersions calls
-// as progress events. Those are the network-bound source lookups of graph construction.
-// Write operations (Add*) are delegated without reporting: they only happen on target
-// repositories, which are tracked by the transfer phase's own transformation progress.
 type resolutionProgressRepository struct {
 	repository.ComponentVersionRepository
 	events chan<- resolutionEvent

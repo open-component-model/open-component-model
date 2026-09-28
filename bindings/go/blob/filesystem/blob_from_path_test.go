@@ -2,10 +2,13 @@ package filesystem_test
 
 import (
 	"archive/tar"
+	"bytes"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
+	"testing/fstest"
 	"time"
 
 	"github.com/stretchr/testify/require"
@@ -229,7 +232,7 @@ func TestGetBlobFromPath_PreserveDirectory(t *testing.T) {
 
 		foundHeaders = append(foundHeaders, header.Name)
 
-		// Expect exact directory header for preserved directory in canonical form (base + "/")
+		// Expect exact directory header for the preserved directory
 		if header.Typeflag == tar.TypeDir && header.Name == expectedDirHeader {
 			foundPrefixed = true
 		}
@@ -241,7 +244,7 @@ func TestGetBlobFromPath_PreserveDirectory(t *testing.T) {
 
 	// Debug output to understand what we got
 	if !foundPrefixed {
-		t.Logf("Expected prefix: %s/", targetDirName)
+		t.Logf("Expected entry: %s", targetDirName)
 		t.Logf("Found headers: %v", foundHeaders)
 	}
 
@@ -566,4 +569,171 @@ func extractTarContents(t *testing.T, b blob.ReadOnlyBlob) []string {
 	}
 
 	return files
+}
+
+func readTarHeaders(t *testing.T, b blob.ReadOnlyBlob) []*tar.Header {
+	t.Helper()
+	r := require.New(t)
+	data, err := readAllFromBlob(b)
+	r.NoError(err)
+
+	tr := tar.NewReader(bytes.NewReader(data))
+	var headers []*tar.Header
+	for {
+		header, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		r.NoError(err)
+		headers = append(headers, header)
+		_, err = io.ReadAll(tr)
+		r.NoError(err)
+	}
+	return headers
+}
+
+// Git-style directory layout is explicitly opt-in.
+func TestGetBlobFromPath_ArchiveLayout(t *testing.T) {
+	r := require.New(t)
+
+	tmpDir := t.TempDir()
+	r.NoError(os.MkdirAll(filepath.Join(tmpDir, "sub", "nested"), 0755))
+	createTestFile(t, tmpDir, "root.txt", "root")
+	createTestFile(t, filepath.Join(tmpDir, "sub"), "file.txt", "content")
+
+	b, err := filesystem.GetBlobFromPath(t.Context(), tmpDir, filesystem.DirOptions{
+		Reproducible: true, OmitRoot: true, OmitDirTrailingSlash: true,
+	})
+	r.NoError(err)
+
+	names := map[string]byte{}
+	for _, header := range readTarHeaders(t, b) {
+		names[header.Name] = header.Typeflag
+	}
+
+	r.Equal(map[string]byte{
+		"root.txt":     tar.TypeReg,
+		"sub":          tar.TypeDir,
+		"sub/file.txt": tar.TypeReg,
+		"sub/nested":   tar.TypeDir,
+	}, names)
+}
+
+// PreserveSymlinks stores a link as a link. The target is recorded as written,
+// so an absolute or dangling one is kept verbatim rather than resolved, and the
+// walk does not descend through a link to a directory.
+func TestGetBlobFromPath_PreserveSymlinks(t *testing.T) {
+	r := require.New(t)
+
+	tmpDir := t.TempDir()
+	createTestFile(t, tmpDir, "target.txt", "target content")
+	r.NoError(os.MkdirAll(filepath.Join(tmpDir, "realdir"), 0755))
+	createTestFile(t, filepath.Join(tmpDir, "realdir"), "inner.txt", "inner")
+
+	links := map[string]string{
+		"relative.txt": "target.txt",
+		"absolute.txt": "/etc/hosts",
+		"dangling.txt": "nonexistent.txt",
+		"escaping.txt": "../../outside.txt",
+		"dirlink":      "realdir",
+	}
+	for name, target := range links {
+		if err := os.Symlink(target, filepath.Join(tmpDir, name)); err != nil {
+			t.Skipf("symlink creation failed (may not be supported on this system): %v", err)
+			return
+		}
+	}
+
+	b, err := filesystem.GetBlobFromPath(t.Context(), tmpDir, filesystem.DirOptions{PreserveSymlinks: true})
+	r.NoError(err)
+
+	targets := map[string]string{}
+	var names []string
+	for _, header := range readTarHeaders(t, b) {
+		names = append(names, header.Name)
+		if header.Typeflag == tar.TypeSymlink {
+			targets[header.Name] = header.Linkname
+		}
+	}
+
+	r.Equal(links, targets, "every link is stored as a link, with its target as written")
+
+	// The link to a directory contributes the link alone; the directory itself is
+	// still walked under its own name.
+	r.NotContains(names, "dirlink/inner.txt")
+	r.Contains(names, "realdir/inner.txt")
+}
+
+func TestGetBlobFromPath_DefaultTarBytes(t *testing.T) {
+	for _, reproducible := range []bool{false, true} {
+		name := "default"
+		if reproducible {
+			name = "reproducible"
+		}
+		t.Run(name, func(t *testing.T) {
+			r := require.New(t)
+			dir := t.TempDir()
+			createTestFile(t, dir, "sub/file", "content")
+			var expected bytes.Buffer
+			tw := tar.NewWriter(&expected)
+			for _, name := range []string{".", "sub", "sub/file"} {
+				info, err := os.Stat(filepath.Join(dir, name))
+				r.NoError(err)
+				h, err := tar.FileInfoHeader(info, "")
+				r.NoError(err)
+				h.Name = name
+				if info.IsDir() {
+					h.Name += "/"
+				}
+				if reproducible {
+					h.ModTime, h.AccessTime, h.ChangeTime = time.Unix(0, 0), time.Unix(0, 0), time.Unix(0, 0)
+					h.Uid, h.Gid, h.Uname, h.Gname = 0, 0, "", ""
+					h.Mode &= 0o777
+				}
+				r.NoError(tw.WriteHeader(h))
+				if !info.IsDir() {
+					_, err = tw.Write([]byte("content"))
+					r.NoError(err)
+				}
+			}
+			r.NoError(tw.Close())
+			b, err := filesystem.GetBlobFromPath(t.Context(), dir, filesystem.DirOptions{Reproducible: reproducible})
+			r.NoError(err)
+			actual, err := readAllFromBlob(b)
+			r.NoError(err)
+			r.Equal(expected.Bytes(), actual, "default bytes retain ./ and sub/ entries")
+		})
+	}
+}
+
+func TestWriteTarLayoutOptions(t *testing.T) {
+	for _, tt := range []struct {
+		name  string
+		opt   filesystem.DirOptions
+		names []string
+	}{
+		{name: "defaults", names: []string{"./", "sub/"}},
+		{name: "omit root", opt: filesystem.DirOptions{OmitRoot: true}, names: []string{"sub/"}},
+		{name: "omit slash", opt: filesystem.DirOptions{OmitDirTrailingSlash: true}, names: []string{".", "sub"}},
+		{name: "git layout", opt: filesystem.DirOptions{OmitRoot: true, OmitDirTrailingSlash: true}, names: []string{"sub"}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+			source := fstest.MapFS{"sub": &fstest.MapFile{Mode: fs.ModeDir | 0o755}}
+			var output bytes.Buffer
+			writer := tar.NewWriter(&output)
+			r.NoError(filesystem.WriteTar(t.Context(), source, writer, tt.opt))
+			r.NoError(writer.Close())
+			reader := tar.NewReader(&output)
+			var names []string
+			for range tt.names {
+				h, err := reader.Next()
+				r.NoError(err)
+				names = append(names, h.Name)
+			}
+			r.Equal(tt.names, names)
+			_, err := reader.Next()
+			r.ErrorIs(err, io.EOF)
+		})
+	}
 }

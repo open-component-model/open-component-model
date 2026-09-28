@@ -42,7 +42,23 @@ configuration files and display the merged effective configuration as a single o
   ocm get config --output json
 
   # Display effective config from a specific config file
-  ocm get config --config ./my-ocm-config.yaml`,
+  ocm get config --config ./my-ocm-config.yaml
+
+  # Add config from stdin on top of the config files
+  ocm get config <<EOF
+  type: generic.config.ocm.software/v1
+  configurations:
+  - type: credentials.config.ocm.software
+    consumers:
+    - identity:
+        type: OCIRegistry
+        hostname: ghcr.io
+      credentials:
+      - type: Credentials/v1
+        properties:
+          username: my-user
+          password: my-token
+  EOF`,
 		RunE:              GetConfig,
 		DisableAutoGenTag: true,
 	}

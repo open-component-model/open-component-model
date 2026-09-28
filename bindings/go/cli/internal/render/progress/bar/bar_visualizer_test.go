@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 
@@ -129,6 +130,33 @@ func TestFormatItem_FallsBackToID(t *testing.T) {
 	assert.Contains(t, result, "my-id")
 }
 
+func TestFormatItem_Duration(t *testing.T) {
+	tests := []struct {
+		name     string
+		state    progress.State
+		duration time.Duration
+		contains string
+	}{
+		{"completed shows rounded duration", progress.Completed, 90 * time.Second, "(took 1m30s)"},
+		{"failed shows duration", progress.Failed, 12 * time.Second, "(took 12s)"},
+		{"cancelled shows duration", progress.Cancelled, time.Minute, "(took 1m0s)"},
+		{"completed with unknown duration shows no suffix", progress.Completed, 0, ""},
+		{"running never shows duration", progress.Running, 90 * time.Second, ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v, _ := newTestVisualizer(1)
+			result := stripANSI(v.formatItem(progress.Event[string]{ID: "test", Name: "test", State: tt.state, Duration: tt.duration}))
+			if tt.contains == "" {
+				assert.NotContains(t, result, "took")
+			} else {
+				assert.Contains(t, result, tt.contains)
+			}
+		})
+	}
+}
+
 func TestLogBuffer(t *testing.T) {
 	t.Run("drain prints and clears buffer", func(t *testing.T) {
 		v, _ := newTestVisualizer(1)
@@ -180,6 +208,26 @@ func TestRenderFinalHeader(t *testing.T) {
 		v.End(nil)
 
 		assert.Contains(t, buf.String(), "✗")
+	})
+
+	t.Run("shows elapsed time measured from Begin", func(t *testing.T) {
+		v, buf := newTestVisualizer(0)
+		v.start = time.Now().Add(-90 * time.Second)
+		v.header = "Transferring"
+
+		v.End(nil)
+
+		// Depending on how much time passes before End, rounding yields 1m30s or 1m31s.
+		assert.Regexp(t, `Transferring\.\.\. \(took 1m3[01]s\)`, stripANSI(buf.String()))
+	})
+
+	t.Run("omits elapsed time when Begin never ran", func(t *testing.T) {
+		v, buf := newTestVisualizer(0)
+		v.header = "Transferring"
+
+		v.End(nil)
+
+		assert.NotContains(t, buf.String(), "took")
 	})
 }
 

@@ -16,6 +16,7 @@ import (
 	godigest "github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/require"
 
+	"ocm.software/open-component-model/bindings/go/blob"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -187,6 +188,74 @@ func Test_DownloadResource(t *testing.T) {
 	entries, err = os.ReadDir(tempFolder)
 	require.NoError(t, err)
 	require.Len(t, entries, 1, "the downloaded file is owned by the caller and must outlive the download")
+}
+
+func Test_DownloadResource_DigestVerification(t *testing.T) {
+	content := []byte("hello from s3")
+
+	// downloadWith serves body and downloads it for a resource carrying dig.
+	downloadWith := func(t *testing.T, body []byte, dig *descriptor.Digest) (blob.ReadOnlyBlob, error) {
+		t.Helper()
+		tempFolder := t.TempDir()
+		srv := newFakeS3(t, body, "")
+		repo := NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &tempFolder})
+
+		res := s3Resource(servedBy(srv, &v2.S3{BucketName: "b", ObjectKey: "k"}))
+		res.Digest = dig
+
+		return repo.DownloadResource(context.Background(), res, fakeCredentials())
+	}
+
+	matching := &descriptor.Digest{
+		HashAlgorithm:          hashAlgorithmSHA256,
+		NormalisationAlgorithm: genericBlobDigestV1,
+		Value:                  godigest.FromBytes(content).Encoded(),
+	}
+
+	t.Run("accepts an object matching the resource digest", func(t *testing.T) {
+		b, err := downloadWith(t, content, matching)
+		require.NoError(t, err)
+
+		rc, err := b.ReadCloser()
+		require.NoError(t, err)
+		got, err := io.ReadAll(rc)
+		require.NoError(t, err)
+		require.NoError(t, rc.Close())
+		require.Equal(t, content, got)
+	})
+
+	t.Run("rejects an object that does not match the resource digest", func(t *testing.T) {
+		// Verification is streaming, so the download itself still succeeds.
+		b, err := downloadWith(t, []byte("not what was promised"), matching)
+		require.NoError(t, err)
+
+		rc, err := b.ReadCloser()
+		require.NoError(t, err)
+		_, err = io.ReadAll(rc)
+		require.ErrorContains(t, err, "digest mismatch")
+		require.ErrorContains(t, rc.Close(), "digest mismatch")
+	})
+
+	t.Run("serves an object unverified when the resource carries no digest", func(t *testing.T) {
+		b, err := downloadWith(t, content, nil)
+		require.NoError(t, err)
+
+		rc, err := b.ReadCloser()
+		require.NoError(t, err)
+		got, err := io.ReadAll(rc)
+		require.NoError(t, err)
+		require.NoError(t, rc.Close())
+		require.Equal(t, content, got)
+	})
+
+	t.Run("refuses an object when the digest is present but unusable", func(t *testing.T) {
+		_, err := downloadWith(t, content, &descriptor.Digest{
+			HashAlgorithm:          "MD5",
+			NormalisationAlgorithm: genericBlobDigestV1,
+			Value:                  godigest.FromBytes(content).Encoded(),
+		})
+		require.ErrorContains(t, err, "unsupported hash algorithm")
+	})
 }
 
 func Test_ProcessResourceDigest(t *testing.T) {
