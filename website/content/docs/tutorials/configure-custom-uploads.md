@@ -266,17 +266,11 @@ target `hostname`, as in Step 2.
 
 ## Deploy Helm Charts to JFrog Artifactory or Sonatype Nexus
 
-The `helm.uploader.transfer.config.ocm.software/v1alpha1` uploader uploads Helm
-charts into a JFrog Artifactory or Sonatype Nexus Repository 3 Helm repository and
-rewrites the resource to a `Helm/v1` access. It extracts the chart archive from
-`Helm/v1`, `OCIImage/v1`, `LocalBlob` (for example charts added with the `helm`
-input) or other remote sources and streams it as a `PUT` to the server. It then
-publishes a `Helm/v1` access with the chart name and version the server recorded,
-so downstream consumers can pull the chart with `helm pull`.
+The `helm.uploader.transfer.config.ocm.software/v1alpha1` uploader streams Helm
+charts into an Artifactory or Nexus Helm repository and rewrites the resource to
+a `Helm/v1` access, so consumers can `helm pull` the chart.
 
 ### Uploader configuration
-
-For Artifactory, the chart is stored under the path of its component version:
 
 ```yaml
 type: generic.config.ocm.software/v1
@@ -286,29 +280,14 @@ configurations:
   - type: helm.uploader.transfer.config.ocm.software/v1alpha1
     match:
       accessType: Helm/v1
-    server: Artifactory
+    server: Artifactory   # or Nexus
     url: https://myorg.jfrog.io
     repository: helm-local
 ```
 
-For a Nexus Helm hosted repository, Nexus stores the chart as
-`<name>-<version>.tgz` and the published `helmRepository` is
-`https://nexus.example.com/repository/helm-hosted`:
-
-```yaml
-  - type: helm.uploader.transfer.config.ocm.software/v1alpha1
-    match:
-      accessType: Helm/v1
-    server: Nexus
-    url: https://nexus.example.com
-    repository: helm-hosted
-```
-
 ### Credentials
 
-Add credentials for the server host. The uploader resolves them using the
-`HelmChartRepository` consumer identity of the published Helm repository, falling
-back to the `Wget` consumer identity of the upload URL, so either entry works:
+Add credentials for the server host:
 
 ```yaml
   - type: credentials.config.ocm.software
@@ -322,8 +301,7 @@ back to the `Wget` consumer identity of the upload URL, so either entry works:
             password: <PASSWORD>
 ```
 
-A `type: Wget` identity with `WgetCredentials/v1` works as well, for example to
-send the access token as a bearer `identityToken`.
+A `type: Wget` identity with `WgetCredentials/v1` works as well.
 
 ### Transfer and verify
 
