@@ -133,8 +133,10 @@ func ociTarget(toSpec runtime.Typed) (string, bool) {
 }
 
 // expressionUses reports which identifiers and function names the CEL source expr uses.
+// It parses with the same syntax options as the graph environment (optional field
+// selection such as `a.?b`), so every template the graph accepts is analyzable here.
 func expressionUses(expr string) (idents, functions map[string]bool, err error) {
-	env, err := cel.NewEnv()
+	env, err := cel.NewEnv(cel.OptionalTypes())
 	if err != nil {
 		return nil, nil, err
 	}
@@ -160,14 +162,12 @@ func expressionUses(expr string) (idents, functions map[string]bool, err error) 
 // in the descriptor environment node and `target` at the OCI registry target. A
 // template that uses `target` on a non-OCI target, or calls toOCI() for a resource
 // without an OCI reference (a local blob without referenceName), does not apply; reason
-// says why, so the resource falls through instead of failing the transfer.
+// says why, so the resource falls through instead of failing the transfer. The OCI
+// reference is only derived (and a malformed one only rejected) when the template
+// calls toOCI().
 func ociImageReference(u *transferv1alpha1.OCIUploaderConfig, access runtime.Typed, baseID string, i int, toSpec runtime.Typed) (imageReference string, applies bool, reason string, err error) {
 	if !ociUploadable(access) {
 		return "", false, "access type is not uploadable as an OCI artifact", nil
-	}
-	_, hasReference, err := ociReference(access)
-	if err != nil {
-		return "", false, "", err
 	}
 	targetLiteral, isOCITarget := ociTarget(toSpec)
 
@@ -191,8 +191,14 @@ func ociImageReference(u *transferv1alpha1.OCIUploaderConfig, access runtime.Typ
 		if !isOCITarget && idents[targetAlias] {
 			return "", false, fmt.Sprintf("imageReference uses %s, but target %s is not an OCI registry", targetAlias, targetKind(toSpec)), nil
 		}
-		if !hasReference && functions[ocifunctions.ToOCIFunctionName] {
-			return "", false, fmt.Sprintf("imageReference calls %s(), but the resource has no OCI reference", ocifunctions.ToOCIFunctionName), nil
+		if functions[ocifunctions.ToOCIFunctionName] {
+			_, hasReference, err := ociReference(access)
+			if err != nil {
+				return "", false, "", err
+			}
+			if !hasReference {
+				return "", false, fmt.Sprintf("imageReference calls %s(), but the resource has no OCI reference", ocifunctions.ToOCIFunctionName), nil
+			}
 		}
 	}
 	return imageReference, true, "", nil

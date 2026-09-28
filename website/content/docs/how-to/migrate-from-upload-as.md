@@ -324,6 +324,29 @@ When the resource has no OCI reference name, build the reference from
   imageReference: '${target.baseUrl + "/" + resource.name + ":" + resource.version}'
 ```
 
+### Use a local blob's reference name as-is
+
+The default places a local blob under the target, at
+`<target>/<referenceName>`. If `referenceName` already is the full reference
+you want, such as `ghcr.io/org/image:v1`, rebuild it with `toOCI()` and scope the
+entry to that resource:
+
+```yaml
+- type: oci.uploader.transfer.config.ocm.software/v1alpha1
+  match:
+    name: my-image
+  imageReference: >-
+    ${resource.access.toOCI().repository
+    + (resource.access.toOCI().tag == "" ? "" : ":" + resource.access.toOCI().tag)
+    + (resource.access.toOCI().digest == "" ? "" : "@" + resource.access.toOCI().digest)}
+```
+
+Use `toOCI()` rather than `${resource.access.referenceName}`: the direct field
+fails to compile when an earlier resource in the descriptor has no
+`referenceName`. See the
+[Transfer Configuration Reference]({{< relref "docs/reference/transfer-configuration.md" >}})
+for the details and limits.
+
 The two CEL identifiers available in `imageReference` templates are:
 
 | Identifier | Value |

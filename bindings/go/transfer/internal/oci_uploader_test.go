@@ -92,6 +92,9 @@ func TestBuildGraphDefinition_OCIUploader(t *testing.T) {
 	manifestBlobWithRegistrylessName := dockerManifestLocalBlobResource("my-image", "1.0.0")
 	manifestBlobWithRegistrylessName.Access.(*descriptorv2.LocalBlob).ReferenceName = "stefanprodan/podinfo:6.5.0"
 
+	manifestBlobWithHostPortName := dockerManifestLocalBlobResource("my-image", "1.0.0")
+	manifestBlobWithHostPortName.Access.(*descriptorv2.LocalBlob).ReferenceName = "127.0.0.1:5000/org/image:v1"
+
 	manifestBlobWithDottedName := dockerManifestLocalBlobResource("my-image", "1.0.0")
 	manifestBlobWithDottedName.Access.(*descriptorv2.LocalBlob).ReferenceName = "ocm.software/podinfo@sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
 
@@ -172,6 +175,24 @@ func TestBuildGraphDefinition_OCIUploader(t *testing.T) {
 			wantTypes:      []runtime.Type{ociv1alpha1.OCIGetLocalResourceV1alpha1, addOCIArtifact, ociv1alpha1.OCIAddComponentVersionV1alpha1, FileCleanupVersionedType},
 			wantImageRef:   "ghcr.io/target/ocm.software/podinfo",
 			wantImageRefAt: 1,
+		},
+		{
+			name:     "a malformed reference name only matters when the template calls toOCI()",
+			target:   testOCIRepo("ghcr.io/target"),
+			resource: manifestBlobWithHostPortName,
+			uploaders: []transferv1alpha1.UploaderConfig{&transferv1alpha1.OCIUploaderConfig{
+				ImageReference: `${target.baseUrl + "/" + resource.name + ":" + resource.version}`,
+			}},
+			wantTypes:      []runtime.Type{ociv1alpha1.OCIGetLocalResourceV1alpha1, addOCIArtifact, ociv1alpha1.OCIAddComponentVersionV1alpha1, FileCleanupVersionedType},
+			wantImageRef:   "ghcr.io/target/my-image:1.0.0",
+			wantImageRefAt: 1,
+		},
+		{
+			name:      "a malformed reference name fails the build when the template calls toOCI()",
+			target:    testOCIRepo("ghcr.io/target"),
+			resource:  manifestBlobWithHostPortName,
+			uploaders: ociUploaders(),
+			wantErr:   "cannot parse referenceName",
 		},
 		{
 			name:      "non-manifest local blob falls through to local blob",
@@ -309,6 +330,53 @@ func TestBuildGraphDefinition_OCIUploader(t *testing.T) {
 			if tc.wantCleanup > 0 {
 				r.Len(cleanupFileExpressions(t, findCleanupTransformation(tgd)), tc.wantCleanup)
 			}
+		})
+	}
+}
+
+// referenceNameAsIsTemplate rebuilds a local blob's referenceName (repository[:tag][@digest])
+// through toOCI(), so it can be used verbatim as the full target reference.
+const referenceNameAsIsTemplate = `${resource.access.toOCI().repository` +
+	` + (resource.access.toOCI().tag == "" ? "" : ":" + resource.access.toOCI().tag)` +
+	` + (resource.access.toOCI().digest == "" ? "" : "@" + resource.access.toOCI().digest)}`
+
+// TestBuildGraphDefinition_OCIUploader_ReferenceNameAsIs covers uploading a local blob to
+// its referenceName verbatim, scoped by match so other resources are unaffected, in
+// descriptors that mix access types in either order.
+func TestBuildGraphDefinition_OCIUploader_ReferenceNameAsIs(t *testing.T) {
+	blob := dockerManifestLocalBlobResource("my-blob", "1.0.0")
+	blob.Access.(*descriptorv2.LocalBlob).ReferenceName = "ghcr.io/org/image:v1@sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+	image := ociImageResource("my-image", "1.0.0", "oci://ghcr.io/other/image:v2")
+	asIs := []transferv1alpha1.UploaderConfig{&transferv1alpha1.OCIUploaderConfig{
+		MatchSpec:      &transferv1alpha1.UploaderMatch{Name: "my-blob"},
+		ImageReference: referenceNameAsIsTemplate,
+	}}
+
+	for _, tc := range []struct {
+		name      string
+		resources []descriptor.Resource
+	}{
+		{"local blob listed first", []descriptor.Resource{blob, image}},
+		{"local blob listed after a resource without referenceName", []descriptor.Resource{image, blob}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			desc := testDescriptor("ocm.software/test", "1.0.0", tc.resources, nil)
+			resolver := testResolverFor("ocm.software/test", "1.0.0", testOCIRepo("ghcr.io/source"), desc)
+			roots := testTransferRoots("ocm.software/test", "1.0.0", testOCIRepo("ghcr.io/target"), resolver)
+
+			tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeLocalBlobResources}, asIs)
+			r.NoError(err)
+
+			addOCIArtifact := runtime.NewVersionedType(ociv1alpha1.AddOCIArtifactType, ociv1alpha1.Version)
+			var got []string
+			for _, tr := range tgd.Transformations {
+				if tr.Type == addOCIArtifact {
+					got = append(got, evaluateTemplate(t, tgd, specImageReference(t, tr)))
+				}
+			}
+			r.Equal([]string{"ghcr.io/org/image:v1@sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"}, got,
+				"only the matched local blob is uploaded, to its referenceName as-is")
 		})
 	}
 }
