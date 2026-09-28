@@ -75,7 +75,7 @@ reference.uploader.transfer.config.ocm.software/v1alpha1 (keep by reference). Th
 uploader whose match (including match.when) selects a resource handles it. --copy-resources
 appends a catch-all localblob.uploader.transfer.config.ocm.software/v1alpha1 entry after all
 configured uploaders, so every resource they do not select is copied as a local blob. The
-former --upload-as flag and copyMode field are replaced by these uploader configurations (see
+former --upload-as flag and the copy mode setting are replaced by these uploader configurations (see
 the "Migrate from --upload-as to Uploader Configurations" guide on ocm.software). --recursive
 walks the component's references and transfers them too.
 
