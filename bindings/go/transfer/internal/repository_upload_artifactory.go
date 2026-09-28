@@ -19,7 +19,7 @@ import (
 // ArtifactoryUpload uploads a resource into a local repository of a JFrog Artifactory server.
 // The package type of the repository decides what is uploaded and how the resource is
 // published: a Helm chart with a Helm/v1 access (helm), or the resource content with a Wget/v1
-// access (generic). See the ArtifactoryUploaderConfig transfer config.
+// access (any other package type). See the ArtifactoryUploaderConfig transfer config.
 type ArtifactoryUpload struct {
 	repositoryUploader
 }
@@ -52,22 +52,17 @@ func (t *ArtifactoryUpload) Transform(ctx context.Context, step runtime.Typed) (
 
 	src := descriptor.ConvertFromV2Resource(spec.Resource)
 	var out *descriptor.Resource
-	switch typ {
-	case "helm":
-		srv, err := t.artifactoryServer(spec, src, ".tgz")
-		if err != nil {
+	if typ == "helm" {
+		var srv *artifactoryServer
+		if srv, err = t.artifactoryServer(spec, src, ".tgz"); err != nil {
 			return nil, err
 		}
 		out, err = t.uploadHelm(ctx, c, spec, src, srv)
-		if err != nil {
-			return nil, err
-		}
-	case "generic":
-		if out, err = t.uploadGeneric(ctx, c, spec, src); err != nil {
-			return nil, err
-		}
-	default:
-		return nil, fmt.Errorf("artifactory repository %q has package type %q; supported: helm, generic", spec.Repository, typ)
+	} else {
+		out, err = t.uploadFile(ctx, c, spec, src)
+	}
+	if err != nil {
+		return nil, err
 	}
 	if transformation.Output, err = t.output(out); err != nil {
 		return nil, err
@@ -114,10 +109,12 @@ func artifactoryRepositoryType(ctx context.Context, c *repositoryClient, spec *R
 	return strings.ToLower(config.PackageType), nil
 }
 
-// uploadGeneric deploys the resource content as is into a generic repository and returns the
-// resource with a Wget/v1 access on the deployed file. Like charts, the file carries the owner
-// properties and an existing file is only replaced when they name this resource.
-func (t *ArtifactoryUpload) uploadGeneric(ctx context.Context, c *repositoryClient, spec *RepositoryUploadSpec, src *descriptor.Resource) (*descriptor.Resource, error) {
+// uploadFile deploys the resource content as is into a repository of any package type other
+// than helm and returns the resource with a Wget/v1 access on the stored file. Artifactory
+// deploys files the same way into every local repository; the package type only decides how it
+// indexes them. Like charts, the file carries the owner properties and an existing file is only
+// replaced when they name this resource.
+func (t *ArtifactoryUpload) uploadFile(ctx context.Context, c *repositoryClient, spec *RepositoryUploadSpec, src *descriptor.Resource) (*descriptor.Resource, error) {
 	srv, err := t.artifactoryServer(spec, src, "")
 	if err != nil {
 		return nil, err
@@ -149,14 +146,14 @@ func (t *ArtifactoryUpload) uploadGeneric(ctx context.Context, c *repositoryClie
 	digestHex := known
 	uploadURL := redactURL(srv.uploadURL())
 	if reused {
-		slog.InfoContext(ctx, "reused content already stored in the artifactory repository", "resource", src.ToIdentity(), "url", uploadURL)
+		slog.InfoContext(ctx, "reused content already stored in the artifactory repository", "resource", src.ToIdentity(), "url", redactURL(srv.storedURL()))
 	} else {
 		header := http.Header{"Content-Type": {mediaType}}
 		if known != "" {
 			// Artifactory rejects the upload when the bytes do not match the checksum.
 			header.Set("X-Checksum-Sha256", known)
 		}
-		computed, _, err := uploadBlob(ctx, c, content.Blob, srv.deployURL(), header)
+		computed, _, err := uploadBlob(ctx, c, content.Blob, srv.deployURL(), header, &srv.deployed)
 		if err != nil {
 			return nil, err
 		}
@@ -166,14 +163,14 @@ func (t *ArtifactoryUpload) uploadGeneric(ctx context.Context, c *repositoryClie
 			}
 			return nil, fmt.Errorf("digest mismatch: expected %s, got %s", known, computed)
 		}
-		slog.InfoContext(ctx, "uploaded resource content", "server", srv.name(), "resource", src.ToIdentity(), "url", uploadURL)
+		slog.InfoContext(ctx, "uploaded resource content", "server", srv.name(), "resource", src.ToIdentity(), "url", redactURL(srv.storedURL()))
 		digestHex = computed
 	}
 
 	out := src.DeepCopy()
 	out.Access = &wgetaccessv1.Wget{
 		Type:      wgetaccess.V1VersionedType,
-		URL:       srv.uploadURL(),
+		URL:       srv.storedURL(),
 		MediaType: mediaType,
 	}
 	out.Digest = uploadedDigest(src.Digest, expected, digestHex)

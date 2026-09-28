@@ -86,7 +86,7 @@ func (u *repositoryUploader) uploadHelm(ctx context.Context, c *repositoryClient
 		slog.InfoContext(ctx, "reused helm chart content already stored in the helm repository",
 			"server", srv.name(), "resource", src.ToIdentity(), "url", uploadURL)
 	} else {
-		computed, complete, err := uploadBlob(ctx, c, chart.Archive, srv.deployURL(), srv.uploadHeader(known))
+		computed, complete, err := uploadBlob(ctx, c, chart.Archive, srv.deployURL(), srv.uploadHeader(known), nil)
 		switch {
 		case err != nil:
 			// A repository that rejects redeploying a chart still stores its content, e.g.
@@ -139,11 +139,13 @@ func (u *repositoryUploader) uploadHelm(ctx context.Context, c *repositoryClient
 // properties and reads the chart name and version from the properties Artifactory records when
 // it indexes the deployed chart.
 type artifactoryServer struct {
-	putURL, storageURL, helmRepo string
+	repository, repoURL, putURL, storageURL, helmRepo string
 	// properties are the owner properties as deploy matrix parameters (;key=value...).
 	properties string
 	owner      []chartProperty
 	interval   time.Duration
+	// deployed is the file the last deploy stored, see storedURL.
+	deployed artifactoryDeployment
 }
 
 func newArtifactoryServer(spec *RepositoryUploadSpec, path string, owner []chartProperty, interval time.Duration) (*artifactoryServer, error) {
@@ -160,6 +162,8 @@ func newArtifactoryServer(spec *RepositoryUploadSpec, path string, owner []chart
 		return nil, fmt.Errorf("invalid artifactory url: %w", err)
 	}
 	return &artifactoryServer{
+		repository: spec.Repository,
+		repoURL:    uploadBase,
 		putURL:     uploadBase + "/" + path,
 		storageURL: storageBase + "/" + path,
 		helmRepo:   helmRepo,
@@ -210,8 +214,36 @@ func (a *artifactoryServer) reuse(ctx context.Context, c *repositoryClient, sha2
 	if err != nil {
 		return false, err
 	}
-	_ = resp.Body.Close()
-	return resp.StatusCode >= 200 && resp.StatusCode < 300, nil
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return false, nil
+	}
+	var deployed artifactoryDeployment
+	if err := decodeJSONBody(resp.Body, &deployed); err != nil {
+		return false, fmt.Errorf("failed decoding response of PUT %s: %w", redactURL(a.putURL), err)
+	}
+	a.deployed = deployed
+	return true, nil
+}
+
+// artifactoryDeployment is the part of an Artifactory deploy response naming the stored file.
+type artifactoryDeployment struct {
+	Repo string `json:"repo"`
+	Path string `json:"path"`
+}
+
+// storedURL is the URL of the stored file. Artifactory may store a file under another path than
+// requested, e.g. a Maven -SNAPSHOT file under its unique timestamped version, so the path of the
+// deploy response is used when there is one.
+func (a *artifactoryServer) storedURL() string {
+	if a.deployed.Repo != a.repository || a.deployed.Path == "" {
+		return a.putURL
+	}
+	segments := strings.Split(strings.TrimPrefix(a.deployed.Path, "/"), "/")
+	for i, segment := range segments {
+		segments[i] = url.PathEscape(segment)
+	}
+	return a.repoURL + "/" + strings.Join(segments, "/")
 }
 
 // claim reads the file stored at the upload location. A missing file leaves the location free,
@@ -339,7 +371,7 @@ func (a *artifactoryServer) chart(ctx context.Context, c *repositoryClient, _ st
 }
 
 func (a *artifactoryServer) discard(ctx context.Context, c *repositoryClient, _ string) error {
-	return c.send(ctx, http.MethodDelete, a.putURL, nil, -1, nil)
+	return c.send(ctx, http.MethodDelete, a.storedURL(), nil, -1, nil, nil)
 }
 
 // nexusServer uploads the chart to the root of a Nexus Repository 3 Helm hosted repository.

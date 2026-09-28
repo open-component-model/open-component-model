@@ -3,6 +3,7 @@ package internal
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -418,8 +419,8 @@ func (t *repositoryUploader) resolveTargetCredentials(ctx context.Context, helmR
 }
 
 // uploadBlob streams content to putURL and returns the hex SHA-256 of the bytes read and
-// whether content was read to its end.
-func uploadBlob(ctx context.Context, c *repositoryClient, content blob.ReadOnlyBlob, putURL string, header http.Header) (sha256Hex string, complete bool, err error) {
+// whether content was read to its end. A successful response body is decoded into out, if set.
+func uploadBlob(ctx context.Context, c *repositoryClient, content blob.ReadOnlyBlob, putURL string, header http.Header, out any) (sha256Hex string, complete bool, err error) {
 	rc, err := content.ReadCloser()
 	if err != nil {
 		return "", false, fmt.Errorf("failed opening content: %w", err)
@@ -431,7 +432,7 @@ func uploadBlob(ctx context.Context, c *repositoryClient, content blob.ReadOnlyB
 	}
 	hasher := sha256.New()
 	body := &eofReader{r: rc}
-	err = c.send(ctx, http.MethodPut, putURL, io.TeeReader(body, hasher), size, header)
+	err = c.send(ctx, http.MethodPut, putURL, io.TeeReader(body, hasher), size, header, out)
 	return godigest.NewDigestFromBytes(godigest.SHA256, hasher.Sum(nil)).Encoded(), body.eof, err
 }
 
@@ -455,21 +456,34 @@ type repositoryClient struct {
 	creds      runtime.Typed
 }
 
-// send issues a single request and fails on a non-2xx response. Errors never carry userinfo,
-// query or fragment of target.
-func (c *repositoryClient) send(ctx context.Context, method, target string, body io.Reader, size int64, header http.Header) error {
+// send issues a single request and fails on a non-2xx response. A successful JSON response is
+// decoded into out, if set. Errors never carry userinfo, query or fragment of target.
+func (c *repositoryClient) send(ctx context.Context, method, target string, body io.Reader, size int64, header http.Header, out any) error {
 	resp, err := c.do(ctx, method, target, body, size, header)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = resp.Body.Close() }()
+	safe := redactURL(target)
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		safe := redactURL(target)
 		excerpt, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorBodyBytes))
 		if msg := strings.TrimSpace(string(excerpt)); msg != "" {
 			return fmt.Errorf("%s %s returned status %d: %s", method, safe, resp.StatusCode, msg)
 		}
 		return fmt.Errorf("%s %s returned status %d", method, safe, resp.StatusCode)
+	}
+	if out != nil {
+		if err := decodeJSONBody(resp.Body, out); err != nil {
+			return fmt.Errorf("failed decoding response of %s %s: %w", method, safe, err)
+		}
+	}
+	return nil
+}
+
+// decodeJSONBody decodes a JSON response body into out; an empty body leaves out unchanged.
+func decodeJSONBody(body io.Reader, out any) error {
+	if err := json.NewDecoder(io.LimitReader(body, maxErrorBodyBytes)).Decode(out); err != nil && !errors.Is(err, io.EOF) {
+		return err
 	}
 	return nil
 }

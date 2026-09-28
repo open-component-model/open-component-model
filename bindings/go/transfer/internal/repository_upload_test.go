@@ -118,6 +118,9 @@ type fakeArtifactory struct {
 	rclass      string
 	// detectionStatus overrides the response status of the detection endpoint (0 means 200).
 	detectionStatus int
+	// storedPath maps a deploy path to the path the file is stored under, like Artifactory
+	// storing a Maven -SNAPSHOT file under its unique version. nil stores files as requested.
+	storedPath func(path string) string
 
 	mu         sync.Mutex
 	requests   []artifactoryRequest
@@ -225,6 +228,13 @@ func (f *fakeArtifactory) handle(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	case r.Method == http.MethodPut && strings.HasPrefix(path, repoPrefix):
 		stored := strings.TrimPrefix(path, repoPrefix)
+		if f.storedPath != nil {
+			stored = f.storedPath(stored)
+		}
+		created := func() {
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(map[string]string{"repo": "helm-local", "path": "/" + stored})
+		}
 		if req.deploy {
 			// Deploy by checksum succeeds only for content Artifactory already stores.
 			if !f.contents[req.checksum] {
@@ -232,7 +242,7 @@ func (f *fakeArtifactory) handle(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			f.store(stored, req.checksum, params)
-			w.WriteHeader(http.StatusCreated)
+			created()
 			return
 		}
 		sum := sha256.Sum256(body)
@@ -244,7 +254,7 @@ func (f *fakeArtifactory) handle(w http.ResponseWriter, r *http.Request) {
 		}
 		f.contents[digest] = true
 		f.store(stored, digest, params)
-		w.WriteHeader(http.StatusCreated)
+		created()
 	default:
 		http.Error(w, "unexpected request", http.StatusBadRequest)
 	}
@@ -631,29 +641,55 @@ func TestArtifactoryUpload_Transform_Generic(t *testing.T) {
 		return out
 	}
 
-	t.Run("uploads content with owner properties and publishes Wget access", func(t *testing.T) {
+	for _, packageType := range []string{"generic", "maven", "npm"} {
+		t.Run(packageType+" repository stores the content and publishes a Wget access", func(t *testing.T) {
+			r := require.New(t)
+			srv := newFakeArtifactory(t, nil)
+			srv.packageType = packageType
+			out, err := transformer().Transform(t.Context(), step(srv.URL, source()))
+			r.NoError(err)
+
+			got := srv.recorded()
+			// detection, claim (storage GET, 404), reuse (deploy-by-checksum PUT, 404), content PUT
+			r.Equal([]string{"GET " + detectionPath, "GET " + storagePath, "PUT " + putPath, "PUT " + putPath}, methods(got))
+			r.True(got[2].deploy, "deploy by checksum is tried first")
+			r.Empty(got[2].body)
+			r.False(got[3].deploy)
+			r.Equal([]byte(content), got[3].body)
+			r.Equal(owner, got[3].properties)
+
+			res := out.(*ArtifactoryUploadTransformation).Output.Resource
+			r.Equal("renamed", res.Name)
+			var access wgetaccessv1.Wget
+			r.NoError(wgetaccess.Scheme.Convert(res.Access, &access))
+			r.Equal(srv.URL+"/artifactory/helm-local/"+genericPath, access.URL)
+			r.Equal("application/octet-stream", access.MediaType)
+			r.Equal(&descriptorv2.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: "genericBlobDigest/v1", Value: contentDigest}, res.Digest)
+		})
+	}
+
+	t.Run("access points at the file Artifactory stored", func(t *testing.T) {
 		r := require.New(t)
 		srv := newFakeArtifactory(t, nil)
-		srv.packageType = "generic"
-		out, err := transformer().Transform(t.Context(), step(srv.URL, source()))
-		r.NoError(err)
+		srv.packageType = "maven"
+		srv.storedPath = func(path string) string {
+			return strings.Replace(path, "renamed-1.0.0-SNAPSHOT", "renamed-1.0.0-20260928.182907-1", 1)
+		}
+		res := source()
+		res.Version = "1.0.0-SNAPSHOT"
+		res.Digest = &descriptorv2.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: "genericBlobDigest/v1", Value: contentDigest}
+		want := srv.URL + "/artifactory/helm-local/ocm.software/test/1.0.0/renamed-1.0.0-20260928.182907-1"
 
+		for _, run := range []string{"upload", "deploy by checksum"} {
+			out, err := transformer().Transform(t.Context(), step(srv.URL, res))
+			r.NoError(err, run)
+			var access wgetaccessv1.Wget
+			r.NoError(wgetaccess.Scheme.Convert(out.(*ArtifactoryUploadTransformation).Output.Resource.Access, &access))
+			r.Equal(want, access.URL, run)
+		}
 		got := srv.recorded()
-		// detection, claim (storage GET, 404), reuse (deploy-by-checksum PUT, 404), content PUT
-		r.Equal([]string{"GET " + detectionPath, "GET " + storagePath, "PUT " + putPath, "PUT " + putPath}, methods(got))
-		r.True(got[2].deploy, "deploy by checksum is tried first")
-		r.Empty(got[2].body)
-		r.False(got[3].deploy)
-		r.Equal([]byte(content), got[3].body)
-		r.Equal(owner, got[3].properties)
-
-		res := out.(*ArtifactoryUploadTransformation).Output.Resource
-		r.Equal("renamed", res.Name)
-		var access wgetaccessv1.Wget
-		r.NoError(wgetaccess.Scheme.Convert(res.Access, &access))
-		r.Equal(srv.URL+"/artifactory/helm-local/"+genericPath, access.URL)
-		r.Equal("application/octet-stream", access.MediaType)
-		r.Equal(&descriptorv2.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: "genericBlobDigest/v1", Value: contentDigest}, res.Digest)
+		last := got[len(got)-1]
+		r.True(last.deploy, "the second transfer reuses the stored content")
 	})
 
 	t.Run("no chart property GET is issued for generic uploads", func(t *testing.T) {
@@ -717,15 +753,6 @@ func TestArtifactoryUpload_Transform_DetectionErrors(t *testing.T) {
 		srv.rclass = "remote"
 		_, err := transformer().Transform(t.Context(), step(srv.URL))
 		r.ErrorContains(err, "uploads need a local repository")
-		r.False(hasPUT(srv.recorded()))
-	})
-
-	t.Run("unsupported packageType npm", func(t *testing.T) {
-		r := require.New(t)
-		srv := newFakeArtifactory(t, nil)
-		srv.packageType = "npm"
-		_, err := transformer().Transform(t.Context(), step(srv.URL))
-		r.ErrorContains(err, "supported: helm, generic")
 		r.False(hasPUT(srv.recorded()))
 	})
 

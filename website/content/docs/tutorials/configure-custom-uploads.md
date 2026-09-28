@@ -281,13 +281,13 @@ version.
 
 Two dedicated uploaders stream resources into Artifactory or Nexus repositories
 and rewrite the resource access so consumers can fetch the artifact from the
-repository server. Each uploader detects the repository type (helm, generic or
-raw) through the server API:
+repository server. Each uploader detects the repository type through the server
+API:
 
-| Config type                                                    | Repository types  | Published access       |
-|----------------------------------------------------------------|-------------------|------------------------|
-| `artifactory.uploader.transfer.config.ocm.software/v1alpha1`   | `helm`, `generic` | `Helm/v1` or `Wget/v1` |
-| `nexus.uploader.transfer.config.ocm.software/v1alpha1`         | `helm`, `raw`     | `Helm/v1` or `Wget/v1` |
+| Config type                                                  | Repository types                 | Published access       |
+|--------------------------------------------------------------|----------------------------------|------------------------|
+| `artifactory.uploader.transfer.config.ocm.software/v1alpha1` | `helm`, any other package type   | `Helm/v1` or `Wget/v1` |
+| `nexus.uploader.transfer.config.ocm.software/v1alpha1`       | `helm`, `raw`                    | `Helm/v1` or `Wget/v1` |
 
 ### Artifactory Helm example
 
@@ -319,8 +319,9 @@ configurations:
 
 ### Generic / raw repository example
 
-Upload any resource (not just Helm charts) into an Artifactory generic or Nexus
-raw repository and publish a `Wget/v1` access:
+Upload any resource (not just Helm charts) into an Artifactory repository of any
+other package type (for example generic or maven) or a Nexus raw repository and
+publish a `Wget/v1` access:
 
 ```yaml
   - type: artifactory.uploader.transfer.config.ocm.software/v1alpha1
@@ -365,7 +366,7 @@ ocm get cv ghcr.io/target-org/ocm//ocm.software/demo:1.0.0 -o yaml
 ```
 
 The resource now carries a `Helm/v1` access (helm repository) or `Wget/v1` access
-(generic/raw repository):
+(other Artifactory repository, Nexus raw repository):
 
 {{< details "Expected resource access (Helm)" >}}
 ```yaml

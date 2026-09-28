@@ -35,7 +35,7 @@ configurations:
 |----------------------------------------------------------------|------------------------------------------------------------------------------------------------------|
 | `transfer.config.ocm.software/v1alpha1`                        | Global transfer settings: recursion, which resources are copied and how.                             |
 | `http.uploader.transfer.config.ocm.software/v1alpha1`          | Per-match rule that streams a resource to a custom HTTP target.                                      |
-| `artifactory.uploader.transfer.config.ocm.software/v1alpha1`   | Per-match rule that uploads a resource into a JFrog Artifactory local repository (helm or generic).  |
+| `artifactory.uploader.transfer.config.ocm.software/v1alpha1`   | Per-match rule that uploads a resource into a JFrog Artifactory local repository of any type.        |
 | `nexus.uploader.transfer.config.ocm.software/v1alpha1`         | Per-match rule that uploads a resource into a Sonatype Nexus hosted repository (helm or raw).        |
 
 By default the CLI looks for configuration in `$HOME/.ocmconfig`. Pass
@@ -144,10 +144,10 @@ The behaviour depends on the **package type** of the repository, which the uploa
 reads from the Artifactory repository configuration
 (`GET <url>/artifactory/api/repositories/<repository>`):
 
-| Repository type | Source handling                                                               | Published access                                                                                                     |
-|-----------------|-------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------|
-| `helm`          | The packaged Helm chart located in the resource content (.tgz, tar, or OCI)   | `Helm/v1` (`helmRepository: <url>/artifactory/api/helm/<repository>`, `helmChart: <name>:<version>`)                 |
-| `generic`       | The resource content as is (OCI artifacts as an OCI layout tar)               | `Wget/v1` (`url: <url>/artifactory/<repository>/<path>`)                                                             |
+| Repository type                           | Source handling                                                             | Published access                                                                                     |
+|-------------------------------------------|-----------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------|
+| `helm`                                    | The packaged Helm chart located in the resource content (.tgz, tar, or OCI) | `Helm/v1` (`helmRepository: <url>/artifactory/api/helm/<repository>`, `helmChart: <name>:<version>`) |
+| any other (`generic`, `maven`, ...)       | The resource content as is (OCI artifacts as an OCI layout tar)             | `Wget/v1` (`url` of the stored file)                                                                 |
 
 The repository **must** be a local or federated repository. Remote or virtual
 repositories cannot receive uploads. The uploading user must be allowed to read
@@ -210,8 +210,13 @@ content: a packaged chart `.tgz`, a tar containing one (Helm downloader output),
 or a Helm chart OCI artifact (its chart layer is uploaded). Other content fails
 the transfer.
 
-**Generic** repositories accept any access type and upload the resource content
-as is. OCI artifacts are materialized as an OCI layout tar.
+**Other** repositories accept any access type and store the resource content as
+is. OCI artifacts are materialized as an OCI layout tar. The file is not
+packaged for the package type: it is downloadable by its URL, but package
+clients (Maven, npm, …) only resolve it if its content and `path` already follow
+their format. When Artifactory stores a file under another path than requested,
+such as a Maven `-SNAPSHOT` file under its timestamped version, the published
+`url` points at the stored file.
 
 #### Credentials
 

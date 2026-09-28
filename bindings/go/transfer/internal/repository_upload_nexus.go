@@ -139,7 +139,7 @@ func (t *NexusUpload) uploadRaw(ctx context.Context, c *repositoryClient, spec *
 	if stored {
 		slog.InfoContext(ctx, "reused content already stored in the nexus repository", "resource", src.ToIdentity(), "url", safe)
 	} else {
-		computed, _, err := uploadBlob(ctx, c, content.Blob, target, http.Header{"Content-Type": {mediaType}})
+		computed, _, err := uploadBlob(ctx, c, content.Blob, target, http.Header{"Content-Type": {mediaType}}, nil)
 		if err != nil {
 			return nil, err
 		}

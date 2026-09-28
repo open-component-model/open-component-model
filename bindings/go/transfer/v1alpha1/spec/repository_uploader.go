@@ -32,7 +32,7 @@ func init() {
 // ArtifactoryUploaderConfig uploads matching resources into a local repository of a JFrog
 // Artifactory server. What is uploaded and how the resource is re-described depends on the
 // package type of the repository, which is read from the Artifactory repository configuration
-// (GET <url>/artifactory/api/repositories/<repository>)
+// (GET <url>/artifactory/api/repositories/<repository>):
 //
 //   - helm: the packaged Helm chart located in the resource content (a packaged chart, a tar
 //     containing one as the helm downloader produces, or a helm chart OCI artifact) is deployed and
@@ -42,8 +42,12 @@ func init() {
 //     not recognize as a chart is deleted again and fails the transfer. The repository must not
 //     enforce chart name and version in file names (Helm Enforce Layout), because the file name
 //     is not derived from the chart.
-//   - generic: the resource content is deployed as is (OCI artifacts as an OCI layout tar) and the
-//     resource is published with a Wget/v1 access on the deployed file.
+//   - any other package type (generic, maven, npm, ...): the resource content is deployed as is
+//     (OCI artifacts as an OCI layout tar) and the resource is published with a Wget/v1 access on
+//     the stored file. The file is not packaged for the package type: it is downloadable, but
+//     package clients only resolve it if the content and path already follow the format. Where
+//     Artifactory stores a file under another path than requested (Maven -SNAPSHOT versions get a
+//     unique timestamped version), the access points at the stored file.
 //
 // The content is deployed to <url>/artifactory/<repository>/<path>. Path defaults to
 // <component>/<component version>/<resource>-<resource version>, plus .tgz for helm. The deployed
@@ -91,7 +95,7 @@ type ArtifactoryUploaderConfig struct {
 // NexusUploaderConfig uploads matching resources into a hosted repository of a Sonatype Nexus
 // Repository 3 server. What is uploaded and how the resource is re-described depends on the
 // format of the repository, which is read from the Nexus repository settings
-// (GET <url>/service/rest/v1/repositories/<repository>)
+// (GET <url>/service/rest/v1/repositories/<repository>):
 //
 //   - helm: the packaged Helm chart located in the resource content is uploaded to
 //     <url>/repository/<repository>/<resource>-<resource version>.tgz. Nexus stores it under the
