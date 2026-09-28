@@ -106,7 +106,7 @@ type UploaderMatch struct {
 	// AccessType is the resource access type this uploader matches (e.g. Wget/v1).
 	// When empty, resources of any access type match; [HTTPUploaderConfig] still
 	// requires it.
-	AccessType runtime.Type `json:"accessType,omitempty,omitzero"`
+	AccessType runtime.Type `json:"accessType,omitzero"`
 	// Name optionally restricts the match to resources with this exact name.
 	// When empty, resources of any name match.
 	Name string `json:"name,omitempty"`
