@@ -99,9 +99,8 @@ Read a package's `doc.go` (if present) and `README.md` before changing it.
 
 Coupled files — editing one without the other breaks CI or behavior:
 
-- **Tool/binary versions live in per-area `.env` files (renovate-managed)**: root `.env` (golangci-lint, deepcopy-gen, markdownlint-cli2, go toolchain), `bindings/go/kubernetes/controller/.env` (controller-tools, envtest, kind node), `bindings/go/sigstore/signing/handler/internal/.env` (cosign), `bindings/go/sigstore/integration/.env` (scaffolding). Taskfiles source these — never hardcode a version in a Taskfile or script. Exception: explicit bash fallbacks for tools without an `.env` pin (controller Taskfile: `HELM_DOCS_VERSION`, `YQ_VERSION`); keep those documented in the Taskfile and don't extend the pattern. Cross-dir coupling: `sigstore/integration/Taskfile.yml` reads `COSIGN_VERSION` from `signing/handler/internal/.env`.
+- **Tool/binary versions live in per-area `.env` files (renovate-managed)**: root `.env` (golangci-lint, deepcopy-gen, markdownlint-cli2), `bindings/go/kubernetes/controller/.env` (controller-tools, envtest, kind node), `bindings/go/sigstore/signing/handler/internal/.env` (cosign), `bindings/go/sigstore/integration/.env` (scaffolding). Taskfiles source these — never hardcode a version in a Taskfile or script. Exception: explicit bash fallbacks for tools without an `.env` pin (controller Taskfile: `HELM_DOCS_VERSION`, `YQ_VERSION`); keep those documented in the Taskfile and don't extend the pattern. Cross-dir coupling: `sigstore/integration/Taskfile.yml` reads `COSIGN_VERSION` from `signing/handler/internal/.env`.
 - `ENVTEST_K8S_VERSION` (`controller/.env`) ↔ `DefaultEnvTestVersion` (`.../internal/test/envtest.go`) — keep equal.
-- `GO_TOOLCHAIN_VERSION` (root `.env`) ↔ `toolchain` directive (`bindings/go/go.mod`) — keep equal. It pins the toolchain that compiles deepcopy-gen; a mismatch builds a generator that cannot parse the project stdlib.
 - Docs version ↔ `hugo.yaml` + `module.yaml` — only via `npm run register-docs-version`.
 - Website Node/npm floors — check the `engines` field in `website/package.json`, don't restate here.
 
