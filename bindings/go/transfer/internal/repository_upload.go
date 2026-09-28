@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -19,24 +18,23 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/helm/chartarchive"
-	helmaccessv1 "ocm.software/open-component-model/bindings/go/helm/spec/access/v1"
 	helmcredsv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/v1"
 	helmidentityv1 "ocm.software/open-component-model/bindings/go/helm/spec/identity/v1"
 	ocmhttp "ocm.software/open-component-model/bindings/go/http"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
-	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/wget/httpauth"
 	wgetcredsv1 "ocm.software/open-component-model/bindings/go/wget/spec/credentials/v1"
 	wgetidentityv1 "ocm.software/open-component-model/bindings/go/wget/spec/identity/v1"
 )
 
 const (
-	HelmRepositoryUploadType    = "HelmRepositoryUpload"
-	helmRepositoryUploadVersion = "v1alpha1"
+	ArtifactoryUploadType   = "ArtifactoryUpload"
+	NexusUploadType         = "NexusUpload"
+	repositoryUploadVersion = "v1alpha1"
 
-	// hashAlgorithmSHA256 is the hash algorithm recorded for uploaded chart digests.
+	// hashAlgorithmSHA256 is the hash algorithm recorded for uploaded content digests.
 	hashAlgorithmSHA256 = "SHA-256"
 	// genericBlobDigestV1 is the normalisation algorithm for a plain streamed blob.
 	genericBlobDigestV1 = "genericBlobDigest/v1"
@@ -50,37 +48,44 @@ const (
 	chartMetadataAttempts = 30
 	// defaultChartMetadataInterval is the wait between two chart metadata polls.
 	defaultChartMetadataInterval = 500 * time.Millisecond
+	// octetStream is the content type of uploaded content of unknown media type.
+	octetStream = "application/octet-stream"
 )
 
-// HelmRepositoryUploadVersionedType is the versioned type identifier for HelmRepositoryUpload transformations.
-var HelmRepositoryUploadVersionedType = runtime.NewVersionedType(HelmRepositoryUploadType, helmRepositoryUploadVersion)
+var (
+	// ArtifactoryUploadVersionedType is the versioned type identifier for ArtifactoryUpload transformations.
+	ArtifactoryUploadVersionedType = runtime.NewVersionedType(ArtifactoryUploadType, repositoryUploadVersion)
+	// NexusUploadVersionedType is the versioned type identifier for NexusUpload transformations.
+	NexusUploadVersionedType = runtime.NewVersionedType(NexusUploadType, repositoryUploadVersion)
+)
 
-// HelmRepositoryUploadSpec is the input specification for a HelmRepositoryUpload transformation.
+// RepositoryUploadSpec is the input specification of an ArtifactoryUpload or NexusUpload
+// transformation.
 // +k8s:deepcopy-gen=true
 // +ocm:jsonschema-gen=true
-type HelmRepositoryUploadSpec struct {
-	// Resource is the source resource holding the helm chart.
+type RepositoryUploadSpec struct {
+	// Resource is the source resource to upload.
 	Resource *descriptorv2.Resource `json:"resource"`
-	// ComponentVersion is the component version holding the resource. It determines where the
-	// chart is stored in an Artifactory repository and, for local blob resources, where it is
-	// read from.
-	ComponentVersion *HelmRepositoryUploadComponentVersion `json:"componentVersion"`
-	// Server selects the API of the Helm repository server.
-	Server transferv1alpha1.HelmRepositoryServer `json:"server"`
-	// URL is the base URL of the Helm repository server.
+	// ComponentVersion is the component version holding the resource. It determines the default
+	// upload location and, for local blob resources, where the resource is read from.
+	ComponentVersion *RepositoryUploadComponentVersion `json:"componentVersion"`
+	// URL is the base URL of the server.
 	URL string `json:"url"`
-	// Repository is the name of the Helm repository.
+	// Repository is the name of the target repository.
 	Repository string `json:"repository"`
-	// Path is where the chart is stored in an Artifactory repository, relative to the
-	// repository root. It must consist of non-empty segments without . or .. and end in .tgz.
-	// Empty stores the chart under <component>/<component version>/<resource>-<resource version>.tgz.
+	// RepositoryType is the type of the target repository (Artifactory package type, Nexus
+	// format). Empty reads it from the server.
+	RepositoryType string `json:"repositoryType,omitempty"`
+	// Path is where the content is stored, relative to the repository root. It must consist of
+	// non-empty segments without . or .. and, for helm repositories, end in .tgz. Empty stores the
+	// content under <component>/<component version>/<resource>-<resource version>.
 	Path string `json:"path,omitempty"`
 }
 
-// HelmRepositoryUploadComponentVersion identifies the component version holding the resource.
+// RepositoryUploadComponentVersion identifies the component version holding the resource.
 // +k8s:deepcopy-gen=true
 // +ocm:jsonschema-gen=true
-type HelmRepositoryUploadComponentVersion struct {
+type RepositoryUploadComponentVersion struct {
 	// Repository is the specification of the repository holding the component version. It is
 	// set for local blob resources only, which are read from it.
 	Repository *runtime.Raw `json:"repository,omitempty"`
@@ -90,35 +95,45 @@ type HelmRepositoryUploadComponentVersion struct {
 	Version string `json:"version"`
 }
 
-// HelmRepositoryUploadOutput is the output of a HelmRepositoryUpload transformation.
+// RepositoryUploadOutput is the output of an ArtifactoryUpload or NexusUpload transformation.
 // +k8s:deepcopy-gen=true
 // +ocm:jsonschema-gen=true
-type HelmRepositoryUploadOutput struct {
-	// Resource is the uploaded resource with its Helm/v1 access on the Helm repository.
+type RepositoryUploadOutput struct {
+	// Resource is the uploaded resource with its access on the target repository.
 	Resource *descriptorv2.Resource `json:"resource"`
 }
 
-// HelmRepositoryUploadTransformation uploads the packaged Helm chart of a resource to a Helm
-// repository of a JFrog Artifactory or Sonatype Nexus server and publishes the resource with a
-// Helm/v1 access on it.
+// ArtifactoryUploadTransformation uploads a resource into a repository of a JFrog Artifactory
+// server and publishes it with an access on that repository, see [ArtifactoryUpload].
 // +k8s:deepcopy-gen=true
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +ocm:typegen=true
 // +ocm:jsonschema-gen=true
-type HelmRepositoryUploadTransformation struct {
-	// +ocm:jsonschema-gen:enum=HelmRepositoryUpload/v1alpha1
-	Type   runtime.Type                `json:"type"`
-	ID     string                      `json:"id"`
-	Spec   *HelmRepositoryUploadSpec   `json:"spec"`
-	Output *HelmRepositoryUploadOutput `json:"output,omitempty"`
+type ArtifactoryUploadTransformation struct {
+	// +ocm:jsonschema-gen:enum=ArtifactoryUpload/v1alpha1
+	Type   runtime.Type            `json:"type"`
+	ID     string                  `json:"id"`
+	Spec   *RepositoryUploadSpec   `json:"spec"`
+	Output *RepositoryUploadOutput `json:"output,omitempty"`
 }
 
-// HelmRepositoryUpload uploads the packaged chart of a resource to a Helm repository and outputs
-// the resource with a Helm/v1 access on it. The chart is streamed and never buffered on disk.
-// The chart is not parsed: its name and version are the chart metadata the server records for
-// the uploaded chart. Where the chart is stored and how the metadata is read depends on the
-// server, see [helmRepositoryServer].
-type HelmRepositoryUpload struct {
+// NexusUploadTransformation uploads a resource into a hosted repository of a Sonatype Nexus
+// Repository 3 server and publishes it with an access on that repository, see [NexusUpload].
+// +k8s:deepcopy-gen=true
+// +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
+// +ocm:typegen=true
+// +ocm:jsonschema-gen=true
+type NexusUploadTransformation struct {
+	// +ocm:jsonschema-gen:enum=NexusUpload/v1alpha1
+	Type   runtime.Type            `json:"type"`
+	ID     string                  `json:"id"`
+	Spec   *RepositoryUploadSpec   `json:"spec"`
+	Output *RepositoryUploadOutput `json:"output,omitempty"`
+}
+
+// repositoryUploader holds what every repository upload needs: it opens the source resource
+// and talks to the target server. The content is streamed and never buffered on disk.
+type repositoryUploader struct {
 	Scheme *runtime.Scheme
 	Charts *chartarchive.Source
 	// ResourceRepository derives the source credential identities of remote resources.
@@ -132,163 +147,108 @@ type HelmRepositoryUpload struct {
 	chartMetadataInterval time.Duration
 }
 
-func (t *HelmRepositoryUpload) Transform(ctx context.Context, step runtime.Typed) (runtime.Typed, error) {
-	var transformation HelmRepositoryUploadTransformation
-	if err := t.Scheme.Convert(step, &transformation); err != nil {
-		return nil, fmt.Errorf("failed converting generic transformation to HelmRepositoryUpload transformation: %w", err)
-	}
-	spec := transformation.Spec
+// validateSpec rejects a spec missing a field every upload needs.
+func validateSpec(spec *RepositoryUploadSpec) error {
 	switch {
 	case spec == nil:
-		return nil, fmt.Errorf("spec is required for HelmRepositoryUpload transformation")
+		return fmt.Errorf("spec is required")
 	case spec.Resource == nil:
-		return nil, fmt.Errorf("source resource is required")
+		return fmt.Errorf("source resource is required")
 	case spec.ComponentVersion == nil || spec.ComponentVersion.Component == "" || spec.ComponentVersion.Version == "":
-		return nil, fmt.Errorf("component and version are required")
-	case spec.Server == "":
-		return nil, fmt.Errorf("server is required")
+		return fmt.Errorf("component and version are required")
 	case spec.URL == "":
-		return nil, fmt.Errorf("url is required")
+		return fmt.Errorf("url is required")
 	case spec.Repository == "":
-		return nil, fmt.Errorf("repository is required")
+		return fmt.Errorf("repository is required")
 	}
-	src := descriptor.ConvertFromV2Resource(spec.Resource)
-	cv := spec.ComponentVersion
-	file, err := chartFile(src)
-	if err != nil {
-		return nil, err
-	}
-	var path string
-	if spec.Path != "" {
-		path, err = customChartPath(spec.Path)
-	} else {
-		path, err = chartPath(cv.Component, cv.Version, src)
-	}
-	if err != nil {
-		return nil, err
-	}
-	srv, err := t.newServer(spec, path, file, chartOwner(cv, src))
-	if err != nil {
-		return nil, err
-	}
-
-	req := chartarchive.Request{Resource: src}
-	if cv.Repository != nil {
-		if req.Local, err = t.localSource(ctx, cv); err != nil {
-			return nil, err
-		}
-	} else if req.Credentials, err = t.resolveSourceCredentials(ctx, src); err != nil {
-		return nil, err
-	}
-
-	chart, err := t.Charts.Open(ctx, req)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = chart.Close() }()
-
-	creds, err := t.resolveTargetCredentials(ctx, srv.helmRepository(), srv.uploadURL())
-	if err != nil {
-		return nil, err
-	}
-	c := &helmClient{httpConfig: t.HTTPConfig, creds: creds}
-
-	expected, err := expectedDigest(src.Digest, chart.FromOCI)
-	if err != nil {
-		return nil, err
-	}
-	known := expected
-	if known == "" {
-		if da, ok := chart.Archive.(blob.DigestAware); ok {
-			if d, ok := da.Digest(); ok {
-				known, _ = strings.CutPrefix(d, "sha256:")
-				if known == d {
-					known = ""
-				}
-			}
-		}
-	}
-
-	// The upload location must be free, hold this resource's earlier upload, or already hold
-	// the chart; nothing else is ever overwritten.
-	reused, err := srv.claim(ctx, c, known)
-	if err != nil {
-		return nil, err
-	}
-	if !reused && known != "" {
-		if reused, err = srv.reuse(ctx, c, known); err != nil {
-			return nil, err
-		}
-	}
-	digestHex := known
-	uploadURL := redactURL(srv.uploadURL())
-	if reused {
-		slog.InfoContext(ctx, "reused helm chart content already stored in the helm repository",
-			"server", srv.name(), "resource", src.ToIdentity(), "url", uploadURL)
-	} else {
-		computed, complete, err := uploadChart(ctx, c, chart, srv.deployURL(), srv.uploadHeader(known))
-		switch {
-		case err != nil:
-			// A repository that rejects redeploying a chart still stores its content, e.g.
-			// from an earlier transfer of the same resource without a source digest.
-			if known != "" || !complete || !srv.rejectedUploadStored(ctx, c, computed) {
-				return nil, err
-			}
-			slog.InfoContext(ctx, "helm repository already stores the chart the upload was rejected for",
-				"server", srv.name(), "resource", src.ToIdentity(), "url", uploadURL)
-		case known != "" && computed != known:
-			if err := srv.discard(ctx, c, computed); err != nil {
-				slog.WarnContext(ctx, "failed removing uploaded content that must not be published", "url", uploadURL, "error", err)
-			}
-			return nil, fmt.Errorf("digest mismatch: expected %s, got %s", known, computed)
-		default:
-			slog.InfoContext(ctx, "uploaded helm chart", "server", srv.name(), "resource", src.ToIdentity(), "url", uploadURL)
-		}
-		digestHex = computed
-	}
-
-	// The upload succeeded, so the server stores the content either way; isChart only
-	// reports whether it recognized that content as a helm chart and recorded its metadata.
-	name, version, isChart, err := srv.chart(ctx, c, digestHex)
-	if err != nil {
-		return nil, err
-	}
-	if !isChart {
-		// Remove the stored non-chart content again (Artifactory deletes the uploaded file;
-		// Nexus cannot, see nexusServer.discard).
-		if err := srv.discard(ctx, c, digestHex); err != nil {
-			slog.WarnContext(ctx, "failed removing uploaded content that must not be published", "url", uploadURL, "error", err)
-		}
-		return nil, fmt.Errorf("content of resource %s is not a helm chart: %s recorded no chart name and version for %s", src.ToIdentity(), srv.name(), uploadURL)
-	}
-	if strings.ContainsAny(name, ":/") || strings.Contains(version, "/") {
-		return nil, fmt.Errorf("%s recorded an invalid chart name %q or version %q for %s", srv.name(), name, version, uploadURL)
-	}
-
-	out := src.DeepCopy()
-	out.Access = &helmaccessv1.Helm{
-		Type:           runtime.NewVersionedType(helmaccessv1.Type, helmaccessv1.Version),
-		HelmRepository: srv.helmRepository(),
-		HelmChart:      name + ":" + version,
-	}
-	if expected != "" {
-		out.Digest = src.Digest.DeepCopy()
-	} else {
-		out.Digest = &descriptor.Digest{HashAlgorithm: hashAlgorithmSHA256, NormalisationAlgorithm: genericBlobDigestV1, Value: digestHex}
-	}
-	if transformation.Output == nil {
-		transformation.Output = &HelmRepositoryUploadOutput{}
-	}
-	if transformation.Output.Resource, err = descriptor.ConvertToV2Resource(t.Scheme, out); err != nil {
-		return nil, fmt.Errorf("failed converting uploaded resource to v2 format: %w", err)
-	}
-	return &transformation, nil
+	return nil
 }
 
-// chartFile returns the path-escaped file name of the chart:
-// <resource name>-<resource version>.tgz, with a hash of the extra identity appended when the
+// target resolves the upload credentials, see resolveTargetCredentials, and returns a client
+// sending requests with them.
+func (u *repositoryUploader) target(ctx context.Context, helmRepo, repoURL string) (*repositoryClient, error) {
+	creds, err := u.resolveTargetCredentials(ctx, helmRepo, repoURL)
+	if err != nil {
+		return nil, err
+	}
+	return &repositoryClient{httpConfig: u.HTTPConfig, creds: creds}, nil
+}
+
+// open returns the request opening the source resource: from the source component version for
+// local blobs, else with the resolved source credentials.
+func (u *repositoryUploader) open(ctx context.Context, spec *RepositoryUploadSpec, src *descriptor.Resource) (chartarchive.Request, error) {
+	req := chartarchive.Request{Resource: src}
+	var err error
+	if spec.ComponentVersion.Repository != nil {
+		req.Local, err = u.localSource(ctx, spec.ComponentVersion)
+	} else {
+		req.Credentials, err = u.resolveSourceCredentials(ctx, src)
+	}
+	return req, err
+}
+
+// interval is the wait between two chart metadata polls.
+func (u *repositoryUploader) interval() time.Duration {
+	if u.chartMetadataInterval == 0 {
+		return defaultChartMetadataInterval
+	}
+	return u.chartMetadataInterval
+}
+
+// output converts the uploaded resource to its v2 form.
+func (u *repositoryUploader) output(out *descriptor.Resource) (*RepositoryUploadOutput, error) {
+	res, err := descriptor.ConvertToV2Resource(u.Scheme, out)
+	if err != nil {
+		return nil, fmt.Errorf("failed converting uploaded resource to v2 format: %w", err)
+	}
+	return &RepositoryUploadOutput{Resource: res}, nil
+}
+
+// knownDigest returns the SHA-256 the uploaded content must have (expected, see expectedDigest)
+// and the one it is known to have up front (known): expected, else the digest the content
+// reports itself.
+func knownDigest(src *descriptor.Digest, content blob.ReadOnlyBlob, fromOCI bool) (expected, known string, err error) {
+	if expected, err = expectedDigest(src, fromOCI); err != nil {
+		return "", "", err
+	}
+	if expected != "" {
+		return expected, expected, nil
+	}
+	if da, ok := content.(blob.DigestAware); ok {
+		if d, ok := da.Digest(); ok {
+			if hex, ok := strings.CutPrefix(d, "sha256:"); ok {
+				return "", hex, nil
+			}
+		}
+	}
+	return "", "", nil
+}
+
+// uploadedDigest is the digest of the published resource: the source digest if it describes the
+// uploaded content, else the SHA-256 of the uploaded bytes.
+func uploadedDigest(src *descriptor.Digest, expected, sha256Hex string) *descriptor.Digest {
+	if expected != "" {
+		return src.DeepCopy()
+	}
+	return &descriptor.Digest{HashAlgorithm: hashAlgorithmSHA256, NormalisationAlgorithm: genericBlobDigestV1, Value: sha256Hex}
+}
+
+// contentType is the media type content is uploaded with: that of the content, else that of the
+// resource access, else application/octet-stream.
+func contentType(content *chartarchive.Content, res *descriptorv2.Resource) string {
+	if content.MediaType != "" {
+		return content.MediaType
+	}
+	if mt := mediaTypeFromAccess(*res); mt != "" {
+		return mt
+	}
+	return octetStream
+}
+
+// resourceFile returns the path-escaped file name of the resource:
+// <resource name>-<resource version><ext>, with a hash of the extra identity appended when the
 // resource has one, so every resource of a component version has its own file.
-func chartFile(res *descriptor.Resource) (string, error) {
+func resourceFile(res *descriptor.Resource, ext string) (string, error) {
 	if strings.ContainsAny(res.Name+res.Version, "/\\") {
 		return "", fmt.Errorf("resource name %q and version %q must not contain path separators", res.Name, res.Version)
 	}
@@ -296,13 +256,13 @@ func chartFile(res *descriptor.Resource) (string, error) {
 	if len(res.ExtraIdentity) > 0 {
 		file += fmt.Sprintf("-%016x", res.ExtraIdentity.CanonicalHashV1())
 	}
-	return url.PathEscape(file + ".tgz"), nil
+	return url.PathEscape(file + ext), nil
 }
 
-// chartPath returns the path-escaped location of the chart in the repository:
-// <component>/<component version>/<chart file>.
-func chartPath(component, version string, res *descriptor.Resource) (string, error) {
-	file, err := chartFile(res)
+// defaultPath returns the path-escaped default location of the resource in the repository:
+// <component>/<component version>/<resource file>.
+func defaultPath(component, version string, res *descriptor.Resource, ext string) (string, error) {
+	file, err := resourceFile(res, ext)
 	if err != nil {
 		return "", err
 	}
@@ -316,25 +276,33 @@ func chartPath(component, version string, res *descriptor.Resource) (string, err
 	return strings.Join(append(segments, file), "/"), nil
 }
 
-// customChartPath validates a configured chart location and returns it path-escaped. It must be
-// relative, consist of non-empty segments other than . and .., and name a .tgz file, so it can
+// uploadPath returns the configured location, see customPath, else the default location.
+func uploadPath(spec *RepositoryUploadSpec, res *descriptor.Resource, ext string) (string, error) {
+	if spec.Path != "" {
+		return customPath(spec.Path, ext)
+	}
+	return defaultPath(spec.ComponentVersion.Component, spec.ComponentVersion.Version, res, ext)
+}
+
+// customPath validates a configured location and returns it path-escaped. It must be relative,
+// consist of non-empty segments other than . and .., and end in requiredSuffix, so it can
 // neither leave the repository nor address a folder.
-func customChartPath(path string) (string, error) {
-	if !strings.HasSuffix(path, ".tgz") {
-		return "", fmt.Errorf("chart path %q must end in .tgz", path)
+func customPath(path, requiredSuffix string) (string, error) {
+	if !strings.HasSuffix(path, requiredSuffix) {
+		return "", fmt.Errorf("path %q must end in %s", path, requiredSuffix)
 	}
 	segments := strings.Split(path, "/")
 	for i, segment := range segments {
 		if segment == "" || segment == "." || segment == ".." || strings.Contains(segment, "\\") {
-			return "", fmt.Errorf("chart path %q must be relative without empty, \".\" or \"..\" segments", path)
+			return "", fmt.Errorf("path %q must be relative without empty, \".\" or \"..\" segments", path)
 		}
 		segments[i] = url.PathEscape(segment)
 	}
 	return strings.Join(segments, "/"), nil
 }
 
-// chartOwner returns the properties that identify the resource a chart is uploaded for.
-func chartOwner(cv *HelmRepositoryUploadComponentVersion, res *descriptor.Resource) []chartProperty {
+// chartOwner returns the properties that identify the resource content is uploaded for.
+func chartOwner(cv *RepositoryUploadComponentVersion, res *descriptor.Resource) []chartProperty {
 	owner := []chartProperty{
 		{"ocm.component.name", cv.Component},
 		{"ocm.component.version", cv.Version},
@@ -364,7 +332,7 @@ func expectedDigest(src *descriptor.Digest, fromOCI bool) (string, error) {
 }
 
 // localSource resolves the source component version repository of a local blob resource.
-func (t *HelmRepositoryUpload) localSource(ctx context.Context, cv *HelmRepositoryUploadComponentVersion) (*chartarchive.Local, error) {
+func (t *repositoryUploader) localSource(ctx context.Context, cv *RepositoryUploadComponentVersion) (*chartarchive.Local, error) {
 	if t.RepoProvider == nil {
 		return nil, fmt.Errorf("no component version repository provider configured for local resources")
 	}
@@ -385,7 +353,7 @@ func (t *HelmRepositoryUpload) localSource(ctx context.Context, cv *HelmReposito
 
 // resolveSourceCredentials resolves credentials for a remote source resource by its consumer
 // identity. A missing provider or ErrNotFound yields nil credentials.
-func (t *HelmRepositoryUpload) resolveSourceCredentials(ctx context.Context, resource *descriptor.Resource) (runtime.Typed, error) {
+func (t *repositoryUploader) resolveSourceCredentials(ctx context.Context, resource *descriptor.Resource) (runtime.Typed, error) {
 	if t.CredentialProvider == nil {
 		return nil, nil
 	}
@@ -407,10 +375,10 @@ func (t *HelmRepositoryUpload) resolveSourceCredentials(ctx context.Context, res
 }
 
 // resolveTargetCredentials resolves the upload credentials: those of the HelmChartRepository
-// identity of the published Helm repository, falling back to the Wget identity of the upload
-// URL. Without either, the upload is anonymous. HelmHTTPCredentials are mapped to their
+// identity of the Helm repository URL of the target repository, falling back to the Wget
+// identity of its repository URL. Without either, the upload is anonymous. HelmHTTPCredentials are mapped to their
 // username and password, which is all an HTTP upload uses.
-func (t *HelmRepositoryUpload) resolveTargetCredentials(ctx context.Context, helmRepo, putURL string) (runtime.Typed, error) {
+func (t *repositoryUploader) resolveTargetCredentials(ctx context.Context, helmRepo, repoURL string) (runtime.Typed, error) {
 	if t.CredentialProvider == nil {
 		return nil, nil
 	}
@@ -419,7 +387,7 @@ func (t *HelmRepositoryUpload) resolveTargetCredentials(ctx context.Context, hel
 		return nil, fmt.Errorf("failed deriving target consumer identity: %w", err)
 	}
 	helmID.SetType(helmidentityv1.Type)
-	wgetID, err := wgetidentityv1.IdentityFromURL(putURL)
+	wgetID, err := wgetidentityv1.IdentityFromURL(repoURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed deriving target consumer identity: %w", err)
 	}
@@ -443,7 +411,7 @@ func (t *HelmRepositoryUpload) resolveTargetCredentials(ctx context.Context, hel
 		return nil, fmt.Errorf("failed converting target credentials: %w", err)
 	}
 	if helmCreds.CertFile != "" || helmCreds.KeyFile != "" {
-		return nil, fmt.Errorf("HelmHTTPCredentials certFile/keyFile are not supported for helm repository uploads; use WgetCredentials/v1 certificate and privateKey")
+		return nil, fmt.Errorf("HelmHTTPCredentials certFile/keyFile are not supported for repository uploads; use WgetCredentials/v1 certificate and privateKey")
 	}
 	return &wgetcredsv1.WgetCredentials{
 		Type:     wgetcredsv1.WgetCredentialsVersionedType,
@@ -452,16 +420,16 @@ func (t *HelmRepositoryUpload) resolveTargetCredentials(ctx context.Context, hel
 	}, nil
 }
 
-// uploadChart streams the chart archive to putURL and returns the hex SHA-256 of the bytes read
-// and whether the archive was read to its end.
-func uploadChart(ctx context.Context, c *helmClient, chart *chartarchive.Chart, putURL string, header http.Header) (sha256Hex string, complete bool, err error) {
-	rc, err := chart.Archive.ReadCloser()
+// uploadBlob streams content to putURL and returns the hex SHA-256 of the bytes read and
+// whether content was read to its end.
+func uploadBlob(ctx context.Context, c *repositoryClient, content blob.ReadOnlyBlob, putURL string, header http.Header) (sha256Hex string, complete bool, err error) {
+	rc, err := content.ReadCloser()
 	if err != nil {
-		return "", false, fmt.Errorf("failed opening chart archive: %w", err)
+		return "", false, fmt.Errorf("failed opening content: %w", err)
 	}
 	defer func() { _ = rc.Close() }()
 	size := blob.SizeUnknown
-	if sized, ok := chart.Archive.(blob.SizeAware); ok {
+	if sized, ok := content.(blob.SizeAware); ok {
 		size = sized.Size()
 	}
 	hasher := sha256.New()
@@ -484,15 +452,15 @@ func (e *eofReader) Read(p []byte) (int, error) {
 	return n, err
 }
 
-// helmClient sends authenticated requests to the Helm repository server.
-type helmClient struct {
+// repositoryClient sends authenticated requests to the repository server.
+type repositoryClient struct {
 	httpConfig *httpv1alpha1.Config
 	creds      runtime.Typed
 }
 
 // send issues a single request and fails on a non-2xx response. Errors never carry userinfo,
 // query or fragment of target.
-func (c *helmClient) send(ctx context.Context, method, target string, body io.Reader, size int64, header http.Header) error {
+func (c *repositoryClient) send(ctx context.Context, method, target string, body io.Reader, size int64, header http.Header) error {
 	resp, err := c.do(ctx, method, target, body, size, header)
 	if err != nil {
 		return err
@@ -510,7 +478,7 @@ func (c *helmClient) send(ctx context.Context, method, target string, body io.Re
 }
 
 // do sends a single authenticated request. The caller closes the response body.
-func (c *helmClient) do(ctx context.Context, method, target string, body io.Reader, size int64, header http.Header) (*http.Response, error) {
+func (c *repositoryClient) do(ctx context.Context, method, target string, body io.Reader, size int64, header http.Header) (*http.Response, error) {
 	safe := redactURL(target)
 	req, err := http.NewRequestWithContext(ctx, method, target, body)
 	if err != nil {

@@ -277,30 +277,64 @@ version.
 `match.accessType` to the resource's `access.type` there, for example
 `OCIImage/v1` for an `ociArtifact` access.
 
-## Deploy Helm Charts to JFrog Artifactory or Sonatype Nexus
+## Deploy Resources to JFrog Artifactory or Sonatype Nexus
 
-The `helm.uploader.transfer.config.ocm.software/v1alpha1` uploader streams Helm
-charts into an Artifactory or Nexus Helm repository and rewrites the resource to
-a `Helm/v1` access, so consumers can `helm pull` the chart.
+Two dedicated uploaders stream resources into Artifactory or Nexus repositories
+and rewrite the resource access so consumers can fetch the artifact from the
+repository server. Each uploader auto-detects the repository type (helm, generic
+or raw) or can be told via `repositoryType`:
 
-### Uploader configuration
+| Config type                                                    | Repository types  | Published access       |
+|----------------------------------------------------------------|-------------------|------------------------|
+| `artifactory.uploader.transfer.config.ocm.software/v1alpha1`   | `helm`, `generic` | `Helm/v1` or `Wget/v1` |
+| `nexus.uploader.transfer.config.ocm.software/v1alpha1`         | `helm`, `raw`     | `Helm/v1` or `Wget/v1` |
+
+### Artifactory Helm example
 
 ```yaml
 type: generic.config.ocm.software/v1
 configurations:
   - type: transfer.config.ocm.software/v1alpha1
     copyMode: allResources
-  - type: helm.uploader.transfer.config.ocm.software/v1alpha1
+  - type: artifactory.uploader.transfer.config.ocm.software/v1alpha1
     match:
       accessType: Helm/v1
-    server: Artifactory
     url: https://myorg.jfrog.io
     repository: helm-local
 ```
 
+### Nexus Helm example
+
+```yaml
+type: generic.config.ocm.software/v1
+configurations:
+  - type: transfer.config.ocm.software/v1alpha1
+    copyMode: allResources
+  - type: nexus.uploader.transfer.config.ocm.software/v1alpha1
+    match:
+      accessType: Helm/v1
+    url: https://nexus.example.com
+    repository: helm-hosted
+```
+
+### Generic / raw repository example
+
+Upload any resource (not just Helm charts) into an Artifactory generic or Nexus
+raw repository and publish a `Wget/v1` access:
+
+```yaml
+  - type: artifactory.uploader.transfer.config.ocm.software/v1alpha1
+    match:
+      accessType: localBlob
+    url: https://myorg.jfrog.io
+    repository: generic-local
+    repositoryType: generic
+```
+
 ### Credentials
 
-Add credentials for the server host:
+Add credentials for the server host. The uploader resolves them for the
+`HelmChartRepository` identity of the repository URL, falling back to `Wget`:
 
 ```yaml
   - type: credentials.config.ocm.software
@@ -331,9 +365,10 @@ Inspect the transferred component version:
 ocm get cv ghcr.io/target-org/ocm//ocm.software/demo:1.0.0 -o yaml
 ```
 
-The resource now carries a `Helm/v1` access:
+The resource now carries a `Helm/v1` access (helm repository) or `Wget/v1` access
+(generic/raw repository):
 
-{{< details "Expected resource access" >}}
+{{< details "Expected resource access (Helm)" >}}
 ```yaml
 resources:
   - name: mychart
@@ -350,7 +385,8 @@ resources:
 {{< /details >}}
 
 For the full field reference, see
-[`helm.uploader.transfer.config.ocm.software/v1alpha1`]({{< relref "docs/reference/transfer-configuration.md" >}}#helmuploadertransferconfigocmsoftwarev1alpha1).
+[`artifactory.uploader.transfer.config.ocm.software/v1alpha1`]({{< relref "docs/reference/transfer-configuration.md" >}}#artifactoryuploadertransferconfigocmsoftwarev1alpha1) and
+[`nexus.uploader.transfer.config.ocm.software/v1alpha1`]({{< relref "docs/reference/transfer-configuration.md" >}}#nexusuploadertransferconfigocmsoftwarev1alpha1).
 
 ## Next steps
 

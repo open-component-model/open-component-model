@@ -31,11 +31,12 @@ configurations:
     method: PUT
 ```
 
-| Type                                                  | Purpose                                                                                                       |
-|-------------------------------------------------------|---------------------------------------------------------------------------------------------------------------|
-| `transfer.config.ocm.software/v1alpha1`               | Global transfer settings: recursion, which resources are copied and how.                                      |
-| `http.uploader.transfer.config.ocm.software/v1alpha1` | Per-match rule that streams a resource to a custom HTTP target.                                               |
-| `helm.uploader.transfer.config.ocm.software/v1alpha1` | Per-match rule that uploads a Helm chart into a JFrog Artifactory or Sonatype Nexus Helm repository.          |
+| Type                                                           | Purpose                                                                                              |
+|----------------------------------------------------------------|------------------------------------------------------------------------------------------------------|
+| `transfer.config.ocm.software/v1alpha1`                        | Global transfer settings: recursion, which resources are copied and how.                             |
+| `http.uploader.transfer.config.ocm.software/v1alpha1`          | Per-match rule that streams a resource to a custom HTTP target.                                      |
+| `artifactory.uploader.transfer.config.ocm.software/v1alpha1`   | Per-match rule that uploads a resource into a JFrog Artifactory local repository (helm or generic).  |
+| `nexus.uploader.transfer.config.ocm.software/v1alpha1`         | Per-match rule that uploads a resource into a Sonatype Nexus hosted repository (helm or raw).        |
 
 By default the CLI looks for configuration in `$HOME/.ocmconfig`. Pass
 `--config <file>` to use a different file. The corresponding CLI flags
@@ -81,8 +82,9 @@ An **uploader configuration** streams resources that match a rule to a custom
 target instead of the default download-and-embed path. The config type dedicates
 each uploader to a specific target:
 `http.uploader.transfer.config.ocm.software/v1alpha1` streams to an HTTP endpoint;
-`helm.uploader.transfer.config.ocm.software/v1alpha1` uploads a Helm chart into a
-JFrog Artifactory or Sonatype Nexus Helm repository. Each entry is an independent
+`artifactory.uploader.transfer.config.ocm.software/v1alpha1` uploads into a JFrog
+Artifactory local repository; `nexus.uploader.transfer.config.ocm.software/v1alpha1`
+uploads into a Sonatype Nexus hosted repository. Each entry is an independent
 rule; you may declare several.
 
 During transfer, the **first** uploader whose `match` applies to a resource wins,
@@ -135,74 +137,94 @@ cannot re-send the write request that would overwrite the uploaded object.
 | `noRedirect`          | bool                  | request                           | Disable following HTTP redirects on the upload. Not on the published access.           |
 | `mediaType`           | string                | request + published (`mediaType`) | Media type recorded on the resource. Defaults to the source's.                         |
 
-### `helm.uploader.transfer.config.ocm.software/v1alpha1`
+### `artifactory.uploader.transfer.config.ocm.software/v1alpha1`
 
-Uploads a matched Helm chart into a JFrog Artifactory or Sonatype Nexus Repository 3
-Helm repository and rewrites the resource to a `Helm/v1` access with
-`helmChart: <name>:<version>`. The chart streams from its source into a `PUT`
-without touching disk. The uploader does not parse the chart: it publishes the
-name and version the server records.
+Uploads a matched resource into a local repository of a JFrog Artifactory server.
+The behaviour depends on the **package type** of the repository, which the uploader
+reads from the Artifactory repository configuration
+(`GET <url>/artifactory/api/repositories/<repository>`) unless `repositoryType` is
+set in the config:
 
-| `server`      | Upload URL                                                                                                                          | Published `helmRepository`                |
-|---------------|-------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------|
-| `Artifactory` | `<url>/artifactory/<repository>/<path>`, `<path>` defaulting to `<component>/<component-version>/<resource>-<resource-version>.tgz` | `<url>/artifactory/api/helm/<repository>` |
-| `Nexus`       | `<url>/repository/<repository>/<resource>-<resource-version>.tgz`                                                                   | `<url>/repository/<repository>`           |
+| Repository type | Source handling                                                               | Published access                                                                                                     |
+|-----------------|-------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------|
+| `helm`          | The packaged Helm chart located in the resource content (.tgz, tar, or OCI)   | `Helm/v1` (`helmRepository: <url>/artifactory/api/helm/<repository>`, `helmChart: <name>:<version>`)                 |
+| `generic`       | The resource content as is (OCI artifacts as an OCI layout tar)               | `Wget/v1` (`url: <url>/artifactory/<repository>/<path>`)                                                             |
 
-**Artifactory** reads the chart name and version from the deployed file's
+The repository **must** be a local or federated repository. Remote or virtual
+repositories cannot receive uploads.
+
+{{< callout context="tip" title="Set repositoryType to skip detection" >}}
+Reading the repository configuration can need more permissions than deploying.
+If the uploading user cannot read it, the transfer fails; set `repositoryType`
+in the config to skip the API query.
+{{< /callout >}}
+
+#### Helm repositories
+
+Artifactory reads the chart name and version from the deployed file's
 properties; content without them is deleted and fails the transfer. Artifactory
 indexes the deployed chart itself. The repository must not enable
-*Enforce Chart Name and Version*, because the file name does not come from the chart.
+*Enforce Chart Name and Version* (Helm Enforce Layout), because the file name
+does not come from the chart.
 
-Every deployed chart carries properties naming the resource it was uploaded
+#### Owner properties
+
+Every deployed file carries properties naming the resource it was uploaded
 for: `ocm.component.name`, `ocm.component.version`, `ocm.resource.name`,
 `ocm.resource.version` and, when the resource has one,
-`ocm.resource.extraIdentity`. They make the chart searchable by component and
+`ocm.resource.extraIdentity`. They make the artifact searchable by component and
 decide whether a file already stored at the upload path may be replaced:
 
-- no file, or a file with the same content: the chart is (re)used;
+- no file, or a file with the same content: the file is (re)used;
 - a file whose properties name the same resource of the same component
   version: it is replaced (a repeated transfer);
 - any other file: the transfer fails and the file is left untouched. Configure
   a `path` that includes whatever distinguishes the resources, such as the
   component version.
 
-**Nexus** stores the chart as `<name>-<version>.tgz` from `Chart.yaml` and
-maintains `index.yaml` itself. The uploader looks up the chart by SHA-256 in the
-component search. If the repository disables redeploy and already stores the same
-content, the rejected upload (`409`) is accepted; different content under the same
-name and version fails.
+#### Path
 
-#### Schema
-
-{{< schema-renderer url="/schemas/bindings/go/transfer/HelmUploaderConfig.schema.json" >}}
-
-#### Fields
-
-| Field        | Type              | Description                                                                                                                                                                                                                                |
-|--------------|-------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `match`      | `UploaderMatch`   | Selects resources this uploader applies to. `match.accessType` is required.                                                                                                                                                                |
-| `server`     | enum (required)   | `Artifactory` or `Nexus`.                                                                                                                                                                                                                  |
-| `url`        | string (required) | Server base URL **without** the `/artifactory` or `/repository` segment, e.g. `https://myorg.jfrog.io`.                                                                                                                                    |
-| `repository` | string (required) | Helm repository name, e.g. `helm-local`.                                                                                                                                                                                                   |
-| `path`       | string            | Artifactory only. Location of the chart in the repository, a literal or a `${…}` CEL expression over `resource` and `component` (see [CEL Expressions](#cel-expressions)). Must be relative, without `.`/`..` segments, and end in `.tgz`. |
-
-#### Sources
-
-Any access type works; the chart archive is located in the content: a packaged
-chart `.tgz`, a tar containing one (Helm downloader output), or a Helm chart OCI
-artifact (its chart layer is uploaded). Other content fails the transfer.
+Content is deployed to `<url>/artifactory/<repository>/<path>`. The default path
+is `<component>/<component-version>/<resource>-<resource-version>`, plus `.tgz`
+for helm repositories. A custom `path` must be relative, without `.`/`..`
+segments, and end in `.tgz` for helm repositories.
 
 #### Digest
 
 A `genericBlobDigest/v1` SHA-256 source digest is verified, and content the
-server already stores is not uploaded again. Artifactory rejects mismatching bytes
-before storing them; Nexus cannot, so the uploader fails after the upload. Charts
-extracted from an OCI artifact get the SHA-256 of the uploaded `.tgz`.
+server already stores is not uploaded again. Artifactory verifies bytes against an
+`X-Checksum-Sha256` header on deploy. Content extracted from an OCI artifact
+gets the SHA-256 of the uploaded bytes (the OCI layout tar or chart .tgz).
+
+#### Schema
+
+{{< schema-renderer url="/schemas/bindings/go/transfer/ArtifactoryUploaderConfig.schema.json" >}}
+
+#### Fields
+
+| Field            | Type                                 | Description                                                                                                                                                                                                           |
+|------------------|--------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `match`          | `UploaderMatch`                      | Selects resources this uploader applies to. `match.accessType` is required.                                                                                                                                           |
+| `url`            | string (required)                    | Server base URL **without** the `/artifactory` segment, e.g. `https://myorg.jfrog.io`.                                                                                                                                |
+| `repository`     | string (required)                    | Repository key, e.g. `helm-local`.                                                                                                                                                                                    |
+| `repositoryType` | `helm` or `generic` (optional)       | Package type of the target repository. When set, the uploader skips the API query that reads the repository configuration.                                                                                            |
+| `path`           | string                               | Content location relative to the repository root. Literal or `${…}` CEL expression (see [CEL Expressions](#cel-expressions)). Must be relative, without `.`/`..` segments; helm repositories require a `.tgz` suffix. |
+
+#### Sources
+
+**Helm** repositories accept any access type; the chart archive is located in the
+content: a packaged chart `.tgz`, a tar containing one (Helm downloader output),
+or a Helm chart OCI artifact (its chart layer is uploaded). Other content fails
+the transfer.
+
+**Generic** repositories accept any access type and upload the resource content
+as is. OCI artifacts are materialized as an OCI layout tar.
 
 #### Credentials
 
-Resolved for the `HelmChartRepository` identity of the published
-`helmRepository`, falling back to the `Wget` identity of the upload URL:
+Resolved for the `HelmChartRepository` identity of
+`<url>/artifactory/api/helm/<repository>`, falling back to the `Wget` identity
+of `<url>/artifactory/<repository>`:
 
 ```yaml
   - type: credentials.config.ocm.software
@@ -221,17 +243,18 @@ Resolved for the `HelmChartRepository` identity of the published
 not supported. See
 [Credential Consumer Identities]({{< relref "docs/reference/credential-consumer-identities.md" >}}).
 
-#### Example
+#### Examples
+
+Helm chart upload to Artifactory:
 
 ```yaml
 type: generic.config.ocm.software/v1
 configurations:
-  - type: helm.uploader.transfer.config.ocm.software/v1alpha1
+  - type: artifactory.uploader.transfer.config.ocm.software/v1alpha1
     match:
       accessType: Helm/v1
-    server: Nexus   # or Artifactory
-    url: https://nexus.example.com
-    repository: helm-hosted
+    url: https://myorg.jfrog.io
+    repository: helm-local
 ```
 
 Artifactory with the default path written out as `path` (for resources without
@@ -240,13 +263,138 @@ extra identity), as a starting point for your own layout. Keep
 component version:
 
 ```yaml
-  - type: helm.uploader.transfer.config.ocm.software/v1alpha1
+  - type: artifactory.uploader.transfer.config.ocm.software/v1alpha1
     match:
       accessType: Helm/v1
-    server: Artifactory
     url: https://myorg.jfrog.io
     repository: helm-local
     path: '${component.name + "/" + component.version + "/" + resource.name + "-" + resource.version + ".tgz"}'
+```
+
+Generic repository — upload any resource and publish a `Wget/v1` access:
+
+```yaml
+  - type: artifactory.uploader.transfer.config.ocm.software/v1alpha1
+    match:
+      accessType: localBlob
+    url: https://myorg.jfrog.io
+    repository: generic-local
+    repositoryType: generic
+```
+
+### `nexus.uploader.transfer.config.ocm.software/v1alpha1`
+
+Uploads a matched resource into a hosted repository of a Sonatype Nexus
+Repository 3 server. The behaviour depends on the **format** of the repository,
+which the uploader reads from the Nexus repository settings
+(`GET <url>/service/rest/v1/repositories/<repository>`) unless `repositoryType`
+is set in the config:
+
+| Repository type | Source handling                                                               | Published access                                                              |
+|-----------------|-------------------------------------------------------------------------------|-------------------------------------------------------------------------------|
+| `helm`          | The packaged Helm chart located in the resource content (.tgz, tar, or OCI)   | `Helm/v1` (`helmRepository: <url>/repository/<repository>`)                   |
+| `raw`           | The resource content as is (OCI artifacts as an OCI layout tar)               | `Wget/v1` (`url: <url>/repository/<repository>/<path>`)                       |
+
+The repository **must** be a hosted repository. Proxy and group repositories
+cannot receive uploads.
+
+{{< callout context="tip" title="Set repositoryType to skip detection" >}}
+Reading the repository settings can need more permissions than uploading. If
+the uploading user cannot read them, the transfer fails; set `repositoryType`
+in the config to skip the API query.
+{{< /callout >}}
+
+#### Helm repositories
+
+Nexus stores the chart as `<name>-<version>.tgz` from `Chart.yaml` and
+maintains `index.yaml` itself. The uploader looks up the chart by SHA-256 in the
+component search. If the repository disables redeploy and already stores the same
+content, the rejected upload (`409`) is accepted; different content under the same
+name and version fails. `path` is **not supported** for Nexus helm repositories:
+Nexus stores charts under a path it derives from the chart itself.
+
+#### Raw repositories
+
+The resource content is uploaded to `<url>/repository/<repository>/<path>`.
+The default path is `<component>/<component-version>/<resource>-<resource-version>`.
+Nexus records no owner of a file, so a file already stored at the path is
+**never overwritten**: it is reused when it has the same content, otherwise the
+transfer fails with an error asking the user to configure a different path.
+
+#### Digest
+
+A `genericBlobDigest/v1` SHA-256 source digest is verified, and content the
+server already stores is not uploaded again. Nexus cannot reject mismatching
+bytes on deploy, so the uploader fails after the upload on a mismatch. Content
+extracted from an OCI artifact gets the SHA-256 of the uploaded bytes.
+
+#### Schema
+
+{{< schema-renderer url="/schemas/bindings/go/transfer/NexusUploaderConfig.schema.json" >}}
+
+#### Fields
+
+| Field            | Type                          | Description                                                                                                                                                                                                 |
+|------------------|-------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `match`          | `UploaderMatch`               | Selects resources this uploader applies to. `match.accessType` is required.                                                                                                                                 |
+| `url`            | string (required)             | Server base URL **without** the `/repository` segment, e.g. `https://nexus.example.com`.                                                                                                                    |
+| `repository`     | string (required)             | Repository name, e.g. `helm-hosted`.                                                                                                                                                                        |
+| `repositoryType` | `helm` or `raw` (optional)    | Format of the target repository. When set, the uploader skips the API query that reads the repository settings.                                                                                             |
+| `path`           | string                        | Content location in a raw repository relative to the root. Literal or `${…}` CEL expression (see [CEL Expressions](#cel-expressions)). Must be relative, without `.`/`..` segments. Not for helm repos.     |
+
+#### Sources
+
+**Helm** repositories accept any access type; the chart archive is located in the
+content, exactly as described for [Artifactory helm repositories](#helm-repositories).
+
+**Raw** repositories accept any access type and upload the resource content
+as is. OCI artifacts are materialized as an OCI layout tar.
+
+#### Credentials
+
+Resolved for the `HelmChartRepository` identity of
+`<url>/repository/<repository>`, falling back to its `Wget` identity:
+
+```yaml
+  - type: credentials.config.ocm.software
+    consumers:
+      - identity:
+          type: HelmChartRepository
+          hostname: nexus.example.com
+        credentials:
+          - type: HelmHTTPCredentials/v1
+            username: <USERNAME>
+            password: <PASSWORD>
+```
+
+`WgetCredentials/v1` additionally supports a bearer `identityToken` and mutual TLS
+(`certificate`/`privateKey`); `HelmHTTPCredentials/v1` `certFile`/`keyFile` are
+not supported. See
+[Credential Consumer Identities]({{< relref "docs/reference/credential-consumer-identities.md" >}}).
+
+#### Examples
+
+Helm chart upload to Nexus:
+
+```yaml
+type: generic.config.ocm.software/v1
+configurations:
+  - type: nexus.uploader.transfer.config.ocm.software/v1alpha1
+    match:
+      accessType: Helm/v1
+    url: https://nexus.example.com
+    repository: helm-hosted
+```
+
+Raw repository — upload any resource and publish a `Wget/v1` access:
+
+```yaml
+  - type: nexus.uploader.transfer.config.ocm.software/v1alpha1
+    match:
+      accessType: localBlob
+    url: https://nexus.example.com
+    repository: raw-hosted
+    repositoryType: raw
 ```
 
 ### Routing Resources to Different Targets
@@ -274,7 +422,7 @@ configurations:
 
 ### CEL Expressions
 
-`targetURL`, every `header` value and the Helm uploader's `path` are
+`targetURL`, every `header` value and the Artifactory/Nexus uploader's `path` are
 [CEL](https://cel.dev/) expressions — the same expression language the transfer
 graph uses to resolve every other field. A CEL value **must be wrapped in `${…}`**,
 matching how every other CEL field is written in the transfer graph. It is
@@ -425,9 +573,10 @@ it finds a matching artifact and `404` when the content must still be uploaded:
 ```
 
 Both require the source resource to carry a SHA-256 digest (`resource.digest.hashAlgorithm == "SHA-256"`).
-To deploy Helm charts into an Artifactory Helm repository and publish a `Helm/v1`
-access, use
-[`helm.uploader.transfer.config.ocm.software/v1alpha1`]({{< relref "docs/reference/transfer-configuration.md" >}}#helmuploadertransferconfigocmsoftwarev1alpha1)
+To deploy Helm charts into an Artifactory or Nexus Helm repository and publish a
+`Helm/v1` access, use
+[`artifactory.uploader.transfer.config.ocm.software/v1alpha1`](#artifactoryuploadertransferconfigocmsoftwarev1alpha1)
+or [`nexus.uploader.transfer.config.ocm.software/v1alpha1`](#nexusuploadertransferconfigocmsoftwarev1alpha1)
 instead.
 
 #### Credentials

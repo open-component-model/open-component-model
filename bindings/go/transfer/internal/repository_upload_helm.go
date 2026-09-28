@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"slices"
@@ -12,10 +13,12 @@ import (
 	"time"
 
 	"ocm.software/open-component-model/bindings/go/blob/compression"
-	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
+	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	helmaccessv1 "ocm.software/open-component-model/bindings/go/helm/spec/access/v1"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// helmRepositoryServer is the server-specific part of a HelmRepositoryUpload.
+// helmRepositoryServer is the server-specific part of a Helm chart upload, see uploadHelm.
 type helmRepositoryServer interface {
 	// name is "artifactory" or "nexus", used in logs and errors.
 	name() string
@@ -29,39 +32,107 @@ type helmRepositoryServer interface {
 	uploadHeader(sha256Hex string) http.Header
 	// claim checks that the upload location may be written for this resource. stored reports
 	// that it already holds content with sha256Hex, so nothing needs to be written.
-	claim(ctx context.Context, c *helmClient, sha256Hex string) (stored bool, err error)
+	claim(ctx context.Context, c *repositoryClient, sha256Hex string) (stored bool, err error)
 	// reuse makes content the repository already stores under sha256Hex available without uploading it.
-	reuse(ctx context.Context, c *helmClient, sha256Hex string) (bool, error)
+	reuse(ctx context.Context, c *repositoryClient, sha256Hex string) (bool, error)
 	// rejectedUploadStored reports whether the repository stores the content of an upload it rejected.
-	rejectedUploadStored(ctx context.Context, c *helmClient, sha256Hex string) bool
+	rejectedUploadStored(ctx context.Context, c *repositoryClient, sha256Hex string) bool
 	// chart returns the chart name and version the server recorded for the stored content;
 	// isChart=false when it recorded none, i.e. did not recognize the content as a chart.
-	chart(ctx context.Context, c *helmClient, sha256Hex string) (name, version string, isChart bool, err error)
+	chart(ctx context.Context, c *repositoryClient, sha256Hex string) (name, version string, isChart bool, err error)
 	// discard removes uploaded content that must not be published.
-	discard(ctx context.Context, c *helmClient, sha256Hex string) error
+	discard(ctx context.Context, c *repositoryClient, sha256Hex string) error
 }
 
-// chartProperty is an Artifactory property recorded on a deployed chart.
+// chartProperty is an Artifactory property recorded on a deployed file.
 type chartProperty struct {
 	key, value string
 }
 
-// newServer returns the backend of spec.Server. path is the chart location in the repository,
-// file the chart file name, both path-escaped. owner identifies the resource the chart is
-// uploaded for.
-func (t *HelmRepositoryUpload) newServer(spec *HelmRepositoryUploadSpec, path, file string, owner []chartProperty) (helmRepositoryServer, error) {
-	interval := t.chartMetadataInterval
-	if interval == 0 {
-		interval = defaultChartMetadataInterval
+// uploadHelm uploads the packaged chart located in the resource content to a Helm repository and
+// returns the resource with a Helm/v1 access on it. The chart is not parsed: its name and version
+// are the chart metadata the server records for the uploaded chart. Where the chart is stored
+// and how the metadata is read depends on the server, see [helmRepositoryServer].
+func (u *repositoryUploader) uploadHelm(ctx context.Context, c *repositoryClient, spec *RepositoryUploadSpec, src *descriptor.Resource, srv helmRepositoryServer) (*descriptor.Resource, error) {
+	req, err := u.open(ctx, spec, src)
+	if err != nil {
+		return nil, err
 	}
-	switch spec.Server {
-	case transferv1alpha1.HelmRepositoryServerArtifactory:
-		return newArtifactoryServer(spec, path, owner, interval)
-	case transferv1alpha1.HelmRepositoryServerNexus:
-		return newNexusServer(spec, file, interval)
-	default:
-		return nil, fmt.Errorf("unsupported helm repository server %q", spec.Server)
+	chart, err := u.Charts.Open(ctx, req)
+	if err != nil {
+		return nil, err
 	}
+	defer func() { _ = chart.Close() }()
+
+	expected, known, err := knownDigest(src.Digest, chart.Archive, chart.FromOCI)
+	if err != nil {
+		return nil, err
+	}
+
+	// The upload location must be free, hold this resource's earlier upload, or already hold
+	// the chart; nothing else is ever overwritten.
+	reused, err := srv.claim(ctx, c, known)
+	if err != nil {
+		return nil, err
+	}
+	if !reused && known != "" {
+		if reused, err = srv.reuse(ctx, c, known); err != nil {
+			return nil, err
+		}
+	}
+	digestHex := known
+	uploadURL := redactURL(srv.uploadURL())
+	if reused {
+		slog.InfoContext(ctx, "reused helm chart content already stored in the helm repository",
+			"server", srv.name(), "resource", src.ToIdentity(), "url", uploadURL)
+	} else {
+		computed, complete, err := uploadBlob(ctx, c, chart.Archive, srv.deployURL(), srv.uploadHeader(known))
+		switch {
+		case err != nil:
+			// A repository that rejects redeploying a chart still stores its content, e.g.
+			// from an earlier transfer of the same resource without a source digest.
+			if known != "" || !complete || !srv.rejectedUploadStored(ctx, c, computed) {
+				return nil, err
+			}
+			slog.InfoContext(ctx, "helm repository already stores the chart the upload was rejected for",
+				"server", srv.name(), "resource", src.ToIdentity(), "url", uploadURL)
+		case known != "" && computed != known:
+			if err := srv.discard(ctx, c, computed); err != nil {
+				slog.WarnContext(ctx, "failed removing uploaded content that must not be published", "url", uploadURL, "error", err)
+			}
+			return nil, fmt.Errorf("digest mismatch: expected %s, got %s", known, computed)
+		default:
+			slog.InfoContext(ctx, "uploaded helm chart", "server", srv.name(), "resource", src.ToIdentity(), "url", uploadURL)
+		}
+		digestHex = computed
+	}
+
+	// The upload succeeded, so the server stores the content either way; isChart only
+	// reports whether it recognized that content as a helm chart and recorded its metadata.
+	name, version, isChart, err := srv.chart(ctx, c, digestHex)
+	if err != nil {
+		return nil, err
+	}
+	if !isChart {
+		// Remove the stored non-chart content again (Artifactory deletes the uploaded file;
+		// Nexus cannot, see nexusServer.discard).
+		if err := srv.discard(ctx, c, digestHex); err != nil {
+			slog.WarnContext(ctx, "failed removing uploaded content that must not be published", "url", uploadURL, "error", err)
+		}
+		return nil, fmt.Errorf("content of resource %s is not a helm chart: %s recorded no chart name and version for %s", src.ToIdentity(), srv.name(), uploadURL)
+	}
+	if strings.ContainsAny(name, ":/") || strings.Contains(version, "/") {
+		return nil, fmt.Errorf("%s recorded an invalid chart name %q or version %q for %s", srv.name(), name, version, uploadURL)
+	}
+
+	out := src.DeepCopy()
+	out.Access = &helmaccessv1.Helm{
+		Type:           runtime.NewVersionedType(helmaccessv1.Type, helmaccessv1.Version),
+		HelmRepository: srv.helmRepository(),
+		HelmChart:      name + ":" + version,
+	}
+	out.Digest = uploadedDigest(src.Digest, expected, digestHex)
+	return out, nil
 }
 
 // artifactoryServer deploys the chart to <url>/artifactory/<repository>/<path> with the owner
@@ -75,7 +146,7 @@ type artifactoryServer struct {
 	interval   time.Duration
 }
 
-func newArtifactoryServer(spec *HelmRepositoryUploadSpec, path string, owner []chartProperty, interval time.Duration) (*artifactoryServer, error) {
+func newArtifactoryServer(spec *RepositoryUploadSpec, path string, owner []chartProperty, interval time.Duration) (*artifactoryServer, error) {
 	uploadBase, err := url.JoinPath(spec.URL, "artifactory", spec.Repository)
 	if err != nil {
 		return nil, fmt.Errorf("invalid artifactory url: %w", err)
@@ -131,7 +202,7 @@ func (a *artifactoryServer) uploadHeader(sha256Hex string) http.Header {
 // checksum ("Deploy Artifact by Checksum"), so the chart is not uploaded again. It reports false
 // when Artifactory does not have the content (404) or declines the request otherwise; the caller
 // then uploads the chart, which surfaces real errors such as missing permissions.
-func (a *artifactoryServer) reuse(ctx context.Context, c *helmClient, sha256Hex string) (bool, error) {
+func (a *artifactoryServer) reuse(ctx context.Context, c *repositoryClient, sha256Hex string) (bool, error) {
 	resp, err := c.do(ctx, http.MethodPut, a.deployURL(), nil, 0, http.Header{
 		"X-Checksum-Deploy": {"true"},
 		"X-Checksum-Sha256": {sha256Hex},
@@ -147,7 +218,7 @@ func (a *artifactoryServer) reuse(ctx context.Context, c *helmClient, sha256Hex 
 // a file with content sha256Hex already holds the chart, and a file whose owner properties name
 // this resource is its earlier upload and may be replaced. Any other file is never overwritten,
 // because it was stored for another resource, another component version or outside OCM.
-func (a *artifactoryServer) claim(ctx context.Context, c *helmClient, sha256Hex string) (bool, error) {
+func (a *artifactoryServer) claim(ctx context.Context, c *repositoryClient, sha256Hex string) (bool, error) {
 	resp, err := c.do(ctx, http.MethodGet, a.storageURL, nil, -1, nil)
 	if err != nil {
 		return false, err
@@ -199,7 +270,7 @@ func (a *artifactoryServer) claim(ctx context.Context, c *helmClient, sha256Hex 
 
 // readProperties returns the requested properties of the file at the upload location; a file
 // without any of them yields an empty map.
-func (a *artifactoryServer) readProperties(ctx context.Context, c *helmClient, keys []string) (map[string][]string, error) {
+func (a *artifactoryServer) readProperties(ctx context.Context, c *repositoryClient, keys []string) (map[string][]string, error) {
 	target := a.storageURL + "?properties=" + strings.Join(keys, ",")
 	resp, err := c.do(ctx, http.MethodGet, target, nil, -1, nil)
 	if err != nil {
@@ -223,14 +294,14 @@ func (a *artifactoryServer) readProperties(ctx context.Context, c *helmClient, k
 }
 
 // rejectedUploadStored is false: a rejected Artifactory upload fails the transfer.
-func (a *artifactoryServer) rejectedUploadStored(context.Context, *helmClient, string) bool {
+func (a *artifactoryServer) rejectedUploadStored(context.Context, *repositoryClient, string) bool {
 	return false
 }
 
 // chart reads the chart name and version Artifactory records as properties of the deployed chart.
 // It polls briefly in case the metadata is calculated asynchronously and reports found=false when
 // Artifactory recorded none, i.e. the content is not a helm chart.
-func (a *artifactoryServer) chart(ctx context.Context, c *helmClient, _ string) (string, string, bool, error) {
+func (a *artifactoryServer) chart(ctx context.Context, c *repositoryClient, _ string) (string, string, bool, error) {
 	target := a.storageURL + "?properties=chart.name,chart.version"
 	for attempt := 1; ; attempt++ {
 		resp, err := c.do(ctx, http.MethodGet, target, nil, -1, nil)
@@ -267,7 +338,7 @@ func (a *artifactoryServer) chart(ctx context.Context, c *helmClient, _ string) 
 	}
 }
 
-func (a *artifactoryServer) discard(ctx context.Context, c *helmClient, _ string) error {
+func (a *artifactoryServer) discard(ctx context.Context, c *repositoryClient, _ string) error {
 	return c.send(ctx, http.MethodDelete, a.putURL, nil, -1, nil)
 }
 
@@ -288,7 +359,7 @@ type nexusComponent struct {
 	Format  string `json:"format"`
 }
 
-func newNexusServer(spec *HelmRepositoryUploadSpec, file string, interval time.Duration) (*nexusServer, error) {
+func newNexusServer(spec *RepositoryUploadSpec, file string, interval time.Duration) (*nexusServer, error) {
 	helmRepo, err := url.JoinPath(spec.URL, "repository", spec.Repository)
 	if err != nil {
 		return nil, fmt.Errorf("invalid nexus url: %w", err)
@@ -313,7 +384,7 @@ func (n *nexusServer) deployURL() string      { return n.putURL }
 
 // claim leaves the location to Nexus: it stores the chart under a path derived from the chart,
 // and its redeploy policy decides whether a stored chart may be replaced.
-func (n *nexusServer) claim(context.Context, *helmClient, string) (bool, error) {
+func (n *nexusServer) claim(context.Context, *repositoryClient, string) (bool, error) {
 	return false, nil
 }
 
@@ -324,7 +395,7 @@ func (n *nexusServer) uploadHeader(string) http.Header {
 
 // reuse reports whether the repository already stores a chart with the content, which Nexus then
 // publishes under its own path, so nothing needs to be uploaded.
-func (n *nexusServer) reuse(ctx context.Context, c *helmClient, sha256Hex string) (bool, error) {
+func (n *nexusServer) reuse(ctx context.Context, c *repositoryClient, sha256Hex string) (bool, error) {
 	items, err := n.search(ctx, c, sha256Hex)
 	if err != nil {
 		return false, err
@@ -340,14 +411,14 @@ func (n *nexusServer) reuse(ctx context.Context, c *helmClient, sha256Hex string
 // rejectedUploadStored reports whether the repository stores a chart with the content of an upload
 // it rejected, as Nexus does when redeploy is disabled and the chart was uploaded before. It polls
 // like chart, because the earlier upload may not be searchable yet.
-func (n *nexusServer) rejectedUploadStored(ctx context.Context, c *helmClient, sha256Hex string) bool {
+func (n *nexusServer) rejectedUploadStored(ctx context.Context, c *repositoryClient, sha256Hex string) bool {
 	_, _, found, err := n.chart(ctx, c, sha256Hex)
 	return err == nil && found
 }
 
 // chart polls the component search until it finds the content and fails when the content is
 // stored as more than one chart name and version.
-func (n *nexusServer) chart(ctx context.Context, c *helmClient, sha256Hex string) (string, string, bool, error) {
+func (n *nexusServer) chart(ctx context.Context, c *repositoryClient, sha256Hex string) (string, string, bool, error) {
 	for attempt := 1; ; attempt++ {
 		items, err := n.search(ctx, c, sha256Hex)
 		if err != nil {
@@ -378,13 +449,13 @@ func (n *nexusServer) chart(ctx context.Context, c *helmClient, sha256Hex string
 
 // discard deletes nothing: Nexus chooses the path from the chart, and the content may predate
 // this upload.
-func (n *nexusServer) discard(_ context.Context, _ *helmClient, sha256Hex string) error {
+func (n *nexusServer) discard(_ context.Context, _ *repositoryClient, sha256Hex string) error {
 	return fmt.Errorf("nexus stores charts under a path derived from the chart, so content with SHA-256 %s is left in repository %s", sha256Hex, n.repository)
 }
 
 // search returns the helm components of the repository whose asset has the SHA-256. Only the
 // first page is read: one content is expected to be stored as at most one component.
-func (n *nexusServer) search(ctx context.Context, c *helmClient, sha256Hex string) ([]nexusComponent, error) {
+func (n *nexusServer) search(ctx context.Context, c *repositoryClient, sha256Hex string) ([]nexusComponent, error) {
 	target := n.searchURL + "?" + url.Values{
 		"repository": {n.repository},
 		"format":     {"helm"},

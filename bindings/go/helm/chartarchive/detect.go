@@ -16,6 +16,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
+	ocistream "ocm.software/open-component-model/bindings/go/oci/stream"
 	ocitar "ocm.software/open-component-model/bindings/go/oci/tar"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -28,9 +29,7 @@ func detect(ctx context.Context, c content, id runtime.Identity) (*Chart, error)
 		if root.MediaType == ocispec.MediaTypeImageManifest {
 			return fromManifest(ctx, c.stream, root, id)
 		}
-		stream := c.stream
-		c.blob = &descriptorBlob{fetch: func() (io.ReadCloser, error) { return stream.Fetch(ctx, root) }, desc: root}
-		c.mediaType = root.MediaType
+		c.blob, c.mediaType = rootBlob(ctx, c.stream), root.MediaType
 	}
 	if strings.HasPrefix(c.mediaType, layout.MediaTypeOCIImageLayout) {
 		return fromLayout(ctx, c.blob, id)
@@ -148,3 +147,19 @@ func (b *descriptorBlob) ReadCloser() (io.ReadCloser, error) { return b.fetch() 
 func (b *descriptorBlob) Size() int64 { return b.desc.Size }
 
 func (b *descriptorBlob) Digest() (string, bool) { return b.desc.Digest.String(), true }
+
+// rootBlob streams the root blob of stream, which is a plain blob rather than an OCI artifact.
+func rootBlob(ctx context.Context, stream ocistream.ResourceStream) blob.ReadOnlyBlob {
+	root := stream.Root()
+	return &descriptorBlob{fetch: func() (io.ReadCloser, error) { return stream.Fetch(ctx, root) }, desc: root}
+}
+
+// isOCIArtifact reports whether mediaType is that of an OCI (or Docker) manifest or index.
+func isOCIArtifact(mediaType string) bool {
+	switch mediaType {
+	case ocispec.MediaTypeImageManifest, ocispec.MediaTypeImageIndex,
+		"application/vnd.docker.distribution.manifest.v2+json", "application/vnd.docker.distribution.manifest.list.v2+json":
+		return true
+	}
+	return false
+}

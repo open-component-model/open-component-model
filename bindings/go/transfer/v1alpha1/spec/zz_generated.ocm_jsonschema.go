@@ -9,6 +9,12 @@ import (
 	_ "embed"
 )
 
+//go:embed schemas/ArtifactoryRepositoryType.schema.json
+var schemaArtifactoryRepositoryType []byte
+
+//go:embed schemas/ArtifactoryUploaderConfig.schema.json
+var schemaArtifactoryUploaderConfig []byte
+
 //go:embed schemas/Config.schema.json
 var schemaConfig []byte
 
@@ -18,11 +24,11 @@ var schemaCopyMode []byte
 //go:embed schemas/HTTPUploaderConfig.schema.json
 var schemaHTTPUploaderConfig []byte
 
-//go:embed schemas/HelmRepositoryServer.schema.json
-var schemaHelmRepositoryServer []byte
+//go:embed schemas/NexusRepositoryType.schema.json
+var schemaNexusRepositoryType []byte
 
-//go:embed schemas/HelmUploaderConfig.schema.json
-var schemaHelmUploaderConfig []byte
+//go:embed schemas/NexusUploaderConfig.schema.json
+var schemaNexusUploaderConfig []byte
 
 //go:embed schemas/Recursive.schema.json
 var schemaRecursive []byte
@@ -32,6 +38,16 @@ var schemaUploadType []byte
 
 //go:embed schemas/UploaderMatch.schema.json
 var schemaUploaderMatch []byte
+
+// JSONSchema returns the JSON Schema for ArtifactoryRepositoryType.
+func (ArtifactoryRepositoryType) JSONSchema() []byte {
+	return schemaArtifactoryRepositoryType
+}
+
+// JSONSchema returns the JSON Schema for ArtifactoryUploaderConfig.
+func (ArtifactoryUploaderConfig) JSONSchema() []byte {
+	return schemaArtifactoryUploaderConfig
+}
 
 // JSONSchema returns the JSON Schema for Config.
 func (Config) JSONSchema() []byte {
@@ -48,14 +64,14 @@ func (HTTPUploaderConfig) JSONSchema() []byte {
 	return schemaHTTPUploaderConfig
 }
 
-// JSONSchema returns the JSON Schema for HelmRepositoryServer.
-func (HelmRepositoryServer) JSONSchema() []byte {
-	return schemaHelmRepositoryServer
+// JSONSchema returns the JSON Schema for NexusRepositoryType.
+func (NexusRepositoryType) JSONSchema() []byte {
+	return schemaNexusRepositoryType
 }
 
-// JSONSchema returns the JSON Schema for HelmUploaderConfig.
-func (HelmUploaderConfig) JSONSchema() []byte {
-	return schemaHelmUploaderConfig
+// JSONSchema returns the JSON Schema for NexusUploaderConfig.
+func (NexusUploaderConfig) JSONSchema() []byte {
+	return schemaNexusUploaderConfig
 }
 
 // JSONSchema returns the JSON Schema for Recursive.

@@ -21,6 +21,7 @@ import (
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	ociaccess "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	ociaccessv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
+	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	ocistream "ocm.software/open-component-model/bindings/go/oci/stream"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -107,6 +108,52 @@ func (s *Source) Open(ctx context.Context, req Request) (*Chart, error) {
 		return nil, fmt.Errorf("failed opening resource %s: %w", id, err)
 	}
 	return detect(ctx, c, id)
+}
+
+// Content is the opened content of a resource, unmodified.
+type Content struct {
+	// Blob yields the content exactly once; it implements blob.SizeAware when the size is
+	// known and blob.DigestAware when the digest is known up front.
+	Blob blob.ReadOnlyBlob
+	// MediaType is the media type of the content when known, else "".
+	MediaType string
+	// FromOCI reports that Blob is an OCI layout materialized from an OCI artifact, so the
+	// source resource digest does not describe Blob.
+	FromOCI bool
+}
+
+// Close releases the source stream when Blob was never read. It is a no-op once Blob was read.
+func (c *Content) Close() error {
+	if closer, ok := c.Blob.(io.Closer); ok {
+		return closer.Close()
+	}
+	return nil
+}
+
+// OpenContent fetches the resource like Open, but returns its content as is instead of
+// locating a chart in it. OCI artifacts (manifest or index roots) are returned as an OCI layout
+// tar; plain blobs, including local blobs handed out as a resource stream, as they are.
+func (s *Source) OpenContent(ctx context.Context, req Request) (*Content, error) {
+	if req.Resource == nil || req.Resource.Access == nil {
+		return nil, errors.New("resource access is required")
+	}
+	id := req.Resource.ToIdentity()
+	c, err := s.fetch(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("failed opening resource %s: %w", id, err)
+	}
+	if c.stream == nil {
+		return &Content{Blob: c.blob, MediaType: c.mediaType}, nil
+	}
+	if root := c.stream.Root(); !isOCIArtifact(root.MediaType) {
+		return &Content{Blob: rootBlob(ctx, c.stream), MediaType: root.MediaType}, nil
+	}
+	// An OCI artifact has no single byte representation; it is uploaded as an OCI layout.
+	b, err := c.stream.Materialize(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed materializing resource %s as OCI layout: %w", id, err)
+	}
+	return &Content{Blob: b, MediaType: layout.MediaTypeOCIImageLayoutTarV1, FromOCI: true}, nil
 }
 
 func (s *Source) fetch(ctx context.Context, req Request) (content, error) {

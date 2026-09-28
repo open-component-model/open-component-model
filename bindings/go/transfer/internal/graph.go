@@ -284,8 +284,12 @@ func processResources(
 				if err := processHTTPUploader(resource, cfg, baseID, id, val, tgd, resourceTransformIDs, i); err != nil {
 					return nil, nil, fmt.Errorf("cannot process uploader for resource %v: %w", resource.ToIdentity(), err)
 				}
-			case *transferv1alpha1.HelmUploaderConfig:
-				if err := processHelmUploader(resource, access, cfg, baseID, id, val, tgd, resourceTransformIDs, i); err != nil {
+			case *transferv1alpha1.ArtifactoryUploaderConfig:
+				if err := processRepositoryUploader(resource, access, ArtifactoryUploadVersionedType, cfg.URL, cfg.Repository, string(cfg.RepositoryType), cfg.Path, baseID, id, val, tgd, resourceTransformIDs, i); err != nil {
+					return nil, nil, fmt.Errorf("cannot process uploader for resource %v: %w", resource.ToIdentity(), err)
+				}
+			case *transferv1alpha1.NexusUploaderConfig:
+				if err := processRepositoryUploader(resource, access, NexusUploadVersionedType, cfg.URL, cfg.Repository, string(cfg.RepositoryType), cfg.Path, baseID, id, val, tgd, resourceTransformIDs, i); err != nil {
 					return nil, nil, fmt.Errorf("cannot process uploader for resource %v: %w", resource.ToIdentity(), err)
 				}
 			default:
@@ -319,7 +323,9 @@ func warnUnusedUploaders(ctx context.Context, uploaders []transferv1alpha1.Uploa
 		switch cfg := u.(type) {
 		case *transferv1alpha1.HTTPUploaderConfig:
 			match = cfg.MatchSpec
-		case *transferv1alpha1.HelmUploaderConfig:
+		case *transferv1alpha1.ArtifactoryUploaderConfig:
+			match = cfg.MatchSpec
+		case *transferv1alpha1.NexusUploaderConfig:
 			match = cfg.MatchSpec
 		}
 		slog.WarnContext(ctx, "uploader matched no resource; match.accessType is compared with the resource access in the source component version",

@@ -26,6 +26,7 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/helm/chartarchive"
 	helmcredsv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/v1"
+	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	ocistream "ocm.software/open-component-model/bindings/go/oci/stream"
 	ocitar "ocm.software/open-component-model/bindings/go/oci/tar"
 	"ocm.software/open-component-model/bindings/go/repository"
@@ -240,8 +241,10 @@ func TestSource_Open(t *testing.T) {
 		{
 			name: "OCIImage/v1 streams the chart layer",
 			setup: func(t *testing.T) opened {
-				return opened{&chartarchive.Source{OCIRepository: &stubOCIRepo{stream: ociStream(t, registry.ConfigMediaType, registry.ChartLayerMediaType, []byte("chart"))}},
-					chartarchive.Request{Resource: ociSource}}
+				return opened{
+					&chartarchive.Source{OCIRepository: &stubOCIRepo{stream: ociStream(t, registry.ConfigMediaType, registry.ChartLayerMediaType, []byte("chart"))}},
+					chartarchive.Request{Resource: ociSource},
+				}
 			},
 			want:        []byte("chart"),
 			wantFromOCI: true,
@@ -249,8 +252,10 @@ func TestSource_Open(t *testing.T) {
 		{
 			name: "OCIImage/v1 with legacy chart layer media type",
 			setup: func(t *testing.T) opened {
-				return opened{&chartarchive.Source{OCIRepository: &stubOCIRepo{stream: ociStream(t, registry.ConfigMediaType, registry.LegacyChartLayerMediaType, []byte("legacy"))}},
-					chartarchive.Request{Resource: ociSource}}
+				return opened{
+					&chartarchive.Source{OCIRepository: &stubOCIRepo{stream: ociStream(t, registry.ConfigMediaType, registry.LegacyChartLayerMediaType, []byte("legacy"))}},
+					chartarchive.Request{Resource: ociSource},
+				}
 			},
 			want:        []byte("legacy"),
 			wantFromOCI: true,
@@ -265,8 +270,10 @@ func TestSource_Open(t *testing.T) {
 		{
 			name: "OCIImage/v1 that is not a helm chart",
 			setup: func(t *testing.T) opened {
-				return opened{&chartarchive.Source{OCIRepository: &stubOCIRepo{stream: ociStream(t, ocispec.MediaTypeImageConfig, registry.ChartLayerMediaType, []byte("chart"))}},
-					chartarchive.Request{Resource: ociSource}}
+				return opened{
+					&chartarchive.Source{OCIRepository: &stubOCIRepo{stream: ociStream(t, ocispec.MediaTypeImageConfig, registry.ChartLayerMediaType, []byte("chart"))}},
+					chartarchive.Request{Resource: ociSource},
+				}
 			},
 			wantErr: `is not a helm chart: config media type "` + ocispec.MediaTypeImageConfig + `"`,
 		},
@@ -364,6 +371,113 @@ func TestSource_Open(t *testing.T) {
 			r.True(ok, "the archive must report its size")
 			if size := sized.Size(); size != blob.SizeUnknown {
 				r.Equal(int64(len(tt.want)), size)
+			}
+		})
+	}
+}
+
+func TestSource_OpenContent(t *testing.T) {
+	chartTGZ, err := os.ReadFile("../testdata/mychart-0.1.0.tgz")
+	require.NoError(t, err)
+	const chartConfig = `{"name":"mychart","version":"0.1.0","apiVersion":"v2"}`
+
+	localBlob := func(mediaType string) *descriptor.Resource {
+		return resourceWith(rawAccess(t, `{"type":"LocalBlob/v1","localReference":"sha256:abc","mediaType":"`+mediaType+`"}`))
+	}
+	ociStream := func(t *testing.T, configMediaType, layerMediaType string, layerContent []byte) ocistream.ResourceStream {
+		ctx := t.Context()
+		store := memory.New()
+		layers := []ocispec.Descriptor{pushBlob(t, ctx, store, registry.ProvLayerMediaType, []byte("prov"))}
+		if layerMediaType != "" {
+			layers = append([]ocispec.Descriptor{pushBlob(t, ctx, store, layerMediaType, layerContent)}, layers...)
+		}
+		_, manifest := func() (*memory.Store, ocispec.Descriptor) {
+			return store, buildOCIManifest(t, ctx, store, configMediaType, chartConfig, layers)
+		}()
+		return &ocistream.OCIResourceStream{ReadOnlyGraphStorage: store, Descriptor: manifest}
+	}
+	local := func(repo repository.ComponentVersionRepository) *chartarchive.Local {
+		return &chartarchive.Local{Repository: repo, Component: "ocm.software/c", Version: "1.0.0"}
+	}
+	fromBytes := func(data []byte) blob.ReadOnlyBlob {
+		return inmemory.New(bytes.NewReader(data), inmemory.WithSize(int64(len(data))))
+	}
+
+	type opened struct {
+		source *chartarchive.Source
+		req    chartarchive.Request
+	}
+	tests := []struct {
+		name          string
+		setup         func(t *testing.T) opened
+		want          []byte
+		wantMediaType string
+		wantFromOCI   bool
+		wantErr       string
+	}{
+		{
+			name: "LocalBlob returns exact bytes and its media type",
+			setup: func(t *testing.T) opened {
+				repo := &localRepo{blob: fromBytes([]byte("hello world"))}
+				return opened{&chartarchive.Source{}, chartarchive.Request{Resource: localBlob("text/plain"), Local: local(repo)}}
+			},
+			want:          []byte("hello world"),
+			wantMediaType: "text/plain",
+			wantFromOCI:   false,
+		},
+		{
+			name: "LocalBlob with chart media type returns the chart bytes",
+			setup: func(t *testing.T) opened {
+				repo := &localRepo{blob: fromBytes(chartTGZ)}
+				return opened{&chartarchive.Source{}, chartarchive.Request{Resource: localBlob(registry.ChartLayerMediaType), Local: local(repo)}}
+			},
+			want:          chartTGZ,
+			wantMediaType: registry.ChartLayerMediaType,
+			wantFromOCI:   false,
+		},
+		{
+			name: "LocalBlob as plain stream root returns exact bytes and FromOCI=false",
+			setup: func(t *testing.T) opened {
+				store := memory.New()
+				root := pushBlob(t, t.Context(), store, "application/octet-stream", []byte("plain data"))
+				repo := &streamingLocalRepo{stream: &ocistream.OCIResourceStream{ReadOnlyGraphStorage: store, Descriptor: root}}
+				return opened{&chartarchive.Source{}, chartarchive.Request{Resource: localBlob("application/octet-stream"), Local: local(repo)}}
+			},
+			want:          []byte("plain data"),
+			wantMediaType: "application/octet-stream",
+			wantFromOCI:   false,
+		},
+		{
+			name: "LocalBlob streamed as OCI manifest returns FromOCI=true and layout media type",
+			setup: func(t *testing.T) opened {
+				repo := &streamingLocalRepo{stream: ociStream(t, registry.ConfigMediaType, registry.ChartLayerMediaType, chartTGZ)}
+				return opened{&chartarchive.Source{}, chartarchive.Request{Resource: localBlob(ocispec.MediaTypeImageManifest), Local: local(repo)}}
+			},
+			wantMediaType: layout.MediaTypeOCIImageLayoutTarV1,
+			wantFromOCI:   true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+			o := tt.setup(t)
+			got, err := o.source.OpenContent(t.Context(), o.req)
+			if tt.wantErr != "" {
+				r.ErrorContains(err, tt.wantErr)
+				return
+			}
+			r.NoError(err)
+			r.Equal(tt.wantFromOCI, got.FromOCI)
+			r.Equal(tt.wantMediaType, got.MediaType)
+			rc, err := got.Blob.ReadCloser()
+			r.NoError(err)
+			defer func() { _ = rc.Close() }()
+			data, err := io.ReadAll(rc)
+			r.NoError(err)
+			if tt.want != nil {
+				r.Equal(tt.want, data)
+			} else {
+				r.NotEmpty(data, "OCI layout tar should not be empty")
 			}
 		})
 	}

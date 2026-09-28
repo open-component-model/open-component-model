@@ -144,9 +144,10 @@ func NewDefaultBuilder(
 		HTTPConfig:         httpConfig,
 	}
 
-	// Helm repository upload transformer (helm uploader configurations)
-	transformerScheme.MustRegisterWithAlias(&HelmRepositoryUploadTransformation{}, HelmRepositoryUploadVersionedType)
-	helmRepositoryUpload := &HelmRepositoryUpload{
+	// Repository upload transformers (artifactory and nexus uploader configurations)
+	transformerScheme.MustRegisterWithAlias(&ArtifactoryUploadTransformation{}, ArtifactoryUploadVersionedType)
+	transformerScheme.MustRegisterWithAlias(&NexusUploadTransformation{}, NexusUploadVersionedType)
+	repositoryUpload := repositoryUploader{
 		Scheme: transformerScheme,
 		Charts: &chartarchive.Source{
 			ResourceRepository: resourceRepo,
@@ -184,6 +185,7 @@ func NewDefaultBuilder(
 		WithTransformer(&s3v1alpha1.DownloadS3Resource{}, downloadS3).
 		WithTransformer(&githubv1alpha1.GetGitHubCommit{}, getGitHubCommit).
 		WithTransformer(&wgetv1alpha1.HTTPStreaming{}, httpStreaming).
-		WithTransformer(&HelmRepositoryUploadTransformation{}, helmRepositoryUpload).
+		WithTransformer(&ArtifactoryUploadTransformation{}, &ArtifactoryUpload{repositoryUpload}).
+		WithTransformer(&NexusUploadTransformation{}, &NexusUpload{repositoryUpload}).
 		WithTransformer(&FileCleanupTransformation{}, fileCleanup)
 }

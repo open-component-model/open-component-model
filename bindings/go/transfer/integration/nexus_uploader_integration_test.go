@@ -3,6 +3,7 @@ package integration_test
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -25,6 +26,9 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/transfer"
 	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
+	wgetrepository "ocm.software/open-component-model/bindings/go/wget/repository"
+	wgetaccess "ocm.software/open-component-model/bindings/go/wget/spec/access"
+	wgetaccessv1 "ocm.software/open-component-model/bindings/go/wget/spec/access/v1"
 )
 
 const (
@@ -94,10 +98,9 @@ func Test_Integration_TransferHelmResource_NexusHelmUploaderDeploysChart(t *test
 		FilePath:   targetCTFPath,
 		AccessMode: "readwrite|create",
 	}
-	uploaders := []transferv1alpha1.UploaderConfig{&transferv1alpha1.HelmUploaderConfig{
-		Type:       runtime.NewVersionedType(transferv1alpha1.HelmUploaderConfigType, transferv1alpha1.Version),
+	uploaders := []transferv1alpha1.UploaderConfig{&transferv1alpha1.NexusUploaderConfig{
+		Type:       runtime.NewVersionedType(transferv1alpha1.NexusUploaderConfigType, transferv1alpha1.Version),
 		MatchSpec:  transferv1alpha1.UploaderMatch{AccessType: runtime.NewVersionedType(helmaccessv1.Type, helmaccessv1.LegacyTypeVersion)},
-		Server:     transferv1alpha1.HelmRepositoryServerNexus,
 		URL:        baseURL,
 		Repository: nexusHelmRepository,
 	}}
@@ -193,6 +196,10 @@ func startNexus(t *testing.T) (baseURL, adminPassword string) {
 	status, body = nexusRequest(t, http.MethodPost, baseURL+"/service/rest/v1/repositories/helm/hosted", adminPassword,
 		[]byte(`{"name":"`+nexusHelmRepository+`","online":true,"storage":{"blobStoreName":"default","strictContentTypeValidation":true,"writePolicy":"allow_once"}}`))
 	r.Equal(http.StatusCreated, status, string(body))
+
+	status, body = nexusRequest(t, http.MethodPost, baseURL+"/service/rest/v1/repositories/raw/hosted", adminPassword,
+		[]byte(`{"name":"raw-hosted","online":true,"storage":{"blobStoreName":"default","strictContentTypeValidation":false,"writePolicy":"allow_once"}}`))
+	r.Equal(http.StatusCreated, status, string(body))
 	return baseURL, adminPassword
 }
 
@@ -219,4 +226,139 @@ func nexusGet(t *testing.T, target, password string) []byte {
 	status, body := nexusRequest(t, http.MethodGet, target, password, nil)
 	require.Equal(t, http.StatusOK, status, string(body))
 	return body
+}
+
+// Test_Integration_TransferWgetResource_NexusRawUploader verifies that a Wget/v1 resource is
+// transferred into a Nexus raw hosted repository via the raw uploader path. The test:
+//   - uses no repositoryType, so format detection via the Nexus API is exercised;
+//   - asserts the target descriptor resource has a Wget/v1 access pointing at the raw repository;
+//   - downloads the file from Nexus and checks it matches the original content;
+//   - transfers a second time to exercise the reuse path (HEAD 200, search assets, same sha256).
+func Test_Integration_TransferWgetResource_NexusRawUploader(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
+	ctx := t.Context()
+
+	baseURL, adminPassword := startNexus(t)
+	rawRepo := baseURL + "/repository/raw-hosted"
+
+	// Serve the resource content over HTTP.
+	resourceData := []byte("hello")
+	srcSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		_, _ = w.Write(resourceData)
+	}))
+	t.Cleanup(srcSrv.Close)
+
+	componentName := "ocm.software/nexus-raw-uploader-test"
+	componentVersion := "1.0.0"
+	sourceCTFPath := t.TempDir()
+	ctfRepo := createCTFRepository(t, sourceCTFPath)
+
+	wgetAccessObj := &wgetaccessv1.Wget{
+		Type:      runtime.NewVersionedType(wgetaccess.WgetConsumerType, wgetaccessv1.Version),
+		URL:       srcSrv.URL + "/blob.txt",
+		MediaType: "text/plain",
+	}
+	rawWgetAccess := &runtime.Raw{}
+	r.NoError(runtime.NewScheme(runtime.WithAllowUnknown()).Convert(wgetAccessObj, rawWgetAccess))
+
+	r.NoError(ctfRepo.AddComponentVersion(ctx, &descriptor.Descriptor{
+		Meta: descriptor.Meta{Version: "v2"},
+		Component: descriptor.Component{
+			ComponentMeta: descriptor.ComponentMeta{
+				ObjectMeta: descriptor.ObjectMeta{Name: componentName, Version: componentVersion},
+			},
+			Provider: descriptor.Provider{Name: "test-provider"},
+			Resources: []descriptor.Resource{{
+				ElementMeta: descriptor.ElementMeta{
+					ObjectMeta: descriptor.ObjectMeta{Name: "raw-resource", Version: "1.0.0"},
+				},
+				Type:     "blob",
+				Relation: descriptor.ExternalRelation,
+				Access:   rawWgetAccess,
+				Digest: &descriptor.Digest{
+					HashAlgorithm:          "SHA-256",
+					NormalisationAlgorithm: "genericBlobDigest/v1",
+					Value:                  digestOf(resourceData).Encoded(),
+				},
+			}},
+		},
+	}))
+
+	sourceSpec := &ctfrepospec.Repository{
+		Type:     runtime.Type{Name: ctfrepospec.Type, Version: ctfrepospec.Version},
+		FilePath: sourceCTFPath,
+	}
+	targetCTFPath := t.TempDir()
+	targetSpec := &ctfrepospec.Repository{
+		Type:       runtime.Type{Name: ctfrepospec.Type, Version: ctfrepospec.Version},
+		FilePath:   targetCTFPath,
+		AccessMode: "readwrite|create",
+	}
+
+	// No repositoryType → detection via GET /service/rest/v1/repositories/raw-hosted is exercised.
+	uploaders := []transferv1alpha1.UploaderConfig{&transferv1alpha1.NexusUploaderConfig{
+		Type:       runtime.NewVersionedType(transferv1alpha1.NexusUploaderConfigType, transferv1alpha1.Version),
+		MatchSpec:  transferv1alpha1.UploaderMatch{AccessType: runtime.NewVersionedType(wgetaccess.WgetConsumerType, wgetaccessv1.Version)},
+		URL:        baseURL,
+		Repository: "raw-hosted",
+	}}
+
+	id, err := runtime.ParseURLToIdentity(rawRepo)
+	r.NoError(err)
+	id.SetType(helmidentityv1.Type)
+	credResolver := credentials.NewStaticCredentialsResolver(map[string]map[string]string{
+		id.String(): {"username": "admin", "password": adminPassword},
+	})
+
+	transferOnce := func() {
+		tgd, err := transfer.BuildGraphDefinition(ctx,
+			&transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeAllResources},
+			uploaders,
+			transfer.Mapping{
+				Components: []transfer.ComponentID{{Component: componentName, Version: componentVersion}},
+				Target:     targetSpec,
+				Resolver:   transfer.NewRepositoryResolver(ctfRepo, sourceSpec),
+			},
+		)
+		r.NoError(err)
+		repoProvider := provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()))
+		resourceRepo := wgetrepository.NewResourceRepository(nil)
+		b := transfer.NewDefaultBuilder(repoProvider, resourceRepo, credResolver)
+		graph, err := b.BuildAndCheck(tgd)
+		r.NoError(err)
+		r.NoError(graph.Process(ctx))
+	}
+	transferOnce()
+	// Nexus indexes raw assets asynchronously; wait for the search API to reflect the upload
+	// so the second transfer can find the stored checksum and reuse it.
+	time.Sleep(5 * time.Second)
+	// Second transfer: the file is already stored, reuse path (HEAD 200, search assets, same sha256).
+	transferOnce()
+
+	gotDesc, err := createCTFRepository(t, targetCTFPath).GetComponentVersion(ctx, componentName, componentVersion)
+	r.NoError(err)
+	r.Len(gotDesc.Component.Resources, 1)
+	gotResource := gotDesc.Component.Resources[0]
+
+	// The published access must be Wget/v1.
+	r.NotNil(gotResource.Access)
+	r.Equal(wgetaccess.WgetConsumerType, gotResource.Access.GetType().Name,
+		"uploaded resource should carry a Wget access")
+
+	var typedWget wgetaccessv1.Wget
+	r.NoError(wgetaccess.Scheme.Convert(gotResource.Access, &typedWget))
+	expectedURL := fmt.Sprintf("%s/repository/raw-hosted/ocm.software/nexus-raw-uploader-test/1.0.0/raw-resource-1.0.0", baseURL)
+	r.Equal(expectedURL, typedWget.URL,
+		"wget URL should point at the raw repository path")
+
+	// The digest must be SHA-256 of the content.
+	r.NotNil(gotResource.Digest, "transferred resource should carry a digest")
+	r.Equal("SHA-256", gotResource.Digest.HashAlgorithm)
+	r.Equal("genericBlobDigest/v1", gotResource.Digest.NormalisationAlgorithm)
+	r.Equal(digestOf(resourceData).Encoded(), gotResource.Digest.Value)
+
+	// Download the file from Nexus and verify its content.
+	r.Equal(resourceData, nexusGet(t, expectedURL, adminPassword))
 }

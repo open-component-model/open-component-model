@@ -104,11 +104,10 @@ func Test_Integration_TransferHelmResource_ArtifactoryHelmUploaderDeploysChart(t
 		AccessMode: "readwrite|create",
 	}
 
-	// The Artifactory helm uploader routes Helm/v1 resources to the fake Artifactory server.
-	uploaders := []transferv1alpha1.UploaderConfig{&transferv1alpha1.HelmUploaderConfig{
-		Type:       runtime.NewVersionedType(transferv1alpha1.HelmUploaderConfigType, transferv1alpha1.Version),
+	// The Artifactory uploader routes Helm/v1 resources to the fake Artifactory server.
+	uploaders := []transferv1alpha1.UploaderConfig{&transferv1alpha1.ArtifactoryUploaderConfig{
+		Type:       runtime.NewVersionedType(transferv1alpha1.ArtifactoryUploaderConfigType, transferv1alpha1.Version),
 		MatchSpec:  transferv1alpha1.UploaderMatch{AccessType: runtime.NewVersionedType(helmaccessv1.Type, helmaccessv1.LegacyTypeVersion)},
-		Server:     transferv1alpha1.HelmRepositoryServerArtifactory,
 		URL:        targetSrv.URL,
 		Repository: "helm-local",
 	}}
@@ -267,11 +266,10 @@ func Test_Integration_TransferLocalBlobHelmResource_ArtifactoryHelmUploaderDeplo
 				AccessMode: "readwrite|create",
 			}
 
-			// The Artifactory helm uploader routes LocalBlob/v1 resources to the fake Artifactory server.
-			uploaders := []transferv1alpha1.UploaderConfig{&transferv1alpha1.HelmUploaderConfig{
-				Type:       runtime.NewVersionedType(transferv1alpha1.HelmUploaderConfigType, transferv1alpha1.Version),
+			// The Artifactory uploader routes LocalBlob/v1 resources to the fake Artifactory server.
+			uploaders := []transferv1alpha1.UploaderConfig{&transferv1alpha1.ArtifactoryUploaderConfig{
+				Type:       runtime.NewVersionedType(transferv1alpha1.ArtifactoryUploaderConfigType, transferv1alpha1.Version),
 				MatchSpec:  transferv1alpha1.UploaderMatch{AccessType: runtime.NewVersionedType(descriptorv2.LocalBlobAccessType, descriptorv2.LocalBlobAccessTypeVersion)},
-				Server:     transferv1alpha1.HelmRepositoryServerArtifactory,
 				URL:        targetSrv.URL,
 				Repository: "helm-local",
 			}}
@@ -368,6 +366,8 @@ func (f *fakeArtifactory) handle(w http.ResponseWriter, req *http.Request) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	switch {
+	case req.Method == http.MethodGet && path == "/artifactory/api/repositories/helm-local":
+		_, _ = io.WriteString(w, `{"packageType":"helm","rclass":"local"}`)
 	case req.Method == http.MethodPut && req.Header.Get("X-Checksum-Deploy") == "true":
 		// Artifactory has no content with this checksum yet.
 		w.WriteHeader(http.StatusNotFound)

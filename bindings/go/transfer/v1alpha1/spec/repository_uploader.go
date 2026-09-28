@@ -1,0 +1,258 @@
+package spec
+
+import (
+	"fmt"
+	"net/url"
+	"slices"
+	"strings"
+
+	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/runtime"
+)
+
+const (
+	// ArtifactoryUploaderConfigType routes matching resources to a repository of a JFrog
+	// Artifactory server.
+	ArtifactoryUploaderConfigType = "artifactory.uploader.transfer.config.ocm.software"
+	// NexusUploaderConfigType routes matching resources to a hosted repository of a Sonatype
+	// Nexus Repository 3 server.
+	NexusUploaderConfigType = "nexus.uploader.transfer.config.ocm.software"
+)
+
+func init() {
+	Scheme.MustRegisterWithAlias(&ArtifactoryUploaderConfig{},
+		runtime.NewVersionedType(ArtifactoryUploaderConfigType, Version),
+		runtime.NewUnversionedType(ArtifactoryUploaderConfigType),
+	)
+	Scheme.MustRegisterWithAlias(&NexusUploaderConfig{},
+		runtime.NewVersionedType(NexusUploaderConfigType, Version),
+		runtime.NewUnversionedType(NexusUploaderConfigType),
+	)
+}
+
+// ArtifactoryRepositoryType is the package type of an Artifactory repository.
+// +ocm:jsonschema-gen:enum=helm,generic
+type ArtifactoryRepositoryType string
+
+const (
+	// ArtifactoryRepositoryTypeHelm is a Helm repository: the resource must hold a Helm chart,
+	// which is published with a Helm/v1 access.
+	ArtifactoryRepositoryTypeHelm ArtifactoryRepositoryType = "helm"
+	// ArtifactoryRepositoryTypeGeneric is a generic repository: the resource content is stored
+	// as a file and published with a Wget/v1 access.
+	ArtifactoryRepositoryTypeGeneric ArtifactoryRepositoryType = "generic"
+)
+
+// NexusRepositoryType is the format of a Nexus repository.
+// +ocm:jsonschema-gen:enum=helm,raw
+type NexusRepositoryType string
+
+const (
+	// NexusRepositoryTypeHelm is a Helm hosted repository: the resource must hold a Helm chart,
+	// which is published with a Helm/v1 access.
+	NexusRepositoryTypeHelm NexusRepositoryType = "helm"
+	// NexusRepositoryTypeRaw is a raw hosted repository: the resource content is stored as a
+	// file and published with a Wget/v1 access.
+	NexusRepositoryTypeRaw NexusRepositoryType = "raw"
+)
+
+// ArtifactoryUploaderConfig uploads matching resources into a local repository of a JFrog
+// Artifactory server. What is uploaded and how the resource is re-described depends on the
+// package type of the repository, which is read from the Artifactory repository configuration
+// (GET <url>/artifactory/api/repositories/<repository>) unless RepositoryType is set:
+//
+//   - helm: the packaged Helm chart located in the resource content (a packaged chart, a tar
+//     containing one as the helm downloader produces, or a helm chart OCI artifact) is deployed and
+//     the resource is published with a Helm/v1 access (helmRepository
+//     <url>/artifactory/api/helm/<repository>, helmChart <name>:<version>). The chart is not
+//     parsed: name and version are the chart metadata Artifactory records, and content it does
+//     not recognize as a chart is deleted again and fails the transfer. The repository must not
+//     enforce chart name and version in file names (Helm Enforce Layout), because the file name
+//     is not derived from the chart.
+//   - generic: the resource content is deployed as is (OCI artifacts as an OCI layout tar) and the
+//     resource is published with a Wget/v1 access on the deployed file.
+//
+// The content is deployed to <url>/artifactory/<repository>/<path>. Path defaults to
+// <component>/<component version>/<resource>-<resource version>, plus .tgz for helm. The deployed
+// file carries the properties ocm.component.name, ocm.component.version, ocm.resource.name,
+// ocm.resource.version and, for resources with one, ocm.resource.extraIdentity. A file already
+// stored at the path is only replaced when these properties name the same resource of the same
+// component version or it has the same content.
+//
+// Upload credentials are resolved for the HelmChartRepository consumer identity of
+// <url>/artifactory/api/helm/<repository>, falling back to the Wget consumer identity of
+// <url>/artifactory/<repository>. They are also used to read the repository configuration.
+//
+//	type: generic.config.ocm.software/v1
+//	configurations:
+//	  - type: artifactory.uploader.transfer.config.ocm.software/v1alpha1
+//	    match:
+//	      accessType: Helm/v1
+//	    url: https://common.repositories.cloud.sap
+//	    repository: open-component-model-helm-test
+//
+// +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
+// +k8s:deepcopy-gen=true
+// +ocm:typegen=true
+// +ocm:jsonschema-gen=true
+type ArtifactoryUploaderConfig struct {
+	// +ocm:jsonschema-gen:enum=artifactory.uploader.transfer.config.ocm.software/v1alpha1
+	// +ocm:jsonschema-gen:enum:deprecated=artifactory.uploader.transfer.config.ocm.software
+	Type runtime.Type `json:"type"`
+	// MatchSpec selects the resources this uploader applies to (exposed as `match`).
+	MatchSpec UploaderMatch `json:"match"`
+	// URL is the base URL of the server (scheme, host, optional port and context path) without
+	// the /artifactory segment, e.g. https://common.repositories.cloud.sap.
+	URL string `json:"url"`
+	// Repository is the key of the local repository to upload into.
+	Repository string `json:"repository"`
+	// RepositoryType is the package type of the repository: helm or generic. It skips reading
+	// the repository configuration, which needs permissions users that may only deploy lack.
+	RepositoryType ArtifactoryRepositoryType `json:"repositoryType,omitempty"`
+	// Path overrides where the content is stored, relative to the repository root, e.g.
+	// ${component.name + "/" + component.version + "/" + resource.name + "-" + resource.version + ".tgz"}.
+	// It is a literal or a CEL expression wrapped in ${...} over the source resource (resource)
+	// and its component (component: name, version, provider, ...). The result must consist of
+	// non-empty segments without . or .. and, for helm repositories, end in .tgz. Defaults to
+	// <component>/<component version>/<resource>-<resource version>, plus .tgz for helm.
+	Path string `json:"path,omitempty"`
+}
+
+// NexusUploaderConfig uploads matching resources into a hosted repository of a Sonatype Nexus
+// Repository 3 server. What is uploaded and how the resource is re-described depends on the
+// format of the repository, which is read from the Nexus repository settings
+// (GET <url>/service/rest/v1/repositories/<repository>) unless RepositoryType is set:
+//
+//   - helm: the packaged Helm chart located in the resource content is uploaded to
+//     <url>/repository/<repository>/<resource>-<resource version>.tgz. Nexus stores it under the
+//     path it derives from the chart (<name>-<version>.tgz) and the resource is published with a
+//     Helm/v1 access (helmRepository <url>/repository/<repository>). Path is not supported.
+//   - raw: the resource content is uploaded as is (OCI artifacts as an OCI layout tar) to
+//     <url>/repository/<repository>/<path> and the resource is published with a Wget/v1 access
+//     on it. Path defaults to <component>/<component version>/<resource>-<resource version>.
+//     Nexus records no owner of a file, so a file already stored at the path is never
+//     overwritten: it is reused when it has the same content, otherwise the transfer fails.
+//
+// Upload credentials are resolved for the HelmChartRepository consumer identity of
+// <url>/repository/<repository>, falling back to its Wget consumer identity. They are also used
+// to read the repository settings.
+//
+//	type: generic.config.ocm.software/v1
+//	configurations:
+//	  - type: nexus.uploader.transfer.config.ocm.software/v1alpha1
+//	    match:
+//	      accessType: Helm/v1
+//	    url: https://nexus.example.com
+//	    repository: helm-hosted
+//
+// +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
+// +k8s:deepcopy-gen=true
+// +ocm:typegen=true
+// +ocm:jsonschema-gen=true
+type NexusUploaderConfig struct {
+	// +ocm:jsonschema-gen:enum=nexus.uploader.transfer.config.ocm.software/v1alpha1
+	// +ocm:jsonschema-gen:enum:deprecated=nexus.uploader.transfer.config.ocm.software
+	Type runtime.Type `json:"type"`
+	// MatchSpec selects the resources this uploader applies to (exposed as `match`).
+	MatchSpec UploaderMatch `json:"match"`
+	// URL is the base URL of the server (scheme, host, optional port and context path) without
+	// the /repository segment, e.g. https://nexus.example.com.
+	URL string `json:"url"`
+	// Repository is the name of the hosted repository to upload into.
+	Repository string `json:"repository"`
+	// RepositoryType is the format of the repository: helm or raw. It skips reading the
+	// repository settings, which needs permissions users that may only upload lack.
+	RepositoryType NexusRepositoryType `json:"repositoryType,omitempty"`
+	// Path overrides where the content is stored in a raw repository, relative to the repository
+	// root. It is a literal or a CEL expression wrapped in ${...} over the source resource
+	// (resource) and its component (component: name, version, provider, ...). The result must
+	// consist of non-empty segments other than "." and "..". It is not supported for helm
+	// repositories: Nexus stores charts under a path derived from the chart. Defaults to
+	// <component>/<component version>/<resource>-<resource version>.
+	Path string `json:"path,omitempty"`
+}
+
+// Match reports whether this uploader applies to resource. It implements [UploaderConfig].
+func (u *ArtifactoryUploaderConfig) Match(resource descriptorv2.Resource, types TypeResolver) bool {
+	if u == nil {
+		return false
+	}
+	return u.MatchSpec.Matches(resource, types)
+}
+
+// Match reports whether this uploader applies to resource. It implements [UploaderConfig].
+func (u *NexusUploaderConfig) Match(resource descriptorv2.Resource, types TypeResolver) bool {
+	if u == nil {
+		return false
+	}
+	return u.MatchSpec.Matches(resource, types)
+}
+
+// Validate rejects a non-matching Type, an empty match access type, a URL that is not an
+// absolute http(s) URL without query or fragment, a repository that is not a single key and an
+// unknown repository type. An empty Type is allowed for programmatically constructed configs.
+func (u *ArtifactoryUploaderConfig) Validate() error {
+	if u == nil {
+		return nil
+	}
+	if err := validateRepositoryUploader(u.Type, ArtifactoryUploaderConfigType, u.MatchSpec, u.URL, u.Repository); err != nil {
+		return err
+	}
+	return validateRepositoryType(u.RepositoryType, ArtifactoryRepositoryTypeHelm, ArtifactoryRepositoryTypeGeneric)
+}
+
+// Validate rejects what [ArtifactoryUploaderConfig.Validate] rejects and a path for helm
+// repositories.
+func (u *NexusUploaderConfig) Validate() error {
+	if u == nil {
+		return nil
+	}
+	if err := validateRepositoryUploader(u.Type, NexusUploaderConfigType, u.MatchSpec, u.URL, u.Repository); err != nil {
+		return err
+	}
+	if err := validateRepositoryType(u.RepositoryType, NexusRepositoryTypeHelm, NexusRepositoryTypeRaw); err != nil {
+		return err
+	}
+	if u.RepositoryType == NexusRepositoryTypeHelm && u.Path != "" {
+		return fmt.Errorf("path is not supported for nexus helm repositories")
+	}
+	return nil
+}
+
+func validateRepositoryUploader(typ runtime.Type, name string, match UploaderMatch, rawURL, repository string) error {
+	if !typ.IsEmpty() {
+		if typ.Name != name || (typ.Version != "" && typ.Version != Version) {
+			return fmt.Errorf("invalid type %q (must be %q or %q)", typ, name, runtime.NewVersionedType(name, Version))
+		}
+	}
+	if match.AccessType.IsEmpty() {
+		return fmt.Errorf("match.accessType is required")
+	}
+	if rawURL == "" {
+		return fmt.Errorf("url is required")
+	}
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("invalid url %q: %w", rawURL, err)
+	}
+	if (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
+		return fmt.Errorf("url must be an absolute http or https URL, got %q", rawURL)
+	}
+	if parsed.RawQuery != "" || parsed.Fragment != "" {
+		return fmt.Errorf("url must not carry a query or fragment, got %q", rawURL)
+	}
+	if repository == "" {
+		return fmt.Errorf("repository is required")
+	}
+	if strings.ContainsAny(repository, "/?#") {
+		return fmt.Errorf("repository must be a single repository key, got %q", repository)
+	}
+	return nil
+}
+
+func validateRepositoryType[T ~string](typ T, supported ...T) error {
+	if typ == "" || slices.Contains(supported, typ) {
+		return nil
+	}
+	return fmt.Errorf("repositoryType must be one of %q, got %q", supported, typ)
+}
