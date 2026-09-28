@@ -25,6 +25,13 @@ type Options struct {
 	CredentialRepositoryTypeScheme *runtime.Scheme
 	// CredentialTypeSchemeProvider provides access to known credential types (e.g. HelmHTTPCredentials/v1).
 	CredentialTypeSchemeProvider CredentialTypeSchemeProvider
+	// ConsumerIdentityTypeScheme contains the known consumer identity types (e.g. Wget/v1).
+	// If set, config-authored consumer identities whose type is registered as an alias
+	// are canonicalized to the unversioned spelling of their default type at ingest
+	// time (e.g. HTTP or HTTP/v1 resolve to Wget).
+	// Identity lookups always use the unversioned spelling, so canonicalization has to
+	// preserve matching behavior for every spelling the scheme knows.
+	ConsumerIdentityTypeScheme *runtime.Scheme
 }
 
 // ToGraph creates a new credential graph from the provided configuration and options.
@@ -35,6 +42,7 @@ func ToGraph(ctx context.Context, config *cfgRuntime.Config, opts Options) (*Gra
 		credentialPluginProvider:     opts.CredentialPluginProvider,
 		repositoryPluginProvider:     opts.RepositoryPluginProvider,
 		credentialTypeSchemeProvider: opts.CredentialTypeSchemeProvider,
+		consumerIdentityTypeScheme:   opts.ConsumerIdentityTypeScheme,
 	}
 
 	if err := ingest(ctx, g, config, opts.CredentialRepositoryTypeScheme); err != nil {
@@ -56,6 +64,28 @@ type Graph struct {
 	repositoryPluginProvider     RepositoryPluginProvider     // injection for resolving custom repository types
 	credentialPluginProvider     CredentialPluginProvider     // injection for resolving custom credential types
 	credentialTypeSchemeProvider CredentialTypeSchemeProvider // optional: enables typed credential ingestion
+	consumerIdentityTypeScheme   *runtime.Scheme              // optional: enables canonicalization of consumer identity alias types
+}
+
+// canonicalizeConsumerIdentity resolves the type of a config-authored consumer identity
+// through the consumer identity type scheme. Registered aliases resolve to the unversioned
+// spelling of their default type, which is the spelling identity producers use when matching.
+// Identities that don't match anything registered are returned unchanged.
+func (g *Graph) canonicalizeConsumerIdentity(identity runtime.Identity) runtime.Identity {
+	if g.consumerIdentityTypeScheme == nil {
+		return identity
+	}
+	typ, err := identity.ParseType()
+	if err != nil {
+		return identity
+	}
+	canonical, ok := g.consumerIdentityTypeScheme.ResolveCanonicalType(typ)
+	if !ok {
+		return identity
+	}
+	canonicalized := identity.Clone()
+	canonicalized.SetType(runtime.NewUnversionedType(canonical.GetName()))
+	return canonicalized
 }
 
 // credentialTypeScheme returns the underlying scheme from the credential type

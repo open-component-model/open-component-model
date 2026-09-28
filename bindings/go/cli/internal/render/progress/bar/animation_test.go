@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -51,19 +52,41 @@ func TestWriteRunningLine(t *testing.T) {
 }
 
 func TestWriteCompletedLine(t *testing.T) {
-	var buf bytes.Buffer
-	WriteCompletedLine(&buf, "Loading")
-	output := buf.String()
-	assert.Contains(t, output, "✓")
-	assert.Contains(t, output, "Loading...")
+	t.Run("without duration", func(t *testing.T) {
+		var buf bytes.Buffer
+		WriteCompletedLine(&buf, "Loading", -1)
+		output := buf.String()
+		assert.Contains(t, output, "✓")
+		assert.Contains(t, output, "Loading...")
+		assert.NotContains(t, output, "took")
+	})
+
+	t.Run("with duration rounded to seconds", func(t *testing.T) {
+		var buf bytes.Buffer
+		WriteCompletedLine(&buf, "Loading", 95*time.Minute+27*time.Second+500*time.Millisecond)
+		output := stripANSI(buf.String())
+		assert.Contains(t, output, "✓")
+		assert.Contains(t, output, "Loading... (took 1h35m28s)")
+	})
 }
 
 func TestWriteFailedLine(t *testing.T) {
-	var buf bytes.Buffer
-	WriteFailedLine(&buf, "Loading")
-	output := buf.String()
-	assert.Contains(t, output, "✗")
-	assert.Contains(t, output, "Loading...")
+	t.Run("without duration", func(t *testing.T) {
+		var buf bytes.Buffer
+		WriteFailedLine(&buf, "Loading", -1)
+		output := buf.String()
+		assert.Contains(t, output, "✗")
+		assert.Contains(t, output, "Loading...")
+		assert.NotContains(t, output, "took")
+	})
+
+	t.Run("with duration", func(t *testing.T) {
+		var buf bytes.Buffer
+		WriteFailedLine(&buf, "Loading", 12*time.Second)
+		output := stripANSI(buf.String())
+		assert.Contains(t, output, "✗")
+		assert.Contains(t, output, "Loading... (took 12s)")
+	})
 }
 
 func TestRunAnimation(t *testing.T) {

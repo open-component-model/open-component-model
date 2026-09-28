@@ -670,6 +670,7 @@ representable
 reproducibility
 requeue
 requeues
+requeued
 resendbuffer
 resmgmt
 resolvefromcomponentversion
@@ -971,4 +972,6 @@ RGW
 Cloudflare
 unversioned
 BuildKit
+retryable
+lexicographically
 artifactory
