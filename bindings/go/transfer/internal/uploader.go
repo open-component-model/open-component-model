@@ -18,10 +18,13 @@ import (
 	wgettransformv1alpha1 "ocm.software/open-component-model/bindings/go/wget/transformation/spec/v1alpha1"
 )
 
-// resourceAlias is the identifier an uploader's targetURL CEL expression uses to
-// reference the source resource. processHTTPUploader rewrites it to the concrete
-// environment node path before the graph runtime evaluates the expression.
-const resourceAlias = "resource"
+// resourceAlias and componentAlias are the identifiers an uploader's CEL expressions use to
+// reference the source resource and its component. templateExpressions rewrites them to the
+// concrete environment node paths before the graph runtime evaluates the expression.
+const (
+	resourceAlias  = "resource"
+	componentAlias = "component"
+)
 
 // resourceNodePath returns the CEL path the `resource` alias is rewritten to. Instead
 // of injecting a second copy of the resource into the environment, it points at the
@@ -44,6 +47,12 @@ func resourceNodePath(baseID string, index int) string {
 	return fmt.Sprintf("environment.%s.component.resources[%d]", baseID, index)
 }
 
+// componentNodePath returns the CEL path the `component` alias is rewritten to: the component
+// of the descriptor environment node keyed by baseID (see addDescriptorToEnvironment).
+func componentNodePath(baseID string) string {
+	return fmt.Sprintf("environment.%s.component", baseID)
+}
+
 // mediaTypeFromAccess extracts the source access media type (if any) from the resource
 // access, used as the default target media type. Returns "" when absent.
 func mediaTypeFromAccess(resource descriptorv2.Resource) string {
@@ -59,14 +68,16 @@ func mediaTypeFromAccess(resource descriptorv2.Resource) string {
 	return access.MediaType
 }
 
-// templateExpressions rewrites the `resource` alias in every ${...} expression across
-// the entire JSON object held by raw, in place. It does not hardcode which fields may
-// carry expressions: it reuses the graph's own expression pipeline — [celparser.ParseSchemaless]
+// templateExpressions rewrites the `resource` and `component` aliases in every ${...}
+// expression across the entire JSON object held by raw, in place. `resource` references the
+// resource at index of the descriptor environment node baseID (see resourceNodePath),
+// `component` that node's component (see componentNodePath). It does not hardcode which fields
+// may carry expressions: it reuses the graph's own expression pipeline — [celparser.ParseSchemaless]
 // discovers every expression field (standalone ${expr} and embedded "pre-${expr}"
-// templates alike), each expression's `resource` alias is rewritten to reference
-// nodePath, and [resolver.Resolver.UpsertValueAtPath] splices the result back at the
-// field's path. Strings without ${...} carry no expressions and pass through unchanged.
-func templateExpressions(raw *runtime.Raw, nodePath string) error {
+// templates alike), each expression's aliases are rewritten, and
+// [resolver.Resolver.UpsertValueAtPath] splices the result back at the field's path. Strings
+// without ${...} carry no expressions and pass through unchanged.
+func templateExpressions(raw *runtime.Raw, baseID string, index int) error {
 	var obj map[string]any
 	if err := json.Unmarshal(raw.Data, &obj); err != nil {
 		return fmt.Errorf("cannot decode target access: %w", err)
@@ -93,7 +104,9 @@ func templateExpressions(raw *runtime.Raw, nodePath string) error {
 		rewritten := value
 		for _, expr := range field.Expressions {
 			original := "${" + expr.Value + "}"
-			replaced := "${" + celparser.RewriteIdentifier(expr.Value, resourceAlias, nodePath) + "}"
+			expression := celparser.RewriteIdentifier(expr.Value, componentAlias, componentNodePath(baseID))
+			expression = celparser.RewriteIdentifier(expression, resourceAlias, resourceNodePath(baseID, index))
+			replaced := "${" + expression + "}"
 			rewritten = strings.ReplaceAll(rewritten, original, replaced)
 		}
 		if err := res.UpsertValueAtPath(field.Path, rewritten); err != nil {
@@ -107,6 +120,24 @@ func templateExpressions(raw *runtime.Raw, nodePath string) error {
 	}
 	raw.Data = data
 	return nil
+}
+
+// templateString rewrites the uploader aliases in the ${...} expressions of a single string
+// value, see templateExpressions.
+func templateString(value, baseID string, index int) (string, error) {
+	data, err := json.Marshal(map[string]string{"value": value})
+	if err != nil {
+		return "", err
+	}
+	raw := &runtime.Raw{Data: data}
+	if err := templateExpressions(raw, baseID, index); err != nil {
+		return "", err
+	}
+	var out map[string]string
+	if err := json.Unmarshal(raw.Data, &out); err != nil {
+		return "", err
+	}
+	return out["value"], nil
 }
 
 // targetHostFromExpression best-effort extracts a display host from a raw targetURL
@@ -172,20 +203,19 @@ func processHTTPUploader(resource descriptorv2.Resource, u *transferv1alpha1.HTT
 		MediaType: mediaType,
 	}
 
-	// Rewrite the `resource` alias in every ${...} string across each access object,
-	// rather than templating hand-picked fields. Point it at the resource already present
-	// in the descriptor environment node (selected by index, see resourceNodePath) so no
-	// second copy of the resource is injected; every access field stays addressable
-	// generically under resource.access.<field>, so an uploader works with any source
-	// access type, not only wget. Both objects share the same targetURL expression, so
-	// the request and the published read access resolve to the same URL at runtime.
-	nodePath := resourceNodePath(baseID, i)
+	// Rewrite the `resource` and `component` aliases in every ${...} string across each
+	// access object, rather than templating hand-picked fields. They point at the resource
+	// and component already present in the descriptor environment node (see resourceNodePath)
+	// so no second copy is injected; every access field stays addressable generically under
+	// resource.access.<field>, so an uploader works with any source access type, not only
+	// wget. Both objects share the same targetURL expression, so the request and the
+	// published read access resolve to the same URL at runtime.
 
 	requestRaw := &runtime.Raw{}
 	if err := wgetaccess.Scheme.Convert(requestAccess, requestRaw); err != nil {
 		return fmt.Errorf("cannot convert uploader request access: %w", err)
 	}
-	if err := templateExpressions(requestRaw, nodePath); err != nil {
+	if err := templateExpressions(requestRaw, baseID, i); err != nil {
 		return fmt.Errorf("cannot template uploader request access: %w", err)
 	}
 
@@ -193,7 +223,7 @@ func processHTTPUploader(resource descriptorv2.Resource, u *transferv1alpha1.HTT
 	if err := wgetaccess.Scheme.Convert(publishedAccess, publishedRaw); err != nil {
 		return fmt.Errorf("cannot convert uploader published access: %w", err)
 	}
-	if err := templateExpressions(publishedRaw, nodePath); err != nil {
+	if err := templateExpressions(publishedRaw, baseID, i); err != nil {
 		return fmt.Errorf("cannot template uploader published access: %w", err)
 	}
 

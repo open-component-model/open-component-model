@@ -204,6 +204,15 @@ func TestBuildGraphDefinition_HelmUploader_EmitsHelmTarget(t *testing.T) {
 		r.Equal("chart", tr.Spec.Data["resource"].(map[string]any)["name"])
 	})
 
+	t.Run("path aliases point at the resource and its component", func(t *testing.T) {
+		r := require.New(t)
+		u := uploader(helmMatch)
+		u.Path = `${component.name + "/" + resource.name + ".tgz"}`
+		_, tr := build(t, chartResource, u)
+		path := tr.Spec.Data["path"].(string)
+		r.Regexp(`^\$\{environment\.\w+\.component\.name \+ "/" \+ environment\.\w+\.component\.resources\[0\]\.name \+ "\.tgz"\}$`, path)
+	})
+
 	t.Run("nexus server", func(t *testing.T) {
 		r := require.New(t)
 		u := uploader(helmMatch)

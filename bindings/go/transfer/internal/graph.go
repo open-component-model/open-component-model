@@ -285,7 +285,7 @@ func processResources(
 					return nil, nil, fmt.Errorf("cannot process uploader for resource %v: %w", resource.ToIdentity(), err)
 				}
 			case *transferv1alpha1.HelmUploaderConfig:
-				if err := processHelmUploader(resource, access, cfg, id, val, tgd, resourceTransformIDs, i); err != nil {
+				if err := processHelmUploader(resource, access, cfg, baseID, id, val, tgd, resourceTransformIDs, i); err != nil {
 					return nil, nil, fmt.Errorf("cannot process uploader for resource %v: %w", resource.ToIdentity(), err)
 				}
 			default:

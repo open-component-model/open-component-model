@@ -337,6 +337,10 @@
           "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.transfer.internal.HelmRepositoryUploadComponentVersion",
           "description": "ComponentVersion is the component version holding the resource. It determines where the\nchart is stored in an Artifactory repository and, for local blob resources, where it is\nread from."
         },
+        "path": {
+          "type": "string",
+          "description": "Path is where the chart is stored in an Artifactory repository, relative to the\nrepository root. It must consist of non-empty segments without . or .. and end in .tgz.\nEmpty stores the chart under \u003ccomponent\u003e/\u003ccomponent version\u003e/\u003cresource\u003e-\u003cresource version\u003e.tgz."
+        },
         "repository": {
           "type": "string",
           "description": "Repository is the name of the Helm repository."

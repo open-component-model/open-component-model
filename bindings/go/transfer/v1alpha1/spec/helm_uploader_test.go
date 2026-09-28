@@ -34,6 +34,10 @@ func TestHelmUploaderConfig_Validate(t *testing.T) {
 		{name: "missing server", mutate: func(u *spec.HelmUploaderConfig) { u.Server = "" }, wantErr: "server is required"},
 		{name: "unknown server", mutate: func(u *spec.HelmUploaderConfig) { u.Server = "Harbor" }, wantErr: `server must be "Artifactory" or "Nexus", got "Harbor"`},
 		{name: "valid nexus config", mutate: func(u *spec.HelmUploaderConfig) { u.Server = spec.HelmRepositoryServerNexus }},
+		{name: "nexus with path", mutate: func(u *spec.HelmUploaderConfig) {
+			u.Server = spec.HelmRepositoryServerNexus
+			u.Path = "charts/mychart.tgz"
+		}, wantErr: `path is only supported for server "Artifactory"`},
 		{name: "missing accessType", mutate: func(u *spec.HelmUploaderConfig) {
 			u.MatchSpec.AccessType = runtime.Type{}
 		}, wantErr: "match.accessType is required"},

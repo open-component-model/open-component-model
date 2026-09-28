@@ -143,15 +143,28 @@ Helm repository and rewrites the resource to a `Helm/v1` access with
 without touching disk. The uploader does not parse the chart: it publishes the
 name and version the server records.
 
-| `server`      | Upload URL                                                                                         | Published `helmRepository`                |
-|---------------|----------------------------------------------------------------------------------------------------|-------------------------------------------|
-| `Artifactory` | `<url>/artifactory/<repository>/<component>/<component-version>/<resource>-<resource-version>.tgz` | `<url>/artifactory/api/helm/<repository>` |
-| `Nexus`       | `<url>/repository/<repository>/<resource>-<resource-version>.tgz`                                  | `<url>/repository/<repository>`           |
+| `server`      | Upload URL                                                                                                                          | Published `helmRepository`                |
+|---------------|-------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------|
+| `Artifactory` | `<url>/artifactory/<repository>/<path>`, `<path>` defaulting to `<component>/<component-version>/<resource>-<resource-version>.tgz` | `<url>/artifactory/api/helm/<repository>` |
+| `Nexus`       | `<url>/repository/<repository>/<resource>-<resource-version>.tgz`                                                                   | `<url>/repository/<repository>`           |
 
 **Artifactory** reads the chart name and version from the deployed file's
 properties; content without them is deleted and fails the transfer. Artifactory
 indexes the deployed chart itself. The repository must not enable
-*Enforce Chart Name and Version*, because the file name comes from the resource.
+*Enforce Chart Name and Version*, because the file name does not come from the chart.
+
+Every deployed chart carries properties naming the resource it was uploaded
+for: `ocm.component.name`, `ocm.component.version`, `ocm.resource.name`,
+`ocm.resource.version` and, when the resource has one,
+`ocm.resource.extraIdentity`. They make the chart searchable by component and
+decide whether a file already stored at the upload path may be replaced:
+
+- no file, or a file with the same content: the chart is (re)used;
+- a file whose properties name the same resource of the same component
+  version: it is replaced (a repeated transfer);
+- any other file: the transfer fails and the file is left untouched. Configure
+  a `path` that includes whatever distinguishes the resources, such as the
+  component version.
 
 **Nexus** stores the chart as `<name>-<version>.tgz` from `Chart.yaml` and
 maintains `index.yaml` itself. The uploader looks up the chart by SHA-256 in the
@@ -165,12 +178,13 @@ name and version fails.
 
 #### Fields
 
-| Field        | Type              | Description                                                                                             |
-|--------------|-------------------|---------------------------------------------------------------------------------------------------------|
-| `match`      | `UploaderMatch`   | Selects resources this uploader applies to. `match.accessType` is required.                             |
-| `server`     | enum (required)   | `Artifactory` or `Nexus`.                                                                               |
-| `url`        | string (required) | Server base URL **without** the `/artifactory` or `/repository` segment, e.g. `https://myorg.jfrog.io`. |
-| `repository` | string (required) | Helm repository name, e.g. `helm-local`.                                                                |
+| Field        | Type              | Description                                                                                                                                                                                                                                |
+|--------------|-------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `match`      | `UploaderMatch`   | Selects resources this uploader applies to. `match.accessType` is required.                                                                                                                                                                |
+| `server`     | enum (required)   | `Artifactory` or `Nexus`.                                                                                                                                                                                                                  |
+| `url`        | string (required) | Server base URL **without** the `/artifactory` or `/repository` segment, e.g. `https://myorg.jfrog.io`.                                                                                                                                    |
+| `repository` | string (required) | Helm repository name, e.g. `helm-local`.                                                                                                                                                                                                   |
+| `path`       | string            | Artifactory only. Location of the chart in the repository, a literal or a `${…}` CEL expression over `resource` and `component` (see [CEL Expressions](#cel-expressions)). Must be relative, without `.`/`..` segments, and end in `.tgz`. |
 
 #### Sources
 
@@ -220,6 +234,18 @@ configurations:
     repository: helm-hosted
 ```
 
+Artifactory with a custom path:
+
+```yaml
+  - type: helm.uploader.transfer.config.ocm.software/v1alpha1
+    match:
+      accessType: Helm/v1
+    server: Artifactory
+    url: https://myorg.jfrog.io
+    repository: helm-local
+    path: '${"charts/" + component.name + "/" + resource.name + "-" + resource.version + ".tgz"}'
+```
+
 ### Routing Resources to Different Targets
 
 Because a rule can match on identity as well as access type, several resources of
@@ -245,16 +271,20 @@ configurations:
 
 ### CEL Expressions
 
-`targetURL` and every `header` value are [CEL](https://cel.dev/) expressions — the
-same expression language the transfer graph uses to resolve every other field. A
-CEL value **must be wrapped in `${…}`**, matching how every other CEL field is
-written in the transfer graph. It is evaluated against the source resource, exposed
-under the `resource` alias, and resolved by the transfer runtime, so the produced
-plan is deterministic. CEL string concatenation (`+`), conditionals (`cond ? a : b`),
-and comparisons are all available. Append any static query string inside the
-expression. (A `header` value with no `${…}` is a plain literal and is sent verbatim.)
+`targetURL`, every `header` value and the Helm uploader's `path` are
+[CEL](https://cel.dev/) expressions — the same expression language the transfer
+graph uses to resolve every other field. A CEL value **must be wrapped in `${…}`**,
+matching how every other CEL field is written in the transfer graph. It is
+evaluated against the source resource, exposed under the `resource` alias, and its
+component, exposed under the `component` alias, and resolved by the transfer
+runtime, so the produced plan is deterministic. CEL string concatenation (`+`),
+conditionals (`cond ? a : b`), and comparisons are all available. Append any static
+query string inside the expression. (A value with no `${…}` is a plain literal and
+is used verbatim.)
 
-The `resource` alias always exposes:
+The `component` alias exposes the component of the source component version, e.g.
+`component.name`, `component.version` and `component.provider`. The `resource`
+alias always exposes:
 
 | Expression                               | Value                                                        |
 |------------------------------------------|--------------------------------------------------------------|

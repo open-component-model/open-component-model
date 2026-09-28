@@ -71,6 +71,10 @@ type HelmRepositoryUploadSpec struct {
 	URL string `json:"url"`
 	// Repository is the name of the Helm repository.
 	Repository string `json:"repository"`
+	// Path is where the chart is stored in an Artifactory repository, relative to the
+	// repository root. It must consist of non-empty segments without . or .. and end in .tgz.
+	// Empty stores the chart under <component>/<component version>/<resource>-<resource version>.tgz.
+	Path string `json:"path,omitempty"`
 }
 
 // HelmRepositoryUploadComponentVersion identifies the component version holding the resource.
@@ -154,11 +158,16 @@ func (t *HelmRepositoryUpload) Transform(ctx context.Context, step runtime.Typed
 	if err != nil {
 		return nil, err
 	}
-	path, err := chartPath(cv.Component, cv.Version, src)
+	var path string
+	if spec.Path != "" {
+		path, err = customChartPath(spec.Path)
+	} else {
+		path, err = chartPath(cv.Component, cv.Version, src)
+	}
 	if err != nil {
 		return nil, err
 	}
-	srv, err := t.newServer(spec, path, file)
+	srv, err := t.newServer(spec, path, file, chartOwner(cv, src))
 	if err != nil {
 		return nil, err
 	}
@@ -200,8 +209,13 @@ func (t *HelmRepositoryUpload) Transform(ctx context.Context, step runtime.Typed
 		}
 	}
 
-	reused := false
-	if known != "" {
+	// The upload location must be free, hold this resource's earlier upload, or already hold
+	// the chart; nothing else is ever overwritten.
+	reused, err := srv.claim(ctx, c, known)
+	if err != nil {
+		return nil, err
+	}
+	if !reused && known != "" {
 		if reused, err = srv.reuse(ctx, c, known); err != nil {
 			return nil, err
 		}
@@ -212,7 +226,7 @@ func (t *HelmRepositoryUpload) Transform(ctx context.Context, step runtime.Typed
 		slog.InfoContext(ctx, "reused helm chart content already stored in the helm repository",
 			"server", srv.name(), "resource", src.ToIdentity(), "url", uploadURL)
 	} else {
-		computed, complete, err := uploadChart(ctx, c, chart, srv.uploadURL(), srv.uploadHeader(known))
+		computed, complete, err := uploadChart(ctx, c, chart, srv.deployURL(), srv.uploadHeader(known))
 		switch {
 		case err != nil:
 			// A repository that rejects redeploying a chart still stores its content, e.g.
@@ -300,6 +314,37 @@ func chartPath(component, version string, res *descriptor.Resource) (string, err
 		segments[i] = url.PathEscape(segment)
 	}
 	return strings.Join(append(segments, file), "/"), nil
+}
+
+// customChartPath validates a configured chart location and returns it path-escaped. It must be
+// relative, consist of non-empty segments other than . and .., and name a .tgz file, so it can
+// neither leave the repository nor address a folder.
+func customChartPath(path string) (string, error) {
+	if !strings.HasSuffix(path, ".tgz") {
+		return "", fmt.Errorf("chart path %q must end in .tgz", path)
+	}
+	segments := strings.Split(path, "/")
+	for i, segment := range segments {
+		if segment == "" || segment == "." || segment == ".." || strings.Contains(segment, "\\") {
+			return "", fmt.Errorf("chart path %q must be relative without empty, \".\" or \"..\" segments", path)
+		}
+		segments[i] = url.PathEscape(segment)
+	}
+	return strings.Join(segments, "/"), nil
+}
+
+// chartOwner returns the properties that identify the resource a chart is uploaded for.
+func chartOwner(cv *HelmRepositoryUploadComponentVersion, res *descriptor.Resource) []chartProperty {
+	owner := []chartProperty{
+		{"ocm.component.name", cv.Component},
+		{"ocm.component.version", cv.Version},
+		{"ocm.resource.name", res.Name},
+		{"ocm.resource.version", res.Version},
+	}
+	if len(res.ExtraIdentity) > 0 {
+		owner = append(owner, chartProperty{"ocm.resource.extraIdentity", res.ExtraIdentity.String()})
+	}
+	return owner
 }
 
 // expectedDigest returns the SHA-256 the uploaded chart must have: the source digest, if it

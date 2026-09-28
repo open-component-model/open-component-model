@@ -15,7 +15,9 @@ import (
 // [transferv1alpha1.HelmUploaderConfig]. The chart is published with the chart name and version
 // the server records, so the transformation computes the published access at runtime and the
 // descriptor picks it up from its output. A local blob is read from the source component version.
-func processHelmUploader(resource descriptorv2.Resource, access runtime.Typed, u *transferv1alpha1.HelmUploaderConfig, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, resourceTransformIDs map[int]string, i int) error {
+// A configured path has its `resource` and `component` aliases rewritten like the HTTP
+// uploader's targetURL (see templateExpressions); the graph runtime resolves it.
+func processHelmUploader(resource descriptorv2.Resource, access runtime.Typed, u *transferv1alpha1.HelmUploaderConfig, baseID, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, resourceTransformIDs map[int]string, i int) error {
 	if resource.Access == nil {
 		return fmt.Errorf("resource access is required")
 	}
@@ -38,13 +40,21 @@ func processHelmUploader(resource descriptorv2.Resource, access runtime.Typed, u
 		}
 		cv["repository"] = sourceRepo.Data
 	}
-	spec, err := runtime.UnstructuredFromMixedData(map[string]any{
+	data := map[string]any{
 		"resource":         resource,
 		"componentVersion": cv,
 		"server":           string(u.Server),
 		"url":              u.URL,
 		"repository":       u.Repository,
-	})
+	}
+	if u.Path != "" {
+		path, err := templateString(u.Path, baseID, i)
+		if err != nil {
+			return fmt.Errorf("cannot template helm uploader path: %w", err)
+		}
+		data["path"] = path
+	}
+	spec, err := runtime.UnstructuredFromMixedData(data)
 	if err != nil {
 		return fmt.Errorf("cannot create unstructured spec for helm repository upload transformation: %w", err)
 	}

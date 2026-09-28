@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
@@ -86,41 +87,69 @@ func (p *localChartRepoProvider) GetComponentVersionRepository(context.Context, 
 }
 
 type artifactoryRequest struct {
-	method, path, contentType string
-	username, password        string
-	basic                     bool
-	authorization             string
-	checksum                  string
-	deploy                    bool
-	body                      []byte
+	method, path, query, contentType string
+	username, password               string
+	basic                            bool
+	authorization                    string
+	checksum                         string
+	deploy                           bool
+	// properties are the deploy matrix parameters of a PUT.
+	properties map[string]string
+	body       []byte
 }
 
 // fakeArtifactory emulates the parts of an Artifactory Helm repository the uploader uses. Like
 // Artifactory, it records chart name and version properties for deployed content it recognizes
-// as a chart; here, recognition is a lookup of the content digest in charts.
+// as a chart; here, recognition is a lookup of the content digest in charts. Matrix parameters
+// of a deploy are stored as properties of the file.
 type fakeArtifactory struct {
 	*httptest.Server
 	charts map[string][2]string // sha256 -> name, version
 
-	mu       sync.Mutex
-	requests []artifactoryRequest
-	contents map[string]bool   // sha256 of stored content
-	paths    map[string]string // repository path -> sha256
+	mu         sync.Mutex
+	requests   []artifactoryRequest
+	contents   map[string]bool              // sha256 of stored content
+	paths      map[string]string            // repository path -> sha256
+	properties map[string]map[string]string // repository path -> properties
 }
 
 func newFakeArtifactory(t *testing.T, charts map[string][2]string) *fakeArtifactory {
 	t.Helper()
-	f := &fakeArtifactory{charts: charts, contents: map[string]bool{}, paths: map[string]string{}}
+	f := &fakeArtifactory{charts: charts, contents: map[string]bool{}, paths: map[string]string{}, properties: map[string]map[string]string{}}
 	f.Server = httptest.NewServer(http.HandlerFunc(f.handle))
 	t.Cleanup(f.Close)
 	return f
 }
 
+// splitMatrixParams splits ;key=value matrix parameters off an escaped request path and
+// returns the unescaped path and parameter values (Artifactory's backslash escapes removed).
+func splitMatrixParams(escapedPath string) (string, map[string]string) {
+	parts := strings.Split(escapedPath, ";")
+	path, _ := url.PathUnescape(parts[0])
+	var params map[string]string
+	for _, part := range parts[1:] {
+		key, value, _ := strings.Cut(part, "=")
+		value, _ = url.PathUnescape(value)
+		if params == nil {
+			params = map[string]string{}
+		}
+		params[key] = strings.NewReplacer(`\\`, `\`, `\,`, `,`, `\|`, `|`, `\=`, `=`, `\;`, `;`).Replace(value)
+	}
+	return path, params
+}
+
+// store records content at path with the deploy properties, replacing earlier ones.
+func (f *fakeArtifactory) store(path, digest string, props map[string]string) {
+	f.paths[path] = digest
+	f.properties[path] = props
+}
+
 func (f *fakeArtifactory) handle(w http.ResponseWriter, r *http.Request) {
 	body, _ := io.ReadAll(r.Body)
+	path, params := splitMatrixParams(r.URL.EscapedPath())
 	req := artifactoryRequest{
-		method: r.Method, path: r.URL.Path, contentType: r.Header.Get("Content-Type"), authorization: r.Header.Get("Authorization"),
-		checksum: r.Header.Get("X-Checksum-Sha256"), deploy: r.Header.Get("X-Checksum-Deploy") == "true", body: body,
+		method: r.Method, path: path, query: r.URL.RawQuery, contentType: r.Header.Get("Content-Type"), authorization: r.Header.Get("Authorization"),
+		checksum: r.Header.Get("X-Checksum-Sha256"), deploy: r.Header.Get("X-Checksum-Deploy") == "true", properties: params, body: body,
 	}
 	req.username, req.password, req.basic = r.BasicAuth()
 	f.mu.Lock()
@@ -129,25 +158,45 @@ func (f *fakeArtifactory) handle(w http.ResponseWriter, r *http.Request) {
 
 	const repoPrefix, storagePrefix = "/artifactory/helm-local/", "/artifactory/api/storage/helm-local/"
 	switch {
-	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, storagePrefix):
-		chart, ok := f.charts[f.paths[strings.TrimPrefix(r.URL.Path, storagePrefix)]]
+	case r.Method == http.MethodGet && strings.HasPrefix(path, storagePrefix) && !r.URL.Query().Has("properties"):
+		digest, ok := f.paths[strings.TrimPrefix(path, storagePrefix)]
 		if !ok {
+			http.Error(w, `{"errors":[{"status":404,"message":"Unable to find item"}]}`, http.StatusNotFound)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"checksums": map[string]string{"sha256": digest}})
+	case r.Method == http.MethodGet && strings.HasPrefix(path, storagePrefix):
+		stored := strings.TrimPrefix(path, storagePrefix)
+		all := map[string][]string{}
+		if chart, ok := f.charts[f.paths[stored]]; ok {
+			all["chart.name"], all["chart.version"] = []string{chart[0]}, []string{chart[1]}
+		}
+		for k, v := range f.properties[stored] {
+			all[k] = []string{v}
+		}
+		props := map[string][]string{}
+		for _, key := range strings.Split(r.URL.Query().Get("properties"), ",") {
+			if v, ok := all[key]; ok {
+				props[key] = v
+			}
+		}
+		if len(props) == 0 {
 			http.Error(w, `{"errors":[{"status":404,"message":"No properties could be found."}]}`, http.StatusNotFound)
 			return
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"properties": map[string][]string{"chart.name": {chart[0]}, "chart.version": {chart[1]}}})
-	case r.Method == http.MethodDelete && strings.HasPrefix(r.URL.Path, repoPrefix):
-		delete(f.paths, strings.TrimPrefix(r.URL.Path, repoPrefix))
+		_ = json.NewEncoder(w).Encode(map[string]any{"properties": props})
+	case r.Method == http.MethodDelete && strings.HasPrefix(path, repoPrefix):
+		delete(f.paths, strings.TrimPrefix(path, repoPrefix))
 		w.WriteHeader(http.StatusNoContent)
-	case r.Method == http.MethodPut && strings.HasPrefix(r.URL.Path, repoPrefix):
-		path := strings.TrimPrefix(r.URL.Path, repoPrefix)
+	case r.Method == http.MethodPut && strings.HasPrefix(path, repoPrefix):
+		stored := strings.TrimPrefix(path, repoPrefix)
 		if req.deploy {
 			// Deploy by checksum succeeds only for content Artifactory already stores.
 			if !f.contents[req.checksum] {
 				http.NotFound(w, r)
 				return
 			}
-			f.paths[path] = req.checksum
+			f.store(stored, req.checksum, params)
 			w.WriteHeader(http.StatusCreated)
 			return
 		}
@@ -159,7 +208,7 @@ func (f *fakeArtifactory) handle(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		f.contents[digest] = true
-		f.paths[path] = digest
+		f.store(stored, digest, params)
 		w.WriteHeader(http.StatusCreated)
 	default:
 		http.Error(w, "unexpected request", http.StatusBadRequest)
@@ -194,7 +243,12 @@ func TestHelmRepositoryUpload_Transform_Artifactory(t *testing.T) {
 		chartPath   = "ocm.software/test/1.0.0/renamed-9.9.9.tgz"
 		putPath     = "/artifactory/helm-local/" + chartPath
 		storagePath = "/artifactory/api/storage/helm-local/" + chartPath
+		chartProps  = storagePath + "?properties=chart.name,chart.version"
 	)
+	owner := map[string]string{
+		"ocm.component.name": "ocm.software/test", "ocm.component.version": "1.0.0",
+		"ocm.resource.name": "renamed", "ocm.resource.version": "9.9.9",
+	}
 	source := func() *descriptorv2.Resource {
 		return &descriptorv2.Resource{
 			ElementMeta: descriptorv2.ElementMeta{Name: "renamed", Version: "9.9.9"},
@@ -230,7 +284,11 @@ func TestHelmRepositoryUpload_Transform_Artifactory(t *testing.T) {
 	methods := func(reqs []artifactoryRequest) []string {
 		var out []string
 		for _, req := range reqs {
-			out = append(out, req.method+" "+req.path)
+			target := req.path
+			if req.query != "" {
+				target += "?" + req.query
+			}
+			out = append(out, req.method+" "+target)
 		}
 		return out
 	}
@@ -250,10 +308,11 @@ func TestHelmRepositoryUpload_Transform_Artifactory(t *testing.T) {
 		r.NoError(err)
 
 		got := srv.recorded()
-		r.Equal([]string{"PUT " + putPath, "GET " + storagePath}, methods(got))
-		r.Equal("application/gzip", got[0].contentType)
-		r.Equal(chartTGZ, got[0].body)
-		r.Empty(got[0].checksum, "without a source digest there is no checksum to announce")
+		r.Equal([]string{"GET " + storagePath, "PUT " + putPath, "GET " + chartProps}, methods(got))
+		r.Equal("application/gzip", got[1].contentType)
+		r.Equal(chartTGZ, got[1].body)
+		r.Empty(got[1].checksum, "without a source digest there is no checksum to announce")
+		r.Equal(owner, got[1].properties, "the deploy records the owning resource as properties")
 
 		res := out.(*HelmRepositoryUploadTransformation).Output.Resource
 		r.Equal("renamed", res.Name)
@@ -271,9 +330,10 @@ func TestHelmRepositoryUpload_Transform_Artifactory(t *testing.T) {
 		_, err := transformerFor(notAChart, nil).Transform(t.Context(), step(srv.URL, source()))
 		r.ErrorContains(err, "is not a helm chart: artifactory recorded no chart name and version")
 		got := methods(srv.recorded())
-		r.Equal("PUT "+putPath, got[0])
-		r.Equal("GET "+storagePath, got[1])
-		r.Len(got, 2+chartMetadataAttempts, "properties are polled, then the file is deleted")
+		r.Equal("GET "+storagePath, got[0])
+		r.Equal("PUT "+putPath, got[1])
+		r.Equal("GET "+chartProps, got[2])
+		r.Len(got, 3+chartMetadataAttempts, "the location is checked, properties are polled, then the file is deleted")
 		r.Equal("DELETE "+putPath, got[len(got)-1])
 		r.False(srv.stored(chartPath))
 	})
@@ -304,7 +364,7 @@ func TestHelmRepositoryUpload_Transform_Artifactory(t *testing.T) {
 			}
 			r.NoError(err)
 			got := srv.recorded()
-			r.Len(got, 2, "PUT and property GET")
+			r.Len(got, 3, "file info GET, PUT and property GET")
 			for _, req := range got {
 				if tt.wantBasic != nil {
 					r.True(req.basic, "%s %s must use basic auth", req.method, req.path)
@@ -324,21 +384,19 @@ func TestHelmRepositoryUpload_Transform_Artifactory(t *testing.T) {
 		out, err := transformer(nil).Transform(t.Context(), step(srv.URL, res))
 		r.NoError(err)
 		got := srv.recorded()
-		r.Equal([]string{"PUT " + putPath, "PUT " + putPath, "GET " + storagePath}, methods(got))
-		r.True(got[0].deploy, "deploy by checksum is tried first")
-		r.Empty(got[0].body)
-		r.False(got[1].deploy)
-		r.Equal(chartDigest, got[1].checksum)
-		r.Equal(chartTGZ, got[1].body)
+		r.Equal([]string{"GET " + storagePath, "PUT " + putPath, "PUT " + putPath, "GET " + chartProps}, methods(got))
+		r.True(got[1].deploy, "deploy by checksum is tried first")
+		r.Empty(got[1].body)
+		r.False(got[2].deploy)
+		r.Equal(chartDigest, got[2].checksum)
+		r.Equal(chartTGZ, got[2].body)
 		r.Equal(res.Digest, out.(*HelmRepositoryUploadTransformation).Output.Resource.Digest)
 
-		// Artifactory now stores the chart, so a second transfer does not upload it again.
+		// The upload location now holds the chart, so a second transfer writes nothing.
 		out, err = transformer(nil).Transform(t.Context(), step(srv.URL, res))
 		r.NoError(err)
-		got = srv.recorded()[3:]
-		r.Equal([]string{"PUT " + putPath, "GET " + storagePath}, methods(got))
-		r.True(got[0].deploy)
-		r.Empty(got[0].body)
+		got = srv.recorded()[4:]
+		r.Equal([]string{"GET " + storagePath, "GET " + chartProps}, methods(got))
 		r.Equal("mychart:0.1.0", helmChart(r, out))
 		r.Equal(res.Digest, out.(*HelmRepositoryUploadTransformation).Output.Resource.Digest)
 	})
@@ -350,7 +408,7 @@ func TestHelmRepositoryUpload_Transform_Artifactory(t *testing.T) {
 		res.Digest = &descriptorv2.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: "genericBlobDigest/v1", Value: "0000"}
 		_, err := transformer(nil).Transform(t.Context(), step(srv.URL, res))
 		r.ErrorContains(err, "returned status 409")
-		r.Equal([]string{"PUT " + putPath, "PUT " + putPath}, methods(srv.recorded()), "deploy by checksum and the rejected upload, nothing else")
+		r.Equal([]string{"GET " + storagePath, "PUT " + putPath, "PUT " + putPath}, methods(srv.recorded()), "location check, deploy by checksum and the rejected upload, nothing else")
 		r.False(srv.stored(chartPath))
 	})
 
@@ -364,16 +422,76 @@ func TestHelmRepositoryUpload_Transform_Artifactory(t *testing.T) {
 		r.Empty(srv.recorded())
 	})
 
-	t.Run("extra identity gets its own path", func(t *testing.T) {
+	t.Run("extra identity gets its own path and property", func(t *testing.T) {
 		r := require.New(t)
 		srv := newFakeArtifactory(t, charts)
 		res := source()
-		res.ExtraIdentity = runtime.Identity{"arch": "arm64"}
+		res.ExtraIdentity = runtime.Identity{"arch": "arm64", "os": "linux"}
 		_, err := transformer(nil).Transform(t.Context(), step(srv.URL, res))
 		r.NoError(err)
-		put := srv.recorded()[0].path
-		r.True(strings.HasPrefix(put, "/artifactory/helm-local/ocm.software/test/1.0.0/renamed-9.9.9-"), put)
-		r.NotEqual(putPath, put)
+		put := srv.recorded()[1]
+		r.True(strings.HasPrefix(put.path, "/artifactory/helm-local/ocm.software/test/1.0.0/renamed-9.9.9-"), put.path)
+		r.NotEqual(putPath, put.path)
+		r.Equal("arch=arm64,os=linux", put.properties["ocm.resource.extraIdentity"], "separators survive the matrix parameter escaping")
+	})
+
+	t.Run("custom path", func(t *testing.T) {
+		r := require.New(t)
+		srv := newFakeArtifactory(t, charts)
+		s := step(srv.URL, source())
+		s.Spec.Path = "team a/charts/mychart.tgz"
+		out, err := transformer(nil).Transform(t.Context(), s)
+		r.NoError(err)
+		got := srv.recorded()
+		r.Equal("PUT /artifactory/helm-local/team a/charts/mychart.tgz", methods(got)[1])
+		r.Equal(owner, got[1].properties)
+		r.Equal("mychart:0.1.0", helmChart(r, out))
+	})
+
+	for _, path := range []string{"../other/mychart.tgz", "/abs/mychart.tgz", "a//mychart.tgz", "a/./mychart.tgz", `a\b.tgz`, "mychart.zip"} {
+		t.Run("invalid custom path "+path, func(t *testing.T) {
+			r := require.New(t)
+			srv := newFakeArtifactory(t, charts)
+			s := step(srv.URL, source())
+			s.Spec.Path = path
+			_, err := transformer(nil).Transform(t.Context(), s)
+			r.ErrorContains(err, "chart path")
+			r.Empty(srv.recorded())
+		})
+	}
+
+	t.Run("re-transfer of the same resource replaces its earlier upload", func(t *testing.T) {
+		r := require.New(t)
+		srv := newFakeArtifactory(t, charts)
+		_, err := transformer(nil).Transform(t.Context(), step(srv.URL, source()))
+		r.NoError(err)
+		_, err = transformer(nil).Transform(t.Context(), step(srv.URL, source()))
+		r.NoError(err)
+		r.Equal([]string{"GET " + storagePath, "GET " + storagePath + "?properties=ocm.component.name,ocm.component.version,ocm.resource.name,ocm.resource.version,ocm.resource.extraIdentity", "PUT " + putPath, "GET " + chartProps},
+			methods(srv.recorded()[3:]))
+	})
+
+	t.Run("a file stored for another resource is never overwritten", func(t *testing.T) {
+		const shared = "shared/mychart.tgz"
+		for name, props := range map[string]map[string]string{
+			"other component version": {"ocm.component.name": "ocm.software/test", "ocm.component.version": "2.0.0", "ocm.resource.name": "renamed", "ocm.resource.version": "9.9.9"},
+			"other extra identity":    {"ocm.component.name": "ocm.software/test", "ocm.component.version": "1.0.0", "ocm.resource.name": "renamed", "ocm.resource.version": "9.9.9", "ocm.resource.extraIdentity": "arch=arm64"},
+			"not uploaded by ocm":     nil,
+		} {
+			t.Run(name, func(t *testing.T) {
+				r := require.New(t)
+				srv := newFakeArtifactory(t, charts)
+				srv.store(shared, "0123", props)
+				s := step(srv.URL, source())
+				s.Spec.Path = shared
+				_, err := transformer(nil).Transform(t.Context(), s)
+				r.ErrorContains(err, "was not uploaded for this resource")
+				for _, m := range methods(srv.recorded()) {
+					r.NotContains(m, "PUT", "nothing may be written")
+				}
+				r.Equal("0123", srv.paths[shared])
+			})
+		}
 	})
 
 	t.Run("resource names cannot escape the component version path", func(t *testing.T) {
@@ -412,8 +530,8 @@ func TestHelmRepositoryUpload_Transform_Artifactory(t *testing.T) {
 		r.Equal("1.0.0", repo.version)
 		r.Equal(runtime.Identity{"name": "renamed", "version": "9.9.9"}, repo.identity)
 		got := srv.recorded()
-		r.Equal("PUT "+putPath, methods(got)[0])
-		r.Equal(chartTGZ, got[0].body)
+		r.Equal("PUT "+putPath, methods(got)[1])
+		r.Equal(chartTGZ, got[1].body)
 		r.Equal("mychart:0.1.0", helmChart(r, out))
 	})
 }

@@ -39,12 +39,16 @@ const (
 // one (as the helm downloader produces), or a helm chart OCI artifact (OCIImage and oci:// Helm
 // sources, LocalBlob sources stored by the helm input).
 //
-// Artifactory: the chart is deployed to
-// <url>/artifactory/<repository>/<component>/<component version>/<resource>-<resource version>.tgz
-// and published with helmRepository <url>/artifactory/api/helm/<repository>. Content Artifactory
-// does not recognize as a chart is deleted again. The target repository must not enforce chart
-// name and version in file names (Artifactory's Helm Enforce Layout), because the file name is
-// derived from the resource.
+// Artifactory: the chart is deployed to <url>/artifactory/<repository>/<path> and published with
+// helmRepository <url>/artifactory/api/helm/<repository>. path defaults to
+// <component>/<component version>/<resource>-<resource version>.tgz and can be overridden with
+// Path. The deployed file carries the properties ocm.component.name, ocm.component.version,
+// ocm.resource.name, ocm.resource.version and, for resources with one, ocm.resource.extraIdentity.
+// A file already stored at the path is only replaced when these properties name the same
+// resource of the same component version or it has the same content. Content Artifactory does
+// not recognize as a chart is deleted again. The target repository must not enforce chart name
+// and version in file names (Artifactory's Helm Enforce Layout), because the file name is not
+// derived from the chart.
 //
 // Nexus: the chart is uploaded to <url>/repository/<repository>/<resource>-<resource version>.tgz;
 // Nexus stores it under the path it derives from the chart (<name>-<version>.tgz) and the chart
@@ -80,6 +84,14 @@ type HelmUploaderConfig struct {
 	URL string `json:"url"`
 	// Repository is the name of the Helm (hosted) repository to upload into.
 	Repository string `json:"repository"`
+	// Path overrides where the chart is stored in an Artifactory repository, relative to the
+	// repository root, e.g. ${component.name + "/" + resource.name + "-" + resource.version + ".tgz"}.
+	// It is a literal or a CEL expression wrapped in ${...} over the source resource (resource)
+	// and its component (component: name, version, provider, ...). The result must consist of
+	// non-empty segments without . or .. and end in .tgz. Artifactory only: Nexus stores charts
+	// under a path derived from the chart. Defaults to
+	// <component>/<component version>/<resource>-<resource version>.tgz.
+	Path string `json:"path,omitempty"`
 }
 
 // Match reports whether this uploader applies to resource, delegating to the
@@ -91,9 +103,10 @@ func (u *HelmUploaderConfig) Match(resource descriptorv2.Resource, types TypeRes
 	return u.MatchSpec.Matches(resource, types)
 }
 
-// Validate rejects a non-matching Type, an unknown server, an empty match access type, a URL
-// that is not an absolute http(s) URL without query or fragment and a repository that is not a
-// single key. An empty Type is allowed for programmatically constructed configs.
+// Validate rejects a non-matching Type, an unknown server, a path for Nexus, an empty match
+// access type, a URL that is not an absolute http(s) URL without query or fragment and a
+// repository that is not a single key. An empty Type is allowed for programmatically
+// constructed configs.
 func (u *HelmUploaderConfig) Validate() error {
 	if u == nil {
 		return nil
@@ -110,6 +123,9 @@ func (u *HelmUploaderConfig) Validate() error {
 	case HelmRepositoryServerArtifactory, HelmRepositoryServerNexus:
 	default:
 		return fmt.Errorf("server must be %q or %q, got %q", HelmRepositoryServerArtifactory, HelmRepositoryServerNexus, u.Server)
+	}
+	if u.Server == HelmRepositoryServerNexus && u.Path != "" {
+		return fmt.Errorf("path is only supported for server %q", HelmRepositoryServerArtifactory)
 	}
 	if u.MatchSpec.AccessType.IsEmpty() {
 		return fmt.Errorf("match.accessType is required")

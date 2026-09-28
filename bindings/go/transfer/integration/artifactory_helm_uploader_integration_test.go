@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -362,6 +363,8 @@ func newFakeArtifactory(t *testing.T, chart []byte) *fakeArtifactory {
 
 func (f *fakeArtifactory) handle(w http.ResponseWriter, req *http.Request) {
 	const storagePrefix = "/artifactory/api/storage/helm-local/"
+	// Deploy matrix parameters (;key=value) set properties; they are not part of the path.
+	path, _, _ := strings.Cut(req.URL.Path, ";")
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	switch {
@@ -374,11 +377,21 @@ func (f *fakeArtifactory) handle(w http.ResponseWriter, req *http.Request) {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
-		f.files[req.URL.Path] = body
-		f.headers[req.URL.Path] = req.Header.Clone()
+		f.files[path] = body
+		f.headers[path] = req.Header.Clone()
 		w.WriteHeader(http.StatusCreated)
-	case req.Method == http.MethodGet && strings.HasPrefix(req.URL.Path, storagePrefix):
-		body, ok := f.files["/artifactory/helm-local/"+strings.TrimPrefix(req.URL.Path, storagePrefix)]
+	case req.Method == http.MethodGet && strings.HasPrefix(path, storagePrefix):
+		body, ok := f.files["/artifactory/helm-local/"+strings.TrimPrefix(path, storagePrefix)]
+		if !req.URL.Query().Has("properties") {
+			// File info: the location is free until a chart is deployed.
+			if !ok {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+			sum := sha256.Sum256(body)
+			_, _ = fmt.Fprintf(w, `{"checksums":{"sha256":%q}}`, hex.EncodeToString(sum[:]))
+			return
+		}
 		sum := sha256.Sum256(body)
 		if !ok || hex.EncodeToString(sum[:]) != f.chartSHA {
 			w.WriteHeader(http.StatusNotFound)
