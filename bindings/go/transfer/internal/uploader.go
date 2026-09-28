@@ -123,16 +123,20 @@ func templateString(value string, aliases map[string]string) (string, []string, 
 // it rewrites each ${expr} in place. Aliases are applied in sorted order so the result is
 // deterministic.
 func rewriteAliases(value string, exprValues []string, aliases map[string]string) string {
-	names := slices.Sorted(maps.Keys(aliases))
 	rewritten := value
 	for _, expr := range exprValues {
-		replaced := expr
-		for _, name := range names {
-			replaced = celparser.RewriteIdentifier(replaced, name, aliases[name])
-		}
-		rewritten = strings.ReplaceAll(rewritten, "${"+expr+"}", "${"+replaced+"}")
+		rewritten = strings.ReplaceAll(rewritten, "${"+expr+"}", "${"+rewriteExpression(expr, aliases)+"}")
 	}
 	return rewritten
+}
+
+// rewriteExpression rewrites every alias identifier in the CEL source expr, in sorted
+// alias order.
+func rewriteExpression(expr string, aliases map[string]string) string {
+	for _, name := range slices.Sorted(maps.Keys(aliases)) {
+		expr = celparser.RewriteIdentifier(expr, name, aliases[name])
+	}
+	return expr
 }
 
 // targetHostFromExpression best-effort extracts a display host from a raw targetURL

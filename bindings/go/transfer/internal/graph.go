@@ -236,8 +236,9 @@ func fillGraphDefinitionWithPrefetchedComponents(
 }
 
 // processResources iterates over resources in a v2 descriptor and creates the appropriate
-// transformations: the first matching uploader that applies to a resource wins; otherwise
-// get/add pairs are created based on access type and copy mode.
+// transformations: the first uploader whose match (static fields and when) selects a
+// resource handles it; otherwise get/add pairs are created based on access type and copy
+// mode.
 // It returns CEL spec-field expressions for all Get transformations that buffer content to disk.
 func processResources(
 	ctx context.Context,
@@ -255,7 +256,7 @@ func processResources(
 	version := val.Descriptor.Component.Version
 	resourceTransformIDs := make(map[int]string)
 	var fileExpressions []string
-	refEnv := &imageReferenceEnv{baseID: baseID, node: tgd.Environment.Data[baseID]}
+	env := &uploaderEnv{baseID: baseID, node: tgd.Environment.Data[baseID]}
 
 	for i, resource := range v2desc.Component.Resources {
 		access, err := scheme.NewObject(resource.Access.Type)
@@ -266,32 +267,42 @@ func processResources(
 			return nil, nil, fmt.Errorf("cannot convert resource access to typed object: %w", err)
 		}
 
-		// An uploader is an explicit instruction to move a matched resource, so it
-		// runs regardless of copy mode and takes precedence over the default handlers.
-		// Declaration order is significant: the first uploader that matches and applies
-		// wins, so more specific rules should precede broader ones. An uploader that
-		// matches but does not apply (e.g. an OCI uploader for a wget resource) falls
-		// through to the next uploader and finally to the default handling.
+		// An uploader is an explicit instruction to move a selected resource, so it runs
+		// regardless of copy mode and takes precedence over the default handlers.
+		// Declaration order is significant: the first uploader whose match (static fields
+		// and when) selects the resource handles it, so more specific rules should precede
+		// broader ones. A selected uploader that cannot handle the resource fails the build.
 		handled := false
-		for _, u := range uploaders {
-			if u == nil || !u.Match(resource) {
-				continue
-			}
-			var exprs []string
-			switch cfg := u.(type) {
-			case *transferv1alpha1.HTTPUploaderConfig:
-				err = processHTTPUploader(resource, cfg, baseID, id, val, tgd, resourceTransformIDs, i)
-				handled = err == nil
-			case *transferv1alpha1.OCIUploaderConfig:
-				handled, exprs, err = processOCIUploader(ctx, resource, access, cfg, refEnv, id, val, tgd, toSpec, resourceTransformIDs, i)
-			default:
-				return nil, nil, fmt.Errorf("unsupported uploader config type %T for resource %v", u, resource.ToIdentity())
-			}
+		if len(uploaders) > 0 {
+			aliases, err := uploaderAliases(env, i, access, resource, toSpec)
 			if err != nil {
-				return nil, nil, fmt.Errorf("cannot process uploader for resource %v: %w", resource.ToIdentity(), err)
+				return nil, nil, err
 			}
-			if handled {
+			for ui, u := range uploaders {
+				if u == nil || !u.Match(resource) {
+					continue
+				}
+				selected, err := whenMatches(u.MatchWhen(), aliases, env)
+				if err != nil {
+					return nil, nil, fmt.Errorf("uploader %d (%s) for resource %v: %w", ui, u.GetType(), resource.ToIdentity(), err)
+				}
+				if !selected {
+					continue
+				}
+				var exprs []string
+				switch cfg := u.(type) {
+				case *transferv1alpha1.HTTPUploaderConfig:
+					err = processHTTPUploader(resource, cfg, baseID, id, val, tgd, resourceTransformIDs, i)
+				case *transferv1alpha1.OCIUploaderConfig:
+					exprs, err = processOCIUploader(resource, access, cfg, aliases, env, id, val, tgd, toSpec, resourceTransformIDs, i)
+				default:
+					return nil, nil, fmt.Errorf("unsupported uploader config type %T for resource %v", u, resource.ToIdentity())
+				}
+				if err != nil {
+					return nil, nil, fmt.Errorf("cannot process uploader for resource %v: %w", resource.ToIdentity(), err)
+				}
 				fileExpressions = append(fileExpressions, exprs...)
+				handled = true
 				break
 			}
 		}

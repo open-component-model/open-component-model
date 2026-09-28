@@ -70,8 +70,9 @@ copy (and, when needed, transform) the resources it references; copied resources
 as local blobs in the target. To upload resources as separate OCI artifacts or to other
 custom targets, declare uploader configurations (e.g.
 oci.uploader.transfer.config.ocm.software/v1alpha1,
-http.uploader.transfer.config.ocm.software/v1alpha1) in the OCM configuration; a matching
-uploader applies regardless of --copy-resources. The former --upload-as flag is replaced by
+http.uploader.transfer.config.ocm.software/v1alpha1) in the OCM configuration; the first
+uploader whose match (including match.when) selects a resource handles it, regardless of
+--copy-resources. The former --upload-as flag is replaced by
 these uploader configurations (see the "Migrate from --upload-as to Uploader Configurations"
 guide on ocm.software). --recursive walks the component's references and transfers them too.
 

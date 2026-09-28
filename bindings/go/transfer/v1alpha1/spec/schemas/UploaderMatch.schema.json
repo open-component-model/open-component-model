@@ -4,7 +4,7 @@
   "$id": "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec/schemas/UploaderMatch.schema.json",
   "title": "UploaderMatch",
   "type": "object",
-  "description": "UploaderMatch selects resources by their access type and identity. A resource\nmatches when its access type matches AccessType (if set) and every specified\nidentity constraint (Name, Version, ExtraIdentity) also matches. This lets multiple\nuploaders target the same access type while routing different resources to\ndifferent upload targets; the first matching uploader (in declaration order) wins,\nso more specific rules should be declared before broader ones.",
+  "description": "UploaderMatch selects resources by their access type, identity and an optional CEL\npredicate. A resource matches when its access type matches AccessType (if set),\nevery specified identity constraint (Name, Version, ExtraIdentity) matches, and the\neffective When evaluates to true. This lets multiple uploaders target the same\naccess type while routing different resources to different upload targets; the\nfirst matching uploader (in declaration order) handles the resource, so more\nspecific rules should be declared before broader ones.",
   "properties": {
     "accessType": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",
@@ -21,6 +21,10 @@
     "version": {
       "type": "string",
       "description": "Version optionally restricts the match to resources with this exact\nversion. When empty, resources of any version match."
+    },
+    "when": {
+      "type": "string",
+      "description": "When is a CEL boolean expression that further restricts the match. It sees\n`resource` (dynamically typed), `accessType` (canonical access type name) and\n`target` (the transfer target as a map with `type`). When empty, the uploader\ntype's default applies (see its MatchWhen). An explicit value replaces the default."
     }
   },
   "additionalProperties": false,

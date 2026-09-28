@@ -146,6 +146,23 @@ configurations:
 		r.False(byName.Match(resourceWithIdentity("other", "1.0.0", nil)))
 	})
 
+	t.Run("match.when is decoded", func(t *testing.T) {
+		r := require.New(t)
+		generic := decode(t, `
+type: generic.config.ocm.software/v1
+configurations:
+  - type: oci.uploader.transfer.config.ocm.software/v1alpha1
+    match:
+      name: x
+      when: accessType == "OCIImage"
+`)
+		uploaders, err := spec.LookupUploaderConfigs(generic)
+		r.NoError(err)
+		r.Len(uploaders, 1)
+		r.Equal(`accessType == "OCIImage"`, uploaders[0].(*spec.OCIUploaderConfig).MatchSpec.When)
+		r.Equal(`accessType == "OCIImage"`, uploaders[0].MatchWhen())
+	})
+
 	t.Run("unknown uploader field is rejected", func(t *testing.T) {
 		generic := decode(t, `
 type: generic.config.ocm.software/v1
@@ -160,6 +177,25 @@ configurations:
 		_, err := spec.LookupUploaderConfigs(generic)
 		require.ErrorContains(t, err, `unknown field "headers"`)
 	})
+}
+
+func TestUploaderConfig_MatchWhen(t *testing.T) {
+	const when = `accessType == "Helm"`
+	for _, tc := range []struct {
+		name     string
+		uploader spec.UploaderConfig
+		want     string
+	}{
+		{"oci without match uses the default", &spec.OCIUploaderConfig{}, spec.DefaultOCIUploaderWhen},
+		{"oci with static match only uses the default", &spec.OCIUploaderConfig{MatchSpec: &spec.UploaderMatch{Name: "x"}}, spec.DefaultOCIUploaderWhen},
+		{"oci with when replaces the default", &spec.OCIUploaderConfig{MatchSpec: &spec.UploaderMatch{When: when}}, when},
+		{"http with when", &spec.HTTPUploaderConfig{MatchSpec: spec.UploaderMatch{When: when}}, when},
+		{"http without when has no predicate", &spec.HTTPUploaderConfig{}, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			require.New(t).Equal(tc.want, tc.uploader.MatchWhen())
+		})
+	}
 }
 
 func TestHTTPUploaderConfig_Validate(t *testing.T) {

@@ -19,9 +19,10 @@ import (
 // fields resolve to the defaults: no recursion and
 // [transferv1alpha1.CopyModeLocalBlobResources].
 //
-// uploaders are applied in declaration order: the first uploader that matches
-// a resource and applies to it wins; otherwise the resource follows the
-// default handling for cfg.
+// uploaders are evaluated in declaration order: the first uploader whose match
+// (static fields and match.when) selects a resource handles it, and a selected
+// uploader that cannot handle the resource fails the build; a resource no
+// uploader selects follows the default handling for cfg.
 //
 // Each [Mapping] pairs source components with a target repository and a
 // resolver, enabling N:M routing where different sources feed different

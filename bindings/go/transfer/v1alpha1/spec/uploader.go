@@ -29,12 +29,17 @@ func init() {
 // transformer.
 //
 // All uploader configurations are extracted from the central generic config with
-// [LookupUploaderConfigs], which preserves declaration order: the first uploader that
-// matches a resource and applies to it wins.
+// [LookupUploaderConfigs], which preserves declaration order: the first uploader whose
+// match (static fields and when) selects a resource handles it. A selected uploader
+// that cannot handle the resource fails the transfer; there is no fall-through to
+// later uploaders.
 type UploaderConfig interface {
 	runtime.Typed
-	// GetMatch returns the rule selecting the resources this uploader applies to.
-	GetMatch() UploaderMatch
+	// Match reports whether the static match fields of this uploader select resource.
+	Match(resource descriptorv2.Resource) bool
+	// MatchWhen returns the effective match.when predicate: the configured one, or the
+	// type's default; "" means no predicate.
+	MatchWhen() string
 	// Validate reports whether the configuration is well-formed.
 	Validate() error
 }
@@ -74,8 +79,8 @@ type HTTPUploaderConfig struct {
 	// +ocm:jsonschema-gen:enum:deprecated=http.uploader.transfer.config.ocm.software
 	Type runtime.Type `json:"type"`
 
-	// MatchSpec selects the resources this uploader applies to. It is exposed as the
-	// `match` field.
+	// MatchSpec selects the resources this uploader handles. It is exposed as the
+	// `match` field; the Go field is named MatchSpec so the type can offer a Match method.
 	MatchSpec UploaderMatch `json:"match"`
 
 	// TargetURL is a standalone CEL expression wrapped in ${...} (referencing the
@@ -93,12 +98,13 @@ type HTTPUploaderConfig struct {
 	MediaType string `json:"mediaType,omitempty"`
 }
 
-// UploaderMatch selects resources by their access type and identity. A resource
-// matches when its access type matches AccessType (if set) and every specified
-// identity constraint (Name, Version, ExtraIdentity) also matches. This lets multiple
-// uploaders target the same access type while routing different resources to
-// different upload targets; the first matching uploader (in declaration order) wins,
-// so more specific rules should be declared before broader ones.
+// UploaderMatch selects resources by their access type, identity and an optional CEL
+// predicate. A resource matches when its access type matches AccessType (if set),
+// every specified identity constraint (Name, Version, ExtraIdentity) matches, and the
+// effective When evaluates to true. This lets multiple uploaders target the same
+// access type while routing different resources to different upload targets; the
+// first matching uploader (in declaration order) handles the resource, so more
+// specific rules should be declared before broader ones.
 //
 // +k8s:deepcopy-gen=true
 // +ocm:jsonschema-gen=true
@@ -117,9 +123,15 @@ type UploaderMatch struct {
 	// contains all of these key/value pairs. When empty, no extra-identity
 	// constraint is applied.
 	ExtraIdentity runtime.Identity `json:"extraIdentity,omitempty"`
+	// When is a CEL boolean expression that further restricts the match. It sees
+	// `resource` (dynamically typed), `accessType` (canonical access type name) and
+	// `target` (the transfer target as a map with `type`). When empty, the uploader
+	// type's default applies (see its MatchWhen). An explicit value replaces the default.
+	When string `json:"when,omitempty"`
 }
 
-// Matches reports whether resource satisfies this match. A set access type must match:
+// Matches reports whether resource satisfies the static fields of this match; When is
+// evaluated by the transfer. A set access type must match:
 // when the rule specifies a version (Wget/v1) it must equal the resource access type
 // exactly; an unversioned rule (Wget) matches any version by name. The identity
 // constraint (optional Name, Version plus ExtraIdentity) is a subset match against the
@@ -207,8 +219,23 @@ func (u *HTTPUploaderConfig) Validate() error {
 	return nil
 }
 
-// GetMatch returns MatchSpec. It implements [UploaderConfig].
-func (u *HTTPUploaderConfig) GetMatch() UploaderMatch { return u.MatchSpec }
+// Match reports whether the static match fields select resource, delegating to the
+// configured [UploaderMatch]. It implements [UploaderConfig].
+func (u *HTTPUploaderConfig) Match(resource descriptorv2.Resource) bool {
+	if u == nil {
+		return false
+	}
+	return u.MatchSpec.Matches(resource)
+}
+
+// MatchWhen returns the configured match.when; HTTP uploaders have no default
+// predicate. It implements [UploaderConfig].
+func (u *HTTPUploaderConfig) MatchWhen() string {
+	if u == nil {
+		return ""
+	}
+	return u.MatchSpec.When
+}
 
 // LookupUploaderConfigs extracts all uploader configurations from a central generic
 // config. It walks the config entries in declaration order and recognizes an entry as

@@ -1,0 +1,373 @@
+package internal
+
+import (
+	"encoding/json"
+	"fmt"
+	"strings"
+	"testing"
+
+	ocispecv1 "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/stretchr/testify/require"
+
+	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
+	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	ociv1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
+	"ocm.software/open-component-model/bindings/go/runtime"
+	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
+	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
+	wgetv1alpha1 "ocm.software/open-component-model/bindings/go/wget/transformation/spec/v1alpha1"
+)
+
+// examplesResources returns the fixture resources of the documented uploader selection
+// examples (website/content/docs/reference/transfer-configuration.md, "Selection
+// examples").
+func examplesResources() []descriptor.Resource {
+	app := ociImageResource("app", "1.0.0", "ghcr.io/acme/app:1.0.0")
+	app.Labels = []descriptor.Label{{Name: "ocm.software/transfer", Value: json.RawMessage(`"oci"`)}}
+
+	bundle := dockerManifestLocalBlobResource("bundle", "1.0.0")
+	bundleAccess := bundle.Access.(*descriptorv2.LocalBlob)
+	bundleAccess.MediaType = ocispecv1.MediaTypeImageManifest
+	bundleAccess.ReferenceName = "acme/bundle:1.0.0"
+
+	return []descriptor.Resource{
+		app,
+		ociImageResource("nginx", "1.0.0", "docker.io/library/nginx:1.25"),
+		helmResource("chart", "1.0.0", "https://charts.acme.io/stable", "app"),
+		bundle,
+		localBlobResource("notes", "1.0.0"),
+		wgetResource("docs", "1.0.0", "https://docs.acme.io/guide.tar"),
+	}
+}
+
+// examplesResource returns the named fixture resource.
+func examplesResource(t *testing.T, name string) descriptor.Resource {
+	t.Helper()
+	for _, res := range examplesResources() {
+		if res.Name == name {
+			return res
+		}
+	}
+	t.Fatalf("no example resource %q", name)
+	return descriptor.Resource{}
+}
+
+// indentBlock indents every line of s by n spaces, for embedding s in a YAML block scalar.
+func indentBlock(s string, n int) string {
+	pad := strings.Repeat(" ", n)
+	return pad + strings.ReplaceAll(s, "\n", "\n"+pad)
+}
+
+// uploaderOutcomes classifies what the graph does with each resource: "oci <ref>" for an
+// OCI artifact push (ref evaluated), "local blob" for an embedded local resource, "http"
+// for an HTTP upload, and "by reference" when no transformation handles the resource.
+func uploaderOutcomes(t *testing.T, tgd *transformv1alpha1.TransformationGraphDefinition, resources []descriptor.Resource) map[string]string {
+	t.Helper()
+	addOCIArtifact := runtime.NewVersionedType(ociv1alpha1.AddOCIArtifactType, ociv1alpha1.Version)
+	got := make(map[string]string, len(resources))
+	for _, res := range resources {
+		resourceID := identityToTransformationID(res.ToIdentity())
+		outcome := "by reference"
+		for _, tr := range tgd.Transformations {
+			if !strings.HasSuffix(tr.ID, resourceID) {
+				continue
+			}
+			switch tr.Type {
+			case ociv1alpha1.TransferOCIArtifactV1alpha1, addOCIArtifact:
+				outcome = "oci " + evaluateTemplate(t, tgd, specImageReference(t, tr))
+			case ociv1alpha1.OCIAddLocalResourceV1alpha1, ociv1alpha1.CTFAddLocalResourceV1alpha1:
+				outcome = "local blob"
+			case wgetv1alpha1.HTTPStreamingV1alpha1:
+				outcome = "http"
+			}
+		}
+		got[res.Name] = outcome
+	}
+	return got
+}
+
+// TestUploaderExamples executes the documented uploader selection examples: each config
+// must produce exactly the documented outcome per resource, or the documented error.
+func TestUploaderExamples(t *testing.T) {
+	const ociTarget = "ghcr.io/target-org/ocm"
+	ctf := func(t *testing.T) runtime.Typed { return testCTFRepo(t.TempDir()) }
+	oci := func(*testing.T) runtime.Typed { return testOCIRepo(ociTarget) }
+
+	e1 := map[string]string{
+		"app":    "oci ghcr.io/target-org/ocm/acme/app:1.0.0",
+		"nginx":  "oci ghcr.io/target-org/ocm/library/nginx:1.25",
+		"chart":  "oci ghcr.io/target-org/ocm/stable/app:1.0.0",
+		"bundle": "oci ghcr.io/target-org/ocm/acme/bundle:1.0.0",
+		"notes":  "local blob",
+		"docs":   "by reference",
+	}
+
+	tests := []struct {
+		name       string
+		configYAML string
+		target     func(t *testing.T) runtime.Typed
+		// resources defaults to examplesResources().
+		resources []string
+		want      map[string]string
+		wantErr   string
+	}{
+		{
+			name: "E1 default OCI uploader",
+			configYAML: `
+type: generic.config.ocm.software/v1
+configurations:
+  - type: oci.uploader.transfer.config.ocm.software/v1alpha1
+`,
+			target: oci,
+			want:   e1,
+		},
+		{
+			name: "E2 the same with every default spelled out",
+			configYAML: fmt.Sprintf(`
+type: generic.config.ocm.software/v1
+configurations:
+  - type: oci.uploader.transfer.config.ocm.software/v1alpha1
+    match:
+      when: |-
+%s
+    imageReference: |-
+%s
+`, indentBlock(transferv1alpha1.DefaultOCIUploaderWhen, 8), indentBlock(transferv1alpha1.DefaultOCIImageReference, 6)),
+			target: oci,
+			want:   e1,
+		},
+		{
+			name: "E3 Helm charts only",
+			configYAML: `
+type: generic.config.ocm.software/v1
+configurations:
+  - type: oci.uploader.transfer.config.ocm.software/v1alpha1
+    match:
+      when: target.type == "OCIRepository" && accessType == "Helm"
+`,
+			target: oci,
+			want: map[string]string{
+				"app":    "by reference",
+				"nginx":  "by reference",
+				"chart":  "oci ghcr.io/target-org/ocm/stable/app:1.0.0",
+				"bundle": "local blob",
+				"notes":  "local blob",
+				"docs":   "by reference",
+			},
+		},
+		{
+			name: "E4 OCI-manifest local blobs only",
+			configYAML: `
+type: generic.config.ocm.software/v1
+configurations:
+  - type: oci.uploader.transfer.config.ocm.software/v1alpha1
+    match:
+      when: >-
+        target.type == "OCIRepository"
+        && accessType == "LocalBlob"
+        && isOCIManifest(resource.access.mediaType)
+        && has(resource.access.referenceName)
+`,
+			target: oci,
+			want: map[string]string{
+				"app":    "by reference",
+				"nginx":  "by reference",
+				"chart":  "by reference",
+				"bundle": "oci ghcr.io/target-org/ocm/acme/bundle:1.0.0",
+				"notes":  "local blob",
+				"docs":   "by reference",
+			},
+		},
+		{
+			name: "E5 only images from Docker Hub",
+			configYAML: `
+type: generic.config.ocm.software/v1
+configurations:
+  - type: oci.uploader.transfer.config.ocm.software/v1alpha1
+    match:
+      when: >-
+        target.type == "OCIRepository"
+        && accessType == "OCIImage"
+        && resource.access.toOCI().host.endsWith("docker.io")
+`,
+			target: oci,
+			want: map[string]string{
+				"app":    "by reference",
+				"nginx":  "oci ghcr.io/target-org/ocm/library/nginx:1.25",
+				"chart":  "by reference",
+				"bundle": "local blob",
+				"notes":  "local blob",
+				"docs":   "by reference",
+			},
+		},
+		{
+			name: "E6 select by label",
+			configYAML: `
+type: generic.config.ocm.software/v1
+configurations:
+  - type: oci.uploader.transfer.config.ocm.software/v1alpha1
+    match:
+      when: >-
+        target.type == "OCIRepository"
+        && accessType == "OCIImage"
+        && has(resource.labels)
+        && resource.labels.exists(l, l.name == "ocm.software/transfer" && l.value == "oci")
+`,
+			target: oci,
+			want: map[string]string{
+				"app":    "oci ghcr.io/target-org/ocm/acme/app:1.0.0",
+				"nginx":  "by reference",
+				"chart":  "by reference",
+				"bundle": "local blob",
+				"notes":  "local blob",
+				"docs":   "by reference",
+			},
+		},
+		{
+			name: "E7 CTF target, images mirrored to a registry",
+			configYAML: `
+type: generic.config.ocm.software/v1
+configurations:
+  - type: oci.uploader.transfer.config.ocm.software/v1alpha1
+    match:
+      when: accessType == "OCIImage"
+    imageReference: '${"registry.example.com/mirror/" + resource.access.toOCI().repository + ":" + resource.access.toOCI().tag}'
+`,
+			target: ctf,
+			want: map[string]string{
+				"app":    "oci registry.example.com/mirror/acme/app:1.0.0",
+				"nginx":  "oci registry.example.com/mirror/library/nginx:1.25",
+				"chart":  "by reference",
+				"bundle": "local blob",
+				"notes":  "local blob",
+				"docs":   "by reference",
+			},
+		},
+		{
+			name: "E8 relocate one resource, default for the rest",
+			configYAML: `
+type: generic.config.ocm.software/v1
+configurations:
+  - type: oci.uploader.transfer.config.ocm.software/v1alpha1
+    match:
+      name: app
+    imageReference: ghcr.io/target-org/special/app:1.0.0
+  - type: oci.uploader.transfer.config.ocm.software/v1alpha1
+`,
+			target: oci,
+			want: map[string]string{
+				"app":    "oci ghcr.io/target-org/special/app:1.0.0",
+				"nginx":  e1["nginx"],
+				"chart":  e1["chart"],
+				"bundle": e1["bundle"],
+				"notes":  e1["notes"],
+				"docs":   e1["docs"],
+			},
+		},
+		{
+			name: "E9 selected access type the OCI uploader cannot upload",
+			configYAML: `
+type: generic.config.ocm.software/v1
+configurations:
+  - type: oci.uploader.transfer.config.ocm.software/v1alpha1
+    match:
+      when: accessType == "Wget"
+`,
+			target:    oci,
+			resources: []string{"docs"},
+			wantErr:   "oci uploader cannot upload access type Wget/v1",
+		},
+		{
+			name: "E9 selected local blob that is not an OCI manifest",
+			configYAML: `
+type: generic.config.ocm.software/v1
+configurations:
+  - type: oci.uploader.transfer.config.ocm.software/v1alpha1
+    match:
+      when: accessType == "LocalBlob"
+`,
+			target:    oci,
+			resources: []string{"notes"},
+			wantErr:   "not an OCI manifest",
+		},
+		{
+			name: "E9 when that does not compile",
+			configYAML: `
+type: generic.config.ocm.software/v1
+configurations:
+  - type: oci.uploader.transfer.config.ocm.software/v1alpha1
+    match:
+      when: accessType ==
+`,
+			target:    oci,
+			resources: []string{"app"},
+			wantErr:   "invalid match.when",
+		},
+		{
+			name: "E9 when that is not a bool",
+			configYAML: `
+type: generic.config.ocm.software/v1
+configurations:
+  - type: oci.uploader.transfer.config.ocm.software/v1alpha1
+    match:
+      when: '"yes"'
+`,
+			target:    oci,
+			resources: []string{"app"},
+			wantErr:   "must evaluate to a bool",
+		},
+		{
+			name: "E9 default imageReference on a CTF target",
+			configYAML: `
+type: generic.config.ocm.software/v1
+configurations:
+  - type: oci.uploader.transfer.config.ocm.software/v1alpha1
+    match:
+      when: accessType == "OCIImage"
+`,
+			target:    ctf,
+			resources: []string{"app"},
+			wantErr:   "imageReference does not evaluate",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+
+			var generic genericv1.Config
+			r.NoError(genericv1.Scheme.Decode(strings.NewReader(tc.configYAML), &generic))
+			cfg, err := transferv1alpha1.LookupConfig(&generic)
+			r.NoError(err)
+			if cfg == nil {
+				cfg = &transferv1alpha1.Config{}
+			}
+			if cfg.CopyMode == "" {
+				cfg.CopyMode = transferv1alpha1.CopyModeLocalBlobResources
+			}
+			uploaders, err := transferv1alpha1.LookupUploaderConfigs(&generic)
+			r.NoError(err)
+
+			resources := examplesResources()
+			if tc.resources != nil {
+				resources = nil
+				for _, name := range tc.resources {
+					resources = append(resources, examplesResource(t, name))
+				}
+			}
+
+			desc := testDescriptor("ocm.software/demo", "1.0.0", resources, nil)
+			resolver := testResolverFor("ocm.software/demo", "1.0.0", testOCIRepo("ghcr.io/source"), desc)
+			roots := testTransferRoots("ocm.software/demo", "1.0.0", tc.target(t), resolver)
+
+			tgd, err := BuildGraphDefinition(t.Context(), roots, *cfg, uploaders)
+			if tc.wantErr != "" {
+				r.ErrorContains(err, tc.wantErr)
+				return
+			}
+			r.NoError(err)
+			r.Equal(tc.want, uploaderOutcomes(t, tgd, resources))
+		})
+	}
+}

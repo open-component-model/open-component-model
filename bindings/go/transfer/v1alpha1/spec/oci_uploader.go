@@ -31,6 +31,17 @@ const DefaultOCIImageReference = `${target.baseUrl
       : resource.access.toOCI().repository
         + (resource.access.toOCI().tag == "" ? "" : ":" + resource.access.toOCI().tag))}`
 
+// DefaultOCIUploaderWhen is the match.when an [OCIUploaderConfig] uses when none is
+// set: OCI registry targets only; OCI images, Helm charts, and local blobs that hold an
+// OCI manifest and have a referenceName.
+//
+// Writing it explicitly into a config is equivalent to omitting match.when.
+const DefaultOCIUploaderWhen = `target.type == "OCIRepository"
+  && (accessType in ["OCIImage", "Helm"]
+    || (accessType == "LocalBlob"
+      && isOCIManifest(resource.access.mediaType)
+      && has(resource.access.referenceName)))`
+
 func init() {
 	Scheme.MustRegisterWithAlias(&OCIUploaderConfig{},
 		runtime.NewVersionedType(OCIUploaderConfigType, Version),
@@ -44,13 +55,12 @@ func init() {
 // extracted with [LookupUploaderConfigs]. Each entry is an independent rule; entries
 // are not merged.
 //
-// The uploader applies to OCI image and Helm chart resources and to local blobs that
-// hold an OCI manifest. ImageReference is a CEL template; when omitted,
-// [DefaultOCIImageReference] is used. The template is evaluated for each matched
-// resource while the transfer graph is built: the uploader applies only if it
-// evaluates, e.g. `target` requires an OCI registry target and
-// resource.access.referenceName requires a local blob that has one. Otherwise the
-// resource falls through to the next uploader and finally to the default handling.
+// The uploader handles the resources its match selects; without match.when it uses
+// [DefaultOCIUploaderWhen]. ImageReference is a CEL template; when omitted,
+// [DefaultOCIImageReference] is used. The template is evaluated for each selected
+// resource while the transfer graph is built. A selected resource the uploader cannot
+// upload (an access type other than OCI image, Helm chart or OCI-manifest local blob),
+// or whose ImageReference does not evaluate, fails the transfer.
 //
 //	type: generic.config.ocm.software/v1
 //	configurations:
@@ -59,8 +69,8 @@ func init() {
 //	    match:
 //	      name: my-image
 //	    imageReference: '${"ghcr.io/mirror/" + resource.access.toOCI().repository + ":" + resource.access.toOCI().tag}'
-//	  # upload every other applicable resource next to the component version
-//	  # (imageReference omitted: DefaultOCIImageReference)
+//	  # upload every other resource the default match.when selects next to the
+//	  # component version (imageReference omitted: DefaultOCIImageReference)
 //	  - type: oci.uploader.transfer.config.ocm.software/v1alpha1
 //
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
@@ -72,8 +82,8 @@ type OCIUploaderConfig struct {
 	// +ocm:jsonschema-gen:enum:deprecated=oci.uploader.transfer.config.ocm.software
 	Type runtime.Type `json:"type"`
 
-	// MatchSpec optionally restricts the resources this uploader applies to; when
-	// omitted every resource matches. It is exposed as the `match` field; the Go field
+	// MatchSpec optionally restricts the resources this uploader selects; when omitted,
+	// the default match.when (DefaultOCIUploaderWhen) alone selects. It is exposed as the `match` field; the Go field
 	// is named MatchSpec so the type can offer a Match method.
 	MatchSpec *UploaderMatch `json:"match,omitempty"`
 
@@ -81,8 +91,10 @@ type OCIUploaderConfig struct {
 	// (or a plain literal). `resource` is the source resource; its fields are accessed
 	// dynamically, so has() tests for fields of any access type, and
 	// resource.access.toOCI() splits an OCI image access into host, registry,
-	// repository, tag, digest and reference. `target` is the OCI registry target with
-	// baseUrl and subPath. When empty, it defaults to DefaultOCIImageReference.
+	// repository, tag, digest and reference. `accessType` is the canonical access type
+	// name. `target` is the transfer target: an OCI registry has type, baseUrl and
+	// subPath; a CTF archive has type and filePath. When empty, it defaults to
+	// DefaultOCIImageReference.
 	ImageReference string `json:"imageReference,omitempty"`
 }
 
@@ -102,7 +114,7 @@ func (u *OCIUploaderConfig) Validate() error {
 	return nil
 }
 
-// Match reports whether this uploader applies to resource. Without a match every
+// Match reports whether the static match fields select resource. Without a match every
 // resource with an access matches. It implements [UploaderConfig].
 func (u *OCIUploaderConfig) Match(resource descriptorv2.Resource) bool {
 	if u == nil || resource.Access == nil {
@@ -112,4 +124,16 @@ func (u *OCIUploaderConfig) Match(resource descriptorv2.Resource) bool {
 		return true
 	}
 	return u.MatchSpec.Matches(resource)
+}
+
+// MatchWhen returns the configured match.when, or [DefaultOCIUploaderWhen]. It
+// implements [UploaderConfig].
+func (u *OCIUploaderConfig) MatchWhen() string {
+	if u == nil {
+		return ""
+	}
+	if u.MatchSpec != nil && u.MatchSpec.When != "" {
+		return u.MatchSpec.When
+	}
+	return DefaultOCIUploaderWhen
 }
