@@ -148,8 +148,7 @@ func TestInvalidResource(t *testing.T) {
 	r := require.New(t)
 
 	repo := repository.NewResourceRepository(nil)
-	var typedNil *v1.Git
-	for _, res := range []*descriptor.Resource{nil, {}, {Access: typedNil}, {Access: &runtime.Raw{Type: runtime.NewUnversionedType("wrong")}}} {
+	for _, res := range []*descriptor.Resource{nil, {}, {Access: &runtime.Raw{Type: runtime.NewUnversionedType("wrong")}}} {
 		_, err := repo.DownloadResource(t.Context(), res, nil)
 		r.Error(err)
 

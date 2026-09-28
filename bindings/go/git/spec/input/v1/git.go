@@ -7,10 +7,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-const (
-	Type = "git"
-)
-
 // Git describes a repository snapshot archived during component construction
 // and stored as a local blob in the component version.
 //
@@ -19,10 +15,8 @@ const (
 // +ocm:typegen=true
 // +ocm:jsonschema-gen=true
 type Git struct {
-	// +ocm:jsonschema-gen:enum=git/v1
-	// +ocm:jsonschema-gen:enum:deprecated=git
-	// +ocm:jsonschema-gen:enum:deprecated=Git
-	// +ocm:jsonschema-gen:enum:deprecated=Git/v1
+	// +ocm:jsonschema-gen:enum=Git/v1,Git
+	// +ocm:jsonschema-gen:enum:deprecated=git,git/v1alpha1,Git/v1alpha1
 	Type runtime.Type `json:"type"`
 
 	// Repository is the Git repository URL.

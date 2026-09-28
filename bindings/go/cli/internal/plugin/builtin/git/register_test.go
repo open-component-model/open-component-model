@@ -12,12 +12,15 @@ import (
 
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	gitinput "ocm.software/open-component-model/bindings/go/git/input"
 	gitrepository "ocm.software/open-component-model/bindings/go/git/repository"
 	accessv1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
 	gitcreds "ocm.software/open-component-model/bindings/go/git/spec/credentials"
+	inputv1 "ocm.software/open-component-model/bindings/go/git/spec/input/v1"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/credentialtyperepository"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/digestprocessor"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/input"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/resource"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -27,16 +30,32 @@ func TestRegister(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 
+	inputs := input.NewInputRepositoryRegistry(ctx)
 	resources := resource.NewResourceRegistry(ctx)
 	credentialTypes := credentialtyperepository.NewCredentialTypeRegistry(ctx)
 	maxRetries := -1
+	tempFolder := t.TempDir()
+	httpConfig := &httpv1alpha1.Config{Retry: &httpv1alpha1.RetryConfig{MaxRetries: &maxRetries}}
 	r.NoError(Register(
+		inputs,
 		resources,
 		digestprocessor.NewDigestProcessorRegistry(ctx),
 		credentialTypes,
-		&filesystemv1alpha1.Config{},
-		&httpv1alpha1.Config{Retry: &httpv1alpha1.RetryConfig{MaxRetries: &maxRetries}},
+		&filesystemv1alpha1.Config{TempFolder: &tempFolder},
+		httpConfig,
 	))
+
+	for _, typ := range []runtime.Type{
+		runtime.NewVersionedType(inputv1.Type, inputv1.Version),
+		runtime.NewUnversionedType(inputv1.LegacyType),
+	} {
+		plugin, err := inputs.GetResourceInputPlugin(ctx, &inputv1.Git{Type: typ, Repository: "https://example.com/repo.git"})
+		r.NoError(err, typ.String())
+		method, ok := plugin.(*gitinput.InputMethod)
+		r.True(ok, "expected the built-in git input method, got %T", plugin)
+		r.Equal(tempFolder, method.TempFolder)
+		r.Same(httpConfig, method.HTTPConfig)
+	}
 
 	for typ, aliases := range gitcreds.Scheme.GetTypes() {
 		r.True(credentialTypes.GetCredentialTypeScheme().IsRegistered(typ), typ.String())

@@ -22,7 +22,10 @@
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",
       "oneOf": [
         {
-          "const": "git/v1"
+          "const": "Git/v1"
+        },
+        {
+          "const": "Git"
         },
         {
           "deprecated": true,
@@ -30,11 +33,11 @@
         },
         {
           "deprecated": true,
-          "const": "Git"
+          "const": "git/v1alpha1"
         },
         {
           "deprecated": true,
-          "const": "Git/v1"
+          "const": "Git/v1alpha1"
         }
       ]
     }

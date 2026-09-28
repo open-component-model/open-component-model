@@ -14,9 +14,10 @@ import (
 	"ocm.software/open-component-model/bindings/go/git/input"
 	inputspec "ocm.software/open-component-model/bindings/go/git/spec/input"
 	inputv1 "ocm.software/open-component-model/bindings/go/git/spec/input/v1"
+	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 )
 
-func TestProcessResourceUsesHTTPClient(t *testing.T) {
+func TestProcessResourceUsesHTTPConfig(t *testing.T) {
 	r := require.New(t)
 	var reached atomic.Bool
 	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, req *http.Request) {
@@ -26,7 +27,7 @@ func TestProcessResourceUsesHTTPClient(t *testing.T) {
 	t.Cleanup(server.Close)
 	method := &input.InputMethod{
 		TempFolder: t.TempDir(),
-		HTTPClient: &http.Client{Timeout: 100 * time.Millisecond},
+		HTTPConfig: &httpv1alpha1.Config{TimeoutConfig: httpv1alpha1.TimeoutConfig{Timeout: httpv1alpha1.NewTimeout(100 * time.Millisecond)}},
 	}
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()

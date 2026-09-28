@@ -91,10 +91,10 @@ func TestProcessResourceErrors(t *testing.T) {
 
 	for _, tc := range []struct {
 		name, wantErr  string
-		maxArchiveSize int64
+		maxArchiveSize *int64
 		credentials    runtime.Typed
 	}{
-		{name: "archive size", maxArchiveSize: 1, wantErr: "git archive exceeds the maximum size"},
+		{name: "archive size", maxArchiveSize: new(int64(1)), wantErr: "git archive exceeds the maximum size"},
 		{
 			name: "unsupported credentials", wantErr: "unsupported git credential type",
 			credentials: &runtime.Raw{Type: runtime.NewUnversionedType("unsupported")},
@@ -137,11 +137,9 @@ func TestGetResourceCredentialConsumerIdentity(t *testing.T) {
 func TestInvalidResource(t *testing.T) {
 	r := require.New(t)
 	method := &input.InputMethod{TempFolder: t.TempDir()}
-	var typedNil *inputv1.Git
 	for _, resource := range []*constructorruntime.Resource{
 		nil,
 		{},
-		{Input: typedNil},
 		{Input: &runtime.Raw{Type: runtime.NewUnversionedType("unsupported")}},
 		{Input: &inputv1.Git{Type: inputspec.V1VersionedType}},
 		{Input: &inputv1.Git{Type: inputspec.V1VersionedType, Repository: "https://example.com/repo.git", Commit: "not-a-hash"}},

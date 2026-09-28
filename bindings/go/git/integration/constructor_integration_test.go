@@ -71,7 +71,7 @@ components:
 		return repo, err
 	}
 
-	repo, err := construct(t, "git/v1", nil)
+	repo, err := construct(t, "Git/v1", nil)
 	r.NoError(err)
 
 	desc, err := repo.GetComponentVersion(ctx, "ocm.software/git-app", "1.0.0")
@@ -93,15 +93,16 @@ components:
 	for _, tc := range []struct {
 		name, typ, hash, normalization, value, wantErr string
 	}{
-		{"canonical", "git/v1", "SHA-256", "genericBlobDigest/v1", resource.Digest.Value, ""},
-		{"unversioned", "git", "SHA-256", "genericBlobDigest/v1", resource.Digest.Value, ""},
-		{"legacy uppercase", "Git", "SHA-256", "genericBlobDigest/v1", resource.Digest.Value, ""},
-		{"legacy uppercase versioned", "Git/v1", "SHA-256", "genericBlobDigest/v1", resource.Digest.Value, ""},
-		{"wrong value", "git/v1", "SHA-256", "genericBlobDigest/v1", strings.Repeat("0", 64), "digest mismatch"},
-		{"missing value", "git/v1", "SHA-256", "genericBlobDigest/v1", "", "digest"},
-		{"short value", "git/v1", "SHA-256", "genericBlobDigest/v1", "abc", "digest"},
-		{"unknown hash", "git/v1", "bogus", "genericBlobDigest/v1", resource.Digest.Value, "hash algorithm"},
-		{"missing hash", "git/v1", "", "genericBlobDigest/v1", resource.Digest.Value, "hash algorithm"},
+		{"canonical", "Git/v1", "SHA-256", "genericBlobDigest/v1", resource.Digest.Value, ""},
+		{"unversioned", "Git", "SHA-256", "genericBlobDigest/v1", resource.Digest.Value, ""},
+		{"legacy lowercase", "git", "SHA-256", "genericBlobDigest/v1", resource.Digest.Value, ""},
+		{"legacy lowercase v1alpha1", "git/v1alpha1", "SHA-256", "genericBlobDigest/v1", resource.Digest.Value, ""},
+		{"legacy v1alpha1", "Git/v1alpha1", "SHA-256", "genericBlobDigest/v1", resource.Digest.Value, ""},
+		{"wrong value", "Git/v1", "SHA-256", "genericBlobDigest/v1", strings.Repeat("0", 64), "digest mismatch"},
+		{"missing value", "Git/v1", "SHA-256", "genericBlobDigest/v1", "", "digest"},
+		{"short value", "Git/v1", "SHA-256", "genericBlobDigest/v1", "abc", "digest"},
+		{"unknown hash", "Git/v1", "bogus", "genericBlobDigest/v1", resource.Digest.Value, "hash algorithm"},
+		{"missing hash", "Git/v1", "", "genericBlobDigest/v1", resource.Digest.Value, "hash algorithm"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)

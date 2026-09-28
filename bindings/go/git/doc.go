@@ -55,7 +55,7 @@
 // SSH uses the current user's known_hosts unless WithHostKeyCallback overrides it.
 // HTTP(S) uses the client from
 // [ocm.software/open-component-model/bindings/go/git/repository.WithHTTPClient],
-// or the HTTPClient field of the input method, which also decides TLS trust;
+// or the HTTPConfig field of the input method, which also decides TLS trust;
 // without one, the shared OCM client defaults apply.
 // Each repository hands its client to every Git operation it runs, so repositories
 // with different clients are isolated within one process.
@@ -75,5 +75,5 @@
 // # Wire types
 //
 // The access scheme registers Git/v1, Git, git, git/v1alpha1 and Git/v1alpha1.
-// The separate input scheme registers git/v1, git, Git and Git/v1.
+// The input scheme registers the same types as the access scheme.
 package git

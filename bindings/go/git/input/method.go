@@ -5,8 +5,6 @@ package input
 import (
 	"context"
 	"fmt"
-	"net/http"
-	"reflect"
 
 	"golang.org/x/crypto/ssh"
 
@@ -14,10 +12,13 @@ import (
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	"ocm.software/open-component-model/bindings/go/git/internal/download"
 	accessv1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
+	gitcreds "ocm.software/open-component-model/bindings/go/git/spec/credentials"
 	credsv1 "ocm.software/open-component-model/bindings/go/git/spec/credentials/v1"
 	identityv1 "ocm.software/open-component-model/bindings/go/git/spec/identity/v1"
 	"ocm.software/open-component-model/bindings/go/git/spec/input"
 	v1 "ocm.software/open-component-model/bindings/go/git/spec/input/v1"
+	httpclient "ocm.software/open-component-model/bindings/go/http"
+	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -29,14 +30,16 @@ type InputMethod struct {
 	// the OS temporary directory is used. The archive outlives ProcessResource
 	// and is owned by the caller.
 	TempFolder string
+	// HTTPConfig configures the HTTP client that serves http(s) repositories.
+	// Nil uses the shared client's defaults.
+	HTTPConfig *httpv1alpha1.Config
 	// MaxArchiveSize caps compressed output, not the preceding clone or fetch.
-	// Non-positive values disable the limit; output is streamed to disk.
-	MaxArchiveSize int64
+	// Nil uses the download package default, which is unlimited. Non-positive
+	// values disable the limit; output is streamed to disk.
+	MaxArchiveSize *int64
 	// HostKeyCallback overrides SSH host key verification. If nil, verification
 	// uses the user's known_hosts.
 	HostKeyCallback ssh.HostKeyCallback
-	// HTTPClient serves http(s) repositories. Nil uses the shared OCM client defaults.
-	HTTPClient *http.Client
 }
 
 func (i *InputMethod) GetInputMethodScheme() *runtime.Scheme {
@@ -69,6 +72,18 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 		}
 	}
 
+	opts := download.Options{
+		TempDir:         i.TempFolder,
+		MaxArchiveSize:  download.DefaultMaxArchiveSize,
+		HostKeyCallback: i.HostKeyCallback,
+	}
+	if i.MaxArchiveSize != nil {
+		opts.MaxArchiveSize = *i.MaxArchiveSize
+	}
+	if i.HTTPConfig != nil {
+		opts.HTTPClient = httpclient.New(httpclient.WithConfig(i.HTTPConfig))
+	}
+
 	ref := spec.Ref
 	if ref == "" && spec.Commit == "" {
 		ref = "HEAD"
@@ -77,12 +92,7 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 		Repository: spec.Repository,
 		Ref:        ref,
 		Commit:     spec.Commit,
-	}, creds, download.Options{
-		TempDir:         i.TempFolder,
-		MaxArchiveSize:  i.MaxArchiveSize,
-		HostKeyCallback: i.HostKeyCallback,
-		HTTPClient:      i.HTTPClient,
-	})
+	}, creds, opts)
 	if err != nil {
 		return nil, fmt.Errorf("error downloading git input: %w", err)
 	}
@@ -94,7 +104,7 @@ func (i *InputMethod) convertInput(resource *constructorruntime.Resource) (*v1.G
 	if resource == nil {
 		return nil, fmt.Errorf("resource is required")
 	}
-	if resource.Input == nil || (reflect.ValueOf(resource.Input).Kind() == reflect.Pointer && reflect.ValueOf(resource.Input).IsNil()) {
+	if resource.Input == nil {
 		return nil, fmt.Errorf("resource input is required")
 	}
 
@@ -107,4 +117,8 @@ func (i *InputMethod) convertInput(resource *constructorruntime.Resource) (*v1.G
 	}
 
 	return spec, nil
+}
+
+func (i *InputMethod) GetCredentialTypeScheme() *runtime.Scheme {
+	return gitcreds.Scheme
 }

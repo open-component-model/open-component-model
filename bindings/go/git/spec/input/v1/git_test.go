@@ -38,8 +38,9 @@ func TestGit_JSON(t *testing.T) {
 	for _, typ := range []runtime.Type{
 		runtime.NewVersionedType(Type, Version),
 		runtime.NewUnversionedType(Type),
-		runtime.NewVersionedType("Git", Version),
-		runtime.NewUnversionedType("Git"),
+		runtime.NewUnversionedType(LegacyType),
+		runtime.NewVersionedType(LegacyType, "v1alpha1"),
+		runtime.NewVersionedType(Type, "v1alpha1"),
 	} {
 		t.Run(typ.String(), func(t *testing.T) {
 			r := require.New(t)
