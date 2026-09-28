@@ -42,19 +42,7 @@ func TestArtifactoryUploaderConfig_Validate(t *testing.T) {
 		}, wantErr: "url must not carry a query or fragment"},
 		{name: "empty repository", mutate: func(u *spec.ArtifactoryUploaderConfig) { u.Repository = "" }, wantErr: "repository is required"},
 		{name: "nested repository", mutate: func(u *spec.ArtifactoryUploaderConfig) { u.Repository = "a/b" }, wantErr: "repository must be a single repository key"},
-		{name: "unknown repositoryType", mutate: func(u *spec.ArtifactoryUploaderConfig) {
-			u.RepositoryType = "npm"
-		}, wantErr: `repositoryType must be one of`},
-		{name: "repositoryType helm is valid", mutate: func(u *spec.ArtifactoryUploaderConfig) {
-			u.RepositoryType = spec.ArtifactoryRepositoryTypeHelm
-		}},
-		{name: "repositoryType generic is valid", mutate: func(u *spec.ArtifactoryUploaderConfig) {
-			u.RepositoryType = spec.ArtifactoryRepositoryTypeGeneric
-		}},
-		{name: "generic with path is valid", mutate: func(u *spec.ArtifactoryUploaderConfig) {
-			u.RepositoryType = spec.ArtifactoryRepositoryTypeGeneric
-			u.Path = "my/custom/path"
-		}},
+		{name: "path is valid", mutate: func(u *spec.ArtifactoryUploaderConfig) { u.Path = "my/custom/path" }},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -102,23 +90,7 @@ func TestNexusUploaderConfig_Validate(t *testing.T) {
 		}, wantErr: "url must not carry a query or fragment"},
 		{name: "empty repository", mutate: func(u *spec.NexusUploaderConfig) { u.Repository = "" }, wantErr: "repository is required"},
 		{name: "nested repository", mutate: func(u *spec.NexusUploaderConfig) { u.Repository = "a/b" }, wantErr: "repository must be a single repository key"},
-		{name: "unknown repositoryType", mutate: func(u *spec.NexusUploaderConfig) {
-			u.RepositoryType = "npm"
-		}, wantErr: `repositoryType must be one of`},
-		{name: "repositoryType helm is valid", mutate: func(u *spec.NexusUploaderConfig) {
-			u.RepositoryType = spec.NexusRepositoryTypeHelm
-		}},
-		{name: "repositoryType raw is valid", mutate: func(u *spec.NexusUploaderConfig) {
-			u.RepositoryType = spec.NexusRepositoryTypeRaw
-		}},
-		{name: "helm with path is rejected", mutate: func(u *spec.NexusUploaderConfig) {
-			u.RepositoryType = spec.NexusRepositoryTypeHelm
-			u.Path = "charts/mychart.tgz"
-		}, wantErr: "path is not supported for nexus helm repositories"},
-		{name: "raw with path is valid", mutate: func(u *spec.NexusUploaderConfig) {
-			u.RepositoryType = spec.NexusRepositoryTypeRaw
-			u.Path = "my/custom/path"
-		}},
+		{name: "path is valid", mutate: func(u *spec.NexusUploaderConfig) { u.Path = "my/custom/path" }},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -150,7 +122,6 @@ configurations:
       accessType: Helm/v1
     url: https://artifactory.example.com
     repository: helm-local
-    repositoryType: generic
 `), &generic))
 
 	uploaders, err := spec.LookupUploaderConfigs(&generic)
@@ -161,7 +132,6 @@ configurations:
 	r.True(ok, "second entry must decode as ArtifactoryUploaderConfig, got %T", uploaders[1])
 	r.Equal("https://artifactory.example.com", u.URL)
 	r.Equal("helm-local", u.Repository)
-	r.Equal(spec.ArtifactoryRepositoryTypeGeneric, u.RepositoryType)
 }
 
 func TestLookupUploaderConfigs_Nexus(t *testing.T) {
@@ -175,7 +145,6 @@ configurations:
       accessType: Helm/v1
     url: https://nexus.example.com
     repository: helm-hosted
-    repositoryType: raw
 `), &generic))
 
 	uploaders, err := spec.LookupUploaderConfigs(&generic)
@@ -185,5 +154,4 @@ configurations:
 	r.True(ok, "entry must decode as NexusUploaderConfig, got %T", uploaders[0])
 	r.Equal("https://nexus.example.com", u.URL)
 	r.Equal("helm-hosted", u.Repository)
-	r.Equal(spec.NexusRepositoryTypeRaw, u.RepositoryType)
 }

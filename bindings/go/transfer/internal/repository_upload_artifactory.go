@@ -12,7 +12,6 @@ import (
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
-	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
 	wgetaccess "ocm.software/open-component-model/bindings/go/wget/spec/access"
 	wgetaccessv1 "ocm.software/open-component-model/bindings/go/wget/spec/access/v1"
 )
@@ -20,7 +19,7 @@ import (
 // ArtifactoryUpload uploads a resource into a local repository of a JFrog Artifactory server.
 // The package type of the repository decides what is uploaded and how the resource is
 // published: a Helm chart with a Helm/v1 access (helm), or the resource content with a Wget/v1
-// access (generic). See [transferv1alpha1.ArtifactoryUploaderConfig].
+// access (generic). See the ArtifactoryUploaderConfig transfer config.
 type ArtifactoryUpload struct {
 	repositoryUploader
 }
@@ -53,8 +52,8 @@ func (t *ArtifactoryUpload) Transform(ctx context.Context, step runtime.Typed) (
 
 	src := descriptor.ConvertFromV2Resource(spec.Resource)
 	var out *descriptor.Resource
-	switch transferv1alpha1.ArtifactoryRepositoryType(typ) {
-	case transferv1alpha1.ArtifactoryRepositoryTypeHelm:
+	switch typ {
+	case "helm":
 		srv, err := t.artifactoryServer(spec, src, ".tgz")
 		if err != nil {
 			return nil, err
@@ -63,7 +62,7 @@ func (t *ArtifactoryUpload) Transform(ctx context.Context, step runtime.Typed) (
 		if err != nil {
 			return nil, err
 		}
-	case transferv1alpha1.ArtifactoryRepositoryTypeGeneric:
+	case "generic":
 		if out, err = t.uploadGeneric(ctx, c, spec, src); err != nil {
 			return nil, err
 		}
@@ -86,12 +85,9 @@ func (t *ArtifactoryUpload) artifactoryServer(spec *RepositoryUploadSpec, src *d
 	return newArtifactoryServer(spec, path, chartOwner(spec.ComponentVersion, src), t.interval())
 }
 
-// artifactoryRepositoryType returns spec.RepositoryType, else reads the package type of the
+// artifactoryRepositoryType reads the package type of the
 // repository from its configuration. Only local and federated repositories accept uploads.
 func artifactoryRepositoryType(ctx context.Context, c *repositoryClient, spec *RepositoryUploadSpec) (string, error) {
-	if spec.RepositoryType != "" {
-		return spec.RepositoryType, nil
-	}
 	target, err := url.JoinPath(spec.URL, "artifactory", "api", "repositories", spec.Repository)
 	if err != nil {
 		return "", fmt.Errorf("invalid artifactory url: %w", err)
@@ -102,7 +98,7 @@ func artifactoryRepositoryType(ctx context.Context, c *repositoryClient, spec *R
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("failed detecting the type of artifactory repository %q: GET %s returned status %d; set repositoryType to skip detection",
+		return "", fmt.Errorf("failed detecting the type of artifactory repository %q: GET %s returned status %d",
 			spec.Repository, redactURL(target), resp.StatusCode)
 	}
 	var config struct {

@@ -142,8 +142,7 @@ cannot re-send the write request that would overwrite the uploaded object.
 Uploads a matched resource into a local repository of a JFrog Artifactory server.
 The behaviour depends on the **package type** of the repository, which the uploader
 reads from the Artifactory repository configuration
-(`GET <url>/artifactory/api/repositories/<repository>`) unless `repositoryType` is
-set in the config:
+(`GET <url>/artifactory/api/repositories/<repository>`):
 
 | Repository type | Source handling                                                               | Published access                                                                                                     |
 |-----------------|-------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------|
@@ -151,13 +150,8 @@ set in the config:
 | `generic`       | The resource content as is (OCI artifacts as an OCI layout tar)               | `Wget/v1` (`url: <url>/artifactory/<repository>/<path>`)                                                             |
 
 The repository **must** be a local or federated repository. Remote or virtual
-repositories cannot receive uploads.
-
-{{< callout context="tip" title="Set repositoryType to skip detection" >}}
-Reading the repository configuration can need more permissions than deploying.
-If the uploading user cannot read it, the transfer fails; set `repositoryType`
-in the config to skip the API query.
-{{< /callout >}}
+repositories cannot receive uploads. The uploading user must be allowed to read
+the repository configuration.
 
 #### Helm repositories
 
@@ -207,7 +201,6 @@ gets the SHA-256 of the uploaded bytes (the OCI layout tar or chart .tgz).
 | `match`          | `UploaderMatch`                      | Selects resources this uploader applies to. `match.accessType` is required.                                                                                                                                           |
 | `url`            | string (required)                    | Server base URL **without** the `/artifactory` segment, e.g. `https://myorg.jfrog.io`.                                                                                                                                |
 | `repository`     | string (required)                    | Repository key, e.g. `helm-local`.                                                                                                                                                                                    |
-| `repositoryType` | `helm` or `generic` (optional)       | Package type of the target repository. When set, the uploader skips the API query that reads the repository configuration.                                                                                            |
 | `path`           | string                               | Content location relative to the repository root. Literal or `${…}` CEL expression (see [CEL Expressions](#cel-expressions)). Must be relative, without `.`/`..` segments; helm repositories require a `.tgz` suffix. |
 
 #### Sources
@@ -279,7 +272,6 @@ Generic repository — upload any resource and publish a `Wget/v1` access:
       accessType: localBlob
     url: https://myorg.jfrog.io
     repository: generic-local
-    repositoryType: generic
 ```
 
 ### `nexus.uploader.transfer.config.ocm.software/v1alpha1`
@@ -287,8 +279,7 @@ Generic repository — upload any resource and publish a `Wget/v1` access:
 Uploads a matched resource into a hosted repository of a Sonatype Nexus
 Repository 3 server. The behaviour depends on the **format** of the repository,
 which the uploader reads from the Nexus repository settings
-(`GET <url>/service/rest/v1/repositories/<repository>`) unless `repositoryType`
-is set in the config:
+(`GET <url>/service/rest/v1/repositories/<repository>`):
 
 | Repository type | Source handling                                                               | Published access                                                              |
 |-----------------|-------------------------------------------------------------------------------|-------------------------------------------------------------------------------|
@@ -296,13 +287,8 @@ is set in the config:
 | `raw`           | The resource content as is (OCI artifacts as an OCI layout tar)               | `Wget/v1` (`url: <url>/repository/<repository>/<path>`)                       |
 
 The repository **must** be a hosted repository. Proxy and group repositories
-cannot receive uploads.
-
-{{< callout context="tip" title="Set repositoryType to skip detection" >}}
-Reading the repository settings can need more permissions than uploading. If
-the uploading user cannot read them, the transfer fails; set `repositoryType`
-in the config to skip the API query.
-{{< /callout >}}
+cannot receive uploads. The uploading user must be allowed to read the
+repository settings.
 
 #### Helm repositories
 
@@ -339,7 +325,6 @@ extracted from an OCI artifact gets the SHA-256 of the uploaded bytes.
 | `match`          | `UploaderMatch`               | Selects resources this uploader applies to. `match.accessType` is required.                                                                                                                                 |
 | `url`            | string (required)             | Server base URL **without** the `/repository` segment, e.g. `https://nexus.example.com`.                                                                                                                    |
 | `repository`     | string (required)             | Repository name, e.g. `helm-hosted`.                                                                                                                                                                        |
-| `repositoryType` | `helm` or `raw` (optional)    | Format of the target repository. When set, the uploader skips the API query that reads the repository settings.                                                                                             |
 | `path`           | string                        | Content location in a raw repository relative to the root. Literal or `${…}` CEL expression (see [CEL Expressions](#cel-expressions)). Must be relative, without `.`/`..` segments. Not for helm repos.     |
 
 #### Sources
@@ -394,7 +379,6 @@ Raw repository — upload any resource and publish a `Wget/v1` access:
       accessType: localBlob
     url: https://nexus.example.com
     repository: raw-hosted
-    repositoryType: raw
 ```
 
 ### Routing Resources to Different Targets

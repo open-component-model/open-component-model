@@ -9,9 +9,6 @@ import (
 	_ "embed"
 )
 
-//go:embed schemas/ArtifactoryRepositoryType.schema.json
-var schemaArtifactoryRepositoryType []byte
-
 //go:embed schemas/ArtifactoryUploaderConfig.schema.json
 var schemaArtifactoryUploaderConfig []byte
 
@@ -24,9 +21,6 @@ var schemaCopyMode []byte
 //go:embed schemas/HTTPUploaderConfig.schema.json
 var schemaHTTPUploaderConfig []byte
 
-//go:embed schemas/NexusRepositoryType.schema.json
-var schemaNexusRepositoryType []byte
-
 //go:embed schemas/NexusUploaderConfig.schema.json
 var schemaNexusUploaderConfig []byte
 
@@ -38,11 +32,6 @@ var schemaUploadType []byte
 
 //go:embed schemas/UploaderMatch.schema.json
 var schemaUploaderMatch []byte
-
-// JSONSchema returns the JSON Schema for ArtifactoryRepositoryType.
-func (ArtifactoryRepositoryType) JSONSchema() []byte {
-	return schemaArtifactoryRepositoryType
-}
 
 // JSONSchema returns the JSON Schema for ArtifactoryUploaderConfig.
 func (ArtifactoryUploaderConfig) JSONSchema() []byte {
@@ -62,11 +51,6 @@ func (CopyMode) JSONSchema() []byte {
 // JSONSchema returns the JSON Schema for HTTPUploaderConfig.
 func (HTTPUploaderConfig) JSONSchema() []byte {
 	return schemaHTTPUploaderConfig
-}
-
-// JSONSchema returns the JSON Schema for NexusRepositoryType.
-func (NexusRepositoryType) JSONSchema() []byte {
-	return schemaNexusRepositoryType
 }
 
 // JSONSchema returns the JSON Schema for NexusUploaderConfig.

@@ -73,9 +73,6 @@ type RepositoryUploadSpec struct {
 	URL string `json:"url"`
 	// Repository is the name of the target repository.
 	Repository string `json:"repository"`
-	// RepositoryType is the type of the target repository (Artifactory package type, Nexus
-	// format). Empty reads it from the server.
-	RepositoryType string `json:"repositoryType,omitempty"`
 	// Path is where the content is stored, relative to the repository root. It must consist of
 	// non-empty segments without . or .. and, for helm repositories, end in .tgz. Empty stores the
 	// content under <component>/<component version>/<resource>-<resource version>.

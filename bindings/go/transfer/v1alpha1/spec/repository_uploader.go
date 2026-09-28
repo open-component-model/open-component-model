@@ -3,7 +3,6 @@ package spec
 import (
 	"fmt"
 	"net/url"
-	"slices"
 	"strings"
 
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
@@ -30,36 +29,10 @@ func init() {
 	)
 }
 
-// ArtifactoryRepositoryType is the package type of an Artifactory repository.
-// +ocm:jsonschema-gen:enum=helm,generic
-type ArtifactoryRepositoryType string
-
-const (
-	// ArtifactoryRepositoryTypeHelm is a Helm repository: the resource must hold a Helm chart,
-	// which is published with a Helm/v1 access.
-	ArtifactoryRepositoryTypeHelm ArtifactoryRepositoryType = "helm"
-	// ArtifactoryRepositoryTypeGeneric is a generic repository: the resource content is stored
-	// as a file and published with a Wget/v1 access.
-	ArtifactoryRepositoryTypeGeneric ArtifactoryRepositoryType = "generic"
-)
-
-// NexusRepositoryType is the format of a Nexus repository.
-// +ocm:jsonschema-gen:enum=helm,raw
-type NexusRepositoryType string
-
-const (
-	// NexusRepositoryTypeHelm is a Helm hosted repository: the resource must hold a Helm chart,
-	// which is published with a Helm/v1 access.
-	NexusRepositoryTypeHelm NexusRepositoryType = "helm"
-	// NexusRepositoryTypeRaw is a raw hosted repository: the resource content is stored as a
-	// file and published with a Wget/v1 access.
-	NexusRepositoryTypeRaw NexusRepositoryType = "raw"
-)
-
 // ArtifactoryUploaderConfig uploads matching resources into a local repository of a JFrog
 // Artifactory server. What is uploaded and how the resource is re-described depends on the
 // package type of the repository, which is read from the Artifactory repository configuration
-// (GET <url>/artifactory/api/repositories/<repository>) unless RepositoryType is set:
+// (GET <url>/artifactory/api/repositories/<repository>)
 //
 //   - helm: the packaged Helm chart located in the resource content (a packaged chart, a tar
 //     containing one as the helm downloader produces, or a helm chart OCI artifact) is deployed and
@@ -106,9 +79,6 @@ type ArtifactoryUploaderConfig struct {
 	URL string `json:"url"`
 	// Repository is the key of the local repository to upload into.
 	Repository string `json:"repository"`
-	// RepositoryType is the package type of the repository: helm or generic. It skips reading
-	// the repository configuration, which needs permissions users that may only deploy lack.
-	RepositoryType ArtifactoryRepositoryType `json:"repositoryType,omitempty"`
 	// Path overrides where the content is stored, relative to the repository root, e.g.
 	// ${component.name + "/" + component.version + "/" + resource.name + "-" + resource.version + ".tgz"}.
 	// It is a literal or a CEL expression wrapped in ${...} over the source resource (resource)
@@ -121,7 +91,7 @@ type ArtifactoryUploaderConfig struct {
 // NexusUploaderConfig uploads matching resources into a hosted repository of a Sonatype Nexus
 // Repository 3 server. What is uploaded and how the resource is re-described depends on the
 // format of the repository, which is read from the Nexus repository settings
-// (GET <url>/service/rest/v1/repositories/<repository>) unless RepositoryType is set:
+// (GET <url>/service/rest/v1/repositories/<repository>)
 //
 //   - helm: the packaged Helm chart located in the resource content is uploaded to
 //     <url>/repository/<repository>/<resource>-<resource version>.tgz. Nexus stores it under the
@@ -160,9 +130,6 @@ type NexusUploaderConfig struct {
 	URL string `json:"url"`
 	// Repository is the name of the hosted repository to upload into.
 	Repository string `json:"repository"`
-	// RepositoryType is the format of the repository: helm or raw. It skips reading the
-	// repository settings, which needs permissions users that may only upload lack.
-	RepositoryType NexusRepositoryType `json:"repositoryType,omitempty"`
 	// Path overrides where the content is stored in a raw repository, relative to the repository
 	// root. It is a literal or a CEL expression wrapped in ${...} over the source resource
 	// (resource) and its component (component: name, version, provider, ...). The result must
@@ -189,32 +156,22 @@ func (u *NexusUploaderConfig) Match(resource descriptorv2.Resource, types TypeRe
 }
 
 // Validate rejects a non-matching Type, an empty match access type, a URL that is not an
-// absolute http(s) URL without query or fragment, a repository that is not a single key and an
-// unknown repository type. An empty Type is allowed for programmatically constructed configs.
+// absolute http(s) URL without query or fragment and a repository that is not a single key. An
+// empty Type is allowed for programmatically constructed configs.
 func (u *ArtifactoryUploaderConfig) Validate() error {
 	if u == nil {
 		return nil
 	}
-	if err := validateRepositoryUploader(u.Type, ArtifactoryUploaderConfigType, u.MatchSpec, u.URL, u.Repository); err != nil {
-		return err
-	}
-	return validateRepositoryType(u.RepositoryType, ArtifactoryRepositoryTypeHelm, ArtifactoryRepositoryTypeGeneric)
+	return validateRepositoryUploader(u.Type, ArtifactoryUploaderConfigType, u.MatchSpec, u.URL, u.Repository)
 }
 
-// Validate rejects what [ArtifactoryUploaderConfig.Validate] rejects and a path for helm
-// repositories.
+// Validate rejects what [ArtifactoryUploaderConfig.Validate] rejects.
 func (u *NexusUploaderConfig) Validate() error {
 	if u == nil {
 		return nil
 	}
 	if err := validateRepositoryUploader(u.Type, NexusUploaderConfigType, u.MatchSpec, u.URL, u.Repository); err != nil {
 		return err
-	}
-	if err := validateRepositoryType(u.RepositoryType, NexusRepositoryTypeHelm, NexusRepositoryTypeRaw); err != nil {
-		return err
-	}
-	if u.RepositoryType == NexusRepositoryTypeHelm && u.Path != "" {
-		return fmt.Errorf("path is not supported for nexus helm repositories")
 	}
 	return nil
 }
@@ -248,11 +205,4 @@ func validateRepositoryUploader(typ runtime.Type, name string, match UploaderMat
 		return fmt.Errorf("repository must be a single repository key, got %q", repository)
 	}
 	return nil
-}
-
-func validateRepositoryType[T ~string](typ T, supported ...T) error {
-	if typ == "" || slices.Contains(supported, typ) {
-		return nil
-	}
-	return fmt.Errorf("repositoryType must be one of %q, got %q", supported, typ)
 }

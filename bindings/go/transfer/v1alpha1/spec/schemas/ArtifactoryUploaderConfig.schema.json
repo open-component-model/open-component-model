@@ -4,7 +4,7 @@
   "$id": "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec/schemas/ArtifactoryUploaderConfig.schema.json",
   "title": "ArtifactoryUploaderConfig",
   "type": "object",
-  "description": "ArtifactoryUploaderConfig uploads matching resources into a local repository of a JFrog\nArtifactory server. What is uploaded and how the resource is re-described depends on the\npackage type of the repository, which is read from the Artifactory repository configuration\n(GET \u003curl\u003e/artifactory/api/repositories/\u003crepository\u003e) unless RepositoryType is set:\n\n- helm: the packaged Helm chart located in the resource content (a packaged chart, a tar\ncontaining one as the helm downloader produces, or a helm chart OCI artifact) is deployed and\nthe resource is published with a Helm/v1 access (helmRepository\n\u003curl\u003e/artifactory/api/helm/\u003crepository\u003e, helmChart \u003cname\u003e:\u003cversion\u003e). The chart is not\nparsed: name and version are the chart metadata Artifactory records, and content it does\nnot recognize as a chart is deleted again and fails the transfer. The repository must not\nenforce chart name and version in file names (Helm Enforce Layout), because the file name\nis not derived from the chart.\n- generic: the resource content is deployed as is (OCI artifacts as an OCI layout tar) and the\nresource is published with a Wget/v1 access on the deployed file.\n\nThe content is deployed to \u003curl\u003e/artifactory/\u003crepository\u003e/\u003cpath\u003e. Path defaults to\n\u003ccomponent\u003e/\u003ccomponent version\u003e/\u003cresource\u003e-\u003cresource version\u003e, plus .tgz for helm. The deployed\nfile carries the properties ocm.component.name, ocm.component.version, ocm.resource.name,\nocm.resource.version and, for resources with one, ocm.resource.extraIdentity. A file already\nstored at the path is only replaced when these properties name the same resource of the same\ncomponent version or it has the same content.\n\nUpload credentials are resolved for the HelmChartRepository consumer identity of\n\u003curl\u003e/artifactory/api/helm/\u003crepository\u003e, falling back to the Wget consumer identity of\n\u003curl\u003e/artifactory/\u003crepository\u003e. They are also used to read the repository configuration.\n\ntype: generic.config.ocm.software/v1\nconfigurations:\n- type: artifactory.uploader.transfer.config.ocm.software/v1alpha1\nmatch:\naccessType: Helm/v1\nurl: https://common.repositories.cloud.sap\nrepository: open-component-model-helm-test",
+  "description": "ArtifactoryUploaderConfig uploads matching resources into a local repository of a JFrog\nArtifactory server. What is uploaded and how the resource is re-described depends on the\npackage type of the repository, which is read from the Artifactory repository configuration\n(GET \u003curl\u003e/artifactory/api/repositories/\u003crepository\u003e)\n\n- helm: the packaged Helm chart located in the resource content (a packaged chart, a tar\ncontaining one as the helm downloader produces, or a helm chart OCI artifact) is deployed and\nthe resource is published with a Helm/v1 access (helmRepository\n\u003curl\u003e/artifactory/api/helm/\u003crepository\u003e, helmChart \u003cname\u003e:\u003cversion\u003e). The chart is not\nparsed: name and version are the chart metadata Artifactory records, and content it does\nnot recognize as a chart is deleted again and fails the transfer. The repository must not\nenforce chart name and version in file names (Helm Enforce Layout), because the file name\nis not derived from the chart.\n- generic: the resource content is deployed as is (OCI artifacts as an OCI layout tar) and the\nresource is published with a Wget/v1 access on the deployed file.\n\nThe content is deployed to \u003curl\u003e/artifactory/\u003crepository\u003e/\u003cpath\u003e. Path defaults to\n\u003ccomponent\u003e/\u003ccomponent version\u003e/\u003cresource\u003e-\u003cresource version\u003e, plus .tgz for helm. The deployed\nfile carries the properties ocm.component.name, ocm.component.version, ocm.resource.name,\nocm.resource.version and, for resources with one, ocm.resource.extraIdentity. A file already\nstored at the path is only replaced when these properties name the same resource of the same\ncomponent version or it has the same content.\n\nUpload credentials are resolved for the HelmChartRepository consumer identity of\n\u003curl\u003e/artifactory/api/helm/\u003crepository\u003e, falling back to the Wget consumer identity of\n\u003curl\u003e/artifactory/\u003crepository\u003e. They are also used to read the repository configuration.\n\ntype: generic.config.ocm.software/v1\nconfigurations:\n- type: artifactory.uploader.transfer.config.ocm.software/v1alpha1\nmatch:\naccessType: Helm/v1\nurl: https://common.repositories.cloud.sap\nrepository: open-component-model-helm-test",
   "properties": {
     "match": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.transfer.v1alpha1.spec.UploaderMatch",
@@ -17,10 +17,6 @@
     "repository": {
       "type": "string",
       "description": "Repository is the key of the local repository to upload into."
-    },
-    "repositoryType": {
-      "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.transfer.v1alpha1.spec.ArtifactoryRepositoryType",
-      "description": "RepositoryType is the package type of the repository: helm or generic. It skips reading\nthe repository configuration, which needs permissions users that may only deploy lack."
     },
     "type": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",
@@ -64,23 +60,6 @@
       "type": "string",
       "description": "Type represents a structured type with an optional version and a name. It is used to identify the type of an object in a versioned API.",
       "pattern": "^([a-zA-Z0-9][a-zA-Z0-9.]*)(?:/(v[0-9]+(?:alpha[0-9]+|beta[0-9]+)?))?$"
-    },
-    "ocm.software.open-component-model.bindings.go.transfer.v1alpha1.spec.ArtifactoryRepositoryType": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "$comment": "generated by the ocm schema generation tool",
-      "title": "ArtifactoryRepositoryType",
-      "type": "string",
-      "description": "ArtifactoryRepositoryType is the package type of an Artifactory repository.",
-      "oneOf": [
-        {
-          "description": "ArtifactoryRepositoryTypeHelm is a Helm repository: the resource must hold a Helm chart,\nwhich is published with a Helm/v1 access.",
-          "const": "helm"
-        },
-        {
-          "description": "ArtifactoryRepositoryTypeGeneric is a generic repository: the resource content is stored\nas a file and published with a Wget/v1 access.",
-          "const": "generic"
-        }
-      ]
     },
     "ocm.software.open-component-model.bindings.go.transfer.v1alpha1.spec.UploaderMatch": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",

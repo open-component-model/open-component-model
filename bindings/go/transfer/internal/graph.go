@@ -285,11 +285,11 @@ func processResources(
 					return nil, nil, fmt.Errorf("cannot process uploader for resource %v: %w", resource.ToIdentity(), err)
 				}
 			case *transferv1alpha1.ArtifactoryUploaderConfig:
-				if err := processRepositoryUploader(resource, access, ArtifactoryUploadVersionedType, cfg.URL, cfg.Repository, string(cfg.RepositoryType), cfg.Path, baseID, id, val, tgd, resourceTransformIDs, i); err != nil {
+				if err := processRepositoryUploader(resource, access, ArtifactoryUploadVersionedType, cfg.URL, cfg.Repository, cfg.Path, baseID, id, val, tgd, resourceTransformIDs, i); err != nil {
 					return nil, nil, fmt.Errorf("cannot process uploader for resource %v: %w", resource.ToIdentity(), err)
 				}
 			case *transferv1alpha1.NexusUploaderConfig:
-				if err := processRepositoryUploader(resource, access, NexusUploadVersionedType, cfg.URL, cfg.Repository, string(cfg.RepositoryType), cfg.Path, baseID, id, val, tgd, resourceTransformIDs, i); err != nil {
+				if err := processRepositoryUploader(resource, access, NexusUploadVersionedType, cfg.URL, cfg.Repository, cfg.Path, baseID, id, val, tgd, resourceTransformIDs, i); err != nil {
 					return nil, nil, fmt.Errorf("cannot process uploader for resource %v: %w", resource.ToIdentity(), err)
 				}
 			default:

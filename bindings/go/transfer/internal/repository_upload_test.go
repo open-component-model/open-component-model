@@ -570,19 +570,6 @@ func TestArtifactoryUpload_Transform_Helm(t *testing.T) {
 		r.Equal(chartTGZ, got[2].body)
 		r.Equal("mychart:0.1.0", helmChart(r, out))
 	})
-
-	t.Run("repositoryType helm skips detection", func(t *testing.T) {
-		r := require.New(t)
-		srv := newFakeArtifactory(t, charts)
-		s := step(srv.URL, source())
-		s.Spec.RepositoryType = "helm"
-		out, err := transformer(nil).Transform(t.Context(), s)
-		r.NoError(err)
-		got := srv.recorded()
-		// No detection GET
-		r.Equal("GET "+storagePath, methods(got)[0])
-		r.Equal("mychart:0.1.0", helmChart(r, out))
-	})
 }
 
 func TestArtifactoryUpload_Transform_Generic(t *testing.T) {
@@ -679,19 +666,6 @@ func TestArtifactoryUpload_Transform_Generic(t *testing.T) {
 			r.NotContains(req.query, "chart.name", "no chart property should be requested")
 		}
 	})
-
-	t.Run("repositoryType generic skips detection", func(t *testing.T) {
-		r := require.New(t)
-		srv := newFakeArtifactory(t, nil)
-		srv.packageType = "generic"
-		s := step(srv.URL, source())
-		s.Spec.RepositoryType = "generic"
-		_, err := transformer().Transform(t.Context(), s)
-		r.NoError(err)
-		got := srv.recorded()
-		// No detection GET: first request is the storage GET
-		r.Equal("GET "+storagePath, methods(got)[0])
-	})
 }
 
 func TestArtifactoryUpload_Transform_DetectionErrors(t *testing.T) {
@@ -760,7 +734,7 @@ func TestArtifactoryUpload_Transform_DetectionErrors(t *testing.T) {
 		srv := newFakeArtifactory(t, nil)
 		srv.detectionStatus = http.StatusForbidden
 		_, err := transformer().Transform(t.Context(), step(srv.URL))
-		r.ErrorContains(err, "set repositoryType to skip detection")
+		r.ErrorContains(err, "returned status 403")
 		r.False(hasPUT(srv.recorded()))
 	})
 
@@ -1082,33 +1056,6 @@ func TestNexusUpload_Transform_Helm(t *testing.T) {
 		})
 		r.ErrorContains(err, "path is not supported for nexus helm repositories")
 	})
-
-	t.Run("repositoryType helm skips detection", func(t *testing.T) {
-		r := require.New(t)
-		srv := newFakeNexus(t, charts, "", false)
-		repo := &chartResourceRepo{chart: chartTGZ}
-		tr := &NexusUpload{repositoryUploader{
-			Scheme:                scheme,
-			Charts:                &chartarchive.Source{ResourceRepository: repo},
-			ResourceRepository:    repo,
-			chartMetadataInterval: time.Millisecond,
-		}}
-		out, err := tr.Transform(t.Context(), &NexusUploadTransformation{
-			Type: NexusUploadVersionedType,
-			ID:   "upload",
-			Spec: &RepositoryUploadSpec{
-				Resource:         source(""),
-				ComponentVersion: &RepositoryUploadComponentVersion{Component: "ocm.software/test", Version: "1.0.0"},
-				URL:              srv.URL,
-				Repository:       "helm-hosted",
-				RepositoryType:   "helm",
-			},
-		})
-		r.NoError(err)
-		got := srv.recorded()
-		r.Equal("PUT "+putPath, got[0], "no detection: first request is the upload")
-		r.Equal("mychart:0.1.0", access(r, out.(*NexusUploadTransformation)).HelmChart)
-	})
 }
 
 func TestNexusUpload_Transform_Raw(t *testing.T) {
@@ -1217,18 +1164,6 @@ func TestNexusUpload_Transform_Raw(t *testing.T) {
 			r.NotContains(req, "PUT", "nothing may be written")
 		}
 	})
-
-	t.Run("repositoryType raw skips detection", func(t *testing.T) {
-		r := require.New(t)
-		srv := newFakeNexus(t, nil, "", false)
-		srv.format = "raw"
-		s := step(srv.URL, source(""))
-		s.Spec.RepositoryType = "raw"
-		_, err := transformer(nil).Transform(t.Context(), s)
-		r.NoError(err)
-		got := srv.recorded()
-		r.Equal("HEAD "+putPath, got[0], "no detection: first request is the HEAD check")
-	})
 }
 
 func TestNexusUpload_Transform_DetectionErrors(t *testing.T) {
@@ -1285,7 +1220,7 @@ func TestNexusUpload_Transform_DetectionErrors(t *testing.T) {
 		srv := newFakeNexus(t, nil, "", false)
 		srv.detectionStatus = http.StatusForbidden
 		_, err := transformer().Transform(t.Context(), step(srv.URL))
-		r.ErrorContains(err, "set repositoryType to skip detection")
+		r.ErrorContains(err, "returned status 403")
 	})
 
 	t.Run("target credential error prevents any request", func(t *testing.T) {

@@ -183,16 +183,7 @@ func TestBuildGraphDefinition_RepositoryUploaders(t *testing.T) {
 		r.Equal("ocm.software/test", cv["component"])
 		r.Equal("1.0.0", cv["version"])
 		r.NotContains(cv, "repository", "remote resources are not read from the source component version")
-		r.NotContains(tr.Spec.Data, "repositoryType", "repositoryType is absent when not set")
 		r.Equal("test@1.0.0 [Stream chart-resource to artifactory.example]", tr.Label)
-	})
-
-	t.Run("repositoryType appears in spec only when set", func(t *testing.T) {
-		r := require.New(t)
-		u := artifactoryUploader(helmMatch)
-		u.RepositoryType = transferv1alpha1.ArtifactoryRepositoryTypeGeneric
-		_, tr := buildArtifactory(t, chartResource, u)
-		r.Equal("generic", tr.Spec.Data["repositoryType"])
 	})
 
 	t.Run("LocalBlob carries its source component version", func(t *testing.T) {
@@ -246,8 +237,6 @@ func TestBuildGraphDefinition_RepositoryUploaders(t *testing.T) {
 		tr := uploads[0]
 		r.Equal("https://nexus.example", tr.Spec.Data["url"])
 		r.Equal("helm-hosted", tr.Spec.Data["repository"])
-		r.NotContains(tr.Spec.Data, "server", "no server field")
-		r.NotContains(tr.Spec.Data, "repositoryType", "repositoryType absent when not set")
 	})
 }
 

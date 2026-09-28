@@ -230,7 +230,7 @@ func nexusGet(t *testing.T, target, password string) []byte {
 
 // Test_Integration_TransferWgetResource_NexusRawUploader verifies that a Wget/v1 resource is
 // transferred into a Nexus raw hosted repository via the raw uploader path. The test:
-//   - uses no repositoryType, so format detection via the Nexus API is exercised;
+//   - detects the raw format via the Nexus API;
 //   - asserts the target descriptor resource has a Wget/v1 access pointing at the raw repository;
 //   - downloads the file from Nexus and checks it matches the original content;
 //   - transfers a second time to exercise the reuse path (HEAD 200, search assets, same sha256).
@@ -297,7 +297,7 @@ func Test_Integration_TransferWgetResource_NexusRawUploader(t *testing.T) {
 		AccessMode: "readwrite|create",
 	}
 
-	// No repositoryType → detection via GET /service/rest/v1/repositories/raw-hosted is exercised.
+	// Detection via GET /service/rest/v1/repositories/raw-hosted is exercised.
 	uploaders := []transferv1alpha1.UploaderConfig{&transferv1alpha1.NexusUploaderConfig{
 		Type:       runtime.NewVersionedType(transferv1alpha1.NexusUploaderConfigType, transferv1alpha1.Version),
 		MatchSpec:  transferv1alpha1.UploaderMatch{AccessType: runtime.NewVersionedType(wgetaccess.WgetConsumerType, wgetaccessv1.Version)},

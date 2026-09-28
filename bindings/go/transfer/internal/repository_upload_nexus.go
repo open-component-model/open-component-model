@@ -11,7 +11,6 @@ import (
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
-	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
 	wgetaccess "ocm.software/open-component-model/bindings/go/wget/spec/access"
 	wgetaccessv1 "ocm.software/open-component-model/bindings/go/wget/spec/access/v1"
 )
@@ -19,7 +18,7 @@ import (
 // NexusUpload uploads a resource into a hosted repository of a Sonatype Nexus Repository 3
 // server. The format of the repository decides what is uploaded and how the resource is
 // published: a Helm chart with a Helm/v1 access (helm), or the resource content with a Wget/v1
-// access (raw). See [transferv1alpha1.NexusUploaderConfig].
+// access (raw). See the NexusUploaderConfig transfer config.
 type NexusUpload struct {
 	repositoryUploader
 }
@@ -48,8 +47,8 @@ func (t *NexusUpload) Transform(ctx context.Context, step runtime.Typed) (runtim
 
 	src := descriptor.ConvertFromV2Resource(spec.Resource)
 	var out *descriptor.Resource
-	switch transferv1alpha1.NexusRepositoryType(typ) {
-	case transferv1alpha1.NexusRepositoryTypeHelm:
+	switch typ {
+	case "helm":
 		if spec.Path != "" {
 			return nil, fmt.Errorf("path is not supported for nexus helm repositories: nexus stores charts under <name>-<version>.tgz")
 		}
@@ -64,7 +63,7 @@ func (t *NexusUpload) Transform(ctx context.Context, step runtime.Typed) (runtim
 		if out, err = t.uploadHelm(ctx, c, spec, src, srv); err != nil {
 			return nil, err
 		}
-	case transferv1alpha1.NexusRepositoryTypeRaw:
+	case "raw":
 		if out, err = t.uploadRaw(ctx, c, spec, src, repoURL); err != nil {
 			return nil, err
 		}
@@ -77,12 +76,9 @@ func (t *NexusUpload) Transform(ctx context.Context, step runtime.Typed) (runtim
 	return &transformation, nil
 }
 
-// nexusRepositoryType returns spec.RepositoryType, else reads the format of the repository from
+// nexusRepositoryType reads the format of the repository from
 // its settings. Only hosted repositories accept uploads.
 func nexusRepositoryType(ctx context.Context, c *repositoryClient, spec *RepositoryUploadSpec) (string, error) {
-	if spec.RepositoryType != "" {
-		return spec.RepositoryType, nil
-	}
 	target, err := url.JoinPath(spec.URL, "service", "rest", "v1", "repositories", spec.Repository)
 	if err != nil {
 		return "", fmt.Errorf("invalid nexus url: %w", err)
@@ -93,7 +89,7 @@ func nexusRepositoryType(ctx context.Context, c *repositoryClient, spec *Reposit
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("failed detecting the type of nexus repository %q: GET %s returned status %d; set repositoryType to skip detection",
+		return "", fmt.Errorf("failed detecting the type of nexus repository %q: GET %s returned status %d",
 			spec.Repository, redactURL(target), resp.StatusCode)
 	}
 	var settings struct {

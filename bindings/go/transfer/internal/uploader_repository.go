@@ -17,7 +17,7 @@ import (
 // from its output. A local blob is read from the source component version. A configured path
 // has its `resource` and `component` aliases rewritten like the HTTP uploader's targetURL (see
 // templateExpressions); the graph runtime resolves it.
-func processRepositoryUploader(resource descriptorv2.Resource, access runtime.Typed, typ runtime.Type, rawURL, repository, repositoryType, path, baseID, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, resourceTransformIDs map[int]string, i int) error {
+func processRepositoryUploader(resource descriptorv2.Resource, access runtime.Typed, typ runtime.Type, rawURL, repository, path, baseID, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, resourceTransformIDs map[int]string, i int) error {
 	if resource.Access == nil {
 		return fmt.Errorf("resource access is required")
 	}
@@ -42,9 +42,6 @@ func processRepositoryUploader(resource descriptorv2.Resource, access runtime.Ty
 		"componentVersion": cv,
 		"url":              rawURL,
 		"repository":       repository,
-	}
-	if repositoryType != "" {
-		data["repositoryType"] = repositoryType
 	}
 	if path != "" {
 		templated, err := templateString(path, baseID, i)

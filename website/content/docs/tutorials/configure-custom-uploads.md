@@ -281,8 +281,8 @@ version.
 
 Two dedicated uploaders stream resources into Artifactory or Nexus repositories
 and rewrite the resource access so consumers can fetch the artifact from the
-repository server. Each uploader auto-detects the repository type (helm, generic
-or raw) or can be told via `repositoryType`:
+repository server. Each uploader detects the repository type (helm, generic or
+raw) through the server API:
 
 | Config type                                                    | Repository types  | Published access       |
 |----------------------------------------------------------------|-------------------|------------------------|
@@ -328,7 +328,6 @@ raw repository and publish a `Wget/v1` access:
       accessType: localBlob
     url: https://myorg.jfrog.io
     repository: generic-local
-    repositoryType: generic
 ```
 
 ### Credentials
