@@ -14,7 +14,8 @@ const DefaultMaxDownloadSize int64 = 0
 
 // option holds the configuration for a single [Download] call.
 type option struct {
-	// Client is the HTTP client used for the request. When nil, http.DefaultClient is used.
+	// Client is the HTTP client used for the request. When nil, a client from
+	// ocmhttp.New is used, which returns response bytes unmodified.
 	Client *http.Client
 
 	// MaxDownloadSize limits the number of bytes read from a response body. When nil,
@@ -36,8 +37,8 @@ type option struct {
 // Option configures the behavior of [Download].
 type Option func(*option)
 
-// WithClient sets the HTTP client used for the download. When unset,
-// http.DefaultClient is used.
+// WithClient sets the HTTP client used for the download. When unset, a client
+// from ocmhttp.New is used, which returns response bytes unmodified.
 func WithClient(client *http.Client) Option {
 	return func(o *option) {
 		o.Client = client
