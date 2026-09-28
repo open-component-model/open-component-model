@@ -287,7 +287,7 @@ API:
 | Config type                                                  | Repository types                  | Published access       |
 |--------------------------------------------------------------|-----------------------------------|------------------------|
 | `artifactory.uploader.transfer.config.ocm.software/v1alpha1` | `helm`, `generic`, `maven`, `npm` | `Helm/v1` or `Wget/v1` |
-| `nexus.uploader.transfer.config.ocm.software/v1alpha1`       | `helm`, `raw`, `maven2`           | `Helm/v1` or `Wget/v1` |
+| `nexus.uploader.transfer.config.ocm.software/v1alpha1`       | `helm`, `raw`, `maven2`, `npm`    | `Helm/v1` or `Wget/v1` |
 
 For guidance per repository type, see
 [Upload Resources to JFrog Artifactory]({{< relref "docs/how-to/vendor-specific-apis/jfrog-artifactory.md" >}})

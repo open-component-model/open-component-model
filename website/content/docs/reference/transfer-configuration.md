@@ -31,12 +31,12 @@ configurations:
     method: PUT
 ```
 
-| Type                                                         | Purpose                                                                                             |
-|--------------------------------------------------------------|-----------------------------------------------------------------------------------------------------|
-| `transfer.config.ocm.software/v1alpha1`                      | Global transfer settings: recursion, which resources are copied and how.                            |
-| `http.uploader.transfer.config.ocm.software/v1alpha1`        | Per-match rule that streams a resource to a custom HTTP target.                                     |
-| `artifactory.uploader.transfer.config.ocm.software/v1alpha1` | Per-match rule that uploads a resource into a JFrog Artifactory helm, generic, maven or npm repo.   |
-| `nexus.uploader.transfer.config.ocm.software/v1alpha1`       | Per-match rule that uploads a resource into a Sonatype Nexus hosted helm, raw or maven2 repository. |
+| Type                                                         | Purpose                                                                                                  |
+|--------------------------------------------------------------|----------------------------------------------------------------------------------------------------------|
+| `transfer.config.ocm.software/v1alpha1`                      | Global transfer settings: recursion, which resources are copied and how.                                 |
+| `http.uploader.transfer.config.ocm.software/v1alpha1`        | Per-match rule that streams a resource to a custom HTTP target.                                          |
+| `artifactory.uploader.transfer.config.ocm.software/v1alpha1` | Per-match rule that uploads a resource into a JFrog Artifactory helm, generic, maven or npm repo.        |
+| `nexus.uploader.transfer.config.ocm.software/v1alpha1`       | Per-match rule that uploads a resource into a Sonatype Nexus hosted helm, raw, maven2 or npm repository. |
 
 By default the CLI looks for configuration in `$HOME/.ocmconfig`. Pass
 `--config <file>` to use a different file. The corresponding CLI flags
@@ -302,6 +302,7 @@ which the uploader reads from the Nexus repository settings
 | `helm`          | The packaged Helm chart located in the resource content (.tgz, tar, or OCI) | `Helm/v1` (`helmRepository: <url>/repository/<repository>`) |
 | `raw`           | The resource content as is (OCI artifacts as an OCI layout tar)             | `Wget/v1` (`url: <url>/repository/<repository>/<path>`)     |
 | `maven2`        | The resource content as one file of a Maven component                       | `Wget/v1` (`url: <url>/repository/<repository>/<path>`)     |
+| `npm`           | The npm package tarball, uploaded through the components API                | `Wget/v1` (`url` of the stored tarball)                     |
 
 The repository **must** be a hosted repository. Proxy and group repositories
 cannot receive uploads. The uploading user must be allowed to read the
@@ -339,6 +340,14 @@ date; snapshot versions, which the components API refuses, are uploaded with a
 plain `PUT` and are not added to `maven-metadata.xml`. Like raw files, a stored
 file is never overwritten.
 
+#### npm repositories
+
+The npm package tarball is uploaded through the components API. Nexus reads name
+and version from its `package.json`, stores it under
+`<name>/-/<name>-<version>.tgz` and keeps `latest` on the highest release
+version. The resource is published as `Wget/v1` on the stored tarball; a tarball
+the repository already stores is reused. `path` is not supported.
+
 #### Digest
 
 A `genericBlobDigest/v1` SHA-256 source digest is verified, and content the
@@ -352,12 +361,12 @@ extracted from an OCI artifact gets the SHA-256 of the uploaded bytes.
 
 #### Fields
 
-| Field        | Type              | Description                                                                                                                                                                                                                                        |
-|--------------|-------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `match`      | `UploaderMatch`   | Selects resources this uploader applies to. `match.accessType` is required.                                                                                                                                                                        |
-| `url`        | string (required) | Server base URL **without** the `/repository` segment, e.g. `https://nexus.example.com`.                                                                                                                                                           |
-| `repository` | string (required) | Repository name, e.g. `helm-hosted`.                                                                                                                                                                                                               |
-| `path`       | string            | Content location relative to the root; required in Maven repository layout for `maven2` repositories. Literal or `${…}` CEL expression (see [CEL Expressions](#cel-expressions)). Must be relative, without `.`/`..` segments. Not for helm repos. |
+| Field        | Type              | Description                                                                                                                                                                                                                                               |
+|--------------|-------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `match`      | `UploaderMatch`   | Selects resources this uploader applies to. `match.accessType` is required.                                                                                                                                                                               |
+| `url`        | string (required) | Server base URL **without** the `/repository` segment, e.g. `https://nexus.example.com`.                                                                                                                                                                  |
+| `repository` | string (required) | Repository name, e.g. `helm-hosted`.                                                                                                                                                                                                                      |
+| `path`       | string            | Content location relative to the root; required in Maven repository layout for `maven2` repositories. Literal or `${…}` CEL expression (see [CEL Expressions](#cel-expressions)). Must be relative, without `.`/`..` segments. Not for helm or npm repos. |
 
 #### Sources
 

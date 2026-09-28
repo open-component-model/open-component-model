@@ -16,7 +16,7 @@ type expects, so consumers fetch it with their usual tools.
 ## Guides in This Section
 
 - **[Upload Resources to JFrog Artifactory]({{< relref "jfrog-artifactory.md" >}})** — Helm, Maven, npm and generic repositories
-- **[Upload Resources to Sonatype Nexus]({{< relref "sonatype-nexus.md" >}})** — Helm, Maven and raw repositories, with guidance for npm
+- **[Upload Resources to Sonatype Nexus]({{< relref "sonatype-nexus.md" >}})** — Helm, Maven, npm and raw repositories
 
 ## Related Documentation
 

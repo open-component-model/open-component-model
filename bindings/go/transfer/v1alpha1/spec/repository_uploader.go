@@ -119,6 +119,10 @@ type ArtifactoryUploaderConfig struct {
 //     POM as a resource of its own so Maven can resolve the component. The resource is
 //     published with a Wget/v1 access on the stored file, and like raw files, a stored file is
 //     never overwritten.
+//   - npm: the resource content, an npm package tarball, is uploaded through the components API.
+//     Nexus reads name and version from its package.json and stores it under
+//     <name>/-/<name>-<version>.tgz; the resource is published with a Wget/v1 access on the
+//     stored tarball. A tarball the repository already stores is reused. Path is not supported.
 //
 // Upload credentials are resolved for the HelmChartRepository consumer identity of
 // <url>/repository/<repository>, falling back to its Wget consumer identity. They are also used

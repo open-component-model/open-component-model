@@ -870,6 +870,8 @@ type fakeNexus struct {
 	raw      map[string][]byte // raw path -> content
 	// mavenForms are the form values of the components API uploads.
 	mavenForms []map[string][]string
+	// npm maps the sha256 of content Nexus recognizes as an npm package to its name and version.
+	npm map[string][2]string
 }
 
 func newFakeNexus(t *testing.T, charts map[string][2]string, basePath string, allowOnce bool) *fakeNexus {
@@ -933,6 +935,12 @@ func (f *fakeNexus) handle(w http.ResponseWriter, r *http.Request) {
 		var items []item
 		if f.searchLag > 0 {
 			f.searchLag--
+		} else if sha := q.Get("sha256"); repo == "helm-hosted" && sha != "" {
+			for path, digest := range f.stored {
+				if digest == sha {
+					items = append(items, item{Path: "/" + path, Checksum: checksum{SHA256: digest}})
+				}
+			}
 		} else if repo == "helm-hosted" && name != "" {
 			// Nexus reports asset paths with a leading slash; strip it for our stored map.
 			lookupName := strings.TrimPrefix(name, "/")
@@ -1000,6 +1008,21 @@ func (f *fakeNexus) handle(w http.ResponseWriter, r *http.Request) {
 				return v[0]
 			}
 			return ""
+		}
+		if files := form.File["npm.asset"]; len(files) == 1 {
+			file, _ := files[0].Open()
+			content, _ := io.ReadAll(file)
+			sum := sha256.Sum256(content)
+			digest := hex.EncodeToString(sum[:])
+			pkg, ok := f.npm[digest]
+			if !ok {
+				http.Error(w, `[{"id":"*","message":"Name and version are mandatory fields"}]`, http.StatusBadRequest)
+				return
+			}
+			base := pkg[0][strings.LastIndex(pkg[0], "/")+1:]
+			f.stored[pkg[0]+"/-/"+base+"-"+pkg[1]+".tgz"] = digest
+			w.WriteHeader(http.StatusNoContent)
+			return
 		}
 		f.mavenForms = append(f.mavenForms, form.Value)
 		file, err := form.File["maven2.asset1"][0].Open()
@@ -1338,12 +1361,12 @@ func TestNexusUpload_Transform_DetectionErrors(t *testing.T) {
 		r.ErrorContains(err, "uploads need a hosted repository")
 	})
 
-	t.Run("unsupported format npm", func(t *testing.T) {
+	t.Run("unsupported format pypi", func(t *testing.T) {
 		r := require.New(t)
 		srv := newFakeNexus(t, nil, "", false)
-		srv.format = "npm"
+		srv.format = "pypi"
 		_, err := transformer().Transform(t.Context(), step(srv.URL))
-		r.ErrorContains(err, "supported: helm, raw, maven2")
+		r.ErrorContains(err, "supported: helm, raw, maven2, npm")
 	})
 
 	t.Run("detection returns 403", func(t *testing.T) {
@@ -1505,4 +1528,91 @@ func TestParseMavenPath(t *testing.T) {
 			require.ErrorContains(t, err, "Maven repository layout")
 		})
 	}
+}
+
+func TestNexusUpload_Transform_Npm(t *testing.T) {
+	const content = "npm tarball"
+	contentSum := sha256.Sum256([]byte(content))
+	contentDigest := hex.EncodeToString(contentSum[:])
+	const stored = "/@ocm/demo/-/demo-2.0.0.tgz"
+
+	scheme := runtime.NewScheme()
+	scheme.MustRegisterWithAlias(&NexusUploadTransformation{}, NexusUploadVersionedType)
+	scheme.MustRegisterScheme(wgetaccess.Scheme)
+
+	transform := func(t *testing.T, srv *fakeNexus, digest, path string) (runtime.Typed, error) {
+		res := &descriptorv2.Resource{
+			ElementMeta: descriptorv2.ElementMeta{Name: "demo", Version: "2.0.0"},
+			Type:        "npmPackage",
+			Relation:    descriptorv2.ExternalRelation,
+			Access:      &runtime.Raw{Type: runtime.NewVersionedType("Wget", "v1"), Data: []byte(`{"type":"Wget/v1","url":"https://example.com/demo.tgz"}`)},
+		}
+		if digest != "" {
+			res.Digest = &descriptorv2.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: "genericBlobDigest/v1", Value: digest}
+		}
+		repo := &chartResourceRepo{chart: []byte(content)}
+		tr := &NexusUpload{repositoryUploader{
+			Scheme:                scheme,
+			Charts:                &chartarchive.Source{ResourceRepository: repo},
+			ResourceRepository:    repo,
+			chartMetadataInterval: time.Millisecond,
+		}}
+		return tr.Transform(t.Context(), &NexusUploadTransformation{
+			Type: NexusUploadVersionedType,
+			ID:   "upload",
+			Spec: &RepositoryUploadSpec{
+				Resource:         res,
+				ComponentVersion: &RepositoryUploadComponentVersion{Component: "ocm.software/test", Version: "1.0.0"},
+				URL:              srv.URL,
+				Repository:       "helm-hosted",
+				Path:             path,
+			},
+		})
+	}
+	newServer := func(t *testing.T) *fakeNexus {
+		srv := newFakeNexus(t, nil, "", false)
+		srv.format = "npm"
+		srv.npm = map[string][2]string{contentDigest: {"@ocm/demo", "2.0.0"}}
+		return srv
+	}
+	accessURL := func(r *require.Assertions, out runtime.Typed) string {
+		var access wgetaccessv1.Wget
+		r.NoError(wgetaccess.Scheme.Convert(out.(*NexusUploadTransformation).Output.Resource.Access, &access))
+		return access.URL
+	}
+
+	t.Run("uploads through the components API and publishes the stored tarball", func(t *testing.T) {
+		r := require.New(t)
+		srv := newServer(t)
+		srv.searchLag = 1
+		out, err := transform(t, srv, "", "")
+		r.NoError(err)
+		r.Contains(srv.recorded(), "POST /service/rest/v1/components")
+		r.Equal(srv.URL+"/repository/helm-hosted"+stored, accessURL(r, out))
+	})
+
+	t.Run("reuses a stored package with the same content", func(t *testing.T) {
+		r := require.New(t)
+		srv := newServer(t)
+		srv.store(strings.TrimPrefix(stored, "/"), contentDigest)
+		out, err := transform(t, srv, contentDigest, "")
+		r.NoError(err)
+		r.NotContains(srv.recorded(), "POST /service/rest/v1/components")
+		r.Equal(srv.URL+"/repository/helm-hosted"+stored, accessURL(r, out))
+	})
+
+	t.Run("fails for content that is not an npm package", func(t *testing.T) {
+		r := require.New(t)
+		srv := newServer(t)
+		srv.npm = nil
+		_, err := transform(t, srv, "", "")
+		r.ErrorContains(err, "Name and version are mandatory fields")
+	})
+
+	t.Run("rejects a path", func(t *testing.T) {
+		r := require.New(t)
+		srv := newServer(t)
+		_, err := transform(t, srv, "", "packages/demo.tgz")
+		r.ErrorContains(err, "path is not supported for nexus npm repositories")
+	})
 }

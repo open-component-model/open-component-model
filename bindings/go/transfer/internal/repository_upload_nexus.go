@@ -26,7 +26,7 @@ import (
 // NexusUpload uploads a resource into a hosted repository of a Sonatype Nexus Repository 3
 // server. The format of the repository decides what is uploaded and how the resource is
 // published: a Helm chart with a Helm/v1 access (helm), or the resource content with a Wget/v1
-// access (raw, maven2). See the NexusUploaderConfig transfer config.
+// access (raw, maven2, npm). See the NexusUploaderConfig transfer config.
 type NexusUpload struct {
 	repositoryUploader
 }
@@ -87,8 +87,15 @@ func (t *NexusUpload) Transform(ctx context.Context, step runtime.Typed) (runtim
 		if out, err = t.uploadFile(ctx, c, spec, src, repoURL, path, nexusMaven); err != nil {
 			return nil, err
 		}
+	case "npm":
+		if spec.Path != "" {
+			return nil, fmt.Errorf("path is not supported for nexus npm repositories: nexus stores packages under <name>/-/<name>-<version>.tgz")
+		}
+		if out, err = t.uploadNpm(ctx, c, spec, src, repoURL); err != nil {
+			return nil, err
+		}
 	default:
-		return nil, fmt.Errorf("nexus repository %q has format %q; supported: helm, raw, maven2", spec.Repository, typ)
+		return nil, fmt.Errorf("nexus repository %q has format %q; supported: helm, raw, maven2, npm", spec.Repository, typ)
 	}
 	if transformation.Output, err = t.output(out); err != nil {
 		return nil, err
@@ -371,6 +378,22 @@ func nexusMavenUpload(ctx context.Context, c *repositoryClient, spec *Repository
 		computed, _, err := uploadBlob(ctx, c, content, target, http.Header{"Content-Type": {mediaType}}, nil)
 		return computed, err
 	}
+	fields := [][2]string{
+		{"maven2.groupId", coords.groupID},
+		{"maven2.artifactId", coords.artifactID},
+		{"maven2.version", coords.version},
+		{"maven2.generate-pom", "false"},
+		{"maven2.asset1.extension", coords.extension},
+	}
+	if coords.classifier != "" {
+		fields = append(fields, [2]string{"maven2.asset1.classifier", coords.classifier})
+	}
+	return nexusComponentUpload(ctx, c, spec, fields, "maven2.asset1", coords.artifactID+"."+coords.extension, content, mediaType)
+}
+
+// nexusComponentUpload streams content as the single asset assetField of a component, with
+// the form fields, to the components API and returns the hex SHA-256 of the bytes sent.
+func nexusComponentUpload(ctx context.Context, c *repositoryClient, spec *RepositoryUploadSpec, fields [][2]string, assetField, filename string, content blob.ReadOnlyBlob, mediaType string) (string, error) {
 	base, err := url.JoinPath(spec.URL, "service", "rest", "v1", "components")
 	if err != nil {
 		return "", fmt.Errorf("invalid nexus url: %w", err)
@@ -388,7 +411,7 @@ func nexusMavenUpload(ctx context.Context, c *repositoryClient, spec *Repository
 	written := make(chan struct{})
 	go func() {
 		defer close(written)
-		pw.CloseWithError(writeMavenForm(form, coords, io.TeeReader(rc, hasher), mediaType))
+		pw.CloseWithError(writeComponentForm(form, fields, assetField, filename, io.TeeReader(rc, hasher), mediaType))
 	}()
 	err = c.send(ctx, http.MethodPost, componentsURL, body, -1, http.Header{"Content-Type": {form.FormDataContentType()}}, nil)
 	// Unblock the writer if the request stopped reading, then wait until it stopped hashing.
@@ -397,25 +420,15 @@ func nexusMavenUpload(ctx context.Context, c *repositoryClient, spec *Repository
 	return hex.EncodeToString(hasher.Sum(nil)), err
 }
 
-// writeMavenForm writes the components API form of a single maven2 asset.
-func writeMavenForm(form *multipart.Writer, coords mavenCoordinates, content io.Reader, mediaType string) error {
-	fields := [][2]string{
-		{"maven2.groupId", coords.groupID},
-		{"maven2.artifactId", coords.artifactID},
-		{"maven2.version", coords.version},
-		{"maven2.generate-pom", "false"},
-		{"maven2.asset1.extension", coords.extension},
-	}
-	if coords.classifier != "" {
-		fields = append(fields, [2]string{"maven2.asset1.classifier", coords.classifier})
-	}
+// writeComponentForm writes the components API form of a single asset.
+func writeComponentForm(form *multipart.Writer, fields [][2]string, assetField, filename string, content io.Reader, mediaType string) error {
 	for _, field := range fields {
 		if err := form.WriteField(field[0], field[1]); err != nil {
 			return err
 		}
 	}
 	header := textproto.MIMEHeader{}
-	header.Set("Content-Disposition", fmt.Sprintf(`form-data; name="maven2.asset1"; filename=%q`, coords.artifactID+"."+coords.extension))
+	header.Set("Content-Disposition", fmt.Sprintf(`form-data; name=%q; filename=%q`, assetField, filename))
 	header.Set("Content-Type", mediaType)
 	part, err := form.CreatePart(header)
 	if err != nil {
@@ -425,4 +438,115 @@ func writeMavenForm(form *multipart.Writer, coords mavenCoordinates, content io.
 		return err
 	}
 	return form.Close()
+}
+
+// uploadNpm uploads the npm package tarball of the resource through the components API and
+// returns the resource with a Wget/v1 access on the stored tarball. Nexus reads the package name
+// and version from package.json and stores the tarball under <name>/-/<name>-<version>.tgz, so
+// the tarball is found by its SHA-256 afterwards. A tarball the repository already stores is
+// reused without uploading it.
+func (t *NexusUpload) uploadNpm(ctx context.Context, c *repositoryClient, spec *RepositoryUploadSpec, src *descriptor.Resource, repoURL string) (*descriptor.Resource, error) {
+	req, err := t.open(ctx, spec, src)
+	if err != nil {
+		return nil, err
+	}
+	content, err := t.Charts.OpenContent(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = content.Close() }()
+
+	expected, known, err := knownDigest(src.Digest, content.Blob, content.FromOCI)
+	if err != nil {
+		return nil, err
+	}
+	mediaType := contentType(content, spec.Resource)
+	var paths []string
+	if known != "" {
+		if paths, err = nexusAssetPaths(ctx, c, spec, known); err != nil {
+			return nil, err
+		}
+	}
+	digestHex := known
+	if len(paths) > 0 {
+		slog.InfoContext(ctx, "reused npm package already stored in the nexus repository", "resource", src.ToIdentity(), "url", redactURL(repoURL+paths[0]))
+	} else {
+		file, err := resourceFile(src, ".tgz")
+		if err != nil {
+			return nil, err
+		}
+		computed, err := nexusComponentUpload(ctx, c, spec, nil, "npm.asset", file, content.Blob, mediaType)
+		if err != nil {
+			return nil, err
+		}
+		if known != "" && computed != known {
+			return nil, fmt.Errorf("digest mismatch: expected %s, got %s (nexus keeps the uploaded package in repository %s)", known, computed, spec.Repository)
+		}
+		digestHex = computed
+		// Nexus indexes the stored tarball for search shortly after the upload.
+		for attempt := 1; len(paths) == 0; attempt++ {
+			if paths, err = nexusAssetPaths(ctx, c, spec, digestHex); err != nil {
+				return nil, err
+			}
+			if len(paths) > 0 {
+				break
+			}
+			if attempt == chartMetadataAttempts {
+				return nil, fmt.Errorf("nexus repository %q stored the npm package of resource %s, but its search does not find it by SHA-256 %s", spec.Repository, src.ToIdentity(), digestHex)
+			}
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(t.interval()):
+			}
+		}
+		slog.InfoContext(ctx, "uploaded npm package", "server", "nexus", "resource", src.ToIdentity(), "url", redactURL(repoURL+paths[0]))
+	}
+
+	out := src.DeepCopy()
+	out.Access = &wgetaccessv1.Wget{
+		Type:      wgetaccess.V1VersionedType,
+		URL:       repoURL + paths[0],
+		MediaType: mediaType,
+	}
+	out.Digest = uploadedDigest(src.Digest, expected, digestHex)
+	return out, nil
+}
+
+// nexusAssetPaths returns the escaped paths, with a leading slash, of the .tgz assets the
+// repository stores with content sha256Hex.
+func nexusAssetPaths(ctx context.Context, c *repositoryClient, spec *RepositoryUploadSpec, sha256Hex string) ([]string, error) {
+	base, err := url.JoinPath(spec.URL, "service", "rest", "v1", "search", "assets")
+	if err != nil {
+		return nil, fmt.Errorf("invalid nexus url: %w", err)
+	}
+	target := base + "?" + url.Values{"repository": {spec.Repository}, "sha256": {sha256Hex}}.Encode()
+	resp, err := c.do(ctx, http.MethodGet, target, nil, -1, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("GET %s returned status %d", redactURL(target), resp.StatusCode)
+	}
+	var page struct {
+		Items []struct {
+			Path string `json:"path"`
+		} `json:"items"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&page); err != nil {
+		return nil, fmt.Errorf("failed decoding nexus search result of %s: %w", redactURL(target), err)
+	}
+	var paths []string
+	for _, item := range page.Items {
+		if !strings.HasSuffix(item.Path, ".tgz") {
+			continue
+		}
+		segments := strings.Split(strings.TrimPrefix(item.Path, "/"), "/")
+		for i, segment := range segments {
+			segments[i] = url.PathEscape(segment)
+		}
+		paths = append(paths, "/"+strings.Join(segments, "/"))
+	}
+	return paths, nil
 }

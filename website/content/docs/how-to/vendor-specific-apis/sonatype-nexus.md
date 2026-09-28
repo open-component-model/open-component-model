@@ -1,6 +1,6 @@
 ---
 title: "Upload Resources to Sonatype Nexus"
-description: "Transfer component versions and upload their resources into Sonatype Nexus Repository 3 hosted repositories: Helm charts, Maven artifacts and raw files."
+description: "Transfer component versions and upload their resources into Sonatype Nexus Repository 3 hosted repositories: Helm charts, Maven artifacts, npm packages and raw files."
 weight: 2
 toc: true
 ---
@@ -9,7 +9,7 @@ toc: true
 
 Transfer a component version and upload its resources into Sonatype Nexus
 Repository 3 hosted repositories, so that consumers fetch them with their usual
-tools (`helm`, `curl`, `mvn`).
+tools (`helm`, `mvn`, `npm`, `curl`).
 
 ## You'll end up with
 
@@ -31,7 +31,7 @@ and picks the upload method for it:
 flowchart LR
     R[Matched resource] --> D{Format}
     D -->|helm| H[Upload chart, publish Helm/v1]
-    D -->|raw / maven2| F[Upload file, publish Wget/v1]
+    D -->|raw / maven2 / npm| F[Upload file, publish Wget/v1]
     D -->|anything else| X[Transfer fails]
 ```
 
@@ -40,6 +40,7 @@ flowchart LR
 | `helm`   | The Helm chart found in the resource                  | `Helm/v1` (`helmRepository`, `helmChart`) |
 | `raw`    | The resource content as is                            | `Wget/v1` on the stored file              |
 | `maven2` | The resource content as one file of a Maven component | `Wget/v1` on the stored file              |
+| `npm`    | The npm package tarball, as is                        | `Wget/v1` on the stored tarball           |
 
 Every other format fails the transfer before anything is uploaded. See
 [Other repository formats](#other-repository-formats) for alternatives.
@@ -175,32 +176,51 @@ Behavior to plan for:
 - A `path` outside the Maven layout, or no `path`, fails before anything is uploaded:
   `path "…" is not in the Maven repository layout …`.
 
-## Other repository formats
-
-| Repository                  | Error                                            | Alternative                                    |
-|-----------------------------|--------------------------------------------------|------------------------------------------------|
-| `npm`                       | `has format "npm"; supported: helm, raw, maven2` | `npm publish` or the components API, see below |
-| Proxy or group repositories | `uploads need a hosted repository`               | Upload into the hosted repository behind it    |
-
 ### npm packages
 
-A Nexus `npm` hosted repository does not accept plain `PUT`s of package tarballs
-(`400`). It accepts packages from `npm publish` and from the components API with the
-tarball as `npm.asset`:
+Point the uploader at an npm hosted repository. The resource must hold an npm package
+tarball (`package/package.json` plus the package files):
 
-```bash
-curl -u <USERNAME>:<PASSWORD> -F "npm.asset=@my-package-1.0.0.tgz" \
-  "https://nexus.example.com/service/rest/v1/components?repository=npm-hosted"
+```yaml
+  - type: nexus.uploader.transfer.config.ocm.software/v1alpha1
+    match:
+      accessType: localBlob
+      name: my-package
+    url: https://nexus.example.com
+    repository: npm-hosted
 ```
 
-- Nexus reads name and version from `package.json` and stores the tarball at
-  `<name>/-/<name>-<version>.tgz` (`@scope/<name>/-/<name>-<version>.tgz` for scoped
-  packages). Content without a `package.json` fails with
-  `Name and version are mandatory fields`.
-- The `latest` dist-tag is the highest release version: uploading `1.0.0` or
-  `0.5.0` after `2.0.0`, or the prerelease `3.0.0-rc.1`, keeps `2.0.0` as `latest`.
-- Uploading a version the repository already stores fails with `409` when redeploy
-  is disabled.
+Nexus does not accept plain uploads of package tarballs, so the uploader uses the
+components API (`POST /service/rest/v1/components` with the tarball as `npm.asset`).
+Nexus reads name and version from `package.json` and stores the tarball under
+`<name>/-/<name>-<version>.tgz` (`@scope/<name>/-/<name>-<version>.tgz` for scoped
+packages). The resource is published as `Wget/v1` on the stored tarball, for example
+`https://nexus.example.com/repository/npm-hosted/@ocm/demo/-/demo-2.0.0.tgz`.
+
+Install it with npm:
+
+```bash
+npm install @ocm/demo@2.0.0 --registry https://nexus.example.com/repository/npm-hosted/
+```
+
+Behavior to plan for:
+
+- **The `latest` dist-tag is the highest release version**, not the most recently
+  uploaded one: transferring `1.0.0` after `2.0.0` keeps `2.0.0` as `latest`, and a
+  prerelease such as `3.0.0-rc.1` does not become `latest`.
+- **A second transfer reuses the stored tarball**: the uploader finds it by its SHA-256.
+- **Content that is not an npm package** fails the transfer:
+  `POST …/service/rest/v1/components returned status 400: … Name and version are mandatory fields`.
+- **A version the repository already stores with other content** fails with `409` when
+  redeploy is disabled.
+- `path` is not supported: Nexus decides where packages are stored.
+
+## Other repository formats
+
+| Repository                  | Error                                                  | Alternative                                 |
+|-----------------------------|--------------------------------------------------------|---------------------------------------------|
+| `pypi` and other formats    | `has format "pypi"; supported: helm, raw, maven2, npm` | Upload with the format's own client         |
+| Proxy or group repositories | `uploads need a hosted repository`                     | Upload into the hosted repository behind it |
 
 ## Troubleshooting
 
