@@ -44,6 +44,7 @@ func NewCredentialGraph(ctx context.Context, config *genericv1.Config, opts Cred
 		),
 		CredentialRepositoryTypeScheme: opts.PluginManager.CredentialRepositoryRegistry.RepositoryScheme(),
 		CredentialTypeSchemeProvider:   opts.PluginManager.CredentialTypeRegistry,
+		ConsumerIdentityTypeScheme:     opts.PluginManager.CredentialTypeRegistry.GetConsumerIdentityTypeScheme(),
 	}
 
 	graph, err := credentials.ToGraph(ctx, credCfg, credOpts)
