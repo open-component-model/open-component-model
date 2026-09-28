@@ -149,9 +149,8 @@ name and version the server records.
 | `Nexus`       | `<url>/repository/<repository>/<resource>-<resource-version>.tgz`                                  | `<url>/repository/<repository>`           |
 
 **Artifactory** reads the chart name and version from the deployed file's
-properties; content without them is deleted and fails the transfer. After each
-upload the uploader requests a reindex of the chart (Artifactory 7.105.2+,
-failures only logged; `reindex: false` skips it). The repository must not enable
+properties; content without them is deleted and fails the transfer. Artifactory
+indexes the deployed chart itself. The repository must not enable
 *Enforce Chart Name and Version*, because the file name comes from the resource.
 
 **Nexus** stores the chart as `<name>-<version>.tgz` from `Chart.yaml` and
@@ -172,7 +171,6 @@ name and version fails.
 | `server`     | enum (required)   | `Artifactory` or `Nexus`.                                                                               |
 | `url`        | string (required) | Server base URL **without** the `/artifactory` or `/repository` segment, e.g. `https://myorg.jfrog.io`. |
 | `repository` | string (required) | Helm repository name, e.g. `helm-local`.                                                                |
-| `reindex`    | bool              | Artifactory only. Request an index recalculation per uploaded chart. Defaults to `true`.                |
 
 #### Sources
 

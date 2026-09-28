@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -140,8 +139,6 @@ func Test_Integration_TransferHelmResource_ArtifactoryHelmUploaderDeploysChart(t
 	r.Equal(chartTgzBytes, got, "uploaded bytes must equal the chart .tgz")
 	r.Equal("application/gzip", gotHeaders.Get("Content-Type"),
 		"Content-Type must be application/gzip")
-	r.Equal([]string{"/artifactory/api/helm/helm-local/" + strings.TrimPrefix(expectedPath, "/artifactory/helm-local/") + "/reindex uploaded=true"}, targetSrv.reindexed(),
-		"the index of the uploaded chart must be recalculated once, after the chart was deployed")
 
 	// Verify the transferred descriptor in the target CTF.
 	gotDesc, err := createCTFRepository(t, targetCTFPath).GetComponentVersion(ctx, componentName, componentVersion)
@@ -305,8 +302,6 @@ func Test_Integration_TransferLocalBlobHelmResource_ArtifactoryHelmUploaderDeplo
 			r.Equal(tt.wantBody, got, "uploaded bytes must equal the chart .tgz")
 			r.Equal("application/gzip", gotHeaders.Get("Content-Type"),
 				"Content-Type must be application/gzip")
-			r.Equal([]string{"/artifactory/api/helm/helm-local/" + strings.TrimPrefix(expectedPath, "/artifactory/helm-local/") + "/reindex uploaded=true"}, targetSrv.reindexed(),
-				"the index of the uploaded chart must be recalculated once, after the chart was deployed")
 
 			// Verify the transferred descriptor in the target CTF.
 			gotDesc, err := createCTFRepository(t, targetCTFPath).GetComponentVersion(ctx, componentName, componentVersion)
@@ -351,10 +346,9 @@ type fakeArtifactory struct {
 	*httptest.Server
 	chartSHA string
 
-	mu        sync.Mutex
-	files     map[string][]byte
-	headers   map[string]http.Header
-	reindexes []string
+	mu      sync.Mutex
+	files   map[string][]byte
+	headers map[string]http.Header
 }
 
 func newFakeArtifactory(t *testing.T, chart []byte) *fakeArtifactory {
@@ -391,11 +385,6 @@ func (f *fakeArtifactory) handle(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 		_, _ = io.WriteString(w, `{"properties":{"chart.name":["mychart"],"chart.version":["0.1.0"]}}`)
-	case req.Method == http.MethodPost && strings.HasSuffix(req.URL.Path, "/reindex"):
-		chartPath := "/artifactory/helm-local/" + strings.TrimSuffix(strings.TrimPrefix(req.URL.Path, "/artifactory/api/helm/helm-local/"), "/reindex")
-		_, uploaded := f.files[chartPath]
-		f.reindexes = append(f.reindexes, fmt.Sprintf("%s uploaded=%t", req.URL.Path, uploaded))
-		w.WriteHeader(http.StatusOK)
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
@@ -412,10 +401,4 @@ func (f *fakeArtifactory) storedPaths() []string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return storedKeys(f.files)
-}
-
-func (f *fakeArtifactory) reindexed() []string {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return append([]string(nil), f.reindexes...)
 }

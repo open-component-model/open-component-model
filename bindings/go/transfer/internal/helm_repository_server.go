@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
 	"net/url"
 	"time"
@@ -33,8 +32,6 @@ type helmRepositoryServer interface {
 	chart(ctx context.Context, c *helmClient, sha256Hex string) (name, version string, isChart bool, err error)
 	// discard removes uploaded content that must not be published.
 	discard(ctx context.Context, c *helmClient, sha256Hex string) error
-	// afterUpload runs follow-up requests; failures are logged, never returned.
-	afterUpload(ctx context.Context, c *helmClient)
 }
 
 // newServer returns the backend of spec.Server. path is the chart location below the component
@@ -58,9 +55,8 @@ func (t *HelmRepositoryUpload) newServer(spec *HelmRepositoryUploadSpec, path, f
 // <url>/artifactory/<repository>/<component>/<component version>/<chart file> and reads the chart
 // name and version from the properties Artifactory records when it indexes the deployed chart.
 type artifactoryServer struct {
-	putURL, storageURL, helmRepo, reindexURL string
-	reindex                                  bool
-	interval                                 time.Duration
+	putURL, storageURL, helmRepo string
+	interval                     time.Duration
 }
 
 func newArtifactoryServer(spec *HelmRepositoryUploadSpec, path string, interval time.Duration) (*artifactoryServer, error) {
@@ -80,8 +76,6 @@ func newArtifactoryServer(spec *HelmRepositoryUploadSpec, path string, interval 
 		putURL:     uploadBase + "/" + path,
 		storageURL: storageBase + "/" + path,
 		helmRepo:   helmRepo,
-		reindexURL: helmRepo + "/" + path + "/reindex",
-		reindex:    spec.Reindex,
 		interval:   interval,
 	}, nil
 }
@@ -163,16 +157,6 @@ func (a *artifactoryServer) chart(ctx context.Context, c *helmClient, _ string) 
 
 func (a *artifactoryServer) discard(ctx context.Context, c *helmClient, _ string) error {
 	return c.send(ctx, http.MethodDelete, a.putURL, nil, -1, nil)
-}
-
-func (a *artifactoryServer) afterUpload(ctx context.Context, c *helmClient) {
-	if !a.reindex {
-		return
-	}
-	if err := c.send(ctx, http.MethodPost, a.reindexURL, nil, -1, nil); err != nil {
-		slog.WarnContext(ctx, "failed requesting a helm index recalculation for the uploaded chart; artifactory also indexes deployed charts on its own",
-			"url", redactURL(a.putURL), "error", err)
-	}
 }
 
 // nexusServer uploads the chart to the root of a Nexus Repository 3 Helm hosted repository.
@@ -278,8 +262,6 @@ func (n *nexusServer) chart(ctx context.Context, c *helmClient, sha256Hex string
 func (n *nexusServer) discard(_ context.Context, _ *helmClient, sha256Hex string) error {
 	return fmt.Errorf("nexus stores charts under a path derived from the chart, so content with SHA-256 %s is left in repository %s", sha256Hex, n.repository)
 }
-
-func (n *nexusServer) afterUpload(context.Context, *helmClient) {}
 
 // search returns the helm components of the repository whose asset has the SHA-256. Only the
 // first page is read: one content is expected to be stored as at most one component.

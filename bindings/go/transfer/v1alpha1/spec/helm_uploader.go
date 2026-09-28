@@ -80,18 +80,6 @@ type HelmUploaderConfig struct {
 	URL string `json:"url"`
 	// Repository is the name of the Helm (hosted) repository to upload into.
 	Repository string `json:"repository"`
-	// Reindex requests Artifactory's Helm index recalculation for the uploaded chart only
-	// (POST <url>/artifactory/api/helm/<repository>/<chart path>/reindex, Artifactory 7.105.2 or
-	// later) after each upload. Artifactory only; Nexus maintains its index on its own. Artifactory
-	// also indexes deployed charts on its own, so a failing request is only logged. Defaults to
-	// true.
-	Reindex *bool `json:"reindex,omitempty"`
-}
-
-// ReindexEnabled reports whether a Helm index recalculation follows each upload: always false for
-// Nexus, default true for Artifactory.
-func (u *HelmUploaderConfig) ReindexEnabled() bool {
-	return u.Server == HelmRepositoryServerArtifactory && (u.Reindex == nil || *u.Reindex)
 }
 
 // Match reports whether this uploader applies to resource, delegating to the
@@ -103,10 +91,9 @@ func (u *HelmUploaderConfig) Match(resource descriptorv2.Resource, types TypeRes
 	return u.MatchSpec.Matches(resource, types)
 }
 
-// Validate rejects a non-matching Type, an unknown server, reindex for Nexus, an empty match
-// access type, a URL that is not an absolute http(s) URL without query or fragment and a
-// repository that is not a single key. An empty Type is allowed for programmatically
-// constructed configs.
+// Validate rejects a non-matching Type, an unknown server, an empty match access type, a URL
+// that is not an absolute http(s) URL without query or fragment and a repository that is not a
+// single key. An empty Type is allowed for programmatically constructed configs.
 func (u *HelmUploaderConfig) Validate() error {
 	if u == nil {
 		return nil
@@ -123,9 +110,6 @@ func (u *HelmUploaderConfig) Validate() error {
 	case HelmRepositoryServerArtifactory, HelmRepositoryServerNexus:
 	default:
 		return fmt.Errorf("server must be %q or %q, got %q", HelmRepositoryServerArtifactory, HelmRepositoryServerNexus, u.Server)
-	}
-	if u.Server == HelmRepositoryServerNexus && u.Reindex != nil {
-		return fmt.Errorf("reindex is only supported for server %q", HelmRepositoryServerArtifactory)
 	}
 	if u.MatchSpec.AccessType.IsEmpty() {
 		return fmt.Errorf("match.accessType is required")

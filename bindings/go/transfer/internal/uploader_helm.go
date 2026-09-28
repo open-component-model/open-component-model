@@ -44,7 +44,6 @@ func processHelmUploader(resource descriptorv2.Resource, access runtime.Typed, u
 		"server":           string(u.Server),
 		"url":              u.URL,
 		"repository":       u.Repository,
-		"reindex":          u.ReindexEnabled(),
 	})
 	if err != nil {
 		return fmt.Errorf("cannot create unstructured spec for helm repository upload transformation: %w", err)

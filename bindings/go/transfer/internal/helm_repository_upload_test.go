@@ -100,8 +100,7 @@ type artifactoryRequest struct {
 // as a chart; here, recognition is a lookup of the content digest in charts.
 type fakeArtifactory struct {
 	*httptest.Server
-	charts        map[string][2]string // sha256 -> name, version
-	reindexStatus int
+	charts map[string][2]string // sha256 -> name, version
 
 	mu       sync.Mutex
 	requests []artifactoryRequest
@@ -111,7 +110,7 @@ type fakeArtifactory struct {
 
 func newFakeArtifactory(t *testing.T, charts map[string][2]string) *fakeArtifactory {
 	t.Helper()
-	f := &fakeArtifactory{charts: charts, reindexStatus: http.StatusOK, contents: map[string]bool{}, paths: map[string]string{}}
+	f := &fakeArtifactory{charts: charts, contents: map[string]bool{}, paths: map[string]string{}}
 	f.Server = httptest.NewServer(http.HandlerFunc(f.handle))
 	t.Cleanup(f.Close)
 	return f
@@ -130,8 +129,6 @@ func (f *fakeArtifactory) handle(w http.ResponseWriter, r *http.Request) {
 
 	const repoPrefix, storagePrefix = "/artifactory/helm-local/", "/artifactory/api/storage/helm-local/"
 	switch {
-	case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/artifactory/api/helm/helm-local/") && strings.HasSuffix(r.URL.Path, "/reindex"):
-		w.WriteHeader(f.reindexStatus)
 	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, storagePrefix):
 		chart, ok := f.charts[f.paths[strings.TrimPrefix(r.URL.Path, storagePrefix)]]
 		if !ok {
@@ -197,7 +194,6 @@ func TestHelmRepositoryUpload_Transform_Artifactory(t *testing.T) {
 		chartPath   = "ocm.software/test/1.0.0/renamed-9.9.9.tgz"
 		putPath     = "/artifactory/helm-local/" + chartPath
 		storagePath = "/artifactory/api/storage/helm-local/" + chartPath
-		reindexPath = "/artifactory/api/helm/helm-local/" + chartPath + "/reindex"
 	)
 	source := func() *descriptorv2.Resource {
 		return &descriptorv2.Resource{
@@ -207,7 +203,7 @@ func TestHelmRepositoryUpload_Transform_Artifactory(t *testing.T) {
 			Access:      &runtime.Raw{Type: runtime.NewVersionedType("Wget", "v1"), Data: []byte(`{"type":"Wget/v1","url":"https://charts.example/mychart-0.1.0.tgz"}`)},
 		}
 	}
-	step := func(url string, reindex bool, res *descriptorv2.Resource) *HelmRepositoryUploadTransformation {
+	step := func(url string, res *descriptorv2.Resource) *HelmRepositoryUploadTransformation {
 		return &HelmRepositoryUploadTransformation{
 			Type: HelmRepositoryUploadVersionedType,
 			ID:   "upload",
@@ -217,7 +213,6 @@ func TestHelmRepositoryUpload_Transform_Artifactory(t *testing.T) {
 				Server:           transferv1alpha1.HelmRepositoryServerArtifactory,
 				URL:              url,
 				Repository:       "helm-local",
-				Reindex:          reindex,
 			},
 		}
 	}
@@ -251,11 +246,11 @@ func TestHelmRepositoryUpload_Transform_Artifactory(t *testing.T) {
 	t.Run("stores the chart under the component version and publishes the name artifactory records", func(t *testing.T) {
 		r := require.New(t)
 		srv := newFakeArtifactory(t, charts)
-		out, err := transformer(nil).Transform(t.Context(), step(srv.URL, true, source()))
+		out, err := transformer(nil).Transform(t.Context(), step(srv.URL, source()))
 		r.NoError(err)
 
 		got := srv.recorded()
-		r.Equal([]string{"PUT " + putPath, "GET " + storagePath, "POST " + reindexPath}, methods(got))
+		r.Equal([]string{"PUT " + putPath, "GET " + storagePath}, methods(got))
 		r.Equal("application/gzip", got[0].contentType)
 		r.Equal(chartTGZ, got[0].body)
 		r.Empty(got[0].checksum, "without a source digest there is no checksum to announce")
@@ -269,28 +264,11 @@ func TestHelmRepositoryUpload_Transform_Artifactory(t *testing.T) {
 		r.Equal(&descriptorv2.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: "genericBlobDigest/v1", Value: chartDigest}, res.Digest)
 	})
 
-	t.Run("no reindex when disabled", func(t *testing.T) {
-		r := require.New(t)
-		srv := newFakeArtifactory(t, charts)
-		_, err := transformer(nil).Transform(t.Context(), step(srv.URL, false, source()))
-		r.NoError(err)
-		r.Equal([]string{"PUT " + putPath, "GET " + storagePath}, methods(srv.recorded()))
-	})
-
-	t.Run("a failing reindex does not fail the upload", func(t *testing.T) {
-		r := require.New(t)
-		srv := newFakeArtifactory(t, charts)
-		srv.reindexStatus = http.StatusForbidden
-		out, err := transformer(nil).Transform(t.Context(), step(srv.URL, true, source()))
-		r.NoError(err)
-		r.Equal("mychart:0.1.0", helmChart(r, out))
-	})
-
 	t.Run("content artifactory does not recognize as a chart is deleted and fails", func(t *testing.T) {
 		r := require.New(t)
 		srv := newFakeArtifactory(t, charts)
 		notAChart := []byte{0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
-		_, err := transformerFor(notAChart, nil).Transform(t.Context(), step(srv.URL, true, source()))
+		_, err := transformerFor(notAChart, nil).Transform(t.Context(), step(srv.URL, source()))
 		r.ErrorContains(err, "is not a helm chart: artifactory recorded no chart name and version")
 		got := methods(srv.recorded())
 		r.Equal("PUT "+putPath, got[0])
@@ -318,7 +296,7 @@ func TestHelmRepositoryUpload_Transform_Artifactory(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			r := require.New(t)
 			srv := newFakeArtifactory(t, charts)
-			_, err := transformer(tt.creds).Transform(t.Context(), step(srv.URL, true, source()))
+			_, err := transformer(tt.creds).Transform(t.Context(), step(srv.URL, source()))
 			if tt.wantErr != "" {
 				r.ErrorContains(err, tt.wantErr)
 				r.Empty(srv.recorded(), "no request may be sent")
@@ -326,7 +304,7 @@ func TestHelmRepositoryUpload_Transform_Artifactory(t *testing.T) {
 			}
 			r.NoError(err)
 			got := srv.recorded()
-			r.Len(got, 3)
+			r.Len(got, 2, "PUT and property GET")
 			for _, req := range got {
 				if tt.wantBasic != nil {
 					r.True(req.basic, "%s %s must use basic auth", req.method, req.path)
@@ -343,7 +321,7 @@ func TestHelmRepositoryUpload_Transform_Artifactory(t *testing.T) {
 		srv := newFakeArtifactory(t, charts)
 		res := source()
 		res.Digest = &descriptorv2.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: "genericBlobDigest/v1", Value: chartDigest}
-		out, err := transformer(nil).Transform(t.Context(), step(srv.URL, false, res))
+		out, err := transformer(nil).Transform(t.Context(), step(srv.URL, res))
 		r.NoError(err)
 		got := srv.recorded()
 		r.Equal([]string{"PUT " + putPath, "PUT " + putPath, "GET " + storagePath}, methods(got))
@@ -355,7 +333,7 @@ func TestHelmRepositoryUpload_Transform_Artifactory(t *testing.T) {
 		r.Equal(res.Digest, out.(*HelmRepositoryUploadTransformation).Output.Resource.Digest)
 
 		// Artifactory now stores the chart, so a second transfer does not upload it again.
-		out, err = transformer(nil).Transform(t.Context(), step(srv.URL, false, res))
+		out, err = transformer(nil).Transform(t.Context(), step(srv.URL, res))
 		r.NoError(err)
 		got = srv.recorded()[3:]
 		r.Equal([]string{"PUT " + putPath, "GET " + storagePath}, methods(got))
@@ -370,7 +348,7 @@ func TestHelmRepositoryUpload_Transform_Artifactory(t *testing.T) {
 		srv := newFakeArtifactory(t, charts)
 		res := source()
 		res.Digest = &descriptorv2.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: "genericBlobDigest/v1", Value: "0000"}
-		_, err := transformer(nil).Transform(t.Context(), step(srv.URL, true, res))
+		_, err := transformer(nil).Transform(t.Context(), step(srv.URL, res))
 		r.ErrorContains(err, "returned status 409")
 		r.Equal([]string{"PUT " + putPath, "PUT " + putPath}, methods(srv.recorded()), "deploy by checksum and the rejected upload, nothing else")
 		r.False(srv.stored(chartPath))
@@ -381,7 +359,7 @@ func TestHelmRepositoryUpload_Transform_Artifactory(t *testing.T) {
 		srv := newFakeArtifactory(t, charts)
 		res := source()
 		res.Digest = &descriptorv2.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: "ociArtifactDigest/v1", Value: chartDigest}
-		_, err := transformer(nil).Transform(t.Context(), step(srv.URL, true, res))
+		_, err := transformer(nil).Transform(t.Context(), step(srv.URL, res))
 		r.ErrorContains(err, "unsupported normalisation algorithm")
 		r.Empty(srv.recorded())
 	})
@@ -391,7 +369,7 @@ func TestHelmRepositoryUpload_Transform_Artifactory(t *testing.T) {
 		srv := newFakeArtifactory(t, charts)
 		res := source()
 		res.ExtraIdentity = runtime.Identity{"arch": "arm64"}
-		_, err := transformer(nil).Transform(t.Context(), step(srv.URL, false, res))
+		_, err := transformer(nil).Transform(t.Context(), step(srv.URL, res))
 		r.NoError(err)
 		put := srv.recorded()[0].path
 		r.True(strings.HasPrefix(put, "/artifactory/helm-local/ocm.software/test/1.0.0/renamed-9.9.9-"), put)
@@ -403,7 +381,7 @@ func TestHelmRepositoryUpload_Transform_Artifactory(t *testing.T) {
 		srv := newFakeArtifactory(t, charts)
 		res := source()
 		res.Name = "../../other"
-		_, err := transformer(nil).Transform(t.Context(), step(srv.URL, true, res))
+		_, err := transformer(nil).Transform(t.Context(), step(srv.URL, res))
 		r.ErrorContains(err, "must not contain path separators")
 		r.Empty(srv.recorded())
 	})
@@ -411,7 +389,7 @@ func TestHelmRepositoryUpload_Transform_Artifactory(t *testing.T) {
 	t.Run("local blob without repository provider", func(t *testing.T) {
 		r := require.New(t)
 		srv := newFakeArtifactory(t, charts)
-		s := step(srv.URL, false, source())
+		s := step(srv.URL, source())
 		s.Spec.ComponentVersion.Repository = &runtime.Raw{Type: runtime.NewVersionedType("OCIRepository", "v1"), Data: []byte(`{"type":"OCIRepository/v1","baseUrl":"ghcr.io/source"}`)}
 		_, err := transformer(nil).Transform(t.Context(), s)
 		r.ErrorContains(err, "no component version repository provider configured")
@@ -426,7 +404,7 @@ func TestHelmRepositoryUpload_Transform_Artifactory(t *testing.T) {
 		tr.RepoProvider = &localChartRepoProvider{repo: repo}
 		res := source()
 		res.Access = &runtime.Raw{Type: runtime.NewVersionedType("LocalBlob", "v1"), Data: []byte(`{"type":"LocalBlob/v1","localReference":"sha256:abc","mediaType":"application/vnd.cncf.helm.chart.content.v1.tar+gzip"}`)}
-		s := step(srv.URL, false, res)
+		s := step(srv.URL, res)
 		s.Spec.ComponentVersion.Repository = &runtime.Raw{Type: runtime.NewVersionedType("OCIRepository", "v1"), Data: []byte(`{"type":"OCIRepository/v1","baseUrl":"ghcr.io/source"}`)}
 		out, err := tr.Transform(t.Context(), s)
 		r.NoError(err)

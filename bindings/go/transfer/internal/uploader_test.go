@@ -173,13 +173,12 @@ func TestBuildGraphDefinition_HelmUploader_EmitsHelmTarget(t *testing.T) {
 	}
 	helmMatch := runtime.NewVersionedType(helmv1.LegacyType, helmv1.LegacyTypeVersion)
 
-	t.Run("emits one HelmRepositoryUpload node that reindexes", func(t *testing.T) {
+	t.Run("emits one HelmRepositoryUpload node", func(t *testing.T) {
 		r := require.New(t)
 		_, tr := build(t, chartResource, uploader(helmMatch))
 		r.Equal("Artifactory", tr.Spec.Data["server"])
 		r.Equal("https://artifactory.example", tr.Spec.Data["url"])
 		r.Equal("helm-local", tr.Spec.Data["repository"])
-		r.Equal(true, tr.Spec.Data["reindex"])
 		r.Equal("chart-resource", tr.Spec.Data["resource"].(map[string]any)["name"])
 		cv := tr.Spec.Data["componentVersion"].(map[string]any)
 		r.Equal("ocm.software/test", cv["component"])
@@ -205,21 +204,12 @@ func TestBuildGraphDefinition_HelmUploader_EmitsHelmTarget(t *testing.T) {
 		r.Equal("chart", tr.Spec.Data["resource"].(map[string]any)["name"])
 	})
 
-	t.Run("reindex disabled", func(t *testing.T) {
-		r := require.New(t)
-		u := uploader(helmMatch)
-		u.Reindex = new(bool)
-		_, tr := build(t, chartResource, u)
-		r.Equal(false, tr.Spec.Data["reindex"])
-	})
-
-	t.Run("nexus never reindexes", func(t *testing.T) {
+	t.Run("nexus server", func(t *testing.T) {
 		r := require.New(t)
 		u := uploader(helmMatch)
 		u.Server = transferv1alpha1.HelmRepositoryServerNexus
 		_, tr := build(t, chartResource, u)
 		r.Equal("Nexus", tr.Spec.Data["server"])
-		r.Equal(false, tr.Spec.Data["reindex"])
 	})
 }
 

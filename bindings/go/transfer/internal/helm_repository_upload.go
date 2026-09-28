@@ -71,9 +71,6 @@ type HelmRepositoryUploadSpec struct {
 	URL string `json:"url"`
 	// Repository is the name of the Helm repository.
 	Repository string `json:"repository"`
-	// Reindex requests an index recalculation for the uploaded chart (Artifactory only). A
-	// failure is only logged, because Artifactory indexes deployed charts on its own.
-	Reindex bool `json:"reindex,omitempty"`
 }
 
 // HelmRepositoryUploadComponentVersion identifies the component version holding the resource.
@@ -253,8 +250,6 @@ func (t *HelmRepositoryUpload) Transform(ctx context.Context, step runtime.Typed
 	if strings.ContainsAny(name, ":/") || strings.Contains(version, "/") {
 		return nil, fmt.Errorf("%s recorded an invalid chart name %q or version %q for %s", srv.name(), name, version, uploadURL)
 	}
-
-	srv.afterUpload(ctx, c)
 
 	out := src.DeepCopy()
 	out.Access = &helmaccessv1.Helm{

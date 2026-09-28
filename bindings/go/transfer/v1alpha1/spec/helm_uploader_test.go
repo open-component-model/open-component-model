@@ -33,10 +33,6 @@ func TestHelmUploaderConfig_Validate(t *testing.T) {
 		}, wantErr: "invalid type"},
 		{name: "missing server", mutate: func(u *spec.HelmUploaderConfig) { u.Server = "" }, wantErr: "server is required"},
 		{name: "unknown server", mutate: func(u *spec.HelmUploaderConfig) { u.Server = "Harbor" }, wantErr: `server must be "Artifactory" or "Nexus", got "Harbor"`},
-		{name: "nexus with reindex", mutate: func(u *spec.HelmUploaderConfig) {
-			u.Server = spec.HelmRepositoryServerNexus
-			u.Reindex = new(bool)
-		}, wantErr: `reindex is only supported for server "Artifactory"`},
 		{name: "valid nexus config", mutate: func(u *spec.HelmUploaderConfig) { u.Server = spec.HelmRepositoryServerNexus }},
 		{name: "missing accessType", mutate: func(u *spec.HelmUploaderConfig) {
 			u.MatchSpec.AccessType = runtime.Type{}

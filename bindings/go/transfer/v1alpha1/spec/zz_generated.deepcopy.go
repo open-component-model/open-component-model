@@ -80,11 +80,6 @@ func (in *HelmUploaderConfig) DeepCopyInto(out *HelmUploaderConfig) {
 	*out = *in
 	out.Type = in.Type
 	in.MatchSpec.DeepCopyInto(&out.MatchSpec)
-	if in.Reindex != nil {
-		in, out := &in.Reindex, &out.Reindex
-		*out = new(bool)
-		**out = **in
-	}
 	return
 }
 

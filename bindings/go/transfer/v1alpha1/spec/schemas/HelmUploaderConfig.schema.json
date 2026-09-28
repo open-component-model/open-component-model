@@ -10,10 +10,6 @@
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.transfer.v1alpha1.spec.UploaderMatch",
       "description": "MatchSpec selects the resources this uploader applies to (exposed as `match`)."
     },
-    "reindex": {
-      "type": "boolean",
-      "description": "Reindex requests Artifactory's Helm index recalculation for the uploaded chart only\n(POST \u003curl\u003e/artifactory/api/helm/\u003crepository\u003e/\u003cchart path\u003e/reindex, Artifactory 7.105.2 or\nlater) after each upload. Artifactory only; Nexus maintains its index on its own. Artifactory\nalso indexes deployed charts on its own, so a failing request is only logged. Defaults to\ntrue."
-    },
     "repository": {
       "type": "string",
       "description": "Repository is the name of the Helm (hosted) repository to upload into."

@@ -337,10 +337,6 @@
           "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.transfer.internal.HelmRepositoryUploadComponentVersion",
           "description": "ComponentVersion is the component version holding the resource. It determines where the\nchart is stored in an Artifactory repository and, for local blob resources, where it is\nread from."
         },
-        "reindex": {
-          "type": "boolean",
-          "description": "Reindex requests an index recalculation for the uploaded chart (Artifactory only). A\nfailure is only logged, because Artifactory indexes deployed charts on its own."
-        },
         "repository": {
           "type": "string",
           "description": "Repository is the name of the Helm repository."
