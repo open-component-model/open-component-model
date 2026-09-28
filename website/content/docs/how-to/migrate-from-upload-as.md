@@ -39,9 +39,27 @@ a Before / After pair showing the exact change.
 | Before | After | Behaviour difference |
 | -------- | ------- | ---------------------- |
 | `--upload-as localBlob`, `uploadType: localBlob`, or nothing | Drop the flag/field. | None. Local blob is the default. |
-| `--copy-resources --upload-as ociArtifact`, or `copyMode: allResources` + `uploadType: ociArtifact` | Keep `--copy-resources` / `copyMode: allResources`; add `- type: oci.uploader.transfer.config.ocm.software/v1alpha1` (no other fields). | None. Same target references: `<target>/<referenceName>`. |
-| `--upload-as ociArtifact` without `--copy-resources` (only OCI-manifest local blobs became OCI artifacts; OCI image / Helm references stayed by reference) | Two OCI uploader entries, `match: {accessType: LocalBlob}` and `match: {accessType: localBlob}`. | None. Both entries are needed because `match.accessType` compares the type name exactly, and descriptors carry either spelling. |
+| `--copy-resources --upload-as ociArtifact`, or `copyMode: allResources` + `uploadType: ociArtifact` | Keep `--copy-resources` / `copyMode: allResources`; add an `oci.uploader.transfer.config.ocm.software/v1alpha1` entry with `imageReference: '${targetRepository + "/" + referenceName}'`. | None. Same target references: `<target>/<referenceName>`. |
+| `--upload-as ociArtifact` without `--copy-resources` (only OCI-manifest local blobs became OCI artifacts; OCI image / Helm references stayed by reference) | Two OCI uploader entries with the same `imageReference`, one with `match: {accessType: LocalBlob}` and one with `match: {accessType: localBlob}`. | None. Both entries are needed because `match.accessType` compares the type name exactly, and descriptors carry either spelling. |
 | Controller: `uploadType: ociArtifact` in the transfer config referenced by a `Replication` | Remove `uploadType` from that config entry; add the OCI uploader entry to the same config (ConfigMap/Secret). | None. The controller reads uploader entries from the same configs (`LookupUploaderConfigs`). |
+
+### The old path mapping as a CEL expression
+
+`--upload-as ociArtifact` placed every artifact at the hard-coded path
+`<target baseUrl>[/<subPath>]/<referenceName>`. The OCI uploader expresses that
+mapping as a CEL template in `imageReference`:
+
+```yaml
+imageReference: '${targetRepository + "/" + referenceName}'
+```
+
+- `targetRepository` is the target registry's `baseUrl` plus its optional `subPath`
+  (for example `ghcr.io/target-org/ocm`).
+- `referenceName` is the resource's source repository and tag without the
+  registry (for example `stefanprodan/podinfo:6.5.0`).
+
+This template is also the default when `imageReference` is omitted. The examples
+below write it out so the mapping is visible and can be changed in place.
 
 {{< callout context="note" title="match.accessType does not resolve aliases" icon="outline/info-circle" >}}
 `match.accessType` compares type names exactly. Access types have multiple alias
@@ -113,6 +131,7 @@ Create an OCM config file (e.g. `ocmconfig.yaml`):
 type: generic.config.ocm.software/v1
 configurations:
   - type: oci.uploader.transfer.config.ocm.software/v1alpha1
+    imageReference: '${targetRepository + "/" + referenceName}'
 ```
 
 Then run:
@@ -131,6 +150,7 @@ configurations:
   - type: transfer.config.ocm.software/v1alpha1
     copyMode: allResources
   - type: oci.uploader.transfer.config.ocm.software/v1alpha1
+    imageReference: '${targetRepository + "/" + referenceName}'
 ```
 
 {{< /tab >}}
@@ -157,9 +177,11 @@ configurations:
   - type: oci.uploader.transfer.config.ocm.software/v1alpha1
     match:
       accessType: LocalBlob
+    imageReference: '${targetRepository + "/" + referenceName}'
   - type: oci.uploader.transfer.config.ocm.software/v1alpha1
     match:
       accessType: localBlob
+    imageReference: '${targetRepository + "/" + referenceName}'
 ```
 
 Both entries are needed because `match.accessType` compares the type name
@@ -193,6 +215,7 @@ configurations:
     recursive: -1
     copyMode: allResources
   - type: oci.uploader.transfer.config.ocm.software/v1alpha1
+    imageReference: '${targetRepository + "/" + referenceName}'
 ```
 
 Remove `uploadType` from the transfer config entry and add the OCI uploader
@@ -204,14 +227,15 @@ configs (`LookupUploaderConfigs`).
 
 ## Behaviour to know after migrating
 
-- An uploader applies regardless of `--copy-resources`. The plain entry without
-  `--copy-resources` therefore now also uploads OCI image and Helm resources
-  (which previously stayed by reference), which is why the local-blob-only row
-  above exists.
-- The same entry keeps local blobs when:
-  - the target is a CTF;
-  - a local blob has no `referenceName`;
-  - a local blob is not an OCI manifest.
+- An uploader applies regardless of `--copy-resources`. An entry without a
+  `match` therefore now also uploads OCI image and Helm resources without
+  `--copy-resources` (they previously stayed by reference), which is why the
+  local-blob-only row above exists.
+- An uploader applies only if every alias its `imageReference` uses is available.
+  With the default template the resource keeps the default local-blob handling when:
+  - the target is a CTF (no `targetRepository`);
+  - a local blob has no `referenceName`.
+- A local blob that is not an OCI manifest is never OCI-uploaded.
 - Wget, S3 and GitHub resources are never OCI-uploaded.
 
 The following table shows which access types the OCI uploader supports:
@@ -271,8 +295,9 @@ to the target:
 ocm transfer cv --dry-run -o yaml --config ./ocmconfig.yaml <src> <target>
 ```
 
-Check for `TransferOCIArtifact` / `AddOCIArtifact` nodes whose `imageReference`
-starts with the expected registry path.
+Check for `TransferOCIArtifact` / `AddOCIArtifact` nodes. Their `imageReference`
+is your template with the aliases replaced by quoted values; it is evaluated
+when the transfer runs.
 
 {{< details "Expected output (TransferOCIArtifact)" >}}
 
@@ -290,14 +315,16 @@ transferred to `ghcr.io/target-org/ocm` with the plain OCI uploader entry
         type: OCIImage/v1
     targetResource:
       access:
-        imageReference: ghcr.io/target-org/ocm/stefanprodan/podinfo:6.5.0
+        imageReference: ${"ghcr.io/target-org/ocm" + "/" + "stefanprodan/podinfo:6.5.0"}
         type: ociArtifact/v1
   type: TransferOCIArtifact/v1alpha1
 ```
 
 For a Helm chart resource, you will see `GetHelmChart`, `ConvertHelmToOCI`, and
 then `AddOCIArtifact/v1alpha1` whose `spec.resource.access.imageReference` is the
-target reference, for example `ghcr.io/target-org/ocm/podinfo/podinfo:6.5.0`.
+templated target reference, for example
+`${"ghcr.io/target-org/ocm" + "/" + "podinfo/podinfo:6.5.0"}`, which evaluates to
+`ghcr.io/target-org/ocm/podinfo/podinfo:6.5.0` during the transfer.
 
 With `imageReference: '${"ghcr.io/mirror/" + referenceName}'` and a CTF target,
 the dry-run shows the unevaluated CEL expression:
@@ -329,33 +356,30 @@ Strict decoding now rejects unknown fields.
 
 ### Symptom: Resources still end up as local blobs
 
-**Cause:** The target is a CTF, the local blob has no `referenceName`, or its
-media type is not an OCI manifest. Without `imageReference`, the OCI uploader
-falls through to the default local blob handling in these cases.
+**Cause:** The uploader does not apply to the resource, so it falls through to
+the default local blob handling. This happens when:
 
-**Fix:** Set `imageReference` to an absolute registry reference (e.g.
-`'${"registry.example.com/mirror/" + referenceName}'`), or accept the local blob.
+- the `imageReference` template uses `targetRepository` (the default does) and
+  the target is not an OCI registry, for example a CTF archive;
+- the template uses `referenceName` (the default does) and the resource has none,
+  for example a local blob without `referenceName`;
+- the resource is a local blob whose media type is not an OCI manifest.
 
-### Symptom: `imageReference references targetRepository, but target … is not an OCI registry`
+Run with `--loglevel debug` to see the reason: the transfer logs
+`oci uploader does not apply to resource` with a `reason` attribute.
 
-**Cause:** The `imageReference` template uses the `targetRepository` alias, but
-the transfer target is not an OCI registry (e.g. it is a CTF archive).
-
-**Fix:** Use an absolute registry prefix instead of `targetRepository`:
+**Fix:** For a CTF target, use an absolute registry prefix instead of
+`targetRepository`:
 
 ```yaml
 imageReference: '${"ghcr.io/my-org/mirror/" + referenceName}'
 ```
 
-### Symptom: `imageReference references referenceName, but resource … has no reference name`
-
-**Cause:** The matched resource does not have a reference name (e.g. a local blob
-without `referenceName`).
-
-**Fix:** Use `resource.name`, `resource.version`, or a literal value instead:
+For a resource without a reference name, build the reference from the resource
+instead:
 
 ```yaml
-imageReference: '${"ghcr.io/my-org/" + resource.name + ":" + resource.version}'
+imageReference: '${targetRepository + "/" + resource.name + ":" + resource.version}'
 ```
 
 ## Related documentation

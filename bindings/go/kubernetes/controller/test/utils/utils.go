@@ -185,7 +185,7 @@ func PrepareOCMComponent(ctx context.Context, name, componentConstructorPath, im
 
 	if strings.Contains(name, "localization") {
 		uploaderConfigPath := filepath.Join(tmpDir, "oci-uploader.ocmconfig")
-		uploaderConfig := "type: generic.config.ocm.software/v1\nconfigurations:\n- type: oci.uploader.transfer.config.ocm.software/v1alpha1\n"
+		uploaderConfig := "type: generic.config.ocm.software/v1\nconfigurations:\n- type: oci.uploader.transfer.config.ocm.software/v1alpha1\n  imageReference: '${targetRepository + \"/\" + referenceName}'\n"
 		if err := os.WriteFile(uploaderConfigPath, []byte(uploaderConfig), 0o600); err != nil {
 			return fmt.Errorf("could not write oci uploader ocmconfig: %w", err)
 		}

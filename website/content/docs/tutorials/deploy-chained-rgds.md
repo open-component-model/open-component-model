@@ -326,6 +326,7 @@ cat > oci-uploader.yaml << 'EOF'
 type: generic.config.ocm.software/v1
 configurations:
   - type: oci.uploader.transfer.config.ocm.software/v1alpha1
+    imageReference: '${targetRepository + "/" + referenceName}'
 EOF
 ```
 

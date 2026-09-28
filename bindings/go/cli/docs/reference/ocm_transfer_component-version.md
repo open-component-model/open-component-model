@@ -84,8 +84,9 @@ transfer component-version ctf::./my-archive//ocm.software/mycomponent ghcr.io/m
 #   type: generic.config.ocm.software/v1
 #   configurations:
 #   - type: oci.uploader.transfer.config.ocm.software/v1alpha1
-#     # optional: relocate the artifacts instead of placing them next to the component version
-#     # imageReference: '${"ghcr.io/target-org/images/" + referenceName}'
+#     # CEL template for the target image reference; this is also the default when omitted.
+#     # Use e.g. '${"ghcr.io/target-org/images/" + referenceName}' to relocate the artifacts.
+#     imageReference: '${targetRepository + "/" + referenceName}'
 # OCI images, Helm charts and OCI-manifest local blobs are uploaded as OCI artifacts.
 transfer component-version --config ./oci-uploader.yaml ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm
 

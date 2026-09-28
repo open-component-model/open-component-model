@@ -656,6 +656,7 @@ Yes. By default, `--copy-resources` stores artifacts as local blobs within the c
 type: generic.config.ocm.software/v1
 configurations:
   - type: oci.uploader.transfer.config.ocm.software/v1alpha1
+    imageReference: '${targetRepository + "/" + referenceName}'
 ```
 
 Pass the config with `--config oci-uploader.yaml`. With `localBlob` (the default), the artifact stays within the component version's index. With the OCI uploader, it is stored independently.

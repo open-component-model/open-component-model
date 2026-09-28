@@ -79,25 +79,26 @@ func identifierUsed(expr, ident string) bool {
 	return celparser.RewriteIdentifier(expr, ident, "") != expr
 }
 
-// ociImageReference resolves the target image reference for resource under u and
-// reports whether the uploader applies. Without an imageReference template it applies
-// only to an OCI registry target and a non-empty reference name, and yields
-// targetRepository + "/" + referenceName. With a template, the available aliases are
-// rewritten; referencing an unavailable alias is an error.
-func ociImageReference(u *transferv1alpha1.OCIUploaderConfig, access runtime.Typed, resource descriptorv2.Resource, baseID string, i int, toSpec runtime.Typed) (string, bool, error) {
+// ociImageReference templates the target image reference for resource under u (see
+// [transferv1alpha1.DefaultOCIImageReference] for the template used when none is set)
+// and reports whether the uploader applies. Only available aliases are rewritten:
+// referenceName when the resource has one, targetRepository when the target is an OCI
+// registry. A template that references an unavailable alias does not apply, and
+// reason says why, so the resource falls through instead of failing the transfer.
+func ociImageReference(u *transferv1alpha1.OCIUploaderConfig, access runtime.Typed, baseID string, i int, toSpec runtime.Typed) (imageReference string, applies bool, reason string, err error) {
 	referenceName, supported, err := ociReferenceName(access)
-	if err != nil || !supported {
-		return "", false, err
+	if err != nil {
+		return "", false, "", err
+	}
+	if !supported {
+		return "", false, "access type is not uploadable as an OCI artifact", nil
 	}
 	targetRepository, isOCITarget := ociTargetRepository(toSpec)
 
-	if u.ImageReference == "" {
-		if !isOCITarget || referenceName == "" {
-			return "", false, nil
-		}
-		return targetRepository + "/" + referenceName, true, nil
+	template := u.ImageReference
+	if template == "" {
+		template = transferv1alpha1.DefaultOCIImageReference
 	}
-
 	aliases := map[string]string{resourceAlias: resourceNodePath(baseID, i)}
 	if referenceName != "" {
 		aliases[referenceNameAlias] = strconv.Quote(referenceName)
@@ -105,19 +106,19 @@ func ociImageReference(u *transferv1alpha1.OCIUploaderConfig, access runtime.Typ
 	if isOCITarget {
 		aliases[targetRepositoryAlias] = strconv.Quote(targetRepository)
 	}
-	imageReference, exprs, err := templateString(u.ImageReference, aliases)
+	imageReference, exprs, err := templateString(template, aliases)
 	if err != nil {
-		return "", false, fmt.Errorf("cannot template imageReference: %w", err)
+		return "", false, "", fmt.Errorf("cannot template imageReference: %w", err)
 	}
 	for _, expr := range exprs {
 		if !isOCITarget && identifierUsed(expr, targetRepositoryAlias) {
-			return "", false, fmt.Errorf("imageReference references %s, but target %s is not an OCI registry", targetRepositoryAlias, targetKind(toSpec))
+			return "", false, fmt.Sprintf("imageReference uses %s, but target %s is not an OCI registry", targetRepositoryAlias, targetKind(toSpec)), nil
 		}
 		if referenceName == "" && identifierUsed(expr, referenceNameAlias) {
-			return "", false, fmt.Errorf("imageReference references %s, but resource %s has no reference name", referenceNameAlias, resource.ToIdentity())
+			return "", false, fmt.Sprintf("imageReference uses %s, but the resource has no reference name", referenceNameAlias), nil
 		}
 	}
-	return imageReference, true, nil
+	return imageReference, true, "", nil
 }
 
 // processOCIUploader emits the transformations that upload resource as a separate OCI
@@ -126,7 +127,7 @@ func ociImageReference(u *transferv1alpha1.OCIUploaderConfig, access runtime.Typ
 // uploader or the default handling. It returns the CEL spec-field expressions of the
 // file buffers produced, for cleanup.
 func processOCIUploader(ctx context.Context, resource descriptorv2.Resource, access runtime.Typed, u *transferv1alpha1.OCIUploaderConfig, baseID, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int) (bool, []string, error) {
-	imageReference, ok, err := ociImageReference(u, access, resource, baseID, i, toSpec)
+	imageReference, ok, reason, err := ociImageReference(u, access, baseID, i, toSpec)
 	if err != nil {
 		return false, nil, err
 	}
@@ -134,7 +135,7 @@ func processOCIUploader(ctx context.Context, resource descriptorv2.Resource, acc
 		slog.DebugContext(ctx, "oci uploader does not apply to resource, using default handling",
 			"component", val.Descriptor.Component.Name, "version", val.Descriptor.Component.Version,
 			"resource", resource.ToIdentity().String(), "accessType", resource.Access.Type.String(),
-			"target", targetKind(toSpec))
+			"target", targetKind(toSpec), "reason", reason)
 		return false, nil, nil
 	}
 

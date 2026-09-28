@@ -78,6 +78,7 @@ Create an OCM config file (e.g. `oci-uploader.yaml`):
 type: generic.config.ocm.software/v1
 configurations:
   - type: oci.uploader.transfer.config.ocm.software/v1alpha1
+    imageReference: '${targetRepository + "/" + referenceName}'
 ```
 
 Then transfer:

@@ -11,6 +11,12 @@ import (
 // separate OCI artifacts instead of embedding them as local blobs.
 const OCIUploaderConfigType = "oci.uploader.transfer.config.ocm.software"
 
+// DefaultOCIImageReference is the CEL template an [OCIUploaderConfig] uses when
+// ImageReference is empty: the artifact is placed next to the component version in the
+// target registry, under the resource's source repository[:tag]. Writing it explicitly
+// into a config is equivalent to omitting ImageReference.
+const DefaultOCIImageReference = `${targetRepository + "/" + referenceName}`
+
 func init() {
 	Scheme.MustRegisterWithAlias(&OCIUploaderConfig{},
 		runtime.NewVersionedType(OCIUploaderConfigType, Version),
@@ -25,10 +31,11 @@ func init() {
 // are not merged.
 //
 // The uploader applies to OCI image and Helm chart resources and to local blobs that
-// hold an OCI manifest. Without an ImageReference the artifact is uploaded to
-// <target registry>[/<subPath>]/<referenceName> and the uploader only applies when the
-// transfer target is an OCI registry and the resource has a reference name; otherwise
-// the resource falls through to the next uploader and finally to the default handling.
+// hold an OCI manifest. ImageReference is a CEL template; when omitted,
+// [DefaultOCIImageReference] is used. The uploader applies only if every alias its
+// template references is available: `targetRepository` requires an OCI registry target
+// and `referenceName` a resource with a reference name. Otherwise the resource falls
+// through to the next uploader and finally to the default handling.
 //
 //	type: generic.config.ocm.software/v1
 //	configurations:
@@ -39,6 +46,7 @@ func init() {
 //	    imageReference: '${"ghcr.io/mirror/" + referenceName}'
 //	  # upload every other applicable resource next to the component version
 //	  - type: oci.uploader.transfer.config.ocm.software/v1alpha1
+//	    imageReference: '${targetRepository + "/" + referenceName}' # the default
 //
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
@@ -54,11 +62,11 @@ type OCIUploaderConfig struct {
 	// is named MatchSpec so the type can offer a Match method.
 	MatchSpec *UploaderMatch `json:"match,omitempty"`
 
-	// ImageReference optionally overrides the target image reference. It is a literal
-	// reference or a CEL expression wrapped in ${...} that can use the aliases
-	// `resource` (the source resource), `referenceName` (the source repository[:tag])
-	// and `targetRepository` (the target registry base URL including its sub path).
-	// When empty, targetRepository + "/" + referenceName is used.
+	// ImageReference is the target image reference: a CEL expression wrapped in ${...}
+	// (or a plain literal) that can use the aliases `resource` (the source resource),
+	// `referenceName` (the source repository[:tag]) and `targetRepository` (the target
+	// registry base URL including its sub path). When empty, it defaults to
+	// ${targetRepository + "/" + referenceName}.
 	ImageReference string `json:"imageReference,omitempty"`
 }
 

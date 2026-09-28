@@ -52,15 +52,16 @@ func writeOCMConfigWithCredsAndTransfer(t *testing.T, regs []internal.ConfigOpts
 	return cfgPath
 }
 
-// writeOCIUploaderConfig writes an OCM config holding a single default
-// oci.uploader.transfer.config.ocm.software/v1alpha1 entry, the replacement for the
-// former `--upload-as ociArtifact`. --config may be repeated, so it merges with the
+// writeOCIUploaderConfig writes an OCM config holding a single
+// oci.uploader.transfer.config.ocm.software/v1alpha1 entry with the default image
+// reference template spelled out, the replacement for the former
+// `--upload-as ociArtifact`. --config may be repeated, so it merges with the
 // credentials config.
 func writeOCIUploaderConfig(t *testing.T) string {
 	t.Helper()
 	cfgPath := filepath.Join(t.TempDir(), "oci-uploader.yaml")
 	require.NoError(t, os.WriteFile(cfgPath, []byte(
-		"type: generic.config.ocm.software/v1\nconfigurations:\n- type: oci.uploader.transfer.config.ocm.software/v1alpha1\n"), 0o600))
+		"type: generic.config.ocm.software/v1\nconfigurations:\n- type: oci.uploader.transfer.config.ocm.software/v1alpha1\n  imageReference: '${targetRepository + \"/\" + referenceName}'\n"), 0o600))
 	return cfgPath
 }
 
