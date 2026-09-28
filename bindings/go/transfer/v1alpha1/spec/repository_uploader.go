@@ -110,6 +110,15 @@ type ArtifactoryUploaderConfig struct {
 //     on it. Path defaults to <component>/<component version>/<resource>-<resource version>.
 //     Nexus records no owner of a file, so a file already stored at the path is never
 //     overwritten: it is reused when it has the same content, otherwise the transfer fails.
+//   - maven2: the resource content is uploaded as one file of a Maven component to Path, which
+//     must follow the Maven repository layout
+//     <group path>/<artifactId>/<version>/<artifactId>-<version>[-<classifier>].<extension>. The
+//     coordinates are taken from the path. Release versions go through the components API,
+//     which keeps maven-metadata.xml up to date; snapshot versions, which the components API
+//     refuses, are uploaded with a plain PUT and are not added to maven-metadata.xml. Upload the
+//     POM as a resource of its own so Maven can resolve the component. The resource is
+//     published with a Wget/v1 access on the stored file, and like raw files, a stored file is
+//     never overwritten.
 //
 // Upload credentials are resolved for the HelmChartRepository consumer identity of
 // <url>/repository/<repository>, falling back to its Wget consumer identity. They are also used
@@ -138,12 +147,13 @@ type NexusUploaderConfig struct {
 	URL string `json:"url"`
 	// Repository is the name of the hosted repository to upload into.
 	Repository string `json:"repository"`
-	// Path overrides where the content is stored in a raw repository, relative to the repository
-	// root. It is a literal or a CEL expression wrapped in ${...} over the source resource
-	// (resource) and its component (component: name, version, provider, ...). The result must
-	// consist of non-empty segments other than "." and "..". It is not supported for helm
+	// Path overrides where the content is stored in a raw repository and is required for a
+	// maven2 repository, relative to the repository root. It is a literal or a CEL expression
+	// wrapped in ${...} over the source resource (resource) and its component (component: name,
+	// version, provider, ...). The result must consist of non-empty segments other than "." and
+	// "..", and for maven2 follow the Maven repository layout. It is not supported for helm
 	// repositories: Nexus stores charts under a path derived from the chart. Defaults to
-	// <component>/<component version>/<resource>-<resource version>.
+	// <component>/<component version>/<resource>-<resource version> for raw repositories.
 	Path string `json:"path,omitempty"`
 }
 

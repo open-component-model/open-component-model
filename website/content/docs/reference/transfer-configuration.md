@@ -31,12 +31,12 @@ configurations:
     method: PUT
 ```
 
-| Type                                                         | Purpose                                                                                           |
-|--------------------------------------------------------------|---------------------------------------------------------------------------------------------------|
-| `transfer.config.ocm.software/v1alpha1`                      | Global transfer settings: recursion, which resources are copied and how.                          |
-| `http.uploader.transfer.config.ocm.software/v1alpha1`        | Per-match rule that streams a resource to a custom HTTP target.                                   |
-| `artifactory.uploader.transfer.config.ocm.software/v1alpha1` | Per-match rule that uploads a resource into a JFrog Artifactory helm, generic, maven or npm repo. |
-| `nexus.uploader.transfer.config.ocm.software/v1alpha1`       | Per-match rule that uploads a resource into a Sonatype Nexus hosted repository (helm or raw).     |
+| Type                                                         | Purpose                                                                                             |
+|--------------------------------------------------------------|-----------------------------------------------------------------------------------------------------|
+| `transfer.config.ocm.software/v1alpha1`                      | Global transfer settings: recursion, which resources are copied and how.                            |
+| `http.uploader.transfer.config.ocm.software/v1alpha1`        | Per-match rule that streams a resource to a custom HTTP target.                                     |
+| `artifactory.uploader.transfer.config.ocm.software/v1alpha1` | Per-match rule that uploads a resource into a JFrog Artifactory helm, generic, maven or npm repo.   |
+| `nexus.uploader.transfer.config.ocm.software/v1alpha1`       | Per-match rule that uploads a resource into a Sonatype Nexus hosted helm, raw or maven2 repository. |
 
 By default the CLI looks for configuration in `$HOME/.ocmconfig`. Pass
 `--config <file>` to use a different file. The corresponding CLI flags
@@ -301,6 +301,7 @@ which the uploader reads from the Nexus repository settings
 |-----------------|-----------------------------------------------------------------------------|-------------------------------------------------------------|
 | `helm`          | The packaged Helm chart located in the resource content (.tgz, tar, or OCI) | `Helm/v1` (`helmRepository: <url>/repository/<repository>`) |
 | `raw`           | The resource content as is (OCI artifacts as an OCI layout tar)             | `Wget/v1` (`url: <url>/repository/<repository>/<path>`)     |
+| `maven2`        | The resource content as one file of a Maven component                       | `Wget/v1` (`url: <url>/repository/<repository>/<path>`)     |
 
 The repository **must** be a hosted repository. Proxy and group repositories
 cannot receive uploads. The uploading user must be allowed to read the
@@ -326,6 +327,18 @@ Nexus records no owner of a file, so a file already stored at the path is
 **never overwritten**: it is reused when it has the same content, otherwise the
 transfer fails with an error asking the user to configure a different path.
 
+#### Maven repositories
+
+The resource content is uploaded as one file of a Maven component to
+`<url>/repository/<repository>/<path>`. `path` is required and must follow the
+Maven repository layout
+`<group path>/<artifactId>/<version>/<artifactId>-<version>[-<classifier>].<extension>`;
+the coordinates are taken from it. Release versions go through the components
+API (`POST /service/rest/v1/components`), which keeps `maven-metadata.xml` up to
+date; snapshot versions, which the components API refuses, are uploaded with a
+plain `PUT` and are not added to `maven-metadata.xml`. Like raw files, a stored
+file is never overwritten.
+
 #### Digest
 
 A `genericBlobDigest/v1` SHA-256 source digest is verified, and content the
@@ -339,20 +352,20 @@ extracted from an OCI artifact gets the SHA-256 of the uploaded bytes.
 
 #### Fields
 
-| Field        | Type              | Description                                                                                                                                                                                             |
-|--------------|-------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `match`      | `UploaderMatch`   | Selects resources this uploader applies to. `match.accessType` is required.                                                                                                                             |
-| `url`        | string (required) | Server base URL **without** the `/repository` segment, e.g. `https://nexus.example.com`.                                                                                                                |
-| `repository` | string (required) | Repository name, e.g. `helm-hosted`.                                                                                                                                                                    |
-| `path`       | string            | Content location in a raw repository relative to the root. Literal or `${…}` CEL expression (see [CEL Expressions](#cel-expressions)). Must be relative, without `.`/`..` segments. Not for helm repos. |
+| Field        | Type              | Description                                                                                                                                                                                                                                        |
+|--------------|-------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `match`      | `UploaderMatch`   | Selects resources this uploader applies to. `match.accessType` is required.                                                                                                                                                                        |
+| `url`        | string (required) | Server base URL **without** the `/repository` segment, e.g. `https://nexus.example.com`.                                                                                                                                                           |
+| `repository` | string (required) | Repository name, e.g. `helm-hosted`.                                                                                                                                                                                                               |
+| `path`       | string            | Content location relative to the root; required in Maven repository layout for `maven2` repositories. Literal or `${…}` CEL expression (see [CEL Expressions](#cel-expressions)). Must be relative, without `.`/`..` segments. Not for helm repos. |
 
 #### Sources
 
 **Helm** repositories accept any access type; the chart archive is located in the
 content, exactly as described for [Artifactory helm repositories](#helm-repositories).
 
-**Raw** repositories accept any access type and upload the resource content
-as is. OCI artifacts are materialized as an OCI layout tar.
+**Raw** and **Maven** repositories accept any access type and upload the
+resource content as is. OCI artifacts are materialized as an OCI layout tar.
 
 #### Credentials
 

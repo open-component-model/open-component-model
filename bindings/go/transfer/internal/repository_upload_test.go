@@ -8,6 +8,8 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"mime"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -866,6 +868,8 @@ type fakeNexus struct {
 	requests []string
 	stored   map[string]string // <name>-<version> or raw path -> sha256
 	raw      map[string][]byte // raw path -> content
+	// mavenForms are the form values of the components API uploads.
+	mavenForms []map[string][]string
 }
 
 func newFakeNexus(t *testing.T, charts map[string][2]string, basePath string, allowOnce bool) *fakeNexus {
@@ -915,16 +919,25 @@ func (f *fakeNexus) handle(w http.ResponseWriter, r *http.Request) {
 			SHA256 string `json:"sha256"`
 		}
 		type item struct {
+			Path     string   `json:"path"`
 			Checksum checksum `json:"checksum"`
+		}
+		if artifactID := q.Get("maven.artifactId"); artifactID != "" {
+			// Maven assets are found by coordinates; the search also returns sibling files.
+			file := artifactID + "-" + q.Get("maven.baseVersion")
+			if classifier := q.Get("maven.classifier"); classifier != "" {
+				file += "-" + classifier
+			}
+			name = "/" + strings.ReplaceAll(q.Get("maven.groupId"), ".", "/") + "/" + artifactID + "/" + q.Get("maven.baseVersion") + "/" + file + "." + q.Get("maven.extension")
 		}
 		var items []item
 		if f.searchLag > 0 {
 			f.searchLag--
 		} else if repo == "helm-hosted" && name != "" {
-			// Nexus indexes raw assets with a leading slash; strip it for our stored map.
+			// Nexus reports asset paths with a leading slash; strip it for our stored map.
 			lookupName := strings.TrimPrefix(name, "/")
 			if digest, ok := f.stored[lookupName]; ok {
-				items = append(items, item{Checksum: checksum{SHA256: digest}})
+				items = append(items, item{Path: name, Checksum: checksum{SHA256: digest}}, item{Path: name + ".sha1", Checksum: checksum{SHA256: "other"}})
 			}
 		}
 		if items == nil {
@@ -973,6 +986,37 @@ func (f *fakeNexus) handle(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"items": items, "continuationToken": nil})
+
+	// Components API: a single maven2 asset, stored at its Maven layout path.
+	case r.Method == http.MethodPost && r.URL.Path == f.basePath+"/service/rest/v1/components":
+		_, params, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
+		form, err := multipart.NewReader(bytes.NewReader(body), params["boundary"]).ReadForm(1 << 20)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		field := func(name string) string {
+			if v := form.Value[name]; len(v) == 1 {
+				return v[0]
+			}
+			return ""
+		}
+		f.mavenForms = append(f.mavenForms, form.Value)
+		file, err := form.File["maven2.asset1"][0].Open()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		content, _ := io.ReadAll(file)
+		name := field("maven2.artifactId") + "-" + field("maven2.version")
+		if classifier := field("maven2.asset1.classifier"); classifier != "" {
+			name += "-" + classifier
+		}
+		relPath := strings.ReplaceAll(field("maven2.groupId"), ".", "/") + "/" + field("maven2.artifactId") + "/" + field("maven2.version") + "/" + name + "." + field("maven2.asset1.extension")
+		sum := sha256.Sum256(content)
+		f.stored[relPath] = hex.EncodeToString(sum[:])
+		f.raw[relPath] = content
+		w.WriteHeader(http.StatusNoContent)
 
 	// Raw HEAD
 	case r.Method == http.MethodHead && strings.HasPrefix(r.URL.Path, repoPrefix):
@@ -1299,7 +1343,7 @@ func TestNexusUpload_Transform_DetectionErrors(t *testing.T) {
 		srv := newFakeNexus(t, nil, "", false)
 		srv.format = "npm"
 		_, err := transformer().Transform(t.Context(), step(srv.URL))
-		r.ErrorContains(err, "supported: helm, raw")
+		r.ErrorContains(err, "supported: helm, raw, maven2")
 	})
 
 	t.Run("detection returns 403", func(t *testing.T) {
@@ -1328,4 +1372,137 @@ func TestNexusUpload_Transform_DetectionErrors(t *testing.T) {
 		r.ErrorContains(err, "HelmHTTPCredentials certFile/keyFile are not supported")
 		r.Empty(srv.recorded(), "no request may be sent when credentials fail before detection")
 	})
+}
+
+func TestNexusUpload_Transform_Maven(t *testing.T) {
+	const content = "jar bytes"
+	contentSum := sha256.Sum256([]byte(content))
+	contentDigest := hex.EncodeToString(contentSum[:])
+
+	scheme := runtime.NewScheme()
+	scheme.MustRegisterWithAlias(&NexusUploadTransformation{}, NexusUploadVersionedType)
+	scheme.MustRegisterScheme(wgetaccess.Scheme)
+
+	const (
+		mavenPath  = "com/example/demo/1.0.0/demo-1.0.0-sources.jar"
+		components = "/service/rest/v1/components"
+	)
+	source := &descriptorv2.Resource{
+		ElementMeta: descriptorv2.ElementMeta{Name: "demo", Version: "1.0.0"},
+		Type:        "blob",
+		Relation:    descriptorv2.ExternalRelation,
+		Access:      &runtime.Raw{Type: runtime.NewVersionedType("Wget", "v1"), Data: []byte(`{"type":"Wget/v1","url":"https://example.com/demo.jar"}`)},
+		Digest:      &descriptorv2.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: "genericBlobDigest/v1", Value: contentDigest},
+	}
+	transform := func(t *testing.T, srv *fakeNexus, path string) (runtime.Typed, error) {
+		repo := &chartResourceRepo{chart: []byte(content), mediaType: "application/java-archive"}
+		tr := &NexusUpload{repositoryUploader{
+			Scheme:                scheme,
+			Charts:                &chartarchive.Source{ResourceRepository: repo},
+			ResourceRepository:    repo,
+			chartMetadataInterval: time.Millisecond,
+		}}
+		return tr.Transform(t.Context(), &NexusUploadTransformation{
+			Type: NexusUploadVersionedType,
+			ID:   "upload",
+			Spec: &RepositoryUploadSpec{
+				Resource:         source,
+				ComponentVersion: &RepositoryUploadComponentVersion{Component: "ocm.software/test", Version: "1.0.0"},
+				URL:              srv.URL,
+				Repository:       "helm-hosted",
+				Path:             path,
+			},
+		})
+	}
+	newServer := func(t *testing.T) *fakeNexus {
+		srv := newFakeNexus(t, nil, "", false)
+		srv.format = "maven2"
+		return srv
+	}
+
+	t.Run("uploads through the components API and publishes the Maven layout URL", func(t *testing.T) {
+		r := require.New(t)
+		srv := newServer(t)
+		out, err := transform(t, srv, mavenPath)
+		r.NoError(err)
+
+		r.Equal("POST "+components, srv.recorded()[len(srv.recorded())-1])
+		r.Equal(map[string][]string{
+			"maven2.groupId":           {"com.example"},
+			"maven2.artifactId":        {"demo"},
+			"maven2.version":           {"1.0.0"},
+			"maven2.generate-pom":      {"false"},
+			"maven2.asset1.extension":  {"jar"},
+			"maven2.asset1.classifier": {"sources"},
+		}, srv.mavenForms[0])
+		r.Equal([]byte(content), srv.raw[mavenPath])
+
+		var access wgetaccessv1.Wget
+		r.NoError(wgetaccess.Scheme.Convert(out.(*NexusUploadTransformation).Output.Resource.Access, &access))
+		r.Equal(srv.URL+"/repository/helm-hosted/"+mavenPath, access.URL)
+	})
+
+	t.Run("reuses a stored file with the same content", func(t *testing.T) {
+		r := require.New(t)
+		srv := newServer(t)
+		srv.store(mavenPath, contentDigest)
+		_, err := transform(t, srv, mavenPath)
+		r.NoError(err)
+		r.NotContains(srv.recorded(), "POST "+components)
+	})
+
+	t.Run("never overwrites a stored file with other content", func(t *testing.T) {
+		r := require.New(t)
+		srv := newServer(t)
+		srv.store(mavenPath, strings.Repeat("ab", 32))
+		_, err := transform(t, srv, mavenPath)
+		r.ErrorContains(err, "never overwrites files in maven2 repositories")
+		r.NotContains(srv.recorded(), "POST "+components)
+	})
+
+	t.Run("stores snapshots with a plain PUT", func(t *testing.T) {
+		r := require.New(t)
+		srv := newServer(t)
+		const snapshot = "com/example/demo/1.0.0-SNAPSHOT/demo-1.0.0-SNAPSHOT.jar"
+		_, err := transform(t, srv, snapshot)
+		r.NoError(err)
+		r.Contains(srv.recorded(), "PUT /repository/helm-hosted/"+snapshot)
+		r.NotContains(srv.recorded(), "POST "+components)
+	})
+
+	for name, path := range map[string]string{
+		"without a path":                   "",
+		"with a path outside Maven layout": "files/demo.jar",
+		"with a file not named after it":   "com/example/demo/1.0.0/other-1.0.0.jar",
+	} {
+		t.Run("fails "+name, func(t *testing.T) {
+			r := require.New(t)
+			srv := newServer(t)
+			_, err := transform(t, srv, path)
+			r.ErrorContains(err, "Maven repository layout")
+			r.NotContains(srv.recorded(), "POST "+components)
+		})
+	}
+}
+
+func TestParseMavenPath(t *testing.T) {
+	for path, want := range map[string]mavenCoordinates{
+		"com/example/demo/1.0.0/demo-1.0.0.jar":         {groupID: "com.example", artifactID: "demo", version: "1.0.0", extension: "jar"},
+		"com/example/demo/1.0.0/demo-1.0.0.pom":         {groupID: "com.example", artifactID: "demo", version: "1.0.0", extension: "pom"},
+		"com/example/demo/1.0.0/demo-1.0.0-sources.jar": {groupID: "com.example", artifactID: "demo", version: "1.0.0", classifier: "sources", extension: "jar"},
+		"org/demo/2.0/demo-2.0.tar.gz":                  {groupID: "org", artifactID: "demo", version: "2.0", extension: "tar.gz"},
+	} {
+		t.Run(path, func(t *testing.T) {
+			r := require.New(t)
+			got, err := parseMavenPath(path)
+			r.NoError(err)
+			r.Equal(want, got)
+		})
+	}
+	for _, path := range []string{"demo/1.0.0/demo-1.0.0.jar", "com/example/demo/1.0.0/demo-1.0.0", "com/example/demo/1.0.0/demo-1.0.0-.jar", "com/example/demo/1.0.0/demo-1.0.0-sources"} {
+		t.Run("invalid "+path, func(t *testing.T) {
+			_, err := parseMavenPath(path)
+			require.ErrorContains(t, err, "Maven repository layout")
+		})
+	}
 }

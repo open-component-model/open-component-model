@@ -1,6 +1,6 @@
 ---
 title: "Upload Resources to Sonatype Nexus"
-description: "Transfer component versions and upload their resources into Sonatype Nexus Repository 3 hosted repositories: Helm charts and raw files, with guidance for Maven artifacts."
+description: "Transfer component versions and upload their resources into Sonatype Nexus Repository 3 hosted repositories: Helm charts, Maven artifacts and raw files."
 weight: 2
 toc: true
 ---
@@ -31,14 +31,15 @@ and picks the upload method for it:
 flowchart LR
     R[Matched resource] --> D{Format}
     D -->|helm| H[Upload chart, publish Helm/v1]
-    D -->|raw| F[Upload file, publish Wget/v1]
+    D -->|raw / maven2| F[Upload file, publish Wget/v1]
     D -->|anything else| X[Transfer fails]
 ```
 
-| Format | Uploaded content                     | Published access                          |
-|--------|--------------------------------------|-------------------------------------------|
-| `helm` | The Helm chart found in the resource | `Helm/v1` (`helmRepository`, `helmChart`) |
-| `raw`  | The resource content as is           | `Wget/v1` on the stored file              |
+| Format   | Uploaded content                                      | Published access                          |
+|----------|-------------------------------------------------------|-------------------------------------------|
+| `helm`   | The Helm chart found in the resource                  | `Helm/v1` (`helmRepository`, `helmChart`) |
+| `raw`    | The resource content as is                            | `Wget/v1` on the stored file              |
+| `maven2` | The resource content as one file of a Maven component | `Wget/v1` on the stored file              |
 
 Every other format fails the transfer before anything is uploaded. See
 [Other repository formats](#other-repository-formats) for alternatives.
@@ -128,33 +129,78 @@ file with different content fails the transfer:
 nexus repository "raw-hosted" already stores a different file at …; the uploader never overwrites files in raw repositories, configure a different path
 ```
 
-## Other repository formats
-
-| Repository                  | Error                                       | Alternative                                              |
-|-----------------------------|---------------------------------------------|----------------------------------------------------------|
-| `maven2`                    | `has format "maven2"; supported: helm, raw` | HTTP uploader with a Maven-layout `targetURL`, see below |
-| `npm`                       | `has format "npm"; supported: helm, raw`    | `npm publish`; Nexus rejects plain uploads               |
-| Proxy or group repositories | `uploads need a hosted repository`          | Upload into the hosted repository behind it              |
-
 ### Maven artifacts
 
-A Nexus `maven2` hosted repository accepts plain `PUT`s at Maven-layout paths
-(`com/example/demo/1.0.0/demo-1.0.0.jar` returns `201`) and rejects other paths with
-`400 Invalid mavenPath for a Maven 2 repository`. The
-[HTTP uploader]({{< relref "docs/reference/transfer-configuration.md#httpuploadertransferconfigocmsoftwarev1alpha1" >}})
-can deploy there:
+Maven resolves an artifact from its Maven coordinates, so a `maven2` repository needs
+a `path` in the Maven repository layout
+`<group path>/<artifactId>/<version>/<artifactId>-<version>[-<classifier>].<extension>`.
+The uploader takes the coordinates from the path. Upload the POM as a resource of its
+own next to the artifact, one uploader rule per file type:
 
 ```yaml
-  - type: http.uploader.transfer.config.ocm.software/v1alpha1
-    match:
-      accessType: Wget/v1
-      name: jar
-    method: PUT
-    targetURL: '${"https://nexus.example.com/repository/maven-releases/com/example/demo/" + resource.version + "/demo-" + resource.version + ".jar"}'
+  - type: nexus.uploader.transfer.config.ocm.software/v1alpha1
+    match: {accessType: localBlob, name: jar}
+    url: https://nexus.example.com
+    repository: maven-releases
+    path: '${"com/example/demo/" + resource.version + "/demo-" + resource.version + ".jar"}'
+  - type: nexus.uploader.transfer.config.ocm.software/v1alpha1
+    match: {accessType: localBlob, name: pom}
+    url: https://nexus.example.com
+    repository: maven-releases
+    path: '${"com/example/demo/" + resource.version + "/demo-" + resource.version + ".pom"}'
 ```
 
-The HTTP uploader reads remote sources such as `Wget/v1`; it cannot upload local
-blobs (`failed to get plugin for typ "LocalBlob/v1"`).
+The files are published as `Wget/v1` on
+`https://nexus.example.com/repository/maven-releases/com/example/demo/1.0.0/demo-1.0.0.jar`
+and `….pom`. Verify that Maven resolves the artifact:
+
+```bash
+mvn dependency:get -Dartifact=com.example:demo:1.0.0 \
+  -DremoteRepositories=nexus::default::https://nexus.example.com/repository/maven-releases
+```
+
+Behavior to plan for:
+
+- **Release versions** go through the Nexus components API
+  (`POST /service/rest/v1/components`), which updates `maven-metadata.xml`. Its
+  `latest` and `release` are the highest version, not the most recently uploaded one:
+  transferring `4.0.0` after `5.0.0` keeps `5.0.0`.
+- **Snapshot versions** go into a snapshot repository with a plain `PUT`, because the
+  components API refuses them. Maven resolves them by their exact version, but they
+  are not added to `maven-metadata.xml`. The repository's version policy decides what it
+  accepts: a `-SNAPSHOT` version in a release repository fails with
+  `Version policy mismatch, cannot upload SNAPSHOT content to RELEASE repositories`.
+- **Stored files are never overwritten**, like in raw repositories: a file with the same
+  content is reused, a different one fails the transfer.
+- A `path` outside the Maven layout, or no `path`, fails before anything is uploaded:
+  `path "…" is not in the Maven repository layout …`.
+
+## Other repository formats
+
+| Repository                  | Error                                            | Alternative                                    |
+|-----------------------------|--------------------------------------------------|------------------------------------------------|
+| `npm`                       | `has format "npm"; supported: helm, raw, maven2` | `npm publish` or the components API, see below |
+| Proxy or group repositories | `uploads need a hosted repository`               | Upload into the hosted repository behind it    |
+
+### npm packages
+
+A Nexus `npm` hosted repository does not accept plain `PUT`s of package tarballs
+(`400`). It accepts packages from `npm publish` and from the components API with the
+tarball as `npm.asset`:
+
+```bash
+curl -u <USERNAME>:<PASSWORD> -F "npm.asset=@my-package-1.0.0.tgz" \
+  "https://nexus.example.com/service/rest/v1/components?repository=npm-hosted"
+```
+
+- Nexus reads name and version from `package.json` and stores the tarball at
+  `<name>/-/<name>-<version>.tgz` (`@scope/<name>/-/<name>-<version>.tgz` for scoped
+  packages). Content without a `package.json` fails with
+  `Name and version are mandatory fields`.
+- The `latest` dist-tag is the highest release version: uploading `1.0.0` or
+  `0.5.0` after `2.0.0`, or the prerelease `3.0.0-rc.1`, keeps `2.0.0` as `latest`.
+- Uploading a version the repository already stores fails with `409` when redeploy
+  is disabled.
 
 ## Troubleshooting
 
@@ -170,9 +216,9 @@ blobs (`failed to get plugin for typ "LocalBlob/v1"`).
 
 **Fix:** Grant read access to the repository configuration, or use a user that has it.
 
-### Symptom: `nexus repository … already stores a different file at …; the uploader never overwrites files in raw repositories`
+### Symptom: `nexus repository … already stores a different file at …; the uploader never overwrites files in … repositories`
 
-**Cause:** The raw repository already stores a file with different content at the
+**Cause:** The raw or maven2 repository already stores a file with different content at the
 upload path, for example from another component version with the same resource
 version.
 
