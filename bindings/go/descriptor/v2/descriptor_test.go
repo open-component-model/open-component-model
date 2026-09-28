@@ -960,9 +960,16 @@ func TestSchemaConformance(t *testing.T) {
 				valid:   true,
 			},
 			{
-				name:    "InvalidVersion",
+				// "invalid" is now structurally valid (non-empty string); the
+				// concrete scheme is checked by ValidateVersions, not the schema.
+				name:    "NonSemverIsStructurallyValid",
 				version: "invalid",
-				valid:   false,
+				valid:   true,
+			},
+			{
+				name:    "CalverIsStructurallyValid",
+				version: "2024.03.15",
+				valid:   true,
 			},
 		}
 
@@ -991,7 +998,6 @@ func TestSchemaConformance(t *testing.T) {
 					assert.NoError(t, err)
 				} else {
 					assert.Error(t, err)
-					assert.Contains(t, err.Error(), "does not match pattern")
 				}
 			})
 		}

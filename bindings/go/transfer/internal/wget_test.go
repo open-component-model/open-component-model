@@ -61,14 +61,14 @@ func TestProcessWget(t *testing.T) {
 	require.Len(t, tgd.Transformations, 2)
 
 	getTransform := tgd.Transformations[0]
-	assert.Equal(t, wgetv1alpha1.DownloadWgetResourceV1alpha1, getTransform.TransformationMeta.Type)
-	assert.Contains(t, getTransform.TransformationMeta.ID, "Get")
+	assert.Equal(t, wgetv1alpha1.DownloadWgetResourceV1alpha1, getTransform.Type)
+	assert.Contains(t, getTransform.ID, "Get")
 	assert.NotNil(t, getTransform.Spec)
 
 	addTransform := tgd.Transformations[1]
-	assert.Equal(t, ociv1alpha1.OCIAddLocalResourceV1alpha1, addTransform.TransformationMeta.Type)
-	assert.Contains(t, addTransform.TransformationMeta.ID, "Add")
+	assert.Equal(t, ociv1alpha1.OCIAddLocalResourceV1alpha1, addTransform.Type)
+	assert.Contains(t, addTransform.ID, "Add")
 
 	// The resource's tracked transformation is the add (upload) node.
-	assert.Equal(t, addTransform.TransformationMeta.ID, resourceTransformIDs[0])
+	assert.Equal(t, addTransform.ID, resourceTransformIDs[0])
 }

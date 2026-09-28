@@ -29,6 +29,7 @@ var (
 		"context",
 		"dependency",
 		"dependencies",
+		"environment",
 		"externalRef",
 		"externalReference",
 		"externalRefs",

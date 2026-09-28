@@ -1,6 +1,7 @@
 package v2
 
 import (
+	"encoding/json"
 	"errors"
 	"strings"
 
@@ -48,6 +49,43 @@ type S3 struct {
 	// UsePathStyle enables path-style addressing (bucket in the path instead of the
 	// host). Required by most self-hosted S3-compatible stores.
 	UsePathStyle bool `json:"usePathStyle,omitempty"`
+}
+
+// UnmarshalJSON accepts legacy field names for compatibility with older S3 records.
+// Marshaling and the schema retain only the v2 field names.
+func (t *S3) UnmarshalJSON(data []byte) error {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	var legacy, modern bool
+	for field := range fields {
+		switch strings.ToLower(field) {
+		case "bucket", "key":
+			legacy = true
+		case "bucketname", "objectkey":
+			modern = true
+		}
+	}
+	if legacy && modern {
+		return errors.New("ambiguous S3 access spec: cannot mix bucket/key with bucketName/objectKey")
+	}
+
+	type plain S3
+	decoded := struct {
+		plain
+		Bucket string `json:"bucket"`
+		Key    string `json:"key"`
+	}{plain: plain(*t), Bucket: t.BucketName, Key: t.ObjectKey}
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	if legacy {
+		decoded.BucketName = decoded.Bucket
+		decoded.ObjectKey = decoded.Key
+	}
+	*t = S3(decoded.plain)
+	return nil
 }
 
 // Validate verifies that the required fields of the S3 access are set.

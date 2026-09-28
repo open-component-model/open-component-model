@@ -19,7 +19,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/s3/internal/download"
 	accessspec "ocm.software/open-component-model/bindings/go/s3/spec/access"
-	"ocm.software/open-component-model/bindings/go/s3/spec/access/v2"
+	v2 "ocm.software/open-component-model/bindings/go/s3/spec/access/v2"
 	s3creds "ocm.software/open-component-model/bindings/go/s3/spec/credentials"
 	identityv1 "ocm.software/open-component-model/bindings/go/s3/spec/identity/v1"
 )
@@ -83,6 +83,9 @@ func (r *ResourceRepository) GetResourceCredentialConsumerIdentity(ctx context.C
 // The object is streamed into a file under the configured TempFolder, and the
 // returned blob reads from that file, which outlives this call and is owned by the
 // caller.
+//
+// The content is held to the digest the resource declares, which is the digest over
+// exactly these bytes, so a store serving something else fails the read.
 func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) (blob.ReadOnlyBlob, error) {
 	spec, err := r.convertAccess(resource)
 	if err != nil {
@@ -99,7 +102,7 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 		return nil, err
 	}
 
-	return result.Blob, nil
+	return repository.VerifyDownload(ctx, resource, result.Blob)
 }
 
 func (r *ResourceRepository) convertAccess(resource *descriptor.Resource) (*v2.S3, error) {
@@ -110,8 +113,8 @@ func (r *ResourceRepository) convertAccess(resource *descriptor.Resource) (*v2.S
 		return nil, errors.New("resource access is required")
 	}
 
-	spec := &v2.S3{}
-	if err := accessspec.Scheme.Convert(resource.Access, spec); err != nil {
+	spec, err := accessspec.ConvertToV2(resource.Access)
+	if err != nil {
 		return nil, fmt.Errorf("error converting resource access spec: %w", err)
 	}
 	if err := spec.Validate(); err != nil {

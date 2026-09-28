@@ -15,11 +15,17 @@ var schemaConfig []byte
 //go:embed schemas/CopyMode.schema.json
 var schemaCopyMode []byte
 
+//go:embed schemas/HTTPUploaderConfig.schema.json
+var schemaHTTPUploaderConfig []byte
+
 //go:embed schemas/Recursive.schema.json
 var schemaRecursive []byte
 
 //go:embed schemas/UploadType.schema.json
 var schemaUploadType []byte
+
+//go:embed schemas/UploaderMatch.schema.json
+var schemaUploaderMatch []byte
 
 // JSONSchema returns the JSON Schema for Config.
 func (Config) JSONSchema() []byte {
@@ -31,6 +37,11 @@ func (CopyMode) JSONSchema() []byte {
 	return schemaCopyMode
 }
 
+// JSONSchema returns the JSON Schema for HTTPUploaderConfig.
+func (HTTPUploaderConfig) JSONSchema() []byte {
+	return schemaHTTPUploaderConfig
+}
+
 // JSONSchema returns the JSON Schema for Recursive.
 func (Recursive) JSONSchema() []byte {
 	return schemaRecursive
@@ -39,4 +50,9 @@ func (Recursive) JSONSchema() []byte {
 // JSONSchema returns the JSON Schema for UploadType.
 func (UploadType) JSONSchema() []byte {
 	return schemaUploadType
+}
+
+// JSONSchema returns the JSON Schema for UploaderMatch.
+func (UploaderMatch) JSONSchema() []byte {
+	return schemaUploaderMatch
 }

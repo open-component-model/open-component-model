@@ -112,12 +112,36 @@ func (p *DigestProcessor) ProcessResourceDigest(
 	dlResource := res.DeepCopy()
 	dlResource.Access = dlAccess
 
+	// A hand-written resource.Digest in a component constructor cannot know the
+	// normalisation algorithm — the blob is never normalised — and need not
+	// restate the hash. An unset field means "fill it in with what we compute";
+	// only a field pinned to a *different* algorithm is a genuine conflict.
+	// Spelling is not a conflict either: comparisons ignore case, so "sha-256"
+	// or an uppercase hex value verifies instead of failing while an absent
+	// field would have been accepted.
+	//
+	// Checked before the download: neither comparison needs the archive, and a
+	// digest pinned to another algorithm can never match what is computed here,
+	// so fetching it would be a guaranteed waste. It also keeps such a digest from
+	// reaching the verifying blob, which would refuse to be built over it.
+	if res.Digest != nil {
+		if res.Digest.HashAlgorithm != "" && !strings.EqualFold(res.Digest.HashAlgorithm, hashAlgorithmSHA256) {
+			return nil, fmt.Errorf("hash algorithm mismatch: expected %s, got %s", hashAlgorithmSHA256, res.Digest.HashAlgorithm)
+		}
+		if res.Digest.NormalisationAlgorithm != "" && !strings.EqualFold(res.Digest.NormalisationAlgorithm, normalisationGenericBlobDigestV1) {
+			return nil, fmt.Errorf("normalisation algorithm mismatch: expected %s, got %s", normalisationGenericBlobDigestV1, res.Digest.NormalisationAlgorithm)
+		}
+	}
+
 	// The full archive is fetched only to be hashed and thrown away. That cost
 	// is easy to miss from the outside, so it is called out loudly rather than
 	// hidden in debug logs.
 	slog.WarnContext(ctx, "computing the digest of a github resource downloads the full commit archive and discards it after hashing",
 		"repoUrl", gitHub.RepoURL, "commit", gitHub.Commit)
 
+	// Downloaded by resource, and never read through the verifying reader: the digest
+	// is taken from the blob itself, which reports what it holds rather than what the
+	// resource claims. So nothing here is checked against the digest being computed.
 	downloaded, err := p.resourceRepository.DownloadResource(ctx, dlResource, credentials)
 	if err != nil {
 		return nil, fmt.Errorf("error downloading github resource for digest processing: %w", err)
@@ -141,19 +165,6 @@ func (p *DigestProcessor) ProcessResourceDigest(
 		return res, nil
 	}
 
-	// A hand-written resource.Digest in a component constructor cannot know the
-	// normalisation algorithm — the blob is never normalised — and need not
-	// restate the hash. An unset field means "fill it in with what we compute";
-	// only a field pinned to a *different* algorithm is a genuine conflict.
-	// Spelling is not a conflict either: comparisons ignore case, so "sha-256"
-	// or an uppercase hex value verifies instead of failing while an absent
-	// field would have been accepted.
-	if res.Digest.HashAlgorithm != "" && !strings.EqualFold(res.Digest.HashAlgorithm, hashAlgorithmSHA256) {
-		return nil, fmt.Errorf("hash algorithm mismatch: expected %s, got %s", hashAlgorithmSHA256, res.Digest.HashAlgorithm)
-	}
-	if res.Digest.NormalisationAlgorithm != "" && !strings.EqualFold(res.Digest.NormalisationAlgorithm, normalisationGenericBlobDigestV1) {
-		return nil, fmt.Errorf("normalisation algorithm mismatch: expected %s, got %s", normalisationGenericBlobDigestV1, res.Digest.NormalisationAlgorithm)
-	}
 	if !strings.EqualFold(res.Digest.Value, resolvedValue) {
 		return nil, fmt.Errorf("digest value mismatch: expected %s, got %s", res.Digest.Value, resolvedValue)
 	}

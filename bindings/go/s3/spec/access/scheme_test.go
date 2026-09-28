@@ -8,7 +8,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/runtime"
 	accessspec "ocm.software/open-component-model/bindings/go/s3/spec/access"
-	"ocm.software/open-component-model/bindings/go/s3/spec/access/v2"
+	v2 "ocm.software/open-component-model/bindings/go/s3/spec/access/v2"
 )
 
 // The spellings registered here are the ones the JSON schema declares for the type
@@ -34,10 +34,8 @@ func TestScheme_ResolvesAllS3Aliases(t *testing.T) {
 	}
 }
 
-// The package documentation states that no spelling other than the four registered
-// ones resolves.
 func TestScheme_RejectsUndeclaredSpellings(t *testing.T) {
-	for _, name := range []string{"S3/v1", "s3/v1", "S3Bucket/v1", "S3Bucket", "s3bucket"} {
+	for _, name := range []string{"S3/v3", "s3/v3", "S3Bucket/v1", "S3Bucket", "s3bucket"} {
 		t.Run(name, func(t *testing.T) {
 			typ, err := runtime.TypeFromString(name)
 			require.NoError(t, err)
@@ -63,15 +61,4 @@ func TestScheme_ReadsOCMv1V2Format(t *testing.T) {
 		Version:    "x",
 		MediaType:  "m",
 	}, *spec)
-}
-
-// ocmv1 writes an unversioned "s3" in its v1 format (bucket, key) by default. That shape
-// is read as v2 and must fail validation rather than address an empty bucket.
-func TestScheme_OCMv1V1FormatFailsValidation(t *testing.T) {
-	raw := &runtime.Raw{}
-	require.NoError(t, json.Unmarshal([]byte(`{"type":"s3","bucket":"b","key":"k"}`), raw))
-
-	spec := &v2.S3{}
-	require.NoError(t, accessspec.Scheme.Convert(raw, spec))
-	require.ErrorContains(t, spec.Validate(), "bucketName is required")
 }

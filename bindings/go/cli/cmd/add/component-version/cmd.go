@@ -24,6 +24,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/cli/internal/render/graph/tree"
 	"ocm.software/open-component-model/bindings/go/cli/internal/repository/ocm"
 	"ocm.software/open-component-model/bindings/go/cli/internal/subsystem"
+	versioningspec "ocm.software/open-component-model/bindings/go/configuration/versioning/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/constructor"
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	constructorv1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
@@ -354,6 +355,11 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 		graph:              credentialGraph,
 	}
 
+	registry, err := versioningspec.RegistryFromConfig(config)
+	if err != nil {
+		return fmt.Errorf("could not build versioning registry: %w", err)
+	}
+
 	opts := constructor.Options{
 		TargetRepositoryProvider:            instance,
 		ResourceRepositoryProvider:          instance,
@@ -366,6 +372,7 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 		ConcurrencyLimit:                    concurrencyLimit,
 		ComponentVersionConflictPolicy:      ComponentVersionConflictPolicy(cvConflictPolicy).ToConstructorConflictPolicy(),
 		ExternalComponentVersionCopyPolicy:  ExternalComponentVersionCopyPolicy(evCopyPolicy).ToConstructorPolicy(),
+		VersioningRegistry:                  registry,
 	}
 	if !skipReferenceDigestProcessing {
 		opts.ResourceDigestProcessorProvider = instance

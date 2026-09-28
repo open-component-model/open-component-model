@@ -83,7 +83,7 @@ func TestBuildGraphDefinition_Labels(t *testing.T) {
 
 	tgd, err := BuildGraphDefinition(t.Context(),
 		testTransferRoots("ocm.software/my-app", "1.0.0", targetRepo, resolver),
-		transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeLocalBlobResources})
+		transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeLocalBlobResources}, nil)
 	r.NoError(err)
 
 	r.NotEmpty(tgd.Transformations)

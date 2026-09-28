@@ -7,8 +7,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/modules/minio"
 
 	filesystemaccess "ocm.software/open-component-model/bindings/go/blob/filesystem/spec/access"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
@@ -37,23 +35,17 @@ func (s staticCredentials) Resolve(_ context.Context, _ runtime.Identity) (runti
 }
 
 // Test_Integration_S3Transformation exercises the DownloadS3Resource transformer end to end
-// against a MinIO container: the object is downloaded and buffered to a file the transformation
+// against a RustFS container: the object is downloaded and buffered to a file the transformation
 // output points at, which is what the subsequent AddLocalResource transformation consumes.
 func Test_Integration_S3Transformation(t *testing.T) {
 	r := require.New(t)
 	ctx := context.Background()
 
-	container, err := minio.Run(ctx, minioImage)
-	r.NoError(err)
-	t.Cleanup(func() { r.NoError(testcontainers.TerminateContainer(container)) })
-
-	hostPort, err := container.ConnectionString(ctx)
-	r.NoError(err)
-	endpoint := "http://" + hostPort
+	endpoint := "http://" + startRustFS(t, ctx)
 
 	const bucket, key = "transformation-bucket", "path/to/blob.txt"
 	content := []byte("hello ocm from the s3 transformer")
-	setup := newSetupClient(t, ctx, endpoint, container.Username, container.Password)
+	setup := newSetupClient(t, ctx, endpoint, rustfsAccessKey, rustfsSecretKey)
 	createBucket(t, ctx, setup, bucket)
 	putObject(t, ctx, setup, bucket, key, content)
 
@@ -76,7 +68,7 @@ func Test_Integration_S3Transformation(t *testing.T) {
 	transform := &transformation.DownloadS3Resource{
 		Scheme:             scheme,
 		ResourceRepository: repository.NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: new(t.TempDir())}),
-		CredentialProvider: staticCredentials{container.Username, container.Password},
+		CredentialProvider: staticCredentials{rustfsAccessKey, rustfsSecretKey},
 	}
 
 	outputDir := t.TempDir()

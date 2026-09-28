@@ -3,6 +3,7 @@ package configuration
 import (
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -51,7 +52,8 @@ By default (without specifying custom locations with this flag), the file will b
 - $EXE_DIR/.ocmconfig
 If multiple configuration files are found, they will be merged in the order they are discovered.
 Later entries have higher priority.
-Using the option, the specified configuration file(s) will be used instead of the lookup above.`)
+Using the option, the specified configuration file(s) will be used instead of the lookup above.
+Configuration documents piped into stdin are applied last, on top of these files.`)
 }
 
 func GetFlattenedOCMConfigForCommand(cmd *cobra.Command) (*genericv1.Config, error) {
@@ -134,9 +136,12 @@ func GetConfigFromPath(path string) (_ *genericv1.Config, err error) {
 	defer func() {
 		err = errors.Join(err, file.Close())
 	}()
+	return decodeConfig(file)
+}
 
+func decodeConfig(r io.Reader) (*genericv1.Config, error) {
 	var instance genericv1.Config
-	if err := genericv1.Scheme.Decode(file, &instance); err != nil {
+	if err := genericv1.Scheme.Decode(r, &instance); err != nil {
 		return nil, err
 	}
 	return &instance, nil
