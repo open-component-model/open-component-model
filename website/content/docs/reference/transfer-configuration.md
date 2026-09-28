@@ -234,7 +234,10 @@ configurations:
     repository: helm-hosted
 ```
 
-Artifactory with a custom path:
+Artifactory with the default path written out as `path` (for resources without
+extra identity), as a starting point for your own layout. Keep
+`component.version` in it unless each chart version comes from a single
+component version:
 
 ```yaml
   - type: helm.uploader.transfer.config.ocm.software/v1alpha1
@@ -243,7 +246,7 @@ Artifactory with a custom path:
     server: Artifactory
     url: https://myorg.jfrog.io
     repository: helm-local
-    path: '${"charts/" + component.name + "/" + resource.name + "-" + resource.version + ".tgz"}'
+    path: '${component.name + "/" + component.version + "/" + resource.name + "-" + resource.version + ".tgz"}'
 ```
 
 ### Routing Resources to Different Targets
