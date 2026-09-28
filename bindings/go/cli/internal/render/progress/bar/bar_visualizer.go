@@ -25,6 +25,10 @@ type barVisualizer[T any] struct {
 	logBuffer      *progress.SyncBuffer
 	buf            strings.Builder
 	start          time.Time
+	// renderedLines is the number of live-block lines the previous frame wrote.
+	// The next frame clears exactly this many, so a growing indeterminate log
+	// never clears lines it did not write.
+	renderedLines int
 }
 
 // NewVisualizer is a [progress.VisualizerFactory] that creates an animated
@@ -48,16 +52,7 @@ func (v *barVisualizer[T]) SetLogBuffer(buf *progress.SyncBuffer) {
 	v.logBuffer = buf
 }
 
-// maxLogLines returns the number of item log lines shown for an operation.
-// A negative total means the item count is not known up front ([progress.IndeterminateTotal]):
-// the log is still shown, just without a progress bar. Simple operations (total 0)
-// show only the spinner header.
-func maxLogLines(total int) int {
-	if total < 0 {
-		return 4
-	}
-	return min(4, total)
-}
+const maxLogWindowLines = 4
 
 // Begin starts the animation.
 func (v *barVisualizer[T]) Begin(name string) {
@@ -70,7 +65,13 @@ func (v *barVisualizer[T]) Begin(name string) {
 	v.done = make(chan struct{})
 	v.spinnerFrame = 0
 	v.dotFrame = 0
-	v.maxLogs = maxLogLines(v.total)
+	v.maxLogs = maxLogWindowLines
+	if 0 <= v.total && v.total < maxLogWindowLines {
+		// Simple operations get exactly their lines of output. Anything larger
+		// is trimmed. Anything <0 is the indeterminate case where number of
+		// lines are not known in advance.
+		v.maxLogs = v.total
+	}
 
 	v.reserveSpace()
 
@@ -153,13 +154,15 @@ func (v *barVisualizer[T]) End(err error) {
 // --- rendering ---
 
 func (v *barVisualizer[T]) reserveSpace() {
-	for i := 0; i < v.fixedLines(); i++ {
+	n := v.fixedLines()
+	for i := 0; i < n; i++ {
 		fmt.Fprintln(v.out)
 	}
+	v.renderedLines = n
 }
 
 func (v *barVisualizer[T]) fixedLines() int {
-	lines := v.maxLogs
+	lines := v.reservedLogLines()
 	if v.total > 0 {
 		lines++ // bar
 	}
@@ -167,6 +170,17 @@ func (v *barVisualizer[T]) fixedLines() int {
 		lines++ // header
 	}
 	return lines
+}
+
+// reservedLogLines returns the number of item log lines that occupy terminal
+// space. The item count of determinate operations is known up front, so all
+// log lines are reserved at once to avoid flicker. The count of indeterminate
+// operations is not, so the log grows as items arrive, bounded by maxLogs.
+func (v *barVisualizer[T]) reservedLogLines() int {
+	if v.total < 0 {
+		return min(len(v.events), v.maxLogs)
+	}
+	return v.maxLogs
 }
 
 // renderLocked builds the entire frame into v.buf and flushes it in one write
@@ -186,11 +200,12 @@ func (v *barVisualizer[T]) renderLocked() {
 	if v.total > 0 {
 		v.writeBar()
 	}
+	v.renderedLines = v.fixedLines()
 	_, _ = io.WriteString(v.out, v.buf.String())
 }
 
 func (v *barVisualizer[T]) writeClearLines() {
-	for i := 0; i < v.fixedLines(); i++ {
+	for i := 0; i < v.renderedLines; i++ {
 		v.buf.WriteString(CursorUp + ClearLine)
 	}
 }
@@ -224,7 +239,7 @@ func (v *barVisualizer[T]) writeEvents() {
 		fmt.Fprintln(&v.buf, v.formatItem(event))
 	}
 
-	for i := 0; i < v.maxLogs-len(visible); i++ {
+	for i := 0; i < v.reservedLogLines()-len(visible); i++ {
 		fmt.Fprintln(&v.buf)
 	}
 }

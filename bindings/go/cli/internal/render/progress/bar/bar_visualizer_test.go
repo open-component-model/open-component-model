@@ -2,6 +2,7 @@ package bar
 
 import (
 	"bytes"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -13,12 +14,16 @@ import (
 
 func newTestVisualizer(total int) (*barVisualizer[string], *bytes.Buffer) {
 	buf := &bytes.Buffer{}
+	maxLogs := maxLogWindowLines
+	if 0 <= total && total < maxLogWindowLines {
+		maxLogs = total
+	}
 	v := &barVisualizer[string]{
 		out:            buf,
 		total:          total,
 		events:         make([]progress.Event[string], 0, total),
 		done:           make(chan struct{}),
-		maxLogs:        maxLogLines(total),
+		maxLogs:        maxLogs,
 		errorFormatter: func(_ string, err error) string { return err.Error() },
 	}
 	return v, buf
@@ -250,14 +255,6 @@ func TestNewVisualizer(t *testing.T) {
 	assert.Contains(t, output, "Transfer")
 }
 
-func TestMaxLogLines(t *testing.T) {
-	assert.Equal(t, 0, maxLogLines(0))
-	assert.Equal(t, 2, maxLogLines(2))
-	assert.Equal(t, 4, maxLogLines(4))
-	assert.Equal(t, 4, maxLogLines(6))
-	assert.Equal(t, 4, maxLogLines(progress.IndeterminateTotal))
-}
-
 func TestNewVisualizer_Indeterminate(t *testing.T) {
 	buf := &bytes.Buffer{}
 	vis := NewVisualizer[any](buf, progress.IndeterminateTotal)
@@ -276,6 +273,43 @@ func TestNewVisualizer_Indeterminate(t *testing.T) {
 	assert.Contains(t, output, "ocm.software/a:1.0.0")
 	// ... but no progress bar
 	assert.NotContains(t, output, "%")
+}
+
+// Indeterminate operations reserve only as many item lines as they actually
+// use, so a small operation must not leave blank lines behind.
+func TestNewVisualizer_Indeterminate_FewItemsLeaveNoBlankLines(t *testing.T) {
+	tests := []struct {
+		name  string
+		items int
+		blank int
+	}{
+		{"no item", 0, 0},
+		{"one item", 1, 0},
+		{"three items", 3, 0},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			buf := &bytes.Buffer{}
+			vis := NewVisualizer[any](buf, progress.IndeterminateTotal)
+			vis.Begin("Resolving")
+			bv := vis.(*barVisualizer[any])
+			close(bv.done)
+			bv.done = make(chan struct{})
+			for i := 0; i < tc.items; i++ {
+				bv.HandleEvent(progress.Event[any]{ID: fmt.Sprintf("c%d", i), Name: fmt.Sprintf("ocm.software/c%d:1.0.0", i), State: progress.Completed})
+			}
+			buf.Reset()
+			vis.End(nil)
+
+			blank := 0
+			for _, line := range strings.Split(strings.TrimRight(stripANSI(buf.String()), "\n"), "\n") {
+				if strings.TrimSpace(line) == "" {
+					blank++
+				}
+			}
+			assert.Equal(t, tc.blank, blank, "final frame must not contain blank lines")
+		})
+	}
 }
 
 func TestNewVisualizer_Simple(t *testing.T) {
