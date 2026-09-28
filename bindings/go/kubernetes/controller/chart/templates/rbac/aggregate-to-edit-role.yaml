@@ -16,6 +16,7 @@ rules:
       resources:
         - components
         - deployers
+        - discoveries
         - replications
         - repositories
         - resources
