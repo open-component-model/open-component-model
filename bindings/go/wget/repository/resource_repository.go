@@ -11,6 +11,7 @@ import (
 	checksumhttpv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/checksum/http/v1alpha1/spec"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	ocmhttp "ocm.software/open-component-model/bindings/go/http"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/wget/checksum"
@@ -54,7 +55,7 @@ func NewResourceRepository(filesystemConfig *filesystemv1alpha1.Config, opts ...
 	}
 	client := options.Client
 	if client == nil {
-		client = http.DefaultClient
+		client = ocmhttp.New()
 	}
 	var maxSize int64
 	if options.MaxDownloadSize != nil {

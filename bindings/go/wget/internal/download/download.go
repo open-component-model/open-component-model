@@ -17,6 +17,7 @@ import (
 	"net/url"
 	"os"
 
+	ocmhttp "ocm.software/open-component-model/bindings/go/http"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	credv1 "ocm.software/open-component-model/bindings/go/wget/spec/credentials/v1"
 )
@@ -62,7 +63,7 @@ func Download(ctx context.Context, req Request, opts ...Option) (_ *Blob, err er
 	}
 	client := o.Client
 	if client == nil {
-		client = http.DefaultClient
+		client = ocmhttp.New()
 	}
 
 	parsedURL, err := url.Parse(req.URL)
@@ -99,14 +100,6 @@ func Download(ctx context.Context, req Request, opts ...Option) (_ *Blob, err er
 		for _, v := range vals {
 			httpReq.Header.Add(k, v)
 		}
-	}
-	// When digests are computed over the response body, force
-	// Accept-Encoding: identity. Go's default transport otherwise auto-adds
-	// gzip and transparently decompresses; hashing decoded bytes then breaks
-	// RFC 9530 Content-Digest (computed over encoded bytes) and lets a mirror
-	// serving compressed bytes yield a different OCM SHA-256.
-	if len(o.DigestAlgorithms) > 0 {
-		httpReq.Header.Set("Accept-Encoding", "identity")
 	}
 
 	if req.NoRedirect {

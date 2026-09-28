@@ -149,7 +149,13 @@ func NewReadOnlyChartFromRemote(ctx context.Context, helmRepo, targetDir string,
 		Keyring:          keyring,
 	}
 
-	resolvedRepo, err := resolveHTTPChartURL(ctx, helmRepo, opt.Version, targetDir, GetterProviders(httpClient, cfgOpts), &helmrepo.Entry{
+	// index.yaml is parsed, never hashed, and compresses up to ~18x.
+	indexProviders := providers
+	if opt.HTTPConfig != nil {
+		indexProviders = GetterProviders(ocmhttp.New(ocmhttp.WithConfig(opt.HTTPConfig), ocmhttp.WithCompression()), cfgOpts)
+	}
+
+	resolvedRepo, err := resolveHTTPChartURL(ctx, helmRepo, opt.Version, targetDir, indexProviders, &helmrepo.Entry{
 		Name:     "index",
 		Username: username,
 		Password: password,
