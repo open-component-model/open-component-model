@@ -7,6 +7,7 @@ import (
 	"github.com/go-logr/logr"
 	"k8s.io/utils/lru"
 
+	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/resolution/workerpool"
@@ -132,9 +133,9 @@ func (r *Resolver) createResolver(ctx context.Context, spec runtime.Typed, cfg *
 		RepoProvider: pm.ComponentVersionRepositoryRegistry,
 	}
 
-	var credGraph credentials.Resolver
+	var genericCfg *genericv1.Config
 	if cfg != nil {
-		graph, err := setup.NewCredentialGraph(ctx, cfg.Config, setup.CredentialGraphOptions{
+		credGraph, err := setup.NewCredentialGraph(ctx, cfg.Config, setup.CredentialGraphOptions{
 			PluginManager: pm,
 			Logger:        r.logger,
 		})
@@ -142,21 +143,14 @@ func (r *Resolver) createResolver(ctx context.Context, spec runtime.Typed, cfg *
 			return nil, fmt.Errorf("failed to create credential graph: %w", err)
 		}
 		r.logger.V(1).Info("resolved credential graph")
-		credGraph = graph
-		opts.CredentialGraph = graph
-
-		fallbackResolvers, pathMatchers, err := resolvers.ExtractResolvers(cfg.Config, ocirepository.Scheme)
-		if err != nil {
-			return nil, err
-		}
-		opts.FallbackResolvers = fallbackResolvers
-		opts.PathMatchers = pathMatchers
+		opts.CredentialGraph = credGraph
+		genericCfg = cfg.Config
 	}
 
-	resolver, err := resolvers.New(ctx, opts, spec)
+	resolver, err := resolvers.NewFromConfig(ctx, genericCfg, ocirepository.Scheme, opts, spec)
 	if err != nil {
 		return nil, err
 	}
 
-	return &resolvedProvider{resolver: resolver, credentialGraph: credGraph}, nil
+	return &resolvedProvider{resolver: resolver, credentialGraph: opts.CredentialGraph}, nil
 }
