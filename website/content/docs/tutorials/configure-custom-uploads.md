@@ -290,8 +290,8 @@ API:
 | `nexus.uploader.transfer.config.ocm.software/v1alpha1`       | `helm`, `raw`                     | `Helm/v1` or `Wget/v1` |
 
 For guidance per repository type, see
-[Upload Resources to JFrog Artifactory]({{< relref "docs/how-to/upload-to-jfrog-artifactory.md" >}})
-and [Upload Resources to Sonatype Nexus]({{< relref "docs/how-to/upload-to-sonatype-nexus.md" >}}).
+[Upload Resources to JFrog Artifactory]({{< relref "docs/how-to/vendor-specific-apis/jfrog-artifactory.md" >}})
+and [Upload Resources to Sonatype Nexus]({{< relref "docs/how-to/vendor-specific-apis/sonatype-nexus.md" >}}).
 
 ### Artifactory Helm example
 

@@ -1,7 +1,7 @@
 ---
 title: "Upload Resources to Sonatype Nexus"
-description: "Transfer component versions and upload their resources into Sonatype Nexus Repository 3 hosted repositories: Helm charts and raw files, with guidance for Maven and Python packages."
-weight: 17
+description: "Transfer component versions and upload their resources into Sonatype Nexus Repository 3 hosted repositories: Helm charts and raw files, with guidance for Maven artifacts."
+weight: 2
 toc: true
 ---
 
@@ -9,7 +9,7 @@ toc: true
 
 Transfer a component version and upload its resources into Sonatype Nexus
 Repository 3 hosted repositories, so that consumers fetch them with their usual
-tools (`helm`, `curl`, `mvn`, `pip`).
+tools (`helm`, `curl`, `mvn`).
 
 ## You'll end up with
 
@@ -133,7 +133,6 @@ nexus repository "raw-hosted" already stores a different file at …; the upload
 | Repository                  | Error                                       | Alternative                                              |
 |-----------------------------|---------------------------------------------|----------------------------------------------------------|
 | `maven2`                    | `has format "maven2"; supported: helm, raw` | HTTP uploader with a Maven-layout `targetURL`, see below |
-| `pypi`                      | `has format "pypi"; supported: helm, raw`   | `twine`, see [Python packages](#python-packages-pypi)    |
 | `npm`                       | `has format "npm"; supported: helm, raw`    | `npm publish`; Nexus rejects plain uploads               |
 | Proxy or group repositories | `uploads need a hosted repository`          | Upload into the hosted repository behind it              |
 
@@ -156,35 +155,6 @@ can deploy there:
 
 The HTTP uploader reads remote sources such as `Wget/v1`; it cannot upload local
 blobs (`failed to get plugin for typ "LocalBlob/v1"`).
-
-### Python packages (PyPI)
-
-The uploader refuses Nexus PyPI repositories
-(`nexus repository "pypi-hosted" has format "pypi"; supported: helm, raw`), and a
-plain `PUT` of a wheel into a PyPI hosted repository fails with
-`400 Unable to parse form content`: Nexus only accepts the upload form of the Python
-packaging tools. Publish with `twine` instead:
-
-1. Transfer the component version without an uploader rule for the package.
-2. Download the package from the transferred component version, named like the wheel:
-
-   ```bash
-   ocm download resource ctf::./target//ocm.software/demo:1.0.0 \
-     --identity name=wheel --output demo-1.0.0-py3-none-any.whl
-   ```
-
-3. Upload it with `twine`:
-
-   ```bash
-   twine upload --repository-url https://nexus.example.com/repository/pypi-hosted/ \
-     -u <USERNAME> -p <PASSWORD> demo-1.0.0-py3-none-any.whl
-   ```
-
-4. Install it from the repository's simple index:
-
-   ```bash
-   pip install --index-url https://<USERNAME>:<PASSWORD>@nexus.example.com/repository/pypi-hosted/simple demo==1.0.0
-   ```
 
 ## Troubleshooting
 
@@ -217,7 +187,7 @@ repository.
 
 ## Related documentation
 
-- [How-to: Upload Resources to JFrog Artifactory]({{< relref "docs/how-to/upload-to-jfrog-artifactory.md" >}})
+- [How-to: Upload Resources to JFrog Artifactory]({{< relref "docs/how-to/vendor-specific-apis/jfrog-artifactory.md" >}})
 - [Reference: Transfer Configuration]({{< relref "docs/reference/transfer-configuration.md" >}})
 - [Tutorial: Configure Custom Uploads During Transfer]({{< relref "docs/tutorials/configure-custom-uploads.md" >}})
 - [Concept: Transfer and Transport]({{< relref "docs/concepts/transfer-concept.md" >}})

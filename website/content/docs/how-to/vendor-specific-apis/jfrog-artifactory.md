@@ -1,7 +1,7 @@
 ---
 title: "Upload Resources to JFrog Artifactory"
-description: "Transfer component versions and upload their resources into JFrog Artifactory repositories: Helm charts, Maven artifacts, npm packages, Python packages and plain files."
-weight: 16
+description: "Transfer component versions and upload their resources into JFrog Artifactory repositories: Helm charts, Maven artifacts, npm packages and plain files."
+weight: 1
 toc: true
 ---
 
@@ -9,7 +9,7 @@ toc: true
 
 Transfer a component version and upload its resources into JFrog Artifactory
 repositories, so that consumers fetch them with their usual tools (`helm`, `mvn`,
-`npm`, `pip`, `curl`).
+`npm`, `curl`).
 
 ## You'll end up with
 
@@ -248,34 +248,6 @@ access:
 OCI images are uploaded as a single OCI layout tar
 (`application/vnd.ocm.software.oci.layout.v1+tar`).
 
-### Python packages (PyPI)
-
-The uploader refuses Artifactory PyPI repositories
-(`has package type "pypi"; supported: helm, generic, maven, npm`). Publish wheels and
-source distributions with `twine` instead:
-
-1. Transfer the component version with the package as a local blob or with its
-   original access, without an uploader rule for it.
-2. Download the package from the transferred component version:
-
-   ```bash
-   ocm download resource ctf::./target//ocm.software/demo:1.0.0 \
-     --identity name=wheel --output demo-1.0.0-py3-none-any.whl
-   ```
-
-   The output file name must be the wheel file name: `twine` reads the package name
-   and version from it.
-3. Upload it to the repository's PyPI API:
-
-   ```bash
-   twine upload --repository-url https://common.repositories.cloud.sap/artifactory/api/pypi/<repository> \
-     -u <USERNAME> -p <IDENTITY_TOKEN> demo-1.0.0-py3-none-any.whl
-   ```
-
-To keep the file inside OCM's transfer instead, upload the wheel into a
-[generic repository](#generic-files): it is then downloadable from its `Wget/v1` URL,
-for example with `pip install <url>`, but not listed in a PyPI index.
-
 ### Owner properties and overwrites
 
 Every file the Artifactory uploader deploys carries the properties
@@ -289,7 +261,6 @@ and never touched otherwise: the transfer fails and asks for a different `path`.
 
 | Repository                   | Error                                                             | Alternative                                                |
 |------------------------------|-------------------------------------------------------------------|------------------------------------------------------------|
-| `pypi`                       | `has package type "pypi"; supported: helm, generic, maven, npm`   | `twine`, see [Python packages](#python-packages-pypi)      |
 | `docker`                     | `has package type "docker"; supported: helm, generic, maven, npm` | Transfer images to the OCI registry host of the repository |
 | Remote or virtual repository | `uploads need a local repository`                                 | Upload into the local repository behind it                 |
 
@@ -332,7 +303,7 @@ ones.
 
 ## Related documentation
 
-- [How-to: Upload Resources to Sonatype Nexus]({{< relref "docs/how-to/upload-to-sonatype-nexus.md" >}})
+- [How-to: Upload Resources to Sonatype Nexus]({{< relref "docs/how-to/vendor-specific-apis/sonatype-nexus.md" >}})
 - [Reference: Transfer Configuration]({{< relref "docs/reference/transfer-configuration.md" >}})
 - [Tutorial: Configure Custom Uploads During Transfer]({{< relref "docs/tutorials/configure-custom-uploads.md" >}})
 - [Concept: Transfer and Transport]({{< relref "docs/concepts/transfer-concept.md" >}})

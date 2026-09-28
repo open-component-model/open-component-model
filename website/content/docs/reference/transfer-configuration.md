@@ -154,9 +154,9 @@ The repository **must** be a local or federated repository. Remote or virtual
 repositories cannot receive uploads. The uploading user must be allowed to read
 the repository configuration.
 
-For step-by-step guidance per repository type, including Maven POMs, npm and
-Python packages, see
-[Upload Resources to JFrog Artifactory]({{< relref "docs/how-to/upload-to-jfrog-artifactory.md" >}}).
+For step-by-step guidance per repository type, including Maven POMs and npm
+packages, see
+[Upload Resources to JFrog Artifactory]({{< relref "docs/how-to/vendor-specific-apis/jfrog-artifactory.md" >}}).
 
 #### Helm repositories
 
@@ -306,8 +306,8 @@ The repository **must** be a hosted repository. Proxy and group repositories
 cannot receive uploads. The uploading user must be allowed to read the
 repository settings.
 
-For step-by-step guidance, including Maven and Python packages, see
-[Upload Resources to Sonatype Nexus]({{< relref "docs/how-to/upload-to-sonatype-nexus.md" >}}).
+For step-by-step guidance, including Maven artifacts, see
+[Upload Resources to Sonatype Nexus]({{< relref "docs/how-to/vendor-specific-apis/sonatype-nexus.md" >}}).
 
 #### Helm repositories
 
