@@ -3,7 +3,6 @@ package cmd
 import (
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -42,25 +41,25 @@ func New() *cobra.Command {
   artifacts, like Component Archives, Common Transport Archive,
   Component Repositories, and Component Versions.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if versionRequested(cmd) {
+				return version.Write(cmd.OutOrStdout(), version.OutputText)
+			}
 			return cmd.Help()
 		},
-		PersistentPreRunE: hooks.PreRunE,
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			if versionRequested(cmd) {
+				return nil
+			}
+			return hooks.PreRunE(cmd, args)
+		},
 		DisableAutoGenTag: true,
 		SilenceUsage:      true,
 	}
 
-	// Enable the built-in --version / -v flag. The value is a sentinel; the
-	// template below ignores it and renders the same human-readable output as
-	// the `ocm version` subcommand, so `ocm --version` and `ocm version` match.
-	cmd.Version = "(see template)"
-	cmd.SetVersionTemplate("{{ ocmVersion }}")
-	cobra.AddTemplateFunc("ocmVersion", func() (string, error) {
-		var buf strings.Builder
-		if err := version.Write(&buf, version.OutputText); err != nil {
-			return "", err
-		}
-		return buf.String(), nil
-	})
+	// Hand-rolled instead of cobra's Version + SetVersionTemplate: any custom cobra
+	// template links text/template, whose reflective method calls disable the
+	// linker's dead-method elimination and grew the binary by ~50%.
+	cmd.Flags().BoolP(versionFlag, "v", false, "version for ocm")
 
 	configuration.RegisterConfigFlag(cmd)
 
@@ -81,4 +80,16 @@ func New() *cobra.Command {
 	cmd.AddCommand(transfer.New())
 	cmd.AddCommand(describe.New())
 	return cmd
+}
+
+const versionFlag = "version"
+
+// versionRequested reports whether --version was passed to the root command.
+// Subcommands may define their own "version" flag, so only the root is checked.
+func versionRequested(cmd *cobra.Command) bool {
+	if cmd.HasParent() {
+		return false
+	}
+	v, _ := cmd.Flags().GetBool(versionFlag)
+	return v
 }

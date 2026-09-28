@@ -18,6 +18,15 @@ var schemaDownloadWgetResourceOutput []byte
 //go:embed schemas/DownloadWgetResourceSpec.schema.json
 var schemaDownloadWgetResourceSpec []byte
 
+//go:embed schemas/HTTPStreaming.schema.json
+var schemaHTTPStreaming []byte
+
+//go:embed schemas/HTTPStreamingOutput.schema.json
+var schemaHTTPStreamingOutput []byte
+
+//go:embed schemas/HTTPStreamingSpec.schema.json
+var schemaHTTPStreamingSpec []byte
+
 // JSONSchema returns the JSON Schema for DownloadWgetResource.
 func (DownloadWgetResource) JSONSchema() []byte {
 	return schemaDownloadWgetResource
@@ -31,4 +40,19 @@ func (DownloadWgetResourceOutput) JSONSchema() []byte {
 // JSONSchema returns the JSON Schema for DownloadWgetResourceSpec.
 func (DownloadWgetResourceSpec) JSONSchema() []byte {
 	return schemaDownloadWgetResourceSpec
+}
+
+// JSONSchema returns the JSON Schema for HTTPStreaming.
+func (HTTPStreaming) JSONSchema() []byte {
+	return schemaHTTPStreaming
+}
+
+// JSONSchema returns the JSON Schema for HTTPStreamingOutput.
+func (HTTPStreamingOutput) JSONSchema() []byte {
+	return schemaHTTPStreamingOutput
+}
+
+// JSONSchema returns the JSON Schema for HTTPStreamingSpec.
+func (HTTPStreamingSpec) JSONSchema() []byte {
+	return schemaHTTPStreamingSpec
 }

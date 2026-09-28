@@ -234,7 +234,14 @@ If you discover a security vulnerability, please report it responsibly through
 instead of opening a public issue. Each repository in the organization has this feature enabled - navigate to the
 **Security** tab of the affected repository to submit a report. This allows maintainers to assess and address the issue
 before it is disclosed publicly.
+
+If private vulnerability reporting is not an option for you, contact the Technical Steering Committee via email at
+[open-component-model-tsc@lists.neonephos.org](mailto:open-component-model-tsc@lists.neonephos.org).
 {{</callout>}}
+
+Our [Security Policy](https://github.com/open-component-model/.github/blob/main/SECURITY.md) documents the full
+disclosure process: supported versions, response targets, embargo periods, and how we publish security advisories.
+It follows the [NeoNephos Security Guidelines](https://github.com/neonephos/guidelines-development/blob/main/security-guidelines/security-guidelines.md).
 
 ## License
 

@@ -106,12 +106,28 @@ tasks:
         --config={{ .GOLANGCI_LINT_CONFIG }}
 
   markdownlint:
-    desc: "Run markdownlint-cli2 on all markdown files (add -- --fix to fix automatically)"
+    desc: "Run markdownlint-cli2 on non-website markdown files (add -- --fix to fix automatically)"
+    dir: '{{ .ROOT_DIR }}'
     vars:
       MARKDOWNLINT_CLI2_CONFIG: '{{ .ROOT_DIR }}/.github/config/.markdownlint-cli2.yaml'
+    # Keep the glob in `cmd` relative: ignore patterns match against glob results as given,
+    # so a relative 'website/**' never matches an absolute result path. An absolute glob 
+    # silently disables the config's ignores here (--fix then rewrites files that should
+    # have been excluded)
     cmd: |
       npx --yes markdownlint-cli2@{{ .MARKDOWNLINT_CLI2_TARGET_VERSION }} --config {{ .MARKDOWNLINT_CLI2_CONFIG }} \
-        {{ .CLI_ARGS }} '{{ .ROOT_DIR }}/**/*.md'
+        {{ .CLI_ARGS }} '**/*.md'
+
+  markdownlint/website:
+    desc: "Run markdownlint-cli2 on website markdown files with the website config (add -- --fix to fix automatically)"
+    dir: '{{ .ROOT_DIR }}'
+    vars:
+      MARKDOWNLINT_CLI2_CONFIG: '{{ .ROOT_DIR }}/.github/config/website.markdownlint-cli2.yaml'
+    cmd: |
+      npx --yes markdownlint-cli2@{{ .MARKDOWNLINT_CLI2_TARGET_VERSION }} --config {{ .MARKDOWNLINT_CLI2_CONFIG }} \
+        {{ .CLI_ARGS }} 'website/**/*.md' \
+        '!website/content/docs/reference/ocm-cli' '!website/content/docs/reference/ocm-controller' \
+        '!website/node_modules/**'
 
   dependency-list/generate:
     desc: "Regenerate the generated documents derived from the golangci.yml depguard rules"

@@ -19,8 +19,8 @@ func TestUploadAsLocalResource_OCI(t *testing.T) {
 
 	transform, err := uploadAsLocalResource(toSpec, "comp", "1.0.0", "addRes1", "getRes1", staticReferenceName("my/image:v1"), "comp@1.0.0 [Add my-image]")
 	require.NoError(t, err)
-	assert.Equal(t, ociv1alpha1.OCIAddLocalResourceV1alpha1, transform.TransformationMeta.Type)
-	assert.Equal(t, "addRes1", transform.TransformationMeta.ID)
-	assert.Equal(t, "comp@1.0.0 [Add my-image]", transform.TransformationMeta.Label)
+	assert.Equal(t, ociv1alpha1.OCIAddLocalResourceV1alpha1, transform.Type)
+	assert.Equal(t, "addRes1", transform.ID)
+	assert.Equal(t, "comp@1.0.0 [Add my-image]", transform.Label)
 	assert.NotNil(t, transform.Spec)
 }

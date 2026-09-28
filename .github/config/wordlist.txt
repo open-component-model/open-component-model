@@ -74,6 +74,7 @@ callout
 callouts
 camelcase
 canonicalized
+calver
 cas
 ccwienk
 cel
@@ -970,3 +971,4 @@ RGW
 Cloudflare
 unversioned
 BuildKit
+artifactory

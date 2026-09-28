@@ -17,6 +17,7 @@ import (
 
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	gpgcredentials "ocm.software/open-component-model/bindings/go/gpg/signing/handler/internal/credentials"
+	gpgcredentialsspec "ocm.software/open-component-model/bindings/go/gpg/spec/credentials"
 	gpgcredentialsv1 "ocm.software/open-component-model/bindings/go/gpg/spec/credentials/v1alpha1"
 	identityv1 "ocm.software/open-component-model/bindings/go/gpg/spec/identity/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/gpg/spec/signing/v1alpha1"
@@ -251,4 +252,8 @@ func validateHashAlgorithm(alg string) error {
 		return nil
 	}
 	return fmt.Errorf("unsupported hash algorithm %q", alg)
+}
+
+func (h *Handler) GetCredentialTypeScheme() *runtime.Scheme {
+	return gpgcredentialsspec.Scheme
 }

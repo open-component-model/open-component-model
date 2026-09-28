@@ -242,6 +242,58 @@ func TestTransferComponentVersionWithTransferSpecStdinInvalid(t *testing.T) {
 	require.Contains(t, err.Error(), "parsing transfer spec")
 }
 
+func TestTransferComponentVersionWithTransferSpecAndConfigStdin(t *testing.T) {
+	const config = `type: generic.config.ocm.software/v1
+configurations:
+- type: attributes.config.ocm.software
+  attributes:
+    source: stdin
+`
+	componentName := "ocm.software/stdin-both-test"
+	componentVersion := "0.0.1"
+	sourceRef := setupSourceRef(t, componentName, componentVersion)
+
+	configBeforeSpec := func(spec string) string { return config + "---\n" + spec }
+	specBeforeConfig := func(spec string) string { return spec + "---\n" + config }
+	tests := []struct {
+		name  string
+		stdin func(spec string) string
+	}{
+		{name: "config before spec", stdin: configBeforeSpec},
+		{name: "spec before config", stdin: specBeforeConfig},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			toPath := t.TempDir()
+			spec := dryRunTransferSpec(t, sourceRef, fmt.Sprintf("ctf::%s", toPath))
+
+			_, err := test.OCM(t,
+				test.WithArgs("transfer", "component-version", "--transfer-spec", "-"),
+				test.WithInput(bytes.NewBufferString(tt.stdin(spec))),
+				test.WithOutput(new(bytes.Buffer)),
+				test.WithErrorOutput(test.NewJSONLogReader()),
+			)
+			require.NoError(t, err)
+
+			desc, err := openCTFRepo(t, toPath).GetComponentVersion(t.Context(), componentName, componentVersion)
+			require.NoError(t, err)
+			require.Equal(t, componentName, desc.Component.Name)
+		})
+	}
+}
+
+// TestTransferComponentVersionWithTransferSpecStdinAppliesConfig proves that configuration in
+// stdin is loaded: a broken configuration document fails the command.
+func TestTransferComponentVersionWithTransferSpecStdinAppliesConfig(t *testing.T) {
+	_, err := test.OCM(t,
+		test.WithArgs("transfer", "component-version", "--transfer-spec", "-"),
+		test.WithInput(bytes.NewBufferString("type: generic.config.ocm.software/v1\nconfigurations: notalist\n")),
+		test.WithOutput(new(bytes.Buffer)),
+		test.WithErrorOutput(test.NewJSONLogReader()),
+	)
+	require.ErrorContains(t, err, "could not load configuration from stdin")
+}
+
 func TestTransferComponentVersionWithTransferSpecFileNotFound(t *testing.T) {
 	_, err := test.OCM(t,
 		test.WithArgs("transfer", "component-version", "--transfer-spec", "/nonexistent/path/spec.yaml"),
@@ -526,7 +578,7 @@ func TestTransferComponentVersion_SemverConstraint(t *testing.T) {
 	targetArg := fmt.Sprintf("ctf::%s", toPath)
 
 	_, err := test.OCM(t,
-		test.WithArgs("transfer", "component-version", sourceRef, targetArg, "--semver-constraint", "< 2.0.0"),
+		test.WithArgs("transfer", "component-version", sourceRef, targetArg, "--constraint", "< 2.0.0"),
 		test.WithOutput(new(bytes.Buffer)),
 		test.WithErrorOutput(test.NewJSONLogReader()),
 	)
@@ -586,7 +638,7 @@ func TestTransferComponentVersion_ExactVersionIgnoresConstraintFlags(t *testing.
 	targetArg := fmt.Sprintf("ctf::%s", toPath)
 
 	_, err := test.OCM(t,
-		test.WithArgs("transfer", "component-version", exactRef.String(), targetArg, "--semver-constraint", "< 2.0.0", "--latest"),
+		test.WithArgs("transfer", "component-version", exactRef.String(), targetArg, "--constraint", "< 2.0.0", "--latest"),
 		test.WithOutput(new(bytes.Buffer)),
 		test.WithErrorOutput(test.NewJSONLogReader()),
 	)

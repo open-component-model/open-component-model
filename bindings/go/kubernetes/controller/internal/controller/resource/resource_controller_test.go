@@ -2,7 +2,6 @@ package resource
 
 import (
 	"crypto"
-	"encoding/base64"
 	"encoding/json"
 	"log/slog"
 	"os"
@@ -1506,6 +1505,15 @@ var _ = Describe("Resource Controller", func() {
 
 			By("mocking a component")
 			namespace := test.NamespaceForTest(ctx)
+
+			By("creating an ocm config holding the verification configuration")
+			configSecret := test.SetupSignatureVerificationConfig(ctx, k8sClient, namespace.GetName(), "signature-verification",
+				test.SignatureVerification{
+					Signature: signatureName,
+					Algorithm: signingv1alpha1.AlgorithmRSASSAPSS,
+					PublicKey: pubKey,
+				})
+
 			componentObj := test.MockComponent(
 				ctx,
 				componentObjName,
@@ -1518,13 +1526,8 @@ var _ = Describe("Resource Controller", func() {
 						Version:        componentVersion,
 						RepositorySpec: &apiextensionsv1.JSON{Raw: specData},
 					},
-					Repository: repositoryName,
-					Verify: []v1alpha1.Verification{
-						{
-							Signature: signatureName,
-							Value:     base64.StdEncoding.EncodeToString([]byte(pubKey)),
-						},
-					},
+					Repository:         repositoryName,
+					EffectiveOCMConfig: []v1alpha1.OCMConfiguration{test.SecretOCMConfiguration(configSecret)},
 				},
 			)
 			DeferCleanup(func(ctx SpecContext) {

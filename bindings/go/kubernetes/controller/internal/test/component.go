@@ -36,7 +36,6 @@ type MockComponentOptions struct {
 	Recorder           record.EventRecorder
 	Info               v1alpha1.ComponentInfo
 	Repository         string
-	Verify             []v1alpha1.Verification
 	EffectiveOCMConfig []v1alpha1.OCMConfiguration
 }
 
@@ -57,7 +56,6 @@ func MockComponent(
 				Name: options.Repository,
 			},
 			Component: options.Info.Component,
-			Verify:    options.Verify,
 		},
 	}
 	Expect(options.Client.Create(ctx, component)).To(Succeed())

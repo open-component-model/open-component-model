@@ -87,7 +87,10 @@ func (s *Store) StoreForReference(_ context.Context, reference string) (spec.Sto
 
 // ComponentVersionReference creates a reference string for a component version in the format "component-descriptors/component:version".
 func (s *Store) ComponentVersionReference(ctx context.Context, component, version string) string {
-	tag := oci.LooseSemverToOCITag(ctx, version) // Remove prohibited characters.
+	tag, err := oci.VersionToOCITag(ctx, version)
+	if err != nil {
+		slog.WarnContext(ctx, "building CTF component version reference with an invalid OCI tag", "component", component, "version", version, "error", err)
+	}
 	return fmt.Sprintf("%s/component-descriptors/%s:%s", wellKnownRegistryCTF, component, tag)
 }
 

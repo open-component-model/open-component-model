@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net/http"
 	"os"
 	"runtime"
+	"sync/atomic"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
@@ -21,16 +23,56 @@ import (
 type Blob struct {
 	*filesystem.Blob
 	path string
+	// headers are the response headers of the download that produced this blob.
+	headers http.Header
+	// digests holds hex digests computed during the download, keyed by
+	// [DigestAlgorithm.Name].
+	digests map[string]string
+	// precalculated is returned by [Blob.Digest] verbatim when set, avoiding a
+	// re-read to recompute the digest.
+	precalculated atomic.Pointer[string]
 }
 
 var (
 	_ blob.ReadOnlyBlob          = (*Blob)(nil)
 	_ blob.SizeAware             = (*Blob)(nil)
 	_ blob.DigestAware           = (*Blob)(nil)
+	_ blob.DigestPrecalculatable = (*Blob)(nil)
 	_ blob.MediaTypeAware        = (*Blob)(nil)
 	_ blob.MediaTypeOverrideable = (*Blob)(nil)
 	_ io.Closer                  = (*Blob)(nil)
 )
+
+// Headers returns the response headers of the producing download.
+func (b *Blob) Headers() http.Header {
+	return b.headers
+}
+
+// Digests returns hex digests computed during the download, keyed by the name
+// the caller passed to [WithDigestAlgorithms].
+func (b *Blob) Digests() map[string]string {
+	return b.digests
+}
+
+// Digest returns the precalculated digest when set, otherwise the embedded
+// blob's lazily computed digest.
+func (b *Blob) Digest() (string, bool) {
+	if p := b.precalculated.Load(); p != nil {
+		return *p, true
+	}
+	return b.Blob.Digest()
+}
+
+// HasPrecalculatedDigest reports whether a precalculated digest was set.
+func (b *Blob) HasPrecalculatedDigest() bool {
+	return b.precalculated.Load() != nil
+}
+
+// SetPrecalculatedDigest sets the digest returned by [Blob.Digest]. Safe for
+// concurrent use.
+func (b *Blob) SetPrecalculatedDigest(digest string) {
+	b.precalculated.Store(&digest)
+}
 
 // removeTempFile deletes the file at path. A file that is already gone is not an
 // error, which makes repeated calls (Close plus the cleanup) idempotent without

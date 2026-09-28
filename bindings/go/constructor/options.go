@@ -7,6 +7,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
+	"ocm.software/open-component-model/bindings/go/runtime/versioning"
 )
 
 // Options are the options for construction based on a *constructor.Constructor.
@@ -86,6 +87,11 @@ type Options struct {
 	// While constructing a component version, the constructor library will use the given callbacks to notify about
 	// the construction process. This can be used to implement custom logging or other actions such as progress trackers.
 	ComponentConstructionCallbacks
+
+	// VersioningRegistry defines the versioning schemes used to validate the
+	// component, resource, source, and reference versions of every constructed
+	// component. When nil, the loose-semver default is used.
+	VersioningRegistry *versioning.Registry
 }
 
 type ComponentConstructionCallbacks struct {

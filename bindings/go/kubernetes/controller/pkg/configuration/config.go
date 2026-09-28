@@ -26,6 +26,7 @@ import (
 	ocicredentials "ocm.software/open-component-model/bindings/go/oci/spec/credentials"
 	ocicredentialsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	signingspec "ocm.software/open-component-model/bindings/go/signing/v1alpha1/spec"
 	transferspec "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
 )
 
@@ -51,6 +52,9 @@ var allowedConfigTypes = append(
 	runtime.NewUnversionedType(transferspec.ConfigType),
 	runtime.NewVersionedType(httpv1alpha1.ConfigType, httpv1alpha1.Version),
 	runtime.NewUnversionedType(httpv1alpha1.ConfigType),
+	// signing settings, selects the verifier used for component signature verification
+	runtime.NewVersionedType(signingspec.ConfigType, signingspec.Version),
+	runtime.NewUnversionedType(signingspec.ConfigType),
 )
 
 // filterAllowedConfigTypes filters the provided config to only include config entries whose

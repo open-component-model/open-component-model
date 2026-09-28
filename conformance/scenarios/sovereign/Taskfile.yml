@@ -306,9 +306,30 @@ tasks:
     cmds:
     - cmd: kubectl apply -f deploy/rbac.yaml
     - cmd: kubectl apply -f deploy/namespace.yaml
+    # The controller takes verification from the central OCM configuration: the signing entry asks for
+    # the "default" signature to be verified, the credentials entry supplies the key to check it with.
     - cmd: |
+        cat > tmp/keys/verify.ocmconfig <<EOF
+        type: generic.config.ocm.software/v1
+        configurations:
+        - type: signing.config.ocm.software/v1alpha1
+          signature: default
+          verifier:
+            type: RSASigningConfiguration/v1alpha1
+        - type: credentials.config.ocm.software
+          consumers:
+          - identity:
+              type: RSA/v1alpha1
+              algorithm: RSASSA-PSS
+              signature: default
+            credentials:
+            - type: Credentials/v1
+              properties:
+                public_key_pem: |
+        $(sed 's/^/          /' tmp/keys/acme-public.pem)
+        EOF
         kubectl -n sovereign-product create secret generic acme-signing-key \
-        --from-file=default=tmp/keys/acme-public.pem --dry-run=client -o yaml | kubectl apply -f -
+        --from-file=.ocmconfig=tmp/keys/verify.ocmconfig --dry-run=client -o yaml | kubectl apply -f -
     - cmd: kubectl apply -f deploy/bootstrap.yaml
     - cmd: kubectl wait --for=condition=Ready deployer/sovereign-product-deployer --timeout=300s
     - cmd: kubectl wait --for=condition=Ready ResourceGraphDefinition/sovereign-product --timeout=300s

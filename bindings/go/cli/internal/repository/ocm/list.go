@@ -6,11 +6,11 @@ import (
 	"slices"
 	"sync"
 
-	"github.com/Masterminds/semver/v3"
 	"golang.org/x/sync/errgroup"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/repository"
+	"ocm.software/open-component-model/bindings/go/runtime/versioning"
 )
 
 // ComponentVersionsFilterOptions holds the configuration for filtering component versions.
@@ -20,6 +20,16 @@ type ComponentVersionsFilterOptions struct {
 	latestOnly       bool
 	concurrencyLimit int
 	sort             bool
+	registry         *versioning.Registry
+}
+
+// registry returns the configured versioning registry, or the loose-semver
+// default when none is set.
+func (o *ComponentVersionsFilterOptions) reg() *versioning.Registry {
+	if o.registry != nil {
+		return o.registry
+	}
+	return versioning.Default()
 }
 
 // ComponentVersionsFilterOption is a function that configures ComponentVersionsFilterOptions.
@@ -60,6 +70,13 @@ func WithSort() ComponentVersionsFilterOption {
 	}
 }
 
+// WithVersioningRegistry sets the versioning schemes used to filter and sort versions.
+func WithVersioningRegistry(registry *versioning.Registry) ComponentVersionsFilterOption {
+	return func(o *ComponentVersionsFilterOptions) {
+		o.registry = registry
+	}
+}
+
 // ListComponentVersions retrieves component version descriptors for multiple components.
 // It supports filtering by semantic version constraints and retrieving only the latest version.
 func ListComponentVersions(ctx context.Context, repo repository.ComponentVersionRepository, opts ...ComponentVersionsFilterOption) ([]*descriptor.Descriptor, error) {
@@ -89,30 +106,29 @@ func ListComponentVersions(ctx context.Context, repo repository.ComponentVersion
 				return fmt.Errorf("listing component versions failed: %w", err)
 			}
 
+			reg := options.reg()
 			if options.semverConstraint != "" {
-				versions, err = filterBySemver(versions, options.semverConstraint)
+				versions, err = reg.Filter(versions, options.semverConstraint)
 				if err != nil {
 					return fmt.Errorf("filtering component versions failed: %w", err)
 				}
 			}
 
-			semvers, err := convertToSemverVersions(versions)
-			if err != nil {
-				return fmt.Errorf("found invalid semver version: %w", err)
+			if err := reg.SortDescending(versions); err != nil {
+				return fmt.Errorf("sorting component versions failed: %w", err)
 			}
 
-			// If latestOnly, find and fetch only the latest version
+			// If latestOnly, fetch only the newest version.
 			if options.latestOnly {
-				if len(semvers) == 0 {
+				if len(versions) == 0 {
 					return nil
 				}
-
-				semvers = semvers[:1]
+				versions = versions[:1]
 			}
 
-			descs := make([]*descriptor.Descriptor, 0, len(semvers))
-			for _, version := range semvers {
-				desc, err := repo.GetComponentVersion(ctx, compName, version.Original())
+			descs := make([]*descriptor.Descriptor, 0, len(versions))
+			for _, version := range versions {
+				desc, err := repo.GetComponentVersion(ctx, compName, version)
 				if err != nil {
 					return fmt.Errorf("getting component version failed: %w", err)
 				}
@@ -133,54 +149,23 @@ func ListComponentVersions(ctx context.Context, repo repository.ComponentVersion
 
 	// Ensure deterministic global ordering across components and versions.
 	if options.sort {
-		return sortDescriptorsBySemver(result)
+		reg := options.reg()
+		var cmpErr error
+		slices.SortFunc(result, func(a, b *descriptor.Descriptor) int {
+			if cmpErr != nil {
+				return 0
+			}
+			c, err := reg.Compare(b.Component.Version, a.Component.Version)
+			if err != nil {
+				cmpErr = err
+				return 0
+			}
+			return c
+		})
+		if cmpErr != nil {
+			return nil, fmt.Errorf("sorting component versions failed: %w", cmpErr)
+		}
 	}
 
 	return result, nil
-}
-
-// convertToSemverVersions attempts to convert all versions to semver for sorting.
-func convertToSemverVersions(versions []string) ([]*semver.Version, error) {
-	semvers := make([]*semver.Version, 0, len(versions))
-	for _, version := range versions {
-		semverVersion, err := semver.NewVersion(version)
-		if err != nil {
-			return nil, fmt.Errorf("parsing version %q failed: %w", version, err)
-		}
-		semvers = append(semvers, semverVersion)
-	}
-
-	slices.SortFunc(semvers, func(a, b *semver.Version) int {
-		return b.Compare(a)
-	})
-
-	return semvers, nil
-}
-
-// versionConvertedDescriptors contains the descriptor and its version converted to semver.
-type versionConvertedDescriptors struct {
-	desc    *descriptor.Descriptor
-	version *semver.Version
-}
-
-// sortDescriptorsBySemver sorts descriptors by semantic version in descending order (newest first).
-func sortDescriptorsBySemver(descs []*descriptor.Descriptor) ([]*descriptor.Descriptor, error) {
-	vcd := make([]*versionConvertedDescriptors, 0, len(descs))
-	for _, d := range descs {
-		sv, err := semver.NewVersion(d.Component.Version)
-		if err != nil {
-			return nil, fmt.Errorf("parsing version %q failed: %w", d.Component.Version, err)
-		}
-		vcd = append(vcd, &versionConvertedDescriptors{desc: d, version: sv})
-	}
-
-	slices.SortFunc(vcd, func(a, b *versionConvertedDescriptors) int {
-		return b.version.Compare(a.version)
-	})
-
-	return slices.Collect[*descriptor.Descriptor](func(yield func(*descriptor.Descriptor) bool) {
-		for _, d := range vcd {
-			yield(d.desc)
-		}
-	}), nil
 }

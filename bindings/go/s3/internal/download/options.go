@@ -24,7 +24,8 @@ type option struct {
 type Option func(*option)
 
 // WithCredentials sets the OCM credentials used to build the S3 client. When nil,
-// the AWS default credential chain is used.
+// the AWS default credential chain is used. Anonymous access requires credentials
+// with Anonymous set to true; credential or authorization errors never trigger it.
 func WithCredentials(c runtime.Typed) Option {
 	return func(o *option) { o.Credentials = c }
 }

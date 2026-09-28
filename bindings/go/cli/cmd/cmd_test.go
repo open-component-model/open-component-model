@@ -356,7 +356,7 @@ func Test_Get_Component_Version_Invalid_Semver(t *testing.T) {
 
 	logs := test.NewJSONLogReader()
 	result := new(bytes.Buffer)
-	_, err = test.OCM(t, test.WithArgs("get", "cv", path, "--semver-constraint", "invalid-constraint"), test.WithOutput(result), test.WithErrorOutput(logs))
+	_, err = test.OCM(t, test.WithArgs("get", "cv", path, "--constraint", "invalid-constraint"), test.WithOutput(result), test.WithErrorOutput(logs))
 
 	require.ErrorContains(t, err, "invalid-constraint")
 	require.Error(t, err, "expected error but got none")
@@ -653,14 +653,14 @@ COMPONENT                   │ VERSION │ PROVIDER
 		},
 		{
 			name: "Semver constraint",
-			args: []string{"get", "cv", path, "--semver-constraint", "< 0.0.2"},
+			args: []string{"get", "cv", path, "--constraint", "< 0.0.2"},
 			expectedOutput: `NESTING  COMPONENT                    VERSION  PROVIDER      IDENTITY                                       
  └─       ocm.software/test-component  0.0.1    ocm.software  name=ocm.software/test-component,version=0.0.1`,
 			expectedError: false,
 		},
 		{
 			name:           "Invalid semver constraint",
-			args:           []string{"get", "cv", path, "--semver-constraint", "invalid"},
+			args:           []string{"get", "cv", path, "--constraint", "invalid"},
 			expectedOutput: "",
 			expectedError:  true,
 		},
@@ -787,7 +787,7 @@ COMPONENT           │ VERSION │ PROVIDER
 		},
 		{
 			name: "Semver constraint",
-			args: []string{"get", "cv", path, "--semver-constraint", "< 0.0.2", "--recursive=-1"},
+			args: []string{"get", "cv", path, "--constraint", "< 0.0.2", "--recursive=-1"},
 			expectedOutput: `NESTING  COMPONENT            VERSION  PROVIDER      IDENTITY                               
  └─ ●     ocm.software/root    0.0.1    ocm.software  name=ocm.software/root,version=0.0.1   
     ├─    ocm.software/leaf-a  0.0.1    ocm.software  name=ocm.software/leaf-a,version=0.0.1 

@@ -5,6 +5,7 @@ import (
 	"log/slog"
 
 	ocicredentialplugin "ocm.software/open-component-model/bindings/go/cli/internal/plugin/builtin/credentials/oci"
+	"ocm.software/open-component-model/bindings/go/cli/internal/plugin/builtin/git"
 	"ocm.software/open-component-model/bindings/go/cli/internal/plugin/builtin/github"
 	"ocm.software/open-component-model/bindings/go/cli/internal/plugin/builtin/gpg"
 	"ocm.software/open-component-model/bindings/go/cli/internal/plugin/builtin/input/dir"
@@ -16,6 +17,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/cli/internal/plugin/builtin/rsa"
 	"ocm.software/open-component-model/bindings/go/cli/internal/plugin/builtin/s3"
 	"ocm.software/open-component-model/bindings/go/cli/internal/plugin/builtin/wget"
+	checksumhttpv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/checksum/http/v1alpha1/spec"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	helmdigest "ocm.software/open-component-model/bindings/go/helm/digest"
 	helmresource "ocm.software/open-component-model/bindings/go/helm/repository/resource"
@@ -23,7 +25,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 )
 
-func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alpha1.Config, httpConfig *httpv1alpha1.Config, logger *slog.Logger) error {
+func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alpha1.Config, httpConfig *httpv1alpha1.Config, checksumHTTPConfig *checksumhttpv1alpha1.Config, logger *slog.Logger) error {
 	if err := ocicredentialplugin.Register(manager.CredentialRepositoryRegistry); err != nil {
 		return fmt.Errorf("could not register OCI inbuilt credential plugin: %w", err)
 	}
@@ -34,6 +36,7 @@ func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alph
 		manager.DigestProcessorRegistry,
 		manager.BlobTransformerRegistry,
 		manager.ComponentListerRegistry,
+		manager.CredentialTypeRegistry,
 		filesystemConfig,
 		httpConfig,
 		logger,
@@ -50,22 +53,23 @@ func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alph
 	if err := dir.Register(manager.InputRegistry, filesystemConfig); err != nil {
 		return fmt.Errorf("could not register dir input plugin: %w", err)
 	}
-	if err := helm.Register(manager.InputRegistry, manager.CredentialRepositoryRegistry, filesystemConfig, httpConfig); err != nil {
+	if err := helm.Register(manager.InputRegistry, manager.CredentialTypeRegistry, filesystemConfig, httpConfig); err != nil {
 		return fmt.Errorf("could not register helm input plugin: %w", err)
 	}
 
 	if err := wget.Register(manager.InputRegistry,
 		manager.ResourcePluginRegistry,
 		manager.DigestProcessorRegistry,
-		manager.CredentialRepositoryRegistry,
+		manager.CredentialTypeRegistry,
 		httpConfig,
-		filesystemConfig); err != nil {
+		filesystemConfig,
+		checksumHTTPConfig); err != nil {
 		return fmt.Errorf("could not register wget inbuilt plugin: %w", err)
 	}
 
 	if err := github.Register(manager.ResourcePluginRegistry,
 		manager.DigestProcessorRegistry,
-		manager.CredentialRepositoryRegistry,
+		manager.CredentialTypeRegistry,
 		httpConfig); err != nil {
 		return fmt.Errorf("could not register github inbuilt plugin: %w", err)
 	}
@@ -73,10 +77,18 @@ func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alph
 	if err := s3.Register(manager.InputRegistry,
 		manager.ResourcePluginRegistry,
 		manager.DigestProcessorRegistry,
-		manager.CredentialRepositoryRegistry,
+		manager.CredentialTypeRegistry,
 		httpConfig,
 		filesystemConfig); err != nil {
 		return fmt.Errorf("could not register s3 inbuilt plugin: %w", err)
+	}
+
+	if err := git.Register(manager.ResourcePluginRegistry,
+		manager.DigestProcessorRegistry,
+		manager.CredentialTypeRegistry,
+		filesystemConfig,
+		httpConfig); err != nil {
+		return fmt.Errorf("could not register git inbuilt plugin: %w", err)
 	}
 
 	var tempFolder string
@@ -93,16 +105,16 @@ func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alph
 	); err != nil {
 		return fmt.Errorf("could not register helm resource repository plugin: %w", err)
 	}
-	if err := rsa.Register(manager.SigningRegistry, manager.CredentialRepositoryRegistry, filesystemConfig); err != nil {
+	if err := rsa.Register(manager.SigningRegistry, manager.CredentialTypeRegistry, filesystemConfig); err != nil {
 		return fmt.Errorf("could not register RSA signing plugin: %w", err)
 	}
-	if err := oidc.Register(manager.SigningRegistry, manager.CredentialRepositoryRegistry, filesystemConfig); err != nil {
+	if err := oidc.Register(manager.SigningRegistry, manager.CredentialTypeRegistry, filesystemConfig); err != nil {
 		return fmt.Errorf("could not register Sigstore signing plugin: %w", err)
 	}
 	if err := oidc.RegisterCredentialPlugin(manager.CredentialPluginRegistry); err != nil {
 		return fmt.Errorf("could not register OIDC credential plugin: %w", err)
 	}
-	if err := gpg.Register(manager.SigningRegistry, manager.CredentialRepositoryRegistry, filesystemConfig); err != nil {
+	if err := gpg.Register(manager.SigningRegistry, manager.CredentialTypeRegistry); err != nil {
 		return fmt.Errorf("could not register GPG signing plugin: %w", err)
 	}
 

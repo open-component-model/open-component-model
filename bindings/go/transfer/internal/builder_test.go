@@ -40,7 +40,7 @@ func TestNewDefaultBuilder_CanBuildGitHubGraph(t *testing.T) {
 	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
 	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{
 		CopyMode: transferv1alpha1.CopyModeAllResources,
-	})
+	}, nil)
 	require.NoError(t, err)
 
 	// BuildAndCheck resolves a transformer for every node type. Providers are only used at

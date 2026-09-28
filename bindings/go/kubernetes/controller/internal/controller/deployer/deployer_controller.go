@@ -963,8 +963,8 @@ func (r *Reconciler) getEffectiveComponentDescriptor(
 	cfg *configuration.Configuration,
 	pm *manager.PluginManager,
 ) (*descriptor.Descriptor, error) {
-	// We get the (ready) component CR to (1) get any verifications needed to resolve the component version and (2) to
-	// compare the component version used in the component and resource controller.
+	// We get the (ready) component CR to compare the component version used in the component and resource
+	// controller.
 	component, err := util.GetReadyObject[deliveryv1alpha1.Component, *deliveryv1alpha1.Component](ctx, r.Client, client.ObjectKey{
 		Namespace: resource.GetNamespace(),
 		Name:      resource.Spec.ComponentRef.Name,
@@ -979,9 +979,9 @@ func (r *Reconciler) getEffectiveComponentDescriptor(
 		return nil, fmt.Errorf("failed to decode repository spec: %w", err)
 	}
 
-	// Add verifications from the component to the cache-backed repository to make sure they are included in the
-	// cache key and used for verification (if any).
-	verifications, err := verification.GetVerifications(ctx, r.Client, component)
+	// The verifications apply to the parent component version only; component versions resolved through a
+	// reference path are integrity-checked against their reference digest instead.
+	verifications, err := verification.GetVerifications(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get verifications: %w", err)
 	}

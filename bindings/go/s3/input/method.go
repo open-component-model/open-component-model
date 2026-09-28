@@ -13,6 +13,7 @@ import (
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/s3/internal/download"
+	s3creds "ocm.software/open-component-model/bindings/go/s3/spec/credentials"
 	identityv1 "ocm.software/open-component-model/bindings/go/s3/spec/identity/v1"
 	"ocm.software/open-component-model/bindings/go/s3/spec/input"
 	"ocm.software/open-component-model/bindings/go/s3/spec/input/v2"
@@ -110,4 +111,8 @@ func (i *InputMethod) convertInput(resource *constructorruntime.Resource) (*v2.S
 	}
 
 	return spec, nil
+}
+
+func (i *InputMethod) GetCredentialTypeScheme() *runtime.Scheme {
+	return s3creds.Scheme
 }

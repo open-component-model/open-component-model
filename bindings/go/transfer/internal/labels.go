@@ -66,6 +66,13 @@ func transferLabel(c *descriptor.Component, resourceName string, toSpec runtime.
 	return fmt.Sprintf("%s [Transfer %s to %s]", componentLabel(c), resourceName, targetKind(toSpec))
 }
 
+// uploaderLabel renders the label for the HTTP streaming uploader path, which
+// streams a resource to an HTTP endpoint, e.g. "my-app@1.0.0 [Stream icons to mytarget.registry.com]".
+// host is the target host the resource is streamed to.
+func uploaderLabel(c *descriptor.Component, resourceName, host string) string {
+	return fmt.Sprintf("%s [Stream %s to %s]", componentLabel(c), resourceName, host)
+}
+
 // cleanupLabel is the label of the file-buffer cleanup transformation. There is
 // exactly one cleanup transformation per graph, so no component context is needed.
 const cleanupLabel = "Cleanup temp files"

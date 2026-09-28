@@ -15,7 +15,7 @@
 //	    Recursive: transferv1alpha1.RecursiveInfinite,
 //	    CopyMode:  transferv1alpha1.CopyModeAllResources,
 //	}
-//	tgd, err := transfer.BuildGraphDefinition(ctx, cfg,
+//	tgd, err := transfer.BuildGraphDefinition(ctx, cfg, nil,
 //	    transfer.Mapping{
 //	        Components: []transfer.ComponentID{{Component: "ocm.software/app", Version: "1.0.0"}},
 //	        Target:     targetSpec,

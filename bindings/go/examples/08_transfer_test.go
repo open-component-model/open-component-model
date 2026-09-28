@@ -96,7 +96,7 @@ func TestExample_TransferCTFtoCTF(t *testing.T) {
 	// transfer.NewRepositoryResolver wraps the source repo directly, so no custom resolver is needed.
 	// A nil cfg uses the defaults; see TestExample_Transfer_WithTransferConfig
 	// below for driving transfer settings explicitly.
-	tgd, err := transfer.BuildGraphDefinition(ctx, nil,
+	tgd, err := transfer.BuildGraphDefinition(ctx, nil, nil,
 		transfer.Mapping{
 			Components: []transfer.ComponentID{{Component: component, Version: version}},
 			Target:     targetSpec,
@@ -197,7 +197,7 @@ func TestExample_Transfer_WithTransferConfig(t *testing.T) {
 	cfg := &transferv1alpha1.Config{
 		Recursive: transferv1alpha1.RecursiveInfinite,
 	}
-	tgd, err := transfer.BuildGraphDefinition(ctx, cfg,
+	tgd, err := transfer.BuildGraphDefinition(ctx, cfg, nil,
 		transfer.Mapping{
 			Components: []transfer.ComponentID{{Component: parent, Version: version}},
 			Target:     targetSpec,
@@ -299,7 +299,7 @@ configurations:
 	targetSpec := newCTFSpecAt(t, t.TempDir())
 	targetSpec.AccessMode = ctfrepospec.AccessModeReadWrite
 
-	tgd, err := transfer.BuildGraphDefinition(ctx, nil,
+	tgd, err := transfer.BuildGraphDefinition(ctx, nil, nil,
 		transfer.Mapping{
 			Components: []transfer.ComponentID{{Component: component, Version: version}},
 			Target:     targetSpec,

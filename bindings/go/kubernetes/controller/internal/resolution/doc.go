@@ -47,7 +47,8 @@
 // for the same component version produce separate cache entries. This prevents an unverified
 // cached result from being served to a requester that asked for verification.
 //
-// Use Verifications for top-level components where the Component CR specifies signatures.
+// Use Verifications for top-level components, built from the signing.config.ocm.software entries of
+// the reconciled object's OCM configuration (see [verification.GetVerifications]).
 // Use Digest for child components resolved through a reference path, where integrity is
 // checked against the parent's reference digest rather than a standalone signature.
 //

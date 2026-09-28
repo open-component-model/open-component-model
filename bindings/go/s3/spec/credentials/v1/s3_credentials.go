@@ -28,6 +28,9 @@ type S3Credentials struct {
 	// +ocm:jsonschema-gen:enum=S3Credentials/v1
 	// +ocm:jsonschema-gen:enum:deprecated=S3Credentials
 	Type runtime.Type `json:"type"`
+	// Anonymous disables request signing, even when AWS credentials are available.
+	// It defaults to false and cannot be combined with access keys or a session token.
+	Anonymous bool `json:"anonymous,omitempty"`
 	// AccessKeyID is the access key ID.
 	AccessKeyID string `json:"accessKeyId,omitempty"`
 	// SecretAccessKey is the secret access key paired with AccessKeyID.
