@@ -812,6 +812,9 @@ type fakeNexus struct {
 	typ    string
 	// detectionStatus overrides the response status (0 means 200).
 	detectionStatus int
+	// searchLag is the number of asset searches that find nothing yet, like Nexus indexing
+	// stored assets for search shortly after the upload.
+	searchLag int
 
 	mu       sync.Mutex
 	requests []string
@@ -869,7 +872,9 @@ func (f *fakeNexus) handle(w http.ResponseWriter, r *http.Request) {
 			Checksum checksum `json:"checksum"`
 		}
 		var items []item
-		if repo == "helm-hosted" && name != "" {
+		if f.searchLag > 0 {
+			f.searchLag--
+		} else if repo == "helm-hosted" && name != "" {
 			// Nexus indexes raw assets with a leading slash; strip it for our stored map.
 			lookupName := strings.TrimPrefix(name, "/")
 			if digest, ok := f.stored[lookupName]; ok {
@@ -1126,10 +1131,11 @@ func TestNexusUpload_Transform_Raw(t *testing.T) {
 	transformer := func(creds credentials.Resolver) *NexusUpload {
 		repo := &chartResourceRepo{chart: []byte(content), mediaType: "text/plain"}
 		return &NexusUpload{repositoryUploader{
-			Scheme:             scheme,
-			Charts:             &chartarchive.Source{ResourceRepository: repo},
-			ResourceRepository: repo,
-			CredentialProvider: creds,
+			Scheme:                scheme,
+			Charts:                &chartarchive.Source{ResourceRepository: repo},
+			ResourceRepository:    repo,
+			CredentialProvider:    creds,
+			chartMetadataInterval: time.Millisecond,
 		}}
 	}
 	step := func(url string, res *descriptorv2.Resource) *NexusUploadTransformation {
@@ -1163,7 +1169,7 @@ func TestNexusUpload_Transform_Raw(t *testing.T) {
 		r.Equal(&descriptorv2.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: "genericBlobDigest/v1", Value: contentDigest}, res.Digest)
 	})
 
-	t.Run("second upload with same digest reuses via HEAD and search", func(t *testing.T) {
+	t.Run("second upload with same digest reuses once the search finds the stored file", func(t *testing.T) {
 		r := require.New(t)
 		srv := newFakeNexus(t, nil, "", false)
 		srv.format = "raw"
@@ -1171,18 +1177,15 @@ func TestNexusUpload_Transform_Raw(t *testing.T) {
 		_, err := transformer(nil).Transform(t.Context(), step(srv.URL, source("")))
 		r.NoError(err)
 
-		// Second upload with the known digest.
+		// Second upload with the known digest, before Nexus indexed the first one for search.
+		srv.searchLag = 2
 		out, err := transformer(nil).Transform(t.Context(), step(srv.URL, source(contentDigest)))
 		r.NoError(err)
 
 		got := srv.recorded()
-		// After the first 3 requests (detection + HEAD + PUT), the second run should be
-		// detection + HEAD + search (no PUT).
-		second := got[3:]
-		r.Equal("GET "+detectionPath, second[0])
-		r.Equal("HEAD "+putPath, second[1])
-		r.Equal("GET "+searchAssets, second[2])
-		r.Len(second, 3, "no PUT on reuse")
+		// After the first 3 requests (detection + HEAD + PUT), the second run is detection,
+		// HEAD and the search polled until it finds the file; nothing is uploaded.
+		r.Equal([]string{"GET " + detectionPath, "HEAD " + putPath, "GET " + searchAssets, "GET " + searchAssets, "GET " + searchAssets}, got[3:])
 
 		res := out.(*NexusUploadTransformation).Output.Resource
 		var access wgetaccessv1.Wget

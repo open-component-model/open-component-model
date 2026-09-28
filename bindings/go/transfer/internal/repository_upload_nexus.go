@@ -8,6 +8,8 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"slices"
+	"time"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -131,7 +133,7 @@ func (t *NexusUpload) uploadRaw(ctx context.Context, c *repositoryClient, spec *
 	}
 	mediaType := contentType(content, spec.Resource)
 	safe := redactURL(target)
-	stored, err := nexusRawStored(ctx, c, spec, path, target, known)
+	stored, err := nexusRawStored(ctx, c, spec, path, target, known, t.interval())
 	if err != nil {
 		return nil, err
 	}
@@ -161,8 +163,10 @@ func (t *NexusUpload) uploadRaw(ctx context.Context, c *repositoryClient, spec *
 }
 
 // nexusRawStored reports whether target already holds content with sha256Hex. It fails when
-// target holds other content, or content whose digest is unknown up front.
-func nexusRawStored(ctx context.Context, c *repositoryClient, spec *RepositoryUploadSpec, path, target, sha256Hex string) (bool, error) {
+// target holds other content, or content whose digest is unknown up front. Nexus indexes assets
+// for search shortly after they are stored, so a stored file the search does not find yet is
+// polled like chart metadata.
+func nexusRawStored(ctx context.Context, c *repositoryClient, spec *RepositoryUploadSpec, path, target, sha256Hex string, interval time.Duration) (bool, error) {
 	resp, err := c.do(ctx, http.MethodHead, target, nil, -1, nil)
 	if err != nil {
 		return false, err
@@ -175,15 +179,21 @@ func nexusRawStored(ctx context.Context, c *repositoryClient, spec *RepositoryUp
 	default:
 		return false, fmt.Errorf("HEAD %s returned status %d", redactURL(target), resp.StatusCode)
 	}
-	if sha256Hex != "" {
+	for attempt := 1; sha256Hex != ""; attempt++ {
 		checksums, err := nexusAssetChecksums(ctx, c, spec, path)
 		if err != nil {
 			return false, err
 		}
-		for _, checksum := range checksums {
-			if checksum == sha256Hex {
-				return true, nil
-			}
+		if slices.Contains(checksums, sha256Hex) {
+			return true, nil
+		}
+		if len(checksums) > 0 || attempt == chartMetadataAttempts {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return false, ctx.Err()
+		case <-time.After(interval):
 		}
 	}
 	return false, fmt.Errorf("nexus repository %q already stores a different file at %s; the uploader never overwrites files in raw repositories, configure a different path",
