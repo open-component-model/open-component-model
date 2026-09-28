@@ -40,16 +40,17 @@ component's reference graph and transfers the component version into the target.
 It records the transferred version and digest in its status and treats an unchanged
 digest as a no-op, so it never re-transfers content that is already present.
 
-Transfer behaviour (recursion depth, copy mode, upload type) and the registry
+Transfer behaviour (recursion depth, copy mode) and the registry
 credentials are supplied as OCM configuration through `ocmConfig`. In the steps
 below they live in two `Secret`s: the `Component` carries the credentials and
 propagates them down, while the `Replication` declares the transfer settings
 itself and references the `Component` to merge in those propagated credentials.
 
-The configuration influences the way the transfer happens: `recursive` controls following references,
-`copyMode` controls which resources are transferred, and `uploadType` controls how they are uploaded.
-These options mirror the flags on the `ocm transfer component-version` CLI command, mapped out in the
-configuration step below.
+The configuration influences the way the transfer happens: `recursive` controls following references
+and `copyMode` controls which resources are transferred. To upload resources as separate OCI artifacts,
+add an `oci.uploader.transfer.config.ocm.software/v1alpha1` uploader entry to the same config (see the
+[migration guide]({{< relref "docs/how-to/migrate-from-upload-as.md" >}})). These options mirror the
+flags on the `ocm transfer component-version` CLI command, mapped out in the configuration step below.
 
 ## Steps
 
@@ -214,12 +215,13 @@ directly to a flag on the `ocm transfer component-version` CLI command:
 |--------------|--------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `recursive`  | `-r, --recursive`  | `-1` follows component references without limit; `0` disables recursion. The CLI flag is a boolean: set means `-1`, unset means `0`.                                                                                                                 |
 | `copyMode`   | `--copy-resources` | `localBlob` (default) includes only local-blob resources; `allResources` also pulls in remote OCI artifacts and Helm charts. Set the CLI flag for `allResources`, leave it unset for `localBlob`.                                                    |
-| `uploadType` | `-u, --upload-as`  | How resources are stored in the target: `localBlob` (default) embeds them in the descriptor, `ociArtifact` uploads them as separate OCI artifacts (OCI target only). Only relevant for resources that `copyMode` includes.                           |
 
-The example sets `recursive: -1` and `copyMode: localBlob` because the sample components
-carry blob resources, and omits `uploadType` so it defaults to `localBlob`. To stream
-resources that are themselves OCI artifacts, set `copyMode: allResources` with
-`uploadType: ociArtifact`.
+The example sets `recursive: -1` and `copyMode: localBlob` because the sample
+components carry blob resources. To upload resources as separate OCI artifacts,
+set `copyMode: allResources` and add an `oci.uploader.transfer.config.ocm.software/v1alpha1`
+entry to the same config. See the
+[Migrate from --upload-as to Uploader Configurations]({{< relref "docs/how-to/migrate-from-upload-as.md" >}})
+guide.
 
 {{< callout context="note" title="Propagating a single config" icon="outline/info-circle" >}}
 Splitting the configuration is optional. If you set `policy: Propagate`, you can

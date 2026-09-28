@@ -24,12 +24,13 @@ func init() {
 // UploaderConfig is the common contract implemented by every uploader configuration
 // type. An uploader is a declarative rule that reroutes a matched resource through a
 // custom upload target during transfer instead of the default download → local-blob
-// path. Concrete types (e.g. [HTTPUploaderConfig]) carry the target-specific request
-// fields inline; the config type itself selects the target transformer.
+// path. Concrete types ([HTTPUploaderConfig], [OCIUploaderConfig]) carry the
+// target-specific request fields inline; the config type itself selects the target
+// transformer.
 //
 // All uploader configurations are extracted from the central generic config with
-// [LookupUploaderConfigs], which preserves declaration order so the first recognized
-// match wins.
+// [LookupUploaderConfigs], which preserves declaration order: the first uploader that
+// matches a resource and applies to it wins.
 type UploaderConfig interface {
 	runtime.Typed
 	// GetMatch returns the rule selecting the resources this uploader applies to.
@@ -92,18 +93,20 @@ type HTTPUploaderConfig struct {
 	MediaType string `json:"mediaType,omitempty"`
 }
 
-// UploaderMatch selects resources by their access type and, optionally, their
-// identity. A resource matches when its access type matches AccessType and every
-// specified identity constraint (Name, Version, ExtraIdentity) also matches. This lets
-// multiple uploaders target the same access type while routing different resources
-// to different upload targets; the first matching uploader (in declaration order)
-// wins, so more specific rules should be declared before broader ones.
+// UploaderMatch selects resources by their access type and identity. A resource
+// matches when its access type matches AccessType (if set) and every specified
+// identity constraint (Name, Version, ExtraIdentity) also matches. This lets multiple
+// uploaders target the same access type while routing different resources to
+// different upload targets; the first matching uploader (in declaration order) wins,
+// so more specific rules should be declared before broader ones.
 //
 // +k8s:deepcopy-gen=true
 // +ocm:jsonschema-gen=true
 type UploaderMatch struct {
 	// AccessType is the resource access type this uploader matches (e.g. Wget/v1).
-	AccessType runtime.Type `json:"accessType"`
+	// When empty, resources of any access type match; [HTTPUploaderConfig] still
+	// requires it.
+	AccessType runtime.Type `json:"accessType,omitempty,omitzero"`
 	// Name optionally restricts the match to resources with this exact name.
 	// When empty, resources of any name match.
 	Name string `json:"name,omitempty"`
@@ -116,18 +119,16 @@ type UploaderMatch struct {
 	ExtraIdentity runtime.Identity `json:"extraIdentity,omitempty"`
 }
 
-// Matches reports whether resource satisfies this match. The access type is the one
-// of the resource as described in the source component version. The rule is compared
-// with every alias types knows for that access type: a versioned rule (OCIImage/v1) must
-// equal one of them, an unversioned rule (ociArtifact) must name one of them. So
-// OCIImage/v1, ociArtifact/v1 and ociArtifact all match an ociArtifact or OCIImage/v1
-// access. The identity constraint (optional Name, Version plus ExtraIdentity) is a subset
-// match against the resource identity: every specified key/value must be present and equal.
-func (m UploaderMatch) Matches(resource descriptorv2.Resource, types TypeResolver) bool {
+// Matches reports whether resource satisfies this match. A set access type must match:
+// when the rule specifies a version (Wget/v1) it must equal the resource access type
+// exactly; an unversioned rule (Wget) matches any version by name. The identity
+// constraint (optional Name, Version plus ExtraIdentity) is a subset match against the
+// resource identity: every specified key/value must be present and equal.
+func (m UploaderMatch) Matches(resource descriptorv2.Resource) bool {
 	if resource.Access == nil {
 		return false
 	}
-	if !accessTypeMatches(m.AccessType, resource.Access.Type, types) {
+	if !m.AccessType.IsEmpty() && !accessTypeMatches(m.AccessType, resource.Access.Type) {
 		return false
 	}
 	return runtime.IdentitySubset(m.identity(), resource.ToIdentity())
@@ -233,7 +234,7 @@ func LookupUploaderConfigs(cfg *genericv1.Config) ([]UploaderConfig, error) {
 		if !ok {
 			continue
 		}
-		if err := Scheme.Convert(entry, u); err != nil {
+		if err := runtime.DecodeStrict(entry, u); err != nil {
 			return nil, fmt.Errorf("failed to decode uploader config: %w", err)
 		}
 		if err := u.Validate(); err != nil {

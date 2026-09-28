@@ -40,6 +40,11 @@ func testCTFRepo(path string) *ctfv1.Repository {
 	}
 }
 
+// ociUploaders returns a single OCI uploader with the default image reference mapping.
+func ociUploaders() []transferv1alpha1.UploaderConfig {
+	return []transferv1alpha1.UploaderConfig{&transferv1alpha1.OCIUploaderConfig{}}
+}
+
 func testTransferRoots(component, version string, target runtime.Typed, resolver resolvers.ComponentVersionRepositoryResolver) map[string]TransferRoot {
 	key := component + ":" + version
 	return map[string]TransferRoot{
@@ -226,7 +231,7 @@ func TestBuildGraphDefinition_OCIImageWithCopyAllResources(t *testing.T) {
 	assert.Equal(t, ociv1alpha1.GetOCIArtifactV1alpha1, tgd.Transformations[0].Type)
 }
 
-func TestBuildGraphDefinition_OCIImageUploadAsOCIArtifact(t *testing.T) {
+func TestBuildGraphDefinition_OCIImage_OCIUploader(t *testing.T) {
 	sourceRepo := testOCIRepo("ghcr.io/source")
 	targetRepo := testOCIRepo("ghcr.io/target")
 	desc := testDescriptor("ocm.software/test", "1.0.0",
@@ -234,7 +239,7 @@ func TestBuildGraphDefinition_OCIImageUploadAsOCIArtifact(t *testing.T) {
 	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
 	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
 
-	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeAllResources, UploadType: transferv1alpha1.UploadAsOciArtifact}, nil)
+	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeAllResources}, ociUploaders())
 	require.NoError(t, err)
 
 	assert.Len(t, tgd.Transformations, 2)
@@ -281,7 +286,7 @@ func TestBuildGraphDefinition_GitHubResource(t *testing.T) {
 	assert.Equal(t, FileCleanupVersionedType, tgd.Transformations[3].Type)
 }
 
-func TestBuildGraphDefinition_GitHubResource_UploadAsOciArtifact(t *testing.T) {
+func TestBuildGraphDefinition_GitHubResource_OCIUploader(t *testing.T) {
 	sourceRepo := testOCIRepo("ghcr.io/source")
 	targetRepo := testOCIRepo("ghcr.io/target")
 	desc := testDescriptor("ocm.software/test", "1.0.0",
@@ -292,15 +297,14 @@ func TestBuildGraphDefinition_GitHubResource_UploadAsOciArtifact(t *testing.T) {
 	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
 
 	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{
-		CopyMode:   transferv1alpha1.CopyModeAllResources,
-		UploadType: transferv1alpha1.UploadAsOciArtifact,
-	}, nil)
+		CopyMode: transferv1alpha1.CopyModeAllResources,
+	}, ociUploaders())
 	require.NoError(t, err)
 
 	require.Len(t, tgd.Transformations, 4)
 	assert.Equal(t, githubv1alpha1.GetGitHubCommitV1alpha1, tgd.Transformations[0].Type)
 	assert.Equal(t, ociv1alpha1.OCIAddLocalResourceV1alpha1, tgd.Transformations[1].Type,
-		"a github resource must stay on the local-resource path even when uploadType requests an OCI artifact")
+		"a github resource must stay on the local-resource path even with an OCI uploader")
 }
 
 func TestBuildGraphDefinition_CTFTarget(t *testing.T) {
@@ -600,7 +604,7 @@ func TestBuildGraphDefinition_CleanupReferencesAddSpec_OCIArtifact(t *testing.T)
 	assert.NotContains(t, exprs[0], ".output.")
 }
 
-func TestBuildGraphDefinition_NoCleanupForStreamingOCIArtifact(t *testing.T) {
+func TestBuildGraphDefinition_NoCleanupForStreamingOCIArtifact_OCIUploader(t *testing.T) {
 	sourceRepo := testOCIRepo("ghcr.io/source")
 	targetRepo := testOCIRepo("ghcr.io/target")
 	desc := testDescriptor("ocm.software/test", "1.0.0",
@@ -608,7 +612,7 @@ func TestBuildGraphDefinition_NoCleanupForStreamingOCIArtifact(t *testing.T) {
 	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
 	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
 
-	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeAllResources, UploadType: transferv1alpha1.UploadAsOciArtifact}, nil)
+	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeAllResources}, ociUploaders())
 	require.NoError(t, err)
 
 	// TransferOCIArtifact streams blobs directly — no temp file is ever created.
@@ -908,7 +912,7 @@ func dockerManifestLocalBlobResource(name, version string) descriptor.Resource {
 	}
 }
 
-func TestBuildGraphDefinition_DockerManifestLocalBlob_UploadedAsOCIArtifact(t *testing.T) {
+func TestBuildGraphDefinition_DockerManifestLocalBlob_OCIUploader(t *testing.T) {
 	sourceRepo := testOCIRepo("ghcr.io/source")
 	targetRepo := testOCIRepo("ghcr.io/target")
 	desc := testDescriptor("ocm.software/test", "1.0.0",
@@ -916,7 +920,7 @@ func TestBuildGraphDefinition_DockerManifestLocalBlob_UploadedAsOCIArtifact(t *t
 	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
 	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
 
-	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeLocalBlobResources, UploadType: transferv1alpha1.UploadAsOciArtifact}, nil)
+	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeLocalBlobResources}, ociUploaders())
 	require.NoError(t, err)
 
 	addOCIType := runtime.NewVersionedType(ociv1alpha1.AddOCIArtifactType, ociv1alpha1.Version)
@@ -925,7 +929,7 @@ func TestBuildGraphDefinition_DockerManifestLocalBlob_UploadedAsOCIArtifact(t *t
 	assert.Equal(t, addOCIType, tgd.Transformations[1].Type, "Docker manifest LocalBlob should be uploaded as OCI artifact")
 }
 
-func TestBuildGraphDefinition_DockerManifestLocalBlob_FallsBackToLocalBlobWithoutUploadFlag(t *testing.T) {
+func TestBuildGraphDefinition_DockerManifestLocalBlob_FallsBackToLocalBlobWithoutOCIUploader(t *testing.T) {
 	sourceRepo := testOCIRepo("ghcr.io/source")
 	targetRepo := testOCIRepo("ghcr.io/target")
 	desc := testDescriptor("ocm.software/test", "1.0.0",

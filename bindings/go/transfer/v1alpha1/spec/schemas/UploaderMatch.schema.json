@@ -4,11 +4,11 @@
   "$id": "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec/schemas/UploaderMatch.schema.json",
   "title": "UploaderMatch",
   "type": "object",
-  "description": "UploaderMatch selects resources by their access type and, optionally, their\nidentity. A resource matches when its access type matches AccessType and every\nspecified identity constraint (Name, Version, ExtraIdentity) also matches. This lets\nmultiple uploaders target the same access type while routing different resources\nto different upload targets; the first matching uploader (in declaration order)\nwins, so more specific rules should be declared before broader ones.",
+  "description": "UploaderMatch selects resources by their access type and identity. A resource\nmatches when its access type matches AccessType (if set) and every specified\nidentity constraint (Name, Version, ExtraIdentity) also matches. This lets multiple\nuploaders target the same access type while routing different resources to\ndifferent upload targets; the first matching uploader (in declaration order) wins,\nso more specific rules should be declared before broader ones.",
   "properties": {
     "accessType": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",
-      "description": "AccessType is the resource access type this uploader matches (e.g. Wget/v1)."
+      "description": "AccessType is the resource access type this uploader matches (e.g. Wget/v1).\nWhen empty, resources of any access type match; [HTTPUploaderConfig] still\nrequires it."
     },
     "extraIdentity": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Identity",
@@ -23,9 +23,6 @@
       "description": "Version optionally restricts the match to resources with this exact\nversion. When empty, resources of any version match."
     }
   },
-  "required": [
-    "accessType"
-  ],
   "additionalProperties": false,
   "$defs": {
     "ocm.software.open-component-model.bindings.go.runtime.Identity": {

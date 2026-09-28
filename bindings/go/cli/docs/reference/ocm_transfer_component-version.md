@@ -25,13 +25,18 @@ OCI, CTF, and Helm repositories are supported as transfer sources.
 OCI and CTF repositories are supported as transfer targets, while Helm repositories are not supported.
 
 By default, only the component version itself is transferred. Use --copy-resources to also
-copy (and, when needed, transform) the resources it references. --upload-as controls whether
-those resources land as OCI artifacts or as local blobs in the target. --recursive walks the
-component's references and transfers them too.
+copy (and, when needed, transform) the resources it references; copied resources are stored
+as local blobs in the target. To upload resources as separate OCI artifacts or to other
+custom targets, declare uploader configurations (e.g.
+oci.uploader.transfer.config.ocm.software/v1alpha1,
+http.uploader.transfer.config.ocm.software/v1alpha1) in the OCM configuration; a matching
+uploader applies regardless of --copy-resources. The former --upload-as flag is replaced by
+these uploader configurations (see the "Migrate from --upload-as to Uploader Configurations"
+guide on ocm.software). --recursive walks the component's references and transfers them too.
 
 Driving defaults from the OCM configuration:
   A transfer.config.ocm.software/v1alpha1 entry inside the central OCM configuration
-  (passed via --config) sets defaults for --recursive, --copy-resources, and --upload-as.
+  (passed via --config) sets defaults for --recursive and --copy-resources.
   Explicit command-line flags always override the values from the configuration.
 
 Two-step workflow (generate, review, replay):
@@ -40,18 +45,18 @@ Two-step workflow (generate, review, replay):
   from a file (or stdin with "-"):
     1. Generate the spec:  transfer cv --dry-run -o yaml --copy-resources -r {reference} {target} > spec.yaml
     2. Review/edit spec.yaml, then execute: transfer cv --transfer-spec spec.yaml
-  All graph-shaping flags (--recursive, --copy-resources, --upload-as) and any transfer
+  All graph-shaping flags (--recursive, --copy-resources) and any transfer or uploader
   configuration entry are baked into the spec during step 1 and are therefore ignored in
-  step 2 - the spec is the full graph definition. Only --dry-run, --output, and
-  --concurrency-limit remain meaningful when replaying a spec.
+  step 2 - the spec is the full graph definition. Only --dry-run and --output remain
+  meaningful when replaying a spec.
 
 How the graph is built:
   Internally the command assembles a TransformationGraphDefinition from these node types,
   selected based on the source/target references:
     1. CTFGetComponentVersion -> OCIGetComponentVersion
     2. CTFAddComponentVersion -> OCIAddComponentVersion
-    3. GetOCIArtifact -> OCIAddLocalResource / AddOCIArtifact
-    4. GetHelmChart -> ConvertHelmToOCI -> OCIAddLocalResource / AddOCIArtifact
+    3. GetOCIArtifact -> OCIAddLocalResource, or TransferOCIArtifact (OCI uploader)
+    4. GetHelmChart -> ConvertHelmToOCI -> OCIAddLocalResource / AddOCIArtifact (OCI uploader)
 
 ```
 ocm transfer component-version {reference} {target} [flags]
@@ -75,14 +80,14 @@ transfer component-version ctf::./my-archive//ocm.software/mycomponent ghcr.io/m
 # Transfer only the latest version
 transfer component-version ctf::./my-archive//ocm.software/mycomponent ghcr.io/my-org/ocm --latest
 
-# Transfer from one OCI to another using localBlobs (default)
-transfer component-version ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm --copy-resources --upload-as localBlob
-
-# Transfer from one OCI to another using OCI artifacts
-transfer component-version ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm --copy-resources --upload-as ociArtifact
-
-# Transfer a component version containing Helm charts (access-type: helm/v1) as an OCI artifact
-transfer component-version ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm --copy-resources --upload-as ociArtifact
+# Transfer resources as separate OCI artifacts. With --config ./oci-uploader.yaml containing:
+#   type: generic.config.ocm.software/v1
+#   configurations:
+#   - type: oci.uploader.transfer.config.ocm.software/v1alpha1
+#     # optional: relocate the artifacts instead of placing them next to the component version
+#     # imageReference: '${"ghcr.io/target-org/images/" + referenceName}'
+# OCI images, Helm charts and OCI-manifest local blobs are uploaded as OCI artifacts.
+transfer component-version --config ./oci-uploader.yaml ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm
 
 # Transfer including all resources (e.g. OCI artifacts)
 transfer component-version ctf::./my-archive//ocm.software/mycomponent:1.0.0 ghcr.io/my-org/ocm --copy-resources
@@ -96,8 +101,7 @@ transfer component-version ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.
 #   - type: transfer.config.ocm.software/v1alpha1
 #     recursive: -1
 #     copyMode: allResources
-#     uploadType: ociArtifact
-# the following invocation transfers recursively with all resources copied as OCI artifacts.
+# the following invocation transfers recursively with all resources copied.
 # Any explicit flag still overrides the corresponding configuration value.
 transfer component-version --config ./ocmconfig.yaml ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm
 
@@ -110,18 +114,15 @@ transfer component-version --transfer-spec spec.yaml
 ### Options
 
 ```
-      --concurrency-limit int   maximum number of transformation nodes processed in parallel; independent nodes run concurrently while dependency ordering is preserved. Increase it to speed up large graphs, decrease it to reduce load on the registry (default 4)
-      --constraint string       version constraint evaluated by each version's configured scheme; versions with no applicable scheme are retained (e.g. ">= 1.0.0, < 2.0.0"); only used when no version is specified in the reference
-      --copy-resources          copy all resources in the component version
-      --dry-run                 build and validate the graph but do not execute
-  -h, --help                    help for component-version
-      --latest                  if set, only the latest version of the component is transferred; only used when no version is specified in the reference
-  -o, --output enum             output format of the component descriptors
-                                (must be one of [json ndjson yaml]) (default yaml)
-  -r, --recursive               recursively discover and transfer component versions
-      --transfer-spec string    path to a transfer specification file (use "-" for stdin). The input must hold exactly one transfer spec document; with "-", OCM configuration documents in stdin are applied as configuration
-  -u, --upload-as enum          Define whether copied resources should be uploaded as OCI artifacts (instead of local blob resources). This option is only relevant if --copy-resources is set.
-                                (must be one of [localBlob ociArtifact]) (default localBlob)
+      --constraint string      version constraint evaluated by each version's configured scheme; versions with no applicable scheme are retained (e.g. ">= 1.0.0, < 2.0.0"); only used when no version is specified in the reference
+      --copy-resources         copy all resources in the component version
+      --dry-run                build and validate the graph but do not execute
+  -h, --help                   help for component-version
+      --latest                 if set, only the latest version of the component is transferred; only used when no version is specified in the reference
+  -o, --output enum            output format of the component descriptors
+                               (must be one of [json ndjson yaml]) (default yaml)
+  -r, --recursive              recursively discover and transfer component versions
+      --transfer-spec string   path to a transfer specification file (use "-" for stdin). The input must hold exactly one transfer spec document; with "-", OCM configuration documents in stdin are applied as configuration
 ```
 
 ### Options inherited from parent commands

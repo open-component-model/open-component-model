@@ -649,13 +649,18 @@ The `globalAccess.imageReference` provides a direct pullable reference. Note tha
 Without `globalAccess`, you can still access native OCI artifacts directly using the `localReference` digest and the component version's repository path in the registry.
 {{< /details >}}
 
-{{< details "Can I use `--upload-as` to control how artifacts are stored?" >}}
-Yes. The `ocm transfer cv` command supports `--upload-as` with two values:
+{{< details "Can I control how artifacts are stored in the target?" >}}
+Yes. By default, `--copy-resources` stores artifacts as local blobs within the component version. To upload them as standalone OCI artifacts in the target registry, add an OCI uploader configuration:
 
-- `--upload-as localBlob` — stores OCI artifacts as local blobs within the component version (default behavior with `--copy-resources`)
-- `--upload-as ociArtifact` — uploads OCI artifacts as standalone OCI artifacts in the target registry, separate from the component version
+```yaml
+type: generic.config.ocm.software/v1
+configurations:
+  - type: oci.uploader.transfer.config.ocm.software/v1alpha1
+```
 
-Both options make the artifact natively accessible in OCI registries, but `localBlob` keeps the artifact within the component version's index while `ociArtifact` stores it independently.
+Pass the config with `--config oci-uploader.yaml`. With `localBlob` (the default), the artifact stays within the component version's index. With the OCI uploader, it is stored independently.
+
+Both options make the artifact natively accessible in OCI registries. For details, see the [Transfer Configuration Reference]({{< relref "docs/reference/transfer-configuration.md" >}}).
 {{< /details >}}
 
 ## Cleanup

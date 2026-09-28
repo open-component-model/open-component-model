@@ -314,13 +314,23 @@ On success it prints a summary table:
 ```
 
 Transfer it to your registry. `--copy-resources` copies the image into your registry instead
-of leaving the component pointing back at `ghcr.io/stefanprodan`, and `--upload-as ociArtifact`
-is what creates a standalone oci image that can be pulled individually; see [Resource
+of leaving the component pointing back at `ghcr.io/stefanprodan`, and the OCI uploader
+configuration creates a standalone OCI image that can be pulled individually; see [Resource
 Handling: References vs. Copies]({{< relref "docs/concepts/transfer-concept.md#resource-handling-references-vs-copies" >}})
 for why that distinction exists.
 
+Create an OCM config file for the OCI uploader:
+
 ```bash
-ocm transfer cv --copy-resources --upload-as ociArtifact \
+cat > oci-uploader.yaml << 'EOF'
+type: generic.config.ocm.software/v1
+configurations:
+  - type: oci.uploader.transfer.config.ocm.software/v1alpha1
+EOF
+```
+
+```bash
+ocm transfer cv --copy-resources --config oci-uploader.yaml \
   "transport-archive//ocm.software/ocm-k8s-toolkit/system:1.0.0" $OCM_REPO
 ```
 

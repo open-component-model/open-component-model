@@ -51,21 +51,13 @@ type Config struct {
 	// resources are included or all resources (including remote OCI artifacts and Helm charts)
 	// are fetched and re-uploaded to the target repository.
 	CopyMode CopyMode `json:"copyMode,omitempty"`
-
-	// UploadType determines how resources are stored in the target repository during transfer.
-	//
-	// This option is only relevant when resources are being copied (i.e., when [CopyModeAllResources]
-	// is set or for local blob resources with [CopyModeLocalBlobResources]). It controls whether
-	// resources are embedded as local blobs within the component descriptor or uploaded as separate
-	// OCI artifacts with their own repository references.
-	UploadType UploadType `json:"uploadType,omitempty"`
 }
 
 // Validate rejects a non-matching [Config.Type] and unknown enum values.
 // An empty Type is allowed so callers constructing a Config programmatically
 // (without going through [Scheme.Decode]) do not need to set it explicitly.
-// Empty enum fields are allowed; consumers resolve them to their defaults
-// ([CopyModeLocalBlobResources], [UploadAsLocalBlob]) at the point of use.
+// An empty CopyMode is allowed; consumers resolve it to
+// [CopyModeLocalBlobResources] at the point of use.
 func (cfg *Config) Validate() error {
 	if cfg == nil {
 		return nil
@@ -85,9 +77,6 @@ func (cfg *Config) Validate() error {
 		return fmt.Errorf("recursive depth %d is not implemented yet (use -1 for infinite recursion or 0 for none)", cfg.Recursive)
 	}
 
-	if cfg.UploadType != "" && !slices.Contains(AllUploadTypes, cfg.UploadType) {
-		return fmt.Errorf("invalid uploadType %q (must be one of %q)", cfg.UploadType, AllUploadTypes)
-	}
 	if cfg.CopyMode != "" && !slices.Contains([]CopyMode{CopyModeLocalBlobResources, CopyModeAllResources}, cfg.CopyMode) {
 		return fmt.Errorf("invalid copyMode %q (must be one of %q, %q)",
 			cfg.CopyMode, CopyModeLocalBlobResources, CopyModeAllResources)
@@ -111,7 +100,7 @@ func LookupConfig(cfg *genericv1.Config) (*Config, error) {
 	cfgs := make([]*Config, 0, len(filtered.Configurations))
 	for _, entry := range filtered.Configurations {
 		var config Config
-		if err := Scheme.Convert(entry, &config); err != nil {
+		if err := runtime.DecodeStrict(entry, &config); err != nil {
 			return nil, fmt.Errorf("failed to decode transfer config: %w", err)
 		}
 		if err := config.Validate(); err != nil {
@@ -123,9 +112,9 @@ func LookupConfig(cfg *genericv1.Config) (*Config, error) {
 }
 
 // Merge merges the provided configs into a single config. Later entries win:
-// a non-empty CopyMode or UploadType and a non-zero Recursive override
-// whatever earlier entries set. An explicit "recursive: 0" cannot be
-// distinguished from an omitted field; both leave the default of no recursion.
+// a non-empty CopyMode and a non-zero Recursive override whatever earlier
+// entries set. An explicit "recursive: 0" cannot be distinguished from an
+// omitted field; both leave the default of no recursion.
 func Merge(configs ...*Config) *Config {
 	if len(configs) == 0 {
 		return nil
@@ -142,9 +131,6 @@ func Merge(configs ...*Config) *Config {
 		}
 		if cfg.CopyMode != "" {
 			merged.CopyMode = cfg.CopyMode
-		}
-		if cfg.UploadType != "" {
-			merged.UploadType = cfg.UploadType
 		}
 	}
 	return merged

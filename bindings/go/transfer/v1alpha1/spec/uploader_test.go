@@ -28,7 +28,6 @@ type: generic.config.ocm.software/v1
 configurations:
   - type: transfer.config.ocm.software/v1alpha1
     copyMode: allResources
-    uploadType: ociArtifact
   - type: http.uploader.transfer.config.ocm.software/v1alpha1
     match:
       accessType: Wget/v1alpha1
@@ -51,7 +50,6 @@ configurations:
 		r.NoError(err)
 		r.NotNil(cfg)
 		assert.Equal(t, spec.CopyModeAllResources, cfg.CopyMode)
-		assert.Equal(t, spec.UploadAsOciArtifact, cfg.UploadType)
 	})
 
 	t.Run("no uploader entries returns nil", func(t *testing.T) {
@@ -114,6 +112,53 @@ configurations:
 		_, err := spec.LookupUploaderConfigs(generic)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "targetURL is required")
+	})
+
+	t.Run("oci uploader without fields matches everything, order is kept", func(t *testing.T) {
+		r := require.New(t)
+		generic := decode(t, `
+type: generic.config.ocm.software/v1
+configurations:
+  - type: http.uploader.transfer.config.ocm.software/v1alpha1
+    match:
+      accessType: Wget/v1
+    targetURL: '${"https://first.example/uploads" + url(resource.access.url).path}'
+  - type: oci.uploader.transfer.config.ocm.software/v1alpha1
+  - type: oci.uploader.transfer.config.ocm.software
+    match:
+      name: docs
+    imageReference: ghcr.io/mirror/docs:1.0.0
+`)
+		uploaders, err := spec.LookupUploaderConfigs(generic)
+		r.NoError(err)
+		r.Len(uploaders, 3)
+		r.IsType(&spec.HTTPUploaderConfig{}, uploaders[0])
+		plain, ok := uploaders[1].(*spec.OCIUploaderConfig)
+		r.True(ok)
+		r.Nil(plain.MatchSpec)
+		r.Empty(plain.ImageReference)
+		r.True(plain.Match(resourceWithIdentity("anything", "1.0.0", nil)))
+
+		byName, ok := uploaders[2].(*spec.OCIUploaderConfig)
+		r.True(ok)
+		r.Equal("ghcr.io/mirror/docs:1.0.0", byName.ImageReference)
+		r.True(byName.Match(resourceWithIdentity("docs", "1.0.0", nil)), "a name-only match must match any access type")
+		r.False(byName.Match(resourceWithIdentity("other", "1.0.0", nil)))
+	})
+
+	t.Run("unknown uploader field is rejected", func(t *testing.T) {
+		generic := decode(t, `
+type: generic.config.ocm.software/v1
+configurations:
+  - type: http.uploader.transfer.config.ocm.software/v1alpha1
+    match:
+      accessType: Wget/v1
+    targetURL: '${"https://example/uploads"}'
+    headers:
+      X-Foo: [bar]
+`)
+		_, err := spec.LookupUploaderConfigs(generic)
+		require.ErrorContains(t, err, `unknown field "headers"`)
 	})
 }
 

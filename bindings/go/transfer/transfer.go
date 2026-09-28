@@ -16,9 +16,12 @@ import (
 // describes how to transfer component versions between repositories.
 //
 // cfg carries the declarative transfer settings. A nil cfg and empty enum
-// fields resolve to the defaults: no recursion,
-// [transferv1alpha1.CopyModeLocalBlobResources], and
-// [transferv1alpha1.UploadAsLocalBlob].
+// fields resolve to the defaults: no recursion and
+// [transferv1alpha1.CopyModeLocalBlobResources].
+//
+// uploaders are applied in declaration order: the first uploader that matches
+// a resource and applies to it wins; otherwise the resource follows the
+// default handling for cfg.
 //
 // Each [Mapping] pairs source components with a target repository and a
 // resolver, enabling N:M routing where different sources feed different
@@ -45,9 +48,6 @@ func BuildGraphDefinition(
 	if resolved.CopyMode == "" {
 		resolved.CopyMode = transferv1alpha1.CopyModeLocalBlobResources
 	}
-	if resolved.UploadType == "" {
-		resolved.UploadType = transferv1alpha1.UploadAsLocalBlob
-	}
 
 	roots, err := collectTransferRoots(ctx, mappings)
 	if err != nil {
@@ -58,7 +58,7 @@ func BuildGraphDefinition(
 		"roots", len(roots),
 		"recursive", resolved.Recursive,
 		"copyMode", resolved.CopyMode,
-		"uploadType", resolved.UploadType)
+		"uploaders", len(uploaders))
 
 	return internal.BuildGraphDefinition(ctx, roots, resolved, uploaders)
 }

@@ -52,6 +52,18 @@ func writeOCMConfigWithCredsAndTransfer(t *testing.T, regs []internal.ConfigOpts
 	return cfgPath
 }
 
+// writeOCIUploaderConfig writes an OCM config holding a single default
+// oci.uploader.transfer.config.ocm.software/v1alpha1 entry, the replacement for the
+// former `--upload-as ociArtifact`. --config may be repeated, so it merges with the
+// credentials config.
+func writeOCIUploaderConfig(t *testing.T) string {
+	t.Helper()
+	cfgPath := filepath.Join(t.TempDir(), "oci-uploader.yaml")
+	require.NoError(t, os.WriteFile(cfgPath, []byte(
+		"type: generic.config.ocm.software/v1\nconfigurations:\n- type: oci.uploader.transfer.config.ocm.software/v1alpha1\n"), 0o600))
+	return cfgPath
+}
+
 // Test_Integration_TransferWithTransferConfig_FileDrivesCopyMode proves that
 // `copyMode: allResources` set purely as a transfer.config.ocm.software/v1alpha1
 // entry in the central OCM configuration (no flags) actually reaches the
@@ -79,8 +91,7 @@ func Test_Integration_TransferWithTransferConfig_FileDrivesCopyMode(t *testing.T
 		{Host: sourceRegistry.Host, Port: sourceRegistry.Port, User: sourceRegistry.User, Password: sourceRegistry.Password},
 		{Host: targetRegistry.Host, Port: targetRegistry.Port, User: targetRegistry.User, Password: targetRegistry.Password},
 	}, `- type: transfer.config.ocm.software/v1alpha1
-  copyMode: allResources
-  uploadType: localBlob`)
+  copyMode: allResources`)
 
 	componentName := "ocm.software/transfer-config-copymode-test"
 	componentVersion := "v1.0.0"

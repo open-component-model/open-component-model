@@ -203,7 +203,7 @@ components:
 
 	sourceRef := fmt.Sprintf("ctf::%s//%s:%s", sourceCTF, componentName, componentVersion)
 
-	t.Run("transfer with default (no --upload-as flag)", func(t *testing.T) {
+	t.Run("transfer with default (no uploader config)", func(t *testing.T) {
 		targetRef := fmt.Sprintf("http://%s/%s", targetRegistry.RegistryAddress, "default")
 
 		transferCMD := cmd.New()
@@ -244,48 +244,7 @@ components:
 		r.NoError(v2.Scheme.Convert(desc.Component.Resources[1].Access, &localBlobAccess2))
 	})
 
-	t.Run("transfer with --upload-as localBlob", func(t *testing.T) {
-		targetRef := fmt.Sprintf("http://%s/%s", targetRegistry.RegistryAddress, "as/local")
-
-		transferCMD := cmd.New()
-		transferCMD.SetArgs([]string{
-			"transfer",
-			"component-version",
-			sourceRef,
-			targetRef,
-			"--config", cfgPath,
-			"--copy-resources", // required, otherwise we wouldn't transfer oci artifacts
-			"--upload-as", "localBlob",
-		})
-
-		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
-		defer cancel()
-
-		// Executes transfer
-		r.NoError(transferCMD.ExecuteContext(ctx), "transfer should succeed")
-
-		// Set up a repository to download components from the target to check whether
-		// the transfer worked as expected.
-		targetRepo, err := createRepo(ctx, repoProvider, credentialResolver, &ociv1.Repository{BaseUrl: targetRef})
-
-		// Check if component exists in target registry
-		desc, err := targetRepo.GetComponentVersion(ctx, componentName, componentVersion)
-		r.NoError(err, "should be able to retrieve transferred component")
-		r.Equal(componentName, desc.Component.Name)
-		r.Equal(componentVersion, desc.Component.Version)
-		r.Len(desc.Component.Resources, 2)
-		r.Equal("test-oci-resource", desc.Component.Resources[0].Name)
-
-		var localBlobAccess v2.LocalBlob
-		r.NoError(v2.Scheme.Convert(desc.Component.Resources[0].Access, &localBlobAccess))
-		r.Equal("test-oci-resource:v1.0.0", localBlobAccess.ReferenceName)
-
-		r.Equal("test-localblob-oci-resource", desc.Component.Resources[1].Name)
-		var localBlobAccess2 v2.LocalBlob
-		r.NoError(v2.Scheme.Convert(desc.Component.Resources[1].Access, &localBlobAccess2))
-	})
-
-	t.Run("transfer with --upload-as ociArtifact (local blob with missing reference name)", func(t *testing.T) {
+	t.Run("transfer with OCI uploader config (local blob with missing reference name)", func(t *testing.T) {
 		targetRef := fmt.Sprintf("http://%s/%s", targetRegistry.RegistryAddress, "as/oci/norefname")
 
 		transferCMD := cmd.New()
@@ -295,8 +254,8 @@ components:
 			sourceRef,
 			targetRef,
 			"--config", cfgPath,
-			"--copy-resources",           // required, otherwise we wouldn't transfer oci artifacts
-			"--upload-as", "ociArtifact", // This is the new flag we are testing
+			"--copy-resources", // required, otherwise we wouldn't transfer oci artifacts
+			"--config", writeOCIUploaderConfig(t),
 		})
 
 		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
@@ -328,7 +287,7 @@ components:
 		r.NoError(v2.Scheme.Convert(desc.Component.Resources[1].Access, &localBlobAccess2))
 	})
 
-	t.Run("transfer with --upload-as ociArtifact", func(t *testing.T) {
+	t.Run("transfer with OCI uploader config", func(t *testing.T) {
 		// Perform an intermediary transfer to get a local blob with a reference name
 		intermediaryctf := filepath.Join(tempdir, "intermediary-ctf")
 		intermediaryRef := fmt.Sprintf("ctf::%s", intermediaryctf)
@@ -371,8 +330,8 @@ components:
 			intermediaryRef,
 			targetRef,
 			"--config", cfgPath,
-			"--copy-resources",           // required, otherwise we wouldn't transfer oci artifacts
-			"--upload-as", "ociArtifact", // This is the new flag we are testing
+			"--copy-resources", // required, otherwise we wouldn't transfer oci artifacts
+			"--config", writeOCIUploaderConfig(t),
 		})
 
 		// Executes transfer
@@ -557,7 +516,6 @@ components:
 		sourceRef, targetRef,
 		"--config", cfgPath,
 		"--copy-resources",
-		"--upload-as", "localBlob",
 	})
 
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
@@ -680,7 +638,7 @@ func Test_Integration_Transfer_OCIArtifact_PreservesV1DescriptorDigest(t *testin
 				command := cmd.New()
 				command.SetArgs([]string{
 					"transfer", "component-version", from, to,
-					"--config", cfgPath, "--copy-resources", "--upload-as", "ociArtifact",
+					"--config", cfgPath, "--copy-resources", "--config", writeOCIUploaderConfig(t),
 				})
 				ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 				defer cancel()

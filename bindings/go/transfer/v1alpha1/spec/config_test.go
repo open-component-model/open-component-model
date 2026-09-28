@@ -13,11 +13,10 @@ import (
 
 func TestConfig_ParseYAML(t *testing.T) {
 	tests := []struct {
-		name           string
-		yaml           string
-		wantRecursive  spec.Recursive
-		wantCopyMode   spec.CopyMode
-		wantUploadType spec.UploadType
+		name          string
+		yaml          string
+		wantRecursive spec.Recursive
+		wantCopyMode  spec.CopyMode
 	}{
 		{
 			name: "all fields",
@@ -27,11 +26,9 @@ configurations:
   - type: transfer.config.ocm.software/v1alpha1
     recursive: -1
     copyMode: allResources
-    uploadType: ociArtifact
 `,
-			wantRecursive:  spec.RecursiveInfinite,
-			wantCopyMode:   spec.CopyModeAllResources,
-			wantUploadType: spec.UploadAsOciArtifact,
+			wantRecursive: spec.RecursiveInfinite,
+			wantCopyMode:  spec.CopyModeAllResources,
 		},
 		{
 			name: "fields omitted stay empty",
@@ -40,9 +37,8 @@ type: generic.config.ocm.software/v1
 configurations:
   - type: transfer.config.ocm.software/v1alpha1
 `,
-			wantRecursive:  spec.RecursiveNone,
-			wantCopyMode:   "",
-			wantUploadType: "",
+			wantRecursive: spec.RecursiveNone,
+			wantCopyMode:  "",
 		},
 		{
 			name: "unversioned type alias",
@@ -69,7 +65,6 @@ configurations:
 
 			assert.Equal(t, tt.wantRecursive, cfg.Recursive)
 			assert.Equal(t, tt.wantCopyMode, cfg.CopyMode)
-			assert.Equal(t, tt.wantUploadType, cfg.UploadType)
 		})
 	}
 }
@@ -81,12 +76,10 @@ func TestConfig_Validate(t *testing.T) {
 		wantErr string
 	}{
 		{"valid empty", spec.Config{}, ""},
-		{"valid all fields", spec.Config{Recursive: spec.RecursiveInfinite, CopyMode: spec.CopyModeAllResources, UploadType: spec.UploadAsOciArtifact}, ""},
+		{"valid all fields", spec.Config{Recursive: spec.RecursiveInfinite, CopyMode: spec.CopyModeAllResources}, ""},
 		{"valid recursive none", spec.Config{Recursive: spec.RecursiveNone}, ""},
 		{"valid copyMode localBlob", spec.Config{CopyMode: spec.CopyModeLocalBlobResources}, ""},
-		{"valid uploadType localBlob", spec.Config{UploadType: spec.UploadAsLocalBlob}, ""},
 		{"invalid copyMode", spec.Config{CopyMode: "garbage"}, "invalid copyMode"},
-		{"invalid uploadType", spec.Config{UploadType: "garbage"}, "invalid uploadType"},
 		{"recursive depth not implemented", spec.Config{Recursive: 3}, "not implemented"},
 		{"invalid recursive below -1", spec.Config{Recursive: -5}, "invalid recursive"},
 	}
@@ -109,14 +102,13 @@ func TestMerge(t *testing.T) {
 	})
 
 	t.Run("later non-empty fields win", func(t *testing.T) {
-		a := &spec.Config{Recursive: spec.RecursiveInfinite, CopyMode: spec.CopyModeLocalBlobResources, UploadType: spec.UploadAsLocalBlob}
+		a := &spec.Config{Recursive: spec.RecursiveInfinite, CopyMode: spec.CopyModeLocalBlobResources}
 		b := &spec.Config{CopyMode: spec.CopyModeAllResources}
 
 		merged := spec.Merge(a, b)
 
 		assert.Equal(t, spec.RecursiveInfinite, merged.Recursive)
 		assert.Equal(t, spec.CopyModeAllResources, merged.CopyMode)
-		assert.Equal(t, spec.UploadAsLocalBlob, merged.UploadType)
 	})
 
 	t.Run("nil element is skipped", func(t *testing.T) {
@@ -160,7 +152,6 @@ configurations:
 		require.NotNil(t, cfg)
 		assert.Equal(t, spec.RecursiveInfinite, cfg.Recursive)
 		assert.Equal(t, spec.CopyModeAllResources, cfg.CopyMode)
-		assert.Empty(t, cfg.UploadType)
 	})
 
 	t.Run("later entry wins, unset fields fall through", func(t *testing.T) {
@@ -170,7 +161,6 @@ configurations:
   - type: transfer.config.ocm.software/v1alpha1
     recursive: -1
     copyMode: localBlob
-    uploadType: localBlob
   - type: transfer.config.ocm.software/v1alpha1
     copyMode: allResources
 `)
@@ -179,7 +169,6 @@ configurations:
 		require.NotNil(t, cfg)
 		assert.Equal(t, spec.RecursiveInfinite, cfg.Recursive)
 		assert.Equal(t, spec.CopyModeAllResources, cfg.CopyMode)
-		assert.Equal(t, spec.UploadAsLocalBlob, cfg.UploadType)
 	})
 
 	t.Run("invalid entry is rejected", func(t *testing.T) {
@@ -202,5 +191,17 @@ configurations:
 `)
 		_, err := spec.LookupConfig(generic)
 		require.ErrorContains(t, err, "not implemented")
+	})
+
+	t.Run("stale uploadType is rejected", func(t *testing.T) {
+		generic := decode(t, `
+type: generic.config.ocm.software/v1
+configurations:
+  - type: transfer.config.ocm.software/v1alpha1
+    copyMode: allResources
+    uploadType: ociArtifact
+`)
+		_, err := spec.LookupConfig(generic)
+		require.ErrorContains(t, err, `unknown field "uploadType"`)
 	})
 }

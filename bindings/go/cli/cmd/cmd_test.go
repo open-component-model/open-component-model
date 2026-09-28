@@ -2794,7 +2794,6 @@ configurations:
 - type: transfer.config.ocm.software/v1alpha1
   recursive: -1
   copyMode: allResources
-  uploadType: ociArtifact
 - type: credentials.config.ocm.software
   consumers:
   - identity:
@@ -2828,7 +2827,6 @@ configurations:
 - copyMode: allResources
   recursive: -1
   type: transfer.config.ocm.software/v1alpha1
-  uploadType: ociArtifact
 - rules:
   - filename: output.tar
     layerSelectors:
