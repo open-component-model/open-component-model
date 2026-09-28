@@ -45,13 +45,17 @@ func init() {
 //   - generic, maven: the resource content is deployed as is (OCI artifacts as an OCI layout tar)
 //     and the resource is published with a Wget/v1 access on the stored file. The file is not
 //     packaged as a Maven artifact: it is downloadable, but Maven only resolves it if the content
-//     and path already follow the Maven layout. Where
-//     Artifactory stores a file under another path than requested (Maven -SNAPSHOT versions get a
-//     unique timestamped version), the access points at the stored file.
+//     and path already follow the Maven layout. Where Artifactory stores a file under another
+//     path than requested (Maven -SNAPSHOT versions get a unique timestamped version), the access
+//     points at the stored file.
+//   - npm: the resource content, an npm package tarball, is deployed as is and published with a
+//     Wget/v1 access on the stored file. Artifactory reads its package.json and serves it through
+//     its npm API; content it does not recognize as a package is deleted again and fails the
+//     transfer. Artifactory moves the latest dist-tag to the most recently deployed version.
 //
 // The content is deployed to <url>/artifactory/<repository>/<path>. Path defaults to
-// <component>/<component version>/<resource>-<resource version>, plus .tgz for helm. The deployed
-// file carries the properties ocm.component.name, ocm.component.version, ocm.resource.name,
+// <component>/<component version>/<resource>-<resource version>, plus .tgz for helm and npm. The
+// deployed file carries the properties ocm.component.name, ocm.component.version, ocm.resource.name,
 // ocm.resource.version and, for resources with one, ocm.resource.extraIdentity. A file already
 // stored at the path is only replaced when these properties name the same resource of the same
 // component version or it has the same content.
@@ -87,8 +91,8 @@ type ArtifactoryUploaderConfig struct {
 	// ${component.name + "/" + component.version + "/" + resource.name + "-" + resource.version + ".tgz"}.
 	// It is a literal or a CEL expression wrapped in ${...} over the source resource (resource)
 	// and its component (component: name, version, provider, ...). The result must consist of
-	// non-empty segments without . or .. and, for helm repositories, end in .tgz. Defaults to
-	// <component>/<component version>/<resource>-<resource version>, plus .tgz for helm.
+	// non-empty segments without . or .. and, for helm and npm repositories, end in .tgz. Defaults to
+	// <component>/<component version>/<resource>-<resource version>, plus .tgz for helm and npm.
 	Path string `json:"path,omitempty"`
 }
 

@@ -112,6 +112,9 @@ type artifactoryRequest struct {
 type fakeArtifactory struct {
 	*httptest.Server
 	charts map[string][2]string // sha256 -> name, version
+	// npm maps the sha256 of content Artifactory recognizes as an npm package to its name and
+	// version.
+	npm map[string][2]string
 
 	// packageType and rclass control the GET /artifactory/api/repositories/<repo> response.
 	packageType string
@@ -208,6 +211,9 @@ func (f *fakeArtifactory) handle(w http.ResponseWriter, r *http.Request) {
 		all := map[string][]string{}
 		if chart, ok := f.charts[f.paths[stored]]; ok {
 			all["chart.name"], all["chart.version"] = []string{chart[0]}, []string{chart[1]}
+		}
+		if pkg, ok := f.npm[f.paths[stored]]; ok {
+			all["npm.name"], all["npm.version"] = []string{pkg[0]}, []string{pkg[1]}
 		}
 		for k, v := range f.properties[stored] {
 			all[k] = []string{v}
@@ -582,7 +588,7 @@ func TestArtifactoryUpload_Transform_Helm(t *testing.T) {
 	})
 }
 
-func TestArtifactoryUpload_Transform_Generic(t *testing.T) {
+func TestArtifactoryUpload_Transform_File(t *testing.T) {
 	const content = "hello"
 	contentSum := sha256.Sum256([]byte(content))
 	contentDigest := hex.EncodeToString(contentSum[:])
@@ -692,6 +698,46 @@ func TestArtifactoryUpload_Transform_Generic(t *testing.T) {
 		r.True(last.deploy, "the second transfer reuses the stored content")
 	})
 
+	t.Run("npm repository publishes a package Artifactory recognizes", func(t *testing.T) {
+		r := require.New(t)
+		srv := newFakeArtifactory(t, nil)
+		srv.packageType = "npm"
+		srv.npm = map[string][2]string{contentDigest: {"renamed", "9.9.9"}}
+		out, err := transformer().Transform(t.Context(), step(srv.URL, source()))
+		r.NoError(err)
+
+		got := methods(srv.recorded())
+		r.Equal("PUT "+putPath+".tgz", got[len(got)-2], "the default file name ends in .tgz so Artifactory indexes it")
+		r.Equal("GET "+storagePath+".tgz?properties=npm.name,npm.version", got[len(got)-1])
+		var access wgetaccessv1.Wget
+		r.NoError(wgetaccess.Scheme.Convert(out.(*ArtifactoryUploadTransformation).Output.Resource.Access, &access))
+		r.Equal(srv.URL+"/artifactory/helm-local/"+genericPath+".tgz", access.URL)
+	})
+
+	t.Run("npm repository removes content that is not a package", func(t *testing.T) {
+		r := require.New(t)
+		srv := newFakeArtifactory(t, nil)
+		srv.packageType = "npm"
+		tr := transformer()
+		tr.chartMetadataInterval = time.Millisecond
+		_, err := tr.Transform(t.Context(), step(srv.URL, source()))
+		r.ErrorContains(err, "is not an npm package")
+		r.False(srv.stored(genericPath+".tgz"), "the stored file is removed again")
+	})
+
+	t.Run("npm repository needs a .tgz path", func(t *testing.T) {
+		r := require.New(t)
+		srv := newFakeArtifactory(t, nil)
+		srv.packageType = "npm"
+		s := step(srv.URL, source())
+		s.Spec.Path = "packages/renamed"
+		_, err := transformer().Transform(t.Context(), s)
+		r.ErrorContains(err, `path "packages/renamed" must end in .tgz`)
+		for _, req := range srv.recorded() {
+			r.NotEqual(http.MethodPut, req.method)
+		}
+	})
+
 	t.Run("no chart property GET is issued for generic uploads", func(t *testing.T) {
 		r := require.New(t)
 		srv := newFakeArtifactory(t, nil)
@@ -756,13 +802,13 @@ func TestArtifactoryUpload_Transform_DetectionErrors(t *testing.T) {
 		r.False(hasPUT(srv.recorded()))
 	})
 
-	for _, packageType := range []string{"npm", "docker"} {
+	for _, packageType := range []string{"docker", "pypi"} {
 		t.Run("unsupported packageType "+packageType, func(t *testing.T) {
 			r := require.New(t)
 			srv := newFakeArtifactory(t, nil)
 			srv.packageType = packageType
 			_, err := transformer().Transform(t.Context(), step(srv.URL))
-			r.ErrorContains(err, "supported: helm, generic, maven")
+			r.ErrorContains(err, "supported: helm, generic, maven, npm")
 			r.False(hasPUT(srv.recorded()))
 		})
 	}

@@ -31,12 +31,12 @@ configurations:
     method: PUT
 ```
 
-| Type                                                           | Purpose                                                                                              |
-|----------------------------------------------------------------|------------------------------------------------------------------------------------------------------|
-| `transfer.config.ocm.software/v1alpha1`                        | Global transfer settings: recursion, which resources are copied and how.                             |
-| `http.uploader.transfer.config.ocm.software/v1alpha1`          | Per-match rule that streams a resource to a custom HTTP target.                                      |
-| `artifactory.uploader.transfer.config.ocm.software/v1alpha1`   | Per-match rule that uploads a resource into a JFrog Artifactory helm, generic or maven repository.   |
-| `nexus.uploader.transfer.config.ocm.software/v1alpha1`         | Per-match rule that uploads a resource into a Sonatype Nexus hosted repository (helm or raw).        |
+| Type                                                         | Purpose                                                                                           |
+|--------------------------------------------------------------|---------------------------------------------------------------------------------------------------|
+| `transfer.config.ocm.software/v1alpha1`                      | Global transfer settings: recursion, which resources are copied and how.                          |
+| `http.uploader.transfer.config.ocm.software/v1alpha1`        | Per-match rule that streams a resource to a custom HTTP target.                                   |
+| `artifactory.uploader.transfer.config.ocm.software/v1alpha1` | Per-match rule that uploads a resource into a JFrog Artifactory helm, generic, maven or npm repo. |
+| `nexus.uploader.transfer.config.ocm.software/v1alpha1`       | Per-match rule that uploads a resource into a Sonatype Nexus hosted repository (helm or raw).     |
 
 By default the CLI looks for configuration in `$HOME/.ocmconfig`. Pass
 `--config <file>` to use a different file. The corresponding CLI flags
@@ -125,17 +125,17 @@ cannot re-send the write request that would overwrite the uploaded object.
 `targetURL` and `mediaType` also become the published `Wget/v1` download access;
 `method`, `header`, `body` and `noRedirect` apply to the upload request only:
 
-| Field                 | Type                  | Applies to                        | Description                                                                            |
-|-----------------------|-----------------------|-----------------------------------|----------------------------------------------------------------------------------------|
-| `match.accessType`    | `runtime.Type`        | —                                 | Access type this uploader applies to; any alias matches, omitted version = any.        |
-| `match.name`          | string (optional)     | —                                 | Restrict the match to resources with this exact name.                                  |
-| `match.version`       | string (optional)     | —                                 | Restrict the match to resources with this exact version.                               |
-| `match.extraIdentity` | `map[string]string`   | —                                 | Restrict the match to resources whose identity contains these key/value pairs.         |
-| `targetURL`           | CEL expression        | request + published (`url`)       | The upload URL; also the published download URL. See CEL Expressions below.            |
-| `method`              | string                | request (`verb`)                  | HTTP method for the upload request. Defaults to PUT. Not on the published access.      |
-| `header`              | `map[string][]string` | request                           | HTTP headers sent with the upload request. May be CEL-templated. Request only.         |
-| `noRedirect`          | bool                  | request                           | Disable following HTTP redirects on the upload. Not on the published access.           |
-| `mediaType`           | string                | request + published (`mediaType`) | Media type recorded on the resource. Defaults to the source's.                         |
+| Field                 | Type                  | Applies to                        | Description                                                                       |
+|-----------------------|-----------------------|-----------------------------------|-----------------------------------------------------------------------------------|
+| `match.accessType`    | `runtime.Type`        | —                                 | Access type this uploader applies to; any alias matches, omitted version = any.   |
+| `match.name`          | string (optional)     | —                                 | Restrict the match to resources with this exact name.                             |
+| `match.version`       | string (optional)     | —                                 | Restrict the match to resources with this exact version.                          |
+| `match.extraIdentity` | `map[string]string`   | —                                 | Restrict the match to resources whose identity contains these key/value pairs.    |
+| `targetURL`           | CEL expression        | request + published (`url`)       | The upload URL; also the published download URL. See CEL Expressions below.       |
+| `method`              | string                | request (`verb`)                  | HTTP method for the upload request. Defaults to PUT. Not on the published access. |
+| `header`              | `map[string][]string` | request                           | HTTP headers sent with the upload request. May be CEL-templated. Request only.    |
+| `noRedirect`          | bool                  | request                           | Disable following HTTP redirects on the upload. Not on the published access.      |
+| `mediaType`           | string                | request + published (`mediaType`) | Media type recorded on the resource. Defaults to the source's.                    |
 
 ### `artifactory.uploader.transfer.config.ocm.software/v1alpha1`
 
@@ -144,10 +144,11 @@ The behaviour depends on the **package type** of the repository, which the uploa
 reads from the Artifactory repository configuration
 (`GET <url>/artifactory/api/repositories/<repository>`):
 
-| Repository type                           | Source handling                                                             | Published access                                                                                     |
-|-------------------------------------------|-----------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------|
-| `helm`                                    | The packaged Helm chart located in the resource content (.tgz, tar, or OCI) | `Helm/v1` (`helmRepository: <url>/artifactory/api/helm/<repository>`, `helmChart: <name>:<version>`) |
-| `generic`, `maven`                        | The resource content as is (OCI artifacts as an OCI layout tar)             | `Wget/v1` (`url` of the stored file)                                                                 |
+| Repository type    | Source handling                                                             | Published access                                                                                     |
+|--------------------|-----------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------|
+| `helm`             | The packaged Helm chart located in the resource content (.tgz, tar, or OCI) | `Helm/v1` (`helmRepository: <url>/artifactory/api/helm/<repository>`, `helmChart: <name>:<version>`) |
+| `generic`, `maven` | The resource content as is (OCI artifacts as an OCI layout tar)             | `Wget/v1` (`url` of the stored file)                                                                 |
+| `npm`              | The npm package tarball, as is                                              | `Wget/v1` (`url` of the stored file)                                                                 |
 
 The repository **must** be a local or federated repository. Remote or virtual
 repositories cannot receive uploads. The uploading user must be allowed to read
@@ -200,12 +201,12 @@ gets the SHA-256 of the uploaded bytes (the OCI layout tar or chart .tgz).
 
 #### Fields
 
-| Field            | Type                                 | Description                                                                                                                                                                                                           |
-|------------------|--------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `match`          | `UploaderMatch`                      | Selects resources this uploader applies to. `match.accessType` is required.                                                                                                                                           |
-| `url`            | string (required)                    | Server base URL **without** the `/artifactory` segment, e.g. `https://myorg.jfrog.io`.                                                                                                                                |
-| `repository`     | string (required)                    | Repository key, e.g. `helm-local`.                                                                                                                                                                                    |
-| `path`           | string                               | Content location relative to the repository root. Literal or `${…}` CEL expression (see [CEL Expressions](#cel-expressions)). Must be relative, without `.`/`..` segments; helm repositories require a `.tgz` suffix. |
+| Field        | Type              | Description                                                                                                                                                                                                   |
+|--------------|-------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `match`      | `UploaderMatch`   | Selects resources this uploader applies to. `match.accessType` is required.                                                                                                                                   |
+| `url`        | string (required) | Server base URL **without** the `/artifactory` segment, e.g. `https://myorg.jfrog.io`.                                                                                                                        |
+| `repository` | string (required) | Repository key, e.g. `helm-local`.                                                                                                                                                                            |
+| `path`       | string            | Content location relative to the repository root. Literal or `${…}` CEL expression (see [CEL Expressions](#cel-expressions)). Must be relative, without `.`/`..` segments; helm and npm need a `.tgz` suffix. |
 
 #### Sources
 
@@ -221,6 +222,12 @@ but Maven only resolves it if its content and `path` already follow the Maven
 layout. When Artifactory stores a file under another path than requested,
 such as a Maven `-SNAPSHOT` file under its timestamped version, the published
 `url` points at the stored file.
+
+**npm** repositories accept any access type holding an npm package tarball.
+Artifactory reads its `package.json` and serves the version through its npm API;
+content it does not recognize as a package is deleted again and fails the
+transfer. Artifactory moves the `latest` dist-tag to the most recently deployed
+version, also when that is an older version.
 
 #### Credentials
 
@@ -290,10 +297,10 @@ Repository 3 server. The behaviour depends on the **format** of the repository,
 which the uploader reads from the Nexus repository settings
 (`GET <url>/service/rest/v1/repositories/<repository>`):
 
-| Repository type | Source handling                                                               | Published access                                                              |
-|-----------------|-------------------------------------------------------------------------------|-------------------------------------------------------------------------------|
-| `helm`          | The packaged Helm chart located in the resource content (.tgz, tar, or OCI)   | `Helm/v1` (`helmRepository: <url>/repository/<repository>`)                   |
-| `raw`           | The resource content as is (OCI artifacts as an OCI layout tar)               | `Wget/v1` (`url: <url>/repository/<repository>/<path>`)                       |
+| Repository type | Source handling                                                             | Published access                                            |
+|-----------------|-----------------------------------------------------------------------------|-------------------------------------------------------------|
+| `helm`          | The packaged Helm chart located in the resource content (.tgz, tar, or OCI) | `Helm/v1` (`helmRepository: <url>/repository/<repository>`) |
+| `raw`           | The resource content as is (OCI artifacts as an OCI layout tar)             | `Wget/v1` (`url: <url>/repository/<repository>/<path>`)     |
 
 The repository **must** be a hosted repository. Proxy and group repositories
 cannot receive uploads. The uploading user must be allowed to read the
@@ -332,12 +339,12 @@ extracted from an OCI artifact gets the SHA-256 of the uploaded bytes.
 
 #### Fields
 
-| Field            | Type                          | Description                                                                                                                                                                                                 |
-|------------------|-------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `match`          | `UploaderMatch`               | Selects resources this uploader applies to. `match.accessType` is required.                                                                                                                                 |
-| `url`            | string (required)             | Server base URL **without** the `/repository` segment, e.g. `https://nexus.example.com`.                                                                                                                    |
-| `repository`     | string (required)             | Repository name, e.g. `helm-hosted`.                                                                                                                                                                        |
-| `path`           | string                        | Content location in a raw repository relative to the root. Literal or `${…}` CEL expression (see [CEL Expressions](#cel-expressions)). Must be relative, without `.`/`..` segments. Not for helm repos.     |
+| Field        | Type              | Description                                                                                                                                                                                             |
+|--------------|-------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `match`      | `UploaderMatch`   | Selects resources this uploader applies to. `match.accessType` is required.                                                                                                                             |
+| `url`        | string (required) | Server base URL **without** the `/repository` segment, e.g. `https://nexus.example.com`.                                                                                                                |
+| `repository` | string (required) | Repository name, e.g. `helm-hosted`.                                                                                                                                                                    |
+| `path`       | string            | Content location in a raw repository relative to the root. Literal or `${…}` CEL expression (see [CEL Expressions](#cel-expressions)). Must be relative, without `.`/`..` segments. Not for helm repos. |
 
 #### Sources
 

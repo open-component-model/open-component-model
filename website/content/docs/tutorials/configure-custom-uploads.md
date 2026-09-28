@@ -284,10 +284,10 @@ and rewrite the resource access so consumers can fetch the artifact from the
 repository server. Each uploader detects the repository type through the server
 API:
 
-| Config type                                                  | Repository types                 | Published access       |
-|--------------------------------------------------------------|----------------------------------|------------------------|
-| `artifactory.uploader.transfer.config.ocm.software/v1alpha1` | `helm`, `generic`, `maven`       | `Helm/v1` or `Wget/v1` |
-| `nexus.uploader.transfer.config.ocm.software/v1alpha1`       | `helm`, `raw`                    | `Helm/v1` or `Wget/v1` |
+| Config type                                                  | Repository types                  | Published access       |
+|--------------------------------------------------------------|-----------------------------------|------------------------|
+| `artifactory.uploader.transfer.config.ocm.software/v1alpha1` | `helm`, `generic`, `maven`, `npm` | `Helm/v1` or `Wget/v1` |
+| `nexus.uploader.transfer.config.ocm.software/v1alpha1`       | `helm`, `raw`                     | `Helm/v1` or `Wget/v1` |
 
 For guidance per repository type (Helm, Maven, npm, generic, raw), see
 [Upload Resources to Artifactory and Nexus Repositories]({{< relref "docs/how-to/upload-to-artifactory-and-nexus.md" >}}).

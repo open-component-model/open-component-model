@@ -334,7 +334,15 @@ func (a *artifactoryServer) rejectedUploadStored(context.Context, *repositoryCli
 // It polls briefly in case the metadata is calculated asynchronously and reports found=false when
 // Artifactory recorded none, i.e. the content is not a helm chart.
 func (a *artifactoryServer) chart(ctx context.Context, c *repositoryClient, _ string) (string, string, bool, error) {
-	target := a.storageURL + "?properties=chart.name,chart.version"
+	return a.packageInfo(ctx, c, "chart.name", "chart.version")
+}
+
+// packageInfo reads the package name and version Artifactory records as the properties nameKey
+// and versionKey when it indexes the stored file. It polls briefly in case the metadata is
+// calculated asynchronously and reports found=false when Artifactory recorded none, i.e. did
+// not recognize the content as a package of the repository type.
+func (a *artifactoryServer) packageInfo(ctx context.Context, c *repositoryClient, nameKey, versionKey string) (string, string, bool, error) {
+	target := a.storageURL + "?properties=" + nameKey + "," + versionKey
 	for attempt := 1; ; attempt++ {
 		resp, err := c.do(ctx, http.MethodGet, target, nil, -1, nil)
 		if err != nil {
@@ -348,9 +356,9 @@ func (a *artifactoryServer) chart(ctx context.Context, c *repositoryClient, _ st
 			err = json.NewDecoder(io.LimitReader(resp.Body, maxErrorBodyBytes)).Decode(&props)
 			_ = resp.Body.Close()
 			if err != nil {
-				return "", "", false, fmt.Errorf("failed decoding chart properties of %s: %w", redactURL(a.storageURL), err)
+				return "", "", false, fmt.Errorf("failed decoding package properties of %s: %w", redactURL(a.storageURL), err)
 			}
-			if names, versions := props.Properties["chart.name"], props.Properties["chart.version"]; len(names) == 1 && len(versions) == 1 {
+			if names, versions := props.Properties[nameKey], props.Properties[versionKey]; len(names) == 1 && len(versions) == 1 {
 				return names[0], versions[0], names[0] != "" && versions[0] != "", nil
 			}
 		case http.StatusNotFound:

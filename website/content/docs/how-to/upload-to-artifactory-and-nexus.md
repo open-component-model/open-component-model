@@ -32,7 +32,7 @@ reads the repository type from the server API and picks the upload method for it
 flowchart LR
     R[Matched resource] --> D{Repository type}
     D -->|helm| H[Upload chart, publish Helm/v1]
-    D -->|generic / maven / raw| F[Upload file, publish Wget/v1]
+    D -->|generic / maven / npm / raw| F[Upload file, publish Wget/v1]
     D -->|anything else| X[Transfer fails]
 ```
 
@@ -41,11 +41,12 @@ flowchart LR
 | Artifactory | `helm`          | The Helm chart found in the resource | `Helm/v1` (`helmRepository`, `helmChart`) |
 | Artifactory | `generic`       | The resource content as is           | `Wget/v1` on the stored file              |
 | Artifactory | `maven`         | The resource content as is           | `Wget/v1` on the stored file              |
+| Artifactory | `npm`           | The npm package tarball, as is       | `Wget/v1` on the stored tarball           |
 | Nexus       | `helm`          | The Helm chart found in the resource | `Helm/v1` (`helmRepository`, `helmChart`) |
 | Nexus       | `raw`           | The resource content as is           | `Wget/v1` on the stored file              |
 
-Every other repository type, for example Artifactory `npm` or `docker` and Nexus
-`maven2` or `npm`, fails the transfer before anything is uploaded. See
+Every other repository type, for example Artifactory `docker` and Nexus `maven2` or
+`npm`, fails the transfer before anything is uploaded. See
 [Other repository types](#other-repository-types) for alternatives.
 
 ## Prerequisites
@@ -205,6 +206,54 @@ Behavior to plan for:
 - **Without a Maven-layout `path`** the file is stored under the default path. It can
   be downloaded from its `Wget/v1` URL, but Maven does not see it.
 
+### npm packages
+
+Point the uploader at an npm repository. The resource must hold an npm package
+tarball (`package/package.json` plus the package files):
+
+```yaml
+  - type: artifactory.uploader.transfer.config.ocm.software/v1alpha1
+    match:
+      accessType: localBlob
+      name: my-package
+    url: https://common.repositories.cloud.sap
+    repository: open-component-model-npm-test
+```
+
+The tarball is stored under `<component>/<component version>/<resource>-<resource version>.tgz`.
+Artifactory reads its `package.json`, serves the version through its npm API, and the
+resource is published as `Wget/v1` on the stored tarball. The uploader logs the
+package Artifactory indexed:
+
+```text
+msg="artifactory indexed the npm package" resource="name=my-package,version=2.0.0" package=my-package@2.0.0
+```
+
+Install it with npm:
+
+```bash
+npm install my-package@2.0.0 \
+  --registry https://common.repositories.cloud.sap/artifactory/api/npm/open-component-model-npm-test/
+```
+
+Behavior to plan for:
+
+- **Package name and version come from `package.json`**, not from the OCM resource.
+  The file name and a custom `path` do not matter to npm, but a custom `path` must
+  end in `.tgz`: Artifactory only indexes `.tgz` files as packages.
+- **Content that is not an npm package** is deleted again and fails the transfer:
+  `content of resource … is not an npm package: artifactory recorded no npm.name and npm.version for …`.
+- **The `latest` dist-tag moves to the most recently deployed version**, also to an
+  older one: transferring `1.0.0` after `2.0.0` makes `1.0.0` the `latest`. Restore it
+  after transferring older versions:
+
+  ```bash
+  npm dist-tag add my-package@2.0.0 latest \
+    --registry https://common.repositories.cloud.sap/artifactory/api/npm/open-component-model-npm-test/
+  ```
+
+- A second transfer reuses the stored tarball: `reused content already stored in the artifactory repository`.
+
 ### Generic files
 
 Any resource can go into a generic repository. It is stored as is under
@@ -297,46 +346,30 @@ OCM does not build:
 
 | Repository                                   | Error                                                                  | Alternative                                                |
 |----------------------------------------------|------------------------------------------------------------------------|------------------------------------------------------------|
-| Artifactory `npm`                            | `has package type "npm"; supported: helm, generic, maven`              | HTTP uploader, see below                                   |
-| Artifactory `docker`                         | `has package type "docker"; supported: helm, generic, maven`           | Transfer images to the OCI registry host of the repository |
-| Nexus `maven2`                               | `has format "maven2"; supported: helm, raw`                            | HTTP uploader with a Maven-layout `targetURL`              |
+| Artifactory `docker`                         | `has package type "docker"; supported: helm, generic, maven, npm`      | Transfer images to the OCI registry host of the repository |
+| Nexus `maven2`                               | `has format "maven2"; supported: helm, raw`                            | HTTP uploader with a Maven-layout `targetURL`, see below   |
 | Nexus `npm`                                  | `has format "npm"; supported: helm, raw`                               | None: Nexus only accepts `npm publish`                     |
 | Remote, virtual, proxy or group repositories | `uploads need a local repository` / `uploads need a hosted repository` | Upload into the local or hosted repository behind it       |
-
-### npm packages in Artifactory
-
-Artifactory indexes an npm package tarball deployed with a plain `PUT` when the file
-name ends in `.tgz`: it reads `package.json` and serves the version through its npm
-API. The
-[HTTP uploader]({{< relref "docs/reference/transfer-configuration.md#httpuploadertransferconfigocmsoftwarev1alpha1" >}})
-can deploy it to the path npm uses:
-
-```yaml
-  - type: http.uploader.transfer.config.ocm.software/v1alpha1
-    match:
-      accessType: Wget/v1
-      name: my-package
-    method: PUT
-    targetURL: '${"https://common.repositories.cloud.sap/artifactory/open-component-model-npm-test/" + resource.name + "/-/" + resource.name + "-" + resource.version + ".tgz"}'
-```
-
-- The resource name and version must be the npm package name and version.
-- The HTTP uploader reads remote sources such as `Wget/v1`; it cannot upload local
-  blobs (`failed to get plugin for typ "LocalBlob/v1"`).
-- **The `latest` dist-tag moves to the most recently deployed version.** Transferring
-  `1.0.0` after `2.0.0` makes `1.0.0` the `latest`. Restore it with:
-
-  ```bash
-  npm dist-tag add my-package@2.0.0 latest \
-    --registry https://common.repositories.cloud.sap/artifactory/api/npm/open-component-model-npm-test/
-  ```
 
 ### Maven artifacts in Nexus
 
 A Nexus `maven2` hosted repository accepts plain `PUT`s at Maven-layout paths
 (`com/example/demo/1.0.0/demo-1.0.0.jar` returns `201`) and rejects other paths with
-`400 Invalid mavenPath for a Maven 2 repository`. Use the HTTP uploader with a
-Maven-layout `targetURL`, as for npm above.
+`400 Invalid mavenPath for a Maven 2 repository`. The
+[HTTP uploader]({{< relref "docs/reference/transfer-configuration.md#httpuploadertransferconfigocmsoftwarev1alpha1" >}})
+can deploy there:
+
+```yaml
+  - type: http.uploader.transfer.config.ocm.software/v1alpha1
+    match:
+      accessType: Wget/v1
+      name: jar
+    method: PUT
+    targetURL: '${"https://nexus.example.com/repository/maven-releases/com/example/demo/" + resource.version + "/demo-" + resource.version + ".jar"}'
+```
+
+The HTTP uploader reads remote sources such as `Wget/v1`; it cannot upload local
+blobs (`failed to get plugin for typ "LocalBlob/v1"`).
 
 ## Troubleshooting
 
@@ -359,12 +392,21 @@ resource, component version or was not uploaded by OCM.
 
 **Fix:** Configure a `path` that is unique for the resource, or remove the stored file.
 
-### Symptom: `content of resource … is not a helm chart`
+### Symptom: `content of resource … is not a helm chart` or `… is not an npm package`
 
-**Cause:** The resource matched by a Helm repository uploader holds no packaged chart.
+**Cause:** The resource matched by a Helm or npm repository uploader holds no packaged
+chart or npm package tarball.
 
-**Fix:** Narrow `match` to the chart resources, or route other resources to a
-generic or raw repository.
+**Fix:** Narrow `match` to the chart or package resources, or route other resources
+to a generic or raw repository.
+
+### Symptom: `npm error notarget No matching version found for … with a date before …`
+
+**Cause:** The npm client is configured with `min-release-age` (or `before`), which
+hides versions published less than that many days ago, including freshly transferred
+ones.
+
+**Fix:** Install with `--min-release-age=0`, or wait until the version is old enough.
 
 ## Related documentation
 

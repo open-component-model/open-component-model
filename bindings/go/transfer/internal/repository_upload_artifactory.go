@@ -19,7 +19,7 @@ import (
 // ArtifactoryUpload uploads a resource into a local repository of a JFrog Artifactory server.
 // The package type of the repository decides what is uploaded and how the resource is
 // published: a Helm chart with a Helm/v1 access (helm), or the resource content with a Wget/v1
-// access (generic, maven). See the ArtifactoryUploaderConfig transfer config.
+// access (generic, maven, npm). See the ArtifactoryUploaderConfig transfer config.
 type ArtifactoryUpload struct {
 	repositoryUploader
 }
@@ -60,9 +60,11 @@ func (t *ArtifactoryUpload) Transform(ctx context.Context, step runtime.Typed) (
 		}
 		out, err = t.uploadHelm(ctx, c, spec, src, srv)
 	case "generic", "maven":
-		out, err = t.uploadFile(ctx, c, spec, src)
+		out, err = t.uploadFile(ctx, c, spec, src, "", nil)
+	case "npm":
+		out, err = t.uploadFile(ctx, c, spec, src, ".tgz", npmPackage)
 	default:
-		return nil, fmt.Errorf("artifactory repository %q has package type %q; supported: helm, generic, maven", spec.Repository, typ)
+		return nil, fmt.Errorf("artifactory repository %q has package type %q; supported: helm, generic, maven, npm", spec.Repository, typ)
 	}
 	if err != nil {
 		return nil, err
@@ -112,11 +114,22 @@ func artifactoryRepositoryType(ctx context.Context, c *repositoryClient, spec *R
 	return strings.ToLower(config.PackageType), nil
 }
 
-// uploadFile deploys the resource content as is into a generic or maven repository and returns
-// the resource with a Wget/v1 access on the stored file. Like charts, the file carries the owner properties and an existing file is only
-// replaced when they name this resource.
-func (t *ArtifactoryUpload) uploadFile(ctx context.Context, c *repositoryClient, spec *RepositoryUploadSpec, src *descriptor.Resource) (*descriptor.Resource, error) {
-	srv, err := t.artifactoryServer(spec, src, "")
+// artifactoryPackage names the properties Artifactory records for a package it recognizes in
+// a stored file.
+type artifactoryPackage struct {
+	kind, nameKey, versionKey string
+}
+
+// npmPackage is an npm package tarball; Artifactory reads its package.json.
+var npmPackage = &artifactoryPackage{kind: "npm package", nameKey: "npm.name", versionKey: "npm.version"}
+
+// uploadFile deploys the resource content as is and returns the resource with a Wget/v1 access
+// on the stored file. Like charts, the file carries the owner properties and an existing file
+// is only replaced when they name this resource. ext is the extension of the default file name.
+// With pkg set, the content must be a package Artifactory recognizes: otherwise the stored file
+// is removed again and the upload fails.
+func (t *ArtifactoryUpload) uploadFile(ctx context.Context, c *repositoryClient, spec *RepositoryUploadSpec, src *descriptor.Resource, ext string, pkg *artifactoryPackage) (*descriptor.Resource, error) {
+	srv, err := t.artifactoryServer(spec, src, ext)
 	if err != nil {
 		return nil, err
 	}
@@ -166,6 +179,21 @@ func (t *ArtifactoryUpload) uploadFile(ctx context.Context, c *repositoryClient,
 		}
 		slog.InfoContext(ctx, "uploaded resource content", "server", srv.name(), "resource", src.ToIdentity(), "url", redactURL(srv.storedURL()))
 		digestHex = computed
+	}
+
+	if pkg != nil {
+		name, version, found, err := srv.packageInfo(ctx, c, pkg.nameKey, pkg.versionKey)
+		if err != nil {
+			return nil, err
+		}
+		if !found {
+			if err := srv.discard(ctx, c, digestHex); err != nil {
+				slog.WarnContext(ctx, "failed removing uploaded content that must not be published", "url", uploadURL, "error", err)
+			}
+			return nil, fmt.Errorf("content of resource %s is not an %s: artifactory recorded no %s and %s for %s",
+				src.ToIdentity(), pkg.kind, pkg.nameKey, pkg.versionKey, redactURL(srv.storedURL()))
+		}
+		slog.InfoContext(ctx, "artifactory indexed the "+pkg.kind, "resource", src.ToIdentity(), "package", name+"@"+version)
 	}
 
 	out := src.DeepCopy()
