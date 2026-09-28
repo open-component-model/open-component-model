@@ -135,7 +135,7 @@ Handles resources served over plain HTTP or HTTPS.
 
 | Access Type                                                                                                                  |
 |------------------------------------------------------------------------------------------------------------------------------|
-| [`Wget/v1`]({{< relref "input-and-access-types.md" >}}#wgetv1-access), also accepted as `HTTP/v1`, `HTTP`, `http/v1`, `http` |
+| [`Wget/v1`]({{< relref "input-and-access-types.md" >}}#wgetv1-access), also accepted as `HTTP/v1`, `HTTP`, `http/v1`, `http`, `wget/v1`, `Wget`, `wget` |
 
 ### Capabilities
 
