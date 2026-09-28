@@ -13,9 +13,14 @@ import (
 	ocmhttp "ocm.software/open-component-model/bindings/go/http"
 )
 
-// ErrNotStreamable reports a chart reference or credential setup that needs the full helm
-// downloader (OCI references, client certificates, custom CAs or provenance verification with
-// a keyring), so the chart cannot be streamed with OpenHTTPChart.
+// ErrNotStreamable reports a chart reference or credential setup OpenHTTPChart does not
+// implement, so the caller falls back to the full helm downloader, which writes the chart
+// to disk:
+//   - oci:// references are pulled with helm's registry client, not over plain HTTP.
+//   - Client certificates and custom CAs need a TLS transport; helm's getter builds it
+//     from certificate files, which this plain HTTP GET does not replicate.
+//   - Provenance verification with a keyring reads the chart and its .prov file from disk
+//     after the download, so the chart cannot be passed on as a stream.
 var ErrNotStreamable = errors.New("helm chart cannot be streamed directly")
 
 // OpenHTTPChart streams the packaged chart (.tgz) of an HTTP/S helm repository reference
@@ -29,14 +34,18 @@ func OpenHTTPChart(ctx context.Context, helmRepo string, opts ...Option) (rc io.
 		o(opt)
 	}
 	if !strings.HasPrefix(helmRepo, "http://") && !strings.HasPrefix(helmRepo, "https://") {
+		// oci:// and other schemes need helm's registry client or getters.
 		return nil, 0, ErrNotStreamable
 	}
 	if opt.CACert != "" || opt.CACertFile != "" {
+		// helm's getter configures the custom CA on its own TLS transport.
 		return nil, 0, ErrNotStreamable
 	}
 	var username, password string
 	if c := opt.Credentials; c != nil {
 		if c.CertFile != "" || c.KeyFile != "" || c.Keyring != "" {
+			// Client certificates need helm's TLS transport; a keyring verifies the
+			// provenance file of the chart on disk.
 			return nil, 0, ErrNotStreamable
 		}
 		username, password = c.Username, c.Password

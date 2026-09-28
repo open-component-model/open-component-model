@@ -169,7 +169,7 @@ func resourceWithIdentity(name, version string, extra map[string]string) descrip
 // first-recognized-match-wins selection the graph builder performs.
 func firstMatch(uploaders []spec.UploaderConfig, resource descriptorv2.Resource) string {
 	for _, u := range uploaders {
-		if u != nil && u.Match(resource) {
+		if u != nil && u.Match(resource, nil) {
 			return strings.Trim(u.(*spec.HTTPUploaderConfig).TargetURL, "${\"}")
 		}
 	}

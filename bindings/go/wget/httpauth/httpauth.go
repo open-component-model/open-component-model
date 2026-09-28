@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -97,7 +98,32 @@ func Apply(ctx context.Context, req *http.Request, client **http.Client, credent
 		req.Header.Set("Authorization", "Bearer "+creds.IdentityToken)
 	case creds.Username != "":
 		req.SetBasicAuth(creds.Username, creds.Password)
+	default:
+		return nil
 	}
 
+	// net/http forwards the Authorization header on redirects to the same host, even from
+	// https to http, which would send the credentials in clear text.
+	stripped := **client
+	stripped.CheckRedirect = stripAuthOnDowngrade(stripped.CheckRedirect)
+	*client = &stripped
 	return nil
+}
+
+// stripAuthOnDowngrade wraps a redirect policy so that a redirect from an https request to
+// a non-https URL does not carry the Authorization header. next is the wrapped policy; nil
+// is net/http's default of following at most 10 redirects.
+func stripAuthOnDowngrade(next func(*http.Request, []*http.Request) error) func(*http.Request, []*http.Request) error {
+	return func(req *http.Request, via []*http.Request) error {
+		if len(via) > 0 && via[0].URL.Scheme == "https" && req.URL.Scheme != "https" {
+			req.Header.Del("Authorization")
+		}
+		if next != nil {
+			return next(req, via)
+		}
+		if len(via) >= 10 {
+			return errors.New("stopped after 10 redirects")
+		}
+		return nil
+	}
 }

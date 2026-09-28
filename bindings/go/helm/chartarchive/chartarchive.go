@@ -161,11 +161,12 @@ func (s *Source) fetchHelm(ctx context.Context, req Request) (content, error) {
 			ImageReference: ociRef,
 		}
 		var creds runtime.Typed
-		if req.Credentials != nil {
-			ociCreds, err := helmcredsv1.ConvertToOCICredentials(req.Credentials)
-			if err != nil {
-				return content{}, fmt.Errorf("error converting credentials: %w", err)
-			}
+		ociCreds, err := helmcredsv1.ConvertToOCICredentials(req.Credentials)
+		if err != nil {
+			return content{}, fmt.Errorf("error converting credentials: %w", err)
+		}
+		// A nil *OCICredentials must not become a non-nil runtime.Typed.
+		if ociCreds != nil {
 			creds = ociCreds
 		}
 		stream, err := s.OCIRepository.DownloadResourceStream(ctx, ociResource, creds)

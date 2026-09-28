@@ -291,7 +291,7 @@ func Test_Integration_TransferLocalBlobHelmResource_ArtifactoryHelmUploaderDeplo
 			r.NotNil(tgd)
 
 			ctx := t.Context()
-					repoProvider := provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()))
+			repoProvider := provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()))
 			resourceRepo := helmresource.NewResourceRepository(nil)
 			b := transfer.NewDefaultBuilder(repoProvider, resourceRepo, nil)
 			graph, err := b.BuildAndCheck(tgd)

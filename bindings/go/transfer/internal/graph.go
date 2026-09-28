@@ -174,6 +174,9 @@ func fillGraphDefinitionWithPrefetchedComponents(
 		"components", len(d.Vertices))
 
 	var allFileRefs []string
+	// uploaderUsed records which uploaders matched a resource, so a rule that matched
+	// nothing is reported instead of silently falling back to the default handlers.
+	uploaderUsed := make([]bool, len(uploaders))
 
 	// Iterate vertices in sorted key order so the emitted transformation list is
 	// deterministic across runs (ranging the map directly would randomize order).
@@ -214,7 +217,7 @@ func fillGraphDefinitionWithPrefetchedComponents(
 				"targetIndex", targetIdx, "targetType", fmt.Sprintf("%T", target),
 				"transformID", id)
 
-			resourceTransformIDs, fileRefs, err := processResources(ctx, v2desc, baseID, id, val, tgd, target, copyMode, uploadType, uploaders)
+			resourceTransformIDs, fileRefs, err := processResources(ctx, v2desc, baseID, id, val, tgd, target, copyMode, uploadType, uploaders, uploaderUsed)
 			if err != nil {
 				return err
 			}
@@ -228,6 +231,7 @@ func fillGraphDefinitionWithPrefetchedComponents(
 	}
 
 	addFileCleanupTransformation(tgd, allFileRefs)
+	warnUnusedUploaders(ctx, uploaders, uploaderUsed)
 
 	return nil
 }
@@ -246,6 +250,7 @@ func processResources(
 	copyMode transferv1alpha1.CopyMode,
 	uploadType transferv1alpha1.UploadType,
 	uploaders []transferv1alpha1.UploaderConfig,
+	uploaderUsed []bool,
 ) (map[int]string, []string, error) {
 	component := val.Descriptor.Component.Name
 	version := val.Descriptor.Component.Version
@@ -266,9 +271,10 @@ func processResources(
 		// Declaration order is significant: the first recognized match wins, so more
 		// specific rules should precede broader ones.
 		var matched transferv1alpha1.UploaderConfig
-		for _, u := range uploaders {
-			if u != nil && u.Match(resource) {
+		for idx, u := range uploaders {
+			if u != nil && u.Match(resource, scheme) {
 				matched = u
+				uploaderUsed[idx] = true
 				break
 			}
 		}
@@ -299,6 +305,31 @@ func processResources(
 		fileExpressions = append(fileExpressions, exprs...)
 	}
 	return resourceTransformIDs, fileExpressions, nil
+}
+
+// warnUnusedUploaders logs every uploader that matched no resource of the transfer. The
+// common cause is a match.accessType naming the access a resource gets in the target (such
+// as LocalBlob/v1 after copying) instead of its access in the source component version.
+func warnUnusedUploaders(ctx context.Context, uploaders []transferv1alpha1.UploaderConfig, used []bool) {
+	for idx, u := range uploaders {
+		if u == nil || used[idx] {
+			continue
+		}
+		var match transferv1alpha1.UploaderMatch
+		switch cfg := u.(type) {
+		case *transferv1alpha1.HTTPUploaderConfig:
+			match = cfg.MatchSpec
+		case *transferv1alpha1.HelmUploaderConfig:
+			match = cfg.MatchSpec
+		}
+		slog.WarnContext(ctx, "uploader matched no resource; match.accessType is compared with the resource access in the source component version",
+			"uploader", u.GetType().String(),
+			"index", idx,
+			"accessType", match.AccessType.String(),
+			"name", match.Name,
+			"version", match.Version,
+			"extraIdentity", match.ExtraIdentity.String())
+	}
 }
 
 func logSkippedResource(ctx context.Context, component, version string, resource descriptorv2.Resource, copyMode transferv1alpha1.CopyMode, uploadType transferv1alpha1.UploadType) {

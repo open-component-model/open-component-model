@@ -89,6 +89,13 @@ During transfer, the **first** uploader whose `match` applies to a resource wins
 and it takes precedence over `copyMode`/`uploadType` for that resource. Because
 matching is first-match, declare more specific rules before broader ones.
 
+`match.accessType` is compared with the resource access in the **source**
+component version, not with the access the resource would get in the target. A
+resource added with an `ociArtifact` access matches `OCIImage/v1`, `ociArtifact`
+or any other alias of that type; it does not match `LocalBlob/v1`, even if a
+plain transfer would store it as a local blob. The transfer logs a warning for
+every uploader that matched no resource.
+
 ### `http.uploader.transfer.config.ocm.software/v1alpha1`
 
 Streams a matched resource's content directly to an HTTP endpoint (typically a

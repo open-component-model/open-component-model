@@ -96,11 +96,11 @@ func (u *HelmUploaderConfig) ReindexEnabled() bool {
 
 // Match reports whether this uploader applies to resource, delegating to the
 // configured [UploaderMatch]. It implements [UploaderConfig].
-func (u *HelmUploaderConfig) Match(resource descriptorv2.Resource) bool {
+func (u *HelmUploaderConfig) Match(resource descriptorv2.Resource, types TypeResolver) bool {
 	if u == nil {
 		return false
 	}
-	return u.MatchSpec.Matches(resource)
+	return u.MatchSpec.Matches(resource, types)
 }
 
 // Validate rejects a non-matching Type, an unknown server, reindex for Nexus, an empty match

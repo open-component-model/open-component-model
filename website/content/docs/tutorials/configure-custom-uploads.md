@@ -264,6 +264,19 @@ field fails the transfer deliberately rather than producing a partial URL.
 **Fix:** Add a `credentials.config.ocm.software` consumer with `type: Wget` and the
 target `hostname`, as in Step 2.
 
+### Problem: The transfer succeeds but nothing is uploaded
+
+**Symptom:** The resource is stored as `LocalBlob/v1` in the target and the log
+warns `uploader matched no resource`.
+
+**Cause:** `match.accessType` names the access the resource would get in the
+target (such as `LocalBlob/v1`) instead of its access in the source component
+version.
+
+**Fix:** Check the source with `ocm get cv <source> -o yaml` and set
+`match.accessType` to the resource's `access.type` there, for example
+`OCIImage/v1` for an `ociArtifact` access.
+
 ## Deploy Helm Charts to JFrog Artifactory or Sonatype Nexus
 
 The `helm.uploader.transfer.config.ocm.software/v1alpha1` uploader streams Helm
@@ -280,7 +293,7 @@ configurations:
   - type: helm.uploader.transfer.config.ocm.software/v1alpha1
     match:
       accessType: Helm/v1
-    server: Artifactory   # or Nexus
+    server: Artifactory
     url: https://myorg.jfrog.io
     repository: helm-local
 ```

@@ -119,8 +119,10 @@ func newFakeArtifactory(t *testing.T, charts map[string][2]string) *fakeArtifact
 
 func (f *fakeArtifactory) handle(w http.ResponseWriter, r *http.Request) {
 	body, _ := io.ReadAll(r.Body)
-	req := artifactoryRequest{method: r.Method, path: r.URL.Path, contentType: r.Header.Get("Content-Type"), authorization: r.Header.Get("Authorization"),
-		checksum: r.Header.Get("X-Checksum-Sha256"), deploy: r.Header.Get("X-Checksum-Deploy") == "true", body: body}
+	req := artifactoryRequest{
+		method: r.Method, path: r.URL.Path, contentType: r.Header.Get("Content-Type"), authorization: r.Header.Get("Authorization"),
+		checksum: r.Header.Get("X-Checksum-Sha256"), deploy: r.Header.Get("X-Checksum-Deploy") == "true", body: body,
+	}
 	req.username, req.password, req.basic = r.BasicAuth()
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -222,10 +224,10 @@ func TestHelmRepositoryUpload_Transform_Artifactory(t *testing.T) {
 	transformerFor := func(content []byte, creds credentials.Resolver) *HelmRepositoryUpload {
 		repo := &chartResourceRepo{chart: content}
 		return &HelmRepositoryUpload{
-			Scheme:                  scheme,
-			Charts:                  &chartarchive.Source{ResourceRepository: repo},
-			ResourceRepository:      repo,
-			CredentialProvider:      creds,
+			Scheme:                scheme,
+			Charts:                &chartarchive.Source{ResourceRepository: repo},
+			ResourceRepository:    repo,
+			CredentialProvider:    creds,
 			chartMetadataInterval: time.Millisecond,
 		}
 	}

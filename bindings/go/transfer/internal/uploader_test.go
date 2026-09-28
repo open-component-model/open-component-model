@@ -12,6 +12,7 @@ import (
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	helmv1 "ocm.software/open-component-model/bindings/go/helm/spec/access/v1"
 	helmv1alpha1 "ocm.software/open-component-model/bindings/go/helm/transformation/spec/v1alpha1"
+	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	ociv1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
@@ -195,6 +196,13 @@ func TestBuildGraphDefinition_HelmUploader_EmitsHelmTarget(t *testing.T) {
 		r.Equal("1.0.0", cv["version"])
 		r.Equal("OCIRepository/v1", cv["repository"].(map[string]any)["type"])
 		r.Nil(findCleanupTransformation(tgd), "nothing is buffered, so there is nothing to clean up")
+	})
+
+	t.Run("matches an alias of the source access type", func(t *testing.T) {
+		r := require.New(t)
+		// An ociArtifact access (as written in constructors) matches the canonical OCIImage/v1.
+		_, tr := build(t, ociImageResource("chart", "1.0.0", "ghcr.io/org/charts/podinfo:6.14.1"), uploader(runtime.NewVersionedType(ociv1.OCIImageType, ociv1.Version)))
+		r.Equal("chart", tr.Spec.Data["resource"].(map[string]any)["name"])
 	})
 
 	t.Run("reindex disabled", func(t *testing.T) {

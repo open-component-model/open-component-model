@@ -31,10 +31,17 @@ func init() {
 // match wins.
 type UploaderConfig interface {
 	runtime.Typed
-	// Match reports whether this uploader applies to resource.
-	Match(resource descriptorv2.Resource) bool
+	// Match reports whether this uploader applies to resource. types resolves access
+	// type aliases; nil compares access types literally.
+	Match(resource descriptorv2.Resource, types TypeResolver) bool
 	// Validate reports whether the configuration is well-formed.
 	Validate() error
+}
+
+// TypeResolver resolves an access type or one of its aliases (ociArtifact, OCIImage,
+// OCIImage/v1) to the canonical type. [runtime.Scheme] implements it.
+type TypeResolver interface {
+	ResolveCanonicalType(typ runtime.Type) (canonical runtime.Type, ok bool)
 }
 
 // HTTPUploaderConfig is a declarative rule that streams matching resources to a
@@ -105,16 +112,18 @@ type UploaderMatch struct {
 	ExtraIdentity runtime.Identity `json:"extraIdentity,omitempty"`
 }
 
-// Matches reports whether resource satisfies this match. The access type must match:
+// Matches reports whether resource satisfies this match. The access type is the one
+// of the resource as described in the source component version. It must match:
 // when the rule specifies a version (Wget/v1) it must equal the resource access type
-// exactly; an unversioned rule (Wget) matches any version by name. The identity
-// constraint (optional Name, Version plus ExtraIdentity) is a subset match against the
-// resource identity: every specified key/value must be present and equal.
-func (m UploaderMatch) Matches(resource descriptorv2.Resource) bool {
+// exactly; an unversioned rule (Wget) matches any version by name. Aliases known to
+// types match their canonical type, so OCIImage/v1 matches an ociArtifact access. The
+// identity constraint (optional Name, Version plus ExtraIdentity) is a subset match
+// against the resource identity: every specified key/value must be present and equal.
+func (m UploaderMatch) Matches(resource descriptorv2.Resource, types TypeResolver) bool {
 	if resource.Access == nil {
 		return false
 	}
-	if !accessTypeMatches(m.AccessType, resource.Access.Type) {
+	if !accessTypeMatches(m.AccessType, resource.Access.Type, types) {
 		return false
 	}
 	return runtime.IdentitySubset(m.identity(), resource.ToIdentity())
@@ -139,9 +148,16 @@ func (m UploaderMatch) identity() runtime.Identity {
 }
 
 // accessTypeMatches reports whether a resource access type satisfies the uploader
-// match access type. A versioned match type must equal the access type exactly
-// ([runtime.Type.Equal]); an unversioned match type matches any version by name.
-func accessTypeMatches(match, access runtime.Type) bool {
+// match access type. Types that types resolves to the same canonical type match. Otherwise
+// a versioned match type must equal the access type exactly ([runtime.Type.Equal]); an
+// unversioned match type matches any version by name.
+func accessTypeMatches(match, access runtime.Type, types TypeResolver) bool {
+	if types != nil {
+		canonicalAccess, accessKnown := types.ResolveCanonicalType(access)
+		if canonicalMatch, matchKnown := types.ResolveCanonicalType(match); accessKnown && matchKnown && canonicalMatch.Equal(canonicalAccess) {
+			return true
+		}
+	}
 	if match.HasVersion() {
 		return match.Equal(access)
 	}
@@ -173,11 +189,11 @@ func (u *HTTPUploaderConfig) Validate() error {
 
 // Match reports whether this uploader applies to resource, delegating to the
 // configured [UploaderMatch]. It implements [UploaderConfig].
-func (u *HTTPUploaderConfig) Match(resource descriptorv2.Resource) bool {
+func (u *HTTPUploaderConfig) Match(resource descriptorv2.Resource, types TypeResolver) bool {
 	if u == nil {
 		return false
 	}
-	return u.MatchSpec.Matches(resource)
+	return u.MatchSpec.Matches(resource, types)
 }
 
 // LookupUploaderConfigs extracts all uploader configurations from a central generic

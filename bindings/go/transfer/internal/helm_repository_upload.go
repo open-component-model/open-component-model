@@ -42,9 +42,12 @@ const (
 	genericBlobDigestV1 = "genericBlobDigest/v1"
 	// maxErrorBodyBytes bounds how much of a non-2xx response body is read into an error.
 	maxErrorBodyBytes = 4 << 10
-	// chartMetadataAttempts bounds how often the chart metadata Artifactory records on
-	// deployment is polled before the content is considered not to be a helm chart.
-	chartMetadataAttempts = 6
+	// chartMetadataAttempts bounds how often the chart metadata a server records for an
+	// uploaded chart is polled before the content is considered not to be a helm chart. The
+	// metadata can lag behind the upload: Artifactory may calculate the chart.name and
+	// chart.version properties asynchronously, Nexus indexes components for search about 2 s
+	// after the upload (Nexus 3.96). 30 polls allow about 15 s for a server under load.
+	chartMetadataAttempts = 30
 	// defaultChartMetadataInterval is the wait between two chart metadata polls.
 	defaultChartMetadataInterval = 500 * time.Millisecond
 )
@@ -233,11 +236,15 @@ func (t *HelmRepositoryUpload) Transform(ctx context.Context, step runtime.Typed
 		digestHex = computed
 	}
 
-	name, version, found, err := srv.chart(ctx, c, digestHex)
+	// The upload succeeded, so the server stores the content either way; isChart only
+	// reports whether it recognized that content as a helm chart and recorded its metadata.
+	name, version, isChart, err := srv.chart(ctx, c, digestHex)
 	if err != nil {
 		return nil, err
 	}
-	if !found {
+	if !isChart {
+		// Remove the stored non-chart content again (Artifactory deletes the uploaded file;
+		// Nexus cannot, see nexusServer.discard).
 		if err := srv.discard(ctx, c, digestHex); err != nil {
 			slog.WarnContext(ctx, "failed removing uploaded content that must not be published", "url", uploadURL, "error", err)
 		}

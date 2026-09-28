@@ -14,10 +14,6 @@ import (
 	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
 )
 
-// nexusChartMetadataAttempts bounds how often Nexus's component search is polled for an uploaded
-// chart. Nexus indexes uploaded components for search asynchronously (about 2 s on Nexus 3.96).
-const nexusChartMetadataAttempts = 30
-
 // helmRepositoryServer is the server-specific part of a HelmRepositoryUpload.
 type helmRepositoryServer interface {
 	// name is "artifactory" or "nexus", used in logs and errors.
@@ -32,8 +28,9 @@ type helmRepositoryServer interface {
 	reuse(ctx context.Context, c *helmClient, sha256Hex string) (bool, error)
 	// rejectedUploadStored reports whether the repository stores the content of an upload it rejected.
 	rejectedUploadStored(ctx context.Context, c *helmClient, sha256Hex string) bool
-	// chart returns the chart name and version the server recorded; found=false when none.
-	chart(ctx context.Context, c *helmClient, sha256Hex string) (name, version string, found bool, err error)
+	// chart returns the chart name and version the server recorded for the stored content;
+	// isChart=false when it recorded none, i.e. did not recognize the content as a chart.
+	chart(ctx context.Context, c *helmClient, sha256Hex string) (name, version string, isChart bool, err error)
 	// discard removes uploaded content that must not be published.
 	discard(ctx context.Context, c *helmClient, sha256Hex string) error
 	// afterUpload runs follow-up requests; failures are logged, never returned.
@@ -265,7 +262,7 @@ func (n *nexusServer) chart(ctx context.Context, c *helmClient, sha256Hex string
 		for chart := range charts {
 			return chart[0], chart[1], true, nil
 		}
-		if attempt == nexusChartMetadataAttempts {
+		if attempt == chartMetadataAttempts {
 			return "", "", false, nil
 		}
 		select {
