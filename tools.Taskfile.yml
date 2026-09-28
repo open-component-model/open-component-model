@@ -35,13 +35,21 @@ tasks:
     desc: "Install {{.PKG}} at {{ .DEEPCOPY_GEN_TARGET_VERSION }} into tmp ({{ .ROOT_DIR }}/tmp/bin) if not already present"
     vars:
       PKG: k8s.io/code-generator/cmd/deepcopy-gen
+      BIN: '{{ .ROOT_DIR }}/tmp/bin/deepcopy-gen-{{ .DEEPCOPY_GEN_TARGET_VERSION }}'
+      # Build the generator with the toolchain that bindings/go/go.mod pins
+      GO_TOOLCHAIN:
+        sh: go mod edit -json {{ .ROOT_DIR }}/bindings/go/go.mod | jq -r '.Toolchain // "go" + .Go'
+      BUILT_WITH:
+        sh: 'if [ -x {{ .BIN }} ]; then go version -m {{ .BIN }} | head -1 | grep -o "go[0-9.]*"; else echo "absent"; fi'
     status:
-      - '{{ .ROOT_DIR }}/tmp/bin/deepcopy-gen-{{ .DEEPCOPY_GEN_TARGET_VERSION }}'
+      - 'test -x {{ .BIN }}'
+      - '[ "{{ .BUILT_WITH }}" = "{{ .GO_TOOLCHAIN }}" ]'
     env:
       GOBIN: '{{ .ROOT_DIR }}/tmp/bin'
+      GOTOOLCHAIN: '{{ .GO_TOOLCHAIN }}'
     cmds:
       - go install {{ .PKG }}@{{ .DEEPCOPY_GEN_TARGET_VERSION }}
-      - mv {{ .ROOT_DIR }}/tmp/bin/deepcopy-gen {{ .ROOT_DIR }}/tmp/bin/deepcopy-gen-{{ .DEEPCOPY_GEN_TARGET_VERSION }}
+      - mv {{ .ROOT_DIR }}/tmp/bin/deepcopy-gen {{ .BIN }}
 
 
   golangci-lint/run:
