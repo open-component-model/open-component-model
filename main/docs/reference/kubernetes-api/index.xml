@@ -9,4 +9,8 @@ cluster. It references a &lt;code&gt;Resource&lt;/code&gt; containing a &lt;code
 manages the lifecycle of the deployed Kubernetes objects.&lt;/p&gt;</description></item><item><title>Replication</title><link>https://ocm.software/main/docs/reference/kubernetes-api/replication/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/main/docs/reference/kubernetes-api/replication/</guid><description>&lt;p&gt;A &lt;strong&gt;Replication&lt;/strong&gt; transfers a component version from one OCM repository to
 another, the same behaviour of &lt;code&gt;ocm transfer&lt;/code&gt; as a controller. It references
 a &lt;code&gt;Component&lt;/code&gt; for the source version and a target &lt;code&gt;Repository&lt;/code&gt;, and re-runs the
-transfer whenever the resolved source version changes.&lt;/p&gt;</description></item></channel></rss>
+transfer whenever the resolved source version changes.&lt;/p&gt;</description></item><item><title>Discovery</title><link>https://ocm.software/main/docs/reference/kubernetes-api/discovery/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/main/docs/reference/kubernetes-api/discovery/</guid><description>&lt;p&gt;A &lt;strong&gt;Discovery&lt;/strong&gt; publishes a filtered, optionally projected view of the transitive
+reference graph of a &lt;code&gt;Component&lt;/code&gt;. It resolves the entire reachable graph from the
+&lt;code&gt;Component&lt;/code&gt;&amp;rsquo;s resolved repository, applies reference, component, and resource
+selectors, and either publishes the filtered raw v2 descriptors or projects them
+into free-form records with CEL expressions.&lt;/p&gt;</description></item></channel></rss>
