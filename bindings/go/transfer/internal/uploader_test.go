@@ -573,3 +573,30 @@ func TestResourceNodePath_ExtraIdentitySelectorEvaluatesOverMixedResources(t *te
 	r.NoError(err, "selector must evaluate without an undefined-field error over mixed resources")
 	assert.Equal(t, "blob", out.Value(), "the index selector must resolve to the matching resource")
 }
+
+// TestUploaderMatch_MatchesEveryAliasOfTheAccessType checks that an uploader rule naming any
+// alias of an access type, versioned or not, matches a resource described with any other
+// alias of that type, and never a resource of another type.
+func TestUploaderMatch_MatchesEveryAliasOfTheAccessType(t *testing.T) {
+	resourceWith := func(access runtime.Type) descriptorv2.Resource {
+		return descriptorv2.Resource{
+			ElementMeta: descriptorv2.ElementMeta{ObjectMeta: descriptorv2.ObjectMeta{Name: "r", Version: "1.0.0"}},
+			Access:      &runtime.Raw{Type: access},
+		}
+	}
+	for canonical, aliases := range scheme.GetTypes() {
+		family := append([]runtime.Type{canonical}, aliases...)
+		t.Run(canonical.String(), func(t *testing.T) {
+			for _, rule := range family {
+				for _, matchType := range []runtime.Type{rule, runtime.NewUnversionedType(rule.Name)} {
+					m := transferv1alpha1.UploaderMatch{AccessType: matchType}
+					for _, access := range family {
+						assert.True(t, m.Matches(resourceWith(access), scheme), "rule %s must match access %s", matchType, access)
+					}
+				}
+				other := runtime.NewVersionedType("NotAnAccessType", "v1")
+				assert.False(t, transferv1alpha1.UploaderMatch{AccessType: rule}.Matches(resourceWith(other), scheme), "rule %s must not match %s", rule, other)
+			}
+		})
+	}
+}

@@ -125,7 +125,7 @@ cannot re-send the write request that would overwrite the uploaded object.
 
 | Field                 | Type                  | Applies to                        | Description                                                                            |
 |-----------------------|-----------------------|-----------------------------------|----------------------------------------------------------------------------------------|
-| `match.accessType`    | `runtime.Type`        | —                                 | Access type this uploader applies to (matched by name; omitted version = any).         |
+| `match.accessType`    | `runtime.Type`        | —                                 | Access type this uploader applies to; any alias matches, omitted version = any.        |
 | `match.name`          | string (optional)     | —                                 | Restrict the match to resources with this exact name.                                  |
 | `match.version`       | string (optional)     | —                                 | Restrict the match to resources with this exact version.                               |
 | `match.extraIdentity` | `map[string]string`   | —                                 | Restrict the match to resources whose identity contains these key/value pairs.         |

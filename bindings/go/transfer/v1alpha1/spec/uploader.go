@@ -2,6 +2,7 @@ package spec
 
 import (
 	"fmt"
+	"iter"
 
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
@@ -38,10 +39,14 @@ type UploaderConfig interface {
 	Validate() error
 }
 
-// TypeResolver resolves an access type or one of its aliases (ociArtifact, OCIImage,
-// OCIImage/v1) to the canonical type. [runtime.Scheme] implements it.
+// TypeResolver lists the aliases of an access type (ociArtifact, OCIImage, OCIImage/v1 are
+// aliases of one type), so uploader rules match whichever alias a descriptor uses.
+// [runtime.Scheme] implements it.
 type TypeResolver interface {
+	// ResolveCanonicalType returns the canonical type of typ or one of its aliases.
 	ResolveCanonicalType(typ runtime.Type) (canonical runtime.Type, ok bool)
+	// AliasesIter yields all aliases of a canonical type.
+	AliasesIter(canonical runtime.Type) iter.Seq[runtime.Type]
 }
 
 // HTTPUploaderConfig is a declarative rule that streams matching resources to a
@@ -113,12 +118,12 @@ type UploaderMatch struct {
 }
 
 // Matches reports whether resource satisfies this match. The access type is the one
-// of the resource as described in the source component version. It must match:
-// when the rule specifies a version (Wget/v1) it must equal the resource access type
-// exactly; an unversioned rule (Wget) matches any version by name. Aliases known to
-// types match their canonical type, so OCIImage/v1 matches an ociArtifact access. The
-// identity constraint (optional Name, Version plus ExtraIdentity) is a subset match
-// against the resource identity: every specified key/value must be present and equal.
+// of the resource as described in the source component version. The rule is compared
+// with every alias types knows for that access type: a versioned rule (OCIImage/v1) must
+// equal one of them, an unversioned rule (ociArtifact) must name one of them. So
+// OCIImage/v1, ociArtifact/v1 and ociArtifact all match an ociArtifact or OCIImage/v1
+// access. The identity constraint (optional Name, Version plus ExtraIdentity) is a subset
+// match against the resource identity: every specified key/value must be present and equal.
 func (m UploaderMatch) Matches(resource descriptorv2.Resource, types TypeResolver) bool {
 	if resource.Access == nil {
 		return false
@@ -147,21 +152,36 @@ func (m UploaderMatch) identity() runtime.Identity {
 	return id
 }
 
-// accessTypeMatches reports whether a resource access type satisfies the uploader
-// match access type. Types that types resolves to the same canonical type match. Otherwise
-// a versioned match type must equal the access type exactly ([runtime.Type.Equal]); an
-// unversioned match type matches any version by name.
+// accessTypeMatches reports whether a resource access type satisfies the uploader match
+// access type. The match is tried against every alias of the access type types knows
+// (the access type itself if types is nil or does not know it): a versioned match type
+// must equal one of them ([runtime.Type.Equal]), an unversioned one must name one of them.
 func accessTypeMatches(match, access runtime.Type, types TypeResolver) bool {
-	if types != nil {
-		canonicalAccess, accessKnown := types.ResolveCanonicalType(access)
-		if canonicalMatch, matchKnown := types.ResolveCanonicalType(match); accessKnown && matchKnown && canonicalMatch.Equal(canonicalAccess) {
+	matches := func(candidate runtime.Type) bool {
+		if match.HasVersion() {
+			return match.Equal(candidate)
+		}
+		return match.GetName() == candidate.GetName()
+	}
+	if matches(access) {
+		return true
+	}
+	if types == nil {
+		return false
+	}
+	canonical, ok := types.ResolveCanonicalType(access)
+	if !ok {
+		return false
+	}
+	if matches(canonical) {
+		return true
+	}
+	for alias := range types.AliasesIter(canonical) {
+		if matches(alias) {
 			return true
 		}
 	}
-	if match.HasVersion() {
-		return match.Equal(access)
-	}
-	return match.GetName() == access.GetName()
+	return false
 }
 
 // Validate rejects a non-matching [HTTPUploaderConfig.Type], an empty match access
