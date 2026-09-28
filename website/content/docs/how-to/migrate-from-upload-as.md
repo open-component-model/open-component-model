@@ -1,7 +1,7 @@
 ---
 title: "Migrate from --upload-as to Uploader Configurations"
 slug: "migrate-from-upload-as"
-description: "Replace the removed --upload-as flag and uploadType transfer setting with the oci.uploader.transfer.config.ocm.software uploader configuration."
+description: "Replace the removed --upload-as flag and upload type transfer setting with the oci.uploader.transfer.config.ocm.software uploader configuration."
 weight: 12
 toc: true
 ---
