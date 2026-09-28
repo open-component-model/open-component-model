@@ -286,7 +286,7 @@ API:
 
 | Config type                                                  | Repository types                 | Published access       |
 |--------------------------------------------------------------|----------------------------------|------------------------|
-| `artifactory.uploader.transfer.config.ocm.software/v1alpha1` | `helm`, any other package type   | `Helm/v1` or `Wget/v1` |
+| `artifactory.uploader.transfer.config.ocm.software/v1alpha1` | `helm`, `generic`, `maven`       | `Helm/v1` or `Wget/v1` |
 | `nexus.uploader.transfer.config.ocm.software/v1alpha1`       | `helm`, `raw`                    | `Helm/v1` or `Wget/v1` |
 
 ### Artifactory Helm example
@@ -319,9 +319,8 @@ configurations:
 
 ### Generic / raw repository example
 
-Upload any resource (not just Helm charts) into an Artifactory repository of any
-other package type (for example generic or maven) or a Nexus raw repository and
-publish a `Wget/v1` access:
+Upload any resource (not just Helm charts) into an Artifactory generic or maven
+repository, or a Nexus raw repository, and publish a `Wget/v1` access:
 
 ```yaml
   - type: artifactory.uploader.transfer.config.ocm.software/v1alpha1

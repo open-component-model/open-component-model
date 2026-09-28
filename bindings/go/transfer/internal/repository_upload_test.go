@@ -641,7 +641,7 @@ func TestArtifactoryUpload_Transform_Generic(t *testing.T) {
 		return out
 	}
 
-	for _, packageType := range []string{"generic", "maven", "npm"} {
+	for _, packageType := range []string{"generic", "maven"} {
 		t.Run(packageType+" repository stores the content and publishes a Wget access", func(t *testing.T) {
 			r := require.New(t)
 			srv := newFakeArtifactory(t, nil)
@@ -755,6 +755,17 @@ func TestArtifactoryUpload_Transform_DetectionErrors(t *testing.T) {
 		r.ErrorContains(err, "uploads need a local repository")
 		r.False(hasPUT(srv.recorded()))
 	})
+
+	for _, packageType := range []string{"npm", "docker"} {
+		t.Run("unsupported packageType "+packageType, func(t *testing.T) {
+			r := require.New(t)
+			srv := newFakeArtifactory(t, nil)
+			srv.packageType = packageType
+			_, err := transformer().Transform(t.Context(), step(srv.URL))
+			r.ErrorContains(err, "supported: helm, generic, maven")
+			r.False(hasPUT(srv.recorded()))
+		})
+	}
 
 	t.Run("detection returns 403", func(t *testing.T) {
 		r := require.New(t)

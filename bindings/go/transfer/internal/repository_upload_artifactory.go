@@ -19,7 +19,7 @@ import (
 // ArtifactoryUpload uploads a resource into a local repository of a JFrog Artifactory server.
 // The package type of the repository decides what is uploaded and how the resource is
 // published: a Helm chart with a Helm/v1 access (helm), or the resource content with a Wget/v1
-// access (any other package type). See the ArtifactoryUploaderConfig transfer config.
+// access (generic, maven). See the ArtifactoryUploaderConfig transfer config.
 type ArtifactoryUpload struct {
 	repositoryUploader
 }
@@ -52,14 +52,17 @@ func (t *ArtifactoryUpload) Transform(ctx context.Context, step runtime.Typed) (
 
 	src := descriptor.ConvertFromV2Resource(spec.Resource)
 	var out *descriptor.Resource
-	if typ == "helm" {
+	switch typ {
+	case "helm":
 		var srv *artifactoryServer
 		if srv, err = t.artifactoryServer(spec, src, ".tgz"); err != nil {
 			return nil, err
 		}
 		out, err = t.uploadHelm(ctx, c, spec, src, srv)
-	} else {
+	case "generic", "maven":
 		out, err = t.uploadFile(ctx, c, spec, src)
+	default:
+		return nil, fmt.Errorf("artifactory repository %q has package type %q; supported: helm, generic, maven", spec.Repository, typ)
 	}
 	if err != nil {
 		return nil, err
@@ -109,10 +112,8 @@ func artifactoryRepositoryType(ctx context.Context, c *repositoryClient, spec *R
 	return strings.ToLower(config.PackageType), nil
 }
 
-// uploadFile deploys the resource content as is into a repository of any package type other
-// than helm and returns the resource with a Wget/v1 access on the stored file. Artifactory
-// deploys files the same way into every local repository; the package type only decides how it
-// indexes them. Like charts, the file carries the owner properties and an existing file is only
+// uploadFile deploys the resource content as is into a generic or maven repository and returns
+// the resource with a Wget/v1 access on the stored file. Like charts, the file carries the owner properties and an existing file is only
 // replaced when they name this resource.
 func (t *ArtifactoryUpload) uploadFile(ctx context.Context, c *repositoryClient, spec *RepositoryUploadSpec, src *descriptor.Resource) (*descriptor.Resource, error) {
 	srv, err := t.artifactoryServer(spec, src, "")

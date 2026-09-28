@@ -42,10 +42,10 @@ func init() {
 //     not recognize as a chart is deleted again and fails the transfer. The repository must not
 //     enforce chart name and version in file names (Helm Enforce Layout), because the file name
 //     is not derived from the chart.
-//   - any other package type (generic, maven, npm, ...): the resource content is deployed as is
-//     (OCI artifacts as an OCI layout tar) and the resource is published with a Wget/v1 access on
-//     the stored file. The file is not packaged for the package type: it is downloadable, but
-//     package clients only resolve it if the content and path already follow the format. Where
+//   - generic, maven: the resource content is deployed as is (OCI artifacts as an OCI layout tar)
+//     and the resource is published with a Wget/v1 access on the stored file. The file is not
+//     packaged as a Maven artifact: it is downloadable, but Maven only resolves it if the content
+//     and path already follow the Maven layout. Where
 //     Artifactory stores a file under another path than requested (Maven -SNAPSHOT versions get a
 //     unique timestamped version), the access points at the stored file.
 //
