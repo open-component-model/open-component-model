@@ -111,7 +111,7 @@ Without the OCI uploader, copied resources are embedded directly in the componen
 This keeps the chart coupled to the component version but means it is not independently addressable in the registry and cannot be pulled with the Helm
 CLI.
 
-For more on the OCI uploader and how it replaces the former `--upload-as` flag, see
+For more on the OCI uploader and how it replaces the deprecated `--upload-as` flag, see
 [Migrate from --upload-as to Uploader Configurations]({{< relref "docs/how-to/migrate-from-upload-as.md" >}}).
 
 To find the `imageReference`, inspect the component descriptor:
