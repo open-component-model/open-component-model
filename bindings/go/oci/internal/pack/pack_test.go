@@ -715,6 +715,55 @@ func TestResourceLocalBlobMediaTypeDetection(t *testing.T) {
 	}
 }
 
+// A digest derived from the input blob describes the bytes before packing. For an
+// OCI layout those bytes are not stored, so the resource digest must be replaced
+// with the digest of what the local blob references.
+func TestResourceLocalBlobDigestMatchesStoredContent(t *testing.T) {
+	ctx := t.Context()
+	var buf bytes.Buffer
+	writer, err := tar.NewOCILayoutWriterWithTempFile(&buf, t.TempDir())
+	require.NoError(t, err)
+	_, err = oras.PackManifest(ctx, writer, oras.PackManifestVersion1_1, "application/custom", oras.PackManifestOptions{})
+	require.NoError(t, err)
+	require.NoError(t, writer.Close())
+	layoutContent := buf.Bytes()
+	layerContent := []byte("regular layer content")
+
+	for _, tt := range []struct {
+		name    string
+		content []byte
+		media   string
+	}{
+		{name: "oci layout", content: layoutContent, media: layout.MediaTypeOCIImageLayoutTarV1},
+		{name: "oci layer", content: layerContent, media: "application/octet-stream"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+			store, err := file.New(t.TempDir())
+			r.NoError(err)
+			t.Cleanup(func() { r.NoError(store.Close()) })
+			opts := Options{AccessScheme: runtime.NewScheme(), BaseReference: "test-ref"}
+			v2.MustAddToScheme(opts.AccessScheme)
+			oci.MustAddToScheme(opts.AccessScheme)
+
+			resource := &descriptor.Resource{}
+			b, err := resourceblob.NewArtifactBlob(resource, &testBlob{
+				content: tt.content, mediaType: tt.media, digest: digest.FromBytes(tt.content),
+			})
+			r.NoError(err)
+
+			desc, err := ResourceLocalBlob(ctx, store, b, &v2.LocalBlob{MediaType: tt.media}, opts)
+			r.NoError(err)
+
+			r.NotNil(resource.Digest)
+			r.Equal(desc.Digest.Encoded(), resource.Digest.Value)
+			localBlob, ok := resource.Access.(*v2.LocalBlob)
+			r.True(ok, "expected a local blob access, got %T", resource.Access)
+			r.Equal(desc.Digest.String(), localBlob.LocalReference)
+		})
+	}
+}
+
 func TestResourceLocalBlobOCISingleLayerArtifact(t *testing.T) {
 	store, err := file.New(t.TempDir())
 	require.NoError(t, err)
