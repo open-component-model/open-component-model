@@ -20,7 +20,7 @@ Artifactory generic repository, so that consumers download them by URL.
 
 ## Prerequisites
 
-- The setup in [Upload Resources to JFrog Artifactory]({{< relref "docs/how-to/vendor-specific-apis/jfrog-artifactory/_index.md#prerequisites" >}}),
+- The setup in [JFrog Artifactory]({{< relref "docs/how-to/vendor-specific-apis/jfrog-artifactory/_index.md#prerequisites" >}}),
   with [credentials configured]({{< relref "docs/how-to/vendor-specific-apis/jfrog-artifactory/_index.md#configure-credentials" >}})
 - An Artifactory generic repository, here `generic-local`
 - `curl`
@@ -93,6 +93,7 @@ For credential and overwrite errors, see
 
 ## Related documentation
 
-- [How-to: Upload Resources to JFrog Artifactory]({{< relref "docs/how-to/vendor-specific-apis/jfrog-artifactory/_index.md" >}})
+- [How-to: JFrog Artifactory]({{< relref "docs/how-to/vendor-specific-apis/jfrog-artifactory/_index.md" >}})
 - [How-to: Upload Raw Files to Sonatype Nexus]({{< relref "docs/how-to/vendor-specific-apis/sonatype-nexus/raw-files.md" >}})
 - [Reference: JFrog Artifactory Uploader]({{< relref "docs/reference/transfer-configuration/artifactory-uploader.md#repository-types" >}})
+- [JFrog: Generic Repositories](https://jfrog.com/help/r/jfrog-artifactory-documentation/generic-repositories)

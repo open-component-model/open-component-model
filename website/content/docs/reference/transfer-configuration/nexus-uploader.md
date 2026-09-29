@@ -8,7 +8,7 @@ toc: true
 Uploads a matched resource into a hosted repository of a Sonatype Nexus
 Repository 3 server, the way the repository's format expects. For step-by-step
 guides per repository type, see
-[Upload Resources to Sonatype Nexus]({{< relref "docs/how-to/vendor-specific-apis/sonatype-nexus/_index.md" >}}).
+[Sonatype Nexus]({{< relref "docs/how-to/vendor-specific-apis/sonatype-nexus/_index.md" >}}).
 
 ## Schema
 

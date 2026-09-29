@@ -20,7 +20,7 @@ repository, so that `helm pull` finds it.
 
 ## Prerequisites
 
-- The setup in [Upload Resources to Sonatype Nexus]({{< relref "docs/how-to/vendor-specific-apis/sonatype-nexus/_index.md#prerequisites" >}}),
+- The setup in [Sonatype Nexus]({{< relref "docs/how-to/vendor-specific-apis/sonatype-nexus/_index.md#prerequisites" >}}),
   with [credentials configured]({{< relref "docs/how-to/vendor-specific-apis/sonatype-nexus/_index.md#configure-credentials" >}})
 - A Nexus helm hosted repository, here `helm-hosted`
 - The `helm` CLI
@@ -103,6 +103,7 @@ For credential and overwrite errors, see
 
 ## Related documentation
 
-- [How-to: Upload Resources to Sonatype Nexus]({{< relref "docs/how-to/vendor-specific-apis/sonatype-nexus/_index.md" >}})
+- [How-to: Sonatype Nexus]({{< relref "docs/how-to/vendor-specific-apis/sonatype-nexus/_index.md" >}})
 - [How-to: Upload Helm Charts to JFrog Artifactory]({{< relref "docs/how-to/vendor-specific-apis/jfrog-artifactory/helm-charts.md" >}})
 - [Reference: Sonatype Nexus Uploader]({{< relref "docs/reference/transfer-configuration/nexus-uploader.md#repository-types" >}})
+- [Sonatype: Helm Repositories](https://help.sonatype.com/en/helm-repositories.html)

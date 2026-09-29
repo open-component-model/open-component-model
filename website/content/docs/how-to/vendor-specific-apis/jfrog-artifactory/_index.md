@@ -1,5 +1,5 @@
 ---
-title: "Upload Resources to JFrog Artifactory"
+title: "JFrog Artifactory"
 description: "Upload resources into JFrog Artifactory helm, maven, npm and generic repositories during transfer, with credentials and overwrite rules."
 weight: 1
 toc: true
@@ -100,9 +100,14 @@ resource, component version or was not uploaded by OCM.
 
 ## Related documentation
 
-- [How-to: Upload Resources to Sonatype Nexus]({{< relref "docs/how-to/vendor-specific-apis/sonatype-nexus/_index.md" >}})
+- [How-to: Sonatype Nexus]({{< relref "docs/how-to/vendor-specific-apis/sonatype-nexus/_index.md" >}})
 - [Reference: JFrog Artifactory Uploader]({{< relref "docs/reference/transfer-configuration/artifactory-uploader.md" >}})
 - [Reference: Transfer Configuration]({{< relref "docs/reference/transfer-configuration/_index.md" >}})
 - [Tutorial: Configure Custom Uploads During Transfer]({{< relref "docs/tutorials/configure-custom-uploads.md" >}})
 - [Concept: Transfer and Transport]({{< relref "docs/concepts/transfer-concept.md" >}})
 - [Credential Consumer Identities]({{< relref "docs/reference/credential-consumer-identities.md" >}})
+- [JFrog: Local Repositories](https://jfrog.com/help/r/jfrog-artifactory-documentation/local-repositories)
+- [JFrog: Helm Chart Repositories](https://jfrog.com/help/r/jfrog-artifactory-documentation/helm-chart-repositories)
+- [JFrog: Maven Repositories](https://jfrog.com/help/r/jfrog-artifactory-documentation/maven-repositories)
+- [JFrog: npm Repositories](https://jfrog.com/help/r/jfrog-artifactory-documentation/npm-repositories)
+- [JFrog: Generic Repositories](https://jfrog.com/help/r/jfrog-artifactory-documentation/generic-repositories)

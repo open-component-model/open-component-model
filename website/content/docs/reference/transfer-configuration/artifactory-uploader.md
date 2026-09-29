@@ -8,7 +8,7 @@ toc: true
 Uploads a matched resource into a local repository of a JFrog Artifactory server,
 the way the repository's package type expects. For step-by-step guides per
 repository type, see
-[Upload Resources to JFrog Artifactory]({{< relref "docs/how-to/vendor-specific-apis/jfrog-artifactory/_index.md" >}}).
+[JFrog Artifactory]({{< relref "docs/how-to/vendor-specific-apis/jfrog-artifactory/_index.md" >}}).
 
 ## Schema
 

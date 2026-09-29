@@ -1,5 +1,5 @@
 ---
-title: "Upload Resources to Sonatype Nexus"
+title: "Sonatype Nexus"
 description: "Upload resources into Sonatype Nexus Repository 3 hosted helm, maven2, npm and raw repositories during transfer, with credentials and overwrite rules."
 weight: 2
 toc: true
@@ -98,9 +98,14 @@ version.
 
 ## Related documentation
 
-- [How-to: Upload Resources to JFrog Artifactory]({{< relref "docs/how-to/vendor-specific-apis/jfrog-artifactory/_index.md" >}})
+- [How-to: JFrog Artifactory]({{< relref "docs/how-to/vendor-specific-apis/jfrog-artifactory/_index.md" >}})
 - [Reference: Sonatype Nexus Uploader]({{< relref "docs/reference/transfer-configuration/nexus-uploader.md" >}})
 - [Reference: Transfer Configuration]({{< relref "docs/reference/transfer-configuration/_index.md" >}})
 - [Tutorial: Configure Custom Uploads During Transfer]({{< relref "docs/tutorials/configure-custom-uploads.md" >}})
 - [Concept: Transfer and Transport]({{< relref "docs/concepts/transfer-concept.md" >}})
 - [Credential Consumer Identities]({{< relref "docs/reference/credential-consumer-identities.md" >}})
+- [Sonatype: REST and Integration API](https://help.sonatype.com/en/rest-and-integration-api.html)
+- [Sonatype: Helm Repositories](https://help.sonatype.com/en/helm-repositories.html)
+- [Sonatype: Maven Repositories](https://help.sonatype.com/en/maven-repositories.html)
+- [Sonatype: npm Registry](https://help.sonatype.com/en/npm-registry.html)
+- [Sonatype: Raw Repositories](https://help.sonatype.com/en/raw-repositories.html)

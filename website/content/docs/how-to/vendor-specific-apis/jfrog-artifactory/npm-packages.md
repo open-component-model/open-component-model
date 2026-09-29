@@ -20,7 +20,7 @@ repository, so that `npm install` finds it.
 
 ## Prerequisites
 
-- The setup in [Upload Resources to JFrog Artifactory]({{< relref "docs/how-to/vendor-specific-apis/jfrog-artifactory/_index.md#prerequisites" >}}),
+- The setup in [JFrog Artifactory]({{< relref "docs/how-to/vendor-specific-apis/jfrog-artifactory/_index.md#prerequisites" >}}),
   with [credentials configured]({{< relref "docs/how-to/vendor-specific-apis/jfrog-artifactory/_index.md#configure-credentials" >}})
 - An Artifactory npm repository, here `npm-local`
 - A resource that holds an npm package tarball (`package/package.json` plus the package files)
@@ -129,6 +129,7 @@ For credential and overwrite errors, see
 
 ## Related documentation
 
-- [How-to: Upload Resources to JFrog Artifactory]({{< relref "docs/how-to/vendor-specific-apis/jfrog-artifactory/_index.md" >}})
+- [How-to: JFrog Artifactory]({{< relref "docs/how-to/vendor-specific-apis/jfrog-artifactory/_index.md" >}})
 - [How-to: Upload npm Packages to Sonatype Nexus]({{< relref "docs/how-to/vendor-specific-apis/sonatype-nexus/npm-packages.md" >}})
 - [Reference: JFrog Artifactory Uploader]({{< relref "docs/reference/transfer-configuration/artifactory-uploader.md#repository-types" >}})
+- [JFrog: npm Repositories](https://jfrog.com/help/r/jfrog-artifactory-documentation/npm-repositories)

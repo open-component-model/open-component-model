@@ -15,10 +15,10 @@ type expects, so consumers fetch it with their usual tools.
 
 ## Choose your server
 
-| Server                      | Repository types          | Guide                                                                                                                  |
-|-----------------------------|---------------------------|------------------------------------------------------------------------------------------------------------------------|
-| JFrog Artifactory           | helm, maven, npm, generic | [Upload Resources to JFrog Artifactory]({{< relref "docs/how-to/vendor-specific-apis/jfrog-artifactory/_index.md" >}}) |
-| Sonatype Nexus Repository 3 | helm, maven2, npm, raw    | [Upload Resources to Sonatype Nexus]({{< relref "docs/how-to/vendor-specific-apis/sonatype-nexus/_index.md" >}})       |
+| Server                      | Repository types          | Guide                                                                                              |
+|-----------------------------|---------------------------|----------------------------------------------------------------------------------------------------|
+| JFrog Artifactory           | helm, maven, npm, generic | [JFrog Artifactory]({{< relref "docs/how-to/vendor-specific-apis/jfrog-artifactory/_index.md" >}}) |
+| Sonatype Nexus Repository 3 | helm, maven2, npm, raw    | [Sonatype Nexus]({{< relref "docs/how-to/vendor-specific-apis/sonatype-nexus/_index.md" >}})       |
 
 ## How vendor uploaders work
 

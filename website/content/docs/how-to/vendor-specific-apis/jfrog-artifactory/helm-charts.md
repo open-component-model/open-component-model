@@ -20,7 +20,7 @@ repository, so that `helm pull` finds it.
 
 ## Prerequisites
 
-- The setup in [Upload Resources to JFrog Artifactory]({{< relref "docs/how-to/vendor-specific-apis/jfrog-artifactory/_index.md#prerequisites" >}}),
+- The setup in [JFrog Artifactory]({{< relref "docs/how-to/vendor-specific-apis/jfrog-artifactory/_index.md#prerequisites" >}}),
   with [credentials configured]({{< relref "docs/how-to/vendor-specific-apis/jfrog-artifactory/_index.md#configure-credentials" >}})
 - An Artifactory helm repository, here `helm-local`
 - The `helm` CLI
@@ -103,6 +103,7 @@ For credential and overwrite errors, see
 
 ## Related documentation
 
-- [How-to: Upload Resources to JFrog Artifactory]({{< relref "docs/how-to/vendor-specific-apis/jfrog-artifactory/_index.md" >}})
+- [How-to: JFrog Artifactory]({{< relref "docs/how-to/vendor-specific-apis/jfrog-artifactory/_index.md" >}})
 - [How-to: Upload Helm Charts to Sonatype Nexus]({{< relref "docs/how-to/vendor-specific-apis/sonatype-nexus/helm-charts.md" >}})
 - [Reference: JFrog Artifactory Uploader]({{< relref "docs/reference/transfer-configuration/artifactory-uploader.md#repository-types" >}})
+- [JFrog: Helm Chart Repositories](https://jfrog.com/help/r/jfrog-artifactory-documentation/helm-chart-repositories)

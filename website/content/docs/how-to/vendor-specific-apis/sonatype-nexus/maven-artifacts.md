@@ -20,7 +20,7 @@ hosted repository, so that Maven resolves the artifact from its coordinates.
 
 ## Prerequisites
 
-- The setup in [Upload Resources to Sonatype Nexus]({{< relref "docs/how-to/vendor-specific-apis/sonatype-nexus/_index.md#prerequisites" >}}),
+- The setup in [Sonatype Nexus]({{< relref "docs/how-to/vendor-specific-apis/sonatype-nexus/_index.md#prerequisites" >}}),
   with [credentials configured]({{< relref "docs/how-to/vendor-specific-apis/sonatype-nexus/_index.md#configure-credentials" >}})
 - A Nexus maven2 hosted repository with release version policy, here `maven-releases`
 - The `mvn` CLI
@@ -143,6 +143,7 @@ For credential and overwrite errors, see
 
 ## Related documentation
 
-- [How-to: Upload Resources to Sonatype Nexus]({{< relref "docs/how-to/vendor-specific-apis/sonatype-nexus/_index.md" >}})
+- [How-to: Sonatype Nexus]({{< relref "docs/how-to/vendor-specific-apis/sonatype-nexus/_index.md" >}})
 - [How-to: Upload Maven Artifacts to JFrog Artifactory]({{< relref "docs/how-to/vendor-specific-apis/jfrog-artifactory/maven-artifacts.md" >}})
 - [Reference: Sonatype Nexus Uploader]({{< relref "docs/reference/transfer-configuration/nexus-uploader.md#repository-types" >}})
+- [Sonatype: Maven Repositories](https://help.sonatype.com/en/maven-repositories.html)
