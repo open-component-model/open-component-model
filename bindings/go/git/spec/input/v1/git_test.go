@@ -39,6 +39,7 @@ func TestGit_JSON(t *testing.T) {
 		runtime.NewVersionedType(Type, Version),
 		runtime.NewUnversionedType(Type),
 		runtime.NewUnversionedType(LegacyType),
+		runtime.NewVersionedType(LegacyType, Version),
 		runtime.NewVersionedType(LegacyType, "v1alpha1"),
 		runtime.NewVersionedType(Type, "v1alpha1"),
 	} {

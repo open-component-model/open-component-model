@@ -75,5 +75,5 @@
 // # Wire types
 //
 // The access scheme registers Git/v1, Git, git, git/v1alpha1 and Git/v1alpha1.
-// The input scheme registers the same types as the access scheme.
+// The input scheme registers the same types plus git/v1, which OCM v1 accepted as an input type.
 package git

@@ -48,6 +48,7 @@ func TestRegister(t *testing.T) {
 	for _, typ := range []runtime.Type{
 		runtime.NewVersionedType(inputv1.Type, inputv1.Version),
 		runtime.NewUnversionedType(inputv1.LegacyType),
+		runtime.NewVersionedType(inputv1.LegacyType, inputv1.Version),
 	} {
 		plugin, err := inputs.GetResourceInputPlugin(ctx, &inputv1.Git{Type: typ, Repository: "https://example.com/repo.git"})
 		r.NoError(err, typ.String())

@@ -33,6 +33,10 @@
         },
         {
           "deprecated": true,
+          "const": "git/v1"
+        },
+        {
+          "deprecated": true,
           "const": "git/v1alpha1"
         },
         {
