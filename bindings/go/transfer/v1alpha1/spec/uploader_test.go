@@ -293,3 +293,39 @@ func TestReferenceUploaderConfig_Validate(t *testing.T) {
 		require.ErrorContains(t, err, "invalid type")
 	})
 }
+
+func TestUploaderTypes(t *testing.T) {
+	r := require.New(t)
+	var names []string
+	for _, typ := range spec.UploaderTypes() {
+		r.True(strings.HasSuffix(typ.Name, ".uploader.transfer.config.ocm.software"), typ.String())
+		r.Equal(spec.Version, typ.Version)
+		names = append(names, spec.UploaderName(typ))
+	}
+	r.Equal([]string{"http", "localblob", "oci", "reference"}, names)
+}
+
+func TestResolveUploaderType(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		want    runtime.Type
+		wantErr string
+	}{
+		{"oci", runtime.NewVersionedType(spec.OCIUploaderConfigType, spec.Version), ""},
+		{"oci.uploader.transfer.config.ocm.software/v1alpha1", runtime.NewVersionedType(spec.OCIUploaderConfigType, spec.Version), ""},
+		{"reference.uploader.transfer.config.ocm.software", runtime.NewUnversionedType(spec.ReferenceUploaderConfigType), ""},
+		{"transfer.config.ocm.software/v1alpha1", runtime.Type{}, `unknown uploader "transfer.config.ocm.software/v1alpha1" (available: http, localblob, oci, reference)`},
+		{"nope", runtime.Type{}, `unknown uploader "nope" (available: http, localblob, oci, reference)`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			got, err := spec.ResolveUploaderType(tc.name)
+			if tc.wantErr != "" {
+				r.EqualError(err, tc.wantErr)
+				return
+			}
+			r.NoError(err)
+			r.Equal(tc.want, got)
+		})
+	}
+}

@@ -26,7 +26,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/compref"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
-	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/transfer"
 	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
 	graphPkg "ocm.software/open-component-model/bindings/go/transform/graph"
@@ -35,14 +34,14 @@ import (
 )
 
 const (
-	FlagDryRun        = "dry-run"
-	FlagOutput        = "output"
-	FlagRecursive     = "recursive"
-	FlagCopyResources = "copy-resources"
-	FlagTransferSpec  = "transfer-spec"
-	FlagConstraint    = "constraint"
-	FlagLatest        = "latest"
-	FlagConcurrency   = "concurrency-limit"
+	FlagDryRun       = "dry-run"
+	FlagOutput       = "output"
+	FlagRecursive    = "recursive"
+	FlagUploader     = "uploader"
+	FlagTransferSpec = "transfer-spec"
+	FlagConstraint   = "constraint"
+	FlagLatest       = "latest"
+	FlagConcurrency  = "concurrency-limit"
 
 	// Each node emits 2 events (Running + Completed/Failed) and since the tracker consumes
 	// them faster than the transfer produces, 16 is enough to avoid blocking with room to grow.
@@ -67,17 +66,16 @@ OCI, CTF, and Helm repositories are supported as transfer sources.
 OCI and CTF repositories are supported as transfer targets, while Helm repositories are not supported.
 
 By default, local blobs are copied and all other resources stay by reference (their access
-is unchanged in the target). Uploader configurations in the OCM configuration select which
-resources are moved and how: oci.uploader.transfer.config.ocm.software/v1alpha1 (separate
-OCI artifacts), http.uploader.transfer.config.ocm.software/v1alpha1 (custom HTTP targets),
-localblob.uploader.transfer.config.ocm.software/v1alpha1 (copy as local blobs) and
-reference.uploader.transfer.config.ocm.software/v1alpha1 (keep by reference). The first
-uploader whose match selects a resource handles it. --copy-resources
-appends a catch-all localblob.uploader.transfer.config.ocm.software/v1alpha1 entry after all
-configured uploaders, so every resource they do not select is copied as a local blob. The
-former --upload-as flag and the copy mode setting are replaced by these uploader configurations (see
-the "Migrate from --upload-as to Uploader Configurations" guide on ocm.software). --recursive
-walks the component's references and transfers them too.
+is unchanged in the target). Uploaders decide what happens to a resource; they come from the
+OCM configuration and from --uploader, which adds entries after the configured ones. Each
+uploader selects resources with a CEL match expression over resource and target (test access
+types with resource.access.isType("OCIImage"), which resolves aliases and versions);
+the first uploader whose match is true handles the resource. Available uploaders: oci
+(separate OCI artifacts), http (custom HTTP targets), localblob (copy as local blobs) and
+reference (keep by reference). --uploader localblob copies every resource no other uploader
+selects. The former --upload-as and --copy-resources flags and the copy mode setting are
+replaced by uploaders (see the "Migrate from --upload-as to Uploader Configurations" guide on
+ocm.software). --recursive walks the component's references and transfers them too.
 
 Driving defaults from the OCM configuration:
   A transfer.config.ocm.software/v1alpha1 entry inside the central OCM configuration
@@ -88,9 +86,9 @@ Two-step workflow (generate, review, replay):
   --dry-run builds and validates the graph without executing it, and with -o yaml|json prints
   the resulting TransformationGraphDefinition. --transfer-spec then replays a saved definition
   from a file (or stdin with "-"):
-    1. Generate the spec:  transfer cv --dry-run -o yaml --copy-resources -r {reference} {target} > spec.yaml
+    1. Generate the spec:  transfer cv --dry-run -o yaml --uploader localblob -r {reference} {target} > spec.yaml
     2. Review/edit spec.yaml, then execute: transfer cv --transfer-spec spec.yaml
-  All graph-shaping flags (--recursive, --copy-resources) and any transfer or uploader
+  All graph-shaping flags (--recursive, --uploader) and any transfer or uploader
   configuration entry are baked into the spec during step 1 and are therefore ignored in
   step 2 - the spec is the full graph definition. Only --dry-run, --output, and
   --concurrency-limit remain meaningful when replaying a spec.
@@ -118,33 +116,22 @@ transfer component-version ctf::./my-archive//ocm.software/mycomponent ghcr.io/m
 # Transfer only the latest version
 transfer component-version ctf::./my-archive//ocm.software/mycomponent ghcr.io/my-org/ocm --latest
 
-# Transfer resources as separate OCI artifacts. With --config ./oci-uploader.yaml containing:
+# Upload OCI images, Helm charts and OCI-manifest local blobs as separate OCI artifacts and copy
+# every other resource as a local blob. Equivalent OCM configuration:
 #   type: generic.config.ocm.software/v1
 #   configurations:
 #   - type: oci.uploader.transfer.config.ocm.software/v1alpha1
-#     # CEL template for the target image reference; this is also the default when omitted.
-#     # "target" is the OCI target repository; "resource" is the source resource.
-#     imageReference: |-
-#       ${target.baseUrl
-#         + (target.subPath == "" ? "" : "/" + target.subPath)
-#         + "/" + (has(resource.access.referenceName)
-#           ? resource.access.referenceName
-#           : has(resource.access.helmChart)
-#             ? (url(resource.access.helmRepository).path.split("/") + [resource.access.helmChart.split(":")[0]]).filter(s, s != "").join("/")
-#               + (has(resource.access.version) && resource.access.version != ""
-#                 ? ":" + resource.access.version
-#                 : (resource.access.helmChart.contains(":") ? ":" + resource.access.helmChart.split(":")[1] : ""))
-#             : resource.access.toOCI().repository
-#               + (resource.access.toOCI().tag == "" ? "" : ":" + resource.access.toOCI().tag))}
-#     # Relocate OCI images instead: '${"ghcr.io/target-org/images/" + resource.access.toOCI().repository}'
-# OCI images, Helm charts and OCI-manifest local blobs are uploaded as OCI artifacts.
-transfer component-version --config ./oci-uploader.yaml ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm
+#   - type: localblob.uploader.transfer.config.ocm.software/v1alpha1
+transfer component-version --uploader oci --uploader localblob ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm
+
+# Keep one resource by reference and copy all others as local blobs
+transfer component-version --uploader 'reference=resource.name == "base-os-image"' --uploader localblob ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm
 
 # Transfer including all resources (e.g. OCI artifacts)
-transfer component-version ctf::./my-archive//ocm.software/mycomponent:1.0.0 ghcr.io/my-org/ocm --copy-resources
+transfer component-version ctf::./my-archive//ocm.software/mycomponent:1.0.0 ghcr.io/my-org/ocm --uploader localblob
 
 # Recursively transfer a component version and all its references
-transfer component-version ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm -r --copy-resources
+transfer component-version ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm -r --uploader localblob
 
 # Drive defaults from the OCM configuration. With --config ./ocmconfig.yaml containing:
 #   type: generic.config.ocm.software/v1
@@ -157,7 +144,7 @@ transfer component-version ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.
 transfer component-version --config ./ocmconfig.yaml ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm
 
 # Two-step transfer: generate a spec with all desired flags, then review and execute
-transfer component-version --dry-run -o yaml --copy-resources -r ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm > spec.yaml
+transfer component-version --dry-run -o yaml --uploader localblob -r ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm > spec.yaml
 # (review/edit spec.yaml as needed, e.g. change the target registry)
 transfer component-version --transfer-spec spec.yaml
 `),
@@ -169,7 +156,7 @@ transfer component-version --transfer-spec spec.yaml
 	enum.VarP(cmd.Flags(), FlagOutput, "o", []string{render.OutputFormatYAML.String(), render.OutputFormatJSON.String(), render.OutputFormatNDJSON.String()}, "output format of the component descriptors")
 	cmd.Flags().Bool(FlagDryRun, false, "build and validate the graph but do not execute")
 	cmd.Flags().BoolP(FlagRecursive, "r", false, "recursively discover and transfer component versions")
-	cmd.Flags().Bool(FlagCopyResources, false, "copy every resource that no configured uploader selects into the target as a local blob (appends a localblob.uploader.transfer.config.ocm.software/v1alpha1 entry after all configured uploaders)")
+	cmd.Flags().StringArray(FlagUploader, nil, uploaderUsage())
 	cmd.Flags().String(FlagTransferSpec, "", "path to a transfer specification file (use \"-\" for stdin). The input must hold exactly one transfer spec document; with \"-\", OCM configuration documents in stdin are applied as configuration")
 	cmd.Flags().String(FlagConstraint, "", "version constraint evaluated by each version's configured scheme; versions with no applicable scheme are retained (e.g. \">= 1.0.0, < 2.0.0\"); only used when no version is specified in the reference")
 	cmd.Flags().Bool(FlagLatest, false, "if set, only the latest version of the component is transferred; only used when no version is specified in the reference")
@@ -188,7 +175,7 @@ func transferArgs(cmd *cobra.Command, args []string) error {
 		if len(args) > 0 {
 			return fmt.Errorf("positional arguments are not allowed when --%s is set", FlagTransferSpec)
 		}
-		ignoredFlags := []string{FlagRecursive, FlagCopyResources}
+		ignoredFlags := []string{FlagRecursive, FlagUploader}
 		for _, name := range ignoredFlags {
 			if cmd.Flags().Changed(name) {
 				slog.Warn(fmt.Sprintf("--%s has no effect when --%s is set", name, FlagTransferSpec))
@@ -440,7 +427,11 @@ func buildGraphDefinitionFromArgs(
 		transferCfg = &transferv1alpha1.Config{}
 	}
 
-	uploaderCfgs, err := transferv1alpha1.LookupUploaderConfigs(cfg)
+	uploaderSource, err := withFlagUploaders(cmd, cfg)
+	if err != nil {
+		return nil, err
+	}
+	uploaderCfgs, err := transferv1alpha1.LookupUploaderConfigs(uploaderSource)
 	if err != nil {
 		return nil, fmt.Errorf("looking up uploader configs failed: %w", err)
 	}
@@ -455,16 +446,6 @@ func buildGraphDefinitionFromArgs(
 		} else {
 			transferCfg.Recursive = transferv1alpha1.RecursiveNone
 		}
-	}
-	copyResources, err := cmd.Flags().GetBool(FlagCopyResources)
-	if err != nil {
-		return nil, fmt.Errorf("getting copy-resources flag failed: %w", err)
-	}
-	if copyResources {
-		// Appended after all configured uploaders so explicit rules still win.
-		uploaderCfgs = append(uploaderCfgs, &transferv1alpha1.LocalBlobUploaderConfig{
-			Type: runtime.NewVersionedType(transferv1alpha1.LocalBlobUploaderConfigType, transferv1alpha1.Version),
-		})
 	}
 
 	constraint, err := cmd.Flags().GetString(FlagConstraint)

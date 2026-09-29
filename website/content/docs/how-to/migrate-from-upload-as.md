@@ -22,9 +22,8 @@ A leftover `uploadType` field in a transfer config fails config loading with
 
 The `--upload-as` flag applied to every resource uniformly — all resources were
 either uploaded as OCI artifacts or stored as local blobs. An uploader
-configuration matches per resource (`match.accessType`, `match.name`,
-`match.version`, `match.extraIdentity`), controls the target location
-(`imageReference`), and shares one mechanism with the HTTP uploader.
+configuration matches per resource (`match` CEL expression), controls the target
+location (`imageReference`), and shares one mechanism with the HTTP uploader.
 
 ## Prerequisites
 
@@ -39,8 +38,8 @@ a Before / After pair showing the exact change.
 | Before | After | Behaviour difference |
 | -------- | ------- | ---------------------- |
 | `--upload-as localBlob`, `uploadType: localBlob`, or nothing | Drop the flag/field. | None. Local blob is the default. |
-| `--copy-resources --upload-as ociArtifact`, or `copyMode: allResources` + `uploadType: ociArtifact` | Keep `--copy-resources` or add a `localblob.uploader.transfer.config.ocm.software/v1alpha1` catch-all entry; add an `oci.uploader.transfer.config.ocm.software/v1alpha1` entry. | None. Same target references: `<baseUrl>[/<subPath>]/<repository>[:<tag>]`. |
-| `--upload-as ociArtifact` without `--copy-resources` (only OCI-manifest local blobs became OCI artifacts; OCI image / Helm references stayed by reference) | One OCI uploader entry whose `match.when` selects only OCI-manifest local blobs with a `referenceName` (see step 3). | None. |
+| `--copy-resources --upload-as ociArtifact`, or `copyMode: allResources` + `uploadType: ociArtifact` | Replace `--copy-resources` with `--uploader localblob` or add a `localblob.uploader.transfer.config.ocm.software/v1alpha1` catch-all entry; add an `oci.uploader.transfer.config.ocm.software/v1alpha1` entry. | None. Same target references: `<baseUrl>[/<subPath>]/<repository>[:<tag>]`. |
+| `--upload-as ociArtifact` without `--copy-resources` (only OCI-manifest local blobs became OCI artifacts; OCI image / Helm references stayed by reference) | One OCI uploader entry whose `match` selects only OCI-manifest local blobs with a `referenceName` (see step 3). | None. |
 | Controller: `uploadType: ociArtifact` in the transfer config referenced by a `Replication` | Remove `uploadType` from that config entry; add the OCI uploader entry to the same config (ConfigMap/Secret). | None. The controller reads uploader entries from the same configs (`LookupUploaderConfigs`). |
 
 ### The default path mapping
@@ -82,33 +81,23 @@ equivalent.
 
 ### Which resources the OCI uploader selects
 
-An uploader handles the resources its `match` selects: the static fields
-(`accessType`, `name`, `version`, `extraIdentity`) and the CEL predicate
-`match.when`. Without `match.when`, the OCI uploader uses this default:
+An uploader handles the resources its `match` selects. `match` is a CEL boolean
+expression. Without an explicit `match`, the OCI uploader uses this default:
 
 ```yaml
-match:
-  when: |-
-    target.type == "OCIRepository"
-      && (accessType in ["OCIImage", "Helm"]
-        || (accessType == "LocalBlob"
-          && isOCIManifest(resource.access.mediaType)
-          && has(resource.access.referenceName)))
+match: >-
+  target.type == "OCIRepository"
+  && (resource.access.isType(["OCIImage", "Helm"])
+    || (resource.access.isType("LocalBlob")
+      && isOCIManifest(resource.access.mediaType)
+      && has(resource.access.referenceName)))
 ```
 
-This is exactly what `--upload-as ociArtifact` uploaded. `accessType` is the
-access type name with aliases resolved (`ociArtifact`, `ociImage`, … are all
-`OCIImage`; `localBlob` is `LocalBlob`; `helm` is `Helm`). An explicit
-`match.when` replaces the default. See
-[`match.when`]({{< relref "docs/reference/transfer-configuration.md#matchwhen" >}})
+This is exactly what `--upload-as ociArtifact` uploaded. `resource.access.isType`
+resolves aliases, so `isType("OCIImage")` matches `ociArtifact/v1`,
+`ociImage/v1`, etc. An explicit `match` replaces the default. See
+[`match`]({{< relref "docs/reference/transfer-configuration.md#match" >}})
 for all identifiers and functions.
-
-{{< callout context="note" title="match.accessType does not resolve aliases" icon="outline/info-circle" >}}
-`match.accessType` compares type names exactly. Access types have multiple alias
-names in descriptors (e.g. OCI images: `OCIImage`, `ociArtifact`, `ociRegistry`,
-`ociImage`; local blobs: `LocalBlob`, `localBlob`; Helm: `Helm`, `helm`). To
-select by access type regardless of the alias, use `accessType` in `match.when`.
-{{< /callout >}}
 
 ### 1. Local blob (default) — drop the flag
 
@@ -131,7 +120,7 @@ Or in config:
 {{< tab "After" >}}
 
 ```bash
-ocm transfer cv --copy-resources <src> <target>
+ocm transfer cv --uploader localblob <src> <target>
 ```
 
 Or in config:
@@ -194,10 +183,16 @@ the mapping visible and easy to change in place.
 Then run:
 
 ```bash
-ocm transfer cv --copy-resources --config ./ocmconfig.yaml <src> <target>
+ocm transfer cv --uploader localblob --config ./ocmconfig.yaml <src> <target>
 ```
 
 `--config` may be repeated, so the uploader can live in its own file.
+
+With the default `imageReference`, the same works without a config file:
+
+```bash
+ocm transfer cv --uploader oci --uploader localblob <src> <target>
+```
 
 Or add the entry to the same config that already holds the transfer settings:
 
@@ -243,16 +238,15 @@ OCI image and Helm references stayed by reference.
 type: generic.config.ocm.software/v1
 configurations:
   - type: oci.uploader.transfer.config.ocm.software/v1alpha1
-    match:
-      when: >-
-        target.type == "OCIRepository"
-        && accessType == "LocalBlob"
-        && isOCIManifest(resource.access.mediaType)
-        && has(resource.access.referenceName)
+    match: >-
+      target.type == "OCIRepository"
+      && resource.access.isType("LocalBlob")
+      && isOCIManifest(resource.access.mediaType)
+      && has(resource.access.referenceName)
 ```
 
-`accessType` resolves the `LocalBlob` / `localBlob` spellings, so one entry is
-enough.
+`resource.access.isType` resolves the `LocalBlob` / `localBlob` spellings, so
+one entry is enough.
 
 {{< /tab >}}
 {{< /tabs >}}
@@ -306,25 +300,25 @@ configs (`LookupUploaderConfigs`).
 ## Behaviour to know after migrating
 
 - An uploader handles exactly the resources its `match` selects. An entry
-  without an explicit `match.when` therefore also uploads OCI image and Helm
+  without an explicit `match` therefore also uploads OCI image and Helm
   resources (they previously stayed by reference when using the old
   `--upload-as` flag), which is why the local-blob-only row above exists.
 - There is no fall-through: if a selected resource cannot be uploaded (an
-  explicit `when` selects a `Wget` resource, or `imageReference` does not
+  explicit `match` selects a `Wget` resource, or `imageReference` does not
   evaluate for it), the transfer fails instead of silently copying the resource
   as a local blob.
-- The default `when` selects nothing on a CTF target, so resources keep the
+- The default `match` selects nothing on a CTF target, so resources keep the
   default handling there. To push to a registry from a CTF transfer, use a
-  `when` without the target check and an absolute `imageReference`.
+  `match` without the target check and an absolute `imageReference`.
 - A local blob's `access.referenceName` is used verbatim in the default
   template (whatever it contains, including host/port/digest).
   `ghcr.io/org/image:v1` therefore still lands at
   `<target>/ghcr.io/org/image:v1`, as with the old flag.
 - A local blob that is not an OCI manifest, or has no `referenceName`, is not
-  selected by the default `when`.
+  selected by the default `match`.
 - Wget, S3 and GitHub resources are never OCI-uploaded.
 
-The following table shows what the default `when` selects:
+The following table shows what the default `match` selects:
 
 | Source access type | Selected when | Name used in the default `imageReference` |
 | --- | --- | --- |
@@ -343,8 +337,7 @@ The OCI uploader configuration supports capabilities that `--upload-as` did not.
 
 ```yaml
 - type: oci.uploader.transfer.config.ocm.software/v1alpha1
-  match:
-    when: target.type == "OCIRepository" && accessType == "OCIImage"
+  match: target.type == "OCIRepository" && resource.access.isType("OCIImage")
   imageReference: '${"ghcr.io/target-org/images/" + resource.access.toOCI().repository + ":" + resource.access.toOCI().tag}'
 ```
 
@@ -352,8 +345,7 @@ The OCI uploader configuration supports capabilities that `--upload-as` did not.
 
 ```yaml
 - type: oci.uploader.transfer.config.ocm.software/v1alpha1
-  match:
-    when: accessType == "LocalBlob" && isOCIManifest(resource.access.mediaType) && has(resource.access.referenceName)
+  match: resource.access.isType("LocalBlob") && isOCIManifest(resource.access.mediaType) && has(resource.access.referenceName)
   imageReference: '${"ghcr.io/mirror/" + resource.access.referenceName}'
 ```
 
@@ -361,37 +353,34 @@ The OCI uploader configuration supports capabilities that `--upload-as` did not.
 
 ```yaml
 - type: oci.uploader.transfer.config.ocm.software/v1alpha1
-  match:
-    name: my-image
+  match: resource.name == "my-image"
   imageReference: ghcr.io/target-org/special/my-image:1.0.0
 ```
 
 ### CTF target with a custom registry for artifacts
 
-The default `when` selects nothing on a CTF target, so spell out a `when`
+The default `match` selects nothing on a CTF target, so spell out a `match`
 without the target check:
 
 ```yaml
 - type: oci.uploader.transfer.config.ocm.software/v1alpha1
-  match:
-    when: accessType == "LocalBlob" && isOCIManifest(resource.access.mediaType) && has(resource.access.referenceName)
+  match: resource.access.isType("LocalBlob") && isOCIManifest(resource.access.mediaType) && has(resource.access.referenceName)
   imageReference: '${"registry.example.com/mirror/" + resource.access.referenceName}'
 ```
 
 ```bash
-ocm transfer cv --copy-resources --config ./ocmconfig.yaml <src> ctf::./archive
+ocm transfer cv --uploader localblob --config ./ocmconfig.yaml <src> ctf::./archive
 ```
 
 ### Build a reference from resource metadata
 
 When the resource has no OCI reference name, build the reference from
 `resource.name` and `resource.version` instead, and select such local blobs
-explicitly (the default `when` requires a `referenceName`):
+explicitly (the default `match` requires a `referenceName`):
 
 ```yaml
 - type: oci.uploader.transfer.config.ocm.software/v1alpha1
-  match:
-    when: target.type == "OCIRepository" && accessType == "LocalBlob" && isOCIManifest(resource.access.mediaType)
+  match: target.type == "OCIRepository" && resource.access.isType("LocalBlob") && isOCIManifest(resource.access.mediaType)
   imageReference: '${target.baseUrl + "/" + resource.name + ":" + resource.version}'
 ```
 
@@ -403,22 +392,20 @@ you want, such as `ghcr.io/org/image:v1`, use it directly:
 
 ```yaml
 - type: oci.uploader.transfer.config.ocm.software/v1alpha1
-  match:
-    name: my-image
+  match: resource.name == "my-image"
   imageReference: '${resource.access.referenceName}'
 ```
 
-`match.name` scopes the entry to that resource and the default `when` still
-applies: the resource is uploaded if it is an OCI-manifest local blob with a
-`referenceName` and the target is an OCI registry. If `my-image` is an OCI image
-or Helm chart instead, the template does not evaluate and the transfer fails.
+This `match` replaces the default, so the entry selects `my-image` on any target
+and for any access type. If `my-image` is not a local blob with a
+`referenceName` (for example an OCI image or Helm chart), the template does not
+evaluate and the transfer fails.
 
-The CEL identifiers available in `match.when` and `imageReference` are:
+The CEL identifiers available in `match` and `imageReference` are:
 
 | Identifier | Value |
 | --- | --- |
-| `resource` | The source resource descriptor (same `resource` alias as the HTTP uploader). Fields are resolved dynamically, so an expression may use `has()` and read fields of any access type. For OCI image accesses, call `resource.access.toOCI()` to get a map with `repository`, `tag`, `host`, `digest`, etc. In transfers, `toOCI()` resolves OCI image accesses only. |
-| `accessType` | The access type name with aliases resolved: `OCIImage`, `Helm`, `LocalBlob`, `Wget`, `S3`, `GitHub`, or the raw name of any other type. |
+| `resource` | The source resource descriptor (same `resource` alias as the HTTP uploader). Fields are resolved dynamically, so an expression may use `has()` and read fields of any access type. For OCI image accesses, call `resource.access.toOCI()` to get a map with `repository`, `tag`, `host`, `digest`, etc. In transfers, `toOCI()` resolves OCI image accesses only. Test access types with `resource.access.isType(...)`. |
 | `target` | The transfer target. An OCI registry has `type: OCIRepository`, `baseUrl` (registry host) and `subPath` (repository prefix; may be `""`); a CTF archive has `type: CommonTransportFormat` and `filePath`. |
 
 ## Verify the migration
@@ -501,7 +488,7 @@ Strict decoding now rejects unknown fields.
 ### Symptom: Resources still end up as local blobs or stay by reference
 
 **Cause:** The uploader's `match` does not select the resource, so the resource
-follows the default handling. With the default `when` this happens when:
+follows the default handling. With the default `match` this happens when:
 
 - the target is not an OCI registry, for example a CTF archive;
 - the resource is a local blob whose media type is not an OCI manifest, or that
@@ -509,13 +496,12 @@ follows the default handling. With the default `when` this happens when:
 - the resource is a Wget, S3, GitHub or other resource the OCI uploader cannot
   upload.
 
-**Fix:** Spell out a `match.when` that selects the resource. For a CTF target,
+**Fix:** Spell out a `match` that selects the resource. For a CTF target,
 drop the target check and use an absolute registry prefix instead of `target`:
 
 ```yaml
 - type: oci.uploader.transfer.config.ocm.software/v1alpha1
-  match:
-    when: accessType == "LocalBlob" && isOCIManifest(resource.access.mediaType) && has(resource.access.referenceName)
+  match: resource.access.isType("LocalBlob") && isOCIManifest(resource.access.mediaType) && has(resource.access.referenceName)
   imageReference: '${"ghcr.io/my-org/mirror/" + resource.access.referenceName}'
 ```
 
@@ -524,23 +510,22 @@ from the resource instead:
 
 ```yaml
 - type: oci.uploader.transfer.config.ocm.software/v1alpha1
-  match:
-    when: target.type == "OCIRepository" && accessType == "LocalBlob" && isOCIManifest(resource.access.mediaType)
+  match: target.type == "OCIRepository" && resource.access.isType("LocalBlob") && isOCIManifest(resource.access.mediaType)
   imageReference: '${target.baseUrl + "/" + resource.name + ":" + resource.version}'
 ```
 
 ### Symptom: `oci uploader cannot upload access type`
 
 The full error names the uploader and the resource, for example
-`uploader 0 (oci.uploader.transfer.config.ocm.software/v1alpha1) …: oci uploader cannot upload access type Wget/v1 (adjust match.when)`.
+`uploader 0 (oci.uploader.transfer.config.ocm.software/v1alpha1) …: oci uploader cannot upload access type Wget/v1 (adjust match)`.
 
-**Cause:** An explicit `match.when` selected a resource the OCI uploader cannot
+**Cause:** An explicit `match` selected a resource the OCI uploader cannot
 upload. The
 OCI uploader uploads OCI images, Helm charts, and local blobs holding an OCI
 manifest. A local blob that is not an OCI manifest fails with
 `not an OCI manifest` instead.
 
-**Fix:** Narrow `match.when`, e.g. add `&& accessType in ["OCIImage", "Helm"]`.
+**Fix:** Narrow `match`, e.g. add `&& resource.access.isType(["OCIImage", "Helm"])`.
 
 ### Symptom: `imageReference does not evaluate`
 
@@ -548,7 +533,7 @@ manifest. A local blob that is not an OCI manifest fails with
 for it, for example the default template on a CTF target (it reads
 `target.baseUrl`), or `resource.access.toOCI()` on a Helm chart.
 
-**Fix:** Narrow `match.when` to the resources the template works for, or use a
+**Fix:** Narrow `match` to the resources the template works for, or use a
 template that does not read the missing field.
 
 ### Symptom: `unknown field "copyMode"`
@@ -569,8 +554,7 @@ The following table maps old values to their replacements:
 | --- | --- |
 | `copyMode: localBlob` or omitted | Delete the field; nothing else (baseline). |
 | `copyMode: allResources` | Delete the field; append `- type: localblob.uploader.transfer.config.ocm.software/v1alpha1` as the last uploader entry. |
-| `--copy-resources` | Unchanged: appends the same catch-all after all configured uploaders. |
-| `--copy-resources=false` overriding a config's `allResources` | No equivalent: the flag only adds; remove the catch-all from the config. |
+| `--copy-resources` | Use `--uploader localblob`: it appends the same catch-all after all configured uploaders. |
 | Exclude a resource from copying | Add a `reference.uploader.transfer.config.ocm.software/v1alpha1` entry with `match` before the catch-all. |
 
 ## Related documentation

@@ -348,7 +348,7 @@ Your numbers will differ, because the vulnerability database moves.
 Transfer the component version by value, which is what an air-gapped delivery does:
 
 ```bash
-ocm transfer cv ./transport-archive//ocm.software/examples/sbom-demo:1.0.0 ./transport-archive-transferred --copy-resources
+ocm transfer cv ./transport-archive//ocm.software/examples/sbom-demo:1.0.0 ./transport-archive-transferred --uploader localblob
 ```
 
 The linked SBOM is still there. It was a resource, so it was copied along with everything else:
@@ -428,7 +428,7 @@ rm -rf /tmp/ocm-sbom-tutorial
 
 - [How-to: Download Resources from Component Versions]({{< relref "docs/how-to/download-resources-from-component-versions.md" >}}) - The download command this tutorial builds on
 - [How-to: Air-Gap Transfer]({{< relref "docs/how-to/air-gap-transfer.md" >}}) - Moving a component version by value, the case that decides which SBOM strategy works
-- [Reference: Input and Access Types]({{< relref "docs/reference/input-and-access-types.md" >}}) - `File/v1`, `OCIImage/v1`, and what `--copy-resources` turns them into
+- [Reference: Input and Access Types]({{< relref "docs/reference/input-and-access-types.md" >}}) - `File/v1`, `OCIImage/v1`, and what `--uploader localblob` turns them into
 - [Tutorial: Plain Signatures]({{< relref "docs/tutorials/signing/plain.md" >}}) - Signing the component version, which is what makes a linked SBOM trustworthy
 - [Concept: Software Bills of Materials]({{< relref "docs/concepts/sboms.md" >}}) - What an SBOM is and why OCM binds it to the component version
 - [Blog: Shipping SBOMs with Your Components](/blog/2026-07-28-shipping-sboms-with-your-components/) - The proof of concept this feature grew out of

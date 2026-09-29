@@ -167,7 +167,7 @@ configurations:
 			sourceRef,
 			targetRef,
 			"--config", cfgPath,
-			"--copy-resources",
+			"--uploader", "localblob",
 		})
 
 		ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
@@ -204,7 +204,7 @@ configurations:
 			sourceRef,
 			targetRef,
 			"--config", cfgPath,
-			"--copy-resources",
+			"--uploader", "localblob",
 			"--config", writeOCIUploaderConfig(t),
 		})
 
@@ -245,7 +245,7 @@ configurations:
 			sourceRef,
 			intermediateRef,
 			"--config", cfgPath,
-			"--copy-resources",
+			"--uploader", "localblob",
 		})
 
 		ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
@@ -276,7 +276,7 @@ configurations:
 			intermediateSourceRef,
 			finalRef,
 			"--config", cfgPath,
-			"--copy-resources",
+			"--uploader", "localblob",
 			"--config", writeOCIUploaderConfig(t),
 		})
 
@@ -344,7 +344,7 @@ configurations:
 			localSourceRef,
 			targetRef,
 			"--config", cfgPath,
-			"--copy-resources",
+			"--uploader", "localblob",
 		})
 
 		ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
@@ -477,7 +477,7 @@ configurations:
 			sourceRef,
 			targetRef,
 			"--config", cfgPath,
-			"--copy-resources",
+			"--uploader", "localblob",
 		})
 
 		ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)

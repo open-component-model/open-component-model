@@ -8,7 +8,7 @@ hasMermaid: true
 ---
 
 By default, `ocm transfer` either leaves external resources where they are or, with
-`--copy-resources`, downloads and re-embeds them into the target component version.
+`--uploader localblob`, downloads and re-embeds them into the target component version.
 An **uploader configuration** gives you a third option: route a matching resource
 through a custom transformer that streams it to an upload target of your choice and
 rewrites the resource to point at the new location.
@@ -73,8 +73,7 @@ resource as a local blob:
 type: generic.config.ocm.software/v1
 configurations:
   - type: http.uploader.transfer.config.ocm.software/v1alpha1
-    match:
-      accessType: Wget/v1
+    match: resource.access.isType("Wget/v1")
     targetURL: '${"https://mytarget.example.com/uploads" + url(resource.access.url).path}'
     method: PUT
   - type: localblob.uploader.transfer.config.ocm.software/v1alpha1
@@ -96,7 +95,7 @@ source), so you can route any access type to an HTTP target — see the
 Uploaders are evaluated in declaration order and the first one that selects a
 resource handles it, so the HTTP uploader takes the `Wget/v1` resource and the
 `localblob.uploader` catch-all copies everything else as a local blob (the same
-as passing `--copy-resources`). Without the catch-all, local blobs are still
+as passing `--uploader localblob`). Without the catch-all, local blobs are still
 copied and all other resources stay by reference.
 
 {{< /step >}}
@@ -114,8 +113,7 @@ every matched resource has one.
 
 ```yaml
   - type: http.uploader.transfer.config.ocm.software/v1alpha1
-    match:
-      accessType: Wget/v1
+    match: resource.access.isType("Wget/v1")
     targetURL: '${"https://mytarget.example.com/uploads" + url(resource.access.url).path}'
     method: PUT
     header:

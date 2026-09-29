@@ -304,7 +304,7 @@ func transferComponentVersion(t *testing.T, ctx context.Context, srcReg *interna
 		"--config", cfgPath,
 	}
 	if copyResources {
-		args = append(args, "--copy-resources")
+		args = append(args, "--uploader", "localblob")
 	}
 	if ociUploader {
 		args = append(args, "--config", writeOCIUploaderConfig(t))

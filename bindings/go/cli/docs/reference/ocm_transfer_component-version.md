@@ -25,17 +25,16 @@ OCI, CTF, and Helm repositories are supported as transfer sources.
 OCI and CTF repositories are supported as transfer targets, while Helm repositories are not supported.
 
 By default, local blobs are copied and all other resources stay by reference (their access
-is unchanged in the target). Uploader configurations in the OCM configuration select which
-resources are moved and how: oci.uploader.transfer.config.ocm.software/v1alpha1 (separate
-OCI artifacts), http.uploader.transfer.config.ocm.software/v1alpha1 (custom HTTP targets),
-localblob.uploader.transfer.config.ocm.software/v1alpha1 (copy as local blobs) and
-reference.uploader.transfer.config.ocm.software/v1alpha1 (keep by reference). The first
-uploader whose match selects a resource handles it. --copy-resources
-appends a catch-all localblob.uploader.transfer.config.ocm.software/v1alpha1 entry after all
-configured uploaders, so every resource they do not select is copied as a local blob. The
-former --upload-as flag and the copy mode setting are replaced by these uploader configurations (see
-the "Migrate from --upload-as to Uploader Configurations" guide on ocm.software). --recursive
-walks the component's references and transfers them too.
+is unchanged in the target). Uploaders decide what happens to a resource; they come from the
+OCM configuration and from --uploader, which adds entries after the configured ones. Each
+uploader selects resources with a CEL match expression over resource and target (test access
+types with resource.access.isType("OCIImage"), which resolves aliases and versions);
+the first uploader whose match is true handles the resource. Available uploaders: oci
+(separate OCI artifacts), http (custom HTTP targets), localblob (copy as local blobs) and
+reference (keep by reference). --uploader localblob copies every resource no other uploader
+selects. The former --upload-as and --copy-resources flags and the copy mode setting are
+replaced by uploaders (see the "Migrate from --upload-as to Uploader Configurations" guide on
+ocm.software). --recursive walks the component's references and transfers them too.
 
 Driving defaults from the OCM configuration:
   A transfer.config.ocm.software/v1alpha1 entry inside the central OCM configuration
@@ -46,9 +45,9 @@ Two-step workflow (generate, review, replay):
   --dry-run builds and validates the graph without executing it, and with -o yaml|json prints
   the resulting TransformationGraphDefinition. --transfer-spec then replays a saved definition
   from a file (or stdin with "-"):
-    1. Generate the spec:  transfer cv --dry-run -o yaml --copy-resources -r {reference} {target} > spec.yaml
+    1. Generate the spec:  transfer cv --dry-run -o yaml --uploader localblob -r {reference} {target} > spec.yaml
     2. Review/edit spec.yaml, then execute: transfer cv --transfer-spec spec.yaml
-  All graph-shaping flags (--recursive, --copy-resources) and any transfer or uploader
+  All graph-shaping flags (--recursive, --uploader) and any transfer or uploader
   configuration entry are baked into the spec during step 1 and are therefore ignored in
   step 2 - the spec is the full graph definition. Only --dry-run and --output remain
   meaningful when replaying a spec.
@@ -83,33 +82,22 @@ transfer component-version ctf::./my-archive//ocm.software/mycomponent ghcr.io/m
 # Transfer only the latest version
 transfer component-version ctf::./my-archive//ocm.software/mycomponent ghcr.io/my-org/ocm --latest
 
-# Transfer resources as separate OCI artifacts. With --config ./oci-uploader.yaml containing:
+# Upload OCI images, Helm charts and OCI-manifest local blobs as separate OCI artifacts and copy
+# every other resource as a local blob. Equivalent OCM configuration:
 #   type: generic.config.ocm.software/v1
 #   configurations:
 #   - type: oci.uploader.transfer.config.ocm.software/v1alpha1
-#     # CEL template for the target image reference; this is also the default when omitted.
-#     # "target" is the OCI target repository; "resource" is the source resource.
-#     imageReference: |-
-#       ${target.baseUrl
-#         + (target.subPath == "" ? "" : "/" + target.subPath)
-#         + "/" + (has(resource.access.referenceName)
-#           ? resource.access.referenceName
-#           : has(resource.access.helmChart)
-#             ? (url(resource.access.helmRepository).path.split("/") + [resource.access.helmChart.split(":")[0]]).filter(s, s != "").join("/")
-#               + (has(resource.access.version) && resource.access.version != ""
-#                 ? ":" + resource.access.version
-#                 : (resource.access.helmChart.contains(":") ? ":" + resource.access.helmChart.split(":")[1] : ""))
-#             : resource.access.toOCI().repository
-#               + (resource.access.toOCI().tag == "" ? "" : ":" + resource.access.toOCI().tag))}
-#     # Relocate OCI images instead: '${"ghcr.io/target-org/images/" + resource.access.toOCI().repository}'
-# OCI images, Helm charts and OCI-manifest local blobs are uploaded as OCI artifacts.
-transfer component-version --config ./oci-uploader.yaml ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm
+#   - type: localblob.uploader.transfer.config.ocm.software/v1alpha1
+transfer component-version --uploader oci --uploader localblob ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm
+
+# Keep one resource by reference and copy all others as local blobs
+transfer component-version --uploader 'reference=resource.name == "base-os-image"' --uploader localblob ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm
 
 # Transfer including all resources (e.g. OCI artifacts)
-transfer component-version ctf::./my-archive//ocm.software/mycomponent:1.0.0 ghcr.io/my-org/ocm --copy-resources
+transfer component-version ctf::./my-archive//ocm.software/mycomponent:1.0.0 ghcr.io/my-org/ocm --uploader localblob
 
 # Recursively transfer a component version and all its references
-transfer component-version ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm -r --copy-resources
+transfer component-version ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm -r --uploader localblob
 
 # Drive defaults from the OCM configuration. With --config ./ocmconfig.yaml containing:
 #   type: generic.config.ocm.software/v1
@@ -122,7 +110,7 @@ transfer component-version ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.
 transfer component-version --config ./ocmconfig.yaml ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm
 
 # Two-step transfer: generate a spec with all desired flags, then review and execute
-transfer component-version --dry-run -o yaml --copy-resources -r ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm > spec.yaml
+transfer component-version --dry-run -o yaml --uploader localblob -r ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm > spec.yaml
 # (review/edit spec.yaml as needed, e.g. change the target registry)
 transfer component-version --transfer-spec spec.yaml
 ```
@@ -131,7 +119,6 @@ transfer component-version --transfer-spec spec.yaml
 
 ```
       --constraint string      version constraint evaluated by each version's configured scheme; versions with no applicable scheme are retained (e.g. ">= 1.0.0, < 2.0.0"); only used when no version is specified in the reference
-      --copy-resources         copy every resource that no configured uploader selects into the target as a local blob (appends a localblob.uploader.transfer.config.ocm.software/v1alpha1 entry after all configured uploaders)
       --dry-run                build and validate the graph but do not execute
   -h, --help                   help for component-version
       --latest                 if set, only the latest version of the component is transferred; only used when no version is specified in the reference
@@ -139,6 +126,7 @@ transfer component-version --transfer-spec spec.yaml
                                (must be one of [json ndjson yaml]) (default yaml)
   -r, --recursive              recursively discover and transfer component versions
       --transfer-spec string   path to a transfer specification file (use "-" for stdin). The input must hold exactly one transfer spec document; with "-", OCM configuration documents in stdin are applied as configuration
+      --uploader stringArray   add an uploader configuration entry after those from the OCM configuration (repeatable, in the given order): an uploader name (http, localblob, oci, reference), <name>=<CEL match expression> (e.g. 'reference=resource.name == "my-image"'), or a YAML/JSON mapping of the entry whose "type" is a name. "localblob" copies every resource no other uploader selects
 ```
 
 ### Options inherited from parent commands

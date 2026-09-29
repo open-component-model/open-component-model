@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -513,7 +514,7 @@ func TestTransferComponentVersionPreservesSignatures(t *testing.T) {
 	r.NoError(err)
 	r.NotEmpty(srcDesc.Signatures, "source descriptor should have signatures")
 
-	// Transfer to target CTF with --copy-resources
+	// Transfer to target CTF with --uploader localblob
 	toPath := t.TempDir()
 	fromRef := compref.Ref{
 		Repository: &ctfv1.Repository{
@@ -527,7 +528,7 @@ func TestTransferComponentVersionPreservesSignatures(t *testing.T) {
 	logs := test.NewJSONLogReader()
 	result := new(bytes.Buffer)
 	_, err = test.OCM(t,
-		test.WithArgs("transfer", "component-version", fromRef.String(), targetArg, "--copy-resources"),
+		test.WithArgs("transfer", "component-version", fromRef.String(), targetArg, "--uploader", "localblob"),
 		test.WithOutput(result),
 		test.WithErrorOutput(logs),
 	)
@@ -686,13 +687,13 @@ func TestTransferComponentVersion_ExactVersionIgnoresConstraintFlags(t *testing.
 	}
 }
 
-// TestTransferCopyResourcesAppendsLocalBlobUploader verifies that --copy-resources
-// appends a catch-all local blob uploader after all configured uploaders.
-func TestTransferCopyResourcesAppendsLocalBlobUploader(t *testing.T) {
+// setupOCIImageTransferFixture creates a CTF source holding a component with one external
+// OCIImage resource named "image" and returns its reference and a CTF target argument.
+func setupOCIImageTransferFixture(t *testing.T) (fromRef string, targetArg string) {
+	t.Helper()
 	r := require.New(t)
 
-	// Build a component with an OCIImage resource (external, no blob).
-	fromDesc := createTestDescriptor("ocm.software/copy-resources-test", "1.0.0")
+	fromDesc := createTestDescriptor("ocm.software/uploader-flag-test", "1.0.0")
 	fromDesc.Component.Resources = []descriptor.Resource{
 		{
 			ElementMeta: descriptor.ElementMeta{
@@ -718,46 +719,105 @@ func TestTransferCopyResourcesAppendsLocalBlobUploader(t *testing.T) {
 	r.NoError(err)
 	r.NoError(sourceRepo.AddComponentVersion(t.Context(), fromDesc))
 
-	fromRef := compref.Ref{
+	ref := compref.Ref{
 		Repository: &ctfv1.Repository{FilePath: archivePath},
 		Component:  fromDesc.Component.Name,
 		Version:    fromDesc.Component.Version,
 	}
+	return ref.String(), fmt.Sprintf("ctf::%s", t.TempDir())
+}
 
-	// Write a config with only an OCI uploader.
-	cfgPath := t.TempDir() + "/oci.yaml"
-	r.NoError(os.WriteFile(cfgPath, []byte(`type: generic.config.ocm.software/v1
+// TestTransferUploaderFlag verifies that --uploader entries are appended after the
+// configured uploaders in flag order and are decoded and validated like config entries.
+func TestTransferUploaderFlag(t *testing.T) {
+	fromRef, targetArg := setupOCIImageTransferFixture(t)
+
+	writeConfig := func(t *testing.T, uploaderType string) string {
+		t.Helper()
+		path := filepath.Join(t.TempDir(), "config.yaml")
+		require.NoError(t, os.WriteFile(path, []byte(`type: generic.config.ocm.software/v1
 configurations:
-  - type: oci.uploader.transfer.config.ocm.software/v1alpha1
+  - type: `+uploaderType+`
 `), 0o644))
+		return path
+	}
+	ociConfig := writeConfig(t, "oci.uploader.transfer.config.ocm.software/v1alpha1")
+	referenceConfig := writeConfig(t, "reference.uploader.transfer.config.ocm.software/v1alpha1")
 
-	toPath := t.TempDir()
-	targetArg := fmt.Sprintf("ctf::%s", toPath)
-
-	t.Run("without copy-resources the OCI default when does not select for CTF target", func(t *testing.T) {
-		r := require.New(t)
-		result := new(bytes.Buffer)
-		_, err := test.OCM(t,
-			test.WithArgs("transfer", "component-version", fromRef.String(), targetArg, "--dry-run", "-o", "yaml", "--config", cfgPath),
-			test.WithOutput(result),
-			test.WithErrorOutput(test.NewJSONLogReader()),
-		)
-		r.NoError(err, "dry-run should succeed")
-		out := result.String()
-		r.NotContains(out, "GetOCIArtifact", "CTF target: the OCI default when should not select; baseline keeps the image by reference")
-	})
-
-	t.Run("with copy-resources GetOCIArtifact and CTFAddLocalResource appear", func(t *testing.T) {
-		r := require.New(t)
-		result := new(bytes.Buffer)
-		_, err := test.OCM(t,
-			test.WithArgs("transfer", "component-version", fromRef.String(), targetArg, "--dry-run", "-o", "yaml", "--config", cfgPath, "--copy-resources"),
-			test.WithOutput(result),
-			test.WithErrorOutput(test.NewJSONLogReader()),
-		)
-		r.NoError(err, "dry-run should succeed")
-		out := result.String()
-		r.Contains(out, "GetOCIArtifact", "with --copy-resources the local blob catch-all should generate GetOCIArtifact")
-		r.Contains(out, "CTFAddLocalResource", "with --copy-resources the local blob catch-all should generate CTFAddLocalResource")
-	})
+	for _, tc := range []struct {
+		name        string
+		args        []string
+		contains    []string
+		notContains []string
+		wantErr     string
+	}{
+		{
+			name:        "oci config alone does not select an image for a CTF target",
+			args:        []string{"--config", ociConfig},
+			notContains: []string{"GetOCIArtifact"},
+		},
+		{
+			name:     "localblob flag after the oci config copies the image",
+			args:     []string{"--config", ociConfig, "--uploader", "localblob"},
+			contains: []string{"GetOCIArtifact", "CTFAddLocalResource"},
+		},
+		{
+			name:        "config entries come before flag entries",
+			args:        []string{"--config", referenceConfig, "--uploader", "localblob"},
+			notContains: []string{"GetOCIArtifact"},
+		},
+		{
+			name:        "flag entries keep their order",
+			args:        []string{"--uploader", `reference=resource.name == "image"`, "--uploader", "localblob"},
+			notContains: []string{"GetOCIArtifact"},
+		},
+		{
+			name:    "unknown uploader name",
+			args:    []string{"--uploader", "nope"},
+			wantErr: `invalid --uploader "nope": unknown uploader "nope" (available: http, localblob, oci, reference)`,
+		},
+		{
+			name:    "a single empty value is reported",
+			args:    []string{"--uploader", ""},
+			wantErr: `invalid --uploader "": empty value`,
+		},
+		{
+			name:    "unknown field in a mapping is rejected when decoding",
+			args:    []string{"--uploader", "{type: oci, bogus: 1}"},
+			wantErr: `unknown field "bogus"`,
+		},
+		{
+			name:    "http without match fails validation",
+			args:    []string{"--uploader", "http"},
+			wantErr: "match is required",
+		},
+		{
+			name:    "the removed --copy-resources flag is unknown",
+			args:    []string{"--copy-resources"},
+			wantErr: "unknown flag: --copy-resources",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			result := new(bytes.Buffer)
+			args := append([]string{"transfer", "component-version", fromRef, targetArg, "--dry-run", "-o", "yaml"}, tc.args...)
+			_, err := test.OCM(t,
+				test.WithArgs(args...),
+				test.WithOutput(result),
+				test.WithErrorOutput(test.NewJSONLogReader()),
+			)
+			if tc.wantErr != "" {
+				r.ErrorContains(err, tc.wantErr)
+				return
+			}
+			r.NoError(err, "dry-run should succeed")
+			out := result.String()
+			for _, s := range tc.contains {
+				r.Contains(out, s)
+			}
+			for _, s := range tc.notContains {
+				r.NotContains(out, s)
+			}
+		})
+	}
 }

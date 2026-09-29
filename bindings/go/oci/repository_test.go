@@ -2733,7 +2733,7 @@ func TestRepository_AddLocalResource_CopiesOwnershipReferrer(t *testing.T) {
 // ExtendedCopyGraph pulls the referrer along, so the materialized layout holds
 // more than one manifest and the index alone no longer says which one was
 // requested. The layout must therefore name the requested artifact, otherwise
-// packing it back in (--copy-resources) fails with "multiple manifests found in
+// packing it back in (--uploader localblob) fails with "multiple manifests found in
 // oci store, but no manifest could be identified as the top level parent".
 func TestRepository_DownloadResourceStream_DigestPinnedWithReferrer(t *testing.T) {
 	r := require.New(t)

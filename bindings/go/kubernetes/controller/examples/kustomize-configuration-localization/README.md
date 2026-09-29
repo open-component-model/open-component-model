@@ -26,7 +26,7 @@ this media type in its `ARGOCD_REPO_SERVER_OCI_LAYER_MEDIA_TYPES` allowlist.
 
 `ocm add cv` recognizes the OCM layout media type and stores the layout as
 a local blob whose access keeps that media type. Transfer with
-`--copy-resources` and an OCI uploader configuration so the referenced
+`--uploader localblob` and an OCI uploader configuration so the referenced
 resources are copied into the target registry and layout resources are
 converted into native OCI artifacts there:
 
@@ -50,7 +50,7 @@ configurations:
 ```
 
 ```bash
-ocm transfer cv --copy-resources --config oci-uploader.yaml <ctf> <registry>
+ocm transfer cv --uploader localblob --config oci-uploader.yaml <ctf> <registry>
 ```
 
 Without both the copy flag and the OCI uploader the OCI artifact does not

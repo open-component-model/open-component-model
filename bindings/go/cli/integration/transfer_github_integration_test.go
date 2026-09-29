@@ -212,7 +212,7 @@ func Test_Integration_Transfer_GitHub(t *testing.T) {
 	t.Run("copying all resources embeds the archive as a local blob", func(t *testing.T) {
 		r := require.New(t)
 
-		desc, targetRef := transferAndFetch(t, "github-transfer-default", "--copy-resources")
+		desc, targetRef := transferAndFetch(t, "github-transfer-default", "--uploader", "localblob")
 
 		res := desc.Component.Resources[0]
 		var localBlobAccess v2.LocalBlob
@@ -239,11 +239,11 @@ func Test_Integration_Transfer_GitHub(t *testing.T) {
 		r.NoError(os.WriteFile(archivePath, stored, 0o600))
 		internal.AssertGitHubArchiveAtCommit(t, archivePath)
 
-		// --copy-resources has no counterpart for sources, so the source keeps
+		// --uploader localblob has no counterpart for sources, so the source keeps
 		// pointing at github even though the resource beside it was embedded.
 		// Sources carry no digest either, so nothing about them is verifiable.
 		r.Equal("GitHub/v1", desc.Component.Sources[0].Access.GetType().String(),
-			"--copy-resources must not embed a source")
+			"--uploader localblob must not embed a source")
 		var sourceLocalBlobAccess v2.LocalBlob
 		r.Error(v2.Scheme.Convert(desc.Component.Sources[0].Access, &sourceLocalBlobAccess),
 			"a github source access must not convert to a local blob")
@@ -252,7 +252,7 @@ func Test_Integration_Transfer_GitHub(t *testing.T) {
 	t.Run("the default copy mode leaves the access external", func(t *testing.T) {
 		r := require.New(t)
 
-		// A github access is not a local blob, so without --copy-resources the
+		// A github access is not a local blob, so without --uploader localblob the
 		// resource content is skipped and the target keeps the remote reference.
 		desc, _ := transferAndFetch(t, "github-transfer-skipped")
 
@@ -276,7 +276,7 @@ func Test_Integration_Transfer_GitHub(t *testing.T) {
 			githubConstructor(internal.GitHubRepoURL, "ref", internal.GitHubRef),
 			"--skip-reference-digest-processing")
 
-		_, err := runTransfer(t, refOnlyRef, "github-transfer-refonly", "--copy-resources")
+		_, err := runTransfer(t, refOnlyRef, "github-transfer-refonly", "--uploader", "localblob")
 		r.Error(err, "transferring a ref-only github resource must fail")
 		r.ErrorContains(err, "no pinned commit",
 			"the failure must name the missing commit, since the embedded bytes would not be reproducible")

@@ -174,7 +174,7 @@ tasks:
           COMPONENT: '{{.CTF}}//{{.NAME}}:{{.VERSION}}'
       - cmd: |
           {{ .ocm }} transfer cv \
-            --copy-resources \
+            --uploader localblob \
             --recursive \
             {{.CTF}}//{{.NAME}}:{{.VERSION}} {{.AIRGAP_CTF}} {{ .CLI_ARGS }}
 
@@ -296,7 +296,7 @@ tasks:
     desc: Transfer CTF archive to air-gapped cluster
     cmd: |
       {{ .ocm }} transfer cv \
-        --copy-resources \
+        --uploader localblob \
         --recursive \
         {{.AIRGAP_CTF}}//{{.NAME}}:{{.VERSION}} \
         http://registry:5000

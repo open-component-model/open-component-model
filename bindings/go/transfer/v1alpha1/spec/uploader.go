@@ -2,6 +2,7 @@ package spec
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
@@ -168,4 +169,56 @@ func LookupUploaderConfigs(cfg *genericv1.Config) ([]UploaderConfig, error) {
 		uploaders = append(uploaders, u)
 	}
 	return uploaders, nil
+}
+
+// uploaderTypeSuffix is the type-name suffix every uploader configuration uses:
+// <name>.uploader.transfer.config.ocm.software.
+const uploaderTypeSuffix = ".uploader." + ConfigType
+
+// UploaderTypes returns the default (versioned) type of every uploader configuration
+// registered in Scheme, sorted by runtime.CompareTypesLexicographically.
+func UploaderTypes() []runtime.Type {
+	var out []runtime.Type
+	for t := range Scheme.GetTypes() {
+		obj, err := Scheme.NewObject(t)
+		if err != nil {
+			continue
+		}
+		if _, ok := obj.(UploaderConfig); ok {
+			out = append(out, t)
+		}
+	}
+	slices.SortFunc(out, runtime.CompareTypesLexicographically)
+	return out
+}
+
+// UploaderName returns the short name of an uploader type, e.g. "oci".
+func UploaderName(t runtime.Type) string {
+	return strings.TrimSuffix(t.Name, uploaderTypeSuffix)
+}
+
+// ResolveUploaderType resolves a short name ("oci") or a full type
+// ("oci.uploader.transfer.config.ocm.software[/v1alpha1]") to a type registered in
+// Scheme whose prototype implements UploaderConfig.
+func ResolveUploaderType(name string) (runtime.Type, error) {
+	var t runtime.Type
+	var err error
+	if strings.Contains(name, ".") {
+		t, err = runtime.TypeFromString(name)
+	} else {
+		t = runtime.NewVersionedType(name+uploaderTypeSuffix, Version)
+	}
+	if err == nil {
+		if obj, newErr := Scheme.NewObject(t); newErr == nil {
+			if _, ok := obj.(UploaderConfig); ok {
+				return t, nil
+			}
+		}
+	}
+	types := UploaderTypes()
+	names := make([]string, 0, len(types))
+	for _, ut := range types {
+		names = append(names, UploaderName(ut))
+	}
+	return runtime.Type{}, fmt.Errorf("unknown uploader %q (available: %s)", name, strings.Join(names, ", "))
 }
