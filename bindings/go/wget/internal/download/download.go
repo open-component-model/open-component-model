@@ -143,18 +143,6 @@ func Download(ctx context.Context, req Request, opts ...Option) (_ *Blob, err er
 	return b, nil
 }
 
-// Open performs the HTTP request described by req and returns the response with its body
-// unread, so callers can stream it. Only the client and credentials options apply. The
-// caller must close the response body.
-func Open(ctx context.Context, req Request, opts ...Option) (*http.Response, error) {
-	o := &option{}
-	for _, opt := range opts {
-		opt(o)
-	}
-	resp, _, err := open(ctx, req, o)
-	return resp, err
-}
-
 // open sends the request and checks the response status. It also returns the request URL
 // without userinfo, query and fragment for use in errors and logs.
 func open(ctx context.Context, req Request, o *option) (*http.Response, string, error) {

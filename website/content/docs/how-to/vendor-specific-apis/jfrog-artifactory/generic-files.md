@@ -82,8 +82,8 @@ curl -fsSL -H "Authorization: Bearer <ARTIFACTORY_IDENTITY_TOKEN>" https://myorg
 ## How the repository behaves
 
 - Any access type is accepted and the content is stored as is.
-- OCI images are uploaded as one OCI layout tar
-  (`application/vnd.ocm.software.oci.layout.v1+tar`).
+- OCI images are uploaded as one gzipped OCI layout tar
+  (`application/vnd.ocm.software.oci.layout.v1+tar+gzip`).
 - A second transfer reuses the stored file: `reused content already stored in the artifactory repository`.
 
 ## Troubleshooting

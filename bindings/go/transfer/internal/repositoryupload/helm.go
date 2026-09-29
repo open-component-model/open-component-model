@@ -3,6 +3,7 @@ package repositoryupload
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -44,17 +45,19 @@ type HelmServer interface {
 // are the chart metadata the server records for the uploaded chart. Where the chart is stored
 // and how the metadata is read depends on the server, see [HelmServer].
 func (u *Uploader) UploadHelm(ctx context.Context, c *Client, spec *uploadv1alpha1.RepositoryUploadSpec, src *descriptor.Resource, srv HelmServer) (*descriptor.Resource, error) {
-	req, err := u.Open(ctx, spec, src)
+	content, mediaType, err := u.Source(ctx, spec, src)
 	if err != nil {
 		return nil, err
 	}
-	chart, err := u.Charts.Open(ctx, req)
+	archive, layoutChart, err := LocateChart(ctx, content, mediaType, src.ToIdentity())
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = chart.Close() }()
+	if closer, ok := archive.(io.Closer); ok {
+		defer func() { _ = closer.Close() }()
+	}
 
-	expected, known, err := KnownDigest(src.Digest, chart.Archive, chart.FromOCI)
+	expected, known, err := KnownDigest(src.Digest, archive, layoutChart || ociHelmChart(src))
 	if err != nil {
 		return nil, err
 	}
@@ -76,7 +79,7 @@ func (u *Uploader) UploadHelm(ctx context.Context, c *Client, spec *uploadv1alph
 		slog.InfoContext(ctx, "reused helm chart content already stored in the helm repository",
 			"server", srv.Name(), "resource", src.ToIdentity(), "url", uploadURL)
 	} else {
-		computed, complete, err := UploadBlob(ctx, c, chart.Archive, srv.DeployURL(), srv.UploadHeader(known), nil)
+		computed, complete, err := UploadBlob(ctx, c, archive, srv.DeployURL(), srv.UploadHeader(known), nil)
 		switch {
 		case err != nil:
 			// A repository that rejects redeploying a chart still stores its content, e.g.

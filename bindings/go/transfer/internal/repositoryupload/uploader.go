@@ -20,7 +20,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
-	"ocm.software/open-component-model/bindings/go/helm/chartarchive"
 	helmcredsv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/v1"
 	helmidentityv1 "ocm.software/open-component-model/bindings/go/helm/spec/identity/v1"
 	ocmhttp "ocm.software/open-component-model/bindings/go/http"
@@ -52,12 +51,11 @@ const (
 	octetStream = "application/octet-stream"
 )
 
-// Uploader holds what every repository upload needs: it opens the source resource
-// and talks to the target server. The content is streamed and never buffered on disk.
+// Uploader holds what every repository upload needs: it fetches the source resource
+// and talks to the target server.
 type Uploader struct {
 	Scheme *runtime.Scheme
-	Charts *chartarchive.Source
-	// ResourceRepository derives the source credential identities of remote resources.
+	// ResourceRepository downloads remote source resources and derives their credential identities.
 	ResourceRepository repository.ResourceRepository
 	// RepoProvider resolves the source repositories of local blob resources.
 	RepoProvider       repository.ComponentVersionRepositoryProvider
@@ -95,17 +93,57 @@ func (u *Uploader) Target(ctx context.Context, helmRepo, repoURL string) (*Clien
 	return &Client{httpConfig: u.HTTPConfig, creds: creds}, nil
 }
 
-// Open returns the request opening the source resource: from the source component version for
-// local blobs, else with the resolved source credentials.
-func (u *Uploader) Open(ctx context.Context, spec *uploadv1alpha1.RepositoryUploadSpec, src *descriptor.Resource) (chartarchive.Request, error) {
-	req := chartarchive.Request{Resource: src}
-	var err error
+// Source returns the unmodified content of the source resource and its media type ("" when unknown):
+// local blobs from the source component version, remote resources downloaded with the resolved
+// source credentials.
+func (u *Uploader) Source(ctx context.Context, spec *uploadv1alpha1.RepositoryUploadSpec, src *descriptor.Resource) (blob.ReadOnlyBlob, string, error) {
 	if spec.ComponentVersion.Repository != nil {
-		req.Local, err = u.localSource(ctx, spec.ComponentVersion)
-	} else {
-		req.Credentials, err = u.resolveSourceCredentials(ctx, src)
+		repo, err := u.localSource(ctx, spec.ComponentVersion)
+		if err != nil {
+			return nil, "", err
+		}
+		b, _, err := repo.GetLocalResource(ctx, spec.ComponentVersion.Component, spec.ComponentVersion.Version, src.ToIdentity())
+		if err != nil {
+			return nil, "", fmt.Errorf("failed getting local resource %v: %w", src.ToIdentity(), err)
+		}
+		if mt := blobMediaType(b); mt != "" && mt != octetStream {
+			return b, mt, nil
+		}
+		return b, localBlobMediaType(src.Access), nil
 	}
-	return req, err
+	creds, err := u.resolveSourceCredentials(ctx, src)
+	if err != nil {
+		return nil, "", err
+	}
+	b, err := u.ResourceRepository.DownloadResource(ctx, src, creds)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed downloading source resource %v: %w", src.ToIdentity(), err)
+	}
+	return b, blobMediaType(b), nil
+}
+
+// OCISource reports that the source content of src with mediaType was downloaded from an OCI
+// artifact, so the source digest does not describe it.
+func OCISource(src *descriptor.Resource, mediaType string) bool {
+	return isOCILayout(mediaType) || ociHelmChart(src)
+}
+
+// blobMediaType returns the media type b reports, "" when unknown.
+func blobMediaType(b blob.ReadOnlyBlob) string {
+	if mt, ok := b.(blob.MediaTypeAware); ok {
+		if m, known := mt.MediaType(); known {
+			return m
+		}
+	}
+	return ""
+}
+
+func localBlobMediaType(access runtime.Typed) string {
+	var lb descriptorv2.LocalBlob
+	if err := descriptorv2.Scheme.Convert(access, &lb); err != nil {
+		return ""
+	}
+	return lb.MediaType
 }
 
 // Interval is the wait between two metadata or search polls.
@@ -156,9 +194,9 @@ func UploadedDigest(src *descriptor.Digest, expected, sha256Hex string) *descrip
 
 // ContentType is the media type content is uploaded with: that of the content, else that of the
 // resource access, else application/octet-stream.
-func ContentType(content *chartarchive.Content, res *descriptorv2.Resource) string {
-	if content.MediaType != "" {
-		return content.MediaType
+func ContentType(mediaType string, res *descriptorv2.Resource) string {
+	if mediaType != "" {
+		return mediaType
 	}
 	if mt := MediaTypeFromAccess(*res); mt != "" {
 		return mt
@@ -239,7 +277,7 @@ func expectedDigest(src *descriptor.Digest, fromOCI bool) (string, error) {
 }
 
 // localSource resolves the source component version repository of a local blob resource.
-func (t *Uploader) localSource(ctx context.Context, cv *uploadv1alpha1.RepositoryUploadComponentVersion) (*chartarchive.Local, error) {
+func (t *Uploader) localSource(ctx context.Context, cv *uploadv1alpha1.RepositoryUploadComponentVersion) (repository.ComponentVersionRepository, error) {
 	if t.RepoProvider == nil {
 		return nil, fmt.Errorf("no component version repository provider configured for local resources")
 	}
@@ -255,7 +293,7 @@ func (t *Uploader) localSource(ctx context.Context, cv *uploadv1alpha1.Repositor
 	if err != nil {
 		return nil, fmt.Errorf("failed getting source component version repository: %w", err)
 	}
-	return &chartarchive.Local{Repository: repo, Component: cv.Component, Version: cv.Version}, nil
+	return repo, nil
 }
 
 // resolveSourceCredentials resolves credentials for a remote source resource by its consumer

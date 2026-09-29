@@ -136,21 +136,15 @@ func (t *Transformer) uploadFile(ctx context.Context, c *repositoryupload.Client
 	if err != nil {
 		return nil, err
 	}
-	req, err := t.Open(ctx, spec, src)
+	content, mediaType, err := t.Source(ctx, spec, src)
 	if err != nil {
 		return nil, err
 	}
-	content, err := t.Charts.OpenContent(ctx, req)
+	expected, known, err := repositoryupload.KnownDigest(src.Digest, content, repositoryupload.OCISource(src, mediaType))
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = content.Close() }()
-
-	expected, known, err := repositoryupload.KnownDigest(src.Digest, content.Blob, content.FromOCI)
-	if err != nil {
-		return nil, err
-	}
-	mediaType := repositoryupload.ContentType(content, spec.Resource)
+	mediaType = repositoryupload.ContentType(mediaType, spec.Resource)
 	reused, err := srv.Claim(ctx, c, known)
 	if err != nil {
 		return nil, err
@@ -170,7 +164,7 @@ func (t *Transformer) uploadFile(ctx context.Context, c *repositoryupload.Client
 			// Artifactory rejects the upload when the bytes do not match the checksum.
 			header.Set("X-Checksum-Sha256", known)
 		}
-		computed, _, err := repositoryupload.UploadBlob(ctx, c, content.Blob, srv.DeployURL(), header, &srv.deployed)
+		computed, _, err := repositoryupload.UploadBlob(ctx, c, content, srv.DeployURL(), header, &srv.deployed)
 		if err != nil {
 			return nil, err
 		}

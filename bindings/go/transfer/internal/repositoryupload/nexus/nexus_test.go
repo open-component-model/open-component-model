@@ -21,7 +21,6 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
-	"ocm.software/open-component-model/bindings/go/helm/chartarchive"
 	helmaccess "ocm.software/open-component-model/bindings/go/helm/spec/access"
 	helmaccessv1 "ocm.software/open-component-model/bindings/go/helm/spec/access/v1"
 	helmcredsv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/v1"
@@ -318,7 +317,6 @@ func TestTransform_Helm(t *testing.T) {
 		repo := &uploadtest.ResourceRepo{Content: chartTGZ}
 		tr := &Transformer{repositoryupload.Uploader{
 			Scheme:             scheme,
-			Charts:             &chartarchive.Source{ResourceRepository: repo},
 			ResourceRepository: repo,
 			PollInterval:       time.Millisecond,
 		}}
@@ -414,7 +412,6 @@ func TestTransform_Helm(t *testing.T) {
 		repo := &uploadtest.ResourceRepo{Content: chartTGZ}
 		tr := &Transformer{repositoryupload.Uploader{
 			Scheme:             scheme,
-			Charts:             &chartarchive.Source{ResourceRepository: repo},
 			ResourceRepository: repo,
 		}}
 		_, err := tr.Transform(t.Context(), &uploadv1alpha1.NexusUpload{
@@ -463,7 +460,6 @@ func TestTransform_Raw(t *testing.T) {
 		repo := &uploadtest.ResourceRepo{Content: []byte(content), MediaType: "text/plain"}
 		return &Transformer{repositoryupload.Uploader{
 			Scheme:             scheme,
-			Charts:             &chartarchive.Source{ResourceRepository: repo},
 			ResourceRepository: repo,
 			CredentialProvider: creds,
 			PollInterval:       time.Millisecond,
@@ -496,7 +492,7 @@ func TestTransform_Raw(t *testing.T) {
 		var access wgetaccessv1.Wget
 		r.NoError(wgetaccess.Scheme.Convert(res.Access, &access))
 		r.Equal(srv.URL+"/repository/helm-hosted/"+rawPath, access.URL)
-		r.Equal("application/octet-stream", access.MediaType)
+		r.Equal("text/plain", access.MediaType, "the media type the source blob reports")
 		r.Equal(&descriptorv2.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: "genericBlobDigest/v1", Value: contentDigest}, res.Digest)
 	})
 
@@ -616,7 +612,6 @@ func TestTransform_DetectionErrors(t *testing.T) {
 		repo := &uploadtest.ResourceRepo{Content: []byte("hello"), MediaType: "text/plain"}
 		return &Transformer{repositoryupload.Uploader{
 			Scheme:             scheme,
-			Charts:             &chartarchive.Source{ResourceRepository: repo},
 			ResourceRepository: repo,
 		}}
 	}
@@ -663,7 +658,6 @@ func TestTransform_DetectionErrors(t *testing.T) {
 		repo := &uploadtest.ResourceRepo{Content: []byte("hello"), MediaType: "text/plain"}
 		tr := &Transformer{repositoryupload.Uploader{
 			Scheme:             scheme,
-			Charts:             &chartarchive.Source{ResourceRepository: repo},
 			ResourceRepository: repo,
 			CredentialProvider: certCreds,
 		}}
@@ -697,7 +691,6 @@ func TestTransform_Maven(t *testing.T) {
 		repo := &uploadtest.ResourceRepo{Content: []byte(content), MediaType: "application/java-archive"}
 		tr := &Transformer{repositoryupload.Uploader{
 			Scheme:             scheme,
-			Charts:             &chartarchive.Source{ResourceRepository: repo},
 			ResourceRepository: repo,
 			PollInterval:       time.Millisecond,
 		}}
@@ -851,7 +844,6 @@ func TestTransform_Npm(t *testing.T) {
 		repo := &uploadtest.ResourceRepo{Content: []byte(content)}
 		tr := &Transformer{repositoryupload.Uploader{
 			Scheme:             scheme,
-			Charts:             &chartarchive.Source{ResourceRepository: repo},
 			ResourceRepository: repo,
 			PollInterval:       time.Millisecond,
 		}}

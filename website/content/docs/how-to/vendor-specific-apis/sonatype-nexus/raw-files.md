@@ -83,8 +83,8 @@ curl -fsSL -u <USERNAME>:<PASSWORD_OR_USER_TOKEN> https://nexus.example.com/repo
 ## How the repository behaves
 
 - Any access type is accepted and the content is stored as is.
-- OCI images are uploaded as one OCI layout tar
-  (`application/vnd.ocm.software.oci.layout.v1+tar`).
+- OCI images are uploaded as one gzipped OCI layout tar
+  (`application/vnd.ocm.software.oci.layout.v1+tar+gzip`).
 - A stored file is never overwritten, see
   [Existing files at the upload path]({{< relref "docs/how-to/vendor-specific-apis/sonatype-nexus/_index.md#existing-files-at-the-upload-path" >}}).
   A file with different content fails the transfer:

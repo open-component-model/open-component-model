@@ -186,21 +186,15 @@ var mavenFormat = fileFormat{
 // path is never overwritten: it is reused when it has the content, otherwise the upload fails.
 func (t *Transformer) uploadFile(ctx context.Context, c *repositoryupload.Client, spec *uploadv1alpha1.RepositoryUploadSpec, src *descriptor.Resource, repoURL, path string, format fileFormat) (*descriptor.Resource, error) {
 	target := repoURL + "/" + path
-	req, err := t.Open(ctx, spec, src)
+	content, mediaType, err := t.Source(ctx, spec, src)
 	if err != nil {
 		return nil, err
 	}
-	content, err := t.Charts.OpenContent(ctx, req)
+	expected, known, err := repositoryupload.KnownDigest(src.Digest, content, repositoryupload.OCISource(src, mediaType))
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = content.Close() }()
-
-	expected, known, err := repositoryupload.KnownDigest(src.Digest, content.Blob, content.FromOCI)
-	if err != nil {
-		return nil, err
-	}
-	mediaType := repositoryupload.ContentType(content, spec.Resource)
+	mediaType = repositoryupload.ContentType(mediaType, spec.Resource)
 	safe := repositoryupload.RedactURL(target)
 	stored, err := fileStored(ctx, c, spec, format, path, target, known, t.Interval())
 	if err != nil {
@@ -210,7 +204,7 @@ func (t *Transformer) uploadFile(ctx context.Context, c *repositoryupload.Client
 	if stored {
 		slog.InfoContext(ctx, "reused content already stored in the nexus repository", "resource", src.ToIdentity(), "url", safe)
 	} else {
-		computed, err := format.put(ctx, c, spec, content.Blob, path, target, mediaType)
+		computed, err := format.put(ctx, c, spec, content, path, target, mediaType)
 		if err != nil {
 			return nil, err
 		}
@@ -449,21 +443,15 @@ func writeComponentForm(form *multipart.Writer, fields [][2]string, assetField, 
 // the tarball is found by its SHA-256 afterwards. A tarball the repository already stores is
 // reused without uploading it.
 func (t *Transformer) uploadNpm(ctx context.Context, c *repositoryupload.Client, spec *uploadv1alpha1.RepositoryUploadSpec, src *descriptor.Resource, repoURL string) (*descriptor.Resource, error) {
-	req, err := t.Open(ctx, spec, src)
+	content, mediaType, err := t.Source(ctx, spec, src)
 	if err != nil {
 		return nil, err
 	}
-	content, err := t.Charts.OpenContent(ctx, req)
+	expected, known, err := repositoryupload.KnownDigest(src.Digest, content, repositoryupload.OCISource(src, mediaType))
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = content.Close() }()
-
-	expected, known, err := repositoryupload.KnownDigest(src.Digest, content.Blob, content.FromOCI)
-	if err != nil {
-		return nil, err
-	}
-	mediaType := repositoryupload.ContentType(content, spec.Resource)
+	mediaType = repositoryupload.ContentType(mediaType, spec.Resource)
 	var paths []string
 	if known != "" {
 		if paths, err = assetPaths(ctx, c, spec, known); err != nil {
@@ -478,7 +466,7 @@ func (t *Transformer) uploadNpm(ctx context.Context, c *repositoryupload.Client,
 		if err != nil {
 			return nil, err
 		}
-		computed, err := componentUpload(ctx, c, spec, nil, "npm.asset", file, content.Blob, mediaType)
+		computed, err := componentUpload(ctx, c, spec, nil, "npm.asset", file, content, mediaType)
 		if err != nil {
 			return nil, err
 		}
