@@ -152,7 +152,8 @@ Downloads content from an HTTP or HTTPS URL while the component version is const
 Use it when the upstream artifact is a plain HTTP download (a release archive, a checksum file, a signed binary) and you
 want the bytes captured in the component version rather than fetched again at consumption time.
 
-Alternative type names `wget/v1`, `Wget`, and `wget` are also accepted; `Wget/v1` is canonical.
+Alternative type names `wget/v1`, `Wget`, and `wget` are also accepted, as are the additional aliases `HTTP/v1`,
+`HTTP`, `http/v1`, and `http`; `Wget/v1` is canonical.
 
 | Field        | Type                  | Required | Description                                                                                                                               |
 |--------------|-----------------------|----------|-------------------------------------------------------------------------------------------------------------------------------------------|
