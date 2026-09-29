@@ -11,6 +11,8 @@ import (
 
 // Deprecated flags kept for backwards compatibility. They are hidden from the help and
 // translated into --uploader values (see legacyUploaderValues).
+//
+// TODO(legacy-flags): remove this file and every TODO(legacy-flags) test with the flags.
 const (
 	FlagCopyResources = "copy-resources"
 	FlagUploadAs      = "upload-as"

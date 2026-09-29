@@ -793,6 +793,7 @@ configurations:
 			args:    []string{"--uploader", "http"},
 			wantErr: "match is required",
 		},
+		// TODO(legacy-flags): deprecated flag cases; remove together with legacy_flags.go.
 		{
 			name:     "deprecated --copy-resources copies the image like --uploader localblob",
 			args:     []string{"--copy-resources"},

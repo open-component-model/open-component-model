@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TODO(legacy-flags): remove together with legacy_flags.go.
 func TestLegacyUploaderValues(t *testing.T) {
 	for _, tc := range []struct {
 		name          string
