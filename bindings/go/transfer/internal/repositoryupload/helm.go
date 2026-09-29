@@ -10,6 +10,7 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	helmaccessv1 "ocm.software/open-component-model/bindings/go/helm/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	uploadv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/transformation/spec/v1alpha1"
 )
 
 // HelmServer is the server-specific part of a Helm chart upload, see [Uploader.UploadHelm].
@@ -42,7 +43,7 @@ type HelmServer interface {
 // returns the resource with a Helm/v1 access on it. The chart is not parsed: its name and version
 // are the chart metadata the server records for the uploaded chart. Where the chart is stored
 // and how the metadata is read depends on the server, see [HelmServer].
-func (u *Uploader) UploadHelm(ctx context.Context, c *Client, spec *Spec, src *descriptor.Resource, srv HelmServer) (*descriptor.Resource, error) {
+func (u *Uploader) UploadHelm(ctx context.Context, c *Client, spec *uploadv1alpha1.RepositoryUploadSpec, src *descriptor.Resource, srv HelmServer) (*descriptor.Resource, error) {
 	req, err := u.Open(ctx, spec, src)
 	if err != nil {
 		return nil, err

@@ -15,8 +15,7 @@ import (
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	ociv1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
-	"ocm.software/open-component-model/bindings/go/transfer/internal/repositoryupload/artifactory"
-	"ocm.software/open-component-model/bindings/go/transfer/internal/repositoryupload/nexus"
+	uploadv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/transformation/spec/v1alpha1"
 	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/transform/graph/env"
 	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
@@ -157,7 +156,7 @@ func TestBuildGraphDefinition_RepositoryUploaders(t *testing.T) {
 			r.NotEqual(wgetv1alpha1.HTTPStreamingV1alpha1, tr.Type, "the repository uploader must not emit an HTTPStreaming node")
 			r.NotEqual(helmv1alpha1.GetHelmChartV1alpha1, tr.Type, "the repository uploader must not emit a GetHelmChart node")
 			r.NotEqual(ociv1alpha1.OCIGetLocalResourceV1alpha1, tr.Type, "the repository uploader must not buffer local blobs")
-			if tr.Type == artifactory.VersionedType {
+			if tr.Type == uploadv1alpha1.ArtifactoryUploadV1alpha1 {
 				uploads = append(uploads, tr)
 			}
 		}
@@ -231,7 +230,7 @@ func TestBuildGraphDefinition_RepositoryUploaders(t *testing.T) {
 
 		var uploads []transformv1alpha1.GenericTransformation
 		for _, tr := range tgd.Transformations {
-			if tr.Type == nexus.VersionedType {
+			if tr.Type == uploadv1alpha1.NexusUploadV1alpha1 {
 				uploads = append(uploads, tr)
 			}
 		}

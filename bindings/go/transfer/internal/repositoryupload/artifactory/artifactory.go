@@ -14,42 +14,21 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/transfer/internal/repositoryupload"
+	uploadv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/transformation/spec/v1alpha1"
 	wgetaccess "ocm.software/open-component-model/bindings/go/wget/spec/access"
 	wgetaccessv1 "ocm.software/open-component-model/bindings/go/wget/spec/access/v1"
 )
 
-const (
-	Type    = "ArtifactoryUpload"
-	Version = "v1alpha1"
-)
-
-// VersionedType is the versioned type identifier for ArtifactoryUpload transformations.
-var VersionedType = runtime.NewVersionedType(Type, Version)
-
-// Transformation uploads a resource into a repository of a JFrog Artifactory server and
-// publishes it with an access on that repository, see [Transformer].
-// +k8s:deepcopy-gen=true
-// +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
-// +ocm:typegen=true
-// +ocm:jsonschema-gen=true
-type Transformation struct {
-	// +ocm:jsonschema-gen:enum=ArtifactoryUpload/v1alpha1
-	Type   runtime.Type             `json:"type"`
-	ID     string                   `json:"id"`
-	Spec   *repositoryupload.Spec   `json:"spec"`
-	Output *repositoryupload.Output `json:"output,omitempty"`
-}
-
 // Transformer uploads a resource into a local repository of a JFrog Artifactory server.
 // The package type of the repository decides what is uploaded and how the resource is
 // published: a Helm chart with a Helm/v1 access (helm), or the resource content with a Wget/v1
-// access (generic, maven, npm). See the ArtifactoryUploaderConfig transfer config.
+// access (generic, maven, npm). It runs [uploadv1alpha1.ArtifactoryUpload] transformations.
 type Transformer struct {
 	repositoryupload.Uploader
 }
 
 func (t *Transformer) Transform(ctx context.Context, step runtime.Typed) (runtime.Typed, error) {
-	var transformation Transformation
+	var transformation uploadv1alpha1.ArtifactoryUpload
 	if err := t.Scheme.Convert(step, &transformation); err != nil {
 		return nil, fmt.Errorf("failed converting generic transformation to ArtifactoryUpload transformation: %w", err)
 	}
@@ -101,7 +80,7 @@ func (t *Transformer) Transform(ctx context.Context, step runtime.Typed) (runtim
 
 // serverFor returns the server storing the resource at its upload path with owner
 // properties; ext is the extension of the default file name.
-func (t *Transformer) serverFor(spec *repositoryupload.Spec, src *descriptor.Resource, ext string) (*server, error) {
+func (t *Transformer) serverFor(spec *uploadv1alpha1.RepositoryUploadSpec, src *descriptor.Resource, ext string) (*server, error) {
 	path, err := repositoryupload.UploadPath(spec, src, ext)
 	if err != nil {
 		return nil, err
@@ -111,7 +90,7 @@ func (t *Transformer) serverFor(spec *repositoryupload.Spec, src *descriptor.Res
 
 // repositoryType reads the package type of the
 // repository from its configuration. Only local and federated repositories accept uploads.
-func repositoryType(ctx context.Context, c *repositoryupload.Client, spec *repositoryupload.Spec) (string, error) {
+func repositoryType(ctx context.Context, c *repositoryupload.Client, spec *uploadv1alpha1.RepositoryUploadSpec) (string, error) {
 	target, err := url.JoinPath(spec.URL, "artifactory", "api", "repositories", spec.Repository)
 	if err != nil {
 		return "", fmt.Errorf("invalid artifactory url: %w", err)
@@ -152,7 +131,7 @@ var npmPackage = &packageKind{kind: "npm package", nameKey: "npm.name", versionK
 // is only replaced when they name this resource. ext is the extension of the default file name.
 // With pkg set, the content must be a package Artifactory recognizes: otherwise the stored file
 // is removed again and the upload fails.
-func (t *Transformer) uploadFile(ctx context.Context, c *repositoryupload.Client, spec *repositoryupload.Spec, src *descriptor.Resource, ext string, pkg *packageKind) (*descriptor.Resource, error) {
+func (t *Transformer) uploadFile(ctx context.Context, c *repositoryupload.Client, spec *uploadv1alpha1.RepositoryUploadSpec, src *descriptor.Resource, ext string, pkg *packageKind) (*descriptor.Resource, error) {
 	srv, err := t.serverFor(spec, src, ext)
 	if err != nil {
 		return nil, err

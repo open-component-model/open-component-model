@@ -21,42 +21,21 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/transfer/internal/repositoryupload"
+	uploadv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/transformation/spec/v1alpha1"
 	wgetaccess "ocm.software/open-component-model/bindings/go/wget/spec/access"
 	wgetaccessv1 "ocm.software/open-component-model/bindings/go/wget/spec/access/v1"
 )
 
-const (
-	Type    = "NexusUpload"
-	Version = "v1alpha1"
-)
-
-// VersionedType is the versioned type identifier for NexusUpload transformations.
-var VersionedType = runtime.NewVersionedType(Type, Version)
-
-// Transformation uploads a resource into a hosted repository of a Sonatype Nexus
-// Repository 3 server and publishes it with an access on that repository, see [Transformer].
-// +k8s:deepcopy-gen=true
-// +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
-// +ocm:typegen=true
-// +ocm:jsonschema-gen=true
-type Transformation struct {
-	// +ocm:jsonschema-gen:enum=NexusUpload/v1alpha1
-	Type   runtime.Type             `json:"type"`
-	ID     string                   `json:"id"`
-	Spec   *repositoryupload.Spec   `json:"spec"`
-	Output *repositoryupload.Output `json:"output,omitempty"`
-}
-
 // Transformer uploads a resource into a hosted repository of a Sonatype Nexus Repository 3
 // server. The format of the repository decides what is uploaded and how the resource is
 // published: a Helm chart with a Helm/v1 access (helm), or the resource content with a Wget/v1
-// access (raw, maven2, npm). See the NexusUploaderConfig transfer config.
+// access (raw, maven2, npm). It runs [uploadv1alpha1.NexusUpload] transformations.
 type Transformer struct {
 	repositoryupload.Uploader
 }
 
 func (t *Transformer) Transform(ctx context.Context, step runtime.Typed) (runtime.Typed, error) {
-	var transformation Transformation
+	var transformation uploadv1alpha1.NexusUpload
 	if err := t.Scheme.Convert(step, &transformation); err != nil {
 		return nil, fmt.Errorf("failed converting generic transformation to NexusUpload transformation: %w", err)
 	}
@@ -129,7 +108,7 @@ func (t *Transformer) Transform(ctx context.Context, step runtime.Typed) (runtim
 
 // repositoryType reads the format of the repository from
 // its settings. Only hosted repositories accept uploads.
-func repositoryType(ctx context.Context, c *repositoryupload.Client, spec *repositoryupload.Spec) (string, error) {
+func repositoryType(ctx context.Context, c *repositoryupload.Client, spec *uploadv1alpha1.RepositoryUploadSpec) (string, error) {
 	target, err := url.JoinPath(spec.URL, "service", "rest", "v1", "repositories", spec.Repository)
 	if err != nil {
 		return "", fmt.Errorf("invalid nexus url: %w", err)
@@ -161,18 +140,18 @@ type fileFormat struct {
 	name string
 	// checksums returns the SHA-256 Nexus reports for the file stored at path; empty when it
 	// reports none yet.
-	checksums func(ctx context.Context, c *repositoryupload.Client, spec *repositoryupload.Spec, path, target string) ([]string, error)
+	checksums func(ctx context.Context, c *repositoryupload.Client, spec *uploadv1alpha1.RepositoryUploadSpec, path, target string) ([]string, error)
 	// put stores content at path and returns the hex SHA-256 of the bytes sent.
-	put func(ctx context.Context, c *repositoryupload.Client, spec *repositoryupload.Spec, content blob.ReadOnlyBlob, path, target, mediaType string) (string, error)
+	put func(ctx context.Context, c *repositoryupload.Client, spec *uploadv1alpha1.RepositoryUploadSpec, content blob.ReadOnlyBlob, path, target, mediaType string) (string, error)
 }
 
 // rawFormat stores files with a plain PUT and finds them by the asset search.
 var rawFormat = fileFormat{
 	name: "raw",
-	checksums: func(ctx context.Context, c *repositoryupload.Client, spec *repositoryupload.Spec, path, _ string) ([]string, error) {
+	checksums: func(ctx context.Context, c *repositoryupload.Client, spec *uploadv1alpha1.RepositoryUploadSpec, path, _ string) ([]string, error) {
 		return assetChecksums(ctx, c, spec, path, nil)
 	},
-	put: func(ctx context.Context, c *repositoryupload.Client, _ *repositoryupload.Spec, content blob.ReadOnlyBlob, _, target, mediaType string) (string, error) {
+	put: func(ctx context.Context, c *repositoryupload.Client, _ *uploadv1alpha1.RepositoryUploadSpec, content blob.ReadOnlyBlob, _, target, mediaType string) (string, error) {
 		computed, _, err := repositoryupload.UploadBlob(ctx, c, content, target, http.Header{"Content-Type": {mediaType}}, nil)
 		return computed, err
 	},
@@ -183,7 +162,7 @@ var rawFormat = fileFormat{
 // finds maven assets by their coordinates, not by name.
 var mavenFormat = fileFormat{
 	name: "maven2",
-	checksums: func(ctx context.Context, c *repositoryupload.Client, spec *repositoryupload.Spec, path, _ string) ([]string, error) {
+	checksums: func(ctx context.Context, c *repositoryupload.Client, spec *uploadv1alpha1.RepositoryUploadSpec, path, _ string) ([]string, error) {
 		coords, err := parseMavenPath(spec.Path)
 		if err != nil {
 			return nil, err
@@ -205,7 +184,7 @@ var mavenFormat = fileFormat{
 // uploadFile uploads the resource content as is to path and returns the resource with a Wget/v1
 // access on the stored file. Nexus records no owner of a file, so a file already stored at the
 // path is never overwritten: it is reused when it has the content, otherwise the upload fails.
-func (t *Transformer) uploadFile(ctx context.Context, c *repositoryupload.Client, spec *repositoryupload.Spec, src *descriptor.Resource, repoURL, path string, format fileFormat) (*descriptor.Resource, error) {
+func (t *Transformer) uploadFile(ctx context.Context, c *repositoryupload.Client, spec *uploadv1alpha1.RepositoryUploadSpec, src *descriptor.Resource, repoURL, path string, format fileFormat) (*descriptor.Resource, error) {
 	target := repoURL + "/" + path
 	req, err := t.Open(ctx, spec, src)
 	if err != nil {
@@ -256,7 +235,7 @@ func (t *Transformer) uploadFile(ctx context.Context, c *repositoryupload.Client
 // target holds other content, or content whose digest is unknown up front. Nexus reports the
 // checksum of a stored file shortly after storing it (raw assets are indexed for search), so a
 // stored file without a reported checksum yet is polled like chart metadata.
-func fileStored(ctx context.Context, c *repositoryupload.Client, spec *repositoryupload.Spec, format fileFormat, path, target, sha256Hex string, interval time.Duration) (bool, error) {
+func fileStored(ctx context.Context, c *repositoryupload.Client, spec *uploadv1alpha1.RepositoryUploadSpec, format fileFormat, path, target, sha256Hex string, interval time.Duration) (bool, error) {
 	resp, err := c.Do(ctx, http.MethodHead, target, nil, -1, nil)
 	if err != nil {
 		return false, err
@@ -292,7 +271,7 @@ func fileStored(ctx context.Context, c *repositoryupload.Client, spec *repositor
 
 // assetChecksums returns the SHA-256 of the assets Nexus's search finds at path. query
 // selects the assets by format-specific attributes; without it, raw assets are selected by name.
-func assetChecksums(ctx context.Context, c *repositoryupload.Client, spec *repositoryupload.Spec, path string, query url.Values) ([]string, error) {
+func assetChecksums(ctx context.Context, c *repositoryupload.Client, spec *uploadv1alpha1.RepositoryUploadSpec, path string, query url.Values) ([]string, error) {
 	base, err := url.JoinPath(spec.URL, "service", "rest", "v1", "search", "assets")
 	if err != nil {
 		return nil, fmt.Errorf("invalid nexus url: %w", err)
@@ -344,7 +323,7 @@ type mavenCoordinates struct {
 // mavenPath validates the configured path as a Maven repository layout path,
 // <group path>/<artifactId>/<version>/<artifactId>-<version>[-<classifier>].<extension>, and
 // returns it path-escaped. Nexus maven2 repositories store files only at such paths.
-func mavenPath(spec *repositoryupload.Spec) (string, error) {
+func mavenPath(spec *uploadv1alpha1.RepositoryUploadSpec) (string, error) {
 	if spec.Path == "" {
 		return "", fmt.Errorf("nexus maven2 repositories need a path in the Maven repository layout, e.g. " +
 			`${"com/example/" + resource.name + "/" + resource.version + "/" + resource.name + "-" + resource.version + ".jar"}`)
@@ -393,7 +372,7 @@ func parseMavenPath(path string) (mavenCoordinates, error) {
 // API and returns the hex SHA-256 of the bytes sent. The components API refuses snapshot
 // versions, so those are stored with a plain PUT, which Nexus accepts at Maven layout paths but
 // does not record in maven-metadata.xml.
-func mavenUpload(ctx context.Context, c *repositoryupload.Client, spec *repositoryupload.Spec, content blob.ReadOnlyBlob, _, target, mediaType string) (string, error) {
+func mavenUpload(ctx context.Context, c *repositoryupload.Client, spec *uploadv1alpha1.RepositoryUploadSpec, content blob.ReadOnlyBlob, _, target, mediaType string) (string, error) {
 	coords, err := parseMavenPath(spec.Path)
 	if err != nil {
 		return "", err
@@ -417,7 +396,7 @@ func mavenUpload(ctx context.Context, c *repositoryupload.Client, spec *reposito
 
 // componentUpload streams content as the single asset assetField of a component, with
 // the form fields, to the components API and returns the hex SHA-256 of the bytes sent.
-func componentUpload(ctx context.Context, c *repositoryupload.Client, spec *repositoryupload.Spec, fields [][2]string, assetField, filename string, content blob.ReadOnlyBlob, mediaType string) (string, error) {
+func componentUpload(ctx context.Context, c *repositoryupload.Client, spec *uploadv1alpha1.RepositoryUploadSpec, fields [][2]string, assetField, filename string, content blob.ReadOnlyBlob, mediaType string) (string, error) {
 	base, err := url.JoinPath(spec.URL, "service", "rest", "v1", "components")
 	if err != nil {
 		return "", fmt.Errorf("invalid nexus url: %w", err)
@@ -469,7 +448,7 @@ func writeComponentForm(form *multipart.Writer, fields [][2]string, assetField, 
 // and version from package.json and stores the tarball under <name>/-/<name>-<version>.tgz, so
 // the tarball is found by its SHA-256 afterwards. A tarball the repository already stores is
 // reused without uploading it.
-func (t *Transformer) uploadNpm(ctx context.Context, c *repositoryupload.Client, spec *repositoryupload.Spec, src *descriptor.Resource, repoURL string) (*descriptor.Resource, error) {
+func (t *Transformer) uploadNpm(ctx context.Context, c *repositoryupload.Client, spec *uploadv1alpha1.RepositoryUploadSpec, src *descriptor.Resource, repoURL string) (*descriptor.Resource, error) {
 	req, err := t.Open(ctx, spec, src)
 	if err != nil {
 		return nil, err
@@ -539,7 +518,7 @@ func (t *Transformer) uploadNpm(ctx context.Context, c *repositoryupload.Client,
 
 // assetPaths returns the escaped paths, with a leading slash, of the .tgz assets the
 // repository stores with content sha256Hex.
-func assetPaths(ctx context.Context, c *repositoryupload.Client, spec *repositoryupload.Spec, sha256Hex string) ([]string, error) {
+func assetPaths(ctx context.Context, c *repositoryupload.Client, spec *uploadv1alpha1.RepositoryUploadSpec, sha256Hex string) ([]string, error) {
 	base, err := url.JoinPath(spec.URL, "service", "rest", "v1", "search", "assets")
 	if err != nil {
 		return nil, fmt.Errorf("invalid nexus url: %w", err)

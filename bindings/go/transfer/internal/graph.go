@@ -17,8 +17,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	s3v2 "ocm.software/open-component-model/bindings/go/s3/spec/access/v2"
-	"ocm.software/open-component-model/bindings/go/transfer/internal/repositoryupload/artifactory"
-	"ocm.software/open-component-model/bindings/go/transfer/internal/repositoryupload/nexus"
+	uploadv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/transformation/spec/v1alpha1"
 	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
 	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1/meta"
@@ -287,11 +286,11 @@ func processResources(
 					return nil, nil, fmt.Errorf("cannot process uploader for resource %v: %w", resource.ToIdentity(), err)
 				}
 			case *transferv1alpha1.ArtifactoryUploaderConfig:
-				if err := processRepositoryUploader(resource, access, artifactory.VersionedType, cfg.URL, cfg.Repository, cfg.Path, baseID, id, val, tgd, resourceTransformIDs, i); err != nil {
+				if err := processRepositoryUploader(resource, access, uploadv1alpha1.ArtifactoryUploadV1alpha1, cfg.URL, cfg.Repository, cfg.Path, baseID, id, val, tgd, resourceTransformIDs, i); err != nil {
 					return nil, nil, fmt.Errorf("cannot process uploader for resource %v: %w", resource.ToIdentity(), err)
 				}
 			case *transferv1alpha1.NexusUploaderConfig:
-				if err := processRepositoryUploader(resource, access, nexus.VersionedType, cfg.URL, cfg.Repository, cfg.Path, baseID, id, val, tgd, resourceTransformIDs, i); err != nil {
+				if err := processRepositoryUploader(resource, access, uploadv1alpha1.NexusUploadV1alpha1, cfg.URL, cfg.Repository, cfg.Path, baseID, id, val, tgd, resourceTransformIDs, i); err != nil {
 					return nil, nil, fmt.Errorf("cannot process uploader for resource %v: %w", resource.ToIdentity(), err)
 				}
 			default:

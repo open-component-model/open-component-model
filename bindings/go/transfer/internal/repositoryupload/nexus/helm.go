@@ -11,6 +11,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob/compression"
 	"ocm.software/open-component-model/bindings/go/transfer/internal/repositoryupload"
+	uploadv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/transformation/spec/v1alpha1"
 )
 
 // helmServer uploads the chart to the root of a Nexus Repository 3 Helm hosted repository.
@@ -30,7 +31,7 @@ type component struct {
 	Format  string `json:"format"`
 }
 
-func newHelmServer(spec *repositoryupload.Spec, file string, interval time.Duration) (*helmServer, error) {
+func newHelmServer(spec *uploadv1alpha1.RepositoryUploadSpec, file string, interval time.Duration) (*helmServer, error) {
 	helmRepo, err := url.JoinPath(spec.URL, "repository", spec.Repository)
 	if err != nil {
 		return nil, fmt.Errorf("invalid nexus url: %w", err)

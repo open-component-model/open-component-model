@@ -33,6 +33,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/transfer/internal/repositoryupload"
 	"ocm.software/open-component-model/bindings/go/transfer/internal/repositoryupload/uploadtest"
+	uploadv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/transformation/spec/v1alpha1"
 	wgetaccess "ocm.software/open-component-model/bindings/go/wget/spec/access"
 	wgetaccessv1 "ocm.software/open-component-model/bindings/go/wget/spec/access/v1"
 	wgetcredsv1 "ocm.software/open-component-model/bindings/go/wget/spec/credentials/v1"
@@ -265,7 +266,7 @@ func TestTransform_Helm(t *testing.T) {
 	charts := map[string][2]string{chartDigest: {"mychart", "0.1.0"}}
 
 	scheme := runtime.NewScheme()
-	scheme.MustRegisterWithAlias(&Transformation{}, VersionedType)
+	scheme.MustRegisterScheme(uploadv1alpha1.Scheme)
 	scheme.MustRegisterScheme(helmaccess.Scheme)
 
 	const (
@@ -287,13 +288,13 @@ func TestTransform_Helm(t *testing.T) {
 			Access:      &runtime.Raw{Type: runtime.NewVersionedType("Wget", "v1"), Data: []byte(`{"type":"Wget/v1","url":"https://charts.example/mychart-0.1.0.tgz"}`)},
 		}
 	}
-	step := func(url string, res *descriptorv2.Resource) *Transformation {
-		return &Transformation{
-			Type: VersionedType,
+	step := func(url string, res *descriptorv2.Resource) *uploadv1alpha1.ArtifactoryUpload {
+		return &uploadv1alpha1.ArtifactoryUpload{
+			Type: uploadv1alpha1.ArtifactoryUploadV1alpha1,
 			ID:   "upload",
-			Spec: &repositoryupload.Spec{
+			Spec: &uploadv1alpha1.RepositoryUploadSpec{
 				Resource:         res,
-				ComponentVersion: &repositoryupload.ComponentVersion{Component: "ocm.software/test", Version: "1.0.0"},
+				ComponentVersion: &uploadv1alpha1.RepositoryUploadComponentVersion{Component: "ocm.software/test", Version: "1.0.0"},
 				URL:              url,
 				Repository:       "helm-local",
 			},
@@ -323,7 +324,7 @@ func TestTransform_Helm(t *testing.T) {
 	}
 	helmChart := func(r *require.Assertions, out runtime.Typed) string {
 		var access helmaccessv1.Helm
-		r.NoError(helmaccess.Scheme.Convert(out.(*Transformation).Output.Resource.Access, &access))
+		r.NoError(helmaccess.Scheme.Convert(out.(*uploadv1alpha1.ArtifactoryUpload).Output.Resource.Access, &access))
 		return access.HelmChart
 	}
 	helmCreds := &helmcredsv1.HelmHTTPCredentials{Type: runtime.NewVersionedType(helmcredsv1.HelmHTTPCredentialsType, helmcredsv1.Version), Username: "helm-user", Password: "helm-pass"}
@@ -343,7 +344,7 @@ func TestTransform_Helm(t *testing.T) {
 		r.Empty(got[2].checksum, "without a source digest there is no checksum to announce")
 		r.Equal(owner, got[2].properties, "the deploy records the owning resource as properties")
 
-		res := out.(*Transformation).Output.Resource
+		res := out.(*uploadv1alpha1.ArtifactoryUpload).Output.Resource
 		r.Equal("renamed", res.Name)
 		var access helmaccessv1.Helm
 		r.NoError(helmaccess.Scheme.Convert(res.Access, &access))
@@ -420,7 +421,7 @@ func TestTransform_Helm(t *testing.T) {
 		r.False(got[3].deploy)
 		r.Equal(chartDigest, got[3].checksum)
 		r.Equal(chartTGZ, got[3].body)
-		r.Equal(res.Digest, out.(*Transformation).Output.Resource.Digest)
+		r.Equal(res.Digest, out.(*uploadv1alpha1.ArtifactoryUpload).Output.Resource.Digest)
 
 		// The upload location now holds the chart, so a second transfer writes nothing.
 		out, err = transformer(nil).Transform(t.Context(), step(srv.URL, res))
@@ -428,7 +429,7 @@ func TestTransform_Helm(t *testing.T) {
 		got = srv.recorded()[5:]
 		r.Equal([]string{"GET " + detectionPath, "GET " + storagePath, "GET " + chartProps}, methods(got))
 		r.Equal("mychart:0.1.0", helmChart(r, out))
-		r.Equal(res.Digest, out.(*Transformation).Output.Resource.Digest)
+		r.Equal(res.Digest, out.(*uploadv1alpha1.ArtifactoryUpload).Output.Resource.Digest)
 	})
 
 	t.Run("source digest mismatch is rejected by artifactory", func(t *testing.T) {
@@ -572,7 +573,7 @@ func TestTransform_File(t *testing.T) {
 	contentDigest := hex.EncodeToString(contentSum[:])
 
 	scheme := runtime.NewScheme()
-	scheme.MustRegisterWithAlias(&Transformation{}, VersionedType)
+	scheme.MustRegisterScheme(uploadv1alpha1.Scheme)
 	scheme.MustRegisterScheme(wgetaccess.Scheme)
 
 	const (
@@ -593,13 +594,13 @@ func TestTransform_File(t *testing.T) {
 			Access:      &runtime.Raw{Type: runtime.NewVersionedType("Wget", "v1"), Data: []byte(`{"type":"Wget/v1","url":"https://example.com/hello"}`)},
 		}
 	}
-	step := func(url string, res *descriptorv2.Resource) *Transformation {
-		return &Transformation{
-			Type: VersionedType,
+	step := func(url string, res *descriptorv2.Resource) *uploadv1alpha1.ArtifactoryUpload {
+		return &uploadv1alpha1.ArtifactoryUpload{
+			Type: uploadv1alpha1.ArtifactoryUploadV1alpha1,
 			ID:   "upload",
-			Spec: &repositoryupload.Spec{
+			Spec: &uploadv1alpha1.RepositoryUploadSpec{
 				Resource:         res,
-				ComponentVersion: &repositoryupload.ComponentVersion{Component: "ocm.software/test", Version: "1.0.0"},
+				ComponentVersion: &uploadv1alpha1.RepositoryUploadComponentVersion{Component: "ocm.software/test", Version: "1.0.0"},
 				URL:              url,
 				Repository:       "helm-local",
 			},
@@ -642,7 +643,7 @@ func TestTransform_File(t *testing.T) {
 			r.Equal([]byte(content), got[3].body)
 			r.Equal(owner, got[3].properties)
 
-			res := out.(*Transformation).Output.Resource
+			res := out.(*uploadv1alpha1.ArtifactoryUpload).Output.Resource
 			r.Equal("renamed", res.Name)
 			var access wgetaccessv1.Wget
 			r.NoError(wgetaccess.Scheme.Convert(res.Access, &access))
@@ -668,7 +669,7 @@ func TestTransform_File(t *testing.T) {
 			out, err := transformer().Transform(t.Context(), step(srv.URL, res))
 			r.NoError(err, run)
 			var access wgetaccessv1.Wget
-			r.NoError(wgetaccess.Scheme.Convert(out.(*Transformation).Output.Resource.Access, &access))
+			r.NoError(wgetaccess.Scheme.Convert(out.(*uploadv1alpha1.ArtifactoryUpload).Output.Resource.Access, &access))
 			r.Equal(want, access.URL, run)
 		}
 		got := srv.recorded()
@@ -688,7 +689,7 @@ func TestTransform_File(t *testing.T) {
 		r.Equal("PUT "+putPath+".tgz", got[len(got)-2], "the default file name ends in .tgz so Artifactory indexes it")
 		r.Equal("GET "+storagePath+".tgz?properties=npm.name,npm.version", got[len(got)-1])
 		var access wgetaccessv1.Wget
-		r.NoError(wgetaccess.Scheme.Convert(out.(*Transformation).Output.Resource.Access, &access))
+		r.NoError(wgetaccess.Scheme.Convert(out.(*uploadv1alpha1.ArtifactoryUpload).Output.Resource.Access, &access))
 		r.Equal(srv.URL+"/artifactory/helm-local/"+genericPath+".tgz", access.URL)
 	})
 
@@ -756,7 +757,7 @@ func TestTransform_File(t *testing.T) {
 		r.Empty(got[2].body)
 		r.Equal(owner, got[2].properties)
 		var access wgetaccessv1.Wget
-		r.NoError(wgetaccess.Scheme.Convert(out.(*Transformation).Output.Resource.Access, &access))
+		r.NoError(wgetaccess.Scheme.Convert(out.(*uploadv1alpha1.ArtifactoryUpload).Output.Resource.Access, &access))
 		r.Equal(srv.URL+"/artifactory/helm-local/"+genericPath, access.URL)
 	})
 
@@ -832,14 +833,14 @@ func TestTransform_File(t *testing.T) {
 		}
 		r.Equal([]string{"/artifactory/helm-local/packages/renamed-9.9.9.tgz"}, puts)
 		var access wgetaccessv1.Wget
-		r.NoError(wgetaccess.Scheme.Convert(out.(*Transformation).Output.Resource.Access, &access))
+		r.NoError(wgetaccess.Scheme.Convert(out.(*uploadv1alpha1.ArtifactoryUpload).Output.Resource.Access, &access))
 		r.Equal(srv.URL+"/artifactory/helm-local/packages/renamed-9.9.9.tgz", access.URL)
 	})
 }
 
 func TestTransform_DetectionErrors(t *testing.T) {
 	scheme := runtime.NewScheme()
-	scheme.MustRegisterWithAlias(&Transformation{}, VersionedType)
+	scheme.MustRegisterScheme(uploadv1alpha1.Scheme)
 	scheme.MustRegisterScheme(helmaccess.Scheme)
 	scheme.MustRegisterScheme(wgetaccess.Scheme)
 
@@ -851,13 +852,13 @@ func TestTransform_DetectionErrors(t *testing.T) {
 			Access:      &runtime.Raw{Type: runtime.NewVersionedType("Wget", "v1"), Data: []byte(`{"type":"Wget/v1","url":"https://charts.example/mychart-0.1.0.tgz"}`)},
 		}
 	}
-	step := func(url string) *Transformation {
-		return &Transformation{
-			Type: VersionedType,
+	step := func(url string) *uploadv1alpha1.ArtifactoryUpload {
+		return &uploadv1alpha1.ArtifactoryUpload{
+			Type: uploadv1alpha1.ArtifactoryUploadV1alpha1,
 			ID:   "upload",
-			Spec: &repositoryupload.Spec{
+			Spec: &uploadv1alpha1.RepositoryUploadSpec{
 				Resource:         source(),
-				ComponentVersion: &repositoryupload.ComponentVersion{Component: "ocm.software/test", Version: "1.0.0"},
+				ComponentVersion: &uploadv1alpha1.RepositoryUploadComponentVersion{Component: "ocm.software/test", Version: "1.0.0"},
 				URL:              url,
 				Repository:       "helm-local",
 			},

@@ -1,5 +1,5 @@
-// Package repositoryupload holds what the Artifactory and Nexus uploaders share: the
-// transformation spec, the source and target plumbing, and the Helm chart upload flow.
+// Package repositoryupload holds what the Artifactory and Nexus uploaders share: the source
+// and target plumbing and the Helm chart upload flow.
 package repositoryupload
 
 import (
@@ -27,6 +27,7 @@ import (
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	uploadv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/transformation/spec/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/wget/httpauth"
 	wgetcredsv1 "ocm.software/open-component-model/bindings/go/wget/spec/credentials/v1"
 	wgetidentityv1 "ocm.software/open-component-model/bindings/go/wget/spec/identity/v1"
@@ -51,47 +52,6 @@ const (
 	octetStream = "application/octet-stream"
 )
 
-// Spec is the input specification of an Artifactory or Nexus upload
-// transformation.
-// +k8s:deepcopy-gen=true
-// +ocm:jsonschema-gen=true
-type Spec struct {
-	// Resource is the source resource to upload.
-	Resource *descriptorv2.Resource `json:"resource"`
-	// ComponentVersion is the component version holding the resource. It determines the default
-	// upload location and, for local blob resources, where the resource is read from.
-	ComponentVersion *ComponentVersion `json:"componentVersion"`
-	// URL is the base URL of the server.
-	URL string `json:"url"`
-	// Repository is the name of the target repository.
-	Repository string `json:"repository"`
-	// Path is where the content is stored, relative to the repository root. It must consist of
-	// non-empty segments without . or .. and, for helm repositories, end in .tgz. Empty stores the
-	// content under <component>/<component version>/<resource>-<resource version>.
-	Path string `json:"path,omitempty"`
-}
-
-// ComponentVersion identifies the component version holding the resource.
-// +k8s:deepcopy-gen=true
-// +ocm:jsonschema-gen=true
-type ComponentVersion struct {
-	// Repository is the specification of the repository holding the component version. It is
-	// set for local blob resources only, which are read from it.
-	Repository *runtime.Raw `json:"repository,omitempty"`
-	// Component is the component name.
-	Component string `json:"component"`
-	// Version is the component version.
-	Version string `json:"version"`
-}
-
-// Output is the output of an Artifactory or Nexus upload transformation.
-// +k8s:deepcopy-gen=true
-// +ocm:jsonschema-gen=true
-type Output struct {
-	// Resource is the uploaded resource with its access on the target repository.
-	Resource *descriptorv2.Resource `json:"resource"`
-}
-
 // Uploader holds what every repository upload needs: it opens the source resource
 // and talks to the target server. The content is streamed and never buffered on disk.
 type Uploader struct {
@@ -109,7 +69,7 @@ type Uploader struct {
 }
 
 // ValidateSpec rejects a spec missing a field every upload needs.
-func ValidateSpec(spec *Spec) error {
+func ValidateSpec(spec *uploadv1alpha1.RepositoryUploadSpec) error {
 	switch {
 	case spec == nil:
 		return fmt.Errorf("spec is required")
@@ -137,7 +97,7 @@ func (u *Uploader) Target(ctx context.Context, helmRepo, repoURL string) (*Clien
 
 // Open returns the request opening the source resource: from the source component version for
 // local blobs, else with the resolved source credentials.
-func (u *Uploader) Open(ctx context.Context, spec *Spec, src *descriptor.Resource) (chartarchive.Request, error) {
+func (u *Uploader) Open(ctx context.Context, spec *uploadv1alpha1.RepositoryUploadSpec, src *descriptor.Resource) (chartarchive.Request, error) {
 	req := chartarchive.Request{Resource: src}
 	var err error
 	if spec.ComponentVersion.Repository != nil {
@@ -157,12 +117,12 @@ func (u *Uploader) Interval() time.Duration {
 }
 
 // Output converts the uploaded resource to its v2 form.
-func (u *Uploader) Output(out *descriptor.Resource) (*Output, error) {
+func (u *Uploader) Output(out *descriptor.Resource) (*uploadv1alpha1.RepositoryUploadOutput, error) {
 	res, err := descriptor.ConvertToV2Resource(u.Scheme, out)
 	if err != nil {
 		return nil, fmt.Errorf("failed converting uploaded resource to v2 format: %w", err)
 	}
-	return &Output{Resource: res}, nil
+	return &uploadv1alpha1.RepositoryUploadOutput{Resource: res}, nil
 }
 
 // KnownDigest returns the SHA-256 the uploaded content must have (expected, see expectedDigest)
@@ -238,7 +198,7 @@ func defaultPath(component, version string, res *descriptor.Resource, ext string
 }
 
 // UploadPath returns the configured location, see CustomPath, else the default location.
-func UploadPath(spec *Spec, res *descriptor.Resource, ext string) (string, error) {
+func UploadPath(spec *uploadv1alpha1.RepositoryUploadSpec, res *descriptor.Resource, ext string) (string, error) {
 	if spec.Path != "" {
 		return CustomPath(spec.Path, ext)
 	}
@@ -279,7 +239,7 @@ func expectedDigest(src *descriptor.Digest, fromOCI bool) (string, error) {
 }
 
 // localSource resolves the source component version repository of a local blob resource.
-func (t *Uploader) localSource(ctx context.Context, cv *ComponentVersion) (*chartarchive.Local, error) {
+func (t *Uploader) localSource(ctx context.Context, cv *uploadv1alpha1.RepositoryUploadComponentVersion) (*chartarchive.Local, error) {
 	if t.RepoProvider == nil {
 		return nil, fmt.Errorf("no component version repository provider configured for local resources")
 	}

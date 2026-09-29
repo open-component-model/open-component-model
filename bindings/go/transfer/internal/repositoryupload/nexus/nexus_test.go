@@ -29,6 +29,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/transfer/internal/repositoryupload"
 	"ocm.software/open-component-model/bindings/go/transfer/internal/repositoryupload/uploadtest"
+	uploadv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/transformation/spec/v1alpha1"
 	wgetaccess "ocm.software/open-component-model/bindings/go/wget/spec/access"
 	wgetaccessv1 "ocm.software/open-component-model/bindings/go/wget/spec/access/v1"
 	wgetcredsv1 "ocm.software/open-component-model/bindings/go/wget/spec/credentials/v1"
@@ -293,7 +294,7 @@ func TestTransform_Helm(t *testing.T) {
 	charts := map[string][2]string{chartDigest: {"mychart", "0.1.0"}}
 
 	scheme := runtime.NewScheme()
-	scheme.MustRegisterWithAlias(&Transformation{}, VersionedType)
+	scheme.MustRegisterScheme(uploadv1alpha1.Scheme)
 	scheme.MustRegisterScheme(helmaccess.Scheme)
 
 	const (
@@ -313,7 +314,7 @@ func TestTransform_Helm(t *testing.T) {
 		}
 		return res
 	}
-	transform := func(t *testing.T, url string, res *descriptorv2.Resource) (*Transformation, error) {
+	transform := func(t *testing.T, url string, res *descriptorv2.Resource) (*uploadv1alpha1.NexusUpload, error) {
 		repo := &uploadtest.ResourceRepo{Content: chartTGZ}
 		tr := &Transformer{repositoryupload.Uploader{
 			Scheme:             scheme,
@@ -321,12 +322,12 @@ func TestTransform_Helm(t *testing.T) {
 			ResourceRepository: repo,
 			PollInterval:       time.Millisecond,
 		}}
-		out, err := tr.Transform(t.Context(), &Transformation{
-			Type: VersionedType,
+		out, err := tr.Transform(t.Context(), &uploadv1alpha1.NexusUpload{
+			Type: uploadv1alpha1.NexusUploadV1alpha1,
 			ID:   "upload",
-			Spec: &repositoryupload.Spec{
+			Spec: &uploadv1alpha1.RepositoryUploadSpec{
 				Resource:         res,
-				ComponentVersion: &repositoryupload.ComponentVersion{Component: "ocm.software/test", Version: "1.0.0"},
+				ComponentVersion: &uploadv1alpha1.RepositoryUploadComponentVersion{Component: "ocm.software/test", Version: "1.0.0"},
 				URL:              url,
 				Repository:       "helm-hosted",
 			},
@@ -334,9 +335,9 @@ func TestTransform_Helm(t *testing.T) {
 		if err != nil {
 			return nil, err
 		}
-		return out.(*Transformation), nil
+		return out.(*uploadv1alpha1.NexusUpload), nil
 	}
-	access := func(r *require.Assertions, out *Transformation) helmaccessv1.Helm {
+	access := func(r *require.Assertions, out *uploadv1alpha1.NexusUpload) helmaccessv1.Helm {
 		var access helmaccessv1.Helm
 		r.NoError(helmaccess.Scheme.Convert(out.Output.Resource.Access, &access))
 		return access
@@ -416,12 +417,12 @@ func TestTransform_Helm(t *testing.T) {
 			Charts:             &chartarchive.Source{ResourceRepository: repo},
 			ResourceRepository: repo,
 		}}
-		_, err := tr.Transform(t.Context(), &Transformation{
-			Type: VersionedType,
+		_, err := tr.Transform(t.Context(), &uploadv1alpha1.NexusUpload{
+			Type: uploadv1alpha1.NexusUploadV1alpha1,
 			ID:   "upload",
-			Spec: &repositoryupload.Spec{
+			Spec: &uploadv1alpha1.RepositoryUploadSpec{
 				Resource:         source(""),
-				ComponentVersion: &repositoryupload.ComponentVersion{Component: "ocm.software/test", Version: "1.0.0"},
+				ComponentVersion: &uploadv1alpha1.RepositoryUploadComponentVersion{Component: "ocm.software/test", Version: "1.0.0"},
 				URL:              srv.URL,
 				Repository:       "helm-hosted",
 				Path:             "custom/chart.tgz",
@@ -437,7 +438,7 @@ func TestTransform_Raw(t *testing.T) {
 	contentDigest := hex.EncodeToString(contentSum[:])
 
 	scheme := runtime.NewScheme()
-	scheme.MustRegisterWithAlias(&Transformation{}, VersionedType)
+	scheme.MustRegisterScheme(uploadv1alpha1.Scheme)
 	scheme.MustRegisterScheme(wgetaccess.Scheme)
 
 	const (
@@ -468,13 +469,13 @@ func TestTransform_Raw(t *testing.T) {
 			PollInterval:       time.Millisecond,
 		}}
 	}
-	step := func(url string, res *descriptorv2.Resource) *Transformation {
-		return &Transformation{
-			Type: VersionedType,
+	step := func(url string, res *descriptorv2.Resource) *uploadv1alpha1.NexusUpload {
+		return &uploadv1alpha1.NexusUpload{
+			Type: uploadv1alpha1.NexusUploadV1alpha1,
 			ID:   "upload",
-			Spec: &repositoryupload.Spec{
+			Spec: &uploadv1alpha1.RepositoryUploadSpec{
 				Resource:         res,
-				ComponentVersion: &repositoryupload.ComponentVersion{Component: "ocm.software/test", Version: "1.0.0"},
+				ComponentVersion: &uploadv1alpha1.RepositoryUploadComponentVersion{Component: "ocm.software/test", Version: "1.0.0"},
 				URL:              url,
 				Repository:       "helm-hosted",
 			},
@@ -491,7 +492,7 @@ func TestTransform_Raw(t *testing.T) {
 		got := srv.recorded()
 		r.Equal([]string{"GET " + detectionPath, "HEAD " + putPath, "PUT " + putPath}, got)
 
-		res := out.(*Transformation).Output.Resource
+		res := out.(*uploadv1alpha1.NexusUpload).Output.Resource
 		var access wgetaccessv1.Wget
 		r.NoError(wgetaccess.Scheme.Convert(res.Access, &access))
 		r.Equal(srv.URL+"/repository/helm-hosted/"+rawPath, access.URL)
@@ -517,7 +518,7 @@ func TestTransform_Raw(t *testing.T) {
 		// HEAD and the search polled until it finds the file; nothing is uploaded.
 		r.Equal([]string{"GET " + detectionPath, "HEAD " + putPath, "GET " + searchAssets, "GET " + searchAssets, "GET " + searchAssets}, got[3:])
 
-		res := out.(*Transformation).Output.Resource
+		res := out.(*uploadv1alpha1.NexusUpload).Output.Resource
 		var access wgetaccessv1.Wget
 		r.NoError(wgetaccess.Scheme.Convert(res.Access, &access))
 		r.Equal(srv.URL+"/repository/helm-hosted/"+rawPath, access.URL)
@@ -546,7 +547,7 @@ func TestTransform_Raw(t *testing.T) {
 		r.NoError(err)
 		r.Equal([]string{"GET " + detectionPath, "HEAD /repository/helm-hosted/files/notes.txt", "PUT /repository/helm-hosted/files/notes.txt"}, srv.recorded())
 		var access wgetaccessv1.Wget
-		r.NoError(wgetaccess.Scheme.Convert(out.(*Transformation).Output.Resource.Access, &access))
+		r.NoError(wgetaccess.Scheme.Convert(out.(*uploadv1alpha1.NexusUpload).Output.Resource.Access, &access))
 		r.Equal(srv.URL+"/repository/helm-hosted/files/notes.txt", access.URL)
 	})
 
@@ -589,7 +590,7 @@ func TestTransform_Raw(t *testing.T) {
 
 func TestTransform_DetectionErrors(t *testing.T) {
 	scheme := runtime.NewScheme()
-	scheme.MustRegisterWithAlias(&Transformation{}, VersionedType)
+	scheme.MustRegisterScheme(uploadv1alpha1.Scheme)
 
 	source := func() *descriptorv2.Resource {
 		return &descriptorv2.Resource{
@@ -599,13 +600,13 @@ func TestTransform_DetectionErrors(t *testing.T) {
 			Access:      &runtime.Raw{Type: runtime.NewVersionedType("Wget", "v1"), Data: []byte(`{"type":"Wget/v1","url":"https://example.com/hello"}`)},
 		}
 	}
-	step := func(url string) *Transformation {
-		return &Transformation{
-			Type: VersionedType,
+	step := func(url string) *uploadv1alpha1.NexusUpload {
+		return &uploadv1alpha1.NexusUpload{
+			Type: uploadv1alpha1.NexusUploadV1alpha1,
 			ID:   "upload",
-			Spec: &repositoryupload.Spec{
+			Spec: &uploadv1alpha1.RepositoryUploadSpec{
 				Resource:         source(),
-				ComponentVersion: &repositoryupload.ComponentVersion{Component: "ocm.software/test", Version: "1.0.0"},
+				ComponentVersion: &uploadv1alpha1.RepositoryUploadComponentVersion{Component: "ocm.software/test", Version: "1.0.0"},
 				URL:              url,
 				Repository:       "helm-hosted",
 			},
@@ -678,7 +679,7 @@ func TestTransform_Maven(t *testing.T) {
 	contentDigest := hex.EncodeToString(contentSum[:])
 
 	scheme := runtime.NewScheme()
-	scheme.MustRegisterWithAlias(&Transformation{}, VersionedType)
+	scheme.MustRegisterScheme(uploadv1alpha1.Scheme)
 	scheme.MustRegisterScheme(wgetaccess.Scheme)
 
 	const (
@@ -700,12 +701,12 @@ func TestTransform_Maven(t *testing.T) {
 			ResourceRepository: repo,
 			PollInterval:       time.Millisecond,
 		}}
-		return tr.Transform(t.Context(), &Transformation{
-			Type: VersionedType,
+		return tr.Transform(t.Context(), &uploadv1alpha1.NexusUpload{
+			Type: uploadv1alpha1.NexusUploadV1alpha1,
 			ID:   "upload",
-			Spec: &repositoryupload.Spec{
+			Spec: &uploadv1alpha1.RepositoryUploadSpec{
 				Resource:         source,
-				ComponentVersion: &repositoryupload.ComponentVersion{Component: "ocm.software/test", Version: "1.0.0"},
+				ComponentVersion: &uploadv1alpha1.RepositoryUploadComponentVersion{Component: "ocm.software/test", Version: "1.0.0"},
 				URL:              srv.URL + srv.basePath,
 				Repository:       "helm-hosted",
 				Path:             path,
@@ -736,7 +737,7 @@ func TestTransform_Maven(t *testing.T) {
 		r.Equal([]byte(content), srv.raw[mavenPath])
 
 		var access wgetaccessv1.Wget
-		r.NoError(wgetaccess.Scheme.Convert(out.(*Transformation).Output.Resource.Access, &access))
+		r.NoError(wgetaccess.Scheme.Convert(out.(*uploadv1alpha1.NexusUpload).Output.Resource.Access, &access))
 		r.Equal(srv.URL+"/repository/helm-hosted/"+mavenPath, access.URL)
 	})
 
@@ -800,7 +801,7 @@ func TestTransform_Maven(t *testing.T) {
 		r.NoError(err)
 		r.Contains(srv.recorded(), "POST /nexus"+components)
 		var access wgetaccessv1.Wget
-		r.NoError(wgetaccess.Scheme.Convert(out.(*Transformation).Output.Resource.Access, &access))
+		r.NoError(wgetaccess.Scheme.Convert(out.(*uploadv1alpha1.NexusUpload).Output.Resource.Access, &access))
 		r.Equal(srv.URL+"/nexus/repository/helm-hosted/"+mavenPath, access.URL)
 	})
 }
@@ -834,7 +835,7 @@ func TestTransform_Npm(t *testing.T) {
 	const stored = "/@acme/demo/-/demo-2.0.0.tgz"
 
 	scheme := runtime.NewScheme()
-	scheme.MustRegisterWithAlias(&Transformation{}, VersionedType)
+	scheme.MustRegisterScheme(uploadv1alpha1.Scheme)
 	scheme.MustRegisterScheme(wgetaccess.Scheme)
 
 	transform := func(t *testing.T, srv *fakeNexus, digest, path string) (runtime.Typed, error) {
@@ -854,12 +855,12 @@ func TestTransform_Npm(t *testing.T) {
 			ResourceRepository: repo,
 			PollInterval:       time.Millisecond,
 		}}
-		return tr.Transform(t.Context(), &Transformation{
-			Type: VersionedType,
+		return tr.Transform(t.Context(), &uploadv1alpha1.NexusUpload{
+			Type: uploadv1alpha1.NexusUploadV1alpha1,
 			ID:   "upload",
-			Spec: &repositoryupload.Spec{
+			Spec: &uploadv1alpha1.RepositoryUploadSpec{
 				Resource:         res,
-				ComponentVersion: &repositoryupload.ComponentVersion{Component: "ocm.software/test", Version: "1.0.0"},
+				ComponentVersion: &uploadv1alpha1.RepositoryUploadComponentVersion{Component: "ocm.software/test", Version: "1.0.0"},
 				URL:              srv.URL,
 				Repository:       "helm-hosted",
 				Path:             path,
@@ -874,7 +875,7 @@ func TestTransform_Npm(t *testing.T) {
 	}
 	accessURL := func(r *require.Assertions, out runtime.Typed) string {
 		var access wgetaccessv1.Wget
-		r.NoError(wgetaccess.Scheme.Convert(out.(*Transformation).Output.Resource.Access, &access))
+		r.NoError(wgetaccess.Scheme.Convert(out.(*uploadv1alpha1.NexusUpload).Output.Resource.Access, &access))
 		return access.URL
 	}
 

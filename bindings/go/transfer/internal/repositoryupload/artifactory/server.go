@@ -14,6 +14,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob/compression"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/transfer/internal/repositoryupload"
+	uploadv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/transformation/spec/v1alpha1"
 )
 
 // property is an Artifactory property recorded on a deployed file.
@@ -22,7 +23,7 @@ type property struct {
 }
 
 // ownerProperties returns the properties that identify the resource content is uploaded for.
-func ownerProperties(cv *repositoryupload.ComponentVersion, res *descriptor.Resource) []property {
+func ownerProperties(cv *uploadv1alpha1.RepositoryUploadComponentVersion, res *descriptor.Resource) []property {
 	owner := []property{
 		{"ocm.component.name", cv.Component},
 		{"ocm.component.version", cv.Version},
@@ -48,7 +49,7 @@ type server struct {
 	deployed deployment
 }
 
-func newServer(spec *repositoryupload.Spec, path string, owner []property, interval time.Duration) (*server, error) {
+func newServer(spec *uploadv1alpha1.RepositoryUploadSpec, path string, owner []property, interval time.Duration) (*server, error) {
 	uploadBase, err := url.JoinPath(spec.URL, "artifactory", spec.Repository)
 	if err != nil {
 		return nil, fmt.Errorf("invalid artifactory url: %w", err)
