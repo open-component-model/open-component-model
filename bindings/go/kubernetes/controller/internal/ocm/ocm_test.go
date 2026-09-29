@@ -6,7 +6,6 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/Masterminds/semver/v3"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -22,6 +21,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci"
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	"ocm.software/open-component-model/bindings/go/runtime/versioning"
 )
 
 var _ = Describe("ocm utility", func() {
@@ -675,13 +675,9 @@ var _ = Describe("ocm utility", func() {
 			versions, err := repo.ListComponentVersions(ctx, TestComponent)
 			Expect(err).ToNot(HaveOccurred())
 
-			versionLatest, err := GetLatestValidVersion(ctx, versions, "<2.5.0")
+			versionLatest, err := GetLatestValidVersion(ctx, versioning.Default(), versions, "<2.5.0")
 			Expect(err).ToNot(HaveOccurred())
-
-			version2, err := semver.NewVersion(Version2)
-			Expect(err).ToNot(HaveOccurred())
-
-			Expect(versionLatest.Equal(version2))
+			Expect(versionLatest).To(Equal(Version2))
 		})
 
 		It("with filter", func(ctx SpecContext) {
@@ -691,13 +687,9 @@ var _ = Describe("ocm utility", func() {
 			regexpFilterFn, err := RegexpFilter(".*-rc.*")
 			Expect(err).ToNot(HaveOccurred())
 
-			versionLatest, err := GetLatestValidVersion(ctx, versions, "<2.5.0", regexpFilterFn)
+			versionLatest, err := GetLatestValidVersion(ctx, versioning.Default(), versions, "<2.5.0-0", regexpFilterFn)
 			Expect(err).ToNot(HaveOccurred())
-
-			version1, err := semver.NewVersion(Version1)
-			Expect(err).ToNot(HaveOccurred())
-
-			Expect(versionLatest.Equal(version1))
+			Expect(versionLatest).To(Equal(Version1))
 		})
 	})
 
@@ -715,73 +707,49 @@ var _ = Describe("ocm utility", func() {
 		}
 
 		It("returns the candidate on first reconcile regardless of policy", func() {
-			candidate, err := semver.NewVersion("1.0.0")
-			Expect(err).ToNot(HaveOccurred())
-
-			got, err := ApplyDowngradePolicy(componentWith("", v1alpha1.DowngradePolicyDeny), candidate)
+			got, err := ApplyDowngradePolicy(versioning.Default(), componentWith("", v1alpha1.DowngradePolicyDeny), "1.0.0")
 			Expect(err).ToNot(HaveOccurred())
 			Expect(got).To(Equal("1.0.0"))
 		})
 
 		It("preserves the candidate's original string including build metadata", func() {
-			candidate, err := semver.NewVersion("1.2.3-rc.1+build.5")
-			Expect(err).ToNot(HaveOccurred())
-
-			got, err := ApplyDowngradePolicy(componentWith("", ""), candidate)
+			got, err := ApplyDowngradePolicy(versioning.Default(), componentWith("", ""), "1.2.3-rc.1+build.5")
 			Expect(err).ToNot(HaveOccurred())
 			Expect(got).To(Equal("1.2.3-rc.1+build.5"))
 		})
 
 		It("accepts an equal candidate", func() {
-			candidate, err := semver.NewVersion("1.0.0")
-			Expect(err).ToNot(HaveOccurred())
-
-			got, err := ApplyDowngradePolicy(componentWith("1.0.0", v1alpha1.DowngradePolicyDeny), candidate)
+			got, err := ApplyDowngradePolicy(versioning.Default(), componentWith("1.0.0", v1alpha1.DowngradePolicyDeny), "1.0.0")
 			Expect(err).ToNot(HaveOccurred())
 			Expect(got).To(Equal("1.0.0"))
 		})
 
 		It("accepts a greater candidate", func() {
-			candidate, err := semver.NewVersion("2.0.0")
-			Expect(err).ToNot(HaveOccurred())
-
-			got, err := ApplyDowngradePolicy(componentWith("1.0.0", v1alpha1.DowngradePolicyDeny), candidate)
+			got, err := ApplyDowngradePolicy(versioning.Default(), componentWith("1.0.0", v1alpha1.DowngradePolicyDeny), "2.0.0")
 			Expect(err).ToNot(HaveOccurred())
 			Expect(got).To(Equal("2.0.0"))
 		})
 
 		It("denies a downgrade with policy Deny", func() {
-			candidate, err := semver.NewVersion("0.9.0")
-			Expect(err).ToNot(HaveOccurred())
-
-			_, err = ApplyDowngradePolicy(componentWith("1.0.0", v1alpha1.DowngradePolicyDeny), candidate)
+			_, err := ApplyDowngradePolicy(versioning.Default(), componentWith("1.0.0", v1alpha1.DowngradePolicyDeny), "0.9.0")
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("cannot be downgraded from version 1.0.0 to version 0.9.0"))
 		})
 
 		It("allows a downgrade with policy Allow", func() {
-			candidate, err := semver.NewVersion("0.9.0")
-			Expect(err).ToNot(HaveOccurred())
-
-			got, err := ApplyDowngradePolicy(componentWith("1.0.0", v1alpha1.DowngradePolicyAllow), candidate)
+			got, err := ApplyDowngradePolicy(versioning.Default(), componentWith("1.0.0", v1alpha1.DowngradePolicyAllow), "0.9.0")
 			Expect(err).ToNot(HaveOccurred())
 			Expect(got).To(Equal("0.9.0"))
 		})
 
 		It("rejects an unknown downgrade policy", func() {
-			candidate, err := semver.NewVersion("0.9.0")
-			Expect(err).ToNot(HaveOccurred())
-
-			_, err = ApplyDowngradePolicy(componentWith("1.0.0", v1alpha1.DowngradePolicy("bogus")), candidate)
+			_, err := ApplyDowngradePolicy(versioning.Default(), componentWith("1.0.0", v1alpha1.DowngradePolicy("bogus")), "0.9.0")
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("unknown downgrade policy: bogus"))
 		})
 
 		It("returns a terminal error if the previously-reconciled version is malformed", func() {
-			candidate, err := semver.NewVersion("1.0.0")
-			Expect(err).ToNot(HaveOccurred())
-
-			_, err = ApplyDowngradePolicy(componentWith("not-a-version", v1alpha1.DowngradePolicyDeny), candidate)
+			_, err := ApplyDowngradePolicy(versioning.Default(), componentWith("not-a-version", v1alpha1.DowngradePolicyDeny), "1.0.0")
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("failed to check reconciled version"))
 		})

@@ -152,7 +152,8 @@ Downloads content from an HTTP or HTTPS URL while the component version is const
 Use it when the upstream artifact is a plain HTTP download (a release archive, a checksum file, a signed binary) and you
 want the bytes captured in the component version rather than fetched again at consumption time.
 
-Alternative type names `wget/v1`, `Wget`, and `wget` are also accepted; `Wget/v1` is canonical.
+Alternative type names `wget/v1`, `Wget`, and `wget` are also accepted, as are the additional aliases `HTTP/v1`,
+`HTTP`, `http/v1`, and `http`; `Wget/v1` is canonical.
 
 | Field        | Type                  | Required | Description                                                                                                                               |
 |--------------|-----------------------|----------|-------------------------------------------------------------------------------------------------------------------------------------------|
@@ -206,6 +207,36 @@ resources:
 
 See [Tutorial: Work with HTTP Resources]({{< relref "docs/tutorials/wget-http-resources.md" >}}) for media type
 resolution, redirects, download tuning, and credential configuration.
+
+#### Verifying a pinned digest {#wget-pinned-digest}
+
+If the resource carries a `digest` (the standard OCM digest info, set alongside
+the resource rather than inside `input`), the wget input verifies the downloaded
+content against it and fails the build on a mismatch. Only the canonical
+SHA-256 / `genericBlobDigest/v1` form is accepted.
+
+```yaml
+resources:
+- name: release-archive
+  type: blob
+  version: 1.0.0
+  digest:
+    hashAlgorithm: SHA-256
+    normalisationAlgorithm: genericBlobDigest/v1
+    value: b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9
+  input:
+    type: Wget/v1
+    url: https://downloads.example.com/myapp/1.0.0/myapp-linux-amd64.tar.gz
+```
+
+#### Checksum verification (via OCM config) {#checksum-verification-via-ocm-config}
+
+HTTP downloads can additionally be verified against a source-side checksum
+advertised in response headers, steered centrally by the
+`checksum.http.config.ocm.software/v1alpha1` configuration (the wget spec itself
+carries no checksum field). See
+[HTTP Checksum Configuration]({{< relref "checksum-http-configuration.md" >}})
+for the schema, checksum modes, and the access-side pin-from-source fast path.
 
 ### `S3/v2` {#s3v2-input}
 
@@ -447,9 +478,10 @@ Because the content is not under your control, the expected digest can be pinned
 `digest` field alongside `access` rather than inside it. It is then verified on every fetch. See
 [Tutorial: Work with HTTP Resources]({{< relref "docs/tutorials/wget-http-resources.md#pin-a-digest" >}}).
 
-Alternative type names `wget/v1`, `Wget`, and `wget` are also accepted; `Wget/v1` is canonical. The fields are identical
-to those of the [`Wget/v1` input type]({{< relref "input-and-access-types.md" >}}#wgetv1-input), so the same request can
-be expressed either by value or by reference.
+`Wget/v1` is the canonical type name. OCM also accepts `wget/v1`, `Wget`, `wget`, and the additional aliases
+`HTTP/v1`, `HTTP`, `http/v1`, and `http`. The fields are identical to those of the
+[`Wget/v1` input type]({{< relref "input-and-access-types.md" >}}#wgetv1-input), so the same request can be expressed
+either by value or by reference.
 
 | Field        | Type                  | Required | Description                                                                                                                               |
 |--------------|-----------------------|----------|-------------------------------------------------------------------------------------------------------------------------------------------|
@@ -485,6 +517,11 @@ resources:
 {{< callout context="note" >}}
 Upload is not supported for this access type: a plain HTTP endpoint has no standardized write API. A `Wget/v1` access therefore has no by-reference form in a target repository. It is copied only when resource copying is requested using `--copy-resources`, and then always by value.  The content is downloaded and stored as a [`LocalBlob/v1`]({{< relref "input-and-access-types.md" >}}#localblobv1).
 {{< /callout >}}
+
+The `checksum.http.config.ocm.software/v1alpha1` configuration can pin the
+access digest from source-advertised response headers via a single HEAD, with
+no body download. See
+[HTTP Checksum Configuration]({{< relref "checksum-http-configuration.md" >}}).
 
 For guidance on choosing between the input and the access type, and for media type resolution, redirects, download
 tuning, and credential configuration, see

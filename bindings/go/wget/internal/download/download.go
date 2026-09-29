@@ -8,13 +8,16 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/hex"
 	"fmt"
+	"hash"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
 
+	ocmhttp "ocm.software/open-component-model/bindings/go/http"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	credv1 "ocm.software/open-component-model/bindings/go/wget/spec/credentials/v1"
 )
@@ -60,7 +63,7 @@ func Download(ctx context.Context, req Request, opts ...Option) (_ *Blob, err er
 	}
 	client := o.Client
 	if client == nil {
-		client = http.DefaultClient
+		client = ocmhttp.New()
 	}
 
 	parsedURL, err := url.Parse(req.URL)
@@ -150,7 +153,20 @@ func Download(ctx context.Context, req Request, opts ...Option) (_ *Blob, err er
 		}
 	}()
 
-	written, err := io.Copy(file, respBody)
+	// Hash the stream while writing it to disk so no second read is needed.
+	hashers := make(map[string]hash.Hash, len(o.DigestAlgorithms))
+	writers := []io.Writer{file}
+	for _, alg := range o.DigestAlgorithms {
+		h := alg.New()
+		hashers[alg.Name] = h
+		writers = append(writers, h)
+	}
+	dst := io.Writer(file)
+	if len(writers) > 1 {
+		dst = io.MultiWriter(writers...)
+	}
+
+	written, err := io.Copy(dst, respBody)
 	if closeErr := file.Close(); err == nil {
 		err = closeErr
 	}
@@ -160,6 +176,11 @@ func Download(ctx context.Context, req Request, opts ...Option) (_ *Blob, err er
 
 	if maxDownloadSize > 0 && written > maxDownloadSize {
 		return nil, fmt.Errorf("response body from %s exceeds maximum allowed size of %d bytes", safeURL.String(), maxDownloadSize)
+	}
+
+	digests := make(map[string]string, len(hashers))
+	for name, h := range hashers {
+		digests[name] = hex.EncodeToString(h.Sum(nil))
 	}
 
 	mediaType := req.MediaType
@@ -175,6 +196,8 @@ func Download(ctx context.Context, req Request, opts ...Option) (_ *Blob, err er
 		return nil, fmt.Errorf("error creating blob for %s from %s: %w", safeURL.String(), path, err)
 	}
 	b.SetMediaType(mediaType)
+	b.headers = resp.Header
+	b.digests = digests
 
 	return b, nil
 }

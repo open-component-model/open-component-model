@@ -1,0 +1,166 @@
+package checksum
+
+import (
+	"context"
+	"fmt"
+	"net/http"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+)
+
+// Digests of the ASCII payload "hello".
+const (
+	helloSHA256    = "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+	helloSHA1      = "aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d"
+	helloMD5       = "5d41402abc4b2a76b9719d911017c592"
+	helloSHA256B64 = "LPJNul+wow4m6DsqxbninhsWHlwfp0JecwQzYpOLmCQ="
+	helloSHA1B64   = "qvTGHdzF6KLavt4PO0gs2a6pQ00="
+)
+
+func helloComputed() map[string]string {
+	return map[string]string{
+		SHA256.OCMName: helloSHA256,
+		SHA1.OCMName:   helloSHA1,
+		MD5.OCMName:    helloMD5,
+	}
+}
+
+func TestFromHeaders_RFC9530ContentDigest(t *testing.T) {
+	r := require.New(t)
+	h := http.Header{}
+	// Multiple algorithms in one Content-Digest dictionary.
+	h.Set("Content-Digest", fmt.Sprintf("sha-256=:%s:,sha=:%s:", helloSHA256B64, helloSHA1B64))
+
+	got := FromHeaders(h, nil)
+	r.Len(got, 2)
+
+	exp, ok := Select(got, []Algorithm{SHA256})
+	r.True(ok)
+	r.Equal("SHA-256", exp.Algorithm.OCMName)
+	r.Equal(helloSHA256, exp.Value)
+
+	exp, ok = Select(got, []Algorithm{SHA1})
+	r.True(ok)
+	r.Equal("SHA-1", exp.Algorithm.OCMName)
+	r.Equal(helloSHA1, exp.Value)
+}
+
+func TestFromHeaders_LegacyXChecksum(t *testing.T) {
+	r := require.New(t)
+	h := http.Header{}
+	h.Set("x-checksum-sha1", helloSHA1)
+	h.Set("x-checksum-md5", helloMD5)
+
+	got := FromHeaders(h, nil)
+	r.Len(got, 2)
+
+	// No preference => strongest first (SHA-1 before MD5).
+	exp, ok := Select(got, nil)
+	r.True(ok)
+	r.Equal("SHA-1", exp.Algorithm.OCMName)
+	r.Equal(helloSHA1, exp.Value)
+}
+
+func TestFromHeaders_ExtraHeaderInfersAlgorithm(t *testing.T) {
+	r := require.New(t)
+	h := http.Header{}
+	h.Set("x-artifact-sha256", helloSHA256)
+
+	got := FromHeaders(h, []string{"x-artifact-sha256"})
+	r.Len(got, 1)
+	r.Equal("SHA-256", got[0].Algorithm.OCMName)
+	r.Equal(helloSHA256, got[0].Value)
+}
+
+func TestFromHeaders_IgnoresMalformedValues(t *testing.T) {
+	r := require.New(t)
+	h := http.Header{}
+	h.Set("x-checksum-sha256", "not-a-hex-digest")
+	h.Set("Content-Digest", "sha-256=:not-base64!:")
+	r.Empty(FromHeaders(h, nil))
+}
+
+
+func TestVerify(t *testing.T) {
+	r := require.New(t)
+	computed := helloComputed()
+
+	r.NoError(Verify(computed, Expected{Algorithm: SHA256, Value: helloSHA256}))
+	// Case-insensitive comparison.
+	r.NoError(Verify(computed, Expected{Algorithm: SHA1, Value: "AAF4C61DDCC5E8A2DABEDE0F3B482CD9AEA9434D"}))
+	// Mismatch is an error.
+	r.Error(Verify(computed, Expected{Algorithm: SHA256, Value: helloSHA1 + "00"}))
+	// Missing computed algorithm is an error.
+	r.Error(Verify(map[string]string{}, Expected{Algorithm: SHA256, Value: helloSHA256}))
+}
+
+func TestResolve_HeaderMatchAndVerify(t *testing.T) {
+	r := require.New(t)
+	h := http.Header{}
+	h.Set("x-checksum-sha1", helloSHA1)
+
+	exp, verified, err := Resolve(context.Background(), Policy{
+		Sources:   []Source{{Type: SourceHTTPHeader}},
+		OnMissing: Fail,
+	}, Input{Headers: h, Computed: helloComputed()})
+	r.NoError(err)
+	r.True(verified)
+	r.Equal("SHA-1", exp.Algorithm.OCMName)
+}
+
+func TestResolve_HeaderMismatchFails(t *testing.T) {
+	r := require.New(t)
+	h := http.Header{}
+	h.Set("x-checksum-sha256", "0000000000000000000000000000000000000000000000000000000000000000") // valid length, wrong value
+
+	_, _, err := Resolve(context.Background(), Policy{
+		Sources: []Source{{Type: SourceHTTPHeader}},
+	}, Input{Headers: h, Computed: helloComputed()})
+	r.Error(err)
+	r.Contains(err.Error(), "checksum mismatch")
+}
+
+
+func TestResolve_OnMissingFail(t *testing.T) {
+	r := require.New(t)
+	_, _, err := Resolve(context.Background(), Policy{
+		Sources:   []Source{{Type: SourceHTTPHeader}},
+		OnMissing: Fail,
+	}, Input{Headers: http.Header{}, Computed: helloComputed()})
+	r.Error(err)
+	r.Contains(err.Error(), "no checksum could be obtained")
+}
+
+func TestResolve_OnMissingCompute(t *testing.T) {
+	r := require.New(t)
+	_, verified, err := Resolve(context.Background(), Policy{
+		Sources:   []Source{{Type: SourceHTTPHeader}},
+		OnMissing: Compute,
+	}, Input{Headers: http.Header{}, Computed: helloComputed()})
+	r.NoError(err)
+	r.False(verified, "no external checksum was verified")
+}
+
+func TestResolve_StreamSourceStops(t *testing.T) {
+	r := require.New(t)
+	// A stream source short-circuits without verification even if headers exist.
+	h := http.Header{}
+	h.Set("x-checksum-sha256", helloSHA1+"00") // would mismatch if consulted
+	_, verified, err := Resolve(context.Background(), Policy{
+		Sources: []Source{{Type: SourceStream}, {Type: SourceHTTPHeader}},
+	}, Input{Headers: h, Computed: helloComputed()})
+	r.NoError(err)
+	r.False(verified)
+}
+
+func TestRequiredAlgorithms_AlwaysIncludesStorage(t *testing.T) {
+	r := require.New(t)
+	got := RequiredAlgorithms(Policy{Sources: []Source{{Type: SourceHTTPHeader, Algorithms: []Algorithm{SHA1}}}})
+	names := map[string]bool{}
+	for _, a := range got {
+		names[a.OCMName] = true
+	}
+	r.True(names["SHA-256"], "storage algorithm must always be computed")
+	r.True(names["SHA-1"], "policy algorithm must be computed")
+}

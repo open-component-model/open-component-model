@@ -129,6 +129,20 @@ func executeTransferSpec(t *testing.T, specFile string) {
 	require.NoError(t, err)
 }
 
+// completedOperationItems returns the IDs of items the given progress operation
+// reported as completed via the non-terminal slog progress visualizer.
+func completedOperationItems(entries []*test.JSONLogEntry, name string) []string {
+	var items []string
+	for _, e := range entries {
+		if strings.HasPrefix(e.Msg, name) && strings.HasSuffix(e.Msg, ": item completed") {
+			if item, ok := e.Extras["item"].(string); ok {
+				items = append(items, item)
+			}
+		}
+	}
+	return items
+}
+
 // openCTFRepo opens a CTF repository at the given path for verification.
 func openCTFRepo(t *testing.T, path string) *oci.Repository {
 	t.Helper()
@@ -240,6 +254,58 @@ func TestTransferComponentVersionWithTransferSpecStdinInvalid(t *testing.T) {
 	)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "parsing transfer spec")
+}
+
+func TestTransferComponentVersionWithTransferSpecAndConfigStdin(t *testing.T) {
+	const config = `type: generic.config.ocm.software/v1
+configurations:
+- type: attributes.config.ocm.software
+  attributes:
+    source: stdin
+`
+	componentName := "ocm.software/stdin-both-test"
+	componentVersion := "0.0.1"
+	sourceRef := setupSourceRef(t, componentName, componentVersion)
+
+	configBeforeSpec := func(spec string) string { return config + "---\n" + spec }
+	specBeforeConfig := func(spec string) string { return spec + "---\n" + config }
+	tests := []struct {
+		name  string
+		stdin func(spec string) string
+	}{
+		{name: "config before spec", stdin: configBeforeSpec},
+		{name: "spec before config", stdin: specBeforeConfig},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			toPath := t.TempDir()
+			spec := dryRunTransferSpec(t, sourceRef, fmt.Sprintf("ctf::%s", toPath))
+
+			_, err := test.OCM(t,
+				test.WithArgs("transfer", "component-version", "--transfer-spec", "-"),
+				test.WithInput(bytes.NewBufferString(tt.stdin(spec))),
+				test.WithOutput(new(bytes.Buffer)),
+				test.WithErrorOutput(test.NewJSONLogReader()),
+			)
+			require.NoError(t, err)
+
+			desc, err := openCTFRepo(t, toPath).GetComponentVersion(t.Context(), componentName, componentVersion)
+			require.NoError(t, err)
+			require.Equal(t, componentName, desc.Component.Name)
+		})
+	}
+}
+
+// TestTransferComponentVersionWithTransferSpecStdinAppliesConfig proves that configuration in
+// stdin is loaded: a broken configuration document fails the command.
+func TestTransferComponentVersionWithTransferSpecStdinAppliesConfig(t *testing.T) {
+	_, err := test.OCM(t,
+		test.WithArgs("transfer", "component-version", "--transfer-spec", "-"),
+		test.WithInput(bytes.NewBufferString("type: generic.config.ocm.software/v1\nconfigurations: notalist\n")),
+		test.WithOutput(new(bytes.Buffer)),
+		test.WithErrorOutput(test.NewJSONLogReader()),
+	)
+	require.ErrorContains(t, err, "could not load configuration from stdin")
 }
 
 func TestTransferComponentVersionWithTransferSpecFileNotFound(t *testing.T) {
@@ -363,6 +429,18 @@ func TestTransferComponentVersionRecursive(t *testing.T) {
 		}
 	}
 	require.True(t, found, "expected success log message")
+
+	// the resolution phase must report one completed item per resolved component version
+	for _, id := range []string{"ocm.software/parent-component:1.0.0", "ocm.software/child-component:0.0.1"} {
+		require.Contains(t, completedOperationItems(logEntries, "Resolving component versions"), id, "expected resolution progress for %s", id)
+	}
+
+	// the graph construction phase must report one completed item per
+	// transformation node of the graph (the upload of parent and child)
+	for _, label := range []string{"parent-component@1.0.0 [Upload to CTF]", "child-component@0.0.1 [Upload to CTF]"} {
+		require.Contains(t, completedOperationItems(logEntries, "Building transformation graph"), label,
+			"expected build progress for %s", label)
+	}
 }
 
 // TestTransferComponentVersionPreservesSignatures verifies that signatures on a component
@@ -526,7 +604,7 @@ func TestTransferComponentVersion_SemverConstraint(t *testing.T) {
 	targetArg := fmt.Sprintf("ctf::%s", toPath)
 
 	_, err := test.OCM(t,
-		test.WithArgs("transfer", "component-version", sourceRef, targetArg, "--semver-constraint", "< 2.0.0"),
+		test.WithArgs("transfer", "component-version", sourceRef, targetArg, "--constraint", "< 2.0.0"),
 		test.WithOutput(new(bytes.Buffer)),
 		test.WithErrorOutput(test.NewJSONLogReader()),
 	)
@@ -586,7 +664,7 @@ func TestTransferComponentVersion_ExactVersionIgnoresConstraintFlags(t *testing.
 	targetArg := fmt.Sprintf("ctf::%s", toPath)
 
 	_, err := test.OCM(t,
-		test.WithArgs("transfer", "component-version", exactRef.String(), targetArg, "--semver-constraint", "< 2.0.0", "--latest"),
+		test.WithArgs("transfer", "component-version", exactRef.String(), targetArg, "--constraint", "< 2.0.0", "--latest"),
 		test.WithOutput(new(bytes.Buffer)),
 		test.WithErrorOutput(test.NewJSONLogReader()),
 	)
