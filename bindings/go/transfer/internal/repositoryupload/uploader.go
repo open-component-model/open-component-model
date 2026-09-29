@@ -1,5 +1,5 @@
-// Package repositoryupload holds what the Artifactory and Nexus uploaders share: the source
-// and target plumbing and the upload flow, see [Uploader.Upload].
+// Package repositoryupload runs the uploads of resources into vendor repositories, see
+// [Uploader.Upload]. The vendor-specific parts are [Backend] and [Store] implementations.
 package repositoryupload
 
 import (
@@ -7,13 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"net/http"
-	"net/url"
-	"strings"
 	"time"
-
-	godigest "github.com/opencontainers/go-digest"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/credentials"
@@ -21,35 +15,18 @@ import (
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	helmcredsv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/v1"
 	helmidentityv1 "ocm.software/open-component-model/bindings/go/helm/spec/identity/v1"
-	ocmhttp "ocm.software/open-component-model/bindings/go/http"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	"ocm.software/open-component-model/bindings/go/transfer/internal/repositoryupload/chart"
+	"ocm.software/open-component-model/bindings/go/transfer/internal/repositoryupload/client"
 	uploadv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/transformation/spec/v1alpha1"
-	"ocm.software/open-component-model/bindings/go/wget/httpauth"
 	wgetcredsv1 "ocm.software/open-component-model/bindings/go/wget/spec/credentials/v1"
 	wgetidentityv1 "ocm.software/open-component-model/bindings/go/wget/spec/identity/v1"
 )
 
-const (
-	// genericBlobDigestV1 is the normalisation algorithm for a plain streamed blob.
-	genericBlobDigestV1 = "genericBlobDigest/v1"
-	// maxErrorBodyBytes bounds how much of a non-2xx response body is read into an error.
-	maxErrorBodyBytes = 4 << 10
-	// maxJSONBytes bounds how much of a successful JSON response body is decoded; search pages
-	// exceed maxErrorBodyBytes.
-	maxJSONBytes = 1 << 20
-	// PollAttempts bounds how often the chart metadata a server records for an
-	// uploaded chart is polled before the content is considered not to be a helm chart. The
-	// metadata can lag behind the upload: Artifactory may calculate the chart.name and
-	// chart.version properties asynchronously, Nexus indexes components for search about 2 s
-	// after the upload (Nexus 3.96). 30 polls allow about 15 s for a server under load.
-	PollAttempts = 30
-	// DefaultPollInterval is the wait between two chart metadata polls.
-	DefaultPollInterval = 500 * time.Millisecond
-	// octetStream is the content type of uploaded content of unknown media type.
-	octetStream = "application/octet-stream"
-)
+// octetStream is the content type of uploaded content of unknown media type.
+const octetStream = "application/octet-stream"
 
 // Uploader holds what every repository upload needs: it fetches the source resource
 // and talks to the target server.
@@ -83,14 +60,14 @@ func validateSpec(spec *uploadv1alpha1.RepositoryUploadSpec) error {
 	return nil
 }
 
-// target resolves the upload credentials, see resolveTargetCredentials, and returns a client
-// sending requests with them.
-func (u *Uploader) target(ctx context.Context, helmRepo, repoURL string) (*Client, error) {
+// target returns a client sending requests with the upload credentials, see
+// resolveTargetCredentials.
+func (u *Uploader) target(ctx context.Context, helmRepo, repoURL string) (*client.Client, error) {
 	creds, err := u.resolveTargetCredentials(ctx, helmRepo, repoURL)
 	if err != nil {
 		return nil, err
 	}
-	return &Client{httpConfig: u.HTTPConfig, creds: creds}, nil
+	return client.New(u.HTTPConfig, creds), nil
 }
 
 // source returns the unmodified content of the source resource and its media type ("" when unknown):
@@ -125,7 +102,7 @@ func (u *Uploader) source(ctx context.Context, spec *uploadv1alpha1.RepositoryUp
 // ociSource reports that the source content of src with mediaType was downloaded from an OCI
 // artifact, so the source digest does not describe it.
 func ociSource(src *descriptor.Resource, mediaType string) bool {
-	return isOCILayout(mediaType) || ociHelmChart(src)
+	return chart.IsOCILayout(mediaType) || chart.FromOCIRegistry(src)
 }
 
 // blobMediaType returns the media type b reports, "" when unknown.
@@ -146,6 +123,33 @@ func localBlobMediaType(access runtime.Typed) string {
 	return lb.MediaType
 }
 
+// contentType is the media type content is uploaded with: that of the content, else that of the
+// resource access, else application/octet-stream.
+func contentType(mediaType string, res *descriptorv2.Resource) string {
+	if mediaType != "" {
+		return mediaType
+	}
+	if mt := MediaTypeFromAccess(*res); mt != "" {
+		return mt
+	}
+	return octetStream
+}
+
+// MediaTypeFromAccess extracts the source access media type (if any) from the resource
+// access, used as the default target media type. Returns "" when absent.
+func MediaTypeFromAccess(resource descriptorv2.Resource) string {
+	if resource.Access == nil || len(resource.Access.Data) == 0 {
+		return ""
+	}
+	var access struct {
+		MediaType string `json:"mediaType"`
+	}
+	if err := json.Unmarshal(resource.Access.Data, &access); err != nil {
+		return ""
+	}
+	return access.MediaType
+}
+
 // interval is the wait between two metadata or search polls.
 func (u *Uploader) interval() time.Duration {
 	if u.PollInterval == 0 {
@@ -163,147 +167,20 @@ func (u *Uploader) output(out *descriptor.Resource) (*uploadv1alpha1.RepositoryU
 	return &uploadv1alpha1.RepositoryUploadOutput{Resource: res}, nil
 }
 
-// knownDigest returns the digest the uploaded content must have (expected, see expectedDigest)
-// and the one it is known to have up front (known): expected, else the digest the content
-// reports itself. Both are empty when unknown.
-func knownDigest(src *descriptor.Digest, content blob.ReadOnlyBlob, fromOCI bool) (expected, known godigest.Digest, err error) {
-	if expected, err = expectedDigest(src, fromOCI); err != nil {
-		return "", "", err
-	}
-	if expected != "" {
-		return expected, expected, nil
-	}
-	if da, ok := content.(blob.DigestAware); ok {
-		if d, ok := da.Digest(); ok {
-			if parsed, err := godigest.Parse(d); err == nil {
-				return "", parsed, nil
-			}
-		}
-	}
-	return "", "", nil
-}
-
-// uploadedDigest is the digest of the published resource: the source digest if it describes the
-// uploaded content, else the digest of the uploaded bytes.
-func uploadedDigest(src *descriptor.Digest, expected, uploaded godigest.Digest) *descriptor.Digest {
-	if expected != "" {
-		return src.DeepCopy()
-	}
-	var hashAlgorithm string
-	for name, alg := range hashAlgorithms {
-		if alg == uploaded.Algorithm() {
-			hashAlgorithm = name
-		}
-	}
-	return &descriptor.Digest{HashAlgorithm: hashAlgorithm, NormalisationAlgorithm: genericBlobDigestV1, Value: uploaded.Encoded()}
-}
-
-// contentType is the media type content is uploaded with: that of the content, else that of the
-// resource access, else application/octet-stream.
-func contentType(mediaType string, res *descriptorv2.Resource) string {
-	if mediaType != "" {
-		return mediaType
-	}
-	if mt := MediaTypeFromAccess(*res); mt != "" {
-		return mt
-	}
-	return octetStream
-}
-
-// ResourceFile returns the path-escaped file name of the resource:
-// <resource name>-<resource version><ext>, with a hash of the extra identity appended when the
-// resource has one, so every resource of a component version has its own file.
-func ResourceFile(res *descriptor.Resource, ext string) (string, error) {
-	if strings.ContainsAny(res.Name+res.Version, "/\\") {
-		return "", fmt.Errorf("resource name %q and version %q must not contain path separators", res.Name, res.Version)
-	}
-	file := res.Name + "-" + res.Version
-	if len(res.ExtraIdentity) > 0 {
-		file += fmt.Sprintf("-%016x", res.ExtraIdentity.CanonicalHashV1())
-	}
-	return url.PathEscape(file + ext), nil
-}
-
-// defaultPath returns the path-escaped default location of the resource in the repository:
-// <component>/<component version>/<resource file>.
-func defaultPath(component, version string, res *descriptor.Resource, ext string) (string, error) {
-	file, err := ResourceFile(res, ext)
-	if err != nil {
-		return "", err
-	}
-	segments := append(strings.Split(component, "/"), version)
-	for i, segment := range segments {
-		if segment == "" || segment == "." || segment == ".." || strings.Contains(segment, "\\") {
-			return "", fmt.Errorf("component %q version %q cannot be used as a repository path", component, version)
-		}
-		segments[i] = url.PathEscape(segment)
-	}
-	return strings.Join(append(segments, file), "/"), nil
-}
-
-// UploadPath returns the configured location, see CustomPath, else the default location.
-func UploadPath(spec *uploadv1alpha1.RepositoryUploadSpec, res *descriptor.Resource, ext string) (string, error) {
-	if spec.Path != "" {
-		return CustomPath(spec.Path, ext)
-	}
-	return defaultPath(spec.ComponentVersion.Component, spec.ComponentVersion.Version, res, ext)
-}
-
-// CustomPath validates a configured location and returns it path-escaped. It must be relative,
-// consist of non-empty segments other than . and .., and end in requiredSuffix, so it can
-// neither leave the repository nor address a folder.
-func CustomPath(path, requiredSuffix string) (string, error) {
-	if !strings.HasSuffix(path, requiredSuffix) {
-		return "", fmt.Errorf("path %q must end in %s", path, requiredSuffix)
-	}
-	segments := strings.Split(path, "/")
-	for i, segment := range segments {
-		if segment == "" || segment == "." || segment == ".." || strings.Contains(segment, "\\") {
-			return "", fmt.Errorf("path %q must be relative without empty, \".\" or \"..\" segments", path)
-		}
-		segments[i] = url.PathEscape(segment)
-	}
-	return strings.Join(segments, "/"), nil
-}
-
-// hashAlgorithms maps the OCM hash algorithms of source digests to digest algorithms.
-var hashAlgorithms = map[string]godigest.Algorithm{"SHA-256": godigest.SHA256, "SHA-512": godigest.SHA512}
-
-// expectedDigest returns the digest the uploaded content must have: the source digest, if it
-// describes the uploaded bytes. It is empty when there is no source digest or the content was
-// taken from an OCI artifact, whose digest describes a different byte representation.
-func expectedDigest(src *descriptor.Digest, fromOCI bool) (godigest.Digest, error) {
-	if src == nil || fromOCI {
-		return "", nil
-	}
-	alg, ok := hashAlgorithms[src.HashAlgorithm]
-	if !ok {
-		return "", fmt.Errorf("unsupported hash algorithm: expected SHA-256 or SHA-512, got %s", src.HashAlgorithm)
-	}
-	if src.NormalisationAlgorithm != genericBlobDigestV1 {
-		return "", fmt.Errorf("unsupported normalisation algorithm: expected %s, got %s", genericBlobDigestV1, src.NormalisationAlgorithm)
-	}
-	d := godigest.NewDigestFromEncoded(alg, src.Value)
-	if err := d.Validate(); err != nil {
-		return "", fmt.Errorf("invalid source digest: %w", err)
-	}
-	return d, nil
-}
-
 // localSource resolves the source component version repository of a local blob resource.
-func (t *Uploader) localSource(ctx context.Context, cv *uploadv1alpha1.RepositoryUploadComponentVersion) (repository.ComponentVersionRepository, error) {
-	if t.RepoProvider == nil {
+func (u *Uploader) localSource(ctx context.Context, cv *uploadv1alpha1.RepositoryUploadComponentVersion) (repository.ComponentVersionRepository, error) {
+	if u.RepoProvider == nil {
 		return nil, fmt.Errorf("no component version repository provider configured for local resources")
 	}
 	var creds runtime.Typed
-	if t.CredentialProvider != nil {
-		if consumerID, err := t.RepoProvider.GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, cv.Repository); err == nil {
-			if creds, err = t.CredentialProvider.Resolve(ctx, consumerID); err != nil && !errors.Is(err, credentials.ErrNotFound) {
+	if u.CredentialProvider != nil {
+		if consumerID, err := u.RepoProvider.GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, cv.Repository); err == nil {
+			if creds, err = u.CredentialProvider.Resolve(ctx, consumerID); err != nil && !errors.Is(err, credentials.ErrNotFound) {
 				return nil, fmt.Errorf("failed resolving source repository credentials: %w", err)
 			}
 		}
 	}
-	repo, err := t.RepoProvider.GetComponentVersionRepository(ctx, cv.Repository, creds)
+	repo, err := u.RepoProvider.GetComponentVersionRepository(ctx, cv.Repository, creds)
 	if err != nil {
 		return nil, fmt.Errorf("failed getting source component version repository: %w", err)
 	}
@@ -312,18 +189,18 @@ func (t *Uploader) localSource(ctx context.Context, cv *uploadv1alpha1.Repositor
 
 // resolveSourceCredentials resolves credentials for a remote source resource by its consumer
 // identity. A missing provider or ErrNotFound yields nil credentials.
-func (t *Uploader) resolveSourceCredentials(ctx context.Context, resource *descriptor.Resource) (runtime.Typed, error) {
-	if t.CredentialProvider == nil {
+func (u *Uploader) resolveSourceCredentials(ctx context.Context, resource *descriptor.Resource) (runtime.Typed, error) {
+	if u.CredentialProvider == nil {
 		return nil, nil
 	}
-	consumerID, err := t.ResourceRepository.GetResourceCredentialConsumerIdentity(ctx, resource)
+	consumerID, err := u.ResourceRepository.GetResourceCredentialConsumerIdentity(ctx, resource)
 	if err != nil {
 		return nil, fmt.Errorf("failed deriving source consumer identity: %w", err)
 	}
 	if consumerID == nil {
 		return nil, nil
 	}
-	creds, err := t.CredentialProvider.Resolve(ctx, consumerID)
+	creds, err := u.CredentialProvider.Resolve(ctx, consumerID)
 	if err != nil {
 		if errors.Is(err, credentials.ErrNotFound) {
 			return nil, nil
@@ -335,10 +212,10 @@ func (t *Uploader) resolveSourceCredentials(ctx context.Context, resource *descr
 
 // resolveTargetCredentials resolves the upload credentials: those of the HelmChartRepository
 // identity of the Helm repository URL of the target repository, falling back to the Wget
-// identity of its repository URL. Without either, the upload is anonymous. HelmHTTPCredentials are mapped to their
-// username and password, which is all an HTTP upload uses.
-func (t *Uploader) resolveTargetCredentials(ctx context.Context, helmRepo, repoURL string) (runtime.Typed, error) {
-	if t.CredentialProvider == nil {
+// identity of its repository URL. Without either, the upload is anonymous. HelmHTTPCredentials
+// are mapped to their username and password, which is all an HTTP upload uses.
+func (u *Uploader) resolveTargetCredentials(ctx context.Context, helmRepo, repoURL string) (runtime.Typed, error) {
+	if u.CredentialProvider == nil {
 		return nil, nil
 	}
 	helmID, err := runtime.ParseURLToIdentity(helmRepo)
@@ -353,7 +230,7 @@ func (t *Uploader) resolveTargetCredentials(ctx context.Context, helmRepo, repoU
 
 	var creds runtime.Typed
 	for _, id := range []runtime.Identity{helmID, wgetID} {
-		creds, err = t.CredentialProvider.Resolve(ctx, id)
+		creds, err = u.CredentialProvider.Resolve(ctx, id)
 		if err == nil {
 			break
 		}
@@ -377,166 +254,4 @@ func (t *Uploader) resolveTargetCredentials(ctx context.Context, helmRepo, repoU
 		Username: helmCreds.Username,
 		Password: helmCreds.Password,
 	}, nil
-}
-
-// UploadBlob streams content to putURL and returns the digest of the bytes read, with the
-// algorithm of known (SHA-256 when known is empty), and whether content was read to its end. A
-// successful response body is decoded into out, if set.
-func UploadBlob(ctx context.Context, c *Client, content blob.ReadOnlyBlob, known godigest.Digest, putURL string, header http.Header, out any) (godigest.Digest, bool, error) {
-	rc, err := content.ReadCloser()
-	if err != nil {
-		return "", false, fmt.Errorf("failed opening content: %w", err)
-	}
-	defer func() { _ = rc.Close() }()
-	size := blob.SizeUnknown
-	if sized, ok := content.(blob.SizeAware); ok {
-		size = sized.Size()
-	}
-	digester := DigestAlgorithm(known).Digester()
-	body := &eofReader{r: rc}
-	err = c.Send(ctx, http.MethodPut, putURL, io.TeeReader(body, digester.Hash()), size, header, out)
-	return digester.Digest(), body.eof, err
-}
-
-// DigestAlgorithm is the algorithm uploaded content is hashed with: that of known, else SHA-256.
-func DigestAlgorithm(known godigest.Digest) godigest.Algorithm {
-	if known == "" {
-		return godigest.SHA256
-	}
-	return known.Algorithm()
-}
-
-// eofReader records whether its reader returned io.EOF, i.e. was read to its end.
-type eofReader struct {
-	r   io.Reader
-	eof bool
-}
-
-func (e *eofReader) Read(p []byte) (int, error) {
-	n, err := e.r.Read(p)
-	if errors.Is(err, io.EOF) {
-		e.eof = true
-	}
-	return n, err
-}
-
-// Client sends authenticated requests to the repository server.
-type Client struct {
-	httpConfig *httpv1alpha1.Config
-	creds      runtime.Typed
-}
-
-// Send issues a single request and fails on a non-2xx response. A successful JSON response is
-// decoded into out, if set. Errors never carry userinfo, query or fragment of target.
-func (c *Client) Send(ctx context.Context, method, target string, body io.Reader, size int64, header http.Header, out any) error {
-	resp, err := c.Do(ctx, method, target, body, size, header)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = resp.Body.Close() }()
-	safe := RedactURL(target)
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		excerpt, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorBodyBytes))
-		if msg := strings.TrimSpace(string(excerpt)); msg != "" {
-			return fmt.Errorf("%s %s returned status %d: %s", method, safe, resp.StatusCode, msg)
-		}
-		return fmt.Errorf("%s %s returned status %d", method, safe, resp.StatusCode)
-	}
-	if out != nil {
-		if err := DecodeJSONBody(resp.Body, out); err != nil {
-			return fmt.Errorf("failed decoding response of %s %s: %w", method, safe, err)
-		}
-	}
-	return nil
-}
-
-// GetJSON GETs target and decodes a 200 JSON body into out. A 404 yields found=false; any other
-// non-200 status yields "GET <redacted target> returned status <code>".
-func (c *Client) GetJSON(ctx context.Context, target string, out any) (found bool, err error) {
-	resp, err := c.Do(ctx, http.MethodGet, target, nil, -1, nil)
-	if err != nil {
-		return false, err
-	}
-	defer func() { _ = resp.Body.Close() }()
-	switch resp.StatusCode {
-	case http.StatusOK:
-	case http.StatusNotFound:
-		return false, nil
-	default:
-		return false, fmt.Errorf("GET %s returned status %d", RedactURL(target), resp.StatusCode)
-	}
-	if err := DecodeJSONBody(resp.Body, out); err != nil {
-		return false, fmt.Errorf("failed decoding response of GET %s: %w", RedactURL(target), err)
-	}
-	return true, nil
-}
-
-// DecodeJSONBody decodes a JSON response body into out; an empty body leaves out unchanged.
-func DecodeJSONBody(body io.Reader, out any) error {
-	if err := json.NewDecoder(io.LimitReader(body, maxJSONBytes)).Decode(out); err != nil && !errors.Is(err, io.EOF) {
-		return err
-	}
-	return nil
-}
-
-// Do sends a single authenticated request. The caller closes the response body.
-func (c *Client) Do(ctx context.Context, method, target string, body io.Reader, size int64, header http.Header) (*http.Response, error) {
-	safe := RedactURL(target)
-	req, err := http.NewRequestWithContext(ctx, method, target, body)
-	if err != nil {
-		return nil, fmt.Errorf("failed creating %s request for %s: %w", method, safe, err)
-	}
-	if size >= 0 {
-		req.ContentLength = size
-	}
-	for k, v := range header {
-		req.Header[k] = v
-	}
-	client := ocmhttp.New(ocmhttp.WithConfig(c.httpConfig))
-	if method != http.MethodGet && method != http.MethodHead {
-		// Following a redirect turns PUT and POST into a GET, so a redirect to e.g. a login page
-		// would report an upload as successful that stored nothing. The 3xx fails the request instead.
-		client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-	}
-	if err := httpauth.Apply(ctx, req, &client, c.creds); err != nil {
-		return nil, fmt.Errorf("failed applying target credentials: %w", err)
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		// client.Do wraps errors in a *url.Error carrying the full request URL.
-		var urlErr *url.Error
-		if errors.As(err, &urlErr) {
-			urlErr.URL = safe
-		}
-		return nil, fmt.Errorf("%s %s failed: %w", method, safe, err)
-	}
-	return resp, nil
-}
-
-// RedactURL strips userinfo, query and fragment so credentials or presigned parameters never
-// reach logs or errors.
-func RedactURL(raw string) string {
-	u, err := url.Parse(raw)
-	if err != nil {
-		return "<invalid url>"
-	}
-	u.User = nil
-	u.RawQuery = ""
-	u.Fragment = ""
-	return u.String()
-}
-
-// MediaTypeFromAccess extracts the source access media type (if any) from the resource
-// access, used as the default target media type. Returns "" when absent.
-func MediaTypeFromAccess(resource descriptorv2.Resource) string {
-	if resource.Access == nil || len(resource.Access.Data) == 0 {
-		return ""
-	}
-	var access struct {
-		MediaType string `json:"mediaType"`
-	}
-	if err := json.Unmarshal(resource.Access.Data, &access); err != nil {
-		return ""
-	}
-	return access.MediaType
 }

@@ -16,6 +16,8 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/transfer/internal/repositoryupload"
+	"ocm.software/open-component-model/bindings/go/transfer/internal/repositoryupload/chart"
+	"ocm.software/open-component-model/bindings/go/transfer/internal/repositoryupload/client"
 	uploadv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/transformation/spec/v1alpha1"
 	wgetaccess "ocm.software/open-component-model/bindings/go/wget/spec/access"
 	wgetaccessv1 "ocm.software/open-component-model/bindings/go/wget/spec/access/v1"
@@ -40,10 +42,11 @@ func ownerProperties(cv *uploadv1alpha1.RepositoryUploadComponentVersion, res *d
 	return owner
 }
 
-// server deploys the content to <url>/artifactory/<repository>/<path> with the owner properties.
+// store deploys the content to <url>/artifactory/<repository>/<path> with the owner properties.
 // Helm charts and npm packages are published with the name and version Artifactory records as
 // properties when it indexes the deployed file; other content as the file.
-type server struct {
+type store struct {
+	client                                            *client.Client
 	packageType                                       string
 	repository, repoURL, putURL, storageURL, helmRepo string
 	// properties are the owner properties as deploy matrix parameters (;key=value...).
@@ -51,12 +54,12 @@ type server struct {
 	owner      []property
 	interval   time.Duration
 	// deployed is the file the last deploy stored, see storedURL.
-	deployed deployment
+	deployed deployResponse
 }
 
-var _ repositoryupload.Store = (*server)(nil)
+var _ repositoryupload.Store = (*store)(nil)
 
-func newServer(spec *uploadv1alpha1.RepositoryUploadSpec, packageType, path string, owner []property, interval time.Duration) (*server, error) {
+func newStore(c *client.Client, spec *uploadv1alpha1.RepositoryUploadSpec, packageType, path string, owner []property, interval time.Duration) (*store, error) {
 	uploadBase, err := url.JoinPath(spec.URL, "artifactory", spec.Repository)
 	if err != nil {
 		return nil, fmt.Errorf("invalid artifactory url: %w", err)
@@ -69,7 +72,8 @@ func newServer(spec *uploadv1alpha1.RepositoryUploadSpec, packageType, path stri
 	if err != nil {
 		return nil, fmt.Errorf("invalid artifactory url: %w", err)
 	}
-	return &server{
+	return &store{
+		client:      c,
 		packageType: packageType,
 		repository:  spec.Repository,
 		repoURL:     uploadBase,
@@ -96,67 +100,67 @@ func matrixParams(props []property) string {
 	return b.String()
 }
 
-func (a *server) Chart() bool { return a.packageType == "helm" }
+func (s *store) Chart() bool { return s.packageType == "helm" }
 
-func (a *server) URL() string { return a.storedURL() }
+func (s *store) URL() string { return s.storedURL() }
 
 // Stored claims the upload location, see claim, and otherwise asks Artifactory to deploy it from
 // content it already stores under the SHA-256 checksum, see reuse.
-func (a *server) Stored(ctx context.Context, c *repositoryupload.Client, known digest.Digest) (bool, error) {
-	stored, err := a.claim(ctx, c, known)
+func (s *store) Stored(ctx context.Context, known digest.Digest) (bool, error) {
+	stored, err := s.claim(ctx, known)
 	if stored || err != nil || known == "" || known.Algorithm() != digest.SHA256 {
 		return stored, err
 	}
-	return a.reuse(ctx, c, known)
+	return s.reuse(ctx, known)
 }
 
-func (a *server) Put(ctx context.Context, c *repositoryupload.Client, content blob.ReadOnlyBlob, mediaType string, known digest.Digest) (digest.Digest, error) {
+func (s *store) Put(ctx context.Context, content blob.ReadOnlyBlob, mediaType string, known digest.Digest) (digest.Digest, error) {
 	header := http.Header{"Content-Type": {mediaType}}
 	if known != "" && known.Algorithm() == digest.SHA256 {
 		// Artifactory verifies the uploaded bytes against this checksum and rejects the upload
 		// on mismatch, so a corrupted stream is never stored.
 		header.Set("X-Checksum-Sha256", known.Encoded())
 	}
-	computed, _, err := repositoryupload.UploadBlob(ctx, c, content, known, a.putURL+a.properties, header, &a.deployed)
+	computed, _, err := s.client.PutBlob(ctx, s.putURL+s.properties, content, known, header, &s.deployed)
 	return computed, err
 }
 
-func (a *server) Discard(ctx context.Context, c *repositoryupload.Client, _ digest.Digest) error {
-	return c.Send(ctx, http.MethodDelete, a.storedURL(), nil, -1, nil, nil)
+func (s *store) Discard(ctx context.Context, _ digest.Digest) error {
+	return s.client.Send(ctx, http.MethodDelete, s.storedURL(), nil, -1, nil, nil)
 }
 
 // Publish returns a Helm/v1 access on the chart Artifactory indexed (helm), or a Wget/v1 access on
 // the stored file; npm packages must have been indexed as such.
-func (a *server) Publish(ctx context.Context, c *repositoryupload.Client, _ digest.Digest, mediaType string) (runtime.Typed, error) {
-	switch a.packageType {
+func (s *store) Publish(ctx context.Context, _ digest.Digest, mediaType string) (runtime.Typed, error) {
+	switch s.packageType {
 	case "helm":
-		name, version, found, err := a.packageInfo(ctx, c, "chart.name", "chart.version")
+		name, version, found, err := s.packageInfo(ctx, "chart.name", "chart.version")
 		if err != nil {
 			return nil, err
 		}
 		if !found {
-			return nil, &repositoryupload.NotRecognizedError{Kind: "a helm chart", Reason: "artifactory recorded no chart name and version for " + repositoryupload.RedactURL(a.storedURL())}
+			return nil, &repositoryupload.NotRecognizedError{Kind: "a helm chart", Reason: "artifactory recorded no chart name and version for " + client.RedactURL(s.storedURL())}
 		}
-		return repositoryupload.HelmAccess("artifactory", a.helmRepo, name, version, repositoryupload.RedactURL(a.storedURL()))
+		return chart.Access("artifactory", s.helmRepo, name, version, client.RedactURL(s.storedURL()))
 	case "npm":
-		name, version, found, err := a.packageInfo(ctx, c, "npm.name", "npm.version")
+		name, version, found, err := s.packageInfo(ctx, "npm.name", "npm.version")
 		if err != nil {
 			return nil, err
 		}
 		if !found {
-			return nil, &repositoryupload.NotRecognizedError{Kind: "an npm package", Reason: "artifactory recorded no npm.name and npm.version for " + repositoryupload.RedactURL(a.storedURL())}
+			return nil, &repositoryupload.NotRecognizedError{Kind: "an npm package", Reason: "artifactory recorded no npm.name and npm.version for " + client.RedactURL(s.storedURL())}
 		}
-		slog.InfoContext(ctx, "artifactory indexed the npm package", "url", repositoryupload.RedactURL(a.storedURL()), "package", name+"@"+version)
+		slog.InfoContext(ctx, "artifactory indexed the npm package", "url", client.RedactURL(s.storedURL()), "package", name+"@"+version)
 	}
-	return &wgetaccessv1.Wget{Type: wgetaccess.V1VersionedType, URL: a.storedURL(), MediaType: mediaType}, nil
+	return &wgetaccessv1.Wget{Type: wgetaccess.V1VersionedType, URL: s.storedURL(), MediaType: mediaType}, nil
 }
 
 // reuse asks Artifactory to deploy the upload URL from content it already stores under the
 // checksum ("Deploy Artifact by Checksum"), so the content is not uploaded again. It reports false
 // when Artifactory does not have the content (404) or declines the request otherwise; the caller
 // then uploads the content, which surfaces real errors such as missing permissions.
-func (a *server) reuse(ctx context.Context, c *repositoryupload.Client, sha256 digest.Digest) (bool, error) {
-	resp, err := c.Do(ctx, http.MethodPut, a.putURL+a.properties, nil, 0, http.Header{
+func (s *store) reuse(ctx context.Context, sha256 digest.Digest) (bool, error) {
+	resp, err := s.client.Do(ctx, http.MethodPut, s.putURL+s.properties, nil, 0, http.Header{
 		"X-Checksum-Deploy": {"true"},
 		"X-Checksum-Sha256": {sha256.Encoded()},
 	})
@@ -167,16 +171,16 @@ func (a *server) reuse(ctx context.Context, c *repositoryupload.Client, sha256 d
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return false, nil
 	}
-	var deployed deployment
-	if err := repositoryupload.DecodeJSONBody(resp.Body, &deployed); err != nil {
-		return false, fmt.Errorf("failed decoding response of PUT %s: %w", repositoryupload.RedactURL(a.putURL), err)
+	var deployed deployResponse
+	if err := client.DecodeJSON(resp.Body, &deployed); err != nil {
+		return false, fmt.Errorf("failed decoding response of PUT %s: %w", client.RedactURL(s.putURL), err)
 	}
-	a.deployed = deployed
+	s.deployed = deployed
 	return true, nil
 }
 
-// deployment is the part of an Artifactory deploy response naming the stored file.
-type deployment struct {
+// deployResponse is the part of an Artifactory deploy response naming the stored file.
+type deployResponse struct {
 	Repo string `json:"repo"`
 	Path string `json:"path"`
 }
@@ -184,36 +188,36 @@ type deployment struct {
 // storedURL is the URL of the stored file. Artifactory may store a file under another path than
 // requested, e.g. a Maven -SNAPSHOT file under its unique timestamped version, so the path of the
 // deploy response is used when there is one.
-func (a *server) storedURL() string {
-	if a.deployed.Repo != a.repository || a.deployed.Path == "" {
-		return a.putURL
+func (s *store) storedURL() string {
+	if s.deployed.Repo != s.repository || s.deployed.Path == "" {
+		return s.putURL
 	}
-	segments := strings.Split(strings.TrimPrefix(a.deployed.Path, "/"), "/")
+	segments := strings.Split(strings.TrimPrefix(s.deployed.Path, "/"), "/")
 	for i, segment := range segments {
 		segments[i] = url.PathEscape(segment)
 	}
-	return a.repoURL + "/" + strings.Join(segments, "/")
+	return s.repoURL + "/" + strings.Join(segments, "/")
 }
 
 // claim reads the file stored at the upload location. A missing file leaves the location free,
 // a file with content known already holds the content, and a file whose owner properties name
 // this resource is its earlier upload and may be replaced. Any other file is never overwritten,
 // because it was stored for another resource, another component version or outside OCM.
-func (a *server) claim(ctx context.Context, c *repositoryupload.Client, known digest.Digest) (bool, error) {
+func (s *store) claim(ctx context.Context, known digest.Digest) (bool, error) {
 	var info struct {
 		// Checksums maps algorithms (sha1, sha256, md5) to the hex checksums of the file.
 		Checksums map[string]string `json:"checksums"`
 	}
-	if exists, err := c.GetJSON(ctx, a.storageURL, &info); !exists || err != nil {
+	if exists, err := s.client.GetJSON(ctx, s.storageURL, &info); !exists || err != nil {
 		return false, err
 	}
 	if known != "" && info.Checksums[known.Algorithm().String()] == known.Encoded() {
 		return true, nil
 	}
 
-	keys := make([]string, 0, len(a.owner)+1)
+	keys := make([]string, 0, len(s.owner)+1)
 	want := map[string]string{}
-	for _, p := range a.owner {
+	for _, p := range s.owner {
 		keys = append(keys, p.key)
 		want[p.key] = p.value
 	}
@@ -224,14 +228,14 @@ func (a *server) claim(ctx context.Context, c *repositoryupload.Client, known di
 		Properties map[string][]string `json:"properties"`
 	}
 	// A file without any of the properties yields 404.
-	if _, err := c.GetJSON(ctx, a.storageURL+"?properties="+strings.Join(keys, ","), &props); err != nil {
+	if _, err := s.client.GetJSON(ctx, s.storageURL+"?properties="+strings.Join(keys, ","), &props); err != nil {
 		return false, err
 	}
 	for _, key := range keys {
 		got := props.Properties[key]
 		if value, ok := want[key]; ok && (len(got) != 1 || got[0] != value) || !ok && len(got) != 0 {
 			return false, fmt.Errorf("%s already stores a file that was not uploaded for this resource (recorded owner: %v); refusing to overwrite it, configure a different path",
-				repositoryupload.RedactURL(a.putURL), props.Properties)
+				client.RedactURL(s.putURL), props.Properties)
 		}
 	}
 	return false, nil
@@ -241,13 +245,13 @@ func (a *server) claim(ctx context.Context, c *repositoryupload.Client, known di
 // and versionKey when it indexes the stored file. It polls in case the metadata is calculated
 // asynchronously and reports found=false when Artifactory recorded none, i.e. did not recognize
 // the content as a package of the repository type.
-func (a *server) packageInfo(ctx context.Context, c *repositoryupload.Client, nameKey, versionKey string) (name, version string, found bool, err error) {
-	target := a.storageURL + "?properties=" + nameKey + "," + versionKey
-	found, err = repositoryupload.Poll(ctx, a.interval, func() (bool, error) {
+func (s *store) packageInfo(ctx context.Context, nameKey, versionKey string) (name, version string, found bool, err error) {
+	target := s.storageURL + "?properties=" + nameKey + "," + versionKey
+	found, err = repositoryupload.Poll(ctx, s.interval, func() (bool, error) {
 		var props struct {
 			Properties map[string][]string `json:"properties"`
 		}
-		if ok, err := c.GetJSON(ctx, target, &props); !ok || err != nil {
+		if ok, err := s.client.GetJSON(ctx, target, &props); !ok || err != nil {
 			return false, err
 		}
 		names, versions := props.Properties[nameKey], props.Properties[versionKey]

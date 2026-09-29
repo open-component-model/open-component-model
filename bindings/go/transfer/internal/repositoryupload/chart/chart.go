@@ -1,4 +1,6 @@
-package repositoryupload
+// Package chart locates the packaged Helm chart in the content of a resource and describes charts
+// published to Helm repositories.
+package chart
 
 import (
 	"archive/tar"
@@ -24,12 +26,12 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// LocateChart returns the packaged Helm chart (.tgz) in content: content itself when it is gzip, the
+// Locate returns the packaged Helm chart (.tgz) in content: content itself when it is gzip, the
 // first .tgz of a tar (helm downloader output), or the chart layer of a Helm chart OCI layout.
 // fromOCI reports that the chart came from an OCI artifact, so the source digest does not describe it.
 // The chart is located, not parsed: the target repository reads and validates it.
-func LocateChart(ctx context.Context, content blob.ReadOnlyBlob, mediaType string, id runtime.Identity) (chart blob.ReadOnlyBlob, fromOCI bool, err error) {
-	if isOCILayout(mediaType) {
+func Locate(ctx context.Context, content blob.ReadOnlyBlob, mediaType string, id runtime.Identity) (chart blob.ReadOnlyBlob, fromOCI bool, err error) {
+	if IsOCILayout(mediaType) {
 		chart, err := fromLayout(ctx, content, id)
 		return chart, true, err
 	}
@@ -37,15 +39,15 @@ func LocateChart(ctx context.Context, content blob.ReadOnlyBlob, mediaType strin
 	return chart, false, err
 }
 
-// isOCILayout reports whether mediaType is that of an OCM OCI layout, the form OCI artifacts are
+// IsOCILayout reports whether mediaType is that of an OCM OCI layout, the form OCI artifacts are
 // downloaded in.
-func isOCILayout(mediaType string) bool {
+func IsOCILayout(mediaType string) bool {
 	return strings.HasPrefix(mediaType, layout.MediaTypeOCIImageLayout)
 }
 
-// ociHelmChart reports whether src is a Helm chart stored in an OCI registry. Its digest is that
+// FromOCIRegistry reports whether src is a Helm chart stored in an OCI registry. Its digest is that
 // of the chart manifest (see helm/digest), not of the downloaded chart.
-func ociHelmChart(src *descriptor.Resource) bool {
+func FromOCIRegistry(src *descriptor.Resource) bool {
 	if src.Access == nil || !helmaccess.Scheme.IsRegistered(src.Access.GetType()) {
 		return false
 	}
@@ -189,4 +191,17 @@ func (b *readerBlob) Close() error {
 type readCloser struct {
 	io.Reader
 	io.Closer
+}
+
+// Access returns the Helm/v1 access of chart name:version in helmRepo. It rejects a name
+// containing ":" or "/" and a version containing "/", which server recorded for the chart at url.
+func Access(server, helmRepo, name, version, url string) (runtime.Typed, error) {
+	if strings.ContainsAny(name, ":/") || strings.Contains(version, "/") {
+		return nil, fmt.Errorf("%s recorded an invalid chart name %q or version %q for %s", server, name, version, url)
+	}
+	return &helmaccessv1.Helm{
+		Type:           runtime.NewVersionedType(helmaccessv1.Type, helmaccessv1.Version),
+		HelmRepository: helmRepo,
+		HelmChart:      name + ":" + version,
+	}, nil
 }

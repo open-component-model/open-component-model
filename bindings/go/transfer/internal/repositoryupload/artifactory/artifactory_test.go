@@ -44,29 +44,29 @@ import (
 	wgetidentityv1 "ocm.software/open-component-model/bindings/go/wget/spec/identity/v1"
 )
 
-// localChartRepo serves the content as a local resource and records the request.
-type localChartRepo struct {
+// stubLocalRepository serves the content as a local resource and records the request.
+type stubLocalRepository struct {
 	repository.ComponentVersionRepository
 	content            []byte
 	component, version string
 	identity           runtime.Identity
 }
 
-func (l *localChartRepo) GetLocalResource(_ context.Context, component, version string, identity runtime.Identity) (blob.ReadOnlyBlob, *descriptor.Resource, error) {
+func (l *stubLocalRepository) GetLocalResource(_ context.Context, component, version string, identity runtime.Identity) (blob.ReadOnlyBlob, *descriptor.Resource, error) {
 	l.component, l.version, l.identity = component, version, identity
 	return inmemory.New(bytes.NewReader(l.content), inmemory.WithSize(int64(len(l.content)))), nil, nil
 }
 
-type localChartRepoProvider struct {
+type stubRepositoryProvider struct {
 	repository.ComponentVersionRepositoryProvider
-	repo *localChartRepo
+	repo *stubLocalRepository
 }
 
-func (p *localChartRepoProvider) GetComponentVersionRepositoryCredentialConsumerIdentity(context.Context, runtime.Typed) (runtime.Identity, error) {
+func (p *stubRepositoryProvider) GetComponentVersionRepositoryCredentialConsumerIdentity(context.Context, runtime.Typed) (runtime.Identity, error) {
 	return nil, errors.New("no identity")
 }
 
-func (p *localChartRepoProvider) GetComponentVersionRepository(context.Context, runtime.Typed, runtime.Typed) (repository.ComponentVersionRepository, error) {
+func (p *stubRepositoryProvider) GetComponentVersionRepository(context.Context, runtime.Typed, runtime.Typed) (repository.ComponentVersionRepository, error) {
 	return p.repo, nil
 }
 
@@ -105,10 +105,10 @@ func sha256Hex(data []byte) string {
 
 // uploadRun is what a TestTransform row checks beyond its columns.
 type uploadRun struct {
-	repo  *artifactorytest.Repository
+	repo  *artifactorytest.FakeRepository
 	reqs  []artifactorytest.Request // of the last transfer
 	out   *descriptorv2.Resource
-	local *localChartRepo
+	local *stubLocalRepository
 }
 
 func (u uploadRun) bodyPUTs() []artifactorytest.Request {
@@ -172,8 +172,8 @@ func TestTransform(t *testing.T) {
 		}
 	}
 	nothingWritten := func(r *require.Assertions, u uploadRun) { r.Empty(u.bodyPUTs(), "nothing may be written") }
-	storedElsewhere := func(path string) func(*artifactorytest.Repository) {
-		return func(repo *artifactorytest.Repository) {
+	storedElsewhere := func(path string) func(*artifactorytest.FakeRepository) {
+		return func(repo *artifactorytest.FakeRepository) {
 			repo.StoredPath = func(string) string { return path }
 		}
 	}
@@ -192,8 +192,8 @@ func TestTransform(t *testing.T) {
 		resource  func(*descriptorv2.Resource)
 		local     bool // local blob read from the source component version
 		path      string
-		creds     uploadtest.Credentials
-		seed      func(*artifactorytest.Repository)
+		creds     uploadtest.StubCredentials
+		seed      func(*artifactorytest.FakeRepository)
 		transfers int // requests and output of the last transfer are checked; default 1
 		wantErr   string
 		// wantAccess and wantDigest (genericBlobDigest/v1 value) describe the published resource.
@@ -224,12 +224,12 @@ func TestTransform(t *testing.T) {
 				r.False(u.repo.Stored(file + ".tgz"))
 			},
 		},
-		{name: "HelmChartRepository HelmHTTPCredentials use basic auth", creds: uploadtest.Credentials{helmType: helmCreds}, check: auth([]string{"helm-user", "helm-pass"}, "")},
-		{name: "Wget WgetCredentials use a bearer token", creds: uploadtest.Credentials{wgetType: wgetCreds}, check: auth(nil, "wget-token")},
-		{name: "HelmChartRepository credentials win over Wget", creds: uploadtest.Credentials{helmType: helmCreds, wgetType: wgetCreds}, check: auth([]string{"helm-user", "helm-pass"}, "")},
+		{name: "HelmChartRepository HelmHTTPCredentials use basic auth", creds: uploadtest.StubCredentials{helmType: helmCreds}, check: auth([]string{"helm-user", "helm-pass"}, "")},
+		{name: "Wget WgetCredentials use a bearer token", creds: uploadtest.StubCredentials{wgetType: wgetCreds}, check: auth(nil, "wget-token")},
+		{name: "HelmChartRepository credentials win over Wget", creds: uploadtest.StubCredentials{helmType: helmCreds, wgetType: wgetCreds}, check: auth([]string{"helm-user", "helm-pass"}, "")},
 		{
 			name:    "HelmHTTPCredentials client certificates are rejected before any request",
-			creds:   uploadtest.Credentials{helmType: certCreds},
+			creds:   uploadtest.StubCredentials{helmType: certCreds},
 			wantErr: "HelmHTTPCredentials certFile/keyFile are not supported for repository uploads",
 			check:   func(r *require.Assertions, u uploadRun) { r.Empty(u.reqs) },
 		},
@@ -328,7 +328,7 @@ func TestTransform(t *testing.T) {
 		{
 			name: "a file stored for another component version is never overwritten",
 			path: "shared/mychart.tgz",
-			seed: func(repo *artifactorytest.Repository) {
+			seed: func(repo *artifactorytest.FakeRepository) {
 				repo.Store("shared/mychart.tgz", "0123", map[string]string{"ocm.component.name": "ocm.software/test", "ocm.component.version": "2.0.0", "ocm.resource.name": "renamed", "ocm.resource.version": "9.9.9"})
 			},
 			wantErr: "was not uploaded for this resource (recorded owner: ",
@@ -337,7 +337,7 @@ func TestTransform(t *testing.T) {
 		{
 			name: "a file stored for another extra identity is never overwritten",
 			path: "shared/mychart.tgz",
-			seed: func(repo *artifactorytest.Repository) {
+			seed: func(repo *artifactorytest.FakeRepository) {
 				repo.Store("shared/mychart.tgz", "0123", map[string]string{"ocm.component.name": "ocm.software/test", "ocm.component.version": "1.0.0", "ocm.resource.name": "renamed", "ocm.resource.version": "9.9.9", "ocm.resource.extraIdentity": "arch=arm64"})
 			},
 			wantErr: "was not uploaded for this resource",
@@ -346,7 +346,7 @@ func TestTransform(t *testing.T) {
 		{
 			name:    "a file not uploaded by ocm is never overwritten",
 			path:    "shared/mychart.tgz",
-			seed:    func(repo *artifactorytest.Repository) { repo.Store("shared/mychart.tgz", "0123", nil) },
+			seed:    func(repo *artifactorytest.FakeRepository) { repo.Store("shared/mychart.tgz", "0123", nil) },
 			wantErr: "refusing to overwrite it, configure a different path",
 			check:   nothingWritten,
 		},
@@ -431,7 +431,7 @@ func TestTransform(t *testing.T) {
 			name:     "npm publishes a package artifactory recognizes",
 			repoType: "npm",
 			content:  hello,
-			seed: func(repo *artifactorytest.Repository) {
+			seed: func(repo *artifactorytest.FakeRepository) {
 				repo.NPM = map[string]artifactorytest.Package{helloDigest: {Name: "renamed", Version: "9.9.9"}}
 			},
 			wantAccess:   access{url: "/artifactory/helm-local/" + file + ".tgz"},
@@ -449,7 +449,7 @@ func TestTransform(t *testing.T) {
 			repoType: "npm",
 			content:  hello,
 			resource: withDigest(helloDigest, "genericBlobDigest/v1"),
-			seed: func(repo *artifactorytest.Repository) {
+			seed: func(repo *artifactorytest.FakeRepository) {
 				repo.NPM = map[string]artifactorytest.Package{helloDigest: {Name: "renamed", Version: "9.9.9"}}
 			},
 			transfers:    2,
@@ -460,18 +460,18 @@ func TestTransform(t *testing.T) {
 			repoType: "npm",
 			content:  hello,
 			path:     "packages/renamed-9.9.9.tgz",
-			seed: func(repo *artifactorytest.Repository) {
+			seed: func(repo *artifactorytest.FakeRepository) {
 				repo.NPM = map[string]artifactorytest.Package{helloDigest: {Name: "renamed", Version: "9.9.9"}}
 			},
 			wantAccess: access{url: "/artifactory/helm-local/packages/renamed-9.9.9.tgz"},
 		},
 		{
 			name:    "remote repositories are rejected",
-			seed:    func(repo *artifactorytest.Repository) { repo.RClass = "remote" },
+			seed:    func(repo *artifactorytest.FakeRepository) { repo.RClass = "remote" },
 			wantErr: `artifactory repository "helm-local" is a remote repository; uploads need a local repository`,
 			check:   nothingWritten,
 		},
-		{name: "federated repositories are accepted", repoType: "generic", seed: func(repo *artifactorytest.Repository) { repo.RClass = "federated" }},
+		{name: "federated repositories are accepted", repoType: "generic", seed: func(repo *artifactorytest.FakeRepository) { repo.RClass = "federated" }},
 		{name: "package type is case-insensitive", repoType: "Maven", content: hello, check: func(r *require.Assertions, u uploadRun) { r.Len(u.bodyPUTs(), 1) }},
 		{
 			name:     "unsupported package type",
@@ -481,13 +481,13 @@ func TestTransform(t *testing.T) {
 		},
 		{
 			name:    "unauthorized repository detection",
-			seed:    func(repo *artifactorytest.Repository) { repo.DetectionStatus = http.StatusUnauthorized },
+			seed:    func(repo *artifactorytest.FakeRepository) { repo.DetectionStatus = http.StatusUnauthorized },
 			wantErr: `failed detecting the type of artifactory repository "helm-local": GET {url}/artifactory/api/repositories/helm-local returned status 401`,
 			check:   nothingWritten,
 		},
 		{
 			name:    "invalid repository configuration",
-			seed:    func(repo *artifactorytest.Repository) { repo.DetectionBody = "not json" },
+			seed:    func(repo *artifactorytest.FakeRepository) { repo.DetectionBody = "not json" },
 			wantErr: `failed detecting the type of artifactory repository "helm-local": failed decoding response of GET`,
 			check:   nothingWritten,
 		},
@@ -495,7 +495,7 @@ func TestTransform(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
-			repo := &artifactorytest.Repository{Charts: map[string]artifactorytest.Package{chartDigest: {Name: "mychart", Version: "0.1.0"}}, PackageType: tc.repoType}
+			repo := &artifactorytest.FakeRepository{Charts: map[string]artifactorytest.Package{chartDigest: {Name: "mychart", Version: "0.1.0"}}, PackageType: tc.repoType}
 			if tc.seed != nil {
 				tc.seed(repo)
 			}
@@ -521,10 +521,10 @@ func TestTransform(t *testing.T) {
 				Repository:       artifactorytest.Key,
 				Path:             tc.path,
 			}
-			local := &localChartRepo{content: content}
+			local := &stubLocalRepository{content: content}
 			tr := &Transformer{repositoryupload.Uploader{
 				Scheme:             scheme,
-				ResourceRepository: &uploadtest.ResourceRepository{Content: content, MediaType: tc.mediaType},
+				ResourceRepository: &uploadtest.StubResourceRepository{Content: content, MediaType: tc.mediaType},
 				PollInterval:       time.Millisecond,
 			}}
 			if tc.creds != nil {
@@ -534,7 +534,7 @@ func TestTransform(t *testing.T) {
 				spec.ComponentVersion.Repository = &runtime.Raw{Type: runtime.NewVersionedType("OCIRepository", "v1"), Data: []byte(`{"type":"OCIRepository/v1","baseUrl":"ghcr.io/source"}`)}
 			}
 			if tc.local {
-				tr.RepoProvider = &localChartRepoProvider{repo: local}
+				tr.RepoProvider = &stubRepositoryProvider{repo: local}
 			}
 
 			var out runtime.Typed

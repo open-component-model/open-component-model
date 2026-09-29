@@ -1,7 +1,7 @@
 // Package artifactorytest provides an in-memory JFrog Artifactory repository for tests of the
-// Artifactory uploader. A [Repository] is an [http.Handler]; serve it with [httptest.NewServer]:
+// Artifactory uploader. A [FakeRepository] is an [http.Handler]; serve it with [httptest.NewServer]:
 //
-//	repo := &artifactorytest.Repository{Charts: map[string]artifactorytest.Package{sha256Hex: {Name: "mychart", Version: "0.1.0"}}}
+//	repo := &artifactorytest.FakeRepository{Charts: map[string]artifactorytest.Package{sha256Hex: {Name: "mychart", Version: "0.1.0"}}}
 //	srv := httptest.NewServer(repo)
 //	defer srv.Close()
 package artifactorytest
@@ -18,7 +18,7 @@ import (
 	"sync"
 )
 
-// Key is the key of the repository a [Repository] serves.
+// Key is the key of the repository a [FakeRepository] serves.
 const Key = "helm-local"
 
 // Package is the name and version Artifactory records for content it recognizes as a package.
@@ -26,7 +26,7 @@ type Package struct {
 	Name, Version string
 }
 
-// Request is a request a [Repository] received.
+// Request is a request a [FakeRepository] received.
 type Request struct {
 	Method, Path, Query, ContentType string
 	Username, Password               string
@@ -39,14 +39,14 @@ type Request struct {
 	Body       []byte
 }
 
-// Repository emulates the endpoints of an Artifactory repository the uploader uses. Like
+// FakeRepository emulates the endpoints of an Artifactory repository the uploader uses. Like
 // Artifactory, it records package properties for deployed content it recognizes; here,
 // recognition is a lookup of the SHA-256 of the content in Charts and NPM. Matrix parameters of a
 // deploy are stored as properties of the file.
 //
 // The zero value is a local helm repository that recognizes no content. Configure the exported
 // fields before serving the first request.
-type Repository struct {
+type FakeRepository struct {
 	// Charts maps the hex SHA-256 of content recognized as a Helm chart to the chart.
 	Charts map[string]Package
 	// NPM maps the hex SHA-256 of content recognized as an npm package to the package.
@@ -75,13 +75,13 @@ type file struct {
 
 // Store records a file with content of the hex SHA-256 at the repository path with properties,
 // as if it had been deployed.
-func (f *Repository) Store(path, sha256Hex string, properties map[string]string) {
+func (f *FakeRepository) Store(path, sha256Hex string, properties map[string]string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.store(path, sha256Hex, properties)
 }
 
-func (f *Repository) store(path, sha256Hex string, properties map[string]string) {
+func (f *FakeRepository) store(path, sha256Hex string, properties map[string]string) {
 	if f.files == nil {
 		f.files = map[string]file{}
 	}
@@ -89,21 +89,21 @@ func (f *Repository) store(path, sha256Hex string, properties map[string]string)
 }
 
 // Requests returns the requests received so far.
-func (f *Repository) Requests() []Request {
+func (f *FakeRepository) Requests() []Request {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return append([]Request(nil), f.requests...)
 }
 
 // Stored reports whether the repository stores a file at path.
-func (f *Repository) Stored(path string) bool {
+func (f *FakeRepository) Stored(path string) bool {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	_, ok := f.files[path]
 	return ok
 }
 
-func (f *Repository) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (f *FakeRepository) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	body, _ := io.ReadAll(r.Body)
 	path, params := splitMatrixParams(r.URL.EscapedPath())
 	req := Request{
@@ -138,7 +138,7 @@ func (f *Repository) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (f *Repository) serveConfiguration(w http.ResponseWriter) {
+func (f *FakeRepository) serveConfiguration(w http.ResponseWriter) {
 	switch {
 	case f.DetectionStatus != 0 && f.DetectionStatus != http.StatusOK:
 		http.Error(w, http.StatusText(f.DetectionStatus), f.DetectionStatus)
@@ -151,7 +151,7 @@ func (f *Repository) serveConfiguration(w http.ResponseWriter) {
 
 // serveProperties answers a properties request with the requested keys among the owner
 // properties and the package properties recorded for the file; none of them yields 404.
-func (f *Repository) serveProperties(w http.ResponseWriter, stored file, keys []string) {
+func (f *FakeRepository) serveProperties(w http.ResponseWriter, stored file, keys []string) {
 	all := map[string][]string{}
 	for key, value := range stored.properties {
 		all[key] = []string{value}
@@ -176,7 +176,7 @@ func (f *Repository) serveProperties(w http.ResponseWriter, stored file, keys []
 
 // deploy stores a PUT at path. A deploy by checksum succeeds only for content the repository
 // already stores; a body that does not match the announced checksum is rejected.
-func (f *Repository) deploy(w http.ResponseWriter, req Request, path string) {
+func (f *FakeRepository) deploy(w http.ResponseWriter, req Request, path string) {
 	if f.StoredPath != nil {
 		path = f.StoredPath(path)
 	}

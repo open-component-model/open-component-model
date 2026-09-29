@@ -14,30 +14,30 @@ import (
 )
 
 var (
-	_ repository.ResourceRepository = (*ResourceRepository)(nil)
-	_ credentials.Resolver          = Credentials(nil)
+	_ repository.ResourceRepository = (*StubResourceRepository)(nil)
+	_ credentials.Resolver          = StubCredentials(nil)
 )
 
-// ResourceRepository downloads every resource as Content with MediaType and derives no source
+// StubResourceRepository downloads every resource as Content with MediaType and derives no source
 // credential identity. Its other methods are not implemented and panic.
-type ResourceRepository struct {
+type StubResourceRepository struct {
 	repository.ResourceRepository
 	Content   []byte
 	MediaType string
 }
 
-func (s *ResourceRepository) GetResourceCredentialConsumerIdentity(context.Context, *descriptor.Resource) (runtime.Identity, error) {
+func (s *StubResourceRepository) GetResourceCredentialConsumerIdentity(context.Context, *descriptor.Resource) (runtime.Identity, error) {
 	return nil, nil
 }
 
-func (s *ResourceRepository) DownloadResource(context.Context, *descriptor.Resource, runtime.Typed) (blob.ReadOnlyBlob, error) {
+func (s *StubResourceRepository) DownloadResource(context.Context, *descriptor.Resource, runtime.Typed) (blob.ReadOnlyBlob, error) {
 	return inmemory.New(bytes.NewReader(s.Content), inmemory.WithSize(int64(len(s.Content))), inmemory.WithMediaType(s.MediaType)), nil
 }
 
-// Credentials resolves the credentials of a consumer identity by its type attribute.
-type Credentials map[string]runtime.Typed
+// StubCredentials resolves the credentials of a consumer identity by its type attribute.
+type StubCredentials map[string]runtime.Typed
 
-func (c Credentials) Resolve(_ context.Context, id runtime.Identity) (runtime.Typed, error) {
+func (c StubCredentials) Resolve(_ context.Context, id runtime.Identity) (runtime.Typed, error) {
 	if cred, ok := c[id["type"]]; ok {
 		return cred, nil
 	}

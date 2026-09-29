@@ -3,10 +3,6 @@ package repositoryupload
 import (
 	"context"
 	"errors"
-	"io"
-	"net/http"
-	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 
@@ -52,28 +48,4 @@ func TestPoll(t *testing.T) {
 			r.Equal(tc.wantCalls, calls)
 		})
 	}
-}
-
-func TestClientSend_RejectsRedirectOfUpload(t *testing.T) {
-	r := require.New(t)
-	var loginHits int
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		if req.URL.Path == "/login" {
-			loginHits++
-			_, _ = io.WriteString(w, "{}")
-			return
-		}
-		_, _ = io.Copy(io.Discard, req.Body)
-		http.Redirect(w, req, "/login", http.StatusFound)
-	}))
-	t.Cleanup(srv.Close)
-
-	c := &Client{}
-	err := c.Send(t.Context(), http.MethodPut, srv.URL+"/upload", strings.NewReader("content"), -1, nil, nil)
-	r.ErrorContains(err, "returned status 302")
-	r.Zero(loginHits, "the redirect of an upload must not be followed")
-
-	var out any
-	r.NoError(c.Send(t.Context(), http.MethodGet, srv.URL+"/upload", nil, -1, nil, &out), "reads still follow redirects")
-	r.Equal(1, loginHits)
 }

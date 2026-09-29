@@ -12,6 +12,8 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/transfer/internal/repositoryupload"
+	"ocm.software/open-component-model/bindings/go/transfer/internal/repositoryupload/client"
+	"ocm.software/open-component-model/bindings/go/transfer/internal/repositoryupload/uploadpath"
 	uploadv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/transformation/spec/v1alpha1"
 )
 
@@ -36,7 +38,7 @@ func (t *Transformer) Transform(ctx context.Context, step runtime.Typed) (runtim
 	return &tr, nil
 }
 
-// backend stores resources in Artifactory, see [server].
+// backend stores resources in Artifactory, see [store].
 type backend struct{}
 
 func (backend) Name() string { return "artifactory" }
@@ -55,7 +57,7 @@ func (backend) CredentialURLs(spec *uploadv1alpha1.RepositoryUploadSpec) (string
 
 // Store stores the resource at its upload path with owner properties. Helm and npm files get
 // the .tgz extension in the default file name.
-func (backend) Store(ctx context.Context, c *repositoryupload.Client, spec *uploadv1alpha1.RepositoryUploadSpec, src *descriptor.Resource, interval time.Duration) (repositoryupload.Store, error) {
+func (backend) Store(ctx context.Context, c *client.Client, spec *uploadv1alpha1.RepositoryUploadSpec, src *descriptor.Resource, interval time.Duration) (repositoryupload.Store, error) {
 	typ, err := repositoryType(ctx, c, spec)
 	if err != nil {
 		return nil, err
@@ -68,16 +70,16 @@ func (backend) Store(ctx context.Context, c *repositoryupload.Client, spec *uplo
 	default:
 		return nil, fmt.Errorf("artifactory repository %q has package type %q; supported: helm, generic, maven, npm", spec.Repository, typ)
 	}
-	path, err := repositoryupload.UploadPath(spec, src, ext)
+	path, err := uploadpath.Resolve(spec, src, ext)
 	if err != nil {
 		return nil, err
 	}
-	return newServer(spec, typ, path, ownerProperties(spec.ComponentVersion, src), interval)
+	return newStore(c, spec, typ, path, ownerProperties(spec.ComponentVersion, src), interval)
 }
 
 // repositoryType reads the package type of the repository from its configuration. Only local
 // and federated repositories accept uploads.
-func repositoryType(ctx context.Context, c *repositoryupload.Client, spec *uploadv1alpha1.RepositoryUploadSpec) (string, error) {
+func repositoryType(ctx context.Context, c *client.Client, spec *uploadv1alpha1.RepositoryUploadSpec) (string, error) {
 	target, err := url.JoinPath(spec.URL, "artifactory", "api", "repositories", spec.Repository)
 	if err != nil {
 		return "", fmt.Errorf("invalid artifactory url: %w", err)

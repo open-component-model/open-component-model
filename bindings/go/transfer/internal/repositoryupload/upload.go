@@ -14,7 +14,20 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob/compression"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	"ocm.software/open-component-model/bindings/go/transfer/internal/repositoryupload/chart"
+	"ocm.software/open-component-model/bindings/go/transfer/internal/repositoryupload/client"
 	uploadv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/transformation/spec/v1alpha1"
+)
+
+const (
+	// PollAttempts bounds how often the metadata a server records for uploaded content is polled
+	// before the content is considered not to be recognized. The metadata can lag behind the
+	// upload: Artifactory may calculate package properties asynchronously, Nexus indexes
+	// components for search about 2 s after the upload (Nexus 3.96). 30 polls allow about 15 s for
+	// a server under load.
+	PollAttempts = 30
+	// DefaultPollInterval is the wait between two metadata polls.
+	DefaultPollInterval = 500 * time.Millisecond
 )
 
 // Backend is the vendor-specific part of an upload.
@@ -23,13 +36,14 @@ type Backend interface {
 	Name() string
 	// CredentialURLs returns the Helm repository URL and repository URL upload credentials are resolved for.
 	CredentialURLs(spec *uploadv1alpha1.RepositoryUploadSpec) (helmRepo, repoURL string, err error)
-	// Store reads the repository type from the server and returns the store for it, or the unsupported-type error.
-	Store(ctx context.Context, c *Client, spec *uploadv1alpha1.RepositoryUploadSpec, src *descriptor.Resource, interval time.Duration) (Store, error)
+	// Store reads the repository type from the server and returns the store for it, or the
+	// unsupported-type error. The store sends its requests with c.
+	Store(ctx context.Context, c *client.Client, spec *uploadv1alpha1.RepositoryUploadSpec, src *descriptor.Resource, interval time.Duration) (Store, error)
 }
 
-// Store uploads into one repository type.
+// Store uploads into one repository type. Its digests are empty when unknown.
 type Store interface {
-	// Chart reports that the store takes the packaged Helm chart located in the content (see LocateChart),
+	// Chart reports that the store takes the packaged Helm chart located in the content (see chart.Locate),
 	// uploaded as application/gzip, instead of the content as is.
 	Chart() bool
 	// URL is the upload location, for logs and errors (callers redact it).
@@ -37,15 +51,15 @@ type Store interface {
 	// Stored reports whether the repository already holds content with digest known ("" when unknown), or
 	// made it available without an upload. It fails for a location holding content that must not be
 	// overwritten. Stores whose server cannot look up the algorithm of known treat it as unknown.
-	Stored(ctx context.Context, c *Client, known digest.Digest) (bool, error)
-	// Put uploads content and returns the digest of the bytes sent, see [UploadBlob] for its algorithm.
-	Put(ctx context.Context, c *Client, content blob.ReadOnlyBlob, mediaType string, known digest.Digest) (digest.Digest, error)
+	Stored(ctx context.Context, known digest.Digest) (bool, error)
+	// Put uploads content and returns the digest of the bytes sent, see [client.DigestAlgorithm].
+	Put(ctx context.Context, content blob.ReadOnlyBlob, mediaType string, known digest.Digest) (digest.Digest, error)
 	// Discard removes uploaded content that must not be published. Stores that cannot remove it return
 	// an error saying where it was left.
-	Discard(ctx context.Context, c *Client, uploaded digest.Digest) error
+	Discard(ctx context.Context, uploaded digest.Digest) error
 	// Publish returns the access of the stored content. Content the server did not recognize as the
 	// repository type expects yields a *NotRecognizedError.
-	Publish(ctx context.Context, c *Client, stored digest.Digest, mediaType string) (runtime.Typed, error)
+	Publish(ctx context.Context, stored digest.Digest, mediaType string) (runtime.Typed, error)
 }
 
 // NotRecognizedError reports content the server did not recognize as the package the repository expects.
@@ -84,12 +98,12 @@ func (u *Uploader) Upload(ctx context.Context, spec *uploadv1alpha1.RepositoryUp
 	defer closeBlob(content)
 	fromOCI := ociSource(src, mediaType)
 	if st.Chart() {
-		chart, layoutChart, err := LocateChart(ctx, content, mediaType, src.ToIdentity())
+		located, layoutChart, err := chart.Locate(ctx, content, mediaType, src.ToIdentity())
 		if err != nil {
 			return nil, err
 		}
-		defer closeBlob(chart)
-		content, fromOCI, mediaType = chart, fromOCI || layoutChart, compression.MediaTypeGzip
+		defer closeBlob(located)
+		content, fromOCI, mediaType = located, fromOCI || layoutChart, compression.MediaTypeGzip
 	} else {
 		mediaType = contentType(mediaType, spec.Resource)
 	}
@@ -98,12 +112,12 @@ func (u *Uploader) Upload(ctx context.Context, spec *uploadv1alpha1.RepositoryUp
 	if err != nil {
 		return nil, err
 	}
-	stored, err := st.Stored(ctx, c, known)
+	stored, err := st.Stored(ctx, known)
 	if err != nil {
 		return nil, err
 	}
 	logAttrs := func() []any {
-		return []any{"server", b.Name(), "resource", src.ToIdentity(), "url", RedactURL(st.URL())}
+		return []any{"server", b.Name(), "resource", src.ToIdentity(), "url", client.RedactURL(st.URL())}
 	}
 	dgst := known
 	switch {
@@ -112,11 +126,11 @@ func (u *Uploader) Upload(ctx context.Context, spec *uploadv1alpha1.RepositoryUp
 	case stored:
 		slog.InfoContext(ctx, "reused content already stored in the "+b.Name()+" repository", logAttrs()...)
 	default:
-		if dgst, err = st.Put(ctx, c, content, mediaType, known); err != nil {
+		if dgst, err = st.Put(ctx, content, mediaType, known); err != nil {
 			return nil, err
 		}
 		if known != "" && dgst != known {
-			discard(ctx, c, st, dgst)
+			discard(ctx, st, dgst)
 			return nil, fmt.Errorf("digest mismatch: expected %s, got %s", known, dgst)
 		}
 		if st.Chart() {
@@ -126,9 +140,9 @@ func (u *Uploader) Upload(ctx context.Context, spec *uploadv1alpha1.RepositoryUp
 		}
 	}
 
-	access, err := st.Publish(ctx, c, dgst, mediaType)
+	access, err := st.Publish(ctx, dgst, mediaType)
 	if nr := (*NotRecognizedError)(nil); errors.As(err, &nr) {
-		discard(ctx, c, st, dgst)
+		discard(ctx, st, dgst)
 		return nil, fmt.Errorf("content of resource %s is not %s: %s", src.ToIdentity(), nr.Kind, nr.Reason)
 	}
 	if err != nil {
@@ -141,9 +155,9 @@ func (u *Uploader) Upload(ctx context.Context, spec *uploadv1alpha1.RepositoryUp
 }
 
 // discard removes uploaded content that must not be published, logging where it was left otherwise.
-func discard(ctx context.Context, c *Client, st Store, uploaded digest.Digest) {
-	if err := st.Discard(ctx, c, uploaded); err != nil {
-		slog.WarnContext(ctx, "failed removing uploaded content that must not be published", "url", RedactURL(st.URL()), "error", err)
+func discard(ctx context.Context, st Store, uploaded digest.Digest) {
+	if err := st.Discard(ctx, uploaded); err != nil {
+		slog.WarnContext(ctx, "failed removing uploaded content that must not be published", "url", client.RedactURL(st.URL()), "error", err)
 	}
 }
 

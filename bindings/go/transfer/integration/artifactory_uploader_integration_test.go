@@ -81,7 +81,7 @@ func Test_Integration_TransferLocalBlobHelmResource_ArtifactoryHelmUploaderDeplo
 			r := require.New(t)
 
 			// Target "Artifactory": records chart properties for the chart .tgz like Artifactory does.
-			target := &artifactorytest.Repository{Charts: map[string]artifactorytest.Package{digestOf(chartTgzBytes).Encoded(): {Name: "mychart", Version: "0.1.0"}}}
+			target := &artifactorytest.FakeRepository{Charts: map[string]artifactorytest.Package{digestOf(chartTgzBytes).Encoded(): {Name: "mychart", Version: "0.1.0"}}}
 			targetSrv := httptest.NewServer(target)
 			t.Cleanup(targetSrv.Close)
 

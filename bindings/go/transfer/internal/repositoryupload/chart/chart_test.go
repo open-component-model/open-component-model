@@ -1,4 +1,4 @@
-package repositoryupload
+package chart
 
 import (
 	"archive/tar"
@@ -45,8 +45,8 @@ func chartLayout(t *testing.T, configMediaType string, chart []byte) blob.ReadOn
 	return b
 }
 
-func TestLocateChart(t *testing.T) {
-	chartTGZ, err := os.ReadFile("../../../helm/testdata/mychart-0.1.0.tgz")
+func TestLocate(t *testing.T) {
+	chartTGZ, err := os.ReadFile("../../../../helm/testdata/mychart-0.1.0.tgz")
 	require.NoError(t, err)
 	var helmTar bytes.Buffer
 	tw := tar.NewWriter(&helmTar)
@@ -103,7 +103,7 @@ func TestLocateChart(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
-			chart, fromOCI, err := LocateChart(t.Context(), tc.content(t), tc.mediaType, runtime.Identity{"name": "mychart"})
+			chart, fromOCI, err := Locate(t.Context(), tc.content(t), tc.mediaType, runtime.Identity{"name": "mychart"})
 			if tc.wantErr != "" {
 				r.ErrorContains(err, tc.wantErr)
 				return
