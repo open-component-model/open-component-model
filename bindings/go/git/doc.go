@@ -15,8 +15,9 @@
 //	}
 //
 // The archive is streamed to TempFolder (the OS temporary directory by default).
-// Its file outlives the call and belongs to the caller; temporary Git storage is
-// removed. Upload is not supported. WithMaxArchiveSize caps the compressed output,
+// Its file outlives the call; callers must close the returned blob (io.Closer)
+// after closing all readers to remove it. Temporary Git storage is removed.
+// Upload is not supported. WithMaxArchiveSize caps the compressed output,
 // not the preceding clone or fetch; by default it is unlimited.
 //
 // # Constructor input
@@ -27,6 +28,15 @@
 // input spec accepts repository, ref and commit; omitting both selectors uses
 // remote HEAD, matching OCM v1 input behavior. Commit takes precedence over Ref.
 // The constructor delegates local-blob storage and digest handling to the target storage.
+//
+// # Transfer
+//
+// The Git download transformer buffers a pinned snapshot for the transfer graph.
+// Transfer with resource copying stores Git access resources as local blobs in
+// OCI or CTF targets, preserving the resource digest. It requires a pinned Commit;
+// constructor digest processing pins ref-only access before publication.
+// Without resource copying, external Git access remains unchanged. Git upload
+// is not supported.
 //
 // # Archive and digests
 //

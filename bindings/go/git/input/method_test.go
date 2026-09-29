@@ -62,10 +62,10 @@ func TestProcessResourceSnapshots(t *testing.T) {
 
 			reader, err := result.ProcessedBlobData.ReadCloser()
 			r.NoError(err)
-			t.Cleanup(func() { r.NoError(reader.Close()) })
+
 			gz, err := gzip.NewReader(reader)
 			r.NoError(err)
-			t.Cleanup(func() { r.NoError(gz.Close()) })
+
 			archive := tar.NewReader(gz)
 			header, err := archive.Next()
 			r.NoError(err)
@@ -80,6 +80,19 @@ func TestProcessResourceSnapshots(t *testing.T) {
 			r.NoError(err)
 			r.Len(files, 1, "only the returned archive should outlive the download")
 			r.False(files[0].IsDir())
+			r.NoError(gz.Close())
+			r.NoError(reader.Close())
+			// Upload and digest consumers can read the blob repeatedly before release.
+			again, err := result.ProcessedBlobData.ReadCloser()
+			r.NoError(err)
+			r.NoError(again.Close())
+			closer, ok := result.ProcessedBlobData.(io.Closer)
+			r.True(ok)
+			r.NoError(closer.Close())
+			r.NoError(closer.Close())
+			files, err = os.ReadDir(dir)
+			r.NoError(err)
+			r.Empty(files, "closing the input blob must release its source archive")
 		})
 	}
 }
@@ -113,6 +126,9 @@ func TestProcessResourceErrors(t *testing.T) {
 			r.ErrorContains(err, tc.wantErr)
 			r.Nil(result)
 			r.Equal(before, resource)
+			files, err := os.ReadDir(dir)
+			r.NoError(err)
+			r.Empty(files)
 		})
 	}
 }
