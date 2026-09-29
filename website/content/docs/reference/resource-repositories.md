@@ -335,6 +335,91 @@ and normalisation algorithms are only compared when they are set: an empty field
 
 ---
 
+## Git Resource Repository
+
+Handles snapshots of a commit in any Git repository, fetched over HTTPS, HTTP, SSH, the Git protocol or from a local
+path.
+
+### Supported Access Types
+
+| Access Type                                                                   |
+|-------------------------------------------------------------------------------|
+| [`Git/v1`]({{< relref "input-and-access-types.md" >}}#gitv1-access)           |
+
+The [`Git/v1` input type]({{< relref "input-and-access-types.md" >}}#gitv1-input) uses the same download, archive
+format and credentials.
+
+### Capabilities
+
+| Operation         | Supported |
+|-------------------|-----------|
+| Download          | Yes       |
+| Upload            | No        |
+| Digest Processing | Yes       |
+
+{{< callout context="note" >}}
+Upload is not supported: the `Git/v1` access type is a read-only source reference. A commit is pushed with Git, not
+with OCM.
+{{< /callout >}}
+
+### Credential Resolution
+
+The credential consumer identity is derived from the `repository` field in the access specification. The identity type
+is `Git`.
+
+**Example:** For a resource with `repository: https://gitlab.com/example-group/example-project.git`:
+
+| Attribute  | Value                                |
+|------------|--------------------------------------|
+| `type`     | `Git`                                |
+| `scheme`   | `https`                              |
+| `hostname` | `gitlab.com`                         |
+| `port`     | `443`                                |
+| `path`     | `example-group/example-project.git`  |
+
+Credentials are optional. Without them, HTTPS requests are anonymous, and SSH uses the SSH agent. When credentials
+resolve, OCM uses an SSH private key first, then a token, then a username and password. See
+[`GitCredentials/v1`]({{< relref "credential-types.md#gitcredentialsv1" >}}).
+
+See [Credential Consumer Identities: Git]({{< relref "credential-consumer-identities.md" >}}#git) for how each URL form
+maps to the identity, and for matching rules.
+
+### Download Behavior
+
+OCM fetches the pinned commit into a temporary bare repository. If the server does not allow a fetch by commit SHA, OCM
+fetches all refs instead. With only a `ref`, OCM fetches the refs and resolves the `ref` to a commit. An annotated tag
+is resolved to the commit it points to.
+
+OCM then writes the files of the commit into a gzip-compressed tar (`application/x-tgz`). It reads the Git objects
+directly, so no working tree is checked out. The archive is deterministic:
+
+- Entries are sorted by path, depth first, without a root directory.
+- Owner and group are `0`, and all modification times are the Unix epoch.
+- Files have mode `0644`, executable files and directories `0755`, and symbolic links `0777`.
+- Symbolic links are kept as links. Submodules are empty directories.
+
+The same commit therefore gives the same archive bytes with the same OCM version. A different Go version in a later
+OCM release may compress differently.
+
+The archive is streamed to a file under the `tempFolder` of the `filesystem.config.ocm.software/v1alpha1`
+configuration type. The temporary Git storage is removed after the download.
+
+### Digest Processing
+
+If the access has only a `ref`, the Git digest processor resolves it to a `commit` and writes that commit onto the
+resource. This works like an OCI tag that is pinned to a digest. The `ref` stays in the access, but only as
+information. The processor hashes the archive of that commit in the same download: `SHA-256` over the compressed
+archive bytes, normalisation `genericBlobDigest/v1`.
+
+If the access already has a `commit`, the `ref` is not resolved again. A branch can move on, or be deleted after a
+merge, and that must not break a component version that has not changed.
+
+The digest is checked on every download. If the resource already declares one, the computed value must match it. The
+hash and normalisation algorithms are only compared when they are set: an empty field is filled in with the computed
+value.
+
+---
+
 ## External Resource Repositories (Plugins)
 
 External plugins declare supported access types in their capability specification and implement the same three
