@@ -1,17 +1,20 @@
 // Package artifactory uploads resources into repositories of a JFrog Artifactory server.
+// Each package type has its own store package under internal/.
 package artifactory
 
 import (
 	"context"
 	"fmt"
-	"net/http"
-	"net/url"
 	"strings"
 	"time"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/transfer/internal/repositoryupload"
+	"ocm.software/open-component-model/bindings/go/transfer/internal/repositoryupload/artifactory/internal/api"
+	"ocm.software/open-component-model/bindings/go/transfer/internal/repositoryupload/artifactory/internal/generic"
+	"ocm.software/open-component-model/bindings/go/transfer/internal/repositoryupload/artifactory/internal/helm"
+	"ocm.software/open-component-model/bindings/go/transfer/internal/repositoryupload/artifactory/internal/npm"
 	"ocm.software/open-component-model/bindings/go/transfer/internal/repositoryupload/client"
 	"ocm.software/open-component-model/bindings/go/transfer/internal/repositoryupload/uploadpath"
 	uploadv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/transformation/spec/v1alpha1"
@@ -38,61 +41,54 @@ func (t *Transformer) Transform(ctx context.Context, step runtime.Typed) (runtim
 	return &tr, nil
 }
 
-// backend stores resources in Artifactory, see [store].
+// backend picks the store of the package type: [helm.Store], [npm.Store] or [generic.Store].
 type backend struct{}
 
 func (backend) Name() string { return "artifactory" }
 
 func (backend) CredentialURLs(spec *uploadv1alpha1.RepositoryUploadSpec) (string, string, error) {
-	helmRepo, err := url.JoinPath(spec.URL, "artifactory", "api", "helm", spec.Repository)
+	repo, err := api.New(nil, spec.URL, spec.Repository)
 	if err != nil {
-		return "", "", fmt.Errorf("invalid artifactory url: %w", err)
+		return "", "", err
 	}
-	repoURL, err := url.JoinPath(spec.URL, "artifactory", spec.Repository)
-	if err != nil {
-		return "", "", fmt.Errorf("invalid artifactory url: %w", err)
-	}
-	return helmRepo, repoURL, nil
+	return repo.HelmURL, repo.URL, nil
 }
 
-// Store stores the resource at its upload path with owner properties. Helm and npm files get
-// the .tgz extension in the default file name.
+// Store reads the configuration of the repository; only local and federated repositories accept
+// uploads. The resource is stored at its upload path with owner properties; helm and npm files
+// get the .tgz extension in the default file name.
 func (backend) Store(ctx context.Context, c *client.Client, spec *uploadv1alpha1.RepositoryUploadSpec, src *descriptor.Resource, interval time.Duration) (repositoryupload.Store, error) {
-	typ, err := repositoryType(ctx, c, spec)
+	repo, err := api.New(c, spec.URL, spec.Repository)
 	if err != nil {
 		return nil, err
 	}
+	config, err := repo.Configuration(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed detecting the type of artifactory repository %q: %w", spec.Repository, err)
+	}
+	if rclass := strings.ToLower(config.RClass); rclass != "local" && rclass != "federated" {
+		return nil, fmt.Errorf("artifactory repository %q is a %s repository; uploads need a local repository", spec.Repository, config.RClass)
+	}
+	packageType := strings.ToLower(config.PackageType)
 	var ext string
-	switch typ {
+	switch packageType {
 	case "helm", "npm":
 		ext = ".tgz"
 	case "generic", "maven":
 	default:
-		return nil, fmt.Errorf("artifactory repository %q has package type %q; supported: helm, generic, maven, npm", spec.Repository, typ)
+		return nil, fmt.Errorf("artifactory repository %q has package type %q; supported: helm, generic, maven, npm", spec.Repository, packageType)
 	}
 	path, err := uploadpath.Resolve(spec, src, ext)
 	if err != nil {
 		return nil, err
 	}
-	return newStore(c, spec, typ, path, ownerProperties(spec.ComponentVersion, src), interval)
-}
-
-// repositoryType reads the package type of the repository from its configuration. Only local
-// and federated repositories accept uploads.
-func repositoryType(ctx context.Context, c *client.Client, spec *uploadv1alpha1.RepositoryUploadSpec) (string, error) {
-	target, err := url.JoinPath(spec.URL, "artifactory", "api", "repositories", spec.Repository)
-	if err != nil {
-		return "", fmt.Errorf("invalid artifactory url: %w", err)
+	file := repo.File(path, api.Owner(spec.ComponentVersion, src), interval)
+	switch packageType {
+	case "helm":
+		return helm.New(file, repo.HelmURL), nil
+	case "npm":
+		return npm.New(file), nil
+	default:
+		return generic.New(file), nil
 	}
-	var config struct {
-		PackageType string `json:"packageType"`
-		RClass      string `json:"rclass"`
-	}
-	if err := c.Send(ctx, http.MethodGet, target, nil, -1, nil, &config); err != nil {
-		return "", fmt.Errorf("failed detecting the type of artifactory repository %q: %w", spec.Repository, err)
-	}
-	if rclass := strings.ToLower(config.RClass); rclass != "local" && rclass != "federated" {
-		return "", fmt.Errorf("artifactory repository %q is a %s repository; uploads need a local repository", spec.Repository, config.RClass)
-	}
-	return strings.ToLower(config.PackageType), nil
 }

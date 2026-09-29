@@ -39,6 +39,15 @@ type Request struct {
 	Body       []byte
 }
 
+// String returns the method, path and query of the request, e.g.
+// "GET /artifactory/api/storage/helm-local/a.tgz?properties=chart.name".
+func (r Request) String() string {
+	if r.Query == "" {
+		return r.Method + " " + r.Path
+	}
+	return r.Method + " " + r.Path + "?" + r.Query
+}
+
 // FakeRepository emulates the endpoints of an Artifactory repository the uploader uses. Like
 // Artifactory, it records package properties for deployed content it recognizes; here,
 // recognition is a lookup of the SHA-256 of the content in Charts and NPM. Matrix parameters of a

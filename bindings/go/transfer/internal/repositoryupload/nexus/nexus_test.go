@@ -38,11 +38,20 @@ func sha256Hex(data []byte) string {
 // uploadRun is what a TestTransform row checks beyond its columns.
 type uploadRun struct {
 	repo *nexustest.FakeRepository
-	reqs []string // of the last transfer
+	reqs []nexustest.Request // of the last transfer
+}
+
+// requests returns the method and path of the requests of the last transfer.
+func (u uploadRun) requests() []string {
+	var out []string
+	for _, req := range u.reqs {
+		out = append(out, req.String())
+	}
+	return out
 }
 
 func (u uploadRun) hasRequest(prefix string) bool {
-	return slices.ContainsFunc(u.reqs, func(req string) bool { return strings.HasPrefix(req, prefix) })
+	return slices.ContainsFunc(u.requests(), func(req string) bool { return strings.HasPrefix(req, prefix) })
 }
 
 func TestTransform(t *testing.T) {
@@ -231,9 +240,9 @@ func TestTransform(t *testing.T) {
 				Type: wgetcredsv1.WgetCredentialsVersionedType, Username: "u", Password: "p",
 			}},
 			check: func(r *require.Assertions, u uploadRun) {
-				r.NotEmpty(u.repo.Authorizations())
-				for _, auth := range u.repo.Authorizations() {
-					r.Equal("Basic dTpw", auth)
+				r.NotEmpty(u.reqs)
+				for _, req := range u.reqs {
+					r.Equal("Basic dTpw", req.Authorization)
 				}
 			},
 		},
@@ -273,7 +282,7 @@ func TestTransform(t *testing.T) {
 			path:       mavenPath,
 			wantAccess: access{url: repoPath + mavenPath},
 			check: func(r *require.Assertions, u uploadRun) {
-				r.Equal(components, u.reqs[len(u.reqs)-1])
+				r.Equal(components, u.requests()[len(u.reqs)-1])
 				r.Equal(map[string][]string{
 					"maven2.groupId":           {"com.example"},
 					"maven2.artifactId":        {"demo"},
@@ -328,8 +337,8 @@ func TestTransform(t *testing.T) {
 			resource: mavenSource,
 			path:     "com/example/demo/1.0.0-SNAPSHOT/demo-1.0.0-SNAPSHOT.jar",
 			check: func(r *require.Assertions, u uploadRun) {
-				r.Contains(u.reqs, "PUT "+repoPath+"com/example/demo/1.0.0-SNAPSHOT/demo-1.0.0-SNAPSHOT.jar")
-				r.NotContains(u.reqs, components)
+				r.Contains(u.requests(), "PUT "+repoPath+"com/example/demo/1.0.0-SNAPSHOT/demo-1.0.0-SNAPSHOT.jar")
+				r.NotContains(u.requests(), components)
 			},
 		},
 		{name: "maven fails without a path", repoType: "maven2", content: jar, resource: mavenSource, wantErr: "Maven repository layout", check: nothingWritten},
@@ -354,7 +363,9 @@ func TestTransform(t *testing.T) {
 			path:       mavenPath,
 			seed:       func(repo *nexustest.FakeRepository) { repo.BasePath = "/nexus" },
 			wantAccess: access{url: "/nexus" + repoPath + mavenPath},
-			check:      func(r *require.Assertions, u uploadRun) { r.Contains(u.reqs, "POST /nexus/service/rest/v1/components") },
+			check: func(r *require.Assertions, u uploadRun) {
+				r.Contains(u.requests(), "POST /nexus/service/rest/v1/components")
+			},
 		},
 		{
 			name:       "npm uploads through the components API and publishes the stored tarball",
@@ -364,7 +375,7 @@ func TestTransform(t *testing.T) {
 			seed:       func(repo *nexustest.FakeRepository) { repo.SearchLag = 1 },
 			wantAccess: access{url: repoPath + npmStored},
 			wantDigest: npmDigest,
-			check:      func(r *require.Assertions, u uploadRun) { r.Contains(u.reqs, components) },
+			check:      func(r *require.Assertions, u uploadRun) { r.Contains(u.requests(), components) },
 		},
 		{
 			name:       "npm reuses a stored package with the same content",
@@ -399,9 +410,9 @@ func TestTransform(t *testing.T) {
 			seed:     func(repo *nexustest.FakeRepository) { repo.SearchLag = 1000 },
 			wantErr:  `nexus repository "helm-hosted" stored the npm package sha256:` + npmDigest + ", but its search does not find it",
 			check: func(r *require.Assertions, u uploadRun) {
-				upload := slices.Index(u.reqs, components)
+				upload := slices.Index(u.requests(), components)
 				r.NotEqual(-1, upload)
-				r.Equal(slices.Repeat([]string{searchAssets}, repositoryupload.PollAttempts), u.reqs[upload+1:], "the search is polled after the upload")
+				r.Equal(slices.Repeat([]string{searchAssets}, repositoryupload.PollAttempts), u.requests()[upload+1:], "the search is polled after the upload")
 			},
 		},
 		{
@@ -457,7 +468,7 @@ func TestTransform(t *testing.T) {
 
 			var out runtime.Typed
 			var err error
-			var reqs []string
+			var reqs []nexustest.Request
 			for i := range max(tc.transfers, 1) {
 				before := len(repo.Requests())
 				out, err = tr.Transform(t.Context(), step)
@@ -491,7 +502,7 @@ func TestTransform(t *testing.T) {
 				}
 			}
 			if tc.wantRequests != nil {
-				r.Equal(tc.wantRequests, reqs)
+				r.Equal(tc.wantRequests, uploadRun{reqs: reqs}.requests())
 			}
 			if tc.check != nil {
 				tc.check(r, uploadRun{repo: repo, reqs: reqs})

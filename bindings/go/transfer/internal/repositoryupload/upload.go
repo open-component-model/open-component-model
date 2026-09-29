@@ -17,6 +17,8 @@ import (
 	"ocm.software/open-component-model/bindings/go/transfer/internal/repositoryupload/chart"
 	"ocm.software/open-component-model/bindings/go/transfer/internal/repositoryupload/client"
 	uploadv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/transformation/spec/v1alpha1"
+	wgetaccess "ocm.software/open-component-model/bindings/go/wget/spec/access"
+	wgetaccessv1 "ocm.software/open-component-model/bindings/go/wget/spec/access/v1"
 )
 
 const (
@@ -185,4 +187,9 @@ func Poll(ctx context.Context, interval time.Duration, try func() (done bool, er
 		case <-time.After(interval):
 		}
 	}
+}
+
+// FileAccess returns the Wget/v1 access of the file stored at url with mediaType.
+func FileAccess(url, mediaType string) runtime.Typed {
+	return &wgetaccessv1.Wget{Type: wgetaccess.V1VersionedType, URL: url, MediaType: mediaType}
 }

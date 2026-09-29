@@ -14,8 +14,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/transfer/internal/repositoryupload"
 	"ocm.software/open-component-model/bindings/go/transfer/internal/repositoryupload/nexus/internal/api"
-	wgetaccess "ocm.software/open-component-model/bindings/go/wget/spec/access"
-	wgetaccessv1 "ocm.software/open-component-model/bindings/go/wget/spec/access/v1"
 )
 
 // Store uploads the package tarball through the components API. Nexus reads the package name
@@ -68,7 +66,7 @@ func (s *Store) Publish(ctx context.Context, stored digest.Digest, mediaType str
 			return nil, fmt.Errorf("nexus repository %q stored the npm package %s, but its search does not find it", s.repo.Name, stored)
 		}
 	}
-	return &wgetaccessv1.Wget{Type: wgetaccess.V1VersionedType, URL: s.repo.URL + s.path, MediaType: mediaType}, nil
+	return repositoryupload.FileAccess(s.repo.URL+s.path, mediaType), nil
 }
 
 // find looks up the first .tgz asset the repository stores with content d and remembers its path.

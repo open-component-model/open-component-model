@@ -5,7 +5,6 @@ package nexus
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"time"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
@@ -49,11 +48,11 @@ type backend struct{}
 func (backend) Name() string { return "nexus" }
 
 func (backend) CredentialURLs(spec *uploadv1alpha1.RepositoryUploadSpec) (string, string, error) {
-	repoURL, err := url.JoinPath(spec.URL, "repository", spec.Repository)
+	repo, err := api.New(nil, spec.URL, spec.Repository)
 	if err != nil {
-		return "", "", fmt.Errorf("invalid nexus url: %w", err)
+		return "", "", err
 	}
-	return repoURL, repoURL, nil
+	return repo.URL, repo.URL, nil
 }
 
 // Store reads the settings of the repository; only hosted repositories accept uploads.

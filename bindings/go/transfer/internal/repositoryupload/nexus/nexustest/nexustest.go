@@ -32,6 +32,14 @@ type Package struct {
 	Name, Version string
 }
 
+// Request is a request a [FakeRepository] received.
+type Request struct {
+	Method, Path, Query, Authorization string
+}
+
+// String returns the method and path of the request, e.g. "GET /service/rest/v1/search".
+func (r Request) String() string { return r.Method + " " + r.Path }
+
 // FakeRepository emulates the endpoints of a Nexus hosted repository the uploader uses. It
 // stores an uploaded chart under <name>-<version>, an npm package under
 // <name>/-/<name>-<version>.tgz, a maven2 component asset at its Maven layout path and any
@@ -69,11 +77,10 @@ type FakeRepository struct {
 	// assets first, like a name with search wildcards that puts the exact asset on a later page.
 	AssetPageSize int
 
-	mu             sync.Mutex
-	requests       []string
-	authorizations []string
-	files          map[string]file // <name>-<version> for charts, else path -> file
-	mavenForms     []map[string][]string
+	mu         sync.Mutex
+	requests   []Request
+	files      map[string]file // <name>-<version> for charts, else path -> file
+	mavenForms []map[string][]string
 }
 
 type file struct {
@@ -96,18 +103,11 @@ func (f *FakeRepository) store(path string, stored file) {
 	f.files[path] = stored
 }
 
-// Requests returns the method and path of the requests received so far.
-func (f *FakeRepository) Requests() []string {
+// Requests returns the requests received so far.
+func (f *FakeRepository) Requests() []Request {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return slices.Clone(f.requests)
-}
-
-// Authorizations returns the Authorization header of the requests received so far.
-func (f *FakeRepository) Authorizations() []string {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return slices.Clone(f.authorizations)
 }
 
 // MavenForms returns the form values of the maven2 components uploads received so far.
@@ -128,8 +128,7 @@ func (f *FakeRepository) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	body, _ := io.ReadAll(r.Body)
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.requests = append(f.requests, r.Method+" "+r.URL.Path)
-	f.authorizations = append(f.authorizations, r.Header.Get("Authorization"))
+	f.requests = append(f.requests, Request{Method: r.Method, Path: r.URL.Path, Query: r.URL.RawQuery, Authorization: r.Header.Get("Authorization")})
 
 	rest, repoPrefix := f.BasePath+"/service/rest/v1", f.BasePath+"/repository/"+Key+"/"
 	switch {

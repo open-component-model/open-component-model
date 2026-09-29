@@ -14,8 +14,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/transfer/internal/repositoryupload"
 	"ocm.software/open-component-model/bindings/go/transfer/internal/repositoryupload/client"
 	"ocm.software/open-component-model/bindings/go/transfer/internal/repositoryupload/nexus/internal/api"
-	wgetaccess "ocm.software/open-component-model/bindings/go/wget/spec/access"
-	wgetaccessv1 "ocm.software/open-component-model/bindings/go/wget/spec/access/v1"
 )
 
 // Store stores the content as is at a path with a plain PUT. A file already stored at the path is
@@ -51,5 +49,5 @@ func (s *Store) Discard(context.Context, digest.Digest) error {
 }
 
 func (s *Store) Publish(_ context.Context, _ digest.Digest, mediaType string) (runtime.Typed, error) {
-	return &wgetaccessv1.Wget{Type: wgetaccess.V1VersionedType, URL: s.target, MediaType: mediaType}, nil
+	return repositoryupload.FileAccess(s.target, mediaType), nil
 }

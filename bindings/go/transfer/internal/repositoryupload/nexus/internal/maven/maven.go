@@ -22,8 +22,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/transfer/internal/repositoryupload/client"
 	"ocm.software/open-component-model/bindings/go/transfer/internal/repositoryupload/nexus/internal/api"
 	"ocm.software/open-component-model/bindings/go/transfer/internal/repositoryupload/uploadpath"
-	wgetaccess "ocm.software/open-component-model/bindings/go/wget/spec/access"
-	wgetaccessv1 "ocm.software/open-component-model/bindings/go/wget/spec/access/v1"
 )
 
 // maxPOMBytes bounds the POM read into memory, see checkPOM.
@@ -112,7 +110,7 @@ func (s *Store) Discard(context.Context, digest.Digest) error {
 }
 
 func (s *Store) Publish(_ context.Context, _ digest.Digest, mediaType string) (runtime.Typed, error) {
-	return &wgetaccessv1.Wget{Type: wgetaccess.V1VersionedType, URL: s.target, MediaType: mediaType}, nil
+	return repositoryupload.FileAccess(s.target, mediaType), nil
 }
 
 // Coordinates are the Maven coordinates of a single file.

@@ -2,11 +2,9 @@ package artifactory
 
 import (
 	"bytes"
-	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -22,9 +20,6 @@ import (
 	"helm.sh/helm/v4/pkg/registry"
 	"oras.land/oras-go/v2/content/memory"
 
-	"ocm.software/open-component-model/bindings/go/blob"
-	"ocm.software/open-component-model/bindings/go/blob/inmemory"
-	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	helmaccess "ocm.software/open-component-model/bindings/go/helm/spec/access"
 	helmaccessv1 "ocm.software/open-component-model/bindings/go/helm/spec/access/v1"
@@ -32,7 +27,6 @@ import (
 	helmidentityv1 "ocm.software/open-component-model/bindings/go/helm/spec/identity/v1"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	ocitar "ocm.software/open-component-model/bindings/go/oci/tar"
-	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/transfer/internal/repositoryupload"
 	"ocm.software/open-component-model/bindings/go/transfer/internal/repositoryupload/artifactory/artifactorytest"
@@ -43,32 +37,6 @@ import (
 	wgetcredsv1 "ocm.software/open-component-model/bindings/go/wget/spec/credentials/v1"
 	wgetidentityv1 "ocm.software/open-component-model/bindings/go/wget/spec/identity/v1"
 )
-
-// stubLocalRepository serves the content as a local resource and records the request.
-type stubLocalRepository struct {
-	repository.ComponentVersionRepository
-	content            []byte
-	component, version string
-	identity           runtime.Identity
-}
-
-func (l *stubLocalRepository) GetLocalResource(_ context.Context, component, version string, identity runtime.Identity) (blob.ReadOnlyBlob, *descriptor.Resource, error) {
-	l.component, l.version, l.identity = component, version, identity
-	return inmemory.New(bytes.NewReader(l.content), inmemory.WithSize(int64(len(l.content)))), nil, nil
-}
-
-type stubRepositoryProvider struct {
-	repository.ComponentVersionRepositoryProvider
-	repo *stubLocalRepository
-}
-
-func (p *stubRepositoryProvider) GetComponentVersionRepositoryCredentialConsumerIdentity(context.Context, runtime.Typed) (runtime.Identity, error) {
-	return nil, errors.New("no identity")
-}
-
-func (p *stubRepositoryProvider) GetComponentVersionRepository(context.Context, runtime.Typed, runtime.Typed) (repository.ComponentVersionRepository, error) {
-	return p.repo, nil
-}
 
 // helmChartLayout returns the OCI layout of a helm chart OCI artifact holding chart, as
 // resource repositories hand out OCI artifacts.
@@ -108,7 +76,7 @@ type uploadRun struct {
 	repo  *artifactorytest.FakeRepository
 	reqs  []artifactorytest.Request // of the last transfer
 	out   *descriptorv2.Resource
-	local *stubLocalRepository
+	local *uploadtest.StubComponentVersionRepository
 }
 
 func (u uploadRun) bodyPUTs() []artifactorytest.Request {
@@ -361,9 +329,9 @@ func TestTransform(t *testing.T) {
 			local:      true,
 			wantAccess: access{helmChart: "mychart:0.1.0"},
 			check: func(r *require.Assertions, u uploadRun) {
-				r.Equal("ocm.software/test", u.local.component)
-				r.Equal("1.0.0", u.local.version)
-				r.Equal(runtime.Identity{"name": "renamed", "version": "9.9.9"}, u.local.identity)
+				r.Equal("ocm.software/test", u.local.Component)
+				r.Equal("1.0.0", u.local.Version)
+				r.Equal(runtime.Identity{"name": "renamed", "version": "9.9.9"}, u.local.Identity)
 				r.Equal(chartTGZ, u.bodyPUTs()[0].Body)
 			},
 		},
@@ -521,7 +489,7 @@ func TestTransform(t *testing.T) {
 				Repository:       artifactorytest.Key,
 				Path:             tc.path,
 			}
-			local := &stubLocalRepository{content: content}
+			local := &uploadtest.StubComponentVersionRepository{Content: content}
 			tr := &Transformer{repositoryupload.Uploader{
 				Scheme:             scheme,
 				ResourceRepository: &uploadtest.StubResourceRepository{Content: content, MediaType: tc.mediaType},
@@ -534,7 +502,7 @@ func TestTransform(t *testing.T) {
 				spec.ComponentVersion.Repository = &runtime.Raw{Type: runtime.NewVersionedType("OCIRepository", "v1"), Data: []byte(`{"type":"OCIRepository/v1","baseUrl":"ghcr.io/source"}`)}
 			}
 			if tc.local {
-				tr.RepoProvider = &stubRepositoryProvider{repo: local}
+				tr.RepoProvider = &uploadtest.StubRepositoryProvider{Repository: local}
 			}
 
 			var out runtime.Typed
@@ -577,11 +545,7 @@ func TestTransform(t *testing.T) {
 			if tc.wantRequests != nil {
 				var got []string
 				for _, req := range reqs {
-					target := req.Method + " " + req.Path
-					if req.Query != "" {
-						target += "?" + req.Query
-					}
-					got = append(got, target)
+					got = append(got, req.String())
 				}
 				r.Equal(tc.wantRequests, got)
 			}
