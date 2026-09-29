@@ -235,8 +235,7 @@ func fillGraphDefinitionWithPrefetchedComponents(
 }
 
 // processResources iterates over resources in a v2 descriptor and creates the appropriate
-// transformations: the first uploader whose match (static fields and when) selects a
-// resource handles it. A resource no uploader selects follows the baseline: a local blob
+// transformations: the first uploader whose match selects a resource handles it. A resource no uploader selects follows the baseline: a local blob
 // is copied as a local blob, anything else stays by reference (no transformation).
 // It returns CEL spec-field expressions for all Get transformations that buffer content to disk.
 func processResources(
@@ -265,20 +264,19 @@ func processResources(
 			return nil, nil, fmt.Errorf("cannot convert resource access to typed object: %w", err)
 		}
 
-		// Declaration order is significant: the first uploader whose match (static fields
-		// and when) selects the resource handles it, so more specific rules should precede
-		// broader ones. A selected uploader that cannot handle the resource fails the build.
+		// Declaration order is significant: the first uploader whose match selects the
+		// resource handles it, so more specific rules should precede broader ones. A selected uploader that cannot handle the resource fails the build.
 		handled := false
 		if len(uploaders) > 0 {
-			aliases, err := uploaderAliases(env, i, access, resource, toSpec)
+			aliases, err := uploaderAliases(env, i, toSpec)
 			if err != nil {
 				return nil, nil, err
 			}
 			for ui, u := range uploaders {
-				if u == nil || !u.Match(resource) {
+				if u == nil {
 					continue
 				}
-				selected, err := whenMatches(u.MatchWhen(), aliases, env)
+				selected, err := matches(u.EffectiveMatch(), aliases, env)
 				if err != nil {
 					return nil, nil, fmt.Errorf("uploader %d (%s) for resource %v: %w", ui, u.GetType(), resource.ToIdentity(), err)
 				}
@@ -296,7 +294,7 @@ func processResources(
 				case *transferv1alpha1.ReferenceUploaderConfig:
 					// No transformation: buildDescriptorSpec keeps the environment resource.
 					if descriptorv2.IsLocalBlob(access) {
-						err = fmt.Errorf("local blobs cannot be kept by reference (adjust match.when)")
+						err = fmt.Errorf("local blobs cannot be kept by reference (adjust match)")
 					}
 				default:
 					return nil, nil, fmt.Errorf("unsupported uploader config type %T for resource %v", u, resource.ToIdentity())
@@ -375,7 +373,7 @@ func processResource(resource descriptorv2.Resource, access runtime.Typed, id st
 		}
 		return []string{fmt.Sprintf("${%s.spec.file}", addResourceID)}, nil
 	default:
-		return nil, fmt.Errorf("local blob uploader cannot copy access type %s (adjust match.when)", resource.Access.Type)
+		return nil, fmt.Errorf("local blob uploader cannot copy access type %s (adjust match)", resource.Access.Type)
 	}
 }
 

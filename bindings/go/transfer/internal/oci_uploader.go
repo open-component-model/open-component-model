@@ -64,17 +64,17 @@ func ociImageReference(u *transferv1alpha1.OCIUploaderConfig, aliases map[string
 
 // processOCIUploader emits the transformations that upload resource, selected by u, as a
 // separate OCI artifact. A resource the uploader cannot upload is an error: the uploader's
-// match.when selected it, so the config must be adjusted. It returns the CEL spec-field
+// match selected it, so the config must be adjusted. It returns the CEL spec-field
 // expressions of the file buffers produced, for cleanup.
 func processOCIUploader(resource descriptorv2.Resource, access runtime.Typed, u *transferv1alpha1.OCIUploaderConfig, aliases map[string]string, env *uploaderEnv, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int) ([]string, error) {
 	switch acc := access.(type) {
 	case *ociv1.OCIImage, *helmv1.Helm:
 	case *descriptorv2.LocalBlob:
 		if !isOCICompliantManifest(acc.MediaType) {
-			return nil, fmt.Errorf("oci uploader cannot upload local blob with media type %q: not an OCI manifest (adjust match.when)", acc.MediaType)
+			return nil, fmt.Errorf("oci uploader cannot upload local blob with media type %q: not an OCI manifest (adjust match)", acc.MediaType)
 		}
 	default:
-		return nil, fmt.Errorf("oci uploader cannot upload access type %s (adjust match.when)", resource.Access.Type)
+		return nil, fmt.Errorf("oci uploader cannot upload access type %s (adjust match)", resource.Access.Type)
 	}
 
 	imageReference, err := ociImageReference(u, aliases, env)

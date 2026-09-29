@@ -4,15 +4,15 @@
   "$id": "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec/schemas/OCIUploaderConfig.schema.json",
   "title": "OCIUploaderConfig",
   "type": "object",
-  "description": "OCIUploaderConfig is a declarative rule that uploads matching resources as separate\nOCI artifacts during transfer. It is carried as an entry inside the central generic\nconfiguration (generic.config.ocm.software/v1), as a sibling of [Config], and\nextracted with [LookupUploaderConfigs]. Each entry is an independent rule; entries\nare not merged.\n\nThe uploader handles the resources its match selects; without match.when it uses\n[DefaultOCIUploaderWhen]. ImageReference is a CEL template; when omitted,\n[DefaultOCIImageReference] is used. The template is evaluated for each selected\nresource while the transfer graph is built. A selected resource the uploader cannot\nupload (an access type other than OCI image, Helm chart or OCI-manifest local blob),\nor whose ImageReference does not evaluate, fails the transfer.\n\ntype: generic.config.ocm.software/v1\nconfigurations:\n# relocate one image below a custom registry path (declared first: first match wins)\n- type: oci.uploader.transfer.config.ocm.software/v1alpha1\nmatch:\nname: my-image\nimageReference: '${\"ghcr.io/mirror/\" + resource.access.toOCI().repository + \":\" + resource.access.toOCI().tag}'\n# upload every other resource the default match.when selects next to the\n# component version (imageReference omitted: DefaultOCIImageReference)\n- type: oci.uploader.transfer.config.ocm.software/v1alpha1",
+  "description": "OCIUploaderConfig is a declarative rule that uploads matching resources as separate\nOCI artifacts during transfer. It is carried as an entry inside the central generic\nconfiguration (generic.config.ocm.software/v1), as a sibling of [Config], and\nextracted with [LookupUploaderConfigs]. Each entry is an independent rule; entries\nare not merged.\n\nThe uploader handles the resources its match selects; without match it uses\n[DefaultOCIUploaderMatch]. ImageReference is a CEL template; when omitted,\n[DefaultOCIImageReference] is used. The template is evaluated for each selected\nresource while the transfer graph is built. A selected resource the uploader cannot\nupload (an access type other than OCI image, Helm chart or OCI-manifest local blob),\nor whose ImageReference does not evaluate, fails the transfer.\n\ntype: generic.config.ocm.software/v1\nconfigurations:\n# relocate one image below a custom registry path (declared first: first match wins)\n- type: oci.uploader.transfer.config.ocm.software/v1alpha1\nmatch: resource.name == \"my-image\"\nimageReference: '${\"ghcr.io/mirror/\" + resource.access.toOCI().repository + \":\" + resource.access.toOCI().tag}'\n# upload every other resource the default match selects next to the\n# component version (imageReference omitted: DefaultOCIImageReference)\n- type: oci.uploader.transfer.config.ocm.software/v1alpha1",
   "properties": {
     "imageReference": {
       "type": "string",
-      "description": "ImageReference is the target image reference: a CEL expression wrapped in ${...}\n(or a plain literal). `resource` is the source resource; its fields are accessed\ndynamically, so has() tests for fields of any access type, and\nresource.access.toOCI() splits an OCI image access into host, registry,\nrepository, tag, digest and reference. `accessType` is the canonical access type\nname. `target` is the transfer target: an OCI registry has type, baseUrl and\nsubPath; a CTF archive has type and filePath. When empty, it defaults to\nDefaultOCIImageReference."
+      "description": "ImageReference is the target image reference: a CEL expression wrapped in ${...}\n(or a plain literal). `resource` is the source resource; its fields are accessed\ndynamically, so has() tests for fields of any access type, and\nresource.access.toOCI() splits an OCI image access into host, registry,\nrepository, tag, digest and reference; resource.access.isType tests the access\ntype with aliases resolved. `target` is the transfer target: an OCI registry has type, baseUrl and\nsubPath; a CTF archive has type and filePath. When empty, it defaults to\nDefaultOCIImageReference."
     },
     "match": {
-      "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.transfer.v1alpha1.spec.UploaderMatch",
-      "description": "MatchSpec optionally restricts the resources this uploader selects; when omitted,\nthe default match.when (DefaultOCIUploaderWhen) alone selects. It is exposed as the `match` field; the Go field\nis named MatchSpec so the type can offer a Match method."
+      "type": "string",
+      "description": "Match is a CEL boolean expression selecting the resources this uploader handles. It\nsees `resource` and `target`; test access types with resource.access.isType. When empty,\nDefaultOCIUploaderMatch applies; an explicit value replaces it."
     },
     "type": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",
@@ -32,16 +32,6 @@
   ],
   "additionalProperties": false,
   "$defs": {
-    "ocm.software.open-component-model.bindings.go.runtime.Identity": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "$comment": "generated by the ocm schema generation tool",
-      "title": "Identity",
-      "type": "object",
-      "description": "Identity is a map that represents a set of attributes that uniquely identity\narbitrary resources. It is used in various places in Open Component Model to uniquely\nidentity objects such as resources or components.",
-      "additionalProperties": {
-        "type": "string"
-      }
-    },
     "ocm.software.open-component-model.bindings.go.runtime.Type": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "$comment": "this core runtime schema was automatically included by the ocm schema generation tool to allow introspection",
@@ -49,36 +39,6 @@
       "type": "string",
       "description": "Type represents a structured type with an optional version and a name. It is used to identify the type of an object in a versioned API.",
       "pattern": "^([a-zA-Z0-9][a-zA-Z0-9.]*)(?:/(v[0-9]+(?:alpha[0-9]+|beta[0-9]+)?))?$"
-    },
-    "ocm.software.open-component-model.bindings.go.transfer.v1alpha1.spec.UploaderMatch": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "$comment": "generated by the ocm schema generation tool",
-      "title": "UploaderMatch",
-      "type": "object",
-      "description": "UploaderMatch selects resources by their access type, identity and an optional CEL\npredicate. A resource matches when its access type matches AccessType (if set),\nevery specified identity constraint (Name, Version, ExtraIdentity) matches, and the\neffective When evaluates to true. This lets multiple uploaders target the same\naccess type while routing different resources to different upload targets; the\nfirst matching uploader (in declaration order) handles the resource, so more\nspecific rules should be declared before broader ones.",
-      "properties": {
-        "accessType": {
-          "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",
-          "description": "AccessType is the resource access type this uploader matches (e.g. Wget/v1).\nWhen empty, resources of any access type match; [HTTPUploaderConfig] still\nrequires it."
-        },
-        "extraIdentity": {
-          "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Identity",
-          "description": "ExtraIdentity optionally restricts the match to resources whose identity\ncontains all of these key/value pairs. When empty, no extra-identity\nconstraint is applied."
-        },
-        "name": {
-          "type": "string",
-          "description": "Name optionally restricts the match to resources with this exact name.\nWhen empty, resources of any name match."
-        },
-        "version": {
-          "type": "string",
-          "description": "Version optionally restricts the match to resources with this exact\nversion. When empty, resources of any version match."
-        },
-        "when": {
-          "type": "string",
-          "description": "When is a CEL boolean expression that further restricts the match. It sees\n`resource` (dynamically typed), `accessType` (canonical access type name) and\n`target` (the transfer target as a map with `type`). When empty, the uploader\ntype's default applies (see its MatchWhen). An explicit value replaces the default."
-        }
-      },
-      "additionalProperties": false
     }
   }
 }

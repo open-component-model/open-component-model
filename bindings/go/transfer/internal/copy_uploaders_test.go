@@ -21,7 +21,7 @@ func TestBuildGraphDefinition_LocalBlobAndReferenceUploaders(t *testing.T) {
 	image := ociImageResource("my-image", "1.0.0", "oci://ghcr.io/org/image:v1")
 	blob := localBlobResource("my-blob", "1.0.0")
 	custom := customAccessResource("custom", "1.0.0")
-	always := &transferv1alpha1.UploaderMatch{When: "true"}
+	const always = "true"
 
 	for _, tc := range []struct {
 		name      string
@@ -50,7 +50,7 @@ func TestBuildGraphDefinition_LocalBlobAndReferenceUploaders(t *testing.T) {
 			name:     "reference uploader before the catch-all excludes a resource",
 			resource: image,
 			uploaders: []transferv1alpha1.UploaderConfig{
-				&transferv1alpha1.ReferenceUploaderConfig{MatchSpec: &transferv1alpha1.UploaderMatch{Name: "my-image"}},
+				&transferv1alpha1.ReferenceUploaderConfig{Match: `resource.name == "my-image"`},
 				&transferv1alpha1.LocalBlobUploaderConfig{},
 			},
 			wantTypes: byReference,
@@ -64,7 +64,7 @@ func TestBuildGraphDefinition_LocalBlobAndReferenceUploaders(t *testing.T) {
 		{
 			name:      "a local blob selected by a reference uploader fails the build",
 			resource:  blob,
-			uploaders: []transferv1alpha1.UploaderConfig{&transferv1alpha1.ReferenceUploaderConfig{MatchSpec: always}},
+			uploaders: []transferv1alpha1.UploaderConfig{&transferv1alpha1.ReferenceUploaderConfig{Match: always}},
 			wantErr:   "local blobs cannot be kept by reference",
 		},
 		{
@@ -82,7 +82,7 @@ func TestBuildGraphDefinition_LocalBlobAndReferenceUploaders(t *testing.T) {
 		{
 			name:      "a local blob uploader scoped to another name leaves the resource by reference",
 			resource:  image,
-			uploaders: []transferv1alpha1.UploaderConfig{&transferv1alpha1.LocalBlobUploaderConfig{MatchSpec: &transferv1alpha1.UploaderMatch{Name: "other"}}},
+			uploaders: []transferv1alpha1.UploaderConfig{&transferv1alpha1.LocalBlobUploaderConfig{Match: `resource.name == "other"`}},
 			wantTypes: byReference,
 		},
 		{
@@ -94,7 +94,7 @@ func TestBuildGraphDefinition_LocalBlobAndReferenceUploaders(t *testing.T) {
 		{
 			name:      "an unknown access type selected by a local blob uploader fails the build",
 			resource:  custom,
-			uploaders: []transferv1alpha1.UploaderConfig{&transferv1alpha1.LocalBlobUploaderConfig{MatchSpec: always}},
+			uploaders: []transferv1alpha1.UploaderConfig{&transferv1alpha1.LocalBlobUploaderConfig{Match: always}},
 			wantErr:   "local blob uploader cannot copy access type Custom/v1",
 		},
 	} {

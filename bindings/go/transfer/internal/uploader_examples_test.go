@@ -73,31 +73,26 @@ configurations:
   # 1. Keep the large base image by reference (not copied at all).
   #    Declared first, so the catch-all below never sees it.
   - type: reference.uploader.transfer.config.ocm.software/v1alpha1
-    match:
-      name: base-os-image
-      when: accessType != "LocalBlob"          # default
+    match: resource.name == "base-os-image"
   # 2. Stream wget-hosted documentation to an HTTP artifact store.
   - type: http.uploader.transfer.config.ocm.software/v1alpha1
-    match:
-      accessType: Wget/v1
+    match: resource.access.isType("Wget/v1")
     targetURL: '${"https://artifacts.example.com/ocm" + url(resource.access.url).path}'
     method: PUT
   # 3. OCI images, Helm charts and OCI-manifest local blobs become separate OCI
   #    artifacts next to the component version (former uploadType: ociArtifact).
   - type: oci.uploader.transfer.config.ocm.software/v1alpha1
-    match:
-      when: >-                                   # default
-        target.type == "OCIRepository"
-        && (accessType in ["OCIImage", "Helm"]
-          || (accessType == "LocalBlob"
-            && isOCIManifest(resource.access.mediaType)
-            && has(resource.access.referenceName)))
+    match: >-                                   # default
+      target.type == "OCIRepository"
+      && (resource.access.isType(["OCIImage", "Helm"])
+        || (resource.access.isType("LocalBlob")
+          && isOCIManifest(resource.access.mediaType)
+          && has(resource.access.referenceName)))
     # imageReference omitted = default
   # 4. Everything the rules above did not select is embedded as a local blob
   #    (former copyMode: allResources).
   - type: localblob.uploader.transfer.config.ocm.software/v1alpha1
-    match:
-      when: accessType in ["LocalBlob", "OCIImage", "Helm", "Wget", "S3", "GitHub"]   # default
+    match: resource.access.isType(["LocalBlob", "OCIImage", "Helm", "Wget", "S3", "GitHub"])   # default
 `
 
 // completeExampleResources returns the resources of the complete config example.
@@ -197,12 +192,11 @@ configurations:
 type: generic.config.ocm.software/v1
 configurations:
   - type: oci.uploader.transfer.config.ocm.software/v1alpha1
-    match:
-      when: |-
+    match: |-
 %s
     imageReference: |-
 %s
-`, indentBlock(transferv1alpha1.DefaultOCIUploaderWhen, 8), indentBlock(transferv1alpha1.DefaultOCIImageReference, 6)),
+`, indentBlock(transferv1alpha1.DefaultOCIUploaderMatch, 6), indentBlock(transferv1alpha1.DefaultOCIImageReference, 6)),
 			target: oci,
 			want:   e1,
 		},
@@ -212,8 +206,7 @@ configurations:
 type: generic.config.ocm.software/v1
 configurations:
   - type: oci.uploader.transfer.config.ocm.software/v1alpha1
-    match:
-      when: target.type == "OCIRepository" && accessType == "Helm"
+    match: target.type == "OCIRepository" && resource.access.isType("Helm")
 `,
 			target: oci,
 			want: map[string]string{
@@ -231,12 +224,11 @@ configurations:
 type: generic.config.ocm.software/v1
 configurations:
   - type: oci.uploader.transfer.config.ocm.software/v1alpha1
-    match:
-      when: >-
-        target.type == "OCIRepository"
-        && accessType == "LocalBlob"
-        && isOCIManifest(resource.access.mediaType)
-        && has(resource.access.referenceName)
+    match: >-
+      target.type == "OCIRepository"
+      && resource.access.isType("LocalBlob")
+      && isOCIManifest(resource.access.mediaType)
+      && has(resource.access.referenceName)
 `,
 			target: oci,
 			want: map[string]string{
@@ -254,11 +246,10 @@ configurations:
 type: generic.config.ocm.software/v1
 configurations:
   - type: oci.uploader.transfer.config.ocm.software/v1alpha1
-    match:
-      when: >-
-        target.type == "OCIRepository"
-        && accessType == "OCIImage"
-        && resource.access.toOCI().host.endsWith("docker.io")
+    match: >-
+      target.type == "OCIRepository"
+      && resource.access.isType("OCIImage")
+      && resource.access.toOCI().host.endsWith("docker.io")
 `,
 			target: oci,
 			want: map[string]string{
@@ -276,12 +267,11 @@ configurations:
 type: generic.config.ocm.software/v1
 configurations:
   - type: oci.uploader.transfer.config.ocm.software/v1alpha1
-    match:
-      when: >-
-        target.type == "OCIRepository"
-        && accessType == "OCIImage"
-        && has(resource.labels)
-        && resource.labels.exists(l, l.name == "ocm.software/transfer" && l.value == "oci")
+    match: >-
+      target.type == "OCIRepository"
+      && resource.access.isType("OCIImage")
+      && has(resource.labels)
+      && resource.labels.exists(l, l.name == "ocm.software/transfer" && l.value == "oci")
 `,
 			target: oci,
 			want: map[string]string{
@@ -299,8 +289,7 @@ configurations:
 type: generic.config.ocm.software/v1
 configurations:
   - type: oci.uploader.transfer.config.ocm.software/v1alpha1
-    match:
-      when: accessType == "OCIImage"
+    match: resource.access.isType("OCIImage")
     imageReference: '${"registry.example.com/mirror/" + resource.access.toOCI().repository + ":" + resource.access.toOCI().tag}'
 `,
 			target: ctf,
@@ -319,8 +308,7 @@ configurations:
 type: generic.config.ocm.software/v1
 configurations:
   - type: oci.uploader.transfer.config.ocm.software/v1alpha1
-    match:
-      name: app
+    match: resource.name == "app"
     imageReference: ghcr.io/target-org/special/app:1.0.0
   - type: oci.uploader.transfer.config.ocm.software/v1alpha1
 `,
@@ -340,8 +328,7 @@ configurations:
 type: generic.config.ocm.software/v1
 configurations:
   - type: oci.uploader.transfer.config.ocm.software/v1alpha1
-    match:
-      when: accessType == "Wget"
+    match: resource.access.isType("Wget")
 `,
 			target:    oci,
 			resources: []string{"docs"},
@@ -353,34 +340,31 @@ configurations:
 type: generic.config.ocm.software/v1
 configurations:
   - type: oci.uploader.transfer.config.ocm.software/v1alpha1
-    match:
-      when: accessType == "LocalBlob"
+    match: resource.access.isType("LocalBlob")
 `,
 			target:    oci,
 			resources: []string{"notes"},
 			wantErr:   "not an OCI manifest",
 		},
 		{
-			name: "E9 when that does not compile",
+			name: "E9 match that does not compile",
 			configYAML: `
 type: generic.config.ocm.software/v1
 configurations:
   - type: oci.uploader.transfer.config.ocm.software/v1alpha1
-    match:
-      when: accessType ==
+    match: resource.name ==
 `,
 			target:    oci,
 			resources: []string{"app"},
-			wantErr:   "invalid match.when",
+			wantErr:   "invalid match",
 		},
 		{
-			name: "E9 when that is not a bool",
+			name: "E9 match that is not a bool",
 			configYAML: `
 type: generic.config.ocm.software/v1
 configurations:
   - type: oci.uploader.transfer.config.ocm.software/v1alpha1
-    match:
-      when: '"yes"'
+    match: '"yes"'
 `,
 			target:    oci,
 			resources: []string{"app"},
@@ -392,8 +376,7 @@ configurations:
 type: generic.config.ocm.software/v1
 configurations:
   - type: oci.uploader.transfer.config.ocm.software/v1alpha1
-    match:
-      when: accessType == "OCIImage"
+    match: resource.access.isType("OCIImage")
 `,
 			target:    ctf,
 			resources: []string{"app"},
@@ -440,8 +423,7 @@ configurations:
 type: generic.config.ocm.software/v1
 configurations:
   - type: reference.uploader.transfer.config.ocm.software/v1alpha1
-    match:
-      name: nginx
+    match: resource.name == "nginx"
   - type: oci.uploader.transfer.config.ocm.software/v1alpha1
   - type: localblob.uploader.transfer.config.ocm.software/v1alpha1
 `,
@@ -461,8 +443,7 @@ configurations:
 type: generic.config.ocm.software/v1
 configurations:
   - type: reference.uploader.transfer.config.ocm.software/v1alpha1
-    match:
-      when: accessType == "OCIImage" && resource.access.toOCI().host.endsWith("docker.io")
+    match: resource.access.isType("OCIImage") && resource.access.toOCI().host.endsWith("docker.io")
   - type: localblob.uploader.transfer.config.ocm.software/v1alpha1
 `,
 			target: oci,
@@ -481,8 +462,7 @@ configurations:
 type: generic.config.ocm.software/v1
 configurations:
   - type: localblob.uploader.transfer.config.ocm.software/v1alpha1
-    match:
-      when: accessType == "Wget"
+    match: resource.access.isType("Wget")
 `,
 			target: oci,
 			want: map[string]string{
@@ -500,8 +480,7 @@ configurations:
 type: generic.config.ocm.software/v1
 configurations:
   - type: reference.uploader.transfer.config.ocm.software/v1alpha1
-    match:
-      when: "true"
+    match: "true"
 `,
 			target:    oci,
 			resources: []string{"bundle"},
@@ -513,8 +492,7 @@ configurations:
 type: generic.config.ocm.software/v1
 configurations:
   - type: localblob.uploader.transfer.config.ocm.software/v1alpha1
-    match:
-      when: "true"
+    match: "true"
 `,
 			target:  oci,
 			fixture: []descriptor.Resource{customAccessResource("custom", "1.0.0")},

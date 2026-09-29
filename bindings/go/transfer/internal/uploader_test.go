@@ -50,11 +50,11 @@ func ociResource(name, version, imageRef string) descriptor.Resource {
 	}
 }
 
-func uploaderFor(t *testing.T, accessType runtime.Type, targetURL string) *transferv1alpha1.HTTPUploaderConfig {
+func uploaderFor(t *testing.T, match, targetURL string) *transferv1alpha1.HTTPUploaderConfig {
 	t.Helper()
 	return &transferv1alpha1.HTTPUploaderConfig{
 		Type:      runtime.NewVersionedType(transferv1alpha1.HTTPUploaderConfigType, transferv1alpha1.Version),
-		MatchSpec: transferv1alpha1.UploaderMatch{AccessType: accessType},
+		Match:     match,
 		TargetURL: targetURL,
 		Method:    "PUT",
 	}
@@ -62,10 +62,10 @@ func uploaderFor(t *testing.T, accessType runtime.Type, targetURL string) *trans
 
 func wgetUploader(t *testing.T, targetURL string) *transferv1alpha1.HTTPUploaderConfig {
 	t.Helper()
-	return uploaderFor(t, runtime.NewVersionedType("Wget", "v1"), targetURL)
+	return uploaderFor(t, `resource.access.isType("Wget")`, targetURL)
 }
 
-func TestBuildGraphDefinition_UploaderMatch_EmitsHTTPStreaming(t *testing.T) {
+func TestBuildGraphDefinition_Uploader_EmitsHTTPStreaming(t *testing.T) {
 	r := require.New(t)
 	sourceRepo := testOCIRepo("ghcr.io/source")
 	targetRepo := testOCIRepo("ghcr.io/target")
@@ -376,10 +376,7 @@ func TestBuildGraphDefinition_UploaderUsesLabelValueAndIdentityMatch(t *testing.
 	// Match on the extra identity; build the target host from the label value, selected
 	// by name via a CEL filter (order-independent).
 	u := wgetUploader(t, `${"https://" + resource.labels.filter(l, l.name == "region")[0].value + ".example.com" + url(resource.access.url).path}`)
-	u.MatchSpec = transferv1alpha1.UploaderMatch{
-		AccessType:    runtime.NewVersionedType("Wget", "v1"),
-		ExtraIdentity: runtime.Identity{"tier": "public"},
-	}
+	u.Match = `resource.access.isType("Wget/v1") && has(resource.extraIdentity) && resource.extraIdentity.tier == "public"`
 	uploaders := []transferv1alpha1.UploaderConfig{u}
 
 	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{}, uploaders)
@@ -423,7 +420,7 @@ func TestBuildGraphDefinition_UploaderMatchesNonWgetSource(t *testing.T) {
 	// An OCI source with no URL: the expression references an access-specific field
 	// (imageReference) exposed generically under resource.access.
 	uploaders := []transferv1alpha1.UploaderConfig{
-		uploaderFor(t, runtime.NewVersionedType("OCIImage", "v1"),
+		uploaderFor(t, `resource.access.isType("OCIImage/v1")`,
 			`${"https://mirror.example/" + resource.access.imageReference}`),
 	}
 	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{}, withLocalBlobUploader(uploaders...))

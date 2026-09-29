@@ -19,10 +19,10 @@ import (
 // defaults: no recursion.
 //
 // uploaders select the resources to move and are evaluated in declaration order:
-// the first uploader whose match (static fields and match.when) selects a
-// resource handles it, and a selected uploader that cannot handle the resource
-// fails the build. A resource no uploader selects follows the baseline: local
-// blobs are copied as local blobs, everything else stays by reference.
+// the first uploader whose match selects a resource handles it, and a selected
+// uploader that cannot handle the resource fails the build. A resource no uploader
+// selects follows the baseline: local blobs are copied as local blobs, everything
+// else stays by reference.
 //
 // Each [Mapping] pairs source components with a target repository and a
 // resolver, enabling N:M routing where different sources feed different

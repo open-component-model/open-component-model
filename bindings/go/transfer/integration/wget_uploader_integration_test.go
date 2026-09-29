@@ -125,7 +125,7 @@ func Test_Integration_TransferWgetResource_UploaderStreamsToHTTPTarget(t *testin
 	// source-resource node at execution time.
 	uploaders := []transferv1alpha1.UploaderConfig{&transferv1alpha1.HTTPUploaderConfig{
 		Type:      runtime.NewVersionedType(transferv1alpha1.HTTPUploaderConfigType, transferv1alpha1.Version),
-		MatchSpec: transferv1alpha1.UploaderMatch{AccessType: runtime.NewVersionedType("Wget", "v1")},
+		Match:     `resource.access.isType("Wget/v1")`,
 		TargetURL: fmt.Sprintf("${%q + url(resource.access.url).path}", targetSrv.URL+"/uploads"),
 		Method:    http.MethodPut,
 		Header: map[string][]string{

@@ -212,7 +212,7 @@ func TestBuildGraphDefinition_OCIUploader(t *testing.T) {
 			wantTypes: []runtime.Type{ociv1alpha1.OCIGetLocalResourceV1alpha1, ociv1alpha1.OCIAddLocalResourceV1alpha1, ociv1alpha1.OCIAddComponentVersionV1alpha1, FileCleanupVersionedType},
 		},
 		{
-			name:      "CTF target is not selected by the default when",
+			name:      "CTF target is not selected by the default match",
 			target:    testCTFRepo("/tmp/target"),
 			resource:  ociImageResource("my-image", "1.0.0", "oci://ghcr.io/org/image:v1"),
 			uploaders: withLocalBlobUploader(ociUploaders()...),
@@ -223,7 +223,7 @@ func TestBuildGraphDefinition_OCIUploader(t *testing.T) {
 			target:   testCTFRepo("/tmp/target"),
 			resource: ociImageResource("my-image", "1.0.0", "oci://ghcr.io/org/image:v1"),
 			uploaders: []transferv1alpha1.UploaderConfig{&transferv1alpha1.OCIUploaderConfig{
-				MatchSpec:      &transferv1alpha1.UploaderMatch{When: `accessType == "OCIImage"`},
+				Match:          `resource.access.isType("OCIImage")`,
 				ImageReference: `${"ghcr.io/mirror/" + resource.access.toOCI().repository + ":" + resource.access.toOCI().tag}`,
 			}},
 			wantTypes:      []runtime.Type{ociv1alpha1.TransferOCIArtifactV1alpha1, ociv1alpha1.CTFAddComponentVersionV1alpha1},
@@ -266,7 +266,7 @@ func TestBuildGraphDefinition_OCIUploader(t *testing.T) {
 			target:   testOCIRepo("ghcr.io/target"),
 			resource: manifestBlobWithoutReferenceName,
 			uploaders: []transferv1alpha1.UploaderConfig{&transferv1alpha1.OCIUploaderConfig{
-				MatchSpec:      &transferv1alpha1.UploaderMatch{When: `accessType == "LocalBlob" && isOCIManifest(resource.access.mediaType)`},
+				Match:          `resource.access.isType("LocalBlob") && isOCIManifest(resource.access.mediaType)`,
 				ImageReference: `${target.baseUrl + "/" + resource.name + ":" + resource.version}`,
 			}},
 			wantTypes:      []runtime.Type{ociv1alpha1.OCIGetLocalResourceV1alpha1, addOCIArtifact, ociv1alpha1.OCIAddComponentVersionV1alpha1, FileCleanupVersionedType},
@@ -290,7 +290,7 @@ func TestBuildGraphDefinition_OCIUploader(t *testing.T) {
 			wantErr: "invalid imageReference",
 		},
 		{
-			name:     "the default when does not select wget; the next uploader handles it",
+			name:     "the default match does not select wget; the next uploader handles it",
 			target:   testOCIRepo("ghcr.io/target"),
 			resource: wgetResource("blob", "1.0.0", "https://source.example/blob.tar"),
 			uploaders: []transferv1alpha1.UploaderConfig{
@@ -304,7 +304,7 @@ func TestBuildGraphDefinition_OCIUploader(t *testing.T) {
 			target:   testOCIRepo("ghcr.io/target"),
 			resource: ociImageResource("my-image", "1.0.0", "oci://ghcr.io/org/image:v1"),
 			uploaders: []transferv1alpha1.UploaderConfig{&transferv1alpha1.OCIUploaderConfig{
-				MatchSpec: &transferv1alpha1.UploaderMatch{Name: "other"},
+				Match: `resource.name == "other"`,
 			}},
 			wantTypes: []runtime.Type{ociv1alpha1.OCIAddComponentVersionV1alpha1},
 		},
@@ -313,7 +313,7 @@ func TestBuildGraphDefinition_OCIUploader(t *testing.T) {
 			target:   testOCIRepo("ghcr.io/target"),
 			resource: wgetResource("blob", "1.0.0", "https://source.example/blob.tar"),
 			uploaders: []transferv1alpha1.UploaderConfig{&transferv1alpha1.OCIUploaderConfig{
-				MatchSpec: &transferv1alpha1.UploaderMatch{When: `accessType == "Wget"`},
+				Match: `resource.access.isType("Wget")`,
 			}},
 			wantErr: "oci uploader cannot upload access type",
 		},
@@ -322,45 +322,45 @@ func TestBuildGraphDefinition_OCIUploader(t *testing.T) {
 			target:   testOCIRepo("ghcr.io/target"),
 			resource: localBlobResource("my-resource", "1.0.0"),
 			uploaders: []transferv1alpha1.UploaderConfig{&transferv1alpha1.OCIUploaderConfig{
-				MatchSpec: &transferv1alpha1.UploaderMatch{When: `accessType == "LocalBlob"`},
+				Match: `resource.access.isType("LocalBlob")`,
 			}},
 			wantErr: "not an OCI manifest",
 		},
 		{
-			name:     "a when that does not compile fails the build",
+			name:     "a match that does not compile fails the build",
 			target:   testOCIRepo("ghcr.io/target"),
 			resource: ociImageResource("my-image", "1.0.0", "oci://ghcr.io/org/image:v1"),
 			uploaders: []transferv1alpha1.UploaderConfig{&transferv1alpha1.OCIUploaderConfig{
-				MatchSpec: &transferv1alpha1.UploaderMatch{When: `accessType ==`},
+				Match: `resource.name ==`,
 			}},
-			wantErr: "invalid match.when",
+			wantErr: "invalid match",
 		},
 		{
-			name:     "a when that is not a bool fails the build",
+			name:     "a match that is not a bool fails the build",
 			target:   testOCIRepo("ghcr.io/target"),
 			resource: ociImageResource("my-image", "1.0.0", "oci://ghcr.io/org/image:v1"),
 			uploaders: []transferv1alpha1.UploaderConfig{&transferv1alpha1.OCIUploaderConfig{
-				MatchSpec: &transferv1alpha1.UploaderMatch{When: `"x"`},
+				Match: `"x"`,
 			}},
 			wantErr: "must evaluate to a bool",
 		},
 		{
-			name:     "explicit default when equals the omitted default",
+			name:     "explicit default match equals the omitted default",
 			target:   testOCIRepo("ghcr.io/target"),
 			resource: ociImageResource("my-image", "1.0.0", "oci://ghcr.io/org/image:v1"),
 			uploaders: []transferv1alpha1.UploaderConfig{&transferv1alpha1.OCIUploaderConfig{
-				MatchSpec: &transferv1alpha1.UploaderMatch{When: transferv1alpha1.DefaultOCIUploaderWhen},
+				Match: transferv1alpha1.DefaultOCIUploaderMatch,
 			}},
 			wantTypes:      []runtime.Type{ociv1alpha1.TransferOCIArtifactV1alpha1, ociv1alpha1.OCIAddComponentVersionV1alpha1},
 			wantImageRef:   "ghcr.io/target/org/image:v1",
 			wantImageRefAt: 0,
 		},
 		{
-			name:     "accessType resolves the legacy ociArtifact type to OCIImage",
+			name:     "isType resolves the legacy ociArtifact type to OCIImage",
 			target:   testOCIRepo("ghcr.io/target"),
 			resource: ociImageResource("my-image", "1.0.0", "oci://ghcr.io/org/image:v1"),
 			uploaders: []transferv1alpha1.UploaderConfig{&transferv1alpha1.OCIUploaderConfig{
-				MatchSpec: &transferv1alpha1.UploaderMatch{When: `accessType == "OCIImage"`},
+				Match: `resource.access.isType("OCIImage")`,
 			}},
 			wantTypes:      []runtime.Type{ociv1alpha1.TransferOCIArtifactV1alpha1, ociv1alpha1.OCIAddComponentVersionV1alpha1},
 			wantImageRef:   "ghcr.io/target/org/image:v1",
@@ -409,7 +409,7 @@ func TestBuildGraphDefinition_OCIUploader_ReferenceNameAsIs(t *testing.T) {
 	blob.Access.(*descriptorv2.LocalBlob).ReferenceName = "ghcr.io/org/image:v1@sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
 	image := ociImageResource("my-image", "1.0.0", "oci://ghcr.io/other/image:v2")
 	asIs := []transferv1alpha1.UploaderConfig{&transferv1alpha1.OCIUploaderConfig{
-		MatchSpec:      &transferv1alpha1.UploaderMatch{Name: "my-blob"},
+		Match:          `resource.name == "my-blob"`,
 		ImageReference: `${resource.access.referenceName}`,
 	}}
 

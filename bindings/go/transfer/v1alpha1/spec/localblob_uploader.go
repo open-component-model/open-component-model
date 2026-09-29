@@ -1,7 +1,8 @@
 package spec
 
 import (
-	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"strings"
+
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -9,11 +10,11 @@ import (
 // the target as local blobs of the transferred component version.
 const LocalBlobUploaderConfigType = "localblob.uploader.transfer.config.ocm.software"
 
-// DefaultLocalBlobUploaderWhen is the match.when a [LocalBlobUploaderConfig] uses when
-// none is set: every access type the transfer can download.
+// DefaultLocalBlobUploaderMatch is the match a [LocalBlobUploaderConfig] uses when none
+// is set: every access type the transfer can download.
 //
-// Writing it explicitly into a config is equivalent to omitting match.when.
-const DefaultLocalBlobUploaderWhen = `accessType in ["LocalBlob", "OCIImage", "Helm", "Wget", "S3", "GitHub"]`
+// Writing it explicitly into a config is equivalent to omitting match.
+const DefaultLocalBlobUploaderMatch = `resource.access.isType(["LocalBlob", "OCIImage", "Helm", "Wget", "S3", "GitHub"])`
 
 func init() {
 	Scheme.MustRegisterWithAlias(&LocalBlobUploaderConfig{},
@@ -29,7 +30,7 @@ func init() {
 // generic configuration (generic.config.ocm.software/v1), as a sibling of [Config], and
 // extracted with [LookupUploaderConfigs].
 //
-// Without match.when it uses [DefaultLocalBlobUploaderWhen]. A selected resource whose
+// Without match it uses [DefaultLocalBlobUploaderMatch]. A selected resource whose
 // access type the transfer cannot download fails the transfer.
 //
 // Declared as the last uploader without a match, it copies every resource no earlier
@@ -50,11 +51,10 @@ type LocalBlobUploaderConfig struct {
 	// +ocm:jsonschema-gen:enum:deprecated=localblob.uploader.transfer.config.ocm.software
 	Type runtime.Type `json:"type"`
 
-	// MatchSpec optionally restricts the resources this uploader selects; when omitted,
-	// the default match.when (DefaultLocalBlobUploaderWhen) alone selects. It is exposed
-	// as the `match` field; the Go field is named MatchSpec so the type can offer a Match
-	// method.
-	MatchSpec *UploaderMatch `json:"match,omitempty"`
+	// Match is a CEL boolean expression selecting the resources this uploader handles. It
+	// sees `resource` and `target`; test access types with resource.access.isType. When empty,
+	// DefaultLocalBlobUploaderMatch applies; an explicit value replaces it.
+	Match string `json:"match,omitempty"`
 }
 
 // Validate rejects a non-matching [LocalBlobUploaderConfig.Type]. An empty Type is
@@ -66,17 +66,14 @@ func (u *LocalBlobUploaderConfig) Validate() error {
 	return validateUploaderType(u.Type, LocalBlobUploaderConfigType)
 }
 
-// Match reports whether the static match fields select resource. Without a match every
-// resource with an access matches. It implements [UploaderConfig].
-func (u *LocalBlobUploaderConfig) Match(resource descriptorv2.Resource) bool {
-	return u != nil && matchOptional(u.MatchSpec, resource)
-}
-
-// MatchWhen returns the configured match.when, or [DefaultLocalBlobUploaderWhen]. It
-// implements [UploaderConfig].
-func (u *LocalBlobUploaderConfig) MatchWhen() string {
+// EffectiveMatch returns the configured match, or [DefaultLocalBlobUploaderMatch]. It implements
+// [UploaderConfig].
+func (u *LocalBlobUploaderConfig) EffectiveMatch() string {
 	if u == nil {
 		return ""
 	}
-	return whenOrDefault(u.MatchSpec, DefaultLocalBlobUploaderWhen)
+	if strings.TrimSpace(u.Match) != "" {
+		return u.Match
+	}
+	return DefaultLocalBlobUploaderMatch
 }

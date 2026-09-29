@@ -30,7 +30,7 @@ resources are moved and how: oci.uploader.transfer.config.ocm.software/v1alpha1 
 OCI artifacts), http.uploader.transfer.config.ocm.software/v1alpha1 (custom HTTP targets),
 localblob.uploader.transfer.config.ocm.software/v1alpha1 (copy as local blobs) and
 reference.uploader.transfer.config.ocm.software/v1alpha1 (keep by reference). The first
-uploader whose match (including match.when) selects a resource handles it. --copy-resources
+uploader whose match selects a resource handles it. --copy-resources
 appends a catch-all localblob.uploader.transfer.config.ocm.software/v1alpha1 entry after all
 configured uploaders, so every resource they do not select is copied as a local blob. The
 former --upload-as flag and the copy mode setting are replaced by these uploader configurations (see
