@@ -104,7 +104,7 @@ func (i *InputMethod) convertInput(resource *constructorruntime.Resource) (*v1.G
 	if resource == nil {
 		return nil, fmt.Errorf("resource is required")
 	}
-	if resource.Input == nil {
+	if typed, ok := resource.Input.(*v1.Git); resource.Input == nil || ok && typed == nil {
 		return nil, fmt.Errorf("resource input is required")
 	}
 

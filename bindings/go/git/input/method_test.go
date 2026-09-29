@@ -137,9 +137,11 @@ func TestGetResourceCredentialConsumerIdentity(t *testing.T) {
 func TestInvalidResource(t *testing.T) {
 	r := require.New(t)
 	method := &input.InputMethod{TempFolder: t.TempDir()}
+	var typedNil *inputv1.Git
 	for _, resource := range []*constructorruntime.Resource{
 		nil,
 		{},
+		{Input: typedNil},
 		{Input: &runtime.Raw{Type: runtime.NewUnversionedType("unsupported")}},
 		{Input: &inputv1.Git{Type: inputspec.V1VersionedType}},
 		{Input: &inputv1.Git{Type: inputspec.V1VersionedType, Repository: "https://example.com/repo.git", Commit: "not-a-hash"}},

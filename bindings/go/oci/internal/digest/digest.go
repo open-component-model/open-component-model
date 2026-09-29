@@ -9,9 +9,8 @@ import (
 )
 
 const (
-	HashAlgorithmSHA256              = "SHA-256"
-	HashAlgorithmSHA512              = "SHA-512"
-	NormalisationGenericBlobDigestV1 = "genericBlobDigest/v1"
+	HashAlgorithmSHA256 = "SHA-256"
+	HashAlgorithmSHA512 = "SHA-512"
 )
 
 var SHAMapping = map[string]digest.Algorithm{
@@ -33,7 +32,7 @@ func Apply(target *runtime.Digest, digest digest.Digest) error {
 	}
 	target.HashAlgorithm = algo
 	// TODO(matthiasbruns): #3674 regression tests. also implications for existing resoufces etc need to be documented
-	target.NormalisationAlgorithm = NormalisationGenericBlobDigestV1
+	target.NormalisationAlgorithm = "genericBlobDigest/v1" // TODO use a constant from blob package for this
 	target.Value = digest.Encoded()
 
 	return nil

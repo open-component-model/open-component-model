@@ -204,7 +204,7 @@ func accessFrom(res *descriptor.Resource) (*accessv1.Git, error) {
 	}
 
 	spec := res.Access
-	if spec == nil {
+	if typed, ok := spec.(*accessv1.Git); spec == nil || ok && typed == nil {
 		return nil, fmt.Errorf("git access is required")
 	}
 

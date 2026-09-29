@@ -161,9 +161,8 @@ func TestResourceBlob_SetPrecalculatedDigest(t *testing.T) {
 			},
 			newDigest: digest.FromString("test").String(),
 			expectedDigest: &descriptor.Digest{
-				HashAlgorithm:          internaldigest.ReverseSHAMapping[digest.FromString("test").Algorithm()],
-				Value:                  digest.FromString("test").Encoded(),
-				NormalisationAlgorithm: internaldigest.NormalisationGenericBlobDigestV1,
+				HashAlgorithm: internaldigest.ReverseSHAMapping[digest.FromString("test").Algorithm()],
+				Value:         digest.FromString("test").Encoded(),
 			},
 			expectPanic: false,
 		},

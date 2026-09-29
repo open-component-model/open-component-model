@@ -1,12 +1,10 @@
 package input_test
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -17,26 +15,41 @@ import (
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 )
 
+// The test server's certificate is self-signed, so the request only reaches it
+// when the configured InsecureSkipVerify is applied.
 func TestProcessResourceUsesHTTPConfig(t *testing.T) {
-	r := require.New(t)
-	var reached atomic.Bool
-	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, req *http.Request) {
-		reached.Store(true)
-		<-req.Context().Done()
-	}))
-	t.Cleanup(server.Close)
-	method := &input.InputMethod{
-		TempFolder: t.TempDir(),
-		HTTPConfig: &httpv1alpha1.Config{TimeoutConfig: httpv1alpha1.TimeoutConfig{Timeout: httpv1alpha1.NewTimeout(100 * time.Millisecond)}},
-	}
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
-	defer cancel()
+	for _, tc := range []struct {
+		name        string
+		insecure    bool
+		wantReached bool
+		wantErr     string
+	}{
+		{name: "configured client trusts the server", insecure: true, wantReached: true, wantErr: "503"},
+		{name: "verifying client rejects the server", insecure: false, wantReached: false, wantErr: "certificate"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			var reached atomic.Bool
+			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				reached.Store(true)
+				w.WriteHeader(http.StatusServiceUnavailable)
+			}))
+			t.Cleanup(server.Close)
+			maxRetries := -1
+			method := &input.InputMethod{
+				TempFolder: t.TempDir(),
+				HTTPConfig: &httpv1alpha1.Config{
+					TLSConfig: httpv1alpha1.TLSConfig{InsecureSkipVerify: &tc.insecure},
+					Retry:     &httpv1alpha1.RetryConfig{MaxRetries: &maxRetries},
+				},
+			}
 
-	result, err := method.ProcessResource(ctx, &constructorruntime.Resource{Input: &inputv1.Git{
-		Type: inputspec.V1VersionedType, Repository: server.URL + "/repo.git",
-	}}, nil)
-	r.ErrorContains(err, "Client.Timeout")
-	r.Nil(result)
-	r.True(reached.Load())
-	r.NoError(ctx.Err(), "the configured client timeout must fire before the caller deadline")
+			result, err := method.ProcessResource(t.Context(), &constructorruntime.Resource{Input: &inputv1.Git{
+				Type: inputspec.V1VersionedType, Repository: server.URL + "/repo.git",
+			}}, nil)
+			r.ErrorContains(err, tc.wantErr)
+			r.Nil(result)
+			r.Equal(tc.wantReached, reached.Load())
+		})
+	}
 }
