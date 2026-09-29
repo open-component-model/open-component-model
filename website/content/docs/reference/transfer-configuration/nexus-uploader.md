@@ -6,67 +6,9 @@ toc: true
 ---
 
 Uploads a matched resource into a hosted repository of a Sonatype Nexus
-Repository 3 server. The behaviour depends on the **format** of the repository,
-which the uploader reads from the Nexus repository settings
-(`GET <url>/service/rest/v1/repositories/<repository>`):
-
-| Repository type | Source handling                                                             | Published access                                            |
-|-----------------|-----------------------------------------------------------------------------|-------------------------------------------------------------|
-| `helm`          | The packaged Helm chart located in the resource content (.tgz, tar, or OCI) | `Helm/v1` (`helmRepository: <url>/repository/<repository>`) |
-| `raw`           | The resource content as is (OCI artifacts as an OCI layout tar)             | `Wget/v1` (`url: <url>/repository/<repository>/<path>`)     |
-| `maven2`        | The resource content as one file of a Maven component                       | `Wget/v1` (`url: <url>/repository/<repository>/<path>`)     |
-| `npm`           | The npm package tarball, uploaded through the components API                | `Wget/v1` (`url` of the stored tarball)                     |
-
-The repository **must** be a hosted repository. Proxy and group repositories
-cannot receive uploads. The uploading user must be allowed to read the
-repository settings.
-
-For step-by-step guidance, including Maven artifacts, see
-[Upload Resources to Sonatype Nexus]({{< relref "docs/how-to/vendor-specific-apis/sonatype-nexus.md" >}}).
-
-## Helm repositories
-
-Nexus stores the chart as `<name>-<version>.tgz` from `Chart.yaml` and
-maintains `index.yaml` itself. The uploader looks up the chart by SHA-256 in the
-component search. If the repository disables redeploy and already stores the same
-content, the rejected upload (`409`) is accepted; different content under the same
-name and version fails. `path` is **not supported** for Nexus helm repositories:
-Nexus stores charts under a path it derives from the chart itself.
-
-## Raw repositories
-
-The resource content is uploaded to `<url>/repository/<repository>/<path>`.
-The default path is `<component>/<component-version>/<resource>-<resource-version>`.
-Nexus records no owner of a file, so a file already stored at the path is
-**never overwritten**: it is reused when it has the same content, otherwise the
-transfer fails with an error asking the user to configure a different path.
-
-## Maven repositories
-
-The resource content is uploaded as one file of a Maven component to
-`<url>/repository/<repository>/<path>`. `path` is required and must follow the
-Maven repository layout
-`<group path>/<artifactId>/<version>/<artifactId>-<version>[-<classifier>].<extension>`;
-the coordinates are taken from it. Release versions go through the components
-API (`POST /service/rest/v1/components`), which keeps `maven-metadata.xml` up to
-date; snapshot versions, which the components API refuses, are uploaded with a
-plain `PUT` and are not added to `maven-metadata.xml`. Like raw files, a stored
-file is never overwritten.
-
-## npm repositories
-
-The npm package tarball is uploaded through the components API. Nexus reads name
-and version from its `package.json`, stores it under
-`<name>/-/<name>-<version>.tgz` and keeps `latest` on the highest release
-version. The resource is published as `Wget/v1` on the stored tarball; a tarball
-the repository already stores is reused. `path` is not supported.
-
-## Digest
-
-A `genericBlobDigest/v1` SHA-256 source digest is verified, and content the
-server already stores is not uploaded again. Nexus cannot reject mismatching
-bytes on deploy, so the uploader fails after the upload on a mismatch. Content
-extracted from an OCI artifact gets the SHA-256 of the uploaded bytes.
+Repository 3 server, the way the repository's format expects. For step-by-step
+guides per repository type, see
+[Upload Resources to Sonatype Nexus]({{< relref "docs/how-to/vendor-specific-apis/sonatype-nexus/_index.md" >}}).
 
 ## Schema
 
@@ -81,13 +23,43 @@ extracted from an OCI artifact gets the SHA-256 of the uploaded bytes.
 | `repository` | string (required) | Repository name, e.g. `helm-hosted`.                                                                                                                                                                                                                                                                               |
 | `path`       | string            | Content location relative to the root; required in Maven repository layout for `maven2` repositories. Literal or `${…}` CEL expression (see [CEL Expressions]({{< relref "docs/reference/transfer-configuration/cel-expressions.md" >}})). Must be relative, without `.`/`..` segments. Not for helm or npm repos. |
 
-## Sources
+## Repository types
 
-**Helm** repositories accept any access type; the chart archive is located in the
-content, exactly as described for [Artifactory helm repositories]({{< relref "docs/reference/transfer-configuration/artifactory-uploader.md" >}}#helm-repositories).
+The uploader reads the format from
+`GET <url>/service/rest/v1/repositories/<repository>`:
 
-**Raw** and **Maven** repositories accept any access type and upload the
-resource content as is. OCI artifacts are materialized as an OCI layout tar.
+| Type     | Uploaded content                                                                                                                                                        | Published access                                               | `path`                                                                                                            | Guide                                                                                                         |
+|----------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------|
+| `helm`   | The packaged chart found in the content (`.tgz`, a tar holding one, or a Helm chart OCI artifact); stored as `<name>-<version>.tgz`                                     | `Helm/v1` with `helmRepository: <url>/repository/<repository>` | Not supported                                                                                                     | [Upload Helm Charts]({{< relref "docs/how-to/vendor-specific-apis/sonatype-nexus/helm-charts.md" >}})         |
+| `raw`    | The content as is; OCI artifacts as an OCI layout tar                                                                                                                   | `Wget/v1` on `<url>/repository/<repository>/<path>`            | Optional                                                                                                          | [Upload Raw Files]({{< relref "docs/how-to/vendor-specific-apis/sonatype-nexus/raw-files.md" >}})             |
+| `maven2` | The content as one file of a Maven component. Releases go through the components API; `-SNAPSHOT` versions use a plain `PUT` and are not added to `maven-metadata.xml`. | `Wget/v1` on `<url>/repository/<repository>/<path>`            | Required, in Maven layout `<group path>/<artifactId>/<version>/<artifactId>-<version>[-<classifier>].<extension>` | [Upload Maven Artifacts]({{< relref "docs/how-to/vendor-specific-apis/sonatype-nexus/maven-artifacts.md" >}}) |
+| `npm`    | The tarball via the components API; stored as `<name>/-/<name>-<version>.tgz`                                                                                           | `Wget/v1` on the stored tarball                                | Not supported                                                                                                     | [Upload npm Packages]({{< relref "docs/how-to/vendor-specific-apis/sonatype-nexus/npm-packages.md" >}})       |
+
+Only hosted repositories accept uploads; other formats fail with
+`has format "<format>"; supported: helm, raw, maven2, npm`.
+
+## Default path
+
+Content is uploaded to `<url>/repository/<repository>/<path>`. The default path is
+`<component>/<component version>/<resource>-<resource version>`. For resources with
+an extra identity, `-<16-hex-digit hash of the extra identity>` is appended to the
+file name, so that every resource gets its own file. The default path applies to
+`raw` repositories only.
+
+## Existing files
+
+Nexus records no owner of a file, so in `raw` and `maven2` repositories a stored file
+is never overwritten: same content is reused, different content fails the transfer.
+In `helm` and `npm` repositories a stored package with the same content is reused,
+and different content under the same name and version fails when the repository
+disallows redeploys.
+
+## Digest
+
+A `genericBlobDigest/v1` SHA-256 source digest is verified, and content the
+server already stores is not uploaded again. Nexus cannot reject mismatching
+bytes on deploy, so the uploader fails after the upload on a mismatch. Content
+extracted from an OCI artifact gets the SHA-256 of the uploaded bytes.
 
 ## Credentials
 
@@ -111,7 +83,7 @@ Resolved for the `HelmChartRepository` identity of
 not supported. See
 [Credential Consumer Identities]({{< relref "docs/reference/credential-consumer-identities.md" >}}).
 
-## Examples
+## Example
 
 Helm chart upload to Nexus:
 
@@ -123,14 +95,4 @@ configurations:
       accessType: Helm/v1
     url: https://nexus.example.com
     repository: helm-hosted
-```
-
-Raw repository — upload any resource and publish a `Wget/v1` access:
-
-```yaml
-  - type: nexus.uploader.transfer.config.ocm.software/v1alpha1
-    match:
-      accessType: localBlob
-    url: https://nexus.example.com
-    repository: raw-hosted
 ```

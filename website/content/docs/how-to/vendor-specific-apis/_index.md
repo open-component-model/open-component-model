@@ -13,10 +13,23 @@ repository types behind their own APIs. OCM's vendor uploaders read the type of 
 target repository from the server and upload each resource the way that repository
 type expects, so consumers fetch it with their usual tools.
 
-## Guides in This Section
+## Choose your server
 
-- **[Upload Resources to JFrog Artifactory]({{< relref "jfrog-artifactory.md" >}})** — Helm, Maven, npm and generic repositories
-- **[Upload Resources to Sonatype Nexus]({{< relref "sonatype-nexus.md" >}})** — Helm, Maven, npm and raw repositories
+| Server                      | Repository types          | Guide                                                                                                                  |
+|-----------------------------|---------------------------|------------------------------------------------------------------------------------------------------------------------|
+| JFrog Artifactory           | helm, maven, npm, generic | [Upload Resources to JFrog Artifactory]({{< relref "docs/how-to/vendor-specific-apis/jfrog-artifactory/_index.md" >}}) |
+| Sonatype Nexus Repository 3 | helm, maven2, npm, raw    | [Upload Resources to Sonatype Nexus]({{< relref "docs/how-to/vendor-specific-apis/sonatype-nexus/_index.md" >}})       |
+
+## How vendor uploaders work
+
+1. An uploader rule matches resources by their access type in the **source**
+   component version. The first matching rule wins, see
+   [Uploader configurations]({{< relref "docs/reference/transfer-configuration/_index.md#uploader-configurations" >}}).
+2. At upload time the uploader reads the repository type from the server.
+3. It uploads the resource the way that repository type expects.
+4. It rewrites the resource in the target component version to a `Helm/v1` access
+   for charts, or a `Wget/v1` access for files and packages. A `genericBlobDigest/v1`
+   SHA-256 source digest is verified.
 
 ## Related Documentation
 
