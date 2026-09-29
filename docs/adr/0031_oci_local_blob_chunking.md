@@ -1,7 +1,7 @@
 # Chunk Oversized OCI Local Blobs
 
 * **Status**: proposed
-* **Deciders**: Fabian Burth (@fabianburth)
+* **Deciders**: OCM Maintainer Team
 * **Date**: 2026-09-16
 
 ## Context and Problem Statement
