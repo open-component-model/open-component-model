@@ -73,9 +73,12 @@ types with resource.access.isType("OCIImage"), which resolves aliases and versio
 the first uploader whose match is true handles the resource. Available uploaders: oci
 (separate OCI artifacts), http (custom HTTP targets), localblob (copy as local blobs) and
 reference (keep by reference). --uploader localblob copies every resource no other uploader
-selects. The former --upload-as and --copy-resources flags and the copy mode setting are
-replaced by uploaders (see the "Migrate from --upload-as to Uploader Configurations" guide on
-ocm.software). --recursive walks the component's references and transfers them too.
+selects. The copy mode setting is replaced by uploaders (see the "Migrate from --upload-as to
+Uploader Configurations" guide on ocm.software). The deprecated --copy-resources and
+--upload-as flags still work: they are translated into uploaders appended after all others
+(--copy-resources as localblob, --upload-as ociArtifact as oci, limited to OCI-manifest local
+blobs without --copy-resources). --recursive walks the component's references and transfers
+them too.
 
 Driving defaults from the OCM configuration:
   A transfer.config.ocm.software/v1alpha1 entry inside the central OCM configuration
@@ -157,6 +160,7 @@ transfer component-version --transfer-spec spec.yaml
 	cmd.Flags().Bool(FlagDryRun, false, "build and validate the graph but do not execute")
 	cmd.Flags().BoolP(FlagRecursive, "r", false, "recursively discover and transfer component versions")
 	cmd.Flags().StringArray(FlagUploader, nil, uploaderUsage())
+	registerLegacyFlags(cmd.Flags())
 	cmd.Flags().String(FlagTransferSpec, "", "path to a transfer specification file (use \"-\" for stdin). The input must hold exactly one transfer spec document; with \"-\", OCM configuration documents in stdin are applied as configuration")
 	cmd.Flags().String(FlagConstraint, "", "version constraint evaluated by each version's configured scheme; versions with no applicable scheme are retained (e.g. \">= 1.0.0, < 2.0.0\"); only used when no version is specified in the reference")
 	cmd.Flags().Bool(FlagLatest, false, "if set, only the latest version of the component is transferred; only used when no version is specified in the reference")
@@ -175,7 +179,7 @@ func transferArgs(cmd *cobra.Command, args []string) error {
 		if len(args) > 0 {
 			return fmt.Errorf("positional arguments are not allowed when --%s is set", FlagTransferSpec)
 		}
-		ignoredFlags := []string{FlagRecursive, FlagUploader}
+		ignoredFlags := []string{FlagRecursive, FlagUploader, FlagCopyResources, FlagUploadAs}
 		for _, name := range ignoredFlags {
 			if cmd.Flags().Changed(name) {
 				slog.Warn(fmt.Sprintf("--%s has no effect when --%s is set", name, FlagTransferSpec))

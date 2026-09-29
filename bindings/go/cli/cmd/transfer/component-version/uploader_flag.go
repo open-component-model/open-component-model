@@ -92,7 +92,9 @@ func rawEntry(t runtime.Type, entry map[string]any) (*runtime.Raw, error) {
 }
 
 // withFlagUploaders returns a copy of cfg whose configurations are cfg's entries followed
-// by the --uploader entries in flag order. cfg is not modified; a nil cfg counts as empty.
+// by the --uploader entries in flag order, then the entries translated from the deprecated
+// --copy-resources and --upload-as flags (last, like the catch-all --copy-resources used to
+// append). cfg is not modified; a nil cfg counts as empty.
 func withFlagUploaders(cmd *cobra.Command, cfg *genericv1.Config) (*genericv1.Config, error) {
 	// GetStringArray round-trips through the flag's string form, which turns a single
 	// empty value into no values; read the slice directly so it is reported instead.
@@ -102,14 +104,25 @@ func withFlagUploaders(cmd *cobra.Command, cfg *genericv1.Config) (*genericv1.Co
 			values = sv.GetSlice()
 		}
 	}
-	if len(values) == 0 {
+	legacy, err := legacyUploaderValuesFromFlags(cmd)
+	if err != nil {
+		return nil, err
+	}
+	if len(values) == 0 && len(legacy) == 0 {
 		return cfg, nil
 	}
-	entries := make([]*runtime.Raw, 0, len(values))
+	entries := make([]*runtime.Raw, 0, len(values)+len(legacy))
 	for _, v := range values {
 		entry, err := uploaderEntry(v)
 		if err != nil {
 			return nil, fmt.Errorf("invalid --%s %q: %w", FlagUploader, v, err)
+		}
+		entries = append(entries, entry)
+	}
+	for _, v := range legacy {
+		entry, err := uploaderEntry(v)
+		if err != nil {
+			return nil, fmt.Errorf("translating --%s/--%s to uploader %q: %w", FlagCopyResources, FlagUploadAs, v, err)
 		}
 		entries = append(entries, entry)
 	}

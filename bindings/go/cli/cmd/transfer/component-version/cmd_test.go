@@ -745,8 +745,10 @@ configurations:
 	referenceConfig := writeConfig(t, "reference.uploader.transfer.config.ocm.software/v1alpha1")
 
 	for _, tc := range []struct {
-		name        string
-		args        []string
+		name string
+		args []string
+		// target overrides the CTF target argument.
+		target      string
 		contains    []string
 		notContains []string
 		wantErr     string
@@ -792,15 +794,41 @@ configurations:
 			wantErr: "match is required",
 		},
 		{
-			name:    "the removed --copy-resources flag is unknown",
-			args:    []string{"--copy-resources"},
-			wantErr: "unknown flag: --copy-resources",
+			name:     "deprecated --copy-resources copies the image like --uploader localblob",
+			args:     []string{"--copy-resources"},
+			contains: []string{"GetOCIArtifact", "CTFAddLocalResource"},
+		},
+		{
+			name:        "deprecated --copy-resources comes after --uploader entries",
+			args:        []string{"--copy-resources", "--uploader", `reference=resource.name == "image"`},
+			notContains: []string{"GetOCIArtifact"},
+		},
+		{
+			name:        "deprecated --upload-as ociArtifact alone keeps an OCI image by reference",
+			args:        []string{"--upload-as", "ociArtifact"},
+			target:      "ghcr.io/target-org/ocm",
+			notContains: []string{"TransferOCIArtifact", "GetOCIArtifact"},
+		},
+		{
+			name:     "deprecated --copy-resources --upload-as ociArtifact uploads an OCI image as an artifact",
+			args:     []string{"--copy-resources", "--upload-as", "ociArtifact"},
+			target:   "ghcr.io/target-org/ocm",
+			contains: []string{"TransferOCIArtifact"},
+		},
+		{
+			name:    "deprecated --upload-as rejects unknown values",
+			args:    []string{"--upload-as", "bogus"},
+			wantErr: "expected one of",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
 			result := new(bytes.Buffer)
-			args := append([]string{"transfer", "component-version", fromRef, targetArg, "--dry-run", "-o", "yaml"}, tc.args...)
+			target := targetArg
+			if tc.target != "" {
+				target = tc.target
+			}
+			args := append([]string{"transfer", "component-version", fromRef, target, "--dry-run", "-o", "yaml"}, tc.args...)
 			_, err := test.OCM(t,
 				test.WithArgs(args...),
 				test.WithOutput(result),

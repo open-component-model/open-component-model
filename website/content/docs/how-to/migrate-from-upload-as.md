@@ -1,7 +1,7 @@
 ---
 title: "Migrate from --upload-as to Uploader Configurations"
 slug: "migrate-from-upload-as"
-description: "Replace the removed --upload-as flag and upload type transfer setting with the oci.uploader.transfer.config.ocm.software uploader configuration."
+description: "Replace the deprecated --upload-as flag and the removed upload type transfer setting with the oci.uploader.transfer.config.ocm.software uploader configuration."
 weight: 12
 toc: true
 ---
@@ -13,9 +13,12 @@ CLI config and controller `Replication` configs) with the
 `oci.uploader.transfer.config.ocm.software/v1alpha1` uploader configuration.
 
 {{< callout context="caution" >}}
-The `--upload-as` flag has been removed. Passing it fails with `unknown flag: --upload-as`.
-A leftover `uploadType` field in a transfer config fails config loading with
-`unknown field "uploadType"`. Both must be migrated before upgrading.
+The `--upload-as` and `--copy-resources` flags are deprecated. They still work
+and print a deprecation warning: the CLI translates them into uploader entries
+appended after all configured and `--uploader` entries (see
+[Deprecated flags](#deprecated-flags)). A leftover `uploadType` field in a
+transfer config fails config loading with `unknown field "uploadType"` and must
+be migrated before upgrading.
 {{< /callout >}}
 
 ## Why Migrate?
@@ -27,8 +30,25 @@ location (`imageReference`), and shares one mechanism with the HTTP uploader.
 
 ## Prerequisites
 
-- [OCM CLI]({{< relref "/docs/getting-started/ocm-cli-installation.md" >}}) installed (the version that removed `--upload-as`)
+- [OCM CLI]({{< relref "/docs/getting-started/ocm-cli-installation.md" >}}) installed (the version that deprecated `--upload-as`)
 - An existing workflow that uses `--upload-as` or `uploadType`
+
+## Deprecated flags
+
+Until you migrate, the CLI translates the deprecated flags into `--uploader`
+values. The translated entries come after all entries from the OCM configuration
+and from `--uploader`, so explicit rules still win:
+
+| Deprecated flags | Translated to |
+| --- | --- |
+| `--copy-resources` | `--uploader localblob` |
+| `--copy-resources --upload-as ociArtifact` | `--uploader oci --uploader localblob` |
+| `--upload-as ociArtifact` | `--uploader 'oci=target.type == "OCIRepository" && resource.access.isType("LocalBlob") && isOCIManifest(resource.access.mediaType) && has(resource.access.referenceName)'` |
+| `--upload-as localBlob`, `--copy-resources=false` | nothing |
+
+`--copy-resources=false` used to override `copyMode: allResources` from a
+config. It has no effect now: a flag cannot remove uploader entries configured in
+the OCM configuration.
 
 ## Steps
 
@@ -468,11 +488,13 @@ imageReference: >-
 
 ## Troubleshooting
 
-### Symptom: `unknown flag: --upload-as`
+### Symptom: `Flag --upload-as has been deprecated`
 
-**Cause:** The `--upload-as` flag has been removed.
+**Cause:** The `--upload-as` (or `--copy-resources`) flag is deprecated. The
+transfer still runs with the translated uploaders (see
+[Deprecated flags](#deprecated-flags)).
 
-**Fix:** Remove the flag from your command and add an OCI uploader entry to your
+**Fix:** Replace the flag with `--uploader` or an OCI uploader entry in your
 config as shown in the migration steps above.
 
 ### Symptom: `unknown field "uploadType"`
