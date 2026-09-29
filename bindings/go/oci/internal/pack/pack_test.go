@@ -685,7 +685,7 @@ func TestResourceLocalBlobMediaTypeDetection(t *testing.T) {
 			v2.MustAddToScheme(opts.AccessScheme)
 			oci.MustAddToScheme(opts.AccessScheme)
 
-			resource := &descriptor.Resource{}
+			resource := &descriptor.Resource{Access: tt.access}
 			require.NoError(t, resourceblob.UpdateArtifactWithInformationFromBlob(resource, tt.blob))
 
 			resourceBlob, err := resourceblob.NewArtifactBlob(resource, tt.blob)
@@ -867,7 +867,7 @@ func TestResourceLocalBlobOCISingleLayerArtifact(t *testing.T) {
 }
 
 func TestPackingPreservesResourceDigest(t *testing.T) {
-	for _, storageForm := range []string{"layer", "manifest", "wrapper index"} {
+	for _, storageForm := range []string{"layer", "manifest", "index"} {
 		t.Run(storageForm, func(t *testing.T) {
 			r := require.New(t)
 			ctx := t.Context()
@@ -886,7 +886,7 @@ func TestPackingPreservesResourceDigest(t *testing.T) {
 				root, err = oras.PackManifest(ctx, writer, oras.PackManifestVersion1_1, "application/custom", oras.PackManifestOptions{})
 				r.NoError(err)
 				resourceDigest = root.Digest
-				if storageForm == "wrapper index" {
+				if storageForm == "index" {
 					index := ociImageSpecV1.Index{
 						MediaType: ociImageSpecV1.MediaTypeImageIndex,
 						Manifests: []ociImageSpecV1.Descriptor{root},
@@ -897,6 +897,7 @@ func TestPackingPreservesResourceDigest(t *testing.T) {
 					root = content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageIndex, indexData)
 					r.NoError(writer.Push(ctx, root, bytes.NewReader(indexData)))
 					r.NotEqual(resourceDigest, root.Digest)
+					resourceDigest = root.Digest
 				}
 				r.NoError(writer.Close())
 				data = buf.Bytes()
@@ -1001,7 +1002,7 @@ func TestResourceLocalBlobOCILayout(t *testing.T) {
 			name: "success with valid input",
 			blob: &testBlob{
 				content:   ociLayout,
-				mediaType: "application/vnd.oci.image.layout.v1+tar",
+				mediaType: layout.MediaTypeOCIImageLayoutTarV1,
 				digest:    digest.FromBytes(ociLayout),
 			},
 			resource: &descriptor.Resource{},
@@ -1014,7 +1015,7 @@ func TestResourceLocalBlobOCILayout(t *testing.T) {
 			name: "error on invalid OCI layout",
 			blob: &testBlob{
 				content:   []byte("invalid layout"),
-				mediaType: "application/vnd.oci.image.layout.v1+tar",
+				mediaType: layout.MediaTypeOCIImageLayoutTarV1,
 				digest:    digest.FromBytes([]byte("invalid layout")),
 			},
 			resource: &descriptor.Resource{},

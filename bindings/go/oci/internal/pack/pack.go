@@ -216,6 +216,18 @@ func ResourceLocalBlobOCILayout(ctx context.Context, storage content.Storage, b 
 			CopyGraphOptions: opts.CopyGraphOptions,
 		},
 		MutateParentFunc: func(idx *ociImageSpecV1.Descriptor) error {
+			// Verify the selected root, not the archive checksum, before any graph writes.
+			if resource, ok := b.Artifact.(*descriptor.Resource); ok && resource.Digest != nil {
+				d := resource.Digest
+				if d.HashAlgorithm != "" && d.Value != "" {
+					switch d.NormalisationAlgorithm {
+					case internaldigest.OCIArtifactDigestV1, internaldigest.GenericBlobDigestV1:
+						if err := internaldigest.VerifyOCIArtifact(d, idx.Digest); err != nil {
+							return fmt.Errorf("failed to verify resource OCI artifact digest: %w", err)
+						}
+					}
+				}
+			}
 			return identity.Adopt(idx, b.Artifact)
 		},
 	})
