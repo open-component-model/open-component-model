@@ -33,13 +33,14 @@ func TestRegister(t *testing.T) {
 	inputs := input.NewInputRepositoryRegistry(ctx)
 	resources := resource.NewResourceRegistry(ctx)
 	credentialTypes := credentialtyperepository.NewCredentialTypeRegistry(ctx)
+	digests := digestprocessor.NewDigestProcessorRegistry(ctx)
 	maxRetries := -1
 	tempFolder := t.TempDir()
 	httpConfig := &httpv1alpha1.Config{Retry: &httpv1alpha1.RetryConfig{MaxRetries: &maxRetries}}
 	r.NoError(Register(
 		inputs,
 		resources,
-		digestprocessor.NewDigestProcessorRegistry(ctx),
+		digests,
 		credentialTypes,
 		&filesystemv1alpha1.Config{TempFolder: &tempFolder},
 		httpConfig,
@@ -72,6 +73,9 @@ func TestRegister(t *testing.T) {
 		plugin, err := resources.GetResourcePlugin(ctx, &accessv1.Git{Type: typ, Repository: "https://example.com/repo.git", Ref: "main"})
 		r.NoError(err, typ.String())
 		r.IsType(&gitrepository.ResourceRepository{}, plugin, typ.String())
+		processor, err := digests.GetPlugin(ctx, &accessv1.Git{Type: typ})
+		r.NoError(err, typ.String())
+		r.Same(plugin, processor, "access and digest processing must use the same configured repository")
 	}
 
 	var requests atomic.Int32

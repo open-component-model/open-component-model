@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -18,7 +19,6 @@ import (
 	"github.com/go-git/go-git/v6/plumbing/transport"
 	"github.com/opencontainers/go-digest"
 
-	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/git/internal/endpoint"
 	accessv1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
 	credsv1 "ocm.software/open-component-model/bindings/go/git/spec/credentials/v1"
@@ -27,8 +27,9 @@ import (
 
 // Result is one downloaded snapshot of a Git repository, archived as tar.gz.
 type Result struct {
-	// Blob is backed by a file that outlives the call and is owned by the caller.
-	Blob *filesystem.Blob
+	// Blob owns an archive file that outlives the call. The caller must Close it
+	// after closing all readers to remove the file.
+	Blob *archiveBlob
 	// Commit is the full SHA the archive was taken from.
 	Commit string
 	// Digest covers the final compressed archive bytes.
@@ -136,7 +137,11 @@ func Download(ctx context.Context, access *accessv1.Git, creds *credsv1.GitCrede
 		return nil, err
 	}
 
-	return &Result{Blob: b, Commit: selected.Hash.String(), Digest: archiveDigest}, nil
+	absolutePath, err := filepath.Abs(archivePath)
+	if err != nil {
+		return nil, fmt.Errorf("cannot resolve git archive path: %w", err)
+	}
+	return &Result{Blob: newArchiveBlob(b, absolutePath), Commit: selected.Hash.String(), Digest: archiveDigest}, nil
 }
 
 // fetchRepository fetches explicit refs or a pinned commit without depending on a valid remote HEAD.
