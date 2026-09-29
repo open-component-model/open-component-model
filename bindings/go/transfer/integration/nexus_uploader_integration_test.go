@@ -1,13 +1,15 @@
 package integration_test
 
 import (
+	"archive/tar"
 	"bytes"
+	"compress/gzip"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -21,10 +23,8 @@ import (
 	helmaccess "ocm.software/open-component-model/bindings/go/helm/spec/access"
 	helmaccessv1 "ocm.software/open-component-model/bindings/go/helm/spec/access/v1"
 	helmidentityv1 "ocm.software/open-component-model/bindings/go/helm/spec/identity/v1"
-	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	ctfrepospec "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	"ocm.software/open-component-model/bindings/go/runtime"
-	"ocm.software/open-component-model/bindings/go/transfer"
 	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
 	wgetrepository "ocm.software/open-component-model/bindings/go/wget/repository"
 	wgetaccess "ocm.software/open-component-model/bindings/go/wget/spec/access"
@@ -34,125 +34,201 @@ import (
 const (
 	nexusImage          = "sonatype/nexus3:3.96.3"
 	nexusHelmRepository = "helm-hosted"
+	nexusNpmRepository  = "npm-hosted"
 )
 
-// Test_Integration_TransferHelmResource_NexusHelmUploaderDeploysChart verifies that a Helm/v1
-// resource routed through a Nexus helm uploader configuration is uploaded to a real Nexus Helm
-// hosted repository with redeploy disabled and re-described with the chart name and version
-// Nexus records. The transfer runs twice: the second upload is rejected by Nexus because the
-// chart already exists, which the uploader recovers from because Nexus stores the same content.
-func Test_Integration_TransferHelmResource_NexusHelmUploaderDeploysChart(t *testing.T) {
+// Test_Integration_NexusUploader transfers resources into the hosted repositories of one real
+// Nexus Repository 3 server, one parallel subtest per repository format. Every subtest transfers twice:
+// all repositories disallow redeploys, so the second transfer must reuse what the first stored.
+func Test_Integration_NexusUploader(t *testing.T) {
 	t.Parallel()
-	r := require.New(t)
-	ctx := t.Context()
-
 	baseURL, adminPassword := startNexus(t)
-	helmRepo := baseURL + "/repository/" + nexusHelmRepository
+	creds := nexusCredentials(t, baseURL, adminPassword, nexusHelmRepository, "raw-hosted", "maven-releases", nexusNpmRepository)
+	uploader := func(accessType runtime.Type, repository, path string) transferv1alpha1.UploaderConfig {
+		return &transferv1alpha1.NexusUploaderConfig{
+			Type:       runtime.NewVersionedType(transferv1alpha1.NexusUploaderConfigType, transferv1alpha1.Version),
+			MatchSpec:  transferv1alpha1.UploaderMatch{AccessType: accessType},
+			URL:        baseURL,
+			Repository: repository,
+			Path:       path,
+		}
+	}
+	wgetType := runtime.NewVersionedType(wgetaccess.WgetConsumerType, wgetaccessv1.Version)
+	// wgetAccesses returns the Wget/v1 access URLs of the transferred resources by resource name.
+	wgetAccesses := func(r *require.Assertions, targetPath, component, version string) map[string]string {
+		desc, err := createCTFRepository(t, targetPath).GetComponentVersion(t.Context(), component, version)
+		r.NoError(err)
+		urls := map[string]string{}
+		for _, res := range desc.Component.Resources {
+			var access wgetaccessv1.Wget
+			r.NoError(wgetaccess.Scheme.Convert(res.Access, &access))
+			urls[res.Name] = access.URL
+		}
+		return urls
+	}
 
-	chartTgzBytes, err := os.ReadFile("../../helm/testdata/mychart-0.1.0.tgz")
-	r.NoError(err)
+	// The helm repository rejects redeploying mychart-0.1.0; the uploader finds the same
+	// content stored and re-describes the resource with the chart name and version Nexus records.
+	t.Run("helm", func(t *testing.T) {
+		t.Parallel()
+		r := require.New(t)
+		helmRepo := baseURL + "/repository/" + nexusHelmRepository
+		chartTgzBytes, err := os.ReadFile("../../helm/testdata/mychart-0.1.0.tgz")
+		r.NoError(err)
 
-	// The helm downloader with helmChart "mychart-0.1.0.tgz" GETs the file directly.
-	srcSrv := httptest.NewServer(http.FileServer(http.Dir("../../helm/testdata/provenance")))
-	t.Cleanup(srcSrv.Close)
-
-	componentName := "ocm.software/nexus-helm-uploader-test"
-	componentVersion := "1.0.0"
-	sourceCTFPath := t.TempDir()
-	ctfRepo := createCTFRepository(t, sourceCTFPath)
-
-	helmAccessData, err := json.Marshal(map[string]string{
-		"type":           "Helm/v1",
-		"helmRepository": srcSrv.URL,
-		"helmChart":      "mychart-0.1.0.tgz",
-	})
-	r.NoError(err)
-	rawHelmAccess := &runtime.Raw{}
-	r.NoError(rawHelmAccess.UnmarshalJSON(helmAccessData))
-	r.NoError(ctfRepo.AddComponentVersion(ctx, &descriptor.Descriptor{
-		Meta: descriptor.Meta{Version: "v2"},
-		Component: descriptor.Component{
-			ComponentMeta: descriptor.ComponentMeta{
-				ObjectMeta: descriptor.ObjectMeta{Name: componentName, Version: componentVersion},
-			},
-			Provider: descriptor.Provider{Name: "test-provider"},
-			Resources: []descriptor.Resource{{
-				ElementMeta: descriptor.ElementMeta{
+		// The helm downloader with helmChart "mychart-0.1.0.tgz" GETs the file directly.
+		srcSrv := httptest.NewServer(http.FileServer(http.Dir("../../helm/testdata/provenance")))
+		t.Cleanup(srcSrv.Close)
+		const component, version = "ocm.software/nexus-helm-uploader-test", "1.0.0"
+		sourcePath := t.TempDir()
+		ctfRepo := createCTFRepository(t, sourcePath)
+		helmAccessData, err := json.Marshal(map[string]string{"type": "Helm/v1", "helmRepository": srcSrv.URL, "helmChart": "mychart-0.1.0.tgz"})
+		r.NoError(err)
+		rawHelmAccess := &runtime.Raw{}
+		r.NoError(rawHelmAccess.UnmarshalJSON(helmAccessData))
+		r.NoError(ctfRepo.AddComponentVersion(t.Context(), &descriptor.Descriptor{
+			Meta: descriptor.Meta{Version: "v2"},
+			Component: descriptor.Component{
+				ComponentMeta: descriptor.ComponentMeta{ObjectMeta: descriptor.ObjectMeta{Name: component, Version: version}},
+				Provider:      descriptor.Provider{Name: "test-provider"},
+				Resources: []descriptor.Resource{{
 					// Deliberately differs from Chart.yaml: name and version come from the chart.
-					ObjectMeta: descriptor.ObjectMeta{Name: "chart-resource", Version: "9.9.9"},
-				},
-				Type:     "helmChart",
-				Relation: descriptor.ExternalRelation,
-				Access:   rawHelmAccess,
-			}},
-		},
-	}))
+					ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "chart-resource", Version: "9.9.9"}},
+					Type:        "helmChart",
+					Relation:    descriptor.ExternalRelation,
+					Access:      rawHelmAccess,
+				}},
+			},
+		}))
+		sourceSpec := &ctfrepospec.Repository{Type: runtime.Type{Name: ctfrepospec.Type, Version: ctfrepospec.Version}, FilePath: sourcePath}
+		targetPath, targetSpec := newTargetCTF(t)
+		up := uploader(runtime.NewVersionedType(helmaccessv1.Type, helmaccessv1.LegacyTypeVersion), nexusHelmRepository, "")
+		for range 2 {
+			transferOnce(t, ctfRepo, sourceSpec, targetSpec, up, helmresource.NewResourceRepository(nil), creds, component, version)
+		}
 
-	sourceSpec := &ctfrepospec.Repository{
-		Type:     runtime.Type{Name: ctfrepospec.Type, Version: ctfrepospec.Version},
-		FilePath: sourceCTFPath,
-	}
-	targetCTFPath := t.TempDir()
-	targetSpec := &ctfrepospec.Repository{
-		Type:       runtime.Type{Name: ctfrepospec.Type, Version: ctfrepospec.Version},
-		FilePath:   targetCTFPath,
-		AccessMode: "readwrite|create",
-	}
-	uploaders := []transferv1alpha1.UploaderConfig{&transferv1alpha1.NexusUploaderConfig{
-		Type:       runtime.NewVersionedType(transferv1alpha1.NexusUploaderConfigType, transferv1alpha1.Version),
-		MatchSpec:  transferv1alpha1.UploaderMatch{AccessType: runtime.NewVersionedType(helmaccessv1.Type, helmaccessv1.LegacyTypeVersion)},
-		URL:        baseURL,
-		Repository: nexusHelmRepository,
-	}}
+		gotDesc, err := createCTFRepository(t, targetPath).GetComponentVersion(t.Context(), component, version)
+		r.NoError(err)
+		r.Len(gotDesc.Component.Resources, 1)
+		gotResource := gotDesc.Component.Resources[0]
+		var typedHelm helmaccessv1.Helm
+		r.NoError(helmaccess.Scheme.Convert(gotResource.Access, &typedHelm))
+		r.Equal(helmRepo, typedHelm.HelmRepository)
+		r.Equal("mychart:0.1.0", typedHelm.HelmChart, "helmChart is the chart name and version nexus records")
+		r.Equal(&descriptor.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: "genericBlobDigest/v1", Value: digestOf(chartTgzBytes).Encoded()}, gotResource.Digest)
 
-	id, err := runtime.ParseURLToIdentity(helmRepo)
-	r.NoError(err)
-	id.SetType(helmidentityv1.Type)
-	credResolver := credentials.NewStaticCredentialsResolver(map[string]map[string]string{
-		id.String(): {"username": "admin", "password": adminPassword},
+		// Nexus stores the chart under the path it derives from Chart.yaml and indexes it.
+		r.Equal(chartTgzBytes, nexusGet(t, helmRepo+"/mychart-0.1.0.tgz", adminPassword))
+		r.Contains(string(nexusGet(t, helmRepo+"/index.yaml", adminPassword)), "mychart:")
 	})
 
-	transferOnce := func() {
-		tgd, err := transfer.BuildGraphDefinition(ctx,
-			&transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeAllResources},
-			uploaders,
-			transfer.Mapping{
-				Components: []transfer.ComponentID{{Component: componentName, Version: componentVersion}},
-				Target:     targetSpec,
-				Resolver:   transfer.NewRepositoryResolver(ctfRepo, sourceSpec),
-			},
+	// The second transfer finds the stored file by HEAD and the asset search, which the uploader
+	// polls until Nexus has indexed the first upload.
+	t.Run("raw", func(t *testing.T) {
+		t.Parallel()
+		r := require.New(t)
+		const component, version = "ocm.software/nexus-raw-uploader-test", "1.0.0"
+		data := []byte("hello")
+		ctfRepo, sourceSpec := addWgetComponent(t, component, version, wgetFile{name: "blob.txt", resource: "raw-resource", version: "1.0.0", mediaType: "text/plain", data: data})
+		targetPath, targetSpec := newTargetCTF(t)
+		for range 2 {
+			transferOnce(t, ctfRepo, sourceSpec, targetSpec, uploader(wgetType, "raw-hosted", ""), wgetrepository.NewResourceRepository(nil), creds, component, version)
+		}
+
+		want := baseURL + "/repository/raw-hosted/ocm.software/nexus-raw-uploader-test/1.0.0/raw-resource-1.0.0"
+		r.Equal(map[string]string{"raw-resource": want}, wgetAccesses(r, targetPath, component, version))
+		r.Equal(data, nexusGet(t, want, adminPassword))
+	})
+
+	// Release files go through the components API, which records them in maven-metadata.xml.
+	t.Run("maven2", func(t *testing.T) {
+		t.Parallel()
+		r := require.New(t)
+		const component, version = "ocm.software/nexus-maven-uploader-test", "1.0.0"
+		pom := []byte(`<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>com.example</groupId>
+  <artifactId>demo</artifactId>
+  <version>1.0.0</version>
+</project>
+`)
+		ctfRepo, sourceSpec := addWgetComponent(t, component, version,
+			wgetFile{name: "demo-1.0.0.jar", resource: "jar", version: "1.0.0", mediaType: "application/java-archive", data: []byte("jar")},
+			wgetFile{name: "demo-1.0.0.pom", resource: "pom", version: "1.0.0", mediaType: "application/xml", data: pom},
 		)
-		r.NoError(err)
-		repoProvider := provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()))
-		b := transfer.NewDefaultBuilder(repoProvider, helmresource.NewResourceRepository(nil), credResolver)
-		graph, err := b.BuildAndCheck(tgd)
-		r.NoError(err)
-		r.NoError(graph.Process(ctx))
+		targetPath, targetSpec := newTargetCTF(t)
+		up := uploader(wgetType, "maven-releases",
+			`${"com/example/demo/" + resource.version + "/demo-" + resource.version + (resource.name == "pom" ? ".pom" : ".jar")}`)
+		for range 2 {
+			transferOnce(t, ctfRepo, sourceSpec, targetSpec, up, wgetrepository.NewResourceRepository(nil), creds, component, version)
+		}
+
+		base := baseURL + "/repository/maven-releases/com/example/demo"
+		r.Equal(map[string]string{"jar": base + "/1.0.0/demo-1.0.0.jar", "pom": base + "/1.0.0/demo-1.0.0.pom"}, wgetAccesses(r, targetPath, component, version))
+		r.Equal([]byte("jar"), nexusGet(t, base+"/1.0.0/demo-1.0.0.jar", adminPassword))
+		r.Eventually(func() bool {
+			status, body := nexusRequest(t, http.MethodGet, base+"/maven-metadata.xml", adminPassword, nil)
+			return status == http.StatusOK && strings.Contains(string(body), "<version>1.0.0</version>")
+		}, 15*time.Second, 500*time.Millisecond, "maven-metadata.xml lists the uploaded version")
+	})
+
+	// Nexus reads name and version from package.json and stores the tarball under its npm path.
+	t.Run("npm", func(t *testing.T) {
+		t.Parallel()
+		r := require.New(t)
+		const component, version = "ocm.software/nexus-npm-uploader-test", "1.0.0"
+		tarball := npmTarball(t, `{"name":"ocm-integration-demo","version":"1.0.0"}`)
+		ctfRepo, sourceSpec := addWgetComponent(t, component, version, wgetFile{name: "pkg.tgz", resource: "pkg", version: "1.0.0", mediaType: "application/gzip", data: tarball})
+		targetPath, targetSpec := newTargetCTF(t)
+		for range 2 {
+			transferOnce(t, ctfRepo, sourceSpec, targetSpec, uploader(wgetType, nexusNpmRepository, ""), wgetrepository.NewResourceRepository(nil), creds, component, version)
+		}
+
+		want := baseURL + "/repository/" + nexusNpmRepository + "/ocm-integration-demo/-/ocm-integration-demo-1.0.0.tgz"
+		r.Equal(map[string]string{"pkg": want}, wgetAccesses(r, targetPath, component, version))
+		r.Equal(tarball, nexusGet(t, want, adminPassword))
+		r.Eventually(func() bool {
+			status, body := nexusRequest(t, http.MethodGet, baseURL+"/repository/"+nexusNpmRepository+"/ocm-integration-demo", adminPassword, nil)
+			var metadata struct {
+				Versions map[string]json.RawMessage `json:"versions"`
+			}
+			return status == http.StatusOK && json.Unmarshal(body, &metadata) == nil && metadata.Versions["1.0.0"] != nil
+		}, 15*time.Second, 500*time.Millisecond, "the npm package metadata lists the uploaded version")
+	})
+}
+
+// nexusCredentials resolves the admin credentials for the HelmChartRepository identity of each
+// repository, which the Nexus uploader looks up for every repository format.
+func nexusCredentials(t *testing.T, baseURL, password string, repos ...string) credentials.Resolver {
+	t.Helper()
+	creds := map[string]map[string]string{}
+	for _, repo := range repos {
+		id, err := runtime.ParseURLToIdentity(baseURL + "/repository/" + repo)
+		require.NoError(t, err)
+		id.SetType(helmidentityv1.Type)
+		creds[id.String()] = map[string]string{"username": "admin", "password": password}
 	}
-	transferOnce()
-	// Nexus rejects redeploying mychart-0.1.0; the uploader finds the same content stored.
-	transferOnce()
+	return credentials.NewStaticCredentialsResolver(creds)
+}
 
-	gotDesc, err := createCTFRepository(t, targetCTFPath).GetComponentVersion(ctx, componentName, componentVersion)
+// npmTarball returns a gzipped npm package tarball holding only package/package.json.
+func npmTarball(t *testing.T, packageJSON string) []byte {
+	t.Helper()
+	r := require.New(t)
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gz)
+	r.NoError(tw.WriteHeader(&tar.Header{Name: "package/package.json", Mode: 0o644, Size: int64(len(packageJSON)), Typeflag: tar.TypeReg}))
+	_, err := io.WriteString(tw, packageJSON)
 	r.NoError(err)
-	r.Len(gotDesc.Component.Resources, 1)
-	gotResource := gotDesc.Component.Resources[0]
-	var typedHelm helmaccessv1.Helm
-	r.NoError(helmaccess.Scheme.Convert(gotResource.Access, &typedHelm))
-	r.Equal(helmRepo, typedHelm.HelmRepository)
-	r.Equal("mychart:0.1.0", typedHelm.HelmChart, "helmChart is the chart name and version nexus records")
-	r.NotNil(gotResource.Digest)
-	r.Equal("SHA-256", gotResource.Digest.HashAlgorithm)
-	r.Equal("genericBlobDigest/v1", gotResource.Digest.NormalisationAlgorithm)
-	r.Equal(digestOf(chartTgzBytes).Encoded(), gotResource.Digest.Value)
-
-	// Nexus stores the chart under the path it derives from Chart.yaml and indexes it.
-	r.Equal(chartTgzBytes, nexusGet(t, helmRepo+"/mychart-0.1.0.tgz", adminPassword))
-	r.Contains(string(nexusGet(t, helmRepo+"/index.yaml", adminPassword)), "mychart:")
+	r.NoError(tw.Close())
+	r.NoError(gz.Close())
+	return buf.Bytes()
 }
 
 // startNexus starts a Nexus Repository 3 container, accepts the Community Edition EULA and
-// creates a Helm hosted repository with redeploy disabled. It returns the base URL and the
+// creates Helm, raw and npm hosted repositories with redeploy disabled. It returns the base URL and the
 // admin password.
 func startNexus(t *testing.T) (baseURL, adminPassword string) {
 	t.Helper()
@@ -200,6 +276,11 @@ func startNexus(t *testing.T) (baseURL, adminPassword string) {
 	status, body = nexusRequest(t, http.MethodPost, baseURL+"/service/rest/v1/repositories/raw/hosted", adminPassword,
 		[]byte(`{"name":"raw-hosted","online":true,"storage":{"blobStoreName":"default","strictContentTypeValidation":false,"writePolicy":"allow_once"}}`))
 	r.Equal(http.StatusCreated, status, string(body))
+
+	// maven-releases exists by default.
+	status, body = nexusRequest(t, http.MethodPost, baseURL+"/service/rest/v1/repositories/npm/hosted", adminPassword,
+		[]byte(`{"name":"`+nexusNpmRepository+`","online":true,"storage":{"blobStoreName":"default","strictContentTypeValidation":true,"writePolicy":"allow_once"}}`))
+	r.Equal(http.StatusCreated, status, string(body))
 	return baseURL, adminPassword
 }
 
@@ -226,139 +307,4 @@ func nexusGet(t *testing.T, target, password string) []byte {
 	status, body := nexusRequest(t, http.MethodGet, target, password, nil)
 	require.Equal(t, http.StatusOK, status, string(body))
 	return body
-}
-
-// Test_Integration_TransferWgetResource_NexusRawUploader verifies that a Wget/v1 resource is
-// transferred into a Nexus raw hosted repository via the raw uploader path. The test:
-//   - detects the raw format via the Nexus API;
-//   - asserts the target descriptor resource has a Wget/v1 access pointing at the raw repository;
-//   - downloads the file from Nexus and checks it matches the original content;
-//   - transfers a second time to exercise the reuse path (HEAD 200, search assets, same sha256).
-func Test_Integration_TransferWgetResource_NexusRawUploader(t *testing.T) {
-	t.Parallel()
-	r := require.New(t)
-	ctx := t.Context()
-
-	baseURL, adminPassword := startNexus(t)
-	rawRepo := baseURL + "/repository/raw-hosted"
-
-	// Serve the resource content over HTTP.
-	resourceData := []byte("hello")
-	srcSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "text/plain")
-		_, _ = w.Write(resourceData)
-	}))
-	t.Cleanup(srcSrv.Close)
-
-	componentName := "ocm.software/nexus-raw-uploader-test"
-	componentVersion := "1.0.0"
-	sourceCTFPath := t.TempDir()
-	ctfRepo := createCTFRepository(t, sourceCTFPath)
-
-	wgetAccessObj := &wgetaccessv1.Wget{
-		Type:      runtime.NewVersionedType(wgetaccess.WgetConsumerType, wgetaccessv1.Version),
-		URL:       srcSrv.URL + "/blob.txt",
-		MediaType: "text/plain",
-	}
-	rawWgetAccess := &runtime.Raw{}
-	r.NoError(runtime.NewScheme(runtime.WithAllowUnknown()).Convert(wgetAccessObj, rawWgetAccess))
-
-	r.NoError(ctfRepo.AddComponentVersion(ctx, &descriptor.Descriptor{
-		Meta: descriptor.Meta{Version: "v2"},
-		Component: descriptor.Component{
-			ComponentMeta: descriptor.ComponentMeta{
-				ObjectMeta: descriptor.ObjectMeta{Name: componentName, Version: componentVersion},
-			},
-			Provider: descriptor.Provider{Name: "test-provider"},
-			Resources: []descriptor.Resource{{
-				ElementMeta: descriptor.ElementMeta{
-					ObjectMeta: descriptor.ObjectMeta{Name: "raw-resource", Version: "1.0.0"},
-				},
-				Type:     "blob",
-				Relation: descriptor.ExternalRelation,
-				Access:   rawWgetAccess,
-				Digest: &descriptor.Digest{
-					HashAlgorithm:          "SHA-256",
-					NormalisationAlgorithm: "genericBlobDigest/v1",
-					Value:                  digestOf(resourceData).Encoded(),
-				},
-			}},
-		},
-	}))
-
-	sourceSpec := &ctfrepospec.Repository{
-		Type:     runtime.Type{Name: ctfrepospec.Type, Version: ctfrepospec.Version},
-		FilePath: sourceCTFPath,
-	}
-	targetCTFPath := t.TempDir()
-	targetSpec := &ctfrepospec.Repository{
-		Type:       runtime.Type{Name: ctfrepospec.Type, Version: ctfrepospec.Version},
-		FilePath:   targetCTFPath,
-		AccessMode: "readwrite|create",
-	}
-
-	// Detection via GET /service/rest/v1/repositories/raw-hosted is exercised.
-	uploaders := []transferv1alpha1.UploaderConfig{&transferv1alpha1.NexusUploaderConfig{
-		Type:       runtime.NewVersionedType(transferv1alpha1.NexusUploaderConfigType, transferv1alpha1.Version),
-		MatchSpec:  transferv1alpha1.UploaderMatch{AccessType: runtime.NewVersionedType(wgetaccess.WgetConsumerType, wgetaccessv1.Version)},
-		URL:        baseURL,
-		Repository: "raw-hosted",
-	}}
-
-	id, err := runtime.ParseURLToIdentity(rawRepo)
-	r.NoError(err)
-	id.SetType(helmidentityv1.Type)
-	credResolver := credentials.NewStaticCredentialsResolver(map[string]map[string]string{
-		id.String(): {"username": "admin", "password": adminPassword},
-	})
-
-	transferOnce := func() {
-		tgd, err := transfer.BuildGraphDefinition(ctx,
-			&transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeAllResources},
-			uploaders,
-			transfer.Mapping{
-				Components: []transfer.ComponentID{{Component: componentName, Version: componentVersion}},
-				Target:     targetSpec,
-				Resolver:   transfer.NewRepositoryResolver(ctfRepo, sourceSpec),
-			},
-		)
-		r.NoError(err)
-		repoProvider := provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()))
-		resourceRepo := wgetrepository.NewResourceRepository(nil)
-		b := transfer.NewDefaultBuilder(repoProvider, resourceRepo, credResolver)
-		graph, err := b.BuildAndCheck(tgd)
-		r.NoError(err)
-		r.NoError(graph.Process(ctx))
-	}
-	transferOnce()
-	// Nexus indexes raw assets asynchronously; wait for the search API to reflect the upload
-	// so the second transfer can find the stored checksum and reuse it.
-	time.Sleep(5 * time.Second)
-	// Second transfer: the file is already stored, reuse path (HEAD 200, search assets, same sha256).
-	transferOnce()
-
-	gotDesc, err := createCTFRepository(t, targetCTFPath).GetComponentVersion(ctx, componentName, componentVersion)
-	r.NoError(err)
-	r.Len(gotDesc.Component.Resources, 1)
-	gotResource := gotDesc.Component.Resources[0]
-
-	// The published access must be Wget/v1.
-	r.NotNil(gotResource.Access)
-	r.Equal(wgetaccess.WgetConsumerType, gotResource.Access.GetType().Name,
-		"uploaded resource should carry a Wget access")
-
-	var typedWget wgetaccessv1.Wget
-	r.NoError(wgetaccess.Scheme.Convert(gotResource.Access, &typedWget))
-	expectedURL := fmt.Sprintf("%s/repository/raw-hosted/ocm.software/nexus-raw-uploader-test/1.0.0/raw-resource-1.0.0", baseURL)
-	r.Equal(expectedURL, typedWget.URL,
-		"wget URL should point at the raw repository path")
-
-	// The digest must be SHA-256 of the content.
-	r.NotNil(gotResource.Digest, "transferred resource should carry a digest")
-	r.Equal("SHA-256", gotResource.Digest.HashAlgorithm)
-	r.Equal("genericBlobDigest/v1", gotResource.Digest.NormalisationAlgorithm)
-	r.Equal(digestOf(resourceData).Encoded(), gotResource.Digest.Value)
-
-	// Download the file from Nexus and verify its content.
-	r.Equal(resourceData, nexusGet(t, expectedURL, adminPassword))
 }

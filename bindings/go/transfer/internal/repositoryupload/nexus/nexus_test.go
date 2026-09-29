@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -30,6 +31,8 @@ import (
 	"ocm.software/open-component-model/bindings/go/transfer/internal/repositoryupload/uploadtest"
 	wgetaccess "ocm.software/open-component-model/bindings/go/wget/spec/access"
 	wgetaccessv1 "ocm.software/open-component-model/bindings/go/wget/spec/access/v1"
+	wgetcredsv1 "ocm.software/open-component-model/bindings/go/wget/spec/credentials/v1"
+	wgetidentityv1 "ocm.software/open-component-model/bindings/go/wget/spec/identity/v1"
 )
 
 // fakeNexus emulates the parts of a Nexus Repository 3 hosted repository the uploader uses.
@@ -47,14 +50,23 @@ type fakeNexus struct {
 	typ    string
 	// detectionStatus overrides the response status (0 means 200).
 	detectionStatus int
+	// detectionBody, if set, is written verbatim as the 200 detection response.
+	detectionBody string
+	// headStatus, if set, is the response status of every raw HEAD.
+	headStatus int
+	// componentStatus and componentBody, if the status is set, answer every components API upload.
+	componentStatus int
+	componentBody   string
 	// searchLag is the number of asset searches that find nothing yet, like Nexus indexing
 	// stored assets for search shortly after the upload.
 	searchLag int
 
 	mu       sync.Mutex
 	requests []string
-	stored   map[string]string // <name>-<version> or raw path -> sha256
-	raw      map[string][]byte // raw path -> content
+	// auth is the Authorization header of every request.
+	auth   []string
+	stored map[string]string // <name>-<version> or raw path -> sha256
+	raw    map[string][]byte // raw path -> content
 	// mavenForms are the form values of the components API uploads.
 	mavenForms []map[string][]string
 	// npm maps the sha256 of content Nexus recognizes as an npm package to its name and version.
@@ -82,6 +94,7 @@ func (f *fakeNexus) handle(w http.ResponseWriter, r *http.Request) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.requests = append(f.requests, r.Method+" "+r.URL.Path)
+	f.auth = append(f.auth, r.Header.Get("Authorization"))
 
 	repoPrefix := f.basePath + "/repository/helm-hosted/"
 
@@ -93,6 +106,10 @@ func (f *fakeNexus) handle(w http.ResponseWriter, r *http.Request) {
 		}
 		if status != http.StatusOK {
 			http.Error(w, "forbidden", status)
+			return
+		}
+		if f.detectionBody != "" {
+			_, _ = io.WriteString(w, f.detectionBody)
 			return
 		}
 		_ = json.NewEncoder(w).Encode(map[string]string{"format": f.format, "type": f.typ})
@@ -184,6 +201,10 @@ func (f *fakeNexus) handle(w http.ResponseWriter, r *http.Request) {
 
 	// Components API: a single maven2 asset, stored at its Maven layout path.
 	case r.Method == http.MethodPost && r.URL.Path == f.basePath+"/service/rest/v1/components":
+		if f.componentStatus != 0 {
+			http.Error(w, f.componentBody, f.componentStatus)
+			return
+		}
 		_, params, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
 		form, err := multipart.NewReader(bytes.NewReader(body), params["boundary"]).ReadForm(1 << 20)
 		if err != nil {
@@ -207,7 +228,12 @@ func (f *fakeNexus) handle(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			base := pkg[0][strings.LastIndex(pkg[0], "/")+1:]
-			f.stored[pkg[0]+"/-/"+base+"-"+pkg[1]+".tgz"] = digest
+			key := pkg[0] + "/-/" + base + "-" + pkg[1] + ".tgz"
+			if _, exists := f.stored[key]; exists && f.allowOnce {
+				http.Error(w, "helm-hosted/"+key+" -  cannot be updated as asset already exists and redeploy is not allowed", http.StatusConflict)
+				return
+			}
+			f.stored[key] = digest
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
@@ -231,9 +257,13 @@ func (f *fakeNexus) handle(w http.ResponseWriter, r *http.Request) {
 	// Raw HEAD
 	case r.Method == http.MethodHead && strings.HasPrefix(r.URL.Path, repoPrefix):
 		relPath := strings.TrimPrefix(r.URL.Path, repoPrefix)
-		if _, ok := f.stored[relPath]; ok {
+		_, ok := f.stored[relPath]
+		switch {
+		case f.headStatus != 0:
+			w.WriteHeader(f.headStatus)
+		case ok:
 			w.WriteHeader(http.StatusOK)
-		} else {
+		default:
 			w.WriteHeader(http.StatusNotFound)
 		}
 
@@ -505,6 +535,56 @@ func TestTransform_Raw(t *testing.T) {
 			r.NotContains(req, "PUT", "nothing may be written")
 		}
 	})
+
+	t.Run("custom path", func(t *testing.T) {
+		r := require.New(t)
+		srv := newFakeNexus(t, nil, "", false)
+		srv.format = "raw"
+		s := step(srv.URL, source(""))
+		s.Spec.Path = "files/notes.txt"
+		out, err := transformer(nil).Transform(t.Context(), s)
+		r.NoError(err)
+		r.Equal([]string{"GET " + detectionPath, "HEAD /repository/helm-hosted/files/notes.txt", "PUT /repository/helm-hosted/files/notes.txt"}, srv.recorded())
+		var access wgetaccessv1.Wget
+		r.NoError(wgetaccess.Scheme.Convert(out.(*Transformation).Output.Resource.Access, &access))
+		r.Equal(srv.URL+"/repository/helm-hosted/files/notes.txt", access.URL)
+	})
+
+	t.Run("unexpected HEAD status fails before uploading", func(t *testing.T) {
+		r := require.New(t)
+		srv := newFakeNexus(t, nil, "", false)
+		srv.format = "raw"
+		// Not a 5xx, which the HTTP client retries with backoff.
+		srv.headStatus = http.StatusForbidden
+		_, err := transformer(nil).Transform(t.Context(), step(srv.URL, source(contentDigest)))
+		r.ErrorContains(err, "returned status 403")
+		r.NotContains(srv.recorded(), "PUT "+putPath)
+	})
+
+	t.Run("wrong source digest fails after the upload", func(t *testing.T) {
+		r := require.New(t)
+		srv := newFakeNexus(t, nil, "", false)
+		srv.format = "raw"
+		otherSum := sha256.Sum256([]byte("other"))
+		_, err := transformer(nil).Transform(t.Context(), step(srv.URL, source(hex.EncodeToString(otherSum[:]))))
+		r.ErrorContains(err, "digest mismatch:")
+		r.ErrorContains(err, "nexus keeps the uploaded file at")
+	})
+
+	t.Run("sends target credentials on every request", func(t *testing.T) {
+		r := require.New(t)
+		srv := newFakeNexus(t, nil, "", false)
+		srv.format = "raw"
+		creds := uploadtest.CredentialsByType{wgetidentityv1.Type.String(): &wgetcredsv1.WgetCredentials{
+			Type: wgetcredsv1.WgetCredentialsVersionedType, Username: "u", Password: "p",
+		}}
+		_, err := transformer(creds).Transform(t.Context(), step(srv.URL, source("")))
+		r.NoError(err)
+		r.NotEmpty(srv.auth)
+		for _, auth := range srv.auth {
+			r.Equal("Basic dTpw", auth)
+		}
+	})
 }
 
 func TestTransform_DetectionErrors(t *testing.T) {
@@ -564,6 +644,14 @@ func TestTransform_DetectionErrors(t *testing.T) {
 		r.ErrorContains(err, "returned status 403")
 	})
 
+	t.Run("invalid repository settings", func(t *testing.T) {
+		r := require.New(t)
+		srv := newFakeNexus(t, nil, "", false)
+		srv.detectionBody = "not json"
+		_, err := transformer().Transform(t.Context(), step(srv.URL))
+		r.ErrorContains(err, `failed decoding the settings of nexus repository "helm-hosted"`)
+	})
+
 	t.Run("target credential error prevents any request", func(t *testing.T) {
 		r := require.New(t)
 		srv := newFakeNexus(t, nil, "", false)
@@ -618,7 +706,7 @@ func TestTransform_Maven(t *testing.T) {
 			Spec: &repositoryupload.Spec{
 				Resource:         source,
 				ComponentVersion: &repositoryupload.ComponentVersion{Component: "ocm.software/test", Version: "1.0.0"},
-				URL:              srv.URL,
+				URL:              srv.URL + srv.basePath,
 				Repository:       "helm-hosted",
 				Path:             path,
 			},
@@ -693,6 +781,28 @@ func TestTransform_Maven(t *testing.T) {
 			r.NotContains(srv.recorded(), "POST "+components)
 		})
 	}
+
+	t.Run("components API errors are returned", func(t *testing.T) {
+		r := require.New(t)
+		srv := newServer(t)
+		srv.componentStatus = http.StatusBadRequest
+		srv.componentBody = `[{"id":"*","message":"Version policy mismatch"}]`
+		_, err := transform(t, srv, mavenPath)
+		r.ErrorContains(err, "returned status 400")
+		r.ErrorContains(err, "Version policy mismatch")
+	})
+
+	t.Run("context path is kept", func(t *testing.T) {
+		r := require.New(t)
+		srv := newFakeNexus(t, nil, "/nexus", false)
+		srv.format = "maven2"
+		out, err := transform(t, srv, mavenPath)
+		r.NoError(err)
+		r.Contains(srv.recorded(), "POST /nexus"+components)
+		var access wgetaccessv1.Wget
+		r.NoError(wgetaccess.Scheme.Convert(out.(*Transformation).Output.Resource.Access, &access))
+		r.Equal(srv.URL+"/nexus/repository/helm-hosted/"+mavenPath, access.URL)
+	})
 }
 
 func TestParseMavenPath(t *testing.T) {
@@ -801,5 +911,42 @@ func TestTransform_Npm(t *testing.T) {
 		srv := newServer(t)
 		_, err := transform(t, srv, "", "packages/demo.tgz")
 		r.ErrorContains(err, "path is not supported for nexus npm repositories")
+	})
+
+	t.Run("fails when the search never finds the uploaded tarball", func(t *testing.T) {
+		r := require.New(t)
+		srv := newServer(t)
+		srv.searchLag = 1000
+		_, err := transform(t, srv, "", "")
+		r.ErrorContains(err, "but its search does not find it by SHA-256")
+		got := srv.recorded()
+		upload := slices.Index(got, "POST /service/rest/v1/components")
+		r.NotEqual(-1, upload)
+		searches := 0
+		for _, req := range got[upload+1:] {
+			r.Equal("GET /service/rest/v1/search/assets", req)
+			searches++
+		}
+		r.Equal(repositoryupload.PollAttempts, searches, "the search is polled after the upload")
+	})
+
+	t.Run("wrong source digest fails after the upload", func(t *testing.T) {
+		r := require.New(t)
+		srv := newServer(t)
+		otherSum := sha256.Sum256([]byte("other"))
+		_, err := transform(t, srv, hex.EncodeToString(otherSum[:]), "")
+		r.ErrorContains(err, "digest mismatch:")
+		r.ErrorContains(err, "nexus keeps the uploaded package in repository helm-hosted")
+	})
+
+	t.Run("redeploy rejection is returned", func(t *testing.T) {
+		r := require.New(t)
+		srv := newFakeNexus(t, nil, "", true)
+		srv.format = "npm"
+		srv.npm = map[string][2]string{contentDigest: {"@acme/demo", "2.0.0"}}
+		srv.store(strings.TrimPrefix(stored, "/"), strings.Repeat("ab", 32))
+		_, err := transform(t, srv, "", "")
+		r.ErrorContains(err, "returned status 409")
+		r.ErrorContains(err, "redeploy is not allowed")
 	})
 }

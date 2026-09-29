@@ -93,6 +93,8 @@ type fakeArtifactory struct {
 	rclass      string
 	// detectionStatus overrides the response status of the detection endpoint (0 means 200).
 	detectionStatus int
+	// detectionBody, if set, is written verbatim as the 200 detection response.
+	detectionBody string
 	// storedPath maps a deploy path to the path the file is stored under, like Artifactory
 	// storing a Maven -SNAPSHOT file under its unique version. nil stores files as requested.
 	storedPath func(path string) string
@@ -164,6 +166,10 @@ func (f *fakeArtifactory) handle(w http.ResponseWriter, r *http.Request) {
 		}
 		if status != http.StatusOK {
 			http.Error(w, "forbidden", status)
+			return
+		}
+		if f.detectionBody != "" {
+			_, _ = io.WriteString(w, f.detectionBody)
 			return
 		}
 		_ = json.NewEncoder(w).Encode(map[string]string{"packageType": f.packageType, "rclass": f.rclass})
@@ -720,12 +726,122 @@ func TestTransform_File(t *testing.T) {
 			r.NotContains(req.query, "chart.name", "no chart property should be requested")
 		}
 	})
+
+	withDigest := func(value string) *descriptorv2.Resource {
+		res := source()
+		res.Digest = &descriptorv2.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: "genericBlobDigest/v1", Value: value}
+		return res
+	}
+	bodyPUTs := func(reqs []artifactoryRequest) int {
+		n := 0
+		for _, req := range reqs {
+			if req.method == http.MethodPut && !req.deploy {
+				n++
+			}
+		}
+		return n
+	}
+
+	t.Run("generic reuses content artifactory already stores by checksum", func(t *testing.T) {
+		r := require.New(t)
+		srv := newFakeArtifactory(t, nil)
+		srv.packageType = "generic"
+		srv.contents[contentDigest] = true
+		out, err := transformer().Transform(t.Context(), step(srv.URL, withDigest(contentDigest)))
+		r.NoError(err)
+
+		got := srv.recorded()
+		r.Equal([]string{"GET " + detectionPath, "GET " + storagePath, "PUT " + putPath}, methods(got))
+		r.True(got[2].deploy)
+		r.Empty(got[2].body)
+		r.Equal(owner, got[2].properties)
+		var access wgetaccessv1.Wget
+		r.NoError(wgetaccess.Scheme.Convert(out.(*Transformation).Output.Resource.Access, &access))
+		r.Equal(srv.URL+"/artifactory/helm-local/"+genericPath, access.URL)
+	})
+
+	t.Run("generic never overwrites a file stored for another resource", func(t *testing.T) {
+		r := require.New(t)
+		srv := newFakeArtifactory(t, nil)
+		srv.packageType = "generic"
+		srv.store(genericPath, strings.Repeat("ab", 32), map[string]string{"ocm.component.name": "other"})
+		_, err := transformer().Transform(t.Context(), step(srv.URL, source()))
+		r.ErrorContains(err, "refusing to overwrite it, configure a different path")
+		r.Zero(bodyPUTs(srv.recorded()))
+	})
+
+	t.Run("generic upload with a wrong source digest is rejected", func(t *testing.T) {
+		r := require.New(t)
+		srv := newFakeArtifactory(t, nil)
+		srv.packageType = "generic"
+		otherSum := sha256.Sum256([]byte("other"))
+		_, err := transformer().Transform(t.Context(), step(srv.URL, withDigest(hex.EncodeToString(otherSum[:]))))
+		r.ErrorContains(err, "returned status 409")
+		r.False(srv.stored(genericPath))
+	})
+
+	t.Run("generic uses target credentials of the repository URL", func(t *testing.T) {
+		r := require.New(t)
+		srv := newFakeArtifactory(t, nil)
+		srv.packageType = "generic"
+		tr := transformer()
+		tr.CredentialProvider = uploadtest.CredentialsByType{wgetidentityv1.Type.String(): &wgetcredsv1.WgetCredentials{
+			Type: wgetcredsv1.WgetCredentialsVersionedType, IdentityToken: "tok",
+		}}
+		_, err := tr.Transform(t.Context(), step(srv.URL, source()))
+		r.NoError(err)
+		got := srv.recorded()
+		r.NotEmpty(got)
+		for _, req := range got {
+			r.Equal("Bearer tok", req.authorization, req.method+" "+req.path)
+		}
+	})
+
+	t.Run("npm re-transfer reuses the stored tarball", func(t *testing.T) {
+		r := require.New(t)
+		srv := newFakeArtifactory(t, nil)
+		srv.packageType = "npm"
+		srv.npm = map[string][2]string{contentDigest: {"renamed", "9.9.9"}}
+		_, err := transformer().Transform(t.Context(), step(srv.URL, withDigest(contentDigest)))
+		r.NoError(err)
+		first := len(srv.recorded())
+
+		_, err = transformer().Transform(t.Context(), step(srv.URL, withDigest(contentDigest)))
+		r.NoError(err)
+		second := srv.recorded()[first:]
+		r.Zero(bodyPUTs(second), "the stored tarball is not uploaded again")
+		got := methods(second)
+		r.Equal("GET "+storagePath+".tgz?properties=npm.name,npm.version", got[len(got)-1])
+	})
+
+	t.Run("npm custom .tgz path", func(t *testing.T) {
+		r := require.New(t)
+		srv := newFakeArtifactory(t, nil)
+		srv.packageType = "npm"
+		srv.npm = map[string][2]string{contentDigest: {"renamed", "9.9.9"}}
+		s := step(srv.URL, source())
+		s.Spec.Path = "packages/renamed-9.9.9.tgz"
+		out, err := transformer().Transform(t.Context(), s)
+		r.NoError(err)
+
+		var puts []string
+		for _, req := range srv.recorded() {
+			if req.method == http.MethodPut && !req.deploy {
+				puts = append(puts, req.path)
+			}
+		}
+		r.Equal([]string{"/artifactory/helm-local/packages/renamed-9.9.9.tgz"}, puts)
+		var access wgetaccessv1.Wget
+		r.NoError(wgetaccess.Scheme.Convert(out.(*Transformation).Output.Resource.Access, &access))
+		r.Equal(srv.URL+"/artifactory/helm-local/packages/renamed-9.9.9.tgz", access.URL)
+	})
 }
 
 func TestTransform_DetectionErrors(t *testing.T) {
 	scheme := runtime.NewScheme()
 	scheme.MustRegisterWithAlias(&Transformation{}, VersionedType)
 	scheme.MustRegisterScheme(helmaccess.Scheme)
+	scheme.MustRegisterScheme(wgetaccess.Scheme)
 
 	source := func() *descriptorv2.Resource {
 		return &descriptorv2.Resource{
@@ -791,6 +907,33 @@ func TestTransform_DetectionErrors(t *testing.T) {
 		srv.detectionStatus = http.StatusForbidden
 		_, err := transformer().Transform(t.Context(), step(srv.URL))
 		r.ErrorContains(err, "returned status 403")
+		r.False(hasPUT(srv.recorded()))
+	})
+
+	t.Run("federated repository is accepted", func(t *testing.T) {
+		r := require.New(t)
+		srv := newFakeArtifactory(t, nil)
+		srv.rclass = "federated"
+		srv.packageType = "generic"
+		_, err := transformer().Transform(t.Context(), step(srv.URL))
+		r.NoError(err)
+	})
+
+	t.Run("package type is case-insensitive", func(t *testing.T) {
+		r := require.New(t)
+		srv := newFakeArtifactory(t, nil)
+		srv.packageType = "Maven"
+		_, err := transformer().Transform(t.Context(), step(srv.URL))
+		r.NoError(err)
+		r.True(hasPUT(srv.recorded()))
+	})
+
+	t.Run("invalid repository configuration", func(t *testing.T) {
+		r := require.New(t)
+		srv := newFakeArtifactory(t, nil)
+		srv.detectionBody = "not json"
+		_, err := transformer().Transform(t.Context(), step(srv.URL))
+		r.ErrorContains(err, `failed decoding the configuration of artifactory repository "helm-local"`)
 		r.False(hasPUT(srv.recorded()))
 	})
 

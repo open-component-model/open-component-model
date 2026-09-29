@@ -29,6 +29,9 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/transfer"
 	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
+	wgetrepository "ocm.software/open-component-model/bindings/go/wget/repository"
+	wgetaccess "ocm.software/open-component-model/bindings/go/wget/spec/access"
+	wgetaccessv1 "ocm.software/open-component-model/bindings/go/wget/spec/access/v1"
 )
 
 // Test_Integration_TransferHelmResource_ArtifactoryHelmUploaderDeploysChart verifies that a Helm/v1
@@ -52,7 +55,7 @@ func Test_Integration_TransferHelmResource_ArtifactoryHelmUploaderDeploysChart(t
 	t.Cleanup(srcSrv.Close)
 
 	// Target "Artifactory": records chart properties for the chart .tgz like Artifactory does.
-	targetSrv := newFakeArtifactory(t, chartTgzBytes)
+	targetSrv := newFakeArtifactory(t, chartTgzBytes, "helm-local", "helm")
 
 	componentName := "ocm.software/jfrog-helm-uploader-test"
 	componentVersion := "1.0.0"
@@ -221,7 +224,7 @@ func Test_Integration_TransferLocalBlobHelmResource_ArtifactoryHelmUploaderDeplo
 			r := require.New(t)
 
 			// Target "Artifactory": records chart properties for the chart .tgz like Artifactory does.
-			targetSrv := newFakeArtifactory(t, chartTgzBytes)
+			targetSrv := newFakeArtifactory(t, chartTgzBytes, "helm-local", "helm")
 
 			componentName := "ocm.software/jfrog-helm-local-blob-test"
 			componentVersion := "1.0.0"
@@ -339,35 +342,40 @@ func storedKeys(m map[string][]byte) []string {
 	return keys
 }
 
-// fakeArtifactory emulates the Artifactory Helm repository endpoints the helm uploader uses. Like Artifactory, it records chart name and version properties for deployed content it
+// fakeArtifactory emulates the endpoints of an Artifactory local repository the uploader uses.
+// Like Artifactory, it records chart name and version properties for deployed content it
 // recognizes as a chart; here, only the given chart archive is recognized.
 type fakeArtifactory struct {
 	*httptest.Server
-	chartSHA string
+	chartSHA                string
+	repository, packageType string
 
 	mu      sync.Mutex
 	files   map[string][]byte
 	headers map[string]http.Header
 }
 
-func newFakeArtifactory(t *testing.T, chart []byte) *fakeArtifactory {
+func newFakeArtifactory(t *testing.T, chart []byte, repository, packageType string) *fakeArtifactory {
 	t.Helper()
 	sum := sha256.Sum256(chart)
-	f := &fakeArtifactory{chartSHA: hex.EncodeToString(sum[:]), files: map[string][]byte{}, headers: map[string]http.Header{}}
+	f := &fakeArtifactory{
+		chartSHA: hex.EncodeToString(sum[:]), repository: repository, packageType: packageType,
+		files: map[string][]byte{}, headers: map[string]http.Header{},
+	}
 	f.Server = httptest.NewServer(http.HandlerFunc(f.handle))
 	t.Cleanup(f.Close)
 	return f
 }
 
 func (f *fakeArtifactory) handle(w http.ResponseWriter, req *http.Request) {
-	const storagePrefix = "/artifactory/api/storage/helm-local/"
+	storagePrefix, filePrefix := "/artifactory/api/storage/"+f.repository+"/", "/artifactory/"+f.repository+"/"
 	// Deploy matrix parameters (;key=value) set properties; they are not part of the path.
 	path, _, _ := strings.Cut(req.URL.Path, ";")
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	switch {
-	case req.Method == http.MethodGet && path == "/artifactory/api/repositories/helm-local":
-		_, _ = io.WriteString(w, `{"packageType":"helm","rclass":"local"}`)
+	case req.Method == http.MethodGet && path == "/artifactory/api/repositories/"+f.repository:
+		_, _ = fmt.Fprintf(w, `{"packageType":%q,"rclass":"local"}`, f.packageType)
 	case req.Method == http.MethodPut && req.Header.Get("X-Checksum-Deploy") == "true":
 		// Artifactory has no content with this checksum yet.
 		w.WriteHeader(http.StatusNotFound)
@@ -381,7 +389,7 @@ func (f *fakeArtifactory) handle(w http.ResponseWriter, req *http.Request) {
 		f.headers[path] = req.Header.Clone()
 		w.WriteHeader(http.StatusCreated)
 	case req.Method == http.MethodGet && strings.HasPrefix(path, storagePrefix):
-		body, ok := f.files["/artifactory/helm-local/"+strings.TrimPrefix(path, storagePrefix)]
+		body, ok := f.files[filePrefix+strings.TrimPrefix(path, storagePrefix)]
 		if !req.URL.Query().Has("properties") {
 			// File info: the location is free until a chart is deployed.
 			if !ok {
@@ -414,4 +422,41 @@ func (f *fakeArtifactory) storedPaths() []string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return storedKeys(f.files)
+}
+
+// Test_Integration_TransferWgetResource_ArtifactoryMavenUploader verifies that a Wget/v1 resource
+// routed through an Artifactory uploader into a maven repository is deployed as is at the
+// configured Maven layout path and re-described with a Wget/v1 access on the stored file.
+func Test_Integration_TransferWgetResource_ArtifactoryMavenUploader(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
+	const component, version = "ocm.software/artifactory-maven-uploader-test", "1.0.0"
+	data := []byte("jar")
+	targetSrv := newFakeArtifactory(t, nil, "maven-local", "maven")
+	ctfRepo, sourceSpec := addWgetComponent(t, component, version,
+		wgetFile{name: "demo-1.0.0.jar", resource: "jar", version: "1.0.0", mediaType: "application/java-archive", data: data})
+	targetPath, targetSpec := newTargetCTF(t)
+
+	uploader := &transferv1alpha1.ArtifactoryUploaderConfig{
+		Type:       runtime.NewVersionedType(transferv1alpha1.ArtifactoryUploaderConfigType, transferv1alpha1.Version),
+		MatchSpec:  transferv1alpha1.UploaderMatch{AccessType: runtime.NewVersionedType(wgetaccess.WgetConsumerType, wgetaccessv1.Version)},
+		URL:        targetSrv.URL,
+		Repository: "maven-local",
+		Path:       `${"com/example/demo/" + resource.version + "/demo-" + resource.version + ".jar"}`,
+	}
+	transferOnce(t, ctfRepo, sourceSpec, targetSpec, uploader, wgetrepository.NewResourceRepository(nil), nil, component, version)
+
+	const stored = "/artifactory/maven-local/com/example/demo/1.0.0/demo-1.0.0.jar"
+	got, _, ok := targetSrv.stored(stored)
+	r.True(ok, "stored paths: %v", targetSrv.storedPaths())
+	r.Equal(data, got)
+
+	gotDesc, err := createCTFRepository(t, targetPath).GetComponentVersion(t.Context(), component, version)
+	r.NoError(err)
+	r.Len(gotDesc.Component.Resources, 1)
+	gotResource := gotDesc.Component.Resources[0]
+	var access wgetaccessv1.Wget
+	r.NoError(wgetaccess.Scheme.Convert(gotResource.Access, &access))
+	r.Equal(targetSrv.URL+stored, access.URL)
+	r.Equal(&descriptor.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: "genericBlobDigest/v1", Value: digestOf(data).Encoded()}, gotResource.Digest)
 }
