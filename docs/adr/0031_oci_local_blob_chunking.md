@@ -238,7 +238,7 @@ The representation-level writer should use this capability for direct chunk writ
 * CTF streams descriptor-backed writes, but must be extended to implement `StreamingPusher` before it can derive and return a digest during the write; until then, unknown-digest chunks require bounded pre-upload staging;
 * retry, redirect, cancellation, and descriptor verification remain the responsibility of the remote streaming implementation.
 
-### Existing chunked blob
+### Transferring an Already Chunked Blob
 
 `maxChunkSize` is a maximum accepted size, not a desired canonical layout.
 
