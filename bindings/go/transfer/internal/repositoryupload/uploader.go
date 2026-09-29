@@ -473,6 +473,11 @@ func (c *Client) Do(ctx context.Context, method, target string, body io.Reader, 
 		req.Header[k] = v
 	}
 	client := ocmhttp.New(ocmhttp.WithConfig(c.httpConfig))
+	if method != http.MethodGet && method != http.MethodHead {
+		// Following a redirect turns PUT and POST into a GET, so a redirect to e.g. a login page
+		// would report an upload as successful that stored nothing. The 3xx fails the request instead.
+		client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	}
 	if err := httpauth.Apply(ctx, req, &client, c.creds); err != nil {
 		return nil, fmt.Errorf("failed applying target credentials: %w", err)
 	}

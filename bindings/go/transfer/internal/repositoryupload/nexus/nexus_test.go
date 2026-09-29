@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -62,6 +63,9 @@ type fakeNexus struct {
 	// searchLag is the number of asset searches that find nothing yet, like Nexus indexing
 	// stored assets for search shortly after the upload.
 	searchLag int
+	// assetPageSize, if set, pages the asset search with continuation tokens, listing sibling
+	// assets first, like a name with search wildcards that puts the exact asset on a later page.
+	assetPageSize int
 
 	mu       sync.Mutex
 	requests []string
@@ -155,6 +159,17 @@ func (f *fakeNexus) handle(w http.ResponseWriter, r *http.Request) {
 		}
 		if items == nil {
 			items = []item{}
+		}
+		if f.assetPageSize > 0 {
+			slices.Reverse(items)
+			start, _ := strconv.Atoi(q.Get("continuationToken"))
+			end := min(start+f.assetPageSize, len(items))
+			page := map[string]any{"items": items[start:end]}
+			if end < len(items) {
+				page["continuationToken"] = strconv.Itoa(end)
+			}
+			_ = json.NewEncoder(w).Encode(page)
+			return
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"items": items})
 		return
@@ -434,6 +449,15 @@ func TestTransform(t *testing.T) {
 			wantRequests: []string{detect, "HEAD " + repo + rawPath, searchAssets, searchAssets, searchAssets},
 		},
 		{
+			name:         "raw file with the same content on a later search page is reused",
+			repoType:     "raw",
+			content:      hello,
+			resource:     withDigest(helloDigest),
+			seed:         func(srv *fakeNexus) { srv.store(rawPath, helloDigest); srv.assetPageSize = 1 },
+			wantAccess:   access{url: repo + rawPath},
+			wantRequests: []string{detect, "HEAD " + repo + rawPath, searchAssets, searchAssets},
+		},
+		{
 			name:     "raw file with other content at the path is never overwritten",
 			repoType: "raw",
 			content:  hello,
@@ -539,6 +563,23 @@ func TestTransform(t *testing.T) {
 			path:     mavenPath,
 			seed:     store(mavenPath, otherDigest),
 			wantErr:  "the uploader never overwrites files in maven2 repositories",
+			check:    nothingWritten,
+		},
+		{
+			name:       "maven uploads a POM declaring the coordinates of its path",
+			repoType:   "maven2",
+			content:    []byte(`<project><parent><groupId>com.example</groupId></parent><artifactId>demo</artifactId><version>1.0.0</version></project>`),
+			resource:   resource("demo", "1.0.0", ""),
+			path:       "com/example/demo/1.0.0/demo-1.0.0.pom",
+			wantAccess: access{url: repo + "com/example/demo/1.0.0/demo-1.0.0.pom"},
+		},
+		{
+			name:     "maven rejects a POM declaring other coordinates than its path",
+			repoType: "maven2",
+			content:  []byte(`<project><groupId>org.example</groupId><artifactId>actual</artifactId><version>2.0</version></project>`),
+			resource: resource("demo", "1.0.0", ""),
+			path:     "com/example/demo/1.0.0/demo-1.0.0.pom",
+			wantErr:  `POM declares org.example:actual:2.0, but path "com/example/demo/1.0.0/demo-1.0.0.pom" is com.example:demo:1.0.0`,
 			check:    nothingWritten,
 		},
 		{

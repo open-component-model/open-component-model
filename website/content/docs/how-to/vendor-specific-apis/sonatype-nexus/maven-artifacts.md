@@ -121,6 +121,8 @@ mvn dependency:get -Dartifact=com.example:demo:1.0.0 \
 - **Stored files are never overwritten**, see
   [Existing files at the upload path]({{< relref "docs/how-to/vendor-specific-apis/sonatype-nexus/_index.md#existing-files-at-the-upload-path" >}}).
 - A `path` outside the Maven layout, or no `path`, fails before anything is uploaded.
+- A POM must declare the coordinates of its `path`: Nexus stores a POM under the coordinates
+  it declares, so a mismatch fails before anything is uploaded.
 
 ## Troubleshooting
 
@@ -129,6 +131,12 @@ mvn dependency:get -Dartifact=com.example:demo:1.0.0 \
 **Cause:** `path` is missing or not in the Maven layout.
 
 **Fix:** Set a `path` in the Maven layout.
+
+### Symptom: `POM declares …, but path "…" is …`
+
+**Cause:** The `groupId`, `artifactId` or `version` in the POM differ from those in `path`.
+
+**Fix:** Set a `path` that matches the POM coordinates.
 
 ### Symptom: `Version policy mismatch, cannot upload SNAPSHOT content to RELEASE repositories`
 

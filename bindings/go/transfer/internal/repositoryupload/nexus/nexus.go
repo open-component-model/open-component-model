@@ -2,9 +2,12 @@
 package nexus
 
 import (
+	"bytes"
+	"cmp"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/xml"
 	"fmt"
 	"io"
 	"mime/multipart"
@@ -16,6 +19,7 @@ import (
 	"time"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/transfer/internal/repositoryupload"
@@ -262,19 +266,30 @@ type asset struct {
 	} `json:"checksum"`
 }
 
-// searchAssets returns the first page of the assets of the repository Nexus's asset search
-// finds with query.
+// searchAssets returns all assets of the repository Nexus's asset search finds with query,
+// following continuation tokens: a name with search wildcards (e.g. *) can match more assets
+// than fit on the first page.
 func searchAssets(ctx context.Context, c *repositoryupload.Client, spec *uploadv1alpha1.RepositoryUploadSpec, query url.Values) ([]asset, error) {
 	base, err := url.JoinPath(spec.URL, "service", "rest", "v1", "search", "assets")
 	if err != nil {
 		return nil, fmt.Errorf("invalid nexus url: %w", err)
 	}
 	query.Set("repository", spec.Repository)
-	var page struct {
-		Items []asset `json:"items"`
+	var items []asset
+	for {
+		var page struct {
+			Items             []asset `json:"items"`
+			ContinuationToken string  `json:"continuationToken"`
+		}
+		if err := c.Send(ctx, http.MethodGet, base+"?"+query.Encode(), nil, -1, nil, &page); err != nil {
+			return nil, err
+		}
+		items = append(items, page.Items...)
+		if page.ContinuationToken == "" {
+			return items, nil
+		}
+		query.Set("continuationToken", page.ContinuationToken)
 	}
-	err = c.Send(ctx, http.MethodGet, base+"?"+query.Encode(), nil, -1, nil, &page)
-	return page.Items, err
 }
 
 // mavenCoordinates are the Maven coordinates of a single file.
@@ -338,6 +353,11 @@ func mavenUpload(ctx context.Context, c *repositoryupload.Client, spec *uploadv1
 	coords, err := parseMavenPath(spec.Path)
 	if err != nil {
 		return "", err
+	}
+	if coords.extension == "pom" {
+		if content, err = checkPOM(content, coords, spec.Path); err != nil {
+			return "", err
+		}
 	}
 	if strings.HasSuffix(coords.version, "-SNAPSHOT") {
 		return rawFormat.put(ctx, c, spec, content, target, mediaType)
@@ -470,3 +490,42 @@ func (s *npmStore) find(ctx context.Context, c *repositoryupload.Client, sha256H
 	}
 	return false, nil
 }
+
+// checkPOM reads a POM and fails unless its coordinates are those of path: the components API
+// stores a POM under the coordinates it declares, ignoring the form fields, so a mismatch would
+// write to a location that was never checked. It returns the POM to upload.
+func checkPOM(content blob.ReadOnlyBlob, coords mavenCoordinates, path string) (blob.ReadOnlyBlob, error) {
+	rc, err := content.ReadCloser()
+	if err != nil {
+		return nil, fmt.Errorf("failed opening content: %w", err)
+	}
+	defer func() { _ = rc.Close() }()
+	data, err := io.ReadAll(io.LimitReader(rc, maxPOMBytes+1))
+	if err != nil {
+		return nil, fmt.Errorf("failed reading POM: %w", err)
+	}
+	if len(data) > maxPOMBytes {
+		return nil, fmt.Errorf("POM at %q exceeds %d bytes", path, maxPOMBytes)
+	}
+	var pom struct {
+		GroupID    string `xml:"groupId"`
+		ArtifactID string `xml:"artifactId"`
+		Version    string `xml:"version"`
+		Parent     struct {
+			GroupID string `xml:"groupId"`
+			Version string `xml:"version"`
+		} `xml:"parent"`
+	}
+	if err := xml.Unmarshal(data, &pom); err != nil {
+		return nil, fmt.Errorf("content for %q is not a POM: %w", path, err)
+	}
+	groupID, version := cmp.Or(pom.GroupID, pom.Parent.GroupID), cmp.Or(pom.Version, pom.Parent.Version)
+	if groupID != coords.groupID || pom.ArtifactID != coords.artifactID || version != coords.version {
+		return nil, fmt.Errorf("POM declares %s:%s:%s, but path %q is %s:%s:%s; nexus stores a POM under the coordinates it declares",
+			groupID, pom.ArtifactID, version, path, coords.groupID, coords.artifactID, coords.version)
+	}
+	return inmemory.New(bytes.NewReader(data), inmemory.WithSize(int64(len(data)))), nil
+}
+
+// maxPOMBytes bounds the POM read into memory for checkPOM.
+const maxPOMBytes = 1 << 20
