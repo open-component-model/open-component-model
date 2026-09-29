@@ -53,7 +53,7 @@ so scope the rule with `match` so every matched resource has one. A value withou
 
 `resource.digest.value` is the **hex** digest and `resource.digest.hashAlgorithm`
 is the OCM algorithm name (e.g. `SHA-256`). Two inbuilt CEL functions build a
-strictly conformant
+standard
 [`Content-Digest`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Digest)
 / `Repr-Digest` field (RFC 9530):
 

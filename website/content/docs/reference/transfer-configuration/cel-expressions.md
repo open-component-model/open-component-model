@@ -1,11 +1,11 @@
 ---
 title: "CEL Expressions"
-description: "Reference for the CEL expressions used by uploader targetURL, header and path fields."
+description: "Reference for the CEL expressions in the target URL, header and path fields of uploaders."
 weight: 5
 toc: true
 ---
 
-`targetURL`, every `header` value and the Artifactory/Nexus uploader's `path` are
+`targetURL`, every `header` value and the `path` of the Artifactory and Nexus uploaders are
 [CEL](https://cel.dev/) expressions — the same expression language the transfer
 graph uses to resolve every other field. A CEL value **must be wrapped in `${…}`**,
 matching how every other CEL field is written in the transfer graph. It is
@@ -46,7 +46,7 @@ function (CEL has no URL parser). `url(<string>)` (also callable as
 `<string>.url()`) parses a URL string and returns a map with the string keys
 `scheme`, `host`, `hostname`, `port`, `path`, `rawPath`, `rawQuery`, `fragment`,
 and `user`. For a `Wget/v1` source, `url(resource.access.url).path` yields the
-source URL's path. Because the field set is derived from the matched resource's
+path of the source URL. Because the field set is derived from the matched resource's
 own access, an expression may only reference fields that exist on every resource
 the uploader matches — scope the rule with `match.accessType` so all matched
 resources share a shape.
