@@ -36,7 +36,7 @@ flowchart LR
     Transfer -- "rewrite access" --> Descriptor
 ```
 
-When a resource's access type matches the uploader's `match`, transfer streams the
+When a resource's access type matches the `match` of the uploader, transfer streams the
 resource's bytes straight from the source into an HTTP request to your target URL,
 computes (or verifies) its digest as the bytes pass through, and records a new
 `Wget/v1` access on the transferred resource pointing at the upload target.

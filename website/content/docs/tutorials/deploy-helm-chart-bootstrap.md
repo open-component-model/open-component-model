@@ -471,30 +471,10 @@ Build the component version locally:
 ocm add cv
 ```
 
-Transfer to your registry with `--uploader localblob` and an OCI uploader configuration to enable localization. The OCI uploader is required so the Helm chart and image land as OCI artifacts in the target registry, keeping image references the RGD can rewrite:
+Transfer to your registry with the OCI uploader to enable localization. `--uploader oci` makes the Helm chart and image land as OCI artifacts in the target registry, keeping image references the RGD can rewrite; `--uploader localblob` copies every other resource:
 
 ```bash
-cat > oci-uploader.yaml << 'EOF'
-type: generic.config.ocm.software/v1
-configurations:
-  - type: oci.uploader.transfer.config.ocm.software/v1alpha1
-    imageReference: |-
-      ${target.baseUrl
-        + (target.subPath == "" ? "" : "/" + target.subPath)
-        + "/" + (has(resource.access.referenceName)
-          ? resource.access.referenceName
-          : has(resource.access.helmChart)
-            ? (url(resource.access.helmRepository).path.split("/") + [resource.access.helmChart.split(":")[0]]).filter(s, s != "").join("/")
-              + (has(resource.access.version) && resource.access.version != ""
-                ? ":" + resource.access.version
-                : (resource.access.helmChart.contains(":") ? ":" + resource.access.helmChart.split(":")[1] : ""))
-            : resource.access.toOCI().repository
-              + (resource.access.toOCI().tag == "" ? "" : ":" + resource.access.toOCI().tag))}
-EOF
-```
-
-```bash
-ocm transfer cv --uploader localblob --config oci-uploader.yaml transport-archive//ocm.software/ocm-k8s-toolkit/bootstrap:1.0.0 $OCM_REPO
+ocm transfer cv --uploader oci --uploader localblob transport-archive//ocm.software/ocm-k8s-toolkit/bootstrap:1.0.0 $OCM_REPO
 ```
 
 {{< /step >}}

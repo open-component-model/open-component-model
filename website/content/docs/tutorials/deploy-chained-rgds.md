@@ -313,36 +313,14 @@ On success it prints a summary table:
  ocm.software/ocm-k8s-toolkit/system │ 1.0.0   │ ocm.software
 ```
 
-Transfer it to your registry. `--uploader localblob` copies the image into your registry instead
-of leaving the component pointing back at `ghcr.io/stefanprodan`, and the OCI uploader
-configuration creates a standalone OCI image that can be pulled individually; see [Resource
+Transfer it to your registry. `--uploader oci` uploads the image as a standalone OCI image in
+your registry that can be pulled individually, instead of leaving the component pointing back at
+`ghcr.io/stefanprodan`; `--uploader localblob` copies every other resource. See [Resource
 Handling: References vs. Copies]({{< relref "docs/concepts/transfer-concept.md#resource-handling-references-vs-copies" >}})
 for why that distinction exists.
 
-Create an OCM config file for the OCI uploader:
-
 ```bash
-cat > oci-uploader.yaml << 'EOF'
-type: generic.config.ocm.software/v1
-configurations:
-  - type: oci.uploader.transfer.config.ocm.software/v1alpha1
-    imageReference: |-
-      ${target.baseUrl
-        + (target.subPath == "" ? "" : "/" + target.subPath)
-        + "/" + (has(resource.access.referenceName)
-          ? resource.access.referenceName
-          : has(resource.access.helmChart)
-            ? (url(resource.access.helmRepository).path.split("/") + [resource.access.helmChart.split(":")[0]]).filter(s, s != "").join("/")
-              + (has(resource.access.version) && resource.access.version != ""
-                ? ":" + resource.access.version
-                : (resource.access.helmChart.contains(":") ? ":" + resource.access.helmChart.split(":")[1] : ""))
-            : resource.access.toOCI().repository
-              + (resource.access.toOCI().tag == "" ? "" : ":" + resource.access.toOCI().tag))}
-EOF
-```
-
-```bash
-ocm transfer cv --uploader localblob --config oci-uploader.yaml \
+ocm transfer cv --uploader oci --uploader localblob \
   "transport-archive//ocm.software/ocm-k8s-toolkit/system:1.0.0" $OCM_REPO
 ```
 

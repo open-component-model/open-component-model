@@ -81,18 +81,11 @@ configurations:
     method: PUT
   # 3. OCI images, Helm charts and OCI-manifest local blobs become separate OCI
   #    artifacts next to the component version (former uploadType: ociArtifact).
+  #    Default match and imageReference.
   - type: oci.uploader.transfer.config.ocm.software/v1alpha1
-    match: >-                                   # default
-      target.type == "OCIRepository"
-      && (resource.access.isType(["OCIImage", "Helm"])
-        || (resource.access.isType("LocalBlob")
-          && isOCIManifest(resource.access.mediaType)
-          && has(resource.access.referenceName)))
-    # imageReference omitted = default
   # 4. Everything the rules above did not select is embedded as a local blob
-  #    (former copyMode: allResources).
+  #    (former copyMode: allResources). Default match.
   - type: localblob.uploader.transfer.config.ocm.software/v1alpha1
-    match: resource.access.isType(["LocalBlob", "OCIImage", "Helm", "Wget", "S3", "GitHub"])   # default
 `
 
 // completeExampleResources returns the resources of the complete config example.

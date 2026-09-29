@@ -65,23 +65,10 @@ a Before / After pair showing the exact change.
 ### The default path mapping
 
 `--upload-as ociArtifact` placed every artifact at the hard-coded path
-`<target baseUrl>[/<subPath>]/<name>`. The OCI uploader default
-`imageReference` produces the same layout:
-
-```yaml
-imageReference: |-
-  ${target.baseUrl
-    + (target.subPath == "" ? "" : "/" + target.subPath)
-    + "/" + (has(resource.access.referenceName)
-      ? resource.access.referenceName
-      : has(resource.access.helmChart)
-        ? (url(resource.access.helmRepository).path.split("/") + [resource.access.helmChart.split(":")[0]]).filter(s, s != "").join("/")
-          + (has(resource.access.version) && resource.access.version != ""
-            ? ":" + resource.access.version
-            : (resource.access.helmChart.contains(":") ? ":" + resource.access.helmChart.split(":")[1] : ""))
-        : resource.access.toOCI().repository
-          + (resource.access.toOCI().tag == "" ? "" : ":" + resource.access.toOCI().tag))}
-```
+`<target baseUrl>[/<subPath>]/<name>`. The default
+`imageReference` produces the same layout, so you do not need to write one
+(the full template is in the
+[`imageReference` reference]({{< relref "docs/reference/transfer-configuration.md#imagereference" >}})).
 
 The name component depends on the access type:
 
@@ -95,9 +82,8 @@ The references match the old `--upload-as ociArtifact` flag for all three access
   `target.subPath` is the repository prefix (e.g. for target `ghcr.io/target-org/ocm`,
   `baseUrl` is `ghcr.io` and `subPath` is `target-org/ocm`).
 
-This is the default when `imageReference` is omitted — a plain
-`oci.uploader.transfer.config.ocm.software/v1alpha1` entry with no fields is
-equivalent.
+A plain `oci.uploader.transfer.config.ocm.software/v1alpha1` entry with no
+fields (or `--uploader oci`) uses exactly this mapping.
 
 ### Which resources the OCI uploader selects
 
@@ -177,64 +163,22 @@ Or in config:
 {{< /tab >}}
 {{< tab "After" >}}
 
-Create an OCM config file (e.g. `ocmconfig.yaml`):
-
-```yaml
-type: generic.config.ocm.software/v1
-configurations:
-  - type: oci.uploader.transfer.config.ocm.software/v1alpha1
-    imageReference: |-
-      ${target.baseUrl
-        + (target.subPath == "" ? "" : "/" + target.subPath)
-        + "/" + (has(resource.access.referenceName)
-          ? resource.access.referenceName
-          : has(resource.access.helmChart)
-            ? (url(resource.access.helmRepository).path.split("/") + [resource.access.helmChart.split(":")[0]]).filter(s, s != "").join("/")
-              + (has(resource.access.version) && resource.access.version != ""
-                ? ":" + resource.access.version
-                : (resource.access.helmChart.contains(":") ? ":" + resource.access.helmChart.split(":")[1] : ""))
-            : resource.access.toOCI().repository
-              + (resource.access.toOCI().tag == "" ? "" : ":" + resource.access.toOCI().tag))}
-```
-
-This is also the default when `imageReference` is omitted. Writing it out makes
-the mapping visible and easy to change in place.
-
-Then run:
-
-```bash
-ocm transfer cv --uploader localblob --config ./ocmconfig.yaml <src> <target>
-```
-
-`--config` may be repeated, so the uploader can live in its own file.
-
-With the default `imageReference`, the same works without a config file:
-
 ```bash
 ocm transfer cv --uploader oci --uploader localblob <src> <target>
 ```
 
-Or add the entry to the same config that already holds the transfer settings:
+Or in config (e.g. `ocmconfig.yaml`, passed with `--config`):
 
 ```yaml
 type: generic.config.ocm.software/v1
 configurations:
   - type: transfer.config.ocm.software/v1alpha1
   - type: oci.uploader.transfer.config.ocm.software/v1alpha1
-    imageReference: |-
-      ${target.baseUrl
-        + (target.subPath == "" ? "" : "/" + target.subPath)
-        + "/" + (has(resource.access.referenceName)
-          ? resource.access.referenceName
-          : has(resource.access.helmChart)
-            ? (url(resource.access.helmRepository).path.split("/") + [resource.access.helmChart.split(":")[0]]).filter(s, s != "").join("/")
-              + (has(resource.access.version) && resource.access.version != ""
-                ? ":" + resource.access.version
-                : (resource.access.helmChart.contains(":") ? ":" + resource.access.helmChart.split(":")[1] : ""))
-            : resource.access.toOCI().repository
-              + (resource.access.toOCI().tag == "" ? "" : ":" + resource.access.toOCI().tag))}
   - type: localblob.uploader.transfer.config.ocm.software/v1alpha1
 ```
+
+The default `imageReference` gives the same target references as
+before; set `imageReference` only to place artifacts elsewhere.
 
 {{< /tab >}}
 {{< /tabs >}}
@@ -295,18 +239,6 @@ configurations:
   - type: transfer.config.ocm.software/v1alpha1
     recursive: -1
   - type: oci.uploader.transfer.config.ocm.software/v1alpha1
-    imageReference: |-
-      ${target.baseUrl
-        + (target.subPath == "" ? "" : "/" + target.subPath)
-        + "/" + (has(resource.access.referenceName)
-          ? resource.access.referenceName
-          : has(resource.access.helmChart)
-            ? (url(resource.access.helmRepository).path.split("/") + [resource.access.helmChart.split(":")[0]]).filter(s, s != "").join("/")
-              + (has(resource.access.version) && resource.access.version != ""
-                ? ":" + resource.access.version
-                : (resource.access.helmChart.contains(":") ? ":" + resource.access.helmChart.split(":")[1] : ""))
-            : resource.access.toOCI().repository
-              + (resource.access.toOCI().tag == "" ? "" : ":" + resource.access.toOCI().tag))}
   - type: localblob.uploader.transfer.config.ocm.software/v1alpha1
 ```
 
@@ -509,7 +441,7 @@ Strict decoding now rejects unknown fields.
 
 ### Symptom: Resources still end up as local blobs or stay by reference
 
-**Cause:** The uploader's `match` does not select the resource, so the resource
+**Cause:** The `match` of the uploader does not select the resource, so the resource
 follows the default handling. With the default `match` this happens when:
 
 - the target is not an OCI registry, for example a CTF archive;

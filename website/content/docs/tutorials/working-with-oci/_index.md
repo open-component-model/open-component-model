@@ -650,27 +650,13 @@ Without `globalAccess`, you can still access native OCI artifacts directly using
 {{< /details >}}
 
 {{< details "Can I control how artifacts are stored in the target?" >}}
-Yes. By default, `--uploader localblob` stores artifacts as local blobs within the component version. To upload them as standalone OCI artifacts in the target registry, add an OCI uploader configuration:
+Yes. `--uploader localblob` stores artifacts as local blobs within the component version. To upload them as standalone OCI artifacts in the target registry, add the OCI uploader before it:
 
-```yaml
-type: generic.config.ocm.software/v1
-configurations:
-  - type: oci.uploader.transfer.config.ocm.software/v1alpha1
-    imageReference: |-
-      ${target.baseUrl
-        + (target.subPath == "" ? "" : "/" + target.subPath)
-        + "/" + (has(resource.access.referenceName)
-          ? resource.access.referenceName
-          : has(resource.access.helmChart)
-            ? (url(resource.access.helmRepository).path.split("/") + [resource.access.helmChart.split(":")[0]]).filter(s, s != "").join("/")
-              + (has(resource.access.version) && resource.access.version != ""
-                ? ":" + resource.access.version
-                : (resource.access.helmChart.contains(":") ? ":" + resource.access.helmChart.split(":")[1] : ""))
-            : resource.access.toOCI().repository
-              + (resource.access.toOCI().tag == "" ? "" : ":" + resource.access.toOCI().tag))}
+```bash
+ocm transfer cv --uploader oci --uploader localblob <src> <target>
 ```
 
-Pass the config with `--config oci-uploader.yaml`. With `localBlob` (the default), the artifact stays within the component version's index. With the OCI uploader, it is stored independently.
+With the local blob uploader, the artifact stays within the component version's index. With the OCI uploader, it is stored independently.
 
 Both options make the artifact natively accessible in OCI registries. For details, see the [Transfer Configuration Reference]({{< relref "docs/reference/transfer-configuration.md" >}}).
 {{< /details >}}
