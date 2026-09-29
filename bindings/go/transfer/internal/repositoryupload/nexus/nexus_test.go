@@ -373,7 +373,7 @@ func TestTransform(t *testing.T) {
 		mediaType string
 		resource  func(*descriptorv2.Resource)
 		path      string
-		creds     uploadtest.CredentialsByType
+		creds     uploadtest.Credentials
 		seed      func(*fakeNexus)
 		transfers int // requests and output of the last transfer are checked; default 1
 		wantErr   string
@@ -499,7 +499,7 @@ func TestTransform(t *testing.T) {
 			name:     "target credentials are sent on every request",
 			repoType: "raw",
 			content:  hello,
-			creds: uploadtest.CredentialsByType{wgetidentityv1.Type.String(): &wgetcredsv1.WgetCredentials{
+			creds: uploadtest.Credentials{wgetidentityv1.Type.String(): &wgetcredsv1.WgetCredentials{
 				Type: wgetcredsv1.WgetCredentialsVersionedType, Username: "u", Password: "p",
 			}},
 			check: func(r *require.Assertions, u uploadRun) {
@@ -511,7 +511,7 @@ func TestTransform(t *testing.T) {
 		},
 		{
 			name: "target credential error prevents any request",
-			creds: uploadtest.CredentialsByType{helmidentityv1.Type.String(): &helmcredsv1.HelmHTTPCredentials{
+			creds: uploadtest.Credentials{helmidentityv1.Type.String(): &helmcredsv1.HelmHTTPCredentials{
 				Type: runtime.NewVersionedType(helmcredsv1.HelmHTTPCredentialsType, helmcredsv1.Version), CertFile: "/cert.pem", KeyFile: "/key.pem",
 			}},
 			wantErr: "HelmHTTPCredentials certFile/keyFile are not supported",
@@ -710,7 +710,7 @@ func TestTransform(t *testing.T) {
 			}
 			tr := &Transformer{repositoryupload.Uploader{
 				Scheme:             scheme,
-				ResourceRepository: &uploadtest.ResourceRepo{Content: content, MediaType: tc.mediaType},
+				ResourceRepository: &uploadtest.ResourceRepository{Content: content, MediaType: tc.mediaType},
 				PollInterval:       time.Millisecond,
 			}}
 			if tc.creds != nil {

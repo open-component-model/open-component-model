@@ -9,6 +9,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
@@ -104,7 +105,7 @@ func sha256Hex(data []byte) string {
 
 // uploadRun is what a TestTransform row checks beyond its columns.
 type uploadRun struct {
-	srv   *artifactorytest.Server
+	repo  *artifactorytest.Repository
 	reqs  []artifactorytest.Request // of the last transfer
 	out   *descriptorv2.Resource
 	local *localChartRepo
@@ -171,9 +172,9 @@ func TestTransform(t *testing.T) {
 		}
 	}
 	nothingWritten := func(r *require.Assertions, u uploadRun) { r.Empty(u.bodyPUTs(), "nothing may be written") }
-	storedElsewhere := func(path string) func(*artifactorytest.Server) {
-		return func(srv *artifactorytest.Server) {
-			srv.StoredPath = func(string) string { return path }
+	storedElsewhere := func(path string) func(*artifactorytest.Repository) {
+		return func(repo *artifactorytest.Repository) {
+			repo.StoredPath = func(string) string { return path }
 		}
 	}
 
@@ -191,8 +192,8 @@ func TestTransform(t *testing.T) {
 		resource  func(*descriptorv2.Resource)
 		local     bool // local blob read from the source component version
 		path      string
-		creds     uploadtest.CredentialsByType
-		seed      func(*artifactorytest.Server)
+		creds     uploadtest.Credentials
+		seed      func(*artifactorytest.Repository)
 		transfers int // requests and output of the last transfer are checked; default 1
 		wantErr   string
 		// wantAccess and wantDigest (genericBlobDigest/v1 value) describe the published resource.
@@ -220,15 +221,15 @@ func TestTransform(t *testing.T) {
 			check: func(r *require.Assertions, u uploadRun) {
 				r.Len(u.reqs, 4+repositoryupload.PollAttempts, "detection, file info, upload, properties polled, then delete")
 				r.Equal(http.MethodDelete, u.reqs[len(u.reqs)-1].Method)
-				r.False(u.srv.Stored(file + ".tgz"))
+				r.False(u.repo.Stored(file + ".tgz"))
 			},
 		},
-		{name: "HelmChartRepository HelmHTTPCredentials use basic auth", creds: uploadtest.CredentialsByType{helmType: helmCreds}, check: auth([]string{"helm-user", "helm-pass"}, "")},
-		{name: "Wget WgetCredentials use a bearer token", creds: uploadtest.CredentialsByType{wgetType: wgetCreds}, check: auth(nil, "wget-token")},
-		{name: "HelmChartRepository credentials win over Wget", creds: uploadtest.CredentialsByType{helmType: helmCreds, wgetType: wgetCreds}, check: auth([]string{"helm-user", "helm-pass"}, "")},
+		{name: "HelmChartRepository HelmHTTPCredentials use basic auth", creds: uploadtest.Credentials{helmType: helmCreds}, check: auth([]string{"helm-user", "helm-pass"}, "")},
+		{name: "Wget WgetCredentials use a bearer token", creds: uploadtest.Credentials{wgetType: wgetCreds}, check: auth(nil, "wget-token")},
+		{name: "HelmChartRepository credentials win over Wget", creds: uploadtest.Credentials{helmType: helmCreds, wgetType: wgetCreds}, check: auth([]string{"helm-user", "helm-pass"}, "")},
 		{
 			name:    "HelmHTTPCredentials client certificates are rejected before any request",
-			creds:   uploadtest.CredentialsByType{helmType: certCreds},
+			creds:   uploadtest.Credentials{helmType: certCreds},
 			wantErr: "HelmHTTPCredentials certFile/keyFile are not supported for repository uploads",
 			check:   func(r *require.Assertions, u uploadRun) { r.Empty(u.reqs) },
 		},
@@ -263,7 +264,7 @@ func TestTransform(t *testing.T) {
 			resource:     withDigest(invalidDigest, "genericBlobDigest/v1"),
 			wantErr:      "returned status 409",
 			wantRequests: []string{detect, fileInfo + ".tgz", put + ".tgz", put + ".tgz"},
-			check:        func(r *require.Assertions, u uploadRun) { r.False(u.srv.Stored(file + ".tgz")) },
+			check:        func(r *require.Assertions, u uploadRun) { r.False(u.repo.Stored(file + ".tgz")) },
 		},
 		{
 			name:         "a SHA-512 source digest is verified after the upload",
@@ -279,7 +280,7 @@ func TestTransform(t *testing.T) {
 			name:     "a SHA-512 source digest mismatch fails after the upload and removes the file",
 			resource: withDigest(digest.SHA512.FromBytes(hello).Encoded(), "genericBlobDigest/v1", "SHA-512"),
 			wantErr:  "digest mismatch: expected sha512:" + digest.SHA512.FromBytes(hello).Encoded() + ", got sha512:" + digest.SHA512.FromBytes(chartTGZ).Encoded(),
-			check:    func(r *require.Assertions, u uploadRun) { r.False(u.srv.Stored(file + ".tgz")) },
+			check:    func(r *require.Assertions, u uploadRun) { r.False(u.repo.Stored(file + ".tgz")) },
 		},
 		{
 			name:         "invalid source digest fails before uploading",
@@ -327,8 +328,8 @@ func TestTransform(t *testing.T) {
 		{
 			name: "a file stored for another component version is never overwritten",
 			path: "shared/mychart.tgz",
-			seed: func(srv *artifactorytest.Server) {
-				srv.Store("shared/mychart.tgz", "0123", map[string]string{"ocm.component.name": "ocm.software/test", "ocm.component.version": "2.0.0", "ocm.resource.name": "renamed", "ocm.resource.version": "9.9.9"})
+			seed: func(repo *artifactorytest.Repository) {
+				repo.Store("shared/mychart.tgz", "0123", map[string]string{"ocm.component.name": "ocm.software/test", "ocm.component.version": "2.0.0", "ocm.resource.name": "renamed", "ocm.resource.version": "9.9.9"})
 			},
 			wantErr: "was not uploaded for this resource (recorded owner: ",
 			check:   nothingWritten,
@@ -336,8 +337,8 @@ func TestTransform(t *testing.T) {
 		{
 			name: "a file stored for another extra identity is never overwritten",
 			path: "shared/mychart.tgz",
-			seed: func(srv *artifactorytest.Server) {
-				srv.Store("shared/mychart.tgz", "0123", map[string]string{"ocm.component.name": "ocm.software/test", "ocm.component.version": "1.0.0", "ocm.resource.name": "renamed", "ocm.resource.version": "9.9.9", "ocm.resource.extraIdentity": "arch=arm64"})
+			seed: func(repo *artifactorytest.Repository) {
+				repo.Store("shared/mychart.tgz", "0123", map[string]string{"ocm.component.name": "ocm.software/test", "ocm.component.version": "1.0.0", "ocm.resource.name": "renamed", "ocm.resource.version": "9.9.9", "ocm.resource.extraIdentity": "arch=arm64"})
 			},
 			wantErr: "was not uploaded for this resource",
 			check:   nothingWritten,
@@ -345,7 +346,7 @@ func TestTransform(t *testing.T) {
 		{
 			name:    "a file not uploaded by ocm is never overwritten",
 			path:    "shared/mychart.tgz",
-			seed:    func(srv *artifactorytest.Server) { srv.Store("shared/mychart.tgz", "0123", nil) },
+			seed:    func(repo *artifactorytest.Repository) { repo.Store("shared/mychart.tgz", "0123", nil) },
 			wantErr: "refusing to overwrite it, configure a different path",
 			check:   nothingWritten,
 		},
@@ -427,10 +428,12 @@ func TestTransform(t *testing.T) {
 			},
 		},
 		{
-			name:         "npm publishes a package artifactory recognizes",
-			repoType:     "npm",
-			content:      hello,
-			seed:         func(srv *artifactorytest.Server) { srv.NPM = map[string][2]string{helloDigest: {"renamed", "9.9.9"}} },
+			name:     "npm publishes a package artifactory recognizes",
+			repoType: "npm",
+			content:  hello,
+			seed: func(repo *artifactorytest.Repository) {
+				repo.NPM = map[string]artifactorytest.Package{helloDigest: {Name: "renamed", Version: "9.9.9"}}
+			},
 			wantAccess:   access{url: "/artifactory/helm-local/" + file + ".tgz"},
 			wantRequests: []string{detect, fileInfo + ".tgz", put + ".tgz", put + ".tgz", fileInfo + ".tgz" + npmProps},
 		},
@@ -439,32 +442,36 @@ func TestTransform(t *testing.T) {
 			repoType: "npm",
 			content:  hello,
 			wantErr:  "content of resource name=renamed,version=9.9.9 is not an npm package: artifactory recorded no npm.name and npm.version for {url}/artifactory/helm-local/" + file + ".tgz",
-			check:    func(r *require.Assertions, u uploadRun) { r.False(u.srv.Stored(file + ".tgz")) },
+			check:    func(r *require.Assertions, u uploadRun) { r.False(u.repo.Stored(file + ".tgz")) },
 		},
 		{
-			name:         "npm re-transfer reuses the stored tarball",
-			repoType:     "npm",
-			content:      hello,
-			resource:     withDigest(helloDigest, "genericBlobDigest/v1"),
-			seed:         func(srv *artifactorytest.Server) { srv.NPM = map[string][2]string{helloDigest: {"renamed", "9.9.9"}} },
+			name:     "npm re-transfer reuses the stored tarball",
+			repoType: "npm",
+			content:  hello,
+			resource: withDigest(helloDigest, "genericBlobDigest/v1"),
+			seed: func(repo *artifactorytest.Repository) {
+				repo.NPM = map[string]artifactorytest.Package{helloDigest: {Name: "renamed", Version: "9.9.9"}}
+			},
 			transfers:    2,
 			wantRequests: []string{detect, fileInfo + ".tgz", fileInfo + ".tgz" + npmProps},
 		},
 		{
-			name:       "npm custom .tgz path",
-			repoType:   "npm",
-			content:    hello,
-			path:       "packages/renamed-9.9.9.tgz",
-			seed:       func(srv *artifactorytest.Server) { srv.NPM = map[string][2]string{helloDigest: {"renamed", "9.9.9"}} },
+			name:     "npm custom .tgz path",
+			repoType: "npm",
+			content:  hello,
+			path:     "packages/renamed-9.9.9.tgz",
+			seed: func(repo *artifactorytest.Repository) {
+				repo.NPM = map[string]artifactorytest.Package{helloDigest: {Name: "renamed", Version: "9.9.9"}}
+			},
 			wantAccess: access{url: "/artifactory/helm-local/packages/renamed-9.9.9.tgz"},
 		},
 		{
 			name:    "remote repositories are rejected",
-			seed:    func(srv *artifactorytest.Server) { srv.RClass = "remote" },
+			seed:    func(repo *artifactorytest.Repository) { repo.RClass = "remote" },
 			wantErr: `artifactory repository "helm-local" is a remote repository; uploads need a local repository`,
 			check:   nothingWritten,
 		},
-		{name: "federated repositories are accepted", repoType: "generic", seed: func(srv *artifactorytest.Server) { srv.RClass = "federated" }},
+		{name: "federated repositories are accepted", repoType: "generic", seed: func(repo *artifactorytest.Repository) { repo.RClass = "federated" }},
 		{name: "package type is case-insensitive", repoType: "Maven", content: hello, check: func(r *require.Assertions, u uploadRun) { r.Len(u.bodyPUTs(), 1) }},
 		{
 			name:     "unsupported package type",
@@ -474,13 +481,13 @@ func TestTransform(t *testing.T) {
 		},
 		{
 			name:    "unauthorized repository detection",
-			seed:    func(srv *artifactorytest.Server) { srv.DetectionStatus = http.StatusUnauthorized },
+			seed:    func(repo *artifactorytest.Repository) { repo.DetectionStatus = http.StatusUnauthorized },
 			wantErr: `failed detecting the type of artifactory repository "helm-local": GET {url}/artifactory/api/repositories/helm-local returned status 401`,
 			check:   nothingWritten,
 		},
 		{
 			name:    "invalid repository configuration",
-			seed:    func(srv *artifactorytest.Server) { srv.DetectionBody = "not json" },
+			seed:    func(repo *artifactorytest.Repository) { repo.DetectionBody = "not json" },
 			wantErr: `failed detecting the type of artifactory repository "helm-local": failed decoding response of GET`,
 			check:   nothingWritten,
 		},
@@ -488,13 +495,12 @@ func TestTransform(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
-			srv := artifactorytest.New(t, map[string][2]string{chartDigest: {"mychart", "0.1.0"}})
-			if tc.repoType != "" {
-				srv.PackageType = tc.repoType
-			}
+			repo := &artifactorytest.Repository{Charts: map[string]artifactorytest.Package{chartDigest: {Name: "mychart", Version: "0.1.0"}}, PackageType: tc.repoType}
 			if tc.seed != nil {
-				tc.seed(srv)
+				tc.seed(repo)
 			}
+			srv := httptest.NewServer(repo)
+			t.Cleanup(srv.Close)
 			content := tc.content
 			if content == nil {
 				content = chartTGZ
@@ -512,13 +518,13 @@ func TestTransform(t *testing.T) {
 				Resource:         res,
 				ComponentVersion: &uploadv1alpha1.RepositoryUploadComponentVersion{Component: "ocm.software/test", Version: "1.0.0"},
 				URL:              srv.URL,
-				Repository:       artifactorytest.Repository,
+				Repository:       artifactorytest.Key,
 				Path:             tc.path,
 			}
 			local := &localChartRepo{content: content}
 			tr := &Transformer{repositoryupload.Uploader{
 				Scheme:             scheme,
-				ResourceRepository: &uploadtest.ResourceRepo{Content: content, MediaType: tc.mediaType},
+				ResourceRepository: &uploadtest.ResourceRepository{Content: content, MediaType: tc.mediaType},
 				PollInterval:       time.Millisecond,
 			}}
 			if tc.creds != nil {
@@ -535,15 +541,15 @@ func TestTransform(t *testing.T) {
 			var err error
 			var reqs []artifactorytest.Request
 			for i := range max(tc.transfers, 1) {
-				before := len(srv.Recorded())
+				before := len(repo.Requests())
 				out, err = tr.Transform(t.Context(), &uploadv1alpha1.ArtifactoryUpload{Type: uploadv1alpha1.ArtifactoryUploadV1alpha1, ID: "upload", Spec: spec})
-				reqs = srv.Recorded()[before:]
+				reqs = repo.Requests()[before:]
 				if i < tc.transfers-1 {
 					r.NoError(err)
 				}
 			}
 
-			run := uploadRun{srv: srv, reqs: reqs, local: local}
+			run := uploadRun{repo: repo, reqs: reqs, local: local}
 			if tc.wantErr != "" {
 				r.ErrorContains(err, strings.ReplaceAll(tc.wantErr, "{url}", srv.URL))
 			} else {

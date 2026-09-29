@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"testing"
 
@@ -80,7 +81,9 @@ func Test_Integration_TransferLocalBlobHelmResource_ArtifactoryHelmUploaderDeplo
 			r := require.New(t)
 
 			// Target "Artifactory": records chart properties for the chart .tgz like Artifactory does.
-			targetSrv := artifactorytest.New(t, map[string][2]string{digestOf(chartTgzBytes).Encoded(): {"mychart", "0.1.0"}})
+			target := &artifactorytest.Repository{Charts: map[string]artifactorytest.Package{digestOf(chartTgzBytes).Encoded(): {Name: "mychart", Version: "0.1.0"}}}
+			targetSrv := httptest.NewServer(target)
+			t.Cleanup(targetSrv.Close)
 
 			componentName := "ocm.software/jfrog-helm-local-blob-test"
 			componentVersion := "1.0.0"
@@ -156,7 +159,7 @@ func Test_Integration_TransferLocalBlobHelmResource_ArtifactoryHelmUploaderDeplo
 			// The target server must have received the chart under the component version path.
 			expectedPath := "/artifactory/helm-local/ocm.software/jfrog-helm-local-blob-test/1.0.0/mychart-0.1.0.tgz"
 			var put *artifactorytest.Request
-			for _, req := range targetSrv.Recorded() {
+			for _, req := range target.Requests() {
 				if req.Method == http.MethodPut && !req.Deploy && req.Path == expectedPath {
 					put = &req
 				}

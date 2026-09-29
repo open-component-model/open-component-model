@@ -1,4 +1,4 @@
-// Package uploadtest holds test doubles shared by the repository uploader tests.
+// Package uploadtest provides test doubles for the repository uploader tests.
 package uploadtest
 
 import (
@@ -13,32 +13,33 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// ResourceRepo serves Content from DownloadResource and derives no source credential identity.
-type ResourceRepo struct {
+var (
+	_ repository.ResourceRepository = (*ResourceRepository)(nil)
+	_ credentials.Resolver          = Credentials(nil)
+)
+
+// ResourceRepository downloads every resource as Content with MediaType and derives no source
+// credential identity. Its other methods are not implemented and panic.
+type ResourceRepository struct {
 	repository.ResourceRepository
 	Content   []byte
 	MediaType string
 }
 
-func (s *ResourceRepo) GetResourceCredentialConsumerIdentity(context.Context, *descriptor.Resource) (runtime.Identity, error) {
+func (s *ResourceRepository) GetResourceCredentialConsumerIdentity(context.Context, *descriptor.Resource) (runtime.Identity, error) {
 	return nil, nil
 }
 
-func (s *ResourceRepo) DownloadResource(_ context.Context, _ *descriptor.Resource, _ runtime.Typed) (blob.ReadOnlyBlob, error) {
+func (s *ResourceRepository) DownloadResource(context.Context, *descriptor.Resource, runtime.Typed) (blob.ReadOnlyBlob, error) {
 	return inmemory.New(bytes.NewReader(s.Content), inmemory.WithSize(int64(len(s.Content))), inmemory.WithMediaType(s.MediaType)), nil
 }
 
-// CredentialsByType resolves credentials by the type attribute of the consumer identity.
-type CredentialsByType map[string]runtime.Typed
+// Credentials resolves the credentials of a consumer identity by its type attribute.
+type Credentials map[string]runtime.Typed
 
-func (c CredentialsByType) Resolve(_ context.Context, id runtime.Identity) (runtime.Typed, error) {
-	typ, ok := id["type"]
-	if !ok {
-		return nil, credentials.ErrNotFound
+func (c Credentials) Resolve(_ context.Context, id runtime.Identity) (runtime.Typed, error) {
+	if cred, ok := c[id["type"]]; ok {
+		return cred, nil
 	}
-	cred, ok := c[typ]
-	if !ok {
-		return nil, credentials.ErrNotFound
-	}
-	return cred, nil
+	return nil, credentials.ErrNotFound
 }
