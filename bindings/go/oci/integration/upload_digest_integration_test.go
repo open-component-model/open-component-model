@@ -2,7 +2,8 @@ package integration_test
 
 import (
 	"bytes"
-	_ "crypto/sha512" // Register SHA-512 for the non-OCM OCI root regression.
+	"crypto"
+	_ "crypto/sha512" // Make SHA-384 and SHA-512 available for OCI root controls.
 	"encoding/json"
 	"os"
 	"testing"
@@ -13,6 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"oras.land/oras-go/v2"
+	"oras.land/oras-go/v2/content"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
@@ -73,19 +75,41 @@ func Test_Integration_OCIUpload_DigestControls(t *testing.T) {
 
 func Test_Integration_OCIUpload_SHA512Root(t *testing.T) {
 	for _, method := range []string{"resource", "stream"} {
-		for _, state := range []string{"absent", "incomplete"} {
+		for _, state := range []string{"absent", "incomplete", "correct"} {
 			t.Run(method+"/"+state, func(t *testing.T) {
 				runDigestUpload(t, digestUploadCase{
 					method: method, algorithm: digest.SHA512, digestState: state,
+					tagged: true,
+				})
+			})
+		}
+	}
+
+	t.Run("source/allowed", func(t *testing.T) {
+		runDigestUpload(t, digestUploadCase{
+			method: "source", algorithm: digest.SHA512, tagged: true,
+		})
+	})
+}
+
+func Test_Integration_OCIUpload_UnsupportedOCMRootAlgorithm(t *testing.T) {
+	// SHA-384 is opt-in in go-digest and deliberately absent from OCM's mapping.
+	digest.RegisterAlgorithm(digest.SHA384, crypto.SHA384)
+	for _, method := range []string{"resource", "stream"} {
+		for _, state := range []string{"absent", "incomplete", "correct"} {
+			t.Run(method+"/"+state, func(t *testing.T) {
+				runDigestUpload(t, digestUploadCase{
+					method: method, algorithm: digest.SHA384, digestState: state,
 					tagged: true, reject: true, errorContains: "unknown algorithm",
 				})
 			})
 		}
 	}
-	// Sources have no OCM digest to populate; SHA-512 is valid at the OCI boundary.
+	// The transport accepts SHA-384, but OCM resource digest conversion does not.
+	// Sources have no OCM digest, so they isolate that conversion from graph copying.
 	t.Run("source/allowed", func(t *testing.T) {
 		runDigestUpload(t, digestUploadCase{
-			method: "source", algorithm: digest.SHA512, tagged: true,
+			method: "source", algorithm: digest.SHA384, tagged: true,
 		})
 	})
 }
@@ -115,17 +139,29 @@ func runDigestUpload(t *testing.T, tc digestUploadCase) {
 	dst, err := resolver.StoreForReference(ctx, repository)
 	r.NoError(err)
 
-	oldBlob, oldRoot := digestUploadLayout(t, digest.SHA256, "existing")
+	oldBlob, oldRoot, oldConfig := digestUploadLayout(t, digest.SHA256, "existing")
 	oldStore, err := ocitar.ReadOCILayout(ctx, oldBlob)
 	r.NoError(err)
 	t.Cleanup(func() { require.NoError(t, oldStore.Close()) })
 	r.NoError(oras.CopyGraph(ctx, oldStore, dst, oldRoot, oras.DefaultCopyGraphOptions))
 	r.NoError(dst.Tag(ctx, oldRoot, tag))
 
-	input, root := digestUploadLayout(t, tc.algorithm, "replacement")
-	exists, err := dst.Exists(ctx, root)
-	r.NoError(err)
-	r.False(exists, "fixture must start without the replacement root")
+	oldContent := make(map[digest.Digest][]byte)
+	for _, desc := range []ocispec.Descriptor{oldRoot, oldConfig} {
+		oldContent[desc.Digest], err = content.FetchAll(ctx, dst, desc)
+		r.NoError(err)
+	}
+
+	input, root, config := digestUploadLayout(t, tc.algorithm, "replacement")
+	for _, desc := range []ocispec.Descriptor{root, config} {
+		exists, existsErr := dst.Exists(ctx, desc)
+		r.NoError(existsErr)
+		r.False(exists, "fixture must start without replacement content: %s", desc.Digest)
+	}
+	hashAlgorithm, ok := map[digest.Algorithm]string{
+		digest.SHA256: "SHA-256", digest.SHA512: "SHA-512", digest.SHA384: "SHA-384",
+	}[tc.algorithm]
+	r.True(ok, "fixture must specify an OCM hash algorithm name")
 	ref := repository
 	if tc.tagged {
 		ref += ":" + tag
@@ -162,7 +198,7 @@ func runDigestUpload(t *testing.T, tc digestUploadCase) {
 			Relation:    descriptor.LocalRelation, Type: "ociImage", Access: access,
 		}
 		if tc.digestState == "incomplete" || tc.digestState == "correct" {
-			res.Digest = &descriptor.Digest{HashAlgorithm: "SHA-256", Value: root.Digest.Encoded()}
+			res.Digest = &descriptor.Digest{HashAlgorithm: hashAlgorithm, Value: root.Digest.Encoded()}
 			if tc.digestState == "correct" {
 				res.Digest.NormalisationAlgorithm = "ociArtifactDigest/v1"
 			}
@@ -189,7 +225,7 @@ func runDigestUpload(t *testing.T, tc digestUploadCase) {
 			r.NoError(err)
 			r.NotNil(result)
 			r.Equal(&descriptor.Digest{
-				HashAlgorithm: "SHA-256", NormalisationAlgorithm: "ociArtifactDigest/v1", Value: root.Digest.Encoded(),
+				HashAlgorithm: hashAlgorithm, NormalisationAlgorithm: "ociArtifactDigest/v1", Value: root.Digest.Encoded(),
 			}, result.Digest)
 		}
 	default:
@@ -215,20 +251,31 @@ func runDigestUpload(t *testing.T, tc digestUploadCase) {
 		wantTag = root.Digest
 	}
 	assert.Equal(t, wantTag, resolved.Digest, "existing destination tag must remain unchanged on rejection or untagged upload")
-	exists, err = dst.Exists(ctx, root)
-	r.NoError(err)
-	assert.Equal(t, !tc.reject, exists, "rejected upload must not write the replacement root")
+	for _, desc := range []ocispec.Descriptor{root, config} {
+		exists, existsErr := dst.Exists(ctx, desc)
+		r.NoError(existsErr)
+		assert.Equal(t, !tc.reject, exists, "rejected upload must not write replacement content: %s", desc.Digest)
+	}
+	for _, desc := range []ocispec.Descriptor{oldRoot, oldConfig} {
+		data, fetchErr := content.FetchAll(ctx, dst, desc)
+		r.NoError(fetchErr)
+		assert.Equal(t, oldContent[desc.Digest], data, "existing destination content must remain intact")
+	}
 }
 
-// Both upload paths consume the same real OCI layout, including a SHA-512 root
-// when requested; only the root algorithm changes, not the config blob's digest.
-func digestUploadLayout(t *testing.T, algorithm digest.Algorithm, marker string) (blob.ReadOnlyBlob, ocispec.Descriptor) {
+// All upload paths consume the same real OCI layout. Only the root algorithm
+// varies; a unique SHA-256 config detects child writes before root rejection.
+func digestUploadLayout(t *testing.T, algorithm digest.Algorithm, marker string) (blob.ReadOnlyBlob, ocispec.Descriptor, ocispec.Descriptor) {
 	t.Helper()
 	r := require.New(t)
+	r.True(algorithm.Available(), "fixture root algorithm must be available")
+	configData, err := json.Marshal(map[string]string{"test-content": marker})
+	r.NoError(err)
+	config := content.NewDescriptorFromBytes(ocispec.MediaTypeImageConfig, configData)
 	manifest, err := json.Marshal(ocispec.Manifest{
 		Versioned: specs.Versioned{SchemaVersion: 2}, MediaType: ocispec.MediaTypeImageManifest,
 		ArtifactType: "application/vnd.ocm.test.digest-upload",
-		Config:       ocispec.DescriptorEmptyJSON, Layers: []ocispec.Descriptor{},
+		Config:       config, Layers: []ocispec.Descriptor{},
 		Annotations: map[string]string{"test-content": marker},
 	})
 	r.NoError(err)
@@ -239,8 +286,8 @@ func digestUploadLayout(t *testing.T, algorithm digest.Algorithm, marker string)
 	w, err := ocitar.NewOCILayoutWriterWithTempFile(&buf, t.TempDir())
 	r.NoError(err)
 	t.Cleanup(func() { require.NoError(t, w.Close()) })
-	r.NoError(w.Push(t.Context(), ocispec.DescriptorEmptyJSON, bytes.NewReader(ocispec.DescriptorEmptyJSON.Data)))
+	r.NoError(w.Push(t.Context(), config, bytes.NewReader(configData)))
 	r.NoError(w.Push(t.Context(), root, bytes.NewReader(manifest)))
 	r.NoError(w.Close())
-	return inmemory.New(bytes.NewReader(buf.Bytes())), root
+	return inmemory.New(bytes.NewReader(buf.Bytes())), root, config
 }
