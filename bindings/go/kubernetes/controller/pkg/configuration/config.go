@@ -39,23 +39,36 @@ var ocmConfigTypes = []runtime.Type{
 
 // allowedConfigTypes defines the set of OCM config types accepted by the controller.
 // It is built on top of ocmConfigTypes so the two can never drift.
-var allowedConfigTypes = append(
-	slices.Clone(ocmConfigTypes),
-	// credentials
-	runtime.NewVersionedType(credentialsv1spec.ConfigType, credentialsv1spec.Version),
-	runtime.NewUnversionedType(credentialsv1spec.ConfigType),
-	// path-matcher resolvers (v1alpha1)
-	runtime.NewVersionedType(resolversv1alpha1spec.ConfigType, resolversv1alpha1spec.Version),
-	runtime.NewUnversionedType(resolversv1alpha1spec.ConfigType),
-	// transfer settings
-	runtime.NewVersionedType(transferspec.ConfigType, transferspec.Version),
-	runtime.NewUnversionedType(transferspec.ConfigType),
-	runtime.NewVersionedType(httpv1alpha1.ConfigType, httpv1alpha1.Version),
-	runtime.NewUnversionedType(httpv1alpha1.ConfigType),
-	// signing settings, selects the verifier used for component signature verification
-	runtime.NewVersionedType(signingspec.ConfigType, signingspec.Version),
-	runtime.NewUnversionedType(signingspec.ConfigType),
+var allowedConfigTypes = slices.Concat(
+	ocmConfigTypes,
+	[]runtime.Type{
+		// credentials
+		runtime.NewVersionedType(credentialsv1spec.ConfigType, credentialsv1spec.Version),
+		runtime.NewUnversionedType(credentialsv1spec.ConfigType),
+		// path-matcher resolvers (v1alpha1)
+		runtime.NewVersionedType(resolversv1alpha1spec.ConfigType, resolversv1alpha1spec.Version),
+		runtime.NewUnversionedType(resolversv1alpha1spec.ConfigType),
+	},
+	// transfer settings, including every uploader configuration
+	schemeTypes(transferspec.Scheme),
+	[]runtime.Type{
+		runtime.NewVersionedType(httpv1alpha1.ConfigType, httpv1alpha1.Version),
+		runtime.NewUnversionedType(httpv1alpha1.ConfigType),
+		// signing settings, selects the verifier used for component signature verification
+		runtime.NewVersionedType(signingspec.ConfigType, signingspec.Version),
+		runtime.NewUnversionedType(signingspec.ConfigType),
+	},
 )
+
+// schemeTypes returns every type registered in s: each default type and all its aliases.
+func schemeTypes(s *runtime.Scheme) []runtime.Type {
+	var out []runtime.Type
+	for def, aliases := range s.GetTypes() {
+		out = append(out, def)
+		out = append(out, aliases...)
+	}
+	return out
+}
 
 // filterAllowedConfigTypes filters the provided config to only include config entries whose
 // types are in the allowedConfigTypes list. Additionally, it strips the deprecated Aliases field

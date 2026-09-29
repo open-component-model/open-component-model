@@ -741,6 +741,18 @@ func TestFilterAllowedConfigTypes(t *testing.T) {
 		assert.Contains(t, types, ocmruntime.NewUnversionedType(resolversv1alpha1spec.ConfigType))
 	})
 
+	t.Run("uploader entries pass through", func(t *testing.T) {
+		cfg := makeGenericConfig(
+			`{"type":"oci.uploader.transfer.config.ocm.software/v1alpha1"}`,
+			`{"type":"reference.uploader.transfer.config.ocm.software"}`,
+		)
+		result, err := filterAllowedConfigTypes(t.Context(), cfg)
+		require.NoError(t, err)
+		require.Len(t, result.Configurations, 2)
+		assert.Equal(t, ocmruntime.NewVersionedType("oci.uploader.transfer.config.ocm.software", "v1alpha1"), result.Configurations[0].GetType())
+		assert.Equal(t, ocmruntime.NewUnversionedType("reference.uploader.transfer.config.ocm.software"), result.Configurations[1].GetType())
+	})
+
 	t.Run("aliases stripped from ocm.config.ocm.software versioned", func(t *testing.T) {
 		cfg := makeGenericConfig(
 			`{"type":"ocm.config.ocm.software/v1","aliases":{"myrepo":{"type":"OCIRegistry","baseUrl":"ghcr.io"}},"resolvers":[]}`,
