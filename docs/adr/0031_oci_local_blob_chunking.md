@@ -11,7 +11,6 @@ OCM must transport opaque artifacts such as VM disk images that exceed OCI regis
 Current paths do not satisfy this:
 
 * `oci/internal/pack.ResourceLocalBlobOCILayer` stores an opaque local blob as one OCI layer.
-* `PrepareArtifactBlobForOCI` calls `ArtifactBlob.Buffer()` when size or digest is unknown; that cache is fully in-memory.
 * nested OCI artifacts are materialized as gzipped OCI-layout tar streams; the tar writer stages the complete layout in a temporary file.
 * local-resource transfer writes the complete result of `GetLocalResource` to a temporary file before `AddLocalResource` reads it again.
 * CTF directory storage is already an OCI content graph. CTF TAR/TGZ extraction and creation remain whole-archive operations by definition.
@@ -204,67 +203,40 @@ Chunking applies only to opaque local blobs. Native OCI artifacts and OCI image 
 
 Use fixed-size chunks. Boundaries start at offset zero for each blob being split.
 
-#### Chosen upload strategy: one pass with one temporary chunk
+#### Chosen upload strategy: one pass with bounded staging
 
 1. Open one source reader.
-2. Stage at most one chunk in a temporary file while computing chunk and whole-content digests.
-3. Rewind and push the chunk after its descriptor is known.
-4. Repeat until EOF.
-5. Push config and manifest.
+2. Divide it into representation chunks no larger than `maxChunkSize`.
+3. If the target can derive a descriptor while accepting content, upload each bounded chunk directly and use the returned descriptor.
+4. Otherwise, stage at most one chunk while computing its digest, then stream it through `content.Storage`; CTF writes the descriptor-backed stream directly to its backing filesystem.
+5. Push the config and manifest after all chunk descriptors are known.
 
-For unknown-size input, stage up to `maxChunkSize + 1` bytes initially. Content at or below the threshold keeps the existing plain-blob representation. Larger content enters the split path. This bypasses the current full in-memory `ArtifactBlob.Buffer()` behavior.
+For unknown-size input, use bounded lookahead to determine whether the content fits in one chunk. Content at or below `maxChunkSize` keeps the existing plain-blob representation; larger content enters the split path. The first chunk may need bounded staging when the target cannot accept an unknown descriptor, but the complete resource is never buffered.
 
 Pros:
 
 * reads the source once;
-* works uniformly with OCI and CTF `content.Storage`;
-* bounds RAM to the copy buffer and temporary disk to approximately one chunk.
+* avoids pre-upload staging when the target supports unknown-descriptor pushes;
+* streams descriptor-backed writes to OCI, CTF, and other `content.Storage` implementations;
+* bounds RAM to the copy buffer and temporary disk to at most one representation chunk.
 
 Cons:
 
-* requires temporary disk up to one chunk;
+* targets that cannot derive a descriptor while writing require bounded staging before the streamed write;
 * uploads are sequential in the initial implementation;
 * failed writes may leave unreferenced chunks for normal registry/CTF cleanup.
 
 If a registry rejects a chunk below the configured policy, return a clear error with the target, attempted size, and configured limit. The initial implementation does not parse registry-specific errors or retry with progressively smaller chunks.
 
-#### Alternative: two-pass reread and upload
+#### Existing transport-level upload while hashing
 
-First read the complete source to compute the whole-content and chunk descriptors. Reopen it and stream each known chunk directly to `content.Storage.Push`.
+`remotestore.RemoteStore.PushStreaming` already implements registry-native upload while hashing. It opens one OCI Distribution upload session, sends bounded `PATCH` requests while computing the digest and size, and closes the session with `PUT`. `ResourceLocalBlobOCILayer` uses this path when the blob's size or digest is unknown and the remote store has chunked upload enabled, avoiding `ArtifactBlob.Buffer()`.
 
-Pros:
+The representation-level writer should use this capability for direct chunk writes where available. It remains an optimization rather than a replacement for the selected representation:
 
-* no temporary chunk files;
-* uses the existing ORAS storage abstraction for OCI and CTF;
-* constant RAM.
-
-Cons:
-
-* reads all source bytes twice;
-* may download a remote source twice;
-* repeats generated transformations such as compression and depends on byte-for-byte reproducibility;
-* failures during the second pass waste the complete first pass.
-
-Evaluate this strategy against representative file, compressed, generated, and remote blobs before implementation is finalized.
-
-#### Alternative: registry-native upload while hashing
-
-OCI Distribution permits initiating a blob upload, sending bytes with `PATCH` while calculating the digest, then finalizing with `PUT ?digest=...`.
-
-Pros:
-
-* one source read;
-* no temporary chunk file;
-* naturally supports upload progress and potentially resumability.
-
-Cons:
-
-* the current ORAS `content.Storage.Push` contract requires digest and size before upload;
-* requires an ORAS extension/upstream API or registry-specific implementation;
-* has no equivalent unknown-descriptor contract for CTF;
-* introduces registry-specific retry, redirect, resumability, and cancellation behavior.
-
-Do not bypass `content.Storage` in the initial implementation without this analysis.
+* one `PushStreaming` call still commits one OCI blob and cannot bypass a cumulative blob or layer-size limit;
+* CTF streams descriptor-backed writes, but must be extended to implement `StreamingPusher` before it can derive and return a digest during the write; until then, unknown-digest chunks require bounded pre-upload staging;
+* retry, redirect, cancellation, and descriptor verification remain the responsibility of the remote streaming implementation.
 
 ### Existing chunked blob
 
