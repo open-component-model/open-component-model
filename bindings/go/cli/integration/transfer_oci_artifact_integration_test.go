@@ -213,7 +213,7 @@ components:
 			sourceRef,
 			targetRef,
 			"--config", cfgPath,
-			"--uploader", "localblob", // required, otherwise we wouldn't transfer oci artifacts
+			"--copy-resources", // required, otherwise we wouldn't transfer oci artifacts
 		})
 
 		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
@@ -254,7 +254,7 @@ components:
 			sourceRef,
 			targetRef,
 			"--config", cfgPath,
-			"--uploader", "localblob", // required, otherwise we wouldn't transfer oci artifacts
+			"--copy-resources", // required, otherwise we wouldn't transfer oci artifacts
 			"--config", writeOCIUploaderConfig(t),
 		})
 
@@ -298,7 +298,7 @@ components:
 			sourceRef,
 			intermediaryRef,
 			"--config", cfgPath,
-			"--uploader", "localblob", // required, otherwise we wouldn't transfer oci artifacts
+			"--copy-resources", // required, otherwise we wouldn't transfer oci artifacts
 		})
 
 		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
@@ -330,7 +330,7 @@ components:
 			intermediaryRef,
 			targetRef,
 			"--config", cfgPath,
-			"--uploader", "localblob", // required, otherwise we wouldn't transfer oci artifacts
+			"--copy-resources", // required, otherwise we wouldn't transfer oci artifacts
 			"--config", writeOCIUploaderConfig(t),
 		})
 
@@ -674,7 +674,7 @@ components:
 		"transfer", "component-version",
 		sourceRef, targetRef,
 		"--config", cfgPath,
-		"--uploader", "localblob",
+		"--copy-resources",
 	})
 
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
@@ -797,7 +797,7 @@ func Test_Integration_Transfer_OCIArtifact_PreservesV1DescriptorDigest(t *testin
 				command := cmd.New()
 				command.SetArgs([]string{
 					"transfer", "component-version", from, to,
-					"--config", cfgPath, "--uploader", "localblob", "--config", writeOCIUploaderConfig(t),
+					"--config", cfgPath, "--copy-resources", "--config", writeOCIUploaderConfig(t),
 				})
 				ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 				defer cancel()

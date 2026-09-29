@@ -171,10 +171,6 @@ func LookupUploaderConfigs(cfg *genericv1.Config) ([]UploaderConfig, error) {
 	return uploaders, nil
 }
 
-// uploaderTypeSuffix is the type-name suffix every uploader configuration uses:
-// <name>.uploader.transfer.config.ocm.software.
-const uploaderTypeSuffix = ".uploader." + ConfigType
-
 // UploaderTypes returns the default (versioned) type of every uploader configuration
 // registered in Scheme, sorted by runtime.CompareTypesLexicographically.
 func UploaderTypes() []runtime.Type {
@@ -188,16 +184,6 @@ func UploaderTypes() []runtime.Type {
 	return out
 }
 
-// UploaderNames returns the short names ("http", "localblob", ...) of UploaderTypes, in the same order.
-func UploaderNames() []string {
-	types := UploaderTypes()
-	names := make([]string, 0, len(types))
-	for _, t := range types {
-		names = append(names, strings.TrimSuffix(t.Name, uploaderTypeSuffix))
-	}
-	return names
-}
-
 // isUploaderType reports whether t is registered in Scheme with a prototype that
 // implements UploaderConfig.
 func isUploaderType(t runtime.Type) bool {
@@ -207,21 +193,4 @@ func isUploaderType(t runtime.Type) bool {
 	}
 	_, ok := obj.(UploaderConfig)
 	return ok
-}
-
-// ResolveUploaderType resolves a short name ("oci") or a full type
-// ("oci.uploader.transfer.config.ocm.software[/v1alpha1]") to a type registered in
-// Scheme whose prototype implements UploaderConfig.
-func ResolveUploaderType(name string) (runtime.Type, error) {
-	var t runtime.Type
-	var err error
-	if strings.Contains(name, ".") {
-		t, err = runtime.TypeFromString(name)
-	} else {
-		t = runtime.NewVersionedType(name+uploaderTypeSuffix, Version)
-	}
-	if err == nil && isUploaderType(t) {
-		return t, nil
-	}
-	return runtime.Type{}, fmt.Errorf("unknown uploader %q (available: %s)", name, strings.Join(UploaderNames(), ", "))
 }

@@ -63,7 +63,7 @@ both will end up as local blobs.
 
 This means:
 
-1. You can use `--uploader localblob` to copy all resources (including Wget resources) as local blobs during transfer. Without it, the resource is skipped, because there is no
+1. You can use a local blob uploader configuration (via `--config`) to copy all resources (including Wget resources) as local blobs during transfer. Without it, the resource is skipped, because there is no
    way to transfer it without copying the bytes.
 2. The bytes are fetched *again at transfer time* and checked against the resource's digest. If the file behind the URL
    changed since the component version was built, the transfer fails instead of copying different content.

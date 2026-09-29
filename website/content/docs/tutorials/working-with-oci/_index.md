@@ -12,7 +12,7 @@ In this tutorial, you'll learn how to embed OCI artifacts as local blobs inside 
 
 - Create an OCI image layout using the ORAS CLI
 - Embed an OCI image layout as a local blob in a component version
-- Transfer a component version with `--uploader localblob` so that external OCI image references are internalized as local blobs
+- Transfer a component version with a local blob uploader configuration so that external OCI image references are internalized as local blobs
 - Access local blobs natively from an OCI registry by their `localReference` digest and media type
 
 **Estimated time:** ~20 minutes
@@ -34,7 +34,7 @@ flowchart LR
         Constructor --> CTF["CTF Archive"]
     end
 
-    CTF --> Transfer["ocm transfer cv<br/>--uploader localblob"]
+    CTF --> Transfer["ocm transfer cv<br/>--config ocmconfig.yaml"]
 
     subgraph registry ["OCI Registry"]
         direction TB
@@ -207,11 +207,19 @@ Notice that the resource has `access.type: LocalBlob/v1` with the native OCI man
 
 ### Transfer to an OCI registry
 
-Transfer the component version to an OCI registry. The `--uploader localblob` flag ensures all local blobs are transferred:
+Transfer the component version to an OCI registry. First, create a transfer configuration that copies all resources by value:
+
+```yaml
+cat > ocmconfig.yaml << 'EOF'
+type: generic.config.ocm.software/v1
+configurations:
+  - type: localblob.uploader.transfer.config.ocm.software/v1alpha1
+EOF
+```
 
 ```bash
 ocm transfer cv \
-  --uploader localblob \
+  --config ocmconfig.yaml \
   ./transport-archive//github.com/acme.org/native-oci-demo:1.0.0 \
   <your-registry>
 ```
@@ -270,7 +278,7 @@ The repository path follows the pattern `<registry>/<subpath>/component-descript
 
 {{< tab "Transfer by Value" >}}
 
-In this use case, you start with a component version that references an external OCI image, transfer it with `--uploader localblob` to internalize the image as a local blob, and then access it natively from the target registry.
+In this use case, you start with a component version that references an external OCI image, transfer it with a local blob uploader configuration to internalize the image as a local blob, and then access it natively from the target registry.
 
 {{< steps >}}
 
@@ -352,13 +360,21 @@ The image is referenced externally — it still lives in `ghcr.io`. The componen
 
 {{< step >}}
 
-### Transfer with --uploader localblob
+### Transfer with a local blob uploader
 
-Transfer the component to your target registry, copying all resources by value:
+Transfer the component to your target registry, copying all resources by value. Reuse the `ocmconfig.yaml` from above (or create it if you have not already):
+
+```yaml
+cat > ocmconfig.yaml << 'EOF'
+type: generic.config.ocm.software/v1
+configurations:
+  - type: localblob.uploader.transfer.config.ocm.software/v1alpha1
+EOF
+```
 
 ```bash
 ocm transfer cv \
-  --uploader localblob \
+  --config ocmconfig.yaml \
   ./transport-archive//github.com/acme.org/transfer-demo:1.0.0 \
   <your-registry>
 ```
@@ -367,7 +383,7 @@ ocm transfer cv \
 For local registries running without TLS, use the `http://` scheme prefix (e.g. `http://localhost:5001`). HTTPS registries work without a scheme prefix.
 {{< /callout >}}
 
-With `--uploader localblob`, OCM:
+With the local blob uploader configuration, OCM:
 
 1. Downloads the image from `ghcr.io/stefanprodan/podinfo:6.9.1`
 2. Stores it as a local blob in the target component version
@@ -384,7 +400,7 @@ With `--uploader localblob`, OCM:
 ocm get cv <your-registry>//github.com/acme.org/transfer-demo:1.0.0 -o yaml
 ```
 
-After transfer with `--uploader localblob`, the access specification changes from an external reference to a local blob:
+After transfer with the local blob uploader, the access specification changes from an external reference to a local blob:
 
 ```yaml
 resources:
@@ -500,7 +516,7 @@ EOF
 ocm add cv
 
 ocm transfer cv \
-  --uploader localblob \
+  --config ocmconfig.yaml \
   ./transport-archive//github.com/acme.org/fetched-oci-demo:1.0.0 \
   <your-registry>
 ```
@@ -604,7 +620,7 @@ By default, `globalAccess` is not populated. To opt in, use the two-step transfe
 1. Generate the transfer spec:
 
    ```bash
-   ocm transfer cv --dry-run -o yaml --uploader localblob \
+   ocm transfer cv --dry-run -o yaml --config ocmconfig.yaml \
      ./transport-archive//github.com/acme.org/native-oci-demo:1.0.0 \
      <your-registry> > spec.yaml
    ```
@@ -650,10 +666,13 @@ Without `globalAccess`, you can still access native OCI artifacts directly using
 {{< /details >}}
 
 {{< details "Can I control how artifacts are stored in the target?" >}}
-Yes. `--uploader localblob` stores artifacts as local blobs within the component version. To upload them as standalone OCI artifacts in the target registry, add the OCI uploader before it:
+Yes. A local blob uploader configuration stores artifacts as local blobs within the component version. To upload them as standalone OCI artifacts in the target registry, add an OCI uploader entry before the local blob entry:
 
-```bash
-ocm transfer cv --uploader oci --uploader localblob <src> <target>
+```yaml
+type: generic.config.ocm.software/v1
+configurations:
+  - type: oci.uploader.transfer.config.ocm.software/v1alpha1
+  - type: localblob.uploader.transfer.config.ocm.software/v1alpha1
 ```
 
 With the local blob uploader, the artifact stays within the component version's index. With the OCI uploader, it is stored independently.

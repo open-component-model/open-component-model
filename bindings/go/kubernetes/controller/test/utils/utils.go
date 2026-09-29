@@ -191,7 +191,7 @@ func PrepareOCMComponent(ctx context.Context, name, componentConstructorPath, im
 		if err := os.WriteFile(uploaderConfigPath, []byte(uploaderConfig), 0o600); err != nil {
 			return fmt.Errorf("could not write oci uploader ocmconfig: %w", err)
 		}
-		cmd.Args = append(cmd.Args, "--uploader", "localblob", "--config", uploaderConfigPath)
+		cmd.Args = append(cmd.Args, "--copy-resources", "--config", uploaderConfigPath)
 	}
 
 	if _, err := Run(cmd); err != nil {

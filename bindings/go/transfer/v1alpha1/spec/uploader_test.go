@@ -262,30 +262,5 @@ func TestUploaderTypes(t *testing.T) {
 		r.True(strings.HasSuffix(typ.Name, ".uploader.transfer.config.ocm.software"), typ.String())
 		r.Equal(spec.Version, typ.Version)
 	}
-	r.Equal([]string{"http", "localblob", "oci", "reference"}, spec.UploaderNames())
-}
-
-func TestResolveUploaderType(t *testing.T) {
-	for _, tc := range []struct {
-		name    string
-		want    runtime.Type
-		wantErr string
-	}{
-		{"oci", runtime.NewVersionedType(spec.OCIUploaderConfigType, spec.Version), ""},
-		{"oci.uploader.transfer.config.ocm.software/v1alpha1", runtime.NewVersionedType(spec.OCIUploaderConfigType, spec.Version), ""},
-		{"reference.uploader.transfer.config.ocm.software", runtime.NewUnversionedType(spec.ReferenceUploaderConfigType), ""},
-		{"transfer.config.ocm.software/v1alpha1", runtime.Type{}, `unknown uploader "transfer.config.ocm.software/v1alpha1" (available: http, localblob, oci, reference)`},
-		{"nope", runtime.Type{}, `unknown uploader "nope" (available: http, localblob, oci, reference)`},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			r := require.New(t)
-			got, err := spec.ResolveUploaderType(tc.name)
-			if tc.wantErr != "" {
-				r.EqualError(err, tc.wantErr)
-				return
-			}
-			r.NoError(err)
-			r.Equal(tc.want, got)
-		})
-	}
+	r.Len(spec.UploaderTypes(), 4)
 }

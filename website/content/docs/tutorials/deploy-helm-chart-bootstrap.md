@@ -67,7 +67,7 @@ This means:
 
 **Localization** keeps image references in sync when components move between registries:
 
-1. **During transfer**: When you run `ocm transfer cv --uploader localblob` with an OCI uploader configuration, OCM uploads artifacts to the new registry as OCI artifacts and updates the descriptor's image references accordingly
+1. **During transfer**: When you run `ocm transfer cv` with an OCI uploader configuration (via `--config`), OCM uploads artifacts to the new registry as OCI artifacts and updates the descriptor's image references accordingly
 2. **During deployment**: The RGD reads the updated image reference from the component and injects it into Helm values
 
 This ensures your deployment always uses images from the current registry, not hardcoded original locations.
@@ -471,10 +471,19 @@ Build the component version locally:
 ocm add cv
 ```
 
-Transfer to your registry with the OCI uploader to enable localization. `--uploader oci` makes the Helm chart and image land as OCI artifacts in the target registry, keeping image references the RGD can rewrite; `--uploader localblob` copies every other resource:
+Transfer to your registry with the OCI uploader to enable localization. An OCI uploader entry makes the Helm chart and image land as OCI artifacts in the target registry, keeping image references the RGD can rewrite; a local blob catch-all copies every other resource:
+
+```yaml
+cat > ocmconfig.yaml << 'EOF'
+type: generic.config.ocm.software/v1
+configurations:
+  - type: oci.uploader.transfer.config.ocm.software/v1alpha1
+  - type: localblob.uploader.transfer.config.ocm.software/v1alpha1
+EOF
+```
 
 ```bash
-ocm transfer cv --uploader oci --uploader localblob transport-archive//ocm.software/ocm-k8s-toolkit/bootstrap:1.0.0 $OCM_REPO
+ocm transfer cv --config ocmconfig.yaml transport-archive//ocm.software/ocm-k8s-toolkit/bootstrap:1.0.0 $OCM_REPO
 ```
 
 {{< /step >}}
@@ -739,7 +748,7 @@ If pods show `ImagePullBackOff` or `ErrImagePull` errors, the kubelet cannot pul
 You've successfully:
 
 - Created an OCM component with embedded deployment instructions (RGD)
-- Used `--uploader localblob` with an OCI uploader configuration to enable localization during transfer
+- Used an OCI uploader configuration to enable localization during transfer
 - Deployed the component using the bootstrap pattern
 - Verified that localization kept image references in sync
 

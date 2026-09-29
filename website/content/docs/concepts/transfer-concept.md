@@ -41,7 +41,7 @@ For details on CTF structure and how to create component versions in a CTF archi
 
 By default, `ocm transfer` copies only the component descriptor (metadata). Resource artifacts such as container images or Helm charts stay in their original location, and the component descriptor references them by their original access coordinates.
 
-With the `--uploader localblob` flag, transfer creates a self-contained copy: all resource artifacts are downloaded from the source and uploaded to the target. This is essential for air-gapped scenarios where the target environment cannot reach the original artifact locations.
+With a local blob uploader configuration (a `localblob.uploader.transfer.config.ocm.software/v1alpha1` entry passed via `--config`), transfer creates a self-contained copy: all resource artifacts are downloaded from the source and uploaded to the target. This is essential for air-gapped scenarios where the target environment cannot reach the original artifact locations.
 
 ```mermaid
 flowchart TB
@@ -73,7 +73,7 @@ flowchart TB
     end
 ```
 
-Use `--uploader localblob` when:
+Use a local blob uploader configuration when:
 
 - The target environment has no network access to the source
 - You want a fully independent copy of all artifacts
@@ -81,7 +81,7 @@ Use `--uploader localblob` when:
 
 ## Localization
 
-When resources are copied with `--uploader localblob`, the component descriptor access coordinates are updated to point to the target registry. However, deployment instructions **embedded inside** resources are not modified. For example, a Helm chart's `values.yaml` may still reference `registry-a.example.com/app:1.0` even after the image has been copied to the target registry. Resources are transferred byte-for-byte to preserve digest integrity, so these internal references remain unchanged.
+When resources are copied with a local blob uploader, the component descriptor access coordinates are updated to point to the target registry. However, deployment instructions **embedded inside** resources are not modified. For example, a Helm chart's `values.yaml` may still reference `registry-a.example.com/app:1.0` even after the image has been copied to the target registry. Resources are transferred byte-for-byte to preserve digest integrity, so these internal references remain unchanged.
 
 **Localization** solves this at deploy time, not at transfer time. In a Kubernetes environment, the OCM controller's Resource CR resolves the actual artifact location from the component descriptor and publishes it in its status. Deployment tools like kro or Flux then consume that published location instead of the stale reference embedded in the deployment manifest.
 
@@ -127,7 +127,7 @@ flowchart LR
     CTF2 -->|"verify signature"| Deploy["Deployment"]
 ```
 
-1. The build environment signs the component version and exports it to a CTF archive with `--uploader localblob`
+1. The build environment signs the component version and exports it to a CTF archive with a local blob uploader configuration
 2. The archive is physically moved across the air-gap boundary
 3. The archive is imported into the target registry
 4. Before deployment, the signature is verified using the public key

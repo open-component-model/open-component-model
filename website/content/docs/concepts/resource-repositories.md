@@ -82,7 +82,7 @@ authentication flows by implementing a resource repository plugin.
 ## How Resource Repositories Fit Into Transfer
 
 During [transfer]({{< relref "docs/concepts/transfer-concept.md" >}}), resource repositories play a central role. When
-transferring with `--uploader localblob`, OCM uses the source resource repository to download each resource artifact and the
+transferring with a local blob uploader configuration, OCM uses the source resource repository to download each resource artifact and the
 target resource repository to upload it. This is how a container image moves from one OCI registry to another or how a
 Helm chart gets re-hosted into a target environment.
 

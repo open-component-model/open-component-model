@@ -7,22 +7,26 @@ import (
 )
 
 // TODO(legacy-flags): remove together with legacy_flags.go.
-func TestLegacyUploaderValues(t *testing.T) {
+func TestLegacyUploaderEntries(t *testing.T) {
+	oci := map[string]any{"type": "oci.uploader.transfer.config.ocm.software/v1alpha1"}
+	localBlob := map[string]any{"type": "localblob.uploader.transfer.config.ocm.software/v1alpha1"}
 	for _, tc := range []struct {
 		name          string
 		copyResources bool
 		uploadAs      string
-		want          []string
+		want          []map[string]any
 	}{
 		{"neither flag", false, "", nil},
 		{"--upload-as localBlob is the default", false, uploadAsLocalBlob, nil},
-		{"--copy-resources", true, "", []string{"localblob"}},
-		{"--copy-resources --upload-as localBlob", true, uploadAsLocalBlob, []string{"localblob"}},
-		{"--copy-resources --upload-as ociArtifact", true, uploadAsOCIArtifact, []string{"oci", "localblob"}},
-		{"--upload-as ociArtifact only uploads OCI-manifest local blobs", false, uploadAsOCIArtifact, []string{"oci=" + legacyOCIArtifactLocalBlobMatch}},
+		{"--copy-resources", true, "", []map[string]any{localBlob}},
+		{"--copy-resources --upload-as localBlob", true, uploadAsLocalBlob, []map[string]any{localBlob}},
+		{"--copy-resources --upload-as ociArtifact", true, uploadAsOCIArtifact, []map[string]any{oci, localBlob}},
+		{"--upload-as ociArtifact only uploads OCI-manifest local blobs", false, uploadAsOCIArtifact, []map[string]any{
+			{"type": "oci.uploader.transfer.config.ocm.software/v1alpha1", "match": legacyOCIArtifactLocalBlobMatch},
+		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			require.New(t).Equal(tc.want, legacyUploaderValues(tc.copyResources, tc.uploadAs))
+			require.New(t).Equal(tc.want, legacyUploaderEntries(tc.copyResources, tc.uploadAs))
 		})
 	}
 }

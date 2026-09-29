@@ -68,7 +68,7 @@ func writeOCIUploaderConfig(t *testing.T) string {
 
 // Test_Integration_TransferWithTransferConfig_FileDrivesLocalBlobUploader proves that
 // a `localblob.uploader.transfer.config.ocm.software/v1alpha1` entry set purely in the
-// central OCM configuration (no --uploader flag) actually reaches the transfer engine.
+// central OCM configuration (no --copy-resources flag) actually reaches the transfer engine.
 //
 // The signal: a source component has an external `OCIImage` access pointing at
 // the source registry. Without the local blob uploader, the access stays
@@ -87,7 +87,7 @@ func Test_Integration_TransferWithTransferConfig_FileDrivesLocalBlobUploader(t *
 	targetRegistry, err := internal.CreateOCIRegistry(t)
 	r.NoError(err, "should be able to start target registry container")
 
-	// Drive the local blob uploader purely from the central OCM config. No --uploader flag.
+	// Drive the local blob uploader purely from the central OCM config. No --copy-resources flag.
 	cfgPath := writeOCMConfigWithCredsAndTransfer(t, []internal.ConfigOpts{
 		{Host: sourceRegistry.Host, Port: sourceRegistry.Port, User: sourceRegistry.User, Password: sourceRegistry.Password},
 		{Host: targetRegistry.Host, Port: targetRegistry.Port, User: targetRegistry.User, Password: targetRegistry.Password},

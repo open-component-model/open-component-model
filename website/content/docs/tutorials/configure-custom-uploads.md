@@ -8,7 +8,7 @@ hasMermaid: true
 ---
 
 By default, `ocm transfer` either leaves external resources where they are or, with
-`--uploader localblob`, downloads and re-embeds them into the target component version.
+a local blob uploader configuration, downloads and re-embeds them into the target component version.
 An **uploader configuration** gives you a third option: route a matching resource
 through a custom transformer that streams it to an upload target of your choice and
 rewrites the resource to point at the new location.
@@ -95,7 +95,7 @@ source), so you can route any access type to an HTTP target — see the
 Uploaders are evaluated in declaration order and the first one that selects a
 resource handles it, so the HTTP uploader takes the `Wget/v1` resource and the
 `localblob.uploader` catch-all copies everything else as a local blob (the same
-as passing `--uploader localblob`). Without the catch-all, local blobs are still
+as passing `--config` with a local blob uploader entry). Without the catch-all, local blobs are still
 copied and all other resources stay by reference.
 
 {{< /step >}}

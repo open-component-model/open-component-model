@@ -122,7 +122,7 @@ For example, if `app-a` resolves `shared-lib` from Registry A, and `app-b` resol
 ## When to Use It
 
 - **Use canonical repositories** when you control the full component graph and want the simplest possible operational model. A single repository with all components means no resolver configuration is needed.
-- **Canonical repositories become important** after a transfer: `ocm transfer cv --recursive --uploader localblob` creates a canonical repository in the target, making the transferred graph self-contained.
+- **Canonical repositories become important** after a transfer: `ocm transfer cv --recursive` with a local blob uploader configuration creates a canonical repository in the target, making the transferred graph self-contained.
 - **You can ignore canonical repositories** when your components are intentionally distributed across registries. In that case, configure [resolvers]({{< relref "docs/concepts/resolvers.md" >}}) to map component names to their respective repositories.
 
 ## Next Steps

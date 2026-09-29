@@ -48,8 +48,7 @@ itself and references the `Component` to merge in those propagated credentials.
 
 The configuration influences the way the transfer happens: `recursive` controls following references.
 By default, local blobs are copied and all other resources stay by reference. To copy all resources,
-add a `localblob.uploader.transfer.config.ocm.software/v1alpha1` catch-all entry (or pass
-`--uploader localblob` on the CLI). To upload resources as separate OCI artifacts, add an
+add a `localblob.uploader.transfer.config.ocm.software/v1alpha1` catch-all entry. To upload resources as separate OCI artifacts, add an
 `oci.uploader.transfer.config.ocm.software/v1alpha1` uploader entry to the same config (see the
 [migration guide]({{< relref "docs/how-to/migrate-from-upload-as.md" >}})). These options mirror the
 flags on the `ocm transfer component-version` CLI command, mapped out in the configuration step below.

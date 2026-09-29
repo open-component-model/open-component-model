@@ -173,10 +173,16 @@ tasks:
         vars:
           COMPONENT: '{{.CTF}}//{{.NAME}}:{{.VERSION}}'
       - cmd: |
+          cat > {{.AIRGAP_CTF}}.ocmconfig.yaml << 'EOF'
+          type: generic.config.ocm.software/v1
+          configurations:
+            - type: localblob.uploader.transfer.config.ocm.software/v1alpha1
+          EOF
           {{ .ocm }} transfer cv \
-            --uploader localblob \
+            --config {{.AIRGAP_CTF}}.ocmconfig.yaml \
             --recursive \
             {{.CTF}}//{{.NAME}}:{{.VERSION}} {{.AIRGAP_CTF}} {{ .CLI_ARGS }}
+          rm -f {{.AIRGAP_CTF}}.ocmconfig.yaml
 
   # === CLUSTER TASKS ===
 
@@ -295,11 +301,17 @@ tasks:
   cluster:import:
     desc: Transfer CTF archive to air-gapped cluster
     cmd: |
+      cat > /tmp/ocm-import-config.yaml << 'EOF'
+      type: generic.config.ocm.software/v1
+      configurations:
+        - type: localblob.uploader.transfer.config.ocm.software/v1alpha1
+      EOF
       {{ .ocm }} transfer cv \
-        --uploader localblob \
+        --config /tmp/ocm-import-config.yaml \
         --recursive \
         {{.AIRGAP_CTF}}//{{.NAME}}:{{.VERSION}} \
         http://registry:5000
+      rm -f /tmp/ocm-import-config.yaml
 
   cluster:bootstrap:
     desc: Bootstrap Components and Wait for Product to be Ready

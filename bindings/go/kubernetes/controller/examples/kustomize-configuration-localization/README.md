@@ -30,8 +30,17 @@ first and the local blob uploader as catch-all, so layout resources are
 converted into native OCI artifacts in the target registry and every other
 resource is copied there:
 
+```yaml
+cat > ocmconfig.yaml << 'EOF'
+type: generic.config.ocm.software/v1
+configurations:
+  - type: oci.uploader.transfer.config.ocm.software/v1alpha1
+  - type: localblob.uploader.transfer.config.ocm.software/v1alpha1
+EOF
+```
+
 ```bash
-ocm transfer cv --uploader oci --uploader localblob <ctf> <registry>
+ocm transfer cv --config ocmconfig.yaml <ctf> <registry>
 ```
 
 Without the OCI uploader, the OCI artifact does not exist at the reference the

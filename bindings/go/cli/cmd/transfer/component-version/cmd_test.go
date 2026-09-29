@@ -514,7 +514,7 @@ func TestTransferComponentVersionPreservesSignatures(t *testing.T) {
 	r.NoError(err)
 	r.NotEmpty(srcDesc.Signatures, "source descriptor should have signatures")
 
-	// Transfer to target CTF with --uploader localblob
+	// Transfer to target CTF with --copy-resources
 	toPath := t.TempDir()
 	fromRef := compref.Ref{
 		Repository: &ctfv1.Repository{
@@ -528,7 +528,7 @@ func TestTransferComponentVersionPreservesSignatures(t *testing.T) {
 	logs := test.NewJSONLogReader()
 	result := new(bytes.Buffer)
 	_, err = test.OCM(t,
-		test.WithArgs("transfer", "component-version", fromRef.String(), targetArg, "--uploader", "localblob"),
+		test.WithArgs("transfer", "component-version", fromRef.String(), targetArg, "--copy-resources"),
 		test.WithOutput(result),
 		test.WithErrorOutput(logs),
 	)
@@ -727,22 +727,27 @@ func setupOCIImageTransferFixture(t *testing.T) (fromRef string, targetArg strin
 	return ref.String(), fmt.Sprintf("ctf::%s", t.TempDir())
 }
 
-// TestTransferUploaderFlag verifies that --uploader entries are appended after the
-// configured uploaders in flag order and are decoded and validated like config entries.
-func TestTransferUploaderFlag(t *testing.T) {
+// TestTransferUploaderConfig verifies that uploader entries of the OCM configuration
+// select resources, and that the deprecated --copy-resources/--upload-as flags are
+// translated into uploader entries appended after them, logging the generated configuration.
+func TestTransferUploaderConfig(t *testing.T) {
 	fromRef, targetArg := setupOCIImageTransferFixture(t)
 
-	writeConfig := func(t *testing.T, uploaderType string) string {
+	writeConfig := func(t *testing.T, entries string) string {
 		t.Helper()
 		path := filepath.Join(t.TempDir(), "config.yaml")
-		require.NoError(t, os.WriteFile(path, []byte(`type: generic.config.ocm.software/v1
-configurations:
-  - type: `+uploaderType+`
-`), 0o644))
+		require.NoError(t, os.WriteFile(path, []byte("type: generic.config.ocm.software/v1\nconfigurations:\n"+entries), 0o644))
 		return path
 	}
-	ociConfig := writeConfig(t, "oci.uploader.transfer.config.ocm.software/v1alpha1")
-	referenceConfig := writeConfig(t, "reference.uploader.transfer.config.ocm.software/v1alpha1")
+	ociConfig := writeConfig(t, "  - type: oci.uploader.transfer.config.ocm.software/v1alpha1\n")
+	referenceConfig := writeConfig(t, "  - type: reference.uploader.transfer.config.ocm.software/v1alpha1\n    match: resource.name == \"image\"\n")
+	ociAndLocalBlobConfig := writeConfig(t, "  - type: oci.uploader.transfer.config.ocm.software/v1alpha1\n  - type: localblob.uploader.transfer.config.ocm.software/v1alpha1\n")
+	httpWithoutMatchConfig := writeConfig(t, "  - type: http.uploader.transfer.config.ocm.software/v1alpha1\n    targetURL: https://example.com\n")
+
+	const (
+		localBlobOnly   = `{"configurations":[{"type":"localblob.uploader.transfer.config.ocm.software/v1alpha1"}],"type":"generic.config.ocm.software/v1"}`
+		ociAndLocalBlob = `{"configurations":[{"type":"oci.uploader.transfer.config.ocm.software/v1alpha1"},{"type":"localblob.uploader.transfer.config.ocm.software/v1alpha1"}],"type":"generic.config.ocm.software/v1"}`
+	)
 
 	for _, tc := range []struct {
 		name string
@@ -751,7 +756,9 @@ configurations:
 		target      string
 		contains    []string
 		notContains []string
-		wantErr     string
+		// wantConfig is the generated configuration the deprecation warning must carry.
+		wantConfig string
+		wantErr    string
 	}{
 		{
 			name:        "oci config alone does not select an image for a CTF target",
@@ -759,50 +766,27 @@ configurations:
 			notContains: []string{"GetOCIArtifact"},
 		},
 		{
-			name:     "localblob flag after the oci config copies the image",
-			args:     []string{"--config", ociConfig, "--uploader", "localblob"},
+			name:     "oci and localblob config copies the image to a CTF target",
+			args:     []string{"--config", ociAndLocalBlobConfig},
 			contains: []string{"GetOCIArtifact", "CTFAddLocalResource"},
 		},
 		{
-			name:        "config entries come before flag entries",
-			args:        []string{"--config", referenceConfig, "--uploader", "localblob"},
-			notContains: []string{"GetOCIArtifact"},
-		},
-		{
-			name:        "flag entries keep their order",
-			args:        []string{"--uploader", `reference=resource.name == "image"`, "--uploader", "localblob"},
-			notContains: []string{"GetOCIArtifact"},
-		},
-		{
-			name:    "unknown uploader name",
-			args:    []string{"--uploader", "nope"},
-			wantErr: `invalid --uploader "nope": unknown uploader "nope" (available: http, localblob, oci, reference)`,
-		},
-		{
-			name:    "a single empty value is reported",
-			args:    []string{"--uploader", ""},
-			wantErr: `invalid --uploader "": empty value`,
-		},
-		{
-			name:    "unknown field in a mapping is rejected when decoding",
-			args:    []string{"--uploader", "{type: oci, bogus: 1}"},
-			wantErr: `unknown field "bogus"`,
-		},
-		{
 			name:    "http without match fails validation",
-			args:    []string{"--uploader", "http"},
+			args:    []string{"--config", httpWithoutMatchConfig},
 			wantErr: "match is required",
 		},
 		// TODO(legacy-flags): deprecated flag cases; remove together with legacy_flags.go.
 		{
-			name:     "deprecated --copy-resources copies the image like --uploader localblob",
-			args:     []string{"--copy-resources"},
-			contains: []string{"GetOCIArtifact", "CTFAddLocalResource"},
+			name:       "deprecated --copy-resources copies the image and logs the generated config",
+			args:       []string{"--copy-resources"},
+			contains:   []string{"GetOCIArtifact", "CTFAddLocalResource"},
+			wantConfig: localBlobOnly,
 		},
 		{
-			name:        "deprecated --copy-resources comes after --uploader entries",
-			args:        []string{"--copy-resources", "--uploader", `reference=resource.name == "image"`},
+			name:        "deprecated --copy-resources comes after configured uploaders",
+			args:        []string{"--config", referenceConfig, "--copy-resources"},
 			notContains: []string{"GetOCIArtifact"},
+			wantConfig:  localBlobOnly,
 		},
 		{
 			name:        "deprecated --upload-as ociArtifact alone keeps an OCI image by reference",
@@ -811,10 +795,11 @@ configurations:
 			notContains: []string{"TransferOCIArtifact", "GetOCIArtifact"},
 		},
 		{
-			name:     "deprecated --copy-resources --upload-as ociArtifact uploads an OCI image as an artifact",
-			args:     []string{"--copy-resources", "--upload-as", "ociArtifact"},
-			target:   "ghcr.io/target-org/ocm",
-			contains: []string{"TransferOCIArtifact"},
+			name:       "deprecated --copy-resources --upload-as ociArtifact uploads an OCI image as an artifact",
+			args:       []string{"--copy-resources", "--upload-as", "ociArtifact"},
+			target:     "ghcr.io/target-org/ocm",
+			contains:   []string{"TransferOCIArtifact"},
+			wantConfig: ociAndLocalBlob,
 		},
 		{
 			name:    "deprecated --upload-as rejects unknown values",
@@ -825,6 +810,7 @@ configurations:
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
 			result := new(bytes.Buffer)
+			logs := test.NewJSONLogReader()
 			target := targetArg
 			if tc.target != "" {
 				target = tc.target
@@ -833,7 +819,7 @@ configurations:
 			_, err := test.OCM(t,
 				test.WithArgs(args...),
 				test.WithOutput(result),
-				test.WithErrorOutput(test.NewJSONLogReader()),
+				test.WithErrorOutput(logs),
 			)
 			if tc.wantErr != "" {
 				r.ErrorContains(err, tc.wantErr)
@@ -846,6 +832,17 @@ configurations:
 			}
 			for _, s := range tc.notContains {
 				r.NotContains(out, s)
+			}
+			if tc.wantConfig != "" {
+				entries, err := logs.List()
+				r.NoError(err)
+				var configs []any
+				for _, e := range entries {
+					if e.Level == "WARN" && strings.Contains(e.Msg, "deprecated") {
+						configs = append(configs, e.Extras["config"])
+					}
+				}
+				r.Equal([]any{tc.wantConfig}, configs, "exactly one deprecation warning carrying the generated config")
 			}
 		})
 	}

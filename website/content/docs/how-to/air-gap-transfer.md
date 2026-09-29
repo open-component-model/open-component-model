@@ -57,11 +57,19 @@ You should see: `SIGNATURE VERIFICATION SUCCESSFUL` and exit code `0`. For detai
 
 ### Transfer to a CTF archive
 
-Create a self-contained [CTF archive]({{< relref "docs/concepts/transfer-concept.md" >}}) that bundles all resource artifacts and transitively referenced [component versions]({{< relref "docs/concepts/component-identity.md" >}}). See [Transfer and Transport]({{< relref "docs/concepts/transfer-concept.md" >}}) for details on the `--uploader localblob` flag.
+Create a self-contained [CTF archive]({{< relref "docs/concepts/transfer-concept.md" >}}) that bundles all resource artifacts and transitively referenced [component versions]({{< relref "docs/concepts/component-identity.md" >}}). A local blob uploader configuration ensures all resources are copied by value (see [Transfer and Transport]({{< relref "docs/concepts/transfer-concept.md" >}})):
+
+```yaml
+cat > ocmconfig.yaml << 'EOF'
+type: generic.config.ocm.software/v1
+configurations:
+  - type: localblob.uploader.transfer.config.ocm.software/v1alpha1
+EOF
+```
 
 ```bash
 ocm transfer cv \
-  --uploader localblob \
+  --config ocmconfig.yaml \
   --recursive \
   <source-repository>//<component-name>:<version> \
   ctf::<path/to/airgap-transport.ctf>
@@ -107,7 +115,7 @@ On the air-gapped side, transfer the CTF archive into the target registry. The t
 
 ```bash
 ocm transfer cv \
-  --uploader localblob \
+  --config ocmconfig.yaml \
   --recursive \
   ctf::<path/to/airgap-transport.ctf>//<component-name>:<version> \
   <target-registry>

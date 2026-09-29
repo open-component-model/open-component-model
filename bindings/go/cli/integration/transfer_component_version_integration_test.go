@@ -249,7 +249,7 @@ configurations:
 	// Add the signed component version
 	r.NoError(sourceRepo.AddComponentVersion(ctx, fromDesc))
 
-	// 3. Transfer to OCI registry with --uploader localblob
+	// 3. Transfer to OCI registry with --copy-resources
 	sourceRef := fmt.Sprintf("ctf::%s//%s:%s", sourceCTFPath, componentName, componentVersion)
 	targetRef := fmt.Sprintf("http://%s", registry.RegistryAddress)
 
@@ -258,7 +258,7 @@ configurations:
 		"transfer", "component-version",
 		sourceRef, targetRef,
 		"--config", cfgPath,
-		"--uploader", "localblob",
+		"--copy-resources",
 	})
 
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
@@ -296,7 +296,7 @@ configurations:
 
 // Test_Integration_TransferComponentVersion_WgetByValue verifies that a component whose resource
 // has a wget access is transferred by value through the CLI: `transfer component-version
-// --uploader localblob` downloads the URL content and embeds it as a local blob in the target CTF,
+// --copy-resources` downloads the URL content and embeds it as a local blob in the target CTF,
 // making the target self-contained. This exercises the wget transfer transformer wired into the
 // default transfer builder.
 func Test_Integration_TransferComponentVersion_WgetByValue(t *testing.T) {
@@ -344,14 +344,14 @@ components:
 	})
 	r.NoError(addCMD.ExecuteContext(ctx), "creating source CTF with a wget access should succeed")
 
-	// transfer CTF -> CTF with --uploader localblob: the wget resource is downloaded and embedded.
+	// transfer CTF -> CTF with --copy-resources: the wget resource is downloaded and embedded.
 	targetCTF := filepath.Join(t.TempDir(), "target-ctf")
 	transferCMD := cmd.New()
 	transferCMD.SetArgs([]string{
 		"transfer", "component-version",
 		fmt.Sprintf("ctf::%s//%s:%s", sourceCTF, componentName, componentVersion),
 		fmt.Sprintf("ctf::%s", targetCTF),
-		"--uploader", "localblob",
+		"--copy-resources",
 	})
 	r.NoError(transferCMD.ExecuteContext(ctx), "wget by-value transfer should succeed")
 
@@ -378,7 +378,7 @@ components:
 }
 
 // Test_Integration_TransferComponentVersion_WgetByValue_ToOCI verifies the wget by-value transfer
-// against a real OCI registry target (not just a CTF): `transfer component-version --uploader localblob`
+// against a real OCI registry target (not just a CTF): `transfer component-version --copy-resources`
 // downloads the wget URL content and embeds it into the registry as a local blob via the
 // OCIAddLocalResource transformer. The resulting resource access is LocalBlob/v1 and its content is
 // stored in (and readable back from) the registry.
@@ -449,14 +449,14 @@ components:
 	})
 	r.NoError(addCMD.ExecuteContext(t.Context()), "creating source CTF with a wget access should succeed")
 
-	// transfer CTF -> OCI registry with --uploader localblob: the wget resource is downloaded and
+	// transfer CTF -> OCI registry with --copy-resources: the wget resource is downloaded and
 	// embedded into the registry as a local blob (OCIAddLocalResource path).
 	transferCMD := cmd.New()
 	transferCMD.SetArgs([]string{
 		"transfer", "component-version",
 		fmt.Sprintf("ctf::%s//%s:%s", sourceCTF, componentName, componentVersion),
 		fmt.Sprintf("http://%s", registry.RegistryAddress),
-		"--uploader", "localblob",
+		"--copy-resources",
 		"--config", cfgPath,
 	})
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)

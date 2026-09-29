@@ -33,7 +33,7 @@ func init() {
 //
 // Declared as the last uploader without a match, it copies every resource no earlier
 // uploader selects; this replaces the former `copyMode: allResources` (and is what
-// `ocm transfer cv --uploader localblob` appends):
+// `ocm transfer cv --copy-resources` appends):
 //
 //	type: generic.config.ocm.software/v1
 //	configurations:

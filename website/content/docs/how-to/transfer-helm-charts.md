@@ -69,18 +69,28 @@ ocm add cv --repository ctf::<path/to/archive> \
 
 ### Transfer the component version
 
-Transfer the component version to the target registry. `--uploader oci` stores the Helm chart as a standalone OCI
-artifact in the target registry, and `--uploader localblob` copies every other resource:
+Transfer the component version to the target registry. An OCI uploader stores the Helm chart as a standalone OCI
+artifact in the target registry, and a local blob catch-all copies every other resource.
+
+Create the transfer configuration:
+
+```yaml
+cat > ocmconfig.yaml << 'EOF'
+type: generic.config.ocm.software/v1
+configurations:
+  - type: oci.uploader.transfer.config.ocm.software/v1alpha1
+  - type: localblob.uploader.transfer.config.ocm.software/v1alpha1
+EOF
+```
 
 ```bash
 ocm transfer cv \
-  --uploader oci \
-  --uploader localblob \
+  --config ocmconfig.yaml \
   ctf::<path/to/archive>//<component-name>:<version> \
   <target-registry>
 ```
 
-The same uploaders can live in an OCM config file instead (pass it with `--config`):
+The same configuration can also live in an existing OCM config file:
 
 ```yaml
 type: generic.config.ocm.software/v1
@@ -154,8 +164,7 @@ To transfer a Helm chart component version from one OCI registry to another, use
 
 ```bash
 ocm transfer cv \
-  --uploader oci \
-  --uploader localblob \
+  --config ocmconfig.yaml \
   <source-registry>//<component-name>:<version> \
   <target-registry>
 ```

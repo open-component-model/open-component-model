@@ -239,7 +239,7 @@ func TestDownloadResourceSBOM_SurvivesTransfer(t *testing.T) {
 	targetPath := t.TempDir()
 
 	_, err := test.OCM(t, test.WithArgs(
-		"transfer", "component-version", source, "ctf::"+targetPath, "--uploader", "localblob"))
+		"transfer", "component-version", source, "ctf::"+targetPath, "--copy-resources"))
 	r.NoError(err)
 
 	target := (&compref.Ref{

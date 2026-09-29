@@ -131,7 +131,7 @@ see [Migrate from Deprecated Resolvers]({{< relref "migrate-from-deprecated-reso
 - **If different versions of the same component live in different registries**, use the `versionConstraint` field to
   route specific version ranges to the right repository. See
   [Version Constraints]({{< relref "docs/reference/resolver-configuration.md#version-constraints" >}}) for details.
-- **If you need to transfer components to another registry**, use `ocm transfer cv --recursive --uploader localblob` with
+- **If you need to transfer components to another registry**, use `ocm transfer cv --recursive --config ocmconfig.yaml` with a local blob uploader configuration and
   the same config file. See
   [OCM Transfer]({{< relref "docs/concepts/resolvers.md#ocm-transfer" >}}) for details.
 - **Resolvers are evaluated in order** — place more specific patterns before broader ones so the right repository is

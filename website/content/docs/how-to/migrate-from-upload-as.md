@@ -14,8 +14,8 @@ CLI config and controller `Replication` configs) with the
 
 {{< callout context="caution" >}}
 The `--upload-as` and `--copy-resources` flags are deprecated. They still work
-and print a deprecation warning: the CLI translates them into uploader entries
-appended after all configured and `--uploader` entries (see
+and print a deprecation warning: the CLI translates them into uploader
+configuration entries appended after all configured entries (see
 [Deprecated flags](#deprecated-flags)). A leftover `uploadType` field in a
 transfer config fails config loading with `unknown field "uploadType"` and must
 be migrated before upgrading.
@@ -35,16 +35,28 @@ location (`imageReference`), and shares one mechanism with the HTTP uploader.
 
 ## Deprecated flags
 
-Until you migrate, the CLI translates the deprecated flags into `--uploader`
-values. The translated entries come after all entries from the OCM configuration
-and from `--uploader`, so explicit rules still win:
+Until you migrate, the CLI translates the deprecated flags into uploader
+configuration entries. The translated entries come after all entries from the
+OCM configuration, so explicit rules still win.
 
-| Deprecated flags | Translated to |
+When a deprecated flag is used, the CLI logs a warning:
+
+```text
+level=WARN msg="--copy-resources and --upload-as are deprecated: replace them with the OCM configuration in the config attribute (JSON is valid YAML), passed via --config or added to your existing configuration" config="{\"configurations\":[{\"type\":\"localblob.uploader.transfer.config.ocm.software/v1alpha1\"}],\"type\":\"generic.config.ocm.software/v1\"}"
+```
+
+The `config` attribute contains the equivalent OCM configuration as one-line
+JSON. Copy that value into a file and pass it with `--config`, then drop the
+deprecated flags.
+
+The following table shows what each deprecated flag combination translates to:
+
+| Deprecated flags | Generated configuration entries |
 | --- | --- |
-| `--copy-resources` | `--uploader localblob` |
-| `--copy-resources --upload-as ociArtifact` | `--uploader oci --uploader localblob` |
-| `--upload-as ociArtifact` | `--uploader 'oci=target.type == "OCIRepository" && resource.access.isType("LocalBlob") && isOCIManifest(resource.access.mediaType) && has(resource.access.referenceName)'` |
-| `--upload-as localBlob`, `--copy-resources=false` | nothing |
+| `--copy-resources` | `- type: localblob.uploader.transfer.config.ocm.software/v1alpha1` |
+| `--copy-resources --upload-as ociArtifact` | `- type: oci.uploader.transfer.config.ocm.software/v1alpha1` then `- type: localblob.uploader.transfer.config.ocm.software/v1alpha1` |
+| `--upload-as ociArtifact` | `- type: oci.uploader.transfer.config.ocm.software/v1alpha1` with `match: 'target.type == "OCIRepository" && resource.access.isType("LocalBlob") && isOCIManifest(resource.access.mediaType) && has(resource.access.referenceName)'` |
+| `--upload-as localBlob`, `--copy-resources=false` | nothing (the CLI logs that they have no effect) |
 
 `--copy-resources=false` used to override `copyMode: allResources` from a
 config. It has no effect now: a flag cannot remove uploader entries configured in
@@ -58,7 +70,7 @@ a Before / After pair showing the exact change.
 | Before | After | Behaviour difference |
 | -------- | ------- | ---------------------- |
 | `--upload-as localBlob`, `uploadType: localBlob`, or nothing | Drop the flag/field. | None. Local blob is the default. |
-| `--copy-resources --upload-as ociArtifact`, or `copyMode: allResources` + `uploadType: ociArtifact` | Replace `--copy-resources` with `--uploader localblob` or add a `localblob.uploader.transfer.config.ocm.software/v1alpha1` catch-all entry; add an `oci.uploader.transfer.config.ocm.software/v1alpha1` entry. | None. Same target references: `<baseUrl>[/<subPath>]/<repository>[:<tag>]`. |
+| `--copy-resources --upload-as ociArtifact`, or `copyMode: allResources` + `uploadType: ociArtifact` | Add an `oci.uploader.transfer.config.ocm.software/v1alpha1` entry and a `localblob.uploader.transfer.config.ocm.software/v1alpha1` catch-all entry in a config file. | None. Same target references: `<baseUrl>[/<subPath>]/<repository>[:<tag>]`. |
 | `--upload-as ociArtifact` without `--copy-resources` (only OCI-manifest local blobs became OCI artifacts; OCI image / Helm references stayed by reference) | One OCI uploader entry whose `match` selects only OCI-manifest local blobs with a `referenceName` (see step 3). | None. |
 | Controller: `uploadType: ociArtifact` in the transfer config referenced by a `Replication` | Remove `uploadType` from that config entry; add the OCI uploader entry to the same config (ConfigMap/Secret). | None. The controller reads uploader entries from the same configs (`LookupUploaderConfigs`). |
 
@@ -83,7 +95,7 @@ The references match the old `--upload-as ociArtifact` flag for all three access
   `baseUrl` is `ghcr.io` and `subPath` is `target-org/ocm`).
 
 A plain `oci.uploader.transfer.config.ocm.software/v1alpha1` entry with no
-fields (or `--uploader oci`) uses exactly this mapping.
+fields uses exactly this mapping.
 
 ### Which resources the OCI uploader selects
 
@@ -125,15 +137,17 @@ Or in config:
 {{< /tab >}}
 {{< tab "After" >}}
 
-```bash
-ocm transfer cv --uploader localblob <src> <target>
-```
-
-Or in config:
+Config file (e.g. `ocmconfig.yaml`, passed with `--config`):
 
 ```yaml
-- type: transfer.config.ocm.software/v1alpha1
-- type: localblob.uploader.transfer.config.ocm.software/v1alpha1
+type: generic.config.ocm.software/v1
+configurations:
+  - type: transfer.config.ocm.software/v1alpha1
+  - type: localblob.uploader.transfer.config.ocm.software/v1alpha1
+```
+
+```bash
+ocm transfer cv --config ocmconfig.yaml <src> <target>
 ```
 
 No uploader entry needed for the default local-blob handling. The local-blob
@@ -163,11 +177,7 @@ Or in config:
 {{< /tab >}}
 {{< tab "After" >}}
 
-```bash
-ocm transfer cv --uploader oci --uploader localblob <src> <target>
-```
-
-Or in config (e.g. `ocmconfig.yaml`, passed with `--config`):
+Config file (e.g. `ocmconfig.yaml`, passed with `--config`):
 
 ```yaml
 type: generic.config.ocm.software/v1
@@ -175,6 +185,10 @@ configurations:
   - type: transfer.config.ocm.software/v1alpha1
   - type: oci.uploader.transfer.config.ocm.software/v1alpha1
   - type: localblob.uploader.transfer.config.ocm.software/v1alpha1
+```
+
+```bash
+ocm transfer cv --config ocmconfig.yaml <src> <target>
 ```
 
 The default `imageReference` gives the same target references as
@@ -321,7 +335,7 @@ without the target check:
 ```
 
 ```bash
-ocm transfer cv --uploader localblob --config ./ocmconfig.yaml <src> ctf::./archive
+ocm transfer cv --config ./ocmconfig.yaml <src> ctf::./archive
 ```
 
 ### Build a reference from resource metadata
@@ -420,14 +434,22 @@ imageReference: >-
 
 ## Troubleshooting
 
-### Symptom: `Flag --upload-as has been deprecated`
+### Symptom: deprecation warning for `--copy-resources` or `--upload-as`
 
 **Cause:** The `--upload-as` (or `--copy-resources`) flag is deprecated. The
 transfer still runs with the translated uploaders (see
 [Deprecated flags](#deprecated-flags)).
 
-**Fix:** Replace the flag with `--uploader` or an OCI uploader entry in your
-config as shown in the migration steps above.
+**Fix:** Copy the `config` attribute from the logged warning into a file and
+pass it with `--config`, then drop the deprecated flags. The warning includes the
+equivalent OCM configuration as one-line JSON. For example:
+
+```text
+level=WARN msg="--copy-resources and --upload-as are deprecated: ..." config="{\"configurations\":[{\"type\":\"localblob.uploader.transfer.config.ocm.software/v1alpha1\"}],\"type\":\"generic.config.ocm.software/v1\"}"
+```
+
+Save the JSON value to `ocmconfig.yaml` (reformatted as YAML or JSON) and use
+`--config ocmconfig.yaml` instead.
 
 ### Symptom: `unknown field "uploadType"`
 
@@ -508,7 +530,7 @@ The following table maps old values to their replacements:
 | --- | --- |
 | `copyMode: localBlob` or omitted | Delete the field; nothing else (baseline). |
 | `copyMode: allResources` | Delete the field; append `- type: localblob.uploader.transfer.config.ocm.software/v1alpha1` as the last uploader entry. |
-| `--copy-resources` | Use `--uploader localblob`: it appends the same catch-all after all configured uploaders. |
+| `--copy-resources` | Add `- type: localblob.uploader.transfer.config.ocm.software/v1alpha1` as the last uploader entry in a config file. |
 | Exclude a resource from copying | Add a `reference.uploader.transfer.config.ocm.software/v1alpha1` entry with `match` before the catch-all. |
 
 ## Related documentation

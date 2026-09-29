@@ -313,14 +313,23 @@ On success it prints a summary table:
  ocm.software/ocm-k8s-toolkit/system │ 1.0.0   │ ocm.software
 ```
 
-Transfer it to your registry. `--uploader oci` uploads the image as a standalone OCI image in
+Transfer it to your registry. An OCI uploader entry uploads the image as a standalone OCI image in
 your registry that can be pulled individually, instead of leaving the component pointing back at
-`ghcr.io/stefanprodan`; `--uploader localblob` copies every other resource. See [Resource
+`ghcr.io/stefanprodan`; a local blob catch-all copies every other resource. See [Resource
 Handling: References vs. Copies]({{< relref "docs/concepts/transfer-concept.md#resource-handling-references-vs-copies" >}})
 for why that distinction exists.
 
+```yaml
+cat > ocmconfig.yaml << 'EOF'
+type: generic.config.ocm.software/v1
+configurations:
+  - type: oci.uploader.transfer.config.ocm.software/v1alpha1
+  - type: localblob.uploader.transfer.config.ocm.software/v1alpha1
+EOF
+```
+
 ```bash
-ocm transfer cv --uploader oci --uploader localblob \
+ocm transfer cv --config ocmconfig.yaml \
   "transport-archive//ocm.software/ocm-k8s-toolkit/system:1.0.0" $OCM_REPO
 ```
 
