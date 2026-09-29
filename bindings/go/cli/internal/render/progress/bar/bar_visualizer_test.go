@@ -255,6 +255,21 @@ func TestNewVisualizer(t *testing.T) {
 	assert.Contains(t, output, "Transfer")
 }
 
+func TestNewVisualizer_SetConcurrency_HeaderShowsRunners(t *testing.T) {
+	buf := &bytes.Buffer{}
+	vis := NewVisualizer[any](buf, 3)
+	vis.(progress.ConcurrencyAware).SetConcurrency(4)
+
+	vis.Begin("Transferring component versions")
+	bv := vis.(*barVisualizer[any])
+	close(bv.done)
+	bv.done = make(chan struct{})
+	buf.Reset()
+	vis.End(nil)
+
+	output := stripANSI(buf.String())
+	assert.Contains(t, output, "Transferring component versions (4 runners)")
+}
 func TestNewVisualizer_Indeterminate(t *testing.T) {
 	buf := &bytes.Buffer{}
 	vis := NewVisualizer[any](buf, progress.IndeterminateTotal)

@@ -42,6 +42,7 @@ const (
 	FlagTransferSpec  = "transfer-spec"
 	FlagConstraint    = "constraint"
 	FlagLatest        = "latest"
+	FlagConcurrency   = "concurrency-limit"
 
 	// Each node emits 2 events (Running + Completed/Failed) and since the tracker consumes
 	// them faster than the transfer produces, 16 is enough to avoid blocking with room to grow.
@@ -83,8 +84,8 @@ Two-step workflow (generate, review, replay):
     2. Review/edit spec.yaml, then execute: transfer cv --transfer-spec spec.yaml
   All graph-shaping flags (--recursive, --copy-resources, --upload-as) and any transfer
   configuration entry are baked into the spec during step 1 and are therefore ignored in
-  step 2 - the spec is the full graph definition. Only --dry-run and --output remain
-  meaningful when replaying a spec.
+  step 2 - the spec is the full graph definition. Only --dry-run, --output, and
+  --concurrency-limit remain meaningful when replaying a spec.
 
 How the graph is built:
   Internally the command assembles a TransformationGraphDefinition from these node types,
@@ -158,6 +159,7 @@ transfer component-version --transfer-spec spec.yaml
 	cmd.Flags().String(FlagTransferSpec, "", "path to a transfer specification file (use \"-\" for stdin). The input must hold exactly one transfer spec document; with \"-\", OCM configuration documents in stdin are applied as configuration")
 	cmd.Flags().String(FlagConstraint, "", "version constraint evaluated by each version's configured scheme; versions with no applicable scheme are retained (e.g. \">= 1.0.0, < 2.0.0\"); only used when no version is specified in the reference")
 	cmd.Flags().Bool(FlagLatest, false, "if set, only the latest version of the component is transferred; only used when no version is specified in the reference")
+	cmd.Flags().Int(FlagConcurrency, 4, "maximum number of transformation nodes processed in parallel; independent nodes run concurrently while dependency ordering is preserved. Increase it to speed up large graphs, decrease it to reduce load on the registry")
 
 	return cmd
 }
@@ -194,6 +196,11 @@ func TransferComponentVersion(cmd *cobra.Command, args []string) error {
 	output, err := enum.Get(cmd.Flags(), FlagOutput)
 	if err != nil {
 		return fmt.Errorf("getting output flag failed: %w", err)
+	}
+
+	concurrency, err := cmd.Flags().GetInt(FlagConcurrency)
+	if err != nil {
+		return fmt.Errorf("getting concurrency-limit flag failed: %w", err)
 	}
 
 	octx := ocmctx.FromContext(ctx)
@@ -264,6 +271,7 @@ func TransferComponentVersion(cmd *cobra.Command, args []string) error {
 		progress.WithEvents(buildEvents, mapEvent, len(tgd.Transformations)),
 		progress.WithErrorFormatter(formatError))
 	graph, err := b.
+		WithConcurrency(concurrency).
 		WithEvents(make(chan graphRuntime.ProgressEvent, eventBufferSize)).
 		WithBuildEvents(buildEvents).
 		BuildAndCheck(tgd)
@@ -307,6 +315,7 @@ func TransferComponentVersion(cmd *cobra.Command, args []string) error {
 	// Execute graph with progress tracking
 	op := tracker.StartOperation("Transferring component versions",
 		progress.WithEvents(graph.Events(), mapEvent, graph.NodeCount()),
+		progress.WithConcurrency[*graphPkg.Transformation](concurrency),
 		progress.WithErrorFormatter(formatError))
 
 	if err := graph.Process(ctx); err != nil {
