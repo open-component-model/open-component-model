@@ -5,7 +5,6 @@ import (
 	"net/url"
 	"strings"
 
-	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -69,8 +68,8 @@ func init() {
 //	  - type: artifactory.uploader.transfer.config.ocm.software/v1alpha1
 //	    match:
 //	      accessType: Helm/v1
-//	    url: https://common.repositories.cloud.sap
-//	    repository: open-component-model-helm-test
+//	    url: https://myorg.jfrog.io
+//	    repository: helm-local
 //
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
@@ -83,7 +82,7 @@ type ArtifactoryUploaderConfig struct {
 	// MatchSpec selects the resources this uploader applies to (exposed as `match`).
 	MatchSpec UploaderMatch `json:"match"`
 	// URL is the base URL of the server (scheme, host, optional port and context path) without
-	// the /artifactory segment, e.g. https://common.repositories.cloud.sap.
+	// the /artifactory segment, e.g. https://myorg.jfrog.io.
 	URL string `json:"url"`
 	// Repository is the key of the local repository to upload into.
 	Repository string `json:"repository"`
@@ -161,21 +160,11 @@ type NexusUploaderConfig struct {
 	Path string `json:"path,omitempty"`
 }
 
-// Match reports whether this uploader applies to resource. It implements [UploaderConfig].
-func (u *ArtifactoryUploaderConfig) Match(resource descriptorv2.Resource, types TypeResolver) bool {
-	if u == nil {
-		return false
-	}
-	return u.MatchSpec.Matches(resource, types)
-}
+// GetMatch returns MatchSpec. It implements [UploaderConfig].
+func (u *ArtifactoryUploaderConfig) GetMatch() UploaderMatch { return u.MatchSpec }
 
-// Match reports whether this uploader applies to resource. It implements [UploaderConfig].
-func (u *NexusUploaderConfig) Match(resource descriptorv2.Resource, types TypeResolver) bool {
-	if u == nil {
-		return false
-	}
-	return u.MatchSpec.Matches(resource, types)
-}
+// GetMatch returns MatchSpec. It implements [UploaderConfig].
+func (u *NexusUploaderConfig) GetMatch() UploaderMatch { return u.MatchSpec }
 
 // Validate rejects a non-matching Type, an empty match access type, a URL that is not an
 // absolute http(s) URL without query or fragment and a repository that is not a single key. An
@@ -192,10 +181,7 @@ func (u *NexusUploaderConfig) Validate() error {
 	if u == nil {
 		return nil
 	}
-	if err := validateRepositoryUploader(u.Type, NexusUploaderConfigType, u.MatchSpec, u.URL, u.Repository); err != nil {
-		return err
-	}
-	return nil
+	return validateRepositoryUploader(u.Type, NexusUploaderConfigType, u.MatchSpec, u.URL, u.Repository)
 }
 
 func validateRepositoryUploader(typ runtime.Type, name string, match UploaderMatch, rawURL, repository string) error {

@@ -273,7 +273,7 @@ func processResources(
 		// specific rules should precede broader ones.
 		var matched transferv1alpha1.UploaderConfig
 		for idx, u := range uploaders {
-			if u != nil && u.Match(resource, scheme) {
+			if u != nil && u.GetMatch().Matches(resource, scheme) {
 				matched = u
 				uploaderUsed[idx] = true
 				break
@@ -320,15 +320,7 @@ func warnUnusedUploaders(ctx context.Context, uploaders []transferv1alpha1.Uploa
 		if u == nil || used[idx] {
 			continue
 		}
-		var match transferv1alpha1.UploaderMatch
-		switch cfg := u.(type) {
-		case *transferv1alpha1.HTTPUploaderConfig:
-			match = cfg.MatchSpec
-		case *transferv1alpha1.ArtifactoryUploaderConfig:
-			match = cfg.MatchSpec
-		case *transferv1alpha1.NexusUploaderConfig:
-			match = cfg.MatchSpec
-		}
+		match := u.GetMatch()
 		slog.WarnContext(ctx, "uploader matched no resource; match.accessType is compared with the resource access in the source component version",
 			"uploader", u.GetType().String(),
 			"index", idx,

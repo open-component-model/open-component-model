@@ -16,8 +16,8 @@ func TestArtifactoryUploaderConfig_Validate(t *testing.T) {
 		return &spec.ArtifactoryUploaderConfig{
 			Type:       runtime.NewVersionedType(spec.ArtifactoryUploaderConfigType, spec.Version),
 			MatchSpec:  spec.UploaderMatch{AccessType: runtime.NewVersionedType("Helm", "v1")},
-			URL:        "https://common.repositories.cloud.sap",
-			Repository: "open-component-model-helm-test",
+			URL:        "https://myorg.jfrog.io",
+			Repository: "helm-local",
 		}
 	}
 
@@ -35,10 +35,10 @@ func TestArtifactoryUploaderConfig_Validate(t *testing.T) {
 		}, wantErr: "match.accessType is required"},
 		{name: "missing url", mutate: func(u *spec.ArtifactoryUploaderConfig) { u.URL = "" }, wantErr: "url is required"},
 		{name: "scheme-less url", mutate: func(u *spec.ArtifactoryUploaderConfig) {
-			u.URL = "common.repositories.cloud.sap"
+			u.URL = "myorg.jfrog.io"
 		}, wantErr: "url must be an absolute http or https URL"},
 		{name: "url with query", mutate: func(u *spec.ArtifactoryUploaderConfig) {
-			u.URL = "https://common.repositories.cloud.sap?x=1"
+			u.URL = "https://myorg.jfrog.io?x=1"
 		}, wantErr: "url must not carry a query or fragment"},
 		{name: "empty repository", mutate: func(u *spec.ArtifactoryUploaderConfig) { u.Repository = "" }, wantErr: "repository is required"},
 		{name: "nested repository", mutate: func(u *spec.ArtifactoryUploaderConfig) { u.Repository = "a/b" }, wantErr: "repository must be a single repository key"},

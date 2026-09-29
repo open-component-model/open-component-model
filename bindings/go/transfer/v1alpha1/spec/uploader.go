@@ -32,9 +32,8 @@ func init() {
 // match wins.
 type UploaderConfig interface {
 	runtime.Typed
-	// Match reports whether this uploader applies to resource. types resolves access
-	// type aliases; nil compares access types literally.
-	Match(resource descriptorv2.Resource, types TypeResolver) bool
+	// GetMatch returns the rule selecting the resources this uploader applies to.
+	GetMatch() UploaderMatch
 	// Validate reports whether the configuration is well-formed.
 	Validate() error
 }
@@ -75,7 +74,7 @@ type HTTPUploaderConfig struct {
 	Type runtime.Type `json:"type"`
 
 	// MatchSpec selects the resources this uploader applies to. It is exposed as the
-	// `match` field; the Go field is named MatchSpec so the type can offer a Match method.
+	// `match` field.
 	MatchSpec UploaderMatch `json:"match"`
 
 	// TargetURL is a standalone CEL expression wrapped in ${...} (referencing the
@@ -207,14 +206,8 @@ func (u *HTTPUploaderConfig) Validate() error {
 	return nil
 }
 
-// Match reports whether this uploader applies to resource, delegating to the
-// configured [UploaderMatch]. It implements [UploaderConfig].
-func (u *HTTPUploaderConfig) Match(resource descriptorv2.Resource, types TypeResolver) bool {
-	if u == nil {
-		return false
-	}
-	return u.MatchSpec.Matches(resource, types)
-}
+// GetMatch returns MatchSpec. It implements [UploaderConfig].
+func (u *HTTPUploaderConfig) GetMatch() UploaderMatch { return u.MatchSpec }
 
 // LookupUploaderConfigs extracts all uploader configurations from a central generic
 // config. It walks the config entries in declaration order and recognizes an entry as
