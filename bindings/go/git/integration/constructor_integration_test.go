@@ -97,8 +97,6 @@ components:
 		{"unversioned", "Git", "SHA-256", "genericBlobDigest/v1", resource.Digest.Value, ""},
 		{"legacy lowercase", "git", "SHA-256", "genericBlobDigest/v1", resource.Digest.Value, ""},
 		{"legacy lowercase v1", "git/v1", "SHA-256", "genericBlobDigest/v1", resource.Digest.Value, ""},
-		{"legacy lowercase v1alpha1", "git/v1alpha1", "SHA-256", "genericBlobDigest/v1", resource.Digest.Value, ""},
-		{"legacy v1alpha1", "Git/v1alpha1", "SHA-256", "genericBlobDigest/v1", resource.Digest.Value, ""},
 		{"wrong value", "Git/v1", "SHA-256", "genericBlobDigest/v1", strings.Repeat("0", 64), "digest mismatch"},
 		{"missing value", "Git/v1", "SHA-256", "genericBlobDigest/v1", "", "digest"},
 		{"short value", "Git/v1", "SHA-256", "genericBlobDigest/v1", "abc", "digest"},

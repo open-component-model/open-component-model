@@ -34,14 +34,6 @@
         {
           "deprecated": true,
           "const": "git/v1"
-        },
-        {
-          "deprecated": true,
-          "const": "git/v1alpha1"
-        },
-        {
-          "deprecated": true,
-          "const": "Git/v1alpha1"
         }
       ]
     }
