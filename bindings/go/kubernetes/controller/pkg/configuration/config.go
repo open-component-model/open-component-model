@@ -49,8 +49,11 @@ var allowedConfigTypes = slices.Concat(
 		runtime.NewVersionedType(resolversv1alpha1spec.ConfigType, resolversv1alpha1spec.Version),
 		runtime.NewUnversionedType(resolversv1alpha1spec.ConfigType),
 	},
-	// transfer settings, including every uploader configuration
-	schemeTypes(transferspec.Scheme),
+	// transfer settings and uploaders; the HTTP uploader is excluded because it streams
+	// resource content to arbitrary URLs from the controller pod.
+	slices.DeleteFunc(schemeTypes(transferspec.Scheme), func(t runtime.Type) bool {
+		return t.Name == transferspec.HTTPUploaderConfigType
+	}),
 	[]runtime.Type{
 		runtime.NewVersionedType(httpv1alpha1.ConfigType, httpv1alpha1.Version),
 		runtime.NewUnversionedType(httpv1alpha1.ConfigType),
