@@ -2,16 +2,9 @@ package integration_test
 
 import (
 	"bytes"
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
-	"net/http/httptest"
 	"os"
-	"strings"
-	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -28,146 +21,9 @@ import (
 	ctfrepospec "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/transfer"
+	"ocm.software/open-component-model/bindings/go/transfer/internal/repositoryupload/artifactory/artifactorytest"
 	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
-	wgetrepository "ocm.software/open-component-model/bindings/go/wget/repository"
-	wgetaccess "ocm.software/open-component-model/bindings/go/wget/spec/access"
-	wgetaccessv1 "ocm.software/open-component-model/bindings/go/wget/spec/access/v1"
 )
-
-// Test_Integration_TransferHelmResource_ArtifactoryHelmUploaderDeploysChart verifies that a Helm/v1
-// resource routed through an Artifactory helm uploader configuration is streamed as a chart archive
-// to a fake Artifactory PUT endpoint and re-described with a Helm/v1 access pointing at the
-// Artifactory Helm API, with the correct digest computed during the stream.
-func Test_Integration_TransferHelmResource_ArtifactoryHelmUploaderDeploysChart(t *testing.T) {
-	t.Parallel()
-	r := require.New(t)
-
-	// Read the expected chart .tgz bytes for later comparison.
-	// helm/testdata/mychart-0.1.0.tgz is a symlink to provenance/mychart-0.1.0.tgz.
-	chartTgzBytes, err := os.ReadFile("../../helm/testdata/mychart-0.1.0.tgz")
-	r.NoError(err)
-	r.NotEmpty(chartTgzBytes)
-
-	// Source HTTP server: serves the provenance directory which contains the .tgz and .prov files.
-	// Using the provenance dir because that's where the actual tgz lives (the root-level one is a symlink).
-	// The helm downloader with helmChart "mychart-0.1.0.tgz" will GET /mychart-0.1.0.tgz directly.
-	srcSrv := httptest.NewServer(http.FileServer(http.Dir("../../helm/testdata/provenance")))
-	t.Cleanup(srcSrv.Close)
-
-	// Target "Artifactory": records chart properties for the chart .tgz like Artifactory does.
-	targetSrv := newFakeArtifactory(t, chartTgzBytes, "helm-local", "helm")
-
-	componentName := "ocm.software/jfrog-helm-uploader-test"
-	componentVersion := "1.0.0"
-	sourceCTFPath := t.TempDir()
-	ctfRepo := createCTFRepository(t, sourceCTFPath)
-
-	// Build the Helm/v1 access as raw JSON.
-	// helmChart is "mychart-0.1.0.tgz" (the file name) so the downloader GETs it directly
-	// from the file server, without needing an index.yaml.
-	helmAccessData, err := json.Marshal(map[string]string{
-		"type":           "Helm/v1",
-		"helmRepository": srcSrv.URL,
-		"helmChart":      "mychart-0.1.0.tgz",
-	})
-	r.NoError(err)
-	rawHelmAccess := &runtime.Raw{}
-	r.NoError(rawHelmAccess.UnmarshalJSON(helmAccessData))
-
-	desc := &descriptor.Descriptor{
-		Meta: descriptor.Meta{Version: "v2"},
-		Component: descriptor.Component{
-			ComponentMeta: descriptor.ComponentMeta{
-				ObjectMeta: descriptor.ObjectMeta{Name: componentName, Version: componentVersion},
-			},
-			Provider: descriptor.Provider{Name: "test-provider"},
-			Resources: []descriptor.Resource{
-				{
-					ElementMeta: descriptor.ElementMeta{
-						// Deliberately differs from Chart.yaml: name and version come from the chart.
-						ObjectMeta: descriptor.ObjectMeta{Name: "chart-resource", Version: "9.9.9"},
-					},
-					Type:     "helmChart",
-					Relation: descriptor.ExternalRelation,
-					Access:   rawHelmAccess,
-				},
-			},
-		},
-	}
-	r.NoError(ctfRepo.AddComponentVersion(t.Context(), desc))
-
-	sourceSpec := &ctfrepospec.Repository{
-		Type:     runtime.Type{Name: ctfrepospec.Type, Version: ctfrepospec.Version},
-		FilePath: sourceCTFPath,
-	}
-	targetCTFPath := t.TempDir()
-	targetSpec := &ctfrepospec.Repository{
-		Type:       runtime.Type{Name: ctfrepospec.Type, Version: ctfrepospec.Version},
-		FilePath:   targetCTFPath,
-		AccessMode: "readwrite|create",
-	}
-
-	// The Artifactory uploader routes Helm/v1 resources to the fake Artifactory server.
-	uploaders := []transferv1alpha1.UploaderConfig{&transferv1alpha1.ArtifactoryUploaderConfig{
-		Type:       runtime.NewVersionedType(transferv1alpha1.ArtifactoryUploaderConfigType, transferv1alpha1.Version),
-		MatchSpec:  transferv1alpha1.UploaderMatch{AccessType: runtime.NewVersionedType(helmaccessv1.Type, helmaccessv1.LegacyTypeVersion)},
-		URL:        targetSrv.URL,
-		Repository: "helm-local",
-	}}
-
-	tgd, err := transfer.BuildGraphDefinition(t.Context(),
-		&transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeAllResources},
-		uploaders,
-		transfer.Mapping{
-			Components: []transfer.ComponentID{{Component: componentName, Version: componentVersion}},
-			Target:     targetSpec,
-			Resolver:   transfer.NewRepositoryResolver(ctfRepo, sourceSpec),
-		},
-	)
-	r.NoError(err)
-	r.NotNil(tgd)
-
-	ctx := t.Context()
-	repoProvider := provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()))
-	resourceRepo := helmresource.NewResourceRepository(nil)
-	b := transfer.NewDefaultBuilder(repoProvider, resourceRepo, nil)
-	graph, err := b.BuildAndCheck(tgd)
-	r.NoError(err)
-	r.NoError(graph.Process(ctx))
-
-	// The target server must have received the chart under the component version path.
-	expectedPath := "/artifactory/helm-local/ocm.software/jfrog-helm-uploader-test/1.0.0/chart-resource-9.9.9.tgz"
-	got, gotHeaders, ok := targetSrv.stored(expectedPath)
-	r.True(ok, "target server should have received a PUT at %s; stored paths: %v", expectedPath, targetSrv.storedPaths())
-	r.Equal(chartTgzBytes, got, "uploaded bytes must equal the chart .tgz")
-	r.Equal("application/gzip", gotHeaders.Get("Content-Type"),
-		"Content-Type must be application/gzip")
-
-	// Verify the transferred descriptor in the target CTF.
-	gotDesc, err := createCTFRepository(t, targetCTFPath).GetComponentVersion(ctx, componentName, componentVersion)
-	r.NoError(err)
-	r.Len(gotDesc.Component.Resources, 1)
-	gotResource := gotDesc.Component.Resources[0]
-
-	// The published access must be Helm/v1.
-	r.NotNil(gotResource.Access)
-	r.Equal(helmaccessv1.Type, gotResource.Access.GetType().Name,
-		"uploaded resource should carry a Helm access")
-
-	var typedHelm helmaccessv1.Helm
-	r.NoError(helmaccess.Scheme.Convert(gotResource.Access, &typedHelm))
-	r.Equal(targetSrv.URL+"/artifactory/api/helm/helm-local", typedHelm.HelmRepository,
-		"helmRepository should point at the Artifactory Helm API")
-	r.Equal("mychart:0.1.0", typedHelm.HelmChart,
-		"helmChart should be <name>:<version>")
-
-	// The digest must be genericBlobDigest/v1 of the chart .tgz.
-	r.NotNil(gotResource.Digest, "transferred resource should carry a digest")
-	r.Equal("SHA-256", gotResource.Digest.HashAlgorithm)
-	r.Equal("genericBlobDigest/v1", gotResource.Digest.NormalisationAlgorithm)
-	r.Equal(digestOf(chartTgzBytes).Encoded(), gotResource.Digest.Value,
-		"digest value should be the sha256 of the chart .tgz")
-}
 
 // Test_Integration_TransferLocalBlobHelmResource_ArtifactoryHelmUploaderDeploysChart verifies that a
 // LocalBlob/v1 resource containing a Helm chart is correctly streamed to the fake Artifactory
@@ -224,7 +80,7 @@ func Test_Integration_TransferLocalBlobHelmResource_ArtifactoryHelmUploaderDeplo
 			r := require.New(t)
 
 			// Target "Artifactory": records chart properties for the chart .tgz like Artifactory does.
-			targetSrv := newFakeArtifactory(t, chartTgzBytes, "helm-local", "helm")
+			targetSrv := artifactorytest.New(t, map[string][2]string{digestOf(chartTgzBytes).Encoded(): {"mychart", "0.1.0"}})
 
 			componentName := "ocm.software/jfrog-helm-local-blob-test"
 			componentVersion := "1.0.0"
@@ -299,11 +155,15 @@ func Test_Integration_TransferLocalBlobHelmResource_ArtifactoryHelmUploaderDeplo
 
 			// The target server must have received the chart under the component version path.
 			expectedPath := "/artifactory/helm-local/ocm.software/jfrog-helm-local-blob-test/1.0.0/mychart-0.1.0.tgz"
-			got, gotHeaders, ok := targetSrv.stored(expectedPath)
-			r.True(ok, "target server should have received a PUT at %s; stored paths: %v", expectedPath, targetSrv.storedPaths())
-			r.Equal(tt.wantBody, got, "uploaded bytes must equal the chart .tgz")
-			r.Equal("application/gzip", gotHeaders.Get("Content-Type"),
-				"Content-Type must be application/gzip")
+			var put *artifactorytest.Request
+			for _, req := range targetSrv.Recorded() {
+				if req.Method == http.MethodPut && !req.Deploy && req.Path == expectedPath {
+					put = &req
+				}
+			}
+			r.NotNil(put, "target server should have received a PUT at %s", expectedPath)
+			r.Equal(tt.wantBody, put.Body, "uploaded bytes must equal the chart .tgz")
+			r.Equal("application/gzip", put.ContentType, "Content-Type must be application/gzip")
 
 			// Verify the transferred descriptor in the target CTF.
 			gotDesc, err := createCTFRepository(t, targetCTFPath).GetComponentVersion(ctx, componentName, componentVersion)
@@ -331,132 +191,4 @@ func Test_Integration_TransferLocalBlobHelmResource_ArtifactoryHelmUploaderDeplo
 				"digest value should be the sha256 of the chart .tgz")
 		})
 	}
-}
-
-// storedKeys returns the keys of a map for diagnostic messages.
-func storedKeys(m map[string][]byte) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	return keys
-}
-
-// fakeArtifactory emulates the endpoints of an Artifactory local repository the uploader uses.
-// Like Artifactory, it records chart name and version properties for deployed content it
-// recognizes as a chart; here, only the given chart archive is recognized.
-type fakeArtifactory struct {
-	*httptest.Server
-	chartSHA                string
-	repository, packageType string
-
-	mu      sync.Mutex
-	files   map[string][]byte
-	headers map[string]http.Header
-}
-
-func newFakeArtifactory(t *testing.T, chart []byte, repository, packageType string) *fakeArtifactory {
-	t.Helper()
-	sum := sha256.Sum256(chart)
-	f := &fakeArtifactory{
-		chartSHA: hex.EncodeToString(sum[:]), repository: repository, packageType: packageType,
-		files: map[string][]byte{}, headers: map[string]http.Header{},
-	}
-	f.Server = httptest.NewServer(http.HandlerFunc(f.handle))
-	t.Cleanup(f.Close)
-	return f
-}
-
-func (f *fakeArtifactory) handle(w http.ResponseWriter, req *http.Request) {
-	storagePrefix, filePrefix := "/artifactory/api/storage/"+f.repository+"/", "/artifactory/"+f.repository+"/"
-	// Deploy matrix parameters (;key=value) set properties; they are not part of the path.
-	path, _, _ := strings.Cut(req.URL.Path, ";")
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	switch {
-	case req.Method == http.MethodGet && path == "/artifactory/api/repositories/"+f.repository:
-		_, _ = fmt.Fprintf(w, `{"packageType":%q,"rclass":"local"}`, f.packageType)
-	case req.Method == http.MethodPut && req.Header.Get("X-Checksum-Deploy") == "true":
-		// Artifactory has no content with this checksum yet.
-		w.WriteHeader(http.StatusNotFound)
-	case req.Method == http.MethodPut:
-		body, err := io.ReadAll(req.Body)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-		f.files[path] = body
-		f.headers[path] = req.Header.Clone()
-		w.WriteHeader(http.StatusCreated)
-	case req.Method == http.MethodGet && strings.HasPrefix(path, storagePrefix):
-		body, ok := f.files[filePrefix+strings.TrimPrefix(path, storagePrefix)]
-		if !req.URL.Query().Has("properties") {
-			// File info: the location is free until a chart is deployed.
-			if !ok {
-				w.WriteHeader(http.StatusNotFound)
-				return
-			}
-			sum := sha256.Sum256(body)
-			_, _ = fmt.Fprintf(w, `{"checksums":{"sha256":%q}}`, hex.EncodeToString(sum[:]))
-			return
-		}
-		sum := sha256.Sum256(body)
-		if !ok || hex.EncodeToString(sum[:]) != f.chartSHA {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-		_, _ = io.WriteString(w, `{"properties":{"chart.name":["mychart"],"chart.version":["0.1.0"]}}`)
-	default:
-		w.WriteHeader(http.StatusMethodNotAllowed)
-	}
-}
-
-func (f *fakeArtifactory) stored(path string) ([]byte, http.Header, bool) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	body, ok := f.files[path]
-	return body, f.headers[path], ok
-}
-
-func (f *fakeArtifactory) storedPaths() []string {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return storedKeys(f.files)
-}
-
-// Test_Integration_TransferWgetResource_ArtifactoryMavenUploader verifies that a Wget/v1 resource
-// routed through an Artifactory uploader into a maven repository is deployed as is at the
-// configured Maven layout path and re-described with a Wget/v1 access on the stored file.
-func Test_Integration_TransferWgetResource_ArtifactoryMavenUploader(t *testing.T) {
-	t.Parallel()
-	r := require.New(t)
-	const component, version = "ocm.software/artifactory-maven-uploader-test", "1.0.0"
-	data := []byte("jar")
-	targetSrv := newFakeArtifactory(t, nil, "maven-local", "maven")
-	ctfRepo, sourceSpec := addWgetComponent(t, component, version,
-		wgetFile{name: "demo-1.0.0.jar", resource: "jar", version: "1.0.0", mediaType: "application/java-archive", data: data})
-	targetPath, targetSpec := newTargetCTF(t)
-
-	uploader := &transferv1alpha1.ArtifactoryUploaderConfig{
-		Type:       runtime.NewVersionedType(transferv1alpha1.ArtifactoryUploaderConfigType, transferv1alpha1.Version),
-		MatchSpec:  transferv1alpha1.UploaderMatch{AccessType: runtime.NewVersionedType(wgetaccess.WgetConsumerType, wgetaccessv1.Version)},
-		URL:        targetSrv.URL,
-		Repository: "maven-local",
-		Path:       `${"com/example/demo/" + resource.version + "/demo-" + resource.version + ".jar"}`,
-	}
-	transferOnce(t, ctfRepo, sourceSpec, targetSpec, uploader, wgetrepository.NewResourceRepository(nil), nil, component, version)
-
-	const stored = "/artifactory/maven-local/com/example/demo/1.0.0/demo-1.0.0.jar"
-	got, _, ok := targetSrv.stored(stored)
-	r.True(ok, "stored paths: %v", targetSrv.storedPaths())
-	r.Equal(data, got)
-
-	gotDesc, err := createCTFRepository(t, targetPath).GetComponentVersion(t.Context(), component, version)
-	r.NoError(err)
-	r.Len(gotDesc.Component.Resources, 1)
-	gotResource := gotDesc.Component.Resources[0]
-	var access wgetaccessv1.Wget
-	r.NoError(wgetaccess.Scheme.Convert(gotResource.Access, &access))
-	r.Equal(targetSrv.URL+stored, access.URL)
-	r.Equal(&descriptor.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: "genericBlobDigest/v1", Value: digestOf(data).Encoded()}, gotResource.Digest)
 }
