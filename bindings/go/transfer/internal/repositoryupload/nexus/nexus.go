@@ -5,8 +5,6 @@ import (
 	"bytes"
 	"cmp"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/xml"
 	"fmt"
 	"io"
@@ -17,6 +15,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/opencontainers/go-digest"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
@@ -142,11 +142,11 @@ func (s *fileStore) Chart() bool { return false }
 
 func (s *fileStore) URL() string { return s.target }
 
-// Stored reports whether target already holds content with sha256Hex. It fails when target
+// Stored reports whether target already holds content with digest known. It fails when target
 // holds other content, or content whose digest is unknown up front. Nexus reports the checksum
 // of a stored file shortly after storing it (raw assets are indexed for search), so a stored file
 // without a reported checksum yet is polled for.
-func (s *fileStore) Stored(ctx context.Context, c *repositoryupload.Client, sha256Hex string) (bool, error) {
+func (s *fileStore) Stored(ctx context.Context, c *repositoryupload.Client, known digest.Digest) (bool, error) {
 	resp, err := c.Do(ctx, http.MethodHead, s.target, nil, -1, nil)
 	if err != nil {
 		return false, err
@@ -159,15 +159,15 @@ func (s *fileStore) Stored(ctx context.Context, c *repositoryupload.Client, sha2
 	default:
 		return false, fmt.Errorf("HEAD %s returned status %d", repositoryupload.RedactURL(s.target), resp.StatusCode)
 	}
-	if sha256Hex != "" {
-		var checksums []string
+	if known != "" {
+		var assets []asset
 		if _, err := repositoryupload.Poll(ctx, s.interval, func() (bool, error) {
-			checksums, err = s.format.checksums(ctx, c, s.spec, s.path)
-			return len(checksums) > 0, err
+			assets, err = s.format.assets(ctx, c, s.spec, s.path)
+			return len(assets) > 0, err
 		}); err != nil {
 			return false, err
 		}
-		if slices.Contains(checksums, sha256Hex) {
+		if slices.ContainsFunc(assets, func(a asset) bool { return a.Checksum[known.Algorithm().String()] == known.Encoded() }) {
 			return true, nil
 		}
 	}
@@ -175,36 +175,36 @@ func (s *fileStore) Stored(ctx context.Context, c *repositoryupload.Client, sha2
 		s.spec.Repository, repositoryupload.RedactURL(s.target), s.format.name)
 }
 
-func (s *fileStore) Put(ctx context.Context, c *repositoryupload.Client, content blob.ReadOnlyBlob, mediaType, _ string) (string, error) {
-	return s.format.put(ctx, c, s.spec, content, s.target, mediaType)
+func (s *fileStore) Put(ctx context.Context, c *repositoryupload.Client, content blob.ReadOnlyBlob, mediaType string, known digest.Digest) (digest.Digest, error) {
+	return s.format.put(ctx, c, s.spec, content, known, s.target, mediaType)
 }
 
-func (s *fileStore) Discard(context.Context, *repositoryupload.Client, string) error {
+func (s *fileStore) Discard(context.Context, *repositoryupload.Client, digest.Digest) error {
 	return fmt.Errorf("nexus keeps the uploaded file at %s", repositoryupload.RedactURL(s.target))
 }
 
-func (s *fileStore) Publish(_ context.Context, _ *repositoryupload.Client, _, mediaType string) (runtime.Typed, error) {
+func (s *fileStore) Publish(_ context.Context, _ *repositoryupload.Client, _ digest.Digest, mediaType string) (runtime.Typed, error) {
 	return &wgetaccessv1.Wget{Type: wgetaccess.V1VersionedType, URL: s.target, MediaType: mediaType}, nil
 }
 
 // fileFormat is how a repository format stores a file and reports what it stores.
 type fileFormat struct {
 	name string
-	// checksums returns the SHA-256 Nexus reports for the file stored at path; empty when it
-	// reports none yet.
-	checksums func(ctx context.Context, c *repositoryupload.Client, spec *uploadv1alpha1.RepositoryUploadSpec, path string) ([]string, error)
-	// put stores content at target and returns the hex SHA-256 of the bytes sent.
-	put func(ctx context.Context, c *repositoryupload.Client, spec *uploadv1alpha1.RepositoryUploadSpec, content blob.ReadOnlyBlob, target, mediaType string) (string, error)
+	// assets returns the assets Nexus reports at path; empty when it reports none yet.
+	assets func(ctx context.Context, c *repositoryupload.Client, spec *uploadv1alpha1.RepositoryUploadSpec, path string) ([]asset, error)
+	// put stores content at target and returns the digest of the bytes sent, see
+	// [repositoryupload.UploadBlob] for its algorithm.
+	put func(ctx context.Context, c *repositoryupload.Client, spec *uploadv1alpha1.RepositoryUploadSpec, content blob.ReadOnlyBlob, known digest.Digest, target, mediaType string) (digest.Digest, error)
 }
 
 // rawFormat stores files with a plain PUT and finds them by the asset search.
 var rawFormat = fileFormat{
 	name: "raw",
-	checksums: func(ctx context.Context, c *repositoryupload.Client, spec *uploadv1alpha1.RepositoryUploadSpec, path string) ([]string, error) {
-		return assetChecksums(ctx, c, spec, path, nil)
+	assets: func(ctx context.Context, c *repositoryupload.Client, spec *uploadv1alpha1.RepositoryUploadSpec, path string) ([]asset, error) {
+		return assetsAt(ctx, c, spec, path, nil)
 	},
-	put: func(ctx context.Context, c *repositoryupload.Client, _ *uploadv1alpha1.RepositoryUploadSpec, content blob.ReadOnlyBlob, target, mediaType string) (string, error) {
-		computed, _, err := repositoryupload.UploadBlob(ctx, c, content, target, http.Header{"Content-Type": {mediaType}}, nil)
+	put: func(ctx context.Context, c *repositoryupload.Client, _ *uploadv1alpha1.RepositoryUploadSpec, content blob.ReadOnlyBlob, known digest.Digest, target, mediaType string) (digest.Digest, error) {
+		computed, _, err := repositoryupload.UploadBlob(ctx, c, content, known, target, http.Header{"Content-Type": {mediaType}}, nil)
 		return computed, err
 	},
 }
@@ -214,7 +214,7 @@ var rawFormat = fileFormat{
 // finds maven assets by their coordinates, not by name.
 var mavenFormat = fileFormat{
 	name: "maven2",
-	checksums: func(ctx context.Context, c *repositoryupload.Client, spec *uploadv1alpha1.RepositoryUploadSpec, path string) ([]string, error) {
+	assets: func(ctx context.Context, c *repositoryupload.Client, spec *uploadv1alpha1.RepositoryUploadSpec, path string) ([]asset, error) {
 		coords, err := parseMavenPath(spec.Path)
 		if err != nil {
 			return nil, err
@@ -228,14 +228,14 @@ var mavenFormat = fileFormat{
 		if coords.classifier != "" {
 			query.Set("maven.classifier", coords.classifier)
 		}
-		return assetChecksums(ctx, c, spec, path, query)
+		return assetsAt(ctx, c, spec, path, query)
 	},
 	put: mavenUpload,
 }
 
-// assetChecksums returns the SHA-256 of the assets Nexus's search finds at path. query
-// selects the assets by format-specific attributes; without it, raw assets are selected by name.
-func assetChecksums(ctx context.Context, c *repositoryupload.Client, spec *uploadv1alpha1.RepositoryUploadSpec, path string, query url.Values) ([]string, error) {
+// assetsAt returns the assets Nexus's search finds at path. query selects the assets by
+// format-specific attributes; without it, raw assets are selected by name.
+func assetsAt(ctx context.Context, c *repositoryupload.Client, spec *uploadv1alpha1.RepositoryUploadSpec, path string, query url.Values) ([]asset, error) {
 	name, err := url.PathUnescape(path)
 	if err != nil {
 		return nil, fmt.Errorf("invalid path %q: %w", path, err)
@@ -249,21 +249,14 @@ func assetChecksums(ctx context.Context, c *repositoryupload.Client, spec *uploa
 	if err != nil {
 		return nil, err
 	}
-	var checksums []string
-	for _, item := range items {
-		if item.Path == assetPath {
-			checksums = append(checksums, item.Checksum.SHA256)
-		}
-	}
-	return checksums, nil
+	return slices.DeleteFunc(items, func(a asset) bool { return a.Path != assetPath }), nil
 }
 
 // asset is an asset item of Nexus's asset search API.
 type asset struct {
-	Path     string `json:"path"`
-	Checksum struct {
-		SHA256 string `json:"sha256"`
-	} `json:"checksum"`
+	Path string `json:"path"`
+	// Checksum maps algorithms (sha1, sha256, sha512, md5) to the hex checksums of the asset.
+	Checksum map[string]string `json:"checksum"`
 }
 
 // searchAssets returns all assets of the repository Nexus's asset search finds with query,
@@ -346,10 +339,10 @@ func parseMavenPath(path string) (mavenCoordinates, error) {
 }
 
 // mavenUpload streams content as a single asset of a maven2 component to the components
-// API and returns the hex SHA-256 of the bytes sent. The components API refuses snapshot
+// API and returns the digest of the bytes sent. The components API refuses snapshot
 // versions, so those are stored with a plain PUT, which Nexus accepts at Maven layout paths but
 // does not record in maven-metadata.xml.
-func mavenUpload(ctx context.Context, c *repositoryupload.Client, spec *uploadv1alpha1.RepositoryUploadSpec, content blob.ReadOnlyBlob, target, mediaType string) (string, error) {
+func mavenUpload(ctx context.Context, c *repositoryupload.Client, spec *uploadv1alpha1.RepositoryUploadSpec, content blob.ReadOnlyBlob, known digest.Digest, target, mediaType string) (digest.Digest, error) {
 	coords, err := parseMavenPath(spec.Path)
 	if err != nil {
 		return "", err
@@ -360,7 +353,7 @@ func mavenUpload(ctx context.Context, c *repositoryupload.Client, spec *uploadv1
 		}
 	}
 	if strings.HasSuffix(coords.version, "-SNAPSHOT") {
-		return rawFormat.put(ctx, c, spec, content, target, mediaType)
+		return rawFormat.put(ctx, c, spec, content, known, target, mediaType)
 	}
 	fields := [][2]string{
 		{"maven2.groupId", coords.groupID},
@@ -372,12 +365,13 @@ func mavenUpload(ctx context.Context, c *repositoryupload.Client, spec *uploadv1
 	if coords.classifier != "" {
 		fields = append(fields, [2]string{"maven2.asset1.classifier", coords.classifier})
 	}
-	return componentUpload(ctx, c, spec, fields, "maven2.asset1", coords.artifactID+"."+coords.extension, content, mediaType)
+	return componentUpload(ctx, c, spec, fields, "maven2.asset1", coords.artifactID+"."+coords.extension, content, known, mediaType)
 }
 
 // componentUpload streams content as the single asset assetField of a component, with
-// the form fields, to the components API and returns the hex SHA-256 of the bytes sent.
-func componentUpload(ctx context.Context, c *repositoryupload.Client, spec *uploadv1alpha1.RepositoryUploadSpec, fields [][2]string, assetField, filename string, content blob.ReadOnlyBlob, mediaType string) (string, error) {
+// the form fields, to the components API and returns the digest of the bytes sent, see
+// [repositoryupload.UploadBlob] for its algorithm.
+func componentUpload(ctx context.Context, c *repositoryupload.Client, spec *uploadv1alpha1.RepositoryUploadSpec, fields [][2]string, assetField, filename string, content blob.ReadOnlyBlob, known digest.Digest, mediaType string) (digest.Digest, error) {
 	base, err := url.JoinPath(spec.URL, "service", "rest", "v1", "components")
 	if err != nil {
 		return "", fmt.Errorf("invalid nexus url: %w", err)
@@ -389,19 +383,19 @@ func componentUpload(ctx context.Context, c *repositoryupload.Client, spec *uplo
 	}
 	defer func() { _ = rc.Close() }()
 
-	hasher := sha256.New()
+	digester := repositoryupload.DigestAlgorithm(known).Digester()
 	body, pw := io.Pipe()
 	form := multipart.NewWriter(pw)
 	written := make(chan struct{})
 	go func() {
 		defer close(written)
-		pw.CloseWithError(writeComponentForm(form, fields, assetField, filename, io.TeeReader(rc, hasher), mediaType))
+		pw.CloseWithError(writeComponentForm(form, fields, assetField, filename, io.TeeReader(rc, digester.Hash()), mediaType))
 	}()
 	err = c.Send(ctx, http.MethodPost, componentsURL, body, -1, http.Header{"Content-Type": {form.FormDataContentType()}}, nil)
 	// Unblock the writer if the request stopped reading, then wait until it stopped hashing.
 	_ = body.CloseWithError(io.ErrClosedPipe)
 	<-written
-	return hex.EncodeToString(hasher.Sum(nil)), err
+	return digester.Digest(), err
 }
 
 // writeComponentForm writes the components API form of a single asset.
@@ -440,40 +434,43 @@ func (s *npmStore) Chart() bool { return false }
 
 func (s *npmStore) URL() string { return s.repoURL + s.path }
 
-func (s *npmStore) Stored(ctx context.Context, c *repositoryupload.Client, sha256Hex string) (bool, error) {
-	if sha256Hex == "" {
+func (s *npmStore) Stored(ctx context.Context, c *repositoryupload.Client, known digest.Digest) (bool, error) {
+	if _, ok := checksumQuery(known); !ok {
 		return false, nil
 	}
-	return s.find(ctx, c, sha256Hex)
+	return s.find(ctx, c, known)
 }
 
-func (s *npmStore) Put(ctx context.Context, c *repositoryupload.Client, content blob.ReadOnlyBlob, mediaType, _ string) (string, error) {
-	return componentUpload(ctx, c, s.spec, nil, "npm.asset", s.file, content, mediaType)
+func (s *npmStore) Put(ctx context.Context, c *repositoryupload.Client, content blob.ReadOnlyBlob, mediaType string, known digest.Digest) (digest.Digest, error) {
+	return componentUpload(ctx, c, s.spec, nil, "npm.asset", s.file, content, known, mediaType)
 }
 
-func (s *npmStore) Discard(context.Context, *repositoryupload.Client, string) error {
+func (s *npmStore) Discard(context.Context, *repositoryupload.Client, digest.Digest) error {
 	return fmt.Errorf("nexus keeps the uploaded package in repository %s", s.spec.Repository)
 }
 
 // Publish returns a Wget/v1 access on the stored tarball. Nexus indexes it for search shortly
 // after the upload, so it is polled for.
-func (s *npmStore) Publish(ctx context.Context, c *repositoryupload.Client, sha256Hex, mediaType string) (runtime.Typed, error) {
+func (s *npmStore) Publish(ctx context.Context, c *repositoryupload.Client, stored digest.Digest, mediaType string) (runtime.Typed, error) {
 	if s.path == "" {
-		found, err := repositoryupload.Poll(ctx, s.interval, func() (bool, error) { return s.find(ctx, c, sha256Hex) })
+		found, err := repositoryupload.Poll(ctx, s.interval, func() (bool, error) { return s.find(ctx, c, stored) })
 		if err != nil {
 			return nil, err
 		}
 		if !found {
-			return nil, fmt.Errorf("nexus repository %q stored the npm package with SHA-256 %s, but its search does not find it", s.spec.Repository, sha256Hex)
+			return nil, fmt.Errorf("nexus repository %q stored the npm package %s, but its search does not find it", s.spec.Repository, stored)
 		}
 	}
 	return &wgetaccessv1.Wget{Type: wgetaccess.V1VersionedType, URL: s.repoURL + s.path, MediaType: mediaType}, nil
 }
 
-// find looks up the first .tgz asset the repository stores with content sha256Hex and remembers
-// its path.
-func (s *npmStore) find(ctx context.Context, c *repositoryupload.Client, sha256Hex string) (bool, error) {
-	items, err := searchAssets(ctx, c, s.spec, url.Values{"sha256": {sha256Hex}})
+// find looks up the first .tgz asset the repository stores with content d and remembers its path.
+func (s *npmStore) find(ctx context.Context, c *repositoryupload.Client, d digest.Digest) (bool, error) {
+	query, ok := checksumQuery(d)
+	if !ok {
+		return false, fmt.Errorf("nexus cannot search for content %s", d)
+	}
+	items, err := searchAssets(ctx, c, s.spec, query)
 	if err != nil {
 		return false, err
 	}
@@ -529,3 +526,16 @@ func checkPOM(content blob.ReadOnlyBlob, coords mavenCoordinates, path string) (
 
 // maxPOMBytes bounds the POM read into memory for checkPOM.
 const maxPOMBytes = 1 << 20
+
+// checksumQuery returns the search query selecting the assets with content d. ok is false for an
+// empty digest or an algorithm Nexus's search does not support.
+func checksumQuery(d digest.Digest) (url.Values, bool) {
+	if d == "" {
+		return nil, false
+	}
+	switch alg := d.Algorithm(); alg {
+	case digest.SHA256, digest.SHA512:
+		return url.Values{alg.String(): {d.Encoded()}}, true
+	}
+	return nil, false
+}

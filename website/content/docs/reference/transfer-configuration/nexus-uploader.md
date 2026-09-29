@@ -56,8 +56,8 @@ disallows redeploys.
 
 ## Digest
 
-A `genericBlobDigest/v1` SHA-256 source digest is verified, and content the
-server already stores is not uploaded again. Nexus cannot reject mismatching
+A `genericBlobDigest/v1` SHA-256 or SHA-512 source digest is verified, and
+content the server already stores is not uploaded again. Nexus cannot reject mismatching
 bytes on deploy, so the uploader fails after the upload on a mismatch. Content
 extracted from an OCI artifact gets the SHA-256 of the uploaded bytes.
 

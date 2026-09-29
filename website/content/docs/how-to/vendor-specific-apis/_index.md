@@ -29,7 +29,7 @@ type expects, so consumers fetch it with their usual tools.
 3. It uploads the resource the way that repository type expects.
 4. It rewrites the resource in the target component version to a `Helm/v1` access
    for charts, or a `Wget/v1` access for files and packages. A `genericBlobDigest/v1`
-   SHA-256 source digest is verified.
+   SHA-256 or SHA-512 source digest is verified.
 
 ## Related Documentation
 

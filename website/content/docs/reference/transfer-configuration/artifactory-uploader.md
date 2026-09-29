@@ -63,9 +63,11 @@ decide whether a file already stored at the upload path may be replaced:
 
 ## Digest
 
-A `genericBlobDigest/v1` SHA-256 source digest is verified, and content the
-server already stores is not uploaded again. Artifactory verifies bytes against an
-`X-Checksum-Sha256` header on deploy. Content extracted from an OCI artifact
+A `genericBlobDigest/v1` SHA-256 or SHA-512 source digest is verified, and
+content the server already stores is not uploaded again. For SHA-256, Artifactory
+verifies bytes against an `X-Checksum-Sha256` header on deploy and deploys stored
+content by checksum; a SHA-512 digest is verified after the upload, and a
+mismatching file is deleted. Content extracted from an OCI artifact
 gets the SHA-256 of the uploaded bytes (the OCI layout tar or chart .tgz).
 
 ## Credentials

@@ -4,7 +4,6 @@ package repositoryupload
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -33,8 +32,6 @@ import (
 )
 
 const (
-	// hashAlgorithmSHA256 is the hash algorithm recorded for uploaded content digests.
-	hashAlgorithmSHA256 = "SHA-256"
 	// genericBlobDigestV1 is the normalisation algorithm for a plain streamed blob.
 	genericBlobDigestV1 = "genericBlobDigest/v1"
 	// maxErrorBodyBytes bounds how much of a non-2xx response body is read into an error.
@@ -166,10 +163,10 @@ func (u *Uploader) output(out *descriptor.Resource) (*uploadv1alpha1.RepositoryU
 	return &uploadv1alpha1.RepositoryUploadOutput{Resource: res}, nil
 }
 
-// knownDigest returns the SHA-256 the uploaded content must have (expected, see expectedDigest)
+// knownDigest returns the digest the uploaded content must have (expected, see expectedDigest)
 // and the one it is known to have up front (known): expected, else the digest the content
-// reports itself.
-func knownDigest(src *descriptor.Digest, content blob.ReadOnlyBlob, fromOCI bool) (expected, known string, err error) {
+// reports itself. Both are empty when unknown.
+func knownDigest(src *descriptor.Digest, content blob.ReadOnlyBlob, fromOCI bool) (expected, known godigest.Digest, err error) {
 	if expected, err = expectedDigest(src, fromOCI); err != nil {
 		return "", "", err
 	}
@@ -178,8 +175,8 @@ func knownDigest(src *descriptor.Digest, content blob.ReadOnlyBlob, fromOCI bool
 	}
 	if da, ok := content.(blob.DigestAware); ok {
 		if d, ok := da.Digest(); ok {
-			if hex, ok := strings.CutPrefix(d, "sha256:"); ok {
-				return "", hex, nil
+			if parsed, err := godigest.Parse(d); err == nil {
+				return "", parsed, nil
 			}
 		}
 	}
@@ -187,12 +184,18 @@ func knownDigest(src *descriptor.Digest, content blob.ReadOnlyBlob, fromOCI bool
 }
 
 // uploadedDigest is the digest of the published resource: the source digest if it describes the
-// uploaded content, else the SHA-256 of the uploaded bytes.
-func uploadedDigest(src *descriptor.Digest, expected, sha256Hex string) *descriptor.Digest {
+// uploaded content, else the digest of the uploaded bytes.
+func uploadedDigest(src *descriptor.Digest, expected, uploaded godigest.Digest) *descriptor.Digest {
 	if expected != "" {
 		return src.DeepCopy()
 	}
-	return &descriptor.Digest{HashAlgorithm: hashAlgorithmSHA256, NormalisationAlgorithm: genericBlobDigestV1, Value: sha256Hex}
+	var hashAlgorithm string
+	for name, alg := range hashAlgorithms {
+		if alg == uploaded.Algorithm() {
+			hashAlgorithm = name
+		}
+	}
+	return &descriptor.Digest{HashAlgorithm: hashAlgorithm, NormalisationAlgorithm: genericBlobDigestV1, Value: uploaded.Encoded()}
 }
 
 // contentType is the media type content is uploaded with: that of the content, else that of the
@@ -263,20 +266,28 @@ func CustomPath(path, requiredSuffix string) (string, error) {
 	return strings.Join(segments, "/"), nil
 }
 
-// expectedDigest returns the SHA-256 the uploaded chart must have: the source digest, if it
-// describes the uploaded bytes. It is empty when there is no source digest or the chart was
-// extracted from an OCI artifact, whose digest describes a different byte representation.
-func expectedDigest(src *descriptor.Digest, fromOCI bool) (string, error) {
+// hashAlgorithms maps the OCM hash algorithms of source digests to digest algorithms.
+var hashAlgorithms = map[string]godigest.Algorithm{"SHA-256": godigest.SHA256, "SHA-512": godigest.SHA512}
+
+// expectedDigest returns the digest the uploaded content must have: the source digest, if it
+// describes the uploaded bytes. It is empty when there is no source digest or the content was
+// taken from an OCI artifact, whose digest describes a different byte representation.
+func expectedDigest(src *descriptor.Digest, fromOCI bool) (godigest.Digest, error) {
 	if src == nil || fromOCI {
 		return "", nil
 	}
-	if src.HashAlgorithm != hashAlgorithmSHA256 {
-		return "", fmt.Errorf("unsupported hash algorithm: expected %s, got %s", hashAlgorithmSHA256, src.HashAlgorithm)
+	alg, ok := hashAlgorithms[src.HashAlgorithm]
+	if !ok {
+		return "", fmt.Errorf("unsupported hash algorithm: expected SHA-256 or SHA-512, got %s", src.HashAlgorithm)
 	}
 	if src.NormalisationAlgorithm != genericBlobDigestV1 {
 		return "", fmt.Errorf("unsupported normalisation algorithm: expected %s, got %s", genericBlobDigestV1, src.NormalisationAlgorithm)
 	}
-	return src.Value, nil
+	d := godigest.NewDigestFromEncoded(alg, src.Value)
+	if err := d.Validate(); err != nil {
+		return "", fmt.Errorf("invalid source digest: %w", err)
+	}
+	return d, nil
 }
 
 // localSource resolves the source component version repository of a local blob resource.
@@ -368,9 +379,10 @@ func (t *Uploader) resolveTargetCredentials(ctx context.Context, helmRepo, repoU
 	}, nil
 }
 
-// UploadBlob streams content to putURL and returns the hex SHA-256 of the bytes read and
-// whether content was read to its end. A successful response body is decoded into out, if set.
-func UploadBlob(ctx context.Context, c *Client, content blob.ReadOnlyBlob, putURL string, header http.Header, out any) (sha256Hex string, complete bool, err error) {
+// UploadBlob streams content to putURL and returns the digest of the bytes read, with the
+// algorithm of known (SHA-256 when known is empty), and whether content was read to its end. A
+// successful response body is decoded into out, if set.
+func UploadBlob(ctx context.Context, c *Client, content blob.ReadOnlyBlob, known godigest.Digest, putURL string, header http.Header, out any) (godigest.Digest, bool, error) {
 	rc, err := content.ReadCloser()
 	if err != nil {
 		return "", false, fmt.Errorf("failed opening content: %w", err)
@@ -380,10 +392,18 @@ func UploadBlob(ctx context.Context, c *Client, content blob.ReadOnlyBlob, putUR
 	if sized, ok := content.(blob.SizeAware); ok {
 		size = sized.Size()
 	}
-	hasher := sha256.New()
+	digester := DigestAlgorithm(known).Digester()
 	body := &eofReader{r: rc}
-	err = c.Send(ctx, http.MethodPut, putURL, io.TeeReader(body, hasher), size, header, out)
-	return godigest.NewDigestFromBytes(godigest.SHA256, hasher.Sum(nil)).Encoded(), body.eof, err
+	err = c.Send(ctx, http.MethodPut, putURL, io.TeeReader(body, digester.Hash()), size, header, out)
+	return digester.Digest(), body.eof, err
+}
+
+// DigestAlgorithm is the algorithm uploaded content is hashed with: that of known, else SHA-256.
+func DigestAlgorithm(known godigest.Digest) godigest.Algorithm {
+	if known == "" {
+		return godigest.SHA256
+	}
+	return known.Algorithm()
 }
 
 // eofReader records whether its reader returned io.EOF, i.e. was read to its end.

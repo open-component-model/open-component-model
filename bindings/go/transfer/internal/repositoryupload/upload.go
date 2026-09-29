@@ -8,6 +8,8 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/opencontainers/go-digest"
+
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/compression"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
@@ -32,17 +34,18 @@ type Store interface {
 	Chart() bool
 	// URL is the upload location, for logs and errors (callers redact it).
 	URL() string
-	// Stored reports whether the repository already holds content with sha256Hex ("" when unknown), or made
-	// it available without an upload. It fails for a location holding content that must not be overwritten.
-	Stored(ctx context.Context, c *Client, sha256Hex string) (bool, error)
-	// Put uploads content and returns the hex SHA-256 of the bytes sent.
-	Put(ctx context.Context, c *Client, content blob.ReadOnlyBlob, mediaType, sha256Hex string) (string, error)
+	// Stored reports whether the repository already holds content with digest known ("" when unknown), or
+	// made it available without an upload. It fails for a location holding content that must not be
+	// overwritten. Stores whose server cannot look up the algorithm of known treat it as unknown.
+	Stored(ctx context.Context, c *Client, known digest.Digest) (bool, error)
+	// Put uploads content and returns the digest of the bytes sent, see [UploadBlob] for its algorithm.
+	Put(ctx context.Context, c *Client, content blob.ReadOnlyBlob, mediaType string, known digest.Digest) (digest.Digest, error)
 	// Discard removes uploaded content that must not be published. Stores that cannot remove it return
 	// an error saying where it was left.
-	Discard(ctx context.Context, c *Client, sha256Hex string) error
+	Discard(ctx context.Context, c *Client, uploaded digest.Digest) error
 	// Publish returns the access of the stored content. Content the server did not recognize as the
 	// repository type expects yields a *NotRecognizedError.
-	Publish(ctx context.Context, c *Client, sha256Hex, mediaType string) (runtime.Typed, error)
+	Publish(ctx context.Context, c *Client, stored digest.Digest, mediaType string) (runtime.Typed, error)
 }
 
 // NotRecognizedError reports content the server did not recognize as the package the repository expects.
@@ -102,19 +105,19 @@ func (u *Uploader) Upload(ctx context.Context, spec *uploadv1alpha1.RepositoryUp
 	logAttrs := func() []any {
 		return []any{"server", b.Name(), "resource", src.ToIdentity(), "url", RedactURL(st.URL())}
 	}
-	digest := known
+	dgst := known
 	switch {
 	case stored && st.Chart():
 		slog.InfoContext(ctx, "reused helm chart content already stored in the helm repository", logAttrs()...)
 	case stored:
 		slog.InfoContext(ctx, "reused content already stored in the "+b.Name()+" repository", logAttrs()...)
 	default:
-		if digest, err = st.Put(ctx, c, content, mediaType, known); err != nil {
+		if dgst, err = st.Put(ctx, c, content, mediaType, known); err != nil {
 			return nil, err
 		}
-		if known != "" && digest != known {
-			discard(ctx, c, st, digest)
-			return nil, fmt.Errorf("digest mismatch: expected %s, got %s", known, digest)
+		if known != "" && dgst != known {
+			discard(ctx, c, st, dgst)
+			return nil, fmt.Errorf("digest mismatch: expected %s, got %s", known, dgst)
 		}
 		if st.Chart() {
 			slog.InfoContext(ctx, "uploaded helm chart", logAttrs()...)
@@ -123,9 +126,9 @@ func (u *Uploader) Upload(ctx context.Context, spec *uploadv1alpha1.RepositoryUp
 		}
 	}
 
-	access, err := st.Publish(ctx, c, digest, mediaType)
+	access, err := st.Publish(ctx, c, dgst, mediaType)
 	if nr := (*NotRecognizedError)(nil); errors.As(err, &nr) {
-		discard(ctx, c, st, digest)
+		discard(ctx, c, st, dgst)
 		return nil, fmt.Errorf("content of resource %s is not %s: %s", src.ToIdentity(), nr.Kind, nr.Reason)
 	}
 	if err != nil {
@@ -133,13 +136,13 @@ func (u *Uploader) Upload(ctx context.Context, spec *uploadv1alpha1.RepositoryUp
 	}
 	out := src.DeepCopy()
 	out.Access = access
-	out.Digest = uploadedDigest(src.Digest, expected, digest)
+	out.Digest = uploadedDigest(src.Digest, expected, dgst)
 	return u.output(out)
 }
 
 // discard removes uploaded content that must not be published, logging where it was left otherwise.
-func discard(ctx context.Context, c *Client, st Store, sha256Hex string) {
-	if err := st.Discard(ctx, c, sha256Hex); err != nil {
+func discard(ctx context.Context, c *Client, st Store, uploaded digest.Digest) {
+	if err := st.Discard(ctx, c, uploaded); err != nil {
 		slog.WarnContext(ctx, "failed removing uploaded content that must not be published", "url", RedactURL(st.URL()), "error", err)
 	}
 }

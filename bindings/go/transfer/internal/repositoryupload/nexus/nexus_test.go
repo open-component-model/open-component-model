@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/require"
 
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
@@ -416,7 +417,7 @@ func TestTransform(t *testing.T) {
 		{
 			name:     "source digest mismatch fails after the upload and deletes nothing",
 			resource: withDigest(otherDigest),
-			wantErr:  "digest mismatch: expected " + otherDigest + ", got " + chartDigest,
+			wantErr:  "digest mismatch: expected sha256:" + otherDigest + ", got sha256:" + chartDigest,
 			check:    func(r *require.Assertions, u uploadRun) { r.False(u.hasRequest(http.MethodDelete)) },
 		},
 		{
@@ -436,6 +437,16 @@ func TestTransform(t *testing.T) {
 			mediaType:    "text/plain",
 			wantAccess:   access{url: repo + rawPath, mediaType: "text/plain"},
 			wantDigest:   helloDigest,
+			wantRequests: []string{detect, "HEAD " + repo + rawPath, "PUT " + repo + rawPath},
+		},
+		{
+			name:     "raw SHA-512 source digest is verified after the upload",
+			repoType: "raw",
+			content:  hello,
+			resource: func(res *descriptorv2.Resource) {
+				res.Digest = &descriptorv2.Digest{HashAlgorithm: "SHA-512", NormalisationAlgorithm: "genericBlobDigest/v1", Value: digest.SHA512.FromBytes(hello).Encoded()}
+			},
+			wantAccess:   access{url: repo + rawPath},
 			wantRequests: []string{detect, "HEAD " + repo + rawPath, "PUT " + repo + rawPath},
 		},
 		{
@@ -658,7 +669,7 @@ func TestTransform(t *testing.T) {
 			content:  npmTarball,
 			resource: npmSource,
 			seed:     func(srv *fakeNexus) { srv.searchLag = 1000 },
-			wantErr:  `nexus repository "helm-hosted" stored the npm package with SHA-256 ` + npmDigest + ", but its search does not find it",
+			wantErr:  `nexus repository "helm-hosted" stored the npm package sha256:` + npmDigest + ", but its search does not find it",
 			check: func(r *require.Assertions, u uploadRun) {
 				upload := slices.Index(u.reqs, components)
 				r.NotEqual(-1, upload)

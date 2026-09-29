@@ -148,9 +148,9 @@ func TestTransform(t *testing.T) {
 		"ocm.component.name": "ocm.software/test", "ocm.component.version": "1.0.0",
 		"ocm.resource.name": "renamed", "ocm.resource.version": "9.9.9",
 	}
-	withDigest := func(value, normalisation string) func(*descriptorv2.Resource) {
+	withDigest := func(value, normalisation string, hashAlgorithm ...string) func(*descriptorv2.Resource) {
 		return func(res *descriptorv2.Resource) {
-			res.Digest = &descriptorv2.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: normalisation, Value: value}
+			res.Digest = &descriptorv2.Digest{HashAlgorithm: append(hashAlgorithm, "SHA-256")[0], NormalisationAlgorithm: normalisation, Value: value}
 		}
 	}
 	helmCreds := &helmcredsv1.HelmHTTPCredentials{Type: runtime.NewVersionedType(helmcredsv1.HelmHTTPCredentialsType, helmcredsv1.Version), Username: "helm-user", Password: "helm-pass"}
@@ -264,6 +264,28 @@ func TestTransform(t *testing.T) {
 			wantErr:      "returned status 409",
 			wantRequests: []string{detect, fileInfo + ".tgz", put + ".tgz", put + ".tgz"},
 			check:        func(r *require.Assertions, u uploadRun) { r.False(u.srv.Stored(file + ".tgz")) },
+		},
+		{
+			name:         "a SHA-512 source digest is verified after the upload",
+			resource:     withDigest(digest.SHA512.FromBytes(chartTGZ).Encoded(), "genericBlobDigest/v1", "SHA-512"),
+			wantAccess:   access{helmChart: "mychart:0.1.0"},
+			wantRequests: []string{detect, fileInfo + ".tgz", put + ".tgz", fileInfo + ".tgz" + chartProps},
+			check: func(r *require.Assertions, u uploadRun) {
+				r.Empty(u.reqs[2].Checksum, "artifactory only verifies SHA-256 checksums")
+				r.Equal(&descriptorv2.Digest{HashAlgorithm: "SHA-512", NormalisationAlgorithm: "genericBlobDigest/v1", Value: digest.SHA512.FromBytes(chartTGZ).Encoded()}, u.out.Digest)
+			},
+		},
+		{
+			name:     "a SHA-512 source digest mismatch fails after the upload and removes the file",
+			resource: withDigest(digest.SHA512.FromBytes(hello).Encoded(), "genericBlobDigest/v1", "SHA-512"),
+			wantErr:  "digest mismatch: expected sha512:" + digest.SHA512.FromBytes(hello).Encoded() + ", got sha512:" + digest.SHA512.FromBytes(chartTGZ).Encoded(),
+			check:    func(r *require.Assertions, u uploadRun) { r.False(u.srv.Stored(file + ".tgz")) },
+		},
+		{
+			name:         "invalid source digest fails before uploading",
+			resource:     withDigest("0000", "genericBlobDigest/v1", "SHA-256"),
+			wantErr:      "invalid source digest",
+			wantRequests: []string{detect},
 		},
 		{
 			name:         "unsupported source digest fails before uploading",

@@ -8,6 +8,8 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/opencontainers/go-digest"
+
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/transfer/internal/repositoryupload"
@@ -49,11 +51,11 @@ func (n *helmStore) URL() string { return n.putURL }
 
 // Stored reports whether the repository already stores a chart with the content, which Nexus
 // publishes under its own path, so nothing needs to be uploaded.
-func (n *helmStore) Stored(ctx context.Context, c *repositoryupload.Client, sha256Hex string) (bool, error) {
-	if sha256Hex == "" {
+func (n *helmStore) Stored(ctx context.Context, c *repositoryupload.Client, known digest.Digest) (bool, error) {
+	if _, ok := checksumQuery(known); !ok {
 		return false, nil
 	}
-	items, err := n.search(ctx, c, sha256Hex)
+	items, err := n.search(ctx, c, known)
 	if err != nil {
 		return false, err
 	}
@@ -69,9 +71,9 @@ func (n *helmStore) Stored(ctx context.Context, c *repositoryupload.Client, sha2
 // rejects redeploying a chart still stores its content, e.g. from an earlier transfer of the same
 // resource without a source digest, so a rejected upload of content whose digest was unknown up
 // front succeeds when the repository stores it.
-func (n *helmStore) Put(ctx context.Context, c *repositoryupload.Client, content blob.ReadOnlyBlob, mediaType, sha256Hex string) (string, error) {
-	computed, complete, err := repositoryupload.UploadBlob(ctx, c, content, n.putURL, http.Header{"Content-Type": {mediaType}}, nil)
-	if err == nil || sha256Hex != "" || !complete {
+func (n *helmStore) Put(ctx context.Context, c *repositoryupload.Client, content blob.ReadOnlyBlob, mediaType string, known digest.Digest) (digest.Digest, error) {
+	computed, complete, err := repositoryupload.UploadBlob(ctx, c, content, known, n.putURL, http.Header{"Content-Type": {mediaType}}, nil)
+	if err == nil || known != "" || !complete {
 		return computed, err
 	}
 	if _, _, found, chartErr := n.chart(ctx, c, computed); chartErr != nil || !found {
@@ -83,12 +85,12 @@ func (n *helmStore) Put(ctx context.Context, c *repositoryupload.Client, content
 
 // Discard deletes nothing: Nexus chooses the path from the chart, and the content may predate
 // this upload.
-func (n *helmStore) Discard(_ context.Context, _ *repositoryupload.Client, sha256Hex string) error {
-	return fmt.Errorf("nexus stores charts under a path derived from the chart, so content with SHA-256 %s is left in repository %s", sha256Hex, n.repository)
+func (n *helmStore) Discard(_ context.Context, _ *repositoryupload.Client, uploaded digest.Digest) error {
+	return fmt.Errorf("nexus stores charts under a path derived from the chart, so content %s is left in repository %s", uploaded, n.repository)
 }
 
-func (n *helmStore) Publish(ctx context.Context, c *repositoryupload.Client, sha256Hex, _ string) (runtime.Typed, error) {
-	name, version, found, err := n.chart(ctx, c, sha256Hex)
+func (n *helmStore) Publish(ctx context.Context, c *repositoryupload.Client, stored digest.Digest, _ string) (runtime.Typed, error) {
+	name, version, found, err := n.chart(ctx, c, stored)
 	if err != nil {
 		return nil, err
 	}
@@ -100,9 +102,9 @@ func (n *helmStore) Publish(ctx context.Context, c *repositoryupload.Client, sha
 
 // chart polls the component search until it finds the content and fails when the content is
 // stored as more than one chart name and version.
-func (n *helmStore) chart(ctx context.Context, c *repositoryupload.Client, sha256Hex string) (name, version string, found bool, err error) {
+func (n *helmStore) chart(ctx context.Context, c *repositoryupload.Client, d digest.Digest) (name, version string, found bool, err error) {
 	found, err = repositoryupload.Poll(ctx, n.interval, func() (bool, error) {
-		items, err := n.search(ctx, c, sha256Hex)
+		items, err := n.search(ctx, c, d)
 		if err != nil {
 			return false, err
 		}
@@ -113,7 +115,7 @@ func (n *helmStore) chart(ctx context.Context, c *repositoryupload.Client, sha25
 			}
 		}
 		if len(charts) > 1 {
-			return false, fmt.Errorf("nexus stores content %s as more than one chart", sha256Hex)
+			return false, fmt.Errorf("nexus stores content %s as more than one chart", d)
 		}
 		for chart := range charts {
 			name, version = chart.Name, chart.Version
@@ -124,14 +126,16 @@ func (n *helmStore) chart(ctx context.Context, c *repositoryupload.Client, sha25
 	return name, version, found, err
 }
 
-// search returns the helm components of the repository whose asset has the SHA-256. Only the
+// search returns the helm components of the repository whose asset has digest d. Only the
 // first page is read: one content is expected to be stored as at most one component.
-func (n *helmStore) search(ctx context.Context, c *repositoryupload.Client, sha256Hex string) ([]component, error) {
-	target := n.searchURL + "?" + url.Values{
-		"repository": {n.repository},
-		"format":     {"helm"},
-		"sha256":     {sha256Hex},
-	}.Encode()
+func (n *helmStore) search(ctx context.Context, c *repositoryupload.Client, d digest.Digest) ([]component, error) {
+	query, ok := checksumQuery(d)
+	if !ok {
+		return nil, fmt.Errorf("nexus cannot search for content %s", d)
+	}
+	query.Set("repository", n.repository)
+	query.Set("format", "helm")
+	target := n.searchURL + "?" + query.Encode()
 	var page struct {
 		Items []component `json:"items"`
 	}

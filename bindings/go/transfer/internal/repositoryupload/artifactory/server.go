@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/opencontainers/go-digest"
+
 	"ocm.software/open-component-model/bindings/go/blob"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -99,33 +101,33 @@ func (a *server) Chart() bool { return a.packageType == "helm" }
 func (a *server) URL() string { return a.storedURL() }
 
 // Stored claims the upload location, see claim, and otherwise asks Artifactory to deploy it from
-// content it already stores under the checksum, see reuse.
-func (a *server) Stored(ctx context.Context, c *repositoryupload.Client, sha256Hex string) (bool, error) {
-	stored, err := a.claim(ctx, c, sha256Hex)
-	if stored || err != nil || sha256Hex == "" {
+// content it already stores under the SHA-256 checksum, see reuse.
+func (a *server) Stored(ctx context.Context, c *repositoryupload.Client, known digest.Digest) (bool, error) {
+	stored, err := a.claim(ctx, c, known)
+	if stored || err != nil || known == "" || known.Algorithm() != digest.SHA256 {
 		return stored, err
 	}
-	return a.reuse(ctx, c, sha256Hex)
+	return a.reuse(ctx, c, known)
 }
 
-func (a *server) Put(ctx context.Context, c *repositoryupload.Client, content blob.ReadOnlyBlob, mediaType, sha256Hex string) (string, error) {
+func (a *server) Put(ctx context.Context, c *repositoryupload.Client, content blob.ReadOnlyBlob, mediaType string, known digest.Digest) (digest.Digest, error) {
 	header := http.Header{"Content-Type": {mediaType}}
-	if sha256Hex != "" {
+	if known != "" && known.Algorithm() == digest.SHA256 {
 		// Artifactory verifies the uploaded bytes against this checksum and rejects the upload
 		// on mismatch, so a corrupted stream is never stored.
-		header.Set("X-Checksum-Sha256", sha256Hex)
+		header.Set("X-Checksum-Sha256", known.Encoded())
 	}
-	computed, _, err := repositoryupload.UploadBlob(ctx, c, content, a.putURL+a.properties, header, &a.deployed)
+	computed, _, err := repositoryupload.UploadBlob(ctx, c, content, known, a.putURL+a.properties, header, &a.deployed)
 	return computed, err
 }
 
-func (a *server) Discard(ctx context.Context, c *repositoryupload.Client, _ string) error {
+func (a *server) Discard(ctx context.Context, c *repositoryupload.Client, _ digest.Digest) error {
 	return c.Send(ctx, http.MethodDelete, a.storedURL(), nil, -1, nil, nil)
 }
 
 // Publish returns a Helm/v1 access on the chart Artifactory indexed (helm), or a Wget/v1 access on
 // the stored file; npm packages must have been indexed as such.
-func (a *server) Publish(ctx context.Context, c *repositoryupload.Client, _, mediaType string) (runtime.Typed, error) {
+func (a *server) Publish(ctx context.Context, c *repositoryupload.Client, _ digest.Digest, mediaType string) (runtime.Typed, error) {
 	switch a.packageType {
 	case "helm":
 		name, version, found, err := a.packageInfo(ctx, c, "chart.name", "chart.version")
@@ -153,10 +155,10 @@ func (a *server) Publish(ctx context.Context, c *repositoryupload.Client, _, med
 // checksum ("Deploy Artifact by Checksum"), so the content is not uploaded again. It reports false
 // when Artifactory does not have the content (404) or declines the request otherwise; the caller
 // then uploads the content, which surfaces real errors such as missing permissions.
-func (a *server) reuse(ctx context.Context, c *repositoryupload.Client, sha256Hex string) (bool, error) {
+func (a *server) reuse(ctx context.Context, c *repositoryupload.Client, sha256 digest.Digest) (bool, error) {
 	resp, err := c.Do(ctx, http.MethodPut, a.putURL+a.properties, nil, 0, http.Header{
 		"X-Checksum-Deploy": {"true"},
-		"X-Checksum-Sha256": {sha256Hex},
+		"X-Checksum-Sha256": {sha256.Encoded()},
 	})
 	if err != nil {
 		return false, err
@@ -194,19 +196,18 @@ func (a *server) storedURL() string {
 }
 
 // claim reads the file stored at the upload location. A missing file leaves the location free,
-// a file with content sha256Hex already holds the content, and a file whose owner properties name
+// a file with content known already holds the content, and a file whose owner properties name
 // this resource is its earlier upload and may be replaced. Any other file is never overwritten,
 // because it was stored for another resource, another component version or outside OCM.
-func (a *server) claim(ctx context.Context, c *repositoryupload.Client, sha256Hex string) (bool, error) {
+func (a *server) claim(ctx context.Context, c *repositoryupload.Client, known digest.Digest) (bool, error) {
 	var info struct {
-		Checksums struct {
-			SHA256 string `json:"sha256"`
-		} `json:"checksums"`
+		// Checksums maps algorithms (sha1, sha256, md5) to the hex checksums of the file.
+		Checksums map[string]string `json:"checksums"`
 	}
 	if exists, err := c.GetJSON(ctx, a.storageURL, &info); !exists || err != nil {
 		return false, err
 	}
-	if sha256Hex != "" && info.Checksums.SHA256 == sha256Hex {
+	if known != "" && info.Checksums[known.Algorithm().String()] == known.Encoded() {
 		return true, nil
 	}
 

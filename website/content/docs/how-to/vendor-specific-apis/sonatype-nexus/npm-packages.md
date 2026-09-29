@@ -92,7 +92,7 @@ npm install @acme/demo@2.0.0 --registry https://nexus.example.com/repository/npm
 - **The `latest` dist-tag is the highest release version**, not the most recently
   uploaded one: transferring `1.0.0` after `2.0.0` keeps `2.0.0` as `latest`, and a
   prerelease such as `3.0.0-rc.1` does not become `latest`.
-- **A second transfer reuses the stored tarball**: the uploader finds it by its SHA-256.
+- **A second transfer reuses the stored tarball**: the uploader finds it by its digest.
 - `path` is not supported: Nexus decides where packages are stored.
 
 ## Troubleshooting
