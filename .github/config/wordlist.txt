@@ -209,7 +209,6 @@ devops
 dex
 diataxis
 digesters
-digester
 directorytree
 dirs
 dirtree
@@ -614,7 +613,6 @@ powershell
 pre
 preact
 precalculated
-precompute
 precomputed
 preconfigure
 preconfigured
@@ -688,7 +686,6 @@ resourcereference
 resourcespec
 resourcestatus
 resubmission
-resumable
 retryconfig
 retrigger
 rgd
@@ -823,7 +820,6 @@ tos
 transformationgraphdefinition
 transformationtypes
 transformerplugin
-traversable
 transportarchive
 tsc
 ttl
