@@ -25,6 +25,7 @@ type barVisualizer[T any] struct {
 	logBuffer      *progress.SyncBuffer
 	buf            strings.Builder
 	start          time.Time
+	concurrency    int
 	// renderedLines is the number of live-block lines the previous frame wrote.
 	// The next frame clears exactly this many, so a growing indeterminate log
 	// never clears lines it did not write.
@@ -47,6 +48,12 @@ func (v *barVisualizer[T]) SetErrorFormatter(f func(T, error) string) {
 	v.errorFormatter = f
 }
 
+// SetConcurrency implements [progress.ConcurrencyAware]. The runner count is
+// shown in the operation header so it is visible while the bar animates.
+func (v *barVisualizer[T]) SetConcurrency(runners int) {
+	v.concurrency = runners
+}
+
 // SetLogBuffer sets the shared slog buffer from the tracker.
 func (v *barVisualizer[T]) SetLogBuffer(buf *progress.SyncBuffer) {
 	v.logBuffer = buf
@@ -60,6 +67,9 @@ func (v *barVisualizer[T]) Begin(name string) {
 	defer v.mu.Unlock()
 
 	v.header = name
+	if v.concurrency > 1 {
+		v.header = fmt.Sprintf("%s (%d runners)", name, v.concurrency)
+	}
 	v.events = nil
 	v.start = time.Now()
 	v.done = make(chan struct{})

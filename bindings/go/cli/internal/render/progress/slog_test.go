@@ -30,6 +30,29 @@ func TestSlogVisualizer_Begin(t *testing.T) {
 	})
 	assert.Contains(t, output, "Resolving: operation starting")
 	assert.Contains(t, output, "level=INFO")
+	assert.NotContains(t, output, "runners")
+}
+
+func TestSlogVisualizer_Begin_WithConcurrency(t *testing.T) {
+	output := captureSlog(t, func() {
+		v := &SlogVisualizer[any]{}
+		v.SetConcurrency(4)
+		v.Begin("Transferring component versions")
+	})
+	assert.Contains(t, output, "Transferring component versions: operation starting")
+	assert.Contains(t, output, "runners=4")
+}
+
+func TestSlogVisualizer_HandleEvent_InFlight(t *testing.T) {
+	output := captureSlog(t, func() {
+		v := &SlogVisualizer[any]{}
+		v.SetConcurrency(4)
+		v.Begin("Transfer")
+		v.HandleEvent(Event[any]{ID: "1", Name: "component-a", State: Running, InFlight: 3})
+	})
+	assert.Contains(t, output, "item in-progress")
+	assert.Contains(t, output, "inFlight=3")
+	assert.Contains(t, output, "runners=4")
 }
 
 func TestSlogVisualizer_End_Success(t *testing.T) {
