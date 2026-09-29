@@ -55,20 +55,17 @@ is the authoritative location and should be used for accessing the resource.
 
 ## How transfer works {#how-transfer-works}
 
-By default, a Wget resource is transferred by value.
+By default, a Wget resource stays by reference: without a matching uploader, `ocm transfer cv` keeps the
+`Wget/v1` access unchanged in the target, and the file stays on the remote server.
 
-Without an uploader configuration, when you run `ocm transfer cv` an access-type resource does not stay a `Wget/v1` access in the target. OCM fetches the
-bytes and writes them into the target as a [`LocalBlob/v1`]({{< relref "docs/reference/input-and-access-types.md#localblobv1" >}}). After a transfer
-both will end up as local blobs.
+With a matching local blob uploader configuration (passed via `--config`), OCM fetches the bytes and writes them into the
+target as a [`LocalBlob/v1`]({{< relref "docs/reference/input-and-access-types.md#localblobv1" >}}). This means:
 
-This means:
-
-1. You can use a local blob uploader configuration (via `--config`) to copy all resources (including Wget resources) as local blobs during transfer. Without it, the resource is skipped, because there is no
-   way to transfer it without copying the bytes.
-2. The bytes are fetched *again at transfer time* and checked against the resource's digest. If the file behind the URL
-   changed since the component version was built, the transfer fails instead of copying different content.
-
-The file stays on the remote server only if the component version is never transferred. Transfer converts the `Wget/v1` reference into a `LocalBlob/v1`.
+1. To embed Wget resources, add a `localblob.uploader.transfer.config.ocm.software/v1alpha1` entry to your OCM
+   configuration. Without it, the `Wget/v1` access remains by reference.
+2. When the local blob uploader copies the resource, the bytes are fetched *again at transfer time* and checked against
+   the resource's digest. If the file behind the URL changed since the component version was built, the transfer fails
+   instead of copying different content.
 
 To keep a resource behind a URL instead of embedding it — streaming it to a custom HTTP target and rewriting the access to a new `Wget/v1` URL — configure an uploader; see [Configure Custom Uploads During Transfer]({{< relref "docs/tutorials/configure-custom-uploads.md" >}}).
 

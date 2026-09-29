@@ -515,6 +515,12 @@ EOF
 ```bash
 ocm add cv
 
+cat > ocmconfig.yaml << 'EOF'
+type: generic.config.ocm.software/v1
+configurations:
+  - type: localblob.uploader.transfer.config.ocm.software/v1alpha1
+EOF
+
 ocm transfer cv \
   --config ocmconfig.yaml \
   ./transport-archive//github.com/acme.org/fetched-oci-demo:1.0.0 \

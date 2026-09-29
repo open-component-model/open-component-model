@@ -150,9 +150,10 @@ configurations:
 ocm transfer cv --config ocmconfig.yaml <src> <target>
 ```
 
-No uploader entry needed for the default local-blob handling. The local-blob
-uploader catch-all is the replacement for `copyMode: allResources`; omit it
-entirely if only local blobs should be copied (the baseline).
+The local-blob uploader catch-all replaces `--copy-resources` and
+`copyMode: allResources`. If the old command did not use `--copy-resources`
+(only `--upload-as localBlob`), omit the catch-all: local blobs are copied by
+default and no uploader entry is needed.
 
 {{< /tab >}}
 {{< /tabs >}}
