@@ -9,6 +9,7 @@ import (
 	celparser "ocm.software/open-component-model/bindings/go/cel/expression/parser"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	"ocm.software/open-component-model/bindings/go/transfer/internal/repositoryupload"
 	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/transform/graph/runtime/resolver"
 	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
@@ -51,21 +52,6 @@ func resourceNodePath(baseID string, index int) string {
 // of the descriptor environment node keyed by baseID (see addDescriptorToEnvironment).
 func componentNodePath(baseID string) string {
 	return fmt.Sprintf("environment.%s.component", baseID)
-}
-
-// mediaTypeFromAccess extracts the source access media type (if any) from the resource
-// access, used as the default target media type. Returns "" when absent.
-func mediaTypeFromAccess(resource descriptorv2.Resource) string {
-	if resource.Access == nil || len(resource.Access.Data) == 0 {
-		return ""
-	}
-	var access struct {
-		MediaType string `json:"mediaType"`
-	}
-	if err := json.Unmarshal(resource.Access.Data, &access); err != nil {
-		return ""
-	}
-	return access.MediaType
 }
 
 // templateExpressions rewrites the `resource` and `component` aliases in every ${...}
@@ -181,7 +167,7 @@ func processHTTPUploader(resource descriptorv2.Resource, u *transferv1alpha1.HTT
 	// source access media type when it exposes one (wget, OCI, ...).
 	mediaType := u.MediaType
 	if mediaType == "" {
-		mediaType = mediaTypeFromAccess(resource)
+		mediaType = repositoryupload.MediaTypeFromAccess(resource)
 	}
 	// Build the upload request access from the raw user strings; expression templating is
 	// applied generically to the whole object below rather than to hand-picked fields.

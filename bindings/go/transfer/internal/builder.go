@@ -18,6 +18,9 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 	s3transformer "ocm.software/open-component-model/bindings/go/s3/transformation"
 	s3v1alpha1 "ocm.software/open-component-model/bindings/go/s3/transformation/spec/v1alpha1"
+	"ocm.software/open-component-model/bindings/go/transfer/internal/repositoryupload"
+	"ocm.software/open-component-model/bindings/go/transfer/internal/repositoryupload/artifactory"
+	"ocm.software/open-component-model/bindings/go/transfer/internal/repositoryupload/nexus"
 	"ocm.software/open-component-model/bindings/go/transform/graph/builder"
 	wgetaccess "ocm.software/open-component-model/bindings/go/wget/spec/access"
 	wgetstream "ocm.software/open-component-model/bindings/go/wget/stream"
@@ -145,9 +148,9 @@ func NewDefaultBuilder(
 	}
 
 	// Repository upload transformers (artifactory and nexus uploader configurations)
-	transformerScheme.MustRegisterWithAlias(&ArtifactoryUploadTransformation{}, ArtifactoryUploadVersionedType)
-	transformerScheme.MustRegisterWithAlias(&NexusUploadTransformation{}, NexusUploadVersionedType)
-	repositoryUpload := repositoryUploader{
+	transformerScheme.MustRegisterWithAlias(&artifactory.Transformation{}, artifactory.VersionedType)
+	transformerScheme.MustRegisterWithAlias(&nexus.Transformation{}, nexus.VersionedType)
+	repositoryUpload := repositoryupload.Uploader{
 		Scheme: transformerScheme,
 		Charts: &chartarchive.Source{
 			ResourceRepository: resourceRepo,
@@ -185,7 +188,7 @@ func NewDefaultBuilder(
 		WithTransformer(&s3v1alpha1.DownloadS3Resource{}, downloadS3).
 		WithTransformer(&githubv1alpha1.GetGitHubCommit{}, getGitHubCommit).
 		WithTransformer(&wgetv1alpha1.HTTPStreaming{}, httpStreaming).
-		WithTransformer(&ArtifactoryUploadTransformation{}, &ArtifactoryUpload{repositoryUpload}).
-		WithTransformer(&NexusUploadTransformation{}, &NexusUpload{repositoryUpload}).
+		WithTransformer(&artifactory.Transformation{}, &artifactory.Transformer{Uploader: repositoryUpload}).
+		WithTransformer(&nexus.Transformation{}, &nexus.Transformer{Uploader: repositoryUpload}).
 		WithTransformer(&FileCleanupTransformation{}, fileCleanup)
 }

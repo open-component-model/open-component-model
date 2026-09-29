@@ -9,9 +9,6 @@ import (
 	_ "embed"
 )
 
-//go:embed schemas/ArtifactoryUploadTransformation.schema.json
-var schemaArtifactoryUploadTransformation []byte
-
 //go:embed schemas/FileCleanupOutput.schema.json
 var schemaFileCleanupOutput []byte
 
@@ -20,23 +17,6 @@ var schemaFileCleanupSpec []byte
 
 //go:embed schemas/FileCleanupTransformation.schema.json
 var schemaFileCleanupTransformation []byte
-
-//go:embed schemas/NexusUploadTransformation.schema.json
-var schemaNexusUploadTransformation []byte
-
-//go:embed schemas/RepositoryUploadComponentVersion.schema.json
-var schemaRepositoryUploadComponentVersion []byte
-
-//go:embed schemas/RepositoryUploadOutput.schema.json
-var schemaRepositoryUploadOutput []byte
-
-//go:embed schemas/RepositoryUploadSpec.schema.json
-var schemaRepositoryUploadSpec []byte
-
-// JSONSchema returns the JSON Schema for ArtifactoryUploadTransformation.
-func (ArtifactoryUploadTransformation) JSONSchema() []byte {
-	return schemaArtifactoryUploadTransformation
-}
 
 // JSONSchema returns the JSON Schema for FileCleanupOutput.
 func (FileCleanupOutput) JSONSchema() []byte {
@@ -51,24 +31,4 @@ func (FileCleanupSpec) JSONSchema() []byte {
 // JSONSchema returns the JSON Schema for FileCleanupTransformation.
 func (FileCleanupTransformation) JSONSchema() []byte {
 	return schemaFileCleanupTransformation
-}
-
-// JSONSchema returns the JSON Schema for NexusUploadTransformation.
-func (NexusUploadTransformation) JSONSchema() []byte {
-	return schemaNexusUploadTransformation
-}
-
-// JSONSchema returns the JSON Schema for RepositoryUploadComponentVersion.
-func (RepositoryUploadComponentVersion) JSONSchema() []byte {
-	return schemaRepositoryUploadComponentVersion
-}
-
-// JSONSchema returns the JSON Schema for RepositoryUploadOutput.
-func (RepositoryUploadOutput) JSONSchema() []byte {
-	return schemaRepositoryUploadOutput
-}
-
-// JSONSchema returns the JSON Schema for RepositoryUploadSpec.
-func (RepositoryUploadSpec) JSONSchema() []byte {
-	return schemaRepositoryUploadSpec
 }

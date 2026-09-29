@@ -1,4 +1,6 @@
-package internal
+// Package repositoryupload holds what the Artifactory and Nexus uploaders share: the
+// transformation spec, the source and target plumbing, and the Helm chart upload flow.
+package repositoryupload
 
 import (
 	"context"
@@ -31,45 +33,34 @@ import (
 )
 
 const (
-	ArtifactoryUploadType   = "ArtifactoryUpload"
-	NexusUploadType         = "NexusUpload"
-	repositoryUploadVersion = "v1alpha1"
-
 	// hashAlgorithmSHA256 is the hash algorithm recorded for uploaded content digests.
 	hashAlgorithmSHA256 = "SHA-256"
 	// genericBlobDigestV1 is the normalisation algorithm for a plain streamed blob.
 	genericBlobDigestV1 = "genericBlobDigest/v1"
-	// maxErrorBodyBytes bounds how much of a non-2xx response body is read into an error.
-	maxErrorBodyBytes = 4 << 10
-	// chartMetadataAttempts bounds how often the chart metadata a server records for an
+	// MaxErrorBodyBytes bounds how much of a non-2xx response body is read into an error.
+	MaxErrorBodyBytes = 4 << 10
+	// PollAttempts bounds how often the chart metadata a server records for an
 	// uploaded chart is polled before the content is considered not to be a helm chart. The
 	// metadata can lag behind the upload: Artifactory may calculate the chart.name and
 	// chart.version properties asynchronously, Nexus indexes components for search about 2 s
 	// after the upload (Nexus 3.96). 30 polls allow about 15 s for a server under load.
-	chartMetadataAttempts = 30
-	// defaultChartMetadataInterval is the wait between two chart metadata polls.
-	defaultChartMetadataInterval = 500 * time.Millisecond
+	PollAttempts = 30
+	// DefaultPollInterval is the wait between two chart metadata polls.
+	DefaultPollInterval = 500 * time.Millisecond
 	// octetStream is the content type of uploaded content of unknown media type.
 	octetStream = "application/octet-stream"
 )
 
-var (
-	// ArtifactoryUploadVersionedType is the versioned type identifier for ArtifactoryUpload transformations.
-	ArtifactoryUploadVersionedType = runtime.NewVersionedType(ArtifactoryUploadType, repositoryUploadVersion)
-	// NexusUploadVersionedType is the versioned type identifier for NexusUpload transformations.
-	NexusUploadVersionedType = runtime.NewVersionedType(NexusUploadType, repositoryUploadVersion)
-)
-
-// RepositoryUploadSpec is the input specification of an ArtifactoryUpload or NexusUpload
+// Spec is the input specification of an Artifactory or Nexus upload
 // transformation.
 // +k8s:deepcopy-gen=true
 // +ocm:jsonschema-gen=true
-type RepositoryUploadSpec struct {
+type Spec struct {
 	// Resource is the source resource to upload.
 	Resource *descriptorv2.Resource `json:"resource"`
 	// ComponentVersion is the component version holding the resource. It determines the default
 	// upload location and, for local blob resources, where the resource is read from.
-	ComponentVersion *RepositoryUploadComponentVersion `json:"componentVersion"`
+	ComponentVersion *ComponentVersion `json:"componentVersion"`
 	// URL is the base URL of the server.
 	URL string `json:"url"`
 	// Repository is the name of the target repository.
@@ -80,10 +71,10 @@ type RepositoryUploadSpec struct {
 	Path string `json:"path,omitempty"`
 }
 
-// RepositoryUploadComponentVersion identifies the component version holding the resource.
+// ComponentVersion identifies the component version holding the resource.
 // +k8s:deepcopy-gen=true
 // +ocm:jsonschema-gen=true
-type RepositoryUploadComponentVersion struct {
+type ComponentVersion struct {
 	// Repository is the specification of the repository holding the component version. It is
 	// set for local blob resources only, which are read from it.
 	Repository *runtime.Raw `json:"repository,omitempty"`
@@ -93,45 +84,17 @@ type RepositoryUploadComponentVersion struct {
 	Version string `json:"version"`
 }
 
-// RepositoryUploadOutput is the output of an ArtifactoryUpload or NexusUpload transformation.
+// Output is the output of an Artifactory or Nexus upload transformation.
 // +k8s:deepcopy-gen=true
 // +ocm:jsonschema-gen=true
-type RepositoryUploadOutput struct {
+type Output struct {
 	// Resource is the uploaded resource with its access on the target repository.
 	Resource *descriptorv2.Resource `json:"resource"`
 }
 
-// ArtifactoryUploadTransformation uploads a resource into a repository of a JFrog Artifactory
-// server and publishes it with an access on that repository, see [ArtifactoryUpload].
-// +k8s:deepcopy-gen=true
-// +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
-// +ocm:typegen=true
-// +ocm:jsonschema-gen=true
-type ArtifactoryUploadTransformation struct {
-	// +ocm:jsonschema-gen:enum=ArtifactoryUpload/v1alpha1
-	Type   runtime.Type            `json:"type"`
-	ID     string                  `json:"id"`
-	Spec   *RepositoryUploadSpec   `json:"spec"`
-	Output *RepositoryUploadOutput `json:"output,omitempty"`
-}
-
-// NexusUploadTransformation uploads a resource into a hosted repository of a Sonatype Nexus
-// Repository 3 server and publishes it with an access on that repository, see [NexusUpload].
-// +k8s:deepcopy-gen=true
-// +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
-// +ocm:typegen=true
-// +ocm:jsonschema-gen=true
-type NexusUploadTransformation struct {
-	// +ocm:jsonschema-gen:enum=NexusUpload/v1alpha1
-	Type   runtime.Type            `json:"type"`
-	ID     string                  `json:"id"`
-	Spec   *RepositoryUploadSpec   `json:"spec"`
-	Output *RepositoryUploadOutput `json:"output,omitempty"`
-}
-
-// repositoryUploader holds what every repository upload needs: it opens the source resource
+// Uploader holds what every repository upload needs: it opens the source resource
 // and talks to the target server. The content is streamed and never buffered on disk.
-type repositoryUploader struct {
+type Uploader struct {
 	Scheme *runtime.Scheme
 	Charts *chartarchive.Source
 	// ResourceRepository derives the source credential identities of remote resources.
@@ -141,12 +104,12 @@ type repositoryUploader struct {
 	CredentialProvider credentials.Resolver
 	HTTPConfig         *httpv1alpha1.Config
 
-	// chartMetadataInterval overrides defaultChartMetadataInterval (tests).
-	chartMetadataInterval time.Duration
+	// PollInterval is the wait between two metadata or search polls; zero uses DefaultPollInterval.
+	PollInterval time.Duration
 }
 
-// validateSpec rejects a spec missing a field every upload needs.
-func validateSpec(spec *RepositoryUploadSpec) error {
+// ValidateSpec rejects a spec missing a field every upload needs.
+func ValidateSpec(spec *Spec) error {
 	switch {
 	case spec == nil:
 		return fmt.Errorf("spec is required")
@@ -162,19 +125,19 @@ func validateSpec(spec *RepositoryUploadSpec) error {
 	return nil
 }
 
-// target resolves the upload credentials, see resolveTargetCredentials, and returns a client
+// Target resolves the upload credentials, see resolveTargetCredentials, and returns a client
 // sending requests with them.
-func (u *repositoryUploader) target(ctx context.Context, helmRepo, repoURL string) (*repositoryClient, error) {
+func (u *Uploader) Target(ctx context.Context, helmRepo, repoURL string) (*Client, error) {
 	creds, err := u.resolveTargetCredentials(ctx, helmRepo, repoURL)
 	if err != nil {
 		return nil, err
 	}
-	return &repositoryClient{httpConfig: u.HTTPConfig, creds: creds}, nil
+	return &Client{httpConfig: u.HTTPConfig, creds: creds}, nil
 }
 
-// open returns the request opening the source resource: from the source component version for
+// Open returns the request opening the source resource: from the source component version for
 // local blobs, else with the resolved source credentials.
-func (u *repositoryUploader) open(ctx context.Context, spec *RepositoryUploadSpec, src *descriptor.Resource) (chartarchive.Request, error) {
+func (u *Uploader) Open(ctx context.Context, spec *Spec, src *descriptor.Resource) (chartarchive.Request, error) {
 	req := chartarchive.Request{Resource: src}
 	var err error
 	if spec.ComponentVersion.Repository != nil {
@@ -185,27 +148,27 @@ func (u *repositoryUploader) open(ctx context.Context, spec *RepositoryUploadSpe
 	return req, err
 }
 
-// interval is the wait between two chart metadata polls.
-func (u *repositoryUploader) interval() time.Duration {
-	if u.chartMetadataInterval == 0 {
-		return defaultChartMetadataInterval
+// Interval is the wait between two metadata or search polls.
+func (u *Uploader) Interval() time.Duration {
+	if u.PollInterval == 0 {
+		return DefaultPollInterval
 	}
-	return u.chartMetadataInterval
+	return u.PollInterval
 }
 
-// output converts the uploaded resource to its v2 form.
-func (u *repositoryUploader) output(out *descriptor.Resource) (*RepositoryUploadOutput, error) {
+// Output converts the uploaded resource to its v2 form.
+func (u *Uploader) Output(out *descriptor.Resource) (*Output, error) {
 	res, err := descriptor.ConvertToV2Resource(u.Scheme, out)
 	if err != nil {
 		return nil, fmt.Errorf("failed converting uploaded resource to v2 format: %w", err)
 	}
-	return &RepositoryUploadOutput{Resource: res}, nil
+	return &Output{Resource: res}, nil
 }
 
-// knownDigest returns the SHA-256 the uploaded content must have (expected, see expectedDigest)
+// KnownDigest returns the SHA-256 the uploaded content must have (expected, see expectedDigest)
 // and the one it is known to have up front (known): expected, else the digest the content
 // reports itself.
-func knownDigest(src *descriptor.Digest, content blob.ReadOnlyBlob, fromOCI bool) (expected, known string, err error) {
+func KnownDigest(src *descriptor.Digest, content blob.ReadOnlyBlob, fromOCI bool) (expected, known string, err error) {
 	if expected, err = expectedDigest(src, fromOCI); err != nil {
 		return "", "", err
 	}
@@ -222,31 +185,31 @@ func knownDigest(src *descriptor.Digest, content blob.ReadOnlyBlob, fromOCI bool
 	return "", "", nil
 }
 
-// uploadedDigest is the digest of the published resource: the source digest if it describes the
+// UploadedDigest is the digest of the published resource: the source digest if it describes the
 // uploaded content, else the SHA-256 of the uploaded bytes.
-func uploadedDigest(src *descriptor.Digest, expected, sha256Hex string) *descriptor.Digest {
+func UploadedDigest(src *descriptor.Digest, expected, sha256Hex string) *descriptor.Digest {
 	if expected != "" {
 		return src.DeepCopy()
 	}
 	return &descriptor.Digest{HashAlgorithm: hashAlgorithmSHA256, NormalisationAlgorithm: genericBlobDigestV1, Value: sha256Hex}
 }
 
-// contentType is the media type content is uploaded with: that of the content, else that of the
+// ContentType is the media type content is uploaded with: that of the content, else that of the
 // resource access, else application/octet-stream.
-func contentType(content *chartarchive.Content, res *descriptorv2.Resource) string {
+func ContentType(content *chartarchive.Content, res *descriptorv2.Resource) string {
 	if content.MediaType != "" {
 		return content.MediaType
 	}
-	if mt := mediaTypeFromAccess(*res); mt != "" {
+	if mt := MediaTypeFromAccess(*res); mt != "" {
 		return mt
 	}
 	return octetStream
 }
 
-// resourceFile returns the path-escaped file name of the resource:
+// ResourceFile returns the path-escaped file name of the resource:
 // <resource name>-<resource version><ext>, with a hash of the extra identity appended when the
 // resource has one, so every resource of a component version has its own file.
-func resourceFile(res *descriptor.Resource, ext string) (string, error) {
+func ResourceFile(res *descriptor.Resource, ext string) (string, error) {
 	if strings.ContainsAny(res.Name+res.Version, "/\\") {
 		return "", fmt.Errorf("resource name %q and version %q must not contain path separators", res.Name, res.Version)
 	}
@@ -260,7 +223,7 @@ func resourceFile(res *descriptor.Resource, ext string) (string, error) {
 // defaultPath returns the path-escaped default location of the resource in the repository:
 // <component>/<component version>/<resource file>.
 func defaultPath(component, version string, res *descriptor.Resource, ext string) (string, error) {
-	file, err := resourceFile(res, ext)
+	file, err := ResourceFile(res, ext)
 	if err != nil {
 		return "", err
 	}
@@ -274,18 +237,18 @@ func defaultPath(component, version string, res *descriptor.Resource, ext string
 	return strings.Join(append(segments, file), "/"), nil
 }
 
-// uploadPath returns the configured location, see customPath, else the default location.
-func uploadPath(spec *RepositoryUploadSpec, res *descriptor.Resource, ext string) (string, error) {
+// UploadPath returns the configured location, see CustomPath, else the default location.
+func UploadPath(spec *Spec, res *descriptor.Resource, ext string) (string, error) {
 	if spec.Path != "" {
-		return customPath(spec.Path, ext)
+		return CustomPath(spec.Path, ext)
 	}
 	return defaultPath(spec.ComponentVersion.Component, spec.ComponentVersion.Version, res, ext)
 }
 
-// customPath validates a configured location and returns it path-escaped. It must be relative,
+// CustomPath validates a configured location and returns it path-escaped. It must be relative,
 // consist of non-empty segments other than . and .., and end in requiredSuffix, so it can
 // neither leave the repository nor address a folder.
-func customPath(path, requiredSuffix string) (string, error) {
+func CustomPath(path, requiredSuffix string) (string, error) {
 	if !strings.HasSuffix(path, requiredSuffix) {
 		return "", fmt.Errorf("path %q must end in %s", path, requiredSuffix)
 	}
@@ -297,20 +260,6 @@ func customPath(path, requiredSuffix string) (string, error) {
 		segments[i] = url.PathEscape(segment)
 	}
 	return strings.Join(segments, "/"), nil
-}
-
-// chartOwner returns the properties that identify the resource content is uploaded for.
-func chartOwner(cv *RepositoryUploadComponentVersion, res *descriptor.Resource) []chartProperty {
-	owner := []chartProperty{
-		{"ocm.component.name", cv.Component},
-		{"ocm.component.version", cv.Version},
-		{"ocm.resource.name", res.Name},
-		{"ocm.resource.version", res.Version},
-	}
-	if len(res.ExtraIdentity) > 0 {
-		owner = append(owner, chartProperty{"ocm.resource.extraIdentity", res.ExtraIdentity.String()})
-	}
-	return owner
 }
 
 // expectedDigest returns the SHA-256 the uploaded chart must have: the source digest, if it
@@ -330,7 +279,7 @@ func expectedDigest(src *descriptor.Digest, fromOCI bool) (string, error) {
 }
 
 // localSource resolves the source component version repository of a local blob resource.
-func (t *repositoryUploader) localSource(ctx context.Context, cv *RepositoryUploadComponentVersion) (*chartarchive.Local, error) {
+func (t *Uploader) localSource(ctx context.Context, cv *ComponentVersion) (*chartarchive.Local, error) {
 	if t.RepoProvider == nil {
 		return nil, fmt.Errorf("no component version repository provider configured for local resources")
 	}
@@ -351,7 +300,7 @@ func (t *repositoryUploader) localSource(ctx context.Context, cv *RepositoryUplo
 
 // resolveSourceCredentials resolves credentials for a remote source resource by its consumer
 // identity. A missing provider or ErrNotFound yields nil credentials.
-func (t *repositoryUploader) resolveSourceCredentials(ctx context.Context, resource *descriptor.Resource) (runtime.Typed, error) {
+func (t *Uploader) resolveSourceCredentials(ctx context.Context, resource *descriptor.Resource) (runtime.Typed, error) {
 	if t.CredentialProvider == nil {
 		return nil, nil
 	}
@@ -376,7 +325,7 @@ func (t *repositoryUploader) resolveSourceCredentials(ctx context.Context, resou
 // identity of the Helm repository URL of the target repository, falling back to the Wget
 // identity of its repository URL. Without either, the upload is anonymous. HelmHTTPCredentials are mapped to their
 // username and password, which is all an HTTP upload uses.
-func (t *repositoryUploader) resolveTargetCredentials(ctx context.Context, helmRepo, repoURL string) (runtime.Typed, error) {
+func (t *Uploader) resolveTargetCredentials(ctx context.Context, helmRepo, repoURL string) (runtime.Typed, error) {
 	if t.CredentialProvider == nil {
 		return nil, nil
 	}
@@ -418,9 +367,9 @@ func (t *repositoryUploader) resolveTargetCredentials(ctx context.Context, helmR
 	}, nil
 }
 
-// uploadBlob streams content to putURL and returns the hex SHA-256 of the bytes read and
+// UploadBlob streams content to putURL and returns the hex SHA-256 of the bytes read and
 // whether content was read to its end. A successful response body is decoded into out, if set.
-func uploadBlob(ctx context.Context, c *repositoryClient, content blob.ReadOnlyBlob, putURL string, header http.Header, out any) (sha256Hex string, complete bool, err error) {
+func UploadBlob(ctx context.Context, c *Client, content blob.ReadOnlyBlob, putURL string, header http.Header, out any) (sha256Hex string, complete bool, err error) {
 	rc, err := content.ReadCloser()
 	if err != nil {
 		return "", false, fmt.Errorf("failed opening content: %w", err)
@@ -432,7 +381,7 @@ func uploadBlob(ctx context.Context, c *repositoryClient, content blob.ReadOnlyB
 	}
 	hasher := sha256.New()
 	body := &eofReader{r: rc}
-	err = c.send(ctx, http.MethodPut, putURL, io.TeeReader(body, hasher), size, header, out)
+	err = c.Send(ctx, http.MethodPut, putURL, io.TeeReader(body, hasher), size, header, out)
 	return godigest.NewDigestFromBytes(godigest.SHA256, hasher.Sum(nil)).Encoded(), body.eof, err
 }
 
@@ -450,47 +399,47 @@ func (e *eofReader) Read(p []byte) (int, error) {
 	return n, err
 }
 
-// repositoryClient sends authenticated requests to the repository server.
-type repositoryClient struct {
+// Client sends authenticated requests to the repository server.
+type Client struct {
 	httpConfig *httpv1alpha1.Config
 	creds      runtime.Typed
 }
 
-// send issues a single request and fails on a non-2xx response. A successful JSON response is
+// Send issues a single request and fails on a non-2xx response. A successful JSON response is
 // decoded into out, if set. Errors never carry userinfo, query or fragment of target.
-func (c *repositoryClient) send(ctx context.Context, method, target string, body io.Reader, size int64, header http.Header, out any) error {
-	resp, err := c.do(ctx, method, target, body, size, header)
+func (c *Client) Send(ctx context.Context, method, target string, body io.Reader, size int64, header http.Header, out any) error {
+	resp, err := c.Do(ctx, method, target, body, size, header)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = resp.Body.Close() }()
-	safe := redactURL(target)
+	safe := RedactURL(target)
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		excerpt, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorBodyBytes))
+		excerpt, _ := io.ReadAll(io.LimitReader(resp.Body, MaxErrorBodyBytes))
 		if msg := strings.TrimSpace(string(excerpt)); msg != "" {
 			return fmt.Errorf("%s %s returned status %d: %s", method, safe, resp.StatusCode, msg)
 		}
 		return fmt.Errorf("%s %s returned status %d", method, safe, resp.StatusCode)
 	}
 	if out != nil {
-		if err := decodeJSONBody(resp.Body, out); err != nil {
+		if err := DecodeJSONBody(resp.Body, out); err != nil {
 			return fmt.Errorf("failed decoding response of %s %s: %w", method, safe, err)
 		}
 	}
 	return nil
 }
 
-// decodeJSONBody decodes a JSON response body into out; an empty body leaves out unchanged.
-func decodeJSONBody(body io.Reader, out any) error {
-	if err := json.NewDecoder(io.LimitReader(body, maxErrorBodyBytes)).Decode(out); err != nil && !errors.Is(err, io.EOF) {
+// DecodeJSONBody decodes a JSON response body into out; an empty body leaves out unchanged.
+func DecodeJSONBody(body io.Reader, out any) error {
+	if err := json.NewDecoder(io.LimitReader(body, MaxErrorBodyBytes)).Decode(out); err != nil && !errors.Is(err, io.EOF) {
 		return err
 	}
 	return nil
 }
 
-// do sends a single authenticated request. The caller closes the response body.
-func (c *repositoryClient) do(ctx context.Context, method, target string, body io.Reader, size int64, header http.Header) (*http.Response, error) {
-	safe := redactURL(target)
+// Do sends a single authenticated request. The caller closes the response body.
+func (c *Client) Do(ctx context.Context, method, target string, body io.Reader, size int64, header http.Header) (*http.Response, error) {
+	safe := RedactURL(target)
 	req, err := http.NewRequestWithContext(ctx, method, target, body)
 	if err != nil {
 		return nil, fmt.Errorf("failed creating %s request for %s: %w", method, safe, err)
@@ -517,9 +466,9 @@ func (c *repositoryClient) do(ctx context.Context, method, target string, body i
 	return resp, nil
 }
 
-// redactURL strips userinfo, query and fragment so credentials or presigned parameters never
+// RedactURL strips userinfo, query and fragment so credentials or presigned parameters never
 // reach logs or errors.
-func redactURL(raw string) string {
+func RedactURL(raw string) string {
 	u, err := url.Parse(raw)
 	if err != nil {
 		return "<invalid url>"
@@ -528,4 +477,19 @@ func redactURL(raw string) string {
 	u.RawQuery = ""
 	u.Fragment = ""
 	return u.String()
+}
+
+// MediaTypeFromAccess extracts the source access media type (if any) from the resource
+// access, used as the default target media type. Returns "" when absent.
+func MediaTypeFromAccess(resource descriptorv2.Resource) string {
+	if resource.Access == nil || len(resource.Access.Data) == 0 {
+		return ""
+	}
+	var access struct {
+		MediaType string `json:"mediaType"`
+	}
+	if err := json.Unmarshal(resource.Access.Data, &access); err != nil {
+		return ""
+	}
+	return access.MediaType
 }

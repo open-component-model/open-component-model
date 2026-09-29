@@ -10,8 +10,8 @@ import (
 	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1/meta"
 )
 
-// processRepositoryUploader emits a single transformation of type typ (ArtifactoryUpload or
-// NexusUpload) for resource from an [transferv1alpha1.ArtifactoryUploaderConfig] or
+// processRepositoryUploader emits a single transformation of type typ ([artifactory.Transformation] or
+// [nexus.Transformation]) for resource from an [transferv1alpha1.ArtifactoryUploaderConfig] or
 // [transferv1alpha1.NexusUploaderConfig]. The published access depends on the type of the target
 // repository, which the transformation detects at runtime, so the descriptor picks the access up
 // from its output. A local blob is read from the source component version. A configured path
