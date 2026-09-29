@@ -19,6 +19,9 @@ RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked \
 COPY . .
 
 # Build
+# GO_TAGS is empty by default; pass GO_TAGS=pprof to get a debug image that
+# serves profiles on --pprof-bind-address.
+ARG GO_TAGS=""
 # the GOARCH has not a default value to allow the binary be built according to the host where the command
 # was called. For example, if we call task docker-build in a local env which has the Apple Silicon M1 SO
 # the docker BUILDPLATFORM arg will be linux/arm64 when for Apple x86 it will be linux/amd64. Therefore,
@@ -31,7 +34,7 @@ COPY . .
 # rebuilding the entire standard library on every build.
 RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked \
     --mount=type=cache,target=/root/.cache/go-build,sharing=locked \
-    CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -o manager ./kubernetes/controller/cmd/main.go
+    CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -tags "${GO_TAGS}" -o manager ./kubernetes/controller/cmd
 
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
