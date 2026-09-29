@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"reflect"
 
 	"ocm.software/open-component-model/bindings/go/dag"
 	dagsync "ocm.software/open-component-model/bindings/go/dag/sync"
@@ -285,23 +284,22 @@ func processResources(
 				if !selected {
 					continue
 				}
-				h, ok := uploaderHandlers[reflect.TypeOf(u)]
-				if !ok {
+				var exprs []string
+				switch cfg := u.(type) {
+				case *transferv1alpha1.HTTPUploaderConfig:
+					err = processHTTPUploader(resource, cfg, baseID, id, val, tgd, resourceTransformIDs, i)
+				case *transferv1alpha1.OCIUploaderConfig:
+					exprs, err = processOCIUploader(resource, access, cfg, aliases, env, id, val, tgd, toSpec, resourceTransformIDs, i)
+				case *transferv1alpha1.LocalBlobUploaderConfig:
+					exprs, err = processResource(resource, access, id, val, tgd, toSpec, resourceTransformIDs, i)
+				case *transferv1alpha1.ReferenceUploaderConfig:
+					// No transformation: buildDescriptorSpec keeps the environment resource.
+					if descriptorv2.IsLocalBlob(access) {
+						err = fmt.Errorf("local blobs cannot be kept by reference (adjust match)")
+					}
+				default:
 					return nil, nil, fmt.Errorf("unsupported uploader config type %T for resource %v", u, resource.ToIdentity())
 				}
-				exprs, err := h(u, uploaderCall{
-					resource:             resource,
-					access:               access,
-					aliases:              aliases,
-					env:                  env,
-					baseID:               baseID,
-					id:                   id,
-					val:                  val,
-					tgd:                  tgd,
-					toSpec:               toSpec,
-					resourceTransformIDs: resourceTransformIDs,
-					i:                    i,
-				})
 				if err != nil {
 					return nil, nil, fmt.Errorf("cannot process uploader for resource %v: %w", resource.ToIdentity(), err)
 				}

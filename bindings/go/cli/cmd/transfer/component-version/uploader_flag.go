@@ -18,18 +18,8 @@ import (
 // uploaderUsage is the --uploader help text, listing the registered uploader names.
 func uploaderUsage() string {
 	return `add an uploader configuration entry after those from the OCM configuration (repeatable, in the given order): an uploader name (` +
-		strings.Join(uploaderNames(), ", ") +
+		strings.Join(transferv1alpha1.UploaderNames(), ", ") +
 		`), <name>=<CEL match expression> (e.g. 'reference=resource.name == "my-image"'), or a YAML/JSON mapping of the entry whose "type" is a name. "localblob" copies every resource no other uploader selects`
-}
-
-// uploaderNames returns the short names of all registered uploaders, sorted by type.
-func uploaderNames() []string {
-	types := transferv1alpha1.UploaderTypes()
-	names := make([]string, 0, len(types))
-	for _, t := range types {
-		names = append(names, transferv1alpha1.UploaderName(t))
-	}
-	return names
 }
 
 // uploaderEntry turns one --uploader value into a central config entry:

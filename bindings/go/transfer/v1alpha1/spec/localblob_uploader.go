@@ -1,8 +1,6 @@
 package spec
 
 import (
-	"strings"
-
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -57,23 +55,8 @@ type LocalBlobUploaderConfig struct {
 	Match string `json:"match,omitempty"`
 }
 
-// Validate rejects a non-matching [LocalBlobUploaderConfig.Type]. An empty Type is
-// allowed so callers constructing a config programmatically do not need to set it.
-func (u *LocalBlobUploaderConfig) Validate() error {
-	if u == nil {
-		return nil
-	}
-	return validateUploaderType(u.Type, LocalBlobUploaderConfigType)
-}
-
 // EffectiveMatch returns the configured match, or [DefaultLocalBlobUploaderMatch]. It implements
 // [UploaderConfig].
 func (u *LocalBlobUploaderConfig) EffectiveMatch() string {
-	if u == nil {
-		return ""
-	}
-	if strings.TrimSpace(u.Match) != "" {
-		return u.Match
-	}
-	return DefaultLocalBlobUploaderMatch
+	return matchOrDefault(u.Match, DefaultLocalBlobUploaderMatch)
 }

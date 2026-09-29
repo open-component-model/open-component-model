@@ -37,8 +37,10 @@ func BuildGraphDefinition(
 		return nil, fmt.Errorf("invalid transfer config: %w", err)
 	}
 	for i, u := range uploaders {
-		if err := u.Validate(); err != nil {
-			return nil, fmt.Errorf("invalid uploader config at index %d: %w", i, err)
+		if v, ok := u.(runtime.Validatable); ok {
+			if err := v.Validate(); err != nil {
+				return nil, fmt.Errorf("invalid uploader config at index %d: %w", i, err)
+			}
 		}
 	}
 

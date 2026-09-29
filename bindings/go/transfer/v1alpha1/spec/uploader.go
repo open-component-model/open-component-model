@@ -32,7 +32,8 @@ func init() {
 // transfer target as a map with `type`); access types are tested with the alias-aware
 // resource.access.isType("OCIImage") or resource.access.isType(["OCIImage", "Helm"]).
 //
-// All uploader configurations are extracted from the central generic config with
+// Types that need more than decoding implement [runtime.Validatable]. All uploader
+// configurations are extracted from the central generic config with
 // [LookupUploaderConfigs], which preserves declaration order: the first uploader whose
 // match is true handles the resource. A selected uploader that cannot handle the
 // resource fails the transfer; there is no fall-through to later uploaders.
@@ -41,8 +42,6 @@ type UploaderConfig interface {
 	// EffectiveMatch returns the CEL expression that selects resources: the configured
 	// match, or the type's default.
 	EffectiveMatch() string
-	// Validate reports whether the configuration is well-formed.
-	Validate() error
 }
 
 // TypeResolver lists the aliases of an access type (ociArtifact, OCIImage, OCIImage/v1 are
@@ -106,8 +105,11 @@ func (u *HTTPUploaderConfig) Validate() error {
 	if u == nil {
 		return nil
 	}
-	if err := validateUploaderType(u.Type, HTTPUploaderConfigType); err != nil {
-		return err
+	if !u.Type.IsEmpty() {
+		if u.Type.Name != HTTPUploaderConfigType || (u.Type.Version != "" && u.Type.Version != Version) {
+			return fmt.Errorf("invalid type %q (must be %q or %q)",
+				u.Type, HTTPUploaderConfigType, runtime.NewVersionedType(HTTPUploaderConfigType, Version))
+		}
 	}
 	if strings.TrimSpace(u.Match) == "" {
 		return fmt.Errorf("match is required")
@@ -118,21 +120,17 @@ func (u *HTTPUploaderConfig) Validate() error {
 	return nil
 }
 
-// validateUploaderType rejects a non-empty t that is not configType or
-// configType/Version.
-func validateUploaderType(t runtime.Type, configType string) error {
-	if t.IsEmpty() || (t.Name == configType && (t.Version == "" || t.Version == Version)) {
-		return nil
+// matchOrDefault returns match, or def when match is blank.
+func matchOrDefault(match, def string) string {
+	if strings.TrimSpace(match) == "" {
+		return def
 	}
-	return fmt.Errorf("invalid type %q (must be %q or %q)", t, configType, runtime.NewVersionedType(configType, Version))
+	return match
 }
 
 // EffectiveMatch returns the configured match; HTTP uploaders have no default. It
 // implements [UploaderConfig].
 func (u *HTTPUploaderConfig) EffectiveMatch() string {
-	if u == nil {
-		return ""
-	}
 	return u.Match
 }
 
@@ -163,8 +161,10 @@ func LookupUploaderConfigs(cfg *genericv1.Config) ([]UploaderConfig, error) {
 		if err := runtime.DecodeStrict(entry, u); err != nil {
 			return nil, fmt.Errorf("failed to decode uploader config: %w", err)
 		}
-		if err := u.Validate(); err != nil {
-			return nil, fmt.Errorf("invalid uploader config: %w", err)
+		if v, ok := u.(runtime.Validatable); ok {
+			if err := v.Validate(); err != nil {
+				return nil, fmt.Errorf("invalid uploader config: %w", err)
+			}
 		}
 		uploaders = append(uploaders, u)
 	}
@@ -180,11 +180,7 @@ const uploaderTypeSuffix = ".uploader." + ConfigType
 func UploaderTypes() []runtime.Type {
 	var out []runtime.Type
 	for t := range Scheme.GetTypes() {
-		obj, err := Scheme.NewObject(t)
-		if err != nil {
-			continue
-		}
-		if _, ok := obj.(UploaderConfig); ok {
+		if isUploaderType(t) {
 			out = append(out, t)
 		}
 	}
@@ -192,9 +188,25 @@ func UploaderTypes() []runtime.Type {
 	return out
 }
 
-// UploaderName returns the short name of an uploader type, e.g. "oci".
-func UploaderName(t runtime.Type) string {
-	return strings.TrimSuffix(t.Name, uploaderTypeSuffix)
+// UploaderNames returns the short names ("http", "localblob", ...) of UploaderTypes, in the same order.
+func UploaderNames() []string {
+	types := UploaderTypes()
+	names := make([]string, 0, len(types))
+	for _, t := range types {
+		names = append(names, strings.TrimSuffix(t.Name, uploaderTypeSuffix))
+	}
+	return names
+}
+
+// isUploaderType reports whether t is registered in Scheme with a prototype that
+// implements UploaderConfig.
+func isUploaderType(t runtime.Type) bool {
+	obj, err := Scheme.NewObject(t)
+	if err != nil {
+		return false
+	}
+	_, ok := obj.(UploaderConfig)
+	return ok
 }
 
 // ResolveUploaderType resolves a short name ("oci") or a full type
@@ -208,17 +220,8 @@ func ResolveUploaderType(name string) (runtime.Type, error) {
 	} else {
 		t = runtime.NewVersionedType(name+uploaderTypeSuffix, Version)
 	}
-	if err == nil {
-		if obj, newErr := Scheme.NewObject(t); newErr == nil {
-			if _, ok := obj.(UploaderConfig); ok {
-				return t, nil
-			}
-		}
+	if err == nil && isUploaderType(t) {
+		return t, nil
 	}
-	types := UploaderTypes()
-	names := make([]string, 0, len(types))
-	for _, ut := range types {
-		names = append(names, UploaderName(ut))
-	}
-	return runtime.Type{}, fmt.Errorf("unknown uploader %q (available: %s)", name, strings.Join(names, ", "))
+	return runtime.Type{}, fmt.Errorf("unknown uploader %q (available: %s)", name, strings.Join(UploaderNames(), ", "))
 }

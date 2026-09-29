@@ -1,8 +1,6 @@
 package spec
 
 import (
-	"strings"
-
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -96,24 +94,8 @@ type OCIUploaderConfig struct {
 	ImageReference string `json:"imageReference,omitempty"`
 }
 
-// Validate rejects a non-matching [OCIUploaderConfig.Type]. An empty Type is allowed
-// so callers constructing a config programmatically (without going through
-// [Scheme.Decode]) do not need to set it.
-func (u *OCIUploaderConfig) Validate() error {
-	if u == nil {
-		return nil
-	}
-	return validateUploaderType(u.Type, OCIUploaderConfigType)
-}
-
 // EffectiveMatch returns the configured match, or [DefaultOCIUploaderMatch]. It implements
 // [UploaderConfig].
 func (u *OCIUploaderConfig) EffectiveMatch() string {
-	if u == nil {
-		return ""
-	}
-	if strings.TrimSpace(u.Match) != "" {
-		return u.Match
-	}
-	return DefaultOCIUploaderMatch
+	return matchOrDefault(u.Match, DefaultOCIUploaderMatch)
 }

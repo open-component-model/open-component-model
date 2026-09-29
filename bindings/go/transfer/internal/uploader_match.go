@@ -140,6 +140,19 @@ func (e *uploaderEnv) get() (*cel.Env, error) {
 	return env, nil
 }
 
+// program compiles expr in the uploader environment.
+func (e *uploaderEnv) program(expr string) (cel.Program, error) {
+	celEnv, err := e.get()
+	if err != nil {
+		return nil, err
+	}
+	ast, issues := celEnv.Compile(expr)
+	if issues != nil && issues.Err() != nil {
+		return nil, issues.Err()
+	}
+	return celEnv.Program(ast)
+}
+
 // targetLiteral returns the CEL map literal the target alias is rewritten to: an OCI
 // registry has type, baseUrl and subPath; a CTF archive has type and filePath.
 func targetLiteral(toSpec runtime.Typed) (string, error) {
@@ -184,15 +197,7 @@ func matches(expr string, aliases map[string]string, env *uploaderEnv) (bool, er
 	if expr == "" {
 		return true, nil
 	}
-	celEnv, err := env.get()
-	if err != nil {
-		return false, err
-	}
-	ast, issues := celEnv.Compile(rewriteExpression(expr, aliases))
-	if issues != nil && issues.Err() != nil {
-		return false, fmt.Errorf("invalid match %q: %w", expr, issues.Err())
-	}
-	prg, err := celEnv.Program(ast)
+	prg, err := env.program(rewriteExpression(expr, aliases))
 	if err != nil {
 		return false, fmt.Errorf("invalid match %q: %w", expr, err)
 	}

@@ -32,21 +32,13 @@ func ociImageReference(u *transferv1alpha1.OCIUploaderConfig, aliases map[string
 		return "", fmt.Errorf("cannot template imageReference: %w", err)
 	}
 
-	celEnv, err := env.get()
-	if err != nil {
-		return "", err
-	}
 	fields, err := celparser.ParseSchemaless(map[string]any{"imageReference": imageReference})
 	if err != nil {
 		return "", fmt.Errorf("invalid imageReference: %w", err)
 	}
 	for _, field := range fields {
 		for _, expr := range field.Expressions {
-			ast, issues := celEnv.Compile(expr.Value)
-			if issues != nil && issues.Err() != nil {
-				return "", fmt.Errorf("invalid imageReference: %w", issues.Err())
-			}
-			prg, err := celEnv.Program(ast)
+			prg, err := env.program(expr.Value)
 			if err != nil {
 				return "", fmt.Errorf("invalid imageReference: %w", err)
 			}
