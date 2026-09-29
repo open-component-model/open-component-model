@@ -29,7 +29,7 @@ func (v *SlogVisualizer[T]) Begin(name string) {
 func (v *SlogVisualizer[T]) HandleEvent(event Event[T]) {
 	var attrs []any
 	attrs = append(attrs, "item", event.Name)
-	if event.InFlight > 0 {
+	if event.InFlight > 0 || event.State != Running {
 		attrs = append(attrs, "inFlight", event.InFlight)
 		if v.concurrency > 0 {
 			attrs = append(attrs, "runners", v.concurrency)

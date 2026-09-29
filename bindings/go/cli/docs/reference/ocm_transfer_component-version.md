@@ -42,8 +42,8 @@ Two-step workflow (generate, review, replay):
     2. Review/edit spec.yaml, then execute: transfer cv --transfer-spec spec.yaml
   All graph-shaping flags (--recursive, --copy-resources, --upload-as) and any transfer
   configuration entry are baked into the spec during step 1 and are therefore ignored in
-  step 2 - the spec is the full graph definition. Only --dry-run and --output remain
-  meaningful when replaying a spec.
+  step 2 - the spec is the full graph definition. Only --dry-run, --output, and
+  --concurrency-limit remain meaningful when replaying a spec.
 
 How the graph is built:
   Internally the command assembles a TransformationGraphDefinition from these node types,

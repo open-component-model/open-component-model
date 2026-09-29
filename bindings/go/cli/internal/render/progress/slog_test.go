@@ -55,6 +55,29 @@ func TestSlogVisualizer_HandleEvent_InFlight(t *testing.T) {
 	assert.Contains(t, output, "runners=4")
 }
 
+func TestSlogVisualizer_HandleEvent_TerminalReportsZeroInFlight(t *testing.T) {
+	output := captureSlog(t, func() {
+		v := &SlogVisualizer[any]{}
+		v.SetConcurrency(4)
+		v.Begin("Transfer")
+		v.HandleEvent(Event[any]{ID: "1", Name: "component-a", State: Completed, InFlight: 0})
+	})
+	assert.Contains(t, output, "item completed")
+	assert.Contains(t, output, "inFlight=0")
+	assert.Contains(t, output, "runners=4")
+}
+
+func TestSlogVisualizer_HandleEvent_RunningOmitsZeroInFlight(t *testing.T) {
+	output := captureSlog(t, func() {
+		v := &SlogVisualizer[any]{}
+		v.SetConcurrency(4)
+		v.HandleEvent(Event[any]{ID: "1", Name: "component-a", State: Running, InFlight: 0})
+	})
+	assert.Contains(t, output, "item in-progress")
+	assert.NotContains(t, output, "inFlight")
+	assert.NotContains(t, output, "runners")
+}
+
 func TestSlogVisualizer_End_Success(t *testing.T) {
 	output := captureSlog(t, func() {
 		v := &SlogVisualizer[any]{}
