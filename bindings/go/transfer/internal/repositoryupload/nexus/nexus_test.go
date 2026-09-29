@@ -565,7 +565,7 @@ func TestTransform_Raw(t *testing.T) {
 		otherSum := sha256.Sum256([]byte("other"))
 		_, err := transformer(nil).Transform(t.Context(), step(srv.URL, source(hex.EncodeToString(otherSum[:]))))
 		r.ErrorContains(err, "digest mismatch:")
-		r.ErrorContains(err, "nexus keeps the uploaded file at")
+		r.ErrorContains(err, "digest mismatch: expected")
 	})
 
 	t.Run("sends target credentials on every request", func(t *testing.T) {
@@ -645,7 +645,7 @@ func TestTransform_DetectionErrors(t *testing.T) {
 		srv := newFakeNexus(t, nil, "", false)
 		srv.detectionBody = "not json"
 		_, err := transformer().Transform(t.Context(), step(srv.URL))
-		r.ErrorContains(err, `failed decoding the settings of nexus repository "helm-hosted"`)
+		r.ErrorContains(err, `failed detecting the type of nexus repository "helm-hosted": failed decoding response of GET`)
 	})
 
 	t.Run("target credential error prevents any request", func(t *testing.T) {
@@ -911,7 +911,7 @@ func TestTransform_Npm(t *testing.T) {
 		srv := newServer(t)
 		srv.searchLag = 1000
 		_, err := transform(t, srv, "", "")
-		r.ErrorContains(err, "but its search does not find it by SHA-256")
+		r.ErrorContains(err, "but its search does not find it")
 		got := srv.recorded()
 		upload := slices.Index(got, "POST /service/rest/v1/components")
 		r.NotEqual(-1, upload)
@@ -929,7 +929,7 @@ func TestTransform_Npm(t *testing.T) {
 		otherSum := sha256.Sum256([]byte("other"))
 		_, err := transform(t, srv, hex.EncodeToString(otherSum[:]), "")
 		r.ErrorContains(err, "digest mismatch:")
-		r.ErrorContains(err, "nexus keeps the uploaded package in repository helm-hosted")
+		r.ErrorContains(err, "digest mismatch: expected")
 	})
 
 	t.Run("redeploy rejection is returned", func(t *testing.T) {

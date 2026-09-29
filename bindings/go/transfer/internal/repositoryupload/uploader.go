@@ -1,5 +1,5 @@
 // Package repositoryupload holds what the Artifactory and Nexus uploaders share: the source
-// and target plumbing and the Helm chart upload flow.
+// and target plumbing and the upload flow, see [Uploader.Upload].
 package repositoryupload
 
 import (
@@ -37,8 +37,11 @@ const (
 	hashAlgorithmSHA256 = "SHA-256"
 	// genericBlobDigestV1 is the normalisation algorithm for a plain streamed blob.
 	genericBlobDigestV1 = "genericBlobDigest/v1"
-	// MaxErrorBodyBytes bounds how much of a non-2xx response body is read into an error.
-	MaxErrorBodyBytes = 4 << 10
+	// maxErrorBodyBytes bounds how much of a non-2xx response body is read into an error.
+	maxErrorBodyBytes = 4 << 10
+	// maxJSONBytes bounds how much of a successful JSON response body is decoded; search pages
+	// exceed maxErrorBodyBytes.
+	maxJSONBytes = 1 << 20
 	// PollAttempts bounds how often the chart metadata a server records for an
 	// uploaded chart is polled before the content is considered not to be a helm chart. The
 	// metadata can lag behind the upload: Artifactory may calculate the chart.name and
@@ -66,8 +69,8 @@ type Uploader struct {
 	PollInterval time.Duration
 }
 
-// ValidateSpec rejects a spec missing a field every upload needs.
-func ValidateSpec(spec *uploadv1alpha1.RepositoryUploadSpec) error {
+// validateSpec rejects a spec missing a field every upload needs.
+func validateSpec(spec *uploadv1alpha1.RepositoryUploadSpec) error {
 	switch {
 	case spec == nil:
 		return fmt.Errorf("spec is required")
@@ -83,9 +86,9 @@ func ValidateSpec(spec *uploadv1alpha1.RepositoryUploadSpec) error {
 	return nil
 }
 
-// Target resolves the upload credentials, see resolveTargetCredentials, and returns a client
+// target resolves the upload credentials, see resolveTargetCredentials, and returns a client
 // sending requests with them.
-func (u *Uploader) Target(ctx context.Context, helmRepo, repoURL string) (*Client, error) {
+func (u *Uploader) target(ctx context.Context, helmRepo, repoURL string) (*Client, error) {
 	creds, err := u.resolveTargetCredentials(ctx, helmRepo, repoURL)
 	if err != nil {
 		return nil, err
@@ -93,10 +96,10 @@ func (u *Uploader) Target(ctx context.Context, helmRepo, repoURL string) (*Clien
 	return &Client{httpConfig: u.HTTPConfig, creds: creds}, nil
 }
 
-// Source returns the unmodified content of the source resource and its media type ("" when unknown):
+// source returns the unmodified content of the source resource and its media type ("" when unknown):
 // local blobs from the source component version, remote resources downloaded with the resolved
 // source credentials.
-func (u *Uploader) Source(ctx context.Context, spec *uploadv1alpha1.RepositoryUploadSpec, src *descriptor.Resource) (blob.ReadOnlyBlob, string, error) {
+func (u *Uploader) source(ctx context.Context, spec *uploadv1alpha1.RepositoryUploadSpec, src *descriptor.Resource) (blob.ReadOnlyBlob, string, error) {
 	if spec.ComponentVersion.Repository != nil {
 		repo, err := u.localSource(ctx, spec.ComponentVersion)
 		if err != nil {
@@ -122,9 +125,9 @@ func (u *Uploader) Source(ctx context.Context, spec *uploadv1alpha1.RepositoryUp
 	return b, blobMediaType(b), nil
 }
 
-// OCISource reports that the source content of src with mediaType was downloaded from an OCI
+// ociSource reports that the source content of src with mediaType was downloaded from an OCI
 // artifact, so the source digest does not describe it.
-func OCISource(src *descriptor.Resource, mediaType string) bool {
+func ociSource(src *descriptor.Resource, mediaType string) bool {
 	return isOCILayout(mediaType) || ociHelmChart(src)
 }
 
@@ -146,16 +149,16 @@ func localBlobMediaType(access runtime.Typed) string {
 	return lb.MediaType
 }
 
-// Interval is the wait between two metadata or search polls.
-func (u *Uploader) Interval() time.Duration {
+// interval is the wait between two metadata or search polls.
+func (u *Uploader) interval() time.Duration {
 	if u.PollInterval == 0 {
 		return DefaultPollInterval
 	}
 	return u.PollInterval
 }
 
-// Output converts the uploaded resource to its v2 form.
-func (u *Uploader) Output(out *descriptor.Resource) (*uploadv1alpha1.RepositoryUploadOutput, error) {
+// output converts the uploaded resource to its v2 form.
+func (u *Uploader) output(out *descriptor.Resource) (*uploadv1alpha1.RepositoryUploadOutput, error) {
 	res, err := descriptor.ConvertToV2Resource(u.Scheme, out)
 	if err != nil {
 		return nil, fmt.Errorf("failed converting uploaded resource to v2 format: %w", err)
@@ -163,10 +166,10 @@ func (u *Uploader) Output(out *descriptor.Resource) (*uploadv1alpha1.RepositoryU
 	return &uploadv1alpha1.RepositoryUploadOutput{Resource: res}, nil
 }
 
-// KnownDigest returns the SHA-256 the uploaded content must have (expected, see expectedDigest)
+// knownDigest returns the SHA-256 the uploaded content must have (expected, see expectedDigest)
 // and the one it is known to have up front (known): expected, else the digest the content
 // reports itself.
-func KnownDigest(src *descriptor.Digest, content blob.ReadOnlyBlob, fromOCI bool) (expected, known string, err error) {
+func knownDigest(src *descriptor.Digest, content blob.ReadOnlyBlob, fromOCI bool) (expected, known string, err error) {
 	if expected, err = expectedDigest(src, fromOCI); err != nil {
 		return "", "", err
 	}
@@ -183,18 +186,18 @@ func KnownDigest(src *descriptor.Digest, content blob.ReadOnlyBlob, fromOCI bool
 	return "", "", nil
 }
 
-// UploadedDigest is the digest of the published resource: the source digest if it describes the
+// uploadedDigest is the digest of the published resource: the source digest if it describes the
 // uploaded content, else the SHA-256 of the uploaded bytes.
-func UploadedDigest(src *descriptor.Digest, expected, sha256Hex string) *descriptor.Digest {
+func uploadedDigest(src *descriptor.Digest, expected, sha256Hex string) *descriptor.Digest {
 	if expected != "" {
 		return src.DeepCopy()
 	}
 	return &descriptor.Digest{HashAlgorithm: hashAlgorithmSHA256, NormalisationAlgorithm: genericBlobDigestV1, Value: sha256Hex}
 }
 
-// ContentType is the media type content is uploaded with: that of the content, else that of the
+// contentType is the media type content is uploaded with: that of the content, else that of the
 // resource access, else application/octet-stream.
-func ContentType(mediaType string, res *descriptorv2.Resource) string {
+func contentType(mediaType string, res *descriptorv2.Resource) string {
 	if mediaType != "" {
 		return mediaType
 	}
@@ -413,7 +416,7 @@ func (c *Client) Send(ctx context.Context, method, target string, body io.Reader
 	defer func() { _ = resp.Body.Close() }()
 	safe := RedactURL(target)
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		excerpt, _ := io.ReadAll(io.LimitReader(resp.Body, MaxErrorBodyBytes))
+		excerpt, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorBodyBytes))
 		if msg := strings.TrimSpace(string(excerpt)); msg != "" {
 			return fmt.Errorf("%s %s returned status %d: %s", method, safe, resp.StatusCode, msg)
 		}
@@ -427,9 +430,30 @@ func (c *Client) Send(ctx context.Context, method, target string, body io.Reader
 	return nil
 }
 
+// GetJSON GETs target and decodes a 200 JSON body into out. A 404 yields found=false; any other
+// non-200 status yields "GET <redacted target> returned status <code>".
+func (c *Client) GetJSON(ctx context.Context, target string, out any) (found bool, err error) {
+	resp, err := c.Do(ctx, http.MethodGet, target, nil, -1, nil)
+	if err != nil {
+		return false, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	switch resp.StatusCode {
+	case http.StatusOK:
+	case http.StatusNotFound:
+		return false, nil
+	default:
+		return false, fmt.Errorf("GET %s returned status %d", RedactURL(target), resp.StatusCode)
+	}
+	if err := DecodeJSONBody(resp.Body, out); err != nil {
+		return false, fmt.Errorf("failed decoding response of GET %s: %w", RedactURL(target), err)
+	}
+	return true, nil
+}
+
 // DecodeJSONBody decodes a JSON response body into out; an empty body leaves out unchanged.
 func DecodeJSONBody(body io.Reader, out any) error {
-	if err := json.NewDecoder(io.LimitReader(body, MaxErrorBodyBytes)).Decode(out); err != nil && !errors.Is(err, io.EOF) {
+	if err := json.NewDecoder(io.LimitReader(body, maxJSONBytes)).Decode(out); err != nil && !errors.Is(err, io.EOF) {
 		return err
 	}
 	return nil

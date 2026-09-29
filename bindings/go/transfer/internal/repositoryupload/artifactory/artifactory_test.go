@@ -930,7 +930,7 @@ func TestTransform_DetectionErrors(t *testing.T) {
 		srv := newFakeArtifactory(t, nil)
 		srv.detectionBody = "not json"
 		_, err := transformer().Transform(t.Context(), step(srv.URL))
-		r.ErrorContains(err, `failed decoding the configuration of artifactory repository "helm-local"`)
+		r.ErrorContains(err, `failed detecting the type of artifactory repository "helm-local": failed decoding response of GET`)
 		r.False(hasPUT(srv.recorded()))
 	})
 
