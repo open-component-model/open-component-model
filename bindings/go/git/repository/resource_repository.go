@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"reflect"
 	"strings"
 
 	"github.com/opencontainers/go-digest"
@@ -205,7 +204,7 @@ func accessFrom(res *descriptor.Resource) (*accessv1.Git, error) {
 	}
 
 	spec := res.Access
-	if spec == nil || (reflect.ValueOf(spec).Kind() == reflect.Pointer && reflect.ValueOf(spec).IsNil()) {
+	if spec == nil {
 		return nil, fmt.Errorf("git access is required")
 	}
 
