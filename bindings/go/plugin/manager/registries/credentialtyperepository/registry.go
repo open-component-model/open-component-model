@@ -20,13 +20,19 @@ type CredentialTypeRegistry struct {
 	registry map[runtime.Type]mtypes.Plugin
 
 	scheme *runtime.Scheme
+	// consumerIdentityTypeScheme holds the consumer identity types declared by built-in
+	// plugins that implement ConsumerIdentityTypeSchemeProvider (e.g. Wget/v1 with its
+	// HTTP aliases). The credential graph uses it to canonicalize alias-typed consumer
+	// identities at ingest time.
+	consumerIdentityTypeScheme *runtime.Scheme
 }
 
 func NewCredentialTypeRegistry(ctx context.Context) *CredentialTypeRegistry {
 	return &CredentialTypeRegistry{
-		ctx:      ctx,
-		registry: make(map[runtime.Type]mtypes.Plugin),
-		scheme:   runtime.NewScheme(),
+		ctx:                        ctx,
+		registry:                   make(map[runtime.Type]mtypes.Plugin),
+		scheme:                     runtime.NewScheme(),
+		consumerIdentityTypeScheme: runtime.NewScheme(),
 	}
 }
 
@@ -40,12 +46,19 @@ func NewCredentialTypeRegistry(ctx context.Context) *CredentialTypeRegistry {
 // A type already registered for a different prototype is a genuine conflict and returns an
 // error.
 func (r *CredentialTypeRegistry) Register(scheme *runtime.Scheme) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	return registerScheme(r.scheme, scheme)
+}
+
+// registerScheme merges the given scheme into target. Registration is idempotent: types
+// that are already registered are skipped when they agree on the prototype. A type
+// already registered for a different prototype is a genuine conflict and returns an error.
+func registerScheme(target *runtime.Scheme, scheme *runtime.Scheme) error {
 	if scheme == nil {
 		return nil
 	}
-
-	r.mu.Lock()
-	defer r.mu.Unlock()
 
 	for typ, aliases := range scheme.GetTypes() {
 		prototype, err := scheme.NewObject(typ)
@@ -57,13 +70,13 @@ func (r *CredentialTypeRegistry) Register(scheme *runtime.Scheme) error {
 		// prototype, otherwise two bindings claim the same type for different Go structs.
 		missing := make([]runtime.Type, 0, len(aliases)+1)
 		for _, candidate := range append([]runtime.Type{typ}, aliases...) {
-			if !r.scheme.IsRegistered(candidate) {
+			if !target.IsRegistered(candidate) {
 				missing = append(missing, candidate)
 
 				continue
 			}
 
-			registered, err := r.scheme.NewObject(candidate)
+			registered, err := target.NewObject(candidate)
 			if err != nil {
 				return fmt.Errorf("failed to create prototype for registered credential type %q: %w", candidate, err)
 			}
@@ -76,7 +89,7 @@ func (r *CredentialTypeRegistry) Register(scheme *runtime.Scheme) error {
 			continue
 		}
 
-		if err := r.scheme.RegisterWithAlias(prototype, missing...); err != nil {
+		if err := target.RegisterWithAlias(prototype, missing...); err != nil {
 			return fmt.Errorf("failed to register credential type %q: %w", typ, err)
 		}
 	}
@@ -88,6 +101,23 @@ func (r *CredentialTypeRegistry) Register(scheme *runtime.Scheme) error {
 // credential types, including built-in and plugin-declared custom types.
 func (r *CredentialTypeRegistry) GetCredentialTypeScheme() *runtime.Scheme {
 	return r.scheme
+}
+
+// GetConsumerIdentityTypeScheme returns the runtime scheme containing the consumer
+// identity types declared by built-in plugins via ConsumerIdentityTypeSchemeProvider
+// (currently only Wget/v1 with its HTTP aliases).
+func (r *CredentialTypeRegistry) GetConsumerIdentityTypeScheme() *runtime.Scheme {
+	return r.consumerIdentityTypeScheme
+}
+
+// RegisterConsumerIdentityTypeScheme merges a pre-built scheme of consumer identity
+// types into the registry. This should be called during startup so that consumer identities
+// written with alias types can be canonicalized when the credential graph is ingested.
+func (r *CredentialTypeRegistry) RegisterConsumerIdentityTypeScheme(scheme *runtime.Scheme) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	return registerScheme(r.consumerIdentityTypeScheme, scheme)
 }
 
 // RegisterCustomTypes registers credential types declared by an external plugin in one of its
@@ -152,6 +182,8 @@ func (r *CredentialTypeRegistry) RegisterCustomTypes(plugin mtypes.Plugin, types
 
 // RegisterInternalCredentialTypeSchemeProvider can be called by actual implementations in the source.
 // It will register any implementations directly for a given type and capability.
+// Plugins that additionally implement ConsumerIdentityTypeSchemeProvider also have their
+// consumer identity types registered.
 func (r *CredentialTypeRegistry) RegisterInternalCredentialTypeSchemeProvider(
 	plugin BuiltinCredentialTypeSchemeProviderPlugin,
 ) error {
@@ -162,6 +194,12 @@ func (r *CredentialTypeRegistry) RegisterInternalCredentialTypeSchemeProvider(
 	// Register takes the lock itself, so it must not be held here.
 	if err := r.Register(plugin.GetCredentialTypeScheme()); err != nil {
 		return fmt.Errorf("failed to register credential types of %T: %w", plugin, err)
+	}
+
+	if provider, ok := plugin.(ConsumerIdentityTypeSchemeProvider); ok {
+		if err := r.RegisterConsumerIdentityTypeScheme(provider.GetConsumerIdentityTypeScheme()); err != nil {
+			return fmt.Errorf("failed to register consumer identity types of %T: %w", plugin, err)
+		}
 	}
 
 	return nil

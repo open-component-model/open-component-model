@@ -32,6 +32,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/controller/deployer"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/controller/deployer/cache"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/controller/deployer/dynamic"
+	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/controller/discovery"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/controller/replication"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/controller/repository"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/controller/resource"
@@ -71,6 +72,7 @@ func main() {
 		metricsAddr               string
 		enableLeaderElection      bool
 		probeAddr                 string
+		pprofAddr                 string
 		secureMetrics             bool
 		enableHTTP2               bool
 		deployerDownloadCacheSize int
@@ -86,6 +88,8 @@ func main() {
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metric endpoint binds to. "+
 		"Use the port :8080. If not set, it will be 0 in order to disable the metrics server")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
+	flag.StringVar(&pprofAddr, "pprof-bind-address", ":6060",
+		"The address the pprof endpoint binds to (only used in builds with the pprof tag).")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
@@ -200,6 +204,11 @@ func main() {
 		os.Exit(1)
 	}
 
+	if pprofEnabled {
+		setupLog.Info("starting pprof server", "address", pprofAddr)
+		startPprof(pprofAddr)
+	}
+
 	ocirepository.MustAddLegacyToScheme(ocirepository.Scheme)
 
 	// Plugins use object config so they need to be request based.
@@ -284,6 +293,18 @@ func main() {
 		RepositoryScheme: ocirepository.Scheme,
 	}).SetupWithManager(ctx, mgr, replicationConcurrency); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Replication")
+		os.Exit(1)
+	}
+
+	if err = (&discovery.Reconciler{
+		BaseReconciler: &ocm.BaseReconciler{
+			Client:           mgr.GetClient(),
+			Scheme:           mgr.GetScheme(),
+			EventRecorder:    eventsRecorder,
+			NewPluginManager: newPluginManager,
+		},
+	}).SetupWithManager(ctx, mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "Discovery")
 		os.Exit(1)
 	}
 

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"testing"
@@ -110,6 +111,62 @@ func TestNewResourceBlobOCILayer(t *testing.T) {
 			assert.Equal(t, tt.blob.mediaType, desc.MediaType)
 			assert.Equal(t, tt.blob.digest, desc.Digest)
 			assert.Equal(t, int64(len(tt.blob.content)), desc.Size)
+		})
+	}
+}
+
+func TestPrepareArtifactBlobForOCI_ExpectedDigest(t *testing.T) {
+	payload := []byte("test content")
+	valid := digest.FromBytes(payload)
+	mismatched := digest.FromString("other content").Encoded()
+	for _, tt := range []struct {
+		name          string
+		knownDigest   bool
+		hash          string
+		value         string
+		errorContains string
+	}{
+		{name: "unknown blob digest/valid", hash: "SHA-256", value: valid.Encoded()},
+		{name: "unknown blob digest/invalid hash", hash: "invalid", value: valid.Encoded(), errorContains: "invalid hash algorithm"},
+		{name: "unknown blob digest/missing hash", value: valid.Encoded(), errorContains: "invalid hash algorithm"},
+		{name: "unknown blob digest/malformed value", hash: "SHA-256", value: "not-a-digest", errorContains: "digest"},
+		{name: "unknown blob digest/missing value", hash: "SHA-256", errorContains: "digest"},
+		{name: "unknown blob digest/mismatched value", hash: "SHA-256", value: mismatched, errorContains: "digest"},
+		{name: "known blob digest/valid", knownDigest: true, hash: "SHA-256", value: valid.Encoded()},
+		{name: "known blob digest/invalid hash", knownDigest: true, hash: "invalid", value: valid.Encoded(), errorContains: "invalid hash algorithm"},
+		{name: "known blob digest/missing hash", knownDigest: true, value: valid.Encoded(), errorContains: "invalid hash algorithm"},
+		{name: "known blob digest/malformed value", knownDigest: true, hash: "SHA-256", value: "not-a-digest", errorContains: "digest"},
+		{name: "known blob digest/missing value", knownDigest: true, hash: "SHA-256", errorContains: "digest"},
+		{name: "known blob digest/mismatched value", knownDigest: true, hash: "SHA-256", value: mismatched, errorContains: "digest"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+			expected := &descriptor.Digest{
+				HashAlgorithm: tt.hash, NormalisationAlgorithm: "genericBlobDigest/v1", Value: tt.value,
+			}
+			res := &descriptor.Resource{Digest: expected}
+			before := *expected
+			base := &testBlob{content: payload, mediaType: "application/octet-stream"}
+			if tt.knownDigest {
+				base.digest = valid
+			}
+			store, err := file.New(t.TempDir())
+			r.NoError(err)
+			t.Cleanup(func() { r.NoError(store.Close()) })
+			b, err := resourceblob.NewArtifactBlob(res, base)
+			if err == nil {
+				var layer ociImageSpecV1.Descriptor
+				b, layer, err = PrepareArtifactBlobForOCI(b, ResourceBlobOCILayerOptions{})
+				if err == nil {
+					err = Blob(t.Context(), store, b, layer)
+				}
+			}
+			if tt.errorContains != "" {
+				r.ErrorContains(err, tt.errorContains)
+			} else {
+				r.NoError(err)
+			}
+			r.Equal(before, *res.Digest, "expected digest must not be rewritten")
 		})
 	}
 }
@@ -658,6 +715,55 @@ func TestResourceLocalBlobMediaTypeDetection(t *testing.T) {
 	}
 }
 
+// A digest derived from the input blob describes the bytes before packing. For an
+// OCI layout those bytes are not stored, so the resource digest must be replaced
+// with the digest of what the local blob references.
+func TestResourceLocalBlobDigestMatchesStoredContent(t *testing.T) {
+	ctx := t.Context()
+	var buf bytes.Buffer
+	writer, err := tar.NewOCILayoutWriterWithTempFile(&buf, t.TempDir())
+	require.NoError(t, err)
+	_, err = oras.PackManifest(ctx, writer, oras.PackManifestVersion1_1, "application/custom", oras.PackManifestOptions{})
+	require.NoError(t, err)
+	require.NoError(t, writer.Close())
+	layoutContent := buf.Bytes()
+	layerContent := []byte("regular layer content")
+
+	for _, tt := range []struct {
+		name    string
+		content []byte
+		media   string
+	}{
+		{name: "oci layout", content: layoutContent, media: layout.MediaTypeOCIImageLayoutTarV1},
+		{name: "oci layer", content: layerContent, media: "application/octet-stream"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+			store, err := file.New(t.TempDir())
+			r.NoError(err)
+			t.Cleanup(func() { r.NoError(store.Close()) })
+			opts := Options{AccessScheme: runtime.NewScheme(), BaseReference: "test-ref"}
+			v2.MustAddToScheme(opts.AccessScheme)
+			oci.MustAddToScheme(opts.AccessScheme)
+
+			resource := &descriptor.Resource{}
+			b, err := resourceblob.NewArtifactBlob(resource, &testBlob{
+				content: tt.content, mediaType: tt.media, digest: digest.FromBytes(tt.content),
+			})
+			r.NoError(err)
+
+			desc, err := ResourceLocalBlob(ctx, store, b, &v2.LocalBlob{MediaType: tt.media}, opts)
+			r.NoError(err)
+
+			r.NotNil(resource.Digest)
+			r.Equal(desc.Digest.Encoded(), resource.Digest.Value)
+			localBlob, ok := resource.Access.(*v2.LocalBlob)
+			r.True(ok, "expected a local blob access, got %T", resource.Access)
+			r.Equal(desc.Digest.String(), localBlob.LocalReference)
+		})
+	}
+}
+
 func TestResourceLocalBlobOCISingleLayerArtifact(t *testing.T) {
 	store, err := file.New(t.TempDir())
 	require.NoError(t, err)
@@ -755,6 +861,107 @@ func TestResourceLocalBlobOCISingleLayerArtifact(t *testing.T) {
 			layerData, err := io.ReadAll(data)
 			require.NoError(t, err)
 			assert.Equal(t, tt.blob.content, layerData)
+		})
+	}
+}
+
+func TestPackingPreservesResourceDigest(t *testing.T) {
+	for _, storageForm := range []string{"layer", "manifest", "wrapper index"} {
+		t.Run(storageForm, func(t *testing.T) {
+			r := require.New(t)
+			ctx := t.Context()
+			data := []byte("test content")
+			mediaType := "application/vnd.test"
+			root := ociImageSpecV1.Descriptor{
+				MediaType: mediaType,
+				Digest:    digest.FromBytes(data),
+				Size:      int64(len(data)),
+			}
+			resourceDigest := root.Digest
+			if storageForm != "layer" {
+				var buf bytes.Buffer
+				writer, err := tar.NewOCILayoutWriterWithTempFile(&buf, t.TempDir())
+				r.NoError(err)
+				root, err = oras.PackManifest(ctx, writer, oras.PackManifestVersion1_1, "application/custom", oras.PackManifestOptions{})
+				r.NoError(err)
+				resourceDigest = root.Digest
+				if storageForm == "wrapper index" {
+					index := ociImageSpecV1.Index{
+						MediaType: ociImageSpecV1.MediaTypeImageIndex,
+						Manifests: []ociImageSpecV1.Descriptor{root},
+					}
+					index.SchemaVersion = 2
+					indexData, err := json.Marshal(index)
+					r.NoError(err)
+					root = content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageIndex, indexData)
+					r.NoError(writer.Push(ctx, root, bytes.NewReader(indexData)))
+					r.NotEqual(resourceDigest, root.Digest)
+				}
+				r.NoError(writer.Close())
+				data = buf.Bytes()
+				mediaType = layout.MediaTypeOCIImageLayoutTarV1
+			}
+
+			for _, tc := range []struct {
+				name          string
+				normalization string
+				hasDigest     bool
+			}{
+				{name: "legacy OCI digest", normalization: "ociArtifactDigest/v1", hasDigest: true},
+				{name: "generic blob digest", normalization: "genericBlobDigest/v1", hasDigest: true},
+				{name: "normalized JSON digest", normalization: "jsonNormalisation/v1", hasDigest: true},
+				{name: "intermediate blob digest", hasDigest: true},
+				{name: "missing digest"},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					r := require.New(t)
+					store, err := file.New(t.TempDir())
+					r.NoError(err)
+					t.Cleanup(func() { r.NoError(store.Close()) })
+					scheme := runtime.NewScheme()
+					v2.MustAddToScheme(scheme)
+					oci.MustAddToScheme(scheme)
+
+					access := &v2.LocalBlob{MediaType: mediaType, ReferenceName: "original"}
+					resource := &descriptor.Resource{Access: access}
+					var original descriptor.Digest
+					if tc.hasDigest {
+						original = descriptor.Digest{
+							HashAlgorithm:          "SHA-256",
+							NormalisationAlgorithm: tc.normalization,
+							Value:                  resourceDigest.Encoded(),
+						}
+						resource.Digest = &original
+					}
+					before := original
+					// Isolate packing from constructor digest defaulting and validation:
+					// a layout's tar digest need not equal the OCM resource digest.
+					b := &resourceblob.ArtifactBlob{
+						Artifact: resource,
+						ReadOnlyBlob: &testBlob{
+							content: data, mediaType: mediaType, digest: digest.FromBytes(data),
+						},
+					}
+					packed, err := ArtifactBlob(t.Context(), store, b, Options{AccessScheme: scheme})
+					r.NoError(err)
+					r.True(content.Equal(root, packed))
+					updated, ok := resource.Access.(*v2.LocalBlob)
+					r.True(ok)
+					r.Equal(root.Digest.String(), updated.LocalReference)
+					r.Equal(root.MediaType, updated.MediaType)
+					r.Equal(access.ReferenceName, updated.ReferenceName)
+					if tc.normalization != "" {
+						r.Same(&original, resource.Digest)
+						r.Equal(before, *resource.Digest)
+					} else {
+						r.Equal(&descriptor.Digest{
+							HashAlgorithm:          "SHA-256",
+							NormalisationAlgorithm: "genericBlobDigest/v1",
+							Value:                  root.Digest.Encoded(),
+						}, resource.Digest)
+					}
+				})
+			}
 		})
 	}
 }

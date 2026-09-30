@@ -3,15 +3,14 @@ package ocm
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"slices"
 	"sync"
 
-	"github.com/Masterminds/semver/v3"
 	"golang.org/x/sync/errgroup"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/repository"
+	"ocm.software/open-component-model/bindings/go/runtime/versioning"
 )
 
 // GetComponentVersionsOptions configures how component versions are retrieved.
@@ -63,20 +62,23 @@ func GetComponentVersions(ctx context.Context, opts GetComponentVersionsOptions,
 		return nil, fmt.Errorf("getting component versions failed: %w", err)
 	}
 
-	// Sort semverVersions descending (newest version first).
+	// Sort descending (newest version first) using the configured versioning schemes.
+	reg := opts.registry()
+	var cmpErr error
 	slices.SortFunc(descs, func(a, b *descriptor.Descriptor) int {
-		semverVersionA, err := semver.NewVersion(a.Component.Version)
-		if err != nil {
-			slog.ErrorContext(ctx, "failed parsing version, this may result in wrong ordering", "version", a.Component.Version, "error", err)
+		if cmpErr != nil {
 			return 0
 		}
-		semverVersionB, err := semver.NewVersion(b.Component.Version)
+		c, err := reg.Compare(b.Component.Version, a.Component.Version)
 		if err != nil {
-			slog.ErrorContext(ctx, "failed parsing version, this may result in wrong ordering", "version", b.Component.Version, "error", err)
+			cmpErr = err
 			return 0
 		}
-		return semverVersionB.Compare(semverVersionA)
+		return c
 	})
+	if cmpErr != nil {
+		return nil, fmt.Errorf("sorting component versions failed: %w", cmpErr)
+	}
 
 	return descs, nil
 }
@@ -85,6 +87,18 @@ func GetComponentVersions(ctx context.Context, opts GetComponentVersionsOptions,
 type VersionOptions struct {
 	SemverConstraint string // Optional semantic version constraint for filtering
 	LatestOnly       bool   // If true, only return the latest version
+	// Registry defines the versioning schemes used to compare, sort, and filter
+	// versions. When nil, the loose-semver default is used.
+	Registry *versioning.Registry
+}
+
+// registry returns the configured versioning registry, or the loose-semver
+// default when none is set.
+func (o VersionOptions) registry() *versioning.Registry {
+	if o.Registry != nil {
+		return o.Registry
+	}
+	return versioning.Default()
 }
 
 // VersionsWithFiltering retrieve available versions for the component based on the provided options.
@@ -95,53 +109,21 @@ func VersionsWithFiltering(ctx context.Context, component string, repo repositor
 		return nil, fmt.Errorf("listing component versions failed: %w", err)
 	}
 
+	reg := opts.registry()
 	if opts.SemverConstraint != "" {
-		if versions, err = filterBySemver(versions, opts.SemverConstraint); err != nil {
+		if versions, err = reg.Filter(versions, opts.SemverConstraint); err != nil {
 			return nil, fmt.Errorf("filtering component versions failed: %w", err)
 		}
 	}
 
-	// Ensure correct order.
-	// We sort here, so we do not have to import semver into each repository
-	// implementation.
-	slices.SortFunc(versions, func(a, b string) int {
-		semverA, err := semver.NewVersion(a)
-		if err != nil {
-			slog.ErrorContext(ctx, "failed parsing version, this may result in wrong ordering", "version", a, "error", err)
-			return 0
-		}
-		semverB, err := semver.NewVersion(b)
-		if err != nil {
-			slog.ErrorContext(ctx, "failed parsing version, this may result in wrong ordering", "version", b, "error", err)
-			return 0
-		}
-		return semverB.Compare(semverA)
-	})
+	// Ensure correct order (newest first) using the configured versioning schemes.
+	if err := reg.SortDescending(versions); err != nil {
+		return nil, fmt.Errorf("sorting component versions failed: %w", err)
+	}
 
 	if opts.LatestOnly && len(versions) > 1 {
 		return versions[:1], nil
 	}
 
 	return versions, nil
-}
-
-// filterBySemver filters a list of versions based on a semantic version constraint.
-// It returns only versions that satisfy the given constraint.
-func filterBySemver(versions []string, constraint string) ([]string, error) {
-	filteredVersions := make([]string, 0, len(versions))
-	constraints, err := semver.NewConstraint(constraint)
-	if err != nil {
-		return nil, fmt.Errorf("parsing semantic version constraint failed: %w", err)
-	}
-	for _, version := range versions {
-		semversion, err := semver.NewVersion(version)
-		if err != nil {
-			continue
-		}
-		if !constraints.Check(semversion) {
-			continue
-		}
-		filteredVersions = append(filteredVersions, version)
-	}
-	return filteredVersions, nil
 }

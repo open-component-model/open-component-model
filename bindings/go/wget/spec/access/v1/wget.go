@@ -8,15 +8,15 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// Wget describes the access for an HTTP-downloadable resource.
+// Wget (aka "HTTP") describes the access for an HTTP-downloadable resource.
 //
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
 // +ocm:typegen=true
 // +ocm:jsonschema-gen=true
 type Wget struct {
-	// +ocm:jsonschema-gen:enum=Wget/v1,wget/v1
-	// +ocm:jsonschema-gen:enum:deprecated=Wget,wget
+	// +ocm:jsonschema-gen:enum=Wget/v1,wget/v1,HTTP/v1,http/v1
+	// +ocm:jsonschema-gen:enum:deprecated=Wget,wget,HTTP,http
 	Type runtime.Type `json:"type"`
 
 	// URL is the HTTP endpoint to download the resource from.

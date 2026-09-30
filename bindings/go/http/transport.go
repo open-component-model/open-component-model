@@ -23,7 +23,13 @@ const (
 
 // NewTransport returns an *http.Transport that starts as a clone of
 // http.DefaultTransport and selectively overrides timeouts from cfg.
-// A nil or empty cfg returns an unmodified clone of http.DefaultTransport.
+// A nil or empty cfg returns a clone of http.DefaultTransport with only
+// compression disabled.
+//
+// Responses are returned as the server sent them: the transport adds no
+// Accept-Encoding header and never decodes gzip transparently, because OCM
+// hashes and forwards response bodies. Use WithCompression on New for
+// metadata fetches whose bytes are only parsed.
 //
 // Setting TCPDialTimeout or TCPKeepAlive replaces the transport's DialContext
 // with a fresh net.Dialer; http.Transport.Clone() does not expose the dialer
@@ -40,6 +46,7 @@ func NewTransport(cfg *httpv1alpha1.TimeoutConfig) *nethttp.Transport {
 		dt = &nethttp.Transport{}
 	}
 	transport := dt.Clone()
+	transport.DisableCompression = true
 
 	if cfg == nil {
 		return transport

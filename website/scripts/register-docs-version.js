@@ -313,6 +313,7 @@ const BINDING_MOUNTS = [
     // Introduced in 0.17; older release tags do not contain these schema directories.
     { pkg: 'transfer',      source: 'v1alpha1/spec/schemas',                             target: 'schemas/bindings/go/transfer',               since: '0.17' },
     { pkg: 'wget',          source: 'transformation/spec/v1alpha1/schemas',              target: 'schemas/bindings/go/wget/transformation',    since: '0.17' },
+    { pkg: 'configuration/checksum/http', source: 'v1alpha1/spec/schemas', target: 'schemas/bindings/go/configuration/checksum/http/v1alpha1', sinceMonolith: true },
 ];
 
 // Return the bindings schema imports for a version. The layout is auto-detected
@@ -359,7 +360,11 @@ function bindingSchemaImports(version, deps) {
 
     const byPackage = new Map();
     for (const m of BINDING_MOUNTS) {
-        if (m.since && compareSemver(version, m.since) < 0) {
+        // Bindings introduced after the monorepo merge never existed as
+        // stand-alone Go modules, so they have no legacy per-package import.
+        // Entries gated by a `since` release simply lacked the schema directory
+        // in older tags.
+        if (m.sinceMonolith || (m.since && compareSemver(version, m.since) < 0)) {
             continue;
         }
         if (!byPackage.has(m.pkg)) {

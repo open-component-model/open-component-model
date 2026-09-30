@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"sync"
 	"sync/atomic"
@@ -101,7 +102,10 @@ func (resolver *CachingResolver) BasePath() string {
 }
 
 func (resolver *CachingResolver) ComponentVersionReference(ctx context.Context, component, version string) string {
-	tag := oci.LooseSemverToOCITag(ctx, version) // Remove prohibited characters.
+	tag, err := oci.VersionToOCITag(ctx, version)
+	if err != nil {
+		slog.WarnContext(ctx, "building component version reference with an invalid OCI tag", "component", component, "version", version, "error", err)
+	}
 	return fmt.Sprintf("%s/%s:%s", resolver.BasePath(), component, tag)
 }
 

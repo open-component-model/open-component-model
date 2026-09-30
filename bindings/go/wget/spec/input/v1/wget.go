@@ -12,17 +12,22 @@ const (
 	Type = "Wget"
 )
 
-// Wget describes an input sourced by downloading a resource from an HTTP/S URL
+// Wget (aka "HTTP") describes an input sourced by downloading a resource from an HTTP/S URL
 // during component construction. The downloaded content is stored as a local blob
 // in the component version.
+//
+// Verification against a source-side checksum is a deployment concern, not a
+// descriptor concern: configure it with `checksum.http.config.ocm.software/v1alpha1`
+// (see `bindings/go/configuration/checksum/http/v1alpha1/spec`), which steers
+// both this input method and the wget access-type digest processor.
 //
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
 // +ocm:typegen=true
 // +ocm:jsonschema-gen=true
 type Wget struct {
-	// +ocm:jsonschema-gen:enum=wget/v1,Wget/v1
-	// +ocm:jsonschema-gen:enum:deprecated=wget,Wget
+	// +ocm:jsonschema-gen:enum=wget/v1,Wget/v1,HTTP/v1,http/v1
+	// +ocm:jsonschema-gen:enum:deprecated=wget,Wget,HTTP,http
 	Type runtime.Type `json:"type"`
 
 	// URL is the HTTP endpoint to download the resource from.

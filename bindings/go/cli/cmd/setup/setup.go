@@ -16,6 +16,7 @@ import (
 	ocmctx "ocm.software/open-component-model/bindings/go/cli/internal/context"
 	"ocm.software/open-component-model/bindings/go/cli/internal/plugin/builtin"
 	"ocm.software/open-component-model/bindings/go/cli/internal/plugin/spec/config/v2alpha1"
+	checksumhttpv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/checksum/http/v1alpha1/spec"
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	credentialsRuntime "ocm.software/open-component-model/bindings/go/credentials/spec/config/runtime"
@@ -24,13 +25,16 @@ import (
 )
 
 func OCMConfig(cmd *cobra.Command) error {
-	cfg, err := configuration.GetFlattenedOCMConfigForCommand(cmd)
+	cfg, err := configuration.GetOCMConfigForCommand(cmd)
 	if err != nil {
 		if flag := cmd.Flag(configuration.OCMConfigCommandArgument); flag != nil && flag.Changed {
 			return fmt.Errorf("could not load configuration: %w", err)
 		}
 		slog.DebugContext(cmd.Context(), "could not get configuration", slog.String("error", err.Error()))
 		cfg = &genericv1.Config{}
+	}
+	if cfg, err = configuration.AddStdinConfig(cmd, cfg); err != nil {
+		return err
 	}
 
 	ctx := ocmctx.WithConfiguration(cmd.Context(), cfg)
@@ -90,7 +94,11 @@ func PluginManager(cmd *cobra.Command) error {
 		slog.String("tlsHandshakeTimeout", timeoutString(httpConfig.TLSHandshakeTimeout)),
 		slog.Any("hosts", httpConfig.Hosts),
 	)
-	if err := builtin.Register(pluginManager, filesystemConfig, httpConfig, slog.Default()); err != nil {
+	checksumHTTPConfig, err := checksumhttpv1alpha1.LookupConfig(ocmContext.Configuration())
+	if err != nil {
+		return fmt.Errorf("could not get checksum-http configuration: %w", err)
+	}
+	if err := builtin.Register(pluginManager, filesystemConfig, httpConfig, checksumHTTPConfig, slog.Default()); err != nil {
 		return fmt.Errorf("could not register builtin plugins: %w", err)
 	}
 
@@ -122,6 +130,7 @@ func CredentialGraph(cmd *cobra.Command) error {
 		CredentialPluginProvider:       pluginManager.CredentialPluginRegistry,
 		CredentialRepositoryTypeScheme: pluginManager.CredentialRepositoryRegistry.RepositoryScheme(),
 		CredentialTypeSchemeProvider:   pluginManager.CredentialTypeRegistry,
+		ConsumerIdentityTypeScheme:     pluginManager.CredentialTypeRegistry.GetConsumerIdentityTypeScheme(),
 	}
 
 	var credCfg *credentialsRuntime.Config

@@ -10,8 +10,9 @@ import (
 
 // Options holds configuration for New.
 type Options struct {
-	config    *httpv1alpha1.Config
-	userAgent string
+	config      *httpv1alpha1.Config
+	userAgent   string
+	compression bool
 }
 
 // Option is a functional option for New.
@@ -31,6 +32,14 @@ func WithConfig(cfg *httpv1alpha1.Config) Option {
 func WithUserAgent(userAgent string) Option {
 	return func(o *Options) {
 		o.userAgent = userAgent
+	}
+}
+
+// WithCompression lets the transport request gzip and decode it transparently. Use it only
+// for metadata whose bytes are parsed, never hashed or forwarded (e.g. Helm index.yaml).
+func WithCompression() Option {
+	return func(o *Options) {
+		o.compression = true
 	}
 }
 
@@ -87,7 +96,8 @@ func retryPolicyFromConfig(rc *httpv1alpha1.RetryConfig) retry.Policy {
 //	    policy. One instance exists per host (plus one for the global fallback)
 //	    so retry attempts share the per-host context deadline.
 //	 5. http.Transport carries the configured TCP/TLS/idle timeouts, merged
-//	    from the global config and the matching per-host overrides.
+//	    from the global config and the matching per-host overrides; responses
+//	    are raw unless WithCompression is set.
 //
 // Without per-host entries, the overall Timeout is applied as
 // http.Client.Timeout. With per-host entries it is applied per request inside
@@ -103,11 +113,12 @@ func New(opts ...Option) *nethttp.Client {
 	}
 
 	build := func(tc *httpv1alpha1.TimeoutConfig, rc *httpv1alpha1.RetryConfig, tlsc *httpv1alpha1.TLSConfig) nethttp.RoundTripper {
-		base, err := NewTransportWithTLS(tc, tlsc)
+		tr, err := NewTransportWithTLS(tc, tlsc)
 		if err != nil {
 			return errorRoundTripper{err: err}
 		}
-		rt := nethttp.RoundTripper(retry.NewTransport(base))
+		tr.DisableCompression = !options.compression
+		rt := nethttp.RoundTripper(retry.NewTransport(tr))
 		if p := retryPolicyFromConfig(rc); p != nil {
 			rt.(*retry.Transport).Policy = func() retry.Policy { return p }
 		}

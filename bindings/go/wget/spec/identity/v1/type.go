@@ -7,6 +7,8 @@ import (
 const (
 	WgetIdentityType = "Wget"
 	Version          = "v1"
+
+	HTTPIdentityType = "HTTP" // Alias for Wget
 )
 
 // Type is the unversioned consumer identity type for wget resources (backward compat).
@@ -24,8 +26,8 @@ var VersionedType = runtime.NewVersionedType(WgetIdentityType, Version)
 // +ocm:typegen=true
 // +ocm:jsonschema-gen=true
 type WgetIdentity struct {
-	// +ocm:jsonschema-gen:enum=Wget/v1
-	// +ocm:jsonschema-gen:enum:deprecated=Wget
+	// +ocm:jsonschema-gen:enum=Wget/v1,HTTP/v1,http/v1
+	// +ocm:jsonschema-gen:enum:deprecated=Wget,HTTP,http
 	Type     runtime.Type `json:"type"`
 	Hostname string       `json:"hostname,omitempty"`
 	Scheme   string       `json:"scheme,omitempty"`
