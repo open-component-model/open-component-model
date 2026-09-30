@@ -350,9 +350,13 @@ func assertSuccessfulChunkedUpload(t *testing.T, events []uploadEvent) {
 				sessionPaths[event.Path] = struct{}{}
 			}
 		}
-		if event.Method == http.MethodPut && event.Status == http.StatusCreated {
-			successfulPuts++
-			sessionPaths[event.Path] = struct{}{}
+		if event.Method == http.MethodPut {
+			r.GreaterOrEqual(event.ContentLength, int64(0))
+			r.LessOrEqual(event.ContentLength, quayChunkSize)
+			if event.Status == http.StatusCreated {
+				successfulPuts++
+				sessionPaths[event.Path] = struct{}{}
+			}
 		}
 	}
 	r.Equal(1, successfulPosts)
@@ -366,6 +370,7 @@ func assertCumulativeLimitRejection(t *testing.T, events []uploadEvent) {
 	r := require.New(t)
 	acceptedBeforeRejection := 0
 	rejectionSeen := false
+	rejectedSessionPath := ""
 	deleteSeen := false
 	for _, event := range events {
 		switch event.Method {
@@ -376,11 +381,14 @@ func assertCumulativeLimitRejection(t *testing.T, events []uploadEvent) {
 				acceptedBeforeRejection++
 			} else if event.Status != 0 && event.Status != http.StatusAccepted && event.Status != http.StatusUnauthorized {
 				rejectionSeen = true
+				rejectedSessionPath = event.Path
 			}
 		case http.MethodPut:
 			r.NotEqual(http.StatusCreated, event.Status, "oversized upload must not be finalized")
 		case http.MethodDelete:
-			deleteSeen = true
+			if event.Path == rejectedSessionPath && event.Status == http.StatusNoContent {
+				deleteSeen = true
+			}
 		}
 	}
 	r.True(rejectionSeen, "expected Quay to reject a PATCH after cumulative upload exceeded %s", quayLayerLimit)
