@@ -1,6 +1,7 @@
 package tsa
 
 import (
+	"bytes"
 	"context"
 	"crypto"
 	"crypto/rand"
@@ -21,7 +22,6 @@ import (
 	"time"
 
 	"github.com/digitorus/pkcs7"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	credconfigv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
@@ -30,69 +30,94 @@ import (
 )
 
 func TestNewMessageImprint(t *testing.T) {
-	digest := sha256.Sum256([]byte("hello"))
-
-	mi, err := NewMessageImprint(crypto.SHA256, digest[:])
-	require.NoError(t, err)
-	assert.True(t, mi.HashAlgorithm.Algorithm.Equal(oidDigestAlgorithmSHA256))
-	assert.Equal(t, digest[:], mi.HashedMessage)
-}
-
-func TestNewMessageImprint_SHA512(t *testing.T) {
-	digest := sha512.Sum512([]byte("hello"))
-
-	mi, err := NewMessageImprint(crypto.SHA512, digest[:])
-	require.NoError(t, err)
-	assert.True(t, mi.HashAlgorithm.Algorithm.Equal(oidDigestAlgorithmSHA512))
-}
-
-func TestNewMessageImprint_UnsupportedHash(t *testing.T) {
-	_, err := NewMessageImprint(crypto.MD5, []byte("short"))
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "unsupported hash algorithm")
-}
-
-func TestNewMessageImprint_WrongDigestLength(t *testing.T) {
-	_, err := NewMessageImprint(crypto.SHA256, []byte("too-short"))
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "digest length")
+	sha256Digest := sha256.Sum256([]byte("hello"))
+	sha512Digest := sha512.Sum512([]byte("hello"))
+	tests := []struct {
+		name    string
+		hash    crypto.Hash
+		digest  []byte
+		wantOID asn1.ObjectIdentifier
+		wantErr string
+	}{
+		{name: "SHA-256", hash: crypto.SHA256, digest: sha256Digest[:], wantOID: oidDigestAlgorithmSHA256},
+		{name: "SHA-512", hash: crypto.SHA512, digest: sha512Digest[:], wantOID: oidDigestAlgorithmSHA512},
+		{name: "unsupported hash", hash: crypto.MD5, digest: []byte("short"), wantErr: "unsupported hash algorithm"},
+		{name: "wrong digest length", hash: crypto.SHA256, digest: []byte("too-short"), wantErr: "digest length"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			mi, err := NewMessageImprint(tc.hash, tc.digest)
+			if tc.wantErr != "" {
+				r.ErrorContains(err, tc.wantErr)
+				return
+			}
+			r.NoError(err)
+			r.True(mi.HashAlgorithm.Algorithm.Equal(tc.wantOID))
+			r.Equal(tc.digest, mi.HashedMessage)
+		})
+	}
 }
 
 func TestMessageImprint_Hash(t *testing.T) {
 	digest := sha256.Sum256([]byte("test"))
-	mi, err := NewMessageImprint(crypto.SHA256, digest[:])
+	known, err := NewMessageImprint(crypto.SHA256, digest[:])
 	require.NoError(t, err)
+	unknown := MessageImprint{
+		HashAlgorithm: pkix.AlgorithmIdentifier{Algorithm: asn1.ObjectIdentifier{1, 2, 3, 4, 5}},
+		HashedMessage: []byte("dummy"),
+	}
 
-	h, err := mi.Hash()
-	require.NoError(t, err)
-	assert.Equal(t, crypto.SHA256, h)
+	tests := []struct {
+		name    string
+		imprint MessageImprint
+		want    crypto.Hash
+		wantErr string
+	}{
+		{name: "known algorithm", imprint: known, want: crypto.SHA256},
+		{name: "unknown algorithm", imprint: unknown, wantErr: "unsupported digest algorithm OID"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			h, err := tc.imprint.Hash()
+			if tc.wantErr != "" {
+				r.ErrorContains(err, tc.wantErr)
+				return
+			}
+			r.NoError(err)
+			r.Equal(tc.want, h)
+		})
+	}
 }
 
 func TestMessageImprint_Equal(t *testing.T) {
+	r := require.New(t)
 	digest := sha256.Sum256([]byte("hello"))
 	mi1, err := NewMessageImprint(crypto.SHA256, digest[:])
-	require.NoError(t, err)
+	r.NoError(err)
 	mi2, err := NewMessageImprint(crypto.SHA256, digest[:])
-	require.NoError(t, err)
+	r.NoError(err)
 
-	assert.True(t, mi1.Equal(mi2))
+	r.True(mi1.Equal(mi2))
 
 	differentDigest := sha256.Sum256([]byte("world"))
 	mi3, err := NewMessageImprint(crypto.SHA256, differentDigest[:])
-	require.NoError(t, err)
-	assert.False(t, mi1.Equal(mi3))
+	r.NoError(err)
+	r.False(mi1.Equal(mi3))
 }
 
 func TestMessageImprint_Equal_DifferentAlgorithm(t *testing.T) {
+	r := require.New(t)
 	digest256 := sha256.Sum256([]byte("hello"))
 	mi256, err := NewMessageImprint(crypto.SHA256, digest256[:])
-	require.NoError(t, err)
+	r.NoError(err)
 
 	digest512 := sha512.Sum512([]byte("hello"))
 	mi512, err := NewMessageImprint(crypto.SHA512, digest512[:])
-	require.NoError(t, err)
+	r.NoError(err)
 
-	assert.False(t, mi256.Equal(mi512))
+	r.False(mi256.Equal(mi512))
 }
 
 func TestAccuracy_Duration(t *testing.T) {
@@ -120,75 +145,102 @@ func TestAccuracy_Duration(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.expected, tt.accuracy.Duration())
+			r := require.New(t)
+			r.Equal(tt.expected, tt.accuracy.Duration())
 		})
 	}
 }
 
 func TestPKIStatusInfo_Err(t *testing.T) {
-	t.Run("granted", func(t *testing.T) {
-		si := PKIStatusInfo{Status: StatusGranted}
-		assert.NoError(t, si.Err())
-	})
-
-	t.Run("grantedWithMods", func(t *testing.T) {
-		si := PKIStatusInfo{Status: StatusGrantedWithMods}
-		assert.NoError(t, si.Err())
-	})
-
-	t.Run("rejection", func(t *testing.T) {
-		si := PKIStatusInfo{Status: StatusRejection}
-		err := si.Err()
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "Status(2)")
-	})
+	statusString, err := asn1.Marshal("bad request")
+	require.NoError(t, err)
+	tests := []struct {
+		name        string
+		info        PKIStatusInfo
+		wantErr     []string
+		wantMissing string
+	}{
+		{name: "granted", info: PKIStatusInfo{Status: StatusGranted}},
+		{name: "granted with modifications", info: PKIStatusInfo{Status: StatusGrantedWithMods}},
+		{name: "rejection", info: PKIStatusInfo{Status: StatusRejection}, wantErr: []string{"Status(2)"}},
+		{
+			name:    "fail info bits",
+			info:    PKIStatusInfo{Status: StatusRejection, FailInfo: asn1.BitString{Bytes: []byte{0b10101000}, BitLength: 5}},
+			wantErr: []string{"FailInfo(0b10101)"},
+		},
+		{
+			name:    "status string",
+			info:    PKIStatusInfo{Status: StatusRejection, StatusString: []asn1.RawValue{{FullBytes: statusString}}},
+			wantErr: []string{"StatusString(bad request)"},
+		},
+		{
+			name:        "unparsable status string is omitted",
+			info:        PKIStatusInfo{Status: StatusRejection, StatusString: []asn1.RawValue{{FullBytes: []byte{0xFF, 0xFF}}}},
+			wantErr:     []string{"Status(2)"},
+			wantMissing: "StatusString(",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			err := tc.info.Err()
+			if len(tc.wantErr) == 0 {
+				r.NoError(err)
+				return
+			}
+			r.Error(err)
+			for _, want := range tc.wantErr {
+				r.Contains(err.Error(), want)
+			}
+			if tc.wantMissing != "" {
+				r.NotContains(err.Error(), tc.wantMissing)
+			}
+		})
+	}
 }
 
 func TestGenerateNonce(t *testing.T) {
+	r := require.New(t)
 	n1, err := GenerateNonce()
-	require.NoError(t, err)
+	r.NoError(err)
 	n2, err := GenerateNonce()
-	require.NoError(t, err)
+	r.NoError(err)
 
-	assert.NotNil(t, n1)
-	assert.NotNil(t, n2)
-	assert.NotEqual(t, n1, n2, "two nonces should differ")
-	assert.True(t, n1.BitLen() > 0)
+	r.NotNil(n1)
+	r.NotNil(n2)
+	r.NotEqual(n1, n2, "two nonces should differ")
+	r.True(n1.BitLen() > 0)
 }
 
 func TestPEM_RoundTrip(t *testing.T) {
+	r := require.New(t)
 	original := []byte{0x30, 0x82, 0x01, 0x00, 0xDE, 0xAD, 0xBE, 0xEF}
 
 	encoded := ToPEM(original)
-	assert.Contains(t, string(encoded), "BEGIN TIMESTAMP TOKEN")
-	assert.Contains(t, string(encoded), "END TIMESTAMP TOKEN")
+	r.Contains(string(encoded), "BEGIN TIMESTAMP TOKEN")
+	r.Contains(string(encoded), "END TIMESTAMP TOKEN")
 
 	decoded, err := FromPEM(encoded)
-	require.NoError(t, err)
-	assert.Equal(t, original, decoded)
+	r.NoError(err)
+	r.Equal(original, decoded)
 }
 
-func TestFromPEM_NoPEMBlock(t *testing.T) {
-	_, err := FromPEM([]byte("not a pem block"))
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "no PEM block found")
-}
-
-func TestFromPEM_WrongBlockType(t *testing.T) {
-	data := []byte("-----BEGIN CERTIFICATE-----\nZm9v\n-----END CERTIFICATE-----\n")
-	_, err := FromPEM(data)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "unexpected PEM block type")
-}
-
-func TestFromPEM_TrailingData(t *testing.T) {
-	original := []byte{0xDE, 0xAD}
-	encoded := ToPEM(original)
-	encoded = append(encoded, []byte("-----BEGIN EXTRA-----\nZm9v\n-----END EXTRA-----\n")...)
-
-	_, err := FromPEM(encoded)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "trailing data")
+func TestFromPEM_Rejects(t *testing.T) {
+	tests := []struct {
+		name    string
+		data    []byte
+		wantErr string
+	}{
+		{name: "no PEM block", data: []byte("not a pem block"), wantErr: "no PEM block found"},
+		{name: "wrong block type", data: []byte("-----BEGIN CERTIFICATE-----\nZm9v\n-----END CERTIFICATE-----\n"), wantErr: "unexpected PEM block type"},
+		{name: "trailing data", data: append(ToPEM([]byte{0xDE, 0xAD}), []byte("-----BEGIN EXTRA-----\nZm9v\n-----END EXTRA-----\n")...), wantErr: "trailing data"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := FromPEM(tc.data)
+			require.New(t).ErrorContains(err, tc.wantErr)
+		})
+	}
 }
 
 func TestIsLegacyPEM(t *testing.T) {
@@ -255,98 +307,37 @@ func TestFromLegacyPEM_Rejects(t *testing.T) {
 
 // --- MessageImprint.Hash error path ---
 
-func TestMessageImprint_Hash_UnknownOID(t *testing.T) {
-	mi := MessageImprint{
-		HashAlgorithm: pkix.AlgorithmIdentifier{
-			Algorithm: asn1.ObjectIdentifier{1, 2, 3, 4, 5}, // unknown OID
-		},
-		HashedMessage: []byte("dummy"),
-	}
-	_, err := mi.Hash()
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "unsupported digest algorithm OID")
-}
-
 // --- PKIStatusInfo.Err with FailInfo and StatusString ---
-
-func TestPKIStatusInfo_Err_WithFailInfo(t *testing.T) {
-	si := PKIStatusInfo{
-		Status:   StatusRejection,
-		FailInfo: asn1.BitString{Bytes: []byte{0b10100000}, BitLength: 3},
-	}
-	err := si.Err()
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "FailInfo(0b")
-}
-
-func TestPKIStatusInfo_Err_WithStatusString(t *testing.T) {
-	// Encode a UTF8String "bad request" as ASN.1
-	encoded, err := asn1.Marshal("bad request")
-	require.NoError(t, err)
-
-	si := PKIStatusInfo{
-		Status: StatusRejection,
-		StatusString: []asn1.RawValue{
-			{FullBytes: encoded},
-		},
-	}
-	err = si.Err()
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "StatusString(bad request)")
-}
-
-func TestPKIStatusInfo_Err_WithStatusStringUnmarshalError(t *testing.T) {
-	// Invalid ASN.1 — unmarshal should fail, parts should be empty
-	si := PKIStatusInfo{
-		Status: StatusRejection,
-		StatusString: []asn1.RawValue{
-			{FullBytes: []byte{0xFF, 0xFF}},
-		},
-	}
-	err := si.Err()
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "Status(2)")
-	assert.NotContains(t, err.Error(), "StatusString(")
-}
-
-func TestPKIStatusInfo_Err_WithFailInfoBits(t *testing.T) {
-	// Test both 0 and 1 bits
-	si := PKIStatusInfo{
-		Status:   StatusRejection,
-		FailInfo: asn1.BitString{Bytes: []byte{0b10101000}, BitLength: 5},
-	}
-	err := si.Err()
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "FailInfo(0b10101)")
-}
 
 // --- credentials.go tests ---
 
-func TestTSAConsumerIdentity_Empty(t *testing.T) {
-	id, err := TSAConsumerIdentity("")
-	require.NoError(t, err)
-	typ, err := id.ParseType()
-	require.NoError(t, err)
-	assert.Equal(t, "TSA", typ.Name)
-	assert.Equal(t, "v1alpha1", typ.Version)
-}
-
-func TestTSAConsumerIdentity_WithURL(t *testing.T) {
-	id, err := TSAConsumerIdentity("https://timestamp.example.com:8443/ts")
-	require.NoError(t, err)
-	typ, err := id.ParseType()
-	require.NoError(t, err)
-	assert.Equal(t, "TSA", typ.Name)
-	assert.Equal(t, "timestamp.example.com", id["hostname"])
-	assert.Equal(t, "https", id["scheme"])
-	assert.Equal(t, "8443", id["port"])
-	assert.Equal(t, "ts", id["path"])
-}
-
-func TestTSAConsumerIdentity_InvalidURL(t *testing.T) {
-	_, err := TSAConsumerIdentity("://invalid")
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "parsing TSA URL")
+func TestTSAConsumerIdentity(t *testing.T) {
+	tests := []struct {
+		name    string
+		url     string
+		want    map[string]string
+		wantErr string
+	}{
+		{name: "generic", want: map[string]string{"type": "TSA"}},
+		{
+			name: "from URL",
+			url:  "https://timestamp.example.com:8443/ts",
+			want: map[string]string{"type": "TSA", "hostname": "timestamp.example.com", "scheme": "https", "port": "8443", "path": "ts"},
+		},
+		{name: "invalid URL", url: "://invalid", wantErr: "parsing TSA URL"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			id, err := TSAConsumerIdentity(tc.url)
+			if tc.wantErr != "" {
+				r.ErrorContains(err, tc.wantErr)
+				return
+			}
+			r.NoError(err)
+			r.Equal(tc.want, map[string]string(id))
+		})
+	}
 }
 
 func directCreds(props map[string]string) *credconfigv1.DirectCredentials {
@@ -356,103 +347,89 @@ func directCreds(props map[string]string) *credconfigv1.DirectCredentials {
 	}
 }
 
-func TestRootCertPool_InlinePEM(t *testing.T) {
+func TestRootCertPool(t *testing.T) {
 	_, cert := mustTSAKeyAndCert(t)
 	pemData := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: cert.Raw})
-
-	pool, err := RootCertPool(&tsacredentialsv1alpha1.TSACredentials{
-		Type:         tsacredentialsv1alpha1.VersionedType,
-		RootCertsPEM: string(pemData),
-	})
-	require.NoError(t, err)
-	require.NotNil(t, pool)
-}
-
-func TestRootCertPool_File(t *testing.T) {
-	_, cert := mustTSAKeyAndCert(t)
-	pemData := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: cert.Raw})
-
 	path := filepath.Join(t.TempDir(), "root.pem")
 	require.NoError(t, os.WriteFile(path, pemData, 0o600))
 
-	pool, err := RootCertPool(&tsacredentialsv1alpha1.TSACredentials{
-		Type:             tsacredentialsv1alpha1.VersionedType,
-		RootCertsPEMFile: path,
-	})
-	require.NoError(t, err)
-	require.NotNil(t, pool)
-}
-
-func TestRootCertPool_FileNotFound(t *testing.T) {
-	_, err := RootCertPool(&tsacredentialsv1alpha1.TSACredentials{
-		Type:             tsacredentialsv1alpha1.VersionedType,
-		RootCertsPEMFile: "/nonexistent/path/root.pem",
-	})
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "reading root certificates")
-}
-
-func TestRootCertPool_InvalidPEM(t *testing.T) {
-	_, err := RootCertPool(&tsacredentialsv1alpha1.TSACredentials{
-		Type:         tsacredentialsv1alpha1.VersionedType,
-		RootCertsPEM: "not valid PEM data",
-	})
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "no valid certificates")
-}
-
-func TestRootCertPool_Nil(t *testing.T) {
-	pool, err := RootCertPool(nil)
-	require.NoError(t, err)
-	assert.Nil(t, pool)
+	tests := []struct {
+		name     string
+		creds    *tsacredentialsv1alpha1.TSACredentials
+		wantPool bool
+		wantErr  string
+	}{
+		{name: "inline PEM", creds: &tsacredentialsv1alpha1.TSACredentials{RootCertsPEM: string(pemData)}, wantPool: true},
+		{name: "PEM file", creds: &tsacredentialsv1alpha1.TSACredentials{RootCertsPEMFile: path}, wantPool: true},
+		{name: "missing file", creds: &tsacredentialsv1alpha1.TSACredentials{RootCertsPEMFile: "/nonexistent/path/root.pem"}, wantErr: "reading root certificates"},
+		{name: "invalid PEM", creds: &tsacredentialsv1alpha1.TSACredentials{RootCertsPEM: "not valid PEM data"}, wantErr: "no valid certificates"},
+		{name: "no credentials"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			if tc.creds != nil {
+				tc.creds.Type = tsacredentialsv1alpha1.VersionedType
+			}
+			pool, err := RootCertPool(tc.creds)
+			if tc.wantErr != "" {
+				r.ErrorContains(err, tc.wantErr)
+				return
+			}
+			r.NoError(err)
+			r.Equal(tc.wantPool, pool != nil)
+		})
+	}
 }
 
 // RootCertPoolFromCredentials converts resolved credentials (typed or the
 // untyped DirectCredentials fallback) before loading the pool. The fallback
 // still accepts the deprecated snake_case keys used by existing .ocmconfig files.
-func TestRootCertPoolFromCredentials_DirectCredentials_CamelCase(t *testing.T) {
+func TestRootCertPoolFromCredentials(t *testing.T) {
 	_, cert := mustTSAKeyAndCert(t)
 	pemData := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: cert.Raw})
-
-	pool, err := RootCertPoolFromCredentials(directCreds(map[string]string{
-		"rootCertsPEM": string(pemData),
-	}))
-	require.NoError(t, err)
-	require.NotNil(t, pool)
-}
-
-func TestRootCertPoolFromCredentials_DirectCredentials_DeprecatedSnakeCase(t *testing.T) {
-	_, cert := mustTSAKeyAndCert(t)
-	pemData := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: cert.Raw})
-
 	path := filepath.Join(t.TempDir(), "root.pem")
 	require.NoError(t, os.WriteFile(path, pemData, 0o600))
 
-	pool, err := RootCertPoolFromCredentials(directCreds(map[string]string{
-		"root_certs_pem_file": path,
-	}))
-	require.NoError(t, err)
-	require.NotNil(t, pool)
-}
-
-func TestRootCertPoolFromCredentials_Nil(t *testing.T) {
-	pool, err := RootCertPoolFromCredentials(nil)
-	require.NoError(t, err)
-	assert.Nil(t, pool)
+	tests := []struct {
+		name     string
+		creds    runtime.Typed
+		wantPool bool
+	}{
+		{name: "direct credentials, camelCase", creds: directCreds(map[string]string{"rootCertsPEM": string(pemData)}), wantPool: true},
+		{name: "direct credentials, deprecated snake_case", creds: directCreds(map[string]string{"root_certs_pem_file": path}), wantPool: true},
+		{name: "no credentials"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			pool, err := RootCertPoolFromCredentials(tc.creds)
+			r.NoError(err)
+			r.Equal(tc.wantPool, pool != nil)
+		})
+	}
 }
 
 // --- RequestTimestamp error paths ---
 
-func TestRequestTimestamp_BadHash(t *testing.T) {
-	_, err := RequestTimestamp(t.Context(), nil, "http://example.com", crypto.MD5, []byte("x"))
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "unsupported hash")
-}
-
-func TestRequestTimestamp_InvalidURL(t *testing.T) {
+func TestRequestTimestamp_RejectsInvalidInput(t *testing.T) {
 	digest := sha256.Sum256([]byte("test"))
-	_, err := RequestTimestamp(t.Context(), nil, "://bad-url", crypto.SHA256, digest[:])
-	assert.Error(t, err)
+	tests := []struct {
+		name    string
+		url     string
+		hash    crypto.Hash
+		digest  []byte
+		wantErr string
+	}{
+		{name: "unsupported hash", url: "http://example.com", hash: crypto.MD5, digest: []byte("x"), wantErr: "unsupported hash"},
+		{name: "invalid URL", url: "://bad-url", hash: crypto.SHA256, digest: digest[:], wantErr: "creating HTTP request"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := RequestTimestamp(t.Context(), nil, tc.url, tc.hash, tc.digest)
+			require.New(t).ErrorContains(err, tc.wantErr)
+		})
+	}
 }
 
 func TestRequestTimestamp_TransportErrorRedactsURL(t *testing.T) {
@@ -466,195 +443,182 @@ func TestRequestTimestamp_TransportErrorRedactsURL(t *testing.T) {
 	r.Contains(err.Error(), "http://127.0.0.1:1/tsa")
 }
 
-func TestRequestTimestamp_BadResponseBody(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+func TestRequestTimestamp_RejectsInvalidResponses(t *testing.T) {
+	tsaKey, tsaCert := mustTSAKeyAndCert(t)
+	type statusOnly struct {
+		Status PKIStatusInfo
+	}
+	writeDER := func(w http.ResponseWriter, der []byte) {
 		w.Header().Set("Content-Type", "application/timestamp-reply")
-		w.Write([]byte("not valid asn1")) //nolint:errcheck
-	}))
-	t.Cleanup(server.Close)
-
-	digest := sha256.Sum256([]byte("test"))
-	_, err := RequestTimestamp(t.Context(), server.Client(), server.URL, crypto.SHA256, digest[:])
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "unmarshaling timestamp response")
-}
-
-func TestRequestTimestamp_TSARejection(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Return a valid ASN.1 response with rejection status
-		type resp struct {
-			Status PKIStatusInfo
+		_, _ = w.Write(der)
+	}
+	// respondWithInfo answers with a signed token whose TSTInfo is derived from
+	// the request and then altered by mutate.
+	respondWithInfo := func(mutate func(req Request, info *Info)) http.HandlerFunc {
+		return func(w http.ResponseWriter, httpReq *http.Request) {
+			body, err := io.ReadAll(httpReq.Body)
+			if err != nil {
+				http.Error(w, "read body", http.StatusBadRequest)
+				return
+			}
+			var req Request
+			if _, err := asn1.Unmarshal(body, &req); err != nil {
+				http.Error(w, "unmarshal request", http.StatusBadRequest)
+				return
+			}
+			info := Info{
+				Version:        1,
+				Policy:         asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 0},
+				MessageImprint: req.MessageImprint,
+				SerialNumber:   big.NewInt(1),
+				GenTime:        time.Now().UTC().Truncate(time.Second),
+				Nonce:          req.Nonce,
+			}
+			mutate(req, &info)
+			writeMockTSAResponse(t, w, tsaCert, tsaKey, info)
 		}
-		respDER, _ := asn1.Marshal(resp{Status: PKIStatusInfo{Status: StatusRejection}})
-		w.Header().Set("Content-Type", "application/timestamp-reply")
-		w.Write(respDER) //nolint:errcheck
-	}))
-	t.Cleanup(server.Close)
+	}
 
-	digest := sha256.Sum256([]byte("test"))
-	_, err := RequestTimestamp(t.Context(), server.Client(), server.URL, crypto.SHA256, digest[:])
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "Status(2)")
-}
+	tests := []struct {
+		name    string
+		handler http.HandlerFunc
+		wantErr string
+	}{
+		{
+			name: "server error",
+			handler: func(w http.ResponseWriter, _ *http.Request) {
+				http.Error(w, "internal error", http.StatusInternalServerError)
+			},
+			wantErr: "HTTP 500",
+		},
+		{
+			name:    "malformed response",
+			handler: func(w http.ResponseWriter, _ *http.Request) { writeDER(w, []byte("not valid asn1")) },
+			wantErr: "unmarshaling timestamp response",
+		},
+		{
+			name: "rejection status",
+			handler: func(w http.ResponseWriter, _ *http.Request) {
+				der, _ := asn1.Marshal(statusOnly{Status: PKIStatusInfo{Status: StatusRejection}})
+				writeDER(w, der)
+			},
+			wantErr: "Status(2)",
+		},
+		{
+			name: "trailing data",
+			handler: func(w http.ResponseWriter, _ *http.Request) {
+				der, _ := asn1.Marshal(statusOnly{Status: PKIStatusInfo{Status: StatusGranted}})
+				writeDER(w, append(der, 0x00, 0x00, 0x00))
+			},
+			wantErr: "trailing data",
+		},
+		{
+			name: "token is not PKCS#7",
+			handler: func(w http.ResponseWriter, _ *http.Request) {
+				der, _ := asn1.Marshal(struct {
+					Status         PKIStatusInfo
+					TimeStampToken asn1.RawValue `asn1:"optional"`
+				}{
+					Status:         PKIStatusInfo{Status: StatusGranted},
+					TimeStampToken: asn1.RawValue{FullBytes: []byte{0x30, 0x03, 0x01, 0x01, 0xFF}},
+				})
+				writeDER(w, der)
+			},
+			wantErr: "parsing PKCS#7 timestamp token",
+		},
+		{
+			name: "mismatched imprint",
+			handler: respondWithInfo(func(req Request, info *Info) {
+				tampered := bytes.Clone(req.MessageImprint.HashedMessage)
+				tampered[0] ^= 0xFF
+				info.MessageImprint.HashedMessage = tampered
+			}),
+			wantErr: "message imprint does not match",
+		},
+		{
+			name:    "mismatched nonce",
+			handler: respondWithInfo(func(_ Request, info *Info) { info.Nonce = big.NewInt(999999) }),
+			wantErr: "nonce does not match",
+		},
+		{
+			name:    "missing nonce",
+			handler: respondWithInfo(func(_ Request, info *Info) { info.Nonce = nil }),
+			wantErr: "nonce does not match",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			server := httptest.NewServer(tc.handler)
+			t.Cleanup(server.Close)
 
-func TestRequestTimestamp_TrailingData(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		type resp struct {
-			Status PKIStatusInfo
-		}
-		respDER, _ := asn1.Marshal(resp{Status: PKIStatusInfo{Status: StatusGranted}})
-		// Append trailing garbage
-		respDER = append(respDER, 0x00, 0x00, 0x00)
-		w.Header().Set("Content-Type", "application/timestamp-reply")
-		w.Write(respDER) //nolint:errcheck
-	}))
-	t.Cleanup(server.Close)
-
-	digest := sha256.Sum256([]byte("test"))
-	_, err := RequestTimestamp(t.Context(), server.Client(), server.URL, crypto.SHA256, digest[:])
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "trailing data")
+			digest := sha256.Sum256([]byte("test"))
+			_, err := RequestTimestamp(t.Context(), server.Client(), server.URL, crypto.SHA256, digest[:])
+			r.ErrorContains(err, tc.wantErr)
+		})
+	}
 }
 
 // --- Verify error paths ---
 
-func TestVerify_BadDER(t *testing.T) {
-	digest := sha256.Sum256([]byte("test"))
-	_, _, err := Verify([]byte("not DER"), crypto.SHA256, digest[:], nil)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "parsing PKCS#7")
-}
-
-func TestVerify_BadHash(t *testing.T) {
-	// Need a valid PKCS#7 to get past Parse, then fail on MessageImprint
+func TestVerify(t *testing.T) {
 	tsaKey, tsaCert := mustTSAKeyAndCert(t)
 	server := httptest.NewServer(newMockTSAHandler(t, tsaCert, tsaKey))
 	t.Cleanup(server.Close)
 
-	digest := sha256.Sum256([]byte("test"))
+	digest := sha256.Sum256([]byte("original"))
 	token, err := RequestTimestamp(t.Context(), server.Client(), server.URL, crypto.SHA256, digest[:])
 	require.NoError(t, err)
 
-	// Try to verify with MD5 (unsupported)
-	_, _, err = Verify(token.Raw, crypto.MD5, []byte("x"), nil)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "unsupported hash")
+	roots := x509.NewCertPool()
+	roots.AddCert(tsaCert)
+	_, otherCert := mustTSAKeyAndCert(t)
+	otherRoots := x509.NewCertPool()
+	otherRoots.AddCert(otherCert)
+	wrongDigest := sha256.Sum256([]byte("tampered"))
+
+	tests := []struct {
+		name        string
+		raw         []byte
+		hash        crypto.Hash
+		digest      []byte
+		roots       *x509.CertPool
+		wantTrusted bool
+		wantErr     string
+	}{
+		{name: "trusted with configured root", raw: token.Raw, hash: crypto.SHA256, digest: digest[:], roots: roots, wantTrusted: true},
+		{name: "structural only without roots", raw: token.Raw, hash: crypto.SHA256, digest: digest[:]},
+		{name: "not DER", raw: []byte("not DER"), hash: crypto.SHA256, digest: digest[:], wantErr: "parsing PKCS#7"},
+		{name: "unsupported hash", raw: token.Raw, hash: crypto.MD5, digest: []byte("x"), wantErr: "unsupported hash"},
+		{name: "wrong digest", raw: token.Raw, hash: crypto.SHA256, digest: wrongDigest[:], roots: roots, wantErr: "does not match"},
+		{name: "untrusted root", raw: token.Raw, hash: crypto.SHA256, digest: digest[:], roots: otherRoots, wantErr: "verifying PKCS#7 signer certificate chain"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			verifiedTime, trusted, err := Verify(tc.raw, tc.hash, tc.digest, tc.roots)
+			if tc.wantErr != "" {
+				r.ErrorContains(err, tc.wantErr)
+				return
+			}
+			r.NoError(err)
+			r.Equal(tc.wantTrusted, trusted)
+			r.Equal(token.Time, verifiedTime)
+		})
+	}
 }
 
 // --- parseTSTInfo error paths ---
 
 func TestParseTSTInfo_BadDER(t *testing.T) {
+	r := require.New(t)
 	_, err := parseTSTInfo([]byte{0xFF, 0xFF})
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "unmarshaling TSTInfo")
-}
-
-func TestRequestTimestamp_MismatchedImprint(t *testing.T) {
-	// Mock server that returns a TSTInfo with a different digest
-	tsaKey, tsaCert := mustTSAKeyAndCert(t)
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
-		var req Request
-		asn1.Unmarshal(body, &req) //nolint:errcheck
-
-		// Tamper: flip the digest
-		tampered := make([]byte, len(req.MessageImprint.HashedMessage))
-		copy(tampered, req.MessageImprint.HashedMessage)
-		tampered[0] ^= 0xFF
-
-		tstInfo := Info{
-			Version:        1,
-			Policy:         asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 0},
-			MessageImprint: MessageImprint{HashAlgorithm: req.MessageImprint.HashAlgorithm, HashedMessage: tampered},
-			SerialNumber:   big.NewInt(1),
-			GenTime:        time.Now().UTC().Truncate(time.Second),
-			Nonce:          req.Nonce,
-		}
-		writeMockTSAResponse(t, w, tsaCert, tsaKey, tstInfo)
-	}))
-	t.Cleanup(server.Close)
-
-	digest := sha256.Sum256([]byte("test"))
-	_, err := RequestTimestamp(t.Context(), server.Client(), server.URL, crypto.SHA256, digest[:])
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "message imprint does not match")
-}
-
-func TestRequestTimestamp_MismatchedNonce(t *testing.T) {
-	tsaKey, tsaCert := mustTSAKeyAndCert(t)
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
-		var req Request
-		asn1.Unmarshal(body, &req) //nolint:errcheck
-
-		tstInfo := Info{
-			Version:        1,
-			Policy:         asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 0},
-			MessageImprint: req.MessageImprint,
-			SerialNumber:   big.NewInt(1),
-			GenTime:        time.Now().UTC().Truncate(time.Second),
-			Nonce:          big.NewInt(999999), // wrong nonce
-		}
-		writeMockTSAResponse(t, w, tsaCert, tsaKey, tstInfo)
-	}))
-	t.Cleanup(server.Close)
-
-	digest := sha256.Sum256([]byte("test"))
-	_, err := RequestTimestamp(t.Context(), server.Client(), server.URL, crypto.SHA256, digest[:])
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "nonce does not match")
-}
-
-func TestRequestTimestamp_NilNonce(t *testing.T) {
-	tsaKey, tsaCert := mustTSAKeyAndCert(t)
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
-		var req Request
-		asn1.Unmarshal(body, &req) //nolint:errcheck
-
-		tstInfo := Info{
-			Version:        1,
-			Policy:         asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 0},
-			MessageImprint: req.MessageImprint,
-			SerialNumber:   big.NewInt(1),
-			GenTime:        time.Now().UTC().Truncate(time.Second),
-			// Nonce intentionally omitted (nil)
-		}
-		writeMockTSAResponse(t, w, tsaCert, tsaKey, tstInfo)
-	}))
-	t.Cleanup(server.Close)
-
-	digest := sha256.Sum256([]byte("test"))
-	_, err := RequestTimestamp(t.Context(), server.Client(), server.URL, crypto.SHA256, digest[:])
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "nonce does not match")
-}
-
-func TestRequestTimestamp_BadTokenInResponse(t *testing.T) {
-	// Return a valid status but garbage token
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		type resp struct {
-			Status         PKIStatusInfo
-			TimeStampToken asn1.RawValue `asn1:"optional"`
-		}
-		r2 := resp{Status: PKIStatusInfo{Status: StatusGranted}}
-		r2.TimeStampToken.FullBytes = []byte{0x30, 0x03, 0x01, 0x01, 0xFF} // minimal valid ASN.1 but not PKCS#7
-		r2.TimeStampToken.Class = asn1.ClassUniversal
-		r2.TimeStampToken.Tag = asn1.TagSequence
-		r2.TimeStampToken.IsCompound = true
-		respDER, _ := asn1.Marshal(r2)
-		w.Header().Set("Content-Type", "application/timestamp-reply")
-		w.Write(respDER) //nolint:errcheck
-	}))
-	t.Cleanup(server.Close)
-
-	digest := sha256.Sum256([]byte("test"))
-	_, err := RequestTimestamp(t.Context(), server.Client(), server.URL, crypto.SHA256, digest[:])
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "parsing PKCS#7 timestamp token")
+	r.Error(err)
+	r.Contains(err.Error(), "unmarshaling TSTInfo")
 }
 
 func TestVerify_NilRoots_InvalidSignature(t *testing.T) {
+	r := require.New(t)
 	// Build a token signed by one key, but with a cert for a different key
 	// This should fail p7.Verify() (the nil-roots path)
 	key1, _ := mustTSAKeyAndCert(t)
@@ -672,41 +636,43 @@ func TestVerify_NilRoots_InvalidSignature(t *testing.T) {
 		}(),
 	}
 	tstInfoDER, err := asn1.Marshal(tstInfo)
-	require.NoError(t, err)
+	r.NoError(err)
 
 	sd, err := pkcs7.NewSignedData(tstInfoDER)
-	require.NoError(t, err)
+	r.NoError(err)
 	sd.SetContentType(asn1.ObjectIdentifier{1, 2, 840, 113549, 1, 9, 16, 1, 4})
 	// Sign with key1 but attach cert2 — mismatch
-	require.NoError(t, sd.AddSigner(cert2, key1, pkcs7.SignerInfoConfig{}))
+	r.NoError(sd.AddSigner(cert2, key1, pkcs7.SignerInfoConfig{}))
 	p7DER, err := sd.Finish()
-	require.NoError(t, err)
+	r.NoError(err)
 
 	digest := sha256.Sum256([]byte("test"))
 	_, _, err = Verify(p7DER, crypto.SHA256, digest[:], nil)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "verifying PKCS#7 signature")
+	r.Error(err)
+	r.Contains(err.Error(), "verifying PKCS#7 signature")
 }
 
 func TestVerify_MismatchedImprint(t *testing.T) {
+	r := require.New(t)
 	tsaKey, tsaCert := mustTSAKeyAndCert(t)
 	server := httptest.NewServer(newMockTSAHandler(t, tsaCert, tsaKey))
 	t.Cleanup(server.Close)
 
 	digest := sha256.Sum256([]byte("original"))
 	token, err := RequestTimestamp(t.Context(), server.Client(), server.URL, crypto.SHA256, digest[:])
-	require.NoError(t, err)
+	r.NoError(err)
 
 	// Verify with correct hash algo but wrong digest — triggers the mismatch in Verify()
 	wrongDigest := sha256.Sum256([]byte("wrong"))
 	roots := x509.NewCertPool()
 	roots.AddCert(tsaCert)
 	_, _, err = Verify(token.Raw, crypto.SHA256, wrongDigest[:], roots)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "does not match")
+	r.Error(err)
+	r.Contains(err.Error(), "does not match")
 }
 
 func TestParseTSTInfo_TrailingData(t *testing.T) {
+	r := require.New(t)
 	tstInfo := Info{
 		Version:      1,
 		Policy:       asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 0},
@@ -719,31 +685,32 @@ func TestParseTSTInfo_TrailingData(t *testing.T) {
 		}(),
 	}
 	der, err := asn1.Marshal(tstInfo)
-	require.NoError(t, err)
+	r.NoError(err)
 
 	// Append trailing garbage
 	der = append(der, 0x00, 0x00)
 	_, err = parseTSTInfo(der)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "trailing data")
+	r.Error(err)
+	r.Contains(err.Error(), "trailing data")
 }
 
 func TestVerify_InvalidTSTInfoContent(t *testing.T) {
+	r := require.New(t)
 	// Build a PKCS#7 SignedData whose content is NOT valid TSTInfo
 	tsaKey, tsaCert := mustTSAKeyAndCert(t)
 
 	garbageContent := []byte{0x04, 0x03, 0x66, 0x6F, 0x6F} // OCTET STRING "foo"
 	sd, err := pkcs7.NewSignedData(garbageContent)
-	require.NoError(t, err)
+	r.NoError(err)
 	sd.SetContentType(asn1.ObjectIdentifier{1, 2, 840, 113549, 1, 9, 16, 1, 4})
-	require.NoError(t, sd.AddSigner(tsaCert, tsaKey, pkcs7.SignerInfoConfig{}))
+	r.NoError(sd.AddSigner(tsaCert, tsaKey, pkcs7.SignerInfoConfig{}))
 	p7DER, err := sd.Finish()
-	require.NoError(t, err)
+	r.NoError(err)
 
 	digest := sha256.Sum256([]byte("test"))
 	_, _, err = Verify(p7DER, crypto.SHA256, digest[:], nil)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "parsing TSTInfo")
+	r.Error(err)
+	r.Contains(err.Error(), "parsing TSTInfo")
 }
 
 // writeMockTSAResponse is a helper that builds a valid TSA response from a TSTInfo.
@@ -795,6 +762,7 @@ func writeMockTSAResponse(t *testing.T, w http.ResponseWriter, cert *x509.Certif
 // --- Integration tests with mock TSA server ---
 
 func TestRequestTimestamp_MockServer(t *testing.T) {
+	r := require.New(t)
 	tsaKey, tsaCert := mustTSAKeyAndCert(t)
 	server := httptest.NewServer(newMockTSAHandler(t, tsaCert, tsaKey))
 	t.Cleanup(server.Close)
@@ -802,14 +770,15 @@ func TestRequestTimestamp_MockServer(t *testing.T) {
 	digest := sha256.Sum256([]byte("test data"))
 
 	token, err := RequestTimestamp(t.Context(), server.Client(), server.URL, crypto.SHA256, digest[:])
-	require.NoError(t, err)
-	assert.NotNil(t, token)
-	assert.NotEmpty(t, token.Raw)
-	assert.False(t, token.Time.IsZero())
-	assert.WithinDuration(t, time.Now(), token.Time, 5*time.Second)
+	r.NoError(err)
+	r.NotNil(token)
+	r.NotEmpty(token.Raw)
+	r.False(token.Time.IsZero())
+	r.WithinDuration(time.Now(), token.Time, 5*time.Second)
 }
 
 func TestRequestTimestamp_NilClient_UsesDefault(t *testing.T) {
+	r := require.New(t)
 	tsaKey, tsaCert := mustTSAKeyAndCert(t)
 	server := httptest.NewServer(newMockTSAHandler(t, tsaCert, tsaKey))
 	t.Cleanup(server.Close)
@@ -817,93 +786,22 @@ func TestRequestTimestamp_NilClient_UsesDefault(t *testing.T) {
 	digest := sha256.Sum256([]byte("test nil client"))
 
 	token, err := RequestTimestamp(t.Context(), nil, server.URL, crypto.SHA256, digest[:])
-	require.NoError(t, err)
-	assert.NotNil(t, token)
-}
-
-func TestRequestTimestamp_AndVerify_RoundTrip(t *testing.T) {
-	tsaKey, tsaCert := mustTSAKeyAndCert(t)
-	server := httptest.NewServer(newMockTSAHandler(t, tsaCert, tsaKey))
-	t.Cleanup(server.Close)
-
-	digest := sha256.Sum256([]byte("round trip data"))
-
-	// Request
-	token, err := RequestTimestamp(t.Context(), server.Client(), server.URL, crypto.SHA256, digest[:])
-	require.NoError(t, err)
-
-	// Verify with correct root
-	roots := x509.NewCertPool()
-	roots.AddCert(tsaCert)
-	verifiedTime, trusted, err := Verify(token.Raw, crypto.SHA256, digest[:], roots)
-	require.NoError(t, err)
-	require.True(t, trusted)
-	assert.Equal(t, token.Time, verifiedTime)
-}
-
-func TestVerify_WrongDigest(t *testing.T) {
-	tsaKey, tsaCert := mustTSAKeyAndCert(t)
-	server := httptest.NewServer(newMockTSAHandler(t, tsaCert, tsaKey))
-	t.Cleanup(server.Close)
-
-	digest := sha256.Sum256([]byte("original"))
-	token, err := RequestTimestamp(t.Context(), server.Client(), server.URL, crypto.SHA256, digest[:])
-	require.NoError(t, err)
-
-	// Verify with wrong digest
-	wrongDigest := sha256.Sum256([]byte("tampered"))
-	roots := x509.NewCertPool()
-	roots.AddCert(tsaCert)
-	_, _, err = Verify(token.Raw, crypto.SHA256, wrongDigest[:], roots)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "does not match")
-}
-
-func TestVerify_WrongRootCert(t *testing.T) {
-	tsaKey, tsaCert := mustTSAKeyAndCert(t)
-	server := httptest.NewServer(newMockTSAHandler(t, tsaCert, tsaKey))
-	t.Cleanup(server.Close)
-
-	digest := sha256.Sum256([]byte("wrong root test"))
-	token, err := RequestTimestamp(t.Context(), server.Client(), server.URL, crypto.SHA256, digest[:])
-	require.NoError(t, err)
-
-	// Verify with different root cert
-	_, wrongCert := mustTSAKeyAndCert(t)
-	wrongRoots := x509.NewCertPool()
-	wrongRoots.AddCert(wrongCert)
-	_, _, err = Verify(token.Raw, crypto.SHA256, digest[:], wrongRoots)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "verifying PKCS#7 signer certificate chain")
-}
-
-func TestVerify_NilRoots_StructuralOnly(t *testing.T) {
-	tsaKey, tsaCert := mustTSAKeyAndCert(t)
-	server := httptest.NewServer(newMockTSAHandler(t, tsaCert, tsaKey))
-	t.Cleanup(server.Close)
-
-	digest := sha256.Sum256([]byte("structural only"))
-	token, err := RequestTimestamp(t.Context(), server.Client(), server.URL, crypto.SHA256, digest[:])
-	require.NoError(t, err)
-
-	// Verify with nil roots — structural check only
-	verifiedTime, trusted, err := Verify(token.Raw, crypto.SHA256, digest[:], nil)
-	require.NoError(t, err)
-	require.False(t, trusted)
-	assert.Equal(t, token.Time, verifiedTime)
+	r.NoError(err)
+	r.NotNil(token)
 }
 
 func TestVerify_RejectsNonTimestampingEKU(t *testing.T) {
+	r := require.New(t)
 	// Build a cert with ServerAuth EKU (critical) instead of TimeStamping.
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
-	require.NoError(t, err)
+	r.NoError(err)
 
 	serial, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
-	require.NoError(t, err)
+	r.NoError(err)
 
 	// Marshal a critical EKU extension containing only id-kp-serverAuth (1.3.6.1.5.5.7.3.1).
 	ekuVal, err := asn1.Marshal([]asn1.ObjectIdentifier{{1, 3, 6, 1, 5, 5, 7, 3, 1}})
-	require.NoError(t, err)
+	r.NoError(err)
 
 	tmpl := &x509.Certificate{
 		SerialNumber:          serial,
@@ -920,9 +818,9 @@ func TestVerify_RejectsNonTimestampingEKU(t *testing.T) {
 		}},
 	}
 	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
-	require.NoError(t, err)
+	r.NoError(err)
 	badCert, err := x509.ParseCertificate(der)
-	require.NoError(t, err)
+	r.NoError(err)
 
 	// Build a mock TSA server using this non-timestamping cert.
 	server := httptest.NewServer(newMockTSAHandler(t, badCert, key))
@@ -930,22 +828,23 @@ func TestVerify_RejectsNonTimestampingEKU(t *testing.T) {
 
 	digest := sha256.Sum256([]byte("eku rejection test"))
 	token, err := RequestTimestamp(t.Context(), server.Client(), server.URL, crypto.SHA256, digest[:])
-	require.NoError(t, err)
+	r.NoError(err)
 
 	roots := x509.NewCertPool()
 	roots.AddCert(badCert)
 	_, _, err = Verify(token.Raw, crypto.SHA256, digest[:], roots)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "non-timestamping")
+	r.Error(err)
+	r.Contains(err.Error(), "non-timestamping")
 }
 
 func TestVerify_RejectsNonCriticalEKU(t *testing.T) {
+	r := require.New(t)
 	// Build a cert with TimeStamping EKU that is NOT marked critical.
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
-	require.NoError(t, err)
+	r.NoError(err)
 
 	serial, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
-	require.NoError(t, err)
+	r.NoError(err)
 
 	tmpl := &x509.Certificate{
 		SerialNumber:          serial,
@@ -960,61 +859,51 @@ func TestVerify_RejectsNonCriticalEKU(t *testing.T) {
 		// when using the ExtKeyUsage field. This is exactly what Verify must reject.
 	}
 	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
-	require.NoError(t, err)
+	r.NoError(err)
 	badCert, err := x509.ParseCertificate(der)
-	require.NoError(t, err)
+	r.NoError(err)
 
 	server := httptest.NewServer(newMockTSAHandler(t, badCert, key))
 	t.Cleanup(server.Close)
 
 	digest := sha256.Sum256([]byte("non-critical eku test"))
 	token, err := RequestTimestamp(t.Context(), server.Client(), server.URL, crypto.SHA256, digest[:])
-	require.NoError(t, err)
+	r.NoError(err)
 
 	roots := x509.NewCertPool()
 	roots.AddCert(badCert)
 	_, _, err = Verify(token.Raw, crypto.SHA256, digest[:], roots)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "not marked critical")
+	r.Error(err)
+	r.Contains(err.Error(), "not marked critical")
 }
 
 func TestRequestTimestamp_PEM_RoundTrip(t *testing.T) {
+	r := require.New(t)
 	tsaKey, tsaCert := mustTSAKeyAndCert(t)
 	server := httptest.NewServer(newMockTSAHandler(t, tsaCert, tsaKey))
 	t.Cleanup(server.Close)
 
 	digest := sha256.Sum256([]byte("pem round trip"))
 	token, err := RequestTimestamp(t.Context(), server.Client(), server.URL, crypto.SHA256, digest[:])
-	require.NoError(t, err)
+	r.NoError(err)
 
 	// Encode to PEM and decode back
 	pemData := ToPEM(token.Raw)
 	decoded, err := FromPEM(pemData)
-	require.NoError(t, err)
-	assert.Equal(t, token.Raw, decoded)
+	r.NoError(err)
+	r.Equal(token.Raw, decoded)
 
 	// Verify the decoded token still works
 	roots := x509.NewCertPool()
 	roots.AddCert(tsaCert)
 	verifiedTime, trusted, err := Verify(decoded, crypto.SHA256, digest[:], roots)
-	require.NoError(t, err)
-	require.True(t, trusted)
-	assert.Equal(t, token.Time, verifiedTime)
-}
-
-func TestRequestTimestamp_ServerError(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.Error(w, "internal error", http.StatusInternalServerError)
-	}))
-	t.Cleanup(server.Close)
-
-	digest := sha256.Sum256([]byte("error test"))
-	_, err := RequestTimestamp(t.Context(), server.Client(), server.URL, crypto.SHA256, digest[:])
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "HTTP 500")
+	r.NoError(err)
+	r.True(trusted)
+	r.Equal(token.Time, verifiedTime)
 }
 
 func TestRequestTimestamp_ContextCancelled(t *testing.T) {
+	r := require.New(t)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(5 * time.Second) // slow server
 	}))
@@ -1025,18 +914,19 @@ func TestRequestTimestamp_ContextCancelled(t *testing.T) {
 
 	digest := sha256.Sum256([]byte("cancel test"))
 	_, err := RequestTimestamp(ctx, server.Client(), server.URL, crypto.SHA256, digest[:])
-	assert.Error(t, err)
+	r.Error(err)
 }
 
 // --- Mock TSA server ---
 
 func mustTSAKeyAndCert(t *testing.T) (*rsa.PrivateKey, *x509.Certificate) {
+	r := require.New(t)
 	t.Helper()
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
-	require.NoError(t, err)
+	r.NoError(err)
 
 	serial, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
-	require.NoError(t, err)
+	r.NoError(err)
 
 	tmpl := &x509.Certificate{
 		SerialNumber:          serial,
@@ -1051,16 +941,16 @@ func mustTSAKeyAndCert(t *testing.T) (*rsa.PrivateKey, *x509.Certificate) {
 			Critical: true,
 			Value: func() []byte {
 				val, err := asn1.Marshal([]asn1.ObjectIdentifier{{1, 3, 6, 1, 5, 5, 7, 3, 8}})
-				require.NoError(t, err)
+				r.NoError(err)
 				return val
 			}(),
 		}},
 	}
 	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
-	require.NoError(t, err)
+	r.NoError(err)
 
 	cert, err := x509.ParseCertificate(der)
-	require.NoError(t, err)
+	r.NoError(err)
 	return key, cert
 }
 
@@ -1203,28 +1093,29 @@ func TestRejectInsecureRedirect(t *testing.T) {
 	r.NoError(err)
 	err = RejectInsecureRedirect(httpReq, nil)
 	r.Error(err)
-	assert.Contains(t, err.Error(), "insecure redirect")
+	r.Contains(err.Error(), "insecure redirect")
 
 	// A custom CheckRedirect disables net/http's default 10-redirect cap, so the
 	// policy must stop once the limit is reached even for HTTPS targets.
 	via := make([]*http.Request, maxTSARedirects)
 	err = RejectInsecureRedirect(httpsReq, via)
 	r.Error(err)
-	assert.Contains(t, err.Error(), "stopped after")
+	r.Contains(err.Error(), "stopped after")
 }
 
 // issueTimestampingCert issues a certificate signed by parent (self-signed when
 // parent/parentKey are nil) carrying the critical id-kp-timeStamping EKU.
 func issueTimestampingCert(t *testing.T, cn string, isCA bool, parent *x509.Certificate, parentKey *rsa.PrivateKey) (*rsa.PrivateKey, *x509.Certificate) {
+	r := require.New(t)
 	t.Helper()
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
-	require.NoError(t, err)
+	r.NoError(err)
 
 	serial, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
-	require.NoError(t, err)
+	r.NoError(err)
 
 	ekuVal, err := asn1.Marshal([]asn1.ObjectIdentifier{{1, 3, 6, 1, 5, 5, 7, 3, 8}})
-	require.NoError(t, err)
+	r.NoError(err)
 
 	tmpl := &x509.Certificate{
 		SerialNumber:          serial,
@@ -1245,9 +1136,9 @@ func issueTimestampingCert(t *testing.T, cn string, isCA bool, parent *x509.Cert
 		signerCert, signerKey = parent, parentKey
 	}
 	der, err := x509.CreateCertificate(rand.Reader, tmpl, signerCert, &key.PublicKey, signerKey)
-	require.NoError(t, err)
+	r.NoError(err)
 	cert, err := x509.ParseCertificate(der)
-	require.NoError(t, err)
+	r.NoError(err)
 	return key, cert
 }
 
@@ -1348,4 +1239,12 @@ func TestVerify_RootIntermediateLeafChain(t *testing.T) {
 	_, trusted, err := Verify(token.Raw, crypto.SHA256, digest[:], roots)
 	r.NoError(err)
 	r.True(trusted)
+}
+
+func TestCredentialTypes(t *testing.T) {
+	r := require.New(t)
+	types := CredentialTypes{}
+	r.True(types.GetCredentialTypeScheme().IsRegistered(tsacredentialsv1alpha1.VersionedType))
+	r.True(types.GetConsumerIdentityTypeScheme().IsRegistered(runtime.NewVersionedType("TSA", "v1alpha1")))
+	r.True(types.GetConsumerIdentityTypeScheme().IsRegistered(runtime.NewUnversionedType("TSA")))
 }

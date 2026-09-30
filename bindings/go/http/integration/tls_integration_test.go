@@ -11,8 +11,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	ocmhttp "ocm.software/open-component-model/bindings/go/http"
+	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 )
 
 type tlsLogCapture struct {
@@ -91,40 +91,31 @@ func TestTLSRootCAs_Integration(t *testing.T) {
 		Type:  "CERTIFICATE",
 		Bytes: srv.Certificate().Raw,
 	}))
+	insecure := true
 
-	t.Run("RootCAsPEM lets a verifying client trust the server cert", func(t *testing.T) {
-		cfg := &httpv1alpha1.Config{
-			TLSConfig: httpv1alpha1.TLSConfig{RootCAsPEM: caPEM},
-		}
-		c := ocmhttp.NewClient(cfg)
-		resp, err := c.Get(srv.URL)
-		require.NoError(t, err, "client with the server CA in RootCAsPEM must verify successfully")
-		resp.Body.Close()
-		assert.Equal(t, nethttp.StatusOK, resp.StatusCode)
-	})
-
-	t.Run("invalid RootCAsPEM fails the request closed", func(t *testing.T) {
-		cfg := &httpv1alpha1.Config{
-			TLSConfig: httpv1alpha1.TLSConfig{RootCAsPEM: "not a certificate"},
-		}
-		c := ocmhttp.NewClient(cfg)
-		_, err := c.Get(srv.URL)
-		require.Error(t, err, "an unparseable RootCAsPEM must fail the request, not fall back to system trust")
-		assert.Contains(t, err.Error(), "no valid certificates")
-	})
-
-	t.Run("InsecureSkipVerify overrides RootCAs and skips verification", func(t *testing.T) {
-		tr := true
-		cfg := &httpv1alpha1.Config{
-			TLSConfig: httpv1alpha1.TLSConfig{
-				InsecureSkipVerify: &tr,
-				RootCAsPEM:         "not a certificate",
-			},
-		}
-		c := ocmhttp.NewClient(cfg)
-		resp, err := c.Get(srv.URL)
-		require.NoError(t, err, "InsecureSkipVerify=true must skip CA loading entirely")
-		resp.Body.Close()
-		assert.Equal(t, nethttp.StatusOK, resp.StatusCode)
-	})
+	tests := []struct {
+		name    string
+		tls     httpv1alpha1.TLSConfig
+		wantErr string
+	}{
+		{name: "RootCAsPEM lets a verifying client trust the server cert", tls: httpv1alpha1.TLSConfig{RootCAsPEM: caPEM}},
+		{name: "invalid RootCAsPEM fails the request closed", tls: httpv1alpha1.TLSConfig{RootCAsPEM: "not a certificate"}, wantErr: "no valid certificates"},
+		{
+			name: "InsecureSkipVerify overrides RootCAs and skips verification",
+			tls:  httpv1alpha1.TLSConfig{InsecureSkipVerify: &insecure, RootCAsPEM: "not a certificate"},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			resp, err := ocmhttp.NewClient(&httpv1alpha1.Config{TLSConfig: tc.tls}).Get(srv.URL)
+			if tc.wantErr != "" {
+				r.ErrorContains(err, tc.wantErr)
+				return
+			}
+			r.NoError(err)
+			r.NoError(resp.Body.Close())
+			r.Equal(nethttp.StatusOK, resp.StatusCode)
+		})
+	}
 }

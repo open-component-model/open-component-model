@@ -86,13 +86,13 @@ type MessageImprint struct {
 func NewMessageImprint(hash crypto.Hash, digest []byte) (MessageImprint, error) {
 	oid, ok := hashToDigestAlgorithm[hash]
 	if !ok {
-		return MessageImprint{}, fmt.Errorf("tsa: unsupported hash algorithm %v", hash)
+		return MessageImprint{}, fmt.Errorf("unsupported hash algorithm %v", hash)
 	}
 	if !hash.Available() {
-		return MessageImprint{}, fmt.Errorf("tsa: hash algorithm %v not available", hash)
+		return MessageImprint{}, fmt.Errorf("hash algorithm %v not available", hash)
 	}
 	if len(digest) != hash.Size() {
-		return MessageImprint{}, fmt.Errorf("tsa: digest length %d does not match %v size %d", len(digest), hash, hash.Size())
+		return MessageImprint{}, fmt.Errorf("digest length %d does not match %v size %d", len(digest), hash, hash.Size())
 	}
 	return MessageImprint{
 		HashAlgorithm: pkix.AlgorithmIdentifier{Algorithm: oid},
@@ -104,7 +104,7 @@ func NewMessageImprint(hash crypto.Hash, digest []byte) (MessageImprint, error) 
 func (mi MessageImprint) Hash() (crypto.Hash, error) {
 	h, ok := digestAlgorithmToHash[mi.HashAlgorithm.Algorithm.String()]
 	if !ok || !h.Available() {
-		return 0, fmt.Errorf("tsa: unsupported digest algorithm OID %s", mi.HashAlgorithm.Algorithm)
+		return 0, fmt.Errorf("unsupported digest algorithm OID %s", mi.HashAlgorithm.Algorithm)
 	}
 	return h, nil
 }
@@ -192,7 +192,7 @@ func (si PKIStatusInfo) Err() error {
 		}
 	}
 
-	return fmt.Errorf("tsa: bad response: Status(%d)%s%s", si.Status, statusStr, fiStr)
+	return fmt.Errorf("bad response: Status(%d)%s%s", si.Status, statusStr, fiStr)
 }
 
 // GenerateNonce creates a cryptographically random nonce suitable for a
@@ -200,7 +200,7 @@ func (si PKIStatusInfo) Err() error {
 func GenerateNonce() (*big.Int, error) {
 	buf := make([]byte, nonceBytes)
 	if _, err := rand.Read(buf); err != nil {
-		return nil, fmt.Errorf("tsa: failed to generate nonce: %w", err)
+		return nil, fmt.Errorf("failed to generate nonce: %w", err)
 	}
 	return new(big.Int).SetBytes(buf), nil
 }

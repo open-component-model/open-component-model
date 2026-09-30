@@ -6,12 +6,25 @@ import (
 	"os"
 
 	"ocm.software/open-component-model/bindings/go/runtime"
+	tsacredentials "ocm.software/open-component-model/bindings/go/signing/tsa/spec/credentials"
 	tsacredentialsv1alpha1 "ocm.software/open-component-model/bindings/go/signing/tsa/spec/credentials/v1alpha1"
+	tsaidentity "ocm.software/open-component-model/bindings/go/signing/tsa/spec/identity"
+	tsaidentityv1alpha1 "ocm.software/open-component-model/bindings/go/signing/tsa/spec/identity/v1alpha1"
 )
 
-// IdentityTypeTSA is the credential consumer identity type for RFC 3161
-// Timestamping Authority configuration.
-var IdentityTypeTSA = runtime.NewVersionedType("TSA", "v1alpha1")
+// CredentialTypes provides the TSA credential and consumer identity types for
+// registration with a credential type registry.
+type CredentialTypes struct{}
+
+// GetCredentialTypeScheme returns the scheme with the TSA credential types.
+func (CredentialTypes) GetCredentialTypeScheme() *runtime.Scheme {
+	return tsacredentials.Scheme
+}
+
+// GetConsumerIdentityTypeScheme returns the scheme with the TSA consumer identity types.
+func (CredentialTypes) GetConsumerIdentityTypeScheme() *runtime.Scheme {
+	return tsaidentity.Scheme
+}
 
 const (
 	// TSAURLLabelPrefix is the label name prefix used to store the TSA URL
@@ -31,7 +44,9 @@ const (
 // TSAConsumerIdentity builds a credential consumer identity for a TSA server.
 // When a URL is provided, it is decomposed into the standard identity attributes
 // (scheme, hostname, port, path) via runtime.ParseURLToIdentity, which enables
-// matching via the credential graph's URL-based identity matching.
+// matching via the credential graph's URL-based identity matching. The
+// unversioned type is used because the credential graph canonicalizes
+// configured TSA identities (e.g. TSA/v1alpha1) to it.
 //
 // Example .ocmconfig entry:
 //
@@ -46,13 +61,13 @@ func TSAConsumerIdentity(tsaURL string) (runtime.Identity, error) {
 	if tsaURL != "" {
 		id, err := runtime.ParseURLToIdentity(tsaURL)
 		if err != nil {
-			return nil, fmt.Errorf("tsa: parsing TSA URL %q for identity: %w", tsaURL, err)
+			return nil, fmt.Errorf("parsing TSA URL %q for identity: %w", tsaURL, err)
 		}
-		id.SetType(IdentityTypeTSA)
+		id.SetType(tsaidentityv1alpha1.Type)
 		return id, nil
 	}
 	id := runtime.Identity{}
-	id.SetType(IdentityTypeTSA)
+	id.SetType(tsaidentityv1alpha1.Type)
 	return id, nil
 }
 
@@ -64,7 +79,7 @@ func TSAConsumerIdentity(tsaURL string) (runtime.Identity, error) {
 func RootCertPoolFromCredentials(creds runtime.Typed) (*x509.CertPool, error) {
 	typed, err := tsacredentialsv1alpha1.ConvertToTSACredentials(creds)
 	if err != nil {
-		return nil, fmt.Errorf("tsa: converting credentials: %w", err)
+		return nil, fmt.Errorf("converting credentials: %w", err)
 	}
 	return RootCertPool(typed)
 }
@@ -86,7 +101,7 @@ func RootCertPool(creds *tsacredentialsv1alpha1.TSACredentials) (*x509.CertPool,
 
 	pool := x509.NewCertPool()
 	if !pool.AppendCertsFromPEM(data) {
-		return nil, fmt.Errorf("tsa: no valid certificates found in %s", source)
+		return nil, fmt.Errorf("no valid certificates found in %s", source)
 	}
 	return pool, nil
 }
@@ -98,7 +113,7 @@ func loadPEMBytes(creds *tsacredentialsv1alpha1.TSACredentials) ([]byte, string,
 	if path := creds.RootCertsPEMFile; path != "" {
 		data, err := os.ReadFile(path)
 		if err != nil {
-			return nil, "", fmt.Errorf("tsa: reading root certificates from %q: %w", path, err)
+			return nil, "", fmt.Errorf("reading root certificates from %q: %w", path, err)
 		}
 		return data, "rootCertsPEMFile", nil
 	}

@@ -23,8 +23,8 @@ import (
 	rsacredsv1 "ocm.software/open-component-model/bindings/go/rsa/spec/credentials/v1"
 	rsaidentityv1 "ocm.software/open-component-model/bindings/go/rsa/spec/identity/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
-	tsahelper "ocm.software/open-component-model/bindings/go/signing/tsa"
 	tsacredsv1alpha1 "ocm.software/open-component-model/bindings/go/signing/tsa/spec/credentials/v1alpha1"
+	tsaidentityv1alpha1 "ocm.software/open-component-model/bindings/go/signing/tsa/spec/identity/v1alpha1"
 	oidctokenv1alpha1 "ocm.software/open-component-model/bindings/go/sigstore/spec/credentials/oidcidentitytoken/v1alpha1"
 	trustedrootv1alpha1 "ocm.software/open-component-model/bindings/go/sigstore/spec/credentials/trustedroot/v1alpha1"
 	sigstoresignerv1alpha1 "ocm.software/open-component-model/bindings/go/sigstore/spec/identity/signer/v1alpha1"
@@ -186,7 +186,7 @@ func TestCredentialGraphResolvesTypedCredentials(t *testing.T) {
 		{
 			name: "TSACredentials/v1alpha1",
 			identity: runtime.Identity{
-				"type": tsahelper.IdentityTypeTSA.String(),
+				"type": tsaidentityv1alpha1.VersionedType.String(),
 			},
 			credential: &tsacredsv1alpha1.TSACredentials{
 				Type:             tsacredsv1alpha1.VersionedType,

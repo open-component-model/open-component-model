@@ -55,10 +55,10 @@ const maxTSARedirects = 10
 // re-imposes it to avoid an unbounded redirect loop against a hostile server.
 func RejectInsecureRedirect(req *http.Request, via []*http.Request) error {
 	if len(via) >= maxTSARedirects {
-		return fmt.Errorf("tsa: stopped after %d redirects", len(via))
+		return fmt.Errorf("stopped after %d redirects", len(via))
 	}
 	if req.URL.Scheme != "https" {
-		return fmt.Errorf("tsa: refusing insecure redirect to %s", RedactURL(req.URL.String()))
+		return fmt.Errorf("refusing insecure redirect to %s", RedactURL(req.URL.String()))
 	}
 	return nil
 }
@@ -91,7 +91,7 @@ func RequestTimestamp(ctx context.Context, client HTTPClient, url string, hash c
 
 	reqDER, err := asn1.Marshal(req)
 	if err != nil {
-		return nil, fmt.Errorf("tsa: marshaling timestamp request: %w", err)
+		return nil, fmt.Errorf("marshaling timestamp request: %w", err)
 	}
 
 	redacted := RedactURL(url)
@@ -99,13 +99,13 @@ func RequestTimestamp(ctx context.Context, client HTTPClient, url string, hash c
 	if err != nil {
 		// Do not wrap err: net/http URL errors embed the raw URL, which may
 		// carry userinfo or query credentials.
-		return nil, fmt.Errorf("tsa: creating HTTP request for %s failed", redacted)
+		return nil, fmt.Errorf("creating HTTP request for %s failed", redacted)
 	}
 	httpReq.Header.Set("Content-Type", contentTypeTSQuery)
 
 	httpResp, err := client.Do(httpReq)
 	if err != nil {
-		return nil, fmt.Errorf("tsa: sending request to %s: %w", redacted, stripURLError(err))
+		return nil, fmt.Errorf("sending request to %s: %w", redacted, stripURLError(err))
 	}
 	defer httpResp.Body.Close()
 
@@ -113,20 +113,20 @@ func RequestTimestamp(ctx context.Context, client HTTPClient, url string, hash c
 	// from a malicious or misconfigured TSA server.
 	body, err := io.ReadAll(io.LimitReader(httpResp.Body, 10<<20))
 	if err != nil {
-		return nil, fmt.Errorf("tsa: reading response from %s: %w", redacted, err)
+		return nil, fmt.Errorf("reading response from %s: %w", redacted, err)
 	}
 
 	if httpResp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("tsa: server %s returned HTTP %d", redacted, httpResp.StatusCode)
+		return nil, fmt.Errorf("server %s returned HTTP %d", redacted, httpResp.StatusCode)
 	}
 
 	var resp Response
 	rest, err := asn1.Unmarshal(body, &resp)
 	if err != nil {
-		return nil, fmt.Errorf("tsa: unmarshaling timestamp response: %w", err)
+		return nil, fmt.Errorf("unmarshaling timestamp response: %w", err)
 	}
 	if len(rest) > 0 {
-		return nil, fmt.Errorf("tsa: trailing data in timestamp response")
+		return nil, fmt.Errorf("trailing data in timestamp response")
 	}
 
 	if err := resp.Status.Err(); err != nil {
@@ -140,22 +140,22 @@ func RequestTimestamp(ctx context.Context, client HTTPClient, url string, hash c
 	// verifier-controlled credential graph.
 	p7, err := pkcs7.Parse(resp.TimeStampToken.FullBytes)
 	if err != nil {
-		return nil, fmt.Errorf("tsa: parsing PKCS#7 timestamp token: %w", err)
+		return nil, fmt.Errorf("parsing PKCS#7 timestamp token: %w", err)
 	}
 	if err := p7.Verify(); err != nil {
-		return nil, fmt.Errorf("tsa: verifying PKCS#7 timestamp token signature: %w", err)
+		return nil, fmt.Errorf("verifying PKCS#7 timestamp token signature: %w", err)
 	}
 
 	info, err := parseTSTInfo(p7.Content)
 	if err != nil {
-		return nil, fmt.Errorf("tsa: parsing TSTInfo from response: %w", err)
+		return nil, fmt.Errorf("parsing TSTInfo from response: %w", err)
 	}
 
 	if !mi.Equal(info.MessageImprint) {
-		return nil, fmt.Errorf("tsa: response message imprint does not match request")
+		return nil, fmt.Errorf("response message imprint does not match request")
 	}
 	if info.Nonce == nil || nonce.Cmp(info.Nonce) != 0 {
-		return nil, fmt.Errorf("tsa: response nonce does not match request")
+		return nil, fmt.Errorf("response nonce does not match request")
 	}
 
 	return &Token{
@@ -198,22 +198,22 @@ func Verify(raw []byte, hash crypto.Hash, digest []byte, roots *x509.CertPool) (
 
 	p7, err := pkcs7.Parse(raw)
 	if err != nil {
-		return time.Time{}, false, fmt.Errorf("tsa: parsing PKCS#7 timestamp token: %w", err)
+		return time.Time{}, false, fmt.Errorf("parsing PKCS#7 timestamp token: %w", err)
 	}
 
 	// Structurally verify the CMS signature over the token content. This does
 	// not establish trust in the TSA identity; chain validation below does.
 	if err := p7.Verify(); err != nil {
-		return time.Time{}, false, fmt.Errorf("tsa: verifying PKCS#7 signature: %w", err)
+		return time.Time{}, false, fmt.Errorf("verifying PKCS#7 signature: %w", err)
 	}
 
 	info, err := parseTSTInfo(p7.Content)
 	if err != nil {
-		return time.Time{}, false, fmt.Errorf("tsa: parsing TSTInfo: %w", err)
+		return time.Time{}, false, fmt.Errorf("parsing TSTInfo: %w", err)
 	}
 
 	if !mi.Equal(info.MessageImprint) {
-		return time.Time{}, false, fmt.Errorf("tsa: timestamp message imprint does not match expected digest")
+		return time.Time{}, false, fmt.Errorf("timestamp message imprint does not match expected digest")
 	}
 
 	// RFC 3161 §2.3: the token MUST have a single signer whose certificate has
@@ -222,7 +222,7 @@ func Verify(raw []byte, hash crypto.Hash, digest []byte, roots *x509.CertPool) (
 	// fabricating a token.
 	signer := p7.GetOnlySigner()
 	if signer == nil {
-		return time.Time{}, false, fmt.Errorf("tsa: timestamp token must have exactly one signer")
+		return time.Time{}, false, fmt.Errorf("timestamp token must have exactly one signer")
 	}
 	if err := verifyTimestampingEKU(signer); err != nil {
 		return time.Time{}, false, err
@@ -255,7 +255,7 @@ func Verify(raw []byte, hash crypto.Hash, digest []byte, roots *x509.CertPool) (
 		KeyUsages:     []x509.ExtKeyUsage{x509.ExtKeyUsageTimeStamping},
 	}
 	if err := p7.VerifyWithOpts(opts); err != nil {
-		return time.Time{}, false, fmt.Errorf("tsa: verifying PKCS#7 signer certificate chain: %w", err)
+		return time.Time{}, false, fmt.Errorf("verifying PKCS#7 signer certificate chain: %w", err)
 	}
 
 	return info.GenTime, true, nil
@@ -271,13 +271,13 @@ func verifyTimestampingEKU(cert *x509.Certificate) error {
 			hasTimeStamping = true
 			continue
 		}
-		return fmt.Errorf("tsa: signer certificate has a non-timestamping extended key usage")
+		return fmt.Errorf("signer certificate has a non-timestamping extended key usage")
 	}
 	if len(cert.UnknownExtKeyUsage) > 0 {
-		return fmt.Errorf("tsa: signer certificate has additional unrecognized extended key usages")
+		return fmt.Errorf("signer certificate has additional unrecognized extended key usages")
 	}
 	if !hasTimeStamping {
-		return fmt.Errorf("tsa: signer certificate lacks the id-kp-timeStamping extended key usage")
+		return fmt.Errorf("signer certificate lacks the id-kp-timeStamping extended key usage")
 	}
 
 	// RFC 3161 requires the EKU extension to be critical. Go removes handled
@@ -286,12 +286,12 @@ func verifyTimestampingEKU(cert *x509.Certificate) error {
 	for _, ext := range cert.Extensions {
 		if ext.Id.Equal(oidExtKeyUsage) {
 			if !ext.Critical {
-				return fmt.Errorf("tsa: signer certificate extended key usage extension is not marked critical")
+				return fmt.Errorf("signer certificate extended key usage extension is not marked critical")
 			}
 			return nil
 		}
 	}
-	return fmt.Errorf("tsa: signer certificate is missing the extended key usage extension")
+	return fmt.Errorf("signer certificate is missing the extended key usage extension")
 }
 
 // ToPEM encodes a DER-encoded timestamp token into PEM format.
@@ -306,13 +306,13 @@ func ToPEM(raw []byte) []byte {
 func FromPEM(data []byte) ([]byte, error) {
 	block, rest := pem.Decode(data)
 	if block == nil {
-		return nil, fmt.Errorf("tsa: no PEM block found")
+		return nil, fmt.Errorf("no PEM block found")
 	}
 	if block.Type != pemBlockType {
-		return nil, fmt.Errorf("tsa: unexpected PEM block type %q, expected %q", block.Type, pemBlockType)
+		return nil, fmt.Errorf("unexpected PEM block type %q, expected %q", block.Type, pemBlockType)
 	}
 	if len(bytes.TrimSpace(rest)) > 0 {
-		return nil, fmt.Errorf("tsa: trailing data after PEM block")
+		return nil, fmt.Errorf("trailing data after PEM block")
 	}
 	return block.Bytes, nil
 }
@@ -331,13 +331,13 @@ func IsLegacyPEM(data []byte) bool {
 func FromLegacyPEM(data []byte) ([]byte, error) {
 	block, rest := pem.Decode(data)
 	if block == nil {
-		return nil, fmt.Errorf("tsa: no PEM block found")
+		return nil, fmt.Errorf("no PEM block found")
 	}
 	if block.Type != legacyPEMBlockType {
-		return nil, fmt.Errorf("tsa: unexpected PEM block type %q, expected %q", block.Type, legacyPEMBlockType)
+		return nil, fmt.Errorf("unexpected PEM block type %q, expected %q", block.Type, legacyPEMBlockType)
 	}
 	if len(bytes.TrimSpace(rest)) > 0 {
-		return nil, fmt.Errorf("tsa: trailing data after PEM block")
+		return nil, fmt.Errorf("trailing data after PEM block")
 	}
 	// asn1.Marshal writes a RawValue with FullBytes verbatim and ignores an
 	// explicit tag, so the [0] wrapper is built here.
@@ -349,7 +349,7 @@ func FromLegacyPEM(data []byte) ([]byte, error) {
 		Content:     asn1.RawValue{Class: asn1.ClassContextSpecific, Tag: 0, IsCompound: true, Bytes: block.Bytes},
 	})
 	if err != nil {
-		return nil, fmt.Errorf("tsa: wrapping legacy timestamp: %w", err)
+		return nil, fmt.Errorf("wrapping legacy timestamp: %w", err)
 	}
 	return der, nil
 }
@@ -396,10 +396,10 @@ func RedactURL(raw string) string {
 func SanitizeURL(raw string) (string, error) {
 	u, err := url.Parse(raw)
 	if err != nil {
-		return "", fmt.Errorf("tsa: parsing TSA URL for sanitization failed")
+		return "", fmt.Errorf("parsing TSA URL for sanitization failed")
 	}
 	if u.Opaque != "" {
-		return "", fmt.Errorf("tsa: refusing to store opaque TSA URL that may embed credentials")
+		return "", fmt.Errorf("refusing to store opaque TSA URL that may embed credentials")
 	}
 	u.User = nil
 	u.RawQuery = ""
