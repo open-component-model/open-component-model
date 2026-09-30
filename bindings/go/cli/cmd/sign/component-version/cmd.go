@@ -52,9 +52,10 @@ const (
 	// DefaultTSAURL is a well-known public TSA server used when --tsa is set
 	// without an explicit --tsa-url. DigiCert's TSA is widely used in the
 	// software supply-chain ecosystem (e.g. by sigstore, Authenticode, Java
-	// jarsigner) and offers free, unauthenticated RFC 3161 timestamps. HTTPS is
-	// used so the timestamp exchange is protected against on-path tampering.
-	DefaultTSAURL = "https://timestamp.digicert.com"
+	// jarsigner) and offers free, unauthenticated RFC 3161 timestamps. It is
+	// served over HTTP only; RFC 3161 needs no transport security because the
+	// token is signed by the TSA and bound to the request by the imprint and nonce.
+	DefaultTSAURL = "http://timestamp.digicert.com"
 
 	// DefaultSignatureName is the default name of the signature to create or update if not provided by FlagSignature.
 	DefaultSignatureName = "default"

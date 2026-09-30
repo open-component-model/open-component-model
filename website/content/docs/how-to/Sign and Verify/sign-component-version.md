@@ -766,11 +766,11 @@ certificate-chain signature keeps verifying after its signing certificate expire
 signatures have no certificate, so they do not gain post-expiry verification. Sigstore signers are not supported:
 Sigstore timestamps its bundles with the TSAs from its own signing config.
 
-Add `--tsa` (uses the default public TSA, `https://timestamp.digicert.com`) or `--tsa-url <url>` (a specific TSA) to
+Add `--tsa` (uses the default public TSA, `http://timestamp.digicert.com`) or `--tsa-url <url>` (a specific TSA) to
 the sign command:
 
 ```bash
-ocm sign cv --tsa-url https://timestamp.digicert.com \
+ocm sign cv --tsa-url http://timestamp.digicert.com \
   /tmp/helloworld/transport-archive//github.com/acme.org/helloworld:1.0.0
 ```
 

@@ -261,7 +261,7 @@ verify component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0 -
       - identity:
           type: TSA/v1alpha1
           hostname: timestamp.digicert.com
-          scheme: https
+          scheme: http
         credentials:
         - type: TSACredentials/v1alpha1
           rootCertsPEMFile: /path/to/digicert-tsa-root.pem

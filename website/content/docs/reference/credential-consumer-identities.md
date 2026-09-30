@@ -694,7 +694,7 @@ any TSA URL; a URL-specific entry is preferred when its attributes match.
 - identity:
     type: TSA/v1alpha1
     hostname: timestamp.digicert.com
-    scheme: https
+    scheme: http
   credentials:
     - type: TSACredentials/v1alpha1
       rootCertsPEMFile: /path/to/digicert-tsa-root.pem
