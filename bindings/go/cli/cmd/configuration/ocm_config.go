@@ -139,6 +139,22 @@ func decodeConfig(r io.Reader) (*genericv1.Config, error) {
 	return &instance, nil
 }
 
+// appendIfNew appends entries in `toAdd` to `given` if not already present
+func appendIfNew(given []string, toAdd ...string) []string {
+	for _, entry := range toAdd {
+		found := false
+		for _, existing := range given {
+			if entry == existing {
+				found = true
+			}
+		}
+		if !found {
+			given = append(given, entry)
+		}
+	}
+	return given
+}
+
 // GetOCMConfigPaths searches for the OCM configuration file in the following locations (in order):
 // 1. The path specified in the OCM_CONFIG environment variable
 // 2. The XDG_CONFIG_HOME directory (if set), or the default XDG home ($HOME/.config), or the user's home directory
@@ -166,13 +182,13 @@ func GetOCMConfigPaths(options OCMConfigOptions) ([]string, error) {
 		paths = append(paths, path)
 	}
 	if subPaths := getFromXDGOrHomeDir(options); len(subPaths) > 0 {
-		paths = append(paths, subPaths...)
+		paths = appendIfNew(paths, subPaths...)
 	}
 	if subPaths := getFromWorkingDir(options); len(subPaths) > 0 {
-		paths = append(paths, subPaths...)
+		paths = appendIfNew(paths, subPaths...)
 	}
 	if subPaths := getFromExecutableDir(options); len(subPaths) > 0 {
-		paths = append(paths, subPaths...)
+		paths = appendIfNew(paths, subPaths...)
 	}
 
 	if len(paths) > 0 {
