@@ -21,6 +21,7 @@ on:
   pull_request:
     branches:
       - main
+      - 'releases/v**'
     paths:
       - 'bindings/go/cli/**'
       - 'bindings/go/kubernetes/controller/**'

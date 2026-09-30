@@ -61,6 +61,17 @@ which tool reconciles the final workload. Both **FluxCD** and **ArgoCD** are sup
 See the working examples under [`examples/`](./examples/) — each `rgd.yaml` contains both a FluxCD and an
 ArgoCD deployer block side by side.
 
+
+## Discovery
+
+The `Discovery` controller resolves a component graph and puts the resulting component
+descriptor into the `status` of the `Discovery` object. It selects a repository per component
+identity, using the effective OCM configuration (including inherited config and credentials) and
+following the same resolver precedence as the `ocm` CLI.
+
+To read more about how the `Discovery` works and how it could be used to fetch available
+versions of certain components, please read the [Discovery Controller Documentation](https://ocm.software/docs/how-to/discover-component-graphs).
+
 ## Development
 
 ### Running e2e tests
