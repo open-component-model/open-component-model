@@ -17,6 +17,9 @@ var (
 	// (id-ce-extKeyUsage, 2.5.29.37). RFC 3161 requires this extension to be
 	// present and marked critical on a TSA signer certificate.
 	oidExtKeyUsage = asn1.ObjectIdentifier{2, 5, 29, 37}
+
+	// oidSignedData is the CMS id-signedData content type (RFC 5652 §5.1).
+	oidSignedData = asn1.ObjectIdentifier{1, 2, 840, 113549, 1, 7, 2}
 )
 
 // digestAlgorithmToHash maps digest algorithm OID strings to crypto.Hash values.

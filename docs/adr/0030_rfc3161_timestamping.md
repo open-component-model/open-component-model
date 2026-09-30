@@ -353,7 +353,8 @@ No new flags on `verify cv` — TSA verification is automatic when a timestamp i
 
 * **Long-lived signature validity** — signatures remain verifiable after signing certificate expiry, eliminating the tension between short-lived certificates (better security) and long verification windows (better usability)
 * **Fully backward-compatible** — no changes required for users who do not use TSA; existing signatures without timestamps continue to verify as before; the `timestamp` field is `omitempty`
-* **Legacy OCM timestamps are ignored, not verified** — the legacy OCM CLI stores a bare CMS SignedData over the descriptor digest (PEM block `TIMESTAMP INFO`). Such timestamps are skipped with a warning: the signature still verifies, but the timestamp never relaxes certificate validity
+* **Reads OCM v1 timestamps** — the legacy OCM CLI stores a bare CMS SignedData over the descriptor digest (PEM block `TIMESTAMP INFO`). Verification accepts these with the digest as imprint and, when trusted, validates the certificate as of the attested time like v1 does. New timestamps are always written in the current format, which v1 cannot read
+* **Not for Sigstore signers** — Sigstore timestamps its bundles with TSAs from its own signing config, which the verifier's trusted root must know; `--tsa`/`--tsa-url` are rejected for a Sigstore signer
 * **Tamper-evident TSA URL** — the TSA URL is a signed label included in the normalised descriptor hash, so an attacker cannot redirect the verifier to a different TSA without breaking the signature
 * **Verifier-controlled trust** — TSA root certificates live exclusively in the verifier's credential graph; the signer cannot embed or assert TSA trust anchors
 * **Per-TSA root certificate management** — URL-specific identity matching allows different root CAs for different TSA servers, so a compromise of one TSA does not affect trust in others

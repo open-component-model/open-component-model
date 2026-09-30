@@ -32,6 +32,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/signing"
 	"ocm.software/open-component-model/bindings/go/signing/tsa"
 	signingv1alpha1 "ocm.software/open-component-model/bindings/go/signing/v1alpha1/spec"
+	sigstorev1alpha1 "ocm.software/open-component-model/bindings/go/sigstore/signing/v1alpha1"
 )
 
 const (
@@ -277,8 +278,8 @@ sign component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0 --s
 	cmd.Flags().String(FlagNormalisationAlgorithm, v4alpha1.Algorithm, "normalisation algorithm to use (default jsonNormalisation/v4alpha1)")
 	cmd.Flags().String(FlagHashAlgorithm, crypto.SHA256.String(), "hash algorithm to use (SHA256, SHA512)")
 	cmd.Flags().Bool(FlagForce, false, "overwrite existing signatures under the same name")
-	cmd.Flags().Bool(FlagTSA, false, fmt.Sprintf("request an RFC 3161 timestamp from a TSA server (default: %s)", DefaultTSAURL))
-	cmd.Flags().String(FlagTSAURL, "", "custom TSA server URL (implies --tsa)")
+	cmd.Flags().Bool(FlagTSA, false, fmt.Sprintf("request an RFC 3161 timestamp from a TSA server (default: %s); not supported for Sigstore signers", DefaultTSAURL))
+	cmd.Flags().String(FlagTSAURL, "", "custom TSA server URL (implies --tsa); not supported for Sigstore signers")
 
 	return cmd
 }
@@ -359,6 +360,14 @@ func SignComponentVersion(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	// Sigstore timestamps its bundles itself, with TSAs from its signing config
+	// that the verifier's trusted root must know. An additional OCM-level token
+	// would be redundant and ignored by Sigstore verification.
+	tsaURL := tsaURLFromFlags(cmd)
+	if tsaURL != "" && signerConfig.GetType().GetName() == sigstorev1alpha1.SignConfigType {
+		return fmt.Errorf("--%s/--%s cannot be used with a Sigstore signer: configure the timestamp authority in the Sigstore signing config (signingConfig) instead", FlagTSA, FlagTSAURL)
+	}
+
 	handler, err := pluginManager.SigningRegistry.GetPlugin(ctx, signerConfig)
 	if err != nil {
 		return fmt.Errorf("getting signature handler failed: %w", err)
@@ -375,7 +384,6 @@ func SignComponentVersion(cmd *cobra.Command, args []string) error {
 
 	// Resolve the TSA URL from flags. --tsa uses the default server; --tsa-url
 	// selects a custom one and implies --tsa. A dry run never contacts a TSA.
-	tsaURL := tsaURLFromFlags(cmd)
 	useTSA := tsaURL != "" && !dryRun
 	if useTSA {
 		// The TSA URL is stored as a signing-relevant label so it is covered by

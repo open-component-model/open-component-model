@@ -1,11 +1,14 @@
 package cmd_test
 
 import (
+	"crypto"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/asn1"
+	"encoding/hex"
+	"encoding/pem"
 	"fmt"
 	"io"
 	"math/big"
@@ -14,8 +17,16 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
+
+	"ocm.software/open-component-model/bindings/go/blob/filesystem"
+	"ocm.software/open-component-model/bindings/go/ctf"
+	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/oci"
+	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
 
 	"github.com/digitorus/pkcs7"
 	"github.com/stretchr/testify/require"
@@ -256,4 +267,85 @@ func Test_Verify_Ignores_Configured_TSA_Verified_Time(t *testing.T) {
 	// The signature has no timestamp; a configured verified time must not rescue the expired certificate.
 	_, err = test.OCM(t, test.WithArgs("verify", "cv", ref, "--config", injected))
 	r.ErrorContains(err, "certificate has expired")
+}
+
+// The legacy OCM CLI timestamps the descriptor digest and stores a bare CMS
+// SignedData under PEM block "TIMESTAMP INFO". It validates an expired signing
+// certificate as of that TSA time, and so must this CLI when reading v1 data.
+func Test_Verify_Legacy_OCM_Timestamp_Validates_Expired_Certificate(t *testing.T) {
+	r := require.New(t)
+	// The TSA attests a time at which the now expired certificate was valid.
+	tsaSrv, tsaCert := newMockTSA(t, time.Now().Add(-48*time.Hour))
+
+	dir := t.TempDir()
+	keyPath, chainPath := writeExpiredSigner(t, dir)
+	rsaConsumer := rsaConsumerYAML("default", chainPath, keyPath, "")
+	withRoots := filepath.Join(dir, "with-tsa-roots.yaml")
+	r.NoError(os.WriteFile(withRoots, []byte(pemSigningConfigYAML(rsaConsumer+tsaConsumerYAML("", writeCertsPEM(t, dir, "tsa-root.pem", tsaCert)))), 0o600))
+
+	name := "ocm.software/v1-timestamped"
+	ref := addTSATestComponentVersion(t, name)
+	_, err := test.OCM(t, test.WithArgs("sign", "cv", ref, "--config", withRoots))
+	r.NoError(err)
+
+	// Control: without a timestamp the expired certificate is rejected.
+	_, err = test.OCM(t, test.WithArgs("verify", "cv", ref, "--config", withRoots))
+	r.ErrorContains(err, "certificate has expired")
+
+	// Attach a legacy timestamp: token over the raw descriptor digest, stored as
+	// a bare SignedData under "TIMESTAMP INFO".
+	archive := strings.SplitN(ref, "//", 2)[0]
+	fs, err := filesystem.NewFS(archive, os.O_RDWR)
+	r.NoError(err)
+	repo, err := oci.NewRepository(ocictf.WithCTF(ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))))
+	r.NoError(err)
+	desc, err := repo.GetComponentVersion(t.Context(), name, "1.0.0")
+	r.NoError(err)
+	r.Len(desc.Signatures, 1)
+	digest, err := hex.DecodeString(desc.Signatures[0].Digest.Value)
+	r.NoError(err)
+	token, err := tsa.RequestTimestamp(t.Context(), nil, tsaSrv.URL, crypto.SHA256, digest)
+	r.NoError(err)
+	var contentInfo struct {
+		ContentType asn1.ObjectIdentifier
+		Content     asn1.RawValue `asn1:"explicit,tag:0"`
+	}
+	_, err = asn1.Unmarshal(token.Raw, &contentInfo)
+	r.NoError(err)
+	desc.Signatures[0].Timestamp = &descriptor.TimestampSpec{
+		Value: string(pem.EncodeToMemory(&pem.Block{Type: "TIMESTAMP INFO", Bytes: contentInfo.Content.Bytes})),
+		Time:  descriptor.CreationTime(token.Time),
+	}
+	r.NoError(repo.AddComponentVersion(t.Context(), desc))
+
+	_, err = test.OCM(t, test.WithArgs("verify", "cv", ref, "--config", withRoots))
+	r.NoError(err, "a trusted legacy timestamp must validate the certificate as of the TSA time")
+}
+
+// Sigstore timestamps its bundles with TSAs from its own signing config, so
+// --tsa must be rejected for a Sigstore signer before anything is contacted.
+func Test_Sign_TSA_Rejected_For_Sigstore_Signer(t *testing.T) {
+	t.Setenv("SIGSTORE_ID_TOKEN", "")
+	t.Setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "")
+	r := require.New(t)
+
+	var tsaRequests atomic.Int64
+	tsaSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		tsaRequests.Add(1)
+		http.Error(w, "unexpected", http.StatusTeapot)
+	}))
+	t.Cleanup(tsaSrv.Close)
+
+	config := filepath.Join(t.TempDir(), "sigstore.yaml")
+	r.NoError(os.WriteFile(config, []byte(`type: generic.config.ocm.software/v1
+configurations:
+- type: signing.config.ocm.software/v1alpha1
+  signer:
+    type: SigstoreSigningConfiguration/v1alpha1
+`), 0o600))
+
+	ref := addTSATestComponentVersion(t, "ocm.software/sigstore-tsa")
+	_, err := test.OCM(t, test.WithArgs("sign", "cv", ref, "--config", config, "--tsa-url", tsaSrv.URL))
+	r.ErrorContains(err, "cannot be used with a Sigstore signer")
+	r.Zero(tsaRequests.Load())
 }

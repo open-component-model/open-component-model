@@ -2,7 +2,9 @@ package componentversion
 
 import (
 	"context"
+	"crypto"
 	"crypto/x509"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -474,14 +476,6 @@ func verifyTSATimestamp(
 	desc *descruntime.Descriptor,
 	signature descruntime.Signature,
 ) (time.Time, bool, error) {
-	// Timestamps written by the legacy OCM CLI use a different encoding and cover
-	// the descriptor digest instead of the signature value. They cannot be
-	// verified here, but must not fail an otherwise valid signature.
-	if tsa.IsLegacyPEM([]byte(signature.Timestamp.Value)) {
-		logger.WarnContext(ctx, "ignoring legacy OCM timestamp; it is not verified and not used for certificate validation", "name", signature.Name)
-		return time.Time{}, false, nil
-	}
-
 	// The TSA URL stored as a signed label enables URL-specific credential lookup.
 	var tsaURL string
 	labelName := tsa.TSAURLLabelPrefix + signature.Name
@@ -505,19 +499,10 @@ func verifyTSATimestamp(
 	}
 	logger.InfoContext(ctx, "verifying TSA timestamp", "name", signature.Name)
 
-	tsaDER, err := tsa.FromPEM([]byte(signature.Timestamp.Value))
+	tsaDER, hash, imprint, err := timestampTokenAndImprint(signature)
 	if err != nil {
-		return time.Time{}, false, fmt.Errorf("parsing TSA timestamp PEM failed: %w", err)
+		return time.Time{}, false, err
 	}
-
-	hash, err := signing.GetSupportedHash(signature.Digest.HashAlgorithm)
-	if err != nil {
-		return time.Time{}, false, fmt.Errorf("preparing TSA verification: %w", err)
-	}
-	// The token covers the signature value, so recompute the imprint over it.
-	h := hash.New()
-	h.Write([]byte(signature.Signature.Value))
-	imprint := h.Sum(nil)
 
 	verifiedTime, trusted, err := tsa.Verify(tsaDER, hash, imprint, tsaRootPool)
 	if err != nil {
@@ -526,6 +511,36 @@ func verifyTSATimestamp(
 
 	logger.InfoContext(ctx, "TSA timestamp verified", "name", signature.Name, "time", verifiedTime, "trusted", trusted)
 	return verifiedTime, trusted, nil
+}
+
+// timestampTokenAndImprint returns the DER timestamp token of a signature and
+// the imprint it must cover. Tokens from this CLI cover the signature value.
+// Tokens from the legacy OCM CLI ("TIMESTAMP INFO") cover the descriptor digest;
+// they are verified with that imprint so v1 data verifies as it did with v1.
+func timestampTokenAndImprint(signature descruntime.Signature) ([]byte, crypto.Hash, []byte, error) {
+	hash, err := signing.GetSupportedHash(signature.Digest.HashAlgorithm)
+	if err != nil {
+		return nil, 0, nil, fmt.Errorf("preparing TSA verification: %w", err)
+	}
+	value := []byte(signature.Timestamp.Value)
+	if tsa.IsLegacyPEM(value) {
+		der, err := tsa.FromLegacyPEM(value)
+		if err != nil {
+			return nil, 0, nil, fmt.Errorf("parsing legacy OCM timestamp failed: %w", err)
+		}
+		digest, err := hex.DecodeString(signature.Digest.Value)
+		if err != nil {
+			return nil, 0, nil, fmt.Errorf("decoding signature digest for legacy OCM timestamp failed: %w", err)
+		}
+		return der, hash, digest, nil
+	}
+	der, err := tsa.FromPEM(value)
+	if err != nil {
+		return nil, 0, nil, fmt.Errorf("parsing TSA timestamp PEM failed: %w", err)
+	}
+	h := hash.New()
+	h.Write([]byte(signature.Signature.Value))
+	return der, hash, h.Sum(nil), nil
 }
 
 // tsaRootPoolFromGraph resolves TSA root certificates from the credential graph.

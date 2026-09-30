@@ -208,6 +208,51 @@ func TestIsLegacyPEM(t *testing.T) {
 	}
 }
 
+func TestFromLegacyPEM_RoundTripVerifies(t *testing.T) {
+	r := require.New(t)
+	tsaKey, tsaCert := mustTSAKeyAndCert(t)
+	server := httptest.NewServer(newMockTSAHandler(t, tsaCert, tsaKey))
+	t.Cleanup(server.Close)
+	digest := sha256.Sum256([]byte("descriptor digest"))
+	token, err := RequestTimestamp(t.Context(), server.Client(), server.URL, crypto.SHA256, digest[:])
+	r.NoError(err)
+
+	// The legacy OCM CLI stores the bare SignedData, without the ContentInfo wrapper.
+	var contentInfo struct {
+		ContentType asn1.ObjectIdentifier
+		Content     asn1.RawValue `asn1:"explicit,tag:0"`
+	}
+	_, err = asn1.Unmarshal(token.Raw, &contentInfo)
+	r.NoError(err)
+	legacy := pem.EncodeToMemory(&pem.Block{Type: "TIMESTAMP INFO", Bytes: contentInfo.Content.Bytes})
+
+	der, err := FromLegacyPEM(legacy)
+	r.NoError(err)
+
+	roots := x509.NewCertPool()
+	roots.AddCert(tsaCert)
+	_, trusted, err := Verify(der, crypto.SHA256, digest[:], roots)
+	r.NoError(err)
+	r.True(trusted)
+}
+
+func TestFromLegacyPEM_Rejects(t *testing.T) {
+	tests := []struct {
+		name string
+		data []byte
+	}{
+		{name: "not PEM", data: []byte("garbage")},
+		{name: "current token block", data: ToPEM([]byte{0x30, 0x00})},
+		{name: "trailing data", data: append(pem.EncodeToMemory(&pem.Block{Type: "TIMESTAMP INFO", Bytes: []byte{0x30, 0x00}}), []byte("extra")...)},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := FromLegacyPEM(tc.data)
+			require.New(t).Error(err)
+		})
+	}
+}
+
 // --- MessageImprint.Hash error path ---
 
 func TestMessageImprint_Hash_UnknownOID(t *testing.T) {

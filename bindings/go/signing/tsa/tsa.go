@@ -319,10 +319,39 @@ func FromPEM(data []byte) ([]byte, error) {
 
 // IsLegacyPEM reports whether data holds a timestamp written by the legacy OCM
 // CLI. Such timestamps cover the descriptor digest rather than the signature
-// value and cannot be verified by Verify.
+// value; decode them with FromLegacyPEM.
 func IsLegacyPEM(data []byte) bool {
 	block, _ := pem.Decode(data)
 	return block != nil && block.Type == legacyPEMBlockType
+}
+
+// FromLegacyPEM decodes a timestamp written by the legacy OCM CLI, a bare CMS
+// SignedData under PEM block type "TIMESTAMP INFO", into the DER ContentInfo
+// that Verify expects.
+func FromLegacyPEM(data []byte) ([]byte, error) {
+	block, rest := pem.Decode(data)
+	if block == nil {
+		return nil, fmt.Errorf("tsa: no PEM block found")
+	}
+	if block.Type != legacyPEMBlockType {
+		return nil, fmt.Errorf("tsa: unexpected PEM block type %q, expected %q", block.Type, legacyPEMBlockType)
+	}
+	if len(bytes.TrimSpace(rest)) > 0 {
+		return nil, fmt.Errorf("tsa: trailing data after PEM block")
+	}
+	// asn1.Marshal writes a RawValue with FullBytes verbatim and ignores an
+	// explicit tag, so the [0] wrapper is built here.
+	der, err := asn1.Marshal(struct {
+		ContentType asn1.ObjectIdentifier
+		Content     asn1.RawValue
+	}{
+		ContentType: oidSignedData,
+		Content:     asn1.RawValue{Class: asn1.ClassContextSpecific, Tag: 0, IsCompound: true, Bytes: block.Bytes},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("tsa: wrapping legacy timestamp: %w", err)
+	}
+	return der, nil
 }
 
 // parseTSTInfo unmarshals TSTInfo from DER-encoded bytes (the eContent
