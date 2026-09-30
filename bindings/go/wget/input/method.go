@@ -17,6 +17,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/wget/checksum/httpverify"
 	"ocm.software/open-component-model/bindings/go/wget/internal/download"
 	wgetcreds "ocm.software/open-component-model/bindings/go/wget/spec/credentials"
+	wgetidentity "ocm.software/open-component-model/bindings/go/wget/spec/identity"
 	identityv1 "ocm.software/open-component-model/bindings/go/wget/spec/identity/v1"
 	"ocm.software/open-component-model/bindings/go/wget/spec/input"
 	v1 "ocm.software/open-component-model/bindings/go/wget/spec/input/v1"
@@ -160,6 +161,12 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 
 func (i *InputMethod) GetCredentialTypeScheme() *runtime.Scheme {
 	return wgetcreds.Scheme
+}
+
+// GetConsumerIdentityTypeScheme returns the scheme with the consumer identity types the
+// wget input method resolves credentials for, including the HTTP aliases.
+func (i *InputMethod) GetConsumerIdentityTypeScheme() *runtime.Scheme {
+	return wgetidentity.Scheme
 }
 
 // verifyProvidedDigest checks the computed content digest against a digest

@@ -57,7 +57,7 @@ func AddStdinConfig(cmd *cobra.Command, cfg *genericv1.Config) (*genericv1.Confi
 		}
 		cfgs = append(cfgs, stdinCfg)
 	}
-	return genericv1.FlatMap(cfgs...), nil
+	return genericv1.MergeConfigs(func(string, ...any) {}, cfgs...), nil
 }
 
 // skipsStdinConfig reports whether cmd or one of its parents never uses configuration.

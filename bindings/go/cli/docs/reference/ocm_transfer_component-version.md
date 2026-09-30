@@ -42,8 +42,8 @@ Two-step workflow (generate, review, replay):
     2. Review/edit spec.yaml, then execute: transfer cv --transfer-spec spec.yaml
   All graph-shaping flags (--recursive, --copy-resources, --upload-as) and any transfer
   configuration entry are baked into the spec during step 1 and are therefore ignored in
-  step 2 - the spec is the full graph definition. Only --dry-run and --output remain
-  meaningful when replaying a spec.
+  step 2 - the spec is the full graph definition. Only --dry-run, --output, and
+  --concurrency-limit remain meaningful when replaying a spec.
 
 How the graph is built:
   Internally the command assembles a TransformationGraphDefinition from these node types,
@@ -110,17 +110,18 @@ transfer component-version --transfer-spec spec.yaml
 ### Options
 
 ```
-      --constraint string      version constraint evaluated by each version's configured scheme; versions with no applicable scheme are retained (e.g. ">= 1.0.0, < 2.0.0"); only used when no version is specified in the reference
-      --copy-resources         copy all resources in the component version
-      --dry-run                build and validate the graph but do not execute
-  -h, --help                   help for component-version
-      --latest                 if set, only the latest version of the component is transferred; only used when no version is specified in the reference
-  -o, --output enum            output format of the component descriptors
-                               (must be one of [json ndjson yaml]) (default yaml)
-  -r, --recursive              recursively discover and transfer component versions
-      --transfer-spec string   path to a transfer specification file (use "-" for stdin). The input must hold exactly one transfer spec document; with "-", OCM configuration documents in stdin are applied as configuration
-  -u, --upload-as enum         Define whether copied resources should be uploaded as OCI artifacts (instead of local blob resources). This option is only relevant if --copy-resources is set.
-                               (must be one of [localBlob ociArtifact]) (default localBlob)
+      --concurrency-limit int   maximum number of transformation nodes processed in parallel; independent nodes run concurrently while dependency ordering is preserved. Increase it to speed up large graphs, decrease it to reduce load on the registry (default 4)
+      --constraint string       version constraint evaluated by each version's configured scheme; versions with no applicable scheme are retained (e.g. ">= 1.0.0, < 2.0.0"); only used when no version is specified in the reference
+      --copy-resources          copy all resources in the component version
+      --dry-run                 build and validate the graph but do not execute
+  -h, --help                    help for component-version
+      --latest                  if set, only the latest version of the component is transferred; only used when no version is specified in the reference
+  -o, --output enum             output format of the component descriptors
+                                (must be one of [json ndjson yaml]) (default yaml)
+  -r, --recursive               recursively discover and transfer component versions
+      --transfer-spec string    path to a transfer specification file (use "-" for stdin). The input must hold exactly one transfer spec document; with "-", OCM configuration documents in stdin are applied as configuration
+  -u, --upload-as enum          Define whether copied resources should be uploaded as OCI artifacts (instead of local blob resources). This option is only relevant if --copy-resources is set.
+                                (must be one of [localBlob ociArtifact]) (default localBlob)
 ```
 
 ### Options inherited from parent commands

@@ -59,6 +59,45 @@ func TestDecodeLegacyOCMAccessSpec(t *testing.T) {
 				Verb: "POST",
 			},
 		},
+		{
+			name:    "HTTP alias with versioned type",
+			rawType: runtime.NewVersionedType("HTTP", v1.Version),
+			json: `{
+				"type": "HTTP/v1",
+				"url": "https://example.com/file.tar.gz",
+				"mediaType": "application/x-tar"
+			}`,
+			want: v1.Wget{
+				URL:       "https://example.com/file.tar.gz",
+				MediaType: "application/x-tar",
+			},
+		},
+		{
+			name:    "lowercase http alias with versioned type",
+			rawType: runtime.NewVersionedType("http", v1.Version),
+			json:    `{"type": "http/v1", "url": "https://example.com/file.bin", "verb": "PUT"}`,
+			want: v1.Wget{
+				URL:  "https://example.com/file.bin",
+				Verb: "PUT",
+			},
+		},
+		{
+			name:    "HTTP alias with unversioned type",
+			rawType: runtime.NewUnversionedType("HTTP"),
+			json:    `{"type": "HTTP", "url": "https://example.com/file", "noRedirect": true}`,
+			want: v1.Wget{
+				URL:        "https://example.com/file",
+				NoRedirect: true,
+			},
+		},
+		{
+			name:    "lowercase http alias with unversioned type",
+			rawType: runtime.NewUnversionedType("http"),
+			json:    `{"type": "http", "url": "https://example.com/file"}`,
+			want: v1.Wget{
+				URL: "https://example.com/file",
+			},
+		},
 	}
 
 	for _, tt := range tests {

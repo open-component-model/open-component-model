@@ -445,3 +445,108 @@ transformations:
 		require.NoError(t, graph.Process(t.Context()))
 	})
 }
+
+func TestBuilder_WithBuildEvents(t *testing.T) {
+	t.Run("reports running and completed events per transformation", func(t *testing.T) {
+		r := require.New(t)
+		tgd := &v1alpha1.TransformationGraphDefinition{}
+		r.NoError(yaml.Unmarshal([]byte(`
+environment:
+  name: "my-object"
+  version: "1.0.0"
+transformations:
+- id: get1
+  type: MockGetObjectTransformer/v1alpha1
+  spec:
+    name: "${environment.name}"
+    version: "${environment.version}"
+- id: add1
+  type: MockAddObjectTransformer/v1alpha1
+  spec:
+    object: ${get1.output.object}
+`), tgd))
+
+		events := make(chan graphRuntime.ProgressEvent, 100)
+		graph, err := newTestBuilder(t).WithBuildEvents(events).BuildAndCheck(tgd)
+		r.NoError(err)
+		r.NotNil(graph)
+
+		// BuildAndCheck must close the channel even though Process was not called
+		var collected []graphRuntime.ProgressEvent
+		for ev := range events {
+			collected = append(collected, ev)
+		}
+
+		states := map[string]graphRuntime.State{}
+		for _, ev := range collected {
+			states[ev.Transformation.ID] = ev.State
+		}
+		for _, id := range []string{"get1", "add1"} {
+			r.Equal(graphRuntime.Completed, states[id], "transformation %q must end as completed", id)
+		}
+
+		r.NoError(graph.Process(t.Context()), "graph must still process events-free runtime")
+	})
+
+	t.Run("reports failed event on static analysis error", func(t *testing.T) {
+		r := require.New(t)
+		tgd := &v1alpha1.TransformationGraphDefinition{}
+		r.NoError(yaml.Unmarshal([]byte(`
+environment:
+  name: "my-object"
+  version: "1.0.0"
+transformations:
+- id: get1
+  type: MockGetObjectTransformer/v1alpha1
+  spec:
+    name: "${nonExistingVariable.name}"
+    version: "${environment.version}"
+`), tgd))
+
+		events := make(chan graphRuntime.ProgressEvent, 100)
+		graph, err := newTestBuilder(t).WithBuildEvents(events).BuildAndCheck(tgd)
+		r.Error(err)
+		r.Nil(graph)
+
+		var collected []graphRuntime.ProgressEvent
+		for ev := range events {
+			collected = append(collected, ev)
+		}
+		r.NotEmpty(collected)
+		last := collected[len(collected)-1]
+		r.Equal("get1", last.Transformation.ID)
+		r.Equal(graphRuntime.Failed, last.State)
+		r.Error(last.Err)
+	})
+
+	t.Run("no events when WithBuildEvents not called", func(t *testing.T) {
+		graph, err := newTestBuilder(t).BuildAndCheck(&v1alpha1.TransformationGraphDefinition{})
+		require.NoError(t, err)
+		require.NoError(t, graph.Process(t.Context()))
+	})
+
+	t.Run("builder reuse does not send on the closed channel", func(t *testing.T) {
+		r := require.New(t)
+		tgd := &v1alpha1.TransformationGraphDefinition{}
+		r.NoError(yaml.Unmarshal([]byte(`
+environment:
+  name: "my-object"
+  version: "1.0.0"
+transformations:
+- id: get1
+  type: MockGetObjectTransformer/v1alpha1
+  spec:
+    name: "${environment.name}"
+    version: "${environment.version}"
+`), tgd))
+
+		builder := newTestBuilder(t).WithBuildEvents(make(chan graphRuntime.ProgressEvent, 100))
+		_, err := builder.BuildAndCheck(tgd)
+		r.NoError(err)
+
+		// a second build without re-subscribing must not emit events or panic
+		graph, err := builder.BuildAndCheck(tgd)
+		r.NoError(err)
+		r.NotNil(graph)
+	})
+}

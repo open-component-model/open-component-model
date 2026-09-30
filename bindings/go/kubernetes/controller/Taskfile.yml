@@ -38,6 +38,8 @@ vars:
   YQ: '{{.LOCALBIN}}/yq-{{.YQ_VERSION}}'
   IGNORE_NOT_FOUND: '{{.IGNORE_NOT_FOUND | default "false"}}'
   PLATFORMS: '{{.PLATFORMS | default "linux/arm64,linux/amd64"}}'
+  PPROF_GO_TAGS: '{{.PPROF_GO_TAGS | default "pprof"}}'
+  PPROF_IMAGE_TAG_SUFFIX: '{{.PPROF_IMAGE_TAG_SUFFIX | default "-debug"}}'
 
 tasks:
   default:
@@ -115,13 +117,18 @@ tasks:
   build:
     desc: "Build the controller manager binary"
     deps: [manifests, generate, fmt, vet]
-    cmd: 'go build -o bin/manager {{.TASKFILE_DIR}}/cmd/main.go'
+    cmd: 'go build -o bin/manager {{.TASKFILE_DIR}}/cmd'
+
+  build/debug:
+    desc: "Build the controller manager binary with pprof enabled"
+    deps: [manifests, generate, fmt, vet]
+    cmd: 'go build -tags={{.PPROF_GO_TAGS}} -o bin/manager {{.TASKFILE_DIR}}/cmd'
 
   run:
     desc: "Run the controller manager locally (installs CRDs into the current kube-context first)"
     deps: [manifests, generate, fmt, vet, helm/install-crds]
     cmds:
-      - 'go run {{.TASKFILE_DIR}}/cmd/main.go'
+      - 'go run {{.TASKFILE_DIR}}/cmd'
 
   # Always build only for the host architecture.
   # We force "linux" OS because all Docker base images are Linux,
@@ -138,6 +145,17 @@ tasks:
         OCI_OUTPUT: '{{.OCI_OUTPUT | default ""}}'
         COSIGN_VERSION: '{{.COSIGN_VERSION}}'
 
+  # Same as docker-build, but with the pprof build tag and a suffixed image tag.
+  docker-build/debug:
+    desc: "Build the Docker image for the host architecture with pprof enabled"
+    cmd:
+      task: docker-build/multi-arch
+      vars:
+        GO_TAGS: '{{.PPROF_GO_TAGS}}'
+        CONTROLLER_IMG: '{{.CONTROLLER_IMG}}{{.PPROF_IMAGE_TAG_SUFFIX}}'
+        PLATFORMS:
+          sh: 'echo "linux/$(go env GOARCH)"'
+
   # Multi-arch capable build task.
   # In this setup it is used only with a single platform (the local arch),
   # but it still supports --push / --load flags if desired.
@@ -149,6 +167,7 @@ tasks:
       args=(
         --platform={{.PLATFORMS}}
         --build-arg COSIGN_VERSION={{.COSIGN_VERSION}}
+        --build-arg GO_TAGS='{{.GO_TAGS | default ""}}'
         -f '{{.TASKFILE_DIR}}/Dockerfile' '{{.TASKFILE_DIR}}/../..'
       )
 

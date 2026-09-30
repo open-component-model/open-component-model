@@ -56,14 +56,6 @@ Using the option, the specified configuration file(s) will be used instead of th
 Configuration documents piped into stdin are applied last, on top of these files.`)
 }
 
-func GetFlattenedOCMConfigForCommand(cmd *cobra.Command) (*genericv1.Config, error) {
-	cfg, err := GetOCMConfigForCommand(cmd)
-	if err != nil {
-		return nil, err
-	}
-	return genericv1.FlatMap(cfg), nil
-}
-
 func GetOCMConfigForCommand(cmd *cobra.Command) (*genericv1.Config, error) {
 	flag := cmd.Flag(OCMConfigCommandArgument)
 	if flag != nil && flag.Changed {
@@ -117,7 +109,7 @@ func loadAndMergeConfigs(paths []string, strict bool) (*genericv1.Config, error)
 		slog.Debug("ocm config was loaded successfully", slog.String("path", path))
 		cfgs = append(cfgs, cfg)
 	}
-	return genericv1.FlatMap(cfgs...), nil
+	return genericv1.MergeConfigs(slog.Warn, cfgs...), nil
 }
 
 // GetConfigFromPath reads and decodes the YAML configuration file from the specified path.

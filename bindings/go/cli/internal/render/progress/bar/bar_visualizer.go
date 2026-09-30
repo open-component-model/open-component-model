@@ -5,6 +5,7 @@ import (
 	"io"
 	"strings"
 	"sync"
+	"time"
 
 	"ocm.software/open-component-model/bindings/go/cli/internal/render/progress"
 )
@@ -23,6 +24,12 @@ type barVisualizer[T any] struct {
 	errorFormatter func(T, error) string
 	logBuffer      *progress.SyncBuffer
 	buf            strings.Builder
+	start          time.Time
+	concurrency    int
+	// renderedLines is the number of live-block lines the previous frame wrote.
+	// The next frame clears exactly this many, so a growing indeterminate log
+	// never clears lines it did not write.
+	renderedLines int
 }
 
 // NewVisualizer is a [progress.VisualizerFactory] that creates an animated
@@ -41,10 +48,18 @@ func (v *barVisualizer[T]) SetErrorFormatter(f func(T, error) string) {
 	v.errorFormatter = f
 }
 
+// SetConcurrency implements [progress.ConcurrencyAware]. The runner count is
+// shown in the operation header so it is visible while the bar animates.
+func (v *barVisualizer[T]) SetConcurrency(runners int) {
+	v.concurrency = runners
+}
+
 // SetLogBuffer sets the shared slog buffer from the tracker.
 func (v *barVisualizer[T]) SetLogBuffer(buf *progress.SyncBuffer) {
 	v.logBuffer = buf
 }
+
+const maxLogWindowLines = 4
 
 // Begin starts the animation.
 func (v *barVisualizer[T]) Begin(name string) {
@@ -52,11 +67,21 @@ func (v *barVisualizer[T]) Begin(name string) {
 	defer v.mu.Unlock()
 
 	v.header = name
+	if v.concurrency > 1 {
+		v.header = fmt.Sprintf("%s (%d runners)", name, v.concurrency)
+	}
 	v.events = nil
+	v.start = time.Now()
 	v.done = make(chan struct{})
 	v.spinnerFrame = 0
 	v.dotFrame = 0
-	v.maxLogs = min(4, v.total)
+	v.maxLogs = maxLogWindowLines
+	if 0 <= v.total && v.total < maxLogWindowLines {
+		// Simple operations get exactly their lines of output. Anything larger
+		// is trimmed. Anything <0 is the indeterminate case where number of
+		// lines are not known in advance.
+		v.maxLogs = v.total
+	}
 
 	v.reserveSpace()
 
@@ -111,10 +136,15 @@ func (v *barVisualizer[T]) End(err error) {
 		}
 	}
 
+	// took is negative when Begin never ran (e.g. in tests), omitting the suffix.
+	took := time.Duration(-1)
+	if !v.start.IsZero() {
+		took = time.Since(v.start)
+	}
 	if err != nil || hasFailures {
-		WriteFailedLine(&v.buf, v.header)
+		WriteFailedLine(&v.buf, v.header, took)
 	} else {
-		WriteCompletedLine(&v.buf, v.header)
+		WriteCompletedLine(&v.buf, v.header, took)
 	}
 
 	v.writeEvents()
@@ -134,13 +164,15 @@ func (v *barVisualizer[T]) End(err error) {
 // --- rendering ---
 
 func (v *barVisualizer[T]) reserveSpace() {
-	for i := 0; i < v.fixedLines(); i++ {
+	n := v.fixedLines()
+	for i := 0; i < n; i++ {
 		fmt.Fprintln(v.out)
 	}
+	v.renderedLines = n
 }
 
 func (v *barVisualizer[T]) fixedLines() int {
-	lines := v.maxLogs
+	lines := v.reservedLogLines()
 	if v.total > 0 {
 		lines++ // bar
 	}
@@ -148,6 +180,17 @@ func (v *barVisualizer[T]) fixedLines() int {
 		lines++ // header
 	}
 	return lines
+}
+
+// reservedLogLines returns the number of item log lines that occupy terminal
+// space. The item count of determinate operations is known up front, so all
+// log lines are reserved at once to avoid flicker. The count of indeterminate
+// operations is not, so the log grows as items arrive, bounded by maxLogs.
+func (v *barVisualizer[T]) reservedLogLines() int {
+	if v.total < 0 {
+		return min(len(v.events), v.maxLogs)
+	}
+	return v.maxLogs
 }
 
 // renderLocked builds the entire frame into v.buf and flushes it in one write
@@ -167,11 +210,12 @@ func (v *barVisualizer[T]) renderLocked() {
 	if v.total > 0 {
 		v.writeBar()
 	}
+	v.renderedLines = v.fixedLines()
 	_, _ = io.WriteString(v.out, v.buf.String())
 }
 
 func (v *barVisualizer[T]) writeClearLines() {
-	for i := 0; i < v.fixedLines(); i++ {
+	for i := 0; i < v.renderedLines; i++ {
 		v.buf.WriteString(CursorUp + ClearLine)
 	}
 }
@@ -205,7 +249,7 @@ func (v *barVisualizer[T]) writeEvents() {
 		fmt.Fprintln(&v.buf, v.formatItem(event))
 	}
 
-	for i := 0; i < v.maxLogs-len(visible); i++ {
+	for i := 0; i < v.reservedLogLines()-len(visible); i++ {
 		fmt.Fprintln(&v.buf)
 	}
 }
@@ -263,7 +307,16 @@ func (v *barVisualizer[T]) formatItem(item progress.Event[T]) string {
 	if displayName == "" {
 		displayName = item.ID
 	}
-	return fmt.Sprintf("    %s%s%s %s", color, symbol, Reset, displayName)
+	var suffix string
+	switch item.State {
+	case progress.Completed, progress.Failed, progress.Cancelled:
+		// Duration 0 means unknown (no Running event seen); omit the suffix.
+		// Real sub-second items round to "0s", which reads as intended.
+		if item.Duration > 0 {
+			suffix = formatTook(item.Duration)
+		}
+	}
+	return fmt.Sprintf("    %s%s%s %s%s", color, symbol, Reset, displayName, suffix)
 }
 
 func (v *barVisualizer[T]) writeFailureSummary() {
