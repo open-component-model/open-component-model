@@ -674,7 +674,7 @@ decomposes it into these URL attributes for URL-specific matching. A consumer en
 
 `rootCertsPEM` takes precedence over `rootCertsPEMFile` when both are set. Without a matching entry, timestamp
 verification degrades to structural-only mode (PKCS#7 parsing and imprint match, no chain verification) and a warning
-is logged. Use [`TSACredentials/v1alpha1`]({{< relref "credential-types.md#tsacredentialsv1alpha1" >}}) for the typed
+is logged. Credential resolution errors other than "not found" fail the verification. Use [`TSACredentials/v1alpha1`]({{< relref "credential-types.md#tsacredentialsv1alpha1" >}}) for the typed
 field reference.
 
 When using the legacy `Credentials/v1` `properties:` map instead of `TSACredentials/v1alpha1`, the snake_case keys

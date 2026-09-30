@@ -372,8 +372,13 @@ timestamping solves this: at signing time a trusted **Timestamping Authority (TS
 proving *when* it was made. At verification time — for RSA/PEM certificate-chain signatures — the certificate chain is
 then validated against the TSA-attested time instead of the current time, so a signature created while the certificate
 was valid keeps verifying after it expires. This certificate-expiry extension applies only when the timestamp is
-**trusted** (its chain validates against TSA roots the verifier configured). Plain signatures carry no certificate, and
-the Sigstore verifier does not consume the TSA-attested time, so neither gains post-expiry verification from a timestamp.
+**trusted** (its chain validates against TSA roots the verifier configured). Plain signatures carry no certificate, so
+they gain no post-expiry verification from a timestamp. Sigstore signatures are timestamped by Sigstore itself, with the
+TSAs from its signing config; `--tsa`/`--tsa-url` are rejected for Sigstore signers.
+
+Component versions signed and timestamped with the OCM v1 CLI keep verifying: their timestamps (PEM block
+`TIMESTAMP INFO`, taken over the descriptor digest) are checked the same way. Timestamps created by this CLI use a
+newer format that OCM v1 cannot read.
 
 Timestamping is **optional**. A timestamp can be attached to Plain and PEM signatures alike, but only PEM
 certificate-chain (RSA) signatures benefit from the certificate-expiry extension. Signatures without a timestamp
