@@ -1,6 +1,8 @@
 package download_test
 
 import (
+	"bytes"
+	"compress/gzip"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -81,6 +83,32 @@ func TestDownload_HappyPath(t *testing.T) {
 
 	got, _ := b.MediaType()
 	assert.Equal(t, "text/plain", got)
+}
+
+// TestDownload_StoredGzipIsNotDecoded asserts that a body served with
+// Content-Encoding: gzip is returned as stored when no client is supplied, so the
+// bytes do not depend on whether a digest is computed.
+func TestDownload_StoredGzipIsNotDecoded(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
+
+	var buf bytes.Buffer
+	zw := gzip.NewWriter(&buf)
+	_, err := zw.Write([]byte("hello world, stored gzipped"))
+	r.NoError(err)
+	r.NoError(zw.Close())
+	stored := buf.Bytes()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Encoding", "gzip")
+		_, _ = w.Write(stored)
+	}))
+	t.Cleanup(srv.Close)
+
+	b, err := download.Download(t.Context(), download.Request{URL: srv.URL + "/stored.gz"}, download.WithTempDir(t.TempDir()))
+	r.NoError(err)
+	t.Cleanup(func() { _ = b.Close() })
+	r.Equal(stored, readBlob(t, b))
 }
 
 func TestDownload_Credentials(t *testing.T) {

@@ -11,6 +11,7 @@ import (
 	checksumhttpv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/checksum/http/v1alpha1/spec"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	ocmhttp "ocm.software/open-component-model/bindings/go/http"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/wget/checksum"
@@ -19,6 +20,7 @@ import (
 	accessspec "ocm.software/open-component-model/bindings/go/wget/spec/access"
 	v1 "ocm.software/open-component-model/bindings/go/wget/spec/access/v1"
 	wgetcreds "ocm.software/open-component-model/bindings/go/wget/spec/credentials"
+	wgetidentity "ocm.software/open-component-model/bindings/go/wget/spec/identity"
 	identityv1 "ocm.software/open-component-model/bindings/go/wget/spec/identity/v1"
 )
 
@@ -54,7 +56,7 @@ func NewResourceRepository(filesystemConfig *filesystemv1alpha1.Config, opts ...
 	}
 	client := options.Client
 	if client == nil {
-		client = http.DefaultClient
+		client = ocmhttp.New()
 	}
 	var maxSize int64
 	if options.MaxDownloadSize != nil {
@@ -117,13 +119,15 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 	if err != nil {
 		return nil, err
 	}
+
 	if hasPolicy {
 		if err := httpverify.Verify(ctx, r.client, credentials, wget.URL, policy, b); err != nil {
 			_ = b.Close()
 			return nil, fmt.Errorf("checksum verification failed for wget access %q: %w", wget.URL, err)
 		}
 	}
-	return b, nil
+
+	return repository.VerifyDownload(ctx, resource, b)
 }
 
 // download streams the resource body into the temp folder and returns the
@@ -256,6 +260,12 @@ func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, resource
 
 func (r *ResourceRepository) GetCredentialTypeScheme() *runtime.Scheme {
 	return wgetcreds.Scheme
+}
+
+// GetConsumerIdentityTypeScheme returns the scheme with the consumer identity types the
+// wget resource repository resolves credentials for, including the HTTP aliases.
+func (r *ResourceRepository) GetConsumerIdentityTypeScheme() *runtime.Scheme {
+	return wgetidentity.Scheme
 }
 
 // processDigestViaPeek runs the no-download fast path. done=true means the

@@ -1168,6 +1168,45 @@ func TestRepository_ListComponentVersions(t *testing.T) {
 	r.Equal(expectedOrder, versions, "Versions should be sorted in descending order")
 }
 
+// TestRepository_ListComponentVersions_PreservesNonSemver guards against the
+// regression where ListComponentVersions dropped versions that are valid OCI
+// tags but do not parse as loose semver (e.g. "build-1837", "ubuntu22.04").
+// Such versions are legal under a configured versioning scheme, and the OCI
+// binding must return them so the CLI can order them with the active registry.
+func TestRepository_ListComponentVersions_PreservesNonSemver(t *testing.T) {
+	r := require.New(t)
+	ctx := t.Context()
+
+	fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
+	r.NoError(err)
+	store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
+	repo := Repository(t, ocictf.WithCTF(store))
+
+	const componentName = "ocm.software/non-semver-component"
+	versionsToAdd := []string{"2.0.0", "build-1837", "ubuntu22.04", "1.0.0"}
+	for _, version := range versionsToAdd {
+		desc := &descriptor.Descriptor{
+			Meta: descriptor.Meta{Version: "v2"},
+			Component: descriptor.Component{
+				Provider: descriptor.Provider{Name: "test-provider"},
+				ComponentMeta: descriptor.ComponentMeta{
+					ObjectMeta: descriptor.ObjectMeta{Name: componentName, Version: version},
+				},
+			},
+		}
+		r.NoError(repo.AddComponentVersion(ctx, desc), "adding %s must succeed (valid OCI tag)", version)
+	}
+
+	versions, err := repo.ListComponentVersions(ctx, componentName)
+	r.NoError(err)
+	r.ElementsMatch(versionsToAdd, versions, "non-semver versions must not be dropped from the listing")
+
+	// The default comparator keeps semver versions ranked ahead of non-semver
+	// ones and orders semver newest-first.
+	r.Equal([]string{"2.0.0", "1.0.0"}, []string{versions[0], versions[1]},
+		"semver versions must sort newest-first ahead of non-semver entries")
+}
+
 func setupLegacyComponentVersion(t *testing.T, store *ocictf.Store, ctx context.Context, content []byte, resource *descriptor.Resource) {
 	r := require.New(t)
 	// Get a repository store for the component
@@ -2519,6 +2558,65 @@ func TestRepository_UploadResourceStream(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestRepository_UploadResourceStream_MissingSubject verifies that a streamed
+// OCI artifact whose manifest references a subject that does not exist in the
+// source store is uploaded without the subject.
+func TestRepository_UploadResourceStream_MissingSubject(t *testing.T) {
+	newDanglingSubjectStream := func(t *testing.T) (*memory.Store, ociImageSpecV1.Descriptor) {
+		t.Helper()
+		ctx := t.Context()
+		r := require.New(t)
+
+		store := memory.New()
+		layerBytes := []byte("stream layer content")
+		layerDesc := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageLayer, layerBytes)
+		r.NoError(store.Push(ctx, layerDesc, bytes.NewReader(layerBytes)))
+		danglingSubject := &ociImageSpecV1.Descriptor{
+			MediaType: ociImageSpecV1.MediaTypeImageManifest,
+			Digest:    digest.FromString("subject that was never pushed"),
+			Size:      42,
+		}
+		manifestDesc, err := oras.PackManifest(ctx, store, oras.PackManifestVersion1_1, "application/custom", oras.PackManifestOptions{
+			Layers:  []ociImageSpecV1.Descriptor{layerDesc},
+			Subject: danglingSubject,
+		})
+		r.NoError(err)
+		return store, manifestDesc
+	}
+
+	r := require.New(t)
+	ctx := t.Context()
+
+	fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
+	r.NoError(err)
+	store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
+	repo := Repository(t, ocictf.WithCTF(store), oci.WithScheme(testScheme))
+
+	src, manifestDesc := newDanglingSubjectStream(t)
+	resource := &descriptor.Resource{
+		ElementMeta: descriptor.ElementMeta{
+			ObjectMeta: descriptor.ObjectMeta{Name: "stream-res", Version: "1.0.0"},
+		},
+		Type:   "ociImage",
+		Access: &v1.OCIImage{ImageReference: "test-repo:v1.0.0"},
+	}
+
+	stream := &ocistream.OCIResourceStream{
+		ReadOnlyGraphStorage: src,
+		Descriptor:           manifestDesc,
+	}
+
+	res, err := repo.UploadResourceStream(ctx, resource, stream)
+	r.NoError(err)
+	r.NotNil(res)
+
+	targetStore, err := store.StoreForReference(ctx, "test-repo")
+	r.NoError(err)
+	exists, err := targetStore.Exists(ctx, manifestDesc)
+	r.NoError(err)
+	r.True(exists, "manifest must have been copied into the target store")
 }
 
 // ownershipArtifactAnnotation is a representative software.ocm.artifact value in

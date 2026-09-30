@@ -25,13 +25,16 @@ import (
 )
 
 func OCMConfig(cmd *cobra.Command) error {
-	cfg, err := configuration.GetFlattenedOCMConfigForCommand(cmd)
+	cfg, err := configuration.GetOCMConfigForCommand(cmd)
 	if err != nil {
 		if flag := cmd.Flag(configuration.OCMConfigCommandArgument); flag != nil && flag.Changed {
 			return fmt.Errorf("could not load configuration: %w", err)
 		}
 		slog.DebugContext(cmd.Context(), "could not get configuration", slog.String("error", err.Error()))
 		cfg = &genericv1.Config{}
+	}
+	if cfg, err = configuration.AddStdinConfig(cmd, cfg); err != nil {
+		return err
 	}
 
 	ctx := ocmctx.WithConfiguration(cmd.Context(), cfg)
@@ -127,6 +130,7 @@ func CredentialGraph(cmd *cobra.Command) error {
 		CredentialPluginProvider:       pluginManager.CredentialPluginRegistry,
 		CredentialRepositoryTypeScheme: pluginManager.CredentialRepositoryRegistry.RepositoryScheme(),
 		CredentialTypeSchemeProvider:   pluginManager.CredentialTypeRegistry,
+		ConsumerIdentityTypeScheme:     pluginManager.CredentialTypeRegistry.GetConsumerIdentityTypeScheme(),
 	}
 
 	var credCfg *credentialsRuntime.Config

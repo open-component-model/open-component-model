@@ -12,7 +12,7 @@ const (
 	Type = "Wget"
 )
 
-// Wget describes an input sourced by downloading a resource from an HTTP/S URL
+// Wget (aka "HTTP") describes an input sourced by downloading a resource from an HTTP/S URL
 // during component construction. The downloaded content is stored as a local blob
 // in the component version.
 //
@@ -26,8 +26,8 @@ const (
 // +ocm:typegen=true
 // +ocm:jsonschema-gen=true
 type Wget struct {
-	// +ocm:jsonschema-gen:enum=wget/v1,Wget/v1
-	// +ocm:jsonschema-gen:enum:deprecated=wget,Wget
+	// +ocm:jsonschema-gen:enum=wget/v1,Wget/v1,HTTP/v1,http/v1
+	// +ocm:jsonschema-gen:enum:deprecated=wget,Wget,HTTP,http
 	Type runtime.Type `json:"type"`
 
 	// URL is the HTTP endpoint to download the resource from.

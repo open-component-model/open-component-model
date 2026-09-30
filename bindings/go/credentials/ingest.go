@@ -56,6 +56,7 @@ func processDirectCredentials(ctx context.Context, g *Graph, config *cfgRuntime.
 
 		if resolved != nil {
 			for _, identity := range consumer.Identities {
+				identity = g.canonicalizeConsumerIdentity(identity)
 				node := identity.String()
 
 				if resolvedDC, ok := resolved.(*v1.DirectCredentials); ok {
@@ -104,6 +105,7 @@ func processDirectCredentials(ctx context.Context, g *Graph, config *cfgRuntime.
 func processPluginBasedEdges(ctx context.Context, g *Graph, consumers []cfgRuntime.Consumer) error {
 	for _, consumer := range consumers {
 		for _, identity := range consumer.Identities {
+			identity = g.canonicalizeConsumerIdentity(identity)
 			node := identity.String()
 			if err := g.addIdentity(identity); err != nil {
 				return err

@@ -2,8 +2,10 @@ package bar
 
 import (
 	"bytes"
+	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 
@@ -12,12 +14,16 @@ import (
 
 func newTestVisualizer(total int) (*barVisualizer[string], *bytes.Buffer) {
 	buf := &bytes.Buffer{}
+	maxLogs := maxLogWindowLines
+	if 0 <= total && total < maxLogWindowLines {
+		maxLogs = total
+	}
 	v := &barVisualizer[string]{
 		out:            buf,
 		total:          total,
 		events:         make([]progress.Event[string], 0, total),
 		done:           make(chan struct{}),
-		maxLogs:        min(4, total),
+		maxLogs:        maxLogs,
 		errorFormatter: func(_ string, err error) string { return err.Error() },
 	}
 	return v, buf
@@ -129,6 +135,33 @@ func TestFormatItem_FallsBackToID(t *testing.T) {
 	assert.Contains(t, result, "my-id")
 }
 
+func TestFormatItem_Duration(t *testing.T) {
+	tests := []struct {
+		name     string
+		state    progress.State
+		duration time.Duration
+		contains string
+	}{
+		{"completed shows rounded duration", progress.Completed, 90 * time.Second, "(took 1m30s)"},
+		{"failed shows duration", progress.Failed, 12 * time.Second, "(took 12s)"},
+		{"cancelled shows duration", progress.Cancelled, time.Minute, "(took 1m0s)"},
+		{"completed with unknown duration shows no suffix", progress.Completed, 0, ""},
+		{"running never shows duration", progress.Running, 90 * time.Second, ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v, _ := newTestVisualizer(1)
+			result := stripANSI(v.formatItem(progress.Event[string]{ID: "test", Name: "test", State: tt.state, Duration: tt.duration}))
+			if tt.contains == "" {
+				assert.NotContains(t, result, "took")
+			} else {
+				assert.Contains(t, result, tt.contains)
+			}
+		})
+	}
+}
+
 func TestLogBuffer(t *testing.T) {
 	t.Run("drain prints and clears buffer", func(t *testing.T) {
 		v, _ := newTestVisualizer(1)
@@ -181,6 +214,26 @@ func TestRenderFinalHeader(t *testing.T) {
 
 		assert.Contains(t, buf.String(), "✗")
 	})
+
+	t.Run("shows elapsed time measured from Begin", func(t *testing.T) {
+		v, buf := newTestVisualizer(0)
+		v.start = time.Now().Add(-90 * time.Second)
+		v.header = "Transferring"
+
+		v.End(nil)
+
+		// Depending on how much time passes before End, rounding yields 1m30s or 1m31s.
+		assert.Regexp(t, `Transferring\.\.\. \(took 1m3[01]s\)`, stripANSI(buf.String()))
+	})
+
+	t.Run("omits elapsed time when Begin never ran", func(t *testing.T) {
+		v, buf := newTestVisualizer(0)
+		v.header = "Transferring"
+
+		v.End(nil)
+
+		assert.NotContains(t, buf.String(), "took")
+	})
 }
 
 // --- NewVisualizer factory tests ---
@@ -200,6 +253,78 @@ func TestNewVisualizer(t *testing.T) {
 	output := buf.String()
 	assert.Contains(t, output, "✓")
 	assert.Contains(t, output, "Transfer")
+}
+
+func TestNewVisualizer_SetConcurrency_HeaderShowsRunners(t *testing.T) {
+	buf := &bytes.Buffer{}
+	vis := NewVisualizer[any](buf, 3)
+	vis.(progress.ConcurrencyAware).SetConcurrency(4)
+
+	vis.Begin("Transferring component versions")
+	bv := vis.(*barVisualizer[any])
+	close(bv.done)
+	bv.done = make(chan struct{})
+	buf.Reset()
+	vis.End(nil)
+
+	output := stripANSI(buf.String())
+	assert.Contains(t, output, "Transferring component versions (4 runners)")
+}
+func TestNewVisualizer_Indeterminate(t *testing.T) {
+	buf := &bytes.Buffer{}
+	vis := NewVisualizer[any](buf, progress.IndeterminateTotal)
+
+	vis.Begin("Resolving")
+	bv := vis.(*barVisualizer[any])
+	close(bv.done)
+	bv.done = make(chan struct{})
+	bv.HandleEvent(progress.Event[any]{ID: "a", Name: "ocm.software/a:1.0.0", State: progress.Completed})
+	buf.Reset()
+	vis.End(nil)
+
+	output := stripANSI(buf.String())
+	// unknown total: the item log is shown ...
+	assert.Contains(t, output, "✓")
+	assert.Contains(t, output, "ocm.software/a:1.0.0")
+	// ... but no progress bar
+	assert.NotContains(t, output, "%")
+}
+
+// Indeterminate operations reserve only as many item lines as they actually
+// use, so a small operation must not leave blank lines behind.
+func TestNewVisualizer_Indeterminate_FewItemsLeaveNoBlankLines(t *testing.T) {
+	tests := []struct {
+		name  string
+		items int
+		blank int
+	}{
+		{"no item", 0, 0},
+		{"one item", 1, 0},
+		{"three items", 3, 0},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			buf := &bytes.Buffer{}
+			vis := NewVisualizer[any](buf, progress.IndeterminateTotal)
+			vis.Begin("Resolving")
+			bv := vis.(*barVisualizer[any])
+			close(bv.done)
+			bv.done = make(chan struct{})
+			for i := 0; i < tc.items; i++ {
+				bv.HandleEvent(progress.Event[any]{ID: fmt.Sprintf("c%d", i), Name: fmt.Sprintf("ocm.software/c%d:1.0.0", i), State: progress.Completed})
+			}
+			buf.Reset()
+			vis.End(nil)
+
+			blank := 0
+			for _, line := range strings.Split(strings.TrimRight(stripANSI(buf.String()), "\n"), "\n") {
+				if strings.TrimSpace(line) == "" {
+					blank++
+				}
+			}
+			assert.Equal(t, tc.blank, blank, "final frame must not contain blank lines")
+		})
+	}
 }
 
 func TestNewVisualizer_Simple(t *testing.T) {

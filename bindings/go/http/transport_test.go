@@ -44,6 +44,7 @@ func TestNewTransport(t *testing.T) {
 		assert.Equal(t, defaultTransport.ExpectContinueTimeout, tr.ExpectContinueTimeout)
 		assert.Equal(t, defaultTransport.MaxIdleConns, tr.MaxIdleConns)
 		assert.Equal(t, defaultTransport.ForceAttemptHTTP2, tr.ForceAttemptHTTP2)
+		assert.True(t, tr.DisableCompression)
 	})
 
 	t.Run("empty cfg preserves DefaultTransport values", func(t *testing.T) {
