@@ -220,7 +220,7 @@ configurations:
     match: >-
       target.type == "OCIRepository"
       && resource.access.isType("LocalBlob")
-      && isOCIManifest(resource.access.mediaType)
+      && has(resource.access.mediaType) && isOCIManifest(resource.access.mediaType)
       && has(resource.access.referenceName)
 `,
 			target: oci,

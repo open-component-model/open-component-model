@@ -21,6 +21,19 @@ func TestBuildGraphDefinition_LocalBlobAndReferenceUploaders(t *testing.T) {
 	image := ociImageResource("my-image", "1.0.0", "oci://ghcr.io/org/image:v1")
 	blob := localBlobResource("my-blob", "1.0.0")
 	custom := customAccessResource("custom", "1.0.0")
+	s3v1 := descriptor.Resource{
+		ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "models", Version: "1.0.0"}},
+		Type:        "blob",
+		Relation:    descriptor.ExternalRelation,
+		Access:      &runtime.Raw{Type: runtime.NewVersionedType("s3", "v1"), Data: []byte(`{"type":"s3/v1","bucket":"b","key":"k"}`)},
+	}
+	// A local blob with a referenceName but no mediaType: the default OCI match must
+	// evaluate to false for it instead of failing on the missing field.
+	namedBlobWithoutMediaType := localBlobResource("named-blob", "1.0.0")
+	namedBlobWithoutMediaType.Access = &runtime.Raw{
+		Type: runtime.NewVersionedType("localBlob", "v1"),
+		Data: []byte(`{"type":"localBlob/v1","localReference":"sha256:abc123","referenceName":"org/image:v1"}`),
+	}
 	const always = "true"
 
 	for _, tc := range []struct {
@@ -30,6 +43,18 @@ func TestBuildGraphDefinition_LocalBlobAndReferenceUploaders(t *testing.T) {
 		wantTypes []runtime.Type
 		wantErr   string
 	}{
+		{
+			name:      "the default local blob match does not select s3/v1, which it cannot copy",
+			resource:  s3v1,
+			uploaders: []transferv1alpha1.UploaderConfig{&transferv1alpha1.LocalBlobUploaderConfig{}},
+			wantTypes: byReference,
+		},
+		{
+			name:      "the default OCI match does not select a local blob without mediaType",
+			resource:  namedBlobWithoutMediaType,
+			uploaders: []transferv1alpha1.UploaderConfig{&transferv1alpha1.OCIUploaderConfig{}},
+			wantTypes: localBlobNodes,
+		},
 		{
 			name:      "baseline keeps an OCI image by reference",
 			resource:  image,

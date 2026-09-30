@@ -266,8 +266,8 @@ func TestBuildGraphDefinition_OCIUploader(t *testing.T) {
 			target:   testOCIRepo("ghcr.io/target"),
 			resource: manifestBlobWithoutReferenceName,
 			uploaders: []transferv1alpha1.UploaderConfig{&transferv1alpha1.OCIUploaderConfig{
-				Match:          `resource.access.isType("LocalBlob") && isOCIManifest(resource.access.mediaType)`,
-				ImageReference: `${target.baseUrl + "/" + resource.name + ":" + resource.version}`,
+				Match:          `resource.access.isType("LocalBlob") && has(resource.access.mediaType) && isOCIManifest(resource.access.mediaType)`,
+				ImageReference: `${target.baseUrl + (target.subPath == "" ? "" : "/" + target.subPath) + "/" + resource.name + ":" + resource.version}`,
 			}},
 			wantTypes:      []runtime.Type{ociv1alpha1.OCIGetLocalResourceV1alpha1, addOCIArtifact, ociv1alpha1.OCIAddComponentVersionV1alpha1, FileCleanupVersionedType},
 			wantImageRef:   "ghcr.io/target/my-image:1.0.0",

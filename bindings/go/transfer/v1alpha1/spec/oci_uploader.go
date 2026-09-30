@@ -36,7 +36,7 @@ const DefaultOCIImageReference = `${target.baseUrl
 const DefaultOCIUploaderMatch = `target.type == "OCIRepository"
   && (resource.access.isType(["OCIImage", "Helm"])
     || (resource.access.isType("LocalBlob")
-      && isOCIManifest(resource.access.mediaType)
+      && has(resource.access.mediaType) && isOCIManifest(resource.access.mediaType)
       && has(resource.access.referenceName)))`
 
 func init() {

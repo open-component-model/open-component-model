@@ -33,7 +33,7 @@ const (
 // legacyOCIArtifactLocalBlobMatch is the match reproducing --upload-as ociArtifact without
 // --copy-resources: only OCI-manifest local blobs with a referenceName became OCI artifacts,
 // and only on OCI registry targets; OCI image and Helm references stayed by reference.
-const legacyOCIArtifactLocalBlobMatch = `target.type == "OCIRepository" && resource.access.isType("LocalBlob") && isOCIManifest(resource.access.mediaType) && has(resource.access.referenceName)`
+const legacyOCIArtifactLocalBlobMatch = `target.type == "OCIRepository" && resource.access.isType("LocalBlob") && has(resource.access.mediaType) && isOCIManifest(resource.access.mediaType) && has(resource.access.referenceName)`
 
 func registerLegacyFlags(flags *pflag.FlagSet) {
 	flags.Bool(FlagCopyResources, false, "deprecated: copy all resources in the component version (logs the equivalent OCM configuration to use instead)")
@@ -101,7 +101,7 @@ func withLegacyFlagUploaders(ctx context.Context, cmd *cobra.Command, cfg *gener
 	}); err != nil {
 		return nil, err
 	}
-	slog.WarnContext(ctx, fmt.Sprintf("--%s and --%s are deprecated: replace them with the OCM configuration in the config attribute (JSON is valid YAML), passed via --config or added to your existing configuration", FlagCopyResources, FlagUploadAs),
+	slog.WarnContext(ctx, fmt.Sprintf("--%s and --%s are deprecated: replace them with the OCM configuration in the config attribute (JSON is valid YAML): add its entries to your OCM configuration, e.g. in ./.ocmconfig, which is merged with your other configuration files (--config would replace them)", FlagCopyResources, FlagUploadAs),
 		"config", strings.TrimSpace(generated.String()))
 
 	out := &genericv1.Config{}
