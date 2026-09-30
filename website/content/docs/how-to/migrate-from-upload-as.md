@@ -452,8 +452,10 @@ equivalent OCM configuration as one-line JSON. For example:
 level=WARN msg="--copy-resources and --upload-as are deprecated: replace them with the OCM configuration in the config attribute (JSON is valid YAML): add its entries to your OCM configuration, e.g. in ./.ocmconfig, which is merged with your other configuration files (--config would replace them)" config="{\"configurations\":[{\"type\":\"localblob.uploader.transfer.config.ocm.software/v1alpha1\"}],\"type\":\"generic.config.ocm.software/v1\"}"
 ```
 
-Save the JSON value to `.ocmconfig` in your working directory (reformatted as
-YAML or JSON). The CLI picks it up automatically.
+Add the uploader entries from the JSON value to the `configurations` list of your
+`.ocmconfig` in the working directory, keeping everything already in it (for
+example credentials, signing keys or resolvers). Create `.ocmconfig` with the JSON
+value only if it does not exist yet. The CLI picks it up automatically.
 
 ### Symptom: `unknown field "uploadType"`
 

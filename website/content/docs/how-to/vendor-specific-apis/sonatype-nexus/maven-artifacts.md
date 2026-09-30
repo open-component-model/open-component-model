@@ -143,10 +143,17 @@ mvn dependency:get -Dartifact=com.example:demo:1.0.0 \
 
 **Cause:** A `-SNAPSHOT` version was routed to a release repository.
 
-**Fix:** Route `-SNAPSHOT` versions to `maven-snapshots` with a second rule that
-matches them by version, for example
-`match: resource.access.isType("LocalBlob") && resource.name == "jar" && resource.version == "2.0.0-SNAPSHOT"`.
-Declare it before the release rule: the first matching rule wins.
+**Fix:** Route `-SNAPSHOT` versions of both files to `maven-snapshots` with a rule
+declared before both release rules, because the first matching rule wins. The
+resource names match the file extensions, so one rule can build both paths:
+
+```yaml
+  - type: nexus.uploader.transfer.config.ocm.software/v1alpha1
+    match: resource.access.isType("LocalBlob") && resource.name in ["jar", "pom"] && resource.version.endsWith("-SNAPSHOT")
+    url: https://nexus.example.com
+    repository: maven-snapshots
+    path: '${"com/example/demo/" + resource.version + "/demo-" + resource.version + "." + resource.name}'
+```
 
 For credential and overwrite errors, see
 [Troubleshooting]({{< relref "docs/how-to/vendor-specific-apis/sonatype-nexus/_index.md#troubleshooting" >}}).

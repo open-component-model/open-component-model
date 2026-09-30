@@ -515,7 +515,12 @@ resources:
 ```
 
 {{< callout context="note" >}}
-Upload is not supported for this access type: a plain HTTP endpoint has no standardized write API. A `Wget/v1` access therefore has no by-reference form in a target repository. It is copied only when resource copying is requested using a local blob uploader configuration, and then always by value.  The content is downloaded and stored as a [`LocalBlob/v1`]({{< relref "input-and-access-types.md" >}}#localblobv1).
+A plain HTTP endpoint has no standardized write API, so transfer cannot write to the source
+location. Without a matching uploader, a `Wget/v1` access stays by reference in the target. A
+local blob uploader downloads the content and stores it as a
+[`LocalBlob/v1`]({{< relref "input-and-access-types.md" >}}#localblobv1). An HTTP, Artifactory
+or Nexus uploader uploads the content to its configured target and publishes a new remote
+access there (see [Transfer Configuration]({{< relref "docs/reference/transfer-configuration/_index.md" >}})).
 {{< /callout >}}
 
 The `checksum.http.config.ocm.software/v1alpha1` configuration can pin the
