@@ -309,7 +309,7 @@ OCM v1 has no S3 input type.
 Archives a snapshot of a Git repository while OCM constructs the component version, and stores it as a local blob. The
 blob is a gzip-compressed tar (`application/x-tgz`) of the files at the selected commit, without the `.git` directory.
 Use this input type when the source code must travel with the component version. The
-[`Git/v1` access type](#gitv1-access) is the alternative: it leaves the code in the repository and reads it on every
+[`Git/v1` access type]({{< relref "input-and-access-types.md#gitv1-access" >}}) is the alternative: it leaves the code in the repository and reads it on every
 download.
 
 `Git/v1` is the canonical type name. OCM also accepts `Git`, and the OCM v1 names `git`, `git/v1alpha1` and
