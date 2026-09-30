@@ -40,6 +40,7 @@ func Test_Integration_OCIRepository_ChunkedPush_QuayLayerLimit(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping Quay layer-limit integration test in short mode")
 	}
+	t.Parallel()
 
 	r := require.New(t)
 	ctx := t.Context()
