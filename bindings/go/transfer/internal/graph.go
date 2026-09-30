@@ -277,7 +277,7 @@ func processResources(
 				if u == nil {
 					continue
 				}
-				selected, err := matches(u.EffectiveMatch(), aliases, env)
+				selected, err := matches(ctx, u.EffectiveMatch(), aliases, env)
 				if err != nil {
 					return nil, nil, fmt.Errorf("uploader %d (%s) for resource %v: %w", ui, u.GetType(), resource.ToIdentity(), err)
 				}
@@ -289,7 +289,7 @@ func processResources(
 				case *transferv1alpha1.HTTPUploaderConfig:
 					err = processHTTPUploader(resource, cfg, baseID, id, val, tgd, resourceTransformIDs, i)
 				case *transferv1alpha1.OCIUploaderConfig:
-					exprs, err = processOCIUploader(resource, access, cfg, aliases, env, id, val, tgd, toSpec, resourceTransformIDs, i)
+					exprs, err = processOCIUploader(ctx, resource, access, cfg, aliases, env, id, val, tgd, toSpec, resourceTransformIDs, i)
 				case *transferv1alpha1.LocalBlobUploaderConfig:
 					exprs, err = processResource(resource, access, id, val, tgd, toSpec, resourceTransformIDs, i)
 				case *transferv1alpha1.ReferenceUploaderConfig:

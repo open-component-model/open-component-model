@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -22,7 +23,7 @@ import (
 // on a CTF target, or a field the resource does not have) fails the build instead of the
 // running transfer. The emitted spec keeps the template, so the graph evaluates it again
 // when it runs.
-func ociImageReference(u *transferv1alpha1.OCIUploaderConfig, aliases map[string]string, env *uploaderEnv) (string, error) {
+func ociImageReference(ctx context.Context, u *transferv1alpha1.OCIUploaderConfig, aliases map[string]string, env *uploaderEnv) (string, error) {
 	template := u.ImageReference
 	if template == "" {
 		template = transferv1alpha1.DefaultOCIImageReference
@@ -42,7 +43,7 @@ func ociImageReference(u *transferv1alpha1.OCIUploaderConfig, aliases map[string
 			if err != nil {
 				return "", fmt.Errorf("invalid imageReference: %w", err)
 			}
-			out, _, err := prg.Eval(map[string]any{})
+			out, _, err := prg.ContextEval(ctx, map[string]any{})
 			if err != nil {
 				return "", fmt.Errorf("imageReference does not evaluate: %w", err)
 			}
@@ -58,7 +59,7 @@ func ociImageReference(u *transferv1alpha1.OCIUploaderConfig, aliases map[string
 // separate OCI artifact. A resource the uploader cannot upload is an error: the uploader's
 // match selected it, so the config must be adjusted. It returns the CEL spec-field
 // expressions of the file buffers produced, for cleanup.
-func processOCIUploader(resource descriptorv2.Resource, access runtime.Typed, u *transferv1alpha1.OCIUploaderConfig, aliases map[string]string, env *uploaderEnv, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int) ([]string, error) {
+func processOCIUploader(ctx context.Context, resource descriptorv2.Resource, access runtime.Typed, u *transferv1alpha1.OCIUploaderConfig, aliases map[string]string, env *uploaderEnv, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int) ([]string, error) {
 	switch acc := access.(type) {
 	case *ociv1.OCIImage, *helmv1.Helm:
 	case *descriptorv2.LocalBlob:
@@ -69,7 +70,7 @@ func processOCIUploader(resource descriptorv2.Resource, access runtime.Typed, u 
 		return nil, fmt.Errorf("oci uploader cannot upload access type %s (adjust match)", resource.Access.Type)
 	}
 
-	imageReference, err := ociImageReference(u, aliases, env)
+	imageReference, err := ociImageReference(ctx, u, aliases, env)
 	if err != nil {
 		return nil, err
 	}

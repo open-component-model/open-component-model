@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"context"
 	"fmt"
 	"reflect"
 	"strconv"
@@ -140,7 +141,19 @@ func (e *uploaderEnv) get() (*cel.Env, error) {
 	return env, nil
 }
 
-// program compiles expr in the uploader environment.
+// Uploader expressions come from user configuration, including configs the controller
+// evaluates while reconciling, so every program is bounded like the controller's own
+// CEL queries.
+const (
+	// celInterruptCheckFrequency makes evaluation observe context cancellation; cel-go
+	// only checks the context when it is at least 1.
+	celInterruptCheckFrequency = 100
+	// celCostLimit bounds the runtime cost of a single evaluation.
+	celCostLimit = 1_000_000
+)
+
+// program compiles expr in the uploader environment, bounded by celCostLimit and
+// interruptible through the evaluation context (see cel.Program.ContextEval).
 func (e *uploaderEnv) program(expr string) (cel.Program, error) {
 	celEnv, err := e.get()
 	if err != nil {
@@ -150,7 +163,7 @@ func (e *uploaderEnv) program(expr string) (cel.Program, error) {
 	if issues != nil && issues.Err() != nil {
 		return nil, issues.Err()
 	}
-	return celEnv.Program(ast)
+	return celEnv.Program(ast, cel.CostLimit(celCostLimit), cel.InterruptCheckFrequency(celInterruptCheckFrequency))
 }
 
 // targetLiteral returns the CEL map literal the target alias is rewritten to: an OCI
@@ -193,7 +206,7 @@ func uploaderAliases(env *uploaderEnv, i int, toSpec runtime.Typed) (map[string]
 // expression matches; only programmatic configs that bypass Validate reach it. An
 // expression that does not compile, does not evaluate, or does not return a bool is an
 // error.
-func matches(expr string, aliases map[string]string, env *uploaderEnv) (bool, error) {
+func matches(ctx context.Context, expr string, aliases map[string]string, env *uploaderEnv) (bool, error) {
 	if expr == "" {
 		return true, nil
 	}
@@ -201,7 +214,7 @@ func matches(expr string, aliases map[string]string, env *uploaderEnv) (bool, er
 	if err != nil {
 		return false, fmt.Errorf("invalid match %q: %w", expr, err)
 	}
-	out, _, err := prg.Eval(map[string]any{})
+	out, _, err := prg.ContextEval(ctx, map[string]any{})
 	if err != nil {
 		return false, fmt.Errorf("match %q does not evaluate: %w", expr, err)
 	}
