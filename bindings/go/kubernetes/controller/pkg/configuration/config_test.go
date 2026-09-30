@@ -741,10 +741,12 @@ func TestFilterAllowedConfigTypes(t *testing.T) {
 		assert.Contains(t, types, ocmruntime.NewUnversionedType(resolversv1alpha1spec.ConfigType))
 	})
 
-	t.Run("http uploader entries are dropped", func(t *testing.T) {
+	t.Run("uploaders sending content to configured URLs are dropped", func(t *testing.T) {
 		cfg := makeGenericConfig(
 			`{"type":"http.uploader.transfer.config.ocm.software/v1alpha1","match":"true","targetURL":"http://internal.example"}`,
 			`{"type":"http.uploader.transfer.config.ocm.software","match":"true","targetURL":"http://internal.example"}`,
+			`{"type":"artifactory.uploader.transfer.config.ocm.software/v1alpha1","match":"true","url":"http://internal.example","repository":"r"}`,
+			`{"type":"nexus.uploader.transfer.config.ocm.software","match":"true","url":"http://internal.example","repository":"r"}`,
 			`{"type":"localblob.uploader.transfer.config.ocm.software/v1alpha1"}`,
 		)
 		result, err := filterAllowedConfigTypes(t.Context(), cfg)

@@ -66,8 +66,7 @@ func init() {
 //	type: generic.config.ocm.software/v1
 //	configurations:
 //	  - type: artifactory.uploader.transfer.config.ocm.software/v1alpha1
-//	    match:
-//	      accessType: Helm/v1
+//	    match: resource.access.isType("Helm")
 //	    url: https://myorg.jfrog.io
 //	    repository: helm-local
 //
@@ -79,8 +78,10 @@ type ArtifactoryUploaderConfig struct {
 	// +ocm:jsonschema-gen:enum=artifactory.uploader.transfer.config.ocm.software/v1alpha1
 	// +ocm:jsonschema-gen:enum:deprecated=artifactory.uploader.transfer.config.ocm.software
 	Type runtime.Type `json:"type"`
-	// MatchSpec selects the resources this uploader applies to (exposed as `match`).
-	MatchSpec UploaderMatch `json:"match"`
+	// Match is a CEL boolean expression selecting the resources this uploader uploads, e.g.
+	// `resource.access.isType("Helm")`. It sees `resource` and `target`; test access types
+	// with resource.access.isType. Required: repository uploaders have no default.
+	Match string `json:"match"`
 	// URL is the base URL of the server (scheme, host, optional port and context path) without
 	// the /artifactory segment, e.g. https://myorg.jfrog.io.
 	URL string `json:"url"`
@@ -130,8 +131,7 @@ type ArtifactoryUploaderConfig struct {
 //	type: generic.config.ocm.software/v1
 //	configurations:
 //	  - type: nexus.uploader.transfer.config.ocm.software/v1alpha1
-//	    match:
-//	      accessType: Helm/v1
+//	    match: resource.access.isType("Helm")
 //	    url: https://nexus.example.com
 //	    repository: helm-hosted
 //
@@ -143,8 +143,10 @@ type NexusUploaderConfig struct {
 	// +ocm:jsonschema-gen:enum=nexus.uploader.transfer.config.ocm.software/v1alpha1
 	// +ocm:jsonschema-gen:enum:deprecated=nexus.uploader.transfer.config.ocm.software
 	Type runtime.Type `json:"type"`
-	// MatchSpec selects the resources this uploader applies to (exposed as `match`).
-	MatchSpec UploaderMatch `json:"match"`
+	// Match is a CEL boolean expression selecting the resources this uploader uploads, e.g.
+	// `resource.access.isType("Helm")`. It sees `resource` and `target`; test access types
+	// with resource.access.isType. Required: repository uploaders have no default.
+	Match string `json:"match"`
 	// URL is the base URL of the server (scheme, host, optional port and context path) without
 	// the /repository segment, e.g. https://nexus.example.com.
 	URL string `json:"url"`
@@ -160,20 +162,22 @@ type NexusUploaderConfig struct {
 	Path string `json:"path,omitempty"`
 }
 
-// GetMatch returns MatchSpec. It implements [UploaderConfig].
-func (u *ArtifactoryUploaderConfig) GetMatch() UploaderMatch { return u.MatchSpec }
+// EffectiveMatch returns the configured match; repository uploaders have no default. It
+// implements [UploaderConfig].
+func (u *ArtifactoryUploaderConfig) EffectiveMatch() string { return u.Match }
 
-// GetMatch returns MatchSpec. It implements [UploaderConfig].
-func (u *NexusUploaderConfig) GetMatch() UploaderMatch { return u.MatchSpec }
+// EffectiveMatch returns the configured match; repository uploaders have no default. It
+// implements [UploaderConfig].
+func (u *NexusUploaderConfig) EffectiveMatch() string { return u.Match }
 
-// Validate rejects a non-matching Type, an empty match access type, a URL that is not an
+// Validate rejects a non-matching Type, an empty match, a URL that is not an
 // absolute http(s) URL without query or fragment and a repository that is not a single key. An
 // empty Type is allowed for programmatically constructed configs.
 func (u *ArtifactoryUploaderConfig) Validate() error {
 	if u == nil {
 		return nil
 	}
-	return validateRepositoryUploader(u.Type, ArtifactoryUploaderConfigType, u.MatchSpec, u.URL, u.Repository)
+	return validateRepositoryUploader(u.Type, ArtifactoryUploaderConfigType, u.Match, u.URL, u.Repository)
 }
 
 // Validate rejects what [ArtifactoryUploaderConfig.Validate] rejects.
@@ -181,17 +185,17 @@ func (u *NexusUploaderConfig) Validate() error {
 	if u == nil {
 		return nil
 	}
-	return validateRepositoryUploader(u.Type, NexusUploaderConfigType, u.MatchSpec, u.URL, u.Repository)
+	return validateRepositoryUploader(u.Type, NexusUploaderConfigType, u.Match, u.URL, u.Repository)
 }
 
-func validateRepositoryUploader(typ runtime.Type, name string, match UploaderMatch, rawURL, repository string) error {
+func validateRepositoryUploader(typ runtime.Type, name string, match string, rawURL, repository string) error {
 	if !typ.IsEmpty() {
 		if typ.Name != name || (typ.Version != "" && typ.Version != Version) {
 			return fmt.Errorf("invalid type %q (must be %q or %q)", typ, name, runtime.NewVersionedType(name, Version))
 		}
 	}
-	if match.AccessType.IsEmpty() {
-		return fmt.Errorf("match.accessType is required")
+	if strings.TrimSpace(match) == "" {
+		return fmt.Errorf("match is required")
 	}
 	if rawURL == "" {
 		return fmt.Errorf("url is required")

@@ -262,5 +262,5 @@ func TestUploaderTypes(t *testing.T) {
 		r.True(strings.HasSuffix(typ.Name, ".uploader.transfer.config.ocm.software"), typ.String())
 		r.Equal(spec.Version, typ.Version)
 	}
-	r.Len(spec.UploaderTypes(), 4)
+	r.Len(spec.UploaderTypes(), 6)
 }

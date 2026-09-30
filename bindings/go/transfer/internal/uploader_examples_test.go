@@ -20,7 +20,7 @@ import (
 )
 
 // examplesResources returns the fixture resources of the documented uploader selection
-// examples (website/content/docs/reference/transfer-configuration.md, "Selection
+// examples (website/content/docs/reference/transfer-configuration/selection-examples.md, "Selection
 // examples").
 func examplesResources() []descriptor.Resource {
 	app := ociImageResource("app", "1.0.0", "ghcr.io/acme/app:1.0.0")

@@ -49,11 +49,15 @@ var allowedConfigTypes = slices.Concat(
 		runtime.NewVersionedType(resolversv1alpha1spec.ConfigType, resolversv1alpha1spec.Version),
 		runtime.NewUnversionedType(resolversv1alpha1spec.ConfigType),
 	},
-	// transfer settings and uploaders; the HTTP uploader is excluded because it streams
-	// resource content to arbitrary URLs from the controller pod.
-	slices.DeleteFunc(schemeTypes(transferspec.Scheme), func(t runtime.Type) bool {
-		return t.Name == transferspec.HTTPUploaderConfigType
-	}),
+	// transfer settings and the uploaders that only write into the replication target or keep
+	// resources by reference. The HTTP, Artifactory and Nexus uploaders are not accepted: they
+	// send resource content to configured URLs from the controller pod.
+	versionedAndUnversioned(
+		transferspec.ConfigType,
+		transferspec.OCIUploaderConfigType,
+		transferspec.LocalBlobUploaderConfigType,
+		transferspec.ReferenceUploaderConfigType,
+	),
 	[]runtime.Type{
 		runtime.NewVersionedType(httpv1alpha1.ConfigType, httpv1alpha1.Version),
 		runtime.NewUnversionedType(httpv1alpha1.ConfigType),
@@ -63,12 +67,12 @@ var allowedConfigTypes = slices.Concat(
 	},
 )
 
-// schemeTypes returns every type registered in s: each default type and all its aliases.
-func schemeTypes(s *runtime.Scheme) []runtime.Type {
-	var out []runtime.Type
-	for def, aliases := range s.GetTypes() {
-		out = append(out, def)
-		out = append(out, aliases...)
+// versionedAndUnversioned returns, for each transfer config type name, its versioned and
+// unversioned type.
+func versionedAndUnversioned(names ...string) []runtime.Type {
+	out := make([]runtime.Type, 0, 2*len(names))
+	for _, name := range names {
+		out = append(out, runtime.NewVersionedType(name, transferspec.Version), runtime.NewUnversionedType(name))
 	}
 	return out
 }

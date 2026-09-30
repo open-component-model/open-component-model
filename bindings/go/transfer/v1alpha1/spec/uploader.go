@@ -44,16 +44,6 @@ type UploaderConfig interface {
 	EffectiveMatch() string
 }
 
-// TypeResolver lists the aliases of an access type (ociArtifact, OCIImage, OCIImage/v1 are
-// aliases of one type), so uploader rules match whichever alias a descriptor uses.
-// [runtime.Scheme] implements it.
-type TypeResolver interface {
-	// ResolveCanonicalType returns the canonical type of typ or one of its aliases.
-	ResolveCanonicalType(typ runtime.Type) (canonical runtime.Type, ok bool)
-	// AliasesIter yields all aliases of a canonical type.
-	AliasesIter(canonical runtime.Type) iter.Seq[runtime.Type]
-}
-
 // HTTPUploaderConfig is a declarative rule that streams matching resources to a
 // custom HTTP target during transfer. It is carried as an entry inside the central
 // generic configuration (generic.config.ocm.software/v1), as a sibling of [Config],

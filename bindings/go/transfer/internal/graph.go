@@ -215,7 +215,7 @@ func fillGraphDefinitionWithPrefetchedComponents(
 				"targetIndex", targetIdx, "targetType", fmt.Sprintf("%T", target),
 				"transformID", id)
 
-			resourceTransformIDs, fileRefs, err := processResources(ctx, v2desc, baseID, id, val, tgd, target, uploaders)
+			resourceTransformIDs, fileRefs, err := processResources(ctx, v2desc, baseID, id, val, tgd, target, uploaders, uploaderUsed)
 			if err != nil {
 				return err
 			}
@@ -284,6 +284,7 @@ func processResources(
 				if !selected {
 					continue
 				}
+				uploaderUsed[ui] = true
 				var exprs []string
 				switch cfg := u.(type) {
 				case *transferv1alpha1.HTTPUploaderConfig:
@@ -292,6 +293,10 @@ func processResources(
 					exprs, err = processOCIUploader(ctx, resource, access, cfg, aliases, env, id, val, tgd, toSpec, resourceTransformIDs, i)
 				case *transferv1alpha1.LocalBlobUploaderConfig:
 					exprs, err = processResource(resource, access, id, val, tgd, toSpec, resourceTransformIDs, i)
+				case *transferv1alpha1.ArtifactoryUploaderConfig:
+					err = processRepositoryUploader(resource, access, uploadv1alpha1.ArtifactoryUploadV1alpha1, cfg.URL, cfg.Repository, cfg.Path, baseID, id, val, tgd, resourceTransformIDs, i)
+				case *transferv1alpha1.NexusUploaderConfig:
+					err = processRepositoryUploader(resource, access, uploadv1alpha1.NexusUploadV1alpha1, cfg.URL, cfg.Repository, cfg.Path, baseID, id, val, tgd, resourceTransformIDs, i)
 				case *transferv1alpha1.ReferenceUploaderConfig:
 					// No transformation: buildDescriptorSpec keeps the environment resource.
 					if descriptorv2.IsLocalBlob(access) {
@@ -375,6 +380,21 @@ func processResource(resource descriptorv2.Resource, access runtime.Typed, id st
 		return []string{fmt.Sprintf("${%s.spec.file}", addResourceID)}, nil
 	default:
 		return nil, fmt.Errorf("local blob uploader cannot copy access type %s (adjust match)", resource.Access.Type)
+	}
+}
+
+// warnUnusedUploaders logs every uploader whose match selected no resource of the transfer.
+// A common cause is a match written against the access a resource gets in the target (such
+// as a local blob after copying) instead of its access in the source component version.
+func warnUnusedUploaders(ctx context.Context, uploaders []transferv1alpha1.UploaderConfig, used []bool) {
+	for idx, u := range uploaders {
+		if u == nil || used[idx] {
+			continue
+		}
+		slog.WarnContext(ctx, "uploader selected no resource; its match is evaluated against the resource as described in the source component version",
+			"uploader", u.GetType().String(),
+			"index", idx,
+			"match", u.EffectiveMatch())
 	}
 }
 

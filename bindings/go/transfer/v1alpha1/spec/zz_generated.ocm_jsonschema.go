@@ -21,6 +21,9 @@ var schemaHTTPUploaderConfig []byte
 //go:embed schemas/LocalBlobUploaderConfig.schema.json
 var schemaLocalBlobUploaderConfig []byte
 
+//go:embed schemas/NexusUploaderConfig.schema.json
+var schemaNexusUploaderConfig []byte
+
 //go:embed schemas/OCIUploaderConfig.schema.json
 var schemaOCIUploaderConfig []byte
 
@@ -29,6 +32,11 @@ var schemaRecursive []byte
 
 //go:embed schemas/ReferenceUploaderConfig.schema.json
 var schemaReferenceUploaderConfig []byte
+
+// JSONSchema returns the JSON Schema for ArtifactoryUploaderConfig.
+func (ArtifactoryUploaderConfig) JSONSchema() []byte {
+	return schemaArtifactoryUploaderConfig
+}
 
 // JSONSchema returns the JSON Schema for Config.
 func (Config) JSONSchema() []byte {
@@ -43,6 +51,11 @@ func (HTTPUploaderConfig) JSONSchema() []byte {
 // JSONSchema returns the JSON Schema for LocalBlobUploaderConfig.
 func (LocalBlobUploaderConfig) JSONSchema() []byte {
 	return schemaLocalBlobUploaderConfig
+}
+
+// JSONSchema returns the JSON Schema for NexusUploaderConfig.
+func (NexusUploaderConfig) JSONSchema() []byte {
+	return schemaNexusUploaderConfig
 }
 
 // JSONSchema returns the JSON Schema for OCIUploaderConfig.

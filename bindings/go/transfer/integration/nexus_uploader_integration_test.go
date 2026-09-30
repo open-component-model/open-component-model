@@ -47,7 +47,7 @@ func Test_Integration_NexusUploader(t *testing.T) {
 	uploader := func(accessType runtime.Type, repository, path string) transferv1alpha1.UploaderConfig {
 		return &transferv1alpha1.NexusUploaderConfig{
 			Type:       runtime.NewVersionedType(transferv1alpha1.NexusUploaderConfigType, transferv1alpha1.Version),
-			MatchSpec:  transferv1alpha1.UploaderMatch{AccessType: accessType},
+			Match:      `resource.access.isType("` + accessType.String() + `")`,
 			URL:        baseURL,
 			Repository: repository,
 			Path:       path,

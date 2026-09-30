@@ -21,10 +21,23 @@ import (
 	wgettransformv1alpha1 "ocm.software/open-component-model/bindings/go/wget/transformation/spec/v1alpha1"
 )
 
-// resourceAlias is the identifier an uploader's CEL expressions (HTTP targetURL, OCI
-// imageReference) use to reference the source resource. It is rewritten to the concrete
-// environment node path before the graph runtime evaluates the expression.
-const resourceAlias = "resource"
+// resourceAlias and componentAlias are the identifiers uploader CEL expressions (match,
+// HTTP targetURL, OCI imageReference, repository path) use for the source resource and its
+// component. They are rewritten to the concrete environment node paths before the graph
+// runtime evaluates the expression.
+const (
+	resourceAlias  = "resource"
+	componentAlias = "component"
+)
+
+// templateAliases returns the aliases of templates evaluated by the graph runtime for
+// resource i of the component keyed by baseID.
+func templateAliases(baseID string, i int) map[string]string {
+	return map[string]string{
+		resourceAlias:  resourceNodePath(baseID, i),
+		componentAlias: componentNodePath(baseID),
+	}
+}
 
 // resourceNodePath returns the CEL path the `resource` alias is rewritten to. Instead
 // of injecting a second copy of the resource into the environment, it points at the
@@ -214,7 +227,7 @@ func processHTTPUploader(resource descriptorv2.Resource, u *transferv1alpha1.HTT
 	if err := wgetaccess.Scheme.Convert(requestAccess, requestRaw); err != nil {
 		return fmt.Errorf("cannot convert uploader request access: %w", err)
 	}
-	if err := templateExpressions(requestRaw, map[string]string{resourceAlias: nodePath}); err != nil {
+	if err := templateExpressions(requestRaw, templateAliases(baseID, i)); err != nil {
 		return fmt.Errorf("cannot template uploader request access: %w", err)
 	}
 
@@ -222,7 +235,7 @@ func processHTTPUploader(resource descriptorv2.Resource, u *transferv1alpha1.HTT
 	if err := wgetaccess.Scheme.Convert(publishedAccess, publishedRaw); err != nil {
 		return fmt.Errorf("cannot convert uploader published access: %w", err)
 	}
-	if err := templateExpressions(publishedRaw, map[string]string{resourceAlias: nodePath}); err != nil {
+	if err := templateExpressions(publishedRaw, templateAliases(baseID, i)); err != nil {
 		return fmt.Errorf("cannot template uploader published access: %w", err)
 	}
 

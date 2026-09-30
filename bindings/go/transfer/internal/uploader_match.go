@@ -190,15 +190,17 @@ func targetLiteral(toSpec runtime.Typed) (string, error) {
 
 // uploaderAliases returns the aliases uploader expressions of resource i see: `resource`
 // as dyn(<its path in the descriptor environment node>), so fields of any access type can
-// be tested and read; `target` as a map literal of the transfer target.
+// be tested and read; `component` likewise for its component; `target` as a map literal
+// of the transfer target.
 func uploaderAliases(env *uploaderEnv, i int, toSpec runtime.Typed) (map[string]string, error) {
 	target, err := targetLiteral(toSpec)
 	if err != nil {
 		return nil, err
 	}
 	return map[string]string{
-		resourceAlias: "dyn(" + resourceNodePath(env.baseID, i) + ")",
-		targetAlias:   target,
+		resourceAlias:  "dyn(" + resourceNodePath(env.baseID, i) + ")",
+		componentAlias: "dyn(" + componentNodePath(env.baseID) + ")",
+		targetAlias:    target,
 	}, nil
 }
 

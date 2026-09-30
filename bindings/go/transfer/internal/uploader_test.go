@@ -148,7 +148,7 @@ func TestBuildGraphDefinition_RepositoryUploaders(t *testing.T) {
 		resolver := testResolverFor("ocm.software/test", "1.0.0", testOCIRepo("ghcr.io/source"), desc)
 		roots := testTransferRoots("ocm.software/test", "1.0.0", testOCIRepo("ghcr.io/target"), resolver)
 
-		tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeAllResources}, []transferv1alpha1.UploaderConfig{u})
+		tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{}, []transferv1alpha1.UploaderConfig{u, &transferv1alpha1.LocalBlobUploaderConfig{}})
 		r.NoError(err)
 
 		var uploads []transformv1alpha1.GenericTransformation
@@ -166,7 +166,7 @@ func TestBuildGraphDefinition_RepositoryUploaders(t *testing.T) {
 	artifactoryUploader := func(accessType runtime.Type) *transferv1alpha1.ArtifactoryUploaderConfig {
 		return &transferv1alpha1.ArtifactoryUploaderConfig{
 			Type:       runtime.NewVersionedType(transferv1alpha1.ArtifactoryUploaderConfigType, transferv1alpha1.Version),
-			MatchSpec:  transferv1alpha1.UploaderMatch{AccessType: accessType},
+			Match:      `resource.access.isType("` + accessType.String() + `")`,
 			URL:        "https://artifactory.example",
 			Repository: "helm-local",
 		}
@@ -217,7 +217,7 @@ func TestBuildGraphDefinition_RepositoryUploaders(t *testing.T) {
 		r := require.New(t)
 		nexusUploader := &transferv1alpha1.NexusUploaderConfig{
 			Type:       runtime.NewVersionedType(transferv1alpha1.NexusUploaderConfigType, transferv1alpha1.Version),
-			MatchSpec:  transferv1alpha1.UploaderMatch{AccessType: helmMatch},
+			Match:      `resource.access.isType("` + helmMatch.String() + `")`,
 			URL:        "https://nexus.example",
 			Repository: "helm-hosted",
 		}
@@ -225,7 +225,7 @@ func TestBuildGraphDefinition_RepositoryUploaders(t *testing.T) {
 		resolver := testResolverFor("ocm.software/test", "1.0.0", testOCIRepo("ghcr.io/source"), desc)
 		roots := testTransferRoots("ocm.software/test", "1.0.0", testOCIRepo("ghcr.io/target"), resolver)
 
-		tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeAllResources}, []transferv1alpha1.UploaderConfig{nexusUploader})
+		tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{}, []transferv1alpha1.UploaderConfig{nexusUploader, &transferv1alpha1.LocalBlobUploaderConfig{}})
 		r.NoError(err)
 
 		var uploads []transformv1alpha1.GenericTransformation
@@ -589,28 +589,21 @@ func TestResourceNodePath_ExtraIdentitySelectorEvaluatesOverMixedResources(t *te
 	assert.Equal(t, "blob", out.Value(), "the index selector must resolve to the matching resource")
 }
 
-// TestUploaderMatch_MatchesEveryAliasOfTheAccessType checks that an uploader rule naming any
+// TestAccessTypeIs_MatchesEveryAliasOfTheAccessType checks that an isType argument naming any
 // alias of an access type, versioned or not, matches a resource described with any other
 // alias of that type, and never a resource of another type.
-func TestUploaderMatch_MatchesEveryAliasOfTheAccessType(t *testing.T) {
-	resourceWith := func(access runtime.Type) descriptorv2.Resource {
-		return descriptorv2.Resource{
-			ElementMeta: descriptorv2.ElementMeta{ObjectMeta: descriptorv2.ObjectMeta{Name: "r", Version: "1.0.0"}},
-			Access:      &runtime.Raw{Type: access},
-		}
-	}
+func TestAccessTypeIs_MatchesEveryAliasOfTheAccessType(t *testing.T) {
 	for canonical, aliases := range scheme.GetTypes() {
 		family := append([]runtime.Type{canonical}, aliases...)
 		t.Run(canonical.String(), func(t *testing.T) {
 			for _, rule := range family {
-				for _, matchType := range []runtime.Type{rule, runtime.NewUnversionedType(rule.Name)} {
-					m := transferv1alpha1.UploaderMatch{AccessType: matchType}
+				for _, want := range []runtime.Type{rule, runtime.NewUnversionedType(rule.Name)} {
 					for _, access := range family {
-						assert.True(t, m.Matches(resourceWith(access), scheme), "rule %s must match access %s", matchType, access)
+						assert.True(t, accessTypeIs(access, want), "isType(%q) must match access %s", want, access)
 					}
 				}
 				other := runtime.NewVersionedType("NotAnAccessType", "v1")
-				assert.False(t, transferv1alpha1.UploaderMatch{AccessType: rule}.Matches(resourceWith(other), scheme), "rule %s must not match %s", rule, other)
+				assert.False(t, accessTypeIs(other, rule), "isType(%q) must not match %s", rule, other)
 			}
 		})
 	}
