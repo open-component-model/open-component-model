@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -142,13 +143,8 @@ func decodeConfig(r io.Reader) (*genericv1.Config, error) {
 // appendIfNew appends entries in `toAdd` to `given` if not already present
 func appendIfNew(given []string, toAdd ...string) []string {
 	for _, entry := range toAdd {
-		found := false
-		for _, existing := range given {
-			if entry == existing {
-				found = true
-			}
-		}
-		if !found {
+		entry = filepath.Clean(entry)
+		if !slices.Contains(given, entry) {
 			given = append(given, entry)
 		}
 	}
