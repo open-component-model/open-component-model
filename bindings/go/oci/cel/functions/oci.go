@@ -168,6 +168,9 @@ func (o *options) resolveMap(m map[string]any) (Reference, error) {
 	return Reference{}, err
 }
 
+// resolveAccess resolves a typed access map: an OCIImage access through its image
+// reference, any other type through the first registered resolver that accepts it.
+// Unlike resolveMap it has no untyped fallback.
 func (o *options) resolveAccess(m map[string]any) (Reference, error) {
 	unstructured, err := runtime.UnstructuredFromMixedData(m)
 	if err != nil {
