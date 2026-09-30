@@ -57,14 +57,16 @@ You should see: `SIGNATURE VERIFICATION SUCCESSFUL` and exit code `0`. For detai
 
 ### Transfer to a CTF archive
 
-Create a self-contained [CTF archive]({{< relref "docs/concepts/transfer-concept.md" >}}) that bundles all resource artifacts and transitively referenced [component versions]({{< relref "docs/concepts/component-identity.md" >}}). A local blob uploader configuration ensures all resources are copied by value (see [Transfer and Transport]({{< relref "docs/concepts/transfer-concept.md" >}})):
+Create a self-contained [CTF archive]({{< relref "docs/concepts/transfer-concept.md" >}}) that bundles all resource artifacts and transitively referenced [component versions]({{< relref "docs/concepts/component-identity.md" >}}). A local blob uploader configuration ensures all resources are copied by value (see [Transfer and Transport]({{< relref "docs/concepts/transfer-concept.md" >}})).
+
+Add the local blob uploader to `.ocmconfig` in the working directory. If the file already exists (for example
+with the signing key, credentials or resolvers), add only the `- type: localblob.uploader.transfer.config.ocm.software/v1alpha1` entry to its `configurations` list;
+otherwise create it with this content:
 
 ```yaml
-cat > .ocmconfig << 'EOF'
 type: generic.config.ocm.software/v1
 configurations:
   - type: localblob.uploader.transfer.config.ocm.software/v1alpha1
-EOF
 ```
 
 The CLI automatically merges `.ocmconfig` from the current directory with your other OCM configuration (such as `$HOME/.ocmconfig`), so credentials and resolvers stay in effect. Passing a file with `--config` would replace that configuration instead.
@@ -167,10 +169,10 @@ See [Signing and Verification]({{< relref "docs/tutorials/signing/plain.md" >}})
 
 ## Cleanup
 
-Remove the temporary CTF archive after successful transfer and verification:
+Remove the temporary CTF archive after successful transfer and verification, and remove the local
+blob uploader entry from `.ocmconfig` again (delete the file only if you created it for this guide):
 
 ```bash
-rm -f .ocmconfig
 rm -rf airgap-transport.ctf
 ```
 

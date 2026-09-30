@@ -72,15 +72,15 @@ ocm add cv --repository ctf::<path/to/archive> \
 Transfer the component version to the target registry. An OCI uploader stores the Helm chart as a standalone OCI
 artifact in the target registry, and a local blob catch-all copies every other resource.
 
-Create the transfer configuration:
+Add the uploaders to `.ocmconfig` in the working directory. If the file already exists (for example
+with the signing key, credentials or resolvers), add only the two uploader entries, in this order, to its `configurations` list;
+otherwise create it with this content:
 
 ```yaml
-cat > .ocmconfig << 'EOF'
 type: generic.config.ocm.software/v1
 configurations:
   - type: oci.uploader.transfer.config.ocm.software/v1alpha1
   - type: localblob.uploader.transfer.config.ocm.software/v1alpha1
-EOF
 ```
 
 The CLI automatically merges `.ocmconfig` from the current directory with your other OCM configuration (such as `$HOME/.ocmconfig`), so credentials and resolvers stay in effect.

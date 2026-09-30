@@ -28,15 +28,15 @@ this media type in its `ARGOCD_REPO_SERVER_OCI_LAYER_MEDIA_TYPES` allowlist.
 a local blob whose access keeps that media type. Transfer with the OCI uploader
 first and the local blob uploader as catch-all, so layout resources are
 converted into native OCI artifacts in the target registry and every other
-resource is copied there:
+resource is copied there. Add the uploaders to `.ocmconfig` in the working directory. If the file already exists (for example
+with the signing key, credentials or resolvers), add only the two uploader entries, in this order, to its `configurations` list;
+otherwise create it with this content:
 
 ```yaml
-cat > .ocmconfig << 'EOF'
 type: generic.config.ocm.software/v1
 configurations:
   - type: oci.uploader.transfer.config.ocm.software/v1alpha1
   - type: localblob.uploader.transfer.config.ocm.software/v1alpha1
-EOF
 ```
 
 ```bash
