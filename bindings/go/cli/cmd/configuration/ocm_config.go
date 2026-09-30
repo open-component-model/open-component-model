@@ -175,7 +175,7 @@ func appendIfNew(given []string, toAdd ...string) []string {
 func GetOCMConfigPaths(options OCMConfigOptions) ([]string, error) {
 	var paths []string
 	if path := getFromEnvironment(options); path != "" {
-		paths = append(paths, path)
+		paths = appendIfNew(paths, path)
 	}
 	if subPaths := getFromXDGOrHomeDir(options); len(subPaths) > 0 {
 		paths = appendIfNew(paths, subPaths...)
