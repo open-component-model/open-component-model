@@ -405,6 +405,11 @@ func VerifyComponentVersion(cmd *cobra.Command, args []string) error {
 				logger.DebugContext(egctx, "using discovered credentials for verification", "type", creds.GetType())
 			}
 
+			var stripped bool
+			if creds, stripped = withoutVerifiedTime(creds); stripped {
+				logger.WarnContext(egctx, "ignoring TSA verified time from resolved credentials; it is only set by a trusted TSA timestamp", "name", signature.Name, "property", tsa.VerifiedTimeKey)
+			}
+
 			// Verify an optional RFC 3161 timestamp attached to the signature.
 			if signature.Timestamp != nil {
 				verifiedTime, trusted, err := verifyTSATimestamp(egctx, logger, credentialGraph, desc, signature)
@@ -417,8 +422,6 @@ func VerifyComponentVersion(cmd *cobra.Command, args []string) error {
 				// current-time certificate validation.
 				if trusted {
 					creds = withVerifiedTime(creds, verifiedTime)
-				} else {
-					logger.WarnContext(egctx, "TSA timestamp is structurally valid but not trusted; not using it for certificate validation. Configure TSA root certs (type: TSA/v1alpha1) in the credential graph for full trust verification.", "name", signature.Name)
 				}
 			}
 
@@ -460,7 +463,7 @@ func loadVerifierConfig(config *genericv1.Config, signatureName string, logger *
 //
 // TSA root certificates are resolved from the credential graph: if the descriptor
 // carries a signed TSA URL label for this signature, a URL-specific TSA/v1alpha1
-// identity is used; otherwise a generic TSA/v1alpha1 identity is tried. trusted is
+// identity is tried first; the generic TSA/v1alpha1 identity follows. trusted is
 // true only when the token's signer certificate chain validated against those
 // roots as of GenTime; without roots only structural validity is checked and
 // trusted is false.
@@ -471,6 +474,14 @@ func verifyTSATimestamp(
 	desc *descruntime.Descriptor,
 	signature descruntime.Signature,
 ) (time.Time, bool, error) {
+	// Timestamps written by the legacy OCM CLI use a different encoding and cover
+	// the descriptor digest instead of the signature value. They cannot be
+	// verified here, but must not fail an otherwise valid signature.
+	if tsa.IsLegacyPEM([]byte(signature.Timestamp.Value)) {
+		logger.WarnContext(ctx, "ignoring legacy OCM timestamp; it is not verified and not used for certificate validation", "name", signature.Name)
+		return time.Time{}, false, nil
+	}
+
 	// The TSA URL stored as a signed label enables URL-specific credential lookup.
 	var tsaURL string
 	labelName := tsa.TSAURLLabelPrefix + signature.Name
@@ -483,21 +494,13 @@ func verifyTSATimestamp(
 		}
 	}
 
-	var tsaRootPool *x509.CertPool
-	if tsaID, err := tsa.TSAConsumerIdentity(tsaURL); err == nil {
-		if tsaCreds, err := credentialGraph.Resolve(ctx, tsaID); err == nil {
-			pool, err := tsa.RootCertPoolFromCredentials(tsaCreds)
-			if err != nil {
-				return time.Time{}, false, fmt.Errorf("loading TSA root certificates from credential graph: %w", err)
-			}
-			if pool != nil {
-				tsaRootPool = pool
-				logger.DebugContext(ctx, "TSA root certificates resolved from credential graph", "name", signature.Name, "tsaURL", tsa.RedactURL(tsaURL))
-			}
-		}
+	tsaRootPool, err := tsaRootPoolFromGraph(ctx, logger, credentialGraph, tsaURL)
+	if err != nil {
+		return time.Time{}, false, err
 	}
-
-	if tsaRootPool == nil {
+	if tsaRootPool != nil {
+		logger.DebugContext(ctx, "TSA root certificates resolved from credential graph", "name", signature.Name, "tsaURL", tsa.RedactURL(tsaURL))
+	} else {
 		logger.WarnContext(ctx, "verifying TSA timestamp without root certificates; only structural validity is checked. Configure TSA root certs in the credential graph (type: TSA/v1alpha1) for full trust verification.", "name", signature.Name)
 	}
 	logger.InfoContext(ctx, "verifying TSA timestamp", "name", signature.Name)
@@ -523,6 +526,60 @@ func verifyTSATimestamp(
 
 	logger.InfoContext(ctx, "TSA timestamp verified", "name", signature.Name, "time", verifiedTime, "trusted", trusted)
 	return verifiedTime, trusted, nil
+}
+
+// tsaRootPoolFromGraph resolves TSA root certificates from the credential graph.
+// The identity derived from the TSA URL label is tried first; the generic
+// TSA/v1alpha1 identity follows, so a consumer entry without URL attributes
+// matches any TSA. URL matching requires equal hostnames, so a type-only entry
+// never matches the URL-derived identity on its own.
+func tsaRootPoolFromGraph(ctx context.Context, logger *slog.Logger, credentialGraph credentials.Resolver, tsaURL string) (*x509.CertPool, error) {
+	candidates := []string{tsaURL}
+	if tsaURL != "" {
+		candidates = append(candidates, "")
+	}
+	for _, candidate := range candidates {
+		tsaID, err := tsa.TSAConsumerIdentity(candidate)
+		if err != nil {
+			logger.WarnContext(ctx, "ignoring unparsable TSA URL label for credential lookup", "error", err.Error())
+			continue
+		}
+		tsaCreds, err := credentialGraph.Resolve(ctx, tsaID)
+		if err != nil {
+			if errors.Is(err, credentials.ErrNotFound) {
+				logger.DebugContext(ctx, "no TSA credentials for identity", "identity", tsaID.String())
+				continue
+			}
+			return nil, fmt.Errorf("resolving TSA credentials failed: %w", err)
+		}
+		pool, err := tsa.RootCertPoolFromCredentials(tsaCreds)
+		if err != nil {
+			return nil, fmt.Errorf("loading TSA root certificates from credential graph: %w", err)
+		}
+		if pool != nil {
+			return pool, nil
+		}
+	}
+	return nil, nil
+}
+
+// withoutVerifiedTime removes a tsa.VerifiedTimeKey property from resolved
+// credentials and reports whether one was present. The RSA handler relaxes
+// certificate validity to that time, so it must originate only from a trusted
+// TSA verification (withVerifiedTime), never from configuration or a plugin.
+func withoutVerifiedTime(creds runtime.Typed) (runtime.Typed, bool) {
+	if creds == nil {
+		return nil, false
+	}
+	properties := credentialProperties(creds)
+	if _, ok := properties[tsa.VerifiedTimeKey]; !ok {
+		return creds, false
+	}
+	delete(properties, tsa.VerifiedTimeKey)
+	return &credconfigv1.DirectCredentials{
+		Type:       runtime.NewVersionedType(credconfigv1.CredentialsType, credconfigv1.Version),
+		Properties: properties,
+	}, true
 }
 
 // withVerifiedTime returns credentials that carry the TSA-verified signing time

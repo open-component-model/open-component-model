@@ -7,6 +7,7 @@ import (
 	"crypto/x509"
 	"encoding/asn1"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -19,6 +20,9 @@ import (
 const (
 	contentTypeTSQuery = "application/timestamp-query"
 	pemBlockType       = "TIMESTAMP TOKEN"
+	// legacyPEMBlockType is the PEM block type the legacy OCM CLI
+	// (open-component-model/ocm) uses for a bare CMS SignedData timestamp.
+	legacyPEMBlockType = "TIMESTAMP INFO"
 )
 
 // Token holds the result of a successful timestamp request.
@@ -101,7 +105,7 @@ func RequestTimestamp(ctx context.Context, client HTTPClient, url string, hash c
 
 	httpResp, err := client.Do(httpReq)
 	if err != nil {
-		return nil, fmt.Errorf("tsa: sending request to %s: %w", redacted, err)
+		return nil, fmt.Errorf("tsa: sending request to %s: %w", redacted, stripURLError(err))
 	}
 	defer httpResp.Body.Close()
 
@@ -159,6 +163,17 @@ func RequestTimestamp(ctx context.Context, client HTTPClient, url string, hash c
 		Time: info.GenTime,
 		Info: info,
 	}, nil
+}
+
+// stripURLError unwraps a *url.Error to its cause. net/http formats *url.Error
+// with the request URL, masking only the userinfo password, so the username and
+// query (which may carry an API key) would otherwise reach error output.
+func stripURLError(err error) error {
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) {
+		return urlErr.Err
+	}
+	return err
 }
 
 // Verify parses a DER-encoded timestamp token and verifies that:
@@ -300,6 +315,14 @@ func FromPEM(data []byte) ([]byte, error) {
 		return nil, fmt.Errorf("tsa: trailing data after PEM block")
 	}
 	return block.Bytes, nil
+}
+
+// IsLegacyPEM reports whether data holds a timestamp written by the legacy OCM
+// CLI. Such timestamps cover the descriptor digest rather than the signature
+// value and cannot be verified by Verify.
+func IsLegacyPEM(data []byte) bool {
+	block, _ := pem.Decode(data)
+	return block != nil && block.Type == legacyPEMBlockType
 }
 
 // parseTSTInfo unmarshals TSTInfo from DER-encoded bytes (the eContent

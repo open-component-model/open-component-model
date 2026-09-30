@@ -191,6 +191,23 @@ func TestFromPEM_TrailingData(t *testing.T) {
 	assert.Contains(t, err.Error(), "trailing data")
 }
 
+func TestIsLegacyPEM(t *testing.T) {
+	tests := []struct {
+		name string
+		data []byte
+		want bool
+	}{
+		{name: "legacy OCM block", data: pem.EncodeToMemory(&pem.Block{Type: "TIMESTAMP INFO", Bytes: []byte{0x30, 0x00}}), want: true},
+		{name: "timestamp token block", data: ToPEM([]byte{0x30, 0x00})},
+		{name: "not PEM", data: []byte("garbage")},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			require.New(t).Equal(tc.want, IsLegacyPEM(tc.data))
+		})
+	}
+}
+
 // --- MessageImprint.Hash error path ---
 
 func TestMessageImprint_Hash_UnknownOID(t *testing.T) {
@@ -391,6 +408,17 @@ func TestRequestTimestamp_InvalidURL(t *testing.T) {
 	digest := sha256.Sum256([]byte("test"))
 	_, err := RequestTimestamp(t.Context(), nil, "://bad-url", crypto.SHA256, digest[:])
 	assert.Error(t, err)
+}
+
+func TestRequestTimestamp_TransportErrorRedactsURL(t *testing.T) {
+	r := require.New(t)
+	digest := sha256.Sum256([]byte("test"))
+	// Port 1 on loopback is closed, so the dial fails without external traffic.
+	_, err := RequestTimestamp(t.Context(), &http.Client{}, "http://alice@127.0.0.1:1/tsa?apikey=S3CR3T", crypto.SHA256, digest[:])
+	r.Error(err)
+	r.NotContains(err.Error(), "S3CR3T")
+	r.NotContains(err.Error(), "alice")
+	r.Contains(err.Error(), "http://127.0.0.1:1/tsa")
 }
 
 func TestRequestTimestamp_BadResponseBody(t *testing.T) {
