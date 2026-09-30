@@ -167,17 +167,10 @@ func NewReadOnlyChartFromRemote(ctx context.Context, helmRepo, targetDir string,
 		return nil, fmt.Errorf("error resolving chart URL %q via index.yaml: %w", helmRepo, err)
 	}
 
-	// Update baseURL to the resolved repo URL for accurate same-host credential scoping,
-	// then rebuild providers so httpConfigGetter instances capture the new baseURL.
-	cfgOpts.baseURL = resolvedRepo
-	if httpClient != nil {
-		providers = GetterProviders(httpClient, cfgOpts)
-		dl.Getters = providers
-	}
-
-	// For the standard getter.HTTPGetter path (no custom client), credentials
-	// must be forwarded via dl.Options. The httpConfigGetter path has them
-	// baked in via cfgOpts above.
+	// Credentials belong to the host of helmRepo. The providers built above scope them to it, so
+	// a chart URL resolved to another host (e.g. the upstream URL in the index.yaml of an
+	// Artifactory remote repository) is fetched without them. For the standard getter.HTTPGetter
+	// path (no custom client), credentials are forwarded via dl.Options only for the same host.
 	if httpClient == nil && username != "" && password != "" && sameHost(helmRepo, resolvedRepo) {
 		dl.Options = append(dl.Options, getter.WithBasicAuth(username, password))
 	}
