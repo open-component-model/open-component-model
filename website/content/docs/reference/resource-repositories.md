@@ -387,8 +387,9 @@ maps to the identity, and for matching rules.
 ### Download Behavior
 
 OCM fetches the pinned commit into a temporary bare repository. If the server does not allow a fetch by commit SHA, OCM
-fetches all refs instead. With only a `ref`, OCM fetches the refs and resolves the `ref` to a commit. An annotated tag
-is resolved to the commit it points to.
+fetches all refs instead. With only a `ref`, OCM fetches all refs and resolves the `ref` to a commit. An annotated tag
+is resolved to the commit it points to. `ref: HEAD` without a `commit` is the one case where OCM clones the whole
+repository, with all refs and tags, instead of fetching.
 
 OCM then writes the files of the commit into a gzip-compressed tar (`application/x-tgz`). It reads the Git objects
 directly, so no working tree is checked out. The archive is deterministic:
@@ -402,7 +403,8 @@ The same commit therefore gives the same archive bytes with the same OCM version
 OCM release may compress differently.
 
 The archive is streamed to a file under the `tempFolder` of the `filesystem.config.ocm.software/v1alpha1`
-configuration type. The temporary Git storage is removed after the download.
+configuration type. When `tempFolder` is unset, OCM uses the temporary directory of the operating system. The temporary
+Git storage is removed after the download.
 
 ### Digest Processing
 

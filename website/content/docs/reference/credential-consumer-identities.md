@@ -578,8 +578,9 @@ user part of the URL (`git@`) is never part of the identity.
 | `ssh://git@git.example.com:2222/org/repo.git` | `ssh`    | `git.example.com` | `2222` | `org/repo.git`        |
 | `git://git.example.com/org/repo.git`          | `git`    | `git.example.com` | `9418` | `org/repo.git`        |
 
-OCM lowercases the scheme and hostname before matching. The `path` keeps a `.git` suffix if the URL has one, so `path: org/repo` does
-not match `https://example.com/org/repo.git`. Use `org/*` or the exact path with `.git`.
+OCM lowercases the scheme and hostname of the URL before matching. It does not change the identity in your
+configuration, so write `scheme` and `hostname` in lowercase there. The `path` keeps a `.git` suffix if the URL has one,
+so `path: org/repo` does not match `https://example.com/org/repo.git`. Use `org/*` or the exact path with `.git`.
 
 ### Credential Properties
 

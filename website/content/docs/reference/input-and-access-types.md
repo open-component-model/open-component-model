@@ -321,7 +321,7 @@ download.
 | `ref`        | string | no       | Branch, tag or full ref name (for example `main`, `v1.0.0`, `refs/tags/v1.0.0`). Ignored when `commit` is set.               |
 | `commit`     | string | no       | Full 40-character commit SHA. Takes precedence over `ref`.                                                                   |
 
-If you set neither `ref` nor `commit`, OCM archives the commit that the remote `HEAD` points to, usually the default
+If you set neither `ref` nor `commit`, OCM archives the commit that the repository's `HEAD` points to, usually the default
 branch. The result then changes when the branch moves. Set `commit` for a reproducible build.
 
 ```yaml
@@ -533,9 +533,9 @@ never copies it into the component version.
 | Local         | `file:///srv/git/repo.git` or `/srv/git/repo.git` |
 
 {{< callout context="caution" >}}
-A URL without a scheme is a **local path**. OCM v1 read `github.com/org/repo` as a remote repository; OCM v2 reads it as
-the directory `github.com/org/repo` under the current working directory. Always write the scheme, for example
-`https://github.com/org/repo`.
+A URL needs a scheme, such as `https://github.com/org/repo`. Without one, OCM treats the value as a **local
+directory**, so `github.com/org/repo` points to a folder under the current working directory. scp-style SSH addresses
+such as `git@github.com:org/repo.git` are the exception and always mean SSH.
 {{< /callout >}}
 
 OCM checks the server's host key against your `~/.ssh/known_hosts`. Without a configured SSH key, OCM uses the SSH agent.
@@ -560,7 +560,8 @@ specifications with the types `git`, `git/v1alpha1` and `Git/v1alpha1` unchanged
 
 Two differences need attention:
 
-- **URLs without a scheme** are local paths in OCM v2, as described above.
+- **Scheme.** OCM v1 read `github.com/org/repo` as a remote repository. OCM v2 reads it as a local directory, so
+  add the scheme. scp-style SSH addresses such as `git@github.com:org/repo.git` are unaffected.
 - **Credentials.** The consumer identity type is still `Git`, but the OCM v1 `pathprefix` attribute is gone. Use
   `path`, which supports glob patterns. See
   [Credential Consumer Identities: Git]({{< relref "credential-consumer-identities.md" >}}#git).
