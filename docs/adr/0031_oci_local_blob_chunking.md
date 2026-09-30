@@ -125,6 +125,9 @@ Cons:
 
 Chosen Option: **[Option 1](#option-1-oci-manifest-with-ordered-chunk-layers)**.
 
+**This option differs from the [option chosen in ocm v1](#option-3-digest-list-in-localreference) and will therefore be a breaking change.**
+The breaking change is acceptable as we expect a quite limited amount of impacted users.
+
 A single manifest matches the required ordered-blob model directly. It supports OCI graph traversal, registry reachability, CTF storage, and CAS reuse without changing the component descriptor.
 
 ## Wire Contract
@@ -163,6 +166,29 @@ The referenced config blob describes the logical content:
 }
 ```
 
+Digest meanings and encodings:
+
+| Field | Digest of |
+| --- | --- |
+| `LocalBlob.localReference` | The serialized chunk manifest. |
+| Manifest `config.digest` | The serialized config blob. |
+| Manifest `layers[].digest` | The bytes of the respective chunk. |
+| Config `content.digest` | The complete logical byte stream formed by concatenating all chunks in manifest order. |
+| Resource `digest` | The same complete logical byte stream as config `content.digest`, independent of chunk boundaries. |
+
+OCI digest fields use `sha256:<lowercase-hex>`. If the complete logical content digest is `sha256:<d>`, config `content.digest` contains that complete OCI digest, while a resource records the same digest as:
+
+```yaml
+digest:
+  hashAlgorithm: SHA-256
+  normalisationAlgorithm: genericBlobDigest/v1
+  value: <d>
+```
+
+Writers MUST compute config `content.digest` and, for resources, resource `digest` from the exact complete logical byte stream, independent of its representation chunks. They MUST NOT substitute `LocalBlob.localReference`, the chunk-manifest digest. The manifest contains the ordered chunk descriptors, so changing the chunk size or chunk boundaries changes the manifest bytes and digest even when concatenating the chunks produces identical logical content. Using the manifest digest as the resource digest would therefore make resource identity and signatures depend on the chunking configuration.
+
+The complete logical content digest is also distinct from the config-blob digest and every individual chunk digest. Sources have no resource digest field, so their complete logical content digest exists only in config `content.digest`.
+
 Contract:
 
 * manifest layer order is content order; no chunk-index annotation;
@@ -172,7 +198,10 @@ Contract:
 * resource digest remains the complete logical content digest;
 * the complete digest is stable across chunk-size settings and storage representations;
 * the config makes the graph self-describing, including for sources without a resource digest field;
-* duplicate metadata must agree. Reader mismatch is an error;
+* duplicated logical-content metadata must agree:
+  * config `content.mediaType` must equal `LocalBlob.mediaType`;
+  * for resources, config `content.digest` and resource `digest` must encode the same complete logical content SHA-256 shown above;
+  * readers reject either mismatch;
 * readers verify each chunk and the reassembled size and digest;
 * generated `globalAccess` is suppressed for chunked blobs because an OCI reference does not provide the logical byte stream to standard clients.
 
@@ -219,6 +248,11 @@ Pros:
 * avoids pre-upload staging when the target supports unknown-descriptor pushes;
 * streams descriptor-backed writes to OCI, CTF, and other `content.Storage` implementations;
 * bounds RAM to the copy buffer and temporary disk to at most one representation chunk.
+* completed-chunk reuse on retry
+
+> [!NOTE]
+> The PushStreaming API only learns a chunk digest after uploading it. So, in those cases, the
+> completed-chunk reuse on retry does not work.
 
 Cons:
 
@@ -287,6 +321,14 @@ Built-in per-registry limits are also deferred for research. OCM v1 carried a ha
 
 Resolve `localReference`, detect the chunk artifact, fetch layers in manifest order, and expose one concatenated `ReadOnlyBlob`. No OCI-layout tar or complete temporary file is needed. Integrity errors surface while consuming the stream.
 
+#### Resource digest lookup
+
+For an ordinary OCI artifact, digest processing can use the digest of the resolved root descriptor as the resource digest without fetching the artifact body. That shortcut is invalid for a chunked local blob: its resolved root digest is the chunk-manifest digest and identifies only one particular chunking representation.
+
+To look up, default, or verify the resource digest of a chunked local blob, the implementation MUST resolve `LocalBlob.localReference`, fetch and parse the chunk manifest, fetch and parse its config blob, and use config `content.digest` as the complete logical content digest. It MUST NOT copy the resolved manifest descriptor digest into resource `digest`. The mapping from config `content.digest` to resource `digest` is the SHA-256 mapping defined in the [wire contract](#wire-contract).
+
+This lookup requires reading the small manifest and config blobs, unlike the descriptor-only lookup used for ordinary OCI artifacts, but does not require fetching any chunk or reconstructing the logical byte stream. Full reads still verify the configured digest against the reconstructed bytes.
+
 ## Storage and Transfer Integration
 
 ### Repository-Level Chunk Support
@@ -341,4 +383,5 @@ Cover at least:
 * Chunk graph copies can deduplicate and avoid resource-level materialization after transfer orchestration selects the graph-native path.
 * Initial upload uses temporary storage up to one chunk.
 * Chunked content requires a chunk-aware OCM client.
+* Resource digest lookup requires fetching the chunk manifest and config blob instead of using only the resolved root descriptor.
 * OCI-native artifact layers remain outside the feature's scope.
