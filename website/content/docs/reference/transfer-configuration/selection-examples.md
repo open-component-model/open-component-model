@@ -48,12 +48,33 @@ configurations:
 | `notes`  | local blob (the default `match` does not select it: not an OCI manifest) |
 | `docs`   | by reference (the default `match` does not select `Wget`)                |
 
-## E2 — the same with every default spelled out
+## E2 — the same as one entry per access type
 
-Writing the default `match` and the default
+One entry per access type, each with the default
 [`imageReference`]({{< relref "docs/reference/transfer-configuration/oci-uploader.md#imagereference" >}})
-into the entry gives the same outcome as E1. There is no reason to do so except
-as a starting point for a change.
+for its access type spelled out, gives the same outcome as E1. This is the
+starting point for changing the reference of one access type only.
+
+```yaml
+type: generic.config.ocm.software/v1
+configurations:
+  - type: oci.uploader.transfer.config.ocm.software/v1alpha1
+    match: target.type == "OCIRepository" && resource.access.isType("OCIImage")
+    imageReference: |-
+      ${target.baseUrl + (target.subPath == "" ? "" : "/" + target.subPath) + "/"
+        + resource.access.toOCI().repository
+        + (resource.access.toOCI().tag == "" ? "" : ":" + resource.access.toOCI().tag)}
+  - type: oci.uploader.transfer.config.ocm.software/v1alpha1
+    match: target.type == "OCIRepository" && resource.access.isType("Helm")
+    # imageReference omitted: the Helm default applies
+  - type: oci.uploader.transfer.config.ocm.software/v1alpha1
+    match: >-
+      target.type == "OCIRepository"
+      && resource.access.isType("LocalBlob")
+      && has(resource.access.mediaType) && isOCIManifest(resource.access.mediaType)
+      && has(resource.access.referenceName)
+    imageReference: '${target.baseUrl + (target.subPath == "" ? "" : "/" + target.subPath) + "/" + resource.access.referenceName}'
+```
 
 ## E3 — Helm charts only
 

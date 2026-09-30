@@ -246,7 +246,7 @@ func TestBuildGraphDefinition_OCIUploader(t *testing.T) {
 			target:   testOCIRepo("ghcr.io/target"),
 			resource: ociImageResource("my-image", "1.0.0", "oci://ghcr.io/org/image:v1"),
 			uploaders: []transferv1alpha1.UploaderConfig{&transferv1alpha1.OCIUploaderConfig{
-				ImageReference: transferv1alpha1.DefaultOCIImageReference,
+				ImageReference: transferv1alpha1.DefaultOCIImageReferenceOCIImage,
 			}},
 			wantTypes:      []runtime.Type{ociv1alpha1.TransferOCIArtifactV1alpha1, ociv1alpha1.OCIAddComponentVersionV1alpha1},
 			wantImageRef:   "ghcr.io/target/org/image:v1",

@@ -8,25 +8,33 @@ import (
 // separate OCI artifacts instead of embedding them as local blobs.
 const OCIUploaderConfigType = "oci.uploader.transfer.config.ocm.software"
 
-// DefaultOCIImageReference is the CEL template an [OCIUploaderConfig] uses when
-// ImageReference is empty. It places the artifact in the target registry (baseUrl plus
-// subPath) under the name the resource's access gives it:
-//   - a local blob's referenceName, verbatim,
-//   - a Helm chart's repository path and chart name, tagged with the chart version,
-//   - an OCI image's repository and tag, via toOCI().
-//
-// Writing it explicitly into a config is equivalent to omitting ImageReference.
-const DefaultOCIImageReference = `${target.baseUrl
-  + (target.subPath == "" ? "" : "/" + target.subPath)
-  + "/" + (has(resource.access.referenceName)
-    ? resource.access.referenceName
-    : has(resource.access.helmChart)
-      ? (url(resource.access.helmRepository).path.split("/") + [resource.access.helmChart.split(":")[0]]).filter(s, s != "").join("/")
-        + (has(resource.access.version) && resource.access.version != ""
-          ? ":" + resource.access.version
-          : (resource.access.helmChart.contains(":") ? ":" + resource.access.helmChart.split(":")[1] : ""))
-      : resource.access.toOCI().repository
-        + (resource.access.toOCI().tag == "" ? "" : ":" + resource.access.toOCI().tag))}`
+// ociTargetPrefix is the CEL expression of the target registry location all default image
+// references start with: baseUrl plus subPath, followed by a slash.
+const ociTargetPrefix = `target.baseUrl + (target.subPath == "" ? "" : "/" + target.subPath) + "/"`
+
+// The default image references an [OCIUploaderConfig] uses when ImageReference is empty,
+// one per access type the uploader can upload; the uploader picks the one matching the
+// access of the selected resource. Each places the artifact in the target registry
+// (baseUrl plus subPath) under the name the access gives it. Writing the one for an access
+// type explicitly into a config is equivalent to omitting ImageReference for it.
+const (
+	// DefaultOCIImageReferenceOCIImage names an OCI image by the repository and tag of its
+	// image reference, via toOCI(): ghcr.io/org/image:v1 becomes <target>/org/image:v1.
+	DefaultOCIImageReferenceOCIImage = "${" + ociTargetPrefix + ` + resource.access.toOCI().repository
+  + (resource.access.toOCI().tag == "" ? "" : ":" + resource.access.toOCI().tag)}`
+
+	// DefaultOCIImageReferenceHelm names a Helm chart by the path of its repository URL and
+	// the chart name, tagged with the chart version: https://charts.example/stable with chart
+	// app and version 1.0.0 becomes <target>/stable/app:1.0.0.
+	DefaultOCIImageReferenceHelm = "${" + ociTargetPrefix + ` + (url(resource.access.helmRepository).path.split("/") + [resource.access.helmChart.split(":")[0]]).filter(s, s != "").join("/")
+  + (has(resource.access.version) && resource.access.version != ""
+    ? ":" + resource.access.version
+    : (resource.access.helmChart.contains(":") ? ":" + resource.access.helmChart.split(":")[1] : ""))}`
+
+	// DefaultOCIImageReferenceLocalBlob names a local blob holding an OCI manifest by its
+	// referenceName, verbatim: org/image:v1 becomes <target>/org/image:v1.
+	DefaultOCIImageReferenceLocalBlob = "${" + ociTargetPrefix + ` + resource.access.referenceName}`
+)
 
 // DefaultOCIUploaderMatch is the match an [OCIUploaderConfig] uses when none is set: OCI
 // registry targets only; OCI images, Helm charts, and local blobs that hold an OCI
@@ -53,9 +61,10 @@ func init() {
 // are not merged.
 //
 // The uploader handles the resources its match selects; without match it uses
-// [DefaultOCIUploaderMatch]. ImageReference is a CEL template; when omitted,
-// [DefaultOCIImageReference] is used. The template is evaluated for each selected
-// resource while the transfer graph is built. A selected resource the uploader cannot
+// [DefaultOCIUploaderMatch]. ImageReference is a CEL template; when omitted, the default
+// for the access type of the selected resource is used ([DefaultOCIImageReferenceOCIImage],
+// [DefaultOCIImageReferenceHelm], [DefaultOCIImageReferenceLocalBlob]). The template is
+// evaluated for each selected resource while the transfer graph is built. A selected resource the uploader cannot
 // upload (an access type other than OCI image, Helm chart or OCI-manifest local blob),
 // or whose ImageReference does not evaluate, fails the transfer.
 //
@@ -66,7 +75,7 @@ func init() {
 //	    match: resource.name == "my-image"
 //	    imageReference: '${"ghcr.io/mirror/" + resource.access.toOCI().repository + ":" + resource.access.toOCI().tag}'
 //	  # upload every other resource the default match selects next to the
-//	  # component version (imageReference omitted: DefaultOCIImageReference)
+//	  # component version (imageReference omitted: the per-access-type default)
 //	  - type: oci.uploader.transfer.config.ocm.software/v1alpha1
 //
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
@@ -88,9 +97,11 @@ type OCIUploaderConfig struct {
 	// dynamically, so has() tests for fields of any access type, and
 	// resource.access.toOCI() splits an OCI image access into host, registry,
 	// repository, tag, digest and reference; resource.access.isType tests the access
-	// type with aliases resolved. `target` is the transfer target: an OCI registry has type, baseUrl and
-	// subPath; a CTF archive has type and filePath. When empty, it defaults to
-	// DefaultOCIImageReference.
+	// type with aliases resolved. `target` is the transfer target: an OCI registry has
+	// type, baseUrl and subPath; a CTF archive has type and filePath. When empty, the
+	// default for the access type of the selected resource applies
+	// (DefaultOCIImageReferenceOCIImage, DefaultOCIImageReferenceHelm,
+	// DefaultOCIImageReferenceLocalBlob).
 	ImageReference string `json:"imageReference,omitempty"`
 }
 

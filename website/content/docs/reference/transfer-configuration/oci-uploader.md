@@ -57,34 +57,52 @@ identifiers as `match`:
 | `component` | The source component version: `component.name`, `component.version`, `component.provider`.                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | `target`    | The transfer target. An OCI registry exposes `target.baseUrl` (the registry, including a scheme if the target has one, e.g. `http://127.0.0.1:5000`) and `target.subPath` (the repository prefix; may be `""`). A CTF archive exposes `target.filePath`.                                                                                                                                                                                                                                                       |
 
-When `imageReference` is omitted, the uploader uses the following default:
+When `imageReference` is omitted, the uploader uses the default for the access
+type of the selected resource. Each produces `<baseUrl>[/<subPath>]/<name>` and
+starts with the same target prefix,
+`target.baseUrl + (target.subPath == "" ? "" : "/" + target.subPath) + "/"`:
 
-```yaml
-imageReference: |-
-  ${target.baseUrl
-    + (target.subPath == "" ? "" : "/" + target.subPath)
-    + "/" + (has(resource.access.referenceName)
-      ? resource.access.referenceName
-      : has(resource.access.helmChart)
-        ? (url(resource.access.helmRepository).path.split("/") + [resource.access.helmChart.split(":")[0]]).filter(s, s != "").join("/")
-          + (has(resource.access.version) && resource.access.version != ""
-            ? ":" + resource.access.version
-            : (resource.access.helmChart.contains(":") ? ":" + resource.access.helmChart.split(":")[1] : ""))
-        : resource.access.toOCI().repository
-          + (resource.access.toOCI().tag == "" ? "" : ":" + resource.access.toOCI().tag))}
-```
+- **OCI image**: the repository and tag of the image reference, via `toOCI()`
+  (registry and digest dropped). E.g. `ghcr.io/org/image:v1` → `<target>/org/image:v1`.
 
-It produces `<baseUrl>[/<subPath>]/<name>`, where the name is:
+  ```yaml
+  imageReference: |-
+    ${target.baseUrl + (target.subPath == "" ? "" : "/" + target.subPath) + "/"
+      + resource.access.toOCI().repository
+      + (resource.access.toOCI().tag == "" ? "" : ":" + resource.access.toOCI().tag)}
+  ```
 
-- **Local blob** (OCI manifest media type): `access.referenceName` verbatim (whatever it contains, including host/port/digest). E.g. `ghcr.io/org/image:v1` → `<target>/ghcr.io/org/image:v1`. Same as the old `--upload-as ociArtifact`.
-- **Helm**: path of `helmRepository` (empty segments dropped) + chart name, tagged with `version` or the part after `:` in `helmChart`. E.g. `https://stefanprodan.github.io/podinfo` + `podinfo:6.5.0` → `podinfo/podinfo:6.5.0`. Same as old.
-- **OCI image**: `resource.access.toOCI().repository` + tag (registry and digest dropped). E.g. `ghcr.io/org/image:v1` → `org/image:v1`. Same as old.
+- **Helm chart**: the path of `helmRepository` (empty segments dropped) plus the
+  chart name, tagged with `version` or the part after `:` in `helmChart`. E.g.
+  `https://stefanprodan.github.io/podinfo` + `podinfo:6.5.0` → `<target>/podinfo/podinfo:6.5.0`.
 
-Writing it out explicitly is equivalent to omitting it.
+  ```yaml
+  imageReference: |-
+    ${target.baseUrl + (target.subPath == "" ? "" : "/" + target.subPath) + "/"
+      + (url(resource.access.helmRepository).path.split("/") + [resource.access.helmChart.split(":")[0]]).filter(s, s != "").join("/")
+      + (has(resource.access.version) && resource.access.version != ""
+        ? ":" + resource.access.version
+        : (resource.access.helmChart.contains(":") ? ":" + resource.access.helmChart.split(":")[1] : ""))}
+  ```
+
+- **Local blob** holding an OCI manifest: `access.referenceName` verbatim
+  (whatever it contains, including host/port/digest). E.g. `ghcr.io/org/image:v1`
+  → `<target>/ghcr.io/org/image:v1`.
+
+  ```yaml
+  imageReference: '${target.baseUrl + (target.subPath == "" ? "" : "/" + target.subPath) + "/" + resource.access.referenceName}'
+  ```
+
+These are the same references as the old `--upload-as ociArtifact`. Writing the
+default for an access type into an entry that selects only that access type is
+equivalent to omitting it. An explicit `imageReference` applies to every
+resource the entry selects, so an entry that selects several access types needs
+a template that works for all of them, or one entry per access type (see E2 in
+the [selection examples]({{< relref "docs/reference/transfer-configuration/selection-examples.md" >}})).
 
 The template is evaluated for every selected resource while the graph is built.
 A template that does not evaluate for a selected resource fails the transfer
-with `imageReference does not evaluate`, for example the default template on a
+with `imageReference does not evaluate`, for example a default reference on a
 CTF target (it reads `target.baseUrl`), or `resource.access.toOCI()` on a Helm
 chart. A template that does not use `target` (for example an absolute registry
 prefix) also works for CTF targets, because `TransferOCIArtifact` and

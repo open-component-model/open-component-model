@@ -180,16 +180,27 @@ configurations:
 			want:   e1,
 		},
 		{
-			name: "E2 the same with every default spelled out",
+			name: "E2 the same as one entry per access type with the defaults spelled out",
 			configYAML: fmt.Sprintf(`
 type: generic.config.ocm.software/v1
 configurations:
   - type: oci.uploader.transfer.config.ocm.software/v1alpha1
-    match: |-
-%s
+    match: target.type == "OCIRepository" && resource.access.isType("OCIImage")
     imageReference: |-
 %s
-`, indentBlock(transferv1alpha1.DefaultOCIUploaderMatch, 6), indentBlock(transferv1alpha1.DefaultOCIImageReference, 6)),
+  - type: oci.uploader.transfer.config.ocm.software/v1alpha1
+    match: target.type == "OCIRepository" && resource.access.isType("Helm")
+    imageReference: |-
+%s
+  - type: oci.uploader.transfer.config.ocm.software/v1alpha1
+    match: >-
+      target.type == "OCIRepository"
+      && resource.access.isType("LocalBlob")
+      && has(resource.access.mediaType) && isOCIManifest(resource.access.mediaType)
+      && has(resource.access.referenceName)
+    imageReference: |-
+%s
+`, indentBlock(transferv1alpha1.DefaultOCIImageReferenceOCIImage, 6), indentBlock(transferv1alpha1.DefaultOCIImageReferenceHelm, 6), indentBlock(transferv1alpha1.DefaultOCIImageReferenceLocalBlob, 6)),
 			target: oci,
 			want:   e1,
 		},
