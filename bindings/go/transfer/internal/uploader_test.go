@@ -9,7 +9,13 @@ import (
 	"github.com/stretchr/testify/require"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	helmv1 "ocm.software/open-component-model/bindings/go/helm/spec/access/v1"
+	helmv1alpha1 "ocm.software/open-component-model/bindings/go/helm/transformation/spec/v1alpha1"
+	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
+	ociv1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	uploadv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/transformation/spec/v1alpha1"
 	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/transform/graph/env"
 	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
@@ -131,6 +137,108 @@ func TestBuildGraphDefinition_UploaderMatch_EmitsHTTPStreaming(t *testing.T) {
 	// ADR 28: the node carries a human-readable label; the host is parsed from the
 	// leading string literal of the targetURL expression.
 	assert.Equal(t, "test@1.0.0 [Stream blob to target.example]", streaming.label)
+}
+
+func TestBuildGraphDefinition_RepositoryUploaders(t *testing.T) {
+	chartResource := helmResource("chart-resource", "1.0.0", "https://charts.example", "chart:1.0.0")
+	buildArtifactory := func(t *testing.T, resource descriptor.Resource, u *transferv1alpha1.ArtifactoryUploaderConfig) (*transformv1alpha1.TransformationGraphDefinition, transformv1alpha1.GenericTransformation) {
+		t.Helper()
+		r := require.New(t)
+		desc := testDescriptor("ocm.software/test", "1.0.0", []descriptor.Resource{resource}, nil)
+		resolver := testResolverFor("ocm.software/test", "1.0.0", testOCIRepo("ghcr.io/source"), desc)
+		roots := testTransferRoots("ocm.software/test", "1.0.0", testOCIRepo("ghcr.io/target"), resolver)
+
+		tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeAllResources}, []transferv1alpha1.UploaderConfig{u})
+		r.NoError(err)
+
+		var uploads []transformv1alpha1.GenericTransformation
+		for _, tr := range tgd.Transformations {
+			r.NotEqual(wgetv1alpha1.HTTPStreamingV1alpha1, tr.Type, "the repository uploader must not emit an HTTPStreaming node")
+			r.NotEqual(helmv1alpha1.GetHelmChartV1alpha1, tr.Type, "the repository uploader must not emit a GetHelmChart node")
+			r.NotEqual(ociv1alpha1.OCIGetLocalResourceV1alpha1, tr.Type, "the repository uploader must not buffer local blobs")
+			if tr.Type == uploadv1alpha1.ArtifactoryUploadV1alpha1 {
+				uploads = append(uploads, tr)
+			}
+		}
+		r.Len(uploads, 1)
+		return tgd, uploads[0]
+	}
+	artifactoryUploader := func(accessType runtime.Type) *transferv1alpha1.ArtifactoryUploaderConfig {
+		return &transferv1alpha1.ArtifactoryUploaderConfig{
+			Type:       runtime.NewVersionedType(transferv1alpha1.ArtifactoryUploaderConfigType, transferv1alpha1.Version),
+			MatchSpec:  transferv1alpha1.UploaderMatch{AccessType: accessType},
+			URL:        "https://artifactory.example",
+			Repository: "helm-local",
+		}
+	}
+	helmMatch := runtime.NewVersionedType(helmv1.LegacyType, helmv1.LegacyTypeVersion)
+
+	t.Run("emits one ArtifactoryUpload node", func(t *testing.T) {
+		r := require.New(t)
+		_, tr := buildArtifactory(t, chartResource, artifactoryUploader(helmMatch))
+		r.NotContains(tr.Spec.Data, "server", "no server field in the new spec")
+		r.Equal("https://artifactory.example", tr.Spec.Data["url"])
+		r.Equal("helm-local", tr.Spec.Data["repository"])
+		r.Equal("chart-resource", tr.Spec.Data["resource"].(map[string]any)["name"])
+		cv := tr.Spec.Data["componentVersion"].(map[string]any)
+		r.Equal("ocm.software/test", cv["component"])
+		r.Equal("1.0.0", cv["version"])
+		r.NotContains(cv, "repository", "remote resources are not read from the source component version")
+		r.Equal("test@1.0.0 [Stream chart-resource to artifactory.example]", tr.Label)
+	})
+
+	t.Run("LocalBlob carries its source component version", func(t *testing.T) {
+		r := require.New(t)
+		tgd, tr := buildArtifactory(t, localBlobResource("chart", "1.0.0"), artifactoryUploader(runtime.NewVersionedType(descriptorv2.LocalBlobAccessType, descriptorv2.LocalBlobAccessTypeVersion)))
+		cv := tr.Spec.Data["componentVersion"].(map[string]any)
+		r.Equal("ocm.software/test", cv["component"])
+		r.Equal("1.0.0", cv["version"])
+		r.Equal("OCIRepository/v1", cv["repository"].(map[string]any)["type"])
+		r.Nil(findCleanupTransformation(tgd), "nothing is buffered, so there is nothing to clean up")
+	})
+
+	t.Run("matches an alias of the source access type", func(t *testing.T) {
+		r := require.New(t)
+		// An ociArtifact access (as written in constructors) matches the canonical OCIImage/v1.
+		_, tr := buildArtifactory(t, ociImageResource("chart", "1.0.0", "ghcr.io/org/charts/podinfo:6.14.1"), artifactoryUploader(runtime.NewVersionedType(ociv1.OCIImageType, ociv1.Version)))
+		r.Equal("chart", tr.Spec.Data["resource"].(map[string]any)["name"])
+	})
+
+	t.Run("path aliases point at the resource and its component", func(t *testing.T) {
+		r := require.New(t)
+		u := artifactoryUploader(helmMatch)
+		u.Path = `${component.name + "/" + resource.name + ".tgz"}`
+		_, tr := buildArtifactory(t, chartResource, u)
+		path := tr.Spec.Data["path"].(string)
+		r.Regexp(`^\$\{environment\.\w+\.component\.name \+ "/" \+ environment\.\w+\.component\.resources\[0\]\.name \+ "\.tgz"\}$`, path)
+	})
+
+	t.Run("Nexus config emits NexusUpload node", func(t *testing.T) {
+		r := require.New(t)
+		nexusUploader := &transferv1alpha1.NexusUploaderConfig{
+			Type:       runtime.NewVersionedType(transferv1alpha1.NexusUploaderConfigType, transferv1alpha1.Version),
+			MatchSpec:  transferv1alpha1.UploaderMatch{AccessType: helmMatch},
+			URL:        "https://nexus.example",
+			Repository: "helm-hosted",
+		}
+		desc := testDescriptor("ocm.software/test", "1.0.0", []descriptor.Resource{chartResource}, nil)
+		resolver := testResolverFor("ocm.software/test", "1.0.0", testOCIRepo("ghcr.io/source"), desc)
+		roots := testTransferRoots("ocm.software/test", "1.0.0", testOCIRepo("ghcr.io/target"), resolver)
+
+		tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeAllResources}, []transferv1alpha1.UploaderConfig{nexusUploader})
+		r.NoError(err)
+
+		var uploads []transformv1alpha1.GenericTransformation
+		for _, tr := range tgd.Transformations {
+			if tr.Type == uploadv1alpha1.NexusUploadV1alpha1 {
+				uploads = append(uploads, tr)
+			}
+		}
+		r.Len(uploads, 1)
+		tr := uploads[0]
+		r.Equal("https://nexus.example", tr.Spec.Data["url"])
+		r.Equal("helm-hosted", tr.Spec.Data["repository"])
+	})
 }
 
 func TestBuildGraphDefinition_NoUploader_KeepsDownloadWgetPath(t *testing.T) {
@@ -482,4 +590,31 @@ func TestResourceNodePath_ExtraIdentitySelectorEvaluatesOverMixedResources(t *te
 	out, _, err := prg.Eval(map[string]any{})
 	r.NoError(err, "selector must evaluate without an undefined-field error over mixed resources")
 	assert.Equal(t, "blob", out.Value(), "the index selector must resolve to the matching resource")
+}
+
+// TestUploaderMatch_MatchesEveryAliasOfTheAccessType checks that an uploader rule naming any
+// alias of an access type, versioned or not, matches a resource described with any other
+// alias of that type, and never a resource of another type.
+func TestUploaderMatch_MatchesEveryAliasOfTheAccessType(t *testing.T) {
+	resourceWith := func(access runtime.Type) descriptorv2.Resource {
+		return descriptorv2.Resource{
+			ElementMeta: descriptorv2.ElementMeta{ObjectMeta: descriptorv2.ObjectMeta{Name: "r", Version: "1.0.0"}},
+			Access:      &runtime.Raw{Type: access},
+		}
+	}
+	for canonical, aliases := range scheme.GetTypes() {
+		family := append([]runtime.Type{canonical}, aliases...)
+		t.Run(canonical.String(), func(t *testing.T) {
+			for _, rule := range family {
+				for _, matchType := range []runtime.Type{rule, runtime.NewUnversionedType(rule.Name)} {
+					m := transferv1alpha1.UploaderMatch{AccessType: matchType}
+					for _, access := range family {
+						assert.True(t, m.Matches(resourceWith(access), scheme), "rule %s must match access %s", matchType, access)
+					}
+				}
+				other := runtime.NewVersionedType("NotAnAccessType", "v1")
+				assert.False(t, transferv1alpha1.UploaderMatch{AccessType: rule}.Matches(resourceWith(other), scheme), "rule %s must not match %s", rule, other)
+			}
+		})
+	}
 }
