@@ -31,7 +31,7 @@ converted into native OCI artifacts in the target registry and every other
 resource is copied there:
 
 ```yaml
-cat > ocmconfig.yaml << 'EOF'
+cat > .ocmconfig << 'EOF'
 type: generic.config.ocm.software/v1
 configurations:
   - type: oci.uploader.transfer.config.ocm.software/v1alpha1
@@ -40,8 +40,10 @@ EOF
 ```
 
 ```bash
-ocm transfer cv --config ocmconfig.yaml <ctf> <registry>
+ocm transfer cv <ctf> <registry>
 ```
+
+> The CLI merges `.ocmconfig` from the current directory with your other OCM configuration (such as `$HOME/.ocmconfig`), so credentials and resolvers stay in effect.
 
 Without the OCI uploader, the OCI artifact does not exist at the reference the
 RGD expects. After transfer, `resource.access.toOCI()` exposes `registry`,

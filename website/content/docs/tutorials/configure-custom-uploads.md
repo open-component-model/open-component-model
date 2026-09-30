@@ -56,7 +56,7 @@ computes (or verifies) its digest as the bytes pass through, and records a new
 - **Component:** `ocm.software/demo:1.0.0` with a resource `docs` using `Wget/v1` access
 - **Source URL:** `https://source.example.com/artifacts/docs.tar`
 - **Upload target:** `https://mytarget.example.com/uploads/artifacts/docs.tar`
-- **Config file:** `./ocmconfig.yaml`
+- **Config file:** `.ocmconfig` in the working directory
 
 ## Tutorial Steps
 
@@ -65,7 +65,7 @@ computes (or verifies) its digest as the bytes pass through, and records a new
 
 ### Write the uploader configuration
 
-Create `ocmconfig.yaml` with an uploader config that matches `Wget/v1` resources
+Create `.ocmconfig` with an uploader config that matches `Wget/v1` resources
 and streams them to your target, followed by a catch-all that copies every other
 resource as a local blob:
 
@@ -78,6 +78,8 @@ configurations:
     method: PUT
   - type: localblob.uploader.transfer.config.ocm.software/v1alpha1
 ```
+
+> **Note:** The CLI merges `.ocmconfig` from the current directory with your other OCM configuration (such as `$HOME/.ocmconfig`), so credentials and resolvers stay in effect.
 
 The `targetURL` is a [CEL](https://cel.dev/) expression wrapped in `${…}`,
 evaluated against the source resource, exposed as `resource`. Here
@@ -95,7 +97,7 @@ source), so you can route any access type to an HTTP target — see the
 Uploaders are evaluated in declaration order and the first one that selects a
 resource handles it, so the HTTP uploader takes the `Wget/v1` resource and the
 `localblob.uploader` catch-all copies everything else as a local blob (the same
-as passing `--config` with a local blob uploader entry). Without the catch-all, local blobs are still
+as having a local blob uploader entry in your OCM configuration). Without the catch-all, local blobs are still
 copied and all other resources stay by reference.
 
 {{< /step >}}
@@ -154,8 +156,8 @@ identity, independently of the source resource:
               password: <token>
 ```
 
-Add this entry to the `configurations` list in `ocmconfig.yaml`. See
-[Credential Types]({{< relref "docs/reference/credential-types.md" >}}) and
+Add this entry to the `configurations` list in `.ocmconfig`. See
+[`WgetCredentials/v1`]({{< relref "docs/reference/credential-types.md#wgetcredentialsv1" >}}) and
 [Credential Consumer Identities]({{< relref "docs/reference/credential-consumer-identities.md" >}})
 for details.
 
@@ -165,11 +167,10 @@ for details.
 
 ### Run the transfer
 
-Transfer the component version, passing your configuration with `--config`:
+Transfer the component version. The CLI picks up the uploader configuration from `.ocmconfig` in the current directory:
 
 ```bash
 ocm transfer cv \
-  --config ./ocmconfig.yaml \
   ghcr.io/source-org/ocm//ocm.software/demo:1.0.0 \
   ghcr.io/target-org/ocm
 ```

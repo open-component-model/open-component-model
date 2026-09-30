@@ -60,16 +60,17 @@ You should see: `SIGNATURE VERIFICATION SUCCESSFUL` and exit code `0`. For detai
 Create a self-contained [CTF archive]({{< relref "docs/concepts/transfer-concept.md" >}}) that bundles all resource artifacts and transitively referenced [component versions]({{< relref "docs/concepts/component-identity.md" >}}). A local blob uploader configuration ensures all resources are copied by value (see [Transfer and Transport]({{< relref "docs/concepts/transfer-concept.md" >}})):
 
 ```yaml
-cat > ocmconfig.yaml << 'EOF'
+cat > .ocmconfig << 'EOF'
 type: generic.config.ocm.software/v1
 configurations:
   - type: localblob.uploader.transfer.config.ocm.software/v1alpha1
 EOF
 ```
 
+The CLI automatically merges `.ocmconfig` from the current directory with your other OCM configuration (such as `$HOME/.ocmconfig`), so credentials and resolvers stay in effect. Passing a file with `--config` would replace that configuration instead.
+
 ```bash
 ocm transfer cv \
-  --config ocmconfig.yaml \
   --recursive \
   <source-repository>//<component-name>:<version> \
   ctf::<path/to/airgap-transport.ctf>
@@ -115,7 +116,6 @@ On the air-gapped side, transfer the CTF archive into the target registry. The t
 
 ```bash
 ocm transfer cv \
-  --config ocmconfig.yaml \
   --recursive \
   ctf::<path/to/airgap-transport.ctf>//<component-name>:<version> \
   <target-registry>
@@ -170,6 +170,7 @@ See [Signing and Verification]({{< relref "docs/tutorials/signing/plain.md" >}})
 Remove the temporary CTF archive after successful transfer and verification:
 
 ```bash
+rm -f .ocmconfig
 rm -rf airgap-transport.ctf
 ```
 

@@ -25,7 +25,7 @@ OCI, CTF, and Helm repositories are supported as transfer sources.
 OCI and CTF repositories are supported as transfer targets, while Helm repositories are not supported.
 
 By default, local blobs are copied and all other resources stay by reference (their access
-is unchanged in the target). Uploader configurations in the OCM configuration (--config) decide
+is unchanged in the target). Uploader configurations in the OCM configuration decide
 what happens to a resource: oci.uploader.transfer.config.ocm.software/v1alpha1 (separate OCI
 artifacts), http.uploader.transfer.config.ocm.software/v1alpha1 (custom HTTP targets),
 localblob.uploader.transfer.config.ocm.software/v1alpha1 (copy as local blobs) and
@@ -47,7 +47,7 @@ Two-step workflow (generate, review, replay):
   --dry-run builds and validates the graph without executing it, and with -o yaml|json prints
   the resulting TransformationGraphDefinition. --transfer-spec then replays a saved definition
   from a file (or stdin with "-"):
-    1. Generate the spec:  transfer cv --dry-run -o yaml --config ocmconfig.yaml -r {reference} {target} > spec.yaml
+    1. Generate the spec:  transfer cv --dry-run -o yaml -r {reference} {target} > spec.yaml
     2. Review/edit spec.yaml, then execute: transfer cv --transfer-spec spec.yaml
   All graph-shaping flags (--recursive, --copy-resources, --upload-as) and any transfer or uploader
   configuration entry are baked into the spec during step 1 and are therefore ignored in
@@ -85,20 +85,21 @@ transfer component-version ctf::./my-archive//ocm.software/mycomponent ghcr.io/m
 transfer component-version ctf::./my-archive//ocm.software/mycomponent ghcr.io/my-org/ocm --latest
 
 # Upload OCI images, Helm charts and OCI-manifest local blobs as separate OCI artifacts and copy
-# every other resource as a local blob. With --config ./ocmconfig.yaml containing:
+# every other resource as a local blob. With ./.ocmconfig in the working directory (merged with
+# your other OCM configuration files) containing:
 #   type: generic.config.ocm.software/v1
 #   configurations:
 #   - type: oci.uploader.transfer.config.ocm.software/v1alpha1
 #   - type: localblob.uploader.transfer.config.ocm.software/v1alpha1
-transfer component-version --config ./ocmconfig.yaml ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm
+transfer component-version ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm
 
-# Keep one resource by reference and copy all others as local blobs. With --config ./ocmconfig.yaml containing:
+# Keep one resource by reference and copy all others as local blobs. With ./.ocmconfig containing:
 #   type: generic.config.ocm.software/v1
 #   configurations:
 #   - type: reference.uploader.transfer.config.ocm.software/v1alpha1
 #     match: resource.name == "base-os-image"
 #   - type: localblob.uploader.transfer.config.ocm.software/v1alpha1
-transfer component-version --config ./ocmconfig.yaml ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm
+transfer component-version ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm
 
 # Drive defaults from the OCM configuration. With --config ./ocmconfig.yaml containing:
 #   type: generic.config.ocm.software/v1
@@ -111,7 +112,7 @@ transfer component-version --config ./ocmconfig.yaml ghcr.io/source-org/ocm//ocm
 transfer component-version --config ./ocmconfig.yaml ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm
 
 # Two-step transfer: generate a spec with all desired flags, then review and execute
-transfer component-version --dry-run -o yaml --config ./ocmconfig.yaml -r ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm > spec.yaml
+transfer component-version --dry-run -o yaml -r ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm > spec.yaml
 # (review/edit spec.yaml as needed, e.g. change the target registry)
 transfer component-version --transfer-spec spec.yaml
 ```

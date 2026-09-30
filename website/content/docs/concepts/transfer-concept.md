@@ -41,7 +41,7 @@ For details on CTF structure and how to create component versions in a CTF archi
 
 By default, `ocm transfer` copies only the component descriptor (metadata). Resource artifacts such as container images or Helm charts stay in their original location, and the component descriptor references them by their original access coordinates.
 
-With a local blob uploader configuration (a `localblob.uploader.transfer.config.ocm.software/v1alpha1` entry passed via `--config`), transfer creates a self-contained copy: all resource artifacts are downloaded from the source and uploaded to the target. This is essential for air-gapped scenarios where the target environment cannot reach the original artifact locations.
+With a local blob uploader configuration (a `localblob.uploader.transfer.config.ocm.software/v1alpha1` entry in your OCM configuration, for example `.ocmconfig` in the working directory), transfer creates a self-contained copy: all resource artifacts are downloaded from the source and uploaded to the target. This is essential for air-gapped scenarios where the target environment cannot reach the original artifact locations.
 
 ```mermaid
 flowchart TB

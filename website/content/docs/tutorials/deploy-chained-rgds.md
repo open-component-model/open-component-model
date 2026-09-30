@@ -320,7 +320,7 @@ Handling: References vs. Copies]({{< relref "docs/concepts/transfer-concept.md#r
 for why that distinction exists.
 
 ```yaml
-cat > ocmconfig.yaml << 'EOF'
+cat > .ocmconfig << 'EOF'
 type: generic.config.ocm.software/v1
 configurations:
   - type: oci.uploader.transfer.config.ocm.software/v1alpha1
@@ -328,8 +328,10 @@ configurations:
 EOF
 ```
 
+> **Note:** The CLI merges `.ocmconfig` from the current directory with your other OCM configuration (such as `$HOME/.ocmconfig`), so credentials and resolvers stay in effect.
+
 ```bash
-ocm transfer cv --config ocmconfig.yaml \
+ocm transfer cv \
   "transport-archive//ocm.software/ocm-k8s-toolkit/system:1.0.0" $OCM_REPO
 ```
 

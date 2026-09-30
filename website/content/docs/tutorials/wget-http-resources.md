@@ -58,7 +58,7 @@ is the authoritative location and should be used for accessing the resource.
 By default, a Wget resource stays by reference: without a matching uploader, `ocm transfer cv` keeps the
 `Wget/v1` access unchanged in the target, and the file stays on the remote server.
 
-With a matching local blob uploader configuration (passed via `--config`), OCM fetches the bytes and writes them into the
+With a matching local blob uploader configuration (in your OCM configuration, for example `.ocmconfig` in the working directory), OCM fetches the bytes and writes them into the
 target as a [`LocalBlob/v1`]({{< relref "docs/reference/input-and-access-types.md#localblobv1" >}}). This means:
 
 1. To embed Wget resources, add a `localblob.uploader.transfer.config.ocm.software/v1alpha1` entry to your OCM

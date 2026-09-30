@@ -67,7 +67,7 @@ This means:
 
 **Localization** keeps image references in sync when components move between registries:
 
-1. **During transfer**: When you run `ocm transfer cv` with an OCI uploader configuration (via `--config`), OCM uploads artifacts to the new registry as OCI artifacts and updates the descriptor's image references accordingly
+1. **During transfer**: When you run `ocm transfer cv` with an OCI uploader configuration (in your OCM configuration, for example `.ocmconfig` in the working directory), OCM uploads artifacts to the new registry as OCI artifacts and updates the descriptor's image references accordingly
 2. **During deployment**: The RGD reads the updated image reference from the component and injects it into Helm values
 
 This ensures your deployment always uses images from the current registry, not hardcoded original locations.
@@ -474,7 +474,7 @@ ocm add cv
 Transfer to your registry with the OCI uploader to enable localization. An OCI uploader entry makes the Helm chart and image land as OCI artifacts in the target registry, keeping image references the RGD can rewrite; a local blob catch-all copies every other resource:
 
 ```yaml
-cat > ocmconfig.yaml << 'EOF'
+cat > .ocmconfig << 'EOF'
 type: generic.config.ocm.software/v1
 configurations:
   - type: oci.uploader.transfer.config.ocm.software/v1alpha1
@@ -482,8 +482,10 @@ configurations:
 EOF
 ```
 
+> **Note:** The CLI merges `.ocmconfig` from the current directory with your other OCM configuration (such as `$HOME/.ocmconfig`), so credentials and resolvers stay in effect.
+
 ```bash
-ocm transfer cv --config ocmconfig.yaml transport-archive//ocm.software/ocm-k8s-toolkit/bootstrap:1.0.0 $OCM_REPO
+ocm transfer cv transport-archive//ocm.software/ocm-k8s-toolkit/bootstrap:1.0.0 $OCM_REPO
 ```
 
 {{< /step >}}

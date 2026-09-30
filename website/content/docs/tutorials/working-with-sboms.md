@@ -349,16 +349,17 @@ Transfer the component version by value, which is what an air-gapped delivery do
 local blob uploader configuration and run the transfer:
 
 ```yaml
-cat > ocmconfig.yaml << 'EOF'
+cat > .ocmconfig << 'EOF'
 type: generic.config.ocm.software/v1
 configurations:
   - type: localblob.uploader.transfer.config.ocm.software/v1alpha1
 EOF
 ```
 
+> **Note:** The CLI merges `.ocmconfig` from the current directory with your other OCM configuration (such as `$HOME/.ocmconfig`), so credentials and resolvers stay in effect.
+
 ```bash
 ocm transfer cv \
-  --config ocmconfig.yaml \
   ./transport-archive//ocm.software/examples/sbom-demo:1.0.0 \
   ./transport-archive-transferred
 ```

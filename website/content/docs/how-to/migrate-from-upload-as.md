@@ -42,12 +42,12 @@ OCM configuration, so explicit rules still win.
 When a deprecated flag is used, the CLI logs a warning:
 
 ```text
-level=WARN msg="--copy-resources and --upload-as are deprecated: replace them with the OCM configuration in the config attribute (JSON is valid YAML), passed via --config or added to your existing configuration" config="{\"configurations\":[{\"type\":\"localblob.uploader.transfer.config.ocm.software/v1alpha1\"}],\"type\":\"generic.config.ocm.software/v1\"}"
+level=WARN msg="--copy-resources and --upload-as are deprecated: replace them with the OCM configuration in the config attribute (JSON is valid YAML): add its entries to your OCM configuration, e.g. in ./.ocmconfig, which is merged with your other configuration files (--config would replace them)" config="{\"configurations\":[{\"type\":\"localblob.uploader.transfer.config.ocm.software/v1alpha1\"}],\"type\":\"generic.config.ocm.software/v1\"}"
 ```
 
 The `config` attribute contains the equivalent OCM configuration as one-line
-JSON. Copy that value into a file and pass it with `--config`, then drop the
-deprecated flags.
+JSON. Copy its entries into `.ocmconfig` in your working directory (or add them
+to your existing OCM configuration) and drop the deprecated flags.
 
 The following table shows what each deprecated flag combination translates to:
 
@@ -55,7 +55,7 @@ The following table shows what each deprecated flag combination translates to:
 | --- | --- |
 | `--copy-resources` | `- type: localblob.uploader.transfer.config.ocm.software/v1alpha1` |
 | `--copy-resources --upload-as ociArtifact` | `- type: oci.uploader.transfer.config.ocm.software/v1alpha1` then `- type: localblob.uploader.transfer.config.ocm.software/v1alpha1` |
-| `--upload-as ociArtifact` | `- type: oci.uploader.transfer.config.ocm.software/v1alpha1` with `match: 'target.type == "OCIRepository" && resource.access.isType("LocalBlob") && isOCIManifest(resource.access.mediaType) && has(resource.access.referenceName)'` |
+| `--upload-as ociArtifact` | `- type: oci.uploader.transfer.config.ocm.software/v1alpha1` with `match: 'target.type == "OCIRepository" && resource.access.isType("LocalBlob") && has(resource.access.mediaType) && isOCIManifest(resource.access.mediaType) && has(resource.access.referenceName)'` |
 | `--upload-as localBlob`, `--copy-resources=false` | nothing (the CLI logs that they have no effect) |
 
 `--copy-resources=false` used to override `copyMode: allResources` from a
@@ -107,7 +107,7 @@ match: >-
   target.type == "OCIRepository"
   && (resource.access.isType(["OCIImage", "Helm"])
     || (resource.access.isType("LocalBlob")
-      && isOCIManifest(resource.access.mediaType)
+      && has(resource.access.mediaType) && isOCIManifest(resource.access.mediaType)
       && has(resource.access.referenceName)))
 ```
 
@@ -137,7 +137,9 @@ Or in config:
 {{< /tab >}}
 {{< tab "After" >}}
 
-Config file (e.g. `ocmconfig.yaml`, passed with `--config`):
+`.ocmconfig` in the working directory:
+
+> The CLI merges `.ocmconfig` from the current directory with your other OCM configuration (such as `$HOME/.ocmconfig`), so credentials and resolvers stay in effect. Passing a file with `--config` would replace that configuration instead.
 
 ```yaml
 type: generic.config.ocm.software/v1
@@ -147,7 +149,7 @@ configurations:
 ```
 
 ```bash
-ocm transfer cv --config ocmconfig.yaml <src> <target>
+ocm transfer cv <src> <target>
 ```
 
 The local-blob uploader catch-all replaces `--copy-resources` and
@@ -178,7 +180,7 @@ Or in config:
 {{< /tab >}}
 {{< tab "After" >}}
 
-Config file (e.g. `ocmconfig.yaml`, passed with `--config`):
+`.ocmconfig` in the working directory:
 
 ```yaml
 type: generic.config.ocm.software/v1
@@ -189,7 +191,7 @@ configurations:
 ```
 
 ```bash
-ocm transfer cv --config ocmconfig.yaml <src> <target>
+ocm transfer cv <src> <target>
 ```
 
 The default `imageReference` gives the same target references as
@@ -220,7 +222,7 @@ configurations:
     match: >-
       target.type == "OCIRepository"
       && resource.access.isType("LocalBlob")
-      && isOCIManifest(resource.access.mediaType)
+      && has(resource.access.mediaType) && isOCIManifest(resource.access.mediaType)
       && has(resource.access.referenceName)
 ```
 
@@ -312,7 +314,7 @@ The OCI uploader configuration supports capabilities that `--upload-as` did not.
 
 ```yaml
 - type: oci.uploader.transfer.config.ocm.software/v1alpha1
-  match: resource.access.isType("LocalBlob") && isOCIManifest(resource.access.mediaType) && has(resource.access.referenceName)
+  match: resource.access.isType("LocalBlob") && has(resource.access.mediaType) && isOCIManifest(resource.access.mediaType) && has(resource.access.referenceName)
   imageReference: '${"ghcr.io/mirror/" + resource.access.referenceName}'
 ```
 
@@ -331,12 +333,12 @@ without the target check:
 
 ```yaml
 - type: oci.uploader.transfer.config.ocm.software/v1alpha1
-  match: resource.access.isType("LocalBlob") && isOCIManifest(resource.access.mediaType) && has(resource.access.referenceName)
+  match: resource.access.isType("LocalBlob") && has(resource.access.mediaType) && isOCIManifest(resource.access.mediaType) && has(resource.access.referenceName)
   imageReference: '${"registry.example.com/mirror/" + resource.access.referenceName}'
 ```
 
 ```bash
-ocm transfer cv --config ./ocmconfig.yaml <src> ctf::./archive
+ocm transfer cv <src> ctf::./archive
 ```
 
 ### Build a reference from resource metadata
@@ -347,8 +349,8 @@ explicitly (the default `match` requires a `referenceName`):
 
 ```yaml
 - type: oci.uploader.transfer.config.ocm.software/v1alpha1
-  match: target.type == "OCIRepository" && resource.access.isType("LocalBlob") && isOCIManifest(resource.access.mediaType)
-  imageReference: '${target.baseUrl + "/" + resource.name + ":" + resource.version}'
+  match: target.type == "OCIRepository" && resource.access.isType("LocalBlob") && has(resource.access.mediaType) && isOCIManifest(resource.access.mediaType)
+  imageReference: '${target.baseUrl + (target.subPath == "" ? "" : "/" + target.subPath) + "/" + resource.name + ":" + resource.version}'
 ```
 
 ### Use a local blob's reference name as-is
@@ -381,7 +383,7 @@ Run the transfer with `--dry-run` to inspect the generated plan without writing
 to the target:
 
 ```bash
-ocm transfer cv --dry-run -o yaml --config ./ocmconfig.yaml <src> <target>
+ocm transfer cv --dry-run -o yaml <src> <target>
 ```
 
 Check for `TransferOCIArtifact` / `AddOCIArtifact` nodes. Their `imageReference`
@@ -441,16 +443,17 @@ imageReference: >-
 transfer still runs with the translated uploaders (see
 [Deprecated flags](#deprecated-flags)).
 
-**Fix:** Copy the `config` attribute from the logged warning into a file and
-pass it with `--config`, then drop the deprecated flags. The warning includes the
+**Fix:** Copy the entries from the `config` attribute in the logged warning into
+`.ocmconfig` in your working directory (or add them to your existing OCM
+configuration) and drop the deprecated flags. The warning includes the
 equivalent OCM configuration as one-line JSON. For example:
 
 ```text
-level=WARN msg="--copy-resources and --upload-as are deprecated: ..." config="{\"configurations\":[{\"type\":\"localblob.uploader.transfer.config.ocm.software/v1alpha1\"}],\"type\":\"generic.config.ocm.software/v1\"}"
+level=WARN msg="--copy-resources and --upload-as are deprecated: replace them with the OCM configuration in the config attribute (JSON is valid YAML): add its entries to your OCM configuration, e.g. in ./.ocmconfig, which is merged with your other configuration files (--config would replace them)" config="{\"configurations\":[{\"type\":\"localblob.uploader.transfer.config.ocm.software/v1alpha1\"}],\"type\":\"generic.config.ocm.software/v1\"}"
 ```
 
-Save the JSON value to `ocmconfig.yaml` (reformatted as YAML or JSON) and use
-`--config ocmconfig.yaml` instead.
+Save the JSON value to `.ocmconfig` in your working directory (reformatted as
+YAML or JSON). The CLI picks it up automatically.
 
 ### Symptom: `unknown field "uploadType"`
 
@@ -478,7 +481,7 @@ drop the target check and use an absolute registry prefix instead of `target`:
 
 ```yaml
 - type: oci.uploader.transfer.config.ocm.software/v1alpha1
-  match: resource.access.isType("LocalBlob") && isOCIManifest(resource.access.mediaType) && has(resource.access.referenceName)
+  match: resource.access.isType("LocalBlob") && has(resource.access.mediaType) && isOCIManifest(resource.access.mediaType) && has(resource.access.referenceName)
   imageReference: '${"ghcr.io/my-org/mirror/" + resource.access.referenceName}'
 ```
 
@@ -487,8 +490,8 @@ from the resource instead:
 
 ```yaml
 - type: oci.uploader.transfer.config.ocm.software/v1alpha1
-  match: target.type == "OCIRepository" && resource.access.isType("LocalBlob") && isOCIManifest(resource.access.mediaType)
-  imageReference: '${target.baseUrl + "/" + resource.name + ":" + resource.version}'
+  match: target.type == "OCIRepository" && resource.access.isType("LocalBlob") && has(resource.access.mediaType) && isOCIManifest(resource.access.mediaType)
+  imageReference: '${target.baseUrl + (target.subPath == "" ? "" : "/" + target.subPath) + "/" + resource.name + ":" + resource.version}'
 ```
 
 ### Symptom: `oci uploader cannot upload access type`

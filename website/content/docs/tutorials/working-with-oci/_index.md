@@ -34,7 +34,7 @@ flowchart LR
         Constructor --> CTF["CTF Archive"]
     end
 
-    CTF --> Transfer["ocm transfer cv<br/>--config ocmconfig.yaml"]
+    CTF --> Transfer["ocm transfer cv<br/>(.ocmconfig)"]
 
     subgraph registry ["OCI Registry"]
         direction TB
@@ -210,16 +210,17 @@ Notice that the resource has `access.type: LocalBlob/v1` with the native OCI man
 Transfer the component version to an OCI registry. First, create a transfer configuration that copies all resources by value:
 
 ```yaml
-cat > ocmconfig.yaml << 'EOF'
+cat > .ocmconfig << 'EOF'
 type: generic.config.ocm.software/v1
 configurations:
   - type: localblob.uploader.transfer.config.ocm.software/v1alpha1
 EOF
 ```
 
+The CLI automatically merges `.ocmconfig` from the current directory with your other OCM configuration (such as `$HOME/.ocmconfig`), so credentials and resolvers stay in effect. Passing a file with `--config` would replace that configuration instead.
+
 ```bash
 ocm transfer cv \
-  --config ocmconfig.yaml \
   ./transport-archive//github.com/acme.org/native-oci-demo:1.0.0 \
   <your-registry>
 ```
@@ -362,10 +363,10 @@ The image is referenced externally — it still lives in `ghcr.io`. The componen
 
 ### Transfer with a local blob uploader
 
-Transfer the component to your target registry, copying all resources by value. Reuse the `ocmconfig.yaml` from above (or create it if you have not already):
+Transfer the component to your target registry, copying all resources by value. Reuse the `.ocmconfig` from above (or create it if you have not already):
 
 ```yaml
-cat > ocmconfig.yaml << 'EOF'
+cat > .ocmconfig << 'EOF'
 type: generic.config.ocm.software/v1
 configurations:
   - type: localblob.uploader.transfer.config.ocm.software/v1alpha1
@@ -374,7 +375,6 @@ EOF
 
 ```bash
 ocm transfer cv \
-  --config ocmconfig.yaml \
   ./transport-archive//github.com/acme.org/transfer-demo:1.0.0 \
   <your-registry>
 ```
@@ -515,14 +515,13 @@ EOF
 ```bash
 ocm add cv
 
-cat > ocmconfig.yaml << 'EOF'
+cat > .ocmconfig << 'EOF'
 type: generic.config.ocm.software/v1
 configurations:
   - type: localblob.uploader.transfer.config.ocm.software/v1alpha1
 EOF
 
 ocm transfer cv \
-  --config ocmconfig.yaml \
   ./transport-archive//github.com/acme.org/fetched-oci-demo:1.0.0 \
   <your-registry>
 ```
@@ -626,7 +625,7 @@ By default, `globalAccess` is not populated. To opt in, use the two-step transfe
 1. Generate the transfer spec:
 
    ```bash
-   ocm transfer cv --dry-run -o yaml --config ocmconfig.yaml \
+   ocm transfer cv --dry-run -o yaml \
      ./transport-archive//github.com/acme.org/native-oci-demo:1.0.0 \
      <your-registry> > spec.yaml
    ```

@@ -75,7 +75,7 @@ artifact in the target registry, and a local blob catch-all copies every other r
 Create the transfer configuration:
 
 ```yaml
-cat > ocmconfig.yaml << 'EOF'
+cat > .ocmconfig << 'EOF'
 type: generic.config.ocm.software/v1
 configurations:
   - type: oci.uploader.transfer.config.ocm.software/v1alpha1
@@ -83,14 +83,15 @@ configurations:
 EOF
 ```
 
+The CLI automatically merges `.ocmconfig` from the current directory with your other OCM configuration (such as `$HOME/.ocmconfig`), so credentials and resolvers stay in effect.
+
 ```bash
 ocm transfer cv \
-  --config ocmconfig.yaml \
   ctf::<path/to/archive>//<component-name>:<version> \
   <target-registry>
 ```
 
-The same configuration can also live in an existing OCM config file:
+This configuration can also be added to an existing OCM configuration file (for example `$HOME/.ocmconfig`):
 
 ```yaml
 type: generic.config.ocm.software/v1
@@ -164,7 +165,6 @@ To transfer a Helm chart component version from one OCI registry to another, use
 
 ```bash
 ocm transfer cv \
-  --config ocmconfig.yaml \
   <source-registry>//<component-name>:<version> \
   <target-registry>
 ```
