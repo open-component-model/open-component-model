@@ -146,7 +146,7 @@ func NewDefaultBuilder(
 	}
 
 	// Repository upload transformers (artifactory and nexus uploader configurations)
-	repositoryUpload := repositoryupload.Uploader{
+	repositoryUpload := &repositoryupload.Uploader{
 		Scheme:             transformerScheme,
 		ResourceRepository: resourceRepo,
 		RepoProvider:       repoProvider,

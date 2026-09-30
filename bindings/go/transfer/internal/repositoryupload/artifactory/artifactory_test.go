@@ -490,20 +490,21 @@ func TestTransform(t *testing.T) {
 				Path:             tc.path,
 			}
 			local := &uploadtest.StubComponentVersionRepository{Content: content}
-			tr := &Transformer{repositoryupload.Uploader{
+			upload := &repositoryupload.Uploader{
 				Scheme:             scheme,
 				ResourceRepository: &uploadtest.StubResourceRepository{Content: content, MediaType: tc.mediaType},
 				PollInterval:       time.Millisecond,
-			}}
+			}
 			if tc.creds != nil {
-				tr.CredentialProvider = tc.creds
+				upload.CredentialProvider = tc.creds
 			}
 			if res.Access.GetType().Name == descriptorv2.LocalBlobAccessType {
 				spec.ComponentVersion.Repository = &runtime.Raw{Type: runtime.NewVersionedType("OCIRepository", "v1"), Data: []byte(`{"type":"OCIRepository/v1","baseUrl":"ghcr.io/source"}`)}
 			}
 			if tc.local {
-				tr.RepoProvider = &uploadtest.StubRepositoryProvider{Repository: local}
+				upload.RepoProvider = &uploadtest.StubRepositoryProvider{Repository: local}
 			}
+			tr := &Transformer{Uploader: upload}
 
 			var out runtime.Typed
 			var err error

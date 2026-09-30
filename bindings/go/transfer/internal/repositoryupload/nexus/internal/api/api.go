@@ -31,11 +31,21 @@ type Repository struct {
 	restURL string
 }
 
-// New returns the repository name of the Nexus server at serverURL.
-func New(c *client.Client, serverURL, name string) (*Repository, error) {
+// URL returns where repository name of the Nexus server at serverURL serves its files:
+// <server>/repository/<name>.
+func URL(serverURL, name string) (string, error) {
 	repoURL, err := url.JoinPath(serverURL, "repository", name)
 	if err != nil {
-		return nil, fmt.Errorf("invalid nexus url: %w", err)
+		return "", fmt.Errorf("invalid nexus url: %w", err)
+	}
+	return repoURL, nil
+}
+
+// New returns the repository name of the Nexus server at serverURL.
+func New(c *client.Client, serverURL, name string) (*Repository, error) {
+	repoURL, err := URL(serverURL, name)
+	if err != nil {
+		return nil, err
 	}
 	restURL, err := url.JoinPath(serverURL, "service", "rest", "v1")
 	if err != nil {

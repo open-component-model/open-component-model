@@ -25,15 +25,15 @@ import (
 // published: a Helm chart with a Helm/v1 access (helm), or the resource content with a Wget/v1
 // access (generic, maven, npm). It runs [uploadv1alpha1.ArtifactoryUpload] transformations.
 type Transformer struct {
-	repositoryupload.Uploader
+	Uploader *repositoryupload.Uploader
 }
 
 func (t *Transformer) Transform(ctx context.Context, step runtime.Typed) (runtime.Typed, error) {
 	var tr uploadv1alpha1.ArtifactoryUpload
-	if err := t.Scheme.Convert(step, &tr); err != nil {
+	if err := t.Uploader.Scheme.Convert(step, &tr); err != nil {
 		return nil, fmt.Errorf("failed converting generic transformation to ArtifactoryUpload transformation: %w", err)
 	}
-	out, err := t.Upload(ctx, tr.Spec, backend{})
+	out, err := t.Uploader.Upload(ctx, tr.Spec, backend{})
 	if err != nil {
 		return nil, err
 	}
@@ -47,11 +47,8 @@ type backend struct{}
 func (backend) Name() string { return "artifactory" }
 
 func (backend) CredentialURLs(spec *uploadv1alpha1.RepositoryUploadSpec) (string, string, error) {
-	repo, err := api.New(nil, spec.URL, spec.Repository)
-	if err != nil {
-		return "", "", err
-	}
-	return repo.HelmURL, repo.URL, nil
+	repoURL, helmURL, err := api.URLs(spec.URL, spec.Repository)
+	return helmURL, repoURL, err
 }
 
 // Store reads the configuration of the repository; only local and federated repositories accept

@@ -33,18 +33,33 @@ type Repository struct {
 	apiURL string
 }
 
+// URLs returns the URLs of repository name of the Artifactory server at serverURL, the URL without
+// the /artifactory segment: where it serves its files (<server>/artifactory/<name>) and its Helm
+// repository API (<server>/artifactory/api/helm/<name>).
+func URLs(serverURL, name string) (repoURL, helmURL string, err error) {
+	repoURL, err = url.JoinPath(serverURL, "artifactory", name)
+	if err != nil {
+		return "", "", fmt.Errorf("invalid artifactory url: %w", err)
+	}
+	apiURL, err := url.JoinPath(serverURL, "artifactory", "api")
+	if err != nil {
+		return "", "", fmt.Errorf("invalid artifactory url: %w", err)
+	}
+	return repoURL, apiURL + "/helm/" + url.PathEscape(name), nil
+}
+
 // New returns the repository name of the Artifactory server at serverURL, the URL without the
 // /artifactory segment.
 func New(c *client.Client, serverURL, name string) (*Repository, error) {
-	repoURL, err := url.JoinPath(serverURL, "artifactory", name)
+	repoURL, helmURL, err := URLs(serverURL, name)
 	if err != nil {
-		return nil, fmt.Errorf("invalid artifactory url: %w", err)
+		return nil, err
 	}
 	apiURL, err := url.JoinPath(serverURL, "artifactory", "api")
 	if err != nil {
 		return nil, fmt.Errorf("invalid artifactory url: %w", err)
 	}
-	return &Repository{Client: c, Name: name, URL: repoURL, HelmURL: apiURL + "/helm/" + url.PathEscape(name), apiURL: apiURL}, nil
+	return &Repository{Client: c, Name: name, URL: repoURL, HelmURL: helmURL, apiURL: apiURL}, nil
 }
 
 // Configuration is the configuration of a repository.

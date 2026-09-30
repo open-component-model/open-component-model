@@ -450,14 +450,15 @@ func TestTransform(t *testing.T) {
 			if tc.resource != nil {
 				tc.resource(res)
 			}
-			tr := &Transformer{repositoryupload.Uploader{
+			upload := &repositoryupload.Uploader{
 				Scheme:             scheme,
 				ResourceRepository: &uploadtest.StubResourceRepository{Content: content, MediaType: tc.mediaType},
 				PollInterval:       time.Millisecond,
-			}}
-			if tc.creds != nil {
-				tr.CredentialProvider = tc.creds
 			}
+			if tc.creds != nil {
+				upload.CredentialProvider = tc.creds
+			}
+			tr := &Transformer{Uploader: upload}
 			step := &uploadv1alpha1.NexusUpload{Type: uploadv1alpha1.NexusUploadV1alpha1, ID: "upload", Spec: &uploadv1alpha1.RepositoryUploadSpec{
 				Resource:         res,
 				ComponentVersion: &uploadv1alpha1.RepositoryUploadComponentVersion{Component: "ocm.software/test", Version: "1.0.0"},
