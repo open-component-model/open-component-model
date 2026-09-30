@@ -26,4 +26,5 @@ putting the checksum policy into the component descriptor. Both the
 &lt;a href="https://ocm.software/main/docs/reference/input-and-access-types/#wgetv1-input"&gt;&lt;code&gt;Wget/v1&lt;/code&gt; input&lt;/a&gt; and
 the &lt;a href="https://ocm.software/main/docs/reference/input-and-access-types/#wgetv1-access"&gt;&lt;code&gt;Wget/v1&lt;/code&gt; access&lt;/a&gt;
 digest processor consult the same configuration, so a mirror trusted for the
-input side is also trusted when the descriptor is refreshed.&lt;/p&gt;</description></item></channel></rss>
+input side is also trusted when the descriptor is refreshed.&lt;/p&gt;</description></item><item><title>Caching Configuration</title><link>https://ocm.software/main/docs/reference/caching-configuration/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/main/docs/reference/caching-configuration/</guid><description>&lt;p&gt;This page is the technical reference for the on-disk caches OCM uses when it reads component versions from OCI
+registries.&lt;/p&gt;</description></item></channel></rss>
