@@ -52,8 +52,9 @@ components:
 
 A `maven2` repository needs a `path` in the Maven repository layout
 `<group path>/<artifactId>/<version>/<artifactId>-<version>[-<classifier>].<extension>`.
-The uploader takes the coordinates from the path. Create `config.yaml` with the
-credentials and one rule per file:
+The uploader takes the coordinates from the path. Add the credentials and one rule
+per file to your `.ocmconfig` in the working directory (merged with
+`$HOME/.ocmconfig`):
 
 ```yaml
 type: generic.config.ocm.software/v1
@@ -69,12 +70,12 @@ configurations:
             username: <USERNAME>
             password: <PASSWORD_OR_USER_TOKEN>
   - type: nexus.uploader.transfer.config.ocm.software/v1alpha1
-    match: {accessType: localBlob, name: jar}
+    match: resource.access.isType("LocalBlob") && resource.name == "jar"
     url: https://nexus.example.com
     repository: maven-releases
     path: '${"com/example/demo/" + resource.version + "/demo-" + resource.version + ".jar"}'
   - type: nexus.uploader.transfer.config.ocm.software/v1alpha1
-    match: {accessType: localBlob, name: pom}
+    match: resource.access.isType("LocalBlob") && resource.name == "pom"
     url: https://nexus.example.com
     repository: maven-releases
     path: '${"com/example/demo/" + resource.version + "/demo-" + resource.version + ".pom"}'
@@ -83,7 +84,7 @@ configurations:
 ### Run the transfer
 
 ```bash
-ocm transfer cv --config config.yaml ctf::./src//ocm.software/demo:1.0.0 ctf::./target
+ocm transfer cv ctf::./src//ocm.software/demo:1.0.0 ctf::./target
 ```
 
 ### Verify
@@ -143,7 +144,8 @@ mvn dependency:get -Dartifact=com.example:demo:1.0.0 \
 **Cause:** A `-SNAPSHOT` version was routed to a release repository.
 
 **Fix:** Route `-SNAPSHOT` versions to `maven-snapshots` with a second rule that
-matches them by `version`, for example `match: {accessType: localBlob, name: jar, version: 2.0.0-SNAPSHOT}`.
+matches them by version, for example
+`match: resource.access.isType("LocalBlob") && resource.name == "jar" && resource.version == "2.0.0-SNAPSHOT"`.
 Declare it before the release rule: the first matching rule wins.
 
 For credential and overwrite errors, see

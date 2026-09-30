@@ -258,15 +258,15 @@ target `hostname`, as in Step 2.
 ### Problem: The transfer succeeds but nothing is uploaded
 
 **Symptom:** The resource is stored as `LocalBlob/v1` in the target and the log
-warns `uploader matched no resource`.
+warns `uploader selected no resource`.
 
-**Cause:** `match.accessType` names the access the resource would get in the
-target (such as `LocalBlob/v1`) instead of its access in the source component
+**Cause:** The `match` expression tests the access type the resource would get in
+the target (such as `LocalBlob`) instead of its access in the source component
 version.
 
-**Fix:** Check the source with `ocm get cv <source> -o yaml` and set
-`match.accessType` to the resource's `access.type` there, for example
-`OCIImage/v1` for an `ociArtifact` access.
+**Fix:** Check the source with `ocm get cv <source> -o yaml` and write
+`match` against the resource's `access.type` there, for example
+`resource.access.isType("OCIImage")` for an `ociArtifact` access.
 
 ## Upload to JFrog Artifactory or Sonatype Nexus
 

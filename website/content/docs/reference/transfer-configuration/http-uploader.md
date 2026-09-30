@@ -1,7 +1,7 @@
 ---
 title: "HTTP Uploader"
 description: "Reference for http.uploader.transfer.config.ocm.software/v1alpha1: stream matched resources to an HTTP endpoint and publish a Wget/v1 access."
-weight: 2
+weight: 5
 toc: true
 ---
 
@@ -21,6 +21,11 @@ carries just the resolved `url` and `mediaType`, never the write verb, body or
 request headers. This ensures a later `ocm download` issues a plain read (GET) and
 cannot re-send the write request that would overwrite the uploaded object.
 
+{{< callout context="note" >}}
+The OCM Kubernetes controller ignores HTTP uploader entries because they send
+content to configured URLs from the controller pod.
+{{< /callout >}}
+
 ## Schema
 
 {{< schema-renderer url="/schemas/bindings/go/transfer/HTTPUploaderConfig.schema.json" >}}
@@ -31,16 +36,31 @@ cannot re-send the write request that would overwrite the uploaded object.
 `method`, `header`, `body` and `noRedirect` apply to the upload request only:
 
 | Field                 | Type                  | Applies to                        | Description                                                                                                                                        |
-|-----------------------|-----------------------|-----------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------|
-| `match.accessType`    | `runtime.Type`        | —                                 | Access type this uploader applies to; any alias matches, omitted version = any.                                                                    |
-| `match.name`          | string (optional)     | —                                 | Restrict the match to resources with this exact name.                                                                                              |
-| `match.version`       | string (optional)     | —                                 | Restrict the match to resources with this exact version.                                                                                           |
-| `match.extraIdentity` | `map[string]string`   | —                                 | Restrict the match to resources whose identity contains these key/value pairs.                                                                     |
+| --------------------- | --------------------- | --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `match`               | CEL expression        | —                                 | A CEL boolean expression selecting the resources this uploader handles. **Required:** the HTTP uploader has no default match.                      |
 | `targetURL`           | CEL expression        | request + published (`url`)       | The upload URL; also the published download URL. See [CEL Expressions]({{< relref "docs/reference/transfer-configuration/cel-expressions.md" >}}). |
 | `method`              | string                | request (`verb`)                  | HTTP method for the upload request. Defaults to PUT. Not on the published access.                                                                  |
 | `header`              | `map[string][]string` | request                           | HTTP headers sent with the upload request. May be CEL-templated. Request only.                                                                     |
 | `noRedirect`          | bool                  | request                           | Disable following HTTP redirects on the upload. Not on the published access.                                                                       |
 | `mediaType`           | string                | request + published (`mediaType`) | Media type recorded on the resource. Defaults to the source's.                                                                                     |
+
+## Routing Resources to Different Targets
+
+Because a rule can match on any resource property, several resources of
+the **same** access type can be routed to **different** targets. List the specific
+rules first; a broader rule acts as a catch-all:
+
+```yaml
+configurations:
+  # Docs go to the docs bucket.
+  - type: http.uploader.transfer.config.ocm.software/v1alpha1
+    match: resource.access.isType("Wget/v1") && resource.name == "docs"
+    targetURL: '${"https://docs.example.com" + url(resource.access.url).path}'
+  # Everything else Wget goes to the generic bucket.
+  - type: http.uploader.transfer.config.ocm.software/v1alpha1
+    match: resource.access.isType("Wget/v1")
+    targetURL: '${"https://blobs.example.com/" + resource.name + "/" + resource.version}'
+```
 
 ## Templating Headers
 
@@ -69,8 +89,7 @@ standard
 
 ```yaml
   - type: http.uploader.transfer.config.ocm.software/v1alpha1
-    match:
-      accessType: Wget/v1
+    match: resource.access.isType("Wget/v1")
     targetURL: '${"https://mytarget.example.com/uploads" + url(resource.access.url).path}'
     method: PUT
     header:

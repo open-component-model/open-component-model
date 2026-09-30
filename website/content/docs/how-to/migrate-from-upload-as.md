@@ -80,7 +80,7 @@ a Before / After pair showing the exact change.
 `<target baseUrl>[/<subPath>]/<name>`. The default
 `imageReference` produces the same layout, so you do not need to write one
 (the full template is in the
-[`imageReference` reference]({{< relref "docs/reference/transfer-configuration.md#imagereference" >}})).
+[`imageReference` reference]({{< relref "docs/reference/transfer-configuration/oci-uploader.md#imagereference" >}})).
 
 The name component depends on the access type:
 
@@ -114,7 +114,7 @@ match: >-
 This is exactly what `--upload-as ociArtifact` uploaded. `resource.access.isType`
 resolves aliases, so `isType("OCIImage")` matches `ociArtifact/v1`,
 `ociImage/v1`, etc. An explicit `match` replaces the default. See
-[`match`]({{< relref "docs/reference/transfer-configuration.md#match" >}})
+[`match`]({{< relref "docs/reference/transfer-configuration/_index.md#match" >}})
 for all identifiers and functions.
 
 ### 1. Local blob (default) — drop the flag
@@ -539,7 +539,7 @@ The following table maps old values to their replacements:
 
 ## Related documentation
 
-- [Transfer Configuration Reference]({{< relref "docs/reference/transfer-configuration.md" >}}) — Full configuration schema and field descriptions
+- [Transfer Configuration Reference]({{< relref "docs/reference/transfer-configuration/_index.md" >}}) — Full configuration schema and field descriptions
 - [Configure Custom Uploads During Transfer]({{< relref "docs/tutorials/configure-custom-uploads.md" >}}) — Tutorial for the HTTP streaming uploader
 - [Transfer Helm Charts with OCM]({{< relref "docs/how-to/transfer-helm-charts.md" >}}) — Transfer component versions containing Helm charts
 - [Replicate Component Versions with the Controller]({{< relref "docs/how-to/replicate-component-versions-controller.md" >}}) — Controller-based replication

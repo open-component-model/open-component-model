@@ -682,7 +682,7 @@ configurations:
 
 With the local blob uploader, the artifact stays within the component version's index. With the OCI uploader, it is stored independently.
 
-Both options make the artifact natively accessible in OCI registries. For details, see the [Transfer Configuration Reference]({{< relref "docs/reference/transfer-configuration.md" >}}).
+Both options make the artifact natively accessible in OCI registries. For details, see the [Transfer Configuration Reference]({{< relref "docs/reference/transfer-configuration/_index.md" >}}).
 {{< /details >}}
 
 ## Cleanup
