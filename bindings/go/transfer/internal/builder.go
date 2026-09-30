@@ -5,6 +5,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/credentials"
 	githubtransformer "ocm.software/open-component-model/bindings/go/github/transformation"
 	githubv1alpha1 "ocm.software/open-component-model/bindings/go/github/transformation/spec/v1alpha1"
+	helmaccess "ocm.software/open-component-model/bindings/go/helm/spec/access"
 	helmtransformer "ocm.software/open-component-model/bindings/go/helm/transformation"
 	helmv1alpha1 "ocm.software/open-component-model/bindings/go/helm/transformation/spec/v1alpha1"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
@@ -16,6 +17,10 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 	s3transformer "ocm.software/open-component-model/bindings/go/s3/transformation"
 	s3v1alpha1 "ocm.software/open-component-model/bindings/go/s3/transformation/spec/v1alpha1"
+	"ocm.software/open-component-model/bindings/go/transfer/internal/repositoryupload"
+	"ocm.software/open-component-model/bindings/go/transfer/internal/repositoryupload/artifactory"
+	"ocm.software/open-component-model/bindings/go/transfer/internal/repositoryupload/nexus"
+	uploadv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/transformation/spec/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/transform/graph/builder"
 	wgetaccess "ocm.software/open-component-model/bindings/go/wget/spec/access"
 	wgettransformer "ocm.software/open-component-model/bindings/go/wget/transformation"
@@ -40,6 +45,8 @@ func NewDefaultBuilder(
 	transformerScheme.MustRegisterScheme(s3v1alpha1.Scheme)
 	transformerScheme.MustRegisterScheme(githubv1alpha1.Scheme)
 	transformerScheme.MustRegisterScheme(wgetaccess.Scheme)
+	transformerScheme.MustRegisterScheme(helmaccess.Scheme)
+	transformerScheme.MustRegisterScheme(uploadv1alpha1.Scheme)
 
 	ociGet := &ocitransformer.GetComponentVersion{
 		Scheme:             transformerScheme,
@@ -138,6 +145,15 @@ func NewDefaultBuilder(
 		HTTPConfig:         httpConfig,
 	}
 
+	// Repository upload transformers (artifactory and nexus uploader configurations)
+	repositoryUpload := &repositoryupload.Uploader{
+		Scheme:             transformerScheme,
+		ResourceRepository: resourceRepo,
+		RepoProvider:       repoProvider,
+		CredentialProvider: credentialProvider,
+		HTTPConfig:         httpConfig,
+	}
+
 	// File cleanup transformer
 	transformerScheme.MustRegisterWithAlias(&FileCleanupTransformation{}, FileCleanupVersionedType)
 	fileCleanup := &FileCleanup{
@@ -162,5 +178,7 @@ func NewDefaultBuilder(
 		WithTransformer(&s3v1alpha1.DownloadS3Resource{}, downloadS3).
 		WithTransformer(&githubv1alpha1.GetGitHubCommit{}, getGitHubCommit).
 		WithTransformer(&wgetv1alpha1.HTTPStreaming{}, httpStreaming).
+		WithTransformer(&uploadv1alpha1.ArtifactoryUpload{}, &artifactory.Transformer{Uploader: repositoryUpload}).
+		WithTransformer(&uploadv1alpha1.NexusUpload{}, &nexus.Transformer{Uploader: repositoryUpload}).
 		WithTransformer(&FileCleanupTransformation{}, fileCleanup)
 }
