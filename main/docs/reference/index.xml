@@ -26,8 +26,4 @@ putting the checksum policy into the component descriptor. Both the
 &lt;a href="https://ocm.software/main/docs/reference/input-and-access-types/#wgetv1-input"&gt;&lt;code&gt;Wget/v1&lt;/code&gt; input&lt;/a&gt; and
 the &lt;a href="https://ocm.software/main/docs/reference/input-and-access-types/#wgetv1-access"&gt;&lt;code&gt;Wget/v1&lt;/code&gt; access&lt;/a&gt;
 digest processor consult the same configuration, so a mirror trusted for the
-input side is also trusted when the descriptor is refreshed.&lt;/p&gt;</description></item><item><title>Transfer Configuration</title><link>https://ocm.software/main/docs/reference/transfer-configuration/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/main/docs/reference/transfer-configuration/</guid><description>&lt;p&gt;This page is the technical reference for OCM transfer configuration. For a
-task-oriented walkthrough of routing resources to a custom upload target, see the
-&lt;a href="https://ocm.software/main/docs/tutorials/configure-custom-uploads-during-transfer/"&gt;Configure Custom Uploads During Transfer&lt;/a&gt;
-tutorial. For the conceptual model, see
-&lt;a href="https://ocm.software/main/docs/concepts/transfer-and-transport/"&gt;Transfer and Transport&lt;/a&gt;.&lt;/p&gt;</description></item></channel></rss>
+input side is also trusted when the descriptor is refreshed.&lt;/p&gt;</description></item></channel></rss>

@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Transfer Configuration on Open Component Model</title><link>https://ocm.software/main/docs/reference/transfer-configuration/</link><description>Recent content in Transfer Configuration on Open Component Model</description><generator>Hugo</generator><language>en-US</language><atom:link href="https://ocm.software/main/docs/reference/transfer-configuration/index.xml" rel="self" type="application/rss+xml"/><item><title>Transfer Settings</title><link>https://ocm.software/main/docs/reference/transfer-configuration/transfer-settings/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/main/docs/reference/transfer-configuration/transfer-settings/</guid><description>&lt;p&gt;The &lt;code&gt;transfer.config.ocm.software/v1alpha1&lt;/code&gt; type controls the global transfer
+behaviour. All fields are optional; when omitted they resolve to their defaults.&lt;/p&gt;
+&lt;h2 id="schema"&gt;Schema&lt;/h2&gt;
+&lt;div class="sr-root" data-schema-renderer data-schema-url="https://ocm.software/main/schemas/bindings/go/transfer/Config.schema.json"&gt;&lt;/div&gt;&lt;script src="https://ocm.software/js/schema/schema-renderer.js"&gt;&lt;/script&gt;
+&lt;h2 id="fields"&gt;Fields&lt;/h2&gt;
+&lt;table&gt;
+	&lt;thead&gt;
+			&lt;tr&gt;
+					&lt;th&gt;Field&lt;/th&gt;
+					&lt;th&gt;Type&lt;/th&gt;
+					&lt;th&gt;Default&lt;/th&gt;
+					&lt;th&gt;Description&lt;/th&gt;
+			&lt;/tr&gt;
+	&lt;/thead&gt;
+	&lt;tbody&gt;
+			&lt;tr&gt;
+					&lt;td&gt;&lt;code&gt;recursive&lt;/code&gt;&lt;/td&gt;
+					&lt;td&gt;&lt;code&gt;-1&lt;/code&gt; or &lt;code&gt;0&lt;/code&gt;&lt;/td&gt;
+					&lt;td&gt;&lt;code&gt;0&lt;/code&gt; (no recursion)&lt;/td&gt;
+					&lt;td&gt;&lt;code&gt;-1&lt;/code&gt; transfers the whole reference tree; &lt;code&gt;0&lt;/code&gt; transfers only the named version.&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;&lt;code&gt;copyMode&lt;/code&gt;&lt;/td&gt;
+					&lt;td&gt;enum&lt;/td&gt;
+					&lt;td&gt;&lt;code&gt;localBlob&lt;/code&gt;&lt;/td&gt;
+					&lt;td&gt;Which resources are copied. See &lt;a href="#copy-mode"&gt;Copy Mode&lt;/a&gt;.&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;&lt;code&gt;uploadType&lt;/code&gt;&lt;/td&gt;
+					&lt;td&gt;enum&lt;/td&gt;
+					&lt;td&gt;&lt;code&gt;localBlob&lt;/code&gt;&lt;/td&gt;
+					&lt;td&gt;How copied resources are stored in the target. See &lt;a href="#upload-type"&gt;Upload Type&lt;/a&gt;.&lt;/td&gt;
+			&lt;/tr&gt;
+	&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;h3 id="copy-mode"&gt;Copy Mode&lt;/h3&gt;
+&lt;table&gt;
+	&lt;thead&gt;
+			&lt;tr&gt;
+					&lt;th&gt;Value&lt;/th&gt;
+					&lt;th&gt;Meaning&lt;/th&gt;
+			&lt;/tr&gt;
+	&lt;/thead&gt;
+	&lt;tbody&gt;
+			&lt;tr&gt;
+					&lt;td&gt;&lt;code&gt;localBlob&lt;/code&gt;&lt;/td&gt;
+					&lt;td&gt;Copy only resources already stored as local blobs. External resources keep their original access and are not fetched.&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;&lt;code&gt;allResources&lt;/code&gt;&lt;/td&gt;
+					&lt;td&gt;Fetch every external resource and re-upload it to the target. Equivalent to the CLI &lt;code&gt;--copy-resources&lt;/code&gt; flag.&lt;/td&gt;
+			&lt;/tr&gt;
+	&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;h3 id="upload-type"&gt;Upload Type&lt;/h3&gt;
+&lt;p&gt;Only relevant when a resource is being copied.&lt;/p&gt;</description></item><item><title>HTTP Uploader</title><link>https://ocm.software/main/docs/reference/transfer-configuration/http-uploader/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/main/docs/reference/transfer-configuration/http-uploader/</guid><description>&lt;p&gt;Streams a matched resource&amp;rsquo;s content directly to an HTTP endpoint (typically a
+&lt;code&gt;PUT&lt;/code&gt; upload) and rewrites the resource to a &lt;code&gt;Wget/v1&lt;/code&gt; access pointing at the
+uploaded location. The &lt;strong&gt;source&lt;/strong&gt; may be any access type (wget, OCI, S3, GitHub,
+…) — its content is fetched through the access-type-specific downloader; only the
+&lt;strong&gt;target&lt;/strong&gt; is always an HTTP endpoint. The source content is piped straight into
+the request body, so it is never buffered in memory or on disk. The digest is
+computed during the stream, or — when the source resource already carries one —
+verified as the bytes pass through.&lt;/p&gt;</description></item><item><title>JFrog Artifactory Uploader</title><link>https://ocm.software/main/docs/reference/transfer-configuration/jfrog-artifactory-uploader/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/main/docs/reference/transfer-configuration/jfrog-artifactory-uploader/</guid><description>&lt;p&gt;Uploads a matched resource into a local repository of a JFrog Artifactory server,
+the way the repository&amp;rsquo;s package type expects. For step-by-step guides per
+repository type, see
+&lt;a href="https://ocm.software/main/docs/how-to/vendor-specific-apis/jfrog-artifactory/"&gt;JFrog Artifactory&lt;/a&gt;.&lt;/p&gt;</description></item><item><title>Sonatype Nexus Uploader</title><link>https://ocm.software/main/docs/reference/transfer-configuration/sonatype-nexus-uploader/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/main/docs/reference/transfer-configuration/sonatype-nexus-uploader/</guid><description>&lt;p&gt;Uploads a matched resource into a hosted repository of a Sonatype Nexus
+Repository 3 server, the way the repository&amp;rsquo;s format expects. For step-by-step
+guides per repository type, see
+&lt;a href="https://ocm.software/main/docs/how-to/vendor-specific-apis/sonatype-nexus/"&gt;Sonatype Nexus&lt;/a&gt;.&lt;/p&gt;</description></item><item><title>CEL Expressions</title><link>https://ocm.software/main/docs/reference/transfer-configuration/cel-expressions/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/main/docs/reference/transfer-configuration/cel-expressions/</guid><description>&lt;p&gt;&lt;code&gt;targetURL&lt;/code&gt;, every &lt;code&gt;header&lt;/code&gt; value and the &lt;code&gt;path&lt;/code&gt; of the Artifactory and Nexus uploaders are
+&lt;a href="https://cel.dev/" target="_blank" rel="noopener"&gt;CEL&lt;/a&gt; expressions — the same expression language the transfer
+graph uses to resolve every other field. A CEL value &lt;strong&gt;must be wrapped in &lt;code&gt;${…}&lt;/code&gt;&lt;/strong&gt;,
+matching how every other CEL field is written in the transfer graph. It is
+evaluated against the source resource, exposed under the &lt;code&gt;resource&lt;/code&gt; alias, and its
+component, exposed under the &lt;code&gt;component&lt;/code&gt; alias, and resolved by the transfer
+runtime, so the produced plan is deterministic. CEL string concatenation (&lt;code&gt;+&lt;/code&gt;),
+conditionals (&lt;code&gt;cond ? a : b&lt;/code&gt;), and comparisons are all available. Append any static
+query string inside the expression. (A value with no &lt;code&gt;${…}&lt;/code&gt; is a plain literal and
+is used verbatim.)&lt;/p&gt;</description></item></channel></rss>
