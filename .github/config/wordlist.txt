@@ -297,6 +297,7 @@ gapped
 gav
 gc
 genericocireg
+geomys
 gerald
 gergely
 gethelmchart
@@ -533,6 +534,7 @@ npm's
 npmjs
 npmrc
 npmregistry
+nul
 nuspec
 oauth
 objectmeta
@@ -991,3 +993,5 @@ Cloudflare
 unversioned
 BuildKit
 artifactory
+LLC
+NIST

@@ -17,7 +17,11 @@ Two signing features do not fit this policy as implemented today:
 * **GPG signing** ([ADR 0023](0023_gpg_signing.md)) runs in-process on `github.com/ProtonMail/go-crypto`. Part of its cryptography runs outside the Go Cryptographic Module, and unwrapping passphrase-protected keys is never FIPS-approved.
 * **Sigstore signing** ([ADR 0017](0017_sigstore_integration.md)) shells out to a `cosign` binary. If none is on `PATH`, OCM downloads the upstream release, which is not built with `GOFIPS140`.
 
-Only the `ocm` CLI binary and the CLI image are affected. The CLI registers the RSA, Sigstore and GPG handlers (`bindings/go/cli/internal/plugin/builtin/builtin.go:97-108`). The controller registers only the RSA handler (`bindings/go/kubernetes/controller/internal/setup/plugins.go:77-89`), and the RSA handler (`bindings/go/rsa/`) uses only standard library cryptography (`crypto/rsa`, `crypto/x509`), which is covered by the Go module.
+Both the `ocm` CLI and the controller are affected:
+
+* The CLI signs and verifies. It registers the RSA, Sigstore and GPG handlers (`bindings/go/cli/internal/plugin/builtin/builtin.go:97-108`).
+* The controller only verifies. Today it registers only the RSA handler (`bindings/go/kubernetes/controller/internal/setup/plugins.go:74-89`), which uses only standard library cryptography (`crypto/rsa`, `crypto/x509`) covered by the Go module. A component signed with GPG or Sigstore cannot be verified by the controller today, with or without FIPS. Registering those handlers in the controller is expected but is a separate feature. This ADR defines how they must behave in FIPS mode once they are registered.
+* Both binaries also link go-crypto through Helm provenance verification, independent of the GPG handler (see [Helm provenance](#helm-provenance)).
 
 This ADR decides how GPG and cosign behave in FIPS mode. Implementing the decision is tracked by the follow-up tasks listed under [Follow-up implementation tasks](#follow-up-implementation-tasks).
 
@@ -28,7 +32,7 @@ This ADR decides how GPG and cosign behave in FIPS mode. Implementing the decisi
 Facts from [the Go FIPS 140-3 documentation](https://go.dev/doc/security/fips140):
 
 * Module v1.0.0 holds [CMVP certificate #5247](https://csrc.nist.gov/projects/cryptographic-module-validation-program/certificate/5247). It is the only certified version and is usable with Go 1.24+.
-* Module v1.26.0 is "Pending Review" on the [CMVP Modules In Process list](https://csrc.nist.gov/projects/cryptographic-module-validation-program/modules-in-process/modules-in-process-list) (CAVP A8028) and is usable with Go 1.26+.
+* Module v1.26.0 is usable with Go 1.26+ and covered by CAVP A8028, but has no CMVP certificate, yet. It is still on the [CMVP Modules In Process list](https://csrc.nist.gov/projects/cryptographic-module-validation-program/modules-in-process/modules-in-process-list), listed as "Go Cryptographic Module | Geomys LLC | FIPS 140-3 | Comment Resolution - CMVP (9/10/2026)". The row carries no version, but v1.0.0 is already certified, so it refers to v1.26.0. "Comment Resolution" means CMVP review comments are being answered; it is not a certificate. The Go documentation still shows the older "Pending Review" status as of 2026-04-28. The [validated modules search](https://csrc.nist.gov/projects/cryptographic-module-validation-program/validated-modules/search?SearchMode=Basic&ModuleName=Go+Cryptographic+Module&CertificateStatus=Active&ValidationYear=0) lists only #5247 for Geomys.
 * `GOFIPS140=certified` and `GOFIPS140=inprocess` are aliases for these two versions.
 * Setting `GODEBUG=fips140=on` on a binary built without `GOFIPS140` uses the unvalidated in-tree module. Selecting a frozen module with `GOFIPS140` at build time is the compliant mechanism.
 * `fips140=only` is "not intended to be used in production".
@@ -40,7 +44,7 @@ Facts from [the Go FIPS 140-3 documentation](https://go.dev/doc/security/fips140
 
 #### GPG
 
-The GPG handler (`bindings/go/gpg/signing/handler/handler.go`, `internal/credentials/credentials.go`) uses `github.com/ProtonMail/go-crypto` v1.4.1. It is the only production importer of that library, which pulls in `github.com/cloudflare/circl` transitively.
+The GPG handler (`bindings/go/gpg/signing/handler/handler.go`, `internal/credentials/credentials.go`) uses `github.com/ProtonMail/go-crypto` v1.4.1, which pulls in `github.com/cloudflare/circl` transitively. It is the only OCM package that imports go-crypto directly. Helm is the other importer (see [Helm provenance](#helm-provenance)).
 
 * Sign is `openpgp.ArmoredDetachSign` over the hex-decoded digest bytes, with the hash restricted to SHA-256/384/512.
 * Verify is `openpgp.CheckArmoredDetachedSignature`.
@@ -77,6 +81,13 @@ Primitive routing inside go-crypto:
 
 * A certificate covers a specific build and version of libgcrypt, used as described in that module's security policy. Upstream libgcrypt, and distributions such as Debian or Alpine, have FIPS mode but no validation.
 * libgcrypt enters FIPS mode when `/proc/sys/crypto/fips_enabled` is non-zero, when `/etc/gcrypt/fips_enabled` exists, or when `LIBGCRYPT_FORCE_FIPS_MODE` is set ([libgcrypt manual: Enabling FIPS mode](https://www.gnupg.org/documentation/manuals/gcrypt/Enabling-FIPS-mode.html)). In FIPS mode it restricts itself to the algorithms approved by that build. The set differs between versions: EdDSA is approved under FIPS 186-5, and the probe below shows libgcrypt 1.11+ accepting Ed25519 in FIPS mode while 1.9/1.10 reject it.
+
+#### Helm provenance
+
+* `bindings/go/helm/internal/download/download.go:80-85` sets `downloader.VerifyIfPossible` when the Helm credentials have a `keyring`. Helm then verifies the chart's `.prov` file with `helm.sh/helm/v4/pkg/provenance`, which is OpenPGP on go-crypto.
+* This path is linked into both binaries. `go list -deps ./kubernetes/controller/cmd` includes `helm.sh/helm/v4/pkg/provenance`, `github.com/ProtonMail/go-crypto/openpgp` and `cloudflare/circl`, through `helmdigest.NewDigestProcessor` (`plugins.go:85`) and Helm's `pkg/downloader`.
+* It has the same limits as the go-crypto GPG path: RSA and NIST ECDSA go through the Go module, EdDSA goes through `circl` and is **NOT** approved. It is not an OCM signature, so the G2 backend does not cover it.
+* This ADR does not decide it. It is tracked as follow-up task 4.
 
 #### cosign
 
@@ -117,6 +128,8 @@ Observed with `go1.27.1` on darwin/arm64 while preparing this ADR:
 * Evidence: a trivial program built with `GOFIPS140=v1.0.0` reports `build GOFIPS140=v1.0.0-c2097c7c` in `go version -m`. The same program built without `GOFIPS140` reports no `GOFIPS140` setting. The recorded value carries a suffix, so checks must match the `v` prefix, not an exact version.
 * Evidence: `go version -m` on the upstream `cosign-darwin-arm64` v3.1.3 release reports `go1.26.4` and no `GOFIPS140` setting.
 * Evidence: a probe with an isolated home directory, following the flow in the GPG Contract below, ran in public container images with libgcrypt forced into FIPS mode (`gpgconf --show-versions` reports `fips-mode:y`). It imported armored, passphrase-protected RSA-3072 secret keys generated by `gpg` and by go-crypto v1.4.1 via stdin without a passphrase, signed with `--pinentry-mode loopback --passphrase-fd 0`, and verified with both `GOODSIG` and `VALIDSIG` in all of them: `registry.suse.com/bci/bci-base:15.7` (GnuPG 2.4.4, libgcrypt 1.11.0), `amazonlinux:2023` (`gnupg2-full` 2.3.7, libgcrypt 1.10.2), `ubuntu:22.04` (2.2.27, 1.9.4), `debian:stable-slim` (2.4.7, 1.11.0) and `alpine:3` (2.4.9, 1.12.2). `/etc/gcrypt/fips_enabled` enabled FIPS mode everywhere, but `LIBGCRYPT_FORCE_FIPS_MODE` was not honoured by the Ubuntu 22.04 build. Ed25519 key generation was rejected in FIPS mode by libgcrypt 1.9.4 and 1.10.2 and accepted by 1.11.0 and 1.12.2.
+* Evidence: on macOS (GnuPG 2.5.22, libgcrypt 1.12.3), `gpg-agent` puts its sockets in the home directory, and a Unix socket path is limited to 104 bytes (108 on Linux). With a 118-character home directory, `--import` succeeds but `--detach-sign` fails with `gpg: can't connect to the gpg-agent: File name too long`. `os.MkdirTemp` under the default macOS `$TMPDIR` gives a 67-character home directory and works, but Go test temporary directories and custom `TMPDIR` values easily exceed the limit. On Linux, GnuPG places the sockets under `/run/user/<uid>/gnupg/d.<hash>/` when that directory exists, which containers usually lack.
+* Evidence: in the same 118-character home directory, importing only a public key and running `gpg --status-fd 1 --trust-model always --verify` succeeds with `GOODSIG` and `VALIDSIG` and starts no `gpg-agent`. Verification with public keys only needs no agent.
 
 ## Decision Drivers
 
@@ -189,6 +202,7 @@ sequenceDiagram
 * **Trigger:** `crypto/fips140.Enabled()` is evaluated once per `Sign`/`Verify` call. `true` selects the `gpg` binary backend for both Sign and Verify. `false` keeps the current go-crypto path unchanged.
 * **Binary:** `exec.LookPath("gpg")` only. There is no auto-download, because the point is the distribution-provided validated libgcrypt. The minimum GnuPG version is `2.2.0`, parsed from the first line of `gpg --version` (`gpg (GnuPG) X.Y.Z`). The `libgcrypt X.Y.Z` line is logged at debug level.
 * **Isolation:** each operation uses a fresh `os.MkdirTemp("", "ocm-gpg-")` directory with mode `0700`, passed as `--homedir`. The user's `~/.gnupg` is never used, and key material still comes only from the OCM credential graph, so the ADR 0023 contract is unchanged. Common flags are `--batch --no-tty --homedir <dir>`. Cleanup always runs `gpgconf --homedir <dir> --kill gpg-agent` and then `os.RemoveAll(<dir>)`.
+* **Socket path limit:** before Sign starts `gpg`, OCM checks that `len(<dir>) + len("/S.gpg-agent.browser")`, the longest agent socket name, is at most 103 bytes (the macOS limit minus the terminating NUL). Otherwise it fails with: `GPG signing in FIPS 140-3 mode needs a temporary directory path of at most 83 bytes for the gpg-agent socket, got %d bytes (%s); set TMPDIR to a shorter path`. Verify needs no agent (see Evidence) and skips the check.
 * **Key import:** armored key bytes (inline or from file, with the same `loadBytes` semantics as today) are piped to `gpg --import` on stdin, so OCM writes no key file to disk. `gpg-agent` keeps its protected copy of the key under the temporary home directory until cleanup.
 * **Sign:**
   * The hex-decoded digest bytes are written to `<dir>/digest.bin`. They are not secret.
@@ -196,7 +210,7 @@ sequenceDiagram
   * Selector: `keyFingerprint` when configured. Otherwise, the fingerprint of the first `fpr` record under the first `sec` record of `gpg --list-secret-keys --with-colons`, which mirrors today's use of `keyring[0]`. The selector carries no `!` suffix, so GnuPG picks the signing-capable (sub)key of the selected key, as go-crypto does today; a certify-only primary key with a signing subkey keeps working.
   * Output: stdout becomes `SignatureInfo{Algorithm: GPG, MediaType: application/vnd.ocm.signature.gpg, Value: <armored sig>}`, identical to today.
 * **Verify:**
-  * Import the public key, falling back to the private key as today.
+  * Import only public key material, so no `gpg-agent` starts. When only a private key is configured, OCM keeps today's fallback by parsing it with go-crypto and serializing the public part with `(*openpgp.Entity).Serialize`. This decrypts nothing and runs no cryptography besides the SHA-1 fingerprint, which is allowed under `fips140=on`.
   * Write the signature to `<dir>/sig.asc` and the digest to `<dir>/digest.bin`.
   * Run `gpg --status-fd 1 --trust-model always --verify <dir>/sig.asc <dir>/digest.bin`.
   * Success requires both `[GNUPG:] GOODSIG` and `[GNUPG:] VALIDSIG` status lines. When `keyFingerprint` is configured, the `VALIDSIG` signing-key fingerprint (field 1) or primary-key fingerprint (field 10) must equal it, or end with it for a long key ID, compared case-insensitively.
@@ -207,6 +221,8 @@ sequenceDiagram
   * Too old: `gpg on PATH (%s) is version %s, minimum required in FIPS 140-3 mode is 2.2.0`
   * Failed subprocess: `gpg %s failed: %w\nstderr: %s`, with stderr truncated to 4096 bytes like `cosign.go:120-124`.
 * **Timeout:** 3 minutes per invocation, the same as `defaultOperationTimeout` in `cosign.go`.
+* **Concurrency:** every operation has its own home directory. Concurrent operations therefore never share a keyring, a `gpg-agent` or a lock file. Verify, the only operation the controller runs, starts no agent, so parallel reconciles only cost one short-lived `gpg` process each. Sign starts one agent per operation and kills it during cleanup. If a `gpg` process hits the timeout, cleanup still runs.
+* **Controller:** once the controller registers the GPG handler, this contract applies unchanged, for Verify only. The controller image (`gcr.io/distroless/static:nonroot`) has no `gpg`, so in FIPS mode GPG verification in the controller needs a derived image, like the CLI (see [Discovery and Distribution](#discovery-and-distribution)).
 * **Responsibility boundary:** OCM does not switch libgcrypt into FIPS mode (neither `LIBGCRYPT_FORCE_FIPS_MODE` nor `/etc/gcrypt/fips_enabled`) and does not verify that the libgcrypt build is validated. The operator runs a GnuPG whose libgcrypt holds a validation for their platform, on a host where FIPS mode is enabled. OCM does not prefer or require any particular distribution; the Context section lists several. Validated libgcrypt builds exist only for Linux distributions; macOS and Windows have none.
 
 ### cosign: FIPS guard now, in-process `sigstore-go` next
@@ -342,6 +358,7 @@ Cons:
 * The CLI image stays `FROM scratch`. The `ocm` binary is static (`CGO_ENABLED=0`, `/ocm` in `ghcr.io/open-component-model/cli`), so FIPS users who need GPG or cosign copy it into an image that already has the tools, on any base they trust:
   * GPG: any distribution image with GnuPG ≥2.2 whose libgcrypt is validated for that distribution (see the certificate table), for example SUSE Linux Enterprise BCI, Amazon Linux 2023 or Ubuntu Pro FIPS.
   * cosign: a `cosign` built with `GOFIPS140` added to any image, or a vendor FIPS cosign image such as Chainguard `cosign-fips` used as the base image, with `ocm` copied in (`FROM cgr.dev/<organization>/cosign-fips`, `COPY --from=ghcr.io/open-component-model/cli:<version> /ocm /usr/bin/ocm`, `ENTRYPOINT ["/usr/bin/ocm"]`).
+* The controller image stays `gcr.io/distroless/static:nonroot` with a static `/manager` binary. Once the controller verifies GPG signatures, FIPS users build a derived image the same way: a distribution image with GnuPG and a validated libgcrypt, plus `COPY --from=<controller image> /manager /manager` and `ENTRYPOINT ["/manager"]`, set as the image in the controller Helm chart values. OCM does not publish such an image, because the validated libgcrypt is tied to the operator's distribution.
 * Both backends honour `GODEBUG=fips140=off` as the documented opt-out.
 
 ### Documentation input for #1314
@@ -354,6 +371,8 @@ Ready-to-paste user-facing points:
   * Supported keys: whatever your validated libgcrypt approves in FIPS mode, with or without passphrase. RSA ≥2048 always works. EdDSA depends on the libgcrypt version, and DSA is not supported. Check your module's security policy.
   * Credentials are configured exactly as outside FIPS mode. OCM never uses your `~/.gnupg`.
   * Signatures created in FIPS mode verify outside FIPS mode and vice versa.
+  * Signing needs a temporary directory path of at most 83 bytes for the `gpg-agent` socket. Set `TMPDIR` to a shorter path if OCM reports that it is too long.
+  * The controller cannot verify GPG signatures yet. Once it can, FIPS mode needs a controller image that contains GnuPG, built the same way as for the CLI.
   * Error when `gpg` is missing: `GPG signing in FIPS 140-3 mode requires the GnuPG "gpg" binary (>= 2.2.0) on PATH backed by a FIPS 140-3 validated libgcrypt; install it or set GODEBUG=fips140=off to use the built-in non-FIPS OpenPGP implementation`
 * **Sigstore signing in FIPS 140-3 mode** requires a FIPS 140-3 compliant `cosign` (>= v3.0.4) on `PATH`. OCM does not download cosign in FIPS mode.
   * Build it yourself: `GOFIPS140=v1.0.0 CGO_ENABLED=0 go install github.com/sigstore/cosign/v3/cmd/cosign@v3.1.3`
@@ -368,12 +387,18 @@ Ready-to-paste user-facing points:
    * Implement the [GPG Contract](#gpg-system-gpg-backend-in-fips-mode) in a new package `bindings/go/gpg/signing/handler/internal/gpgbinary`, mirroring the injectable `LookPath`/`Exec` seams of `CosignBinary`.
    * Unit tests use a fake exec.
    * The integration test runs the `bindings/go/cli/integration/signing_gpg_integration_test.go` scenarios against a public `debian:stable-slim` container with `gnupg` and `/etc/gcrypt/fips_enabled` present, with the CLI built using `GOFIPS140=v1.0.0`. The test checks behavior in libgcrypt FIPS mode, not validation, so it needs no vendor image. Use the file trigger, because `LIBGCRYPT_FORCE_FIPS_MODE` is not honoured by every build (see Evidence).
-   * On Linux, the import/sign/verify flow with passphrase-protected RSA keys is already confirmed in FIPS mode (see Evidence). The first acceptance item is a spike on macOS: confirm that `gpg-agent` starts and its socket works in an `os.MkdirTemp` home directory, since socket paths there can exceed the Unix socket path limit. If the spike fails, the FIPS backend is documented as Linux-only; macOS has no validated libgcrypt anyway.
+   * On Linux, the import/sign/verify flow with passphrase-protected RSA keys is already confirmed in FIPS mode (see Evidence). On macOS the agent works under the default `$TMPDIR` and fails with longer paths (see Evidence), which the socket path check covers. Unit tests must not use `t.TempDir()` as the base for a real `gpg` home directory, because its path is too long on macOS.
+   * A test runs parallel Verify calls against one handler and checks that no `gpg-agent` process starts and no temporary directory is left behind.
 2. **"FIPS 140-3: disable cosign auto-download and warn on non-FIPS cosign in FIPS mode"**
    * Implement the [cosign Contract](#cosign-fips-guard-now-in-process-sigstore-go-next) in `bindings/go/sigstore/signing/handler/internal/cosign.go`.
    * Unit tests toggle FIPS mode via an injectable `fipsEnabled func() bool` field (default `crypto/fips140.Enabled`).
    * With a trial of Chainguard `cosign-fips`, record which build settings its binary carries (`go version -m`). If they reliably identify an OpenSSL-backed FIPS build (for example a `GOEXPERIMENT` value or a toolchain-specific setting), log that case at INFO instead of WARN. Otherwise keep the WARN.
 3. **"FIPS 140-3: ADR and implementation of in-process Sigstore signing/verification via sigstore-go (supersedes ADR 0017)"**
+4. **"FIPS 140-3: Helm provenance verification in FIPS mode"**
+   * Decide how the Helm `keyring` credential behaves in FIPS mode (see [Helm provenance](#helm-provenance)), for both the CLI and the controller. Options include rejecting a `keyring` in FIPS mode, or verifying the `.prov` file with the system `gpg` through the task 1 backend.
+5. **"FIPS 140-3: controller verification with GPG and Sigstore handlers"**
+   * When the controller registers the GPG or Sigstore handler, apply this ADR's contracts for Verify, and document the derived controller image from [Discovery and Distribution](#discovery-and-distribution).
+   * Add an integration test that verifies a GPG-signed component in FIPS mode with a derived controller image.
 
 ## Conclusion
 
