@@ -253,22 +253,6 @@
       ],
     },
     {
-      // Sweep up every remaining non-major Go module bump into one weekly PR.
-      // The specific ecosystem/monorepo groups above (aws-sdk, k8s, golang-x,
-      // google-golang, docker, otel, go-openapi) match first and keep their own
-      // PRs; this only claims the singletons no earlier rule grouped. Last-match
-      // wins on groupName in Renovate, so this must stay BELOW those groups and
-      // ABOVE the disabled/frozen rules that follow. Majors are excluded on
-      // purpose (separateMultipleMajor: one human decision per PR).
-      matchManagers: ['gomod'],
-      matchUpdateTypes: ['minor', 'patch', 'digest'],
-      groupName: 'Go dependencies (non-major)',
-      groupSlug: 'gomod-nonmajor',
-      schedule: [
-        '* * * * 0' // At every minute on Sunday it is allowed to create branches
-      ],
-    },
-    {
       // Go mod updates are disabled as we are using go toolchain directives instead.
       matchManagers: ['gomod'],
       matchDepTypes: ['golang'],
