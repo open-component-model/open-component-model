@@ -643,8 +643,8 @@ server answers with an authentication error.
 
 The identity type is `Git` in OCM v1 and OCM v2, and the credential property names are the same. OCM v1 only matched
 `pathprefix` for `file://` repositories; for remote repositories an entry with `pathprefix` never matched. OCM v2
-converts `pathprefix: org` into `path: org` and `path: org/**`, so such an entry now matches the repositories below
-`org`. Prefer writing `path` directly. The path includes a `.git` suffix if the repository URL has one.
+converts `pathprefix: org` into `path: "{org,org/**}"`, so such an entry now matches the repositories below `org`.
+Prefer writing `path` directly. The path includes a `.git` suffix if the repository URL has one.
 
 ---
 

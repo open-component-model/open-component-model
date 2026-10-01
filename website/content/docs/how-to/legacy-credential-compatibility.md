@@ -53,25 +53,24 @@ The following steps walk you through each change needed to make this config work
 **Change `pathprefix` to `path` with a glob pattern (recommended)**
 
 The field for matching repository paths was renamed from `pathprefix` to `path`. The new OCM still reads `pathprefix`:
-it converts `pathprefix: open-component-model` into two identities, `path: open-component-model` and
-`path: open-component-model/**`, which match the same paths as before, and logs a warning. To drop the warning, write
-the identities yourself:
+it converts `pathprefix: open-component-model` into `path: "{open-component-model,open-component-model/**}"`, which
+matches the same paths as before, and logs a warning. To drop the warning, write the pattern yourself:
 
 ```yaml
     consumers:
-      - identities:
-          - type: OCIRegistry
-            hostname: ghcr.io
-            path: open-component-model     # was: pathprefix: open-component-model
-          - type: OCIRegistry
-            hostname: ghcr.io
-            path: open-component-model/**
+      - identity:
+          type: OCIRegistry
+          hostname: ghcr.io
+          path: "{open-component-model,open-component-model/**}"  # was: pathprefix: open-component-model
 ```
+
+Quote the pattern: unquoted, YAML reads `{…}` as a mapping.
 
 {{< callout context="note" >}}
 `path` does **not** do prefix matching — `path: open-component-model` only matches the exact path
 `open-component-model`, not `open-component-model/my-repo`. `open-component-model/**` matches any depth below the
-prefix but not `open-component-model` itself, and `open-component-model/*` matches a single segment. Legacy OCM picked
+prefix but not `open-component-model` itself, and `open-component-model/*` matches a single segment. `{a,b}` matches
+either `a` or `b`. Legacy OCM picked
 the entry with the longest matching `pathprefix`; the new OCM does not rank matching entries, so avoid overlapping
 entries with different credentials.
 {{< /callout >}}
