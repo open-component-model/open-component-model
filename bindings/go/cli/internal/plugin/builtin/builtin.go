@@ -83,7 +83,8 @@ func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alph
 		return fmt.Errorf("could not register s3 inbuilt plugin: %w", err)
 	}
 
-	if err := git.Register(manager.ResourcePluginRegistry,
+	if err := git.Register(manager.InputRegistry,
+		manager.ResourcePluginRegistry,
 		manager.DigestProcessorRegistry,
 		manager.CredentialTypeRegistry,
 		filesystemConfig,

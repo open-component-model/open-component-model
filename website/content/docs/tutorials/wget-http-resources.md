@@ -106,7 +106,7 @@ reject the upload.
 
 `resource.digest` is only present when the source resource carries a digest (for
 example when it is pinned from the source via the checksum-http configuration). See
-[Templating Headers]({{< relref "docs/reference/transfer-configuration.md" >}}#templating-headers)
+[Templating Headers]({{< relref "docs/reference/transfer-configuration/http-uploader.md" >}}#templating-headers)
 for the full field reference.
 
 For a target such as JFrog Artifactory, which verifies uploads against a **hex**

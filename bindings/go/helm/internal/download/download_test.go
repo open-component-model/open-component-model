@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	helmrepo "helm.sh/helm/v4/pkg/repo/v1"
 	helmcredsv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/v1"
+	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	ocicredsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 )
 
@@ -531,4 +532,43 @@ func newBasicAuthChartServer(t *testing.T, dir, user, pass string) *httptest.Ser
 	}))
 	t.Cleanup(srv.Close)
 	return srv
+}
+
+// TestNewReadOnlyChartFromRemote_CredentialsStayOnRepositoryHost verifies that the repository
+// credentials are not sent when index.yaml points the chart at another host, e.g. an
+// Artifactory remote repository whose index names the upstream chart URL.
+func TestNewReadOnlyChartFromRemote_CredentialsStayOnRepositoryHost(t *testing.T) {
+	workDir, err := os.Getwd()
+	require.NoError(t, err)
+	chartPath := filepath.Join(workDir, "..", "..", "testdata", "mychart-0.1.0.tgz")
+
+	for name, opts := range map[string][]Option{
+		"default client": nil,
+		"http config":    {WithHTTPConfig(&httpv1alpha1.Config{})},
+	} {
+		t.Run(name, func(t *testing.T) {
+			r := require.New(t)
+			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+				if req.Header.Get("Authorization") != "" {
+					http.Error(w, "unexpected credentials", http.StatusUnauthorized)
+					return
+				}
+				http.ServeFile(w, req, chartPath)
+			}))
+			t.Cleanup(upstream.Close)
+			repo := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+				if user, pass, ok := req.BasicAuth(); !ok || user != "user" || pass != "pw" {
+					http.Error(w, "unauthorized", http.StatusUnauthorized)
+					return
+				}
+				_, _ = fmt.Fprintf(w, "apiVersion: v1\nentries:\n  mychart:\n  - name: mychart\n    version: 0.1.0\n    apiVersion: v2\n    urls:\n    - %s/charts/mychart-0.1.0.tgz\n", upstream.URL)
+			}))
+			t.Cleanup(repo.Close)
+
+			opts := append([]Option{WithCredentials(&helmcredsv1.HelmHTTPCredentials{Username: "user", Password: "pw"})}, opts...)
+			chart, err := NewReadOnlyChartFromRemote(t.Context(), repo.URL+"/mychart:0.1.0", t.TempDir(), opts...)
+			r.NoError(err)
+			r.Equal("mychart", chart.Name)
+		})
+	}
 }
