@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -139,6 +140,17 @@ func decodeConfig(r io.Reader) (*genericv1.Config, error) {
 	return &instance, nil
 }
 
+// appendIfNew appends entries in `toAdd` to `given` if not already present
+func appendIfNew(given []string, toAdd ...string) []string {
+	for _, entry := range toAdd {
+		entry = filepath.Clean(entry)
+		if !slices.Contains(given, entry) {
+			given = append(given, entry)
+		}
+	}
+	return given
+}
+
 // GetOCMConfigPaths searches for the OCM configuration file in the following locations (in order):
 // 1. The path specified in the OCM_CONFIG environment variable
 // 2. The XDG_CONFIG_HOME directory (if set), or the default XDG home ($HOME/.config), or the user's home directory
@@ -163,16 +175,16 @@ func decodeConfig(r io.Reader) (*genericv1.Config, error) {
 func GetOCMConfigPaths(options OCMConfigOptions) ([]string, error) {
 	var paths []string
 	if path := getFromEnvironment(options); path != "" {
-		paths = append(paths, path)
+		paths = appendIfNew(paths, path)
 	}
 	if subPaths := getFromXDGOrHomeDir(options); len(subPaths) > 0 {
-		paths = append(paths, subPaths...)
+		paths = appendIfNew(paths, subPaths...)
 	}
 	if subPaths := getFromWorkingDir(options); len(subPaths) > 0 {
-		paths = append(paths, subPaths...)
+		paths = appendIfNew(paths, subPaths...)
 	}
 	if subPaths := getFromExecutableDir(options); len(subPaths) > 0 {
-		paths = append(paths, subPaths...)
+		paths = appendIfNew(paths, subPaths...)
 	}
 
 	if len(paths) > 0 {

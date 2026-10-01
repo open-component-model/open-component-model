@@ -18,7 +18,7 @@
     },
     "match": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.transfer.v1alpha1.spec.UploaderMatch",
-      "description": "MatchSpec selects the resources this uploader applies to. It is exposed as the\n`match` field; the Go field is named MatchSpec so the type can offer a Match method."
+      "description": "MatchSpec selects the resources this uploader applies to. It is exposed as the\n`match` field."
     },
     "mediaType": {
       "type": "string",

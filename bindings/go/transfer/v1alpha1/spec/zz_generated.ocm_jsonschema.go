@@ -9,6 +9,9 @@ import (
 	_ "embed"
 )
 
+//go:embed schemas/ArtifactoryUploaderConfig.schema.json
+var schemaArtifactoryUploaderConfig []byte
+
 //go:embed schemas/Config.schema.json
 var schemaConfig []byte
 
@@ -18,6 +21,9 @@ var schemaCopyMode []byte
 //go:embed schemas/HTTPUploaderConfig.schema.json
 var schemaHTTPUploaderConfig []byte
 
+//go:embed schemas/NexusUploaderConfig.schema.json
+var schemaNexusUploaderConfig []byte
+
 //go:embed schemas/Recursive.schema.json
 var schemaRecursive []byte
 
@@ -26,6 +32,11 @@ var schemaUploadType []byte
 
 //go:embed schemas/UploaderMatch.schema.json
 var schemaUploaderMatch []byte
+
+// JSONSchema returns the JSON Schema for ArtifactoryUploaderConfig.
+func (ArtifactoryUploaderConfig) JSONSchema() []byte {
+	return schemaArtifactoryUploaderConfig
+}
 
 // JSONSchema returns the JSON Schema for Config.
 func (Config) JSONSchema() []byte {
@@ -40,6 +51,11 @@ func (CopyMode) JSONSchema() []byte {
 // JSONSchema returns the JSON Schema for HTTPUploaderConfig.
 func (HTTPUploaderConfig) JSONSchema() []byte {
 	return schemaHTTPUploaderConfig
+}
+
+// JSONSchema returns the JSON Schema for NexusUploaderConfig.
+func (NexusUploaderConfig) JSONSchema() []byte {
+	return schemaNexusUploaderConfig
 }
 
 // JSONSchema returns the JSON Schema for Recursive.
