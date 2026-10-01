@@ -2,8 +2,13 @@ package blob_test
 
 import (
 	"bytes"
+	_ "crypto/sha512" // SHA-512 precalculated checksum hints
 	"encoding/json"
+	"fmt"
 	"io"
+	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 
@@ -14,6 +19,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/direct"
+	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
@@ -155,10 +161,9 @@ func TestResourceBlob_HasPrecalculatedDigest(t *testing.T) {
 
 func TestResourceBlob_SetPrecalculatedDigest(t *testing.T) {
 	tests := []struct {
-		name      string
-		resource  *descriptor.Resource
-		newDigest string
-
+		name        string
+		resource    *descriptor.Resource
+		newDigest   string
 		expectPanic bool
 	}{
 		{
@@ -171,8 +176,6 @@ func TestResourceBlob_SetPrecalculatedDigest(t *testing.T) {
 				},
 			},
 			newDigest: digest.FromString("test").String(),
-
-			expectPanic: false,
 		},
 		{
 			name:      "no resource digest",
@@ -199,11 +202,7 @@ func TestResourceBlob_SetPrecalculatedDigest(t *testing.T) {
 			rb, err := ociblob.NewArtifactBlobWithMediaType(tt.resource, mock, "application/octet-stream")
 			require.NoError(t, err)
 
-			original := tt.resource.Digest
-			var snapshot descriptor.Digest
-			if original != nil {
-				snapshot = *original
-			}
+			original, snapshot := tt.resource.Digest, tt.resource.Digest.DeepCopy()
 			if tt.expectPanic {
 				assert.Panics(t, func() {
 					rb.SetPrecalculatedDigest(tt.newDigest)
@@ -215,12 +214,8 @@ func TestResourceBlob_SetPrecalculatedDigest(t *testing.T) {
 				require.Equal(t, tt.newDigest, dig)
 				require.True(t, rb.HasPrecalculatedDigest())
 			}
-			if original != nil {
-				require.Same(t, original, tt.resource.Digest)
-				require.Equal(t, snapshot, *tt.resource.Digest)
-			} else {
-				require.Nil(t, tt.resource.Digest)
-			}
+			require.Same(t, original, tt.resource.Digest)
+			require.Equal(t, snapshot, tt.resource.Digest)
 		})
 	}
 }
@@ -459,24 +454,27 @@ func TestNewResourceBlobWithMediaType_MediaTypeHandling(t *testing.T) {
 	}
 }
 
+// TestArtifactBlob_LayoutDigestSeparation checks that a layout archive's checksum is
+// never compared with, or defaulted into, the resource digest naming its manifest.
+// The classification is frozen at construction, survives Buffer and rewrapping, and
+// needs no read of the blob.
 func TestArtifactBlob_LayoutDigestSeparation(t *testing.T) {
-	for _, normalization := range []string{internaldigest.OCIArtifactDigestV1, internaldigest.GenericBlobDigestV1, ""} {
+	checksum := digest.FromString("archive").String()
+	for _, normalization := range []string{"none", internaldigest.OCIArtifactDigestV1, internaldigest.GenericBlobDigestV1, ""} {
 		for _, mediaType := range []string{layout.MediaTypeOCIImageLayoutTarV1, layout.MediaTypeOCIImageLayoutTarGzipV1} {
 			for _, location := range []string{"explicit", "underlying", "runtime access", "v2 access", "raw access", "unstructured access"} {
 				for _, known := range []bool{false, true} {
-					name := normalization + "/" + mediaType + "/" + location
-					if known {
-						name += "/known checksum"
-					}
-					t.Run(name, func(t *testing.T) {
+					t.Run(fmt.Sprintf("%s/%s/%s/known=%t", normalization, mediaType, location, known), func(t *testing.T) {
 						r := require.New(t)
-						manifest := &descriptor.Digest{
-							HashAlgorithm:          internaldigest.HashAlgorithmSHA256,
-							NormalisationAlgorithm: normalization,
-							Value:                  digest.FromString("manifest").Encoded(),
+						resource := &descriptor.Resource{}
+						if normalization != "none" {
+							resource.Digest = &descriptor.Digest{
+								HashAlgorithm:          internaldigest.HashAlgorithmSHA256,
+								NormalisationAlgorithm: normalization,
+								Value:                  digest.FromString("manifest").Encoded(),
+							}
 						}
-						original := *manifest
-						resource := &descriptor.Resource{Digest: manifest}
+						original, snapshot := resource.Digest, resource.Digest.DeepCopy()
 						explicitType, underlyingType := "application/octet-stream", "application/octet-stream"
 						switch location {
 						case "explicit":
@@ -486,49 +484,40 @@ func TestArtifactBlob_LayoutDigestSeparation(t *testing.T) {
 						default:
 							resource.Access = localBlobAccess(t, location, mediaType)
 						}
-						base := direct.NewFromBytes([]byte("archive"), direct.WithMediaType(underlyingType))
+						reader := &countingReader{Reader: strings.NewReader("archive")}
+						base := direct.New(reader, direct.WithMediaType(underlyingType))
 						var b blob.ReadOnlyBlob = base
-						checksum := digest.FromString("archive").String()
+						wantDigest := ""
 						if known {
-							b = &mockDigestAwareMediaBlob{Blob: base, checksum: checksum}
+							b, wantDigest = &mockDigestAwareBlob{ReadOnlyBlob: base, digest: checksum, mediaType: underlyingType}, checksum
+						}
+						if location != "explicit" {
+							r.NoError(ociblob.UpdateArtifactWithInformationFromBlob(resource, b))
 						}
 						ab, err := ociblob.NewArtifactBlobWithMediaType(resource, b, explicitType)
 						r.NoError(err)
-						dig, ok := ab.Digest()
-						r.Equal(known, ok)
-						r.Equal(known, ab.HasPrecalculatedDigest())
-						if known {
-							r.Equal(checksum, dig)
-						} else {
-							r.Empty(dig)
-						}
+						r.Zero(reader.reads, "classifying a layout must not read it")
 						// Packing replaces the archive access with the root manifest access.
-						resource.Access = &v2.LocalBlob{MediaType: ociImageSpecV1.MediaTypeImageManifest}
-						dig, ok = ab.Digest()
-						r.Equal(known, ok)
-						r.Equal(known, ab.HasPrecalculatedDigest())
-						if known {
-							r.Equal(checksum, dig)
-						} else {
-							r.Empty(dig)
+						for _, access := range []runtime.Typed{resource.Access, &v2.LocalBlob{MediaType: ociImageSpecV1.MediaTypeImageManifest}} {
+							resource.Access = access
+							requireChecksum(r, ab, wantDigest)
+							r.Equal(known, ab.HasPrecalculatedDigest())
 						}
 						buffered, err := ab.Buffer()
 						r.NoError(err)
-						dig, ok = buffered.Digest()
-						r.True(ok)
-						r.Equal(checksum, dig)
-						mt, ok := buffered.MediaType()
-						r.True(ok)
+						mt, _ := buffered.MediaType()
 						r.Equal(explicitType, mt)
-						// Keep the same bytes but remove the cached checksum to exercise
-						// the buffered wrapper's frozen classification as well.
-						buffered.ReadOnlyBlob = base
-						dig, ok = buffered.Digest()
-						r.False(ok)
-						r.Empty(dig)
+						r.NoError(ociblob.UpdateArtifactWithInformationFromBlob(resource, buffered))
+						rewrapped, err := ociblob.NewArtifactBlob(resource, buffered)
+						r.NoError(err)
+						requireChecksum(r, buffered, checksum)
+						requireChecksum(r, rewrapped, checksum)
+						// Without the cached checksum, the manifest digest must not stand in.
+						buffered.ReadOnlyBlob = &mockBlob{}
+						requireChecksum(r, buffered, "")
 						r.False(buffered.HasPrecalculatedDigest())
-						r.Same(manifest, resource.Digest)
-						r.Equal(original, *resource.Digest)
+						r.Same(original, resource.Digest)
+						r.Equal(snapshot, resource.Digest)
 					})
 				}
 			}
@@ -536,51 +525,24 @@ func TestArtifactBlob_LayoutDigestSeparation(t *testing.T) {
 	}
 }
 
-func TestArtifactBlob_DigestDefaulting(t *testing.T) {
-	for _, mediaType := range []string{"application/octet-stream", layout.MediaTypeOCIImageLayoutTarV1, layout.MediaTypeOCIImageLayoutTarGzipV1} {
-		for _, fromAccess := range []bool{false, true} {
-			t.Run(mediaType+"/"+map[bool]string{false: "explicit", true: "access"}[fromAccess], func(t *testing.T) {
+func TestArtifactBlob_OrdinaryDigestNormalization(t *testing.T) {
+	for _, normalization := range []string{"none", "", internaldigest.GenericBlobDigestV1, internaldigest.OCIArtifactDigestV1, "custom/v1"} {
+		for _, known := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/known=%t", normalization, known), func(t *testing.T) {
 				r := require.New(t)
 				resource := &descriptor.Resource{}
-				explicitType := mediaType
-				if fromAccess {
-					explicitType = "application/octet-stream"
-					resource.Access = &v2.LocalBlob{MediaType: mediaType}
-				}
-				checksum := digest.FromString("archive")
-				ab, err := ociblob.NewArtifactBlobWithMediaType(resource, &mockDigestAwareBlob{digest: checksum.String()}, explicitType)
-				r.NoError(err)
-				dig, ok := ab.Digest()
-				r.True(ok)
-				r.Equal(checksum.String(), dig)
-				if mediaType == "application/octet-stream" {
-					r.Equal(&descriptor.Digest{
+				if normalization != "none" {
+					resource.Digest = &descriptor.Digest{
 						HashAlgorithm:          internaldigest.HashAlgorithmSHA256,
-						NormalisationAlgorithm: internaldigest.GenericBlobDigestV1,
-						Value:                  checksum.Encoded(),
-					}, resource.Digest)
-				} else {
-					r.Nil(resource.Digest)
+						NormalisationAlgorithm: normalization,
+						Value:                  digest.FromString("normalized").Encoded(),
+					}
 				}
-			})
-		}
-	}
-}
-
-func TestArtifactBlob_OrdinaryDigestNormalization(t *testing.T) {
-	for _, normalization := range []string{"", internaldigest.GenericBlobDigestV1, internaldigest.OCIArtifactDigestV1, "custom/v1"} {
-		for _, known := range []bool{false, true} {
-			t.Run(normalization+"/"+map[bool]string{false: "unknown", true: "known"}[known], func(t *testing.T) {
-				r := require.New(t)
-				resource := &descriptor.Resource{Digest: &descriptor.Digest{
-					HashAlgorithm:          internaldigest.HashAlgorithmSHA256,
-					NormalisationAlgorithm: normalization,
-					Value:                  digest.FromString("normalized").Encoded(),
-				}}
 				base := &mockDigestAwareBlob{}
 				if known {
 					base.digest = digest.FromString("bytes").String()
 				}
+				r.NoError(ociblob.UpdateArtifactWithInformationFromBlob(resource, base))
 				ab, err := ociblob.NewArtifactBlob(resource, base)
 				generic := normalization == "" || normalization == internaldigest.GenericBlobDigestV1
 				if generic && known {
@@ -588,66 +550,95 @@ func TestArtifactBlob_OrdinaryDigestNormalization(t *testing.T) {
 					return
 				}
 				r.NoError(err)
-				dig, ok := ab.Digest()
-				r.Equal(known || generic, ok)
-				r.Equal(ok, ab.HasPrecalculatedDigest())
-				switch {
-				case known:
-					r.Equal(base.digest, dig)
-				case generic:
-					r.Equal(digest.FromString("normalized").String(), dig)
-				default:
-					r.Empty(dig)
+				want := base.digest
+				if !known && generic {
+					want = digest.FromString("normalized").String()
+				}
+				requireChecksum(r, ab, want)
+				r.Equal(want != "", ab.HasPrecalculatedDigest())
+				if normalization == "none" && known {
+					r.Equal(&descriptor.Digest{
+						HashAlgorithm:          internaldigest.HashAlgorithmSHA256,
+						NormalisationAlgorithm: internaldigest.GenericBlobDigestV1,
+						Value:                  digest.FromString("bytes").Encoded(),
+					}, resource.Digest, "an ordinary blob's checksum defaults a missing digest")
+				} else if normalization == "none" {
+					r.Nil(resource.Digest)
 				}
 			})
 		}
 	}
 }
 
-func TestArtifactBlob_BufferDigestSeparation(t *testing.T) {
-	for _, mediaType := range []string{"application/octet-stream", layout.MediaTypeOCIImageLayoutTarV1, layout.MediaTypeOCIImageLayoutTarGzipV1} {
-		for _, normalization := range []string{"", internaldigest.GenericBlobDigestV1, internaldigest.OCIArtifactDigestV1} {
-			t.Run(mediaType+"/"+normalization, func(t *testing.T) {
-				r := require.New(t)
-				resource := &descriptor.Resource{}
-				if normalization != "" {
-					value := digest.FromString("manifest").Encoded()
-					if mediaType == "application/octet-stream" && normalization == internaldigest.GenericBlobDigestV1 {
-						value = digest.FromString("archive").Encoded()
-					}
-					resource.Digest = &descriptor.Digest{
-						HashAlgorithm:          internaldigest.HashAlgorithmSHA256,
-						NormalisationAlgorithm: normalization,
-						Value:                  value,
-					}
+// TestArtifactBlob_Buffer checks that Buffer verifies an ordinary resource's expected
+// checksum against the bytes read, even if the file changed after construction or a
+// different precalculated checksum was set, and never rewrites the resource digest.
+func TestArtifactBlob_Buffer(t *testing.T) {
+	original, replacement := []byte("content A"), []byte("content B")
+	for _, tc := range []struct {
+		name, normalization string
+		mutate              bool
+		hint                digest.Algorithm
+	}{
+		{name: "generic", normalization: internaldigest.GenericBlobDigestV1},
+		{name: "unlabelled"},
+		{name: "OCI label is not a byte checksum", normalization: internaldigest.OCIArtifactDigestV1},
+		{name: "defaulted", normalization: "none"},
+		{name: "generic/sha512 hint", normalization: internaldigest.GenericBlobDigestV1, hint: digest.SHA512},
+		{name: "generic/replaced", normalization: internaldigest.GenericBlobDigestV1, mutate: true},
+		{name: "generic/replaced with sha256 hint", normalization: internaldigest.GenericBlobDigestV1, mutate: true, hint: digest.SHA256},
+		{name: "generic/replaced with sha512 hint", normalization: internaldigest.GenericBlobDigestV1, mutate: true, hint: digest.SHA512},
+		{name: "unlabelled/replaced", mutate: true},
+		{name: "unlabelled/replaced with sha256 hint", mutate: true, hint: digest.SHA256},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			dir := t.TempDir()
+			path := filepath.Join(dir, "resource.bin")
+			r.NoError(os.WriteFile(path, original, 0o600))
+			resource := &descriptor.Resource{}
+			if tc.normalization != "none" {
+				value := digest.FromBytes(original).Encoded()
+				if tc.normalization == internaldigest.OCIArtifactDigestV1 {
+					value = digest.FromString("manifest").Encoded()
 				}
-				original := resource.Digest
-				var snapshot descriptor.Digest
-				if original != nil {
-					snapshot = *original
+				resource.Digest = &descriptor.Digest{
+					HashAlgorithm: internaldigest.HashAlgorithmSHA256, NormalisationAlgorithm: tc.normalization, Value: value,
 				}
-				ab, err := ociblob.NewArtifactBlobWithMediaType(resource, direct.NewFromBytes([]byte("archive")), mediaType)
-				r.NoError(err)
-				buffered, err := ab.Buffer()
-				r.NoError(err)
-				mt, ok := buffered.MediaType()
-				r.True(ok)
-				r.Equal(mediaType, mt)
-				dig, ok := buffered.Digest()
-				r.True(ok)
-				r.Equal(digest.FromString("archive").String(), dig)
-				r.Equal(int64(len("archive")), buffered.Size())
-				var content bytes.Buffer
-				r.NoError(blob.Copy(&content, buffered))
-				r.Equal("archive", content.String())
-				if original != nil {
-					r.Same(original, resource.Digest)
-					r.Equal(snapshot, *resource.Digest)
-				} else {
-					r.Nil(resource.Digest)
-				}
-			})
-		}
+			}
+			ab, err := ociblob.NewArtifactBlobWithMediaType(resource, filesystem.NewFileBlob(os.DirFS(dir), "resource.bin"), "application/octet-stream")
+			r.NoError(err)
+			r.NotNil(resource.Digest, "an ordinary file's checksum defaults a missing digest")
+			pointer, snapshot := resource.Digest, *resource.Digest
+			data := original
+			if tc.mutate {
+				data = replacement
+				r.NoError(os.WriteFile(path, data, 0o600))
+			}
+			if tc.hint != "" {
+				ab.SetPrecalculatedDigest(tc.hint.FromBytes(data).String())
+			}
+
+			buffered, err := ab.Buffer()
+			r.Same(pointer, resource.Digest)
+			r.Equal(snapshot, *resource.Digest, "signed digest metadata must remain unchanged")
+			if tc.mutate {
+				r.Error(err, "the expected checksum, not the replacement's, must be verified")
+				r.Nil(buffered)
+				return
+			}
+			r.NoError(err)
+			r.Same(ab.Artifact, buffered.Artifact)
+			r.Equal(int64(len(original)), buffered.Size())
+			requireChecksum(r, buffered, digest.FromBytes(original).String())
+			mt, _ := buffered.MediaType()
+			r.Equal("application/octet-stream", mt)
+			// Removing the source proves subsequent reads use the eagerly loaded cache.
+			r.NoError(os.Remove(path))
+			var content bytes.Buffer
+			r.NoError(blob.Copy(&content, buffered))
+			r.Equal(original, content.Bytes())
+		})
 	}
 }
 
@@ -709,28 +700,23 @@ func localBlobAccess(t *testing.T, representation, mediaType string) runtime.Typ
 }
 
 func TestArtifactBlob_HasPrecalculatedDigestDoesNotRead(t *testing.T) {
-	for _, kind := range []string{"source", "layout", "generic fallback", "non-generic"} {
+	sum := digest.FromString("archive")
+	generic := &descriptor.Digest{HashAlgorithm: internaldigest.HashAlgorithmSHA256, NormalisationAlgorithm: internaldigest.GenericBlobDigestV1, Value: sum.Encoded()}
+	nonGeneric := &descriptor.Digest{HashAlgorithm: internaldigest.HashAlgorithmSHA256, NormalisationAlgorithm: internaldigest.OCIArtifactDigestV1, Value: sum.Encoded()}
+	for _, tc := range []struct {
+		kind, mediaType string
+		artifact        descriptor.Artifact
+	}{
+		{kind: "source", mediaType: "application/octet-stream", artifact: &descriptor.Source{}},
+		{kind: "layout", mediaType: layout.MediaTypeOCIImageLayoutTarV1, artifact: &descriptor.Resource{Digest: generic}},
+		{kind: "generic fallback", mediaType: "application/octet-stream", artifact: &descriptor.Resource{Digest: generic}},
+		{kind: "non-generic", mediaType: "application/octet-stream", artifact: &descriptor.Resource{Digest: nonGeneric}},
+	} {
 		for _, precalculated := range []bool{false, true} {
-			t.Run(kind+"/"+map[bool]string{false: "unknown", true: "known"}[precalculated], func(t *testing.T) {
+			t.Run(fmt.Sprintf("%s/precalculated=%t", tc.kind, precalculated), func(t *testing.T) {
 				r := require.New(t)
-				checksum := digest.FromString("archive").String()
-				var artifact descriptor.Artifact = &descriptor.Source{}
-				mediaType := "application/octet-stream"
-				if kind != "source" {
-					normalization := internaldigest.GenericBlobDigestV1
-					if kind == "non-generic" {
-						normalization = internaldigest.OCIArtifactDigestV1
-					}
-					artifact = &descriptor.Resource{Digest: &descriptor.Digest{
-						HashAlgorithm:          internaldigest.HashAlgorithmSHA256,
-						NormalisationAlgorithm: normalization,
-						Value:                  digest.FromString("archive").Encoded(),
-					}}
-					if kind == "layout" {
-						mediaType = layout.MediaTypeOCIImageLayoutTarV1
-					}
-				}
-				ab, err := ociblob.NewArtifactBlobWithMediaType(artifact, &mockBlob{}, mediaType)
+				checksum := sum.String()
+				ab, err := ociblob.NewArtifactBlobWithMediaType(tc.artifact, &mockBlob{}, tc.mediaType)
 				r.NoError(err)
 				reader := &countingReader{Reader: bytes.NewBufferString("archive")}
 				lazy := inmemory.New(reader)
@@ -739,12 +725,15 @@ func TestArtifactBlob_HasPrecalculatedDigestDoesNotRead(t *testing.T) {
 				}
 				ab.ReadOnlyBlob = lazy
 				for range 3 {
-					r.Equal(precalculated || kind == "generic fallback", ab.HasPrecalculatedDigest())
+					r.Equal(precalculated || tc.kind == "generic fallback", ab.HasPrecalculatedDigest())
+				}
+				if tc.kind == "generic fallback" { // a known resource checksum is not looked up by reading
+					requireChecksum(r, ab, checksum)
 				}
 				r.Zero(reader.reads)
 				// A DigestAware interface alone offers no guarantee of a cheap query.
 				ab.ReadOnlyBlob = &digestOnlyBlob{ReadOnlyBlob: lazy, DigestAware: lazy}
-				r.Equal(kind == "generic fallback", ab.HasPrecalculatedDigest())
+				r.Equal(tc.kind == "generic fallback", ab.HasPrecalculatedDigest())
 				r.Zero(reader.reads)
 				ab.SetPrecalculatedDigest(checksum)
 				r.True(ab.HasPrecalculatedDigest())
@@ -752,6 +741,13 @@ func TestArtifactBlob_HasPrecalculatedDigestDoesNotRead(t *testing.T) {
 			})
 		}
 	}
+}
+
+// requireChecksum asserts the blob's byte checksum; an empty want means unknown.
+func requireChecksum(r *require.Assertions, ab *ociblob.ArtifactBlob, want string) {
+	dig, ok := ab.Digest()
+	r.Equal(want, dig)
+	r.Equal(want != "", ok)
 }
 
 type countingReader struct {
@@ -769,23 +765,6 @@ type digestOnlyBlob struct {
 	blob.DigestAware
 }
 
-type mockDigestAwareMediaBlob struct {
-	*direct.Blob
-	checksum string
-}
-
-func (b *mockDigestAwareMediaBlob) Digest() (string, bool) {
-	return b.checksum, b.checksum != ""
-}
-
-func (b *mockDigestAwareMediaBlob) HasPrecalculatedDigest() bool {
-	return b.checksum != ""
-}
-
-func (b *mockDigestAwareMediaBlob) SetPrecalculatedDigest(dig string) {
-	b.checksum = dig
-}
-
 // Helper types for testing
 type mockSizeAwareBlob struct {
 	blob.ReadOnlyBlob
@@ -798,7 +777,11 @@ func (m *mockSizeAwareBlob) Size() int64 {
 
 type mockDigestAwareBlob struct {
 	blob.ReadOnlyBlob
-	digest string
+	digest, mediaType string
+}
+
+func (m *mockDigestAwareBlob) MediaType() (string, bool) {
+	return m.mediaType, m.mediaType != ""
 }
 
 func (m *mockDigestAwareBlob) Digest() (string, bool) {
