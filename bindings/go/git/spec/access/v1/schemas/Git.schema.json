@@ -7,13 +7,16 @@
   "description": "Git identifies a Git repository snapshot. Commit takes precedence over Ref.",
   "properties": {
     "commit": {
-      "type": "string"
+      "type": "string",
+      "description": "Commit pins a commit by its full 40-character hexadecimal SHA and takes\nprecedence over Ref. At least one of Commit or Ref must be set."
     },
     "ref": {
-      "type": "string"
+      "type": "string",
+      "description": "Ref selects a branch, tag or full ref name (for example main, v1.0.0 or\nrefs/tags/v1.0.0). Digest processing resolves it to a commit."
     },
     "repository": {
-      "type": "string"
+      "type": "string",
+      "description": "Repository is the Git repository URL."
     },
     "type": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",
