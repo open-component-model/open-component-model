@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"go/ast"
+	"go/types"
 	"slices"
 
 	"ocm.software/open-component-model/bindings/go/generator/universe"
@@ -176,6 +177,17 @@ func (g *generation) schemaForExpr(expr ast.Expr, ctx *universe.TypeInfo, field 
 	if key, ok := universe.ResolveExprToTypeKey(ctx.Pkg.TypesInfo, expr); ok {
 		if universe.IsJSONRawMessageKey(key) {
 			return anySchema()
+		}
+	}
+
+	// A named type from another package without a registered schema (e.g.
+	// go-digest's Digest) marshals as its underlying basic type, unless it
+	// implements json.Marshaler.
+	if sel, ok := expr.(*ast.SelectorExpr); ok {
+		if basic, ok := externalBasicType(ctx.Pkg.TypesInfo, sel); ok {
+			if prim := newPrimitiveSchema(ast.NewIdent(basic.Name()), ctx.TypeSpec, ctx.GenDecl, field); prim != nil {
+				return prim
+			}
 		}
 	}
 
@@ -471,6 +483,21 @@ func byteSliceSchema() *JSONSchemaDraft202012 {
 		Type:            "string",
 		ContentEncoding: "base64",
 	}
+}
+
+func externalBasicType(info *types.Info, sel *ast.SelectorExpr) (*types.Basic, bool) {
+	obj, ok := info.Uses[sel.Sel].(*types.TypeName)
+	if !ok {
+		return nil, false
+	}
+	typ := obj.Type()
+	for _, t := range []types.Type{typ, types.NewPointer(typ)} {
+		if m, _, _ := types.LookupFieldOrMethod(t, true, nil, "MarshalJSON"); m != nil {
+			return nil, false
+		}
+	}
+	basic, ok := typ.Underlying().(*types.Basic)
+	return basic, ok
 }
 
 func anyObjectSchema() *JSONSchemaDraft202012 {
