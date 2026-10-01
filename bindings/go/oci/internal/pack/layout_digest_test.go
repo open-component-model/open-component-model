@@ -48,8 +48,10 @@ func TestPackingLayoutVerifiesResolvedRootBeforeWriting(t *testing.T) {
 			{name: "matching", hash: "SHA-256", value: root.Digest.Encoded()},
 			{name: "wrong root", hash: "SHA-256", value: other.Digest.Encoded(), wantError: "digest value mismatch"},
 			{name: "wrong hash", hash: "SHA-512", value: root.Digest.Encoded(), wantError: "hash algorithm mismatch"},
-			{name: "missing hash", value: other.Digest.Encoded()},
+			{name: "missing hash", value: root.Digest.Encoded()},
+			{name: "missing hash with wrong root", value: other.Digest.Encoded(), wantError: "digest value mismatch"},
 			{name: "missing value", hash: "SHA-256"},
+			{name: "missing value with wrong hash", hash: "SHA-512", wantError: "hash algorithm mismatch"},
 			{name: "normalization only"},
 		} {
 			t.Run(normalization+"/"+tc.name, func(t *testing.T) {

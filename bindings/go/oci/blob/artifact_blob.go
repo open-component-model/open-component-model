@@ -51,12 +51,12 @@ func NewArtifactBlobWithMediaType(artifact descriptor.Artifact, b blob.ReadOnlyB
 	if resource, ok := artifact.(*descriptor.Resource); ok && !result.ociLayout {
 		if digAware, ok := b.(blob.DigestAware); ok {
 			if blobDig, ok := digAware.Digest(); ok {
-				if isByteDigest(resource.Digest) {
-					dig, err := digestSpecToDigest(resource.Digest)
-					if err != nil {
-						return nil, fmt.Errorf("failed to parse digest spec from resource: %w", err)
-					}
-					if dig != digest.Digest(blobDig) {
+				expected, known, err := result.resourceByteDigest()
+				if err != nil {
+					return nil, err
+				}
+				if known {
+					if expected != blobDig {
 						return nil, fmt.Errorf("resource blob digest mismatch: resource %s vs blob %s", resource.Digest.Value, blobDig)
 					}
 				} else if resource.Digest == nil {
@@ -89,7 +89,12 @@ func (r *ArtifactBlob) Digest() (string, bool) {
 	if dig != "" {
 		return dig, true
 	}
-	if expected, known := r.resourceByteDigest(); known {
+	expected, known, err := r.resourceByteDigest()
+	if err != nil {
+		// Never substitute the blob's checksum for an invalid expected one.
+		return "", false
+	}
+	if known {
 		return expected, true
 	}
 	if digAware, ok := r.ReadOnlyBlob.(blob.DigestAware); ok {
@@ -100,19 +105,25 @@ func (r *ArtifactBlob) Digest() (string, bool) {
 	return "", false
 }
 
-func (r *ArtifactBlob) resourceByteDigest() (string, bool) {
-	if resource, ok := r.Artifact.(*descriptor.Resource); ok && !r.ociLayout && isByteDigest(resource.Digest) {
-		dig, err := digestSpecToDigest(resource.Digest)
-		if err == nil {
-			return dig.String(), true
-		}
+// resourceByteDigest returns the expected byte checksum of an ordinary resource.
+// A byte digest with any field set must be complete and valid; it is never ignored.
+func (r *ArtifactBlob) resourceByteDigest() (string, bool, error) {
+	resource, ok := r.Artifact.(*descriptor.Resource)
+	if !ok || r.ociLayout || !isByteDigest(resource.Digest) {
+		return "", false, nil
 	}
-	return "", false
+	dig, err := digestSpecToDigest(resource.Digest)
+	if err != nil {
+		return "", false, fmt.Errorf("invalid resource digest: %w", err)
+	}
+	return dig.String(), true, nil
 }
 
 func isByteDigest(dig *descriptor.Digest) bool {
-	return dig != nil && dig.Value != "" &&
-		(dig.NormalisationAlgorithm == "" || dig.NormalisationAlgorithm == internaldigest.GenericBlobDigestV1)
+	if dig == nil || (dig.HashAlgorithm == "" && dig.Value == "") {
+		return false
+	}
+	return dig.NormalisationAlgorithm == "" || dig.NormalisationAlgorithm == internaldigest.GenericBlobDigestV1
 }
 
 func isOCILayout(artifact descriptor.Artifact, b blob.ReadOnlyBlob, mediaType string) bool {
@@ -156,8 +167,8 @@ func (r *ArtifactBlob) HasPrecalculatedDigest() bool {
 	if precalculated, ok := r.ReadOnlyBlob.(blob.DigestPrecalculatable); ok && precalculated.HasPrecalculatedDigest() {
 		return true
 	}
-	_, ok := r.resourceByteDigest()
-	return ok
+	_, ok, err := r.resourceByteDigest()
+	return ok && err == nil
 }
 
 // SetPrecalculatedDigest stores a byte checksum without modifying signed resource metadata.
@@ -195,6 +206,10 @@ func digestSpecToDigest(dig *descriptor.Digest) (digest.Digest, error) {
 	algo, ok := internaldigest.SHAMapping[dig.HashAlgorithm]
 	if !ok {
 		return "", fmt.Errorf("invalid hash algorithm: %s", dig.HashAlgorithm)
+	}
+
+	if dig.Value == "" {
+		return "", fmt.Errorf("missing digest value")
 	}
 
 	return digest.NewDigestFromEncoded(algo, dig.Value), nil
@@ -236,7 +251,11 @@ func (r *ArtifactBlob) Buffer() (result *ArtifactBlob, err error) {
 
 	// A separately supplied byte checksum must not override the expected checksum
 	// of an ordinary resource. Normalized artifact digests are not byte checksums.
-	if expected, known := r.resourceByteDigest(); known {
+	expected, known, err := r.resourceByteDigest()
+	if err != nil {
+		return nil, err
+	}
+	if known {
 		actual, _ := inMemoryBlob.Digest()
 		algorithm := digest.Digest(expected).Algorithm()
 		if digest.Digest(actual).Algorithm() != algorithm {
