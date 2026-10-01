@@ -44,7 +44,7 @@ func processRepositoryUploader(resource descriptorv2.Resource, access runtime.Ty
 		"repository":       repository,
 	}
 	if path != "" {
-		templated, err := templateString(path, baseID, i)
+		templated, _, err := templateString(path, templateAliases(baseID, i))
 		if err != nil {
 			return fmt.Errorf("cannot template uploader path: %w", err)
 		}

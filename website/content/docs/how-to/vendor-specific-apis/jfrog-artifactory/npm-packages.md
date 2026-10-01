@@ -30,7 +30,8 @@ repository, so that `npm install` finds it.
 
 ### Configure the uploader
 
-Create `config.yaml` with the credentials and one uploader rule for the `my-package` resource:
+Add the credentials and one uploader rule for the `my-package` resource to your
+`.ocmconfig` in the working directory (merged with `$HOME/.ocmconfig`):
 
 ```yaml
 type: generic.config.ocm.software/v1
@@ -45,9 +46,7 @@ configurations:
           - type: WgetCredentials/v1
             identityToken: <ARTIFACTORY_IDENTITY_TOKEN>
   - type: artifactory.uploader.transfer.config.ocm.software/v1alpha1
-    match:
-      accessType: localBlob
-      name: my-package
+    match: resource.access.isType("LocalBlob") && resource.name == "my-package"
     url: https://myorg.jfrog.io
     repository: npm-local
 ```
@@ -55,7 +54,7 @@ configurations:
 ### Run the transfer
 
 ```bash
-ocm transfer cv --config config.yaml ctf::./src//ocm.software/demo:1.0.0 ctf::./target
+ocm transfer cv ctf::./src//ocm.software/demo:1.0.0 ctf::./target
 ```
 
 The uploader logs the package Artifactory indexed:
