@@ -29,7 +29,8 @@ repository, so that `helm pull` finds it.
 
 ### Configure the uploader
 
-Create `config.yaml` with the credentials and one uploader rule for the `chart` resource:
+Add the credentials and one uploader rule for the `chart` resource to your
+`.ocmconfig` in the working directory (merged with `$HOME/.ocmconfig`):
 
 ```yaml
 type: generic.config.ocm.software/v1
@@ -45,9 +46,7 @@ configurations:
             username: <USERNAME>
             password: <PASSWORD_OR_USER_TOKEN>
   - type: nexus.uploader.transfer.config.ocm.software/v1alpha1
-    match:
-      accessType: localBlob
-      name: chart
+    match: resource.access.isType("LocalBlob") && resource.name == "chart"
     url: https://nexus.example.com
     repository: helm-hosted
 ```
@@ -55,7 +54,7 @@ configurations:
 ### Run the transfer
 
 ```bash
-ocm transfer cv --config config.yaml ctf::./src//ocm.software/demo:1.0.0 ctf::./target
+ocm transfer cv ctf::./src//ocm.software/demo:1.0.0 ctf::./target
 ```
 
 ### Verify

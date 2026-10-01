@@ -10,7 +10,10 @@ import (
 	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1/meta"
 )
 
-func processHelm(resource v2.Resource, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int, uploadAsOCIArtifact bool) error {
+// processHelm fetches a Helm chart and converts it to an OCI artifact. With an empty
+// ociImageReference the artifact is embedded as a local blob in the target; otherwise it
+// is pushed as a separate OCI artifact to ociImageReference.
+func processHelm(resource v2.Resource, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int, ociImageReference string) error {
 	resourceIdentity := resource.ToIdentity()
 	resourceID := identityToTransformationID(resourceIdentity)
 	getResourceID := fmt.Sprintf("%sGet%s", id, resourceID)
@@ -50,14 +53,11 @@ func processHelm(resource v2.Resource, id string, val *discoveryValue, tgd *tran
 	}
 	tgd.Transformations = append(tgd.Transformations, convertToOCITransform)
 
-	// Create upload transformations
 	var addResourceTransform transformv1alpha1.GenericTransformation
-	if uploadAsOCIArtifact {
-		if addResourceTransform, err = ociUploadAsArtifact(toSpec, addResourceID, convertResourceID, imageReferenceFromAccess(convertResourceID), addLabel(&val.Descriptor.Component, resource.Name, "OCIArtifact", toSpec)); err != nil {
-			return fmt.Errorf("failed to create oci upload transformation: %w", err)
-		}
+	if ociImageReference != "" {
+		addResourceTransform = ociAddArtifact(addResourceID, convertResourceID, ociImageReference, addLabel(&val.Descriptor.Component, resource.Name, "OCIArtifact", toSpec))
 	} else {
-		if addResourceTransform, err = uploadAsLocalResource(toSpec, val.Descriptor.Component.Name, val.Descriptor.Component.Version, addResourceID, convertResourceID, imageReferenceFromAccess(convertResourceID), addLabel(&val.Descriptor.Component, resource.Name, "LocalBlob", toSpec)); err != nil {
+		if addResourceTransform, err = uploadAsLocalResource(toSpec, val.Descriptor.Component.Name, val.Descriptor.Component.Version, addResourceID, convertResourceID, fmt.Sprintf("${%s.output.resource.access.imageReference}", convertResourceID), addLabel(&val.Descriptor.Component, resource.Name, "LocalBlob", toSpec)); err != nil {
 			return fmt.Errorf("failed to create oci upload as local resource transformation: %w", err)
 		}
 	}
