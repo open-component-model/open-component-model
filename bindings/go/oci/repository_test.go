@@ -3750,10 +3750,11 @@ func TestRepository_UploadResource_DigestOnlyAccess(t *testing.T) {
 	})
 }
 
-// TestRepository_AddOwnership_OCIImageLayerSubjectSkipped covers the same no-op
-// contract for a layer access: a bare blob can never be the subject of a referrer,
-// but opting into an ownership policy must not fail the construction either.
-func TestRepository_AddOwnership_OCIImageLayerSubjectSkipped(t *testing.T) {
+// TestRepository_AddOwnership_OCIImageLayerSubjectRejected asserts that ownership cannot
+// be attached to a layer access: a referrer needs a manifest as subject, and a layer is a
+// blob. The constructor only calls AddOwnership for ownershipPolicy Always, which must fail
+// when the ownership cannot be recorded instead of silently recording nothing.
+func TestRepository_AddOwnership_OCIImageLayerSubjectRejected(t *testing.T) {
 	r := require.New(t)
 	ctx := t.Context()
 	const (
@@ -3786,17 +3787,15 @@ func TestRepository_AddOwnership_OCIImageLayerSubjectSkipped(t *testing.T) {
 		},
 	}
 
-	r.NoError(repo.AddOwnership(ctx, component, version, resource, nil))
-
-	_, body, err := pack.OwnershipReferrer(ctx, desc, resource, component, version)
-	r.NoError(err)
-	r.Nil(body, "a layer subject must yield no ownership referrer")
+	err = repo.AddOwnership(ctx, component, version, resource, nil)
+	r.ErrorContains(err, "cannot be the subject of an ownership referrer")
 
 	// The media type on a layer access is not trusted to decide this: a layer is a
-	// blob whatever it claims to be, so it is skipped without consulting the store.
+	// blob whatever it claims to be, so it is rejected without consulting the store.
 	manifestTyped := resource.DeepCopy()
 	manifestTyped.Access.(*v1.OCIImageLayer).MediaType = ociImageSpecV1.MediaTypeImageManifest
-	r.NoError(repo.AddOwnership(ctx, component, version, manifestTyped, nil))
+	err = repo.AddOwnership(ctx, component, version, manifestTyped, nil)
+	r.ErrorContains(err, "cannot be the subject of an ownership referrer")
 
 	// Pushing a referrer always writes the empty config/layer blob first, so its
 	// absence proves nothing was pushed against the layer.

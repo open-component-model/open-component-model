@@ -810,17 +810,9 @@ func (repo *Repository) AddOwnership(ctx context.Context, component, version str
 	if err != nil {
 		return err
 	}
-	if store == nil {
-		slogcontext.Log(ctx, slog.LevelDebug, "resource access has no manifest subject; skipping ownership referrer",
-			slog.String("accessType", resource.Access.GetType().String()))
-		return nil
-	}
 	return repo.buildAndPushOwnershipReferrer(ctx, store, subject, resource, component, version)
 }
 
-// resolveOwnershipSubject returns the store and manifest the ownership referrer should
-// point at. It returns a nil store for access types that address a plain blob, which
-// cannot be the subject of a referrer manifest.
 func (repo *Repository) resolveOwnershipSubject(ctx context.Context, component, version string, resource *descriptor.Resource) (spec.Store, ociImageSpecV1.Descriptor, error) {
 	typed, err := repo.scheme.NewObject(resource.Access.GetType())
 	if err != nil {
@@ -856,7 +848,8 @@ func (repo *Repository) resolveOwnershipSubject(ctx context.Context, component, 
 		}
 		return store, subject, nil
 	case *accessv1.OCIImageLayer:
-		return nil, ociImageSpecV1.Descriptor{}, nil
+		// The subject of a referrer must be a manifest. A layer is a blob, whatever media type it declares.
+		return nil, ociImageSpecV1.Descriptor{}, fmt.Errorf("cannot attach ownership to access type %s: a layer is a blob and cannot be the subject of an ownership referrer", resource.Access.GetType())
 	default:
 		return nil, ociImageSpecV1.Descriptor{}, fmt.Errorf("unsupported resource access type for ownership referrer: %T", typed)
 	}
