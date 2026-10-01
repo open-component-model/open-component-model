@@ -4,8 +4,11 @@ import (
 	"context"
 	"errors"
 	"os/exec"
+	"runtime"
 	"slices"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -87,29 +90,50 @@ fpr:::::::::2222222222222222222222222222222222222222:
 }
 
 func TestParseVerifyStatus(t *testing.T) {
-	const validSig = "[GNUPG:] VALIDSIG 2222222222222222222222222222222222222222 2026-09-25 1790000000 0 4 0 1 8 00 1111111111111111111111111111111111111111"
+	const (
+		signing = "2222222222222222222222222222222222222222"
+		primary = "1111111111111111111111111111111111111111"
+		other   = "3333333333333333333333333333333333333333"
+	)
+	validSig := func(fpr string) string {
+		return "[GNUPG:] VALIDSIG " + fpr + " 2026-09-25 1790000000 0 4 0 1 8 00 " + primary + "\n"
+	}
 	tests := []struct {
 		name    string
 		status  string
-		wantErr bool
+		wantErr string
 	}{
-		{name: "good and valid", status: "[GNUPG:] NEWSIG\n[GNUPG:] GOODSIG AAAAAAAAAAAAAAAA OCM Test\n" + validSig + "\n[GNUPG:] TRUST_UNDEFINED 0 pgp\n"},
-		{name: "valid only", status: validSig + "\n", wantErr: true},
-		{name: "expired key", status: "[GNUPG:] EXPKEYSIG AAAAAAAAAAAAAAAA OCM Test\n" + validSig + "\n", wantErr: true},
-		{name: "empty", status: "", wantErr: true},
+		{name: "good and valid", status: "[GNUPG:] NEWSIG\n[GNUPG:] GOODSIG AAAAAAAAAAAAAAAA OCM Test\n" + validSig(signing) + "[GNUPG:] TRUST_UNDEFINED 0 pgp\n"},
+		{name: "valid only", status: validSig(signing), wantErr: "gpg reported no GOODSIG and VALIDSIG status"},
+		{name: "good only", status: "[GNUPG:] GOODSIG AAAAAAAAAAAAAAAA OCM Test\n", wantErr: "gpg reported no GOODSIG and VALIDSIG status"},
+		{name: "expired key", status: "[GNUPG:] EXPKEYSIG AAAAAAAAAAAAAAAA OCM Test\n" + validSig(signing), wantErr: "gpg reported EXPKEYSIG"},
+		{
+			// gpg exits 0 if one of several signatures is good; the good signature by another key
+			// must not lend its GOODSIG to the revoked key's VALIDSIG.
+			name: "good co-signature with a revoked key",
+			status: "[GNUPG:] NEWSIG\n[GNUPG:] GOODSIG 3333333333333333 Other\n" + validSig(other) +
+				"[GNUPG:] NEWSIG\n[GNUPG:] REVKEYSIG 2222222222222222 Pinned\n" + validSig(signing),
+			wantErr: "gpg reported REVKEYSIG",
+		},
+		{
+			name: "two good signatures",
+			status: "[GNUPG:] NEWSIG\n[GNUPG:] GOODSIG 3333333333333333 Other\n" + validSig(other) +
+				"[GNUPG:] NEWSIG\n[GNUPG:] GOODSIG 2222222222222222 Pinned\n" + validSig(signing),
+			wantErr: "gpg reported 2 good signatures, but a GPG signature must contain exactly one",
+		},
+		{name: "bad signature next to a good one", status: "[GNUPG:] GOODSIG AAAAAAAAAAAAAAAA T\n" + validSig(signing) + "[GNUPG:] BADSIG BBBBBBBBBBBBBBBB T\n", wantErr: "gpg reported BADSIG"},
+		{name: "empty", status: "", wantErr: "gpg reported no GOODSIG and VALIDSIG status"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := require.New(t)
-			fields, err := parseVerifyStatus(tt.status)
-			if tt.wantErr {
-				r.ErrorContains(err, "gpg reported no GOODSIG and VALIDSIG status")
+			key, err := parseVerifyStatus(tt.status)
+			if tt.wantErr != "" {
+				r.ErrorContains(err, tt.wantErr)
 				return
 			}
 			r.NoError(err)
-			r.Len(fields, 10)
-			r.Equal("2222222222222222222222222222222222222222", fields[0])
-			r.Equal("1111111111111111111111111111111111111111", fields[9])
+			r.Equal(verifiedKey{signing: signing, primary: primary}, key)
 		})
 	}
 }
@@ -173,11 +197,11 @@ func TestBinary_Resolve(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			b := New()
-			b.LookPath = tt.lookPath
+			opts := []Option{WithLookPath(tt.lookPath)}
 			if tt.exec != nil {
-				b.Exec = tt.exec
+				opts = append(opts, WithExec(tt.exec))
 			}
+			b := New(opts...)
 			path, err := b.resolve(t.Context())
 			tt.check(require.New(t), path, err)
 		})
@@ -230,9 +254,7 @@ func TestBinary_KeyringInvocations(t *testing.T) {
 			r := require.New(t)
 			var calls [][]string
 			var stdin []byte
-			b := New()
-			b.LookPath = func(file string) (string, error) { return "/fake/bin/" + file, nil }
-			b.Exec = func(_ context.Context, _ string, args []string, in []byte) ([]byte, []byte, error) {
+			b := New(fakeLookPath, WithExec(func(_ context.Context, _ string, args []string, in []byte) ([]byte, []byte, error) {
 				if args[0] == "--version" {
 					return []byte("gpg (GnuPG) 2.4.4\n"), nil, nil
 				}
@@ -242,7 +264,7 @@ func TestBinary_KeyringInvocations(t *testing.T) {
 					return []byte(status), nil, nil
 				}
 				return []byte("-----BEGIN PGP SIGNATURE-----"), nil, nil
-			}
+			}))
 			r.NoError(tt.run(t, b))
 			r.Len(calls, 1, "keyring mode runs exactly one gpg operation: no import, no key listing, no agent shutdown")
 			for _, want := range tt.wantArgs {
@@ -252,6 +274,119 @@ func TestBinary_KeyringInvocations(t *testing.T) {
 				r.NotContains(calls[0], deny)
 			}
 			r.Equal(tt.wantStdin, stdin)
+		})
+	}
+}
+
+var fakeLookPath = WithLookPath(func(file string) (string, error) { return "/fake/bin/" + file, nil })
+
+func TestBinary_ResolveCaching(t *testing.T) {
+	r := require.New(t)
+	var lookups, versions int
+	found := false
+	b := New(
+		WithLookPath(func(file string) (string, error) {
+			lookups++
+			if !found {
+				return "", exec.ErrNotFound
+			}
+			return "/fake/bin/" + file, nil
+		}),
+		WithExec(func(context.Context, string, []string, []byte) ([]byte, []byte, error) {
+			versions++
+			return []byte("gpg (GnuPG) 2.4.4\n"), nil, nil
+		}),
+	)
+
+	_, err := b.resolve(t.Context())
+	r.ErrorIs(err, ErrGPGNotFound)
+	found = true
+	path, err := b.resolve(t.Context())
+	r.NoError(err, "a failed lookup must not be cached")
+	r.Equal("/fake/bin/gpg", path)
+
+	lookupsAfterResolve, versionsAfterResolve := lookups, versions
+	path, err = b.resolve(t.Context())
+	r.NoError(err)
+	r.Equal("/fake/bin/gpg", path)
+	r.Equal(lookupsAfterResolve, lookups, "a resolved gpg must not be looked up again")
+	r.Equal(versionsAfterResolve, versions, "a resolved gpg must not be version-checked again")
+}
+
+// TestBinary_IsolatedHomeCleanup pins that the isolated home directory, which holds the imported
+// private key, has its gpg-agent stopped and is removed even when the operation's context is cancelled.
+func TestBinary_IsolatedHomeCleanup(t *testing.T) {
+	r := require.New(t)
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	var home string
+	var killArgs []string
+	var killCtxErr error
+	b := New(fakeLookPath, WithExec(func(ctx context.Context, binaryPath string, args []string, _ []byte) ([]byte, []byte, error) {
+		switch {
+		case args[0] == "--version":
+			return []byte("gpg (GnuPG) 2.4.4\n"), nil, nil
+		case binaryPath == "/fake/bin/gpgconf":
+			killArgs, killCtxErr = args, ctx.Err()
+			return nil, nil, nil
+		case slices.Contains(args, "--import"):
+			home = args[slices.Index(args, "--homedir")+1]
+			r.DirExists(home)
+			cancel()
+			return nil, []byte("interrupted"), context.Canceled
+		}
+		return nil, nil, errors.New("unexpected gpg invocation")
+	}))
+
+	_, err := b.Sign(ctx, SignRequest{PrivateKey: []byte("key"), DigestAlgo: "SHA256", Data: []byte("d")})
+	r.ErrorIs(err, context.Canceled)
+	r.Equal([]string{"--homedir", home, "--kill", "all"}, killArgs)
+	r.NoError(killCtxErr, "gpg-agent must be stopped although the operation's context is cancelled")
+	r.NoDirExists(home)
+}
+
+func TestBinary_RejectsKeyMaterialWithKeyring(t *testing.T) {
+	r := require.New(t)
+	b := New(WithExec(func(context.Context, string, []string, []byte) ([]byte, []byte, error) {
+		return nil, nil, errors.New("gpg must not be invoked")
+	}))
+	_, err := b.Sign(t.Context(), SignRequest{UseKeyring: true, PrivateKey: []byte("key")})
+	r.ErrorIs(err, ErrKeyMaterialWithKeyring)
+	err = b.Verify(t.Context(), VerifyRequest{UseKeyring: true, KeyFingerprint: strings.Repeat("A", 40), PublicKey: []byte("key")})
+	r.ErrorIs(err, ErrKeyMaterialWithKeyring)
+}
+
+func TestBinary_RunTimeout(t *testing.T) {
+	r := require.New(t)
+	b := New(WithExec(func(ctx context.Context, _ string, _ []string, _ []byte) ([]byte, []byte, error) {
+		<-ctx.Done()
+		return nil, nil, errors.New("signal: killed")
+	}))
+	ctx, cancel := context.WithTimeout(t.Context(), time.Millisecond)
+	defer cancel()
+	_, err := b.run(ctx, "sign", "/fake/bin/gpg", nil, nil)
+	r.ErrorIs(err, context.DeadlineExceeded)
+	r.ErrorContains(err, "gpg sign timed out")
+	r.ErrorContains(err, "signal: killed")
+}
+
+func TestTempBase(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("gpg-agent uses no Unix sockets in the home directory on Windows")
+	}
+	tests := []struct {
+		name   string
+		tmpdir string
+		want   string
+	}{
+		{name: "short TMPDIR is used", tmpdir: "/var/tmp", want: "/var/tmp"},
+		{name: "long TMPDIR falls back to /tmp", tmpdir: "/" + strings.Repeat("d", 80), want: "/tmp"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("TMPDIR", tt.tmpdir)
+			require.New(t).Equal(tt.want, tempBase())
 		})
 	}
 }

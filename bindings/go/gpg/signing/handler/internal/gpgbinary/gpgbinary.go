@@ -3,8 +3,13 @@
 // unwrapping, runs in the system libgcrypt. With a FIPS 140-3 validated libgcrypt
 // this keeps GPG signing compliant in FIPS 140-3 mode.
 //
-// Every operation runs in a fresh temporary GnuPG home directory that only
-// contains the key material of the request and is removed afterwards.
+// By default every operation runs in a fresh temporary GnuPG home directory that
+// only contains the key material of the request; afterwards its daemons are stopped
+// and it is removed. With UseKeyring, gpg uses the user's keyring ($GNUPGHOME or
+// ~/.gnupg) and running gpg-agent instead, and the temporary directory only holds
+// the data and signature files of the operation.
+//
+// Every gpg invocation is bounded by a timeout of 3 minutes.
 package gpgbinary
 
 import (
@@ -18,6 +23,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	goruntime "runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -27,40 +33,70 @@ import (
 )
 
 const (
-	minimumVersion          = "2.2.0"
-	defaultOperationTimeout = 3 * time.Minute
-	versionTimeout          = 10 * time.Second
-	cleanupTimeout          = 10 * time.Second
-	maxStderr               = 4096
+	minimumVersion   = "2.2.0"
+	operationTimeout = 3 * time.Minute
+	versionTimeout   = 10 * time.Second
+	cleanupTimeout   = 10 * time.Second
+	maxStderr        = 4096
+
+	// maxSocketPath is the longest Unix socket path all supported platforms accept:
+	// sun_path holds 104 bytes including the terminating NUL on macOS, 108 on Linux.
+	maxSocketPath = 103
+	// longestSocket is the longest socket name gpg-agent binds inside its home directory
+	// when no /run/user/<uid> exists (always on macOS, often in containers).
+	longestSocket = "S.gpg-agent.browser"
+	// shortTempBase serves as base directory when os.TempDir() is too long for gpg-agent sockets.
+	shortTempBase = "/tmp"
 )
 
-// ErrGPGNotFound is returned when no gpg binary is found on PATH.
-var ErrGPGNotFound = errors.New(`GPG signing requires the GnuPG "gpg" binary (>= 2.2.0) on PATH; install GnuPG, in FIPS 140-3 mode one backed by a FIPS 140-3 validated libgcrypt`)
+var (
+	// ErrGPGNotFound is returned when no gpg binary is found on PATH.
+	ErrGPGNotFound = errors.New(`GPG signing requires the GnuPG "gpg" binary (>= 2.2.0) on PATH; install GnuPG, in FIPS 140-3 mode one backed by a FIPS 140-3 validated libgcrypt`)
+	// ErrKeyringRequiresFingerprint is returned when verifying against the user's keyring without a pinned key.
+	ErrKeyringRequiresFingerprint = errors.New("verifying with the GnuPG keyring requires the full key fingerprint, because any key in the keyring would otherwise be accepted")
+	// ErrKeyMaterialWithKeyring rejects key material in a request that uses the keyring,
+	// so that it is never ambiguous which key signs or verifies.
+	ErrKeyMaterialWithKeyring = errors.New("useKeyring takes keys from the GnuPG keyring; remove the key material from the GPG credentials")
+)
 
 var (
 	gpgVersionRegexp       = regexp.MustCompile(`^gpg \(GnuPG[^)]*\) (\d+\.\d+\.\d+)`)
 	libgcryptVersionRegexp = regexp.MustCompile(`(?m)^libgcrypt (\S+)`)
 )
 
-// Binary resolves and invokes the gpg binary.
-// Resolution is retried on every call until it succeeds once; the resolved path is cached afterwards.
+// ExecFunc runs binaryPath with args, feeding stdin if non-nil.
+type ExecFunc func(ctx context.Context, binaryPath string, args []string, stdin []byte) (stdout, stderr []byte, err error)
+
+// Option configures a Binary.
+type Option func(*Binary)
+
+// WithLookPath overrides how binaries are located on PATH.
+func WithLookPath(fn func(file string) (string, error)) Option {
+	return func(b *Binary) { b.lookPath = fn }
+}
+
+// WithExec overrides how binaries are executed.
+func WithExec(fn ExecFunc) Option {
+	return func(b *Binary) { b.exec = fn }
+}
+
+// Binary resolves and invokes the gpg binary. It is safe for concurrent use.
+// Resolution is retried on every call until it succeeds once; the resolved paths are cached afterwards.
 type Binary struct {
+	lookPath func(file string) (string, error)
+	exec     ExecFunc
+
 	mu          sync.Mutex
 	gpgPath     string // set after the first successful resolution
 	gpgconfPath string // "" if gpgconf is not on PATH
-
-	// OperationTimeout bounds a single gpg invocation; zero means defaultOperationTimeout.
-	OperationTimeout time.Duration
-	// LookPath locates binaries on PATH.
-	LookPath func(file string) (string, error)
-	// Exec runs binaryPath with args, feeding stdin if non-nil.
-	Exec func(ctx context.Context, binaryPath string, args []string, stdin []byte) (stdout, stderr []byte, err error)
 }
 
-// New returns a Binary that resolves gpg via exec.LookPath.
-func New() *Binary {
-	b := &Binary{LookPath: exec.LookPath}
-	b.Exec = b.exec
+// New returns a Binary that resolves binaries via exec.LookPath and runs them as subprocesses.
+func New(opts ...Option) *Binary {
+	b := &Binary{lookPath: exec.LookPath, exec: execCommand}
+	for _, opt := range opts {
+		opt(b)
+	}
 	return b
 }
 
@@ -68,7 +104,7 @@ func New() *Binary {
 type SignRequest struct {
 	// UseKeyring signs with the user's GnuPG keyring and gpg-agent instead of PrivateKey.
 	UseKeyring     bool
-	PrivateKey     []byte // armored or binary key material; ignored with UseKeyring
+	PrivateKey     []byte // armored or binary key material; must be empty with UseKeyring
 	Passphrase     string // with UseKeyring, "" leaves unlocking to gpg-agent (cache, pinentry, token)
 	KeyFingerprint string // "" selects the first secret key, or gpg's default key with UseKeyring
 	DigestAlgo     string // "SHA256" | "SHA384" | "SHA512"
@@ -80,7 +116,7 @@ type VerifyRequest struct {
 	// UseKeyring verifies against the user's GnuPG keyring instead of PublicKey.
 	// It requires KeyFingerprint, because the keyring may contain arbitrary keys.
 	UseKeyring     bool
-	PublicKey      []byte // ignored with UseKeyring
+	PublicKey      []byte // must be empty with UseKeyring
 	KeyFingerprint string // "" accepts any key in PublicKey
 	Data           []byte
 	Signature      string
@@ -88,6 +124,9 @@ type VerifyRequest struct {
 
 // Sign returns an ASCII-armored detached signature over req.Data.
 func (b *Binary) Sign(ctx context.Context, req SignRequest) (string, error) {
+	if req.UseKeyring && len(req.PrivateKey) > 0 {
+		return "", ErrKeyMaterialWithKeyring
+	}
 	gpgPath, err := b.resolve(ctx)
 	if err != nil {
 		return "", err
@@ -143,9 +182,14 @@ func (b *Binary) Sign(ctx context.Context, req SignRequest) (string, error) {
 
 // Verify checks req.Signature over req.Data against the keys in req.PublicKey or the user's keyring.
 func (b *Binary) Verify(ctx context.Context, req VerifyRequest) error {
-	// A 16-hex long key ID is not collision resistant enough to pick a key out of an arbitrary keyring.
-	if req.UseKeyring && len(req.KeyFingerprint) < 40 {
-		return ErrKeyringRequiresFingerprint
+	if req.UseKeyring {
+		if len(req.PublicKey) > 0 {
+			return ErrKeyMaterialWithKeyring
+		}
+		// A 16-hex long key ID is not collision resistant enough to pick a key out of an arbitrary keyring.
+		if len(req.KeyFingerprint) < 40 {
+			return ErrKeyringRequiresFingerprint
+		}
 	}
 	gpgPath, err := b.resolve(ctx)
 	if err != nil {
@@ -179,24 +223,17 @@ func (b *Binary) Verify(ctx context.Context, req VerifyRequest) error {
 	if err != nil {
 		return fmt.Errorf("%w\nstatus: %s", err, strings.TrimSpace(string(out)))
 	}
-	fields, err := parseVerifyStatus(string(out))
+	key, err := parseVerifyStatus(string(out))
 	if err != nil {
 		return err
 	}
 
 	want := req.KeyFingerprint
-	if want == "" {
-		return nil
-	}
-	signingFpr, primaryFpr := fields[0], fields[0]
-	if len(fields) >= 10 {
-		primaryFpr = fields[9]
-	}
-	if fingerprintMatches(signingFpr, want) || fingerprintMatches(primaryFpr, want) {
+	if want == "" || fingerprintMatches(key.signing, want) || fingerprintMatches(key.primary, want) {
 		return nil
 	}
 	return fmt.Errorf("signature was made by key %s (primary key %s), which does not match the configured key fingerprint %q",
-		signingFpr, primaryFpr, want)
+		key.signing, key.primary, want)
 }
 
 // workspace holds the files of one operation and the gpg options selecting its keyring.
@@ -210,30 +247,49 @@ func (w workspace) args(args ...string) []string {
 	return append(slices.Clone(w.base), args...)
 }
 
-// newWorkspace returns an isolated GnuPG home directory, or with useKeyring a scratch
-// directory for the operation's files while gpg uses the user's keyring.
+// newWorkspace creates a temporary directory for the files of one operation. Without
+// useKeyring it is also the operation's isolated GnuPG home directory. cleanup stops
+// the daemons gpg started for an isolated home and removes the directory; it also
+// runs after ctx is cancelled.
 func (b *Binary) newWorkspace(ctx context.Context, useKeyring bool) (workspace, error) {
-	if !useKeyring {
-		dir, cleanup, err := b.newHome(ctx)
-		if err != nil {
-			return workspace{}, err
-		}
-		return workspace{dir: dir, base: []string{"--batch", "--no-tty", "--homedir", dir}, cleanup: cleanup}, nil
-	}
-	dir, err := os.MkdirTemp("", "ocm-gpg-")
+	dir, err := os.MkdirTemp(tempBase(), "ocm-gpg-")
 	if err != nil {
-		return workspace{}, fmt.Errorf("create temporary directory: %w", err)
+		return workspace{}, fmt.Errorf("create temporary GnuPG directory: %w", err)
 	}
-	cleanup := func() {
+	ws := workspace{dir: dir, base: []string{"--batch", "--no-tty"}}
+	isolated := !useKeyring
+	if isolated {
+		ws.base = append(ws.base, "--homedir", dir)
+	}
+	ws.cleanup = func() {
+		if isolated && b.gpgconfPath != "" {
+			kctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), cleanupTimeout)
+			// "all" also covers keyboxd, which GnuPG >= 2.4 may start per home directory.
+			if _, err := b.run(kctx, "kill", b.gpgconfPath, []string{"--homedir", dir, "--kill", "all"}, nil); err != nil {
+				slog.WarnContext(ctx, "failed to stop gpg-agent of temporary GnuPG home directory; it may keep unlocked key material until it exits", "homedir", dir, "error", err)
+			}
+			cancel()
+		}
 		if err := os.RemoveAll(dir); err != nil {
-			slog.WarnContext(ctx, "failed to remove temporary directory", "path", dir, "error", err)
+			slog.WarnContext(ctx, "failed to remove temporary GnuPG directory", "path", dir, "error", err)
 		}
 	}
-	return workspace{dir: dir, base: []string{"--batch", "--no-tty"}, cleanup: cleanup}, nil
+	return ws, nil
 }
 
-// ErrKeyringRequiresFingerprint is returned when verifying against the user's keyring without a pinned key.
-var ErrKeyringRequiresFingerprint = errors.New("verifying with the GnuPG keyring requires the full key fingerprint, because any key in the keyring would otherwise be accepted")
+// tempBase returns the base directory for temporary GnuPG directories. It falls back to
+// a short base when gpg-agent's sockets under os.TempDir() would exceed the Unix socket path limit.
+func tempBase() string {
+	base := os.TempDir()
+	if goruntime.GOOS == "windows" {
+		return base
+	}
+	// os.MkdirTemp appends at most 10 random digits to the pattern.
+	if len(filepath.Join(base, "ocm-gpg-0000000000", longestSocket)) > maxSocketPath {
+		return shortTempBase
+	}
+	return base
+}
 
 func (b *Binary) resolve(ctx context.Context) (string, error) {
 	b.mu.Lock()
@@ -242,7 +298,7 @@ func (b *Binary) resolve(ctx context.Context) (string, error) {
 		return b.gpgPath, nil
 	}
 
-	path, err := b.LookPath("gpg")
+	path, err := b.lookPath("gpg")
 	if err != nil {
 		return "", ErrGPGNotFound
 	}
@@ -268,65 +324,39 @@ func (b *Binary) resolve(ctx context.Context) (string, error) {
 	}
 	slog.DebugContext(ctx, "gpg resolved", "path", path, "version", version, "libgcrypt", libgcrypt)
 
-	if b.gpgconfPath, err = b.LookPath("gpgconf"); err != nil {
-		b.gpgconfPath = ""
-		slog.DebugContext(ctx, "gpgconf not found on PATH; gpg-agent is not stopped explicitly after operations")
+	if gpgconfPath, err := b.lookPath("gpgconf"); err == nil {
+		b.gpgconfPath = gpgconfPath
+	} else {
+		slog.WarnContext(ctx, "gpgconf not found on PATH; gpg-agents of temporary GnuPG home directories are not stopped explicitly and may keep unlocked key material until they exit")
 	}
 	b.gpgPath = path
 	return path, nil
 }
 
-// newHome creates an isolated GnuPG home directory. cleanup stops the daemons
-// gpg started for it and removes it; it also runs after ctx is cancelled.
-func (b *Binary) newHome(ctx context.Context) (string, func(), error) {
-	dir, err := os.MkdirTemp("", "ocm-gpg-")
-	if err != nil {
-		return "", nil, fmt.Errorf("create temporary GnuPG home directory: %w", err)
-	}
-	cleanup := func() {
-		if b.gpgconfPath != "" {
-			kctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), cleanupTimeout)
-			// "all" also covers keyboxd, which GnuPG >= 2.4 may start per home directory.
-			if _, err := b.run(kctx, "kill", b.gpgconfPath, []string{"--homedir", dir, "--kill", "all"}, nil); err != nil {
-				slog.DebugContext(ctx, "failed to stop gpg-agent", "homedir", dir, "error", err)
-			}
-			cancel()
-		}
-		if err := os.RemoveAll(dir); err != nil {
-			slog.WarnContext(ctx, "failed to remove temporary GnuPG home directory containing key material", "path", dir, "error", err)
-		}
-	}
-	return dir, cleanup, nil
-}
-
 // run invokes a gpg (or gpgconf) operation. stdout is returned even on error
 // because verification needs the status lines to explain failures.
 func (b *Binary) run(ctx context.Context, op, binaryPath string, args []string, stdin []byte) ([]byte, error) {
-	timeout := b.OperationTimeout
-	if timeout == 0 {
-		timeout = defaultOperationTimeout
-	}
-	ctx, cancel := context.WithTimeout(ctx, timeout)
+	ctx, cancel := context.WithTimeout(ctx, operationTimeout)
 	defer cancel()
 
 	// args never contain secrets: key material and the passphrase are passed on stdin.
 	slog.DebugContext(ctx, "gpg: invoking", "operation", op, "args", args)
 
-	stdout, stderr, err := b.Exec(ctx, binaryPath, args, stdin)
+	stdout, stderr, err := b.exec(ctx, binaryPath, args, stdin)
 	if err != nil {
 		msg := strings.TrimSpace(string(stderr))
 		if len(msg) > maxStderr {
-			msg = msg[:maxStderr]
+			msg = msg[:maxStderr] + " [truncated]"
 		}
-		if errors.Is(err, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			return stdout, fmt.Errorf("gpg %s timed out: %w\nstderr: %s", op, err, msg)
+		if ctxErr := ctx.Err(); errors.Is(ctxErr, context.DeadlineExceeded) {
+			return stdout, fmt.Errorf("gpg %s timed out: %w\nstderr: %s", op, errors.Join(ctxErr, err), msg)
 		}
 		return stdout, fmt.Errorf("gpg %s failed: %w\nstderr: %s", op, err, msg)
 	}
 	return stdout, nil
 }
 
-func (b *Binary) exec(ctx context.Context, binaryPath string, args []string, stdin []byte) ([]byte, []byte, error) {
+func execCommand(ctx context.Context, binaryPath string, args []string, stdin []byte) ([]byte, []byte, error) {
 	var stdout, stderr bytes.Buffer
 	cmd := exec.CommandContext(ctx, binaryPath, args...)
 	if stdin != nil {
@@ -334,7 +364,6 @@ func (b *Binary) exec(ctx context.Context, binaryPath string, args []string, std
 	}
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
-	cmd.Env = os.Environ()
 	err := cmd.Run()
 	return stdout.Bytes(), stderr.Bytes(), err
 }
@@ -377,24 +406,50 @@ func firstSecretKeyFingerprint(colons string) (string, error) {
 	return "", errors.New("no secret key found in private key material")
 }
 
-// parseVerifyStatus requires GOODSIG and VALIDSIG status lines and returns the VALIDSIG fields.
-// Field 1 is the signing key fingerprint, field 10 (if present) the primary key fingerprint.
-func parseVerifyStatus(status string) ([]string, error) {
-	var good bool
-	var validFields []string
+// verifiedKey identifies the key that made a good signature.
+type verifiedKey struct {
+	signing string // fingerprint of the (sub)key that made the signature
+	primary string // fingerprint of its primary key
+}
+
+// parseVerifyStatus accepts exactly one good signature: one GOODSIG and one VALIDSIG status line
+// and no line reporting a bad, unverifiable, expired or revoked signature. gpg exits 0 if any one
+// of several concatenated signatures is good, so counting keeps a second signature, for example
+// by a revoked key, from borrowing the GOODSIG of another.
+func parseVerifyStatus(status string) (verifiedKey, error) {
+	var goods, valids int
+	var key verifiedKey
 	for line := range strings.SplitSeq(status, "\n") {
-		line = strings.TrimSpace(line)
-		switch {
-		case strings.HasPrefix(line, "[GNUPG:] GOODSIG "):
-			good = true
-		case strings.HasPrefix(line, "[GNUPG:] VALIDSIG "):
-			validFields = strings.Fields(strings.TrimPrefix(line, "[GNUPG:] VALIDSIG "))
+		rest, ok := strings.CutPrefix(strings.TrimSpace(line), "[GNUPG:] ")
+		if !ok {
+			continue
+		}
+		keyword, args, _ := strings.Cut(rest, " ")
+		switch keyword {
+		case "GOODSIG":
+			goods++
+		case "VALIDSIG":
+			valids++
+			// Field 1 is the signing key fingerprint, field 10 (if present) the primary key fingerprint.
+			fields := strings.Fields(args)
+			if len(fields) == 0 {
+				return verifiedKey{}, fmt.Errorf("gpg reported VALIDSIG without fingerprint\nstatus: %s", strings.TrimSpace(status))
+			}
+			key = verifiedKey{signing: fields[0], primary: fields[0]}
+			if len(fields) >= 10 {
+				key.primary = fields[9]
+			}
+		case "BADSIG", "ERRSIG", "EXPSIG", "EXPKEYSIG", "REVKEYSIG":
+			return verifiedKey{}, fmt.Errorf("gpg reported %s\nstatus: %s", keyword, strings.TrimSpace(status))
 		}
 	}
-	if !good || len(validFields) == 0 {
-		return nil, fmt.Errorf("gpg reported no GOODSIG and VALIDSIG status\nstatus: %s", strings.TrimSpace(status))
+	switch {
+	case goods == 0 || valids == 0:
+		return verifiedKey{}, fmt.Errorf("gpg reported no GOODSIG and VALIDSIG status\nstatus: %s", strings.TrimSpace(status))
+	case goods != 1 || valids != 1:
+		return verifiedKey{}, fmt.Errorf("gpg reported %d good signatures, but a GPG signature must contain exactly one\nstatus: %s", max(goods, valids), strings.TrimSpace(status))
 	}
-	return validFields, nil
+	return key, nil
 }
 
 // fingerprintMatches compares a fingerprint against a full fingerprint or a 16-hex long key ID.

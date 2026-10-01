@@ -189,7 +189,7 @@ func mustHandler(t *testing.T) *Handler {
 func handlerWithoutGPG(t *testing.T) *Handler {
 	t.Helper()
 	h := mustHandler(t)
-	h.gpgBinary.LookPath = func(string) (string, error) { return "", exec.ErrNotFound }
+	h.gpgBinary = gpgbinary.New(gpgbinary.WithLookPath(func(string) (string, error) { return "", exec.ErrNotFound }))
 	return h
 }
 

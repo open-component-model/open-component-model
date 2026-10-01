@@ -154,7 +154,7 @@ To run this you need the signer's public key on disk and pointed at by `publicKe
 ## Prerequisites
 
 - [OCM CLI installed]({{< relref "ocm-cli-installation.md" >}})
-- [GnuPG](https://gnupg.org/download/) 2.2 or later installed (`gpg` binary available in `$PATH`); OCM runs it to verify GPG signatures
+- [GnuPG](https://gnupg.org/download/) 2.2 or later installed (`gpg` binary available in `$PATH`); OCM runs it to verify GPG signatures. The [OCM CLI container image]({{< relref "container-image-usage.md" >}}) does not contain GnuPG yet, so run `ocm` where GnuPG is installed. A follow-up moves the image to a base image that includes GnuPG
 - [Verification credentials configured]({{< relref "configure-signing-credentials.md" >}}) with the public key
 - A GPG-signed component version (see the [Sign Component Versions]({{< relref "sign-component-version.md" >}}) how-to)
 
@@ -261,7 +261,7 @@ Without `--signature`, **every** signature on the descriptor is verified. Config
 <!-- markdownlint-disable-next-line MD024 -->
 ## Troubleshooting
 
-### Symptom: `SIGNATURE VERIFICATION FAILED: gpg verify: gpg verify failed: exit status 2` with `Can't check signature: No public key`
+### Symptom: `SIGNATURE VERIFICATION FAILED: gpg verify failed: exit status 2` with `Can't check signature: No public key`
 
 **Cause:** The public key in `.ocmconfig` doesn't match the key that signed — most often because you exported a different key, or the signer rotated their key after signing.
 
@@ -273,13 +273,13 @@ Without `--signature`, **every** signature on the descriptor is verified. Config
 
 **Fix:** Check the path is correct and readable. Absolute paths avoid working-directory surprises.
 
-### Symptom: `SIGNATURE VERIFICATION FAILED: gpg verify: signature was made by key ... which does not match the configured key fingerprint "..."`
+### Symptom: `SIGNATURE VERIFICATION FAILED: signature was made by key ... which does not match the configured key fingerprint "..."`
 
 **Cause:** The verifier contains a `keyFingerprint` that matches neither the key that made the signature nor its primary key.
 
 **Fix:** Either remove `keyFingerprint` from the verifier (any key in the file will be tried) or correct it. Run `gpg --show-keys /tmp/keys/verify-key.asc` to confirm the actual fingerprint.
 
-### Symptom: `SIGNATURE VERIFICATION FAILED: gpg verify: verifying with the GnuPG keyring requires the full key fingerprint ...`
+### Symptom: `SIGNATURE VERIFICATION FAILED: verifying with the GnuPG keyring requires the full key fingerprint ...`
 
 **Cause:** The verifier sets `useKeyring` without a full 40-character `keyFingerprint`. A long key ID is not accepted, because it does not identify a key reliably among all keys in a keyring.
 

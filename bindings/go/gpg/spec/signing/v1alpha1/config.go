@@ -33,7 +33,8 @@ type Config struct {
 	HashAlgorithm HashAlgorithm `json:"hashAlgorithm,omitempty"`
 
 	// KeyFingerprint pins which key in the keyring to use when signing or verifying.
-	// When empty the first available key is used.
+	// When empty, signing uses the first secret key in the key material (gpg's default key with
+	// UseKeyring), and verification accepts a signature by any key in the public key material.
 	// Accepts a full 40-hex-character v4 fingerprint or a 16-hex-character long key ID.
 	KeyFingerprint string `json:"keyFingerprint,omitempty"`
 

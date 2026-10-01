@@ -353,7 +353,7 @@ credentials:
     passphrase: my-secret-passphrase
 ```
 
-OCM decrypts the key in-memory only; the passphrase is never written to disk.
+OCM passes the passphrase to `gpg` on standard input; it is never written to disk. GnuPG unlocks the key in a temporary GnuPG home directory, which OCM removes after each operation.
 {{< /details >}}
 
 {{< details "Can a component have both RSA and GPG signatures?" >}}

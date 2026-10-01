@@ -30,14 +30,16 @@ var (
 	ErrMissingPublicKey  = errors.New("public key not found in credentials")
 	ErrMissingHashAlg    = errors.New("missing hash algorithm in digest")
 	ErrMissingDigestVal  = errors.New("missing digest value")
+	// ErrGPGNotFound is returned when no gpg binary is found on PATH.
+	ErrGPGNotFound = gpgbinary.ErrGPGNotFound
 	// ErrKeyMaterialWithKeyring rejects credentials carrying keys when the keyring is used,
 	// so that it is never ambiguous which key signs or verifies.
-	ErrKeyMaterialWithKeyring = errors.New("useKeyring takes keys from the GnuPG keyring; remove the key material from the GPG credentials")
+	ErrKeyMaterialWithKeyring = gpgbinary.ErrKeyMaterialWithKeyring
 	// ErrKeyringRequiresFingerprint is returned when verifying against the keyring without a full key fingerprint.
 	ErrKeyringRequiresFingerprint = gpgbinary.ErrKeyringRequiresFingerprint
 )
 
-// defaultGPGBinary serves zero-value Handlers.
+// defaultGPGBinary serves zero-value Handlers. Its configuration is immutable; it only caches the resolved paths.
 var defaultGPGBinary = gpgbinary.New()
 
 // Handler implements OpenPGP signing and verification.
@@ -84,10 +86,7 @@ func (h *Handler) Sign(
 	if err != nil {
 		return descruntime.SignatureInfo{}, fmt.Errorf("load GPG private key: %w", err)
 	}
-	switch {
-	case sigCfg.UseKeyring && len(keyBytes) > 0:
-		return descruntime.SignatureInfo{}, ErrKeyMaterialWithKeyring
-	case !sigCfg.UseKeyring && len(keyBytes) == 0:
+	if !sigCfg.UseKeyring && len(keyBytes) == 0 {
 		return descruntime.SignatureInfo{}, ErrMissingPrivateKey
 	}
 	digestBytes, err := parseDigest(unsigned)
@@ -109,7 +108,7 @@ func (h *Handler) Sign(
 		Data:           digestBytes,
 	})
 	if err != nil {
-		return descruntime.SignatureInfo{}, fmt.Errorf("gpg sign: %w", err)
+		return descruntime.SignatureInfo{}, err
 	}
 	return descruntime.SignatureInfo{
 		Algorithm: v1alpha1.AlgorithmGPG,
@@ -143,10 +142,7 @@ func (h *Handler) Verify(
 	if err != nil {
 		return fmt.Errorf("load GPG public key: %w", err)
 	}
-	switch {
-	case sigCfg.UseKeyring && len(keyBytes) > 0:
-		return ErrKeyMaterialWithKeyring
-	case !sigCfg.UseKeyring && len(keyBytes) == 0:
+	if !sigCfg.UseKeyring && len(keyBytes) == 0 {
 		return ErrMissingPublicKey
 	}
 	digestBytes, err := parseDigest(signed.Digest)
@@ -155,16 +151,13 @@ func (h *Handler) Verify(
 	}
 
 	slog.DebugContext(ctx, "verifying with the system gpg binary")
-	if err := h.binary().Verify(ctx, gpgbinary.VerifyRequest{
+	return h.binary().Verify(ctx, gpgbinary.VerifyRequest{
 		UseKeyring:     sigCfg.UseKeyring,
 		PublicKey:      keyBytes,
 		KeyFingerprint: sigCfg.GetKeyFingerprint(),
 		Data:           digestBytes,
 		Signature:      signed.Signature.Value,
-	}); err != nil {
-		return fmt.Errorf("gpg verify: %w", err)
-	}
-	return nil
+	})
 }
 
 // GetSigningCredentialConsumerIdentity returns the credential consumer identity for signing.

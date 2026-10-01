@@ -18,12 +18,11 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	tcexec "github.com/testcontainers/testcontainers-go/exec"
 	"github.com/testcontainers/testcontainers-go/log"
+
+	gpghandler "ocm.software/open-component-model/bindings/go/gpg/signing/handler"
 )
 
 const gpgFIPSTestImage = "debian:trixie-slim"
-
-// errGPGNotFoundText mirrors gpgbinary.ErrGPGNotFound, which is internal to the GPG handler.
-const errGPGNotFoundText = `GPG signing requires the GnuPG "gpg" binary (>= 2.2.0) on PATH; install GnuPG, in FIPS 140-3 mode one backed by a FIPS 140-3 validated libgcrypt`
 
 // Test_Integration_Signing_GPG_FIPS runs a GOFIPS140 build of the CLI against a GnuPG whose
 // libgcrypt runs in FIPS mode and checks that GPG signing and verification work through it,
@@ -171,13 +170,13 @@ configurations:
 			name:    "missing gpg is reported",
 			env:     []string{noPath},
 			cmd:     []string{ocm, "sign", "cv", ref, "--signature", "fips", "--config", cfg, "--dry-run", "--force"},
-			wantOut: errGPGNotFoundText,
+			wantOut: gpghandler.ErrGPGNotFound.Error(),
 		},
 		{
 			name:    "no built-in fallback without FIPS mode",
 			env:     []string{noPath, fipsOff},
 			cmd:     []string{ocm, "verify", "cv", ref, "--signature", "fips", "--config", cfg},
-			wantOut: errGPGNotFoundText,
+			wantOut: gpghandler.ErrGPGNotFound.Error(),
 		},
 	}
 	for _, s := range scenarios {

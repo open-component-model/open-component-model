@@ -187,7 +187,7 @@ With Sigstore (other tabs) you skip the key-pair setup entirely.
 ## Prerequisites
 
 - [OCM CLI installed]({{< relref "ocm-cli-installation.md" >}})
-- [GnuPG](https://gnupg.org/download/) 2.2 or later installed (`gpg` binary available in `$PATH`); OCM runs it to create GPG signatures, so all OpenPGP cryptography happens in GnuPG
+- [GnuPG](https://gnupg.org/download/) 2.2 or later installed (`gpg` binary available in `$PATH`); OCM runs it to create GPG signatures, so all OpenPGP cryptography happens in GnuPG. The [OCM CLI container image]({{< relref "container-image-usage.md" >}}) does not contain GnuPG yet, so run `ocm` where GnuPG is installed. A follow-up moves the image to a base image that includes GnuPG
 - [Signing credentials configured]({{< relref "configure-signing-credentials.md" >}})
 - A component version in a CTF archive or OCI registry (we'll use `github.com/acme.org/helloworld:1.0.0` from the [getting started guide]({{< relref "create-component-version.md" >}}); any component you can write to works)
 
@@ -259,7 +259,7 @@ To sign with a key from your own GnuPG keyring (`$GNUPGHOME`, or `~/.gnupg`), in
     keyFingerprint: B118BE3A32BE4AF28E37E881167C7102F8AC81E4
 ```
 
-With `useKeyring`, key material (`privateKeyPGP`, `privateKeyPGPFile`) in the GPG credentials is rejected, so it is never ambiguous which key signs. Without `keyFingerprint`, gpg signs with its default key.
+With `useKeyring`, key material (`privateKeyPGP`, `privateKeyPGPFile`) in the GPG credentials is rejected, so it is never ambiguous which key signs. Without `keyFingerprint`, gpg signs with its default key. Every `gpg` invocation times out after 3 minutes, which includes waiting for pinentry or a touch on a hardware token.
 
 {{< callout context="caution" >}}
 These are in the same file. Just append this signature in that relevant configuration value.
