@@ -75,6 +75,21 @@ function normalizeType(type: string | string[] | undefined): string {
     return type || "object";
 }
 
+/**
+ * Display type of a node, spelling out array items and map values
+ * (`additionalProperties` schemas) in Go notation, e.g. `map[string][]string`.
+ */
+function typeLabel(node: SchemaNode, root: SchemaNode, seen: Set<string>): string {
+    if (node.type === "array" && node.items) {
+        return `[]${typeLabel(resolve(node.items, root, new Set(seen)), root, seen)}`;
+    }
+    const values = node.additionalProperties;
+    if (!node.properties && values && typeof values === "object") {
+        return `map[string]${typeLabel(resolve(values as SchemaNode, root, new Set(seen)), root, seen)}`;
+    }
+    return normalizeType(node.type);
+}
+
 function isConstAliasBranch(node: SchemaNode): boolean {
     return typeof node.const === "string" && !node.properties && !node.items && !node.oneOf && !node.anyOf;
 }
@@ -223,16 +238,16 @@ function convertField(name: string, raw: SchemaNode, requiredList: string[], roo
         }
 
         return {
-            name, type: `[]${normalizeType(items.type)}`, description: displayProp.description || "",
+            name, type: typeLabel(displayProp, root, seen), description: displayProp.description || "",
             ...constAliases,
             required, immutable, variants: null,
             properties: items.properties ? fieldsFrom(items, root, new Set(seen)) : null,
         };
     }
 
-    // Plain object or scalar
+    // Plain object, map or scalar
     return {
-        name, type: normalizeType(displayProp.type), description: displayProp.description || "",
+        name, type: typeLabel(displayProp, root, seen), description: displayProp.description || "",
         ...constAliases,
         required, immutable, variants: null,
         properties: displayProp.properties ? fieldsFrom(displayProp, root, new Set(seen)) : null,
