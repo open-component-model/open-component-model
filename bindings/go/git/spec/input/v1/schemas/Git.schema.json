@@ -16,7 +16,7 @@
     },
     "repository": {
       "type": "string",
-      "description": "Repository is the Git repository URL."
+      "description": "Repository is the Git repository URL: an http(s)://, ssh:// or git:// URL with a\nhost and a path, the scp-like form user@host:path, or a local repository as\nfile:///path or a plain path. A value without a scheme that is not scp-like is a\nlocal path, relative to the working directory unless absolute."
     },
     "type": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",

@@ -45,11 +45,12 @@ type S3 struct {
 	Version string `json:"version,omitempty"`
 
 	// Endpoint is the base endpoint of an S3-compatible store (e.g. MinIO, Ceph,
-	// R2). When empty, AWS S3 is targeted.
+	// R2), such as https://minio.internal:9000. When empty, AWS S3 is targeted.
 	Endpoint string `json:"endpoint,omitempty"`
 
-	// UsePathStyle enables path-style addressing (bucket in the path instead of the
-	// host). Required by most self-hosted S3-compatible stores.
+	// UsePathStyle enables path-style addressing (<endpoint>/<bucket>/<key>, bucket in
+	// the path instead of the host). Required by most self-hosted S3-compatible stores.
+	// Defaults to false.
 	UsePathStyle bool `json:"usePathStyle,omitempty"`
 }
 

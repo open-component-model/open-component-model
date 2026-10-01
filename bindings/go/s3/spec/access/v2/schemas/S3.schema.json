@@ -12,7 +12,7 @@
     },
     "endpoint": {
       "type": "string",
-      "description": "Endpoint is the base endpoint of an S3-compatible store (e.g. MinIO, Ceph,\nR2). When empty, AWS S3 is targeted."
+      "description": "Endpoint is the base endpoint of an S3-compatible store (e.g. MinIO, Ceph,\nR2), such as https://minio.internal:9000. When empty, AWS S3 is targeted."
     },
     "mediaType": {
       "type": "string",
@@ -47,7 +47,7 @@
     },
     "usePathStyle": {
       "type": "boolean",
-      "description": "UsePathStyle enables path-style addressing (bucket in the path instead of the\nhost). Required by most self-hosted S3-compatible stores."
+      "description": "UsePathStyle enables path-style addressing (\u003cendpoint\u003e/\u003cbucket\u003e/\u003ckey\u003e, bucket in\nthe path instead of the host). Required by most self-hosted S3-compatible stores.\nDefaults to false."
     },
     "version": {
       "type": "string",

@@ -12,7 +12,7 @@
     },
     "endpoint": {
       "type": "string",
-      "description": "Endpoint is the base endpoint of an S3-compatible store, for example MinIO, Ceph\nor R2. When it is empty, OCM uses AWS S3."
+      "description": "Endpoint is the base endpoint of an S3-compatible store, for example MinIO, Ceph\nor R2, such as https://minio.internal:9000. When it is empty, OCM uses AWS S3."
     },
     "mediaType": {
       "type": "string",
@@ -47,7 +47,7 @@
     },
     "usePathStyle": {
       "type": "boolean",
-      "description": "UsePathStyle puts the bucket in the path instead of in the host. Most self-hosted\nS3-compatible stores need this."
+      "description": "UsePathStyle puts the bucket in the path (\u003cendpoint\u003e/\u003cbucket\u003e/\u003ckey\u003e) instead of in\nthe host. Most self-hosted S3-compatible stores need this. Defaults to false."
     },
     "version": {
       "type": "string",

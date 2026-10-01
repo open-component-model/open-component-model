@@ -47,11 +47,11 @@ type S3 struct {
 	Version string `json:"version,omitempty"`
 
 	// Endpoint is the base endpoint of an S3-compatible store, for example MinIO, Ceph
-	// or R2. When it is empty, OCM uses AWS S3.
+	// or R2, such as https://minio.internal:9000. When it is empty, OCM uses AWS S3.
 	Endpoint string `json:"endpoint,omitempty"`
 
-	// UsePathStyle puts the bucket in the path instead of in the host. Most self-hosted
-	// S3-compatible stores need this.
+	// UsePathStyle puts the bucket in the path (<endpoint>/<bucket>/<key>) instead of in
+	// the host. Most self-hosted S3-compatible stores need this. Defaults to false.
 	UsePathStyle bool `json:"usePathStyle,omitempty"`
 }
 
