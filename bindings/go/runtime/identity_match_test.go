@@ -101,13 +101,109 @@ func TestIdentityMatchesPath(t *testing.T) {
 			true,
 		},
 		{
-			"no match based on * pattern but different subpath (explicit double * with no path)",
+			"match based on ** pattern across segments",
 			args{
 				a: runtime.Identity{
 					runtime.IdentityAttributePath: "base/path/abc",
 				},
 				b: runtime.Identity{
 					runtime.IdentityAttributePath: "base/**",
+				},
+			},
+			true,
+		},
+		{
+			"match based on ** pattern on a single segment",
+			args{
+				a: runtime.Identity{
+					runtime.IdentityAttributePath: "base/path",
+				},
+				b: runtime.Identity{
+					runtime.IdentityAttributePath: "base/**",
+				},
+			},
+			true,
+		},
+		{
+			"no match based on ** pattern on the base itself",
+			args{
+				a: runtime.Identity{
+					runtime.IdentityAttributePath: "base",
+				},
+				b: runtime.Identity{
+					runtime.IdentityAttributePath: "base/**",
+				},
+			},
+			false,
+		},
+		{
+			"no match based on ** pattern on a sibling with the same prefix",
+			args{
+				a: runtime.Identity{
+					runtime.IdentityAttributePath: "base-other/path",
+				},
+				b: runtime.Identity{
+					runtime.IdentityAttributePath: "base/**",
+				},
+			},
+			false,
+		},
+		{
+			"match based on * pattern within a segment",
+			args{
+				a: runtime.Identity{
+					runtime.IdentityAttributePath: "base/repo.git",
+				},
+				b: runtime.Identity{
+					runtime.IdentityAttributePath: "base/repo*",
+				},
+			},
+			true,
+		},
+		{
+			"no match on negated class with ^",
+			args{
+				a: runtime.Identity{
+					runtime.IdentityAttributePath: "base/b",
+				},
+				b: runtime.Identity{
+					runtime.IdentityAttributePath: "base/[^b]",
+				},
+			},
+			false,
+		},
+		{
+			"match on negated class with ^",
+			args{
+				a: runtime.Identity{
+					runtime.IdentityAttributePath: "base/c",
+				},
+				b: runtime.Identity{
+					runtime.IdentityAttributePath: "base/[^b]",
+				},
+			},
+			true,
+		},
+		{
+			"match on escaped class bracket followed by ^",
+			args{
+				a: runtime.Identity{
+					runtime.IdentityAttributePath: "base/[^b]",
+				},
+				b: runtime.Identity{
+					runtime.IdentityAttributePath: `base/\[^b\]`,
+				},
+			},
+			true,
+		},
+		{
+			"no match on malformed pattern",
+			args{
+				a: runtime.Identity{
+					runtime.IdentityAttributePath: "base/[",
+				},
+				b: runtime.Identity{
+					runtime.IdentityAttributePath: "base/[",
 				},
 			},
 			false,

@@ -2,7 +2,9 @@ package runtime
 
 import (
 	"maps"
-	"path"
+	"strings"
+
+	"github.com/gobwas/glob"
 )
 
 // IdentityMatchingChainFn is a function that takes two identities and returns if they match.
@@ -23,8 +25,9 @@ func (f IdentityMatchingChainFn) Match(a, b Identity) bool {
 // IdentityMatchesPath returns true if the identity a matches the subpath of the identity b.
 // If the path attribute is not set in either identity, it returns true.
 // If the path attribute is set in both identities,
-// it returns true if the path attribute of b contains the path attribute of a.
-// For more information, check path.Match.
+// it returns true if the path attribute of b, as a glob pattern, matches the path attribute of a.
+// "*" matches within a single path segment and "**" matches across segments.
+// For more information, check github.com/gobwas/glob with "/" as separator.
 // IdentityMatchesPath deletes the path attribute from both identities, because it is expected
 // that it is used in a chain with Identity.Match and the authority decision of the path attribute.
 //
@@ -37,11 +40,31 @@ func IdentityMatchesPath(i, o Identity) bool {
 	if !iok && !ook || (ip == "" && op == "") || op == "" {
 		return true
 	}
-	match, err := path.Match(op, ip)
+	pattern, err := glob.Compile(negateClassesAsGlob(op), '/')
 	if err != nil {
 		return false
 	}
-	return match
+	return pattern.Match(ip)
+}
+
+// negateClassesAsGlob rewrites the path.Match class negation "[^" to "[!", which
+// gobwas/glob reads as a literal "^" and would otherwise invert the class.
+func negateClassesAsGlob(pattern string) string {
+	var b strings.Builder
+	b.Grow(len(pattern))
+	for i := 0; i < len(pattern); i++ {
+		c := pattern[i]
+		b.WriteByte(c)
+		switch {
+		case c == '\\' && i+1 < len(pattern):
+			i++
+			b.WriteByte(pattern[i])
+		case c == '[' && i+1 < len(pattern) && pattern[i+1] == '^':
+			i++
+			b.WriteByte('!')
+		}
+	}
+	return b.String()
 }
 
 // IdentityMatchesURL returns true if the URL components of two identities match,

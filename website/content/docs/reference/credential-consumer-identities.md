@@ -78,7 +78,7 @@ Token fields take precedence over `username`/`password` when both are present. U
 
 Matching runs three chained checks — all must pass:
 
-1. **Path matcher** — compares `path` using `path.Match` (glob). `*` matches one segment, not across `/`. If the
+1. **Path matcher** — compares `path` as a glob. `*` matches within one segment, `**` matches across `/`. If the
    configured entry has no `path`, any request path is accepted.
 2. **URL matcher** — compares `scheme`, `hostname`, and `port`. Applies default ports when a scheme is present (
    `https` → `443`, `http` → `80`).
@@ -385,7 +385,7 @@ Two results of this are specific to S3:
   or do not scope them at all.
 - **`*` does not cross `/`.** Most object keys contain slashes. `path: acme-artifacts/*` matches
   `acme-artifacts/build.zip`, but it does not match `acme-artifacts/datasets/reference.parquet`. To cover a whole
-  bucket, write the full depth (`acme-artifacts/*/*/*`), or omit `path` and scope the entry another way.
+  bucket, use `**` (`acme-artifacts/**`), or omit `path` and scope the entry another way.
 
 {{< callout context="caution" >}}
 Write the identity type as `type: S3`. OCM matches the type as an exact string, and the type is **unversioned**.
@@ -455,7 +455,7 @@ The identity type is `S3` in OCM v1 and in OCM v2, but three other things change
 | Aspect                | OCM v1                                          | OCM v2                                                 |
 |-----------------------|-------------------------------------------------|--------------------------------------------------------|
 | Object location       | `pathprefix`, set to `<bucket>/<key>/<version>` | `path`, set to `<bucketName>/<objectKey>` (no version) |
-| Location matching     | Prefix match                                    | Glob match (`*` does not cross `/`)                    |
+| Location matching     | Prefix match                                    | Glob match (`*` within a segment, `**` across `/`)     |
 | Credential properties | `awsAccessKeyID`, `awsSecretAccessKey`, `token` | `accessKeyId`, `secretAccessKey`, `sessionToken`       |
 
 ```yaml
@@ -486,8 +486,9 @@ The old **property** names are still accepted, but only in an untyped
 `awsSecretAccessKey` and `token`, and maps them to `accessKeyId`, `secretAccessKey` and `sessionToken`. A typed
 `S3Credentials/v1` entry accepts the new names only.
 
-An OCM v1 entry without `pathprefix` still matches every S3 object. An entry with `pathprefix` never matches, because
-the OCM v2 lookup identity has no such attribute. Replace `pathprefix` with `path`.
+An OCM v1 entry without `pathprefix` still matches every S3 object. An entry with `pathprefix` is converted to `path`
+patterns that match the prefix and every key below it. Because the OCM v2 lookup path has no version, a prefix that
+ends with a version no longer matches. Replace `pathprefix` with `path`.
 
 For the matching access specification changes, see
 [Input and Access Types: Migrating from OCM v1]({{< relref "input-and-access-types.md" >}}#s3-migration-from-ocm-v1).
@@ -640,9 +641,10 @@ server answers with an authentication error.
 
 ### Migrating from OCM v1 {#git-identity-migration-from-ocm-v1}
 
-The identity type is `Git` in OCM v1 and OCM v2, and the credential property names are the same. OCM v1 matched the
-repository with a `pathprefix` attribute. OCM v2 has no such attribute, and an entry that sets it never matches. Replace
-`pathprefix: org` with `path: org/*`.
+The identity type is `Git` in OCM v1 and OCM v2, and the credential property names are the same. OCM v1 only matched
+`pathprefix` for `file://` repositories; for remote repositories an entry with `pathprefix` never matched. OCM v2
+converts `pathprefix: org` into `path: org` and `path: org/**`, so such an entry now matches the repositories below
+`org`. Prefer writing `path` directly. The path includes a `.git` suffix if the repository URL has one.
 
 ---
 
