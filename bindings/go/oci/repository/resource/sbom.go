@@ -14,7 +14,7 @@ var _ repository.SBOMDiscoverer = (*ResourceRepository)(nil)
 // DiscoverSBOM returns the SBOM attestations attached to the OCI artifact backing the
 // resource, authenticating against the registry with the given credentials.
 func (p *ResourceRepository) DiscoverSBOM(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed, opts ...repository.SBOMOption) ([]repository.SBOM, error) {
-	repo, err := p.resolveOCIImageRepo(resource, credentials)
+	repo, _, err := p.resolveRepository(resource, credentials)
 	if err != nil {
 		return nil, err
 	}

@@ -295,9 +295,50 @@ func (repo *Repository) ProcessResourceDigest(ctx context.Context, res *descript
 		return repo.ProcessResourceDigest(ctx, res)
 	case *accessv1.OCIImage:
 		return repo.processOCIImageDigest(ctx, res, typed)
+	case *accessv1.OCIImageLayer:
+		return repo.processOCIImageLayerDigest(ctx, res, typed)
 	default:
 		return nil, fmt.Errorf("unsupported resource access type: %T", typed)
 	}
+}
+
+func (repo *Repository) processOCIImageLayerDigest(ctx context.Context, res *descriptor.Resource, typed *accessv1.OCIImageLayer) (*descriptor.Resource, error) {
+	if err := typed.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid OCI image layer access: %w", err)
+	}
+
+	src, err := repo.resolver.StoreForReference(ctx, typed.Reference)
+	if err != nil {
+		return nil, err
+	}
+
+	layer, err := resolveLayer(ctx, src, typed.Digest)
+	if errors.Is(err, errdef.ErrNotFound) {
+		return nil, fmt.Errorf("layer %q does not exist in %q: %w", typed.Digest, typed.Reference, err)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve layer %q in %q: %w", typed.Digest, typed.Reference, err)
+	}
+	// A size of 0 means the access did not declare one, so it is taken from the registry.
+	switch {
+	case typed.Size == 0:
+		typed.Size = layer.Size
+	case typed.Size != layer.Size:
+		return nil, fmt.Errorf("layer %q in %q has size %d, but the access declares %d", typed.Digest, typed.Reference, layer.Size, typed.Size)
+	}
+
+	if res.Digest == nil {
+		res.Digest = &descriptor.Digest{}
+		if err := internaldigest.Apply(res.Digest, typed.Digest); err != nil {
+			return nil, fmt.Errorf("failed to apply digest to resource: %w", err)
+		}
+	} else if err := internaldigest.Verify(res.Digest, typed.Digest); err != nil {
+		return nil, fmt.Errorf("failed to verify digest of resource %q: %w", res.ToIdentity(), err)
+	}
+
+	res.Access = typed
+
+	return res, nil
 }
 
 func (repo *Repository) processOCIImageDigest(ctx context.Context, res *descriptor.Resource, typed *accessv1.OCIImage) (*descriptor.Resource, error) {
@@ -695,9 +736,9 @@ func (repo *Repository) UploadSource(ctx context.Context, src *descriptor.Source
 }
 
 func (repo *Repository) uploadOCIImage(ctx context.Context, newAccess runtime.Typed, b blob.ReadOnlyBlob, expectedDigest *descriptor.Digest) (_ ociImageSpecV1.Descriptor, _ *accessv1.OCIImage, err error) {
-	var access accessv1.OCIImage
-	if err := repo.scheme.Convert(newAccess, &access); err != nil {
-		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("error converting resource target to OCI image: %w", err)
+	access, err := repo.targetOCIImageAccess(newAccess)
+	if err != nil {
+		return ociImageSpecV1.Descriptor{}, nil, err
 	}
 
 	store, err := repo.resolver.StoreForReference(ctx, access.ImageReference)
@@ -748,7 +789,7 @@ func (repo *Repository) uploadOCIImage(ctx context.Context, newAccess runtime.Ty
 		access.ImageReference = ref.String()
 	}
 
-	return main, &access, nil
+	return main, access, nil
 }
 
 // AddOwnership attaches ownership information (i.e. the
@@ -769,9 +810,17 @@ func (repo *Repository) AddOwnership(ctx context.Context, component, version str
 	if err != nil {
 		return err
 	}
+	if store == nil {
+		slogcontext.Log(ctx, slog.LevelDebug, "resource access has no manifest subject; skipping ownership referrer",
+			slog.String("accessType", resource.Access.GetType().String()))
+		return nil
+	}
 	return repo.buildAndPushOwnershipReferrer(ctx, store, subject, resource, component, version)
 }
 
+// resolveOwnershipSubject returns the store and manifest the ownership referrer should
+// point at. It returns a nil store for access types that address a plain blob, which
+// cannot be the subject of a referrer manifest.
 func (repo *Repository) resolveOwnershipSubject(ctx context.Context, component, version string, resource *descriptor.Resource) (spec.Store, ociImageSpecV1.Descriptor, error) {
 	typed, err := repo.scheme.NewObject(resource.Access.GetType())
 	if err != nil {
@@ -806,6 +855,8 @@ func (repo *Repository) resolveOwnershipSubject(ctx context.Context, component, 
 			return nil, ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to resolve subject %q for ownership referrer: %w", typed.ImageReference, err)
 		}
 		return store, subject, nil
+	case *accessv1.OCIImageLayer:
+		return nil, ociImageSpecV1.Descriptor{}, nil
 	default:
 		return nil, ociImageSpecV1.Descriptor{}, fmt.Errorf("unsupported resource access type for ownership referrer: %T", typed)
 	}
@@ -874,11 +925,7 @@ func (repo *Repository) DownloadResource(ctx context.Context, res *descriptor.Re
 	if res.Access.GetType().IsEmpty() {
 		return nil, fmt.Errorf("resource access type is empty")
 	}
-	stream, err := repo.DownloadResourceStream(ctx, res)
-	if err != nil {
-		return nil, err
-	}
-	return stream.Materialize(ctx)
+	return repo.download(ctx, res.Access)
 }
 
 // DownloadSource downloads a [*descriptor.Source] from the repository.
@@ -896,13 +943,60 @@ func (repo *Repository) DownloadSource(ctx context.Context, src *descriptor.Sour
 }
 
 // download downloads an artifact specified by an access from the repository into a blob.ReadOnlyBlob.
-// It delegates to downloadStream and materializes the result into a tar-based OCI layout blob.
+// An OCI image layer is fetched as raw content. Everything else delegates to downloadStream
+// and materializes the result into a tar-based OCI layout blob.
 func (repo *Repository) download(ctx context.Context, access runtime.Typed) (data blob.ReadOnlyBlob, err error) {
-	stream, err := repo.downloadStream(ctx, access)
+	typed, err := repo.scheme.NewObject(access.GetType())
+	if err != nil {
+		return nil, fmt.Errorf("error creating resource access: %w", err)
+	}
+	if err := repo.scheme.Convert(access, typed); err != nil {
+		return nil, fmt.Errorf("error converting resource access: %w", err)
+	}
+	if layer, ok := typed.(*accessv1.OCIImageLayer); ok {
+		return repo.downloadLayer(ctx, layer)
+	}
+	stream, err := repo.downloadStream(ctx, typed)
 	if err != nil {
 		return nil, err
 	}
 	return stream.Materialize(ctx)
+}
+
+func (repo *Repository) downloadLayer(ctx context.Context, layer *accessv1.OCIImageLayer) (blob.ReadOnlyBlob, error) {
+	if err := layer.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid OCI image layer access: %w", err)
+	}
+	src, err := repo.resolver.StoreForReference(ctx, layer.Reference)
+	if err != nil {
+		return nil, err
+	}
+	return fetchLayer(ctx, src, layerDescriptor(layer))
+}
+
+// targetOCIImageAccess converts an upload target access into an OCI image access.
+// Converting a raw access of another type into OCIImage succeeds silently with empty
+// fields, so the registered type is resolved first and must be OCIImage.
+func (repo *Repository) targetOCIImageAccess(access runtime.Typed) (*accessv1.OCIImage, error) {
+	if _, ok := access.(*accessv1.OCIImage); ok {
+		var image accessv1.OCIImage
+		if err := repo.scheme.Convert(access, &image); err != nil {
+			return nil, fmt.Errorf("error converting resource target to OCI image: %w", err)
+		}
+		return &image, nil
+	}
+	typed, err := repo.scheme.NewObject(access.GetType())
+	if err != nil {
+		return nil, fmt.Errorf("error creating resource target access: %w", err)
+	}
+	if err := repo.scheme.Convert(access, typed); err != nil {
+		return nil, fmt.Errorf("error converting resource target to OCI image: %w", err)
+	}
+	image, ok := typed.(*accessv1.OCIImage)
+	if !ok {
+		return nil, fmt.Errorf("unsupported access type %s as upload target: expected OCI image", access.GetType())
+	}
+	return image, nil
 }
 
 // getDescriptorOCIImageManifest retrieves the manifest for a given reference from the store.
@@ -1137,6 +1231,9 @@ func (repo *Repository) downloadStream(ctx context.Context, access runtime.Typed
 			TempDir:              repo.tempDir,
 			Tags:                 tags,
 		}, nil
+	case *accessv1.OCIImageLayer:
+		// A layer is a single blob, not a manifest or index, so it cannot be the root of a stream.
+		return nil, fmt.Errorf("access type %s cannot be streamed: a layer is not an OCI artifact", typed.GetType())
 	default:
 		return nil, fmt.Errorf("unsupported resource access type: %T", typed)
 	}
@@ -1147,9 +1244,13 @@ func (repo *Repository) downloadStream(ctx context.Context, access runtime.Typed
 func (repo *Repository) UploadResourceStream(ctx context.Context, res *descriptor.Resource, rs ocistream.ResourceStream) (*descriptor.Resource, error) {
 	ctx = slogcontext.NewCtx(ctx, repo.logger)
 
-	var access accessv1.OCIImage
-	if err := repo.scheme.Convert(res.Access, &access); err != nil {
-		return nil, fmt.Errorf("error converting resource target to OCI image: %w", err)
+	if !introspection.IsOCICompliantManifest(rs.Root()) {
+		return nil, fmt.Errorf("stream root %q with media type %q is not an OCI manifest or index", rs.Root().Digest, rs.Root().MediaType)
+	}
+
+	access, err := repo.targetOCIImageAccess(res.Access)
+	if err != nil {
+		return nil, err
 	}
 
 	ref, err := looseref.ParseReference(access.ImageReference)
@@ -1195,7 +1296,7 @@ func (repo *Repository) UploadResourceStream(ctx context.Context, res *descripto
 	}
 
 	access.ImageReference = ref.String()
-	res.Access = &access
+	res.Access = access
 
 	return res, nil
 }

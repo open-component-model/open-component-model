@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/opencontainers/go-digest"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -25,6 +24,36 @@ func TestOCIImageLayer_Validate(t *testing.T) {
 				Size:      100,
 			},
 			wantErr: false,
+		},
+		{
+			name:  "registry without tag or digest",
+			layer: OCIImageLayer{Reference: "example.com/repo", Digest: validDigest, Size: 100},
+		},
+		{
+			name:  "scheme with digest",
+			layer: OCIImageLayer{Reference: "https://example.com/repo@" + validDigest.String(), Digest: validDigest, Size: 100},
+		},
+		{
+			name:    "tag",
+			layer:   OCIImageLayer{Reference: "example.com/repo:latest", Digest: validDigest, Size: 100},
+			wantErr: true,
+		},
+		{
+			name:    "tag with digest",
+			layer:   OCIImageLayer{Reference: "https://example.com/repo:latest@" + validDigest.String(), Digest: validDigest, Size: 100},
+			wantErr: true,
+		},
+		{
+			name:  "zero size",
+			layer: OCIImageLayer{Reference: "example.com/repo", Digest: digest.FromString(""), Size: 0},
+		},
+		{
+			name:  "reference without registry",
+			layer: OCIImageLayer{Reference: "nginx", Digest: validDigest, Size: 100},
+		},
+		{
+			name:  "digest reference without registry",
+			layer: OCIImageLayer{Reference: "nginx@" + validDigest.String(), Digest: validDigest, Size: 100},
 		},
 		{
 			name: "empty reference",
@@ -66,12 +95,13 @@ func TestOCIImageLayer_Validate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
 			err := tt.layer.Validate()
 			if tt.wantErr {
-				assert.Error(t, err)
+				r.Error(err)
 				return
 			}
-			assert.NoError(t, err)
+			r.NoError(err)
 		})
 	}
 }
