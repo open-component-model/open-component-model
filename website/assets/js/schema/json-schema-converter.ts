@@ -80,12 +80,20 @@ function normalizeType(type: string | string[] | undefined): string {
  * (`additionalProperties` schemas) in Go notation, e.g. `map[string][]string`.
  */
 function typeLabel(node: SchemaNode, root: SchemaNode, seen: Set<string>): string {
+    if (!node || typeof node !== "object") {
+        return "any";
+    }
     if (node.type === "array" && node.items) {
         return `[]${typeLabel(resolve(node.items, root, new Set(seen)), root, seen)}`;
     }
     const values = node.additionalProperties;
     if (!node.properties && values && typeof values === "object") {
         return `map[string]${typeLabel(resolve(values as SchemaNode, root, new Set(seen)), root, seen)}`;
+    }
+    if (node.type === undefined && !node.properties && !node.items && values === undefined &&
+        !node.oneOf && !node.anyOf && !node.enum && node.const === undefined) {
+        const stringOnly = ["pattern", "format", "minLength", "maxLength"].some((kw) => kw in node);
+        return stringOnly ? "string" : "any";
     }
     return normalizeType(node.type);
 }

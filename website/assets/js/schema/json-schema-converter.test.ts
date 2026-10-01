@@ -337,4 +337,20 @@ describe("edge cases", () => {
         assert.equal(typeOf("open"), "object");
         assert.equal(typeOf("nested"), "object");
     });
+
+    it("untyped fields render as any, or string when only string constraints are set", () => {
+        const model = jsonSchemaToModel({
+            type: "object",
+            properties: {
+                value: { description: "arbitrary JSON" },
+                version: { pattern: "^v[0-9]+$" },
+                nested: { properties: { a: { type: "string" } } },
+            },
+        });
+
+        const typeOf = (name: string) => model.sections[0].fields.find((f) => f.name === name)!.type;
+        assert.equal(typeOf("value"), "any");
+        assert.equal(typeOf("version"), "string");
+        assert.equal(typeOf("nested"), "object");
+    });
 });
