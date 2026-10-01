@@ -217,15 +217,9 @@ func ResourceLocalBlobOCILayout(ctx context.Context, storage content.Storage, b 
 		},
 		MutateParentFunc: func(idx *ociImageSpecV1.Descriptor) error {
 			// Verify the selected root, not the archive checksum, before any graph writes.
-			if resource, ok := b.Artifact.(*descriptor.Resource); ok && resource.Digest != nil {
-				d := resource.Digest
-				if d.HashAlgorithm != "" && d.Value != "" {
-					switch d.NormalisationAlgorithm {
-					case internaldigest.OCIArtifactDigestV1, internaldigest.GenericBlobDigestV1:
-						if err := internaldigest.VerifyOCIArtifact(d, idx.Digest); err != nil {
-							return fmt.Errorf("failed to verify resource OCI artifact digest: %w", err)
-						}
-					}
+			if resource, ok := b.Artifact.(*descriptor.Resource); ok {
+				if err := verifyLayoutRootDigest(resource.Digest, idx.Digest); err != nil {
+					return fmt.Errorf("failed to verify resource OCI artifact digest: %w", err)
 				}
 			}
 			return identity.Adopt(idx, b.Artifact)
@@ -241,6 +235,24 @@ func ResourceLocalBlobOCILayout(ctx context.Context, storage content.Storage, b 
 		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to update resource access: %w", err)
 	}
 	return index, nil
+}
+
+// verifyLayoutRootDigest checks a resource digest against the selected layout root without
+// modifying it. Incomplete digests must be completable from the root; complete digests with
+// another normalisation are preserved unverified.
+func verifyLayoutRootDigest(d *descriptor.Digest, root digest.Digest) error {
+	if !internaldigest.IsComplete(d) {
+		var completed descriptor.Digest
+		if d != nil {
+			completed = *d
+		}
+		return internaldigest.Complete(&completed, root, internaldigest.OCIArtifactDigestV1)
+	}
+	switch d.NormalisationAlgorithm {
+	case internaldigest.OCIArtifactDigestV1, internaldigest.GenericBlobDigestV1:
+		return internaldigest.VerifyOCIArtifact(d, root)
+	}
+	return nil
 }
 
 // ResourceBlobOCILayerOptions defines the configuration options for pushing a blob as a resource.
@@ -379,12 +391,14 @@ func updateArtifactAccess(artifact descriptor.Artifact, access *v2.LocalBlob, de
 		typed.Access = access
 	case *descriptor.Resource:
 		typed.Access = access
-		// Packing may introduce a storage wrapper, so its digest is not necessarily
-		// the normalized artifact digest. Preserve complete signed digest metadata.
-		if typed.Digest == nil || typed.Digest.HashAlgorithm == "" || typed.Digest.NormalisationAlgorithm == "" || typed.Digest.Value == "" {
-			typed.Digest = &descriptor.Digest{}
-			if err := internaldigest.Apply(typed.Digest, desc.Digest, opts.NormalisationAlgorithm); err != nil {
-				return fmt.Errorf("failed to apply digest to artifact: %w", err)
+		// Preserve complete signed digest metadata; complete missing fields only
+		// when the fields already set match the packed content.
+		if !internaldigest.IsComplete(typed.Digest) {
+			if typed.Digest == nil {
+				typed.Digest = &descriptor.Digest{}
+			}
+			if err := internaldigest.Complete(typed.Digest, desc.Digest, opts.NormalisationAlgorithm); err != nil {
+				return fmt.Errorf("failed to complete artifact digest: %w", err)
 			}
 		}
 	}
