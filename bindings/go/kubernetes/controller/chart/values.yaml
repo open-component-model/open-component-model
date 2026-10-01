@@ -87,9 +87,12 @@ manager:
   # -- Pod-level security context
   podSecurityContext:
     runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
   # -- Container-level security context
   securityContext:
     allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
     capabilities:
       drop:
         - ALL

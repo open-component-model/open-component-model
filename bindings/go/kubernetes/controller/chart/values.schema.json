@@ -138,6 +138,14 @@
                     "properties": {
                         "runAsNonRoot": {
                             "type": "boolean"
+                        },
+                        "seccompProfile": {
+                            "type": "object",
+                            "properties": {
+                                "type": {
+                                    "type": "string"
+                                }
+                            }
                         }
                     }
                 },
@@ -221,6 +229,9 @@
                                     }
                                 }
                             }
+                        },
+                        "readOnlyRootFilesystem": {
+                            "type": "boolean"
                         }
                     }
                 },

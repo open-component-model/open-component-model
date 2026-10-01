@@ -85,7 +85,7 @@ Kubernetes: `>=1.26.0-0`
 | manager.metricsServer.enableHttp2 | bool | `false` | Enable HTTP/2 for metrics and webhook servers |
 | manager.metricsServer.secure | bool | `false` | Serve metrics endpoint securely |
 | manager.nodeSelector | object | `{}` | Node selector for pod scheduling |
-| manager.podSecurityContext | object | `{"runAsNonRoot":true}` | Pod-level security context |
+| manager.podSecurityContext | object | `{"runAsNonRoot":true,"seccompProfile":{"type":"RuntimeDefault"}}` | Pod-level security context |
 | manager.readinessProbe.initialDelaySeconds | int | `5` | Initial delay before starting readiness probes |
 | manager.readinessProbe.path | string | `"/readyz"` | Path for the readiness probe |
 | manager.readinessProbe.periodSeconds | int | `10` | Period between readiness probes |
@@ -96,7 +96,7 @@ Kubernetes: `>=1.26.0-0`
 | manager.resolver.workerCount | int | `10` | Number of active resolver workers |
 | manager.resolver.workerQueueLength | int | `1000` | Maximum work items in queue for component version resolution |
 | manager.resources | object | `{"limits":{"cpu":"500m","memory":"512Mi"},"requests":{"cpu":"100m","memory":"256Mi"}}` | Resource limits and requests |
-| manager.securityContext | object | `{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]}}` | Container-level security context |
+| manager.securityContext | object | `{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]},"readOnlyRootFilesystem":true}` | Container-level security context |
 | manager.tolerations | list | `[]` | Pod tolerations |
 | prometheus.enable | bool | `false` | Enable Prometheus ServiceMonitor (requires prometheus-operator) |
 | rbacHelpers.aggregateToDefaultRoles | bool | `true` | Install ClusterRoles that aggregate OCM resource permissions into the built-in `admin`, `edit` and `view` cluster roles |

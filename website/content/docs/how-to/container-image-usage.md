@@ -120,6 +120,12 @@ You can also mount certificates to the container image by adding `-v /etc/ssl/ce
 to your command (Depending on your OS, the path to the certificates may be different).
 {{< /callout >}}
 
+{{< callout title="Note" icon="outline/info-circle" >}}
+The image runs `ocm` as the non-root user `65532`. If the command needs to read files that only your user can read
+(for example a Docker `config.json` with mode `0600`) or write into a mounted directory, run the container as your own
+user by adding `--user "$(id -u):$(id -g)"`.
+{{< /callout >}}
+
 {{< /step >}}
 {{< step >}}
 

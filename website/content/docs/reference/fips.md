@@ -70,6 +70,35 @@ kept up to date by Renovate.
 The binaries are statically linked and do not use the base image's OpenSSL. All
 cryptography in OCM itself goes through the Go Cryptographic Module.
 
+### Container Hardening
+
+Both images and the controller Helm chart follow the DISA
+[Container Image Creation and Deployment Guide](https://dl.dod.cyber.mil/wp-content/uploads/devsecops/pdf/DevSecOps_Enterprise_Container_Image_Creation_and_Deployment_Guide_2.6-Public-Release.pdf)
+for the parts OCM controls:
+
+| Measure | CLI image | Controller image / chart |
+| --- | --- | --- |
+| Runs as non-root user `65532` | ✅ | ✅ (`runAsNonRoot: true`) |
+| setuid/setgid bits removed from all base image executables | ✅ | ✅ |
+| No privilege escalation, all capabilities dropped | — | ✅ |
+| `seccompProfile: RuntimeDefault` | — | ✅ |
+| Read-only root filesystem, writable `emptyDir` at `/tmp` | — | ✅ |
+| Liveness and readiness probes, resource requests and limits | — | ✅ |
+
+The controller's pod spec meets the Kubernetes
+[restricted Pod Security Standard](https://kubernetes.io/docs/concepts/security/pod-security-standards/#restricted),
+and the end-to-end tests install the chart into a namespace that enforces it.
+
+The CLI image sets `HOME=/`, so configuration mounted at `/.ocmconfig` or
+`/.docker/config.json` is still found. Caches and generated configuration go
+to `/tmp`. To read files that only your user can read, or to write into a
+mounted directory, run the container with `--user "$(id -u):$(id -g)"`.
+
+Node operating system and cluster STIGs, such as the Garden Linux
+`disaSTIGlow` feature and the Kubernetes STIG, are the platform operator's
+responsibility. The Garden Linux FIPS container image is not built with
+`disaSTIGlow`.
+
 ## Runtime Modes
 
 You control the runtime mode with the `GODEBUG` environment variable.
@@ -144,15 +173,15 @@ The controller logs it at `info` level on every start:
 INFO setup FIPS 140-3 mode {"enabled": true, "module": "v1.26.0"}
 ```
 
-The CLI logs it at `info` level for every command. The CLI's default log level
-is `warn`, so pass `--loglevel info` to see it:
+The CLI logs it at `debug` level for every command, so it does not add noise to
+regular output. Pass `--loglevel debug` to see it:
 
 ```shell
-ocm --loglevel info get cv <reference>
+ocm --loglevel debug get cv <reference>
 ```
 
 ```text
-level=INFO msg="FIPS 140-3 mode" enabled=true module=v1.26.0
+level=DEBUG msg="FIPS 140-3 mode" enabled=true module=v1.26.0
 ```
 
 `enabled=false` means the binary was built without `GOFIPS140` or was started

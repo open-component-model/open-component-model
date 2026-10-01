@@ -691,7 +691,7 @@ A successful run logs `signed successfully` and embeds the Sigstore bundle into 
 
 {{< details "Alternative: run `ocm` from the OCM CLI container image" >}}
 
-Skip the install step by invoking `ocm` from the official container image (`ghcr.io/open-component-model/cli`) directly with `docker run`. The image is built `FROM scratch` for minimal attack surface — only the `ocm` binary plus CA certs, no shell — so it cannot be used as a GitHub Actions [`container:`]({{< relref "container-image-usage.md" >}}) job runtime. The `docker run` pattern below is the supported way:
+Skip the install step by invoking `ocm` from the official container image (`ghcr.io/open-component-model/cli`) directly with `docker run`. The image uses `ocm` as its entrypoint and runs as the non-root user `65532` on a hardened [Garden Linux FIPS]({{< relref "docs/reference/fips.md" >}}) base. The `docker run` pattern below is the supported way:
 
 ```yaml
 jobs:
