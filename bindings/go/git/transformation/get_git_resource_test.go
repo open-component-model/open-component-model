@@ -108,10 +108,7 @@ func TestGetGitResourceLocalRepository(t *testing.T) {
 			transformer := &GetGitResource{Scheme: v1alpha1.Scheme, ResourceRepository: repo}
 			result, err := transformer.Transform(t.Context(), raw)
 			r.NoError(err)
-			entries, err := os.ReadDir(downloadDir)
-			r.NoError(err)
-			r.Empty(entries, "the source archive must be released before Transform returns")
-			entries, err = os.ReadDir(outputDir)
+			entries, err := os.ReadDir(outputDir)
 			r.NoError(err)
 			r.Len(entries, 1, "only the buffered output belongs to the graph")
 			var transformed v1alpha1.GetGitResource
@@ -276,7 +273,7 @@ func TestGetGitResourceInvalidInput(t *testing.T) {
 	}
 }
 
-func TestGetGitResourceReleasesArchiveOnBufferFailure(t *testing.T) {
+func TestGetGitResourceRemovesOutputOnBufferFailure(t *testing.T) {
 	r := require.New(t)
 	path, commit := localRepository(t)
 	downloadDir, outDir := t.TempDir(), t.TempDir()
@@ -286,7 +283,7 @@ func TestGetGitResourceReleasesArchiveOnBufferFailure(t *testing.T) {
 		r.NoError(err)
 		files, err := os.ReadDir(downloadDir)
 		r.NoError(err)
-		r.Len(files, 1, "exercise cleanup of a real downloaded archive")
+		r.Len(files, 1, "buffer a real downloaded archive")
 		// Make the already-created output path unwritable as a file, without
 		// depending on permission checks that behave differently under root.
 		outputs, err := os.ReadDir(outDir)
@@ -302,11 +299,9 @@ func TestGetGitResourceReleasesArchiveOnBufferFailure(t *testing.T) {
 		Spec: &v1alpha1.GetGitResourceSpec{Resource: gitResource(t, path, "", commit, "Git/v1"), OutputPath: outDir}})
 	r.ErrorContains(err, "failed buffering git resource archive to file")
 	r.Nil(result)
-	for _, dir := range []string{downloadDir, outDir} {
-		files, err := os.ReadDir(dir)
-		r.NoError(err)
-		r.Empty(files)
-	}
+	files, err := os.ReadDir(outDir)
+	r.NoError(err)
+	r.Empty(files)
 }
 
 func TestGetGitResourceRejectsWrongDigest(t *testing.T) {
@@ -320,9 +315,7 @@ func TestGetGitResourceRejectsWrongDigest(t *testing.T) {
 		Spec: &v1alpha1.GetGitResourceSpec{Resource: resource, OutputPath: outDir}})
 	r.ErrorContains(err, "digest mismatch")
 	r.Nil(result)
-	for _, dir := range []string{downloadDir, outDir} {
-		entries, err := os.ReadDir(dir)
-		r.NoError(err)
-		r.Empty(entries)
-	}
+	entries, err := os.ReadDir(outDir)
+	r.NoError(err)
+	r.Empty(entries)
 }

@@ -58,8 +58,6 @@ func (i *InputMethod) GetResourceCredentialConsumerIdentity(_ context.Context, r
 }
 
 // ProcessResource returns the selected repository snapshot as a gzip-compressed tar.
-// ProcessedBlobData implements io.Closer. Its consumer must close the blob after
-// closing all readers to remove the archive; closing a reader alone retains it.
 func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructorruntime.Resource, credentials runtime.Typed) (*constructor.ResourceInputMethodResult, error) {
 	spec, err := i.convertInput(resource)
 	if err != nil {
