@@ -2438,14 +2438,10 @@ func testRepositoryResourceDigest(t *testing.T, operation string) {
 						candidate.Value = digest.FromString("different content").Encoded()
 						wantErr = "digest value mismatch"
 					}
-					if normalization == "unexpected/v1" || normalization == "" {
+					if normalization == "unexpected/v1" {
 						wantErr = "unsupported OCI artifact normalisation algorithm"
 					}
-					if normalization == "" && operation != "ProcessResourceDigest" {
-						// Upload accepts incomplete transport metadata and regenerates it.
-						candidate.HashAlgorithm = "sha256"
-						wantErr = ""
-					}
+					// An empty normalization is completed, but set fields must still match.
 					tests = append(tests, testCase{
 						name:   fmt.Sprintf("normalization=%s/mismatch=%s", normalization, mismatch),
 						digest: candidate,
@@ -2453,24 +2449,27 @@ func testRepositoryResourceDigest(t *testing.T, operation string) {
 					})
 				}
 			}
-			if operation != "ProcessResourceDigest" {
-				for _, missing := range []string{"hash", "value", "hash and value"} {
-					for _, mismatch := range []bool{false, true} {
-						candidate := correct.DeepCopy()
-						if mismatch {
-							candidate.Value = digest.FromString("different content").Encoded()
+			for _, missing := range []string{"hash", "value", "hash and value"} {
+				for _, mismatch := range []bool{false, true} {
+					candidate := correct.DeepCopy()
+					var wantErr string
+					if mismatch {
+						candidate.Value = digest.FromString("different content").Encoded()
+						if missing == "hash" {
+							wantErr = "digest value mismatch"
 						}
-						if missing == "hash" || missing == "hash and value" {
-							candidate.HashAlgorithm = ""
-						}
-						if missing == "value" || missing == "hash and value" {
-							candidate.Value = ""
-						}
-						tests = append(tests, testCase{
-							name:   fmt.Sprintf("missing=%s/mismatch=%t", missing, mismatch),
-							digest: candidate,
-						})
 					}
+					if missing == "hash" || missing == "hash and value" {
+						candidate.HashAlgorithm = ""
+					}
+					if missing == "value" || missing == "hash and value" {
+						candidate.Value = ""
+					}
+					tests = append(tests, testCase{
+						name:   fmt.Sprintf("missing=%s/mismatch=%t", missing, mismatch),
+						digest: candidate,
+						err:    wantErr,
+					})
 				}
 			}
 			for _, tt := range tests {
