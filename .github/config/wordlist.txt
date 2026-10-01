@@ -936,6 +936,7 @@ statefulset
 ConvertHelmToOCI
 GetHelmChart
 AddOCIArtifact
+TransferOCIArtifact
 csl
 async
 netlify
