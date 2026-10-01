@@ -29,7 +29,8 @@ raw hosted repository, so that consumers download them by URL.
 
 ### Configure the uploader
 
-Create `config.yaml` with the credentials and one uploader rule for all `localBlob` resources:
+Add the credentials and one uploader rule for all `LocalBlob` resources to your
+`.ocmconfig` in the working directory (merged with `$HOME/.ocmconfig`):
 
 ```yaml
 type: generic.config.ocm.software/v1
@@ -45,8 +46,7 @@ configurations:
             username: <USERNAME>
             password: <PASSWORD_OR_USER_TOKEN>
   - type: nexus.uploader.transfer.config.ocm.software/v1alpha1
-    match:
-      accessType: localBlob
+    match: resource.access.isType("LocalBlob")
     url: https://nexus.example.com
     repository: raw-hosted
     # optional, defaults to <component>/<component version>/<resource>-<resource version>
@@ -56,7 +56,7 @@ configurations:
 ### Run the transfer
 
 ```bash
-ocm transfer cv --config config.yaml ctf::./src//ocm.software/demo:1.0.0 ctf::./target
+ocm transfer cv ctf::./src//ocm.software/demo:1.0.0 ctf::./target
 ```
 
 ### Verify

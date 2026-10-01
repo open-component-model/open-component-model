@@ -88,8 +88,8 @@ func transferOnce(t *testing.T, ctfRepo repository.ComponentVersionRepository, s
 	t.Helper()
 	r := require.New(t)
 	tgd, err := transfer.BuildGraphDefinition(t.Context(),
-		&transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeAllResources},
-		[]transferv1alpha1.UploaderConfig{uploader},
+		&transferv1alpha1.Config{},
+		[]transferv1alpha1.UploaderConfig{uploader, &transferv1alpha1.LocalBlobUploaderConfig{}},
 		transfer.Mapping{
 			Components: []transfer.ComponentID{{Component: component, Version: version}},
 			Target:     targetSpec,

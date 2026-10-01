@@ -1,7 +1,7 @@
 ---
 title: "Sonatype Nexus Uploader"
 description: "Reference for nexus.uploader.transfer.config.ocm.software/v1alpha1: upload matched resources into Sonatype Nexus helm, raw, maven2 and npm hosted repositories."
-weight: 4
+weight: 7
 toc: true
 ---
 
@@ -10,6 +10,11 @@ Repository 3 server, the way the repository's format expects. For step-by-step
 guides per repository type, see
 [Sonatype Nexus]({{< relref "docs/how-to/vendor-specific-apis/sonatype-nexus/_index.md" >}}).
 
+{{< callout context="note" >}}
+The OCM Kubernetes controller ignores Nexus uploader entries because they send
+content to configured URLs from the controller pod.
+{{< /callout >}}
+
 ## Schema
 
 {{< schema-renderer url="/schemas/bindings/go/transfer/NexusUploaderConfig.schema.json" >}}
@@ -17,8 +22,8 @@ guides per repository type, see
 ## Fields
 
 | Field        | Type              | Description                                                                                                                                                                                                                                                                                                        |
-|--------------|-------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `match`      | `UploaderMatch`   | Selects resources this uploader applies to. `match.accessType` is required.                                                                                                                                                                                                                                        |
+| ------------ | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `match`      | CEL expression    | A CEL boolean expression selecting the resources this uploader handles. **Required:** the Nexus uploader has no default match.                                                                                                                                                                                     |
 | `url`        | string (required) | Server base URL **without** the `/repository` segment, e.g. `https://nexus.example.com`.                                                                                                                                                                                                                           |
 | `repository` | string (required) | Repository name, e.g. `helm-hosted`.                                                                                                                                                                                                                                                                               |
 | `path`       | string            | Content location relative to the root; required in Maven repository layout for `maven2` repositories. Literal or `${…}` CEL expression (see [CEL Expressions]({{< relref "docs/reference/transfer-configuration/cel-expressions.md" >}})). Must be relative, without `.`/`..` segments. Not for helm or npm repos. |
@@ -29,7 +34,7 @@ The uploader reads the format from
 `GET <url>/service/rest/v1/repositories/<repository>`:
 
 | Type     | Uploaded content                                                                                                                                                        | Published access                                               | `path`                                                                                                            | Guide                                                                                                         |
-|----------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------|
+| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
 | `helm`   | The packaged chart found in the content (`.tgz`, a tar holding one, or a Helm chart OCI artifact); stored as `<name>-<version>.tgz`                                     | `Helm/v1` with `helmRepository: <url>/repository/<repository>` | Not supported                                                                                                     | [Upload Helm Charts]({{< relref "docs/how-to/vendor-specific-apis/sonatype-nexus/helm-charts.md" >}})         |
 | `raw`    | The content as is; OCI artifacts as an OCI layout tar                                                                                                                   | `Wget/v1` on `<url>/repository/<repository>/<path>`            | Optional                                                                                                          | [Upload Raw Files]({{< relref "docs/how-to/vendor-specific-apis/sonatype-nexus/raw-files.md" >}})             |
 | `maven2` | The content as one file of a Maven component. Releases go through the components API; `-SNAPSHOT` versions use a plain `PUT` and are not added to `maven-metadata.xml`. | `Wget/v1` on `<url>/repository/<repository>/<path>`            | Required, in Maven layout `<group path>/<artifactId>/<version>/<artifactId>-<version>[-<classifier>].<extension>` | [Upload Maven Artifacts]({{< relref "docs/how-to/vendor-specific-apis/sonatype-nexus/maven-artifacts.md" >}}) |
@@ -91,8 +96,7 @@ Helm chart upload to Nexus:
 type: generic.config.ocm.software/v1
 configurations:
   - type: nexus.uploader.transfer.config.ocm.software/v1alpha1
-    match:
-      accessType: Helm/v1
+    match: resource.access.isType("Helm")
     url: https://nexus.example.com
     repository: helm-hosted
 ```

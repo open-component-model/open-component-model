@@ -52,9 +52,9 @@ components:
 ### Configure the uploader
 
 Maven finds a file only under the Maven layout
-`<group path>/<artifactId>/<version>/<artifactId>-<version>.<ext>`. Create
-`config.yaml` with the credentials and one rule per file, each with a CEL `path` in
-that layout:
+`<group path>/<artifactId>/<version>/<artifactId>-<version>.<ext>`. Add the
+credentials and one rule per file, each with a CEL `path` in that layout, to your
+`.ocmconfig` in the working directory (merged with `$HOME/.ocmconfig`):
 
 ```yaml
 type: generic.config.ocm.software/v1
@@ -69,12 +69,12 @@ configurations:
           - type: WgetCredentials/v1
             identityToken: <ARTIFACTORY_IDENTITY_TOKEN>
   - type: artifactory.uploader.transfer.config.ocm.software/v1alpha1
-    match: {accessType: localBlob, name: jar}
+    match: resource.access.isType("LocalBlob") && resource.name == "jar"
     url: https://myorg.jfrog.io
     repository: maven-local
     path: '${"com/example/demo/" + resource.version + "/demo-" + resource.version + ".jar"}'
   - type: artifactory.uploader.transfer.config.ocm.software/v1alpha1
-    match: {accessType: localBlob, name: pom}
+    match: resource.access.isType("LocalBlob") && resource.name == "pom"
     url: https://myorg.jfrog.io
     repository: maven-local
     path: '${"com/example/demo/" + resource.version + "/demo-" + resource.version + ".pom"}'
@@ -83,7 +83,7 @@ configurations:
 ### Run the transfer
 
 ```bash
-ocm transfer cv --config config.yaml ctf::./src//ocm.software/demo:1.0.0 ctf::./target
+ocm transfer cv ctf::./src//ocm.software/demo:1.0.0 ctf::./target
 ```
 
 ### Verify

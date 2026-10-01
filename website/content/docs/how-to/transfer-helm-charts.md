@@ -69,31 +69,49 @@ ocm add cv --repository ctf::<path/to/archive> \
 
 ### Transfer the component version
 
-Transfer the component version to the target registry. Use `--copy-resources` to include the Helm chart and `--upload-as ociArtifact` to store it as a
-standalone OCI artifact in the target registry.
+Transfer the component version to the target registry. An OCI uploader stores the Helm chart as a standalone OCI
+artifact in the target registry, and a local blob catch-all copies every other resource.
 
-{{< callout title="Note" icon="outline/info-circle" >}}
-The `--upload-as` flag is a temporary solution. It will be superseded by the upcoming transfer specification.
-See [ocm-project#925](https://github.com/open-component-model/ocm-project/issues/925) for details.
-{{< /callout >}}
+Add the uploaders to `.ocmconfig` in the working directory. If the file already exists (for example
+with the signing key, credentials or resolvers), add only the two uploader entries, in this order, to its `configurations` list;
+otherwise create it with this content:
+
+```yaml
+type: generic.config.ocm.software/v1
+configurations:
+  - type: oci.uploader.transfer.config.ocm.software/v1alpha1
+  - type: localblob.uploader.transfer.config.ocm.software/v1alpha1
+```
+
+The CLI automatically merges `.ocmconfig` from the current directory with your other OCM configuration (such as `$HOME/.ocmconfig`), so credentials and resolvers stay in effect.
 
 ```bash
 ocm transfer cv \
-  --copy-resources \
-  --upload-as ociArtifact \
   ctf::<path/to/archive>//<component-name>:<version> \
   <target-registry>
 ```
 
-During transfer, the Helm chart is always converted to an OCI artifact. With `--upload-as ociArtifact`,
+This configuration can also be added to an existing OCM configuration file (for example `$HOME/.ocmconfig`):
+
+```yaml
+type: generic.config.ocm.software/v1
+configurations:
+  - type: oci.uploader.transfer.config.ocm.software/v1alpha1
+  - type: localblob.uploader.transfer.config.ocm.software/v1alpha1
+```
+
+During transfer, the Helm chart is always converted to an OCI artifact. With the OCI uploader configuration,
 this artifact is uploaded as a separate image in the target registry.
 The component descriptor references it via an `imageReference` (e.g., `ghcr.io/my-org/charts/my-chart:1.0.0`),
 making it independently addressable and pullable with `helm pull`. For more details on how transfers and resource handling work,
 see [Transfer and Transport]({{< relref "docs/concepts/transfer-concept.md" >}}).
 
-Alternatively, `--upload-as localBlob` embeds the chart directly in the component version's blob store.
+Without the OCI uploader, copied resources are embedded directly in the component version's blob store as local blobs.
 This keeps the chart coupled to the component version but means it is not independently addressable in the registry and cannot be pulled with the Helm
 CLI.
+
+For more on the OCI uploader and how it replaces the deprecated `--upload-as` flag, see
+[Migrate from --upload-as to Uploader Configurations]({{< relref "docs/how-to/migrate-from-upload-as.md" >}}).
 
 To find the `imageReference`, inspect the component descriptor:
 
@@ -147,8 +165,6 @@ To transfer a Helm chart component version from one OCI registry to another, use
 
 ```bash
 ocm transfer cv \
-  --copy-resources \
-  --upload-as ociArtifact \
   <source-registry>//<component-name>:<version> \
   <target-registry>
 ```
