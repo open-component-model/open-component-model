@@ -16,7 +16,7 @@
     },
     "mediaType": {
       "type": "string",
-      "description": "MediaType is the media type of the referenced object."
+      "description": "MediaType is the media type of the referenced object. If empty, the Content-Type\nof the object is used, falling back to application/octet-stream."
     },
     "objectKey": {
       "type": "string",
@@ -24,7 +24,7 @@
     },
     "region": {
       "type": "string",
-      "description": "Region is the region of the bucket. It is optional. When it is empty, OCM reads\nit from the environment or applies a default. Most custom endpoints ignore it."
+      "description": "Region is the region of the bucket. It is optional. When it is empty, OCM reads\nAWS_REGION or the shared AWS config, and falls back to us-east-1. Most custom\nendpoints ignore it."
     },
     "type": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",

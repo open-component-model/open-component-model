@@ -37,7 +37,8 @@ type Helm struct {
 	// HelmRepository is the URL of the helm repository to load the chart from.
 	HelmRepository string `json:"helmRepository"`
 
-	// HelmChart is the name of the helm chart and its version separated by a colon.
+	// HelmChart is the name of the helm chart, optionally followed by a colon and its
+	// version (for example mariadb:12.2.7).
 	HelmChart string `json:"helmChart"`
 
 	// Version can either be specified as part of the chart name or separately.

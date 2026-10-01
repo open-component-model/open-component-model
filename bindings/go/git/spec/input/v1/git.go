@@ -22,7 +22,8 @@ type Git struct {
 	// Repository is the Git repository URL.
 	Repository string `json:"repository"`
 
-	// Ref selects a Git ref. If both Ref and Commit are empty, remote HEAD is used.
+	// Ref selects a branch, tag or full ref name (for example main, v1.0.0 or
+	// refs/tags/v1.0.0). If both Ref and Commit are empty, remote HEAD is used.
 	Ref string `json:"ref,omitempty"`
 
 	// Commit pins a commit by its full 40-character hexadecimal SHA and takes

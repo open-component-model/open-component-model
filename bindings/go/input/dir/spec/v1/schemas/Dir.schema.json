@@ -34,7 +34,7 @@
     },
     "path": {
       "type": "string",
-      "description": "Path is the path to the directory."
+      "description": "Path is the path to the directory.\nRelative paths are resolved against the working directory, which defaults to\nthe directory of the component constructor file."
     },
     "preserveDir": {
       "type": "boolean",

@@ -12,7 +12,7 @@
     },
     "ref": {
       "type": "string",
-      "description": "Ref selects a Git ref. If both Ref and Commit are empty, remote HEAD is used."
+      "description": "Ref selects a branch, tag or full ref name (for example main, v1.0.0 or\nrefs/tags/v1.0.0). If both Ref and Commit are empty, remote HEAD is used."
     },
     "repository": {
       "type": "string",

@@ -18,6 +18,8 @@ type Dir struct {
 	Type runtime.Type `json:"type"`
 
 	// Path is the path to the directory.
+	// Relative paths are resolved against the working directory, which defaults to
+	// the directory of the component constructor file.
 	Path string `json:"path"`
 
 	// MediaType is the media type of the resulting blob (defaults to application/x-tar).
