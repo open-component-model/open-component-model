@@ -315,6 +315,12 @@ const BINDING_MOUNTS = [
     { pkg: 'wget',          source: 'transformation/spec/v1alpha1/schemas',              target: 'schemas/bindings/go/wget/transformation',    since: '0.17' },
     { pkg: 'configuration/checksum/http', source: 'v1alpha1/spec/schemas', target: 'schemas/bindings/go/configuration/checksum/http/v1alpha1', sinceMonolith: true },
     { pkg: 'git',           source: 'spec/credentials/v1/schemas',                       target: 'schemas/bindings/go/credentials/git/v1',     since: '0.18' },
+    {
+        pkg: 'oci',
+        source: 'spec/config/v1alpha1/schemas',
+        target: 'schemas/bindings/go/oci/config/v1alpha1',
+        since: '0.18',
+    },
 ];
 
 // Return the bindings schema imports for a version. The layout is auto-detected

@@ -651,3 +651,32 @@ configurations:
 		assert.Contains(t, err.Error(), "invalid http configuration")
 	})
 }
+
+func TestPluginManager_OCICachingConfig(t *testing.T) {
+	run := func(t *testing.T, mode string) error {
+		yaml := `
+type: generic.config.ocm.software/v1
+configurations:
+  - type: caching.oci.config.ocm.software/v1alpha1
+    mode: ` + mode + `
+`
+		var generic genericv1.Config
+		require.NoError(t, genericv1.Scheme.Decode(strings.NewReader(yaml), &generic))
+
+		cmd := &cobra.Command{Use: "test"}
+		cmd.SetContext(ocmctx.WithFilesystemConfig(ocmctx.WithConfiguration(context.Background(), &generic), &filesystemv1alpha1.Config{}))
+		cmd.Flags().String(ocmcmd.PluginDirectoryFlag, "", "")
+		Syscalls(cmd)
+		return PluginManager(cmd)
+	}
+
+	t.Run("invalid mode fails", func(t *testing.T) {
+		err := run(t, "Sometimes")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "OCI caching configuration")
+	})
+
+	t.Run("Never accepted", func(t *testing.T) {
+		require.NoError(t, run(t, "Never"))
+	})
+}

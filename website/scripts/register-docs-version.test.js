@@ -712,6 +712,17 @@ test('buildModuleBlocks: monolithic import mounts cover every schema directory',
     }
 });
 
+test('buildModuleBlocks: OCI caching schema mount is gated to 0.18 and later', () => {
+    const target = v => `static/${v}/schemas/bindings/go/oci/config/v1alpha1`;
+    const mountsFor = (v) => buildModuleBlocks(v, `${v}.0`, MONOLITH_DEPS)
+        .imports.find(i => i.path === MONOLITHIC_BINDINGS_MODULE).mounts;
+
+    assert.equal(mountsFor('0.17').some(m => m.target === target('0.17')), false);
+    const mount = mountsFor('0.18').find(m => m.target === target('0.18'));
+    assert.ok(mount, '0.18 should mount the OCI caching schema');
+    assert.equal(mount.source, 'oci/spec/config/v1alpha1/schemas');
+});
+
 test('buildModuleBlocks: monolithic and legacy layouts mount the same schema set', () => {
     const { imports: legacy } = buildModuleBlocks('0.15', '0.15.0', ALL_DEPS);
     const { imports: monolith } = buildModuleBlocks('0.15', '0.15.0', MONOLITH_DEPS);

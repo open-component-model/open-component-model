@@ -17,8 +17,8 @@ import (
 
 // ---- Options validation ----
 
-func TestOptions_DefaultPolicyIsAlways(t *testing.T) {
-	assert.Equal(t, RemotePolicyAlways, Defaults().RemotePolicy)
+func TestOptions_DefaultPolicyIsIfNotPresent(t *testing.T) {
+	assert.Equal(t, RemotePolicyIfNotPresent, Defaults().RemotePolicy)
 }
 
 func TestOptions_ExplicitAlwaysAccepted(t *testing.T) {

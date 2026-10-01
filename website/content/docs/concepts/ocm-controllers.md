@@ -156,6 +156,7 @@ The controller accepts a fixed set of OCM configuration types and silently drops
 | `resolvers.config.ocm.software`   | path-matcher resolvers                                                                                                         |
 | `transfer.config.ocm.software`    | replication settings                                                                                                           |
 | `http.config.ocm.software`        | HTTP client timeouts, retries, per-host overrides, and `insecureSkipVerify` for local registries with self-signed certificates |
+| `caching.oci.config.ocm.software` | OCI blob and reference cache mode, time to live, and maximum cached blob size (see [Caching Configuration]({{< relref "docs/reference/caching-configuration.md" >}})) |
 
 `filesystem.config.ocm.software` is deliberately **not** accepted.
 

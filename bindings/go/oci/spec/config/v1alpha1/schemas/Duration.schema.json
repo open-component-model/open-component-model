@@ -1,0 +1,8 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "Duration is a Go time.Duration that marshals as a duration string (e.g. \"30s\", \"10m\", \"1h30m\"). Numeric values are not accepted.",
+  "title": "Duration",
+  "description": "Duration wraps time.Duration and is serialized as a Go duration string (e.g. \"30s\", \"10m\", \"1h30m\").",
+  "type": "string",
+  "examples": ["30s", "10m", "1h30m"]
+}

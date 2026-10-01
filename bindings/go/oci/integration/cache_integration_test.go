@@ -6,6 +6,8 @@ import (
 	"net/http/httptest"
 	"net/http/httputil"
 	"net/url"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
@@ -18,7 +20,9 @@ import (
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/oci/cache"
+	cacheconfiguration "ocm.software/open-component-model/bindings/go/oci/cache/configuration"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
+	ocicachingv1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/config/v1alpha1"
 	ocirepospecv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/repository"
 )
@@ -277,8 +281,8 @@ func Test_Integration_OCICache_ReReadAvoidsRegistry(t *testing.T) {
 	})
 }
 
-// Test_Integration_OCICache_RemotePolicyAlways covers the policy the
-// controller runs with: the registry must be contacted on every hit so
+// Test_Integration_OCICache_RemotePolicyAlways covers the policy for
+// deployments that must re-authorize: the registry must be contacted on every hit so
 // authorization is re-checked, but cached bytes should not be re-downloaded.
 func Test_Integration_OCICache_RemotePolicyAlways(t *testing.T) {
 	t.Parallel()
@@ -321,4 +325,45 @@ func Test_Integration_OCICache_RemotePolicyAlways(t *testing.T) {
 			calls.downloads(), calls.revalidations(), calls.dump())
 		r.Equal("republished", markerOf(t, got), "cache served content from before the tag moved")
 	})
+}
+
+// Test_Integration_OCICache_ModeNever covers the options produced for
+// `mode: Never`: every read downloads again and no cache directory is created.
+func Test_Integration_OCICache_ModeNever(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	r := require.New(t)
+
+	baseURL, calls := startProxiedRegistry(t, ctx)
+
+	const component, version = "ocm.software/cache-test-never", "v1.0.0"
+
+	seedProv := provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()))
+	r.NoError(repoFor(t, ctx, seedProv, baseURL).AddComponentVersion(ctx, cacheTestDescriptor(component, version, "original")))
+
+	blobOpts, refOpts, err := cacheconfiguration.Resolve(
+		&ocicachingv1alpha1.Config{Mode: ocicachingv1alpha1.ModeNever},
+		cache.RemotePolicyIfNotPresent,
+	)
+	r.NoError(err)
+
+	cacheDir := t.TempDir()
+	prov := provider.NewComponentVersionRepositoryProvider(
+		provider.WithTempDir(cacheDir),
+		provider.WithBlobCacheOptions(blobOpts),
+		provider.WithReferenceCacheOptions(refOpts),
+	)
+	repo := repoFor(t, ctx, prov, baseURL)
+
+	for i := range 2 {
+		calls.reset()
+		_, err := repo.GetComponentVersion(ctx, component, version)
+		r.NoError(err)
+		r.Positive(calls.downloads(), "read %d must download from the registry", i+1)
+	}
+
+	for _, name := range []string{"ocm-oci-cas", "ocm-oci-refcache"} {
+		_, err := os.Stat(filepath.Join(cacheDir, name))
+		r.ErrorIs(err, os.ErrNotExist, "%s must not be created when caching is disabled", name)
+	}
 }
