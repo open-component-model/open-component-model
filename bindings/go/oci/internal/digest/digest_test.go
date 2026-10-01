@@ -82,6 +82,8 @@ func TestComplete(t *testing.T) {
 			want: runtime.Digest{HashAlgorithm: HashAlgorithmSHA256, NormalisationAlgorithm: OCIArtifactDigestV1, Value: root.Encoded()}},
 		{name: "matching partial", target: runtime.Digest{Value: root.Encoded()}, normalization: GenericBlobDigestV1,
 			want: runtime.Digest{HashAlgorithm: HashAlgorithmSHA256, NormalisationAlgorithm: GenericBlobDigestV1, Value: root.Encoded()}},
+		{name: "OCI hash spelling", target: runtime.Digest{HashAlgorithm: "sha256", Value: root.Encoded()}, normalization: OCIArtifactDigestV1,
+			want: runtime.Digest{HashAlgorithm: HashAlgorithmSHA256, NormalisationAlgorithm: OCIArtifactDigestV1, Value: root.Encoded()}},
 		{name: "partial legacy label is corrected", target: runtime.Digest{NormalisationAlgorithm: GenericBlobDigestV1}, normalization: OCIArtifactDigestV1,
 			want: runtime.Digest{HashAlgorithm: HashAlgorithmSHA256, NormalisationAlgorithm: OCIArtifactDigestV1, Value: root.Encoded()}},
 		{name: "OCI label on blob", target: runtime.Digest{NormalisationAlgorithm: OCIArtifactDigestV1}, normalization: GenericBlobDigestV1,

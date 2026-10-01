@@ -2466,6 +2466,10 @@ func testRepositoryResourceDigest(t *testing.T, operation string) {
 						wantErr = "unsupported OCI artifact normalisation algorithm"
 					}
 					// An empty normalization is completed, but set fields must still match.
+					// Incomplete metadata copied from OCI descriptors uses the OCI spelling (Helm does).
+					if normalization == "" && mismatch != "algorithm" {
+						candidate.HashAlgorithm = "sha256"
+					}
 					tests = append(tests, testCase{
 						name:   fmt.Sprintf("normalization=%s/mismatch=%s", normalization, mismatch),
 						digest: candidate,

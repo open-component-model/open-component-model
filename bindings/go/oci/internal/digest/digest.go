@@ -2,6 +2,7 @@ package digest
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/opencontainers/go-digest"
 
@@ -86,7 +87,7 @@ func Complete(target *runtime.Digest, digest digest.Digest, normalisation string
 		(normalisation != OCIArtifactDigestV1 || set != GenericBlobDigestV1) {
 		return fmt.Errorf("normalisation algorithm mismatch: expected %s, got %s", normalisation, set)
 	}
-	if target.HashAlgorithm != "" && target.HashAlgorithm != generated.HashAlgorithm {
+	if target.HashAlgorithm != "" && !sameHashAlgorithm(target.HashAlgorithm, generated.HashAlgorithm) {
 		return fmt.Errorf("hash algorithm mismatch: expected %s, got %s", target.HashAlgorithm, generated.HashAlgorithm)
 	}
 	if target.Value != "" && target.Value != generated.Value {
@@ -94,6 +95,12 @@ func Complete(target *runtime.Digest, digest digest.Digest, normalisation string
 	}
 	*target = generated
 	return nil
+}
+
+// sameHashAlgorithm accepts both the OCM ("SHA-256") and OCI ("sha256") spellings,
+// since incomplete metadata is often copied from an OCI descriptor.
+func sameHashAlgorithm(a, b string) bool {
+	return strings.EqualFold(strings.ReplaceAll(a, "-", ""), strings.ReplaceAll(b, "-", ""))
 }
 
 func verifyHash(target *runtime.Digest, digest digest.Digest) error {
