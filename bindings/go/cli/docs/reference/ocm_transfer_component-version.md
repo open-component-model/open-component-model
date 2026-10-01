@@ -33,9 +33,8 @@ reference.uploader.transfer.config.ocm.software/v1alpha1 (keep by reference). Ea
 resources with a CEL match expression over resource and target (test access types with
 resource.access.isType("OCIImage"), which resolves aliases and versions); the first uploader
 whose match is true handles the resource. The deprecated --copy-resources and --upload-as flags
-still work: they are translated into uploader entries appended after the configured ones, and
-the generated configuration is logged so it can replace them (see the "Migrate from
---upload-as to Uploader Configurations" guide on ocm.software). --recursive walks the
+still work: they are translated into uploader entries appended after the configured ones (see
+the "Migrate from --upload-as to Uploader Configurations" guide on ocm.software). --recursive walks the
 component's references and transfers them too.
 
 Driving defaults from the OCM configuration:
@@ -122,7 +121,7 @@ transfer component-version --transfer-spec spec.yaml
 ```
       --concurrency-limit int   maximum number of transformation nodes processed in parallel; independent nodes run concurrently while dependency ordering is preserved. Increase it to speed up large graphs, decrease it to reduce load on the registry (default 4)
       --constraint string       version constraint evaluated by each version's configured scheme; versions with no applicable scheme are retained (e.g. ">= 1.0.0, < 2.0.0"); only used when no version is specified in the reference
-      --copy-resources          deprecated: copy all resources in the component version (logs the equivalent OCM configuration to use instead)
+      --copy-resources          deprecated: copy all resources in the component version
       --dry-run                 build and validate the graph but do not execute
   -h, --help                    help for component-version
       --latest                  if set, only the latest version of the component is transferred; only used when no version is specified in the reference
@@ -130,7 +129,7 @@ transfer component-version --transfer-spec spec.yaml
                                 (must be one of [json ndjson yaml]) (default yaml)
   -r, --recursive               recursively discover and transfer component versions
       --transfer-spec string    path to a transfer specification file (use "-" for stdin). The input must hold exactly one transfer spec document; with "-", OCM configuration documents in stdin are applied as configuration
-  -u, --upload-as enum          deprecated: define whether copied resources should be uploaded as OCI artifacts (logs the equivalent OCM configuration to use instead)
+  -u, --upload-as enum          deprecated: define whether copied resources should be uploaded as OCI artifacts
                                 (must be one of [localBlob ociArtifact]) (default localBlob)
 ```
 

@@ -50,7 +50,7 @@ config when set.
 
 The `--copy-resources` and `--upload-as` flags are deprecated. They are
 translated into uploader configuration entries appended after all configured
-entries, and the CLI logs a warning with the equivalent configuration. See the
+entries. See the
 [migration guide]({{< relref "docs/how-to/migrate-from-upload-as.md" >}}) for
 details.
 

@@ -13,8 +13,8 @@ CLI config and controller `Replication` configs) with the
 `oci.uploader.transfer.config.ocm.software/v1alpha1` uploader configuration.
 
 {{< callout context="caution" >}}
-The `--upload-as` and `--copy-resources` flags are deprecated. They still work
-and print a deprecation warning: the CLI translates them into uploader
+The `--upload-as` and `--copy-resources` flags are deprecated. They still work:
+the CLI translates them into uploader
 configuration entries appended after all configured entries (see
 [Deprecated flags](#deprecated-flags)). A leftover `uploadType` field in a
 transfer config fails config loading with `unknown field "uploadType"` and must
@@ -39,15 +39,9 @@ Until you migrate, the CLI translates the deprecated flags into uploader
 configuration entries. The translated entries come after all entries from the
 OCM configuration, so explicit rules still win.
 
-When a deprecated flag is used, the CLI logs a warning:
-
-```text
-level=WARN msg="--copy-resources and --upload-as are deprecated: replace them with the OCM configuration in the config attribute (JSON is valid YAML): add its entries to your OCM configuration, e.g. in ./.ocmconfig, which is merged with your other configuration files (--config would replace them)" config="{\"configurations\":[{\"type\":\"localblob.uploader.transfer.config.ocm.software/v1alpha1\"}],\"type\":\"generic.config.ocm.software/v1\"}"
-```
-
-The `config` attribute contains the equivalent OCM configuration as one-line
-JSON. Copy its entries into `.ocmconfig` in your working directory (or add them
-to your existing OCM configuration) and drop the deprecated flags.
+To migrate, add the entries from the table below to your OCM configuration (for
+example `.ocmconfig` in your working directory, which is merged with your other
+configuration files) and drop the deprecated flags.
 
 The following table shows what each deprecated flag combination translates to:
 
@@ -56,7 +50,7 @@ The following table shows what each deprecated flag combination translates to:
 | `--copy-resources` | `- type: localblob.uploader.transfer.config.ocm.software/v1alpha1` |
 | `--copy-resources --upload-as ociArtifact` | `- type: oci.uploader.transfer.config.ocm.software/v1alpha1` then `- type: localblob.uploader.transfer.config.ocm.software/v1alpha1` |
 | `--upload-as ociArtifact` | `- type: oci.uploader.transfer.config.ocm.software/v1alpha1` with `match: 'target.type == "OCIRepository" && resource.access.isType("LocalBlob") && has(resource.access.mediaType) && isOCIManifest(resource.access.mediaType) && has(resource.access.referenceName)'` |
-| `--upload-as localBlob`, `--copy-resources=false` | nothing (the CLI logs that they have no effect) |
+| `--upload-as localBlob`, `--copy-resources=false` | nothing |
 
 `--copy-resources=false` used to override `copyMode: allResources` from a
 config. It has no effect now: a flag cannot remove uploader entries configured in
@@ -436,26 +430,6 @@ imageReference: >-
 {{< /details >}}
 
 ## Troubleshooting
-
-### Symptom: deprecation warning for `--copy-resources` or `--upload-as`
-
-**Cause:** The `--upload-as` (or `--copy-resources`) flag is deprecated. The
-transfer still runs with the translated uploaders (see
-[Deprecated flags](#deprecated-flags)).
-
-**Fix:** Copy the entries from the `config` attribute in the logged warning into
-`.ocmconfig` in your working directory (or add them to your existing OCM
-configuration) and drop the deprecated flags. The warning includes the
-equivalent OCM configuration as one-line JSON. For example:
-
-```text
-level=WARN msg="--copy-resources and --upload-as are deprecated: replace them with the OCM configuration in the config attribute (JSON is valid YAML): add its entries to your OCM configuration, e.g. in ./.ocmconfig, which is merged with your other configuration files (--config would replace them)" config="{\"configurations\":[{\"type\":\"localblob.uploader.transfer.config.ocm.software/v1alpha1\"}],\"type\":\"generic.config.ocm.software/v1\"}"
-```
-
-Add the uploader entries from the JSON value to the `configurations` list of your
-`.ocmconfig` in the working directory, keeping everything already in it (for
-example credentials, signing keys or resolvers). Create `.ocmconfig` with the JSON
-value only if it does not exist yet. The CLI picks it up automatically.
 
 ### Symptom: `unknown field "uploadType"`
 

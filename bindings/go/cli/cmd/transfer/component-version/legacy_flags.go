@@ -1,12 +1,9 @@
 package component_version
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"slices"
-	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -18,8 +15,7 @@ import (
 )
 
 // Deprecated flags kept for backwards compatibility. They are translated into uploader
-// entries of the OCM configuration (see legacyUploaderEntries); using them logs the
-// generated configuration so it can replace the flags.
+// entries of the OCM configuration (see legacyUploaderEntries).
 //
 // TODO(legacy-flags): remove this file and every TODO(legacy-flags) test with the flags.
 const (
@@ -36,9 +32,9 @@ const (
 const legacyOCIArtifactLocalBlobMatch = `target.type == "OCIRepository" && resource.access.isType("LocalBlob") && has(resource.access.mediaType) && isOCIManifest(resource.access.mediaType) && has(resource.access.referenceName)`
 
 func registerLegacyFlags(flags *pflag.FlagSet) {
-	flags.Bool(FlagCopyResources, false, "deprecated: copy all resources in the component version (logs the equivalent OCM configuration to use instead)")
+	flags.Bool(FlagCopyResources, false, "deprecated: copy all resources in the component version")
 	enum.VarP(flags, FlagUploadAs, "u", []string{uploadAsLocalBlob, uploadAsOCIArtifact},
-		"deprecated: define whether copied resources should be uploaded as OCI artifacts (logs the equivalent OCM configuration to use instead)")
+		"deprecated: define whether copied resources should be uploaded as OCI artifacts")
 }
 
 // legacyUploaderEntries translates the deprecated flags into uploader configuration
@@ -69,10 +65,9 @@ func legacyUploaderEntries(copyResources bool, uploadAs string) []map[string]any
 
 // withLegacyFlagUploaders returns a copy of cfg whose configurations are cfg's entries
 // followed by the entries translated from the deprecated --copy-resources and --upload-as
-// flags (last, like the catch-all --copy-resources used to append). When flags translate
-// to entries, it logs a warning with the generated configuration to use instead. cfg is
-// not modified; a nil cfg counts as empty.
-func withLegacyFlagUploaders(ctx context.Context, cmd *cobra.Command, cfg *genericv1.Config) (*genericv1.Config, error) {
+// flags (last, like the catch-all --copy-resources used to append). cfg is not modified;
+// a nil cfg counts as empty.
+func withLegacyFlagUploaders(cmd *cobra.Command, cfg *genericv1.Config) (*genericv1.Config, error) {
 	copyResources, err := cmd.Flags().GetBool(FlagCopyResources)
 	if err != nil {
 		return nil, fmt.Errorf("getting %s flag failed: %w", FlagCopyResources, err)
@@ -85,24 +80,8 @@ func withLegacyFlagUploaders(ctx context.Context, cmd *cobra.Command, cfg *gener
 	}
 	entries := legacyUploaderEntries(copyResources, uploadAs)
 	if len(entries) == 0 {
-		if cmd.Flags().Changed(FlagCopyResources) || cmd.Flags().Changed(FlagUploadAs) {
-			slog.WarnContext(ctx, fmt.Sprintf("--%s and --%s are deprecated and have no effect with these values; remove them", FlagCopyResources, FlagUploadAs))
-		}
 		return cfg, nil
 	}
-
-	// Without HTML escaping, && in match expressions stays readable for copy and paste.
-	var generated strings.Builder
-	enc := json.NewEncoder(&generated)
-	enc.SetEscapeHTML(false)
-	if err := enc.Encode(map[string]any{
-		"type":           runtime.NewVersionedType(genericv1.ConfigType, genericv1.Version).String(),
-		"configurations": entries,
-	}); err != nil {
-		return nil, err
-	}
-	slog.WarnContext(ctx, fmt.Sprintf("--%s and --%s are deprecated: replace them with the OCM configuration in the config attribute (JSON is valid YAML): add its entries to your OCM configuration, e.g. in ./.ocmconfig, which is merged with your other configuration files (--config would replace them)", FlagCopyResources, FlagUploadAs),
-		"config", strings.TrimSpace(generated.String()))
 
 	out := &genericv1.Config{}
 	if cfg != nil {

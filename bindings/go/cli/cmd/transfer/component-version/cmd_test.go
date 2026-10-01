@@ -729,7 +729,7 @@ func setupOCIImageTransferFixture(t *testing.T) (fromRef string, targetArg strin
 
 // TestTransferUploaderConfig verifies that uploader entries of the OCM configuration
 // select resources, and that the deprecated --copy-resources/--upload-as flags are
-// translated into uploader entries appended after them, logging the generated configuration.
+// translated into uploader entries appended after them.
 func TestTransferUploaderConfig(t *testing.T) {
 	fromRef, targetArg := setupOCIImageTransferFixture(t)
 
@@ -744,11 +744,6 @@ func TestTransferUploaderConfig(t *testing.T) {
 	ociAndLocalBlobConfig := writeConfig(t, "  - type: oci.uploader.transfer.config.ocm.software/v1alpha1\n  - type: localblob.uploader.transfer.config.ocm.software/v1alpha1\n")
 	httpWithoutMatchConfig := writeConfig(t, "  - type: http.uploader.transfer.config.ocm.software/v1alpha1\n    targetURL: https://example.com\n")
 
-	const (
-		localBlobOnly   = `{"configurations":[{"type":"localblob.uploader.transfer.config.ocm.software/v1alpha1"}],"type":"generic.config.ocm.software/v1"}`
-		ociAndLocalBlob = `{"configurations":[{"type":"oci.uploader.transfer.config.ocm.software/v1alpha1"},{"type":"localblob.uploader.transfer.config.ocm.software/v1alpha1"}],"type":"generic.config.ocm.software/v1"}`
-	)
-
 	for _, tc := range []struct {
 		name string
 		args []string
@@ -756,9 +751,7 @@ func TestTransferUploaderConfig(t *testing.T) {
 		target      string
 		contains    []string
 		notContains []string
-		// wantConfig is the generated configuration the deprecation warning must carry.
-		wantConfig string
-		wantErr    string
+		wantErr     string
 	}{
 		{
 			name:        "oci config alone does not select an image for a CTF target",
@@ -777,16 +770,14 @@ func TestTransferUploaderConfig(t *testing.T) {
 		},
 		// TODO(legacy-flags): deprecated flag cases; remove together with legacy_flags.go.
 		{
-			name:       "deprecated --copy-resources copies the image and logs the generated config",
-			args:       []string{"--copy-resources"},
-			contains:   []string{"GetOCIArtifact", "CTFAddLocalResource"},
-			wantConfig: localBlobOnly,
+			name:     "deprecated --copy-resources copies the image like a local blob uploader",
+			args:     []string{"--copy-resources"},
+			contains: []string{"GetOCIArtifact", "CTFAddLocalResource"},
 		},
 		{
 			name:        "deprecated --copy-resources comes after configured uploaders",
 			args:        []string{"--config", referenceConfig, "--copy-resources"},
 			notContains: []string{"GetOCIArtifact"},
-			wantConfig:  localBlobOnly,
 		},
 		{
 			name:        "deprecated --upload-as ociArtifact alone keeps an OCI image by reference",
@@ -795,11 +786,10 @@ func TestTransferUploaderConfig(t *testing.T) {
 			notContains: []string{"TransferOCIArtifact", "GetOCIArtifact"},
 		},
 		{
-			name:       "deprecated --copy-resources --upload-as ociArtifact uploads an OCI image as an artifact",
-			args:       []string{"--copy-resources", "--upload-as", "ociArtifact"},
-			target:     "ghcr.io/target-org/ocm",
-			contains:   []string{"TransferOCIArtifact"},
-			wantConfig: ociAndLocalBlob,
+			name:     "deprecated --copy-resources --upload-as ociArtifact uploads an OCI image as an artifact",
+			args:     []string{"--copy-resources", "--upload-as", "ociArtifact"},
+			target:   "ghcr.io/target-org/ocm",
+			contains: []string{"TransferOCIArtifact"},
 		},
 		{
 			name:    "deprecated --upload-as rejects unknown values",
@@ -810,7 +800,6 @@ func TestTransferUploaderConfig(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
 			result := new(bytes.Buffer)
-			logs := test.NewJSONLogReader()
 			target := targetArg
 			if tc.target != "" {
 				target = tc.target
@@ -819,7 +808,7 @@ func TestTransferUploaderConfig(t *testing.T) {
 			_, err := test.OCM(t,
 				test.WithArgs(args...),
 				test.WithOutput(result),
-				test.WithErrorOutput(logs),
+				test.WithErrorOutput(test.NewJSONLogReader()),
 			)
 			if tc.wantErr != "" {
 				r.ErrorContains(err, tc.wantErr)
@@ -832,17 +821,6 @@ func TestTransferUploaderConfig(t *testing.T) {
 			}
 			for _, s := range tc.notContains {
 				r.NotContains(out, s)
-			}
-			if tc.wantConfig != "" {
-				entries, err := logs.List()
-				r.NoError(err)
-				var configs []any
-				for _, e := range entries {
-					if e.Level == "WARN" && strings.Contains(e.Msg, "deprecated") {
-						configs = append(configs, e.Extras["config"])
-					}
-				}
-				r.Equal([]any{tc.wantConfig}, configs, "exactly one deprecation warning carrying the generated config")
 			}
 		})
 	}

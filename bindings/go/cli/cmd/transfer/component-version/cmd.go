@@ -73,9 +73,8 @@ reference.uploader.transfer.config.ocm.software/v1alpha1 (keep by reference). Ea
 resources with a CEL match expression over resource and target (test access types with
 resource.access.isType("OCIImage"), which resolves aliases and versions); the first uploader
 whose match is true handles the resource. The deprecated --copy-resources and --upload-as flags
-still work: they are translated into uploader entries appended after the configured ones, and
-the generated configuration is logged so it can replace them (see the "Migrate from
---upload-as to Uploader Configurations" guide on ocm.software). --recursive walks the
+still work: they are translated into uploader entries appended after the configured ones (see
+the "Migrate from --upload-as to Uploader Configurations" guide on ocm.software). --recursive walks the
 component's references and transfers them too.
 
 Driving defaults from the OCM configuration:
@@ -428,7 +427,7 @@ func buildGraphDefinitionFromArgs(
 		transferCfg = &transferv1alpha1.Config{}
 	}
 
-	uploaderSource, err := withLegacyFlagUploaders(ctx, cmd, cfg)
+	uploaderSource, err := withLegacyFlagUploaders(cmd, cfg)
 	if err != nil {
 		return nil, err
 	}
