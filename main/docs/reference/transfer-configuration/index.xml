@@ -19,41 +19,18 @@ behaviour. All fields are optional; when omitted they resolve to their defaults.
 					&lt;td&gt;&lt;code&gt;0&lt;/code&gt; (no recursion)&lt;/td&gt;
 					&lt;td&gt;&lt;code&gt;-1&lt;/code&gt; transfers the whole reference tree; &lt;code&gt;0&lt;/code&gt; transfers only the named version.&lt;/td&gt;
 			&lt;/tr&gt;
-			&lt;tr&gt;
-					&lt;td&gt;&lt;code&gt;copyMode&lt;/code&gt;&lt;/td&gt;
-					&lt;td&gt;enum&lt;/td&gt;
-					&lt;td&gt;&lt;code&gt;localBlob&lt;/code&gt;&lt;/td&gt;
-					&lt;td&gt;Which resources are copied. See &lt;a href="#copy-mode"&gt;Copy Mode&lt;/a&gt;.&lt;/td&gt;
-			&lt;/tr&gt;
-			&lt;tr&gt;
-					&lt;td&gt;&lt;code&gt;uploadType&lt;/code&gt;&lt;/td&gt;
-					&lt;td&gt;enum&lt;/td&gt;
-					&lt;td&gt;&lt;code&gt;localBlob&lt;/code&gt;&lt;/td&gt;
-					&lt;td&gt;How copied resources are stored in the target. See &lt;a href="#upload-type"&gt;Upload Type&lt;/a&gt;.&lt;/td&gt;
-			&lt;/tr&gt;
 	&lt;/tbody&gt;
-&lt;/table&gt;
-&lt;h3 id="copy-mode"&gt;Copy Mode&lt;/h3&gt;
-&lt;table&gt;
-	&lt;thead&gt;
-			&lt;tr&gt;
-					&lt;th&gt;Value&lt;/th&gt;
-					&lt;th&gt;Meaning&lt;/th&gt;
-			&lt;/tr&gt;
-	&lt;/thead&gt;
-	&lt;tbody&gt;
-			&lt;tr&gt;
-					&lt;td&gt;&lt;code&gt;localBlob&lt;/code&gt;&lt;/td&gt;
-					&lt;td&gt;Copy only resources already stored as local blobs. External resources keep their original access and are not fetched.&lt;/td&gt;
-			&lt;/tr&gt;
-			&lt;tr&gt;
-					&lt;td&gt;&lt;code&gt;allResources&lt;/code&gt;&lt;/td&gt;
-					&lt;td&gt;Fetch every external resource and re-upload it to the target. Equivalent to the CLI &lt;code&gt;--copy-resources&lt;/code&gt; flag.&lt;/td&gt;
-			&lt;/tr&gt;
-	&lt;/tbody&gt;
-&lt;/table&gt;
-&lt;h3 id="upload-type"&gt;Upload Type&lt;/h3&gt;
-&lt;p&gt;Only relevant when a resource is being copied.&lt;/p&gt;</description></item><item><title>HTTP Uploader</title><link>https://ocm.software/main/docs/reference/transfer-configuration/http-uploader/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/main/docs/reference/transfer-configuration/http-uploader/</guid><description>&lt;p&gt;Streams a matched resource&amp;rsquo;s content directly to an HTTP endpoint (typically a
+&lt;/table&gt;</description></item><item><title>OCI Uploader</title><link>https://ocm.software/main/docs/reference/transfer-configuration/oci-uploader/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/main/docs/reference/transfer-configuration/oci-uploader/</guid><description>&lt;p&gt;Uploads a selected resource as a separate OCI artifact in the target registry.
+The resource is stored independently from the component version, making it
+directly addressable and pullable with standard OCI tools.&lt;/p&gt;</description></item><item><title>Local Blob Uploader</title><link>https://ocm.software/main/docs/reference/transfer-configuration/local-blob-uploader/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/main/docs/reference/transfer-configuration/local-blob-uploader/</guid><description>&lt;p&gt;Downloads a selected resource and embeds it in the target as a local blob. This
+is the same operation the baseline applies to local blobs, extended to any
+supported access type: OCI images are fetched via &lt;code&gt;GetOCIArtifact&lt;/code&gt;, Helm charts
+converted to OCI via &lt;code&gt;GetHelmChart&lt;/code&gt; → &lt;code&gt;ConvertHelmToOCI&lt;/code&gt;, and wget, S3 and
+GitHub resources are downloaded through their access-specific downloaders.&lt;/p&gt;</description></item><item><title>Reference Uploader</title><link>https://ocm.software/main/docs/reference/transfer-configuration/reference-uploader/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/main/docs/reference/transfer-configuration/reference-uploader/</guid><description>&lt;p&gt;Keeps a selected resource by reference: no transformation is applied and the
+resource&amp;rsquo;s access is unchanged in the target. This is the same as what the
+baseline does for non-local-blob resources, but expressed as an explicit uploader
+entry so it can be placed before a catch-all to exclude specific resources from
+copying.&lt;/p&gt;</description></item><item><title>HTTP Uploader</title><link>https://ocm.software/main/docs/reference/transfer-configuration/http-uploader/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/main/docs/reference/transfer-configuration/http-uploader/</guid><description>&lt;p&gt;Streams a matched resource&amp;rsquo;s content directly to an HTTP endpoint (typically a
 &lt;code&gt;PUT&lt;/code&gt; upload) and rewrites the resource to a &lt;code&gt;Wget/v1&lt;/code&gt; access pointing at the
 uploaded location. The &lt;strong&gt;source&lt;/strong&gt; may be any access type (wget, OCI, S3, GitHub,
 …) — its content is fetched through the access-type-specific downloader; only the
@@ -66,13 +43,20 @@ repository type, see
 &lt;a href="https://ocm.software/main/docs/how-to/vendor-specific-apis/jfrog-artifactory/"&gt;JFrog Artifactory&lt;/a&gt;.&lt;/p&gt;</description></item><item><title>Sonatype Nexus Uploader</title><link>https://ocm.software/main/docs/reference/transfer-configuration/sonatype-nexus-uploader/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/main/docs/reference/transfer-configuration/sonatype-nexus-uploader/</guid><description>&lt;p&gt;Uploads a matched resource into a hosted repository of a Sonatype Nexus
 Repository 3 server, the way the repository&amp;rsquo;s format expects. For step-by-step
 guides per repository type, see
-&lt;a href="https://ocm.software/main/docs/how-to/vendor-specific-apis/sonatype-nexus/"&gt;Sonatype Nexus&lt;/a&gt;.&lt;/p&gt;</description></item><item><title>CEL Expressions</title><link>https://ocm.software/main/docs/reference/transfer-configuration/cel-expressions/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/main/docs/reference/transfer-configuration/cel-expressions/</guid><description>&lt;p&gt;&lt;code&gt;targetURL&lt;/code&gt;, every &lt;code&gt;header&lt;/code&gt; value and the &lt;code&gt;path&lt;/code&gt; of the Artifactory and Nexus uploaders are
-&lt;a href="https://cel.dev/" target="_blank" rel="noopener"&gt;CEL&lt;/a&gt; expressions — the same expression language the transfer
-graph uses to resolve every other field. A CEL value &lt;strong&gt;must be wrapped in &lt;code&gt;${…}&lt;/code&gt;&lt;/strong&gt;,
-matching how every other CEL field is written in the transfer graph. It is
-evaluated against the source resource, exposed under the &lt;code&gt;resource&lt;/code&gt; alias, and its
-component, exposed under the &lt;code&gt;component&lt;/code&gt; alias, and resolved by the transfer
-runtime, so the produced plan is deterministic. CEL string concatenation (&lt;code&gt;+&lt;/code&gt;),
-conditionals (&lt;code&gt;cond ? a : b&lt;/code&gt;), and comparisons are all available. Append any static
-query string inside the expression. (A value with no &lt;code&gt;${…}&lt;/code&gt; is a plain literal and
-is used verbatim.)&lt;/p&gt;</description></item></channel></rss>
+&lt;a href="https://ocm.software/main/docs/how-to/vendor-specific-apis/sonatype-nexus/"&gt;Sonatype Nexus&lt;/a&gt;.&lt;/p&gt;</description></item><item><title>CEL Expressions</title><link>https://ocm.software/main/docs/reference/transfer-configuration/cel-expressions/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/main/docs/reference/transfer-configuration/cel-expressions/</guid><description>&lt;p&gt;Uploader fields use two forms of &lt;a href="https://cel.dev/" target="_blank" rel="noopener"&gt;CEL&lt;/a&gt; expressions:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;match&lt;/code&gt;&lt;/strong&gt; is a plain CEL boolean expression (no &lt;code&gt;${…}&lt;/code&gt; wrapper). It is
+evaluated once per resource while the transfer graph is built.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;targetURL&lt;/code&gt;&lt;/strong&gt;, every &lt;strong&gt;&lt;code&gt;header&lt;/code&gt;&lt;/strong&gt; value, the &lt;strong&gt;&lt;code&gt;path&lt;/code&gt;&lt;/strong&gt; of the Artifactory
+and Nexus uploaders, and the &lt;strong&gt;&lt;code&gt;imageReference&lt;/code&gt;&lt;/strong&gt; of the OCI uploader are CEL
+templates: a CEL value &lt;strong&gt;must be wrapped in &lt;code&gt;${…}&lt;/code&gt;&lt;/strong&gt;. A value with no &lt;code&gt;${…}&lt;/code&gt;
+is a plain literal and is used verbatim.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;All expressions are evaluated against the source resource and resolved by the
+transfer runtime, so the produced plan is deterministic. CEL string concatenation
+(&lt;code&gt;+&lt;/code&gt;), conditionals (&lt;code&gt;cond ? a : b&lt;/code&gt;), and comparisons are all available.&lt;/p&gt;</description></item><item><title>Selection Examples</title><link>https://ocm.software/main/docs/reference/transfer-configuration/selection-examples/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://ocm.software/main/docs/reference/transfer-configuration/selection-examples/</guid><description>&lt;p&gt;The following examples are executed as tests (&lt;code&gt;TestUploaderExamples&lt;/code&gt; in
+&lt;code&gt;bindings/go/transfer/internal&lt;/code&gt;), so each outcome below is what the transfer
+does. They all transfer the component &lt;code&gt;ocm.software/demo:1.0.0&lt;/code&gt; and, unless
+stated otherwise, target the OCI registry &lt;code&gt;ghcr.io/target-org/ocm&lt;/code&gt;
+(&lt;code&gt;baseUrl: ghcr.io/target-org/ocm&lt;/code&gt;, &lt;code&gt;subPath: &amp;quot;&amp;quot;&lt;/code&gt;). The component has these
+resources:&lt;/p&gt;</description></item></channel></rss>
