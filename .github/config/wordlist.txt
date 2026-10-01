@@ -12,6 +12,7 @@ addociartifact
 addversion
 adr
 adrs
+aes
 agentic
 aggregative
 agpl
@@ -77,6 +78,7 @@ canonicalized
 calver
 cas
 ccwienk
+cavp
 cel
 centos
 certificateidentity
@@ -103,6 +105,7 @@ clusterroles
 clyso
 cmds
 cncf
+cmvp
 coc
 codebase
 codeowners
@@ -214,6 +217,7 @@ directorytree
 dirs
 dirtree
 discoverability
+disa
 discoverable
 distroless
 dl
@@ -233,11 +237,13 @@ downloaders
 downloadhandlers
 dpop
 dry-run
+drbg
 dsl
 dup
 dups
 dynaml
 ecdsa
+ecdhe
 echoserver
 ecrplugin
 elementmeta
@@ -248,6 +254,7 @@ env
 envtest
 eol
 etcd
+esv
 etcd's
 executables
 executoroptions
@@ -265,6 +272,7 @@ filesytem
 finalizer
 finalizers
 fixup
+fips
 florian
 fluxcd
 fluxcd's
@@ -285,6 +293,7 @@ gapped
 gav
 gc
 genericocireg
+gcm
 gerald
 gergely
 gethelmchart
@@ -444,6 +453,7 @@ linters
 lister
 listers
 llm
+liveness
 localblob
 localblobs
 localhost
@@ -513,6 +523,7 @@ newrepository
 newrepositoryspec
 niclas
 nixos
+nist
 noop
 npm
 npm's
@@ -722,6 +733,8 @@ semver
 sequent
 serializable
 serviceaccountname
+setgid
+setuid
 sexualized
 sha
 shortcode
@@ -753,6 +766,8 @@ socio
 sonatype
 sourceref
 spdx
+stig
+stigs
 syft
 src
 srcrefs

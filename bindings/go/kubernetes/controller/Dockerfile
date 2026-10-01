@@ -22,6 +22,9 @@ COPY . .
 # GO_TAGS is empty by default; pass GO_TAGS=pprof to get a debug image that
 # serves profiles on --pprof-bind-address.
 ARG GO_TAGS=""
+# Go Cryptographic Module version (FIPS 140-3). Required; the source of truth is
+# GOFIPS140 in the project root .env, passed in by `task docker-build/multi-arch`.
+ARG GOFIPS140
 # the GOARCH has not a default value to allow the binary be built according to the host where the command
 # was called. For example, if we call task docker-build in a local env which has the Apple Silicon M1 SO
 # the docker BUILDPLATFORM arg will be linux/arm64 when for Apple x86 it will be linux/amd64. Therefore,
@@ -34,7 +37,7 @@ ARG GO_TAGS=""
 # rebuilding the entire standard library on every build.
 RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked \
     --mount=type=cache,target=/root/.cache/go-build,sharing=locked \
-    CGO_ENABLED=0 GOFIPS140=v1.26.0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -tags "${GO_TAGS}" -o manager ./kubernetes/controller/cmd
+    CGO_ENABLED=0 GOFIPS140="${GOFIPS140:?GOFIPS140 build arg is required, see root .env}" GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -tags "${GO_TAGS}" -o manager ./kubernetes/controller/cmd
 
 # Garden Linux FIPS base image; the binary embeds the frozen Go FIPS 140-3 module (GOFIPS140).
 FROM --platform=${TARGETPLATFORM} ghcr.io/gardenlinux/gardenlinux/fips:1877.25@sha256:74ae1f81d0723434024f591d8c2872852201b99b9f18c0fbe10221b16e60e01d AS base

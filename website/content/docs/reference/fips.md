@@ -210,4 +210,8 @@ build does. Run this from `bindings/go`:
 CGO_ENABLED=0 GOFIPS140=v1.26.0 go build -o ocm ./cli
 ```
 
-`task bindings/go/cli:build` already sets these flags.
+The module version is pinned once, as `GOFIPS140` in the repository's root
+`.env`. `task bindings/go/cli:build`, the controller image build
+(`task docker-build/multi-arch`), and the `bindings/go` test tasks all read it
+from there. The controller `Dockerfile` refuses to build without the
+`GOFIPS140` build argument.
