@@ -562,8 +562,8 @@ Two differences need attention:
 
 - **Scheme.** OCM v1 read `github.com/org/repo` as a remote repository. OCM v2 reads it as a local directory, so
   add the scheme. scp-style SSH addresses such as `git@github.com:org/repo.git` are unaffected.
-- **Credentials.** The consumer identity type is still `Git`. Use `path`, which supports glob patterns, instead of the
-  OCM v1 `pathprefix` attribute. See
+- **Credentials.** The consumer identity type is still `Git`, but the OCM v1 `pathprefix` attribute is gone. Use
+  `path`, which supports glob patterns. See
   [Credential Consumer Identities: Git]({{< relref "credential-consumer-identities.md" >}}#git).
 
 ### `File/v1alpha1`

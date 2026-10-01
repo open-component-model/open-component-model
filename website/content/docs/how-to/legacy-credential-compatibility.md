@@ -9,7 +9,7 @@ toc: true
 
 ## Goal
 
-Update a legacy OCM `.ocmconfig` file to use modern field names and optional typed credentials. Most fields work unchanged in the new OCM; this guide covers the renamed field (`pathprefix` → `path`) and the optional migration to typed credentials.
+Update a legacy OCM `.ocmconfig` file to use modern field names and optional typed credentials. Most fields work unchanged in the new OCM; this guide covers the one renamed field (`pathprefix` → `path`) and the optional migration to typed credentials.
 
 {{< callout context="caution" >}}
 `HashiCorpVault/v1`, `GardenerConfig/v1`, and `NPMConfig/v1` are not yet available in the new OCM. If you rely on these,
@@ -50,29 +50,23 @@ The following steps walk you through each change needed to make this config work
 {{< steps >}}
 
 {{< step >}}
-**Change `pathprefix` to `path` with a glob pattern (recommended)**
+**Change `pathprefix` to `path` with a glob pattern**
 
-The field for matching repository paths was renamed from `pathprefix` to `path`. The new OCM still reads `pathprefix`:
-it converts `pathprefix: open-component-model` into `path: "{open-component-model,open-component-model/**}"`, which
-matches the same paths as before, and logs a warning. To drop the warning, write the pattern yourself:
+The field for matching repository paths was renamed from `pathprefix` to `path`. Because `pathprefix` matched any path
+starting with the given prefix, you need to append a glob pattern (`/*`) to preserve the same matching behavior:
 
 ```yaml
     consumers:
       - identity:
           type: OCIRegistry
           hostname: ghcr.io
-          path: "{open-component-model,open-component-model/**}"  # was: pathprefix: open-component-model
+          path: open-component-model/*  # was: pathprefix: open-component-model
 ```
 
-Quote the pattern: unquoted, YAML reads `{…}` as a mapping.
-
 {{< callout context="note" >}}
-`path` does **not** do prefix matching — `path: open-component-model` only matches the exact path
-`open-component-model`, not `open-component-model/my-repo`. `open-component-model/**` matches any depth below the
-prefix but not `open-component-model` itself, and `open-component-model/*` matches a single segment. `{a,b}` matches
-either `a` or `b`. Legacy OCM picked
-the entry with the longest matching `pathprefix`; the new OCM does not rank matching entries, so avoid overlapping
-entries with different credentials.
+`path` does **not** do prefix matching — `path: open-component-model` would only match the exact path
+`open-component-model`, not `open-component-model/my-repo`. Use `open-component-model/*` to match any single segment
+after the prefix, or `open-component-model/*/*` for two levels.
 {{< /callout >}}
 
 {{< /step >}}
@@ -160,8 +154,8 @@ If you get `unknown credential repository type`, you may be using a repository t
 `HashiCorpVault/v1`, `NPMConfig/v1`, `GardenerConfig/v1`). Remove the unsupported entry or stay on legacy OCM until
 support is added.
 
-If you get `401 Unauthorized`, check the `path` and `pathprefix` values of your consumer entries. Both are compared with
-whole path segments: `pathprefix: org/repo` does not match `org/repo.git`.
+If you get `401 Unauthorized`, check that you renamed `pathprefix` → `path` (with a glob pattern) in all consumer
+entries.
 
 {{< /step >}}
 
