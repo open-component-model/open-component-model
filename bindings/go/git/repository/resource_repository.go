@@ -2,7 +2,6 @@ package repository
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -109,8 +108,8 @@ func (r *ResourceRepository) GetResourceCredentialConsumerIdentity(_ context.Con
 }
 
 // DownloadResource returns the archive of the resolved commit. It is backed by a
-// file under the configured TempFolder. The returned blob implements io.Closer;
-// the caller must close it after closing all readers to remove the archive.
+// file under the configured TempFolder, which outlives this call and is owned by
+// the caller.
 func (r *ResourceRepository) DownloadResource(ctx context.Context, res *descriptor.Resource, creds runtime.Typed) (blob.ReadOnlyBlob, error) {
 	spec, err := accessFrom(res)
 	if err != nil {
@@ -140,7 +139,7 @@ func (r *ResourceRepository) download(ctx context.Context, spec *accessv1.Git, e
 	}
 
 	if err := verifyDigest(expected, result.Digest); err != nil {
-		return nil, errors.Join(err, result.Blob.Close())
+		return nil, err
 	}
 
 	return result, nil
@@ -177,12 +176,6 @@ func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, res *des
 	if err != nil {
 		return nil, err
 	}
-
-	defer func() {
-		if closeErr := downloaded.Blob.Close(); closeErr != nil {
-			slog.WarnContext(ctx, "failed to remove git archive after digest processing", "err", closeErr)
-		}
-	}()
 
 	// A set commit is authoritative, only a ref-only access gets pinned.
 	if spec.Commit == "" {

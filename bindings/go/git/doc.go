@@ -15,9 +15,8 @@
 //	}
 //
 // The archive is streamed to TempFolder (the OS temporary directory by default).
-// Its file outlives the call; callers must close the returned blob (io.Closer)
-// after closing all readers to remove it. Temporary Git storage is removed.
-// Upload is not supported. WithMaxArchiveSize caps the compressed output,
+// Its file outlives the call and belongs to the caller; temporary Git storage is
+// removed. Upload is not supported. WithMaxArchiveSize caps the compressed output,
 // not the preceding clone or fetch; by default it is unlimited.
 //
 // # Constructor input

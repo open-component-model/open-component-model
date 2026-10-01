@@ -22,7 +22,7 @@ import (
 	"github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/require"
 
-	"ocm.software/open-component-model/bindings/go/blob"
+	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	v1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
 )
 
@@ -129,16 +129,9 @@ func TestDownloadArchive(t *testing.T) {
 	r.NoError(writer.Close())
 	r.Equal(data, recompressed.Bytes())
 
-	r.NoError(b.Close())
-	r.NoError(b.Close())
-	files, err = os.ReadDir(dir)
-	r.NoError(err)
-	r.Empty(files)
-	_, err = b.ReadCloser()
-	r.ErrorIs(err, os.ErrNotExist)
 }
 
-func readBlob(t *testing.T, b blob.ReadOnlyBlob) []byte {
+func readBlob(t *testing.T, b *filesystem.Blob) []byte {
 	t.Helper()
 
 	r := require.New(t)

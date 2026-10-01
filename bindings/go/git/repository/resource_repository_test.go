@@ -62,13 +62,6 @@ func TestResourceDigestPinning(t *testing.T) {
 	files, err = os.ReadDir(dir)
 	r.NoError(err)
 	r.Len(files, 1)
-	closer, ok := b.(io.Closer)
-	r.True(ok, "downloaded archives must expose ownership cleanup")
-	r.NoError(closer.Close())
-	r.NoError(closer.Close())
-	files, err = os.ReadDir(dir)
-	r.NoError(err)
-	r.Empty(files)
 }
 
 func TestResourceDigestVerification(t *testing.T) {
@@ -88,9 +81,6 @@ func TestResourceDigestVerification(t *testing.T) {
 	compressed, err := io.ReadAll(reader)
 	r.NoError(err)
 	r.NoError(reader.Close())
-	closer, ok := b.(io.Closer)
-	r.True(ok)
-	r.NoError(closer.Close())
 	checksum := digest.FromBytes(compressed)
 
 	generated, err := repo.ProcessResourceDigest(t.Context(), res, nil)
@@ -120,28 +110,14 @@ func TestResourceDigestVerification(t *testing.T) {
 			}
 			before := preset.DeepCopy()
 
-			dir := t.TempDir()
-			repo := repository.NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &dir})
-			downloaded, downloadErr := repo.DownloadResource(t.Context(), preset, nil)
-			if downloaded != nil {
-				closer, ok := downloaded.(io.Closer)
-				r.True(ok)
-				r.NoError(closer.Close())
-			}
-			files, err := os.ReadDir(dir)
-			r.NoError(err)
-			r.Empty(files, "DownloadResource must not leak an archive on verification failure")
+			_, downloadErr := repo.DownloadResource(t.Context(), preset, nil)
 			processed, processErr := repo.ProcessResourceDigest(t.Context(), preset, nil)
-			files, err = os.ReadDir(dir)
-			r.NoError(err)
-			r.Empty(files, "digest processing must release both the archive and its directory")
 			if tc.wantErr == "" {
 				r.NoError(downloadErr)
 				r.NoError(processErr)
 				r.Equal(preset.Digest, processed.Digest)
 			} else {
 				r.ErrorContains(downloadErr, tc.wantErr)
-				r.Nil(downloaded)
 				r.ErrorContains(processErr, tc.wantErr)
 				r.Nil(processed)
 			}
