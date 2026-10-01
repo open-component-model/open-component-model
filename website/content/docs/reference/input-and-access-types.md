@@ -28,6 +28,8 @@ Embeds a directory as a tar archive.
 
 {{< schema-renderer url="/schemas/bindings/go/input/dir/v1/Dir.schema.json" >}}
 
+**Example**
+
 ```yaml
 resources:
 - name: deploy-manifests
@@ -44,6 +46,8 @@ resources:
 Embeds a single file.
 
 {{< schema-renderer url="/schemas/bindings/go/input/file/v1/File.schema.json" >}}
+
+**Example**
 
 ```yaml
 resources:
@@ -77,6 +81,8 @@ Embeds a Helm chart from the local filesystem or a remote repository. Exactly on
 specified.
 
 {{< schema-renderer url="/schemas/bindings/go/input/helm/v1/Helm.schema.json" >}}
+
+**Example**
 
 ```yaml
 # Local chart
@@ -112,6 +118,8 @@ Embeds inline text or structured data. Exactly one of `text`, `json`, `formatted
 
 {{< schema-renderer url="/schemas/bindings/go/input/utf8/v1/UTF8.schema.json" >}}
 
+**Example**
+
 ```yaml
 resources:
 - name: config-data
@@ -142,6 +150,8 @@ control. Configure authentication through the
 [credential system]({{< relref "credential-consumer-identities.md" >}}#wget) instead, which keeps secrets in
 `.ocmconfig` and out of the artifacts you publish.
 {{< /callout >}}
+
+**Example**
 
 ```yaml
 resources:
@@ -223,6 +233,8 @@ same object by value or by reference. Input types remain v2-only: even the unver
 
 {{< schema-renderer url="/schemas/bindings/go/input/s3/v2/S3.schema.json" >}}
 
+**Example**
+
 ```yaml
 resources:
   - name: reference-dataset
@@ -282,6 +294,8 @@ download.
 If you set neither `ref` nor `commit`, OCM archives the commit that the repository's `HEAD` points to, usually the default
 branch. The result then changes when the branch moves. Set `commit` for a reproducible build.
 
+**Example**
+
 ```yaml
 resources:
   - name: source-snapshot
@@ -315,6 +329,8 @@ References an OCI artifact (image or image index) in a registry. This is the can
 
 {{< schema-renderer url="/schemas/bindings/go/access/oci/v1/OCIImage.schema.json" >}}
 
+**Example**
+
 ```yaml
 resources:
   - name: app-image
@@ -335,6 +351,8 @@ When stored in an OCI registry, local blobs with OCI-native media types (e.g. `a
 
 {{< schema-renderer url="/schemas/bindings/go/access/localblob/v1/LocalBlob.schema.json" >}}
 
+**Example**
+
 ```yaml
 resources:
   - name: data
@@ -351,6 +369,8 @@ resources:
 References a single blob (layer) in an OCI repository by digest. Legacy alias: `ociBlob`.
 
 {{< schema-renderer url="/schemas/bindings/go/access/oci/v1/OCIImageLayer.schema.json" >}}
+
+**Example**
 
 ```yaml
 resources:
@@ -371,6 +391,8 @@ resources:
 References a Helm chart in a Helm chart repository or OCI registry. Legacy alias: `helm`.
 
 {{< schema-renderer url="/schemas/bindings/go/access/helm/v1/Helm.schema.json" >}}
+
+**Example**
 
 ```yaml
 resources:
@@ -401,6 +423,8 @@ REST API. Also usable unversioned as `GitHub`. Legacy aliases: `github`, `github
 At least one of `commit` or `ref` must be set. A resource may be authored with only a
 `ref`; its `commit` is pinned later during digest processing. A source is never pinned, so
 give it a `commit`.
+
+**Example**
 
 ```yaml
 resources:
@@ -438,6 +462,8 @@ Bitbucket and self-hosted servers, over HTTPS or SSH.
 
 At least one of `commit` or `ref` must be set. A resource may have only a `ref`. OCM adds the `commit` during digest
 processing. A source never goes through digest processing, so set its `commit` yourself.
+
+**Example**
 
 ```yaml
 resources:
@@ -505,6 +531,8 @@ References a file by URI ([RFC 8089](https://datatracker.ietf.org/doc/html/rfc80
 
 {{< schema-renderer url="/schemas/bindings/go/access/file/v1alpha1/File.schema.json" >}}
 
+**Example**
+
 ```yaml
 resources:
   - name: readme
@@ -545,6 +573,8 @@ component version. Configure authentication through the
 [credential system]({{< relref "credential-consumer-identities.md" >}}#wget) instead. Credentials are resolved at
 request time from `.ocmconfig` and never become part of the component version.
 {{< /callout >}}
+
+**Example**
 
 ```yaml
 resources:
@@ -589,6 +619,8 @@ Records containing fields from both formats are rejected as ambiguous. See
 [Migrating from OCM v1](#s3-migration-from-ocm-v1). The schema below describes the v2 fields.
 
 {{< schema-renderer url="/schemas/bindings/go/access/s3/v2/S3.schema.json" >}}
+
+**Example**
 
 ```yaml
 resources:
