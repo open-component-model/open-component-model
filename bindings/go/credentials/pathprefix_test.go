@@ -40,6 +40,8 @@ func TestIngestLegacyPathPrefix(t *testing.T) {
 		{"bang class is literal", "a/[!b]", "a/c", false},
 		{"question mark is literal", "a/b?", "a/bc", false},
 		{"backslash is literal", `a/b\c`, `a/b\c`, true},
+		{"comma is literal", "a/b,c", "a/b,c/d", true},
+		{"comma does not split the prefix", "a/b,c", "a/b", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
