@@ -20,6 +20,7 @@ import (
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	"ocm.software/open-component-model/bindings/go/wget/httpauth"
 	"ocm.software/open-component-model/bindings/go/wget/internal/download"
 	wgetaccessv1 "ocm.software/open-component-model/bindings/go/wget/spec/access/v1"
 	identityv1 "ocm.software/open-component-model/bindings/go/wget/spec/identity/v1"
@@ -145,7 +146,7 @@ func (t *HTTPStreamingTransformer) Transform(ctx context.Context, step runtime.T
 	if tw.NoRedirect {
 		client = download.CloneClientWithNoRedirect(client)
 	}
-	if err := download.ApplyCredentials(ctx, req, &client, dstCreds); err != nil {
+	if err := httpauth.Apply(ctx, req, &client, dstCreds); err != nil {
 		return nil, fmt.Errorf("failed applying target credentials: %w", err)
 	}
 

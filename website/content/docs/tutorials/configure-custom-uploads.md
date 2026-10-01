@@ -91,7 +91,7 @@ conditionals. The uploader is not limited to
 wget sources: every field of the source access is exposed under
 `resource.access.<field>` (e.g. `resource.access.imageReference` for an OCI
 source), so you can route any access type to an HTTP target — see the
-[Transfer Configuration reference]({{< relref "docs/reference/transfer-configuration.md" >}}#cel-expressions).
+[Transfer Configuration reference]({{< relref "docs/reference/transfer-configuration/cel-expressions.md" >}}).
 
 {{< callout context="note" title="Why copyMode: allResources" >}}
 An uploader only applies to a resource that transfer actually processes. A `Wget/v1`
@@ -131,7 +131,7 @@ every matched resource has one.
 OCM algorithm name (e.g. `SHA-256`). `contentDigestAlgorithm()` maps that name to the
 RFC 9530 field key (`sha-256`), and `base64.encode(hex.decode(...))` converts the hex
 digest to the base64 value RFC 9530 expects — see the
-[Templating Headers reference]({{< relref "docs/reference/transfer-configuration.md" >}}#templating-headers).
+[Templating Headers reference]({{< relref "docs/reference/transfer-configuration/http-uploader.md" >}}#templating-headers).
 
 {{< /step >}}
 
@@ -150,13 +150,14 @@ identity, independently of the source resource:
           type: Wget
           hostname: mytarget.example.com
         credentials:
-          - type: WgetCredentials/v1
-            username: uploader
-            password: <token>
+          - type: Credentials/v1
+            properties:
+              username: uploader
+              password: <token>
 ```
 
 Add this entry to the `configurations` list in `ocmconfig.yaml`. See
-[`WgetCredentials/v1`]({{< relref "docs/reference/credential-types.md#wgetcredentialsv1" >}}) and
+[Credential Types]({{< relref "docs/reference/credential-types.md" >}}) and
 [Credential Consumer Identities]({{< relref "docs/reference/credential-consumer-identities.md" >}})
 for details.
 
@@ -263,6 +264,27 @@ field fails the transfer deliberately rather than producing a partial URL.
 **Fix:** Add a `credentials.config.ocm.software` consumer with `type: Wget` and the
 target `hostname`, as in Step 2.
 
+### Problem: The transfer succeeds but nothing is uploaded
+
+**Symptom:** The resource is stored as `LocalBlob/v1` in the target and the log
+warns `uploader matched no resource`.
+
+**Cause:** `match.accessType` names the access the resource would get in the
+target (such as `LocalBlob/v1`) instead of its access in the source component
+version.
+
+**Fix:** Check the source with `ocm get cv <source> -o yaml` and set
+`match.accessType` to the resource's `access.type` there, for example
+`OCIImage/v1` for an `ociArtifact` access.
+
+## Upload to JFrog Artifactory or Sonatype Nexus
+
+To upload into Artifactory or Nexus repositories, use the vendor uploaders instead
+of the HTTP uploader. They detect the repository type (Helm, Maven, npm, generic or
+raw) through the server API and publish an access consumers can use with their own
+tools. See
+[Using Vendor-Specific APIs]({{< relref "docs/how-to/vendor-specific-apis/_index.md" >}}).
+
 ## Next steps
 
 - [How-to: Transfer Helm Charts with OCM]({{< relref "docs/how-to/transfer-helm-charts.md" >}})
@@ -270,6 +292,6 @@ target `hostname`, as in Step 2.
 
 ## Related documentation
 
-- [Reference: Transfer Configuration]({{< relref "docs/reference/transfer-configuration.md" >}}) — full field reference for transfer and uploader configuration
+- [Reference: Transfer Configuration]({{< relref "docs/reference/transfer-configuration/_index.md" >}}) — full field reference for transfer and uploader configuration
 - [Concept: Transfer and Transport]({{< relref "docs/concepts/transfer-concept.md" >}}) — how OCM moves component versions between repositories
 - [Tutorial: Working with HTTP Resources]({{< relref "docs/tutorials/wget-http-resources.md" >}}) — the `Wget/v1` type produced by the uploader
