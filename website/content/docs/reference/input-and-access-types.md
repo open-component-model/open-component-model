@@ -286,8 +286,8 @@ Use this input type when the source code must travel with the component version.
 [`Git/v1` access type]({{< relref "input-and-access-types.md#gitv1-access" >}}) is the alternative: it leaves the code in the repository and reads it on every
 download.
 
-`Git/v1` is the canonical type name. OCM also accepts `Git`, and the OCM v1 names `git`, `git/v1alpha1` and
-`Git/v1alpha1`. The fields are the same as the fields of the access type.
+`Git/v1` is the canonical type name. OCM also accepts `Git`, and the OCM v1 names `git` and `git/v1`. The fields are
+the same as the fields of the access type.
 
 {{< schema-renderer url="/schemas/bindings/go/input/git/v1/Git.schema.json" >}}
 
