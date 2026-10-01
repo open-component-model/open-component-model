@@ -67,7 +67,7 @@ func newGitFixture(t *testing.T) (path, first string) {
 }
 
 // assertGitArchiveAtFirstCommit checks that data is the archive of the fixture's
-// first commit, not of the newer main branch.
+// first commit, not of main, which already points at the second one.
 func assertGitArchiveAtFirstCommit(t *testing.T, data []byte) {
 	t.Helper()
 	r := require.New(t)
@@ -81,7 +81,7 @@ func assertGitArchiveAtFirstCommit(t *testing.T, data []byte) {
 	r.Equal("README.md", header.Name)
 	content, err := io.ReadAll(tr)
 	r.NoError(err)
-	r.Equal("first\n", string(content), "commit must take precedence over the newer main branch")
+	r.Equal("first\n", string(content), "the archive must hold the pinned commit, not main")
 	_, err = tr.Next()
 	r.ErrorIs(err, io.EOF)
 }
@@ -136,13 +136,9 @@ func Test_Integration_Transfer_Git(t *testing.T) {
 		resourceVersion  = "v1.0.0"
 	)
 
-	// gitConstructor renders a constructor holding one Git resource on main,
-	// optionally pinned to commit.
-	gitConstructor := func(commit string) string {
-		pin := ""
-		if commit != "" {
-			pin = "\n      commit: " + commit
-		}
+	// gitConstructor renders a constructor holding one Git resource, selected by
+	// pinField — "commit" or "ref".
+	gitConstructor := func(pinField, pinValue string) string {
 		return fmt.Sprintf(`components:
 - name: %[1]s
   version: %[2]s
@@ -156,8 +152,8 @@ func Test_Integration_Transfer_Git(t *testing.T) {
     access:
       type: Git/v1
       repository: %[5]q
-      ref: refs/heads/main%[6]s
-`, componentName, componentVersion, resourceName, resourceVersion, gitPath, pin)
+      %[6]s: %[7]s
+`, componentName, componentVersion, resourceName, resourceVersion, gitPath, pinField, pinValue)
 	}
 
 	// addToCTF adds the constructor to a CTF in its own directory and returns the
@@ -207,7 +203,7 @@ func Test_Integration_Transfer_Git(t *testing.T) {
 	// 2. Build a source CTF with one commit-pinned Git resource. Digest
 	//    processing archives the commit to hash it, giving the resource the
 	//    digest the transfer must preserve.
-	ctfRef, sourceCTF := addToCTF(t, gitConstructor(commit))
+	ctfRef, sourceCTF := addToCTF(t, gitConstructor("commit", commit))
 
 	sourceRepo, err := createRepo(ctx, repoProvider, credentialResolver, &ctfv1.Repository{FilePath: sourceCTF})
 	r.NoError(err, "should be able to open the source CTF")
@@ -280,7 +276,7 @@ func Test_Integration_Transfer_Git(t *testing.T) {
 
 		// Skip digest processing so the stored access keeps only its ref —
 		// pinning it to a commit is exactly that processor's job.
-		refOnlyRef, _ := addToCTF(t, gitConstructor(""), "--skip-reference-digest-processing")
+		refOnlyRef, _ := addToCTF(t, gitConstructor("ref", "refs/heads/main"), "--skip-reference-digest-processing")
 
 		_, err := runTransfer(t, refOnlyRef, "git-transfer-refonly", "--copy-resources")
 		r.Error(err, "transferring a ref-only Git resource must fail")
