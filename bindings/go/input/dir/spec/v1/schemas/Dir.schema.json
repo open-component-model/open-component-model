@@ -12,7 +12,7 @@
     },
     "excludeFiles": {
       "type": "array",
-      "description": "ExcludeFiles is a list of file name patterns to exclude from addition to the resulting blob.\nExcluded files always override included files.",
+      "description": "ExcludeFiles is a list of file name patterns to exclude from addition to the resulting blob.\nExcluded files always override included files.\nPatterns use filepath.Match syntax (no **) and are matched against paths\nrelative to Path.",
       "items": {
         "type": "string"
       }
@@ -23,7 +23,7 @@
     },
     "includeFiles": {
       "type": "array",
-      "description": "IncludeFiles is a list of file name patterns to exclusively add to the resulting blob.",
+      "description": "IncludeFiles is a list of file name patterns to exclusively add to the resulting blob.\nPatterns use filepath.Match syntax (no **) and are matched against paths\nrelative to Path.",
       "items": {
         "type": "string"
       }
@@ -42,7 +42,7 @@
     },
     "reproducible": {
       "type": "boolean",
-      "description": "Reproducible defines that the attributes of the included files have to be normalized.\nThis is important if reproducible generation of blobs is required. In this case the blobs\nneed to be comparable on byte level (e.g. for hashing). So, if Reproducible is set to true,\nto get fully byte-equivalent blobs despite different file modification time, permission bits, etc.,\nthese attributes will be set to fixed values while creating the blob."
+      "description": "Reproducible defines that the attributes of the included files have to be normalized.\nThis is important if reproducible generation of blobs is required. In this case the blobs\nneed to be comparable on byte level (e.g. for hashing). So, if Reproducible is set to true,\nto get fully byte-equivalent blobs despite different file modification time, permission bits, etc.,\nthese attributes will be set to fixed values while creating the blob.\nRecommended when signing, so that rebuilding the component version yields the same digest."
     },
     "type": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",
