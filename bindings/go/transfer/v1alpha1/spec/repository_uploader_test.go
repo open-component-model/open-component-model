@@ -14,7 +14,7 @@ import (
 // repositoryUploader holds the fields the Artifactory and Nexus uploader configs share.
 type repositoryUploader struct {
 	typ                   runtime.Type
-	match                 spec.UploaderMatch
+	match                 string
 	url, repository, path string
 }
 
@@ -23,10 +23,10 @@ var repositoryUploaderKinds = []struct {
 	new func(u repositoryUploader) spec.UploaderConfig
 }{
 	{spec.ArtifactoryUploaderConfigType, func(u repositoryUploader) spec.UploaderConfig {
-		return &spec.ArtifactoryUploaderConfig{Type: u.typ, MatchSpec: u.match, URL: u.url, Repository: u.repository, Path: u.path}
+		return &spec.ArtifactoryUploaderConfig{Type: u.typ, Match: u.match, URL: u.url, Repository: u.repository, Path: u.path}
 	}},
 	{spec.NexusUploaderConfigType, func(u repositoryUploader) spec.UploaderConfig {
-		return &spec.NexusUploaderConfig{Type: u.typ, MatchSpec: u.match, URL: u.url, Repository: u.repository, Path: u.path}
+		return &spec.NexusUploaderConfig{Type: u.typ, Match: u.match, URL: u.url, Repository: u.repository, Path: u.path}
 	}},
 }
 
@@ -40,7 +40,7 @@ func TestRepositoryUploaderConfig_Validate(t *testing.T) {
 		{name: "wrong type", mutate: func(u *repositoryUploader) {
 			u.typ = runtime.NewVersionedType(spec.HTTPUploaderConfigType, spec.Version)
 		}, wantErr: "invalid type"},
-		{name: "missing accessType", mutate: func(u *repositoryUploader) { u.match.AccessType = runtime.Type{} }, wantErr: "match.accessType is required"},
+		{name: "missing match", mutate: func(u *repositoryUploader) { u.match = " " }, wantErr: "match is required"},
 		{name: "missing url", mutate: func(u *repositoryUploader) { u.url = "" }, wantErr: "url is required"},
 		{name: "scheme-less url", mutate: func(u *repositoryUploader) { u.url = "repo.example.com" }, wantErr: "url must be an absolute http or https URL"},
 		{name: "url with query", mutate: func(u *repositoryUploader) { u.url = "https://repo.example.com?x=1" }, wantErr: "url must not carry a query or fragment"},
@@ -54,12 +54,12 @@ func TestRepositoryUploaderConfig_Validate(t *testing.T) {
 				r := require.New(t)
 				u := repositoryUploader{
 					typ:        runtime.NewVersionedType(kind.typ, spec.Version),
-					match:      spec.UploaderMatch{AccessType: runtime.NewVersionedType("Helm", "v1")},
+					match:      `resource.access.isType("Helm/v1")`,
 					url:        "https://repo.example.com",
 					repository: "helm-local",
 				}
 				tt.mutate(&u)
-				err := kind.new(u).Validate()
+				err := kind.new(u).(runtime.Validatable).Validate()
 				if tt.wantErr == "" {
 					r.NoError(err)
 					return
@@ -77,17 +77,14 @@ func TestLookupUploaderConfigs_RepositoryUploaders(t *testing.T) {
 type: generic.config.ocm.software/v1
 configurations:
   - type: http.uploader.transfer.config.ocm.software/v1alpha1
-    match:
-      accessType: Wget/v1
+    match: resource.access.isType("Wget/v1")
     targetURL: '${"https://target.example/" + resource.name}'
   - type: artifactory.uploader.transfer.config.ocm.software/v1alpha1
-    match:
-      accessType: Helm/v1
+    match: resource.access.isType("Helm/v1")
     url: https://artifactory.example.com
     repository: helm-local
   - type: nexus.uploader.transfer.config.ocm.software/v1alpha1
-    match:
-      accessType: Helm/v1
+    match: resource.access.isType("Helm/v1")
     url: https://nexus.example.com
     repository: helm-hosted
 `), &generic))
@@ -98,13 +95,13 @@ configurations:
 	r.IsType(&spec.HTTPUploaderConfig{}, uploaders[0])
 	r.Equal(&spec.ArtifactoryUploaderConfig{
 		Type:       runtime.NewVersionedType(spec.ArtifactoryUploaderConfigType, spec.Version),
-		MatchSpec:  spec.UploaderMatch{AccessType: runtime.NewVersionedType("Helm", "v1")},
+		Match:      `resource.access.isType("Helm/v1")`,
 		URL:        "https://artifactory.example.com",
 		Repository: "helm-local",
 	}, uploaders[1])
 	r.Equal(&spec.NexusUploaderConfig{
 		Type:       runtime.NewVersionedType(spec.NexusUploaderConfigType, spec.Version),
-		MatchSpec:  spec.UploaderMatch{AccessType: runtime.NewVersionedType("Helm", "v1")},
+		Match:      `resource.access.isType("Helm/v1")`,
 		URL:        "https://nexus.example.com",
 		Repository: "helm-hosted",
 	}, uploaders[2])

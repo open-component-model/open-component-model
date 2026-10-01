@@ -176,7 +176,7 @@ func TestGenerate_MapAliasAdditionalProperties(t *testing.T) {
 
 func TestGenerate_StructPropertiesAndRequired(t *testing.T) {
 	u := universe.New()
-	// build a struct with two fields: FieldA (no omitempty) and FieldB (omitempty)
+	// build a struct with FieldA (required), FieldB (omitempty) and FieldC (omitzero)
 	fieldA := &ast.Field{
 		Names: []*ast.Ident{{Name: "FieldA"}},
 		Type:  &ast.Ident{Name: "string"},
@@ -186,7 +186,12 @@ func TestGenerate_StructPropertiesAndRequired(t *testing.T) {
 		Type:  &ast.Ident{Name: "int"},
 		Tag:   &ast.BasicLit{Value: "`json:\"fieldB,omitempty\"`"},
 	}
-	st := &ast.StructType{Fields: &ast.FieldList{List: []*ast.Field{fieldA, fieldB}}}
+	fieldC := &ast.Field{
+		Names: []*ast.Ident{{Name: "FieldC"}},
+		Type:  &ast.Ident{Name: "string"},
+		Tag:   &ast.BasicLit{Value: "`json:\"fieldC,omitzero\"`"},
+	}
+	st := &ast.StructType{Fields: &ast.FieldList{List: []*ast.Field{fieldA, fieldB, fieldC}}}
 
 	root := mkTypeInfo("example.com/pkg", "MyStruct", nil, st)
 	u.Types[root.Key] = root
@@ -201,9 +206,10 @@ func TestGenerate_StructPropertiesAndRequired(t *testing.T) {
 	require.True(t, okA)
 	require.True(t, okB)
 
-	// Required should only include FieldA (since FieldB has omitempty)
+	// Required should only include FieldA (fieldB has omitempty, fieldC has omitzero)
 	require.Contains(t, s.Required, "FieldA")
 	require.NotContains(t, s.Required, "fieldB")
+	require.NotContains(t, s.Required, "fieldC")
 }
 
 func TestGenerate_MixedFieldTypes(t *testing.T) {

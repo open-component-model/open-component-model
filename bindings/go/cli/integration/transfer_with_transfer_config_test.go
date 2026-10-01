@@ -52,18 +52,30 @@ func writeOCMConfigWithCredsAndTransfer(t *testing.T, regs []internal.ConfigOpts
 	return cfgPath
 }
 
-// Test_Integration_TransferWithTransferConfig_FileDrivesCopyMode proves that
-// `copyMode: allResources` set purely as a transfer.config.ocm.software/v1alpha1
-// entry in the central OCM configuration (no flags) actually reaches the
-// transfer engine.
+// writeOCIUploaderConfig writes an OCM config holding a single
+// oci.uploader.transfer.config.ocm.software/v1alpha1 entry (default image references),
+// the replacement for the former
+// `--upload-as ociArtifact`. --config may be repeated, so it merges with the
+// credentials config.
+func writeOCIUploaderConfig(t *testing.T) string {
+	t.Helper()
+	cfgPath := filepath.Join(t.TempDir(), "oci-uploader.yaml")
+	require.NoError(t, os.WriteFile(cfgPath, []byte(
+		"type: generic.config.ocm.software/v1\nconfigurations:\n- type: oci.uploader.transfer.config.ocm.software/v1alpha1\n"), 0o600))
+	return cfgPath
+}
+
+// Test_Integration_TransferWithTransferConfig_FileDrivesLocalBlobUploader proves that
+// a `localblob.uploader.transfer.config.ocm.software/v1alpha1` entry set purely in the
+// central OCM configuration (no --copy-resources flag) actually reaches the transfer engine.
 //
 // The signal: a source component has an external `OCIImage` access pointing at
-// the source registry. With the default `copyMode: localBlob`, the access stays
+// the source registry. Without the local blob uploader, the access stays
 // untouched in the target descriptor (it would still point at the source
-// registry). With `copyMode: allResources`, the resource is fetched and re-stored
+// registry). With the uploader, the resource is fetched and re-stored
 // as a `LocalBlob` in the target. The assertion fails if the entry is silently
 // dropped.
-func Test_Integration_TransferWithTransferConfig_FileDrivesCopyMode(t *testing.T) {
+func Test_Integration_TransferWithTransferConfig_FileDrivesLocalBlobUploader(t *testing.T) {
 	ctx := t.Context()
 	r := require.New(t)
 	t.Parallel()
@@ -74,21 +86,19 @@ func Test_Integration_TransferWithTransferConfig_FileDrivesCopyMode(t *testing.T
 	targetRegistry, err := internal.CreateOCIRegistry(t)
 	r.NoError(err, "should be able to start target registry container")
 
-	// Drive copyMode purely from the central OCM config. No --copy-resources flag.
+	// Drive the local blob uploader purely from the central OCM config. No --copy-resources flag.
 	cfgPath := writeOCMConfigWithCredsAndTransfer(t, []internal.ConfigOpts{
 		{Host: sourceRegistry.Host, Port: sourceRegistry.Port, User: sourceRegistry.User, Password: sourceRegistry.Password},
 		{Host: targetRegistry.Host, Port: targetRegistry.Port, User: targetRegistry.User, Password: targetRegistry.Password},
-	}, `- type: transfer.config.ocm.software/v1alpha1
-  copyMode: allResources
-  uploadType: localBlob`)
+	}, `- type: localblob.uploader.transfer.config.ocm.software/v1alpha1`)
 
-	componentName := "ocm.software/transfer-config-copymode-test"
+	componentName := "ocm.software/transfer-config-localblob-uploader-test"
 	componentVersion := "v1.0.0"
 
 	// Push an OCI image to the source registry and build a CTF component that
 	// references it via OCIImage access.
-	originalData := []byte("transfer-config copyMode payload")
-	imageData := internal.CreateSingleLayerOCIImageLayoutTar(t, originalData, "ghcr.io/transfer-config-copymode:v1.0.0").Bytes()
+	originalData := []byte("transfer-config local blob uploader payload")
+	imageData := internal.CreateSingleLayerOCIImageLayoutTar(t, originalData, "ghcr.io/transfer-config-localblob:v1.0.0").Bytes()
 
 	resource := descriptor.Resource{
 		ElementMeta: descriptor.ElementMeta{
@@ -97,7 +107,7 @@ func Test_Integration_TransferWithTransferConfig_FileDrivesCopyMode(t *testing.T
 		Type: "ociArtifact",
 		Access: &v1.OCIImage{
 			Type:           ocmruntime.Type{Name: "ociArtifact", Version: "v1"},
-			ImageReference: fmt.Sprintf("http://%s", sourceRegistry.Reference("transfer-config-copymode:v1.0.0")),
+			ImageReference: fmt.Sprintf("http://%s", sourceRegistry.Reference("transfer-config-localblob:v1.0.0")),
 		},
 	}
 
@@ -164,11 +174,11 @@ components:
 	gotAccess := desc.Component.Resources[0].Access
 	r.NotNil(gotAccess, "resource access must not be nil")
 
-	// The whole point of the test: with localBlob copyMode (the default), this
+	// The whole point of the test: without the local blob uploader (the baseline), this
 	// would still be OCIImage pointing at the source registry. With the central
-	// config's allResources honored, the resource was fetched and re-stored locally.
+	// config's uploader honored, the resource was fetched and re-stored locally.
 	r.Equal(v2.LocalBlobAccessType, gotAccess.GetType().Name,
-		"resource access must be LocalBlob: copyMode: allResources from the OCM config was not honored")
+		"resource access must be LocalBlob: local blob uploader from the OCM config was not honored")
 }
 
 // Test_Integration_TransferWithTransferConfig_FlagOverridesFileRecursion
@@ -288,15 +298,14 @@ components:
 	r.Equal(childComponent, childDesc.Component.Name)
 }
 
-// Test_Integration_TransferWithTransferConfig_InvalidValueRejected ensures the
-// LookupConfig Validate() pass rejects bogus enum values cleanly instead of
-// letting them flow through to the graph builder. Pre-flight failure is the
-// whole point of having a typed wire format.
-func Test_Integration_TransferWithTransferConfig_InvalidValueRejected(t *testing.T) {
+// Test_Integration_TransferWithTransferConfig_StaleCopyModeRejected ensures that
+// a stale `copyMode` field in the transfer config is rejected cleanly by strict
+// decoding before the transfer starts.
+func Test_Integration_TransferWithTransferConfig_StaleCopyModeRejected(t *testing.T) {
 	r := require.New(t)
 	t.Parallel()
 
-	componentName := "ocm.software/transfer-config-invalid-test"
+	componentName := "ocm.software/transfer-config-stale-copymode-test"
 	componentVersion := "v1.0.0"
 
 	registry, err := internal.CreateOCIRegistry(t)
@@ -306,7 +315,7 @@ func Test_Integration_TransferWithTransferConfig_InvalidValueRejected(t *testing
 		Host: registry.Host, Port: registry.Port,
 		User: registry.User, Password: registry.Password,
 	}}, `- type: transfer.config.ocm.software/v1alpha1
-  copyMode: notAValidMode`)
+  copyMode: allResources`)
 
 	sourceRef := createSourceCTF(t, componentName, componentVersion)
 	targetRef := fmt.Sprintf("http://%s", registry.RegistryAddress)
@@ -322,6 +331,6 @@ func Test_Integration_TransferWithTransferConfig_InvalidValueRejected(t *testing
 	defer cancel()
 
 	err = transferCMD.ExecuteContext(ctx)
-	r.Error(err, "invalid copyMode in transfer config should fail before transfer starts")
-	r.Contains(err.Error(), "invalid copyMode", "error should identify the invalid field")
+	r.Error(err, "stale copyMode in transfer config should fail before transfer starts")
+	r.Contains(err.Error(), `unknown field "copyMode"`, "error should identify the stale field")
 }

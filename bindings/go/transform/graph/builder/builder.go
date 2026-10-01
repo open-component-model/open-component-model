@@ -22,6 +22,7 @@ type Builder struct {
 	events       chan graphRuntime.ProgressEvent
 	buildEvents  chan graphRuntime.ProgressEvent
 	concurrency  int
+	envOptions   []cel.EnvOption
 }
 
 func NewBuilder(scheme *runtime.Scheme) *Builder {
@@ -67,6 +68,7 @@ func (b *Builder) BuildAndCheck(original *v1alpha1.TransformationGraphDefinition
 	if err != nil {
 		return nil, err
 	}
+	builder.RegisterEnvOption(b.envOptions...)
 	env, _, err := builder.CurrentEnv()
 	if err != nil {
 		return nil, err
@@ -194,6 +196,13 @@ func (p *progressProcessor) ProcessValue(ctx context.Context, transformation gra
 	}
 	p.events <- graphRuntime.ProgressEvent{Transformation: t, State: graphRuntime.Completed}
 	return nil
+}
+
+// WithEnvOptions registers additional CEL environment options (e.g. custom functions)
+// for every expression in the graph, both during static analysis and evaluation.
+func (b *Builder) WithEnvOptions(opts ...cel.EnvOption) *Builder {
+	b.envOptions = append(b.envOptions, opts...)
+	return b
 }
 
 // Events returns the channel where progress events are sent during Process().
