@@ -111,7 +111,7 @@ tasks:
       - tmp/resources/ocm-{{ .GOOS }}-{{ .GOARCH }}.yaml
     cmds:
       - cmd: |
-          CGO_ENABLED=0 GOOS={{ .GOOS }} GOARCH={{ .GOARCH }} go build \
+          CGO_ENABLED=0 GOFIPS140=v1.26.0 GOOS={{ .GOOS }} GOARCH={{ .GOARCH }} go build \
             -ldflags "-s -w -X ocm.software/open-component-model/bindings/go/cli/cmd/version.BuildVersion={{ .BUILD_VERSION }}" \
             -o {{ .TASKFILE_DIR }}/tmp/bin/ocm-{{ .GOOS }}-{{ .GOARCH }}
       - |

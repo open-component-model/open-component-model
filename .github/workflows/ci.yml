@@ -187,6 +187,8 @@ jobs:
     runs-on: ubuntu-24.04-arm
     if: ${{ needs.changes.outputs.run_go == 'true' }}
     env:
+      # Test against the same frozen Go Cryptographic Module the release artifacts ship.
+      GOFIPS140: v1.26.0
       # All packages of one `go test ./...` share a single testcontainers reaper, which
       # reaps and removes itself 10s after the last package disconnects — the next package
       # then blocks 60s on the removed container and fails. Outlive the suite instead.
@@ -241,6 +243,9 @@ jobs:
     needs: changes
     runs-on: ubuntu-24.04-arm
     if: ${{ needs.changes.outputs.run_go == 'true' }}
+    env:
+      # Test against the same frozen Go Cryptographic Module the release artifacts ship.
+      GOFIPS140: v1.26.0
     steps:
       - name: Install Task
         uses: arduino/setup-task@c0bc642852239c2689f73f4ea6459c29405f3c52 # v3.0.0

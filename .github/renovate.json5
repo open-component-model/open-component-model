@@ -55,6 +55,14 @@
       ],
     },
     {
+      // Garden Linux FIPS base image (CLI + controller). Only follow the
+      // multi-arch `<major>.<patch>` tags, not the per-arch `amd64-*`/`arm64-*` ones.
+      matchDatasources: ['docker'],
+      matchPackageNames: ['ghcr.io/gardenlinux/gardenlinux/fips'],
+      allowedVersions: '/^\\d+\\.\\d+$/',
+      versioning: 'loose',
+    },
+    {
       matchUpdateTypes: ['minor','patch'],
       automerge: true,
     },
