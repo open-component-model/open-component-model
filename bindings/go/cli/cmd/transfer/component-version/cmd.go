@@ -2,6 +2,7 @@ package component_version
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -20,12 +21,15 @@ import (
 	"ocm.software/open-component-model/bindings/go/cli/internal/render/progress"
 	"ocm.software/open-component-model/bindings/go/cli/internal/render/progress/bar"
 	"ocm.software/open-component-model/bindings/go/cli/internal/repository/ocm"
+	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	versioningspec "ocm.software/open-component-model/bindings/go/configuration/versioning/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/oci/compref"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
+	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
+	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/transfer"
 	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
 	graphPkg "ocm.software/open-component-model/bindings/go/transform/graph"
@@ -60,8 +64,10 @@ a target repository using an internally generated transformation graph.
 
 When a version is included in the source reference, exactly that version is transferred.
 When the version is omitted, all versions of the component are discovered and transferred.
+When the source is a repository reference (without a component), every component version
+the repository contains is transferred (component listing is currently CTF-only).
 Use --constraint to restrict which versions are selected, and --latest to transfer
-only the newest matching version.
+only the newest matching version. Both apply per component.
 
 OCI, CTF, and Helm repositories are supported as transfer sources.
 OCI and CTF repositories are supported as transfer targets, while Helm repositories are not supported.
@@ -103,6 +109,10 @@ transfer component-version ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.
 
 # Transfer all versions of a component (omit version from reference)
 transfer component-version ctf::./my-archive//ocm.software/mycomponent ghcr.io/my-org/ocm
+
+# Transfer every component version contained in a CTF archive (repository reference as source)
+transfer component-version ./my-archive ghcr.io/my-org/ocm
+transfer component-version ctf::./my-archive ghcr.io/my-org/ocm
 
 # Transfer all versions matching a version constraint
 transfer component-version ctf::./my-archive//ocm.software/mycomponent ghcr.io/my-org/ocm --constraint ">= 1.0.0, < 2.0.0"
@@ -396,18 +406,10 @@ func buildGraphDefinitionFromArgs(
 		return nil, fmt.Errorf("source component reference and target repository spec are required as positional arguments")
 	}
 
-	fromSpec, compErr := compref.Parse(args[0], compref.IgnoreSemverCompatibility())
-	if compErr != nil {
-		return nil, fmt.Errorf("invalid source component reference: %w", compErr)
-	}
-
-	repoProvider, err := ocm.NewComponentRepositoryResolver(
-		ctx, pm.ComponentVersionRepositoryRegistry, credGraph, ocm.WithConfig(cfg), ocm.WithComponentRef(fromSpec),
-	)
+	fromSpec, repoProvider, sourceComponents, err := resolveSource(ctx, args[0], pm, credGraph, cfg, resolutionEvents)
 	if err != nil {
-		return nil, fmt.Errorf("could not initialize ocm repositoryProvider: %w", err)
+		return nil, err
 	}
-	repoProvider = &resolutionProgressResolver{ComponentVersionRepositoryResolver: repoProvider, events: resolutionEvents}
 
 	toSpec, err := compref.ParseRepository(args[1],
 		compref.WithCTFAccessMode(ctfv1.AccessModeReadWrite+"|"+ctfv1.AccessModeCreate),
@@ -461,55 +463,9 @@ func buildGraphDefinitionFromArgs(
 		transferCfg.UploadType = transferv1alpha1.UploadType(uploadAs)
 	}
 
-	constraint, err := cmd.Flags().GetString(FlagConstraint)
+	componentIDs, err := collectComponentIDs(ctx, cmd, cfg, repoProvider, fromSpec, sourceComponents)
 	if err != nil {
-		return nil, fmt.Errorf("getting constraint flag failed: %w", err)
-	}
-	latestOnly, err := cmd.Flags().GetBool(FlagLatest)
-	if err != nil {
-		return nil, fmt.Errorf("getting latest flag failed: %w", err)
-	}
-
-	var componentIDs []transfer.ComponentID
-	if fromSpec.Version != "" {
-		if cmd.Flags().Changed(FlagConstraint) {
-			slog.WarnContext(ctx, fmt.Sprintf("--%s has no effect when a version is already specified in the reference", FlagConstraint))
-		}
-		if cmd.Flags().Changed(FlagLatest) {
-			slog.WarnContext(ctx, fmt.Sprintf("--%s has no effect when a version is already specified in the reference", FlagLatest))
-		}
-		componentIDs = []transfer.ComponentID{{Component: fromSpec.Component, Version: fromSpec.Version}}
-	} else {
-		repo, err := repoProvider.GetComponentVersionRepositoryForComponent(ctx, fromSpec.Component, "")
-		if err != nil {
-			return nil, fmt.Errorf("could not access ocm repository: %w", err)
-		}
-		registry, err := versioningspec.RegistryFromConfig(cfg)
-		if err != nil {
-			return nil, fmt.Errorf("could not build versioning registry: %w", err)
-		}
-		versions, err := ocm.VersionsWithFiltering(ctx, fromSpec.Component, repo, ocm.VersionOptions{
-			SemverConstraint: constraint,
-			LatestOnly:       latestOnly,
-			Registry:         registry,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("listing and filtering component versions failed: %w", err)
-		}
-		if len(versions) == 0 {
-			msg := fmt.Sprintf("no versions found for component %q", fromSpec.Component)
-			if constraint != "" {
-				msg += fmt.Sprintf(" matching constraint %q", constraint)
-			}
-			if latestOnly {
-				msg += " (latest only)"
-			}
-			return nil, errors.New(msg)
-		}
-		componentIDs = make([]transfer.ComponentID, len(versions))
-		for i, v := range versions {
-			componentIDs[i] = transfer.ComponentID{Component: fromSpec.Component, Version: v}
-		}
+		return nil, err
 	}
 
 	tgd, err := transfer.BuildGraphDefinition(ctx, transferCfg, uploaderCfgs,
@@ -524,6 +480,154 @@ func buildGraphDefinitionFromArgs(
 	}
 
 	return tgd, nil
+}
+
+// resolveSource parses the source as a component reference or, as a fallback, a
+// repository reference. A repository reference transfers every component version it
+// contains. The returned sourceComponents is nil for a component reference and holds
+// the discovered component names otherwise.
+func resolveSource(
+	ctx context.Context,
+	source string,
+	pm *manager.PluginManager,
+	credGraph credentials.Resolver,
+	cfg *genericv1.Config,
+	resolutionEvents chan<- resolutionEvent,
+) (fromSpec *compref.Ref, repoProvider resolvers.ComponentVersionRepositoryResolver, sourceComponents []string, err error) {
+	fromSpec, compErr := compref.Parse(source, compref.IgnoreSemverCompatibility())
+
+	var sourceRepository runtime.Typed
+	if compErr != nil {
+		repo, repoErr := compref.ParseRepository(source)
+		if repoErr != nil {
+			return nil, nil, nil, fmt.Errorf("invalid source reference: must be either a component reference or a repository reference: %w", errors.Join(compErr, repoErr))
+		}
+		sourceRepository = repo
+	}
+
+	resolverOpts := []ocm.RepositoryResolverOption{ocm.WithConfig(cfg)}
+	if sourceRepository != nil {
+		// Component names must be discovered before the resolver is built so they can
+		// be registered as high-priority patterns for the source repository.
+		if sourceComponents, err = listComponentsFromRepository(ctx, pm, sourceRepository); err != nil {
+			return nil, nil, nil, fmt.Errorf("could not list components in source repository: %w", err)
+		}
+		if len(sourceComponents) == 0 {
+			return nil, nil, nil, fmt.Errorf("no components found in source repository")
+		}
+		resolverOpts = append(resolverOpts, ocm.WithRepository(sourceRepository), ocm.WithComponentPatterns(sourceComponents))
+	} else {
+		resolverOpts = append(resolverOpts, ocm.WithComponentRef(fromSpec))
+	}
+
+	resolver, err := ocm.NewComponentRepositoryResolver(ctx, pm.ComponentVersionRepositoryRegistry, credGraph, resolverOpts...)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("could not initialize ocm repositoryProvider: %w", err)
+	}
+
+	return fromSpec, &resolutionProgressResolver{ComponentVersionRepositoryResolver: resolver, events: resolutionEvents}, sourceComponents, nil
+}
+
+// collectComponentIDs determines which component versions to transfer. For a
+// component reference with an explicit version, exactly that version is used.
+// Otherwise versions are listed and filtered (by --constraint and --latest) for the
+// single referenced component, or for every component of a repository reference.
+func collectComponentIDs(
+	ctx context.Context,
+	cmd *cobra.Command,
+	cfg *genericv1.Config,
+	repoProvider resolvers.ComponentVersionRepositoryResolver,
+	fromSpec *compref.Ref,
+	sourceComponents []string,
+) ([]transfer.ComponentID, error) {
+	constraint, err := cmd.Flags().GetString(FlagConstraint)
+	if err != nil {
+		return nil, fmt.Errorf("getting constraint flag failed: %w", err)
+	}
+	latestOnly, err := cmd.Flags().GetBool(FlagLatest)
+	if err != nil {
+		return nil, fmt.Errorf("getting latest flag failed: %w", err)
+	}
+
+	repositorySource := sourceComponents != nil
+
+	if !repositorySource && fromSpec.Version != "" {
+		if cmd.Flags().Changed(FlagConstraint) {
+			slog.WarnContext(ctx, fmt.Sprintf("--%s has no effect when a version is already specified in the reference", FlagConstraint))
+		}
+		if cmd.Flags().Changed(FlagLatest) {
+			slog.WarnContext(ctx, fmt.Sprintf("--%s has no effect when a version is already specified in the reference", FlagLatest))
+		}
+		return []transfer.ComponentID{{Component: fromSpec.Component, Version: fromSpec.Version}}, nil
+	}
+
+	registry, err := versioningspec.RegistryFromConfig(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("could not build versioning registry: %w", err)
+	}
+
+	components := sourceComponents
+	if !repositorySource {
+		components = []string{fromSpec.Component}
+	}
+
+	var componentIDs []transfer.ComponentID
+	for _, component := range components {
+		repo, err := repoProvider.GetComponentVersionRepositoryForComponent(ctx, component, "")
+		if err != nil {
+			return nil, fmt.Errorf("could not access ocm repository: %w", err)
+		}
+		versions, err := ocm.VersionsWithFiltering(ctx, component, repo, ocm.VersionOptions{
+			SemverConstraint: constraint,
+			LatestOnly:       latestOnly,
+			Registry:         registry,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("listing and filtering component versions failed: %w", err)
+		}
+		for _, v := range versions {
+			componentIDs = append(componentIDs, transfer.ComponentID{Component: component, Version: v})
+		}
+	}
+	if len(componentIDs) == 0 {
+		msg := "no versions found"
+		if !repositorySource {
+			msg = fmt.Sprintf("no versions found for component %q", fromSpec.Component)
+		}
+		if constraint != "" {
+			msg += fmt.Sprintf(" matching constraint %q", constraint)
+		}
+		if latestOnly {
+			msg += " (latest only)"
+		}
+		return nil, errors.New(msg)
+	}
+
+	return componentIDs, nil
+}
+
+// listComponentsFromRepository lists the component names contained in a repository.
+// Component listing currently supports CTF repositories only, which covers the common
+// "transfer a whole transport archive" case.
+func listComponentsFromRepository(ctx context.Context, pm *manager.PluginManager, repository runtime.Typed) ([]string, error) {
+	if _, ok := repository.(*ctfv1.Repository); !ok {
+		return nil, fmt.Errorf("component listing in repositories of type %T is not supported; specify a component in the source reference", repository)
+	}
+
+	lister, err := pm.ComponentListerRegistry.GetComponentLister(ctx, repository, nil)
+	if err != nil {
+		return nil, fmt.Errorf("could not get component lister: %w", err)
+	}
+
+	var componentNames []string
+	if err := lister.ListComponents(ctx, "", func(names []string) error {
+		componentNames = append(componentNames, names...)
+		return nil
+	}); err != nil {
+		return nil, fmt.Errorf("could not list components: %w", err)
+	}
+
+	return componentNames, nil
 }
 
 func renderTGD(tgd *transformv1alpha1.TransformationGraphDefinition, format string) (io.ReadCloser, error) {
