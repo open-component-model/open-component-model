@@ -313,14 +313,25 @@ On success it prints a summary table:
  ocm.software/ocm-k8s-toolkit/system │ 1.0.0   │ ocm.software
 ```
 
-Transfer it to your registry. `--copy-resources` copies the image into your registry instead
-of leaving the component pointing back at `ghcr.io/stefanprodan`, and `--upload-as ociArtifact`
-is what creates a standalone oci image that can be pulled individually; see [Resource
+Transfer it to your registry. An OCI uploader entry uploads the image as a standalone OCI image in
+your registry that can be pulled individually, instead of leaving the component pointing back at
+`ghcr.io/stefanprodan`; a local blob catch-all copies every other resource. See [Resource
 Handling: References vs. Copies]({{< relref "docs/concepts/transfer-concept.md#resource-handling-references-vs-copies" >}})
 for why that distinction exists.
 
+```yaml
+cat > .ocmconfig << 'EOF'
+type: generic.config.ocm.software/v1
+configurations:
+  - type: oci.uploader.transfer.config.ocm.software/v1alpha1
+  - type: localblob.uploader.transfer.config.ocm.software/v1alpha1
+EOF
+```
+
+> **Note:** The CLI merges `.ocmconfig` from the current directory with your other OCM configuration (such as `$HOME/.ocmconfig`), so credentials and resolvers stay in effect.
+
 ```bash
-ocm transfer cv --copy-resources --upload-as ociArtifact \
+ocm transfer cv \
   "transport-archive//ocm.software/ocm-k8s-toolkit/system:1.0.0" $OCM_REPO
 ```
 

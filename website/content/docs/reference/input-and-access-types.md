@@ -304,6 +304,50 @@ type. It does not hold the object in memory, so the size of the object does not 
 
 OCM v1 has no S3 input type.
 
+### `Git/v1` {#gitv1-input}
+
+Archives a snapshot of a Git repository while OCM constructs the component version, and stores it as a local blob. The
+blob is a gzip-compressed tar (`application/x-tgz`) of the files at the selected commit, without the `.git` directory.
+Use this input type when the source code must travel with the component version. The
+[`Git/v1` access type]({{< relref "input-and-access-types.md#gitv1-access" >}}) is the alternative: it leaves the code in the repository and reads it on every
+download.
+
+`Git/v1` is the canonical type name. OCM also accepts `Git`, and the OCM v1 names `git`, `git/v1alpha1` and
+`Git/v1alpha1`. The fields are the same as the fields of the access type.
+
+| Field        | Type   | Required | Description                                                                                                                  |
+|--------------|--------|----------|------------------------------------------------------------------------------------------------------------------------------|
+| `repository` | string | yes      | Repository URL. See [supported URL forms](#git-url-forms).                                                                   |
+| `ref`        | string | no       | Branch, tag or full ref name (for example `main`, `v1.0.0`, `refs/tags/v1.0.0`). Ignored when `commit` is set.               |
+| `commit`     | string | no       | Full 40-character commit SHA. Takes precedence over `ref`.                                                                   |
+
+If you set neither `ref` nor `commit`, OCM archives the commit that the repository's `HEAD` points to, usually the default
+branch. The result then changes when the branch moves. Set `commit` for a reproducible build.
+
+```yaml
+resources:
+  - name: source-snapshot
+    type: directoryTree
+    version: 1.0.0
+    input:
+      type: Git/v1
+      repository: https://github.com/open-component-model/ocm.git
+      ref: refs/tags/v0.39.0
+```
+
+{{< callout context="caution" >}}
+Do not put credentials in `repository`, such as `https://user:token@host/...`. The URL is in your
+`component-constructor.yaml`, which is normally checked into version control. Configure authentication through the
+[credential system]({{< relref "credential-consumer-identities.md" >}}#git) instead. The input type and the access type
+use the same `Git` consumer identity, so one consumer entry covers both.
+{{< /callout >}}
+
+OCM streams the archive to a file under the `tempFolder` of the `filesystem.config.ocm.software/v1alpha1`
+configuration type. For the archive format and its digest, see
+[Resource Repositories: Git]({{< relref "resource-repositories.md" >}}#git-resource-repository).
+
+The OCM v1 `git` input type has the same fields. A constructor file written for OCM v1 works without changes.
+
 ## Access Types
 
 ### `OCIImage/v1`
@@ -329,7 +373,7 @@ resources:
 ### `LocalBlob/v1`
 
 References content stored alongside the component descriptor in the same repository. Legacy alias: `localBlob`.
-Typically created automatically when using input types or when transferring with `--copy-resources`.
+Typically created automatically when using input types or when transferring with a local blob uploader configuration.
 
 When stored in an OCI registry, local blobs with OCI-native media types (e.g. `application/vnd.oci.image.manifest.v1+json`, `application/vnd.oci.image.index.v1+json`) are mapped to native OCI manifests and can be accessed directly by digest using standard OCI tools. The `globalAccess` field provides the native image reference for direct access. See the [Working with OCI]({{< relref "docs/tutorials/working-with-oci" >}}) tutorial for details.
 
@@ -444,6 +488,84 @@ on that same host. Set `apiHostname` only when the API lives on a different host
 lists `commit` as required and has no `apiHostname` attribute.
 {{< /callout >}}
 
+### `Git/v1` {#gitv1-access}
+
+References a commit in any Git repository. OCM fetches the commit over the Git protocol and returns the files as a
+gzip-compressed tar (`application/x-tgz`). It works with every Git server: GitHub, GitLab, Gitea, Azure DevOps,
+Bitbucket and self-hosted servers, over HTTPS or SSH.
+
+`Git/v1` is the canonical type name. OCM also accepts `Git`, and the OCM v1 names `git`, `git/v1alpha1` and
+`Git/v1alpha1`.
+
+| Field        | Type   | Required | Description                                                                                                                 |
+|--------------|--------|----------|-----------------------------------------------------------------------------------------------------------------------------|
+| `repository` | string | yes      | Repository URL. See [supported URL forms](#git-url-forms).                                                                  |
+| `commit`     | string | no*      | Full 40-character commit SHA. When set, it is authoritative.                                                                |
+| `ref`        | string | no*      | Branch, tag or full ref name (for example `main`, `v1.0.0`, `refs/tags/v1.0.0`). Resolved to a commit by digest processing. |
+
+\* At least one of `commit` or `ref` must be set. A resource may have only a `ref`. OCM adds the `commit` during digest
+processing. A source never goes through digest processing, so set its `commit` yourself.
+
+```yaml
+resources:
+  - name: my-source
+    version: 1.0.0
+    type: directoryTree
+    relation: external
+    access:
+      type: Git/v1
+      repository: https://gitlab.com/example-group/example-project.git
+      ref: refs/heads/main
+      commit: a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2
+```
+
+The same access works under `sources:`. A source always stays a remote reference. It has no digest, and a transfer
+never copies it into the component version.
+
+#### Supported URL forms {#git-url-forms}
+
+| Form          | Example                                           |
+|---------------|---------------------------------------------------|
+| HTTPS or HTTP | `https://gitlab.com/group/project.git`            |
+| SSH URL       | `ssh://git@git.example.com:2222/org/repo.git`     |
+| scp-style SSH | `git@github.com:org/repo.git`                     |
+| Git protocol  | `git://git.example.com/org/repo.git`              |
+| Local         | `file:///srv/git/repo.git` or `/srv/git/repo.git` |
+
+{{< callout context="caution" >}}
+A URL needs a scheme, such as `https://github.com/org/repo`. Without one, OCM treats the value as a **local
+directory**, so `github.com/org/repo` points to a folder under the current working directory. scp-style SSH addresses
+such as `git@github.com:org/repo.git` are the exception and always mean SSH.
+{{< /callout >}}
+
+OCM checks the server's host key against your `~/.ssh/known_hosts`. Without a configured SSH key, OCM uses the SSH agent.
+
+#### `Git/v1` or `GitHub/v1`?
+
+Both types reference a commit and return a tar archive of it, but they fetch it in different ways.
+
+| Use                      | When                                                                                                                                               |
+|--------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------|
+| [`GitHub/v1`](#githubv1) | The repository is on GitHub or GitHub Enterprise and you have HTTPS access to its REST API. The archive is one HTTP download, with no Git history. |
+| `Git/v1`                 | The repository is not on GitHub (GitLab, Gitea, Azure DevOps, Bitbucket, a self-hosted server), you need SSH, or the REST API is not reachable.    |
+
+The two archives are not the same bytes, so the same commit has different digests with `GitHub/v1` and `Git/v1`. Do not
+switch a published resource from one type to the other.
+
+#### Migrating from OCM v1 {#git-migration-from-ocm-v1}
+
+The OCM v1 `git` access type has the same fields: `repository`, `ref` and `commit`. OCM v2 reads access
+specifications with the types `git`, `git/v1alpha1` and `Git/v1alpha1` unchanged. New specifications should use
+`Git/v1`.
+
+Two differences need attention:
+
+- **Scheme.** OCM v1 read `github.com/org/repo` as a remote repository. OCM v2 reads it as a local directory, so
+  add the scheme. scp-style SSH addresses such as `git@github.com:org/repo.git` are unaffected.
+- **Credentials.** The consumer identity type is still `Git`, but the OCM v1 `pathprefix` attribute is gone. Use
+  `path`, which supports glob patterns. See
+  [Credential Consumer Identities: Git]({{< relref "credential-consumer-identities.md" >}}#git).
+
 ### `File/v1alpha1`
 
 References a file by URI ([RFC 8089](https://datatracker.ietf.org/doc/html/rfc8089)). Legacy alias: `file`.
@@ -515,7 +637,12 @@ resources:
 ```
 
 {{< callout context="note" >}}
-Upload is not supported for this access type: a plain HTTP endpoint has no standardized write API. A `Wget/v1` access therefore has no by-reference form in a target repository. It is copied only when resource copying is requested using `--copy-resources`, and then always by value.  The content is downloaded and stored as a [`LocalBlob/v1`]({{< relref "input-and-access-types.md" >}}#localblobv1).
+A plain HTTP endpoint has no standardized write API, so transfer cannot write to the source
+location. Without a matching uploader, a `Wget/v1` access stays by reference in the target. A
+local blob uploader downloads the content and stores it as a
+[`LocalBlob/v1`]({{< relref "input-and-access-types.md" >}}#localblobv1). An HTTP, Artifactory
+or Nexus uploader uploads the content to its configured target and publishes a new remote
+access there (see [Transfer Configuration]({{< relref "docs/reference/transfer-configuration/_index.md" >}})).
 {{< /callout >}}
 
 The `checksum.http.config.ocm.software/v1alpha1` configuration can pin the

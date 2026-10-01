@@ -156,7 +156,7 @@ configurations:
 
 	sourceRef := fmt.Sprintf("ctf::%s//%s:%s", sourceCTF, componentName, componentVersion)
 
-	t.Run("transfer with default (no --upload-as flag)", func(t *testing.T) {
+	t.Run("transfer with default (no uploader config)", func(t *testing.T) {
 		r := require.New(t)
 		targetRef := fmt.Sprintf("http://%s/%s", targetRegistry.RegistryAddress, "helm-transfer-default")
 
@@ -193,7 +193,48 @@ configurations:
 		downloadAndVerifyResource(t, ctx, targetRef, componentName, componentVersion, cfgPath, chartFile, provFile)
 	})
 
-	t.Run("transfer helm chart with --upload-as localBlob", func(t *testing.T) {
+	t.Run("transfer helm chart with OCI uploader config", func(t *testing.T) {
+		r := require.New(t)
+		targetRef := fmt.Sprintf("http://%s/%s", targetRegistry.RegistryAddress, "helm-transfer-oci")
+
+		transferCMD := cmd.New()
+		transferCMD.SetArgs([]string{
+			"transfer",
+			"component-version",
+			sourceRef,
+			targetRef,
+			"--config", cfgPath,
+			"--copy-resources",
+			"--config", writeOCIUploaderConfig(t),
+		})
+
+		ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
+		defer cancel()
+
+		r.NoError(transferCMD.ExecuteContext(ctx), "transfer should succeed")
+
+		targetRepo, err := createRepo(ctx, repoProvider, credentialResolver, &ociv1.Repository{BaseUrl: targetRef})
+		r.NoError(err, "should be able to create target repository")
+
+		desc, err := targetRepo.GetComponentVersion(ctx, componentName, componentVersion)
+		r.NoError(err, "should be able to retrieve transferred component")
+		r.Equal(componentName, desc.Component.Name)
+		r.Equal(componentVersion, desc.Component.Version)
+		r.Len(desc.Component.Resources, 1)
+		r.Equal("mychart", desc.Component.Resources[0].Name)
+
+		var ociAccess ociaccessv1.OCIImage
+		r.NoError(ociaccess.Scheme.Convert(desc.Component.Resources[0].Access, &ociAccess),
+			"resource access should be an OCI artifact")
+		r.Contains(ociAccess.ImageReference, targetRef,
+			"image reference should point to the target registry")
+
+		downloadAndVerifyResource(t, ctx, targetRef, componentName, componentVersion, cfgPath, chartFile, provFile)
+	})
+
+	// TODO(legacy-flags): deprecated --copy-resources/--upload-as behavior, kept verbatim from
+	// before the uploader migration; remove together with legacy_flags.go.
+	t.Run("[deprecated] transfer helm chart with --upload-as localBlob", func(t *testing.T) {
 		r := require.New(t)
 		targetRef := fmt.Sprintf("http://%s/%s", targetRegistry.RegistryAddress, "helm-transfer-local")
 
@@ -230,7 +271,7 @@ configurations:
 		downloadAndVerifyResource(t, ctx, targetRef, componentName, componentVersion, cfgPath, chartFile, provFile)
 	})
 
-	t.Run("transfer helm chart with --upload-as ociArtifact", func(t *testing.T) {
+	t.Run("[deprecated] transfer helm chart with --upload-as ociArtifact", func(t *testing.T) {
 		r := require.New(t)
 		targetRef := fmt.Sprintf("http://%s/%s", targetRegistry.RegistryAddress, "helm-transfer-oci")
 
@@ -302,7 +343,7 @@ configurations:
 		r.NoError(v2.Scheme.Convert(intermediateDesc.Component.Resources[0].Access, &localBlobAccess),
 			"intermediate resource should have local blob access")
 
-		// Second hop: transfer from intermediate registry to final registry with --upload-as ociArtifact
+		// Second hop: transfer from intermediate registry to final registry with an OCI uploader config
 		intermediateSourceRef := fmt.Sprintf("%s//%s:%s", intermediateRef, componentName, componentVersion)
 		finalRef := fmt.Sprintf("http://%s/%s", targetRegistry.RegistryAddress, "helm-twohop-final")
 
@@ -314,7 +355,7 @@ configurations:
 			finalRef,
 			"--config", cfgPath,
 			"--copy-resources",
-			"--upload-as", "ociArtifact",
+			"--config", writeOCIUploaderConfig(t),
 		})
 
 		r.NoError(transferCMD2.ExecuteContext(ctx), "second hop transfer should succeed")
