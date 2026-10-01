@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"strings"
+	"sync"
 
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -11,6 +12,10 @@ import (
 // legacyIdentityAttributePathPrefix is the OCM v1 attribute that scoped a consumer
 // identity to every path below a prefix, compared segment by segment.
 const legacyIdentityAttributePathPrefix = "pathprefix"
+
+// pathPrefixWarning limits the migration hint to one log entry per process, because
+// graphs are built repeatedly (e.g. per reconcile) from the same configuration.
+var pathPrefixWarning sync.Once
 
 // pathPrefixToPath replaces the legacy pathprefix attribute with the path pattern
 // "{prefix,prefix/**}", which matches the prefix and every path below it, as OCM v1 did.
@@ -22,12 +27,16 @@ func pathPrefixToPath(ctx context.Context, identity runtime.Identity) runtime.Id
 		return identity
 	}
 
+	pathPrefixWarning.Do(func() {
+		slog.WarnContext(ctx, "consumer identity uses the legacy pathprefix attribute, which is converted to a path pattern; "+
+			"consider migrating to path. Follow our migration guide for more details: "+
+			"https://ocm.software/docs/how-to/migrate-legacy-credentials/", "identity", identity.String())
+	})
+
 	converted := identity.Clone()
 	delete(converted, legacyIdentityAttributePathPrefix)
 
 	if _, ok := converted[runtime.IdentityAttributePath]; ok {
-		slog.WarnContext(ctx, "consumer identity sets both path and the legacy pathprefix, ignoring pathprefix",
-			"identity", converted.String())
 		return converted
 	}
 
@@ -39,10 +48,6 @@ func pathPrefixToPath(ctx context.Context, identity runtime.Identity) runtime.Id
 
 	escaped := escapeGlob(prefix)
 	converted[runtime.IdentityAttributePath] = "{" + escaped + "," + escaped + "/**}"
-
-	slog.WarnContext(ctx, "consumer identity uses the legacy pathprefix attribute, replace it with path",
-		"pathprefix", prefix, "path", converted[runtime.IdentityAttributePath])
-
 	return converted
 }
 
