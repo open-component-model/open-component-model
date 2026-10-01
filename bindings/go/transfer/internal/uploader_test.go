@@ -50,11 +50,11 @@ func ociResource(name, version, imageRef string) descriptor.Resource {
 	}
 }
 
-func uploaderFor(t *testing.T, accessType runtime.Type, targetURL string) *transferv1alpha1.HTTPUploaderConfig {
+func uploaderFor(t *testing.T, match, targetURL string) *transferv1alpha1.HTTPUploaderConfig {
 	t.Helper()
 	return &transferv1alpha1.HTTPUploaderConfig{
 		Type:      runtime.NewVersionedType(transferv1alpha1.HTTPUploaderConfigType, transferv1alpha1.Version),
-		MatchSpec: transferv1alpha1.UploaderMatch{AccessType: accessType},
+		Match:     match,
 		TargetURL: targetURL,
 		Method:    "PUT",
 	}
@@ -62,10 +62,10 @@ func uploaderFor(t *testing.T, accessType runtime.Type, targetURL string) *trans
 
 func wgetUploader(t *testing.T, targetURL string) *transferv1alpha1.HTTPUploaderConfig {
 	t.Helper()
-	return uploaderFor(t, runtime.NewVersionedType("Wget", "v1"), targetURL)
+	return uploaderFor(t, `resource.access.isType("Wget")`, targetURL)
 }
 
-func TestBuildGraphDefinition_UploaderMatch_EmitsHTTPStreaming(t *testing.T) {
+func TestBuildGraphDefinition_Uploader_EmitsHTTPStreaming(t *testing.T) {
 	r := require.New(t)
 	sourceRepo := testOCIRepo("ghcr.io/source")
 	targetRepo := testOCIRepo("ghcr.io/target")
@@ -75,7 +75,7 @@ func TestBuildGraphDefinition_UploaderMatch_EmitsHTTPStreaming(t *testing.T) {
 	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
 
 	uploaders := []transferv1alpha1.UploaderConfig{wgetUploader(t, `${"https://target.example" + url(resource.access.url).path}`)}
-	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeLocalBlobResources}, uploaders)
+	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{}, uploaders)
 	r.NoError(err)
 
 	// Exactly one HTTPStreaming node for the resource, plus the component-version upload.
@@ -148,7 +148,7 @@ func TestBuildGraphDefinition_RepositoryUploaders(t *testing.T) {
 		resolver := testResolverFor("ocm.software/test", "1.0.0", testOCIRepo("ghcr.io/source"), desc)
 		roots := testTransferRoots("ocm.software/test", "1.0.0", testOCIRepo("ghcr.io/target"), resolver)
 
-		tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeAllResources}, []transferv1alpha1.UploaderConfig{u})
+		tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{}, []transferv1alpha1.UploaderConfig{u, &transferv1alpha1.LocalBlobUploaderConfig{}})
 		r.NoError(err)
 
 		var uploads []transformv1alpha1.GenericTransformation
@@ -166,7 +166,7 @@ func TestBuildGraphDefinition_RepositoryUploaders(t *testing.T) {
 	artifactoryUploader := func(accessType runtime.Type) *transferv1alpha1.ArtifactoryUploaderConfig {
 		return &transferv1alpha1.ArtifactoryUploaderConfig{
 			Type:       runtime.NewVersionedType(transferv1alpha1.ArtifactoryUploaderConfigType, transferv1alpha1.Version),
-			MatchSpec:  transferv1alpha1.UploaderMatch{AccessType: accessType},
+			Match:      `resource.access.isType("` + accessType.String() + `")`,
 			URL:        "https://artifactory.example",
 			Repository: "helm-local",
 		}
@@ -217,7 +217,7 @@ func TestBuildGraphDefinition_RepositoryUploaders(t *testing.T) {
 		r := require.New(t)
 		nexusUploader := &transferv1alpha1.NexusUploaderConfig{
 			Type:       runtime.NewVersionedType(transferv1alpha1.NexusUploaderConfigType, transferv1alpha1.Version),
-			MatchSpec:  transferv1alpha1.UploaderMatch{AccessType: helmMatch},
+			Match:      `resource.access.isType("` + helmMatch.String() + `")`,
 			URL:        "https://nexus.example",
 			Repository: "helm-hosted",
 		}
@@ -225,7 +225,7 @@ func TestBuildGraphDefinition_RepositoryUploaders(t *testing.T) {
 		resolver := testResolverFor("ocm.software/test", "1.0.0", testOCIRepo("ghcr.io/source"), desc)
 		roots := testTransferRoots("ocm.software/test", "1.0.0", testOCIRepo("ghcr.io/target"), resolver)
 
-		tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeAllResources}, []transferv1alpha1.UploaderConfig{nexusUploader})
+		tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{}, []transferv1alpha1.UploaderConfig{nexusUploader, &transferv1alpha1.LocalBlobUploaderConfig{}})
 		r.NoError(err)
 
 		var uploads []transformv1alpha1.GenericTransformation
@@ -250,7 +250,7 @@ func TestBuildGraphDefinition_NoUploader_KeepsDownloadWgetPath(t *testing.T) {
 	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
 	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
 
-	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeAllResources}, nil)
+	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{}, withLocalBlobUploader())
 	r.NoError(err)
 
 	var sawDownloadWget, sawStreaming bool
@@ -279,7 +279,7 @@ func TestBuildGraphDefinition_UploaderPreservesResourceInStringLiteral(t *testin
 	uploaders := []transferv1alpha1.UploaderConfig{
 		wgetUploader(t, `${"https://uploads.example/resource/" + resource.name}`),
 	}
-	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeLocalBlobResources}, uploaders)
+	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{}, uploaders)
 	r.NoError(err)
 
 	var targetURL string
@@ -322,7 +322,7 @@ func TestBuildGraphDefinition_UploaderTemplatesHeaders(t *testing.T) {
 	}
 	uploaders := []transferv1alpha1.UploaderConfig{u}
 
-	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeLocalBlobResources}, uploaders)
+	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{}, uploaders)
 	r.NoError(err)
 
 	var header map[string]any
@@ -376,13 +376,10 @@ func TestBuildGraphDefinition_UploaderUsesLabelValueAndIdentityMatch(t *testing.
 	// Match on the extra identity; build the target host from the label value, selected
 	// by name via a CEL filter (order-independent).
 	u := wgetUploader(t, `${"https://" + resource.labels.filter(l, l.name == "region")[0].value + ".example.com" + url(resource.access.url).path}`)
-	u.MatchSpec = transferv1alpha1.UploaderMatch{
-		AccessType:    runtime.NewVersionedType("Wget", "v1"),
-		ExtraIdentity: runtime.Identity{"tier": "public"},
-	}
+	u.Match = `resource.access.isType("Wget/v1") && has(resource.extraIdentity) && resource.extraIdentity.tier == "public"`
 	uploaders := []transferv1alpha1.UploaderConfig{u}
 
-	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeLocalBlobResources}, uploaders)
+	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{}, uploaders)
 	r.NoError(err)
 
 	// The uploader matched (via the extra-identity criterion) → an HTTPStreaming node exists.
@@ -423,10 +420,10 @@ func TestBuildGraphDefinition_UploaderMatchesNonWgetSource(t *testing.T) {
 	// An OCI source with no URL: the expression references an access-specific field
 	// (imageReference) exposed generically under resource.access.
 	uploaders := []transferv1alpha1.UploaderConfig{
-		uploaderFor(t, runtime.NewVersionedType("OCIImage", "v1"),
+		uploaderFor(t, `resource.access.isType("OCIImage/v1")`,
 			`${"https://mirror.example/" + resource.access.imageReference}`),
 	}
-	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeAllResources}, uploaders)
+	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{}, withLocalBlobUploader(uploaders...))
 	r.NoError(err)
 
 	var streamID string
@@ -465,7 +462,7 @@ func TestBuildGraphDefinition_UploaderLiteralTargetURL(t *testing.T) {
 	// A targetURL without ${...} is a literal, templated like any other string: it
 	// passes through unchanged with no special-case handling.
 	uploaders := []transferv1alpha1.UploaderConfig{wgetUploader(t, `https://target.example/uploads/blob.tar`)}
-	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeLocalBlobResources}, uploaders)
+	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{}, uploaders)
 	r.NoError(err)
 
 	var targetURL string
@@ -506,10 +503,10 @@ func TestBuildGraphDefinition_DeterministicOrder(t *testing.T) {
 
 	uploaders := []transferv1alpha1.UploaderConfig{wgetUploader(t, `${"https://target.example" + url(resource.access.url).path}`)}
 
-	first, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeAllResources}, uploaders)
+	first, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{}, withLocalBlobUploader(uploaders...))
 	r.NoError(err)
 	for i := 0; i < 20; i++ {
-		next, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeAllResources}, uploaders)
+		next, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{}, withLocalBlobUploader(uploaders...))
 		r.NoError(err)
 		r.Equal(len(first.Transformations), len(next.Transformations))
 		for j := range first.Transformations {
@@ -592,28 +589,21 @@ func TestResourceNodePath_ExtraIdentitySelectorEvaluatesOverMixedResources(t *te
 	assert.Equal(t, "blob", out.Value(), "the index selector must resolve to the matching resource")
 }
 
-// TestUploaderMatch_MatchesEveryAliasOfTheAccessType checks that an uploader rule naming any
+// TestAccessTypeIs_MatchesEveryAliasOfTheAccessType checks that an isType argument naming any
 // alias of an access type, versioned or not, matches a resource described with any other
 // alias of that type, and never a resource of another type.
-func TestUploaderMatch_MatchesEveryAliasOfTheAccessType(t *testing.T) {
-	resourceWith := func(access runtime.Type) descriptorv2.Resource {
-		return descriptorv2.Resource{
-			ElementMeta: descriptorv2.ElementMeta{ObjectMeta: descriptorv2.ObjectMeta{Name: "r", Version: "1.0.0"}},
-			Access:      &runtime.Raw{Type: access},
-		}
-	}
+func TestAccessTypeIs_MatchesEveryAliasOfTheAccessType(t *testing.T) {
 	for canonical, aliases := range scheme.GetTypes() {
 		family := append([]runtime.Type{canonical}, aliases...)
 		t.Run(canonical.String(), func(t *testing.T) {
 			for _, rule := range family {
-				for _, matchType := range []runtime.Type{rule, runtime.NewUnversionedType(rule.Name)} {
-					m := transferv1alpha1.UploaderMatch{AccessType: matchType}
+				for _, want := range []runtime.Type{rule, runtime.NewUnversionedType(rule.Name)} {
 					for _, access := range family {
-						assert.True(t, m.Matches(resourceWith(access), scheme), "rule %s must match access %s", matchType, access)
+						assert.True(t, accessTypeIs(access, want), "isType(%q) must match access %s", want, access)
 					}
 				}
 				other := runtime.NewVersionedType("NotAnAccessType", "v1")
-				assert.False(t, transferv1alpha1.UploaderMatch{AccessType: rule}.Matches(resourceWith(other), scheme), "rule %s must not match %s", rule, other)
+				assert.False(t, accessTypeIs(other, rule), "isType(%q) must not match %s", rule, other)
 			}
 		})
 	}

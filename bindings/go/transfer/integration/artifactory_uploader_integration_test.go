@@ -131,13 +131,13 @@ func Test_Integration_TransferLocalBlobHelmResource_ArtifactoryHelmUploaderDeplo
 			// The Artifactory uploader routes LocalBlob/v1 resources to the fake Artifactory server.
 			uploaders := []transferv1alpha1.UploaderConfig{&transferv1alpha1.ArtifactoryUploaderConfig{
 				Type:       runtime.NewVersionedType(transferv1alpha1.ArtifactoryUploaderConfigType, transferv1alpha1.Version),
-				MatchSpec:  transferv1alpha1.UploaderMatch{AccessType: runtime.NewVersionedType(descriptorv2.LocalBlobAccessType, descriptorv2.LocalBlobAccessTypeVersion)},
+				Match:      `resource.access.isType("` + runtime.NewVersionedType(descriptorv2.LocalBlobAccessType, descriptorv2.LocalBlobAccessTypeVersion).String() + `")`,
 				URL:        targetSrv.URL,
 				Repository: "helm-local",
-			}}
+			}, &transferv1alpha1.LocalBlobUploaderConfig{}}
 
 			tgd, err := transfer.BuildGraphDefinition(t.Context(),
-				&transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeAllResources},
+				&transferv1alpha1.Config{},
 				uploaders,
 				transfer.Mapping{
 					Components: []transfer.ComponentID{{Component: componentName, Version: componentVersion}},

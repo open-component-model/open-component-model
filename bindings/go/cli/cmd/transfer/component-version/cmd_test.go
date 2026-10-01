@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -21,7 +22,9 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci"
 	"ocm.software/open-component-model/bindings/go/oci/compref"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
+	ociaccessv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
+	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/signing"
 )
 
@@ -779,4 +782,143 @@ func TestTransferComponentVersion_RepositoryReferenceLatestOnly(t *testing.T) {
 
 	_, err = targetRepo.GetComponentVersion(ctx, "github.com/acme/first", "v1.0.0")
 	r.Error(err, "non-latest version should NOT be in target")
+}
+
+// setupOCIImageTransferFixture creates a CTF source holding a component with one external
+// OCIImage resource named "image" and returns its reference and a CTF target argument.
+func setupOCIImageTransferFixture(t *testing.T) (fromRef string, targetArg string) {
+	t.Helper()
+	r := require.New(t)
+
+	fromDesc := createTestDescriptor("ocm.software/uploader-flag-test", "1.0.0")
+	fromDesc.Component.Resources = []descriptor.Resource{
+		{
+			ElementMeta: descriptor.ElementMeta{
+				ObjectMeta: descriptor.ObjectMeta{
+					Name:    "image",
+					Version: "1.0.0",
+				},
+			},
+			Type:     "ociImage",
+			Relation: descriptor.ExternalRelation,
+			Access: &ociaccessv1.OCIImage{
+				Type:           runtime.NewVersionedType(ociaccessv1.OCIImageType, "v1"),
+				ImageReference: "ghcr.io/org/image:v1",
+			},
+		},
+	}
+
+	archivePath := t.TempDir()
+	fs, err := filesystem.NewFS(archivePath, os.O_RDWR)
+	r.NoError(err)
+	archive := ctf.NewFileSystemCTF(fs)
+	sourceRepo, err := oci.NewRepository(ocictf.WithCTF(ocictf.NewFromCTF(archive)))
+	r.NoError(err)
+	r.NoError(sourceRepo.AddComponentVersion(t.Context(), fromDesc))
+
+	ref := compref.Ref{
+		Repository: &ctfv1.Repository{FilePath: archivePath},
+		Component:  fromDesc.Component.Name,
+		Version:    fromDesc.Component.Version,
+	}
+	return ref.String(), fmt.Sprintf("ctf::%s", t.TempDir())
+}
+
+// TestTransferUploaderConfig verifies that uploader entries of the OCM configuration
+// select resources, and that the deprecated --copy-resources/--upload-as flags are
+// translated into uploader entries appended after them.
+func TestTransferUploaderConfig(t *testing.T) {
+	fromRef, targetArg := setupOCIImageTransferFixture(t)
+
+	writeConfig := func(t *testing.T, entries string) string {
+		t.Helper()
+		path := filepath.Join(t.TempDir(), "config.yaml")
+		require.NoError(t, os.WriteFile(path, []byte("type: generic.config.ocm.software/v1\nconfigurations:\n"+entries), 0o644))
+		return path
+	}
+	ociConfig := writeConfig(t, "  - type: oci.uploader.transfer.config.ocm.software/v1alpha1\n")
+	referenceConfig := writeConfig(t, "  - type: reference.uploader.transfer.config.ocm.software/v1alpha1\n    match: resource.name == \"image\"\n")
+	ociAndLocalBlobConfig := writeConfig(t, "  - type: oci.uploader.transfer.config.ocm.software/v1alpha1\n  - type: localblob.uploader.transfer.config.ocm.software/v1alpha1\n")
+	httpWithoutMatchConfig := writeConfig(t, "  - type: http.uploader.transfer.config.ocm.software/v1alpha1\n    targetURL: https://example.com\n")
+
+	for _, tc := range []struct {
+		name string
+		args []string
+		// target overrides the CTF target argument.
+		target      string
+		contains    []string
+		notContains []string
+		wantErr     string
+	}{
+		{
+			name:        "oci config alone does not select an image for a CTF target",
+			args:        []string{"--config", ociConfig},
+			notContains: []string{"GetOCIArtifact"},
+		},
+		{
+			name:     "oci and localblob config copies the image to a CTF target",
+			args:     []string{"--config", ociAndLocalBlobConfig},
+			contains: []string{"GetOCIArtifact", "CTFAddLocalResource"},
+		},
+		{
+			name:    "http without match fails validation",
+			args:    []string{"--config", httpWithoutMatchConfig},
+			wantErr: "match is required",
+		},
+		// TODO(legacy-flags): deprecated flag cases; remove together with legacy_flags.go.
+		{
+			name:     "deprecated --copy-resources copies the image like a local blob uploader",
+			args:     []string{"--copy-resources"},
+			contains: []string{"GetOCIArtifact", "CTFAddLocalResource"},
+		},
+		{
+			name:        "deprecated --copy-resources comes after configured uploaders",
+			args:        []string{"--config", referenceConfig, "--copy-resources"},
+			notContains: []string{"GetOCIArtifact"},
+		},
+		{
+			name:        "deprecated --upload-as ociArtifact alone keeps an OCI image by reference",
+			args:        []string{"--upload-as", "ociArtifact"},
+			target:      "ghcr.io/target-org/ocm",
+			notContains: []string{"TransferOCIArtifact", "GetOCIArtifact"},
+		},
+		{
+			name:     "deprecated --copy-resources --upload-as ociArtifact uploads an OCI image as an artifact",
+			args:     []string{"--copy-resources", "--upload-as", "ociArtifact"},
+			target:   "ghcr.io/target-org/ocm",
+			contains: []string{"TransferOCIArtifact"},
+		},
+		{
+			name:    "deprecated --upload-as rejects unknown values",
+			args:    []string{"--upload-as", "bogus"},
+			wantErr: "expected one of",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			result := new(bytes.Buffer)
+			target := targetArg
+			if tc.target != "" {
+				target = tc.target
+			}
+			args := append([]string{"transfer", "component-version", fromRef, target, "--dry-run", "-o", "yaml"}, tc.args...)
+			_, err := test.OCM(t,
+				test.WithArgs(args...),
+				test.WithOutput(result),
+				test.WithErrorOutput(test.NewJSONLogReader()),
+			)
+			if tc.wantErr != "" {
+				r.ErrorContains(err, tc.wantErr)
+				return
+			}
+			r.NoError(err, "dry-run should succeed")
+			out := result.String()
+			for _, s := range tc.contains {
+				r.Contains(out, s)
+			}
+			for _, s := range tc.notContains {
+				r.NotContains(out, s)
+			}
+		})
+	}
 }
