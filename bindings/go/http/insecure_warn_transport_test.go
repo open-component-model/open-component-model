@@ -84,7 +84,7 @@ func TestNewTransportWithTLS_ConstructionWarning(t *testing.T) {
 	slog.SetDefault(slog.New(capture))
 	t.Cleanup(func() { slog.SetDefault(origLogger) })
 
-	_ = ocmhttp.NewTransportWithTLS(nil, &httpv1alpha1.TLSConfig{InsecureSkipVerify: &tr})
+	_, _ = ocmhttp.NewTransportWithTLS(nil, &httpv1alpha1.TLSConfig{InsecureSkipVerify: &tr})
 
 	msgs := capture.warnMessages()
 	require.NotEmpty(t, msgs)
@@ -99,7 +99,7 @@ func TestNewTransportWithTLS_NoWarningWhenDisabled(t *testing.T) {
 	slog.SetDefault(slog.New(capture))
 	t.Cleanup(func() { slog.SetDefault(origLogger) })
 
-	_ = ocmhttp.NewTransportWithTLS(nil, &httpv1alpha1.TLSConfig{InsecureSkipVerify: &fa})
+	_, _ = ocmhttp.NewTransportWithTLS(nil, &httpv1alpha1.TLSConfig{InsecureSkipVerify: &fa})
 
 	assert.Empty(t, capture.warnMessages())
 }

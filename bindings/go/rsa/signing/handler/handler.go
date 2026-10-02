@@ -180,7 +180,7 @@ func (h *Handler) Verify(
 
 	case v1alpha1.MediaTypePEM:
 		slog.WarnContext(ctx, "verifying signatures with PEM encoding is experimental")
-		return h.verifyPEMSignature(signed, hash, dig, rsaCreds)
+		return h.verifyPEMSignature(signed, hash, dig, rsaCreds, creds)
 
 	default:
 		return fmt.Errorf("unsupported media type %q", signed.Signature.MediaType)
@@ -196,6 +196,7 @@ func (h *Handler) verifyPEMSignature(
 	hash crypto.Hash,
 	dig []byte,
 	creds *rsacredentialsv1.RSACredentials,
+	rawCreds runtime.Typed,
 ) error {
 	sig, algFromPEM, chain, err := rsasignature.GetSignatureFromPem([]byte(signed.Signature.Value))
 	if err != nil {
@@ -220,7 +221,18 @@ func (h *Handler) verifyPEMSignature(
 	allIntermediates = append(allIntermediates, chain[1:]...)
 	allIntermediates = append(allIntermediates, credIntermediates...)
 
-	if err := verifyChainWithOptionalAnchor(leaf, allIntermediates, credAnchor, h.roots, h.now); err != nil {
+	// If a verified TSA time is present in the credentials, use it instead of
+	// h.now for certificate chain validation. This allows verifying signatures
+	// with expired certificates when the TSA timestamp proves the signature was
+	// created while the cert was still valid.
+	nowFn := h.now
+	if tsaTime, ok, err := rsacredentialsv1.VerifiedTimeFromCredentials(rawCreds); err != nil {
+		return err
+	} else if ok {
+		nowFn = func() time.Time { return tsaTime }
+	}
+
+	if err := verifyChainWithOptionalAnchor(leaf, allIntermediates, credAnchor, h.roots, nowFn); err != nil {
 		return fmt.Errorf("certificate verification failed: %w", err)
 	}
 
