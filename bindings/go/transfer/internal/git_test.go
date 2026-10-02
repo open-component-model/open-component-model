@@ -49,7 +49,7 @@ func TestProcessGit(t *testing.T) {
 			resource := v2desc.Component.Resources[0]
 			tgd := &transformv1alpha1.TransformationGraphDefinition{}
 			ids := map[int]string{0: "existing"}
-			exprs, err := processResource(resource, res.Access, "root", &discoveryValue{Descriptor: desc}, tgd, tt.target, ids, 1, transferv1alpha1.UploadAsOciArtifact)
+			exprs, err := processResource(resource, res.Access, "root", &discoveryValue{Descriptor: desc}, tgd, tt.target, ids, 1)
 			r.NoError(err)
 			r.Len(tgd.Transformations, 2)
 			get, add := tgd.Transformations[0], tgd.Transformations[1]
@@ -76,7 +76,7 @@ func TestProcessGit_RejectsUnpinnedAccess(t *testing.T) {
 	r.NoError(err)
 	tgd := &transformv1alpha1.TransformationGraphDefinition{}
 	ids := map[int]string{}
-	exprs, err := processResource(v2desc.Component.Resources[0], res.Access, "root", &discoveryValue{Descriptor: desc}, tgd, testOCIRepo("ghcr.io/target"), ids, 0, "")
+	exprs, err := processResource(v2desc.Component.Resources[0], res.Access, "root", &discoveryValue{Descriptor: desc}, tgd, testOCIRepo("ghcr.io/target"), ids, 0)
 	r.ErrorContains(err, "cannot process Git resource")
 	r.ErrorContains(err, "no pinned commit")
 	r.ErrorContains(err, "refs/heads/main")
@@ -114,10 +114,7 @@ func TestBuildGraphDefinition_GitResource(t *testing.T) {
 			desc := testDescriptor("ocm.software/test", "1.0.0", []descriptor.Resource{res}, nil)
 			resolver := testResolverFor("ocm.software/test", "1.0.0", testOCIRepo("ghcr.io/source"), desc)
 			roots := testTransferRoots("ocm.software/test", "1.0.0", testOCIRepo("ghcr.io/target"), resolver)
-			tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{
-				CopyMode:   transferv1alpha1.CopyModeAllResources,
-				UploadType: transferv1alpha1.UploadAsOciArtifact,
-			}, nil)
+			tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{}, withLocalBlobUploader(ociUploaders()...))
 			r.NoError(err)
 			r.Len(tgd.Transformations, 4)
 			r.Equal(gitv1alpha1.GetGitResourceV1alpha1, tgd.Transformations[0].Type)
@@ -130,14 +127,12 @@ func TestBuildGraphDefinition_GitResource(t *testing.T) {
 	}
 }
 
-func TestBuildGraphDefinition_GitResource_LocalCopySkipsUnpinned(t *testing.T) {
+func TestBuildGraphDefinition_GitResource_WithoutUploaderKeepsUnpinnedByReference(t *testing.T) {
 	r := require.New(t)
 	desc := testDescriptor("ocm.software/test", "1.0.0", []descriptor.Resource{gitResource("")}, nil)
 	resolver := testResolverFor("ocm.software/test", "1.0.0", testOCIRepo("ghcr.io/source"), desc)
 	roots := testTransferRoots("ocm.software/test", "1.0.0", testOCIRepo("ghcr.io/target"), resolver)
-	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{
-		CopyMode: transferv1alpha1.CopyModeLocalBlobResources,
-	}, nil)
+	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{}, nil)
 	r.NoError(err)
 	r.Len(tgd.Transformations, 1)
 	r.Equal(ociv1alpha1.OCIAddComponentVersionV1alpha1, tgd.Transformations[0].Type)

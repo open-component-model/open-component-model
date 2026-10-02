@@ -81,11 +81,11 @@ Use a local blob uploader configuration when:
 
 ### Git Repository Snapshots
 
-Resources with `Git/v1` access reference a snapshot of a Git repository. With `--copy-resources`, transfer downloads the pinned commit as a gzip-compressed tar archive (`application/x-tgz`) and stores it as a `localBlob` in the target OCI repository or CTF. The resource digest is preserved, and the target no longer needs access to the original Git repository.
+Resources with `Git/v1` access reference a snapshot of a Git repository. With a local blob uploader configuration, transfer downloads the pinned commit as a gzip-compressed tar archive (`application/x-tgz`) and stores it as a `localBlob` in the target OCI repository or CTF. The resource digest is preserved, and the target no longer needs access to the original Git repository.
 
 By-value Git transfer requires a full commit hash in the access specification. This prevents a moving branch or tag from changing the transferred content. When creating a component version, Git digest processing resolves ref-only access to a pinned commit; if both `ref` and `commit` are present, the commit takes precedence.
 
-Without `--copy-resources`, external Git access remains a reference to the original repository. A constructor resource using the `git` input type is already stored as a local blob and follows normal local-blob transfer behavior. Transfer does not push commits or upload content to Git repositories.
+Without a local blob uploader, external Git access remains a reference to the original repository. A constructor resource using the `git` input type is already stored as a local blob and follows normal local-blob transfer behavior. Transfer does not push commits or upload content to Git repositories.
 
 ## Localization
 

@@ -11,7 +11,9 @@ import (
 	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1/meta"
 )
 
-// processGit transfers a pinned Git snapshot as a local blob, not an OCI artifact.
+// processGit emits the transformation nodes for a git resource selected by a local blob
+// uploader. The snapshot at the pinned commit is downloaded (GetGitResource), then embedded
+// as a local blob (AddLocalResource).
 func processGit(resource descriptorv2.Resource, access *gitv1.Git, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int) error {
 	if access.Commit == "" {
 		return fmt.Errorf("git resource %q has no pinned commit: pin ref %q to a commit before transferring it by value", resource.Name, access.Ref)
@@ -37,7 +39,7 @@ func processGit(resource descriptorv2.Resource, access *gitv1.Git, id string, va
 		Spec: unstructured,
 	}
 
-	addResourceTransform, err := uploadAsLocalResource(toSpec, val.Descriptor.Component.Name, val.Descriptor.Component.Version, addResourceID, getResourceID, staticReferenceName(resource.Name), addLabel(&val.Descriptor.Component, resource.Name, "LocalBlob", toSpec))
+	addResourceTransform, err := uploadAsLocalResource(toSpec, val.Descriptor.Component.Name, val.Descriptor.Component.Version, addResourceID, getResourceID, resource.Name, addLabel(&val.Descriptor.Component, resource.Name, "LocalBlob", toSpec))
 	if err != nil {
 		return fmt.Errorf("failed to create local resource upload transformation: %w", err)
 	}

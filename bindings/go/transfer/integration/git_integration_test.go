@@ -122,8 +122,7 @@ func Test_Integration_TransferGit_CTFToOCI(t *testing.T) {
 	}
 	r.NoError(ctfRepo.AddComponentVersion(t.Context(), desc))
 
-	// 3. Build the transfer graph. CopyModeAllResources is required: the default
-	//    CopyModeLocalBlobResources skips external resources, and a Git access is external.
+	// 3. Build the transfer graph with a local blob uploader (external resources are kept by reference otherwise).
 	sourceSpec := &ctfrepospec.Repository{
 		Type:     runtime.Type{Name: ctfrepospec.Type, Version: ctfrepospec.Version},
 		FilePath: sourceCTFPath,
@@ -134,8 +133,8 @@ func Test_Integration_TransferGit_CTFToOCI(t *testing.T) {
 	}
 
 	tgd, err := transfer.BuildGraphDefinition(t.Context(),
-		&transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeAllResources},
-		nil,
+		&transferv1alpha1.Config{},
+		[]transferv1alpha1.UploaderConfig{&transferv1alpha1.LocalBlobUploaderConfig{}},
 		transfer.Mapping{
 			Components: []transfer.ComponentID{{Component: componentName, Version: componentVersion}},
 			Target:     targetSpec,
