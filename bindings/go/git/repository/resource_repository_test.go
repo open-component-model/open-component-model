@@ -126,6 +126,33 @@ func TestResourceDigestVerification(t *testing.T) {
 	}
 }
 
+func TestResourceDigestMovesURLFragmentIntoFields(t *testing.T) {
+	fixture := newRepository(t)
+	for _, tc := range []struct {
+		name, fragment, wantRef string
+	}{
+		{name: "branch", fragment: "branch=main", wantRef: "refs/heads/main"},
+		{name: "commit", fragment: "commit=" + fixture.First.String()},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			repo := repository.NewResourceRepository(nil)
+			res := &descriptor.Resource{Access: &v1.Git{
+				Type: runtime.NewVersionedType("Git", "v1"), Repository: fixture.Path + "#" + tc.fragment,
+			}}
+
+			pinned, err := repo.ProcessResourceDigest(t.Context(), res, nil)
+			r.NoError(err)
+
+			var spec v1.Git
+			r.NoError(access.Scheme.Convert(pinned.Access, &spec))
+			r.Equal(fixture.Path, spec.Repository)
+			r.Equal(tc.wantRef, spec.Ref)
+			r.NotEmpty(spec.Commit)
+		})
+	}
+}
+
 func TestResourceDigestKeepsPinnedCommit(t *testing.T) {
 	r := require.New(t)
 

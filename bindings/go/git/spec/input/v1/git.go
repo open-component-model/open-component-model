@@ -46,7 +46,8 @@ func (g *Git) Validate() error {
 	return access.Validate()
 }
 
-// ToAccess returns the Git access that selects the input snapshot.
+// ToAccess returns the Git access that selects the input snapshot. A ref or
+// commit selected by the repository URL fragment is moved into Ref or Commit.
 func (g *Git) ToAccess() (*accessv1.Git, error) {
 	if g == nil {
 		return nil, errors.New("git input is required")
@@ -67,5 +68,5 @@ func (g *Git) ToAccess() (*accessv1.Git, error) {
 		ref = "HEAD"
 	}
 
-	return &accessv1.Git{Repository: g.Repository, Ref: ref, Commit: commit}, nil
+	return &accessv1.Git{Repository: ep.Repository, Ref: ref, Commit: commit}, nil
 }

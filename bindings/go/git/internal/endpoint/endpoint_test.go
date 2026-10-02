@@ -44,11 +44,31 @@ func TestParseFragment(t *testing.T) {
 	for _, tc := range []struct {
 		repository, url, ref, commit string
 	}{
-		{"https://example.com/org/repo.git#branch=main", "https://example.com/org/repo.git", "refs/heads/main", ""},
-		{"git@example.com:org/repo.git#tag=v1.0.0", "git@example.com:org/repo.git", "refs/tags/v1.0.0", ""},
-		{"/srv/repo.git#commit=" + commit, "file:///srv/repo.git", "", commit},
-		{"https://example.com/repo.git#branch=release/1.x&commit=" + commit, "https://example.com/repo.git", "refs/heads/release/1.x", commit},
-		{"https://example.com/repo.git#", "https://example.com/repo.git", "", ""},
+		{
+			repository: "https://example.com/org/repo.git#branch=main",
+			url:        "https://example.com/org/repo.git",
+			ref:        "refs/heads/main",
+		},
+		{
+			repository: "git@example.com:org/repo.git#tag=v1.0.0",
+			url:        "git@example.com:org/repo.git",
+			ref:        "refs/tags/v1.0.0",
+		},
+		{
+			repository: "/srv/repo.git#commit=" + commit,
+			url:        "file:///srv/repo.git",
+			commit:     commit,
+		},
+		{
+			repository: "https://example.com/repo.git#branch=release/1.x&commit=" + commit,
+			url:        "https://example.com/repo.git",
+			ref:        "refs/heads/release/1.x",
+			commit:     commit,
+		},
+		{
+			repository: "https://example.com/repo.git#",
+			url:        "https://example.com/repo.git",
+		},
 	} {
 		t.Run(tc.repository, func(t *testing.T) {
 			r := require.New(t)
@@ -56,6 +76,7 @@ func TestParseFragment(t *testing.T) {
 			ep, err := endpoint.Parse(tc.repository)
 			r.NoError(err)
 			r.Equal(tc.url, ep.URL)
+			r.Equal(strings.Split(tc.repository, "#")[0], ep.Repository)
 			r.Equal(tc.ref, ep.Ref)
 			r.Equal(tc.commit, ep.Commit)
 		})
@@ -67,14 +88,56 @@ func TestSelectors(t *testing.T) {
 	for _, tc := range []struct {
 		name, repository, ref, commit, wantRef, wantCommit, err string
 	}{
-		{"fields only", "https://example.com/repo.git", "main", commit, "main", commit, ""},
-		{"fragment only", "https://example.com/repo.git#branch=main&commit=" + commit, "", "", "refs/heads/main", commit, ""},
-		{"same short branch", "https://example.com/repo.git#branch=main", "main", "", "refs/heads/main", "", ""},
-		{"same short tag", "https://example.com/repo.git#tag=v1", "v1", "", "refs/tags/v1", "", ""},
-		{"same qualified branch", "https://example.com/repo.git#branch=main", "refs/heads/main", "", "refs/heads/main", "", ""},
-		{"same commit in other case", "https://example.com/repo.git#commit=" + commit, "", strings.ToUpper(commit), "", commit, ""},
-		{"different branch", "https://example.com/repo.git#branch=main", "dev", "", "", "", "conflicts"},
-		{"different commit", "https://example.com/repo.git#commit=" + commit, "", strings.Repeat("b", 40), "", "", "conflicts"},
+		{
+			name:       "fields only",
+			repository: "https://example.com/repo.git",
+			ref:        "main",
+			commit:     commit,
+			wantRef:    "main",
+			wantCommit: commit,
+		},
+		{
+			name:       "fragment only",
+			repository: "https://example.com/repo.git#branch=main&commit=" + commit,
+			wantRef:    "refs/heads/main",
+			wantCommit: commit,
+		},
+		{
+			name:       "same short branch",
+			repository: "https://example.com/repo.git#branch=main",
+			ref:        "main",
+			wantRef:    "refs/heads/main",
+		},
+		{
+			name:       "same short tag",
+			repository: "https://example.com/repo.git#tag=v1",
+			ref:        "v1",
+			wantRef:    "refs/tags/v1",
+		},
+		{
+			name:       "same qualified branch",
+			repository: "https://example.com/repo.git#branch=main",
+			ref:        "refs/heads/main",
+			wantRef:    "refs/heads/main",
+		},
+		{
+			name:       "same commit in other case",
+			repository: "https://example.com/repo.git#commit=" + commit,
+			commit:     strings.ToUpper(commit),
+			wantCommit: commit,
+		},
+		{
+			name:       "different branch",
+			repository: "https://example.com/repo.git#branch=main",
+			ref:        "dev",
+			err:        "conflicts",
+		},
+		{
+			name:       "different commit",
+			repository: "https://example.com/repo.git#commit=" + commit,
+			commit:     strings.Repeat("b", 40),
+			err:        "conflicts",
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)

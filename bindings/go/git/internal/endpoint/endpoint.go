@@ -14,13 +14,15 @@ import (
 // Endpoint is a parsed git repository URL with a lowercase protocol and host.
 type Endpoint struct {
 	// URL is the repository URL to hand to go-git.
-	URL      string
-	Protocol string
-	User     string
-	Password string
-	Host     string
-	Port     int
-	Path     string
+	URL string
+	// Repository is the repository as given, without the fragment.
+	Repository string
+	Protocol   string
+	User       string
+	Password   string
+	Host       string
+	Port       int
+	Path       string
 	// Ref and Commit are selected by the URL fragment, as in #branch=main.
 	Ref    string
 	Commit string
@@ -57,10 +59,11 @@ func Parse(repository string) (*Endpoint, error) {
 	}
 
 	ep := &Endpoint{
-		URL:      repository,
-		Protocol: strings.ToLower(u.Scheme),
-		Host:     strings.ToLower(u.Hostname()),
-		Path:     u.Path,
+		URL:        repository,
+		Repository: repository,
+		Protocol:   strings.ToLower(u.Scheme),
+		Host:       strings.ToLower(u.Hostname()),
+		Path:       u.Path,
 	}
 	if err := ep.parseFragment(fragment); err != nil {
 		return nil, err

@@ -93,13 +93,13 @@ func TestDownloadURLFragment(t *testing.T) {
 
 	for _, tc := range []struct {
 		name, fragment, ref string
-		want               plumbing.Hash
+		want                plumbing.Hash
 	}{
-		{"branch", "branch=feature", "", fixture.First},
-		{"tag", "tag=v1", "", fixture.First},
-		{"commit", "commit=" + fixture.First.String(), "", fixture.First},
-		{"commit overrides ref", "commit=" + fixture.First.String(), "main", fixture.First},
-		{"same branch as ref", "branch=main", "main", fixture.Second},
+		{name: "branch", fragment: "branch=feature", want: fixture.First},
+		{name: "tag", fragment: "tag=v1", want: fixture.First},
+		{name: "commit", fragment: "commit=" + fixture.First.String(), want: fixture.First},
+		{name: "commit overrides ref", fragment: "commit=" + fixture.First.String(), ref: "main", want: fixture.First},
+		{name: "same branch as ref", fragment: "branch=main", ref: "main", want: fixture.Second},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)

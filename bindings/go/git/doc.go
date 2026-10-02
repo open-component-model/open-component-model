@@ -7,6 +7,8 @@
 // The repository URL may select them with a fragment instead, as in
 // https://github.com/org/repo.git#branch=main; the keys are branch, tag and
 // commit. A fragment selector and a set field must not name different revisions.
+// ProcessResourceDigest and the constructor input move it into Ref or Commit,
+// so stored descriptors carry a plain repository URL.
 //
 // [ocm.software/open-component-model/bindings/go/git/repository.ResourceRepository]
 // downloads the commit tree as a gzip-compressed tar (application/x-tgz):
