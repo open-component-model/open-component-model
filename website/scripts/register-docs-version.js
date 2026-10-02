@@ -315,6 +315,21 @@ const BINDING_MOUNTS = [
     { pkg: 'wget',          source: 'transformation/spec/v1alpha1/schemas',              target: 'schemas/bindings/go/wget/transformation',    since: '0.17' },
     { pkg: 'configuration/checksum/http', source: 'v1alpha1/spec/schemas', target: 'schemas/bindings/go/configuration/checksum/http/v1alpha1', sinceMonolith: true },
     { pkg: 'git',           source: 'spec/credentials/v1/schemas',                       target: 'schemas/bindings/go/credentials/git/v1',     since: '0.18' },
+    { pkg: 'input/dir', source: 'spec/v1/schemas', target: 'schemas/bindings/go/input/dir/v1', since: '0.18' },
+    { pkg: 'input/file', source: 'spec/v1/schemas', target: 'schemas/bindings/go/input/file/v1', since: '0.18' },
+    { pkg: 'input/utf8', source: 'spec/v1/schemas', target: 'schemas/bindings/go/input/utf8/v1', since: '0.18' },
+    { pkg: 'helm', source: 'spec/input/v1/schemas', target: 'schemas/bindings/go/input/helm/v1', since: '0.18' },
+    { pkg: 'wget', source: 'spec/input/v1/schemas', target: 'schemas/bindings/go/input/wget/v1', since: '0.18' },
+    { pkg: 's3', source: 'spec/input/v2/schemas', target: 'schemas/bindings/go/input/s3/v2', since: '0.18' },
+    { pkg: 'git', source: 'spec/input/v1/schemas', target: 'schemas/bindings/go/input/git/v1', since: '0.18' },
+    { pkg: 'oci', source: 'spec/access/v1/schemas', target: 'schemas/bindings/go/access/oci/v1', since: '0.18' },
+    { pkg: 'descriptor/v2', source: 'schemas', target: 'schemas/bindings/go/access/localblob/v1', since: '0.18' },
+    { pkg: 'helm', source: 'spec/access/v1/schemas', target: 'schemas/bindings/go/access/helm/v1', since: '0.18' },
+    { pkg: 'github', source: 'spec/access/v1/schemas', target: 'schemas/bindings/go/access/github/v1', since: '0.18' },
+    { pkg: 'git', source: 'spec/access/v1/schemas', target: 'schemas/bindings/go/access/git/v1', since: '0.18' },
+    { pkg: 'blob/filesystem', source: 'spec/access/v1alpha1/schemas', target: 'schemas/bindings/go/access/file/v1alpha1', since: '0.18' },
+    { pkg: 'wget', source: 'spec/access/v1/schemas', target: 'schemas/bindings/go/access/wget/v1', since: '0.18' },
+    { pkg: 's3', source: 'spec/access/v2/schemas', target: 'schemas/bindings/go/access/s3/v2', since: '0.18' },
 ];
 
 // Return the bindings schema imports for a version. The layout is auto-detected

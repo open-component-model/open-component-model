@@ -244,6 +244,96 @@ mounts:
       matrix:
         versions:
           - main
+  - source: ../bindings/go/input/dir/spec/v1/schemas
+    target: static/main/schemas/bindings/go/input/dir/v1
+    sites:
+      matrix:
+        versions:
+          - main
+  - source: ../bindings/go/input/file/spec/v1/schemas
+    target: static/main/schemas/bindings/go/input/file/v1
+    sites:
+      matrix:
+        versions:
+          - main
+  - source: ../bindings/go/input/utf8/spec/v1/schemas
+    target: static/main/schemas/bindings/go/input/utf8/v1
+    sites:
+      matrix:
+        versions:
+          - main
+  - source: ../bindings/go/helm/spec/input/v1/schemas
+    target: static/main/schemas/bindings/go/input/helm/v1
+    sites:
+      matrix:
+        versions:
+          - main
+  - source: ../bindings/go/wget/spec/input/v1/schemas
+    target: static/main/schemas/bindings/go/input/wget/v1
+    sites:
+      matrix:
+        versions:
+          - main
+  - source: ../bindings/go/s3/spec/input/v2/schemas
+    target: static/main/schemas/bindings/go/input/s3/v2
+    sites:
+      matrix:
+        versions:
+          - main
+  - source: ../bindings/go/git/spec/input/v1/schemas
+    target: static/main/schemas/bindings/go/input/git/v1
+    sites:
+      matrix:
+        versions:
+          - main
+  - source: ../bindings/go/oci/spec/access/v1/schemas
+    target: static/main/schemas/bindings/go/access/oci/v1
+    sites:
+      matrix:
+        versions:
+          - main
+  - source: ../bindings/go/descriptor/v2/schemas
+    target: static/main/schemas/bindings/go/access/localblob/v1
+    sites:
+      matrix:
+        versions:
+          - main
+  - source: ../bindings/go/helm/spec/access/v1/schemas
+    target: static/main/schemas/bindings/go/access/helm/v1
+    sites:
+      matrix:
+        versions:
+          - main
+  - source: ../bindings/go/github/spec/access/v1/schemas
+    target: static/main/schemas/bindings/go/access/github/v1
+    sites:
+      matrix:
+        versions:
+          - main
+  - source: ../bindings/go/git/spec/access/v1/schemas
+    target: static/main/schemas/bindings/go/access/git/v1
+    sites:
+      matrix:
+        versions:
+          - main
+  - source: ../bindings/go/blob/filesystem/spec/access/v1alpha1/schemas
+    target: static/main/schemas/bindings/go/access/file/v1alpha1
+    sites:
+      matrix:
+        versions:
+          - main
+  - source: ../bindings/go/wget/spec/access/v1/schemas
+    target: static/main/schemas/bindings/go/access/wget/v1
+    sites:
+      matrix:
+        versions:
+          - main
+  - source: ../bindings/go/s3/spec/access/v2/schemas
+    target: static/main/schemas/bindings/go/access/s3/v2
+    sites:
+      matrix:
+        versions:
+          - main
   - source: ../bindings/go/kubernetes/controller/config/crd/bases
     target: static/main/schemas/kubernetes/controller
     sites:

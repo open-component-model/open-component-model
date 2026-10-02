@@ -26,16 +26,9 @@ reference for the full YAML schema.
 
 Embeds a directory as a tar archive.
 
-| Field | Type | Required | Description |
-| ----- | ---- | -------- | ----------- |
-| `path` | string | yes | Path to the directory (relative to the constructor file). |
-| `mediaType` | string | no | MediaType of the resource (defaults to application/x-tar). The Dir input always creates a tar. However, it does not add a +tar suffix as this might cause conflicts with MediaType's such as application/x-tar. |
-| `compress` | boolean | no | Compress the tar archive (gzip). If set to true, the default media type gets a +gzip suffix. A declared `mediaType` is used as-is. |
-| `reproducible` | boolean | no | Normalize file attributes (timestamps, permissions) for reproducible digests. Recommended when signing. |
-| `preserveDir` | boolean | no | Include the directory itself in the archive. |
-| `followSymlinks` | boolean | no | Include the content of symbolic links in the archive. Not yet implemented; accepted for compatibility with previous OCM versions. |
-| `excludeFiles` | array of string | no | Glob patterns for files to exclude. |
-| `includeFiles` | array of string | no | Glob patterns for files to include. |
+{{< schema-renderer url="/schemas/bindings/go/input/dir/v1/Dir.schema.json" >}}
+
+**Example**
 
 ```yaml
 resources:
@@ -52,11 +45,9 @@ resources:
 
 Embeds a single file.
 
-| Field | Type | Required | Description |
-| ----- | ---- | -------- | ----------- |
-| `path` | string | yes | Path to the file (relative to the constructor file). |
-| `mediaType` | string | no | Media type of the file. |
-| `compress` | boolean | no | Compress the content (gzip). |
+{{< schema-renderer url="/schemas/bindings/go/input/file/v1/File.schema.json" >}}
+
+**Example**
 
 ```yaml
 resources:
@@ -89,11 +80,9 @@ See the [Working with OCI]({{< relref "docs/tutorials/working-with-oci" >}}) tut
 Embeds a Helm chart from the local filesystem or a remote repository. Exactly one of `path` or `helmRepository` must be
 specified.
 
-| Field            | Type   | Required | Description                                                                                                                                   |
-|------------------|--------|----------|-----------------------------------------------------------------------------------------------------------------------------------------------|
-| `path`           | string | no       | Path to a local chart directory or `.tgz` archive.                                                                                            |
-| `helmRepository` | string | no       | Remote URL (HTTP/HTTPS `.tgz` or OCI reference).                                                                                              |
-| `repository`     | string | no       | OCI reference specifying the upload location of the chart. Must include a version tag matching the chart version (e.g. `charts/myapp:1.0.0`). |
+{{< schema-renderer url="/schemas/bindings/go/input/helm/v1/Helm.schema.json" >}}
+
+**Example**
 
 ```yaml
 # Local chart
@@ -127,13 +116,9 @@ resources:
 
 Embeds inline text or structured data. Exactly one of `text`, `json`, `formattedJson`, or `yaml` must be specified.
 
-| Field           | Type    | Required | Description                                 |
-|-----------------|---------|----------|---------------------------------------------|
-| `text`          | string  | no       | Plain text content.                         |
-| `json`          | any     | no       | JSON value (stored compact).                |
-| `formattedJson` | any     | no       | JSON value (stored formatted).              |
-| `yaml`          | any     | no       | YAML value (converted to JSON for storage). |
-| `compress`      | boolean | no       | Compress the content (gzip).                |
+{{< schema-renderer url="/schemas/bindings/go/input/utf8/v1/UTF8.schema.json" >}}
+
+**Example**
 
 ```yaml
 resources:
@@ -155,14 +140,7 @@ want the bytes captured in the component version rather than fetched again at co
 Alternative type names `wget/v1`, `Wget`, and `wget` are also accepted, as are the additional aliases `HTTP/v1`,
 `HTTP`, `http/v1`, and `http`; `Wget/v1` is canonical.
 
-| Field        | Type                  | Required | Description                                                                                                                               |
-|--------------|-----------------------|----------|-------------------------------------------------------------------------------------------------------------------------------------------|
-| `url`        | string                | yes      | HTTP or HTTPS endpoint to download from. Other URL schemes are rejected.                                                                  |
-| `mediaType`  | string                | no       | Media type of the downloaded content. If omitted, the response `Content-Type` header is used, falling back to `application/octet-stream`. |
-| `header`     | `map[string][]string` | no       | Additional HTTP headers to send with the request.                                                                                         |
-| `verb`       | string                | no       | HTTP method to use. Defaults to `GET`.                                                                                                    |
-| `body`       | string (base64)       | no       | Request body. Encoded as base64 in YAML because the underlying field is a byte slice.                                                     |
-| `noRedirect` | boolean               | no       | Do not follow HTTP redirects. Defaults to `false`.                                                                                        |
+{{< schema-renderer url="/schemas/bindings/go/input/wget/v1/Wget.schema.json" >}}
 
 {{< callout context="caution" >}}
 Do not put credentials in `url`, `header`, or `body`. That includes userinfo (`https://user:token@host/...`) and
@@ -172,6 +150,8 @@ control. Configure authentication through the
 [credential system]({{< relref "credential-consumer-identities.md" >}}#wget) instead, which keeps secrets in
 `.ocmconfig` and out of the artifacts you publish.
 {{< /callout >}}
+
+**Example**
 
 ```yaml
 resources:
@@ -251,15 +231,9 @@ same as the fields of the
 same object by value or by reference. Input types remain v2-only: even the unversioned aliases require
 `bucketName` and `objectKey`; `S3/v1` and `s3/v1` are access types only.
 
-| Field          | Type    | Required | Description                                                                                                                                                        |
-|----------------|---------|----------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `bucketName`   | string  | yes      | Name of the bucket that holds the object.                                                                                                                          |
-| `objectKey`    | string  | yes      | Key (path) of the object in the bucket.                                                                                                                            |
-| `region`       | string  | no       | Region of the bucket. If you omit it, the AWS SDK reads `AWS_REGION` or the shared AWS config, and falls back to `us-east-1`. Most S3-compatible stores ignore it. |
-| `mediaType`    | string  | no       | Media type of the object. If you omit it, OCM uses the `Content-Type` of the object, and falls back to `application/octet-stream`.                                 |
-| `version`      | string  | no       | S3 object version (`versionId`) to read. If you omit it, OCM reads the latest version.                                                                             |
-| `endpoint`     | string  | no       | Base endpoint of an S3-compatible store such as MinIO, Ceph or R2, for example `https://minio.internal:9000`. If you omit it, OCM uses AWS S3.                     |
-| `usePathStyle` | boolean | no       | Put the bucket in the path (`<endpoint>/<bucket>/<key>`) instead of in the host. Most self-hosted S3-compatible stores need this. Default: `false`.                |
+{{< schema-renderer url="/schemas/bindings/go/input/s3/v2/S3.schema.json" >}}
+
+**Example**
 
 ```yaml
 resources:
@@ -312,17 +286,15 @@ Use this input type when the source code must travel with the component version.
 [`Git/v1` access type]({{< relref "input-and-access-types.md#gitv1-access" >}}) is the alternative: it leaves the code in the repository and reads it on every
 download.
 
-`Git/v1` is the canonical type name. OCM also accepts `Git`, and the OCM v1 names `git`, `git/v1alpha1` and
-`Git/v1alpha1`. The fields are the same as the fields of the access type.
+`Git/v1` is the canonical type name. OCM also accepts `Git`, and the OCM v1 names `git` and `git/v1`. The fields are
+the same as the fields of the access type.
 
-| Field        | Type   | Required | Description                                                                                                                  |
-|--------------|--------|----------|------------------------------------------------------------------------------------------------------------------------------|
-| `repository` | string | yes      | Repository URL. See [supported URL forms](#git-url-forms).                                                                   |
-| `ref`        | string | no       | Branch, tag or full ref name (for example `main`, `v1.0.0`, `refs/tags/v1.0.0`). Ignored when `commit` is set.               |
-| `commit`     | string | no       | Full 40-character commit SHA. Takes precedence over `ref`.                                                                   |
+{{< schema-renderer url="/schemas/bindings/go/input/git/v1/Git.schema.json" >}}
 
 If you set neither `ref` nor `commit`, OCM archives the commit that the repository's `HEAD` points to, usually the default
 branch. The result then changes when the branch moves. Set `commit` for a reproducible build.
+
+**Example**
 
 ```yaml
 resources:
@@ -355,9 +327,9 @@ The OCM v1 `git` input type has the same fields. A constructor file written for 
 References an OCI artifact (image or image index) in a registry. This is the canonical type name. The legacy aliases
 `ociArtifact`, `ociRegistry`, and `ociImage` are also accepted.
 
-| Field            | Type   | Required | Description                                                                 |
-|------------------|--------|----------|-----------------------------------------------------------------------------|
-| `imageReference` | string | yes      | Full OCI image reference including registry, repository, and tag or digest. |
+{{< schema-renderer url="/schemas/bindings/go/access/oci/v1/OCIImage.schema.json" >}}
+
+**Example**
 
 ```yaml
 resources:
@@ -377,12 +349,9 @@ Typically created automatically when using input types or when transferring with
 
 When stored in an OCI registry, local blobs with OCI-native media types (e.g. `application/vnd.oci.image.manifest.v1+json`, `application/vnd.oci.image.index.v1+json`) are mapped to native OCI manifests and can be accessed directly by digest using standard OCI tools. The `globalAccess` field provides the native image reference for direct access. See the [Working with OCI]({{< relref "docs/tutorials/working-with-oci" >}}) tutorial for details.
 
-| Field            | Type   | Required | Description                                                      |
-|------------------|--------|----------|------------------------------------------------------------------|
-| `localReference` | string | yes      | Repository-local blob identifier (usually a digest).             |
-| `mediaType`      | string | yes      | Media type of the blob.                                          |
-| `referenceName`  | string | no       | Optional static name for the blob in a local repository context. |
-| `globalAccess`   | object | no       | Optional global access fallback.                                 |
+{{< schema-renderer url="/schemas/bindings/go/access/localblob/v1/LocalBlob.schema.json" >}}
+
+**Example**
 
 ```yaml
 resources:
@@ -399,12 +368,9 @@ resources:
 
 References a single blob (layer) in an OCI repository by digest. Legacy alias: `ociBlob`.
 
-| Field       | Type    | Required | Description                |
-|-------------|---------|----------|----------------------------|
-| `ref`       | string  | yes      | OCI repository reference.  |
-| `mediaType` | string  | no       | Media type of the layer.   |
-| `digest`    | string  | yes      | Digest of the blob.        |
-| `size`      | integer | yes      | Size of the blob in bytes. |
+{{< schema-renderer url="/schemas/bindings/go/access/oci/v1/OCIImageLayer.schema.json" >}}
+
+**Example**
 
 ```yaml
 resources:
@@ -424,11 +390,9 @@ resources:
 
 References a Helm chart in a Helm chart repository or OCI registry. Legacy alias: `helm`.
 
-| Field            | Type   | Required | Description                                                               |
-|------------------|--------|----------|---------------------------------------------------------------------------|
-| `helmRepository` | string | yes      | URL of the Helm chart repository.                                         |
-| `helmChart`      | string | yes      | Chart name and optional version separated by `:` (e.g. `mariadb:12.2.7`). |
-| `version`        | string | no       | Chart version. Can also be specified as part of `helmChart`.              |
+{{< schema-renderer url="/schemas/bindings/go/access/helm/v1/Helm.schema.json" >}}
+
+**Example**
 
 ```yaml
 resources:
@@ -454,16 +418,13 @@ References a commit of a GitHub repository, downloaded as a source archive via t
 REST API. Also usable unversioned as `GitHub`. Legacy aliases: `github`, `github/v1`,
 `gitHub`, `gitHub/v1`.
 
-| Field         | Type   | Required | Description                                                                                                                      |
-|---------------|--------|----------|----------------------------------------------------------------------------------------------------------------------------------|
-| `repoUrl`     | string | yes      | Repository URL (scheme optional, `https` assumed), e.g. `github.com/open-component-model/ocm`.                                   |
-| `apiHostname` | string | no       | Overrides the GitHub REST API hostname for GitHub Enterprise.                                                                    |
-| `commit`      | string | no*      | 40-character hex commit SHA. When set it is authoritative.                                                                       |
-| `ref`         | string | no*      | Git reference (e.g. `refs/heads/main`), resolved to a commit at download time and pinned onto the resource by digest processing. |
+{{< schema-renderer url="/schemas/bindings/go/access/github/v1/GitHub.schema.json" >}}
 
-\* At least one of `commit` or `ref` must be set. A resource may be authored with only a
+At least one of `commit` or `ref` must be set. A resource may be authored with only a
 `ref`; its `commit` is pinned later during digest processing. A source is never pinned, so
 give it a `commit`.
+
+**Example**
 
 ```yaml
 resources:
@@ -497,14 +458,12 @@ Bitbucket and self-hosted servers, over HTTPS or SSH.
 `Git/v1` is the canonical type name. OCM also accepts `Git`, and the OCM v1 names `git`, `git/v1alpha1` and
 `Git/v1alpha1`.
 
-| Field        | Type   | Required | Description                                                                                                                 |
-|--------------|--------|----------|-----------------------------------------------------------------------------------------------------------------------------|
-| `repository` | string | yes      | Repository URL. See [supported URL forms](#git-url-forms).                                                                  |
-| `commit`     | string | no*      | Full 40-character commit SHA. When set, it is authoritative.                                                                |
-| `ref`        | string | no*      | Branch, tag or full ref name (for example `main`, `v1.0.0`, `refs/tags/v1.0.0`). Resolved to a commit by digest processing. |
+{{< schema-renderer url="/schemas/bindings/go/access/git/v1/Git.schema.json" >}}
 
-\* At least one of `commit` or `ref` must be set. A resource may have only a `ref`. OCM adds the `commit` during digest
+At least one of `commit` or `ref` must be set. A resource may have only a `ref`. OCM adds the `commit` during digest
 processing. A source never goes through digest processing, so set its `commit` yourself.
+
+**Example**
 
 ```yaml
 resources:
@@ -570,11 +529,9 @@ Two differences need attention:
 
 References a file by URI ([RFC 8089](https://datatracker.ietf.org/doc/html/rfc8089)). Legacy alias: `file`.
 
-| Field       | Type   | Required | Description                                                                                        |
-|-------------|--------|----------|----------------------------------------------------------------------------------------------------|
-| `uri`       | string | yes      | File locator conforming to RFC 8089.                                                               |
-| `mediaType` | string | no       | Media type of the file. Inferred from the file extension if not set.                               |
-| `digest`    | string | no       | Expected content digest for integrity verification (e.g. `sha256:7173b809...`). OCI digest format. |
+{{< schema-renderer url="/schemas/bindings/go/access/file/v1alpha1/File.schema.json" >}}
+
+**Example**
 
 ```yaml
 resources:
@@ -605,14 +562,7 @@ Because the content is not under your control, the expected digest can be pinned
 [`Wget/v1` input type]({{< relref "input-and-access-types.md" >}}#wgetv1-input), so the same request can be expressed
 either by value or by reference.
 
-| Field        | Type                  | Required | Description                                                                                                                               |
-|--------------|-----------------------|----------|-------------------------------------------------------------------------------------------------------------------------------------------|
-| `url`        | string                | yes      | HTTP or HTTPS endpoint to download from. Other URL schemes are rejected.                                                                  |
-| `mediaType`  | string                | no       | Media type of the referenced content. If omitted, the response `Content-Type` header is used, falling back to `application/octet-stream`. |
-| `header`     | `map[string][]string` | no       | Additional HTTP headers to send with the request.                                                                                         |
-| `verb`       | string                | no       | HTTP method to use. Defaults to `GET`.                                                                                                    |
-| `body`       | string (base64)       | no       | Request body. Encoded as base64 in YAML because the underlying field is a byte slice.                                                     |
-| `noRedirect` | boolean               | no       | Do not follow HTTP redirects. Defaults to `false`.                                                                                        |
+{{< schema-renderer url="/schemas/bindings/go/access/wget/v1/Wget.schema.json" >}}
 
 {{< callout context="caution" >}}
 **Never put credentials in `url`, `header`, or `body`.** Unlike an input specification, an access specification is
@@ -623,6 +573,8 @@ component version. Configure authentication through the
 [credential system]({{< relref "credential-consumer-identities.md" >}}#wget) instead. Credentials are resolved at
 request time from `.ocmconfig` and never become part of the component version.
 {{< /callout >}}
+
+**Example**
 
 ```yaml
 resources:
@@ -664,17 +616,11 @@ repository. It does not make S3 a component version repository.
 both versions support `region`, `version`, `mediaType` and the `endpoint` and `usePathStyle` extensions.
 Unversioned `S3` and `s3` accept either legacy `bucket` and `key` or v2 `bucketName` and `objectKey` fields.
 Records containing fields from both formats are rejected as ambiguous. See
-[Migrating from OCM v1](#s3-migration-from-ocm-v1). The table below describes the v2 fields.
+[Migrating from OCM v1](#s3-migration-from-ocm-v1). The schema below describes the v2 fields.
 
-| Field          | Type    | Required | Description                                                                                                                                                        |
-|----------------|---------|----------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `bucketName`   | string  | yes      | Name of the bucket that holds the object.                                                                                                                          |
-| `objectKey`    | string  | yes      | Key (path) of the object in the bucket.                                                                                                                            |
-| `region`       | string  | no       | Region of the bucket. If you omit it, the AWS SDK reads `AWS_REGION` or the shared AWS config, and falls back to `us-east-1`. Most S3-compatible stores ignore it. |
-| `mediaType`    | string  | no       | Media type of the object. If you omit it, OCM uses the `Content-Type` of the object, and falls back to `application/octet-stream`.                                 |
-| `version`      | string  | no       | S3 object version (`versionId`) to read. If you omit it, OCM reads the latest version.                                                                             |
-| `endpoint`     | string  | no       | Base endpoint of an S3-compatible store such as MinIO, Ceph or R2, for example `https://minio.internal:9000`. If you omit it, OCM uses AWS S3.                     |
-| `usePathStyle` | boolean | no       | Put the bucket in the path (`<endpoint>/<bucket>/<key>`) instead of in the host. Most self-hosted S3-compatible stores need this. Default: `false`.                |
+{{< schema-renderer url="/schemas/bindings/go/access/s3/v2/S3.schema.json" >}}
+
+**Example**
 
 ```yaml
 resources:

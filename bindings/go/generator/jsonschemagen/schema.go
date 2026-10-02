@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"go/ast"
+	"go/types"
 	"slices"
 
 	"ocm.software/open-component-model/bindings/go/generator/universe"
@@ -176,6 +177,23 @@ func (g *generation) schemaForExpr(expr ast.Expr, ctx *universe.TypeInfo, field 
 	if key, ok := universe.ResolveExprToTypeKey(ctx.Pkg.TypesInfo, expr); ok {
 		if universe.IsJSONRawMessageKey(key) {
 			return anySchema()
+		}
+	}
+
+	// A named type from another package without a registered schema (e.g.
+	// go-digest's Digest) marshals as its underlying basic type, unless it
+	// implements json.Marshaler or encoding.TextMarshaler.
+	if sel, ok := expr.(*ast.SelectorExpr); ok {
+		if obj, ok := ctx.Pkg.TypesInfo.Uses[sel.Sel].(*types.TypeName); ok {
+			// encoding/json writes a json.Number string as a JSON number.
+			if obj.Pkg() != nil && obj.Pkg().Path() == "encoding/json" && obj.Name() == "Number" {
+				return &JSONSchemaDraft202012{Type: "number"}
+			}
+			if basic, ok := externalBasicType(obj); ok {
+				if prim := newPrimitiveSchema(ast.NewIdent(basic.Name()), ctx.TypeSpec, ctx.GenDecl, field); prim != nil {
+					return prim
+				}
+			}
 		}
 	}
 
@@ -471,6 +489,30 @@ func byteSliceSchema() *JSONSchemaDraft202012 {
 		Type:            "string",
 		ContentEncoding: "base64",
 	}
+}
+
+// externalBasicType returns the basic type obj marshals as. encoding/json
+// prefers MarshalJSON over MarshalText, and MarshalText produces a JSON string.
+func externalBasicType(obj *types.TypeName) (*types.Basic, bool) {
+	typ := obj.Type()
+	if hasMethod(typ, "MarshalJSON") {
+		return nil, false
+	}
+	if hasMethod(typ, "MarshalText") {
+		return types.Typ[types.String], true
+	}
+	basic, ok := typ.Underlying().(*types.Basic)
+	return basic, ok
+}
+
+// hasMethod reports whether typ or *typ has the named method.
+func hasMethod(typ types.Type, name string) bool {
+	for _, t := range []types.Type{typ, types.NewPointer(typ)} {
+		if m, _, _ := types.LookupFieldOrMethod(t, true, nil, name); m != nil {
+			return true
+		}
+	}
+	return false
 }
 
 func anyObjectSchema() *JSONSchemaDraft202012 {

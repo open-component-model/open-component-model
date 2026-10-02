@@ -14,7 +14,7 @@
       "description": "FormattedJSON is a JSON value, raw encoded via UTF-8, with default indentation applied."
     },
     "json": {
-      "description": "JSON is a JSON value, raw encoded via UTF-8."
+      "description": "JSON is a JSON value, raw encoded via UTF-8 in compact form."
     },
     "text": {
       "type": "string",
