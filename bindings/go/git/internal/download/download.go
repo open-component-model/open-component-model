@@ -50,6 +50,11 @@ func Download(ctx context.Context, access *accessv1.Git, creds *credsv1.GitCrede
 		return nil, fmt.Errorf("cannot address git repository: %w", err)
 	}
 
+	ref, commit, err := ep.Selectors(access.Ref, access.Commit)
+	if err != nil {
+		return nil, fmt.Errorf("cannot select git revision: %w", err)
+	}
+
 	auth, err := authMethod(ep, creds, opts)
 	if err != nil {
 		return nil, fmt.Errorf("cannot authenticate against git repository: %w", err)
@@ -84,7 +89,7 @@ func Download(ctx context.Context, access *accessv1.Git, creds *credsv1.GitCrede
 	}()
 
 	var repo *git.Repository
-	if access.Commit == "" && access.Ref == "HEAD" {
+	if commit == "" && ref == "HEAD" {
 		repo, err = git.PlainCloneContext(ctx, dir, &git.CloneOptions{
 			URL:           ep.URL,
 			ClientOptions: clientOptions,
@@ -95,7 +100,7 @@ func Download(ctx context.Context, access *accessv1.Git, creds *credsv1.GitCrede
 			err = transportError(ctx, "cannot fetch git repository", err)
 		}
 	} else {
-		repo, err = fetchRepository(ctx, dir, ep.URL, access.Commit, clientOptions)
+		repo, err = fetchRepository(ctx, dir, ep.URL, commit, clientOptions)
 	}
 
 	if repo != nil {
@@ -108,9 +113,9 @@ func Download(ctx context.Context, access *accessv1.Git, creds *credsv1.GitCrede
 		return nil, err
 	}
 
-	hash := plumbing.NewHash(access.Commit)
-	if access.Commit == "" {
-		hash, err = resolveRef(repo, access.Ref)
+	hash := plumbing.NewHash(commit)
+	if commit == "" {
+		hash, err = resolveRef(repo, ref)
 		if err != nil {
 			return nil, fmt.Errorf("cannot resolve git ref: %w", err)
 		}

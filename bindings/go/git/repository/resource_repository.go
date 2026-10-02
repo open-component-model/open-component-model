@@ -15,6 +15,7 @@ import (
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/git/internal/download"
+	"ocm.software/open-component-model/bindings/go/git/internal/endpoint"
 	"ocm.software/open-component-model/bindings/go/git/spec/access"
 	accessv1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
 	gitcreds "ocm.software/open-component-model/bindings/go/git/spec/credentials"
@@ -171,6 +172,16 @@ func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, res *des
 	if err != nil {
 		return nil, err
 	}
+
+	// Readers that do not know URL fragments, such as OCM v1, get plain fields.
+	ep, err := endpoint.Parse(spec.Repository)
+	if err != nil {
+		return nil, err
+	}
+	if spec.Ref, spec.Commit, err = ep.Selectors(spec.Ref, spec.Commit); err != nil {
+		return nil, err
+	}
+	spec.Repository = ep.Repository
 
 	downloaded, err := r.download(ctx, spec, res.Digest, creds, tempDir)
 	if err != nil {

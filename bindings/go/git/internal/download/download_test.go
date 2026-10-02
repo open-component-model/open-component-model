@@ -86,6 +86,47 @@ func TestDownloadRevisions(t *testing.T) {
 	}
 }
 
+func TestDownloadURLFragment(t *testing.T) {
+	fixture := newRepository(t)
+	r := require.New(t)
+	r.NoError(fixture.Git.Storer.SetReference(plumbing.NewHashReference("refs/heads/feature", fixture.First)))
+
+	for _, tc := range []struct {
+		name, fragment, ref string
+		want                plumbing.Hash
+	}{
+		{name: "branch", fragment: "branch=feature", want: fixture.First},
+		{name: "tag", fragment: "tag=v1", want: fixture.First},
+		{name: "commit", fragment: "commit=" + fixture.First.String(), want: fixture.First},
+		{name: "commit overrides ref", fragment: "commit=" + fixture.First.String(), ref: "main", want: fixture.First},
+		{name: "same branch as ref", fragment: "branch=main", ref: "main", want: fixture.Second},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			spec := &v1.Git{Repository: fixture.Path + "#" + tc.fragment, Ref: tc.ref}
+			result, err := Download(t.Context(), spec, nil, Options{TempDir: t.TempDir()})
+			r.NoError(err)
+			r.Equal(tc.want.String(), result.Commit)
+		})
+	}
+}
+
+func TestDownloadURLFragmentNotSent(t *testing.T) {
+	r := require.New(t)
+
+	var requests []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		requests = append(requests, req.URL.RequestURI())
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	t.Cleanup(server.Close)
+
+	_, err := Download(t.Context(), &v1.Git{Repository: server.URL + "/repo.git#branch=main"}, nil,
+		Options{TempDir: t.TempDir(), HTTPClient: server.Client()})
+	r.ErrorContains(err, "repository not found")
+	r.Equal([]string{"/repo.git/info/refs?service=git-upload-pack"}, requests)
+}
+
 func TestDownloadArchive(t *testing.T) {
 	r := require.New(t)
 	fixture := newRepository(t)
