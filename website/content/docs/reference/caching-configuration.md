@@ -55,11 +55,11 @@ The unversioned type `caching.oci.config.ocm.software` is accepted as a deprecat
 
 All fields are optional.
 
-| Field         | Type                                   | Default                                              | Description                                                                                                                 |
-|---------------|----------------------------------------|------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------|
-| `mode`        | `Always`, `IfNotPresent`, or `Never`   | `IfNotPresent`                                       | Cache activation and [remote policy](#remote-policy). `Never` disables both caches.                                          |
-| `ttl`         | duration string, for example `30s`, `10m`, `1h30m` | `10m`                                    | How long cached entries remain reusable. Must be positive. Numeric values are rejected.                                     |
-| `maxBlobSize` | integer, bytes                         | `4194304` (4 MiB)                                    | Largest individual blob the blob cache retains. Must be positive. Larger blobs are downloaded as usual but not cached.      |
+| Field         | Type                                               | Default           | Description                                                                                                            |
+|---------------|----------------------------------------------------|-------------------|------------------------------------------------------------------------------------------------------------------------|
+| `mode`        | `Always`, `IfNotPresent`, or `Never`               | `IfNotPresent`    | Cache activation and [remote policy](#remote-policy). `Never` disables both caches.                                    |
+| `ttl`         | duration string, for example `30s`, `10m`, `1h30m` | `10m`             | How long cached entries remain reusable. Must be positive. Numeric values are rejected.                                |
+| `maxBlobSize` | integer, bytes                                     | `4194304` (4 MiB) | Largest individual blob the blob cache retains. Must be positive. Larger blobs are downloaded as usual but not cached. |
 
 Without a caching entry, the CLI and the controller run with `IfNotPresent` and the default `ttl` and
 `maxBlobSize`.
