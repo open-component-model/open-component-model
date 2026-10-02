@@ -313,7 +313,6 @@ gitignore
 gitops
 gitrepository
 gittreestate
-glibc
 globalaccess
 globals
 gmbh
@@ -411,7 +410,6 @@ keycloak
 keyless
 keypair
 keyring
-keyserver
 kickstart
 konfidence
 kopic

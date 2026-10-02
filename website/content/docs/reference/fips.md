@@ -62,7 +62,7 @@ but it was frozen from Go 1.24, and Go removes it once v1.26.0 is validated.
 | Artifact | Build | Image contents |
 | --- | --- | --- |
 | `ocm` CLI binaries (all OS/architectures) | `GOFIPS140=v1.26.0`, `CGO_ENABLED=0` | — |
-| OCM CLI image | `GOFIPS140=v1.26.0`, `CGO_ENABLED=0` | `scratch` with `ocm`, `cosign`, `gpg` and the CA bundle |
+| OCM CLI image | `GOFIPS140=v1.26.0`, `CGO_ENABLED=0` | `scratch` with `ocm` and the CA bundle |
 | OCM controller image | `GOFIPS140=v1.26.0`, `CGO_ENABLED=0` | `ghcr.io/gardenlinux/gardenlinux/fips` |
 
 The controller image is based on the
@@ -71,21 +71,15 @@ The controller image is based on the
 OCM, is an Apeiro project. The image is pinned by digest and kept up to date by
 Renovate.
 
-The CLI image is built `FROM scratch` and contains only:
+The CLI image is built `FROM scratch` and contains only `/ocm` (the entrypoint),
+the CA bundle at `/etc/ssl/certs/ca-certificates.crt` (taken from the Garden
+Linux FIPS image) and a writable `/tmp`. It has no shell and no package
+manager, and it does not include `cosign` or `gpg`. See
+[Sigstore and cosign](#sigstore-and-cosign) and [The gpg command](#the-gpg-command)
+for how to use them.
 
-- `/ocm` (the entrypoint) and `/usr/local/bin/cosign`, both static Go binaries
-  built with the Go Cryptographic Module.
-- `gpg`, `gpg-agent`, `gpgconf` and `gpg-connect-agent` with their shared
-  libraries (glibc, `libgcrypt`, ...), taken from Garden Linux FIPS packages.
-  The packages are recorded under `/var/lib/dpkg/status.d/` for image scanners.
-- The CA bundle at `/etc/ssl/certs/ca-certificates.crt`.
-
-It has no shell, no package manager and no `dirmngr`, so gpg keyserver
-operations such as `--recv-keys` are not available.
-
-`ocm` and `cosign` are statically linked and do not use any system cryptographic
-library. All cryptography in OCM itself goes through the Go Cryptographic
-Module.
+`ocm` is statically linked and does not use any system cryptographic library.
+All cryptography in OCM itself goes through the Go Cryptographic Module.
 
 ### Container Hardening
 
@@ -214,37 +208,78 @@ boundary:
 | Feature | Reason |
 | --- | --- |
 | GPG signing and verification | Uses `github.com/ProtonMail/go-crypto/openpgp`, which ships its own cryptographic implementation. |
-| Sigstore/cosign outside the CLI image | When no `cosign` is on `PATH`, OCM downloads the upstream release binary, which is not a FIPS build. |
-| `gpg` command in the CLI image | GnuPG uses `libgcrypt`. The image forces its FIPS mode (`/etc/gcrypt/fips_enabled`), so only approved algorithms work: RSA, NIST P-curve and Ed25519 keys, SHA-2, AES. SHA-1 signatures, MD5, CAST5 and cv25519 (gpg's default encryption subkey, so pass an explicit algorithm such as `rsa3072` to `--quick-gen-key`) are rejected. FIPS mode is not validation: `libgcrypt` is not a submitted Garden Linux module. |
+| Sigstore/cosign with the downloaded `cosign` | When no `cosign` is on `PATH`, OCM downloads the upstream release binary, which is not a FIPS build. Provide your own FIPS build instead, see below. |
 
-In a FIPS-restricted environment, use RSA signing, or Sigstore from the OCM CLI
-image. Progress on GPG is tracked in
+In a FIPS-restricted environment, use RSA signing, or Sigstore with a FIPS
+build of `cosign`. Progress on GPG is tracked in
 [ocm-project#1327](https://github.com/open-component-model/ocm-project/issues/1327).
 
 ### Sigstore and cosign
 
 OCM's Sigstore signing handler runs the external `cosign` binary. It uses the
-first `cosign` on `PATH` and only downloads the upstream release when none is
-found.
+first `cosign` on `PATH` and only downloads the upstream release, which is not a
+FIPS build, when none is found. Neither the OCM CLI binaries nor the CLI image
+include `cosign`.
 
-The OCM CLI image ships `/usr/local/bin/cosign`, built from source with the
-same `GOFIPS140` module version as `ocm`. The cosign version is pinned in
-`bindings/go/sigstore/signing/handler/internal/.env`. Check it with:
-
-```shell
-go version -m cosign | grep -E 'GOFIPS140|DefaultGODEBUG'
-```
-
-To get the same outside the image, build cosign yourself and put it on `PATH`
-before running `ocm`:
+cosign builds unmodified against the Go Cryptographic Module. Build it with the
+same `GOFIPS140` value as OCM; the cosign version OCM is tested with is pinned in
+`bindings/go/sigstore/signing/handler/internal/.env`:
 
 ```shell
 CGO_ENABLED=0 GOFIPS140=v1.26.0 go install github.com/sigstore/cosign/v3/cmd/cosign@v3.1.3
+go version -m "$(go env GOPATH)/bin/cosign" | grep -E 'GOFIPS140|DefaultGODEBUG'
 ```
+
+- **Local `ocm` binary:** put that `cosign` on `PATH` before running `ocm`.
+- **OCM CLI image:** build cosign for the image's platform (for example
+  `GOOS=linux GOARCH=amd64`) and mount it at `/usr/local/bin/cosign`, which is
+  on the image's `PATH`. The image sets `TUF_ROOT=/tmp/.sigstore/root`, so
+  cosign's trust-root cache works for the non-root user:
+
+  ```shell
+  docker run --rm \
+    -v "$PWD/cosign:/usr/local/bin/cosign:ro" \
+    -v "$PWD/.ocmconfig:/.ocmconfig:ro" \
+    ghcr.io/open-component-model/cli:latest \
+    verify cv --config /.ocmconfig ghcr.io/<namespace>//<component>:<version>
+  ```
+
+The OCM release workflow signs its own components this way.
 
 cosign's encrypted private key files (`cosign generate-key-pair`) use scrypt and
 NaCl secretbox from `golang.org/x/crypto`, which are outside the Go
 Cryptographic Module. OCM's keyless Sigstore flow does not use these key files.
+
+### The gpg command
+
+OCM does not use the `gpg` command: its GPG signing is built in (see above).
+If you need `gpg` itself next to OCM, for example to manage the keys you pass
+to OCM, run it from its own container. The CLI image does not include it.
+
+For an approved-algorithms-only `gpg`, use the Garden Linux FIPS image and
+force `libgcrypt`, which GnuPG uses for its cryptography, into FIPS mode:
+
+```dockerfile
+FROM ghcr.io/gardenlinux/gardenlinux/fips:<version>
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends gnupg \
+ && rm -rf /var/lib/apt/lists/* \
+ && mkdir -p /etc/gcrypt && echo 1 > /etc/gcrypt/fips_enabled
+```
+
+In this mode:
+
+- RSA, NIST P-curve and Ed25519 keys, SHA-2 and AES work.
+- SHA-1 signatures, MD5, CAST5 and cv25519 are rejected. cv25519 is gpg's
+  default encryption subkey, so pass an explicit algorithm such as `rsa3072` to
+  `gpg --quick-gen-key`.
+- `libgcrypt` is not a submitted Garden Linux module. FIPS mode restricts the
+  algorithms but does not make `gpg` validated.
+
+A statically linked `gpg` built from upstream sources is not a substitute:
+`libgcrypt`'s FIPS integrity self-check works only on the shared library, and
+the upstream build does not reject non-approved algorithms such as MD5 in FIPS
+mode.
 
 ## Building from Source
 

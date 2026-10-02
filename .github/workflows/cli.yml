@@ -146,73 +146,11 @@ jobs:
             ${{ env.CLI_DIR }}/tmp/bin/ocm-${{ matrix.goos }}-${{ matrix.goarch }}
             ${{ env.CLI_DIR }}/tmp/resources/ocm-${{ matrix.goos }}-${{ matrix.goarch }}.yaml
 
-  # Build the CLI image once per architecture on a native runner, so the
-  # target-arch steps in the Containerfile (gnupg install) run without QEMU.
-  # The assemble job merges both layouts into the multi-arch image.
-  image:
-    name: image linux/${{ matrix.arch }}
-    needs: [ version, build ]
-    runs-on: ${{ matrix.runner }}
-    permissions:
-      contents: read
-    strategy:
-      fail-fast: true
-      matrix:
-        include:
-          - arch: amd64
-            runner: ubuntu-24.04
-          - arch: arm64
-            runner: ubuntu-24.04-arm
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          repository: ${{ env.CHECKOUT_REPO }}
-          sparse-checkout: |
-            ${{ env.CLI_DIR }}
-            # COSIGN_VERSION for the FIPS cosign build stage in the CLI image
-            bindings/go/sigstore/signing/handler/internal
-          persist-credentials: 'false'
-          ref: ${{ env.REF }}
-
-      - name: Install Task
-        uses: arduino/setup-task@c0bc642852239c2689f73f4ea6459c29405f3c52 # v3.0.0
-        with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-          version: 3.x
-
-      - name: Setup docker/buildx
-        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
-
-      - name: Download linux/${{ matrix.arch }} binary
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          name: cli-target-linux-${{ matrix.arch }}
-          path: ${{ env.CLI_DIR }}/tmp
-
-      # Artifact upload/download drops the executable bit; restore it before packaging
-      - name: Make binary executable
-        run: chmod +x ${{ env.CLI_DIR }}/tmp/bin/ocm-linux-${{ matrix.arch }}
-
-      - name: Build image linux/${{ matrix.arch }}
-        env:
-          VERSION: ${{ needs.version.outputs.version }}
-        run: task bindings/go/cli:package/image/platform ARCH=${{ matrix.arch }} VERSION="${VERSION}"
-
-      - name: Upload image layout
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          if-no-files-found: 'error'
-          retention-days: 1
-          name: cli-image-${{ matrix.arch }}
-          path: ${{ env.CLI_DIR }}/tmp/oci/cli-${{ matrix.arch }}.tar
-
-  # Join job: gather every prebuilt binary and per-arch image, merge the image
-  # and assemble the CTF without rebuilding, then attest and publish the
-  # artifacts the pipeline consumes.
+  # Join job: gather every prebuilt binary, package the image and CTF without
+  # recompiling, then attest and publish the artifacts the pipeline consumes.
   assemble:
     name: Assemble CTF
-    needs: [ version, build, image ]
+    needs: [ version, build ]
     runs-on: ubuntu-24.04-arm
     outputs:
       artifact_name: ${{ env.ARTIFACT_NAME }}
@@ -237,12 +175,9 @@ jobs:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           version: 3.x
 
-      - name: Download per-arch image layouts
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          path: ${{ env.CLI_DIR }}/tmp/oci
-          pattern: cli-image-*
-          merge-multiple: true
+      # Buildx packages the OCI image from the prebuilt linux binaries (no recompile)
+      - name: Setup docker/buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
 
       # Restore every target's binary and resource manifest under cli/tmp
       - name: Download target binaries
@@ -280,7 +215,7 @@ jobs:
           retention-days: 1
           name: ${{ env.ARTIFACT_NAME }}
           # Compiled CLI binaries
-          # Multi-arch OCI layout
+          # OCI layout files
           path: |
             ${{ env.CLI_DIR }}/tmp/bin/ocm-*
-            ${{ env.CLI_DIR }}/tmp/oci/cli.tar
+            ${{ env.CLI_DIR }}/tmp/oci/*

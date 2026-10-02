@@ -1,82 +1,31 @@
-# The final image is scratch plus exactly: ocm, cosign, gpg (with its shared
-# library closure) and the CA bundle. No shell, package manager or setuid
-# binaries.
+# The CLI image is scratch plus ocm and the CA bundle. ocm is a static Go binary
+# built against the Go Cryptographic Module (FIPS 140-3, see GOFIPS140 in the
+# root .env). cosign and gpg are not included; see the FIPS reference docs for
+# how to use them with this image.
 #
-# GnuPG and its libraries come from Garden Linux packages. Package scripts run
-# as target-arch binaries, so CI builds each architecture on a native runner
-# (see package/image/platform in the Taskfile).
-FROM --platform=$TARGETPLATFORM ghcr.io/gardenlinux/gardenlinux/fips:1877.25@sha256:74ae1f81d0723434024f591d8c2872852201b99b9f18c0fbe10221b16e60e01d AS gpg
-RUN apt-get update \
- && apt-get install -y --no-install-recommends gnupg \
- && apt-get clean \
- && rm -rf /var/lib/apt/lists/*
-# Stage the payload under /out, mirroring the merged-/usr layout (/lib and
-# /lib64 are symlinks into /usr) so the binaries' ELF interpreter and the
-# loader's default multiarch search path resolve without an ld.so.cache.
-RUN set -eu \
- && bins="/usr/bin/gpg /usr/bin/gpg-agent /usr/bin/gpgconf /usr/bin/gpg-connect-agent" \
- && mkdir -p /out/usr/bin /out/etc/ssl/certs \
- && cp -a /lib /out/lib \
- && { [ ! -e /lib64 ] || cp -a /lib64 /out/lib64; } \
- && cp $bins /out/usr/bin/ \
- && for lib in $(ldd $bins | awk '/=>/ {print $3} /^[[:space:]]*\/.*ld-linux/ {print $1}' | sort -u); do \
-      dir="/out$(readlink -f "$(dirname "$lib")")"; mkdir -p "$dir"; cp -L "$lib" "$dir/"; \
-    done \
+# The CA bundle comes from the Garden Linux FIPS image. Only files are copied,
+# so this stage runs on the build platform and the multi-arch build needs no
+# emulation.
+FROM --platform=$BUILDPLATFORM ghcr.io/gardenlinux/gardenlinux/fips:1877.25@sha256:74ae1f81d0723434024f591d8c2872852201b99b9f18c0fbe10221b16e60e01d AS rootfs
+RUN mkdir -p /out/etc/ssl/certs \
  && cp /etc/ssl/certs/ca-certificates.crt /out/etc/ssl/certs/ \
  && mkdir -m 1777 /out/tmp
-# Force libgcrypt (and therefore gpg) into FIPS mode regardless of the host
-# kernel's fips flag: only approved algorithms (e.g. RSA, NIST P-curves,
-# Ed25519, SHA-2, AES); SHA-1 signatures, MD5, CAST5 and cv25519 are rejected.
-# FIPS mode is not validation: libgcrypt is not a submitted Garden Linux module.
-RUN mkdir -p /out/etc/gcrypt && echo 1 > /out/etc/gcrypt/fips_enabled
-# Record the shipped packages distroless-style (/var/lib/dpkg/status.d/<pkg>)
-# so image scanners and SBOM tools still see gnupg, libgcrypt, glibc, ...
-RUN set -eu \
- && mkdir -p /out/var/lib/dpkg/status.d \
- && for f in $(cd /out && find usr -type f); do \
-      dpkg -S "/$f" 2>/dev/null || dpkg -S "/${f#usr/}" 2>/dev/null || true; \
-    done | cut -d: -f1 | sort -u > /tmp/pkgs \
- && test -s /tmp/pkgs \
- && while read -r pkg; do dpkg-query -s "$pkg" > "/out/var/lib/dpkg/status.d/$pkg"; done < /tmp/pkgs
-
-# cosign, built from source against the same Go Cryptographic Module (FIPS 140-3)
-# as ocm. The upstream release binaries are not FIPS builds. OCM's Sigstore
-# signing handler prefers cosign on PATH, so shipping it here avoids the
-# runtime download. `go install pkg@version` verifies the module against the Go
-# checksum database.
-FROM --platform=$BUILDPLATFORM golang:1.27.1@sha256:3680233e3204827fbdc66088528ae6d4b3d034f51d03a99d454f6de034888244 AS cosign
-ARG TARGETOS
-ARG TARGETARCH
-# Both required; sources of truth: root .env (GOFIPS140) and
-# bindings/go/sigstore/signing/handler/internal/.env (COSIGN_VERSION).
-ARG GOFIPS140
-ARG COSIGN_VERSION
-RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked \
-    --mount=type=cache,target=/root/.cache/go-build,sharing=locked \
-    CGO_ENABLED=0 \
-    GOFIPS140="${GOFIPS140:?GOFIPS140 build arg is required, see root .env}" \
-    GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
-    go install -trimpath -ldflags="-s -w" \
-      "github.com/sigstore/cosign/v3/cmd/cosign@${COSIGN_VERSION:?COSIGN_VERSION build arg is required}" \
- && bin="$(go env GOPATH)/bin" \
- && { cp "${bin}/${TARGETOS}_${TARGETARCH}/cosign" /cosign 2>/dev/null || cp "${bin}/cosign" /cosign; }
 
 FROM scratch
 ARG TARGETOS
 ARG TARGETARCH
-COPY --from=gpg /out /
+COPY --from=rootfs /out /
 COPY tmp/bin/ocm-${TARGETOS}-${TARGETARCH} /ocm
-COPY --from=cosign /cosign /usr/local/bin/cosign
 # Run as a non-privileged user. HOME stays at / so existing mounts such as
 # /.ocmconfig and /.docker/config.json keep working; caches and generated
 # configuration go to the world-writable /tmp instead of the read-only /.
-# TUF_ROOT moves cosign's Sigstore trust-root cache off $HOME/.sigstore, and
-# GNUPGHOME moves the gpg keyring off $HOME/.gnupg.
+# PATH and TUF_ROOT serve a cosign binary that is mounted at
+# /usr/local/bin/cosign or downloaded by OCM: cosign keeps its Sigstore
+# trust-root cache in TUF_ROOT instead of the read-only $HOME/.sigstore.
 ENV PATH=/usr/local/bin:/usr/bin \
     HOME=/ \
     XDG_CACHE_HOME=/tmp/.cache \
     XDG_CONFIG_HOME=/tmp/.config \
-    TUF_ROOT=/tmp/.sigstore/root \
-    GNUPGHOME=/tmp/.gnupg
+    TUF_ROOT=/tmp/.sigstore/root
 USER 65532:65532
 ENTRYPOINT ["/ocm"]

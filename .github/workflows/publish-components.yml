@@ -51,8 +51,12 @@ jobs:
       - name: Checkout component constructor
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          # .env (root, GOFIPS140), the sigstore .env (COSIGN_VERSION) and
+          # go.mod (Go toolchain) drive the FIPS cosign build below.
           sparse-checkout: |
             .github/components
+            bindings/go/go.mod
+            bindings/go/sigstore/signing/handler/internal/.env
           persist-credentials: 'false'
 
       - name: Compute image refs
@@ -135,8 +139,26 @@ jobs:
               --constructor "$CONSTRUCTOR" \
               --component-version-conflict-policy "$CONFLICT_POLICY"
 
-      # The CLI image ships cosign built against the Go FIPS 140-3 module at
-      # /usr/local/bin/cosign; the Sigstore handler picks it up from PATH.
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: bindings/go/go.mod
+          cache: false
+
+      # The CLI image does not ship cosign, and the upstream release binaries are
+      # not FIPS builds. Build cosign from source against the same Go
+      # Cryptographic Module as ocm and mount it into the image, where the
+      # Sigstore handler finds it on PATH.
+      - name: Build cosign (Go FIPS 140-3 module)
+        run: |
+          set -euo pipefail
+          . ./.env
+          . bindings/go/sigstore/signing/handler/internal/.env
+          GOBIN="${RUNNER_TEMP}/cosign-bin" CGO_ENABLED=0 GOFIPS140="${GOFIPS140}" \
+            go install -trimpath -ldflags="-s -w" "github.com/sigstore/cosign/v3/cmd/cosign@${COSIGN_VERSION}"
+          go version -m "${RUNNER_TEMP}/cosign-bin/cosign" | grep -E 'GOFIPS140|DefaultGODEBUG'
+          echo "COSIGN_BIN=${RUNNER_TEMP}/cosign-bin/cosign" >> "$GITHUB_ENV"
+
       # GHA OIDC vars are forwarded explicitly for keyless signing.
       - name: Sign component-versions (keyless Sigstore)
         env:
@@ -152,6 +174,7 @@ jobs:
               -e TMPDIR=/tmp \
               -e ACTIONS_ID_TOKEN_REQUEST_TOKEN \
               -e ACTIONS_ID_TOKEN_REQUEST_URL \
+              -v "${COSIGN_BIN}:/usr/local/bin/cosign:ro" \
               -v "${HOME}/.docker/config.json:/.docker/config.json:ro" \
               -v "${HOME}/.ocmconfig:/.ocmconfig:ro" \
               -v /etc/ssl/certs/:/etc/ssl/certs/:ro \

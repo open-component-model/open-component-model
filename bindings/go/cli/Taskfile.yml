@@ -73,84 +73,16 @@ tasks:
           GOARCH: '{{ .GOARCH }}'
 
   package/image:
-    desc: "Build the multi-arch CLI image locally (both platforms, then merge)"
     internal: true
-    cmds:
-      - task: package/image/platform
-        vars: { ARCH: amd64 }
-      - task: package/image/platform
-        vars: { ARCH: arm64 }
-      - task: package/image/merge
-
-  # Builds the image for one linux architecture into tmp/oci/cli-<ARCH>.tar.
-  # CI runs this on a runner of the matching architecture, so the target-arch
-  # apt step in the Containerfile (gnupg) runs natively without QEMU.
-  package/image/platform:
-    desc: "Build the CLI image for a single linux architecture (CI per-arch entrypoint)"
-    requires:
-      vars: [ ARCH ]
-    # GOFIPS140 (root .env) and COSIGN_VERSION (sigstore handler .env) are
-    # forwarded as build args for the FIPS cosign build stage.
-    dotenv: ['{{.TASKFILE_DIR}}/../../../.env', '{{.TASKFILE_DIR}}/../sigstore/signing/handler/internal/.env']
     dir: '{{ .TASKFILE_DIR }}'
     cmds:
       - |
         mkdir -p {{ .TASKFILE_DIR }}/tmp/oci
         {{ .IMAGE_TOOL }} buildx build \
-          --platform linux/{{ .ARCH }} \
-          --provenance=mode=min \
+          --platform linux/amd64,linux/arm64 \
           --tag ghcr.io/open-component-model/cli:{{ .VERSION }} \
-          --build-arg GOFIPS140 \
-          --build-arg COSIGN_VERSION \
-          --output type=oci,dest={{ .TASKFILE_DIR }}/tmp/oci/cli-{{ .ARCH }}.tar,oci-mediatypes=true,name=ghcr.io/open-component-model/cli \
+          --output type=oci,dest={{ .TASKFILE_DIR }}/tmp/oci/cli.tar,oci-mediatypes=true,name=ghcr.io/open-component-model/cli \
           -f ./Containerfile .
-
-  # Merges tmp/oci/cli-{amd64,arm64}.tar into the multi-arch tmp/oci/cli.tar,
-  # with the same shape a multi-platform buildx build produces: one image index
-  # tagged VERSION that lists every platform manifest and its provenance
-  # attestation manifest.
-  package/image/merge:
-    desc: "Merge the per-arch CLI image layouts into the multi-arch OCI layout (CI join entrypoint)"
-    dir: '{{ .TASKFILE_DIR }}/tmp/oci'
-    cmds:
-      - |
-        set -euo pipefail
-        chmod -R u+w merged 2>/dev/null || true
-        rm -rf merged && mkdir -p merged
-        children='[]'
-        for arch in amd64 arm64; do
-          # Blobs are content-addressed, so blobs shared by both layouts are
-          # identical; extracted blobs are read-only, so re-enable writes first.
-          chmod -R u+w merged
-          tar -xf "cli-${arch}.tar" -C merged oci-layout blobs
-          top=$(tar -xOf "cli-${arch}.tar" index.json | jq -r '.manifests[0].digest | sub("^sha256:"; "")')
-          children=$(jq -c --argjson acc "${children}" '$acc + .manifests' "merged/blobs/sha256/${top}")
-        done
-        chmod -R u+w merged
-        # Platform manifests first, then attestation manifests, as buildx orders them.
-        jq -cn --argjson m "${children}" '{
-          schemaVersion: 2,
-          mediaType: "application/vnd.oci.image.index.v1+json",
-          manifests: (($m | map(select(.annotations["vnd.docker.reference.type"] == null)))
-                    + ($m | map(select(.annotations["vnd.docker.reference.type"] != null))))
-        }' > index.blob
-        digest=$( (sha256sum index.blob 2>/dev/null || shasum -a 256 index.blob) | cut -d' ' -f1)
-        size=$(wc -c < index.blob | tr -d ' ')
-        mv index.blob "merged/blobs/sha256/${digest}"
-        jq -n --arg d "sha256:${digest}" --argjson s "${size}" --arg v "{{ .VERSION }}" '{
-          schemaVersion: 2,
-          mediaType: "application/vnd.oci.image.index.v1+json",
-          manifests: [{
-            mediaType: "application/vnd.oci.image.index.v1+json",
-            digest: $d, size: $s,
-            annotations: {
-              "io.containerd.image.name": ("ghcr.io/open-component-model/cli:" + $v),
-              "org.opencontainers.image.ref.name": $v
-            }
-          }]
-        }' > merged/index.json
-        tar -cf cli.tar -C merged oci-layout index.json blobs
-        rm -rf merged
       - |
         mkdir -p {{ .TASKFILE_DIR }}/tmp/resources
         cat > {{ .TASKFILE_DIR }}/tmp/resources/ocm-multi-arch-container-image.yaml <<EOF
@@ -211,9 +143,9 @@ tasks:
         --repository {{ .CTF_LOCATION }}
 
   assemble/ctf:
-    desc: "Assemble the CTF from binaries and per-arch images already present in tmp/ without rebuilding (CI join entrypoint)"
+    desc: "Assemble the CTF from binaries already present in tmp/bin without recompiling (CI join entrypoint)"
     cmds:
-      - task: package/image/merge
+      - task: package/image
       - task: assemble/component-constructor
       - ln -sf {{ .TASKFILE_DIR }}/tmp/bin/ocm-{{ .GOOS }}-{{ .GOARCH }} {{ .TASKFILE_DIR }}/tmp/bin/ocm
       - |
