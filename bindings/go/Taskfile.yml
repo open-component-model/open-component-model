@@ -16,7 +16,13 @@ tasks:
   test:
     deps: [build/plugins]
     cmds:
-      - go test -short -skip "Integration" -count=1 $(go list ./... | grep -v /integration | grep -v /kubernetes/controller/test/e2e) {{.CLI_ARGS}}
+      - >
+        go test -short -skip "Integration" -count=1
+        -coverprofile=coverage.unit.out -covermode=atomic
+        $(go list ./... | grep -v /integration | grep -v /kubernetes/controller/test/e2e)
+        {{.CLI_ARGS}}
+      # Drop generated files (zz_generated.*) so the number reflects hand-written code.
+      - grep -v 'zz_generated\.' coverage.unit.out > coverage.unit.out.tmp && mv coverage.unit.out.tmp coverage.unit.out
 
   test/integration:
     set: [errexit]
@@ -27,10 +33,22 @@ tasks:
       - |
         export PATH="{{.SIGSTORE_INTEGRATION_DIR}}/tmp/bin:$PATH"
         . "{{.SIGSTORE_INTEGRATION_DIR}}/tmp/sigstore-env.sh"
+        # Binary coverage dir: each (re)run appends its own covcounters/covmeta,
+        # so a flake that passes on retry does NOT clobber the profile (unlike a
+        # single -coverprofile, which gotestsum's final rerun overwrites).
+        rm -rf coverage.integration.covdir && mkdir -p coverage.integration.covdir
         go run gotest.tools/gotestsum@"${GOTESTSUM_VERSION}" \
           --format testname \
           --junitfile=junit.xml \
           --rerun-fails=2 \
           --rerun-fails-max-failures=5 \
           --packages="./..." \
-          -- -run "Integration" -count=1
+          -- -run "Integration" -count=1 -coverpkg=./... -args -test.gocoverdir="$PWD/coverage.integration.covdir"
+        # Merge every run's data into one profile. -args passes gocoverdir to the
+        # test binary without fighting gotestsum's flag ordering.
+        go tool covdata textfmt -i=coverage.integration.covdir -o coverage.integration.out
+        # Drop generated files (zz_generated.*) so the number reflects hand-written code.
+        grep -v 'zz_generated\.' coverage.integration.out > coverage.integration.out.tmp && mv coverage.integration.out.tmp coverage.integration.out
+        go tool cover -func=coverage.integration.out | tail -1
+        # -coverpkg=./... credits library code the flows exercise (the integration
+        # packages themselves are near-empty).
