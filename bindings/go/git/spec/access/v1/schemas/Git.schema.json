@@ -12,7 +12,7 @@
     },
     "ref": {
       "type": "string",
-      "description": "Ref selects a branch, tag or full ref name (for example main, v1.0.0 or\nrefs/tags/v1.0.0). Digest processing resolves it to a commit."
+      "description": "Ref selects a branch, tag or full ref name. A bare name resolves to a\nmatching branch first and then to a tag, so use refs/tags/v1.0.0 to select\nthat tag unambiguously. Digest processing resolves it to a commit."
     },
     "repository": {
       "type": "string",

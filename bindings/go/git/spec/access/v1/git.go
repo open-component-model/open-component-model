@@ -28,8 +28,9 @@ type Git struct {
 	// local path, relative to the working directory unless absolute.
 	Repository string `json:"repository"`
 
-	// Ref selects a branch, tag or full ref name (for example main, v1.0.0 or
-	// refs/tags/v1.0.0). Digest processing resolves it to a commit.
+	// Ref selects a branch, tag or full ref name. A bare name resolves to a
+	// matching branch first and then to a tag, so use refs/tags/v1.0.0 to select
+	// that tag unambiguously. Digest processing resolves it to a commit.
 	Ref string `json:"ref,omitempty"`
 
 	// Commit pins a commit by its full 40-character hexadecimal SHA and takes
