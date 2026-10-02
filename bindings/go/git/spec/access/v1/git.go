@@ -20,10 +20,13 @@ import (
 type Git struct {
 	// +ocm:jsonschema-gen:enum=Git/v1,Git
 	// +ocm:jsonschema-gen:enum:deprecated=git,git/v1alpha1,Git/v1alpha1
-	Type       runtime.Type `json:"type"`
-	Repository string       `json:"repository"`
-	Ref        string       `json:"ref,omitempty"`
-	Commit     string       `json:"commit,omitempty"`
+	Type runtime.Type `json:"type"`
+	// Repository is the Git repository URL. A fragment may select the ref or
+	// commit with branch=<name>, tag=<name> or commit=<sha>, as in
+	// https://github.com/org/repo.git#branch=main.
+	Repository string `json:"repository"`
+	Ref        string `json:"ref,omitempty"`
+	Commit     string `json:"commit,omitempty"`
 }
 
 var commitSHA = regexp.MustCompile(`^[0-9a-fA-F]{40}$`)
@@ -33,20 +36,25 @@ func (g *Git) Validate() error {
 		return fmt.Errorf("git access is required")
 	}
 
-	if _, err := endpoint.Parse(g.Repository); err != nil {
+	ep, err := endpoint.Parse(g.Repository)
+	if err != nil {
 		return err
 	}
 
-	if g.Ref == "" && g.Commit == "" {
+	ref, commit, err := ep.Selectors(g.Ref, g.Commit)
+	if err != nil {
+		return err
+	}
+
+	if ref == "" && commit == "" {
 		return fmt.Errorf("either commit or ref must be set")
 	}
 
-	if g.Commit != "" && !commitSHA.MatchString(g.Commit) {
+	if commit != "" && !commitSHA.MatchString(commit) {
 		return fmt.Errorf("commit must be a 40-character hexadecimal SHA")
 	}
 
-	if g.Ref != "" && g.Ref != "HEAD" {
-		ref := g.Ref
+	if ref != "" && ref != "HEAD" {
 		if !strings.HasPrefix(ref, "refs/") {
 			ref = "refs/heads/" + ref
 		}

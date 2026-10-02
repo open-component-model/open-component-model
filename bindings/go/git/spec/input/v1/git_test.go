@@ -17,6 +17,8 @@ func TestGit_Validate(t *testing.T) {
 		{"missing repository", "", "", "", "repository must not be empty"},
 		{"invalid ref", "https://example.com/repo.git", "refs/heads/../main", "", "invalid git ref"},
 		{"short commit", "https://example.com/repo.git", "", "abc123", "40-character hexadecimal SHA"},
+		{"fragment branch", "https://example.com/repo.git#branch=main", "", "", ""},
+		{"fragment conflicts with ref", "https://example.com/repo.git#branch=main", "dev", "", "conflicts"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			r := require.New(t)

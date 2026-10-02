@@ -21,6 +21,11 @@ func TestValidate(t *testing.T) {
 		{"nonhex commit", "https://example.com/repo", "", strings.Repeat("g", 40), false},
 		{"invalid ref", "https://example.com/repo", "refs/heads/../main", "", false},
 		{"unsupported URL", "ftp://example.com/repo", "main", "", false},
+		{"fragment branch", "https://example.com/repo.git#branch=main", "", "", true},
+		{"fragment commit", "https://example.com/repo.git#commit=" + strings.Repeat("a", 40), "", "", true},
+		{"fragment short commit", "https://example.com/repo.git#commit=abc123", "", "", false},
+		{"fragment invalid branch", "https://example.com/repo.git#branch=..", "", "", false},
+		{"fragment conflicts with ref", "https://example.com/repo.git#branch=main", "dev", "", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)

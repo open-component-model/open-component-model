@@ -4,6 +4,9 @@
 // [ocm.software/open-component-model/bindings/go/git/spec/access/v1.Git]
 // spec with a repository URL and a Ref, a Commit, or both. A set Commit is
 // authoritative; Ref is then informational, even if the branch moves or is deleted.
+// The repository URL may select them with a fragment instead, as in
+// https://github.com/org/repo.git#branch=main; the keys are branch, tag and
+// commit. A fragment selector and a set field must not name different revisions.
 //
 // [ocm.software/open-component-model/bindings/go/git/repository.ResourceRepository]
 // downloads the commit tree as a gzip-compressed tar (application/x-tgz):

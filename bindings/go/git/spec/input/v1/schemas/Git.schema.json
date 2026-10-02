@@ -16,7 +16,7 @@
     },
     "repository": {
       "type": "string",
-      "description": "Repository is the Git repository URL."
+      "description": "Repository is the Git repository URL. A fragment may select the ref or\ncommit with branch=\u003cname\u003e, tag=\u003cname\u003e or commit=\u003csha\u003e, as in\nhttps://github.com/org/repo.git#branch=main."
     },
     "type": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",

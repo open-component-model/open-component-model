@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/go-git/go-git/v6/plumbing"
 	"github.com/go-git/go-git/v6/plumbing/transport"
 )
 
@@ -20,6 +21,9 @@ type Endpoint struct {
 	Host     string
 	Port     int
 	Path     string
+	// Ref and Commit are selected by the URL fragment, as in #branch=main.
+	Ref    string
+	Commit string
 }
 
 const (
@@ -36,10 +40,16 @@ const (
 // scp-like form user@host:path, and local repositories as file:///path,
 // file://localhost/path or a plain path. A string that has no scheme and is not
 // scp-like is a local path, relative to the working directory unless absolute.
+//
+// A fragment may select a ref or commit with branch=<name>, tag=<name> or
+// commit=<sha>, as in https://host/org/repo.git#branch=main. It is removed from
+// URL: go-git would append its request path to the fragment.
 func Parse(repository string) (*Endpoint, error) {
 	if strings.TrimSpace(repository) == "" {
 		return nil, fmt.Errorf("repository must not be empty")
 	}
+
+	repository, fragment, _ := strings.Cut(repository, "#")
 
 	u, err := parseURL(repository)
 	if err != nil {
@@ -51,6 +61,9 @@ func Parse(repository string) (*Endpoint, error) {
 		Protocol: strings.ToLower(u.Scheme),
 		Host:     strings.ToLower(u.Hostname()),
 		Path:     u.Path,
+	}
+	if err := ep.parseFragment(fragment); err != nil {
+		return nil, err
 	}
 	if u.User != nil {
 		ep.User = u.User.Username()
@@ -92,6 +105,57 @@ func Parse(repository string) (*Endpoint, error) {
 	}
 
 	return ep, nil
+}
+
+func (ep *Endpoint) parseFragment(fragment string) error {
+	values, err := url.ParseQuery(fragment)
+	if err != nil {
+		return fmt.Errorf("invalid git repository URL fragment")
+	}
+
+	if values.Has("branch") && values.Has("tag") {
+		return fmt.Errorf("git repository URL fragment must not set both branch and tag")
+	}
+
+	for key, value := range values {
+		if len(value) != 1 || value[0] == "" {
+			return fmt.Errorf("git repository URL fragment %q requires exactly one value", key)
+		}
+
+		switch key {
+		case "branch":
+			ep.Ref = plumbing.NewBranchReferenceName(value[0]).String()
+		case "tag":
+			ep.Ref = plumbing.NewTagReferenceName(value[0]).String()
+		case "commit":
+			ep.Commit = value[0]
+		default:
+			return fmt.Errorf("unsupported git repository URL fragment %q, expected branch, tag or commit", key)
+		}
+	}
+
+	return nil
+}
+
+// Selectors merges ref and commit with the selectors of the URL fragment.
+// Both may name the same ref or commit, but not different ones.
+func (ep *Endpoint) Selectors(ref, commit string) (string, string, error) {
+	if ep.Ref != "" {
+		if ref != "" && ref != ep.Ref && plumbing.NewBranchReferenceName(ref).String() != ep.Ref &&
+			plumbing.NewTagReferenceName(ref).String() != ep.Ref {
+			return "", "", fmt.Errorf("git ref %q conflicts with %q selected by the repository URL", ref, ep.Ref)
+		}
+		ref = ep.Ref
+	}
+
+	if ep.Commit != "" {
+		if commit != "" && !strings.EqualFold(commit, ep.Commit) {
+			return "", "", fmt.Errorf("git commit %q conflicts with %q selected by the repository URL", commit, ep.Commit)
+		}
+		commit = ep.Commit
+	}
+
+	return ref, commit, nil
 }
 
 // parseURL keeps the host of file URLs: go-git reads everything after file://
