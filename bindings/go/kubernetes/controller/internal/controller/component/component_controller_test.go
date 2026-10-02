@@ -976,6 +976,296 @@ var _ = Describe("Component Controller", func() {
 			By("delete resources manually")
 			test.DeleteObject(ctx, k8sClient, component)
 		})
+
+		It("fails to verify with two public keys under the same signature identity", func(ctx SpecContext) {
+			By("creating a component version")
+			repo, specData := test.SetupCTFComponentVersionRepository(ctx, ctfpath, []*descruntime.Descriptor{
+				{
+					Component: descruntime.Component{
+						ComponentMeta: descruntime.ComponentMeta{
+							ObjectMeta: descruntime.ObjectMeta{
+								Name:    componentName,
+								Version: Version1,
+							},
+						},
+						Provider: descruntime.Provider{Name: "ocm.software"},
+					},
+				},
+			})
+
+			By("signing the component with key A")
+			signatureName := "test-signature"
+
+			desc, err := repo.GetComponentVersion(ctx, componentName, Version1)
+			Expect(err).ToNot(HaveOccurred())
+
+			normalised, err := normalisation.Normalise(desc, v4alpha1.Algorithm)
+			Expect(err).ToNot(HaveOccurred())
+			signature, pubKeyA := test.SignComponent(ctx, signatureName, signingv1alpha1.AlgorithmRSASSAPSS, normalised, pm)
+
+			desc.Signatures = append(desc.Signatures, signature)
+			Expect(repo.AddComponentVersion(ctx, desc)).To(Succeed())
+
+			By("generating an unrelated key B for the same identity")
+			_, pubKeyB := test.SignComponent(ctx, signatureName, signingv1alpha1.AlgorithmRSASSAPSS, normalised, pm)
+
+			By("mocking an ocm repository")
+			repositoryObj = test.SetupRepositoryWithSpecData(ctx, k8sClient, namespace.GetName(), repositoryName, specData)
+
+			By("creating an ocm config listing both keys under the same signature identity")
+			configSecret := test.SetupSignatureVerificationConfig(ctx, k8sClient, namespace.GetName(), "signature-verification",
+				test.SignatureVerification{
+					Signature: signatureName,
+					Algorithm: signingv1alpha1.AlgorithmRSASSAPSS,
+					PublicKey: pubKeyA,
+				},
+				test.SignatureVerification{
+					Signature: signatureName,
+					Algorithm: signingv1alpha1.AlgorithmRSASSAPSS,
+					PublicKey: pubKeyB,
+				})
+
+			By("creating a component")
+			component := &v1alpha1.Component{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: namespace.GetName(),
+					Name:      ComponentObj,
+				},
+				Spec: v1alpha1.ComponentSpec{
+					RepositoryRef: corev1.LocalObjectReference{
+						Name: repositoryObj.GetName(),
+					},
+					Component: componentName,
+					Semver:    Version1,
+					Interval:  metav1.Duration{Duration: time.Minute * 10},
+					OCMConfig: []v1alpha1.OCMConfiguration{test.SecretOCMConfiguration(configSecret)},
+				},
+				Status: v1alpha1.ComponentStatus{},
+			}
+			Expect(k8sClient.Create(ctx, component)).To(Succeed())
+
+			By("checking that the component has not been reconciled successfully")
+			test.WaitForNotReadyObject(ctx, k8sClient, component, v1alpha1.GetComponentVersionFailedReason)
+
+			By("delete resources manually")
+			test.DeleteObject(ctx, k8sClient, component)
+		})
+
+		It("verifies a GPG-signed component version", func(ctx SpecContext) {
+			By("creating a component version")
+			repo, specData := test.SetupCTFComponentVersionRepository(ctx, ctfpath, []*descruntime.Descriptor{
+				{
+					Component: descruntime.Component{
+						ComponentMeta: descruntime.ComponentMeta{
+							ObjectMeta: descruntime.ObjectMeta{
+								Name:    componentName,
+								Version: Version1,
+							},
+						},
+						Provider: descruntime.Provider{Name: "ocm.software"},
+					},
+				},
+			})
+
+			By("signing the component with GPG")
+			signatureName := "gpg-signature"
+
+			desc, err := repo.GetComponentVersion(ctx, componentName, Version1)
+			Expect(err).ToNot(HaveOccurred())
+
+			normalised, err := normalisation.Normalise(desc, v4alpha1.Algorithm)
+			Expect(err).ToNot(HaveOccurred())
+			signature, pubKey := test.SignComponentGPG(ctx, signatureName, normalised, pm)
+
+			desc.Signatures = append(desc.Signatures, signature)
+			Expect(repo.AddComponentVersion(ctx, desc)).To(Succeed())
+
+			By("mocking an ocm repository")
+			repositoryObj = test.SetupRepositoryWithSpecData(ctx, k8sClient, namespace.GetName(), repositoryName, specData)
+
+			By("creating an ocm config with the matching GPG public key")
+			configSecret := test.SetupSignatureVerificationConfig(ctx, k8sClient, namespace.GetName(), "signature-verification",
+				test.SignatureVerification{
+					Signature: signatureName,
+					Handler:   test.SignatureHandlerGPG,
+					PublicKey: pubKey,
+				})
+
+			By("creating a component")
+			component := &v1alpha1.Component{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: namespace.GetName(),
+					Name:      ComponentObj,
+				},
+				Spec: v1alpha1.ComponentSpec{
+					RepositoryRef: corev1.LocalObjectReference{
+						Name: repositoryObj.GetName(),
+					},
+					Component: componentName,
+					Semver:    Version1,
+					Interval:  metav1.Duration{Duration: time.Minute * 10},
+					OCMConfig: []v1alpha1.OCMConfiguration{test.SecretOCMConfiguration(configSecret)},
+				},
+				Status: v1alpha1.ComponentStatus{},
+			}
+			Expect(k8sClient.Create(ctx, component)).To(Succeed())
+
+			By("checking that the component has been reconciled successfully")
+			test.WaitForReadyObject(ctx, k8sClient, component, map[string]any{
+				"Status.Component.Version": Version1,
+			})
+
+			By("delete resources manually")
+			test.DeleteObject(ctx, k8sClient, component)
+		})
+
+		It("fails to verify a GPG-signed component version with a mismatching public key", func(ctx SpecContext) {
+			By("creating a component version")
+			repo, specData := test.SetupCTFComponentVersionRepository(ctx, ctfpath, []*descruntime.Descriptor{
+				{
+					Component: descruntime.Component{
+						ComponentMeta: descruntime.ComponentMeta{
+							ObjectMeta: descruntime.ObjectMeta{
+								Name:    componentName,
+								Version: Version1,
+							},
+						},
+						Provider: descruntime.Provider{Name: "ocm.software"},
+					},
+				},
+			})
+
+			By("signing the component with GPG key A")
+			signatureName := "gpg-signature"
+
+			desc, err := repo.GetComponentVersion(ctx, componentName, Version1)
+			Expect(err).ToNot(HaveOccurred())
+
+			normalised, err := normalisation.Normalise(desc, v4alpha1.Algorithm)
+			Expect(err).ToNot(HaveOccurred())
+			signature, _ := test.SignComponentGPG(ctx, signatureName, normalised, pm)
+
+			desc.Signatures = append(desc.Signatures, signature)
+			Expect(repo.AddComponentVersion(ctx, desc)).To(Succeed())
+
+			By("generating an unrelated GPG key B")
+			_, foreignPubKey := test.SignComponentGPG(ctx, signatureName, normalised, pm)
+
+			By("mocking an ocm repository")
+			repositoryObj = test.SetupRepositoryWithSpecData(ctx, k8sClient, namespace.GetName(), repositoryName, specData)
+
+			By("creating an ocm config holding the wrong GPG public key")
+			configSecret := test.SetupSignatureVerificationConfig(ctx, k8sClient, namespace.GetName(), "signature-verification",
+				test.SignatureVerification{
+					Signature: signatureName,
+					Handler:   test.SignatureHandlerGPG,
+					PublicKey: foreignPubKey,
+				})
+
+			By("creating a component")
+			component := &v1alpha1.Component{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: namespace.GetName(),
+					Name:      ComponentObj,
+				},
+				Spec: v1alpha1.ComponentSpec{
+					RepositoryRef: corev1.LocalObjectReference{
+						Name: repositoryObj.GetName(),
+					},
+					Component: componentName,
+					Semver:    Version1,
+					Interval:  metav1.Duration{Duration: time.Minute * 10},
+					OCMConfig: []v1alpha1.OCMConfiguration{test.SecretOCMConfiguration(configSecret)},
+				},
+				Status: v1alpha1.ComponentStatus{},
+			}
+			Expect(k8sClient.Create(ctx, component)).To(Succeed())
+
+			By("checking that the component has not been reconciled and reports the GPG verification error")
+			test.WaitForNotReadyObjectWithMessage(ctx, k8sClient, component,
+				v1alpha1.GetComponentVersionFailedReason, "openpgp")
+
+			By("delete resources manually")
+			test.DeleteObject(ctx, k8sClient, component)
+		})
+
+		It("verifies a component version signed with both RSA and GPG", func(ctx SpecContext) {
+			By("creating a component version")
+			repo, specData := test.SetupCTFComponentVersionRepository(ctx, ctfpath, []*descruntime.Descriptor{
+				{
+					Component: descruntime.Component{
+						ComponentMeta: descruntime.ComponentMeta{
+							ObjectMeta: descruntime.ObjectMeta{
+								Name:    componentName,
+								Version: Version1,
+							},
+						},
+						Provider: descruntime.Provider{Name: "ocm.software"},
+					},
+				},
+			})
+
+			By("signing the component with RSA")
+			rsaSigName := "rsa-signature"
+
+			desc, err := repo.GetComponentVersion(ctx, componentName, Version1)
+			Expect(err).ToNot(HaveOccurred())
+
+			normalised, err := normalisation.Normalise(desc, v4alpha1.Algorithm)
+			Expect(err).ToNot(HaveOccurred())
+			rsaSig, rsaPubKey := test.SignComponent(ctx, rsaSigName, signingv1alpha1.AlgorithmRSASSAPSS, normalised, pm)
+			desc.Signatures = append(desc.Signatures, rsaSig)
+
+			By("signing the same component with GPG")
+			gpgSigName := "gpg-signature"
+			gpgSig, gpgPubKey := test.SignComponentGPG(ctx, gpgSigName, normalised, pm)
+			desc.Signatures = append(desc.Signatures, gpgSig)
+
+			Expect(repo.AddComponentVersion(ctx, desc)).To(Succeed())
+
+			By("mocking an ocm repository")
+			repositoryObj = test.SetupRepositoryWithSpecData(ctx, k8sClient, namespace.GetName(), repositoryName, specData)
+
+			By("creating an ocm config verifying both signatures")
+			configSecret := test.SetupSignatureVerificationConfig(ctx, k8sClient, namespace.GetName(), "signature-verification",
+				test.SignatureVerification{
+					Signature: rsaSigName,
+					Algorithm: signingv1alpha1.AlgorithmRSASSAPSS,
+					PublicKey: rsaPubKey,
+				},
+				test.SignatureVerification{
+					Signature: gpgSigName,
+					Handler:   test.SignatureHandlerGPG,
+					PublicKey: gpgPubKey,
+				})
+
+			By("creating a component")
+			component := &v1alpha1.Component{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: namespace.GetName(),
+					Name:      ComponentObj,
+				},
+				Spec: v1alpha1.ComponentSpec{
+					RepositoryRef: corev1.LocalObjectReference{
+						Name: repositoryObj.GetName(),
+					},
+					Component: componentName,
+					Semver:    Version1,
+					Interval:  metav1.Duration{Duration: time.Minute * 10},
+					OCMConfig: []v1alpha1.OCMConfiguration{test.SecretOCMConfiguration(configSecret)},
+				},
+				Status: v1alpha1.ComponentStatus{},
+			}
+			Expect(k8sClient.Create(ctx, component)).To(Succeed())
+
+			By("checking that the component has been reconciled successfully")
+			test.WaitForReadyObject(ctx, k8sClient, component, map[string]any{
+				"Status.Component.Version": Version1,
+			})
+
+			By("delete resources manually")
+			test.DeleteObject(ctx, k8sClient, component)
+		})
 	})
 
 	Context("ocm config handling", func() {

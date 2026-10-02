@@ -263,6 +263,13 @@
       minimumReleaseAge: '28 days',
     },
     {
+      // Only track promoted (GA) OCM releases for in-repo `semver:` pins used
+      // as e2e fixtures. Prereleases like 0.16.0-rc.N are skipped.
+      matchDatasources: ['github-releases'],
+      matchDepNames: ['open-component-model/open-component-model'],
+      ignoreUnstable: true,
+    },
+    {
       // Renovate has no release timestamp for these types and
       // minimumReleaseAge requires that to work, otherwise, it will just never update them.
       matchUpdateTypes: [
@@ -335,6 +342,21 @@
       ],
       matchStrings: [
         '# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s+.*?_VERSION = "v?(?<currentValue>\\d+\\.\\d+\\.\\d+)"',
+      ],
+      versioningTemplate: 'semver',
+    },
+    {
+      // Generic in-file `# renovate: datasource=... depName=...` markers for
+      // free-form fields that no manager parses natively: YAML `semver:` in
+      // test fixtures, Dockerfile `ARG *_VERSION=`. The marker and the value
+      // must sit on consecutive lines.
+      customType: 'regex',
+      managerFilePatterns: [
+        '/\\.ya?ml$/',
+        '/(^|/)Dockerfile(\\..*)?$/',
+      ],
+      matchStrings: [
+        '# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s+[^\\n]*?[:= ]v?(?<currentValue>\\d+\\.\\d+\\.\\d+)',
       ],
       versioningTemplate: 'semver',
     },
