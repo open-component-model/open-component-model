@@ -231,7 +231,7 @@ configurations:
     type: GPGSigningConfiguration/v1alpha1
 ```
 
-If your keyring contains multiple keys, pin the one to use by adding `keyFingerprint` to the signer by adding one extra line:
+If your keyring contains multiple keys, pin the one to use by adding `keyFingerprint` to the signer by adding one extra line. You can paste the fingerprint as `gpg --fingerprint` prints it; OCM removes spaces and a `0x` prefix:
 
 ```yaml
 - type: signing.config.ocm.software/v1alpha1

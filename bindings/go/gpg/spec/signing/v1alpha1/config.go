@@ -1,6 +1,8 @@
 package v1alpha1
 
 import (
+	"strings"
+
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -35,7 +37,8 @@ type Config struct {
 	// KeyFingerprint pins which key in the keyring to use when signing or verifying.
 	// When empty, signing uses the first secret key in the key material (gpg's default key with
 	// KeySource keyring), and verification accepts a signature by any key in the public key material.
-	// Accepts a full 40-hex-character v4 fingerprint or a 16-hex-character long key ID.
+	// Accepts a full 40-hex-character v4 fingerprint or a 16-hex-character long key ID, optionally
+	// with a 0x prefix and with spaces as printed by gpg --fingerprint.
 	KeyFingerprint string `json:"keyFingerprint,omitempty"`
 
 	// KeySource selects where the keys for signing and verification come from.
@@ -75,10 +78,15 @@ func (c *Config) GetHashAlgorithm() HashAlgorithm {
 	return c.HashAlgorithm
 }
 
-// GetKeyFingerprint returns the configured key fingerprint (may be empty).
+// GetKeyFingerprint returns the configured key fingerprint (may be empty) without a 0x prefix
+// and without whitespace, so that the spaced output of gpg --fingerprint can be pasted as is.
 func (c *Config) GetKeyFingerprint() string {
 	if c == nil {
 		return ""
 	}
-	return c.KeyFingerprint
+	fpr := strings.Join(strings.Fields(c.KeyFingerprint), "")
+	if len(fpr) > 2 && (fpr[:2] == "0x" || fpr[:2] == "0X") {
+		fpr = fpr[2:]
+	}
+	return fpr
 }

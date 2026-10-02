@@ -285,7 +285,7 @@ Without `--signature`, **every** signature on the descriptor is verified. Config
 
 **Cause:** The verifier sets `keySource: keyring` without a full 40-character `keyFingerprint`. A long key ID is not accepted, because it does not identify a key reliably among all keys in a keyring.
 
-**Fix:** Set `keyFingerprint` to the full fingerprint of the key you trust (`gpg --list-keys --with-colons <key> | grep '^fpr'`).
+**Fix:** Set `keyFingerprint` to the full fingerprint of the key you trust (`gpg --fingerprint <key>`; spaces and a `0x` prefix are accepted).
 
 ### Symptom: `GPG signing requires the GnuPG "gpg" binary (>= 2.2.0) on PATH`
 
