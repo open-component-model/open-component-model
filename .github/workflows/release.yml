@@ -213,7 +213,7 @@ jobs:
       id-token: write
       attestations: write
       artifact-metadata: write
-    uses: ./.github/workflows/pipeline.yml
+    uses: $/.github/workflows/pipeline.yml
     with:
       ref: ${{ needs.prepare.outputs.new_tag }}
       build_version: ${{ needs.prepare.outputs.base_version }}
@@ -275,7 +275,7 @@ jobs:
       packages: write
       actions: read
       id-token: write # forwarded to publish-components.yml for keyless Sigstore signing
-    uses: ./.github/workflows/publish-components.yml
+    uses: $/.github/workflows/publish-components.yml
     with:
       version: ${{ needs.prepare.outputs.new_version }}
       release_tag: ${{ needs.prepare.outputs.new_tag }}
@@ -659,7 +659,7 @@ jobs:
     name: Verify install script for ${{ needs.prepare.outputs.base_version }}
     needs: [prepare, promote_and_release_final]
     if: ${{ github.event.inputs.dry_run == 'false' }}
-    uses: ./.github/workflows/website-live-test-install-script.yml
+    uses: $/.github/workflows/website-live-test-install-script.yml
     with:
       version: ${{ needs.prepare.outputs.base_version }}
     permissions:
@@ -675,7 +675,7 @@ jobs:
       packages: write
       actions: read
       id-token: write # forwarded to publish-components.yml for keyless Sigstore signing
-    uses: ./.github/workflows/publish-components.yml
+    uses: $/.github/workflows/publish-components.yml
     with:
       version: ${{ needs.prepare.outputs.base_version }}
       release_tag: ${{ needs.prepare.outputs.promotion_tag }}
