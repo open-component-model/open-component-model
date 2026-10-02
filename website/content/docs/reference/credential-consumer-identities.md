@@ -44,6 +44,7 @@ The following types are defined by the core OCM modules:
 | [`Wget / HTTP`](#wget--http)                  | Authenticating against plain HTTP/HTTPS servers     |
 | [`S3`](#s3)                                   | Authenticating against S3 and S3-compatible buckets |
 | [`GitHubRepository`](#githubrepository)       | Authenticating against the GitHub REST API          |
+| [`Git`](#git)                                 | Authenticating against Git servers (HTTPS and SSH)  |
 | [`RSA/v1alpha1`](#rsav1alpha1)                | Providing signing and verification keys             |
 | [`TSA/v1alpha1`](#tsav1alpha1)                | Providing RFC 3161 timestamp verification roots     |
 
@@ -543,6 +544,106 @@ optional; see the note on anonymous access under
 ```
 
 Omitting `path` matches every repository on that host.
+
+---
+
+## Git
+
+Used when OCM fetches a repository with the
+[`Git/v1` access type]({{< relref "input-and-access-types.md#gitv1-access" >}}) or the
+[`Git/v1` input type]({{< relref "input-and-access-types.md#gitv1-input" >}}). The identity is derived from the
+`repository` URL. The access type and the input type derive it in the same way, so one consumer entry covers both.
+Credentials are optional. See [`GitCredentials/v1`]({{< relref "credential-types.md#gitcredentialsv1" >}}).
+
+### Identity Attributes
+
+| Attribute  | Required | Description                                                                                                                        |
+|------------|----------|------------------------------------------------------------------------------------------------------------------------------------|
+| `type`     | Yes      | Must be `Git`                                                                                                                      |
+| `hostname` | Yes      | Server hostname (e.g. `gitlab.com`)                                                                                                |
+| `path`     | No       | Repository path without the leading `/`. Supports glob patterns (`*` matches one path segment). If omitted, matches any path.      |
+| `scheme`   | No       | Transport: `https`, `http`, `ssh` or `git`. If omitted, matches any transport. If set, must match exactly.                         |
+| `port`     | No       | Port number as string. If omitted, `https` URLs match `443` and `http` URLs match `80`. For `ssh` and `git` URLs, you must set it. |
+
+### Derivation from the repository URL
+
+OCM derives every attribute from the URL. The port is the explicit port, or the default port of the transport. The
+user part of the URL (`git@`) is never part of the identity.
+
+| `repository`                                  | `scheme` | `hostname`        | `port` | `path`                |
+|-----------------------------------------------|----------|-------------------|--------|-----------------------|
+| `https://gitlab.com/group/project.git`        | `https`  | `gitlab.com`      | `443`  | `group/project.git`   |
+| `http://git.example.com:8080/org/repo.git`    | `http`   | `git.example.com` | `8080` | `org/repo.git`        |
+| `ssh://git@git.example.com/org/repo.git`      | `ssh`    | `git.example.com` | `22`   | `org/repo.git`        |
+| `git@github.com:org/repo.git` (scp-style)     | `ssh`    | `github.com`      | `22`   | `org/repo.git`        |
+| `ssh://git@git.example.com:2222/org/repo.git` | `ssh`    | `git.example.com` | `2222` | `org/repo.git`        |
+| `git://git.example.com/org/repo.git`          | `git`    | `git.example.com` | `9418` | `org/repo.git`        |
+
+OCM lowercases the scheme and hostname of the URL before matching. It does not change the identity in your
+configuration, so write `scheme` and `hostname` in lowercase there. The `path` keeps a `.git` suffix if the URL has one,
+so `path: org/repo` does not match `https://example.com/org/repo.git`. Use `org/*` or the exact path with `.git`.
+
+### Credential Properties
+
+| Property        | Description                                                            |
+|-----------------|------------------------------------------------------------------------|
+| `username`      | HTTPS Basic Auth user, or the SSH user                                 |
+| `password`      | HTTPS Basic Auth password, or the passphrase of the SSH key            |
+| `token`         | HTTPS bearer token                                                     |
+| `privateKey`    | Path to an SSH private key file                                        |
+| `privateKeyPEM` | Inline PEM-encoded SSH private key. Takes precedence over `privateKey` |
+
+Use [`GitCredentials/v1`]({{< relref "credential-types.md#gitcredentialsv1" >}}) for the typed field reference and the
+order in which OCM picks an authentication method.
+
+### Matching Behavior
+
+The same three chained checks as [`OCIRegistry`](#ociregistry) apply: path glob, URL (scheme, hostname, port), then
+exact equality on the remaining attributes.
+
+{{< callout context="caution" >}}
+For an `ssh` or `git` URL, set `port` (`"22"` or `"9418"`, or the port in the URL). OCM fills in a missing default port
+only for `https` and `http`, so an SSH entry without `port` never matches.
+
+Set `scheme` when HTTPS and SSH need different credentials: an SSH key does not work for an HTTPS URL, and a token does
+not work for an SSH URL. If no entry matches, OCM reports no error. It sends the request without credentials, and the
+server answers with an authentication error.
+{{< /callout >}}
+
+### Examples
+
+**All repositories of a group, over HTTPS:**
+
+```yaml
+- identity:
+    type: Git
+    hostname: gitlab.com
+    scheme: https
+    path: example-group/*
+  credentials:
+    - type: GitCredentials/v1
+      username: oauth2
+      password: glpat-example-token
+```
+
+**Every repository on a host, over SSH:**
+
+```yaml
+- identity:
+    type: Git
+    hostname: git.example.com
+    scheme: ssh
+    port: "22"
+  credentials:
+    - type: GitCredentials/v1
+      privateKey: /home/user/.ssh/id_ed25519
+```
+
+### Migrating from OCM v1 {#git-identity-migration-from-ocm-v1}
+
+The identity type is `Git` in OCM v1 and OCM v2, and the credential property names are the same. OCM v1 matched the
+repository with a `pathprefix` attribute. OCM v2 has no such attribute, and an entry that sets it never matches. Replace
+`pathprefix: org` with `path: org/*`.
 
 ---
 

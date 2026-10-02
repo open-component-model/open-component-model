@@ -318,12 +318,19 @@ func (g *generation) buildStructRequired(st *ast.StructType, ti *universe.TypeIn
 			req = append(req, g.buildStructRequired(ti.Struct, ti)...)
 			continue
 		}
-		if name == "-" || slices.Contains(opts, "omitempty") {
+		if name == "-" || isOptionalField(opts) {
 			continue
 		}
 		req = append(req, name)
 	}
 	return req
+}
+
+// isOptionalField reports whether a field's JSON tag options make it optional on the
+// wire: omitempty and omitzero both drop the field from encoded output, so it cannot be
+// required.
+func isOptionalField(opts []string) bool {
+	return slices.Contains(opts, "omitempty") || slices.Contains(opts, "omitzero")
 }
 
 func unwrapStar(expr ast.Expr) ast.Expr {
@@ -361,7 +368,7 @@ func (g *generation) inlineAnonymousStruct(st *ast.StructType, ctx *universe.Typ
 		}
 
 		props[name] = &SchemaOrBool{Schema: sch}
-		if !slices.Contains(opts, "omitempty") {
+		if !isOptionalField(opts) {
 			req = append(req, name)
 		}
 	}

@@ -2,6 +2,7 @@ package component_version
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -20,12 +21,15 @@ import (
 	"ocm.software/open-component-model/bindings/go/cli/internal/render/progress"
 	"ocm.software/open-component-model/bindings/go/cli/internal/render/progress/bar"
 	"ocm.software/open-component-model/bindings/go/cli/internal/repository/ocm"
+	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	versioningspec "ocm.software/open-component-model/bindings/go/configuration/versioning/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/oci/compref"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
+	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
+	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/transfer"
 	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
 	graphPkg "ocm.software/open-component-model/bindings/go/transform/graph"
@@ -34,15 +38,13 @@ import (
 )
 
 const (
-	FlagDryRun        = "dry-run"
-	FlagOutput        = "output"
-	FlagRecursive     = "recursive"
-	FlagCopyResources = "copy-resources"
-	FlagUploadAs      = "upload-as"
-	FlagTransferSpec  = "transfer-spec"
-	FlagConstraint    = "constraint"
-	FlagLatest        = "latest"
-	FlagConcurrency   = "concurrency-limit"
+	FlagDryRun       = "dry-run"
+	FlagOutput       = "output"
+	FlagRecursive    = "recursive"
+	FlagTransferSpec = "transfer-spec"
+	FlagConstraint   = "constraint"
+	FlagLatest       = "latest"
+	FlagConcurrency  = "concurrency-limit"
 
 	// Each node emits 2 events (Running + Completed/Failed) and since the tracker consumes
 	// them faster than the transfer produces, 16 is enough to avoid blocking with room to grow.
@@ -60,29 +62,39 @@ a target repository using an internally generated transformation graph.
 
 When a version is included in the source reference, exactly that version is transferred.
 When the version is omitted, all versions of the component are discovered and transferred.
+When the source is a repository reference (without a component), every component version
+the repository contains is transferred (component listing is currently CTF-only).
 Use --constraint to restrict which versions are selected, and --latest to transfer
-only the newest matching version.
+only the newest matching version. Both apply per component.
 
 OCI, CTF, and Helm repositories are supported as transfer sources.
 OCI and CTF repositories are supported as transfer targets, while Helm repositories are not supported.
 
-By default, only the component version itself is transferred. Use --copy-resources to also
-copy (and, when needed, transform) the resources it references. --upload-as controls whether
-those resources land as OCI artifacts or as local blobs in the target. --recursive walks the
+By default, local blobs are copied and all other resources stay by reference (their access
+is unchanged in the target). Uploader configurations in the OCM configuration decide
+what happens to a resource: oci.uploader.transfer.config.ocm.software/v1alpha1 (separate OCI
+artifacts), http.uploader.transfer.config.ocm.software/v1alpha1 (custom HTTP targets),
+localblob.uploader.transfer.config.ocm.software/v1alpha1 (copy as local blobs) and
+reference.uploader.transfer.config.ocm.software/v1alpha1 (keep by reference). Each selects
+resources with a CEL match expression over resource and target (test access types with
+resource.access.isType("OCIImage"), which resolves aliases and versions); the first uploader
+whose match is true handles the resource. The deprecated --copy-resources and --upload-as flags
+still work: they are translated into uploader entries appended after the configured ones (see
+the "Migrate from --upload-as to Uploader Configurations" guide on ocm.software). --recursive walks the
 component's references and transfers them too.
 
 Driving defaults from the OCM configuration:
   A transfer.config.ocm.software/v1alpha1 entry inside the central OCM configuration
-  (passed via --config) sets defaults for --recursive, --copy-resources, and --upload-as.
+  (passed via --config) sets defaults for --recursive.
   Explicit command-line flags always override the values from the configuration.
 
 Two-step workflow (generate, review, replay):
   --dry-run builds and validates the graph without executing it, and with -o yaml|json prints
   the resulting TransformationGraphDefinition. --transfer-spec then replays a saved definition
   from a file (or stdin with "-"):
-    1. Generate the spec:  transfer cv --dry-run -o yaml --copy-resources -r {reference} {target} > spec.yaml
+    1. Generate the spec:  transfer cv --dry-run -o yaml -r {reference} {target} > spec.yaml
     2. Review/edit spec.yaml, then execute: transfer cv --transfer-spec spec.yaml
-  All graph-shaping flags (--recursive, --copy-resources, --upload-as) and any transfer
+  All graph-shaping flags (--recursive, --copy-resources, --upload-as) and any transfer or uploader
   configuration entry are baked into the spec during step 1 and are therefore ignored in
   step 2 - the spec is the full graph definition. Only --dry-run, --output, and
   --concurrency-limit remain meaningful when replaying a spec.
@@ -92,8 +104,8 @@ How the graph is built:
   selected based on the source/target references:
     1. CTFGetComponentVersion -> OCIGetComponentVersion
     2. CTFAddComponentVersion -> OCIAddComponentVersion
-    3. GetOCIArtifact -> OCIAddLocalResource / AddOCIArtifact
-    4. GetHelmChart -> ConvertHelmToOCI -> OCIAddLocalResource / AddOCIArtifact`,
+    3. GetOCIArtifact -> OCIAddLocalResource, or TransferOCIArtifact (OCI uploader)
+    4. GetHelmChart -> ConvertHelmToOCI -> OCIAddLocalResource / AddOCIArtifact (OCI uploader)`,
 		Example: strings.TrimSpace(`
 # Transfer a component version from a CTF archive to an OCI registry
 transfer component-version ctf::./my-archive//ocm.software/mycomponent:1.0.0 ghcr.io/my-org/ocm
@@ -104,40 +116,45 @@ transfer component-version ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.
 # Transfer all versions of a component (omit version from reference)
 transfer component-version ctf::./my-archive//ocm.software/mycomponent ghcr.io/my-org/ocm
 
+# Transfer every component version contained in a CTF archive (repository reference as source)
+transfer component-version ./my-archive ghcr.io/my-org/ocm
+transfer component-version ctf::./my-archive ghcr.io/my-org/ocm
+
 # Transfer all versions matching a version constraint
 transfer component-version ctf::./my-archive//ocm.software/mycomponent ghcr.io/my-org/ocm --constraint ">= 1.0.0, < 2.0.0"
 
 # Transfer only the latest version
 transfer component-version ctf::./my-archive//ocm.software/mycomponent ghcr.io/my-org/ocm --latest
 
-# Transfer from one OCI to another using localBlobs (default)
-transfer component-version ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm --copy-resources --upload-as localBlob
+# Upload OCI images, Helm charts and OCI-manifest local blobs as separate OCI artifacts and copy
+# every other resource as a local blob. With ./.ocmconfig in the working directory (merged with
+# your other OCM configuration files) containing:
+#   type: generic.config.ocm.software/v1
+#   configurations:
+#   - type: oci.uploader.transfer.config.ocm.software/v1alpha1
+#   - type: localblob.uploader.transfer.config.ocm.software/v1alpha1
+transfer component-version ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm
 
-# Transfer from one OCI to another using OCI artifacts
-transfer component-version ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm --copy-resources --upload-as ociArtifact
-
-# Transfer a component version containing Helm charts (access-type: helm/v1) as an OCI artifact
-transfer component-version ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm --copy-resources --upload-as ociArtifact
-
-# Transfer including all resources (e.g. OCI artifacts)
-transfer component-version ctf::./my-archive//ocm.software/mycomponent:1.0.0 ghcr.io/my-org/ocm --copy-resources
-
-# Recursively transfer a component version and all its references
-transfer component-version ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm -r --copy-resources
+# Keep one resource by reference and copy all others as local blobs. With ./.ocmconfig containing:
+#   type: generic.config.ocm.software/v1
+#   configurations:
+#   - type: reference.uploader.transfer.config.ocm.software/v1alpha1
+#     match: resource.name == "base-os-image"
+#   - type: localblob.uploader.transfer.config.ocm.software/v1alpha1
+transfer component-version ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm
 
 # Drive defaults from the OCM configuration. With --config ./ocmconfig.yaml containing:
 #   type: generic.config.ocm.software/v1
 #   configurations:
 #   - type: transfer.config.ocm.software/v1alpha1
 #     recursive: -1
-#     copyMode: allResources
-#     uploadType: ociArtifact
-# the following invocation transfers recursively with all resources copied as OCI artifacts.
+#   - type: localblob.uploader.transfer.config.ocm.software/v1alpha1
+# the following invocation transfers recursively with all resources copied.
 # Any explicit flag still overrides the corresponding configuration value.
 transfer component-version --config ./ocmconfig.yaml ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm
 
 # Two-step transfer: generate a spec with all desired flags, then review and execute
-transfer component-version --dry-run -o yaml --copy-resources -r ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm > spec.yaml
+transfer component-version --dry-run -o yaml -r ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.0 ghcr.io/target-org/ocm > spec.yaml
 # (review/edit spec.yaml as needed, e.g. change the target registry)
 transfer component-version --transfer-spec spec.yaml
 `),
@@ -149,13 +166,7 @@ transfer component-version --transfer-spec spec.yaml
 	enum.VarP(cmd.Flags(), FlagOutput, "o", []string{render.OutputFormatYAML.String(), render.OutputFormatJSON.String(), render.OutputFormatNDJSON.String()}, "output format of the component descriptors")
 	cmd.Flags().Bool(FlagDryRun, false, "build and validate the graph but do not execute")
 	cmd.Flags().BoolP(FlagRecursive, "r", false, "recursively discover and transfer component versions")
-	cmd.Flags().Bool(FlagCopyResources, false, "copy all resources in the component version")
-	uploadAsValues := make([]string, len(transferv1alpha1.AllUploadTypes))
-	for i, t := range transferv1alpha1.AllUploadTypes {
-		uploadAsValues[i] = string(t)
-	}
-	enum.VarP(cmd.Flags(), FlagUploadAs, "u", uploadAsValues,
-		"Define whether copied resources should be uploaded as OCI artifacts (instead of local blob resources). This option is only relevant if --copy-resources is set.")
+	registerLegacyFlags(cmd.Flags())
 	cmd.Flags().String(FlagTransferSpec, "", "path to a transfer specification file (use \"-\" for stdin). The input must hold exactly one transfer spec document; with \"-\", OCM configuration documents in stdin are applied as configuration")
 	cmd.Flags().String(FlagConstraint, "", "version constraint evaluated by each version's configured scheme; versions with no applicable scheme are retained (e.g. \">= 1.0.0, < 2.0.0\"); only used when no version is specified in the reference")
 	cmd.Flags().Bool(FlagLatest, false, "if set, only the latest version of the component is transferred; only used when no version is specified in the reference")
@@ -396,18 +407,10 @@ func buildGraphDefinitionFromArgs(
 		return nil, fmt.Errorf("source component reference and target repository spec are required as positional arguments")
 	}
 
-	fromSpec, compErr := compref.Parse(args[0], compref.IgnoreSemverCompatibility())
-	if compErr != nil {
-		return nil, fmt.Errorf("invalid source component reference: %w", compErr)
-	}
-
-	repoProvider, err := ocm.NewComponentRepositoryResolver(
-		ctx, pm.ComponentVersionRepositoryRegistry, credGraph, ocm.WithConfig(cfg), ocm.WithComponentRef(fromSpec),
-	)
+	fromSpec, repoProvider, sourceComponents, err := resolveSource(ctx, args[0], pm, credGraph, cfg, resolutionEvents)
 	if err != nil {
-		return nil, fmt.Errorf("could not initialize ocm repositoryProvider: %w", err)
+		return nil, err
 	}
-	repoProvider = &resolutionProgressResolver{ComponentVersionRepositoryResolver: repoProvider, events: resolutionEvents}
 
 	toSpec, err := compref.ParseRepository(args[1],
 		compref.WithCTFAccessMode(ctfv1.AccessModeReadWrite+"|"+ctfv1.AccessModeCreate),
@@ -426,7 +429,11 @@ func buildGraphDefinitionFromArgs(
 		transferCfg = &transferv1alpha1.Config{}
 	}
 
-	uploaderCfgs, err := transferv1alpha1.LookupUploaderConfigs(cfg)
+	uploaderSource, err := withLegacyFlagUploaders(cmd, cfg)
+	if err != nil {
+		return nil, err
+	}
+	uploaderCfgs, err := transferv1alpha1.LookupUploaderConfigs(uploaderSource)
 	if err != nil {
 		return nil, fmt.Errorf("looking up uploader configs failed: %w", err)
 	}
@@ -442,74 +449,10 @@ func buildGraphDefinitionFromArgs(
 			transferCfg.Recursive = transferv1alpha1.RecursiveNone
 		}
 	}
-	if cmd.Flags().Changed(FlagCopyResources) {
-		copyResources, err := cmd.Flags().GetBool(FlagCopyResources)
-		if err != nil {
-			return nil, fmt.Errorf("getting copy-resources flag failed: %w", err)
-		}
-		if copyResources {
-			transferCfg.CopyMode = transferv1alpha1.CopyModeAllResources
-		} else {
-			transferCfg.CopyMode = transferv1alpha1.CopyModeLocalBlobResources
-		}
-	}
-	if cmd.Flags().Changed(FlagUploadAs) {
-		uploadAs, err := enum.Get(cmd.Flags(), FlagUploadAs)
-		if err != nil {
-			return nil, fmt.Errorf("getting upload-as flag failed: %w", err)
-		}
-		transferCfg.UploadType = transferv1alpha1.UploadType(uploadAs)
-	}
 
-	constraint, err := cmd.Flags().GetString(FlagConstraint)
+	componentIDs, err := collectComponentIDs(ctx, cmd, cfg, repoProvider, fromSpec, sourceComponents)
 	if err != nil {
-		return nil, fmt.Errorf("getting constraint flag failed: %w", err)
-	}
-	latestOnly, err := cmd.Flags().GetBool(FlagLatest)
-	if err != nil {
-		return nil, fmt.Errorf("getting latest flag failed: %w", err)
-	}
-
-	var componentIDs []transfer.ComponentID
-	if fromSpec.Version != "" {
-		if cmd.Flags().Changed(FlagConstraint) {
-			slog.WarnContext(ctx, fmt.Sprintf("--%s has no effect when a version is already specified in the reference", FlagConstraint))
-		}
-		if cmd.Flags().Changed(FlagLatest) {
-			slog.WarnContext(ctx, fmt.Sprintf("--%s has no effect when a version is already specified in the reference", FlagLatest))
-		}
-		componentIDs = []transfer.ComponentID{{Component: fromSpec.Component, Version: fromSpec.Version}}
-	} else {
-		repo, err := repoProvider.GetComponentVersionRepositoryForComponent(ctx, fromSpec.Component, "")
-		if err != nil {
-			return nil, fmt.Errorf("could not access ocm repository: %w", err)
-		}
-		registry, err := versioningspec.RegistryFromConfig(cfg)
-		if err != nil {
-			return nil, fmt.Errorf("could not build versioning registry: %w", err)
-		}
-		versions, err := ocm.VersionsWithFiltering(ctx, fromSpec.Component, repo, ocm.VersionOptions{
-			SemverConstraint: constraint,
-			LatestOnly:       latestOnly,
-			Registry:         registry,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("listing and filtering component versions failed: %w", err)
-		}
-		if len(versions) == 0 {
-			msg := fmt.Sprintf("no versions found for component %q", fromSpec.Component)
-			if constraint != "" {
-				msg += fmt.Sprintf(" matching constraint %q", constraint)
-			}
-			if latestOnly {
-				msg += " (latest only)"
-			}
-			return nil, errors.New(msg)
-		}
-		componentIDs = make([]transfer.ComponentID, len(versions))
-		for i, v := range versions {
-			componentIDs[i] = transfer.ComponentID{Component: fromSpec.Component, Version: v}
-		}
+		return nil, err
 	}
 
 	tgd, err := transfer.BuildGraphDefinition(ctx, transferCfg, uploaderCfgs,
@@ -524,6 +467,154 @@ func buildGraphDefinitionFromArgs(
 	}
 
 	return tgd, nil
+}
+
+// resolveSource parses the source as a component reference or, as a fallback, a
+// repository reference. A repository reference transfers every component version it
+// contains. The returned sourceComponents is nil for a component reference and holds
+// the discovered component names otherwise.
+func resolveSource(
+	ctx context.Context,
+	source string,
+	pm *manager.PluginManager,
+	credGraph credentials.Resolver,
+	cfg *genericv1.Config,
+	resolutionEvents chan<- resolutionEvent,
+) (fromSpec *compref.Ref, repoProvider resolvers.ComponentVersionRepositoryResolver, sourceComponents []string, err error) {
+	fromSpec, compErr := compref.Parse(source, compref.IgnoreSemverCompatibility())
+
+	var sourceRepository runtime.Typed
+	if compErr != nil {
+		repo, repoErr := compref.ParseRepository(source)
+		if repoErr != nil {
+			return nil, nil, nil, fmt.Errorf("invalid source reference: must be either a component reference or a repository reference: %w", errors.Join(compErr, repoErr))
+		}
+		sourceRepository = repo
+	}
+
+	resolverOpts := []ocm.RepositoryResolverOption{ocm.WithConfig(cfg)}
+	if sourceRepository != nil {
+		// Component names must be discovered before the resolver is built so they can
+		// be registered as high-priority patterns for the source repository.
+		if sourceComponents, err = listComponentsFromRepository(ctx, pm, sourceRepository); err != nil {
+			return nil, nil, nil, fmt.Errorf("could not list components in source repository: %w", err)
+		}
+		if len(sourceComponents) == 0 {
+			return nil, nil, nil, fmt.Errorf("no components found in source repository")
+		}
+		resolverOpts = append(resolverOpts, ocm.WithRepository(sourceRepository), ocm.WithComponentPatterns(sourceComponents))
+	} else {
+		resolverOpts = append(resolverOpts, ocm.WithComponentRef(fromSpec))
+	}
+
+	resolver, err := ocm.NewComponentRepositoryResolver(ctx, pm.ComponentVersionRepositoryRegistry, credGraph, resolverOpts...)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("could not initialize ocm repositoryProvider: %w", err)
+	}
+
+	return fromSpec, &resolutionProgressResolver{ComponentVersionRepositoryResolver: resolver, events: resolutionEvents}, sourceComponents, nil
+}
+
+// collectComponentIDs determines which component versions to transfer. For a
+// component reference with an explicit version, exactly that version is used.
+// Otherwise versions are listed and filtered (by --constraint and --latest) for the
+// single referenced component, or for every component of a repository reference.
+func collectComponentIDs(
+	ctx context.Context,
+	cmd *cobra.Command,
+	cfg *genericv1.Config,
+	repoProvider resolvers.ComponentVersionRepositoryResolver,
+	fromSpec *compref.Ref,
+	sourceComponents []string,
+) ([]transfer.ComponentID, error) {
+	constraint, err := cmd.Flags().GetString(FlagConstraint)
+	if err != nil {
+		return nil, fmt.Errorf("getting constraint flag failed: %w", err)
+	}
+	latestOnly, err := cmd.Flags().GetBool(FlagLatest)
+	if err != nil {
+		return nil, fmt.Errorf("getting latest flag failed: %w", err)
+	}
+
+	repositorySource := sourceComponents != nil
+
+	if !repositorySource && fromSpec.Version != "" {
+		if cmd.Flags().Changed(FlagConstraint) {
+			slog.WarnContext(ctx, fmt.Sprintf("--%s has no effect when a version is already specified in the reference", FlagConstraint))
+		}
+		if cmd.Flags().Changed(FlagLatest) {
+			slog.WarnContext(ctx, fmt.Sprintf("--%s has no effect when a version is already specified in the reference", FlagLatest))
+		}
+		return []transfer.ComponentID{{Component: fromSpec.Component, Version: fromSpec.Version}}, nil
+	}
+
+	registry, err := versioningspec.RegistryFromConfig(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("could not build versioning registry: %w", err)
+	}
+
+	components := sourceComponents
+	if !repositorySource {
+		components = []string{fromSpec.Component}
+	}
+
+	var componentIDs []transfer.ComponentID
+	for _, component := range components {
+		repo, err := repoProvider.GetComponentVersionRepositoryForComponent(ctx, component, "")
+		if err != nil {
+			return nil, fmt.Errorf("could not access ocm repository: %w", err)
+		}
+		versions, err := ocm.VersionsWithFiltering(ctx, component, repo, ocm.VersionOptions{
+			SemverConstraint: constraint,
+			LatestOnly:       latestOnly,
+			Registry:         registry,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("listing and filtering component versions failed: %w", err)
+		}
+		for _, v := range versions {
+			componentIDs = append(componentIDs, transfer.ComponentID{Component: component, Version: v})
+		}
+	}
+	if len(componentIDs) == 0 {
+		msg := "no versions found"
+		if !repositorySource {
+			msg = fmt.Sprintf("no versions found for component %q", fromSpec.Component)
+		}
+		if constraint != "" {
+			msg += fmt.Sprintf(" matching constraint %q", constraint)
+		}
+		if latestOnly {
+			msg += " (latest only)"
+		}
+		return nil, errors.New(msg)
+	}
+
+	return componentIDs, nil
+}
+
+// listComponentsFromRepository lists the component names contained in a repository.
+// Component listing currently supports CTF repositories only, which covers the common
+// "transfer a whole transport archive" case.
+func listComponentsFromRepository(ctx context.Context, pm *manager.PluginManager, repository runtime.Typed) ([]string, error) {
+	if _, ok := repository.(*ctfv1.Repository); !ok {
+		return nil, fmt.Errorf("component listing in repositories of type %T is not supported; specify a component in the source reference", repository)
+	}
+
+	lister, err := pm.ComponentListerRegistry.GetComponentLister(ctx, repository, nil)
+	if err != nil {
+		return nil, fmt.Errorf("could not get component lister: %w", err)
+	}
+
+	var componentNames []string
+	if err := lister.ListComponents(ctx, "", func(names []string) error {
+		componentNames = append(componentNames, names...)
+		return nil
+	}); err != nil {
+		return nil, fmt.Errorf("could not list components: %w", err)
+	}
+
+	return componentNames, nil
 }
 
 func renderTGD(tgd *transformv1alpha1.TransformationGraphDefinition, format string) (io.ReadCloser, error) {
