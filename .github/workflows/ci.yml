@@ -185,10 +185,6 @@ jobs:
     name: "Integration Tests"
     needs: changes
     runs-on: ubuntu-24.04-arm
-    permissions:
-      # Allow the JUnit report action to publish a check run with per-test annotations.
-      # Downgraded to read-only automatically for pull requests from forks.
-      checks: write
     if: ${{ needs.changes.outputs.run_go == 'true' }}
     env:
       # All packages of one `go test ./...` share a single testcontainers reaper, which
@@ -234,9 +230,10 @@ jobs:
         if: always()
         with:
           report_paths: '${{ github.workspace }}/bindings/go/junit.xml'
-          check_name: 'Integration Tests Report'
           detailed_summary: true
           include_passed: false
+          # annotate inline + write the job summary without creating a check run,
+          # so the report works on fork PRs (read-only token) too.
           annotate_only: true
 
   run_unit_tests:
