@@ -548,30 +548,35 @@ func TestGenerate_JSONRawMessageFieldIsUnconstrained(t *testing.T) {
 
 func TestGenerate_ExternalNamedBasicTypeUsesUnderlyingType(t *testing.T) {
 	pkg := types.NewPackage("example.com/ext", "ext")
-	named := func(name string, underlying types.Type, withMarshalJSON bool) *types.TypeName {
+	named := func(name string, underlying types.Type, methods ...string) *types.TypeName {
 		obj := types.NewTypeName(0, pkg, name, nil)
 		n := types.NewNamed(obj, underlying, nil)
-		if withMarshalJSON {
+		for _, method := range methods {
 			errType := types.Universe.Lookup("error").Type()
 			results := types.NewTuple(
 				types.NewVar(0, pkg, "", types.NewSlice(types.Typ[types.Byte])),
 				types.NewVar(0, pkg, "", errType),
 			)
 			sig := types.NewSignatureType(types.NewVar(0, pkg, "", n), nil, nil, nil, results, false)
-			n.AddMethod(types.NewFunc(0, pkg, "MarshalJSON", sig))
+			n.AddMethod(types.NewFunc(0, pkg, method, sig))
 		}
 		return obj
 	}
+	jsonNumber := types.NewTypeName(0, types.NewPackage("encoding/json", "json"), "Number", nil)
+	types.NewNamed(jsonNumber, types.Typ[types.String], nil)
 
 	tests := []struct {
 		name         string
 		obj          *types.TypeName
 		expectedType string
 	}{
-		{name: "string", obj: named("Digest", types.Typ[types.String], false), expectedType: "string"},
-		{name: "integer", obj: named("Count", types.Typ[types.Int64], false), expectedType: "integer"},
-		{name: "boolean", obj: named("Flag", types.Typ[types.Bool], false), expectedType: "boolean"},
-		{name: "custom MarshalJSON keeps fallback", obj: named("Custom", types.Typ[types.String], true), expectedType: "object"},
+		{name: "string", obj: named("Digest", types.Typ[types.String]), expectedType: "string"},
+		{name: "integer", obj: named("Count", types.Typ[types.Int64]), expectedType: "integer"},
+		{name: "boolean", obj: named("Flag", types.Typ[types.Bool]), expectedType: "boolean"},
+		{name: "custom MarshalJSON keeps fallback", obj: named("Custom", types.Typ[types.String], "MarshalJSON"), expectedType: "object"},
+		{name: "MarshalText is a string", obj: named("Level", types.Typ[types.Int], "MarshalText"), expectedType: "string"},
+		{name: "MarshalJSON wins over MarshalText", obj: named("Both", types.Typ[types.Int], "MarshalText", "MarshalJSON"), expectedType: "object"},
+		{name: "json.Number is a number", obj: jsonNumber, expectedType: "number"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
