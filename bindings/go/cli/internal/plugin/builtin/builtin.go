@@ -22,10 +22,11 @@ import (
 	helmdigest "ocm.software/open-component-model/bindings/go/helm/digest"
 	helmresource "ocm.software/open-component-model/bindings/go/helm/repository/resource"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
+	ocicachingv1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 )
 
-func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alpha1.Config, httpConfig *httpv1alpha1.Config, checksumHTTPConfig *checksumhttpv1alpha1.Config, logger *slog.Logger) error {
+func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alpha1.Config, httpConfig *httpv1alpha1.Config, checksumHTTPConfig *checksumhttpv1alpha1.Config, ociCachingConfig *ocicachingv1alpha1.Config, logger *slog.Logger) error {
 	if err := ocicredentialplugin.Register(manager.CredentialRepositoryRegistry); err != nil {
 		return fmt.Errorf("could not register OCI inbuilt credential plugin: %w", err)
 	}
@@ -39,6 +40,7 @@ func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alph
 		manager.CredentialTypeRegistry,
 		filesystemConfig,
 		httpConfig,
+		ociCachingConfig,
 		logger,
 	); err != nil {
 		return fmt.Errorf("could not register OCI inbuilt plugin: %w", err)

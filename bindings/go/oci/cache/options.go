@@ -51,17 +51,18 @@ type Options struct {
 	// the same Dir can be shared.
 	Dir string
 
-	// MaxEntries bounds the LRU. A value of 0 means unlimited
-	// (subject only to TTL).
+	// MaxEntries bounds the LRU. A value of 0 selects the default
+	// from [Defaults].
 	MaxEntries int
 
-	// TTL is the maximum age of a cache entry. A value of 0 disables
-	// time-based expiry; entries then live until LRU overflow.
+	// TTL is the maximum age of a cache entry. A value of 0 selects the
+	// default from [Defaults].
 	TTL time.Duration
 
 	// MaxBlobSize is the per-blob size cap for the [BlobCache].
 	// Descriptors with a larger Size are fetched but not cached.
-	// A value of 0 disables the cap. Ignored by [ReferenceCache].
+	// A value of 0 selects the default from [Defaults]. Ignored by
+	// [ReferenceCache].
 	MaxBlobSize int64
 
 	// Accept reports whether a blob should be cached by the
@@ -72,7 +73,7 @@ type Options struct {
 	Accept func(desc ociImageSpecV1.Descriptor) bool
 
 	// RemotePolicy controls whether the upstream registry is contacted
-	// on a cache hit. Defaults to [RemotePolicyIfNotPresent].
+	// on a cache hit. An empty value selects [RemotePolicyIfNotPresent].
 	RemotePolicy RemotePolicy
 }
 
@@ -81,7 +82,7 @@ type Options struct {
 //   - 10 minute TTL
 //   - 4 MiB per-blob size cap
 //   - [DefaultAccept] media-type filter
-//   - [RemotePolicyAlways] (secure by default)
+//   - [RemotePolicyIfNotPresent]
 //
 // Dir is left zero — callers must set it explicitly.
 func Defaults() *Options {
@@ -90,7 +91,7 @@ func Defaults() *Options {
 		TTL:          10 * time.Minute,
 		MaxBlobSize:  4 << 20,
 		Accept:       DefaultAccept,
-		RemotePolicy: RemotePolicyAlways,
+		RemotePolicy: RemotePolicyIfNotPresent,
 	}
 }
 

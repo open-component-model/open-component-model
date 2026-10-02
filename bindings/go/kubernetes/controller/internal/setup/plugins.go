@@ -11,9 +11,11 @@ import (
 	helmdigest "ocm.software/open-component-model/bindings/go/helm/digest"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	ocicache "ocm.software/open-component-model/bindings/go/oci/cache"
+	cacheconfiguration "ocm.software/open-component-model/bindings/go/oci/cache/configuration"
 	ocicredentials "ocm.software/open-component-model/bindings/go/oci/credentials"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	ocires "ocm.software/open-component-model/bindings/go/oci/repository/resource"
+	ociconfigv1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/config/v1alpha1"
 	ociidentityv1 "ocm.software/open-component-model/bindings/go/oci/spec/identity/v1"
 	ocirepository "ocm.software/open-component-model/bindings/go/oci/spec/repository"
 	"ocm.software/open-component-model/bindings/go/oci/transformer"
@@ -55,6 +57,15 @@ func NewPluginManager(ctx context.Context, cfg *genericv1.Config, logger *slog.L
 		return nil, fmt.Errorf("failed to look up http configuration: %w", err)
 	}
 
+	cachingCfg, err := ociconfigv1alpha1.LookupConfig(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to look up OCI caching configuration: %w", err)
+	}
+	blobCacheOptions, referenceCacheOptions, err := cacheconfiguration.Resolve(cachingCfg, ocicache.RemotePolicyIfNotPresent)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve OCI cache options: %w", err)
+	}
+
 	fsCfg := &filesystemv1alpha1.Config{}
 	if options.TempDir != "" {
 		fsCfg.TempFolder = &options.TempDir
@@ -67,8 +78,8 @@ func NewPluginManager(ctx context.Context, cfg *genericv1.Config, logger *slog.L
 		provider.WithUserAgent(creator),
 		provider.WithTempDir(options.TempDir),
 		provider.WithHTTPConfig(httpCfg),
-		provider.WithBlobCacheOptions(&ocicache.Options{RemotePolicy: ocicache.RemotePolicyAlways}),
-		provider.WithReferenceCacheOptions(&ocicache.Options{RemotePolicy: ocicache.RemotePolicyAlways}),
+		provider.WithBlobCacheOptions(blobCacheOptions),
+		provider.WithReferenceCacheOptions(referenceCacheOptions),
 	)
 
 	signingHandler, err := handler.New(signingv1alpha1.Scheme, true)

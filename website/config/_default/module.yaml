@@ -160,6 +160,12 @@ mounts:
       matrix:
         versions:
           - main
+  - source: ../bindings/go/oci/spec/config/v1alpha1/schemas
+    target: static/main/schemas/bindings/go/oci/config/v1alpha1
+    sites:
+      matrix:
+        versions:
+          - main
   - source: ../bindings/go/oci/spec/credentials/v1/schemas
     target: static/main/schemas/bindings/go/credentials/oci/v1
     sites:

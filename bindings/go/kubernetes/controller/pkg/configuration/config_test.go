@@ -21,6 +21,7 @@ import (
 	credentialsv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
+	ocicachingv1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/config/v1alpha1"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -840,6 +841,32 @@ func TestFilterAllowedConfigTypes(t *testing.T) {
 		require.Contains(t, httpCfg.Hosts, "ghcr.io")
 		require.NotNil(t, httpCfg.Hosts["ghcr.io"].Timeout)
 		assert.Equal(t, 10*time.Second, time.Duration(*httpCfg.Hosts["ghcr.io"].Timeout))
+	})
+
+	t.Run("oci caching config passes through with values preserved", func(t *testing.T) {
+		cfg := makeGenericConfig(`{"type":"caching.oci.config.ocm.software/v1alpha1","mode":"IfNotPresent","ttl":"5m","maxBlobSize":2048}`)
+		result, err := filterAllowedConfigTypes(t.Context(), cfg)
+		require.NoError(t, err)
+		require.Len(t, result.Configurations, 1)
+
+		var cachingCfg ocicachingv1alpha1.Config
+		require.NoError(t, ocicachingv1alpha1.Scheme.Convert(result.Configurations[0], &cachingCfg))
+		assert.Equal(t, ocicachingv1alpha1.ModeIfNotPresent, cachingCfg.Mode)
+		require.NotNil(t, cachingCfg.TTL)
+		assert.Equal(t, 5*time.Minute, time.Duration(*cachingCfg.TTL))
+		require.NotNil(t, cachingCfg.MaxBlobSize)
+		assert.EqualValues(t, 2048, *cachingCfg.MaxBlobSize)
+	})
+
+	t.Run("oci caching config passes through unversioned", func(t *testing.T) {
+		cfg := makeGenericConfig(`{"type":"caching.oci.config.ocm.software","mode":"Never"}`)
+		result, err := filterAllowedConfigTypes(t.Context(), cfg)
+		require.NoError(t, err)
+		require.Len(t, result.Configurations, 1)
+		assert.Equal(t,
+			ocmruntime.NewUnversionedType(ocicachingv1alpha1.ConfigType),
+			result.Configurations[0].GetType(),
+		)
 	})
 
 	t.Run("http config passes through unversioned", func(t *testing.T) {

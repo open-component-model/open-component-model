@@ -21,6 +21,9 @@ import (
 	"ocm.software/open-component-model/bindings/go/credentials"
 	credentialsRuntime "ocm.software/open-component-model/bindings/go/credentials/spec/config/runtime"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
+	"ocm.software/open-component-model/bindings/go/oci/cache"
+	cacheconfiguration "ocm.software/open-component-model/bindings/go/oci/cache/configuration"
+	ocicachingv1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 )
 
@@ -98,7 +101,14 @@ func PluginManager(cmd *cobra.Command) error {
 	if err != nil {
 		return fmt.Errorf("could not get checksum-http configuration: %w", err)
 	}
-	if err := builtin.Register(pluginManager, filesystemConfig, httpConfig, checksumHTTPConfig, slog.Default()); err != nil {
+	ociCachingConfig, err := ocicachingv1alpha1.LookupConfig(ocmContext.Configuration())
+	if err != nil {
+		return fmt.Errorf("could not get OCI caching configuration: %w", err)
+	}
+	if _, _, err := cacheconfiguration.Resolve(ociCachingConfig, cache.RemotePolicyIfNotPresent); err != nil {
+		return fmt.Errorf("could not get OCI caching configuration: %w", err)
+	}
+	if err := builtin.Register(pluginManager, filesystemConfig, httpConfig, checksumHTTPConfig, ociCachingConfig, slog.Default()); err != nil {
 		return fmt.Errorf("could not register builtin plugins: %w", err)
 	}
 

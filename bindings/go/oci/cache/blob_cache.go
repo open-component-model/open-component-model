@@ -101,7 +101,7 @@ func (c *BlobCache) Accept(desc ociImageSpecV1.Descriptor) bool {
 	return c.opts.Accept(desc)
 }
 
-// MaxBlobSize returns the configured per-blob size cap (0 means no cap).
+// MaxBlobSize returns the configured per-blob size cap (never 0 after defaults are applied).
 func (c *BlobCache) MaxBlobSize() int64 {
 	return c.opts.MaxBlobSize
 }

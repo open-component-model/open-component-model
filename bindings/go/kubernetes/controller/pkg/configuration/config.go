@@ -23,6 +23,7 @@ import (
 	credentialsv1spec "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
+	ocicachingv1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/config/v1alpha1"
 	ocicredentials "ocm.software/open-component-model/bindings/go/oci/spec/credentials"
 	ocicredentialsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -61,6 +62,9 @@ var allowedConfigTypes = slices.Concat(
 	[]runtime.Type{
 		runtime.NewVersionedType(httpv1alpha1.ConfigType, httpv1alpha1.Version),
 		runtime.NewUnversionedType(httpv1alpha1.ConfigType),
+		// OCI blob and reference cache settings
+		runtime.NewVersionedType(ocicachingv1alpha1.ConfigType, ocicachingv1alpha1.Version),
+		runtime.NewUnversionedType(ocicachingv1alpha1.ConfigType),
 		// signing settings, selects the verifier used for component signature verification
 		runtime.NewVersionedType(signingspec.ConfigType, signingspec.Version),
 		runtime.NewUnversionedType(signingspec.ConfigType),

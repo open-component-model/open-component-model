@@ -1,6 +1,6 @@
 ---
 title: "Caching Configuration"
-description: "Reference for the OCI caches used by the OCM CLI and controller: cache location, temporary folder, limits, admission rules, and remote policy."
+description: "Reference for the OCI caches used by the OCM CLI and controller: the caching configuration type, cache location, temporary folder, limits, admission rules, and remote policy."
 icon: "🗄️"
 weight: 8
 toc: true
@@ -9,11 +9,9 @@ toc: true
 This page is the technical reference for the on-disk caches OCM uses when it reads component versions from OCI
 registries.
 
-{{< callout context="note" title="No dedicated configuration type" >}}
-OCM has no caching configuration type. The CLI and the controller enable caching by default, and the
-limits and remote policy are fixed. The only thing you can set is **where** the cache lives, through the
-temporary folder described in [Cache Location](#cache-location).
-{{< /callout >}}
+The CLI and the controller enable caching by default. The `caching.oci.config.ocm.software/v1alpha1`
+configuration type changes the cache mode, time to live, and maximum cached blob size. **Where** the cache lives is
+not part of this type; see [Cache Location](#cache-location).
 
 ## Caches
 
@@ -30,11 +28,74 @@ the blob cache between repositories and credentials. OCM checks every fetched bl
 writes the blob to disk.
 
 The reference cache has one instance per repository location (`hostname[:port]/path`). Credentials are not part of
-the key, so rotating short-lived tokens does not make the cache useless. Use the `Always` [remote policy](#remote-policy)
+the key, so rotating short-lived tokens does not make the cache useless. Use the `Always` [mode](#fields)
 when every access must be authorized by the registry.
 
 Resource layers, such as the image layers of an OCI image resource, are **not** cached. Only the blobs listed in
 [Admission Rules](#admission-rules) are cached.
+
+## Configuration Type
+
+Caching is controlled by the `caching.oci.config.ocm.software/v1alpha1` configuration type, embedded in the standard
+OCM configuration file. It is a standalone entry; it is not part of an OCI repository specification, because cache
+behaviour is local to the consumer.
+
+```yaml
+type: generic.config.ocm.software/v1
+configurations:
+  - type: caching.oci.config.ocm.software/v1alpha1
+    mode: IfNotPresent
+    ttl: 10m
+    maxBlobSize: 4194304 # bytes
+```
+
+The unversioned type `caching.oci.config.ocm.software` is accepted as a deprecated alias.
+
+### Fields
+
+All fields are optional.
+
+| Field         | Type                                               | Default           | Description                                                                                                            |
+|---------------|----------------------------------------------------|-------------------|------------------------------------------------------------------------------------------------------------------------|
+| `mode`        | `Always`, `IfNotPresent`, or `Never`               | `IfNotPresent`    | Cache activation and [remote policy](#remote-policy). `Never` disables both caches.                                    |
+| `ttl`         | duration string, for example `30s`, `10m`, `1h30m` | `10m`             | How long cached entries remain reusable. Must be positive. Numeric values are rejected.                                |
+| `maxBlobSize` | integer, bytes                                     | `4194304` (4 MiB) | Largest individual blob the blob cache retains. Must be positive. Larger blobs are downloaded as usual but not cached. |
+
+Without a caching entry, the CLI and the controller run with `IfNotPresent` and the default `ttl` and
+`maxBlobSize`.
+
+Invalid values (an unknown `mode`, a malformed, numeric, zero, or negative `ttl`, a zero or negative `maxBlobSize`)
+are rejected when the CLI starts or the controller builds its plugins. A zero value does not select a default;
+omit the field instead.
+
+### Merge Behaviour
+
+If the configuration contains more than one caching entry, OCM merges them from first to last. The last explicitly
+set value of each field wins; an omitted field keeps the value of an earlier entry, or the default. `ocm get config`
+shows the merged entry, and omits it when no caching entry is configured.
+
+### Controller
+
+The controller accepts the caching type in the OCM configuration referenced from `spec.ocmConfig`. There are no
+controller flags or Helm values for these settings.
+
+{{< callout context="caution" title="The controller does not re-authorize cache hits by default" >}}
+With the default `IfNotPresent`, the controller serves cached manifests and descriptors without contacting the
+registry, so a cache hit is not authorized by the registry. The cache is shared by every object the controller
+reconciles. If users of the controller have different access to registry content, set `mode: Always` so the registry
+authorizes every access, or `mode: Never` to disable caching.
+{{< /callout >}}
+
+### Schema
+
+The schema below defines the full structure of the `caching.oci.config.ocm.software/v1alpha1` type as specified by
+[JSON Schema 2020-12](https://json-schema.org/draft/2020-12/schema).
+
+---
+
+{{< schema-renderer url="/schemas/bindings/go/oci/config/v1alpha1/Config.schema.json" >}}
+
+---
 
 ## Cache Location
 
@@ -97,14 +158,17 @@ writable volume. If the cache directory cannot be created, the controller logs a
 
 Each cache applies these limits:
 
-| Limit             | Value   | Applies to                       | Behaviour                                                            |
-|-------------------|---------|----------------------------------|----------------------------------------------------------------------|
-| Maximum entries   | `256`   | Blob cache, each reference cache | When the limit is reached, the least recently used entry is removed. |
-| Time to live      | `10m`   | Blob cache, each reference cache | Entries older than this are removed.                                 |
-| Maximum blob size | `4 MiB` | Blob cache                       | Larger blobs are downloaded as usual but not cached.                 |
+| Limit             | Default | Configurable             | Applies to                       | Behaviour                                                            |
+|-------------------|---------|--------------------------|----------------------------------|----------------------------------------------------------------------|
+| Maximum entries   | `256`   | No                       | Blob cache, each reference cache | When the limit is reached, the least recently used entry is removed. |
+| Time to live      | `10m`   | `ttl`                    | Blob cache, each reference cache | Entries older than this are removed.                                 |
+| Maximum blob size | `4 MiB` | `maxBlobSize`            | Blob cache                       | Larger blobs are downloaded as usual but not cached.                 |
+
+The 256-entry limit is an implementation default and is deliberately not configurable. It counts entries of one
+cache, so it has a different scope for the shared blob cache and for each per-repository reference cache.
 
 When the blob cache removes an entry, it also deletes the file. When a reference cache is loaded from disk,
-entries resolved more than `10m` ago are not loaded. When the blob cache is loaded from disk, every valid file is
+entries resolved more than the time to live ago are not loaded. When the blob cache is loaded from disk, every valid file is
 loaded and gets a new time to live, because content addressed by digest cannot become stale.
 
 ## Admission Rules
@@ -120,13 +184,10 @@ All other blobs are downloaded from the registry every time.
 
 ## Remote Policy
 
-The remote policy decides whether OCM contacts the registry when it finds an entry in the cache. It is fixed per
-component:
+The remote policy decides whether OCM contacts the registry when it finds an entry in the cache. It is set by
+`mode`; when `mode` is omitted, the CLI and the controller use `IfNotPresent`.
 
-| Component  | Policy         |
-|------------|----------------|
-| CLI        | `IfNotPresent` |
-| Controller | `Always`       |
+`mode: Never` is not a remote policy: it bypasses both caches entirely, and OCM creates neither cache directory.
 
 | Policy         | Blob cache hit                                                                                                                                                 | Reference cache                                                                              |
 |----------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------|
@@ -137,7 +198,7 @@ With `IfNotPresent`, anyone who can read the cache directory can read cached man
 without registry access. On macOS `$TMPDIR` is per user, but on Linux the default `/tmp` is shared by all users. On
 shared machines, set `tempFolder` or `--temp-folder` to a directory that only you can read.
 
-With `Always`, the controller asks the registry to authorize every access, but does not download cached content again.
+With `Always`, OCM asks the registry to authorize every access, but does not download cached content again.
 
 A tag that has been moved to a new digest is never served from the cache under either policy, because tags are always
 resolved against the registry.
