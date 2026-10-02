@@ -45,7 +45,8 @@ const (
 	// longestSocket is the longest socket name gpg-agent binds inside its home directory
 	// when no /run/user/<uid> exists (always on macOS, often in containers).
 	longestSocket = "S.gpg-agent.browser"
-	// shortTempBase serves as base directory when os.TempDir() is too long for gpg-agent sockets.
+	// shortTempBase serves as base directory for isolated GnuPG homes when the configured
+	// temporary directory is too long for gpg-agent sockets.
 	shortTempBase = "/tmp"
 )
 
@@ -80,11 +81,17 @@ func WithExec(fn ExecFunc) Option {
 	return func(b *Binary) { b.exec = fn }
 }
 
+// WithTempDir sets the directory for temporary GnuPG directories; "" means os.TempDir().
+func WithTempDir(dir string) Option {
+	return func(b *Binary) { b.tempDir = dir }
+}
+
 // Binary resolves and invokes the gpg binary. It is safe for concurrent use.
 // Resolution is retried on every call until it succeeds once; the resolved paths are cached afterwards.
 type Binary struct {
 	lookPath func(file string) (string, error)
 	exec     ExecFunc
+	tempDir  string // "" means os.TempDir()
 
 	mu          sync.Mutex
 	gpgPath     string // set after the first successful resolution
@@ -252,9 +259,9 @@ func (w workspace) args(args ...string) []string {
 // the daemons gpg started for an isolated home and removes the directory; it also
 // runs after ctx is cancelled.
 func (b *Binary) newWorkspace(ctx context.Context, useKeyring bool) (workspace, error) {
-	dir, err := os.MkdirTemp(tempBase(), "ocm-gpg-")
+	dir, err := b.mkdirTemp(ctx, !useKeyring)
 	if err != nil {
-		return workspace{}, fmt.Errorf("create temporary GnuPG directory: %w", err)
+		return workspace{}, err
 	}
 	ws := workspace{dir: dir, base: []string{"--batch", "--no-tty"}}
 	isolated := !useKeyring
@@ -277,18 +284,39 @@ func (b *Binary) newWorkspace(ctx context.Context, useKeyring bool) (workspace, 
 	return ws, nil
 }
 
-// tempBase returns the base directory for temporary GnuPG directories. It falls back to
-// a short base when gpg-agent's sockets under os.TempDir() would exceed the Unix socket path limit.
-func tempBase() string {
-	base := os.TempDir()
+// mkdirTemp creates a temporary directory under the configured temporary directory. A directory
+// that is to be a GnuPG home (hostsSockets) moves to a short base when gpg-agent's sockets in it
+// would exceed the Unix socket path limit; the user's keyring keeps its sockets elsewhere.
+func (b *Binary) mkdirTemp(ctx context.Context, hostsSockets bool) (string, error) {
+	base := b.tempDir
+	if base == "" {
+		base = os.TempDir()
+	}
+	if !hostsSockets || socketPathFits(base) {
+		dir, err := os.MkdirTemp(base, "ocm-gpg-")
+		if err != nil {
+			return "", fmt.Errorf("create temporary GnuPG directory: %w", err)
+		}
+		return dir, nil
+	}
+	dir, err := os.MkdirTemp(shortTempBase, "ocm-gpg-")
+	if err != nil {
+		return "", fmt.Errorf("temporary directory %q is too long for the Unix sockets of gpg-agent (at most %d bytes), "+
+			"and creating the GnuPG home directory under %s instead failed; configure a shorter temporary directory: %w",
+			base, maxSocketPath, shortTempBase, err)
+	}
+	slog.DebugContext(ctx, "temporary directory too long for gpg-agent sockets; using a short base for the GnuPG home directory",
+		"tempDir", base, "home", dir)
+	return dir, nil
+}
+
+// socketPathFits reports whether gpg-agent can bind its sockets in a GnuPG home directory created under base.
+func socketPathFits(base string) bool {
 	if goruntime.GOOS == "windows" {
-		return base
+		return true // gpg-agent uses no Unix sockets in the home directory on Windows
 	}
 	// os.MkdirTemp appends at most 10 random digits to the pattern.
-	if len(filepath.Join(base, "ocm-gpg-0000000000", longestSocket)) > maxSocketPath {
-		return shortTempBase
-	}
-	return base
+	return len(filepath.Join(base, "ocm-gpg-0000000000", longestSocket)) <= maxSocketPath
 }
 
 func (b *Binary) resolve(ctx context.Context) (string, error) {

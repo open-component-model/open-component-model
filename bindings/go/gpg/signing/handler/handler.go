@@ -48,9 +48,26 @@ type Handler struct {
 	gpgBinary *gpgbinary.Binary // nil means defaultGPGBinary
 }
 
+// Option configures a Handler.
+type Option func(*handlerOptions)
+
+type handlerOptions struct {
+	tempDir string
+}
+
+// WithTempDir sets the directory for the temporary files and GnuPG home directories of each
+// operation, typically the tempFolder of the filesystem configuration. "" means os.TempDir().
+func WithTempDir(dir string) Option {
+	return func(o *handlerOptions) { o.tempDir = dir }
+}
+
 // New returns a Handler.
-func New(_ *runtime.Scheme) (*Handler, error) {
-	return &Handler{gpgBinary: gpgbinary.New()}, nil
+func New(_ *runtime.Scheme, opts ...Option) (*Handler, error) {
+	var o handlerOptions
+	for _, opt := range opts {
+		opt(&o)
+	}
+	return &Handler{gpgBinary: gpgbinary.New(gpgbinary.WithTempDir(o.tempDir))}, nil
 }
 
 func (h *Handler) binary() *gpgbinary.Binary {

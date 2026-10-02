@@ -3,7 +3,9 @@ package gpgbinary
 import (
 	"context"
 	"errors"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"slices"
 	"strings"
@@ -371,22 +373,40 @@ func TestBinary_RunTimeout(t *testing.T) {
 	r.ErrorContains(err, "signal: killed")
 }
 
-func TestTempBase(t *testing.T) {
+func TestBinary_MkdirTemp(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("gpg-agent uses no Unix sockets in the home directory on Windows")
 	}
+	// Under /tmp, not t.TempDir() or $TMPDIR: a base nested there can already be too long for gpg-agent sockets.
+	short, err := os.MkdirTemp(shortTempBase, "ocm-gpg-test-")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.RemoveAll(short) })
+	require.True(t, socketPathFits(short), "test base %q must be short", short)
+	long := filepath.Join(short, strings.Repeat("d", 80))
+	require.NoError(t, os.MkdirAll(long, 0o700))
+
 	tests := []struct {
-		name   string
-		tmpdir string
-		want   string
+		name         string
+		tempDir      string
+		tmpdirEnv    string
+		hostsSockets bool
+		wantParent   string
 	}{
-		{name: "short TMPDIR is used", tmpdir: "/var/tmp", want: "/var/tmp"},
-		{name: "long TMPDIR falls back to /tmp", tmpdir: "/" + strings.Repeat("d", 80), want: "/tmp"},
+		{name: "configured temp dir hosts a GnuPG home", tempDir: short, hostsSockets: true, wantParent: short},
+		{name: "unset temp dir falls back to TMPDIR", tmpdirEnv: short, hostsSockets: true, wantParent: short},
+		{name: "too long for sockets moves the GnuPG home to /tmp", tempDir: long, hostsSockets: true, wantParent: shortTempBase},
+		{name: "keyring scratch dir stays in a long temp dir", tempDir: long, hostsSockets: false, wantParent: long},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Setenv("TMPDIR", tt.tmpdir)
-			require.New(t).Equal(tt.want, tempBase())
+			r := require.New(t)
+			if tt.tmpdirEnv != "" {
+				t.Setenv("TMPDIR", tt.tmpdirEnv)
+			}
+			dir, err := New(WithTempDir(tt.tempDir)).mkdirTemp(t.Context(), tt.hostsSockets)
+			r.NoError(err)
+			t.Cleanup(func() { _ = os.RemoveAll(dir) })
+			r.Equal(tt.wantParent, filepath.Dir(dir))
 		})
 	}
 }
