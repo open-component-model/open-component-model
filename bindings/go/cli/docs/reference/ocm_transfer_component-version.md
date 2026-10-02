@@ -18,8 +18,10 @@ a target repository using an internally generated transformation graph.
 
 When a version is included in the source reference, exactly that version is transferred.
 When the version is omitted, all versions of the component are discovered and transferred.
+When the source is a repository reference (without a component), every component version
+the repository contains is transferred (component listing is currently CTF-only).
 Use --constraint to restrict which versions are selected, and --latest to transfer
-only the newest matching version.
+only the newest matching version. Both apply per component.
 
 OCI, CTF, and Helm repositories are supported as transfer sources.
 OCI and CTF repositories are supported as transfer targets, while Helm repositories are not supported.
@@ -76,6 +78,10 @@ transfer component-version ghcr.io/source-org/ocm//ocm.software/mycomponent:1.0.
 
 # Transfer all versions of a component (omit version from reference)
 transfer component-version ctf::./my-archive//ocm.software/mycomponent ghcr.io/my-org/ocm
+
+# Transfer every component version contained in a CTF archive (repository reference as source)
+transfer component-version ./my-archive ghcr.io/my-org/ocm
+transfer component-version ctf::./my-archive ghcr.io/my-org/ocm
 
 # Transfer all versions matching a version constraint
 transfer component-version ctf::./my-archive//ocm.software/mycomponent ghcr.io/my-org/ocm --constraint ">= 1.0.0, < 2.0.0"
