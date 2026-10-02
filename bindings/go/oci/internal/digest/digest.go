@@ -2,6 +2,7 @@ package digest
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/opencontainers/go-digest"
 
@@ -11,6 +12,8 @@ import (
 const (
 	HashAlgorithmSHA256 = "SHA-256"
 	HashAlgorithmSHA512 = "SHA-512"
+	GenericBlobDigestV1 = "genericBlobDigest/v1"
+	OCIArtifactDigestV1 = "ociArtifactDigest/v1"
 )
 
 var SHAMapping = map[string]digest.Algorithm{
@@ -20,31 +23,87 @@ var SHAMapping = map[string]digest.Algorithm{
 
 var ReverseSHAMapping = reverseMap(SHAMapping)
 
-// Apply applies the given digest to the target digest structure.
-// It sets the Digest field of the resource to a new Digest object
-// with the specified hash algorithm and normalisation algorithm.
-// The Mappings are defined by OCM and are static.
-// They mainly differ in the algorithm name, but are semantically equivalent.
-func Apply(target *runtime.Digest, digest digest.Digest) error {
+// Apply records a digest with the normalization of the content that was hashed.
+func Apply(target *runtime.Digest, digest digest.Digest, normalisation string) error {
 	algo, ok := ReverseSHAMapping[digest.Algorithm()]
 	if !ok {
 		return fmt.Errorf("unknown algorithm: %s", digest.Algorithm())
 	}
+	if normalisation != GenericBlobDigestV1 && normalisation != OCIArtifactDigestV1 {
+		return fmt.Errorf("unsupported normalisation algorithm: %s", normalisation)
+	}
 	target.HashAlgorithm = algo
-	// TODO(matthiasbruns): #3674 regression tests. also implications for existing resoufces etc need to be documented
-	target.NormalisationAlgorithm = "genericBlobDigest/v1" // TODO use a constant from blob package for this
+	target.NormalisationAlgorithm = normalisation
 	target.Value = digest.Encoded()
 
 	return nil
 }
 
-// Verify checks if the target digest matches the provided digest.
-// It compares the Value and HashAlgorithm fields of the target
-// with the encoded value and algorithm of the provided digest.
-func Verify(target *runtime.Digest, digest digest.Digest) error {
+// Verify checks a digest without treating different normalizations as interchangeable.
+func Verify(target *runtime.Digest, digest digest.Digest, normalisation string) error {
 	if target == nil {
 		return fmt.Errorf("target digest is nil")
 	}
+	if target.NormalisationAlgorithm != normalisation {
+		return fmt.Errorf("normalisation algorithm mismatch: expected %s, got %s", normalisation, target.NormalisationAlgorithm)
+	}
+	return verifyHash(target, digest)
+}
+
+// VerifyOCIArtifact accepts the historical v2 generic label only at an OCI artifact
+// boundary, where digest is the resolved manifest/index hash, never a blob checksum.
+// Keeping the original triple avoids invalidating signatures on published descriptors.
+func VerifyOCIArtifact(target *runtime.Digest, digest digest.Digest) error {
+	if target == nil {
+		return fmt.Errorf("target digest is nil")
+	}
+	switch target.NormalisationAlgorithm {
+	case OCIArtifactDigestV1, GenericBlobDigestV1:
+		return verifyHash(target, digest)
+	default:
+		return fmt.Errorf("unsupported OCI artifact normalisation algorithm: %s", target.NormalisationAlgorithm)
+	}
+}
+
+// IsComplete reports whether hash algorithm, normalisation algorithm, and value are all set.
+func IsComplete(target *runtime.Digest) bool {
+	return target != nil && target.HashAlgorithm != "" && target.NormalisationAlgorithm != "" && target.Value != ""
+}
+
+// Complete fills the missing fields of target from digest recorded with normalisation.
+// Hash algorithm and value that are already set must agree with digest, so incomplete
+// metadata is completed but never silently replaced. For OCI artifacts the historical
+// generic label is accepted, as in VerifyOCIArtifact, and corrected: incomplete
+// metadata cannot carry a signature that relabeling would invalidate.
+func Complete(target *runtime.Digest, digest digest.Digest, normalisation string) error {
+	if target == nil {
+		return fmt.Errorf("target digest is nil")
+	}
+	var generated runtime.Digest
+	if err := Apply(&generated, digest, normalisation); err != nil {
+		return err
+	}
+	if set := target.NormalisationAlgorithm; set != "" && set != normalisation &&
+		(normalisation != OCIArtifactDigestV1 || set != GenericBlobDigestV1) {
+		return fmt.Errorf("normalisation algorithm mismatch: expected %s, got %s", normalisation, set)
+	}
+	if target.HashAlgorithm != "" && !sameHashAlgorithm(target.HashAlgorithm, generated.HashAlgorithm) {
+		return fmt.Errorf("hash algorithm mismatch: expected %s, got %s", target.HashAlgorithm, generated.HashAlgorithm)
+	}
+	if target.Value != "" && target.Value != generated.Value {
+		return fmt.Errorf("digest value mismatch: expected %s, got %s", target.Value, generated.Value)
+	}
+	*target = generated
+	return nil
+}
+
+// sameHashAlgorithm accepts both the OCM ("SHA-256") and OCI ("sha256") spellings,
+// since incomplete metadata is often copied from an OCI descriptor.
+func sameHashAlgorithm(a, b string) bool {
+	return strings.EqualFold(strings.ReplaceAll(a, "-", ""), strings.ReplaceAll(b, "-", ""))
+}
+
+func verifyHash(target *runtime.Digest, digest digest.Digest) error {
 	if target.Value != digest.Encoded() {
 		return fmt.Errorf("digest value mismatch: expected %s, got %s", target.Value, digest.Encoded())
 	}
