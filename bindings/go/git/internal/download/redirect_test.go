@@ -62,3 +62,21 @@ func TestDownloadHTTPSRedirectDoesNotLeakCredentials(t *testing.T) {
 		}
 	}
 }
+
+func TestDownloadRejectsHTMLDiscovery(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write([]byte("<html><title>Sign in</title></html>"))
+	}))
+	t.Cleanup(server.Close)
+
+	for _, ref := range []string{"HEAD", "main", "refs/heads/main"} {
+		t.Run(ref, func(t *testing.T) {
+			r := require.New(t)
+
+			_, err := Download(t.Context(), &accessv1.Git{Repository: server.URL + "/org/repo.git", Ref: ref}, nil,
+				Options{TempDir: t.TempDir(), HTTPClient: server.Client()})
+			r.ErrorContains(err, "cannot fetch git repository: the server answered with an HTML page instead of git data")
+		})
+	}
+}

@@ -59,7 +59,7 @@ func Download(ctx context.Context, access *accessv1.Git, creds *credsv1.GitCrede
 	if httpClient == nil {
 		httpClient = ocmhttp.New()
 	}
-	clientOptions := []client.Option{client.WithHTTPClient(httpClient)}
+	clientOptions := []client.Option{client.WithHTTPClient(rejectHTMLDiscovery(httpClient))}
 	if option, ok := authOption(auth); ok {
 		clientOptions = append(clientOptions, option)
 	}
@@ -240,6 +240,8 @@ func transportError(ctx context.Context, operation string, err error) error {
 	// The cause is added with %s and not %w: %w prints the error itself, and a
 	// transport error quotes the remote URL with its credentials.
 	switch {
+	case errors.Is(err, errHTMLDiscovery):
+		return fmt.Errorf("%s: the server answered with an HTML page instead of git data, usually a sign-in page; check the credentials for the repository: %s", operation, redact(err))
 	case errors.Is(err, git.ErrRepositoryNotExists), errors.Is(err, transport.ErrRepositoryNotFound):
 		return fmt.Errorf("%s: repository not found: %s", operation, redact(err))
 	case errors.Is(err, transport.ErrAuthenticationRequired):
