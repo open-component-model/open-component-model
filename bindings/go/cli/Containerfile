@@ -1,14 +1,26 @@
 # Garden Linux FIPS base: ships the CA bundle and a FIPS-configured userland,
 # complementing the Go FIPS 140-3 module compiled into the binary.
 FROM --platform=$TARGETPLATFORM ghcr.io/gardenlinux/gardenlinux/fips:1877.25@sha256:74ae1f81d0723434024f591d8c2872852201b99b9f18c0fbe10221b16e60e01d AS base
+# GnuPG for users of the image. Not FIPS-validated: it uses libgcrypt, which is
+# not a submitted Garden Linux module (FIPS mode is forced below). Package
+# scripts run as target-arch binaries, so CI builds each architecture on a
+# native runner (see package/image/platform in the Taskfile).
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends gnupg \
+ && apt-get clean \
+ && rm -rf /var/lib/apt/lists/*
 
 # DISA container hardening: no executable may grant higher privileges, so strip
 # setuid/setgid bits from the base root filesystem. This runs on the build
-# platform against a copy of the target rootfs, so no emulation is needed for
-# the multi-arch build.
+# platform against a copy of the target rootfs, so it needs no emulation.
 FROM --platform=$BUILDPLATFORM ghcr.io/gardenlinux/gardenlinux/fips:1877.25@sha256:74ae1f81d0723434024f591d8c2872852201b99b9f18c0fbe10221b16e60e01d AS harden
 COPY --from=base / /rootfs
 RUN find /rootfs -xdev -perm /6000 -type f -exec chmod ug-s {} +
+# Force libgcrypt (and therefore gpg) into FIPS mode regardless of the host
+# kernel's fips flag: only approved algorithms (e.g. RSA, NIST P-curves,
+# Ed25519, SHA-2, AES); SHA-1 signatures, MD5, CAST5 and cv25519 are rejected.
+# FIPS mode is not validation: libgcrypt is not a submitted Garden Linux module.
+RUN mkdir -p /rootfs/etc/gcrypt && echo 1 > /rootfs/etc/gcrypt/fips_enabled
 
 # cosign, built from source against the same Go Cryptographic Module (FIPS 140-3)
 # as ocm. The upstream release binaries are not FIPS builds. OCM's Sigstore
@@ -41,10 +53,12 @@ COPY --from=cosign /cosign /usr/local/bin/cosign
 # Run as a non-privileged user. HOME stays at / so existing mounts such as
 # /.ocmconfig and /.docker/config.json keep working; caches and generated
 # configuration go to the world-writable /tmp instead of the read-only /.
-# TUF_ROOT moves cosign's Sigstore trust-root cache off $HOME/.sigstore.
+# TUF_ROOT moves cosign's Sigstore trust-root cache off $HOME/.sigstore, and
+# GNUPGHOME moves the gpg keyring off $HOME/.gnupg.
 ENV HOME=/ \
     XDG_CACHE_HOME=/tmp/.cache \
     XDG_CONFIG_HOME=/tmp/.config \
-    TUF_ROOT=/tmp/.sigstore/root
+    TUF_ROOT=/tmp/.sigstore/root \
+    GNUPGHOME=/tmp/.gnupg
 USER 65532:65532
 ENTRYPOINT ["/ocm"]

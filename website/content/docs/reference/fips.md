@@ -202,6 +202,7 @@ boundary:
 | --- | --- |
 | GPG signing and verification | Uses `github.com/ProtonMail/go-crypto/openpgp`, which ships its own cryptographic implementation. |
 | Sigstore/cosign outside the CLI image | When no `cosign` is on `PATH`, OCM downloads the upstream release binary, which is not a FIPS build. |
+| `gpg` command in the CLI image | GnuPG uses `libgcrypt`. The image forces its FIPS mode (`/etc/gcrypt/fips_enabled`), so only approved algorithms work: RSA, NIST P-curve and Ed25519 keys, SHA-2, AES. SHA-1 signatures, MD5, CAST5 and cv25519 (gpg's default encryption subkey, so pass an explicit algorithm such as `rsa3072` to `--quick-gen-key`) are rejected. FIPS mode is not validation: `libgcrypt` is not a submitted Garden Linux module. |
 
 In a FIPS-restricted environment, use RSA signing, or Sigstore from the OCM CLI
 image. Progress on GPG is tracked in

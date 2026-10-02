@@ -316,6 +316,7 @@ gittreestate
 globalaccess
 globals
 gmbh
+gnupg
 gobuildinfo
 gobuildinfojson
 gocritic
