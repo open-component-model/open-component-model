@@ -254,7 +254,6 @@ env
 envtest
 eol
 etcd
-esv
 etcd's
 executables
 executoroptions

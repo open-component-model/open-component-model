@@ -33,24 +33,18 @@ Setting `GOFIPS140` at build time does two things:
 ### Validation Status
 
 {{< callout context="caution" >}}
-Neither cryptographic module in the OCM images has a CMVP validation certificate
-yet. Both are still under review:
+The Go Cryptographic Module in the OCM binaries has no CMVP validation
+certificate yet:
 
 - **Go Cryptographic Module v1.26.0** is in the *Comment Resolution - CMVP*
   stage (since 2026-09-10) on the
   [CMVP Modules In Process List](https://csrc.nist.gov/Projects/cryptographic-module-validation-program/modules-in-process/modules-in-process-list).
   Its algorithms are covered by
   [CAVP Certificate A8028](https://csrc.nist.gov/projects/cryptographic-algorithm-validation-program/details?validation=40638).
-- **The Garden Linux cryptographic modules** have received all Entropy Source
-  Validation (ESV) certificates from NIST, were validated by an external
-  auditor, and are submitted to NIST for final review. The *SAP SE Garden Linux
-  1877 Kernel Cryptographic Module* (since 2026-09-18) and the *SAP SE Garden
-  Linux OpenSSL Cryptographic Module* (since 2026-09-28) are listed as
-  *Pending Review* on the same list.
 
-Statuses as of 2026-10-02; check the list for the current state.
+Status as of 2026-10-02; check the list for the current state.
 
-Until both modules are validated, check with your compliance owner whether
+Until the module is validated, check with your compliance owner whether
 modules on the Modules In Process List meet your requirements. The previous
 Go Cryptographic Module v1.0.0 is validated
 ([CMVP Certificate #5247](https://csrc.nist.gov/projects/cryptographic-module-validation-program/certificate/5247)),
@@ -66,17 +60,13 @@ but it was frozen from Go 1.24, and Go removes it once v1.26.0 is validated.
 | OCM controller image | `GOFIPS140=v1.26.0`, `CGO_ENABLED=0` | `scratch` with `manager` and the CA bundle |
 
 Both images are built `FROM scratch`. They contain only the static binary
-(`/ocm` or `/manager`, the entrypoint) and the CA bundle at
-`/etc/ssl/certs/ca-certificates.crt`, taken from the
-[Garden Linux FIPS image](https://github.com/gardenlinux/gardenlinux/pkgs/container/gardenlinux%2Ffips).
-[Garden Linux](https://docs.gardenlinux.org/reference/glossary.html#fips), like
-OCM, is an Apeiro project; the image is pinned by digest and kept up to date by
-Renovate. The CLI image also has a writable `/tmp`; the controller chart mounts
-an `emptyDir` there.
+(`/ocm` or `/manager`, the entrypoint) and a CA bundle at
+`/etc/ssl/certs/ca-certificates.crt`. The CLI image also has a writable
+`/tmp`; the controller chart mounts an `emptyDir` there.
 
 The images have no shell and no package manager, and the CLI image does not
 include `cosign` or `gpg`. See [Sigstore and cosign](#sigstore-and-cosign) and
-[GPG and gpg](#gpg-and-gpg) for how to use them.
+[GPG](#gpg) for how to use them.
 
 The binaries are statically linked and do not use any system cryptographic
 library. All cryptography in OCM itself goes through the Go Cryptographic
@@ -107,10 +97,8 @@ The CLI image sets `HOME=/`, so configuration mounted at `/.ocmconfig` or
 to `/tmp`. To read files that only your user can read, or to write into a
 mounted directory, run the container with `--user "$(id -u):$(id -g)"`.
 
-Node operating system and cluster STIGs, such as the Garden Linux
-`disaSTIGlow` feature and the Kubernetes STIG, are the platform operator's
-responsibility. The Garden Linux FIPS container image is not built with
-`disaSTIGlow`.
+Node operating system and cluster STIGs, such as the Kubernetes STIG, are the
+platform operator's responsibility.
 
 ## Runtime Modes
 
@@ -208,7 +196,7 @@ binary:
 
 | Feature | Where the cryptography runs |
 | --- | --- |
-| GPG signing and verification | OCM runs the GnuPG `gpg` binary (>= 2.2.0) from `PATH`, so all OpenPGP cryptography runs in its `libgcrypt`. It is FIPS-covered only with a FIPS 140-3 validated `libgcrypt` in FIPS mode, see [GPG and gpg](#gpg-and-gpg). |
+| GPG signing and verification | OCM runs the GnuPG `gpg` binary (>= 2.2.0) from `PATH`, so all OpenPGP cryptography runs in its `libgcrypt`. It is FIPS-covered only with a FIPS 140-3 validated `libgcrypt` in FIPS mode, see [GPG](#gpg). |
 | Sigstore/cosign signing and verification | OCM runs the `cosign` binary from `PATH`. When none is found, it downloads the upstream release, which is not a FIPS build. Provide your own FIPS build instead, see [Sigstore and cosign](#sigstore-and-cosign). |
 
 In a FIPS-restricted environment, use RSA signing, or Sigstore with a FIPS
@@ -251,15 +239,18 @@ cosign's encrypted private key files (`cosign generate-key-pair`) use scrypt and
 NaCl secretbox from `golang.org/x/crypto`, which are outside the Go
 Cryptographic Module. OCM's keyless Sigstore flow does not use these key files.
 
-### GPG and gpg
+### GPG
 
 OCM signs and verifies GPG signatures by running the `gpg` binary on `PATH`.
 Neither the OCM CLI binaries nor the CLI image include it, and GPG signing does
 not work in the CLI image as is.
 
 GnuPG does its cryptography in `libgcrypt`. For an approved-algorithms-only
-`gpg`, use the Garden Linux FIPS image and force `libgcrypt` into FIPS mode.
-To use it with OCM in a container, add `ocm` from the CLI image:
+`gpg`, use the
+[Garden Linux FIPS image](https://github.com/gardenlinux/gardenlinux/pkgs/container/gardenlinux%2Ffips)
+([Garden Linux](https://docs.gardenlinux.org/reference/glossary.html#fips) is,
+like OCM, an Apeiro project) and force `libgcrypt` into FIPS mode. To use it
+with OCM in a container, add `ocm` from the CLI image:
 
 ```dockerfile
 FROM ghcr.io/gardenlinux/gardenlinux/fips:<version>
