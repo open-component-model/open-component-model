@@ -215,7 +215,7 @@ same `GOFIPS140` value as OCM; the cosign version OCM is tested with is pinned i
 `bindings/go/sigstore/signing/handler/internal/.env`:
 
 ```shell
-CGO_ENABLED=0 GOFIPS140=v1.26.0 go install github.com/sigstore/cosign/v3/cmd/cosign@v3.1.3
+CGO_ENABLED=0 GOFIPS140=v1.26.0 go install -trimpath -ldflags="-s -w" github.com/sigstore/cosign/v3/cmd/cosign@v3.1.3
 go version -m "$(go env GOPATH)/bin/cosign" | grep -E 'GOFIPS140|DefaultGODEBUG'
 ```
 
@@ -282,12 +282,18 @@ mode.
 
 ## Building from Source
 
-To build FIPS binaries yourself, set `GOFIPS140` the same way the release
-build does. Run this from `bindings/go`:
+To build FIPS binaries yourself, use the same settings as the release build
+(`build:target` in `bindings/go/cli/Taskfile.yml`). Run this from `bindings/go`:
 
 ```shell
-CGO_ENABLED=0 GOFIPS140=v1.26.0 go build -o ocm ./cli
+CGO_ENABLED=0 GOFIPS140=v1.26.0 go build \
+  -ldflags "-s -w -X ocm.software/open-component-model/bindings/go/cli/cmd/version.BuildVersion=<version>" \
+  -o ocm ./cli
 ```
+
+`-s -w` strips the symbol table and DWARF debug information, as the release
+binaries do. The `GOFIPS140` build information that `go version -m` reads is
+kept.
 
 The module version is pinned once, as `GOFIPS140` in the repository's root
 `.env`. `task bindings/go/cli:build`, the controller image build
