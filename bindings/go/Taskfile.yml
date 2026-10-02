@@ -27,4 +27,9 @@ tasks:
       - |
         export PATH="{{.SIGSTORE_INTEGRATION_DIR}}/tmp/bin:$PATH"
         . "{{.SIGSTORE_INTEGRATION_DIR}}/tmp/sigstore-env.sh"
-        go test -run "Integration" -count=1 ./...
+        go run gotest.tools/gotestsum@"${GOTESTSUM_VERSION}" \
+          --format testname \
+          --rerun-fails=2 \
+          --rerun-fails-max-failures=5 \
+          --packages="./..." \
+          -- -run "Integration" -count=1
