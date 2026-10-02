@@ -35,7 +35,10 @@ func (g *Graph) resolveFromGraph(ctx context.Context, identity runtime.Identity)
 
 	// Non–leaf node: recursively resolve each child and merge the results.
 	var resolved []runtime.Typed
-	for edgeID := range vertex.Edges {
+	for edgeID, edgeAttributes := range vertex.Edges {
+		if edgeAttributes["kind"] == "cyclic-only" {
+			continue
+		}
 		childID, ok := g.getIdentity(edgeID)
 		if !ok {
 			return nil, fmt.Errorf("no credentials for node %q available: child node %q not found", vertex.ID, edgeID)
