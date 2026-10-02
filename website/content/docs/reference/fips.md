@@ -76,7 +76,7 @@ an `emptyDir` there.
 
 The images have no shell and no package manager, and the CLI image does not
 include `cosign` or `gpg`. See [Sigstore and cosign](#sigstore-and-cosign) and
-[The gpg command](#the-gpg-command) for how to use them.
+[GPG and gpg](#gpg-and-gpg) for how to use them.
 
 The binaries are statically linked and do not use any system cryptographic
 library. All cryptography in OCM itself goes through the Go Cryptographic
@@ -203,13 +203,13 @@ with `GODEBUG=fips140=off`.
 ## Known Limitations
 
 FIPS mode only covers cryptography that runs through the Go Cryptographic
-Module. The following signing mechanisms are fully or partly outside that
-boundary:
+Module. The following signing mechanisms run their cryptography in an external
+binary:
 
-| Feature | Reason |
+| Feature | Where the cryptography runs |
 | --- | --- |
-| GPG signing and verification | Uses `github.com/ProtonMail/go-crypto/openpgp`, which ships its own cryptographic implementation. |
-| Sigstore/cosign with the downloaded `cosign` | When no `cosign` is on `PATH`, OCM downloads the upstream release binary, which is not a FIPS build. Provide your own FIPS build instead, see below. |
+| GPG signing and verification | OCM runs the GnuPG `gpg` binary (>= 2.2.0) from `PATH`, so all OpenPGP cryptography runs in its `libgcrypt`. It is FIPS-covered only with a FIPS 140-3 validated `libgcrypt` in FIPS mode, see [GPG and gpg](#gpg-and-gpg). |
+| Sigstore/cosign signing and verification | OCM runs the `cosign` binary from `PATH`. When none is found, it downloads the upstream release, which is not a FIPS build. Provide your own FIPS build instead, see [Sigstore and cosign](#sigstore-and-cosign). |
 
 In a FIPS-restricted environment, use RSA signing, or Sigstore with a FIPS
 build of `cosign`. Progress on GPG is tracked in
@@ -251,14 +251,15 @@ cosign's encrypted private key files (`cosign generate-key-pair`) use scrypt and
 NaCl secretbox from `golang.org/x/crypto`, which are outside the Go
 Cryptographic Module. OCM's keyless Sigstore flow does not use these key files.
 
-### The gpg command
+### GPG and gpg
 
-OCM does not use the `gpg` command: its GPG signing is built in (see above).
-If you need `gpg` itself next to OCM, for example to manage the keys you pass
-to OCM, run it from its own container. The CLI image does not include it.
+OCM signs and verifies GPG signatures by running the `gpg` binary on `PATH`.
+Neither the OCM CLI binaries nor the CLI image include it, and GPG signing does
+not work in the CLI image as is.
 
-For an approved-algorithms-only `gpg`, use the Garden Linux FIPS image and
-force `libgcrypt`, which GnuPG uses for its cryptography, into FIPS mode:
+GnuPG does its cryptography in `libgcrypt`. For an approved-algorithms-only
+`gpg`, use the Garden Linux FIPS image and force `libgcrypt` into FIPS mode.
+To use it with OCM in a container, add `ocm` from the CLI image:
 
 ```dockerfile
 FROM ghcr.io/gardenlinux/gardenlinux/fips:<version>
@@ -266,16 +267,22 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends gnupg \
  && rm -rf /var/lib/apt/lists/* \
  && mkdir -p /etc/gcrypt && echo 1 > /etc/gcrypt/fips_enabled
+COPY --from=ghcr.io/open-component-model/cli:<version> /ocm /usr/local/bin/ocm
+ENTRYPOINT ["/usr/local/bin/ocm"]
 ```
 
-In this mode:
+On a host, install GnuPG from your distribution. `libgcrypt` also enters FIPS
+mode automatically when the kernel runs in FIPS mode
+(`/proc/sys/crypto/fips_enabled` is `1`).
+
+In FIPS mode:
 
 - RSA, NIST P-curve and Ed25519 keys, SHA-2 and AES work.
 - SHA-1 signatures, MD5, CAST5 and cv25519 are rejected. cv25519 is gpg's
   default encryption subkey, so pass an explicit algorithm such as `rsa3072` to
   `gpg --quick-gen-key`.
-- `libgcrypt` is not a submitted Garden Linux module. FIPS mode restricts the
-  algorithms but does not make `gpg` validated.
+- Garden Linux's `libgcrypt` is not a submitted Garden Linux module. FIPS mode
+  restricts the algorithms but does not make GPG signing validated.
 
 A statically linked `gpg` built from upstream sources is not a substitute:
 `libgcrypt`'s FIPS integrity self-check works only on the shared library, and
