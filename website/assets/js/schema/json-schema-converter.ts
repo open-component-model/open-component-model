@@ -83,12 +83,20 @@ function typeLabel(node: SchemaNode, root: SchemaNode, seen: Set<string>): strin
     if (!node || typeof node !== "object") {
         return "any";
     }
+    // Carries followed refs into the recursion so a self-referencing map or array terminates.
+    const inner = (child: SchemaNode): string => {
+        if (child.$ref && seen.has(child.$ref)) {
+            return "any";
+        }
+        const next = child.$ref ? new Set(seen).add(child.$ref) : seen;
+        return typeLabel(resolve(child, root, new Set(seen)), root, next);
+    };
     if (node.type === "array" && node.items) {
-        return `[]${typeLabel(resolve(node.items, root, new Set(seen)), root, seen)}`;
+        return `[]${inner(node.items)}`;
     }
     const values = node.additionalProperties;
     if (!node.properties && values && typeof values === "object") {
-        return `map[string]${typeLabel(resolve(values as SchemaNode, root, new Set(seen)), root, seen)}`;
+        return `map[string]${inner(values as SchemaNode)}`;
     }
     if (node.type === undefined && !node.properties && !node.items && values === undefined &&
         !node.oneOf && !node.anyOf && !node.enum && node.const === undefined) {

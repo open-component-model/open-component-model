@@ -338,6 +338,16 @@ describe("edge cases", () => {
         assert.equal(typeOf("nested"), "object");
     });
 
+    it("self-referencing map types terminate", () => {
+        const model = jsonSchemaToModel({
+            type: "object",
+            properties: { tree: { $ref: "#/$defs/Tree" } },
+            $defs: { Tree: { type: "object", additionalProperties: { $ref: "#/$defs/Tree" } } },
+        });
+
+        assert.equal(model.sections[0].fields[0].type, "map[string]map[string]any");
+    });
+
     it("untyped fields render as any, or string when only string constraints are set", () => {
         const model = jsonSchemaToModel({
             type: "object",
