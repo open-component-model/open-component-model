@@ -10,16 +10,41 @@ FROM --platform=$BUILDPLATFORM ghcr.io/gardenlinux/gardenlinux/fips:1877.25@sha2
 COPY --from=base / /rootfs
 RUN find /rootfs -xdev -perm /6000 -type f -exec chmod ug-s {} +
 
+# cosign, built from source against the same Go Cryptographic Module (FIPS 140-3)
+# as ocm. The upstream release binaries are not FIPS builds. OCM's Sigstore
+# signing handler prefers cosign on PATH, so shipping it here avoids the
+# runtime download. `go install pkg@version` verifies the module against the Go
+# checksum database.
+FROM --platform=$BUILDPLATFORM golang:1.27.1@sha256:3680233e3204827fbdc66088528ae6d4b3d034f51d03a99d454f6de034888244 AS cosign
+ARG TARGETOS
+ARG TARGETARCH
+# Both required; sources of truth: root .env (GOFIPS140) and
+# bindings/go/sigstore/signing/handler/internal/.env (COSIGN_VERSION).
+ARG GOFIPS140
+ARG COSIGN_VERSION
+RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked \
+    --mount=type=cache,target=/root/.cache/go-build,sharing=locked \
+    CGO_ENABLED=0 \
+    GOFIPS140="${GOFIPS140:?GOFIPS140 build arg is required, see root .env}" \
+    GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
+    go install -trimpath -ldflags="-s -w" \
+      "github.com/sigstore/cosign/v3/cmd/cosign@${COSIGN_VERSION:?COSIGN_VERSION build arg is required}" \
+ && bin="$(go env GOPATH)/bin" \
+ && { cp "${bin}/${TARGETOS}_${TARGETARCH}/cosign" /cosign 2>/dev/null || cp "${bin}/cosign" /cosign; }
+
 FROM scratch
 ARG TARGETOS
 ARG TARGETARCH
 COPY --from=harden /rootfs /
 COPY tmp/bin/ocm-${TARGETOS}-${TARGETARCH} /ocm
+COPY --from=cosign /cosign /usr/local/bin/cosign
 # Run as a non-privileged user. HOME stays at / so existing mounts such as
 # /.ocmconfig and /.docker/config.json keep working; caches and generated
 # configuration go to the world-writable /tmp instead of the read-only /.
+# TUF_ROOT moves cosign's Sigstore trust-root cache off $HOME/.sigstore.
 ENV HOME=/ \
     XDG_CACHE_HOME=/tmp/.cache \
-    XDG_CONFIG_HOME=/tmp/.config
+    XDG_CONFIG_HOME=/tmp/.config \
+    TUF_ROOT=/tmp/.sigstore/root
 USER 65532:65532
 ENTRYPOINT ["/ocm"]

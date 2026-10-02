@@ -195,16 +195,42 @@ with `GODEBUG=fips140=off`.
 ## Known Limitations
 
 FIPS mode only covers cryptography that runs through the Go Cryptographic
-Module. The following signing mechanisms are outside that boundary:
+Module. The following signing mechanisms are fully or partly outside that
+boundary:
 
 | Feature | Reason |
 | --- | --- |
 | GPG signing and verification | Uses `github.com/ProtonMail/go-crypto/openpgp`, which ships its own cryptographic implementation. |
-| Sigstore/cosign signing and verification | Runs the external `cosign` binary, which is not built against a validated FIPS module. |
+| Sigstore/cosign outside the CLI image | When no `cosign` is on `PATH`, OCM downloads the upstream release binary, which is not a FIPS build. |
 
-In a FIPS-restricted environment, use RSA signing, which uses the Go standard
-library cryptography. Progress on GPG and cosign is tracked in
+In a FIPS-restricted environment, use RSA signing, or Sigstore from the OCM CLI
+image. Progress on GPG is tracked in
 [ocm-project#1327](https://github.com/open-component-model/ocm-project/issues/1327).
+
+### Sigstore and cosign
+
+OCM's Sigstore signing handler runs the external `cosign` binary. It uses the
+first `cosign` on `PATH` and only downloads the upstream release when none is
+found.
+
+The OCM CLI image ships `/usr/local/bin/cosign`, built from source with the
+same `GOFIPS140` module version as `ocm`. The cosign version is pinned in
+`bindings/go/sigstore/signing/handler/internal/.env`. Check it with:
+
+```shell
+go version -m cosign | grep -E 'GOFIPS140|DefaultGODEBUG'
+```
+
+To get the same outside the image, build cosign yourself and put it on `PATH`
+before running `ocm`:
+
+```shell
+CGO_ENABLED=0 GOFIPS140=v1.26.0 go install github.com/sigstore/cosign/v3/cmd/cosign@v3.1.3
+```
+
+cosign's encrypted private key files (`cosign generate-key-pair`) use scrypt and
+NaCl secretbox from `golang.org/x/crypto`, which are outside the Go
+Cryptographic Module. OCM's keyless Sigstore flow does not use these key files.
 
 ## Building from Source
 

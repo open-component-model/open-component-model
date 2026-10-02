@@ -51,10 +51,8 @@ jobs:
       - name: Checkout component constructor
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # use same .env file as in bindings to determine cosign version
           sparse-checkout: |
             .github/components
-            bindings/go/sigstore/signing/handler/internal/.env
           persist-credentials: 'false'
 
       - name: Compute image refs
@@ -106,6 +104,8 @@ jobs:
           EOF
 
       # The CLI image ENTRYPOINT is `/ocm`; args after the image name go straight to the CLI.
+      # The image runs as a non-root user; run as the runner user so the mounted
+      # docker config (mode 0600) is readable.
       - name: Publish component-versions
         env:
           VERSION: ${{ inputs.version }}
@@ -114,8 +114,8 @@ jobs:
           CONSTRUCTOR: ${{ github.workspace }}/.github/components/ocm-release/component-constructor.yaml
         run: |
           set -euo pipefail
-          # scratch image has no /tmp; mount a writable tmpfs for wget-style downloads
           docker run --rm \
+            --user "$(id -u):$(id -g)" \
             --tmpfs /tmp:rw,exec \
             -e TMPDIR=/tmp \
             -v "${HOME}/.docker/config.json:/.docker/config.json:ro" \
@@ -135,39 +135,23 @@ jobs:
               --constructor "$CONSTRUCTOR" \
               --component-version-conflict-policy "$CONFLICT_POLICY"
 
-      # cosign is not in the scratch CLI image; install on runner and bind-mount in.
-      # Version is the single source of truth from bindings/go/sigstore/signing/handler/internal/.env,
-      # tracked by Renovate.
-      - name: Read cosign version from .env
-        run: |
-          set -euo pipefail
-          . bindings/go/sigstore/signing/handler/internal/.env
-          echo "COSIGN_VERSION=${COSIGN_VERSION}" >> "$GITHUB_ENV"
-
-      - name: Install cosign
-        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
-        with:
-          cosign-release: ${{ env.COSIGN_VERSION }}
-
-      # scratch image has no /tmp or $HOME: mount tmpfs and forward GHA OIDC vars explicitly.
+      # The CLI image ships cosign built against the Go FIPS 140-3 module at
+      # /usr/local/bin/cosign; the Sigstore handler picks it up from PATH.
+      # GHA OIDC vars are forwarded explicitly for keyless signing.
       - name: Sign component-versions (keyless Sigstore)
         env:
           WORKSPACE: ${{ github.workspace }}
         run: |
           set -euo pipefail
-          # readlink -f required: cosign-installer may expose a symlink; bind-mount needs a real path.
-          COSIGN_BIN="$(readlink -f "$(command -v cosign)")"
-
           for ref in "$OCM_COMPONENT_REF" "$CLI_COMPONENT_REF" "$CONTROLLER_COMPONENT_REF"; do
             echo "::group::Signing ${ref}"
             docker run --rm \
+              --user "$(id -u):$(id -g)" \
               --tmpfs /tmp:rw,exec \
               -e HOME=/tmp \
               -e TMPDIR=/tmp \
-              -e PATH=/usr/local/bin:/usr/bin:/bin \
               -e ACTIONS_ID_TOKEN_REQUEST_TOKEN \
               -e ACTIONS_ID_TOKEN_REQUEST_URL \
-              -v "${COSIGN_BIN}:/usr/local/bin/cosign:ro" \
               -v "${HOME}/.docker/config.json:/.docker/config.json:ro" \
               -v "${HOME}/.ocmconfig:/.ocmconfig:ro" \
               -v /etc/ssl/certs/:/etc/ssl/certs/:ro \

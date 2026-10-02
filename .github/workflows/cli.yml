@@ -166,6 +166,8 @@ jobs:
           repository: ${{ env.CHECKOUT_REPO }}
           sparse-checkout: |
             ${{ env.CLI_DIR }}
+            # COSIGN_VERSION for the FIPS cosign build stage in the CLI image
+            bindings/go/sigstore/signing/handler/internal
           persist-credentials: 'false'
           ref: ${{ env.REF }}
 

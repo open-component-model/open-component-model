@@ -510,6 +510,7 @@ mvnrepository
 myprivateregistry
 möller
 müller
+nacl
 namespace
 namespaced
 namespaces
@@ -727,7 +728,9 @@ scalable
 scheidemann
 schema
 schemas
+scrypt
 sdk
+secretbox
 secretref
 semver
 sequent
