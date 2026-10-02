@@ -236,7 +236,7 @@ jobs:
           report_paths: '${{ github.workspace }}/bindings/go/junit.xml'
           check_name: 'Integration Tests Report'
           detailed_summary: true
-          include_passed: true
+          include_passed: false
           annotate_only: true
 
   run_unit_tests:
