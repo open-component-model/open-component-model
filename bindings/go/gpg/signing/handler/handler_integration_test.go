@@ -199,7 +199,7 @@ func Test_Integration_GPGHandler_Keyring(t *testing.T) {
 
 	h := mustHandler(t)
 	digest := makeDigest(t, crypto.SHA256, []byte("keyring integration"))
-	keyringCfg := func(fpr string) *v1alpha1.Config { return &v1alpha1.Config{UseKeyring: true, KeyFingerprint: fpr} }
+	keyringCfg := func(fpr string) *v1alpha1.Config { return &v1alpha1.Config{KeySource: v1alpha1.KeySourceKeyring, KeyFingerprint: fpr} }
 
 	t.Run("sign and verify with a pinned key", func(t *testing.T) {
 		r := require.New(t)
@@ -268,7 +268,7 @@ func Test_Integration_GPGHandler_RevokedKeyWithCosigner(t *testing.T) {
 	}{
 		{
 			name: "keyring",
-			cfg:  &v1alpha1.Config{UseKeyring: true, KeyFingerprint: pinned.fpr},
+			cfg:  &v1alpha1.Config{KeySource: v1alpha1.KeySourceKeyring, KeyFingerprint: pinned.fpr},
 		},
 		{
 			name:  "isolated home with the revocation in the public key material",

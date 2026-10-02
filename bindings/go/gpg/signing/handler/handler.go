@@ -77,6 +77,11 @@ func (h *Handler) Sign(
 		return descruntime.SignatureInfo{}, fmt.Errorf("convert config: %w", err)
 	}
 
+	useKeyring, err := isKeyring(sigCfg.GetKeySource())
+	if err != nil {
+		return descruntime.SignatureInfo{}, err
+	}
+
 	typedCreds, err := convertCredentials(creds)
 	if err != nil {
 		return descruntime.SignatureInfo{}, err
@@ -86,7 +91,7 @@ func (h *Handler) Sign(
 	if err != nil {
 		return descruntime.SignatureInfo{}, fmt.Errorf("load GPG private key: %w", err)
 	}
-	if !sigCfg.UseKeyring && len(keyBytes) == 0 {
+	if !useKeyring && len(keyBytes) == 0 {
 		return descruntime.SignatureInfo{}, ErrMissingPrivateKey
 	}
 	digestBytes, err := parseDigest(unsigned)
@@ -100,7 +105,7 @@ func (h *Handler) Sign(
 
 	slog.DebugContext(ctx, "signing with the system gpg binary")
 	sig, err := h.binary().Sign(ctx, gpgbinary.SignRequest{
-		UseKeyring:     sigCfg.UseKeyring,
+		UseKeyring:     useKeyring,
 		PrivateKey:     keyBytes,
 		Passphrase:     typedCreds.Passphrase,
 		KeyFingerprint: sigCfg.GetKeyFingerprint(),
@@ -133,6 +138,11 @@ func (h *Handler) Verify(
 		return fmt.Errorf("convert config: %w", err)
 	}
 
+	useKeyring, err := isKeyring(sigCfg.GetKeySource())
+	if err != nil {
+		return err
+	}
+
 	typedCreds, err := convertCredentials(creds)
 	if err != nil {
 		return err
@@ -142,7 +152,7 @@ func (h *Handler) Verify(
 	if err != nil {
 		return fmt.Errorf("load GPG public key: %w", err)
 	}
-	if !sigCfg.UseKeyring && len(keyBytes) == 0 {
+	if !useKeyring && len(keyBytes) == 0 {
 		return ErrMissingPublicKey
 	}
 	digestBytes, err := parseDigest(signed.Digest)
@@ -152,7 +162,7 @@ func (h *Handler) Verify(
 
 	slog.DebugContext(ctx, "verifying with the system gpg binary")
 	return h.binary().Verify(ctx, gpgbinary.VerifyRequest{
-		UseKeyring:     sigCfg.UseKeyring,
+		UseKeyring:     useKeyring,
 		PublicKey:      keyBytes,
 		KeyFingerprint: sigCfg.GetKeyFingerprint(),
 		Data:           digestBytes,
@@ -212,6 +222,19 @@ func gpgIdentityToMap(id *identityv1.GPGIdentity) runtime.Identity {
 	}
 	m.SetType(id.Type)
 	return m
+}
+
+// isKeyring reports whether keys come from the user's GnuPG keyring.
+// Returns an error for unknown or misspelled values so callers don't silently get credentials.
+func isKeyring(src v1alpha1.KeySource) (bool, error) {
+	switch src {
+	case v1alpha1.KeySourceCredentials:
+		return false, nil
+	case v1alpha1.KeySourceKeyring:
+		return true, nil
+	default:
+		return false, fmt.Errorf("unsupported GPG key source %q, expected %q or %q", src, v1alpha1.KeySourceCredentials, v1alpha1.KeySourceKeyring)
+	}
 }
 
 // gpgDigestAlgoForHash maps a HashAlgorithm to a gpg --digest-algo name.

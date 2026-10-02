@@ -56,7 +56,7 @@ var (
 	ErrKeyringRequiresFingerprint = errors.New("verifying with the GnuPG keyring requires the full key fingerprint, because any key in the keyring would otherwise be accepted")
 	// ErrKeyMaterialWithKeyring rejects key material in a request that uses the keyring,
 	// so that it is never ambiguous which key signs or verifies.
-	ErrKeyMaterialWithKeyring = errors.New("useKeyring takes keys from the GnuPG keyring; remove the key material from the GPG credentials")
+	ErrKeyMaterialWithKeyring = errors.New("keySource keyring takes keys from the GnuPG keyring; remove the key material from the GPG credentials")
 )
 
 var (

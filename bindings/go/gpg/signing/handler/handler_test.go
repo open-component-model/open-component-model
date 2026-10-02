@@ -103,7 +103,7 @@ func TestGPGHandler_Keyring(t *testing.T) {
 		{
 			name: "sign rejects private key material",
 			call: func(h *Handler) error {
-				_, err := h.Sign(t.Context(), digest, &v1alpha1.Config{UseKeyring: true}, &gpgcredentialsv1.GPGCredentials{PrivateKeyPGP: placeholderKey})
+				_, err := h.Sign(t.Context(), digest, &v1alpha1.Config{KeySource: v1alpha1.KeySourceKeyring}, &gpgcredentialsv1.GPGCredentials{PrivateKeyPGP: placeholderKey})
 				return err
 			},
 			wantErr: ErrKeyMaterialWithKeyring,
@@ -111,7 +111,7 @@ func TestGPGHandler_Keyring(t *testing.T) {
 		{
 			name: "sign needs no key material",
 			call: func(h *Handler) error {
-				_, err := h.Sign(t.Context(), digest, &v1alpha1.Config{UseKeyring: true}, &gpgcredentialsv1.GPGCredentials{Passphrase: "pw"})
+				_, err := h.Sign(t.Context(), digest, &v1alpha1.Config{KeySource: v1alpha1.KeySourceKeyring}, &gpgcredentialsv1.GPGCredentials{Passphrase: "pw"})
 				return err
 			},
 			wantErr: gpgbinary.ErrGPGNotFound,
@@ -119,35 +119,35 @@ func TestGPGHandler_Keyring(t *testing.T) {
 		{
 			name: "verify rejects public key material",
 			call: func(h *Handler) error {
-				return h.Verify(t.Context(), signed, &v1alpha1.Config{UseKeyring: true, KeyFingerprint: fpr}, &gpgcredentialsv1.GPGCredentials{PublicKeyPGP: placeholderKey})
+				return h.Verify(t.Context(), signed, &v1alpha1.Config{KeySource: v1alpha1.KeySourceKeyring, KeyFingerprint: fpr}, &gpgcredentialsv1.GPGCredentials{PublicKeyPGP: placeholderKey})
 			},
 			wantErr: ErrKeyMaterialWithKeyring,
 		},
 		{
 			name: "verify rejects private key material",
 			call: func(h *Handler) error {
-				return h.Verify(t.Context(), signed, &v1alpha1.Config{UseKeyring: true, KeyFingerprint: fpr}, &gpgcredentialsv1.GPGCredentials{PrivateKeyPGP: placeholderKey})
+				return h.Verify(t.Context(), signed, &v1alpha1.Config{KeySource: v1alpha1.KeySourceKeyring, KeyFingerprint: fpr}, &gpgcredentialsv1.GPGCredentials{PrivateKeyPGP: placeholderKey})
 			},
 			wantErr: ErrKeyMaterialWithKeyring,
 		},
 		{
 			name: "verify requires a fingerprint",
 			call: func(h *Handler) error {
-				return h.Verify(t.Context(), signed, &v1alpha1.Config{UseKeyring: true}, nil)
+				return h.Verify(t.Context(), signed, &v1alpha1.Config{KeySource: v1alpha1.KeySourceKeyring}, nil)
 			},
 			wantErr: ErrKeyringRequiresFingerprint,
 		},
 		{
 			name: "verify rejects a long key ID",
 			call: func(h *Handler) error {
-				return h.Verify(t.Context(), signed, &v1alpha1.Config{UseKeyring: true, KeyFingerprint: fpr[24:]}, nil)
+				return h.Verify(t.Context(), signed, &v1alpha1.Config{KeySource: v1alpha1.KeySourceKeyring, KeyFingerprint: fpr[24:]}, nil)
 			},
 			wantErr: ErrKeyringRequiresFingerprint,
 		},
 		{
 			name: "verify with full fingerprint needs no key material",
 			call: func(h *Handler) error {
-				return h.Verify(t.Context(), signed, &v1alpha1.Config{UseKeyring: true, KeyFingerprint: fpr}, nil)
+				return h.Verify(t.Context(), signed, &v1alpha1.Config{KeySource: v1alpha1.KeySourceKeyring, KeyFingerprint: fpr}, nil)
 			},
 			wantErr: gpgbinary.ErrGPGNotFound,
 		},
@@ -157,6 +157,18 @@ func TestGPGHandler_Keyring(t *testing.T) {
 			require.New(t).ErrorIs(tt.call(handlerWithoutGPG(t)), tt.wantErr)
 		})
 	}
+}
+
+func TestGPGHandler_UnknownKeySource(t *testing.T) {
+	r := require.New(t)
+	h := handlerWithoutGPG(t)
+	digest := makeDigest(t, crypto.SHA256, []byte("key source"))
+	cfg := &v1alpha1.Config{KeySource: "Keyring"}
+	const want = `unsupported GPG key source "Keyring", expected "credentials" or "keyring"`
+
+	_, err := h.Sign(t.Context(), digest, cfg, &gpgcredentialsv1.GPGCredentials{PrivateKeyPGP: placeholderKey})
+	r.EqualError(err, want)
+	r.EqualError(h.Verify(t.Context(), gpgSignature(digest, "irrelevant"), cfg, &gpgcredentialsv1.GPGCredentials{PublicKeyPGP: placeholderKey}), want)
 }
 
 func TestGPGHandler_CredentialIdentities(t *testing.T) {
