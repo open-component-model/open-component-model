@@ -16,6 +16,9 @@ const TYPE_CLASSES: Record<string, string> = {
 
 function typeClass(type: string): string {
     const base = type.replace("[]", "").toLowerCase();
+    if (type.startsWith("map[")) {
+        return "sr-type--object";
+    }
     return TYPE_CLASSES[base] || (type.includes("[]") ? "sr-type--array" : "sr-type--object");
 }
 

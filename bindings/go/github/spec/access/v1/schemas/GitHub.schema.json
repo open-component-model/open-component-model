@@ -20,7 +20,7 @@
     },
     "repoUrl": {
       "type": "string",
-      "description": "RepoURL is the full repository URL (e.g. https://github.com/open-component-model/ocm)."
+      "description": "RepoURL is the repository URL (e.g. https://github.com/open-component-model/ocm).\nThe scheme is optional; https is assumed when it is missing."
     },
     "type": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",

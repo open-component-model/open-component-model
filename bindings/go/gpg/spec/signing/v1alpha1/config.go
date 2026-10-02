@@ -33,9 +33,38 @@ type Config struct {
 	HashAlgorithm HashAlgorithm `json:"hashAlgorithm,omitempty"`
 
 	// KeyFingerprint pins which key in the keyring to use when signing or verifying.
-	// When empty the first available key is used.
+	// When empty, signing uses the first secret key in the key material (gpg's default key with
+	// KeySource keyring), and verification accepts a signature by any key in the public key material.
 	// Accepts a full 40-hex-character v4 fingerprint or a 16-hex-character long key ID.
 	KeyFingerprint string `json:"keyFingerprint,omitempty"`
+
+	// KeySource selects where the keys for signing and verification come from.
+	// Defaults to credentials when omitted.
+	// Supported values: credentials, keyring.
+	KeySource KeySource `json:"keySource,omitempty"`
+}
+
+// KeySource names where the GPG handler takes its keys from.
+type KeySource string
+
+const (
+	// KeySourceCredentials takes the key material from the GPG credentials and runs gpg
+	// in a temporary, isolated GnuPG home directory per operation.
+	KeySourceCredentials KeySource = "credentials"
+	// KeySourceKeyring takes the keys from the user's GnuPG keyring ($GNUPGHOME, or ~/.gnupg)
+	// and the running gpg-agent. This enables hardware tokens and the agent's passphrase cache.
+	// Key material in the credentials is rejected; a passphrase is still used if set.
+	// Verification requires KeyFingerprint to be a full fingerprint, so that only the pinned key
+	// is accepted out of all keys in the keyring.
+	KeySourceKeyring KeySource = "keyring"
+)
+
+// GetKeySource returns the configured key source, defaulting to credentials.
+func (c *Config) GetKeySource() KeySource {
+	if c == nil || c.KeySource == "" {
+		return KeySourceCredentials
+	}
+	return c.KeySource
 }
 
 // GetHashAlgorithm returns the configured hash algorithm, defaulting to SHA-256.

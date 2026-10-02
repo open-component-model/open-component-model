@@ -687,6 +687,103 @@ func TestTransferComponentVersion_ExactVersionIgnoresConstraintFlags(t *testing.
 	}
 }
 
+// TestTransferComponentVersion_RepositoryReference verifies that a bare repository
+// reference as source transfers every component version the repository contains.
+func TestTransferComponentVersion_RepositoryReference(t *testing.T) {
+	r := require.New(t)
+
+	fromPath, err := setupTestRepositoryWithDescriptorLibrary(t,
+		createTestDescriptor("github.com/acme/first", "v1.0.0"),
+		createTestDescriptor("github.com/acme/first", "v1.1.0"),
+		createTestDescriptor("github.com/acme/second", "v2.0.0"),
+	)
+	r.NoError(err)
+
+	toPath := t.TempDir()
+	targetArg := fmt.Sprintf("ctf::%s", toPath)
+
+	// A bare path (no "//<component>") is a repository reference.
+	_, err = test.OCM(t,
+		test.WithArgs("transfer", "component-version", fromPath, targetArg),
+		test.WithOutput(new(bytes.Buffer)),
+		test.WithErrorOutput(test.NewJSONLogReader()),
+	)
+	r.NoError(err)
+
+	targetRepo := openCTFRepo(t, toPath)
+	ctx := t.Context()
+	for _, cv := range []struct{ name, version string }{
+		{"github.com/acme/first", "v1.0.0"},
+		{"github.com/acme/first", "v1.1.0"},
+		{"github.com/acme/second", "v2.0.0"},
+	} {
+		desc, err := targetRepo.GetComponentVersion(ctx, cv.name, cv.version)
+		r.NoError(err, "component %s:%s should be in target", cv.name, cv.version)
+		r.Equal(cv.version, desc.Component.Version)
+	}
+}
+
+// TestTransferComponentVersion_RepositoryReferenceWithCTFPrefix verifies that the
+// ctf:: prefixed repository form is also accepted as a source.
+func TestTransferComponentVersion_RepositoryReferenceWithCTFPrefix(t *testing.T) {
+	r := require.New(t)
+
+	fromPath, err := setupTestRepositoryWithDescriptorLibrary(t,
+		createTestDescriptor("github.com/acme/only", "v0.0.1"),
+	)
+	r.NoError(err)
+
+	toPath := t.TempDir()
+
+	_, err = test.OCM(t,
+		test.WithArgs("transfer", "component-version", fmt.Sprintf("ctf::%s", fromPath), fmt.Sprintf("ctf::%s", toPath)),
+		test.WithOutput(new(bytes.Buffer)),
+		test.WithErrorOutput(test.NewJSONLogReader()),
+	)
+	r.NoError(err)
+
+	targetRepo := openCTFRepo(t, toPath)
+	desc, err := targetRepo.GetComponentVersion(t.Context(), "github.com/acme/only", "v0.0.1")
+	r.NoError(err)
+	r.Equal("v0.0.1", desc.Component.Version)
+}
+
+// TestTransferComponentVersion_RepositoryReferenceLatestOnly verifies that --latest
+// applies per component when a repository reference is used as source.
+func TestTransferComponentVersion_RepositoryReferenceLatestOnly(t *testing.T) {
+	r := require.New(t)
+
+	fromPath, err := setupTestRepositoryWithDescriptorLibrary(t,
+		createTestDescriptor("github.com/acme/first", "v1.0.0"),
+		createTestDescriptor("github.com/acme/first", "v1.1.0"),
+		createTestDescriptor("github.com/acme/second", "v2.0.0"),
+	)
+	r.NoError(err)
+
+	toPath := t.TempDir()
+
+	_, err = test.OCM(t,
+		test.WithArgs("transfer", "component-version", fromPath, fmt.Sprintf("ctf::%s", toPath), "--latest"),
+		test.WithOutput(new(bytes.Buffer)),
+		test.WithErrorOutput(test.NewJSONLogReader()),
+	)
+	r.NoError(err)
+
+	targetRepo := openCTFRepo(t, toPath)
+	ctx := t.Context()
+
+	// Only the latest version of each component must be present.
+	desc, err := targetRepo.GetComponentVersion(ctx, "github.com/acme/first", "v1.1.0")
+	r.NoError(err, "latest of first should be in target")
+	r.Equal("v1.1.0", desc.Component.Version)
+	desc, err = targetRepo.GetComponentVersion(ctx, "github.com/acme/second", "v2.0.0")
+	r.NoError(err, "latest of second should be in target")
+	r.Equal("v2.0.0", desc.Component.Version)
+
+	_, err = targetRepo.GetComponentVersion(ctx, "github.com/acme/first", "v1.0.0")
+	r.Error(err, "non-latest version should NOT be in target")
+}
+
 // setupOCIImageTransferFixture creates a CTF source holding a component with one external
 // OCIImage resource named "image" and returns its reference and a CTF target argument.
 func setupOCIImageTransferFixture(t *testing.T) (fromRef string, targetArg string) {

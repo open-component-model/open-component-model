@@ -545,3 +545,59 @@ func TestGenerate_JSONRawMessageFieldIsUnconstrained(t *testing.T) {
 	require.Empty(t, prop.Schema.Type)
 	require.Nil(t, prop.Schema.AdditionalProperties)
 }
+
+func TestGenerate_ExternalNamedBasicTypeUsesUnderlyingType(t *testing.T) {
+	pkg := types.NewPackage("example.com/ext", "ext")
+	named := func(name string, underlying types.Type, methods ...string) *types.TypeName {
+		obj := types.NewTypeName(0, pkg, name, nil)
+		n := types.NewNamed(obj, underlying, nil)
+		for _, method := range methods {
+			errType := types.Universe.Lookup("error").Type()
+			results := types.NewTuple(
+				types.NewVar(0, pkg, "", types.NewSlice(types.Typ[types.Byte])),
+				types.NewVar(0, pkg, "", errType),
+			)
+			sig := types.NewSignatureType(types.NewVar(0, pkg, "", n), nil, nil, nil, results, false)
+			n.AddMethod(types.NewFunc(0, pkg, method, sig))
+		}
+		return obj
+	}
+	jsonNumber := types.NewTypeName(0, types.NewPackage("encoding/json", "json"), "Number", nil)
+	types.NewNamed(jsonNumber, types.Typ[types.String], nil)
+
+	tests := []struct {
+		name         string
+		obj          *types.TypeName
+		expectedType string
+	}{
+		{name: "string", obj: named("Digest", types.Typ[types.String]), expectedType: "string"},
+		{name: "integer", obj: named("Count", types.Typ[types.Int64]), expectedType: "integer"},
+		{name: "boolean", obj: named("Flag", types.Typ[types.Bool]), expectedType: "boolean"},
+		{name: "custom MarshalJSON keeps fallback", obj: named("Custom", types.Typ[types.String], "MarshalJSON"), expectedType: "object"},
+		{name: "MarshalText is a string", obj: named("Level", types.Typ[types.Int], "MarshalText"), expectedType: "string"},
+		{name: "MarshalJSON wins over MarshalText", obj: named("Both", types.Typ[types.Int], "MarshalText", "MarshalJSON"), expectedType: "object"},
+		{name: "json.Number is a number", obj: jsonNumber, expectedType: "number"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			u := universe.New()
+
+			selIdent := &ast.Ident{Name: tc.obj.Name()}
+			field := &ast.Field{
+				Names: []*ast.Ident{{Name: "Value"}},
+				Type:  &ast.SelectorExpr{X: &ast.Ident{Name: "ext"}, Sel: selIdent},
+			}
+			st := &ast.StructType{Fields: &ast.FieldList{List: []*ast.Field{field}}}
+			root := mkTypeInfo("example.com/pkg", "Holder", nil, st)
+			root.Pkg.TypesInfo = &types.Info{Uses: map[*ast.Ident]types.Object{selIdent: tc.obj}}
+			u.Types[root.Key] = root
+
+			s := jsonschemagen.New(u).GenerateJSONSchemaDraft202012(root)
+
+			prop, ok := s.Properties["Value"]
+			r.True(ok)
+			r.Equal(tc.expectedType, prop.Schema.Type)
+		})
+	}
+}

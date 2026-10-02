@@ -75,6 +75,37 @@ function normalizeType(type: string | string[] | undefined): string {
     return type || "object";
 }
 
+/**
+ * Display type of a node, spelling out array items and map values
+ * (`additionalProperties` schemas) in Go notation, e.g. `map[string][]string`.
+ */
+function typeLabel(node: SchemaNode, root: SchemaNode, seen: Set<string>): string {
+    if (!node || typeof node !== "object") {
+        return "any";
+    }
+    // Carries followed refs into the recursion so a self-referencing map or array terminates.
+    const inner = (child: SchemaNode): string => {
+        if (child.$ref && seen.has(child.$ref)) {
+            return "any";
+        }
+        const next = child.$ref ? new Set(seen).add(child.$ref) : seen;
+        return typeLabel(resolve(child, root, new Set(seen)), root, next);
+    };
+    if (node.type === "array" && node.items) {
+        return `[]${inner(node.items)}`;
+    }
+    const values = node.additionalProperties;
+    if (!node.properties && values && typeof values === "object") {
+        return `map[string]${inner(values as SchemaNode)}`;
+    }
+    if (node.type === undefined && !node.properties && !node.items && values === undefined &&
+        !node.oneOf && !node.anyOf && !node.enum && node.const === undefined) {
+        const stringOnly = ["pattern", "format", "minLength", "maxLength"].some((kw) => kw in node);
+        return stringOnly ? "string" : "any";
+    }
+    return normalizeType(node.type);
+}
+
 function isConstAliasBranch(node: SchemaNode): boolean {
     return typeof node.const === "string" && !node.properties && !node.items && !node.oneOf && !node.anyOf;
 }
@@ -223,16 +254,16 @@ function convertField(name: string, raw: SchemaNode, requiredList: string[], roo
         }
 
         return {
-            name, type: `[]${normalizeType(items.type)}`, description: displayProp.description || "",
+            name, type: typeLabel(displayProp, root, seen), description: displayProp.description || "",
             ...constAliases,
             required, immutable, variants: null,
             properties: items.properties ? fieldsFrom(items, root, new Set(seen)) : null,
         };
     }
 
-    // Plain object or scalar
+    // Plain object, map or scalar
     return {
-        name, type: normalizeType(displayProp.type), description: displayProp.description || "",
+        name, type: typeLabel(displayProp, root, seen), description: displayProp.description || "",
         ...constAliases,
         required, immutable, variants: null,
         properties: displayProp.properties ? fieldsFrom(displayProp, root, new Set(seen)) : null,
