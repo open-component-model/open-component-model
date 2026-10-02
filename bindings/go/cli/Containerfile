@@ -1,26 +1,43 @@
-# Garden Linux FIPS base: ships the CA bundle and a FIPS-configured userland,
-# complementing the Go FIPS 140-3 module compiled into the binary.
-FROM --platform=$TARGETPLATFORM ghcr.io/gardenlinux/gardenlinux/fips:1877.25@sha256:74ae1f81d0723434024f591d8c2872852201b99b9f18c0fbe10221b16e60e01d AS base
-# GnuPG for users of the image. Not FIPS-validated: it uses libgcrypt, which is
-# not a submitted Garden Linux module (FIPS mode is forced below). Package
-# scripts run as target-arch binaries, so CI builds each architecture on a
-# native runner (see package/image/platform in the Taskfile).
+# The final image is scratch plus exactly: ocm, cosign, gpg (with its shared
+# library closure) and the CA bundle. No shell, package manager or setuid
+# binaries.
+#
+# GnuPG and its libraries come from Garden Linux packages. Package scripts run
+# as target-arch binaries, so CI builds each architecture on a native runner
+# (see package/image/platform in the Taskfile).
+FROM --platform=$TARGETPLATFORM ghcr.io/gardenlinux/gardenlinux/fips:1877.25@sha256:74ae1f81d0723434024f591d8c2872852201b99b9f18c0fbe10221b16e60e01d AS gpg
 RUN apt-get update \
  && apt-get install -y --no-install-recommends gnupg \
  && apt-get clean \
  && rm -rf /var/lib/apt/lists/*
-
-# DISA container hardening: no executable may grant higher privileges, so strip
-# setuid/setgid bits from the base root filesystem. This runs on the build
-# platform against a copy of the target rootfs, so it needs no emulation.
-FROM --platform=$BUILDPLATFORM ghcr.io/gardenlinux/gardenlinux/fips:1877.25@sha256:74ae1f81d0723434024f591d8c2872852201b99b9f18c0fbe10221b16e60e01d AS harden
-COPY --from=base / /rootfs
-RUN find /rootfs -xdev -perm /6000 -type f -exec chmod ug-s {} +
+# Stage the payload under /out, mirroring the merged-/usr layout (/lib and
+# /lib64 are symlinks into /usr) so the binaries' ELF interpreter and the
+# loader's default multiarch search path resolve without an ld.so.cache.
+RUN set -eu \
+ && bins="/usr/bin/gpg /usr/bin/gpg-agent /usr/bin/gpgconf /usr/bin/gpg-connect-agent" \
+ && mkdir -p /out/usr/bin /out/etc/ssl/certs \
+ && cp -a /lib /out/lib \
+ && { [ ! -e /lib64 ] || cp -a /lib64 /out/lib64; } \
+ && cp $bins /out/usr/bin/ \
+ && for lib in $(ldd $bins | awk '/=>/ {print $3} /^[[:space:]]*\/.*ld-linux/ {print $1}' | sort -u); do \
+      dir="/out$(readlink -f "$(dirname "$lib")")"; mkdir -p "$dir"; cp -L "$lib" "$dir/"; \
+    done \
+ && cp /etc/ssl/certs/ca-certificates.crt /out/etc/ssl/certs/ \
+ && mkdir -m 1777 /out/tmp
 # Force libgcrypt (and therefore gpg) into FIPS mode regardless of the host
 # kernel's fips flag: only approved algorithms (e.g. RSA, NIST P-curves,
 # Ed25519, SHA-2, AES); SHA-1 signatures, MD5, CAST5 and cv25519 are rejected.
 # FIPS mode is not validation: libgcrypt is not a submitted Garden Linux module.
-RUN mkdir -p /rootfs/etc/gcrypt && echo 1 > /rootfs/etc/gcrypt/fips_enabled
+RUN mkdir -p /out/etc/gcrypt && echo 1 > /out/etc/gcrypt/fips_enabled
+# Record the shipped packages distroless-style (/var/lib/dpkg/status.d/<pkg>)
+# so image scanners and SBOM tools still see gnupg, libgcrypt, glibc, ...
+RUN set -eu \
+ && mkdir -p /out/var/lib/dpkg/status.d \
+ && for f in $(cd /out && find usr -type f); do \
+      dpkg -S "/$f" 2>/dev/null || dpkg -S "/${f#usr/}" 2>/dev/null || true; \
+    done | cut -d: -f1 | sort -u > /tmp/pkgs \
+ && test -s /tmp/pkgs \
+ && while read -r pkg; do dpkg-query -s "$pkg" > "/out/var/lib/dpkg/status.d/$pkg"; done < /tmp/pkgs
 
 # cosign, built from source against the same Go Cryptographic Module (FIPS 140-3)
 # as ocm. The upstream release binaries are not FIPS builds. OCM's Sigstore
@@ -47,7 +64,7 @@ RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked \
 FROM scratch
 ARG TARGETOS
 ARG TARGETARCH
-COPY --from=harden /rootfs /
+COPY --from=gpg /out /
 COPY tmp/bin/ocm-${TARGETOS}-${TARGETARCH} /ocm
 COPY --from=cosign /cosign /usr/local/bin/cosign
 # Run as a non-privileged user. HOME stays at / so existing mounts such as
@@ -55,7 +72,8 @@ COPY --from=cosign /cosign /usr/local/bin/cosign
 # configuration go to the world-writable /tmp instead of the read-only /.
 # TUF_ROOT moves cosign's Sigstore trust-root cache off $HOME/.sigstore, and
 # GNUPGHOME moves the gpg keyring off $HOME/.gnupg.
-ENV HOME=/ \
+ENV PATH=/usr/local/bin:/usr/bin \
+    HOME=/ \
     XDG_CACHE_HOME=/tmp/.cache \
     XDG_CONFIG_HOME=/tmp/.config \
     TUF_ROOT=/tmp/.sigstore/root \

@@ -59,21 +59,33 @@ but it was frozen from Go 1.24, and Go removes it once v1.26.0 is validated.
 
 ## Artifacts
 
-| Artifact | Build | Base image |
+| Artifact | Build | Image contents |
 | --- | --- | --- |
 | `ocm` CLI binaries (all OS/architectures) | `GOFIPS140=v1.26.0`, `CGO_ENABLED=0` | — |
-| OCM CLI image | `GOFIPS140=v1.26.0`, `CGO_ENABLED=0` | `ghcr.io/gardenlinux/gardenlinux/fips` |
+| OCM CLI image | `GOFIPS140=v1.26.0`, `CGO_ENABLED=0` | `scratch` with `ocm`, `cosign`, `gpg` and the CA bundle |
 | OCM controller image | `GOFIPS140=v1.26.0`, `CGO_ENABLED=0` | `ghcr.io/gardenlinux/gardenlinux/fips` |
 
-Both images are based on the
+The controller image is based on the
 [Garden Linux FIPS image](https://github.com/gardenlinux/gardenlinux/pkgs/container/gardenlinux%2Ffips).
 [Garden Linux](https://docs.gardenlinux.org/reference/glossary.html#fips), like
-OCM, is an Apeiro project. Its FIPS image provides the CA certificate bundle at
-`/etc/ssl/certs/ca-certificates.crt`. The base image is pinned by digest and
-kept up to date by Renovate.
+OCM, is an Apeiro project. The image is pinned by digest and kept up to date by
+Renovate.
 
-The binaries are statically linked and do not use the base image's OpenSSL. All
-cryptography in OCM itself goes through the Go Cryptographic Module.
+The CLI image is built `FROM scratch` and contains only:
+
+- `/ocm` (the entrypoint) and `/usr/local/bin/cosign`, both static Go binaries
+  built with the Go Cryptographic Module.
+- `gpg`, `gpg-agent`, `gpgconf` and `gpg-connect-agent` with their shared
+  libraries (glibc, `libgcrypt`, ...), taken from Garden Linux FIPS packages.
+  The packages are recorded under `/var/lib/dpkg/status.d/` for image scanners.
+- The CA bundle at `/etc/ssl/certs/ca-certificates.crt`.
+
+It has no shell, no package manager and no `dirmngr`, so gpg keyserver
+operations such as `--recv-keys` are not available.
+
+`ocm` and `cosign` are statically linked and do not use any system cryptographic
+library. All cryptography in OCM itself goes through the Go Cryptographic
+Module.
 
 ### Container Hardening
 
@@ -84,7 +96,8 @@ for the parts OCM controls:
 | Measure | CLI image | Controller image / chart |
 | --- | --- | --- |
 | Runs as non-root user `65532` | ✅ | ✅ (`runAsNonRoot: true`) |
-| setuid/setgid bits removed from all base image executables | ✅ | ✅ |
+| No setuid/setgid executables | ✅ (none shipped) | ✅ (bits removed from all base image executables) |
+| No shell or package manager | ✅ | — |
 | No privilege escalation, all capabilities dropped | — | ✅ |
 | `seccompProfile: RuntimeDefault` | — | ✅ |
 | Read-only root filesystem, writable `emptyDir` at `/tmp` | — | ✅ |
