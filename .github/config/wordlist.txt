@@ -12,11 +12,13 @@ addociartifact
 addversion
 adr
 adrs
+AES
 agentic
 aggregative
 agpl
 algo
 allowlist
+AlmaLinux
 alpn
 aml
 anchore
@@ -62,6 +64,7 @@ blobhandler
 blobtransformer
 bool
 boolean
+brainpool
 braun
 brautigam
 bruns
@@ -76,6 +79,7 @@ camelcase
 canonicalized
 calver
 cas
+CAVP
 ccwienk
 cel
 centos
@@ -83,7 +87,9 @@ certificateidentity
 certificateoidcissuer
 cest
 cet
+CFB
 cgo
+Chainguard
 changelog
 changelogs
 checksums
@@ -91,6 +97,7 @@ chocolateyinstall
 cdn
 cidrs
 cicd
+CIQ
 cli
 cli's
 cliconfig
@@ -102,6 +109,7 @@ clusterrolebinding
 clusterroles
 clyso
 cmds
+CMVP
 cncf
 coc
 codebase
@@ -149,6 +157,7 @@ continuosly
 contradictive
 contributability
 converthelmtooci
+cosign
 crd
 cyclonedx
 crds
@@ -233,13 +242,16 @@ downloaders
 downloadhandlers
 dpop
 dry-run
+DSA
 dsl
 dup
 dups
 dynaml
+EAX
 ecdsa
 echoserver
 ecrplugin
+EdDSA
 elementmeta
 enablement
 entrypoint
@@ -264,6 +276,7 @@ filesystems
 filesytem
 finalizer
 finalizers
+FIPS
 fixup
 florian
 fluxcd
@@ -285,6 +298,7 @@ gapped
 gav
 gc
 genericocireg
+geomys
 gerald
 gergely
 gethelmchart
@@ -307,6 +321,7 @@ gittreestate
 globalaccess
 globals
 gmbh
+GnuPG
 gobuildinfo
 gobuildinfojson
 gocritic
@@ -393,6 +408,7 @@ jsonnormalisation
 jsonschema
 jsonschemagen
 jwt
+KDF
 kelch
 keychain
 kep
@@ -436,6 +452,7 @@ learnings
 legacyjson
 lf
 lfx
+libgcrypt
 lifecycle
 lifecycles
 linktitle
@@ -519,12 +536,14 @@ npm's
 npmjs
 npmrc
 npmregistry
+nul
 nuspec
 oauth
 objectmeta
 objectreference
 observability
 observedgeneration
+OCB
 oci
 ociaddcomponentversion
 ociaddlocalresource
@@ -717,6 +736,7 @@ scheidemann
 schema
 schemas
 sdk
+secp
 secretref
 semver
 sequent
@@ -793,6 +813,7 @@ suppresstitle
 svg
 tac
 taskfile
+toolchains
 trivy
 taskfiles
 tbd
@@ -828,6 +849,7 @@ transportarchive
 tsc
 ttl
 tuf
+TuxCare
 typehandler
 typename
 ui
@@ -978,3 +1000,5 @@ BuildKit
 retryable
 lexicographically
 artifactory
+LLC
+NIST
