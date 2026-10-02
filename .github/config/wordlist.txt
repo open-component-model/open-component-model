@@ -602,6 +602,7 @@ packagespec
 packageversion
 parallelize
 parameterization
+passwd
 patchstrategicmerge
 patchstrategicmergesource
 patchstrategicmergetarget

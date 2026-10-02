@@ -61,8 +61,9 @@ but it was frozen from Go 1.24, and Go removes it once v1.26.0 is validated.
 
 Both images are built `FROM scratch`. They contain only the static binary
 (`/ocm` or `/manager`, the entrypoint) and a CA bundle at
-`/etc/ssl/certs/ca-certificates.crt`. The CLI image also has a writable
-`/tmp`; the controller chart mounts an `emptyDir` there.
+`/etc/ssl/certs/ca-certificates.crt`. The CLI image also has world-writable
+`/tmp`, `/.cache` and `/.sigstore` directories; the controller chart mounts an
+`emptyDir` at `/tmp`.
 
 The images have no shell and no package manager, and the CLI image does not
 include `cosign` or `gpg`. See [Sigstore and cosign](#sigstore-and-cosign) and
@@ -92,10 +93,11 @@ The controller's pod spec meets the Kubernetes
 [restricted Pod Security Standard](https://kubernetes.io/docs/concepts/security/pod-security-standards/#restricted),
 and the end-to-end tests install the chart into a namespace that enforces it.
 
-The CLI image sets `HOME=/`, so configuration mounted at `/.ocmconfig` or
-`/.docker/config.json` is still found. Caches and generated configuration go
-to `/tmp`. To read files that only your user can read, or to write into a
-mounted directory, run the container with `--user "$(id -u):$(id -g)"`.
+The CLI image runs with `HOME=/`, Docker's default for a user without a passwd
+entry, so configuration mounted at `/.ocmconfig` or `/.docker/config.json` is
+found. Caches go to the world-writable `/.cache`, for any user ID. To read files
+that only your user can read, or to write into a mounted directory, run the
+container with `--user "$(id -u):$(id -g)"`.
 
 Node operating system and cluster STIGs, such as the Kubernetes STIG, are the
 platform operator's responsibility.
@@ -222,8 +224,8 @@ go version -m "$(go env GOPATH)/bin/cosign" | grep -E 'GOFIPS140|DefaultGODEBUG'
 - **Local `ocm` binary:** put that `cosign` on `PATH` before running `ocm`.
 - **OCM CLI image:** build cosign for the image's platform (for example
   `GOOS=linux GOARCH=amd64`) and mount it at `/usr/local/bin/cosign`, which is
-  on the image's `PATH`. The image sets `TUF_ROOT=/tmp/.sigstore/root`, so
-  cosign's trust-root cache works for the non-root user:
+  on the default `PATH`. cosign keeps its trust-root cache in the image's
+  world-writable `/.sigstore`, so it works for any user ID:
 
   ```shell
   docker run --rm \

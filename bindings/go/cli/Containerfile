@@ -1,21 +1,16 @@
-# CA bundle from the Garden Linux FIPS image, and a world-writable /tmp for the
-# non-root user's caches. Files only, so this runs on the build platform.
+# CA bundle from the Garden Linux FIPS image, plus world-writable /tmp and the
+# default cache directories under HOME=/ (Docker's HOME for a user without a
+# passwd entry): /.cache for OCM's caches and a downloaded cosign, /.sigstore
+# for cosign's trust root. Files only, so this runs on the build platform.
 FROM --platform=$BUILDPLATFORM ghcr.io/gardenlinux/gardenlinux/fips:1877.25@sha256:74ae1f81d0723434024f591d8c2872852201b99b9f18c0fbe10221b16e60e01d AS certs
 RUN mkdir -p /out/etc/ssl/certs \
  && cp /etc/ssl/certs/ca-certificates.crt /out/etc/ssl/certs/ \
- && mkdir -m 1777 /out/tmp
+ && mkdir -m 1777 /out/tmp /out/.cache /out/.sigstore
 
 FROM scratch
 ARG TARGETOS
 ARG TARGETARCH
 COPY --from=certs /out /
 COPY tmp/bin/ocm-${TARGETOS}-${TARGETARCH} /ocm
-# HOME=/ keeps mounts such as /.ocmconfig working; caches go to /tmp. PATH and
-# TUF_ROOT serve a cosign mounted at /usr/local/bin/cosign or downloaded by OCM.
-ENV PATH=/usr/local/bin:/usr/bin \
-    HOME=/ \
-    XDG_CACHE_HOME=/tmp/.cache \
-    XDG_CONFIG_HOME=/tmp/.config \
-    TUF_ROOT=/tmp/.sigstore/root
 USER 65532:65532
 ENTRYPOINT ["/ocm"]
