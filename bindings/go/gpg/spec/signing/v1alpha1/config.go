@@ -39,7 +39,7 @@ type Config struct {
 	KeyFingerprint string `json:"keyFingerprint,omitempty"`
 
 	// KeySource selects where the keys for signing and verification come from.
-	// Defaults to credentials when empty.
+	// Defaults to credentials when omitted.
 	// Supported values: credentials, keyring.
 	KeySource KeySource `json:"keySource,omitempty"`
 }

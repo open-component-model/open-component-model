@@ -189,17 +189,19 @@ If you are only verifying, the `signer` field can be left out entirely:
     type: GPGSigningConfiguration/v1alpha1
 ```
 
-If the signer's public key is already in your GnuPG keyring (`$GNUPGHOME`, or `~/.gnupg`), verify against the keyring instead of a key file by setting `keySource: keyring`. The keyring may hold many keys, so this requires the **full** fingerprint of the key you trust; a signature by any other key in the keyring fails. Keys revoked or expired in your keyring are rejected, and gpg never fetches keys from the network during verification:
+If the signer's public key is already in your GnuPG keyring (`$GNUPGHOME`, or `~/.gnupg`), verify against the keyring instead of a key file by setting `keySource: keyring`. The keyring may hold many keys, so this requires the **full** fingerprint of the key you trust; a signature by any other key in the keyring fails. Keys revoked or expired in your keyring are rejected, and gpg never fetches keys from the network during verification.
+
+Key material in the GPG credentials is rejected with `keySource: keyring`, and verification needs no passphrase. Remove the GPG consumer entry with `publicKeyPGPFile` (or `privateKeyPGPFile`) from `.ocmconfig`; the verifier entry is all you need:
 
 ```yaml
+type: generic.config.ocm.software/v1
+configurations:
 - type: signing.config.ocm.software/v1alpha1
   verifier:
     type: GPGSigningConfiguration/v1alpha1
     keySource: keyring
     keyFingerprint: B118BE3A32BE4AF28E37E881167C7102F8AC81E4
 ```
-
-With `keySource: keyring`, key material in the GPG credentials is rejected.
 
 {{< callout context="note" >}}
 Give the entry a `signature` field to scope it to a single signature; without one it applies to every signature. Because the verifier is resolved per signature, a component carrying a GPG signature next to an RSA one can be verified in a single run, each with its own handler.

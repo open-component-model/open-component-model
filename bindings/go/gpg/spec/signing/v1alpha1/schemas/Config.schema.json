@@ -16,7 +16,7 @@
     },
     "keySource": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.gpg.spec.signing.v1alpha1.KeySource",
-      "description": "KeySource selects where the keys for signing and verification come from.\nDefaults to credentials when empty.\nSupported values: credentials, keyring."
+      "description": "KeySource selects where the keys for signing and verification come from.\nDefaults to credentials when omitted.\nSupported values: credentials, keyring."
     },
     "type": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",
