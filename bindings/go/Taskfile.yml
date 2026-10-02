@@ -29,6 +29,7 @@ tasks:
         . "{{.SIGSTORE_INTEGRATION_DIR}}/tmp/sigstore-env.sh"
         go run gotest.tools/gotestsum@"${GOTESTSUM_VERSION}" \
           --format testname \
+          --junitfile=junit.xml \
           --rerun-fails=2 \
           --rerun-fails-max-failures=5 \
           --packages="./..." \
