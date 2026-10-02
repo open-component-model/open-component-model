@@ -36,14 +36,19 @@ Setting `GOFIPS140` at build time does two things:
 Neither cryptographic module in the OCM images has a CMVP validation certificate
 yet. Both are still under review:
 
-- **Go Cryptographic Module v1.26.0** is listed as *Pending Review* on the
+- **Go Cryptographic Module v1.26.0** is in the *Comment Resolution - CMVP*
+  stage (since 2026-09-10) on the
   [CMVP Modules In Process List](https://csrc.nist.gov/Projects/cryptographic-module-validation-program/modules-in-process/modules-in-process-list).
   Its algorithms are covered by
   [CAVP Certificate A8028](https://csrc.nist.gov/projects/cryptographic-algorithm-validation-program/details?validation=40638).
 - **The Garden Linux cryptographic modules** have received all Entropy Source
   Validation (ESV) certificates from NIST, were validated by an external
-  auditor, and are submitted to NIST for final review. They are listed on the
-  [CMVP Modules In Process List](https://csrc.nist.gov/Projects/cryptographic-module-validation-program/modules-in-process/modules-in-process-list).
+  auditor, and are submitted to NIST for final review. The *SAP SE Garden Linux
+  1877 Kernel Cryptographic Module* (since 2026-09-18) and the *SAP SE Garden
+  Linux OpenSSL Cryptographic Module* (since 2026-09-28) are listed as
+  *Pending Review* on the same list.
+
+Statuses as of 2026-10-02; check the list for the current state.
 
 Until both modules are validated, check with your compliance owner whether
 modules on the Modules In Process List meet your requirements. The previous
