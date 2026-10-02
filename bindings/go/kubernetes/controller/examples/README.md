@@ -1,13 +1,10 @@
 # Examples
 
-This directory contains end-to-end examples demonstrating how to use the OCM Kubernetes Controller Toolkit.
-Each example is self-contained: it includes a component definition (`component-constructor.yaml`), a bootstrap
-manifest (`bootstrap.yaml`), and — where deployment is needed — a kro `ResourceGraphDefinition` (`rgd.yaml`)
-and an instance manifest (`instance.yaml`).
+This directory contains end-to-end examples demonstrating how to use the OCM Kubernetes Controller Toolkit. Each example is self-contained: it includes a component definition (`component-constructor.yaml`), a bootstrap manifest (`bootstrap.yaml`), and a kro `ResourceGraphDefinition` (`rgd.yaml`) and an instance manifest (`instance.yaml`).
 
 ## Prerequisites
 
-A local Kind cluster with kro, FluxCD, and ArgoCD installed. Use the Taskfile to set it up:
+A local Kind cluster with kro, FluxCD, ArgoCD, and Crossplane installed. Use the Taskfile to set it up:
 
 ```bash
 task test/e2e/setup/local
@@ -29,9 +26,6 @@ See the [installation notes in the root README](../README.md#installation) for d
 | [`kustomize-configuration-localization`](#kustomize-configuration-localization) | FluxCD + ArgoCD | Image localization via Kustomize JSON patches |
 | [`k8s-manifest-simple`](#k8s-manifest-simple) | (raw kubectl) | Applying a plain Kubernetes manifest from an OCM resource |
 | [`applyset-pruning`](#applyset-pruning) | (raw kubectl) | Pruning orphaned resources with ApplySet |
-
-All examples that use FluxCD and ArgoCD include **both deployer blocks** in the same `rgd.yaml`. kro
-instantiates both; on a cluster where only one is installed, remove the block for the absent deployer.
 
 ---
 

@@ -40,3 +40,24 @@ spec:
   resourceRef:
     name: helm-simple-resource-rgd
     namespace: default
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Resource
+metadata:
+  name: helm-simple-crossplane-resource-xrd
+spec:
+  componentRef:
+    name: helm-simple-component
+  resource:
+    byReference:
+      resource:
+        name: crossplane-xrd
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Deployer
+metadata:
+  name: helm-simple-crossplane-deployer
+spec:
+  resourceRef:
+    name: helm-simple-crossplane-resource-xrd
+    namespace: default

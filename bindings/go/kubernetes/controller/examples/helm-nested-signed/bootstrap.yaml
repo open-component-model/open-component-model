@@ -80,3 +80,27 @@ spec:
   resourceRef:
     name: helm-nested-signed-resource-nested-rgd
     namespace: default
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Resource
+metadata:
+  name: helm-nested-signed-crossplane-resource-xrd
+spec:
+  componentRef:
+    name: helm-nested-signed-component
+  resource:
+    byReference:
+      resource:
+        name: crossplane-xrd
+      referencePath:
+        - name: nested-signed-extended
+        - name: nested-signed-rgd
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Deployer
+metadata:
+  name: helm-nested-signed-crossplane-deployer
+spec:
+  resourceRef:
+    name: helm-nested-signed-crossplane-resource-xrd
+    namespace: default
