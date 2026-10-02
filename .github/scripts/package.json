@@ -21,7 +21,7 @@
   },
   "overrides": {
     "@actions/http-client": {
-      "undici": "^8.6.0"
+      "undici": "^8.10.2"
     }
   }
 }

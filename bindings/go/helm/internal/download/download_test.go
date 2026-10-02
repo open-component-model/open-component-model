@@ -451,6 +451,17 @@ func TestResolveHTTPChartURL(t *testing.T) {
 			wantSuffix: "/mychart/mychart-0.1.0.tgz",
 		},
 		{
+			name:     "resolves a version with build metadata from index.yaml",
+			helmRepo: "%s/charts/mychart:0.1.0+abc123",
+			setupMux: func(mux *http.ServeMux, getSrvURL func() string) {
+				mux.HandleFunc("/charts/index.yaml", func(w http.ResponseWriter, r *http.Request) {
+					w.Header().Set("Content-Type", "application/yaml")
+					_, _ = w.Write([]byte("apiVersion: v1\ngenerated: \"2024-01-01T00:00:00.000Z\"\nentries:\n  mychart:\n  - name: mychart\n    version: 0.1.0+abc123\n    apiVersion: v2\n    urls:\n    - " + getSrvURL() + "/charts/mychart-0.1.0+abc123.tgz\n"))
+				})
+			},
+			wantSuffix: "/charts/mychart-0.1.0+abc123.tgz",
+		},
+		{
 			name:     "chart not found in index returns error",
 			helmRepo: "%s/notexist:9.9.9",
 			setupMux: func(mux *http.ServeMux, getSrvURL func() string) {
