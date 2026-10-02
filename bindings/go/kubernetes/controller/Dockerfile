@@ -39,21 +39,13 @@ RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked \
     --mount=type=cache,target=/root/.cache/go-build,sharing=locked \
     CGO_ENABLED=0 GOFIPS140="${GOFIPS140:?GOFIPS140 build arg is required, see root .env}" GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -tags "${GO_TAGS}" -o manager ./kubernetes/controller/cmd
 
-# Garden Linux FIPS base image; the binary embeds the frozen Go FIPS 140-3 module (GOFIPS140).
-FROM --platform=${TARGETPLATFORM} ghcr.io/gardenlinux/gardenlinux/fips:1877.25@sha256:74ae1f81d0723434024f591d8c2872852201b99b9f18c0fbe10221b16e60e01d AS base
-
-# DISA container hardening: no executable may grant higher privileges, so strip
-# setuid/setgid bits from the base root filesystem. This runs on the build
-# platform against a copy of the target rootfs, so no emulation is needed for
-# cross-architecture builds.
-FROM --platform=${BUILDPLATFORM} ghcr.io/gardenlinux/gardenlinux/fips:1877.25@sha256:74ae1f81d0723434024f591d8c2872852201b99b9f18c0fbe10221b16e60e01d AS harden
-COPY --from=base / /rootfs
-RUN find /rootfs -xdev -perm /6000 -type f -exec chmod ug-s {} +
+# CA bundle from the Garden Linux FIPS image. The manager is a static binary
+# built against the Go Cryptographic Module (GOFIPS140) and needs nothing else.
+FROM --platform=${BUILDPLATFORM} ghcr.io/gardenlinux/gardenlinux/fips:1877.25@sha256:74ae1f81d0723434024f591d8c2872852201b99b9f18c0fbe10221b16e60e01d AS certs
 
 FROM scratch
-COPY --from=harden /rootfs /
-WORKDIR /
-COPY --from=builder /workspace/manager .
+COPY --from=certs /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+COPY --from=builder /workspace/manager /manager
 USER 65532:65532
 
 ENTRYPOINT ["/manager"]

@@ -1,12 +1,6 @@
-# The CLI image is scratch plus ocm and the CA bundle. ocm is a static Go binary
-# built against the Go Cryptographic Module (FIPS 140-3, see GOFIPS140 in the
-# root .env). cosign and gpg are not included; see the FIPS reference docs for
-# how to use them with this image.
-#
-# The CA bundle comes from the Garden Linux FIPS image. Only files are copied,
-# so this stage runs on the build platform and the multi-arch build needs no
-# emulation.
-FROM --platform=$BUILDPLATFORM ghcr.io/gardenlinux/gardenlinux/fips:1877.25@sha256:74ae1f81d0723434024f591d8c2872852201b99b9f18c0fbe10221b16e60e01d AS rootfs
+# CA bundle from the Garden Linux FIPS image, and a world-writable /tmp for the
+# non-root user's caches. Files only, so this runs on the build platform.
+FROM --platform=$BUILDPLATFORM ghcr.io/gardenlinux/gardenlinux/fips:1877.25@sha256:74ae1f81d0723434024f591d8c2872852201b99b9f18c0fbe10221b16e60e01d AS certs
 RUN mkdir -p /out/etc/ssl/certs \
  && cp /etc/ssl/certs/ca-certificates.crt /out/etc/ssl/certs/ \
  && mkdir -m 1777 /out/tmp
@@ -14,14 +8,10 @@ RUN mkdir -p /out/etc/ssl/certs \
 FROM scratch
 ARG TARGETOS
 ARG TARGETARCH
-COPY --from=rootfs /out /
+COPY --from=certs /out /
 COPY tmp/bin/ocm-${TARGETOS}-${TARGETARCH} /ocm
-# Run as a non-privileged user. HOME stays at / so existing mounts such as
-# /.ocmconfig and /.docker/config.json keep working; caches and generated
-# configuration go to the world-writable /tmp instead of the read-only /.
-# PATH and TUF_ROOT serve a cosign binary that is mounted at
-# /usr/local/bin/cosign or downloaded by OCM: cosign keeps its Sigstore
-# trust-root cache in TUF_ROOT instead of the read-only $HOME/.sigstore.
+# HOME=/ keeps mounts such as /.ocmconfig working; caches go to /tmp. PATH and
+# TUF_ROOT serve a cosign mounted at /usr/local/bin/cosign or downloaded by OCM.
 ENV PATH=/usr/local/bin:/usr/bin \
     HOME=/ \
     XDG_CACHE_HOME=/tmp/.cache \
