@@ -292,6 +292,12 @@ func (b *Binary) mkdirTemp(ctx context.Context, hostsSockets bool) (string, erro
 	if base == "" {
 		base = os.TempDir()
 	}
+	// gpg-agent binds its sockets at the absolute home path, and --homedir and cleanup
+	// must not depend on the working directory, so measure and create under an absolute base.
+	base, err := filepath.Abs(base)
+	if err != nil {
+		return "", fmt.Errorf("resolve temporary directory %q: %w", b.tempDir, err)
+	}
 	if !hostsSockets || socketPathFits(base) {
 		dir, err := os.MkdirTemp(base, "ocm-gpg-")
 		if err != nil {

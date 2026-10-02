@@ -384,11 +384,15 @@ func TestBinary_MkdirTemp(t *testing.T) {
 	require.True(t, socketPathFits(short), "test base %q must be short", short)
 	long := filepath.Join(short, strings.Repeat("d", 80))
 	require.NoError(t, os.MkdirAll(long, 0o700))
+	for _, base := range []string{short, long} {
+		require.NoError(t, os.Mkdir(filepath.Join(base, "rel"), 0o700))
+	}
 
 	tests := []struct {
 		name         string
 		tempDir      string
 		tmpdirEnv    string
+		workDir      string
 		hostsSockets bool
 		wantParent   string
 	}{
@@ -396,6 +400,11 @@ func TestBinary_MkdirTemp(t *testing.T) {
 		{name: "unset temp dir falls back to TMPDIR", tmpdirEnv: short, hostsSockets: true, wantParent: short},
 		{name: "too long for sockets moves the GnuPG home to /tmp", tempDir: long, hostsSockets: true, wantParent: shortTempBase},
 		{name: "keyring scratch dir stays in a long temp dir", tempDir: long, hostsSockets: false, wantParent: long},
+		{name: "relative temp dir resolves against the working directory", tempDir: "rel", workDir: short, hostsSockets: true, wantParent: filepath.Join(short, "rel")},
+		{
+			// "rel" alone fits the socket limit; only its absolute path, where gpg-agent binds, does not.
+			name: "relative temp dir is measured by its absolute path", tempDir: "rel", workDir: long, hostsSockets: true, wantParent: shortTempBase,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -403,10 +412,18 @@ func TestBinary_MkdirTemp(t *testing.T) {
 			if tt.tmpdirEnv != "" {
 				t.Setenv("TMPDIR", tt.tmpdirEnv)
 			}
+			if tt.workDir != "" {
+				t.Chdir(tt.workDir)
+			}
 			dir, err := New(WithTempDir(tt.tempDir)).mkdirTemp(t.Context(), tt.hostsSockets)
 			r.NoError(err)
 			t.Cleanup(func() { _ = os.RemoveAll(dir) })
-			r.Equal(tt.wantParent, filepath.Dir(dir))
+			r.True(filepath.IsAbs(dir), "GnuPG directory %q must be absolute", dir)
+			gotParent, err := filepath.EvalSymlinks(filepath.Dir(dir))
+			r.NoError(err)
+			wantParent, err := filepath.EvalSymlinks(tt.wantParent)
+			r.NoError(err)
+			r.Equal(wantParent, gotParent)
 		})
 	}
 }
