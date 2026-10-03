@@ -130,6 +130,20 @@
                         }
                     }
                 },
+                "networkPolicy": {
+                    "type": "object",
+                    "properties": {
+                        "egress": {
+                            "type": "array"
+                        },
+                        "enabled": {
+                            "type": "boolean"
+                        },
+                        "ingress": {
+                            "type": "array"
+                        }
+                    }
+                },
                 "nodeSelector": {
                     "type": "object"
                 },
