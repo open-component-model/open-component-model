@@ -149,10 +149,11 @@ env:
 
 ## Verifying a Binary
 
-`go version -m` shows the FIPS build settings embedded in a binary:
+The OCM CLI prints the Go build settings embedded in it, including the FIPS
+ones:
 
 ```shell
-go version -m ./ocm | grep -E 'GOFIPS140|DefaultGODEBUG'
+ocm version -o gobuildinfo | grep -E 'GOFIPS140|DefaultGODEBUG'
 ```
 
 Expected output:
@@ -162,8 +163,17 @@ build DefaultGODEBUG=fips140=on
 build GOFIPS140=v1.26.0
 ```
 
-For a container image, copy the binary out first. The binary is `/ocm` in the
-CLI image and `/manager` in the controller image.
+`-o gobuildinfojson` prints the same information as JSON. For the CLI image,
+run `docker run --rm ghcr.io/open-component-model/cli:<version> version -o gobuildinfo`.
+
+For any Go binary, including the controller's `/manager`, `go version -m`
+shows the same settings (plain `go version` prints only the Go version):
+
+```shell
+go version -m ./manager | grep -E 'GOFIPS140|DefaultGODEBUG'
+```
+
+For a container image, copy the binary out first.
 
 ### Startup Log
 
