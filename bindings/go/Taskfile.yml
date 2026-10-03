@@ -33,21 +33,51 @@ tasks:
     vars:
       SIGSTORE_INTEGRATION_DIR: '{{.TASKFILE_DIR}}/sigstore/integration'
     cmds:
-      - task -d '{{.SIGSTORE_INTEGRATION_DIR}}' setup
       - |
-        export PATH="{{.SIGSTORE_INTEGRATION_DIR}}/tmp/bin:$PATH"
-        . "{{.SIGSTORE_INTEGRATION_DIR}}/tmp/sigstore-env.sh"
+        # Only sigstore/integration needs the scaffolding cluster, which takes ~3 min to
+        # provision. Provision it in the background while every other package compiles
+        # and runs, and start sigstore/integration as soon as the cluster is ready.
+        setup_log="{{.SIGSTORE_INTEGRATION_DIR}}/tmp/setup.log"
+        mkdir -p "$(dirname "$setup_log")"
+        task -d '{{.SIGSTORE_INTEGRATION_DIR}}' setup > "$setup_log" 2>&1 &
+        setup_pid=$!
+
         # Binary coverage dir: each (re)run appends its own covcounters/covmeta,
         # so a flake that passes on retry does NOT clobber the profile (unlike a
-        # single -coverprofile, which gotestsum's final rerun overwrites).
+        # single -coverprofile, which gotestsum's final rerun overwrites). Both
+        # runs below write into it concurrently; file names are unique per process.
         rm -rf coverage.integration.covdir && mkdir -p coverage.integration.covdir
-        go run gotest.tools/gotestsum@"${GOTESTSUM_VERSION}" \
-          --format testname \
-          --junitfile=junit.xml \
-          --rerun-fails=2 \
-          --rerun-fails-max-failures=5 \
-          --packages="./..." \
-          -- -run "Integration" -count=1 -coverpkg=./... -args -test.gocoverdir="$PWD/coverage.integration.covdir"
+        run_integration() {
+          local junit="$1"; shift
+          go run gotest.tools/gotestsum@"${GOTESTSUM_VERSION}" \
+            --format testname \
+            --junitfile="$junit" \
+            --rerun-fails=2 \
+            --rerun-fails-max-failures=5 \
+            --packages="$*" \
+            -- -run "Integration" -count=1 -coverpkg=./... -args -test.gocoverdir="$PWD/coverage.integration.covdir"
+        }
+
+        sigstore_pkg=$(go list ./sigstore/integration)
+        run_integration junit.xml $(go list ./... | grep -vxF "$sigstore_pkg") &
+        rest_pid=$!
+
+        rc=0
+        if wait "$setup_pid"; then
+          echo "sigstore scaffolding ready (log: $setup_log)"
+          (
+            export PATH="{{.SIGSTORE_INTEGRATION_DIR}}/tmp/bin:$PATH"
+            . "{{.SIGSTORE_INTEGRATION_DIR}}/tmp/sigstore-env.sh"
+            run_integration junit-sigstore.xml "$sigstore_pkg"
+          ) || rc=1
+        else
+          echo "sigstore scaffolding setup failed:" >&2
+          cat "$setup_log" >&2
+          rc=1
+        fi
+        wait "$rest_pid" || rc=1
+        [ "$rc" -eq 0 ]
+
         # Merge every run's data into one profile. -args passes gocoverdir to the
         # test binary without fighting gotestsum's flag ordering.
         go tool covdata textfmt -i=coverage.integration.covdir -o coverage.integration.out

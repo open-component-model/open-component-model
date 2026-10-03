@@ -229,7 +229,7 @@ jobs:
         uses: mikepenz/action-junit-report@a9170d5795813c01ab4901ffb045b52bab4ab09d # v6.5.0
         if: always()
         with:
-          report_paths: '${{ github.workspace }}/bindings/go/junit.xml'
+          report_paths: '${{ github.workspace }}/bindings/go/junit*.xml'
           detailed_summary: true
           include_passed: false
           # annotate inline + write the job summary without creating a check run,
