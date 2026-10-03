@@ -461,7 +461,7 @@ GnuPG does its cryptography in `libgcrypt`. For an approved-algorithms-only
 `gpg`, use the
 [Garden Linux FIPS image](https://github.com/gardenlinux/gardenlinux/pkgs/container/gardenlinux%2Ffips)
 ([Garden Linux](https://docs.gardenlinux.org/reference/glossary.html#fips) is,
-like OCM, an Apeiro project) and force `libgcrypt` into FIPS mode. To use it
+like OCM, a [NeoNephos](https://neonephos.org/) project) and force `libgcrypt` into FIPS mode. To use it
 with OCM in a container, add `ocm` from the CLI image:
 
 ```dockerfile
