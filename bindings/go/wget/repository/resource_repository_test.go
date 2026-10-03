@@ -2,7 +2,6 @@ package repository_test
 
 import (
 	"crypto"
-	_ "crypto/sha1"
 	_ "crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -532,7 +531,9 @@ func TestProcessResourceDigest_AccessFastPath(t *testing.T) {
 	content := []byte("access-side pin from source")
 	sha256 := godigest.FromBytes(content).Encoded()
 	sha512 := shaHex(content, crypto.SHA512)
-	sha1 := shaHex(content, crypto.SHA1)
+	// Precomputed SHA-1 of content, so the test does not hash with SHA-1 itself
+	// (GODEBUG=fips140=only panics on it). The server only advertises it.
+	sha1 := "b36ad81286cb9f8e00489bc31f4cc5f1fff9d2c2"
 
 	// noBodyGET returns 500 on GET so a fast-path bug (falling through to
 	// download) surfaces as an obvious failure, not silent SHA-256 recompute.

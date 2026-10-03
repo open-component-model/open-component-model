@@ -3,6 +3,7 @@ package download
 import (
 	"archive/tar"
 	"bytes"
+	"crypto/fips140"
 	"io"
 	"os"
 	"testing"
@@ -19,7 +20,13 @@ import (
 // The tree holds entries a checkout could not reproduce: names that collide on
 // case-insensitive file systems, a name invalid on Windows and symlinks pointing
 // outside the tree or nowhere.
+// archive runs inside [Download], outside strict FIPS enforcement, because Git
+// hashes objects with SHA-1; the test runs it the same way.
 func TestArchiveUsesGitTree(t *testing.T) {
+	fips140.WithoutEnforcement(func() { testArchiveUsesGitTree(t) })
+}
+
+func testArchiveUsesGitTree(t *testing.T) {
 	r := require.New(t)
 
 	repo, err := git.Init(memory.NewStorage(), nil)
