@@ -70,10 +70,12 @@ node .github/scripts/stig-scan.js <image> bindings/go/cli/Containerfile tmp/stig
 
 `tmp/stig` then contains the XCCDF results and HTML reports of both
 evaluations. In the pipeline, the reusable `Image scan` workflow
-(`.github/workflows/image-scan.yml`) writes the results of each image and
-architecture to the job summary and uploads the reports as
-`image-scan-<image>-<arch>` workflow artifacts, for example
-`image-scan-cli-amd64`.
+(`.github/workflows/image-scan.yml`) runs this STIG scan and a vulnerability
+scan (Trivy, with an OpenVEX document from `govulncheck`; see
+[EU Cyber Resilience Act]({{< relref "docs/reference/standards-and-regulations/cra.md" >}}))
+for each image and architecture. It writes both results to the job summary and
+uploads the reports as `image-scan-<image>-<arch>` workflow artifacts, for
+example `image-scan-cli-amd64`.
 
 Node operating system and cluster STIGs, such as the Kubernetes STIG, are the
 platform operator's responsibility.

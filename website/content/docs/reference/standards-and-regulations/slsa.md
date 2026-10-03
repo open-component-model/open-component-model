@@ -60,9 +60,9 @@ The build is split across reusable workflows:
 | `kubernetes-controller.yml` | `workflow_call` only | Builds the controller image (no attestation; attestation happens at publish time in `pipeline.yml`) |
 | `controller-chart-final.yml` | `workflow_call` only | Re-packages, pushes and attests the final Helm chart during a release |
 
-For Build L3 the attestation must be generated inside a reusable workflow so
-that user-defined build steps cannot access the provenance signing material.
-Where the attestation happens determines the level:
+Under GitHub's mapping, the level depends on where the attestation is
+generated. In a reusable workflow, the provenance names that workflow as the
+signer, separate from the workflow that called it:
 
 - **CLI binaries** are attested in `cli.yml`, which is always invoked as a
   reusable workflow.
@@ -87,8 +87,10 @@ Where the attestation happens determines the level:
 | OCM component versions | `ghcr.io/open-component-model//ocm.software/*` | ❌ No GitHub attestation | — | — |
 
 The release workflow verifies every RC attestation before promoting the release
-to final (job `verify_attestations` in `release.yml`). This acts as a gate:
-if any attestation is missing or invalid, the final release is not created.
+to final (job `verify_attestations` in `release.yml`), pinning the expected
+signer workflow (`cli.yml` for binaries, `pipeline.yml` for images and the RC
+chart). If an attestation is missing, invalid, or signed by another workflow,
+the final release is not created.
 
 ## Verifying Attestations
 
@@ -163,19 +165,45 @@ gh attestation verify /tmp/ocm/ocm-linux-amd64 \
   --signer-workflow open-component-model/open-component-model/.github/workflows/cli.yml
 ```
 
+### SBOM and OpenVEX Attestations
+
+Besides build provenance, the release pipeline attests an SPDX SBOM to every CLI
+binary and to both OCI images (one per platform), and the OpenVEX document the
+images were scanned with to both OCI images. Select them by predicate type:
+
+```shell
+# SBOM (SPDX 2.3)
+gh attestation verify oci://ghcr.io/open-component-model/cli:0.20.0 \
+  --owner open-component-model \
+  --predicate-type https://spdx.dev/Document/v2.3 \
+  --format json --jq '.[].verificationResult.statement.predicate.name'
+
+# OpenVEX
+gh attestation verify oci://ghcr.io/open-component-model/cli:0.20.0 \
+  --owner open-component-model \
+  --predicate-type https://openvex.dev/ns/v0.2.0 \
+  --format json --jq '.[].verificationResult.statement.predicate.statements'
+```
+
+SBOMs and VEX documents are not SLSA provenance; they are signed by the same
+workflows and verified the same way. See the
+[EU Cyber Resilience Act]({{< relref "docs/reference/standards-and-regulations/cra.md" >}})
+page for how they are produced.
+
 ## Permissions
 
-The workflows that generate attestations require three token permissions:
+The workflows that generate attestations require these token permissions:
 
 | Permission | Purpose |
 | --- | --- |
 | `id-token: write` | Request a GitHub Actions OIDC token used as the Sigstore signing identity |
 | `attestations: write` | Store the attestation in the repository's attestation ledger |
+| `artifact-metadata: write` | Create the artifact metadata storage record when the attestation is pushed to a registry |
 | `packages: write` | Push the attestation to the container registry (OCI artifacts only) |
 
-These permissions are declared on the publish jobs in `pipeline.yml` and
-`release.yml` and are forwarded to reusable workflows through the
-`permissions` block of the caller.
+These permissions are declared on the attesting jobs in `cli.yml`,
+`pipeline.yml`, `release.yml` and `controller-chart-final.yml`, and are
+forwarded to reusable workflows through the `permissions` block of the caller.
 
 ## Known Gaps
 
