@@ -1,9 +1,10 @@
-name: STIG scan
+name: Image scan
 
 on:
-  # Reusable STIG scan of the CLI and controller images, invoked by the build &
-  # publish pipeline (pipeline.yml) with the image artifacts it built. Scans each
-  # architecture against the DISA GPOS SRG as tailored in .github/stig.
+  # Reusable scan of the CLI and controller images, invoked by the build &
+  # publish pipeline (pipeline.yml) with the image artifacts it built. Each
+  # architecture is scanned for vulnerabilities (Trivy, with an OpenVEX document
+  # from govulncheck) and against the DISA GPOS SRG as tailored in .github/stig.
   workflow_call:
     inputs:
       ref:
@@ -18,19 +19,80 @@ on:
         description: "Artifact with the controller OCI image (controller.tar)."
         type: string
         required: true
+    outputs:
+      vex_artifact:
+        description: "Artifact with the OpenVEX document (ocm.openvex.json) the images were scanned with."
+        value: ${{ jobs.vex.outputs.artifact }}
 
 permissions:
   contents: read
 
 jobs:
+  # govulncheck knows whether vulnerable code is reachable; image scanners only
+  # see module versions. The OpenVEX document carries govulncheck's verdicts to
+  # Trivy, so the image scan reports the same findings as govulncheck and none
+  # that it already ruled out.
+  vex:
+    name: OpenVEX
+    runs-on: ubuntu-24.04-arm
+    outputs:
+      artifact: ${{ steps.artifact.outputs.name }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          sparse-checkout: |
+            bindings/go
+            .github/scripts
+            .env
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: bindings/go/go.mod
+          cache-dependency-path: bindings/go/go.sum
+
+      - name: Run govulncheck
+        working-directory: bindings/go
+        run: |
+          set -euo pipefail
+          version="$(sed -n 's/^GOVULNCHECK_VERSION=//p' ../.env)"
+          mkdir -p ../tmp/vex
+          # JSON output exits 0 with findings; the reachability verdicts go into the VEX.
+          go run "golang.org/x/vuln/cmd/govulncheck@${version}" -format json ./... > ../tmp/vex/govulncheck.json
+
+      - name: Build OpenVEX
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        env:
+          GOVULNCHECK_JSON: tmp/vex/govulncheck.json
+          VEX_OUTPUT: tmp/vex/ocm.openvex.json
+        with:
+          script: |
+            const script = await import('${{ github.workspace }}/.github/scripts/vex.js');
+            await script.default({ core, context });
+
+      - name: Artifact name
+        id: artifact
+        run: echo "name=openvex" >> "$GITHUB_OUTPUT"
+
+      - name: Upload OpenVEX
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: ${{ steps.artifact.outputs.name }}
+          path: tmp/vex/
+          if-no-files-found: error
+
   scan:
     name: ${{ matrix.image }} (${{ matrix.arch }})
+    needs: vex
     runs-on: ubuntu-24.04-arm
     strategy:
       fail-fast: false
       matrix:
         image: [cli, controller]
-        # The scan only reads the image's files, so amd64 is scanned on the arm64 runner.
+        # The scans only read the image's files, so amd64 is scanned on the arm64 runner.
         arch: [arm64, amd64]
         include:
           - image: cli
@@ -60,6 +122,12 @@ jobs:
           name: ${{ matrix.artifact }}
           path: tmp/artifact
 
+      - name: Download OpenVEX
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: ${{ needs.vex.outputs.artifact }}
+          path: tmp/vex
+
       - name: Ensure skopeo is installed
         run: command -v skopeo || { sudo apt-get update -qq && sudo apt-get install -yqq skopeo; }
 
@@ -70,15 +138,47 @@ jobs:
           ARCH: ${{ matrix.arch }}
         run: |
           skopeo --override-arch "${ARCH}" --override-os linux copy \
-            "oci-archive:tmp/artifact/${OCI_TAR}" "docker-daemon:ocm-stig:${IMAGE}-${ARCH}"
+            "oci-archive:tmp/artifact/${OCI_TAR}" "docker-daemon:ocm-scan:${IMAGE}-${ARCH}"
+          mkdir -p "tmp/image-scan/${IMAGE}-${ARCH}"
 
-      # Scans, writes the job summary, and fails on any failed rule.
-      - name: Scan
+      # Fails on any vulnerability the OpenVEX document does not mark as
+      # not_affected, at every severity and also without a fix: those are the
+      # findings govulncheck reports as reachable. Nothing is uploaded to code
+      # scanning, so Dependabot alerts stay the only alert surface.
+      - name: Vulnerability scan
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        env:
+          TRIVY_VEX: tmp/vex/ocm.openvex.json
+        with:
+          image-ref: ocm-scan:${{ matrix.image }}-${{ matrix.arch }}
+          scanners: vuln
+          exit-code: '1'
+          format: table
+          output: tmp/image-scan/${{ matrix.image }}-${{ matrix.arch }}/trivy.txt
+
+      - name: Vulnerability scan summary
+        if: ${{ !cancelled() }}
+        env:
+          IMAGE: ${{ matrix.image }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          {
+            echo "### 🔎 Vulnerability scan: ${IMAGE} (linux/${ARCH})"
+            echo
+            echo '```text'
+            cat "tmp/image-scan/${IMAGE}-${ARCH}/trivy.txt" 2>/dev/null || echo "no report"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Scans, writes the job summary, and fails on any failed rule. Runs even when
+      # the vulnerability scan failed, so both results are reported.
+      - name: STIG scan
+        if: ${{ !cancelled() }}
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         env:
-          IMAGE_REF: ocm-stig:${{ matrix.image }}-${{ matrix.arch }}
+          IMAGE_REF: ocm-scan:${{ matrix.image }}-${{ matrix.arch }}
           CONTAINERFILE: ${{ matrix.containerfile }}
-          RESULTS_DIR: tmp/stig/${{ matrix.image }}-${{ matrix.arch }}
+          RESULTS_DIR: tmp/image-scan/${{ matrix.image }}-${{ matrix.arch }}
           SUMMARY_TITLE: ${{ matrix.image }} (linux/${{ matrix.arch }})
         with:
           script: |
@@ -89,6 +189,6 @@ jobs:
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: stig-${{ matrix.image }}-${{ matrix.arch }}
-          path: tmp/stig/${{ matrix.image }}-${{ matrix.arch }}
+          name: image-scan-${{ matrix.image }}-${{ matrix.arch }}
+          path: tmp/image-scan/${{ matrix.image }}-${{ matrix.arch }}
           if-no-files-found: ignore
