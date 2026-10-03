@@ -38,19 +38,37 @@ plane, etcd, and worker nodes) are the platform operator's responsibility.
 
 ## Scan Tools
 
-The results on this page are produced with three open-source scanners:
+Every build and release pipeline run scans the images and the chart with three
+open-source scanners, in the reusable `Image scan` workflow
+(`.github/workflows/image-scan.yml`). The scans block publishing, like the
+[DISA STIG]({{< relref "docs/reference/standards-and-regulations/disa-stig.md" >}})
+scan:
 
-| Tool | What it checks |
-| --- | --- |
-| [dockle](https://github.com/goodwithtech/dockle) | CIS Docker Benchmark section 4 checks against a saved image tarball |
-| [Trivy](https://github.com/aquasecurity/trivy) `config` | CIS Kubernetes Benchmark and built-in Kubernetes security checks against rendered Helm chart manifests |
-| [Kubescape](https://github.com/kubescape/kubescape) | NSA and MITRE ATT&CK frameworks against rendered manifests |
+| Tool | What it checks | Runs on | Fails on |
+| --- | --- | --- | --- |
+| [dockle](https://github.com/goodwithtech/dockle) | CIS Docker Benchmark section 4 | Each image and architecture | Any WARN or FATAL check |
+| [Trivy](https://github.com/aquasecurity/trivy) `config` | CIS Kubernetes Benchmark and the built-in Kubernetes checks of Trivy | Rendered chart | Any finding not in `.github/benchmarks/trivyignore.yaml`, or no manifests checked |
+| [Kubescape](https://github.com/kubescape/kubescape) | NSA and MITRE ATT&CK frameworks | Rendered chart | Any failed control on a resource without an exception in `.github/benchmarks/kubescape-exceptions.json`, or no resources scanned |
+
+The chart is rendered with `helm template` twice: with default values, and with
+`manager.networkPolicy.enabled=true`. Each template is written to its own file,
+so each accepted Trivy finding applies only to the template that needs it.
+Every accepted finding is explained below. The dockle and Kubescape images are
+pinned by digest in the root `.env` (`DOCKLE_IMAGE`, `KUBESCAPE_IMAGE`), and
+Trivy by the `trivy-action` version. Kubescape downloads its framework
+definitions at scan time, so a new upstream control can fail the scan without
+any change in OCM.
+
+Results are in the job summary and in the `image-scan-<image>-<arch>` and
+`chart-scan-<values>` workflow artifacts.
 
 ## CIS Docker Benchmark (Section 4)
 
 Both images are scanned with dockle. The `scratch`-based images have no shell,
 no package manager, no setuid/setgid files, no secrets, no `ADD` instructions,
-and run as user `65532`. dockle produces no WARN or FATAL findings:
+and run as user `65532`. dockle produces no WARN or FATAL findings. Its two
+SKIP results (`DKL-LI-0001`, `DKL-LI-0002`) are checks specific to dockle of
+`/etc/passwd` and `/etc/shadow`, which a `scratch` image does not contain:
 
 | Check | Description | CLI image | Controller image | Notes |
 | --- | --- | --- | --- | --- |
@@ -91,13 +109,17 @@ docker buildx build --platform linux/arm64 --load \
   -f kubernetes/controller/Dockerfile .
 ```
 
-Scan either image:
+Scan either image with the dockle version CI uses (from the root `.env`):
 
 ```shell
-docker save local/ocm-cli:bench \
-  | docker run --rm -i --entrypoint sh goodwithtech/dockle:latest \
-      -c 'cat > /tmp/i.tar && dockle --exit-code 0 -af settings.py --input /tmp/i.tar'
+docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+  "$(sed -n 's/^DOCKLE_IMAGE=//p' .env)" \
+  --exit-code 1 --exit-level warn local/ocm-cli:bench
 ```
+
+dockle's CIS-DI-0001 check flags only images whose user is `root` by name. An
+image built with a numeric `USER 0` passes it. The chart's `runAsNonRoot: true`
+covers this on Kubernetes.
 
 Clean up:
 
@@ -107,8 +129,9 @@ docker rmi local/ocm-cli:bench local/ocm-controller:bench
 
 ## CIS Kubernetes Benchmark (Section 5)
 
-The rendered Helm chart is scanned with Trivy `config`. Out of 939 checks, 936
-pass and 3 report findings. All three are by design.
+The rendered Helm chart is scanned with Trivy `config`. It reports three
+findings, all by design and accepted in `.github/benchmarks/trivyignore.yaml`
+for the listed template only:
 
 | Check | Severity | Title | Result | Rationale |
 | --- | --- | --- | --- | --- |
@@ -124,30 +147,36 @@ Benchmark section 5.2 (Pod Security Standards) controls.
 
 ### Reproducing with Trivy
 
-Because Docker Desktop on macOS does not share the worktree path, copy the chart
-into a Docker volume first:
+The Helm renderer built into Trivy assumes Kubernetes 1.20, which the chart's
+`kubeVersion: ">=1.26.0-0"` rejects, so Trivy would scan nothing. Render the
+chart first, as CI does. Docker Desktop on macOS does not share the worktree
+path, so copy the rendered templates into a Docker volume:
 
 ```shell
 cd <repository-root>
-tar cf - --no-mac-metadata -C bindings/go/kubernetes/controller chart \
-  | docker run --rm -i -v trivy-scan:/data alpine:latest sh -c 'cd /data && tar xf -'
+helm template ocm-k8s-toolkit bindings/go/kubernetes/controller/chart \
+  --namespace ocm-k8s-toolkit-system --kube-version 1.35.1 \
+  --output-dir /tmp/ocm-bench/rendered
+cp -R .github/benchmarks /tmp/ocm-bench/
+tar cf - --no-mac-metadata -C /tmp/ocm-bench . \
+  | docker run --rm -i -v ocm-bench:/data alpine:latest sh -c 'cd /data && tar xf - && chown -R 1001 /data'
 
-docker run --rm -v trivy-scan:/data \
-  aquasec/trivy config --exit-code 0 \
-  --misconfig-scanners helm /data/chart
+docker run --rm -v ocm-bench:/data -w /data aquasec/trivy:0.70.0 \
+  config --ignorefile benchmarks/trivyignore.yaml rendered
 ```
 
-Add `--include-non-failures` to see every passing check. Clean up:
-
-```shell
-docker volume rm trivy-scan
-```
+Omit `--ignorefile` to see the accepted findings, or add
+`--include-non-failures` to see every passing check.
 
 ## NSA/CISA Kubernetes Hardening Guide
 
 The rendered chart is scanned with Kubescape against the NSA and MITRE ATT&CK
-frameworks. Kubescape reports an NSA compliance score of 92.50% and a MITRE
-score of 88.24%, with 25 of 30 controls passing and 5 findings.
+frameworks. With default values, Kubescape reports an NSA compliance score of
+92.50% and a MITRE score of 88.24%, with 25 of 30 controls passing and 5
+findings. All five have exceptions in `.github/benchmarks/kubescape-exceptions.json`.
+With `manager.networkPolicy.enabled=true`, C-0030 passes as well and the NSA
+score is 97.50%. CI scans that variant without the C-0030 exception, so the
+NetworkPolicy has to keep satisfying the control.
 
 | Control | Severity | Title | Result | Rationale |
 | --- | --- | --- | --- | --- |
@@ -181,32 +210,31 @@ for any controller-runtime operator.
 
 ### Reproducing with Kubescape
 
+With the rendered templates in the `ocm-bench` volume (see
+[Reproducing with Trivy](#reproducing-with-trivy)):
+
 ```shell
-cd <repository-root>
-helm template ocm bindings/go/kubernetes/controller/chart > /tmp/ocm-rendered.yaml
-
-docker run --rm -i -v trivy-scan:/data alpine:latest \
-  sh -c 'cat > /data/rendered.yaml' < /tmp/ocm-rendered.yaml
-
-docker run --rm -v trivy-scan:/data \
-  quay.io/kubescape/kubescape-cli:latest \
-  scan framework nsa,mitre /data/rendered.yaml
+docker run --rm --user 1001 -e HOME=/tmp -v ocm-bench:/data -w /data \
+  "$(sed -n 's/^KUBESCAPE_IMAGE=//p' .env)" \
+  scan framework nsa,mitre rendered --exceptions benchmarks/kubescape-exceptions.json
 ```
 
-Add `-v` for per-resource details. Clean up:
+Kubescape lists excepted controls as failed, marked `w/exceptions`. Omit
+`--exceptions` to see them without the marker, or add `-v` for per-resource
+details. Clean up:
 
 ```shell
-docker volume rm trivy-scan
-rm /tmp/ocm-rendered.yaml
+docker volume rm ocm-bench
+rm -r /tmp/ocm-bench
 ```
 
 ## Summary
 
-| Benchmark | Tool | Total checks | Pass | Findings | Failures |
-| --- | --- | --- | --- | --- | --- |
-| CIS Docker Benchmark v1.7.0 §4 | dockle | 9 | 7 | 2 INFO | 0 |
-| CIS Kubernetes Benchmark v1.11.0 §5 | Trivy config | 939 | 936 | 3 | 0 |
-| NSA/CISA Hardening Guide v1.2 | Kubescape | 30 | 25 | 5 | 0 |
+| Benchmark | Tool | Findings | Accepted | Open (fails CI) |
+| --- | --- | --- | --- | --- |
+| CIS Docker Benchmark v1.7.0 §4 | dockle | 2 INFO | — (INFO does not fail) | 0 |
+| CIS Kubernetes Benchmark v1.11.0 §5 | Trivy config | 3 | 3 | 0 |
+| NSA/CISA Hardening Guide v1.2 | Kubescape | 5 (4 with NetworkPolicy) | 5 | 0 |
 
 Every finding has an explanation above. The three categories of accepted
 findings are:

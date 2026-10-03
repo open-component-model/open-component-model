@@ -1,0 +1,58 @@
+[
+  {
+    "name": "controller-reads-registry-credentials",
+    "reason": "C-0015: the controller resolves OCI registry credentials from Secrets referenced in Repository and Resource objects, so its ClusterRole needs get/list/watch on Secrets (no create, update or delete).",
+    "policyType": "postureExceptionPolicy",
+    "actions": ["alertOnly"],
+    "resources": [
+      {
+        "designatorType": "Attributes",
+        "attributes": { "kind": "ServiceAccount", "name": "ocm-k8s-toolkit-controller-manager", "namespace": "ocm-k8s-toolkit-system" }
+      }
+    ],
+    "posturePolicies": [{ "controlID": "C-0015" }]
+  },
+  {
+    "name": "controller-leader-election-configmaps",
+    "reason": "C-0037: controller-runtime leader election writes a ConfigMap in the release namespace; the Role is namespace-scoped.",
+    "policyType": "postureExceptionPolicy",
+    "actions": ["alertOnly"],
+    "resources": [
+      {
+        "designatorType": "Attributes",
+        "attributes": { "kind": "ServiceAccount", "name": "ocm-k8s-toolkit-controller-manager", "namespace": "ocm-k8s-toolkit-system" }
+      }
+    ],
+    "posturePolicies": [{ "controlID": "C-0037" }]
+  },
+  {
+    "name": "controller-needs-api-access",
+    "reason": "C-0034, C-0053: the controller authenticates to the Kubernetes API with its projected service account token, so the token must be mounted.",
+    "policyType": "postureExceptionPolicy",
+    "actions": ["alertOnly"],
+    "resources": [
+      {
+        "designatorType": "Attributes",
+        "attributes": { "kind": "ServiceAccount", "name": "ocm-k8s-toolkit-controller-manager", "namespace": "ocm-k8s-toolkit-system" }
+      },
+      {
+        "designatorType": "Attributes",
+        "attributes": { "kind": "Deployment", "name": "ocm-k8s-toolkit-controller-manager", "namespace": "ocm-k8s-toolkit-system" }
+      }
+    ],
+    "posturePolicies": [{ "controlID": "C-0034" }, { "controlID": "C-0053" }]
+  },
+  {
+    "name": "network-policy-opt-in",
+    "reason": "C-0030: the chart's NetworkPolicy is opt-in (manager.networkPolicy.enabled) because it needs a CNI that enforces it. The scan of the chart with the policy enabled has no exception for C-0030.",
+    "policyType": "postureExceptionPolicy",
+    "actions": ["alertOnly"],
+    "resources": [
+      {
+        "designatorType": "Attributes",
+        "attributes": { "kind": "Deployment", "name": "ocm-k8s-toolkit-controller-manager", "namespace": "ocm-k8s-toolkit-system" }
+      }
+    ],
+    "posturePolicies": [{ "controlID": "C-0030" }]
+  }
+]

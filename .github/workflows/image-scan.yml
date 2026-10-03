@@ -4,7 +4,11 @@ on:
   # Reusable scan of the CLI and controller images, invoked by the build &
   # publish pipeline (pipeline.yml) with the image artifacts it built. Each
   # architecture is scanned for vulnerabilities (Trivy, with an OpenVEX document
-  # from govulncheck) and against the DISA GPOS SRG as tailored in .github/stig.
+  # from govulncheck), against the DISA GPOS SRG as tailored in .github/stig, and
+  # against the CIS Docker Benchmark (dockle). The rendered controller Helm chart
+  # is scanned against the CIS Kubernetes Benchmark (Trivy config) and the
+  # NSA/CISA and MITRE frameworks (Kubescape), with accepted findings in
+  # .github/benchmarks.
   workflow_call:
     inputs:
       ref:
@@ -185,10 +189,132 @@ jobs:
             const script = await import('${{ github.workspace }}/.github/scripts/stig-scan.js');
             await script.default({ core });
 
+      # CIS Docker Benchmark section 4. Fails on WARN and FATAL; INFO (content
+      # trust, HEALTHCHECK) and SKIP (no /etc/passwd in scratch) do not fail.
+      - name: CIS Docker Benchmark (dockle)
+        if: ${{ !cancelled() }}
+        env:
+          IMAGE: ${{ matrix.image }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          set -uo pipefail
+          dockle="$(sed -n 's/^DOCKLE_IMAGE=//p' .env)"
+          [[ -n "$dockle" ]] || { echo "::error::DOCKLE_IMAGE not set in .env"; exit 1; }
+          out="tmp/image-scan/${IMAGE}-${ARCH}/dockle.json"
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock "$dockle" \
+            --exit-code 1 --exit-level warn --format json "ocm-scan:${IMAGE}-${ARCH}" > "$out"
+          rc=$?
+          {
+            echo "### 🐳 CIS Docker Benchmark: ${IMAGE} (linux/${ARCH})"
+            echo
+            jq -r '"\(.summary.pass) pass, \(.summary.warn) warn, \(.summary.fatal) fatal, \(.summary.info) info, \(.summary.skip) skip\n",
+              "| Check | Level | Title |", "| --- | --- | --- |",
+              (.details[] | "| \(.code) | \(.level) | \(.title) |")' "$out" 2>/dev/null || echo "no report"
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$rc"
+
       - name: Upload reports
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: image-scan-${{ matrix.image }}-${{ matrix.arch }}
           path: tmp/image-scan/${{ matrix.image }}-${{ matrix.arch }}
+          if-no-files-found: ignore
+
+  chart:
+    name: chart (${{ matrix.values }})
+    runs-on: ubuntu-24.04-arm
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - values: default
+            set: ""
+          # Proves the opt-in NetworkPolicy satisfies Kubescape C-0030.
+          - values: network-policy
+            set: manager.networkPolicy.enabled=true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          sparse-checkout: |
+            .github/benchmarks
+            .github/scripts
+            .env
+            bindings/go/kubernetes/controller/.env
+            bindings/go/kubernetes/controller/chart
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - name: Install Helm
+        uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with:
+          version: v4.2.4
+
+      # One file per template, so accepted Trivy findings are scoped to the
+      # template that needs them. The chart requires a kubeVersion that Trivy's
+      # own Helm renderer does not default to, so the scanners get rendered YAML.
+      - name: Render chart
+        env:
+          SET: ${{ matrix.set }}
+        run: |
+          set -euo pipefail
+          kube="$(sed -n 's/^KIND_NODE_IMAGE_VERSION=//p' bindings/go/kubernetes/controller/.env)"
+          [[ -n "$kube" ]] || { echo "::error::KIND_NODE_IMAGE_VERSION not set in bindings/go/kubernetes/controller/.env"; exit 1; }
+          args=()
+          [[ -z "$SET" ]] || args+=(--set "$SET")
+          mkdir -p tmp/chart-scan
+          helm template ocm-k8s-toolkit bindings/go/kubernetes/controller/chart \
+            --namespace ocm-k8s-toolkit-system --kube-version "$kube" "${args[@]}" \
+            --output-dir tmp/chart-scan/rendered
+
+      - name: CIS Kubernetes Benchmark (Trivy config)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: config
+          scan-ref: tmp/chart-scan/rendered
+          trivyignores: .github/benchmarks/trivyignore.yaml
+          # The gate below fails on findings and on an empty scan.
+          exit-code: '0'
+          format: json
+          output: tmp/chart-scan/trivy.json
+
+      # Kubescape fetches the framework definitions at scan time. It reports
+      # controls as failed even when an exception covers them, so the gate below
+      # decides.
+      - name: NSA/CISA and MITRE (Kubescape)
+        if: ${{ !cancelled() }}
+        env:
+          VALUES: ${{ matrix.values }}
+        run: |
+          set -euo pipefail
+          kubescape="$(sed -n 's/^KUBESCAPE_IMAGE=//p' .env)"
+          [[ -n "$kubescape" ]] || { echo "::error::KUBESCAPE_IMAGE not set in .env"; exit 1; }
+          if [[ "$VALUES" == network-policy ]]; then
+            jq '[.[] | select(.name != "network-policy-opt-in")]' .github/benchmarks/kubescape-exceptions.json > tmp/chart-scan/exceptions.json
+          else
+            cp .github/benchmarks/kubescape-exceptions.json tmp/chart-scan/exceptions.json
+          fi
+          docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD/tmp/chart-scan:/scan" -w /scan "$kubescape" \
+            scan framework nsa,mitre rendered --exceptions exceptions.json --format json --output kubescape.json
+
+      - name: Benchmark gate
+        if: ${{ !cancelled() }}
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        env:
+          TRIVY_JSON: tmp/chart-scan/trivy.json
+          KUBESCAPE_JSON: tmp/chart-scan/kubescape.json
+          SUMMARY_TITLE: controller chart (${{ matrix.values }} values)
+        with:
+          script: |
+            const script = await import('${{ github.workspace }}/.github/scripts/chart-benchmarks.js');
+            await script.default({ core });
+
+      - name: Upload reports
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: chart-scan-${{ matrix.values }}
+          path: tmp/chart-scan
           if-no-files-found: ignore

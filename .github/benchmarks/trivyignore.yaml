@@ -1,0 +1,17 @@
+# Accepted Trivy misconfiguration findings for the rendered controller Helm chart
+# (image-scan.yml, job "chart"). Paths are relative to the helm template
+# --output-dir, so each finding is accepted only for the template that needs it.
+# Rationale per finding: website/content/docs/reference/standards-and-regulations/benchmarks.md
+misconfigurations:
+  - id: KSV-0041
+    paths:
+      - chart/templates/rbac/manager-role.yaml
+    statement: Registry credentials are resolved from Secrets referenced in Repository and Resource objects; the ClusterRole has get/list/watch only.
+  - id: KSV-0049
+    paths:
+      - chart/templates/rbac/leader-election-role.yaml
+    statement: controller-runtime leader election writes a ConfigMap in the release namespace.
+  - id: KSV-0125
+    paths:
+      - chart/templates/manager/manager.yaml
+    statement: The default image is ghcr.io/open-component-model/kubernetes/controller, which is not on Trivy's built-in registry allowlist; manager.image.repository overrides it.
