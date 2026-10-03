@@ -1,0 +1,100 @@
+name: STIG scan
+
+on:
+  # Reusable STIG scan of the CLI and controller images, invoked by the build &
+  # publish pipeline (pipeline.yml) with the image artifacts it built. Scans each
+  # architecture against the DISA GPOS SRG as tailored in .github/stig.
+  workflow_call:
+    inputs:
+      ref:
+        description: "The ref to check out the scan configuration from. Defaults to the current ref."
+        type: string
+        required: false
+      cli_artifact:
+        description: "Artifact with the CLI OCI image (oci/cli.tar)."
+        type: string
+        required: true
+      controller_artifact:
+        description: "Artifact with the controller OCI image (controller.tar)."
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    name: ${{ matrix.image }} (${{ matrix.arch }})
+    runs-on: ubuntu-24.04-arm
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [cli, controller]
+        # The scan only reads the image's files, so amd64 is scanned on the arm64 runner.
+        arch: [arm64, amd64]
+        include:
+          - image: cli
+            artifact: ${{ inputs.cli_artifact }}
+            oci_tar: oci/cli.tar
+            containerfile: bindings/go/cli/Containerfile
+          - image: controller
+            artifact: ${{ inputs.controller_artifact }}
+            oci_tar: controller.tar
+            containerfile: bindings/go/kubernetes/controller/Dockerfile
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          sparse-checkout: |
+            .github/stig
+            .github/scripts
+            .env
+            ${{ matrix.containerfile }}
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - name: Download image artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: ${{ matrix.artifact }}
+          path: tmp/artifact
+
+      - name: Ensure skopeo is installed
+        run: command -v skopeo || { sudo apt-get update -qq && sudo apt-get install -yqq skopeo; }
+
+      - name: Load image
+        env:
+          OCI_TAR: ${{ matrix.oci_tar }}
+          IMAGE: ${{ matrix.image }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          skopeo --override-arch "${ARCH}" --override-os linux copy \
+            "oci-archive:tmp/artifact/${OCI_TAR}" "docker-daemon:ocm-stig:${IMAGE}-${ARCH}"
+
+      - name: Scan
+        env:
+          IMAGE: ${{ matrix.image }}
+          ARCH: ${{ matrix.arch }}
+          CONTAINERFILE: ${{ matrix.containerfile }}
+        run: .github/scripts/stig-scan.sh "ocm-stig:${IMAGE}-${ARCH}" "${CONTAINERFILE}" "tmp/stig/${IMAGE}-${ARCH}"
+
+      - name: Report
+        if: ${{ !cancelled() }}
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        env:
+          RESULTS_DIR: tmp/stig/${{ matrix.image }}-${{ matrix.arch }}
+          IMAGE: ${{ matrix.image }}
+          ARCH: ${{ matrix.arch }}
+        with:
+          script: |
+            const script = await import('${{ github.workspace }}/.github/scripts/stig-summary.js');
+            await script.default({ core });
+
+      - name: Upload reports
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: stig-${{ matrix.image }}-${{ matrix.arch }}
+          path: tmp/stig/${{ matrix.image }}-${{ matrix.arch }}
+          if-no-files-found: ignore
