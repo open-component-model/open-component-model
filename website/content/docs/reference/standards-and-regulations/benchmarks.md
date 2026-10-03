@@ -50,9 +50,11 @@ scan:
 | [Trivy](https://github.com/aquasecurity/trivy) `config` | CIS Kubernetes Benchmark and the built-in Kubernetes checks of Trivy | Rendered chart | Any finding not in `.github/benchmarks/trivyignore.yaml`, or no manifests checked |
 | [Kubescape](https://github.com/kubescape/kubescape) | NSA and MITRE ATT&CK frameworks | Rendered chart | Any failed control on a resource without an exception in `.github/benchmarks/kubescape-exceptions.json`, or no resources scanned |
 
-The chart is rendered with `helm template` twice: with default values, and with
-`manager.networkPolicy.enabled=true`. Each template is written to its own file,
-so each accepted Trivy finding applies only to the template that needs it.
+The chart is rendered with `helm template` and
+`manager.networkPolicy.enabled=true`. That render is the default render plus the
+`NetworkPolicy`, so it covers every template a default installation gets. Each
+template is written to its own file, so each accepted Trivy finding applies only
+to the template that needs it.
 Every accepted finding is explained below. The dockle and Kubescape images are
 pinned by digest in the root `.env` (`DOCKLE_IMAGE`, `KUBESCAPE_IMAGE`), and
 Trivy by the `trivy-action` version. Kubescape downloads its framework
@@ -60,7 +62,7 @@ definitions at scan time, so a new upstream control can fail the scan without
 any change in OCM.
 
 Results are in the job summary and in the `image-scan-<image>-<arch>` and
-`chart-scan-<values>` workflow artifacts.
+`chart-scan` workflow artifacts.
 
 ## CIS Docker Benchmark (Section 4)
 
@@ -152,6 +154,7 @@ path, so copy the rendered templates into a Docker volume:
 cd <repository-root>
 helm template ocm-k8s-toolkit bindings/go/kubernetes/controller/chart \
   --namespace ocm-k8s-toolkit-system --kube-version 1.35.1 \
+  --set manager.networkPolicy.enabled=true \
   --output-dir /tmp/ocm-bench/rendered
 cp -R .github/benchmarks /tmp/ocm-bench/
 tar cf - --no-mac-metadata -C /tmp/ocm-bench . \
@@ -166,14 +169,20 @@ Omit `--ignorefile` to see the accepted findings, or add
 
 ## NSA/CISA Kubernetes Hardening Guide
 
-The rendered chart is scanned with Kubescape against the NSA and MITRE ATT&CK
-frameworks. Every control that fails with default values has an exception. The
-table below is rendered from `.github/benchmarks/kubescape-exceptions.json`,
-the same file the CI scan uses. The compliance scores of each run are in the
-job summary of the `Image scan / chart` jobs. CI also scans the chart with
-`manager.networkPolicy.enabled=true`, without the exception for C-0030
-(Ingress and Egress blocked), so the NetworkPolicy has to keep satisfying that
-control.
+The chart, rendered with the `NetworkPolicy` enabled, is scanned with Kubescape
+against the NSA and MITRE ATT&CK frameworks. Every control that still fails has
+an exception. The table below is rendered from
+`.github/benchmarks/kubescape-exceptions.json`, the same file the CI scan uses.
+The compliance scores of each run are in the job summary of the
+`Image scan / chart` job.
+
+With default values (`manager.networkPolicy.enabled=false`), no `NetworkPolicy` is
+rendered, so C-0030 (Ingress and Egress blocked) also fails. The policy is
+opt-in because it needs a CNI that enforces `NetworkPolicy`. When enabled, it
+allows ingress to the health-probe port (and the metrics port when metrics are
+enabled) and egress to DNS (53) and HTTPS/Kubernetes API (443, 6443); replace
+the egress rules with `manager.networkPolicy.egress`, add ingress rules with
+`manager.networkPolicy.ingress`.
 
 {{< benchmark-exceptions "kubescape" >}}
 
@@ -204,11 +213,12 @@ rm -r /tmp/ocm-bench
 
 ## Summary
 
-No finding is open: all three scans block publishing, so every release passes
-them. The accepted findings come from what the controller needs to work
+No benchmark finding is open: all three scans block publishing, so every release
+passes them. The accepted findings come from what the controller needs to work
 (reading registry credentials from Secrets, leader election, Kubernetes API
-access) and from environment-specific policy (a registry allowlist, the opt-in
-`NetworkPolicy`), each listed with its rationale above.
+access) and from a registry allowlist that depends on your environment. Each is
+listed with its rationale above. Without the opt-in `NetworkPolicy`, C-0030 fails
+as well.
 
 Image-level checks (CIS-DI-0005, CIS-DI-0006) are informational and not
 applicable in a Kubernetes deployment.

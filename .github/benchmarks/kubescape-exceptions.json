@@ -41,18 +41,5 @@
       }
     ],
     "posturePolicies": [{ "controlID": "C-0034" }, { "controlID": "C-0053" }]
-  },
-  {
-    "name": "network-policy-opt-in",
-    "reason": "The chart ships an opt-in NetworkPolicy (manager.networkPolicy.enabled, default false). With default values the finding remains because the policy is not rendered. When enabled, the policy restricts ingress and egress. CI scans the enabled variant without this exception, so the NetworkPolicy must keep satisfying the control.",
-    "policyType": "postureExceptionPolicy",
-    "actions": ["alertOnly"],
-    "resources": [
-      {
-        "designatorType": "Attributes",
-        "attributes": { "kind": "Deployment", "name": "ocm-k8s-toolkit-controller-manager", "namespace": "ocm-k8s-toolkit-system" }
-      }
-    ],
-    "posturePolicies": [{ "controlID": "C-0030" }]
   }
 ]

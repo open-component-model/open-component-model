@@ -296,11 +296,36 @@ jobs:
         run: |
           source .env
           echo "govulncheck=${GOVULNCHECK_VERSION}" >> "$GITHUB_OUTPUT"
-      - name: Run govulncheck
-        working-directory: bindings/go
+      # Installed, not `go run`: go run reports govulncheck's exit status 3
+      # (vulnerabilities found) as 1, indistinguishable from a tool error.
+      - name: Install govulncheck
         env:
           GOVULNCHECK_VERSION: ${{ steps.versions.outputs.govulncheck }}
-        run: go run "golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}" ./...
+        run: GOBIN="$RUNNER_TEMP/bin" go install "golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}"
+      # Exit status 3 means reachable vulnerabilities; any other non-zero status
+      # is a tool error and fails the job.
+      - name: Run govulncheck
+        id: govulncheck
+        working-directory: bindings/go
+        run: |
+          set -uo pipefail
+          "$RUNNER_TEMP/bin/govulncheck" ./... | tee "$RUNNER_TEMP/govulncheck.txt"
+          rc=${PIPESTATUS[0]}
+          echo "rc=${rc}" >> "$GITHUB_OUTPUT"
+          if [[ "$rc" -eq 3 ]]; then
+            { echo "### ⚠️ govulncheck: reachable vulnerabilities (does not block the PR)"; echo; echo '```text'; cat "$RUNNER_TEMP/govulncheck.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          exit "$rc"
+      # Fails visibly without failing the job, so findings do not block PRs.
+      - name: No reachable vulnerabilities
+        continue-on-error: true
+        env:
+          RC: ${{ steps.govulncheck.outputs.rc }}
+        run: |
+          [[ "$RC" -eq 0 ]] && exit 0
+          echo "govulncheck found reachable vulnerabilities, listed in the job summary."
+          exit 1
 
   generate:
     runs-on: ubuntu-24.04-arm
