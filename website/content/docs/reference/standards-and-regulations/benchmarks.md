@@ -129,17 +129,13 @@ docker rmi local/ocm-cli:bench local/ocm-controller:bench
 
 ## CIS Kubernetes Benchmark (Section 5)
 
-The rendered Helm chart is scanned with Trivy `config`. It reports three
-findings, all by design and accepted in `.github/benchmarks/trivyignore.yaml`
-for the listed template only:
+The rendered Helm chart is scanned with Trivy `config`. Every finding it reports
+is accepted for the listed template only. The table below is rendered from
+`.github/benchmarks/trivyignore.yaml`, the same file the CI scan uses:
 
-| Check | Severity | Title | Result | Rationale |
-| --- | --- | --- | --- | --- |
-| KSV-0041 | Critical | ClusterRole can manage secrets | Finding | The controller resolves OCI registry credentials from Kubernetes Secrets referenced in `Repository` and `Resource` custom resources. Read/list/watch on secrets is required for this. The ClusterRole does not grant create, update, or delete on secrets. |
-| KSV-0049 | Medium | Role can manage configmaps | Finding | The leader-election Role grants create/update/patch/delete on ConfigMaps in the release namespace. `controller-runtime` uses a ConfigMap (or Lease) for leader election; write access is required. |
-| KSV-0125 | Medium | Image not from a trusted registry | Finding | The default `values.yaml` references `ghcr.io/open-component-model/kubernetes/controller`. Trivy flags any registry not on its built-in allowlist. Override `manager.image.repository` if your policy requires a mirror. |
+{{< benchmark-exceptions "trivy" >}}
 
-The remaining 936 checks pass. The pod spec sets `runAsNonRoot: true`,
+All other checks pass. The pod spec sets `runAsNonRoot: true`,
 `runAsUser`/`runAsGroup: 65532`, `allowPrivilegeEscalation: false`,
 `readOnlyRootFilesystem: true`, drops all capabilities, and uses
 `seccompProfile: RuntimeDefault`. These settings satisfy the CIS Kubernetes
@@ -171,42 +167,20 @@ Omit `--ignorefile` to see the accepted findings, or add
 ## NSA/CISA Kubernetes Hardening Guide
 
 The rendered chart is scanned with Kubescape against the NSA and MITRE ATT&CK
-frameworks. With default values, Kubescape reports an NSA compliance score of
-92.50% and a MITRE score of 88.24%, with 25 of 30 controls passing and 5
-findings. All five have exceptions in `.github/benchmarks/kubescape-exceptions.json`.
-With `manager.networkPolicy.enabled=true`, C-0030 passes as well and the NSA
-score is 97.50%. CI scans that variant without the C-0030 exception, so the
-NetworkPolicy has to keep satisfying the control.
+frameworks. Every control that fails with default values has an exception. The
+table below is rendered from `.github/benchmarks/kubescape-exceptions.json`,
+the same file the CI scan uses. The compliance scores of each run are in the
+job summary of the `Image scan / chart` jobs. CI also scans the chart with
+`manager.networkPolicy.enabled=true`, without the exception for C-0030
+(Ingress and Egress blocked), so the NetworkPolicy has to keep satisfying that
+control.
 
-| Control | Severity | Title | Result | Rationale |
-| --- | --- | --- | --- | --- |
-| C-0015 | High | List Kubernetes secrets | Finding | Same as KSV-0041: the ClusterRole grants get/list/watch on Secrets for credential resolution. |
-| C-0030 | Medium | Ingress and Egress blocked | Finding | The chart ships an opt-in `NetworkPolicy` (`manager.networkPolicy.enabled`, default `false`). With default values the finding remains because the policy is not rendered. When enabled, the policy restricts ingress and egress as described in [BSI IT-Grundschutz]({{< relref "docs/reference/standards-and-regulations/bsi-it-grundschutz.md" >}}). |
-| C-0034 | Medium | Automatic mapping of service account | Finding | The Deployment does not set `automountServiceAccountToken: false`. The controller needs the projected service account token to authenticate to the Kubernetes API. |
-| C-0037 | Medium | CoreDNS poisoning | Finding | The leader-election Role grants write access to ConfigMaps, which Kubescape flags as a vector for CoreDNS ConfigMap tampering. The Role is namespace-scoped to the release namespace and used only for leader election. |
-| C-0053 | Medium | Access container service account | Finding | The ServiceAccount is mounted into the pod. As noted under C-0034, the controller requires API access and cannot opt out. |
+{{< benchmark-exceptions "kubescape" >}}
 
 All other controls pass, including: no privileged containers, no host PID/IPC/network, no
 hostPath mounts, no insecure capabilities, non-root execution, read-only
 filesystem, CPU and memory limits set, immutable container filesystem, and no
 privilege escalation.
-
-### Gaps
-
-**NetworkPolicy (C-0030).** The chart includes an opt-in `NetworkPolicy`
-(`manager.networkPolicy.enabled`, default `false`). When enabled, it allows
-ingress to the health-probe port (and the metrics port when metrics are
-enabled) and defaults egress to DNS (UDP/TCP 53) and HTTPS/Kubernetes API (TCP
-443, 6443). Egress rules are replaceable via `manager.networkPolicy.egress`;
-extra ingress rules can be added via `manager.networkPolicy.ingress`. The
-policy requires a CNI that enforces `NetworkPolicy`. With default chart values
-(`enabled: false`) the Kubescape finding remains because no `NetworkPolicy` is
-rendered.
-
-**automountServiceAccountToken (C-0034, C-0053).** The controller is a
-Kubernetes operator that watches custom resources and reads Secrets. Disabling
-the service account token mount would break it. This is an accepted trade-off
-for any controller-runtime operator.
 
 ### Reproducing with Kubescape
 
@@ -230,21 +204,11 @@ rm -r /tmp/ocm-bench
 
 ## Summary
 
-| Benchmark | Tool | Findings | Accepted | Open (fails CI) |
-| --- | --- | --- | --- | --- |
-| CIS Docker Benchmark v1.7.0 §4 | dockle | 2 INFO | — (INFO does not fail) | 0 |
-| CIS Kubernetes Benchmark v1.11.0 §5 | Trivy config | 3 | 3 | 0 |
-| NSA/CISA Hardening Guide v1.2 | Kubescape | 5 (4 with NetworkPolicy) | 5 | 0 |
-
-Every finding has an explanation above. The three categories of accepted
-findings are:
-
-1. **Secrets access** (KSV-0041, C-0015): required for credential resolution.
-2. **Service account and leader election** (KSV-0049, C-0034, C-0037, C-0053):
-   required for controller-runtime operation.
-3. **Image registry policy and network policy** (KSV-0125, C-0030):
-   environment-specific; the chart provides an opt-in `NetworkPolicy`, but the
-   operator must enable and tune it.
+No finding is open: all three scans block publishing, so every release passes
+them. The accepted findings come from what the controller needs to work
+(reading registry credentials from Secrets, leader election, Kubernetes API
+access) and from environment-specific policy (a registry allowlist, the opt-in
+`NetworkPolicy`), each listed with its rationale above.
 
 Image-level checks (CIS-DI-0005, CIS-DI-0006) are informational and not
 applicable in a Kubernetes deployment.

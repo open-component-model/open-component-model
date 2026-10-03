@@ -1,7 +1,7 @@
 [
   {
     "name": "controller-reads-registry-credentials",
-    "reason": "C-0015: the controller resolves OCI registry credentials from Secrets referenced in Repository and Resource objects, so its ClusterRole needs get/list/watch on Secrets (no create, update or delete).",
+    "reason": "The controller resolves OCI registry credentials from Secrets referenced in Repository and Resource custom resources, so its ClusterRole needs get/list/watch on Secrets. It does not grant create, update, or delete.",
     "policyType": "postureExceptionPolicy",
     "actions": ["alertOnly"],
     "resources": [
@@ -14,7 +14,7 @@
   },
   {
     "name": "controller-leader-election-configmaps",
-    "reason": "C-0037: controller-runtime leader election writes a ConfigMap in the release namespace; the Role is namespace-scoped.",
+    "reason": "controller-runtime leader election writes a ConfigMap in the release namespace. The Role is namespace-scoped to the release namespace and used only for leader election.",
     "policyType": "postureExceptionPolicy",
     "actions": ["alertOnly"],
     "resources": [
@@ -27,7 +27,7 @@
   },
   {
     "name": "controller-needs-api-access",
-    "reason": "C-0034, C-0053: the controller authenticates to the Kubernetes API with its projected service account token, so the token must be mounted.",
+    "reason": "The controller authenticates to the Kubernetes API with its projected service account token. Disabling the token mount would break any controller-runtime operator; this is an accepted trade-off.",
     "policyType": "postureExceptionPolicy",
     "actions": ["alertOnly"],
     "resources": [
@@ -44,7 +44,7 @@
   },
   {
     "name": "network-policy-opt-in",
-    "reason": "C-0030: the chart's NetworkPolicy is opt-in (manager.networkPolicy.enabled) because it needs a CNI that enforces it. The scan of the chart with the policy enabled has no exception for C-0030.",
+    "reason": "The chart ships an opt-in NetworkPolicy (manager.networkPolicy.enabled, default false). With default values the finding remains because the policy is not rendered. When enabled, the policy restricts ingress and egress. CI scans the enabled variant without this exception, so the NetworkPolicy must keep satisfying the control.",
     "policyType": "postureExceptionPolicy",
     "actions": ["alertOnly"],
     "resources": [
