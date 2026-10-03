@@ -166,6 +166,24 @@ install_argocd() {
       argocd-applicationset-controller \
       --for=condition=Available --timeout=5m || return 1
 
+  # argocd-server creates the "default" AppProject at startup; the core install has no server, so create it here.
+  # Every example Application uses project: default and never syncs without it.
+  kubectl apply -n argocd -f - <<EOF || return 1
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: default
+  namespace: argocd
+spec:
+  sourceRepos: ["*"]
+  destinations:
+    - server: "*"
+      namespace: "*"
+  clusterResourceWhitelist:
+    - group: "*"
+      kind: "*"
+EOF
+
   # Register the local OCI registry with ArgoCD as an insecure (plain HTTP) Helm OCI
   # credential template. Any Application whose repoURL starts with oci://ocm-e2e-image-registry:5000
   # inherits these settings. insecureOCIForceHttp is required because the local registry
