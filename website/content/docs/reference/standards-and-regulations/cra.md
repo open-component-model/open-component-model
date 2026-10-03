@@ -98,7 +98,7 @@ From 11 September 2026, manufacturers must report actively exploited
 vulnerabilities and severe incidents to the CSIRT of their Member State and to
 ENISA within 24 hours (early warning), 72 hours (main notification), and 14
 days / 1 month (final report). These reports go through the
-[ENISA CRA Single Reporting Platform](https://reporting.enisa.europa.eu).
+[ENISA CRA Single Reporting Platform](https://www.enisa.europa.eu/tools/cra-single-reporting-platform).
 
 OCM's steward, the Linux Foundation, handles regulatory reporting for
 NeoNephos projects. Projects that become aware of an actively exploited

@@ -55,13 +55,13 @@ jobs:
           cache-dependency-path: bindings/go/go.sum
 
       - name: Run govulncheck
-        working-directory: bindings/go
         run: |
           set -euo pipefail
-          version="$(sed -n 's/^GOVULNCHECK_VERSION=//p' ../.env)"
-          mkdir -p ../tmp/vex
+          version="$(sed -n 's/^GOVULNCHECK_VERSION=//p' .env)"
+          [[ -n "$version" ]] || { echo "::error::GOVULNCHECK_VERSION not set in .env"; exit 1; }
+          mkdir -p tmp/vex
           # JSON output exits 0 with findings; the reachability verdicts go into the VEX.
-          go run "golang.org/x/vuln/cmd/govulncheck@${version}" -format json ./... > ../tmp/vex/govulncheck.json
+          (cd bindings/go && go run "golang.org/x/vuln/cmd/govulncheck@${version}" -format json ./...) > tmp/vex/govulncheck.json
 
       - name: Build OpenVEX
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
