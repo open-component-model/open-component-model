@@ -191,19 +191,6 @@ jobs:
       - name: Make binaries executable
         run: chmod +x ${{ env.CLI_DIR }}/tmp/bin/ocm-*
 
-      - name: Install Syft
-        uses: anchore/sbom-action/download-syft@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
-
-      - name: Generate SBOMs
-        run: |
-          mkdir -p ${{ env.CLI_DIR }}/tmp/sbom
-          for bin in ${{ env.CLI_DIR }}/tmp/bin/ocm-*; do
-            name="$(basename "$bin")"
-            echo "::group::SBOM for ${name}"
-            syft scan "file:${bin}" -o "spdx-json=${{ env.CLI_DIR }}/tmp/sbom/${name}.spdx.json"
-            echo "::endgroup::"
-          done
-
       - name: Assemble & Verify CTF
         env:
           VERSION: ${{ needs.version.outputs.version }}
@@ -219,48 +206,6 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           subject-path: "${{ env.CLI_DIR }}/tmp/bin/ocm-*"
 
-      - name: Attest SBOM (linux/amd64)
-        if: ${{ github.event_name != 'pull_request' }}
-        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
-        with:
-          subject-path: ${{ env.CLI_DIR }}/tmp/bin/ocm-linux-amd64
-          sbom-path: ${{ env.CLI_DIR }}/tmp/sbom/ocm-linux-amd64.spdx.json
-
-      - name: Attest SBOM (linux/arm64)
-        if: ${{ github.event_name != 'pull_request' }}
-        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
-        with:
-          subject-path: ${{ env.CLI_DIR }}/tmp/bin/ocm-linux-arm64
-          sbom-path: ${{ env.CLI_DIR }}/tmp/sbom/ocm-linux-arm64.spdx.json
-
-      - name: Attest SBOM (darwin/amd64)
-        if: ${{ github.event_name != 'pull_request' }}
-        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
-        with:
-          subject-path: ${{ env.CLI_DIR }}/tmp/bin/ocm-darwin-amd64
-          sbom-path: ${{ env.CLI_DIR }}/tmp/sbom/ocm-darwin-amd64.spdx.json
-
-      - name: Attest SBOM (darwin/arm64)
-        if: ${{ github.event_name != 'pull_request' }}
-        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
-        with:
-          subject-path: ${{ env.CLI_DIR }}/tmp/bin/ocm-darwin-arm64
-          sbom-path: ${{ env.CLI_DIR }}/tmp/sbom/ocm-darwin-arm64.spdx.json
-
-      - name: Attest SBOM (windows/amd64)
-        if: ${{ github.event_name != 'pull_request' }}
-        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
-        with:
-          subject-path: ${{ env.CLI_DIR }}/tmp/bin/ocm-windows-amd64
-          sbom-path: ${{ env.CLI_DIR }}/tmp/sbom/ocm-windows-amd64.spdx.json
-
-      - name: Attest SBOM (windows/arm64)
-        if: ${{ github.event_name != 'pull_request' }}
-        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
-        with:
-          subject-path: ${{ env.CLI_DIR }}/tmp/bin/ocm-windows-arm64
-          sbom-path: ${{ env.CLI_DIR }}/tmp/sbom/ocm-windows-arm64.spdx.json
-
       # Upload CLI binaries and OCI layout as build artifacts
       - name: Upload Artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -273,5 +218,4 @@ jobs:
           # OCI layout files
           path: |
             ${{ env.CLI_DIR }}/tmp/bin/ocm-*
-            ${{ env.CLI_DIR }}/tmp/sbom/*.spdx.json
             ${{ env.CLI_DIR }}/tmp/oci/*

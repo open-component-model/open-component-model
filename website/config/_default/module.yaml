@@ -21,8 +21,6 @@ mounts:
     target: data
   - source: data
     target: data
-  - source: ../.github/benchmarks
-    target: data/benchmarks
   - source: layouts
     target: layouts
   - files:

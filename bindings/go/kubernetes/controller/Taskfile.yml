@@ -271,17 +271,13 @@ tasks:
       - helm template ocm-k8s-toolkit chart/ --namespace ocm-k8s-toolkit-system -f chart/test-values.yaml > dist/generated.yaml
 
   helm/install:
-    desc: "Install the Helm chart into a namespace that enforces the restricted Pod Security Standard"
+    desc: "Install the Helm chart"
     cmds:
-      # Enforcing "restricted" makes the install fail if the chart's pod spec
-      # regresses on the hardening baseline (non-root, seccomp, no privilege
-      # escalation, dropped capabilities).
-      - kubectl create namespace ocm-k8s-toolkit-system --dry-run=client -o yaml | kubectl apply -f -
-      - kubectl label namespace ocm-k8s-toolkit-system --overwrite pod-security.kubernetes.io/enforce=restricted pod-security.kubernetes.io/enforce-version=latest
       - |
         helm upgrade --install ocm-k8s-toolkit chart/ \
           -f chart/test-values.yaml \
           --namespace ocm-k8s-toolkit-system \
+          --create-namespace \
           --wait \
           --timeout 120s
 

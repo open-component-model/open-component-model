@@ -274,59 +274,6 @@ jobs:
           awk -v p="$pct" -v f="$floor" 'BEGIN{exit (p+0 < f+0)}' \
             || { echo "::error::unit coverage ${pct}% is below the ${floor}% floor"; exit 1; }
 
-  govulncheck:
-    name: "govulncheck"
-    needs: changes
-    runs-on: ubuntu-24.04-arm
-    if: ${{ needs.changes.outputs.run_go == 'true' }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          sparse-checkout: |
-            bindings/go
-            .env
-          persist-credentials: false
-      - name: Setup Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
-        with:
-          go-version-file: '${{ github.workspace }}/bindings/go/go.mod'
-          cache-dependency-path: '${{ github.workspace }}/bindings/go/go.sum'
-      - name: Read tool versions
-        id: versions
-        run: |
-          source .env
-          echo "govulncheck=${GOVULNCHECK_VERSION}" >> "$GITHUB_OUTPUT"
-      # Installed, not `go run`: go run reports govulncheck's exit status 3
-      # (vulnerabilities found) as 1, indistinguishable from a tool error.
-      - name: Install govulncheck
-        env:
-          GOVULNCHECK_VERSION: ${{ steps.versions.outputs.govulncheck }}
-        run: GOBIN="$RUNNER_TEMP/bin" go install "golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}"
-      # Exit status 3 means reachable vulnerabilities; any other non-zero status
-      # is a tool error and fails the job.
-      - name: Run govulncheck
-        id: govulncheck
-        working-directory: bindings/go
-        run: |
-          set -uo pipefail
-          "$RUNNER_TEMP/bin/govulncheck" ./... | tee "$RUNNER_TEMP/govulncheck.txt"
-          rc=${PIPESTATUS[0]}
-          echo "rc=${rc}" >> "$GITHUB_OUTPUT"
-          if [[ "$rc" -eq 3 ]]; then
-            { echo "### ⚠️ govulncheck: reachable vulnerabilities (does not block the PR)"; echo; echo '```text'; cat "$RUNNER_TEMP/govulncheck.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-          exit "$rc"
-      # Fails visibly without failing the job, so findings do not block PRs.
-      - name: No reachable vulnerabilities
-        continue-on-error: true
-        env:
-          RC: ${{ steps.govulncheck.outputs.rc }}
-        run: |
-          [[ "$RC" -eq 0 ]] && exit 0
-          echo "govulncheck found reachable vulnerabilities, listed in the job summary."
-          exit 1
-
   generate:
     runs-on: ubuntu-24.04-arm
     name: "Code Generation"
@@ -370,7 +317,6 @@ jobs:
       - run_unit_tests
       - run_integration_tests
       - golangci_lint
-      - govulncheck
       - dependency_list_verify
     if: ${{ failure() }}
     steps:

@@ -106,10 +106,6 @@ helm install ocm-k8s-toolkit "oci://ghcr.io/open-component-model/kubernetes/cont
 The release name `ocm-k8s-toolkit` used above gives the controller's resources predictable names, such as the service account `ocm-k8s-toolkit-controller-manager`. If you install under a different release name — or via a GitOps tool such as Flux that alters the effective release name — add `--set fullnameOverride=ocm-k8s-toolkit` to keep these names stable. This matters when you [configure custom RBAC]({{< relref "/docs/how-to/custom-rbac.md" >}}), which binds to the service account by name.
 {{</callout>}}
 
-{{<callout context="tip" title="Hardened installations" icon="outline/shield-check">}}
-The chart ships an opt-in NetworkPolicy for the controller. Add `--set manager.networkPolicy.enabled=true` to admit only the health-probe (and, if enabled, metrics) port and allow egress to DNS, HTTPS and the Kubernetes API. It needs a CNI that enforces NetworkPolicy. For how the controller relates to FIPS 140-3, the DISA STIG, BSI IT-Grundschutz and other standards, see [Standards & Regulations]({{< relref "docs/reference/standards-and-regulations/_index.md" >}}).
-{{</callout>}}
-
 <details>
 <summary>You should see this output</summary>
 

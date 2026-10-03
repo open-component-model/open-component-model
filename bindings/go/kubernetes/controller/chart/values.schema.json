@@ -130,42 +130,14 @@
                         }
                     }
                 },
-                "networkPolicy": {
-                    "type": "object",
-                    "properties": {
-                        "egress": {
-                            "type": "array"
-                        },
-                        "enabled": {
-                            "type": "boolean"
-                        },
-                        "ingress": {
-                            "type": "array"
-                        }
-                    }
-                },
                 "nodeSelector": {
                     "type": "object"
                 },
                 "podSecurityContext": {
                     "type": "object",
                     "properties": {
-                        "runAsGroup": {
-                            "type": "integer"
-                        },
                         "runAsNonRoot": {
                             "type": "boolean"
-                        },
-                        "runAsUser": {
-                            "type": "integer"
-                        },
-                        "seccompProfile": {
-                            "type": "object",
-                            "properties": {
-                                "type": {
-                                    "type": "string"
-                                }
-                            }
                         }
                     }
                 },
@@ -249,9 +221,6 @@
                                     }
                                 }
                             }
-                        },
-                        "readOnlyRootFilesystem": {
-                            "type": "boolean"
                         }
                     }
                 },

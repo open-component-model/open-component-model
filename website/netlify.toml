@@ -11,7 +11,7 @@
   # CRDs are generated from api/v1alpha1 by `task manifests` and committed
   # under kubernetes/controller/config/crd/bases. The trigger follows the
   # Go source of truth so a forgotten regeneration still rebuilds the site.
-  ignore = "git diff --quiet origin/main HEAD -- . ../cli/docs/reference ../bindings/go/constructor/spec/v1/resources ../bindings/go/descriptor/v2/resources ../kubernetes/controller/api/v1alpha1 ../.github/benchmarks"
+  ignore = "git diff --quiet origin/main HEAD -- . ../cli/docs/reference ../bindings/go/constructor/spec/v1/resources ../bindings/go/descriptor/v2/resources ../kubernetes/controller/api/v1alpha1"
 
 [context.deploy-preview]
   command = "npm ci && npm run build -- --baseURL=$DEPLOY_PRIME_URL --buildDrafts --buildFuture"

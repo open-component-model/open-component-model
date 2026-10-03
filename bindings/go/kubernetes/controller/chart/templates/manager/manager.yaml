@@ -148,8 +148,6 @@ spec:
                   volumeMounts:
                     - mountPath: /data
                       name: data
-                    - mountPath: /tmp
-                      name: tmp
                     {{- if .Values.webhook.enable }}
                     - mountPath: /tmp/k8s-webhook-server/serving-certs
                       name: cert
@@ -166,8 +164,6 @@ spec:
             volumes:
                 - emptyDir: {}
                   name: data
-                - emptyDir: {}
-                  name: tmp
                 {{- if .Values.webhook.enable }}
                 - name: cert
                   secret:
