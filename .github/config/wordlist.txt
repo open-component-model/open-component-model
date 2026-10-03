@@ -894,6 +894,7 @@ uncomment
 uncommenting
 undefine
 unencrypted
+unforgeable
 unmarshal
 unmarshalled
 unmarshaller

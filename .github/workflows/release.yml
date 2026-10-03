@@ -379,13 +379,17 @@ jobs:
             --pattern "ocm-*" \
             --dir "${{ runner.temp }}/binaries"
 
+      # --signer-workflow pins the reusable workflow that signed each attestation
+      # (SLSA Build L3 via GitHub artifact attestations); --repo alone would also
+      # accept an attestation signed by any other workflow in the repository.
       - name: Verify CLI binary attestations
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           for file in ${{ runner.temp }}/binaries/ocm-*; do
             echo "Verifying $(basename "$file")..."
-            gh attestation verify "$file" --repo "$GH_REPO"
+            gh attestation verify "$file" --repo "$GH_REPO" \
+              --signer-workflow "$GH_REPO/.github/workflows/cli.yml"
           done
 
       - name: Verify CLI OCI attestation
@@ -393,21 +397,24 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           IMAGE_DIGEST: ${{ needs.build_and_test.outputs.cli_image_digest }}
         run: |
-          gh attestation verify "oci://$CLI_IMAGE@${IMAGE_DIGEST}" --repo "$GH_REPO"
+          gh attestation verify "oci://$CLI_IMAGE@${IMAGE_DIGEST}" --repo "$GH_REPO" \
+            --signer-workflow "$GH_REPO/.github/workflows/pipeline.yml"
 
       - name: Verify controller image attestation
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           IMAGE_DIGEST: ${{ needs.build_and_test.outputs.controller_image_digest }}
         run: |
-          gh attestation verify "oci://$CONTROLLER_IMAGE@${IMAGE_DIGEST}" --repo "$GH_REPO"
+          gh attestation verify "oci://$CONTROLLER_IMAGE@${IMAGE_DIGEST}" --repo "$GH_REPO" \
+            --signer-workflow "$GH_REPO/.github/workflows/pipeline.yml"
 
       - name: Verify chart attestation
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CHART_DIGEST: ${{ needs.build_and_test.outputs.controller_chart_digest }}
         run: |
-          gh attestation verify "oci://$CONTROLLER_CHART@${CHART_DIGEST}" --repo "$GH_REPO"
+          gh attestation verify "oci://$CONTROLLER_CHART@${CHART_DIGEST}" --repo "$GH_REPO" \
+            --signer-workflow "$GH_REPO/.github/workflows/pipeline.yml"
 
   promote_final:
     name: Promote Tags and Images
