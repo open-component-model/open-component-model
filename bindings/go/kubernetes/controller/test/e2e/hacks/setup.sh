@@ -129,8 +129,8 @@ run_step() {
 install_registries() {
   kubectl apply -f "${image_registries}" || return 1
   kubectl apply -f "${rbac}" || return 1
-  kubectl wait pod -l app=protected-registry1 --for condition=Ready --timeout 5m || return 1
-  kubectl wait pod -l app=protected-registry2 --for condition=Ready --timeout 5m || return 1
+  # Wait on the Deployments: a pod label selector matches nothing until the ReplicaSet has created the pods.
+  kubectl wait -n default deployment protected-registry1 protected-registry2 --for=condition=Available --timeout=5m || return 1
 }
 
 install_flux() {
