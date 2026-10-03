@@ -1,14 +1,56 @@
 package internal
 
 import (
+	"debug/buildinfo"
 	"errors"
 	"net/http"
 	"os"
 	"os/exec"
+	"runtime/debug"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
+
+func TestResolveBinary_CosignOnPathFIPSBuild(t *testing.T) {
+	withSettings := func(settings ...debug.BuildSetting) func(string) (*buildinfo.BuildInfo, error) {
+		return func(string) (*buildinfo.BuildInfo, error) { return &buildinfo.BuildInfo{Settings: settings}, nil }
+	}
+	tests := []struct {
+		name      string
+		fips      bool
+		readInfo  func(string) (*buildinfo.BuildInfo, error)
+		wantErr   string
+		wantReads bool
+	}{
+		{name: "FIPS build", fips: true, readInfo: withSettings(debug.BuildSetting{Key: "GOFIPS140", Value: "v1.26.0"}), wantReads: true},
+		{name: "GOFIPS140=latest", fips: true, readInfo: withSettings(debug.BuildSetting{Key: "GOFIPS140", Value: "latest"}), wantErr: "built with GOFIPS140=latest", wantReads: true},
+		{name: "no GOFIPS140", fips: true, readInfo: withSettings(debug.BuildSetting{Key: "CGO_ENABLED", Value: "0"}), wantErr: "built without GOFIPS140", wantReads: true},
+		{name: "unreadable build info", fips: true, readInfo: func(string) (*buildinfo.BuildInfo, error) { return nil, errors.New("not a Go binary") }, wantErr: "not a Go binary", wantReads: true},
+		{name: "non-FIPS build outside FIPS mode", readInfo: withSettings()},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			var reads bool
+			b := NewCosignBinary()
+			b.LookPath = func(string) (string, error) { return "/fake/bin/cosign", nil }
+			b.FIPSEnabled = func() bool { return tc.fips }
+			b.ReadBuildInfo = func(p string) (*buildinfo.BuildInfo, error) { reads = true; return tc.readInfo(p) }
+
+			path, err := b.resolveBinary(t.Context())
+			r.Equal(tc.wantReads, reads)
+			if tc.wantErr != "" {
+				r.ErrorIs(err, ErrCosignNotFIPSBuild)
+				r.ErrorContains(err, tc.wantErr)
+				r.Empty(b.binaryPath, "a rejected cosign must not be cached")
+				return
+			}
+			r.NoError(err)
+			r.Equal("/fake/bin/cosign", path)
+		})
+	}
+}
 
 // recordingTransport fails every request and records that one was made.
 type recordingTransport struct{ called bool }

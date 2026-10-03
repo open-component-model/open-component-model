@@ -70,10 +70,12 @@ On the verify side: TUF supplies the current trust roots, OCM validates the Fulc
 - Optional: `yq`and `jq` for inspecting the signature bundle (not required for signing or verification)
 
 {{< callout context="note" title="Install the cosign CLI" icon="outline/info-circle" >}}
-The OCM CLI invokes the `cosign` binary (v3.0.4 or later) under the hood, so install
-[cosign](https://github.com/sigstore/cosign?tab=readme-ov-file#installation) and make sure it is on your PATH.
-Official OCM builds run in FIPS 140-3 mode, where OCM does not download cosign. Only with `GODEBUG=fips140=off`
-does OCM download and cache it under `~/.cache/ocm/cosign/...` when none is on your PATH. See the
+The OCM CLI invokes the `cosign` binary (v3.0.4 or later) under the hood, so it must be on your PATH.
+Official OCM builds run in FIPS 140-3 mode, where OCM only accepts a cosign built against the Go
+Cryptographic Module and does not download one. Build it with
+`CGO_ENABLED=0 GOFIPS140=v1.26.0 go install github.com/sigstore/cosign/v3/cmd/cosign@v3.1.3`. With
+`GODEBUG=fips140=off`, any [cosign](https://github.com/sigstore/cosign?tab=readme-ov-file#installation) works,
+and OCM downloads and caches it under `~/.cache/ocm/cosign/...` when none is on your PATH. See the
 [FIPS reference]({{< relref "docs/reference/fips.md" >}}#sigstore-and-cosign).
 {{< /callout >}}
 

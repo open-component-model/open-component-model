@@ -38,7 +38,7 @@ Go Cryptographic Module, FIPS mode changes OCM's behavior in these places:
 | --- | --- | --- |
 | TLS connections | Only FIPS-approved TLS versions, cipher suites and key exchanges | [Effects of FIPS Mode](#effects-of-fips-mode) |
 | Signing and verification | Resource and component reference digests must use SHA-256 or SHA-512 | [Digest Algorithms](#digest-algorithms) |
-| Sigstore signing | OCM does not download `cosign`; it must be on `PATH` | [Sigstore and cosign](#sigstore-and-cosign) |
+| Sigstore signing | `cosign` must be on `PATH` and built against a frozen Go Cryptographic Module; OCM does not download it | [Sigstore and cosign](#sigstore-and-cosign) |
 | GPG signing | `gpg` must use a `libgcrypt` that runs in FIPS mode | [GPG](#gpg) |
 
 **Module version.** The module version is pinned once, as `GOFIPS140` in the
@@ -48,9 +48,9 @@ of a newer version changes. The version is part of every binary's build
 information, see [Verifying a Binary](#verifying-a-binary).
 
 **Out of scope.** Whether the `libgcrypt` that `gpg` uses is FIPS validated
-(OCM only checks that it runs in FIPS mode), how external `cosign` builds are
-built, and code outside the Go Cryptographic Module, such as
-`golang.org/x/crypto`. See [Known Limitations](#known-limitations).
+(OCM only checks that it runs in FIPS mode), and code outside the Go
+Cryptographic Module, such as `golang.org/x/crypto`. See
+[Known Limitations](#known-limitations).
 
 **Reporting gaps.** Report FIPS-related problems or gaps as
 [GitHub issues](https://github.com/open-component-model/open-component-model/issues).
@@ -286,7 +286,7 @@ binary:
 | Feature | Where the cryptography runs |
 | --- | --- |
 | GPG signing and verification | OCM runs the GnuPG `gpg` binary (>= 2.2.0) from `PATH`, so all OpenPGP cryptography runs in its `libgcrypt`. In FIPS mode, OCM requires that `libgcrypt` runs in FIPS mode, but cannot check that it is FIPS validated, see [GPG](#gpg). |
-| Sigstore/cosign signing and verification | OCM runs the `cosign` binary from `PATH`. In FIPS mode, OCM does not download cosign when none is found, because the upstream release is not a FIPS build. Provide your own FIPS build, see [Sigstore and cosign](#sigstore-and-cosign). |
+| Sigstore/cosign signing and verification | OCM runs the `cosign` binary from `PATH`. In FIPS mode, OCM requires a cosign built against a frozen Go Cryptographic Module and does not download one, see [Sigstore and cosign](#sigstore-and-cosign). |
 
 In a FIPS-restricted environment, use RSA signing, or Sigstore with a FIPS
 build of `cosign`. Progress on GPG is tracked in
@@ -295,11 +295,20 @@ build of `cosign`. Progress on GPG is tracked in
 ### Sigstore and cosign
 
 OCM's Sigstore signing handler runs the external `cosign` binary from `PATH`.
-Neither the OCM CLI binaries nor the CLI image include `cosign`. When none is
-found, OCM fails in FIPS mode with `downloading cosign is disabled in FIPS 140-3
-mode`, and does not use a previously downloaded one either, because the
-upstream release is not a FIPS build. Only outside FIPS mode
-(`GODEBUG=fips140=off`) does it download and cache the upstream release.
+Neither the OCM CLI binaries nor the CLI image include `cosign`. In FIPS mode:
+
+- The `cosign` on `PATH` must be built against a frozen Go Cryptographic Module.
+  OCM reads the Go build information of the binary, the same data that
+  `go version -m` shows, and requires `GOFIPS140=v<version>`. Otherwise it fails
+  with `in FIPS 140-3 mode, Sigstore signing requires a cosign built against a
+  frozen Go Cryptographic Module`. The upstream cosign releases are not such
+  builds.
+- When no `cosign` is on `PATH`, OCM fails with `downloading cosign is disabled
+  in FIPS 140-3 mode` instead of downloading the upstream release, and does not
+  use a previously downloaded one either.
+
+Outside FIPS mode (`GODEBUG=fips140=off`), any `cosign` >= v3.0.4 works, and
+OCM downloads and caches the upstream release when none is on `PATH`.
 
 cosign builds unmodified against the Go Cryptographic Module. Build it with the
 same `GOFIPS140` value as OCM; the cosign version OCM is tested with is pinned in
