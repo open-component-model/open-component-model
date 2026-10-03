@@ -234,7 +234,7 @@ binary:
 | Feature | Where the cryptography runs |
 | --- | --- |
 | GPG signing and verification | OCM runs the GnuPG `gpg` binary (>= 2.2.0) from `PATH`, so all OpenPGP cryptography runs in its `libgcrypt`. It is FIPS-covered only with a FIPS 140-3 validated `libgcrypt` in FIPS mode, see [GPG](#gpg). |
-| Sigstore/cosign signing and verification | OCM runs the `cosign` binary from `PATH`. When none is found, it downloads the upstream release, which is not a FIPS build. Provide your own FIPS build instead, see [Sigstore and cosign](#sigstore-and-cosign). |
+| Sigstore/cosign signing and verification | OCM runs the `cosign` binary from `PATH`. In FIPS mode, OCM does not download cosign when none is found, because the upstream release is not a FIPS build. Provide your own FIPS build, see [Sigstore and cosign](#sigstore-and-cosign). |
 
 In a FIPS-restricted environment, use RSA signing, or Sigstore with a FIPS
 build of `cosign`. Progress on GPG is tracked in
@@ -242,10 +242,12 @@ build of `cosign`. Progress on GPG is tracked in
 
 ### Sigstore and cosign
 
-OCM's Sigstore signing handler runs the external `cosign` binary. It uses the
-first `cosign` on `PATH` and only downloads the upstream release, which is not a
-FIPS build, when none is found. Neither the OCM CLI binaries nor the CLI image
-include `cosign`.
+OCM's Sigstore signing handler runs the external `cosign` binary from `PATH`.
+Neither the OCM CLI binaries nor the CLI image include `cosign`. When none is
+found, OCM fails in FIPS mode with `downloading cosign is disabled in FIPS 140-3
+mode`, and does not use a previously downloaded one either, because the
+upstream release is not a FIPS build. Only outside FIPS mode
+(`GODEBUG=fips140=off`) does it download and cache the upstream release.
 
 cosign builds unmodified against the Go Cryptographic Module. Build it with the
 same `GOFIPS140` value as OCM; the cosign version OCM is tested with is pinned in

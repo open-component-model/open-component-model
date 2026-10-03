@@ -3,6 +3,7 @@ package internal
 import (
 	"bytes"
 	"context"
+	"crypto/fips140"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -34,11 +35,13 @@ type CosignBinary struct {
 	OperationTimeout time.Duration                                                          // zero means use defaultOperationTimeout
 	ExecCosign       func(ctx context.Context, binaryPath string, args, env []string) error // runs a cosign subcommand; args[0] is the subcommand name
 	LookPath         func(file string) (string, error)                                      // locates the cosign binary on PATH
+	FIPSEnabled      func() bool                                                            // reports FIPS 140-3 mode; true disables the cosign download
 }
 
 func NewCosignBinary() *CosignBinary {
 	b := &CosignBinary{
-		HttpClient: &http.Client{Timeout: defaultHTTPClientTimeout},
+		HttpClient:  &http.Client{Timeout: defaultHTTPClientTimeout},
+		FIPSEnabled: fips140.Enabled,
 	}
 	b.ExecCosign = b.execCosign
 	b.LookPath = exec.LookPath
@@ -71,6 +74,12 @@ func (b *CosignBinary) Verify(ctx context.Context, dataPath, bundlePath string, 
 	return b.ExecCosign(ctx, path, args, env)
 }
 
+// ErrCosignDownloadInFIPSMode is returned when no cosign is on PATH in FIPS
+// 140-3 mode. OCM then neither downloads the upstream release nor uses a
+// previously downloaded one, because those are not FIPS builds.
+var ErrCosignDownloadInFIPSMode = errors.New("cosign binary not found on PATH; downloading cosign is disabled in FIPS 140-3 mode " +
+	"because the upstream release is not a FIPS build: install a cosign built with GOFIPS140 and ensure it is on PATH")
+
 func (b *CosignBinary) resolveBinary(ctx context.Context) (string, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -84,6 +93,9 @@ func (b *CosignBinary) resolveBinary(ctx context.Context) (string, error) {
 		}
 		b.binaryPath = path
 		return path, nil
+	}
+	if b.FIPSEnabled != nil && b.FIPSEnabled() {
+		return "", ErrCosignDownloadInFIPSMode
 	}
 	path, dlErr := ensureOrDownloadCosign(ctx, b.HttpClient)
 	if dlErr != nil {
