@@ -43,6 +43,8 @@ tasks:
         # single -coverprofile, which gotestsum's final rerun overwrites). Both
         # runs below write into it concurrently; file names are unique per process.
         rm -rf coverage.integration.covdir && mkdir -p coverage.integration.covdir
+        # The packages mostly wait on containers, not CPU, so run all of a call's packages at
+        # once (-p) instead of one per CPU.
         run_integration() {
           local junit="$1"; shift
           go run gotest.tools/gotestsum@"${GOTESTSUM_VERSION}" \
@@ -51,11 +53,15 @@ tasks:
             --rerun-fails=2 \
             --rerun-fails-max-failures=5 \
             --packages="$*" \
-            -- -run "Integration" -count=1 -coverpkg=./... -args -test.gocoverdir="$PWD/coverage.integration.covdir"
+            -- -p "$#" -run "Integration" -count=1 -coverpkg=./... -args -test.gocoverdir="$PWD/coverage.integration.covdir"
         }
 
+        # -run "Integration" only selects top-level tests whose name contains "Integration".
+        # Build and run only the packages that declare one: every other package would still
+        # compile a test binary instrumented with -coverpkg=./..., link it, and run nothing.
+        integration_pkgs=$(go list $(grep -rlE --include='*_test.go' '^func Test[A-Za-z0-9_]*Integration' . | xargs -n1 dirname | sort -u))
         sigstore_pkg=$(go list ./sigstore/integration)
-        run_integration junit.xml $(go list ./... | grep -vxF "$sigstore_pkg") &
+        run_integration junit.xml $(echo "$integration_pkgs" | grep -vxF "$sigstore_pkg") &
         rest_pid=$!
 
         rc=0
