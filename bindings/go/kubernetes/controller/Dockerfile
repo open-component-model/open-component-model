@@ -35,9 +35,11 @@ ARG GOFIPS140
 # running both at once. That keeps peak memory at roughly a single build and
 # lets the second arch reuse the warmed caches. Dropping `-a` avoids force
 # rebuilding the entire standard library on every build.
+# GOTOOLCHAIN=local: build with the image's Go only; a toolchain mismatch with
+# go.mod fails instead of downloading another toolchain.
 RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked \
     --mount=type=cache,target=/root/.cache/go-build,sharing=locked \
-    CGO_ENABLED=0 GOFIPS140="${GOFIPS140:?GOFIPS140 build arg is required, see root .env}" GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -tags "${GO_TAGS}" -o manager ./kubernetes/controller/cmd
+    CGO_ENABLED=0 GOTOOLCHAIN=local GOFIPS140="${GOFIPS140:?GOFIPS140 build arg is required, see root .env}" GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -tags "${GO_TAGS}" -o manager ./kubernetes/controller/cmd
 
 # CA bundle from the Garden Linux FIPS image. The manager is a static binary
 # built against the Go Cryptographic Module (GOFIPS140) and needs nothing else.

@@ -103,6 +103,8 @@ tasks:
 
   build:target:
     # GOFIPS140 (root .env) selects the Go FIPS 140-3 module for the build.
+    # GOTOOLCHAIN=local: build with the installed Go only; a mismatch with the
+    # toolchain in go.mod fails instead of downloading another toolchain.
     dotenv: ['{{.TASKFILE_DIR}}/../../../.env']
     desc: "Build CLI for a specific GOOS/GOARCH target"
     internal: true
@@ -113,7 +115,7 @@ tasks:
       - tmp/resources/ocm-{{ .GOOS }}-{{ .GOARCH }}.yaml
     cmds:
       - cmd: |
-          CGO_ENABLED=0 GOOS={{ .GOOS }} GOARCH={{ .GOARCH }} go build \
+          CGO_ENABLED=0 GOTOOLCHAIN=local GOOS={{ .GOOS }} GOARCH={{ .GOARCH }} go build \
             -ldflags "-s -w -X ocm.software/open-component-model/bindings/go/cli/cmd/version.BuildVersion={{ .BUILD_VERSION }}" \
             -o {{ .TASKFILE_DIR }}/tmp/bin/ocm-{{ .GOOS }}-{{ .GOARCH }}
       - |
