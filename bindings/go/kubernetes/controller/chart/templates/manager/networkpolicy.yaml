@@ -1,0 +1,48 @@
+{{- if .Values.manager.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+    labels:
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        app.kubernetes.io/name: {{ include "ocm-k8s-toolkit.name" . }}
+        helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        control-plane: controller-manager
+    name: {{ include "ocm-k8s-toolkit.resourceName" (dict "suffix" "controller-manager" "context" $) }}
+    namespace: {{ .Release.Namespace }}
+spec:
+    podSelector:
+        matchLabels:
+            app.kubernetes.io/name: {{ include "ocm-k8s-toolkit.name" . }}
+            app.kubernetes.io/instance: {{ .Release.Name }}
+            control-plane: controller-manager
+    policyTypes:
+        - Ingress
+        - Egress
+    ingress:
+        - ports:
+            - port: {{ .Values.manager.livenessProbe.port }}
+              protocol: TCP
+            {{- if ne (.Values.manager.metricsServer.bindAddress | toString) "0" }}
+            - port: {{ regexFind "[0-9]+$" (toString .Values.manager.metricsServer.bindAddress) | int }}
+              protocol: TCP
+            {{- end }}
+        {{- with .Values.manager.networkPolicy.ingress }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    egress:
+        {{- if .Values.manager.networkPolicy.egress }}
+        {{- toYaml .Values.manager.networkPolicy.egress | nindent 8 }}
+        {{- else }}
+        - ports:
+            - port: 53
+              protocol: UDP
+            - port: 53
+              protocol: TCP
+        - ports:
+            - port: 443
+              protocol: TCP
+            - port: 6443
+              protocol: TCP
+        {{- end }}
+{{- end }}

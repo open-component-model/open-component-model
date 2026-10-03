@@ -3,6 +3,7 @@ package download
 import (
 	"bytes"
 	"compress/gzip"
+	"crypto/fips140"
 	"context"
 	"errors"
 	"fmt"
@@ -302,7 +303,16 @@ type objectEncoder interface {
 	Encode(plumbing.EncodedObject) error
 }
 
-func storeObject(t *testing.T, repo *git.Repository, obj objectEncoder) plumbing.Hash {
+// The fixture helpers below run outside strict FIPS enforcement, the way
+// [Download] runs go-git: Git hashes objects with SHA-1.
+
+func storeObject(t *testing.T, repo *git.Repository, obj objectEncoder) (hash plumbing.Hash) {
+	t.Helper()
+	fips140.WithoutEnforcement(func() { hash = encodeObject(t, repo, obj) })
+	return hash
+}
+
+func encodeObject(t *testing.T, repo *git.Repository, obj objectEncoder) plumbing.Hash {
 	t.Helper()
 	r := require.New(t)
 	encoded := repo.Storer.NewEncodedObject()
@@ -312,7 +322,13 @@ func storeObject(t *testing.T, repo *git.Repository, obj objectEncoder) plumbing
 	return hash
 }
 
-func storeBlob(t *testing.T, repo *git.Repository, content string) plumbing.Hash {
+func storeBlob(t *testing.T, repo *git.Repository, content string) (hash plumbing.Hash) {
+	t.Helper()
+	fips140.WithoutEnforcement(func() { hash = writeBlob(t, repo, content) })
+	return hash
+}
+
+func writeBlob(t *testing.T, repo *git.Repository, content string) plumbing.Hash {
 	t.Helper()
 	r := require.New(t)
 	encoded := repo.Storer.NewEncodedObject()
@@ -334,7 +350,13 @@ type repositoryFixture struct {
 	First, Second plumbing.Hash
 }
 
-func newRepository(t *testing.T) repositoryFixture {
+func newRepository(t *testing.T) (fixture repositoryFixture) {
+	t.Helper()
+	fips140.WithoutEnforcement(func() { fixture = buildRepository(t) })
+	return fixture
+}
+
+func buildRepository(t *testing.T) repositoryFixture {
 	t.Helper()
 
 	r := require.New(t)

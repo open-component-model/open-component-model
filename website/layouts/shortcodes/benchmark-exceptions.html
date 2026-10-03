@@ -1,0 +1,57 @@
+{{- $scanner := .Get 0 -}}
+{{- if not $scanner -}}
+  {{- errorf "benchmark-exceptions shortcode: missing required positional parameter (\"trivy\" or \"kubescape\") at %s" .Position -}}
+{{- end -}}
+{{- if eq $scanner "trivy" -}}
+  {{- $data := (hugo.Data).benchmarks.trivyignore -}}
+  {{- if not $data -}}
+    {{- errorf "benchmark-exceptions shortcode: data file benchmarks/trivyignore.yaml not found — check the data mount in module.yaml" -}}
+  {{- end -}}
+  {{- $findings := $data.misconfigurations -}}
+  {{- if not $findings -}}
+    {{- errorf "benchmark-exceptions shortcode: trivyignore.yaml has no misconfigurations" -}}
+  {{- end -}}
+<table>
+<thead><tr><th>Check</th><th>Template</th><th>Rationale</th></tr></thead>
+<tbody>
+  {{- range $findings }}
+<tr>
+<td><a href="https://avd.aquasec.com/misconfig/{{ .id | lower }}">{{ .id }}</a></td>
+<td>{{ delimit .paths ", " }}</td>
+<td>{{ .statement }}</td>
+</tr>
+  {{- end }}
+</tbody>
+</table>
+{{- else if eq $scanner "kubescape" -}}
+  {{- $data := index (hugo.Data).benchmarks "kubescape-exceptions" -}}
+  {{- if not $data -}}
+    {{- errorf "benchmark-exceptions shortcode: data file benchmarks/kubescape-exceptions.json not found — check the data mount in module.yaml" -}}
+  {{- end -}}
+<table>
+<thead><tr><th>Control(s)</th><th>Resources</th><th>Rationale</th></tr></thead>
+<tbody>
+  {{- range $data }}
+  {{- $ids := slice -}}
+  {{- range .posturePolicies -}}
+    {{- $ids = $ids | append .controlID -}}
+  {{- end -}}
+  {{- $links := slice -}}
+  {{- range $ids -}}
+    {{- $links = $links | append (printf "<a href=\"https://hub.armosec.io/docs/%s\">%s</a>" (. | lower) .) -}}
+  {{- end -}}
+  {{- $resources := slice -}}
+  {{- range .resources -}}
+    {{- $resources = $resources | append (printf "%s/%s" .attributes.kind .attributes.name) -}}
+  {{- end -}}
+<tr>
+<td>{{ delimit $links ", " | safeHTML }}</td>
+<td>{{ delimit $resources ", " }}</td>
+<td>{{ .reason }}</td>
+</tr>
+  {{- end }}
+</tbody>
+</table>
+{{- else -}}
+  {{- errorf "benchmark-exceptions shortcode: unknown scanner %q at %s — expected \"trivy\" or \"kubescape\"" $scanner .Position -}}
+{{- end -}}

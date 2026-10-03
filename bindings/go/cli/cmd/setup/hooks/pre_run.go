@@ -1,6 +1,7 @@
 package hooks
 
 import (
+	"crypto/fips140"
 	"fmt"
 	"log/slog"
 
@@ -29,6 +30,8 @@ func PreRunEWithConfig(cmd *cobra.Command, cfg Config) error {
 		return fmt.Errorf("get logger: %w", err)
 	}
 	slog.SetDefault(logger)
+	slog.DebugContext(cmd.Context(), "FIPS 140-3 mode",
+		slog.Bool("enabled", fips140.Enabled()), slog.String("module", fips140.Version()))
 
 	setup.Syscalls(cmd)
 	// Best-effort first-startup auto configuration. Failures must not block command execution.

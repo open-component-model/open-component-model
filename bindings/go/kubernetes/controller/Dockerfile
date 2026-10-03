@@ -22,6 +22,9 @@ COPY . .
 # GO_TAGS is empty by default; pass GO_TAGS=pprof to get a debug image that
 # serves profiles on --pprof-bind-address.
 ARG GO_TAGS=""
+# Go Cryptographic Module version (FIPS 140-3). Required; the source of truth is
+# GOFIPS140 in the project root .env, passed in by `task docker-build/multi-arch`.
+ARG GOFIPS140
 # the GOARCH has not a default value to allow the binary be built according to the host where the command
 # was called. For example, if we call task docker-build in a local env which has the Apple Silicon M1 SO
 # the docker BUILDPLATFORM arg will be linux/arm64 when for Apple x86 it will be linux/amd64. Therefore,
@@ -32,15 +35,19 @@ ARG GO_TAGS=""
 # running both at once. That keeps peak memory at roughly a single build and
 # lets the second arch reuse the warmed caches. Dropping `-a` avoids force
 # rebuilding the entire standard library on every build.
+# GOTOOLCHAIN=local: build with the image's Go only; a toolchain mismatch with
+# go.mod fails instead of downloading another toolchain.
 RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked \
     --mount=type=cache,target=/root/.cache/go-build,sharing=locked \
-    CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -tags "${GO_TAGS}" -o manager ./kubernetes/controller/cmd
+    CGO_ENABLED=0 GOTOOLCHAIN=local GOFIPS140="${GOFIPS140:?GOFIPS140 build arg is required, see root .env}" GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -tags "${GO_TAGS}" -o manager ./kubernetes/controller/cmd
 
-# Use distroless as minimal base image to package the manager binary
-# Refer to https://github.com/GoogleContainerTools/distroless for more details
-FROM gcr.io/distroless/static:nonroot@sha256:e2e927ec666bae08560abb3c55d0659eceabb657f56b6782ab500a9fc7f555e3
-WORKDIR /
-COPY --from=builder /workspace/manager .
+# CA bundle from the Garden Linux FIPS image. The manager is a static binary
+# built against the Go Cryptographic Module (GOFIPS140) and needs nothing else.
+FROM --platform=${BUILDPLATFORM} ghcr.io/gardenlinux/gardenlinux/fips:1877.25@sha256:74ae1f81d0723434024f591d8c2872852201b99b9f18c0fbe10221b16e60e01d AS certs
+
+FROM scratch
+COPY --from=certs /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+COPY --from=builder /workspace/manager /manager
 USER 65532:65532
 
 ENTRYPOINT ["/manager"]
