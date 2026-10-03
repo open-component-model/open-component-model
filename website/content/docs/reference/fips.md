@@ -312,7 +312,23 @@ such builds.
 | `fips140=off` | Used | Downloaded |
 
 To keep Sigstore signing inside the FIPS boundary, provide a FIPS build of
-cosign.
+cosign: build it yourself as shown below, or use a commercial FIPS image of
+cosign, such as Chainguard's
+[`cosign-fips`](https://images.chainguard.dev/directory/image/cosign-fips/overview)
+or the FIPS variant of the Docker Hardened Image
+[`dhi.io/cosign`](https://hub.docker.com/hardened-images/catalog/dhi/cosign).
+These images use the OpenSSL FIPS provider instead of the Go Cryptographic
+Module, so their `cosign` only works inside the image. Copy the static `ocm`
+binary into such an image instead of copying `cosign` out:
+
+```dockerfile
+FROM <registry>/cosign-fips:<tag>
+COPY --from=ghcr.io/open-component-model/cli:<version> /ocm /usr/local/bin/ocm
+ENTRYPOINT ["/usr/local/bin/ocm"]
+```
+
+OCM's check only recognizes `GOFIPS140` builds, so with `fips140=only` it
+rejects these images' `cosign`; with the default `fips140=on` it uses them.
 
 cosign builds unmodified against the Go Cryptographic Module. Build it with the
 same `GOFIPS140` value as OCM; the cosign version OCM is tested with is pinned in

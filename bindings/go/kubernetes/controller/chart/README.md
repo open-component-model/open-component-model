@@ -85,7 +85,7 @@ Kubernetes: `>=1.26.0-0`
 | manager.metricsServer.enableHttp2 | bool | `false` | Enable HTTP/2 for metrics and webhook servers |
 | manager.metricsServer.secure | bool | `false` | Serve metrics endpoint securely |
 | manager.nodeSelector | object | `{}` | Node selector for pod scheduling |
-| manager.podSecurityContext | object | `{"runAsNonRoot":true,"seccompProfile":{"type":"RuntimeDefault"}}` | Pod-level security context |
+| manager.podSecurityContext | object | `{"runAsGroup":65532,"runAsNonRoot":true,"runAsUser":65532,"seccompProfile":{"type":"RuntimeDefault"}}` | Pod-level security context |
 | manager.readinessProbe.initialDelaySeconds | int | `5` | Initial delay before starting readiness probes |
 | manager.readinessProbe.path | string | `"/readyz"` | Path for the readiness probe |
 | manager.readinessProbe.periodSeconds | int | `10` | Period between readiness probes |
