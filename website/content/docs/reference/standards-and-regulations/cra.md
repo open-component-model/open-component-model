@@ -96,8 +96,11 @@ provides the upstream vulnerability handling that manufacturers can build on.
 
 From 11 September 2026, manufacturers must report actively exploited
 vulnerabilities and severe incidents to the CSIRT of their Member State and to
-ENISA within 24 hours (early warning), 72 hours (main notification), and 14
-days / 1 month (final report). These reports go through the
+ENISA within 24 hours (early warning) and 72 hours (main notification). The
+final report is due 14 days after a corrective or mitigating measure is
+available for an actively exploited vulnerability, and one month after the
+incident notification for a severe incident (Article 14). These reports go
+through the
 [ENISA CRA Single Reporting Platform](https://www.enisa.europa.eu/tools/cra-single-reporting-platform).
 
 OCM's steward, the Linux Foundation, handles regulatory reporting for

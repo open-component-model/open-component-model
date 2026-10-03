@@ -530,6 +530,7 @@ jobs:
       packages: write
       id-token: write
       attestations: write
+      artifact-metadata: write
       actions: read
     uses: $/.github/workflows/controller-chart-final.yml
     with:

@@ -298,7 +298,9 @@ jobs:
           echo "govulncheck=${GOVULNCHECK_VERSION}" >> "$GITHUB_OUTPUT"
       - name: Run govulncheck
         working-directory: bindings/go
-        run: go run golang.org/x/vuln/cmd/govulncheck@${{ steps.versions.outputs.govulncheck }} ./...
+        env:
+          GOVULNCHECK_VERSION: ${{ steps.versions.outputs.govulncheck }}
+        run: go run "golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}" ./...
 
   generate:
     runs-on: ubuntu-24.04-arm

@@ -51,6 +51,7 @@ jobs:
       packages: write
       id-token: write
       attestations: write
+      artifact-metadata: write
     steps:
       - name: Compute image refs (lowercase owner)
         env:

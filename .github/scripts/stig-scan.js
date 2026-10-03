@@ -202,6 +202,9 @@ export async function evaluate(out) {
         // oscap exits 2 when a rule fails; anything else non-zero is an evaluation error.
         if (code !== "0" && code !== "2") errors.push(`${name} evaluation error (exit ${code}), see ${out}/${name}.log`);
     }
+    for (const name of ["gpos", "ocm"]) {
+        if (!new RegExp(`^${name} \\d+$`, "m").test(exits)) errors.push(`${name} evaluation did not complete`);
+    }
 
     /** @type {Record<string, RuleResult[]>} */
     const evaluations = {};

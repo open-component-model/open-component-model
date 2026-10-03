@@ -8,11 +8,12 @@ toc: true
 This page describes how the OCM release artifacts align with the
 [SLSA](https://slsa.dev) (Supply-chain Levels for Software Artifacts) Build
 track, as defined in [SLSA v1.2](https://slsa.dev/spec/v1.2/), the current
-version. Every released artifact carries a GitHub build provenance
-attestation. Since OCM 0.20.0, all of them are attested from a reusable
-workflow, which is GitHub's recipe for Build Level 3, and the release workflow
-verifies the signing workflow of each attestation before promoting a release.
-Remaining gaps are documented below.
+version. Every released CLI binary, OCI image, and Helm chart carries a GitHub
+build provenance attestation. Since OCM 0.20.0, all of them are attested from a
+reusable workflow, which is GitHub's recipe for Build Level 3, and the release
+workflow verifies the signing workflow of each attestation before promoting a
+release. OCM component versions are signed, not provenance-attested; this and
+other gaps are documented below.
 
 ## SLSA Build Track Summary
 

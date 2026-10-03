@@ -20,11 +20,13 @@ provides as evidence so that you or your assessor can make that determination.
 
 The SSDF is the technical foundation of the
 [CISA Secure Software Development Attestation Form](https://www.cisa.gov/resources-tools/resources/secure-software-development-attestation-form),
-which US federal agencies may require software producers to complete under OMB
-Memorandum M-22-18 and its successor M-26-05. Software producers that sell to
-the US federal government must attest that they follow SSDF practices. The
-mapping below helps users of OCM understand which SSDF practices the project
-already addresses and where gaps remain.
+introduced under OMB Memorandum M-22-18.
+[OMB Memorandum M-26-05](https://www.whitehouse.gov/wp-content/uploads/2026/01/M-26-05-Adopting-a-Risk-based-Approach-to-Software-and-Hardware-Security.pdf)
+rescinded M-22-18 and M-23-16 in January 2026: federal agencies now set
+software-assurance requirements based on risk and may still use the attestation
+form, and agency or contract-specific requirements can apply. The mapping below
+helps users of OCM understand which SSDF practices the project already
+addresses and where gaps remain.
 
 ## Practice Groups
 
