@@ -34,8 +34,7 @@ on:
       - '.github/workflows/pipeline.yml'
       - '.env'
       - '.github/stig/**'
-      - '.github/scripts/stig-scan.sh'
-      - '.github/scripts/stig-summary.js'
+      - '.github/scripts/stig-scan.js'
   workflow_call:
     inputs:
       ref:

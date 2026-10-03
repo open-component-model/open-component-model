@@ -4,7 +4,7 @@
   checks against a Wolfi root filesystem. tailoring.xml deselects those rules
   for OCM's scratch images; the rules below check the same requirements against
   what the images actually contain, with the OVAL definitions in
-  ocm-supplement-oval.xml. stig-scan.sh sets the Values per image.
+  ocm-supplement-oval.xml. stig-scan.js sets the Values per image.
 -->
 <Benchmark xmlns="http://checklists.nist.gov/xccdf/1.2"
            id="xccdf_software.ocm_benchmark_gpos-container-supplement" resolved="1" xml:lang="en">

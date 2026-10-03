@@ -18,7 +18,7 @@
     <definition class="compliance" id="oval:software.ocm:def:1" version="1">
       <metadata>
         <title>Entrypoint is built against a frozen Go Cryptographic Module in FIPS mode</title>
-        <description>The Go build information of the entrypoint binary records GOFIPS140=v&lt;version&gt; and a DefaultGODEBUG that enables fips140. OVAL file probes stop at the first NUL byte and cannot read a binary, so stig-scan.sh reads both build settings from the entrypoint and passes them as variables.</description>
+        <description>The Go build information of the entrypoint binary records GOFIPS140=v&lt;version&gt; and a DefaultGODEBUG that enables fips140. OVAL file probes stop at the first NUL byte and cannot read a binary, so stig-scan.js reads both build settings from the entrypoint and passes them as variables.</description>
       </metadata>
       <criteria operator="AND">
         <criterion test_ref="oval:software.ocm:tst:1" comment="GOFIPS140 names a frozen module version"/>

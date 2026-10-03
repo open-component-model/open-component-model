@@ -171,7 +171,7 @@ The scan runs offline on the exported root filesystem. To scan an image
 locally:
 
 ```shell
-.github/scripts/stig-scan.sh <image> bindings/go/cli/Containerfile tmp/stig
+node .github/scripts/stig-scan.js <image> bindings/go/cli/Containerfile tmp/stig
 ```
 
 `tmp/stig` then contains the XCCDF results and HTML reports of both

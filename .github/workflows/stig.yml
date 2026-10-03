@@ -72,23 +72,17 @@ jobs:
           skopeo --override-arch "${ARCH}" --override-os linux copy \
             "oci-archive:tmp/artifact/${OCI_TAR}" "docker-daemon:ocm-stig:${IMAGE}-${ARCH}"
 
+      # Scans, writes the job summary, and fails on any failed rule.
       - name: Scan
-        env:
-          IMAGE: ${{ matrix.image }}
-          ARCH: ${{ matrix.arch }}
-          CONTAINERFILE: ${{ matrix.containerfile }}
-        run: .github/scripts/stig-scan.sh "ocm-stig:${IMAGE}-${ARCH}" "${CONTAINERFILE}" "tmp/stig/${IMAGE}-${ARCH}"
-
-      - name: Report
-        if: ${{ !cancelled() }}
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         env:
+          IMAGE_REF: ocm-stig:${{ matrix.image }}-${{ matrix.arch }}
+          CONTAINERFILE: ${{ matrix.containerfile }}
           RESULTS_DIR: tmp/stig/${{ matrix.image }}-${{ matrix.arch }}
-          IMAGE: ${{ matrix.image }}
-          ARCH: ${{ matrix.arch }}
+          SUMMARY_TITLE: ${{ matrix.image }} (linux/${{ matrix.arch }})
         with:
           script: |
-            const script = await import('${{ github.workspace }}/.github/scripts/stig-summary.js');
+            const script = await import('${{ github.workspace }}/.github/scripts/stig-scan.js');
             await script.default({ core });
 
       - name: Upload reports
