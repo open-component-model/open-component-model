@@ -13,6 +13,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 func TestGetSupportedHash(t *testing.T) {
@@ -73,6 +74,75 @@ func TestIsSafelyDigestible(t *testing.T) {
 		}},
 	}
 	assert.Error(t, IsSafelyDigestible(comp3))
+}
+
+func TestValidateDigestHashAlgorithms(t *testing.T) {
+	meta := func(name string) descruntime.ElementMeta {
+		return descruntime.ElementMeta{ObjectMeta: descruntime.ObjectMeta{Name: name, Version: "v1"}}
+	}
+	access := &runtime.Raw{Type: runtime.NewVersionedType("OCIImage", "v1")}
+	digest := func(hash string) *descruntime.Digest {
+		return &descruntime.Digest{HashAlgorithm: hash, NormalisationAlgorithm: "genericBlobDigest/v1", Value: "abcd"}
+	}
+	resource := func(name string, d *descruntime.Digest) descruntime.Resource {
+		return descruntime.Resource{ElementMeta: meta(name), Access: access, Digest: d}
+	}
+	withResources := func(res ...descruntime.Resource) *descruntime.Component {
+		return &descruntime.Component{Resources: res}
+	}
+	withReference := func(d *descruntime.Digest) *descruntime.Component {
+		return &descruntime.Component{References: []descruntime.Reference{{ElementMeta: meta("ref"), Digest: *d}}}
+	}
+
+	tests := []struct {
+		name    string
+		comp    *descruntime.Component
+		wantErr string
+	}{
+		{name: "resource SHA-256 (lowercase, no dash)", comp: withResources(resource("res", digest("sha256")))},
+		{name: "resource SHA-512", comp: withResources(resource("res", digest("SHA-512")))},
+		{name: "resource excluded from signature", comp: withResources(resource("res", descruntime.NewExcludeFromSignatureDigest()))},
+		{name: "resource MD5", comp: withResources(resource("res", digest("MD5"))), wantErr: `"MD5" in resource for res:v1`},
+		{name: "resource SHA-1", comp: withResources(resource("res", digest("SHA-1"))), wantErr: `"SHA-1" in resource for res:v1`},
+		{
+			name:    "MD5 behind an incomplete digest on another resource",
+			comp:    withResources(resource("incomplete", nil), resource("weak", digest("MD5"))),
+			wantErr: `"MD5" in resource for weak:v1`,
+		},
+		{name: "reference SHA-512", comp: withReference(digest("SHA-512"))},
+		{name: "reference SHA-1", comp: withReference(digest("SHA-1")), wantErr: `"SHA-1" in componentReference for ref:v1`},
+		{name: "reference NO-DIGEST", comp: withReference(digest(descruntime.NoDigest)), wantErr: `"NO-DIGEST" in componentReference for ref:v1`},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			err := ValidateDigestHashAlgorithms(tc.comp)
+			if tc.wantErr == "" {
+				r.NoError(err)
+				return
+			}
+			r.ErrorIs(err, ErrUnsupportedDigestHash)
+			r.ErrorContains(err, tc.wantErr)
+
+			// IsSafelyDigestible, which the controller enforces, rejects the
+			// algorithm only in FIPS 140-3 mode.
+			setFIPSMode(t, true)
+			r.True(DigestHashAlgorithmsEnforced())
+			r.ErrorIs(IsSafelyDigestible(tc.comp), ErrUnsupportedDigestHash)
+			setFIPSMode(t, false)
+			r.False(DigestHashAlgorithmsEnforced())
+			r.NotErrorIs(IsSafelyDigestible(tc.comp), ErrUnsupportedDigestHash)
+		})
+	}
+}
+
+// setFIPSMode overrides the FIPS 140-3 mode seen by this package for the
+// duration of the test, independent of how the test binary was built.
+func setFIPSMode(t *testing.T, enabled bool) {
+	t.Helper()
+	original := fipsEnabled
+	fipsEnabled = func() bool { return enabled }
+	t.Cleanup(func() { fipsEnabled = original })
 }
 
 // Tests for GenerateDigest

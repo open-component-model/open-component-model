@@ -200,6 +200,31 @@ level=DEBUG msg="FIPS 140-3 mode" enabled=true module=v1.26.0
 `enabled=false` means the binary was built without `GOFIPS140` or was started
 with `GODEBUG=fips140=off`.
 
+## Digest Algorithms
+
+A component signature covers the normalized component descriptor, which is
+hashed with SHA-256 or SHA-512. Resources and component references are
+covered only through the digests recorded in the descriptor, so those digests
+are security-relevant: with a weak hash such as MD5 or SHA-1, content could be
+swapped under a valid signature.
+
+In FIPS 140-3 mode, OCM therefore requires every resource and component
+reference digest to use SHA-256 or SHA-512:
+
+| Operation | FIPS mode | Outside FIPS mode |
+| --- | --- | --- |
+| `ocm sign cv` | Fails with `refusing to sign component version in FIPS 140-3 mode: unsupported digest hash algorithm` | Signs, logs a warning |
+| `ocm verify cv` | Fails with `refusing to verify component version in FIPS 140-3 mode: unsupported digest hash algorithm` | Verifies, logs a warning |
+| Controller signature verification | Fails the resolution | Not affected |
+
+Resources excluded from the signature (`NO-DIGEST` / `EXCLUDE-FROM-SIGNATURE`)
+are exempt. Digests that OCM computes itself, for example when adding a
+component version from a constructor, already use SHA-256, and downloading a
+resource accepts only SHA-256 digests in any mode.
+
+MD5 and SHA-1 remain usable for purposes that are not security-relevant, such
+as Git object IDs or caching.
+
 ## Known Limitations
 
 FIPS mode only covers cryptography that runs through the Go Cryptographic

@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"crypto"
+	"crypto/fips140"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -23,6 +25,22 @@ const (
 	// It is used to prevent meaningless digest claims.
 	AccessTypeNone = "None"
 )
+
+// ErrUnsupportedDigestHash is returned when a resource or component reference
+// digest uses a hash algorithm other than SHA-256 or SHA-512.
+var ErrUnsupportedDigestHash = errors.New("unsupported digest hash algorithm")
+
+// fipsEnabled reports whether the Go Cryptographic Module runs in FIPS 140-3
+// mode. It is a variable so tests can exercise both modes.
+var fipsEnabled = fips140.Enabled
+
+// DigestHashAlgorithmsEnforced reports whether reference and resource digests
+// must use SHA-256 or SHA-512 (see ValidateDigestHashAlgorithms). This is the
+// case in FIPS 140-3 mode, where a signature must not rest on a non-approved
+// hash; outside FIPS mode callers should only warn.
+func DigestHashAlgorithmsEnforced() bool {
+	return fipsEnabled()
+}
 
 // VerifyDigestMatchesDescriptor ensures that a descriptor matches a digest
 // provided by a signature. This validates descriptor integrity against the
@@ -127,9 +145,21 @@ func GenerateDigest(
 //     it must also have a complete digest.
 //   - Resources without access: they must not carry a digest (enforced to prevent
 //     meaningless digest claims).
+//   - Digest algorithms (FIPS 140-3 mode only, see DigestHashAlgorithmsEnforced):
+//     reference and resource digests must use SHA-256 or SHA-512. The signature
+//     covers resources and references only through these digests, so a weak
+//     hash such as MD5 or SHA-1 would let content be swapped under a valid
+//     signature. Resources explicitly excluded from the signature
+//     (NO-DIGEST / EXCLUDE-FROM-SIGNATURE) are exempt.
 //
 // Returns nil if all rules are satisfied, otherwise returns the first violation.
 func IsSafelyDigestible(cd *descruntime.Component) error {
+	if DigestHashAlgorithmsEnforced() {
+		if err := ValidateDigestHashAlgorithms(cd); err != nil {
+			return err
+		}
+	}
+
 	for _, reference := range cd.References {
 		if reference.Digest.HashAlgorithm == "" ||
 			reference.Digest.NormalisationAlgorithm == "" ||
@@ -151,6 +181,51 @@ func IsSafelyDigestible(cd *descruntime.Component) error {
 		}
 	}
 	return nil
+}
+
+// ValidateDigestHashAlgorithms checks that every set resource and component
+// reference digest uses SHA-256 or SHA-512, and returns an error wrapping
+// ErrUnsupportedDigestHash for the first one that does not. It checks
+// regardless of FIPS mode; use DigestHashAlgorithmsEnforced to decide whether a
+// violation is fatal. Empty digests and resources excluded from the signature
+// are not its concern; IsSafelyDigestible covers completeness.
+func ValidateDigestHashAlgorithms(cd *descruntime.Component) error {
+	for _, reference := range cd.References {
+		if alg := reference.Digest.HashAlgorithm; alg != "" && !isApprovedDigestHash(alg) {
+			return fmt.Errorf("%w %q in componentReference for %s:%s (use SHA-256 or SHA-512)",
+				ErrUnsupportedDigestHash, alg, reference.Name, reference.Version)
+		}
+	}
+	for _, res := range cd.Resources {
+		if res.Digest == nil || res.Digest.HashAlgorithm == "" || isExcludedFromSignature(res.Digest) {
+			continue
+		}
+		if !isApprovedDigestHash(res.Digest.HashAlgorithm) {
+			return fmt.Errorf("%w %q in resource for %s:%s (use SHA-256 or SHA-512)",
+				ErrUnsupportedDigestHash, res.Digest.HashAlgorithm, res.Name, res.Version)
+		}
+	}
+	return nil
+}
+
+// isApprovedDigestHash reports whether a reference or resource digest uses
+// SHA-256 or SHA-512. Both "SHA-256" and "sha256" spellings occur in
+// descriptors, so the comparison ignores case and dashes.
+func isApprovedDigestHash(name string) bool {
+	switch strings.ToUpper(strings.ReplaceAll(name, "-", "")) {
+	case "SHA256", "SHA512":
+		return true
+	default:
+		return false
+	}
+}
+
+// isExcludedFromSignature reports whether a resource digest is the explicit
+// marker that keeps the resource content out of the signature. It matches the
+// marker the same way the repository's download verification does.
+func isExcludedFromSignature(d *descruntime.Digest) bool {
+	return strings.EqualFold(d.HashAlgorithm, descruntime.NoDigest) ||
+		strings.EqualFold(d.NormalisationAlgorithm, descruntime.ExcludeFromSignature)
 }
 
 // hasUsableAccess checks if a resource has an access type other than "None".
