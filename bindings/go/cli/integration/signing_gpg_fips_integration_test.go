@@ -37,7 +37,7 @@ func Test_Integration_Signing_GPG_FIPS(t *testing.T) {
 	r.NoError(err)
 	bin := filepath.Join(dir, "ocm")
 	build := exec.CommandContext(t.Context(), goBin, "build", "-o", bin, "ocm.software/open-component-model/bindings/go/cli")
-	build.Env = append(os.Environ(), "GOOS=linux", "GOARCH="+runtime.GOARCH, "CGO_ENABLED=0", "GOFIPS140=v1.0.0")
+	build.Env = append(os.Environ(), "GOOS=linux", "GOARCH="+runtime.GOARCH, "CGO_ENABLED=0", "GOFIPS140=certified")
 	out, err := build.CombinedOutput()
 	r.NoError(err, "build FIPS CLI: %s", out)
 	info, err := buildinfo.ReadFile(bin)
@@ -48,7 +48,7 @@ func Test_Integration_Signing_GPG_FIPS(t *testing.T) {
 			fipsSetting = s.Value
 		}
 	}
-	r.True(strings.HasPrefix(fipsSetting, "v1.0.0"), "GOFIPS140 build setting %q", fipsSetting)
+	r.True(strings.HasPrefix(fipsSetting, "v"), "GOFIPS140=certified must resolve to a frozen module version, got %q", fipsSetting)
 
 	writeGPGKeyPair(t, dir, "protected", "fips-test-passphrase")
 	writeGPGKeyPair(t, dir, "plain", "")

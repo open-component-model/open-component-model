@@ -29,8 +29,8 @@ compliance guarantees.
 **Default and opt-out.** FIPS mode is on by default (`fips140=on`), so there is
 no separate FIPS build. Outside regulated environments you can turn it off with
 `GODEBUG=fips140=off`. `GODEBUG=fips140=only` additionally rejects external
-binaries that run outside the FIPS boundary, but has caveats, see
-[Runtime Modes](#runtime-modes).
+binaries that run outside the FIPS boundary. It is meant for testing and
+assessment, not for production, see [Runtime Modes](#runtime-modes).
 
 **What changes in FIPS mode.** Besides the cryptography itself running in the
 Go Cryptographic Module, FIPS mode changes OCM's behavior in these places:
@@ -42,11 +42,13 @@ Go Cryptographic Module, FIPS mode changes OCM's behavior in these places:
 | Sigstore signing | A `cosign` that is not a FIPS build, or a downloaded one, is used and logged at debug level | Rejected; `cosign` must be on `PATH` and a FIPS build | [Sigstore and cosign](#sigstore-and-cosign) |
 | GPG signing | A `gpg` without a FIPS-mode `libgcrypt` is used and logged at debug level | Rejected | [GPG](#gpg) |
 
-**Module version.** The module version is pinned once, as `GOFIPS140` in the
-repository's root `.env`. OCM uses the newest module version that is validated
-or on the CMVP Modules In Process List, and bumps the pin when the CMVP status
-of a newer version changes. The version is part of every binary's build
-information, see [Verifying a Binary](#verifying-a-binary).
+**Module version.** OCM builds with `GOFIPS140=certified`, set once in the
+repository's root `.env`. `certified` selects the newest Go Cryptographic Module
+version that has a CMVP validation certificate, as recorded by the Go
+toolchain the release is built with. When a newer module version is certified,
+OCM releases pick it up with the next Go toolchain update; no pin needs to
+change. The resolved version is part of every binary's build information, see
+[Verifying a Binary](#verifying-a-binary).
 
 **Out of scope.** Whether the `libgcrypt` that `gpg` uses is FIPS validated
 (OCM only checks that it runs in FIPS mode), and code outside the Go
@@ -67,8 +69,8 @@ that ships with the current Go toolchain.
 
 | Setting | Value |
 | --- | --- |
-| Build setting | `GOFIPS140=v1.26.0` |
-| Module version in the binary | `v1.26.0` |
+| Build setting | `GOFIPS140=certified` |
+| Module version in the binary | `v1.0.0` (build information: `GOFIPS140=v1.0.0-c2097c7c`) |
 | Default runtime setting | `GODEBUG=fips140=on` |
 
 Setting `GOFIPS140` at build time does two things:
@@ -79,32 +81,29 @@ Setting `GOFIPS140` at build time does two things:
 
 ### Validation Status
 
-{{< callout context="caution" >}}
-The Go Cryptographic Module in the OCM binaries has no CMVP validation
-certificate yet:
+- **Go Cryptographic Module v1.0.0**, used by current OCM releases, is validated:
+  [CMVP Certificate #5247](https://csrc.nist.gov/projects/cryptographic-module-validation-program/certificate/5247).
+  Its [Security Policy](https://csrc.nist.gov/CSRC/media/projects/cryptographic-module-validation-program/documents/security-policies/140sp5247.pdf)
+  lists the tested operating environments, and section 11.1 names the build
+  information that marks a correctly configured binary:
+  `build GOFIPS140=v1.0.0-c2097c7c`.
+- **Go Cryptographic Module v1.26.0** is on the
+  [CMVP Modules In Process List](https://csrc.nist.gov/Projects/cryptographic-module-validation-program/modules-in-process/modules-in-process-list)
+  (status as of 2026-10-02: *Comment Resolution - CMVP*). OCM switches to it
+  automatically through `GOFIPS140=certified` once it is certified and a Go
+  release marks it as such.
 
-- **Go Cryptographic Module v1.26.0** is in the *Comment Resolution - CMVP*
-  stage (since 2026-09-10) on the
-  [CMVP Modules In Process List](https://csrc.nist.gov/Projects/cryptographic-module-validation-program/modules-in-process/modules-in-process-list).
-  Its algorithms are covered by
-  [CAVP Certificate A8028](https://csrc.nist.gov/projects/cryptographic-algorithm-validation-program/details?validation=40638).
-
-Status as of 2026-10-02; check the list for the current state.
-
-Until the module is validated, check with your compliance owner whether
-modules on the Modules In Process List meet your requirements. The previous
-Go Cryptographic Module v1.0.0 is validated
-([CMVP Certificate #5247](https://csrc.nist.gov/projects/cryptographic-module-validation-program/certificate/5247)),
-but it was frozen from Go 1.24, and Go removes it once v1.26.0 is validated.
-{{< /callout >}}
+v1.0.0 was frozen from Go 1.24. Standard library features added to the module
+later, such as `crypto/mldsa`, are not available in OCM until the module
+version changes.
 
 ## Artifacts
 
 | Artifact | Build | Image contents |
 | --- | --- | --- |
-| `ocm` CLI binaries (all OS/architectures) | `GOFIPS140=v1.26.0`, `CGO_ENABLED=0` | — |
-| OCM CLI image | `GOFIPS140=v1.26.0`, `CGO_ENABLED=0` | `scratch` with `ocm` and the CA bundle |
-| OCM controller image | `GOFIPS140=v1.26.0`, `CGO_ENABLED=0` | `scratch` with `manager` and the CA bundle |
+| `ocm` CLI binaries (all OS/architectures) | `GOFIPS140=certified`, `CGO_ENABLED=0` | — |
+| OCM CLI image | `GOFIPS140=certified`, `CGO_ENABLED=0` | `scratch` with `ocm` and the CA bundle |
+| OCM controller image | `GOFIPS140=certified`, `CGO_ENABLED=0` | `scratch` with `manager` and the CA bundle |
 
 Both images are built `FROM scratch`. They contain only the static binary
 (`/ocm` or `/manager`, the entrypoint) and a CA bundle at
@@ -162,7 +161,12 @@ You control the runtime mode with the `GODEBUG` environment variable.
 OCM runs in `fips140=on` mode by default, which allows non-approved algorithms
 instead of rejecting them. Parts of the dependency tree use non-approved
 algorithms for non-security purposes, such as content addressing and legacy
-digests. The FIPS 140-3 Security Policy does not require `fips140=only`.
+digests. The Security Policy of the Go Cryptographic Module does not require
+`fips140=only`: the module enters and leaves its approved mode per service and
+reports the state through a service indicator (Security Policy sections 2.4
+and 4.4), and Go
+[documents](https://go.dev/doc/security/fips140#the-fips140-godebug-option)
+`only` as "not intended to be used in production".
 
 With `fips140=only`, OCM refuses to run `cosign` or `gpg` outside the FIPS
 boundary. Go's own enforcement, however, applies to every Go program OCM starts,
@@ -214,7 +218,7 @@ Expected output:
 
 ```text
 build DefaultGODEBUG=fips140=on
-build GOFIPS140=v1.26.0
+build GOFIPS140=v1.0.0-c2097c7c
 ```
 
 `-o gobuildinfojson` prints the same information as JSON. For the CLI image,
@@ -237,7 +241,7 @@ Both binaries log the FIPS state at startup, as reported by
 The controller logs it at `info` level on every start:
 
 ```text
-INFO setup FIPS 140-3 mode {"enabled": true, "module": "v1.26.0"}
+INFO setup FIPS 140-3 mode {"enabled": true, "module": "v1.0.0"}
 ```
 
 The CLI logs it at `debug` level for every command, so it does not add noise to
@@ -248,7 +252,7 @@ ocm --loglevel debug get cv <reference>
 ```
 
 ```text
-level=DEBUG msg="FIPS 140-3 mode" enabled=true module=v1.26.0
+level=DEBUG msg="FIPS 140-3 mode" enabled=true module=v1.0.0
 ```
 
 `enabled=false` means the binary was built without `GOFIPS140` or was started
@@ -351,18 +355,18 @@ CLI image. The cosign version OCM is tested with is pinned in
 `bindings/go/sigstore/signing/handler/internal/.env`:
 
 ```shell
-CGO_ENABLED=0 GOFIPS140=v1.26.0 \
+CGO_ENABLED=0 GOFIPS140=certified \
   go install -trimpath -ldflags="-s -w" github.com/sigstore/cosign/v3/cmd/cosign@v3.1.3
 ```
 
-Check the build information. The output must contain `GOFIPS140=v1.26.0`,
+Check the build information. The output must contain `GOFIPS140=v<version>`,
 `CGO_ENABLED=0`, and `fips140=on` in `DefaultGODEBUG`:
 
 ```shell
 $ go version -m "$(go env GOPATH)/bin/cosign" | grep -E 'GOFIPS140|CGO_ENABLED|DefaultGODEBUG'
         build   DefaultGODEBUG=fips140=on,tracebacklabels=0,x509sslcertoverrideplatform=0
         build   CGO_ENABLED=0
-        build   GOFIPS140=v1.26.0
+        build   GOFIPS140=v1.0.0-c2097c7c
 ```
 
 To build for another platform, set `GOOS` and `GOARCH`. `go install` then writes
@@ -457,7 +461,7 @@ To build FIPS binaries yourself, use the same settings as the release build
 (`build:target` in `bindings/go/cli/Taskfile.yml`). Run this from `bindings/go`:
 
 ```shell
-CGO_ENABLED=0 GOFIPS140=v1.26.0 go build \
+CGO_ENABLED=0 GOFIPS140=certified go build \
   -ldflags "-s -w -X ocm.software/open-component-model/bindings/go/cli/cmd/version.BuildVersion=<version>" \
   -o ocm ./cli
 ```
@@ -466,7 +470,7 @@ CGO_ENABLED=0 GOFIPS140=v1.26.0 go build \
 binaries do. The `GOFIPS140` build information that `go version -m` reads is
 kept.
 
-The module version is pinned once, as `GOFIPS140` in the repository's root
+The module setting lives once, as `GOFIPS140` in the repository's root
 `.env`. `task bindings/go/cli:build`, the controller image build
 (`task docker-build/multi-arch`), and the `bindings/go` test tasks all read it
 from there. The controller `Dockerfile` refuses to build without the
