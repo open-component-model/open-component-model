@@ -290,9 +290,9 @@ binary:
 | GPG signing and verification | OCM runs the GnuPG `gpg` binary (>= 2.2.0) from `PATH`, so all OpenPGP cryptography runs in its `libgcrypt`. OCM checks that `libgcrypt` runs in FIPS mode, but cannot check that it is FIPS validated, see [GPG](#gpg). |
 | Sigstore/cosign signing and verification | OCM runs the `cosign` binary from `PATH`, or downloads the upstream release, which is not a FIPS build. OCM checks whether `cosign` is a FIPS build, see [Sigstore and cosign](#sigstore-and-cosign). |
 
-In a FIPS-restricted environment, use RSA signing, or Sigstore with a FIPS
-build of `cosign`. Progress on GPG is tracked in
-[ocm-project#1327](https://github.com/open-component-model/ocm-project/issues/1327).
+In a FIPS-restricted environment, use RSA signing, Sigstore with a FIPS build
+of `cosign`, or GPG with a `gpg` whose `libgcrypt` runs in FIPS mode on an
+operating system with FIPS-validated cryptographic modules, see [GPG](#gpg).
 
 ### Sigstore and cosign
 
