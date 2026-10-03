@@ -360,8 +360,6 @@ In FIPS mode:
 - SHA-1 signatures, MD5, CAST5 and cv25519 are rejected. cv25519 is gpg's
   default encryption subkey, so pass an explicit algorithm such as `rsa3072` to
   `gpg --quick-gen-key`.
-- Garden Linux's `libgcrypt` is not a submitted Garden Linux module. FIPS mode
-  restricts the algorithms but does not make GPG signing validated.
 
 A statically linked `gpg` built from upstream sources is not a substitute:
 `libgcrypt`'s FIPS integrity self-check works only on the shared library, and
