@@ -1,6 +1,6 @@
 ---
 title: "FIPS 140-3"
-description: "Reference for FIPS 140-3 support in the OCM CLI and OCM controller: Go FIPS module, runtime modes, base images, and known limitations."
+description: "Reference for FIPS 140-3 support in the OCM CLI and OCM controller: support policy, Go FIPS module, runtime modes, images, and known limitations."
 icon: "🛡️"
 weight: 8
 toc: true
@@ -10,6 +10,51 @@ This page describes how the OCM CLI and the OCM controller support FIPS 140-3.
 OCM does not ship a separate FIPS variant. The regular binaries and container
 images are built for FIPS, so the same artifact runs in both normal and
 FIPS-restricted environments.
+
+## Support Policy
+
+**What OCM provides.** OCM binaries and images are built against a frozen
+version of the Go Cryptographic Module and run in FIPS 140-3 mode by default.
+OCM is not itself a cryptographic module and is not FIPS certified or
+validated; FIPS 140-3 validation applies to the cryptographic module it uses.
+See [Validation Status](#validation-status) for that module's current CMVP
+status.
+
+**What you are responsible for.** Whether a deployment meets your regulatory
+requirements depends on more than OCM: the node operating system and kernel,
+the external binaries OCM runs (`gpg`, `cosign`), your configuration, and your
+compliance regime. Check these with your compliance owner. OCM does not give
+compliance guarantees.
+
+**Default and opt-out.** FIPS mode is on by default (`fips140=on`), so there is
+no separate FIPS build. Outside regulated environments you can turn it off with
+`GODEBUG=fips140=off`. `GODEBUG=fips140=only` is not supported, see
+[Runtime Modes](#runtime-modes).
+
+**What changes in FIPS mode.** Besides the cryptography itself running in the
+Go Cryptographic Module, FIPS mode changes OCM's behavior in these places:
+
+| Area | In FIPS mode | Details |
+| --- | --- | --- |
+| TLS connections | Only FIPS-approved TLS versions, cipher suites and key exchanges | [Effects of FIPS Mode](#effects-of-fips-mode) |
+| Signing and verification | Resource and component reference digests must use SHA-256 or SHA-512 | [Digest Algorithms](#digest-algorithms) |
+| Sigstore signing | OCM does not download `cosign`; it must be on `PATH` | [Sigstore and cosign](#sigstore-and-cosign) |
+
+**Module version.** The module version is pinned once, as `GOFIPS140` in the
+repository's root `.env`. OCM uses the newest module version that is validated
+or on the CMVP Modules In Process List, and bumps the pin when the CMVP status
+of a newer version changes. The version is part of every binary's build
+information, see [Verifying a Binary](#verifying-a-binary).
+
+**Out of scope.** GPG signing (cryptography in GnuPG's `libgcrypt`), external
+`cosign` builds, and code outside the Go Cryptographic Module, such as
+`golang.org/x/crypto`, are not covered. See
+[Known Limitations](#known-limitations).
+
+**Reporting gaps.** Report FIPS-related problems or gaps as
+[GitHub issues](https://github.com/open-component-model/open-component-model/issues).
+Open work on GPG and cosign is tracked in
+[ocm-project#1327](https://github.com/open-component-model/ocm-project/issues/1327).
 
 ## Cryptographic Module
 
@@ -117,6 +162,12 @@ instead of rejecting them. Parts of the dependency tree use non-approved
 algorithms for non-security purposes, such as content addressing and legacy
 digests. The FIPS 140-3 Security Policy does not require `fips140=only`, and
 OCM does not support it.
+
+`GODEBUG` is inherited by every Go program OCM starts, including programs OCM
+does not control. For example, with `fips140=only` the Docker Desktop credential
+helper (`docker-credential-desktop`) panics on an internal MD5 use, so OCM cannot
+resolve registry credentials. `fips140=only` is still useful as a one-off audit:
+run a workload once to find non-approved algorithms in its call path.
 
 ### Effects of FIPS Mode
 
