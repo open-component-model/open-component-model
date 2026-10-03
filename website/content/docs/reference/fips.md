@@ -39,6 +39,7 @@ Go Cryptographic Module, FIPS mode changes OCM's behavior in these places:
 | TLS connections | Only FIPS-approved TLS versions, cipher suites and key exchanges | [Effects of FIPS Mode](#effects-of-fips-mode) |
 | Signing and verification | Resource and component reference digests must use SHA-256 or SHA-512 | [Digest Algorithms](#digest-algorithms) |
 | Sigstore signing | OCM does not download `cosign`; it must be on `PATH` | [Sigstore and cosign](#sigstore-and-cosign) |
+| GPG signing | `gpg` must use a `libgcrypt` that runs in FIPS mode | [GPG](#gpg) |
 
 **Module version.** The module version is pinned once, as `GOFIPS140` in the
 repository's root `.env`. OCM uses the newest module version that is validated
@@ -46,10 +47,10 @@ or on the CMVP Modules In Process List, and bumps the pin when the CMVP status
 of a newer version changes. The version is part of every binary's build
 information, see [Verifying a Binary](#verifying-a-binary).
 
-**Out of scope.** GPG signing (cryptography in GnuPG's `libgcrypt`), external
-`cosign` builds, and code outside the Go Cryptographic Module, such as
-`golang.org/x/crypto`, are not covered. See
-[Known Limitations](#known-limitations).
+**Out of scope.** Whether the `libgcrypt` that `gpg` uses is FIPS validated
+(OCM only checks that it runs in FIPS mode), how external `cosign` builds are
+built, and code outside the Go Cryptographic Module, such as
+`golang.org/x/crypto`. See [Known Limitations](#known-limitations).
 
 **Reporting gaps.** Report FIPS-related problems or gaps as
 [GitHub issues](https://github.com/open-component-model/open-component-model/issues).
@@ -284,7 +285,7 @@ binary:
 
 | Feature | Where the cryptography runs |
 | --- | --- |
-| GPG signing and verification | OCM runs the GnuPG `gpg` binary (>= 2.2.0) from `PATH`, so all OpenPGP cryptography runs in its `libgcrypt`. It is FIPS-covered only with a FIPS 140-3 validated `libgcrypt` in FIPS mode, see [GPG](#gpg). |
+| GPG signing and verification | OCM runs the GnuPG `gpg` binary (>= 2.2.0) from `PATH`, so all OpenPGP cryptography runs in its `libgcrypt`. In FIPS mode, OCM requires that `libgcrypt` runs in FIPS mode, but cannot check that it is FIPS validated, see [GPG](#gpg). |
 | Sigstore/cosign signing and verification | OCM runs the `cosign` binary from `PATH`. In FIPS mode, OCM does not download cosign when none is found, because the upstream release is not a FIPS build. Provide your own FIPS build, see [Sigstore and cosign](#sigstore-and-cosign). |
 
 In a FIPS-restricted environment, use RSA signing, or Sigstore with a FIPS
@@ -332,6 +333,12 @@ Cryptographic Module. OCM's keyless Sigstore flow does not use these key files.
 OCM signs and verifies GPG signatures by running the `gpg` binary on `PATH`.
 Neither the OCM CLI binaries nor the CLI image include it, and GPG signing does
 not work in the CLI image as is.
+
+In FIPS mode, OCM rejects a `gpg` whose `libgcrypt` does not run in FIPS mode.
+It asks `gpgconf --show-versions`, which must report `fips-mode:y`, so `gpgconf`
+must be on `PATH` as well. Otherwise GPG signing and verification fail with
+`in FIPS 140-3 mode, GPG signing requires a gpg whose libgcrypt runs in FIPS
+mode`. Outside FIPS mode (`GODEBUG=fips140=off`), any `gpg` >= 2.2.0 works.
 
 GnuPG does its cryptography in `libgcrypt`. For an approved-algorithms-only
 `gpg`, use the

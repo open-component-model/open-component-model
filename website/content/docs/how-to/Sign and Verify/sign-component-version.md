@@ -388,7 +388,13 @@ signatures:
 
 **Cause:** OCM delegates all OpenPGP operations to GnuPG, and no `gpg` binary was found on `PATH`.
 
-**Fix:** Install GnuPG 2.2 or later (`brew install gnupg`, `sudo apt-get install gnupg`, `sudo dnf install gnupg2`) and make sure `gpg` is on `PATH`. In FIPS 140-3 mode, use a GnuPG backed by a FIPS 140-3 validated libgcrypt.
+**Fix:** Install GnuPG 2.2 or later (`brew install gnupg`, `sudo apt-get install gnupg`, `sudo dnf install gnupg2`) and make sure `gpg` is on `PATH`.
+
+### Symptom: `in FIPS 140-3 mode, GPG signing requires a gpg whose libgcrypt runs in FIPS mode`
+
+**Cause:** Official OCM builds run in FIPS 140-3 mode by default, and the `libgcrypt` of your `gpg` does not run in FIPS mode (`gpgconf --show-versions` reports `fips-mode:n`), or `gpgconf` is not on `PATH`.
+
+**Fix:** Use a GnuPG whose `libgcrypt` runs in FIPS mode, see [FIPS 140-3: GPG]({{< relref "docs/reference/fips.md" >}}#gpg). Outside regulated environments, run OCM with `GODEBUG=fips140=off` instead.
 
 {{< /tab >}}
 {{< tab "Sigstore (interactive)" >}}

@@ -2,6 +2,12 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+// The GPG tests run the system gpg, which usually does not use a FIPS-mode
+// libgcrypt, so this package's test binary runs outside FIPS 140-3 mode even in
+// GOFIPS140 builds. Test_Integration_Signing_GPG_FIPS builds and runs a separate
+// FIPS-mode CLI against a FIPS-mode libgcrypt.
+//
+//go:debug fips140=off
 package integration
 
 import (
