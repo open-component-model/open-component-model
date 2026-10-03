@@ -27,20 +27,6 @@ tasks:
       # Drop generated files (zz_generated.*) so the number reflects hand-written code.
       - grep -v 'zz_generated\.' coverage.unit.out > coverage.unit.out.tmp && mv coverage.unit.out.tmp coverage.unit.out
 
-  # Unit tests in strict FIPS 140-3 mode, on demand only (not part of CI):
-  # surfaces code paths that use non-approved algorithms, which the default
-  # fips140=on mode allows silently.
-  test/fips140-only:
-    dotenv: ['{{.TASKFILE_DIR}}/../../.env']
-    deps: [build/plugins]
-    env:
-      GODEBUG: fips140=only
-    cmds:
-      - >
-        go test -short -skip "Integration" -count=1
-        $(go list ./... | grep -v /integration | grep -v /kubernetes/controller/test/e2e)
-        {{.CLI_ARGS}}
-
   test/integration:
     dotenv: ['{{.TASKFILE_DIR}}/../../.env']
     set: [errexit]

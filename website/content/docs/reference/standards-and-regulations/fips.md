@@ -163,9 +163,6 @@ approved algorithms only:
   publishes. Only these hashes run outside strict enforcement; the digest OCM
   records and signs is always SHA-256.
 
-To check OCM's own code paths, run the unit tests in strict mode with
-`task bindings/go:test/fips140-only`. This run is not part of CI.
-
 ### Effects of FIPS Mode
 
 In FIPS mode, the Go Cryptographic Module:
