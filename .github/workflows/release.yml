@@ -313,6 +313,14 @@ jobs:
     permissions:
       contents: read
     steps:
+      # Vulnerability findings do not block the release; listing them here puts
+      # them in front of the release manager before the release environment gate.
+      - name: Download image scan reports
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          pattern: image-scan-*
+          path: ${{ runner.temp }}/image-scan
+
       - name: Summarize RC release
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         env:
@@ -322,6 +330,7 @@ jobs:
           IMAGE_DIGEST: ${{ needs.build_and_test.outputs.controller_image_digest }}
           CHART_DIGEST: ${{ needs.build_and_test.outputs.controller_chart_digest }}
           CLI_IMAGE_DIGEST: ${{ needs.build_and_test.outputs.cli_image_digest }}
+          SCAN_DIR: ${{ runner.temp }}/image-scan
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
@@ -354,8 +363,38 @@ jobs:
                 ['OCM Controller Component', `${repo}//ocm.software/kubernetes/controller:${ver}`],
               ])
               .addEOL()
-              .addLink('View Release', release.data.html_url)
-              .write();
+              .addLink('View Release', release.data.html_url);
+
+            // Reachable vulnerabilities from the image scan (Trivy with the OpenVEX
+            // document), one report per image and architecture.
+            const fs = require('fs');
+            const path = require('path');
+            const rows = [];
+            const scanned = [];
+            for (const dir of fs.existsSync(process.env.SCAN_DIR) ? fs.readdirSync(process.env.SCAN_DIR) : []) {
+              const file = path.join(process.env.SCAN_DIR, dir, 'trivy.json');
+              if (!fs.existsSync(file)) continue;
+              const target = dir.replace(/^image-scan-/, '');
+              scanned.push(target);
+              for (const result of JSON.parse(fs.readFileSync(file, 'utf8')).Results ?? []) {
+                for (const v of result.Vulnerabilities ?? []) {
+                  rows.push([target, v.VulnerabilityID, v.Severity, v.PkgName, v.InstalledVersion, v.FixedVersion || '']);
+                }
+              }
+            }
+            core.summary.addHeading('Reachable Vulnerabilities', 3);
+            if (scanned.length === 0) {
+              core.summary.addRaw('⚠️ No image scan reports found; check the Image scan jobs.', true);
+            } else if (rows.length === 0) {
+              core.summary.addRaw(`None in ${scanned.join(', ')} (findings the OpenVEX document marks not_affected are excluded).`, true);
+            } else {
+              core.warning(`${rows.length} reachable vulnerabilities in the RC images; see the job summary before approving the release.`);
+              core.summary.addTable([
+                ['Image', 'ID', 'Severity', 'Package', 'Installed', 'Fixed'].map((data) => ({ data, header: true })),
+                ...rows,
+              ]);
+            }
+            await core.summary.write();
 
   # ===========================================================================
   # PHASE 2: FINAL RELEASE (after environment gate)
