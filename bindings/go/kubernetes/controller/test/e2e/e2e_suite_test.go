@@ -123,7 +123,8 @@ var _ = BeforeSuite(func(ctx SpecContext) {
 	})
 })
 
-var _ = AfterSuite(func(ctx SpecContext) {
+// Runs on parallel process 1 after all processes finish, so the exported controller log covers every spec.
+var _ = SynchronizedAfterSuite(func() {}, func(ctx SpecContext) {
 	logPath := os.Getenv("CONTROLLER_LOG_PATH")
 	if logPath != "" {
 		By("displays logs from the controller", func() {
