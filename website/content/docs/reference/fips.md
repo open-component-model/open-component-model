@@ -151,8 +151,8 @@ DISA publishes no STIG for container images. Like vendors of hardened images,
 OCM scans its images against the DISA General Purpose Operating System Security
 Requirements Guide (GPOS SRG) with OpenSCAP, using the open source
 [Chainguard GPOS SRG profile](https://github.com/chainguard-dev/stigs). The
-release pipeline scans the CLI and controller images it builds, and fails before
-publishing if any rule fails.
+release pipeline scans the linux/arm64 and linux/amd64 variants of the CLI and
+controller images it builds, and fails before publishing if any rule fails.
 
 The profile checks a Wolfi root filesystem in a few places. For OCM's `scratch`
 images, `.github/stig/tailoring.xml` deselects those rules, and
@@ -174,8 +174,8 @@ locally:
 ```
 
 `tmp/stig` then contains the XCCDF results and HTML reports of both
-evaluations. The pipeline uploads them as the `stig-cli` and `stig-controller`
-workflow artifacts.
+evaluations. The pipeline uploads them as `stig-<image>-<arch>` workflow
+artifacts, for example `stig-cli-amd64`.
 
 Node operating system and cluster STIGs, such as the Kubernetes STIG, are the
 platform operator's responsibility.
