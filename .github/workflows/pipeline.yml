@@ -32,6 +32,8 @@ on:
       - '.github/workflows/e2e.yml'
       - '.github/workflows/pipeline.yml'
       - '.env'
+      - '.github/stig/**'
+      - '.github/scripts/stig-scan.sh'
   workflow_call:
     inputs:
       ref:
@@ -126,11 +128,73 @@ jobs:
       cli_artifact: ${{ needs.build_cli.outputs.artifact_name }}
   # === end ===
 
+  # STIG scan of the CLI and controller images built above (arm64 variant),
+  # against the DISA GPOS SRG as tailored in .github/stig. Gates publish.
+  stig:
+    name: STIG (${{ matrix.image }})
+    needs: [build_cli, build_controller]
+    runs-on: ubuntu-24.04-arm
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: cli
+            artifact: ${{ needs.build_cli.outputs.artifact_name }}
+            oci_tar: oci/cli.tar
+            containerfile: bindings/go/cli/Containerfile
+          - image: controller
+            artifact: ${{ needs.build_controller.outputs.artifact_name }}
+            oci_tar: controller.tar
+            containerfile: bindings/go/kubernetes/controller/Dockerfile
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          sparse-checkout: |
+            .github/stig
+            .github/scripts/stig-scan.sh
+            .env
+            ${{ matrix.containerfile }}
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - name: Download image artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: ${{ matrix.artifact }}
+          path: tmp/artifact
+
+      - name: Ensure skopeo is installed
+        run: command -v skopeo || { sudo apt-get update -qq && sudo apt-get install -yqq skopeo; }
+
+      - name: Load image
+        env:
+          OCI_TAR: ${{ matrix.oci_tar }}
+          IMAGE: ${{ matrix.image }}
+        run: |
+          skopeo --override-arch arm64 --override-os linux copy \
+            "oci-archive:tmp/artifact/${OCI_TAR}" "docker-daemon:ocm-stig:${IMAGE}"
+
+      - name: Scan
+        env:
+          IMAGE: ${{ matrix.image }}
+          CONTAINERFILE: ${{ matrix.containerfile }}
+        run: .github/scripts/stig-scan.sh "ocm-stig:${IMAGE}" "${CONTAINERFILE}" "tmp/stig/${IMAGE}"
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: stig-${{ matrix.image }}
+          path: tmp/stig/${{ matrix.image }}
+          if-no-files-found: ignore
+
   # === New this part is a copy from cli.yml::build::branch-check + kubernetes-controller.yml::build::branch-check ===
   # Changes include things for the modified tag regex.
   decide_publish:
     name: Decide Publish
-    needs: [conformance, e2e]
+    needs: [conformance, e2e, stig]
     runs-on: ubuntu-24.04-arm
     outputs:
       publish: ${{ steps.check.outputs.publish }}

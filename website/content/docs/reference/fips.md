@@ -127,7 +127,7 @@ for the parts OCM controls:
 
 | Measure | CLI image | Controller image / chart |
 | --- | --- | --- |
-| Runs as non-root user `65532` | ✅ | ✅ (`runAsNonRoot: true`) |
+| Runs as non-root user `65532` | ✅ | ✅ (`runAsNonRoot`, `runAsUser`/`runAsGroup: 65532`) |
 | No setuid/setgid executables | ✅ (none shipped) | ✅ (none shipped) |
 | No shell or package manager | ✅ | ✅ |
 | No privilege escalation, all capabilities dropped | — | ✅ |
@@ -144,6 +144,38 @@ entry, so configuration mounted at `/.ocmconfig` or `/.docker/config.json` is
 found. Caches go to the world-writable `/.cache`, for any user ID. To read files
 that only your user can read, or to write into a mounted directory, run the
 container with `--user "$(id -u):$(id -g)"`.
+
+### STIG Scan
+
+DISA publishes no STIG for container images. Like vendors of hardened images,
+OCM scans its images against the DISA General Purpose Operating System Security
+Requirements Guide (GPOS SRG) with OpenSCAP, using the open source
+[Chainguard GPOS SRG profile](https://github.com/chainguard-dev/stigs). The
+release pipeline scans the CLI and controller images it builds, and fails before
+publishing if any rule fails.
+
+The profile checks a Wolfi root filesystem in a few places. For OCM's `scratch`
+images, `.github/stig/tailoring.xml` deselects those rules, and
+`.github/stig/ocm-supplement-xccdf.xml` checks the same SRG requirements against
+what the images contain:
+
+| SRG rules | Chainguard profile checks | OCM check |
+| --- | --- | --- |
+| SV-203649, SV-203739, SV-203750, SV-203751, SV-203776 | OpenSSL FIPS provider | Every Go executable has `GOFIPS140=v<version>` and `fips140=on` in its build information |
+| SV-263659 | Wolfi CA bundle digests | The only certificate file is the CA bundle of the digest-pinned Garden Linux base image |
+| SV-203675, SV-203716 | Shared library permissions | No shared libraries, dynamic loader, package manager, setuid/setgid files, or world-writable paths without the sticky bit |
+| SV-203616, SV-203617, SV-203664 | `/var/log` permissions | No on-disk log locations; logs go to stdout/stderr |
+
+The scan runs offline on the exported root filesystem. To scan an image
+locally:
+
+```shell
+.github/scripts/stig-scan.sh <image> bindings/go/cli/Containerfile tmp/stig
+```
+
+`tmp/stig` then contains the XCCDF results and HTML reports of both
+evaluations. The pipeline uploads them as the `stig-cli` and `stig-controller`
+workflow artifacts.
 
 Node operating system and cluster STIGs, such as the Kubernetes STIG, are the
 platform operator's responsibility.

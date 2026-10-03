@@ -336,6 +336,17 @@
       versioningTemplate: 'semver',
     },
     {
+      // Digest-pinned images in .env files, e.g. OPENSCAP_IMAGE (tag@sha256:...).
+      customType: 'regex',
+      managerFilePatterns: [
+        '/(^|/)\\.env(\\.local)?$/',
+      ],
+      matchStrings: [
+        '# renovate: datasource=docker depName=(?<depName>\\S+)\\s+\\w+_IMAGE=\\S+?:(?<currentValue>[^@\\s]+)@(?<currentDigest>sha256:[a-f0-9]{64})',
+      ],
+      datasourceTemplate: 'docker',
+    },
+    {
       // Automatic version bump for GO_VERSION, NPM_VERSION and NODE_VERSION in Netlify.
       customType: 'regex',
       managerFilePatterns: [
