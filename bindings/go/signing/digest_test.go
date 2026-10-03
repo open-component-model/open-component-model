@@ -125,24 +125,25 @@ func TestValidateDigestHashAlgorithms(t *testing.T) {
 			r.ErrorContains(err, tc.wantErr)
 
 			// IsSafelyDigestible, which the controller enforces, rejects the
-			// algorithm only in FIPS 140-3 mode.
-			setFIPSMode(t, true)
+			// algorithm only with GODEBUG=fips140=only.
+			setFIPSEnforced(t, true)
 			r.True(DigestHashAlgorithmsEnforced())
 			r.ErrorIs(IsSafelyDigestible(tc.comp), ErrUnsupportedDigestHash)
-			setFIPSMode(t, false)
+			setFIPSEnforced(t, false)
 			r.False(DigestHashAlgorithmsEnforced())
 			r.NotErrorIs(IsSafelyDigestible(tc.comp), ErrUnsupportedDigestHash)
 		})
 	}
 }
 
-// setFIPSMode overrides the FIPS 140-3 mode seen by this package for the
-// duration of the test, independent of how the test binary was built.
-func setFIPSMode(t *testing.T, enabled bool) {
+// setFIPSEnforced overrides whether this package sees FIPS 140-3 mode as
+// enforced (GODEBUG=fips140=only) for the duration of the test, independent of
+// how the test binary was built and run.
+func setFIPSEnforced(t *testing.T, enforced bool) {
 	t.Helper()
-	original := fipsEnabled
-	fipsEnabled = func() bool { return enabled }
-	t.Cleanup(func() { fipsEnabled = original })
+	original := fipsEnforced
+	fipsEnforced = func() bool { return enforced }
+	t.Cleanup(func() { fipsEnforced = original })
 }
 
 // Tests for GenerateDigest

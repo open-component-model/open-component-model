@@ -130,7 +130,7 @@ You control the runtime mode with the `GODEBUG` environment variable.
 | `GODEBUG` | Behavior |
 | --- | --- |
 | `fips140=on` (default) | FIPS mode is active. Approved algorithms run in their FIPS-compliant form, and non-approved algorithms such as MD5 and SHA-1 stay available. |
-| `fips140=only` | Like `on`, but non-approved algorithms return an error or panic, and OCM rejects a `cosign` or `gpg` that runs outside the FIPS boundary. Go documents this as a best-effort mode for testing and assessment, not for production. |
+| `fips140=only` | Like `on`, but non-approved algorithms return an error or panic. OCM also rejects a `cosign` or `gpg` that runs outside the FIPS boundary, and resource or reference digests other than SHA-256/SHA-512 (see [Digest Algorithms](#digest-algorithms)). Go documents this as a best-effort mode for testing and assessment, not for production. |
 | `fips140=off` | FIPS mode is disabled. |
 
 OCM runs in `fips140=on` mode by default, which allows non-approved algorithms
@@ -241,14 +241,16 @@ covered only through the digests recorded in the descriptor, so those digests
 are security-relevant: with a weak hash such as MD5 or SHA-1, content could be
 swapped under a valid signature.
 
-In FIPS 140-3 mode, OCM therefore requires every resource and component
-reference digest to use SHA-256 or SHA-512:
+With `GODEBUG=fips140=only`, OCM therefore requires every resource and
+component reference digest to use SHA-256 or SHA-512. In the default
+`fips140=on` mode and outside FIPS mode, it logs a warning instead, so component
+versions with existing MD5 or SHA-1 digests keep working:
 
-| Operation | FIPS mode | Outside FIPS mode |
+| Operation | `fips140=only` | `fips140=on` (default) and `off` |
 | --- | --- | --- |
-| `ocm sign cv` | Fails with `refusing to sign component version in FIPS 140-3 mode: unsupported digest hash algorithm` | Signs, logs a warning |
-| `ocm verify cv` | Fails with `refusing to verify component version in FIPS 140-3 mode: unsupported digest hash algorithm` | Verifies, logs a warning |
-| Controller signature verification | Fails the resolution | Not affected |
+| `ocm sign cv` | Fails with `refusing to sign component version with GODEBUG=fips140=only: unsupported digest hash algorithm` | Signs, logs a warning |
+| `ocm verify cv` | Fails with `refusing to verify component version with GODEBUG=fips140=only: unsupported digest hash algorithm` | Verifies, logs a warning |
+| Controller signature verification | Fails the resolution | Verifies, logs the weak digest |
 
 Resources excluded from the signature (`NO-DIGEST` / `EXCLUDE-FROM-SIGNATURE`)
 are exempt. Digests that OCM computes itself, for example when adding a

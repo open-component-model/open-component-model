@@ -30,16 +30,18 @@ const (
 // digest uses a hash algorithm other than SHA-256 or SHA-512.
 var ErrUnsupportedDigestHash = errors.New("unsupported digest hash algorithm")
 
-// fipsEnabled reports whether the Go Cryptographic Module runs in FIPS 140-3
-// mode. It is a variable so tests can exercise both modes.
-var fipsEnabled = fips140.Enabled
+// fipsEnforced reports whether the Go Cryptographic Module enforces FIPS 140-3
+// mode (GODEBUG=fips140=only). It is a variable so tests can exercise both modes.
+var fipsEnforced = fips140.Enforced
 
 // DigestHashAlgorithmsEnforced reports whether reference and resource digests
 // must use SHA-256 or SHA-512 (see ValidateDigestHashAlgorithms). This is the
-// case in FIPS 140-3 mode, where a signature must not rest on a non-approved
-// hash; outside FIPS mode callers should only warn.
+// case with GODEBUG=fips140=only, where a signature must not rest on a
+// non-approved hash. In the default fips140=on mode and outside FIPS mode,
+// callers should log the violation instead, so existing component versions
+// with MD5 or SHA-1 digests keep working.
 func DigestHashAlgorithmsEnforced() bool {
-	return fipsEnabled()
+	return fipsEnforced()
 }
 
 // VerifyDigestMatchesDescriptor ensures that a descriptor matches a digest
@@ -145,7 +147,7 @@ func GenerateDigest(
 //     it must also have a complete digest.
 //   - Resources without access: they must not carry a digest (enforced to prevent
 //     meaningless digest claims).
-//   - Digest algorithms (FIPS 140-3 mode only, see DigestHashAlgorithmsEnforced):
+//   - Digest algorithms (GODEBUG=fips140=only, see DigestHashAlgorithmsEnforced):
 //     reference and resource digests must use SHA-256 or SHA-512. The signature
 //     covers resources and references only through these digests, so a weak
 //     hash such as MD5 or SHA-1 would let content be swapped under a valid
@@ -187,8 +189,8 @@ func IsSafelyDigestible(cd *descruntime.Component) error {
 // reference digest uses SHA-256 or SHA-512, and returns an error wrapping
 // ErrUnsupportedDigestHash for the first one that does not. It checks
 // regardless of FIPS mode; use DigestHashAlgorithmsEnforced to decide whether a
-// violation is fatal. Empty digests and resources excluded from the signature
-// are not its concern; IsSafelyDigestible covers completeness.
+// violation is fatal or only logged. Empty digests and resources excluded from
+// the signature are not its concern; IsSafelyDigestible covers completeness.
 func ValidateDigestHashAlgorithms(cd *descruntime.Component) error {
 	for _, reference := range cd.References {
 		if alg := reference.Digest.HashAlgorithm; alg != "" && !isApprovedDigestHash(alg) {

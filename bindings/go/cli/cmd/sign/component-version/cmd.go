@@ -334,14 +334,14 @@ func SignComponentVersion(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("getting component version failed: %w", err)
 	}
 
-	// A signature covers resources and references only through their digests. In
-	// FIPS 140-3 mode, refuse to sign bindings that rest on a weak hash such as
-	// MD5 or SHA-1; otherwise warn.
+	// A signature covers resources and references only through their digests.
+	// With GODEBUG=fips140=only, refuse to sign bindings that rest on a weak hash
+	// such as MD5 or SHA-1; otherwise warn.
 	if err := signing.ValidateDigestHashAlgorithms(&desc.Component); err != nil {
 		if signing.DigestHashAlgorithmsEnforced() {
-			return fmt.Errorf("refusing to sign component version in FIPS 140-3 mode: %w", err)
+			return fmt.Errorf("refusing to sign component version with GODEBUG=fips140=only: %w", err)
 		}
-		logger.WarnContext(ctx, "component version uses a weak digest hash algorithm", "error", err.Error())
+		logger.WarnContext(ctx, "component version uses a weak digest hash algorithm (GODEBUG=fips140=only rejects it)", "error", err.Error())
 	}
 	if err := signing.IsSafelyDigestible(&desc.Component); err != nil {
 		logger.WarnContext(ctx, "component version not safely digestible", "error", err.Error())
