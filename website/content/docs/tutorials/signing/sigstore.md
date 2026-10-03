@@ -73,7 +73,7 @@ On the verify side: TUF supplies the current trust roots, OCM validates the Fulc
 The OCM CLI invokes the `cosign` binary (v3.0.4 or later) under the hood. If it's not on your PATH, OCM downloads and
 caches it under `~/.cache/ocm/cosign/...` on first use. Subsequent runs skip the download. To keep Sigstore signing
 inside the FIPS 140-3 boundary, put a cosign built against the Go Cryptographic Module on your PATH instead; with
-`GODEBUG=fips140=only`, OCM requires one. See the [FIPS reference]({{< relref "docs/reference/fips.md" >}}#sigstore-and-cosign).
+`GODEBUG=fips140=only`, OCM requires one. See the [FIPS reference]({{< relref "docs/reference/standards-and-regulations/fips.md" >}}#sigstore-and-cosign).
 {{< /callout >}}
 
 ## Scenario

@@ -297,7 +297,7 @@ Without `--signature`, **every** signature on the descriptor is verified. Config
 
 **Cause:** OCM runs with `GODEBUG=fips140=only`, and the `libgcrypt` of your `gpg` does not run in FIPS mode (`gpgconf --show-versions` reports `fips-mode:n`), or `gpgconf` is not on `PATH`.
 
-**Fix:** Use a GnuPG whose `libgcrypt` runs in FIPS mode, see [FIPS 140-3: GPG]({{< relref "docs/reference/fips.md" >}}#gpg), or run OCM without `fips140=only`.
+**Fix:** Use a GnuPG whose `libgcrypt` runs in FIPS mode, see [FIPS 140-3: GPG]({{< relref "docs/reference/standards-and-regulations/fips.md" >}}#gpg), or run OCM without `fips140=only`.
 
 {{< /tab >}}
 {{< tab "Sigstore (interactive)" >}}

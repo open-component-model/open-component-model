@@ -1,15 +1,15 @@
 ---
 title: "FIPS 140-3"
-description: "Reference for FIPS 140-3 support in the OCM CLI and OCM controller: support policy, Go FIPS module, runtime modes, images, and known limitations."
-icon: "🛡️"
-weight: 8
+description: "Reference for FIPS 140-3 support in the OCM CLI and OCM controller: support policy, Go FIPS module, runtime modes, artifacts, and known limitations."
+weight: 1
 toc: true
 ---
 
 This page describes how the OCM CLI and the OCM controller support FIPS 140-3.
-OCM does not ship a separate FIPS variant. The regular binaries and container
-images are built for FIPS, so the same artifact runs in both normal and
-FIPS-restricted environments.
+Since OCM 0.20.0, the binaries and container images are built in FIPS mode. OCM
+does not ship a separate FIPS variant: the regular binaries and images are built
+for FIPS, so the same artifact runs in both normal and FIPS-restricted
+environments.
 
 ## Support Policy
 
@@ -119,69 +119,9 @@ The binaries are statically linked and do not use any system cryptographic
 library. All cryptography in OCM itself goes through the Go Cryptographic
 Module.
 
-### Container Hardening
-
-Both images and the controller Helm chart follow the DISA
-[Container Image Creation and Deployment Guide](https://dl.dod.cyber.mil/wp-content/uploads/devsecops/pdf/DevSecOps_Enterprise_Container_Image_Creation_and_Deployment_Guide_2.6-Public-Release.pdf)
-for the parts OCM controls:
-
-| Measure | CLI image | Controller image / chart |
-| --- | --- | --- |
-| Runs as non-root user `65532` | ✅ | ✅ (`runAsNonRoot`, `runAsUser`/`runAsGroup: 65532`) |
-| No setuid/setgid executables | ✅ (none shipped) | ✅ (none shipped) |
-| No shell or package manager | ✅ | ✅ |
-| No privilege escalation, all capabilities dropped | — | ✅ |
-| `seccompProfile: RuntimeDefault` | — | ✅ |
-| Read-only root filesystem, writable `emptyDir` at `/tmp` | — | ✅ |
-| Liveness and readiness probes, resource requests and limits | — | ✅ |
-
-The controller's pod spec meets the Kubernetes
-[restricted Pod Security Standard](https://kubernetes.io/docs/concepts/security/pod-security-standards/#restricted),
-and the end-to-end tests install the chart into a namespace that enforces it.
-
-The CLI image runs with `HOME=/`, Docker's default for a user without a passwd
-entry, so configuration mounted at `/.ocmconfig` or `/.docker/config.json` is
-found. Caches go to the world-writable `/.cache`, for any user ID. To read files
-that only your user can read, or to write into a mounted directory, run the
-container with `--user "$(id -u):$(id -g)"`.
-
-### STIG Scan
-
-DISA publishes no STIG for container images. Like vendors of hardened images,
-OCM scans its images against the DISA General Purpose Operating System Security
-Requirements Guide (GPOS SRG) with OpenSCAP, using the open source
-[Chainguard GPOS SRG profile](https://github.com/chainguard-dev/stigs). The
-release pipeline scans the linux/arm64 and linux/amd64 variants of the CLI and
-controller images it builds, and fails before publishing if any rule fails.
-
-The profile checks a Wolfi root filesystem in a few places. For OCM's `scratch`
-images, `.github/stig/tailoring.xml` deselects those rules, and
-`.github/stig/ocm-supplement-xccdf.xml` checks the same SRG requirements against
-what the images contain, with OVAL definitions in
-`.github/stig/ocm-supplement-oval.xml`:
-
-| SRG rules | Chainguard profile checks | OCM check |
-| --- | --- | --- |
-| SV-203649, SV-203739, SV-203750, SV-203751, SV-203776 | OpenSSL FIPS provider | The entrypoint has `GOFIPS140=v<version>` and `fips140=on` in its build information |
-| SV-263659 | Wolfi CA bundle digests | The only certificate file is the CA bundle of the digest-pinned Garden Linux base image |
-| SV-203675, SV-203716 | Shared library permissions | No shared libraries, dynamic loader, package manager, setuid/setgid files, world-writable paths without the sticky bit, or executable other than the entrypoint |
-| SV-203616, SV-203617, SV-203664 | `/var/log` permissions | No on-disk log locations; logs go to stdout/stderr |
-
-The scan runs offline on the exported root filesystem. To scan an image
-locally:
-
-```shell
-node .github/scripts/stig-scan.js <image> bindings/go/cli/Containerfile tmp/stig
-```
-
-`tmp/stig` then contains the XCCDF results and HTML reports of both
-evaluations. In the pipeline, the reusable `STIG scan` workflow
-(`.github/workflows/stig.yml`) writes the results of each image and architecture
-to the job summary and uploads the reports as `stig-<image>-<arch>` workflow
-artifacts, for example `stig-cli-amd64`.
-
-Node operating system and cluster STIGs, such as the Kubernetes STIG, are the
-platform operator's responsibility.
+For how the images and the controller chart are hardened, and how they are
+scanned against the DISA GPOS SRG, see
+[DISA STIG]({{< relref "docs/reference/standards-and-regulations/disa-stig.md" >}}).
 
 ## Runtime Modes
 

@@ -394,7 +394,7 @@ signatures:
 
 **Cause:** OCM runs with `GODEBUG=fips140=only`, and the `libgcrypt` of your `gpg` does not run in FIPS mode (`gpgconf --show-versions` reports `fips-mode:n`), or `gpgconf` is not on `PATH`.
 
-**Fix:** Use a GnuPG whose `libgcrypt` runs in FIPS mode, see [FIPS 140-3: GPG]({{< relref "docs/reference/fips.md" >}}#gpg), or run OCM without `fips140=only`.
+**Fix:** Use a GnuPG whose `libgcrypt` runs in FIPS mode, see [FIPS 140-3: GPG]({{< relref "docs/reference/standards-and-regulations/fips.md" >}}#gpg), or run OCM without `fips140=only`.
 
 {{< /tab >}}
 {{< tab "Sigstore (interactive)" >}}
@@ -427,7 +427,7 @@ For the conceptual picture (how Fulcio, Rekor, and OIDC fit together), see [Iden
 - A browser on the same machine (signing opens a browser window to log you in)
 - An OIDC identity with a provider supported by your Sigstore stack — on public Sigstore that's Google, GitHub, or Microsoft
 - Network access to `*.sigstore.dev` (in particular `fulcio.sigstore.dev`, `oauth2.sigstore.dev`, `rekor.sigstore.dev`, `tuf-repo-cdn.sigstore.dev`) — corporate networks often block these
-- [cosign](https://github.com/sigstore/cosign) v3.0.4 or later on your PATH; if it isn't, OCM downloads and caches it under `~/.cache/ocm/cosign/...`. To keep Sigstore signing inside the [FIPS 140-3]({{< relref "docs/reference/fips.md" >}}#sigstore-and-cosign) boundary, use a cosign built against the Go Cryptographic Module (`CGO_ENABLED=0 GOFIPS140=certified go install github.com/sigstore/cosign/v3/cmd/cosign@v3.1.3`); with `GODEBUG=fips140=only`, OCM requires one
+- [cosign](https://github.com/sigstore/cosign) v3.0.4 or later on your PATH; if it isn't, OCM downloads and caches it under `~/.cache/ocm/cosign/...`. To keep Sigstore signing inside the [FIPS 140-3]({{< relref "docs/reference/standards-and-regulations/fips.md" >}}#sigstore-and-cosign) boundary, use a cosign built against the Go Cryptographic Module (`CGO_ENABLED=0 GOFIPS140=certified go install github.com/sigstore/cosign/v3/cmd/cosign@v3.1.3`); with `GODEBUG=fips140=only`, OCM requires one
 - A component version in a CTF archive or OCI registry (we'll use `github.com/acme.org/helloworld:1.0.0` from the [getting started guide]({{< relref "create-component-version.md" >}}); any component you can write to works)
 
 {{< callout context="note" >}}
@@ -697,7 +697,7 @@ A successful run logs `signed successfully` and embeds the Sigstore bundle into 
 
 {{< details "Alternative: run `ocm` from the OCM CLI container image" >}}
 
-Skip the install step by invoking `ocm` from the official container image (`ghcr.io/open-component-model/cli`) directly with `docker run`. The image uses `ocm` as its entrypoint and runs as the non-root user `65532`. It does not include `cosign`, so OCM downloads the upstream release on first use; for a FIPS build of cosign, mount your own at `/usr/local/bin/cosign` as described in the [FIPS reference]({{< relref "docs/reference/fips.md" >}}#sigstore-and-cosign). The `docker run` pattern below is the supported way:
+Skip the install step by invoking `ocm` from the official container image (`ghcr.io/open-component-model/cli`) directly with `docker run`. The image uses `ocm` as its entrypoint and runs as the non-root user `65532`. It does not include `cosign`, so OCM downloads the upstream release on first use; for a FIPS build of cosign, mount your own at `/usr/local/bin/cosign` as described in the [FIPS reference]({{< relref "docs/reference/standards-and-regulations/fips.md" >}}#sigstore-and-cosign). The `docker run` pattern below is the supported way:
 
 ```yaml
 jobs:
