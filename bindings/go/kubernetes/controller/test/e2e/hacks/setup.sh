@@ -55,6 +55,7 @@ KIND_NODE_IMAGE="kindest/node:v${KIND_NODE_IMAGE_VERSION}"
 # - Port mappings for additional cluster OCI registries (replication tests).
 # - Containerd config patches to add registry mirrors and configs for the internal registries.
 # - http-alias and insecure_skip_verify.
+# - A single node: no spec needs multi-node scheduling, and images are pulled and kind-loaded once.
 CONTAINERD_CONFIG_PATH="/etc/containerd/certs.d"
 cat <<EOF | kind create cluster --name ocm-e2e --image="${KIND_NODE_IMAGE}" --config=-
 kind: Cluster
@@ -66,7 +67,6 @@ nodes:
         hostPort: 31002
       - containerPort: 31003
         hostPort: 31003
-  - role: worker
 containerdConfigPatches:
 - |-
  [plugins."io.containerd.grpc.v1.cri".registry]
@@ -144,25 +144,27 @@ install_argocd() {
   argocd_version="${ARGOCD_VERSION:-stable}"
 
   kubectl get namespace argocd &>/dev/null || kubectl create namespace argocd
-  kubectl apply -n argocd --server-side --force-conflicts -f "https://raw.githubusercontent.com/argoproj/argo-cd/${argocd_version}/manifests/install.yaml" || return 1
-
-  kubectl wait -n argocd deployment \
-      argocd-server \
-      argocd-repo-server \
-      argocd-redis \
-      argocd-dex-server \
-      argocd-applicationset-controller \
-      argocd-notifications-controller \
-      --for=condition=Available --timeout=5m || return 1
 
   # Widen argocd-repo-server's OCI layer mediaType allowlist to include
   # flux-native artifacts (application/vnd.cncf.flux.content.v1.tar+gzip),
   # produced from ./kustomize by test/utils.buildKustomizeOCILayout for the
   # kustomize-configuration-localization example. Defaults reproduced from
   # argocd's cmd/argocd-repo-server/commands/argocd_repo_server.go.
-  kubectl -n argocd set env deploy/argocd-repo-server \
-      ARGOCD_REPO_SERVER_OCI_LAYER_MEDIA_TYPES="application/vnd.oci.image.layer.v1.tar,application/vnd.oci.image.layer.v1.tar+gzip,application/vnd.cncf.helm.chart.content.v1.tar+gzip,application/vnd.cncf.flux.content.v1.tar+gzip" || return 1
-  kubectl -n argocd rollout status deploy/argocd-repo-server --timeout=2m || return 1
+  # Created before the install manifest; that manifest's argocd-cmd-params-cm declares no data, and a distinct field
+  # manager keeps this key across its server-side apply.
+  kubectl -n argocd create configmap argocd-cmd-params-cm \
+      --from-literal=reposerver.oci.layer.media.types="application/vnd.oci.image.layer.v1.tar,application/vnd.oci.image.layer.v1.tar+gzip,application/vnd.cncf.helm.chart.content.v1.tar+gzip,application/vnd.cncf.flux.content.v1.tar+gzip" \
+      --dry-run=client -o yaml | kubectl apply --server-side --field-manager=ocm-e2e-setup -f - || return 1
+
+  # Core install (application-controller, repo-server, redis, applicationset-controller): specs only need
+  # Applications to sync; API server, dex and notifications are unused.
+  kubectl apply -n argocd --server-side --force-conflicts -f "https://raw.githubusercontent.com/argoproj/argo-cd/${argocd_version}/manifests/core-install.yaml" || return 1
+
+  kubectl wait -n argocd deployment \
+      argocd-repo-server \
+      argocd-redis \
+      argocd-applicationset-controller \
+      --for=condition=Available --timeout=5m || return 1
 
   # Register the local OCI registry with ArgoCD as an insecure (plain HTTP) Helm OCI
   # credential template. Any Application whose repoURL starts with oci://ocm-e2e-image-registry:5000
