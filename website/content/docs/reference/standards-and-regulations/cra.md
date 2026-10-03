@@ -157,8 +157,10 @@ CV=ghcr.io/open-component-model//ocm.software/cli:0.20.0
 # SBOM of one CLI binary, found through its artifact-references label
 ocm download resource "$CV" --identity name=cli,os=linux,architecture=amd64 --sbom --output sboms
 
-# OpenVEX document, applied when scanning the binary
+# OpenVEX document, applied when scanning the binary. Trivy only inspects
+# executable files, so make the downloaded binary executable first.
 ocm download resource "$CV" --identity name=openvex --output ocm.openvex.json
+chmod +x ocm-linux-amd64
 trivy rootfs --vex ocm.openvex.json ocm-linux-amd64
 ```
 
