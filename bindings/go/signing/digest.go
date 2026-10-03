@@ -209,8 +209,10 @@ func ValidateDigestHashAlgorithms(cd *descruntime.Component) error {
 }
 
 // isApprovedDigestHash reports whether a reference or resource digest uses
-// SHA-256 or SHA-512. Both "SHA-256" and "sha256" spellings occur in
-// descriptors, so the comparison ignores case and dashes.
+// SHA-256 or SHA-512. OCM writes "SHA-256"/"SHA-512"; the legacy names
+// "sha256"/"sha512" appear in older signed descriptors, which OCM v1
+// reproduces when verifying them (LegacyHashAlgorithm). They must keep
+// verifying, so the comparison ignores case and dashes.
 func isApprovedDigestHash(name string) bool {
 	switch strings.ToUpper(strings.ReplaceAll(name, "-", "")) {
 	case "SHA256", "SHA512":
