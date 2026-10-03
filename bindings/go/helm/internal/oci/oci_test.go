@@ -2,6 +2,7 @@ package oci_test
 
 import (
 	"context"
+	"crypto/fips140"
 	"encoding/json"
 	"io"
 	"os"
@@ -79,9 +80,6 @@ func TestCopyChartToOCILayout_Success(t *testing.T) {
 			assert.Equal(t, registry.ChartLayerMediaType, manifest.Layers[0].MediaType, "expected first layer to be chart layer")
 
 			if tt.provGPG != "" {
-				signatory, err := provenance.NewFromKeyring(tt.provGPG, tt.provKeyID)
-				require.NoError(t, err, "failed to create signatory from GPG keyring")
-
 				t.Run("provenance verification", func(t *testing.T) {
 					require.Len(t, manifest.Layers, 2, "expected two layers for chart and provenance file")
 					assert.Equal(t, registry.ProvLayerMediaType, manifest.Layers[1].MediaType, "expected second layer to be provenance file")
@@ -102,6 +100,11 @@ func TestCopyChartToOCILayout_Success(t *testing.T) {
 					provData, err := io.ReadAll(provLayer)
 					require.NoError(t, err, "failed to read provenance layer")
 
+					if fips140.Enforced() {
+						t.Skip("OpenPGP provenance verification (ProtonMail/go-crypto) uses SHA-1 key fingerprints, which GODEBUG=fips140=only rejects")
+					}
+					signatory, err := provenance.NewFromKeyring(tt.provGPG, tt.provKeyID)
+					require.NoError(t, err, "failed to create signatory from GPG keyring")
 					_, err = signatory.Verify(chartData, provData, filepath.Base(tt.path))
 					require.NoError(t, err, "failed to verify provenance file")
 				})

@@ -75,9 +75,20 @@ func newWithRunner(runner *execRecorder, opts ...HandlerOption) *Handler {
 	allOpts := []HandlerOption{
 		WithLookPath(func(string) (string, error) { return "/fake/cosign", nil }),
 		WithExecCosign(runner.exec),
+		withFIPSOnMode(),
 	}
 	allOpts = append(allOpts, opts...)
 	return New(allOpts...)
+}
+
+// withFIPSOnMode pins the default fips140=on mode, so tests that are not about
+// the FIPS check do not depend on how the test process runs (with
+// GODEBUG=fips140=only the fake cosign would be rejected).
+func withFIPSOnMode() HandlerOption {
+	return func(h *Handler) {
+		h.runner.FIPSEnabled = func() bool { return true }
+		h.runner.FIPSEnforced = func() bool { return false }
+	}
 }
 
 // --- Test helpers ---
@@ -1310,6 +1321,7 @@ func TestWithOperationTimeout_DeadlineExceeded(t *testing.T) {
 	h := New(
 		WithLookPath(func(string) (string, error) { return "/bin/sleep", nil }),
 		WithOperationTimeout(time.Nanosecond),
+		withFIPSOnMode(),
 	)
 
 	_, err := h.Sign(

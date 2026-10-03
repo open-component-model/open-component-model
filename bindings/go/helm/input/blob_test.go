@@ -1,6 +1,7 @@
 package input_test
 
 import (
+	"crypto/fips140"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -147,9 +148,6 @@ func TestGetV1HelmBlob_Success(t *testing.T) {
 			require.Equal(t, registry.ChartLayerMediaType, manifest.Layers[0].MediaType, "expected first layer to be chart layer")
 
 			if tt.provGPG != "" {
-				signatory, err := provenance.NewFromKeyring(tt.provGPG, tt.provKeyID)
-				require.NoError(t, err, "failed to create signatory from GPG keyring")
-
 				var provFile string
 				t.Run("provenance verification", func(t *testing.T) {
 					require.Len(t, manifest.Layers, 2, "expected two layers for chart and provenance file")
@@ -177,6 +175,11 @@ func TestGetV1HelmBlob_Success(t *testing.T) {
 					provFile = filepath.Join(t.TempDir(), "provenance.json")
 					require.NoError(t, os.WriteFile(provFile, provData, 0o644))
 
+					if fips140.Enforced() {
+						t.Skip("OpenPGP provenance verification (ProtonMail/go-crypto) uses SHA-1 key fingerprints, which GODEBUG=fips140=only rejects")
+					}
+					signatory, err := provenance.NewFromKeyring(tt.provGPG, tt.provKeyID)
+					require.NoError(t, err, "failed to create signatory from GPG keyring")
 					_, err = signatory.Verify(chartData, provData, filepath.Base(tt.path))
 					require.NoError(t, err, "failed to verify provenance file")
 				})

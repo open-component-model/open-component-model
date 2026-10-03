@@ -1,6 +1,7 @@
 package repository_test
 
 import (
+	"crypto/fips140"
 	"io"
 	"os"
 	"path/filepath"
@@ -174,7 +175,15 @@ type repositoryFixture struct {
 // annotated tag on the first. The wrapper needs a moving branch to pin and a
 // tag object to peel; ref resolution and archive contents are covered in
 // internal/download.
-func newRepository(t *testing.T) repositoryFixture {
+func newRepository(t *testing.T) (fixture repositoryFixture) {
+	t.Helper()
+	// Built outside strict FIPS enforcement, the way production code runs
+	// go-git: Git hashes objects with SHA-1 (see the download package).
+	fips140.WithoutEnforcement(func() { fixture = buildRepository(t) })
+	return fixture
+}
+
+func buildRepository(t *testing.T) repositoryFixture {
 	t.Helper()
 
 	r := require.New(t)

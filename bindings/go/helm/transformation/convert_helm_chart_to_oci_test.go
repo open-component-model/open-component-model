@@ -1,6 +1,7 @@
 package transformation_test
 
 import (
+	"crypto/fips140"
 	"encoding/json"
 	"io"
 	"os"
@@ -370,6 +371,9 @@ func verifyProvenance(t *testing.T, ociPath, gpgKeyPath, keyID, chartFileName st
 	provData, err := io.ReadAll(provLayer)
 	r.NoError(err)
 
+	if fips140.Enforced() {
+		t.Skip("OpenPGP provenance verification (ProtonMail/go-crypto) uses SHA-1 key fingerprints, which GODEBUG=fips140=only rejects")
+	}
 	signatory, err := provenance.NewFromKeyring(gpgKeyPath, keyID)
 	r.NoError(err)
 

@@ -335,6 +335,9 @@ func TestResolveV1DockerConfigCredentials(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Cases without an explicit config fall back to the default Docker config;
+			// keep the host's (and its credential helpers) out of the test.
+			t.Setenv("DOCKER_CONFIG", t.TempDir())
 			creds, err := ResolveV1DockerConfigCredentials(t.Context(), tt.dockerConfig, identityv1.ToIdentity(&tt.identity))
 
 			if tt.wantErr {

@@ -3,6 +3,7 @@ package input_test
 import (
 	"archive/tar"
 	"compress/gzip"
+	"crypto/fips140"
 	"io"
 	"os"
 	"path/filepath"
@@ -152,7 +153,16 @@ func TestInvalidResource(t *testing.T) {
 	}
 }
 
+// newRepository builds the fixture outside strict FIPS enforcement, the way
+// production code runs go-git: Git hashes objects with SHA-1 (see the download
+// package).
 func newRepository(t *testing.T) (path, firstCommit string) {
+	t.Helper()
+	fips140.WithoutEnforcement(func() { path, firstCommit = buildRepository(t) })
+	return path, firstCommit
+}
+
+func buildRepository(t *testing.T) (path, firstCommit string) {
 	t.Helper()
 	r := require.New(t)
 	work := t.TempDir()
