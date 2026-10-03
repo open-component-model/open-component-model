@@ -75,7 +75,7 @@ today and where gaps remain. Requirements are paraphrased; the
 | Protection against unauthorized access; access control | The controller chart enforces `readOnlyRootFilesystem`, `runAsNonRoot`, `seccompProfile: RuntimeDefault`, and drops all capabilities. Credential resolution is separated from signing configuration ([ADR-0002](https://github.com/open-component-model/open-component-model/blob/main/docs/adr/0002_credentials.md)). | Access control for multi-tenant use is the platform operator's responsibility. |
 | Protect confidentiality and integrity of data | All cryptography in OCM runs through the Go Cryptographic Module ([CMVP #5247](https://csrc.nist.gov/projects/cryptographic-module-validation-program/certificate/5247)). TLS restricted to FIPS-approved cipher suites in FIPS mode. Component versions can be signed (RSA, Sigstore) and verified. See [FIPS 140-3]({{< relref "docs/reference/standards-and-regulations/fips.md" >}}). | — |
 | Minimize attack surface | `scratch` images contain only the static binary and a CA bundle. No shell, dynamic linker, package manager, or setuid/setgid binaries. The DISA GPOS SRG scan enforces this at release time. See [DISA STIG]({{< relref "docs/reference/standards-and-regulations/disa-stig.md" >}}). | — |
-| Software bill of materials (SBOM) | OCM can transport SBOMs as component resources (CycloneDX, SPDX) alongside the artifacts they describe, as explored in a [proof-of-concept](https://ocm.software/blog/2026-07-28-shipping-sboms-with-your-components). The release pipeline generates SPDX JSON SBOMs with [Syft](https://github.com/anchore/syft) for every CLI binary (`.github/workflows/cli.yml`) and for the CLI and controller OCI images per platform (`.github/workflows/pipeline.yml`). SBOMs are attested to each artifact with `actions/attest` (`sbom-path`) and, for images, pushed to the registry. | The Helm chart has no SBOM because it contains no software beyond Kubernetes manifests. |
+| Software bill of materials (SBOM) | The release pipeline generates SPDX JSON SBOMs with [Syft](https://github.com/anchore/syft) for every CLI binary (`.github/workflows/cli.yml`) and for the CLI and controller OCI images per platform (`.github/workflows/pipeline.yml`). They are attested to each artifact, published as release assets, and shipped as resources of the OCM component versions. See [SBOMs and VEX Documents](#sboms-and-vex-documents). | The Helm chart has no SBOM because it contains no software beyond Kubernetes manifests. |
 
 ## Vulnerability Handling (Annex I, Part II)
 
@@ -124,17 +124,53 @@ manufacturers building on OCM.
 | --- | --- | --- |
 | Build provenance / SLSA attestation | `actions/attest-build-provenance` (SLSA) attests CLI binaries (`.github/workflows/cli.yml`), OCI images and Helm charts (`.github/workflows/pipeline.yml`, `.github/workflows/release.yml`). Attestations are published alongside artifacts. | — |
 | Component version signing | Release component versions are signed keyless with Sigstore (Fulcio + Rekor) in the publish-components workflow (`.github/workflows/publish-components.yml`). Git tags are GPG-signed (`.github/workflows/release.yml`). | — |
-| SBOM generation | The release pipeline generates SPDX JSON SBOMs with Syft for every CLI binary (`cli.yml`, `assemble` job) and for the CLI and controller OCI images per platform (`pipeline.yml`, `publish_cli` / `publish_controller`). Binary SBOMs are included in the uploaded build artifact; image SBOMs are attested with `actions/attest` and pushed to the container registry. Verify with `gh attestation verify ... --predicate-type https://spdx.dev/Document/v2.3`. | The Helm chart has no SBOM (it contains no software beyond Kubernetes manifests). |
-| CSAF / VEX advisories | An [OpenVEX](https://openvex.dev/) document is generated from `govulncheck` reachability analysis and attested to each OCI image with `actions/attest` (`predicate-type: https://openvex.dev/ns/v0.2.0`, pushed to the registry). Advisories whose code is not called receive `not_affected` (justification `vulnerable_code_not_present` or `vulnerable_code_not_in_execute_path`); called ones receive `affected`. Verify with `gh attestation verify oci://<image>@<digest> --owner open-component-model --predicate-type https://openvex.dev/ns/v0.2.0`. | OCM does not publish machine-readable CSAF advisories. BSI [TR-03183 Part 3](https://www.bsi.bund.de/EN/Themen/Unternehmen-und-Organisationen/Standards-und-Zertifizierung/Technische-Richtlinien/TR-nach-Thema-sortiert/tr03183/tr-03183.html) describes vulnerability report and notification formats. |
+| SBOM generation | The release pipeline generates SPDX JSON SBOMs with Syft for every CLI binary (`cli.yml`, `assemble` job) and for the CLI and controller OCI images per platform (`pipeline.yml`, `publish_cli` / `publish_controller`). See [SBOMs and VEX Documents](#sboms-and-vex-documents) for where to get them. | The Helm chart has no SBOM (it contains no software beyond Kubernetes manifests). |
+| CSAF / VEX advisories | An [OpenVEX](https://openvex.dev/) document is generated from `govulncheck` reachability analysis (`.github/workflows/image-scan.yml`). Advisories whose code is not called receive `not_affected` (justification `vulnerable_code_not_present` or `vulnerable_code_not_in_execute_path`); called ones receive `affected`. The image scan uses the same document, and it applies to the CLI binaries and both images. See [SBOMs and VEX Documents](#sboms-and-vex-documents). | OCM does not publish machine-readable CSAF advisories. BSI [TR-03183 Part 3](https://www.bsi.bund.de/EN/Themen/Unternehmen-und-Organisationen/Standards-und-Zertifizierung/Technische-Richtlinien/TR-nach-Thema-sortiert/tr03183/tr-03183.html) describes vulnerability report and notification formats. |
 | OpenSSF Scorecard | Runs weekly and on push to `main` via `ossf/scorecard-action` (`.github/workflows/openssf-scorecard.yml`). Results are published to the OpenSSF API and uploaded to GitHub code scanning. | — |
 | Cryptographic hardening | FIPS 140-3 mode on by default. See [FIPS 140-3]({{< relref "docs/reference/standards-and-regulations/fips.md" >}}). | — |
 | Container and chart hardening | `scratch` images, DISA GPOS SRG scan, restricted pod security. See [DISA STIG]({{< relref "docs/reference/standards-and-regulations/disa-stig.md" >}}). | — |
+
+### SBOMs and VEX Documents
+
+Since OCM 0.20.0, every release publishes the SBOMs and the OpenVEX document
+through three channels:
+
+| Channel | CLI binaries | CLI image | Controller image | Use when |
+| --- | --- | --- | --- | --- |
+| GitHub artifact attestation | SBOM, OpenVEX | SBOM per platform, OpenVEX | SBOM per platform, OpenVEX | You need proof the document was produced by the OCM release workflows |
+| GitHub release assets | `ocm-<os>-<arch>.spdx.json`, `ocm.openvex.json` | `ocm-cli-image-linux-<arch>.spdx.json`, `ocm.openvex.json` | `ocm-controller-image-linux-<arch>.spdx.json`, `ocm.openvex.json` | You download OCM from GitHub |
+| OCM component version resources | `cli-sbom` (per os/architecture), `openvex` in `ocm.software/cli` | `image-sbom` (per architecture), `openvex` in `ocm.software/cli` | `image-sbom` (per architecture), `openvex` in `ocm.software/kubernetes/controller` | You consume OCM as a component, including after `ocm transfer` into another registry or an air-gapped environment |
+
+In the component versions, the SBOMs and the OpenVEX document are local blobs,
+so they are covered by the component's Sigstore signature and travel with it.
+Each one carries the `ocm.software/artifact-references` label naming the
+resources it describes, following the
+[artifact-linking convention](https://github.com/open-component-model/ocm-spec/blob/main/doc/01-model/06-conventions.md#artifact-linking-label)
+(see [Working with SBOMs]({{< relref "docs/tutorials/working-with-sboms.md" >}})).
+SBOMs have type `sbom` and media type `application/spdx+json`. The OpenVEX
+document has type `vex` and media type `application/json`, because OpenVEX
+defines no media type of its own.
+
+```shell
+CV=ghcr.io/open-component-model//ocm.software/cli:0.20.0
+
+# SBOM of one CLI binary, found through its artifact-references label
+ocm download resource "$CV" --identity name=cli,os=linux,architecture=amd64 --sbom --output sboms
+
+# OpenVEX document, applied when scanning the binary
+ocm download resource "$CV" --identity name=openvex --output ocm.openvex.json
+trivy rootfs --vex ocm.openvex.json ocm-linux-amd64
+```
+
+A component version cannot change after it is signed, so its OpenVEX document
+reflects what `govulncheck` reported at release time. Advisories published
+later appear in new patch releases, not in the existing component version.
 
 ## Summary of Gaps
 
 | Gap | Impact |
 | --- | --- |
-| No CSAF advisories | VEX documents (OpenVEX) are attested to OCI images, but OCM does not publish machine-readable CSAF advisories. Vulnerability information beyond VEX is human-readable (GitHub Advisories). |
+| No CSAF advisories | OpenVEX documents ship with every release (attestations, release assets, component resources), but OCM does not publish machine-readable CSAF advisories. Vulnerability information beyond VEX is human-readable (GitHub Advisories). |
 | Security design documents are not formal CRA technical documentation | The documents exist and are thorough, but they are not structured as CRA Annex VII technical documentation. This is primarily a manufacturer obligation. |
 
 ## Further Reading

@@ -168,27 +168,30 @@ gh attestation verify /tmp/ocm/ocm-linux-amd64 \
 ### SBOM and OpenVEX Attestations
 
 Besides build provenance, the release pipeline attests an SPDX SBOM to every CLI
-binary and to both OCI images (one per platform), and the OpenVEX document the
-images were scanned with to both OCI images. Select them by predicate type:
+binary and to both OCI images (one per platform), and attests the OpenVEX
+document to every CLI binary and both OCI images. The images are scanned with
+that same document. Select the attestations by predicate type:
 
 ```shell
-# SBOM (SPDX 2.3)
+# SBOM (SPDX 2.3) of an image
 gh attestation verify oci://ghcr.io/open-component-model/cli:0.20.0 \
   --owner open-component-model \
   --predicate-type https://spdx.dev/Document/v2.3 \
   --format json --jq '.[].verificationResult.statement.predicate.name'
 
-# OpenVEX
-gh attestation verify oci://ghcr.io/open-component-model/cli:0.20.0 \
+# OpenVEX of a binary, signed by pipeline.yml
+gh attestation verify /tmp/ocm/ocm-linux-amd64 \
   --owner open-component-model \
   --predicate-type https://openvex.dev/ns/v0.2.0 \
+  --signer-workflow open-component-model/open-component-model/.github/workflows/pipeline.yml \
   --format json --jq '.[].verificationResult.statement.predicate.statements'
 ```
 
 SBOMs and VEX documents are not SLSA provenance; they are signed by the same
-workflows and verified the same way. See the
-[EU Cyber Resilience Act]({{< relref "docs/reference/standards-and-regulations/cra.md" >}})
-page for how they are produced.
+workflows and verified the same way. The release verifies the OpenVEX
+attestation of every binary before promoting a release. The same documents are
+also release assets and resources of the OCM component versions; see
+[EU Cyber Resilience Act: SBOMs and VEX Documents]({{< relref "docs/reference/standards-and-regulations/cra.md#sboms-and-vex-documents" >}}).
 
 ## Permissions
 

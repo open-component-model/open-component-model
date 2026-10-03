@@ -247,6 +247,19 @@ jobs:
           name: ${{ needs.build_and_test.outputs.controller_chart_artifact_name }}
           path: ${{ runner.temp }}/chart-assets
 
+      - name: Download OpenVEX
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: ${{ needs.build_and_test.outputs.vex_artifact }}
+          path: ${{ runner.temp }}/vex-assets
+
+      - name: Download image SBOMs
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          pattern: image-sbom-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/image-sbom-assets
+
       - name: Create RC pre-release
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3
         with:
@@ -255,10 +268,15 @@ jobs:
           body_path: ${{ runner.temp }}/CHANGELOG.md
           fail_on_unmatched_files: true
           prerelease: true
+          # SBOMs and the OpenVEX document are also resources of the OCM
+          # component versions (publish-components.yml reads them from here).
           files: |
             ${{ runner.temp }}/cli-assets/bin/ocm-*
+            ${{ runner.temp }}/cli-assets/sbom/ocm-*.spdx.json
             ${{ runner.temp }}/cli-assets/oci/*
             ${{ runner.temp }}/chart-assets/chart-*.tgz
+            ${{ runner.temp }}/image-sbom-assets/ocm-*-image-linux-*.spdx.json
+            ${{ runner.temp }}/vex-assets/ocm.openvex.json
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -387,9 +405,13 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           for file in ${{ runner.temp }}/binaries/ocm-*; do
+            [[ "$file" == *.json ]] && continue # SBOM assets share the ocm- prefix
             echo "Verifying $(basename "$file")..."
             gh attestation verify "$file" --repo "$GH_REPO" \
               --signer-workflow "$GH_REPO/.github/workflows/cli.yml"
+            gh attestation verify "$file" --repo "$GH_REPO" \
+              --predicate-type https://openvex.dev/ns/v0.2.0 \
+              --signer-workflow "$GH_REPO/.github/workflows/pipeline.yml" > /dev/null
           done
 
       - name: Verify CLI OCI attestation
@@ -598,10 +620,12 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "${{ runner.temp }}/final-assets"
-          # CLI binaries + OCI tarballs come from the RC release (already validated by attestation verify).
+          # CLI binaries, their and the images' SBOMs (ocm-*), the OpenVEX document and the
+          # OCI tarballs come from the RC release (binaries already validated by attestation verify).
           gh release download "${RC_TAG}" \
             --repo "$GH_REPO" \
             --pattern "ocm-*" \
+            --pattern "ocm.openvex.json" \
             --pattern "*.tar" \
             --dir "${{ runner.temp }}/final-assets"
           # Final chart from the reusable workflow's artifact.

@@ -81,6 +81,20 @@ jobs:
             echo "CONTROLLER_COMPONENT_REF=$REGISTRY/$OWNER//ocm.software/kubernetes/controller:${VERSION}"
           } >> "$GITHUB_ENV"
 
+      # SBOMs and the OpenVEX document become local resources of the component
+      # versions (signed with them, carried along by `ocm transfer`).
+      - name: Download SBOMs and OpenVEX from the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          ASSETS_DIR="${GITHUB_WORKSPACE}/tmp/release-assets"
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --pattern "ocm-*.spdx.json" --pattern "ocm.openvex.json" --dir "$ASSETS_DIR"
+          ls -l "$ASSETS_DIR"
+          echo "ASSETS_DIR=$ASSETS_DIR" >> "$GITHUB_ENV"
+
       - name: Log in to GHCR
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
@@ -129,6 +143,7 @@ jobs:
             -v "${WORKSPACE}:${WORKSPACE}:ro" \
             -w "${WORKSPACE}" \
             -e VERSION \
+            -e ASSETS_DIR \
             -e CLI_DOWNLOAD_URL \
             -e CLI_IMAGE_REF \
             -e CONTROLLER_IMAGE_REF \
@@ -138,6 +153,7 @@ jobs:
               --config "/.ocmconfig" \
               --repository "$REPO_ROOT" \
               --constructor "$CONSTRUCTOR" \
+              --working-directory "${WORKSPACE}" \
               --component-version-conflict-policy "$CONFLICT_POLICY"
 
       - name: Setup Go

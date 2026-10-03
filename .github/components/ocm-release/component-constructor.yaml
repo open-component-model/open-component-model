@@ -1,7 +1,8 @@
 components:
   # The six CLI executables are referenced by their GitHub release download URL
   # via the Wget access type, so the GitHub release carrying ${RELEASE_TAG} must
-  # already exist when this constructor is published.
+  # already exist when this constructor is published. The SBOMs and the OpenVEX
+  # document are local blobs read from that release's assets (${ASSETS_DIR}).
   - name: ocm.software/cli
     version: "${VERSION}"
     provider:
@@ -80,6 +81,186 @@ components:
         access:
           type: ociArtifact
           imageReference: "${CLI_IMAGE_REF}"
+      # SPDX SBOMs and the OpenVEX document, linked to the artifacts they describe via
+      # ocm.software/artifact-references (see docs/tutorials/working-with-sboms). Files
+      # come from the GitHub release assets; publish-components.yml sets ASSETS_DIR.
+      - name: cli-sbom
+        type: sbom
+        version: "${VERSION}"
+        extraIdentity:
+          os: linux
+          architecture: amd64
+        labels:
+          - name: ocm.software/artifact-references
+            signing: true
+            value:
+              - identity:
+                  name: cli
+                  os: linux
+                  architecture: amd64
+        input:
+          type: File/v1
+          path: "${ASSETS_DIR}/ocm-linux-amd64.spdx.json"
+          mediaType: application/spdx+json
+      - name: cli-sbom
+        type: sbom
+        version: "${VERSION}"
+        extraIdentity:
+          os: linux
+          architecture: arm64
+        labels:
+          - name: ocm.software/artifact-references
+            signing: true
+            value:
+              - identity:
+                  name: cli
+                  os: linux
+                  architecture: arm64
+        input:
+          type: File/v1
+          path: "${ASSETS_DIR}/ocm-linux-arm64.spdx.json"
+          mediaType: application/spdx+json
+      - name: cli-sbom
+        type: sbom
+        version: "${VERSION}"
+        extraIdentity:
+          os: darwin
+          architecture: amd64
+        labels:
+          - name: ocm.software/artifact-references
+            signing: true
+            value:
+              - identity:
+                  name: cli
+                  os: darwin
+                  architecture: amd64
+        input:
+          type: File/v1
+          path: "${ASSETS_DIR}/ocm-darwin-amd64.spdx.json"
+          mediaType: application/spdx+json
+      - name: cli-sbom
+        type: sbom
+        version: "${VERSION}"
+        extraIdentity:
+          os: darwin
+          architecture: arm64
+        labels:
+          - name: ocm.software/artifact-references
+            signing: true
+            value:
+              - identity:
+                  name: cli
+                  os: darwin
+                  architecture: arm64
+        input:
+          type: File/v1
+          path: "${ASSETS_DIR}/ocm-darwin-arm64.spdx.json"
+          mediaType: application/spdx+json
+      - name: cli-sbom
+        type: sbom
+        version: "${VERSION}"
+        extraIdentity:
+          os: windows
+          architecture: amd64
+        labels:
+          - name: ocm.software/artifact-references
+            signing: true
+            value:
+              - identity:
+                  name: cli
+                  os: windows
+                  architecture: amd64
+        input:
+          type: File/v1
+          path: "${ASSETS_DIR}/ocm-windows-amd64.spdx.json"
+          mediaType: application/spdx+json
+      - name: cli-sbom
+        type: sbom
+        version: "${VERSION}"
+        extraIdentity:
+          os: windows
+          architecture: arm64
+        labels:
+          - name: ocm.software/artifact-references
+            signing: true
+            value:
+              - identity:
+                  name: cli
+                  os: windows
+                  architecture: arm64
+        input:
+          type: File/v1
+          path: "${ASSETS_DIR}/ocm-windows-arm64.spdx.json"
+          mediaType: application/spdx+json
+      - name: image-sbom
+        type: sbom
+        version: "${VERSION}"
+        extraIdentity:
+          os: linux
+          architecture: amd64
+        labels:
+          - name: ocm.software/artifact-references
+            signing: true
+            value:
+              - identity:
+                  name: image
+        input:
+          type: File/v1
+          path: "${ASSETS_DIR}/ocm-cli-image-linux-amd64.spdx.json"
+          mediaType: application/spdx+json
+      - name: image-sbom
+        type: sbom
+        version: "${VERSION}"
+        extraIdentity:
+          os: linux
+          architecture: arm64
+        labels:
+          - name: ocm.software/artifact-references
+            signing: true
+            value:
+              - identity:
+                  name: image
+        input:
+          type: File/v1
+          path: "${ASSETS_DIR}/ocm-cli-image-linux-arm64.spdx.json"
+          mediaType: application/spdx+json
+      - name: openvex
+        type: vex
+        version: "${VERSION}"
+        labels:
+          - name: ocm.software/artifact-references
+            signing: true
+            value:
+              - identity:
+                  name: cli
+                  os: linux
+                  architecture: amd64
+              - identity:
+                  name: cli
+                  os: linux
+                  architecture: arm64
+              - identity:
+                  name: cli
+                  os: darwin
+                  architecture: amd64
+              - identity:
+                  name: cli
+                  os: darwin
+                  architecture: arm64
+              - identity:
+                  name: cli
+                  os: windows
+                  architecture: amd64
+              - identity:
+                  name: cli
+                  os: windows
+                  architecture: arm64
+              - identity:
+                  name: image
+        input:
+          type: File/v1
+          path: "${ASSETS_DIR}/ocm.openvex.json"
+          mediaType: application/json
 
   - name: ocm.software/kubernetes/controller
     version: "${VERSION}"
@@ -100,6 +281,51 @@ components:
         access:
           type: ociArtifact
           imageReference: "${CONTROLLER_CHART_REF}"
+      - name: image-sbom
+        type: sbom
+        version: "${VERSION}"
+        extraIdentity:
+          os: linux
+          architecture: amd64
+        labels:
+          - name: ocm.software/artifact-references
+            signing: true
+            value:
+              - identity:
+                  name: image
+        input:
+          type: File/v1
+          path: "${ASSETS_DIR}/ocm-controller-image-linux-amd64.spdx.json"
+          mediaType: application/spdx+json
+      - name: image-sbom
+        type: sbom
+        version: "${VERSION}"
+        extraIdentity:
+          os: linux
+          architecture: arm64
+        labels:
+          - name: ocm.software/artifact-references
+            signing: true
+            value:
+              - identity:
+                  name: image
+        input:
+          type: File/v1
+          path: "${ASSETS_DIR}/ocm-controller-image-linux-arm64.spdx.json"
+          mediaType: application/spdx+json
+      - name: openvex
+        type: vex
+        version: "${VERSION}"
+        labels:
+          - name: ocm.software/artifact-references
+            signing: true
+            value:
+              - identity:
+                  name: image
+        input:
+          type: File/v1
+          path: "${ASSETS_DIR}/ocm.openvex.json"
+          mediaType: application/json
 
   - name: ocm.software/ocm
     version: "${VERSION}"

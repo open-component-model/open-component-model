@@ -50,7 +50,7 @@ on:
         required: false
     outputs:
       cli_artifact_name:
-        description: "CLI artifact name (binaries + OCI layout) from the build job."
+        description: "CLI artifact name (binaries, their SPDX SBOMs under sbom/, OCI layout) from the build job."
         value: ${{ jobs.build_cli.outputs.artifact_name }}
       cli_version:
         description: "Version computed/embedded for the CLI build."
@@ -70,6 +70,15 @@ on:
       controller_chart_digest:
         description: "Digest of the pushed Helm chart."
         value: ${{ jobs.publish_controller.outputs.chart_digest }}
+      vex_artifact:
+        description: "Artifact with the OpenVEX document (ocm.openvex.json) the images were scanned with."
+        value: ${{ jobs.image_scan.outputs.vex_artifact }}
+      cli_image_sbom_artifact:
+        description: "Artifact with the per-platform SPDX SBOMs of the pushed CLI image (when published)."
+        value: ${{ jobs.publish_cli.outputs.image_sbom_artifact }}
+      controller_image_sbom_artifact:
+        description: "Artifact with the per-platform SPDX SBOMs of the pushed controller image (when published)."
+        value: ${{ jobs.publish_controller.outputs.image_sbom_artifact }}
 
 permissions:
   contents: read
@@ -184,6 +193,7 @@ jobs:
     runs-on: ubuntu-24.04-arm
     outputs:
       image_digest: ${{ steps.digest.outputs.digest }}
+      image_sbom_artifact: image-sbom-cli
     permissions:
       contents: read
       actions: read
@@ -254,19 +264,19 @@ jobs:
       - name: Generate image SBOM (linux/amd64)
         env:
           DIGEST: ${{ steps.digest.outputs.digest }}
-        run: syft scan "registry:${TARGET_REPO}@${DIGEST}" --platform linux/amd64 -o spdx-json=cli-linux-amd64.spdx.json
+        run: syft scan "registry:${TARGET_REPO}@${DIGEST}" --platform linux/amd64 -o spdx-json=ocm-cli-image-linux-amd64.spdx.json
 
       - name: Generate image SBOM (linux/arm64)
         env:
           DIGEST: ${{ steps.digest.outputs.digest }}
-        run: syft scan "registry:${TARGET_REPO}@${DIGEST}" --platform linux/arm64 -o spdx-json=cli-linux-arm64.spdx.json
+        run: syft scan "registry:${TARGET_REPO}@${DIGEST}" --platform linux/arm64 -o spdx-json=ocm-cli-image-linux-arm64.spdx.json
 
       - name: Attest image SBOM (linux/amd64)
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-digest: ${{ steps.digest.outputs.digest }}
           subject-name: ${{ env.TARGET_REPO }}
-          sbom-path: cli-linux-amd64.spdx.json
+          sbom-path: ocm-cli-image-linux-amd64.spdx.json
           push-to-registry: true
 
       - name: Attest image SBOM (linux/arm64)
@@ -274,8 +284,17 @@ jobs:
         with:
           subject-digest: ${{ steps.digest.outputs.digest }}
           subject-name: ${{ env.TARGET_REPO }}
-          sbom-path: cli-linux-arm64.spdx.json
+          sbom-path: ocm-cli-image-linux-arm64.spdx.json
           push-to-registry: true
+
+      # Release assets and component-version resources (release.yml).
+      - name: Upload image SBOMs
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: image-sbom-cli
+          retention-days: 1
+          path: ocm-cli-image-linux-*.spdx.json
+          if-no-files-found: error
 
       - name: Download OpenVEX
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
@@ -293,6 +312,15 @@ jobs:
           predicate-type: https://openvex.dev/ns/v0.2.0
           predicate-path: tmp/vex/ocm.openvex.json
           push-to-registry: true
+
+      # The VEX statements are about the Go modules in bindings/go, which the
+      # binaries are built from just like the image.
+      - name: Attest OpenVEX (binaries)
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: bin/ocm-*
+          predicate-type: https://openvex.dev/ns/v0.2.0
+          predicate-path: tmp/vex/ocm.openvex.json
   # === cli.yml::publish ===
 
   # === Same as above but for Kubernetes publish. ===
@@ -305,6 +333,7 @@ jobs:
       image_digest: ${{ steps.image-digest.outputs.digest }}
       chart_digest: ${{ steps.chart-digest.outputs.digest }}
       chart_artifact_name: controller-chart-${{ needs.build_controller.outputs.version }}
+      image_sbom_artifact: image-sbom-controller
     permissions:
       contents: read
       actions: read
@@ -403,19 +432,19 @@ jobs:
       - name: Generate image SBOM (linux/amd64)
         env:
           DIGEST: ${{ steps.image-digest.outputs.digest }}
-        run: syft scan "registry:${IMAGE_NAME}@${DIGEST}" --platform linux/amd64 -o spdx-json=controller-linux-amd64.spdx.json
+        run: syft scan "registry:${IMAGE_NAME}@${DIGEST}" --platform linux/amd64 -o spdx-json=ocm-controller-image-linux-amd64.spdx.json
 
       - name: Generate image SBOM (linux/arm64)
         env:
           DIGEST: ${{ steps.image-digest.outputs.digest }}
-        run: syft scan "registry:${IMAGE_NAME}@${DIGEST}" --platform linux/arm64 -o spdx-json=controller-linux-arm64.spdx.json
+        run: syft scan "registry:${IMAGE_NAME}@${DIGEST}" --platform linux/arm64 -o spdx-json=ocm-controller-image-linux-arm64.spdx.json
 
       - name: Attest image SBOM (linux/amd64)
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-digest: ${{ steps.image-digest.outputs.digest }}
           subject-name: ${{ env.IMAGE_NAME }}
-          sbom-path: controller-linux-amd64.spdx.json
+          sbom-path: ocm-controller-image-linux-amd64.spdx.json
           push-to-registry: true
 
       - name: Attest image SBOM (linux/arm64)
@@ -423,8 +452,16 @@ jobs:
         with:
           subject-digest: ${{ steps.image-digest.outputs.digest }}
           subject-name: ${{ env.IMAGE_NAME }}
-          sbom-path: controller-linux-arm64.spdx.json
+          sbom-path: ocm-controller-image-linux-arm64.spdx.json
           push-to-registry: true
+
+      - name: Upload image SBOMs
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: image-sbom-controller
+          retention-days: 1
+          path: ocm-controller-image-linux-*.spdx.json
+          if-no-files-found: error
 
       - name: Download OpenVEX
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
