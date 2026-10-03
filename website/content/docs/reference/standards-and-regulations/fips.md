@@ -103,12 +103,13 @@ version changes.
 | --- | --- | --- |
 | `ocm` CLI binaries (all OS/architectures) | `GOFIPS140=certified`, `CGO_ENABLED=0` | — |
 | OCM CLI image | `GOFIPS140=certified`, `CGO_ENABLED=0` | `scratch` with `ocm` and the CA bundle |
-| OCM controller image | `GOFIPS140=certified`, `CGO_ENABLED=0` | `gcr.io/distroless/static:nonroot` with `manager` |
+| OCM controller image | `GOFIPS140=certified`, `CGO_ENABLED=0` | `scratch` with `manager` and the CA bundle |
 
-The CLI image is built `FROM scratch` and contains only the static `/ocm`
-binary (the entrypoint) and a CA bundle at `/etc/ssl/certs/ca-certificates.crt`.
-The controller image is based on distroless `static`, which adds CA
-certificates, time zone data and a `nonroot` user, but no cryptographic library.
+Both images are built `FROM scratch`. They contain only the static binary
+(`/ocm` or `/manager`, the entrypoint) and a CA bundle at
+`/etc/ssl/certs/ca-certificates.crt`. The CLI image also has world-writable
+`/tmp`, `/.cache` and `/.sigstore` directories; the controller chart mounts an
+`emptyDir` at `/tmp`.
 
 The images have no shell and no package manager, and the CLI image does not
 include `cosign` or `gpg`. See [Sigstore and cosign](#sigstore-and-cosign) and
@@ -117,6 +118,10 @@ include `cosign` or `gpg`. See [Sigstore and cosign](#sigstore-and-cosign) and
 The binaries are statically linked and do not use any system cryptographic
 library. All cryptography in OCM itself goes through the Go Cryptographic
 Module.
+
+For how the images and the controller chart are hardened, and how they are
+scanned against the DISA GPOS SRG, see
+[DISA STIG]({{< relref "docs/reference/standards-and-regulations/disa-stig.md" >}}).
 
 ## Runtime Modes
 
@@ -384,7 +389,9 @@ the binary to `$(go env GOPATH)/bin/<os>_<arch>/cosign`, for example
 
 - **Local `ocm` binary:** put that `cosign` on `PATH` before running `ocm`.
 - **OCM CLI image:** build cosign for the image's platform and mount it at
-  `/usr/local/bin/cosign`, which is on the default `PATH`:
+  `/usr/local/bin/cosign`, which is on the default `PATH`. cosign keeps its
+  trust-root cache in the image's world-writable `/.sigstore`, so it works for
+  any user ID:
 
   ```shell
   docker run --rm \

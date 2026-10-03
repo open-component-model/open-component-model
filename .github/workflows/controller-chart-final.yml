@@ -1,0 +1,172 @@
+name: controller final chart
+
+# Reusable workflow that re-packages, verifies, pushes and attests the final
+# Helm chart during a release. Called from release.yml so the attestation is
+# generated inside a reusable workflow (SLSA Build L3).
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: "Final semver without leading 'v' (e.g. 0.20.0)."
+        required: true
+        type: string
+      rc_tag:
+        description: "RC tag whose release assets carry the RC chart (e.g. v0.20.0-rc.1)."
+        required: true
+        type: string
+      rc_version:
+        description: "RC version (e.g. 0.20.0-rc.1)."
+        required: true
+        type: string
+      image_digest:
+        description: "Digest of the controller image already pushed to GHCR."
+        required: true
+        type: string
+    outputs:
+      chart_digest:
+        description: "Digest of the pushed final Helm chart."
+        value: ${{ jobs.chart.outputs.chart_digest }}
+      chart_artifact_name:
+        description: "Name of the uploaded chart artifact."
+        value: ${{ jobs.chart.outputs.chart_artifact_name }}
+
+permissions:
+  contents: read
+
+env:
+  REGISTRY: ghcr.io
+  CONTROLLER_PATH: bindings/go/kubernetes/controller
+  GH_REPO: ${{ github.repository }}
+
+jobs:
+  chart:
+    name: Package and Attest Final Chart
+    runs-on: ubuntu-24.04-arm
+    outputs:
+      chart_digest: ${{ steps.chart-digest.outputs.digest }}
+      chart_artifact_name: controller-chart-final-${{ inputs.version }}
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    steps:
+      - name: Compute image refs (lowercase owner)
+        env:
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          OWNER="${OWNER,,}"
+          {
+            echo "CONTROLLER_IMAGE=ghcr.io/$OWNER/kubernetes/controller"
+            echo "CONTROLLER_CHART=ghcr.io/$OWNER/kubernetes/controller/chart"
+          } >> "$GITHUB_ENV"
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Full checkout, as in the release job this replaces: the controller
+          # Taskfile includes Taskfiles outside its directory.
+          persist-credentials: false
+
+      - name: Install Task
+        uses: arduino/setup-task@c0bc642852239c2689f73f4ea6459c29405f3c52 # v3.0.0
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install Helm
+        uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with:
+          version: v4.2.4
+
+      - name: Setup ORAS
+        uses: oras-project/setup-oras@005458ad77f1c8facd38a094e4af2e69e5607ff4 # v2
+
+      - name: Log in to GHCR
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Re-package final chart
+        working-directory: ${{ env.CONTROLLER_PATH }}
+        env:
+          VERSION: ${{ inputs.version }}
+          IMAGE_DIGEST: ${{ inputs.image_digest }}
+        run: |
+          set -euo pipefail
+          task helm/package VERSION="${VERSION}" APP_VERSION="${VERSION}" IMAGE_DIGEST="${IMAGE_DIGEST}" IMAGE_REPOSITORY="$CONTROLLER_IMAGE"
+
+      - name: Verify chart equivalence (RC vs final)
+        working-directory: ${{ env.CONTROLLER_PATH }}
+        env:
+          RC_TAG: ${{ inputs.rc_tag }}
+          RC_VERSION: ${{ inputs.rc_version }}
+          VERSION: ${{ inputs.version }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          work=$(mktemp -d)
+          mkdir -p "$work/rc" "$work/final"
+          trap 'rm -rf "$work"' EXIT
+
+          gh release download "${RC_TAG}" \
+            --repo "$GH_REPO" \
+            --pattern "chart-${RC_VERSION}.tgz" \
+            --dir "$work"
+
+          tar -xzf "$work/chart-${RC_VERSION}.tgz" -C "$work/rc" --strip-components=1
+          tar -xzf "dist/chart-${VERSION}.tgz" -C "$work/final" --strip-components=1
+
+          # Normalize version-dependent fields so RC and final become byte-comparable.
+          #   - Chart.yaml: drop version + appVersion (always differ between RC and final).
+          #   - values.yaml: strip the tag portion before "@" in manager.image.tag, leaving
+          #     the @<digest> intact. Contract: the chart MUST pin the manager image by
+          #     digest (image:tag@sha256:...) for this normalization to be meaningful.
+          #     If a future change ships a tag-only pin (no @<digest>), this regex would
+          #     clear the whole string and could mask real drift between RC and final.
+          for dir in "$work/rc" "$work/final"; do
+            grep -q '@sha256:' "$dir/values.yaml" \
+              || { echo "::error::$dir/values.yaml is not digest-pinned"; exit 1; }
+            yq -i 'del(.version, .appVersion)' "$dir/Chart.yaml"
+            yq -i '.manager.image.tag |= sub("^[^@]*", "")' "$dir/values.yaml"
+          done
+
+          diff -r "$work/rc" "$work/final"
+
+      - name: Push final chart
+        working-directory: ${{ env.CONTROLLER_PATH }}
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          task helm/push VERSION="${VERSION}" REGISTRY="$CONTROLLER_IMAGE"
+
+      - name: Resolve final chart digest
+        id: chart-digest
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          digest=$(oras resolve "$CONTROLLER_CHART:${VERSION}")
+          [[ "$digest" == sha256:* ]] || { echo "::error::oras resolve returned unexpected digest: $digest"; exit 1; }
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+
+      - name: Attest final chart
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          subject-digest: ${{ steps.chart-digest.outputs.digest }}
+          subject-name: ${{ env.CONTROLLER_CHART }}
+          push-to-registry: true
+
+      - name: Upload chart artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: controller-chart-final-${{ inputs.version }}
+          retention-days: 1
+          path: ${{ env.CONTROLLER_PATH }}/dist/chart-${{ inputs.version }}.tgz
+          if-no-files-found: error

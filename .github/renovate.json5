@@ -55,6 +55,14 @@
       ],
     },
     {
+      // Garden Linux FIPS base image (CLI + controller). Only follow the
+      // multi-arch `<major>.<patch>` tags, not the per-arch `amd64-*`/`arm64-*` ones.
+      matchDatasources: ['docker'],
+      matchPackageNames: ['ghcr.io/gardenlinux/gardenlinux/fips'],
+      allowedVersions: '/^\\d+\\.\\d+$/',
+      versioning: 'loose',
+    },
+    {
       matchUpdateTypes: ['minor','patch'],
       automerge: true,
     },
@@ -326,6 +334,17 @@
         '# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s+.*?_VERSION=v?(?<currentValue>\\d+\\.\\d+\\.\\d+)',
       ],
       versioningTemplate: 'semver',
+    },
+    {
+      // Digest-pinned images in .env files, e.g. OPENSCAP_IMAGE (tag@sha256:...).
+      customType: 'regex',
+      managerFilePatterns: [
+        '/(^|/)\\.env(\\.local)?$/',
+      ],
+      matchStrings: [
+        '# renovate: datasource=docker depName=(?<depName>\\S+)\\s+\\w+_IMAGE=\\S+?:(?<currentValue>[^@\\s]+)@(?<currentDigest>sha256:[a-f0-9]{64})',
+      ],
+      datasourceTemplate: 'docker',
     },
     {
       // Automatic version bump for GO_VERSION, NPM_VERSION and NODE_VERSION in Netlify.

@@ -1,14 +1,16 @@
-# Use multi-stage builds to copy certs from a minimal base image.
-# Debian uses the Mozilla CA bundle which contains a maximum number of trusted CAs.
-FROM --platform=$BUILDPLATFORM debian:bookworm-slim@sha256:3783cc01769c7b2b1b83a5c5ad96c815348e28ed7da68e2e3687004faa906251 AS certs
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates \
-    && update-ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+# CA bundle from the Garden Linux FIPS image, plus world-writable /tmp and the
+# default cache directories under HOME=/ (Docker's HOME for a user without a
+# passwd entry): /.cache for OCM's caches and a downloaded cosign, /.sigstore
+# for cosign's trust root. Files only, so this runs on the build platform.
+FROM --platform=$BUILDPLATFORM ghcr.io/gardenlinux/gardenlinux/fips:1877.25@sha256:74ae1f81d0723434024f591d8c2872852201b99b9f18c0fbe10221b16e60e01d AS certs
+RUN mkdir -p /out/etc/ssl/certs \
+ && cp /etc/ssl/certs/ca-certificates.crt /out/etc/ssl/certs/ \
+ && mkdir -m 1777 /out/tmp /out/.cache /out/.sigstore
 
 FROM scratch
 ARG TARGETOS
 ARG TARGETARCH
-COPY --from=certs /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+COPY --from=certs /out /
 COPY tmp/bin/ocm-${TARGETOS}-${TARGETARCH} /ocm
+USER 65532:65532
 ENTRYPOINT ["/ocm"]
