@@ -1,9 +1,3 @@
-// These tests run the system gpg, which usually does not use a FIPS-mode libgcrypt,
-// so the test binary runs outside FIPS 140-3 mode even in GOFIPS140 builds. The
-// FIPS-mode requirement on gpg is tested in internal/gpgbinary, and end to end
-// against a FIPS-mode libgcrypt by cli/integration Test_Integration_Signing_GPG_FIPS.
-//
-//go:debug fips140=off
 package handler
 
 import (

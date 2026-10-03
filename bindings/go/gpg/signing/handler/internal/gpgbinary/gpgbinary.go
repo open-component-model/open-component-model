@@ -59,9 +59,9 @@ var (
 	// ErrKeyMaterialWithKeyring rejects key material in a request that uses the keyring,
 	// so that it is never ambiguous which key signs or verifies.
 	ErrKeyMaterialWithKeyring = errors.New("keySource keyring takes keys from the GnuPG keyring; remove the key material from the GPG credentials")
-	// ErrGPGNotInFIPSMode is returned in FIPS 140-3 mode when the libgcrypt of gpg does not run in FIPS mode,
+	// ErrGPGNotInFIPSMode is returned with GODEBUG=fips140=only when the libgcrypt of gpg does not run in FIPS mode,
 	// because GPG signing would then leave the FIPS boundary.
-	ErrGPGNotInFIPSMode = errors.New("in FIPS 140-3 mode, GPG signing requires a gpg whose libgcrypt runs in FIPS mode " +
+	ErrGPGNotInFIPSMode = errors.New("with GODEBUG=fips140=only, GPG signing requires a gpg whose libgcrypt runs in FIPS mode " +
 		"(gpgconf --show-versions reports fips-mode:y; enable it with /etc/gcrypt/fips_enabled or a FIPS-mode kernel)")
 )
 
@@ -91,18 +91,21 @@ func WithTempDir(dir string) Option {
 	return func(b *Binary) { b.tempDir = dir }
 }
 
-// WithFIPSEnabled overrides how FIPS 140-3 mode is detected; in FIPS mode gpg must run with a FIPS-mode libgcrypt.
-func WithFIPSEnabled(fn func() bool) Option {
-	return func(b *Binary) { b.fipsEnabled = fn }
+// WithFIPSMode overrides how the FIPS 140-3 mode is detected. In FIPS mode (enabled) OCM checks that gpg runs with
+// a FIPS-mode libgcrypt; in strict FIPS mode (enforced, GODEBUG=fips140=only) a failed check is an error, otherwise
+// it is logged at debug level.
+func WithFIPSMode(enabled, enforced func() bool) Option {
+	return func(b *Binary) { b.fipsEnabled, b.fipsEnforced = enabled, enforced }
 }
 
 // Binary resolves and invokes the gpg binary. It is safe for concurrent use.
 // Resolution is retried on every call until it succeeds once; the resolved paths are cached afterwards.
 type Binary struct {
-	lookPath    func(file string) (string, error)
-	exec        ExecFunc
-	tempDir     string      // "" means os.TempDir()
-	fipsEnabled func() bool // reports FIPS 140-3 mode
+	lookPath     func(file string) (string, error)
+	exec         ExecFunc
+	tempDir      string      // "" means os.TempDir()
+	fipsEnabled  func() bool // reports FIPS 140-3 mode (fips140=on or only)
+	fipsEnforced func() bool // reports strict FIPS 140-3 mode (fips140=only)
 
 	mu          sync.Mutex
 	gpgPath     string // set after the first successful resolution
@@ -111,7 +114,7 @@ type Binary struct {
 
 // New returns a Binary that resolves binaries via exec.LookPath and runs them as subprocesses.
 func New(opts ...Option) *Binary {
-	b := &Binary{lookPath: exec.LookPath, exec: execCommand, fipsEnabled: fips140.Enabled}
+	b := &Binary{lookPath: exec.LookPath, exec: execCommand, fipsEnabled: fips140.Enabled, fipsEnforced: fips140.Enforced}
 	for _, opt := range opts {
 		opt(b)
 	}
@@ -374,9 +377,14 @@ func (b *Binary) resolve(ctx context.Context) (string, error) {
 	} else {
 		slog.WarnContext(ctx, "gpgconf not found on PATH; gpg-agents of temporary GnuPG home directories are not stopped explicitly and may keep unlocked key material until they exit")
 	}
-	if b.fipsEnabled != nil && b.fipsEnabled() {
+	enforced := b.fipsEnforced != nil && b.fipsEnforced()
+	if enforced || (b.fipsEnabled != nil && b.fipsEnabled()) {
 		if err := b.requireLibgcryptFIPSMode(vctx); err != nil {
-			return "", err
+			if enforced {
+				return "", err
+			}
+			slog.DebugContext(ctx, "gpg does not use a FIPS-mode libgcrypt; GPG signing runs outside the FIPS 140-3 boundary "+
+				"(GODEBUG=fips140=only rejects it)", "path", path, "reason", err.Error())
 		}
 	}
 	b.gpgPath = path

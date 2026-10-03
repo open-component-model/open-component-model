@@ -28,18 +28,19 @@ compliance guarantees.
 
 **Default and opt-out.** FIPS mode is on by default (`fips140=on`), so there is
 no separate FIPS build. Outside regulated environments you can turn it off with
-`GODEBUG=fips140=off`. `GODEBUG=fips140=only` is not supported, see
+`GODEBUG=fips140=off`. `GODEBUG=fips140=only` additionally rejects external
+binaries that run outside the FIPS boundary, but has caveats, see
 [Runtime Modes](#runtime-modes).
 
 **What changes in FIPS mode.** Besides the cryptography itself running in the
 Go Cryptographic Module, FIPS mode changes OCM's behavior in these places:
 
-| Area | In FIPS mode | Details |
-| --- | --- | --- |
-| TLS connections | Only FIPS-approved TLS versions, cipher suites and key exchanges | [Effects of FIPS Mode](#effects-of-fips-mode) |
-| Signing and verification | Resource and component reference digests must use SHA-256 or SHA-512 | [Digest Algorithms](#digest-algorithms) |
-| Sigstore signing | `cosign` must be on `PATH` and built against a frozen Go Cryptographic Module; OCM does not download it | [Sigstore and cosign](#sigstore-and-cosign) |
-| GPG signing | `gpg` must use a `libgcrypt` that runs in FIPS mode | [GPG](#gpg) |
+| Area | `fips140=on` (default) | `fips140=only` | Details |
+| --- | --- | --- | --- |
+| TLS connections | Only FIPS-approved TLS versions, cipher suites and key exchanges | Same | [Effects of FIPS Mode](#effects-of-fips-mode) |
+| Signing and verification | Resource and component reference digests must use SHA-256 or SHA-512 | Same | [Digest Algorithms](#digest-algorithms) |
+| Sigstore signing | A `cosign` that is not a FIPS build, or a downloaded one, is used and logged at debug level | Rejected; `cosign` must be on `PATH` and a FIPS build | [Sigstore and cosign](#sigstore-and-cosign) |
+| GPG signing | A `gpg` without a FIPS-mode `libgcrypt` is used and logged at debug level | Rejected | [GPG](#gpg) |
 
 **Module version.** The module version is pinned once, as `GOFIPS140` in the
 repository's root `.env`. OCM uses the newest module version that is validated
@@ -155,20 +156,21 @@ You control the runtime mode with the `GODEBUG` environment variable.
 | `GODEBUG` | Behavior |
 | --- | --- |
 | `fips140=on` (default) | FIPS mode is active. Approved algorithms run in their FIPS-compliant form, and non-approved algorithms such as MD5 and SHA-1 stay available. |
-| `fips140=only` | Non-approved algorithms return an error or panic. Go documents this as a best-effort mode for testing and assessment, not for production. |
+| `fips140=only` | Like `on`, but non-approved algorithms return an error or panic, and OCM rejects a `cosign` or `gpg` that runs outside the FIPS boundary. Go documents this as a best-effort mode for testing and assessment, not for production. |
 | `fips140=off` | FIPS mode is disabled. |
 
 OCM runs in `fips140=on` mode by default, which allows non-approved algorithms
 instead of rejecting them. Parts of the dependency tree use non-approved
 algorithms for non-security purposes, such as content addressing and legacy
-digests. The FIPS 140-3 Security Policy does not require `fips140=only`, and
-OCM does not support it.
+digests. The FIPS 140-3 Security Policy does not require `fips140=only`.
 
-`GODEBUG` is inherited by every Go program OCM starts, including programs OCM
-does not control. For example, with `fips140=only` the Docker Desktop credential
-helper (`docker-credential-desktop`) panics on an internal MD5 use, so OCM cannot
-resolve registry credentials. `fips140=only` is still useful as a one-off audit:
-run a workload once to find non-approved algorithms in its call path.
+With `fips140=only`, OCM refuses to run `cosign` or `gpg` outside the FIPS
+boundary. Go's own enforcement, however, applies to every Go program OCM starts,
+including programs OCM does not control. For example, the Docker Desktop
+credential helper (`docker-credential-desktop`) panics on an internal MD5 use, so
+OCM cannot resolve registry credentials. Use `fips140=only` where all such
+programs are known to work, or as a one-off audit to find non-approved
+algorithms in a workload's call path.
 
 ### Effects of FIPS Mode
 
@@ -285,8 +287,8 @@ binary:
 
 | Feature | Where the cryptography runs |
 | --- | --- |
-| GPG signing and verification | OCM runs the GnuPG `gpg` binary (>= 2.2.0) from `PATH`, so all OpenPGP cryptography runs in its `libgcrypt`. In FIPS mode, OCM requires that `libgcrypt` runs in FIPS mode, but cannot check that it is FIPS validated, see [GPG](#gpg). |
-| Sigstore/cosign signing and verification | OCM runs the `cosign` binary from `PATH`. In FIPS mode, OCM requires a cosign built against a frozen Go Cryptographic Module and does not download one, see [Sigstore and cosign](#sigstore-and-cosign). |
+| GPG signing and verification | OCM runs the GnuPG `gpg` binary (>= 2.2.0) from `PATH`, so all OpenPGP cryptography runs in its `libgcrypt`. OCM checks that `libgcrypt` runs in FIPS mode, but cannot check that it is FIPS validated, see [GPG](#gpg). |
+| Sigstore/cosign signing and verification | OCM runs the `cosign` binary from `PATH`, or downloads the upstream release, which is not a FIPS build. OCM checks whether `cosign` is a FIPS build, see [Sigstore and cosign](#sigstore-and-cosign). |
 
 In a FIPS-restricted environment, use RSA signing, or Sigstore with a FIPS
 build of `cosign`. Progress on GPG is tracked in
@@ -295,20 +297,22 @@ build of `cosign`. Progress on GPG is tracked in
 ### Sigstore and cosign
 
 OCM's Sigstore signing handler runs the external `cosign` binary from `PATH`.
-Neither the OCM CLI binaries nor the CLI image include `cosign`. In FIPS mode:
+Neither the OCM CLI binaries nor the CLI image include `cosign`. When none is on
+`PATH`, OCM downloads and caches the upstream release.
 
-- The `cosign` on `PATH` must be built against a frozen Go Cryptographic Module.
-  OCM reads the Go build information of the binary, the same data that
-  `go version -m` shows, and requires `GOFIPS140=v<version>`. Otherwise it fails
-  with `in FIPS 140-3 mode, Sigstore signing requires a cosign built against a
-  frozen Go Cryptographic Module`. The upstream cosign releases are not such
-  builds.
-- When no `cosign` is on `PATH`, OCM fails with `downloading cosign is disabled
-  in FIPS 140-3 mode` instead of downloading the upstream release, and does not
-  use a previously downloaded one either.
+In FIPS mode, OCM reads the Go build information of `cosign`, the same data that
+`go version -m` shows, and checks for `GOFIPS140=v<version>`, which marks a build
+against a frozen Go Cryptographic Module. The upstream cosign releases are not
+such builds.
 
-Outside FIPS mode (`GODEBUG=fips140=off`), any `cosign` >= v3.0.4 works, and
-OCM downloads and caches the upstream release when none is on `PATH`.
+| Mode | `cosign` that is not a FIPS build | No `cosign` on `PATH` |
+| --- | --- | --- |
+| `fips140=on` (default) | Used; logged at debug level | Downloaded; logged at debug level |
+| `fips140=only` | Rejected: `Sigstore signing requires a cosign built against a frozen Go Cryptographic Module` | Rejected: `downloading cosign is disabled`; a previously downloaded one is not used either |
+| `fips140=off` | Used | Downloaded |
+
+To keep Sigstore signing inside the FIPS boundary, provide a FIPS build of
+cosign.
 
 cosign builds unmodified against the Go Cryptographic Module. Build it with the
 same `GOFIPS140` value as OCM; the cosign version OCM is tested with is pinned in
@@ -343,11 +347,15 @@ OCM signs and verifies GPG signatures by running the `gpg` binary on `PATH`.
 Neither the OCM CLI binaries nor the CLI image include it, and GPG signing does
 not work in the CLI image as is.
 
-In FIPS mode, OCM rejects a `gpg` whose `libgcrypt` does not run in FIPS mode.
-It asks `gpgconf --show-versions`, which must report `fips-mode:y`, so `gpgconf`
-must be on `PATH` as well. Otherwise GPG signing and verification fail with
-`in FIPS 140-3 mode, GPG signing requires a gpg whose libgcrypt runs in FIPS
-mode`. Outside FIPS mode (`GODEBUG=fips140=off`), any `gpg` >= 2.2.0 works.
+In FIPS mode, OCM checks whether the `libgcrypt` of `gpg` runs in FIPS mode by
+asking `gpgconf --show-versions` for `fips-mode:y`. With `fips140=only`, a
+missing `gpgconf` also fails the check.
+
+| Mode | `gpg` without a FIPS-mode `libgcrypt` |
+| --- | --- |
+| `fips140=on` (default) | Used; logged at debug level |
+| `fips140=only` | Rejected: `GPG signing requires a gpg whose libgcrypt runs in FIPS mode` |
+| `fips140=off` | Used |
 
 GnuPG does its cryptography in `libgcrypt`. For an approved-algorithms-only
 `gpg`, use the

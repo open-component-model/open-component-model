@@ -293,11 +293,11 @@ Without `--signature`, **every** signature on the descriptor is verified. Config
 
 **Fix:** Install GnuPG 2.2 or later (`brew install gnupg`, `sudo apt-get install gnupg`, `sudo dnf install gnupg2`) and make sure `gpg` is on `PATH`.
 
-### Symptom: `in FIPS 140-3 mode, GPG signing requires a gpg whose libgcrypt runs in FIPS mode`
+### Symptom: `with GODEBUG=fips140=only, GPG signing requires a gpg whose libgcrypt runs in FIPS mode`
 
-**Cause:** Official OCM builds run in FIPS 140-3 mode by default, and the `libgcrypt` of your `gpg` does not run in FIPS mode (`gpgconf --show-versions` reports `fips-mode:n`), or `gpgconf` is not on `PATH`.
+**Cause:** OCM runs with `GODEBUG=fips140=only`, and the `libgcrypt` of your `gpg` does not run in FIPS mode (`gpgconf --show-versions` reports `fips-mode:n`), or `gpgconf` is not on `PATH`.
 
-**Fix:** Use a GnuPG whose `libgcrypt` runs in FIPS mode, see [FIPS 140-3: GPG]({{< relref "docs/reference/fips.md" >}}#gpg). Outside regulated environments, run OCM with `GODEBUG=fips140=off` instead.
+**Fix:** Use a GnuPG whose `libgcrypt` runs in FIPS mode, see [FIPS 140-3: GPG]({{< relref "docs/reference/fips.md" >}}#gpg), or run OCM without `fips140=only`.
 
 {{< /tab >}}
 {{< tab "Sigstore (interactive)" >}}

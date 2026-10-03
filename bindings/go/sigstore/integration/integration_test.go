@@ -1,8 +1,3 @@
-// The scaffolding provides the upstream cosign release, which is not built
-// against a frozen Go Cryptographic Module, so the test binary runs outside FIPS
-// 140-3 mode even in GOFIPS140 builds.
-//
-//go:debug fips140=off
 package integration_test
 
 // TODO(ocm-project): Add integration tests for:

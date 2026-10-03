@@ -12,22 +12,31 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// setMode sets the FIPS 140-3 mode seen by b: "off", "on" (fips140=on) or "only" (fips140=only).
+func setMode(b *CosignBinary, mode string) {
+	b.FIPSEnabled = func() bool { return mode != "off" }
+	b.FIPSEnforced = func() bool { return mode == "only" }
+}
+
 func TestResolveBinary_CosignOnPathFIPSBuild(t *testing.T) {
 	withSettings := func(settings ...debug.BuildSetting) func(string) (*buildinfo.BuildInfo, error) {
 		return func(string) (*buildinfo.BuildInfo, error) { return &buildinfo.BuildInfo{Settings: settings}, nil }
 	}
+	fipsBuild := withSettings(debug.BuildSetting{Key: "GOFIPS140", Value: "v1.26.0"})
+	plainBuild := withSettings(debug.BuildSetting{Key: "CGO_ENABLED", Value: "0"})
 	tests := []struct {
 		name      string
-		fips      bool
+		mode      string
 		readInfo  func(string) (*buildinfo.BuildInfo, error)
 		wantErr   string
 		wantReads bool
 	}{
-		{name: "FIPS build", fips: true, readInfo: withSettings(debug.BuildSetting{Key: "GOFIPS140", Value: "v1.26.0"}), wantReads: true},
-		{name: "GOFIPS140=latest", fips: true, readInfo: withSettings(debug.BuildSetting{Key: "GOFIPS140", Value: "latest"}), wantErr: "built with GOFIPS140=latest", wantReads: true},
-		{name: "no GOFIPS140", fips: true, readInfo: withSettings(debug.BuildSetting{Key: "CGO_ENABLED", Value: "0"}), wantErr: "built without GOFIPS140", wantReads: true},
-		{name: "unreadable build info", fips: true, readInfo: func(string) (*buildinfo.BuildInfo, error) { return nil, errors.New("not a Go binary") }, wantErr: "not a Go binary", wantReads: true},
-		{name: "non-FIPS build outside FIPS mode", readInfo: withSettings()},
+		{name: "only: FIPS build accepted", mode: "only", readInfo: fipsBuild, wantReads: true},
+		{name: "only: GOFIPS140=latest rejected", mode: "only", readInfo: withSettings(debug.BuildSetting{Key: "GOFIPS140", Value: "latest"}), wantErr: "built with GOFIPS140=latest", wantReads: true},
+		{name: "only: no GOFIPS140 rejected", mode: "only", readInfo: plainBuild, wantErr: "built without GOFIPS140", wantReads: true},
+		{name: "only: unreadable build info rejected", mode: "only", readInfo: func(string) (*buildinfo.BuildInfo, error) { return nil, errors.New("not a Go binary") }, wantErr: "not a Go binary", wantReads: true},
+		{name: "on: non-FIPS build accepted after the check", mode: "on", readInfo: plainBuild, wantReads: true},
+		{name: "off: build information not read", mode: "off", readInfo: plainBuild},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -35,7 +44,7 @@ func TestResolveBinary_CosignOnPathFIPSBuild(t *testing.T) {
 			var reads bool
 			b := NewCosignBinary()
 			b.LookPath = func(string) (string, error) { return "/fake/bin/cosign", nil }
-			b.FIPSEnabled = func() bool { return tc.fips }
+			setMode(b, tc.mode)
 			b.ReadBuildInfo = func(p string) (*buildinfo.BuildInfo, error) { reads = true; return tc.readInfo(p) }
 
 			path, err := b.resolveBinary(t.Context())
@@ -62,16 +71,16 @@ func (rt *recordingTransport) RoundTrip(*http.Request) (*http.Response, error) {
 
 func TestResolveBinary_NoCosignOnPath(t *testing.T) {
 	tests := []struct {
-		name         string
-		fips         bool
+		mode         string
 		wantFIPSErr  bool
 		wantDownload bool
 	}{
-		{name: "FIPS mode refuses to download", fips: true, wantFIPSErr: true},
-		{name: "non-FIPS mode attempts the download", fips: false, wantDownload: true},
+		{mode: "only", wantFIPSErr: true},
+		{mode: "on", wantDownload: true},
+		{mode: "off", wantDownload: true},
 	}
 	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+		t.Run(tc.mode, func(t *testing.T) {
 			r := require.New(t)
 			// Isolate the download cache so a previously cached cosign cannot
 			// short-circuit the download attempt.
@@ -82,7 +91,7 @@ func TestResolveBinary_NoCosignOnPath(t *testing.T) {
 			b := NewCosignBinary()
 			b.HttpClient = &http.Client{Transport: transport}
 			b.LookPath = func(string) (string, error) { return "", exec.ErrNotFound }
-			b.FIPSEnabled = func() bool { return tc.fips }
+			setMode(b, tc.mode)
 
 			_, err := b.resolveBinary(t.Context())
 			r.Error(err)
