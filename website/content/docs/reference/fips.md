@@ -235,8 +235,6 @@ go version -m "$(go env GOPATH)/bin/cosign" | grep -E 'GOFIPS140|DefaultGODEBUG'
     verify cv --config /.ocmconfig ghcr.io/<namespace>//<component>:<version>
   ```
 
-The OCM release workflow signs its own components this way.
-
 cosign's encrypted private key files (`cosign generate-key-pair`) use scrypt and
 NaCl secretbox from `golang.org/x/crypto`, which are outside the Go
 Cryptographic Module. OCM's keyless Sigstore flow does not use these key files.
