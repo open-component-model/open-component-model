@@ -69,10 +69,11 @@ node .github/scripts/stig-scan.js <image> bindings/go/cli/Containerfile tmp/stig
 ```
 
 `tmp/stig` then contains the XCCDF results and HTML reports of both
-evaluations. In the pipeline, the reusable `STIG scan` workflow
-(`.github/workflows/stig.yml`) writes the results of each image and architecture
-to the job summary and uploads the reports as `stig-<image>-<arch>` workflow
-artifacts, for example `stig-cli-amd64`.
+evaluations. In the pipeline, the reusable `Image scan` workflow
+(`.github/workflows/image-scan.yml`) writes the results of each image and
+architecture to the job summary and uploads the reports as
+`image-scan-<image>-<arch>` workflow artifacts, for example
+`image-scan-cli-amd64`.
 
 Node operating system and cluster STIGs, such as the Kubernetes STIG, are the
 platform operator's responsibility.

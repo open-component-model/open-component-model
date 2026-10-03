@@ -152,7 +152,7 @@ score of 88.24%, with 25 of 30 controls passing and 5 findings.
 | Control | Severity | Title | Result | Rationale |
 | --- | --- | --- | --- | --- |
 | C-0015 | High | List Kubernetes secrets | Finding | Same as KSV-0041: the ClusterRole grants get/list/watch on Secrets for credential resolution. |
-| C-0030 | Medium | Ingress and Egress blocked | Finding | The chart does not ship a NetworkPolicy. Network segmentation depends on the cluster's CNI and the operator's network policies. |
+| C-0030 | Medium | Ingress and Egress blocked | Finding | The chart ships an opt-in `NetworkPolicy` (`manager.networkPolicy.enabled`, default `false`). With default values the finding remains because the policy is not rendered. When enabled, the policy restricts ingress and egress as described in [BSI IT-Grundschutz]({{< relref "docs/reference/standards-and-regulations/bsi-it-grundschutz.md" >}}). |
 | C-0034 | Medium | Automatic mapping of service account | Finding | The Deployment does not set `automountServiceAccountToken: false`. The controller needs the projected service account token to authenticate to the Kubernetes API. |
 | C-0037 | Medium | CoreDNS poisoning | Finding | The leader-election Role grants write access to ConfigMaps, which Kubescape flags as a vector for CoreDNS ConfigMap tampering. The Role is namespace-scoped to the release namespace and used only for leader election. |
 | C-0053 | Medium | Access container service account | Finding | The ServiceAccount is mounted into the pod. As noted under C-0034, the controller requires API access and cannot opt out. |
@@ -164,12 +164,15 @@ privilege escalation.
 
 ### Gaps
 
-**NetworkPolicy (C-0030).** The chart does not include a NetworkPolicy because
-the required rules depend on the cluster's CNI, the namespace layout, and which
-OCI registries the controller must reach. To restrict traffic, create a
-NetworkPolicy in the release namespace that allows egress to the Kubernetes API
-server and to your OCI registries, and allows ingress on the health-probe and
-metrics ports if exposed.
+**NetworkPolicy (C-0030).** The chart includes an opt-in `NetworkPolicy`
+(`manager.networkPolicy.enabled`, default `false`). When enabled, it allows
+ingress to the health-probe port (and the metrics port when metrics are
+enabled) and defaults egress to DNS (UDP/TCP 53) and HTTPS/Kubernetes API (TCP
+443, 6443). Egress rules are replaceable via `manager.networkPolicy.egress`;
+extra ingress rules can be added via `manager.networkPolicy.ingress`. The
+policy requires a CNI that enforces `NetworkPolicy`. With default chart values
+(`enabled: false`) the Kubescape finding remains because no `NetworkPolicy` is
+rendered.
 
 **automountServiceAccountToken (C-0034, C-0053).** The controller is a
 Kubernetes operator that watches custom resources and reads Secrets. Disabling
@@ -212,7 +215,8 @@ findings are:
 2. **Service account and leader election** (KSV-0049, C-0034, C-0037, C-0053):
    required for controller-runtime operation.
 3. **Image registry policy and network policy** (KSV-0125, C-0030):
-   environment-specific; the operator configures these.
+   environment-specific; the chart provides an opt-in `NetworkPolicy`, but the
+   operator must enable and tune it.
 
 Image-level checks (CIS-DI-0005, CIS-DI-0006) are informational and not
 applicable in a Kubernetes deployment.

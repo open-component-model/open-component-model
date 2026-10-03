@@ -66,7 +66,7 @@ the OCM evidence that supports it, and any gaps.
 
 | Practice | Name | OCM evidence | Gap |
 | --- | --- | --- | --- |
-| RV.1 | Identify and Confirm Vulnerabilities on an Ongoing Basis | CodeQL runs daily (`.github/workflows/codeql.yml`). OpenSSF Scorecard runs weekly (`.github/workflows/openssf-scorecard.yml`). Renovate creates dependency update PRs with a 28-day minimum release age and groups for fast-moving dependencies. The org-level [security policy](https://github.com/open-component-model/.github/blob/main/SECURITY.md) accepts vulnerability reports through GitHub private vulnerability reporting or email to the TSC. | No SBOM is generated or published with releases. |
+| RV.1 | Identify and Confirm Vulnerabilities on an Ongoing Basis | CodeQL runs daily (`.github/workflows/codeql.yml`). `govulncheck` runs in source mode on every Go code change (`.github/workflows/ci.yml`), gated by the required CI completion check, providing reachability-aware vulnerability analysis. Every container image is scanned with Trivy using an OpenVEX document from `govulncheck` (`.github/workflows/image-scan.yml`); the scan gates publishing and reports only reachable vulnerabilities. OpenSSF Scorecard runs weekly (`.github/workflows/openssf-scorecard.yml`). Renovate creates dependency update PRs with a 28-day minimum release age and groups for fast-moving dependencies. The org-level [security policy](https://github.com/open-component-model/.github/blob/main/SECURITY.md) accepts vulnerability reports through GitHub private vulnerability reporting or email to the TSC. SPDX JSON SBOMs are generated with Syft for every CLI binary and OCI image and attested with `actions/attest`. OpenVEX documents are attested to each OCI image. | — |
 | RV.2 | Assess, Prioritize, and Remediate Vulnerabilities | The security policy defines severity-based response targets (Critical ≤ 14 days fix, High ≤ 30 days, Medium ≤ 90 days). Published advisories are listed in each repository's Security → Advisories tab. | — |
 | RV.3 | Analyze Vulnerabilities to Identify Their Root Causes | ADRs document architectural decisions and their security rationale. The assurance case (`docs/security/assurance-case.md`) maps threats to mitigations. | No formal root-cause analysis process is documented. |
 
@@ -74,7 +74,6 @@ the OCM evidence that supports it, and any gaps.
 
 | Gap | SSDF practice | Notes |
 | --- | --- | --- |
-| No SBOM published with releases | RV.1 | No CycloneDX or SPDX SBOM is generated or attached to releases. Build-provenance attestations are present but do not substitute for an SBOM. |
 | No fuzzing or DAST | PW.8 | Static analysis (CodeQL, gosec) and unit/integration/conformance/e2e tests are in place, but no fuzz testing or dynamic analysis runs in CI. |
 | No formal root-cause analysis process | RV.3 | ADRs and the assurance case exist, but no documented process requires root-cause analysis after a vulnerability fix. |
 | No documented minimum Scorecard policy | PO.4 | The OpenSSF Scorecard runs and publishes results, but no minimum score is enforced as a gate. |

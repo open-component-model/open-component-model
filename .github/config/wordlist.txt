@@ -13,6 +13,7 @@ cybersecurity
 dast
 dockle
 enisa
+govulncheck
 gpos
 grundschutz
 grype
@@ -21,7 +22,9 @@ init
 kube
 kubescape
 lex
+micro-segmentation
 openscap
+openvex
 probot
 Runtime's
 acls
@@ -767,6 +770,7 @@ serializable
 serviceaccountname
 setgid
 setuid
+severities
 sexualized
 sha
 shortcode
@@ -882,6 +886,7 @@ ttl
 tuf
 typehandler
 typename
+udp
 ui
 uids
 uis
