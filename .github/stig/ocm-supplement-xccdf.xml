@@ -3,15 +3,15 @@
   OCM checks for the GPOS SRG requirements that the Chainguard GPOS SRG profile
   checks against a Wolfi root filesystem. tailoring.xml deselects those rules
   for OCM's scratch images; the rules below check the same requirements against
-  what the images actually contain. Each rule references the SRG rules it covers.
+  what the images actually contain, with the OVAL definitions in
+  ocm-supplement-oval.xml. stig-scan.sh sets the Values per image.
 -->
-<Benchmark xmlns="http://checklists.nist.gov/xccdf/1.2" xmlns:xhtml="http://www.w3.org/1999/xhtml"
+<Benchmark xmlns="http://checklists.nist.gov/xccdf/1.2"
            id="xccdf_software.ocm_benchmark_gpos-container-supplement" resolved="1" xml:lang="en">
   <status>accepted</status>
   <title>OCM container image checks supplementing the GPOS SRG profile</title>
   <description>Checks GPOS SRG requirements against OCM's scratch images, which contain a static Go binary built against the Go Cryptographic Module and a CA bundle.</description>
-  <version>1</version>
-
+  <version>2</version>
 
   <Profile id="xccdf_software.ocm_profile_supplement">
     <title>OCM GPOS SRG supplement</title>
@@ -22,30 +22,41 @@
     <select idref="xccdf_software.ocm_rule_no_local_logs" selected="true"/>
   </Profile>
 
-  <Value id="xccdf_software.ocm_value_rootfs" type="string" operator="equals">
-    <title>Root filesystem of the image under test</title>
-    <description>Directory holding the exported root filesystem of the scanned image.</description>
-    <value>/work/rootfs</value>
+  <Value id="xccdf_software.ocm_value_entrypoint" type="string" operator="equals">
+    <title>Entrypoint binary</title>
+    <description>Path of the image's entrypoint binary, for example /ocm or /manager.</description>
+    <value>/ocm</value>
   </Value>
   <Value id="xccdf_software.ocm_value_expected_ca_sha256" type="string" operator="equals">
-    <title>File with the expected CA bundle digest</title>
-    <description>File holding the sha256 of the CA bundle in the digest-pinned base image.</description>
-    <value>/work/expected-ca.sha256</value>
+    <title>Expected CA bundle digest</title>
+    <description>sha256 of the CA bundle in the digest-pinned base image.</description>
+    <value/>
+  </Value>
+
+  <Value id="xccdf_software.ocm_value_gofips140" type="string" operator="equals">
+    <title>GOFIPS140 build setting</title>
+    <description>Value of the GOFIPS140 build setting in the entrypoint's Go build information.</description>
+    <value/>
+  </Value>
+  <Value id="xccdf_software.ocm_value_default_godebug" type="string" operator="equals">
+    <title>DefaultGODEBUG build setting</title>
+    <description>Value of the DefaultGODEBUG build setting in the entrypoint's Go build information.</description>
+    <value/>
   </Value>
 
   <Rule id="xccdf_software.ocm_rule_go_fips_module" selected="true" severity="high">
     <title>Cryptography runs in a FIPS-validated module</title>
-    <description>Every Go executable is built with GOFIPS140=v&lt;version&gt; and defaults to fips140=on, so all of OCM's cryptography runs in the Go Cryptographic Module (CMVP certificate #5247 for v1.0.0). The images contain no other cryptographic library.</description>
+    <description>The entrypoint is built with GOFIPS140=v&lt;version&gt; and defaults to fips140=on, so all of OCM's cryptography runs in the Go Cryptographic Module (CMVP certificate #5247 for v1.0.0). The images contain no other cryptographic library or executable.</description>
     <reference href="https://public.cyber.mil/stigs/">SV-203649</reference>
     <reference href="https://public.cyber.mil/stigs/">SV-203739</reference>
     <reference href="https://public.cyber.mil/stigs/">SV-203750</reference>
     <reference href="https://public.cyber.mil/stigs/">SV-203751</reference>
     <reference href="https://public.cyber.mil/stigs/">SV-203776</reference>
     <rationale>Covers SV-203649, SV-203739, SV-203750, SV-203751 and SV-203776, which the Chainguard profile checks for an OpenSSL FIPS provider.</rationale>
-    <check system="http://open-scap.org/page/SCE">
-      <check-import import-name="stdout"/>
-      <check-export value-id="xccdf_software.ocm_value_rootfs" export-name="ROOTFS"/>
-      <check-content-ref href="checks/go-fips-module.sh"/>
+    <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+      <check-export value-id="xccdf_software.ocm_value_gofips140" export-name="oval:software.ocm:var:3"/>
+      <check-export value-id="xccdf_software.ocm_value_default_godebug" export-name="oval:software.ocm:var:4"/>
+      <check-content-ref href="ocm-supplement-oval.xml" name="oval:software.ocm:def:1"/>
     </check>
   </Rule>
 
@@ -54,24 +65,21 @@
     <description>The only certificate file is /etc/ssl/certs/ca-certificates.crt, and it is byte-identical to the CA bundle of the digest-pinned Garden Linux FIPS base image.</description>
     <reference href="https://public.cyber.mil/stigs/">SV-263659</reference>
     <rationale>Covers SV-263659, which the Chainguard profile checks against Wolfi's build-time CA bundle digests.</rationale>
-    <check system="http://open-scap.org/page/SCE">
-      <check-import import-name="stdout"/>
-      <check-export value-id="xccdf_software.ocm_value_rootfs" export-name="ROOTFS"/>
-      <check-export value-id="xccdf_software.ocm_value_expected_ca_sha256" export-name="EXPECTED_CA_SHA256"/>
-      <check-content-ref href="checks/ca-bundle.sh"/>
+    <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+      <check-export value-id="xccdf_software.ocm_value_expected_ca_sha256" export-name="oval:software.ocm:var:2"/>
+      <check-content-ref href="ocm-supplement-oval.xml" name="oval:software.ocm:def:2"/>
     </check>
   </Rule>
 
   <Rule id="xccdf_software.ocm_rule_static_rootfs" selected="true" severity="medium">
     <title>No shared libraries, package manager, or setuid/setgid files</title>
-    <description>The image contains no shared libraries or dynamic loader, no package manager or package database, no setuid/setgid files, and no world-writable location without the sticky bit.</description>
+    <description>The image contains no shared libraries or dynamic loader, no package manager or package database, no setuid/setgid files, no world-writable location without the sticky bit, and no executable other than the entrypoint.</description>
     <reference href="https://public.cyber.mil/stigs/">SV-203675</reference>
     <reference href="https://public.cyber.mil/stigs/">SV-203716</reference>
     <rationale>Covers SV-203675 (library permissions) and SV-203716 (user installation of software): with a static binary and no package manager there are no library permissions to change and no way to install software.</rationale>
-    <check system="http://open-scap.org/page/SCE">
-      <check-import import-name="stdout"/>
-      <check-export value-id="xccdf_software.ocm_value_rootfs" export-name="ROOTFS"/>
-      <check-content-ref href="checks/static-rootfs.sh"/>
+    <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+      <check-export value-id="xccdf_software.ocm_value_entrypoint" export-name="oval:software.ocm:var:1"/>
+      <check-content-ref href="ocm-supplement-oval.xml" name="oval:software.ocm:def:3"/>
     </check>
   </Rule>
 
@@ -82,10 +90,8 @@
     <reference href="https://public.cyber.mil/stigs/">SV-203617</reference>
     <reference href="https://public.cyber.mil/stigs/">SV-203664</reference>
     <rationale>Covers SV-203616, SV-203617 (protect audit information) and SV-203664 (error messages only to authorized users), which the Chainguard profile checks through /var/log permissions.</rationale>
-    <check system="http://open-scap.org/page/SCE">
-      <check-import import-name="stdout"/>
-      <check-export value-id="xccdf_software.ocm_value_rootfs" export-name="ROOTFS"/>
-      <check-content-ref href="checks/no-local-logs.sh"/>
+    <check system="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+      <check-content-ref href="ocm-supplement-oval.xml" name="oval:software.ocm:def:4"/>
     </check>
   </Rule>
 </Benchmark>

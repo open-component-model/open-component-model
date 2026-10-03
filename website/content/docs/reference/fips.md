@@ -157,13 +157,14 @@ controller images it builds, and fails before publishing if any rule fails.
 The profile checks a Wolfi root filesystem in a few places. For OCM's `scratch`
 images, `.github/stig/tailoring.xml` deselects those rules, and
 `.github/stig/ocm-supplement-xccdf.xml` checks the same SRG requirements against
-what the images contain:
+what the images contain, with OVAL definitions in
+`.github/stig/ocm-supplement-oval.xml`:
 
 | SRG rules | Chainguard profile checks | OCM check |
 | --- | --- | --- |
-| SV-203649, SV-203739, SV-203750, SV-203751, SV-203776 | OpenSSL FIPS provider | Every Go executable has `GOFIPS140=v<version>` and `fips140=on` in its build information |
+| SV-203649, SV-203739, SV-203750, SV-203751, SV-203776 | OpenSSL FIPS provider | The entrypoint has `GOFIPS140=v<version>` and `fips140=on` in its build information |
 | SV-263659 | Wolfi CA bundle digests | The only certificate file is the CA bundle of the digest-pinned Garden Linux base image |
-| SV-203675, SV-203716 | Shared library permissions | No shared libraries, dynamic loader, package manager, setuid/setgid files, or world-writable paths without the sticky bit |
+| SV-203675, SV-203716 | Shared library permissions | No shared libraries, dynamic loader, package manager, setuid/setgid files, world-writable paths without the sticky bit, or executable other than the entrypoint |
 | SV-203616, SV-203617, SV-203664 | `/var/log` permissions | No on-disk log locations; logs go to stdout/stderr |
 
 The scan runs offline on the exported root filesystem. To scan an image
