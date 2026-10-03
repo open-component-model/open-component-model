@@ -151,6 +151,21 @@ OCM cannot resolve registry credentials. Use `fips140=only` where all such
 programs are known to work, or as a one-off audit to find non-approved
 algorithms in a workload's call path.
 
+Two OCM features use non-approved hashes by design and run them outside strict
+enforcement (`crypto/fips140.WithoutEnforcement`), so they keep working with
+`fips140=only`. FIPS mode itself stays on, so TLS and SSH still negotiate
+approved algorithms only:
+
+- **Git** identifies objects by SHA-1. Cloning, fetching and archiving a
+  repository runs outside strict enforcement; the archive OCM records is
+  digested with SHA-256.
+- **wget checksum verification** accepts MD5 and SHA-1 checksums that a server
+  publishes. Only these hashes run outside strict enforcement; the digest OCM
+  records and signs is always SHA-256.
+
+To check OCM's own code paths, run the unit tests in strict mode with
+`task bindings/go:test/fips140-only`. This run is not part of CI.
+
 ### Effects of FIPS Mode
 
 In FIPS mode, the Go Cryptographic Module:
@@ -165,6 +180,22 @@ In FIPS mode, the Go Cryptographic Module:
   ECDHE AES-CBC-SHA256 on TLS 1.2) cipher suites, no plain X25519 key exchange,
   and RSA certificates of at least 2048 bits. A registry or HTTP endpoint that
   offers only non-approved options fails the TLS handshake.
+- Draws entropy for its DRBG from the operating system. Module v1.0.0 uses the
+  kernel (`getrandom`) as a passive entropy source outside the module boundary,
+  so the quality of OCM's random numbers rests on the operating system. Run OCM
+  on an operating system with a FIPS-compliant entropy source, for example a
+  distribution with FIPS-validated kernel crypto. Module v1.26.0 adds a CPU
+  jitter entropy source with ESV certificate
+  [#E318](https://go.dev/doc/security/fips140); OCM moves to it once that module
+  is certified.
+
+FIPS mode does not make TLS compliant with
+[CNSA 1.0 or CNSA 2.0](https://media.defense.gov/2025/May/30/2003728741/-1/-1/0/CSA_CNSA_2.0_ALGORITHMS.PDF),
+which National Security Systems and DoD IL5 require: CNSA asks for AES-256,
+P-384 or `ML-KEM-1024`, and SHA-384, while Go also offers AES-128 and P-256, and
+does not let applications restrict TLS 1.3 cipher suites. OCM does not
+configure CNSA TLS. Deployments that need it have to build OCM with a
+toolchain that enforces it, such as the `go-fips` toolchain from Chainguard.
 
 To set the mode explicitly for the CLI:
 
@@ -274,6 +305,15 @@ binary:
 In a FIPS-restricted environment, use RSA signing, Sigstore with a FIPS build
 of `cosign`, or GPG with a `gpg` whose `libgcrypt` runs in FIPS mode on an
 operating system with FIPS-validated cryptographic modules, see [GPG](#gpg).
+
+Some dependencies bring cryptography that does not run through the Go
+Cryptographic Module. `github.com/ProtonMail/go-crypto` (OpenPGP) is imported by
+go-git (commit and tag signature verification) and Helm (chart provenance). OCM
+does not call either verification path; it only passes Helm provenance files
+through. In OCM's own code, `golangci-lint` (`depguard`) rejects imports of
+non-approved algorithms (DES, RC4, DSA, secp256k1, `golang.org/x/crypto`
+outside reviewed exceptions, ProtonMail OpenPGP) and limits MD5 and SHA-1 to
+wget checksum verification.
 
 ### Sigstore and cosign
 
@@ -438,10 +478,13 @@ To build FIPS binaries yourself, use the same settings as the release build
 (`build:target` in `bindings/go/cli/Taskfile.yml`). Run this from `bindings/go`:
 
 ```shell
-CGO_ENABLED=0 GOFIPS140=certified go build \
+CGO_ENABLED=0 GOTOOLCHAIN=local GOFIPS140=certified go build \
   -ldflags "-s -w -X ocm.software/open-component-model/bindings/go/cli/cmd/version.BuildVersion=<version>" \
   -o ocm ./cli
 ```
+
+`GOTOOLCHAIN=local` makes the build fail if the installed Go does not match the
+`toolchain` in `go.mod`, instead of downloading another toolchain.
 
 `-s -w` strips the symbol table and DWARF debug information, as the release
 binaries do. The `GOFIPS140` build information that `go version -m` reads is

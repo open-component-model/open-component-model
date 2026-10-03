@@ -4,6 +4,7 @@ bsi
 chainguard
 cisa
 cni
+cnsa
 cra
 csaf
 csirt
@@ -13,6 +14,7 @@ cybersecurity
 dast
 dockle
 enisa
+esv
 govulncheck
 gpos
 grundschutz
