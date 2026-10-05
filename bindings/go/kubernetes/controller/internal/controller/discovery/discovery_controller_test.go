@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"strings"
 	"testing"
@@ -73,7 +72,7 @@ func realPluginReconciler(t *testing.T, objs ...client.Object) (*Reconciler, cli
 	t.Helper()
 	rec, c := newReconciler(t, objs...)
 	rec.NewPluginManager = func(ctx context.Context, cfg *genericv1.Config) (*manager.PluginManager, error) {
-		return setup.NewPluginManager(ctx, cfg, slog.New(slog.NewTextHandler(io.Discard, nil)))
+		return setup.NewPluginManager(ctx, cfg, slog.New(slog.DiscardHandler))
 	}
 	return rec, c
 }
