@@ -8,7 +8,7 @@ hasMermaid: true
 ---
 
 By default, `ocm transfer` either leaves external resources where they are or, with
-`--copy-resources`, downloads and re-embeds them into the target component version.
+a local blob uploader configuration, downloads and re-embeds them into the target component version.
 An **uploader configuration** gives you a third option: route a matching resource
 through a custom transformer that streams it to an upload target of your choice and
 rewrites the resource to point at the new location.
@@ -36,7 +36,7 @@ flowchart LR
     Transfer -- "rewrite access" --> Descriptor
 ```
 
-When a resource's access type matches the uploader's `match`, transfer streams the
+When a resource's access type matches the `match` of the uploader, transfer streams the
 resource's bytes straight from the source into an HTTP request to your target URL,
 computes (or verifies) its digest as the bytes pass through, and records a new
 `Wget/v1` access on the transferred resource pointing at the upload target.
@@ -56,7 +56,7 @@ computes (or verifies) its digest as the bytes pass through, and records a new
 - **Component:** `ocm.software/demo:1.0.0` with a resource `docs` using `Wget/v1` access
 - **Source URL:** `https://source.example.com/artifacts/docs.tar`
 - **Upload target:** `https://mytarget.example.com/uploads/artifacts/docs.tar`
-- **Config file:** `./ocmconfig.yaml`
+- **Config file:** `.ocmconfig` in the working directory
 
 ## Tutorial Steps
 
@@ -65,20 +65,21 @@ computes (or verifies) its digest as the bytes pass through, and records a new
 
 ### Write the uploader configuration
 
-Create `ocmconfig.yaml` with a transfer config that copies external resources and
-an uploader config that matches `Wget/v1` resources and streams them to your target:
+Create `.ocmconfig` with an uploader config that matches `Wget/v1` resources
+and streams them to your target, followed by a catch-all that copies every other
+resource as a local blob:
 
 ```yaml
 type: generic.config.ocm.software/v1
 configurations:
-  - type: transfer.config.ocm.software/v1alpha1
-    copyMode: allResources
   - type: http.uploader.transfer.config.ocm.software/v1alpha1
-    match:
-      accessType: Wget/v1
+    match: resource.access.isType("Wget/v1")
     targetURL: '${"https://mytarget.example.com/uploads" + url(resource.access.url).path}'
     method: PUT
+  - type: localblob.uploader.transfer.config.ocm.software/v1alpha1
 ```
+
+> **Note:** The CLI merges `.ocmconfig` from the current directory with your other OCM configuration (such as `$HOME/.ocmconfig`), so credentials and resolvers stay in effect.
 
 The `targetURL` is a [CEL](https://cel.dev/) expression wrapped in `${…}`,
 evaluated against the source resource, exposed as `resource`. Here
@@ -91,13 +92,13 @@ conditionals. The uploader is not limited to
 wget sources: every field of the source access is exposed under
 `resource.access.<field>` (e.g. `resource.access.imageReference` for an OCI
 source), so you can route any access type to an HTTP target — see the
-[Transfer Configuration reference]({{< relref "docs/reference/transfer-configuration.md" >}}#cel-expressions).
+[Transfer Configuration reference]({{< relref "docs/reference/transfer-configuration/cel-expressions.md" >}}).
 
-{{< callout context="note" title="Why copyMode: allResources" >}}
-An uploader only applies to a resource that transfer actually processes. A `Wget/v1`
-resource is external, so it is only picked up under `copyMode: allResources`. The
-uploader then takes precedence over the default local-blob path for that resource.
-{{< /callout >}}
+Uploaders are evaluated in declaration order and the first one that selects a
+resource handles it, so the HTTP uploader takes the `Wget/v1` resource and the
+`localblob.uploader` catch-all copies everything else as a local blob (the same
+as having a local blob uploader entry in your OCM configuration). Without the catch-all, local blobs are still
+copied and all other resources stay by reference.
 
 {{< /step >}}
 
@@ -114,8 +115,7 @@ every matched resource has one.
 
 ```yaml
   - type: http.uploader.transfer.config.ocm.software/v1alpha1
-    match:
-      accessType: Wget/v1
+    match: resource.access.isType("Wget/v1")
     targetURL: '${"https://mytarget.example.com/uploads" + url(resource.access.url).path}'
     method: PUT
     header:
@@ -131,7 +131,7 @@ every matched resource has one.
 OCM algorithm name (e.g. `SHA-256`). `contentDigestAlgorithm()` maps that name to the
 RFC 9530 field key (`sha-256`), and `base64.encode(hex.decode(...))` converts the hex
 digest to the base64 value RFC 9530 expects — see the
-[Templating Headers reference]({{< relref "docs/reference/transfer-configuration.md" >}}#templating-headers).
+[Templating Headers reference]({{< relref "docs/reference/transfer-configuration/http-uploader.md" >}}#templating-headers).
 
 {{< /step >}}
 
@@ -150,12 +150,13 @@ identity, independently of the source resource:
           type: Wget
           hostname: mytarget.example.com
         credentials:
-          - type: WgetCredentials/v1
-            username: uploader
-            password: <token>
+          - type: Credentials/v1
+            properties:
+              username: uploader
+              password: <token>
 ```
 
-Add this entry to the `configurations` list in `ocmconfig.yaml`. See
+Add this entry to the `configurations` list in `.ocmconfig`. See
 [`WgetCredentials/v1`]({{< relref "docs/reference/credential-types.md#wgetcredentialsv1" >}}) and
 [Credential Consumer Identities]({{< relref "docs/reference/credential-consumer-identities.md" >}})
 for details.
@@ -166,11 +167,10 @@ for details.
 
 ### Run the transfer
 
-Transfer the component version, passing your configuration with `--config`:
+Transfer the component version. The CLI picks up the uploader configuration from `.ocmconfig` in the current directory:
 
 ```bash
 ocm transfer cv \
-  --config ./ocmconfig.yaml \
   ghcr.io/source-org/ocm//ocm.software/demo:1.0.0 \
   ghcr.io/target-org/ocm
 ```
@@ -237,14 +237,6 @@ method or any upload headers. Those apply to the upload request only, so a later
 
 ## Troubleshooting
 
-### Problem: The resource is not uploaded and keeps its original access
-
-**Cause:** The resource was not processed because `copyMode` left external resources
-in place.
-
-**Fix:** Set `copyMode: allResources` in the transfer config (or pass
-`--copy-resources`), so the `Wget/v1` resource is processed and the uploader applies.
-
 ### Problem: `targetURL` fails to evaluate
 
 **Cause:** The CEL expression references a field that is not available on the
@@ -263,6 +255,27 @@ field fails the transfer deliberately rather than producing a partial URL.
 **Fix:** Add a `credentials.config.ocm.software` consumer with `type: Wget` and the
 target `hostname`, as in Step 2.
 
+### Problem: The transfer succeeds but nothing is uploaded
+
+**Symptom:** The resource is stored as `LocalBlob/v1` in the target and the log
+warns `uploader selected no resource`.
+
+**Cause:** The `match` expression tests the access type the resource would get in
+the target (such as `LocalBlob`) instead of its access in the source component
+version.
+
+**Fix:** Check the source with `ocm get cv <source> -o yaml` and write
+`match` against the resource's `access.type` there, for example
+`resource.access.isType("OCIImage")` for an `ociArtifact` access.
+
+## Upload to JFrog Artifactory or Sonatype Nexus
+
+To upload into Artifactory or Nexus repositories, use the vendor uploaders instead
+of the HTTP uploader. They detect the repository type (Helm, Maven, npm, generic or
+raw) through the server API and publish an access consumers can use with their own
+tools. See
+[Using Vendor-Specific APIs]({{< relref "docs/how-to/vendor-specific-apis/_index.md" >}}).
+
 ## Next steps
 
 - [How-to: Transfer Helm Charts with OCM]({{< relref "docs/how-to/transfer-helm-charts.md" >}})
@@ -270,6 +283,6 @@ target `hostname`, as in Step 2.
 
 ## Related documentation
 
-- [Reference: Transfer Configuration]({{< relref "docs/reference/transfer-configuration.md" >}}) — full field reference for transfer and uploader configuration
+- [Reference: Transfer Configuration]({{< relref "docs/reference/transfer-configuration/_index.md" >}}) — full field reference for transfer and uploader configuration
 - [Concept: Transfer and Transport]({{< relref "docs/concepts/transfer-concept.md" >}}) — how OCM moves component versions between repositories
 - [Tutorial: Working with HTTP Resources]({{< relref "docs/tutorials/wget-http-resources.md" >}}) — the `Wget/v1` type produced by the uploader

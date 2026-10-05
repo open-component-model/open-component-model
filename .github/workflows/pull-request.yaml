@@ -95,7 +95,7 @@ jobs:
           # files_to_ignore: ''
   verify-labels:
     needs: [labeler, size-labeler, conventional-commit-labeler]
-    uses: ./.github/workflows/verify-labels.yaml
+    uses: $/.github/workflows/verify-labels.yaml
     permissions:
       pull-requests: read
     with:

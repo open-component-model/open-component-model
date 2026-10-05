@@ -56,6 +56,19 @@ func TestGetOCMConfigPaths(t *testing.T) {
 			},
 		},
 		{
+			name:     "files are not discovered multiple times",
+			existing: map[string]bool{"/home/user/.ocmconfig": true},
+			envVars: map[string]string{
+				"OCM_CONFIG":      "/home/user",
+				"XDG_CONFIG_HOME": "/home/user",
+			},
+			want: func(workingDirectory, executableDirectory string) []string {
+				return []string{
+					"/home/user/.ocmconfig",
+				}
+			},
+		},
+		{
 			name:     "no files found returns error",
 			existing: map[string]bool{},
 			envVars:  map[string]string{},

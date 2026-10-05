@@ -167,17 +167,10 @@ func NewReadOnlyChartFromRemote(ctx context.Context, helmRepo, targetDir string,
 		return nil, fmt.Errorf("error resolving chart URL %q via index.yaml: %w", helmRepo, err)
 	}
 
-	// Update baseURL to the resolved repo URL for accurate same-host credential scoping,
-	// then rebuild providers so httpConfigGetter instances capture the new baseURL.
-	cfgOpts.baseURL = resolvedRepo
-	if httpClient != nil {
-		providers = GetterProviders(httpClient, cfgOpts)
-		dl.Getters = providers
-	}
-
-	// For the standard getter.HTTPGetter path (no custom client), credentials
-	// must be forwarded via dl.Options. The httpConfigGetter path has them
-	// baked in via cfgOpts above.
+	// Credentials belong to the host of helmRepo. The providers built above scope them to it, so
+	// a chart URL resolved to another host (e.g. the upstream URL in the index.yaml of an
+	// Artifactory remote repository) is fetched without them. For the standard getter.HTTPGetter
+	// path (no custom client), credentials are forwarded via dl.Options only for the same host.
 	if httpClient == nil && username != "" && password != "" && sameHost(helmRepo, resolvedRepo) {
 		dl.Options = append(dl.Options, getter.WithBasicAuth(username, password))
 	}
@@ -282,31 +275,28 @@ func resolveHTTPChartURL(ctx context.Context, helmRepo, requestedVersion, tmpDir
 		return helmRepo, nil
 	}
 
-	ref, err := looseref.ParseReference(helmRepo)
+	// Split the reference as a URL, not with the OCI reference grammar: a chart version is
+	// SemVer and may carry build metadata ("1.0.0+abc"), which is not a valid OCI tag.
+	u, err := url.Parse(helmRepo)
 	if err != nil {
 		return helmRepo, nil
 	}
 
-	// Tag holds the version; Repository holds "<host>/<repoPath>/<chartName>".
-	// If either is absent this isn't a ChartReference()-style URL.
-	if ref.Tag == "" || ref.Repository == "" {
+	// The last path segment is "<chartName>:<version>"; neither part can contain a colon.
+	// Without both parts this isn't a ChartReference()-style URL.
+	repoPath, lastSegment := path.Split(u.Path)
+	chartName, chartVersion, found := strings.Cut(lastSegment, ":")
+	if !found || chartName == "" || chartVersion == "" {
 		return helmRepo, nil
 	}
-
-	// chartName is the last path segment of the repository, repoPath is everything before it.
-	chartName := path.Base(ref.Repository)
-	repoPath := path.Dir(ref.Repository)
 	base := &url.URL{
-		Scheme: ref.Scheme,
-		Host:   ref.Registry,
-	}
-	if repoPath != "." {
-		base.Path = "/" + repoPath
+		Scheme: u.Scheme,
+		Host:   u.Host,
+		Path:   strings.TrimSuffix(repoPath, "/"),
 	}
 	repoBase := base.String()
 	entry.URL = repoBase
 
-	chartVersion := ref.Tag
 	if requestedVersion != "" {
 		chartVersion = requestedVersion
 	}

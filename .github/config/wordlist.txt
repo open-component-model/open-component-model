@@ -313,6 +313,7 @@ gib
 gitcommit
 gitea
 github
+gitlab
 gitignore
 gitops
 gitrepository
@@ -795,6 +796,7 @@ subcharts
 subfolder
 subfolders
 subheadline
+submodules
 subpath
 subpaths
 subprocess
@@ -956,6 +958,7 @@ statefulset
 ConvertHelmToOCI
 GetHelmChart
 AddOCIArtifact
+TransferOCIArtifact
 csl
 async
 netlify
@@ -997,5 +1000,10 @@ BuildKit
 retryable
 lexicographically
 artifactory
+ADR's
+KiB
+VM
+traversable
+unsplit
 LLC
 NIST
