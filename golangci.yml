@@ -117,7 +117,6 @@ linters:
       # from this list in the same PR that resolves its findings.
       - linters:
           - canonicalheader # 14: non-canonical HTTP header keys in test fixtures
-          - copyloopvar     # 1: redundant pre-Go1.22 loop variable copy
           - depguard        # 12: tests import siblings outside the prod allow-list
           - dupword         # 2: false positives on intentional repetition (CEL map(x,x*2)); fixer corrupts strings
           - errchkjson      # 16: unchecked json.Marshal in test helpers
