@@ -41,9 +41,7 @@ func TestDownload_RegionCorrection(t *testing.T) {
 					t.Setenv("AWS_REGION", "ap-south-1")
 					creds := &credv1.S3Credentials{Type: credv1.S3CredentialsVersionedType, Anonymous: anonymous}
 					if !anonymous {
-						// 40 characters like a real secret key: SigV4 uses "AWS4"+secret as an
-						// HMAC key, which must be at least 112 bits with GODEBUG=fips140=only.
-						creds.AccessKeyID, creds.SecretAccessKey, creds.SessionToken = "key", "test-secret-access-key-0123456789abcdefg", "token"
+						creds.AccessKeyID, creds.SecretAccessKey, creds.SessionToken = "key", "secret", "token"
 					}
 					var methods []string
 					client := &http.Client{Transport: regionTransport(func(req *http.Request) (*http.Response, error) {

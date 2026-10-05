@@ -158,6 +158,12 @@ approved algorithms only:
   publishes. Only these hashes run outside strict enforcement; the digest OCM
   records and signs is always SHA-256.
 
+Test packages named `fips140` (`bindings/go/cli/cmd/fips140`,
+`bindings/go/git/fips140`, `bindings/go/wget/fips140`) set
+`//go:debug fips140=only` and run in every unit test run, so CI exercises
+signing, verification, Git downloads and legacy checksum verification in
+strict mode. All other tests run in the default `fips140=on` mode.
+
 ### Effects of FIPS Mode
 
 In FIPS mode, the Go Cryptographic Module:

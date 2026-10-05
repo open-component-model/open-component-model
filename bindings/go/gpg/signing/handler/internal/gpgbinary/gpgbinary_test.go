@@ -199,7 +199,7 @@ func TestBinary_Resolve(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			opts := []Option{WithLookPath(tt.lookPath), fipsOnMode}
+			opts := []Option{WithLookPath(tt.lookPath)}
 			if tt.exec != nil {
 				opts = append(opts, WithExec(tt.exec))
 			}
@@ -347,7 +347,7 @@ func TestBinary_ResolveCaching(t *testing.T) {
 	r := require.New(t)
 	var lookups, versions int
 	found := false
-	b := New(fipsOnMode,
+	b := New(
 		WithLookPath(func(file string) (string, error) {
 			lookups++
 			if !found {
@@ -386,7 +386,7 @@ func TestBinary_IsolatedHomeCleanup(t *testing.T) {
 	var home string
 	var killArgs []string
 	var killCtxErr error
-	b := New(fakeLookPath, fipsOnMode, WithExec(func(ctx context.Context, binaryPath string, args []string, _ []byte) ([]byte, []byte, error) {
+	b := New(fakeLookPath, WithExec(func(ctx context.Context, binaryPath string, args []string, _ []byte) ([]byte, []byte, error) {
 		switch {
 		case args[0] == "--version":
 			return []byte("gpg (GnuPG) 2.4.4\n"), nil, nil
@@ -408,11 +408,6 @@ func TestBinary_IsolatedHomeCleanup(t *testing.T) {
 	r.NoError(killCtxErr, "gpg-agent must be stopped although the operation's context is cancelled")
 	r.NoDirExists(home)
 }
-
-// fipsOnMode pins the default fips140=on mode, so tests that are not about the
-// FIPS check do not depend on how the test process runs (for example with
-// GODEBUG=fips140=only, which rejects the fake gpg).
-var fipsOnMode = WithFIPSMode(func() bool { return true }, func() bool { return false })
 
 func TestBinary_RejectsKeyMaterialWithKeyring(t *testing.T) {
 	r := require.New(t)
