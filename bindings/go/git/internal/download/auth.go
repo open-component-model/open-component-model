@@ -7,6 +7,7 @@ import (
 	"github.com/go-git/go-git/v6/plumbing/client"
 	githttp "github.com/go-git/go-git/v6/plumbing/transport/http"
 	gitssh "github.com/go-git/go-git/v6/plumbing/transport/ssh"
+	"github.com/go-git/go-git/v6/plumbing/transport/ssh/sshagent"
 
 	"ocm.software/open-component-model/bindings/go/git/internal/endpoint"
 	credsv1 "ocm.software/open-component-model/bindings/go/git/spec/credentials/v1"
@@ -65,7 +66,7 @@ func sshAuthMethod(ep *endpoint.Endpoint, creds *credsv1.GitSSHCredentials, opts
 	}
 
 	if creds.PrivateKeyPEM == "" && creds.PrivateKey == "" {
-		sshAgent, connection, err := openSSHAgent()
+		sshAgent, connection, err := sshagent.New()
 		if err != nil {
 			return nil, fmt.Errorf("cannot use SSH agent: %w", err)
 		}
