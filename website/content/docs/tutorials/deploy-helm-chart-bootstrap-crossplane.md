@@ -74,12 +74,12 @@ offers a claimable `Bootstrap` kind, resolves the chart and image through OCM `R
 to create the Flux `OCIRepository` and `HelmRelease`. Flux's `helm-controller` still renders the chart. Crossplane
 simply replaces kro as the reconciler. The building blocks map like this:
 
-| kro                                       | Crossplane                                                          |
-| ----------------------------------------- | ------------------------------------------------------------------- |
-| `ResourceGraphDefinition`                 | `CompositeResourceDefinition` (XRD) + `Composition`                 |
-| Schema `kind: Bootstrap` registered by kro | Claim `kind: Bootstrap` offered by the XRD                          |
-| Instance of the `Bootstrap` CRD           | Claim of the `Bootstrap` composite                                  |
-| kro reconciles the graph                  | Crossplane reconciles the composite, creating the composed resources |
+| kro                                        | Crossplane                                                           |
+| ------------------------------------------ | -------------------------------------------------------------------- |
+| `ResourceGraphDefinition`                  | `CompositeResourceDefinition` (XRD) + `Composition`                  |
+| Schema `kind: Bootstrap` registered by kro | Claim `kind: Bootstrap` offered by the XRD                           |
+| Instance of the `Bootstrap` CRD            | Claim of the `Bootstrap` composite                                   |
+| kro reconciles the graph                   | Crossplane reconciles the composite, creating the composed resources |
 
 The `Composition` runs in **pipeline mode** (`mode: Pipeline`), the supported form since Crossplane v2 removed the
 legacy inline `resources` field. A single pipeline step invokes the `function-patch-and-transform` function, whose
@@ -250,7 +250,7 @@ spec:
                     apiVersion: delivery.ocm.software/v1alpha1
                     kind: Resource
                     metadata:
-                      name: bootstrap-chart
+                      name: placeholder  # overwritten by name patch below
                       namespace: default
                     spec:
                       resource:
@@ -263,6 +263,16 @@ spec:
               - type: FromCompositeFieldPath
                 fromFieldPath: spec.ocmComponent
                 toFieldPath: spec.forProvider.manifest.spec.componentRef.name
+              # Derive a claim-specific Resource name so parallel claims never
+              # share one default/<name> OCM Resource.
+              - type: FromCompositeFieldPath
+                fromFieldPath: metadata.name
+                toFieldPath: spec.forProvider.manifest.metadata.name
+                transforms:
+                  - type: string
+                    string:
+                      type: Format
+                      fmt: "%s-chart"
               # Publish resolved chart coordinates onto composite status so the
               # OCIRepository Object below can consume them.
               - type: ToCompositeFieldPath
@@ -294,7 +304,7 @@ spec:
                     apiVersion: delivery.ocm.software/v1alpha1
                     kind: Resource
                     metadata:
-                      name: bootstrap-image
+                      name: placeholder  # overwritten by name patch below
                       namespace: default
                     spec:
                       resource:
@@ -307,6 +317,16 @@ spec:
               - type: FromCompositeFieldPath
                 fromFieldPath: spec.ocmComponent
                 toFieldPath: spec.forProvider.manifest.spec.componentRef.name
+              # Derive a claim-specific Resource name so parallel claims never
+              # share one default/<name> OCM Resource.
+              - type: FromCompositeFieldPath
+                fromFieldPath: metadata.name
+                toFieldPath: spec.forProvider.manifest.metadata.name
+                transforms:
+                  - type: string
+                    string:
+                      type: Format
+                      fmt: "%s-image"
               - type: ToCompositeFieldPath
                 fromFieldPath: status.atProvider.manifest.status.additional.oci.registry
                 policy:
@@ -342,7 +362,6 @@ spec:
                       namespace: default
                     spec:
                       interval: 1m0s
-                      insecure: true
                       layerSelector:
                         mediaType: "application/vnd.cncf.helm.chart.content.v1.tar+gzip"
                         operation: copy
@@ -389,7 +408,6 @@ spec:
                       # Static namespace: the cluster-scoped composite has no namespace.
                       namespace: default
                     spec:
-                      releaseName: bootstrap-release
                       interval: 1m
                       timeout: 5m
                       chartRef:
@@ -688,7 +706,7 @@ created the Flux `OCIRepository` and `HelmRelease`, which Flux then reconciles i
 Check that the deployed pod uses the localized image from your registry (not the original `ghcr.io/stefanprodan/...`):
 
 ```bash
-kubectl get pods -l app.kubernetes.io/name=bootstrap-release-podinfo -o jsonpath='{.items[0].spec.containers[0].image}'
+kubectl get pods -l app.kubernetes.io/name=bootstrap-helmrelease-podinfo -o jsonpath='{.items[0].spec.containers[0].image}'
 ```
 
 <details>
