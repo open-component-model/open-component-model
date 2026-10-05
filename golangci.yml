@@ -5,7 +5,7 @@
 version: "2"
 run:
   issues-exit-code: 2
-  tests: false
+  tests: true
   allow-parallel-runners: true
 issues:
   max-issues-per-linter: 0
@@ -30,6 +30,10 @@ formatters:
       - third_party$
       - builtin$
       - examples$
+      # Test files were never formatted while run.tests was false. Defer formatting
+      # of _test.go to a dedicated follow-up (a one-shot `golangci-lint fmt`) so the
+      # test-linting enablement stays config-only and reviewable.
+      - _test\.go$
 linters:
   default: all
   disable:
@@ -105,6 +109,40 @@ linters:
           - funlen
           - gocyclo
           - gosec
+        path: _test\.go
+      # Test linting was enabled (run.tests: true) on a suite that had never been
+      # linted, which surfaced a large pre-existing backlog. Each linter below is
+      # disabled ONLY on _test.go so the backlog can be cleared one linter per PR
+      # (counts are the findings at enablement time). To fix a linter, remove it
+      # from this list in the same PR that resolves its findings.
+      - linters:
+          - canonicalheader # 14: non-canonical HTTP header keys in test fixtures
+          - copyloopvar     # 1: redundant pre-Go1.22 loop variable copy
+          - depguard        # 12: tests import siblings outside the prod allow-list
+          - dupword         # 2: false positives on intentional repetition (CEL map(x,x*2)); fixer corrupts strings
+          - errchkjson      # 16: unchecked json.Marshal in test helpers
+          - errname         # 1: test error type not named xxxError
+          - errorlint       # 23: err == / type assertion instead of errors.Is/As
+          - fatcontext      # 3: context nested in loop/closure in tests
+          - ginkgolinter    # 5: Gomega length/error assertion idioms
+          - gocritic        # 16: assorted style checks (badCall, etc.) in tests
+          - gosmopolitan    # 5: time.Local / non-portable usage in tests
+          - ineffassign     # 8: ineffectual assignments in tests
+          - maintidx        # 39: low maintainability index of large table tests
+          - misspell        # 25: false positives on the `interm` abbreviation; fixer rewrites identifiers
+          - noctx           # 33: exec/http calls without context in tests
+          - nolintlint      # 4: unused //nolint directives tied to the linters disabled here
+          - predeclared     # 1: parameter shadows a predeclared identifier
+          - sloglint        # 16: slog idioms (use slog.DiscardHandler, etc.)
+          - staticcheck     # 115: assorted SA/ST checks across tests
+          - testifylint     # 525: testify idioms (require.NoError, ErrorIs, Len, Empty, ...)
+          - thelper         # 332: test helpers should start with t.Helper()
+          - tparallel       # 47: subtest t.Parallel() consistency
+          - unconvert       # 5: unnecessary type conversions
+          - unused          # 4: unused test-only helpers
+          - usestdlibvars   # 24: use stdlib consts (http.MethodGet, etc.)
+          - usetesting      # 14: use t.TempDir()/t.Context()
+          - whitespace      # 17: leading/trailing blank lines in test funcs
         path: _test\.go
       - path: (.+)\.go$
         text: composites
