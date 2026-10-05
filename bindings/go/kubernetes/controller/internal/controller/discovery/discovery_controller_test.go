@@ -323,7 +323,6 @@ func TestUpToDate(t *testing.T) {
 		{"unchanged with extracted payload", discovery(func(d *v1alpha1.Discovery) {
 			d.Status.Components = nil
 			d.Status.Extracted = []v1alpha1.ExtractedRecord{}
-
 		}), info("abc"), true},
 		{"no recorded digest", discovery(func(d *v1alpha1.Discovery) {
 			d.Status.ObservedComponentDigest = ""

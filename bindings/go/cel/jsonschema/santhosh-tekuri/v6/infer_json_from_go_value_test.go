@@ -143,7 +143,6 @@ func TestInferFromGoValue(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-
 			sch, err := stv6jsonschema.InferFromGoValue(tt.input)
 
 			if tt.expectErr {

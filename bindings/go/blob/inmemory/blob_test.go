@@ -355,7 +355,6 @@ func TestMemoryBlobOptions(t *testing.T) {
 		r.True(known)
 		r.Equal(expectedDigest.String(), dig)
 	})
-
 }
 
 func TestConcurrentAndSerialReads(t *testing.T) {

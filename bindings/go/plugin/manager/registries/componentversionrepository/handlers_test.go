@@ -83,7 +83,6 @@ func TestGetComponentVersionHandlerFunc(t *testing.T) {
 				require.NoError(t, err)
 				require.Equal(t, `{"meta":{"schemaVersion":"1.0.0"},"component":{"name":"component","version":"1.0.0","repositoryContexts":null,"provider":"ocm.software","resources":null,"sources":null,"componentReferences":null}}
 `, string(content))
-
 			},
 			assertError: func(t *testing.T, err error) {
 				require.NoError(t, err)

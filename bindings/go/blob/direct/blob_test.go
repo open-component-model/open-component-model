@@ -112,7 +112,6 @@ func TestBlobOptions(t *testing.T) {
 			r.Equal(data[:len(data)-1], string(d))
 		})
 	})
-
 }
 
 func TestCompatibility(t *testing.T) {

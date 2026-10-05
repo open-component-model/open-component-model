@@ -22,8 +22,8 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
-	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	ocmhttp "ocm.software/open-component-model/bindings/go/http"
+	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 )
 
 const (
@@ -145,7 +145,6 @@ func Test_Integration_HTTPClient(t *testing.T) {
 			}
 		})
 	})
-
 }
 
 // integrationEnv is the shared fixture for the HTTP client integration suite:

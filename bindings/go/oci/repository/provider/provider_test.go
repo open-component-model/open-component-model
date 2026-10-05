@@ -119,7 +119,6 @@ func Test_Provider_Smoke(t *testing.T) {
 			}
 		})
 	})
-
 }
 
 func Test_JSON_Schema_For_Repository_Specification(t *testing.T) {

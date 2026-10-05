@@ -63,7 +63,6 @@ func TestConformance(t *testing.T) {
 			})
 		}
 	})
-
 }
 
 // TestNormalization verifies that the normalization (using ExclusionRules)

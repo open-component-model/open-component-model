@@ -142,7 +142,6 @@ linters:
           - unused          # 4: unused test-only helpers
           - usestdlibvars   # 24: use stdlib consts (http.MethodGet, etc.)
           - usetesting      # 14: use t.TempDir()/t.Context()
-          - whitespace      # 17: leading/trailing blank lines in test funcs
         path: _test\.go
       - path: (.+)\.go$
         text: composites
