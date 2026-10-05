@@ -3,6 +3,8 @@ package internal
 import (
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
+	gittransformer "ocm.software/open-component-model/bindings/go/git/transformation"
+	gitv1alpha1 "ocm.software/open-component-model/bindings/go/git/transformation/spec/v1alpha1"
 	githubtransformer "ocm.software/open-component-model/bindings/go/github/transformation"
 	githubv1alpha1 "ocm.software/open-component-model/bindings/go/github/transformation/spec/v1alpha1"
 	helmaccess "ocm.software/open-component-model/bindings/go/helm/spec/access"
@@ -28,7 +30,7 @@ import (
 )
 
 // NewDefaultBuilder creates a builder.Builder pre-configured with all standard OCI, CTF,
-// Helm, wget, s3, and GitHub transformers.
+// Helm, wget, s3, Git, and GitHub transformers.
 // It accepts the repository provider, resource repository, and credential resolver interfaces
 // that are needed by the transformers to interact with repositories.
 func NewDefaultBuilder(
@@ -44,6 +46,7 @@ func NewDefaultBuilder(
 	transformerScheme.MustRegisterScheme(wgetv1alpha1.Scheme)
 	transformerScheme.MustRegisterScheme(s3v1alpha1.Scheme)
 	transformerScheme.MustRegisterScheme(githubv1alpha1.Scheme)
+	transformerScheme.MustRegisterScheme(gitv1alpha1.Scheme)
 	transformerScheme.MustRegisterScheme(wgetaccess.Scheme)
 	transformerScheme.MustRegisterScheme(helmaccess.Scheme)
 	transformerScheme.MustRegisterScheme(uploadv1alpha1.Scheme)
@@ -137,6 +140,12 @@ func NewDefaultBuilder(
 		CredentialProvider: credentialProvider,
 	}
 
+	getGitResource := &gittransformer.GetGitResource{
+		Scheme:             transformerScheme,
+		ResourceRepository: resourceRepo,
+		CredentialProvider: credentialProvider,
+	}
+
 	// HTTP streaming transformer (uploader configurations)
 	httpStreaming := &wgettransformer.HTTPStreamingTransformer{
 		Scheme:             transformerScheme,
@@ -178,6 +187,7 @@ func NewDefaultBuilder(
 		WithTransformer(&wgetv1alpha1.DownloadWgetResource{}, downloadWget).
 		WithTransformer(&s3v1alpha1.DownloadS3Resource{}, downloadS3).
 		WithTransformer(&githubv1alpha1.GetGitHubCommit{}, getGitHubCommit).
+		WithTransformer(&gitv1alpha1.GetGitResource{}, getGitResource).
 		WithTransformer(&wgetv1alpha1.HTTPStreaming{}, httpStreaming).
 		WithTransformer(&uploadv1alpha1.ArtifactoryUpload{}, &artifactory.Transformer{Uploader: repositoryUpload}).
 		WithTransformer(&uploadv1alpha1.NexusUpload{}, &nexus.Transformer{Uploader: repositoryUpload}).

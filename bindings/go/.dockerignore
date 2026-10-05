@@ -13,6 +13,7 @@
 !dag
 !descriptor
 !generator
+!git
 !github
 !go.mod
 !go.sum
