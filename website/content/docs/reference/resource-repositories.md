@@ -257,13 +257,22 @@ global setting applies.
 ### Digest Processing
 
 The S3 digest processor first sends a `HeadObject` request with checksum mode enabled. If the store reports a SHA-256
-checksum of the whole object (`x-amz-checksum-sha256`), OCM uses it as the digest and does not download the object. S3
-keeps such a checksum for single-part uploads made with `--checksum-algorithm SHA256`. In every other case, OCM
-downloads the object and hashes it with SHA-256: no checksum, another algorithm, the `COMPOSITE` checksum of a
-multipart upload, or a failed `HeadObject`. Both paths apply the `genericBlobDigest/v1` normalisation. OCM does not
-use the S3 `ETag`, because the `ETag` is not a whole-object hash for a multipart upload. If the resource already has a
-digest, OCM compares the computed digest with it. A difference fails the operation. Every download checks the content
-against the digest, so a store that reports a wrong checksum fails at the next read.
+checksum of the whole object (`x-amz-checksum-sha256`), OCM uses it as the digest and does not download the object. In
+every other case, OCM downloads the object and hashes it with SHA-256: no checksum, another algorithm, the `COMPOSITE`
+checksum of a multipart upload, or a failed `HeadObject`. Both paths apply the `genericBlobDigest/v1` normalisation.
+OCM does not use the S3 `ETag`, because the `ETag` is not a whole-object hash for a multipart upload. If the resource
+already has a digest, OCM compares the computed digest with it. A difference fails the operation. Every download checks
+the content against the digest, so a store that reports a wrong checksum fails at the next read.
+
+Only objects uploaded in a single part with a SHA-256 checksum skip the download:
+
+- S3 stores a SHA-256 only if the upload asks for one, for example `aws s3 cp --checksum-algorithm SHA256`. By default,
+  the AWS SDKs use CRC32 and S3 uses CRC64NVME.
+- For a multipart upload, S3 supports SHA-256 only as a `COMPOSITE` checksum, which is a hash of the part hashes. The
+  SHA-256 of the content cannot be derived from it. The AWS CLI uses a multipart upload for files above its multipart
+  threshold (8 MiB by default), so raise `multipart_threshold` if large objects should qualify.
+- To give an existing object a full-object SHA-256, copy it onto itself with `aws s3api copy-object
+  --checksum-algorithm SHA256`. A single copy is limited to 5 GB.
 
 Digest processing also pins the access specification to the object version that it read, so a later read gets the same
 object. On an unversioned bucket, S3 reports the placeholder `null`. It pins nothing, and OCM never writes it back.

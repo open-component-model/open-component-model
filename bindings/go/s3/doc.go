@@ -67,12 +67,21 @@
 // # Digest processing
 //
 // ProcessResourceDigest first sends a HeadObject with checksum mode enabled. When the
-// store reports a SHA-256 checksum covering the whole object (x-amz-checksum-sha256,
-// kept by S3 for single-part uploads made with --checksum-algorithm SHA256), that is
-// the digest and the object is not transferred. Any other answer — no checksum, another
-// algorithm, a COMPOSITE checksum of a multipart upload, or a failed HEAD — falls back
-// to downloading the object and hashing it. Every download verifies the bytes against
-// the resource digest, so a store misreporting its checksum fails the next read.
+// store reports a SHA-256 checksum covering the whole object (x-amz-checksum-sha256),
+// that is the digest and the object is not transferred. Any other answer — no checksum,
+// another algorithm, a COMPOSITE checksum of a multipart upload, or a failed HEAD —
+// falls back to downloading the object and hashing it. Every download verifies the
+// bytes against the resource digest, so a store misreporting its checksum fails the
+// next read.
+//
+// The fast path applies only to objects uploaded in a single part with a SHA-256
+// checksum requested. S3 stores a SHA-256 only when the uploader asks for one (SDKs
+// default to CRC32, S3 itself to CRC64NVME), and for multipart uploads SHA-256 exists
+// only as a COMPOSITE checksum: the hash of the part hashes, from which the content's
+// SHA-256 cannot be derived. Tools switch to multipart for large files (the AWS CLI
+// above its multipart threshold, 8 MiB by default), so those are always downloaded.
+// A CopyObject with a SHA-256 checksum algorithm, up to the 5 GB copy limit, rewrites
+// an object with a full-object SHA-256.
 //
 // # Object versions
 //
