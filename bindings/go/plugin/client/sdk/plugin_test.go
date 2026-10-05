@@ -113,7 +113,7 @@ func TestPluginSDKForceShutdownContext(t *testing.T) {
 	parse, err := url.Parse("http://unix/shutdown")
 	r.NoError(err)
 	req := &http.Request{
-		Method: "GET",
+		Method: http.MethodGet,
 		URL:    parse,
 	}
 	req = req.WithContext(forceCTX)

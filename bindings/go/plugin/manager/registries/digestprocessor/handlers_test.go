@@ -48,7 +48,7 @@ func TestResourceDigestProcessorHandlerFunc(t *testing.T) {
 				header.Add("Authorization", "not-json")
 				parse, _ := url.Parse(base)
 				return &http.Request{
-					Method: "POST",
+					Method: http.MethodPost,
 					URL:    parse,
 					Header: header,
 				}
@@ -101,7 +101,7 @@ func TestResourceDigestProcessorHandlerFunc(t *testing.T) {
 				}`))
 
 				return &http.Request{
-					Method: "POST",
+					Method: http.MethodPost,
 					URL:    parse,
 					Header: header,
 					Body:   io.NopCloser(body),
@@ -148,7 +148,7 @@ func TestIdentityProcessorHandlerFunc(t *testing.T) {
 			request: func(base string) *http.Request {
 				parse, _ := url.Parse(base)
 				return &http.Request{
-					Method: "POST",
+					Method: http.MethodPost,
 					URL:    parse,
 					Body:   nil,
 				}
@@ -181,7 +181,7 @@ func TestIdentityProcessorHandlerFunc(t *testing.T) {
 				body.Write([]byte(`{"typed":{"type":"example-type"}}`))
 
 				return &http.Request{
-					Method: "POST",
+					Method: http.MethodPost,
 					URL:    parse,
 					Header: header,
 					Body:   io.NopCloser(body),

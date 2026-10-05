@@ -140,7 +140,6 @@ linters:
           - tparallel       # 47: subtest t.Parallel() consistency
           - unconvert       # 5: unnecessary type conversions
           - unused          # 4: unused test-only helpers
-          - usestdlibvars   # 24: use stdlib consts (http.MethodGet, etc.)
           - usetesting      # 14: use t.TempDir()/t.Context()
         path: _test\.go
       - path: (.+)\.go$

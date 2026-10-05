@@ -50,7 +50,7 @@ func TestResourceInputProcessorHandlerFunc(t *testing.T) {
 				header.Add("Authorization", "not-json")
 				parse, _ := url.Parse(base)
 				return &http.Request{
-					Method: "POST",
+					Method: http.MethodPost,
 					URL:    parse,
 					Header: header,
 				}
@@ -108,7 +108,7 @@ func TestResourceInputProcessorHandlerFunc(t *testing.T) {
 				}`))
 
 				return &http.Request{
-					Method: "POST",
+					Method: http.MethodPost,
 					URL:    parse,
 					Header: header,
 					Body:   io.NopCloser(body),
@@ -161,7 +161,7 @@ func TestSourceInputProcessorHandlerFunc(t *testing.T) {
 				header.Add("Authorization", "not-json")
 				parse, _ := url.Parse(base)
 				return &http.Request{
-					Method: "POST",
+					Method: http.MethodPost,
 					URL:    parse,
 					Header: header,
 				}
@@ -218,7 +218,7 @@ func TestSourceInputProcessorHandlerFunc(t *testing.T) {
 				}`))
 
 				return &http.Request{
-					Method: "POST",
+					Method: http.MethodPost,
 					URL:    parse,
 					Header: header,
 					Body:   io.NopCloser(body),

@@ -47,7 +47,7 @@ func TestGetComponentVersionHandlerFunc(t *testing.T) {
 			request: func(base string) *http.Request {
 				parse, _ := url.Parse(base)
 				return &http.Request{
-					Method: "GET",
+					Method: http.MethodGet,
 					URL:    parse,
 				}
 			},
@@ -97,7 +97,7 @@ func TestGetComponentVersionHandlerFunc(t *testing.T) {
 				parse.RawQuery = query.Encode()
 
 				return &http.Request{
-					Method: "GET",
+					Method: http.MethodGet,
 					URL:    parse,
 					Header: header,
 				}
@@ -147,7 +147,7 @@ func TestGetLocalResourceHandlerFunc(t *testing.T) {
 			request: func(base string) *http.Request {
 				parse, _ := url.Parse(base)
 				return &http.Request{
-					Method: "GET",
+					Method: http.MethodGet,
 					URL:    parse,
 				}
 			},
@@ -180,7 +180,7 @@ func TestGetLocalResourceHandlerFunc(t *testing.T) {
 				parse.RawQuery = query.Encode()
 
 				return &http.Request{
-					Method: "GET",
+					Method: http.MethodGet,
 					URL:    parse,
 					Header: header,
 				}
@@ -230,7 +230,7 @@ func TestAddComponentVersionHandlerFunc(t *testing.T) {
 			request: func(base string) *http.Request {
 				parse, _ := url.Parse(base)
 				return &http.Request{
-					Method: "POST",
+					Method: http.MethodPost,
 					URL:    parse,
 				}
 			},
@@ -278,7 +278,7 @@ func TestAddComponentVersionHandlerFunc(t *testing.T) {
 }`))
 
 				return &http.Request{
-					Method: "POST",
+					Method: http.MethodPost,
 					URL:    parse,
 					Header: header,
 					Body:   io.NopCloser(body),
@@ -329,7 +329,7 @@ func TestAddLocalResourceHandlerFunc(t *testing.T) {
 			request: func(base string) *http.Request {
 				parse, _ := url.Parse(base)
 				return &http.Request{
-					Method: "POST",
+					Method: http.MethodPost,
 					URL:    parse,
 				}
 			},
@@ -394,7 +394,7 @@ func TestAddLocalResourceHandlerFunc(t *testing.T) {
 }`))
 
 				return &http.Request{
-					Method: "POST",
+					Method: http.MethodPost,
 					URL:    parse,
 					Header: header,
 					Body:   io.NopCloser(body),
