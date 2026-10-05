@@ -44,7 +44,7 @@ Before starting, make sure you have set up your environment as described in the 
 - `envsubst` installed (pre-installed on most Linux/macOS systems as part of `gettext`)
 
 {{< callout context="note" title="Private registries" icon="outline/lock" >}}
-If using a private registry, you'll need to configure credentials for both the OCM CLI and the controller resources. See [Configure Credentials for Controllers]({{< relref "docs/how-to/deploy/configure-credentials-ocm-controllers.md" >}}) for details.
+If using a private registry, you'll need to configure credentials for both the OCM CLI and the controller resources. See [Configure Credentials for Controllers]({{< relref "docs/how-to/configure-credentials-ocm-controllers.md" >}}) for details.
 {{< /callout >}}
 
 ## Environment Setup
@@ -155,7 +155,7 @@ this variant that file holds a Crossplane XRD + Composition. Create it before bu
 {{< details "XRD + Composition (composition.yaml)" >}}
 The two OCM `Resource` objects (`ocm-resource-chart` and `ocm-resource-image`) resolve the chart and image through
 the OCM controllers, using `additionalStatusFields`/`toOCI()` to expose the registry, repository, and digest under
-`status.additional`. See [Concept: OCM Controllers]({{< relref "docs/concepts/deploy/ocm-controllers.md#additional-status-fields" >}})
+`status.additional`. See [Concept: OCM Controllers]({{< relref "docs/concepts/ocm-controllers.md#additional-status-fields" >}})
 for how that mechanism works. `ToCompositeFieldPath` patches copy those resolved coordinates onto the composite
 status, where the two `Object` resources read them to build the Flux `OCIRepository` and `HelmRelease`.
 
@@ -408,6 +408,7 @@ spec:
                       # Static namespace: the cluster-scoped composite has no namespace.
                       namespace: default
                     spec:
+                      releaseName: placeholder  # overwritten by patch below
                       interval: 1m
                       timeout: 5m
                       chartRef:
@@ -423,6 +424,16 @@ spec:
                     string:
                       type: Format
                       fmt: "%s-helmrelease"
+              # Derive a claim-specific, reader-deterministic Helm release name from
+              # the claim name so parallel claims never share one Helm release.
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.claimRef.name
+                toFieldPath: spec.forProvider.manifest.spec.releaseName
+                transforms:
+                  - type: string
+                    string:
+                      type: Format
+                      fmt: "%s-release"
               # Point the HelmRelease at the OCIRepository created in step 3.
               - type: FromCompositeFieldPath
                 fromFieldPath: metadata.name
@@ -460,7 +471,7 @@ EOF
 Make the component public in the GitHub `packages` tab by opening the
 `component-descriptors/ocm.software/ocm-k8s-toolkit/bootstrap` package and setting its visibility to `public`.
 Alternatively, keep it private and configure credentials for the OCM Controllers and Flux before `ocm add cv`. See
-[Credentials for OCM Controllers]({{< relref "/docs/how-to/deploy/configure-credentials-ocm-controllers.md" >}}),
+[Credentials for OCM Controllers]({{< relref "/docs/how-to/configure-credentials-ocm-controllers.md" >}}),
 and add a `secretRef` to the `OCIRepository` manifest in the Composition's `ocirepository` resource.
 {{< /step >}}
 
@@ -706,7 +717,7 @@ created the Flux `OCIRepository` and `HelmRelease`, which Flux then reconciles i
 Check that the deployed pod uses the localized image from your registry (not the original `ghcr.io/stefanprodan/...`):
 
 ```bash
-kubectl get pods -l app.kubernetes.io/name=bootstrap-helmrelease-podinfo -o jsonpath='{.items[0].spec.containers[0].image}'
+kubectl get pods -l app.kubernetes.io/name=bootstrap-release-podinfo -o jsonpath='{.items[0].spec.containers[0].image}'
 ```
 
 <details>
@@ -909,5 +920,5 @@ This pattern lets developers ship deployment instructions alongside their softwa
 
 - [Deploy an Application from a Helm Chart with OCM and kro]({{< relref "deploy-helm-chart-bootstrap.md" >}}) covers the same delivery driven by kro with a Flux or Argo CD deployer
 - [How-to: Air-Gap Transfer]({{< relref "air-gap-transfer.md" >}}) transfers components to disconnected environments
-- [How-to: Configure Credentials for Controllers]({{< relref "docs/how-to/deploy/configure-credentials-ocm-controllers.md" >}}) sets up private registry access
+- [How-to: Configure Credentials for Controllers]({{< relref "docs/how-to/configure-credentials-ocm-controllers.md" >}}) sets up private registry access
 - [Concept: OCM Controllers]({{< relref "ocm-controllers.md" >}}) explains the controller architecture
