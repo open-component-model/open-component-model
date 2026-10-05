@@ -10,6 +10,7 @@ import (
 	dagsync "ocm.software/open-component-model/bindings/go/dag/sync"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	gitv1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
 	githubv1 "ocm.software/open-component-model/bindings/go/github/spec/access/v1"
 	helmv1 "ocm.software/open-component-model/bindings/go/helm/spec/access/v1"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
@@ -371,6 +372,11 @@ func processResource(resource descriptorv2.Resource, access runtime.Typed, id st
 		// target. There is no OCI-artifact representation.
 		if err := processS3(resource, id, val, tgd, toSpec, resourceTransformIDs, i); err != nil {
 			return nil, fmt.Errorf("cannot process s3 resource: %w", err)
+		}
+		return []string{fmt.Sprintf("${%s.spec.file}", addResourceID)}, nil
+	case *gitv1.Git:
+		if err := processGit(resource, acc, id, val, tgd, toSpec, resourceTransformIDs, i); err != nil {
+			return nil, fmt.Errorf("cannot process Git resource: %w", err)
 		}
 		return []string{fmt.Sprintf("${%s.spec.file}", addResourceID)}, nil
 	case *githubv1.GitHub:
