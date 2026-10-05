@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"crypto/sha256"
+	"crypto/sha512"
 	"encoding/base64"
 	"encoding/binary"
 	"hash/crc32"
@@ -286,31 +287,77 @@ func Test_ProcessResourceDigest(t *testing.T) {
 	require.Empty(t, entries, "digest processing must clean up the object it downloaded")
 }
 
-// A store keeping a SHA-256 of the whole object answers the digest from a HeadObject;
-// anything short of that is digested by download, as without the fast path.
+// A store keeping a SHA-256 or SHA-512 of the whole object answers the digest from a
+// HeadObject; anything short of that is digested by download, as without the fast path.
 func Test_ProcessResourceDigest_FromStoreChecksum(t *testing.T) {
 	content := []byte("digest me")
-	sum := sha256.Sum256(content)
-	advertised := base64.StdEncoding.EncodeToString(sum[:])
-	value := godigest.FromBytes(content).Encoded()
+	sum256 := sha256.Sum256(content)
+	sum512 := sha512.Sum512(content)
+	advertised256 := base64.StdEncoding.EncodeToString(sum256[:])
+	advertised512 := base64.StdEncoding.EncodeToString(sum512[:])
+	digest256 := &descriptor.Digest{HashAlgorithm: hashAlgorithmSHA256, NormalisationAlgorithm: genericBlobDigestV1, Value: godigest.SHA256.FromBytes(content).Encoded()}
+	digest512 := &descriptor.Digest{HashAlgorithm: hashAlgorithmSHA512, NormalisationAlgorithm: genericBlobDigestV1, Value: godigest.SHA512.FromBytes(content).Encoded()}
 
 	tests := []struct {
 		name         string
-		checksum     string
+		sha256       string
+		sha512       string
 		checksumType string
 		digest       *descriptor.Digest
+		wantDigest   *descriptor.Digest
 		wantMethods  []string
 		wantErr      string
 	}{
 		{
 			name:         "full-object SHA-256 skips the download",
-			checksum:     advertised,
+			sha256:       advertised256,
 			checksumType: "FULL_OBJECT",
+			wantDigest:   digest256,
 			wantMethods:  []string{http.MethodHead},
 		},
 		{
+			name:         "full-object SHA-512 skips the download",
+			sha512:       advertised512,
+			checksumType: "FULL_OBJECT",
+			wantDigest:   digest512,
+			wantMethods:  []string{http.MethodHead},
+		},
+		{
+			name:         "SHA-256 is preferred when the store keeps both",
+			sha256:       advertised256,
+			sha512:       advertised512,
+			checksumType: "FULL_OBJECT",
+			wantDigest:   digest256,
+			wantMethods:  []string{http.MethodHead},
+		},
+		{
+			name:         "an author SHA-512 digest takes the store's SHA-512",
+			sha256:       advertised256,
+			sha512:       advertised512,
+			checksumType: "FULL_OBJECT",
+			digest:       &descriptor.Digest{HashAlgorithm: "sha-512", Value: godigest.SHA512.FromBytes(content).String()},
+			wantDigest:   digest512,
+			wantMethods:  []string{http.MethodHead},
+		},
+		{
+			name:         "an author SHA-512 digest is computed by download when the store keeps only SHA-256",
+			sha256:       advertised256,
+			checksumType: "FULL_OBJECT",
+			digest:       &descriptor.Digest{HashAlgorithm: hashAlgorithmSHA512, Value: digest512.Value},
+			wantDigest:   digest512,
+			wantMethods:  []string{http.MethodHead, http.MethodGet},
+		},
+		{
+			name:         "an author digest without algorithm stays SHA-256 when the store keeps only SHA-512",
+			sha512:       advertised512,
+			checksumType: "FULL_OBJECT",
+			digest:       &descriptor.Digest{Value: digest256.Value},
+			wantDigest:   digest256,
+			wantMethods:  []string{http.MethodHead, http.MethodGet},
+		},
+		{
 			name:         "an author digest is verified against the store's SHA-256",
-			checksum:     advertised,
+			sha256:       advertised256,
 			checksumType: "FULL_OBJECT",
 			digest:       &descriptor.Digest{Value: godigest.FromString("something else").Encoded()},
 			wantMethods:  []string{http.MethodHead},
@@ -318,12 +365,15 @@ func Test_ProcessResourceDigest_FromStoreChecksum(t *testing.T) {
 		},
 		{
 			name:         "a composite checksum of a multipart upload is no content digest",
-			checksum:     advertised,
+			sha256:       advertised256,
+			sha512:       advertised512,
 			checksumType: "COMPOSITE",
+			wantDigest:   digest256,
 			wantMethods:  []string{http.MethodHead, http.MethodGet},
 		},
 		{
-			name:        "no SHA-256 checksum falls back to the download",
+			name:        "no checksum falls back to the download",
+			wantDigest:  digest256,
 			wantMethods: []string{http.MethodHead, http.MethodGet},
 		},
 	}
@@ -333,8 +383,13 @@ func Test_ProcessResourceDigest_FromStoreChecksum(t *testing.T) {
 			r := require.New(t)
 			srv := newFakeS3(t, content, "v-1")
 			srv.header = http.Header{}
-			if tt.checksum != "" {
-				srv.header.Set("x-amz-checksum-sha256", tt.checksum)
+			if tt.sha256 != "" {
+				srv.header.Set("x-amz-checksum-sha256", tt.sha256)
+			}
+			if tt.sha512 != "" {
+				srv.header.Set("x-amz-checksum-sha512", tt.sha512)
+			}
+			if tt.checksumType != "" {
 				srv.header.Set("x-amz-checksum-type", tt.checksumType)
 			}
 			tempFolder := t.TempDir()
@@ -354,11 +409,20 @@ func Test_ProcessResourceDigest_FromStoreChecksum(t *testing.T) {
 				return
 			}
 			r.NoError(err)
-			r.Equal(&descriptor.Digest{HashAlgorithm: hashAlgorithmSHA256, NormalisationAlgorithm: genericBlobDigestV1, Value: value}, res.Digest)
+			r.Equal(tt.wantDigest, res.Digest)
 
 			pinned, err := accessspec.ConvertToV2(res.Access)
 			r.NoError(err)
 			r.Equal("v-1", pinned.Version, "the access is pinned to the version the digest was taken at")
+
+			// The digest is one later downloads can be verified against.
+			b, err := repo.DownloadResource(t.Context(), res, fakeCredentials())
+			r.NoError(err)
+			rc, err := b.ReadCloser()
+			r.NoError(err)
+			_, err = io.ReadAll(rc)
+			r.NoError(err)
+			r.NoError(rc.Close())
 		})
 	}
 }
@@ -387,8 +451,8 @@ func Test_ProcessResourceDigest_VerifiesLeniently(t *testing.T) {
 			digest: &descriptor.Digest{Value: strings.ToUpper(value)},
 		},
 		{
-			name:    "a genuinely different hash algorithm is a conflict",
-			digest:  &descriptor.Digest{HashAlgorithm: "SHA-512", Value: value},
+			name:    "a hash algorithm the processor does not produce is a conflict",
+			digest:  &descriptor.Digest{HashAlgorithm: "MD5", Value: value},
 			wantErr: "hash algorithm mismatch",
 		},
 		{

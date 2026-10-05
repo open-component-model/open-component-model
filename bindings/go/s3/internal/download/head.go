@@ -3,6 +3,7 @@ package download
 import (
 	"context"
 	"crypto/sha256"
+	"crypto/sha512"
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
@@ -13,10 +14,11 @@ import (
 )
 
 // ObjectInfo is what a [Head] learns about an object without transferring its body.
+// Each checksum is hex-encoded and covers the whole object, or is empty when the store
+// reports none that does.
 type ObjectInfo struct {
-	// SHA256 is the hex-encoded SHA-256 of the whole object as the store recorded it,
-	// or empty when the store reports none that covers the whole object.
 	SHA256 string
+	SHA512 string
 	// VersionID is the object version the store answered for; see [Result.VersionID].
 	VersionID string
 }
@@ -56,22 +58,23 @@ func Head(ctx context.Context, req Request, opts ...Option) (*ObjectInfo, error)
 	}
 
 	return &ObjectInfo{
-		SHA256:    fullObjectSHA256(out.ChecksumType, aws.ToString(out.ChecksumSHA256)),
+		SHA256:    fullObjectChecksum(out.ChecksumType, aws.ToString(out.ChecksumSHA256), sha256.Size),
+		SHA512:    fullObjectChecksum(out.ChecksumType, aws.ToString(out.ChecksumSHA512), sha512.Size),
 		VersionID: aws.ToString(out.VersionId),
 	}, nil
 }
 
-// fullObjectSHA256 returns the hex form of a base64 SHA-256 checksum, or empty unless
-// it covers the whole object. A multipart upload reports a COMPOSITE checksum, the hash
-// of its part hashes suffixed with "-<parts>", which is no digest of the content. Stores
-// that omit the checksum type are judged by the value alone: a composite never decodes
-// to exactly one SHA-256.
-func fullObjectSHA256(checksumType types.ChecksumType, value string) string {
+// fullObjectChecksum returns the hex form of a base64 checksum of size bytes, or empty
+// unless it covers the whole object. A multipart upload reports a COMPOSITE checksum,
+// the hash of its part hashes suffixed with "-<parts>", which is no digest of the
+// content. Stores that omit the checksum type are judged by the value alone: a
+// composite never decodes to exactly one hash.
+func fullObjectChecksum(checksumType types.ChecksumType, value string, size int) string {
 	if checksumType == types.ChecksumTypeComposite {
 		return ""
 	}
 	sum, err := base64.StdEncoding.DecodeString(value)
-	if err != nil || len(sum) != sha256.Size {
+	if err != nil || len(sum) != size {
 		return ""
 	}
 	return hex.EncodeToString(sum)
