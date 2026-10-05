@@ -215,13 +215,13 @@ jobs:
         if: always()
         working-directory: bindings/go
         run: |
-          if [ ! -f coverage.integration.out ]; then
+          if [ ! -f output/coverage.integration.out ]; then
             echo "### Integration coverage: n/a (tests did not run)" >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
           # Floor = measured baseline (~47%, merged + generated excluded) minus a margin for churn. Ratchet up over time.
           floor=43
-          pct=$(go tool cover -func=coverage.integration.out | awk '/^total:/{gsub(/%/,"",$NF);print $NF}')
+          pct=$(go tool cover -func=output/coverage.integration.out | awk '/^total:/{gsub(/%/,"",$NF);print $NF}')
           echo "### Integration coverage: ${pct}% (floor ${floor}%)" >> "$GITHUB_STEP_SUMMARY"
           awk -v p="$pct" -v f="$floor" 'BEGIN{exit (p+0 < f+0)}' \
             || { echo "::error::integration coverage ${pct}% is below the ${floor}% floor"; exit 1; }
@@ -229,7 +229,7 @@ jobs:
         uses: mikepenz/action-junit-report@a9170d5795813c01ab4901ffb045b52bab4ab09d # v6.5.0
         if: always()
         with:
-          report_paths: '${{ github.workspace }}/bindings/go/junit*.xml'
+          report_paths: '${{ github.workspace }}/bindings/go/output/junit*.xml'
           detailed_summary: true
           include_passed: false
           # annotate inline + write the job summary without creating a check run,
@@ -263,13 +263,13 @@ jobs:
         if: always()
         working-directory: bindings/go
         run: |
-          if [ ! -f coverage.unit.out ]; then
+          if [ ! -f output/coverage.unit.out ]; then
             echo "### Unit coverage: n/a (tests did not run)" >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
           # Floor = filtered baseline (~65%, generated files excluded) minus a margin for churn. Ratchet up over time.
           floor=62
-          pct=$(go tool cover -func=coverage.unit.out | awk '/^total:/{gsub(/%/,"",$NF);print $NF}')
+          pct=$(go tool cover -func=output/coverage.unit.out | awk '/^total:/{gsub(/%/,"",$NF);print $NF}')
           echo "### Unit coverage: ${pct}% (floor ${floor}%)" >> "$GITHUB_STEP_SUMMARY"
           awk -v p="$pct" -v f="$floor" 'BEGIN{exit (p+0 < f+0)}' \
             || { echo "::error::unit coverage ${pct}% is below the ${floor}% floor"; exit 1; }

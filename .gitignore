@@ -14,9 +14,6 @@ Dockerfile.cross
 
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out
-# Binary coverage data and junit reports written by `task bindings/go:test/integration`
-*.covdir/
-junit*.xml
 
 # Kubernetes Generated files - skip generated files, except for vendored files
 
