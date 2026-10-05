@@ -17,7 +17,8 @@ func TestScheme(t *testing.T) {
 	r.NoError(err)
 	r.IsType(&GetGitResource{}, obj)
 	r.Equal("GetGitResource/v1alpha1", obj.GetType().String())
-	step := &GetGitResource{Type: GetGitResourceV1alpha1, ID: "git",
+	step := &GetGitResource{
+		Type: GetGitResourceV1alpha1, ID: "git",
 		Spec:   &GetGitResourceSpec{Resource: &v2.Resource{Access: &runtime.Raw{Type: runtime.NewVersionedType("Git", "v1"), Data: []byte(`{"ref":"HEAD","repository":"https://example.com/repo","type":"Git/v1"}`)}}},
 		Output: &GetGitResourceOutput{Resource: &v2.Resource{}, File: filev1alpha1.File{Type: runtime.NewVersionedType("File", "v1alpha1")}},
 	}

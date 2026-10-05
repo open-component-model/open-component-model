@@ -96,8 +96,10 @@ func TestGetGitResourceLocalRepository(t *testing.T) {
 			pinned, err := repo.ProcessResourceDigest(t.Context(), descriptor.ConvertFromV2Resource(resource), nil)
 			r.NoError(err)
 			// Keep the original access, including ref-only access, but require digest verification.
-			resource.Digest = &v2.Digest{HashAlgorithm: pinned.Digest.HashAlgorithm,
-				NormalisationAlgorithm: pinned.Digest.NormalisationAlgorithm, Value: pinned.Digest.Value}
+			resource.Digest = &v2.Digest{
+				HashAlgorithm:          pinned.Digest.HashAlgorithm,
+				NormalisationAlgorithm: pinned.Digest.NormalisationAlgorithm, Value: pinned.Digest.Value,
+			}
 			step := &v1alpha1.GetGitResource{
 				Type: v1alpha1.GetGitResourceV1alpha1, ID: "download-git",
 				Spec: &v1alpha1.GetGitResourceSpec{Resource: resource, OutputPath: outputDir},
@@ -222,8 +224,10 @@ func TestGetGitResourceCredentialsAndCleanup(t *testing.T) {
 					return resolved, tc.resolveErr
 				})
 			}
-			step := &v1alpha1.GetGitResource{Type: v1alpha1.GetGitResourceV1alpha1,
-				Spec: &v1alpha1.GetGitResourceSpec{Resource: gitResource(t, "https://example.com/repo", "HEAD", "", "Git/v1"), OutputPath: outDir}}
+			step := &v1alpha1.GetGitResource{
+				Type: v1alpha1.GetGitResourceV1alpha1,
+				Spec: &v1alpha1.GetGitResourceSpec{Resource: gitResource(t, "https://example.com/repo", "HEAD", "", "Git/v1"), OutputPath: outDir},
+			}
 			before := step.DeepCopy()
 			result, err := transformer.Transform(t.Context(), step)
 			r.Equal(before, step)
@@ -291,8 +295,10 @@ func TestGetGitResourceRemovesOutputOnBufferFailure(t *testing.T) {
 		return b, nil
 	}}
 	transformer := &GetGitResource{Scheme: v1alpha1.Scheme, ResourceRepository: intercept}
-	result, err := transformer.Transform(t.Context(), &v1alpha1.GetGitResource{Type: v1alpha1.GetGitResourceV1alpha1,
-		Spec: &v1alpha1.GetGitResourceSpec{Resource: gitResource(t, path, "", commit, "Git/v1"), OutputPath: outDir}})
+	result, err := transformer.Transform(t.Context(), &v1alpha1.GetGitResource{
+		Type: v1alpha1.GetGitResourceV1alpha1,
+		Spec: &v1alpha1.GetGitResourceSpec{Resource: gitResource(t, path, "", commit, "Git/v1"), OutputPath: outDir},
+	})
 	r.ErrorContains(err, "failed buffering git resource archive to file")
 	r.Nil(result)
 	files, err := os.ReadDir(outDir)
@@ -307,8 +313,10 @@ func TestGetGitResourceRejectsWrongDigest(t *testing.T) {
 	resource := gitResource(t, path, "", commit, "Git/v1")
 	resource.Digest = &v2.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: "genericBlobDigest/v1", Value: strings.Repeat("0", 64)}
 	transformer := &GetGitResource{Scheme: v1alpha1.Scheme, ResourceRepository: gitrepository.NewResourceRepository(&filesystemconfig.Config{TempFolder: &downloadDir})}
-	result, err := transformer.Transform(t.Context(), &v1alpha1.GetGitResource{Type: v1alpha1.GetGitResourceV1alpha1,
-		Spec: &v1alpha1.GetGitResourceSpec{Resource: resource, OutputPath: outDir}})
+	result, err := transformer.Transform(t.Context(), &v1alpha1.GetGitResource{
+		Type: v1alpha1.GetGitResourceV1alpha1,
+		Spec: &v1alpha1.GetGitResourceSpec{Resource: resource, OutputPath: outDir},
+	})
 	r.ErrorContains(err, "digest mismatch")
 	r.Nil(result)
 	entries, err := os.ReadDir(outDir)
