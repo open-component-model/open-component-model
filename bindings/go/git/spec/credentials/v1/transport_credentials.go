@@ -1,0 +1,90 @@
+package v1
+
+import (
+	"fmt"
+	"strings"
+
+	"ocm.software/open-component-model/bindings/go/runtime"
+)
+
+// GitBasicCredentials authenticates Git over HTTPS with HTTP Basic authentication.
+// Password can be a password, personal access token, or OAuth access token,
+// according to the server's requirements. No provider-specific defaults are applied.
+//
+// +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
+// +k8s:deepcopy-gen=true
+// +ocm:typegen=true
+// +ocm:jsonschema-gen=true
+type GitBasicCredentials struct {
+	// +ocm:jsonschema-gen:enum=GitBasicCredentials/v1
+	Type     runtime.Type `json:"type"`
+	Username string       `json:"username"`
+	Password string       `json:"password"`
+}
+
+func (c *GitBasicCredentials) Validate() error {
+	if c.Username == "" {
+		return fmt.Errorf("HTTP Basic authentication requires a username")
+	}
+	if strings.Contains(c.Username, ":") {
+		return fmt.Errorf("HTTP Basic username must not contain a colon")
+	}
+	return nil
+}
+
+// GitBearerCredentials authenticates Git over HTTPS using Authorization: Bearer.
+// Use GitBasicCredentials when the server expects a token as the Basic password.
+//
+// +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
+// +k8s:deepcopy-gen=true
+// +ocm:typegen=true
+// +ocm:jsonschema-gen=true
+type GitBearerCredentials struct {
+	// +ocm:jsonschema-gen:enum=GitBearerCredentials/v1
+	Type  runtime.Type `json:"type"`
+	Token string       `json:"token"`
+}
+
+func (c *GitBearerCredentials) Validate() error {
+	if c.Token == "" {
+		return fmt.Errorf("HTTP Bearer authentication requires a token")
+	}
+	return nil
+}
+
+// GitSSHCredentials authenticates Git over SSH with a private key or the SSH agent.
+// Without a key, the SSH agent is used. Username defaults to the URL user, then git.
+// Host keys are checked against known_hosts unless the caller supplies a callback.
+//
+// +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
+// +k8s:deepcopy-gen=true
+// +ocm:typegen=true
+// +ocm:jsonschema-gen=true
+type GitSSHCredentials struct {
+	// +ocm:jsonschema-gen:enum=GitSSHCredentials/v1
+	Type     runtime.Type `json:"type"`
+	Username string       `json:"username,omitempty"`
+	// PrivateKey is the path to an SSH private key file.
+	PrivateKey string `json:"privateKey,omitempty"`
+	// PrivateKeyPEM is an inline PEM-encoded SSH private key.
+	PrivateKeyPEM string `json:"privateKeyPEM,omitempty"`
+	// Passphrase decrypts the private key. It is not an HTTP password.
+	Passphrase string `json:"passphrase,omitempty"`
+}
+
+func (c *GitSSHCredentials) Validate() error {
+	if c.PrivateKey != "" && c.PrivateKeyPEM != "" {
+		return fmt.Errorf("SSH credentials must specify only one of privateKey and privateKeyPEM")
+	}
+	if c.Passphrase != "" && c.PrivateKey == "" && c.PrivateKeyPEM == "" {
+		return fmt.Errorf("SSH passphrase requires a private key")
+	}
+	return nil
+}
+
+// MustRegisterTransportCredentialTypes registers the explicit Git authentication methods.
+func MustRegisterTransportCredentialTypes(scheme *runtime.Scheme) {
+	scheme.MustRegisterWithAlias(&GitBasicCredentials{}, runtime.NewVersionedType(GitBasicCredentialsType, Version))
+	scheme.MustRegisterWithAlias(&GitBearerCredentials{}, runtime.NewVersionedType(GitBearerCredentialsType, Version))
+	scheme.MustRegisterWithAlias(&GitSSHCredentials{}, runtime.NewVersionedType(GitSSHCredentialsType, Version))
+}

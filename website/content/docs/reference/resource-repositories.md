@@ -379,7 +379,7 @@ is `Git`.
 
 Credentials are optional. Without them, HTTPS requests are anonymous, and SSH uses the SSH agent. When credentials
 resolve, OCM uses an SSH private key first, then a token, then a username and password. See
-[`GitCredentials/v1`]({{< relref "credential-types.md#gitcredentialsv1" >}}).
+[Git transport credentials]({{< relref "credential-types.md#git-credential-selection" >}}).
 
 See [Credential Consumer Identities: Git]({{< relref "credential-consumer-identities.md" >}}#git) for how each URL form
 maps to the identity, and for matching rules.

@@ -32,7 +32,10 @@ OCM ships with the following built-in credential types:
 | [`WgetCredentials/v1`](#wgetcredentialsv1)                 | `Wget` consumers                         | HTTP/S Basic Auth, bearer token, and mutual TLS                 |
 | [`S3Credentials/v1`](#s3credentialsv1)                     | `S3` consumers                           | S3 access keys and temporary STS credentials                    |
 | [`GitHubCredentials/v1`](#githubcredentialsv1)             | `GitHubRepository` consumers             | GitHub and GitHub Enterprise REST API token auth                |
-| [`GitCredentials/v1`](#gitcredentialsv1)                   | `Git` consumers                          | Git over HTTPS (token, Basic Auth) and SSH keys                 |
+| [`GitBasicCredentials/v1`](#gitbasiccredentialsv1)         | `Git` consumers                          | Git over HTTPS with HTTP Basic authentication                   |
+| [`GitBearerCredentials/v1`](#gitbearercredentialsv1)       | `Git` consumers                          | Git over HTTPS with HTTP Bearer authentication                  |
+| [`GitSSHCredentials/v1`](#gitsshcredentialsv1)             | `Git` consumers                          | Git over SSH with a key or SSH agent                            |
+| [`GitCredentials/v1`](#gitcredentialsv1)                   | `Git` consumers                          | Legacy Git credentials                                          |
 | [`RSACredentials/v1`](#rsacredentialsv1)                   | `RSA/v1alpha1` consumers                 | RSA signing and verification key material                       |
 | [`GPGCredentials/v1alpha1`](#gpgcredentialsv1alpha1)       | `GPG/v1alpha1` consumers                 | GPG signing and verification key material                       |
 | [`OIDCIdentityToken/v1alpha1`](#oidcidentitytokenv1alpha1) | `SigstoreSigner/v1alpha1` consumers      | OIDC token for Sigstore keyless signing via Fulcio              |
@@ -340,9 +343,102 @@ Configuring no consumer at all is valid: the GitHub REST API is then called anon
 
 ---
 
+## GitBasicCredentials/v1
+
+{{< schema-renderer url="/schemas/bindings/go/credentials/git/v1/GitBasicCredentials.schema.json" >}}
+
+Uses HTTP Basic authentication over HTTPS. Set a non-empty `username` and put the server's required secret in
+`password`. The secret can be a password, personal access token, or OAuth access token. OCM does not infer the
+server vendor, username conventions, or authentication method from the hostname or token format.
+
+```yaml
+consumers:
+  - identity:
+      type: Git
+      hostname: git.example.com
+      scheme: https
+    credentials:
+      - type: GitBasicCredentials/v1
+        username: repository-user
+        password: example-access-token
+```
+
+For GitHub Git over HTTPS, provide a non-empty username and a PAT as `password`. For GitLab, a PAT also goes in
+`password`; for OAuth access tokens, GitLab recommends `oauth2` as the username. These are server conventions supplied
+by the configuration, not defaults applied by OCM. Token issuance and refresh belong to the credential provider.
+
+## GitBearerCredentials/v1
+
+{{< schema-renderer url="/schemas/bindings/go/credentials/git/v1/GitBearerCredentials.schema.json" >}}
+
+Sends `Authorization: Bearer <token>` over HTTPS. Use this only when the Git server supports Bearer authentication.
+A secret being a token does not determine how it should be sent; use `GitBasicCredentials/v1` when it belongs in
+an HTTP Basic password field.
+
+```yaml
+consumers:
+  - identity:
+      type: Git
+      hostname: git.example.com
+      scheme: https
+    credentials:
+      - type: GitBearerCredentials/v1
+        token: example-bearer-token
+```
+
+## GitSSHCredentials/v1
+
+{{< schema-renderer url="/schemas/bindings/go/credentials/git/v1/GitSSHCredentials.schema.json" >}}
+
+Requires an SSH repository URL. Supply either `privateKey` (a file path) or `privateKeyPEM` (inline PEM), with an
+optional `passphrase` to decrypt the key. Supplying both key fields is an error. Without a key, OCM uses the SSH agent.
+`username` defaults to the URL user, then `git`. Host key verification uses `known_hosts` unless the caller overrides it.
+
+```yaml
+consumers:
+  - identity:
+      type: Git
+      hostname: git.example.com
+      scheme: ssh
+      port: "22"
+    credentials:
+      - type: GitSSHCredentials/v1
+        privateKey: /home/user/.ssh/id_ed25519
+        passphrase: example-key-passphrase
+```
+
+To use the SSH agent with an explicit username, omit the key and passphrase:
+
+```yaml
+consumers:
+  - identity:
+      type: Git
+      hostname: git.example.com
+      scheme: ssh
+      port: "22"
+    credentials:
+      - type: GitSSHCredentials/v1
+        username: git
+```
+
+### Git credential selection
+
+These three types work with [`Git`]({{< relref "credential-consumer-identities.md#git" >}}) consumers for both
+[`Git/v1` access]({{< relref "input-and-access-types.md#gitv1-access" >}}) and
+[`Git/v1` input]({{< relref "input-and-access-types.md#gitv1-input" >}}). Configure one authentication method per
+consumer lookup; multiple types are not an ordered list of authentication attempts. Include `scheme` in the identity
+to distinguish HTTPS and SSH credentials for the same host. Unknown or mixed fields on explicit credential types
+are rejected. HTTP credentials require HTTPS, and OCM rejects redirects that downgrade HTTPS to HTTP.
+
+Configuring no consumer is valid: HTTPS requests are anonymous, and SSH uses the SSH agent.
+
+---
+
 ## GitCredentials/v1
 
 {{< schema-renderer url="/schemas/bindings/go/credentials/git/v1/GitCredentials.schema.json" >}}
+
+This legacy type remains supported. Prefer the explicit Git credential types above for new configurations.
 
 OCM picks one authentication method, in this order:
 

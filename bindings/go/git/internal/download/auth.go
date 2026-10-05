@@ -9,11 +9,56 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/git/internal/endpoint"
 	credsv1 "ocm.software/open-component-model/bindings/go/git/spec/credentials/v1"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // authMethod returns a client.SSHAuth or client.HTTPAuth, or nil to leave the
 // authentication to go-git.
-func authMethod(ep *endpoint.Endpoint, creds *credsv1.GitCredentials, opts Options) (any, error) {
+func authMethod(ep *endpoint.Endpoint, credentials runtime.Typed, opts Options) (any, error) {
+	switch creds := credentials.(type) {
+	case nil:
+		return legacyAuthMethod(ep, nil, opts)
+	case *credsv1.GitCredentials:
+		return legacyAuthMethod(ep, creds, opts)
+	case *credsv1.GitBasicCredentials:
+		if err := creds.Validate(); err != nil {
+			return nil, err
+		}
+		return legacyAuthMethod(ep, &credsv1.GitCredentials{Username: creds.Username, Password: creds.Password}, opts)
+	case *credsv1.GitBearerCredentials:
+		if err := creds.Validate(); err != nil {
+			return nil, err
+		}
+		return legacyAuthMethod(ep, &credsv1.GitCredentials{Token: creds.Token}, opts)
+	case *credsv1.GitSSHCredentials:
+		if err := creds.Validate(); err != nil {
+			return nil, err
+		}
+		if ep.Protocol != "ssh" {
+			return nil, fmt.Errorf("SSH credentials require an SSH repository")
+		}
+		if creds.PrivateKey != "" || creds.PrivateKeyPEM != "" {
+			return legacyAuthMethod(ep, &credsv1.GitCredentials{Username: creds.Username, PrivateKey: creds.PrivateKey, PrivateKeyPEM: creds.PrivateKeyPEM, Password: creds.Passphrase}, opts)
+		}
+		username := creds.Username
+		if username == "" {
+			username = ep.User
+		}
+		if username == "" {
+			username = "git"
+		}
+		auth, err := gitssh.NewSSHAgentAuth(username)
+		if err != nil {
+			return nil, fmt.Errorf("cannot use SSH agent: %w", err)
+		}
+		auth.HostKeyCallback = opts.HostKeyCallback
+		return auth, nil
+	default:
+		return nil, fmt.Errorf("unsupported git credential type %T", credentials)
+	}
+}
+
+func legacyAuthMethod(ep *endpoint.Endpoint, creds *credsv1.GitCredentials, opts Options) (any, error) {
 	if creds == nil {
 		creds = &credsv1.GitCredentials{}
 	}

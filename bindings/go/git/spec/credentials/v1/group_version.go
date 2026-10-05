@@ -1,6 +1,12 @@
 package v1
 
 const (
-	Version            = "v1"
-	GitCredentialsType = "GitCredentials"
+	Version = "v1"
+	//nolint:gosec // G101: This is a type name, not a credential.
+	GitBasicCredentialsType = "GitBasicCredentials"
+	//nolint:gosec // G101: This is a type name, not a credential.
+	GitBearerCredentialsType = "GitBearerCredentials"
+	//nolint:gosec // G101: This is a type name, not a credential.
+	GitSSHCredentialsType = "GitSSHCredentials"
+	GitCredentialsType    = "GitCredentials"
 )

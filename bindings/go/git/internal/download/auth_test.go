@@ -15,17 +15,26 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/git/internal/endpoint"
 	credsv1 "ocm.software/open-component-model/bindings/go/git/spec/credentials/v1"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 func TestAuthModes(t *testing.T) {
 	for _, tc := range []struct {
 		name       string
 		repository string
-		creds      *credsv1.GitCredentials
+		creds      runtime.Typed
 		want       any
 		wantErr    string
 	}{
 		{name: "anonymous HTTPS", repository: "https://example.com/repo"},
+		{name: "explicit basic token", repository: "https://example.com/repo", creds: &credsv1.GitBasicCredentials{Username: "user", Password: "oauth-token"}, want: &githttp.BasicAuth{Username: "user", Password: "oauth-token"}},
+		{name: "explicit bearer", repository: "https://example.com/repo", creds: &credsv1.GitBearerCredentials{Token: "token"}, want: &githttp.TokenAuth{Token: "token"}},
+		{name: "explicit basic on HTTP", repository: "http://example.com/repo", creds: &credsv1.GitBasicCredentials{Username: "user", Password: "token"}, wantErr: "username/password authentication requires an HTTPS repository"},
+		{name: "explicit bearer on HTTP", repository: "http://example.com/repo", creds: &credsv1.GitBearerCredentials{Token: "token"}, wantErr: "tokens require an HTTPS repository"},
+		{name: "explicit basic on SSH", repository: "git@example.com:repo", creds: &credsv1.GitBasicCredentials{Username: "user", Password: "token"}, wantErr: "username/password authentication requires an HTTPS repository"},
+		{name: "explicit bearer on SSH", repository: "git@example.com:repo", creds: &credsv1.GitBearerCredentials{Token: "token"}, wantErr: "tokens require an HTTPS repository"},
+		{name: "explicit SSH on HTTPS", repository: "https://example.com/repo", creds: &credsv1.GitSSHCredentials{}, wantErr: "SSH credentials require an SSH repository"},
+
 		{name: "anonymous HTTP", repository: "http://example.com/repo"},
 		{
 			name: "token over basic", repository: "https://example.com/repo",
@@ -165,4 +174,22 @@ func TestAuthSSHKeys(t *testing.T) {
 			r.ErrorIs(keys.HostKeyCallback("example.com:22", nil, keys.Signer.PublicKey()), sentinel)
 		})
 	}
+}
+
+func TestExplicitSSHKey(t *testing.T) {
+	r := require.New(t)
+	_, private, err := ed25519.GenerateKey(rand.Reader)
+	r.NoError(err)
+	block, err := ssh.MarshalPrivateKeyWithPassphrase(private, "", []byte("key-passphrase"))
+	r.NoError(err)
+	ep, err := endpoint.Parse("url-user@example.com:repo")
+	r.NoError(err)
+	sentinel := errors.New("host key rejected")
+	callback := func(string, net.Addr, ssh.PublicKey) error { return sentinel }
+	auth, err := authMethod(ep, &credsv1.GitSSHCredentials{Username: "credential-user", PrivateKeyPEM: string(pem.EncodeToMemory(block)), Passphrase: "key-passphrase"}, Options{HostKeyCallback: callback})
+	r.NoError(err)
+	keys := auth.(*gitssh.PublicKeys)
+	r.Equal("credential-user", keys.User)
+	r.NotNil(keys.Signer)
+	r.ErrorIs(keys.HostKeyCallback("example.com:22", nil, keys.Signer.PublicKey()), sentinel)
 }

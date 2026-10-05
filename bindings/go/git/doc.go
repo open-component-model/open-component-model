@@ -54,12 +54,20 @@
 //
 // # Credentials
 //
-// Credentials are optional, supplied as
-// [ocm.software/open-component-model/bindings/go/git/spec/credentials/v1.GitCredentials].
-// Precedence is SSH PrivateKeyPEM or PrivateKey (Password is the passphrase), then
-// HTTPS Token, then HTTPS Username/Password. Without credentials, SSH uses the
-// agent and other transports fetch anonymously. Credentials on plain HTTP and
-// HTTPS-to-HTTP redirects are rejected before transmission.
+// Git access and input accept one vendor-independent credential type per lookup:
+// [ocm.software/open-component-model/bindings/go/git/spec/credentials/v1.GitBasicCredentials]
+// sends a username and password (which may be an access token) using HTTP Basic;
+// [ocm.software/open-component-model/bindings/go/git/spec/credentials/v1.GitBearerCredentials]
+// sends Authorization: Bearer; both require HTTPS.
+// [ocm.software/open-component-model/bindings/go/git/spec/credentials/v1.GitSSHCredentials]
+// uses an SSH key with an optional Passphrase, or the SSH agent when no key is given.
+// No server-specific usernames, token formats, or authentication defaults are inferred.
+//
+// Legacy GitCredentials and Credentials/v1 retain their existing precedence:
+// SSH PrivateKeyPEM or PrivateKey (Password is the passphrase), then HTTPS Token
+// (Bearer), then HTTPS Username/Password (Basic). Without credentials, SSH uses
+// the agent and other transports fetch anonymously. Credentials on plain HTTP
+// and HTTPS-to-HTTP redirects are rejected before transmission.
 //
 // SSH uses the current user's known_hosts unless WithHostKeyCallback overrides it.
 // HTTP(S) uses the client from

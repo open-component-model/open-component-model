@@ -552,7 +552,9 @@ Used when OCM fetches a repository with the
 [`Git/v1` access type]({{< relref "input-and-access-types.md#gitv1-access" >}}) or the
 [`Git/v1` input type]({{< relref "input-and-access-types.md#gitv1-input" >}}). The identity is derived from the
 `repository` URL. The access type and the input type derive it in the same way, so one consumer entry covers both.
-Credentials are optional. See [`GitCredentials/v1`]({{< relref "credential-types.md#gitcredentialsv1" >}}).
+Credentials are optional. Use [`GitBasicCredentials/v1`]({{< relref "credential-types.md#gitbasiccredentialsv1" >}}),
+[`GitBearerCredentials/v1`]({{< relref "credential-types.md#gitbearercredentialsv1" >}}), or
+[`GitSSHCredentials/v1`]({{< relref "credential-types.md#gitsshcredentialsv1" >}}).
 
 ### Identity Attributes
 
@@ -592,8 +594,9 @@ so `path: org/repo` does not match `https://example.com/org/repo.git`. Use `org/
 | `privateKey`    | Path to an SSH private key file                                        |
 | `privateKeyPEM` | Inline PEM-encoded SSH private key. Takes precedence over `privateKey` |
 
-Use [`GitCredentials/v1`]({{< relref "credential-types.md#gitcredentialsv1" >}}) for the typed field reference and the
-order in which OCM picks an authentication method.
+See [Git credential selection]({{< relref "credential-types.md#git-credential-selection" >}}) for the typed field reference and the
+choice of authentication method. The field table above describes legacy `GitCredentials/v1`;
+explicit SSH credentials use `passphrase` for key decryption.
 
 ### Matching Behavior
 
@@ -620,7 +623,7 @@ server answers with an authentication error.
     scheme: https
     path: example-group/*
   credentials:
-    - type: GitCredentials/v1
+    - type: GitBasicCredentials/v1
       username: oauth2
       password: glpat-example-token
 ```
@@ -634,7 +637,7 @@ server answers with an authentication error.
     scheme: ssh
     port: "22"
   credentials:
-    - type: GitCredentials/v1
+    - type: GitSSHCredentials/v1
       privateKey: /home/user/.ssh/id_ed25519
 ```
 

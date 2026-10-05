@@ -12,6 +12,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/credentials"
 	credconfigruntime "ocm.software/open-component-model/bindings/go/credentials/spec/config/runtime"
 	credv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
+	gitcredsv1 "ocm.software/open-component-model/bindings/go/git/spec/credentials/v1"
 	gpgcredsv1alpha1 "ocm.software/open-component-model/bindings/go/gpg/spec/credentials/v1alpha1"
 	gpgidentityv1alpha1 "ocm.software/open-component-model/bindings/go/gpg/spec/identity/v1alpha1"
 	helmcredsv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/v1"
@@ -43,6 +44,9 @@ func TestCredentialTypeSchemePopulatedByBuiltinRegister(t *testing.T) {
 		name          string
 		versionedType runtime.Type
 	}{
+		{"GitBasicCredentials/v1", runtime.NewVersionedType(gitcredsv1.GitBasicCredentialsType, gitcredsv1.Version)},
+		{"GitBearerCredentials/v1", runtime.NewVersionedType(gitcredsv1.GitBearerCredentialsType, gitcredsv1.Version)},
+		{"GitSSHCredentials/v1", runtime.NewVersionedType(gitcredsv1.GitSSHCredentialsType, gitcredsv1.Version)},
 		{"OCICredentials/v1", runtime.NewVersionedType(ocicredsv1.OCICredentialsType, ocicredsv1.Version)},
 		{"HelmHTTPCredentials/v1", runtime.NewVersionedType(helmcredsv1.HelmHTTPCredentialsType, helmcredsv1.Version)},
 		{"RSACredentials/v1", rsacredsv1.VersionedType},
@@ -74,6 +78,33 @@ func TestCredentialGraphResolvesTypedCredentials(t *testing.T) {
 		credential runtime.Typed
 		assertType func(t *testing.T, resolved runtime.Typed)
 	}{
+		{
+			name:       "GitBasicCredentials/v1",
+			identity:   runtime.Identity{"type": "Git", "hostname": "git.example.com"},
+			credential: &gitcredsv1.GitBasicCredentials{Type: runtime.NewVersionedType(gitcredsv1.GitBasicCredentialsType, gitcredsv1.Version), Username: "user", Password: "access-token"},
+			assertType: func(t *testing.T, resolved runtime.Typed) {
+				t.Helper()
+				require.Equal(t, &gitcredsv1.GitBasicCredentials{Type: runtime.NewVersionedType(gitcredsv1.GitBasicCredentialsType, gitcredsv1.Version), Username: "user", Password: "access-token"}, resolved)
+			},
+		},
+		{
+			name:       "GitBearerCredentials/v1",
+			identity:   runtime.Identity{"type": "Git", "hostname": "git.example.com"},
+			credential: &gitcredsv1.GitBearerCredentials{Type: runtime.NewVersionedType(gitcredsv1.GitBearerCredentialsType, gitcredsv1.Version), Token: "access-token"},
+			assertType: func(t *testing.T, resolved runtime.Typed) {
+				t.Helper()
+				require.Equal(t, &gitcredsv1.GitBearerCredentials{Type: runtime.NewVersionedType(gitcredsv1.GitBearerCredentialsType, gitcredsv1.Version), Token: "access-token"}, resolved)
+			},
+		},
+		{
+			name:       "GitSSHCredentials/v1",
+			identity:   runtime.Identity{"type": "Git", "hostname": "git.example.com"},
+			credential: &gitcredsv1.GitSSHCredentials{Type: runtime.NewVersionedType(gitcredsv1.GitSSHCredentialsType, gitcredsv1.Version), Username: "git", PrivateKey: "/keys/key", Passphrase: "key-passphrase"},
+			assertType: func(t *testing.T, resolved runtime.Typed) {
+				t.Helper()
+				require.Equal(t, &gitcredsv1.GitSSHCredentials{Type: runtime.NewVersionedType(gitcredsv1.GitSSHCredentialsType, gitcredsv1.Version), Username: "git", PrivateKey: "/keys/key", Passphrase: "key-passphrase"}, resolved)
+			},
+		},
 		{
 			name: "OCICredentials/v1",
 			identity: runtime.Identity{
