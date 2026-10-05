@@ -151,6 +151,8 @@ tasks:
   # In this setup it is used only with a single platform (the local arch),
   # but it still supports --push / --load flags if desired.
   docker-build/multi-arch:
+    # GOFIPS140 (root .env) is forwarded as a build arg from the environment.
+    dotenv: ['{{.TASKFILE_DIR}}/../../../../.env']
     desc: "Build a multi-architecture Docker image"
     requires:
       vars: [ PLATFORMS, CONTROLLER_IMG ]
@@ -158,6 +160,7 @@ tasks:
       args=(
         --platform={{.PLATFORMS}}
         --build-arg GO_TAGS='{{.GO_TAGS | default ""}}'
+        --build-arg GOFIPS140
         -f '{{.TASKFILE_DIR}}/Dockerfile' '{{.TASKFILE_DIR}}/../..'
       )
 

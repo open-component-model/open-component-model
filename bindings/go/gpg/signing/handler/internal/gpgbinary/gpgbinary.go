@@ -16,6 +16,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/fips140"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -58,6 +59,10 @@ var (
 	// ErrKeyMaterialWithKeyring rejects key material in a request that uses the keyring,
 	// so that it is never ambiguous which key signs or verifies.
 	ErrKeyMaterialWithKeyring = errors.New("keySource keyring takes keys from the GnuPG keyring; remove the key material from the GPG credentials")
+	// ErrGPGNotInFIPSMode is returned with GODEBUG=fips140=only when the libgcrypt of gpg does not run in FIPS mode,
+	// because GPG signing and verification would then leave the FIPS boundary.
+	ErrGPGNotInFIPSMode = errors.New("with GODEBUG=fips140=only, GPG signing and verification require a gpg whose libgcrypt runs in FIPS mode " +
+		"(gpgconf --show-versions reports fips-mode:y; enable it with /etc/gcrypt/fips_enabled or a FIPS-mode kernel)")
 )
 
 var (
@@ -86,12 +91,21 @@ func WithTempDir(dir string) Option {
 	return func(b *Binary) { b.tempDir = dir }
 }
 
+// WithFIPSMode overrides how the FIPS 140-3 mode is detected. In FIPS mode (enabled) OCM checks that gpg runs with
+// a FIPS-mode libgcrypt; in strict FIPS mode (enforced, GODEBUG=fips140=only) a failed check is an error, otherwise
+// it is logged at debug level.
+func WithFIPSMode(enabled, enforced func() bool) Option {
+	return func(b *Binary) { b.fipsEnabled, b.fipsEnforced = enabled, enforced }
+}
+
 // Binary resolves and invokes the gpg binary. It is safe for concurrent use.
 // Resolution is retried on every call until it succeeds once; the resolved paths are cached afterwards.
 type Binary struct {
-	lookPath func(file string) (string, error)
-	exec     ExecFunc
-	tempDir  string // "" means os.TempDir()
+	lookPath     func(file string) (string, error)
+	exec         ExecFunc
+	tempDir      string      // "" means os.TempDir()
+	fipsEnabled  func() bool // reports FIPS 140-3 mode (fips140=on or only)
+	fipsEnforced func() bool // reports strict FIPS 140-3 mode (fips140=only)
 
 	mu          sync.Mutex
 	gpgPath     string // set after the first successful resolution
@@ -100,7 +114,7 @@ type Binary struct {
 
 // New returns a Binary that resolves binaries via exec.LookPath and runs them as subprocesses.
 func New(opts ...Option) *Binary {
-	b := &Binary{lookPath: exec.LookPath, exec: execCommand}
+	b := &Binary{lookPath: exec.LookPath, exec: execCommand, fipsEnabled: fips140.Enabled, fipsEnforced: fips140.Enforced}
 	for _, opt := range opts {
 		opt(b)
 	}
@@ -363,8 +377,49 @@ func (b *Binary) resolve(ctx context.Context) (string, error) {
 	} else {
 		slog.WarnContext(ctx, "gpgconf not found on PATH; gpg-agents of temporary GnuPG home directories are not stopped explicitly and may keep unlocked key material until they exit")
 	}
+	enforced := b.fipsEnforced != nil && b.fipsEnforced()
+	if enforced || (b.fipsEnabled != nil && b.fipsEnabled()) {
+		if err := b.requireLibgcryptFIPSMode(vctx); err != nil {
+			if enforced {
+				return "", err
+			}
+			slog.DebugContext(ctx, "gpg does not use a FIPS-mode libgcrypt; GPG signing runs outside the FIPS 140-3 boundary "+
+				"(GODEBUG=fips140=only rejects it)", "path", path, "reason", err.Error())
+		}
+	}
 	b.gpgPath = path
 	return path, nil
+}
+
+// requireLibgcryptFIPSMode checks that libgcrypt, which does all OpenPGP cryptography of gpg,
+// runs in FIPS mode, as reported by "gpgconf --show-versions" (the "fips-mode:y" line).
+func (b *Binary) requireLibgcryptFIPSMode(ctx context.Context) error {
+	if b.gpgconfPath == "" {
+		return fmt.Errorf("%w: gpgconf is not on PATH, so the FIPS mode of libgcrypt cannot be determined", ErrGPGNotInFIPSMode)
+	}
+	out, err := b.run(ctx, "show-versions", b.gpgconfPath, []string{"--show-versions"}, nil)
+	if err != nil {
+		return fmt.Errorf("%w: %w", ErrGPGNotInFIPSMode, err)
+	}
+	switch mode := libgcryptFIPSMode(string(out)); mode {
+	case "y":
+		return nil
+	case "":
+		return fmt.Errorf("%w: gpgconf --show-versions reports no fips-mode for libgcrypt", ErrGPGNotInFIPSMode)
+	default:
+		return fmt.Errorf("%w: gpgconf --show-versions reports fips-mode:%s", ErrGPGNotInFIPSMode, mode)
+	}
+}
+
+// libgcryptFIPSMode returns the value of the "fips-mode:<y|n>:..." line of "gpgconf --show-versions", or "" if absent.
+func libgcryptFIPSMode(out string) string {
+	for line := range strings.Lines(out) {
+		if rest, ok := strings.CutPrefix(strings.TrimSpace(line), "fips-mode:"); ok {
+			mode, _, _ := strings.Cut(rest, ":")
+			return mode
+		}
+	}
+	return ""
 }
 
 // run invokes a gpg (or gpgconf) operation. stdout is returned even on error

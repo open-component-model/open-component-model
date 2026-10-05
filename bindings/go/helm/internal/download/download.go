@@ -2,6 +2,7 @@ package download
 
 import (
 	"context"
+	"crypto/fips140"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -26,6 +27,13 @@ import (
 	ocicredsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 )
 
+// ErrProvenanceVerificationInFIPSMode is returned with GODEBUG=fips140=only when the credentials carry a keyring.
+// Helm verifies chart provenance with OpenPGP (github.com/ProtonMail/go-crypto), which hashes key fingerprints with
+// SHA-1 and does not run through the Go Cryptographic Module; strict mode would panic in it.
+var ErrProvenanceVerificationInFIPSMode = errors.New("with GODEBUG=fips140=only, Helm chart provenance verification " +
+	"is not available: Helm verifies provenance with OpenPGP outside the Go Cryptographic Module; " +
+	"remove the keyring from the Helm credentials or run OCM without fips140=only")
+
 // NewReadOnlyChartFromRemote downloads a Helm chart from a remote repository and returns it as [helm.ChartData].
 // The helmRepo parameter accepts both OCI references (e.g. "oci://registry.example.com/charts/mychart:1.0.0")
 // and HTTP/S URLs (e.g. "https://example.com/charts/mychart-1.0.0.tgz").
@@ -48,6 +56,16 @@ func NewReadOnlyChartFromRemote(ctx context.Context, helmRepo, targetDir string,
 	}
 	if opt.OCICredentials == nil {
 		opt.OCICredentials = &ocicredsv1.OCICredentials{}
+	}
+
+	if opt.Credentials.Keyring != "" {
+		if fips140.Enforced() {
+			return nil, ErrProvenanceVerificationInFIPSMode
+		}
+		if fips140.Enabled() {
+			slog.DebugContext(ctx, "Helm chart provenance verification runs OpenPGP outside the Go Cryptographic Module "+
+				"(GODEBUG=fips140=only rejects it)")
+		}
 	}
 
 	chartDir, err := os.MkdirTemp(targetDir, "helmRemoteChart*")
