@@ -56,7 +56,7 @@ func Test_Integration_GitHTTPSAuthentication(t *testing.T) {
 			invalidCredentials: &credsv1.GitBearerCredentials{Type: runtime.NewVersionedType(credsv1.GitBearerCredentialsType, credsv1.Version), Token: "wrong-secret"},
 		},
 		{
-			name:               "explicit basic token as password",
+			name:               "explicit HTTPS token as password",
 			authorization:      "Basic " + base64.StdEncoding.EncodeToString([]byte("fixture-user:fixture-token")),
 			credentials:        &credsv1.GitHTTPSCredentials{Type: runtime.NewVersionedType(credsv1.GitHTTPSCredentialsType, credsv1.Version), Username: "fixture-user", Password: "fixture-token"},
 			invalidCredentials: &credsv1.GitHTTPSCredentials{Type: runtime.NewVersionedType(credsv1.GitHTTPSCredentialsType, credsv1.Version), Username: "fixture-user", Password: "wrong-secret"},

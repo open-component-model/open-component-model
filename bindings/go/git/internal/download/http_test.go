@@ -10,8 +10,9 @@ import (
 )
 
 func TestAuthenticatedHTTPClientRedirectPolicy(t *testing.T) {
+	r := require.New(t)
 	origin, err := url.Parse("https://git.example.com/repo")
-	require.NoError(t, err)
+	r.NoError(err)
 	for _, tc := range []struct {
 		name, target string
 		allowed      bool
@@ -57,14 +58,14 @@ func TestAuthenticatedHTTPClientRedirectPolicy(t *testing.T) {
 		}
 		r.EqualError(authenticatedHTTPClient(&http.Client{}).CheckRedirect(&http.Request{URL: origin}, via), "stopped after 10 redirects")
 	})
-}
-
-func TestAuthenticatedHTTPClientRejectsCallerOriginChange(t *testing.T) {
-	r := require.New(t)
-	origin, err := url.Parse("https://git.example.com/repo")
-	r.NoError(err)
-	target, err := url.Parse("https://git.example.com/other")
-	r.NoError(err)
-	original := &http.Client{CheckRedirect: func(req *http.Request, _ []*http.Request) error { req.URL.Host = "other.example.com"; return nil }}
-	r.EqualError(authenticatedHTTPClient(original).CheckRedirect(&http.Request{URL: target}, []*http.Request{{URL: origin}}), "authenticated git redirect changes origin")
+	t.Run("caller changes origin", func(t *testing.T) {
+		r := require.New(t)
+		target, err := url.Parse("https://git.example.com/other")
+		r.NoError(err)
+		original := &http.Client{CheckRedirect: func(req *http.Request, _ []*http.Request) error {
+			req.URL.Host = "other.example.com"
+			return nil
+		}}
+		r.EqualError(authenticatedHTTPClient(original).CheckRedirect(&http.Request{URL: target}, []*http.Request{{URL: origin}}), "authenticated git redirect changes origin")
+	})
 }

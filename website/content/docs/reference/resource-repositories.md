@@ -377,10 +377,8 @@ is `Git`.
 | `port`     | `443`                                |
 | `path`     | `example-group/example-project.git`  |
 
-Credentials are optional. Without them, HTTPS requests are anonymous, and SSH uses the SSH agent. When credentials
-resolve, explicit Git credential types select one method by type. Legacy `GitCredentials/v1` and `Credentials/v1`
-use an SSH private key first, then a bearer token, then a username and password. See
-[Git transport credentials]({{< relref "credential-types.md#git-credential-selection" >}}).
+Credentials are optional. See [Git credential selection]({{< relref "credential-types.md#git-credential-selection" >}})
+for supported authentication methods.
 
 See [Credential Consumer Identities: Git]({{< relref "credential-consumer-identities.md" >}}#git) for how each URL form
 maps to the identity, and for matching rules.

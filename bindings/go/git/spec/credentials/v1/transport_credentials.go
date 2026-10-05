@@ -70,7 +70,7 @@ type GitSSHCredentials struct {
 	PrivateKey string `json:"privateKey,omitempty"`
 	// PrivateKeyPEM is an inline PEM-encoded SSH private key.
 	PrivateKeyPEM string `json:"privateKeyPEM,omitempty"`
-	// Passphrase decrypts the private key. It is not an HTTP password.
+	// Passphrase decrypts the private key.
 	Passphrase string `json:"passphrase,omitempty"`
 }
 

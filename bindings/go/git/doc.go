@@ -54,22 +54,16 @@
 //
 // # Credentials
 //
-// Git access and input accept one vendor-independent credential type per lookup:
+// Git access and input accept vendor-independent credentials:
 // [ocm.software/open-component-model/bindings/go/git/spec/credentials/v1.GitHTTPSCredentials]
-// uses a username and password or access token for HTTPS cloning;
+// sends a username and password or access token using HTTP Basic over HTTPS;
 // [ocm.software/open-component-model/bindings/go/git/spec/credentials/v1.GitBearerCredentials]
-// is an advanced option for servers explicitly requiring Authorization: Bearer.
-// Both require HTTPS; HTTPS credentials are sent using HTTP Basic authentication.
+// supports servers explicitly requiring Bearer over HTTPS;
 // [ocm.software/open-component-model/bindings/go/git/spec/credentials/v1.GitSSHCredentials]
-// uses an SSH key with an optional Passphrase, or the SSH agent when no key is given.
-// No server-specific usernames, token formats, or authentication defaults are inferred.
-//
-// Legacy GitCredentials and Credentials/v1 retain their existing precedence:
-// SSH PrivateKeyPEM or PrivateKey (Password is the passphrase), then HTTPS Token
-// (Bearer), then HTTPS Username/Password (Basic). Without credentials, SSH uses
-// the agent and other transports fetch anonymously. Credentials on plain HTTP
-// and HTTPS-to-HTTP redirects are rejected before transmission. Authenticated HTTPS
-// redirects must retain the original origin (scheme, hostname, and port).
+// uses an SSH key or agent. Legacy GitCredentials and Credentials/v1 remain supported.
+// Without credentials, SSH uses the agent and other transports fetch anonymously.
+// Credentials on plain HTTP are rejected. Authenticated HTTPS redirects must retain
+// the original origin (scheme, hostname, and port).
 //
 // SSH uses the current user's known_hosts unless WithHostKeyCallback overrides it.
 // HTTP(S) uses the client from

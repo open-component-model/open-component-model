@@ -552,11 +552,8 @@ Used when OCM fetches a repository with the
 [`Git/v1` access type]({{< relref "input-and-access-types.md#gitv1-access" >}}) or the
 [`Git/v1` input type]({{< relref "input-and-access-types.md#gitv1-input" >}}). The identity is derived from the
 `repository` URL. The access type and the input type derive it in the same way, so one consumer entry covers both.
-Credentials are optional. For HTTPS cloning with a password or access token, use
-[`GitHTTPSCredentials/v1`]({{< relref "credential-types.md#githttpscredentialsv1" >}}). For SSH with a key or agent, use
-[`GitSSHCredentials/v1`]({{< relref "credential-types.md#gitsshcredentialsv1" >}}).
-[`GitBearerCredentials/v1`]({{< relref "credential-types.md#gitbearercredentialsv1" >}}) is an advanced option for
-servers that explicitly require Bearer authentication.
+Credentials are optional. See [Git credential selection]({{< relref "credential-types.md#git-credential-selection" >}})
+for supported types and their schemas.
 
 ### Identity Attributes
 
@@ -585,20 +582,6 @@ user part of the URL (`git@`) is never part of the identity.
 OCM lowercases the scheme and hostname of the URL before matching. It does not change the identity in your
 configuration, so write `scheme` and `hostname` in lowercase there. The `path` keeps a `.git` suffix if the URL has one,
 so `path: org/repo` does not match `https://example.com/org/repo.git`. Use `org/*` or the exact path with `.git`.
-
-### Credential Properties
-
-| Property        | Description                                                            |
-|-----------------|------------------------------------------------------------------------|
-| `username`      | HTTPS Basic Auth user, or the SSH user                                 |
-| `password`      | HTTPS Basic Auth password, or the passphrase of the SSH key            |
-| `token`         | HTTPS bearer token                                                     |
-| `privateKey`    | Path to an SSH private key file                                        |
-| `privateKeyPEM` | Inline PEM-encoded SSH private key. Takes precedence over `privateKey` |
-
-See [Git credential selection]({{< relref "credential-types.md#git-credential-selection" >}}) for the typed field reference and the
-choice of authentication method. The field table above describes legacy `GitCredentials/v1`;
-explicit SSH credentials use `passphrase` for key decryption.
 
 ### Matching Behavior
 

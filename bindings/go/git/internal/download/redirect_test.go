@@ -25,7 +25,7 @@ func TestDownloadHTTPSRedirectDoesNotLeakCredentials(t *testing.T) {
 		}{
 			{name: "legacy token", creds: &credsv1.GitCredentials{Token: "redirect-test-token"}, authorization: "Bearer redirect-test-token"},
 			{name: "explicit bearer", creds: &credsv1.GitBearerCredentials{Token: "redirect-test-token"}, authorization: "Bearer redirect-test-token"},
-			{name: "explicit basic", creds: &credsv1.GitHTTPSCredentials{Username: "redirect-test-user", Password: "redirect-test-token"}, authorization: "Basic " + base64.StdEncoding.EncodeToString([]byte("redirect-test-user:redirect-test-token"))},
+			{name: "explicit HTTPS", creds: &credsv1.GitHTTPSCredentials{Username: "redirect-test-user", Password: "redirect-test-token"}, authorization: "Basic " + base64.StdEncoding.EncodeToString([]byte("redirect-test-user:redirect-test-token"))},
 			{name: "legacy basic", creds: &credsv1.GitCredentials{Username: "redirect-test-user", Password: "redirect-test-password"}, authorization: "Basic " + base64.StdEncoding.EncodeToString([]byte("redirect-test-user:redirect-test-password"))},
 		} {
 			t.Run(ref+"/"+tc.name, func(t *testing.T) {
@@ -98,7 +98,7 @@ func TestDownloadAuthenticatedRedirectOrigins(t *testing.T) {
 				userinfo      string
 				authenticated bool
 			}{
-				{name: "basic", creds: &credsv1.GitHTTPSCredentials{Username: "user", Password: "example-token"}, authenticated: true},
+				{name: "HTTPS", creds: &credsv1.GitHTTPSCredentials{Username: "user", Password: "example-token"}, authenticated: true},
 				{name: "bearer", creds: &credsv1.GitBearerCredentials{Token: "example-token"}, authenticated: true},
 				{name: "URL userinfo", userinfo: "user:example-token@", authenticated: true},
 				{name: "anonymous"},

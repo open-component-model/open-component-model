@@ -27,58 +27,18 @@ func TestAuthModes(t *testing.T) {
 		wantErr    string
 	}{
 		{name: "anonymous HTTPS", repository: "https://example.com/repo"},
-		{name: "explicit basic token", repository: "https://example.com/repo", creds: &credsv1.GitHTTPSCredentials{Username: "user", Password: "oauth-token"}, want: &githttp.BasicAuth{Username: "user", Password: "oauth-token"}},
+		{name: "explicit HTTPS token", repository: "https://example.com/repo", creds: &credsv1.GitHTTPSCredentials{Username: "user", Password: "oauth-token"}, want: &githttp.BasicAuth{Username: "user", Password: "oauth-token"}},
 		{name: "explicit bearer", repository: "https://example.com/repo", creds: &credsv1.GitBearerCredentials{Token: "token"}, want: &githttp.TokenAuth{Token: "token"}},
-		{name: "explicit basic on HTTP", repository: "http://example.com/repo", creds: &credsv1.GitHTTPSCredentials{Username: "user", Password: "token"}, wantErr: "username/password authentication requires an HTTPS repository"},
+		{name: "explicit HTTPS on HTTP", repository: "http://example.com/repo", creds: &credsv1.GitHTTPSCredentials{Username: "user", Password: "token"}, wantErr: "username/password authentication requires an HTTPS repository"},
 		{name: "explicit bearer on HTTP", repository: "http://example.com/repo", creds: &credsv1.GitBearerCredentials{Token: "token"}, wantErr: "tokens require an HTTPS repository"},
-		{name: "explicit basic on SSH", repository: "git@example.com:repo", creds: &credsv1.GitHTTPSCredentials{Username: "user", Password: "token"}, wantErr: "username/password authentication requires an HTTPS repository"},
+		{name: "explicit HTTPS on SSH", repository: "git@example.com:repo", creds: &credsv1.GitHTTPSCredentials{Username: "user", Password: "token"}, wantErr: "username/password authentication requires an HTTPS repository"},
 		{name: "explicit bearer on SSH", repository: "git@example.com:repo", creds: &credsv1.GitBearerCredentials{Token: "token"}, wantErr: "tokens require an HTTPS repository"},
 		{name: "explicit SSH on HTTPS", repository: "https://example.com/repo", creds: &credsv1.GitSSHCredentials{}, wantErr: "SSH credentials require an SSH repository"},
 
 		{name: "anonymous HTTP", repository: "http://example.com/repo"},
 		{
-			name: "token over basic", repository: "https://example.com/repo",
-			creds: &credsv1.GitCredentials{Token: "token", Username: "ignored", Password: "ignored"},
-			want:  &githttp.TokenAuth{Token: "token"},
-		},
-		{
-			name: "basic", repository: "https://example.com/repo",
-			creds: &credsv1.GitCredentials{Username: "user", Password: "password"},
-			want:  &githttp.BasicAuth{Username: "user", Password: "password"},
-		},
-		{
-			name: "password without username", repository: "https://example.com/repo",
-			creds:   &credsv1.GitCredentials{Password: "missing-user"},
-			wantErr: "password requires a username or SSH private key",
-		},
-		{
-			name: "SSH key on HTTPS", repository: "https://example.com/repo",
-			creds:   &credsv1.GitCredentials{PrivateKey: "/keys/key"},
-			wantErr: "SSH credentials require an SSH repository",
-		},
-		{
-			name: "token on HTTP", repository: "http://example.com/repo",
-			creds:   &credsv1.GitCredentials{Token: "token"},
-			wantErr: "tokens require an HTTPS repository",
-		},
-		{
-			name: "basic on HTTP", repository: "http://example.com/repo",
-			creds:   &credsv1.GitCredentials{Username: "user", Password: "password"},
-			wantErr: "username/password authentication requires an HTTPS repository",
-		},
-		{
 			name: "userinfo on HTTP", repository: "http://user:secret@example.com/repo",
 			wantErr: "the repository URL contains credentials; use an HTTPS repository so they are not sent in clear text",
-		},
-		{
-			name: "token on SSH", repository: "git@example.com:repo",
-			creds:   &credsv1.GitCredentials{Token: "token"},
-			wantErr: "tokens require an HTTPS repository",
-		},
-		{
-			name: "basic on SSH", repository: "git@example.com:repo",
-			creds:   &credsv1.GitCredentials{Username: "user", Password: "password"},
-			wantErr: "username/password authentication requires an HTTPS repository",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -86,15 +46,7 @@ func TestAuthModes(t *testing.T) {
 			ep, err := endpoint.Parse(tc.repository)
 			r.NoError(err)
 
-			credentials := tc.creds
-			if legacy, ok := credentials.(*credsv1.GitCredentials); ok {
-				legacy.Type = runtime.NewVersionedType(credsv1.GitCredentialsType, credsv1.Version)
-				credentials, err = credsv1.ConvertCredentials(legacy)
-			}
-			var auth any
-			if err == nil {
-				auth, err = authMethod(ep, credentials, Options{})
-			}
+			auth, err := authMethod(ep, tc.creds, Options{})
 			if tc.wantErr != "" {
 				r.EqualError(err, tc.wantErr)
 				r.Nil(auth)
@@ -123,36 +75,34 @@ func TestAuthSSHKeys(t *testing.T) {
 	block, err := ssh.MarshalPrivateKey(private, "")
 	r.NoError(err)
 	keyPEM := string(pem.EncodeToMemory(block))
+	block, err = ssh.MarshalPrivateKeyWithPassphrase(private, "", []byte("key-passphrase"))
+	r.NoError(err)
+	encryptedKeyPEM := string(pem.EncodeToMemory(block))
 
 	for _, tc := range []struct {
 		name       string
 		repository string
-		creds      credsv1.GitCredentials
+		creds      credsv1.GitSSHCredentials
 		wantUser   string
 	}{
 		{
-			name: "inline key over file", repository: "url-user@example.com:repo",
-			creds:    credsv1.GitCredentials{PrivateKeyPEM: keyPEM, PrivateKey: "/does/not/exist"},
-			wantUser: "url-user",
-		},
-		{
-			name: "key over token", repository: "url-user@example.com:repo",
-			creds:    credsv1.GitCredentials{PrivateKeyPEM: keyPEM, Token: "ignored"},
-			wantUser: "url-user",
+			name: "encrypted key", repository: "url-user@example.com:repo",
+			creds:    credsv1.GitSSHCredentials{PrivateKeyPEM: encryptedKeyPEM, Username: "credential-user", Passphrase: "key-passphrase"},
+			wantUser: "credential-user",
 		},
 		{
 			name: "credential username over URL", repository: "url-user@example.com:repo",
-			creds:    credsv1.GitCredentials{PrivateKeyPEM: keyPEM, Username: "credential-user"},
+			creds:    credsv1.GitSSHCredentials{PrivateKeyPEM: keyPEM, Username: "credential-user"},
 			wantUser: "credential-user",
 		},
 		{
 			name: "URL username", repository: "url-user@example.com:repo",
-			creds:    credsv1.GitCredentials{PrivateKeyPEM: keyPEM},
+			creds:    credsv1.GitSSHCredentials{PrivateKeyPEM: keyPEM},
 			wantUser: "url-user",
 		},
 		{
 			name: "default username", repository: "ssh://example.com/repo",
-			creds:    credsv1.GitCredentials{PrivateKeyPEM: keyPEM},
+			creds:    credsv1.GitSSHCredentials{PrivateKeyPEM: keyPEM},
 			wantUser: "git",
 		},
 	} {
@@ -163,10 +113,7 @@ func TestAuthSSHKeys(t *testing.T) {
 			sentinel := errors.New("host key rejected by supplied callback")
 			callback := func(string, net.Addr, ssh.PublicKey) error { return sentinel }
 
-			tc.creds.Type = runtime.NewVersionedType(credsv1.GitCredentialsType, credsv1.Version)
-			credentials, err := credsv1.ConvertCredentials(&tc.creds)
-			r.NoError(err)
-			auth, err := authMethod(ep, credentials, Options{HostKeyCallback: callback})
+			auth, err := authMethod(ep, &tc.creds, Options{HostKeyCallback: callback})
 			r.NoError(err)
 			r.IsType(&gitssh.PublicKeys{}, auth)
 			keys := auth.(*gitssh.PublicKeys)
@@ -176,22 +123,4 @@ func TestAuthSSHKeys(t *testing.T) {
 			r.ErrorIs(keys.HostKeyCallback("example.com:22", nil, keys.Signer.PublicKey()), sentinel)
 		})
 	}
-}
-
-func TestExplicitSSHKey(t *testing.T) {
-	r := require.New(t)
-	_, private, err := ed25519.GenerateKey(rand.Reader)
-	r.NoError(err)
-	block, err := ssh.MarshalPrivateKeyWithPassphrase(private, "", []byte("key-passphrase"))
-	r.NoError(err)
-	ep, err := endpoint.Parse("url-user@example.com:repo")
-	r.NoError(err)
-	sentinel := errors.New("host key rejected")
-	callback := func(string, net.Addr, ssh.PublicKey) error { return sentinel }
-	auth, err := authMethod(ep, &credsv1.GitSSHCredentials{Username: "credential-user", PrivateKeyPEM: string(pem.EncodeToMemory(block)), Passphrase: "key-passphrase"}, Options{HostKeyCallback: callback})
-	r.NoError(err)
-	keys := auth.(*gitssh.PublicKeys)
-	r.Equal("credential-user", keys.User)
-	r.NotNil(keys.Signer)
-	r.ErrorIs(keys.HostKeyCallback("example.com:22", nil, keys.Signer.PublicKey()), sentinel)
 }

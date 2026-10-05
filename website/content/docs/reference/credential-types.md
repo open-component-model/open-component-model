@@ -408,19 +408,7 @@ consumers:
         passphrase: example-key-passphrase
 ```
 
-To use the SSH agent with an explicit username, omit the key and passphrase:
-
-```yaml
-consumers:
-  - identity:
-      type: Git
-      hostname: git.example.com
-      scheme: ssh
-      port: "22"
-    credentials:
-      - type: GitSSHCredentials/v1
-        username: git
-```
+To use the SSH agent, omit the key and passphrase. Set `username` only to override the SSH user.
 
 ### Git credential selection
 
