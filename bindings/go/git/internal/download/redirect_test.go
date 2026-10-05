@@ -51,7 +51,14 @@ func TestDownloadHTTPSRedirectDoesNotLeakCredentials(t *testing.T) {
 
 				ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 				defer cancel()
-				_, err := Download(ctx, &accessv1.Git{Repository: secure.URL + "/repo.git", Ref: ref}, tc.creds,
+				credentials := tc.creds
+				if legacy, ok := credentials.(*credsv1.GitCredentials); ok {
+					legacy.Type = runtime.NewVersionedType(credsv1.GitCredentialsType, credsv1.Version)
+					var err error
+					credentials, err = credsv1.ConvertCredentials(legacy)
+					r.NoError(err)
+				}
+				_, err := Download(ctx, &accessv1.Git{Repository: secure.URL + "/repo.git", Ref: ref}, credentials,
 					Options{TempDir: t.TempDir(), HTTPClient: secure.Client()})
 
 				r.True(authenticatedHTTPSRequest.Load(), "Download must authenticate the HTTPS Git discovery request before the redirect")

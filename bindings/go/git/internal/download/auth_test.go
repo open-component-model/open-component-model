@@ -54,7 +54,7 @@ func TestAuthModes(t *testing.T) {
 		{
 			name: "SSH key on HTTPS", repository: "https://example.com/repo",
 			creds:   &credsv1.GitCredentials{PrivateKey: "/keys/key"},
-			wantErr: "SSH private keys require an SSH repository",
+			wantErr: "SSH credentials require an SSH repository",
 		},
 		{
 			name: "token on HTTP", repository: "http://example.com/repo",
@@ -86,7 +86,15 @@ func TestAuthModes(t *testing.T) {
 			ep, err := endpoint.Parse(tc.repository)
 			r.NoError(err)
 
-			auth, err := authMethod(ep, tc.creds, Options{})
+			credentials := tc.creds
+			if legacy, ok := credentials.(*credsv1.GitCredentials); ok {
+				legacy.Type = runtime.NewVersionedType(credsv1.GitCredentialsType, credsv1.Version)
+				credentials, err = credsv1.ConvertCredentials(legacy)
+			}
+			var auth any
+			if err == nil {
+				auth, err = authMethod(ep, credentials, Options{})
+			}
 			if tc.wantErr != "" {
 				r.EqualError(err, tc.wantErr)
 				r.Nil(auth)
@@ -164,7 +172,10 @@ func TestAuthSSHKeys(t *testing.T) {
 			sentinel := errors.New("host key rejected by supplied callback")
 			callback := func(string, net.Addr, ssh.PublicKey) error { return sentinel }
 
-			auth, err := authMethod(ep, &tc.creds, Options{HostKeyCallback: callback})
+			tc.creds.Type = runtime.NewVersionedType(credsv1.GitCredentialsType, credsv1.Version)
+			credentials, err := credsv1.ConvertCredentials(&tc.creds)
+			r.NoError(err)
+			auth, err := authMethod(ep, credentials, Options{HostKeyCallback: callback})
 			r.NoError(err)
 			r.IsType(&gitssh.PublicKeys{}, auth)
 			keys := auth.(*gitssh.PublicKeys)

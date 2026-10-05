@@ -12,107 +12,77 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// authMethod returns a client.SSHAuth or client.HTTPAuth, or nil to leave the
-// authentication to go-git.
+// authMethod consumes credentials normalized by ConvertCredentials and returns
+// a client.SSHAuth or client.HTTPAuth, or nil to leave authentication to go-git.
 func authMethod(ep *endpoint.Endpoint, credentials runtime.Typed, opts Options) (any, error) {
+	// go-git turns URL userinfo into basic auth, which plain HTTP would send in clear text.
+	if ep.Protocol == "http" && (ep.User != "" || ep.Password != "") {
+		return nil, fmt.Errorf("the repository URL contains credentials; use an HTTPS repository so they are not sent in clear text")
+	}
 	switch creds := credentials.(type) {
 	case nil:
-		return legacyAuthMethod(ep, nil, opts)
-	case *credsv1.GitCredentials:
-		return legacyAuthMethod(ep, creds, opts)
+		if ep.Protocol == "ssh" && opts.HostKeyCallback != nil {
+			// go-git's implicit SSH agent authentication ignores the supplied callback.
+			return sshAuthMethod(ep, &credsv1.GitSSHCredentials{}, opts)
+		}
+		return nil, nil
 	case *credsv1.GitBasicCredentials:
-		return legacyAuthMethod(ep, &credsv1.GitCredentials{Username: creds.Username, Password: creds.Password}, opts)
+		return basicAuthMethod(ep, creds)
 	case *credsv1.GitBearerCredentials:
-		return legacyAuthMethod(ep, &credsv1.GitCredentials{Token: creds.Token}, opts)
+		return bearerAuthMethod(ep, creds)
 	case *credsv1.GitSSHCredentials:
-		if ep.Protocol != "ssh" {
-			return nil, fmt.Errorf("SSH credentials require an SSH repository")
-		}
-		if creds.PrivateKey != "" || creds.PrivateKeyPEM != "" {
-			return legacyAuthMethod(ep, &credsv1.GitCredentials{Username: creds.Username, PrivateKey: creds.PrivateKey, PrivateKeyPEM: creds.PrivateKeyPEM, Password: creds.Passphrase}, opts)
-		}
-		username := creds.Username
-		if username == "" {
-			username = ep.User
-		}
-		if username == "" {
-			username = "git"
-		}
+		return sshAuthMethod(ep, creds, opts)
+	default:
+		return nil, fmt.Errorf("unsupported git credential type %T", credentials)
+	}
+}
+
+func basicAuthMethod(ep *endpoint.Endpoint, creds *credsv1.GitBasicCredentials) (client.HTTPAuth, error) {
+	if ep.Protocol != "https" {
+		return nil, fmt.Errorf("username/password authentication requires an HTTPS repository")
+	}
+	return &githttp.BasicAuth{Username: creds.Username, Password: creds.Password}, nil
+}
+
+func bearerAuthMethod(ep *endpoint.Endpoint, creds *credsv1.GitBearerCredentials) (client.HTTPAuth, error) {
+	if ep.Protocol != "https" {
+		return nil, fmt.Errorf("tokens require an HTTPS repository")
+	}
+	return &githttp.TokenAuth{Token: creds.Token}, nil
+}
+
+func sshAuthMethod(ep *endpoint.Endpoint, creds *credsv1.GitSSHCredentials, opts Options) (client.SSHAuth, error) {
+	if ep.Protocol != "ssh" {
+		return nil, fmt.Errorf("SSH credentials require an SSH repository")
+	}
+	username := creds.Username
+	if username == "" {
+		username = ep.User
+	}
+	if username == "" {
+		username = "git"
+	}
+
+	if creds.PrivateKeyPEM == "" && creds.PrivateKey == "" {
 		auth, err := gitssh.NewSSHAgentAuth(username)
 		if err != nil {
 			return nil, fmt.Errorf("cannot use SSH agent: %w", err)
 		}
 		auth.HostKeyCallback = opts.HostKeyCallback
 		return auth, nil
-	default:
-		return nil, fmt.Errorf("unsupported git credential type %T", credentials)
 	}
-}
-
-func legacyAuthMethod(ep *endpoint.Endpoint, creds *credsv1.GitCredentials, opts Options) (any, error) {
-	if creds == nil {
-		creds = &credsv1.GitCredentials{}
+	var auth *gitssh.PublicKeys
+	var err error
+	if creds.PrivateKeyPEM != "" {
+		auth, err = gitssh.NewPublicKeys(username, []byte(creds.PrivateKeyPEM), creds.Passphrase)
+	} else {
+		auth, err = gitssh.NewPublicKeysFromFile(username, creds.PrivateKey, creds.Passphrase)
 	}
-
-	// go-git turns URL userinfo into basic auth, which plain HTTP would send in clear text.
-	if ep.Protocol == "http" && (ep.User != "" || ep.Password != "") {
-		return nil, fmt.Errorf("the repository URL contains credentials; use an HTTPS repository so they are not sent in clear text")
+	if err != nil {
+		return nil, fmt.Errorf("cannot load SSH private key: %w", err)
 	}
-
-	switch {
-	case creds.PrivateKeyPEM != "" || creds.PrivateKey != "":
-		if ep.Protocol != "ssh" {
-			return nil, fmt.Errorf("SSH private keys require an SSH repository")
-		}
-
-		username := creds.Username
-		if username == "" {
-			username = ep.User
-		}
-
-		if username == "" {
-			username = "git"
-		}
-
-		var auth *gitssh.PublicKeys
-		var err error
-		if creds.PrivateKeyPEM != "" {
-			auth, err = gitssh.NewPublicKeys(username, []byte(creds.PrivateKeyPEM), creds.Password)
-		} else {
-			auth, err = gitssh.NewPublicKeysFromFile(username, creds.PrivateKey, creds.Password)
-		}
-		if err != nil {
-			return nil, fmt.Errorf("cannot load SSH private key: %w", err)
-		}
-
-		auth.HostKeyCallback = opts.HostKeyCallback
-		return auth, nil
-	case creds.Token != "":
-		if ep.Protocol != "https" {
-			return nil, fmt.Errorf("tokens require an HTTPS repository")
-		}
-
-		return &githttp.TokenAuth{Token: creds.Token}, nil
-	case creds.Username != "":
-		if ep.Protocol != "https" {
-			return nil, fmt.Errorf("username/password authentication requires an HTTPS repository")
-		}
-
-		return &githttp.BasicAuth{Username: creds.Username, Password: creds.Password}, nil
-	case creds.Password != "":
-		return nil, fmt.Errorf("password requires a username or SSH private key")
-	case ep.Protocol == "ssh" && opts.HostKeyCallback != nil:
-		// go-git falls back to the SSH agent on its own, but then ignores the host key callback.
-		auth, err := gitssh.NewSSHAgentAuth(ep.User)
-		if err != nil {
-			return nil, fmt.Errorf("cannot use SSH agent: %w", err)
-		}
-
-		auth.HostKeyCallback = opts.HostKeyCallback
-		return auth, nil
-	default:
-		return nil, nil
-	}
+	auth.HostKeyCallback = opts.HostKeyCallback
+	return auth, nil
 }
 
 // authOption configures the client with an authentication from authMethod.
