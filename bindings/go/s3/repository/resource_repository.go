@@ -127,21 +127,28 @@ func (r *ResourceRepository) convertAccess(resource *descriptor.Resource) (*v2.S
 // download streams the object described by spec into tempDir and returns it as a
 // file-backed blob. The file outlives this call and is owned by the caller.
 func (r *ResourceRepository) download(ctx context.Context, spec *v2.S3, credentials runtime.Typed, tempDir string) (*download.Result, error) {
-	opts := []download.Option{
-		download.WithCredentials(credentials),
-		download.WithTempDir(tempDir),
-	}
+	opts := append(r.clientOptions(credentials), download.WithTempDir(tempDir))
 	if r.maxDownloadSize != nil {
 		opts = append(opts, download.WithMaxDownloadSize(*r.maxDownloadSize))
 	}
+
+	return download.Download(ctx, request(spec), opts...)
+}
+
+// clientOptions are the download options that shape the S3 client.
+func (r *ResourceRepository) clientOptions(credentials runtime.Typed) []download.Option {
+	opts := []download.Option{download.WithCredentials(credentials)}
 	if r.httpConfig != nil {
 		opts = append(opts, download.WithHTTPConfig(r.httpConfig))
 	}
 	if r.httpClient != nil {
 		opts = append(opts, download.WithHTTPClient(r.httpClient))
 	}
+	return opts
+}
 
-	return download.Download(ctx, download.Request{
+func request(spec *v2.S3) download.Request {
+	return download.Request{
 		Region:       spec.Region,
 		BucketName:   spec.BucketName,
 		ObjectKey:    spec.ObjectKey,
@@ -149,7 +156,7 @@ func (r *ResourceRepository) download(ctx context.Context, spec *v2.S3, credenti
 		Version:      spec.Version,
 		Endpoint:     spec.Endpoint,
 		UsePathStyle: spec.UsePathStyle,
-	}, opts...)
+	}
 }
 
 // UploadResource is not supported by the S3 access type, which is
@@ -166,10 +173,12 @@ func (r *ResourceRepository) GetResourceDigestProcessorCredentialConsumerIdentit
 	return r.GetResourceCredentialConsumerIdentity(ctx, resource)
 }
 
-// ProcessResourceDigest computes the digest of an S3 resource by downloading the
-// referenced object and taking the SHA-256 the downloaded blob carries, which is the
+// ProcessResourceDigest computes the SHA-256 digest of an S3 resource, which is the
 // source of truth rather than the S3 ETag. When the resource already carries a digest,
 // the computed value is verified against it.
+//
+// A store that keeps a SHA-256 checksum of the whole object answers from a HeadObject,
+// so the object is not transferred; see [ResourceRepository.resolveDigest].
 //
 // After a successful digest, the access is pinned to the object version that was read;
 // see [ResourceRepository.pinAccess].
@@ -179,35 +188,10 @@ func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, resource
 		return nil, err
 	}
 
-	tempFolder := ""
-	if r.filesystemConfig.TempFolder != nil {
-		tempFolder = *r.filesystemConfig.TempFolder
-	}
-
-	tempDir, err := os.MkdirTemp(tempFolder, "ocm-s3-digest-*")
+	resolvedValue, versionID, err := r.resolveDigest(ctx, spec, credentials)
 	if err != nil {
-		return nil, fmt.Errorf("error creating temporary directory for digest processing: %w", err)
+		return nil, err
 	}
-	defer func() {
-		if rmErr := os.RemoveAll(tempDir); rmErr != nil {
-			slog.WarnContext(ctx, "failed to remove temporary directory after digest processing", "path", tempDir, "err", rmErr)
-		}
-	}()
-
-	result, err := r.download(ctx, spec, credentials, tempDir)
-	if err != nil {
-		return nil, fmt.Errorf("error downloading resource for digest processing: %w", err)
-	}
-
-	raw, ok := result.Blob.Digest()
-	if !ok {
-		return nil, fmt.Errorf("error computing digest of downloaded s3 object %s/%s", spec.BucketName, spec.ObjectKey)
-	}
-	resolved, err := godigest.Parse(raw)
-	if err != nil {
-		return nil, fmt.Errorf("downloaded s3 object %s/%s has an unparsable digest %q: %w", spec.BucketName, spec.ObjectKey, raw, err)
-	}
-	resolvedValue := resolved.Encoded()
 
 	resource = resource.DeepCopy()
 	if resource.Digest == nil {
@@ -236,14 +220,14 @@ func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, resource
 		resource.Digest.Value = resolvedValue
 	}
 
-	switch pinned, served := pinningVersion(spec.Version), pinningVersion(result.VersionID); {
+	switch pinned, served := pinningVersion(spec.Version), pinningVersion(versionID); {
 	case pinned != "":
 		// The version is sent as the request's versionId, so a store answering with a
 		// different one did not serve the object the access names. One reporting no
 		// version cannot be checked and is taken at its word.
 		if served != "" && served != pinned {
 			return nil, fmt.Errorf("s3 object %s/%s was requested at version %q but the store served version %q",
-				spec.BucketName, spec.ObjectKey, spec.Version, result.VersionID)
+				spec.BucketName, spec.ObjectKey, spec.Version, versionID)
 		}
 	case served != "":
 		spec.Version = served
@@ -264,6 +248,64 @@ func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, resource
 	}
 
 	return resource, nil
+}
+
+// resolveDigest returns the hex SHA-256 of the object and the version it was taken at.
+//
+// It first asks the store with a HeadObject: a SHA-256 checksum covering the whole
+// object, which S3 verifies on upload and keeps for single-part uploads made with it,
+// is the digest without transferring a byte. Everything else — no checksum, another
+// algorithm, a multipart COMPOSITE checksum, a store not answering HEAD — falls back to
+// downloading and hashing. Taking the store's word costs no integrity: every later
+// download is verified against the digest this produces.
+func (r *ResourceRepository) resolveDigest(ctx context.Context, spec *v2.S3, credentials runtime.Typed) (string, string, error) {
+	info, err := download.Head(ctx, request(spec), r.clientOptions(credentials)...)
+	switch {
+	case err != nil:
+		slog.DebugContext(ctx, "s3 HeadObject failed, digesting the object by download",
+			slog.String("bucket", spec.BucketName), slog.String("objectKey", spec.ObjectKey), slog.String("err", err.Error()))
+	case info.SHA256 != "":
+		slog.DebugContext(ctx, "s3 object digest taken from the store's SHA-256 checksum",
+			slog.String("bucket", spec.BucketName), slog.String("objectKey", spec.ObjectKey))
+		return info.SHA256, info.VersionID, nil
+	}
+
+	return r.digestByDownload(ctx, spec, credentials)
+}
+
+// digestByDownload downloads the object into a temporary directory it removes again
+// and returns the SHA-256 computed while streaming, with the version that was read.
+func (r *ResourceRepository) digestByDownload(ctx context.Context, spec *v2.S3, credentials runtime.Typed) (string, string, error) {
+	tempFolder := ""
+	if r.filesystemConfig.TempFolder != nil {
+		tempFolder = *r.filesystemConfig.TempFolder
+	}
+
+	tempDir, err := os.MkdirTemp(tempFolder, "ocm-s3-digest-*")
+	if err != nil {
+		return "", "", fmt.Errorf("error creating temporary directory for digest processing: %w", err)
+	}
+	defer func() {
+		if rmErr := os.RemoveAll(tempDir); rmErr != nil {
+			slog.WarnContext(ctx, "failed to remove temporary directory after digest processing", "path", tempDir, "err", rmErr)
+		}
+	}()
+
+	result, err := r.download(ctx, spec, credentials, tempDir)
+	if err != nil {
+		return "", "", fmt.Errorf("error downloading resource for digest processing: %w", err)
+	}
+
+	raw, ok := result.Blob.Digest()
+	if !ok {
+		return "", "", fmt.Errorf("error computing digest of downloaded s3 object %s/%s", spec.BucketName, spec.ObjectKey)
+	}
+	resolved, err := godigest.Parse(raw)
+	if err != nil {
+		return "", "", fmt.Errorf("downloaded s3 object %s/%s has an unparsable digest %q: %w", spec.BucketName, spec.ObjectKey, raw, err)
+	}
+
+	return resolved.Encoded(), result.VersionID, nil
 }
 
 // pinningVersion returns versionID unless it is the unversioned placeholder, which pins nothing.

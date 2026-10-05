@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/binary"
 	"hash/crc32"
@@ -27,14 +28,17 @@ import (
 	identityv1 "ocm.software/open-component-model/bindings/go/s3/spec/identity/v1"
 )
 
-// fakeS3 is an httptest server answering GetObject with a canned object, so that the
-// repository is exercised over the real AWS SDK rather than a stubbed client. It serves
-// only a body and a version; the rest of the response is covered in the download package.
+// fakeS3 is an httptest server answering GetObject and HeadObject with a canned object,
+// so that the repository is exercised over the real AWS SDK rather than a stubbed
+// client. It serves only a body, a version and the headers set in header; the rest of
+// the response is covered in the download package.
 type fakeS3 struct {
 	*httptest.Server
 
 	body      []byte
 	versionID string
+	// header is added to every response. Set it before the first request.
+	header http.Header
 
 	mu       sync.Mutex
 	requests []s3Request
@@ -42,6 +46,7 @@ type fakeS3 struct {
 
 // s3Request is one request a [fakeS3] answered.
 type s3Request struct {
+	method string
 	// path is the request path, which is /bucket/key for path-style addressing.
 	path string
 	// versionID is the versionId query parameter, empty when none was sent.
@@ -57,6 +62,7 @@ func newFakeS3(t *testing.T, body []byte, versionID string) *fakeS3 {
 	f.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		f.mu.Lock()
 		f.requests = append(f.requests, s3Request{
+			method:    r.Method,
 			path:      r.URL.Path,
 			versionID: r.URL.Query().Get("versionId"),
 		})
@@ -69,6 +75,9 @@ func newFakeS3(t *testing.T, body []byte, versionID string) *fakeS3 {
 		sum := make([]byte, 4)
 		binary.BigEndian.PutUint32(sum, crc32.ChecksumIEEE(f.body))
 		w.Header().Set("x-amz-checksum-crc32", base64.StdEncoding.EncodeToString(sum))
+		for k, v := range f.header {
+			w.Header()[k] = v
+		}
 
 		_, _ = w.Write(f.body)
 	}))
@@ -275,6 +284,83 @@ func Test_ProcessResourceDigest(t *testing.T) {
 	entries, err := os.ReadDir(tempFolder)
 	require.NoError(t, err)
 	require.Empty(t, entries, "digest processing must clean up the object it downloaded")
+}
+
+// A store keeping a SHA-256 of the whole object answers the digest from a HeadObject;
+// anything short of that is digested by download, as without the fast path.
+func Test_ProcessResourceDigest_FromStoreChecksum(t *testing.T) {
+	content := []byte("digest me")
+	sum := sha256.Sum256(content)
+	advertised := base64.StdEncoding.EncodeToString(sum[:])
+	value := godigest.FromBytes(content).Encoded()
+
+	tests := []struct {
+		name         string
+		checksum     string
+		checksumType string
+		digest       *descriptor.Digest
+		wantMethods  []string
+		wantErr      string
+	}{
+		{
+			name:         "full-object SHA-256 skips the download",
+			checksum:     advertised,
+			checksumType: "FULL_OBJECT",
+			wantMethods:  []string{http.MethodHead},
+		},
+		{
+			name:         "an author digest is verified against the store's SHA-256",
+			checksum:     advertised,
+			checksumType: "FULL_OBJECT",
+			digest:       &descriptor.Digest{Value: godigest.FromString("something else").Encoded()},
+			wantMethods:  []string{http.MethodHead},
+			wantErr:      "digest value mismatch",
+		},
+		{
+			name:         "a composite checksum of a multipart upload is no content digest",
+			checksum:     advertised,
+			checksumType: "COMPOSITE",
+			wantMethods:  []string{http.MethodHead, http.MethodGet},
+		},
+		{
+			name:        "no SHA-256 checksum falls back to the download",
+			wantMethods: []string{http.MethodHead, http.MethodGet},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+			srv := newFakeS3(t, content, "v-1")
+			srv.header = http.Header{}
+			if tt.checksum != "" {
+				srv.header.Set("x-amz-checksum-sha256", tt.checksum)
+				srv.header.Set("x-amz-checksum-type", tt.checksumType)
+			}
+			tempFolder := t.TempDir()
+			repo := NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &tempFolder})
+
+			resource := s3Resource(servedBy(srv, &v2.S3{BucketName: "b", ObjectKey: "k"}))
+			resource.Digest = tt.digest
+			res, err := repo.ProcessResourceDigest(t.Context(), resource, fakeCredentials())
+
+			var methods []string
+			for _, req := range srv.recorded() {
+				methods = append(methods, req.method)
+			}
+			r.Equal(tt.wantMethods, methods)
+			if tt.wantErr != "" {
+				r.ErrorContains(err, tt.wantErr)
+				return
+			}
+			r.NoError(err)
+			r.Equal(&descriptor.Digest{HashAlgorithm: hashAlgorithmSHA256, NormalisationAlgorithm: genericBlobDigestV1, Value: value}, res.Digest)
+
+			pinned, err := accessspec.ConvertToV2(res.Access)
+			r.NoError(err)
+			r.Equal("v-1", pinned.Version, "the access is pinned to the version the digest was taken at")
+		})
+	}
 }
 
 // A hand-written digest cannot know the normalisation algorithm and need not restate the

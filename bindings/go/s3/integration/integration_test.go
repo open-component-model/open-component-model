@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"io"
 	"net"
+	"net/http"
 	"testing"
 	"time"
 
@@ -127,6 +128,32 @@ func Test_Integration_S3(t *testing.T) {
 		r.NotNil(withDigest.Digest)
 		r.Equal(godigest.FromBytes(content).Encoded(), withDigest.Digest.Value)
 		r.Equal("SHA-256", withDigest.Digest.HashAlgorithm)
+	})
+
+	t.Run("digest from the store's SHA-256 checksum", func(t *testing.T) {
+		r := require.New(t)
+		const bucket, key = "checksum-bucket", "blob"
+		content := []byte("digested without download")
+		createBucket(t, ctx, setup, bucket)
+		_, err := setup.PutObject(ctx, &s3.PutObjectInput{
+			Bucket:            new(bucket),
+			Key:               new(key),
+			Body:              bytes.NewReader(content),
+			ChecksumAlgorithm: types.ChecksumAlgorithmSha256,
+		})
+		r.NoError(err)
+
+		var methods []string
+		client := &http.Client{Transport: recordingTransport(func(req *http.Request) (*http.Response, error) {
+			methods = append(methods, req.Method)
+			return http.DefaultTransport.RoundTrip(req)
+		})}
+		recorded := repository.NewResourceRepository(fsConfig, repository.WithHTTPClient(client))
+
+		withDigest, err := recorded.ProcessResourceDigest(ctx, resourceFor(access(bucket, key, "")), creds)
+		r.NoError(err)
+		r.Equal(godigest.FromBytes(content).Encoded(), withDigest.Digest.Value)
+		r.Equal([]string{http.MethodHead}, methods, "a stored full-object SHA-256 must make the download unnecessary")
 	})
 
 	t.Run("pinned object version", func(t *testing.T) {
@@ -271,6 +298,10 @@ func enableVersioning(t *testing.T, ctx context.Context, client *s3.Client, buck
 	})
 	require.NoError(t, err)
 }
+
+type recordingTransport func(*http.Request) (*http.Response, error)
+
+func (f recordingTransport) RoundTrip(req *http.Request) (*http.Response, error) { return f(req) }
 
 func putObject(t *testing.T, ctx context.Context, client *s3.Client, bucket, key string, content []byte) {
 	t.Helper()

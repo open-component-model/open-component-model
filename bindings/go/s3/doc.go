@@ -64,6 +64,16 @@
 // The input derives its credential consumer identity exactly as the access type does,
 // so one consumer entry serves a bucket whether its objects are referenced or taken in.
 //
+// # Digest processing
+//
+// ProcessResourceDigest first sends a HeadObject with checksum mode enabled. When the
+// store reports a SHA-256 checksum covering the whole object (x-amz-checksum-sha256,
+// kept by S3 for single-part uploads made with --checksum-algorithm SHA256), that is
+// the digest and the object is not transferred. Any other answer — no checksum, another
+// algorithm, a COMPOSITE checksum of a multipart upload, or a failed HEAD — falls back
+// to downloading the object and hashing it. Every download verifies the bytes against
+// the resource digest, so a store misreporting its checksum fails the next read.
+//
 // # Object versions
 //
 // ProcessResourceDigest pins the access to the versionId the object was read at. A
@@ -87,11 +97,11 @@
 // # Retries
 //
 // On AWS (no custom endpoint), a 301 PermanentRedirect triggers one region
-// correction: the download uses x-amz-bucket-region, or HeadBucket if that header
-// is absent, and retries GetObject once using the SDK's regional endpoint. This
-// can correct an explicitly configured region too. Credentials, object version and
-// HTTP settings are preserved; invalid region hints fail rather than following
-// Location. Custom endpoints and other GetObject errors do not trigger discovery.
+// correction: the request uses x-amz-bucket-region, or HeadBucket if that header
+// is absent, and retries GetObject or HeadObject once using the SDK's regional
+// endpoint. This can correct an explicitly configured region too. Credentials, object
+// version and HTTP settings are preserved; invalid region hints fail rather than
+// following Location. Custom endpoints and other errors do not trigger discovery.
 //
 // Retrying is left to the aws-sdk-go-v2 client, which retries the whole operation,
 // re-signs every attempt and classifies S3's error codes; transport retry is switched

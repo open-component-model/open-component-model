@@ -83,14 +83,11 @@ func Download(ctx context.Context, req Request, opts ...Option) (*Result, error)
 		opt(o)
 	}
 
-	if req.BucketName == "" {
-		return nil, errors.New("bucketName is required")
-	}
-	if req.ObjectKey == "" {
-		return nil, errors.New("objectKey is required")
+	if err := req.validate(); err != nil {
+		return nil, err
 	}
 
-	getter, err := newClient(ctx, req, o)
+	client, err := newClient(ctx, req, o)
 	if err != nil {
 		return nil, err
 	}
@@ -103,7 +100,9 @@ func Download(ctx context.Context, req Request, opts ...Option) (*Result, error)
 		in.VersionId = new(req.Version)
 	}
 
-	out, err := getObject(ctx, getter, req, in)
+	out, err := inBucketRegion(ctx, client, req, func(optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
+		return client.GetObject(ctx, in, optFns...)
+	})
 	if err != nil {
 		return nil, fmt.Errorf("error getting s3 object %s/%s: %w", req.BucketName, req.ObjectKey, err)
 	}
@@ -155,6 +154,16 @@ func Download(ctx context.Context, req Request, opts ...Option) (*Result, error)
 	b.SetMediaType(mediaType)
 
 	return &Result{Blob: b, VersionID: aws.ToString(out.VersionId)}, nil
+}
+
+func (req Request) validate() error {
+	if req.BucketName == "" {
+		return errors.New("bucketName is required")
+	}
+	if req.ObjectKey == "" {
+		return errors.New("objectKey is required")
+	}
+	return nil
 }
 
 // storeObject streams body into file and returns a blob backed by it. It closes file
