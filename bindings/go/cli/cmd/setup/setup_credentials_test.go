@@ -44,7 +44,7 @@ func TestCredentialTypeSchemePopulatedByBuiltinRegister(t *testing.T) {
 		name          string
 		versionedType runtime.Type
 	}{
-		{"GitBasicCredentials/v1", runtime.NewVersionedType(gitcredsv1.GitBasicCredentialsType, gitcredsv1.Version)},
+		{"GitHTTPSCredentials/v1", runtime.NewVersionedType(gitcredsv1.GitHTTPSCredentialsType, gitcredsv1.Version)},
 		{"GitBearerCredentials/v1", runtime.NewVersionedType(gitcredsv1.GitBearerCredentialsType, gitcredsv1.Version)},
 		{"GitSSHCredentials/v1", runtime.NewVersionedType(gitcredsv1.GitSSHCredentialsType, gitcredsv1.Version)},
 		{"OCICredentials/v1", runtime.NewVersionedType(ocicredsv1.OCICredentialsType, ocicredsv1.Version)},
@@ -79,12 +79,12 @@ func TestCredentialGraphResolvesTypedCredentials(t *testing.T) {
 		assertType func(t *testing.T, resolved runtime.Typed)
 	}{
 		{
-			name:       "GitBasicCredentials/v1",
+			name:       "GitHTTPSCredentials/v1",
 			identity:   runtime.Identity{"type": "Git", "hostname": "git.example.com"},
-			credential: &gitcredsv1.GitBasicCredentials{Type: runtime.NewVersionedType(gitcredsv1.GitBasicCredentialsType, gitcredsv1.Version), Username: "user", Password: "access-token"},
+			credential: &gitcredsv1.GitHTTPSCredentials{Type: runtime.NewVersionedType(gitcredsv1.GitHTTPSCredentialsType, gitcredsv1.Version), Username: "user", Password: "access-token"},
 			assertType: func(t *testing.T, resolved runtime.Typed) {
 				t.Helper()
-				require.Equal(t, &gitcredsv1.GitBasicCredentials{Type: runtime.NewVersionedType(gitcredsv1.GitBasicCredentialsType, gitcredsv1.Version), Username: "user", Password: "access-token"}, resolved)
+				require.Equal(t, &gitcredsv1.GitHTTPSCredentials{Type: runtime.NewVersionedType(gitcredsv1.GitHTTPSCredentialsType, gitcredsv1.Version), Username: "user", Password: "access-token"}, resolved)
 			},
 		},
 		{

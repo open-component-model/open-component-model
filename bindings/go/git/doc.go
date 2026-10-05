@@ -55,10 +55,11 @@
 // # Credentials
 //
 // Git access and input accept one vendor-independent credential type per lookup:
-// [ocm.software/open-component-model/bindings/go/git/spec/credentials/v1.GitBasicCredentials]
-// sends a username and password (which may be an access token) using HTTP Basic;
+// [ocm.software/open-component-model/bindings/go/git/spec/credentials/v1.GitHTTPSCredentials]
+// uses a username and password or access token for HTTPS cloning;
 // [ocm.software/open-component-model/bindings/go/git/spec/credentials/v1.GitBearerCredentials]
-// sends Authorization: Bearer; both require HTTPS.
+// is an advanced option for servers explicitly requiring Authorization: Bearer.
+// Both require HTTPS; HTTPS credentials are sent using HTTP Basic authentication.
 // [ocm.software/open-component-model/bindings/go/git/spec/credentials/v1.GitSSHCredentials]
 // uses an SSH key with an optional Passphrase, or the SSH agent when no key is given.
 // No server-specific usernames, token formats, or authentication defaults are inferred.

@@ -32,8 +32,8 @@ OCM ships with the following built-in credential types:
 | [`WgetCredentials/v1`](#wgetcredentialsv1)                 | `Wget` consumers                         | HTTP/S Basic Auth, bearer token, and mutual TLS                 |
 | [`S3Credentials/v1`](#s3credentialsv1)                     | `S3` consumers                           | S3 access keys and temporary STS credentials                    |
 | [`GitHubCredentials/v1`](#githubcredentialsv1)             | `GitHubRepository` consumers             | GitHub and GitHub Enterprise REST API token auth                |
-| [`GitBasicCredentials/v1`](#gitbasiccredentialsv1)         | `Git` consumers                          | Git over HTTPS with HTTP Basic authentication                   |
-| [`GitBearerCredentials/v1`](#gitbearercredentialsv1)       | `Git` consumers                          | Git over HTTPS with HTTP Bearer authentication                  |
+| [`GitHTTPSCredentials/v1`](#githttpscredentialsv1)         | `Git` consumers                          | Git over HTTPS with a password or access token                  |
+| [`GitBearerCredentials/v1`](#gitbearercredentialsv1)       | `Git` consumers                          | Advanced: Git servers requiring Bearer authentication           |
 | [`GitSSHCredentials/v1`](#gitsshcredentialsv1)             | `Git` consumers                          | Git over SSH with a key or SSH agent                            |
 | [`GitCredentials/v1`](#gitcredentialsv1)                   | `Git` consumers                          | Legacy Git credentials                                          |
 | [`RSACredentials/v1`](#rsacredentialsv1)                   | `RSA/v1alpha1` consumers                 | RSA signing and verification key material                       |
@@ -343,13 +343,15 @@ Configuring no consumer at all is valid: the GitHub REST API is then called anon
 
 ---
 
-## GitBasicCredentials/v1
+## GitHTTPSCredentials/v1
 
-{{< schema-renderer url="/schemas/bindings/go/credentials/git/v1/GitBasicCredentials.schema.json" >}}
+{{< schema-renderer url="/schemas/bindings/go/credentials/git/v1/GitHTTPSCredentials.schema.json" >}}
 
-Uses HTTP Basic authentication over HTTPS. Set a non-empty `username` and put the server's required secret in
-`password`. The secret can be a password, personal access token, or OAuth access token. OCM does not infer the
-server vendor, username conventions, or authentication method from the hostname or token format.
+Use this for HTTPS cloning with a password or access token. Set the username required by your Git server and
+put your password, personal access token, or OAuth access token in `password`. You do not need an SSH key.
+
+OCM sends these credentials using HTTP Basic authentication. It does not infer server-specific usernames or
+authentication settings from the hostname or token format.
 
 ```yaml
 consumers:
@@ -358,7 +360,7 @@ consumers:
       hostname: git.example.com
       scheme: https
     credentials:
-      - type: GitBasicCredentials/v1
+      - type: GitHTTPSCredentials/v1
         username: repository-user
         password: example-access-token
 ```
@@ -371,9 +373,8 @@ by the configuration, not defaults applied by OCM. Token issuance and refresh be
 
 {{< schema-renderer url="/schemas/bindings/go/credentials/git/v1/GitBearerCredentials.schema.json" >}}
 
-Sends `Authorization: Bearer <token>` over HTTPS. Use this only when the Git server supports Bearer authentication.
-A secret being a token does not determine how it should be sent; use `GitBasicCredentials/v1` when it belongs in
-an HTTP Basic password field.
+Advanced option: use this only when your Git server explicitly requires `Authorization: Bearer <token>` over HTTPS.
+For HTTPS cloning with a password or access token, use `GitHTTPSCredentials/v1`.
 
 ```yaml
 consumers:

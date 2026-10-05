@@ -56,8 +56,8 @@ func TestConvertLegacyCredentialsToTransport(t *testing.T) {
 		{name: "inline key over file and token", credentials: v1.GitCredentials{Username: "git", Password: "phrase", Token: "ignored", PrivateKey: "/ignored", PrivateKeyPEM: "pem"}, want: &v1.GitSSHCredentials{Type: runtime.NewVersionedType(v1.GitSSHCredentialsType, v1.Version), Username: "git", PrivateKeyPEM: "pem", Passphrase: "phrase"}},
 		{name: "file key over token", credentials: v1.GitCredentials{Password: "phrase", PrivateKey: "/keys/key", Token: "ignored"}, want: &v1.GitSSHCredentials{Type: runtime.NewVersionedType(v1.GitSSHCredentialsType, v1.Version), PrivateKey: "/keys/key", Passphrase: "phrase"}},
 		{name: "token over basic", credentials: v1.GitCredentials{Username: "ignored", Password: "ignored", Token: "bearer"}, want: &v1.GitBearerCredentials{Type: runtime.NewVersionedType(v1.GitBearerCredentialsType, v1.Version), Token: "bearer"}},
-		{name: "basic", credentials: v1.GitCredentials{Username: "user", Password: "access-token"}, want: &v1.GitBasicCredentials{Type: runtime.NewVersionedType(v1.GitBasicCredentialsType, v1.Version), Username: "user", Password: "access-token"}},
-		{name: "username only", credentials: v1.GitCredentials{Username: "user"}, want: &v1.GitBasicCredentials{Type: runtime.NewVersionedType(v1.GitBasicCredentialsType, v1.Version), Username: "user"}},
+		{name: "basic", credentials: v1.GitCredentials{Username: "user", Password: "access-token"}, want: &v1.GitHTTPSCredentials{Type: runtime.NewVersionedType(v1.GitHTTPSCredentialsType, v1.Version), Username: "user", Password: "access-token"}},
+		{name: "username only", credentials: v1.GitCredentials{Username: "user"}, want: &v1.GitHTTPSCredentials{Type: runtime.NewVersionedType(v1.GitHTTPSCredentialsType, v1.Version), Username: "user"}},
 		{name: "empty", credentials: v1.GitCredentials{}},
 		{name: "password without username or key", credentials: v1.GitCredentials{Password: "phrase"}, wantErr: "password requires a username or SSH private key"},
 	} {

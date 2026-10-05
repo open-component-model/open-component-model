@@ -17,20 +17,20 @@ func TestTransportCredentials(t *testing.T) {
 		want    runtime.Typed
 		wantErr string
 	}{
-		{name: "basic token as password", json: `{"type":"GitBasicCredentials/v1","username":"user","password":"access-token"}`, want: &v1.GitBasicCredentials{Type: runtime.NewVersionedType(v1.GitBasicCredentialsType, v1.Version), Username: "user", Password: "access-token"}},
-		{name: "basic empty password", json: `{"type":"GitBasicCredentials/v1","username":"user","password":""}`, want: &v1.GitBasicCredentials{Type: runtime.NewVersionedType(v1.GitBasicCredentialsType, v1.Version), Username: "user"}},
+		{name: "basic token as password", json: `{"type":"GitHTTPSCredentials/v1","username":"user","password":"access-token"}`, want: &v1.GitHTTPSCredentials{Type: runtime.NewVersionedType(v1.GitHTTPSCredentialsType, v1.Version), Username: "user", Password: "access-token"}},
+		{name: "basic empty password", json: `{"type":"GitHTTPSCredentials/v1","username":"user","password":""}`, want: &v1.GitHTTPSCredentials{Type: runtime.NewVersionedType(v1.GitHTTPSCredentialsType, v1.Version), Username: "user"}},
 		{name: "bearer", json: `{"type":"GitBearerCredentials/v1","token":"access-token"}`, want: &v1.GitBearerCredentials{Type: runtime.NewVersionedType(v1.GitBearerCredentialsType, v1.Version), Token: "access-token"}},
 		{name: "SSH file", json: `{"type":"GitSSHCredentials/v1","privateKey":"/keys/key","passphrase":"phrase"}`, want: &v1.GitSSHCredentials{Type: runtime.NewVersionedType(v1.GitSSHCredentialsType, v1.Version), PrivateKey: "/keys/key", Passphrase: "phrase"}},
 		{name: "SSH agent", json: `{"type":"GitSSHCredentials/v1","username":"ssh-user"}`, want: &v1.GitSSHCredentials{Type: runtime.NewVersionedType(v1.GitSSHCredentialsType, v1.Version), Username: "ssh-user"}},
-		{name: "basic missing username", json: `{"type":"GitBasicCredentials/v1","password":"secret"}`, wantErr: "requires a username"},
-		{name: "basic colon username", json: `{"type":"GitBasicCredentials/v1","username":"user:other","password":"secret"}`, wantErr: "must not contain a colon"},
+		{name: "basic missing username", json: `{"type":"GitHTTPSCredentials/v1","password":"secret"}`, wantErr: "require a username"},
+		{name: "basic colon username", json: `{"type":"GitHTTPSCredentials/v1","username":"user:other","password":"secret"}`, wantErr: "must not contain a colon"},
 		{name: "bearer missing token", json: `{"type":"GitBearerCredentials/v1"}`, wantErr: "requires a token"},
 		{name: "SSH conflicting keys", json: `{"type":"GitSSHCredentials/v1","privateKey":"key","privateKeyPEM":"pem"}`, wantErr: "only one"},
 		{name: "SSH passphrase without key", json: `{"type":"GitSSHCredentials/v1","passphrase":"phrase"}`, wantErr: "requires a private key"},
-		{name: "basic mixed bearer", json: `{"type":"GitBasicCredentials/v1","username":"user","password":"secret","token":"secret"}`, wantErr: `unknown field "token"`},
+		{name: "basic mixed bearer", json: `{"type":"GitHTTPSCredentials/v1","username":"user","password":"secret","token":"secret"}`, wantErr: `unknown field "token"`},
 		{name: "bearer mixed basic", json: `{"type":"GitBearerCredentials/v1","token":"secret","username":"user"}`, wantErr: `unknown field "username"`},
 		{name: "SSH HTTP password", json: `{"type":"GitSSHCredentials/v1","privateKey":"key","password":"secret"}`, wantErr: `unknown field "password"`},
-		{name: "unsupported", json: `{"type":"GitBasicCredentials/v2"}`, wantErr: "unsupported git credential type"},
+		{name: "unsupported", json: `{"type":"GitHTTPSCredentials/v2"}`, wantErr: "unsupported git credential type"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)

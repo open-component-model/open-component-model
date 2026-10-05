@@ -102,7 +102,7 @@ func convertLegacyCredentials(creds *GitCredentials) (runtime.Typed, error) {
 	case creds.Token != "":
 		return &GitBearerCredentials{Type: runtime.NewVersionedType(GitBearerCredentialsType, Version), Token: creds.Token}, nil
 	case creds.Username != "":
-		return &GitBasicCredentials{Type: runtime.NewVersionedType(GitBasicCredentialsType, Version), Username: creds.Username, Password: creds.Password}, nil
+		return &GitHTTPSCredentials{Type: runtime.NewVersionedType(GitHTTPSCredentialsType, Version), Username: creds.Username, Password: creds.Password}, nil
 	case creds.Password != "":
 		return nil, fmt.Errorf("password requires a username or SSH private key")
 	default:

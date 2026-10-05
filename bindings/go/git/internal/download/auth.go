@@ -27,8 +27,8 @@ func authMethod(ep *endpoint.Endpoint, credentials runtime.Typed, opts Options) 
 			return sshAuthMethod(ep, &credsv1.GitSSHCredentials{}, opts)
 		}
 		return nil, nil
-	case *credsv1.GitBasicCredentials:
-		return basicAuthMethod(ep, creds)
+	case *credsv1.GitHTTPSCredentials:
+		return httpsAuthMethod(ep, creds)
 	case *credsv1.GitBearerCredentials:
 		return bearerAuthMethod(ep, creds)
 	case *credsv1.GitSSHCredentials:
@@ -38,7 +38,7 @@ func authMethod(ep *endpoint.Endpoint, credentials runtime.Typed, opts Options) 
 	}
 }
 
-func basicAuthMethod(ep *endpoint.Endpoint, creds *credsv1.GitBasicCredentials) (client.HTTPAuth, error) {
+func httpsAuthMethod(ep *endpoint.Endpoint, creds *credsv1.GitHTTPSCredentials) (client.HTTPAuth, error) {
 	if ep.Protocol != "https" {
 		return nil, fmt.Errorf("username/password authentication requires an HTTPS repository")
 	}

@@ -552,9 +552,11 @@ Used when OCM fetches a repository with the
 [`Git/v1` access type]({{< relref "input-and-access-types.md#gitv1-access" >}}) or the
 [`Git/v1` input type]({{< relref "input-and-access-types.md#gitv1-input" >}}). The identity is derived from the
 `repository` URL. The access type and the input type derive it in the same way, so one consumer entry covers both.
-Credentials are optional. Use [`GitBasicCredentials/v1`]({{< relref "credential-types.md#gitbasiccredentialsv1" >}}),
-[`GitBearerCredentials/v1`]({{< relref "credential-types.md#gitbearercredentialsv1" >}}), or
+Credentials are optional. For HTTPS cloning with a password or access token, use
+[`GitHTTPSCredentials/v1`]({{< relref "credential-types.md#githttpscredentialsv1" >}}). For SSH with a key or agent, use
 [`GitSSHCredentials/v1`]({{< relref "credential-types.md#gitsshcredentialsv1" >}}).
+[`GitBearerCredentials/v1`]({{< relref "credential-types.md#gitbearercredentialsv1" >}}) is an advanced option for
+servers that explicitly require Bearer authentication.
 
 ### Identity Attributes
 
@@ -623,7 +625,7 @@ server answers with an authentication error.
     scheme: https
     path: example-group/*
   credentials:
-    - type: GitBasicCredentials/v1
+    - type: GitHTTPSCredentials/v1
       username: oauth2
       password: glpat-example-token
 ```

@@ -27,11 +27,11 @@ func TestAuthModes(t *testing.T) {
 		wantErr    string
 	}{
 		{name: "anonymous HTTPS", repository: "https://example.com/repo"},
-		{name: "explicit basic token", repository: "https://example.com/repo", creds: &credsv1.GitBasicCredentials{Username: "user", Password: "oauth-token"}, want: &githttp.BasicAuth{Username: "user", Password: "oauth-token"}},
+		{name: "explicit basic token", repository: "https://example.com/repo", creds: &credsv1.GitHTTPSCredentials{Username: "user", Password: "oauth-token"}, want: &githttp.BasicAuth{Username: "user", Password: "oauth-token"}},
 		{name: "explicit bearer", repository: "https://example.com/repo", creds: &credsv1.GitBearerCredentials{Token: "token"}, want: &githttp.TokenAuth{Token: "token"}},
-		{name: "explicit basic on HTTP", repository: "http://example.com/repo", creds: &credsv1.GitBasicCredentials{Username: "user", Password: "token"}, wantErr: "username/password authentication requires an HTTPS repository"},
+		{name: "explicit basic on HTTP", repository: "http://example.com/repo", creds: &credsv1.GitHTTPSCredentials{Username: "user", Password: "token"}, wantErr: "username/password authentication requires an HTTPS repository"},
 		{name: "explicit bearer on HTTP", repository: "http://example.com/repo", creds: &credsv1.GitBearerCredentials{Token: "token"}, wantErr: "tokens require an HTTPS repository"},
-		{name: "explicit basic on SSH", repository: "git@example.com:repo", creds: &credsv1.GitBasicCredentials{Username: "user", Password: "token"}, wantErr: "username/password authentication requires an HTTPS repository"},
+		{name: "explicit basic on SSH", repository: "git@example.com:repo", creds: &credsv1.GitHTTPSCredentials{Username: "user", Password: "token"}, wantErr: "username/password authentication requires an HTTPS repository"},
 		{name: "explicit bearer on SSH", repository: "git@example.com:repo", creds: &credsv1.GitBearerCredentials{Token: "token"}, wantErr: "tokens require an HTTPS repository"},
 		{name: "explicit SSH on HTTPS", repository: "https://example.com/repo", creds: &credsv1.GitSSHCredentials{}, wantErr: "SSH credentials require an SSH repository"},
 

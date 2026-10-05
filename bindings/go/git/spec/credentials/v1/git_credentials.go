@@ -5,7 +5,7 @@ import "ocm.software/open-component-model/bindings/go/runtime"
 // GitCredentials supports HTTP basic authentication, bearer tokens, and SSH keys.
 // An SSH repository without a private key uses the SSH agent.
 //
-// For new configurations, use GitBasicCredentials, GitBearerCredentials, or GitSSHCredentials
+// For new configurations, use GitHTTPSCredentials, GitBearerCredentials, or GitSSHCredentials
 // to select the authentication method explicitly.
 //
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed

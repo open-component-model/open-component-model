@@ -7,33 +7,35 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// GitBasicCredentials authenticates Git over HTTPS with HTTP Basic authentication.
+// GitHTTPSCredentials authenticates Git over HTTPS with a username and password or access token.
 // Password can be a password, personal access token, or OAuth access token,
-// according to the server's requirements. No provider-specific defaults are applied.
+// according to the server's requirements. Credentials are sent using HTTP Basic authentication.
+// No provider-specific defaults are applied.
 //
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
 // +ocm:typegen=true
 // +ocm:jsonschema-gen=true
-type GitBasicCredentials struct {
-	// +ocm:jsonschema-gen:enum=GitBasicCredentials/v1
+type GitHTTPSCredentials struct {
+	// +ocm:jsonschema-gen:enum=GitHTTPSCredentials/v1
 	Type     runtime.Type `json:"type"`
 	Username string       `json:"username"`
 	Password string       `json:"password"`
 }
 
-func (c *GitBasicCredentials) Validate() error {
+func (c *GitHTTPSCredentials) Validate() error {
 	if c.Username == "" {
-		return fmt.Errorf("HTTP Basic authentication requires a username")
+		return fmt.Errorf("git HTTPS credentials require a username")
 	}
 	if strings.Contains(c.Username, ":") {
-		return fmt.Errorf("HTTP Basic username must not contain a colon")
+		return fmt.Errorf("git HTTPS username must not contain a colon")
 	}
 	return nil
 }
 
 // GitBearerCredentials authenticates Git over HTTPS using Authorization: Bearer.
-// Use GitBasicCredentials when the server expects a token as the Basic password.
+// Use only when the server explicitly requires Bearer authentication. For HTTPS
+// cloning with a password or access token, use GitHTTPSCredentials.
 //
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
@@ -84,7 +86,7 @@ func (c *GitSSHCredentials) Validate() error {
 
 // MustRegisterTransportCredentialTypes registers the explicit Git authentication methods.
 func MustRegisterTransportCredentialTypes(scheme *runtime.Scheme) {
-	scheme.MustRegisterWithAlias(&GitBasicCredentials{}, runtime.NewVersionedType(GitBasicCredentialsType, Version))
+	scheme.MustRegisterWithAlias(&GitHTTPSCredentials{}, runtime.NewVersionedType(GitHTTPSCredentialsType, Version))
 	scheme.MustRegisterWithAlias(&GitBearerCredentials{}, runtime.NewVersionedType(GitBearerCredentialsType, Version))
 	scheme.MustRegisterWithAlias(&GitSSHCredentials{}, runtime.NewVersionedType(GitSSHCredentialsType, Version))
 }
