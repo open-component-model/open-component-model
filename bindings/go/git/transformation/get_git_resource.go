@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
 
@@ -61,16 +60,6 @@ func (t *GetGitResource) Transform(ctx context.Context, step runtime.Typed) (_ r
 	if err != nil {
 		return nil, fmt.Errorf("error downloading git resource: %w", err)
 	}
-	// The downloaded blob is backed by a temporary file the repository hands over to
-	// us. Its content is copied to outputPath below, so release it afterwards instead
-	// of leaving a second copy behind.
-	defer func() {
-		if closer, ok := downloadedBlob.(io.Closer); ok {
-			if closeErr := closer.Close(); closeErr != nil {
-				slog.WarnContext(ctx, "failed to remove temporary git download file", "err", closeErr)
-			}
-		}
-	}()
 	fileSpec, err := filesystem.BlobToSpec(downloadedBlob, outputPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed buffering git resource archive to file: %w", err)

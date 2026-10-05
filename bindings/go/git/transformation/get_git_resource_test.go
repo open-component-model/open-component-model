@@ -164,7 +164,6 @@ func (f resolverFunc) Resolve(ctx context.Context, identity runtime.Identity) (r
 
 type testBlob struct {
 	readErr error
-	closed  bool
 }
 
 func (b *testBlob) ReadCloser() (io.ReadCloser, error) {
@@ -173,8 +172,6 @@ func (b *testBlob) ReadCloser() (io.ReadCloser, error) {
 	}
 	return io.NopCloser(strings.NewReader("archive")), nil
 }
-
-func (b *testBlob) Close() error { b.closed = true; return nil }
 
 func TestGetGitResourceCredentialsAndCleanup(t *testing.T) {
 	r := require.New(t)
@@ -246,7 +243,6 @@ func TestGetGitResourceCredentialsAndCleanup(t *testing.T) {
 				r.NoError(err)
 				r.NotNil(result)
 			}
-			r.Equal(tc.wantDownload && tc.downloadErr == nil, b.closed)
 		})
 	}
 }
