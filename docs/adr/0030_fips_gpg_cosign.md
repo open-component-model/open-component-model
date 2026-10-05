@@ -217,6 +217,7 @@ sequenceDiagram
 * **Sign:** the passphrase goes to `gpg` on stdin (`--pinentry-mode loopback --passphrase-fd 0`), the digest is written to a file, and stdout becomes the armored detached signature. The selector is `keyFingerprint` when configured, otherwise the first secret key; GnuPG picks the signing-capable (sub)key.
 * **Verify:** imports public key material only, so no `gpg-agent` starts, and runs `gpg --status-fd 1 --trust-model always --no-auto-key-retrieve --verify`. Exactly one good signature (`GOODSIG` and `VALIDSIG`) is accepted; a configured `keyFingerprint` must match the signing or primary key.
 * **Timeout:** 3 minutes per operation.
+* **Concurrency:** with `keySource: credentials`, every operation has its own home directory, so concurrent operations never share a keyring, a `gpg-agent` or a lock file. Verify, the only operation the controller runs, starts no agent, so parallel reconciles only cost one short-lived `gpg` process each. With `keySource: keyring`, operations share the user's GnuPG home and agent.
 * **Responsibility boundary:** OCM checks that libgcrypt runs in FIPS mode, but cannot check that the build is validated. The operator runs a GnuPG whose libgcrypt holds a validation for their platform. Validated libgcrypt builds exist only for Linux distributions.
 * **Controller:** once the controller registers the GPG handler, this contract applies for Verify. The controller image has no `gpg`, so GPG verification needs a derived image (see [Discovery and Distribution](#discovery-and-distribution)).
 
