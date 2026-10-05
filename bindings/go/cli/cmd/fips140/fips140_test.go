@@ -4,6 +4,7 @@
 // deep inside dependencies. These tests run the construct, sign and verify path
 // end to end, so such a use shows up as a test failure. The mode is fixed per
 // process, so the directive below applies to this package's test binary only.
+//
 //go:debug fips140=only
 package fips140
 

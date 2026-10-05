@@ -4,6 +4,7 @@
 // Module, which panics in strict FIPS 140-3 mode. OCM rejects provenance
 // verification in that mode with an error instead. The mode is fixed per
 // process, so the directive below applies to this package's test binary only.
+//
 //go:debug fips140=only
 package fips140
 

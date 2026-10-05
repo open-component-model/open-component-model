@@ -5,6 +5,7 @@
 // these two), and these tests catch a path that hashes with them directly. The
 // mode is fixed per process, so the directive below applies to this package's
 // test binary only.
+//
 //go:debug fips140=only
 package fips140
 

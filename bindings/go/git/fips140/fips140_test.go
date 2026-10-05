@@ -4,6 +4,7 @@
 // tests catch code paths that hash with SHA-1 outside the download's
 // fips140.WithoutEnforcement scope. The mode is fixed per process, so the
 // directive below applies to this package's test binary only.
+//
 //go:debug fips140=only
 package fips140
 
