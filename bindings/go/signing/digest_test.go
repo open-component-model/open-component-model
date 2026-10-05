@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto"
 	"encoding/hex"
-	"io"
 	"log/slog"
 	"testing"
 
@@ -13,6 +12,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 func TestGetSupportedHash(t *testing.T) {
@@ -25,7 +25,7 @@ func TestGetSupportedHash(t *testing.T) {
 }
 
 func TestEnsureNormalisationAlgo(t *testing.T) {
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 	ctx := context.Background()
 
 	// legacy should be translated to v4alpha1
@@ -75,9 +75,79 @@ func TestIsSafelyDigestible(t *testing.T) {
 	assert.Error(t, IsSafelyDigestible(comp3))
 }
 
+func TestValidateDigestHashAlgorithms(t *testing.T) {
+	meta := func(name string) descruntime.ElementMeta {
+		return descruntime.ElementMeta{ObjectMeta: descruntime.ObjectMeta{Name: name, Version: "v1"}}
+	}
+	access := &runtime.Raw{Type: runtime.NewVersionedType("OCIImage", "v1")}
+	digest := func(hash string) *descruntime.Digest {
+		return &descruntime.Digest{HashAlgorithm: hash, NormalisationAlgorithm: "genericBlobDigest/v1", Value: "abcd"}
+	}
+	resource := func(name string, d *descruntime.Digest) descruntime.Resource {
+		return descruntime.Resource{ElementMeta: meta(name), Access: access, Digest: d}
+	}
+	withResources := func(res ...descruntime.Resource) *descruntime.Component {
+		return &descruntime.Component{Resources: res}
+	}
+	withReference := func(d *descruntime.Digest) *descruntime.Component {
+		return &descruntime.Component{References: []descruntime.Reference{{ElementMeta: meta("ref"), Digest: *d}}}
+	}
+
+	tests := []struct {
+		name    string
+		comp    *descruntime.Component
+		wantErr string
+	}{
+		{name: "resource SHA-256 (lowercase, no dash)", comp: withResources(resource("res", digest("sha256")))},
+		{name: "resource SHA-512", comp: withResources(resource("res", digest("SHA-512")))},
+		{name: "resource excluded from signature", comp: withResources(resource("res", descruntime.NewExcludeFromSignatureDigest()))},
+		{name: "resource MD5", comp: withResources(resource("res", digest("MD5"))), wantErr: `"MD5" in resource for res:v1`},
+		{name: "resource SHA-1", comp: withResources(resource("res", digest("SHA-1"))), wantErr: `"SHA-1" in resource for res:v1`},
+		{
+			name:    "MD5 behind an incomplete digest on another resource",
+			comp:    withResources(resource("incomplete", nil), resource("weak", digest("MD5"))),
+			wantErr: `"MD5" in resource for weak:v1`,
+		},
+		{name: "reference SHA-512", comp: withReference(digest("SHA-512"))},
+		{name: "reference SHA-1", comp: withReference(digest("SHA-1")), wantErr: `"SHA-1" in componentReference for ref:v1`},
+		{name: "reference NO-DIGEST", comp: withReference(digest(descruntime.NoDigest)), wantErr: `"NO-DIGEST" in componentReference for ref:v1`},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			err := ValidateDigestHashAlgorithms(tc.comp)
+			if tc.wantErr == "" {
+				r.NoError(err)
+				return
+			}
+			r.ErrorIs(err, ErrUnsupportedDigestHash)
+			r.ErrorContains(err, tc.wantErr)
+
+			// IsSafelyDigestible, which the controller enforces, rejects the
+			// algorithm only with GODEBUG=fips140=only.
+			setFIPSEnforced(t, true)
+			r.True(DigestHashAlgorithmsEnforced())
+			r.ErrorIs(IsSafelyDigestible(tc.comp), ErrUnsupportedDigestHash)
+			setFIPSEnforced(t, false)
+			r.False(DigestHashAlgorithmsEnforced())
+			r.NotErrorIs(IsSafelyDigestible(tc.comp), ErrUnsupportedDigestHash)
+		})
+	}
+}
+
+// setFIPSEnforced overrides whether this package sees FIPS 140-3 mode as
+// enforced (GODEBUG=fips140=only) for the duration of the test, independent of
+// how the test binary was built and run.
+func setFIPSEnforced(t *testing.T, enforced bool) {
+	t.Helper()
+	original := fipsEnforced
+	fipsEnforced = func() bool { return enforced }
+	t.Cleanup(func() { fipsEnforced = original })
+}
+
 // Tests for GenerateDigest
 func TestGenerateDigest_Default(t *testing.T) {
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 	ctx := context.Background()
 
 	d := &descruntime.Descriptor{
@@ -99,7 +169,7 @@ func TestGenerateDigest_Default(t *testing.T) {
 }
 
 func TestGenerateDigest_InvalidHash(t *testing.T) {
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 	ctx := context.Background()
 	d := &descruntime.Descriptor{}
 	_, err := GenerateDigest(ctx, d, logger, v4alpha1.Algorithm, "unknown-hash")
@@ -107,7 +177,7 @@ func TestGenerateDigest_InvalidHash(t *testing.T) {
 }
 
 func TestGenerateDigest_LegacyNormalisation(t *testing.T) {
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 	ctx := context.Background()
 	d := &descruntime.Descriptor{
 		Component: descruntime.Component{
@@ -125,7 +195,7 @@ func TestGenerateDigest_LegacyNormalisation(t *testing.T) {
 
 // Tests for VerifyDigestMatchesDescriptor
 func TestVerifyDigestMatchesDescriptor_Success(t *testing.T) {
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 	ctx := context.Background()
 
 	d := &descruntime.Descriptor{
@@ -148,7 +218,7 @@ func TestVerifyDigestMatchesDescriptor_Success(t *testing.T) {
 }
 
 func TestVerifyDigestMatchesDescriptor_Mismatch(t *testing.T) {
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 	ctx := context.Background()
 
 	d1 := &descruntime.Descriptor{Component: descruntime.Component{ComponentMeta: descruntime.ComponentMeta{ObjectMeta: descruntime.ObjectMeta{Name: "a"}}, Provider: descruntime.Provider{Name: "p"}}}
@@ -165,7 +235,7 @@ func TestVerifyDigestMatchesDescriptor_Mismatch(t *testing.T) {
 }
 
 func TestVerifyDigestMatchesDescriptor_InvalidHex(t *testing.T) {
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 	ctx := context.Background()
 
 	d := &descruntime.Descriptor{Component: descruntime.Component{ComponentMeta: descruntime.ComponentMeta{ObjectMeta: descruntime.ObjectMeta{Name: "x"}}, Provider: descruntime.Provider{Name: "p"}}}
@@ -178,7 +248,7 @@ func TestVerifyDigestMatchesDescriptor_InvalidHex(t *testing.T) {
 }
 
 func TestVerifyDigestMatchesDescriptor_UnsupportedHash(t *testing.T) {
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 	ctx := context.Background()
 
 	d := &descruntime.Descriptor{Component: descruntime.Component{ComponentMeta: descruntime.ComponentMeta{ObjectMeta: descruntime.ObjectMeta{Name: "y"}}, Provider: descruntime.Provider{Name: "p"}}}
@@ -196,7 +266,7 @@ func TestVerifyDigestMatchesDescriptor_UnsupportedHash(t *testing.T) {
 }
 
 func TestVerifyDigestMatchesDescriptor_LegacyNormalisation(t *testing.T) {
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 	ctx := context.Background()
 
 	d := &descruntime.Descriptor{Component: descruntime.Component{ComponentMeta: descruntime.ComponentMeta{ObjectMeta: descruntime.ObjectMeta{Name: "legacy"}}, Provider: descruntime.Provider{Name: "p"}}}

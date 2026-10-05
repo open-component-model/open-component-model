@@ -8,6 +8,7 @@ import (
 	"github.com/santhosh-tekuri/jsonschema/v6"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 	"ocm.software/open-component-model/bindings/go/cel/expression/fieldpath"
 	"ocm.software/open-component-model/bindings/go/cel/expression/variable"
 	stv6jsonschema "ocm.software/open-component-model/bindings/go/cel/jsonschema/santhosh-tekuri/v6"
@@ -97,7 +98,8 @@ func TestParseResource(t *testing.T) {
 			{Path: fieldpath.MustParse("intField"), Expressions: []variable.Expression{{Value: "int.value"}}, StandaloneExpression: true},
 			{Path: fieldpath.MustParse("boolField"), Expressions: []variable.Expression{{Value: "bool.value"}}, StandaloneExpression: true},
 			{Path: fieldpath.MustParse("nestedObject.nestedString"), Expressions: []variable.Expression{{Value: "nested.string"}}, StandaloneExpression: true},
-			{Path: fieldpath.MustParse("nestedObject.nestedStringMultiple"),
+			{
+				Path: fieldpath.MustParse("nestedObject.nestedStringMultiple"),
 				Expressions: []variable.Expression{
 					{Value: "nested.string1"},
 					{Value: "nested.string2"},

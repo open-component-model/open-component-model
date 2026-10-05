@@ -47,7 +47,7 @@ func TestConsumerIdentityForConfigHandlerFunc(t *testing.T) {
 			request: func(base string) *http.Request {
 				parse, _ := url.Parse(base)
 				return &http.Request{
-					Method: "POST",
+					Method: http.MethodPost,
 					URL:    parse,
 					Body:   nil,
 				}
@@ -84,7 +84,7 @@ func TestConsumerIdentityForConfigHandlerFunc(t *testing.T) {
 				}`))
 
 				return &http.Request{
-					Method: "POST",
+					Method: http.MethodPost,
 					URL:    parse,
 					Body:   io.NopCloser(body),
 				}
@@ -148,7 +148,7 @@ func TestResolveHandlerFunc(t *testing.T) {
 				}`))
 
 				return &http.Request{
-					Method: "POST",
+					Method: http.MethodPost,
 					URL:    parse,
 					Header: header,
 					Body:   io.NopCloser(body),
@@ -176,7 +176,7 @@ func TestResolveHandlerFunc(t *testing.T) {
 				parse, _ := url.Parse(base)
 
 				return &http.Request{
-					Method: "POST",
+					Method: http.MethodPost,
 					URL:    parse,
 					Header: header,
 					Body:   nil,
@@ -219,7 +219,7 @@ func TestResolveHandlerFunc(t *testing.T) {
 				}`))
 
 				return &http.Request{
-					Method: "POST",
+					Method: http.MethodPost,
 					URL:    parse,
 					Header: header,
 					Body:   io.NopCloser(body),

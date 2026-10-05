@@ -7,11 +7,11 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"ocm.software/open-component-model/bindings/go/blob/filesystem/spec/access/v1alpha1"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/direct"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
+	"ocm.software/open-component-model/bindings/go/blob/filesystem/spec/access/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -288,7 +288,7 @@ func TestBlobToSpec_MediaTypeFromBlob(t *testing.T) {
 			targetPath := filepath.Join(tmpDir, "output.txt")
 
 			// Create a blob with specified media type
-			var b = direct.NewFromBytes([]byte("content"))
+			b := direct.NewFromBytes([]byte("content"))
 			if tt.mediaType != "" {
 				b = direct.NewFromBytes([]byte("content"), direct.WithMediaType(tt.mediaType))
 			}

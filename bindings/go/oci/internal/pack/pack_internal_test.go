@@ -1,13 +1,15 @@
 package pack
 
 import (
+	"testing"
+
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/require"
+	"oras.land/oras-go/v2/content"
+
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/runtime"
-	"oras.land/oras-go/v2/content"
-	"testing"
 )
 
 func TestUpdateArtifactAccess_ReplacesPartialDigest(t *testing.T) {

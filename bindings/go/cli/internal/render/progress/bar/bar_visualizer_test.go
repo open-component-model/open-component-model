@@ -270,6 +270,7 @@ func TestNewVisualizer_SetConcurrency_HeaderShowsRunners(t *testing.T) {
 	output := stripANSI(buf.String())
 	assert.Contains(t, output, "Transferring component versions (4 runners)")
 }
+
 func TestNewVisualizer_Indeterminate(t *testing.T) {
 	buf := &bytes.Buffer{}
 	vis := NewVisualizer[any](buf, progress.IndeterminateTotal)

@@ -1398,7 +1398,6 @@ components:
 	r.Equal(int64(len(content)), header.Size)
 	_, err = tr.Next()
 	r.ErrorIs(err, io.EOF)
-
 }
 
 // startS3WithObject starts RustFS holding content at bucket/key and writes an ocmconfig

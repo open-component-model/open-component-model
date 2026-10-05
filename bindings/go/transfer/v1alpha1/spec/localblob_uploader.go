@@ -12,7 +12,7 @@ const LocalBlobUploaderConfigType = "localblob.uploader.transfer.config.ocm.soft
 // is set: every access type the transfer can download.
 //
 // Writing it explicitly into a config is equivalent to omitting match.
-const DefaultLocalBlobUploaderMatch = `resource.access.isType(["LocalBlob", "OCIImage", "Helm", "Wget", "S3/v2", "GitHub"])`
+const DefaultLocalBlobUploaderMatch = `resource.access.isType(["LocalBlob", "OCIImage", "Helm", "Wget", "S3/v2", "GitHub", "Git"])`
 
 func init() {
 	Scheme.MustRegisterWithAlias(&LocalBlobUploaderConfig{},
@@ -23,7 +23,7 @@ func init() {
 
 // LocalBlobUploaderConfig is a declarative rule that downloads the resources it selects
 // and embeds them in the target as local blobs of the transferred component version
-// (OCI images via GetOCIArtifact, Helm charts converted to OCI, wget, S3 and GitHub
+// (OCI images via GetOCIArtifact, Helm charts converted to OCI, wget, S3, GitHub and Git
 // downloads, local blobs as they are). It is carried as an entry inside the central
 // generic configuration (generic.config.ocm.software/v1), as a sibling of [Config], and
 // extracted with [LookupUploaderConfigs].

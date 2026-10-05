@@ -4,11 +4,12 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"sigs.k8s.io/yaml"
+
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/transform/graph/internal/testutils"
 	graphRuntime "ocm.software/open-component-model/bindings/go/transform/graph/runtime"
 	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
-	"sigs.k8s.io/yaml"
 )
 
 func newTestBuilder(t *testing.T) *Builder {

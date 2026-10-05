@@ -1051,7 +1051,7 @@ func TestSigningConsumerIdentity_MatchesDocumentedConfig(t *testing.T) {
 			configIdentity: runtime.Identity{
 				runtime.IdentityAttributeType:       signerv1.VersionedType.String(),
 				signerv1.IdentityAttributeSignature: signatureName,
-				"algorithm":                        string(v1alpha1.AlgorithmSigstoreV1Alpha1),
+				"algorithm":                         string(v1alpha1.AlgorithmSigstoreV1Alpha1),
 			},
 			signConfig: testSignConfig(),
 			wantMatch:  false,
