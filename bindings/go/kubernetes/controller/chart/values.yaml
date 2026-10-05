@@ -15,6 +15,14 @@ manager:
     tag: latest@sha256:0901f1c523c3de736b1fb7a4c58c44e47bdaa4c1b425ce528c4250c46a0dd611
     # -- Image pull policy
     pullPolicy: IfNotPresent
+  ## Cluster-scoped Deployer
+  deployer:
+    # -- Run the controller for the cluster-scoped Deployer. It applies with the permissions of the controller itself.
+    enabled: true
+  ## NamespacedDeployer
+  namespacedDeployer:
+    # -- Run the controller for the NamespacedDeployer and grant the controller permission to impersonate service accounts
+    enabled: true
   ## Controller concurrency settings
   concurrency:
     # -- Number of active resource controller workers

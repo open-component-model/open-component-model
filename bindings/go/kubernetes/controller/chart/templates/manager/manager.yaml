@@ -88,6 +88,9 @@ spec:
                     - --deployer-download-max-resource-size={{ .deployerDownloadMaxResourceSize }}
                     {{- end }}
                     {{- end }}
+                    {{- /* Deployers */}}
+                    - --enable-deployer={{ .Values.manager.deployer.enabled }}
+                    - --enable-namespaced-deployer={{ .Values.manager.namespacedDeployer.enabled }}
                     {{- /* Logging */}}
                     {{- with .Values.manager.logging }}
                     {{- if .level }}

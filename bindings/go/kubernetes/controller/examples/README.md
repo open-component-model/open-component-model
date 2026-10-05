@@ -27,8 +27,13 @@ See the [installation notes in the root README](../README.md#installation) for d
 | [`helm-configuration-localization`](#helm-configuration-localization) | FluxCD + ArgoCD | Image localization + Helm value injection |
 | [`kustomize-simple`](#kustomize-simple) | FluxCD + ArgoCD | Kustomize overlay from a Git-sourced OCM resource |
 | [`kustomize-configuration-localization`](#kustomize-configuration-localization) | FluxCD + ArgoCD | Image localization via Kustomize JSON patches |
-| [`k8s-manifest-simple`](#k8s-manifest-simple) | (raw kubectl) | Applying a plain Kubernetes manifest from an OCM resource |
-| [`applyset-pruning`](#applyset-pruning) | (raw kubectl) | Pruning orphaned resources with ApplySet |
+| [`k8s-manifest-simple`](#k8s-manifest-simple) | `NamespacedDeployer` | Applying a plain Kubernetes manifest from an OCM resource |
+| [`applyset-pruning`](#applyset-pruning) | `NamespacedDeployer` | Pruning orphaned resources with ApplySet |
+
+All examples except `helm-simple-nested-status` deploy with the `NamespacedDeployer`, which applies with the
+permissions of a service account defined in the example's bootstrap. The RGD examples bind that service account
+to a `ClusterRole` for `ResourceGraphDefinitions`, as RGDs are cluster-scoped. `helm-simple-nested-status` keeps
+the cluster-scoped `Deployer`, which is discouraged because it applies with the controller's own permissions.
 
 All examples that use FluxCD and ArgoCD include **both deployer blocks** in the same `rgd.yaml`. kro
 instantiates both; on a cluster where only one is installed, remove the block for the absent deployer.
@@ -148,16 +153,17 @@ Like `kustomize-simple`, but adds image localization and configuration via JSON 
 
 ## k8s-manifest-simple
 
-**Deployer:** none (raw `kubectl apply`)
+**Deployer:** `NamespacedDeployer`
 
 Applies a raw Kubernetes manifest stored as an OCM resource, without using kro or a GitOps deployer. Useful as
-a reference for the simplest possible OCM → cluster workflow.
+a reference for the simplest possible OCM → cluster workflow. The `NamespacedDeployer` applies with the
+permissions of the `k8s-manifest-simple-deployer` service account.
 
 ---
 
 ## applyset-pruning
 
-**Deployer:** none (ApplySet-based pruning)
+**Deployer:** `NamespacedDeployer` (ApplySet-based pruning)
 
 Demonstrates how orphaned resources are pruned when an OCM component version is updated. Uses Kubernetes
 [ApplySet](https://kubernetes.io/docs/reference/labels-annotations-taints/) for pruning instead of a

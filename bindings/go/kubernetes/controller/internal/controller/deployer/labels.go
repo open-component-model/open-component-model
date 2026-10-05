@@ -24,7 +24,7 @@ const (
 )
 
 // These are common labels.
-func setOwnershipLabels(obj client.Object, resource *deliveryv1alpha1.Resource, deployer *deliveryv1alpha1.Deployer) {
+func setOwnershipLabels(obj client.Object, resource *deliveryv1alpha1.Resource, deployer client.Object) {
 	limit := func(v string) string {
 		if len(v) > validation.LabelValueMaxLength {
 			return v[:validation.LabelValueMaxLength]

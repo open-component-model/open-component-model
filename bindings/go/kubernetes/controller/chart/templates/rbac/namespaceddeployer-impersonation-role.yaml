@@ -1,0 +1,37 @@
+{{- if .Values.manager.namespacedDeployer.enabled }}
+# Lets the NamespacedDeployer apply and prune with the permissions of the service account in its spec.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+    labels:
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        app.kubernetes.io/name: {{ include "ocm-k8s-toolkit.name" . }}
+        helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    name: {{ include "ocm-k8s-toolkit.resourceName" (dict "suffix" "namespaceddeployer-impersonation-role" "context" $) }}
+rules:
+    - apiGroups:
+        - ""
+      resources:
+        - serviceaccounts
+      verbs:
+        - impersonate
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+    labels:
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        app.kubernetes.io/name: {{ include "ocm-k8s-toolkit.name" . }}
+        helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    name: {{ include "ocm-k8s-toolkit.resourceName" (dict "suffix" "namespaceddeployer-impersonation-rolebinding" "context" $) }}
+roleRef:
+    apiGroup: rbac.authorization.k8s.io
+    kind: ClusterRole
+    name: {{ include "ocm-k8s-toolkit.resourceName" (dict "suffix" "namespaceddeployer-impersonation-role" "context" $) }}
+subjects:
+    - kind: ServiceAccount
+      name: {{ include "ocm-k8s-toolkit.resourceName" (dict "suffix" "controller-manager" "context" $) }}
+      namespace: {{ .Release.Namespace }}
+{{- end }}

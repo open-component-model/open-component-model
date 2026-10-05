@@ -2,6 +2,7 @@ package v1alpha1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -40,4 +41,22 @@ type OCMK8SObject interface {
 	client.Object
 	ConditionAccessor
 	ConfigRefProvider
+}
+
+// DeployerObject is implemented by Deployer and NamespacedDeployer so both kinds share one reconciler.
+// +kubebuilder:object:generate=false
+type DeployerObject interface {
+	OCMK8SObject
+	// ObjectKind provides the GroupVersionKind used for the ApplySet ID.
+	schema.ObjectKind
+
+	GetVID() map[string]string
+	SetObservedGeneration(v int64)
+
+	// GetResourceRef returns the referenced Resource. An empty namespace defaults to the deployer's namespace.
+	GetResourceRef() ObjectKey
+	// GetServiceAccountName returns the service account to impersonate, or empty for the controller identity.
+	GetServiceAccountName() string
+	IsSuspended() bool
+	GetDeployerStatus() *DeployerStatus
 }

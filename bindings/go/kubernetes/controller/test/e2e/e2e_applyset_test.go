@@ -157,7 +157,7 @@ var _ = Describe("ApplySet Pruning Tests", func() {
 
 			// delete deployer
 			By("cleaning up the deployer")
-			deployerName := "deployer.delivery.ocm.software/" + example.Name() + "-deployer"
+			deployerName := "namespaceddeployer.delivery.ocm.software/" + example.Name() + "-deployer"
 			Expect(utils.DeleteResource(ctx, timeout, deployerName)).To(Succeed())
 
 			// make sure that the deployer is deleted
@@ -166,7 +166,7 @@ var _ = Describe("ApplySet Pruning Tests", func() {
 				cmd := exec.CommandContext(ctx, "kubectl", "get", deployerName, "-n", "default")
 				_, err := utils.Run(cmd)
 				return err
-			}, timeout).Should(HaveOccurred(), "Deployer should be deleted")
+			}, timeout).Should(HaveOccurred(), "NamespacedDeployer should be deleted")
 
 			// check that deployed resources are also deleted
 			By("verifying that deployed resources are deleted")

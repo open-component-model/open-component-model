@@ -12,7 +12,7 @@ The OCM controllers reconcile OCM component versions into a Kubernetes cluster. 
 - **Repository** validates that an OCM repository is reachable.
 - **Component** resolves and verifies a component version from that repository.
 - **Resource** fetches a specific resource from the component version.
-- **[Deployer]({{< relref "kubernetes-deployer.md" >}})** downloads the resource content and applies it to the cluster.
+- **[Deployer and NamespacedDeployer]({{< relref "kubernetes-deployer.md" >}})** download the resource content and apply it to the cluster.
 
 A fifth resource, **Replication**, sits alongside the chain rather than within it. Instead of delivering content into the cluster, it transfers a resolved component version from one OCM repository to another, mirroring `ocm transfer` as a controller.
 
@@ -76,6 +76,9 @@ You can attach CEL expressions via `additionalStatusFields` to extract values fr
 ### Deployer
 
 A `Deployer` is a cluster-scoped object that watches a `Resource` and, once it is `Ready`, downloads the resource blob and applies the contained Kubernetes manifests to the cluster using server-side apply. It manages the full lifecycle of what it deploys: *creating* resources on first apply, *updating* them when the component version changes, and *pruning* resources that are no longer part of the manifest set.
+
+A `NamespacedDeployer` does the same, but applies with the permissions of a service account in its namespace instead
+of the controller's. Use it: the cluster-scoped `Deployer` is discouraged because of its cluster-wide permissions.
 
 See [Kubernetes Deployer]({{< relref "kubernetes-deployer.md" >}}) for a full description of its apply semantics, drift detection, and caching behavior.
 

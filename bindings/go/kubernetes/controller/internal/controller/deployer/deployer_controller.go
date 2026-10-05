@@ -11,17 +11,19 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	lru "github.com/hashicorp/golang-lru/v2"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/time/rate"
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/meta"
 	apiresource "k8s.io/apimachinery/pkg/api/resource"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
+	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/yaml"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -67,9 +69,20 @@ const (
 
 var ErrComponentVersionDrift = errors.New("component version drift: resource status has not yet caught up with component")
 
-// Reconciler reconciles a Deployer object.
+// Reconciler reconciles a Deployer or, if Namespaced is set, a NamespacedDeployer object.
 type Reconciler struct {
 	*ocm.BaseReconciler
+
+	// Namespaced selects NamespacedDeployer as the reconciled kind. A NamespacedDeployer only deploys into its own
+	// namespace and applies and prunes by impersonating its service account.
+	Namespaced bool
+
+	// apiReader reads service accounts uncached to avoid a cluster-wide informer for them.
+	apiReader client.Reader
+	// restConfig is the base config impersonated clients are derived from.
+	restConfig *rest.Config
+	// impersonatedClients caches one client per impersonated service account.
+	impersonatedClients *lru.Cache[string, client.Client]
 
 	// resourceWatchChannel is used to register watches for resources that are referenced by the deployer.
 	// It is used by the dynamic informer manager to register watches for resources deployed.
@@ -101,6 +114,9 @@ var _ ocm.Reconciler = (*Reconciler)(nil)
 // +kubebuilder:rbac:groups=delivery.ocm.software,resources=deployers,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=delivery.ocm.software,resources=deployers/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=delivery.ocm.software,resources=deployers/finalizers,verbs=update
+// +kubebuilder:rbac:groups=delivery.ocm.software,resources=namespaceddeployers,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=delivery.ocm.software,resources=namespaceddeployers/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=delivery.ocm.software,resources=namespaceddeployers/finalizers,verbs=update
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
@@ -109,22 +125,28 @@ func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) err
 		return err
 	}
 
+	r.apiReader = mgr.GetAPIReader()
+	r.restConfig = mgr.GetConfig()
+	if r.impersonatedClients, err = lru.New[string, client.Client](impersonatedClientCacheSize); err != nil {
+		return fmt.Errorf("failed to create impersonated client cache: %w", err)
+	}
+
 	// Build index for deployers that reference a resource to get notified about resource changes.
 	const fieldName = ".spec.resourceRef"
 	if err := mgr.GetFieldIndexer().IndexField(
 		ctx,
-		&deliveryv1alpha1.Deployer{},
+		r.newObject(),
 		fieldName,
 		func(obj client.Object) []string {
-			deployer, ok := obj.(*deliveryv1alpha1.Deployer)
+			deployer, ok := obj.(deliveryv1alpha1.DeployerObject)
 			if !ok {
 				return nil
 			}
 
 			return []string{fmt.Sprintf(
 				"%s/%s",
-				deployer.Spec.ResourceRef.Namespace,
-				deployer.Spec.ResourceRef.Name,
+				deployer.GetResourceRef().Namespace,
+				deployer.GetResourceRef().Name,
 			)}
 		},
 	); err != nil {
@@ -133,7 +155,7 @@ func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) err
 
 	eventSource := workerpool.NewEventSource(r.Resolver.WorkerPool())
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&deliveryv1alpha1.Deployer{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
+		For(r.newObject(), builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		WatchesRawSource(eventSource).
 		WatchesRawSource(informerManager.Source()).
 		// Watch for events from OCM resources that are referenced by the deployer
@@ -146,7 +168,7 @@ func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) err
 				}
 
 				// Get list of deployers that reference the resource
-				list := &deliveryv1alpha1.DeployerList{}
+				list := r.newList()
 				if err := r.List(
 					ctx,
 					list,
@@ -156,14 +178,19 @@ func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) err
 				}
 
 				// For every deployer that references the resource create a reconciliation request for that deployer
-				requests := make([]reconcile.Request, 0, len(list.Items))
-				for _, deployer := range list.Items {
+				var requests []reconcile.Request
+				if err := meta.EachListItem(list, func(obj k8sruntime.Object) error {
+					deployer, ok := obj.(client.Object)
+					if !ok {
+						return nil
+					}
 					requests = append(requests, reconcile.Request{
-						NamespacedName: k8stypes.NamespacedName{
-							Namespace: deployer.GetNamespace(),
-							Name:      deployer.GetName(),
-						},
+						NamespacedName: client.ObjectKeyFromObject(deployer),
 					})
+
+					return nil
+				}); err != nil {
+					return []reconcile.Request{}
 				}
 
 				return requests
@@ -189,19 +216,15 @@ func (r *Reconciler) setupDynamicResourceWatcherWithManager(mgr ctrl.Manager) (*
 	// For Registering and Unregistering watches, we use a dynamic informer manager.
 	// To buffer pending registrations and unregistrations, we use channels.
 	informerManager, err := dynamic.NewInformerManager(&dynamic.Options{
-		Config:     mgr.GetConfig(),
-		HTTPClient: mgr.GetHTTPClient(),
-		RESTMapper: mgr.GetRESTMapper(),
-		Handler: handler.EnqueueRequestForOwner(
-			mgr.GetScheme(), mgr.GetRESTMapper(),
-			&deliveryv1alpha1.Deployer{},
-			handler.OnlyControllerOwner(),
-		),
+		Config:                      mgr.GetConfig(),
+		HTTPClient:                  mgr.GetHTTPClient(),
+		RESTMapper:                  mgr.GetRESTMapper(),
+		Handler:                     r.childEventHandler(mgr),
 		DefaultLabelSelector:        sel,
 		Workers:                     runtime.NumCPU(),
 		RegisterChannelBufferSize:   channelBufferSize,
 		UnregisterChannelBufferSize: channelBufferSize,
-		MetricsLabel:                deployerManager + "/" + "resources",
+		MetricsLabel:                r.metricsLabel(),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create dynamic informer deployerManager: %w", err)
@@ -231,7 +254,7 @@ func (r *Reconciler) setupDynamicResourceWatcherWithManager(mgr ctrl.Manager) (*
 // Untrack sends stop events for all active resource watches on the deployer.
 // Returns true if all watches are already stopped, false if stop events were
 // sent and another reconcile is needed to verify completion.
-func (r *Reconciler) Untrack(ctx context.Context, deployer *deliveryv1alpha1.Deployer) (bool, error) {
+func (r *Reconciler) Untrack(ctx context.Context, deployer deliveryv1alpha1.DeployerObject) (bool, error) {
 	logger := log.FromContext(ctx)
 	var atLeastOneResourceNeededStopWatch bool
 	for _, obj := range r.resourceWatches(deployer) {
@@ -243,7 +266,7 @@ func (r *Reconciler) Untrack(ctx context.Context, deployer *deliveryv1alpha1.Dep
 				Child:  obj,
 			}:
 			case <-ctx.Done():
-				return false, fmt.Errorf("context canceled while unregistering resource watch for deployer %s: %w", deployer.Name, ctx.Err())
+				return false, fmt.Errorf("context canceled while unregistering resource watch for deployer %s: %w", deployer.GetName(), ctx.Err())
 			}
 			atLeastOneResourceNeededStopWatch = true
 		}
@@ -258,10 +281,19 @@ func (r *Reconciler) Untrack(ctx context.Context, deployer *deliveryv1alpha1.Dep
 // pruneWithApplySet prunes all resources managed by the deployer's ApplySet.
 // Returns true if pruning is complete (nothing left to prune), false if resources
 // are still being pruned and another reconcile is needed.
-func (r *Reconciler) pruneWithApplySet(ctx context.Context, deployer *deliveryv1alpha1.Deployer) (bool, error) {
-	logger := log.FromContext(ctx).WithValues("deployer", deployer.Name, "namespace", deployer.Namespace)
+func (r *Reconciler) pruneWithApplySet(ctx context.Context, deployer deliveryv1alpha1.DeployerObject) (bool, error) {
+	logger := log.FromContext(ctx).WithValues("deployer", deployer.GetName(), "namespace", deployer.GetNamespace())
 
-	set := r.createApplySet(deployer, logger)
+	applyClient, err := r.applyClient(ctx, deployer)
+	if err != nil {
+		if r.orphanOnDeletion(deployer, err) {
+			logger.Info("skipping ApplySet prune as the service account cannot prune", "reason", err.Error())
+			return true, nil
+		}
+		return false, err
+	}
+
+	set := r.createApplySet(applyClient, deployer, logger)
 
 	metadata, err := set.Project(nil)
 	if err != nil {
@@ -275,6 +307,10 @@ func (r *Reconciler) pruneWithApplySet(ctx context.Context, deployer *deliveryv1
 		Concurrency: runtime.NumCPU(),
 	})
 	if err != nil {
+		if r.orphanOnDeletion(deployer, err) {
+			logger.Info("skipping ApplySet prune as the service account cannot prune", "reason", err.Error())
+			return true, nil
+		}
 		return false, fmt.Errorf("failed to prune ApplySet: %w", err)
 	}
 
@@ -292,24 +328,27 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 	logger := log.FromContext(ctx)
 	logger.Info("starting reconciliation")
 
-	deployer := &deliveryv1alpha1.Deployer{}
+	deployer := r.newObject()
 	if err := r.Get(ctx, req.NamespacedName, deployer); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	old := deployer.DeepCopy()
+	old, ok := deployer.DeepCopyObject().(deliveryv1alpha1.DeployerObject)
+	if !ok {
+		return ctrl.Result{}, fmt.Errorf("unexpected type %T after deep copy", deployer)
+	}
 	defer func(ctx context.Context) {
-		if !equality.Semantic.DeepEqual(deployer.Finalizers, old.Finalizers) {
+		if !equality.Semantic.DeepEqual(deployer.GetFinalizers(), old.GetFinalizers()) {
 			err = errors.Join(err, r.GetClient().Update(ctx, deployer))
 			return
 		}
 		status.UpdateBeforePatch(deployer, r.EventRecorder, 0, err)
-		if !equality.Semantic.DeepEqual(deployer.Status, old.Status) {
+		if !equality.Semantic.DeepEqual(deployer.GetDeployerStatus(), old.GetDeployerStatus()) {
 			err = errors.Join(err, r.GetClient().Status().Patch(ctx, deployer, client.MergeFrom(old)))
 		}
 	}(ctx)
 
-	if deployer.Spec.Suspend {
+	if deployer.IsSuspended() {
 		return ctrl.Result{}, nil
 	}
 
@@ -332,7 +371,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 
 // reconcileDeployment orchestrates the main deployment pipeline: resolve the referenced resource,
 // load configuration, download the OCM resource, apply it, and track the deployed objects.
-func (r *Reconciler) reconcileDeployment(ctx context.Context, deployer *deliveryv1alpha1.Deployer) (ctrl.Result, error) {
+func (r *Reconciler) reconcileDeployment(ctx context.Context, deployer deliveryv1alpha1.DeployerObject) (ctrl.Result, error) {
 	resource, err := r.resolveResource(ctx, deployer)
 	if resource == nil || err != nil {
 		return ctrl.Result{}, err
@@ -396,16 +435,16 @@ func (r *Reconciler) reconcileDeployment(ctx context.Context, deployer *delivery
 // Returns (nil, nil) when the resource is not yet ready or is being deleted (non-retriable).
 func (r *Reconciler) resolveResource(
 	ctx context.Context,
-	deployer *deliveryv1alpha1.Deployer,
+	deployer deliveryv1alpha1.DeployerObject,
 ) (*deliveryv1alpha1.Resource, error) {
-	resourceNamespace := deployer.Spec.ResourceRef.Namespace
+	resourceNamespace := deployer.GetResourceRef().Namespace
 	if resourceNamespace == "" {
 		resourceNamespace = deployer.GetNamespace()
 	}
 
 	resource, err := util.GetReadyObject[deliveryv1alpha1.Resource, *deliveryv1alpha1.Resource](ctx, r.Client, client.ObjectKey{
 		Namespace: resourceNamespace,
-		Name:      deployer.Spec.ResourceRef.Name,
+		Name:      deployer.GetResourceRef().Name,
 	})
 	if err != nil {
 		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.ResourceIsNotAvailable, err.Error())
@@ -442,16 +481,29 @@ func (r *Reconciler) resolveResource(
 // Sets deployer.Status.EffectiveOCMConfig as a side effect.
 func (r *Reconciler) resolveConfiguration(
 	ctx context.Context,
-	deployer *deliveryv1alpha1.Deployer,
+	deployer deliveryv1alpha1.DeployerObject,
 	resource *deliveryv1alpha1.Resource,
 ) (*configuration.Configuration, error) {
+	if err := r.validateConfigNamespaces(deployer, deployer.GetSpecifiedOCMConfig()); err != nil {
+		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetConfigurationFailedReason, err.Error())
+
+		return nil, err
+	}
+
 	configs, err := ocm.GetEffectiveConfig(ctx, r.GetClient(), deployer, resource)
 	if err != nil {
 		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetConfigurationFailedReason, err.Error())
 
 		return nil, fmt.Errorf("failed to get effective config: %w", err)
 	}
-	deployer.Status.EffectiveOCMConfig = configs
+
+	// Configuration propagated from the Resource may still point to other namespaces.
+	if err := r.validateConfigNamespaces(deployer, configs); err != nil {
+		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetConfigurationFailedReason, err.Error())
+
+		return nil, err
+	}
+	deployer.GetDeployerStatus().EffectiveOCMConfig = configs
 
 	cfg, err := configuration.LoadConfigurations(ctx, r.Client, deployer.GetNamespace(), configs)
 	if err != nil {
@@ -466,7 +518,7 @@ func (r *Reconciler) resolveConfiguration(
 // createCacheBackedRepository creates a cache-backed OCM repository from the resource's repository spec.
 func (r *Reconciler) createCacheBackedRepository(
 	ctx context.Context,
-	deployer *deliveryv1alpha1.Deployer,
+	deployer deliveryv1alpha1.DeployerObject,
 	resource *deliveryv1alpha1.Resource,
 	cfg *configuration.Configuration,
 	pm *manager.PluginManager,
@@ -504,7 +556,7 @@ func (r *Reconciler) createCacheBackedRepository(
 // Returns (nil, nil, nil) when resolution is in progress (non-retriable).
 func (r *Reconciler) resolveComponentAndMatchResource(
 	ctx context.Context,
-	deployer *deliveryv1alpha1.Deployer,
+	deployer deliveryv1alpha1.DeployerObject,
 	resource *deliveryv1alpha1.Resource,
 	cfg *configuration.Configuration,
 	pm *manager.PluginManager,
@@ -557,7 +609,7 @@ func (r *Reconciler) resolveComponentAndMatchResource(
 // ApplySet (deleting previously applied resources), then untracking watched resources.
 // Each finalizer is processed one at a time with requeues between them to ensure
 // sequential cleanup. The returned bool indicates whether deletion was in progress.
-func (r *Reconciler) reconcileDeletionTimestamp(ctx context.Context, deployer *deliveryv1alpha1.Deployer, logger logr.Logger) (ctrl.Result, error, bool) {
+func (r *Reconciler) reconcileDeletionTimestamp(ctx context.Context, deployer deliveryv1alpha1.DeployerObject, logger logr.Logger) (ctrl.Result, error, bool) {
 	if !deployer.GetDeletionTimestamp().IsZero() {
 		var errs []error
 
@@ -779,9 +831,9 @@ func buildResourceCacheKey(
 	return key
 }
 
-func (r *Reconciler) createApplySet(deployer *deliveryv1alpha1.Deployer, logger logr.Logger) *applyset.ApplySet {
+func (r *Reconciler) createApplySet(c client.Client, deployer deliveryv1alpha1.DeployerObject, logger logr.Logger) *applyset.ApplySet {
 	cfg := applyset.Config{
-		Client:          r.Client,
+		Client:          c,
 		RESTMapper:      r.resourceRESTMapper,
 		Log:             logger,
 		ParentNamespace: deployer.GetNamespace(),
@@ -797,12 +849,17 @@ func (r *Reconciler) createApplySet(deployer *deliveryv1alpha1.Deployer, logger 
 // - All deployed resources are labeled with applyset.k8s.io/part-of=<applyset-id>
 // - The deployer carries annotations tracking the GroupKinds and namespaces of managed resources
 // - Pruning automatically removes resources that were previously deployed but are no longer in the manifest
-func (r *Reconciler) applyWithApplySet(ctx context.Context, resource *deliveryv1alpha1.Resource, deployer *deliveryv1alpha1.Deployer, objs []*unstructured.Unstructured) error {
-	logger := log.FromContext(ctx).WithValues("deployer", deployer.Name, "namespace", deployer.Namespace)
+func (r *Reconciler) applyWithApplySet(ctx context.Context, resource *deliveryv1alpha1.Resource, deployer deliveryv1alpha1.DeployerObject, objs []*unstructured.Unstructured) error {
+	logger := log.FromContext(ctx).WithValues("deployer", deployer.GetName(), "namespace", deployer.GetNamespace())
+
+	applyClient, err := r.applyClient(ctx, deployer)
+	if err != nil {
+		return err
+	}
 
 	// Use the deployer as the ApplySet parent
 	// This allows us to track all resources deployed by this deployer
-	set := r.createApplySet(deployer, logger)
+	set := r.createApplySet(applyClient, deployer, logger)
 
 	logger.Info("adding objects to ApplySet", "count", len(objs))
 
@@ -818,14 +875,21 @@ func (r *Reconciler) applyWithApplySet(ctx context.Context, resource *deliveryv1
 		setOwnershipAnnotations(obj, resource)
 		logger.Info("set ownership annotations", "annotations", obj.GetAnnotations())
 
-		// Set controller reference
-		if err := controllerutil.SetControllerReference(deployer, obj, r.Scheme); err != nil {
-			return fmt.Errorf("failed to set controller reference on object %s/%s: %w", obj.GetNamespace(), obj.GetName(), err)
+		// Default namespace and apiVersion if needed
+		namespaced, err := r.defaultObj(ctx, obj, r.defaultNamespace(deployer))
+		if err != nil {
+			return fmt.Errorf("failed to default object %s/%s: %w", obj.GetNamespace(), obj.GetName(), err)
 		}
 
-		// Default namespace and apiVersion if needed
-		if err := r.defaultObj(ctx, resource, obj); err != nil {
-			return fmt.Errorf("failed to default object %s/%s: %w", obj.GetNamespace(), obj.GetName(), err)
+		if r.Namespaced {
+			setNamespacedDeployerAnnotation(obj, deployer)
+		}
+
+		// Set controller reference
+		if r.canOwn(deployer, obj, namespaced) {
+			if err := controllerutil.SetControllerReference(deployer, obj, r.Scheme, r.ownerReferenceOptions()...); err != nil {
+				return fmt.Errorf("failed to set controller reference on object %s/%s: %w", obj.GetNamespace(), obj.GetName(), err)
+			}
 		}
 
 		resourcesToAdd = append(resourcesToAdd, applyset.Resource{
@@ -878,9 +942,11 @@ func (r *Reconciler) applyWithApplySet(ctx context.Context, resource *deliveryv1
 //
 // Behavior:
 //  1. Determines the GroupVersionKind (GVK) using the RESTMapper that is dynamically filled.
-//  2. If the object is namespaced but lacks a namespace, it defaults to "default" and logs the action.
+//  2. If the object is namespaced but lacks a namespace, it defaults to defaultNamespace and logs the action.
 //  3. If the object's apiVersion is missing but the RESTMapper provides one, it applies that version.
-func (r *Reconciler) defaultObj(ctx context.Context, resource *deliveryv1alpha1.Resource, obj *unstructured.Unstructured) error {
+//
+// It reports whether the object is namespaced.
+func (r *Reconciler) defaultObj(ctx context.Context, obj *unstructured.Unstructured, defaultNamespace string) (bool, error) {
 	logger := log.FromContext(ctx).WithValues(
 		"operation", "apply",
 		"gvk", obj.GetObjectKind().GroupVersionKind().String())
@@ -889,25 +955,25 @@ func (r *Reconciler) defaultObj(ctx context.Context, resource *deliveryv1alpha1.
 	gvk := schema.FromAPIVersionAndKind(obj.GetAPIVersion(), obj.GetKind())
 	mapping, err := r.resourceRESTMapper.RESTMapping(gvk.GroupKind(), gvk.Version)
 	if err != nil {
-		return fmt.Errorf("failed to determine resource mapping: %w", err)
+		return false, fmt.Errorf("failed to determine resource mapping: %w", err)
 	}
-	if mapping.Scope.Name() == meta.RESTScopeNameNamespace && obj.GetNamespace() == "" {
-		// TODO(jakobmoellerdev) we can think of adding more namespacing options down the line
-		logger.Info("namespace will be defaulted", "defaultNamespace", resource.GetNamespace())
-		obj.SetNamespace(metav1.NamespaceDefault)
+	namespaced := mapping.Scope.Name() == meta.RESTScopeNameNamespace
+	if namespaced && obj.GetNamespace() == "" {
+		logger.Info("namespace will be defaulted", "defaultNamespace", defaultNamespace)
+		obj.SetNamespace(defaultNamespace)
 	}
 	if gvk.Version == "" && mapping.GroupVersionKind.Version != "" {
 		logger.Info("apiVersion will be defaulted to match discovered rest mapping", "defaultAPIVersion", mapping.GroupVersionKind.Version)
 		gvk.Version = mapping.GroupVersionKind.Version
 		obj.SetGroupVersionKind(gvk)
 	}
-	return nil
+	return namespaced, nil
 }
 
 // trackConcurrently tracks the objects for the deployer concurrently.
 //
 // See track for more details on how the objects are tracked.
-func (r *Reconciler) trackConcurrently(ctx context.Context, deployer *deliveryv1alpha1.Deployer, objs []*unstructured.Unstructured) error {
+func (r *Reconciler) trackConcurrently(ctx context.Context, deployer deliveryv1alpha1.DeployerObject, objs []*unstructured.Unstructured) error {
 	eg, egctx := errgroup.WithContext(ctx)
 
 	for i := range objs {
@@ -923,7 +989,7 @@ func (r *Reconciler) trackConcurrently(ctx context.Context, deployer *deliveryv1
 // It checks if the resource watch is already registered and synced. If not, it registers the watch and returns an error
 // indicating that the object is not yet registered and synced.
 // If the resource watch is already registered and synced, it skips the registration and returns nil.
-func (r *Reconciler) track(ctx context.Context, deployer *deliveryv1alpha1.Deployer, obj client.Object) error {
+func (r *Reconciler) track(ctx context.Context, deployer deliveryv1alpha1.DeployerObject, obj client.Object) error {
 	logger := log.FromContext(ctx)
 
 	if r.resourceWatchHasSynced(deployer, obj) {
@@ -936,7 +1002,7 @@ func (r *Reconciler) track(ctx context.Context, deployer *deliveryv1alpha1.Deplo
 			Child:  obj,
 		}:
 		case <-ctx.Done():
-			return fmt.Errorf("context canceled while unregistering resource watch for deployer %s: %w", deployer.Name, ctx.Err())
+			return fmt.Errorf("context canceled while unregistering resource watch for deployer %s: %w", deployer.GetName(), ctx.Err())
 		}
 
 		return fmt.Errorf("object is not yet registered and synced, waiting for registration")
@@ -958,7 +1024,7 @@ func (r *Reconciler) track(ctx context.Context, deployer *deliveryv1alpha1.Deplo
 //     This operation should be cheap as we expect the component to be in cache already.
 func (r *Reconciler) getEffectiveComponentDescriptor(
 	ctx context.Context,
-	deployer *deliveryv1alpha1.Deployer,
+	deployer deliveryv1alpha1.DeployerObject,
 	resource *deliveryv1alpha1.Resource,
 	cfg *configuration.Configuration,
 	pm *manager.PluginManager,
@@ -1063,7 +1129,7 @@ func (r *Reconciler) getEffectiveComponentDescriptor(
 	return resourceDescriptor, err
 }
 
-func updateDeployedObjectStatusReferences[T client.Object](objs []T, deployer *deliveryv1alpha1.Deployer) {
+func updateDeployedObjectStatusReferences[T client.Object](objs []T, deployer deliveryv1alpha1.DeployerObject) {
 	for _, obj := range objs {
 		apiVersion, kind := obj.GetObjectKind().GroupVersionKind().ToAPIVersionAndKind()
 		ref := deliveryv1alpha1.DeployedObjectReference{
@@ -1073,12 +1139,13 @@ func updateDeployedObjectStatusReferences[T client.Object](objs []T, deployer *d
 			Namespace:  obj.GetNamespace(),
 			UID:        obj.GetUID(),
 		}
-		if idx := slices.IndexFunc(deployer.Status.Deployed, func(reference deliveryv1alpha1.DeployedObjectReference) bool {
+		st := deployer.GetDeployerStatus()
+		if idx := slices.IndexFunc(st.Deployed, func(reference deliveryv1alpha1.DeployedObjectReference) bool {
 			return reference.UID == obj.GetUID()
 		}); idx < 0 {
-			deployer.Status.Deployed = append(deployer.Status.Deployed, ref)
+			st.Deployed = append(st.Deployed, ref)
 		} else {
-			deployer.Status.Deployed[idx] = ref
+			st.Deployed[idx] = ref
 		}
 	}
 }

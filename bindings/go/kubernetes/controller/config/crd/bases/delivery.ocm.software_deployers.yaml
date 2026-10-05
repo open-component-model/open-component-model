@@ -24,10 +24,16 @@ spec:
       jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
+    deprecated: true
+    deprecationWarning: Deployer applies with the controller's cluster-wide permissions
+      and is discouraged. Use the NamespacedDeployer, which applies with the permissions
+      of a service account.
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: Deployer is the Schema for the deployers API.
+        description: |-
+          Deployer is the Schema for the deployers API.
+          It applies with the controller's own permissions and is discouraged in favor of NamespacedDeployer.
         properties:
           apiVersion:
             description: |-

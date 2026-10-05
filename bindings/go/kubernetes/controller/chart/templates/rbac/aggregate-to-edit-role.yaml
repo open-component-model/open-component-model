@@ -17,6 +17,7 @@ rules:
         - components
         - deployers
         - discoveries
+        - namespaceddeployers
         - replications
         - repositories
         - resources
