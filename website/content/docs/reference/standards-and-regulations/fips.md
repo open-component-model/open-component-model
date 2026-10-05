@@ -125,7 +125,7 @@ You control the runtime mode with the `GODEBUG` environment variable.
 | `GODEBUG` | Behavior |
 | --- | --- |
 | `fips140=on` (default) | FIPS mode is active. Approved algorithms run in their FIPS-compliant form, and non-approved algorithms such as MD5 and SHA-1 stay available. |
-| `fips140=only` | Like `on`, but non-approved algorithms return an error or panic. OCM also rejects a `cosign` or `gpg` that runs outside the FIPS boundary, and resource or reference digests other than SHA-256/SHA-512 (see [Digest Algorithms](#digest-algorithms)). Go documents this as a best-effort mode for testing and assessment, not for production. |
+| `fips140=only` | Like `on`, but non-approved algorithms return an error or panic. OCM also rejects a `cosign` or `gpg` that runs outside the FIPS boundary, Helm chart provenance verification (see [Known Limitations](#known-limitations)), and resource or reference digests other than SHA-256/SHA-512 (see [Digest Algorithms](#digest-algorithms)). Go documents this as a best-effort mode for testing and assessment, not for production. |
 | `fips140=off` | FIPS mode is disabled. |
 
 OCM runs in `fips140=on` mode by default, which allows non-approved algorithms
@@ -159,10 +159,11 @@ approved algorithms only:
   records and signs is always SHA-256.
 
 Test packages named `fips140` (`bindings/go/cli/cmd/fips140`,
-`bindings/go/git/fips140`, `bindings/go/wget/fips140`) set
-`//go:debug fips140=only` and run in every unit test run, so CI exercises
-signing, verification, Git downloads and legacy checksum verification in
-strict mode. All other tests run in the default `fips140=on` mode.
+`bindings/go/git/fips140`, `bindings/go/helm/fips140`,
+`bindings/go/wget/fips140`) set `//go:debug fips140=only` and run in every
+unit test run, so CI exercises signing, verification, Git downloads, the Helm
+provenance rejection and legacy checksum verification in strict mode. All
+other tests run in the default `fips140=on` mode.
 
 ### Effects of FIPS Mode
 
@@ -306,12 +307,22 @@ operating system with FIPS-validated cryptographic modules, see [GPG](#gpg).
 
 Some dependencies bring cryptography that does not run through the Go
 Cryptographic Module. `github.com/ProtonMail/go-crypto` (OpenPGP) is imported by
-go-git (commit and tag signature verification) and Helm (chart provenance). OCM
-does not call either verification path; it only passes Helm provenance files
-through. In OCM's own code, `golangci-lint` (`depguard`) rejects imports of
-non-approved algorithms (DES, RC4, DSA, secp256k1, `golang.org/x/crypto`
-outside reviewed exceptions, ProtonMail OpenPGP) and limits MD5 and SHA-1 to
-wget checksum verification.
+go-git (commit and tag signature verification) and Helm (chart provenance).
+OCM does not call go-git's verification. It does call Helm's provenance
+verification when downloading a chart from a Helm repository with Helm
+credentials that include a `keyring`:
+
+| Mode | Helm chart download with a `keyring` |
+| --- | --- |
+| `fips140=on` (default) | Provenance verified with OpenPGP outside the module; logged at debug level |
+| `fips140=only` | Rejected: `Helm chart provenance verification is not available`; remove the `keyring` to download without verification |
+| `fips140=off` | Provenance verified |
+
+Without a `keyring`, OCM only passes Helm provenance files through. In OCM's
+own code, `golangci-lint` (`depguard`) rejects imports of non-approved
+algorithms (DES, RC4, DSA, secp256k1, `golang.org/x/crypto` outside reviewed
+exceptions, ProtonMail OpenPGP) and limits MD5 and SHA-1 to wget checksum
+verification.
 
 ### Sigstore and cosign
 
@@ -355,7 +366,7 @@ The upstream cosign releases are not FIPS builds.
 | Mode | `cosign` that is not a FIPS build | No `cosign` on `PATH` |
 | --- | --- | --- |
 | `fips140=on` (default) | Used; logged at debug level | Downloaded; logged at debug level |
-| `fips140=only` | Rejected: `Sigstore signing requires a cosign built against a frozen Go Cryptographic Module` | Rejected: `downloading cosign is disabled`; a previously downloaded one is not used either |
+| `fips140=only` | Rejected: `Sigstore signing and verification require a cosign built against a frozen Go Cryptographic Module` | Rejected: `downloading cosign is disabled`; a previously downloaded one is not used either |
 | `fips140=off` | Used | Downloaded |
 
 To keep Sigstore signing inside the FIPS boundary, put a FIPS build of `cosign`
@@ -432,7 +443,7 @@ missing `gpgconf` also fails the check.
 | Mode | `gpg` without a FIPS-mode `libgcrypt` |
 | --- | --- |
 | `fips140=on` (default) | Used; logged at debug level |
-| `fips140=only` | Rejected: `GPG signing requires a gpg whose libgcrypt runs in FIPS mode` |
+| `fips140=only` | Rejected: `GPG signing and verification require a gpg whose libgcrypt runs in FIPS mode` |
 | `fips140=off` | Used |
 
 GnuPG does its cryptography in `libgcrypt`. For an approved-algorithms-only

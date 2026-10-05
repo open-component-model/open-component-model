@@ -293,7 +293,7 @@ Without `--signature`, **every** signature on the descriptor is verified. Config
 
 **Fix:** Install GnuPG 2.2 or later (`brew install gnupg`, `sudo apt-get install gnupg`, `sudo dnf install gnupg2`) and make sure `gpg` is on `PATH`.
 
-### Symptom: `with GODEBUG=fips140=only, GPG signing requires a gpg whose libgcrypt runs in FIPS mode`
+### Symptom: `with GODEBUG=fips140=only, GPG signing and verification require a gpg whose libgcrypt runs in FIPS mode`
 
 **Cause:** OCM runs with `GODEBUG=fips140=only`, and the `libgcrypt` of your `gpg` does not run in FIPS mode (`gpgconf --show-versions` reports `fips-mode:n`), or `gpgconf` is not on `PATH`.
 

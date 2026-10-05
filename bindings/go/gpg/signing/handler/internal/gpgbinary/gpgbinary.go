@@ -60,8 +60,8 @@ var (
 	// so that it is never ambiguous which key signs or verifies.
 	ErrKeyMaterialWithKeyring = errors.New("keySource keyring takes keys from the GnuPG keyring; remove the key material from the GPG credentials")
 	// ErrGPGNotInFIPSMode is returned with GODEBUG=fips140=only when the libgcrypt of gpg does not run in FIPS mode,
-	// because GPG signing would then leave the FIPS boundary.
-	ErrGPGNotInFIPSMode = errors.New("with GODEBUG=fips140=only, GPG signing requires a gpg whose libgcrypt runs in FIPS mode " +
+	// because GPG signing and verification would then leave the FIPS boundary.
+	ErrGPGNotInFIPSMode = errors.New("with GODEBUG=fips140=only, GPG signing and verification require a gpg whose libgcrypt runs in FIPS mode " +
 		"(gpgconf --show-versions reports fips-mode:y; enable it with /etc/gcrypt/fips_enabled or a FIPS-mode kernel)")
 )
 

@@ -85,8 +85,8 @@ var ErrCosignDownloadInFIPSMode = errors.New("cosign binary not found on PATH; w
 	"because the upstream release is not a FIPS build: install a cosign built with GOFIPS140 and ensure it is on PATH")
 
 // ErrCosignNotFIPSBuild is returned with GODEBUG=fips140=only when the cosign on PATH is not built against a
-// frozen Go Cryptographic Module, because Sigstore signing would then leave the FIPS boundary.
-var ErrCosignNotFIPSBuild = errors.New("with GODEBUG=fips140=only, Sigstore signing requires a cosign built against a frozen " +
+// frozen Go Cryptographic Module, because Sigstore signing and verification would then leave the FIPS boundary.
+var ErrCosignNotFIPSBuild = errors.New("with GODEBUG=fips140=only, Sigstore signing and verification require a cosign built against a frozen " +
 	"Go Cryptographic Module (GOFIPS140=v<version>, see go version -m)")
 
 // resolveBinary locates cosign. In FIPS 140-3 mode it checks that cosign is a FIPS build: with fips140=only a
