@@ -30,7 +30,8 @@ repository, so that `npm install` finds it.
 
 ### Configure the uploader
 
-Create `config.yaml` with the credentials and one uploader rule for the `my-package` resource:
+Add the credentials and one uploader rule for the `my-package` resource to your
+`.ocmconfig` in the working directory (merged with `$HOME/.ocmconfig`):
 
 ```yaml
 type: generic.config.ocm.software/v1
@@ -46,9 +47,7 @@ configurations:
             username: <USERNAME>
             password: <PASSWORD_OR_USER_TOKEN>
   - type: nexus.uploader.transfer.config.ocm.software/v1alpha1
-    match:
-      accessType: localBlob
-      name: my-package
+    match: resource.access.isType("LocalBlob") && resource.name == "my-package"
     url: https://nexus.example.com
     repository: npm-hosted
 ```
@@ -56,7 +55,7 @@ configurations:
 ### Run the transfer
 
 ```bash
-ocm transfer cv --config config.yaml ctf::./src//ocm.software/demo:1.0.0 ctf::./target
+ocm transfer cv ctf::./src//ocm.software/demo:1.0.0 ctf::./target
 ```
 
 Nexus does not accept plain uploads of package tarballs, so the uploader uses the

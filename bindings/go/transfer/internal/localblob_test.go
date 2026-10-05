@@ -17,7 +17,7 @@ func TestUploadAsLocalResource_OCI(t *testing.T) {
 		BaseUrl: "ghcr.io",
 	}
 
-	transform, err := uploadAsLocalResource(toSpec, "comp", "1.0.0", "addRes1", "getRes1", staticReferenceName("my/image:v1"), "comp@1.0.0 [Add my-image]")
+	transform, err := uploadAsLocalResource(toSpec, "comp", "1.0.0", "addRes1", "getRes1", "my/image:v1", "comp@1.0.0 [Add my-image]")
 	require.NoError(t, err)
 	assert.Equal(t, ociv1alpha1.OCIAddLocalResourceV1alpha1, transform.Type)
 	assert.Equal(t, "addRes1", transform.ID)

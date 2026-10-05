@@ -4,11 +4,11 @@
   "$id": "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec/schemas/NexusUploaderConfig.schema.json",
   "title": "NexusUploaderConfig",
   "type": "object",
-  "description": "NexusUploaderConfig uploads matching resources into a hosted repository of a Sonatype Nexus\nRepository 3 server. What is uploaded and how the resource is re-described depends on the\nformat of the repository, which is read from the Nexus repository settings\n(GET \u003curl\u003e/service/rest/v1/repositories/\u003crepository\u003e):\n\n- helm: the packaged Helm chart located in the resource content is uploaded to\n\u003curl\u003e/repository/\u003crepository\u003e/\u003cresource\u003e-\u003cresource version\u003e.tgz. Nexus stores it under the\npath it derives from the chart (\u003cname\u003e-\u003cversion\u003e.tgz) and the resource is published with a\nHelm/v1 access (helmRepository \u003curl\u003e/repository/\u003crepository\u003e). Path is not supported.\n- raw: the resource content is uploaded as is (OCI artifacts as an OCI layout tar) to\n\u003curl\u003e/repository/\u003crepository\u003e/\u003cpath\u003e and the resource is published with a Wget/v1 access\non it. Path defaults to \u003ccomponent\u003e/\u003ccomponent version\u003e/\u003cresource\u003e-\u003cresource version\u003e.\nNexus records no owner of a file, so a file already stored at the path is never\noverwritten: it is reused when it has the same content, otherwise the transfer fails.\n- maven2: the resource content is uploaded as one file of a Maven component to Path, which\nmust follow the Maven repository layout\n\u003cgroup path\u003e/\u003cartifactId\u003e/\u003cversion\u003e/\u003cartifactId\u003e-\u003cversion\u003e[-\u003cclassifier\u003e].\u003cextension\u003e. The\ncoordinates are taken from the path. Release versions go through the components API,\nwhich keeps maven-metadata.xml up to date; snapshot versions, which the components API\nrefuses, are uploaded with a plain PUT and are not added to maven-metadata.xml. Upload the\nPOM as a resource of its own so Maven can resolve the component. The resource is\npublished with a Wget/v1 access on the stored file, and like raw files, a stored file is\nnever overwritten.\n- npm: the resource content, an npm package tarball, is uploaded through the components API.\nNexus reads name and version from its package.json and stores it under\n\u003cname\u003e/-/\u003cname\u003e-\u003cversion\u003e.tgz; the resource is published with a Wget/v1 access on the\nstored tarball. A tarball the repository already stores is reused. Path is not supported.\n\nUpload credentials are resolved for the HelmChartRepository consumer identity of\n\u003curl\u003e/repository/\u003crepository\u003e, falling back to its Wget consumer identity. They are also used\nto read the repository settings.\n\ntype: generic.config.ocm.software/v1\nconfigurations:\n- type: nexus.uploader.transfer.config.ocm.software/v1alpha1\nmatch:\naccessType: Helm/v1\nurl: https://nexus.example.com\nrepository: helm-hosted",
+  "description": "NexusUploaderConfig uploads matching resources into a hosted repository of a Sonatype Nexus\nRepository 3 server. What is uploaded and how the resource is re-described depends on the\nformat of the repository, which is read from the Nexus repository settings\n(GET \u003curl\u003e/service/rest/v1/repositories/\u003crepository\u003e):\n\n- helm: the packaged Helm chart located in the resource content is uploaded to\n\u003curl\u003e/repository/\u003crepository\u003e/\u003cresource\u003e-\u003cresource version\u003e.tgz. Nexus stores it under the\npath it derives from the chart (\u003cname\u003e-\u003cversion\u003e.tgz) and the resource is published with a\nHelm/v1 access (helmRepository \u003curl\u003e/repository/\u003crepository\u003e). Path is not supported.\n- raw: the resource content is uploaded as is (OCI artifacts as an OCI layout tar) to\n\u003curl\u003e/repository/\u003crepository\u003e/\u003cpath\u003e and the resource is published with a Wget/v1 access\non it. Path defaults to \u003ccomponent\u003e/\u003ccomponent version\u003e/\u003cresource\u003e-\u003cresource version\u003e.\nNexus records no owner of a file, so a file already stored at the path is never\noverwritten: it is reused when it has the same content, otherwise the transfer fails.\n- maven2: the resource content is uploaded as one file of a Maven component to Path, which\nmust follow the Maven repository layout\n\u003cgroup path\u003e/\u003cartifactId\u003e/\u003cversion\u003e/\u003cartifactId\u003e-\u003cversion\u003e[-\u003cclassifier\u003e].\u003cextension\u003e. The\ncoordinates are taken from the path. Release versions go through the components API,\nwhich keeps maven-metadata.xml up to date; snapshot versions, which the components API\nrefuses, are uploaded with a plain PUT and are not added to maven-metadata.xml. Upload the\nPOM as a resource of its own so Maven can resolve the component. The resource is\npublished with a Wget/v1 access on the stored file, and like raw files, a stored file is\nnever overwritten.\n- npm: the resource content, an npm package tarball, is uploaded through the components API.\nNexus reads name and version from its package.json and stores it under\n\u003cname\u003e/-/\u003cname\u003e-\u003cversion\u003e.tgz; the resource is published with a Wget/v1 access on the\nstored tarball. A tarball the repository already stores is reused. Path is not supported.\n\nUpload credentials are resolved for the HelmChartRepository consumer identity of\n\u003curl\u003e/repository/\u003crepository\u003e, falling back to its Wget consumer identity. They are also used\nto read the repository settings.\n\ntype: generic.config.ocm.software/v1\nconfigurations:\n- type: nexus.uploader.transfer.config.ocm.software/v1alpha1\nmatch: resource.access.isType(\"Helm\")\nurl: https://nexus.example.com\nrepository: helm-hosted",
   "properties": {
     "match": {
-      "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.transfer.v1alpha1.spec.UploaderMatch",
-      "description": "MatchSpec selects the resources this uploader applies to (exposed as `match`)."
+      "type": "string",
+      "description": "Match is a CEL boolean expression selecting the resources this uploader uploads, e.g.\n`resource.access.isType(\"Helm\")`. It sees `resource` and `target`; test access types\nwith resource.access.isType. Required: repository uploaders have no default."
     },
     "path": {
       "type": "string",
@@ -43,16 +43,6 @@
   ],
   "additionalProperties": false,
   "$defs": {
-    "ocm.software.open-component-model.bindings.go.runtime.Identity": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "$comment": "generated by the ocm schema generation tool",
-      "title": "Identity",
-      "type": "object",
-      "description": "Identity is a map that represents a set of attributes that uniquely identity\narbitrary resources. It is used in various places in Open Component Model to uniquely\nidentity objects such as resources or components.",
-      "additionalProperties": {
-        "type": "string"
-      }
-    },
     "ocm.software.open-component-model.bindings.go.runtime.Type": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "$comment": "this core runtime schema was automatically included by the ocm schema generation tool to allow introspection",
@@ -60,35 +50,6 @@
       "type": "string",
       "description": "Type represents a structured type with an optional version and a name. It is used to identify the type of an object in a versioned API.",
       "pattern": "^([a-zA-Z0-9][a-zA-Z0-9.]*)(?:/(v[0-9]+(?:alpha[0-9]+|beta[0-9]+)?))?$"
-    },
-    "ocm.software.open-component-model.bindings.go.transfer.v1alpha1.spec.UploaderMatch": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "$comment": "generated by the ocm schema generation tool",
-      "title": "UploaderMatch",
-      "type": "object",
-      "description": "UploaderMatch selects resources by their access type and, optionally, their\nidentity. A resource matches when its access type matches AccessType and every\nspecified identity constraint (Name, Version, ExtraIdentity) also matches. This lets\nmultiple uploaders target the same access type while routing different resources\nto different upload targets; the first matching uploader (in declaration order)\nwins, so more specific rules should be declared before broader ones.",
-      "properties": {
-        "accessType": {
-          "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",
-          "description": "AccessType is the resource access type this uploader matches (e.g. Wget/v1)."
-        },
-        "extraIdentity": {
-          "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Identity",
-          "description": "ExtraIdentity optionally restricts the match to resources whose identity\ncontains all of these key/value pairs. When empty, no extra-identity\nconstraint is applied."
-        },
-        "name": {
-          "type": "string",
-          "description": "Name optionally restricts the match to resources with this exact name.\nWhen empty, resources of any name match."
-        },
-        "version": {
-          "type": "string",
-          "description": "Version optionally restricts the match to resources with this exact\nversion. When empty, resources of any version match."
-        }
-      },
-      "required": [
-        "accessType"
-      ],
-      "additionalProperties": false
     }
   }
 }

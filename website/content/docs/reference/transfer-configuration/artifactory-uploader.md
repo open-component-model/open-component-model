@@ -1,7 +1,7 @@
 ---
 title: "JFrog Artifactory Uploader"
 description: "Reference for artifactory.uploader.transfer.config.ocm.software/v1alpha1: upload resources into JFrog Artifactory helm, generic, maven and npm repositories."
-weight: 3
+weight: 6
 toc: true
 ---
 
@@ -10,6 +10,11 @@ the way the repository's package type expects. For step-by-step guides per
 repository type, see
 [JFrog Artifactory]({{< relref "docs/how-to/vendor-specific-apis/jfrog-artifactory/_index.md" >}}).
 
+{{< callout context="note" >}}
+The OCM Kubernetes controller ignores Artifactory uploader entries because they
+send content to configured URLs from the controller pod.
+{{< /callout >}}
+
 ## Schema
 
 {{< schema-renderer url="/schemas/bindings/go/transfer/ArtifactoryUploaderConfig.schema.json" >}}
@@ -17,8 +22,8 @@ repository type, see
 ## Fields
 
 | Field        | Type              | Description                                                                                                                                                                                                                                                            |
-|--------------|-------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `match`      | `UploaderMatch`   | Selects resources this uploader applies to. `match.accessType` is required.                                                                                                                                                                                            |
+| ------------ | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `match`      | CEL expression    | A CEL boolean expression selecting the resources this uploader handles. **Required:** the Artifactory uploader has no default match.                                                                                                                                   |
 | `url`        | string (required) | Server base URL **without** the `/artifactory` segment, e.g. `https://myorg.jfrog.io`.                                                                                                                                                                                 |
 | `repository` | string (required) | Repository key, e.g. `helm-local`.                                                                                                                                                                                                                                     |
 | `path`       | string            | Content location relative to the repository root. Literal or `${…}` CEL expression (see [CEL Expressions]({{< relref "docs/reference/transfer-configuration/cel-expressions.md" >}})). Must be relative, without `.`/`..` segments; helm and npm need a `.tgz` suffix. |
@@ -29,7 +34,7 @@ The uploader reads the package type from
 `GET <url>/artifactory/api/repositories/<repository>`:
 
 | Type      | Uploaded content                                                                                                                                        | Published access                                                                                                          | `path`                                                  | Guide                                                                                                            |
-|-----------|---------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------|------------------------------------------------------------------------------------------------------------------|
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
 | `helm`    | The packaged chart found in the content (`.tgz`, a tar holding one, or a Helm chart OCI artifact). Non-chart content is deleted and fails the transfer. | `Helm/v1` with `helmRepository: <url>/artifactory/api/helm/<repository>` and `helmChart: <name>:<version>` from the chart | Optional, must end in `.tgz`                            | [Upload Helm Charts]({{< relref "docs/how-to/vendor-specific-apis/jfrog-artifactory/helm-charts.md" >}})         |
 | `generic` | The content as is; OCI artifacts as an OCI layout tar                                                                                                   | `Wget/v1` on the stored file                                                                                              | Optional                                                | [Upload Generic Files]({{< relref "docs/how-to/vendor-specific-apis/jfrog-artifactory/generic-files.md" >}})     |
 | `maven`   | As `generic`                                                                                                                                            | `Wget/v1` on the stored file (the timestamped file for `-SNAPSHOT` versions)                                              | Optional; Maven only resolves paths in the Maven layout | [Upload Maven Artifacts]({{< relref "docs/how-to/vendor-specific-apis/jfrog-artifactory/maven-artifacts.md" >}}) |
@@ -101,8 +106,7 @@ Helm chart upload to Artifactory:
 type: generic.config.ocm.software/v1
 configurations:
   - type: artifactory.uploader.transfer.config.ocm.software/v1alpha1
-    match:
-      accessType: Helm/v1
+    match: resource.access.isType("Helm")
     url: https://myorg.jfrog.io
     repository: helm-local
 ```

@@ -275,31 +275,28 @@ func resolveHTTPChartURL(ctx context.Context, helmRepo, requestedVersion, tmpDir
 		return helmRepo, nil
 	}
 
-	ref, err := looseref.ParseReference(helmRepo)
+	// Split the reference as a URL, not with the OCI reference grammar: a chart version is
+	// SemVer and may carry build metadata ("1.0.0+abc"), which is not a valid OCI tag.
+	u, err := url.Parse(helmRepo)
 	if err != nil {
 		return helmRepo, nil
 	}
 
-	// Tag holds the version; Repository holds "<host>/<repoPath>/<chartName>".
-	// If either is absent this isn't a ChartReference()-style URL.
-	if ref.Tag == "" || ref.Repository == "" {
+	// The last path segment is "<chartName>:<version>"; neither part can contain a colon.
+	// Without both parts this isn't a ChartReference()-style URL.
+	repoPath, lastSegment := path.Split(u.Path)
+	chartName, chartVersion, found := strings.Cut(lastSegment, ":")
+	if !found || chartName == "" || chartVersion == "" {
 		return helmRepo, nil
 	}
-
-	// chartName is the last path segment of the repository, repoPath is everything before it.
-	chartName := path.Base(ref.Repository)
-	repoPath := path.Dir(ref.Repository)
 	base := &url.URL{
-		Scheme: ref.Scheme,
-		Host:   ref.Registry,
-	}
-	if repoPath != "." {
-		base.Path = "/" + repoPath
+		Scheme: u.Scheme,
+		Host:   u.Host,
+		Path:   strings.TrimSuffix(repoPath, "/"),
 	}
 	repoBase := base.String()
 	entry.URL = repoBase
 
-	chartVersion := ref.Tag
 	if requestedVersion != "" {
 		chartVersion = requestedVersion
 	}
