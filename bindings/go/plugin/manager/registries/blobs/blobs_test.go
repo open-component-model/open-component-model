@@ -19,7 +19,7 @@ func TestCreateBlobDataLocalFileSuccess(t *testing.T) {
 	testFile := filepath.Join(tempDir, "test.txt")
 	testData := []byte("test data")
 
-	err := os.WriteFile(testFile, testData, 0644)
+	err := os.WriteFile(testFile, testData, 0o644)
 	r.NoError(err)
 
 	location := types.Location{
@@ -89,7 +89,7 @@ func TestCreateBlobData_WithMediaType(t *testing.T) {
 	tmpDir := t.TempDir()
 	tmpFile := filepath.Join(tmpDir, "test.txt")
 	content := []byte("test content")
-	err := os.WriteFile(tmpFile, content, 0644)
+	err := os.WriteFile(tmpFile, content, 0o644)
 	require.NoError(t, err)
 
 	// Test with MediaType set
@@ -117,7 +117,7 @@ func TestCreateBlobData_WithoutMediaType(t *testing.T) {
 	tmpDir := t.TempDir()
 	tmpFile := filepath.Join(tmpDir, "test.txt")
 	content := []byte("test content")
-	err := os.WriteFile(tmpFile, content, 0644)
+	err := os.WriteFile(tmpFile, content, 0o644)
 	require.NoError(t, err)
 
 	// Test without MediaType set

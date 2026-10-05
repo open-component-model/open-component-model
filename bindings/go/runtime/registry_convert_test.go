@@ -158,8 +158,10 @@ func TestConvert_Errors(t *testing.T) {
 
 	t.Run("unregistered type (Raw → Typed)", func(t *testing.T) {
 		scheme := runtime.NewScheme()
-		r := runtime.Raw{Type: runtime.NewVersionedType("TestType", "v1"),
-			Data: []byte(`{"type": "TestType/v1", "foo": "bar"}`)}
+		r := runtime.Raw{
+			Type: runtime.NewVersionedType("TestType", "v1"),
+			Data: []byte(`{"type": "TestType/v1", "foo": "bar"}`),
+		}
 
 		err := scheme.Convert(&r, &TestType{})
 		assert.Error(t, err)

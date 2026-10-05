@@ -81,7 +81,6 @@ func TestFromHeaders_IgnoresMalformedValues(t *testing.T) {
 	r.Empty(FromHeaders(h, nil))
 }
 
-
 func TestVerify(t *testing.T) {
 	r := require.New(t)
 	computed := helloComputed()
@@ -120,7 +119,6 @@ func TestResolve_HeaderMismatchFails(t *testing.T) {
 	r.Error(err)
 	r.Contains(err.Error(), "checksum mismatch")
 }
-
 
 func TestResolve_OnMissingFail(t *testing.T) {
 	r := require.New(t)

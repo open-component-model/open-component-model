@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"golang.org/x/tools/go/packages"
+
 	"ocm.software/open-component-model/bindings/go/generator/jsonschemagen"
 	"ocm.software/open-component-model/bindings/go/generator/universe"
 )

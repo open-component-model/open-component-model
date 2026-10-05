@@ -6,13 +6,14 @@ import (
 	"strings"
 	"testing"
 
+	. "ocm.software/open-component-model/bindings/go/blob/inmemory/cache"
+
 	"github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 
 	"ocm.software/open-component-model/bindings/go/blob"
-	. "ocm.software/open-component-model/bindings/go/blob/inmemory/cache"
+	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 )
 
 type mockBlob struct {

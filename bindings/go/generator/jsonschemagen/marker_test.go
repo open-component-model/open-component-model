@@ -4,9 +4,9 @@ import (
 	"go/ast"
 	"testing"
 
-	"github.com/stretchr/testify/require"
-
 	. "ocm.software/open-component-model/bindings/go/generator/jsonschemagen"
+
+	"github.com/stretchr/testify/require"
 )
 
 func cg(lines ...string) *ast.CommentGroup {

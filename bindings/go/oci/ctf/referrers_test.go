@@ -2,11 +2,12 @@ package ctf
 
 import (
 	"bytes"
-	_ "crypto/sha512" // for digest.SHA512 in TestBuildReferrersTag
 	"encoding/json"
 	"strconv"
 	"sync"
 	"testing"
+
+	_ "crypto/sha512" // for digest.SHA512 in TestBuildReferrersTag
 
 	"github.com/opencontainers/go-digest"
 	"github.com/opencontainers/image-spec/specs-go"

@@ -363,7 +363,7 @@ func TestLockFileProcessValidation(t *testing.T) {
 		r.NoError(err)
 		socketFile.Close()
 
-		err = os.WriteFile(lockFile, []byte(fakePID), 0644)
+		err = os.WriteFile(lockFile, []byte(fakePID), 0o644)
 		r.NoError(err)
 
 		_, err = os.Stat(location)

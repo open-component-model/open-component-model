@@ -2,10 +2,11 @@ package v4alpha1_test
 
 import (
 	"embed"
-	_ "embed"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	_ "embed"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

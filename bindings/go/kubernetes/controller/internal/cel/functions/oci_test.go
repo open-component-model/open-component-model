@@ -39,8 +39,8 @@ func TestLocalBlobResolver(t *testing.T) {
 		err       require.ErrorAssertionFunc
 	}{
 		{
-			name:      "localBlob builds reference from repo spec and component info",
-			input:     typedToMap(t, &v2.LocalBlob{
+			name: "localBlob builds reference from repo spec and component info",
+			input: typedToMap(t, &v2.LocalBlob{
 				Type:           runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
 				LocalReference: "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
 				MediaType:      "application/vnd.oci.image.manifest.v1+json",
@@ -56,8 +56,8 @@ func TestLocalBlobResolver(t *testing.T) {
 			},
 		},
 		{
-			name:      "localBlob builds reference without subPath",
-			input:     typedToMap(t, &v2.LocalBlob{
+			name: "localBlob builds reference without subPath",
+			input: typedToMap(t, &v2.LocalBlob{
 				Type:           runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
 				LocalReference: "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
 				MediaType:      "application/vnd.oci.image.manifest.v1+json",
@@ -73,8 +73,8 @@ func TestLocalBlobResolver(t *testing.T) {
 			},
 		},
 		{
-			name:      "localBlob with nil component returns error",
-			input:     typedToMap(t, &v2.LocalBlob{
+			name: "localBlob with nil component returns error",
+			input: typedToMap(t, &v2.LocalBlob{
 				Type:           runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
 				LocalReference: "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
 				MediaType:      "application/vnd.oci.image.manifest.v1+json",

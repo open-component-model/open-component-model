@@ -158,7 +158,7 @@ func TestGetBlobFromPath_PatternSemantics(t *testing.T) {
 			createTestFile(t, tmpDir, "config/my-config.json", `{"key": "value"}`)
 			createTestFile(t, tmpDir, "README.md", "# Project")
 			createTestFile(t, tmpDir, "temp.tmp", "temporary")
-			require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "test"), 0755))
+			require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "test"), 0o755))
 			createTestFile(t, tmpDir, "test/file.txt", "test content")
 
 			// Test with patterns
@@ -205,7 +205,7 @@ func TestGetBlobFromPath_PreserveDirectory(t *testing.T) {
 	parent := t.TempDir()
 	targetDirName := "preserve_me"
 	targetDir := filepath.Join(parent, targetDirName)
-	r.NoError(os.Mkdir(targetDir, 0755))
+	r.NoError(os.Mkdir(targetDir, 0o755))
 	createTestFile(t, targetDir, "file.txt", "content")
 
 	// Test: preserve directory structure
@@ -348,7 +348,7 @@ func TestGetBlobFromPath_ReproducibleBuilds(t *testing.T) {
 	// Setup: create test file
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "test.txt")
-	r.NoError(os.WriteFile(testFile, []byte("test content"), 0644))
+	r.NoError(os.WriteFile(testFile, []byte("test content"), 0o644))
 
 	// Test: create blob with reproducible option
 	opt := filesystem.DirOptions{Reproducible: true}
@@ -401,11 +401,11 @@ func TestGetBlobFromPath_ErrorCases(t *testing.T) {
 				base := t.TempDir()
 				allowed := filepath.Join(base, "allowed")
 				outside := filepath.Join(base, "outside")
-				require.NoError(t, os.MkdirAll(allowed, 0755))
-				require.NoError(t, os.MkdirAll(outside, 0755))
+				require.NoError(t, os.MkdirAll(allowed, 0o755))
+				require.NoError(t, os.MkdirAll(outside, 0o755))
 
 				testFile := filepath.Join(outside, "test.txt")
-				require.NoError(t, os.WriteFile(testFile, []byte("content"), 0644))
+				require.NoError(t, os.WriteFile(testFile, []byte("content"), 0o644))
 
 				return testFile, filesystem.DirOptions{WorkingDir: allowed}
 			},
@@ -440,7 +440,7 @@ func TestGetBlobFromPath_SymlinkRejection(t *testing.T) {
 	targetFile := filepath.Join(tmpDir, "target.txt")
 	symlinkFile := filepath.Join(tmpDir, "symlink.txt")
 
-	r.NoError(os.WriteFile(targetFile, []byte("target content"), 0644))
+	r.NoError(os.WriteFile(targetFile, []byte("target content"), 0o644))
 
 	if err := os.Symlink("target.txt", symlinkFile); err != nil {
 		t.Skipf("symlink creation failed (may not be supported on this system): %v", err)
@@ -463,7 +463,7 @@ func TestGetBlobFromPath_IncludeDirectoryOnly(t *testing.T) {
 	// Setup: create directory with an empty sub directory
 	tmpDir := t.TempDir()
 	targetDir := filepath.Join(tmpDir, "sub", "dir")
-	r.NoError(os.MkdirAll(targetDir, 0755))
+	r.NoError(os.MkdirAll(targetDir, 0o755))
 
 	// Only include the directory itself
 	opt := filesystem.DirOptions{IncludePatterns: []string{"sub/dir"}, Reproducible: true}
@@ -536,8 +536,8 @@ func createTestFile(t *testing.T, basePath, relativePath, content string) string
 	fullPath := filepath.Join(basePath, relativePath)
 	dir := filepath.Dir(fullPath)
 
-	require.NoError(t, os.MkdirAll(dir, 0755))
-	require.NoError(t, os.WriteFile(fullPath, []byte(content), 0644))
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	require.NoError(t, os.WriteFile(fullPath, []byte(content), 0o644))
 
 	return fullPath
 }
@@ -597,7 +597,7 @@ func TestGetBlobFromPath_ArchiveLayout(t *testing.T) {
 	r := require.New(t)
 
 	tmpDir := t.TempDir()
-	r.NoError(os.MkdirAll(filepath.Join(tmpDir, "sub", "nested"), 0755))
+	r.NoError(os.MkdirAll(filepath.Join(tmpDir, "sub", "nested"), 0o755))
 	createTestFile(t, tmpDir, "root.txt", "root")
 	createTestFile(t, filepath.Join(tmpDir, "sub"), "file.txt", "content")
 
@@ -627,7 +627,7 @@ func TestGetBlobFromPath_PreserveSymlinks(t *testing.T) {
 
 	tmpDir := t.TempDir()
 	createTestFile(t, tmpDir, "target.txt", "target content")
-	r.NoError(os.MkdirAll(filepath.Join(tmpDir, "realdir"), 0755))
+	r.NoError(os.MkdirAll(filepath.Join(tmpDir, "realdir"), 0o755))
 	createTestFile(t, filepath.Join(tmpDir, "realdir"), "inner.txt", "inner")
 
 	links := map[string]string{
