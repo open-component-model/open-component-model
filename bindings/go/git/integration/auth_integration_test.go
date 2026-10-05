@@ -283,6 +283,7 @@ func Test_Integration_GitSSHAuthentication(t *testing.T) {
 		listener, err := net.Listen("unix", filepath.Join(socketDir, "agent.sock"))
 		r.NoError(err)
 		t.Cleanup(func() { _ = listener.Close() })
+		closed := make(chan struct{}, 8)
 		go func() {
 			for {
 				conn, err := listener.Accept()
@@ -292,6 +293,7 @@ func Test_Integration_GitSSHAuthentication(t *testing.T) {
 				go func() {
 					defer func() { _ = conn.Close() }()
 					_ = agent.ServeAgent(keyring, conn)
+					closed <- struct{}{}
 				}()
 			}
 		}()
@@ -304,5 +306,13 @@ func Test_Integration_GitSSHAuthentication(t *testing.T) {
 		b, err := newRepo(t, hostKey).DownloadResource(t.Context(), res, &credsv1.GitSSHCredentials{Type: runtime.NewVersionedType(credsv1.GitSSHCredentialsType, credsv1.Version), Username: "git"})
 		r.NoError(err)
 		assertArchive(t, b, "second\n")
+		// Each access/input download must release its signing connection.
+		for range 5 {
+			select {
+			case <-closed:
+			case <-time.After(2 * time.Second):
+				t.Fatal("SSH agent connection remained open after successful Download")
+			}
+		}
 	})
 }

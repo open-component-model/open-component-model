@@ -105,21 +105,12 @@ func TestAuthModes(t *testing.T) {
 		})
 	}
 
-	t.Run("default agent", func(t *testing.T) {
-		r := require.New(t)
-		ep, err := endpoint.Parse("git@example.com:repo")
-		r.NoError(err)
-		auth, err := authMethod(ep, nil, Options{})
-		r.NoError(err)
-		r.Nil(auth, "without a host key callback go-git builds the SSH agent auth itself")
-	})
-
 	t.Run("missing agent", func(t *testing.T) {
 		r := require.New(t)
 		t.Setenv("SSH_AUTH_SOCK", "")
 		ep, err := endpoint.Parse("git@example.com:repo")
 		r.NoError(err)
-		auth, err := authMethod(ep, nil, Options{HostKeyCallback: ssh.InsecureIgnoreHostKey()})
+		auth, err := authMethod(ep, nil, Options{})
 		r.ErrorContains(err, "cannot use SSH agent:")
 		r.Nil(auth)
 	})

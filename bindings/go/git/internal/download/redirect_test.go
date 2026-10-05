@@ -68,3 +68,71 @@ func TestDownloadHTTPSRedirectDoesNotLeakCredentials(t *testing.T) {
 		}
 	}
 }
+
+type redirectTestTransport struct {
+	target    string
+	transport http.RoundTripper
+}
+
+func (tr redirectTestTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	clone := req.Clone(req.Context())
+	clone.Host = req.URL.Host
+	clone.URL.Host = tr.target
+	return tr.transport.RoundTrip(clone)
+}
+
+func TestDownloadAuthenticatedRedirectOrigins(t *testing.T) {
+	for _, ref := range []string{"HEAD", "refs/heads/main"} {
+		for _, target := range []struct {
+			name, host, path string
+			sameOrigin       bool
+		}{
+			{"child subdomain", "child.git.example.test", "/repo.git", false},
+			{"other hostname", "other.example.test", "/repo.git", false},
+			{"other port", "git.example.test:8443", "/repo.git", false},
+			{"same origin path", "git.example.test", "/canonical/repo.git", true},
+		} {
+			for _, auth := range []struct {
+				name          string
+				creds         runtime.Typed
+				userinfo      string
+				authenticated bool
+			}{
+				{name: "basic", creds: &credsv1.GitBasicCredentials{Username: "user", Password: "example-token"}, authenticated: true},
+				{name: "bearer", creds: &credsv1.GitBearerCredentials{Token: "example-token"}, authenticated: true},
+				{name: "URL userinfo", userinfo: "user:example-token@", authenticated: true},
+				{name: "anonymous"},
+			} {
+				t.Run(ref+"/"+target.name+"/"+auth.name, func(t *testing.T) {
+					r := require.New(t)
+					var initialAuthenticated, targetReached, targetAuthenticated atomic.Bool
+					secure := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+						authenticated := req.Header.Get("Authorization") != ""
+						if req.Host == "git.example.test" && req.URL.Path == "/repo.git/info/refs" {
+							initialAuthenticated.Store(authenticated)
+							http.Redirect(w, req, "https://"+target.host+target.path+"/info/refs?service=git-upload-pack", http.StatusFound)
+							return
+						}
+						targetReached.Store(true)
+						targetAuthenticated.Store(authenticated)
+						w.WriteHeader(http.StatusNotFound)
+					}))
+					t.Cleanup(secure.Close)
+					httpClient := secure.Client()
+					httpClient.Transport = redirectTestTransport{target: secure.Listener.Addr().String(), transport: httpClient.Transport}
+					_, err := Download(t.Context(), &accessv1.Git{Repository: "https://" + auth.userinfo + "git.example.test/repo.git", Ref: ref}, auth.creds, Options{TempDir: t.TempDir(), HTTPClient: httpClient})
+					r.Error(err)
+					r.Equal(auth.authenticated, initialAuthenticated.Load())
+					if auth.authenticated && !target.sameOrigin {
+						r.ErrorContains(err, "authenticated git redirect changes origin")
+						r.False(targetReached.Load())
+						r.False(targetAuthenticated.Load())
+					} else {
+						r.True(targetReached.Load())
+						r.Equal(auth.authenticated, targetAuthenticated.Load())
+					}
+				})
+			}
+		}
+	}
+}

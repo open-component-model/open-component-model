@@ -67,7 +67,8 @@
 // SSH PrivateKeyPEM or PrivateKey (Password is the passphrase), then HTTPS Token
 // (Bearer), then HTTPS Username/Password (Basic). Without credentials, SSH uses
 // the agent and other transports fetch anonymously. Credentials on plain HTTP
-// and HTTPS-to-HTTP redirects are rejected before transmission.
+// and HTTPS-to-HTTP redirects are rejected before transmission. Authenticated HTTPS
+// redirects must retain the original origin (scheme, hostname, and port).
 //
 // SSH uses the current user's known_hosts unless WithHostKeyCallback overrides it.
 // HTTP(S) uses the client from

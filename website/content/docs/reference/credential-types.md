@@ -429,6 +429,8 @@ These three types work with [`Git`]({{< relref "credential-consumer-identities.m
 consumer lookup; multiple types are not an ordered list of authentication attempts. Include `scheme` in the identity
 to distinguish HTTPS and SSH credentials for the same host. Unknown or mixed fields on explicit credential types
 are rejected. HTTP credentials require HTTPS, and OCM rejects redirects that downgrade HTTPS to HTTP.
+Authenticated HTTPS redirects must retain the original scheme, hostname, and port; path changes within that origin
+are allowed.
 
 Configuring no consumer is valid: HTTPS requests are anonymous, and SSH uses the SSH agent.
 

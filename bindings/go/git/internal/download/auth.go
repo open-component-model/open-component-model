@@ -2,6 +2,7 @@ package download
 
 import (
 	"fmt"
+	"io"
 
 	"github.com/go-git/go-git/v6/plumbing/client"
 	githttp "github.com/go-git/go-git/v6/plumbing/transport/http"
@@ -21,8 +22,8 @@ func authMethod(ep *endpoint.Endpoint, credentials runtime.Typed, opts Options) 
 	}
 	switch creds := credentials.(type) {
 	case nil:
-		if ep.Protocol == "ssh" && opts.HostKeyCallback != nil {
-			// go-git's implicit SSH agent authentication ignores the supplied callback.
+		if ep.Protocol == "ssh" {
+			// Own the agent connection even when no explicit credentials were supplied.
 			return sshAuthMethod(ep, &credsv1.GitSSHCredentials{}, opts)
 		}
 		return nil, nil
@@ -64,12 +65,13 @@ func sshAuthMethod(ep *endpoint.Endpoint, creds *credsv1.GitSSHCredentials, opts
 	}
 
 	if creds.PrivateKeyPEM == "" && creds.PrivateKey == "" {
-		auth, err := gitssh.NewSSHAgentAuth(username)
+		sshAgent, connection, err := openSSHAgent()
 		if err != nil {
 			return nil, fmt.Errorf("cannot use SSH agent: %w", err)
 		}
+		auth := &gitssh.PublicKeysCallback{User: username, Callback: sshAgent.Signers}
 		auth.HostKeyCallback = opts.HostKeyCallback
-		return auth, nil
+		return &sshAgentAuth{PublicKeysCallback: auth, connection: connection}, nil
 	}
 	var auth *gitssh.PublicKeys
 	var err error
@@ -95,4 +97,17 @@ func authOption(auth any) (client.Option, bool) {
 	default:
 		return nil, false
 	}
+}
+
+// sshAgentAuth keeps the signer connection alive until Download finishes using it.
+type sshAgentAuth struct {
+	*gitssh.PublicKeysCallback
+	connection io.Closer
+}
+
+func (a *sshAgentAuth) Close() error {
+	if a.connection == nil {
+		return nil
+	}
+	return a.connection.Close()
 }

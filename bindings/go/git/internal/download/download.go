@@ -67,9 +67,20 @@ func download(ctx context.Context, access *accessv1.Git, creds runtime.Typed, op
 		return nil, fmt.Errorf("cannot authenticate against git repository: %w", err)
 	}
 
+	if closer, ok := auth.(io.Closer); ok {
+		defer func() {
+			if closeErr := closer.Close(); closeErr != nil {
+				slog.WarnContext(ctx, "failed to close SSH agent connection", "err", closeErr)
+			}
+		}()
+	}
+
 	httpClient := opts.HTTPClient
 	if httpClient == nil {
 		httpClient = ocmhttp.New()
+	}
+	if _, authenticated := auth.(client.HTTPAuth); ep.Protocol == "https" && (authenticated || ep.User != "" || ep.Password != "") {
+		httpClient = authenticatedHTTPClient(httpClient)
 	}
 	clientOptions := []client.Option{client.WithHTTPClient(httpClient)}
 	if option, ok := authOption(auth); ok {
