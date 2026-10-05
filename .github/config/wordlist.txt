@@ -1015,3 +1015,8 @@ BuildKit
 retryable
 lexicographically
 artifactory
+ADR's
+KiB
+VM
+traversable
+unsplit
