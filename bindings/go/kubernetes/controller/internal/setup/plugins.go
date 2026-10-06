@@ -8,7 +8,6 @@ import (
 
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
-	gpghandler "ocm.software/open-component-model/bindings/go/gpg/signing/handler"
 	helmdigest "ocm.software/open-component-model/bindings/go/helm/digest"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	ocicache "ocm.software/open-component-model/bindings/go/oci/cache"
@@ -78,11 +77,6 @@ func NewPluginManager(ctx context.Context, cfg *genericv1.Config, logger *slog.L
 		return nil, fmt.Errorf("failed to create signing handler: %w", err)
 	}
 
-	gpgSigningHandler, err := gpghandler.New(nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create GPG signing handler: %w", err)
-	}
-
 	sigstoreSigningHandler := sigstorehandler.New(sigstorehandler.WithTempDir(options.TempDir))
 
 	ociResourceRepoPlugin := ocires.NewResourceRepository(
@@ -96,7 +90,6 @@ func NewPluginManager(ctx context.Context, cfg *genericv1.Config, logger *slog.L
 	if err := errors.Join(
 		pm.ComponentVersionRepositoryRegistry.RegisterInternalComponentVersionRepositoryPlugin(repositoryProvider),
 		pm.SigningRegistry.RegisterInternalComponentSignatureHandler(signingHandler),
-		pm.SigningRegistry.RegisterInternalComponentSignatureHandler(gpgSigningHandler),
 		pm.SigningRegistry.RegisterInternalComponentSignatureHandler(sigstoreSigningHandler),
 		pm.CredentialRepositoryRegistry.RegisterInternalCredentialRepositoryPlugin(
 			&ocicredentials.OCICredentialRepository{},
@@ -113,7 +106,6 @@ func NewPluginManager(ctx context.Context, cfg *genericv1.Config, logger *slog.L
 	// Each internal plugin declares the credential types it consumes.
 	if err := errors.Join(
 		pm.CredentialTypeRegistry.RegisterInternalCredentialTypeSchemeProvider(signingHandler),
-		pm.CredentialTypeRegistry.RegisterInternalCredentialTypeSchemeProvider(gpgSigningHandler),
 		pm.CredentialTypeRegistry.RegisterInternalCredentialTypeSchemeProvider(sigstoreSigningHandler),
 		pm.CredentialTypeRegistry.RegisterInternalCredentialTypeSchemeProvider(ociResourceRepoPlugin),
 		pm.CredentialTypeRegistry.RegisterInternalCredentialTypeSchemeProvider(helmDigestProcessor),
