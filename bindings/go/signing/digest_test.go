@@ -62,7 +62,7 @@ func TestIsSafelyDigestible(t *testing.T) {
 			Digest:      descruntime.Digest{},
 		}},
 	}
-	assert.Error(t, IsSafelyDigestible(comp2))
+	require.Error(t, IsSafelyDigestible(comp2))
 
 	// resource without access but with digest -> error
 	comp3 := &descruntime.Component{
@@ -165,7 +165,7 @@ func TestGenerateDigest_Default(t *testing.T) {
 	// digest value should be a valid hex string of the correct length (sha256 -> 32 bytes -> 64 hex chars)
 	b, err := hex.DecodeString(digest.Value)
 	require.NoError(t, err)
-	assert.Equal(t, 32, len(b))
+	assert.Len(t, b, 32)
 }
 
 func TestGenerateDigest_InvalidHash(t *testing.T) {
@@ -230,7 +230,7 @@ func TestVerifyDigestMatchesDescriptor_Mismatch(t *testing.T) {
 	sig := descruntime.Signature{Name: "s1", Digest: *dg}
 
 	err = VerifyDigestMatchesDescriptor(ctx, d2, sig, logger)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "digest mismatch")
 }
 
@@ -243,7 +243,7 @@ func TestVerifyDigestMatchesDescriptor_InvalidHex(t *testing.T) {
 	sig := descruntime.Signature{Name: "s2", Digest: descruntime.Digest{HashAlgorithm: crypto.SHA256.String(), NormalisationAlgorithm: v4alpha1.Algorithm, Value: "zzzz"}}
 
 	err := VerifyDigestMatchesDescriptor(ctx, d, sig, logger)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "decoding digest from signature failed")
 }
 
@@ -261,7 +261,7 @@ func TestVerifyDigestMatchesDescriptor_UnsupportedHash(t *testing.T) {
 	sig := descruntime.Signature{Name: "s3", Digest: *dg}
 
 	err = VerifyDigestMatchesDescriptor(ctx, d, sig, logger)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unsupported hash algorithm")
 }
 

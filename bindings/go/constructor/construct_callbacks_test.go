@@ -168,5 +168,5 @@ func TestConstructionCallbacks(t *testing.T) {
 	// Verify the descriptor passed to end component callback
 	assert.Equal(t, component.Name, tracker.descriptor.Component.Name)
 	assert.Equal(t, component.Version, tracker.descriptor.Component.Version)
-	assert.Nil(t, tracker.err, "No error should have been passed to OnEndComponentConstruct")
+	assert.NoError(t, tracker.err, "No error should have been passed to OnEndComponentConstruct")
 }

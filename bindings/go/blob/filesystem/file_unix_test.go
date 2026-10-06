@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sys/unix"
 
@@ -38,12 +39,12 @@ func TestCopyBlobToOSPath_NamedPipe_Blocking(t *testing.T) {
 
 	go func() {
 		f, err := os.OpenFile(pipePath, os.O_RDONLY, os.ModeNamedPipe)
-		r.NoError(err)
+		assert.NoError(t, err)
 		defer func() {
-			r.NoError(f.Close())
+			assert.NoError(t, f.Close())
 		}()
 		all, err := io.ReadAll(f)
-		r.NoError(err)
+		assert.NoError(t, err)
 		data <- all
 	}()
 

@@ -146,7 +146,10 @@ func uploaderOutcomes(t *testing.T, tgd *transformv1alpha1.TransformationGraphDe
 // must produce exactly the documented outcome per resource, or the documented error.
 func TestUploaderExamples(t *testing.T) {
 	const ociTarget = "ghcr.io/target-org/ocm"
-	ctf := func(t *testing.T) runtime.Typed { return testCTFRepo(t.TempDir()) }
+	ctf := func(t *testing.T) runtime.Typed {
+		t.Helper()
+		return testCTFRepo(t.TempDir())
+	}
 	oci := func(*testing.T) runtime.Typed { return testOCIRepo(ociTarget) }
 
 	e1 := map[string]string{

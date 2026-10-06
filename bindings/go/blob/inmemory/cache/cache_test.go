@@ -427,13 +427,13 @@ func TestCache_ConcurrentAccess(t *testing.T) {
 
 					// Test ReadCloser
 					reader, err := cached.ReadCloser()
-					require.NoError(t, err)
+					assert.NoError(t, err)
 					_, err = io.ReadAll(reader)
-					require.NoError(t, err)
+					assert.NoError(t, err)
 
 					// Test Data
 					data := cached.Data()
-					require.NotEmpty(t, data)
+					assert.NotEmpty(t, data)
 
 					// Test Size
 					_ = cached.Size()

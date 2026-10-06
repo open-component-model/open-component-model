@@ -186,7 +186,7 @@ func TestResourceRepository_DownloadResource(t *testing.T) {
 			},
 		}
 		_, err := NewResourceRepository().DownloadResource(t.Context(), res, nil)
-		assert.ErrorContains(t, err, "invalid GitHub access")
+		require.ErrorContains(t, err, "invalid GitHub access")
 		assert.Zero(t, requests, "an invalid access must be rejected before any request reaches the server")
 	})
 

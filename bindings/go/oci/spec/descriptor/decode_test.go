@@ -32,7 +32,8 @@ func createV2DescriptorYAML() []byte {
 	return data
 }
 
-func createV2DescriptorJSON() []byte {
+func createV2DescriptorJSON(tb testing.TB) []byte {
+	tb.Helper()
 	desc := &v2.Descriptor{
 		Meta: v2.Meta{
 			Version: "v2",
@@ -46,7 +47,8 @@ func createV2DescriptorJSON() []byte {
 			},
 		},
 	}
-	data, _ := json.Marshal(desc)
+	data, err := json.Marshal(desc)
+	require.NoError(tb, err)
 	return data
 }
 
@@ -67,7 +69,7 @@ func createTarWithFile(name string, content []byte) *bytes.Buffer {
 
 func TestSingleFileDecodeDescriptor_AllFormats(t *testing.T) {
 	validYAML := createV2DescriptorYAML()
-	validJSON := createV2DescriptorJSON()
+	validJSON := createV2DescriptorJSON(t)
 
 	tests := []struct {
 		name          string
@@ -142,7 +144,7 @@ func TestSingleFileDecodeDescriptor_AllFormats(t *testing.T) {
 				return yaml.Unmarshal(bytes, obj)
 			})
 			if tt.expectError != "" {
-				assert.Error(t, err)
+				require.Error(t, err)
 				assert.Contains(t, err.Error(), tt.expectError)
 				assert.Nil(t, desc)
 				return
@@ -188,7 +190,7 @@ func TestDescriptorFileFromTar_EmptyTar(t *testing.T) {
 	_ = tw.Close()
 
 	r, err := descriptorFileFromTar(bytes.NewReader(buf.Bytes()))
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Nil(t, r)
 	assert.Contains(t, err.Error(), "no component descriptor found")
 }
@@ -197,6 +199,6 @@ func TestDescriptorFileFromTar_EmptyTar(t *testing.T) {
 func TestDescriptorFileFromTar_BrokenTar(t *testing.T) {
 	broken := bytes.NewBufferString("not-a-tar")
 	r, err := descriptorFileFromTar(broken)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Nil(t, r)
 }

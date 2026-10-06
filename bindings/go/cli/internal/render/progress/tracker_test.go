@@ -184,7 +184,7 @@ func TestOperation_WithEvents_CancelledContext(t *testing.T) {
 
 	require.Len(t, vis.events, 1)
 	assert.Equal(t, Cancelled, vis.events[0].State)
-	assert.Nil(t, vis.events[0].Err)
+	assert.NoError(t, vis.events[0].Err)
 }
 
 // runningOrDone maps test input strings to events: "done:<id>" is a terminal
