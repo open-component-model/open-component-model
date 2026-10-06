@@ -37,3 +37,21 @@ type StreamingResourceRepository interface {
 	// each ReadCloser call re-issues the source request from the beginning.
 	DownloadResourceStream(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) (blob.ReadOnlyBlob, error)
 }
+
+// IdempotentSource is an optional capability of a streaming source blob (see
+// [StreamingResourceRepository]) that reports whether its underlying request can
+// be safely issued more than once.
+//
+// The streaming by-value path may open a source blob more than once, for example
+// to read the response headers (media type) before streaming the body. That is
+// only safe when the request is idempotent, such as an HTTP GET or HEAD. A source
+// backed by a non-idempotent request (for example a wget access with a non-GET
+// verb and a body) MUST report false, and the caller must then avoid opening it
+// more than once (typically by materializing it with DownloadResource instead).
+//
+// A blob that does not implement IdempotentSource must be treated as not safe to
+// repeat.
+type IdempotentSource interface {
+	// Idempotent reports whether the source request can be repeated safely.
+	Idempotent() bool
+}

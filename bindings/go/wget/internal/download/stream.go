@@ -8,6 +8,7 @@ import (
 	"hash"
 	"io"
 	"net/http"
+	"strings"
 	"sync"
 
 	"ocm.software/open-component-model/bindings/go/blob"
@@ -50,6 +51,19 @@ var (
 	_ blob.ReadOnlyBlob   = (*Stream)(nil)
 	_ blob.MediaTypeAware = (*Stream)(nil)
 )
+
+// Idempotent reports whether the request can be safely re-issued. It is true for
+// a GET or HEAD (and the empty verb, which defaults to GET); any other verb (for
+// example a POST carrying a body) is not safe to repeat, so the streaming
+// by-value path must not open such a blob more than once.
+func (s *Stream) Idempotent() bool {
+	switch strings.ToUpper(s.req.Verb) {
+	case "", http.MethodGet, http.MethodHead:
+		return true
+	default:
+		return false
+	}
+}
 
 // NewStream builds a lazy streaming blob for req. The verify callback is optional;
 // when nil no verification runs and no digests are computed unless requested via

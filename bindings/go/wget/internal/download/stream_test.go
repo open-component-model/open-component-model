@@ -183,3 +183,31 @@ func TestStream_MaxDownloadSize(t *testing.T) {
 		})
 	}
 }
+
+// TestStream_Idempotent reports true only for a repeatable verb (GET/HEAD and the
+// empty default), so the streaming by-value path never re-issues a non-idempotent
+// request.
+func TestStream_Idempotent(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		verb string
+		want bool
+	}{
+		{verb: "", want: true},
+		{verb: "GET", want: true},
+		{verb: "get", want: true},
+		{verb: "HEAD", want: true},
+		{verb: "head", want: true},
+		{verb: "POST", want: false},
+		{verb: "PUT", want: false},
+		{verb: "DELETE", want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.verb, func(t *testing.T) {
+			t.Parallel()
+			r := require.New(t)
+			s := download.NewStream(t.Context(), download.Request{URL: "http://example.com", Verb: tt.verb}, nil)
+			r.Equal(tt.want, s.Idempotent())
+		})
+	}
+}

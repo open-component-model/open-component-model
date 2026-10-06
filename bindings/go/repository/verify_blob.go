@@ -33,6 +33,7 @@ var (
 	_ blob.DigestAware           = (*verifyingBlob)(nil)
 	_ blob.MediaTypeAware        = (*verifyingBlob)(nil)
 	_ blob.MediaTypeOverrideable = (*verifyingBlob)(nil)
+	_ IdempotentSource           = (*verifyingBlob)(nil)
 	_ io.Closer                  = (*verifyingBlob)(nil)
 )
 
@@ -101,6 +102,16 @@ func (b *verifyingBlob) SetMediaType(mediaType string) {
 	if overrideable, ok := b.base.(blob.MediaTypeOverrideable); ok {
 		overrideable.SetMediaType(mediaType)
 	}
+}
+
+// Idempotent forwards to the underlying blob so wrapping does not hide a source's
+// idempotency. A base that does not implement [IdempotentSource] is reported as
+// not safe to repeat, matching the conservative default of that interface.
+func (b *verifyingBlob) Idempotent() bool {
+	if idem, ok := b.base.(IdempotentSource); ok {
+		return idem.Idempotent()
+	}
+	return false
 }
 
 // Close forwards to the underlying blob so that wrapping does not leak the

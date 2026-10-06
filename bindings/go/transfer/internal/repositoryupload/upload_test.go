@@ -19,15 +19,18 @@ import (
 
 // lazyMediaTypeBlob is a streaming source blob whose media type (the response
 // Content-Type) is only known once its stream is opened, like the wget/s3 lazy
-// blobs. MediaType reports unknown until the first ReadCloser call primes it.
+// blobs. MediaType reports unknown until the first ReadCloser call primes it. It
+// is idempotent, modelling a GET source that may be opened more than once.
 type lazyMediaTypeBlob struct {
 	content     []byte
 	contentType string
 	primed      bool
+	opens       int
 }
 
 func (b *lazyMediaTypeBlob) ReadCloser() (io.ReadCloser, error) {
 	b.primed = true
+	b.opens++
 	return io.NopCloser(bytes.NewReader(b.content)), nil
 }
 
@@ -38,11 +41,33 @@ func (b *lazyMediaTypeBlob) MediaType() (string, bool) {
 	return b.contentType, true
 }
 
-// streamingStubRepository streams Blob as the source and derives no credential
-// identity, exercising the uploader streaming path.
+func (b *lazyMediaTypeBlob) Idempotent() bool { return true }
+
+// nonIdempotentBlob is a streaming source blob whose request must not be repeated
+// (for example a wget access with a non-GET verb and a body). It records every
+// open so a test can assert the streaming path never issued the request.
+type nonIdempotentBlob struct {
+	opens int
+}
+
+func (b *nonIdempotentBlob) ReadCloser() (io.ReadCloser, error) {
+	b.opens++
+	return io.NopCloser(bytes.NewReader(nil)), nil
+}
+
+func (b *nonIdempotentBlob) MediaType() (string, bool) { return "", false }
+
+func (b *nonIdempotentBlob) Idempotent() bool { return false }
+
+// streamingStubRepository streams StreamBlob as the source and derives no
+// credential identity, exercising the uploader streaming path. DownloadResource
+// returns the materialized MaterializedBlob and records the call, so a test can
+// assert the non-idempotent fallback.
 type streamingStubRepository struct {
 	repository.ResourceRepository
-	Blob blob.ReadOnlyBlob
+	StreamBlob        blob.ReadOnlyBlob
+	MaterializedBlob  blob.ReadOnlyBlob
+	downloadResources int
 }
 
 func (s *streamingStubRepository) GetResourceCredentialConsumerIdentity(context.Context, *descriptor.Resource) (runtime.Identity, error) {
@@ -50,7 +75,12 @@ func (s *streamingStubRepository) GetResourceCredentialConsumerIdentity(context.
 }
 
 func (s *streamingStubRepository) DownloadResourceStream(context.Context, *descriptor.Resource, runtime.Typed) (blob.ReadOnlyBlob, error) {
-	return s.Blob, nil
+	return s.StreamBlob, nil
+}
+
+func (s *streamingStubRepository) DownloadResource(context.Context, *descriptor.Resource, runtime.Typed) (blob.ReadOnlyBlob, error) {
+	s.downloadResources++
+	return s.MaterializedBlob, nil
 }
 
 // TestSourcePrimesStreamingMediaType guards the primeMediaType/downloadRemoteSource
@@ -59,7 +89,7 @@ func (s *streamingStubRepository) DownloadResourceStream(context.Context, *descr
 func TestSourcePrimesStreamingMediaType(t *testing.T) {
 	r := require.New(t)
 	src := &lazyMediaTypeBlob{content: []byte("hello"), contentType: "text/plain"}
-	u := &Uploader{ResourceRepository: &streamingStubRepository{Blob: src}}
+	u := &Uploader{ResourceRepository: &streamingStubRepository{StreamBlob: src}}
 	spec := &uploadv1alpha1.RepositoryUploadSpec{
 		ComponentVersion: &uploadv1alpha1.RepositoryUploadComponentVersion{Component: "c", Version: "v"},
 	}
@@ -69,6 +99,28 @@ func TestSourcePrimesStreamingMediaType(t *testing.T) {
 	r.NotNil(b)
 	r.Equal("text/plain", mediaType, "the response Content-Type is primed, not the octet-stream fallback")
 	r.NotEqual(octetStream, mediaType)
+}
+
+// TestSourceMaterializesNonIdempotentStream guards the idempotency gate: a
+// streaming source whose request is not idempotent must be materialized with
+// DownloadResource and must never be opened by the streaming path, so the
+// non-idempotent request is issued only once (by DownloadResource).
+func TestSourceMaterializesNonIdempotentStream(t *testing.T) {
+	r := require.New(t)
+	stream := &nonIdempotentBlob{}
+	materialized := &lazyMediaTypeBlob{content: []byte("hi"), contentType: "text/plain", primed: true}
+	repo := &streamingStubRepository{StreamBlob: stream, MaterializedBlob: materialized}
+	u := &Uploader{ResourceRepository: repo}
+	spec := &uploadv1alpha1.RepositoryUploadSpec{
+		ComponentVersion: &uploadv1alpha1.RepositoryUploadComponentVersion{Component: "c", Version: "v"},
+	}
+
+	b, mediaType, err := u.source(t.Context(), spec, &descriptor.Resource{})
+	r.NoError(err)
+	r.NotNil(b)
+	r.Equal(0, stream.opens, "the non-idempotent streaming source must never be opened")
+	r.Equal(1, repo.downloadResources, "the non-idempotent source must be materialized once")
+	r.Equal("text/plain", mediaType)
 }
 
 func TestPoll(t *testing.T) {

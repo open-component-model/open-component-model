@@ -232,3 +232,51 @@ type plainBlob struct {
 func (p plainBlob) ReadCloser() (io.ReadCloser, error) {
 	return io.NopCloser(strings.NewReader(p.content)), nil
 }
+
+// idempotentBase wraps a blob and reports a fixed idempotency, so a test can
+// assert verifyingBlob forwards it.
+type idempotentBase struct {
+	blob.ReadOnlyBlob
+	idempotent bool
+}
+
+func (b idempotentBase) Idempotent() bool { return b.idempotent }
+
+// TestVerifyingBlob_IdempotentForwarding checks that verifyingBlob forwards the
+// base's idempotency, and treats a base that does not implement IdempotentSource
+// as not safe to repeat.
+func TestVerifyingBlob_IdempotentForwarding(t *testing.T) {
+	t.Parallel()
+	expected := digest.FromString(verifyTestContent)
+
+	tests := []struct {
+		name string
+		base blob.ReadOnlyBlob
+		want bool
+	}{
+		{
+			name: "forwards true",
+			base: idempotentBase{ReadOnlyBlob: inmemory.New(strings.NewReader(verifyTestContent)), idempotent: true},
+			want: true,
+		},
+		{
+			name: "forwards false",
+			base: idempotentBase{ReadOnlyBlob: inmemory.New(strings.NewReader(verifyTestContent)), idempotent: false},
+			want: false,
+		},
+		{
+			name: "defaults to false when base is not an IdempotentSource",
+			base: inmemory.New(strings.NewReader(verifyTestContent)),
+			want: false,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			r := require.New(t)
+			b, err := newVerifyingBlob(tc.base, expected)
+			r.NoError(err)
+			r.Equal(tc.want, b.Idempotent())
+		})
+	}
+}

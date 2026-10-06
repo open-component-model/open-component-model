@@ -39,6 +39,12 @@ var (
 	_ blob.MediaTypeAware = (*Stream)(nil)
 )
 
+// Idempotent reports that the source request can be safely re-issued. The S3
+// source is always a GetObject, so repeating it is safe.
+func (s *Stream) Idempotent() bool {
+	return true
+}
+
 // NewStream builds a lazy streaming blob for the S3 object described by req. The
 // S3 client is created on the first read and reused on subsequent reads. Options
 // mirror those of [Download] (credentials, max size, HTTP client/config);

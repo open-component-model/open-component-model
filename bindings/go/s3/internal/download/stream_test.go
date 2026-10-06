@@ -148,3 +148,12 @@ func TestStream_GetObjectErrorIsWrapped(t *testing.T) {
 	r.ErrorContains(err, "error getting s3 object my-bucket/my-key")
 	r.ErrorContains(err, "AccessDenied")
 }
+
+// TestStream_Idempotent reports that an S3 source (a GetObject) is always safe to
+// repeat.
+func TestStream_Idempotent(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
+	s := NewStream(t.Context(), Request{BucketName: "b", ObjectKey: "k", Region: "r"}, WithCredentials(fakeCredentials()))
+	r.True(s.Idempotent())
+}

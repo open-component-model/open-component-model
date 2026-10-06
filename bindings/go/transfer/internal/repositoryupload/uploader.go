@@ -106,6 +106,8 @@ func (u *Uploader) source(ctx context.Context, spec *uploadv1alpha1.RepositoryUp
 	// once a request is issued, whereas the old file-backed download captured it
 	// eagerly. Prime it here so a source whose access spec does not pin a media type
 	// still uploads with its real content type instead of application/octet-stream.
+	// Priming is safe only for an idempotent source; downloadRemoteSource guarantees
+	// that by materializing a non-idempotent source instead of streaming it.
 	primeMediaType(b)
 	return b, blobMediaType(b), nil
 }
@@ -119,15 +121,18 @@ func (u *Uploader) source(ctx context.Context, spec *uploadv1alpha1.RepositoryUp
 //
 // Under the re-issue-per-ReadCloser replay model this priming open is a separate
 // header-only source request (prime headers here, then stream the body on the
-// upload's own ReadCloser), so the extra source GET is by design, not a bug. The
-// source fetch is a GET (idempotent); do not reuse this prime-then-replay pattern
-// for non-idempotent request verbs.
+// upload's own ReadCloser). That extra request is only issued when the source is
+// idempotent (see [repository.IdempotentSource]); priming is skipped otherwise so
+// a non-idempotent source request is never sent more than once.
 func primeMediaType(b blob.ReadOnlyBlob) {
 	aware, ok := b.(blob.MediaTypeAware)
 	if !ok {
 		return
 	}
 	if _, known := aware.MediaType(); known {
+		return
+	}
+	if idem, ok := b.(repository.IdempotentSource); !ok || !idem.Idempotent() {
 		return
 	}
 	rc, err := b.ReadCloser()
@@ -139,12 +144,26 @@ func primeMediaType(b blob.ReadOnlyBlob) {
 
 // downloadRemoteSource obtains a remote source blob, preferring the lazy streaming
 // source when the resource repository implements
-// [repository.StreamingResourceRepository].
+// [repository.StreamingResourceRepository]. A streaming source whose request is
+// not idempotent (see [repository.IdempotentSource]) is materialized with
+// DownloadResource instead: the streaming upload path opens the source more than
+// once (prime the media type, then stream the body), which must not re-issue a
+// non-idempotent request. Materializing issues the single request the old path
+// always did. No request is sent while deciding, because DownloadResourceStream
+// defers all I/O until the blob's ReadCloser is called.
 func (u *Uploader) downloadRemoteSource(ctx context.Context, src *descriptor.Resource, creds runtime.Typed) (blob.ReadOnlyBlob, error) {
-	if streamingRepo, ok := u.ResourceRepository.(repository.StreamingResourceRepository); ok {
-		return streamingRepo.DownloadResourceStream(ctx, src, creds)
+	streamingRepo, ok := u.ResourceRepository.(repository.StreamingResourceRepository)
+	if !ok {
+		return u.ResourceRepository.DownloadResource(ctx, src, creds)
 	}
-	return u.ResourceRepository.DownloadResource(ctx, src, creds)
+	b, err := streamingRepo.DownloadResourceStream(ctx, src, creds)
+	if err != nil {
+		return nil, err
+	}
+	if idem, ok := b.(repository.IdempotentSource); ok && !idem.Idempotent() {
+		return u.ResourceRepository.DownloadResource(ctx, src, creds)
+	}
+	return b, nil
 }
 
 // ociSource reports that the source content of src with mediaType was downloaded from an OCI
