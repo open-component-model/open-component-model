@@ -54,6 +54,7 @@ func init() {
 }
 
 func Repository(t *testing.T, options ...oci.RepositoryOption) *oci.Repository {
+	t.Helper()
 	opts := append([]oci.RepositoryOption{oci.WithTempDir(t.TempDir())}, options...)
 	repo, err := oci.NewRepository(opts...)
 	require.NoError(t, err, "Failed to create repository")
@@ -179,6 +180,7 @@ func TestRepository_GetLocalResource(t *testing.T) {
 			expectError:    true,
 			setupComponent: false,
 			checkContent: func(t *testing.T, original []byte, actual []byte) {
+				t.Helper()
 				assert.Equal(t, string(original), string(actual))
 			},
 		},
@@ -204,6 +206,7 @@ func TestRepository_GetLocalResource(t *testing.T) {
 			},
 			setupComponent: true,
 			checkContent: func(t *testing.T, original []byte, actual []byte) {
+				t.Helper()
 				assert.Equal(t, string(original), string(actual))
 			},
 		},
@@ -236,6 +239,7 @@ func TestRepository_GetLocalResource(t *testing.T) {
 			},
 			setupComponent: true,
 			checkContent: func(t *testing.T, original []byte, actual []byte) {
+				t.Helper()
 				assert.Equal(t, string(original), string(actual))
 			},
 		},
@@ -262,6 +266,7 @@ func TestRepository_GetLocalResource(t *testing.T) {
 			},
 			setupComponentLikeOldOCM: true,
 			checkContent: func(t *testing.T, original []byte, actual []byte) {
+				t.Helper()
 				assert.Equal(t, string(original), string(actual))
 			},
 		},
@@ -316,6 +321,7 @@ func TestRepository_GetLocalResource(t *testing.T) {
 			},
 			setupComponent: true,
 			checkContent: func(t *testing.T, original []byte, actual []byte) {
+				t.Helper()
 				assert.Equal(t, string(original), string(actual))
 			},
 		},
@@ -336,6 +342,7 @@ func TestRepository_GetLocalResource(t *testing.T) {
 				},
 			},
 			content: func(t *testing.T) []byte {
+				t.Helper()
 				// Create a buffer to hold the OCI layout
 				buf := bytes.NewBuffer(nil)
 				layout, err := tar.NewOCILayoutWriterWithTempFile(buf, t.TempDir())
@@ -367,6 +374,7 @@ func TestRepository_GetLocalResource(t *testing.T) {
 				return buf.Bytes()
 			}(t),
 			checkContent: func(t *testing.T, original []byte, actual []byte) {
+				t.Helper()
 				r := require.New(t)
 				store, err := tar.ReadOCILayout(t.Context(), inmemory.New(bytes.NewReader(original)))
 				r.NoError(err, "Failed to read OCI layout")
@@ -1102,6 +1110,7 @@ func TestRepository_AddLocalResourceOCIImageLayer(t *testing.T) {
 }
 
 func createSingleLayerOCIImage(t *testing.T, data []byte, ref string) ([]byte, *v1.OCIImage) {
+	t.Helper()
 	r := require.New(t)
 	var buf bytes.Buffer
 	w, err := tar.NewOCILayoutWriterWithTempFile(&buf, t.TempDir())
@@ -1211,6 +1220,7 @@ func TestRepository_ListComponentVersions_PreservesNonSemver(t *testing.T) {
 }
 
 func setupLegacyComponentVersion(t *testing.T, store *ocictf.Store, ctx context.Context, content []byte, resource *descriptor.Resource) {
+	t.Helper()
 	r := require.New(t)
 	// Get a repository store for the component
 	repoStore, err := store.StoreForReference(t.Context(), store.ComponentVersionReference(t.Context(), "ocm.software/test-component", "1.0.0"))
@@ -1256,6 +1266,7 @@ func setupLegacyComponentVersion(t *testing.T, store *ocictf.Store, ctx context.
 }
 
 func setupLegacyComponentVersionWithSource(t *testing.T, store *ocictf.Store, ctx context.Context, content []byte, source *descriptor.Source) {
+	t.Helper()
 	r := require.New(t)
 	// Get a repository store for the component
 	repoStore, err := store.StoreForReference(t.Context(), store.ComponentVersionReference(t.Context(), "ocm.software/test-component", "1.0.0"))
@@ -1332,6 +1343,7 @@ func TestRepository_GetLocalSource(t *testing.T) {
 			expectError:    true,
 			setupComponent: false,
 			checkContent: func(t *testing.T, original []byte, actual []byte) {
+				t.Helper()
 				assert.Equal(t, string(original), string(actual))
 			},
 		},
@@ -1355,6 +1367,7 @@ func TestRepository_GetLocalSource(t *testing.T) {
 			},
 			setupComponent: true,
 			checkContent: func(t *testing.T, original []byte, actual []byte) {
+				t.Helper()
 				assert.Equal(t, string(original), string(actual))
 			},
 		},
@@ -1385,6 +1398,7 @@ func TestRepository_GetLocalSource(t *testing.T) {
 			},
 			setupComponent: true,
 			checkContent: func(t *testing.T, original []byte, actual []byte) {
+				t.Helper()
 				assert.Equal(t, string(original), string(actual))
 			},
 		},
@@ -1430,6 +1444,7 @@ func TestRepository_GetLocalSource(t *testing.T) {
 				},
 			},
 			content: func(t *testing.T) []byte {
+				t.Helper()
 				// Create a buffer to hold the OCI layout
 				buf := bytes.NewBuffer(nil)
 				layout, err := tar.NewOCILayoutWriterWithTempFile(buf, t.TempDir())
@@ -1462,6 +1477,7 @@ func TestRepository_GetLocalSource(t *testing.T) {
 				return buf.Bytes()
 			}(t),
 			checkContent: func(t *testing.T, original []byte, actual []byte) {
+				t.Helper()
 				r := require.New(t)
 				store, err := tar.ReadOCILayout(t.Context(), inmemory.New(bytes.NewReader(original)))
 				r.NoError(err, "Failed to read OCI layout")
@@ -1614,6 +1630,7 @@ func TestRepository_ProcessResourceDigest(t *testing.T) {
 				},
 			},
 			setup: func(t *testing.T) {
+				t.Helper()
 				ctx := t.Context()
 				r := require.New(t)
 				store, err := store.StoreForReference(ctx, "test-registry/test-image:v2.0.0")
@@ -1646,6 +1663,7 @@ func TestRepository_ProcessResourceDigest(t *testing.T) {
 				},
 			},
 			setup: func(t *testing.T) {
+				t.Helper()
 				ctx := t.Context()
 				r := require.New(t)
 				store, err := store.StoreForReference(ctx, "test-registry/test-image:v2.0.0")
@@ -1682,6 +1700,7 @@ func TestRepository_ProcessResourceDigest(t *testing.T) {
 				},
 			},
 			setup: func(t *testing.T) {
+				t.Helper()
 				ctx := t.Context()
 				r := require.New(t)
 				store, err := store.StoreForReference(ctx, "test-registry/test-image:v2.0.0")
@@ -2101,6 +2120,7 @@ func TestRepository_RemoveComponentVersionAlias(t *testing.T) {
 		{
 			name: "removes alias leaving sibling alias and semver intact",
 			setup: func(t *testing.T, repo *oci.Repository) {
+				t.Helper()
 				r := require.New(t)
 				r.NoError(repo.AddComponentVersion(t.Context(), makeDesc("1.0.0")))
 				r.NoError(repo.AddComponentVersionAlias(t.Context(), componentName, "1.0.0", "latest"))
@@ -2108,6 +2128,7 @@ func TestRepository_RemoveComponentVersionAlias(t *testing.T) {
 			},
 			alias: "latest",
 			assert: func(t *testing.T, repo *oci.Repository, removeErr error) {
+				t.Helper()
 				r := require.New(t)
 				r.NoError(removeErr)
 
@@ -2128,16 +2149,19 @@ func TestRepository_RemoveComponentVersionAlias(t *testing.T) {
 			setup: func(*testing.T, *oci.Repository) {},
 			alias: "nonexistent",
 			assert: func(t *testing.T, _ *oci.Repository, removeErr error) {
+				t.Helper()
 				require.ErrorIs(t, removeErr, repository.ErrNotFound)
 			},
 		},
 		{
 			name: "rejects a semver version string and leaves it accessible",
 			setup: func(t *testing.T, repo *oci.Repository) {
+				t.Helper()
 				require.NoError(t, repo.AddComponentVersion(t.Context(), makeDesc("1.0.0")))
 			},
 			alias: "1.0.0",
 			assert: func(t *testing.T, repo *oci.Repository, removeErr error) {
+				t.Helper()
 				r := require.New(t)
 				r.Error(removeErr)
 				r.Contains(removeErr.Error(), "not an alias")
@@ -2150,6 +2174,7 @@ func TestRepository_RemoveComponentVersionAlias(t *testing.T) {
 		{
 			name: "removed alias does not appear in ListComponentVersions",
 			setup: func(t *testing.T, repo *oci.Repository) {
+				t.Helper()
 				r := require.New(t)
 				r.NoError(repo.AddComponentVersion(t.Context(), makeDesc("1.0.0")))
 				r.NoError(repo.AddComponentVersion(t.Context(), makeDesc("2.0.0")))
@@ -2157,6 +2182,7 @@ func TestRepository_RemoveComponentVersionAlias(t *testing.T) {
 			},
 			alias: "latest",
 			assert: func(t *testing.T, repo *oci.Repository, removeErr error) {
+				t.Helper()
 				r := require.New(t)
 				r.NoError(removeErr)
 
@@ -2697,6 +2723,7 @@ func TestRepository_UploadResourceStream(t *testing.T) {
 			name:     "tag-only reference uploads and preserves tag",
 			imageRef: "test-repo:v1.0.0",
 			checkResult: func(t *testing.T, res *descriptor.Resource, manifestDesc ociImageSpecV1.Descriptor) {
+				t.Helper()
 				r := require.New(t)
 				access := res.Access.(*v1.OCIImage)
 				r.Equal("test-repo:v1.0.0", access.ImageReference, "tag preserved, no digest added for tag-only form")
@@ -2707,6 +2734,7 @@ func TestRepository_UploadResourceStream(t *testing.T) {
 		{
 			name: "digest-only reference uploads without tagging and preserves digest",
 			checkResult: func(t *testing.T, res *descriptor.Resource, manifestDesc ociImageSpecV1.Descriptor) {
+				t.Helper()
 				r := require.New(t)
 				access := res.Access.(*v1.OCIImage)
 				r.Contains(access.ImageReference, manifestDesc.Digest.String(), "digest preserved")
@@ -2719,6 +2747,7 @@ func TestRepository_UploadResourceStream(t *testing.T) {
 				return "test-repo:v1.0.0@" + manifestDesc.Digest.String()
 			},
 			checkResult: func(t *testing.T, res *descriptor.Resource, manifestDesc ociImageSpecV1.Descriptor) {
+				t.Helper()
 				r := require.New(t)
 				access := res.Access.(*v1.OCIImage)
 				r.Contains(access.ImageReference, "v1.0.0", "tag preserved")

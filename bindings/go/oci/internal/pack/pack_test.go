@@ -377,6 +377,7 @@ func TestResourceBlob(t *testing.T) {
 				GlobalAccessPolicy: policy.GlobalAccessPolicyNever,
 			},
 			checkGlobalAccess: func(t *testing.T, resource *descriptor.Resource) {
+				t.Helper()
 				access, ok := resource.Access.(*v2.LocalBlob)
 				require.True(t, ok, "access should be of type LocalBlob")
 				assert.Nil(t, access.GlobalAccess, "global access should not be set with Never policy")
@@ -402,6 +403,7 @@ func TestResourceBlob(t *testing.T) {
 				GlobalAccessPolicy: policy.GlobalAccessPolicyAuto,
 			},
 			checkGlobalAccess: func(t *testing.T, resource *descriptor.Resource) {
+				t.Helper()
 				access, ok := resource.Access.(*v2.LocalBlob)
 				require.True(t, ok, "access should be of type LocalBlob")
 				// Auto on local (non-remote) store should not set global access

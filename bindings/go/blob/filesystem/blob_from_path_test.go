@@ -384,6 +384,7 @@ func TestGetBlobFromPath_ErrorCases(t *testing.T) {
 		{
 			name: "empty_path",
 			setupFunc: func(t *testing.T) (string, filesystem.DirOptions) {
+				t.Helper()
 				return "", filesystem.DirOptions{}
 			},
 			expectError: true,
@@ -391,6 +392,7 @@ func TestGetBlobFromPath_ErrorCases(t *testing.T) {
 		{
 			name: "non_existent_path",
 			setupFunc: func(t *testing.T) (string, filesystem.DirOptions) {
+				t.Helper()
 				return "/non/existent/path", filesystem.DirOptions{}
 			},
 			expectError: true,
@@ -398,6 +400,7 @@ func TestGetBlobFromPath_ErrorCases(t *testing.T) {
 		{
 			name: "path_outside_working_directory",
 			setupFunc: func(t *testing.T) (string, filesystem.DirOptions) {
+				t.Helper()
 				base := t.TempDir()
 				allowed := filepath.Join(base, "allowed")
 				outside := filepath.Join(base, "outside")
@@ -533,6 +536,7 @@ func readAllFromBlob(b blob.ReadOnlyBlob) ([]byte, error) {
 }
 
 func createTestFile(t *testing.T, basePath, relativePath, content string) string {
+	t.Helper()
 	fullPath := filepath.Join(basePath, relativePath)
 	dir := filepath.Dir(fullPath)
 
@@ -543,6 +547,7 @@ func createTestFile(t *testing.T, basePath, relativePath, content string) string
 }
 
 func extractTarContents(t *testing.T, b blob.ReadOnlyBlob) []string {
+	t.Helper()
 	reader, err := b.ReadCloser()
 	require.NoError(t, err)
 	defer func() { require.NoError(t, reader.Close()) }()
