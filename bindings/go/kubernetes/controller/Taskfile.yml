@@ -22,6 +22,8 @@ vars:
     sh: 'source {{.PROJECT_ROOT}}/.env && [ -f .env ] && source .env; echo "${HELM_DOCS_VERSION:-v1.14.2}"'
   YQ_VERSION:
     sh: 'source {{.PROJECT_ROOT}}/.env && [ -f .env ] && source .env; echo "${YQ_VERSION:-v4.49.2}"'
+  REGISTRY_IMAGE_VERSION:
+    sh: 'source {{.PROJECT_ROOT}}/.env && [ -f .env ] && source .env; echo "$REGISTRY_IMAGE_VERSION"'
 
   CONTAINER_TOOL: '{{.CONTAINER_TOOL | default "docker"}}'
   LOCALBIN: '{{.TASKFILE_DIR}}/bin'
@@ -106,6 +108,44 @@ tasks:
       - task: test/e2e
         vars:
           CLI_ARGS: '{{.CLI_ARGS}}'
+
+  test/performance/setup:
+    desc: "Create the 'ocm-perf' Kind cluster and registry, then build and install the controller from the working tree. To benchmark another image, run test/performance/install with CONTROLLER_IMG afterwards."
+    cmds:
+      - task: docker-build
+        vars:
+          LOAD: "true"
+      - 'KIND_NODE_IMAGE_VERSION={{.KIND_NODE_IMAGE_VERSION}} REGISTRY_IMAGE_VERSION={{.REGISTRY_IMAGE_VERSION}} bash test/performance/hacks/setup.sh'
+      - task: test/performance/install
+
+  test/performance/install:
+    desc: "Load CONTROLLER_IMG into the 'ocm-perf' cluster and (re)install the chart with the benchmark values."
+    cmds:
+      - 'kind load docker-image {{.CONTROLLER_IMG}} --name ocm-perf'
+      - kubectl --context kind-ocm-perf apply -f test/performance/hacks/rbac.yaml
+      - |
+        img='{{.CONTROLLER_IMG}}'
+        # Split after the last path segment so registry ports and digests survive.
+        tag="${img##*/}"; tag="${tag#*:}"
+        helm upgrade --install ocm-k8s-toolkit chart/ \
+          --kube-context kind-ocm-perf \
+          -f test/performance/hacks/values.yaml \
+          --set manager.image.repository="${img%:"$tag"}" \
+          --set manager.image.tag="${tag}" \
+          --namespace ocm-k8s-toolkit-system \
+          --create-namespace \
+          --wait \
+          --timeout 180s
+
+  test/performance:
+    desc: "Run the controller performance benchmark against the 'ocm-perf' cluster. Pass flags via `--`, e.g. `task test/performance -- --scenarios=cold --objects=100 --repeats=1`."
+    cmd: 'go run ./test/performance {{.CLI_ARGS}}'
+
+  test/performance/teardown:
+    desc: "Delete the 'ocm-perf' Kind cluster and its registry."
+    cmds:
+      - 'kind delete cluster --name ocm-perf 2>/dev/null || true'
+      - 'docker rm -f ocm-perf-registry 2>/dev/null || true'
 
   # Build
   build:
