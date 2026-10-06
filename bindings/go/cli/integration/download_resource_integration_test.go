@@ -341,7 +341,6 @@ configurations:
 					compressedData, err := io.ReadAll(compressedDataRC)
 					r.NoError(err)
 					r.Equal(compressedData, data, "data should match the original compressed data")
-
 				}
 			})
 		}

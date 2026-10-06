@@ -99,7 +99,7 @@ func TestUnstructured(t *testing.T) {
 			},
 			// comparing string so if there is a conflict it's easier to see
 			assertResult: func(t *testing.T, data []byte) {
-				assert.Equal(t, "{\"baseUrl\":\"ghcr.io\",\"componentNameMapping\":\"urlPath\",\"subPath\":\"open-component-model/ocm\",\"type\":\"OCIRegistry\"}", string(data))
+				assert.JSONEq(t, "{\"baseUrl\":\"ghcr.io\",\"componentNameMapping\":\"urlPath\",\"subPath\":\"open-component-model/ocm\",\"type\":\"OCIRegistry\"}", string(data))
 			},
 		},
 		{
@@ -118,7 +118,7 @@ func TestUnstructured(t *testing.T) {
 			},
 			// comparing string so if there is a conflict it's easier to see
 			assertResult: func(t *testing.T, data []byte) {
-				assert.Equal(t, "{\"componentNameMapping\":\"urlPath\",\"type\":\"name/version\"}", string(data))
+				assert.JSONEq(t, "{\"componentNameMapping\":\"urlPath\",\"type\":\"name/version\"}", string(data))
 			},
 		},
 	}

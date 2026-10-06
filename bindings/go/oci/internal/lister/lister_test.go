@@ -8,13 +8,13 @@ import (
 	"log/slog"
 	"testing"
 
+	. "ocm.software/open-component-model/bindings/go/oci/internal/lister"
+
 	v1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	slogcontext "github.com/veqryn/slog-context"
 	"oras.land/oras-go/v2/content"
-
-	. "ocm.software/open-component-model/bindings/go/oci/internal/lister"
 )
 
 // mockReferrerStore implements content.ReadOnlyStorage and registry.ReferrerLister
@@ -92,7 +92,7 @@ func TestNew(t *testing.T) {
 	t.Run("error when no supported lister", func(t *testing.T) {
 		store := &mockBasicStore{}
 		lister, err := New(store)
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Nil(t, lister)
 	})
 }
@@ -210,7 +210,7 @@ func TestList(t *testing.T) {
 		}
 
 		versions, err := lister.List(t.Context(), opts)
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Nil(t, versions)
 	})
 
@@ -226,7 +226,7 @@ func TestList(t *testing.T) {
 		}
 
 		versions, err := lister.List(t.Context(), opts)
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Nil(t, versions)
 	})
 
@@ -253,7 +253,7 @@ func TestList(t *testing.T) {
 		}
 
 		versions, err := lister.List(t.Context(), opts)
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Nil(t, versions)
 	})
 

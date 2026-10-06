@@ -76,7 +76,7 @@ func TestAddLocalResource_Transform_OCI(t *testing.T) {
 	tempDir := t.TempDir()
 	testFile := filepath.Join(tempDir, "test-resource.bin")
 	testBlobData := []byte("test blob content")
-	err := os.WriteFile(testFile, testBlobData, 0644)
+	err := os.WriteFile(testFile, testBlobData, 0o644)
 	require.NoError(t, err)
 
 	mockRepo := &mockRepository{}
@@ -156,7 +156,7 @@ func TestAddLocalResource_Transform_CTF(t *testing.T) {
 	tempDir := t.TempDir()
 	testFile := filepath.Join(tempDir, "test-ctf-resource.bin")
 	testBlobData := []byte("test blob content for CTF")
-	err := os.WriteFile(testFile, testBlobData, 0644)
+	err := os.WriteFile(testFile, testBlobData, 0o644)
 	require.NoError(t, err)
 
 	mockRepo := &mockRepository{}
@@ -295,7 +295,7 @@ func TestAddLocalResource_Transform_ValidationErrors(t *testing.T) {
 			}
 
 			result, err := transformer.Transform(ctx, spec)
-			assert.Error(t, err)
+			require.Error(t, err)
 			assert.Nil(t, result)
 			assert.Contains(t, err.Error(), tt.expectedErr)
 		})

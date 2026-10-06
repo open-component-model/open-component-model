@@ -2,11 +2,12 @@ package handler
 
 import (
 	"crypto"
-	_ "crypto/sha256" // registers crypto.SHA256 for makeDigest
-	_ "crypto/sha512" // registers crypto.SHA384 and crypto.SHA512 for makeDigest
 	"encoding/hex"
 	"os/exec"
 	"testing"
+
+	_ "crypto/sha256" // registers crypto.SHA256 for makeDigest
+	_ "crypto/sha512" // registers crypto.SHA384 and crypto.SHA512 for makeDigest
 
 	"github.com/stretchr/testify/require"
 

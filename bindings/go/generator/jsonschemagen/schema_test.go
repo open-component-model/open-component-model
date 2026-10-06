@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"golang.org/x/tools/go/packages"
+
 	"ocm.software/open-component-model/bindings/go/generator/jsonschemagen"
 	"ocm.software/open-component-model/bindings/go/generator/universe"
 )
@@ -38,7 +39,7 @@ func TestSchemaOrBoolMarshalJSONWithSchema(t *testing.T) {
 	data, err := json.Marshal(sb)
 
 	require.NoError(t, err)
-	require.Equal(t, []byte(`{"type":"string"}`), data)
+	require.JSONEq(t, `{"type":"string"}`, string(data))
 }
 
 // --- Helpers for building small Universe/TypeInfo instances for generation tests ---

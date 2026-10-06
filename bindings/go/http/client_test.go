@@ -106,7 +106,6 @@ func TestNew(t *testing.T) {
 		_, isRetry := c.Transport.(*retry.Transport)
 		assert.False(t, isRetry, "expected hostRouter to wrap the retry transport when Hosts is set")
 	})
-
 }
 
 func TestNewClient_PerHostRouting(t *testing.T) {

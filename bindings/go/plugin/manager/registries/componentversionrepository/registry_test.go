@@ -20,9 +20,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-var (
-	dummyType = runtime.NewVersionedType(dummyv1.Type, dummyv1.Version)
-)
+var dummyType = runtime.NewVersionedType(dummyv1.Type, dummyv1.Version)
 
 func dummyCapability(schema []byte) v1.CapabilitySpec {
 	return v1.CapabilitySpec{
@@ -100,7 +98,8 @@ func TestPluginFlow(t *testing.T) {
 			Provider: descriptor.Provider{
 				Name: "ocm.software",
 			},
-		}})
+		},
+	})
 	require.NoError(t, err)
 }
 

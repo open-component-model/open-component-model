@@ -83,7 +83,7 @@ func TestAdoptAsResource(t *testing.T) {
 			err := Adopt(tt.desc, tt.resource)
 
 			if tt.expectedError != "" {
-				assert.Error(t, err)
+				require.Error(t, err)
 				assert.Contains(t, err.Error(), tt.expectedError)
 				return
 			}

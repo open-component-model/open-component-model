@@ -199,26 +199,26 @@ nestedDigests:
 func TestDescriptor_JSON(t *testing.T) {
 	desc := descriptorv2.Descriptor{}
 	err := json.Unmarshal([]byte(jsonData), &desc)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 	assert.NoError(t, descriptorv2.Validate(&desc))
 
 	assert.NotEmpty(t, desc.Component.Resources[0].ToIdentity())
 
 	descData, err := json.Marshal(desc)
 	assert.JSONEq(t, jsonData, string(descData))
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 	assert.NoError(t, descriptorv2.ValidateRawJSON(descData))
 }
 
 func TestDescriptor_YAML(t *testing.T) {
 	desc := descriptorv2.Descriptor{}
 	err := yaml.Unmarshal([]byte(yamlData), &desc)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 	assert.NoError(t, descriptorv2.Validate(&desc))
 
 	descData, err := yaml.Marshal(desc)
 	assert.YAMLEq(t, yamlData, string(descData))
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 	assert.NoError(t, descriptorv2.ValidateRawYAML(descData))
 }
 
@@ -566,8 +566,8 @@ func TestConstantValues(t *testing.T) {
 	assert.Equal(t, "NO-DIGEST", descriptorv2.NoDigest)
 
 	// Test resource relation constants
-	assert.Equal(t, descriptorv2.ResourceRelation("local"), descriptorv2.LocalRelation)
-	assert.Equal(t, descriptorv2.ResourceRelation("external"), descriptorv2.ExternalRelation)
+	assert.Equal(t, descriptorv2.LocalRelation, descriptorv2.ResourceRelation("local"))
+	assert.Equal(t, descriptorv2.ExternalRelation, descriptorv2.ResourceRelation("external"))
 }
 
 func TestResource_Struct(t *testing.T) {
@@ -1062,7 +1062,7 @@ func TestSchemaConformance(t *testing.T) {
 					},
 				}
 				err := descriptorv2.Validate(&desc)
-				assert.Error(t, err)
+				require.Error(t, err)
 				assert.Contains(t, err.Error(), tt.expectedError)
 			})
 		}
@@ -1125,7 +1125,7 @@ func TestSchemaConformance(t *testing.T) {
 					},
 				}
 				err := descriptorv2.Validate(&desc)
-				assert.Error(t, err)
+				require.Error(t, err)
 				assert.Contains(t, err.Error(), tt.expectedError)
 			})
 		}
@@ -1182,7 +1182,7 @@ func TestSchemaConformance(t *testing.T) {
 					},
 				}
 				err := descriptorv2.Validate(&desc)
-				assert.Error(t, err)
+				require.Error(t, err)
 				assert.Contains(t, err.Error(), tt.expectedError)
 			})
 		}

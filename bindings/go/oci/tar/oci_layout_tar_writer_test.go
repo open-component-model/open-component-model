@@ -127,11 +127,11 @@ func TestOCILayoutTarWriter_Tag(t *testing.T) {
 				assert.Error(t, err)
 				return
 			}
-			assert.NoError(t, err)
+			require.NoError(t, err)
 
 			// Verify the tag was set correctly
 			resolved, err := writer.Resolve(context.Background(), tt.reference)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, tt.desc.Digest, resolved.Digest)
 		})
 	}
@@ -227,7 +227,7 @@ func TestOCILayoutTarWriter_Fetch(t *testing.T) {
 
 	// Fetch should always return ErrUnsupported
 	reader, err := writer.Fetch(context.Background(), desc)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Nil(t, reader)
 }
 
@@ -281,7 +281,7 @@ func TestOCILayoutTarWriter_Resolve(t *testing.T) {
 				assert.Error(t, err)
 				return
 			}
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, tt.desc.Digest, resolved.Digest)
 		})
 	}
@@ -312,7 +312,7 @@ func TestBlobPath(t *testing.T) {
 				assert.Error(t, err)
 				return
 			}
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			expectedPath := "blobs/sha256/" + tt.digest.Encoded()
 			assert.Equal(t, expectedPath, path)
 		})

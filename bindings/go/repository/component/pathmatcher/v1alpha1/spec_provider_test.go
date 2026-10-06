@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
 	resolverspec "ocm.software/open-component-model/bindings/go/configuration/resolvers/v1alpha1/spec"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	pathmatcher "ocm.software/open-component-model/bindings/go/repository/component/pathmatcher/v1alpha1"
@@ -95,7 +96,8 @@ func Test_ResolverRepository_GetRepositorySpec(t *testing.T) {
 			},
 			want: rawRepo1,
 			err:  assert.NoError,
-		}, {
+		},
+		{
 			// glob component name pattern
 			name:      "glob pattern wildcard match",
 			component: "ocm.software/core/test",

@@ -5,12 +5,12 @@ import (
 	"os"
 	"os/exec"
 	"strings"
-
 	"testing"
 
 	"cel.dev/cel-go/cel"
 	stjsonschemav6 "github.com/santhosh-tekuri/jsonschema/v6"
 	"github.com/stretchr/testify/require"
+
 	"ocm.software/open-component-model/bindings/go/cel/jsonschema/provider"
 	"ocm.software/open-component-model/bindings/go/cel/jsonschema/santhosh-tekuri/v6"
 )

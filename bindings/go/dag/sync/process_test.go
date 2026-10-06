@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
 	"ocm.software/open-component-model/bindings/go/dag"
 )
 
@@ -51,11 +52,11 @@ func TestProcessTopology(t *testing.T) {
 		for i, v := range order {
 			idxMap[v] = i
 		}
-		r.True(idxMap["A"] < idxMap["B"], "A before B")
-		r.True(idxMap["A"] < idxMap["C"], "A before C")
-		r.True(idxMap["B"] < idxMap["D"], "B before D")
-		r.True(idxMap["C"] < idxMap["D"], "C before D")
-		r.Equal(4, len(order), "all vertices processed")
+		r.Less(idxMap["A"], idxMap["B"], "A before B")
+		r.Less(idxMap["A"], idxMap["C"], "A before C")
+		r.Less(idxMap["B"], idxMap["D"], "B before D")
+		r.Less(idxMap["C"], idxMap["D"], "C before D")
+		r.Len(order, 4, "all vertices processed")
 	})
 
 	t.Run("returns error if processor fails", func(t *testing.T) {
@@ -123,11 +124,11 @@ func TestProcessReverseTopology(t *testing.T) {
 		for i, v := range order {
 			idxMap[v] = i
 		}
-		r.True(idxMap["D"] < idxMap["B"], "D before B")
-		r.True(idxMap["D"] < idxMap["C"], "D before C")
-		r.True(idxMap["B"] < idxMap["A"], "B before A")
-		r.True(idxMap["C"] < idxMap["A"], "C before A")
-		r.Equal(4, len(order), "all vertices processed")
+		r.Less(idxMap["D"], idxMap["B"], "D before B")
+		r.Less(idxMap["D"], idxMap["C"], "D before C")
+		r.Less(idxMap["B"], idxMap["A"], "B before A")
+		r.Less(idxMap["C"], idxMap["A"], "C before A")
+		r.Len(order, 4, "all vertices processed")
 	})
 
 	t.Run("returns error if processor fails", func(t *testing.T) {

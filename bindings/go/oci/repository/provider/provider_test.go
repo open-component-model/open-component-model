@@ -119,7 +119,6 @@ func Test_Provider_Smoke(t *testing.T) {
 			}
 		})
 	})
-
 }
 
 func Test_JSON_Schema_For_Repository_Specification(t *testing.T) {
@@ -156,7 +155,7 @@ func Test_JSON_Schema_For_Repository_Specification(t *testing.T) {
 				tc.expectErr(t, err)
 				return
 			}
-			r.NotEmpty(t, schema, "schema should not be empty for type %s", tc.inputType.String())
+			r.NotEmptyf(schema, "schema should not be empty for type %s", tc.inputType.String())
 			r.Equal(tc.expectedJSONSchema, schema, "schema does not match expected for type %s", tc.inputType.String())
 		})
 	}

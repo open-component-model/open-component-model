@@ -9,7 +9,6 @@ import (
 )
 
 func TestDAGDiscovery(t *testing.T) {
-
 	t.Run("graph discovery succeeds", func(t *testing.T) {
 		ctx := t.Context()
 		r := require.New(t)
@@ -71,7 +70,6 @@ func TestDAGDiscovery(t *testing.T) {
 		dag := NewGraphDiscoverer(&GraphDiscovererOptions[string, string]{
 			Roots: []string{"A"},
 			Resolver: ResolverFunc[string, string](func(ctx context.Context, key string) (value string, err error) {
-
 				return "", fmt.Errorf("we should never reach this point due to context cancellation")
 			}),
 		})
@@ -161,6 +159,6 @@ func TestDAGDiscovery(t *testing.T) {
 		err := dag.Discover(ctx)
 		r.NoError(err)
 
-		r.Equal(dag.CurrentState("B"), DiscoveryStateCompleted, "expected vertex B to be in completed state, but got %s", dag.CurrentState("B"))
+		r.Equal(DiscoveryStateCompleted, dag.CurrentState("B"), "expected vertex B to be in completed state, but got %s", dag.CurrentState("B"))
 	})
 }

@@ -236,13 +236,13 @@ components:
 				r.Equal("ocm.software", desc.Component.Provider.Name)
 				r.Len(desc.Component.Labels, 1)
 				r.Equal("hello", desc.Component.Labels[0].Name)
-				r.Equal(json.RawMessage("\"world\""), desc.Component.Labels[0].Value)
+				r.JSONEq("\"world\"", string(desc.Component.Labels[0].Value))
 				r.Len(desc.Component.Resources, 1)
 				r.Equal("test-resource", desc.Component.Resources[0].Name)
 				r.Equal("v1.0.0", desc.Component.Resources[0].Version)
 				r.Len(desc.Component.Resources[0].Labels, 1)
 				r.Equal("hello", desc.Component.Resources[0].Labels[0].Name)
-				r.Equal(json.RawMessage("\"world\""), desc.Component.Resources[0].Labels[0].Value)
+				r.JSONEq("\"world\"", string(desc.Component.Resources[0].Labels[0].Value))
 
 				if tc.external {
 					componentNameExternal := fmt.Sprintf("%s-external", componentName)
@@ -1398,7 +1398,6 @@ components:
 	r.Equal(int64(len(content)), header.Size)
 	_, err = tr.Next()
 	r.ErrorIs(err, io.EOF)
-
 }
 
 // startS3WithObject starts RustFS holding content at bucket/key and writes an ocmconfig

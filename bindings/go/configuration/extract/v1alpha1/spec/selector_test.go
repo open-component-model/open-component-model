@@ -798,10 +798,10 @@ func TestLayerSelector_Matches_CombinedLabelsAndExpressions(t *testing.T) {
 }
 
 func TestLayerSelectorOperators(t *testing.T) {
-	require.Equal(t, LayerSelectorOperator("In"), LayerSelectorOpIn)
-	require.Equal(t, LayerSelectorOperator("NotIn"), LayerSelectorOpNotIn)
-	require.Equal(t, LayerSelectorOperator("Exists"), LayerSelectorOpExists)
-	require.Equal(t, LayerSelectorOperator("DoesNotExist"), LayerSelectorOpDoesNotExist)
+	require.Equal(t, LayerSelectorOpIn, LayerSelectorOperator("In"))
+	require.Equal(t, LayerSelectorOpNotIn, LayerSelectorOperator("NotIn"))
+	require.Equal(t, LayerSelectorOpExists, LayerSelectorOperator("Exists"))
+	require.Equal(t, LayerSelectorOpDoesNotExist, LayerSelectorOperator("DoesNotExist"))
 }
 
 func TestPredefinedKeys(t *testing.T) {

@@ -175,7 +175,7 @@ func TestBinary_Resolve(t *testing.T) {
 			name:     "gpg missing",
 			lookPath: func(string) (string, error) { return "", exec.ErrNotFound },
 			check: func(r *require.Assertions, _ string, err error) {
-				r.True(errors.Is(err, ErrGPGNotFound))
+				r.ErrorIs(err, ErrGPGNotFound)
 				r.EqualError(err, `GPG signing requires the GnuPG "gpg" binary (>= 2.2.0) on PATH; install GnuPG, in FIPS 140-3 mode one backed by a FIPS 140-3 validated libgcrypt`)
 			},
 		},
@@ -206,6 +206,63 @@ func TestBinary_Resolve(t *testing.T) {
 			b := New(opts...)
 			path, err := b.resolve(t.Context())
 			tt.check(require.New(t), path, err)
+		})
+	}
+}
+
+func TestBinary_Resolve_FIPSMode(t *testing.T) {
+	const (
+		version = "gpg (GnuPG) 2.4.7\nlibgcrypt 1.11.2\n"
+		fipsY   = "* Libgcrypt 1.11.3 (0000000)\nfips-mode:y::Garden Linux 1877:\n"
+		fipsN   = "* Libgcrypt 1.12.4\nfips-mode:n:::\n"
+	)
+	tests := []struct {
+		name         string
+		mode         string // "off", "on" (fips140=on) or "only" (fips140=only)
+		gpgconf      bool
+		showVersions string
+		wantErr      string
+		wantQueried  bool
+	}{
+		{name: "only: FIPS-mode libgcrypt accepted", mode: "only", gpgconf: true, showVersions: fipsY, wantQueried: true},
+		{name: "only: non-FIPS libgcrypt rejected", mode: "only", gpgconf: true, showVersions: fipsN, wantErr: "reports fips-mode:n", wantQueried: true},
+		{name: "only: no fips-mode line rejected", mode: "only", gpgconf: true, showVersions: "* Libgcrypt 1.8.5\n", wantErr: "reports no fips-mode", wantQueried: true},
+		{name: "only: gpgconf missing rejected", mode: "only", wantErr: "gpgconf is not on PATH"},
+		{name: "on: non-FIPS libgcrypt accepted after the check", mode: "on", gpgconf: true, showVersions: fipsN, wantQueried: true},
+		{name: "on: gpgconf missing accepted", mode: "on"},
+		{name: "off: libgcrypt not queried", mode: "off", gpgconf: true, showVersions: fipsN},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+			var queried bool
+			b := New(
+				WithFIPSMode(func() bool { return tt.mode != "off" }, func() bool { return tt.mode == "only" }),
+				WithLookPath(func(file string) (string, error) {
+					if file == "gpgconf" && !tt.gpgconf {
+						return "", exec.ErrNotFound
+					}
+					return "/fake/bin/" + file, nil
+				}),
+				WithExec(func(_ context.Context, _ string, args []string, _ []byte) ([]byte, []byte, error) {
+					if args[0] == "--show-versions" {
+						queried = true
+						return []byte(tt.showVersions), nil, nil
+					}
+					return []byte(version), nil, nil
+				}),
+			)
+			path, err := b.resolve(t.Context())
+			r.Equal(tt.wantQueried, queried)
+			if tt.wantErr != "" {
+				r.ErrorIs(err, ErrGPGNotInFIPSMode)
+				r.ErrorContains(err, tt.wantErr)
+				// A rejected gpg is not cached, so a later call checks again.
+				r.Empty(b.gpgPath)
+				return
+			}
+			r.NoError(err)
+			r.Equal("/fake/bin/gpg", path)
 		})
 	}
 }
@@ -257,8 +314,12 @@ func TestBinary_KeyringInvocations(t *testing.T) {
 			var calls [][]string
 			var stdin []byte
 			b := New(fakeLookPath, WithExec(func(_ context.Context, _ string, args []string, in []byte) ([]byte, []byte, error) {
-				if args[0] == "--version" {
+				// Resolution queries (gpg --version; gpgconf --show-versions in FIPS mode) are not operations.
+				switch args[0] {
+				case "--version":
 					return []byte("gpg (GnuPG) 2.4.4\n"), nil, nil
+				case "--show-versions":
+					return []byte("fips-mode:y:::\n"), nil, nil
 				}
 				calls = append(calls, args)
 				stdin = in

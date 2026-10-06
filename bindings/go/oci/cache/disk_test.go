@@ -78,7 +78,7 @@ func TestWriteAtomic_NoTempLeak_OnError(t *testing.T) {
 			"leftover temp file %s", e.Name())
 	}
 	_, err = os.Stat(pathFor(dir, dgst))
-	assert.True(t, errors.Is(err, fs.ErrNotExist), "final file must not exist on error")
+	assert.ErrorIs(t, err, fs.ErrNotExist, "final file must not exist on error")
 }
 
 func TestWriteAtomic_TempLivesInAlgoDir(t *testing.T) {
@@ -153,7 +153,7 @@ func TestWriteAtomic_SizeCap(t *testing.T) {
 
 	// Final file must not exist.
 	_, err = os.Stat(pathFor(dir, dgst))
-	assert.True(t, errors.Is(err, fs.ErrNotExist))
+	require.ErrorIs(t, err, fs.ErrNotExist)
 
 	// And no temp file left behind.
 	entries, err := os.ReadDir(dir)
@@ -183,7 +183,7 @@ func TestEnsureDir(t *testing.T) {
 
 func TestRemoveQuiet(t *testing.T) {
 	// missing path: no error
-	assert.NoError(t, removeQuiet(filepath.Join(t.TempDir(), "missing")))
+	require.NoError(t, removeQuiet(filepath.Join(t.TempDir(), "missing")))
 
 	// existing path: removed
 	dir := t.TempDir()
@@ -191,7 +191,7 @@ func TestRemoveQuiet(t *testing.T) {
 	require.NoError(t, os.WriteFile(p, []byte("x"), 0o600))
 	require.NoError(t, removeQuiet(p))
 	_, err := os.Stat(p)
-	assert.True(t, errors.Is(err, fs.ErrNotExist))
+	assert.ErrorIs(t, err, fs.ErrNotExist)
 }
 
 // helper used in store_test.go too

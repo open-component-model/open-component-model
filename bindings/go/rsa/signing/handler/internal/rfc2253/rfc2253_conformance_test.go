@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
 	"ocm.software/open-component-model/bindings/go/rsa/signing/handler/internal/rfc2253"
 )
 
@@ -70,10 +71,10 @@ func TestRFC2253_Conformance(t *testing.T) {
 
 			// CN and String checks if expected
 			if c.wantCN != "" && got.CommonName != c.wantCN {
-				require.Equal(t, got.CommonName, c.wantCN, "CommonName mismatch")
+				require.Equal(t, c.wantCN, got.CommonName, "CommonName mismatch")
 			}
 			if c.wantString != "" {
-				require.Equal(t, got.String(), c.wantString, "String mismatch")
+				require.Equal(t, c.wantString, got.String(), "String mismatch")
 			}
 
 			// ExtraNames checks

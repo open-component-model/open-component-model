@@ -8,11 +8,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
+
 	"ocm.software/open-component-model/bindings/go/plugin/internal/dummytype"
 	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
 	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/componentlister/v1"
@@ -21,9 +21,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-var (
-	dummyType = runtime.NewVersionedType(dummyv1.Type, dummyv1.Version)
-)
+var dummyType = runtime.NewVersionedType(dummyv1.Type, dummyv1.Version)
 
 func dummyCapability(schema []byte) v1.CapabilitySpec {
 	return v1.CapabilitySpec{
@@ -102,7 +100,7 @@ func TestPluginFlow(t *testing.T) {
 	require.Error(t, err)
 	require.Empty(t, resultIfErr)
 	expectedErr := `unknown last: "last"`
-	require.Truef(t, strings.Contains(err.Error(), expectedErr), "returned error '%s' does not contain expected '%s'", err.Error(), expectedErr)
+	require.Containsf(t, err.Error(), expectedErr, "returned error '%s' does not contain expected '%s'", err.Error(), expectedErr)
 }
 
 func TestRegisterInternalComponentListerPlugin(t *testing.T) {

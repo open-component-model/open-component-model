@@ -1,11 +1,13 @@
 package v1_test
 
 import (
+	"testing"
+
 	"github.com/stretchr/testify/require"
+
 	directv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	v1 "ocm.software/open-component-model/bindings/go/git/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
-	"testing"
 )
 
 func TestConvertCredentials(t *testing.T) {

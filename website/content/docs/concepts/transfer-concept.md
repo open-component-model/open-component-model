@@ -79,6 +79,14 @@ Use a local blob uploader configuration when:
 - You want a fully independent copy of all artifacts
 - You are preparing a CTF archive for offline transport
 
+### Git Repository Snapshots
+
+Resources with `Git/v1` access reference a snapshot of a Git repository. With a local blob uploader configuration, transfer downloads the pinned commit as a gzip-compressed tar archive (`application/x-tgz`) and stores it as a `localBlob` in the target OCI repository or CTF. The resource digest is preserved, and the target no longer needs access to the original Git repository.
+
+By-value Git transfer requires a full commit hash in the access specification. This prevents a moving branch or tag from changing the transferred content. When creating a component version, Git digest processing resolves ref-only access to a pinned commit; if both `ref` and `commit` are present, the commit takes precedence.
+
+Without a local blob uploader, external Git access remains a reference to the original repository. A constructor resource using the `git` input type is already stored as a local blob and follows normal local-blob transfer behavior. Transfer does not push commits or upload content to Git repositories.
+
 ## Localization
 
 When resources are copied with a local blob uploader, the component descriptor access coordinates are updated to point to the target registry. However, deployment instructions **embedded inside** resources are not modified. For example, a Helm chart's `values.yaml` may still reference `registry-a.example.com/app:1.0` even after the image has been copied to the target registry. Resources are transferred byte-for-byte to preserve digest integrity, so these internal references remain unchanged.

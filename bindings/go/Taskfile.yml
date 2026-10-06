@@ -2,6 +2,8 @@ version: '3'
 
 tasks:
   build/plugins:
+    # GOFIPS140 (root .env): test plugins and suites use the shipped FIPS module.
+    dotenv: ['{{.TASKFILE_DIR}}/../../.env']
     dir: plugin
     cmds:
       - go build -o tmp/testdata/test-plugin-component-version internal/testplugin-component-version/main.go
@@ -14,6 +16,7 @@ tasks:
       - go build -o tmp/testdata/test-plugin-credential-repository internal/testplugin-credential-repository/main.go
 
   test:
+    dotenv: ['{{.TASKFILE_DIR}}/../../.env']
     deps: [build/plugins]
     cmds:
       - >
@@ -25,6 +28,7 @@ tasks:
       - grep -v 'zz_generated\.' coverage.unit.out > coverage.unit.out.tmp && mv coverage.unit.out.tmp coverage.unit.out
 
   test/integration:
+    dotenv: ['{{.TASKFILE_DIR}}/../../.env']
     set: [errexit]
     vars:
       SIGSTORE_INTEGRATION_DIR: '{{.TASKFILE_DIR}}/sigstore/integration'

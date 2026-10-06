@@ -113,7 +113,7 @@ func TestPluginSDKForceShutdownContext(t *testing.T) {
 	parse, err := url.Parse("http://unix/shutdown")
 	r.NoError(err)
 	req := &http.Request{
-		Method: "GET",
+		Method: http.MethodGet,
 		URL:    parse,
 	}
 	req = req.WithContext(forceCTX)
@@ -170,7 +170,6 @@ func TestIdleChecker(t *testing.T) {
 		// The socket may return EOF while it's still shutting down before
 		// being removed. Only consider the test done once the socket is gone.
 		return strings.Contains(err.Error(), "no such file or directory")
-
 	}, 5*time.Second, 20*time.Millisecond)
 }
 
@@ -364,7 +363,7 @@ func TestLockFileProcessValidation(t *testing.T) {
 		r.NoError(err)
 		socketFile.Close()
 
-		err = os.WriteFile(lockFile, []byte(fakePID), 0644)
+		err = os.WriteFile(lockFile, []byte(fakePID), 0o644)
 		r.NoError(err)
 
 		_, err = os.Stat(location)

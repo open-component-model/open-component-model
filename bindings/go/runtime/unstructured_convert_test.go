@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"maps"
 	"math"
-	"strings"
 	"testing"
 	"time"
 
@@ -287,7 +286,7 @@ func TestNumbers(t *testing.T) {
 			assert.IsTypef(t, int64(0), data[k], "%s should be int64", k)
 		}
 		assert.Equal(t, bigSize, data["i64"])        // >2^53 stays exact
-		assert.Equal(t, 0.1, data["f32"])            // 32-bit shortest, not widened
+		assert.InDelta(t, 0.1, data["f32"], 1e-9)    // 32-bit shortest, not widened
 		assert.Equal(t, int64(bigSize), data["num"]) // json.Number field -> concrete int64
 		assertMatchesJSON(t, from, data)
 
@@ -490,5 +489,5 @@ func TestCycleErrors(t *testing.T) {
 	u := runtime.NewUnstructured()
 	err := s.Convert(from, &u)
 	require.Error(t, err)
-	assert.True(t, strings.Contains(err.Error(), "nesting depth"), "got: %v", err)
+	assert.Contains(t, err.Error(), "nesting depth", "got: %v", err)
 }
