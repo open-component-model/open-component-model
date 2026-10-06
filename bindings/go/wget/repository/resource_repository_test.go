@@ -259,8 +259,8 @@ func TestUploadResource(t *testing.T) {
 }
 
 func TestGetResourceCredentialConsumerIdentity(t *testing.T) {
-	t.Parallel()
 	r := require.New(t)
+	t.Parallel()
 
 	repo := repository.NewResourceRepository(nil)
 

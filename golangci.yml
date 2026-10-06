@@ -133,6 +133,14 @@ linters:
         path: _test\.go
       - path: (.+)\.go$
         text: composites
+      # io.EOF is returned directly per the io.Reader contract and must not be
+      # wrapped, so `err == io.EOF` is idiomatic. errorlint already allows this
+      # for stdlib readers; exempt the remaining test-only cases rather than
+      # forcing errors.Is. See https://github.com/golang/go/issues/39155.
+      - linters:
+          - errorlint
+        path: _test\.go
+        source: io\.EOF
       - linters:
           - cyclop
         path: (.+)_test\.go
@@ -146,11 +154,6 @@ linters:
   settings:
     cyclop:
       max-complexity: 15
-    errorlint:
-      # io.EOF and similar sentinels are returned directly per the io.Reader
-      # contract and must not be wrapped, so `err == io.EOF` is idiomatic.
-      # See https://github.com/golang/go/issues/39155.
-      comparison: false
     funlen:
       lines: 110
       statements: 60
