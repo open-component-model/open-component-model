@@ -210,7 +210,7 @@ func TestListComponentVersions(t *testing.T) {
 		)
 
 		require.NoError(t, err)
-		require.Len(t, descs, 0)
+		require.Empty(t, descs)
 	})
 
 	t.Run("EmptyComponentList", func(t *testing.T) {

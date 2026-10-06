@@ -442,7 +442,7 @@ func TestNormalise(t *testing.T) {
 				assert.Error(t, err)
 				return
 			}
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.JSONEq(t, tt.expected, string(got))
 		})
 	}

@@ -38,6 +38,7 @@ import (
 
 // setupTestRepositoryWithDescriptorLibrary creates a test repository with the given component versions
 func setupTestRepositoryWithDescriptorLibrary(t *testing.T, versions ...*descriptor.Descriptor) (string, error) {
+	t.Helper()
 	r := require.New(t)
 	archivePath := t.TempDir()
 	fs, err := filesystem.NewFS(archivePath, os.O_RDWR)
@@ -219,7 +220,7 @@ COMPONENT                   │ VERSION │ PROVIDER
 			r.NoError(err, "failed to list log entries")
 			r.NotEmpty(logEntries, "expected log entries to be present")
 
-			r.EqualValues(strings.TrimSpace(tt.expectedOutput), strings.TrimSpace(result.String()), "expected output")
+			r.Equal(strings.TrimSpace(tt.expectedOutput), strings.TrimSpace(result.String()), "expected output")
 		})
 	}
 }
@@ -334,7 +335,7 @@ func Test_Get_Component_Version_WideTree(t *testing.T) {
 			_, err := test.OCM(t, test.WithArgs(tt.args...), test.WithOutput(result), test.WithErrorOutput(logs))
 			r.NoError(err, "failed to run command")
 
-			r.EqualValues(trimTreeOutput(tt.expectedOutput), trimTreeOutput(result.String()), "expected output")
+			r.Equal(trimTreeOutput(tt.expectedOutput), trimTreeOutput(result.String()), "expected output")
 		})
 	}
 }
@@ -592,7 +593,7 @@ COMPONENT           │ VERSION │ PROVIDER
 			r.NoError(err, "failed to list log entries")
 			r.NotEmpty(logEntries, "expected log entries to be present")
 
-			r.EqualValues(strings.TrimSpace(tt.expectedOutput), strings.TrimSpace(result.String()), "expected output")
+			r.Equal(strings.TrimSpace(tt.expectedOutput), strings.TrimSpace(result.String()), "expected output")
 		})
 	}
 }
@@ -690,7 +691,7 @@ COMPONENT                   │ VERSION │ PROVIDER
 			r.NoError(err, "failed to list log entries")
 			r.NotEmpty(logEntries, "expected log entries to be present")
 
-			r.EqualValues(strings.TrimSpace(tt.expectedOutput), strings.TrimSpace(result.String()), "expected table output")
+			r.Equal(strings.TrimSpace(tt.expectedOutput), strings.TrimSpace(result.String()), "expected table output")
 		})
 	}
 }
@@ -814,7 +815,7 @@ COMPONENT           │ VERSION │ PROVIDER
 			r.NoError(err, "failed to list log entries")
 			r.NotEmpty(logEntries, "expected log entries to be present")
 
-			r.EqualValues(strings.TrimSpace(tt.expectedOutput), strings.TrimSpace(result.String()), "expected table output")
+			r.Equal(strings.TrimSpace(tt.expectedOutput), strings.TrimSpace(result.String()), "expected table output")
 		})
 	}
 }
@@ -892,7 +893,7 @@ configurations:
 			r.NoError(err, "failed to list log entries")
 			r.NotEmpty(logEntries, "expected log entries to be present")
 
-			r.EqualValues(strings.TrimSpace(tt.expectedOutput), strings.TrimSpace(result.String()), "expected table output")
+			r.Equal(strings.TrimSpace(tt.expectedOutput), strings.TrimSpace(result.String()), "expected table output")
 		})
 	}
 }
@@ -1596,7 +1597,7 @@ resources:
 			r.NoError(err, "failed to list log entries")
 			r.NotEmpty(logEntries, "expected log entries to be present")
 
-			r.EqualValues(strings.TrimSpace(tt.expectedOutput), strings.TrimSpace(result.String()), "expected output")
+			r.Equal(strings.TrimSpace(tt.expectedOutput), strings.TrimSpace(result.String()), "expected output")
 		})
 	}
 }

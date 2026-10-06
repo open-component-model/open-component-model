@@ -175,7 +175,7 @@ func TestBinary_Resolve(t *testing.T) {
 			name:     "gpg missing",
 			lookPath: func(string) (string, error) { return "", exec.ErrNotFound },
 			check: func(r *require.Assertions, _ string, err error) {
-				r.True(errors.Is(err, ErrGPGNotFound))
+				r.ErrorIs(err, ErrGPGNotFound)
 				r.EqualError(err, `GPG signing requires the GnuPG "gpg" binary (>= 2.2.0) on PATH; install GnuPG, in FIPS 140-3 mode one backed by a FIPS 140-3 validated libgcrypt`)
 			},
 		},
@@ -283,6 +283,7 @@ func TestBinary_KeyringInvocations(t *testing.T) {
 		{
 			name: "sign with agent unlocking",
 			run: func(t *testing.T, b *Binary) error {
+				t.Helper()
 				_, err := b.Sign(t.Context(), SignRequest{UseKeyring: true, KeyFingerprint: fpr, DigestAlgo: "SHA256", Data: []byte("d")})
 				return err
 			},
@@ -292,6 +293,7 @@ func TestBinary_KeyringInvocations(t *testing.T) {
 		{
 			name: "sign with passphrase",
 			run: func(t *testing.T, b *Binary) error {
+				t.Helper()
 				_, err := b.Sign(t.Context(), SignRequest{UseKeyring: true, Passphrase: "pw", DigestAlgo: "SHA256", Data: []byte("d")})
 				return err
 			},
@@ -302,6 +304,7 @@ func TestBinary_KeyringInvocations(t *testing.T) {
 		{
 			name: "verify",
 			run: func(t *testing.T, b *Binary) error {
+				t.Helper()
 				return b.Verify(t.Context(), VerifyRequest{UseKeyring: true, KeyFingerprint: fpr, Data: []byte("d"), Signature: "sig"})
 			},
 			wantArgs: []string{"--no-auto-key-retrieve", "--verify"},

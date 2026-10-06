@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -101,7 +100,7 @@ func TestPluginFlow(t *testing.T) {
 	require.Error(t, err)
 	require.Empty(t, resultIfErr)
 	expectedErr := `unknown last: "last"`
-	require.Truef(t, strings.Contains(err.Error(), expectedErr), "returned error '%s' does not contain expected '%s'", err.Error(), expectedErr)
+	require.Containsf(t, err.Error(), expectedErr, "returned error '%s' does not contain expected '%s'", err.Error(), expectedErr)
 }
 
 func TestRegisterInternalComponentListerPlugin(t *testing.T) {

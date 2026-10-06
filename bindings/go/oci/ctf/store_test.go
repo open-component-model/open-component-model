@@ -83,7 +83,7 @@ func TestStoreForReference(t *testing.T) {
 	ctf := setupTestCTF(t)
 	s := NewFromCTF(ctf)
 	result, err := s.StoreForReference(t.Context(), "test:reference")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, "test", result.(*repository).repo)
 }
 
@@ -113,11 +113,11 @@ func TestFetch(t *testing.T) {
 
 	t.Run("successful fetch", func(t *testing.T) {
 		reader, err := store.Fetch(ctx, desc)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.NotNil(t, reader)
 
 		readContent, err := io.ReadAll(reader)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, content, string(readContent))
 	})
 
@@ -126,7 +126,7 @@ func TestFetch(t *testing.T) {
 			Digest: digest.FromString("testabc"),
 		}
 		reader, err := store.Fetch(ctx, nonExistentDesc)
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Nil(t, reader)
 		assert.Contains(t, err.Error(), "not found")
 	})
@@ -139,11 +139,11 @@ func TestFetch(t *testing.T) {
 		// Call Close multiple times - all should succeed without panic
 		// The sync.OnceValue ensures RUnlock and rc.Close() are only called once
 		err = reader.Close()
-		assert.NoError(t, err, "first close should succeed")
+		require.NoError(t, err, "first close should succeed")
 
 		// Second call logs warning but not fail
 		err = reader.Close()
-		assert.NoError(t, err, "second close should be safe (logs warning)")
+		require.NoError(t, err, "second close should be safe (logs warning)")
 
 		// Verify the warning was logged exactly once
 		logHandler.AssertCalled(t, "Handle", slog.LevelError, "Close called multiple times on locked reader.")
@@ -169,7 +169,7 @@ func TestExists(t *testing.T) {
 
 	t.Run("blob exists", func(t *testing.T) {
 		exists, err := store.Exists(ctx, desc)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.True(t, exists)
 	})
 
@@ -178,7 +178,7 @@ func TestExists(t *testing.T) {
 			Digest: digest.Digest("sha256:1234"),
 		}
 		exists, err := store.Exists(ctx, nonExistentDesc)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.False(t, exists)
 	})
 }
@@ -198,11 +198,11 @@ func TestPush(t *testing.T) {
 
 	t.Run("successful push", func(t *testing.T) {
 		err := store.Push(ctx, desc, strings.NewReader(content))
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		// Verify the blob was saved
 		exists, err := store.Exists(ctx, desc)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.True(t, exists)
 	})
 }
@@ -243,7 +243,7 @@ func TestResolve(t *testing.T) {
 	for _, tc := range expectedOkResolves {
 		t.Run(tc, func(t *testing.T) {
 			desc, err := store.Resolve(ctx, tc)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, ociImageSpecV1.MediaTypeImageManifest, desc.MediaType)
 			assert.Equal(t, digest.Digest(digestStr), desc.Digest)
 		})
@@ -251,13 +251,13 @@ func TestResolve(t *testing.T) {
 
 	t.Run("invalid reference", func(t *testing.T) {
 		desc, err := store.Resolve(ctx, "invalid")
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Empty(t, desc)
 	})
 
 	t.Run("reference not found", func(t *testing.T) {
 		desc, err := store.Resolve(ctx, "other-repo:other-tag")
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Empty(t, desc)
 	})
 }
@@ -296,11 +296,11 @@ func TestTag(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := store.Tag(ctx, desc, tt.reference)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 
 			// Verify the tag was created by resolving it
 			resolvedDesc, err := store.Resolve(ctx, tt.reference)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, desc.Digest, resolvedDesc.Digest)
 		})
 	}
@@ -331,19 +331,19 @@ func TestFetchReference(t *testing.T) {
 
 	t.Run("successful fetch reference", func(t *testing.T) {
 		desc, reader, err := store.(*repository).FetchReference(ctx, "test-tag")
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.NotNil(t, reader)
 		assert.Equal(t, ociImageSpecV1.MediaTypeImageManifest, desc.MediaType)
 		assert.Equal(t, digest.Digest(digestStr), desc.Digest)
 
 		readContent, err := io.ReadAll(reader)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, content, string(readContent))
 	})
 
 	t.Run("fetch reference not found", func(t *testing.T) {
 		desc, reader, err := store.(*repository).FetchReference(ctx, "nonexistent-tag")
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Nil(t, reader)
 		assert.Empty(t, desc)
 	})
@@ -390,7 +390,7 @@ func TestTags(t *testing.T) {
 			tags = t
 			return nil
 		})
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		// Like OCI Image Layout, multiple tags can point to the same digest
 		assert.ElementsMatch(t, []string{"tag1", "tag2"}, tags, "multiple tags for same digest should coexist")
 	})
@@ -412,16 +412,16 @@ func TestPushWithManifest(t *testing.T) {
 
 	t.Run("push manifest and verify tag", func(t *testing.T) {
 		err := store.Push(ctx, desc, strings.NewReader(content))
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		// Verify the blob was saved
 		exists, err := store.Exists(ctx, desc)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.True(t, exists)
 
 		// Verify the digest is resolvable
 		resolvedDesc, err := store.Resolve(ctx, desc.Digest.String())
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, desc.Digest, resolvedDesc.Digest)
 	})
 }
@@ -451,7 +451,7 @@ func TestResolveWithRegistry(t *testing.T) {
 
 	t.Run("resolve with registry prefix", func(t *testing.T) {
 		desc, err := store.Resolve(ctx, "test-tag")
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, ociImageSpecV1.MediaTypeImageManifest, desc.MediaType)
 		assert.Equal(t, digest.Digest(digestStr), desc.Digest)
 	})
@@ -482,7 +482,7 @@ func TestResolveWithEmptyMediaType(t *testing.T) {
 
 	t.Run("resolve with empty media type defaults to image manifest", func(t *testing.T) {
 		desc, err := store.Resolve(ctx, "test-tag")
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, ociImageSpecV1.MediaTypeImageManifest, desc.MediaType)
 		assert.Equal(t, digest.Digest(digestStr), desc.Digest)
 	})
@@ -572,22 +572,22 @@ func TestConcurrentBlobOperations(t *testing.T) {
 
 				// Push operation
 				err := store.Push(ctx, desc, bytes.NewReader([]byte(content)))
-				require.NoError(t, err, "goroutine %d: push should succeed", id)
+				assert.NoError(t, err, "goroutine %d: push should succeed", id)
 
 				// Fetch operation
 				reader, err := store.Fetch(ctx, desc)
-				require.NoError(t, err, "goroutine %d: fetch should succeed", id)
-				require.NotNil(t, reader, "goroutine %d: reader should not be nil", id)
+				assert.NoError(t, err, "goroutine %d: fetch should succeed", id)
+				assert.NotNil(t, reader, "goroutine %d: reader should not be nil", id)
 
 				data, err := io.ReadAll(reader)
 				reader.Close()
-				require.NoError(t, err, "goroutine %d: read should succeed", id)
-				require.Equal(t, content, string(data), "goroutine %d: content should match", id)
+				assert.NoError(t, err, "goroutine %d: read should succeed", id)
+				assert.Equal(t, content, string(data), "goroutine %d: content should match", id)
 
 				// Exists operation
 				exists, err := store.Exists(ctx, desc)
-				require.NoError(t, err, "goroutine %d: exists check should succeed", id)
-				require.True(t, exists, "goroutine %d: blob should exist", id)
+				assert.NoError(t, err, "goroutine %d: exists check should succeed", id)
+				assert.True(t, exists, "goroutine %d: blob should exist", id)
 			}(i)
 		}
 
@@ -614,22 +614,22 @@ func TestConcurrentBlobOperations(t *testing.T) {
 
 					// Push
 					err := store.Push(ctx, desc, bytes.NewReader([]byte(content)))
-					require.NoError(t, err, "goroutine %d blob %d: push should succeed", goroutineID, j)
+					assert.NoError(t, err, "goroutine %d blob %d: push should succeed", goroutineID, j)
 
 					// Fetch
 					reader, err := store.Fetch(ctx, desc)
-					require.NoError(t, err, "goroutine %d blob %d: fetch should succeed", goroutineID, j)
-					require.NotNil(t, reader, "goroutine %d blob %d: reader should not be nil", goroutineID, j)
+					assert.NoError(t, err, "goroutine %d blob %d: fetch should succeed", goroutineID, j)
+					assert.NotNil(t, reader, "goroutine %d blob %d: reader should not be nil", goroutineID, j)
 
 					data, err := io.ReadAll(reader)
 					reader.Close()
-					require.NoError(t, err, "goroutine %d blob %d: read should succeed", goroutineID, j)
-					require.Equal(t, content, string(data), "goroutine %d blob %d: content should match", goroutineID, j)
+					assert.NoError(t, err, "goroutine %d blob %d: read should succeed", goroutineID, j)
+					assert.Equal(t, content, string(data), "goroutine %d blob %d: content should match", goroutineID, j)
 
 					// Exists
 					exists, err := store.Exists(ctx, desc)
-					require.NoError(t, err, "goroutine %d blob %d: exists check should succeed", goroutineID, j)
-					require.True(t, exists, "goroutine %d blob %d: blob should exist", goroutineID, j)
+					assert.NoError(t, err, "goroutine %d blob %d: exists check should succeed", goroutineID, j)
+					assert.True(t, exists, "goroutine %d blob %d: blob should exist", goroutineID, j)
 				}
 			}(i)
 		}
@@ -665,7 +665,7 @@ func TestUntag(t *testing.T) {
 	assert.ElementsMatch(t, []string{"v1.0.0"}, tags, "only the semver tag should remain")
 
 	_, err = store.Resolve(ctx, "latest")
-	assert.Error(t, err, "removed tag must not resolve")
+	require.Error(t, err, "removed tag must not resolve")
 
 	// Untag only removes the tag pointer — the blob itself must remain.
 	blobs, err := archive.ListBlobs(ctx)
@@ -708,7 +708,7 @@ func TestUntag_LastTag_KeepsBlob(t *testing.T) {
 	require.NoError(t, store.(*repository).Untag(ctx, "latest"))
 
 	_, err = store.Resolve(ctx, "latest")
-	assert.Error(t, err, "removed tag must not resolve")
+	require.Error(t, err, "removed tag must not resolve")
 
 	blobs, err := archive.ListBlobs(ctx)
 	require.NoError(t, err)

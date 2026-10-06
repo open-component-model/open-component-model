@@ -29,7 +29,7 @@ func TestGoNativeType_EmptyList(t *testing.T) {
 	list, ok := native.([]interface{})
 	require.True(t, ok, "Expected []interface{}, got %T", native)
 	assert.NotNil(t, list)
-	assert.Equal(t, 0, len(list))
+	assert.Empty(t, list)
 }
 
 func TestGoNativeType_ListMap(t *testing.T) {
@@ -51,7 +51,7 @@ func TestGoNativeType_ListMap(t *testing.T) {
 	// Check type
 	list, ok := native.([]interface{})
 	require.True(t, ok, "Expected []interface{}, got %T", native)
-	require.Equal(t, 2, len(list))
+	require.Len(t, list, 2)
 
 	// Check element type
 	map1, ok := list[0].(map[string]interface{})
@@ -116,7 +116,7 @@ func TestGoNativeType_Bytes(t *testing.T) {
 
 	// Check JSON marshalling
 	marshalled, err := json.Marshal(native)
-	assert.NoError(t, err, "Should be JSON marshallable")
+	require.NoError(t, err, "Should be JSON marshallable")
 	assert.NotEmpty(t, marshalled)
 }
 
@@ -180,7 +180,7 @@ func TestGoNativeType_Duration(t *testing.T) {
 
 	// Check JSON marshalling
 	marshalled, err := json.Marshal(native)
-	assert.NoError(t, err, "Should be JSON marshallable")
+	require.NoError(t, err, "Should be JSON marshallable")
 	assert.NotEmpty(t, marshalled)
 }
 
@@ -208,6 +208,6 @@ func TestGoNativeType_Timestamp(t *testing.T) {
 
 	// Check JSON marshalling
 	marshalled, err := json.Marshal(native)
-	assert.NoError(t, err, "Should be JSON marshallable")
+	require.NoError(t, err, "Should be JSON marshallable")
 	assert.NotEmpty(t, marshalled)
 }

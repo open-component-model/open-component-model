@@ -41,6 +41,7 @@ func TestWriteAndRead(t *testing.T) {
 				Value:        filepath.Join(tempDir, "test.txt"),
 			},
 			setup: func(t *testing.T) error {
+				t.Helper()
 				return nil // No setup needed
 			},
 			cleanup: func() error {
@@ -55,6 +56,7 @@ func TestWriteAndRead(t *testing.T) {
 				Value:        filepath.Join(tempDir, "pipe"),
 			},
 			setup: func(t *testing.T) error {
+				t.Helper()
 				return unix.Mkfifo(filepath.Join(tempDir, "pipe"), 0o666)
 			},
 			cleanup: func() error {
@@ -70,7 +72,10 @@ func TestWriteAndRead(t *testing.T) {
 				LocationType: "unsupported",
 				Value:        "test.txt",
 			},
-			setup:       func(t *testing.T) error { return nil },
+			setup: func(t *testing.T) error {
+				t.Helper()
+				return nil
+			},
 			cleanup:     func() error { return nil },
 			expectError: true,
 		},

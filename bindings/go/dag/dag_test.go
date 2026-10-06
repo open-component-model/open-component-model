@@ -20,7 +20,6 @@
 package dag
 
 import (
-	"errors"
 	"fmt"
 	"maps"
 	"slices"
@@ -58,10 +57,10 @@ func TestDAGAddNode(t *testing.T) {
 
 	t.Run("degrees", func(t *testing.T) {
 		r := require.New(t)
-		r.Equal(d.Vertices["A"].OutDegree, 0, "expected out-degree of A to be 0, but got %d", d.Vertices["A"].OutDegree)
-		r.Equal(d.Vertices["A"].InDegree, 0, "expected in-degree of A to be 0, but got %d", d.Vertices["A"].InDegree)
-		r.Equal(d.Vertices["B"].OutDegree, 0, "expected out-degree of B to be 0, but got %d", d.Vertices["B"].OutDegree)
-		r.Equal(d.Vertices["B"].InDegree, 0, "expected in-degree of B to be 0, but got %d", d.Vertices["B"].InDegree)
+		r.Equal(0, d.Vertices["A"].OutDegree, "expected out-degree of A to be 0, but got %d", d.Vertices["A"].OutDegree)
+		r.Equal(0, d.Vertices["A"].InDegree, "expected in-degree of A to be 0, but got %d", d.Vertices["A"].InDegree)
+		r.Equal(0, d.Vertices["B"].OutDegree, "expected out-degree of B to be 0, but got %d", d.Vertices["B"].OutDegree)
+		r.Equal(0, d.Vertices["B"].InDegree, "expected in-degree of B to be 0, but got %d", d.Vertices["B"].InDegree)
 	})
 
 	t.Run("delete", func(t *testing.T) {
@@ -88,28 +87,28 @@ func TestDAGAddEdge(t *testing.T) {
 		r := require.New(t)
 		roots := d.Roots()
 		r.Len(roots, 1, "expected 1 root (A), but got %d", len(d.Roots()))
-		r.EqualValues([]string{"A"}, d.Roots(), "expected roots to be [A], but got %v", d.Roots())
+		r.Equal([]string{"A"}, d.Roots(), "expected roots to be [A], but got %v", d.Roots())
 	})
 
 	r.Len(d.Vertices["A"].Edges, 1, "expected 1 edge from A to B, but got %d", len(d.Vertices["A"].Edges))
-	r.EqualValues([]string{"B"}, slices.Collect(maps.Keys(d.Vertices["A"].Edges)), "expected edge ID to be 'B', but got %s", d.Vertices["A"].Edges)
-	r.Len(d.Vertices["B"].Edges, 0, "expected 0 edges from B to A, but got %d", len(d.Vertices["B"].Edges))
+	r.Equal([]string{"B"}, slices.Collect(maps.Keys(d.Vertices["A"].Edges)), "expected edge ID to be 'B', but got %s", d.Vertices["A"].Edges)
+	r.Empty(d.Vertices["B"].Edges, "expected 0 edges from B to A, but got %d", len(d.Vertices["B"].Edges))
 
 	t.Run("degrees", func(t *testing.T) {
-		r.Equal(d.Vertices["A"].OutDegree, 1, "expected out-degree of A to be 1, but got %d", d.Vertices["A"].OutDegree)
-		r.Equal(d.Vertices["A"].InDegree, 0, "expected in-degree of A to be 0, but got %d", d.Vertices["A"].InDegree)
+		r.Equal(1, d.Vertices["A"].OutDegree, "expected out-degree of A to be 1, but got %d", d.Vertices["A"].OutDegree)
+		r.Equal(0, d.Vertices["A"].InDegree, "expected in-degree of A to be 0, but got %d", d.Vertices["A"].InDegree)
 
-		r.Equal(d.Vertices["B"].OutDegree, 0, "expected out-degree of B to be 0, but got %d", d.Vertices["B"].OutDegree)
-		r.Equal(d.Vertices["B"].InDegree, 1, "expected in-degree of B to be 1, but got %d", d.Vertices["B"].InDegree)
+		r.Equal(0, d.Vertices["B"].OutDegree, "expected out-degree of B to be 0, but got %d", d.Vertices["B"].OutDegree)
+		r.Equal(1, d.Vertices["B"].InDegree, "expected in-degree of B to be 1, but got %d", d.Vertices["B"].InDegree)
 	})
 
 	t.Run("reverse", func(t *testing.T) {
 		r := require.New(t)
 		d, err := d.Reverse()
 		r.NoError(err, "error reversing the graph")
-		r.Len(d.Vertices["A"].Edges, 0, "expected 0 edges from A to B, but got %d", len(d.Vertices["A"].Edges))
+		r.Empty(d.Vertices["A"].Edges, "expected 0 edges from A to B, but got %d", len(d.Vertices["A"].Edges))
 		r.Len(d.Vertices["B"].Edges, 1, "expected 1 edge from B to A, but got %d", len(d.Vertices["B"].Edges))
-		r.EqualValues([]string{"A"}, slices.Collect(maps.Keys(d.Vertices["B"].Edges)), "expected edge ID to be 'A', but got %s", d.Vertices["B"].Edges)
+		r.Equal([]string{"A"}, slices.Collect(maps.Keys(d.Vertices["B"].Edges)), "expected edge ID to be 'A', but got %s", d.Vertices["B"].Edges)
 	})
 
 	t.Run("delete", func(t *testing.T) {
@@ -139,7 +138,7 @@ func TestDAGAddEdgeCycleRollback(t *testing.T) {
 	r.Error(err, "expected error when creating a cycle, but got nil")
 
 	var cerr *CycleError[string]
-	r.True(errors.As(err, &cerr))
+	r.ErrorAs(err, &cerr)
 	r.Len(cerr.Cycle, 4, "expected 3-cycle plus closing node, but got %v", cerr.Cycle)
 	r.Contains(cerr.Cycle, "B")
 
@@ -204,10 +203,9 @@ func TestDAGHasCycle(t *testing.T) {
 
 	_, err := d.TopologicalSort()
 	r.Errorf(err, "expected error when sorting a cyclic graph, but got nil")
-	r.IsType(&CycleError[string]{}, err, "expected CycleError, but got %T", err)
 
 	var cerr *CycleError[string]
-	r.True(errors.As(err, &cerr))
+	r.ErrorAs(err, &cerr)
 	cycle := cerr.Cycle
 
 	r.Len(cycle, 4)

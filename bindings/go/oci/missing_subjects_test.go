@@ -55,11 +55,13 @@ func (g *ghostReferrers) Predecessors(ctx context.Context, desc ociImageSpecV1.D
 
 func TestCopySkipsMissingSubjects(t *testing.T) {
 	newStore := func(t *testing.T) *memory.Store {
+		t.Helper()
 		store := memory.New()
 		pushTestBlob(t, store, ociImageSpecV1.MediaTypeEmptyJSON, ociImageSpecV1.DescriptorEmptyJSON.Data)
 		return store
 	}
 	layer := func(t *testing.T, store *memory.Store) []ociImageSpecV1.Descriptor {
+		t.Helper()
 		return []ociImageSpecV1.Descriptor{pushTestBlob(t, store, "application/vnd.test.layer", []byte("layer"))}
 	}
 
@@ -72,6 +74,7 @@ func TestCopySkipsMissingSubjects(t *testing.T) {
 		{
 			name: "missing subject",
 			setup: func(t *testing.T) (oras.ReadOnlyGraphTarget, ociImageSpecV1.Descriptor) {
+				t.Helper()
 				store := newStore(t)
 				subject := missingDescriptor("subject")
 				return store, pushTestManifest(t, store, layer(t, store), &subject)
@@ -80,6 +83,7 @@ func TestCopySkipsMissingSubjects(t *testing.T) {
 		{
 			name: "missing subject of artifact manifest",
 			setup: func(t *testing.T) (oras.ReadOnlyGraphTarget, ociImageSpecV1.Descriptor) {
+				t.Helper()
 				store := newStore(t)
 				data, err := json.Marshal(map[string]any{
 					"mediaType": mediaTypeArtifactManifest,
@@ -93,6 +97,7 @@ func TestCopySkipsMissingSubjects(t *testing.T) {
 		{
 			name: "missing referrer",
 			setup: func(t *testing.T) (oras.ReadOnlyGraphTarget, ociImageSpecV1.Descriptor) {
+				t.Helper()
 				store := newStore(t)
 				root := pushTestManifest(t, store, layer(t, store), nil)
 				return &ghostReferrers{Store: store, subject: root, ghost: missingDescriptor("referrer")}, root
@@ -101,6 +106,7 @@ func TestCopySkipsMissingSubjects(t *testing.T) {
 		{
 			name: "missing layer",
 			setup: func(t *testing.T) (oras.ReadOnlyGraphTarget, ociImageSpecV1.Descriptor) {
+				t.Helper()
 				store := newStore(t)
 				return store, pushTestManifest(t, store, []ociImageSpecV1.Descriptor{missingDescriptor("layer")}, nil)
 			},
@@ -109,6 +115,7 @@ func TestCopySkipsMissingSubjects(t *testing.T) {
 		{
 			name: "complete graph with subject",
 			setup: func(t *testing.T) (oras.ReadOnlyGraphTarget, ociImageSpecV1.Descriptor) {
+				t.Helper()
 				store := newStore(t)
 				layers := layer(t, store)
 				subject := pushTestManifest(t, store, layers, nil)

@@ -39,9 +39,11 @@ func TestGetComponentVersionHandlerFunc(t *testing.T) {
 				return handler
 			},
 			assertOutput: func(t *testing.T, resp *http.Response) {
+				t.Helper()
 				require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 			},
 			assertError: func(t *testing.T, err error) {
+				t.Helper()
 				require.NoError(t, err)
 			},
 			request: func(base string) *http.Request {
@@ -77,14 +79,16 @@ func TestGetComponentVersionHandlerFunc(t *testing.T) {
 				return handler
 			},
 			assertOutput: func(t *testing.T, resp *http.Response) {
+				t.Helper()
 				defer resp.Body.Close()
 				require.Equal(t, http.StatusOK, resp.StatusCode)
 				content, err := io.ReadAll(resp.Body)
 				require.NoError(t, err)
-				require.Equal(t, `{"meta":{"schemaVersion":"1.0.0"},"component":{"name":"component","version":"1.0.0","repositoryContexts":null,"provider":"ocm.software","resources":null,"sources":null,"componentReferences":null}}
+				require.JSONEq(t, `{"meta":{"schemaVersion":"1.0.0"},"component":{"name":"component","version":"1.0.0","repositoryContexts":null,"provider":"ocm.software","resources":null,"sources":null,"componentReferences":null}}
 `, string(content))
 			},
 			assertError: func(t *testing.T, err error) {
+				t.Helper()
 				require.NoError(t, err)
 			},
 			request: func(base string) *http.Request {
@@ -132,6 +136,7 @@ func TestGetLocalResourceHandlerFunc(t *testing.T) {
 		{
 			name: "GetLocalResourceHandlerFunc unauthorized error",
 			handlerFunc: func(t *testing.T) http.HandlerFunc {
+				t.Helper()
 				handler := GetLocalResourceHandlerFunc(func(ctx context.Context, request repov1.GetLocalResourceRequest[*dummyv1.Repository], credentials runtime.Typed) (repov1.GetLocalResourceResponse, error) {
 					return repov1.GetLocalResourceResponse{}, nil
 				}, scheme, &dummyv1.Repository{})
@@ -139,9 +144,11 @@ func TestGetLocalResourceHandlerFunc(t *testing.T) {
 				return handler
 			},
 			assertOutput: func(t *testing.T, resp *http.Response) {
+				t.Helper()
 				require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 			},
 			assertError: func(t *testing.T, err error) {
+				t.Helper()
 				require.NoError(t, err)
 			},
 			request: func(base string) *http.Request {
@@ -155,6 +162,7 @@ func TestGetLocalResourceHandlerFunc(t *testing.T) {
 		{
 			name: "GetLocalResourceHandlerFunc success",
 			handlerFunc: func(t *testing.T) http.HandlerFunc {
+				t.Helper()
 				handler := GetLocalResourceHandlerFunc(func(ctx context.Context, request repov1.GetLocalResourceRequest[*dummyv1.Repository], credentials runtime.Typed) (repov1.GetLocalResourceResponse, error) {
 					require.Equal(t, "component", request.Name)
 					require.Equal(t, "1.0.0", request.Version)
@@ -164,10 +172,12 @@ func TestGetLocalResourceHandlerFunc(t *testing.T) {
 				return handler
 			},
 			assertOutput: func(t *testing.T, resp *http.Response) {
+				t.Helper()
 				defer resp.Body.Close()
 				require.Equal(t, http.StatusOK, resp.StatusCode)
 			},
 			assertError: func(t *testing.T, err error) {
+				t.Helper()
 				require.NoError(t, err)
 			},
 			request: func(base string) *http.Request {
@@ -222,9 +232,11 @@ func TestAddComponentVersionHandlerFunc(t *testing.T) {
 				return handler
 			},
 			assertOutput: func(t *testing.T, resp *http.Response) {
+				t.Helper()
 				require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 			},
 			assertError: func(t *testing.T, err error) {
+				t.Helper()
 				require.NoError(t, err)
 			},
 			request: func(base string) *http.Request {
@@ -245,10 +257,12 @@ func TestAddComponentVersionHandlerFunc(t *testing.T) {
 				return handler
 			},
 			assertOutput: func(t *testing.T, resp *http.Response) {
+				t.Helper()
 				defer resp.Body.Close()
 				require.Equal(t, http.StatusOK, resp.StatusCode)
 			},
 			assertError: func(t *testing.T, err error) {
+				t.Helper()
 				require.NoError(t, err)
 			},
 			request: func(base string) *http.Request {
@@ -321,9 +335,11 @@ func TestAddLocalResourceHandlerFunc(t *testing.T) {
 				return handler
 			},
 			assertOutput: func(t *testing.T, resp *http.Response) {
+				t.Helper()
 				require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 			},
 			assertError: func(t *testing.T, err error) {
+				t.Helper()
 				require.NoError(t, err)
 			},
 			request: func(base string) *http.Request {
@@ -365,10 +381,12 @@ func TestAddLocalResourceHandlerFunc(t *testing.T) {
 				return handler
 			},
 			assertOutput: func(t *testing.T, resp *http.Response) {
+				t.Helper()
 				defer resp.Body.Close()
 				require.Equal(t, http.StatusOK, resp.StatusCode)
 			},
 			assertError: func(t *testing.T, err error) {
+				t.Helper()
 				require.NoError(t, err)
 			},
 			request: func(base string) *http.Request {

@@ -20,6 +20,7 @@ import (
 
 // setupTestComponent creates a basic component constructor for testing
 func setupTestComponent(t *testing.T, resourceYAML string) *constructorruntime.ComponentConstructor {
+	t.Helper()
 	yamlData := fmt.Sprintf(`
 components:
   - name: ocm.software/test-component
@@ -42,6 +43,7 @@ components:
 
 // verifyBasicComponent verifies the basic component properties
 func verifyBasicComponent(t *testing.T, desc *descriptor.Descriptor) {
+	t.Helper()
 	assert.Equal(t, "ocm.software/test-component", desc.Component.Name)
 	assert.Equal(t, "v1.0.0", desc.Component.Version)
 	assert.Equal(t, "test-provider", desc.Component.Provider.Name)
@@ -109,7 +111,7 @@ func TestConstructWithMockInputMethod(t *testing.T) {
 	assert.NotNil(t, resource.Access)
 
 	// Verify the repository was called correctly
-	assert.Len(t, mockRepo.addedLocalResources, 0)
+	assert.Empty(t, mockRepo.addedLocalResources)
 	assert.Len(t, mockRepo.addedVersions, 1)
 }
 
@@ -160,7 +162,7 @@ func TestConstructWithResourceAccess(t *testing.T) {
 	assert.Contains(t, string(access.Data), "application/octet-stream")
 
 	// Verify the repository was called correctly
-	assert.Len(t, mockRepo.addedLocalResources, 0)
+	assert.Empty(t, mockRepo.addedLocalResources)
 	assert.Len(t, mockRepo.addedVersions, 1)
 }
 
@@ -245,11 +247,11 @@ func TestConstructWithCredentialResolution(t *testing.T) {
 	assert.Equal(t, "application/octet-stream", access.MediaType)
 
 	// Verify the repository was called correctly
-	assert.Len(t, mockRepo.addedLocalResources, 0)
+	assert.Empty(t, mockRepo.addedLocalResources)
 	assert.Len(t, mockRepo.addedVersions, 1)
 
 	// Verify the credential provider was called
-	assert.Equal(t, mockCredProvider.called["mock/v1"], 1)
+	assert.Equal(t, 1, mockCredProvider.called["mock/v1"])
 }
 
 func TestAddColocatedResourceLocalBlob_AttachesOwnershipOptIn(t *testing.T) {
@@ -311,7 +313,7 @@ func TestAddColocatedResourceLocalBlob_AttachesOwnershipOptIn(t *testing.T) {
 			if tt.wantErr {
 				require.Error(t, err)
 				for _, s := range tt.wantErrContains {
-					assert.ErrorContains(t, err, s)
+					require.ErrorContains(t, err, s)
 				}
 			} else {
 				require.NoError(t, err)
@@ -394,7 +396,7 @@ func TestConstructWithResourceDigest(t *testing.T) {
 	assert.Equal(t, "test-digest-value", resource.Digest.Value)
 
 	// Verify the repository was called correctly
-	assert.Len(t, mockTargetRepo.addedLocalResources, 0)
+	assert.Empty(t, mockTargetRepo.addedLocalResources)
 	assert.Len(t, mockTargetRepo.addedVersions, 1)
 }
 
@@ -439,7 +441,7 @@ func TestConstructWithAccessTypeWithoutDigestProcessor(t *testing.T) {
 	assert.Equal(t, "MyCustomAccessType/v1", resource.Access.GetType().String())
 	assert.Nil(t, resource.Digest, "a resource without a digest processor must be stored without a digest")
 
-	assert.Len(t, mockTargetRepo.addedLocalResources, 0)
+	assert.Empty(t, mockTargetRepo.addedLocalResources)
 	assert.Len(t, mockTargetRepo.addedVersions, 1)
 }
 
@@ -721,7 +723,7 @@ components:
 	assert.Equal(t, "application/json", access2.MediaType)
 
 	// Verify the repository was called correctly
-	assert.Len(t, mockRepo.addedLocalResources, 0)
+	assert.Empty(t, mockRepo.addedLocalResources)
 	assert.Len(t, mockRepo.addedVersions, 1)
 }
 
