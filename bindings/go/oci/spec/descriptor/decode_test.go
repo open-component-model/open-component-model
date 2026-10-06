@@ -9,8 +9,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"sigs.k8s.io/yaml"
+
+	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 )
 
 func createV2DescriptorYAML() []byte {
@@ -54,7 +55,7 @@ func createTarWithFile(name string, content []byte) *bytes.Buffer {
 	tw := tar.NewWriter(buf)
 	_ = tw.WriteHeader(&tar.Header{
 		Name: name,
-		Mode: 0644,
+		Mode: 0o644,
 		Size: int64(len(content)),
 	})
 	if len(content) > 0 {
@@ -160,10 +161,10 @@ func TestDescriptorFileFromTar(t *testing.T) {
 	yamlData := createV2DescriptorYAML()
 	buf := &bytes.Buffer{}
 	tw := tar.NewWriter(buf)
-	_ = tw.WriteHeader(&tar.Header{Name: "unrelated.txt", Mode: 0644, Size: 0})
+	_ = tw.WriteHeader(&tar.Header{Name: "unrelated.txt", Mode: 0o644, Size: 0})
 	_ = tw.WriteHeader(&tar.Header{
 		Name: LegacyComponentDescriptorTarFileName,
-		Mode: 0644,
+		Mode: 0o644,
 		Size: int64(len(yamlData)),
 	})
 	_, _ = tw.Write(yamlData)

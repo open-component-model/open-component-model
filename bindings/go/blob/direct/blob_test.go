@@ -10,6 +10,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 	"ocm.software/open-component-model/bindings/go/blob"
 )
 
@@ -112,7 +113,6 @@ func TestBlobOptions(t *testing.T) {
 			r.Equal(data[:len(data)-1], string(d))
 		})
 	})
-
 }
 
 func TestCompatibility(t *testing.T) {

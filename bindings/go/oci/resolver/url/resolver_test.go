@@ -51,6 +51,7 @@ func TestURLPathResolver_SetClient(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, store)
 }
+
 func TestURLPathResolver_ComponentVersionReference(t *testing.T) {
 	resolver, err := url.New(url.WithBaseURL("http://example.com"))
 	assert.NoError(t, err)

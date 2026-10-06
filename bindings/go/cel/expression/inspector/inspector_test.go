@@ -10,6 +10,7 @@ import (
 
 	"cel.dev/cel-go/cel"
 	"cel.dev/cel-go/ext"
+
 	"ocm.software/open-component-model/bindings/go/cel/expression/fieldpath"
 )
 
@@ -613,7 +614,7 @@ func TestInspector_UnknownResourcesAndCalls(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var opts = []cel.EnvOption{
+			opts := []cel.EnvOption{
 				ext.Lists(),
 				ext.Strings(),
 				cel.OptionalTypes(),

@@ -1,10 +1,10 @@
-# syntax=docker/dockerfile:1@sha256:ecfaec9ed6d810b56388c508f4121597bfbba70d41a6dfeee4d8cad5f295fc32
+# syntax=docker/dockerfile:1@sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e
 
 # renovate: datasource=github-releases depName=sigstore/cosign
 ARG COSIGN_VERSION=v3.1.3
 
 # Build the manager binary
-FROM --platform=${BUILDPLATFORM} golang:1.27.1@sha256:3680233e3204827fbdc66088528ae6d4b3d034f51d03a99d454f6de034888244 AS builder
+FROM --platform=${BUILDPLATFORM} golang:1.27.1@sha256:e0174e51e81218523251d85d248a90d24c3d5e81543b4f07a5d66229397db190 AS builder
 ARG TARGETOS
 ARG TARGETARCH
 
@@ -26,6 +26,9 @@ COPY . .
 # GO_TAGS is empty by default; pass GO_TAGS=pprof to get a debug image that
 # serves profiles on --pprof-bind-address.
 ARG GO_TAGS=""
+# Go Cryptographic Module version (FIPS 140-3). Required; the source of truth is
+# GOFIPS140 in the project root .env, passed in by `task docker-build/multi-arch`.
+ARG GOFIPS140
 # the GOARCH has not a default value to allow the binary be built according to the host where the command
 # was called. For example, if we call task docker-build in a local env which has the Apple Silicon M1 SO
 # the docker BUILDPLATFORM arg will be linux/arm64 when for Apple x86 it will be linux/amd64. Therefore,
@@ -36,9 +39,11 @@ ARG GO_TAGS=""
 # running both at once. That keeps peak memory at roughly a single build and
 # lets the second arch reuse the warmed caches. Dropping `-a` avoids force
 # rebuilding the entire standard library on every build.
+# GOTOOLCHAIN=local: build with the image's Go only; a toolchain mismatch with
+# go.mod fails instead of downloading another toolchain.
 RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked \
     --mount=type=cache,target=/root/.cache/go-build,sharing=locked \
-    CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -tags "${GO_TAGS}" -o manager ./kubernetes/controller/cmd
+    CGO_ENABLED=0 GOTOOLCHAIN=local GOFIPS140="${GOFIPS140:?GOFIPS140 build arg is required, see root .env}" GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -tags "${GO_TAGS}" -o manager ./kubernetes/controller/cmd
 
 # Pull the pinned cosign binary from the official multi-arch image published by the sigstore
 # project. The sigstore signing handler in bindings/go/sigstore shells out to this binary; the

@@ -708,8 +708,9 @@ func Test_RSA_Verify_ErrorPaths_BothAlgs(t *testing.T) {
 			t.Run("missing hash algorithm", func(t *testing.T) {
 				s := descruntime.Signature{Digest: descruntime.Digest{HashAlgorithm: "", Value: d.Value}, Signature: si}
 				err := h.Verify(t.Context(), s, nil, &rsacredentialsv1.RSACredentials{
-					Type: rsacredentialsv1.VersionedType,
-					PublicKeyPEMFile: chainPath})
+					Type:             rsacredentialsv1.VersionedType,
+					PublicKeyPEMFile: chainPath,
+				})
 				require.Error(t, err)
 				require.Contains(t, err.Error(), "missing hash algorithm")
 			})
@@ -717,8 +718,9 @@ func Test_RSA_Verify_ErrorPaths_BothAlgs(t *testing.T) {
 			t.Run("missing digest value", func(t *testing.T) {
 				s := descruntime.Signature{Digest: descruntime.Digest{HashAlgorithm: "sha256", Value: ""}, Signature: si}
 				err := h.Verify(t.Context(), s, nil, &rsacredentialsv1.RSACredentials{
-					Type: rsacredentialsv1.VersionedType,
-					PublicKeyPEMFile: chainPath})
+					Type:             rsacredentialsv1.VersionedType,
+					PublicKeyPEMFile: chainPath,
+				})
 				require.Error(t, err)
 				require.Contains(t, err.Error(), "missing digest value")
 			})
@@ -726,8 +728,9 @@ func Test_RSA_Verify_ErrorPaths_BothAlgs(t *testing.T) {
 			t.Run("unsupported hash algorithm", func(t *testing.T) {
 				s := descruntime.Signature{Digest: descruntime.Digest{HashAlgorithm: "sha1", Value: d.Value}, Signature: si}
 				err := h.Verify(t.Context(), s, nil, &rsacredentialsv1.RSACredentials{
-					Type: rsacredentialsv1.VersionedType,
-					PublicKeyPEMFile: chainPath})
+					Type:             rsacredentialsv1.VersionedType,
+					PublicKeyPEMFile: chainPath,
+				})
 				require.Error(t, err)
 				require.Contains(t, err.Error(), "unsupported hash algorithm")
 			})
@@ -735,8 +738,9 @@ func Test_RSA_Verify_ErrorPaths_BothAlgs(t *testing.T) {
 			t.Run("hash name mapping accepts SHA-256", func(t *testing.T) {
 				s := descruntime.Signature{Digest: descruntime.Digest{HashAlgorithm: "SHA-256", Value: d.Value}, Signature: si}
 				err := h.Verify(t.Context(), s, nil, &rsacredentialsv1.RSACredentials{
-					Type: rsacredentialsv1.VersionedType,
-					PublicKeyPEMFile: chainPath})
+					Type:             rsacredentialsv1.VersionedType,
+					PublicKeyPEMFile: chainPath,
+				})
 				require.NoError(t, err)
 			})
 
@@ -744,8 +748,9 @@ func Test_RSA_Verify_ErrorPaths_BothAlgs(t *testing.T) {
 				sum2 := sha256.Sum256([]byte("different"))
 				d2 := descruntime.Digest{HashAlgorithm: crypto.SHA256.String(), Value: hex.EncodeToString(sum2[:])}
 				err := h.Verify(t.Context(), descruntime.Signature{Digest: d2, Signature: si}, nil, &rsacredentialsv1.RSACredentials{
-					Type: rsacredentialsv1.VersionedType,
-					PublicKeyPEMFile: chainPath})
+					Type:             rsacredentialsv1.VersionedType,
+					PublicKeyPEMFile: chainPath,
+				})
 				require.Error(t, err)
 				require.Contains(t, err.Error(), "verification error")
 			})
@@ -760,8 +765,9 @@ func Test_RSA_Verify_ErrorPaths_BothAlgs(t *testing.T) {
 						Value:     pemOnlySig,
 					},
 				}, nil, &rsacredentialsv1.RSACredentials{
-					Type: rsacredentialsv1.VersionedType,
-					PublicKeyPEMFile: chainPath})
+					Type:             rsacredentialsv1.VersionedType,
+					PublicKeyPEMFile: chainPath,
+				})
 				require.Error(t, err)
 				require.Contains(t, err.Error(), "invalid certificate format (expected \"CERTIFICATE\" PEM block)")
 			})
@@ -775,8 +781,9 @@ func Test_RSA_Verify_ErrorPaths_BothAlgs(t *testing.T) {
 						Value:     bad,
 					},
 				}, nil, &rsacredentialsv1.RSACredentials{
-					Type: rsacredentialsv1.VersionedType,
-					PublicKeyPEMFile: chainPath})
+					Type:             rsacredentialsv1.VersionedType,
+					PublicKeyPEMFile: chainPath,
+				})
 				require.Error(t, err)
 				require.Contains(t, err.Error(), "invalid algorithm")
 			})
@@ -787,8 +794,9 @@ func Test_RSA_Verify_ErrorPaths_BothAlgs(t *testing.T) {
 				s := descruntime.Signature{Digest: d, Signature: si}
 				s.Signature.Issuer = cert.Subject.String()
 				err := h.Verify(t.Context(), s, nil, &rsacredentialsv1.RSACredentials{
-					Type: rsacredentialsv1.VersionedType,
-					PublicKeyPEMFile: chainPath})
+					Type:             rsacredentialsv1.VersionedType,
+					PublicKeyPEMFile: chainPath,
+				})
 				require.NoError(t, err)
 			})
 

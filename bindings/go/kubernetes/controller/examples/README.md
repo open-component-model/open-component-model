@@ -48,7 +48,7 @@ ArgoCD Helm OCI sources).
 
 ```bash
 # Run this example in isolation
-task test/e2e -- -ginkgo.focus=helm-simple
+task test/e2e -- --focus=helm-simple
 ```
 
 ---
@@ -115,7 +115,7 @@ FluxCD injects values through `HelmRelease.spec.values`; ArgoCD through
 arise with the string-based `values` field.
 
 ```bash
-task test/e2e -- -ginkgo.focus=helm-configuration-localization
+task test/e2e -- --focus=helm-configuration-localization
 ```
 
 ---
@@ -176,7 +176,7 @@ task test/e2e
 task test/e2e/fresh
 
 # Run a single example by name
-task test/e2e -- -ginkgo.focus=helm-configuration-localization
+task test/e2e -- --focus=helm-configuration-localization
 ```
 
 See [Taskfile.yml](../Taskfile.yml) for the full list of e2e tasks and options.

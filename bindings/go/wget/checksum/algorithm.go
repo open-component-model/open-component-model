@@ -13,6 +13,7 @@ package checksum
 
 import (
 	"crypto"
+	"crypto/fips140"
 	"hash"
 	"strings"
 
@@ -34,8 +35,31 @@ type Algorithm struct {
 }
 
 // New returns a fresh hash.Hash for the algorithm.
+//
+// MD5 and SHA-1 are not FIPS-approved. They only verify checksums that remote
+// servers publish; the digest OCM records and signs is always SHA-256. They
+// therefore run outside strict enforcement, so verification keeps working with
+// GODEBUG=fips140=only.
 func (a Algorithm) New() hash.Hash {
-	return a.Hash.New()
+	h := a.Hash.New()
+	if a.Hash == crypto.MD5 || a.Hash == crypto.SHA1 {
+		return unenforcedHash{h}
+	}
+	return h
+}
+
+// unenforcedHash runs every hashing call of a non-approved algorithm inside
+// [fips140.WithoutEnforcement]. Outside fips140=only that is a direct call.
+type unenforcedHash struct{ hash.Hash }
+
+func (h unenforcedHash) Write(p []byte) (n int, err error) {
+	fips140.WithoutEnforcement(func() { n, err = h.Hash.Write(p) })
+	return n, err
+}
+
+func (h unenforcedHash) Sum(b []byte) (out []byte) {
+	fips140.WithoutEnforcement(func() { out = h.Hash.Sum(b) })
+	return out
 }
 
 var (

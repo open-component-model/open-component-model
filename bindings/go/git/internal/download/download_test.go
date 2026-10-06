@@ -128,7 +128,6 @@ func TestDownloadArchive(t *testing.T) {
 	r.NoError(err)
 	r.NoError(writer.Close())
 	r.Equal(data, recompressed.Bytes())
-
 }
 
 func readBlob(t *testing.T, b *filesystem.Blob) []byte {

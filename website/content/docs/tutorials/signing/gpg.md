@@ -59,7 +59,7 @@ Consumers verify using the corresponding public key to confirm authenticity and 
 ## Prerequisites
 
 - [OCM CLI installed]({{< relref "docs/getting-started/ocm-cli-installation.md" >}})
-- [GnuPG installed](https://gnupg.org/download/) (`gpg` binary available in `$PATH`)
+- [GnuPG](https://gnupg.org/download/) 2.2 or later installed (`gpg` binary available in `$PATH`); OCM runs it to sign and verify
 - A component version to sign (we'll create one if you don't have one)
 
 ## Steps
@@ -353,7 +353,7 @@ credentials:
     passphrase: my-secret-passphrase
 ```
 
-OCM decrypts the key in-memory only; the passphrase is never written to disk.
+OCM passes the passphrase to `gpg` on standard input; it is never written to disk. GnuPG unlocks the key in a temporary GnuPG home directory, which OCM removes after each operation.
 {{< /details >}}
 
 {{< details "Can a component have both RSA and GPG signatures?" >}}

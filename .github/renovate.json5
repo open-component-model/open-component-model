@@ -90,6 +90,16 @@
       ],
     },
     {
+      // k8s.io/kube-openapi is an untagged, indirect pseudo-version module.
+      // Renovate's digest updater would advance it to the latest branch
+      // commit, ahead of the k8s release train it belongs to. That caused
+      // a structured-merge-diff v6/v7 mismatch with apimachinery (PR #3770).
+      // Let `go mod tidy` float it to whatever the k8s minor group pins.
+      matchManagers: ['gomod'],
+      matchPackageNames: ['k8s.io/kube-openapi'],
+      enabled: false,
+    },
+    {
       matchManagers: [
         'gomod',
         'custom.regex',

@@ -22,7 +22,6 @@ import (
 	"crypto/x509/pkix"
 	"encoding/hex"
 	"encoding/pem"
-	"io"
 	"log/slog"
 	"math/big"
 	"os"
@@ -45,7 +44,7 @@ import (
 func TestExample_GenerateDigest(t *testing.T) {
 	r := require.New(t)
 	ctx := t.Context()
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 
 	desc := &descriptor.Descriptor{
 		Component: descriptor.Component{
@@ -78,7 +77,7 @@ func TestExample_GenerateDigest(t *testing.T) {
 func TestExample_VerifyDigest(t *testing.T) {
 	r := require.New(t)
 	ctx := t.Context()
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 
 	desc := &descriptor.Descriptor{
 		Component: descriptor.Component{
@@ -204,7 +203,7 @@ func writeCertPEM(t *testing.T, dir, name string, certs ...*x509.Certificate) st
 func TestExample_RSASignAndVerifyPlain(t *testing.T) {
 	r := require.New(t)
 	ctx := t.Context()
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 
 	// 1. Generate an RSA key pair and write to temp files.
 	key := generateRSAKey(t)
@@ -264,7 +263,7 @@ func TestExample_RSASignAndVerifyPlain(t *testing.T) {
 func TestExample_RSASignAndVerifyPEM(t *testing.T) {
 	r := require.New(t)
 	ctx := t.Context()
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 
 	// Generate key and self-signed certificate.
 	key := generateRSAKey(t)
@@ -323,7 +322,7 @@ func TestExample_RSASignAndVerifyPEM(t *testing.T) {
 func TestExample_RSAVerifyTamperedDigest(t *testing.T) {
 	r := require.New(t)
 	ctx := t.Context()
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 
 	key := generateRSAKey(t)
 	cert := selfSignedCert(t, "tamper-signer", key)
@@ -393,7 +392,7 @@ func TestExample_RSAVerifyTamperedDigest(t *testing.T) {
 func TestExample_RSAVerifyWrongKey(t *testing.T) {
 	r := require.New(t)
 	ctx := t.Context()
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 
 	// Sign with key A.
 	keyA := generateRSAKey(t)
@@ -428,7 +427,7 @@ func TestExample_RSAVerifyWrongKey(t *testing.T) {
 		SignatureEncodingPolicy: v1alpha1.SignatureEncodingPolicyPlain,
 	}
 	sigInfo, err := handler.Sign(ctx, *dig, cfg, &v1.RSACredentials{
-		Type: v1.VersionedType,
+		Type:              v1.VersionedType,
 		PrivateKeyPEMFile: privPathA,
 	})
 	r.NoError(err)

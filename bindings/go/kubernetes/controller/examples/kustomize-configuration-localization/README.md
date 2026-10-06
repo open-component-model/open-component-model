@@ -25,17 +25,28 @@ what Flux's `OCIRepository` and ArgoCD expect. ArgoCD additionally requires
 this media type in its `ARGOCD_REPO_SERVER_OCI_LAYER_MEDIA_TYPES` allowlist.
 
 `ocm add cv` recognizes the OCM layout media type and stores the layout as
-a local blob whose access keeps that media type. Transfer with
-`--copy-resources --upload-as ociArtifact` so the referenced resources are
-copied into the target registry and layout resources are converted into
-native OCI artifacts there:
+a local blob whose access keeps that media type. Transfer with the OCI uploader
+first and the local blob uploader as catch-all, so layout resources are
+converted into native OCI artifacts in the target registry and every other
+resource is copied there. Add the uploaders to `.ocmconfig` in the working directory. If the file already exists (for example
+with the signing key, credentials or resolvers), add only the two uploader entries, in this order, to its `configurations` list;
+otherwise create it with this content:
 
-```bash
-ocm transfer cv --copy-resources --upload-as ociArtifact <ctf> <registry>
+```yaml
+type: generic.config.ocm.software/v1
+configurations:
+  - type: oci.uploader.transfer.config.ocm.software/v1alpha1
+  - type: localblob.uploader.transfer.config.ocm.software/v1alpha1
 ```
 
-Without both flags the OCI artifact does not exist at the reference the RGD
-expects. After transfer, `resource.access.toOCI()` exposes `registry`,
+```bash
+ocm transfer cv <ctf> <registry>
+```
+
+> The CLI merges `.ocmconfig` from the current directory with your other OCM configuration (such as `$HOME/.ocmconfig`), so credentials and resolvers stay in effect.
+
+Without the OCI uploader, the OCI artifact does not exist at the reference the
+RGD expects. After transfer, `resource.access.toOCI()` exposes `registry`,
 `repository`, and `digest` fields that `rgd.yaml` reads into the
 `OCIRepository` and ArgoCD `Application`.
 

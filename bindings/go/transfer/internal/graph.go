@@ -10,13 +10,14 @@ import (
 	dagsync "ocm.software/open-component-model/bindings/go/dag/sync"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	gitv1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
 	githubv1 "ocm.software/open-component-model/bindings/go/github/spec/access/v1"
 	helmv1 "ocm.software/open-component-model/bindings/go/helm/spec/access/v1"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
-	"ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	s3v2 "ocm.software/open-component-model/bindings/go/s3/spec/access/v2"
+	uploadv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/transformation/spec/v1alpha1"
 	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
 	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1/meta"
@@ -139,7 +140,7 @@ func BuildGraphDefinition(
 	// Phase 2: walk the discovered DAG and generate transformation nodes per (component, target) pair.
 	g := dr.Graph()
 	err := g.WithReadLock(func(d *dag.DirectedAcyclicGraph[string]) error {
-		return fillGraphDefinitionWithPrefetchedComponents(ctx, d, targetMap, tgd, cfg.CopyMode, cfg.UploadType, uploaders)
+		return fillGraphDefinitionWithPrefetchedComponents(ctx, d, targetMap, tgd, uploaders)
 	})
 	if err != nil {
 		return nil, err
@@ -153,8 +154,8 @@ func BuildGraphDefinition(
 //
 // For each component:
 //  1. The descriptor is converted to v2 format and added to the graph environment.
-//  2. For each assigned target, resource transformations (get/add pairs) are created based
-//     on the resource access type (local blob, OCI artifact, Helm chart) and the copy mode.
+//  2. For each assigned target, resource transformations are created by the uploader that
+//     selects each resource, or by the baseline (see processResources).
 //  3. A final AddComponentVersion upload transformation is appended, referencing the processed
 //     resources via CEL expressions.
 //
@@ -166,14 +167,15 @@ func fillGraphDefinitionWithPrefetchedComponents(
 	d *dag.DirectedAcyclicGraph[string],
 	targetMap map[string][]runtime.Typed,
 	tgd *transformv1alpha1.TransformationGraphDefinition,
-	copyMode transferv1alpha1.CopyMode,
-	uploadType transferv1alpha1.UploadType,
 	uploaders []transferv1alpha1.UploaderConfig,
 ) error {
 	slog.DebugContext(ctx, "building transformations for discovered components",
 		"components", len(d.Vertices))
 
 	var allFileRefs []string
+	// uploaderUsed records which uploaders matched a resource, so a rule that matched
+	// nothing is reported instead of silently falling back to the default handlers.
+	uploaderUsed := make([]bool, len(uploaders))
 
 	// Iterate vertices in sorted key order so the emitted transformation list is
 	// deterministic across runs (ranging the map directly would randomize order).
@@ -214,7 +216,7 @@ func fillGraphDefinitionWithPrefetchedComponents(
 				"targetIndex", targetIdx, "targetType", fmt.Sprintf("%T", target),
 				"transformID", id)
 
-			resourceTransformIDs, fileRefs, err := processResources(ctx, v2desc, baseID, id, val, tgd, target, copyMode, uploadType, uploaders)
+			resourceTransformIDs, fileRefs, err := processResources(ctx, v2desc, baseID, id, val, tgd, target, uploaders, uploaderUsed)
 			if err != nil {
 				return err
 			}
@@ -228,12 +230,14 @@ func fillGraphDefinitionWithPrefetchedComponents(
 	}
 
 	addFileCleanupTransformation(tgd, allFileRefs)
+	warnUnusedUploaders(ctx, uploaders, uploaderUsed)
 
 	return nil
 }
 
 // processResources iterates over resources in a v2 descriptor and creates the appropriate
-// get/add transformation pairs based on access type, copy mode, and upload type.
+// transformations: the first uploader whose match selects a resource handles it. A resource no uploader selects follows the baseline: a local blob
+// is copied as a local blob, anything else stays by reference (no transformation).
 // It returns CEL spec-field expressions for all Get transformations that buffer content to disk.
 func processResources(
 	ctx context.Context,
@@ -243,14 +247,14 @@ func processResources(
 	val *discoveryValue,
 	tgd *transformv1alpha1.TransformationGraphDefinition,
 	toSpec runtime.Typed,
-	copyMode transferv1alpha1.CopyMode,
-	uploadType transferv1alpha1.UploadType,
 	uploaders []transferv1alpha1.UploaderConfig,
+	uploaderUsed []bool,
 ) (map[int]string, []string, error) {
 	component := val.Descriptor.Component.Name
 	version := val.Descriptor.Component.Version
 	resourceTransformIDs := make(map[int]string)
 	var fileExpressions []string
+	env := &uploaderEnv{baseID: baseID, node: tgd.Environment.Data[baseID]}
 
 	for i, resource := range v2desc.Component.Resources {
 		access, err := scheme.NewObject(resource.Access.Type)
@@ -261,34 +265,66 @@ func processResources(
 			return nil, nil, fmt.Errorf("cannot convert resource access to typed object: %w", err)
 		}
 
-		// An uploader is an explicit instruction to move a matched resource, so it
-		// runs regardless of copy mode and takes precedence over the default handlers.
-		// Declaration order is significant: the first recognized match wins, so more
-		// specific rules should precede broader ones.
-		var matched transferv1alpha1.UploaderConfig
-		for _, u := range uploaders {
-			if u != nil && u.Match(resource) {
-				matched = u
+		// Declaration order is significant: the first uploader whose match selects the
+		// resource handles it, so more specific rules should precede broader ones. A
+		// selected uploader that cannot handle the resource fails the build.
+		handled := false
+		if len(uploaders) > 0 {
+			aliases, err := uploaderAliases(env, i, toSpec)
+			if err != nil {
+				return nil, nil, err
+			}
+			for ui, u := range uploaders {
+				if u == nil {
+					continue
+				}
+				selected, err := matches(ctx, u.EffectiveMatch(), aliases, env)
+				if err != nil {
+					return nil, nil, fmt.Errorf("uploader %d (%s) for resource %v: %w", ui, u.GetType(), resource.ToIdentity(), err)
+				}
+				if !selected {
+					continue
+				}
+				uploaderUsed[ui] = true
+				var exprs []string
+				switch cfg := u.(type) {
+				case *transferv1alpha1.HTTPUploaderConfig:
+					err = processHTTPUploader(resource, cfg, baseID, id, val, tgd, resourceTransformIDs, i)
+				case *transferv1alpha1.OCIUploaderConfig:
+					exprs, err = processOCIUploader(ctx, resource, access, cfg, aliases, env, id, val, tgd, toSpec, resourceTransformIDs, i)
+				case *transferv1alpha1.LocalBlobUploaderConfig:
+					exprs, err = processResource(resource, access, id, val, tgd, toSpec, resourceTransformIDs, i)
+				case *transferv1alpha1.ArtifactoryUploaderConfig:
+					err = processRepositoryUploader(resource, access, uploadv1alpha1.ArtifactoryUploadV1alpha1, cfg.URL, cfg.Repository, cfg.Path, baseID, id, val, tgd, resourceTransformIDs, i)
+				case *transferv1alpha1.NexusUploaderConfig:
+					err = processRepositoryUploader(resource, access, uploadv1alpha1.NexusUploadV1alpha1, cfg.URL, cfg.Repository, cfg.Path, baseID, id, val, tgd, resourceTransformIDs, i)
+				case *transferv1alpha1.ReferenceUploaderConfig:
+					// No transformation: buildDescriptorSpec keeps the environment resource.
+					if descriptorv2.IsLocalBlob(access) {
+						err = fmt.Errorf("local blobs cannot be kept by reference (adjust match)")
+					}
+				default:
+					return nil, nil, fmt.Errorf("unsupported uploader config type %T for resource %v", u, resource.ToIdentity())
+				}
+				if err != nil {
+					return nil, nil, fmt.Errorf("cannot process uploader for resource %v: %w", resource.ToIdentity(), err)
+				}
+				fileExpressions = append(fileExpressions, exprs...)
+				handled = true
 				break
 			}
 		}
-		if matched != nil {
-			switch cfg := matched.(type) {
-			case *transferv1alpha1.HTTPUploaderConfig:
-				if err := processHTTPUploader(resource, cfg, baseID, id, val, tgd, resourceTransformIDs, i); err != nil {
-					return nil, nil, fmt.Errorf("cannot process uploader for resource %v: %w", resource.ToIdentity(), err)
-				}
-			default:
-				return nil, nil, fmt.Errorf("unsupported uploader config type %T for resource %v", matched, resource.ToIdentity())
-			}
+		if handled {
 			continue
 		}
-		if copyMode == transferv1alpha1.CopyModeLocalBlobResources && !descriptorv2.IsLocalBlob(access) {
-			logSkippedResource(ctx, component, version, resource, copyMode, uploadType)
+		if !descriptorv2.IsLocalBlob(access) {
+			slog.DebugContext(ctx, "no uploader selects resource, keeping it by reference",
+				"component", component, "version", version,
+				"resource", resource.ToIdentity().String(), "accessType", resource.Access.Type.String())
 			continue
 		}
 
-		exprs, err := processResource(resource, access, id, val, tgd, toSpec, resourceTransformIDs, i, uploadType)
+		exprs, err := processResource(resource, access, id, val, tgd, toSpec, resourceTransformIDs, i)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -297,75 +333,50 @@ func processResources(
 	return resourceTransformIDs, fileExpressions, nil
 }
 
-func logSkippedResource(ctx context.Context, component, version string, resource descriptorv2.Resource, copyMode transferv1alpha1.CopyMode, uploadType transferv1alpha1.UploadType) {
-	logLevel := slog.LevelDebug
-	if uploadType == transferv1alpha1.UploadAsOciArtifact {
-		logLevel = slog.LevelWarn
-	}
-	slog.Log(ctx, logLevel,
-		"Skipping copy of resource since its access type is not a local blob. Only resources with local blob access are copied when CopyModeLocalBlobResources is set.",
-		"component", component,
-		"version", version,
-		"resource", resource.ToIdentity().String(),
-		"accessType", resource.Access.Type.String(),
-		"copyMode", copyMode)
-}
-
-// processResource dispatches a single resource to the appropriate handler based on its access type.
-// Each handler creates a Get transformation (fetching the resource from the source) and an Add
-// transformation (uploading it to the target). The uploadType and target type determine whether
-// resources are stored as local blobs or separate OCI artifacts (including Helm charts) in the
-// target repository. wget and s3 resources are always downloaded and embedded as local blobs.
+// processResource copies a single resource into the target as a local blob, dispatching on
+// its access type. Each handler creates a Get transformation (fetching the resource from the
+// source) and an Add transformation embedding it as a local blob in the target. It serves
+// the baseline (local blobs) and a selected local blob uploader.
 // It returns CEL spec-field expressions for the file buffers produced, referencing consumer spec
 // fields (not producer outputs) so the DAG edge points from consumer to the cleanup node.
-func processResource(resource descriptorv2.Resource, access runtime.Typed, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int, uploadType transferv1alpha1.UploadType) ([]string, error) {
-	_, isOCITarget := toSpec.(*oci.Repository)
-	uploadAsArtifact := isOCITarget && uploadType == transferv1alpha1.UploadAsOciArtifact
-
+func processResource(resource descriptorv2.Resource, access runtime.Typed, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int) ([]string, error) {
 	resourceIdentity := resource.ToIdentity()
 	resourceID := identityToTransformationID(resourceIdentity)
 	addResourceID := fmt.Sprintf("%sAdd%s", id, resourceID)
 
 	switch acc := access.(type) {
 	case *descriptorv2.LocalBlob:
-		shouldUpload := uploadAsArtifact && isOCICompliantManifest(acc.MediaType) && acc.ReferenceName != ""
-		if err := processLocalBlob(resource, acc, id, val, tgd, toSpec, resourceTransformIDs, i, shouldUpload); err != nil {
+		if err := processLocalBlob(resource, id, val, tgd, toSpec, resourceTransformIDs, i, ""); err != nil {
 			return nil, fmt.Errorf("failed processing local blob resource: %w", err)
 		}
 		return []string{fmt.Sprintf("${%s.spec.file}", addResourceID)}, nil
 	case *ociv1.OCIImage:
-		if err := processOCIArtifact(resource, id, val, tgd, toSpec, resourceTransformIDs, i, uploadAsArtifact); err != nil {
+		if err := processOCIArtifact(resource, id, val, tgd, toSpec, resourceTransformIDs, i); err != nil {
 			return nil, fmt.Errorf("cannot process OCI artifact resource: %w", err)
-		}
-		// Streaming path (TransferOCIArtifact) produces no temp file — skip cleanup.
-		// uploadAsArtifact already requires isOCITarget, so streaming always applies here.
-		if uploadAsArtifact {
-			return nil, nil
 		}
 		return []string{fmt.Sprintf("${%s.spec.file}", addResourceID)}, nil
 	case *helmv1.Helm:
-		convertResourceID := fmt.Sprintf("%sConvert%s", id, resourceID)
-		if err := processHelm(resource, id, val, tgd, toSpec, resourceTransformIDs, i, uploadAsArtifact); err != nil {
+		if err := processHelm(resource, id, val, tgd, toSpec, resourceTransformIDs, i, ""); err != nil {
 			return nil, fmt.Errorf("cannot process Helm Chart resource: %w", err)
 		}
-		return []string{
-			fmt.Sprintf("${%s.spec.chartFile}", convertResourceID),
-			// provFile is optional; cleanup transformer skips empty URIs.
-			fmt.Sprintf("${%s.spec.?provFile}", convertResourceID),
-			fmt.Sprintf("${%s.spec.file}", addResourceID),
-		}, nil
+		return helmFileExpressions(id, resourceID), nil
 	case *wgetv1.Wget:
 		// A wget resource is a plain blob: download it and embed it as a local blob in the
-		// target. There is no OCI-artifact representation, so uploadAsArtifact is not honored here.
+		// target. There is no OCI-artifact representation.
 		if err := processWget(resource, id, val, tgd, toSpec, resourceTransformIDs, i); err != nil {
 			return nil, fmt.Errorf("cannot process wget resource: %w", err)
 		}
 		return []string{fmt.Sprintf("${%s.spec.file}", addResourceID)}, nil
 	case *s3v2.S3:
 		// An S3 resource is a plain blob: download it and embed it as a local blob in the
-		// target. There is no OCI-artifact representation, so uploadAsArtifact is not honored here.
+		// target. There is no OCI-artifact representation.
 		if err := processS3(resource, id, val, tgd, toSpec, resourceTransformIDs, i); err != nil {
 			return nil, fmt.Errorf("cannot process s3 resource: %w", err)
+		}
+		return []string{fmt.Sprintf("${%s.spec.file}", addResourceID)}, nil
+	case *gitv1.Git:
+		if err := processGit(resource, acc, id, val, tgd, toSpec, resourceTransformIDs, i); err != nil {
+			return nil, fmt.Errorf("cannot process Git resource: %w", err)
 		}
 		return []string{fmt.Sprintf("${%s.spec.file}", addResourceID)}, nil
 	case *githubv1.GitHub:
@@ -374,11 +385,35 @@ func processResource(resource descriptorv2.Resource, access runtime.Typed, id st
 		}
 		return []string{fmt.Sprintf("${%s.spec.file}", addResourceID)}, nil
 	default:
-		slog.Info("Unsupported resource access type, skipping resource. Only local blob, OCI artifact, Helm chart, wget, s3, and GitHub resources are supported for transformation.",
-			"component", val.Descriptor.Component.Name, "version", val.Descriptor.Component.Version,
-			"resource", resource.ToIdentity().String(), "accessType", resource.Access.Type.String())
+		return nil, fmt.Errorf("local blob uploader cannot copy access type %s (adjust match)", resource.Access.Type)
 	}
-	return nil, nil
+}
+
+// warnUnusedUploaders logs every uploader whose match selected no resource of the transfer.
+// A common cause is a match written against the access a resource gets in the target (such
+// as a local blob after copying) instead of its access in the source component version.
+func warnUnusedUploaders(ctx context.Context, uploaders []transferv1alpha1.UploaderConfig, used []bool) {
+	for idx, u := range uploaders {
+		if u == nil || used[idx] {
+			continue
+		}
+		slog.WarnContext(ctx, "uploader selected no resource; its match is evaluated against the resource as described in the source component version",
+			"uploader", u.GetType().String(),
+			"index", idx,
+			"match", u.EffectiveMatch())
+	}
+}
+
+// helmFileExpressions returns the CEL spec-field expressions of the file buffers a Helm
+// chart transfer produces (see processHelm), for cleanup.
+func helmFileExpressions(id, resourceID string) []string {
+	convertResourceID := fmt.Sprintf("%sConvert%s", id, resourceID)
+	return []string{
+		fmt.Sprintf("${%s.spec.chartFile}", convertResourceID),
+		// provFile is optional; cleanup transformer skips empty URIs.
+		fmt.Sprintf("${%s.spec.?provFile}", convertResourceID),
+		fmt.Sprintf("${%sAdd%s.spec.file}", id, resourceID),
+	}
 }
 
 func addDescriptorToEnvironment(v2desc *descriptorv2.Descriptor, id string, tgd *transformv1alpha1.TransformationGraphDefinition) error {

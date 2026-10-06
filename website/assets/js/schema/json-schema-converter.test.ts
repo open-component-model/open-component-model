@@ -316,4 +316,51 @@ describe("edge cases", () => {
         assert.deepEqual(type.deprecatedConstValues, ["RSA/v1alpha1", "RSA"]);
         assert.equal(type.variants, null);
     });
+
+    it("map and array types spell out their value types", () => {
+        const model = jsonSchemaToModel({
+            type: "object",
+            properties: {
+                header: { type: "object", additionalProperties: { type: "array", items: { type: "string" } } },
+                labels: { type: "object", additionalProperties: { $ref: "#/$defs/Label" } },
+                matrix: { type: "array", items: { type: "array", items: { type: "integer" } } },
+                open: { type: "object", additionalProperties: true },
+                nested: { type: "object", properties: { a: { type: "string" } }, additionalProperties: { type: "string" } },
+            },
+            $defs: { Label: { type: "string" } },
+        });
+
+        const typeOf = (name: string) => model.sections[0].fields.find((f) => f.name === name)!.type;
+        assert.equal(typeOf("header"), "map[string][]string");
+        assert.equal(typeOf("labels"), "map[string]string");
+        assert.equal(typeOf("matrix"), "[][]integer");
+        assert.equal(typeOf("open"), "object");
+        assert.equal(typeOf("nested"), "object");
+    });
+
+    it("self-referencing map types terminate", () => {
+        const model = jsonSchemaToModel({
+            type: "object",
+            properties: { tree: { $ref: "#/$defs/Tree" } },
+            $defs: { Tree: { type: "object", additionalProperties: { $ref: "#/$defs/Tree" } } },
+        });
+
+        assert.equal(model.sections[0].fields[0].type, "map[string]map[string]any");
+    });
+
+    it("untyped fields render as any, or string when only string constraints are set", () => {
+        const model = jsonSchemaToModel({
+            type: "object",
+            properties: {
+                value: { description: "arbitrary JSON" },
+                version: { pattern: "^v[0-9]+$" },
+                nested: { properties: { a: { type: "string" } } },
+            },
+        });
+
+        const typeOf = (name: string) => model.sections[0].fields.find((f) => f.name === name)!.type;
+        assert.equal(typeOf("value"), "any");
+        assert.equal(typeOf("version"), "string");
+        assert.equal(typeOf("nested"), "object");
+    });
 });

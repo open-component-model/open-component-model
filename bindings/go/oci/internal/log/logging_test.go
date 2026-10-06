@@ -26,7 +26,8 @@ func TestOperation(t *testing.T) {
 				return slog.Attr{}
 			}
 			return a
-		}})))
+		},
+	})))
 
 	done := Operation(ctx, "test-operation", slog.String("test", "value"))
 	assert.Equal(t, "level=DEBUG msg=\"operation starting\" realm=oci operation=test-operation test=value\n", buf.String())

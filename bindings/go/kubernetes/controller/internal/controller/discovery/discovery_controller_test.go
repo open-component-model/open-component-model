@@ -6,13 +6,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
-
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -73,7 +71,7 @@ func realPluginReconciler(t *testing.T, objs ...client.Object) (*Reconciler, cli
 	t.Helper()
 	rec, c := newReconciler(t, objs...)
 	rec.NewPluginManager = func(ctx context.Context, cfg *genericv1.Config) (*manager.PluginManager, error) {
-		return setup.NewPluginManager(ctx, cfg, slog.New(slog.NewTextHandler(io.Discard, nil)))
+		return setup.NewPluginManager(ctx, cfg, slog.New(slog.DiscardHandler))
 	}
 	return rec, c
 }
@@ -323,7 +321,6 @@ func TestUpToDate(t *testing.T) {
 		{"unchanged with extracted payload", discovery(func(d *v1alpha1.Discovery) {
 			d.Status.Components = nil
 			d.Status.Extracted = []v1alpha1.ExtractedRecord{}
-
 		}), info("abc"), true},
 		{"no recorded digest", discovery(func(d *v1alpha1.Discovery) {
 			d.Status.ObservedComponentDigest = ""

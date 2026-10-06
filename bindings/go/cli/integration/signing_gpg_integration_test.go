@@ -8,13 +8,11 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
 
-	"github.com/ProtonMail/go-crypto/openpgp"
-	"github.com/ProtonMail/go-crypto/openpgp/armor"
-	"github.com/ProtonMail/go-crypto/openpgp/packet"
 	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/blob/direct"
@@ -35,11 +33,7 @@ func Test_Integration_Signing_GPG(t *testing.T) {
 
 	dir := t.TempDir()
 
-	entity := mustGPGEntity(t)
-	privKeyPath := filepath.Join(dir, "signing-key.asc")
-	pubKeyPath := filepath.Join(dir, "verify-key.asc")
-	writeArmoredPrivKey(t, entity, privKeyPath)
-	writeArmoredPubKey(t, entity, pubKeyPath)
+	privKeyPath, pubKeyPath := writeGPGKeyPair(t, dir, "signing", "")
 
 	cfg := fmt.Sprintf(`
 type: generic.config.ocm.software/v1
@@ -168,10 +162,8 @@ configurations:
 		r.NoError(signCMD.ExecuteContext(t.Context()))
 
 		// generate a different key pair and configure a verify-only config with it
-		otherEntity := mustGPGEntity(t)
 		otherDir := t.TempDir()
-		otherPubKeyPath := filepath.Join(otherDir, "other-verify.asc")
-		writeArmoredPubKey(t, otherEntity, otherPubKeyPath)
+		_, otherPubKeyPath := writeGPGKeyPair(t, otherDir, "other", "")
 
 		wrongKeyCfg := fmt.Sprintf(`
 type: generic.config.ocm.software/v1
@@ -212,29 +204,34 @@ configurations:
 	})
 }
 
-func mustGPGEntity(t *testing.T) *openpgp.Entity {
+// writeGPGKeyPair generates an RSA key pair with the gpg binary and writes the ASCII-armored
+// secret and public keys to <dir>/<name>.asc and <dir>/<name>.pub.asc.
+// A non-empty passphrase protects the exported secret key.
+func writeGPGKeyPair(t *testing.T, dir, name, passphrase string) (privPath, pubPath string) {
 	t.Helper()
-	entity, err := openpgp.NewEntity("ocm-test", "", "ocm-test@example.com", &packet.Config{RSABits: 2048})
-	require.NoError(t, err)
-	return entity
-}
+	r := require.New(t)
+	// Not t.TempDir(): its long path can overflow the Unix socket path limit of gpg-agent on macOS.
+	home, err := os.MkdirTemp("", "ocm-gpg-test-")
+	r.NoError(err)
+	t.Cleanup(func() {
+		_ = exec.Command("gpgconf", "--homedir", home, "--kill", "all").Run()
+		_ = os.RemoveAll(home)
+	})
+	gpg := func(args ...string) []byte {
+		base := []string{"--batch", "--homedir", home, "--pinentry-mode", "loopback", "--passphrase", passphrase}
+		var stderr bytes.Buffer
+		c := exec.CommandContext(t.Context(), "gpg", append(base, args...)...)
+		c.Stderr = &stderr
+		out, err := c.Output()
+		r.NoError(err, "gpg %v: %s", args, stderr.String())
+		return out
+	}
 
-func writeArmoredPrivKey(t *testing.T, entity *openpgp.Entity, path string) {
-	t.Helper()
-	var buf bytes.Buffer
-	w, err := armor.Encode(&buf, openpgp.PrivateKeyType, nil)
-	require.NoError(t, err)
-	require.NoError(t, entity.SerializePrivateWithoutSigning(w, nil))
-	require.NoError(t, w.Close())
-	require.NoError(t, os.WriteFile(path, buf.Bytes(), 0o600))
-}
-
-func writeArmoredPubKey(t *testing.T, entity *openpgp.Entity, path string) {
-	t.Helper()
-	var buf bytes.Buffer
-	w, err := armor.Encode(&buf, openpgp.PublicKeyType, nil)
-	require.NoError(t, err)
-	require.NoError(t, entity.Serialize(w))
-	require.NoError(t, w.Close())
-	require.NoError(t, os.WriteFile(path, buf.Bytes(), 0o600))
+	uid := fmt.Sprintf("OCM Test %s <%s@example.com>", name, name)
+	gpg("--quick-gen-key", uid, "rsa3072", "sign", "never")
+	privPath = filepath.Join(dir, name+".asc")
+	pubPath = filepath.Join(dir, name+".pub.asc")
+	r.NoError(os.WriteFile(privPath, gpg("--armor", "--export-secret-keys", uid), 0o600))
+	r.NoError(os.WriteFile(pubPath, gpg("--armor", "--export", uid), 0o600))
+	return privPath, pubPath
 }

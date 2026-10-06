@@ -405,6 +405,11 @@ func (wp *WorkerPool) getComponentVersion(ctx context.Context, opts ResolveOptio
 		// If verifications are requested, we need to verify that the component version is safely digestible.
 		// Anything that comes after this will, in case of an error, always be skipped until cache TTL expires
 		// TODO(Skarlso): This contradicts a bit with our config now. Wondering if we should still leave this be.
+		// Weak digest hashes fail IsSafelyDigestible only with GODEBUG=fips140=only; otherwise they are logged.
+		if err := signing.ValidateDigestHashAlgorithms(&desc.Component); err != nil && !signing.DigestHashAlgorithmsEnforced() {
+			logger.Info("component version uses a weak digest hash algorithm (GODEBUG=fips140=only rejects it)",
+				"component", opts.Component, "version", opts.Version, "error", err.Error())
+		}
 		if err := signing.IsSafelyDigestible(&desc.Component); err != nil {
 			return desc, fmt.Errorf("%w: %w", ErrNotSafelyDigestible, err)
 		}

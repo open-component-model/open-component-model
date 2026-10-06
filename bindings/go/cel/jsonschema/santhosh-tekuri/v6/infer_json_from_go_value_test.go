@@ -5,6 +5,7 @@ import (
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
 	"github.com/stretchr/testify/require"
+
 	stv6jsonschema "ocm.software/open-component-model/bindings/go/cel/jsonschema/santhosh-tekuri/v6"
 )
 
@@ -143,7 +144,6 @@ func TestInferFromGoValue(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-
 			sch, err := stv6jsonschema.InferFromGoValue(tt.input)
 
 			if tt.expectErr {
