@@ -102,17 +102,27 @@ version changes.
 | Artifact | Build | Image contents |
 | --- | --- | --- |
 | `ocm` CLI binaries (all OS/architectures) | `GOFIPS140=certified`, `CGO_ENABLED=0` | — |
-| OCM CLI image | `GOFIPS140=certified`, `CGO_ENABLED=0` | `scratch` with `ocm` and the CA bundle |
+| OCM CLI image (`cli:<version>`, default) | `GOFIPS140=certified`, `CGO_ENABLED=0` | Garden Linux `bare-libc` with `ocm`, a FIPS build of `cosign`, `gpg` on Garden Linux's FIPS `libgcrypt`, and the CA bundle |
+| OCM CLI slim image (`cli:<version>-slim`) | `GOFIPS140=certified`, `CGO_ENABLED=0` | `scratch` with `ocm` and the CA bundle |
 | OCM controller image | `GOFIPS140=certified`, `CGO_ENABLED=0` | `gcr.io/distroless/static:nonroot` with `manager` |
 
-The CLI image is built `FROM scratch` and contains only the static `/ocm`
-binary (the entrypoint) and a CA bundle at `/etc/ssl/certs/ca-certificates.crt`.
+The default CLI image is based on Garden Linux
+[`bare-libc`](https://docs.gardenlinux.org/how-to/container-base-image/bare.html).
+It contains the static `/ocm` binary (the entrypoint), `cosign` at
+`/usr/local/bin/cosign` built with the same `GOFIPS140` value as OCM, GnuPG
+(`gpg`, `gpg-agent`, `gpgconf`) from the
+[Garden Linux FIPS image](https://github.com/gardenlinux/gardenlinux/pkgs/container/gardenlinux%2Ffips)
+with `libgcrypt` forced into FIPS mode by `/etc/gcrypt/fips_enabled`, and a CA
+bundle at `/etc/ssl/certs/ca-certificates.crt`. So GPG and Sigstore signing
+work in the image, also with `GODEBUG=fips140=only`. The slim image is built
+`FROM scratch` and contains only `/ocm` and the CA bundle; use it when you
+don't sign with GPG or Sigstore, or bring your own `cosign` and `gpg`.
 The controller image is based on distroless `static`, which adds CA
 certificates, time zone data and a `nonroot` user, but no cryptographic library.
 
-The images have no shell and no package manager, and the CLI image does not
-include `cosign` or `gpg`. See [Sigstore and cosign](#sigstore-and-cosign) and
-[GPG](#gpg) for how to use them.
+The images have no shell and no package manager. See
+[Sigstore and cosign](#sigstore-and-cosign) and [GPG](#gpg) for how OCM uses
+`cosign` and `gpg`.
 
 The binaries are statically linked and do not use any system cryptographic
 library. All cryptography in OCM itself goes through the Go Cryptographic
@@ -327,8 +337,8 @@ verification.
 ### Sigstore and cosign
 
 OCM does not implement Sigstore itself. Its Sigstore signing handler runs the
-external `cosign` binary, so all Sigstore cryptography runs in `cosign`. Neither
-the OCM CLI binaries nor the CLI image include `cosign`.
+external `cosign` binary, so all Sigstore cryptography runs in `cosign`. The CLI
+image includes a FIPS build of `cosign`; the OCM CLI binaries do not.
 
 #### How OCM uses cosign
 
@@ -370,14 +380,14 @@ The upstream cosign releases are not FIPS builds.
 | `fips140=off` | Used | Downloaded |
 
 To keep Sigstore signing inside the FIPS boundary, put a FIPS build of `cosign`
-on `PATH`.
+on `PATH`. The CLI image already does.
 
 #### Build a Static FIPS cosign
 
 cosign builds unmodified against the Go Cryptographic Module. Build it with the
 same `GOFIPS140` value as OCM, and with cgo disabled so that the binary is
-statically linked and runs on any Linux distribution and in the scratch-based OCM
-CLI image. The cosign version OCM is tested with is pinned in
+statically linked and runs on any Linux distribution. This is how the CLI image
+builds it. The cosign version OCM is tested with is pinned in
 `bindings/go/sigstore/signing/handler/internal/.env`:
 
 ```shell
@@ -400,14 +410,14 @@ the binary to `$(go env GOPATH)/bin/<os>_<arch>/cosign`, for example
 `GOOS=linux GOARCH=amd64` writes `bin/linux_amd64/cosign`.
 
 - **Local `ocm` binary:** put that `cosign` on `PATH` before running `ocm`.
-- **OCM CLI image:** build cosign for the image's platform and mount it at
+- **Slim CLI image:** build cosign for the image's platform and mount it at
   `/usr/local/bin/cosign`, which is on the default `PATH`:
 
   ```shell
   docker run --rm \
     -v "$PWD/cosign:/usr/local/bin/cosign:ro" \
     -v "$PWD/.ocmconfig:/.ocmconfig:ro" \
-    ghcr.io/open-component-model/cli:latest \
+    ghcr.io/open-component-model/cli:latest-slim \
     verify cv --config /.ocmconfig ghcr.io/<namespace>//<component>:<version>
   ```
 
@@ -433,8 +443,8 @@ rejects these images' `cosign`; with the default `fips140=on` it uses them.
 ### GPG
 
 OCM signs and verifies GPG signatures by running the `gpg` binary on `PATH`.
-Neither the OCM CLI binaries nor the CLI image include it, and GPG signing does
-not work in the CLI image as is.
+The CLI image includes `gpg` in FIPS mode (see below); the OCM CLI binaries do
+not.
 
 In FIPS mode, OCM checks whether the `libgcrypt` of `gpg` runs in FIPS mode by
 asking `gpgconf --show-versions` for `fips-mode:y`. With `fips140=only`, a
@@ -447,20 +457,22 @@ missing `gpgconf` also fails the check.
 | `fips140=off` | Used |
 
 GnuPG does its cryptography in `libgcrypt`. For an approved-algorithms-only
-`gpg`, use the
+`gpg`, use the one from the
 [Garden Linux FIPS image](https://github.com/gardenlinux/gardenlinux/pkgs/container/gardenlinux%2Ffips)
 ([Garden Linux](https://docs.gardenlinux.org/reference/glossary.html#fips) is,
-like OCM, a [NeoNephos](https://neonephos.org/) project) and force `libgcrypt` into FIPS mode. To use it
-with OCM in a container, add `ocm` from the CLI image:
+like OCM, a [NeoNephos](https://neonephos.org/) project) and force `libgcrypt`
+into FIPS mode with `/etc/gcrypt/fips_enabled`. The CLI image does exactly that
+(`bindings/go/cli/Containerfile`), so use it as is. Mount the signing key and
+point `privateKeyPGPFile` in `.ocmconfig` at the path inside the container
+(`/signing-key.asc`):
 
-```dockerfile
-FROM ghcr.io/gardenlinux/gardenlinux/fips:<version>
-RUN apt-get update \
- && apt-get install -y --no-install-recommends gnupg \
- && rm -rf /var/lib/apt/lists/* \
- && mkdir -p /etc/gcrypt && echo 1 > /etc/gcrypt/fips_enabled
-COPY --from=ghcr.io/open-component-model/cli:<version> /ocm /usr/local/bin/ocm
-ENTRYPOINT ["/usr/local/bin/ocm"]
+```shell
+docker run --rm \
+  -v "$PWD/.ocmconfig:/.ocmconfig:ro" \
+  -v "$PWD/signing-key.asc:/signing-key.asc:ro" \
+  -e GODEBUG=fips140=only \
+  ghcr.io/open-component-model/cli:<version> \
+  sign cv --config /.ocmconfig ghcr.io/<namespace>//<component>:<version>
 ```
 
 On a host, install GnuPG from your distribution. `libgcrypt` also enters FIPS
