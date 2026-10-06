@@ -735,12 +735,15 @@ func TestResourceLocalBlobDigestMatchesStoredContent(t *testing.T) {
 	layerContent := []byte("regular layer content")
 
 	for _, tt := range []struct {
-		name    string
-		content []byte
-		media   string
+		name                  string
+		content               []byte
+		media                 string
+		initialDigest         *descriptor.Digest
+		expectedNormalization string
 	}{
-		{name: "oci layout", content: layoutContent, media: layout.MediaTypeOCIImageLayoutTarV1},
-		{name: "oci layer", content: layerContent, media: "application/octet-stream"},
+		{name: "oci layout", content: layoutContent, media: layout.MediaTypeOCIImageLayoutTarV1, expectedNormalization: "ociArtifactDigest/v1"},
+		{name: "oci layer", content: layerContent, media: "application/octet-stream", expectedNormalization: "genericBlobDigest/v1"},
+		{name: "oci layer with partial digest", content: layerContent, media: "application/octet-stream", initialDigest: &descriptor.Digest{NormalisationAlgorithm: "genericBlobDigest/v1"}, expectedNormalization: "genericBlobDigest/v1"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			r := require.New(t)
@@ -751,7 +754,7 @@ func TestResourceLocalBlobDigestMatchesStoredContent(t *testing.T) {
 			v2.MustAddToScheme(opts.AccessScheme)
 			oci.MustAddToScheme(opts.AccessScheme)
 
-			resource := &descriptor.Resource{}
+			resource := &descriptor.Resource{Digest: tt.initialDigest}
 			b, err := resourceblob.NewArtifactBlob(resource, &testBlob{
 				content: tt.content, mediaType: tt.media, digest: digest.FromBytes(tt.content),
 			})
@@ -761,6 +764,8 @@ func TestResourceLocalBlobDigestMatchesStoredContent(t *testing.T) {
 			r.NoError(err)
 
 			r.NotNil(resource.Digest)
+			r.Equal("SHA-256", resource.Digest.HashAlgorithm)
+			r.Equal(tt.expectedNormalization, resource.Digest.NormalisationAlgorithm)
 			r.Equal(desc.Digest.Encoded(), resource.Digest.Value)
 			localBlob, ok := resource.Access.(*v2.LocalBlob)
 			r.True(ok, "expected a local blob access, got %T", resource.Access)

@@ -26,17 +26,23 @@ func TestVerifyNormalizationBoundary(t *testing.T) {
 	for _, tc := range []struct {
 		name          string
 		normalization string
+		hashAlgorithm string
 		ociAllowed    bool
 		blobAllowed   bool
 	}{
 		{name: "OCI artifact", normalization: OCIArtifactDigestV1, ociAllowed: true},
+		{name: "OCI hash spelling", normalization: OCIArtifactDigestV1, hashAlgorithm: "sha256", ociAllowed: true},
 		{name: "legacy OCI label", normalization: GenericBlobDigestV1, ociAllowed: true, blobAllowed: true},
 		{name: "other normalization", normalization: "jsonNormalisation/v1"},
 		{name: "missing normalization"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
-			dig := &runtime.Digest{HashAlgorithm: HashAlgorithmSHA256, NormalisationAlgorithm: tc.normalization, Value: root.Encoded()}
+			hashAlgorithm := HashAlgorithmSHA256
+			if tc.hashAlgorithm != "" {
+				hashAlgorithm = tc.hashAlgorithm
+			}
+			dig := &runtime.Digest{HashAlgorithm: hashAlgorithm, NormalisationAlgorithm: tc.normalization, Value: root.Encoded()}
 			before := *dig
 			if tc.ociAllowed {
 				r.NoError(VerifyOCIArtifact(dig, root))
