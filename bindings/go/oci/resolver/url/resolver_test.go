@@ -33,28 +33,28 @@ func (c *customRoundTripper) RoundTrip(req *http.Request) (*http.Response, error
 func TestNewURLPathResolver(t *testing.T) {
 	baseURL := "http://example.com"
 	resolver, err := url.New(url.WithBaseURL(baseURL))
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotNil(t, resolver)
 }
 
 func TestURLPathResolver_SetClient(t *testing.T) {
 	resolver, err := url.New(url.WithBaseURL("http://example.com"))
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	repo, err := remote.NewRepository("example.com/test")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Set the client
 	resolver.SetClient(repo.Client)
 
 	// Verify the client was set by using it
 	store, err := resolver.StoreForReference(context.Background(), "example.com/test")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotNil(t, store)
 }
 
 func TestURLPathResolver_ComponentVersionReference(t *testing.T) {
 	resolver, err := url.New(url.WithBaseURL("http://example.com"))
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	component := "ocm.software/test-component"
 	version := "v1.0.0"
 	expected := "http://example.com/component-descriptors/ocm.software/test-component:v1.0.0"
@@ -104,7 +104,7 @@ func TestURLPathResolver_ComponentVersionReferenceWithSubPath(t *testing.T) {
 				opts = append(opts, url.WithSubPath(tt.subPath))
 			}
 			resolver, err := url.New(opts...)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			result := resolver.ComponentVersionReference(t.Context(), tt.component, tt.version)
 			assert.Equal(t, tt.expected, result)
 		})
@@ -145,7 +145,7 @@ func TestURLPathResolver_BasePath(t *testing.T) {
 				opts = append(opts, url.WithSubPath(tt.subPath))
 			}
 			resolver, err := url.New(opts...)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			result := resolver.BasePath()
 			assert.Equal(t, tt.expected, result)
 		})
@@ -173,16 +173,16 @@ func TestURLPathResolver_StoreForReference(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			resolver, err := url.New(url.WithBaseURL("http://example.com"))
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			store, err := resolver.StoreForReference(context.Background(), tt.reference)
 
 			if tt.expectError {
-				assert.Error(t, err)
+				require.Error(t, err)
 				assert.Nil(t, store)
 				return
 			}
 
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.NotNil(t, store)
 		})
 	}
@@ -193,7 +193,7 @@ func TestURLPathResolver_Ping(t *testing.T) {
 
 	t.Run("ping with invalid URL fails", func(t *testing.T) {
 		resolver, err := url.New(url.WithBaseURL("http://invalid.nonexistent.domain"))
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		err = resolver.Ping(ctx)
 		require.Error(t, err)
@@ -203,7 +203,7 @@ func TestURLPathResolver_Ping(t *testing.T) {
 
 	t.Run("ping with malformed URL fails", func(t *testing.T) {
 		resolver, err := url.New(url.WithBaseURL("not-a-valid-url"))
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		err = resolver.Ping(ctx)
 		require.Error(t, err)
@@ -393,7 +393,7 @@ func TestURLPathResolver_Ping(t *testing.T) {
 			// Verify basic auth credentials
 			if auth[:6] == "Basic " {
 				decoded, err := base64.StdEncoding.DecodeString(auth[6:])
-				require.NoError(t, err)
+				assert.NoError(t, err)
 				assert.Equal(t, expectedUsername+":"+expectedPassword, string(decoded))
 				authCalled = true
 			}
@@ -419,7 +419,7 @@ func TestURLPathResolver_Ping(t *testing.T) {
 		resolver.SetClient(authClient)
 
 		err = resolver.Ping(ctx)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.True(t, authCalled, "Expected authentication to be used")
 	})
 
@@ -475,7 +475,7 @@ func TestURLPathResolver_Ping(t *testing.T) {
 		resolver.SetClient(authClient)
 
 		err = resolver.Ping(ctx)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.True(t, tokenFetched, "Expected token to be fetched from auth server")
 		assert.True(t, authUsed, "Expected bearer token to be used in request")
 	})

@@ -78,6 +78,6 @@ func TestProcessGitHub_RejectsUnpinnedAccess(t *testing.T) {
 	tgd := &transformv1alpha1.TransformationGraphDefinition{}
 	err := processGitHub(resource, access, "root", githubTestValue(), tgd, testOCIRepo("ghcr.io/target"), map[int]string{}, 0)
 	require.Error(t, err)
-	assert.ErrorContains(t, err, "no pinned commit")
+	require.ErrorContains(t, err, "no pinned commit")
 	assert.Empty(t, tgd.Transformations, "a rejected resource must not add transformation nodes")
 }

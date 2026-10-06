@@ -22,6 +22,7 @@ import (
 )
 
 func createTestOCILayout(t *testing.T, testBlobData []byte) []byte {
+	t.Helper()
 	var buf bytes.Buffer
 	tw := tar.NewWriter(&buf)
 
@@ -78,6 +79,7 @@ func createTestOCILayout(t *testing.T, testBlobData []byte) []byte {
 }
 
 func createGzippedOCILayout(t *testing.T, data []byte) []byte {
+	t.Helper()
 	ociLayout := createTestOCILayout(t, data)
 	var buf bytes.Buffer
 	gw := gzip.NewWriter(&buf)
@@ -160,7 +162,7 @@ func TestReadOCILayout(t *testing.T) {
 				assert.NoError(t, err)
 				data, err := io.ReadAll(dataFromBlob)
 				assert.NoError(t, err)
-				assert.Equal(t, data, expected)
+				assert.Equal(t, expected, data)
 			}
 		})
 	}

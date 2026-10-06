@@ -172,11 +172,11 @@ func TestParseIdentity(t *testing.T) {
 			result, err := runtime.ParseIdentity(tt.input)
 
 			if tt.expectedError != "" {
-				assert.Error(t, err)
+				require.Error(t, err)
 				assert.Contains(t, err.Error(), tt.expectedError)
 				assert.Nil(t, result)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.Equal(t, tt.expected, result)
 			}
 		})

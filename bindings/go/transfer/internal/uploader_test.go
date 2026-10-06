@@ -508,7 +508,7 @@ func TestBuildGraphDefinition_DeterministicOrder(t *testing.T) {
 	for i := 0; i < 20; i++ {
 		next, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{}, withLocalBlobUploader(uploaders...))
 		r.NoError(err)
-		r.Equal(len(first.Transformations), len(next.Transformations))
+		r.Len(next.Transformations, len(first.Transformations))
 		for j := range first.Transformations {
 			assert.Equal(t, first.Transformations[j].ID, next.Transformations[j].ID,
 				"transformation order must be deterministic across runs (index %d, run %d)", j, i)

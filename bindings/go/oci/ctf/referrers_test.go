@@ -311,7 +311,7 @@ func TestRepushReferrerIsIdempotent(t *testing.T) {
 
 	idx, err = archive.GetIndex(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, entriesAfterFirst, len(idx.GetArtifacts()))
+	assert.Len(t, idx.GetArtifacts(), entriesAfterFirst)
 	indexAfterSecond, err := repo.Resolve(ctx, referrersTag)
 	require.NoError(t, err)
 	assert.Equal(t, indexAfterFirst.Digest, indexAfterSecond.Digest)

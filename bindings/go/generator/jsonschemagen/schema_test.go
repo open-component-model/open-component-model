@@ -39,7 +39,7 @@ func TestSchemaOrBoolMarshalJSONWithSchema(t *testing.T) {
 	data, err := json.Marshal(sb)
 
 	require.NoError(t, err)
-	require.Equal(t, []byte(`{"type":"string"}`), data)
+	require.JSONEq(t, `{"type":"string"}`, string(data))
 }
 
 // --- Helpers for building small Universe/TypeInfo instances for generation tests ---

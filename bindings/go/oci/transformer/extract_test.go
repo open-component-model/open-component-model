@@ -29,6 +29,7 @@ func TestTransformer_TransformBlob(t *testing.T) {
 		{
 			name: "valid OCI artifact",
 			setupBlob: func(t *testing.T) blob.ReadOnlyBlob {
+				t.Helper()
 				b, err := loadOCILayoutBlob("oci-layout.tar.gz")
 				require.NoError(t, err)
 				return b
@@ -38,6 +39,7 @@ func TestTransformer_TransformBlob(t *testing.T) {
 		{
 			name: "invalid blob data",
 			setupBlob: func(t *testing.T) blob.ReadOnlyBlob {
+				t.Helper()
 				return inmemory.New(bytes.NewReader([]byte("not a valid tar")))
 			},
 			expectError: true,
@@ -51,10 +53,10 @@ func TestTransformer_TransformBlob(t *testing.T) {
 
 			result, err := transformer.TransformBlob(t.Context(), inputBlob, nil, nil)
 			if tt.expectError {
-				assert.Error(t, err)
+				require.Error(t, err)
 				assert.Nil(t, result)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.NotNil(t, result)
 
 				if mediaTypeAware, ok := result.(blob.MediaTypeAware); ok {
@@ -144,6 +146,7 @@ func (b *testBlob) Size() int64 {
 
 // validateTarContents validates that specific files are present in the tar.
 func validateTarContents(t *testing.T, reader io.ReadCloser, expectedFiles []string) {
+	t.Helper()
 	defer reader.Close()
 
 	data, err := io.ReadAll(reader)

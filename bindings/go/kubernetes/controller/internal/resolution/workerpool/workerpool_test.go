@@ -128,13 +128,13 @@ func TestWorkerPool_SingleResolution(t *testing.T) {
 
 		result, err := env.Pool.GetComponentVersion(ctx, opts)
 		assert.Nil(t, result)
-		assert.True(t, errors.Is(err, resolution.ErrResolutionInProgress))
+		require.ErrorIs(t, err, resolution.ErrResolutionInProgress)
 
 		// Wait for all goroutines to become durably blocked (resolution complete)
 		synctest.Wait()
 
 		result, err = env.Pool.GetComponentVersion(ctx, opts)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.NotNil(t, result)
 	})
 }
@@ -435,7 +435,7 @@ func TestWorkerPool_ContextCancellation(t *testing.T) {
 		// Start resolution
 		result, err := env.Pool.GetComponentVersion(ctx, opts)
 		assert.Nil(t, result)
-		assert.True(t, errors.Is(err, resolution.ErrResolutionInProgress))
+		require.ErrorIs(t, err, resolution.ErrResolutionInProgress)
 
 		// Cancel context immediately
 		cancel()
@@ -593,7 +593,7 @@ func TestWorkerPool_CacheInvalidation(t *testing.T) {
 
 		// First resolution with config-1
 		_, err := env.Pool.GetComponentVersion(ctx, opts1)
-		assert.True(t, errors.Is(err, resolution.ErrResolutionInProgress))
+		require.ErrorIs(t, err, resolution.ErrResolutionInProgress)
 
 		synctest.Wait()
 
@@ -610,7 +610,7 @@ func TestWorkerPool_CacheInvalidation(t *testing.T) {
 
 		// Second resolution with config-2 (different config = cache miss)
 		_, err = env.Pool.GetComponentVersion(ctx, opts2)
-		assert.True(t, errors.Is(err, resolution.ErrResolutionInProgress))
+		require.ErrorIs(t, err, resolution.ErrResolutionInProgress)
 
 		synctest.Wait()
 
@@ -754,11 +754,11 @@ func TestWorkerPoolEventChannelNotifiesRequesters(t *testing.T) {
 		}()
 
 		_, err := env.Pool.GetComponentVersion(ctx, opts1)
-		assert.True(t, errors.Is(err, resolution.ErrResolutionInProgress))
+		require.ErrorIs(t, err, resolution.ErrResolutionInProgress)
 		_, err = env.Pool.GetComponentVersion(ctx, opts2)
-		assert.True(t, errors.Is(err, resolution.ErrResolutionInProgress))
+		require.ErrorIs(t, err, resolution.ErrResolutionInProgress)
 		_, err = env.Pool.GetComponentVersion(ctx, opts3)
-		assert.True(t, errors.Is(err, resolution.ErrResolutionInProgress))
+		require.ErrorIs(t, err, resolution.ErrResolutionInProgress)
 
 		close(release)
 		synctest.Wait()
