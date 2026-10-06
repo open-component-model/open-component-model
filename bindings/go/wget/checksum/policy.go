@@ -12,7 +12,8 @@ type SourceType string
 
 const (
 	SourceHTTPHeader SourceType = "httpHeader"
-	// SourceURL reads the checksum a content-addressed URL selects the content by, see [FromURL].
+	// SourceURL reads the checksums a content-addressed URL selects the content by, see
+	// [contentAddressedQuery].
 	SourceURL    SourceType = "url"
 	SourceStream SourceType = "stream"
 )
@@ -168,7 +169,10 @@ func (src Source) candidates(in Input) ([]Expected, error) {
 	case SourceHTTPHeader:
 		return FromHeaders(in.Headers, src.Headers), nil
 	case SourceURL:
-		return FromURL(in.URL), nil
+		if query, ok := contentAddressedQuery(in.URL); ok {
+			return fromQuery(query), nil
+		}
+		return nil, nil
 	default:
 		return nil, fmt.Errorf("unsupported checksum source type %q", src.Type)
 	}

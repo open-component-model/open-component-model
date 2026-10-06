@@ -47,7 +47,7 @@ func TestFromHeaders_RFC9530ContentDigest(t *testing.T) {
 	r.Equal(helloSHA1, exp.Value)
 }
 
-func TestFromURL(t *testing.T) {
+func TestURLSource(t *testing.T) {
 	const search = "https://nexus.example.com/service/rest/v1/search/assets/download"
 	for _, tc := range []struct {
 		name, url string
@@ -62,7 +62,9 @@ func TestFromURL(t *testing.T) {
 		{"plain file URL", "https://example.com/file.tgz", nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			require.Equal(t, tc.want, FromURL(tc.url))
+			got, err := Source{Type: SourceURL}.candidates(Input{URL: tc.url})
+			require.NoError(t, err)
+			require.Equal(t, tc.want, got)
 		})
 	}
 }

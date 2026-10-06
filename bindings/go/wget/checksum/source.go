@@ -45,23 +45,28 @@ func FromHeaders(header http.Header, extra []string) []Expected {
 // checksum in the query pins the content the URL serves.
 const nexusSearchDownloadPath = "/service/rest/v1/search/assets/download"
 
-// FromURL extracts expected checksums from a content-addressed URL: a Nexus asset search
-// download URL whose query selects the asset by its checksum (sha256=<hex>, sha512=<hex>, ...).
-// Any other URL yields nothing.
-func FromURL(rawURL string) []Expected {
+// contentAddressedQuery returns the query of a content-addressed URL: one whose server
+// resolves it only to content with the checksums in its query, so the query advertises
+// them. ok is false for any other URL, as servers ignore unknown query parameters.
+func contentAddressedQuery(rawURL string) (url.Values, bool) {
 	u, err := url.Parse(rawURL)
 	if err != nil || !strings.HasSuffix(strings.TrimSuffix(u.Path, "/"), nexusSearchDownloadPath) {
-		return nil
+		return nil, false
 	}
-	query := u.Query()
+	return u.Query(), true
+}
+
+// fromQuery reads hex checksums from query parameters named after the algorithm's
+// extension (sha512, sha256, sha1, md5), strongest first. A repeated parameter is
+// ambiguous and skipped.
+func fromQuery(query url.Values) []Expected {
 	var out []Expected
 	for _, alg := range All {
 		values := query[alg.Extension]
 		if len(values) != 1 {
 			continue
 		}
-		v := strings.ToLower(values[0])
-		if isHex(v, alg.Hash.Size()) {
+		if v := strings.ToLower(values[0]); isHex(v, alg.Hash.Size()) {
 			out = append(out, Expected{Algorithm: alg, Value: v})
 		}
 	}
