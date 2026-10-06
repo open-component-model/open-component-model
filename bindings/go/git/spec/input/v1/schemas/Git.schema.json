@@ -10,6 +10,21 @@
       "type": "string",
       "description": "Commit pins a commit by its full 40-character hexadecimal SHA and takes\nprecedence over Ref."
     },
+    "depth": {
+      "type": "integer",
+      "description": "Depth limits the number of commits fetched from the selected revision.\nZero fetches the full available history.",
+      "minimum": 0,
+      "maximum": 9223372036854776000
+    },
+    "filter": {
+      "type": "string",
+      "description": "Filter requests partial Git objects. The supported value is blob:none.",
+      "oneOf": [
+        {
+          "const": "blob:none"
+        }
+      ]
+    },
     "ref": {
       "type": "string",
       "description": "Ref selects a branch, tag or full ref name (for example main, v1.0.0 or\nrefs/tags/v1.0.0). If both Ref and Commit are empty, remote HEAD is used."

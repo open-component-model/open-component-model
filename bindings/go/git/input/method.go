@@ -74,6 +74,8 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 
 	opts := download.Options{
 		TempDir:         i.TempFolder,
+		Depth:           spec.Depth,
+		Filter:          spec.Filter,
 		MaxArchiveSize:  download.DefaultMaxArchiveSize,
 		HostKeyCallback: i.HostKeyCallback,
 	}
@@ -92,6 +94,8 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 		Repository: spec.Repository,
 		Ref:        ref,
 		Commit:     spec.Commit,
+		Depth:      spec.Depth,
+		Filter:     spec.Filter,
 	}, creds, opts)
 	if err != nil {
 		return nil, fmt.Errorf("error downloading git input: %w", err)

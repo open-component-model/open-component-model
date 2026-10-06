@@ -53,3 +53,27 @@ func TestGit_JSON(t *testing.T) {
 		})
 	}
 }
+
+func TestGit_FetchOptions(t *testing.T) {
+	for _, testCase := range []struct {
+		name    string
+		depth   int
+		filter  string
+		wantErr string
+	}{
+		{name: "shallow and partial", depth: 1, filter: "blob:none"},
+		{name: "negative depth", depth: -1, wantErr: "depth must not be negative"},
+		{name: "unsupported filter", filter: "tree:0", wantErr: "unsupported git filter"},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			r := require.New(t)
+			spec := &Git{Repository: "https://example.com/repo.git", Depth: testCase.depth, Filter: testCase.filter}
+			err := spec.Validate()
+			if testCase.wantErr == "" {
+				r.NoError(err)
+			} else {
+				r.ErrorContains(err, testCase.wantErr)
+			}
+		})
+	}
+}

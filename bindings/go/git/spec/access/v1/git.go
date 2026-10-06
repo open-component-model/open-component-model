@@ -36,6 +36,15 @@ type Git struct {
 	// Commit pins a commit by its full 40-character hexadecimal SHA and takes
 	// precedence over Ref. At least one of Commit or Ref must be set.
 	Commit string `json:"commit,omitempty"`
+
+	// Depth limits the number of commits fetched from the selected revision.
+	// Zero fetches the full available history.
+	// +ocm:jsonschema-gen:minimum=0
+	Depth int `json:"depth,omitempty"`
+
+	// Filter requests partial Git objects. The supported value is blob:none.
+	// +ocm:jsonschema-gen:enum=blob:none
+	Filter string `json:"filter,omitempty"`
 }
 
 var commitSHA = regexp.MustCompile(`^[0-9a-fA-F]{40}$`)
@@ -55,6 +64,12 @@ func (g *Git) Validate() error {
 
 	if g.Commit != "" && !commitSHA.MatchString(g.Commit) {
 		return fmt.Errorf("commit must be a 40-character hexadecimal SHA")
+	}
+	if g.Depth < 0 {
+		return fmt.Errorf("depth must not be negative")
+	}
+	if g.Filter != "" && g.Filter != "blob:none" {
+		return fmt.Errorf("unsupported git filter %q", g.Filter)
 	}
 
 	if g.Ref != "" && g.Ref != "HEAD" {

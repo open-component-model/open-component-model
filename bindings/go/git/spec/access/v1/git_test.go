@@ -36,3 +36,29 @@ func TestValidate(t *testing.T) {
 		})
 	}
 }
+
+func TestFetchOptions(t *testing.T) {
+	for _, testCase := range []struct {
+		name    string
+		depth   int
+		filter  string
+		wantErr string
+	}{
+		{name: "full fetch"},
+		{name: "shallow fetch", depth: 1},
+		{name: "partial fetch", filter: "blob:none"},
+		{name: "negative depth", depth: -1, wantErr: "depth must not be negative"},
+		{name: "unsupported filter", filter: "tree:0", wantErr: "unsupported git filter"},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			r := require.New(t)
+			spec := &v1.Git{Repository: "https://example.com/repo.git", Ref: "refs/heads/main", Depth: testCase.depth, Filter: testCase.filter}
+			err := spec.Validate()
+			if testCase.wantErr == "" {
+				r.NoError(err)
+			} else {
+				r.ErrorContains(err, testCase.wantErr)
+			}
+		})
+	}
+}

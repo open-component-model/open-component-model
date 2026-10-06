@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 
 	"github.com/go-git/go-git/v6/plumbing/object"
@@ -48,6 +49,21 @@ func archive(ctx context.Context, commit *object.Commit, file *os.File, opts Opt
 	b.SetMediaType(mediaTypeTGZ)
 
 	return b, digester.Digest(), nil
+}
+
+// ArchiveDigest computes the same digest as Download without retaining its archive.
+func ArchiveDigest(ctx context.Context, commit *object.Commit, opts Options) (digest.Digest, error) {
+	file, err := os.CreateTemp(opts.TempDir, "ocm-git-digest-*.tar.gz")
+	if err != nil {
+		return "", fmt.Errorf("cannot create git digest file: %w", err)
+	}
+	defer func() {
+		if err := os.Remove(file.Name()); err != nil && !errors.Is(err, os.ErrNotExist) {
+			slog.WarnContext(ctx, "failed to remove git digest file", "path", file.Name(), "err", err)
+		}
+	}()
+	_, archiveDigest, err := archive(ctx, commit, file, opts)
+	return archiveDigest, err
 }
 
 type limitedWriter struct {

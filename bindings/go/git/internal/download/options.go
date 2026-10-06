@@ -12,6 +12,8 @@ const DefaultMaxArchiveSize int64 = 0
 
 type Options struct {
 	TempDir string
+	Depth   int
+	Filter  string
 	// MaxArchiveSize caps the final compressed archive bytes, not the Git transfer
 	// or uncompressed tree. Non-positive values disable the limit.
 	MaxArchiveSize int64
