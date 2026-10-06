@@ -139,7 +139,7 @@ func (r *ResourceRepository) uploadGitRepository(ctx context.Context, repo *git.
 		if existing.Name() != targetRef {
 			continue
 		}
-		if err := r.verifyTargetHistory(ctx, targetRepository, existing.Hash(), targetCreds); err != nil {
+		if err := r.verifyTargetHistory(ctx, targetRepository, string(targetRef), existing.Hash(), targetCreds); err != nil {
 			return nil, err
 		}
 		if existing.Hash() == pushHash {
@@ -167,9 +167,9 @@ func (r *ResourceRepository) uploadGitRepository(ctx context.Context, repo *git.
 	return uploadedResource(source, targetRepository, string(targetRef), selected.Hash.String()), nil
 }
 
-func (r *ResourceRepository) verifyTargetHistory(ctx context.Context, repository string, tip plumbing.Hash, credentials *credsv1.GitCredentials) error {
+func (r *ResourceRepository) verifyTargetHistory(ctx context.Context, repository, ref string, tip plumbing.Hash, credentials *credsv1.GitCredentials) error {
 	opts := r.downloadOptions(r.tempFolder())
-	access := &accessv1.Git{Repository: repository, Commit: tip.String()}
+	access := &accessv1.Git{Repository: repository, Ref: ref}
 	err := download.WithRepository(ctx, access, credentials, opts, func(target *git.Repository, _ *object.Commit) error {
 		_, err := verifyObjectClosure(target, tip)
 		return err
