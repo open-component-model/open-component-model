@@ -378,7 +378,7 @@ authentication settings from the hostname or token format.
 ```yaml
 consumers:
   - identity:
-      type: Git
+      type: Git/v1
       hostname: git.example.com
       scheme: https
     credentials:
@@ -401,7 +401,7 @@ For HTTPS cloning with a password or access token, use `GitHTTPSCredentials/v1`.
 ```yaml
 consumers:
   - identity:
-      type: Git
+      type: Git/v1
       hostname: git.example.com
       scheme: https
     credentials:
@@ -420,7 +420,7 @@ optional `passphrase` to decrypt the key. Supplying both key fields is an error.
 ```yaml
 consumers:
   - identity:
-      type: Git
+      type: Git/v1
       hostname: git.example.com
       scheme: ssh
       port: "22"

@@ -42,10 +42,7 @@ func MustRegisterCredentialType(scheme *runtime.Scheme) {
 	)
 }
 
-// GitHTTPSCredentials authenticates Git over HTTPS with a username and password or access token.
-// Password can be a password, personal access token, or OAuth access token,
-// according to the server's requirements. Credentials are sent using HTTP Basic authentication.
-// No provider-specific defaults are applied.
+// GitHTTPSCredentials authenticates Git over HTTPS using HTTP Basic authentication.
 //
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
@@ -54,7 +51,9 @@ func MustRegisterCredentialType(scheme *runtime.Scheme) {
 type GitHTTPSCredentials struct {
 	// +ocm:jsonschema-gen:enum=GitHTTPSCredentials/v1
 	Type     runtime.Type `json:"type"`
+	// Username is the username required by the Git server.
 	Username string       `json:"username"`
+	// Password is the server password or access token sent as the HTTP Basic password.
 	Password string       `json:"password"`
 }
 
@@ -68,9 +67,7 @@ func (c *GitHTTPSCredentials) Validate() error {
 	return nil
 }
 
-// GitBearerCredentials authenticates Git over HTTPS using Authorization: Bearer.
-// Use only when the server explicitly requires Bearer authentication. For HTTPS
-// cloning with a password or access token, use GitHTTPSCredentials.
+// GitBearerCredentials authenticates Git over HTTPS using Bearer authentication.
 //
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
@@ -79,6 +76,7 @@ func (c *GitHTTPSCredentials) Validate() error {
 type GitBearerCredentials struct {
 	// +ocm:jsonschema-gen:enum=GitBearerCredentials/v1
 	Type  runtime.Type `json:"type"`
+	// Token is sent in the HTTP Authorization Bearer header.
 	Token string       `json:"token"`
 }
 
@@ -90,8 +88,6 @@ func (c *GitBearerCredentials) Validate() error {
 }
 
 // GitSSHCredentials authenticates Git over SSH with a private key or the SSH agent.
-// Without a key, the SSH agent is used. Username defaults to the URL user, then git.
-// Host keys are checked against known_hosts unless the caller supplies a callback.
 //
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
@@ -100,6 +96,7 @@ func (c *GitBearerCredentials) Validate() error {
 type GitSSHCredentials struct {
 	// +ocm:jsonschema-gen:enum=GitSSHCredentials/v1
 	Type     runtime.Type `json:"type"`
+	// Username overrides the SSH URL user. By default, OCM uses the URL user, then git.
 	Username string       `json:"username,omitempty"`
 	// PrivateKey is the path to an SSH private key file.
 	PrivateKey string `json:"privateKey,omitempty"`

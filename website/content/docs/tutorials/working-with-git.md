@@ -235,7 +235,7 @@ configurations:
   - type: credentials.config.ocm.software
     consumers:
       - identity:
-          type: Git
+          type: Git/v1
           hostname: gitlab.com
           scheme: https
           path: example-group/*
@@ -259,7 +259,7 @@ configurations:
   - type: credentials.config.ocm.software
     consumers:
       - identity:
-          type: Git
+          type: Git/v1
           hostname: git.example.com
           scheme: ssh
           port: "22"

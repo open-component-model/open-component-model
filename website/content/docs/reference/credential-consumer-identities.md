@@ -603,7 +603,7 @@ server answers with an authentication error.
 
 ```yaml
 - identity:
-    type: Git
+    type: Git/v1
     hostname: gitlab.com
     scheme: https
     path: example-group/*
@@ -617,7 +617,7 @@ server answers with an authentication error.
 
 ```yaml
 - identity:
-    type: Git
+    type: Git/v1
     hostname: git.example.com
     scheme: ssh
     port: "22"
