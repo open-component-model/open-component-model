@@ -158,6 +158,7 @@ func (r *ResourceRepository) uploadGitRepository(ctx context.Context, repo *git.
 		return nil, fmt.Errorf("cannot stage git upload ref: %w", err)
 	}
 	if err := remote.PushContext(ctx, &git.PushOptions{
+		RemoteName:    "ocm-target",
 		RefSpecs:      []config.RefSpec{config.RefSpec(uploadRef + ":" + string(targetRef))},
 		ClientOptions: targetOptions,
 	}); err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
