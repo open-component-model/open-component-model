@@ -766,18 +766,21 @@ func TestDownloadResource_ChecksumPolicy(t *testing.T) {
 	})
 }
 
-// TestProcessResourceDigest_PeekRedirectSafety proves the HEAD fast path never
-// forwards the Authorization header across an origin-changing redirect and
-// mirrors the access spec's representation-selecting headers.
+// TestProcessResourceDigest_PeekRedirectSafety proves the HEAD fast path
+// follows redirects like the download, never forwards the Authorization header
+// to another host, and mirrors the access spec's representation-selecting
+// headers.
 func TestProcessResourceDigest_PeekRedirectSafety(t *testing.T) {
 	t.Parallel()
 	content := []byte("peek redirect safety")
 	sha256 := godigest.FromBytes(content).Encoded()
+	creds := &credv1.WgetCredentials{
+		Type:          runtime.NewVersionedType(credv1.WgetCredentialsType, credv1.Version),
+		IdentityToken: "secret-token",
+	}
 
-	t.Run("credentialed HEAD does not follow a redirect that would leak Authorization", func(t *testing.T) {
+	t.Run("credentialed HEAD follows a redirect to another host without Authorization", func(t *testing.T) {
 		var leaked, downstreamHit bool
-		// downstream records whether the redirect was followed and whether
-		// Authorization survived it.
 		downstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			downstreamHit = true
 			if r.Header.Get("Authorization") != "" {
@@ -787,7 +790,33 @@ func TestProcessResourceDigest_PeekRedirectSafety(t *testing.T) {
 			w.WriteHeader(http.StatusOK)
 		}))
 		defer downstream.Close()
+		// net/http forwards Authorization to the same host name regardless of
+		// the port, so the downstream is addressed by another host name.
+		downstreamURL := strings.Replace(downstream.URL, "127.0.0.1", "localhost", 1)
 
+		origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, downstreamURL+"/elsewhere", http.StatusFound)
+		}))
+		defer origin.Close()
+
+		repo := repository.NewResourceRepository(nil, repository.WithHTTPClient(downstream.Client()),
+			repository.WithChecksumConfig(&checksumhttpv1alpha1.Config{Mode: checksumhttpv1alpha1.ChecksumModeRequire}))
+		processed, err := repo.ProcessResourceDigest(t.Context(),
+			wgetResource(t, origin.URL, map[string]any{"url": origin.URL + "/resource"}), creds)
+		require.NoError(t, err)
+		assert.True(t, downstreamHit, "the peek follows the redirect the download would follow")
+		assert.False(t, leaked, "Authorization must not be forwarded to another host")
+		assert.Equal(t, sha256, processed.Digest.Value)
+	})
+
+	t.Run("noRedirect HEAD stops at the redirect", func(t *testing.T) {
+		var downstreamHit bool
+		downstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			downstreamHit = true
+			w.Header().Set("x-checksum-sha256", sha256)
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer downstream.Close()
 		origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			http.Redirect(w, r, downstream.URL+"/elsewhere", http.StatusFound)
 		}))
@@ -795,20 +824,60 @@ func TestProcessResourceDigest_PeekRedirectSafety(t *testing.T) {
 
 		repo := repository.NewResourceRepository(nil, repository.WithHTTPClient(downstream.Client()),
 			repository.WithChecksumConfig(&checksumhttpv1alpha1.Config{Mode: checksumhttpv1alpha1.ChecksumModeRequire}))
-		creds := &credv1.WgetCredentials{
-			Type:          runtime.NewVersionedType(credv1.WgetCredentialsType, credv1.Version),
-			IdentityToken: "secret-token",
-		}
-		// The origin only redirects, never advertises a checksum; a
-		// credential-safe peek must stop at the redirect and report "nothing
-		// advertised", so Require aborts — and Authorization must never reach
-		// the downstream origin.
 		_, err := repo.ProcessResourceDigest(t.Context(),
-			wgetResource(t, origin.URL, map[string]any{"url": origin.URL + "/resource"}), creds)
+			wgetResource(t, origin.URL, map[string]any{"url": origin.URL + "/resource", "noRedirect": true}), nil)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "no advertised checksum")
-		assert.False(t, leaked, "Authorization must not be forwarded across an origin-changing redirect")
-		assert.False(t, downstreamHit, "a credentialed peek must refuse the redirect rather than follow it")
+		assert.False(t, downstreamHit)
+	})
+
+	t.Run("content-addressed nexus search URL pins the digest after a same-host redirect", func(t *testing.T) {
+		var gets int
+		mux := http.NewServeMux()
+		authorized := func(w http.ResponseWriter, r *http.Request) bool {
+			if r.Header.Get("Authorization") != "Bearer secret-token" {
+				w.WriteHeader(http.StatusUnauthorized)
+				return false
+			}
+			return true
+		}
+		mux.HandleFunc("/service/rest/v1/search/assets/download", func(w http.ResponseWriter, r *http.Request) {
+			if !authorized(w, r) {
+				return
+			}
+			if r.URL.Query().Get("sha256") != sha256 {
+				http.NotFound(w, r)
+				return
+			}
+			http.Redirect(w, r, "/repository/raw-hosted/file", http.StatusFound)
+		})
+		mux.HandleFunc("/repository/raw-hosted/file", func(w http.ResponseWriter, r *http.Request) {
+			if !authorized(w, r) {
+				return
+			}
+			// Like Nexus: only a SHA-1 ETag, no checksum headers.
+			w.Header().Set("ETag", `"`+shaHex(content, crypto.SHA1)+`"`)
+			if r.Method == http.MethodGet {
+				gets++
+				_, _ = w.Write(content)
+			}
+		})
+		server := httptest.NewServer(mux)
+		defer server.Close()
+
+		repo := repository.NewResourceRepository(nil, repository.WithHTTPClient(server.Client()),
+			repository.WithChecksumConfig(&checksumhttpv1alpha1.Config{Mode: checksumhttpv1alpha1.ChecksumModeRequire}))
+		searchURL := server.URL + "/service/rest/v1/search/assets/download?repository=raw-hosted&name=%2Ffile&sha256="
+
+		processed, err := repo.ProcessResourceDigest(t.Context(), wgetResource(t, server.URL, map[string]any{"url": searchURL + sha256}), creds)
+		require.NoError(t, err)
+		assert.Equal(t, &descruntime.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: "genericBlobDigest/v1", Value: sha256}, processed.Digest)
+		assert.Zero(t, gets, "the digest is pinned without downloading the body")
+
+		other := godigest.FromString("other").Encoded()
+		_, err = repo.ProcessResourceDigest(t.Context(), wgetResource(t, server.URL, map[string]any{"url": searchURL + other}), creds)
+		require.Error(t, err, "a checksum the server does not resolve is not advertised")
+		assert.Contains(t, err.Error(), "no advertised checksum")
 	})
 
 	t.Run("HEAD mirrors representation-selecting headers from the access spec", func(t *testing.T) {

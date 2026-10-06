@@ -1,8 +1,9 @@
 // Package httpverify runs a resolved [checksum.Policy] over a downloaded blob
-// or a source's advertised response headers (RFC 9530 Content-Digest and the
-// x-checksum-* family). Verify reads an already-downloaded response; Peek
-// issues a single credentialed HEAD. Both the wget input method and the access
-// resource repository use it so both paths verify identically.
+// or a source's advertised checksums (RFC 9530 Content-Digest, the
+// x-checksum-* family and content-addressed URLs). Verify reads an
+// already-downloaded response; Peek issues a single credentialed HEAD. Both
+// the wget input method and the access resource repository use it so both
+// paths verify identically.
 package httpverify
 
 import (
@@ -52,8 +53,10 @@ type PeekRequest struct {
 // Peek resolves policy against the source WITHOUT downloading the body: a
 // single credentialed HEAD harvests response headers and returns the first
 // advertised digest whose algorithm appears in prefer (empty means
-// [checksum.All]). Redirects are refused when NoRedirect is set or credentials
-// are attached, so a 3xx cannot forward Authorization across an origin change.
+// [checksum.All]). The HEAD follows redirects like the download does: never
+// with NoRedirect, and with credentials only as [httpauth.Apply] allows. A
+// HEAD that fails or does not end in a 2xx advertises nothing, so a URL
+// source never vouches for content the server did not resolve.
 func Peek(
 	ctx context.Context,
 	baseClient *http.Client,
@@ -67,9 +70,7 @@ func Peek(
 	}
 
 	// HEAD the artifact URL to harvest response headers. A failure (e.g. 405)
-	// is not fatal: fall through with empty headers so ResolveAdvertised can
-	// report "nothing advertised".
-	headers := http.Header{}
+	// is not fatal: it reports "nothing advertised".
 	var body io.Reader
 	if len(req.Body) > 0 {
 		body = bytes.NewReader(req.Body)
@@ -84,31 +85,26 @@ func Peek(
 		}
 	}
 	client := baseClient
-	if credentials != nil {
-		credentialedClient := baseClient
-		if err := httpauth.Apply(ctx, httpReq, &credentialedClient, credentials); err != nil {
-			return checksum.Expected{}, false, fmt.Errorf("cannot apply credentials for checksum peek: %w", err)
-		}
-		client = credentialedClient
+	if req.NoRedirect {
+		client = download.CloneClientWithNoRedirect(client)
 	}
-	if req.NoRedirect || credentials != nil {
-		clone := *client
-		clone.CheckRedirect = func(*http.Request, []*http.Request) error {
-			return http.ErrUseLastResponse
-		}
-		client = &clone
+	if err := httpauth.Apply(ctx, httpReq, &client, credentials); err != nil {
+		return checksum.Expected{}, false, fmt.Errorf("cannot apply credentials for checksum peek: %w", err)
 	}
-	if resp, herr := client.Do(httpReq); herr == nil {
-		headers = resp.Header
-		_ = resp.Body.Close()
-	} else {
-		slog.DebugContext(ctx, "httpverify: HEAD failed; falling through with empty headers",
-			"url", req.URL, "err", herr)
+	resp, herr := client.Do(httpReq)
+	if herr != nil {
+		slog.DebugContext(ctx, "httpverify: HEAD failed; nothing advertised", "url", req.URL, "err", herr)
+		return checksum.Expected{}, false, nil
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		slog.DebugContext(ctx, "httpverify: HEAD returned no content; nothing advertised", "url", req.URL, "status", resp.StatusCode)
+		return checksum.Expected{}, false, nil
 	}
 
 	return checksum.ResolveAdvertised(ctx, policy, checksum.Input{
 		URL:     req.URL,
-		Headers: headers,
+		Headers: resp.Header,
 	}, prefer)
 }
 

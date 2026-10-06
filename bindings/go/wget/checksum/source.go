@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 )
 
@@ -35,6 +36,34 @@ func FromHeaders(header http.Header, extra []string) []Expected {
 	}
 	for _, e := range parseLegacyChecksumHeaders(header, extra) {
 		add(e)
+	}
+	return out
+}
+
+// nexusSearchDownloadPath is the path of the Nexus Repository 3 asset search download endpoint.
+// It redirects to the single asset matching its query and fails when none matches, so a
+// checksum in the query pins the content the URL serves.
+const nexusSearchDownloadPath = "/service/rest/v1/search/assets/download"
+
+// FromURL extracts expected checksums from a content-addressed URL: a Nexus asset search
+// download URL whose query selects the asset by its checksum (sha256=<hex>, sha512=<hex>, ...).
+// Any other URL yields nothing.
+func FromURL(rawURL string) []Expected {
+	u, err := url.Parse(rawURL)
+	if err != nil || !strings.HasSuffix(strings.TrimSuffix(u.Path, "/"), nexusSearchDownloadPath) {
+		return nil
+	}
+	query := u.Query()
+	var out []Expected
+	for _, alg := range All {
+		values := query[alg.Extension]
+		if len(values) != 1 {
+			continue
+		}
+		v := strings.ToLower(values[0])
+		if isHex(v, alg.Hash.Size()) {
+			out = append(out, Expected{Algorithm: alg, Value: v})
+		}
 	}
 	return out
 }
