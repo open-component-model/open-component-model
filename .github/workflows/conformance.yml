@@ -211,15 +211,12 @@ jobs:
         run: task clean
 
   # GPG signing and verification with the full CLI image under
-  # GODEBUG=fips140=only. Needs only Docker, no cluster.
+  # GODEBUG=fips140=only. Needs only Docker, no cluster. arm64 only: the
+  # scenario has no architecture-specific path.
   fips-gpg:
-    name: FIPS GPG Scenario (${{ matrix.arch }})
-    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
+    name: FIPS GPG Scenario (arm64)
+    runs-on: ubuntu-24.04-arm
     timeout-minutes: 15
-    strategy:
-      fail-fast: false
-      matrix:
-        arch: [arm64]
     steps:
       - name: Compute image refs
         env:
@@ -252,7 +249,7 @@ jobs:
         if: ${{ inputs.cli_artifact != '' }}
         env:
           CLI_VERSION: ${{ inputs.cli_version }}
-          ARCH: ${{ matrix.arch }}
+          ARCH: arm64
         run: |
           mkdir -p tmp/cli-oci-dir
           tar -xf tmp/cli-artifact/oci/cli.tar -C tmp/cli-oci-dir
