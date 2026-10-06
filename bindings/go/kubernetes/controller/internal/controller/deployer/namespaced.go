@@ -48,12 +48,16 @@ func (r *Reconciler) newList() client.ObjectList {
 	return &deliveryv1alpha1.DeployerList{}
 }
 
-func (r *Reconciler) metricsLabel() string {
+func (r *Reconciler) managedBy() string {
 	if r.Namespaced {
-		return "namespaced" + deployerManager + "/resources"
+		return namespacedDeployerManager
 	}
 
-	return deployerManager + "/resources"
+	return deployerManager
+}
+
+func (r *Reconciler) metricsLabel() string {
+	return r.managedBy() + "/resources"
 }
 
 func (r *Reconciler) defaultNamespace(deployer deliveryv1alpha1.DeployerObject) string {

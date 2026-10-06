@@ -29,8 +29,9 @@ spec:
       openAPIV3Schema:
         description: |-
           NamespacedDeployer is the Schema for the namespaceddeployers API.
-          Unlike the cluster-scoped Deployer, it only deploys into its own namespace and applies objects
-          with the permissions of the service account referenced in its spec.
+          Unlike the cluster-scoped Deployer, it applies objects with the permissions of the service account
+          referenced in its spec. That service account's RBAC, not this resource, bounds which namespaces and
+          kinds it can deploy.
         properties:
           apiVersion:
             description: |-
@@ -117,6 +118,9 @@ spec:
                     type: string
                 type: object
                 x-kubernetes-map-type: atomic
+                x-kubernetes-validations:
+                - message: resourceRef.name must be set
+                  rule: self.name != ''
               serviceAccountName:
                 description: |-
                   ServiceAccountName is the name of the service account in the same namespace that is impersonated

@@ -64,8 +64,12 @@ const (
 	// applySetPruneFinalizer is the finalizer used to ensure that the ApplySet is pruned when the deployer is deleted.
 	applySetPruneFinalizer = "delivery.ocm.software/applyset-prune"
 
-	// deployerManager is the label used to identify the deployer as a manager of resources.
+	// deployerManager is the managed-by label value of objects deployed by a Deployer.
 	deployerManager = "deployer.delivery.ocm.software"
+
+	// namespacedDeployerManager is the managed-by label value of objects deployed by a NamespacedDeployer.
+	// Its own value keeps each kind's informers from caching the other kind's objects.
+	namespacedDeployerManager = "namespaceddeployer.delivery.ocm.software"
 )
 
 var ErrComponentVersionDrift = errors.New("component version drift: resource status has not yet caught up with component")
@@ -207,7 +211,7 @@ func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) err
 
 func (r *Reconciler) setupDynamicResourceWatcherWithManager(mgr ctrl.Manager) (*dynamic.InformerManager, error) {
 	// only register watches for resources that are managed by the deployer controller
-	sel, err := labels.Parse(fmt.Sprintf("%s=%s", managedByLabel, deployerManager))
+	sel, err := labels.Parse(fmt.Sprintf("%s=%s", managedByLabel, r.managedBy()))
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse label selector: %w", err)
 	}
@@ -887,7 +891,7 @@ func (r *Reconciler) applyWithApplySet(ctx context.Context, resource *deliveryv1
 		obj := obj.DeepCopy()
 
 		// Set ownership labels and annotations (preserving existing behavior)
-		setOwnershipLabels(obj, resource, deployer)
+		setOwnershipLabels(obj, resource, deployer, r.managedBy())
 		logger.Info("set ownership labels", "labels", obj.GetLabels())
 		setOwnershipAnnotations(obj, resource)
 		logger.Info("set ownership annotations", "annotations", obj.GetAnnotations())

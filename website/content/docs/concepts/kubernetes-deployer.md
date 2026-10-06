@@ -114,7 +114,7 @@ The Deployer stamps deployed resources with metadata for traceability in the for
 
 | Label | Value |
 | ----- | ----- |
-| `app.kubernetes.io/managed-by` | `deployer.delivery.ocm.software` |
+| `app.kubernetes.io/managed-by` | `deployer.delivery.ocm.software` for a Deployer, `namespaceddeployer.delivery.ocm.software` for a NamespacedDeployer |
 | `app.kubernetes.io/name` | Resource name |
 | `app.kubernetes.io/version` | Resource version |
 | `app.kubernetes.io/part-of` | Deployer name |

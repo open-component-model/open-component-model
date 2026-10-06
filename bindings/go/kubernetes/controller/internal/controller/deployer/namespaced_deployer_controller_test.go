@@ -66,6 +66,7 @@ data:
 		Expect(owner.BlockOwnerDeletion).To(HaveValue(BeFalse()))
 		deployer.SetGroupVersionKind(v1alpha1.GroupVersion.WithKind(v1alpha1.KindNamespacedDeployer))
 		Expect(cm.GetLabels()).To(HaveKeyWithValue(applyset.ApplysetPartOfLabel, applyset.ID(deployer)))
+		Expect(cm.GetLabels()).To(HaveKeyWithValue(managedByLabel, namespacedDeployerManager))
 		Expect(deployer.Status.Deployed).To(ContainElement(HaveField("Name", "nd-cm")))
 
 		By("deleting the NamespacedDeployer prunes the ConfigMap")
@@ -250,6 +251,16 @@ metadata:
 			},
 		}
 		Expect(errors.IsInvalid(k8sClient.Create(ctx, deployer))).To(BeTrue())
+	})
+
+	It("requires a resource name", func(ctx SpecContext) {
+		deployer := &v1alpha1.NamespacedDeployer{
+			ObjectMeta: metav1.ObjectMeta{Name: "nd-no-resource", Namespace: namespace.GetName()},
+			Spec:       v1alpha1.NamespacedDeployerSpec{ServiceAccountName: "any"},
+		}
+		err := k8sClient.Create(ctx, deployer)
+		Expect(errors.IsInvalid(err)).To(BeTrue())
+		Expect(err.Error()).To(ContainSubstring("resourceRef.name must be set"))
 	})
 })
 

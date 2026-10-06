@@ -13,6 +13,7 @@ const KindNamespacedDeployer = "NamespacedDeployer"
 type NamespacedDeployerSpec struct {
 	// ResourceRef is the name of an OCM resource in the same namespace containing the ResourceGroupDefinition.
 	// +required
+	// +kubebuilder:validation:XValidation:rule="self.name != ''",message="resourceRef.name must be set"
 	ResourceRef corev1.LocalObjectReference `json:"resourceRef"`
 
 	// ServiceAccountName is the name of the service account in the same namespace that is impersonated
@@ -92,8 +93,9 @@ func (in *NamespacedDeployer) GetDeployerStatus() *DeployerStatus {
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Displays the Age of the NamespacedDeployer"
 
 // NamespacedDeployer is the Schema for the namespaceddeployers API.
-// Unlike the cluster-scoped Deployer, it only deploys into its own namespace and applies objects
-// with the permissions of the service account referenced in its spec.
+// Unlike the cluster-scoped Deployer, it applies objects with the permissions of the service account
+// referenced in its spec. That service account's RBAC, not this resource, bounds which namespaces and
+// kinds it can deploy.
 type NamespacedDeployer struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
