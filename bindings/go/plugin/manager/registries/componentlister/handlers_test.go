@@ -69,7 +69,7 @@ func TestListComponentsHandlerFunc(t *testing.T) {
 				bites, err := io.ReadAll(resp.Body)
 				content := strings.TrimSpace(string(bites))
 				require.NoError(t, err)
-				require.Equal(t, `{"list":["test-component-1","test-component-2"]}`, content)
+				require.JSONEq(t, `{"list":["test-component-1","test-component-2"]}`, content)
 			},
 			assertError: func(t *testing.T, err error) {
 				require.NoError(t, err)

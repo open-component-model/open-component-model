@@ -108,7 +108,7 @@ func TestNewResourceBlobOCILayer(t *testing.T) {
 				return
 			}
 
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, tt.blob.mediaType, desc.MediaType)
 			assert.Equal(t, tt.blob.digest, desc.Digest)
 			assert.Equal(t, int64(len(tt.blob.content)), desc.Size)
@@ -188,7 +188,7 @@ func TestBufferArtifactBlob(t *testing.T) {
 	// Compressed blobs neither have a size nor a digest.
 	assert.Equal(t, blob.SizeUnknown, resourceBlob.Size())
 	dig, ok := resourceBlob.Digest()
-	assert.Equal(t, "", dig)
+	assert.Empty(t, dig)
 	assert.False(t, ok)
 
 	// wantData contains the expected compressed data to be compared with later in the test.
@@ -466,7 +466,7 @@ func TestResourceBlob(t *testing.T) {
 				return
 			}
 
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, tt.blob.mediaType, desc.MediaType)
 
 			data, err := store.Fetch(t.Context(), desc)
@@ -554,7 +554,7 @@ func TestResourceLocalBlob(t *testing.T) {
 				return
 			}
 
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			data, err := store.Fetch(t.Context(), desc)
 			require.NoError(t, err)
 			t.Cleanup(func() {
@@ -698,7 +698,7 @@ func TestResourceLocalBlobMediaTypeDetection(t *testing.T) {
 				return
 			}
 
-			assert.NoError(t, err)
+			require.NoError(t, err)
 
 			// Verify the expected behavior based on media type detection
 			if tt.expectLayout {
@@ -1039,7 +1039,7 @@ func TestResourceLocalBlobOCILayout(t *testing.T) {
 				return
 			}
 
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, ociImageSpecV1.MediaTypeImageManifest, fromStore.MediaType)
 			content.Equal(fromStore, desc)
 

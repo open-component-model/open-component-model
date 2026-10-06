@@ -93,7 +93,7 @@ func TestSingleFileEncodeDescriptor_AllFormats(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			buf, err := SingleFileEncodeDescriptor(scheme, desc, tt.mediaType)
 			if tt.expectedError != "" {
-				assert.Error(t, err)
+				require.Error(t, err)
 				assert.Contains(t, err.Error(), tt.expectedError)
 				assert.Nil(t, buf)
 				return
@@ -114,7 +114,7 @@ func TestSingleFileEncodeDescriptor_ErrorPaths(t *testing.T) {
 	// force ConvertToV2 to fail
 	badDesc := &descriptor.Descriptor{}
 	buf, err := SingleFileEncodeDescriptor(scheme, badDesc, MediaTypeComponentDescriptorYAML)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Nil(t, buf)
 	assert.Contains(t, err.Error(), "convert component descriptor")
 

@@ -132,7 +132,7 @@ func TestTransform(t *testing.T) {
 			for _, req := range u.reqs {
 				if basic != nil {
 					r.True(req.Basic, "%s %s must use basic auth", req.Method, req.Path)
-					r.Equal(basic, []string{req.Username, req.Password})
+					r.Equal([]string{req.Username, req.Password}, basic)
 				} else {
 					r.Equal("Bearer "+bearer, req.Authorization)
 				}

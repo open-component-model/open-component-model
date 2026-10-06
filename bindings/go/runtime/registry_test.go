@@ -38,24 +38,24 @@ func TestRegistry_Decode_With_Type_Mismatch_Defaulting_On_Raw(t *testing.T) {
 
 	parsed := &TestType{}
 	r.NoError(registry.Convert(raw, parsed))
-	r.Equal(parsed.Value, "foo")
+	r.Equal("foo", parsed.Value)
 
 	r.NoError(registry.Convert(&TestType{Type: typ, Value: "bar"}, parsed))
-	r.Equal(parsed.Value, "bar")
+	r.Equal("bar", parsed.Value)
 
 	parsed2, err := registry.NewObject(typ)
 	r.NoError(err)
 
 	r.NoError(registry.Clone().Convert(raw, parsed2))
 	r.IsType(&TestType{}, parsed2)
-	r.Equal(parsed2.(*TestType).Value, "foo")
+	r.Equal("foo", parsed2.(*TestType).Value)
 
 	parsed3, err := registry.Clone().NewObject(typ)
 	// forcefully empty the type, because new object defaults to the correct type
 	r.NoError(err)
 	parsed3.SetType(NewUnversionedType(""))
 	r.NoError(registry.Decode(bytes.NewReader(raw.Data), parsed3))
-	r.Equal(parsed3.(*TestType).Value, "foo")
+	r.Equal("foo", parsed3.(*TestType).Value)
 
 	unknown := NewScheme()
 	_, err = unknown.NewObject(typ)
@@ -71,7 +71,7 @@ func TestRegistry_Decode_With_Type_Mismatch_Defaulting_On_Raw(t *testing.T) {
 	r.NoError(unknown.Decode(bytes.NewReader(raw.Data), parsed4))
 	r.IsType(&Raw{}, parsed4)
 	// Version is not set because it is not part of the raw data
-	r.Equal(parsed4.(*Raw).Type.String(), "test.type")
+	r.Equal("test.type", parsed4.(*Raw).Type.String())
 }
 
 func TestRegistry_Convert_WithAllowUnknown(t *testing.T) {
@@ -83,7 +83,7 @@ func TestRegistry_Convert_WithAllowUnknown(t *testing.T) {
 	// Test Raw → Typed conversion
 	parsed := &TestType{}
 	r.NoError(registry.Convert(raw, parsed))
-	r.Equal(parsed.Value, "foo")
+	r.Equal("foo", parsed.Value)
 	r.Equal(parsed.Type, typ)
 
 	// Test Typed → Raw conversion
@@ -122,7 +122,7 @@ func TestRegistry_Decode_UnknownType(t *testing.T) {
 	typed := &TestType{}
 	r.NoError(registry.Decode(bytes.NewReader(raw.Data), typed))
 	r.Equal(typed.Type, typ)
-	r.Equal(typed.Value, "foo")
+	r.Equal("foo", typed.Value)
 }
 
 func TestRegistry_Decode_UnknownType_WithoutAllowUnknown(t *testing.T) {
@@ -427,8 +427,8 @@ func TestRegistry_RegisterScheme(t *testing.T) {
 		err := targetScheme.RegisterScheme(nil)
 		r.NoError(err)
 		// Registering nil scheme should not change the target scheme
-		r.Equal(targetScheme.defaults.Len(), 0)
-		r.Len(targetScheme.aliases, 0)
+		r.Equal(0, targetScheme.defaults.Len())
+		r.Empty(targetScheme.aliases)
 	})
 
 	t.Run("duplicate registration", func(t *testing.T) {

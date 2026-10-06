@@ -241,7 +241,7 @@ func TestGetV1UTF8Blob(t *testing.T) {
 				assert.Equal(t, "application/x-yaml", mt)
 				require.Implements(t, (*blob.SizeAware)(nil), b)
 				size := b.(blob.SizeAware).Size()
-				assert.True(t, size > 0)
+				assert.Positive(t, size)
 
 				reader, err := b.ReadCloser()
 				require.NoError(t, err)
@@ -309,15 +309,15 @@ func TestGetV1UTF8Blob(t *testing.T) {
 
 				// Check specific values
 				assert.Equal(t, "hello world", parsed["string"])
-				assert.Equal(t, 123.45, parsed["number"])
+				assert.InDelta(t, 123.45, parsed["number"], 1e-9)
 				assert.Equal(t, true, parsed["boolean"])
 				assert.Nil(t, parsed["null"])
 
 				// Check array
 				array, ok := parsed["array"].([]interface{})
 				require.True(t, ok)
-				assert.Equal(t, 4, len(array))
-				assert.Equal(t, float64(1), array[0])
+				assert.Len(t, array, 4)
+				assert.InDelta(t, float64(1), array[0], 1e-9)
 				assert.Equal(t, "four", array[3])
 
 				// Check nested object
@@ -327,7 +327,7 @@ func TestGetV1UTF8Blob(t *testing.T) {
 
 				deep, ok := obj["deep"].(map[string]interface{})
 				require.True(t, ok)
-				assert.Equal(t, float64(3), deep["level"])
+				assert.InDelta(t, float64(3), deep["level"], 1e-9)
 			},
 		},
 		{

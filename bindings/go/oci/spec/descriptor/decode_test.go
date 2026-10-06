@@ -142,7 +142,7 @@ func TestSingleFileDecodeDescriptor_AllFormats(t *testing.T) {
 				return yaml.Unmarshal(bytes, obj)
 			})
 			if tt.expectError != "" {
-				assert.Error(t, err)
+				require.Error(t, err)
 				assert.Contains(t, err.Error(), tt.expectError)
 				assert.Nil(t, desc)
 				return
@@ -188,7 +188,7 @@ func TestDescriptorFileFromTar_EmptyTar(t *testing.T) {
 	_ = tw.Close()
 
 	r, err := descriptorFileFromTar(bytes.NewReader(buf.Bytes()))
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Nil(t, r)
 	assert.Contains(t, err.Error(), "no component descriptor found")
 }
@@ -197,6 +197,6 @@ func TestDescriptorFileFromTar_EmptyTar(t *testing.T) {
 func TestDescriptorFileFromTar_BrokenTar(t *testing.T) {
 	broken := bytes.NewBufferString("not-a-tar")
 	r, err := descriptorFileFromTar(broken)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Nil(t, r)
 }

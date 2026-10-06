@@ -77,7 +77,7 @@ func readAllAndClose(t *testing.T, rc io.ReadCloser) []byte {
 	t.Helper()
 	defer rc.Close()
 	got, err := io.ReadAll(rc)
-	require.NoError(t, err)
+	assert.NoError(t, err)
 	return got
 }
 

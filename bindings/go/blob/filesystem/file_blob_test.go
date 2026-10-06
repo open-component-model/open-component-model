@@ -133,7 +133,7 @@ func TestBlob_MediaType(t *testing.T) {
 	// Initially no media type
 	mediaType, ok := b.MediaType()
 	r.False(ok)
-	r.Equal("", mediaType)
+	r.Empty(mediaType)
 
 	// Set media type
 	expectedMediaType := "text/plain"

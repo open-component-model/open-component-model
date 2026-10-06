@@ -126,7 +126,7 @@ func TestParseResource(t *testing.T) {
 		slices.SortFunc(got, sortFn)
 		slices.SortFunc(expected, sortFn)
 
-		require.Equal(t, len(expected), len(got), "number of expressions mismatch")
+		require.Len(t, got, len(expected), "number of expressions mismatch")
 
 		for i := range expected {
 			exp := expected[i]
@@ -135,7 +135,7 @@ func TestParseResource(t *testing.T) {
 			assert.True(t, act.Path.Equals(exp.Path),
 				"path mismatch:\n  got: %s\n want: %s", act.Path, exp.Path)
 
-			assert.Equal(t, len(exp.Expressions), len(act.Expressions),
+			assert.Len(t, act.Expressions, len(exp.Expressions),
 				"expression count mismatch at path %s", exp.Path)
 
 			for j := range exp.Expressions {
@@ -454,7 +454,7 @@ func TestParseWithExpectedSchema(t *testing.T) {
 	slices.SortFunc(got, sortByPath)
 	slices.SortFunc(expected, sortByPath)
 
-	require.Equal(t, len(expected), len(got), "unexpected number of expressions")
+	require.Len(t, got, len(expected), "unexpected number of expressions")
 
 	for i := range expected {
 		exp := expected[i]
@@ -463,7 +463,7 @@ func TestParseWithExpectedSchema(t *testing.T) {
 		assert.True(t, act.Path.Equals(exp.Path),
 			"path mismatch:\n  got: %s\n want: %s", act.Path, exp.Path)
 
-		require.Equal(t, len(exp.Expressions), len(act.Expressions),
+		require.Len(t, act.Expressions, len(exp.Expressions),
 			"expression count mismatch at path %s", exp.Path)
 
 		for j := range exp.Expressions {
@@ -621,7 +621,7 @@ func TestCelExpressionAgainstObjectSchemaDoesNotError(t *testing.T) {
 
 	expectedType := got[0].ExpectedType
 	assert.NotNil(t, expectedType)
-	assert.Equal(t, expectedType.Kind(), types.StructKind)
+	assert.Equal(t, types.StructKind, expectedType.Kind())
 }
 
 func TestArrayExpressionPaths(t *testing.T) {
@@ -729,7 +729,7 @@ func TestArrayExpressionPaths(t *testing.T) {
 			slices.Sort(paths)
 			slices.Sort(tc.expected)
 
-			require.Equal(t, len(tc.expected), len(paths), "unexpected number of expression paths")
+			require.Len(t, paths, len(tc.expected), "unexpected number of expression paths")
 			assert.Equal(t, tc.expected, paths)
 		})
 	}

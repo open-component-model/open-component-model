@@ -695,9 +695,9 @@ func processResourceDigest(t *testing.T, repo *oci.Repository, from, to string) 
 
 	r.Contains(resource.Access.(*v1.OCIImage).ImageReference, "test:v1.0.0@sha256:0aa67467eee1b66c5e549e6b67226e226778f689ccdb46c39fe706b6428c98a5")
 
-	r.Equal(resource.Digest.Value, "0aa67467eee1b66c5e549e6b67226e226778f689ccdb46c39fe706b6428c98a5")
-	r.Equal(resource.Digest.HashAlgorithm, "SHA-256")
-	r.Equal(resource.Digest.NormalisationAlgorithm, "genericBlobDigest/v1")
+	r.Equal("0aa67467eee1b66c5e549e6b67226e226778f689ccdb46c39fe706b6428c98a5", resource.Digest.Value)
+	r.Equal("SHA-256", resource.Digest.HashAlgorithm)
+	r.Equal("genericBlobDigest/v1", resource.Digest.NormalisationAlgorithm)
 
 	r.NotNil(resource.Digest)
 }
@@ -1123,7 +1123,7 @@ func transformGetOCIArtifact(t *testing.T, repo repository.ResourceRepository, u
 
 	require.NotNil(t, ociOutput.Output.File)
 	require.NotNil(t, ociOutput.Output.File.URI)
-	require.Equal(t, ociOutput.Output.File.MediaType, "application/vnd.ocm.software.oci.layout.v1+tar+gzip")
+	require.Equal(t, "application/vnd.ocm.software.oci.layout.v1+tar+gzip", ociOutput.Output.File.MediaType)
 }
 
 func transformAddOCIArtifact(t *testing.T, repo repository.ResourceRepository, username, password, to string) {

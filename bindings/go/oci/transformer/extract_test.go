@@ -51,10 +51,10 @@ func TestTransformer_TransformBlob(t *testing.T) {
 
 			result, err := transformer.TransformBlob(t.Context(), inputBlob, nil, nil)
 			if tt.expectError {
-				assert.Error(t, err)
+				require.Error(t, err)
 				assert.Nil(t, result)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.NotNil(t, result)
 
 				if mediaTypeAware, ok := result.(blob.MediaTypeAware); ok {

@@ -92,7 +92,7 @@ func TestNew(t *testing.T) {
 	t.Run("error when no supported lister", func(t *testing.T) {
 		store := &mockBasicStore{}
 		lister, err := New(store)
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Nil(t, lister)
 	})
 }
@@ -210,7 +210,7 @@ func TestList(t *testing.T) {
 		}
 
 		versions, err := lister.List(t.Context(), opts)
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Nil(t, versions)
 	})
 
@@ -226,7 +226,7 @@ func TestList(t *testing.T) {
 		}
 
 		versions, err := lister.List(t.Context(), opts)
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Nil(t, versions)
 	})
 
@@ -253,7 +253,7 @@ func TestList(t *testing.T) {
 		}
 
 		versions, err := lister.List(t.Context(), opts)
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Nil(t, versions)
 	})
 

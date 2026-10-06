@@ -2,10 +2,10 @@ package componentlister
 
 import (
 	"context"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/componentlister/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -29,10 +29,10 @@ func TestComponentListerPluginConverter_ListComponents(t *testing.T) {
 			return nil
 		})
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, []string{"component1", "component2"}, collectedNames)
-		assert.Equal(t, 1, len(mockPlugin.requests))
-		assert.Equal(t, "", mockPlugin.requests[0].Last)
+		assert.Len(t, mockPlugin.requests, 1)
+		assert.Empty(t, mockPlugin.requests[0].Last)
 	})
 
 	t.Run("multiple page response with pagination", func(t *testing.T) {
@@ -60,10 +60,10 @@ func TestComponentListerPluginConverter_ListComponents(t *testing.T) {
 			return nil
 		})
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, []string{"component1", "component2", "component3", "component4", "component5"}, collectedNames)
-		assert.Equal(t, 3, len(mockPlugin.requests))
-		assert.Equal(t, "", mockPlugin.requests[0].Last)
+		assert.Len(t, mockPlugin.requests, 3)
+		assert.Empty(t, mockPlugin.requests[0].Last)
 		assert.Equal(t, "component2", mockPlugin.requests[1].Last)
 		assert.Equal(t, "component4", mockPlugin.requests[2].Last)
 	})
@@ -81,9 +81,9 @@ func TestComponentListerPluginConverter_ListComponents(t *testing.T) {
 			return nil
 		})
 
-		assert.Error(t, err)
+		require.Error(t, err)
 		expectedErr := assert.AnError.Error()
-		assert.Truef(t, strings.Contains(err.Error(), expectedErr), "returned error '%s' does not contain expected '%s'", err.Error(), expectedErr)
+		assert.Containsf(t, err.Error(), expectedErr, "returned error '%s' does not contain expected '%s'", err.Error(), expectedErr)
 	})
 
 	t.Run("callback function error", func(t *testing.T) {
@@ -102,9 +102,9 @@ func TestComponentListerPluginConverter_ListComponents(t *testing.T) {
 			return callbackErr
 		})
 
-		assert.Error(t, err)
+		require.Error(t, err)
 		expectedErr := assert.AnError.Error()
-		assert.Truef(t, strings.Contains(err.Error(), expectedErr), "returned error '%s' does not contain expected '%s'", err.Error(), expectedErr)
+		assert.Containsf(t, err.Error(), expectedErr, "returned error '%s' does not contain expected '%s'", err.Error(), expectedErr)
 	})
 
 	t.Run("empty response", func(t *testing.T) {
@@ -125,7 +125,7 @@ func TestComponentListerPluginConverter_ListComponents(t *testing.T) {
 			return nil
 		})
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.True(t, callbackCalled)
 	})
 }
