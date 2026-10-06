@@ -2,7 +2,6 @@ package blob_test
 
 import (
 	"bytes"
-	_ "crypto/sha512" // SHA-512 precalculated checksum hints
 	"encoding/json"
 	"fmt"
 	"io"
@@ -11,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	_ "crypto/sha512" // SHA-512 precalculated checksum hints
 
 	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"

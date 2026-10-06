@@ -18,6 +18,7 @@ import (
 	"oras.land/oras-go/v2"
 	"oras.land/oras-go/v2/content"
 	"oras.land/oras-go/v2/content/file"
+	"oras.land/oras-go/v2/content/memory"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/compression"
@@ -26,6 +27,7 @@ import (
 	resourceblob "ocm.software/open-component-model/bindings/go/oci/blob"
 	"ocm.software/open-component-model/bindings/go/oci/internal/policy"
 	oci "ocm.software/open-component-model/bindings/go/oci/spec/access"
+	"ocm.software/open-component-model/bindings/go/oci/spec/annotations"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	"ocm.software/open-component-model/bindings/go/oci/tar"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -970,6 +972,81 @@ func TestPackingPreservesResourceDigest(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestPackingRejectsInvalidOCILayoutDigest(t *testing.T) {
+	r := require.New(t)
+	ctx := t.Context()
+	payload := []byte("artifact payload")
+	layer := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageLayer, payload)
+	var archive bytes.Buffer
+	writer, err := tar.NewOCILayoutWriterWithTempFile(&archive, t.TempDir())
+	r.NoError(err)
+	r.NoError(writer.Push(ctx, layer, bytes.NewReader(payload)))
+	root, err := oras.PackManifest(ctx, writer, oras.PackManifestVersion1_1, "application/selected", oras.PackManifestOptions{
+		Layers: []ociImageSpecV1.Descriptor{layer},
+	})
+	r.NoError(err)
+	other, err := oras.PackManifest(ctx, writer, oras.PackManifestVersion1_1, "application/other", oras.PackManifestOptions{})
+	r.NoError(err)
+	root.Annotations = map[string]string{annotations.OCMLayoutRoot: "true"}
+	r.NoError(writer.Tag(ctx, root, root.Digest.String()))
+	r.NoError(writer.Close())
+	r.NotEqual(root.Digest, digest.FromBytes(archive.Bytes()))
+
+	for _, testCase := range []struct {
+		name       string
+		hash       string
+		value      string
+		corrupt    bool
+		wantError  string
+		wantNoPush bool
+	}{
+		{name: "wrong root", hash: "SHA-256", value: other.Digest.Encoded(), wantError: "digest value mismatch", wantNoPush: true},
+		{name: "wrong hash", hash: "SHA-512", value: root.Digest.Encoded(), wantError: "hash algorithm mismatch", wantNoPush: true},
+		{name: "corrupt layer", hash: "SHA-256", value: root.Digest.Encoded(), corrupt: true, wantError: "mismatched digest"},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			r := require.New(t)
+			data := bytes.Clone(archive.Bytes())
+			if testCase.corrupt {
+				index := bytes.Index(data, payload)
+				r.NotEqual(-1, index)
+				data[index] ^= 1
+			}
+			access := &v2.LocalBlob{MediaType: layout.MediaTypeOCIImageLayoutTarV1}
+			resourceDigest := &descriptor.Digest{
+				HashAlgorithm: testCase.hash, NormalisationAlgorithm: "ociArtifactDigest/v1", Value: testCase.value,
+			}
+			resource := &descriptor.Resource{Access: access, Digest: resourceDigest}
+			source := &testBlob{
+				content: data, mediaType: layout.MediaTypeOCIImageLayoutTarV1, digest: digest.FromBytes(data),
+			}
+			r.NoError(resourceblob.UpdateArtifactWithInformationFromBlob(resource, source))
+			r.Equal(resourceDigest, resource.Digest)
+			artifact, err := resourceblob.NewArtifactBlob(resource, source)
+			r.NoError(err)
+			store := &countingStorage{Storage: memory.New()}
+
+			_, err = ArtifactBlob(t.Context(), store, artifact, Options{AccessScheme: v2.Scheme})
+			r.ErrorContains(err, testCase.wantError)
+			r.Same(resourceDigest, resource.Digest)
+			if testCase.wantNoPush {
+				r.Zero(store.pushes)
+				r.Same(access, resource.Access)
+			}
+		})
+	}
+}
+
+type countingStorage struct {
+	content.Storage
+	pushes int
+}
+
+func (store *countingStorage) Push(ctx context.Context, desc ociImageSpecV1.Descriptor, reader io.Reader) error {
+	store.pushes++
+	return store.Storage.Push(ctx, desc, reader)
 }
 
 func TestResourceLocalBlobOCILayout(t *testing.T) {
