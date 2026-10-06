@@ -64,6 +64,11 @@ func (s *Store) URL() string { return s.target }
 // Stored reports whether the file at the path has the content. The asset search finds maven
 // assets by their coordinates, not by name.
 func (s *Store) Stored(ctx context.Context, known digest.Digest) (bool, error) {
+	return s.repo.StoredFile(ctx, "maven2", s.path, s.query(), known, s.interval)
+}
+
+// query selects the assets of the file by its coordinates.
+func (s *Store) query() url.Values {
 	c := s.coordinates
 	query := url.Values{
 		"maven.groupId":     {c.GroupID},
@@ -74,7 +79,7 @@ func (s *Store) Stored(ctx context.Context, known digest.Digest) (bool, error) {
 	if c.Classifier != "" {
 		query.Set("maven.classifier", c.Classifier)
 	}
-	return s.repo.StoredFile(ctx, "maven2", s.path, query, known, s.interval)
+	return query
 }
 
 // Put uploads the file as the single asset of a maven2 component. The components API refuses
@@ -109,8 +114,21 @@ func (s *Store) Discard(context.Context, digest.Digest) error {
 	return fmt.Errorf("nexus keeps the uploaded file at %s", client.RedactURL(s.target))
 }
 
-func (s *Store) Publish(_ context.Context, _ digest.Digest, mediaType string) (runtime.Typed, error) {
-	return repositoryupload.FileAccess(s.target, mediaType), nil
+// Publish returns a Wget/v1 access on the asset search download URL that pins the stored content,
+// see [api.Repository.DownloadURL]. Snapshots, whose coordinates select every timestamped
+// deployment, and content with an unknown digest get an access on the file.
+func (s *Store) Publish(ctx context.Context, stored digest.Digest, mediaType string) (runtime.Typed, error) {
+	if strings.HasSuffix(s.coordinates.Version, "-SNAPSHOT") {
+		return repositoryupload.FileAccess(s.target, mediaType), nil
+	}
+	download, ok, err := s.repo.DownloadURL(ctx, s.query(), stored, s.interval)
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		download = s.target
+	}
+	return repositoryupload.FileAccess(download, mediaType), nil
 }
 
 // Coordinates are the Maven coordinates of a single file.

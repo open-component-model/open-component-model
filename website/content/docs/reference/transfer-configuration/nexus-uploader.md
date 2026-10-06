@@ -36,9 +36,9 @@ The uploader reads the format from
 | Type     | Uploaded content                                                                                                                                                        | Published access                                               | `path`                                                                                                            | Guide                                                                                                         |
 | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
 | `helm`   | The packaged chart found in the content (`.tgz`, a tar holding one, or a Helm chart OCI artifact); stored as `<name>-<version>.tgz`                                     | `Helm/v1` with `helmRepository: <url>/repository/<repository>` | Not supported                                                                                                     | [Upload Helm Charts]({{< relref "docs/how-to/vendor-specific-apis/sonatype-nexus/helm-charts.md" >}})         |
-| `raw`    | The content as is; OCI artifacts as an OCI layout tar                                                                                                                   | `Wget/v1` on `<url>/repository/<repository>/<path>`            | Optional                                                                                                          | [Upload Raw Files]({{< relref "docs/how-to/vendor-specific-apis/sonatype-nexus/raw-files.md" >}})             |
-| `maven2` | The content as one file of a Maven component. Releases go through the components API; `-SNAPSHOT` versions use a plain `PUT` and are not added to `maven-metadata.xml`. | `Wget/v1` on `<url>/repository/<repository>/<path>`            | Required, in Maven layout `<group path>/<artifactId>/<version>/<artifactId>-<version>[-<classifier>].<extension>` | [Upload Maven Artifacts]({{< relref "docs/how-to/vendor-specific-apis/sonatype-nexus/maven-artifacts.md" >}}) |
-| `npm`    | The tarball via the components API; stored as `<name>/-/<name>-<version>.tgz`                                                                                           | `Wget/v1` on the stored tarball                                | Not supported                                                                                                     | [Upload npm Packages]({{< relref "docs/how-to/vendor-specific-apis/sonatype-nexus/npm-packages.md" >}})       |
+| `raw`    | The content as is; OCI artifacts as an OCI layout tar                                                                                                                   | `Wget/v1` on the [pinned download URL](#pinned-download-url)   | Optional                                                                                                          | [Upload Raw Files]({{< relref "docs/how-to/vendor-specific-apis/sonatype-nexus/raw-files.md" >}})             |
+| `maven2` | The content as one file of a Maven component. Releases go through the components API; `-SNAPSHOT` versions use a plain `PUT` and are not added to `maven-metadata.xml`. | `Wget/v1` on the [pinned download URL](#pinned-download-url)   | Required, in Maven layout `<group path>/<artifactId>/<version>/<artifactId>-<version>[-<classifier>].<extension>` | [Upload Maven Artifacts]({{< relref "docs/how-to/vendor-specific-apis/sonatype-nexus/maven-artifacts.md" >}}) |
+| `npm`    | The tarball via the components API; stored as `<name>/-/<name>-<version>.tgz`                                                                                           | `Wget/v1` on the [pinned download URL](#pinned-download-url)   | Not supported                                                                                                     | [Upload npm Packages]({{< relref "docs/how-to/vendor-specific-apis/sonatype-nexus/npm-packages.md" >}})       |
 
 Only hosted repositories accept uploads; other formats fail with
 `has format "<format>"; supported: helm, raw, maven2, npm`.
@@ -65,6 +65,25 @@ A `genericBlobDigest/v1` SHA-256 or SHA-512 source digest is verified, and
 content the server already stores is not uploaded again. Nexus cannot reject mismatching
 bytes on deploy, so the uploader fails after the upload on a mismatch. Content
 extracted from an OCI artifact gets the SHA-256 of the uploaded bytes.
+
+## Pinned download URL
+
+Nexus sends no SHA-256 checksum header with a file, only a SHA-1 `ETag`. A `Wget/v1`
+access is therefore published on the asset search download endpoint, which selects the
+file by its SHA-256 (or SHA-512) and the file's name or coordinates:
+
+```text
+<url>/service/rest/v1/search/assets/download?name=%2F<path>&repository=<repository>&sha256=<hex>
+```
+
+Nexus redirects the URL to the stored file only while the file has that content, and
+answers `404` otherwise. With
+[checksum mode]({{< relref "docs/reference/checksum-http-configuration.md#access-digest" >}})
+`Require` or `Prefer`, OCM pins the resource digest from the URL with a single
+credentialed `HEAD`, and the download verifies the bytes against it.
+`maven2` repositories select the file by its Maven coordinates, `npm` repositories by the
+checksum alone. `-SNAPSHOT` versions and content with an unknown digest are published
+on `<url>/repository/<repository>/<path>`.
 
 ## Credentials
 

@@ -93,12 +93,14 @@ ocm transfer cv ctf::./src//ocm.software/demo:1.0.0 ctf::./target
 ocm get cv ctf::./target//ocm.software/demo:1.0.0 -o yaml
 ```
 
-The `jar` resource has this access:
+The `jar` resource has a `Wget/v1` access on a
+[pinned download URL]({{< relref "docs/reference/transfer-configuration/nexus-uploader.md#pinned-download-url" >}}),
+which Nexus redirects to the stored file only while the file has the recorded SHA-256:
 
 ```yaml
 access:
   type: Wget/v1
-  url: https://nexus.example.com/repository/maven-releases/com/example/demo/1.0.0/demo-1.0.0.jar
+  url: https://nexus.example.com/service/rest/v1/search/assets/download?maven.artifactId=demo&maven.baseVersion=1.0.0&maven.extension=jar&maven.groupId=com.example&repository=maven-releases&sha256=<SHA256>
   mediaType: application/java-archive
 ```
 

@@ -118,7 +118,8 @@ The wget input embeds the download as a local blob, so the resource identity
 - Always streams the body to disk.
 - Always records `SHA-256` with `genericBlobDigest/v1`.
 - (When the mode enables verification) also verifies the bytes against
-  whatever algorithm the source advertises in response headers.
+  whatever algorithm the source advertises in response headers or in a
+  content-addressed URL (see [Access Side](#access-digest)).
 
 {{< callout context="note" >}}
 Verification and storage are decoupled: the mode may verify against any
@@ -150,7 +151,14 @@ Semantics:
 
 - The digest processor issues **one HEAD** to the artifact URL to harvest
   response headers. It **never fetches the artifact body** unless the mode
-  falls through to the download-and-hash path.
+  falls through to the download-and-hash path. A HEAD that fails or does not
+  end in a `2xx` advertises nothing.
+- Besides response headers, a **content-addressed URL** advertises its digest:
+  a Sonatype Nexus asset search download URL
+  (`…/service/rest/v1/search/assets/download?…&sha256=<hex>`) resolves only to
+  content with that checksum, so a successful HEAD on it advertises the
+  checksum in its query. See
+  [Sonatype Nexus Uploader]({{< relref "docs/reference/transfer-configuration/nexus-uploader.md#pinned-download-url" >}}).
 - The processor pins only a source-advertised **SHA-256** or **SHA-512** digest
   (SHA-256 preferred) — the algorithms OCM/OCI storage and signing accept on a
   resource. Recording a weaker algorithm would make the component
@@ -175,10 +183,11 @@ this configuration — every local blob stays self-describing.
 
 ## Credential Scoping
 
-HEAD requests reuse the artifact's OCM credentials only when the resolved URL
-matches the artifact URL's exact origin (scheme + host + port) and uses HTTPS.
-Redirects on the credentialed client are hard-disabled: a 3xx cannot leak the
-header cross-origin.
+The HEAD follows redirects exactly like the download: up to 10 redirects, and
+none with `noRedirect: true`. Credentials follow the
+`net/http` rules: the `Authorization` header is forwarded only to the same host
+or its subdomains, and dropped on a redirect from `https` to `http`. A client
+certificate is presented to every host in the redirect chain.
 
 ## Related Documentation
 

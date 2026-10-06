@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"slices"
 	"strings"
@@ -96,6 +97,22 @@ func TestTransform(t *testing.T) {
 		r.False(u.hasRequest("PUT "), "nothing may be written")
 		r.False(u.hasRequest(components), "nothing may be written")
 	}
+	// pinned returns the asset search download URL path that pins the content with digest d
+	// among the assets query selects.
+	pinned := func(query url.Values, d digest.Digest) string {
+		query.Set("repository", "helm-hosted")
+		query.Set(d.Algorithm().String(), d.Encoded())
+		return "/service/rest/v1/search/assets/download?" + query.Encode()
+	}
+	rawPinned := func(path string, d digest.Digest) string { return pinned(url.Values{"name": {"/" + path}}, d) }
+	mavenPinned := func(classifier, extension string, d digest.Digest) string {
+		query := url.Values{"maven.groupId": {"com.example"}, "maven.artifactId": {"demo"}, "maven.baseVersion": {"1.0.0"}, "maven.extension": {extension}}
+		if classifier != "" {
+			query.Set("maven.classifier", classifier)
+		}
+		return pinned(query, d)
+	}
+	parentPOM := []byte(`<project><parent><groupId>com.example</groupId></parent><artifactId>demo</artifactId><version>1.0.0</version></project>`)
 
 	type access struct {
 		helmChart string // Helm/v1 access in the Nexus Helm repository
@@ -172,9 +189,9 @@ func TestTransform(t *testing.T) {
 			repoType:     "raw",
 			content:      hello,
 			mediaType:    "text/plain",
-			wantAccess:   access{url: repoPath + rawPath, mediaType: "text/plain"},
+			wantAccess:   access{url: rawPinned(rawPath, digest.FromBytes(hello)), mediaType: "text/plain"},
 			wantDigest:   helloDigest,
-			wantRequests: []string{detect, "HEAD " + repoPath + rawPath, "PUT " + repoPath + rawPath},
+			wantRequests: []string{detect, "HEAD " + repoPath + rawPath, "PUT " + repoPath + rawPath, searchAssets},
 		},
 		{
 			name:     "raw SHA-512 source digest is verified after the upload",
@@ -183,8 +200,8 @@ func TestTransform(t *testing.T) {
 			resource: func(res *descriptorv2.Resource) {
 				res.Digest = &descriptorv2.Digest{HashAlgorithm: "SHA-512", NormalisationAlgorithm: "genericBlobDigest/v1", Value: digest.SHA512.FromBytes(hello).Encoded()}
 			},
-			wantAccess:   access{url: repoPath + rawPath},
-			wantRequests: []string{detect, "HEAD " + repoPath + rawPath, "PUT " + repoPath + rawPath},
+			wantAccess:   access{url: rawPinned(rawPath, digest.SHA512.FromBytes(hello))},
+			wantRequests: []string{detect, "HEAD " + repoPath + rawPath, "PUT " + repoPath + rawPath, searchAssets},
 		},
 		{
 			name:         "raw re-transfer reuses the file once the search finds it",
@@ -193,8 +210,8 @@ func TestTransform(t *testing.T) {
 			resource:     withDigest(helloDigest),
 			seed:         func(repo *nexustest.FakeRepository) { repo.SearchLag = 2 },
 			transfers:    2,
-			wantAccess:   access{url: repoPath + rawPath},
-			wantRequests: []string{detect, "HEAD " + repoPath + rawPath, searchAssets, searchAssets, searchAssets},
+			wantAccess:   access{url: rawPinned(rawPath, digest.FromBytes(hello))},
+			wantRequests: []string{detect, "HEAD " + repoPath + rawPath, searchAssets, searchAssets},
 		},
 		{
 			name:         "raw file with the same content on a later search page is reused",
@@ -202,8 +219,8 @@ func TestTransform(t *testing.T) {
 			content:      hello,
 			resource:     withDigest(helloDigest),
 			seed:         func(repo *nexustest.FakeRepository) { repo.Store(rawPath, helloDigest); repo.AssetPageSize = 1 },
-			wantAccess:   access{url: repoPath + rawPath},
-			wantRequests: []string{detect, "HEAD " + repoPath + rawPath, searchAssets, searchAssets},
+			wantAccess:   access{url: rawPinned(rawPath, digest.FromBytes(hello))},
+			wantRequests: []string{detect, "HEAD " + repoPath + rawPath, searchAssets, searchAssets, searchAssets},
 		},
 		{
 			name:     "raw file with other content at the path is never overwritten",
@@ -219,8 +236,8 @@ func TestTransform(t *testing.T) {
 			repoType:     "raw",
 			content:      hello,
 			path:         "files/notes.txt",
-			wantAccess:   access{url: repoPath + "files/notes.txt"},
-			wantRequests: []string{detect, "HEAD " + repoPath + "files/notes.txt", "PUT " + repoPath + "files/notes.txt"},
+			wantAccess:   access{url: rawPinned("files/notes.txt", digest.FromBytes(hello))},
+			wantRequests: []string{detect, "HEAD " + repoPath + "files/notes.txt", "PUT " + repoPath + "files/notes.txt", searchAssets},
 		},
 		{
 			name:     "raw unexpected HEAD status fails before uploading",
@@ -280,9 +297,9 @@ func TestTransform(t *testing.T) {
 			content:    jar,
 			resource:   mavenSource,
 			path:       mavenPath,
-			wantAccess: access{url: repoPath + mavenPath},
+			wantAccess: access{url: mavenPinned("sources", "jar", digest.FromBytes(jar))},
 			check: func(r *require.Assertions, u uploadRun) {
-				r.Equal(components, u.requests()[len(u.reqs)-1])
+				r.Equal([]string{components, searchAssets}, u.requests()[len(u.reqs)-2:], "the search finds the upload to pin it")
 				r.Equal(map[string][]string{
 					"maven2.groupId":           {"com.example"},
 					"maven2.artifactId":        {"demo"},
@@ -316,10 +333,10 @@ func TestTransform(t *testing.T) {
 		{
 			name:       "maven uploads a POM declaring the coordinates of its path",
 			repoType:   "maven2",
-			content:    []byte(`<project><parent><groupId>com.example</groupId></parent><artifactId>demo</artifactId><version>1.0.0</version></project>`),
+			content:    parentPOM,
 			resource:   resource("demo", "1.0.0", ""),
 			path:       "com/example/demo/1.0.0/demo-1.0.0.pom",
-			wantAccess: access{url: repoPath + "com/example/demo/1.0.0/demo-1.0.0.pom"},
+			wantAccess: access{url: mavenPinned("", "pom", digest.FromBytes(parentPOM))},
 		},
 		{
 			name:     "maven rejects a POM declaring other coordinates than its path",
@@ -362,7 +379,7 @@ func TestTransform(t *testing.T) {
 			resource:   mavenSource,
 			path:       mavenPath,
 			seed:       func(repo *nexustest.FakeRepository) { repo.BasePath = "/nexus" },
-			wantAccess: access{url: "/nexus" + repoPath + mavenPath},
+			wantAccess: access{url: "/nexus" + mavenPinned("sources", "jar", digest.FromBytes(jar))},
 			check: func(r *require.Assertions, u uploadRun) {
 				r.Contains(u.requests(), "POST /nexus/service/rest/v1/components")
 			},
@@ -373,7 +390,7 @@ func TestTransform(t *testing.T) {
 			content:    npmTarball,
 			resource:   npmSource,
 			seed:       func(repo *nexustest.FakeRepository) { repo.SearchLag = 1 },
-			wantAccess: access{url: repoPath + npmStored},
+			wantAccess: access{url: pinned(url.Values{}, digest.FromBytes(npmTarball))},
 			wantDigest: npmDigest,
 			check:      func(r *require.Assertions, u uploadRun) { r.Contains(u.requests(), components) },
 		},
@@ -383,7 +400,7 @@ func TestTransform(t *testing.T) {
 			content:    npmTarball,
 			resource:   resource("demo", "2.0.0", npmDigest),
 			seed:       store(npmStored, npmDigest),
-			wantAccess: access{url: repoPath + npmStored},
+			wantAccess: access{url: pinned(url.Values{}, digest.FromBytes(npmTarball))},
 			check:      nothingWritten,
 		},
 		{
@@ -408,7 +425,7 @@ func TestTransform(t *testing.T) {
 			content:  npmTarball,
 			resource: npmSource,
 			seed:     func(repo *nexustest.FakeRepository) { repo.SearchLag = 1000 },
-			wantErr:  `nexus repository "helm-hosted" stored the npm package sha256:` + npmDigest + ", but its search does not find it",
+			wantErr:  `nexus repository "helm-hosted" stored content sha256:` + npmDigest + ", but its search does not find it",
 			check: func(r *require.Assertions, u uploadRun) {
 				upload := slices.Index(u.requests(), components)
 				r.NotEqual(-1, upload)
