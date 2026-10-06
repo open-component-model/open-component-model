@@ -78,14 +78,15 @@ tasks:
     dotenv:
       - '{{.TASKFILE_DIR}}/../../../.env'
       - '{{.TASKFILE_DIR}}/../sigstore/signing/handler/internal/.env'
-    # Two images: the default "full" image (Containerfile: ocm plus FIPS gpg and
-    # cosign on Garden Linux bare-libc) and the "slim" image (Containerfile.slim:
-    # scratch with only ocm and the CA bundle), tagged <version>-slim.
+    # One Containerfile, two targets: "full" (default tag; ocm plus FIPS gpg and
+    # cosign on Garden Linux bare-libc) and "slim" (scratch with only ocm and the
+    # CA bundle, tagged <version>-slim). full copies ocm from the slim stage.
     cmds:
       - |
         mkdir -p {{ .TASKFILE_DIR }}/tmp/oci
         {{ .IMAGE_TOOL }} buildx build \
           --platform linux/amd64,linux/arm64 \
+          --target full \
           --build-arg GOFIPS140="$GOFIPS140" \
           --build-arg COSIGN_VERSION="$COSIGN_VERSION" \
           --tag ghcr.io/open-component-model/cli:{{ .VERSION }} \
@@ -94,9 +95,10 @@ tasks:
       - |
         {{ .IMAGE_TOOL }} buildx build \
           --platform linux/amd64,linux/arm64 \
+          --target slim \
           --tag ghcr.io/open-component-model/cli:{{ .VERSION }}-slim \
           --output type=oci,dest={{ .TASKFILE_DIR }}/tmp/oci/cli-slim.tar,oci-mediatypes=true,name=ghcr.io/open-component-model/cli \
-          -f ./Containerfile.slim .
+          -f ./Containerfile .
       - |
         mkdir -p {{ .TASKFILE_DIR }}/tmp/resources
         cat > {{ .TASKFILE_DIR }}/tmp/resources/ocm-multi-arch-container-image.yaml <<EOF
