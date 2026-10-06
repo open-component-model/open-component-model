@@ -17,6 +17,7 @@ export default defineConfig([
             "curly": "error",
             "@stylistic/indent": ["error", 4],
             "@stylistic/brace-style": ["error", "1tbs"],
+            "@stylistic/semi": ["error", "always"],
             "@typescript-eslint/no-unused-vars": ["error", {argsIgnorePattern: "^_", varsIgnorePattern: "^_"}],
 
             // Modern syntax preferences.
@@ -39,6 +40,28 @@ export default defineConfig([
             "no-unneeded-ternary": "error",
             "operator-assignment": ["error", "always"],
             "yoda": "error",
+
+            // Style / formatting
+            "@stylistic/eol-last": ["error", "always"],
+            "@stylistic/no-trailing-spaces": "error",
+            "@stylistic/no-multiple-empty-lines": ["error", {max: 1}],
+            "@stylistic/space-before-blocks": "error",
+            "@stylistic/space-before-function-paren": ["error", {anonymous: "always", named: "never", asyncArrow: "always"}],
+            "@stylistic/space-in-parens": ["error", "never"],
+            "@stylistic/space-infix-ops": "error",
+            "@stylistic/keyword-spacing": "error",
+            "@stylistic/comma-spacing": "error",
+            "@stylistic/comma-style": "error",
+            "@stylistic/semi-spacing": "error",
+            "@stylistic/key-spacing": "error",
+            "@stylistic/dot-location": ["error", "property"],
+            "@stylistic/object-curly-spacing": ["error", "always"],
+
+            // Opinionated choices resolving a style that was mixed in the
+            // codebase. Each is auto-fixable.
+            "@stylistic/quotes": ["error", "double", {allowTemplateLiterals: "always"}],
+            "@stylistic/arrow-parens": ["error", "always"],
+            "@stylistic/comma-dangle": ["error", "never"],
         }
     },
     {
@@ -49,6 +72,7 @@ export default defineConfig([
             "@typescript-eslint/consistent-type-imports": "error",
             "@typescript-eslint/prefer-as-const": "error",
             "@typescript-eslint/no-inferrable-types": "error",
+            "@stylistic/member-delimiter-style": "error",
         }
     },
     {
