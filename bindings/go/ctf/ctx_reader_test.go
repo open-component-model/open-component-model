@@ -3,7 +3,6 @@ package ctf
 import (
 	"bytes"
 	"context"
-	"errors"
 	"testing"
 	"time"
 
@@ -20,7 +19,7 @@ func TestNewCtxReader_Success(t *testing.T) {
 	require.NoError(t, err)
 	buf := make([]byte, len(data))
 	n, err := ctxReader.Read(buf)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, len(data), n)
 	assert.Equal(t, data, buf)
 }
@@ -38,8 +37,8 @@ func TestNewCtxReader_CancelledContext(t *testing.T) {
 
 	n, err := ctxReader.Read(buf)
 	assert.Equal(t, 0, n)
-	assert.Error(t, err)
-	assert.True(t, errors.Is(err, context.Canceled))
+	require.Error(t, err)
+	assert.ErrorIs(t, err, context.Canceled)
 }
 
 func TestNewCtxReader_WithDeadline(t *testing.T) {
@@ -54,13 +53,13 @@ func TestNewCtxReader_WithDeadline(t *testing.T) {
 	buf := make([]byte, len(data))
 
 	n, err := ctxReader.Read(buf)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, len(data), n)
 	assert.Equal(t, data, buf)
 
 	time.Sleep(20 * time.Millisecond) // Wait for the context to timeout
 	n, err = ctxReader.Read(buf)
 	assert.Equal(t, 0, n)
-	assert.Error(t, err)
-	assert.True(t, errors.Is(err, context.DeadlineExceeded))
+	require.Error(t, err)
+	assert.ErrorIs(t, err, context.DeadlineExceeded)
 }

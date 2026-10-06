@@ -59,7 +59,7 @@ func TestFlag(t *testing.T) {
 				require.Error(t, err)
 				assert.Contains(t, err.Error(), tt.errContains)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.Equal(t, tt.path, flag.String())
 			}
 			if tt.expectDirectory {
@@ -117,7 +117,7 @@ func TestFlagOpen(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = flag.Open()
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "does not exist")
 }
 

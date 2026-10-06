@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -158,7 +157,7 @@ func TestReconcile_TerminalSelectorFailureIsStalledAndNotRequeued(t *testing.T) 
 
 	result, err := rec.Reconcile(t.Context(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(discovery)})
 	g.Error(err)
-	g.True(errors.Is(err, reconcile.TerminalError(nil)), "selector compilation errors are terminal, got %v", err)
+	g.ErrorIs(err, reconcile.TerminalError(nil), "selector compilation errors are terminal, got %v", err)
 	g.Equal(ctrl.Result{}, result, "terminal failures do not schedule periodic work")
 
 	fresh := &v1alpha1.Discovery{}
@@ -273,7 +272,7 @@ func TestReconcile_UnreadyComponentIsRetryable(t *testing.T) {
 
 	_, err := rec.Reconcile(t.Context(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(discovery)})
 	g.Error(err)
-	g.False(errors.Is(err, reconcile.TerminalError(nil)), "a dependency that is not ready yet backs off, like the other controllers")
+	g.NotErrorIs(err, reconcile.TerminalError(nil), "a dependency that is not ready yet backs off, like the other controllers")
 
 	fresh := &v1alpha1.Discovery{}
 	g.NoError(c.Get(t.Context(), client.ObjectKeyFromObject(discovery), fresh))
@@ -429,7 +428,7 @@ func TestReconcile_ResolutionFailureIsRetryable(t *testing.T) {
 
 	_, err := rec.Reconcile(t.Context(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(discovery)})
 	r.Error(err)
-	r.False(errors.Is(err, reconcile.TerminalError(nil)), "an unreachable repository must back off, not stall")
+	r.NotErrorIs(err, reconcile.TerminalError(nil), "an unreachable repository must back off, not stall")
 
 	current := &v1alpha1.Discovery{}
 	r.NoError(c.Get(t.Context(), client.ObjectKeyFromObject(discovery), current))

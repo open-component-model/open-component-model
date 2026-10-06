@@ -46,7 +46,7 @@ func TestInferFromGoValue(t *testing.T) {
 			input: 3.14,
 			validate: func(t *testing.T, s *jsonschema.Schema) {
 				require.Contains(t, s.Types.ToStrings(), "number")
-				require.Equal(t, 3.14, *s.Const)
+				require.InDelta(t, 3.14, *s.Const, 1e-9)
 			},
 		},
 		{
@@ -124,7 +124,7 @@ func TestInferFromGoValue(t *testing.T) {
 				limits := cfg.Properties["limits"]
 				require.Contains(t, limits.Types.ToStrings(), "array")
 				require.Contains(t, limits.Items2020.Types.ToStrings(), "number")
-				require.Equal(t, 1.0, *limits.Items2020.Const)
+				require.InDelta(t, 1.0, *limits.Items2020.Const, 1e-9)
 			},
 		},
 		{

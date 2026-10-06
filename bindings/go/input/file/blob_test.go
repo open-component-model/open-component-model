@@ -102,7 +102,7 @@ func TestInputFileBlob_InterfaceCompliance(t *testing.T) {
 	r.True(known)
 
 	size := inputBlob.Size()
-	r.Greater(size, int64(0))
+	r.Positive(size)
 
 	digest, ok := inputBlob.Digest()
 	r.True(ok)

@@ -444,7 +444,7 @@ func TestRepository_GetLocalResource(t *testing.T) {
 					defer reader.Close()
 
 					content, err := io.ReadAll(reader)
-					r.NoError(err, fmt.Errorf("failed to read blob content: %w", err))
+					r.NotErrorIs(err, fmt.Errorf("failed to read blob content: %w", err))
 
 					// If the content is gzipped (starts with gzip magic number), decompress it
 					if len(content) >= 2 && content[0] == 0x1f && content[1] == 0x8b {
@@ -1083,7 +1083,7 @@ func TestRepository_AddLocalResourceOCIImageLayer(t *testing.T) {
 	r.NotNil(resource)
 	var localAccess v2.LocalBlob
 	r.NoError(v2.Scheme.Convert(resource.Access, &localAccess))
-	r.Equal(localAccess.ReferenceName, "ocm/oci/repo:latest", "Resource reference name should match expected value")
+	r.Equal("ocm/oci/repo:latest", localAccess.ReferenceName, "Resource reference name should match expected value")
 
 	r.NoError(err, "Failed to get OCI image layer resource")
 	r.NotNil(blob, "Blob should not be nil")
@@ -3056,7 +3056,7 @@ func TestRepository_AddLocalResource_CopiesOwnershipReferrer(t *testing.T) {
 	r.NoError(json.NewDecoder(rc).Decode(&copied))
 	r.Equal(component, copied.Annotations[annotations.OwnershipComponentName], "copied referrer must retain its component name")
 	r.Equal(version, copied.Annotations[annotations.OwnershipComponentVersion], "copied referrer must retain its component version")
-	r.Equal(ownershipArtifactAnnotation, copied.Annotations[annotations.ArtifactAnnotationKey], "copied referrer must retain its software.ocm.artifact annotation")
+	r.JSONEq(ownershipArtifactAnnotation, copied.Annotations[annotations.ArtifactAnnotationKey], "copied referrer must retain its software.ocm.artifact annotation")
 }
 
 // TestRepository_DownloadResourceStream_DigestPinnedWithReferrer covers a
@@ -3326,7 +3326,7 @@ func TestRepository_UploadResource_CopiesOwnershipReferrer(t *testing.T) {
 	r.NoError(json.NewDecoder(rc).Decode(&copied))
 	r.Equal(component, copied.Annotations[annotations.OwnershipComponentName], "copied referrer must retain its component name")
 	r.Equal(version, copied.Annotations[annotations.OwnershipComponentVersion], "copied referrer must retain its component version")
-	r.Equal(ownershipArtifactAnnotation, copied.Annotations[annotations.ArtifactAnnotationKey], "copied referrer must retain its software.ocm.artifact annotation")
+	r.JSONEq(ownershipArtifactAnnotation, copied.Annotations[annotations.ArtifactAnnotationKey], "copied referrer must retain its software.ocm.artifact annotation")
 }
 
 // TestRepository_AddOwnershipByReference proves the by-reference attach path (ADR

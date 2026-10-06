@@ -3,8 +3,6 @@ package discovery
 import (
 	"context"
 	"encoding/json"
-	"errors"
-	"fmt"
 	"math/rand"
 	"testing"
 
@@ -233,7 +231,7 @@ func TestProjectDeterminism(t *testing.T) {
 			reference = marshaled
 			continue
 		}
-		r.JSONEq(string(reference), string(marshaled), fmt.Sprintf("seed %d", seed))
+		r.JSONEq(string(reference), string(marshaled), "seed %d", seed)
 	}
 }
 
@@ -314,8 +312,8 @@ func TestProjectSerializationFailureNotClassified(t *testing.T) {
 			r.Contains(err.Error(), "bad:1.0.0", "projection error carries component context")
 			var selErr *SelectorError
 			var extErr *ExtractError
-			r.False(errors.As(err, &selErr), "must not be a SelectorError")
-			r.False(errors.As(err, &extErr), "must not be an ExtractError")
+			r.NotErrorAs(err, &selErr, "must not be a SelectorError")
+			r.NotErrorAs(err, &extErr, "must not be an ExtractError")
 		})
 	}
 }
@@ -352,8 +350,8 @@ func TestProjectSelectingBadResourceAwayPermitsProjection(t *testing.T) {
 	r.Contains(err.Error(), "d:1.0.0")
 	var selErr *SelectorError
 	var extErr *ExtractError
-	r.False(errors.As(err, &selErr))
-	r.False(errors.As(err, &extErr))
+	r.NotErrorAs(err, &selErr)
+	r.NotErrorAs(err, &extErr)
 }
 
 // TestProjectRawWireFormatFidelity: raw output matches marshaling the expected

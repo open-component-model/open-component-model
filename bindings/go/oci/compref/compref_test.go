@@ -470,9 +470,7 @@ func Test_ComponentReference_Permutations(t *testing.T) {
 							t.Run(fmt.Sprintf("perm-%03d", i), func(t *testing.T) {
 								t.Logf("%q", repositoryInput)
 								parsed, err := Parse(repositoryInput)
-								if !assert.NoError(t, err) {
-									return
-								}
+								require.NoError(t, err)
 								a := assert.New(t)
 								a.Equalf(expected, parsed, "input %q was incorrectly parsed", repositoryInput)
 								a.Containsf(parsed.String(), componentName, "input %q did not serialize properly", repositoryInput)

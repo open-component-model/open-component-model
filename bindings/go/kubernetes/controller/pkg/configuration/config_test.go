@@ -191,9 +191,9 @@ func TestGetConfigFromSecret(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg, err := GetConfigFromSecret(tt.secret)
 			if tt.wantErr {
-				assert.Error(t, err)
+				require.Error(t, err)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 			}
 			assert.Equal(t, tt.want, cfg)
 		})
@@ -242,9 +242,9 @@ func TestGetConfigFromConfigMap(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg, err := GetConfigFromConfigMap(tt.configMap)
 			if tt.wantErr {
-				assert.Error(t, err)
+				require.Error(t, err)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 			}
 			if tt.wantNil {
 				assert.Nil(t, cfg)

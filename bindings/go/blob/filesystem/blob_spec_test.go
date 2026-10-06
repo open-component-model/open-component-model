@@ -337,7 +337,7 @@ func TestBlobToSpec_DirectoryBlob(t *testing.T) {
 	// Verify: TAR file was created
 	fi, err := os.Stat(targetPath)
 	r.NoError(err)
-	r.True(fi.Size() > 0)
+	r.Positive(fi.Size())
 }
 
 func TestBlobToSpec_InvalidPath(t *testing.T) {

@@ -228,7 +228,7 @@ func TestCopyChartToOCILayout_Matrix(t *testing.T) {
 			check: func(t *testing.T, result *oci.Result, _ *internal.ChartData) {
 				t.Helper()
 				assert.NotEmpty(t, result.Desc.Digest, "descriptor digest should not be empty")
-				assert.Greater(t, result.Desc.Size, int64(0), "descriptor size should be positive")
+				assert.Positive(t, result.Desc.Size, "descriptor size should be positive")
 			},
 		},
 		{

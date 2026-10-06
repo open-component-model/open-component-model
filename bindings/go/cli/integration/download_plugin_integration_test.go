@@ -60,7 +60,7 @@ configurations:
 	info, err := os.Stat(pluginLocation)
 	require.NoError(t, err, "should be able to stat the downloaded file")
 	assert.True(t, info.Mode().IsRegular(), "downloaded file should be a regular file")
-	assert.Greater(t, info.Size(), int64(0), "downloaded file should not be empty")
+	assert.Positive(t, info.Size(), "downloaded file should not be empty")
 }
 
 func TestDownloadPluginIntegrationWithResolvers(t *testing.T) {
@@ -115,7 +115,7 @@ configurations:
 	info, err := os.Stat(pluginLocation)
 	require.NoError(t, err, "should be able to stat the downloaded file")
 	assert.True(t, info.Mode().IsRegular(), "downloaded file should be a regular file")
-	assert.Greater(t, info.Size(), int64(0), "downloaded file should not be empty")
+	assert.Positive(t, info.Size(), "downloaded file should not be empty")
 }
 
 func TestDownloadPluginMissingResourceIntegration(t *testing.T) {

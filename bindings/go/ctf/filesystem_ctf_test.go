@@ -78,7 +78,7 @@ func Test_FileSystemCTF_BasicOperations(t *testing.T) {
 	// Verify blob is deleted
 	blobs, err = fs.ListBlobs(ctx)
 	r.NoError(err)
-	r.Len(blobs, 0)
+	r.Empty(blobs)
 }
 
 func Test_FileSystemCTF_MemFS(t *testing.T) {
@@ -256,7 +256,7 @@ func Test_FileSystemCTF_IndexOperations(t *testing.T) {
 	// Verify index was saved correctly
 	savedIdx, err = fs.GetIndex(ctx)
 	r.NoError(err)
-	r.Len(savedIdx.GetArtifacts(), 0)
+	r.Empty(savedIdx.GetArtifacts())
 }
 
 func Test_FileSystemCTF_FileSystemOperations(t *testing.T) {
