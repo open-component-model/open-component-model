@@ -219,7 +219,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        arch: [arm64, amd64]
+        arch: [arm64]
     steps:
       - name: Compute image refs
         env:
