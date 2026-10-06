@@ -129,7 +129,6 @@ linters:
           - nolintlint      # 4: unused //nolint directives tied to the linters disabled here
           - predeclared     # 1: parameter shadows a predeclared identifier
           - staticcheck     # 115: assorted SA/ST checks across tests
-          - thelper         # 332: test helpers should start with t.Helper()
           - tparallel       # 47: subtest t.Parallel() consistency
           - unconvert       # 5: unnecessary type conversions
           - unused          # 4: unused test-only helpers

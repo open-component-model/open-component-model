@@ -840,6 +840,7 @@ func Test_Integration_Transfer_OCIArtifact_PreservesV1DescriptorDigest(t *testin
 }
 
 func createSingleLayerOCIImage(t *testing.T, data []byte, ref ...string) ([]byte, *v1.OCIImage) {
+	t.Helper()
 	r := require.New(t)
 	var buf bytes.Buffer
 	w, err := tar.NewOCILayoutWriterWithTempFile(&buf, t.TempDir())

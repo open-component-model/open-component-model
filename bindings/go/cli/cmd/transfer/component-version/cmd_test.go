@@ -30,6 +30,7 @@ import (
 
 // setupTestRepositoryWithDescriptorLibrary creates a test repository with the given component versions
 func setupTestRepositoryWithDescriptorLibrary(t *testing.T, versions ...*descriptor.Descriptor) (string, error) {
+	t.Helper()
 	r := require.New(t)
 	archivePath := t.TempDir()
 	fs, err := filesystem.NewFS(archivePath, os.O_RDWR)

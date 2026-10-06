@@ -496,6 +496,7 @@ func TestParseRepository(t *testing.T) {
 			repoRef:      "ghcr.io/my-org/my-repo",
 			expectedType: runtime.NewVersionedType(ociv1.Type, ociv1.Version),
 			validateResult: func(t *testing.T, result runtime.Typed, repoSpec string) {
+				t.Helper()
 				repo, ok := result.(*ociv1.Repository)
 				require.True(t, ok, "expected *ociv1.Repository")
 				require.Equal(t, "ghcr.io", repo.BaseUrl)
@@ -507,6 +508,7 @@ func TestParseRepository(t *testing.T) {
 			repoRef:      "localhost:5000/my-repo",
 			expectedType: runtime.NewVersionedType(ociv1.Type, ociv1.Version),
 			validateResult: func(t *testing.T, result runtime.Typed, repoSpec string) {
+				t.Helper()
 				repo, ok := result.(*ociv1.Repository)
 				require.True(t, ok, "expected *ociv1.Repository")
 				require.Equal(t, "localhost:5000", repo.BaseUrl)
@@ -518,6 +520,7 @@ func TestParseRepository(t *testing.T) {
 			repoRef:      "1.2.3.4:5000/my-repo",
 			expectedType: runtime.NewVersionedType(ociv1.Type, ociv1.Version),
 			validateResult: func(t *testing.T, result runtime.Typed, repoSpec string) {
+				t.Helper()
 				repo, ok := result.(*ociv1.Repository)
 				require.True(t, ok, "expected *ociv1.Repository")
 				require.Equal(t, "1.2.3.4:5000", repo.BaseUrl)
@@ -529,6 +532,7 @@ func TestParseRepository(t *testing.T) {
 			repoRef:      "https://registry.example.com/my-repo",
 			expectedType: runtime.NewVersionedType(ociv1.Type, ociv1.Version),
 			validateResult: func(t *testing.T, result runtime.Typed, repoSpec string) {
+				t.Helper()
 				repo, ok := result.(*ociv1.Repository)
 				require.True(t, ok, "expected *ociv1.Repository")
 				require.Equal(t, "https://registry.example.com", repo.BaseUrl)
@@ -540,6 +544,7 @@ func TestParseRepository(t *testing.T) {
 			repoRef:      "./non-existing-archive",
 			expectedType: runtime.NewVersionedType(ctfv1.Type, ctfv1.Version),
 			validateResult: func(t *testing.T, result runtime.Typed, repoSpec string) {
+				t.Helper()
 				repo, ok := result.(*ctfv1.Repository)
 				require.True(t, ok, "expected *ctfv1.Repository")
 				require.Equal(t, repoSpec, repo.FilePath)
@@ -550,6 +555,7 @@ func TestParseRepository(t *testing.T) {
 			repoRef:      "../relative/path",
 			expectedType: runtime.NewVersionedType(ctfv1.Type, ctfv1.Version),
 			validateResult: func(t *testing.T, result runtime.Typed, repoSpec string) {
+				t.Helper()
 				repo, ok := result.(*ctfv1.Repository)
 				require.True(t, ok, "expected *ctfv1.Repository")
 				require.Equal(t, repoSpec, repo.FilePath)
@@ -560,6 +566,7 @@ func TestParseRepository(t *testing.T) {
 			repoRef:      "../../../relative/path",
 			expectedType: runtime.NewVersionedType(ctfv1.Type, ctfv1.Version),
 			validateResult: func(t *testing.T, result runtime.Typed, repoSpec string) {
+				t.Helper()
 				repo, ok := result.(*ctfv1.Repository)
 				require.True(t, ok, "expected *ctfv1.Repository")
 				require.Equal(t, repoSpec, repo.FilePath)
@@ -570,6 +577,7 @@ func TestParseRepository(t *testing.T) {
 			repoRef:      "../a/../b",
 			expectedType: runtime.NewVersionedType(ctfv1.Type, ctfv1.Version),
 			validateResult: func(t *testing.T, result runtime.Typed, repoSpec string) {
+				t.Helper()
 				repo, ok := result.(*ctfv1.Repository)
 				require.True(t, ok, "expected *ctfv1.Repository")
 				require.Equal(t, repoSpec, repo.FilePath)
@@ -580,6 +588,7 @@ func TestParseRepository(t *testing.T) {
 			repoRef:      "file://../rel/archive",
 			expectedType: runtime.NewVersionedType(ctfv1.Type, ctfv1.Version),
 			validateResult: func(t *testing.T, result runtime.Typed, repoSpec string) {
+				t.Helper()
 				repo, ok := result.(*ctfv1.Repository)
 				require.True(t, ok, "expected *ctfv1.Repository")
 				require.Equal(t, repoSpec, repo.FilePath)
@@ -590,6 +599,7 @@ func TestParseRepository(t *testing.T) {
 			repoRef:      "https://ghcr.io/a/../b",
 			expectedType: runtime.NewVersionedType(ociv1.Type, ociv1.Version),
 			validateResult: func(t *testing.T, result runtime.Typed, repoSpec string) {
+				t.Helper()
 				repo, ok := result.(*ociv1.Repository)
 				require.True(t, ok, "expected *ociv1.Repository")
 				require.Equal(t, "https://ghcr.io", repo.BaseUrl)
@@ -601,6 +611,7 @@ func TestParseRepository(t *testing.T) {
 			repoRef:      "oci::http://github.com/open-component-model/ocm/../ocm",
 			expectedType: runtime.NewUnversionedType("oci"),
 			validateResult: func(t *testing.T, result runtime.Typed, repoSpec string) {
+				t.Helper()
 				repo, ok := result.(*ociv1.Repository)
 				require.True(t, ok, "expected *ociv1.Repository")
 				require.Equal(t, "http://github.com", repo.BaseUrl)
@@ -612,6 +623,7 @@ func TestParseRepository(t *testing.T) {
 			repoRef:      "ghcr.io/my-org/repo/../repo",
 			expectedType: runtime.NewVersionedType(ociv1.Type, ociv1.Version),
 			validateResult: func(t *testing.T, result runtime.Typed, repoSpec string) {
+				t.Helper()
 				repo, ok := result.(*ociv1.Repository)
 				require.True(t, ok, "expected *ociv1.Repository")
 				require.Equal(t, "ghcr.io", repo.BaseUrl)
@@ -623,6 +635,7 @@ func TestParseRepository(t *testing.T) {
 			repoRef:      "ghcr.io/team..name",
 			expectedType: runtime.NewVersionedType(ociv1.Type, ociv1.Version),
 			validateResult: func(t *testing.T, result runtime.Typed, repoSpec string) {
+				t.Helper()
 				repo, ok := result.(*ociv1.Repository)
 				require.True(t, ok, "expected *ociv1.Repository")
 				require.Equal(t, "ghcr.io", repo.BaseUrl)
@@ -634,6 +647,7 @@ func TestParseRepository(t *testing.T) {
 			repoRef:      "localhost:5000/a..b",
 			expectedType: runtime.NewVersionedType(ociv1.Type, ociv1.Version),
 			validateResult: func(t *testing.T, result runtime.Typed, repoSpec string) {
+				t.Helper()
 				repo, ok := result.(*ociv1.Repository)
 				require.True(t, ok, "expected *ociv1.Repository")
 				require.Equal(t, "localhost:5000", repo.BaseUrl)
@@ -645,6 +659,7 @@ func TestParseRepository(t *testing.T) {
 			repoRef:      "registry.io:5000/x/../y",
 			expectedType: runtime.NewVersionedType(ociv1.Type, ociv1.Version),
 			validateResult: func(t *testing.T, result runtime.Typed, repoSpec string) {
+				t.Helper()
 				repo, ok := result.(*ociv1.Repository)
 				require.True(t, ok, "expected *ociv1.Repository")
 				require.Equal(t, "registry.io:5000", repo.BaseUrl)
@@ -656,6 +671,7 @@ func TestParseRepository(t *testing.T) {
 			repoRef:      "./test.path.with.dot",
 			expectedType: runtime.NewVersionedType(ctfv1.Type, ctfv1.Version),
 			validateResult: func(t *testing.T, result runtime.Typed, repoSpec string) {
+				t.Helper()
 				repo, ok := result.(*ctfv1.Repository)
 				require.True(t, ok, "expected *ctfv1.Repository")
 				require.Equal(t, repoSpec, repo.FilePath)
@@ -667,6 +683,7 @@ func TestParseRepository(t *testing.T) {
 			repoRef:      "test/../../neighbour",
 			expectedType: runtime.NewVersionedType(ctfv1.Type, ctfv1.Version),
 			validateResult: func(t *testing.T, result runtime.Typed, repoSpec string) {
+				t.Helper()
 				repo, ok := result.(*ctfv1.Repository)
 				require.True(t, ok, "expected *ctfv1.Repository")
 				require.Equal(t, repoSpec, repo.FilePath)
@@ -677,6 +694,7 @@ func TestParseRepository(t *testing.T) {
 			repoRef:      "/tmp/test-archive",
 			expectedType: runtime.NewVersionedType(ctfv1.Type, ctfv1.Version),
 			validateResult: func(t *testing.T, result runtime.Typed, repoSpec string) {
+				t.Helper()
 				repo, ok := result.(*ctfv1.Repository)
 				require.True(t, ok, "expected *ctfv1.Repository")
 				require.Equal(t, repoSpec, repo.FilePath)
@@ -688,6 +706,7 @@ func TestParseRepository(t *testing.T) {
 			repoRef:      `C:\TEMP\ctf`,
 			expectedType: runtime.NewVersionedType(ctfv1.Type, ctfv1.Version),
 			validateResult: func(t *testing.T, result runtime.Typed, repoSpec string) {
+				t.Helper()
 				repo, ok := result.(*ctfv1.Repository)
 				require.True(t, ok, "expected *ctfv1.Repository")
 				require.Equal(t, repoSpec, repo.FilePath)
@@ -698,6 +717,7 @@ func TestParseRepository(t *testing.T) {
 			repoRef:      `D:/TEMP/ctf`,
 			expectedType: runtime.NewVersionedType(ctfv1.Type, ctfv1.Version),
 			validateResult: func(t *testing.T, result runtime.Typed, repoSpec string) {
+				t.Helper()
 				repo, ok := result.(*ctfv1.Repository)
 				require.True(t, ok, "expected *ctfv1.Repository")
 				require.Equal(t, repoSpec, repo.FilePath)
@@ -708,6 +728,7 @@ func TestParseRepository(t *testing.T) {
 			repoRef:      `C:\Users\test\repos\my-archive`,
 			expectedType: runtime.NewVersionedType(ctfv1.Type, ctfv1.Version),
 			validateResult: func(t *testing.T, result runtime.Typed, repoSpec string) {
+				t.Helper()
 				repo, ok := result.(*ctfv1.Repository)
 				require.True(t, ok, "expected *ctfv1.Repository")
 				require.Equal(t, repoSpec, repo.FilePath)
@@ -718,6 +739,7 @@ func TestParseRepository(t *testing.T) {
 			repoRef:      "file://./local/transport-archive",
 			expectedType: runtime.NewVersionedType(ctfv1.Type, ctfv1.Version),
 			validateResult: func(t *testing.T, result runtime.Typed, repoSpec string) {
+				t.Helper()
 				repo, ok := result.(*ctfv1.Repository)
 				require.True(t, ok, "expected *ctfv1.Repository")
 				require.Equal(t, repoSpec, repo.FilePath)
@@ -728,6 +750,7 @@ func TestParseRepository(t *testing.T) {
 			repoRef:      "oci::ghcr.io/my-org/my-repo",
 			expectedType: runtime.NewUnversionedType("oci"),
 			validateResult: func(t *testing.T, result runtime.Typed, repoSpec string) {
+				t.Helper()
 				repo, ok := result.(*ociv1.Repository)
 				require.True(t, ok, "expected *ociv1.Repository")
 				require.Equal(t, "ghcr.io", repo.BaseUrl)
@@ -739,6 +762,7 @@ func TestParseRepository(t *testing.T) {
 			repoRef:      "ctf::./local/archive",
 			expectedType: runtime.NewUnversionedType("ctf"),
 			validateResult: func(t *testing.T, result runtime.Typed, repoSpec string) {
+				t.Helper()
 				repo, ok := result.(*ctfv1.Repository)
 				require.True(t, ok, "expected *ctfv1.Repository")
 				require.Equal(t, "./local/archive", repo.FilePath)
@@ -759,6 +783,7 @@ func TestParseRepository(t *testing.T) {
 			repoRef:      repoPath,
 			expectedType: runtime.NewVersionedType(ctfv1.Type, ctfv1.Version),
 			validateResult: func(t *testing.T, result runtime.Typed, repoSpec string) {
+				t.Helper()
 				repo, ok := result.(*ctfv1.Repository)
 				require.True(t, ok, "expected *ctfv1.Repository")
 				require.Equal(t, repoPath, repo.FilePath)

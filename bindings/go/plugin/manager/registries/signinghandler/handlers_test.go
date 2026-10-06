@@ -66,9 +66,13 @@ func TestHandleGetSignerIdentity(t *testing.T) {
 				return http.NewRequestWithContext(ctx, http.MethodPost, parse.String(), nil)
 			},
 			assertOutput: func(t *testing.T, resp *http.Response) {
+				t.Helper()
 				require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 			},
-			assertError: func(t *testing.T, err error) { require.NoError(t, err) },
+			assertError: func(t *testing.T, err error) {
+				t.Helper()
+				require.NoError(t, err)
+			},
 		},
 		{
 			name: "success",
@@ -93,10 +97,14 @@ func TestHandleGetSignerIdentity(t *testing.T) {
 				return http.NewRequestWithContext(ctx, http.MethodPost, parse.String(), bytes.NewReader(body))
 			},
 			assertOutput: func(t *testing.T, resp *http.Response) {
+				t.Helper()
 				defer resp.Body.Close()
 				require.Equal(t, http.StatusOK, resp.StatusCode)
 			},
-			assertError: func(t *testing.T, err error) { require.NoError(t, err) },
+			assertError: func(t *testing.T, err error) {
+				t.Helper()
+				require.NoError(t, err)
+			},
 		},
 	}
 

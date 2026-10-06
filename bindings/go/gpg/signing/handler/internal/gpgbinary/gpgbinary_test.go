@@ -283,6 +283,7 @@ func TestBinary_KeyringInvocations(t *testing.T) {
 		{
 			name: "sign with agent unlocking",
 			run: func(t *testing.T, b *Binary) error {
+				t.Helper()
 				_, err := b.Sign(t.Context(), SignRequest{UseKeyring: true, KeyFingerprint: fpr, DigestAlgo: "SHA256", Data: []byte("d")})
 				return err
 			},
@@ -292,6 +293,7 @@ func TestBinary_KeyringInvocations(t *testing.T) {
 		{
 			name: "sign with passphrase",
 			run: func(t *testing.T, b *Binary) error {
+				t.Helper()
 				_, err := b.Sign(t.Context(), SignRequest{UseKeyring: true, Passphrase: "pw", DigestAlgo: "SHA256", Data: []byte("d")})
 				return err
 			},
@@ -302,6 +304,7 @@ func TestBinary_KeyringInvocations(t *testing.T) {
 		{
 			name: "verify",
 			run: func(t *testing.T, b *Binary) error {
+				t.Helper()
 				return b.Verify(t.Context(), VerifyRequest{UseKeyring: true, KeyFingerprint: fpr, Data: []byte("d"), Signature: "sig"})
 			},
 			wantArgs: []string{"--no-auto-key-retrieve", "--verify"},

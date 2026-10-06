@@ -84,6 +84,7 @@ func Test_Integration_GitHTTPSAuthentication(t *testing.T) {
 		}}
 	}
 	newRepo := func(t *testing.T) *gitrepository.ResourceRepository {
+		t.Helper()
 		tempDir := t.TempDir()
 		return gitrepository.NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &tempDir})
 	}
@@ -204,6 +205,7 @@ func Test_Integration_GitSSHAuthentication(t *testing.T) {
 		}}
 	}
 	newRepo := func(t *testing.T, hostKey ssh.PublicKey) *gitrepository.ResourceRepository {
+		t.Helper()
 		tempDir := t.TempDir()
 		return gitrepository.NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &tempDir}, gitrepository.WithHostKeyCallback(ssh.FixedHostKey(hostKey)))
 	}
