@@ -150,7 +150,7 @@ var _ = Describe("controller", func() {
 								"kubectl", "logs",
 								"-n", "ocm-k8s-toolkit-system",
 								"-l", "app.kubernetes.io/name=ocm-k8s-toolkit",
-								"--tail=500",
+								"--tail=-1",
 							))
 							return string(out), err
 						}, timeout).Should(ContainSubstring(expected))
