@@ -3,7 +3,6 @@ package filesystem_test
 import (
 	"archive/tar"
 	"bytes"
-	"errors"
 	"io"
 	"io/fs"
 	"os"
@@ -67,7 +66,7 @@ func TestGetBlobFromPath_SimpleDirectory(t *testing.T) {
 
 	for {
 		header, err := tr.Next()
-		if errors.Is(err, io.EOF) {
+		if err == io.EOF {
 			break
 		}
 		r.NoError(err)
@@ -226,7 +225,7 @@ func TestGetBlobFromPath_PreserveDirectory(t *testing.T) {
 
 	for {
 		header, err := tr.Next()
-		if errors.Is(err, io.EOF) {
+		if err == io.EOF {
 			break
 		}
 		r.NoError(err)
@@ -483,7 +482,7 @@ func TestGetBlobFromPath_IncludeDirectoryOnly(t *testing.T) {
 	foundDir := false
 	for {
 		h, err := tr.Next()
-		if errors.Is(err, io.EOF) {
+		if err == io.EOF {
 			break
 		}
 		r.NoError(err)
@@ -558,7 +557,7 @@ func extractTarContents(t *testing.T, b blob.ReadOnlyBlob) []string {
 
 	for {
 		header, err := tr.Next()
-		if errors.Is(err, io.EOF) {
+		if err == io.EOF {
 			break
 		}
 		require.NoError(t, err)
@@ -587,7 +586,7 @@ func readTarHeaders(t *testing.T, b blob.ReadOnlyBlob) []*tar.Header {
 	var headers []*tar.Header
 	for {
 		header, err := tr.Next()
-		if errors.Is(err, io.EOF) {
+		if err == io.EOF {
 			break
 		}
 		r.NoError(err)

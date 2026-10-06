@@ -260,6 +260,7 @@ func TestUploadResource(t *testing.T) {
 
 func TestGetResourceCredentialConsumerIdentity(t *testing.T) {
 	t.Parallel()
+	r := require.New(t)
 
 	repo := repository.NewResourceRepository(nil)
 
@@ -268,14 +269,14 @@ func TestGetResourceCredentialConsumerIdentity(t *testing.T) {
 	resource.Version = "1.0.0"
 	resource.Type = "blob"
 	raw, err := json.Marshal(map[string]any{"url": "https://example.com:443/path/file.tar.gz"})
-	require.NoError(t, err)
+	r.NoError(err)
 	resource.Access = &runtime.Raw{
 		Type: runtime.NewVersionedType("wget", v1.Version),
 		Data: raw,
 	}
 
 	identity, err := repo.GetResourceCredentialConsumerIdentity(t.Context(), resource)
-	require.NoError(t, err)
+	r.NoError(err)
 	assert.Equal(t, "Wget", identity["type"])
 	assert.Equal(t, "https", identity["scheme"])
 	assert.Equal(t, "example.com", identity["hostname"])

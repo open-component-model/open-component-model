@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -161,7 +160,7 @@ func TestOCILayoutTarWriter_Close(t *testing.T) {
 	files := make(map[string][]byte)
 	for {
 		header, err := tarReader.Next()
-		if errors.Is(err, io.EOF) {
+		if err == io.EOF {
 			break
 		}
 		require.NoError(t, err)
@@ -463,7 +462,7 @@ func TestOCILayoutTarWriter_ConcurrentPush(t *testing.T) {
 	foundBlobs := make(map[string][]byte)
 	for {
 		header, err := tarReader.Next()
-		if errors.Is(err, io.EOF) {
+		if err == io.EOF {
 			break
 		}
 		require.NoError(t, err)
@@ -547,7 +546,7 @@ func TestOCILayoutWriter_DirectConstructor(t *testing.T) {
 	files := make(map[string][]byte)
 	for {
 		header, readErr := tarReader.Next()
-		if errors.Is(readErr, io.EOF) {
+		if readErr == io.EOF {
 			break
 		}
 		require.NoError(t, readErr)

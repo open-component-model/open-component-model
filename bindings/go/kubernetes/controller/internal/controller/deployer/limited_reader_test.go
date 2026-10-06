@@ -2,7 +2,6 @@ package deployer
 
 import (
 	"bytes"
-	"errors"
 	"io"
 	"strings"
 	"testing"
@@ -82,7 +81,7 @@ func TestLimitedReadCloser_MultipleReadsAtLimit(t *testing.T) {
 	for {
 		n, err := rc.Read(buf)
 		collected = append(collected, buf[:n]...)
-		if errors.Is(err, io.EOF) {
+		if err == io.EOF {
 			break
 		}
 		if err != nil {

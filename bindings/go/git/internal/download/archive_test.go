@@ -3,7 +3,6 @@ package download
 import (
 	"archive/tar"
 	"bytes"
-	"errors"
 	"io"
 	"os"
 	"testing"
@@ -65,7 +64,7 @@ func TestArchiveUsesGitTree(t *testing.T) {
 	tr := tar.NewReader(bytes.NewReader(uncompressed))
 	for {
 		h, err := tr.Next()
-		if errors.Is(err, io.EOF) {
+		if err == io.EOF {
 			break
 		}
 		r.NoError(err)
