@@ -111,7 +111,7 @@ func verifyHash(target *runtime.Digest, digest digest.Digest) error {
 	if !ok {
 		return fmt.Errorf("unknown algorithm in digest: %s", digest.Algorithm())
 	}
-	if target.HashAlgorithm != algo {
+	if !sameHashAlgorithm(target.HashAlgorithm, algo) {
 		return fmt.Errorf("hash algorithm mismatch: expected %s, got %s", target.HashAlgorithm, ReverseSHAMapping[digest.Algorithm()])
 	}
 	return nil

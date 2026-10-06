@@ -194,7 +194,7 @@ func finishResourceLayer(b *ociblob.ArtifactBlob, access *v2.LocalBlob, layer oc
 	annotations := maps.Clone(layer.Annotations)
 	maps.Copy(annotations, opts.ManifestAnnotations)
 
-	if resource, ok := b.Artifact.(*descriptor.Resource); ok && resource.Digest != nil && resource.Digest.NormalisationAlgorithm == internaldigest.GenericBlobDigestV1 {
+	if resource, ok := b.Artifact.(*descriptor.Resource); ok && internaldigest.IsComplete(resource.Digest) && resource.Digest.NormalisationAlgorithm == internaldigest.GenericBlobDigestV1 {
 		if err := internaldigest.Verify(resource.Digest, layer.Digest, internaldigest.GenericBlobDigestV1); err != nil {
 			return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to verify resource blob digest: %w", err)
 		}
