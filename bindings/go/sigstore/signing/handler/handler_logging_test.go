@@ -150,7 +150,7 @@ func TestVerify_LogsConfiguredConstraints(t *testing.T) {
 func TestVerify_DoesNotLogBundleAcceptedOnFailure(t *testing.T) {
 	capt := withCapturedSlog(t)
 
-	mock := &execRecorder{verifyErr: errStub("verification failed")}
+	mock := &execRecorder{verifyErr: stubError("verification failed")}
 	h := newWithRunner(mock)
 
 	cfg := testVerifyConfig()
@@ -175,7 +175,7 @@ func TestVerify_DoesNotLogBundleAcceptedOnFailure(t *testing.T) {
 	}
 }
 
-// errStub is a minimal error type for tests.
-type errStub string
+// stubError is a minimal error type for tests.
+type stubError string
 
-func (e errStub) Error() string { return string(e) }
+func (e stubError) Error() string { return string(e) }
