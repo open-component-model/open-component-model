@@ -206,7 +206,7 @@ func TestAddLocalResource(t *testing.T) {
 }
 
 func TestGetLocalResource(t *testing.T) {
-	f, err := os.CreateTemp("", "temp_file")
+	f, err := os.CreateTemp(t.TempDir(), "temp_file")
 	require.NoError(t, err)
 	response := &repov1.GetLocalResourceResponse{
 		Location: types.Location{
@@ -277,7 +277,7 @@ func TestGetLocalResource(t *testing.T) {
 }
 
 func TestGetLocalSource(t *testing.T) {
-	f, err := os.CreateTemp("", "temp_file")
+	f, err := os.CreateTemp(t.TempDir(), "temp_file")
 	require.NoError(t, err)
 	response := &repov1.GetLocalSourceResponse{
 		Location: types.Location{
