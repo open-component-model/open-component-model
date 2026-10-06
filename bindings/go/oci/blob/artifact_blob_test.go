@@ -282,7 +282,7 @@ func TestResourceBlob_CompleteWorkflow(t *testing.T) {
 	// Test OCI descriptor
 	desc := rb.OCIDescriptor()
 	assert.Equal(t, mediaType, desc.MediaType)
-	assert.Equal(t, digest.Digest(newDigest), desc.Digest)
+	assert.Equal(t, newDigest, desc.Digest)
 	assert.Equal(t, blob.SizeUnknown, desc.Size)
 }
 

@@ -442,6 +442,7 @@ func TestBinary_MkdirTemp(t *testing.T) {
 		t.Skip("gpg-agent uses no Unix sockets in the home directory on Windows")
 	}
 	// Under /tmp, not t.TempDir() or $TMPDIR: a base nested there can already be too long for gpg-agent sockets.
+	//nolint:usetesting // see above: deliberately using a short base path for gpg-agent sockets
 	short, err := os.MkdirTemp(shortTempBase, "ocm-gpg-test-")
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = os.RemoveAll(short) })
