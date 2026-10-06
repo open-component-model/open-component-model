@@ -33,7 +33,10 @@ func newRecordingProvider() *recordingProvider {
 }
 
 func (p *recordingProvider) GetComponentVersionRepositoryCredentialConsumerIdentity(_ context.Context, spec runtime.Typed) (runtime.Identity, error) {
-	raw, _ := json.Marshal(spec)
+	raw, err := json.Marshal(spec)
+	if err != nil {
+		return nil, err
+	}
 	return runtime.Identity{"spec": string(raw)}, nil
 }
 
@@ -41,7 +44,10 @@ func (p *recordingProvider) GetComponentVersionRepository(_ context.Context, spe
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.specs = append(p.specs, spec)
-	raw, _ := json.Marshal(spec)
+	raw, err := json.Marshal(spec)
+	if err != nil {
+		return nil, err
+	}
 	p.credsFor[string(raw)] = creds
 	return &recordingRepo{}, nil
 }
@@ -324,6 +330,7 @@ func TestNewFromConfig_CredentialsForRoutedRepository(t *testing.T) {
 		}
 	}
 	r.NotNil(routed, "configured repository must have been built")
-	raw, _ := json.Marshal(routed)
+	raw, err := json.Marshal(routed)
+	r.NoError(err)
 	r.Equal(cred, provider.credsFor[string(raw)], "credentials must be resolved for the routed repository")
 }
