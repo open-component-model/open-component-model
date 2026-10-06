@@ -31,7 +31,7 @@ task tools:lint -- --fix     # auto-fix lint findings
 task bindings/go/cli:build   # build ocm CLI into bindings/go/cli/tmp/bin/ocm
 ```
 
-Controller e2e (own flow): `task bindings/go/kubernetes/controller:test/e2e -- -ginkgo.focus=<scenario>`, with Kind setup/teardown under the same `test/e2e/*` tasks.
+Controller e2e (own flow): `task bindings/go/kubernetes/controller:test/e2e -- --focus=<scenario>` (Ginkgo CLI, 4 parallel processes; `--procs=1` for serial), with Kind setup/teardown under the same `test/e2e/*` tasks.
 
 Website (from `website/`): `npm ci && npm run dev` serves <http://localhost:1313> live (`npm run dev:drafts` includes drafts); `npm run lint` = eslint + stylelint + markdownlint; `npm test` runs register-docs-version tests. New docs: classify per Diataxis, start from `website/content_templates/` (templates carry the required frontmatter), and use `{{< relref >}}` for internal links — see `website/CONTRIBUTING.md` and `website/README.md`.
 

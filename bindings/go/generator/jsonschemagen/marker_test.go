@@ -4,9 +4,9 @@ import (
 	"go/ast"
 	"testing"
 
-	"github.com/stretchr/testify/require"
-
 	. "ocm.software/open-component-model/bindings/go/generator/jsonschemagen"
+
+	"github.com/stretchr/testify/require"
 )
 
 func cg(lines ...string) *ast.CommentGroup {
@@ -81,10 +81,10 @@ func TestApplyNumericMarkers(t *testing.T) {
 	require.NotNil(t, s.ExclusiveMinimum)
 	require.NotNil(t, s.ExclusiveMaximum)
 
-	require.Equal(t, 1.0, *s.Minimum)
-	require.Equal(t, 5.0, *s.Maximum)
-	require.Equal(t, 2.0, *s.ExclusiveMinimum)
-	require.Equal(t, 10.0, *s.ExclusiveMaximum)
+	require.InDelta(t, 1.0, *s.Minimum, 1e-9)
+	require.InDelta(t, 5.0, *s.Maximum, 1e-9)
+	require.InDelta(t, 2.0, *s.ExclusiveMinimum, 1e-9)
+	require.InDelta(t, 10.0, *s.ExclusiveMaximum, 1e-9)
 }
 
 func TestApplyNumericMarkers_IgnoresInvalid(t *testing.T) {
@@ -98,5 +98,5 @@ func TestApplyNumericMarkers_IgnoresInvalid(t *testing.T) {
 
 	require.Nil(t, s.Minimum)
 	require.NotNil(t, s.Maximum)
-	require.Equal(t, 100.0, *s.Maximum)
+	require.InDelta(t, 100.0, *s.Maximum, 1e-9)
 }

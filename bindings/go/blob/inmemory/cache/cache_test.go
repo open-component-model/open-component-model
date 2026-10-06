@@ -6,13 +6,14 @@ import (
 	"strings"
 	"testing"
 
+	. "ocm.software/open-component-model/bindings/go/blob/inmemory/cache"
+
 	"github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 
 	"ocm.software/open-component-model/bindings/go/blob"
-	. "ocm.software/open-component-model/bindings/go/blob/inmemory/cache"
+	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 )
 
 type mockBlob struct {
@@ -426,13 +427,13 @@ func TestCache_ConcurrentAccess(t *testing.T) {
 
 					// Test ReadCloser
 					reader, err := cached.ReadCloser()
-					require.NoError(t, err)
+					assert.NoError(t, err)
 					_, err = io.ReadAll(reader)
-					require.NoError(t, err)
+					assert.NoError(t, err)
 
 					// Test Data
 					data := cached.Data()
-					require.NotEmpty(t, data)
+					assert.NotEmpty(t, data)
 
 					// Test Size
 					_ = cached.Size()

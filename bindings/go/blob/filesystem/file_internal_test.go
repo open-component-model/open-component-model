@@ -14,7 +14,7 @@ func TestEnsurePathInWorkingDirectory_Internal(t *testing.T) {
 	r := require.New(t)
 	tempDir := t.TempDir()
 	fp := filepath.Join(tempDir, "testfile.txt")
-	r.NoError(os.WriteFile(fp, []byte("test data"), 0644))
+	r.NoError(os.WriteFile(fp, []byte("test data"), 0o644))
 
 	type args struct {
 		path             string

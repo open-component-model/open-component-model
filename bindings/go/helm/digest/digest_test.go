@@ -121,14 +121,14 @@ func TestGetResourceDigestProcessorCredentialConsumerIdentity(t *testing.T) {
 		resource := helmAccessResource(t, "", "mychart:1.0.0")
 
 		identity, err := p.GetResourceDigestProcessorCredentialConsumerIdentity(t.Context(), resource)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Nil(t, identity)
 	})
 
 	t.Run("returns error for nil access", func(t *testing.T) {
 		resource := &descruntime.Resource{}
 		identity, err := p.GetResourceDigestProcessorCredentialConsumerIdentity(t.Context(), resource)
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Nil(t, identity)
 	})
 
@@ -136,7 +136,7 @@ func TestGetResourceDigestProcessorCredentialConsumerIdentity(t *testing.T) {
 		resource := helmAccessResource(t, "://invalid", "mychart:1.0.0")
 
 		identity, err := p.GetResourceDigestProcessorCredentialConsumerIdentity(t.Context(), resource)
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Nil(t, identity)
 		assert.Contains(t, err.Error(), "error parsing helm repository URL to identity")
 	})

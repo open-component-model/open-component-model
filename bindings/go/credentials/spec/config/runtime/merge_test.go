@@ -27,7 +27,7 @@ func TestMerge(t *testing.T) {
 					},
 					Consumers: []Consumer{
 						{
-							Identities:  []runtime.Identity{runtime.Identity{"type": "id1"}},
+							Identities:  []runtime.Identity{{"type": "id1"}},
 							Credentials: []runtime.Typed{&mockTyped{name: "cred1"}},
 						},
 					},
@@ -40,7 +40,7 @@ func TestMerge(t *testing.T) {
 				},
 				Consumers: []Consumer{
 					{
-						Identities:  []runtime.Identity{runtime.Identity{"type": "id1"}},
+						Identities:  []runtime.Identity{{"type": "id1"}},
 						Credentials: []runtime.Typed{&mockTyped{name: "cred1"}},
 					},
 				},
@@ -56,7 +56,7 @@ func TestMerge(t *testing.T) {
 					},
 					Consumers: []Consumer{
 						{
-							Identities:  []runtime.Identity{runtime.Identity{"type": "id1"}},
+							Identities:  []runtime.Identity{{"type": "id1"}},
 							Credentials: []runtime.Typed{&mockTyped{name: "cred1"}},
 						},
 					},
@@ -68,7 +68,7 @@ func TestMerge(t *testing.T) {
 					},
 					Consumers: []Consumer{
 						{
-							Identities:  []runtime.Identity{runtime.Identity{"type": "id2"}},
+							Identities:  []runtime.Identity{{"type": "id2"}},
 							Credentials: []runtime.Typed{&mockTyped{name: "cred2"}},
 						},
 					},
@@ -82,11 +82,11 @@ func TestMerge(t *testing.T) {
 				},
 				Consumers: []Consumer{
 					{
-						Identities:  []runtime.Identity{runtime.Identity{"type": "id1"}},
+						Identities:  []runtime.Identity{{"type": "id1"}},
 						Credentials: []runtime.Typed{&mockTyped{name: "cred1"}},
 					},
 					{
-						Identities:  []runtime.Identity{runtime.Identity{"type": "id2"}},
+						Identities:  []runtime.Identity{{"type": "id2"}},
 						Credentials: []runtime.Typed{&mockTyped{name: "cred2"}},
 					},
 				},

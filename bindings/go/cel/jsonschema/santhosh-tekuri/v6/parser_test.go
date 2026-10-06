@@ -8,6 +8,7 @@ import (
 	"github.com/santhosh-tekuri/jsonschema/v6"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 	"ocm.software/open-component-model/bindings/go/cel/expression/fieldpath"
 	"ocm.software/open-component-model/bindings/go/cel/expression/variable"
 	stv6jsonschema "ocm.software/open-component-model/bindings/go/cel/jsonschema/santhosh-tekuri/v6"
@@ -97,7 +98,8 @@ func TestParseResource(t *testing.T) {
 			{Path: fieldpath.MustParse("intField"), Expressions: []variable.Expression{{Value: "int.value"}}, StandaloneExpression: true},
 			{Path: fieldpath.MustParse("boolField"), Expressions: []variable.Expression{{Value: "bool.value"}}, StandaloneExpression: true},
 			{Path: fieldpath.MustParse("nestedObject.nestedString"), Expressions: []variable.Expression{{Value: "nested.string"}}, StandaloneExpression: true},
-			{Path: fieldpath.MustParse("nestedObject.nestedStringMultiple"),
+			{
+				Path: fieldpath.MustParse("nestedObject.nestedStringMultiple"),
 				Expressions: []variable.Expression{
 					{Value: "nested.string1"},
 					{Value: "nested.string2"},
@@ -124,7 +126,7 @@ func TestParseResource(t *testing.T) {
 		slices.SortFunc(got, sortFn)
 		slices.SortFunc(expected, sortFn)
 
-		require.Equal(t, len(expected), len(got), "number of expressions mismatch")
+		require.Len(t, got, len(expected), "number of expressions mismatch")
 
 		for i := range expected {
 			exp := expected[i]
@@ -133,7 +135,7 @@ func TestParseResource(t *testing.T) {
 			assert.True(t, act.Path.Equals(exp.Path),
 				"path mismatch:\n  got: %s\n want: %s", act.Path, exp.Path)
 
-			assert.Equal(t, len(exp.Expressions), len(act.Expressions),
+			assert.Len(t, act.Expressions, len(exp.Expressions),
 				"expression count mismatch at path %s", exp.Path)
 
 			for j := range exp.Expressions {
@@ -452,7 +454,7 @@ func TestParseWithExpectedSchema(t *testing.T) {
 	slices.SortFunc(got, sortByPath)
 	slices.SortFunc(expected, sortByPath)
 
-	require.Equal(t, len(expected), len(got), "unexpected number of expressions")
+	require.Len(t, got, len(expected), "unexpected number of expressions")
 
 	for i := range expected {
 		exp := expected[i]
@@ -461,7 +463,7 @@ func TestParseWithExpectedSchema(t *testing.T) {
 		assert.True(t, act.Path.Equals(exp.Path),
 			"path mismatch:\n  got: %s\n want: %s", act.Path, exp.Path)
 
-		require.Equal(t, len(exp.Expressions), len(act.Expressions),
+		require.Len(t, act.Expressions, len(exp.Expressions),
 			"expression count mismatch at path %s", exp.Path)
 
 		for j := range exp.Expressions {
@@ -619,7 +621,7 @@ func TestCelExpressionAgainstObjectSchemaDoesNotError(t *testing.T) {
 
 	expectedType := got[0].ExpectedType
 	assert.NotNil(t, expectedType)
-	assert.Equal(t, expectedType.Kind(), types.StructKind)
+	assert.Equal(t, types.StructKind, expectedType.Kind())
 }
 
 func TestArrayExpressionPaths(t *testing.T) {
@@ -727,7 +729,7 @@ func TestArrayExpressionPaths(t *testing.T) {
 			slices.Sort(paths)
 			slices.Sort(tc.expected)
 
-			require.Equal(t, len(tc.expected), len(paths), "unexpected number of expression paths")
+			require.Len(t, paths, len(tc.expected), "unexpected number of expression paths")
 			assert.Equal(t, tc.expected, paths)
 		})
 	}

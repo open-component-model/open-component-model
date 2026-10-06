@@ -73,7 +73,7 @@ func TestNewFromCTFRepoV1(t *testing.T) {
 				}
 				return
 			}
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.NotNil(t, repo)
 		})
 	}
@@ -139,7 +139,7 @@ func TestNewFromOCIRepoV1(t *testing.T) {
 				}
 				return
 			}
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.NotNil(t, repo)
 		})
 	}

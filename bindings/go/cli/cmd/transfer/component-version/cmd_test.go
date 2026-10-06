@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -21,12 +22,15 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci"
 	"ocm.software/open-component-model/bindings/go/oci/compref"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
+	ociaccessv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
+	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/signing"
 )
 
 // setupTestRepositoryWithDescriptorLibrary creates a test repository with the given component versions
 func setupTestRepositoryWithDescriptorLibrary(t *testing.T, versions ...*descriptor.Descriptor) (string, error) {
+	t.Helper()
 	r := require.New(t)
 	archivePath := t.TempDir()
 	fs, err := filesystem.NewFS(archivePath, os.O_RDWR)
@@ -127,6 +131,20 @@ func executeTransferSpec(t *testing.T, specFile string) {
 		test.WithErrorOutput(test.NewJSONLogReader()),
 	)
 	require.NoError(t, err)
+}
+
+// completedOperationItems returns the IDs of items the given progress operation
+// reported as completed via the non-terminal slog progress visualizer.
+func completedOperationItems(entries []*test.JSONLogEntry, name string) []string {
+	var items []string
+	for _, e := range entries {
+		if strings.HasPrefix(e.Msg, name) && strings.HasSuffix(e.Msg, ": item completed") {
+			if item, ok := e.Extras["item"].(string); ok {
+				items = append(items, item)
+			}
+		}
+	}
+	return items
 }
 
 // openCTFRepo opens a CTF repository at the given path for verification.
@@ -415,6 +433,18 @@ func TestTransferComponentVersionRecursive(t *testing.T) {
 		}
 	}
 	require.True(t, found, "expected success log message")
+
+	// the resolution phase must report one completed item per resolved component version
+	for _, id := range []string{"ocm.software/parent-component:1.0.0", "ocm.software/child-component:0.0.1"} {
+		require.Contains(t, completedOperationItems(logEntries, "Resolving component versions"), id, "expected resolution progress for %s", id)
+	}
+
+	// the graph construction phase must report one completed item per
+	// transformation node of the graph (the upload of parent and child)
+	for _, label := range []string{"parent-component@1.0.0 [Upload to CTF]", "child-component@0.0.1 [Upload to CTF]"} {
+		require.Contains(t, completedOperationItems(logEntries, "Building transformation graph"), label,
+			"expected build progress for %s", label)
+	}
 }
 
 // TestTransferComponentVersionPreservesSignatures verifies that signatures on a component
@@ -655,5 +685,241 @@ func TestTransferComponentVersion_ExactVersionIgnoresConstraintFlags(t *testing.
 	for _, v := range []string{"1.1.0", "2.0.0"} {
 		_, err = targetRepo.GetComponentVersion(ctx, componentName, v)
 		require.Error(t, err, "version %s should NOT be in target", v)
+	}
+}
+
+// TestTransferComponentVersion_RepositoryReference verifies that a bare repository
+// reference as source transfers every component version the repository contains.
+func TestTransferComponentVersion_RepositoryReference(t *testing.T) {
+	r := require.New(t)
+
+	fromPath, err := setupTestRepositoryWithDescriptorLibrary(t,
+		createTestDescriptor("github.com/acme/first", "v1.0.0"),
+		createTestDescriptor("github.com/acme/first", "v1.1.0"),
+		createTestDescriptor("github.com/acme/second", "v2.0.0"),
+	)
+	r.NoError(err)
+
+	toPath := t.TempDir()
+	targetArg := fmt.Sprintf("ctf::%s", toPath)
+
+	// A bare path (no "//<component>") is a repository reference.
+	_, err = test.OCM(t,
+		test.WithArgs("transfer", "component-version", fromPath, targetArg),
+		test.WithOutput(new(bytes.Buffer)),
+		test.WithErrorOutput(test.NewJSONLogReader()),
+	)
+	r.NoError(err)
+
+	targetRepo := openCTFRepo(t, toPath)
+	ctx := t.Context()
+	for _, cv := range []struct{ name, version string }{
+		{"github.com/acme/first", "v1.0.0"},
+		{"github.com/acme/first", "v1.1.0"},
+		{"github.com/acme/second", "v2.0.0"},
+	} {
+		desc, err := targetRepo.GetComponentVersion(ctx, cv.name, cv.version)
+		r.NoError(err, "component %s:%s should be in target", cv.name, cv.version)
+		r.Equal(cv.version, desc.Component.Version)
+	}
+}
+
+// TestTransferComponentVersion_RepositoryReferenceWithCTFPrefix verifies that the
+// ctf:: prefixed repository form is also accepted as a source.
+func TestTransferComponentVersion_RepositoryReferenceWithCTFPrefix(t *testing.T) {
+	r := require.New(t)
+
+	fromPath, err := setupTestRepositoryWithDescriptorLibrary(t,
+		createTestDescriptor("github.com/acme/only", "v0.0.1"),
+	)
+	r.NoError(err)
+
+	toPath := t.TempDir()
+
+	_, err = test.OCM(t,
+		test.WithArgs("transfer", "component-version", fmt.Sprintf("ctf::%s", fromPath), fmt.Sprintf("ctf::%s", toPath)),
+		test.WithOutput(new(bytes.Buffer)),
+		test.WithErrorOutput(test.NewJSONLogReader()),
+	)
+	r.NoError(err)
+
+	targetRepo := openCTFRepo(t, toPath)
+	desc, err := targetRepo.GetComponentVersion(t.Context(), "github.com/acme/only", "v0.0.1")
+	r.NoError(err)
+	r.Equal("v0.0.1", desc.Component.Version)
+}
+
+// TestTransferComponentVersion_RepositoryReferenceLatestOnly verifies that --latest
+// applies per component when a repository reference is used as source.
+func TestTransferComponentVersion_RepositoryReferenceLatestOnly(t *testing.T) {
+	r := require.New(t)
+
+	fromPath, err := setupTestRepositoryWithDescriptorLibrary(t,
+		createTestDescriptor("github.com/acme/first", "v1.0.0"),
+		createTestDescriptor("github.com/acme/first", "v1.1.0"),
+		createTestDescriptor("github.com/acme/second", "v2.0.0"),
+	)
+	r.NoError(err)
+
+	toPath := t.TempDir()
+
+	_, err = test.OCM(t,
+		test.WithArgs("transfer", "component-version", fromPath, fmt.Sprintf("ctf::%s", toPath), "--latest"),
+		test.WithOutput(new(bytes.Buffer)),
+		test.WithErrorOutput(test.NewJSONLogReader()),
+	)
+	r.NoError(err)
+
+	targetRepo := openCTFRepo(t, toPath)
+	ctx := t.Context()
+
+	// Only the latest version of each component must be present.
+	desc, err := targetRepo.GetComponentVersion(ctx, "github.com/acme/first", "v1.1.0")
+	r.NoError(err, "latest of first should be in target")
+	r.Equal("v1.1.0", desc.Component.Version)
+	desc, err = targetRepo.GetComponentVersion(ctx, "github.com/acme/second", "v2.0.0")
+	r.NoError(err, "latest of second should be in target")
+	r.Equal("v2.0.0", desc.Component.Version)
+
+	_, err = targetRepo.GetComponentVersion(ctx, "github.com/acme/first", "v1.0.0")
+	r.Error(err, "non-latest version should NOT be in target")
+}
+
+// setupOCIImageTransferFixture creates a CTF source holding a component with one external
+// OCIImage resource named "image" and returns its reference and a CTF target argument.
+func setupOCIImageTransferFixture(t *testing.T) (fromRef string, targetArg string) {
+	t.Helper()
+	r := require.New(t)
+
+	fromDesc := createTestDescriptor("ocm.software/uploader-flag-test", "1.0.0")
+	fromDesc.Component.Resources = []descriptor.Resource{
+		{
+			ElementMeta: descriptor.ElementMeta{
+				ObjectMeta: descriptor.ObjectMeta{
+					Name:    "image",
+					Version: "1.0.0",
+				},
+			},
+			Type:     "ociImage",
+			Relation: descriptor.ExternalRelation,
+			Access: &ociaccessv1.OCIImage{
+				Type:           runtime.NewVersionedType(ociaccessv1.OCIImageType, "v1"),
+				ImageReference: "ghcr.io/org/image:v1",
+			},
+		},
+	}
+
+	archivePath := t.TempDir()
+	fs, err := filesystem.NewFS(archivePath, os.O_RDWR)
+	r.NoError(err)
+	archive := ctf.NewFileSystemCTF(fs)
+	sourceRepo, err := oci.NewRepository(ocictf.WithCTF(ocictf.NewFromCTF(archive)))
+	r.NoError(err)
+	r.NoError(sourceRepo.AddComponentVersion(t.Context(), fromDesc))
+
+	ref := compref.Ref{
+		Repository: &ctfv1.Repository{FilePath: archivePath},
+		Component:  fromDesc.Component.Name,
+		Version:    fromDesc.Component.Version,
+	}
+	return ref.String(), fmt.Sprintf("ctf::%s", t.TempDir())
+}
+
+// TestTransferUploaderConfig verifies that uploader entries of the OCM configuration
+// select resources, and that the deprecated --copy-resources/--upload-as flags are
+// translated into uploader entries appended after them.
+func TestTransferUploaderConfig(t *testing.T) {
+	fromRef, targetArg := setupOCIImageTransferFixture(t)
+
+	writeConfig := func(t *testing.T, entries string) string {
+		t.Helper()
+		path := filepath.Join(t.TempDir(), "config.yaml")
+		require.NoError(t, os.WriteFile(path, []byte("type: generic.config.ocm.software/v1\nconfigurations:\n"+entries), 0o644))
+		return path
+	}
+	ociConfig := writeConfig(t, "  - type: oci.uploader.transfer.config.ocm.software/v1alpha1\n")
+	referenceConfig := writeConfig(t, "  - type: reference.uploader.transfer.config.ocm.software/v1alpha1\n    match: resource.name == \"image\"\n")
+	ociAndLocalBlobConfig := writeConfig(t, "  - type: oci.uploader.transfer.config.ocm.software/v1alpha1\n  - type: localblob.uploader.transfer.config.ocm.software/v1alpha1\n")
+	httpWithoutMatchConfig := writeConfig(t, "  - type: http.uploader.transfer.config.ocm.software/v1alpha1\n    targetURL: https://example.com\n")
+
+	for _, tc := range []struct {
+		name string
+		args []string
+		// target overrides the CTF target argument.
+		target      string
+		contains    []string
+		notContains []string
+		wantErr     string
+	}{
+		{
+			name:        "oci config alone does not select an image for a CTF target",
+			args:        []string{"--config", ociConfig},
+			notContains: []string{"GetOCIArtifact"},
+		},
+		{
+			name:     "oci and localblob config copies the image to a CTF target",
+			args:     []string{"--config", ociAndLocalBlobConfig},
+			contains: []string{"GetOCIArtifact", "CTFAddLocalResource"},
+		},
+		{
+			name:    "http without match fails validation",
+			args:    []string{"--config", httpWithoutMatchConfig},
+			wantErr: "match is required",
+		},
+		// TODO(legacy-flags): deprecated flag cases; remove together with legacy_flags.go.
+		{
+			name:     "deprecated --copy-resources copies the image like a local blob uploader",
+			args:     []string{"--copy-resources"},
+			contains: []string{"GetOCIArtifact", "CTFAddLocalResource"},
+		},
+		{
+			name:        "deprecated --copy-resources comes after configured uploaders",
+			args:        []string{"--config", referenceConfig, "--copy-resources"},
+			notContains: []string{"GetOCIArtifact"},
+		},
+		{
+			name:        "deprecated --upload-as ociArtifact alone keeps an OCI image by reference",
+			args:        []string{"--upload-as", "ociArtifact"},
+			target:      "ghcr.io/target-org/ocm",
+			notContains: []string{"TransferOCIArtifact", "GetOCIArtifact"},
+		},
+		{
+			name:     "deprecated --copy-resources --upload-as ociArtifact uploads an OCI image as an artifact",
+			args:     []string{"--copy-resources", "--upload-as", "ociArtifact"},
+			target:   "ghcr.io/target-org/ocm",
+			contains: []string{"TransferOCIArtifact"},
+		},
+		{
+			name:    "deprecated --upload-as rejects unknown values",
+			args:    []string{"--upload-as", "bogus"},
+			wantErr: "expected one of",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			result := new(bytes.Buffer)
+			target := targetArg
+			if tc.target != "" {
+				target = tc.target
+			}
+			args := append([]string{"transfer", "component-version", fromRef, target, "--dry-run", "-o", "yaml"}, tc.args...)
+			_, err := test.OCM(t,
+				test.WithArgs(args...),
+				test.WithOutput(result),
+				test.WithErrorOutput(test.NewJSONLogReader()),
+			)
+			if tc.wantErr != "" {
+				r.ErrorContains(err, tc.wantErr)
+				return
+			}
+			r.NoError(err, "dry-run should succeed")
+			out := result.String()
+			for _, s := range tc.contains {
+				r.Contains(out, s)
+			}
+			for _, s := range tc.notContains {
+				r.NotContains(out, s)
+			}
+		})
 	}
 }

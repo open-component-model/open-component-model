@@ -83,7 +83,8 @@ func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alph
 		return fmt.Errorf("could not register s3 inbuilt plugin: %w", err)
 	}
 
-	if err := git.Register(manager.ResourcePluginRegistry,
+	if err := git.Register(manager.InputRegistry,
+		manager.ResourcePluginRegistry,
 		manager.DigestProcessorRegistry,
 		manager.CredentialTypeRegistry,
 		filesystemConfig,
@@ -114,7 +115,7 @@ func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alph
 	if err := oidc.RegisterCredentialPlugin(manager.CredentialPluginRegistry); err != nil {
 		return fmt.Errorf("could not register OIDC credential plugin: %w", err)
 	}
-	if err := gpg.Register(manager.SigningRegistry, manager.CredentialTypeRegistry); err != nil {
+	if err := gpg.Register(manager.SigningRegistry, manager.CredentialTypeRegistry, filesystemConfig); err != nil {
 		return fmt.Errorf("could not register GPG signing plugin: %w", err)
 	}
 

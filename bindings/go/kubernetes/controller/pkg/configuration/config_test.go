@@ -191,9 +191,9 @@ func TestGetConfigFromSecret(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg, err := GetConfigFromSecret(tt.secret)
 			if tt.wantErr {
-				assert.Error(t, err)
+				require.Error(t, err)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 			}
 			assert.Equal(t, tt.want, cfg)
 		})
@@ -242,9 +242,9 @@ func TestGetConfigFromConfigMap(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg, err := GetConfigFromConfigMap(tt.configMap)
 			if tt.wantErr {
-				assert.Error(t, err)
+				require.Error(t, err)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 			}
 			if tt.wantNil {
 				assert.Nil(t, cfg)
@@ -391,6 +391,7 @@ func TestLoadConfigurations(t *testing.T) {
 			},
 			wantErr: false,
 			checkResult: func(t *testing.T, cfg *genericv1.Config) {
+				t.Helper()
 				assert.NotNil(t, cfg)
 				// only the direct credentials entry survives; the nested generic entry is dropped
 				assert.Len(t, cfg.Configurations, 1)
@@ -419,6 +420,7 @@ func TestLoadConfigurations(t *testing.T) {
 			},
 			wantErr: false,
 			checkResult: func(t *testing.T, cfg *genericv1.Config) {
+				t.Helper()
 				assert.NotNil(t, cfg)
 				// the allowed credentials and resolvers entries survive in declaration order;
 				// the disallowed filesystem and whatever entries are dropped
@@ -446,6 +448,7 @@ func TestLoadConfigurations(t *testing.T) {
 			},
 			wantErr: false,
 			checkResult: func(t *testing.T, cfg *genericv1.Config) {
+				t.Helper()
 				assert.NotNil(t, cfg)
 				assert.Len(t, cfg.Configurations, 2)
 			},
@@ -463,6 +466,7 @@ func TestLoadConfigurations(t *testing.T) {
 			},
 			wantErr: false,
 			checkResult: func(t *testing.T, cfg *genericv1.Config) {
+				t.Helper()
 				assert.NotNil(t, cfg)
 			},
 		},
@@ -485,6 +489,7 @@ func TestLoadConfigurations(t *testing.T) {
 			},
 			wantErr: false,
 			checkResult: func(t *testing.T, cfg *genericv1.Config) {
+				t.Helper()
 				assert.NotNil(t, cfg)
 				assert.Len(t, cfg.Configurations, 2)
 			},
@@ -739,6 +744,32 @@ func TestFilterAllowedConfigTypes(t *testing.T) {
 		types := []ocmruntime.Type{result.Configurations[0].GetType(), result.Configurations[1].GetType()}
 		assert.Contains(t, types, ocmruntime.NewUnversionedType(credentialsv1.ConfigType))
 		assert.Contains(t, types, ocmruntime.NewUnversionedType(resolversv1alpha1spec.ConfigType))
+	})
+
+	t.Run("uploaders sending content to configured URLs are dropped", func(t *testing.T) {
+		cfg := makeGenericConfig(
+			`{"type":"http.uploader.transfer.config.ocm.software/v1alpha1","match":"true","targetURL":"http://internal.example"}`,
+			`{"type":"http.uploader.transfer.config.ocm.software","match":"true","targetURL":"http://internal.example"}`,
+			`{"type":"artifactory.uploader.transfer.config.ocm.software/v1alpha1","match":"true","url":"http://internal.example","repository":"r"}`,
+			`{"type":"nexus.uploader.transfer.config.ocm.software","match":"true","url":"http://internal.example","repository":"r"}`,
+			`{"type":"localblob.uploader.transfer.config.ocm.software/v1alpha1"}`,
+		)
+		result, err := filterAllowedConfigTypes(t.Context(), cfg)
+		require.NoError(t, err)
+		require.Len(t, result.Configurations, 1)
+		assert.Equal(t, ocmruntime.NewVersionedType("localblob.uploader.transfer.config.ocm.software", "v1alpha1"), result.Configurations[0].GetType())
+	})
+
+	t.Run("uploader entries pass through", func(t *testing.T) {
+		cfg := makeGenericConfig(
+			`{"type":"oci.uploader.transfer.config.ocm.software/v1alpha1"}`,
+			`{"type":"reference.uploader.transfer.config.ocm.software"}`,
+		)
+		result, err := filterAllowedConfigTypes(t.Context(), cfg)
+		require.NoError(t, err)
+		require.Len(t, result.Configurations, 2)
+		assert.Equal(t, ocmruntime.NewVersionedType("oci.uploader.transfer.config.ocm.software", "v1alpha1"), result.Configurations[0].GetType())
+		assert.Equal(t, ocmruntime.NewUnversionedType("reference.uploader.transfer.config.ocm.software"), result.Configurations[1].GetType())
 	})
 
 	t.Run("aliases stripped from ocm.config.ocm.software versioned", func(t *testing.T) {

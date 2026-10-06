@@ -20,10 +20,22 @@ import (
 type Git struct {
 	// +ocm:jsonschema-gen:enum=Git/v1,Git
 	// +ocm:jsonschema-gen:enum:deprecated=git,git/v1alpha1,Git/v1alpha1
-	Type       runtime.Type `json:"type"`
-	Repository string       `json:"repository"`
-	Ref        string       `json:"ref,omitempty"`
-	Commit     string       `json:"commit,omitempty"`
+	Type runtime.Type `json:"type"`
+
+	// Repository is the Git repository URL: an http(s)://, ssh:// or git:// URL with a
+	// host and a path, the scp-like form user@host:path, or a local repository as
+	// file:///path or a plain path. A value without a scheme that is not scp-like is a
+	// local path, relative to the working directory unless absolute.
+	Repository string `json:"repository"`
+
+	// Ref selects a branch, tag or full ref name. A bare name resolves to a
+	// matching branch first and then to a tag, so use refs/tags/v1.0.0 to select
+	// that tag unambiguously. Digest processing resolves it to a commit.
+	Ref string `json:"ref,omitempty"`
+
+	// Commit pins a commit by its full 40-character hexadecimal SHA and takes
+	// precedence over Ref. At least one of Commit or Ref must be set.
+	Commit string `json:"commit,omitempty"`
 }
 
 var commitSHA = regexp.MustCompile(`^[0-9a-fA-F]{40}$`)

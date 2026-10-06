@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/fips140"
 	"crypto/tls"
 	"flag"
 	"log/slog"
@@ -72,6 +73,7 @@ func main() {
 		metricsAddr               string
 		enableLeaderElection      bool
 		probeAddr                 string
+		pprofAddr                 string
 		secureMetrics             bool
 		enableHTTP2               bool
 		deployerDownloadCacheSize int
@@ -87,6 +89,8 @@ func main() {
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metric endpoint binds to. "+
 		"Use the port :8080. If not set, it will be 0 in order to disable the metrics server")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
+	flag.StringVar(&pprofAddr, "pprof-bind-address", ":6060",
+		"The address the pprof endpoint binds to (only used in builds with the pprof tag).")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
@@ -149,6 +153,7 @@ func main() {
 	}
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+	setupLog.Info("FIPS 140-3 mode", "enabled", fips140.Enabled(), "module", fips140.Version())
 
 	ctx := context.Background()
 
@@ -199,6 +204,11 @@ func main() {
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
 		os.Exit(1)
+	}
+
+	if pprofEnabled {
+		setupLog.Info("starting pprof server", "address", pprofAddr)
+		startPprof(pprofAddr)
 	}
 
 	ocirepository.MustAddLegacyToScheme(ocirepository.Scheme)

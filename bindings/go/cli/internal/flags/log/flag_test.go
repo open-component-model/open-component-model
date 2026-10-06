@@ -51,7 +51,7 @@ func TestGetBaseLogger(t *testing.T) {
 			require.NoError(t, cmd.Flags().Set(OutputFlagName, tt.output))
 
 			logger, err := GetBaseLogger(cmd)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.NotNil(t, logger)
 		})
 	}
@@ -92,7 +92,7 @@ func TestLoggerLevelFromCommand(t *testing.T) {
 			require.NoError(t, cmd.Flags().Set(LevelFlagName, tt.level))
 
 			level, err := loggerLevelFromCommand(cmd)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, tt.expectLevel, level)
 		})
 	}
