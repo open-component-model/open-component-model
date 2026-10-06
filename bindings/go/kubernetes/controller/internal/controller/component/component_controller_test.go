@@ -1183,7 +1183,7 @@ var _ = Describe("Component Controller", func() {
 
 			By("checking that the component has not been reconciled and reports the GPG verification error")
 			test.WaitForNotReadyObjectWithMessage(ctx, k8sClient, component,
-				v1alpha1.GetComponentVersionFailedReason, "openpgp")
+				v1alpha1.GetComponentVersionFailedReason, "gpg verify failed")
 
 			By("delete resources manually")
 			test.DeleteObject(ctx, k8sClient, component)
