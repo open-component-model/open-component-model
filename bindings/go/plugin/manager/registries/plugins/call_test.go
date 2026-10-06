@@ -53,10 +53,10 @@ func TestCall(t *testing.T) {
 
 			// Read and verify payload
 			body, err := io.ReadAll(r.Body)
-			require.NoError(t, err)
+			assert.NoError(t, err)
 			var req TestRequest
 			err = json.Unmarshal(body, &req)
-			require.NoError(t, err)
+			assert.NoError(t, err)
 			assert.Equal(t, "test", req.Name)
 			assert.Equal(t, 42, req.Value)
 
@@ -89,7 +89,7 @@ func TestCall(t *testing.T) {
 			WithPayload(payload),
 			WithResult(&result),
 		)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, "success", result.Status)
 		assert.Equal(t, "Operation completed", result.Message)
 	})
@@ -191,7 +191,7 @@ func TestCall(t *testing.T) {
 			"test-endpoint",
 			http.MethodGet,
 		)
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), "plugin returned status code 400")
 		assert.Contains(t, err.Error(), "Invalid request")
 	})
@@ -212,7 +212,7 @@ func TestCall(t *testing.T) {
 			"test-endpoint",
 			http.MethodGet,
 		)
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), "plugin returned status code: 500 (no details were given)")
 	})
 
@@ -236,7 +236,7 @@ func TestCall(t *testing.T) {
 			http.MethodGet,
 			WithResult(&result),
 		)
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to decode response from plugin")
 	})
 
@@ -250,7 +250,7 @@ func TestCall(t *testing.T) {
 			"test-endpoint",
 			http.MethodGet,
 		)
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to send request to plugin")
 	})
 
@@ -268,7 +268,7 @@ func TestCall(t *testing.T) {
 			http.MethodPost,
 			WithPayload(invalidPayload),
 		)
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to marshal payload")
 	})
 
@@ -293,7 +293,7 @@ func TestCall(t *testing.T) {
 			"test-endpoint",
 			http.MethodGet,
 		)
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), "context canceled")
 	})
 
@@ -342,10 +342,10 @@ func TestCall(t *testing.T) {
 
 			// Read and verify payload
 			body, err := io.ReadAll(r.Body)
-			require.NoError(t, err)
+			assert.NoError(t, err)
 			var req TestRequest
 			err = json.Unmarshal(body, &req)
-			require.NoError(t, err)
+			assert.NoError(t, err)
 			assert.Equal(t, "test", req.Name)
 			assert.Equal(t, 42, req.Value)
 
@@ -392,7 +392,7 @@ func TestCall(t *testing.T) {
 			WithHeader(KV{Key: "Authorization", Value: "Bearer token789"}),
 			WithQueryParams(queryParams),
 		)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, "success", result.Status)
 		assert.Equal(t, "Operation completed", result.Message)
 	})

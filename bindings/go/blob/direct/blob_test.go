@@ -24,20 +24,20 @@ func TestReader(t *testing.T) {
 
 		buf := make([]byte, len(data))
 		br, err := br.ReadCloser()
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		t.Cleanup(func() {
 			assert.NoError(t, br.Close())
 		})
 		reader := io.LimitReader(br, s)
 		n, err := reader.Read(buf)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, len(data), n)
 		assert.Equal(t, data, string(buf))
 	})
 	t.Run("Test Size Calculation After Read", func(t *testing.T) {
 		b := New(strings.NewReader(data))
 		br, err := b.ReadCloser()
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		t.Cleanup(func() {
 			assert.NoError(t, br.Close())
 		})
@@ -45,7 +45,7 @@ func TestReader(t *testing.T) {
 		br.Read(buf) // Partial read
 		expectedSize := int64(len(data))
 		size := b.Size()
-		assert.Greater(t, size, int64(0))
+		assert.Positive(t, size)
 		assert.Equal(t, expectedSize, size)
 	})
 	//
@@ -53,7 +53,7 @@ func TestReader(t *testing.T) {
 		br = New(strings.NewReader(data))
 		expectedSize := int64(len(data))
 		size := br.Size()
-		assert.Greater(t, size, int64(0))
+		assert.Positive(t, size)
 		assert.Equal(t, expectedSize, size)
 	})
 	//
@@ -131,30 +131,30 @@ func TestCompatibility(t *testing.T) {
 		t.Run("direct", func(t *testing.T) {
 			b := NewFromBytes([]byte(data))
 			br, err := b.ReadCloser()
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			result, err := io.ReadAll(br)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, data, string(result))
 			assert.Equal(t, int64(len(data)), b.Size())
 		})
 		t.Run("reader", func(t *testing.T) {
 			b := New(bytes.NewReader([]byte(data)))
 			br, err := b.ReadCloser()
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			result, err := io.ReadAll(br)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, data, string(result))
 			assert.Equal(t, int64(len(data)), b.Size())
 		})
 	})
 
 	t.Run("buffer", func(t *testing.T) {
-		run := func(t assert.TestingT, unsafe bool) {
+		run := func(t require.TestingT, unsafe bool) {
 			b := NewFromBuffer(bytes.NewBuffer([]byte(data)), unsafe)
 			br, err := b.ReadCloser()
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			result, err := io.ReadAll(br)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, data, string(result))
 			assert.Equal(t, int64(len(data)), b.Size())
 		}
@@ -168,19 +168,19 @@ func TestCompatibility(t *testing.T) {
 	t.Run("file", func(t *testing.T) {
 		// Create a temporary file with the data
 		tmpFile, err := os.CreateTemp(t.TempDir(), "")
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		defer func() {
 			assert.NoError(t, tmpFile.Close())
 		}()
 
 		_, err = tmpFile.Write([]byte(data))
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		b := New(tmpFile)
 		br, err := b.ReadCloser()
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		result, err := io.ReadAll(br)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, data, string(result))
 		assert.Equal(t, int64(len(data)), b.Size())
 	})
@@ -195,9 +195,9 @@ func TestCompatibility(t *testing.T) {
 		b := New(r)
 		br, err := b.ReadCloser()
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		result, err := io.ReadAll(br)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, data, string(result))
 		assert.Equal(t, int64(-1), b.Size())
 		mtString, ok := b.MediaType()
@@ -213,8 +213,8 @@ func TestCompatibility(t *testing.T) {
 				}()
 				// Wait for the reader to be created
 				rc, err := b.ReadCloser()
-				require.NoError(t, err)
-				require.NotNil(t, rc)
+				assert.NoError(t, err)
+				assert.NotNil(t, rc)
 				result, err := io.ReadAll(rc)
 				assert.NoError(t, err)
 				assert.Empty(t, result, "because the original read closer should have read all data, the next result should be empty")
@@ -222,7 +222,7 @@ func TestCompatibility(t *testing.T) {
 			}()
 
 			assert.False(t, parallel.Load(), "because the original reader should not be closed yet, we should not be able to create a parallel ReadCloser")
-			assert.NoError(t, br.Close())
+			require.NoError(t, br.Close())
 			<-waitForParallel
 			assert.True(t, parallel.Load(), "because the original reader should have been closed, we should be able to create a parallel ReadCloser")
 		})
@@ -305,7 +305,6 @@ func TestConcurrentAndSerialReads(t *testing.T) {
 	})
 
 	t.Run("Concurrent Reads", func(t *testing.T) {
-		r := require.New(t)
 		const numGoroutines = 10
 		done := make(chan struct{})
 
@@ -314,14 +313,14 @@ func TestConcurrentAndSerialReads(t *testing.T) {
 				defer func() { done <- struct{}{} }()
 
 				reader, err := blob.ReadCloser()
-				r.NoError(err)
+				assert.NoError(t, err)
 				defer reader.Close()
 
 				buf := make([]byte, len(data))
 				n, err := reader.Read(buf)
-				r.NoError(err)
-				r.Equal(len(data), n)
-				r.Equal(expectedData, buf)
+				assert.NoError(t, err)
+				assert.Equal(t, len(data), n)
+				assert.Equal(t, expectedData, buf)
 			}()
 		}
 
@@ -342,14 +341,14 @@ func TestConcurrentAndSerialReads(t *testing.T) {
 				defer func() { done <- struct{}{} }()
 
 				reader, err := blob.ReadCloser()
-				r.NoError(err)
+				assert.NoError(t, err)
 				defer reader.Close()
 
 				buf := make([]byte, len(data))
 				n, err := reader.Read(buf)
-				r.NoError(err)
-				r.Equal(len(data), n)
-				r.Equal(expectedData, buf)
+				assert.NoError(t, err)
+				assert.Equal(t, len(data), n)
+				assert.Equal(t, expectedData, buf)
 			}()
 		}
 
@@ -375,7 +374,6 @@ func TestConcurrentAndSerialReads(t *testing.T) {
 	})
 
 	t.Run("Concurrent Partial Reads", func(t *testing.T) {
-		r := require.New(t)
 		const numGoroutines = 5
 		done := make(chan struct{})
 
@@ -384,22 +382,22 @@ func TestConcurrentAndSerialReads(t *testing.T) {
 				defer func() { done <- struct{}{} }()
 
 				reader, err := blob.ReadCloser()
-				r.NoError(err)
+				assert.NoError(t, err)
 				defer reader.Close()
 
 				// Read first half
 				firstHalf := make([]byte, len(data)/2)
 				n, err := reader.Read(firstHalf)
-				r.NoError(err)
-				r.Equal(len(data)/2, n)
-				r.Equal(expectedData[:len(data)/2], firstHalf)
+				assert.NoError(t, err)
+				assert.Equal(t, len(data)/2, n)
+				assert.Equal(t, expectedData[:len(data)/2], firstHalf)
 
 				// Read second half
 				secondHalf := make([]byte, len(data)-len(data)/2)
 				n, err = reader.Read(secondHalf)
-				r.NoError(err)
-				r.Equal(len(data)-len(data)/2, n)
-				r.Equal(expectedData[len(data)/2:], secondHalf)
+				assert.NoError(t, err)
+				assert.Equal(t, len(data)-len(data)/2, n)
+				assert.Equal(t, expectedData[len(data)/2:], secondHalf)
 			}()
 		}
 

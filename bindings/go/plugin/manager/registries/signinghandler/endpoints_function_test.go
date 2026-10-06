@@ -106,7 +106,7 @@ func TestRegisterSigningHandler(t *testing.T) {
 			r.NoError(json.Unmarshal(content, rawPluginSpec))
 			pluginSpec, err := pluginruntime.ConvertFromSpec(v1.Scheme, rawPluginSpec)
 			r.NoError(err)
-			r.Equal(tt.expectedTypes, len(pluginSpec.CapabilitySpecs))
+			r.Len(pluginSpec.CapabilitySpecs, tt.expectedTypes)
 		})
 	}
 }

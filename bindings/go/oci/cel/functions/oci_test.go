@@ -234,14 +234,14 @@ func TestParseReference(t *testing.T) {
 	r.Equal("ghcr.io", ref.Host)
 	r.Equal("org/repo", ref.Repository)
 	r.Equal("v1", ref.Tag)
-	r.Equal("", ref.Digest)
+	r.Empty(ref.Digest)
 
 	m := ref.Map()
 	r.Equal("ghcr.io", m["host"])
 	r.Equal("ghcr.io", m["registry"])
 	r.Equal("org/repo", m["repository"])
 	r.Equal("v1", m["tag"])
-	r.Equal("", m["digest"])
+	r.Empty(m["digest"])
 	r.Equal("v1", m["reference"])
 }
 

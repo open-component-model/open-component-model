@@ -193,17 +193,17 @@ func TestCopyToOCILayoutInMemory_ErrorCases(t *testing.T) {
 	invalidStore := &invalidStore{}
 	opts := CopyToOCILayoutOptions{}
 	b, err := CopyToOCILayoutInMemory(t.Context(), invalidStore, ociImageSpecV1.Descriptor{}, opts)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	rc, err := b.ReadCloser()
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Nil(t, rc)
 
 	// Test with invalid descriptor
 	src := memory.New()
 	b, err = CopyToOCILayoutInMemory(t.Context(), src, ociImageSpecV1.Descriptor{}, opts)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	rc, err = b.ReadCloser()
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Nil(t, rc)
 }
 
@@ -445,7 +445,7 @@ func TestCopyOCILayoutWithIndex_ErrorCases(t *testing.T) {
 	store := memory.New()
 	opts := CopyOCILayoutWithIndexOptions{}
 	_, err := CopyOCILayoutWithIndex(t.Context(), store, &testReadOnlyBlob{data: []byte("invalid")}, opts)
-	assert.Error(t, err)
+	require.Error(t, err)
 
 	// Test with invalid store
 	_, err = CopyOCILayoutWithIndex(t.Context(), &invalidStore{}, &testReadOnlyBlob{data: []byte("test")}, opts)

@@ -2,7 +2,6 @@ package http
 
 import (
 	"context"
-	"errors"
 	nethttp "net/http"
 	"net/url"
 	"testing"
@@ -136,7 +135,7 @@ func TestHostRouter_RoundTrip_DoesNotExtendParentDeadline(t *testing.T) {
 
 	_, err = r.RoundTrip(req)
 	require.Error(t, err)
-	assert.True(t, errors.Is(err, context.DeadlineExceeded))
+	assert.ErrorIs(t, err, context.DeadlineExceeded)
 }
 
 func TestHostRouter_RoundTrip_CancelAfterBodyClose(t *testing.T) {

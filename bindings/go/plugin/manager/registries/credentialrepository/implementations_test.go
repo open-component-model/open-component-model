@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/plugin/internal/dummytype"
@@ -52,7 +53,7 @@ func TestConsumerIdentityForConfig(t *testing.T) {
 					if r.URL.Path == ConsumerIdentityForConfig {
 						identity := map[string]string{"id": "test-identity", "type": dummyType.String()}
 						err := json.NewEncoder(w).Encode(identity)
-						require.NoError(t, err)
+						assert.NoError(t, err)
 						return
 					}
 					w.WriteHeader(http.StatusNotFound)
@@ -136,7 +137,7 @@ func TestResolve(t *testing.T) {
 					if r.URL.Path == Resolve {
 						resolved := map[string]string{"resolved": "credentials", "token": "abc123"}
 						err := json.NewEncoder(w).Encode(resolved)
-						require.NoError(t, err)
+						assert.NoError(t, err)
 						return
 					}
 					w.WriteHeader(http.StatusNotFound)

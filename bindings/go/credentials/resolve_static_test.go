@@ -5,6 +5,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/credentials"
@@ -69,8 +70,8 @@ func TestStaticCredentialsResolver(t *testing.T) {
 					"hostname": "quay.io",
 				}
 				creds, err := resolveMap(t, identity)
-				r.NoError(err)
-				r.Equal("quayuser", creds["username"])
+				assert.NoError(t, err)
+				assert.Equal(t, "quayuser", creds["username"])
 			}()
 		}
 		wg.Wait()

@@ -72,7 +72,7 @@ func TestInsecureWarnTransport(t *testing.T) {
 		resp, err := c.Get(srv.URL)
 		require.NoError(t, err)
 		resp.Body.Close()
-		assert.Equal(t, before, len(capture.records), "sync.Once must suppress duplicate warnings")
+		assert.Len(t, capture.records, before, "sync.Once must suppress duplicate warnings")
 	})
 }
 

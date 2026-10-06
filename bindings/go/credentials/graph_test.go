@@ -148,9 +148,9 @@ const invalidRecursionYAML = testYAML + `
         secretId: "recursive-creds"
 `
 
-func GetGraph(t testing.TB, yaml string) (credentials.Resolver, error) {
-	t.Helper()
-	r := require.New(t)
+func GetGraph(tb testing.TB, yaml string) (credentials.Resolver, error) {
+	tb.Helper()
+	r := require.New(tb)
 	scheme := runtime.NewScheme()
 	v1.MustRegister(scheme)
 
@@ -368,7 +368,7 @@ func GetGraph(t testing.TB, yaml string) (credentials.Resolver, error) {
 		return nil, fmt.Errorf("unsupported repository type %q", repoType)
 	}
 
-	graph, err := credentials.ToGraph(t.Context(), config, credentials.Options{
+	graph, err := credentials.ToGraph(tb.Context(), config, credentials.Options{
 		RepositoryPluginProvider:       credentials.GetRepositoryPluginFn(getPluginRepositoryFn),
 		CredentialPluginProvider:       credentials.GetCredentialPluginFn(getCredentialPluginsFn),
 		CredentialRepositoryTypeScheme: runtime.NewScheme(runtime.WithAllowUnknown()),
@@ -508,6 +508,7 @@ func TestResolveTypedCredentials(t *testing.T) {
 			},
 			expectedErr: require.NoError,
 			validate: func(t *testing.T, typed runtime.Typed) {
+				t.Helper()
 				direct, ok := typed.(*v1.DirectCredentials)
 				require.True(t, ok, "expected *v1.DirectCredentials, got %T", typed)
 				require.Equal(t, "foo", direct.Properties["username"])
@@ -526,7 +527,9 @@ func TestResolveTypedCredentials(t *testing.T) {
 				require.Error(t, err)
 				require.ErrorIs(t, err, credentials.ErrNotFound)
 			},
-			validate: func(t *testing.T, typed runtime.Typed) {},
+			validate: func(t *testing.T, typed runtime.Typed) {
+				t.Helper()
+			},
 		},
 		{
 			name: "missing identity type returns error",
@@ -538,7 +541,9 @@ func TestResolveTypedCredentials(t *testing.T) {
 				require.Error(t, err)
 				require.ErrorIs(t, err, credentials.ErrUnknown)
 			},
-			validate: func(t *testing.T, typed runtime.Typed) {},
+			validate: func(t *testing.T, typed runtime.Typed) {
+				t.Helper()
+			},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

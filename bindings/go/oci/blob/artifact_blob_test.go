@@ -90,7 +90,7 @@ func TestResourceBlob_Digest(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			mock := &mockBlob{}
 			rb, err := ociblob.NewArtifactBlobWithMediaType(tt.resource, mock, "application/octet-stream")
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			dig, ok := rb.Digest()
 			assert.Equal(t, tt.expectedOK, ok)
 			if tt.expectedOK {
