@@ -45,15 +45,15 @@ func FromHeaders(header http.Header, extra []string) []Expected {
 // checksum in the query pins the content the URL serves.
 const nexusSearchDownloadPath = "/service/rest/v1/search/assets/download"
 
-// contentAddressedQuery returns the query of a content-addressed URL: one whose server
-// resolves it only to content with the checksums in its query, so the query advertises
-// them. ok is false for any other URL, as servers ignore unknown query parameters.
-func contentAddressedQuery(rawURL string) (url.Values, bool) {
+// contentAddressedURL parses rawURL and reports whether it is content-addressed: its server
+// resolves it only to content with the checksums it names, so the URL advertises them. ok is
+// false for any other URL, as servers ignore unknown query parameters.
+func contentAddressedURL(rawURL string) (*url.URL, bool) {
 	u, err := url.Parse(rawURL)
 	if err != nil || !strings.HasSuffix(strings.TrimSuffix(u.Path, "/"), nexusSearchDownloadPath) {
 		return nil, false
 	}
-	return u.Query(), true
+	return u, true
 }
 
 // fromQuery reads hex checksums from query parameters named after the algorithm's

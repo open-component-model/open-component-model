@@ -13,7 +13,7 @@ type SourceType string
 const (
 	SourceHTTPHeader SourceType = "httpHeader"
 	// SourceURL reads the checksums a content-addressed URL selects the content by, see
-	// [contentAddressedQuery].
+	// [contentAddressedURL].
 	SourceURL    SourceType = "url"
 	SourceStream SourceType = "stream"
 )
@@ -169,8 +169,8 @@ func (src Source) candidates(in Input) ([]Expected, error) {
 	case SourceHTTPHeader:
 		return FromHeaders(in.Headers, src.Headers), nil
 	case SourceURL:
-		if query, ok := contentAddressedQuery(in.URL); ok {
-			return fromQuery(query), nil
+		if u, ok := contentAddressedURL(in.URL); ok {
+			return fromQuery(u.Query()), nil
 		}
 		return nil, nil
 	default:
