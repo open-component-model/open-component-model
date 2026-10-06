@@ -19,6 +19,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	wgetaccess "ocm.software/open-component-model/bindings/go/wget/spec/access"
 	wgetaccessv1 "ocm.software/open-component-model/bindings/go/wget/spec/access/v1"
@@ -42,6 +43,26 @@ func (s *stubResourceRepository) DownloadResource(ctx context.Context, res *desc
 
 func (s *stubResourceRepository) UploadResource(ctx context.Context, res *descriptor.Resource, content blob.ReadOnlyBlob, credentials runtime.Typed) (*descriptor.Resource, error) {
 	return nil, nil
+}
+
+// streamingStubRepository is a stubResourceRepository that also offers the lazy
+// streaming capability, recording which path the transformer took.
+type streamingStubRepository struct {
+	*stubResourceRepository
+	streamCalled   *bool
+	downloadCalled *bool
+}
+
+var _ repository.StreamingResourceRepository = (*streamingStubRepository)(nil)
+
+func (s *streamingStubRepository) DownloadResource(ctx context.Context, res *descriptor.Resource, credentials runtime.Typed) (blob.ReadOnlyBlob, error) {
+	*s.downloadCalled = true
+	return s.stubResourceRepository.DownloadResource(ctx, res, credentials)
+}
+
+func (s *streamingStubRepository) DownloadResourceStream(ctx context.Context, res *descriptor.Resource, credentials runtime.Typed) (blob.ReadOnlyBlob, error) {
+	*s.streamCalled = true
+	return s.stubResourceRepository.DownloadResource(ctx, res, credentials)
 }
 
 func newTransformerScheme() *runtime.Scheme {
@@ -142,6 +163,47 @@ func TestHTTPStreamingTransformer_ComputesDigestDuringStream(t *testing.T) {
 	r.NoError(wgetaccess.Scheme.Convert(result.Output.Resource.Access, &tw))
 	assert.Equal(t, "Wget", tw.GetType().Name)
 	assert.Contains(t, tw.URL, "/target/blob.tar")
+}
+
+// TestHTTPStreamingTransformer_PrefersStreamingSource asserts that when the source
+// repository implements the streaming capability, the transformer uses the lazy
+// streaming source instead of the materializing DownloadResource.
+func TestHTTPStreamingTransformer_PrefersStreamingSource(t *testing.T) {
+	r := require.New(t)
+	payload := []byte("streamed, not buffered")
+	scheme := newTransformerScheme()
+
+	var recordedBody []byte
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		recordedBody, _ = io.ReadAll(req.Body)
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(srv.Close)
+
+	source := wgetResourceV2("blob", "https://source.example/blob.tar", "", "", nil, nil)
+	target := wgetResourceV2("blob", srv.URL+"/target/blob.tar", "", "application/x-tar", nil, nil)
+	request := wgetRequest(srv.URL+"/target/blob.tar", http.MethodPut, "application/x-tar", nil)
+	step := &v1alpha1.HTTPStreaming{
+		Type: v1alpha1.HTTPStreamingV1alpha1,
+		ID:   "upload",
+		Spec: &v1alpha1.HTTPStreamingSpec{Resource: source, Request: request, TargetResource: target},
+	}
+
+	var streamCalled, downloadCalled bool
+	tr := &HTTPStreamingTransformer{
+		Scheme: scheme,
+		ResourceRepository: &streamingStubRepository{
+			stubResourceRepository: &stubResourceRepository{payload: payload, mediaType: "application/x-tar"},
+			streamCalled:           &streamCalled,
+			downloadCalled:         &downloadCalled,
+		},
+	}
+
+	_, err := tr.Transform(context.Background(), step)
+	r.NoError(err)
+	assert.True(t, streamCalled, "the transformer must prefer the streaming source")
+	assert.False(t, downloadCalled, "the materializing download must not be used when streaming is available")
+	assert.Equal(t, payload, recordedBody, "the streamed payload must reach the target")
 }
 
 func TestHTTPStreamingTransformer_VerifiesMatchingDigest(t *testing.T) {

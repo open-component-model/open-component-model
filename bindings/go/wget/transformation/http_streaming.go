@@ -101,7 +101,7 @@ func (t *HTTPStreamingTransformer) Transform(ctx context.Context, step runtime.T
 		return nil, err
 	}
 
-	srcBlob, err := t.ResourceRepository.DownloadResource(ctx, srcResource, srcCreds)
+	srcBlob, err := t.downloadSource(ctx, srcResource, srcCreds)
 	if err != nil {
 		return nil, fmt.Errorf("failed downloading source resource %v: %w", srcResource.ToIdentity(), err)
 	}
@@ -212,6 +212,19 @@ func (t *HTTPStreamingTransformer) Transform(ctx context.Context, step runtime.T
 	}
 	transformation.Output.Resource = v2Out
 	return &transformation, nil
+}
+
+// downloadSource obtains the source blob, preferring the lazy streaming source when
+// the source repository implements [repository.StreamingResourceRepository]. The
+// streaming blob re-issues its request on each read and verifies integrity inline,
+// so the source is never buffered to a temporary file for the common
+// wget/s3 -> remote path. A repository without the capability falls back to
+// DownloadResource, which materializes the source first.
+func (t *HTTPStreamingTransformer) downloadSource(ctx context.Context, resource *descriptor.Resource, creds runtime.Typed) (blob.ReadOnlyBlob, error) {
+	if streamingRepo, ok := t.ResourceRepository.(repository.StreamingResourceRepository); ok {
+		return streamingRepo.DownloadResourceStream(ctx, resource, creds)
+	}
+	return t.ResourceRepository.DownloadResource(ctx, resource, creds)
 }
 
 // resolveSourceCredentials resolves credentials for the source resource by its consumer
