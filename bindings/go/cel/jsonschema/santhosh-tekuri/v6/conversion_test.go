@@ -42,6 +42,7 @@ func TestSchemas(t *testing.T) {
 		{
 			file: "bindings/go/cel/jsonschema/santhosh-tekuri/v6/testdata/Config.schema.json",
 			verify: func(t *testing.T, decl *jsonschema.DeclType) {
+				t.Helper()
 				require.Equal(t, "ocm__dot__software__slash__open__dash__component__dash__model__slash__bindings__slash__go__slash__rsa__slash__signing__slash__v1alpha1__slash__schemas__slash__Config__dot__schema__dot__json", decl.TypeName())
 				require.True(t, decl.IsObject())
 				require.Equal(t, []string{"type"}, decl.Required())
@@ -68,6 +69,7 @@ func TestSchemas(t *testing.T) {
 		{
 			file: "bindings/go/cel/jsonschema/santhosh-tekuri/v6/testdata/TrueSchema.schema.json",
 			verify: func(t *testing.T, decl *jsonschema.DeclType) {
+				t.Helper()
 				require.True(t, decl.IsObject())
 				sa := decl.Fields["trueProp"]
 				require.Equal(t, "dyn", sa.Type.TypeName())
@@ -83,6 +85,7 @@ func TestSchemas(t *testing.T) {
 		{
 			file: "bindings/go/cel/jsonschema/santhosh-tekuri/v6/testdata/Formats.schema.json",
 			verify: func(t *testing.T, decl *jsonschema.DeclType) {
+				t.Helper()
 				require.True(t, decl.IsObject())
 				require.Contains(t, decl.Fields, "duration")
 				require.Contains(t, decl.Fields, "date")
@@ -115,6 +118,7 @@ func TestSchemas(t *testing.T) {
 		{
 			file: "bindings/go/cel/jsonschema/santhosh-tekuri/v6/testdata/MapAdditionalProps.schema.json",
 			verify: func(t *testing.T, decl *jsonschema.DeclType) {
+				t.Helper()
 				// OUTER OBJECT
 				require.True(t, decl.IsMap()) // outer is a map
 				require.Empty(t, decl.Fields) // map has no named struct fields
@@ -161,6 +165,7 @@ func TestSchemas(t *testing.T) {
 		{
 			file: "bindings/go/cel/jsonschema/santhosh-tekuri/v6/testdata/RefOnly.schema.json",
 			verify: func(t *testing.T, decl *jsonschema.DeclType) {
+				t.Helper()
 				require.Equal(t, "int", decl.TypeName())
 				require.False(t, decl.IsObject())
 				require.Equal(t, "int", decl.CelType().TypeName())
@@ -178,6 +183,7 @@ func TestSchemas(t *testing.T) {
 		{
 			file: "bindings/go/cel/jsonschema/santhosh-tekuri/v6/testdata/OpenObject.schema.json",
 			verify: func(t *testing.T, decl *jsonschema.DeclType) {
+				t.Helper()
 				require.True(t, decl.IsMap())
 				require.Empty(t, decl.Fields)
 			},
@@ -194,6 +200,7 @@ func TestSchemas(t *testing.T) {
 		{
 			file: "bindings/go/cel/jsonschema/santhosh-tekuri/v6/testdata/EnumConstOneOf.schema.json",
 			verify: func(t *testing.T, decl *jsonschema.DeclType) {
+				t.Helper()
 				require.Equal(t, "test__slash__EnumConstOneOf__dot__schema__dot__json", decl.TypeName())
 				require.Len(t, decl.Fields, 1)
 				field := decl.Fields["custom"]
@@ -217,6 +224,7 @@ func TestSchemas(t *testing.T) {
 		{
 			file: "bindings/go/cel/jsonschema/santhosh-tekuri/v6/testdata/RequiredDefaults.schema.json",
 			verify: func(t *testing.T, decl *jsonschema.DeclType) {
+				t.Helper()
 				require.True(t, decl.IsObject())
 				require.Contains(t, decl.Fields, "a")
 				require.Contains(t, decl.Fields, "b")
@@ -241,6 +249,7 @@ func TestSchemas(t *testing.T) {
 		{
 			file: "bindings/go/cel/jsonschema/santhosh-tekuri/v6/testdata/ComplexMixed.schema.json",
 			verify: func(t *testing.T, decl *jsonschema.DeclType) {
+				t.Helper()
 				// ROOT OBJECT ----------------------------------
 				require.True(t, decl.IsObject())
 				require.ElementsMatch(t, []string{"kind", "metadata"}, decl.Required())
@@ -352,6 +361,7 @@ func TestSchemas(t *testing.T) {
 
 // LoadAndCompileSchema loads a JSON schema file from root and compiles it.
 func LoadAndCompileSchema(t *testing.T, root *os.Root, path string) *stjsonschemav6.Schema {
+	t.Helper()
 	raw, err := root.ReadFile(path)
 	require.NoError(t, err)
 
@@ -368,6 +378,7 @@ func LoadAndCompileSchema(t *testing.T, root *os.Root, path string) *stjsonschem
 
 // LoadDeclType loads, compiles, and wraps the schema into a DeclType.
 func LoadDeclType(t *testing.T, root *os.Root, path string) *jsonschema.DeclType {
+	t.Helper()
 	schema := LoadAndCompileSchema(t, root, path)
 	declType := jsonschema.NewSchemaDeclType(schema)
 	require.NotNil(t, declType)
@@ -376,6 +387,7 @@ func LoadDeclType(t *testing.T, root *os.Root, path string) *jsonschema.DeclType
 
 // NewCelEnv returns a CEL environment for a given DeclType.
 func NewCelEnv(t *testing.T, decl *jsonschema.DeclType) *cel.Env {
+	t.Helper()
 	p := provider.New(decl.Type)
 	env, err := cel.NewEnv(
 		cel.CustomTypeProvider(p),
@@ -393,6 +405,7 @@ func AssertExpression(
 	parse IssueAssertionFunc,
 	check IssueAssertionFunc,
 ) {
+	t.Helper()
 	ast, iss := env.Parse(expr)
 	parse(t, iss, "parse result mismatch")
 	if iss != nil {

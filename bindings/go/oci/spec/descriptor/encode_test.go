@@ -36,6 +36,7 @@ func createMinimalDescriptor() *descriptor.Descriptor {
 }
 
 func decodeTar(t *testing.T, tarBuf *bytes.Buffer) *v2.Descriptor {
+	t.Helper()
 	tr := tar.NewReader(bytes.NewReader(tarBuf.Bytes()))
 	header, err := tr.Next()
 	require.NoError(t, err)
@@ -61,6 +62,7 @@ func TestSingleFileEncodeDescriptor_AllFormats(t *testing.T) {
 			name:      "YAML encoding success",
 			mediaType: MediaTypeComponentDescriptorYAML,
 			validate: func(t *testing.T, buf *bytes.Buffer) {
+				t.Helper()
 				var out v2.Descriptor
 				require.NoError(t, yaml.Unmarshal(buf.Bytes(), &out))
 				assert.Equal(t, "encode-test", out.Component.ComponentMeta.ObjectMeta.Name)
@@ -70,6 +72,7 @@ func TestSingleFileEncodeDescriptor_AllFormats(t *testing.T) {
 			name:      "JSON encoding success",
 			mediaType: MediaTypeComponentDescriptorJSON,
 			validate: func(t *testing.T, buf *bytes.Buffer) {
+				t.Helper()
 				assert.Contains(t, buf.String(), "encode-test")
 				assert.Contains(t, buf.String(), "\"name\"")
 			},
@@ -78,6 +81,7 @@ func TestSingleFileEncodeDescriptor_AllFormats(t *testing.T) {
 			name:      "TAR encoding success",
 			mediaType: MediaTypeLegacyComponentDescriptorTar,
 			validate: func(t *testing.T, buf *bytes.Buffer) {
+				t.Helper()
 				v2desc := decodeTar(t, buf)
 				assert.Equal(t, "encode-test", v2desc.Component.ComponentMeta.ObjectMeta.Name)
 			},

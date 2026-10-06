@@ -33,6 +33,7 @@ func TestAdoptAsResource(t *testing.T) {
 				},
 			},
 			validate: func(t *testing.T, desc *ociImageSpecV1.Descriptor) {
+				t.Helper()
 				assert.NotNil(t, desc.Platform)
 				assert.Equal(t, "amd64", desc.Platform.Architecture)
 				assert.Equal(t, "linux", desc.Platform.OS)
@@ -54,6 +55,7 @@ func TestAdoptAsResource(t *testing.T) {
 				},
 			},
 			validate: func(t *testing.T, desc *ociImageSpecV1.Descriptor) {
+				t.Helper()
 				assert.NotNil(t, desc.Platform)
 				assert.Equal(t, "arm64", desc.Platform.Architecture)
 				assert.Equal(t, "darwin", desc.Platform.OS)
@@ -72,6 +74,7 @@ func TestAdoptAsResource(t *testing.T) {
 				},
 			},
 			validate: func(t *testing.T, desc *ociImageSpecV1.Descriptor) {
+				t.Helper()
 				assert.Nil(t, desc.Platform)
 				assert.NotEmpty(t, desc.Annotations)
 			},

@@ -38,9 +38,11 @@ func TestListComponentsHandlerFunc(t *testing.T) {
 				return handler
 			},
 			assertOutput: func(t *testing.T, resp *http.Response) {
+				t.Helper()
 				require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 			},
 			assertError: func(t *testing.T, err error) {
+				t.Helper()
 				require.NoError(t, err)
 			},
 			request: func(base string) *http.Request {
@@ -64,6 +66,7 @@ func TestListComponentsHandlerFunc(t *testing.T) {
 				return handler
 			},
 			assertOutput: func(t *testing.T, resp *http.Response) {
+				t.Helper()
 				defer resp.Body.Close()
 				require.Equal(t, http.StatusOK, resp.StatusCode)
 				bites, err := io.ReadAll(resp.Body)
@@ -72,6 +75,7 @@ func TestListComponentsHandlerFunc(t *testing.T) {
 				require.JSONEq(t, `{"list":["test-component-1","test-component-2"]}`, content)
 			},
 			assertError: func(t *testing.T, err error) {
+				t.Helper()
 				require.NoError(t, err)
 			},
 			request: func(base string) *http.Request {

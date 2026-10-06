@@ -73,9 +73,11 @@ func TestUnstructured(t *testing.T) {
 	"type": "OCIRegistry"
 }`),
 			assertError: func(t *testing.T, err error) {
+				t.Helper()
 				require.NoError(t, err)
 			},
 			assertUnstructured: func(t *testing.T, un *runtime.Unstructured) {
+				t.Helper()
 				assert.Equal(t, "OCIRepository", un.GetType())
 				value, ok := runtime.Get[string](un, "componentNameMapping")
 				require.True(t, ok)
@@ -85,6 +87,7 @@ func TestUnstructured(t *testing.T) {
 		{
 			name: "successful marshal",
 			assertError: func(t *testing.T, err error) {
+				t.Helper()
 				require.NoError(t, err)
 			},
 			un: func() *runtime.Unstructured {
@@ -99,12 +102,14 @@ func TestUnstructured(t *testing.T) {
 			},
 			// comparing string so if there is a conflict it's easier to see
 			assertResult: func(t *testing.T, data []byte) {
+				t.Helper()
 				assert.JSONEq(t, "{\"baseUrl\":\"ghcr.io\",\"componentNameMapping\":\"urlPath\",\"subPath\":\"open-component-model/ocm\",\"type\":\"OCIRegistry\"}", string(data))
 			},
 		},
 		{
 			name: "set type",
 			assertError: func(t *testing.T, err error) {
+				t.Helper()
 				require.NoError(t, err)
 			},
 			un: func() *runtime.Unstructured {
@@ -118,6 +123,7 @@ func TestUnstructured(t *testing.T) {
 			},
 			// comparing string so if there is a conflict it's easier to see
 			assertResult: func(t *testing.T, data []byte) {
+				t.Helper()
 				assert.JSONEq(t, "{\"componentNameMapping\":\"urlPath\",\"type\":\"name/version\"}", string(data))
 			},
 		},

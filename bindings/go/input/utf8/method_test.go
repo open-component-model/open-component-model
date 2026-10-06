@@ -30,6 +30,7 @@ func TestGetV1UTF8Blob(t *testing.T) {
 				Text: "Hello, World!",
 			},
 			check: func(t *testing.T, b blob.ReadOnlyBlob) {
+				t.Helper()
 				require.Implements(t, (*blob.MediaTypeAware)(nil), b)
 				mt, ok := b.(blob.MediaTypeAware).MediaType()
 				require.True(t, ok)
@@ -52,6 +53,7 @@ func TestGetV1UTF8Blob(t *testing.T) {
 				Compress: true,
 			},
 			check: func(t *testing.T, b blob.ReadOnlyBlob) {
+				t.Helper()
 				require.Implements(t, (*blob.MediaTypeAware)(nil), b)
 				mt, ok := b.(blob.MediaTypeAware).MediaType()
 				require.True(t, ok)
@@ -134,6 +136,7 @@ func TestGetV1UTF8Blob(t *testing.T) {
 				JSON: json.RawMessage(`{"name": "test", "value": 42, "active": true}`),
 			},
 			check: func(t *testing.T, b blob.ReadOnlyBlob) {
+				t.Helper()
 				require.Implements(t, (*blob.MediaTypeAware)(nil), b)
 				mt, ok := b.(blob.MediaTypeAware).MediaType()
 				require.True(t, ok)
@@ -157,6 +160,7 @@ func TestGetV1UTF8Blob(t *testing.T) {
 				Compress: true,
 			},
 			check: func(t *testing.T, b blob.ReadOnlyBlob) {
+				t.Helper()
 				require.Implements(t, (*blob.MediaTypeAware)(nil), b)
 				mt, ok := b.(blob.MediaTypeAware).MediaType()
 				require.True(t, ok)
@@ -180,6 +184,7 @@ func TestGetV1UTF8Blob(t *testing.T) {
 				FormattedJSON: json.RawMessage(`{"name": "test", "value": 42, "active": true}`),
 			},
 			check: func(t *testing.T, b blob.ReadOnlyBlob) {
+				t.Helper()
 				require.Implements(t, (*blob.MediaTypeAware)(nil), b)
 				mt, ok := b.(blob.MediaTypeAware).MediaType()
 				require.True(t, ok)
@@ -207,6 +212,7 @@ func TestGetV1UTF8Blob(t *testing.T) {
 				Compress:      true,
 			},
 			check: func(t *testing.T, b blob.ReadOnlyBlob) {
+				t.Helper()
 				require.Implements(t, (*blob.MediaTypeAware)(nil), b)
 				mt, ok := b.(blob.MediaTypeAware).MediaType()
 				require.True(t, ok)
@@ -235,6 +241,7 @@ func TestGetV1UTF8Blob(t *testing.T) {
 				YAML: json.RawMessage(`{"test": "value"}`),
 			},
 			check: func(t *testing.T, b blob.ReadOnlyBlob) {
+				t.Helper()
 				require.Implements(t, (*blob.MediaTypeAware)(nil), b)
 				mt, ok := b.(blob.MediaTypeAware).MediaType()
 				require.True(t, ok)
@@ -259,6 +266,7 @@ func TestGetV1UTF8Blob(t *testing.T) {
 				Compress: true,
 			},
 			check: func(t *testing.T, b blob.ReadOnlyBlob) {
+				t.Helper()
 				require.Implements(t, (*blob.MediaTypeAware)(nil), b)
 				mt, ok := b.(blob.MediaTypeAware).MediaType()
 				require.True(t, ok)
@@ -292,6 +300,7 @@ func TestGetV1UTF8Blob(t *testing.T) {
 				}`),
 			},
 			check: func(t *testing.T, b blob.ReadOnlyBlob) {
+				t.Helper()
 				require.Implements(t, (*blob.MediaTypeAware)(nil), b)
 				mt, ok := b.(blob.MediaTypeAware).MediaType()
 				require.True(t, ok)
@@ -336,6 +345,7 @@ func TestGetV1UTF8Blob(t *testing.T) {
 				JSON: json.RawMessage(`{}`),
 			},
 			check: func(t *testing.T, b blob.ReadOnlyBlob) {
+				t.Helper()
 				require.Implements(t, (*blob.MediaTypeAware)(nil), b)
 				mt, ok := b.(blob.MediaTypeAware).MediaType()
 				require.True(t, ok)
@@ -354,6 +364,7 @@ func TestGetV1UTF8Blob(t *testing.T) {
 				JSON: json.RawMessage(`[1, 2, 3, "four", true, null]`),
 			},
 			check: func(t *testing.T, b blob.ReadOnlyBlob) {
+				t.Helper()
 				require.Implements(t, (*blob.MediaTypeAware)(nil), b)
 				mt, ok := b.(blob.MediaTypeAware).MediaType()
 				require.True(t, ok)

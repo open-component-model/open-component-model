@@ -45,6 +45,7 @@ type chunkedRegistry struct {
 }
 
 func newChunkedRegistry(t *testing.T) *chunkedRegistry {
+	t.Helper()
 	return &chunkedRegistry{t: t, monolithicBlobs: map[string][]byte{}}
 }
 
