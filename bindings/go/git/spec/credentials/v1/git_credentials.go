@@ -10,8 +10,9 @@ import (
 // GitCredentials supports HTTP basic authentication, bearer tokens, and SSH keys.
 // An SSH repository without a private key uses the SSH agent.
 //
-// For new configurations, use GitHTTPSCredentials, GitBearerCredentials, or GitSSHCredentials
-// to select the authentication method explicitly.
+// Deprecated: For new configurations, use GitHTTPSCredentials,
+// GitBearerCredentials, or GitSSHCredentials to select the authentication
+// method explicitly.
 //
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
@@ -19,7 +20,7 @@ import (
 // +ocm:jsonschema-gen=true
 type GitCredentials struct {
 	// +ocm:jsonschema-gen:enum=GitCredentials/v1
-	// +ocm:jsonschema-gen:enum:deprecated=GitCredentials
+	// +ocm:jsonschema-gen:enum:deprecated=GitCredentials/v1,GitCredentials
 	Type     runtime.Type `json:"type"`
 	Username string       `json:"username,omitempty"`
 	// Password is the HTTP password or the SSH key passphrase.

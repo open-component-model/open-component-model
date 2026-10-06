@@ -35,7 +35,6 @@ OCM ships with the following built-in credential types:
 | [`GitHTTPSCredentials/v1`](#githttpscredentialsv1)         | `Git` consumers                          | Git over HTTPS with a password or access token                  |
 | [`GitBearerCredentials/v1`](#gitbearercredentialsv1)       | `Git` consumers                          | Advanced: Git servers requiring Bearer authentication           |
 | [`GitSSHCredentials/v1`](#gitsshcredentialsv1)             | `Git` consumers                          | Git over SSH with a key or SSH agent                            |
-| [`GitCredentials/v1`](#gitcredentialsv1)                   | `Git` consumers                          | Legacy Git credentials                                          |
 | [`RSACredentials/v1`](#rsacredentialsv1)                   | `RSA/v1alpha1` consumers                 | RSA signing and verification key material                       |
 | [`GPGCredentials/v1alpha1`](#gpgcredentialsv1alpha1)       | `GPG/v1alpha1` consumers                 | GPG signing and verification key material                       |
 | [`OIDCIdentityToken/v1alpha1`](#oidcidentitytokenv1alpha1) | `SigstoreSigner/v1alpha1` consumers      | OIDC token for Sigstore keyless signing via Fulcio              |
@@ -343,7 +342,30 @@ Configuring no consumer at all is valid: the GitHub REST API is then called anon
 
 ---
 
-## GitHTTPSCredentials/v1
+## Git Credentials
+
+### Git credential selection
+
+Use a credential type that matches the repository URL and the authentication method required by the Git server:
+
+- For HTTPS with a password or access token sent using HTTP Basic, use
+  [`GitHTTPSCredentials/v1`](#githttpscredentialsv1).
+- For an HTTPS server that explicitly requires Bearer authentication, use
+  [`GitBearerCredentials/v1`](#gitbearercredentialsv1).
+- For SSH with a private key or SSH agent, use [`GitSSHCredentials/v1`](#gitsshcredentialsv1).
+
+These three types work with [`Git`]({{< relref "credential-consumer-identities.md#git" >}}) consumers for both
+[`Git/v1` access]({{< relref "input-and-access-types.md#gitv1-access" >}}) and
+[`Git/v1` input]({{< relref "input-and-access-types.md#gitv1-input" >}}). Configure one authentication method per
+consumer lookup; multiple types are not an ordered list of authentication attempts. Include `scheme` in the identity
+to distinguish HTTPS and SSH credentials for the same host. Unknown or mixed fields on explicit credential types
+are rejected. HTTP credentials require HTTPS, and OCM rejects redirects that downgrade HTTPS to HTTP.
+Authenticated HTTPS redirects must retain the original scheme, hostname, and port; path changes within that origin
+are allowed.
+
+Configuring no consumer is valid: HTTPS requests are anonymous, and SSH uses the SSH agent.
+
+### GitHTTPSCredentials/v1
 
 {{< schema-renderer url="/schemas/bindings/go/credentials/git/v1/GitHTTPSCredentials.schema.json" >}}
 
@@ -369,7 +391,7 @@ For GitHub Git over HTTPS, provide a non-empty username and a PAT as `password`.
 `password`; for OAuth access tokens, GitLab recommends `oauth2` as the username. These are server conventions supplied
 by the configuration, not defaults applied by OCM. Token issuance and refresh belong to the credential provider.
 
-## GitBearerCredentials/v1
+### GitBearerCredentials/v1
 
 {{< schema-renderer url="/schemas/bindings/go/credentials/git/v1/GitBearerCredentials.schema.json" >}}
 
@@ -387,7 +409,7 @@ consumers:
         token: example-bearer-token
 ```
 
-## GitSSHCredentials/v1
+### GitSSHCredentials/v1
 
 {{< schema-renderer url="/schemas/bindings/go/credentials/git/v1/GitSSHCredentials.schema.json" >}}
 
@@ -409,79 +431,6 @@ consumers:
 ```
 
 To use the SSH agent, omit the key and passphrase. Set `username` only to override the SSH user.
-
-### Git credential selection
-
-These three types work with [`Git`]({{< relref "credential-consumer-identities.md#git" >}}) consumers for both
-[`Git/v1` access]({{< relref "input-and-access-types.md#gitv1-access" >}}) and
-[`Git/v1` input]({{< relref "input-and-access-types.md#gitv1-input" >}}). Configure one authentication method per
-consumer lookup; multiple types are not an ordered list of authentication attempts. Include `scheme` in the identity
-to distinguish HTTPS and SSH credentials for the same host. Unknown or mixed fields on explicit credential types
-are rejected. HTTP credentials require HTTPS, and OCM rejects redirects that downgrade HTTPS to HTTP.
-Authenticated HTTPS redirects must retain the original scheme, hostname, and port; path changes within that origin
-are allowed.
-
-Configuring no consumer is valid: HTTPS requests are anonymous, and SSH uses the SSH agent.
-
----
-
-## GitCredentials/v1
-
-{{< schema-renderer url="/schemas/bindings/go/credentials/git/v1/GitCredentials.schema.json" >}}
-
-This legacy type remains supported. Prefer the explicit Git credential types above for new configurations.
-
-OCM picks one authentication method, in this order:
-
-1. **SSH key**: `privateKeyPEM` (inline PEM) or `privateKey` (path to a key file). `privateKeyPEM` wins when both are
-   set. `password` is the key passphrase. `username` is the SSH user. If unset, OCM takes the user from the URL, or
-   `git`. Needs an SSH repository URL.
-2. **Token**: `token` is sent as an HTTP bearer token. Needs an HTTPS repository URL.
-3. **Basic Auth**: `username` and `password`. Needs an HTTPS repository URL.
-
-If your Git server does not accept bearer tokens, set `username` and put the token in `password`. OCM rejects a method
-that does not fit the URL, for example a token for an SSH URL. It never sends credentials over plain HTTP.
-
-### Example
-
-HTTPS with a token as password:
-
-```yaml
-consumers:
-  - identity:
-      type: Git
-      hostname: gitlab.com
-      scheme: https
-    credentials:
-      - type: GitCredentials/v1
-        username: oauth2
-        password: glpat-example-token
-```
-
-SSH with a key file:
-
-```yaml
-consumers:
-  - identity:
-      type: Git
-      hostname: git.example.com
-      scheme: ssh
-      port: "22"
-    credentials:
-      - type: GitCredentials/v1
-        privateKey: /home/user/.ssh/id_ed25519
-```
-
-The legacy [`Credentials/v1`](#directcredentialsv1) fallback works as well, with the same property names in its
-`properties` map. An OCM v1 configuration with `username`, `password`, `token` or `privateKey` therefore keeps working.
-
-Configuring no consumer at all is valid: HTTPS requests are then anonymous, and SSH uses the SSH agent.
-
-### Used With
-
-[`Git`]({{< relref "credential-consumer-identities.md#git" >}}) consumer identities. They cover both the
-[`Git/v1` access type]({{< relref "input-and-access-types.md#gitv1-access" >}}) and the
-[`Git/v1` input type]({{< relref "input-and-access-types.md#gitv1-input" >}}).
 
 ---
 
