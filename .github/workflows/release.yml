@@ -284,9 +284,31 @@ jobs:
       controller_chart_digest: ${{ needs.build_and_test.outputs.controller_chart_digest }}
       conflict_policy: replace
 
+  # Announces the release candidate to Zulip. Same dispatch pattern as the final
+  # notification in PHASE 2; fires once the RC pre-release and its published
+  # components exist, since the release notes link to the component coordinates.
+  notify_release_rc:
+    name: Trigger RC notification workflow
+    needs: [prepare, tag_rc, release_rc, publish_components_rc]
+    if: ${{ github.event.inputs.dry_run == 'false' && needs.tag_rc.outputs.pushed == 'true' }}
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      actions: write
+    steps:
+      - name: Dispatch release-zulip-notification on main
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.prepare.outputs.new_tag }}
+        run: |
+          set -euo pipefail
+          gh workflow run release-zulip-notification.yml \
+            --repo "$GH_REPO" \
+            --ref main \
+            -f tag="$TAG"
+          echo "Dispatched release-zulip-notification for $TAG on main."
+
   # Summarizes the RC only after the components are published, so the release
   # manager sees the summary with the OCM component coordinates
-
   summarize_rc:
     name: Summarize RC Release
     if: ${{ github.event.inputs.dry_run == 'false' && needs.tag_rc.outputs.pushed == 'true' }}
@@ -708,3 +730,28 @@ jobs:
             --ref main \
             -f version="$VERSION"
           echo "Dispatched website-release-pr for $VERSION on main."
+
+  # Announces the promoted release to Zulip. Dispatched on main (not workflow_call)
+  # so the post logic always runs from main's copy, and is independently
+  # re-triggerable by hand if the post flakes. Same pattern as the website job above.
+  # Waits on publish_components_final so the component coordinates in the release
+  # notes exist before the announcement, mirroring notify_release_rc.
+  notify_release:
+    name: Trigger release notification workflow
+    needs: [prepare, promote_and_release_final, publish_components_final]
+    if: ${{ github.event.inputs.dry_run == 'false' }}
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      actions: write
+    steps:
+      - name: Dispatch release-zulip-notification on main
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.prepare.outputs.promotion_tag }}
+        run: |
+          set -euo pipefail
+          gh workflow run release-zulip-notification.yml \
+            --repo "$GH_REPO" \
+            --ref main \
+            -f tag="$TAG"
+          echo "Dispatched release-zulip-notification for $TAG on main."
