@@ -1,10 +1,6 @@
-# Use multi-stage builds to copy certs from a minimal base image.
-# Debian uses the Mozilla CA bundle which contains a maximum number of trusted CAs.
-FROM --platform=$BUILDPLATFORM debian:bookworm-slim@sha256:3783cc01769c7b2b1b83a5c5ad96c815348e28ed7da68e2e3687004faa906251 AS certs
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates \
-    && update-ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+# Slim ocm CLI image: scratch with only ocm and the CA bundle. The CA bundle
+# comes from the same Garden Linux FIPS image as the full image's userland.
+FROM --platform=$BUILDPLATFORM ghcr.io/gardenlinux/gardenlinux/fips:1877.25@sha256:74ae1f81d0723434024f591d8c2872852201b99b9f18c0fbe10221b16e60e01d AS certs
 
 FROM scratch
 ARG TARGETOS
