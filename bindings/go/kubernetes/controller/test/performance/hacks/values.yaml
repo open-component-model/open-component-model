@@ -1,0 +1,43 @@
+# Helm values for the performance benchmark. Every knob that changes controller
+# throughput is set explicitly, so results stay comparable when chart defaults move.
+manager:
+  replicas: 1
+  # The image is set by `task test/performance/install`.
+  image:
+    pullPolicy: IfNotPresent
+  concurrency:
+    resource: 4
+  resolver:
+    workerCount: 10
+    workerQueueLength: 1000
+    subscriberBufferSize: 100
+    cacheTTL: 30
+  logging:
+    level: "info"
+    development: false
+    encoder: "json"
+  # One replica needs no lease, and a restart then does not wait for the old one to expire.
+  leaderElection:
+    enabled: false
+  metricsServer:
+    bindAddress: ":8080"
+    secure: false
+  # Requests equal limits (Guaranteed QoS) so CPU throttling and memory headroom are fixed.
+  resources:
+    limits:
+      cpu: "2"
+      memory: 2Gi
+    requests:
+      cpu: "2"
+      memory: 2Gi
+  nodeSelector:
+    ocm.software/perf: controller
+  tolerations:
+    - key: ocm.software/perf
+      operator: Equal
+      value: controller
+      effect: NoSchedule
+
+crd:
+  enable: true
+  keep: false
