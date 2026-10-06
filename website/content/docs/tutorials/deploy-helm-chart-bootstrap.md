@@ -33,7 +33,7 @@ Before starting, make sure you have set up your environment as described in the 
 {{< /callout >}}
 
 - [Controller environment]({{< relref "setup-controller-environment.md" >}}) with OCM Controllers, kro, and a deployer (Flux or Argo CD) installed
-- [Custom RBAC]({{< relref "custom-rbac.md" >}}) configured to allow the controller to manage `ResourceGraphDefinitions` (also see [RBAC for CRDs kro creates at runtime]({{< relref "custom-rbac.md#rbac-for-crds-kro-creates-at-runtime" >}}) if you're running a hardened cluster)
+- [Custom RBAC]({{< relref "custom-rbac.md" >}}) configured to allow the controller to manage `ResourceGraphDefinitions`
 - [OCM CLI]({{< relref "ocm-cli-installation.md" >}}) installed
 - Access to an OCI registry (e.g., [ghcr.io](https://docs.github.com/en/packages/learn-github-packages/introduction-to-github-packages))
 - `envsubst` installed (pre-installed on most Linux/macOS systems; part of `gettext`)
@@ -591,6 +591,47 @@ EOF
 
 {{< step >}}
 
+### Grant kro access to the instances
+
+kro needs a `ClusterRole` for the `Bootstrap` instances that the RGD in your component defines. The roles for OCM resources and for your deployer come from the [setup guide]({{< relref "setup-controller-environment.md" >}}). See [Access Control](https://kro.run/docs/advanced/access-control) in the kro documentation for details.
+
+This is separate from the [Custom RBAC]({{< relref "custom-rbac.md" >}}) of the OCM controller, which only allows the Deployer to apply the RGD itself.
+
+Create `kro-rbac.yaml`:
+
+```shell
+cat > kro-rbac.yaml << 'EOF'
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kro:controller:bootstraps
+  labels:
+    # kro picks up every ClusterRole with this label, see https://kro.run/docs/advanced/access-control
+    rbac.kro.run/aggregate-to-controller: "true"
+rules:
+  - apiGroups:
+      - kro.run
+    resources:
+      - bootstraps
+      - bootstraps/status
+    verbs:
+      - get
+      - list
+      - patch
+      - update
+      - watch
+EOF
+```
+
+Apply it:
+
+```bash
+kubectl apply -f kro-rbac.yaml
+```
+{{< /step >}}
+
+{{< step >}}
+
 ### Apply the bootstrap resources
 
 {{< callout context="caution" title="RBAC required before you apply" icon="outline/alert-triangle" >}}
@@ -698,16 +739,6 @@ The image reference points to your registry with a digest. Localization worked!
 {{< /step >}}
 {{< /steps >}}
 
-{{< callout context="caution" title="Going to production: tighten kro's RBAC" icon="outline/lock" >}}
-This tutorial uses a dev-friendly kro install with broad permissions (see [Prerequisites](#prerequisites)).
-A hardened cluster locks that down; see [RBAC for CRDs kro creates at runtime]({{< relref "custom-rbac.md#rbac-for-crds-kro-creates-at-runtime" >}})
-for why kro needs its own grant, separate from the `resourcegraphdefinitions.kro.run` grant the
-OCM controller already needs. For this tutorial, grant kro's service account
-`bootstraps.kro.run` (the instance) and `resources.delivery.ocm.software` (the chart and image),
-plus `ocirepositories.source.toolkit.fluxcd.io` and `helmreleases.helm.toolkit.fluxcd.io` for
-Flux, or `applications.argoproj.io` for Argo CD.
-{{< /callout >}}
-
 ## Troubleshooting
 
 ### Authentication Errors (401 Unauthorized)
@@ -726,6 +757,14 @@ kubectl logs -n ocm-k8s-toolkit-system deployment/ocm-k8s-toolkit-controller-man
 ```
 
 Common causes: missing component, wrong repository URL, credential issues.
+
+If the RGD exists but `kubectl get rgd` shows the state `Inactive`, check the reason:
+
+```bash
+kubectl get rgd bootstrap -o jsonpath='{.status.conditions[?(@.type=="Ready")].message}'
+```
+
+A message like `cache sync timeout for kro.run/v1alpha1, Resource=bootstraps` means that kro lacks access to the `Bootstrap` instances. Check that you applied `kro-rbac.yaml`, as described in [Grant kro access to the instances](#grant-kro-access-to-the-instances).
 
 ### RBAC Permission Errors
 
