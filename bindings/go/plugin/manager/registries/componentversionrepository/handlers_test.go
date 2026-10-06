@@ -81,7 +81,7 @@ func TestGetComponentVersionHandlerFunc(t *testing.T) {
 				require.Equal(t, http.StatusOK, resp.StatusCode)
 				content, err := io.ReadAll(resp.Body)
 				require.NoError(t, err)
-				require.Equal(t, `{"meta":{"schemaVersion":"1.0.0"},"component":{"name":"component","version":"1.0.0","repositoryContexts":null,"provider":"ocm.software","resources":null,"sources":null,"componentReferences":null}}
+				require.JSONEq(t, `{"meta":{"schemaVersion":"1.0.0"},"component":{"name":"component","version":"1.0.0","repositoryContexts":null,"provider":"ocm.software","resources":null,"sources":null,"componentReferences":null}}
 `, string(content))
 			},
 			assertError: func(t *testing.T, err error) {

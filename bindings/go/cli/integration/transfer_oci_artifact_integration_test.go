@@ -317,7 +317,7 @@ components:
 		r.Equal("test-oci-resource:v1.0.0", localBlobAccess.ReferenceName)
 		var anotherLocalBlobAccess v2.LocalBlob
 		r.NoError(v2.Scheme.Convert(desc.Component.Resources[1].Access, &anotherLocalBlobAccess))
-		r.Equal("", anotherLocalBlobAccess.ReferenceName)
+		r.Empty(anotherLocalBlobAccess.ReferenceName)
 
 		// Actual transfer to be tested
 		targetRef := fmt.Sprintf("http://%s/%s", targetRegistry.RegistryAddress, "as/oci/refname")
@@ -476,7 +476,7 @@ components:
 		r.Equal("test-oci-resource:v1.0.0", localBlobAccess.ReferenceName)
 		var anotherLocalBlobAccess v2.LocalBlob
 		r.NoError(v2.Scheme.Convert(desc.Component.Resources[1].Access, &anotherLocalBlobAccess))
-		r.Equal("", anotherLocalBlobAccess.ReferenceName)
+		r.Empty(anotherLocalBlobAccess.ReferenceName)
 
 		// Actual transfer to be tested
 		targetRef := fmt.Sprintf("http://%s/%s", targetRegistry.RegistryAddress, "as/oci/refname")

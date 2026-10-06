@@ -175,7 +175,7 @@ func TestBinary_Resolve(t *testing.T) {
 			name:     "gpg missing",
 			lookPath: func(string) (string, error) { return "", exec.ErrNotFound },
 			check: func(r *require.Assertions, _ string, err error) {
-				r.True(errors.Is(err, ErrGPGNotFound))
+				r.ErrorIs(err, ErrGPGNotFound)
 				r.EqualError(err, `GPG signing requires the GnuPG "gpg" binary (>= 2.2.0) on PATH; install GnuPG, in FIPS 140-3 mode one backed by a FIPS 140-3 validated libgcrypt`)
 			},
 		},

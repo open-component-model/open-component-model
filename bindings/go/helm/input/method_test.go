@@ -72,7 +72,7 @@ func TestInputMethodGetResourceCredentialConsumerIdentity(t *testing.T) {
 			identity, err := inputMethod.GetResourceCredentialConsumerIdentity(t.Context(), resource)
 
 			if tt.expectError {
-				assert.Error(t, err)
+				require.Error(t, err)
 				assert.Nil(t, identity)
 			} else {
 				assert.NoError(t, err)
@@ -85,8 +85,8 @@ func TestInputMethodGetResourceCredentialConsumerIdentity(t *testing.T) {
 					switch tt.helmSpec.HelmRepository {
 					case "https://charts.example.com":
 						assert.Equal(t, "charts.example.com", identity["hostname"])
-						assert.Equal(t, "", identity["port"]) // No port specified
-						assert.Equal(t, "", identity["path"]) // No path specified
+						assert.Empty(t, identity["port"]) // No port specified
+						assert.Empty(t, identity["path"]) // No path specified
 					case "https://registry.example.com:8443/helm/charts/myapp-1.0.0.tgz":
 						assert.Equal(t, "registry.example.com", identity["hostname"])
 						assert.Equal(t, "8443", identity["port"])

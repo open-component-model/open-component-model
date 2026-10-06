@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts/digestprocessor/v1"
@@ -30,7 +31,7 @@ func TestProcessResourceDigest(t *testing.T) {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					if r.URL.Path == ProcessResourceDigest {
 						err := json.NewEncoder(w).Encode(&v1.ProcessResourceDigestResponse{})
-						require.NoError(t, err)
+						assert.NoError(t, err)
 						return
 					}
 					w.WriteHeader(http.StatusNotFound)
@@ -148,7 +149,7 @@ func TestGetIdentity(t *testing.T) {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					if r.URL.Path == Identity {
 						err := json.NewEncoder(w).Encode(&v1.GetIdentityResponse{})
-						require.NoError(t, err)
+						assert.NoError(t, err)
 						return
 					}
 					w.WriteHeader(http.StatusNotFound)

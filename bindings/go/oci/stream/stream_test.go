@@ -100,7 +100,7 @@ func TestOCIResourceStream_Materialize(t *testing.T) {
 
 	data, err := io.ReadAll(rc)
 	require.NoError(t, err)
-	assert.True(t, len(data) > 0, "materialized blob should have content")
+	assert.NotEmpty(t, data, "materialized blob should have content")
 }
 
 func TestOCIResourceStream_CopyGraph(t *testing.T) {

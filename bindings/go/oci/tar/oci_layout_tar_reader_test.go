@@ -160,7 +160,7 @@ func TestReadOCILayout(t *testing.T) {
 				assert.NoError(t, err)
 				data, err := io.ReadAll(dataFromBlob)
 				assert.NoError(t, err)
-				assert.Equal(t, data, expected)
+				assert.Equal(t, expected, data)
 			}
 		})
 	}

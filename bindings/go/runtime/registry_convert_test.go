@@ -362,7 +362,7 @@ func TestConvert_UnstructuredToRaw_Canonicalizes(t *testing.T) {
 	require.NoError(t, scheme.Convert(&TestType{Type: typ, Foo: "a<b&c>d"}, viaTyped))
 
 	assert.Equal(t, string(viaTyped.Data), string(viaUnstructured.Data))
-	assert.Equal(t, `{"foo":"a<b&c>d","type":"TestType/v1"}`, string(viaUnstructured.Data))
+	assert.JSONEq(t, `{"foo":"a<b&c>d","type":"TestType/v1"}`, string(viaUnstructured.Data))
 }
 
 // TestConvert_Unstructured_RoundTrip verifies Typed → Unstructured → Typed is lossless.

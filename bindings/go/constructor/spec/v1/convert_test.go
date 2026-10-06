@@ -467,7 +467,7 @@ func TestConvertToRuntimeComponent(t *testing.T) {
 
 			// Check resources if present
 			if tt.input.Resources != nil {
-				assert.Equal(t, len(tt.expected.Resources), len(result.Resources))
+				assert.Len(t, result.Resources, len(tt.expected.Resources))
 				for i := range tt.expected.Resources {
 					assert.Equal(t, tt.expected.Resources[i].ElementMeta.ObjectMeta.Name, result.Resources[i].ElementMeta.ObjectMeta.Name)
 					assert.Equal(t, tt.expected.Resources[i].ElementMeta.ObjectMeta.Version, result.Resources[i].ElementMeta.ObjectMeta.Version)
@@ -478,7 +478,7 @@ func TestConvertToRuntimeComponent(t *testing.T) {
 
 			// Check sources if present
 			if tt.input.Sources != nil {
-				assert.Equal(t, len(tt.expected.Sources), len(result.Sources))
+				assert.Len(t, result.Sources, len(tt.expected.Sources))
 				for i := range tt.expected.Sources {
 					assert.Equal(t, tt.expected.Sources[i].ElementMeta.ObjectMeta.Name, result.Sources[i].ElementMeta.ObjectMeta.Name)
 					assert.Equal(t, tt.expected.Sources[i].ElementMeta.ObjectMeta.Version, result.Sources[i].ElementMeta.ObjectMeta.Version)
