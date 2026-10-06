@@ -5,13 +5,14 @@ import (
 	"compress/gzip"
 	"context"
 	"crypto"
-	_ "crypto/sha512" // SHA-384 and SHA-512 OCI roots
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"testing"
+
+	_ "crypto/sha512" // SHA-384 and SHA-512 OCI roots
 
 	"github.com/opencontainers/go-digest"
 	"github.com/opencontainers/image-spec/specs-go"
@@ -2418,7 +2419,6 @@ func TestRepository_ProcessResourceDigest_OCIArtifact(t *testing.T) {
 }
 
 func TestRepository_UploadPreservesResourceDigest(t *testing.T) {
-
 	for _, operation := range []string{"UploadResource", "UploadResourceStream"} {
 		t.Run(operation, func(t *testing.T) {
 			testRepositoryResourceDigest(t, operation)
