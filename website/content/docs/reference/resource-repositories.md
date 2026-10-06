@@ -242,11 +242,24 @@ rules.
 
 ### Download Behavior
 
-Sends a `GetObject` request for the bucket and the key of the access specification. If `version` is set, the request
-reads that version. OCM streams the body to a file under the `tempFolder` of the
+Sends a `GetObject` request for part 1 of the object at the bucket and the key of the access specification. If
+`version` is set, every request reads that version. OCM streams the body to a file under the `tempFolder` of the
 `filesystem.config.ocm.software/v1alpha1` configuration type. It does not hold the body in memory, and there is no size
 limit by default. The media type of the blob comes from `mediaType`. If `mediaType` is empty, OCM uses the
 `Content-Type` of the object, and then `application/octet-stream`.
+
+A single-part object arrives whole in that first response. For a multipart object, OCM fetches the other parts in
+parallel, up to eight requests at a time, and writes each part at its offset in the file:
+
+- OCM checks each part against the part checksum that S3 stored for it.
+- Every request carries `If-Match` with the `ETag` of part 1, and the version of part 1, so an object that is overwritten
+  during the download fails the download instead of mixing two objects.
+- If the store reports neither `x-amz-mp-parts-count` nor a part count in the `ETag`, OCM fetches the rest of the object
+  with one `Range` request.
+- If the store rejects part numbers, OCM requests the whole object.
+
+The parts must cover the object without gaps or overlaps. The digest of the object is still the SHA-256 of its content
+(see [Digest Processing](#digest-processing)), so a parallel download is faster but never changes the digest.
 
 Requests go through the shared OCM HTTP client, so timeouts, TLS settings and per-host overrides come from the
 [HTTP client configuration]({{< relref "http-client-configuration.md" >}}). The AWS SDK does the retries. It retries

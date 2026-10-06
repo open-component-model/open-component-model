@@ -71,22 +71,24 @@ func bucketRegion(ctx context.Context, client *s3.Client, bucket string, redirec
 }
 
 // inBucketRegion runs call and, on AWS, repeats it once in the bucket's own region when
-// S3 answers with a permanent redirect.
-func inBucketRegion[T any](ctx context.Context, client *s3.Client, req Request, call func(...func(*s3.Options)) (T, error)) (T, error) {
+// S3 answers with a permanent redirect. It returns the options the successful call ran
+// with, so follow-up requests for the same object go straight to the right region.
+func inBucketRegion[T any](ctx context.Context, client *s3.Client, req Request, call func(...func(*s3.Options)) (T, error)) (T, []func(*s3.Options), error) {
 	out, err := call()
 	if req.Endpoint != "" || !permanentRedirect(err) {
-		return out, err
+		return out, nil, err
 	}
 	var zero T
 	region, discoveryErr := bucketRegion(ctx, client, req.BucketName, err)
 	if discoveryErr != nil {
-		return zero, errors.Join(err, discoveryErr)
+		return zero, nil, errors.Join(err, discoveryErr)
 	}
 	// An operation override preserves credentials (including anonymous), transport,
 	// addressing and retry configuration without rebuilding the client. Never loop.
-	out, err = call(func(o *s3.Options) { o.Region = region })
+	inRegion := []func(*s3.Options){func(o *s3.Options) { o.Region = region }}
+	out, err = call(inRegion...)
 	if err != nil {
-		return zero, fmt.Errorf("retrying in bucket region %q: %w", region, err)
+		return zero, nil, fmt.Errorf("retrying in bucket region %q: %w", region, err)
 	}
-	return out, nil
+	return out, inRegion, nil
 }

@@ -50,7 +50,7 @@ func Head(ctx context.Context, req Request, opts ...Option) (*ObjectInfo, error)
 		in.VersionId = new(req.Version)
 	}
 
-	out, err := inBucketRegion(ctx, client, req, func(optFns ...func(*s3.Options)) (*s3.HeadObjectOutput, error) {
+	out, _, err := inBucketRegion(ctx, client, req, func(optFns ...func(*s3.Options)) (*s3.HeadObjectOutput, error) {
 		return client.HeadObject(ctx, in, optFns...)
 	})
 	if err != nil {

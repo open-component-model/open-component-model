@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -166,6 +167,65 @@ func Test_Integration_S3(t *testing.T) {
 			r.Equal([]string{http.MethodHead}, methods, "a stored full-object checksum must make the download unnecessary")
 		})
 	}
+
+	t.Run("multipart object is downloaded part by part", func(t *testing.T) {
+		r := require.New(t)
+		const bucket, key = "multipart-bucket", "blob"
+		createBucket(t, ctx, setup, bucket)
+		// S3 requires every part but the last to be at least 5 MiB.
+		const partSize = 5 * 1024 * 1024
+		parts := [][]byte{
+			bytes.Repeat([]byte("a"), partSize),
+			bytes.Repeat([]byte("b"), partSize),
+			[]byte("tail"),
+		}
+		content := bytes.Join(parts, nil)
+		upload, err := setup.CreateMultipartUpload(ctx, &s3.CreateMultipartUploadInput{
+			Bucket: new(bucket), Key: new(key), ChecksumAlgorithm: types.ChecksumAlgorithmSha256,
+		})
+		r.NoError(err)
+		var completed []types.CompletedPart
+		for i, part := range parts {
+			number := int32(i + 1)
+			out, err := setup.UploadPart(ctx, &s3.UploadPartInput{
+				Bucket: new(bucket), Key: new(key), UploadId: upload.UploadId, PartNumber: &number,
+				Body: bytes.NewReader(part), ChecksumAlgorithm: types.ChecksumAlgorithmSha256,
+			})
+			r.NoError(err)
+			completed = append(completed, types.CompletedPart{ETag: out.ETag, PartNumber: &number, ChecksumSHA256: out.ChecksumSHA256})
+		}
+		_, err = setup.CompleteMultipartUpload(ctx, &s3.CompleteMultipartUploadInput{
+			Bucket: new(bucket), Key: new(key), UploadId: upload.UploadId,
+			MultipartUpload: &types.CompletedMultipartUpload{Parts: completed},
+		})
+		r.NoError(err)
+
+		var mu sync.Mutex
+		var partNumbers []string
+		client := &http.Client{Transport: recordingTransport(func(req *http.Request) (*http.Response, error) {
+			if req.Method == http.MethodGet {
+				mu.Lock()
+				partNumbers = append(partNumbers, req.URL.Query().Get("partNumber"))
+				mu.Unlock()
+			}
+			return http.DefaultTransport.RoundTrip(req)
+		})}
+		recorded := repository.NewResourceRepository(fsConfig, repository.WithHTTPClient(client))
+
+		withDigest, err := recorded.ProcessResourceDigest(ctx, resourceFor(access(bucket, key, "")), creds)
+		r.NoError(err)
+		r.Equal(godigest.FromBytes(content).Encoded(), withDigest.Digest.Value, "the composite checksum must not stand in for the digest")
+		r.ElementsMatch([]string{"1", "2", "3"}, partNumbers, "every part is fetched on its own")
+
+		b, err := recorded.DownloadResource(ctx, withDigest, creds)
+		r.NoError(err)
+		rc, err := b.ReadCloser()
+		r.NoError(err)
+		got, err := io.ReadAll(rc)
+		r.NoError(err)
+		r.NoError(rc.Close())
+		r.True(bytes.Equal(content, got), "the parts reassemble into the object")
+	})
 
 	t.Run("pinned object version", func(t *testing.T) {
 		r := require.New(t)

@@ -343,17 +343,9 @@ func (r *ResourceRepository) digestByDownload(ctx context.Context, spec *v2.S3, 
 	return resolved, result.VersionID, nil
 }
 
-// blobDigest returns the digest of b in algorithm. The SHA-256 the file-backed blob
-// computed while it was written is reused; any other algorithm reads the file again.
+// blobDigest streams the file behind b through algorithm. It does not use the blob's own
+// Digest, which holds the whole content in memory while hashing.
 func blobDigest(b *filesystem.Blob, algorithm godigest.Algorithm) (godigest.Digest, error) {
-	if algorithm == godigest.SHA256 {
-		raw, ok := b.Digest()
-		if !ok {
-			return "", errors.New("blob reports no digest")
-		}
-		return godigest.Parse(raw)
-	}
-
 	rc, err := b.ReadCloser()
 	if err != nil {
 		return "", err

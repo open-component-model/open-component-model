@@ -28,6 +28,19 @@
 // rather than the S3 ETag, which is not a reliable whole-object hash for multipart
 // objects.
 //
+// # Multipart objects
+//
+// A download asks for part 1. A single-part object arrives whole; the other parts of a
+// multipart object are fetched in parallel, up to eight at a time, and written at the
+// offset each response's Content-Range names. The SDK validates checksums of complete
+// responses only, so each part is checked here against the part-level checksum S3
+// returns for a COMPOSITE object. Every request after the first carries If-Match with
+// the ETag of part 1 and pins its version, so an object overwritten mid-download fails
+// instead of mixing two objects. The part count comes from x-amz-mp-parts-count or the
+// "-<parts>" ETag suffix; a store reporting neither gets the rest as one ranged GET,
+// and one rejecting part numbers is asked for the whole object. The written spans must
+// tile the object exactly.
+//
 // Credentials are optional. When supplied as
 // [ocm.software/open-component-model/bindings/go/s3/spec/credentials/v1.S3Credentials]
 // (access key ID, secret access key and an optional session token) they are used as

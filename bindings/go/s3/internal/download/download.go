@@ -17,6 +17,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	ocmhttp "ocm.software/open-component-model/bindings/go/http"
@@ -75,6 +76,10 @@ type Request struct {
 // size; the file is created under the directory given by [WithTempDir], outlives
 // this call and is owned by the caller.
 //
+// The object is requested by its first part. A single-part object arrives whole in that
+// response; the remaining parts of a multipart object are fetched in parallel, see
+// [storeParts].
+//
 // The credentials and maximum size are supplied via options; see [WithCredentials]
 // and [WithMaxDownloadSize].
 func Download(ctx context.Context, req Request, opts ...Option) (*Result, error) {
@@ -95,14 +100,15 @@ func Download(ctx context.Context, req Request, opts ...Option) (*Result, error)
 	in := &s3.GetObjectInput{
 		Bucket: new(req.BucketName),
 		Key:    new(req.ObjectKey),
+		// Asking for checksums makes S3 return the one it stored for every part, which
+		// the download checks the part against.
+		ChecksumMode: types.ChecksumModeEnabled,
 	}
 	if req.Version != "" {
 		in.VersionId = new(req.Version)
 	}
 
-	out, err := inBucketRegion(ctx, client, req, func(optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
-		return client.GetObject(ctx, in, optFns...)
-	})
+	out, regionOpts, err := getFirstPart(ctx, client, req, in)
 	if err != nil {
 		return nil, fmt.Errorf("error getting s3 object %s/%s: %w", req.BucketName, req.ObjectKey, err)
 	}
@@ -113,22 +119,17 @@ func Download(ctx context.Context, req Request, opts ...Option) (*Result, error)
 		maxDownloadSize = *o.MaxDownloadSize
 	}
 
+	first, ranged := parseContentRange(aws.ToString(out.ContentRange))
+	multipart := ranged && first.end+1 < first.total
+
 	// S3 reports the size up front, so an oversized object is rejected before any
 	// of it is transferred.
-	if maxDownloadSize > 0 && out.ContentLength != nil && *out.ContentLength > maxDownloadSize {
-		return nil, fmt.Errorf("s3 object %s/%s exceeds maximum allowed size of %d bytes", req.BucketName, req.ObjectKey, maxDownloadSize)
+	size := aws.ToInt64(out.ContentLength)
+	if multipart {
+		size = first.total
 	}
-
-	// A store that reports no length, or lies about it, is caught while streaming. The
-	// extra byte separates exceeding the limit from reaching it; MaxInt64 cannot be
-	// exceeded and incrementing it would overflow into a negative, empty bound.
-	body := io.Reader(out.Body)
-	if maxDownloadSize > 0 {
-		limit := maxDownloadSize
-		if limit < math.MaxInt64 {
-			limit++
-		}
-		body = io.LimitReader(out.Body, limit)
+	if maxDownloadSize > 0 && (out.ContentLength != nil || multipart) && size > maxDownloadSize {
+		return nil, fmt.Errorf("s3 object %s/%s exceeds maximum allowed size of %d bytes", req.BucketName, req.ObjectKey, maxDownloadSize)
 	}
 
 	mediaType := req.MediaType
@@ -144,7 +145,18 @@ func Download(ctx context.Context, req Request, opts ...Option) (*Result, error)
 		return nil, fmt.Errorf("error creating temporary file for s3 object %s/%s: %w", req.BucketName, req.ObjectKey, err)
 	}
 
-	b, err := storeObject(file, body, maxDownloadSize, req)
+	var b *filesystem.Blob
+	if multipart {
+		b, err = storeParts(ctx, file, client, regionOpts, in, out, first, req)
+	} else {
+		// A store answering part 1 of a single-part object sends a partial response,
+		// which the SDK does not validate.
+		copyBody := io.Copy
+		if ranged {
+			copyBody = func(w io.Writer, body io.Reader) (int64, error) { return verifiedCopy(w, body, out, first) }
+		}
+		b, err = storeObject(file, limitBody(out.Body, maxDownloadSize), copyBody, maxDownloadSize, req)
+	}
 	if err != nil {
 		if err := os.Remove(file.Name()); err != nil {
 			slog.WarnContext(ctx, "error removing temporary file after failed download", "file", file.Name(), "err", err)
@@ -154,6 +166,21 @@ func Download(ctx context.Context, req Request, opts ...Option) (*Result, error)
 	b.SetMediaType(mediaType)
 
 	return &Result{Blob: b, VersionID: aws.ToString(out.VersionId)}, nil
+}
+
+// limitBody caps body one byte beyond maxDownloadSize. A store that reports no length,
+// or lies about it, is caught while streaming: the extra byte separates exceeding the
+// limit from reaching it. MaxInt64 cannot be exceeded and incrementing it would
+// overflow into a negative, empty bound.
+func limitBody(body io.Reader, maxDownloadSize int64) io.Reader {
+	if maxDownloadSize <= 0 {
+		return body
+	}
+	limit := maxDownloadSize
+	if limit < math.MaxInt64 {
+		limit++
+	}
+	return io.LimitReader(body, limit)
 }
 
 func (req Request) validate() error {
@@ -168,10 +195,10 @@ func (req Request) validate() error {
 
 // storeObject streams body into file and returns a blob backed by it. It closes file
 // whether or not it succeeds, but never removes it; the caller does that in one place.
-func storeObject(file *os.File, body io.Reader, maxDownloadSize int64, req Request) (*filesystem.Blob, error) {
+func storeObject(file *os.File, body io.Reader, copyBody func(io.Writer, io.Reader) (int64, error), maxDownloadSize int64, req Request) (*filesystem.Blob, error) {
 	path := file.Name()
 
-	written, err := io.Copy(file, body)
+	written, err := copyBody(file, body)
 	if closeErr := file.Close(); err == nil {
 		err = closeErr
 	}
