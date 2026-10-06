@@ -462,11 +462,14 @@ GnuPG does its cryptography in `libgcrypt`. For an approved-algorithms-only
 ([Garden Linux](https://docs.gardenlinux.org/reference/glossary.html#fips) is,
 like OCM, a [NeoNephos](https://neonephos.org/) project) and force `libgcrypt`
 into FIPS mode with `/etc/gcrypt/fips_enabled`. The CLI image does exactly that
-(`bindings/go/cli/Containerfile`), so use it as is:
+(`bindings/go/cli/Containerfile`), so use it as is. Mount the signing key and
+point `privateKeyPGPFile` in `.ocmconfig` at the path inside the container
+(`/signing-key.asc`):
 
 ```shell
 docker run --rm \
   -v "$PWD/.ocmconfig:/.ocmconfig:ro" \
+  -v "$PWD/signing-key.asc:/signing-key.asc:ro" \
   -e GODEBUG=fips140=only \
   ghcr.io/open-component-model/cli:<version> \
   sign cv --config /.ocmconfig ghcr.io/<namespace>//<component>:<version>

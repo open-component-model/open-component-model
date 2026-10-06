@@ -41,6 +41,9 @@ RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked \
 # GnuPG comes from the Garden Linux FIPS image because its libgcrypt is the
 # FIPS-capable build. The image itself is a full distro (apt, shell), so gpg and
 # exactly its shared libraries are staged into /rootfs and copied into bare-libc.
+# Keep this image and bare-libc (full stage) on the SAME Garden Linux release:
+# the staged gpg libraries run under bare-libc's dynamic loader. Renovate updates
+# both in one PR (group "Garden Linux images" in .github/renovate.json5).
 FROM ghcr.io/gardenlinux/gardenlinux/fips:1877.25@sha256:74ae1f81d0723434024f591d8c2872852201b99b9f18c0fbe10221b16e60e01d AS gpg
 # gpg-agent is needed for signing; verification only needs gpg.
 # dirmngr: gpgconf --show-versions exits non-zero without it.
