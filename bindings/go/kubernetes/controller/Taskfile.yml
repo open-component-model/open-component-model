@@ -110,28 +110,19 @@ tasks:
           CLI_ARGS: '{{.CLI_ARGS}}'
 
   test/performance/setup:
-    desc: "Create the 'ocm-perf' Kind cluster and registry, then build and install the controller from the working tree. To benchmark another image, run test/performance/install with CONTROLLER_IMG afterwards."
-    cmds:
+    desc: "Create the 'ocm-perf' Kind cluster and registry, and install the controller built from the working tree."
+    deps:
       - task: docker-build
         vars:
           LOAD: "true"
-      - 'KIND_NODE_IMAGE_VERSION={{.KIND_NODE_IMAGE_VERSION}} REGISTRY_IMAGE_VERSION={{.REGISTRY_IMAGE_VERSION}} bash test/performance/hacks/setup.sh'
-      - task: test/performance/install
-
-  test/performance/install:
-    desc: "Load CONTROLLER_IMG into the 'ocm-perf' cluster and (re)install the chart with the benchmark values."
     cmds:
+      - 'KIND_NODE_IMAGE_VERSION={{.KIND_NODE_IMAGE_VERSION}} REGISTRY_IMAGE_VERSION={{.REGISTRY_IMAGE_VERSION}} bash test/performance/hacks/setup.sh'
       - 'kind load docker-image {{.CONTROLLER_IMG}} --name ocm-perf'
       - kubectl --context kind-ocm-perf apply -f test/performance/hacks/rbac.yaml
       - |
-        img='{{.CONTROLLER_IMG}}'
-        # Split after the last path segment so registry ports and digests survive.
-        tag="${img##*/}"; tag="${tag#*:}"
         helm upgrade --install ocm-k8s-toolkit chart/ \
           --kube-context kind-ocm-perf \
           -f test/performance/hacks/values.yaml \
-          --set manager.image.repository="${img%:"$tag"}" \
-          --set manager.image.tag="${tag}" \
           --namespace ocm-k8s-toolkit-system \
           --create-namespace \
           --wait \

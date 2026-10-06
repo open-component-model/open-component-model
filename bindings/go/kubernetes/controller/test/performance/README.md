@@ -2,7 +2,7 @@
 
 A reproducible benchmark for the OCM controllers. It creates many controller objects against a local registry,
 waits until they are ready, and records duration, success, CPU, memory, OCI registry requests and controller
-metrics. Run the same benchmark against two controller images to compare them.
+metrics.
 
 The structure follows [fluxcd/flux-benchmark](https://github.com/fluxcd/flux-benchmark): a dedicated Kind
 cluster, a local OCI registry, parameterized workloads, and install and update scenarios.
@@ -30,6 +30,9 @@ On a laptop, `cold` and `pipeline` at 1,000 objects take about 1.5 and 3 minutes
 
 The controller restarts before every run, so each run starts with empty in-memory caches. Every run publishes
 fresh component names to the registry, so no run sees another run's component versions.
+
+Only the Resource controller has a concurrency flag today. The Component and Deployer controllers run with
+controller-runtime's default of one worker.
 
 ## Scenarios
 
@@ -69,30 +72,15 @@ Metric sources:
 | OCI requests | delta of the registry's `registry_http_requests_total`, split by handler and method |
 | Controller metrics | deltas of every `controller_runtime_*`, `workqueue_*`, `ocm_system_*` and `rest_client_requests_total` series. Per-component labels are folded away. |
 
-## Comparing two controller images
-
-Benchmark any image by loading it into the cluster and reinstalling the chart:
-
-```bash
-docker pull ghcr.io/open-component-model/kubernetes/controller:<tag>
-CONTROLLER_IMG=ghcr.io/open-component-model/kubernetes/controller:<tag> task test/performance/install
-task test/performance
-```
-
-Both images then run with the same values file, cluster and workloads. If an image adds or renames a controller
-flag, adjust [`hacks/values.yaml`](hacks/values.yaml) and record it with the results. `result.json` captures the
-args and image digest of every run.
-
-Only the Resource controller has a concurrency flag today. The Component and Deployer controllers run with
-controller-runtime's default of one worker.
-
 ## Profiling
 
-Build the pprof-enabled image and install it:
+Swap in the pprof-enabled build of the working tree:
 
 ```bash
 task docker-build/debug
-CONTROLLER_IMG=ghcr.io/open-component-model/kubernetes/controller:latest-debug task test/performance/install
+kind load docker-image ghcr.io/open-component-model/kubernetes/controller:latest-debug --name ocm-perf
+helm upgrade ocm-k8s-toolkit chart/ --kube-context kind-ocm-perf -n ocm-k8s-toolkit-system --reuse-values \
+  --set manager.image.tag=latest-debug --wait
 kubectl -n ocm-k8s-toolkit-system port-forward deploy/ocm-k8s-toolkit-controller-manager 6060 &
 # The per-run restart would cut the port-forward, so keep the pod.
 task test/performance -- --scenarios=cold --objects=1000 --repeats=1 --restart-controller=false &
