@@ -49,7 +49,7 @@ func MustRegisterCredentialType(scheme *runtime.Scheme) {
 // +ocm:typegen=true
 // +ocm:jsonschema-gen=true
 type GitHTTPSCredentials struct {
-	// +ocm:jsonschema-gen:enum=GitHTTPSCredentials/v1
+	// +ocm:jsonschema-gen:enum=GitHTTPSCredentials/v1,GitHTTPSCredentials
 	Type     runtime.Type `json:"type"`
 	// Username is the username required by the Git server.
 	Username string       `json:"username"`
@@ -74,7 +74,7 @@ func (c *GitHTTPSCredentials) Validate() error {
 // +ocm:typegen=true
 // +ocm:jsonschema-gen=true
 type GitBearerCredentials struct {
-	// +ocm:jsonschema-gen:enum=GitBearerCredentials/v1
+	// +ocm:jsonschema-gen:enum=GitBearerCredentials/v1,GitBearerCredentials
 	Type  runtime.Type `json:"type"`
 	// Token is sent in the HTTP Authorization Bearer header.
 	Token string       `json:"token"`
@@ -94,7 +94,7 @@ func (c *GitBearerCredentials) Validate() error {
 // +ocm:typegen=true
 // +ocm:jsonschema-gen=true
 type GitSSHCredentials struct {
-	// +ocm:jsonschema-gen:enum=GitSSHCredentials/v1
+	// +ocm:jsonschema-gen:enum=GitSSHCredentials/v1,GitSSHCredentials
 	Type     runtime.Type `json:"type"`
 	// Username overrides the SSH URL user. By default, OCM uses the URL user, then git.
 	Username string       `json:"username,omitempty"`
@@ -116,9 +116,18 @@ func (c *GitSSHCredentials) Validate() error {
 	return nil
 }
 
-// MustRegisterTransportCredentialTypes registers the explicit Git authentication methods.
+// MustRegisterTransportCredentialTypes registers the explicit Git authentication methods and their unversioned aliases.
 func MustRegisterTransportCredentialTypes(scheme *runtime.Scheme) {
-	scheme.MustRegisterWithAlias(&GitHTTPSCredentials{}, runtime.NewVersionedType(GitHTTPSCredentialsType, Version))
-	scheme.MustRegisterWithAlias(&GitBearerCredentials{}, runtime.NewVersionedType(GitBearerCredentialsType, Version))
-	scheme.MustRegisterWithAlias(&GitSSHCredentials{}, runtime.NewVersionedType(GitSSHCredentialsType, Version))
+	scheme.MustRegisterWithAlias(&GitHTTPSCredentials{},
+		runtime.NewVersionedType(GitHTTPSCredentialsType, Version),
+		runtime.NewUnversionedType(GitHTTPSCredentialsType),
+	)
+	scheme.MustRegisterWithAlias(&GitBearerCredentials{},
+		runtime.NewVersionedType(GitBearerCredentialsType, Version),
+		runtime.NewUnversionedType(GitBearerCredentialsType),
+	)
+	scheme.MustRegisterWithAlias(&GitSSHCredentials{},
+		runtime.NewVersionedType(GitSSHCredentialsType, Version),
+		runtime.NewUnversionedType(GitSSHCredentialsType),
+	)
 }
