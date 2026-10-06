@@ -3,6 +3,7 @@ package blob_test
 import (
 	"archive/tar"
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"testing"
@@ -50,7 +51,7 @@ func TestArchiveBlob(t *testing.T) {
 
 	content := make([]byte, size)
 	n, err := tr.Read(content)
-	r.True(err == nil || err == io.EOF, "unexpected error reading tar content")
+	r.True(err == nil || errors.Is(err, io.EOF), "unexpected error reading tar content")
 	r.Equal(blobData, content[:n], "tar content mismatch")
 }
 

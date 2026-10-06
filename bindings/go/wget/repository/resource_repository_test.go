@@ -267,7 +267,8 @@ func TestGetResourceCredentialConsumerIdentity(t *testing.T) {
 	resource.Name = "test"
 	resource.Version = "1.0.0"
 	resource.Type = "blob"
-	raw, _ := json.Marshal(map[string]any{"url": "https://example.com:443/path/file.tar.gz"})
+	raw, err := json.Marshal(map[string]any{"url": "https://example.com:443/path/file.tar.gz"})
+	require.NoError(t, err)
 	resource.Access = &runtime.Raw{
 		Type: runtime.NewVersionedType("wget", v1.Version),
 		Data: raw,
