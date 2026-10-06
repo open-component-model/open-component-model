@@ -302,8 +302,7 @@ func GetGraph(tb testing.TB, yaml string) (credentials.Resolver, error) {
 			var vaultHost string
 			if id, ok := repoType.(runtime.Identity); ok {
 				vaultHost = id[runtime.IdentityAttributeHostname]
-			} else {
-				data, _ := json.Marshal(repoType)
+			} else if data, err := json.Marshal(repoType); err == nil {
 				var mm map[string]any
 				_ = json.Unmarshal(data, &mm)
 				if surl, ok := mm["serverURL"].(string); ok {
