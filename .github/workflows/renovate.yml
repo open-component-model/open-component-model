@@ -2,9 +2,6 @@ name: Renovate OCM
 on:
   schedule:
     - cron: '0 0 * * *' # At 00:00, every day: create branches
-    - cron: '0 2 * * 0' # Sundays 02:00: second pass opens PRs for the Sunday-only
-                        # scheduled groups (branch made at 00:00, PR deferred by
-                        # not-pending; this in-schedule rerun opens it)
   workflow_dispatch:
     inputs:
       repoCache:
