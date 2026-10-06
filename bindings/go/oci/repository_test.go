@@ -141,6 +141,68 @@ func TestRepository_GetComponentVersion(t *testing.T) {
 	r.NotNil(desc, "Expected non-nil descriptor when getting existing component version")
 }
 
+func TestRepository_ReadLegacyOCIArtifactDigest(t *testing.T) {
+	r := require.New(t)
+	ctx := t.Context()
+
+	fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
+	r.NoError(err)
+	store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
+	repo := Repository(t, ocictf.WithCTF(store), oci.WithScheme(testScheme))
+	artifact, root := buildTestManifestStream(t)
+	resourceStore, err := store.StoreForReference(ctx, "test-image:1.0.0")
+	r.NoError(err)
+	r.NoError(oras.CopyGraph(ctx, artifact, resourceStore, root, oras.DefaultCopyGraphOptions))
+	r.NoError(resourceStore.Tag(ctx, root, "1.0.0"))
+
+	legacyDigest := &descriptor.Digest{
+		HashAlgorithm:          "SHA-256",
+		NormalisationAlgorithm: "genericBlobDigest/v1",
+		Value:                  root.Digest.Encoded(),
+	}
+	component := &descriptor.Descriptor{
+		Meta: descriptor.Meta{Version: "v2"},
+		Component: descriptor.Component{
+			ComponentMeta: descriptor.ComponentMeta{ObjectMeta: descriptor.ObjectMeta{Name: "ocm.software/legacy-digest", Version: "1.0.0"}},
+			Provider:      descriptor.Provider{Name: "test-provider"},
+			Resources: []descriptor.Resource{{
+				ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "artifact", Version: "1.0.0"}},
+				Type:        "ociImage",
+				Relation:    descriptor.ExternalRelation,
+				Access: &v1.OCIImage{
+					Type:           runtime.NewVersionedType(v1.OCIImageType, v1.Version),
+					ImageReference: "test-image:1.0.0",
+				},
+				Digest: legacyDigest,
+			}},
+		},
+	}
+	r.NoError(repo.AddComponentVersion(ctx, component))
+
+	got, err := repo.GetComponentVersion(ctx, component.Component.Name, component.Component.Version)
+	r.NoError(err)
+	r.Len(got.Component.Resources, 1)
+	r.Equal(legacyDigest, got.Component.Resources[0].Digest)
+	var ociAccess v1.OCIImage
+	r.NoError(testScheme.Convert(got.Component.Resources[0].Access, &ociAccess))
+	got.Component.Resources[0].Access = &ociAccess
+	processed, err := repo.ProcessResourceDigest(ctx, &got.Component.Resources[0])
+	r.NoError(err)
+	r.Equal(legacyDigest, processed.Digest)
+
+	stream, err := repo.DownloadResourceStream(ctx, &got.Component.Resources[0])
+	r.NoError(err)
+	layout, err := stream.Materialize(ctx)
+	r.NoError(err)
+	downloadedRoot, err := tar.CopyOCILayoutWithIndex(ctx, memory.New(), layout, tar.CopyOCILayoutWithIndexOptions{})
+	r.NoError(err)
+	r.Equal(root.Digest, downloadedRoot.Digest)
+
+	got, err = repo.GetComponentVersion(ctx, component.Component.Name, component.Component.Version)
+	r.NoError(err)
+	r.Equal(legacyDigest, got.Component.Resources[0].Digest)
+}
+
 func TestRepository_GetLocalResource(t *testing.T) {
 	type getLocalResourceTestCase struct {
 		name                     string
