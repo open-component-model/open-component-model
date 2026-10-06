@@ -26,7 +26,12 @@ fi
 
 # The registry runs outside Kind so it does not compete with the controller for node resources.
 # Its debug listener exposes Prometheus metrics, which give the OCI request counts.
-if [ "$(docker inspect -f '{{.State.Running}}' "${reg_name}" 2>/dev/null || true)" != 'true' ]; then
+reg_running="$(docker inspect -f '{{.State.Running}}' "${reg_name}" 2>/dev/null || true)"
+# A stopped container from an interrupted run still owns the name. Recreate it so the pinned version applies.
+if [ "${reg_running}" = 'false' ]; then
+  docker rm "${reg_name}"
+fi
+if [ "${reg_running}" != 'true' ]; then
   docker run -d --restart=always --name "${reg_name}" \
     -p "127.0.0.1:${reg_port}:5000" \
     -p "127.0.0.1:${reg_metrics_port}:5001" \

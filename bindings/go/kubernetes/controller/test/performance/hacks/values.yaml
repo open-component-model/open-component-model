@@ -2,8 +2,9 @@
 # throughput is set explicitly, so results stay comparable when chart defaults move.
 manager:
   replicas: 1
-  # The image is set by `task test/performance/install`.
   image:
+    repository: ghcr.io/open-component-model/kubernetes/controller
+    tag: latest
     pullPolicy: IfNotPresent
   concurrency:
     resource: 4
