@@ -19,8 +19,13 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
+	"ocm.software/open-component-model/bindings/go/ctf"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/oci"
+	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/s3/internal/download"
 	accessspec "ocm.software/open-component-model/bindings/go/s3/spec/access"
@@ -465,6 +470,15 @@ func Test_ProcessResourceDigest_VerifiesLeniently(t *testing.T) {
 			digest:  &descriptor.Digest{Value: godigest.FromString("something else").Encoded()},
 			wantErr: "digest value mismatch",
 		},
+		{
+			name:   "a value prefixed with its own algorithm",
+			digest: &descriptor.Digest{HashAlgorithm: "SHA-256", Value: "sha256:" + value},
+		},
+		{
+			name:    "a value prefixed with another algorithm is a conflict",
+			digest:  &descriptor.Digest{HashAlgorithm: "SHA-256", Value: "sha512:" + value},
+			wantErr: "carries algorithm sha512",
+		},
 	}
 
 	for _, tt := range tests {
@@ -490,6 +504,43 @@ func Test_ProcessResourceDigest_VerifiesLeniently(t *testing.T) {
 			require.Equal(t, value, res.Digest.Value)
 		})
 	}
+}
+
+// Test_SHA512Resource_TransfersByValue covers a resource whose digest the store only
+// keeps in SHA-512: the downloaded blob must be accepted into an OCI/CTF repository
+// under that digest rather than rejected against the filesystem blob's own SHA-256.
+func Test_SHA512Resource_TransfersByValue(t *testing.T) {
+	r := require.New(t)
+	content := []byte("digest me")
+	sum := sha512.Sum512(content)
+	srv := newFakeS3(t, content, "v-1")
+	srv.header = http.Header{}
+	srv.header.Set("x-amz-checksum-sha512", base64.StdEncoding.EncodeToString(sum[:]))
+	srv.header.Set("x-amz-checksum-type", "FULL_OBJECT")
+	tempFolder := t.TempDir()
+	repo := NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &tempFolder})
+
+	res, err := repo.ProcessResourceDigest(t.Context(), s3Resource(servedBy(srv, &v2.S3{BucketName: "b", ObjectKey: "k"})), fakeCredentials())
+	r.NoError(err)
+	r.Equal(hashAlgorithmSHA512, res.Digest.HashAlgorithm)
+
+	b, err := repo.DownloadResource(t.Context(), res, fakeCredentials())
+	r.NoError(err)
+
+	fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
+	r.NoError(err)
+	target, err := oci.NewRepository(ocictf.WithCTF(ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))))
+	r.NoError(err)
+	// Transfer by value rewrites the access to a local blob before adding it.
+	local := res.DeepCopy()
+	local.Access = &descriptorv2.LocalBlob{
+		Type:      runtime.NewVersionedType(descriptorv2.LocalBlobAccessType, descriptorv2.LocalBlobAccessTypeVersion),
+		MediaType: "application/octet-stream",
+	}
+	added, err := target.AddLocalResource(t.Context(), "ocm.software/s3", "1.0.0", local, b)
+	r.NoError(err)
+	r.Equal(hashAlgorithmSHA512, added.Digest.HashAlgorithm)
+	r.Equal(godigest.SHA512.FromBytes(content).Encoded(), added.Digest.Value)
 }
 
 // Test_ProcessResourceDigest_PinsAccess covers the ResourceDigestProcessor requirement

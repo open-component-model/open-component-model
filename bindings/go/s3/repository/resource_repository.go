@@ -212,8 +212,12 @@ func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, resource
 	resource = resource.DeepCopy()
 	if resource.Digest != nil {
 		value := resource.Digest.Value
-		// The value may carry its algorithm as go-digest writes it, "sha512:<hex>".
-		if _, encoded, prefixed := strings.Cut(value, ":"); prefixed {
+		// The value may carry its algorithm as go-digest writes it, "sha512:<hex>", which
+		// must then agree with the algorithm the digest names.
+		if prefix, encoded, prefixed := strings.Cut(value, ":"); prefixed {
+			if godigest.Algorithm(strings.ToLower(prefix)) != resolved.Algorithm() {
+				return nil, fmt.Errorf("digest value %s carries algorithm %s, but the digest names %s", resource.Digest.Value, prefix, resolved.Algorithm())
+			}
 			value = encoded
 		}
 		if !strings.EqualFold(value, resolved.Encoded()) {
