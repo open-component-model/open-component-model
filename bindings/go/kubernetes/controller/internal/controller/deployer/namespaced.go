@@ -3,19 +3,23 @@ package deployer
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	deliveryv1alpha1 "ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
+	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/controller/applyset"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/status"
 )
 
@@ -103,26 +107,61 @@ func (r *Reconciler) applyClient(ctx context.Context, deployer deliveryv1alpha1.
 	return c, nil
 }
 
-// orphanOnDeletion keeps deletion from blocking when the service account or its RBAC is gone. GC removes children in
-// the deployer's namespace through their owner reference; all other children are orphaned and reported.
-func (r *Reconciler) orphanOnDeletion(deployer deliveryv1alpha1.DeployerObject, err error) bool {
-	if !r.Namespaced || (!apierrors.IsNotFound(err) && !apierrors.IsForbidden(err)) {
-		return false
+// orphanOnDeletion reports what a deletion leaves behind when the service account cannot prune. GC removes children
+// in the deployer's namespace through their owner reference, the rest stays and is listed in a Warning event.
+func (r *Reconciler) orphanOnDeletion(ctx context.Context, deployer deliveryv1alpha1.DeployerObject, metadata applyset.Metadata, pruneErr error) {
+	logger := log.FromContext(ctx)
+
+	orphaned, err := r.orphanedObjects(ctx, metadata)
+	if err != nil {
+		// Without read access the controller can only name the scope the objects live in.
+		logger.Error(err, "failed to list orphaned objects")
+		orphaned = []string{metadata.PruneScope().String()}
 	}
+	logger.Info("skipping ApplySet prune as the service account cannot prune", "reason", pruneErr.Error(), "orphaned", len(orphaned))
+	if len(orphaned) == 0 {
+		return
+	}
+
+	status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.DeletionFailedReason, fmt.Sprintf(
+		"service account %s cannot prune (%v), orphaning objects outside of namespace %s: %s",
+		deployer.GetServiceAccountName(), pruneErr, deployer.GetNamespace(), strings.Join(orphaned, ", ")))
+}
+
+// orphanedObjects lists the ApplySet members that are cluster-scoped or in the ApplySet's additional namespaces. The
+// controller reads them with its own identity, which it needs anyway to watch them for drift.
+func (r *Reconciler) orphanedObjects(ctx context.Context, metadata applyset.Metadata) ([]string, error) {
+	selector := client.MatchingLabels{applyset.ApplysetPartOfLabel: metadata.ID}
 
 	var orphaned []string
-	for _, ref := range deployer.GetDeployerStatus().Deployed {
-		if ref.Namespace != deployer.GetNamespace() {
-			orphaned = append(orphaned, fmt.Sprintf("%s %s", ref.Kind, client.ObjectKey{Namespace: ref.Namespace, Name: ref.Name}))
+	for gk := range metadata.GroupKinds {
+		mapping, err := r.resourceRESTMapper.RESTMapping(gk)
+		if err != nil {
+			return nil, fmt.Errorf("failed to map %s: %w", gk, err)
+		}
+
+		namespaces := []string{""}
+		if mapping.Scope.Name() == meta.RESTScopeNameNamespace {
+			namespaces = sets.List(metadata.AdditionalNamespaces)
+		}
+		for _, namespace := range namespaces {
+			list := &metav1.PartialObjectMetadataList{}
+			list.SetGroupVersionKind(mapping.GroupVersionKind.GroupVersion().WithKind(mapping.GroupVersionKind.Kind + "List"))
+			if err := r.apiReader.List(ctx, list, selector, client.InNamespace(namespace)); err != nil {
+				return nil, fmt.Errorf("failed to list %s: %w", gk, err)
+			}
+			for _, item := range list.Items {
+				name := item.GetName()
+				if item.GetNamespace() != "" {
+					name = item.GetNamespace() + "/" + name
+				}
+				orphaned = append(orphaned, gk.String()+" "+name)
+			}
 		}
 	}
-	if len(orphaned) > 0 {
-		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.DeletionFailedReason, fmt.Sprintf(
-			"service account %s cannot prune (%v), orphaning objects outside of namespace %s: %s",
-			deployer.GetServiceAccountName(), err, deployer.GetNamespace(), strings.Join(orphaned, ", ")))
-	}
+	slices.Sort(orphaned)
 
-	return true
+	return orphaned, nil
 }
 
 // canOwn reports whether the deployer can be the controller owner of obj. Kubernetes rejects namespaced owners for

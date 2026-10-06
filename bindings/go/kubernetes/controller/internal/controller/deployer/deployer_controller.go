@@ -15,6 +15,7 @@ import (
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/time/rate"
 	"k8s.io/apimachinery/pkg/api/equality"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	apiresource "k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -284,21 +285,22 @@ func (r *Reconciler) Untrack(ctx context.Context, deployer deliveryv1alpha1.Depl
 func (r *Reconciler) pruneWithApplySet(ctx context.Context, deployer deliveryv1alpha1.DeployerObject) (bool, error) {
 	logger := log.FromContext(ctx).WithValues("deployer", deployer.GetName(), "namespace", deployer.GetNamespace())
 
+	// The projection only reads the parent's annotations, so it does not depend on the apply client.
+	metadata, err := r.createApplySet(r.GetClient(), deployer, logger).Project(nil)
+	if err != nil {
+		return false, fmt.Errorf("failed to project ApplySet: %w", err)
+	}
+
 	applyClient, err := r.applyClient(ctx, deployer)
 	if err != nil {
-		if r.orphanOnDeletion(deployer, err) {
-			logger.Info("skipping ApplySet prune as the service account cannot prune", "reason", err.Error())
+		if r.Namespaced && (apierrors.IsNotFound(err) || apierrors.IsForbidden(err)) {
+			r.orphanOnDeletion(ctx, deployer, metadata, err)
 			return true, nil
 		}
 		return false, err
 	}
 
 	set := r.createApplySet(applyClient, deployer, logger)
-
-	metadata, err := set.Project(nil)
-	if err != nil {
-		return false, fmt.Errorf("failed to project ApplySet: %w", err)
-	}
 
 	logger.Info("pruning ApplySet", "scope", metadata.PruneScope())
 	result, err := set.Prune(ctx, applyset.PruneOptions{
@@ -307,8 +309,8 @@ func (r *Reconciler) pruneWithApplySet(ctx context.Context, deployer deliveryv1a
 		Concurrency: runtime.NumCPU(),
 	})
 	if err != nil {
-		if r.orphanOnDeletion(deployer, err) {
-			logger.Info("skipping ApplySet prune as the service account cannot prune", "reason", err.Error())
+		if r.Namespaced && apierrors.IsForbidden(err) {
+			r.orphanOnDeletion(ctx, deployer, metadata, err)
 			return true, nil
 		}
 		return false, fmt.Errorf("failed to prune ApplySet: %w", err)
@@ -338,13 +340,10 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, fmt.Errorf("unexpected type %T after deep copy", deployer)
 	}
 	defer func(ctx context.Context) {
-		if !equality.Semantic.DeepEqual(deployer.GetFinalizers(), old.GetFinalizers()) {
-			err = errors.Join(err, r.GetClient().Update(ctx, deployer))
-			return
-		}
 		status.UpdateBeforePatch(deployer, r.EventRecorder, 0, err)
 		if !equality.Semantic.DeepEqual(deployer.GetDeployerStatus(), old.GetDeployerStatus()) {
-			err = errors.Join(err, r.GetClient().Status().Patch(ctx, deployer, client.MergeFrom(old)))
+			// Removing the last finalizer deletes the object before the status can be patched.
+			err = errors.Join(err, client.IgnoreNotFound(r.GetClient().Status().Patch(ctx, deployer, client.MergeFrom(old))))
 		}
 	}(ctx)
 
@@ -360,9 +359,10 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 	addedApplySetFinalizer := controllerutil.AddFinalizer(deployer, applySetPruneFinalizer)
 	addedWatchFinalizer := controllerutil.AddFinalizer(deployer, resourceWatchFinalizer)
 	if addedApplySetFinalizer || addedWatchFinalizer {
-		// Finalizers will be persisted by the defer block's Update() call.
-		// Return early to avoid doing work whose status update would be skipped
-		// by the defer's early-return path for finalizer changes.
+		if err := r.Update(ctx, deployer); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to add finalizers: %w", err)
+		}
+
 		return ctrl.Result{Requeue: true}, nil //nolint:staticcheck // SA1019: pending replacement, see https://github.com/open-component-model/open-component-model/issues/2120
 	}
 
@@ -626,7 +626,9 @@ func (r *Reconciler) reconcileDeletionTimestamp(ctx context.Context, deployer de
 				return ctrl.Result{RequeueAfter: time.Second}, nil, true
 			default:
 				logger.Info("successfully pruned ApplySet for deployer")
-				controllerutil.RemoveFinalizer(deployer, applySetPruneFinalizer)
+				if err := r.removeFinalizer(ctx, deployer, applySetPruneFinalizer); err != nil {
+					errs = append(errs, err)
+				}
 			}
 		} else if controllerutil.ContainsFinalizer(deployer, resourceWatchFinalizer) {
 			logger.Info("untracking resources before removing finalizer")
@@ -639,7 +641,9 @@ func (r *Reconciler) reconcileDeletionTimestamp(ctx context.Context, deployer de
 				return ctrl.Result{RequeueAfter: time.Second}, nil, true
 			default:
 				logger.Info("successfully untracked resources")
-				controllerutil.RemoveFinalizer(deployer, resourceWatchFinalizer)
+				if err := r.removeFinalizer(ctx, deployer, resourceWatchFinalizer); err != nil {
+					errs = append(errs, err)
+				}
 			}
 		}
 
@@ -659,6 +663,19 @@ func (r *Reconciler) reconcileDeletionTimestamp(ctx context.Context, deployer de
 		return ctrl.Result{}, nil, true
 	}
 	return ctrl.Result{}, nil, false
+}
+
+// removeFinalizer persists the removal of a finalizer. Update decodes the stored object into deployer, so the status
+// set during this reconciliation is restored for the deferred status patch.
+func (r *Reconciler) removeFinalizer(ctx context.Context, deployer deliveryv1alpha1.DeployerObject, finalizer string) error {
+	st := deployer.GetDeployerStatus().DeepCopy()
+	controllerutil.RemoveFinalizer(deployer, finalizer)
+	if err := r.Update(ctx, deployer); err != nil {
+		return fmt.Errorf("failed to remove finalizer %s: %w", finalizer, err)
+	}
+	*deployer.GetDeployerStatus() = *st
+
+	return nil
 }
 
 func (r *Reconciler) DownloadResourceWithOCM(

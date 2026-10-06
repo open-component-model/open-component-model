@@ -151,16 +151,30 @@ metadata:
 		}).WithTimeout(test.DefaultKubernetesOperationTimeout).WithContext(ctx).Should(BeTrue())
 	})
 
-	It("orphans cluster-scoped objects when its RBAC is deleted first", func(ctx SpecContext) {
+	It("orphans objects when its RBAC is gone", func(ctx SpecContext) {
 		createServiceAccount(ctx, namespace.GetName(), true)
 		grantClusterRoles(ctx, namespace.GetName())
+		other := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace.GetName() + "-other"}}
+		Expect(k8sClient.Create(ctx, other)).To(Succeed())
+		grantConfigMaps(ctx, other.GetName(), namespace.GetName())
 
 		clusterRoleName := "nd-orphan-" + namespace.GetName()
-		resourceObj := mockYAMLResource(ctx, namespace.GetName(), fmt.Sprintf(`apiVersion: rbac.authorization.k8s.io/v1
+		resourceObj := mockYAMLResource(ctx, namespace.GetName(), fmt.Sprintf(`apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nd-own-cm
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nd-other-cm
+  namespace: %s
+---
+apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   name: %s
-`, clusterRoleName))
+`, other.GetName(), clusterRoleName))
 
 		deployer := createNamespacedDeployer(ctx, namespace.GetName(), resourceObj.GetName(), nil)
 		test.WaitForReadyObject(ctx, k8sClient, deployer, map[string]any{})
@@ -168,6 +182,20 @@ metadata:
 		DeferCleanup(func(ctx SpecContext) {
 			test.DeleteObject(ctx, k8sClient, clusterRole)
 		})
+
+		By("reporting only the objects that garbage collection does not remove")
+		deployer.SetGroupVersionKind(v1alpha1.GroupVersion.WithKind(v1alpha1.KindNamespacedDeployer))
+		metadata, err := applyset.New(applyset.Config{
+			Client:          k8sClient,
+			RESTMapper:      k8sManager.GetRESTMapper(),
+			ParentNamespace: namespace.GetName(),
+		}, deployer).Project(nil)
+		Expect(err).NotTo(HaveOccurred())
+		probe := &Reconciler{Namespaced: true, apiReader: k8sManager.GetAPIReader(), resourceRESTMapper: k8sManager.GetRESTMapper()}
+		Expect(probe.orphanedObjects(ctx, metadata)).To(ConsistOf(
+			"ClusterRole.rbac.authorization.k8s.io "+clusterRoleName,
+			"ConfigMap "+other.GetName()+"/nd-other-cm",
+		))
 
 		By("deleting the service account's binding and the service account like `kubectl delete -f` would")
 		test.DeleteObject(ctx, k8sClient, &rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "nd-deployer-" + namespace.GetName()}})
