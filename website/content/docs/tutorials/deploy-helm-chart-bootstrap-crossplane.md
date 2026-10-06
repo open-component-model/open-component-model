@@ -30,7 +30,7 @@ Before starting, make sure you have set up your environment as described in the 
 {{< /callout >}}
 
 - [Controller environment]({{< relref "setup-controller-environment.md" >}}) with OCM Controllers installed
-- [Crossplane](https://docs.crossplane.io/latest/software/install/) core, plus the
+- [Crossplane](https://docs.crossplane.io/latest/get-started/install/) core, plus the
   [Kubernetes provider](https://github.com/crossplane-contrib/provider-kubernetes) (`provider-kubernetes`) with a
   `ProviderConfig` named `kubernetes-provider` using `InjectedIdentity`
 - The [Patch and Transform function](https://github.com/crossplane-contrib/function-patch-and-transform)
