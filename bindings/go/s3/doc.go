@@ -77,11 +77,12 @@
 // against the resource digest, so a store misreporting its checksum fails the next read.
 //
 // The fast path applies only to objects uploaded in a single part with a SHA-256 or
-// SHA-512 checksum requested. S3 stores one only when the uploader asks for it (SDKs
-// default to CRC32, S3 itself to CRC64NVME), and for multipart uploads SHA checksums
-// exist only as COMPOSITE checksums: the hash of the part hashes, from which the
-// content's hash cannot be derived. Tools switch to multipart for large files (the AWS
-// CLI above its multipart threshold, 8 MiB by default), so those are always downloaded.
+// SHA-512 checksum requested. S3 stores one only when the uploader asks for it (the AWS
+// CLI sends CRC64NVME by default, the Go SDK CRC32, and S3 adds CRC64NVME when a client
+// sends none), and for multipart uploads SHA checksums exist only as COMPOSITE
+// checksums: the hash of the part hashes, from which the content's hash cannot be
+// derived. Tools switch to multipart for large files (the AWS CLI above its multipart
+// threshold, 8 MiB by default), so those are always downloaded.
 // A CopyObject with a SHA checksum algorithm, up to the 5 GB copy limit, rewrites an
 // object with a full-object checksum.
 //

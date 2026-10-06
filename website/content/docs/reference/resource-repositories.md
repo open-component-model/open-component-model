@@ -270,7 +270,9 @@ fails at the next read.
 Only objects uploaded in a single part with a SHA-256 or SHA-512 checksum skip the download:
 
 - S3 stores a SHA checksum only if the upload asks for one, for example
-  `aws s3 cp --checksum-algorithm SHA256`. By default, the AWS SDK uses `CRC32` and S3 uses `CRC64NVME`.
+  `aws s3 cp --checksum-algorithm SHA256`. Without that, current clients send a cyclic redundancy check: the AWS
+  CLI v2 uses `CRC64NVME`, and the AWS SDK for Go v2 uses `CRC32` from S3 module v1.74.1 on. If a client sends no
+  checksum, S3 computes and stores `CRC64NVME`.
 - For a multipart upload, S3 supports SHA checksums only as `COMPOSITE` checksums, which are hashes of the part hashes.
   The hash of the content cannot be derived from them. The AWS CLI uses a multipart upload for files above its
   multipart threshold (8 MiB by default), so raise `multipart_threshold` if large objects should qualify.
