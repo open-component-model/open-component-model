@@ -48,7 +48,7 @@ func TestTransformBlobHandlerFunc(t *testing.T) {
 				header.Add("Authorization", "not-json")
 				parse, _ := url.Parse(base)
 				return &http.Request{
-					Method: "POST",
+					Method: http.MethodPost,
 					URL:    parse,
 					Header: header,
 				}
@@ -85,7 +85,7 @@ func TestTransformBlobHandlerFunc(t *testing.T) {
 				body := &bytes.Buffer{}
 				body.Write([]byte(`{"specification":{"type":"DummyRepository/v1","baseUrl":"ocm.software"}}`))
 				return &http.Request{
-					Method: "POST",
+					Method: http.MethodPost,
 					URL:    parse,
 					Header: header,
 					Body:   io.NopCloser(body),

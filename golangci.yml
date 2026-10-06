@@ -5,7 +5,7 @@
 version: "2"
 run:
   issues-exit-code: 2
-  tests: false
+  tests: true
   allow-parallel-runners: true
 issues:
   max-issues-per-linter: 0
@@ -105,6 +105,36 @@ linters:
           - funlen
           - gocyclo
           - gosec
+        path: _test\.go
+      # Test linting was enabled (run.tests: true) on a suite that had never been
+      # linted, which surfaced a large pre-existing backlog. Each linter below is
+      # disabled ONLY on _test.go so the backlog can be cleared one linter per PR
+      # (counts are the findings at enablement time). To fix a linter, remove it
+      # from this list in the same PR that resolves its findings.
+      - linters:
+          - canonicalheader # 14: non-canonical HTTP header keys in test fixtures
+          - depguard        # 12: tests import siblings outside the prod allow-list
+          - dupword         # 2: false positives on intentional repetition (CEL map(x,x*2)); fixer corrupts strings
+          - errchkjson      # 16: unchecked json.Marshal in test helpers
+          - errname         # 1: test error type not named xxxError
+          - errorlint       # 23: err == / type assertion instead of errors.Is/As
+          - fatcontext      # 3: context nested in loop/closure in tests
+          - ginkgolinter    # 5: Gomega length/error assertion idioms
+          - gocritic        # 16: assorted style checks (badCall, etc.) in tests
+          - gosmopolitan    # 5: time.Local / non-portable usage in tests
+          - ineffassign     # 8: ineffectual assignments in tests
+          - maintidx        # 39: low maintainability index of large table tests
+          - misspell        # 25: false positives on the `interm` abbreviation; fixer rewrites identifiers
+          - noctx           # 33: exec/http calls without context in tests
+          - nolintlint      # 4: unused //nolint directives tied to the linters disabled here
+          - predeclared     # 1: parameter shadows a predeclared identifier
+          - staticcheck     # 115: assorted SA/ST checks across tests
+          - testifylint     # 525: testify idioms (require.NoError, ErrorIs, Len, Empty, ...)
+          - thelper         # 332: test helpers should start with t.Helper()
+          - tparallel       # 47: subtest t.Parallel() consistency
+          - unconvert       # 5: unnecessary type conversions
+          - unused          # 4: unused test-only helpers
+          - usetesting      # 14: use t.TempDir()/t.Context()
         path: _test\.go
       - path: (.+)\.go$
         text: composites
@@ -482,6 +512,7 @@ linters:
             - "ocm.software/open-component-model/bindings/go/dag"
             - "ocm.software/open-component-model/bindings/go/descriptor/runtime"
             - "ocm.software/open-component-model/bindings/go/descriptor/v2"
+            - "ocm.software/open-component-model/bindings/go/git"
             - "ocm.software/open-component-model/bindings/go/github"
             - "ocm.software/open-component-model/bindings/go/helm"
             - "ocm.software/open-component-model/bindings/go/http"
@@ -517,6 +548,7 @@ linters:
             - "ocm.software/open-component-model/bindings/go/constructor"
             - "ocm.software/open-component-model/bindings/go/credentials"
             - "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+            - "ocm.software/open-component-model/bindings/go/descriptor/v2"
             - "ocm.software/open-component-model/bindings/go/git"
             - "ocm.software/open-component-model/bindings/go/http"
             - "ocm.software/open-component-model/bindings/go/repository"
@@ -609,3 +641,43 @@ linters:
           deny:
             - pkg: "ocm.software/open-component-model/bindings/go/"
               desc: "kubernetes-controller must not import bindings outside its allowed set"
+        # FIPS 140-3: keep non-approved algorithms out of OCM's own code. Upstream Go
+        # in fips140=on mode still allows them (Chainguard's go-fips blocks them), so
+        # these rules stop them from entering first-party code; the
+        # GODEBUG=fips140=only unit-test run covers dependencies. Tests and the
+        # integration-test harness are exempt. See
+        # website/content/docs/reference/standards-and-regulations/fips.md.
+        fips-non-approved-crypto:
+          list-mode: lax
+          files: ["$all", "!$test", "!**/integration/**"]
+          allow:
+            # Reviewed: in FIPS 140-3 mode x/crypto/ssh negotiates only SP 800-140C/D
+            # approved algorithms (see its package doc) and uses the standard library
+            # crypto underneath.
+            - "golang.org/x/crypto/ssh"
+          deny:
+            - pkg: "crypto/des"
+              desc: "DES and 3DES are not FIPS-approved; use AES (crypto/aes, crypto/cipher)"
+            - pkg: "crypto/rc4"
+              desc: "RC4 is not FIPS-approved; use AES-GCM"
+            - pkg: "crypto/dsa"
+              desc: "DSA is not FIPS 186-5 approved for signing; use ECDSA, Ed25519 or RSA"
+            - pkg: "golang.org/x/crypto/"
+              desc: "golang.org/x/crypto is outside the Go Cryptographic Module; use the standard library crypto packages (exceptions need a FIPS review and an allow entry)"
+            - pkg: "github.com/ProtonMail/go-crypto"
+              desc: "OpenPGP implementation outside the Go Cryptographic Module; use the gpg signing handler"
+            - pkg: "github.com/decred/dcrd/dcrec/secp256k1"
+              desc: "secp256k1 is not a FIPS-approved curve; use P-256, P-384 or P-521"
+            - pkg: "github.com/btcsuite/btcd/btcec"
+              desc: "secp256k1 is not a FIPS-approved curve; use P-256, P-384 or P-521"
+        # MD5 and SHA-1 must not protect anything (signatures, HMACs, digests a
+        # signature rests on). The only allowed use is verifying checksums that
+        # remote servers publish (wget/checksum), which Chainguard's go-fips allows too.
+        fips-legacy-hash:
+          list-mode: lax
+          files: ["$all", "!$test", "!**/integration/**", "!**/bindings/go/wget/checksum/**"]
+          deny:
+            - pkg: "crypto/md5"
+              desc: "MD5 is not FIPS-approved for security purposes; use SHA-256 or SHA-512"
+            - pkg: "crypto/sha1"
+              desc: "SHA-1 is not FIPS-approved for signatures or HMACs; use SHA-256 or SHA-512"

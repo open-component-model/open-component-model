@@ -2,6 +2,7 @@ package download
 
 import (
 	"context"
+	"crypto/fips140"
 	"errors"
 	"fmt"
 	"io"
@@ -36,7 +37,18 @@ type Result struct {
 }
 
 // Download resolves one snapshot of the repository and archives it.
-func Download(ctx context.Context, access *accessv1.Git, creds *credsv1.GitCredentials, opts Options) (_ *Result, err error) {
+//
+// Git identifies objects by SHA-1, which is not FIPS-approved, and go-git hashes
+// with it throughout clone, fetch and tree walks. The download therefore runs
+// outside strict enforcement, so it keeps working with GODEBUG=fips140=only.
+// FIPS mode itself stays on, so TLS and SSH still negotiate approved algorithms
+// only, and the archive OCM records is digested with SHA-256.
+func Download(ctx context.Context, access *accessv1.Git, creds *credsv1.GitCredentials, opts Options) (result *Result, err error) {
+	fips140.WithoutEnforcement(func() { result, err = download(ctx, access, creds, opts) })
+	return result, err
+}
+
+func download(ctx context.Context, access *accessv1.Git, creds *credsv1.GitCredentials, opts Options) (_ *Result, err error) {
 	if err := access.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid git access: %w", err)
 	}

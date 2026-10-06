@@ -2,6 +2,7 @@ package download
 
 import (
 	"context"
+	"crypto/fips140"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -26,6 +27,13 @@ import (
 	ocicredsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 )
 
+// ErrProvenanceVerificationInFIPSMode is returned with GODEBUG=fips140=only when the credentials carry a keyring.
+// Helm verifies chart provenance with OpenPGP (github.com/ProtonMail/go-crypto), which hashes key fingerprints with
+// SHA-1 and does not run through the Go Cryptographic Module; strict mode would panic in it.
+var ErrProvenanceVerificationInFIPSMode = errors.New("with GODEBUG=fips140=only, Helm chart provenance verification " +
+	"is not available: Helm verifies provenance with OpenPGP outside the Go Cryptographic Module; " +
+	"remove the keyring from the Helm credentials or run OCM without fips140=only")
+
 // NewReadOnlyChartFromRemote downloads a Helm chart from a remote repository and returns it as [helm.ChartData].
 // The helmRepo parameter accepts both OCI references (e.g. "oci://registry.example.com/charts/mychart:1.0.0")
 // and HTTP/S URLs (e.g. "https://example.com/charts/mychart-1.0.0.tgz").
@@ -48,6 +56,16 @@ func NewReadOnlyChartFromRemote(ctx context.Context, helmRepo, targetDir string,
 	}
 	if opt.OCICredentials == nil {
 		opt.OCICredentials = &ocicredsv1.OCICredentials{}
+	}
+
+	if opt.Credentials.Keyring != "" {
+		if fips140.Enforced() {
+			return nil, ErrProvenanceVerificationInFIPSMode
+		}
+		if fips140.Enabled() {
+			slog.DebugContext(ctx, "Helm chart provenance verification runs OpenPGP outside the Go Cryptographic Module "+
+				"(GODEBUG=fips140=only rejects it)")
+		}
 	}
 
 	chartDir, err := os.MkdirTemp(targetDir, "helmRemoteChart*")
@@ -167,17 +185,10 @@ func NewReadOnlyChartFromRemote(ctx context.Context, helmRepo, targetDir string,
 		return nil, fmt.Errorf("error resolving chart URL %q via index.yaml: %w", helmRepo, err)
 	}
 
-	// Update baseURL to the resolved repo URL for accurate same-host credential scoping,
-	// then rebuild providers so httpConfigGetter instances capture the new baseURL.
-	cfgOpts.baseURL = resolvedRepo
-	if httpClient != nil {
-		providers = GetterProviders(httpClient, cfgOpts)
-		dl.Getters = providers
-	}
-
-	// For the standard getter.HTTPGetter path (no custom client), credentials
-	// must be forwarded via dl.Options. The httpConfigGetter path has them
-	// baked in via cfgOpts above.
+	// Credentials belong to the host of helmRepo. The providers built above scope them to it, so
+	// a chart URL resolved to another host (e.g. the upstream URL in the index.yaml of an
+	// Artifactory remote repository) is fetched without them. For the standard getter.HTTPGetter
+	// path (no custom client), credentials are forwarded via dl.Options only for the same host.
 	if httpClient == nil && username != "" && password != "" && sameHost(helmRepo, resolvedRepo) {
 		dl.Options = append(dl.Options, getter.WithBasicAuth(username, password))
 	}
@@ -282,31 +293,28 @@ func resolveHTTPChartURL(ctx context.Context, helmRepo, requestedVersion, tmpDir
 		return helmRepo, nil
 	}
 
-	ref, err := looseref.ParseReference(helmRepo)
+	// Split the reference as a URL, not with the OCI reference grammar: a chart version is
+	// SemVer and may carry build metadata ("1.0.0+abc"), which is not a valid OCI tag.
+	u, err := url.Parse(helmRepo)
 	if err != nil {
 		return helmRepo, nil
 	}
 
-	// Tag holds the version; Repository holds "<host>/<repoPath>/<chartName>".
-	// If either is absent this isn't a ChartReference()-style URL.
-	if ref.Tag == "" || ref.Repository == "" {
+	// The last path segment is "<chartName>:<version>"; neither part can contain a colon.
+	// Without both parts this isn't a ChartReference()-style URL.
+	repoPath, lastSegment := path.Split(u.Path)
+	chartName, chartVersion, found := strings.Cut(lastSegment, ":")
+	if !found || chartName == "" || chartVersion == "" {
 		return helmRepo, nil
 	}
-
-	// chartName is the last path segment of the repository, repoPath is everything before it.
-	chartName := path.Base(ref.Repository)
-	repoPath := path.Dir(ref.Repository)
 	base := &url.URL{
-		Scheme: ref.Scheme,
-		Host:   ref.Registry,
-	}
-	if repoPath != "." {
-		base.Path = "/" + repoPath
+		Scheme: u.Scheme,
+		Host:   u.Host,
+		Path:   strings.TrimSuffix(repoPath, "/"),
 	}
 	repoBase := base.String()
 	entry.URL = repoBase
 
-	chartVersion := ref.Tag
 	if requestedVersion != "" {
 		chartVersion = requestedVersion
 	}

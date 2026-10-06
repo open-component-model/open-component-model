@@ -9,6 +9,8 @@ import (
 	"io"
 	"testing"
 
+	. "ocm.software/open-component-model/bindings/go/oci/internal/pack"
+
 	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
@@ -22,7 +24,6 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	resourceblob "ocm.software/open-component-model/bindings/go/oci/blob"
-	. "ocm.software/open-component-model/bindings/go/oci/internal/pack"
 	"ocm.software/open-component-model/bindings/go/oci/internal/policy"
 	oci "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"

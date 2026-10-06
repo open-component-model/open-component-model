@@ -6,12 +6,13 @@ import (
 	"strings"
 	"testing"
 
+	. "ocm.software/open-component-model/bindings/go/blob/inmemory"
+
 	"github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/blob"
-	. "ocm.software/open-component-model/bindings/go/blob/inmemory"
 )
 
 func Test_ReadCloserReturnsReader(t *testing.T) {
@@ -355,7 +356,6 @@ func TestMemoryBlobOptions(t *testing.T) {
 		r.True(known)
 		r.Equal(expectedDigest.String(), dig)
 	})
-
 }
 
 func TestConcurrentAndSerialReads(t *testing.T) {

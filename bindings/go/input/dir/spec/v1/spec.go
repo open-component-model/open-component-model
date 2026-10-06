@@ -18,6 +18,8 @@ type Dir struct {
 	Type runtime.Type `json:"type"`
 
 	// Path is the path to the directory.
+	// Relative paths are resolved against the working directory, which defaults to
+	// the directory of the component constructor file.
 	Path string `json:"path"`
 
 	// MediaType is the media type of the resulting blob (defaults to application/x-tar).
@@ -40,9 +42,13 @@ type Dir struct {
 
 	// ExcludeFiles is a list of file name patterns to exclude from addition to the resulting blob.
 	// Excluded files always override included files.
+	// Patterns use filepath.Match syntax (no **) and are matched against paths
+	// relative to Path.
 	ExcludeFiles []string `json:"excludeFiles,omitempty"`
 
 	// IncludeFiles is a list of file name patterns to exclusively add to the resulting blob.
+	// Patterns use filepath.Match syntax (no **) and are matched against paths
+	// relative to Path.
 	IncludeFiles []string `json:"includeFiles,omitempty"`
 
 	// Reproducible defines that the attributes of the included files have to be normalized.
@@ -50,6 +56,7 @@ type Dir struct {
 	// need to be comparable on byte level (e.g. for hashing). So, if Reproducible is set to true,
 	// to get fully byte-equivalent blobs despite different file modification time, permission bits, etc.,
 	// these attributes will be set to fixed values while creating the blob.
+	// Recommended when signing, so that rebuilding the component version yields the same digest.
 	Reproducible bool `json:"reproducible,omitempty"`
 }
 

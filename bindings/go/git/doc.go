@@ -28,6 +28,15 @@
 // remote HEAD, matching OCM v1 input behavior. Commit takes precedence over Ref.
 // The constructor delegates local-blob storage and digest handling to the target storage.
 //
+// # Transfer
+//
+// The Git download transformer buffers a pinned snapshot for the transfer graph.
+// Transfer with resource copying stores Git access resources as local blobs in
+// OCI or CTF targets, preserving the resource digest. It requires a pinned Commit;
+// constructor digest processing pins ref-only access before publication.
+// Without resource copying, external Git access remains unchanged. Git upload
+// is not supported.
+//
 // # Archive and digests
 //
 // The shared filesystem archiver reads Git objects without a host checkout.

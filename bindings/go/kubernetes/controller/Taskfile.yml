@@ -92,14 +92,14 @@ tasks:
       - 'docker rm -f ocm-e2e-image-registry 2>/dev/null || true'
 
   test/e2e:
-    desc: "Run end-to-end tests against a running cluster. Pass ginkgo flags via `--`, e.g. `task test/e2e -- -ginkgo.focus=helm-simple`. Omit to run all scenarios."
+    desc: "Run end-to-end tests against a running cluster, 4 specs in parallel. Pass Ginkgo CLI flags via `--`, e.g. `task test/e2e -- --focus=helm-simple`; `-- --procs=1` runs serially. Omit to run all scenarios."
     dotenv: [ '{{.TASKFILE_DIR}}/test/e2e/hacks/.env' ]
     cmds:
       - task: helm/install
-      - PROJECT_DIR='{{.TASKFILE_DIR}}' go test '{{.TASKFILE_DIR}}/test/e2e/' -v -timeout 30m -ginkgo.v {{.CLI_ARGS}}
+      - PROJECT_DIR='{{.TASKFILE_DIR}}' go run github.com/onsi/ginkgo/v2/ginkgo --procs=4 -v --timeout=30m {{.CLI_ARGS}} '{{.TASKFILE_DIR}}/test/e2e/'
 
   test/e2e/fresh:
-    desc: "Teardown, setup, and run E2E tests from scratch. Pass ginkgo flags via `--`, e.g. `task test/e2e/fresh -- -ginkgo.focus=helm-simple`."
+    desc: "Teardown, setup, and run E2E tests from scratch. Pass Ginkgo CLI flags via `--`, e.g. `task test/e2e/fresh -- --focus=helm-simple`."
     cmds:
       - task: test/e2e/setup/teardown
       - task: test/e2e/setup/local
@@ -151,6 +151,8 @@ tasks:
   # In this setup it is used only with a single platform (the local arch),
   # but it still supports --push / --load flags if desired.
   docker-build/multi-arch:
+    # GOFIPS140 (root .env) is forwarded as a build arg from the environment.
+    dotenv: ['{{.TASKFILE_DIR}}/../../../../.env']
     desc: "Build a multi-architecture Docker image"
     requires:
       vars: [ PLATFORMS, CONTROLLER_IMG ]
@@ -158,6 +160,7 @@ tasks:
       args=(
         --platform={{.PLATFORMS}}
         --build-arg GO_TAGS='{{.GO_TAGS | default ""}}'
+        --build-arg GOFIPS140
         -f '{{.TASKFILE_DIR}}/Dockerfile' '{{.TASKFILE_DIR}}/../..'
       )
 

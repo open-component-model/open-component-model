@@ -2,8 +2,6 @@ package repository_test
 
 import (
 	"crypto"
-	_ "crypto/sha1"
-	_ "crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"io"
@@ -12,6 +10,9 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	_ "crypto/sha1"
+	_ "crypto/sha256"
 
 	godigest "github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/assert"

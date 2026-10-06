@@ -78,7 +78,7 @@ env:
 jobs:
   # === This is new: workflow_call wiring ===
   build_cli:
-    uses: ./.github/workflows/cli.yml
+    uses: $/.github/workflows/cli.yml
     permissions:
       contents: read
       id-token: write
@@ -88,7 +88,7 @@ jobs:
       build_version: ${{ inputs.build_version }}
 
   build_controller:
-    uses: ./.github/workflows/kubernetes-controller.yml
+    uses: $/.github/workflows/kubernetes-controller.yml
     permissions:
       contents: read
       actions: read
@@ -100,7 +100,7 @@ jobs:
   conformance:
     name: Conformance
     needs: [build_cli, build_controller]
-    uses: ./.github/workflows/conformance.yml
+    uses: $/.github/workflows/conformance.yml
     with:
       cli_artifact: ${{ needs.build_cli.outputs.artifact_name }}
       cli_version: ${{ needs.build_cli.outputs.version }}
@@ -115,7 +115,7 @@ jobs:
   e2e:
     name: E2E
     needs: [build_cli, build_controller]
-    uses: ./.github/workflows/e2e.yml
+    uses: $/.github/workflows/e2e.yml
     permissions:
       contents: read
       actions: read

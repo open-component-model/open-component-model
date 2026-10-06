@@ -8,7 +8,8 @@ import (
 	"cel.dev/cel-go/ext"
 
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
-	ocmfunctions "ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/cel/functions"
+	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/cel/functions"
+	ocifunctions "ocm.software/open-component-model/bindings/go/oci/cel/functions"
 )
 
 var sharedEnv = sync.OnceValues[*cel.Env, error](func() (*cel.Env, error) {
@@ -20,7 +21,7 @@ var sharedEnv = sync.OnceValues[*cel.Env, error](func() (*cel.Env, error) {
 		ext.Encoders(),
 		ext.Bindings(),
 		cel.OptionalTypes(),
-		ocmfunctions.SemverCheck(),
+		functions.SemverCheck(),
 	)
 })
 
@@ -43,7 +44,7 @@ func ComponentInfoEnv(component *v1alpha1.ComponentInfo) (*cel.Env, error) {
 		return nil, fmt.Errorf("failed to load shared cel environment: %w", err)
 	}
 
-	ociEnv, err := env.Extend(ocmfunctions.ToOCI(component))
+	ociEnv, err := env.Extend(ocifunctions.ToOCI(ocifunctions.WithReferenceResolver(functions.LocalBlobResolver(component))))
 	if err != nil {
 		return nil, fmt.Errorf("failed to extend shared cel environment: %w", err)
 	}

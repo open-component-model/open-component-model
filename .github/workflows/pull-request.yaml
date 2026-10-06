@@ -74,7 +74,7 @@ jobs:
       issues: write
       pull-requests: write
     steps:
-      - uses: codelytv/pr-size-labeler@4e3aa0f77f348c8066513d453515316ffa01a607 # v1
+      - uses: codelytv/pr-size-labeler@19c335e7695ba922de938806dd129f0a9b992644 # v1
         with:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           xs_label: 'size/xs'
@@ -95,7 +95,7 @@ jobs:
           # files_to_ignore: ''
   verify-labels:
     needs: [labeler, size-labeler, conventional-commit-labeler]
-    uses: ./.github/workflows/verify-labels.yaml
+    uses: $/.github/workflows/verify-labels.yaml
     permissions:
       pull-requests: read
     with:

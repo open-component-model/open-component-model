@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
 	"ocm.software/open-component-model/bindings/go/plugin/internal/dummytype"
 	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts"
@@ -20,12 +21,12 @@ type mockPlugin struct {
 }
 
 func (m *mockPlugin) GetIdentity(ctx context.Context, typ *v1.GetIdentityRequest[runtime.Typed]) (*v1.GetIdentityResponse, error) {
-	//TODO implement me
+	// TODO implement me
 	panic("implement me")
 }
 
 func (m *mockPlugin) ProcessResourceDigest(ctx context.Context, req *v1.ProcessResourceDigestRequest, credentials runtime.Typed) (*v1.ProcessResourceDigestResponse, error) {
-	//TODO implement me
+	// TODO implement me
 	panic("implement me")
 }
 

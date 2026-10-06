@@ -128,9 +128,9 @@ func TestStaticTypedCredentialsResolver(t *testing.T) {
 			wantUsername: "quayuser",
 		},
 		{
-			name:    "not found returns ErrNotFound",
+			name:     "not found returns ErrNotFound",
 			identity: runtime.Identity{"type": "OCIRegistry", "hostname": "unknown.io"},
-			wantErr: credentials.ErrNotFound,
+			wantErr:  credentials.ErrNotFound,
 		},
 	}
 
