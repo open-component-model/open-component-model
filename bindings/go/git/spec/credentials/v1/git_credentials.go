@@ -50,11 +50,11 @@ func MustRegisterCredentialType(scheme *runtime.Scheme) {
 // +ocm:jsonschema-gen=true
 type GitHTTPSCredentials struct {
 	// +ocm:jsonschema-gen:enum=GitHTTPSCredentials/v1,GitHTTPSCredentials
-	Type     runtime.Type `json:"type"`
+	Type runtime.Type `json:"type"`
 	// Username is the username required by the Git server.
-	Username string       `json:"username"`
+	Username string `json:"username"`
 	// Password is the server password or access token sent as the HTTP Basic password.
-	Password string       `json:"password"`
+	Password string `json:"password"`
 }
 
 func (c *GitHTTPSCredentials) Validate() error {
@@ -75,9 +75,9 @@ func (c *GitHTTPSCredentials) Validate() error {
 // +ocm:jsonschema-gen=true
 type GitBearerCredentials struct {
 	// +ocm:jsonschema-gen:enum=GitBearerCredentials/v1,GitBearerCredentials
-	Type  runtime.Type `json:"type"`
+	Type runtime.Type `json:"type"`
 	// Token is sent in the HTTP Authorization Bearer header.
-	Token string       `json:"token"`
+	Token string `json:"token"`
 }
 
 func (c *GitBearerCredentials) Validate() error {
@@ -95,9 +95,9 @@ func (c *GitBearerCredentials) Validate() error {
 // +ocm:jsonschema-gen=true
 type GitSSHCredentials struct {
 	// +ocm:jsonschema-gen:enum=GitSSHCredentials/v1,GitSSHCredentials
-	Type     runtime.Type `json:"type"`
+	Type runtime.Type `json:"type"`
 	// Username overrides the SSH URL user. By default, OCM uses the URL user, then git.
-	Username string       `json:"username,omitempty"`
+	Username string `json:"username,omitempty"`
 	// PrivateKey is the path to an SSH private key file.
 	PrivateKey string `json:"privateKey,omitempty"`
 	// PrivateKeyPEM is an inline PEM-encoded SSH private key.
