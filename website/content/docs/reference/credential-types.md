@@ -348,10 +348,10 @@ Configuring no consumer at all is valid: the GitHub REST API is then called anon
 
 Use a credential type that matches the repository URL and the authentication method required by the Git server:
 
-- For HTTPS with a password or access token sent using HTTP Basic, use
+- For most major Git hosts, use HTTPS with a personal access token in `password` (HTTP Basic):
   [`GitHTTPSCredentials/v1`](#githttpscredentialsv1).
-- For an HTTPS server that explicitly requires Bearer authentication, use
-  [`GitBearerCredentials/v1`](#gitbearercredentialsv1).
+- Use [`GitBearerCredentials/v1`](#gitbearercredentialsv1) only if the HTTPS server explicitly requires Bearer
+  authentication; major hosts typically do not enable it for Git operations.
 - For SSH with a private key or SSH agent, use [`GitSSHCredentials/v1`](#gitsshcredentialsv1).
 
 These three types work with [`Git`]({{< relref "credential-consumer-identities.md#git" >}}) consumers for both
