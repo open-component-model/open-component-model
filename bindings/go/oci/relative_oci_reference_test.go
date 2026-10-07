@@ -20,6 +20,7 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/oci"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
+	"ocm.software/open-component-model/bindings/go/oci/looseref"
 	"ocm.software/open-component-model/bindings/go/oci/spec"
 	ociaccess "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	v1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
@@ -63,11 +64,14 @@ func (r *recordingResolver) requested(reference string) bool {
 	return false
 }
 
-// stageOCIImage pushes a single-layer OCI image into store at reference and tags it,
-// returning the manifest descriptor.
-func stageOCIImage(t *testing.T, ctx context.Context, store *ocictf.Store, reference, tag string, data []byte) ociImageSpecV1.Descriptor {
+// stageOCIImage pushes a single-layer OCI image into the repository that reference points
+// to and, when reference carries a tag, tags the manifest with it. It returns the manifest
+// descriptor.
+func stageOCIImage(t *testing.T, ctx context.Context, store *ocictf.Store, reference string, data []byte) ociImageSpecV1.Descriptor {
 	t.Helper()
 	r := require.New(t)
+	ref, err := looseref.ParseReference(reference)
+	r.NoError(err)
 	imgStore, err := store.StoreForReference(ctx, reference)
 	r.NoError(err)
 
@@ -78,8 +82,8 @@ func stageOCIImage(t *testing.T, ctx context.Context, store *ocictf.Store, refer
 		Layers: []ociImageSpecV1.Descriptor{layer},
 	})
 	r.NoError(err)
-	if tag != "" {
-		r.NoError(imgStore.Tag(ctx, manifest, tag))
+	if ref.Tag != "" {
+		r.NoError(imgStore.Tag(ctx, manifest, ref.Tag))
 	}
 	return manifest
 }
@@ -134,69 +138,55 @@ func TestRepository_GetLocalResource_RelativeOCIReference(t *testing.T) {
 
 	// A fixed ComponentVersionReference with a scheme and a subPath proves the resolution
 	// base is the registry root: neither the subPath (ocm-prefix) nor the
-	// component-descriptors path is prepended, and the scheme is preserved.
-	const fixedCVRef = "http://registry.example/ocm-prefix/component-descriptors/acme.org/compo:v1.0.0"
+	// component-descriptors path is prepended, and the scheme is preserved. registry is that
+	// root — the only part of fixedCVRef a relative reference resolves against.
+	const (
+		registry   = "http://registry.example"
+		fixedCVRef = registry + "/ocm-prefix/component-descriptors/acme.org/compo:v1.0.0"
+	)
 
 	payload := []byte("relative artifact payload")
 
+	// stageRef, the staged tag and the expected absolute reference are all derived from
+	// reference: the artifact is planted at registry/<reference> and resolution must ask for
+	// exactly that.
 	for _, tc := range []struct {
-		name         string
-		accessType   runtime.Type
-		reference    string
-		stageRef     string // repository[:tag] staged in the CTF
-		stageTag     string
-		expectAbsRef string // reference StoreForReference must be asked for
-		withDigest   bool   // append @<manifestDigest> to reference (and expectAbsRef)
+		name       string
+		accessType runtime.Type
+		reference  string
+		withDigest bool // append @<manifestDigest> to the stored reference and the expectation
 	}{
 		{
-			name:         "unversioned spelling, tag only",
-			accessType:   runtime.NewUnversionedType(v1.RelativeOCIReferenceType),
-			reference:    "ocm/value:v2.0",
-			stageRef:     "ocm/value:v2.0",
-			stageTag:     "v2.0",
-			expectAbsRef: "http://registry.example/ocm/value:v2.0",
+			name:       "unversioned spelling, tag only",
+			accessType: runtime.NewUnversionedType(v1.RelativeOCIReferenceType),
+			reference:  "ocm/value:v2.0",
 		},
 		{
-			name:         "versioned spelling, tag only",
-			accessType:   runtime.NewVersionedType(v1.RelativeOCIReferenceType, v1.Version),
-			reference:    "ocm/value:v2.0",
-			stageRef:     "ocm/value:v2.0",
-			stageTag:     "v2.0",
-			expectAbsRef: "http://registry.example/ocm/value:v2.0",
+			name:       "versioned spelling, tag only",
+			accessType: runtime.NewVersionedType(v1.RelativeOCIReferenceType, v1.Version),
+			reference:  "ocm/value:v2.0",
 		},
 		{
-			name:         "multi-segment repository",
-			accessType:   runtime.NewUnversionedType(v1.RelativeOCIReferenceType),
-			reference:    "ocm-prefix/images/app:v1",
-			stageRef:     "ocm-prefix/images/app:v1",
-			stageTag:     "v1",
-			expectAbsRef: "http://registry.example/ocm-prefix/images/app:v1",
+			name:       "multi-segment repository",
+			accessType: runtime.NewUnversionedType(v1.RelativeOCIReferenceType),
+			reference:  "ocm-prefix/images/app:v1",
 		},
 		{
-			name:         "dotted first segment is a path, not a host",
-			accessType:   runtime.NewUnversionedType(v1.RelativeOCIReferenceType),
-			reference:    "acme.org/value:v2.0",
-			stageRef:     "acme.org/value:v2.0",
-			stageTag:     "v2.0",
-			expectAbsRef: "http://registry.example/acme.org/value:v2.0",
+			name:       "dotted first segment is a path, not a host",
+			accessType: runtime.NewUnversionedType(v1.RelativeOCIReferenceType),
+			reference:  "acme.org/value:v2.0",
 		},
 		{
-			name:         "tag and digest preserved",
-			accessType:   runtime.NewUnversionedType(v1.RelativeOCIReferenceType),
-			reference:    "ocm/value:v2.0",
-			stageRef:     "ocm/value:v2.0",
-			stageTag:     "v2.0",
-			expectAbsRef: "http://registry.example/ocm/value:v2.0",
-			withDigest:   true,
+			name:       "tag and digest preserved",
+			accessType: runtime.NewUnversionedType(v1.RelativeOCIReferenceType),
+			reference:  "ocm/value:v2.0",
+			withDigest: true,
 		},
 		{
-			name:         "digest only",
-			accessType:   runtime.NewUnversionedType(v1.RelativeOCIReferenceType),
-			reference:    "ocm/value",
-			stageRef:     "ocm/value",
-			stageTag:     "",
-			expectAbsRef: "http://registry.example/ocm/value",
-			withDigest:   true,
+			name:       "digest only",
+			accessType: runtime.NewUnversionedType(v1.RelativeOCIReferenceType),
+			reference:  "ocm/value",
+			withDigest: true,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -209,13 +199,13 @@ func TestRepository_GetLocalResource_RelativeOCIReference(t *testing.T) {
 			resolver := &recordingResolver{Resolver: store, fixedCVRef: fixedCVRef}
 			repo := Repository(t, oci.WithResolver(resolver))
 
-			manifest := stageOCIImage(t, ctx, store, "http://registry.example/"+tc.stageRef, tc.stageTag, payload)
+			manifest := stageOCIImage(t, ctx, store, registry+"/"+tc.reference, payload)
 
 			reference := tc.reference
-			expectAbsRef := tc.expectAbsRef
+			expectAbsRef := registry + "/" + tc.reference
 			if tc.withDigest {
-				reference = reference + "@" + manifest.Digest.String()
-				expectAbsRef = expectAbsRef + "@" + manifest.Digest.String()
+				reference += "@" + manifest.Digest.String()
+				expectAbsRef += "@" + manifest.Digest.String()
 			}
 
 			access := &v1.RelativeOCIReference{Type: tc.accessType, Reference: reference}
@@ -262,7 +252,7 @@ func TestRepository_GetLocalResource_RelativeOCIReference_CTF(t *testing.T) {
 	store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
 	repo := Repository(t, ocictf.WithCTF(store))
 
-	manifest := stageOCIImage(t, ctx, store, "ctf.ocm.software/ocm/value:v2.0", "v2.0", []byte("ctf relative payload"))
+	manifest := stageOCIImage(t, ctx, store, "ctf.ocm.software/ocm/value:v2.0", []byte("ctf relative payload"))
 
 	access := &v1.RelativeOCIReference{
 		Type:      runtime.NewUnversionedType(v1.RelativeOCIReferenceType),
