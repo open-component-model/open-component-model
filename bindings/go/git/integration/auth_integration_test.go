@@ -259,7 +259,7 @@ func Test_Integration_GitSSHAuthentication(t *testing.T) {
 		r.NoError(err)
 		t.Cleanup(func() { _ = os.RemoveAll(socketDir) })
 
-		listener, err := net.Listen("unix", filepath.Join(socketDir, "agent.sock"))
+		listener, err := (&net.ListenConfig{}).Listen(t.Context(), "unix", filepath.Join(socketDir, "agent.sock"))
 		r.NoError(err)
 		t.Cleanup(func() { _ = listener.Close() })
 		go func() {

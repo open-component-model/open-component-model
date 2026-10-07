@@ -12,7 +12,7 @@
 // shown pane is expanded. Pages without tabs keep the server-rendered TOC and
 // the theme's scroll spy untouched.
 
-import { ScrollSpy } from 'bootstrap';
+import { ScrollSpy } from "bootstrap";
 
 // Mirrors markup.tableOfContents in config/_default/markup.yaml. Hugo does not
 // expose that config to templates, so the bounds are repeated here.
@@ -20,7 +20,7 @@ const START_LEVEL = 2;
 const END_LEVEL = 3;
 
 // Subtrees that are page chrome rather than page content.
-const SKIP = '.toc-mobile, .nav-tabs, .page-nav, .page-footer-meta';
+const SKIP = ".toc-mobile, .nav-tabs, .page-nav, .page-footer-meta";
 
 // A heading counts as reached once it is this far into the viewport. Roughly
 // the height of the sticky site header.
@@ -28,7 +28,7 @@ const ACTIVATION_OFFSET = 96;
 
 function headingText(heading) {
     const clone = heading.cloneNode(true);
-    for (const anchor of clone.querySelectorAll('.anchor')) {
+    for (const anchor of clone.querySelectorAll(".anchor")) {
         anchor.remove();
     }
     return clone.textContent.trim();
@@ -38,7 +38,7 @@ function headingText(heading) {
 // (rendered for the no-JS fallback) is the backstop for theme-rendered tabs.
 function paneLabel(pane) {
     const trigger = document.querySelector(`[data-bs-target="#${CSS.escape(pane.id)}"]`);
-    const label = trigger ?? pane.querySelector(':scope > .tab-pane-label');
+    const label = trigger ?? pane.querySelector(":scope > .tab-pane-label");
     return label ? label.textContent.trim() : pane.id;
 }
 
@@ -55,8 +55,8 @@ function scanScope(root) {
                 continue;
             }
 
-            if (child.classList.contains('tab-content')) {
-                const panes = [...child.children].filter((pane) => pane.classList.contains('tab-pane') && pane.id);
+            if (child.classList.contains("tab-content")) {
+                const panes = [...child.children].filter((pane) => pane.classList.contains("tab-pane") && pane.id);
                 if (panes.length) {
                     nodes.push({ panes });
                 }
@@ -129,10 +129,10 @@ function buildOutline(root, startLevel) {
 // outline of its own gets a disclosure button in front of its label; `prefix`
 // keeps the ids it needs unique between the desktop and the mobile TOC.
 function renderOutline(items, prefix) {
-    const list = document.createElement('ul');
+    const list = document.createElement("ul");
     for (const item of items) {
-        const entry = document.createElement('li');
-        const link = document.createElement('a');
+        const entry = document.createElement("li");
+        const link = document.createElement("a");
         link.href = `#${item.id}`;
         link.textContent = item.text;
 
@@ -150,14 +150,14 @@ function renderOutline(items, prefix) {
         link.id = `${prefix}-label-${item.id}`;
 
         // Labelled by the tab's own link, so the button needs no separate wording.
-        const toggle = document.createElement('button');
-        toggle.type = 'button';
-        toggle.className = 'toc-tab-toggle';
-        toggle.setAttribute('aria-controls', subtree.id);
-        toggle.setAttribute('aria-labelledby', link.id);
+        const toggle = document.createElement("button");
+        toggle.type = "button";
+        toggle.className = "toc-tab-toggle";
+        toggle.setAttribute("aria-controls", subtree.id);
+        toggle.setAttribute("aria-labelledby", link.id);
 
-        const head = document.createElement('div');
-        head.className = 'toc-tab';
+        const head = document.createElement("div");
+        head.className = "toc-tab";
         head.append(toggle, link);
 
         entry.dataset.tocPane = item.id;
@@ -168,27 +168,27 @@ function renderOutline(items, prefix) {
 }
 
 function setExpanded(entry, expanded) {
-    entry.querySelector(':scope > .toc-tab > .toc-tab-toggle')
-        .setAttribute('aria-expanded', String(expanded));
-    entry.querySelector(':scope > ul').hidden = !expanded;
+    entry.querySelector(":scope > .toc-tab > .toc-tab-toggle")
+        .setAttribute("aria-expanded", String(expanded));
+    entry.querySelector(":scope > ul").hidden = !expanded;
 }
 
 // Expand the outline of every shown pane and collapse the rest, so that the TOC
 // covers about as much as the page does. A manual toggle holds until the next
 // tab switch.
 function syncTabOutlines() {
-    for (const entry of document.querySelectorAll('.page-links [data-toc-pane]')) {
+    for (const entry of document.querySelectorAll(".page-links [data-toc-pane]")) {
         const pane = document.getElementById(entry.dataset.tocPane);
-        setExpanded(entry, Boolean(pane?.classList.contains('active')));
+        setExpanded(entry, Boolean(pane?.classList.contains("active")));
     }
 }
 
 function toggleTabOutline(event) {
-    const toggle = event.target.closest('.page-links .toc-tab-toggle');
+    const toggle = event.target.closest(".page-links .toc-tab-toggle");
     if (!toggle) {
         return;
     }
-    setExpanded(toggle.closest('[data-toc-pane]'), toggle.getAttribute('aria-expanded') !== 'true');
+    setExpanded(toggle.closest("[data-toc-pane]"), toggle.getAttribute("aria-expanded") !== "true");
 }
 
 function flattenIds(items, ids = []) {
@@ -229,10 +229,10 @@ function spyOnOutline(ids, links) {
             return;
         }
         for (const link of links.get(active?.id) ?? []) {
-            link.classList.remove('active');
+            link.classList.remove("active");
         }
         for (const link of links.get(current?.id) ?? []) {
-            link.classList.add('active');
+            link.classList.add("active");
         }
         active = current;
     }
@@ -245,18 +245,18 @@ function spyOnOutline(ids, links) {
         requestAnimationFrame(update);
     }
 
-    window.addEventListener('scroll', schedule, { passive: true });
-    window.addEventListener('resize', schedule, { passive: true });
+    window.addEventListener("scroll", schedule, { passive: true });
+    window.addEventListener("resize", schedule, { passive: true });
     // Showing a tab moves everything below it, and reveals its own headings.
-    document.addEventListener('shown.bs.tab', schedule);
+    document.addEventListener("shown.bs.tab", schedule);
     // Mermaid diagrams and web fonts settle after DOMContentLoaded.
-    window.addEventListener('load', schedule);
+    window.addEventListener("load", schedule);
     update();
 }
 
 function renderTabAwareToc() {
-    const content = document.querySelector('main.docs-content');
-    if (!content || !content.querySelector('.tab-content')) {
+    const content = document.querySelector("main.docs-content");
+    if (!content || !content.querySelector(".tab-content")) {
         return;
     }
 
@@ -266,7 +266,7 @@ function renderTabAwareToc() {
     }
 
     // Desktop (#toc) and mobile (#TableOfContents) both render into .page-links.
-    const navs = document.querySelectorAll('.page-links > nav');
+    const navs = document.querySelectorAll(".page-links > nav");
     if (!navs.length) {
         return;
     }
@@ -274,38 +274,38 @@ function renderTabAwareToc() {
     const links = new Map();
     for (const nav of navs) {
         nav.replaceChildren(renderOutline(outline, nav.id));
-        for (const link of nav.querySelectorAll('a')) {
+        for (const link of nav.querySelectorAll("a")) {
             const id = decodeURIComponent(link.hash.slice(1));
             links.set(id, [...(links.get(id) ?? []), link]);
         }
     }
 
     syncTabOutlines();
-    document.addEventListener('shown.bs.tab', syncTabOutlines);
-    document.addEventListener('click', toggleTabOutline);
+    document.addEventListener("shown.bs.tab", syncTabOutlines);
+    document.addEventListener("click", toggleTabOutline);
 
     // Keep the theme's scroll spy from claiming this TOC. The data API picks the
     // attribute up on window load, after this runs; dispose covers the case
     // where the bundle only finishes loading after that.
-    document.body.removeAttribute('data-bs-spy');
-    window.addEventListener('load', () => ScrollSpy.getInstance(document.body)?.dispose());
+    document.body.removeAttribute("data-bs-spy");
+    window.addEventListener("load", () => ScrollSpy.getInstance(document.body)?.dispose());
 
     spyOnOutline(flattenIds(outline), links);
 }
 
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', renderTabAwareToc);
+if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", renderTabAwareToc);
 } else {
     renderTabAwareToc();
 }
 
 // Close mobile TOC details when clicking on a link
-document.addEventListener('click', function (e) {
+document.addEventListener("click", (e) => {
     // Check if the clicked element is a link within the mobile TOC
-    const tocMobile = e.target.closest('.toc-mobile');
-    if (tocMobile && e.target.tagName === 'A') {
+    const tocMobile = e.target.closest(".toc-mobile");
+    if (tocMobile && e.target.tagName === "A") {
     // Find the details element within the mobile TOC
-        const details = tocMobile.querySelector('details');
+        const details = tocMobile.querySelector("details");
         if (details && details.open) {
             // Close the details element
             details.open = false;

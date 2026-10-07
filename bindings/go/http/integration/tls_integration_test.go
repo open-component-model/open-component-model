@@ -50,7 +50,9 @@ func TestTLSInsecureSkipVerify_Integration(t *testing.T) {
 
 	t.Run("default client fails with self-signed cert", func(t *testing.T) {
 		c := ocmhttp.NewClient(nil)
-		_, err := c.Get(srv.URL)
+		req, err := nethttp.NewRequestWithContext(t.Context(), nethttp.MethodGet, srv.URL, nil)
+		require.NoError(t, err)
+		_, err = c.Do(req)
 		require.Error(t, err, "client without InsecureSkipVerify must reject self-signed cert")
 		assert.Contains(t, err.Error(), "certificate")
 	})
@@ -65,7 +67,9 @@ func TestTLSInsecureSkipVerify_Integration(t *testing.T) {
 			TLSConfig: httpv1alpha1.TLSConfig{InsecureSkipVerify: &tr},
 		}
 		c := ocmhttp.NewClient(cfg)
-		resp, err := c.Get(srv.URL)
+		req, err := nethttp.NewRequestWithContext(t.Context(), nethttp.MethodGet, srv.URL, nil)
+		require.NoError(t, err)
+		resp, err := c.Do(req)
 		require.NoError(t, err, "client with InsecureSkipVerify=true must succeed against self-signed cert")
 		resp.Body.Close()
 		assert.Equal(t, nethttp.StatusOK, resp.StatusCode)
