@@ -385,7 +385,7 @@ func TestPluginManagerMultiplePluginsForSameType(t *testing.T) {
 
 func TestPluginManagerWithNoPlugins(t *testing.T) {
 	pm := NewPluginManager(context.Background())
-	require.ErrorContains(t, pm.RegisterPlugins(context.Background(), filepath.Join(".")), "no plugins found")
+	require.ErrorContains(t, pm.RegisterPlugins(context.Background(), "."), "no plugins found")
 }
 
 func TestCredentialTypeRegistryPopulatedFromPlugin(t *testing.T) {

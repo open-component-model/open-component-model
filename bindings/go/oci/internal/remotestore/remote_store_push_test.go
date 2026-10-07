@@ -90,7 +90,7 @@ func (reg *chunkedRegistry) handler() http.HandlerFunc {
 			reg.uploaded = nil
 			reg.mu.Unlock()
 			if reg.chunkMinLength != "" {
-				w.Header().Set("OCI-Chunk-Min-Length", reg.chunkMinLength)
+				w.Header().Set("Oci-Chunk-Min-Length", reg.chunkMinLength)
 			}
 			if reg.warning != "" {
 				w.Header().Set("Warning", reg.warning)
