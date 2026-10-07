@@ -152,8 +152,8 @@ func TestSingleFileDecodeDescriptor_AllFormats(t *testing.T) {
 
 			require.NoError(t, err)
 			require.NotNil(t, desc)
-			assert.Equal(t, "github.com/ocm/test-component", desc.Component.ComponentMeta.ObjectMeta.Name)
-			assert.Equal(t, "1.0.0", desc.Component.ComponentMeta.ObjectMeta.Version)
+			assert.Equal(t, "github.com/ocm/test-component", desc.Component.Name)
+			assert.Equal(t, "1.0.0", desc.Component.Version)
 		})
 	}
 }
@@ -180,7 +180,7 @@ func TestDescriptorFileFromTar(t *testing.T) {
 	require.NoError(t, err)
 	var d v2.Descriptor
 	require.NoError(t, yaml.Unmarshal(data, &d))
-	assert.Equal(t, "github.com/ocm/test-component", d.Component.ComponentMeta.ObjectMeta.Name)
+	assert.Equal(t, "github.com/ocm/test-component", d.Component.Name)
 }
 
 // Defensive test for empty TAR

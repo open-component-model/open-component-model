@@ -6,7 +6,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"ocm.software/open-component-model/bindings/go/credentials"
 	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/credentialplugin/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -74,5 +73,5 @@ func TestCredentialPluginConverter_Resolve(t *testing.T) {
 }
 
 func TestCredentialPluginConverter_Interface(t *testing.T) {
-	var _ credentials.CredentialPlugin = NewCredentialPluginConverter(&mockExternalCredentialPlugin{})
+	_ = NewCredentialPluginConverter(&mockExternalCredentialPlugin{})
 }

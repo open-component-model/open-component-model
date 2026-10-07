@@ -218,7 +218,7 @@ func (m *ptrMarshaler) MarshalJSON() ([]byte, error) { return []byte(`"ptr:` + m
 type shadowTime struct{ time.Time }
 
 func (t *shadowTime) MarshalJSON() ([]byte, error) {
-	if t.Time.IsZero() {
+	if t.IsZero() {
 		return []byte("null"), nil
 	}
 	return []byte(`"` + t.Time.UTC().Format(time.RFC3339) + `"`), nil

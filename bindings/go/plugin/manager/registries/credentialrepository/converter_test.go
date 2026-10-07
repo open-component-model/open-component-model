@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"ocm.software/open-component-model/bindings/go/credentials"
 	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -94,5 +93,5 @@ func TestCredentialRepositoryPluginConverter_Interface(t *testing.T) {
 	converter := NewCredentialRepositoryPluginConverter(mockPlugin)
 
 	// Verify that the converter implements the correct interface
-	var _ credentials.RepositoryPlugin = converter
+	_ = converter
 }

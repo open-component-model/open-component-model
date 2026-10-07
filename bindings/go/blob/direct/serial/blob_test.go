@@ -64,10 +64,8 @@ func TestSerialBlob(t *testing.T) {
 		s2 := New(ctx2, bytes.NewBufferString("abcdef"))
 		l3 := mustGet(t, s2.ReadCloser)
 		mustCloseAtTestEnd(t, l3)
-		if n, err := l3.Read(make([]byte, 1)); err != nil && !errors.Is(err, io.EOF) {
+		if _, err := l3.Read(make([]byte, 1)); err != nil && !errors.Is(err, io.EOF) {
 			t.Fatalf("unexpected read error after release: %v", err)
-		} else if n == 0 {
-			// ok if buffer exhausted; otherwise we'd expect >=1
 		}
 	})
 
