@@ -697,7 +697,7 @@ A successful run logs `signed successfully` and embeds the Sigstore bundle into 
 
 {{< details "Alternative: run `ocm` from the OCM CLI container image" >}}
 
-Skip the install step by invoking `ocm` from the official container image (`ghcr.io/open-component-model/cli`) directly with `docker run`. The image is built `FROM scratch` for minimal attack surface — only the `ocm` binary plus CA certs, no shell — so it cannot be used as a GitHub Actions [`container:`]({{< relref "container-image-usage.md" >}}) job runtime. It does not include `cosign`, so OCM downloads the upstream release on first use; for a FIPS build of cosign, mount your own at `/usr/local/bin/cosign` as described in the [FIPS reference]({{< relref "docs/reference/standards-and-regulations/fips.md" >}}#sigstore-and-cosign). The `docker run` pattern below is the supported way:
+Skip the install step by invoking `ocm` from the official container image (`ghcr.io/open-component-model/cli`) directly with `docker run`. The image is based on Garden Linux `bare-libc` for minimal attack surface — `ocm`, a FIPS build of `cosign`, `gpg` in FIPS mode and CA certs, no shell — so it cannot be used as a GitHub Actions [`container:`]({{< relref "container-image-usage.md" >}}) job runtime. Because `cosign` is on `PATH`, OCM does not download it. The `-slim` tags (`cli:<version>-slim`) are the `FROM scratch` variant with only `ocm` and CA certs, without `cosign` or `gpg`; see the [FIPS reference]({{< relref "docs/reference/standards-and-regulations/fips.md" >}}#artifacts) for the contents of both. The `docker run` pattern below is the supported way:
 
 ```yaml
 jobs:
