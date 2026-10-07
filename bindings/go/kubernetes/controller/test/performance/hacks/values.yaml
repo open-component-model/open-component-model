@@ -1,6 +1,10 @@
 # Helm values for the performance benchmark. Every knob that changes controller
 # throughput is set explicitly, so results stay comparable when chart defaults move.
 manager:
+  # Pin the deployer cache so we have consistent runs across perf checks even if the default changes.
+  cache:
+    deployerDownloadSize: 1000
+    deployerDownloadMaxResourceSize: "2Mi"
   replicas: 1
   image:
     repository: ghcr.io/open-component-model/kubernetes/controller

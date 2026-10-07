@@ -80,6 +80,9 @@ func (r *result) notes() []string {
 	if r.ControllerRestarted {
 		notes = append(notes, "controller restarted")
 	}
+	if len(r.Errors) > 0 {
+		notes = append(notes, "metric errors")
+	}
 	return notes
 }
 
