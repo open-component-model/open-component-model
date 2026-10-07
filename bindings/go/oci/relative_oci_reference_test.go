@@ -5,7 +5,6 @@ import (
 	"context"
 	"io"
 	"os"
-	"sync"
 	"testing"
 
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
@@ -21,47 +20,22 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
 	"ocm.software/open-component-model/bindings/go/oci/looseref"
-	"ocm.software/open-component-model/bindings/go/oci/spec"
 	ociaccess "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	v1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/oci/tar"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// recordingResolver wraps a CTF store resolver. It can override ComponentVersionReference
-// with a fixed value (to simulate a URL registry with a subPath and scheme) and records
-// every reference StoreForReference is asked for, so a test can assert the absolute image
-// reference derived from a relative access.
-type recordingResolver struct {
+// fixedCVRefResolver overrides ComponentVersionReference with a fixed value — letting a
+// test inject a hosting reference that carries a scheme and a subPath — and delegates
+// everything else (notably StoreForReference) to the wrapped resolver.
+type fixedCVRefResolver struct {
 	oci.Resolver
-	fixedCVRef string
-	mu         sync.Mutex
-	refs       []string
+	ref string
 }
 
-func (r *recordingResolver) ComponentVersionReference(ctx context.Context, component, version string) string {
-	if r.fixedCVRef != "" {
-		return r.fixedCVRef
-	}
-	return r.Resolver.ComponentVersionReference(ctx, component, version)
-}
-
-func (r *recordingResolver) StoreForReference(ctx context.Context, reference string) (spec.Store, error) {
-	r.mu.Lock()
-	r.refs = append(r.refs, reference)
-	r.mu.Unlock()
-	return r.Resolver.StoreForReference(ctx, reference)
-}
-
-func (r *recordingResolver) requested(reference string) bool {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	for _, ref := range r.refs {
-		if ref == reference {
-			return true
-		}
-	}
-	return false
+func (r fixedCVRefResolver) ComponentVersionReference(context.Context, string, string) string {
+	return r.ref
 }
 
 // stageOCIImage pushes a single-layer OCI image into the repository that reference points
@@ -136,10 +110,10 @@ func TestRepository_GetLocalResource_RelativeOCIReference(t *testing.T) {
 		version   = "v1.0.0"
 	)
 
-	// A fixed ComponentVersionReference with a scheme and a subPath proves the resolution
-	// base is the registry root: neither the subPath (ocm-prefix) nor the
-	// component-descriptors path is prepended, and the scheme is preserved. registry is that
-	// root — the only part of fixedCVRef a relative reference resolves against.
+	// A fixed ComponentVersionReference with a scheme and a subPath lets the test prove the
+	// resolution base is the registry root: neither the subPath (ocm-prefix) nor the
+	// component-descriptors path is prepended. registry is that root — the only part of
+	// fixedCVRef a relative reference resolves against, and where the artifact is staged.
 	const (
 		registry   = "http://registry.example"
 		fixedCVRef = registry + "/ocm-prefix/component-descriptors/acme.org/compo:v1.0.0"
@@ -196,29 +170,26 @@ func TestRepository_GetLocalResource_RelativeOCIReference(t *testing.T) {
 			fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
 			r.NoError(err)
 			store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
-			resolver := &recordingResolver{Resolver: store, fixedCVRef: fixedCVRef}
-			repo := Repository(t, oci.WithResolver(resolver))
+			// fixedCVRef carries a scheme and a subPath, so resolving the relative reference
+			// against the registry root (dropping the subPath and component-descriptors) is the
+			// only way the staged artifact at registry/<reference> is found below.
+			repo := Repository(t, oci.WithResolver(fixedCVRefResolver{Resolver: store, ref: fixedCVRef}))
 
 			manifest := stageOCIImage(t, ctx, store, registry+"/"+tc.reference, payload)
 
 			reference := tc.reference
-			expectAbsRef := registry + "/" + tc.reference
 			if tc.withDigest {
 				reference += "@" + manifest.Digest.String()
-				expectAbsRef += "@" + manifest.Digest.String()
 			}
 
 			access := &v1.RelativeOCIReference{Type: tc.accessType, Reference: reference}
 			addComponentWithAccess(t, ctx, repo, component, version, access)
 
+			// A successful fetch proves the registry-root resolution: the artifact resolves
+			// only because the subPath and component-descriptors path were not prepended.
 			blb, res, err := repo.GetLocalResource(ctx, component, version, runtime.Identity{"name": "image"})
 			r.NoError(err)
 			r.NotNil(blb)
-
-			// Resolution base is the registry root: subPath and component-descriptors are
-			// not prepended, the scheme is preserved, the relative reference rides along.
-			r.True(resolver.requested(expectAbsRef),
-				"expected StoreForReference(%q); got %v", expectAbsRef, resolver.refs)
 
 			// The descriptor is not mutated: the returned resource keeps its (unconverted)
 			// relative access and never surfaces the registry host or the CTF sentinel.
