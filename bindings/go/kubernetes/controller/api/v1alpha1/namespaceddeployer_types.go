@@ -18,9 +18,9 @@ type NamespacedDeployerSpec struct {
 
 	// ServiceAccountName is the name of the service account in the same namespace that is impersonated
 	// to apply and prune the deployed objects. Its RBAC permissions define what the deployer may deploy.
-	// +required
-	// +kubebuilder:validation:MinLength=1
-	ServiceAccountName string `json:"serviceAccountName"`
+	// If empty, the deployer applies and prunes with the controller's own service account.
+	// +optional
+	ServiceAccountName string `json:"serviceAccountName,omitempty"`
 
 	// OCMConfig defines references to secrets, config maps or ocm api
 	// objects providing configuration data including credentials.

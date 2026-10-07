@@ -243,14 +243,29 @@ metadata:
 		waitForNotReadyMessage(ctx, deployer, v1alpha1.GetConfigurationFailedReason, "outside of namespace")
 	})
 
-	It("requires a service account name", func(ctx SpecContext) {
+	It("applies and prunes as the controller without a service account", func(ctx SpecContext) {
+		resourceObj := mockYAMLResource(ctx, namespace.GetName(), `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nd-no-sa-cm
+`)
+
 		deployer := &v1alpha1.NamespacedDeployer{
 			ObjectMeta: metav1.ObjectMeta{Name: "nd-no-sa", Namespace: namespace.GetName()},
 			Spec: v1alpha1.NamespacedDeployerSpec{
-				ResourceRef: corev1.LocalObjectReference{Name: "any"},
+				ResourceRef: corev1.LocalObjectReference{Name: resourceObj.GetName()},
 			},
 		}
-		Expect(errors.IsInvalid(k8sClient.Create(ctx, deployer))).To(BeTrue())
+		Expect(k8sClient.Create(ctx, deployer)).To(Succeed())
+		test.WaitForReadyObject(ctx, k8sClient, deployer, map[string]any{})
+
+		cm := &corev1.ConfigMap{}
+		Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace.GetName(), Name: "nd-no-sa-cm"}, cm)).To(Succeed())
+
+		test.DeleteObject(ctx, k8sClient, deployer)
+		Eventually(func(ctx context.Context) bool {
+			return errors.IsNotFound(k8sClient.Get(ctx, client.ObjectKeyFromObject(cm), &corev1.ConfigMap{}))
+		}).WithTimeout(test.DefaultKubernetesOperationTimeout).WithContext(ctx).Should(BeTrue())
 	})
 
 	It("requires a resource name", func(ctx SpecContext) {

@@ -78,19 +78,18 @@ func (r *Reconciler) ownerReferenceOptions() []controllerutil.OwnerReferenceOpti
 	return nil
 }
 
+// impersonates reports whether the deployer applies as a service account instead of the controller's own identity.
+func (r *Reconciler) impersonates(deployer deliveryv1alpha1.DeployerObject) bool {
+	return r.Namespaced && deployer.GetServiceAccountName() != ""
+}
+
 // applyClient returns the client used to apply and prune the deployed objects.
 func (r *Reconciler) applyClient(ctx context.Context, deployer deliveryv1alpha1.DeployerObject) (client.Client, error) {
-	if !r.Namespaced {
+	if !r.impersonates(deployer) {
 		return r.Client, nil
 	}
 
-	name := deployer.GetServiceAccountName()
-	if name == "" {
-		return nil, fmt.Errorf("service account name must be set on %s %s/%s",
-			deliveryv1alpha1.KindNamespacedDeployer, deployer.GetNamespace(), deployer.GetName())
-	}
-
-	key := client.ObjectKey{Namespace: deployer.GetNamespace(), Name: name}
+	key := client.ObjectKey{Namespace: deployer.GetNamespace(), Name: deployer.GetServiceAccountName()}
 	if err := r.apiReader.Get(ctx, key, &corev1.ServiceAccount{}); err != nil {
 		return nil, fmt.Errorf("failed to get service account %s: %w", key, err)
 	}

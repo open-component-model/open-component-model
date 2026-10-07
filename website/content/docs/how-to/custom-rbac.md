@@ -33,9 +33,12 @@ This applies to both custom resources and standard Kubernetes resources. Common 
 
 ## NamespacedDeployer: grant the service account
 
-A `NamespacedDeployer` does not apply with the controller's permissions. It impersonates the service account named in
-`spec.serviceAccountName`, so write access goes to that service account through a `Role` and `RoleBinding` in the
-deployer's namespace:
+A `NamespacedDeployer` that sets `spec.serviceAccountName` does not apply with the controller's permissions. It
+impersonates that service account, so write access goes to it through a `Role` and `RoleBinding` in the deployer's
+namespace. Without `spec.serviceAccountName` it applies with the controller's service account, which you grant as
+described in the next section.
+
+For a deployer with a service account:
 
 ```yaml
 apiVersion: rbac.authorization.k8s.io/v1
@@ -85,7 +88,8 @@ The controller itself still watches deployed objects for drift with its own iden
 ## Create a ClusterRole and ClusterRoleBinding
 
 Create a `ClusterRole` with the permissions your deployers require, then bind it to the controller's service account.
-A cluster-scoped `Deployer` applies with these permissions. A `NamespacedDeployer` only needs the read verbs here.
+A cluster-scoped `Deployer` and a `NamespacedDeployer` without `spec.serviceAccountName` apply with these permissions. A
+`NamespacedDeployer` with a service account only needs the read verbs here.
 
 {{<callout context="note" title="The service account name depends on the Helm release name" icon="outline/info-circle">}}
 The binding below uses `ocm-k8s-toolkit-controller-manager` as the service account name only when the chart's release name contains `ocm-k8s-toolkit`. Other release names (and GitOps tools such as Flux) produce names like `<release-name>-ocm-k8s-toolkit-controller-manager`. Pin it with `fullnameOverride: ocm-k8s-toolkit`, or look it up: `kubectl get sa -n ocm-k8s-toolkit-system -l app.kubernetes.io/name=ocm-k8s-toolkit`.

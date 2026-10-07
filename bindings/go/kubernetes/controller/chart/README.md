@@ -85,7 +85,7 @@ Kubernetes: `>=1.26.0-0`
 | manager.metricsServer.bindAddress | string | `"0"` | Address the metric endpoint binds to. Set to "0" to disable |
 | manager.metricsServer.enableHttp2 | bool | `false` | Enable HTTP/2 for metrics and webhook servers |
 | manager.metricsServer.secure | bool | `false` | Serve metrics endpoint securely |
-| manager.namespacedDeployer.enabled | bool | `true` | Run the controller for the NamespacedDeployer and grant the controller permission to impersonate service accounts |
+| manager.namespacedDeployer.enabled | bool | `true` | Run the controller for the NamespacedDeployer and grant the controller permission to impersonate service accounts. A NamespacedDeployer without spec.serviceAccountName applies with the permissions of the controller itself. |
 | manager.nodeSelector | object | `{}` | Node selector for pod scheduling |
 | manager.podSecurityContext | object | `{"runAsNonRoot":true}` | Pod-level security context |
 | manager.readinessProbe.initialDelaySeconds | int | `5` | Initial delay before starting readiness probes |
