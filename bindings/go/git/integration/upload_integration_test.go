@@ -33,7 +33,6 @@ func Test_Integration_GitUploadOverHTTPS(t *testing.T) {
 	targetPath := filepath.Join(filepath.Dir(sourcePath), "target.git")
 	targetRepo, err := git.PlainInit(targetPath, true)
 	r.NoError(err)
-	configureGitRepository(t, sourcePath, "uploadpack.allowFilter", "true")
 	configureGitRepository(t, targetPath, "http.receivepack", "true")
 
 	const token = "fixture-upload-token"
@@ -53,8 +52,6 @@ func Test_Integration_GitUploadOverHTTPS(t *testing.T) {
 			Repository: sourceURL,
 			Ref:        "refs/heads/main",
 			Commit:     commit.String(),
-			Depth:      1,
-			Filter:     "blob:none",
 		}}
 		pinned, err := resourceRepository.ProcessResourceDigest(t.Context(), resource, credentials)
 		r.NoError(err)

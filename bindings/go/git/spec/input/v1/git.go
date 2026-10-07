@@ -32,15 +32,6 @@ type Git struct {
 	// Commit pins a commit by its full 40-character hexadecimal SHA and takes
 	// precedence over Ref.
 	Commit string `json:"commit,omitempty"`
-
-	// Depth limits the number of commits fetched from the selected revision.
-	// Zero fetches the full available history.
-	// +ocm:jsonschema-gen:minimum=0
-	Depth int `json:"depth,omitempty"`
-
-	// Filter requests partial Git objects. The supported value is blob:none.
-	// +ocm:jsonschema-gen:enum=blob:none
-	Filter string `json:"filter,omitempty"`
 }
 
 func (g *Git) String() string {
@@ -57,5 +48,5 @@ func (g *Git) Validate() error {
 	if ref == "" && g.Commit == "" {
 		ref = "HEAD"
 	}
-	return (&accessv1.Git{Repository: g.Repository, Ref: ref, Commit: g.Commit, Depth: g.Depth, Filter: g.Filter}).Validate()
+	return (&accessv1.Git{Repository: g.Repository, Ref: ref, Commit: g.Commit}).Validate()
 }

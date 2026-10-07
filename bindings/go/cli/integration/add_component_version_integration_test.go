@@ -31,7 +31,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/cli/integration/internal"
 	"ocm.software/open-component-model/bindings/go/ctf"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/oci"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
@@ -1293,9 +1292,11 @@ components:
 	r.Equal(content, readAllFromBlob(t, blobData), "local blob should hold the object from the bucket")
 }
 
-// Test_Integration_AddComponentVersion_GitOptions verifies Git access and input
-// fetch options through component construction and resource download.
-func Test_Integration_AddComponentVersion_GitOptions(t *testing.T) {
+// Test_Integration_AddComponentVersion_GitAccess verifies that a resource declaring a Git
+// access with a ref directly in the constructor is pinned to a commit and hashed by the git
+// digest processor, and that the access is then resolved and downloaded via the git resource
+// repository as a gzip-compressed tar of that commit.
+func Test_Integration_AddComponentVersion_GitAccess(t *testing.T) {
 	t.Parallel()
 	r := require.New(t)
 	ctx := t.Context()
@@ -1328,19 +1329,7 @@ components:
       type: Git/v1
       repository: file://%s
       ref: main
-      depth: 1
-      filter: blob:none
-  - name: repo-input
-    version: v1.0.0
-    type: blob
-    relation: local
-    input:
-      type: Git/v1
-      repository: file://%s
-      ref: main
-      depth: 1
-      filter: blob:none
-`, componentName, componentVersion, repoDir, repoDir)
+`, componentName, componentVersion, repoDir)
 	constructorPath := filepath.Join(t.TempDir(), "constructor.yaml")
 	r.NoError(os.WriteFile(constructorPath, []byte(constructorContent), os.ModePerm))
 
@@ -1359,7 +1348,7 @@ components:
 	repo := registry.Connect(t)
 	desc, err := repo.GetComponentVersion(ctx, componentName, componentVersion)
 	r.NoError(err)
-	r.Len(desc.Component.Resources, 2)
+	r.Len(desc.Component.Resources, 1)
 	res := desc.Component.Resources[0]
 	r.Equal("repo-archive", res.Name)
 	r.NotNil(res.Access, "resource should carry a git access spec")
@@ -1372,35 +1361,10 @@ components:
 	// keeping this test black-box like its github sibling.
 	raw, err := json.Marshal(res.Access)
 	r.NoError(err)
-	var stored struct {
-		Commit string `json:"commit"`
-		Ref    string `json:"ref"`
-		Depth  int    `json:"depth"`
-		Filter string `json:"filter"`
-	}
+	var stored map[string]string
 	r.NoError(json.Unmarshal(raw, &stored))
-	r.Equal(commit, stored.Commit, "the digest processor must resolve the ref and pin the commit it points at")
-	r.Equal("main", stored.Ref, "the ref stays informational next to the pinned commit")
-	r.Equal(1, stored.Depth)
-	r.Equal("blob:none", stored.Filter)
-
-	input := desc.Component.Resources[1]
-	r.Equal("repo-input", input.Name)
-	r.Equal(descriptorv2.LocalBlobAccessType, input.Access.GetType().Name)
-	r.NotNil(input.Digest)
-	inputBlob, _, err := repo.GetLocalResource(ctx, componentName, componentVersion, input.ToIdentity())
-	r.NoError(err)
-	inputArchive := readAllFromBlob(t, inputBlob)
-	r.Equal(godigest.FromBytes(inputArchive).Encoded(), input.Digest.Value)
-	inputGzip, err := gzip.NewReader(bytes.NewReader(inputArchive))
-	r.NoError(err)
-	defer func() { r.NoError(inputGzip.Close()) }()
-	inputTar := tar.NewReader(inputGzip)
-	_, err = inputTar.Next()
-	r.NoError(err)
-	inputContent, err := io.ReadAll(inputTar)
-	r.NoError(err)
-	r.Equal("hello from git access\n", string(inputContent))
+	r.Equal(commit, stored["commit"], "the digest processor must resolve the ref and pin the commit it points at")
+	r.Equal("main", stored["ref"], "the ref stays informational next to the pinned commit")
 
 	// download resource resolves the git access via the registered git resource repository.
 	output := filepath.Join(t.TempDir(), "archive.tgz")

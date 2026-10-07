@@ -18,8 +18,6 @@
 // Its file outlives the call and belongs to the caller; temporary Git storage is
 // removed. WithMaxArchiveSize caps the compressed output, not the preceding clone
 // or fetch; by default it is unlimited.
-// Depth and filter are optional source fetch hints. A filtered snapshot download
-// fetches omitted objects before producing the archive.
 //
 // [ocm.software/open-component-model/bindings/go/git/repository.ResourceRepository.UploadGit]
 // copies original objects to an existing Git repository. It requires a pinned

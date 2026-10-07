@@ -10,21 +10,6 @@
       "type": "string",
       "description": "Commit pins a commit by its full 40-character hexadecimal SHA and takes\nprecedence over Ref. At least one of Commit or Ref must be set."
     },
-    "depth": {
-      "type": "integer",
-      "description": "Depth limits the number of commits fetched from the selected revision.\nZero fetches the full available history.",
-      "minimum": 0,
-      "maximum": 9223372036854776000
-    },
-    "filter": {
-      "type": "string",
-      "description": "Filter requests partial Git objects. The supported value is blob:none.",
-      "oneOf": [
-        {
-          "const": "blob:none"
-        }
-      ]
-    },
     "ref": {
       "type": "string",
       "description": "Ref selects a branch, tag or full ref name. A bare name resolves to a\nmatching branch first and then to a tag, so use refs/tags/v1.0.0 to select\nthat tag unambiguously. Digest processing resolves it to a commit."

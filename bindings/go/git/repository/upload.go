@@ -11,7 +11,6 @@ import (
 	"github.com/go-git/go-git/v6/plumbing"
 	"github.com/go-git/go-git/v6/plumbing/filemode"
 	"github.com/go-git/go-git/v6/plumbing/object"
-	"github.com/go-git/go-git/v6/plumbing/protocol/packp"
 	"github.com/go-git/go-git/v6/plumbing/transport"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
@@ -24,13 +23,10 @@ import (
 
 var errIncompleteObjects = errors.New("incomplete git object history")
 
-// UploadOptions identifies the target ref and controls source fetch overrides.
+// UploadOptions identifies the target repository and ref.
 type UploadOptions struct {
 	Repository string
 	Ref        string
-	Depth      *int
-	Filter     *string
-	MaxDepth   int
 }
 
 // UploadGit copies original Git objects to an existing repository and advances one ref.
@@ -53,9 +49,6 @@ func (r *ResourceRepository) UploadGit(ctx context.Context, source *descriptor.R
 	if target.Repository == "" {
 		return nil, fmt.Errorf("target repository is required")
 	}
-	if target.MaxDepth < 0 {
-		return nil, fmt.Errorf("maxDepth must not be negative")
-	}
 	sourceCreds, err := convertGitCredentials(sourceCredentials)
 	if err != nil {
 		return nil, fmt.Errorf("invalid source credentials: %w", err)
@@ -64,50 +57,17 @@ func (r *ResourceRepository) UploadGit(ctx context.Context, source *descriptor.R
 	if err != nil {
 		return nil, fmt.Errorf("invalid target credentials: %w", err)
 	}
-	fetchOptions := r.downloadOptions(r.tempFolder())
-	fetchOptions.Depth = spec.Depth
-	fetchOptions.Filter = spec.Filter
-	if target.Depth != nil {
-		fetchOptions.Depth = *target.Depth
-	}
-	if target.Filter != nil {
-		fetchOptions.Filter = *target.Filter
-	}
-	if fetchOptions.Depth < 0 || (fetchOptions.Filter != "" && fetchOptions.Filter != "blob:none") {
-		return nil, fmt.Errorf("invalid upload fetch options")
-	}
-	if target.MaxDepth > 0 {
-		if fetchOptions.Depth > target.MaxDepth {
-			return nil, fmt.Errorf("depth exceeds maxDepth")
-		}
-		if fetchOptions.Depth == 0 {
-			fetchOptions.Depth = target.MaxDepth
-		}
-	}
-	targetEndpoint, err := endpoint.Parse(target.Repository)
-	if err != nil {
+	if _, err := endpoint.Parse(target.Repository); err != nil {
 		return nil, fmt.Errorf("invalid target repository: %w", err)
 	}
-	if targetEndpoint.Protocol == "file" {
-		if target.MaxDepth > 0 {
-			return nil, fmt.Errorf("local git upload requires full source history and cannot use maxDepth")
-		}
-		fetchOptions.Depth = 0
-		fetchOptions.Filter = ""
-	}
+	fetchOptions := r.downloadOptions(r.tempFolder())
 	var uploaded *descriptor.Resource
 	upload := func(repo *git.Repository, selected *object.Commit) error {
 		result, err := r.uploadGitRepository(ctx, repo, selected, source, spec, target.Repository, ref, sourceCreds, targetCreds, fetchOptions)
 		uploaded = result
 		return err
 	}
-	err = download.WithRepository(ctx, spec, sourceCreds, fetchOptions, upload)
-	if (errors.Is(err, errIncompleteObjects) || errors.Is(err, transport.ErrFilterNotSupported)) && (fetchOptions.Depth != target.MaxDepth || fetchOptions.Filter != "") {
-		fetchOptions.Depth = target.MaxDepth
-		fetchOptions.Filter = ""
-		err = download.WithRepository(ctx, spec, sourceCreds, fetchOptions, upload)
-	}
-	if err != nil {
+	if err := download.WithRepository(ctx, spec, sourceCreds, fetchOptions, upload); err != nil {
 		return nil, fmt.Errorf("cannot upload git resource: %w", err)
 	}
 	return uploaded, nil
@@ -272,8 +232,6 @@ func fetchPinnedTag(ctx context.Context, repo *git.Repository, sourceRef string,
 		RefSpecs:      []config.RefSpec{config.RefSpec("+" + sourceRef + ":" + tagRef)},
 		ClientOptions: clientOptions,
 		Tags:          git.NoTags,
-		Depth:         options.Depth,
-		Filter:        packp.Filter(options.Filter),
 	})
 	if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
 		return plumbing.ZeroHash, download.TransportError(ctx, "cannot fetch source tag", err)

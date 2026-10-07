@@ -133,10 +133,7 @@ func (r *ResourceRepository) download(ctx context.Context, spec *accessv1.Git, e
 		}
 	}
 
-	opts := r.downloadOptions(tempDir)
-	opts.Depth = spec.Depth
-	opts.Filter = spec.Filter
-	result, err := download.Download(ctx, spec, typed, opts)
+	result, err := download.Download(ctx, spec, typed, r.downloadOptions(tempDir))
 	if err != nil {
 		return nil, err
 	}

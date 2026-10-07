@@ -16,7 +16,6 @@ import (
 	"github.com/go-git/go-git/v6/plumbing"
 	"github.com/go-git/go-git/v6/plumbing/client"
 	"github.com/go-git/go-git/v6/plumbing/object"
-	"github.com/go-git/go-git/v6/plumbing/protocol/packp"
 	"github.com/go-git/go-git/v6/plumbing/transport"
 	"github.com/opencontainers/go-digest"
 
@@ -61,24 +60,18 @@ func Download(ctx context.Context, access *accessv1.Git, creds *credsv1.GitCrede
 			slog.WarnContext(ctx, "failed to remove incomplete git archive", "path", archivePath, "err", removeErr)
 		}
 	}
-	if errors.Is(err, plumbing.ErrObjectNotFound) && opts.Filter != "" && ctx.Err() == nil {
-		opts.Filter = ""
-		return Download(ctx, access, creds, opts)
-	}
 	return result, err
 }
 
 // WithRepository supplies the selected commit and original Git objects to fn.
-// Git object operations run outside strict FIPS enforcement because Git uses SHA-1.
-// Filter is a fetch hint: a server without filter support gets an unfiltered fetch.
+//
+// Git identifies objects by SHA-1, which is not FIPS-approved, and go-git hashes
+// with it throughout clone, fetch and tree walks. The callback therefore runs
+// outside strict enforcement, so it keeps working with GODEBUG=fips140=only.
+// FIPS mode itself stays on, so TLS and SSH still negotiate approved algorithms
+// only, and the archive OCM records is digested with SHA-256.
 func WithRepository(ctx context.Context, access *accessv1.Git, creds *credsv1.GitCredentials, opts Options, fn func(*git.Repository, *object.Commit) error) (err error) {
-	fips140.WithoutEnforcement(func() {
-		err = withRepository(ctx, access, creds, opts, fn)
-		if opts.Filter != "" && errors.Is(err, transport.ErrFilterNotSupported) && ctx.Err() == nil {
-			opts.Filter = ""
-			err = withRepository(ctx, access, creds, opts, fn)
-		}
-	})
+	fips140.WithoutEnforcement(func() { err = withRepository(ctx, access, creds, opts, fn) })
 	return err
 }
 
@@ -109,21 +102,18 @@ func withRepository(ctx context.Context, access *accessv1.Git, creds *credsv1.Gi
 	}()
 
 	var repo *git.Repository
-	filter := packp.Filter(opts.Filter)
 	if access.Commit == "" && access.Ref == "HEAD" {
 		repo, err = git.PlainCloneContext(ctx, dir, &git.CloneOptions{
 			URL:           url,
 			ClientOptions: clientOptions,
 			Bare:          true,
 			Tags:          git.AllTags,
-			Depth:         opts.Depth,
-			Filter:        filter,
 		})
 		if err != nil {
 			err = transportError(ctx, "cannot fetch git repository", err)
 		}
 	} else {
-		repo, err = fetchRepository(ctx, dir, url, access.Commit, clientOptions, opts.Depth, filter)
+		repo, err = fetchRepository(ctx, dir, url, access.Commit, clientOptions)
 	}
 
 	if repo != nil {
@@ -174,7 +164,7 @@ func RemoteOptions(repository string, creds *credsv1.GitCredentials, opts Option
 
 // fetchRepository fetches explicit refs or a pinned commit without depending on a valid remote HEAD.
 // The repository is returned also with a fetch error, so the caller can close its storage.
-func fetchRepository(ctx context.Context, dir, url, commit string, clientOptions []client.Option, depth int, filter packp.Filter) (*git.Repository, error) {
+func fetchRepository(ctx context.Context, dir, url, commit string, clientOptions []client.Option) (*git.Repository, error) {
 	repo, err := git.PlainInit(dir, true)
 	if err != nil {
 		return nil, fmt.Errorf("cannot create git repository: %w", err)
@@ -193,8 +183,6 @@ func fetchRepository(ctx context.Context, dir, url, commit string, clientOptions
 			ClientOptions: clientOptions,
 			Tags:          git.NoTags,
 			RefSpecs:      []config.RefSpec{config.RefSpec("+" + commit + ":refs/ocm/commit")},
-			Depth:         depth,
-			Filter:        filter,
 		})
 	}
 	if commit == "" || errors.Is(err, git.ErrExactSHA1NotSupported) {
@@ -202,8 +190,6 @@ func fetchRepository(ctx context.Context, dir, url, commit string, clientOptions
 			ClientOptions: clientOptions,
 			Tags:          git.AllTags,
 			RefSpecs:      []config.RefSpec{"+refs/*:refs/*", "+refs/heads/*:refs/remotes/origin/*"},
-			Depth:         depth,
-			Filter:        filter,
 		})
 	}
 
@@ -283,8 +269,6 @@ func transportError(ctx context.Context, operation string, err error) error {
 		return fmt.Errorf("%s: authentication required: %s", operation, redact(err))
 	case errors.Is(err, transport.ErrAuthorizationFailed):
 		return fmt.Errorf("%s: authorization failed: %s", operation, redact(err))
-	case errors.Is(err, transport.ErrFilterNotSupported):
-		return fmt.Errorf("%s: %w", operation, transport.ErrFilterNotSupported)
 	default:
 		return fmt.Errorf("%s: transport failed; check repository access and server trust: %s", operation, redact(err))
 	}

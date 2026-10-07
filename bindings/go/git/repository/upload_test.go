@@ -23,16 +23,15 @@ func TestUploadGit(t *testing.T) {
 	r.NoError(err)
 	uploader := repository.NewResourceRepository(nil)
 
-	resource := func(commit plumbing.Hash, depth int) *descriptor.Resource {
+	resource := func(commit plumbing.Hash) *descriptor.Resource {
 		return &descriptor.Resource{Access: &accessv1.Git{
 			Type:       runtime.NewVersionedType(accessv1.Type, accessv1.Version),
 			Repository: fixture.Path,
 			Ref:        "refs/heads/main",
 			Commit:     commit.String(),
-			Depth:      depth,
 		}}
 	}
-	first := resource(fixture.First, 1)
+	first := resource(fixture.First)
 	first.Digest = &descriptor.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: "genericBlobDigest/v1", Value: strings.Repeat("0", 64)}
 	_, err = uploader.UploadGit(t.Context(), first, repository.UploadOptions{Repository: targetPath, Ref: "refs/heads/main"}, nil, nil)
 	r.ErrorContains(err, "digest mismatch")
@@ -43,15 +42,14 @@ func TestUploadGit(t *testing.T) {
 	for _, testCase := range []struct {
 		name   string
 		commit plumbing.Hash
-		depth  int
 	}{
-		{name: "initial upload", commit: fixture.First, depth: 1},
-		{name: "idempotent upload", commit: fixture.First, depth: 1},
-		{name: "incremental upload", commit: fixture.Second, depth: 1},
+		{name: "initial upload", commit: fixture.First},
+		{name: "idempotent upload", commit: fixture.First},
+		{name: "incremental upload", commit: fixture.Second},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			r := require.New(t)
-			output, err := uploader.UploadGit(t.Context(), resource(testCase.commit, testCase.depth), repository.UploadOptions{Repository: targetPath, Ref: "refs/heads/main"}, nil, nil)
+			output, err := uploader.UploadGit(t.Context(), resource(testCase.commit), repository.UploadOptions{Repository: targetPath, Ref: "refs/heads/main"}, nil, nil)
 			r.NoError(err)
 			access, ok := output.Access.(*accessv1.Git)
 			r.True(ok)
@@ -102,8 +100,6 @@ func TestUploadGitPreservesAnnotatedTag(t *testing.T) {
 }
 
 func TestUploadGitOptionValidation(t *testing.T) {
-	depth := -1
-	filter := "tree:0"
 	source := &descriptor.Resource{Access: &accessv1.Git{
 		Type:       runtime.NewVersionedType(accessv1.Type, accessv1.Version),
 		Repository: "https://example.com/source.git",
@@ -116,10 +112,6 @@ func TestUploadGitOptionValidation(t *testing.T) {
 	}{
 		{name: "missing target repository", target: repository.UploadOptions{Ref: "refs/heads/main"}, wantErr: "target repository is required"},
 		{name: "short ref", target: repository.UploadOptions{Repository: "https://example.com/target.git", Ref: "main"}, wantErr: "target ref must be a full"},
-		{name: "negative max depth", target: repository.UploadOptions{Repository: "https://example.com/target.git", Ref: "refs/heads/main", MaxDepth: -1}, wantErr: "maxDepth must not be negative"},
-		{name: "local max depth", target: repository.UploadOptions{Repository: "/tmp/target.git", Ref: "refs/heads/main", MaxDepth: 1}, wantErr: "local git upload requires full source history"},
-		{name: "negative depth override", target: repository.UploadOptions{Repository: "https://example.com/target.git", Ref: "refs/heads/main", Depth: &depth}, wantErr: "invalid upload fetch options"},
-		{name: "unsupported filter override", target: repository.UploadOptions{Repository: "https://example.com/target.git", Ref: "refs/heads/main", Filter: &filter}, wantErr: "invalid upload fetch options"},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			r := require.New(t)
