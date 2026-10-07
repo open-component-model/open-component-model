@@ -538,3 +538,52 @@ func TestStreamLocalResource_RealPackOCI(t *testing.T) {
 	r.Equal(godigest.FromString(content).String(), godigest.FromBytes(gotBytes).String(),
 		"the retrieved blob must have the expected content digest")
 }
+
+// sizedBlob is a materialized source blob that reports a size, used to prove the
+// materialized fallback keeps its SizeAware capability.
+type sizedBlob struct{ data string }
+
+var _ blob.SizeAware = (*sizedBlob)(nil)
+
+func (b *sizedBlob) ReadCloser() (io.ReadCloser, error) {
+	return io.NopCloser(strings.NewReader(b.data)), nil
+}
+func (b *sizedBlob) Size() int64 { return int64(len(b.data)) }
+
+// TestStreamLocalResource_MaterializedBlobKeepsSize guards against wrapping a
+// materialized (fallback) source in knownDigestBlob, which would hide SizeAware
+// and wrongly force the streaming push for a size-known blob. The source carries
+// a SHA-256 digest (so the pre-fix code would have wrapped it) and a non-streaming
+// resource repository forces the materialized path.
+func TestStreamLocalResource_MaterializedBlobKeepsSize(t *testing.T) {
+	r := require.New(t)
+	ctx := context.Background()
+
+	content := "materialized sized content"
+	materialized := &sizedBlob{data: content}
+	resourceRepo := &fakeResourceRepo{blob: materialized} // ResourceRepository only (not streaming)
+	mockRepo := &mockRepository{}
+	provider := &mockRepoProvider{repo: mockRepo}
+
+	tr := &StreamLocalResource{
+		Scheme:             streamTransformerScheme(t),
+		RepoProvider:       provider,
+		ResourceRepository: resourceRepo,
+	}
+
+	src := wgetSourceResource("blob", &v2.Digest{
+		HashAlgorithm:          "SHA-256",
+		NormalisationAlgorithm: "genericBlobDigest/v1",
+		Value:                  "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+	})
+
+	result, err := tr.Transform(ctx, ociStreamSpec(src))
+	r.NoError(err)
+	r.NotNil(result)
+
+	r.True(resourceRepo.downloadCalled, "a non-streaming repo must take the materialized path")
+	r.NotNil(mockRepo.addedBlob)
+	sizer, ok := mockRepo.addedBlob.(blob.SizeAware)
+	r.True(ok, "materialized blob must remain SizeAware (not wrapped in knownDigestBlob), got %T", mockRepo.addedBlob)
+	r.Equal(int64(len(content)), sizer.Size())
+}

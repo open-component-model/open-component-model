@@ -141,8 +141,16 @@ func (t *StreamLocalResource) Transform(ctx context.Context, step runtime.Typed)
 	// If the source resource advertises a SHA-256/genericBlobDigest digest, expose
 	// it on the blob so the chunked push verifies the streamed bytes against it;
 	// otherwise let PushStreaming compute the digest from the stream.
-	if dig, okDigest := knownSHA256Digest(srcResource.Digest); okDigest {
-		srcBlob = &knownDigestBlob{base: srcBlob, digest: dig}
+	//
+	// Only wrap the LAZY streaming blob (streamed): it has no known size, so this
+	// is additive. A materialized fallback blob is file-backed and SizeAware;
+	// wrapping it would hide SizeAware and make pack force PushStreaming on a
+	// size-known blob (buffering on fallback, or erroring after the first PATCH).
+	// DownloadResource already verified the materialized blob's integrity.
+	if streamed {
+		if dig, okDigest := knownSHA256Digest(srcResource.Digest); okDigest {
+			srcBlob = &knownDigestBlob{base: srcBlob, digest: dig}
+		}
 	}
 
 	// Report the push mode honestly so an e2e can trust the signal: "streamed"
