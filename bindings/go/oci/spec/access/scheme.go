@@ -38,6 +38,17 @@ func MustAddToScheme(scheme *runtime.Scheme) {
 	)
 }
 
+// MustAddRelativeOCIReferenceToScheme registers only the relativeOciReference access type
+// (both the versioned and unversioned spelling) into scheme. It lets callers compose a
+// narrow "local by value" scheme (e.g. localBlob + relativeOciReference) without pulling in
+// OCIImage, which must not be classified as local.
+func MustAddRelativeOCIReferenceToScheme(scheme *runtime.Scheme) {
+	scheme.MustRegisterWithAlias(&v2.RelativeOCIReference{},
+		runtime.NewVersionedType(v2.RelativeOCIReferenceType, v2.Version),
+		runtime.NewUnversionedType(v2.RelativeOCIReferenceType),
+	)
+}
+
 // relativeScheme is a narrow scheme registering only the relative OCI reference type. It
 // backs IsRelativeOCIReference: probing a Raw/Unstructured access against the broad Scheme
 // would false-match any registered type (the Raw->Typed path does a bare json.Unmarshal
@@ -46,10 +57,7 @@ func MustAddToScheme(scheme *runtime.Scheme) {
 var relativeScheme = runtime.NewScheme()
 
 func init() {
-	relativeScheme.MustRegisterWithAlias(&v2.RelativeOCIReference{},
-		runtime.NewVersionedType(v2.RelativeOCIReferenceType, v2.Version),
-		runtime.NewUnversionedType(v2.RelativeOCIReferenceType),
-	)
+	MustAddRelativeOCIReferenceToScheme(relativeScheme)
 }
 
 // IsRelativeOCIReference reports whether access is a relativeOciReference (either spelling,
