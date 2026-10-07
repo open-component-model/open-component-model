@@ -113,8 +113,7 @@ configurations:
 			"--config",
 			cfgPath,
 		}
-		signArgsWithDryRun := append(signArgs, "--dry-run")
-		signCMD.SetArgs(signArgsWithDryRun)
+		signCMD.SetArgs(append(signArgs, "--dry-run"))
 		r.NoError(signCMD.ExecuteContext(t.Context()))
 
 		verifyCMD := cmd.New()
