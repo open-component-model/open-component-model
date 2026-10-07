@@ -52,15 +52,15 @@ The following types are defined by the core OCM modules:
 For every identity type, the `path` attribute of a consumer entry is a glob pattern matched against the whole path of
 the lookup identity, with `/` as separator. An entry without `path` matches every path.
 
-| Pattern   | Matches                                                         | Example                                                          |
-|-----------|-----------------------------------------------------------------|------------------------------------------------------------------|
-| `*`       | Any characters within one path segment (does not cross `/`)     | `my-org/*` matches `my-org/repo`, not `my-org/team/repo`         |
-| `**`      | Any characters across segments (crosses `/`)                    | `my-org/**` matches `my-org/repo` and `my-org/team/repo`         |
-| `?`       | Exactly one character other than `/`                            | `repo-?` matches `repo-a`                                        |
-| `[abc]`   | One character of the set; `[a-z]` for a range                   | `v[12]` matches `v1` and `v2`                                    |
-| `[!abc]`  | One character not in the set; `[^abc]` works as well            | `v[!1]` matches `v2`, not `v1`                                   |
-| `{a,b}`   | Any of the comma-separated alternatives, which may contain globs | `{my-org,my-org/**}` matches `my-org` and everything below it    |
-| `\`       | Escapes the next character, so it matches literally             | `my-org/\*` matches only `my-org/*`                              |
+| Pattern  | Matches                                                          | Example                                                       |
+|----------|------------------------------------------------------------------|---------------------------------------------------------------|
+| `*`      | Any characters within one path segment (does not cross `/`)      | `my-org/*` matches `my-org/repo`, not `my-org/team/repo`      |
+| `**`     | Any characters across segments (crosses `/`)                     | `my-org/**` matches `my-org/repo` and `my-org/team/repo`      |
+| `?`      | Exactly one character other than `/`                             | `repo-?` matches `repo-a`                                     |
+| `[abc]`  | One character of the set; `[a-z]` for a range                    | `v[12]` matches `v1` and `v2`                                 |
+| `[!abc]` | One character not in the set; `[^abc]` works as well             | `v[!1]` matches `v2`, not `v1`                                |
+| `{a,b}`  | Any of the comma-separated alternatives, which may contain globs | `{my-org,my-org/**}` matches `my-org` and everything below it |
+| `\`      | Escapes the next character, so it matches literally              | `my-org/\*` matches only `my-org/*`                           |
 
 Quote patterns that start with `*`, `[`, or `{` in YAML, for example `path: "{my-org,my-org/**}"`. Unquoted, YAML reads
 them as an alias, a sequence, or a mapping.
