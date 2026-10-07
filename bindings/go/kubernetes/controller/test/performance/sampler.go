@@ -18,8 +18,8 @@ var gaugePrefixes = []string{
 }
 
 type sample struct {
-	// At is the offset from the start of the measurement.
-	At              time.Duration      `json:"at"`
+	// At is the offset from the start of the measurement, in seconds.
+	At              float64            `json:"at"`
 	WorkingSetBytes float64            `json:"workingSetBytes,omitempty"`
 	Gauges          map[string]float64 `json:"gauges,omitempty"`
 }
@@ -53,7 +53,7 @@ func (s *sampler) run(ctx context.Context) {
 }
 
 func (s *sampler) take(ctx context.Context) {
-	smp := sample{At: time.Since(s.start)}
+	smp := sample{At: time.Since(s.start).Seconds()}
 	var errs []string
 
 	if raw, err := s.c.scrapeController(ctx, s.pod); err != nil {

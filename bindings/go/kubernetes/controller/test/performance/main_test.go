@@ -1,6 +1,10 @@
 package main
 
 import (
+	"errors"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -50,6 +54,36 @@ func TestParseFlags(t *testing.T) {
 			tt.want(r, o)
 		})
 	}
+}
+
+func TestSummarizeRegistryUnavailable(t *testing.T) {
+	r := require.New(t)
+	res := &result{}
+	after := scrapes{registryErr: errors.New("connection refused")}
+
+	err := (&runner{}).summarize(res, scrapes{}, after, nil, time.Second)
+
+	r.ErrorContains(err, "registry metrics unavailable: connection refused")
+	r.Nil(res.Usage.RegistryRequests)
+}
+
+func TestWriteSummary(t *testing.T) {
+	r := require.New(t)
+	dir := t.TempDir()
+	requests := 42.0
+	results := []*result{
+		{Scenario: scenarioCold, Usage: usage{RegistryRequests: &requests}},
+		{Scenario: scenarioCold, Outcome: outcome{TimedOut: true}, ControllerRestarted: true},
+	}
+
+	r.NoError(writeSummary(dir, results))
+
+	raw, err := os.ReadFile(filepath.Join(dir, "summary.md"))
+	r.NoError(err)
+	rows := strings.Split(strings.TrimSpace(string(raw)), "\n")
+	r.Len(rows, 4)
+	r.Contains(rows[2], "| 42 |  |")
+	r.Contains(rows[3], "| n/a | timed out, controller restarted |")
 }
 
 func TestPercentile(t *testing.T) {

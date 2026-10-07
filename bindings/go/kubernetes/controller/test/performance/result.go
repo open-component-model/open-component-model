@@ -67,7 +67,20 @@ type usage struct {
 	AvgCores            float64 `json:"avgCores"`
 	PeakWorkingSetBytes float64 `json:"peakWorkingSetBytes"`
 	PeakRSSBytes        float64 `json:"peakRSSBytes"`
-	RegistryRequests    float64 `json:"registryRequests"`
+	// RegistryRequests is nil when the registry metrics could not be read.
+	RegistryRequests *float64 `json:"registryRequests"`
+}
+
+// notes lists what makes a run unusable as a benchmark number.
+func (r *result) notes() []string {
+	var notes []string
+	if r.Outcome.TimedOut {
+		notes = append(notes, "timed out")
+	}
+	if r.ControllerRestarted {
+		notes = append(notes, "controller restarted")
+	}
+	return notes
 }
 
 // percentile uses the nearest-rank method on sorted latencies.
@@ -91,13 +104,17 @@ func writeJSON(path string, v any) error {
 // invocation. result.json files remain the source of truth.
 func writeSummary(dir string, results []*result) error {
 	var b strings.Builder
-	b.WriteString("| Scenario | Objects | Repeat | Ready | Failed | Pending | Total (s) | p50 (s) | p90 (s) | CPU (s) | Peak WS (MiB) | Registry reqs |\n")
-	b.WriteString("|---|---|---|---|---|---|---|---|---|---|---|---|\n")
+	b.WriteString("| Scenario | Objects | Repeat | Ready | Failed | Pending | Total (s) | p50 (s) | p90 (s) | CPU (s) | Peak WS (MiB) | Registry reqs | Notes |\n")
+	b.WriteString("|---|---|---|---|---|---|---|---|---|---|---|---|---|\n")
 	for _, r := range results {
-		fmt.Fprintf(&b, "| %s | %d | %d | %d | %d | %d | %.1f | %.1f | %.1f | %.1f | %.0f | %.0f |\n",
+		requests := "n/a"
+		if r.Usage.RegistryRequests != nil {
+			requests = fmt.Sprintf("%.0f", *r.Usage.RegistryRequests)
+		}
+		fmt.Fprintf(&b, "| %s | %d | %d | %d | %d | %d | %.1f | %.1f | %.1f | %.1f | %.0f | %s | %s |\n",
 			r.Scenario, r.Objects, r.Repeat, r.Outcome.Ready, r.Outcome.Failed, r.Outcome.Pending,
 			r.Durations.Total, r.Durations.P50, r.Durations.P90, r.Usage.CPUSeconds,
-			r.Usage.PeakWorkingSetBytes/(1<<20), r.Usage.RegistryRequests)
+			r.Usage.PeakWorkingSetBytes/(1<<20), requests, strings.Join(r.notes(), ", "))
 	}
 	return os.WriteFile(filepath.Join(dir, "summary.md"), []byte(b.String()), 0o600)
 }

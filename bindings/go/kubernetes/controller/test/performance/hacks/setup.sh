@@ -1,6 +1,6 @@
 #!/bin/bash
 # Creates the Kind cluster and OCI registry for the controller performance benchmark.
-# Run through `task test/performance/setup`, which pins the versions below.
+# Run through `task test/performance/setup/local`, which pins the versions below.
 set -euo pipefail
 
 : "${KIND_NODE_IMAGE_VERSION:?KIND_NODE_IMAGE_VERSION must be set}"
@@ -12,7 +12,7 @@ reg_name='ocm-perf-registry'
 reg_port='5555'
 reg_metrics_port='5556'
 
-for cmd in docker kind kubectl; do
+for cmd in docker kind kubectl helm; do
   if ! command -v "$cmd" &> /dev/null; then
     echo "$cmd could not be found. Please install $cmd."
     exit 1
@@ -20,7 +20,7 @@ for cmd in docker kind kubectl; do
 done
 
 if kind get clusters | grep -q "^${cluster_name}$"; then
-  echo "Kind cluster '${cluster_name}' already exists. Run 'task test/performance/teardown' first."
+  echo "Kind cluster '${cluster_name}' already exists. Run 'task test/performance/setup/teardown' first."
   exit 1
 fi
 
@@ -58,5 +58,7 @@ kubectl --context "kind-${cluster_name}" taint nodes -l ocm.software/perf=contro
 if [ "$(docker inspect -f='{{json .NetworkSettings.Networks.kind}}' "${reg_name}")" = 'null' ]; then
   docker network connect "kind" "${reg_name}"
 fi
+
+kubectl --context "kind-${cluster_name}" apply -f "$(dirname "$0")/rbac.yaml"
 
 echo "Cluster '${cluster_name}' and registry '${reg_name}' are ready."

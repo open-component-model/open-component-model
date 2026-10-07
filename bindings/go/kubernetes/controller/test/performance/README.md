@@ -12,11 +12,14 @@ cluster, a local OCI registry, parameterized workloads, and install and update s
 Requires `docker`, `kind`, `kubectl` and `helm`. All commands run from `bindings/go/kubernetes/controller/`.
 
 ```bash
-task test/performance/setup        # Kind cluster + registry, builds and installs the controller from the working tree
-task test/performance              # full matrix: 4 scenarios x 100/500/1000 objects x 3 repeats
+task test/performance/setup/local      # Kind cluster + registry, builds and loads the controller from the working tree
+task test/performance                  # installs the chart, then the full matrix: 4 scenarios x 100/500/1000 objects x 3 repeats
 task test/performance -- --scenarios=cold --objects=100 --repeats=1   # a subset
-task test/performance/teardown
+task test/performance/setup/teardown
+task test/performance/fresh            # teardown, setup and run in one go
 ```
+
+The flow mirrors the e2e tasks (`test/e2e/setup/local`, `test/e2e`, `test/e2e/setup/teardown`, `test/e2e/fresh`).
 
 On a laptop, `cold` and `pipeline` at 1,000 objects take about 1.5 and 3 minutes per run, plus restart and cleanup. `go run ./test/performance --help` lists every flag.
 
@@ -55,12 +58,13 @@ records when each object first becomes ready.
 
 Each invocation writes `test/performance/results/<timestamp>/`, which is git-ignored:
 
-- `summary.md`: one row per run.
+- `summary.md`: one row per run. The Notes column flags runs that timed out or lost the controller; the
+  benchmark exits non-zero when any run is flagged.
 - `<run>/result.json`: the full result. It records environment (image digest, controller args and
   resources, Kubernetes version), durations (total, first ready, p50/p90/p99, publish, create),
   outcome (ready, failed, pending, failure reasons), usage, counter deltas and sampled gauge peaks.
 - `<run>/controller-{start,end}.prom`, `<run>/registry-{start,end}.prom`: raw scrapes.
-- `<run>/samples.json`: gauges and memory over time.
+- `<run>/samples.json`: gauges and memory over time, `at` in seconds since the measurement started.
 
 Metric sources:
 
@@ -82,8 +86,9 @@ kind load docker-image ghcr.io/open-component-model/kubernetes/controller:latest
 helm upgrade ocm-k8s-toolkit chart/ --kube-context kind-ocm-perf -n ocm-k8s-toolkit-system --reuse-values \
   --set manager.image.tag=latest-debug --wait
 kubectl -n ocm-k8s-toolkit-system port-forward deploy/ocm-k8s-toolkit-controller-manager 6060 &
-# The per-run restart would cut the port-forward, so keep the pod.
-task test/performance -- --scenarios=cold --objects=1000 --repeats=1 --restart-controller=false &
+# The per-run restart would cut the port-forward, so keep the pod. `task test/performance` would
+# reinstall the chart with the non-debug tag, so run the benchmark directly.
+go run ./test/performance --scenarios=cold --objects=1000 --repeats=1 --restart-controller=false &
 go tool pprof http://localhost:6060/debug/pprof/heap
 ```
 

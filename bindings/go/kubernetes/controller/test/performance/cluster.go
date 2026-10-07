@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"slices"
 	"strconv"
 	"time"
 
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -84,19 +84,6 @@ func newCluster(cfg *rest.Config, opts options) (*cluster, error) {
 	}, nil
 }
 
-func (c *cluster) controllerDeployment(ctx context.Context) (*appsv1.Deployment, error) {
-	var list appsv1.DeploymentList
-	if err := c.client.List(ctx, &list, client.InNamespace(c.controllerNamespace),
-		client.MatchingLabelsSelector{Selector: c.controllerSelector}); err != nil {
-		return nil, err
-	}
-	if len(list.Items) != 1 {
-		return nil, fmt.Errorf("expected one controller deployment matching %q in %s, found %d",
-			c.controllerSelector, c.controllerNamespace, len(list.Items))
-	}
-	return &list.Items[0], nil
-}
-
 // controllerPod returns the single running, non-terminating controller pod.
 func (c *cluster) controllerPod(ctx context.Context) (*corev1.Pod, error) {
 	var list corev1.PodList
@@ -116,31 +103,37 @@ func (c *cluster) controllerPod(ctx context.Context) (*corev1.Pod, error) {
 	return &running[0], nil
 }
 
-// restartController rolls the controller so every run starts with empty
-// in-memory caches, and waits until exactly one new pod is ready.
+// restartController replaces the controller pod so every run starts with empty
+// in-memory caches, and waits until the new pod is ready.
 func (c *cluster) restartController(ctx context.Context, timeout time.Duration) error {
-	dep, err := c.controllerDeployment(ctx)
-	if err != nil {
+	var old corev1.PodList
+	if err := c.client.List(ctx, &old, client.InNamespace(c.controllerNamespace),
+		client.MatchingLabelsSelector{Selector: c.controllerSelector}); err != nil {
 		return err
 	}
-	patch := fmt.Sprintf(`{"spec":{"template":{"metadata":{"annotations":{"perf.ocm.software/restartedAt":%q}}}}}`,
-		time.Now().Format(time.RFC3339Nano))
-	if err := c.client.Patch(ctx, dep, client.RawPatch(types.StrategicMergePatchType, []byte(patch))); err != nil {
-		return fmt.Errorf("restarting controller: %w", err)
+	replaced := map[types.UID]bool{}
+	for _, p := range old.Items {
+		replaced[p.UID] = true
+	}
+	// A rollout would surge a second pod, and two sets of Guaranteed requests
+	// do not fit a small node. Deleting the pod never needs that headroom.
+	if err := c.client.DeleteAllOf(ctx, &corev1.Pod{}, client.InNamespace(c.controllerNamespace),
+		client.MatchingLabelsSelector{Selector: c.controllerSelector}); err != nil {
+		return fmt.Errorf("deleting controller pod: %w", err)
 	}
 
 	return wait.PollUntilContextTimeout(ctx, pollInterval, timeout, true, func(ctx context.Context) (bool, error) {
-		var d appsv1.Deployment
-		if err := c.client.Get(ctx, client.ObjectKeyFromObject(dep), &d); err != nil {
-			return false, err
-		}
-		want := ptrValue(d.Spec.Replicas, 1)
-		if d.Status.ObservedGeneration < d.Generation || d.Status.UpdatedReplicas != want ||
-			d.Status.AvailableReplicas != want || d.Status.Replicas != want {
+		pod, err := c.controllerPod(ctx)
+		if err != nil || replaced[pod.UID] {
 			return false, nil
 		}
-		_, err := c.controllerPod(ctx)
-		return err == nil, nil
+		return podReady(pod), nil
+	})
+}
+
+func podReady(pod *corev1.Pod) bool {
+	return slices.ContainsFunc(pod.Status.Conditions, func(c corev1.PodCondition) bool {
+		return c.Type == corev1.PodReady && c.Status == corev1.ConditionTrue
 	})
 }
 
@@ -211,11 +204,4 @@ func (c *cluster) serverVersion() string {
 		return ""
 	}
 	return v.GitVersion
-}
-
-func ptrValue[T any](p *T, def T) T {
-	if p == nil {
-		return def
-	}
-	return *p
 }

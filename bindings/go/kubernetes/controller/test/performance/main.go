@@ -1,5 +1,5 @@
 // Command performance benchmarks the OCM controllers against a Kind cluster
-// set up by `task test/performance/setup`. See README.md.
+// set up by `task test/performance/setup/local`. See README.md.
 package main
 
 import (
@@ -61,6 +61,9 @@ func run() error {
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
+	// Cleanup outlives the first signal, so hand the next one back to the
+	// default handler: a second Ctrl-C then kills the process.
+	context.AfterFunc(ctx, cancel)
 
 	cfg, err := config.GetConfigWithContext(opts.kubeContext)
 	if err != nil {
@@ -93,6 +96,16 @@ func run() error {
 			}
 		}
 	}
+
+	invalid := 0
+	for _, res := range results {
+		if len(res.notes()) > 0 {
+			invalid++
+		}
+	}
+	if invalid > 0 {
+		return fmt.Errorf("%d of %d runs are not usable, see %s", invalid, len(results), filepath.Join(outDir, "summary.md"))
+	}
 	return nil
 }
 
@@ -112,7 +125,7 @@ func parseFlags(args []string) (options, error) {
 	fs.StringVar(&opts.registryMetricsURL, "registry-metrics", "http://localhost:5556/metrics", "Registry Prometheus endpoint.")
 	fs.StringVar(&opts.controllerNamespace, "controller-namespace", "ocm-k8s-toolkit-system", "Namespace of the controller deployment.")
 	fs.StringVar(&opts.controllerSelector, "controller-selector", "app.kubernetes.io/name=ocm-k8s-toolkit",
-		"Label selector matching the controller deployment and pod.")
+		"Label selector matching the controller pod.")
 	fs.IntVar(&opts.metricsPort, "metrics-port", 8080, "Port of the controller metrics endpoint.")
 	fs.DurationVar(&opts.timeout, "timeout", 20*time.Minute, "Maximum time one run waits for its objects.")
 	fs.DurationVar(&opts.sampleInterval, "sample-interval", 2*time.Second, "Interval between gauge and memory samples.")
