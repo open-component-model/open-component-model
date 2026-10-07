@@ -49,6 +49,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/util"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/verification"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/pkg/configuration"
+	ociaccess "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -688,6 +689,20 @@ func (r *Reconciler) downloadResourceBlob(
 	typed, err := v2.Scheme.NewObject(resource.Access.GetType())
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve access type: %w", err)
+	}
+
+	// relativeOciReference is registered in the OCI access scheme (not v2.Scheme) and is a
+	// local, repository-local access: route it to GetLocalResource like a local blob.
+	if ociaccess.IsRelativeOCIReference(resource.Access) {
+		blob, _, err := repo.GetLocalResource(ctx,
+			componentDescriptor.Component.Name,
+			componentDescriptor.Component.Version,
+			resource.ToIdentity())
+		if err != nil {
+			return nil, fmt.Errorf("failed to get local resource: %w", err)
+		}
+
+		return blob, nil
 	}
 
 	switch typed.(type) { //nolint:gocritic // no, I like switch for types better

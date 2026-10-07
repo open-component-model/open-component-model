@@ -139,6 +139,20 @@ func ociImageResource(name, version, imageRef string) descriptor.Resource {
 	}
 }
 
+func relativeOCIReferenceResource(name, version, reference string) descriptor.Resource {
+	return descriptor.Resource{
+		ElementMeta: descriptor.ElementMeta{
+			ObjectMeta: descriptor.ObjectMeta{Name: name, Version: version},
+		},
+		Type:     "ociImage",
+		Relation: descriptor.LocalRelation,
+		Access: &ociv1.RelativeOCIReference{
+			Type:      runtime.NewUnversionedType(ociv1.RelativeOCIReferenceType),
+			Reference: reference,
+		},
+	}
+}
+
 func helmResource(name, version, helmRepo, chart string) descriptor.Resource {
 	return descriptor.Resource{
 		ElementMeta: descriptor.ElementMeta{

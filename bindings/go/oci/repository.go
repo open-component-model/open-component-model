@@ -581,9 +581,48 @@ func (repo *Repository) localArtifact(ctx context.Context, component, version st
 			artifact.GetElementMeta().Version,
 		)
 		return b, artifact, err
+	case *accessv1.RelativeOCIReference:
+		b, err := repo.getRelativeOCIReference(ctx, reference, typed)
+		return b, artifact, err
 	default:
 		return nil, nil, fmt.Errorf("unsupported resource access type: %T", typed)
 	}
+}
+
+// getRelativeOCIReference resolves a registry-relative OCI reference against the registry
+// root that hosts the component version. The relative access carries no host, so the host
+// is recovered from reference (= ComponentVersionReference) and prepended to the relative
+// reference to form an absolute OCI image reference, which the existing OCIImage download
+// path resolves/credentials/streams via the same resolver. The materialised blob is the
+// OCI-layout tar, identical to the nested-manifest LocalBlob branch. The resolution base is
+// the registry root, never the OCM subPath.
+func (repo *Repository) getRelativeOCIReference(ctx context.Context, reference string, typed *accessv1.RelativeOCIReference) (fetch.LocalBlob, error) {
+	if err := typed.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid relative OCI reference: %w", err)
+	}
+	// reference is already in scope from repo.getStore(...) above (= ComponentVersionReference);
+	// do not call the resolver a second time.
+	parsed, err := looseref.ParseReference(reference)
+	if err != nil {
+		return nil, fmt.Errorf("cannot derive registry for relative reference: %w", err)
+	}
+	abs := parsed.RegistryWithScheme() + "/" + typed.Reference
+	stream, err := repo.downloadStream(ctx, &accessv1.OCIImage{
+		Type:           runtime.NewVersionedType(accessv1.OCIImageType, accessv1.Version),
+		ImageReference: abs,
+	})
+	if err != nil {
+		return nil, err
+	}
+	b, err := stream.Materialize(ctx)
+	if err != nil {
+		return nil, err
+	}
+	local, ok := b.(fetch.LocalBlob)
+	if !ok {
+		return nil, fmt.Errorf("materialized relative OCI reference blob %T does not satisfy fetch.LocalBlob", b)
+	}
+	return local, nil
 }
 
 // getLocalBlobFromIndexOrManifest resolves and fetches a blob from either an

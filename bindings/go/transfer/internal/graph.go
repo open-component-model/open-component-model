@@ -13,6 +13,7 @@ import (
 	gitv1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
 	githubv1 "ocm.software/open-component-model/bindings/go/github/spec/access/v1"
 	helmv1 "ocm.software/open-component-model/bindings/go/helm/spec/access/v1"
+	ociaccess "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -300,7 +301,7 @@ func processResources(
 					err = processRepositoryUploader(resource, access, uploadv1alpha1.NexusUploadV1alpha1, cfg.URL, cfg.Repository, cfg.Path, baseID, id, val, tgd, resourceTransformIDs, i)
 				case *transferv1alpha1.ReferenceUploaderConfig:
 					// No transformation: buildDescriptorSpec keeps the environment resource.
-					if descriptorv2.IsLocalBlob(access) {
+					if isLocalByValue(access) {
 						err = fmt.Errorf("local blobs cannot be kept by reference (adjust match)")
 					}
 				default:
@@ -317,7 +318,7 @@ func processResources(
 		if handled {
 			continue
 		}
-		if !descriptorv2.IsLocalBlob(access) {
+		if !isLocalByValue(access) {
 			slog.DebugContext(ctx, "no uploader selects resource, keeping it by reference",
 				"component", component, "version", version,
 				"resource", resource.ToIdentity().String(), "accessType", resource.Access.Type.String())
@@ -331,6 +332,14 @@ func processResources(
 		fileExpressions = append(fileExpressions, exprs...)
 	}
 	return resourceTransformIDs, fileExpressions, nil
+}
+
+// isLocalByValue reports whether access must be copied into the target by value (embedded
+// as a local blob) rather than kept by reference. It covers v2 local blobs and migrated v1
+// relativeOciReference accesses, whose relative reference is meaningless in a different
+// origin.
+func isLocalByValue(access runtime.Typed) bool {
+	return descriptorv2.IsLocalBlob(access) || ociaccess.IsRelativeOCIReference(access)
 }
 
 // processResource copies a single resource into the target as a local blob, dispatching on
@@ -348,6 +357,14 @@ func processResource(resource descriptorv2.Resource, access runtime.Typed, id st
 	case *descriptorv2.LocalBlob:
 		if err := processLocalBlob(resource, id, val, tgd, toSpec, resourceTransformIDs, i, ""); err != nil {
 			return nil, fmt.Errorf("failed processing local blob resource: %w", err)
+		}
+		return []string{fmt.Sprintf("${%s.spec.file}", addResourceID)}, nil
+	case *ociv1.RelativeOCIReference:
+		// A relativeOciReference is a local, repository-local access: copy by value as a
+		// local blob. pack.ArtifactBlob re-stamps the target access to localBlob, so the
+		// relative type never leaks into the target descriptor.
+		if err := processLocalBlob(resource, id, val, tgd, toSpec, resourceTransformIDs, i, ""); err != nil {
+			return nil, fmt.Errorf("failed processing relative OCI reference resource: %w", err)
 		}
 		return []string{fmt.Sprintf("${%s.spec.file}", addResourceID)}, nil
 	case *ociv1.OCIImage:

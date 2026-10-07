@@ -25,19 +25,19 @@ directly addressable and pullable with standard OCI tools.
 ```yaml
 match: >-
   target.type == "OCIRepository"
-  && (resource.access.isType(["OCIImage", "Helm"])
+  && (resource.access.isType(["OCIImage", "Helm", "relativeOciReference"])
     || (resource.access.isType("LocalBlob")
       && has(resource.access.mediaType) && isOCIManifest(resource.access.mediaType)
       && has(resource.access.referenceName)))
 ```
 
 The OCI uploader selects, on OCI registry targets only:
-
 | Source access type                  | Selected when                                                          | Name used in the default `imageReference`                                                                                                                   |
 | ----------------------------------- | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `OCIImage` (all aliases)            | always                                                                 | `resource.access.toOCI().repository` + tag. E.g. `ghcr.io/org/image:v1` → `org/image:v1` (registry and digest dropped).                                     |
 | `Helm`                              | always                                                                 | Helm repository URL path + chart name, tagged with version. E.g. `https://stefanprodan.github.io/podinfo`, chart `podinfo:6.5.0` → `podinfo/podinfo:6.5.0`. |
 | `LocalBlob`                         | the media type is an OCI manifest and the access has a `referenceName` | `resource.access.referenceName` verbatim (whatever it contains, including host/port/digest). E.g. `ghcr.io/org/image:v1` → `ghcr.io/org/image:v1`.          |
+| `relativeOciReference` (both spellings) | always                                                             | `resource.access.reference` verbatim (a registry-relative repository path, tag/digest preserved). E.g. `ocm/value:v2.0` → `ocm/value:v2.0`.                 |
 | anything else (Wget, S3, GitHub, …) | never                                                                  | —                                                                                                                                                           |
 
 This is exactly the scope of the deprecated `--upload-as ociArtifact`. An explicit
@@ -91,6 +91,15 @@ starts with the same target prefix,
 
   ```yaml
   imageReference: '${target.baseUrl + (target.subPath == "" ? "" : "/" + target.subPath) + "/" + resource.access.referenceName}'
+  ```
+
+- **Relative OCI reference** (a v1 compatibility access, see
+  [`relativeOciReference/v1`]({{< relref "docs/reference/input-and-access-types.md" >}}#relativeocireferencev1)):
+  `access.reference` verbatim (a registry-relative repository path; tag/digest ride along). E.g. `ocm/value:v2.0` →
+  `<target>/ocm/value:v2.0`. Without an OCI uploader the resource is instead copied by value as a `LocalBlob`.
+
+  ```yaml
+  imageReference: '${target.baseUrl + (target.subPath == "" ? "" : "/" + target.subPath) + "/" + resource.access.reference}'
   ```
 
 These are the same references as the old `--upload-as ociArtifact`. Writing the

@@ -31,4 +31,33 @@ func MustAddToScheme(scheme *runtime.Scheme) {
 		runtime.NewVersionedType(v2.LegacyType3, v2.LegacyType3Version),
 		runtime.NewUnversionedType(v2.LegacyType3),
 	)
+
+	scheme.MustRegisterWithAlias(&v2.RelativeOCIReference{},
+		runtime.NewVersionedType(v2.RelativeOCIReferenceType, v2.Version),
+		runtime.NewUnversionedType(v2.RelativeOCIReferenceType),
+	)
+}
+
+// relativeScheme is a narrow scheme registering only the relative OCI reference type. It
+// backs IsRelativeOCIReference: probing a Raw/Unstructured access against the broad Scheme
+// would false-match any registered type (the Raw->Typed path does a bare json.Unmarshal
+// with no type-match check), so classification must use a scheme that registers only the
+// relative type.
+var relativeScheme = runtime.NewScheme()
+
+func init() {
+	relativeScheme.MustRegisterWithAlias(&v2.RelativeOCIReference{},
+		runtime.NewVersionedType(v2.RelativeOCIReferenceType, v2.Version),
+		runtime.NewUnversionedType(v2.RelativeOCIReferenceType),
+	)
+}
+
+// IsRelativeOCIReference reports whether access is a relativeOciReference (either spelling,
+// as a concrete type, Raw, or Unstructured).
+func IsRelativeOCIReference(access runtime.Typed) bool {
+	if access == nil {
+		return false
+	}
+	var rel v2.RelativeOCIReference
+	return relativeScheme.Convert(access, &rel) == nil
 }
