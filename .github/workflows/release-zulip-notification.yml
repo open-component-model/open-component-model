@@ -56,7 +56,7 @@ jobs:
           # Neutralize Zulip mentions/wildcards (@**all**, @*group*) that can ride in on a
           # commit subject line (the only free-text in cliff.toml's template). A zero-width
           # space after each @ breaks the mention token while rendering identically.
-          BODY=$(printf '%s' "$BODY" | perl -CO -pe 's/\@/\@\x{200b}/g')
+          BODY=$(printf '%s' "$BODY" | perl -CS -pe 's/\@/\@\x{200b}/g')
 
           # Zulip caps messages at 10000 bytes; truncate (URL is already at the top).
           if [ ${#BODY} -gt 9000 ]; then
