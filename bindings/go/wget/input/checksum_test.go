@@ -100,7 +100,7 @@ func TestProcessResource_ProvidedDigest(t *testing.T) {
 
 	t.Run("provided digest and policy are both verified", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			w.Header().Set("x-checksum-sha1", hwSHA1)
+			w.Header().Set("X-Checksum-Sha1", hwSHA1)
 			_, _ = w.Write(content)
 		}))
 		defer server.Close()
@@ -141,7 +141,7 @@ func TestProcessResource_ChecksumPolicy_HeaderVerification(t *testing.T) {
 		var artifactAuth string
 		server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			artifactAuth = r.Header.Get("Authorization")
-			w.Header().Set("x-checksum-sha256", hwSHA256)
+			w.Header().Set("X-Checksum-Sha256", hwSHA256)
 			_, _ = w.Write(content)
 		}))
 		defer server.Close()
@@ -156,7 +156,7 @@ func TestProcessResource_ChecksumPolicy_HeaderVerification(t *testing.T) {
 
 	t.Run("tampered advertised header fails construction", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			w.Header().Set("x-checksum-sha256", strings.Repeat("f", 64))
+			w.Header().Set("X-Checksum-Sha256", strings.Repeat("f", 64))
 			_, _ = w.Write(content)
 		}))
 		defer server.Close()
@@ -186,7 +186,7 @@ func TestProcessResource_ChecksumPolicy_ConfigDriven(t *testing.T) {
 			_, _ = w.Write([]byte(hwSHA256 + "  artifact\n"))
 			return
 		}
-		w.Header().Set("x-checksum-sha256", hwSHA256)
+		w.Header().Set("X-Checksum-Sha256", hwSHA256)
 		_, _ = w.Write(content)
 	})
 
@@ -208,7 +208,7 @@ func TestProcessResource_ChecksumPolicy_ConfigDriven(t *testing.T) {
 		// A tampered advertised digest therefore fails against the override but
 		// would go unnoticed under the default.
 		badServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			w.Header().Set("x-checksum-sha256", strings.Repeat("f", 64))
+			w.Header().Set("X-Checksum-Sha256", strings.Repeat("f", 64))
 			_, _ = w.Write(content)
 		}))
 		defer badServer.Close()
