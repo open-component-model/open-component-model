@@ -431,7 +431,6 @@ func (m MockProvider) GetComponentVersionRepository(ctx context.Context, reposit
 }
 
 type MockRepository struct {
-	typ runtime.Type
 	*RepositorySpec
 }
 

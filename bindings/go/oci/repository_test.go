@@ -213,7 +213,6 @@ func TestRepository_GetLocalResource(t *testing.T) {
 		errorContains            string
 		setupComponent           bool
 		setupComponentLikeOldOCM bool
-		setupManifest            func(t *testing.T, store spec.Store, ctx context.Context, content []byte, resource *descriptor.Resource) error
 		checkContent             func(t *testing.T, original []byte, actual []byte)
 	}
 
@@ -1377,7 +1376,6 @@ func TestRepository_GetLocalSource(t *testing.T) {
 		errorContains            string
 		setupComponent           bool
 		setupComponentLikeOldOCM bool
-		setupManifest            func(t *testing.T, store spec.Store, ctx context.Context, content []byte, source *descriptor.Source) error
 		checkContent             func(t *testing.T, original []byte, actual []byte)
 	}
 
