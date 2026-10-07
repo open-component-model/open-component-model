@@ -16,6 +16,7 @@ import (
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/git/internal/download"
+	"ocm.software/open-component-model/bindings/go/git/internal/endpoint"
 	accessv1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
 	credsv1 "ocm.software/open-component-model/bindings/go/git/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -82,6 +83,17 @@ func (r *ResourceRepository) UploadGit(ctx context.Context, source *descriptor.R
 		if fetchOptions.Depth == 0 {
 			fetchOptions.Depth = target.MaxDepth
 		}
+	}
+	targetEndpoint, err := endpoint.Parse(target.Repository)
+	if err != nil {
+		return nil, fmt.Errorf("invalid target repository: %w", err)
+	}
+	if targetEndpoint.Protocol == "file" {
+		if target.MaxDepth > 0 {
+			return nil, fmt.Errorf("local git upload requires full source history and cannot use maxDepth")
+		}
+		fetchOptions.Depth = 0
+		fetchOptions.Filter = ""
 	}
 	var uploaded *descriptor.Resource
 	upload := func(repo *git.Repository, selected *object.Commit) error {

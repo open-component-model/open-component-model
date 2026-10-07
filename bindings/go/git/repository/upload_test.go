@@ -58,6 +58,8 @@ func TestUploadGit(t *testing.T) {
 			r.Equal(targetPath, access.Repository)
 			r.Equal("refs/heads/main", access.Ref)
 			r.Equal(testCase.commit.String(), access.Commit)
+			target, err = git.PlainOpen(targetPath)
+			r.NoError(err)
 			ref, err := target.Reference("refs/heads/main", true)
 			r.NoError(err)
 			r.Equal(testCase.commit, ref.Hash())
@@ -115,6 +117,7 @@ func TestUploadGitOptionValidation(t *testing.T) {
 		{name: "missing target repository", target: repository.UploadOptions{Ref: "refs/heads/main"}, wantErr: "target repository is required"},
 		{name: "short ref", target: repository.UploadOptions{Repository: "https://example.com/target.git", Ref: "main"}, wantErr: "target ref must be a full"},
 		{name: "negative max depth", target: repository.UploadOptions{Repository: "https://example.com/target.git", Ref: "refs/heads/main", MaxDepth: -1}, wantErr: "maxDepth must not be negative"},
+		{name: "local max depth", target: repository.UploadOptions{Repository: "/tmp/target.git", Ref: "refs/heads/main", MaxDepth: 1}, wantErr: "local git upload requires full source history"},
 		{name: "negative depth override", target: repository.UploadOptions{Repository: "https://example.com/target.git", Ref: "refs/heads/main", Depth: &depth}, wantErr: "invalid upload fetch options"},
 		{name: "unsupported filter override", target: repository.UploadOptions{Repository: "https://example.com/target.git", Ref: "refs/heads/main", Filter: &filter}, wantErr: "invalid upload fetch options"},
 	} {
