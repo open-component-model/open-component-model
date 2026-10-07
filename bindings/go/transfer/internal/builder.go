@@ -74,6 +74,21 @@ func NewDefaultBuilder(
 		CredentialProvider: credentialProvider,
 	}
 
+	// Fused streaming local-resource transformer: downloads a by-value source
+	// (wget/s3) and embeds it as a local blob in an OCI registry target in a single
+	// node, so the stream never crosses a graph boundary and no temporary file is
+	// produced. It holds BOTH the ResourceRepository (to open the lazy source
+	// stream) and the ComponentVersionRepositoryProvider (to add to the target).
+	// When the resource repository is not streaming-capable it falls back to a
+	// buffered add. CTF targets keep using the split Download* -> AddLocalResource
+	// path and never reach this transformer.
+	ociStreamResource := &ocitransformer.StreamLocalResource{
+		Scheme:             transformerScheme,
+		RepoProvider:       repoProvider,
+		ResourceRepository: resourceRepo,
+		CredentialProvider: credentialProvider,
+	}
+
 	// OCI Artifact transformers
 	ociGetOCIArtifact := &ocitransformer.GetOCIArtifact{
 		Scheme:             transformerScheme,
@@ -179,6 +194,7 @@ func NewDefaultBuilder(
 		WithTransformer(&ociv1alpha1.OCIAddLocalResource{}, ociAddResource).
 		WithTransformer(&ociv1alpha1.CTFGetLocalResource{}, ociGetResource).
 		WithTransformer(&ociv1alpha1.CTFAddLocalResource{}, ociAddResource).
+		WithTransformer(&ociv1alpha1.OCIStreamLocalResource{}, ociStreamResource).
 		WithTransformer(&ociv1alpha1.GetOCIArtifact{}, ociGetOCIArtifact).
 		WithTransformer(&ociv1alpha1.AddOCIArtifact{}, ociAddOCIArtifact).
 		WithTransformer(&ociv1alpha1.TransferOCIArtifact{}, ociTransferOCIArtifact).

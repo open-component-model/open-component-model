@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/oci"
+	"ocm.software/open-component-model/bindings/go/oci/internal/remotestore"
 	"ocm.software/open-component-model/bindings/go/oci/looseref"
 	ctfrepospecv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ocirepospecv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
@@ -269,4 +270,22 @@ func TestBuildResolver_SubPathExtraction(t *testing.T) {
 			assert.Equal(t, tt.expectedReference, stringer.String())
 		})
 	}
+}
+
+func TestNewResolver_EnablesChunkedPushByDefault(t *testing.T) {
+	r := require.New(t)
+
+	resolver, err := NewResolver(t.Context(), nil, &ocirepospecv1.Repository{BaseUrl: "http://localhost:5000"})
+	r.NoError(err)
+
+	store, err := resolver.StoreForReference(t.Context(), "localhost:5000/example/component:1.0.0")
+	r.NoError(err)
+
+	remoteStore, ok := store.(*remotestore.RemoteStore)
+	r.True(ok, "expected a *remotestore.RemoteStore, got %T", store)
+	// Deliverable D: chunked (and therefore streaming) push must be enabled by
+	// default so a size-unknown by-value resource streams into the target.
+	assert.Equal(t, remotestore.DefaultChunkSize, remoteStore.ChunkSize)
+	assert.Equal(t, remotestore.DefaultChunkThreshold, remoteStore.ChunkThreshold)
+	assert.Positive(t, remoteStore.ChunkSize)
 }
