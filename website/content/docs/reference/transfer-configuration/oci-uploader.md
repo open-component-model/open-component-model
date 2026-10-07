@@ -32,13 +32,14 @@ match: >-
 ```
 
 The OCI uploader selects, on OCI registry targets only:
-| Source access type                  | Selected when                                                          | Name used in the default `imageReference`                                                                                                                   |
-| ----------------------------------- | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `OCIImage` (all aliases)            | always                                                                 | `resource.access.toOCI().repository` + tag. E.g. `ghcr.io/org/image:v1` → `org/image:v1` (registry and digest dropped).                                     |
-| `Helm`                              | always                                                                 | Helm repository URL path + chart name, tagged with version. E.g. `https://stefanprodan.github.io/podinfo`, chart `podinfo:6.5.0` → `podinfo/podinfo:6.5.0`. |
-| `LocalBlob`                         | the media type is an OCI manifest and the access has a `referenceName` | `resource.access.referenceName` verbatim (whatever it contains, including host/port/digest). E.g. `ghcr.io/org/image:v1` → `ghcr.io/org/image:v1`.          |
-| `relativeOciReference` (both spellings) | always                                                             | `resource.access.reference` verbatim (a registry-relative repository path, tag/digest preserved). E.g. `ocm/value:v2.0` → `ocm/value:v2.0`.                 |
-| anything else (Wget, S3, GitHub, …) | never                                                                  | —                                                                                                                                                           |
+
+| Source access type                      | Selected when                                                          | Name used in the default `imageReference`                                                                                                                   |
+| --------------------------------------- | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `OCIImage` (all aliases)                | always                                                                 | `resource.access.toOCI().repository` + tag. E.g. `ghcr.io/org/image:v1` → `org/image:v1` (registry and digest dropped).                                     |
+| `Helm`                                  | always                                                                 | Helm repository URL path + chart name, tagged with version. E.g. `https://stefanprodan.github.io/podinfo`, chart `podinfo:6.5.0` → `podinfo/podinfo:6.5.0`. |
+| `LocalBlob`                             | the media type is an OCI manifest and the access has a `referenceName` | `resource.access.referenceName` verbatim (whatever it contains, including host/port/digest). E.g. `ghcr.io/org/image:v1` → `ghcr.io/org/image:v1`.          |
+| `relativeOciReference` (both spellings) | always                                                                 | `resource.access.reference` verbatim (a registry-relative repository path, tag/digest preserved). E.g. `ocm/value:v2.0` → `ocm/value:v2.0`.                 |
+| anything else (Wget, S3, GitHub, …)     | never                                                                  | —                                                                                                                                                           |
 
 This is exactly the scope of the deprecated `--upload-as ociArtifact`. An explicit
 `match` may select only resources the OCI uploader can upload: OCI images, Helm
