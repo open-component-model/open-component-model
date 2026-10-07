@@ -26,7 +26,7 @@ import (
 
 func TestCopyChartToOCILayout_Success(t *testing.T) {
 	ctx := t.Context()
-	testDataDir := filepath.Join("../../testdata")
+	testDataDir := "../../testdata"
 
 	tests := []struct {
 		name      string
@@ -112,7 +112,7 @@ func TestCopyChartToOCILayout_Success(t *testing.T) {
 
 func TestCopyChartToOCILayout_TagMatchesVersion(t *testing.T) {
 	ctx := t.Context()
-	testDataDir := filepath.Join("../../testdata")
+	testDataDir := "../../testdata"
 
 	chart := newReadOnlyChart(t, filepath.Join(testDataDir, "mychart-0.1.0.tgz"))
 
@@ -134,7 +134,7 @@ func TestCopyChartToOCILayout_TagMatchesVersion(t *testing.T) {
 
 func TestCopyChartToOCILayout_ConfigContent(t *testing.T) {
 	ctx := t.Context()
-	testDataDir := filepath.Join("../../testdata")
+	testDataDir := "../../testdata"
 
 	chart := newReadOnlyChart(t, filepath.Join(testDataDir, "mychart-0.1.0.tgz"))
 
@@ -171,7 +171,7 @@ func TestCopyChartToOCILayout_ConfigContent(t *testing.T) {
 
 func TestCopyChartToOCILayout_Matrix(t *testing.T) {
 	ctx := t.Context()
-	testDataDir := filepath.Join("../../testdata")
+	testDataDir := "../../testdata"
 	chartPath := filepath.Join(testDataDir, "mychart-0.1.0.tgz")
 
 	tests := []struct {
@@ -257,7 +257,7 @@ func TestCopyChartToOCILayout_Matrix(t *testing.T) {
 
 func TestCopyChartToOCILayout_DigestsMatchContent(t *testing.T) {
 	ctx := t.Context()
-	testDataDir := filepath.Join("../../testdata")
+	testDataDir := "../../testdata"
 
 	tests := []struct {
 		name string

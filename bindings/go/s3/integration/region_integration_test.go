@@ -85,12 +85,12 @@ func Test_Integration_S3RegionRedirect(t *testing.T) {
 						status = http.StatusMovedPermanently
 						body = `<Error><Code>PermanentRedirect</Code><Message>Use the bucket region</Message></Error>`
 						w.Header().Set("Content-Type", "application/xml")
-						w.Header().Set("x-amz-bucket-region", region)
+						w.Header().Set("X-Amz-Bucket-Region", region)
 					case len(exchanges) == 1 && req.Host == correctHost:
 						status, body = http.StatusOK, wantContent
 					}
 				}
-				exchanges = append(exchanges, exchange{req.Clone(req.Context()), status, w.Header().Get("x-amz-bucket-region")})
+				exchanges = append(exchanges, exchange{req.Clone(req.Context()), status, w.Header().Get("X-Amz-Bucket-Region")})
 				mu.Unlock()
 				w.WriteHeader(status)
 				if _, err := io.WriteString(w, body); err != nil {
