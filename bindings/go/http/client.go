@@ -113,7 +113,10 @@ func New(opts ...Option) *nethttp.Client {
 	}
 
 	build := func(tc *httpv1alpha1.TimeoutConfig, rc *httpv1alpha1.RetryConfig, tlsc *httpv1alpha1.TLSConfig) nethttp.RoundTripper {
-		tr := NewTransportWithTLS(tc, tlsc)
+		tr, err := NewTransportWithTLS(tc, tlsc)
+		if err != nil {
+			return errorRoundTripper{err: err}
+		}
 		tr.DisableCompression = !options.compression
 		rt := nethttp.RoundTripper(retry.NewTransport(tr))
 		if p := retryPolicyFromConfig(rc); p != nil {

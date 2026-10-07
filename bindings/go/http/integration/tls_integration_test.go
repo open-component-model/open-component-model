@@ -2,6 +2,7 @@ package integration_test
 
 import (
 	"context"
+	"encoding/pem"
 	"log/slog"
 	nethttp "net/http"
 	"net/http/httptest"
@@ -78,4 +79,49 @@ func TestTLSInsecureSkipVerify_Integration(t *testing.T) {
 		assert.NotEmpty(t, msgs, "warning must be emitted when InsecureSkipVerify=true")
 		assert.Contains(t, msgs[0], "InsecureSkipVerify=true", "warning must identify the specific setting")
 	})
+}
+
+// TestTLSRootCAs_Integration proves that a client configured with RootCAsPEM
+// trusts a server whose certificate chains to that CA, without disabling
+// verification. The httptest TLS server's own certificate acts as the CA here:
+// a client that pins it as a root CA succeeds where a default client fails.
+func TestTLSRootCAs_Integration(t *testing.T) {
+	srv := httptest.NewTLSServer(nethttp.HandlerFunc(func(w nethttp.ResponseWriter, _ *nethttp.Request) {
+		w.WriteHeader(nethttp.StatusOK)
+	}))
+	t.Cleanup(srv.Close)
+
+	caPEM := string(pem.EncodeToMemory(&pem.Block{
+		Type:  "CERTIFICATE",
+		Bytes: srv.Certificate().Raw,
+	}))
+	insecure := true
+
+	tests := []struct {
+		name    string
+		tls     httpv1alpha1.TLSConfig
+		wantErr string
+	}{
+		{name: "RootCAsPEM lets a verifying client trust the server cert", tls: httpv1alpha1.TLSConfig{RootCAsPEM: caPEM}},
+		{name: "invalid RootCAsPEM fails the request closed", tls: httpv1alpha1.TLSConfig{RootCAsPEM: "not a certificate"}, wantErr: "no valid certificates"},
+		{
+			name: "InsecureSkipVerify overrides RootCAs and skips verification",
+			tls:  httpv1alpha1.TLSConfig{InsecureSkipVerify: &insecure, RootCAsPEM: "not a certificate"},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			req, err := nethttp.NewRequestWithContext(t.Context(), nethttp.MethodGet, srv.URL, nil)
+			r.NoError(err)
+			resp, err := ocmhttp.NewClient(&httpv1alpha1.Config{TLSConfig: tc.tls}).Do(req)
+			if tc.wantErr != "" {
+				r.ErrorContains(err, tc.wantErr)
+				return
+			}
+			r.NoError(err)
+			r.NoError(resp.Body.Close())
+			r.Equal(nethttp.StatusOK, resp.StatusCode)
+		})
+	}
 }

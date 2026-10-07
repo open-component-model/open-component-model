@@ -41,6 +41,15 @@ Verify component version(s) inside an OCM repository based on signatures.
 - The verifier is resolved per signature, so a component carrying several signatures can be verified with a different handler for each
 - --verifier-spec is no longer supported and fails with an error
 
+## Timestamp Verification (RFC 3161 TSA)
+
+- If a signature carries an RFC 3161 timestamp, the verifier checks it automatically
+- Full certificate-chain verification of the timestamp token requires the TSA's root CA certificate, supplied via the credential graph under a TSA/v1alpha1 identity
+- Without TSA root certificates the token structure and imprint are still checked, but the certificate chain is not verified and a warning is logged
+- Only a timestamp validated against trusted TSA roots is used to validate an (RSA/PEM) signing certificate as of the signing time; a merely structural token never relaxes certificate validity
+- The TSA URL stored as a signed label in the descriptor selects a URL-specific TSA/v1alpha1 entry; an entry without URL attributes applies to any TSA
+- Timestamps created by the OCM v1 CLI are verified as well
+
 Use to validate component versions before promotion, deployment, or further usage to ensure integrity and provenance.
 
 ```
@@ -207,6 +216,22 @@ verify component-version ./repo//ocm.software/cli:0.12.0 --config ./sigstore-ver
 
 # Verify a specific signature
 verify component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0 --signature my-signature
+
+## Example Credential Config (TSA timestamp verification)
+# TSA/v1alpha1 identity supplying the TSA root CA for full timestamp chain verification
+# (see "Timestamp Verification (RFC 3161 TSA)" above):
+
+    type: generic.config.ocm.software/v1
+    configurations:
+    - type: credentials.config.ocm.software
+      consumers:
+      - identity:
+          type: TSA/v1alpha1
+          hostname: timestamp.digicert.com
+          scheme: http
+        credentials:
+        - type: TSACredentials/v1alpha1
+          rootCertsPEMFile: /path/to/digicert-tsa-root.pem
 ```
 
 ### Options

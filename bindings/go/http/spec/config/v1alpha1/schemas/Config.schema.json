@@ -29,6 +29,14 @@
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.http.spec.config.v1alpha1.RetryConfig",
       "description": "Retry configures retry behavior for transient failures.\nNil uses the library default policy (5 retries, exponential backoff\nwith 200ms–3s bounds)."
     },
+    "rootCAsPEM": {
+      "type": "string",
+      "description": "RootCAsPEM is an inline PEM bundle of additional root CA certificates used\nto verify the server's TLS certificate. It is appended to the system trust\npool, so both privately-issued and publicly-issued servers keep verifying.\nUse it to trust an internal/private CA (for example a self-hosted OCI\nregistry or RFC 3161 timestamping server) without disabling verification.\nTakes precedence over RootCAsPEMFile when both are set. Ignored when\nInsecureSkipVerify is true."
+    },
+    "rootCAsPEMFile": {
+      "type": "string",
+      "description": "RootCAsPEMFile is a path to a PEM file with additional root CA certificates.\nSame semantics as RootCAsPEM, but loaded from disk. Ignored when RootCAsPEM\nis also set, and when InsecureSkipVerify is true."
+    },
     "tcpDialTimeout": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.http.spec.config.v1alpha1.Timeout",
       "description": "TCPDialTimeout is the maximum amount of time a dial will wait\nfor a TCP connect to complete. When dialing a host name with\nmultiple IP addresses, the timeout may be divided between them.\nThe operating system may impose its own earlier timeout."
@@ -86,6 +94,14 @@
           "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.http.spec.config.v1alpha1.RetryConfig",
           "description": "Retry overrides the global retry policy for this host.\nFields set here override the corresponding top-level retry value."
         },
+        "rootCAsPEM": {
+          "type": "string",
+          "description": "RootCAsPEM is an inline PEM bundle of additional root CA certificates used\nto verify the server's TLS certificate. It is appended to the system trust\npool, so both privately-issued and publicly-issued servers keep verifying.\nUse it to trust an internal/private CA (for example a self-hosted OCI\nregistry or RFC 3161 timestamping server) without disabling verification.\nTakes precedence over RootCAsPEMFile when both are set. Ignored when\nInsecureSkipVerify is true."
+        },
+        "rootCAsPEMFile": {
+          "type": "string",
+          "description": "RootCAsPEMFile is a path to a PEM file with additional root CA certificates.\nSame semantics as RootCAsPEM, but loaded from disk. Ignored when RootCAsPEM\nis also set, and when InsecureSkipVerify is true."
+        },
         "tcpDialTimeout": {
           "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.http.spec.config.v1alpha1.Timeout",
           "description": "TCPDialTimeout is the maximum amount of time a dial will wait\nfor a TCP connect to complete. When dialing a host name with\nmultiple IP addresses, the timeout may be divided between them.\nThe operating system may impose its own earlier timeout."
@@ -139,6 +155,14 @@
         "insecureSkipVerify": {
           "type": "boolean",
           "description": "InsecureSkipVerify disables verification of the server's TLS certificate\nchain and host name. Setting this to true makes connections vulnerable to\nactive MITM attacks; use only for development and local registry testing.\nA warning is logged at transport build time and on every new host connection.\n\nNil means \"unset\" (TLS verification stays enabled at the top level). When\nTLSConfig is embedded in HostConfig, nil additionally means \"inherit from\nthe global Config\"; an explicit false on a host re-enables verification\neven when the global config sets true. See HostConfig for per-host merge\nsemantics."
+        },
+        "rootCAsPEM": {
+          "type": "string",
+          "description": "RootCAsPEM is an inline PEM bundle of additional root CA certificates used\nto verify the server's TLS certificate. It is appended to the system trust\npool, so both privately-issued and publicly-issued servers keep verifying.\nUse it to trust an internal/private CA (for example a self-hosted OCI\nregistry or RFC 3161 timestamping server) without disabling verification.\nTakes precedence over RootCAsPEMFile when both are set. Ignored when\nInsecureSkipVerify is true."
+        },
+        "rootCAsPEMFile": {
+          "type": "string",
+          "description": "RootCAsPEMFile is a path to a PEM file with additional root CA certificates.\nSame semantics as RootCAsPEM, but loaded from disk. Ignored when RootCAsPEM\nis also set, and when InsecureSkipVerify is true."
         }
       },
       "additionalProperties": false
