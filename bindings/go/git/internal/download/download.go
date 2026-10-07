@@ -70,8 +70,15 @@ func Download(ctx context.Context, access *accessv1.Git, creds *credsv1.GitCrede
 
 // WithRepository supplies the selected commit and original Git objects to fn.
 // Git object operations run outside strict FIPS enforcement because Git uses SHA-1.
+// Filter is a fetch hint: a server without filter support gets an unfiltered fetch.
 func WithRepository(ctx context.Context, access *accessv1.Git, creds *credsv1.GitCredentials, opts Options, fn func(*git.Repository, *object.Commit) error) (err error) {
-	fips140.WithoutEnforcement(func() { err = withRepository(ctx, access, creds, opts, fn) })
+	fips140.WithoutEnforcement(func() {
+		err = withRepository(ctx, access, creds, opts, fn)
+		if opts.Filter != "" && errors.Is(err, transport.ErrFilterNotSupported) && ctx.Err() == nil {
+			opts.Filter = ""
+			err = withRepository(ctx, access, creds, opts, fn)
+		}
+	})
 	return err
 }
 
@@ -276,6 +283,8 @@ func transportError(ctx context.Context, operation string, err error) error {
 		return fmt.Errorf("%s: authentication required: %s", operation, redact(err))
 	case errors.Is(err, transport.ErrAuthorizationFailed):
 		return fmt.Errorf("%s: authorization failed: %s", operation, redact(err))
+	case errors.Is(err, transport.ErrFilterNotSupported):
+		return fmt.Errorf("%s: %w", operation, transport.ErrFilterNotSupported)
 	default:
 		return fmt.Errorf("%s: transport failed; check repository access and server trust: %s", operation, redact(err))
 	}

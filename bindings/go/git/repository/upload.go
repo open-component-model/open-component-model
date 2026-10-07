@@ -102,7 +102,7 @@ func (r *ResourceRepository) UploadGit(ctx context.Context, source *descriptor.R
 		return err
 	}
 	err = download.WithRepository(ctx, spec, sourceCreds, fetchOptions, upload)
-	if errors.Is(err, errIncompleteObjects) && (fetchOptions.Depth != target.MaxDepth || fetchOptions.Filter != "") {
+	if (errors.Is(err, errIncompleteObjects) || errors.Is(err, transport.ErrFilterNotSupported)) && (fetchOptions.Depth != target.MaxDepth || fetchOptions.Filter != "") {
 		fetchOptions.Depth = target.MaxDepth
 		fetchOptions.Filter = ""
 		err = download.WithRepository(ctx, spec, sourceCreds, fetchOptions, upload)

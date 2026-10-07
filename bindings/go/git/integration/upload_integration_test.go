@@ -95,6 +95,14 @@ func Test_Integration_GitUploadOverHTTPS(t *testing.T) {
 	bundleResult, err := resourceRepository.UploadResource(t.Context(), bundleTarget, bundle, credentials)
 	r.NoError(err)
 	r.Equal(second.String(), bundleResult.Access.(*accessv1.Git).Commit)
+	r.Equal(secondResource.Digest, bundleResult.Digest)
+
+	bundleRef, err := targetRepo.Reference("refs/heads/bundle", true)
+	r.NoError(err)
+	r.Equal(second, bundleRef.Hash())
+	verifiedBundle, err := resourceRepository.ProcessResourceDigest(t.Context(), bundleResult, credentials)
+	r.NoError(err)
+	r.Equal(secondResource.Digest, verifiedBundle.Digest)
 
 	ref, err := targetRepo.Reference("refs/heads/release", true)
 	r.NoError(err)
