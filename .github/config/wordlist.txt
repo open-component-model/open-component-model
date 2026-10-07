@@ -227,6 +227,7 @@ dex
 devops
 dex
 diataxis
+digester
 digesters
 directorytree
 dirs
@@ -1008,6 +1009,7 @@ WgetCredentials
 GitHubCredentials
 GitHubRepository
 normalisation
+normalisations
 MinIO
 Ceph
 RGW
