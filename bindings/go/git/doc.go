@@ -25,6 +25,11 @@
 // copies original objects to an existing Git repository. It requires a pinned
 // commit and a full target branch or tag ref, verifies any resource digest,
 // rejects non-fast-forward updates, and returns Git/v1 access to the target.
+// The generic ResourceRepository.UploadResource method accepts a complete Git
+// bundle produced by DownloadGitBundle. Its resource access identifies the
+// target repository and full ref; the bundle carries original Git objects.
+// Callers close the bundle blob after use to remove its temporary file.
+// DownloadResource continues to return a snapshot tar for local-blob transfers.
 //
 // # Constructor input
 //
@@ -42,7 +47,8 @@
 // OCI or CTF targets, preserving the resource digest. It requires a pinned Commit;
 // constructor digest processing pins ref-only access before publication.
 // Without resource copying, external Git access remains unchanged. Git upload
-// is handled separately by UploadGit; the snapshot archive is not a Git object carrier.
+// uses UploadGit or a DownloadGitBundle/UploadResource pair; the snapshot archive
+// is not a Git object carrier.
 //
 // # Archive and digests
 //

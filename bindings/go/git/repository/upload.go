@@ -122,7 +122,7 @@ func (r *ResourceRepository) uploadGitRepository(ctx context.Context, repo *git.
 			return nil, err
 		}
 	}
-	commits, err := verifyObjectClosure(repo, pushHash)
+	commits, _, err := verifyObjectClosure(repo, pushHash)
 	if err != nil {
 		return nil, err
 	}
@@ -135,6 +135,10 @@ func (r *ResourceRepository) uploadGitRepository(ctx context.Context, repo *git.
 			return nil, err
 		}
 	}
+	return r.pushGitRepository(ctx, repo, source, targetRepository, targetRef, selected.Hash, pushHash, commits, targetCreds, options)
+}
+
+func (r *ResourceRepository) pushGitRepository(ctx context.Context, repo *git.Repository, source *descriptor.Resource, targetRepository string, targetRef plumbing.ReferenceName, commit, pushHash plumbing.Hash, commits map[plumbing.Hash]struct{}, targetCreds *credsv1.GitCredentials, options download.Options) (*descriptor.Resource, error) {
 	targetURL, targetOptions, err := download.RemoteOptions(targetRepository, targetCreds, options)
 	if err != nil {
 		return nil, fmt.Errorf("invalid target: %w", err)
@@ -155,13 +159,13 @@ func (r *ResourceRepository) uploadGitRepository(ctx context.Context, repo *git.
 			return nil, err
 		}
 		if existing.Hash() == pushHash {
-			return uploadedResource(source, targetRepository, string(targetRef), selected.Hash.String()), nil
+			return uploadedResource(source, targetRepository, string(targetRef), commit.String()), nil
 		}
 		if strings.HasPrefix(string(targetRef), "refs/tags/") {
 			return nil, fmt.Errorf("target tag %q already exists at another object", targetRef)
 		}
 		if _, ok := commits[existing.Hash()]; !ok {
-			return nil, fmt.Errorf("target ref %q does not fast-forward to %s", targetRef, selected.Hash)
+			return nil, fmt.Errorf("target ref %q does not fast-forward to %s", targetRef, commit)
 		}
 		break
 	}
@@ -176,14 +180,14 @@ func (r *ResourceRepository) uploadGitRepository(ctx context.Context, repo *git.
 	}); err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
 		return nil, download.TransportError(ctx, "cannot push git ref", err)
 	}
-	return uploadedResource(source, targetRepository, string(targetRef), selected.Hash.String()), nil
+	return uploadedResource(source, targetRepository, string(targetRef), commit.String()), nil
 }
 
 func (r *ResourceRepository) verifyTargetHistory(ctx context.Context, repository, ref string, tip plumbing.Hash, credentials *credsv1.GitCredentials) error {
 	opts := r.downloadOptions(r.tempFolder())
 	access := &accessv1.Git{Repository: repository, Ref: ref}
 	err := download.WithRepository(ctx, access, credentials, opts, func(target *git.Repository, _ *object.Commit) error {
-		_, err := verifyObjectClosure(target, tip)
+		_, _, err := verifyObjectClosure(target, tip)
 		return err
 	})
 	if err != nil {
@@ -210,7 +214,7 @@ func uploadedResource(source *descriptor.Resource, repository, ref, commit strin
 	return result
 }
 
-func verifyObjectClosure(repo *git.Repository, tip plumbing.Hash) (map[plumbing.Hash]struct{}, error) {
+func verifyObjectClosure(repo *git.Repository, tip plumbing.Hash) (map[plumbing.Hash]struct{}, map[plumbing.Hash]struct{}, error) {
 	seen := make(map[plumbing.Hash]struct{})
 	commits := make(map[plumbing.Hash]struct{})
 	pending := []plumbing.Hash{tip}
@@ -223,13 +227,13 @@ func verifyObjectClosure(repo *git.Repository, tip plumbing.Hash) (map[plumbing.
 		seen[hash] = struct{}{}
 		encoded, err := repo.Storer.EncodedObject(plumbing.AnyObject, hash)
 		if err != nil {
-			return nil, fmt.Errorf("%w: object %s: %w", errIncompleteObjects, hash, err)
+			return nil, nil, fmt.Errorf("%w: object %s: %w", errIncompleteObjects, hash, err)
 		}
 		switch encoded.Type() {
 		case plumbing.CommitObject:
 			commit, err := object.GetCommit(repo.Storer, hash)
 			if err != nil {
-				return nil, fmt.Errorf("cannot read commit %s: %w", hash, err)
+				return nil, nil, fmt.Errorf("cannot read commit %s: %w", hash, err)
 			}
 			commits[hash] = struct{}{}
 			pending = append(pending, commit.TreeHash)
@@ -237,7 +241,7 @@ func verifyObjectClosure(repo *git.Repository, tip plumbing.Hash) (map[plumbing.
 		case plumbing.TreeObject:
 			tree, err := object.GetTree(repo.Storer, hash)
 			if err != nil {
-				return nil, fmt.Errorf("cannot read tree %s: %w", hash, err)
+				return nil, nil, fmt.Errorf("cannot read tree %s: %w", hash, err)
 			}
 			for _, entry := range tree.Entries {
 				if entry.Mode != filemode.Submodule {
@@ -247,15 +251,15 @@ func verifyObjectClosure(repo *git.Repository, tip plumbing.Hash) (map[plumbing.
 		case plumbing.TagObject:
 			tag, err := object.GetTag(repo.Storer, hash)
 			if err != nil {
-				return nil, fmt.Errorf("cannot read tag %s: %w", hash, err)
+				return nil, nil, fmt.Errorf("cannot read tag %s: %w", hash, err)
 			}
 			pending = append(pending, tag.Target)
 		case plumbing.BlobObject:
 		default:
-			return nil, fmt.Errorf("unsupported git object type %s", encoded.Type())
+			return nil, nil, fmt.Errorf("unsupported git object type %s", encoded.Type())
 		}
 	}
-	return commits, nil
+	return commits, seen, nil
 }
 
 func fetchPinnedTag(ctx context.Context, repo *git.Repository, sourceRef string, commit plumbing.Hash, sourceRepository string, options download.Options, sourceCreds *credsv1.GitCredentials) (plumbing.Hash, error) {

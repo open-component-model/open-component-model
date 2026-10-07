@@ -1,6 +1,7 @@
 package integration_test
 
 import (
+	"io"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -10,6 +11,7 @@ import (
 	"github.com/go-git/go-git/v6/plumbing"
 	"github.com/stretchr/testify/require"
 
+	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	gitrepository "ocm.software/open-component-model/bindings/go/git/repository"
@@ -75,6 +77,24 @@ func Test_Integration_GitUploadOverHTTPS(t *testing.T) {
 	upload(firstResource)
 	secondResource := resourceFor(second)
 	upload(secondResource)
+	bundle, err := resourceRepository.DownloadGitBundle(t.Context(), secondResource, credentials)
+	r.NoError(err)
+	t.Cleanup(func() { r.NoError(bundle.(io.Closer).Close()) })
+	bundlePath := filepath.Join(t.TempDir(), "source.bundle")
+	_, err = filesystem.BlobToSpec(bundle, bundlePath)
+	r.NoError(err)
+	verified, err := exec.CommandContext(t.Context(), "git", "-C", targetPath, "bundle", "verify", bundlePath).CombinedOutput()
+	r.NoError(err, string(verified))
+	bundleTarget := secondResource.DeepCopy()
+	bundleTarget.Access = &accessv1.Git{
+		Type:       runtime.NewVersionedType(accessv1.Type, accessv1.Version),
+		Repository: targetURL,
+		Ref:        "refs/heads/bundle",
+		Commit:     second.String(),
+	}
+	bundleResult, err := resourceRepository.UploadResource(t.Context(), bundleTarget, bundle, credentials)
+	r.NoError(err)
+	r.Equal(second.String(), bundleResult.Access.(*accessv1.Git).Commit)
 
 	ref, err := targetRepo.Reference("refs/heads/release", true)
 	r.NoError(err)

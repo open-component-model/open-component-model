@@ -160,7 +160,7 @@ func TestInvalidResource(t *testing.T) {
 	}
 
 	_, err := repo.UploadResource(t.Context(), nil, nil, nil)
-	r.ErrorContains(err, "do not support upload")
+	r.ErrorContains(err, "resource is required")
 	r.Same(access.Scheme, repo.GetResourceRepositoryScheme())
 }
 
