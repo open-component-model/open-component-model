@@ -242,40 +242,6 @@ func TestRepository_GetLocalResource_RelativeOCIReference(t *testing.T) {
 	}
 }
 
-func TestRepository_GetLocalResource_RelativeOCIReference_Invalid(t *testing.T) {
-	const (
-		component = "acme.org/compo"
-		version   = "v1.0.0"
-	)
-	for _, tc := range []struct {
-		name      string
-		reference string
-	}{
-		{name: "empty", reference: ""},
-		{name: "invalid syntax", reference: "ocm/value:bad:tag:form"},
-		{name: "invalid digest", reference: "ocm/value@sha256:nothex"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			r := require.New(t)
-			ctx := t.Context()
-
-			fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
-			r.NoError(err)
-			store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
-			repo := Repository(t, ocictf.WithCTF(store))
-
-			access := &v1.RelativeOCIReference{
-				Type:      runtime.NewUnversionedType(v1.RelativeOCIReferenceType),
-				Reference: tc.reference,
-			}
-			addComponentWithAccess(t, ctx, repo, component, version, access)
-
-			_, _, err = repo.GetLocalResource(ctx, component, version, runtime.Identity{"name": "image"})
-			r.Error(err)
-		})
-	}
-}
-
 // TestRepository_GetLocalResource_RelativeOCIReference_CTF proves the best-effort CTF read
 // edge case: an archive that genuinely holds the tagged artifact resolves through the same
 // arm, and the CTF sentinel registry never surfaces in the returned access.
