@@ -80,6 +80,13 @@ components:
         access:
           type: ociArtifact
           imageReference: "${CLI_IMAGE_REF}"
+      - name: image-slim
+        type: ociImage
+        version: "${VERSION}"
+        relation: local
+        access:
+          type: ociArtifact
+          imageReference: "${CLI_SLIM_IMAGE_REF}"
 
   - name: ocm.software/kubernetes/controller
     version: "${VERSION}"

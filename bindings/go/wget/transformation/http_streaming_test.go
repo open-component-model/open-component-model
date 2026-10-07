@@ -273,7 +273,7 @@ func TestHTTPStreamingTransformer_UploadErrorRedactsQueryToken(t *testing.T) {
 
 	// A closed listener yields a connection-refused transport error from client.Do,
 	// wrapped in a *url.Error carrying the full request URL including the query token.
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	ln, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
 	r.NoError(err)
 	addr := ln.Addr().String()
 	r.NoError(ln.Close())
