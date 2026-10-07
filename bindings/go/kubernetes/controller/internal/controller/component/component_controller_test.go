@@ -1045,7 +1045,8 @@ var _ = Describe("Component Controller", func() {
 			Expect(k8sClient.Create(ctx, component)).To(Succeed())
 
 			By("checking that the component has not been reconciled successfully")
-			test.WaitForNotReadyObject(ctx, k8sClient, component, v1alpha1.GetComponentVersionFailedReason)
+			test.WaitForNotReadyObjectWithMessage(ctx, k8sClient, component,
+				v1alpha1.GetComponentVersionFailedReason, "signature verification failed for signature "+signatureName)
 
 			By("delete resources manually")
 			test.DeleteObject(ctx, k8sClient, component)
