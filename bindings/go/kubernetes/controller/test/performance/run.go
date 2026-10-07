@@ -16,6 +16,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
 )
 
 const createWorkers = 32
@@ -47,12 +49,22 @@ type scrapes struct {
 func (r *runner) runOnce(ctx context.Context, s scenario, objects, repeat int) (*result, error) {
 	runID := fmt.Sprintf("%s-%d-r%d-%s", s, objects, repeat, randomSuffix())
 	w := newWorkload(s, objects, runID, r.opts.clusterRegistryURL)
+	w.versions, w.depth, w.resources = r.opts.versions, r.opts.depth, r.opts.resources
 	dir := filepath.Join(r.outDir, runID)
 	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return nil, err
 	}
 	log := slog.With("run", runID)
 	res := &result{Scenario: s, Objects: objects, Repeat: repeat, RunID: runID, StartedAt: time.Now().UTC()}
+	switch s {
+	case scenarioVersions:
+		res.Versions = w.versions
+	case scenarioNested:
+		res.Depth = w.depth
+	case scenarioComplex:
+		res.Versions, res.Depth, res.Resources = complexVersions, w.depth, w.resources
+	default:
+	}
 
 	if r.opts.restartController {
 		log.Info("restarting controller")
@@ -72,7 +84,7 @@ func (r *runner) runOnce(ctx context.Context, s scenario, objects, repeat int) (
 	}
 	log.Info("publishing component versions", "count", len(cvs))
 	publishStart := time.Now()
-	if err := r.publish(ctx, cvs); err != nil {
+	if err := r.publish(ctx, w.imagePool(), cvs); err != nil {
 		return nil, err
 	}
 	res.Durations.Publish = time.Since(publishStart).Seconds()
@@ -203,26 +215,33 @@ func (r *runner) prepareUpdate(ctx context.Context, w workload, objs []client.Ob
 	return nil
 }
 
-// create applies the Repository first, then everything else in parallel, the
-// way a GitOps tool would apply a directory.
+// create applies the Repositories first, then everything else in parallel,
+// the way a GitOps tool would apply a directory.
 func (r *runner) create(ctx context.Context, objs []client.Object) error {
-	if len(objs) == 0 {
-		return nil
+	var repositories, rest []client.Object
+	for _, obj := range objs {
+		if _, ok := obj.(*v1alpha1.Repository); ok {
+			repositories = append(repositories, obj)
+		} else {
+			rest = append(rest, obj)
+		}
 	}
-	if err := r.c.client.Create(ctx, objs[0]); err != nil {
-		return fmt.Errorf("creating %s: %w", objs[0].GetName(), err)
+	for _, batch := range [][]client.Object{repositories, rest} {
+		g, gctx := errgroup.WithContext(ctx)
+		g.SetLimit(createWorkers)
+		for _, obj := range batch {
+			g.Go(func() error {
+				if err := r.c.client.Create(gctx, obj); err != nil {
+					return fmt.Errorf("creating %s: %w", obj.GetName(), err)
+				}
+				return nil
+			})
+		}
+		if err := g.Wait(); err != nil {
+			return err
+		}
 	}
-	g, ctx := errgroup.WithContext(ctx)
-	g.SetLimit(createWorkers)
-	for _, obj := range objs[1:] {
-		g.Go(func() error {
-			if err := r.c.client.Create(ctx, obj); err != nil {
-				return fmt.Errorf("creating %s: %w", obj.GetName(), err)
-			}
-			return nil
-		})
-	}
-	return g.Wait()
+	return nil
 }
 
 func (r *runner) updateComponents(ctx context.Context, w workload) error {
@@ -315,13 +334,20 @@ func (r *runner) environment(pod *corev1.Pod) environment {
 	return env
 }
 
-func (r *runner) publish(ctx context.Context, cvs []componentVersion) error {
+func (r *runner) publish(ctx context.Context, images []image, cvs []componentVersion) error {
 	tmp, err := os.MkdirTemp("", "ocm-perf-")
 	if err != nil {
 		return err
 	}
 	defer os.RemoveAll(tmp)
-	return (&publisher{baseURL: r.opts.registryURL, tempDir: tmp}).publish(ctx, cvs)
+	p, err := newPublisher(r.opts.registryURL, tmp)
+	if err != nil {
+		return err
+	}
+	if err := p.publishImages(ctx, images); err != nil {
+		return err
+	}
+	return p.publish(ctx, cvs)
 }
 
 func restartCount(pod *corev1.Pod) int32 {

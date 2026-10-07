@@ -13,9 +13,13 @@ import (
 )
 
 type result struct {
-	Scenario    scenario    `json:"scenario"`
-	Objects     int         `json:"objects"`
-	Repeat      int         `json:"repeat"`
+	Scenario scenario `json:"scenario"`
+	Objects  int      `json:"objects"`
+	Repeat   int      `json:"repeat"`
+	// Versions, Depth and Resources are set for the scenarios they shape.
+	Versions    int         `json:"versions,omitempty"`
+	Depth       int         `json:"depth,omitempty"`
+	Resources   int         `json:"resources,omitempty"`
 	RunID       string      `json:"runID"`
 	StartedAt   time.Time   `json:"startedAt"`
 	Environment environment `json:"environment"`

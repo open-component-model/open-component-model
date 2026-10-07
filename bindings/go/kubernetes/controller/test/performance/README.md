@@ -13,7 +13,7 @@ Requires `docker`, `kind`, `kubectl` and `helm`. All commands run from `bindings
 
 ```bash
 task test/performance/setup/local      # Kind cluster + registry, builds and loads the controller from the working tree
-task test/performance                  # installs the chart, then the full matrix: 4 scenarios x 100/500/1000 objects x 3 repeats
+task test/performance                  # installs the chart, then the full matrix: 8 scenarios x 100/500/1000 objects x 3 repeats
 task test/performance -- --scenarios=cold --objects=100 --repeats=1   # a subset
 task test/performance/setup/teardown
 task test/performance/fresh            # teardown, setup and run in one go
@@ -47,6 +47,22 @@ controller-runtime's default of one worker.
 | `shared` | 1 Repository, N Components that all resolve the same component version | every Component is `Ready` |
 | `pipeline` | 1 Repository, N each of Component, Resource and Deployer | every Deployer is `Ready` |
 | `update` | the `pipeline` objects, already rolled out at `1.0.0` (not measured) | every deployed ConfigMap carries `1.1.0` after all Components are patched to `1.1.0` |
+| `versions` | 1 Repository, N Components with the constraint `>=1.0.0` on one component that has `--versions` versions (default 100) | every Component is `Ready` |
+| `nested` | 1 Repository, N Components, N Resources that each walk a `--depth` long reference path (default 5) | every Resource is `Ready` |
+| `repositories` | N Repositories, each a different `subPath` of the one registry, and N Components | every Component is `Ready` |
+| `complex` | 10 Repositories on different `subPath`s, N each of Component, Resource and Deployer | every Deployer is `Ready` |
+
+What the last four add over the first four:
+
+- `versions`: an exact version skips the version listing, a constraint does not.
+- `nested`: every hop of a reference path is one more component version to resolve. Each object has its own
+  chain of `--depth` referencing components and one leaf that holds the resource.
+- `repositories`: the controller caches repositories per repository spec, so N sub-paths give N cache entries
+  and N resolvers without measuring more than one registry.
+- `complex`: all of the above in one pipeline, shaped like a product delivery. Every object has a root
+  component with 5 versions, selected by constraint, whose descriptor lists `--resources` OCI images
+  (default 100) from a small pool pushed to the registry. The root reaches the deployed manifest through a
+  `--depth` long reference path.
 
 The Deployers apply one ConfigMap each. The ConfigMap's data holds the component version, so the update scenario
 reads the rollout from the cluster itself, not from a status field.

@@ -26,6 +26,9 @@ func TestParseFlags(t *testing.T) {
 				r.Equal(3, o.repeats)
 				r.Equal("kind-ocm-perf", o.kubeContext)
 				r.True(o.restartController)
+				r.Equal(defaultVersions, o.versions)
+				r.Equal(defaultDepth, o.depth)
+				r.Equal(defaultResources, o.resources)
 			},
 		},
 		{
@@ -41,6 +44,7 @@ func TestParseFlags(t *testing.T) {
 		{name: "unknown scenario", args: []string{"--scenarios=warm"}, wantErr: `unknown scenario "warm"`},
 		{name: "invalid size", args: []string{"--objects=100,0"}, wantErr: `invalid object count "0"`},
 		{name: "invalid repeats", args: []string{"--repeats=0"}, wantErr: "repeats must be at least 1"},
+		{name: "invalid depth", args: []string{"--depth=0"}, wantErr: "versions, depth and resources must be at least 1"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
