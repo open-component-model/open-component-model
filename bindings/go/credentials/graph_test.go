@@ -451,10 +451,10 @@ func TestResolveCredentials(t *testing.T) {
 				"username": "some-owner",
 				"password": "abc",
 			},
-			require.ErrorAssertionFunc(func(t require.TestingT, err error, i ...interface{}) {
+			func(t require.TestingT, err error, i ...interface{}) {
 				require.Error(t, err)
 				require.ErrorIs(t, err, credentials.ErrNotFound)
-			}),
+			},
 		},
 		{
 			"plugin resolution error handling",
@@ -468,10 +468,10 @@ func TestResolveCredentials(t *testing.T) {
 				"username": "some-owner",
 				"password": "abc",
 			},
-			require.ErrorAssertionFunc(func(t require.TestingT, err error, i ...interface{}) {
+			func(t require.TestingT, err error, i ...interface{}) {
 				require.Error(t, err)
 				require.ErrorIs(t, err, credentials.ErrUnknown)
-			}),
+			},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

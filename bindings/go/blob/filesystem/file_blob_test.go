@@ -65,7 +65,7 @@ func TestBlob_Size(t *testing.T) {
 	r.NoError(writer.Close())
 
 	size := b.Size()
-	r.Greater(size, int64(blob.SizeUnknown))
+	r.Greater(size, blob.SizeUnknown)
 	r.Equal(int64(9), size)
 }
 

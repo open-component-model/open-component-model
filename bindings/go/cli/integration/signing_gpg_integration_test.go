@@ -211,6 +211,7 @@ func writeGPGKeyPair(t *testing.T, dir, name, passphrase string) (privPath, pubP
 	t.Helper()
 	r := require.New(t)
 	// Not t.TempDir(): its long path can overflow the Unix socket path limit of gpg-agent on macOS.
+	//nolint:usetesting // see above: deliberately using a short base path for gpg-agent sockets
 	home, err := os.MkdirTemp("", "ocm-gpg-test-")
 	r.NoError(err)
 	t.Cleanup(func() {
