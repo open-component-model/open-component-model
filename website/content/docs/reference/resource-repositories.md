@@ -242,11 +242,24 @@ rules.
 
 ### Download Behavior
 
-Sends a `GetObject` request for the bucket and the key of the access specification. If `version` is set, the request
-reads that version. OCM streams the body to a file under the `tempFolder` of the
+Sends a `GetObject` request for part 1 of the object at the bucket and the key of the access specification. If
+`version` is set, every request reads that version. OCM streams the body to a file under the `tempFolder` of the
 `filesystem.config.ocm.software/v1alpha1` configuration type. It does not hold the body in memory, and there is no size
 limit by default. The media type of the blob comes from `mediaType`. If `mediaType` is empty, OCM uses the
 `Content-Type` of the object, and then `application/octet-stream`.
+
+A single-part object arrives whole in that first response. For a multipart object, OCM fetches the other parts in
+parallel, up to eight requests at a time, and writes each part at its offset in the file:
+
+- OCM checks each part against the part checksum that S3 stored for it.
+- Every request carries `If-Match` with the `ETag` of part 1, and the version of part 1, so an object that is overwritten
+  during the download fails the download instead of mixing two objects.
+- If the store reports neither `x-amz-mp-parts-count` nor a part count in the `ETag`, OCM fetches the rest of the object
+  with one `Range` request.
+- If the store rejects part numbers, OCM requests the whole object.
+
+The parts must cover the object without gaps or overlaps. The digest of the object is still the SHA-256 of its content
+(see [Digest Processing](#digest-processing)), so a parallel download is faster but never changes the digest.
 
 Requests go through the shared OCM HTTP client, so timeouts, TLS settings and per-host overrides come from the
 [HTTP client configuration]({{< relref "http-client-configuration.md" >}}). The AWS SDK does the retries. It retries
@@ -256,9 +269,28 @@ global setting applies.
 
 ### Digest Processing
 
-The S3 digest processor downloads the object and hashes it with SHA-256. It applies the `genericBlobDigest/v1`
-normalisation. It does not use the S3 `ETag`, because the `ETag` is not a whole-object hash for a multipart upload. If
-the resource already has a digest, OCM compares the computed digest with it. A difference fails the operation.
+The S3 digest processor first sends a `HeadObject` request with checksum mode enabled. If the store reports a SHA-256 or
+SHA-512 checksum of the whole object (`x-amz-checksum-sha256`, `x-amz-checksum-sha512`), OCM uses it as the digest and
+does not download the object. If the store keeps both, OCM uses SHA-256. If the resource already has a digest, OCM uses
+the algorithm of that digest, and SHA-256 if the digest names no algorithm. In every other case, OCM downloads the
+object and hashes it: no checksum in the needed algorithm, the `COMPOSITE` checksum of a multipart upload, or a failed
+`HeadObject`. The download hashes with SHA-256, or with SHA-512 if the resource digest names it. Both paths apply the
+`genericBlobDigest/v1` normalisation. OCM does not use the S3 `ETag`, because the `ETag` is not a whole-object hash
+for a multipart upload. If the resource already has a digest, OCM compares the computed digest with it. A difference
+fails the operation. Every download checks the content against the digest, so a store that reports a wrong checksum
+fails at the next read.
+
+Only objects uploaded in a single part with a SHA-256 or SHA-512 checksum skip the download:
+
+- S3 stores a SHA checksum only if the upload asks for one, for example
+  `aws s3 cp --checksum-algorithm SHA256`. Without that, current clients send a cyclic redundancy check: the AWS
+  CLI v2 uses `CRC64NVME`, and the AWS SDK for Go v2 uses `CRC32` from S3 module v1.74.1 on. If a client sends no
+  checksum, S3 computes and stores `CRC64NVME`.
+- For a multipart upload, S3 supports SHA checksums only as `COMPOSITE` checksums, which are hashes of the part hashes.
+  The hash of the content cannot be derived from them. The AWS CLI uses a multipart upload for files above its
+  multipart threshold (8 MiB by default), so raise `multipart_threshold` if large objects should qualify.
+- To give an existing object a full-object checksum, copy it onto itself with
+  `aws s3api copy-object --checksum-algorithm SHA256`. A single copy is limited to 5 GB.
 
 Digest processing also pins the access specification to the object version that it read, so a later read gets the same
 object. On an unversioned bucket, S3 reports the placeholder `null`. It pins nothing, and OCM never writes it back.

@@ -70,12 +70,17 @@ func (b *verifyingBlob) ReadCloser() (io.ReadCloser, error) {
 }
 
 // Digest forwards to the underlying blob, so it reports what the content IS, not
-// what it is expected to be.
+// what it is expected to be. An underlying digest in another algorithm cannot be
+// compared with the expected one, so the expected digest is reported instead: every
+// read enforces it, and consumers such as the OCI artifact blob would otherwise see a
+// SHA-256 digest for a resource that names SHA-512 and reject it as a mismatch.
 func (b *verifyingBlob) Digest() (string, bool) {
 	if digestAware, ok := b.base.(blob.DigestAware); ok {
-		return digestAware.Digest()
+		if actual, ok := digestAware.Digest(); ok && digest.Digest(actual).Algorithm() == b.expected.Algorithm() {
+			return actual, true
+		}
 	}
-	return "", false
+	return b.expected.String(), true
 }
 
 // Size forwards to the underlying blob, or reports SizeUnknown if it does not know

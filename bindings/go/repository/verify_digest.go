@@ -30,25 +30,39 @@ func parseDigest(d *descriptor.Digest) (digest.Digest, error) {
 		return "", fmt.Errorf("incomplete digest: hashAlgorithm=%q, value=%q", d.HashAlgorithm, d.Value)
 	}
 
-	// normalize because SHA-256 and sha256 equally appear
-	if !strings.EqualFold(strings.ReplaceAll(d.HashAlgorithm, "-", ""), "sha256") {
-		return "", fmt.Errorf("unsupported hash algorithm %q: only SHA-256 is supported", d.HashAlgorithm)
+	algorithm, err := hashAlgorithm(d.HashAlgorithm)
+	if err != nil {
+		return "", err
 	}
 
 	value := strings.ToLower(d.Value)
 	// a value spelled "<algorithm>:<hex>", as digest.Digest.String() writes it, would
 	// otherwise be prefixed a second time and fail to parse.
-	if algorithm, encoded, prefixed := strings.Cut(value, ":"); prefixed {
-		if !strings.EqualFold(strings.ReplaceAll(algorithm, "-", ""), "sha256") {
-			return "", fmt.Errorf("digest value %q carries algorithm %q but hashAlgorithm is %q", d.Value, algorithm, d.HashAlgorithm)
+	if prefix, encoded, prefixed := strings.Cut(value, ":"); prefixed {
+		if prefixAlgorithm, err := hashAlgorithm(prefix); err != nil || prefixAlgorithm != algorithm {
+			return "", fmt.Errorf("digest value %q carries algorithm %q but hashAlgorithm is %q", d.Value, prefix, d.HashAlgorithm)
 		}
 		value = encoded
 	}
 
-	parsed := digest.NewDigestFromEncoded(digest.SHA256, value)
+	parsed := digest.NewDigestFromEncoded(algorithm, value)
 	if err := parsed.Validate(); err != nil {
 		return "", fmt.Errorf("invalid digest %q: %w", d.Value, err)
 	}
 
 	return parsed, nil
+}
+
+// hashAlgorithm maps an OCM hash algorithm name to its digest algorithm. SHA-256 and
+// sha256 appear equally, so case and the separator are ignored. Only the algorithms
+// OCM accepts for resource digests are known.
+func hashAlgorithm(name string) (digest.Algorithm, error) {
+	switch strings.ToLower(strings.ReplaceAll(name, "-", "")) {
+	case "sha256":
+		return digest.SHA256, nil
+	case "sha512":
+		return digest.SHA512, nil
+	default:
+		return "", fmt.Errorf("unsupported hash algorithm %q: only SHA-256 and SHA-512 are supported", name)
+	}
 }

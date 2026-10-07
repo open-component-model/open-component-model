@@ -23,11 +23,21 @@ func responseRegion(err error) string {
 	return ""
 }
 
+// permanentRedirect reports whether S3 refused the request because the bucket lives in
+// another region. A GET carries the PermanentRedirect code in its error body; a HEAD has
+// no body, so the SDK derives the code from the 301 status text.
 func permanentRedirect(err error) bool {
 	var response *smithyhttp.ResponseError
 	var api smithy.APIError
-	return errors.As(err, &response) && response.HTTPStatusCode() == http.StatusMovedPermanently &&
-		errors.As(err, &api) && api.ErrorCode() == "PermanentRedirect"
+	if !errors.As(err, &response) || response.HTTPStatusCode() != http.StatusMovedPermanently || !errors.As(err, &api) {
+		return false
+	}
+	switch api.ErrorCode() {
+	case "PermanentRedirect", "MovedPermanently":
+		return true
+	default:
+		return false
+	}
 }
 
 func bucketRegion(ctx context.Context, client *s3.Client, bucket string, redirect error) (string, error) {
@@ -60,20 +70,25 @@ func bucketRegion(ctx context.Context, client *s3.Client, bucket string, redirec
 	return region, nil
 }
 
-func getObject(ctx context.Context, client *s3.Client, req Request, in *s3.GetObjectInput) (*s3.GetObjectOutput, error) {
-	out, err := client.GetObject(ctx, in)
+// inBucketRegion runs call and, on AWS, repeats it once in the bucket's own region when
+// S3 answers with a permanent redirect. It returns the options the successful call ran
+// with, so follow-up requests for the same object go straight to the right region.
+func inBucketRegion[T any](ctx context.Context, client *s3.Client, req Request, call func(...func(*s3.Options)) (T, error)) (T, []func(*s3.Options), error) {
+	out, err := call()
 	if req.Endpoint != "" || !permanentRedirect(err) {
-		return out, err
+		return out, nil, err
 	}
+	var zero T
 	region, discoveryErr := bucketRegion(ctx, client, req.BucketName, err)
 	if discoveryErr != nil {
-		return nil, errors.Join(err, discoveryErr)
+		return zero, nil, errors.Join(err, discoveryErr)
 	}
 	// An operation override preserves credentials (including anonymous), transport,
 	// addressing and retry configuration without rebuilding the client. Never loop.
-	out, err = client.GetObject(ctx, in, func(o *s3.Options) { o.Region = region })
+	inRegion := []func(*s3.Options){func(o *s3.Options) { o.Region = region }}
+	out, err = call(inRegion...)
 	if err != nil {
-		return nil, fmt.Errorf("retrying in bucket region %q: %w", region, err)
+		return zero, nil, fmt.Errorf("retrying in bucket region %q: %w", region, err)
 	}
-	return out, nil
+	return out, inRegion, nil
 }

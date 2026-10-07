@@ -28,6 +28,19 @@
 // rather than the S3 ETag, which is not a reliable whole-object hash for multipart
 // objects.
 //
+// # Multipart objects
+//
+// A download asks for part 1. A single-part object arrives whole; the other parts of a
+// multipart object are fetched in parallel, up to eight at a time, and written at the
+// offset each response's Content-Range names. The SDK validates checksums of complete
+// responses only, so each part is checked here against the part-level checksum S3
+// returns for a COMPOSITE object. Every request after the first carries If-Match with
+// the ETag of part 1 and pins its version, so an object overwritten mid-download fails
+// instead of mixing two objects. The part count comes from x-amz-mp-parts-count or the
+// "-<parts>" ETag suffix; a store reporting neither gets the rest as one ranged GET,
+// and one rejecting part numbers is asked for the whole object. The written spans must
+// tile the object exactly.
+//
 // Credentials are optional. When supplied as
 // [ocm.software/open-component-model/bindings/go/s3/spec/credentials/v1.S3Credentials]
 // (access key ID, secret access key and an optional session token) they are used as
@@ -64,6 +77,28 @@
 // The input derives its credential consumer identity exactly as the access type does,
 // so one consumer entry serves a bucket whether its objects are referenced or taken in.
 //
+// # Digest processing
+//
+// ProcessResourceDigest first sends a HeadObject with checksum mode enabled. When the
+// store reports a SHA-256 or SHA-512 checksum covering the whole object
+// (x-amz-checksum-sha256, x-amz-checksum-sha512), that is the digest and the object is
+// not transferred. SHA-256 is taken when the store keeps both; a digest already on the
+// resource selects its own algorithm, and one naming none means SHA-256. Any other
+// answer — no checksum in that algorithm, a COMPOSITE checksum of a multipart upload,
+// or a failed HEAD — falls back to downloading the object and hashing it, in SHA-256
+// unless the resource digest asks for SHA-512. Every download verifies the bytes
+// against the resource digest, so a store misreporting its checksum fails the next read.
+//
+// The fast path applies only to objects uploaded in a single part with a SHA-256 or
+// SHA-512 checksum requested. S3 stores one only when the uploader asks for it (the AWS
+// CLI sends CRC64NVME by default, the Go SDK CRC32, and S3 adds CRC64NVME when a client
+// sends none), and for multipart uploads SHA checksums exist only as COMPOSITE
+// checksums: the hash of the part hashes, from which the content's hash cannot be
+// derived. Tools switch to multipart for large files (the AWS CLI above its multipart
+// threshold, 8 MiB by default), so those are always downloaded.
+// A CopyObject with a SHA checksum algorithm, up to the 5 GB copy limit, rewrites an
+// object with a full-object checksum.
+//
 // # Object versions
 //
 // ProcessResourceDigest pins the access to the versionId the object was read at. A
@@ -87,11 +122,11 @@
 // # Retries
 //
 // On AWS (no custom endpoint), a 301 PermanentRedirect triggers one region
-// correction: the download uses x-amz-bucket-region, or HeadBucket if that header
-// is absent, and retries GetObject once using the SDK's regional endpoint. This
-// can correct an explicitly configured region too. Credentials, object version and
-// HTTP settings are preserved; invalid region hints fail rather than following
-// Location. Custom endpoints and other GetObject errors do not trigger discovery.
+// correction: the request uses x-amz-bucket-region, or HeadBucket if that header
+// is absent, and retries GetObject or HeadObject once using the SDK's regional
+// endpoint. This can correct an explicitly configured region too. Credentials, object
+// version and HTTP settings are preserved; invalid region hints fail rather than
+// following Location. Custom endpoints and other errors do not trigger discovery.
 //
 // Retrying is left to the aws-sdk-go-v2 client, which retries the whole operation,
 // re-signs every attempt and classifies S3's error codes; transport retry is switched

@@ -6,6 +6,9 @@ import (
 	"encoding/json"
 	"io"
 	"net"
+	"net/http"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -127,6 +130,101 @@ func Test_Integration_S3(t *testing.T) {
 		r.NotNil(withDigest.Digest)
 		r.Equal(godigest.FromBytes(content).Encoded(), withDigest.Digest.Value)
 		r.Equal("SHA-256", withDigest.Digest.HashAlgorithm)
+	})
+
+	for _, tc := range []struct {
+		algorithm types.ChecksumAlgorithm
+		digest    godigest.Algorithm
+		name      string
+	}{
+		{algorithm: types.ChecksumAlgorithmSha256, digest: godigest.SHA256, name: "SHA-256"},
+		{algorithm: types.ChecksumAlgorithmSha512, digest: godigest.SHA512, name: "SHA-512"},
+	} {
+		t.Run("digest from the store's "+tc.name+" checksum", func(t *testing.T) {
+			r := require.New(t)
+			bucket, key := "checksum-"+strings.ToLower(string(tc.algorithm)), "blob"
+			content := []byte("digested without download")
+			createBucket(t, ctx, setup, bucket)
+			_, err := setup.PutObject(ctx, &s3.PutObjectInput{
+				Bucket:            new(bucket),
+				Key:               new(key),
+				Body:              bytes.NewReader(content),
+				ChecksumAlgorithm: tc.algorithm,
+			})
+			r.NoError(err)
+
+			var methods []string
+			client := &http.Client{Transport: recordingTransport(func(req *http.Request) (*http.Response, error) {
+				methods = append(methods, req.Method)
+				return http.DefaultTransport.RoundTrip(req)
+			})}
+			recorded := repository.NewResourceRepository(fsConfig, repository.WithHTTPClient(client))
+
+			withDigest, err := recorded.ProcessResourceDigest(ctx, resourceFor(access(bucket, key, "")), creds)
+			r.NoError(err)
+			r.Equal(tc.name, withDigest.Digest.HashAlgorithm)
+			r.Equal(tc.digest.FromBytes(content).Encoded(), withDigest.Digest.Value)
+			r.Equal([]string{http.MethodHead}, methods, "a stored full-object checksum must make the download unnecessary")
+		})
+	}
+
+	t.Run("multipart object is downloaded part by part", func(t *testing.T) {
+		r := require.New(t)
+		const bucket, key = "multipart-bucket", "blob"
+		createBucket(t, ctx, setup, bucket)
+		// S3 requires every part but the last to be at least 5 MiB.
+		const partSize = 5 * 1024 * 1024
+		parts := [][]byte{
+			bytes.Repeat([]byte("a"), partSize),
+			bytes.Repeat([]byte("b"), partSize),
+			[]byte("tail"),
+		}
+		content := bytes.Join(parts, nil)
+		upload, err := setup.CreateMultipartUpload(ctx, &s3.CreateMultipartUploadInput{
+			Bucket: new(bucket), Key: new(key), ChecksumAlgorithm: types.ChecksumAlgorithmSha256,
+		})
+		r.NoError(err)
+		var completed []types.CompletedPart
+		for i, part := range parts {
+			number := int32(i + 1)
+			out, err := setup.UploadPart(ctx, &s3.UploadPartInput{
+				Bucket: new(bucket), Key: new(key), UploadId: upload.UploadId, PartNumber: &number,
+				Body: bytes.NewReader(part), ChecksumAlgorithm: types.ChecksumAlgorithmSha256,
+			})
+			r.NoError(err)
+			completed = append(completed, types.CompletedPart{ETag: out.ETag, PartNumber: &number, ChecksumSHA256: out.ChecksumSHA256})
+		}
+		_, err = setup.CompleteMultipartUpload(ctx, &s3.CompleteMultipartUploadInput{
+			Bucket: new(bucket), Key: new(key), UploadId: upload.UploadId,
+			MultipartUpload: &types.CompletedMultipartUpload{Parts: completed},
+		})
+		r.NoError(err)
+
+		var mu sync.Mutex
+		var partNumbers []string
+		client := &http.Client{Transport: recordingTransport(func(req *http.Request) (*http.Response, error) {
+			if req.Method == http.MethodGet {
+				mu.Lock()
+				partNumbers = append(partNumbers, req.URL.Query().Get("partNumber"))
+				mu.Unlock()
+			}
+			return http.DefaultTransport.RoundTrip(req)
+		})}
+		recorded := repository.NewResourceRepository(fsConfig, repository.WithHTTPClient(client))
+
+		withDigest, err := recorded.ProcessResourceDigest(ctx, resourceFor(access(bucket, key, "")), creds)
+		r.NoError(err)
+		r.Equal(godigest.FromBytes(content).Encoded(), withDigest.Digest.Value, "the composite checksum must not stand in for the digest")
+		r.ElementsMatch([]string{"1", "2", "3"}, partNumbers, "every part is fetched on its own")
+
+		b, err := recorded.DownloadResource(ctx, withDigest, creds)
+		r.NoError(err)
+		rc, err := b.ReadCloser()
+		r.NoError(err)
+		got, err := io.ReadAll(rc)
+		r.NoError(err)
+		r.NoError(rc.Close())
+		r.True(bytes.Equal(content, got), "the parts reassemble into the object")
 	})
 
 	t.Run("pinned object version", func(t *testing.T) {
@@ -271,6 +369,10 @@ func enableVersioning(t *testing.T, ctx context.Context, client *s3.Client, buck
 	})
 	require.NoError(t, err)
 }
+
+type recordingTransport func(*http.Request) (*http.Response, error)
+
+func (f recordingTransport) RoundTrip(req *http.Request) (*http.Response, error) { return f(req) }
 
 func putObject(t *testing.T, ctx context.Context, client *s3.Client, bucket, key string, content []byte) {
 	t.Helper()
