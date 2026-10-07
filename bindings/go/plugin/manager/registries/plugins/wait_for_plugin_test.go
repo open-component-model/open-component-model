@@ -56,6 +56,8 @@ func TestWaitForPlugin(t *testing.T) {
 	})
 
 	t.Run("successful connection to Unix socket plugin", func(t *testing.T) {
+		// Unix socket paths are limited to ~104 bytes, which t.TempDir can exceed on macOS.
+		//nolint:usetesting // see above: t.TempDir can produce too-long Unix socket paths
 		tempDir, err := os.MkdirTemp("", "test-unix-socket")
 		require.NoError(t, err)
 		defer os.RemoveAll(tempDir)
