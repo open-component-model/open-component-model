@@ -9,6 +9,8 @@ on:
     paths:
       - 'website/**'
       - '.github/workflows/website-publish-site.yaml'
+      # Accepted benchmark findings, rendered on the security benchmarks page.
+      - '.github/benchmarks/**'
       # Paths that are relevant for tracking changes on `main` version.
       # CRDs are generated from api/v1alpha1 at build time via controller-gen.
       - 'bindings/go/cli/docs/reference/**'

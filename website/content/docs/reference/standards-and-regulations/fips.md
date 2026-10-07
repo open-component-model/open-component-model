@@ -114,10 +114,14 @@ bundle at `/etc/ssl/certs/ca-certificates.crt`. No GnuPG is included: OCM
 performs all GPG cryptography in-process with the Go OpenPGP library. Sigstore
 signing works in the image because `cosign` is on `PATH`. The slim image is built
 `FROM scratch` and contains only `/ocm` and the CA bundle; use it when you
-don't sign with Sigstore, or bring your own `cosign`.
+don't sign with Sigstore, or bring your own `cosign`. Both CLI images run as
+user `65532` and have world-writable `/tmp`, `/.cache` and `/.sigstore`
+directories.
+
 The controller image is built `FROM scratch` with the static `/manager` binary
-(the entrypoint), the FIPS `cosign`, the CA bundle, and a world-writable `/tmp`.
-No GnuPG is included.
+(the entrypoint), the FIPS `cosign`, the CA bundle, and a world-writable `/tmp`;
+the controller chart additionally mounts an `emptyDir` at `/tmp`. No GnuPG is
+included.
 
 The images have no shell and no package manager. See
 [Sigstore and cosign](#sigstore-and-cosign) and [GPG](#gpg) for how OCM uses
@@ -128,6 +132,10 @@ library. All cryptography in OCM itself goes through the Go Cryptographic
 Module, except for the GPG operations listed under [GPG](#gpg): in the default
 mode they run outside the module and are logged at debug level, and in strict
 mode they are rejected.
+
+For how the images and the controller chart are hardened, and how they are
+scanned against the DISA GPOS SRG, see
+[DISA STIG]({{< relref "docs/reference/standards-and-regulations/disa-stig.md" >}}).
 
 ## Runtime Modes
 
@@ -431,7 +439,9 @@ $ go version -m cosign | grep -E 'GOFIPS140|CGO_ENABLED|DefaultGODEBUG'
 - **Local `ocm` binary:** put that `cosign` on `PATH` before running `ocm`, or
   let OCM download it.
 - **Slim CLI image:** mount the `cosign` for the image's platform at
-  `/usr/local/bin/cosign`, which is on the default `PATH`:
+  `/usr/local/bin/cosign`, which is on the default `PATH`. cosign keeps its
+  trust-root cache in the image's world-writable `/.sigstore`, so it works for
+  any user ID:
 
   ```shell
   docker run --rm \
