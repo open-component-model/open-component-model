@@ -58,20 +58,23 @@ jobs:
           # space after each @ breaks the mention token while rendering identically.
           BODY=$(printf '%s' "$BODY" | perl -CS -pe 's/\@/\@\x{200b}/g')
 
-          # Zulip caps messages at 10000 bytes; truncate (URL is already at the top).
+          # Zulip caps messages at 10000 characters; truncate (URL is already at the top).
           if [ ${#BODY} -gt 9000 ]; then
             BODY="${BODY:0:8500}
 
           … _truncated, see release page above._"
           fi
 
+          # Random delimiter: the body is untrusted, so a fixed marker could collide
+          # with a line in it and truncate the step output.
+          EOF="ZULIPMSGEOF_$(openssl rand -hex 16)"
           {
             echo "topic=$TOPIC"
-            echo "content<<ZULIPMSGEOF"
+            echo "content<<$EOF"
             echo "Release page: $URL"
             echo
             echo "$BODY"
-            echo "ZULIPMSGEOF"
+            echo "$EOF"
           } >> "$GITHUB_OUTPUT"
 
       # One topic per release (titled with the tag), so each RC and the final get their own thread.
