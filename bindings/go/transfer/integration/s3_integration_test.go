@@ -23,12 +23,12 @@ import (
 	credidentity "ocm.software/open-component-model/bindings/go/oci/spec/identity/v1"
 	ctfrepospec "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ocirepospec "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
+	ocitransformv1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	s3repository "ocm.software/open-component-model/bindings/go/s3/repository"
 	s3access "ocm.software/open-component-model/bindings/go/s3/spec/access"
 	s3accessv2 "ocm.software/open-component-model/bindings/go/s3/spec/access/v2"
 	s3identityv1 "ocm.software/open-component-model/bindings/go/s3/spec/identity/v1"
-	s3v1alpha1 "ocm.software/open-component-model/bindings/go/s3/transformation/spec/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/transfer"
 	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
 )
@@ -129,15 +129,16 @@ func Test_Integration_TransferS3Resource_LocalBlobUploader(t *testing.T) {
 	r.NoError(err)
 	r.NotNil(tgd)
 
-	// An s3 resource should generate a DownloadS3Resource transformation.
-	hasDownloadS3 := false
+	// An s3 resource transferred by value into an OCI target is streamed straight into a
+	// local blob via a single fused OCIStreamLocalResource node (no DownloadS3Resource + temp file).
+	hasStreamLocalResource := false
 	for _, tr := range tgd.Transformations {
-		if tr.Type.Name == s3v1alpha1.DownloadS3ResourceType {
-			hasDownloadS3 = true
+		if tr.Type.Name == ocitransformv1alpha1.OCIStreamLocalResourceType {
+			hasStreamLocalResource = true
 			break
 		}
 	}
-	r.True(hasDownloadS3, "s3 resource should generate a DownloadS3Resource transformation")
+	r.True(hasStreamLocalResource, "s3 resource should generate an OCIStreamLocalResource transformation")
 
 	// 5. Build and execute the graph.
 	credResolver := newS3CredResolver(t, endpoint, bucket, objectKey, s3AccessKey, s3SecretKey,
