@@ -1,0 +1,331 @@
+name: Image scan
+
+on:
+  # Reusable scan of the CLI and controller images, invoked by the build &
+  # publish pipeline (pipeline.yml) with the image artifacts it built. Each
+  # architecture is scanned for vulnerabilities (Trivy, with an OpenVEX document
+  # from govulncheck; findings warn, they do not fail), against the DISA GPOS SRG
+  # as tailored in .github/stig, and against the CIS Docker Benchmark (dockle).
+  # The controller Helm chart, rendered with its opt-in NetworkPolicy, is scanned
+  # against the CIS Kubernetes Benchmark (Trivy config) and the NSA/CISA and MITRE
+  # frameworks (Kubescape), with accepted findings in .github/benchmarks.
+  workflow_call:
+    inputs:
+      ref:
+        description: "The ref to check out the scan configuration from. Defaults to the current ref."
+        type: string
+        required: false
+      cli_artifact:
+        description: "Artifact with the CLI OCI image (oci/cli.tar)."
+        type: string
+        required: true
+      controller_artifact:
+        description: "Artifact with the controller OCI image (controller.tar)."
+        type: string
+        required: true
+    outputs:
+      vex_artifact:
+        description: "Artifact with the OpenVEX document (ocm.openvex.json) the images were scanned with."
+        value: ${{ jobs.vex.outputs.artifact }}
+
+permissions:
+  contents: read
+
+jobs:
+  # govulncheck knows whether vulnerable code is reachable; image scanners only
+  # see module versions. The OpenVEX document carries govulncheck's verdicts to
+  # Trivy, so the image scan reports the same findings as govulncheck and none
+  # that it already ruled out.
+  vex:
+    name: OpenVEX
+    runs-on: ubuntu-26.04-arm
+    outputs:
+      artifact: ${{ steps.artifact.outputs.name }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          sparse-checkout: |
+            bindings/go
+            .github/scripts
+            .env
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: bindings/go/go.mod
+          cache-dependency-path: bindings/go/go.sum
+
+      - name: Run govulncheck
+        run: |
+          set -euo pipefail
+          version="$(sed -n 's/^GOVULNCHECK_VERSION=//p' .env)"
+          [[ -n "$version" ]] || { echo "::error::GOVULNCHECK_VERSION not set in .env"; exit 1; }
+          mkdir -p tmp/vex
+          # JSON output exits 0 with findings; the reachability verdicts go into the VEX.
+          (cd bindings/go && go run "golang.org/x/vuln/cmd/govulncheck@${version}" -format json ./...) > tmp/vex/govulncheck.json
+
+      - name: Build OpenVEX
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        env:
+          GOVULNCHECK_JSON: tmp/vex/govulncheck.json
+          VEX_OUTPUT: tmp/vex/ocm.openvex.json
+        with:
+          script: |
+            const script = await import('${{ github.workspace }}/.github/scripts/vex.js');
+            await script.default({ core, context });
+
+      - name: Artifact name
+        id: artifact
+        run: echo "name=openvex" >> "$GITHUB_OUTPUT"
+
+      - name: Upload OpenVEX
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: ${{ steps.artifact.outputs.name }}
+          path: tmp/vex/
+          if-no-files-found: error
+
+  scan:
+    name: ${{ matrix.image }} (${{ matrix.arch }})
+    needs: vex
+    runs-on: ubuntu-26.04-arm
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [cli, controller]
+        # The scans only read the image's files, so amd64 is scanned on the arm64 runner.
+        arch: [arm64, amd64]
+        include:
+          - image: cli
+            artifact: ${{ inputs.cli_artifact }}
+            oci_tar: oci/cli.tar
+            containerfile: bindings/go/cli/Containerfile
+          - image: controller
+            artifact: ${{ inputs.controller_artifact }}
+            oci_tar: controller.tar
+            containerfile: bindings/go/kubernetes/controller/Dockerfile
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          sparse-checkout: |
+            .github/stig
+            .github/scripts
+            .env
+            ${{ matrix.containerfile }}
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - name: Download image artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: ${{ matrix.artifact }}
+          path: tmp/artifact
+
+      - name: Download OpenVEX
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: ${{ needs.vex.outputs.artifact }}
+          path: tmp/vex
+
+      - name: Ensure skopeo is installed
+        run: command -v skopeo || { sudo apt-get update -qq && sudo apt-get install -yqq skopeo; }
+
+      - name: Load image
+        env:
+          OCI_TAR: ${{ matrix.oci_tar }}
+          IMAGE: ${{ matrix.image }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          skopeo --override-arch "${ARCH}" --override-os linux copy \
+            "oci-archive:tmp/artifact/${OCI_TAR}" "docker-daemon:ocm-scan:${IMAGE}-${ARCH}"
+          mkdir -p "tmp/image-scan/${IMAGE}-${ARCH}"
+
+      # Reports, but does not fail on, vulnerabilities the OpenVEX document does
+      # not mark as not_affected: those are the findings govulncheck reports as
+      # reachable. They show up as warning annotations and in the job summary.
+      # Nothing is uploaded to code scanning, so Dependabot alerts stay the only
+      # alert surface.
+      - name: Vulnerability scan
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        env:
+          TRIVY_VEX: tmp/vex/ocm.openvex.json
+        with:
+          image-ref: ocm-scan:${{ matrix.image }}-${{ matrix.arch }}
+          scanners: vuln
+          exit-code: '0'
+          format: json
+          output: tmp/image-scan/${{ matrix.image }}-${{ matrix.arch }}/trivy.json
+
+      - name: Vulnerability scan summary
+        id: vulns
+        if: ${{ !cancelled() }}
+        env:
+          IMAGE: ${{ matrix.image }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          set -euo pipefail
+          report="tmp/image-scan/${IMAGE}-${ARCH}/trivy.json"
+          [[ -s "$report" ]] || { echo "::error::Trivy wrote no report for ${IMAGE} (linux/${ARCH})"; exit 1; }
+          vulns="$(jq -c '[.Results[]? | .Vulnerabilities[]? | {id: .VulnerabilityID, pkg: .PkgName, installed: .InstalledVersion, fixed: (.FixedVersion // ""), severity: .Severity, title: (.Title // "")}]' "$report")"
+          count="$(jq length <<< "$vulns")"
+          echo "count=${count}" >> "$GITHUB_OUTPUT"
+          {
+            echo "### 🔎 Vulnerability scan: ${IMAGE} (linux/${ARCH})"
+            echo
+            if [[ "$count" -eq 0 ]]; then
+              echo "No vulnerabilities beyond those the OpenVEX document marks as not_affected."
+            else
+              echo "⚠️ ${count} reachable vulnerabilities (does not block publishing):"
+              echo
+              echo "| ID | Severity | Package | Installed | Fixed | Title |"
+              echo "| --- | --- | --- | --- | --- | --- |"
+              jq -r '.[] | "| \(.id) | \(.severity) | \(.pkg) | \(.installed) | \(.fixed) | \(.title | gsub("\\|"; "\\\\|")) |"' <<< "$vulns"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Fails visibly without failing the job, so findings do not block PRs or
+      # publishing. A broken scan still fails the job in the step above.
+      - name: No reachable vulnerabilities
+        if: ${{ !cancelled() && steps.vulns.outputs.count != '' }}
+        continue-on-error: true
+        env:
+          COUNT: ${{ steps.vulns.outputs.count }}
+        run: |
+          [[ "$COUNT" -eq 0 ]] && exit 0
+          echo "${COUNT} reachable vulnerabilities, listed in the job summary."
+          exit 1
+
+      # Scans, writes the job summary, and fails on any failed rule.
+      - name: STIG scan
+        if: ${{ !cancelled() }}
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        env:
+          IMAGE_REF: ocm-scan:${{ matrix.image }}-${{ matrix.arch }}
+          CONTAINERFILE: ${{ matrix.containerfile }}
+          RESULTS_DIR: tmp/image-scan/${{ matrix.image }}-${{ matrix.arch }}
+          SUMMARY_TITLE: ${{ matrix.image }} (linux/${{ matrix.arch }})
+        with:
+          script: |
+            const script = await import('${{ github.workspace }}/.github/scripts/stig-scan.js');
+            await script.default({ core });
+
+      # CIS Docker Benchmark section 4. Fails on WARN and FATAL; INFO (content
+      # trust, HEALTHCHECK) and SKIP (no /etc/passwd in scratch) do not fail.
+      - name: CIS Docker Benchmark (dockle)
+        if: ${{ !cancelled() }}
+        env:
+          IMAGE: ${{ matrix.image }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          set -uo pipefail
+          dockle="$(sed -n 's/^DOCKLE_IMAGE=//p' .env)"
+          [[ -n "$dockle" ]] || { echo "::error::DOCKLE_IMAGE not set in .env"; exit 1; }
+          out="tmp/image-scan/${IMAGE}-${ARCH}/dockle.json"
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock "$dockle" \
+            --exit-code 1 --exit-level warn --format json "ocm-scan:${IMAGE}-${ARCH}" > "$out"
+          rc=$?
+          {
+            echo "### 🐳 CIS Docker Benchmark: ${IMAGE} (linux/${ARCH})"
+            echo
+            jq -r '"\(.summary.pass) pass, \(.summary.warn) warn, \(.summary.fatal) fatal, \(.summary.info) info, \(.summary.skip) skip\n",
+              "| Check | Level | Title |", "| --- | --- | --- |",
+              (.details[] | "| \(.code) | \(.level) | \(.title) |")' "$out" 2>/dev/null || echo "no report"
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$rc"
+
+      - name: Upload reports
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: image-scan-${{ matrix.image }}-${{ matrix.arch }}
+          path: tmp/image-scan/${{ matrix.image }}-${{ matrix.arch }}
+          if-no-files-found: ignore
+
+  # The chart is rendered with the opt-in NetworkPolicy. That render is the
+  # default render plus the NetworkPolicy, so it covers every default template
+  # and lets Kubescape check the policy against C-0030 (Ingress and Egress blocked).
+  chart:
+    name: chart
+    runs-on: ubuntu-26.04-arm
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          sparse-checkout: |
+            .github/benchmarks
+            .github/scripts
+            .env
+            bindings/go/kubernetes/controller/.env
+            bindings/go/kubernetes/controller/chart
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - name: Install Helm
+        uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with:
+          # renovate: datasource=github-releases depName=helm/helm
+          version: v4.2.4
+
+      # One file per template, so accepted Trivy findings are scoped to the
+      # template that needs them. The chart requires a kubeVersion that Trivy's
+      # own Helm renderer does not default to, so the scanners get rendered YAML.
+      - name: Render chart
+        run: |
+          set -euo pipefail
+          kube="$(sed -n 's/^KIND_NODE_IMAGE_VERSION=//p' bindings/go/kubernetes/controller/.env)"
+          [[ -n "$kube" ]] || { echo "::error::KIND_NODE_IMAGE_VERSION not set in bindings/go/kubernetes/controller/.env"; exit 1; }
+          mkdir -p tmp/chart-scan
+          helm template ocm-k8s-toolkit bindings/go/kubernetes/controller/chart \
+            --namespace ocm-k8s-toolkit-system --kube-version "$kube" \
+            --set manager.networkPolicy.enabled=true \
+            --output-dir tmp/chart-scan/rendered
+
+      - name: CIS Kubernetes Benchmark (Trivy config)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: config
+          scan-ref: tmp/chart-scan/rendered
+          trivyignores: .github/benchmarks/trivyignore.yaml
+          # The gate below fails on findings and on an empty scan.
+          exit-code: '0'
+          format: json
+          output: tmp/chart-scan/trivy.json
+
+      # Kubescape fetches the framework definitions at scan time. It reports
+      # controls as failed even when an exception covers them, so the gate below
+      # decides.
+      - name: NSA/CISA and MITRE (Kubescape)
+        if: ${{ !cancelled() }}
+        run: |
+          set -euo pipefail
+          kubescape="$(sed -n 's/^KUBESCAPE_IMAGE=//p' .env)"
+          [[ -n "$kubescape" ]] || { echo "::error::KUBESCAPE_IMAGE not set in .env"; exit 1; }
+          docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD/tmp/chart-scan:/scan" \
+            -v "$PWD/.github/benchmarks:/benchmarks:ro" -w /scan "$kubescape" \
+            scan framework nsa,mitre rendered --exceptions /benchmarks/kubescape-exceptions.json --format json --output kubescape.json
+
+      - name: Benchmark gate
+        if: ${{ !cancelled() }}
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        env:
+          TRIVY_JSON: tmp/chart-scan/trivy.json
+          KUBESCAPE_JSON: tmp/chart-scan/kubescape.json
+          SUMMARY_TITLE: controller chart (manager.networkPolicy.enabled=true)
+        with:
+          script: |
+            const script = await import('${{ github.workspace }}/.github/scripts/chart-benchmarks.js');
+            await script.default({ core });
+
+      - name: Upload reports
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: chart-scan
+          path: tmp/chart-scan
+          if-no-files-found: ignore

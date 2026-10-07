@@ -9,13 +9,21 @@
 # binary. To build full around an already published slim image instead, pass
 #   --build-context slim=docker-image://ghcr.io/open-component-model/cli:<version>-slim
 
-FROM --platform=${BUILDPLATFORM} ghcr.io/gardenlinux/gardenlinux/fips:1877.25@sha256:74ae1f81d0723434024f591d8c2872852201b99b9f18c0fbe10221b16e60e01d AS certs
+# CA bundle from the Garden Linux FIPS image, plus world-writable /tmp and the
+# default cache directories under HOME=/ (Docker's HOME for a user without a
+# passwd entry): /.cache for OCM's caches and a downloaded cosign, /.sigstore
+# for cosign's trust root. Files only, so this runs on the build platform.
+FROM --platform=$BUILDPLATFORM ghcr.io/gardenlinux/gardenlinux/fips:1877.25@sha256:74ae1f81d0723434024f591d8c2872852201b99b9f18c0fbe10221b16e60e01d AS certs
+RUN mkdir -p /out/etc/ssl/certs \
+ && cp /etc/ssl/certs/ca-certificates.crt /out/etc/ssl/certs/ \
+ && mkdir -m 1777 /out/tmp /out/.cache /out/.sigstore
 
 FROM scratch AS slim
 ARG TARGETOS
 ARG TARGETARCH
-COPY --from=certs /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+COPY --from=certs /out /
 COPY tmp/bin/ocm-${TARGETOS}-${TARGETARCH} /ocm
+USER 65532:65532
 ENTRYPOINT ["/ocm"]
 
 # cosign is built from source because upstream release binaries are not linked
@@ -70,7 +78,8 @@ COPY --from=gpg /rootfs/ /
 # No GODEBUG needed: GOFIPS140 already makes fips140=on the default of both
 # ocm and cosign (DefaultGODEBUG in their build info).
 COPY --from=cosign /out/cosign /usr/local/bin/cosign
-COPY --from=slim /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+COPY --from=certs /out /
 # /ocm keeps the path of the previous scratch image for COPY --from users.
 COPY --from=slim /ocm /ocm
+USER 65532:65532
 ENTRYPOINT ["/ocm"]

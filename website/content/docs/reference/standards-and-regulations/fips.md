@@ -104,7 +104,7 @@ version changes.
 | `ocm` CLI binaries (all OS/architectures) | `GOFIPS140=certified`, `CGO_ENABLED=0` | — |
 | OCM CLI image (`cli:<version>`, default) | `GOFIPS140=certified`, `CGO_ENABLED=0` | Garden Linux `bare-libc` with `ocm`, a FIPS build of `cosign`, `gpg` on Garden Linux's FIPS `libgcrypt`, and the CA bundle |
 | OCM CLI slim image (`cli:<version>-slim`) | `GOFIPS140=certified`, `CGO_ENABLED=0` | `scratch` with `ocm` and the CA bundle |
-| OCM controller image | `GOFIPS140=certified`, `CGO_ENABLED=0` | `gcr.io/distroless/static:nonroot` with `manager` |
+| OCM controller image | `GOFIPS140=certified`, `CGO_ENABLED=0` | `scratch` with `manager` and the CA bundle |
 
 The default CLI image is based on Garden Linux
 [`bare-libc`](https://docs.gardenlinux.org/how-to/container-base-image/bare.html).
@@ -116,9 +116,13 @@ with `libgcrypt` forced into FIPS mode by `/etc/gcrypt/fips_enabled`, and a CA
 bundle at `/etc/ssl/certs/ca-certificates.crt`. So GPG and Sigstore signing
 work in the image, also with `GODEBUG=fips140=only`. The slim image is built
 `FROM scratch` and contains only `/ocm` and the CA bundle; use it when you
-don't sign with GPG or Sigstore, or bring your own `cosign` and `gpg`.
-The controller image is based on distroless `static`, which adds CA
-certificates, time zone data and a `nonroot` user, but no cryptographic library.
+don't sign with GPG or Sigstore, or bring your own `cosign` and `gpg`. Both CLI
+images run as user `65532` and have world-writable `/tmp`, `/.cache` and
+`/.sigstore` directories.
+
+The controller image is built `FROM scratch` and contains only the static
+`/manager` binary (the entrypoint) and the CA bundle; the controller chart
+mounts an `emptyDir` at `/tmp`.
 
 The images have no shell and no package manager. See
 [Sigstore and cosign](#sigstore-and-cosign) and [GPG](#gpg) for how OCM uses
@@ -127,6 +131,10 @@ The images have no shell and no package manager. See
 The binaries are statically linked and do not use any system cryptographic
 library. All cryptography in OCM itself goes through the Go Cryptographic
 Module.
+
+For how the images and the controller chart are hardened, and how they are
+scanned against the DISA GPOS SRG, see
+[DISA STIG]({{< relref "docs/reference/standards-and-regulations/disa-stig.md" >}}).
 
 ## Runtime Modes
 
@@ -411,7 +419,9 @@ the binary to `$(go env GOPATH)/bin/<os>_<arch>/cosign`, for example
 
 - **Local `ocm` binary:** put that `cosign` on `PATH` before running `ocm`.
 - **Slim CLI image:** build cosign for the image's platform and mount it at
-  `/usr/local/bin/cosign`, which is on the default `PATH`:
+  `/usr/local/bin/cosign`, which is on the default `PATH`. cosign keeps its
+  trust-root cache in the image's world-writable `/.sigstore`, so it works for
+  any user ID:
 
   ```shell
   docker run --rm \
