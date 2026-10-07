@@ -193,6 +193,7 @@ func TestInputMethodProcessResourceRemoteChartPodinfoIntegration(t *testing.T) {
 				},
 			},
 			error: func(t *testing.T, err error) bool {
+				t.Helper()
 				require.NoError(t, err)
 
 				return true
@@ -213,6 +214,7 @@ func TestInputMethodProcessResourceRemoteChartPodinfoIntegration(t *testing.T) {
 				},
 			},
 			error: func(t *testing.T, err error) bool {
+				t.Helper()
 				require.NoError(t, err)
 
 				return true
@@ -233,6 +235,7 @@ func TestInputMethodProcessResourceRemoteChartPodinfoIntegration(t *testing.T) {
 				},
 			},
 			error: func(t *testing.T, err error) bool {
+				t.Helper()
 				require.Error(t, err)
 
 				return false
@@ -253,6 +256,7 @@ func TestInputMethodProcessResourceRemoteChartPodinfoIntegration(t *testing.T) {
 				},
 			},
 			error: func(t *testing.T, err error) bool {
+				t.Helper()
 				require.NoError(t, err)
 
 				return true
@@ -273,6 +277,7 @@ func TestInputMethodProcessResourceRemoteChartPodinfoIntegration(t *testing.T) {
 				},
 			},
 			error: func(t *testing.T, err error) bool {
+				t.Helper()
 				require.ErrorContains(t, err, "chart reference and version mismatch: 6.9.1 is not 6.9.0")
 
 				return false
@@ -301,7 +306,7 @@ func TestInputMethodProcessResourceRemoteChartPodinfoIntegration(t *testing.T) {
 			require.NoError(t, err)
 			defer reader.Close()
 
-			tempFile, err := os.CreateTemp("", "test-")
+			tempFile, err := os.CreateTemp(t.TempDir(), "test-")
 			require.NoError(t, err)
 			defer os.Remove(tempFile.Name())
 

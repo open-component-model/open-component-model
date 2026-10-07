@@ -341,6 +341,7 @@ func TestGetHelmChart_Transform(t *testing.T) {
 }
 
 func compareFiles(t *testing.T, original string, downloaded string) {
+	t.Helper()
 	r := require.New(t)
 
 	// read original file
@@ -358,9 +359,11 @@ func compareFiles(t *testing.T, original string, downloaded string) {
 }
 
 func compareProvFiles(t *testing.T, helmOutput *v1alpha1.GetHelmChart) {
+	t.Helper()
 	compareFiles(t, "../testdata/provenance/mychart-0.1.0.tgz.prov", helmOutput.Output.ProvFile.URI)
 }
 
 func compareChartFiles(t *testing.T, helmOutput *v1alpha1.GetHelmChart) {
+	t.Helper()
 	compareFiles(t, "../testdata/provenance/mychart-0.1.0.tgz", helmOutput.Output.ChartFile.URI)
 }

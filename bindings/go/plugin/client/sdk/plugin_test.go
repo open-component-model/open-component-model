@@ -53,9 +53,9 @@ func TestPluginSDK(t *testing.T) {
 	httpClient := createHttpClient(location)
 
 	// Health check endpoint should be added automatically.
-	waitForPlugin(r, httpClient)
+	waitForPlugin(ctx, r, httpClient)
 
-	resp, err := httpClient.Get("http://unix/test-location")
+	resp, err := httpGet(ctx, httpClient, "http://unix/test-location")
 	r.NoError(err)
 	content, err := io.ReadAll(resp.Body)
 	r.NoError(err)
@@ -100,9 +100,9 @@ func TestPluginSDKForceShutdownContext(t *testing.T) {
 	httpClient := createHttpClient(location)
 
 	// Health check endpoint should be added automatically.
-	waitForPlugin(r, httpClient)
+	waitForPlugin(ctx, r, httpClient)
 
-	resp, err := httpClient.Get("http://unix/test-location")
+	resp, err := httpGet(ctx, httpClient, "http://unix/test-location")
 	r.NoError(err)
 	content, err := io.ReadAll(resp.Body)
 	r.NoError(err)
@@ -123,7 +123,7 @@ func TestPluginSDKForceShutdownContext(t *testing.T) {
 	r.Error(err)
 	cancel()
 	r.Eventually(func() bool {
-		_, err := httpClient.Get("http://unix/healthz")
+		_, err := httpGet(ctx, httpClient, "http://unix/healthz")
 
 		return err != nil
 	}, 10*time.Second, 5*time.Millisecond)
@@ -162,7 +162,7 @@ func TestIdleChecker(t *testing.T) {
 
 	// idle timeout should kill the plugin and remove the socket prematurely.
 	r.Eventually(func() bool {
-		_, err := httpClient.Get("http://unix/healthz")
+		_, err := httpGet(ctx, httpClient, "http://unix/healthz")
 		if err == nil {
 			return false
 		}
@@ -194,10 +194,10 @@ func TestHealthCheckInvalidMethod(t *testing.T) {
 	httpClient := createHttpClient(location)
 
 	// Health check endpoint should be added automatically.
-	waitForPlugin(r, httpClient)
+	waitForPlugin(ctx, r, httpClient)
 
 	// idle timeout should kill the plugin and remove the socket prematurely.
-	resp, err := httpClient.Post("http://unix/healthz", "application/json", bytes.NewBufferString("hello"))
+	resp, err := httpPost(ctx, httpClient, "http://unix/healthz", "application/json", bytes.NewBufferString("hello"))
 	r.NoError(err)
 	r.Equal(http.StatusMethodNotAllowed, resp.StatusCode)
 	content, err := io.ReadAll(resp.Body)
@@ -232,9 +232,9 @@ func TestPanicRecovery(t *testing.T) {
 	}()
 
 	httpClient := createHttpClient(location)
-	waitForPlugin(r, httpClient)
+	waitForPlugin(ctx, r, httpClient)
 
-	resp, err := httpClient.Get("http://unix/panic-endpoint")
+	resp, err := httpGet(ctx, httpClient, "http://unix/panic-endpoint")
 	r.NoError(err)
 	r.Equal(http.StatusInternalServerError, resp.StatusCode)
 	content, err := io.ReadAll(resp.Body)
@@ -244,9 +244,9 @@ func TestPanicRecovery(t *testing.T) {
 	r.NoError(p.GracefulShutdown(ctx))
 }
 
-func waitForPlugin(r *require.Assertions, httpClient *http.Client) {
+func waitForPlugin(ctx context.Context, r *require.Assertions, httpClient *http.Client) {
 	r.Eventually(func() bool {
-		resp, err := httpClient.Get("http://unix/healthz")
+		resp, err := httpGet(ctx, httpClient, "http://unix/healthz")
 		if err != nil {
 			return false
 		}
@@ -396,11 +396,30 @@ func TestLockFileProcessValidation(t *testing.T) {
 func createHttpClient(location string) *http.Client {
 	httpClient := &http.Client{
 		Transport: &http.Transport{
-			DialContext: func(_ context.Context, _, _ string) (net.Conn, error) {
-				return net.Dial("unix", location)
+			DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+				return (&net.Dialer{}).DialContext(ctx, "unix", location)
 			},
 		},
 		Timeout: 30 * time.Second,
 	}
 	return httpClient
+}
+
+// httpGet / httpPost issue cancellation-aware requests, replacing
+// (*http.Client).Get/Post which lack a context (noctx).
+func httpGet(ctx context.Context, c *http.Client, url string) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	return c.Do(req)
+}
+
+func httpPost(ctx context.Context, c *http.Client, url, contentType string, body io.Reader) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, body)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", contentType)
+	return c.Do(req)
 }

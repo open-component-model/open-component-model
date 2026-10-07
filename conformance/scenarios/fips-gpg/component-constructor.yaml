@@ -1,0 +1,14 @@
+# OCM Component Constructor for the FIPS GPG scenario
+components:
+  - name: "${NAME}"
+    version: "${VERSION}"
+    provider:
+      name: acme.org
+    resources:
+      # A local blob, so the signature covers a digest OCM computed itself.
+      - name: notice
+        type: plainText
+        relation: local
+        input:
+          type: file
+          path: ./notice.txt

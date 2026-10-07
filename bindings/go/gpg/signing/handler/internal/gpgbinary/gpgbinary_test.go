@@ -283,6 +283,7 @@ func TestBinary_KeyringInvocations(t *testing.T) {
 		{
 			name: "sign with agent unlocking",
 			run: func(t *testing.T, b *Binary) error {
+				t.Helper()
 				_, err := b.Sign(t.Context(), SignRequest{UseKeyring: true, KeyFingerprint: fpr, DigestAlgo: "SHA256", Data: []byte("d")})
 				return err
 			},
@@ -292,6 +293,7 @@ func TestBinary_KeyringInvocations(t *testing.T) {
 		{
 			name: "sign with passphrase",
 			run: func(t *testing.T, b *Binary) error {
+				t.Helper()
 				_, err := b.Sign(t.Context(), SignRequest{UseKeyring: true, Passphrase: "pw", DigestAlgo: "SHA256", Data: []byte("d")})
 				return err
 			},
@@ -302,6 +304,7 @@ func TestBinary_KeyringInvocations(t *testing.T) {
 		{
 			name: "verify",
 			run: func(t *testing.T, b *Binary) error {
+				t.Helper()
 				return b.Verify(t.Context(), VerifyRequest{UseKeyring: true, KeyFingerprint: fpr, Data: []byte("d"), Signature: "sig"})
 			},
 			wantArgs: []string{"--no-auto-key-retrieve", "--verify"},
@@ -439,6 +442,7 @@ func TestBinary_MkdirTemp(t *testing.T) {
 		t.Skip("gpg-agent uses no Unix sockets in the home directory on Windows")
 	}
 	// Under /tmp, not t.TempDir() or $TMPDIR: a base nested there can already be too long for gpg-agent sockets.
+	//nolint:usetesting // see above: deliberately using a short base path for gpg-agent sockets
 	short, err := os.MkdirTemp(shortTempBase, "ocm-gpg-test-")
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = os.RemoveAll(short) })

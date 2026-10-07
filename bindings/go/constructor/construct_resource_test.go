@@ -20,6 +20,7 @@ import (
 
 // setupTestComponent creates a basic component constructor for testing
 func setupTestComponent(t *testing.T, resourceYAML string) *constructorruntime.ComponentConstructor {
+	t.Helper()
 	yamlData := fmt.Sprintf(`
 components:
   - name: ocm.software/test-component
@@ -42,6 +43,7 @@ components:
 
 // verifyBasicComponent verifies the basic component properties
 func verifyBasicComponent(t *testing.T, desc *descriptor.Descriptor) {
+	t.Helper()
 	assert.Equal(t, "ocm.software/test-component", desc.Component.Name)
 	assert.Equal(t, "v1.0.0", desc.Component.Version)
 	assert.Equal(t, "test-provider", desc.Component.Provider.Name)

@@ -1,10 +1,10 @@
-import { Tab } from 'bootstrap';
+import { Tab } from "bootstrap";
 // Bootstrap registers its data-api (click handlers for data-bs-toggle=*) when
 // the module is imported. Dropdown and Offcanvas are not used directly but must
 // be imported so the version-switcher and mobile nav work without loading the
 // full bootstrap.js bundle.
-import 'bootstrap/js/src/dropdown.js';
-import 'bootstrap/js/src/offcanvas.js';
+import "bootstrap/js/src/dropdown.js";
+import "bootstrap/js/src/offcanvas.js";
 
 // Custom JS for OCM website
 // Necessity: Sidebar section links (<a> inside <summary>) need special click
@@ -15,8 +15,8 @@ import 'bootstrap/js/src/offcanvas.js';
 // <summary> toggle fires. This prevents the <details> from flashing open/closed
 // during navigation.
 
-document.addEventListener('click', (e) => {
-    const link = e.target.closest('.section-nav details > summary a.docs-link');
+document.addEventListener("click", (e) => {
+    const link = e.target.closest(".section-nav details > summary a.docs-link");
     if (!link) {
         return;
     }
@@ -25,19 +25,19 @@ document.addEventListener('click', (e) => {
     if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) {
         return;
     }
-    if (link.target && link.target !== '_self') {
+    if (link.target && link.target !== "_self") {
         return;
     }
-    if (link.hasAttribute('download')) {
+    if (link.hasAttribute("download")) {
         return;
     }
 
-    const details = link.closest('details');
+    const details = link.closest("details");
 
     // If already on this page, let the native <summary> toggle through
     // by NOT calling preventDefault — just stop the link from navigating.
     const onSamePage =
-        link.getAttribute('aria-current') === 'page' ||
+        link.getAttribute("aria-current") === "page" ||
     new URL(link.href, location.href).pathname === location.pathname;
 
     if (onSamePage) {
@@ -83,8 +83,8 @@ function revealHashTarget() {
     let shown = false;
     // closest() includes the target itself, so linking to a pane id
     // (e.g. #tabs-mygroup-1) activates that tab as well.
-    for (let pane = target.closest('.tab-pane'); pane; pane = pane.parentElement?.closest('.tab-pane')) {
-        if (pane.classList.contains('active') || !pane.id) {
+    for (let pane = target.closest(".tab-pane"); pane; pane = pane.parentElement?.closest(".tab-pane")) {
+        if (pane.classList.contains("active") || !pane.id) {
             continue;
         }
         const trigger = document.querySelector(`[data-bs-target="#${CSS.escape(pane.id)}"]`);
@@ -99,9 +99,9 @@ function revealHashTarget() {
     }
 }
 
-window.addEventListener('hashchange', revealHashTarget);
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', revealHashTarget);
+window.addEventListener("hashchange", revealHashTarget);
+if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", revealHashTarget);
 } else {
     revealHashTarget();
 }

@@ -242,6 +242,7 @@ func TestGetRepositorySpecificationForComponent(t *testing.T) {
 	}
 
 	runTests := func(t *testing.T, resolver ComponentVersionRepositoryResolver) {
+		t.Helper()
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
 				spec, err := resolver.GetRepositorySpecificationForComponent(ctx, tt.component, tt.version)
