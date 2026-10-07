@@ -12,7 +12,10 @@ type SourceType string
 
 const (
 	SourceHTTPHeader SourceType = "httpHeader"
-	SourceStream     SourceType = "stream"
+	// SourceURL reads the checksums a content-addressed URL selects the content by, see
+	// [contentAddressedURL].
+	SourceURL    SourceType = "url"
+	SourceStream SourceType = "stream"
 )
 
 // Source is one resolved checksum strategy.
@@ -43,17 +46,19 @@ type Policy struct {
 
 // BuiltinSources is the fixed source set the reduced checksum configuration
 // resolves an enabled policy to: RFC 9530 Content-Digest and the
-// x-checksum-* response-header family, accepting every supported algorithm.
-// Returned fresh so callers may not mutate the shared slice.
+// x-checksum-* response-header family, then a content-addressed URL,
+// accepting every supported algorithm. Returned fresh so callers may not
+// mutate the shared slice.
 func BuiltinSources() []Source {
 	return []Source{
 		{Type: SourceHTTPHeader},
+		{Type: SourceURL},
 	}
 }
 
 // Input carries what a policy needs from a completed download.
 type Input struct {
-	// URL is the artifact URL, used only for log context.
+	// URL is the artifact URL, read by a URL source and used for log context.
 	URL string
 	// Headers are the download response headers.
 	Headers map[string][]string
@@ -69,24 +74,23 @@ type Input struct {
 // nil), signalling "compute and store without verification".
 func Resolve(ctx context.Context, policy Policy, in Input) (expected Expected, verified bool, err error) {
 	for i, src := range policy.Sources {
-		switch src.Type {
-		case SourceStream:
+		if src.Type == SourceStream {
 			slog.DebugContext(ctx, "checksum: source is stream — no verification",
 				"url", in.URL, "index", i)
 			return Expected{}, false, nil
-		case SourceHTTPHeader:
-			candidates := FromHeaders(in.Headers, src.Headers)
-			if exp, ok := Select(candidates, src.Algorithms); ok {
-				if verr := Verify(in.Computed, exp); verr != nil {
-					return Expected{}, false, verr
-				}
-				return exp, true, nil
-			}
-			slog.DebugContext(ctx, "checksum: header source yielded no candidate",
-				"url", in.URL, "index", i, "candidates", len(candidates))
-		default:
-			return Expected{}, false, fmt.Errorf("unsupported checksum source type %q", src.Type)
 		}
+		candidates, err := src.candidates(in)
+		if err != nil {
+			return Expected{}, false, err
+		}
+		if exp, ok := Select(candidates, src.Algorithms); ok {
+			if verr := Verify(in.Computed, exp); verr != nil {
+				return Expected{}, false, verr
+			}
+			return exp, true, nil
+		}
+		slog.DebugContext(ctx, "checksum: source yielded no candidate",
+			"url", in.URL, "index", i, "type", src.Type, "candidates", len(candidates))
 	}
 
 	if policy.OnMissing == Compute {
@@ -140,24 +144,38 @@ func ResolveAdvertised(ctx context.Context, policy Policy, in Input, prefer []Al
 		prefer = All
 	}
 	for i, src := range policy.Sources {
-		switch src.Type {
-		case SourceStream:
+		if src.Type == SourceStream {
 			slog.DebugContext(ctx, "checksum: advertised source is stream — no advertised digest",
 				"url", in.URL, "index", i)
 			return Expected{}, false, nil
-		case SourceHTTPHeader:
-			candidates := FromHeaders(in.Headers, src.Headers)
-			if exp, ok := Select(candidates, intersect(src.Algorithms, prefer)); ok {
-				return exp, true, nil
-			}
-			slog.DebugContext(ctx, "checksum: advertised header source yielded nothing",
-				"url", in.URL, "index", i, "candidates", len(candidates))
-		default:
-			return Expected{}, false, fmt.Errorf("unsupported checksum source type %q", src.Type)
 		}
+		candidates, err := src.candidates(in)
+		if err != nil {
+			return Expected{}, false, err
+		}
+		if exp, ok := Select(candidates, intersect(src.Algorithms, prefer)); ok {
+			return exp, true, nil
+		}
+		slog.DebugContext(ctx, "checksum: advertised source yielded nothing",
+			"url", in.URL, "index", i, "type", src.Type, "candidates", len(candidates))
 	}
 	slog.DebugContext(ctx, "checksum: no source advertised a digest", "url", in.URL)
 	return Expected{}, false, nil
+}
+
+// candidates returns the checksums the source yields for in.
+func (src Source) candidates(in Input) ([]Expected, error) {
+	switch src.Type {
+	case SourceHTTPHeader:
+		return FromHeaders(in.Headers, src.Headers), nil
+	case SourceURL:
+		if u, ok := contentAddressedURL(in.URL); ok {
+			return fromQuery(u.Query()), nil
+		}
+		return nil, nil
+	default:
+		return nil, fmt.Errorf("unsupported checksum source type %q", src.Type)
+	}
 }
 
 // intersect returns the algorithms present in both a and prefer, in prefer's

@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 )
 
@@ -35,6 +36,39 @@ func FromHeaders(header http.Header, extra []string) []Expected {
 	}
 	for _, e := range parseLegacyChecksumHeaders(header, extra) {
 		add(e)
+	}
+	return out
+}
+
+// nexusSearchDownloadPath is the path of the Nexus Repository 3 asset search download endpoint.
+// It redirects to the single asset matching its query and fails when none matches, so a
+// checksum in the query pins the content the URL serves.
+const nexusSearchDownloadPath = "/service/rest/v1/search/assets/download"
+
+// contentAddressedURL parses rawURL and reports whether it is content-addressed: its server
+// resolves it only to content with the checksums it names, so the URL advertises them. ok is
+// false for any other URL, as servers ignore unknown query parameters.
+func contentAddressedURL(rawURL string) (*url.URL, bool) {
+	u, err := url.Parse(rawURL)
+	if err != nil || !strings.HasSuffix(strings.TrimSuffix(u.Path, "/"), nexusSearchDownloadPath) {
+		return nil, false
+	}
+	return u, true
+}
+
+// fromQuery reads hex checksums from query parameters named after the algorithm's
+// extension (sha512, sha256, sha1, md5), strongest first. A repeated parameter is
+// ambiguous and skipped.
+func fromQuery(query url.Values) []Expected {
+	var out []Expected
+	for _, alg := range All {
+		values := query[alg.Extension]
+		if len(values) != 1 {
+			continue
+		}
+		if v := strings.ToLower(values[0]); isHex(v, alg.Hash.Size()) {
+			out = append(out, Expected{Algorithm: alg, Value: v})
+		}
 	}
 	return out
 }

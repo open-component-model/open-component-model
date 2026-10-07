@@ -131,6 +131,42 @@ func ChecksumQuery(d digest.Digest) (url.Values, bool) {
 	return nil, false
 }
 
+// DownloadURL returns the asset search download URL of the asset with content d that query
+// selects: Nexus redirects it to the asset only while the asset has content d, so the URL pins
+// the content, and wget verifies it. query must select at most one asset with content d, as
+// Nexus fails the download of an ambiguous search. ok is false when d is unknown or the search
+// cannot look it up. Nexus indexes a stored file shortly after storing it, so the asset is
+// polled for.
+func (r *Repository) DownloadURL(ctx context.Context, query url.Values, d digest.Digest, interval time.Duration) (string, bool, error) {
+	checksum, ok := ChecksumQuery(d)
+	if !ok {
+		return "", false, nil
+	}
+	selected := func() url.Values {
+		q := url.Values{}
+		for k, v := range query {
+			q[k] = slices.Clone(v)
+		}
+		for k, v := range checksum {
+			q[k] = v
+		}
+		return q
+	}
+	found, err := repositoryupload.Poll(ctx, interval, func() (bool, error) {
+		assets, err := r.SearchAssets(ctx, selected())
+		return len(assets) > 0, err
+	})
+	if err != nil {
+		return "", false, err
+	}
+	if !found {
+		return "", false, fmt.Errorf("nexus repository %q stored content %s, but its search does not find it", r.Name, d)
+	}
+	q := selected()
+	q.Set("repository", r.Name)
+	return r.restURL + "/search/assets/download?" + q.Encode(), true, nil
+}
+
 // StoredFile reports whether the repository stores content known at path (escaped, relative to
 // the repository root). query selects the assets by format-specific attributes; when nil, they
 // are selected by name. It

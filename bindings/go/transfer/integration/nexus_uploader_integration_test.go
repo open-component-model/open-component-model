@@ -17,6 +17,7 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 
+	checksumhttpv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/checksum/http/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	helmresource "ocm.software/open-component-model/bindings/go/helm/repository/resource"
@@ -29,6 +30,7 @@ import (
 	wgetrepository "ocm.software/open-component-model/bindings/go/wget/repository"
 	wgetaccess "ocm.software/open-component-model/bindings/go/wget/spec/access"
 	wgetaccessv1 "ocm.software/open-component-model/bindings/go/wget/spec/access/v1"
+	wgetcredv1 "ocm.software/open-component-model/bindings/go/wget/spec/credentials/v1"
 )
 
 const (
@@ -66,6 +68,8 @@ func Test_Integration_NexusUploader(t *testing.T) {
 		}
 		return urls
 	}
+	// Wget/v1 accesses on stored files are asset search download URLs pinning their content.
+	search := baseURL + "/service/rest/v1/search/assets/download"
 
 	// The helm repository rejects redeploying mychart-0.1.0; the uploader finds the same
 	// content stored and re-describes the resource with the chart name and version Nexus records.
@@ -135,9 +139,10 @@ func Test_Integration_NexusUploader(t *testing.T) {
 			transferOnce(t, ctfRepo, sourceSpec, targetSpec, uploader(wgetType, "raw-hosted", ""), wgetrepository.NewResourceRepository(nil), creds, component, version)
 		}
 
-		want := baseURL + "/repository/raw-hosted/ocm.software/nexus-raw-uploader-test/1.0.0/raw-resource-1.0.0"
+		want := search + "?name=%2Focm.software%2Fnexus-raw-uploader-test%2F1.0.0%2Fraw-resource-1.0.0&repository=raw-hosted&sha256=" + digestOf(data).Encoded()
 		r.Equal(map[string]string{"raw-resource": want}, wgetAccesses(r, targetPath, component, version))
 		r.Equal(data, nexusGet(t, want, adminPassword))
+		requirePinned(t, want, adminPassword, data)
 	})
 
 	// Release files go through the components API, which records them in maven-metadata.xml.
@@ -164,9 +169,14 @@ func Test_Integration_NexusUploader(t *testing.T) {
 			transferOnce(t, ctfRepo, sourceSpec, targetSpec, up, wgetrepository.NewResourceRepository(nil), creds, component, version)
 		}
 
+		coordinates := "?maven.artifactId=demo&maven.baseVersion=1.0.0&maven.extension="
+		jar := search + coordinates + "jar&maven.groupId=com.example&repository=maven-releases&sha256=" + digestOf([]byte("jar")).Encoded()
+		pomURL := search + coordinates + "pom&maven.groupId=com.example&repository=maven-releases&sha256=" + digestOf(pom).Encoded()
+		r.Equal(map[string]string{"jar": jar, "pom": pomURL}, wgetAccesses(r, targetPath, component, version))
+		r.Equal([]byte("jar"), nexusGet(t, jar, adminPassword))
+		r.Equal(pom, nexusGet(t, pomURL, adminPassword))
+		requirePinned(t, jar, adminPassword, []byte("jar"))
 		base := baseURL + "/repository/maven-releases/com/example/demo"
-		r.Equal(map[string]string{"jar": base + "/1.0.0/demo-1.0.0.jar", "pom": base + "/1.0.0/demo-1.0.0.pom"}, wgetAccesses(r, targetPath, component, version))
-		r.Equal([]byte("jar"), nexusGet(t, base+"/1.0.0/demo-1.0.0.jar", adminPassword))
 		r.Eventually(func() bool {
 			status, body := nexusRequest(t, http.MethodGet, base+"/maven-metadata.xml", adminPassword, nil)
 			return status == http.StatusOK && strings.Contains(string(body), "<version>1.0.0</version>")
@@ -185,9 +195,10 @@ func Test_Integration_NexusUploader(t *testing.T) {
 			transferOnce(t, ctfRepo, sourceSpec, targetSpec, uploader(wgetType, nexusNpmRepository, ""), wgetrepository.NewResourceRepository(nil), creds, component, version)
 		}
 
-		want := baseURL + "/repository/" + nexusNpmRepository + "/ocm-integration-demo/-/ocm-integration-demo-1.0.0.tgz"
+		want := search + "?repository=" + nexusNpmRepository + "&sha256=" + digestOf(tarball).Encoded()
 		r.Equal(map[string]string{"pkg": want}, wgetAccesses(r, targetPath, component, version))
 		r.Equal(tarball, nexusGet(t, want, adminPassword))
+		requirePinned(t, want, adminPassword, tarball)
 		r.Eventually(func() bool {
 			status, body := nexusRequest(t, http.MethodGet, baseURL+"/repository/"+nexusNpmRepository+"/ocm-integration-demo", adminPassword, nil)
 			var metadata struct {
@@ -210,6 +221,29 @@ func nexusCredentials(t *testing.T, baseURL, password string, repos ...string) c
 		creds[id.String()] = map[string]string{"username": "admin", "password": password}
 	}
 	return credentials.NewStaticCredentialsResolver(creds)
+}
+
+// requirePinned requires that the wget digest processor in Require mode pins the digest of data
+// for the access URL with a credentialed HEAD alone: Nexus advertises no SHA-256 header, so the
+// digest comes from the content-addressed URL Nexus resolved.
+func requirePinned(t *testing.T, accessURL, password string, data []byte) {
+	t.Helper()
+	repo := wgetrepository.NewResourceRepository(nil,
+		wgetrepository.WithChecksumConfig(&checksumhttpv1alpha1.Config{Mode: checksumhttpv1alpha1.ChecksumModeRequire}))
+	resource := &descriptor.Resource{
+		ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "pinned", Version: "1.0.0"}},
+		Type:        "blob",
+		Relation:    descriptor.ExternalRelation,
+		Access:      &wgetaccessv1.Wget{Type: runtime.NewVersionedType(wgetaccess.WgetConsumerType, wgetaccessv1.Version), URL: accessURL},
+	}
+	creds := &wgetcredv1.WgetCredentials{
+		Type:     runtime.NewVersionedType(wgetcredv1.WgetCredentialsType, wgetcredv1.Version),
+		Username: "admin",
+		Password: password,
+	}
+	processed, err := repo.ProcessResourceDigest(t.Context(), resource, creds)
+	require.NoError(t, err)
+	require.Equal(t, &descriptor.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: "genericBlobDigest/v1", Value: digestOf(data).Encoded()}, processed.Digest)
 }
 
 // npmTarball returns a gzipped npm package tarball holding only package/package.json.

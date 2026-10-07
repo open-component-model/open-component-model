@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/opencontainers/go-digest"
@@ -48,6 +49,20 @@ func (s *Store) Discard(context.Context, digest.Digest) error {
 	return fmt.Errorf("nexus keeps the uploaded file at %s", client.RedactURL(s.target))
 }
 
-func (s *Store) Publish(_ context.Context, _ digest.Digest, mediaType string) (runtime.Typed, error) {
-	return repositoryupload.FileAccess(s.target, mediaType), nil
+// Publish returns a Wget/v1 access on the asset search download URL that pins the stored content,
+// see [api.Repository.DownloadURL], or on the file when the content digest is unknown.
+func (s *Store) Publish(ctx context.Context, stored digest.Digest, mediaType string) (runtime.Typed, error) {
+	name, err := url.PathUnescape(s.path)
+	if err != nil {
+		return nil, fmt.Errorf("invalid path %q: %w", s.path, err)
+	}
+	// Nexus reports raw asset names with a leading slash; path never has one.
+	download, ok, err := s.repo.DownloadURL(ctx, url.Values{"name": {"/" + name}}, stored, s.interval)
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		download = s.target
+	}
+	return repositoryupload.FileAccess(download, mediaType), nil
 }

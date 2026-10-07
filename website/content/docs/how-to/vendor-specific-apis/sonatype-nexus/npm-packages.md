@@ -67,12 +67,15 @@ components API (`POST /service/rest/v1/components` with the tarball as `npm.asse
 ocm get cv ctf::./target//ocm.software/demo:1.0.0 -o yaml
 ```
 
-For a package named `@acme/demo`, the `my-package` resource has this access:
+The `my-package` resource has a `Wget/v1` access on a
+[pinned download URL]({{< relref "docs/reference/transfer-configuration/nexus-uploader.md#pinned-download-url" >}}),
+which Nexus redirects to the stored tarball (`@acme/demo/-/demo-2.0.0.tgz` for a package
+named `@acme/demo`) only while it has the recorded SHA-256:
 
 ```yaml
 access:
   type: Wget/v1
-  url: https://nexus.example.com/repository/npm-hosted/@acme/demo/-/demo-2.0.0.tgz
+  url: https://nexus.example.com/service/rest/v1/search/assets/download?repository=npm-hosted&sha256=<SHA256>
 ```
 
 Install the package with npm:

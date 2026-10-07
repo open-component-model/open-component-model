@@ -54,19 +54,19 @@ func (s *Store) Discard(context.Context, digest.Digest) error {
 	return fmt.Errorf("nexus keeps the uploaded package in repository %s", s.repo.Name)
 }
 
-// Publish returns a Wget/v1 access on the stored tarball. Nexus indexes it for search shortly
-// after the upload, so it is polled for.
+// Publish returns a Wget/v1 access on the asset search download URL that pins the stored
+// tarball, see [api.Repository.DownloadURL]: the checksum alone selects it, as no two package
+// versions share a tarball. Nexus indexes it for search shortly after the upload, so it is
+// polled for.
 func (s *Store) Publish(ctx context.Context, stored digest.Digest, mediaType string) (runtime.Typed, error) {
-	if s.path == "" {
-		found, err := repositoryupload.Poll(ctx, s.interval, func() (bool, error) { return s.find(ctx, stored) })
-		if err != nil {
-			return nil, err
-		}
-		if !found {
-			return nil, fmt.Errorf("nexus repository %q stored the npm package %s, but its search does not find it", s.repo.Name, stored)
-		}
+	download, ok, err := s.repo.DownloadURL(ctx, url.Values{}, stored, s.interval)
+	if err != nil {
+		return nil, err
 	}
-	return repositoryupload.FileAccess(s.repo.URL+s.path, mediaType), nil
+	if !ok {
+		return nil, fmt.Errorf("nexus cannot search for content %s", stored)
+	}
+	return repositoryupload.FileAccess(download, mediaType), nil
 }
 
 // find looks up the first .tgz asset the repository stores with content d and remembers its path.

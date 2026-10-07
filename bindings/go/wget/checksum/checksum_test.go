@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -44,6 +45,39 @@ func TestFromHeaders_RFC9530ContentDigest(t *testing.T) {
 	r.True(ok)
 	r.Equal("SHA-1", exp.Algorithm.OCMName)
 	r.Equal(helloSHA1, exp.Value)
+}
+
+func TestURLSource(t *testing.T) {
+	const search = "https://nexus.example.com/service/rest/v1/search/assets/download"
+	for _, tc := range []struct {
+		name, url string
+		want      []Expected
+	}{
+		{"sha256 query", search + "?repository=raw&sha256=" + helloSHA256, []Expected{{SHA256, helloSHA256}}},
+		{"uppercase hex and context path", "https://example.com/nexus/service/rest/v1/search/assets/download?sha256=" + strings.ToUpper(helloSHA256), []Expected{{SHA256, helloSHA256}}},
+		{"several algorithms", search + "?sha1=" + helloSHA1 + "&sha256=" + helloSHA256, []Expected{{SHA256, helloSHA256}, {SHA1, helloSHA1}}},
+		{"ambiguous repeated parameter", search + "?sha256=" + helloSHA256 + "&sha256=" + helloSHA256, nil},
+		{"wrong length", search + "?sha256=" + helloSHA1, nil},
+		{"other endpoint", "https://nexus.example.com/repository/raw/file?sha256=" + helloSHA256, nil},
+		{"plain file URL", "https://example.com/file.tgz", nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := Source{Type: SourceURL}.candidates(Input{URL: tc.url})
+			require.NoError(t, err)
+			require.Equal(t, tc.want, got)
+		})
+	}
+}
+
+func TestResolve_URLSourceMismatch(t *testing.T) {
+	r := require.New(t)
+	other := strings.Repeat("0", 64)
+	_, _, err := Resolve(t.Context(), Policy{Sources: BuiltinSources(), OnMissing: Fail}, Input{
+		URL:      "https://nexus.example.com/service/rest/v1/search/assets/download?sha256=" + other,
+		Headers:  http.Header{},
+		Computed: helloComputed(),
+	})
+	r.ErrorContains(err, "checksum mismatch")
 }
 
 func TestFromHeaders_LegacyXChecksum(t *testing.T) {
