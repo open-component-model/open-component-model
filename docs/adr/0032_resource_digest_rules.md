@@ -13,7 +13,7 @@ A resource digest is a triple: hash algorithm, normalisation algorithm, and valu
 Each binding handles that triple on its own. Paths are relative to `bindings/go/`. Unless a line says "main" (upstream `57e5d8c50`), it refers to the #3681 head `ec1efe0bd`.
 
 * **Every OCI resource that v2 has created so far is labelled G.** On main, `oci/internal/digest.Apply` hard-codes `genericBlobDigest/v1` for every OCI root (main `oci/internal/digest/digest.go:28-37`). That covers `ProcessResourceDigest` (main `oci/repository.go:339`), both upload paths (main `:667`, `:1168`), packing (main `oci/internal/pack/pack.go:363`) and Helm `oci://` charts (main `helm/digest/digest.go:286`). This "historical G on an OCI root" is not an edge case. It is the label of every v2-created OCI resource that exists today.
-* **The decision logic is copied.** `oci/repository.go:337-346`, `:721-729` and `:1176-1185` contain the same complete-or-verify block. `oci/internal/pack/pack.go:197-201`, `:243-256` and `:396-403` contain variants of it. `helm/digest/digest.go:297-321` reimplements the logic with different rules. Because `oci/internal/digest` is an internal package, helm and transfer cannot reuse it.
+* **The decision logic is copied.** `oci/repository.go:337-346`, `:721-729` and `:1176-1185` contain the same complete-or-verify block. `oci/internal/pack/pack.go:197-201`, `:243-256` and `:396-403` contain variants of it. `helm/digest/digest.go:297-321` implements the same logic again with different rules. Because `oci/internal/digest` is an internal package, helm and transfer cannot reuse it.
 * **Hash names have no single answer.** Each binding uses its own spelling rule (see [Hash names today](#hash-names-today)). In signing, `isApprovedDigestHash` and `getSupportedHash` disagree on `sha256` (`signing/digest.go:218-225` vs `:256-270`). s3, git and github *rewrite* complete digests to their own spelling (`s3/repository/resource_repository.go:233-236`, `github/digest/digest.go:172-175`, `git/repository/resource_repository.go:192-196`).
 * **The content kind is rediscovered at each step.** `oci/blob/artifact_blob.go:129-157` checks five sources (including type assertions on wrapped blobs) to decide whether content is an OCI layout. `oci/internal/pack/pack.go:66-84` decides again, and the two decisions can disagree. `oci/blob/update.go:20` decides a third time.
 * **Blob handling mixes concerns.** `ArtifactBlob.Digest()` mixes the byte checksum with signed metadata (`oci/blob/artifact_blob.go:84-120`). Defaulting runs twice (`update.go:16-37`, `artifact_blob.go:51-68`). `repository.VerifyDownload` accepts only SHA-256 (`repository/verify_digest.go:34`).
@@ -24,7 +24,7 @@ Each binding handles that triple on its own. Paths are relative to `bindings/go/
 2. One place answers which hash names and normalisations are valid.
 3. The shared package has no OCI knowledge. Each binding owns the meaning of what it computes.
 4. House style: plain string constants, small pure functions, sentinel errors, table tests, and no new optional blob interface.
-5. Small, reviewable PRs. Only Go API breaks carry `!`.
+5. Small PRs that are easy to review. Only Go API breaks carry `!`.
 
 ## Considered Options
 
