@@ -145,14 +145,27 @@ var _ = Describe("controller", func() {
 						// signature names are based on the example names, so this should be enough to make sure it got
 						// verified
 						expected := fmt.Sprintf(`"verified signature","signature":%q`, sig)
-						Eventually(func() (string, error) {
+						// The controller wraps every handler error (wrong key, missing
+						// credential, cosign/gpg failure) into this message. It is logged only
+						// after the descriptor and signature are fetched and verification
+						// actually ran, so it is terminal for a fixed-config example: a retry
+						// cannot make a bad key good. Transient fetch errors surface as a
+						// different message, so matching on this one does not flake. Abort the
+						// poll immediately instead of burning the full timeout.
+						failed := fmt.Sprintf("signature verification failed for signature %s:", sig)
+						Eventually(func(g Gomega) string {
 							out, err := utils.Run(exec.CommandContext(ctx,
 								"kubectl", "logs",
 								"-n", "ocm-k8s-toolkit-system",
 								"-l", "app.kubernetes.io/name=ocm-k8s-toolkit",
 								"--tail=-1",
 							))
-							return string(out), err
+							g.Expect(err).ToNot(HaveOccurred())
+							logs := string(out)
+							if strings.Contains(logs, failed) {
+								StopTrying(fmt.Sprintf("controller reported a terminal verification failure for signature %q", sig)).Now()
+							}
+							return logs
 						}, timeout).Should(ContainSubstring(expected))
 					}
 				}

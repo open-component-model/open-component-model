@@ -97,8 +97,8 @@ one merely supplies the verifier that named entries fall back to, so it does not
 on by itself.
 
 The `verifier` field is optional and defaults to RSASSA-PSS. Set it to select a different
-verification handler; the controller ships with `RSASigningConfiguration/v1alpha1` and
-`SigstoreVerificationConfiguration/v1alpha1` handlers
+verification handler; the controller ships with `RSASigningConfiguration/v1alpha1`,
+`GPGSigningConfiguration/v1alpha1`, and `SigstoreVerificationConfiguration/v1alpha1` handlers
 registered.
 {{< /callout >}}
 
