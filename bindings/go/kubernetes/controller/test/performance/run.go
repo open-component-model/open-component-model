@@ -40,6 +40,8 @@ type runner struct {
 // scrapes holds one point-in-time snapshot of every metrics source.
 type scrapes struct {
 	controller, registry []byte
+	// registryErr is set when the registry scrape failed; registry is nil then.
+	registryErr error
 }
 
 func (r *runner) runOnce(ctx context.Context, s scenario, objects, repeat int) (*result, error) {
@@ -249,6 +251,7 @@ func (r *runner) scrapeAll(ctx context.Context, pod *corev1.Pod) (scrapes, error
 	}
 	if s.registry, err = r.c.scrapeRegistry(ctx); err != nil {
 		slog.Warn("scraping registry metrics", "error", err)
+		s.registry, s.registryErr = nil, err
 	}
 	return s, nil
 }
@@ -268,14 +271,17 @@ func (r *runner) summarize(res *result, before, after scrapes, samples []sample,
 		res.Usage.AvgCores = res.Usage.CPUSeconds / elapsed.Seconds()
 	}
 
-	if before.registry != nil && after.registry != nil {
+	if err := errors.Join(before.registryErr, after.registryErr); err != nil {
+		errs = append(errs, fmt.Errorf("registry metrics unavailable: %w", err))
+	} else {
 		rBefore, err1 := parseScrape(before.registry)
 		rAfter, err2 := parseScrape(after.registry)
 		if err := errors.Join(err1, err2); err != nil {
 			errs = append(errs, fmt.Errorf("registry metrics: %w", err))
 		} else {
 			res.RegistryCounters = counterDeltas(rBefore, rAfter, registryCounterPrefixes)
-			res.Usage.RegistryRequests = sumSeries(res.RegistryCounters, "registry_http_requests_total")
+			requests := sumSeries(res.RegistryCounters, "registry_http_requests_total")
+			res.Usage.RegistryRequests = &requests
 		}
 	}
 

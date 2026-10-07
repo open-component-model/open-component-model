@@ -109,8 +109,8 @@ tasks:
         vars:
           CLI_ARGS: '{{.CLI_ARGS}}'
 
-  test/performance/setup:
-    desc: "Create the 'ocm-perf' Kind cluster and registry, and install the controller built from the working tree."
+  test/performance/setup/local:
+    desc: "Set up a local Kind cluster for the performance benchmark"
     deps:
       - task: docker-build
         vars:
@@ -118,25 +118,30 @@ tasks:
     cmds:
       - 'KIND_NODE_IMAGE_VERSION={{.KIND_NODE_IMAGE_VERSION}} REGISTRY_IMAGE_VERSION={{.REGISTRY_IMAGE_VERSION}} bash test/performance/hacks/setup.sh'
       - 'kind load docker-image {{.CONTROLLER_IMG}} --name ocm-perf'
-      - kubectl --context kind-ocm-perf apply -f test/performance/hacks/rbac.yaml
-      - |
-        helm upgrade --install ocm-k8s-toolkit chart/ \
-          --kube-context kind-ocm-perf \
-          -f test/performance/hacks/values.yaml \
-          --namespace ocm-k8s-toolkit-system \
-          --create-namespace \
-          --wait \
-          --timeout 180s
 
-  test/performance:
-    desc: "Run the controller performance benchmark against the 'ocm-perf' cluster. Pass flags via `--`, e.g. `task test/performance -- --scenarios=cold --objects=100 --repeats=1`."
-    cmd: 'go run ./test/performance {{.CLI_ARGS}}'
-
-  test/performance/teardown:
-    desc: "Delete the 'ocm-perf' Kind cluster and its registry."
+  test/performance/setup/teardown:
+    desc: "Delete the 'ocm-perf' Kind cluster and its registry. Only affects resources created by test/performance/setup/local."
     cmds:
       - 'kind delete cluster --name ocm-perf 2>/dev/null || true'
       - 'docker rm -f ocm-perf-registry 2>/dev/null || true'
+
+  test/performance:
+    desc: "Run the controller performance benchmark against the 'ocm-perf' cluster. Pass flags via `--`, e.g. `task test/performance -- --scenarios=cold --objects=100 --repeats=1`. Omit to run the full matrix."
+    cmds:
+      - task: helm/install
+        vars:
+          VALUES: test/performance/hacks/values.yaml
+          KUBE_CONTEXT: kind-ocm-perf
+      - 'go run ./test/performance {{.CLI_ARGS}}'
+
+  test/performance/fresh:
+    desc: "Teardown, setup, and run the performance benchmark from scratch. Pass flags via `--`, e.g. `task test/performance/fresh -- --scenarios=cold`."
+    cmds:
+      - task: test/performance/setup/teardown
+      - task: test/performance/setup/local
+      - task: test/performance
+        vars:
+          CLI_ARGS: '{{.CLI_ARGS}}'
 
   # Build
   build:
@@ -302,11 +307,13 @@ tasks:
       - helm template ocm-k8s-toolkit chart/ --namespace ocm-k8s-toolkit-system -f chart/test-values.yaml > dist/generated.yaml
 
   helm/install:
-    desc: "Install the Helm chart"
+    desc: "Install the Helm chart. VALUES and KUBE_CONTEXT override the values file and the target context."
+    vars:
+      VALUES: '{{.VALUES | default "chart/test-values.yaml"}}'
     cmds:
       - |
         helm upgrade --install ocm-k8s-toolkit chart/ \
-          -f chart/test-values.yaml \
+          {{if .KUBE_CONTEXT}}--kube-context {{.KUBE_CONTEXT}} {{end}}-f {{.VALUES}} \
           --namespace ocm-k8s-toolkit-system \
           --create-namespace \
           --wait \
