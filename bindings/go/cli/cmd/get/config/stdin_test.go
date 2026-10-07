@@ -42,6 +42,26 @@ func TestGetConfigFromStdinMergedWithFile(t *testing.T) {
 		"stdin configuration must come last, so it has the highest priority")
 }
 
+// TestGetConfigHijacksStdinWithoutExplicitFlag exposes the bug reported in issue #3803:
+// stdin is read and merged into configuration even when no explicit opt-in flag is set.
+// This test FAILS today because stdin.example.com appears in the output despite the caller
+// never asking for stdin to be used as configuration. It should pass once an explicit
+// --config-stdin flag is required.
+func TestGetConfigHijacksStdinWithoutExplicitFlag(t *testing.T) {
+	r := require.New(t)
+	out := new(bytes.Buffer)
+	_, err := test.OCM(t,
+		test.WithArgs("get", "config", "--config", "testdata/ocmconfig.yaml"),
+		test.WithInput(bytes.NewBufferString(stdinConfig)),
+		test.WithOutput(out),
+		test.WithErrorOutput(test.NewJSONLogReader()),
+	)
+	r.NoError(err)
+	r.Contains(out.String(), "file.example.com")
+	r.NotContains(out.String(), "stdin.example.com",
+		"stdin must not be read without an explicit --config-stdin flag")
+}
+
 // TestGetConfigFromStdinMergesWithDiscovery proves that piped configuration adds to the
 // configuration found in the well known locations instead of replacing it.
 func TestGetConfigFromStdinMergesWithDiscovery(t *testing.T) {
