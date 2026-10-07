@@ -32,9 +32,12 @@ type RelativeOCIReference struct {
 	Reference string `json:"reference"`
 }
 
-// Validate verifies that the relative reference is set and well formed. The reference is a
-// registry-relative OCI reference (repository[:tag][@digest]); a dotted first segment is a
-// path, not a host.
+// Validate verifies that the relative reference is set and parses as a registry-relative
+// OCI reference (repository[:tag][@digest]); a dotted first segment is a repository path,
+// not a host. This mirrors OCM v1, which performs no validation of its own and resolves
+// the reference host-less against the hosting component repository: our resolution likewise
+// prepends the hosting registry verbatim, so a reference carrying a scheme or host cannot
+// escape to another registry and surfaces a clear parse error at download time.
 func (t *RelativeOCIReference) Validate() error {
 	if t.Reference == "" {
 		return errors.New("reference is required")
