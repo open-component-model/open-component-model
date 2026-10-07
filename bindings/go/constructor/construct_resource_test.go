@@ -12,7 +12,6 @@ import (
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	constructorv1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
 	credconfigv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
-	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -685,9 +684,8 @@ components:
 		ResourceInputMethodProvider: mockProvider,
 		TargetRepositoryProvider:    &mockTargetRepositoryProvider{repo: mockRepo},
 	}
-	graph := syncdag.NewSyncedDirectedAcyclicGraph[string]()
 	constructorInstance := NewDefaultConstructor(converted, opts)
-	graph = constructorInstance.GetGraph()
+	graph := constructorInstance.GetGraph()
 
 	// Process the constructor
 	err = constructorInstance.Construct(context.Background())

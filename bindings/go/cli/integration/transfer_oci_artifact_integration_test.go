@@ -385,6 +385,7 @@ components:
 		// Set up a repository to download components from the target to check whether
 		// the transfer worked as expected.
 		targetRepo, err := createRepo(ctx, repoProvider, credentialResolver, &ociv1.Repository{BaseUrl: targetRef})
+		r.NoError(err, "should be able to set up target repository")
 
 		// Check if component exists in target registry
 		desc, err := targetRepo.GetComponentVersion(ctx, componentName, componentVersion)
