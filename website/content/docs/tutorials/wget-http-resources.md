@@ -244,7 +244,7 @@ Identity matching has been updated.
 | Field             | OCM v1                             | OCM v2             | What to do                                                                               |
 |-------------------|------------------------------------|--------------------|------------------------------------------------------------------------------------------|
 | Consumer identity | `type: wget`                       | `type: Wget`       | Rename the type.                                                                         |
-| Identity path     | `pathprefix`, longest-prefix match | `path`, glob match | Rename the attribute. `*` matches one path segment; omit `path` to match the whole host. |
+| Identity path     | `pathprefix`, longest-prefix match | `path`, glob match | Rename the attribute. `*` matches one path segment, `**` any depth; omit `path` for all. |
 
 Further matching changes:
 
@@ -284,10 +284,10 @@ needs an explicit `mediaType`.
 
 ### `401 Unauthorized` right after migrating from OCM v1
 
-**Why:** Two identity attributes were renamed. `type: wget` MUST become `type: Wget`, and `pathprefix` no longer exists,
-because OCM v2 uses `path`.
+**Why:** Two identity attributes were renamed. `type: wget` MUST become `type: Wget`, and `pathprefix` is replaced by
+`path`. OCM v2 still converts `pathprefix` into `path` patterns, but the type has to be renamed.
 
-**Fix:** Rename the type and drop `pathprefix`. Omitting `path` matches every path on the host. See
+**Fix:** Rename the type and replace `pathprefix` with `path`. Omitting `path` matches every path on the host. See
 [Credential changes](#credential-changes).
 
 ### The resource has media type `application/octet-stream`
