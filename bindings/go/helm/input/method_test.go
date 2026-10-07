@@ -306,7 +306,7 @@ func TestInputMethodProcessResourceRemoteChartPodinfoIntegration(t *testing.T) {
 			require.NoError(t, err)
 			defer reader.Close()
 
-			tempFile, err := os.CreateTemp("", "test-")
+			tempFile, err := os.CreateTemp(t.TempDir(), "test-")
 			require.NoError(t, err)
 			defer os.Remove(tempFile.Name())
 

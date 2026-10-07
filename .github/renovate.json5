@@ -117,6 +117,15 @@
       ]
     },
     {
+      // The CLI image runs gpg libraries from gardenlinux/fips under the dynamic
+      // loader of gardenlinux/bare-libc, so both must move to the same release.
+      groupName: 'Garden Linux images',
+      groupSlug: 'gardenlinux-images',
+      matchPackageNames: [
+        'ghcr.io/gardenlinux/gardenlinux/{/,}**',
+      ],
+    },
+    {
       groupName: 'Golang X Repositories',
       groupSlug: 'golang-x-repos',
       matchPackageNames: [

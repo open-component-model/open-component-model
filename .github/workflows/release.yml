@@ -280,6 +280,7 @@ jobs:
       version: ${{ needs.prepare.outputs.new_version }}
       release_tag: ${{ needs.prepare.outputs.new_tag }}
       cli_image_digest: ${{ needs.build_and_test.outputs.cli_image_digest }}
+      cli_slim_image_digest: ${{ needs.build_and_test.outputs.cli_slim_image_digest }}
       controller_image_digest: ${{ needs.build_and_test.outputs.controller_image_digest }}
       controller_chart_digest: ${{ needs.build_and_test.outputs.controller_chart_digest }}
       conflict_policy: replace
@@ -410,12 +411,14 @@ jobs:
             gh attestation verify "$file" --repo "$GH_REPO"
           done
 
-      - name: Verify CLI OCI attestation
+      - name: Verify CLI OCI attestations
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           IMAGE_DIGEST: ${{ needs.build_and_test.outputs.cli_image_digest }}
+          SLIM_IMAGE_DIGEST: ${{ needs.build_and_test.outputs.cli_slim_image_digest }}
         run: |
           gh attestation verify "oci://$CLI_IMAGE@${IMAGE_DIGEST}" --repo "$GH_REPO"
+          gh attestation verify "oci://$CLI_IMAGE@${SLIM_IMAGE_DIGEST}" --repo "$GH_REPO"
 
       - name: Verify controller image attestation
         env:
@@ -521,13 +524,16 @@ jobs:
       - name: Promote CLI image tags
         env:
           CLI_IMAGE_DIGEST: ${{ needs.build_and_test.outputs.cli_image_digest }}
+          CLI_SLIM_IMAGE_DIGEST: ${{ needs.build_and_test.outputs.cli_slim_image_digest }}
           NEW_RELEASE_VERSION: ${{ needs.prepare.outputs.base_version }}
           SET_LATEST: ${{ needs.prepare.outputs.set_latest }}
         run: |
           set -euo pipefail
           oras tag "$CLI_IMAGE@${CLI_IMAGE_DIGEST}" "${NEW_RELEASE_VERSION}"
+          oras tag "$CLI_IMAGE@${CLI_SLIM_IMAGE_DIGEST}" "${NEW_RELEASE_VERSION}-slim"
           if [ "${SET_LATEST}" = "true" ]; then
             oras tag "$CLI_IMAGE:${NEW_RELEASE_VERSION}" "latest"
+            oras tag "$CLI_IMAGE:${NEW_RELEASE_VERSION}-slim" "latest-slim"
           fi
 
       - name: Promote controller image tags
@@ -702,6 +708,7 @@ jobs:
       version: ${{ needs.prepare.outputs.base_version }}
       release_tag: ${{ needs.prepare.outputs.promotion_tag }}
       cli_image_digest: ${{ needs.build_and_test.outputs.cli_image_digest }}
+      cli_slim_image_digest: ${{ needs.build_and_test.outputs.cli_slim_image_digest }}
       controller_image_digest: ${{ needs.build_and_test.outputs.controller_image_digest }}
       controller_chart_digest: ${{ needs.promote_and_release_final.outputs.final_chart_digest }}
       conflict_policy: replace
