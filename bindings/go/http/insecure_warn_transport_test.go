@@ -60,7 +60,9 @@ func TestInsecureWarnTransport(t *testing.T) {
 
 	t.Run("first request to host emits WarnContext", func(t *testing.T) {
 		before := len(capture.records)
-		resp, err := c.Get(srv.URL)
+		req, err := nethttp.NewRequestWithContext(t.Context(), nethttp.MethodGet, srv.URL, nil)
+		require.NoError(t, err)
+		resp, err := c.Do(req)
 		require.NoError(t, err)
 		resp.Body.Close()
 		assert.Greater(t, len(capture.records), before)
@@ -69,7 +71,9 @@ func TestInsecureWarnTransport(t *testing.T) {
 
 	t.Run("second request to same host does NOT emit another warning", func(t *testing.T) {
 		before := len(capture.records)
-		resp, err := c.Get(srv.URL)
+		req, err := nethttp.NewRequestWithContext(t.Context(), nethttp.MethodGet, srv.URL, nil)
+		require.NoError(t, err)
+		resp, err := c.Do(req)
 		require.NoError(t, err)
 		resp.Body.Close()
 		assert.Len(t, capture.records, before, "sync.Once must suppress duplicate warnings")

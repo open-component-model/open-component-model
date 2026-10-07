@@ -302,8 +302,7 @@ func GetGraph(tb testing.TB, yaml string) (credentials.Resolver, error) {
 			var vaultHost string
 			if id, ok := repoType.(runtime.Identity); ok {
 				vaultHost = id[runtime.IdentityAttributeHostname]
-			} else {
-				data, _ := json.Marshal(repoType)
+			} else if data, err := json.Marshal(repoType); err == nil {
 				var mm map[string]any
 				_ = json.Unmarshal(data, &mm)
 				if surl, ok := mm["serverURL"].(string); ok {
@@ -452,10 +451,10 @@ func TestResolveCredentials(t *testing.T) {
 				"username": "some-owner",
 				"password": "abc",
 			},
-			require.ErrorAssertionFunc(func(t require.TestingT, err error, i ...interface{}) {
+			func(t require.TestingT, err error, i ...interface{}) {
 				require.Error(t, err)
 				require.ErrorIs(t, err, credentials.ErrNotFound)
-			}),
+			},
 		},
 		{
 			"plugin resolution error handling",
@@ -469,10 +468,10 @@ func TestResolveCredentials(t *testing.T) {
 				"username": "some-owner",
 				"password": "abc",
 			},
-			require.ErrorAssertionFunc(func(t require.TestingT, err error, i ...interface{}) {
+			func(t require.TestingT, err error, i ...interface{}) {
 				require.Error(t, err)
 				require.ErrorIs(t, err, credentials.ErrUnknown)
-			}),
+			},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

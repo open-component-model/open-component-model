@@ -2,6 +2,7 @@ package handler
 
 import (
 	"bytes"
+	"context"
 	"crypto"
 	"os"
 	"os/exec"
@@ -313,6 +314,9 @@ func Test_Integration_GPGHandler_LongTMPDIR(t *testing.T) {
 	signer := gpgKey(t, "signer", "ed25519", "sign", "")
 	digest := makeDigest(t, crypto.SHA256, []byte("long TMPDIR"))
 
+	// Not t.TempDir(): this test deliberately builds a long $TMPDIR, and t.TempDir's own
+	// long path can overflow the Unix socket path limit of gpg-agent on macOS.
+	//nolint:usetesting // see above: deliberately using os.MkdirTemp to control $TMPDIR length
 	long, err := os.MkdirTemp("", "ocm-gpg-test-")
 	r.NoError(err)
 	t.Cleanup(func() { _ = os.RemoveAll(long) })
@@ -343,10 +347,11 @@ func (k *testKey) pubCreds() *gpgcredentialsv1.GPGCredentials {
 func gpgKey(t *testing.T, name, algo, usage, passphrase string) *testKey {
 	t.Helper()
 	// Not t.TempDir(): its long path can overflow the Unix socket path limit of gpg-agent on macOS.
+	//nolint:usetesting // see above: deliberately using a short base path for gpg-agent sockets
 	home, err := os.MkdirTemp("", "ocm-gpg-test-")
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		_ = exec.Command("gpgconf", "--homedir", home, "--kill", "all").Run()
+		_ = exec.CommandContext(context.Background(), "gpgconf", "--homedir", home, "--kill", "all").Run()
 		_ = os.RemoveAll(home)
 	})
 	k := &testKey{home: home, passphrase: passphrase}

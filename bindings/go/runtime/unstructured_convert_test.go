@@ -285,9 +285,9 @@ func TestNumbers(t *testing.T) {
 		for _, k := range []string{"i", "i64", "u"} {
 			assert.IsTypef(t, int64(0), data[k], "%s should be int64", k)
 		}
-		assert.Equal(t, bigSize, data["i64"])        // >2^53 stays exact
-		assert.InDelta(t, 0.1, data["f32"], 1e-9)    // 32-bit shortest, not widened
-		assert.Equal(t, int64(bigSize), data["num"]) // json.Number field -> concrete int64
+		assert.Equal(t, bigSize, data["i64"])     // >2^53 stays exact
+		assert.InDelta(t, 0.1, data["f32"], 1e-9) // 32-bit shortest, not widened
+		assert.Equal(t, bigSize, data["num"])     // json.Number field -> concrete int64
 		assertMatchesJSON(t, from, data)
 
 		back := &numHost{}
