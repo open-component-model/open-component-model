@@ -361,9 +361,10 @@ func processResource(resource descriptorv2.Resource, access runtime.Typed, id st
 		return []string{fmt.Sprintf("${%s.spec.file}", addResourceID)}, nil
 	case *ociv1.RelativeOCIReference:
 		// A relativeOciReference is a local, repository-local access: copy by value as a
-		// local blob. pack.ArtifactBlob re-stamps the target access to localBlob, so the
-		// relative type never leaks into the target descriptor.
-		if err := processLocalBlob(resource, id, val, tgd, toSpec, resourceTransformIDs, i, ""); err != nil {
+		// local blob whose referenceName is the relative reference, so the relative type
+		// never leaks into the target descriptor and the artifact can be re-materialised as
+		// an OCI image on a later transfer.
+		if err := processRelativeOCIReference(resource, acc.Reference, id, val, tgd, toSpec, resourceTransformIDs, i); err != nil {
 			return nil, fmt.Errorf("failed processing relative OCI reference resource: %w", err)
 		}
 		return []string{fmt.Sprintf("${%s.spec.file}", addResourceID)}, nil

@@ -221,6 +221,36 @@ func TestBuildGraphDefinition_LocalBlobResource(t *testing.T) {
 	assert.Equal(t, "fileBufferCleanup", tgd.Transformations[3].ID)
 }
 
+// TestBuildGraphDefinition_RelativeOCIReference_CopiesAsLocalBlob proves the baseline copy
+// of a relativeOciReference re-stamps the target access to localBlob (the relative type does
+// not leak) and preserves the registry-relative reference as the referenceName so the
+// artifact can be re-materialised as an OCI image later.
+func TestBuildGraphDefinition_RelativeOCIReference_CopiesAsLocalBlob(t *testing.T) {
+	r := require.New(t)
+	sourceRepo := testOCIRepo("ghcr.io/source")
+	targetRepo := testOCIRepo("ghcr.io/target")
+	desc := testDescriptor("ocm.software/test", "1.0.0",
+		[]descriptor.Resource{relativeOCIReferenceResource("my-relative", "1.0.0", "ocm/value:v2.0")}, nil)
+	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
+	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
+
+	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{}, nil)
+	r.NoError(err)
+
+	r.Equal(ociv1alpha1.OCIGetLocalResourceV1alpha1, tgd.Transformations[0].Type)
+	add := tgd.Transformations[1]
+	r.Equal(ociv1alpha1.OCIAddLocalResourceV1alpha1, add.Type)
+
+	access := add.Spec.Data["resource"].(map[string]any)["access"].(map[string]any)
+	typeStr := access["type"].(string)
+	r.Contains(typeStr, descriptorv2.LocalBlobAccessType, "target access must be a localBlob")
+	r.NotContains(typeStr, ociv1.RelativeOCIReferenceType, "relative type must not leak into the target access")
+	r.Equal("ocm/value:v2.0", access["referenceName"],
+		"the relative reference must be preserved verbatim as the local blob referenceName")
+	_, hasReference := access["reference"]
+	r.False(hasReference, "the relativeOciReference 'reference' field must not leak into the target access")
+}
+
 func TestBuildGraphDefinition_OCIImageSkippedInDefaultMode(t *testing.T) {
 	sourceRepo := testOCIRepo("ghcr.io/source")
 	targetRepo := testOCIRepo("ghcr.io/target")
