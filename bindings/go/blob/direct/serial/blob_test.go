@@ -64,8 +64,12 @@ func TestSerialBlob(t *testing.T) {
 		s2 := New(ctx2, bytes.NewBufferString("abcdef"))
 		l3 := mustGet(t, s2.ReadCloser)
 		mustCloseAtTestEnd(t, l3)
-		if _, err := l3.Read(make([]byte, 1)); err != nil && !errors.Is(err, io.EOF) {
+		n, err := l3.Read(make([]byte, 1))
+		if err != nil && !errors.Is(err, io.EOF) {
 			t.Fatalf("unexpected read error after release: %v", err)
+		}
+		if n == 0 {
+			t.Fatalf("expected to read at least one byte after lease release, got 0")
 		}
 	})
 

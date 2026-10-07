@@ -4,6 +4,9 @@ import (
 	"context"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
+	"ocm.software/open-component-model/bindings/go/credentials"
 	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -89,9 +92,10 @@ func TestCredentialRepositoryPluginConverter_Resolve(t *testing.T) {
 }
 
 func TestCredentialRepositoryPluginConverter_Interface(t *testing.T) {
-	mockPlugin := &mockExternalPlugin{}
-	converter := NewCredentialRepositoryPluginConverter(mockPlugin)
+	r := require.New(t)
+	converter := NewCredentialRepositoryPluginConverter(&mockExternalPlugin{})
 
-	// Verify that the converter implements the correct interface
-	_ = converter
+	// The converter must be a usable, non-nil implementation of the plugin interface.
+	r.NotNil(converter)
+	r.Implements((*credentials.RepositoryPlugin)(nil), converter)
 }
