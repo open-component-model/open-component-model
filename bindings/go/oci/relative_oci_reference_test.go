@@ -13,6 +13,7 @@ import (
 	"oras.land/oras-go/v2"
 	"oras.land/oras-go/v2/content"
 
+	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	"ocm.software/open-component-model/bindings/go/ctf"
@@ -105,6 +106,26 @@ func addComponentWithAccess(t *testing.T, ctx context.Context, repo *oci.Reposit
 	require.NoError(t, repo.AddComponentVersion(ctx, desc))
 }
 
+// requireLayoutContainsManifest asserts blb is an OCI layout tar that contains manifest.
+func requireLayoutContainsManifest(t *testing.T, ctx context.Context, blb blob.ReadOnlyBlob, manifest ociImageSpecV1.Descriptor) {
+	t.Helper()
+	r := require.New(t)
+	rc, err := blb.ReadCloser()
+	r.NoError(err)
+	defer func() { r.NoError(rc.Close()) }()
+	buf, err := io.ReadAll(rc)
+	r.NoError(err)
+	layout, err := tar.ReadOCILayout(ctx, inmemory.New(bytes.NewReader(buf)))
+	r.NoError(err)
+	t.Cleanup(func() { r.NoError(layout.Close()) })
+	for _, m := range layout.Index.Manifests {
+		if m.Digest == manifest.Digest {
+			return
+		}
+	}
+	r.Failf("manifest not found", "materialized layout must contain the staged manifest %s", manifest.Digest)
+}
+
 func TestRepository_GetLocalResource_RelativeOCIReference(t *testing.T) {
 	const (
 		component = "acme.org/compo"
@@ -126,7 +147,6 @@ func TestRepository_GetLocalResource_RelativeOCIReference(t *testing.T) {
 		stageTag     string
 		expectAbsRef string // reference StoreForReference must be asked for
 		withDigest   bool   // append @<manifestDigest> to reference (and expectAbsRef)
-		dropTag      bool   // digest-only: reference carries no tag
 	}{
 		{
 			name:         "unversioned spelling, tag only",
@@ -177,7 +197,6 @@ func TestRepository_GetLocalResource_RelativeOCIReference(t *testing.T) {
 			stageTag:     "",
 			expectAbsRef: "http://registry.example/ocm/value",
 			withDigest:   true,
-			dropTag:      true,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -222,22 +241,7 @@ func TestRepository_GetLocalResource_RelativeOCIReference(t *testing.T) {
 			r.NotContains(rel.Reference, "registry.example")
 
 			// The materialized blob is a valid OCI layout tar holding the staged manifest.
-			rc, err := blb.ReadCloser()
-			r.NoError(err)
-			defer func() { r.NoError(rc.Close()) }()
-			buf, err := io.ReadAll(rc)
-			r.NoError(err)
-			layout, err := tar.ReadOCILayout(ctx, inmemory.New(bytes.NewReader(buf)))
-			r.NoError(err)
-			t.Cleanup(func() { r.NoError(layout.Close()) })
-			r.NotEmpty(layout.Index.Manifests)
-			found := false
-			for _, m := range layout.Index.Manifests {
-				if m.Digest == manifest.Digest {
-					found = true
-				}
-			}
-			r.True(found, "materialized layout must contain the staged manifest %s", manifest.Digest)
+			requireLayoutContainsManifest(t, ctx, blb, manifest)
 		})
 	}
 }
@@ -276,19 +280,5 @@ func TestRepository_GetLocalResource_RelativeOCIReference_CTF(t *testing.T) {
 	r.Equal("ocm/value:v2.0", rel.Reference)
 	r.NotContains(rel.Reference, "ctf.ocm.software")
 
-	rc, err := blb.ReadCloser()
-	r.NoError(err)
-	defer func() { r.NoError(rc.Close()) }()
-	buf, err := io.ReadAll(rc)
-	r.NoError(err)
-	layout, err := tar.ReadOCILayout(ctx, inmemory.New(bytes.NewReader(buf)))
-	r.NoError(err)
-	t.Cleanup(func() { r.NoError(layout.Close()) })
-	found := false
-	for _, m := range layout.Index.Manifests {
-		if m.Digest == manifest.Digest {
-			found = true
-		}
-	}
-	r.True(found)
+	requireLayoutContainsManifest(t, ctx, blb, manifest)
 }
