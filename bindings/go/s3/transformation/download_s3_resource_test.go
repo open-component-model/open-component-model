@@ -55,7 +55,7 @@ func newFakeS3(t *testing.T, body []byte) *httptest.Server {
 		// Real S3 reports a checksum, and the SDK warns about every response carrying none.
 		sum := make([]byte, 4)
 		binary.BigEndian.PutUint32(sum, crc32.ChecksumIEEE(body))
-		w.Header().Set("x-amz-checksum-crc32", base64.StdEncoding.EncodeToString(sum))
+		w.Header().Set("X-Amz-Checksum-Crc32", base64.StdEncoding.EncodeToString(sum))
 		_, _ = w.Write(body)
 	}))
 	t.Cleanup(srv.Close)
