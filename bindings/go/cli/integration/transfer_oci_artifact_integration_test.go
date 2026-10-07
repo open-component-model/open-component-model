@@ -974,3 +974,93 @@ func createSingleLayerOCIImage(t *testing.T, data []byte, ref ...string) ([]byte
 
 	return buf.Bytes(), access
 }
+
+// Regression: v1 stores OCI artifacts as local tar.gz artifact sets whose
+// localReference is the archive hash while the ociArtifactDigest/v1 digest is
+// the manifest hash. Transfer must upload the archive under its own hash.
+func Test_Integration_Transfer_OCIArtifact_V1LocalBlob(t *testing.T) {
+	r := require.New(t)
+	t.Parallel()
+
+	targetRegistry, err := internal.CreateOCIRegistry(t)
+	r.NoError(err)
+	cfgPath, err := internal.CreateOCMConfigForRegistry(t, []internal.ConfigOpts{
+		{Host: targetRegistry.Host, Port: targetRegistry.Port, User: targetRegistry.User, Password: targetRegistry.Password},
+	})
+	r.NoError(err)
+
+	const (
+		componentName    = "github.com/acme.org/helloworld"
+		componentVersion = "1.0.0"
+	)
+	openCTF := func(t *testing.T, path string, flag int) *oci.Repository {
+		t.Helper()
+		fs, err := blobfs.NewFS(path, flag)
+		require.NoError(t, err)
+		repo, err := oci.NewRepository(ocictf.WithCTF(ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))))
+		require.NoError(t, err)
+		return repo
+	}
+
+	tests := []struct {
+		name     string
+		registry bool
+	}{
+		{name: "ctf"},
+		{name: "registry", registry: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			ctx := t.Context()
+
+			sourcePath := filepath.Join(t.TempDir(), "source")
+			r.NoError(os.CopyFS(sourcePath, os.DirFS(filepath.Join("..", "..", "ctf", "testdata", "compatibility", "02", "with-resource"))))
+			source, err := openCTF(t, sourcePath, os.O_RDONLY).GetComponentVersion(ctx, componentName, componentVersion)
+			r.NoError(err)
+			r.Len(source.Component.Resources, 1)
+			want := source.Component.Resources[0]
+			var wantAccess v2.LocalBlob
+			r.NoError(v2.Scheme.Convert(want.Access, &wantAccess))
+			r.Equal("application/vnd.oci.image.manifest.v1+tar+gzip", wantAccess.MediaType)
+			r.Equal("ociArtifactDigest/v1", want.Digest.NormalisationAlgorithm)
+			r.NotEqual(wantAccess.LocalReference, "sha256:"+want.Digest.Value, "fixture must keep archive and manifest hashes apart")
+
+			targetRef := "ctf::" + filepath.Join(t.TempDir(), "target")
+			if tc.registry {
+				targetRef = "http://" + targetRegistry.RegistryAddress
+			}
+			transfer := cmd.New()
+			transfer.SetArgs([]string{
+				"transfer", "component-version",
+				fmt.Sprintf("ctf::%s//%s:%s", sourcePath, componentName, componentVersion), targetRef,
+				"--config", cfgPath,
+			})
+			r.NoError(transfer.ExecuteContext(ctx))
+
+			var targetRepo *oci.Repository
+			if tc.registry {
+				targetRepo = targetRegistry.Connect(t)
+			} else {
+				targetRepo = openCTF(t, strings.TrimPrefix(targetRef, "ctf::"), os.O_RDONLY)
+			}
+			got, err := targetRepo.GetComponentVersion(ctx, componentName, componentVersion)
+			r.NoError(err)
+			r.Len(got.Component.Resources, 1)
+			var gotAccess v2.LocalBlob
+			r.NoError(v2.Scheme.Convert(got.Component.Resources[0].Access, &gotAccess))
+			r.Equal(wantAccess.LocalReference, gotAccess.LocalReference)
+			r.Equal(wantAccess.MediaType, gotAccess.MediaType)
+			r.Equal(want.Digest, got.Component.Resources[0].Digest)
+
+			content, _, err := targetRepo.GetLocalResource(ctx, componentName, componentVersion, got.Component.Resources[0].ToIdentity())
+			r.NoError(err)
+			reader, err := content.ReadCloser()
+			r.NoError(err)
+			data, err := io.ReadAll(reader)
+			r.NoError(reader.Close())
+			r.NoError(err)
+			r.Equal(wantAccess.LocalReference, digest.FromBytes(data).String(), "stored bytes must match localReference")
+		})
+	}
+}
