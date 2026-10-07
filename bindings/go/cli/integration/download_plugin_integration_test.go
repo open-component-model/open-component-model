@@ -281,6 +281,7 @@ func getUserAndPasswordForTest(t *testing.T) (string, string) {
 }
 
 func getUsername(t *testing.T, gh string) (string, error) {
+	t.Helper()
 	if githubUser := os.Getenv("GITHUB_USER"); githubUser != "" {
 		return githubUser, nil
 	}

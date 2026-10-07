@@ -82,15 +82,21 @@ func TestLocate(t *testing.T) {
 			want:    chartTGZ,
 		},
 		{
-			name:        "chart layer of a helm chart OCI layout",
-			content:     func(t *testing.T) blob.ReadOnlyBlob { return chartLayout(t, registry.ConfigMediaType, chartTGZ) },
+			name: "chart layer of a helm chart OCI layout",
+			content: func(t *testing.T) blob.ReadOnlyBlob {
+				t.Helper()
+				return chartLayout(t, registry.ConfigMediaType, chartTGZ)
+			},
 			mediaType:   layout.MediaTypeOCIImageLayoutTarGzipV1,
 			want:        chartTGZ,
 			wantFromOCI: true,
 		},
 		{
-			name:      "OCI layout of an artifact that is no helm chart",
-			content:   func(t *testing.T) blob.ReadOnlyBlob { return chartLayout(t, ocispec.MediaTypeImageConfig, chartTGZ) },
+			name: "OCI layout of an artifact that is no helm chart",
+			content: func(t *testing.T) blob.ReadOnlyBlob {
+				t.Helper()
+				return chartLayout(t, ocispec.MediaTypeImageConfig, chartTGZ)
+			},
 			mediaType: layout.MediaTypeOCIImageLayoutTarGzipV1,
 			wantErr:   `is not a helm chart: config media type "` + ocispec.MediaTypeImageConfig + `"`,
 		},

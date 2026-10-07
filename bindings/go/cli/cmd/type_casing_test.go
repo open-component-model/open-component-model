@@ -34,11 +34,13 @@ func Test_Add_Input_Type_Casing(t *testing.T) {
 			resourceName:   "my-file",
 			expectedAccess: "LocalBlob/v1",
 			setupInput: func(t *testing.T, tmp string) string {
+				t.Helper()
 				filePath := filepath.Join(tmp, "test-file.txt")
 				require.NoError(t, os.WriteFile(filePath, []byte("file-content"), 0o600))
 				return fmt.Sprintf("path: %s", filePath)
 			},
 			verifyContent: func(t *testing.T, content []byte) {
+				t.Helper()
 				require.Equal(t, "file-content", string(content))
 			},
 		},
@@ -49,12 +51,14 @@ func Test_Add_Input_Type_Casing(t *testing.T) {
 			resourceName:   "my-dir",
 			expectedAccess: "LocalBlob/v1",
 			setupInput: func(t *testing.T, tmp string) string {
+				t.Helper()
 				dirPath := filepath.Join(tmp, "test-dir")
 				require.NoError(t, os.MkdirAll(dirPath, 0o755))
 				require.NoError(t, os.WriteFile(filepath.Join(dirPath, "data.txt"), []byte("dir-content"), 0o600))
 				return fmt.Sprintf("path: %s", dirPath)
 			},
 			verifyContent: func(t *testing.T, content []byte) {
+				t.Helper()
 				require.NotEmpty(t, content)
 			},
 		},
@@ -65,9 +69,11 @@ func Test_Add_Input_Type_Casing(t *testing.T) {
 			resourceName:   "my-text",
 			expectedAccess: "LocalBlob/v1",
 			setupInput: func(t *testing.T, _ string) string {
+				t.Helper()
 				return `text: "hello utf8"`
 			},
 			verifyContent: func(t *testing.T, content []byte) {
+				t.Helper()
 				require.Equal(t, "hello utf8", string(content))
 			},
 		},
@@ -78,6 +84,7 @@ func Test_Add_Input_Type_Casing(t *testing.T) {
 			resourceName:   "my-chart",
 			expectedAccess: "LocalBlob/v1",
 			setupInput: func(t *testing.T, tmp string) string {
+				t.Helper()
 				chartDir := filepath.Join(tmp, "mychart")
 				require.NoError(t, os.MkdirAll(filepath.Join(chartDir, "templates"), 0o755))
 				require.NoError(t, os.WriteFile(filepath.Join(chartDir, "Chart.yaml"),
@@ -87,6 +94,7 @@ func Test_Add_Input_Type_Casing(t *testing.T) {
 				return fmt.Sprintf("path: %s", chartDir)
 			},
 			verifyContent: func(t *testing.T, content []byte) {
+				t.Helper()
 				require.NotEmpty(t, content)
 			},
 		},

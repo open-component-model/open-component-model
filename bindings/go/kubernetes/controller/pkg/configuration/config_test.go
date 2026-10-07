@@ -391,6 +391,7 @@ func TestLoadConfigurations(t *testing.T) {
 			},
 			wantErr: false,
 			checkResult: func(t *testing.T, cfg *genericv1.Config) {
+				t.Helper()
 				assert.NotNil(t, cfg)
 				// only the direct credentials entry survives; the nested generic entry is dropped
 				assert.Len(t, cfg.Configurations, 1)
@@ -419,6 +420,7 @@ func TestLoadConfigurations(t *testing.T) {
 			},
 			wantErr: false,
 			checkResult: func(t *testing.T, cfg *genericv1.Config) {
+				t.Helper()
 				assert.NotNil(t, cfg)
 				// the allowed credentials and resolvers entries survive in declaration order;
 				// the disallowed filesystem and whatever entries are dropped
@@ -446,6 +448,7 @@ func TestLoadConfigurations(t *testing.T) {
 			},
 			wantErr: false,
 			checkResult: func(t *testing.T, cfg *genericv1.Config) {
+				t.Helper()
 				assert.NotNil(t, cfg)
 				assert.Len(t, cfg.Configurations, 2)
 			},
@@ -463,6 +466,7 @@ func TestLoadConfigurations(t *testing.T) {
 			},
 			wantErr: false,
 			checkResult: func(t *testing.T, cfg *genericv1.Config) {
+				t.Helper()
 				assert.NotNil(t, cfg)
 			},
 		},
@@ -485,6 +489,7 @@ func TestLoadConfigurations(t *testing.T) {
 			},
 			wantErr: false,
 			checkResult: func(t *testing.T, cfg *genericv1.Config) {
+				t.Helper()
 				assert.NotNil(t, cfg)
 				assert.Len(t, cfg.Configurations, 2)
 			},
