@@ -1,5 +1,10 @@
 version: '3'
 
+vars:
+  # Coverage profiles and junit reports. Absolute so the sigstore exec wrapper,
+  # which runs in the caller's working dir, writes to the same place.
+  OUT_DIR: '{{.TASKFILE_DIR}}/output'
+
 tasks:
   build/plugins:
     # GOFIPS140 (root .env): test plugins and suites use the shipped FIPS module.
@@ -19,40 +24,77 @@ tasks:
     dotenv: ['{{.TASKFILE_DIR}}/../../.env']
     deps: [build/plugins]
     cmds:
+      - mkdir -p '{{.OUT_DIR}}'
       - >
         go test -short -skip "Integration" -count=1
-        -coverprofile=coverage.unit.out -covermode=atomic
+        -coverprofile='{{.OUT_DIR}}/coverage.unit.out' -covermode=atomic
         $(go list ./... | grep -v /integration | grep -v /kubernetes/controller/test/e2e)
         {{.CLI_ARGS}}
       # Drop generated files (zz_generated.*) so the number reflects hand-written code.
-      - grep -v 'zz_generated\.' coverage.unit.out > coverage.unit.out.tmp && mv coverage.unit.out.tmp coverage.unit.out
+      - grep -v 'zz_generated\.' '{{.OUT_DIR}}/coverage.unit.out' > '{{.OUT_DIR}}/coverage.unit.out.tmp' && mv '{{.OUT_DIR}}/coverage.unit.out.tmp' '{{.OUT_DIR}}/coverage.unit.out'
 
   test/integration:
     dotenv: ['{{.TASKFILE_DIR}}/../../.env']
     set: [errexit]
-    vars:
-      SIGSTORE_INTEGRATION_DIR: '{{.TASKFILE_DIR}}/sigstore/integration'
     cmds:
-      - task -d '{{.SIGSTORE_INTEGRATION_DIR}}' setup
+      # Binary coverage dir: each (re)run appends its own covcounters/covmeta,
+      # so a flake that passes on retry does NOT clobber the profile (unlike a
+      # single -coverprofile, which gotestsum's final rerun overwrites). Both
+      # runs write into it concurrently; file names are unique per process.
+      - rm -rf '{{.OUT_DIR}}/coverage.integration.covdir' && mkdir -p '{{.OUT_DIR}}/coverage.integration.covdir'
+      - task: test/integration:run
       - |
-        export PATH="{{.SIGSTORE_INTEGRATION_DIR}}/tmp/bin:$PATH"
-        . "{{.SIGSTORE_INTEGRATION_DIR}}/tmp/sigstore-env.sh"
-        # Binary coverage dir: each (re)run appends its own covcounters/covmeta,
-        # so a flake that passes on retry does NOT clobber the profile (unlike a
-        # single -coverprofile, which gotestsum's final rerun overwrites).
-        rm -rf coverage.integration.covdir && mkdir -p coverage.integration.covdir
-        go run gotest.tools/gotestsum@"${GOTESTSUM_VERSION}" \
-          --format testname \
-          --junitfile=junit.xml \
-          --rerun-fails=2 \
-          --rerun-fails-max-failures=5 \
-          --packages="./..." \
-          -- -run "Integration" -count=1 -coverpkg=./... -args -test.gocoverdir="$PWD/coverage.integration.covdir"
         # Merge every run's data into one profile. -args passes gocoverdir to the
         # test binary without fighting gotestsum's flag ordering.
-        go tool covdata textfmt -i=coverage.integration.covdir -o coverage.integration.out
+        go tool covdata textfmt -i='{{.OUT_DIR}}/coverage.integration.covdir' -o '{{.OUT_DIR}}/coverage.integration.out'
         # Drop generated files (zz_generated.*) so the number reflects hand-written code.
-        grep -v 'zz_generated\.' coverage.integration.out > coverage.integration.out.tmp && mv coverage.integration.out.tmp coverage.integration.out
-        go tool cover -func=coverage.integration.out | tail -1
-        # -coverpkg=./... credits library code the flows exercise (the integration
-        # packages themselves are near-empty).
+        grep -v 'zz_generated\.' '{{.OUT_DIR}}/coverage.integration.out' > '{{.OUT_DIR}}/coverage.integration.out.tmp' && mv '{{.OUT_DIR}}/coverage.integration.out.tmp' '{{.OUT_DIR}}/coverage.integration.out'
+        go tool cover -func='{{.OUT_DIR}}/coverage.integration.out' | tail -1
+
+  test/integration:run:
+    internal: true
+    vars:
+      # -run "Integration" only selects top-level tests whose name contains "Integration".
+      # Build and run only the packages that declare one: every other package would still
+      # compile a test binary instrumented with -coverpkg=./..., link it, and run nothing.
+      INTEGRATION_PKGS:
+        sh: go list $(grep -rlE --include='*_test.go' '^func Test[A-Za-z0-9_]*Integration' . | xargs -n1 dirname | sort -u)
+      SIGSTORE_PKG:
+        sh: go list ./sigstore/integration
+      OTHER_PKGS:
+        sh: echo "{{.INTEGRATION_PKGS}}" | grep -vxF "{{.SIGSTORE_PKG}}" | tr '\n' ' '
+    # Deps run concurrently and Task waits for all of them even if one fails, so both
+    # junit reports are complete. Only sigstore/integration needs the scaffolding cluster
+    # (~3 min to provision); every other package runs while it comes up.
+    deps:
+      - task: test/integration:gotestsum
+        vars:
+          JUNITFILE: '{{.OUT_DIR}}/junit.xml'
+          PACKAGES: '{{.OTHER_PKGS}}'
+      - task: test/integration:gotestsum
+        vars:
+          JUNITFILE: '{{.OUT_DIR}}/junit-sigstore.xml'
+          PACKAGES: '{{.SIGSTORE_PKG}}'
+          # Provisions the cluster, then runs gotestsum with the scaffolding env.
+          EXEC: task -d '{{.TASKFILE_DIR}}/sigstore/integration' exec --
+
+  test/integration:gotestsum:
+    internal: true
+    requires:
+      vars: [JUNITFILE, PACKAGES]
+    vars:
+      # The packages mostly wait on containers, not CPU, so run all of them at once
+      # instead of one per CPU.
+      PARALLEL: '{{len (splitList " " (trim .PACKAGES))}}'
+    cmds:
+      # -coverpkg=./... credits library code the flows exercise (the integration
+      # packages themselves are near-empty).
+      - >
+        {{.EXEC}} go run gotest.tools/gotestsum@"${GOTESTSUM_VERSION}"
+        --format testname
+        --junitfile={{.JUNITFILE}}
+        --rerun-fails=2
+        --rerun-fails-max-failures=5
+        --packages="{{trim .PACKAGES}}"
+        -- -p {{.PARALLEL}} -run "Integration" -count=1 -coverpkg=./...
+        -args -test.gocoverdir='{{.OUT_DIR}}/coverage.integration.covdir'

@@ -112,21 +112,16 @@ linters:
       # (counts are the findings at enablement time). To fix a linter, remove it
       # from this list in the same PR that resolves its findings.
       - linters:
-          - canonicalheader # 14: non-canonical HTTP header keys in test fixtures
           - depguard        # 12: tests import siblings outside the prod allow-list
           - dupword         # 2: false positives on intentional repetition (CEL map(x,x*2)); fixer corrupts strings
           - fatcontext      # 3: all current hits are false positives (intentional ctx capture, Ginkgo suite lifecycle) and the fixer shadows outer vars; value is in prod loop-nesting, not tests
           - ginkgolinter    # 5: Gomega length/error assertion idioms
-          - gocritic        # 16: assorted style checks (badCall, etc.) in tests
           - gosmopolitan    # 5: time.Local / non-portable usage in tests
-          - ineffassign     # 8: ineffectual assignments in tests
           - maintidx        # 39: low maintainability index of large table tests
           - misspell        # 25: false positives on the `interm` abbreviation; fixer rewrites identifiers
           - nolintlint      # 4: unused //nolint directives tied to the linters disabled here
-          - predeclared     # 1: parameter shadows a predeclared identifier
           - staticcheck     # 115: assorted SA/ST checks across tests
           - tparallel       # 47: subtest t.Parallel() consistency
-          - unused          # 4: unused test-only helpers
         path: _test\.go
       - path: (.+)\.go$
         text: composites
