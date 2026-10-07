@@ -231,7 +231,6 @@ func TestIdentityMatchesPath(t *testing.T) {
 }
 
 func TestIdentity_Match(t *testing.T) {
-
 	type args struct {
 		o        runtime.Identity
 		matchers []runtime.ChainableIdentityMatcher

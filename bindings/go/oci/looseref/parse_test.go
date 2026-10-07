@@ -1,20 +1,23 @@
 package looseref
 
 import (
-	_ "crypto/sha256"
-	_ "crypto/sha512"
 	"fmt"
 	"testing"
+
+	_ "crypto/sha256"
+	_ "crypto/sha512"
 
 	"github.com/stretchr/testify/require"
 	"oras.land/oras-go/v2/errdef"
 	"oras.land/oras-go/v2/registry"
 )
 
-const ValidDigest = "sha256:b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9"
-const InvalidDigest = "sha256:b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde"
-const ValidDigest512 = "sha512:ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f"
-const InvalidDigest512 = "sha512:ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49"
+const (
+	ValidDigest      = "sha256:b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9"
+	InvalidDigest    = "sha256:b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde"
+	ValidDigest512   = "sha512:ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f"
+	InvalidDigest512 = "sha512:ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49"
+)
 
 // For a definition of what a "valid form [ABCD]" means, see reference.go.
 func TestParseReferenceGoodies(t *testing.T) {
@@ -224,7 +227,8 @@ func TestLooseReferenceString(t *testing.T) {
 				},
 			},
 			expected: "localhost:5000",
-		}, {
+		},
+		{
 			name: "registry with scheme",
 			ref: LooseReference{
 				Scheme: "oci",

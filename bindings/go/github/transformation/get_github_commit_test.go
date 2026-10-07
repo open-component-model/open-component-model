@@ -137,7 +137,7 @@ func TestGetGitHubCommit_Transform_RemovesOutputOnFailure(t *testing.T) {
 		},
 	})
 	require.Error(t, err)
-	assert.ErrorContains(t, err, "error downloading github commit")
+	require.ErrorContains(t, err, "error downloading github commit")
 
 	entries, err := os.ReadDir(outDir)
 	require.NoError(t, err)

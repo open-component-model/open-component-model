@@ -204,7 +204,9 @@ func Test_Integration_TransferWgetResource_UploaderStreamsToHTTPTarget(t *testin
 		"resource digest should be the sha256 of the streamed content")
 
 	// The target server must re-serve exactly what was streamed.
-	getResp, err := http.Get(targetSrv.URL + expectedPath)
+	getReq, err := http.NewRequestWithContext(ctx, http.MethodGet, targetSrv.URL+expectedPath, nil)
+	r.NoError(err)
+	getResp, err := http.DefaultClient.Do(getReq)
 	r.NoError(err)
 	defer func() { r.NoError(getResp.Body.Close()) }()
 	reserved, err := io.ReadAll(getResp.Body)

@@ -75,13 +75,29 @@ tasks:
   package/image:
     internal: true
     dir: '{{ .TASKFILE_DIR }}'
+    dotenv:
+      - '{{.TASKFILE_DIR}}/../../../.env'
+      - '{{.TASKFILE_DIR}}/../sigstore/signing/handler/internal/.env'
+    # One Containerfile, two targets: "full" (default tag; ocm plus FIPS gpg and
+    # cosign on Garden Linux bare-libc) and "slim" (scratch with only ocm and the
+    # CA bundle, tagged <version>-slim). full copies ocm from the slim stage.
     cmds:
       - |
         mkdir -p {{ .TASKFILE_DIR }}/tmp/oci
         {{ .IMAGE_TOOL }} buildx build \
           --platform linux/amd64,linux/arm64 \
+          --target full \
+          --build-arg GOFIPS140="$GOFIPS140" \
+          --build-arg COSIGN_VERSION="$COSIGN_VERSION" \
           --tag ghcr.io/open-component-model/cli:{{ .VERSION }} \
           --output type=oci,dest={{ .TASKFILE_DIR }}/tmp/oci/cli.tar,oci-mediatypes=true,name=ghcr.io/open-component-model/cli \
+          -f ./Containerfile .
+      - |
+        {{ .IMAGE_TOOL }} buildx build \
+          --platform linux/amd64,linux/arm64 \
+          --target slim \
+          --tag ghcr.io/open-component-model/cli:{{ .VERSION }}-slim \
+          --output type=oci,dest={{ .TASKFILE_DIR }}/tmp/oci/cli-slim.tar,oci-mediatypes=true,name=ghcr.io/open-component-model/cli \
           -f ./Containerfile .
       - |
         mkdir -p {{ .TASKFILE_DIR }}/tmp/resources
@@ -94,6 +110,14 @@ tasks:
             type: file
             mediaType: application/vnd.ocm.software.oci.layout.v1+tar
             path: {{ .TASKFILE_DIR }}/tmp/oci/cli.tar
+        - name: image-slim
+          type: ociImage
+          version: {{ .VERSION }}
+          relation: local
+          input:
+            type: file
+            mediaType: application/vnd.ocm.software.oci.layout.v1+tar
+            path: {{ .TASKFILE_DIR }}/tmp/oci/cli-slim.tar
         EOF
 
   build/multiarch/image:
@@ -102,6 +126,10 @@ tasks:
       - task: package/image
 
   build:target:
+    # GOFIPS140 (root .env) selects the Go FIPS 140-3 module for the build.
+    # GOTOOLCHAIN=local: build with the installed Go only; a mismatch with the
+    # toolchain in go.mod fails instead of downloading another toolchain.
+    dotenv: ['{{.TASKFILE_DIR}}/../../../.env']
     desc: "Build CLI for a specific GOOS/GOARCH target"
     internal: true
     silent: false
@@ -111,7 +139,7 @@ tasks:
       - tmp/resources/ocm-{{ .GOOS }}-{{ .GOARCH }}.yaml
     cmds:
       - cmd: |
-          CGO_ENABLED=0 GOOS={{ .GOOS }} GOARCH={{ .GOARCH }} go build \
+          CGO_ENABLED=0 GOTOOLCHAIN=local GOOS={{ .GOOS }} GOARCH={{ .GOARCH }} go build \
             -ldflags "-s -w -X ocm.software/open-component-model/bindings/go/cli/cmd/version.BuildVersion={{ .BUILD_VERSION }}" \
             -o {{ .TASKFILE_DIR }}/tmp/bin/ocm-{{ .GOOS }}-{{ .GOARCH }}
       - |

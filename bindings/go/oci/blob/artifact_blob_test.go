@@ -90,7 +90,7 @@ func TestResourceBlob_Digest(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			mock := &mockBlob{}
 			rb, err := ociblob.NewArtifactBlobWithMediaType(tt.resource, mock, "application/octet-stream")
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			dig, ok := rb.Digest()
 			assert.Equal(t, tt.expectedOK, ok)
 			if tt.expectedOK {
@@ -282,7 +282,7 @@ func TestResourceBlob_CompleteWorkflow(t *testing.T) {
 	// Test OCI descriptor
 	desc := rb.OCIDescriptor()
 	assert.Equal(t, mediaType, desc.MediaType)
-	assert.Equal(t, digest.Digest(newDigest), desc.Digest)
+	assert.Equal(t, newDigest, desc.Digest)
 	assert.Equal(t, blob.SizeUnknown, desc.Size)
 }
 

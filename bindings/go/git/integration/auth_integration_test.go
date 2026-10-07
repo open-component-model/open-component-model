@@ -68,6 +68,7 @@ func Test_Integration_GitHTTPSAuthentication(t *testing.T) {
 		}}
 	}
 	newRepo := func(t *testing.T) *gitrepository.ResourceRepository {
+		t.Helper()
 		tempDir := t.TempDir()
 		return gitrepository.NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &tempDir})
 	}
@@ -185,6 +186,7 @@ func Test_Integration_GitSSHAuthentication(t *testing.T) {
 		}}
 	}
 	newRepo := func(t *testing.T, hostKey ssh.PublicKey) *gitrepository.ResourceRepository {
+		t.Helper()
 		tempDir := t.TempDir()
 		return gitrepository.NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &tempDir}, gitrepository.WithHostKeyCallback(ssh.FixedHostKey(hostKey)))
 	}
@@ -252,11 +254,12 @@ func Test_Integration_GitSSHAuthentication(t *testing.T) {
 		r.NoError(keyring.Add(agent.AddedKey{PrivateKey: private}))
 
 		// Unix socket paths are limited to about 104 bytes, which t.TempDir can exceed on macOS.
+		//nolint:usetesting // see above: t.TempDir can exceed the Unix socket path limit
 		socketDir, err := os.MkdirTemp("", "ocm-agent-")
 		r.NoError(err)
 		t.Cleanup(func() { _ = os.RemoveAll(socketDir) })
 
-		listener, err := net.Listen("unix", filepath.Join(socketDir, "agent.sock"))
+		listener, err := (&net.ListenConfig{}).Listen(t.Context(), "unix", filepath.Join(socketDir, "agent.sock"))
 		r.NoError(err)
 		t.Cleanup(func() { _ = listener.Close() })
 		go func() {

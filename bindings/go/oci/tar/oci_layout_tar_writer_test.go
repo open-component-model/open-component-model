@@ -127,11 +127,11 @@ func TestOCILayoutTarWriter_Tag(t *testing.T) {
 				assert.Error(t, err)
 				return
 			}
-			assert.NoError(t, err)
+			require.NoError(t, err)
 
 			// Verify the tag was set correctly
 			resolved, err := writer.Resolve(context.Background(), tt.reference)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, tt.desc.Digest, resolved.Digest)
 		})
 	}
@@ -227,7 +227,7 @@ func TestOCILayoutTarWriter_Fetch(t *testing.T) {
 
 	// Fetch should always return ErrUnsupported
 	reader, err := writer.Fetch(context.Background(), desc)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Nil(t, reader)
 }
 
@@ -281,7 +281,7 @@ func TestOCILayoutTarWriter_Resolve(t *testing.T) {
 				assert.Error(t, err)
 				return
 			}
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, tt.desc.Digest, resolved.Digest)
 		})
 	}
@@ -312,7 +312,7 @@ func TestBlobPath(t *testing.T) {
 				assert.Error(t, err)
 				return
 			}
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			expectedPath := "blobs/sha256/" + tt.digest.Encoded()
 			assert.Equal(t, expectedPath, path)
 		})
@@ -488,7 +488,7 @@ func TestOCILayoutTarWriter_ConcurrentPush(t *testing.T) {
 
 func TestOCILayoutTarWriter_ScratchClosedOnClose(t *testing.T) {
 	// When scratch implements io.Closer (like *os.File), Close() calls it.
-	tmpFile, err := os.CreateTemp("", "oci-layout-test-*")
+	tmpFile, err := os.CreateTemp(t.TempDir(), "oci-layout-test-*")
 	require.NoError(t, err)
 	tmpPath := tmpFile.Name()
 	defer os.Remove(tmpPath)
@@ -523,7 +523,7 @@ func TestOCILayoutWriterWithTempFile_RemovesOnClose(t *testing.T) {
 
 func TestOCILayoutWriter_DirectConstructor(t *testing.T) {
 	// Verify the direct constructor works with a caller-managed temp file
-	tmpFile, err := os.CreateTemp("", "oci-layout-test-*")
+	tmpFile, err := os.CreateTemp(t.TempDir(), "oci-layout-test-*")
 	require.NoError(t, err)
 	defer func() {
 		tmpFile.Close()
@@ -596,7 +596,7 @@ func BenchmarkOCILayoutWriter_Push_Sequential(b *testing.B) {
 			b.ResetTimer()
 
 			for range b.N {
-				tmpFile, err := os.CreateTemp("", "bench-seq-*")
+				tmpFile, err := os.CreateTemp(b.TempDir(), "bench-seq-*")
 				if err != nil {
 					b.Fatal(err)
 				}

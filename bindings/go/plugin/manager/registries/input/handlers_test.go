@@ -40,9 +40,11 @@ func TestResourceInputProcessorHandlerFunc(t *testing.T) {
 				return handler
 			},
 			assertOutput: func(t *testing.T, resp *http.Response) {
+				t.Helper()
 				require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 			},
 			assertError: func(t *testing.T, err error) {
+				t.Helper()
 				require.NoError(t, err)
 			},
 			request: func(base string) *http.Request {
@@ -50,7 +52,7 @@ func TestResourceInputProcessorHandlerFunc(t *testing.T) {
 				header.Add("Authorization", "not-json")
 				parse, _ := url.Parse(base)
 				return &http.Request{
-					Method: "POST",
+					Method: http.MethodPost,
 					URL:    parse,
 					Header: header,
 				}
@@ -81,6 +83,7 @@ func TestResourceInputProcessorHandlerFunc(t *testing.T) {
 				return handler
 			},
 			assertOutput: func(t *testing.T, resp *http.Response) {
+				t.Helper()
 				defer resp.Body.Close()
 				require.Equal(t, http.StatusOK, resp.StatusCode)
 				content, err := io.ReadAll(resp.Body)
@@ -92,6 +95,7 @@ func TestResourceInputProcessorHandlerFunc(t *testing.T) {
 				require.Contains(t, string(content), `"value":"/tmp/test-file"`)
 			},
 			assertError: func(t *testing.T, err error) {
+				t.Helper()
 				require.NoError(t, err)
 			},
 			request: func(base string) *http.Request {
@@ -108,7 +112,7 @@ func TestResourceInputProcessorHandlerFunc(t *testing.T) {
 				}`))
 
 				return &http.Request{
-					Method: "POST",
+					Method: http.MethodPost,
 					URL:    parse,
 					Header: header,
 					Body:   io.NopCloser(body),
@@ -151,9 +155,11 @@ func TestSourceInputProcessorHandlerFunc(t *testing.T) {
 				return handler
 			},
 			assertOutput: func(t *testing.T, resp *http.Response) {
+				t.Helper()
 				require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 			},
 			assertError: func(t *testing.T, err error) {
+				t.Helper()
 				require.NoError(t, err)
 			},
 			request: func(base string) *http.Request {
@@ -161,7 +167,7 @@ func TestSourceInputProcessorHandlerFunc(t *testing.T) {
 				header.Add("Authorization", "not-json")
 				parse, _ := url.Parse(base)
 				return &http.Request{
-					Method: "POST",
+					Method: http.MethodPost,
 					URL:    parse,
 					Header: header,
 				}
@@ -191,6 +197,7 @@ func TestSourceInputProcessorHandlerFunc(t *testing.T) {
 				return handler
 			},
 			assertOutput: func(t *testing.T, resp *http.Response) {
+				t.Helper()
 				defer resp.Body.Close()
 				require.Equal(t, http.StatusOK, resp.StatusCode)
 				content, err := io.ReadAll(resp.Body)
@@ -202,6 +209,7 @@ func TestSourceInputProcessorHandlerFunc(t *testing.T) {
 				require.Contains(t, string(content), `"value":"/tmp/test-file"`)
 			},
 			assertError: func(t *testing.T, err error) {
+				t.Helper()
 				require.NoError(t, err)
 			},
 			request: func(base string) *http.Request {
@@ -218,7 +226,7 @@ func TestSourceInputProcessorHandlerFunc(t *testing.T) {
 				}`))
 
 				return &http.Request{
-					Method: "POST",
+					Method: http.MethodPost,
 					URL:    parse,
 					Header: header,
 					Body:   io.NopCloser(body),

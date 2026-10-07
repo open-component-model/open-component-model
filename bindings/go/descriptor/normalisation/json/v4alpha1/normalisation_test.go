@@ -2,10 +2,11 @@ package v4alpha1_test
 
 import (
 	"embed"
-	_ "embed"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	_ "embed"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -63,7 +64,6 @@ func TestConformance(t *testing.T) {
 			})
 		}
 	})
-
 }
 
 // TestNormalization verifies that the normalization (using ExclusionRules)
@@ -442,7 +442,7 @@ func TestNormalise(t *testing.T) {
 				assert.Error(t, err)
 				return
 			}
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.JSONEq(t, tt.expected, string(got))
 		})
 	}

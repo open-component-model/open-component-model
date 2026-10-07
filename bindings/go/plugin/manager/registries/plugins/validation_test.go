@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -81,7 +82,7 @@ func TestValidatePlugin_ValidSchemaAndType(t *testing.T) {
 	}
 
 	valid, err := ValidatePlugin(pluginType, schema)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.True(t, valid)
 }
 
@@ -102,7 +103,7 @@ func TestValidatePlugin_InvalidTypeAgainstSchemaMissingRequiredField(t *testing.
 	}
 
 	valid, err := ValidatePlugin(pluginType, schema)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.False(t, valid)
 	assert.Contains(t, err.Error(), "extra")
 }
@@ -125,7 +126,7 @@ func TestValidatePlugin_InvalidTypeAgainstSchemaWrongType(t *testing.T) {
 	}
 
 	valid, err := ValidatePlugin(pluginType, schema)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.False(t, valid)
 	assert.Contains(t, err.Error(), "boolean")
 }
@@ -150,7 +151,7 @@ func TestValidatePlugin_ValidTypeWithOptionalField(t *testing.T) {
 	}
 
 	valid, err := ValidatePlugin(pluginType, schema)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.True(t, valid)
 }
 
@@ -168,7 +169,7 @@ func TestValidatePlugin_InvalidSchemaMalformedJSON(t *testing.T) {
 	}
 
 	valid, err := ValidatePlugin(pluginType, schema)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.False(t, valid)
 	assert.Contains(t, err.Error(), "invalid character '}' looking for beginning of object key string")
 }
@@ -187,7 +188,7 @@ func TestValidatePlugin_SchemaCompilationError(t *testing.T) {
 	}
 
 	valid, err := ValidatePlugin(pluginType, schema)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.False(t, valid)
 	assert.Contains(t, err.Error(), "invalid character '/' after object key:value pair")
 }
@@ -227,7 +228,7 @@ func TestValidatePlugin_ComplexSchemaAndType(t *testing.T) {
 	}
 
 	valid, err := ValidatePlugin(pluginType, schema)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.True(t, valid)
 
 	invalidPluginType := TestPluginType{
@@ -241,7 +242,7 @@ func TestValidatePlugin_ComplexSchemaAndType(t *testing.T) {
 	}
 
 	validInvalid, errInvalid := ValidatePlugin(invalidPluginType, schema)
-	assert.Error(t, errInvalid)
+	require.Error(t, errInvalid)
 	assert.False(t, validInvalid)
 	assert.Contains(t, errInvalid.Error(), "version")
 	assert.Contains(t, errInvalid.Error(), "port")

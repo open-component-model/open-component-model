@@ -35,7 +35,7 @@ func TestPing(t *testing.T) {
 
 	// Test successful ping
 	err := plugin.Ping(context.Background())
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Test failed ping (by shutting down the server)
 	server.Close()
@@ -49,7 +49,7 @@ func TestListComponentsHandler(t *testing.T) {
 		if r.URL.Path == ListComponents && r.Method == http.MethodPost {
 			serverResponse := v1.ListComponentsResponse{List: []string{"test-component-1", "test-component-2"}}
 			err := json.NewEncoder(w).Encode(serverResponse)
-			require.NoError(t, err)
+			assert.NoError(t, err)
 			return
 		}
 

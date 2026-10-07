@@ -178,7 +178,7 @@ configurations:
 {{< /details >}}
 
 {{< callout context="note" >}}
-For passphrase-protected private keys, add a top-level `passphrase: <secret>` field next to `privateKeyPGPFile`. OCM decrypts the key in memory only; the passphrase is never written back to disk.
+For passphrase-protected private keys, add a top-level `passphrase: <secret>` field next to `privateKeyPGPFile`. OCM passes the passphrase to `gpg` on standard input, never as a command-line argument and never written to disk. GnuPG unlocks the key in a temporary GnuPG home directory, which OCM removes after each operation.
 {{< /callout >}}
 
 If your keyring contains multiple keys, pin the one to use by adding `keyFingerprint` to the GPG signer (set in the [sign how-to]({{< relref "sign-component-version.md" >}})), next to the handler type rather than in the credentials.

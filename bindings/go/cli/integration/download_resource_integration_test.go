@@ -341,7 +341,6 @@ configurations:
 					compressedData, err := io.ReadAll(compressedDataRC)
 					r.NoError(err)
 					r.Equal(compressedData, data, "data should match the original compressed data")
-
 				}
 			})
 		}
@@ -612,6 +611,7 @@ func Test_Integration_ConstructorCompress(t *testing.T) {
 			compress:         true,
 			extractionPolicy: "disable",
 			assertOutput: func(t *testing.T, data []byte) {
+				t.Helper()
 				r := require.New(t)
 				r.NotEqual(originalContent, string(data),
 					"with disable extraction, output should be compressed (not match original)")
@@ -633,6 +633,7 @@ func Test_Integration_ConstructorCompress(t *testing.T) {
 			compress:         false,
 			extractionPolicy: "disable",
 			assertOutput: func(t *testing.T, data []byte) {
+				t.Helper()
 				require.Equal(t, originalContent, string(data),
 					"uncompressed resource should match original content")
 			},
@@ -641,6 +642,7 @@ func Test_Integration_ConstructorCompress(t *testing.T) {
 			name:     "compressed resource with auto extraction is decompressed",
 			compress: true,
 			assertOutput: func(t *testing.T, data []byte) {
+				t.Helper()
 				require.Equal(t, originalContent, string(data),
 					"auto extraction should decompress and match original content")
 			},
@@ -718,6 +720,7 @@ type resource struct {
 func uploadComponentVersion(t *testing.T, repo repository.ComponentVersionRepository, name, version string,
 	resources ...resource,
 ) {
+	t.Helper()
 	ctx := t.Context()
 	r := require.New(t)
 

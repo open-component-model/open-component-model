@@ -133,7 +133,7 @@ describe("edge cases", () => {
     it("simple properties", () => {
         const model = jsonSchemaToModel({
             type: "object",
-            properties: { foo: { type: "string", description: "a foo" } },
+            properties: { foo: { type: "string", description: "a foo" } }
         });
         assert.equal(model.sections[0].fields[0].name, "foo");
         assert.equal(model.sections[0].fields[0].type, "string");
@@ -143,8 +143,8 @@ describe("edge cases", () => {
         const model = jsonSchemaToModel({
             type: "object",
             properties: {
-                name: { type: "string", "x-kubernetes-validations": [{ rule: "self == oldSelf" }] },
-            },
+                name: { type: "string", "x-kubernetes-validations": [{ rule: "self == oldSelf" }] }
+            }
         });
         assert.equal(model.sections[0].fields[0].immutable, true);
     });
@@ -152,7 +152,7 @@ describe("edge cases", () => {
     it("required flag", () => {
         const model = jsonSchemaToModel({
             type: "object", required: ["a"],
-            properties: { a: { type: "string" }, b: { type: "string" } },
+            properties: { a: { type: "string" }, b: { type: "string" } }
         });
         assert.equal(model.sections[0].fields.find((f) => f.name === "a")!.required, true);
         assert.equal(model.sections[0].fields.find((f) => f.name === "b")!.required, false);
@@ -162,7 +162,7 @@ describe("edge cases", () => {
         const model = jsonSchemaToModel({
             type: "object",
             $defs: { loop: { $ref: "#/$defs/loop" } },
-            properties: { x: { $ref: "#/$defs/loop" } },
+            properties: { x: { $ref: "#/$defs/loop" } }
         });
         assert.equal(model.sections[0].fields.find((f) => f.name === "x")!.type, "object");
     });
@@ -174,10 +174,10 @@ describe("edge cases", () => {
                 access: {
                     oneOf: [
                         { type: "object", required: ["localPath"], properties: { localPath: { type: "string" } } },
-                        { type: "object", required: ["imageRef"], properties: { imageRef: { type: "string" } } },
-                    ],
-                },
-            },
+                        { type: "object", required: ["imageRef"], properties: { imageRef: { type: "string" } } }
+                    ]
+                }
+            }
         });
         const access = model.sections[0].fields.find((f) => f.name === "access")!;
         assert.equal(access.properties, null);
@@ -196,10 +196,10 @@ describe("edge cases", () => {
                     required: ["name"],
                     oneOf: [
                         { type: "object", required: ["access"], properties: { access: { type: "object" } } },
-                        { type: "object", required: ["input"], properties: { input: { type: "object" } } },
-                    ],
-                },
-            },
+                        { type: "object", required: ["input"], properties: { input: { type: "object" } } }
+                    ]
+                }
+            }
         });
         const source = model.sections[0].fields.find((f) => f.name === "source")!;
         assert.equal(source.variants!.length, 2);
@@ -217,8 +217,8 @@ describe("edge cases", () => {
         const model = jsonSchemaToModel({
             type: "object",
             properties: {
-                label: { oneOf: [{ type: "null" }, { type: "string", description: "a label" }] },
-            },
+                label: { oneOf: [{ type: "null" }, { type: "string", description: "a label" }] }
+            }
         });
         const label = model.sections[0].fields.find((f) => f.name === "label")!;
         assert.equal(label.type, "string");
@@ -235,17 +235,17 @@ describe("edge cases", () => {
                     oneOf: [
                         { const: "RSA/v1" },
                         { deprecated: true, const: "RSA/v1alpha1" },
-                        { deprecated: true, const: "RSA" },
-                    ],
-                },
+                        { deprecated: true, const: "RSA" }
+                    ]
+                }
             },
             required: ["type"],
             $defs: {
                 runtimeType: {
                     type: "string",
-                    description: "Type represents a structured type.",
-                },
-            },
+                    description: "Type represents a structured type."
+                }
+            }
         });
 
         const type = model.sections[0].fields.find((f) => f.name === "type")!;
@@ -263,10 +263,10 @@ describe("edge cases", () => {
                 mode: {
                     oneOf: [
                         { const: "active" },
-                        { deprecated: true, const: "legacy" },
-                    ],
-                },
-            },
+                        { deprecated: true, const: "legacy" }
+                    ]
+                }
+            }
         });
 
         const mode = model.sections[0].fields.find((f) => f.name === "mode")!;
@@ -284,11 +284,11 @@ describe("edge cases", () => {
                         { const: "DirectCredentials/v1" },
                         { const: "Credentials/v1" },
                         { deprecated: true, const: "Credentials" },
-                        { deprecated: true, const: "DirectCredentials" },
-                    ],
-                },
+                        { deprecated: true, const: "DirectCredentials" }
+                    ]
+                }
             },
-            required: ["type"],
+            required: ["type"]
         });
 
         const type = model.sections[0].fields.find((f) => f.name === "type")!;
@@ -304,16 +304,63 @@ describe("edge cases", () => {
                 type: {
                     oneOf: [
                         { deprecated: true, const: "RSA/v1alpha1" },
-                        { deprecated: true, const: "RSA" },
-                    ],
-                },
+                        { deprecated: true, const: "RSA" }
+                    ]
+                }
             },
-            required: ["type"],
+            required: ["type"]
         });
 
         const type = model.sections[0].fields.find((f) => f.name === "type")!;
         assert.deepEqual(type.constValues, []);
         assert.deepEqual(type.deprecatedConstValues, ["RSA/v1alpha1", "RSA"]);
         assert.equal(type.variants, null);
+    });
+
+    it("map and array types spell out their value types", () => {
+        const model = jsonSchemaToModel({
+            type: "object",
+            properties: {
+                header: { type: "object", additionalProperties: { type: "array", items: { type: "string" } } },
+                labels: { type: "object", additionalProperties: { $ref: "#/$defs/Label" } },
+                matrix: { type: "array", items: { type: "array", items: { type: "integer" } } },
+                open: { type: "object", additionalProperties: true },
+                nested: { type: "object", properties: { a: { type: "string" } }, additionalProperties: { type: "string" } }
+            },
+            $defs: { Label: { type: "string" } }
+        });
+
+        const typeOf = (name: string) => model.sections[0].fields.find((f) => f.name === name)!.type;
+        assert.equal(typeOf("header"), "map[string][]string");
+        assert.equal(typeOf("labels"), "map[string]string");
+        assert.equal(typeOf("matrix"), "[][]integer");
+        assert.equal(typeOf("open"), "object");
+        assert.equal(typeOf("nested"), "object");
+    });
+
+    it("self-referencing map types terminate", () => {
+        const model = jsonSchemaToModel({
+            type: "object",
+            properties: { tree: { $ref: "#/$defs/Tree" } },
+            $defs: { Tree: { type: "object", additionalProperties: { $ref: "#/$defs/Tree" } } }
+        });
+
+        assert.equal(model.sections[0].fields[0].type, "map[string]map[string]any");
+    });
+
+    it("untyped fields render as any, or string when only string constraints are set", () => {
+        const model = jsonSchemaToModel({
+            type: "object",
+            properties: {
+                value: { description: "arbitrary JSON" },
+                version: { pattern: "^v[0-9]+$" },
+                nested: { properties: { a: { type: "string" } } }
+            }
+        });
+
+        const typeOf = (name: string) => model.sections[0].fields.find((f) => f.name === name)!.type;
+        assert.equal(typeOf("value"), "any");
+        assert.equal(typeOf("version"), "string");
+        assert.equal(typeOf("nested"), "object");
     });
 });

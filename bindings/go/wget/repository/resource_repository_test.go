@@ -2,8 +2,6 @@ package repository_test
 
 import (
 	"crypto"
-	_ "crypto/sha1"
-	_ "crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"io"
@@ -12,6 +10,9 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	_ "crypto/sha1"
+	_ "crypto/sha256"
 
 	godigest "github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/assert"
@@ -258,6 +259,7 @@ func TestUploadResource(t *testing.T) {
 }
 
 func TestGetResourceCredentialConsumerIdentity(t *testing.T) {
+	r := require.New(t)
 	t.Parallel()
 
 	repo := repository.NewResourceRepository(nil)
@@ -266,14 +268,15 @@ func TestGetResourceCredentialConsumerIdentity(t *testing.T) {
 	resource.Name = "test"
 	resource.Version = "1.0.0"
 	resource.Type = "blob"
-	raw, _ := json.Marshal(map[string]any{"url": "https://example.com:443/path/file.tar.gz"})
+	raw, err := json.Marshal(map[string]any{"url": "https://example.com:443/path/file.tar.gz"})
+	r.NoError(err)
 	resource.Access = &runtime.Raw{
 		Type: runtime.NewVersionedType("wget", v1.Version),
 		Data: raw,
 	}
 
 	identity, err := repo.GetResourceCredentialConsumerIdentity(t.Context(), resource)
-	require.NoError(t, err)
+	r.NoError(err)
 	assert.Equal(t, "Wget", identity["type"])
 	assert.Equal(t, "https", identity["scheme"])
 	assert.Equal(t, "example.com", identity["hostname"])

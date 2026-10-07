@@ -1,7 +1,7 @@
 /** Converts a JSON Schema document into a SchemaModel with polymorphism handling. */
 
-import type {SchemaNode} from "./json-schema-converter.types.ts";
-import type {SchemaField, FieldVariant, SchemaSection, SchemaMeta, SchemaModel} from "./schema-model.types.ts";
+import type { SchemaNode } from "./json-schema-converter.types.ts";
+import type { SchemaField, FieldVariant, SchemaSection, SchemaMeta, SchemaModel } from "./schema-model.types.ts";
 
 /**
  * Follow a `$ref` pointer. Does NOT collapse oneOf/anyOf.
@@ -13,7 +13,7 @@ function resolveRef(node: SchemaNode, root: SchemaNode, seen = new Set<string>()
 
     if (node.$ref) {
         if (seen.has(node.$ref)) {
-            return {type: "object", description: "(circular)"};
+            return { type: "object", description: "(circular)" };
         }
         seen.add(node.$ref);
 
@@ -26,8 +26,8 @@ function resolveRef(node: SchemaNode, root: SchemaNode, seen = new Set<string>()
             }
         }
 
-        const {$ref: _, ...siblings} = node;
-        return resolveRef({...target, ...siblings} as SchemaNode, root, seen);
+        const { $ref: _, ...siblings } = node;
+        return resolveRef({ ...target, ...siblings } as SchemaNode, root, seen);
     }
 
     return node;
@@ -38,13 +38,13 @@ function resolveRef(node: SchemaNode, root: SchemaNode, seen = new Set<string>()
  */
 function classifyUnion(branches: SchemaNode[]): { kind: "nullable"; resolved: SchemaNode } | {
     kind: "polymorphic";
-    branches: SchemaNode[]
+    branches: SchemaNode[];
 } {
     const nonNull = branches.filter((b) => b && b.type !== "null");
     if (nonNull.length === 1) {
-        return {kind: "nullable", resolved: nonNull[0]};
+        return { kind: "nullable", resolved: nonNull[0] };
     }
-    return {kind: "polymorphic", branches: nonNull.length ? nonNull : branches};
+    return { kind: "polymorphic", branches: nonNull.length ? nonNull : branches };
 }
 
 /**
@@ -58,10 +58,10 @@ function resolve(node: SchemaNode, root: SchemaNode, seen = new Set<string>()): 
             const resolved = (derefed[kw] as SchemaNode[]).map((o) => resolveRef(o, root, new Set(seen)));
             const union = classifyUnion(resolved);
             if (union.kind === "nullable") {
-                const {[kw]: _, ...rest} = derefed;
-                return resolve({...rest, ...union.resolved} as SchemaNode, root, seen);
+                const { [kw]: _, ...rest } = derefed;
+                return resolve({ ...rest, ...union.resolved } as SchemaNode, root, seen);
             }
-            return {...derefed, [kw]: union.branches};
+            return { ...derefed, [kw]: union.branches };
         }
     }
 
@@ -73,6 +73,37 @@ function normalizeType(type: string | string[] | undefined): string {
         return type.find((t) => t !== "null") || type[0] || "object";
     }
     return type || "object";
+}
+
+/**
+ * Display type of a node, spelling out array items and map values
+ * (`additionalProperties` schemas) in Go notation, e.g. `map[string][]string`.
+ */
+function typeLabel(node: SchemaNode, root: SchemaNode, seen: Set<string>): string {
+    if (!node || typeof node !== "object") {
+        return "any";
+    }
+    // Carries followed refs into the recursion so a self-referencing map or array terminates.
+    const inner = (child: SchemaNode): string => {
+        if (child.$ref && seen.has(child.$ref)) {
+            return "any";
+        }
+        const next = child.$ref ? new Set(seen).add(child.$ref) : seen;
+        return typeLabel(resolve(child, root, new Set(seen)), root, next);
+    };
+    if (node.type === "array" && node.items) {
+        return `[]${inner(node.items)}`;
+    }
+    const values = node.additionalProperties;
+    if (!node.properties && values && typeof values === "object") {
+        return `map[string]${inner(values as SchemaNode)}`;
+    }
+    if (node.type === undefined && !node.properties && !node.items && values === undefined &&
+        !node.oneOf && !node.anyOf && !node.enum && node.const === undefined) {
+        const stringOnly = ["pattern", "format", "minLength", "maxLength"].some((kw) => kw in node);
+        return stringOnly ? "string" : "any";
+    }
+    return normalizeType(node.type);
 }
 
 function isConstAliasBranch(node: SchemaNode): boolean {
@@ -94,7 +125,7 @@ function constAliasUnion(node: SchemaNode): { kw: "oneOf" | "anyOf"; branches: S
     for (const kw of ["oneOf", "anyOf"] as const) {
         const branches = node[kw];
         if (Array.isArray(branches) && branches.length && branches.every(isConstAliasBranch)) {
-            return {kw, branches};
+            return { kw, branches };
         }
     }
     return null;
@@ -105,13 +136,13 @@ function constAliasesFrom(node: SchemaNode): { constValues: string[]; deprecated
     if (!union) {
         return {
             constValues: typeof node.const === "string" ? [node.const] : [],
-            deprecatedConstValues: [],
+            deprecatedConstValues: []
         };
     }
 
     return {
         constValues: constStrings(union.branches.filter((branch) => !branch.deprecated)),
-        deprecatedConstValues: constStrings(union.branches.filter((branch) => branch.deprecated)),
+        deprecatedConstValues: constStrings(union.branches.filter((branch) => branch.deprecated))
     };
 }
 
@@ -121,7 +152,7 @@ function withoutConstAliasUnion(node: SchemaNode): SchemaNode {
         return node;
     }
 
-    const {[union.kw]: _, ...rest} = node;
+    const { [union.kw]: _, ...rest } = node;
     return rest;
 }
 
@@ -134,8 +165,8 @@ function mergeParentInto(branch: SchemaNode, parent: SchemaNode, _kw: "oneOf" | 
     }
     return {
         ...branch,
-        properties: {...parent.properties, ...branch.properties},
-        required: [...(parent.required || []), ...(branch.required || [])],
+        properties: { ...parent.properties, ...branch.properties },
+        required: [...(parent.required || []), ...(branch.required || [])]
     };
 }
 
@@ -168,10 +199,10 @@ function fieldsFrom(node: SchemaNode, root: SchemaNode, seen: Set<string>): Sche
 function convertField(name: string, raw: SchemaNode, requiredList: string[], root: SchemaNode, seen = new Set<string>()): SchemaField {
     const prop = resolve(raw, root, new Set(seen));
     const isTypeField = name === "type";
-    const constAliases = isTypeField ? constAliasesFrom(prop) : {constValues: [], deprecatedConstValues: []};
+    const constAliases = isTypeField ? constAliasesFrom(prop) : { constValues: [], deprecatedConstValues: [] };
     const displayProp = isTypeField ? withoutConstAliasUnion(prop) : prop;
     const immutable = prop["x-kubernetes-validations"]?.some((v: {
-        rule?: string
+        rule?: string;
     }) => v.rule?.includes("== oldSelf")) || false;
     const required = requiredList.includes(name);
 
@@ -186,13 +217,13 @@ function convertField(name: string, raw: SchemaNode, requiredList: string[], roo
                 const fields = resolved.properties ? fieldsFrom(resolved, root, new Set(seen)) : null;
                 return {
                     title, type: normalizeType(resolved.type), description: resolved.description || "",
-                    properties: hasSharedProps ? fields?.filter((f) => f.name !== title) || null : fields,
+                    properties: hasSharedProps ? fields?.filter((f) => f.name !== title) || null : fields
                 };
             });
             return {
                 name, type: normalizeType(displayProp.type), description: displayProp.description || "",
                 ...constAliases,
-                required, immutable, properties: null, variants,
+                required, immutable, properties: null, variants
             };
         }
     }
@@ -211,31 +242,31 @@ function convertField(name: string, raw: SchemaNode, requiredList: string[], roo
                     const fields = resolved.properties ? fieldsFrom(resolved, root, new Set(seen)) : null;
                     return {
                         title, type: `[]${normalizeType(resolved.type)}`, description: resolved.description || "",
-                        properties: hasSharedItemProps ? fields?.filter((f) => f.name !== title) || null : fields,
+                        properties: hasSharedItemProps ? fields?.filter((f) => f.name !== title) || null : fields
                     };
                 });
                 return {
                     name, type: `[]${normalizeType(items.type)}`, description: displayProp.description || "",
                     ...constAliases,
-                    required, immutable, properties: null, variants,
+                    required, immutable, properties: null, variants
                 };
             }
         }
 
         return {
-            name, type: `[]${normalizeType(items.type)}`, description: displayProp.description || "",
+            name, type: typeLabel(displayProp, root, seen), description: displayProp.description || "",
             ...constAliases,
             required, immutable, variants: null,
-            properties: items.properties ? fieldsFrom(items, root, new Set(seen)) : null,
+            properties: items.properties ? fieldsFrom(items, root, new Set(seen)) : null
         };
     }
 
-    // Plain object or scalar
+    // Plain object, map or scalar
     return {
-        name, type: normalizeType(displayProp.type), description: displayProp.description || "",
+        name, type: typeLabel(displayProp, root, seen), description: displayProp.description || "",
         ...constAliases,
         required, immutable, variants: null,
-        properties: displayProp.properties ? fieldsFrom(displayProp, root, new Set(seen)) : null,
+        properties: displayProp.properties ? fieldsFrom(displayProp, root, new Set(seen)) : null
     };
 }
 
@@ -250,8 +281,8 @@ function extractMeta(schemaRoot: SchemaNode): SchemaMeta {
 
     return {
         description: schemaRoot.description || "",
-        apiVersions: av.enum || (av["const"] ? [av["const"]] : []),
-        kind: kind["const"] || (kind.enum ? kind.enum.join(", ") : ""),
+        apiVersions: av.enum || (av.const ? [av.const] : []),
+        kind: kind.const || (kind.enum ? kind.enum.join(", ") : "")
     };
 }
 
@@ -271,7 +302,7 @@ export function jsonSchemaToModel(data: SchemaNode): SchemaModel {
     if (root?.properties) {
         return {
             meta: extractMeta(root),
-            sections: [{title: "Fields", description: "", fields: fieldsFrom(root, root, new Set())}],
+            sections: [{ title: "Fields", description: "", fields: fieldsFrom(root, root, new Set()) }]
         };
     }
 
@@ -282,12 +313,12 @@ export function jsonSchemaToModel(data: SchemaNode): SchemaModel {
                 return {
                     title: option.title || resolved.title || `Variant ${i + 1}`,
                     description: option.description || "",
-                    fields: fieldsFrom(resolved, root, new Set()),
+                    fields: fieldsFrom(resolved, root, new Set())
                 };
             });
-            return {meta: extractMeta(root), sections};
+            return { meta: extractMeta(root), sections };
         }
     }
 
-    return {meta: extractMeta(root), sections: []};
+    return { meta: extractMeta(root), sections: [] };
 }

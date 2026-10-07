@@ -11,9 +11,9 @@ import (
 	"github.com/invopop/jsonschema"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
 
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
 	repov1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/ocmrepository/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -40,7 +40,7 @@ func TestPing(t *testing.T) {
 
 	// Test successful ping
 	err := plugin.Ping(context.Background())
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Test failed ping (by shutting down the server)
 	server.Close()
@@ -115,7 +115,7 @@ func TestGetComponentVersion(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == DownloadComponentVersion && r.Method == http.MethodGet {
 			err := json.NewEncoder(w).Encode(response)
-			require.NoError(t, err)
+			assert.NoError(t, err)
 			return
 		}
 
@@ -146,7 +146,7 @@ func TestListComponentVersions(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == ListComponentVersions && r.Method == http.MethodGet {
 			err := json.NewEncoder(w).Encode([]string{"v0.0.1", "v0.0.2"})
-			require.NoError(t, err)
+			assert.NoError(t, err)
 			return
 		}
 
@@ -178,7 +178,7 @@ func TestAddLocalResource(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == UploadLocalResource && r.Method == http.MethodPost {
 			err := json.NewEncoder(w).Encode(resource)
-			require.NoError(t, err)
+			assert.NoError(t, err)
 			return
 		}
 
@@ -206,7 +206,7 @@ func TestAddLocalResource(t *testing.T) {
 }
 
 func TestGetLocalResource(t *testing.T) {
-	f, err := os.CreateTemp("", "temp_file")
+	f, err := os.CreateTemp(t.TempDir(), "temp_file")
 	require.NoError(t, err)
 	response := &repov1.GetLocalResourceResponse{
 		Location: types.Location{
@@ -238,8 +238,8 @@ func TestGetLocalResource(t *testing.T) {
 	}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == DownloadLocalResource && r.Method == http.MethodGet {
-			require.NoError(t, os.WriteFile(f.Name(), []byte(`test`), os.ModePerm))
-			require.NoError(t, json.NewEncoder(w).Encode(response))
+			assert.NoError(t, os.WriteFile(f.Name(), []byte(`test`), os.ModePerm))
+			assert.NoError(t, json.NewEncoder(w).Encode(response))
 
 			return
 		}
@@ -277,7 +277,7 @@ func TestGetLocalResource(t *testing.T) {
 }
 
 func TestGetLocalSource(t *testing.T) {
-	f, err := os.CreateTemp("", "temp_file")
+	f, err := os.CreateTemp(t.TempDir(), "temp_file")
 	require.NoError(t, err)
 	response := &repov1.GetLocalSourceResponse{
 		Location: types.Location{
@@ -303,8 +303,8 @@ func TestGetLocalSource(t *testing.T) {
 	}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == DownloadLocalSource && r.Method == http.MethodGet {
-			require.NoError(t, os.WriteFile(f.Name(), []byte(`test`), os.ModePerm))
-			require.NoError(t, json.NewEncoder(w).Encode(response))
+			assert.NoError(t, os.WriteFile(f.Name(), []byte(`test`), os.ModePerm))
+			assert.NoError(t, json.NewEncoder(w).Encode(response))
 
 			return
 		}

@@ -7,6 +7,8 @@ import (
 	"io"
 	"testing"
 
+	. "ocm.software/open-component-model/bindings/go/oci/internal/pack"
+
 	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"oras.land/oras-go/v2/content"
@@ -14,7 +16,6 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	resourceblob "ocm.software/open-component-model/bindings/go/oci/blob"
-	. "ocm.software/open-component-model/bindings/go/oci/internal/pack"
 	oci "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )

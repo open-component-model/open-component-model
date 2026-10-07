@@ -77,7 +77,7 @@ func readAllAndClose(t *testing.T, rc io.ReadCloser) []byte {
 	t.Helper()
 	defer rc.Close()
 	got, err := io.ReadAll(rc)
-	require.NoError(t, err)
+	assert.NoError(t, err)
 	return got
 }
 
@@ -152,7 +152,6 @@ func TestCache_Fetch_ConcurrentReadersGetEqualBytes(t *testing.T) {
 	results := make([][]byte, N)
 	var wg sync.WaitGroup
 	for i := range N {
-		i := i
 		wg.Go(func() {
 			rc, err := c.Fetch(t.Context(), base, desc)
 			require.NoError(t, err)

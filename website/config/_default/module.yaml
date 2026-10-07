@@ -74,6 +74,7 @@ mounts:
       matrix:
         versions:
           - main
+          - '0.19'
           - '0.17'
           - '0.16'
           - '0.15'
@@ -90,6 +91,7 @@ mounts:
       matrix:
         versions:
           - main
+          - '0.19'
           - '0.17'
           - '0.16'
           - '0.15'
@@ -106,6 +108,7 @@ mounts:
       matrix:
         versions:
           - main
+          - '0.19'
           - '0.17'
           - '0.16'
           - '0.15'
@@ -240,6 +243,96 @@ mounts:
           - main
   - source: ../bindings/go/s3/spec/credentials/v1/schemas
     target: static/main/schemas/bindings/go/credentials/s3/v1
+    sites:
+      matrix:
+        versions:
+          - main
+  - source: ../bindings/go/input/dir/spec/v1/schemas
+    target: static/main/schemas/bindings/go/input/dir/v1
+    sites:
+      matrix:
+        versions:
+          - main
+  - source: ../bindings/go/input/file/spec/v1/schemas
+    target: static/main/schemas/bindings/go/input/file/v1
+    sites:
+      matrix:
+        versions:
+          - main
+  - source: ../bindings/go/input/utf8/spec/v1/schemas
+    target: static/main/schemas/bindings/go/input/utf8/v1
+    sites:
+      matrix:
+        versions:
+          - main
+  - source: ../bindings/go/helm/spec/input/v1/schemas
+    target: static/main/schemas/bindings/go/input/helm/v1
+    sites:
+      matrix:
+        versions:
+          - main
+  - source: ../bindings/go/wget/spec/input/v1/schemas
+    target: static/main/schemas/bindings/go/input/wget/v1
+    sites:
+      matrix:
+        versions:
+          - main
+  - source: ../bindings/go/s3/spec/input/v2/schemas
+    target: static/main/schemas/bindings/go/input/s3/v2
+    sites:
+      matrix:
+        versions:
+          - main
+  - source: ../bindings/go/git/spec/input/v1/schemas
+    target: static/main/schemas/bindings/go/input/git/v1
+    sites:
+      matrix:
+        versions:
+          - main
+  - source: ../bindings/go/oci/spec/access/v1/schemas
+    target: static/main/schemas/bindings/go/access/oci/v1
+    sites:
+      matrix:
+        versions:
+          - main
+  - source: ../bindings/go/descriptor/v2/schemas
+    target: static/main/schemas/bindings/go/access/localblob/v1
+    sites:
+      matrix:
+        versions:
+          - main
+  - source: ../bindings/go/helm/spec/access/v1/schemas
+    target: static/main/schemas/bindings/go/access/helm/v1
+    sites:
+      matrix:
+        versions:
+          - main
+  - source: ../bindings/go/github/spec/access/v1/schemas
+    target: static/main/schemas/bindings/go/access/github/v1
+    sites:
+      matrix:
+        versions:
+          - main
+  - source: ../bindings/go/git/spec/access/v1/schemas
+    target: static/main/schemas/bindings/go/access/git/v1
+    sites:
+      matrix:
+        versions:
+          - main
+  - source: ../bindings/go/blob/filesystem/spec/access/v1alpha1/schemas
+    target: static/main/schemas/bindings/go/access/file/v1alpha1
+    sites:
+      matrix:
+        versions:
+          - main
+  - source: ../bindings/go/wget/spec/access/v1/schemas
+    target: static/main/schemas/bindings/go/access/wget/v1
+    sites:
+      matrix:
+        versions:
+          - main
+  - source: ../bindings/go/s3/spec/access/v2/schemas
+    target: static/main/schemas/bindings/go/access/s3/v2
     sites:
       matrix:
         versions:
@@ -1319,3 +1412,219 @@ imports:
           matrix:
             versions:
               - '0.17'
+  - path: ocm.software/open-component-model/website
+    version: v0.19.0
+    ignoreImports: true
+    ignoreConfig: true
+    mounts:
+      - files:
+          - '! blog/**'
+          - '! community/**'
+          - '! governance/**'
+        source: content/
+        target: content
+        sites:
+          matrix:
+            versions:
+              - '0.19'
+  - path: ocm.software/open-component-model/bindings/go
+    version: v0.19.0
+    mounts:
+      - source: constructor/spec/v1/resources
+        target: static/0.19/schemas/bindings/go/constructor
+        sites:
+          matrix:
+            versions:
+              - '0.19'
+      - source: descriptor/v2/resources
+        target: static/0.19/schemas/bindings/go/descriptor/v2
+        sites:
+          matrix:
+            versions:
+              - '0.19'
+      - source: github/spec/credentials/v1/schemas
+        target: static/0.19/schemas/bindings/go/credentials/github/v1
+        sites:
+          matrix:
+            versions:
+              - '0.19'
+      - source: http/spec/config/v1alpha1/schemas
+        target: static/0.19/schemas/bindings/go/http
+        sites:
+          matrix:
+            versions:
+              - '0.19'
+      - source: oci/spec/credentials/v1/schemas
+        target: static/0.19/schemas/bindings/go/credentials/oci/v1
+        sites:
+          matrix:
+            versions:
+              - '0.19'
+      - source: helm/spec/credentials/v1/schemas
+        target: static/0.19/schemas/bindings/go/credentials/helm/v1
+        sites:
+          matrix:
+            versions:
+              - '0.19'
+      - source: rsa/spec/credentials/v1/schemas
+        target: static/0.19/schemas/bindings/go/credentials/rsa/v1
+        sites:
+          matrix:
+            versions:
+              - '0.19'
+      - source: gpg/spec/credentials/v1alpha1/schemas
+        target: static/0.19/schemas/bindings/go/credentials/gpg/v1alpha1
+        sites:
+          matrix:
+            versions:
+              - '0.19'
+      - source: sigstore/spec/credentials/oidcidentitytoken/v1alpha1/schemas
+        target: static/0.19/schemas/bindings/go/credentials/sigstore/oidcidentitytoken/v1alpha1
+        sites:
+          matrix:
+            versions:
+              - '0.19'
+      - source: sigstore/spec/credentials/trustedroot/v1alpha1/schemas
+        target: static/0.19/schemas/bindings/go/credentials/sigstore/trustedroot/v1alpha1
+        sites:
+          matrix:
+            versions:
+              - '0.19'
+      - source: credentials/spec/config/v1/schemas
+        target: static/0.19/schemas/bindings/go/credentials/direct/v1
+        sites:
+          matrix:
+            versions:
+              - '0.19'
+      - source: wget/spec/credentials/v1/schemas
+        target: static/0.19/schemas/bindings/go/credentials/wget/v1
+        sites:
+          matrix:
+            versions:
+              - '0.19'
+      - source: transfer/v1alpha1/spec/schemas
+        target: static/0.19/schemas/bindings/go/transfer
+        sites:
+          matrix:
+            versions:
+              - '0.19'
+      - source: wget/transformation/spec/v1alpha1/schemas
+        target: static/0.19/schemas/bindings/go/wget/transformation
+        sites:
+          matrix:
+            versions:
+              - '0.19'
+      - source: configuration/checksum/http/v1alpha1/spec/schemas
+        target: static/0.19/schemas/bindings/go/configuration/checksum/http/v1alpha1
+        sites:
+          matrix:
+            versions:
+              - '0.19'
+      - source: git/spec/credentials/v1/schemas
+        target: static/0.19/schemas/bindings/go/credentials/git/v1
+        sites:
+          matrix:
+            versions:
+              - '0.19'
+      - source: input/dir/spec/v1/schemas
+        target: static/0.19/schemas/bindings/go/input/dir/v1
+        sites:
+          matrix:
+            versions:
+              - '0.19'
+      - source: input/file/spec/v1/schemas
+        target: static/0.19/schemas/bindings/go/input/file/v1
+        sites:
+          matrix:
+            versions:
+              - '0.19'
+      - source: input/utf8/spec/v1/schemas
+        target: static/0.19/schemas/bindings/go/input/utf8/v1
+        sites:
+          matrix:
+            versions:
+              - '0.19'
+      - source: helm/spec/input/v1/schemas
+        target: static/0.19/schemas/bindings/go/input/helm/v1
+        sites:
+          matrix:
+            versions:
+              - '0.19'
+      - source: wget/spec/input/v1/schemas
+        target: static/0.19/schemas/bindings/go/input/wget/v1
+        sites:
+          matrix:
+            versions:
+              - '0.19'
+      - source: s3/spec/input/v2/schemas
+        target: static/0.19/schemas/bindings/go/input/s3/v2
+        sites:
+          matrix:
+            versions:
+              - '0.19'
+      - source: git/spec/input/v1/schemas
+        target: static/0.19/schemas/bindings/go/input/git/v1
+        sites:
+          matrix:
+            versions:
+              - '0.19'
+      - source: oci/spec/access/v1/schemas
+        target: static/0.19/schemas/bindings/go/access/oci/v1
+        sites:
+          matrix:
+            versions:
+              - '0.19'
+      - source: descriptor/v2/schemas
+        target: static/0.19/schemas/bindings/go/access/localblob/v1
+        sites:
+          matrix:
+            versions:
+              - '0.19'
+      - source: helm/spec/access/v1/schemas
+        target: static/0.19/schemas/bindings/go/access/helm/v1
+        sites:
+          matrix:
+            versions:
+              - '0.19'
+      - source: github/spec/access/v1/schemas
+        target: static/0.19/schemas/bindings/go/access/github/v1
+        sites:
+          matrix:
+            versions:
+              - '0.19'
+      - source: git/spec/access/v1/schemas
+        target: static/0.19/schemas/bindings/go/access/git/v1
+        sites:
+          matrix:
+            versions:
+              - '0.19'
+      - source: blob/filesystem/spec/access/v1alpha1/schemas
+        target: static/0.19/schemas/bindings/go/access/file/v1alpha1
+        sites:
+          matrix:
+            versions:
+              - '0.19'
+      - source: wget/spec/access/v1/schemas
+        target: static/0.19/schemas/bindings/go/access/wget/v1
+        sites:
+          matrix:
+            versions:
+              - '0.19'
+      - source: s3/spec/access/v2/schemas
+        target: static/0.19/schemas/bindings/go/access/s3/v2
+        sites:
+          matrix:
+            versions:
+              - '0.19'
+      - source: cli/docs/reference
+        target: content/docs/reference/ocm-cli
+        sites:
+          matrix:
+            versions:
+              - '0.19'
+      - source: kubernetes/controller/config/crd/bases
+        target: static/0.19/schemas/kubernetes/controller
+        sites:
+          matrix:
+            versions:
+              - '0.19'

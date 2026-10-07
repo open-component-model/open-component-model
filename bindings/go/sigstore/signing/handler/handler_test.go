@@ -253,10 +253,12 @@ func TestHandler_Sign(t *testing.T) {
 			name:  "builds correct args with signing config",
 			creds: &oidcv1.OIDCIdentityToken{Token: "test-token"},
 			assertArgs: func(t *testing.T, args []string) {
+				t.Helper()
 				r := require.New(t)
 				r.Equal("/etc/sigstore/signing_config.json", argValue(args, "--signing-config"))
 			},
 			assertEnv: func(t *testing.T, env []string) {
+				t.Helper()
 				r := require.New(t)
 				r.True(internal.HasEnvKey(env, "SIGSTORE_ID_TOKEN"))
 				r.Equal("test-token", envValue(env, "SIGSTORE_ID_TOKEN"))
@@ -267,6 +269,7 @@ func TestHandler_Sign(t *testing.T) {
 			creds:   &oidcv1.OIDCIdentityToken{},
 			wantErr: "OIDC identity token required",
 			assertMock: func(t *testing.T, mock *execRecorder) {
+				t.Helper()
 				require.Nil(t, mock.lastSignArgs)
 			},
 		},
@@ -290,6 +293,7 @@ func TestHandler_Sign(t *testing.T) {
 			name:  "OIDC token trimmed of whitespace",
 			creds: &oidcv1.OIDCIdentityToken{Token: "  test-token\n"},
 			assertEnv: func(t *testing.T, env []string) {
+				t.Helper()
 				require.Equal(t, "test-token", envValue(env, "SIGSTORE_ID_TOKEN"))
 			},
 		},
@@ -303,6 +307,7 @@ func TestHandler_Sign(t *testing.T) {
 			name:  "bundle base64-encoded in result",
 			creds: &oidcv1.OIDCIdentityToken{Token: "test-token"},
 			assertResult: func(t *testing.T, result descruntime.SignatureInfo) {
+				t.Helper()
 				r := require.New(t)
 				r.Equal(string(v1alpha1.AlgorithmSigstoreV1Alpha1), result.Algorithm)
 				r.Equal(v1alpha1.MediaTypeSigstoreBundle, result.MediaType)
@@ -312,10 +317,14 @@ func TestHandler_Sign(t *testing.T) {
 			},
 		},
 		{
-			name:       "V1 issuer in bundle does not leak to SignatureInfo",
-			creds:      &oidcv1.OIDCIdentityToken{Token: "test-token"},
-			bundleJSON: func(t *testing.T) []byte { return fakeBundleJSONWithCert(t, "https://accounts.google.com") },
+			name:  "V1 issuer in bundle does not leak to SignatureInfo",
+			creds: &oidcv1.OIDCIdentityToken{Token: "test-token"},
+			bundleJSON: func(t *testing.T) []byte {
+				t.Helper()
+				return fakeBundleJSONWithCert(t, "https://accounts.google.com")
+			},
 			assertResult: func(t *testing.T, result descruntime.SignatureInfo) {
+				t.Helper()
 				require.Empty(t, result.Issuer)
 			},
 		},
@@ -323,9 +332,11 @@ func TestHandler_Sign(t *testing.T) {
 			name:  "V2 issuer in bundle does not leak to SignatureInfo",
 			creds: &oidcv1.OIDCIdentityToken{Token: "test-token"},
 			bundleJSON: func(t *testing.T) []byte {
+				t.Helper()
 				return fakeBundleJSONWithCertV2(t, "https://token.actions.githubusercontent.com")
 			},
 			assertResult: func(t *testing.T, result descruntime.SignatureInfo) {
+				t.Helper()
 				require.Empty(t, result.Issuer)
 			},
 		},
@@ -334,6 +345,7 @@ func TestHandler_Sign(t *testing.T) {
 			creds:   &trustedrootv1.TrustedRoot{TrustedRootJSONFile: "/path/to/trusted_root.json"},
 			wantErr: "convert credentials",
 			assertMock: func(t *testing.T, mock *execRecorder) {
+				t.Helper()
 				require.Nil(t, mock.lastSignArgs)
 			},
 		},
@@ -602,6 +614,7 @@ func TestHandler_Verify(t *testing.T) {
 		{
 			name: "exact issuer and identity",
 			assertArgs: func(t *testing.T, args []string) {
+				t.Helper()
 				r := require.New(t)
 				r.Equal("user@example.com", argValue(args, "--certificate-identity"))
 				r.Equal("https://accounts.google.com", argValue(args, "--certificate-oidc-issuer"))
@@ -619,6 +632,7 @@ func TestHandler_Verify(t *testing.T) {
 			},
 			creds: &trustedrootv1.TrustedRoot{TrustedRootJSONFile: "/path/to/trusted_root.json"},
 			assertArgs: func(t *testing.T, args []string) {
+				t.Helper()
 				r := require.New(t)
 				r.False(hasArg(args, "--certificate-identity"))
 				r.False(hasArg(args, "--certificate-oidc-issuer"))
@@ -634,6 +648,7 @@ func TestHandler_Verify(t *testing.T) {
 			},
 			creds: &trustedrootv1.TrustedRoot{TrustedRootJSONFile: "/path/to/private_trusted_root.json"},
 			assertArgs: func(t *testing.T, args []string) {
+				t.Helper()
 				r := require.New(t)
 				r.True(hasArg(args, "--insecure-ignore-tlog"))
 				r.Equal("/path/to/private_trusted_root.json", argValue(args, "--trusted-root"))
@@ -643,6 +658,7 @@ func TestHandler_Verify(t *testing.T) {
 			name:  "trusted root from inline JSON credential",
 			creds: &trustedrootv1.TrustedRoot{TrustedRootJSON: `{"mediaType":"application/vnd.dev.sigstore.trustedroot+json;version=0.1"}`},
 			assertArgs: func(t *testing.T, args []string) {
+				t.Helper()
 				r := require.New(t)
 				r.True(hasArg(args, "--trusted-root"))
 				r.NotEmpty(argValue(args, "--trusted-root"))
@@ -652,12 +668,14 @@ func TestHandler_Verify(t *testing.T) {
 			name:  "trusted root from file credential",
 			creds: &trustedrootv1.TrustedRoot{TrustedRootJSONFile: "/custom/path/trusted_root.json"},
 			assertArgs: func(t *testing.T, args []string) {
+				t.Helper()
 				require.Equal(t, "/custom/path/trusted_root.json", argValue(args, "--trusted-root"))
 			},
 		},
 		{
 			name: "no trusted root yields no flag",
 			assertArgs: func(t *testing.T, args []string) {
+				t.Helper()
 				require.False(t, hasArg(args, "--trusted-root"))
 			},
 		},
@@ -1051,7 +1069,7 @@ func TestSigningConsumerIdentity_MatchesDocumentedConfig(t *testing.T) {
 			configIdentity: runtime.Identity{
 				runtime.IdentityAttributeType:       signerv1.VersionedType.String(),
 				signerv1.IdentityAttributeSignature: signatureName,
-				"algorithm":                        string(v1alpha1.AlgorithmSigstoreV1Alpha1),
+				"algorithm":                         string(v1alpha1.AlgorithmSigstoreV1Alpha1),
 			},
 			signConfig: testSignConfig(),
 			wantMatch:  false,
@@ -1194,14 +1212,18 @@ func TestExtractCertInfoFromBundleJSON(t *testing.T) {
 			errContains: "bundle contains no certificate",
 		},
 		{
-			name:             "valid v1 issuer OID",
-			input:            func(t *testing.T) []byte { return fakeBundleJSONWithCert(t, "https://issuer.example.com") },
+			name: "valid v1 issuer OID",
+			input: func(t *testing.T) []byte {
+				t.Helper()
+				return fakeBundleJSONWithCert(t, "https://issuer.example.com")
+			},
 			expectedIssuer:   "https://issuer.example.com",
 			expectedIdentity: "signer@example.com",
 		},
 		{
 			name: "valid v2 issuer OID",
 			input: func(t *testing.T) []byte {
+				t.Helper()
 				return fakeBundleJSONWithCertV2(t, "https://token.actions.githubusercontent.com")
 			},
 			expectedIssuer: "https://token.actions.githubusercontent.com",
@@ -1209,6 +1231,7 @@ func TestExtractCertInfoFromBundleJSON(t *testing.T) {
 		{
 			name: "v1 fallback when v2 is malformed",
 			input: func(t *testing.T) []byte {
+				t.Helper()
 				key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 				require.NoError(t, err)
 				template := &x509.Certificate{
@@ -1239,6 +1262,7 @@ func TestExtractCertInfoFromBundleJSON(t *testing.T) {
 		{
 			name: "malformed v2 with no v1 surfaces error",
 			input: func(t *testing.T) []byte {
+				t.Helper()
 				key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 				require.NoError(t, err)
 				template := &x509.Certificate{

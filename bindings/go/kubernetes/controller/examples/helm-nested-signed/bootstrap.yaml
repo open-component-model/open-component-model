@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: Secret
 metadata:
-  name: helm-signing-secret
+  name: helm-nested-signed-secret
 stringData:
   # Verification is configured through the central OCM configuration. The signing entry selects the
   # verifier, the credentials entry supplies the public key of ocm.software.pub.
@@ -51,7 +51,7 @@ spec:
   ocmConfig:
     - apiVersion: v1
       kind: Secret
-      name: helm-signing-secret
+      name: helm-nested-signed-secret
   repositoryRef:
     name: helm-nested-signed-repository
   semver: 1.0.0

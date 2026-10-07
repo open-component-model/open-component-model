@@ -187,6 +187,7 @@ With Sigstore (other tabs) you skip the key-pair setup entirely.
 ## Prerequisites
 
 - [OCM CLI installed]({{< relref "ocm-cli-installation.md" >}})
+- [GnuPG](https://gnupg.org/download/) 2.2 or later installed (`gpg` binary available in `$PATH`); OCM runs it to create GPG signatures, so all OpenPGP cryptography happens in GnuPG. The [OCM CLI container image]({{< relref "container-image-usage.md" >}}) does not contain GnuPG yet, so run `ocm` where GnuPG is installed. A follow-up moves the image to a base image that includes GnuPG
 - [Signing credentials configured]({{< relref "configure-signing-credentials.md" >}})
 - A component version in a CTF archive or OCI registry (we'll use `github.com/acme.org/helloworld:1.0.0` from the [getting started guide]({{< relref "create-component-version.md" >}}); any component you can write to works)
 
@@ -230,7 +231,7 @@ configurations:
     type: GPGSigningConfiguration/v1alpha1
 ```
 
-If your keyring contains multiple keys, pin the one to use by adding `keyFingerprint` to the signer by adding one extra line:
+If your keyring contains multiple keys, pin the one to use by adding `keyFingerprint` to the signer by adding one extra line. You can paste the fingerprint as `gpg --fingerprint` prints it; OCM removes spaces and a `0x` prefix:
 
 ```yaml
 - type: signing.config.ocm.software/v1alpha1
@@ -247,6 +248,30 @@ To use GPG for one signature only and keep RSA elsewhere, add `signature` to tha
   signer:
     type: GPGSigningConfiguration/v1alpha1
 ```
+
+To sign with a key from your own GnuPG keyring (`$GNUPGHOME`, or `~/.gnupg`), including keys on a hardware token such as a YubiKey, set `keySource: keyring` (the default, `credentials`, takes the key from the GPG credentials). OCM then uses your running `gpg-agent`, which unlocks the key from its cache, via pinentry, or with a `passphrase` from the credentials.
+
+Key material in the GPG credentials is rejected with `keySource: keyring`, so it is never ambiguous which key signs. Remove `privateKeyPGPFile` and `publicKeyPGPFile` (or `privateKeyPGP` and `publicKeyPGP`) from the GPG consumer entry. Keep the entry only if you pass a `passphrase`; otherwise remove it entirely:
+
+```yaml
+type: generic.config.ocm.software/v1
+configurations:
+- type: credentials.config.ocm.software
+  consumers:
+  - identity:
+      type: GPG/v1alpha1
+      signature: default
+    credentials:
+    - type: GPGCredentials/v1alpha1
+      passphrase: my-secret-passphrase                         # optional; key files removed
+- type: signing.config.ocm.software/v1alpha1
+  signer:
+    type: GPGSigningConfiguration/v1alpha1
+    keySource: keyring                                          # added
+    keyFingerprint: B118BE3A32BE4AF28E37E881167C7102F8AC81E4
+```
+
+Without `keyFingerprint`, gpg signs with its default key. Every `gpg` invocation times out after 3 minutes, which includes waiting for pinentry or a touch on a hardware token.
 
 {{< callout context="caution" >}}
 These are in the same file. Just append this signature in that relevant configuration value.
@@ -359,6 +384,18 @@ signatures:
 
 **Fix:** Move the contents of the old spec file under the `signer` field of a `signing.config.ocm.software/v1alpha1` entry and drop the flag.
 
+### Symptom: `GPG signing requires the GnuPG "gpg" binary (>= 2.2.0) on PATH`
+
+**Cause:** OCM delegates all OpenPGP operations to GnuPG, and no `gpg` binary was found on `PATH`.
+
+**Fix:** Install GnuPG 2.2 or later (`brew install gnupg`, `sudo apt-get install gnupg`, `sudo dnf install gnupg2`) and make sure `gpg` is on `PATH`.
+
+### Symptom: `with GODEBUG=fips140=only, GPG signing and verification require a gpg whose libgcrypt runs in FIPS mode`
+
+**Cause:** OCM runs with `GODEBUG=fips140=only`, and the `libgcrypt` of your `gpg` does not run in FIPS mode (`gpgconf --show-versions` reports `fips-mode:n`), or `gpgconf` is not on `PATH`.
+
+**Fix:** Use a GnuPG whose `libgcrypt` runs in FIPS mode, see [FIPS 140-3: GPG]({{< relref "docs/reference/standards-and-regulations/fips.md" >}}#gpg), or run OCM without `fips140=only`.
+
 {{< /tab >}}
 {{< tab "Sigstore (interactive)" >}}
 
@@ -390,7 +427,7 @@ For the conceptual picture (how Fulcio, Rekor, and OIDC fit together), see [Iden
 - A browser on the same machine (signing opens a browser window to log you in)
 - An OIDC identity with a provider supported by your Sigstore stack — on public Sigstore that's Google, GitHub, or Microsoft
 - Network access to `*.sigstore.dev` (in particular `fulcio.sigstore.dev`, `oauth2.sigstore.dev`, `rekor.sigstore.dev`, `tuf-repo-cdn.sigstore.dev`) — corporate networks often block these
-- If `cosign` isn't on your PATH or its version is too low, OCM downloads and caches it under `~/.cache/ocm/cosign/...` automatically; subsequent runs skip the download
+- [cosign](https://github.com/sigstore/cosign) v3.0.4 or later on your PATH; if it isn't, OCM downloads and caches it under `~/.cache/ocm/cosign/...`. To keep Sigstore signing inside the [FIPS 140-3]({{< relref "docs/reference/standards-and-regulations/fips.md" >}}#sigstore-and-cosign) boundary, use a cosign built against the Go Cryptographic Module (`CGO_ENABLED=0 GOFIPS140=certified go install github.com/sigstore/cosign/v3/cmd/cosign@v3.1.3`); with `GODEBUG=fips140=only`, OCM requires one
 - A component version in a CTF archive or OCI registry (we'll use `github.com/acme.org/helloworld:1.0.0` from the [getting started guide]({{< relref "create-component-version.md" >}}); any component you can write to works)
 
 {{< callout context="note" >}}
@@ -660,7 +697,7 @@ A successful run logs `signed successfully` and embeds the Sigstore bundle into 
 
 {{< details "Alternative: run `ocm` from the OCM CLI container image" >}}
 
-Skip the install step by invoking `ocm` from the official container image (`ghcr.io/open-component-model/cli`) directly with `docker run`. The image is built `FROM scratch` for minimal attack surface — only the `ocm` binary plus CA certs, no shell — so it cannot be used as a GitHub Actions [`container:`]({{< relref "container-image-usage.md" >}}) job runtime. The `docker run` pattern below is the supported way:
+Skip the install step by invoking `ocm` from the official container image (`ghcr.io/open-component-model/cli`) directly with `docker run`. The image is based on Garden Linux `bare-libc` for minimal attack surface — `ocm`, a FIPS build of `cosign`, `gpg` in FIPS mode and CA certs, no shell — so it cannot be used as a GitHub Actions [`container:`]({{< relref "container-image-usage.md" >}}) job runtime. Because `cosign` is on `PATH`, OCM does not download it. The `-slim` tags (`cli:<version>-slim`) are the `FROM scratch` variant with only `ocm` and CA certs, without `cosign` or `gpg`; see the [FIPS reference]({{< relref "docs/reference/standards-and-regulations/fips.md" >}}#artifacts) for the contents of both. The `docker run` pattern below is the supported way:
 
 ```yaml
 jobs:

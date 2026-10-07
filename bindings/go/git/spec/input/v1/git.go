@@ -19,10 +19,14 @@ type Git struct {
 	// +ocm:jsonschema-gen:enum:deprecated=git,git/v1
 	Type runtime.Type `json:"type"`
 
-	// Repository is the Git repository URL.
+	// Repository is the Git repository URL: an http(s)://, ssh:// or git:// URL with a
+	// host and a path, the scp-like form user@host:path, or a local repository as
+	// file:///path or a plain path. A value without a scheme that is not scp-like is a
+	// local path, relative to the working directory unless absolute.
 	Repository string `json:"repository"`
 
-	// Ref selects a Git ref. If both Ref and Commit are empty, remote HEAD is used.
+	// Ref selects a branch, tag or full ref name (for example main, v1.0.0 or
+	// refs/tags/v1.0.0). If both Ref and Commit are empty, remote HEAD is used.
 	Ref string `json:"ref,omitempty"`
 
 	// Commit pins a commit by its full 40-character hexadecimal SHA and takes

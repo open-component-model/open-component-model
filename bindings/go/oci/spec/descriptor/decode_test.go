@@ -9,8 +9,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"sigs.k8s.io/yaml"
+
+	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 )
 
 func createV2DescriptorYAML() []byte {
@@ -31,7 +32,8 @@ func createV2DescriptorYAML() []byte {
 	return data
 }
 
-func createV2DescriptorJSON() []byte {
+func createV2DescriptorJSON(tb testing.TB) []byte {
+	tb.Helper()
 	desc := &v2.Descriptor{
 		Meta: v2.Meta{
 			Version: "v2",
@@ -45,7 +47,8 @@ func createV2DescriptorJSON() []byte {
 			},
 		},
 	}
-	data, _ := json.Marshal(desc)
+	data, err := json.Marshal(desc)
+	require.NoError(tb, err)
 	return data
 }
 
@@ -54,7 +57,7 @@ func createTarWithFile(name string, content []byte) *bytes.Buffer {
 	tw := tar.NewWriter(buf)
 	_ = tw.WriteHeader(&tar.Header{
 		Name: name,
-		Mode: 0644,
+		Mode: 0o644,
 		Size: int64(len(content)),
 	})
 	if len(content) > 0 {
@@ -66,7 +69,7 @@ func createTarWithFile(name string, content []byte) *bytes.Buffer {
 
 func TestSingleFileDecodeDescriptor_AllFormats(t *testing.T) {
 	validYAML := createV2DescriptorYAML()
-	validJSON := createV2DescriptorJSON()
+	validJSON := createV2DescriptorJSON(t)
 
 	tests := []struct {
 		name          string
@@ -141,7 +144,7 @@ func TestSingleFileDecodeDescriptor_AllFormats(t *testing.T) {
 				return yaml.Unmarshal(bytes, obj)
 			})
 			if tt.expectError != "" {
-				assert.Error(t, err)
+				require.Error(t, err)
 				assert.Contains(t, err.Error(), tt.expectError)
 				assert.Nil(t, desc)
 				return
@@ -160,10 +163,10 @@ func TestDescriptorFileFromTar(t *testing.T) {
 	yamlData := createV2DescriptorYAML()
 	buf := &bytes.Buffer{}
 	tw := tar.NewWriter(buf)
-	_ = tw.WriteHeader(&tar.Header{Name: "unrelated.txt", Mode: 0644, Size: 0})
+	_ = tw.WriteHeader(&tar.Header{Name: "unrelated.txt", Mode: 0o644, Size: 0})
 	_ = tw.WriteHeader(&tar.Header{
 		Name: LegacyComponentDescriptorTarFileName,
-		Mode: 0644,
+		Mode: 0o644,
 		Size: int64(len(yamlData)),
 	})
 	_, _ = tw.Write(yamlData)
@@ -187,7 +190,7 @@ func TestDescriptorFileFromTar_EmptyTar(t *testing.T) {
 	_ = tw.Close()
 
 	r, err := descriptorFileFromTar(bytes.NewReader(buf.Bytes()))
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Nil(t, r)
 	assert.Contains(t, err.Error(), "no component descriptor found")
 }
@@ -196,6 +199,6 @@ func TestDescriptorFileFromTar_EmptyTar(t *testing.T) {
 func TestDescriptorFileFromTar_BrokenTar(t *testing.T) {
 	broken := bytes.NewBufferString("not-a-tar")
 	r, err := descriptorFileFromTar(broken)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Nil(t, r)
 }

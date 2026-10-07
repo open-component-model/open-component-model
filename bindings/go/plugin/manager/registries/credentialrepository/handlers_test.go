@@ -39,15 +39,17 @@ func TestConsumerIdentityForConfigHandlerFunc(t *testing.T) {
 				return handler
 			},
 			assertOutput: func(t *testing.T, resp *http.Response) {
+				t.Helper()
 				require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 			},
 			assertError: func(t *testing.T, err error) {
+				t.Helper()
 				require.NoError(t, err)
 			},
 			request: func(base string) *http.Request {
 				parse, _ := url.Parse(base)
 				return &http.Request{
-					Method: "POST",
+					Method: http.MethodPost,
 					URL:    parse,
 					Body:   nil,
 				}
@@ -63,6 +65,7 @@ func TestConsumerIdentityForConfigHandlerFunc(t *testing.T) {
 				return handler
 			},
 			assertOutput: func(t *testing.T, resp *http.Response) {
+				t.Helper()
 				defer resp.Body.Close()
 				require.Equal(t, http.StatusOK, resp.StatusCode)
 				content, err := io.ReadAll(resp.Body)
@@ -71,6 +74,7 @@ func TestConsumerIdentityForConfigHandlerFunc(t *testing.T) {
 				require.Contains(t, string(content), `"type":"test-type"`)
 			},
 			assertError: func(t *testing.T, err error) {
+				t.Helper()
 				require.NoError(t, err)
 			},
 			request: func(base string) *http.Request {
@@ -84,7 +88,7 @@ func TestConsumerIdentityForConfigHandlerFunc(t *testing.T) {
 				}`))
 
 				return &http.Request{
-					Method: "POST",
+					Method: http.MethodPost,
 					URL:    parse,
 					Body:   io.NopCloser(body),
 				}
@@ -127,9 +131,11 @@ func TestResolveHandlerFunc(t *testing.T) {
 				return handler
 			},
 			assertOutput: func(t *testing.T, resp *http.Response) {
+				t.Helper()
 				require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 			},
 			assertError: func(t *testing.T, err error) {
+				t.Helper()
 				require.NoError(t, err)
 			},
 			request: func(base string) *http.Request {
@@ -148,7 +154,7 @@ func TestResolveHandlerFunc(t *testing.T) {
 				}`))
 
 				return &http.Request{
-					Method: "POST",
+					Method: http.MethodPost,
 					URL:    parse,
 					Header: header,
 					Body:   io.NopCloser(body),
@@ -165,9 +171,11 @@ func TestResolveHandlerFunc(t *testing.T) {
 				return handler
 			},
 			assertOutput: func(t *testing.T, resp *http.Response) {
+				t.Helper()
 				require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 			},
 			assertError: func(t *testing.T, err error) {
+				t.Helper()
 				require.NoError(t, err)
 			},
 			request: func(base string) *http.Request {
@@ -176,7 +184,7 @@ func TestResolveHandlerFunc(t *testing.T) {
 				parse, _ := url.Parse(base)
 
 				return &http.Request{
-					Method: "POST",
+					Method: http.MethodPost,
 					URL:    parse,
 					Header: header,
 					Body:   nil,
@@ -193,6 +201,7 @@ func TestResolveHandlerFunc(t *testing.T) {
 				return handler
 			},
 			assertOutput: func(t *testing.T, resp *http.Response) {
+				t.Helper()
 				defer resp.Body.Close()
 				require.Equal(t, http.StatusOK, resp.StatusCode)
 				content, err := io.ReadAll(resp.Body)
@@ -201,6 +210,7 @@ func TestResolveHandlerFunc(t *testing.T) {
 				require.Contains(t, string(content), `"token":"abc123"`)
 			},
 			assertError: func(t *testing.T, err error) {
+				t.Helper()
 				require.NoError(t, err)
 			},
 			request: func(base string) *http.Request {
@@ -219,7 +229,7 @@ func TestResolveHandlerFunc(t *testing.T) {
 				}`))
 
 				return &http.Request{
-					Method: "POST",
+					Method: http.MethodPost,
 					URL:    parse,
 					Header: header,
 					Body:   io.NopCloser(body),

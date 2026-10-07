@@ -89,7 +89,7 @@ func TestResolveComponentVersion_Success(t *testing.T) {
 
 		result, err := repo.GetComponentVersion(ctx, "test-component", "v1.0.0")
 		assert.Nil(t, result)
-		assert.True(t, errors.Is(err, resolution.ErrResolutionInProgress), "expected in-progress error on first call")
+		require.ErrorIs(t, err, resolution.ErrResolutionInProgress, "expected in-progress error on first call")
 
 		synctest.Wait()
 
@@ -161,7 +161,7 @@ func TestResolveComponentVersion_CacheHit(t *testing.T) {
 
 		result1, err := repo.GetComponentVersion(ctx, "test-component", "v1.0.0")
 		assert.Nil(t, result1)
-		assert.True(t, errors.Is(err, resolution.ErrResolutionInProgress), "first call should be in progress")
+		require.ErrorIs(t, err, resolution.ErrResolutionInProgress, "first call should be in progress")
 
 		synctest.Wait()
 
@@ -256,7 +256,7 @@ func TestResolveComponentVersion_CacheMissOnConfigChange(t *testing.T) {
 
 		result1, err := repo1.GetComponentVersion(ctx, "test-component", "v1.0.0")
 		assert.Nil(t, result1)
-		assert.True(t, errors.Is(err, resolution.ErrResolutionInProgress), "first call should be in progress")
+		require.ErrorIs(t, err, resolution.ErrResolutionInProgress, "first call should be in progress")
 
 		synctest.Wait()
 
@@ -285,7 +285,7 @@ func TestResolveComponentVersion_CacheMissOnConfigChange(t *testing.T) {
 
 		result2, err := repo2.GetComponentVersion(ctx, "test-component", "v1.0.0")
 		assert.Nil(t, result2)
-		assert.True(t, errors.Is(err, resolution.ErrResolutionInProgress), "first call should be in progress")
+		require.ErrorIs(t, err, resolution.ErrResolutionInProgress, "first call should be in progress")
 
 		synctest.Wait()
 
@@ -430,8 +430,8 @@ func TestResolveComponentVersionDeduplication(t *testing.T) {
 		// - See it's in progress and get ErrResolutionInProgress, OR
 		// - Come after completion and get cached result
 		// We verify deduplication worked by checking all either succeeded or got in-progress
-		assert.Equal(t, inProgressCount+successCount, numGoroutines, "all requests should either succeed or get in-progress")
-		assert.Greater(t, inProgressCount, 0, "at least some goroutines should get in-progress before completion")
+		assert.Equal(t, numGoroutines, inProgressCount+successCount, "all requests should either succeed or get in-progress")
+		assert.Positive(t, inProgressCount, "at least some goroutines should get in-progress before completion")
 
 		synctest.Wait()
 
@@ -651,7 +651,7 @@ func TestNewCacheBackedRepository_ConfiguredMatcherOverridesBaseRepository(t *te
 		require.NoError(t, err)
 
 		_, err = repo.GetComponentVersion(ctx, "test-component", "v1.0.0")
-		assert.True(t, errors.Is(err, resolution.ErrResolutionInProgress))
+		require.ErrorIs(t, err, resolution.ErrResolutionInProgress)
 		synctest.Wait()
 
 		result, err := repo.GetComponentVersion(ctx, "test-component", "v1.0.0")

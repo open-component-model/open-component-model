@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/plugin/internal/dummytype"
@@ -54,7 +55,7 @@ func TestGetConsumerIdentity(t *testing.T) {
 			setupMock: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					if r.URL.Path == GetConsumerIdentityEndpoint {
-						require.NoError(t, json.NewEncoder(w).Encode(map[string]string{"id": "test-identity", "type": pluginDummyType.String()}))
+						assert.NoError(t, json.NewEncoder(w).Encode(map[string]string{"id": "test-identity", "type": pluginDummyType.String()}))
 						return
 					}
 					w.WriteHeader(http.StatusNotFound)
@@ -122,7 +123,7 @@ func TestResolve(t *testing.T) {
 			setupMock: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					if r.URL.Path == ResolveEndpoint {
-						require.NoError(t, json.NewEncoder(w).Encode(map[string]string{"resolved": "credentials", "token": "abc123"}))
+						assert.NoError(t, json.NewEncoder(w).Encode(map[string]string{"resolved": "credentials", "token": "abc123"}))
 						return
 					}
 					w.WriteHeader(http.StatusNotFound)
@@ -164,8 +165,8 @@ func TestResolve(t *testing.T) {
 			setupMock: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					if r.URL.Path == ResolveEndpoint {
-						require.Empty(t, r.Header.Get("Authorization"), "nil credentials must not set Authorization header")
-						require.NoError(t, json.NewEncoder(w).Encode(map[string]string{"resolved": "credentials"}))
+						assert.Empty(t, r.Header.Get("Authorization"), "nil credentials must not set Authorization header")
+						assert.NoError(t, json.NewEncoder(w).Encode(map[string]string{"resolved": "credentials"}))
 						return
 					}
 					w.WriteHeader(http.StatusNotFound)

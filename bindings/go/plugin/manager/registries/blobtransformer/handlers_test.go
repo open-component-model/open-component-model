@@ -38,9 +38,11 @@ func TestTransformBlobHandlerFunc(t *testing.T) {
 				return handler
 			},
 			assertOutput: func(t *testing.T, resp *http.Response) {
+				t.Helper()
 				require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 			},
 			assertError: func(t *testing.T, err error) {
+				t.Helper()
 				require.NoError(t, err)
 			},
 			request: func(base string) *http.Request {
@@ -48,7 +50,7 @@ func TestTransformBlobHandlerFunc(t *testing.T) {
 				header.Add("Authorization", "not-json")
 				parse, _ := url.Parse(base)
 				return &http.Request{
-					Method: "POST",
+					Method: http.MethodPost,
 					URL:    parse,
 					Header: header,
 				}
@@ -69,6 +71,7 @@ func TestTransformBlobHandlerFunc(t *testing.T) {
 				return handler
 			},
 			assertOutput: func(t *testing.T, resp *http.Response) {
+				t.Helper()
 				defer resp.Body.Close()
 				require.Equal(t, http.StatusOK, resp.StatusCode)
 				content, err := io.ReadAll(resp.Body)
@@ -76,6 +79,7 @@ func TestTransformBlobHandlerFunc(t *testing.T) {
 				require.Contains(t, string(content), "/dummy/local-file")
 			},
 			assertError: func(t *testing.T, err error) {
+				t.Helper()
 				require.NoError(t, err)
 			},
 			request: func(base string) *http.Request {
@@ -85,7 +89,7 @@ func TestTransformBlobHandlerFunc(t *testing.T) {
 				body := &bytes.Buffer{}
 				body.Write([]byte(`{"specification":{"type":"DummyRepository/v1","baseUrl":"ocm.software"}}`))
 				return &http.Request{
-					Method: "POST",
+					Method: http.MethodPost,
 					URL:    parse,
 					Header: header,
 					Body:   io.NopCloser(body),
