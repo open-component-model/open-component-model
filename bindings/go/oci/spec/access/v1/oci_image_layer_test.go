@@ -122,6 +122,9 @@ func TestRelativeOCIReference_Validate(t *testing.T) {
 		{name: "tag and digest", reference: "ocm/value:v2.0@sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"},
 
 		{name: "empty", reference: "", wantErr: true},
+		{name: "leading slash", reference: "/ocm/value:v2.0", wantErr: true},
+		{name: "scheme", reference: "oci://ocm/value:v2.0", wantErr: true},
+		{name: "host:port", reference: "registry.io:5000/value:v2.0", wantErr: true},
 		{name: "invalid syntax", reference: "ocm/value:bad:tag:form", wantErr: true},
 		{name: "invalid digest", reference: "ocm/value@sha256:nothex", wantErr: true},
 	} {

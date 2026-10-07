@@ -3,6 +3,7 @@ package v1
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"ocm.software/open-component-model/bindings/go/oci/looseref"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -32,18 +33,35 @@ type RelativeOCIReference struct {
 	Reference string `json:"reference"`
 }
 
-// Validate verifies that the relative reference is set and parses as a registry-relative
-// OCI reference (repository[:tag][@digest]); a dotted first segment is a repository path,
-// not a host. This mirrors OCM v1, which performs no validation of its own and resolves
-// the reference host-less against the hosting component repository: our resolution likewise
-// prepends the hosting registry verbatim, so a reference carrying a scheme or host cannot
-// escape to another registry and surfaces a clear parse error at download time.
+// Validate verifies that the relative reference is set and is registry-relative: a bare
+// repository[:tag][@digest], with no scheme, no leading slash, and no host. The host is
+// supplied by the component repository at resolution time (our resolution prepends the
+// hosting registry verbatim), so a reference must not carry one.
+//
+// This mirrors OCM v1, which resolves a relative reference with oci.ParseArt — a host-less
+// artifact grammar that rejects exactly a scheme, a leading slash, and a host:port. v1 has
+// no spec-level validator and enforces this at resolution; we check it up front for a clear
+// error. looseref.ParseReference cannot by itself tell a registry-relative reference from an
+// absolute one: it parses the first path segment as the "registry", so a legitimate
+// multi-segment or dotted path ("ocm/value", "acme.org/value") lands in .Registry. A
+// non-empty .Registry therefore does NOT indicate a host; only a colon in it (a host:port)
+// is never a valid repository path.
 func (t *RelativeOCIReference) Validate() error {
 	if t.Reference == "" {
 		return errors.New("reference is required")
 	}
-	if _, err := looseref.ParseReference(t.Reference); err != nil {
+	if strings.HasPrefix(t.Reference, "/") {
+		return fmt.Errorf("invalid reference %q: must be registry-relative (no leading slash)", t.Reference)
+	}
+	ref, err := looseref.ParseReference(t.Reference)
+	if err != nil {
 		return fmt.Errorf("invalid reference %q: %w", t.Reference, err)
+	}
+	if ref.Scheme != "" {
+		return fmt.Errorf("invalid reference %q: must be registry-relative (no scheme)", t.Reference)
+	}
+	if strings.ContainsRune(ref.Registry, ':') {
+		return fmt.Errorf("invalid reference %q: must be registry-relative (no host:port)", t.Reference)
 	}
 	return nil
 }
