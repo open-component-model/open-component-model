@@ -87,7 +87,7 @@ func Test_Integration_OCICache_ChunkingSurvivesCache(t *testing.T) {
 	}
 	r.NoError(repo.AddComponentVersion(ctx, cd))
 
-	blobRC, gotRes, err := repo.GetLocalResource(ctx, component, version, resource.ElementMeta.ToIdentity())
+	blobRC, gotRes, err := repo.GetLocalResource(ctx, component, version, resource.ToIdentity())
 	r.NoError(err)
 	r.NotNil(gotRes)
 	rc, err := blobRC.ReadCloser()
