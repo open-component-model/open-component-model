@@ -115,7 +115,7 @@ func readHead(r io.Reader) (plumbing.Hash, error) {
 		return plumbing.ZeroHash, err
 	}
 	hash, ok := plumbing.FromHex(strings.TrimSpace(string(content)))
-	if !ok {
+	if !ok || hash.IsZero() {
 		return plumbing.ZeroHash, fmt.Errorf("git archive HEAD is not detached at a commit")
 	}
 	return hash, nil

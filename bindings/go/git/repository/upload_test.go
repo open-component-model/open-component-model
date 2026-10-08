@@ -206,6 +206,16 @@ func TestUploadResourceRejectsArchive(t *testing.T) {
 			}),
 			wantErr: "git archive holds more than one HEAD",
 		},
+		{
+			name: "null HEAD",
+			content: rewriteArchive(t, content, func(name string, data []byte) []archiveEntry {
+				if name == ".git/HEAD" {
+					return []archiveEntry{{name: name, data: []byte(plumbing.ZeroHash.String() + "\n")}, {name: name, data: data}}
+				}
+				return []archiveEntry{{name: name, data: data}}
+			}),
+			wantErr: "git archive HEAD is not detached at a commit",
+		},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			r := require.New(t)
