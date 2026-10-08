@@ -1104,7 +1104,7 @@ resources:
 	t.Run("construction with references targeting fallback resolvers", func(t *testing.T) {
 		r := require.New(t)
 		tmp := t.TempDir()
-		externalConstructorYAML := fmt.Sprintf(`
+		externalConstructorYAML := `
 name: ocm.software/external
 version: 1.0.0
 provider:
@@ -1115,7 +1115,7 @@ resources:
   input:
     type: utf8/v1
     text: "I come from external!"
-`)
+`
 		externalConstructorYAMLFilePath := filepath.Join(tmp, "component-constructor-external.yaml")
 		r.NoError(os.WriteFile(externalConstructorYAMLFilePath, []byte(externalConstructorYAML), 0o600))
 		externalArchiveFilePath := filepath.Join(tmp, "transport-archive-external")
@@ -1141,7 +1141,7 @@ configurations:
 		legacyResolverConfigYAMLFilePath := filepath.Join(tmp, "config-with-legacy-resolver.yaml")
 		r.NoError(os.WriteFile(legacyResolverConfigYAMLFilePath, []byte(legacyResolverConfigYAML), 0o600))
 
-		constructorYAML = fmt.Sprintf(`
+		constructorYAML = `
 components:
 - name: ocm.software/a
   version: 1.0.0
@@ -1170,7 +1170,7 @@ components:
       input:
         type: utf8/v1
         text: "I come from B"
-`)
+`
 
 		// Create a replacement test file to be added to the component version
 		constructorYAMLFilePath := filepath.Join(tmp, "component-constructor-external-reference.yaml")
@@ -1219,7 +1219,7 @@ components:
 	t.Run("construction with references targeting resolvers", func(t *testing.T) {
 		r := require.New(t)
 		tmp := t.TempDir()
-		externalConstructorYAML := fmt.Sprintf(`
+		externalConstructorYAML := `
 name: ocm.software/external
 version: 1.0.0
 provider:
@@ -1230,7 +1230,7 @@ resources:
   input:
     type: utf8/v1
     text: "I come from external!"
-`)
+`
 		externalConstructorYAMLFilePath := filepath.Join(tmp, "component-constructor-external.yaml")
 		r.NoError(os.WriteFile(externalConstructorYAMLFilePath, []byte(externalConstructorYAML), 0o600))
 		externalArchiveFilePath := filepath.Join(tmp, "transport-archive-external")
@@ -1257,7 +1257,7 @@ configurations:
 		resolverConfigYAMLFilePath := filepath.Join(tmp, "config-with-resolver.yaml")
 		r.NoError(os.WriteFile(resolverConfigYAMLFilePath, []byte(resolverConfigYAML), 0o600))
 
-		constructorYAML = fmt.Sprintf(`
+		constructorYAML = `
 components:
 - name: ocm.software/a
   version: 1.0.0
@@ -1286,7 +1286,7 @@ components:
       input:
         type: utf8/v1
         text: "I come from B"
-`)
+`
 
 		// Create a replacement test file to be added to the component version
 		constructorYAMLFilePath := filepath.Join(tmp, "component-constructor-external-reference.yaml")
@@ -2534,7 +2534,7 @@ resources:
 		r := require.New(t)
 		// We need to calculate the digest - the referenced component doesn't have it stored.
 		// Create a component referencing it and let it calculate the digest.
-		constructorYAML := fmt.Sprintf(`
+		constructorYAML := `
 name: ocm.software/referencing-no-digest
 version: 1.0.0
 provider:
@@ -2549,7 +2549,7 @@ resources:
   input:
     type: utf8/v1
     text: "I reference another component"
-`)
+`
 		constructorYAMLFilePath := filepath.Join(tmp, "referencing-no-digest-constructor.yaml")
 		r.NoError(os.WriteFile(constructorYAMLFilePath, []byte(constructorYAML), 0o600))
 

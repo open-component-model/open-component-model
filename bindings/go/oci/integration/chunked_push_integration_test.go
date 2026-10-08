@@ -376,7 +376,7 @@ func Test_Integration_OCIRepository_AddComponentVersion_Streaming(t *testing.T) 
 	r.NoError(err)
 	r.Equal(component, fetched.Component.Name)
 
-	blobRC, gotRes, err := repo.GetLocalResource(ctx, component, version, resource.ElementMeta.ToIdentity())
+	blobRC, gotRes, err := repo.GetLocalResource(ctx, component, version, resource.ToIdentity())
 	r.NoError(err)
 	r.NotNil(gotRes)
 	rc, err := blobRC.ReadCloser()
