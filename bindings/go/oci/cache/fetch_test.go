@@ -175,10 +175,10 @@ type gatedReadOnly struct {
 	release chan struct{}
 }
 
-func newGated(base *fakeReadOnly, cap int) *gatedReadOnly {
+func newGated(base *fakeReadOnly, capacity int) *gatedReadOnly {
 	return &gatedReadOnly{
 		fakeReadOnly: base,
-		blocked:      make(chan struct{}, cap),
+		blocked:      make(chan struct{}, capacity),
 		release:      make(chan struct{}),
 	}
 }

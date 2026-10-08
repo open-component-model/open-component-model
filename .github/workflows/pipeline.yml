@@ -50,8 +50,11 @@ on:
         description: "Version computed/embedded for the CLI build."
         value: ${{ jobs.build_cli.outputs.version }}
       cli_image_digest:
-        description: "Digest of the pushed CLI OCI image (when published)."
+        description: "Digest of the pushed full CLI OCI image (when published)."
         value: ${{ jobs.publish_cli.outputs.image_digest }}
+      cli_slim_image_digest:
+        description: "Digest of the pushed slim CLI OCI image (when published)."
+        value: ${{ jobs.publish_cli.outputs.slim_image_digest }}
       controller_version:
         description: "Version computed for the controller build."
         value: ${{ jobs.build_controller.outputs.version }}
@@ -131,7 +134,7 @@ jobs:
   decide_publish:
     name: Decide Publish
     needs: [conformance, e2e]
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     outputs:
       publish: ${{ steps.check.outputs.publish }}
       ref: ${{ steps.check.outputs.ref }}
@@ -160,9 +163,10 @@ jobs:
     name: Publish CLI
     needs: [build_cli, decide_publish]
     if: ${{ needs.decide_publish.outputs.publish == 'true' }}
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     outputs:
       image_digest: ${{ steps.digest.outputs.digest }}
+      slim_image_digest: ${{ steps.digest.outputs.slim_digest }}
     permissions:
       contents: read
       actions: read
@@ -172,16 +176,19 @@ jobs:
       artifact-metadata: write
     steps:
       - name: Download CLI artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: ${{ needs.build_cli.outputs.artifact_name }}
 
       - name: Set LAYOUT
         env:
           LAYOUT: ${{ github.workspace }}/oci/cli.tar
+          SLIM_LAYOUT: ${{ github.workspace }}/oci/cli-slim.tar
         run: |
           test -e "$LAYOUT" || exit 1
+          test -e "$SLIM_LAYOUT" || exit 1
           echo "LAYOUT=$LAYOUT" >> "$GITHUB_ENV"
+          echo "SLIM_LAYOUT=$SLIM_LAYOUT" >> "$GITHUB_ENV"
 
       - name: Setup ORAS
         uses: oras-project/setup-oras@005458ad77f1c8facd38a094e4af2e69e5607ff4 # v2
@@ -198,32 +205,52 @@ jobs:
           OWNER: ${{ github.repository_owner }}
         run: echo "TARGET_REPO=${REGISTRY}/${OWNER,,}/cli" >> "$GITHUB_ENV"
 
-      - name: Push OCI image
+      - name: Push OCI images
         env:
           VERSION: ${{ needs.build_cli.outputs.version }}
-        run: oras cp --from-oci-layout "${LAYOUT}:${VERSION}" "${TARGET_REPO}:${VERSION}"
+        run: |
+          set -euo pipefail
+          oras cp --from-oci-layout "${LAYOUT}:${VERSION}" "${TARGET_REPO}:${VERSION}"
+          oras cp --from-oci-layout "${SLIM_LAYOUT}:${VERSION}-slim" "${TARGET_REPO}:${VERSION}-slim"
 
-      - name: Tag image with main floating tag
+      - name: Tag images with main floating tag
         if: ${{ needs.decide_publish.outputs.ref == 'main' }}
         env:
           VERSION: ${{ needs.build_cli.outputs.version }}
-        run: oras tag "${TARGET_REPO}:${VERSION}" "main"
+        run: |
+          set -euo pipefail
+          oras tag "${TARGET_REPO}:${VERSION}" "main"
+          oras tag "${TARGET_REPO}:${VERSION}-slim" "main-slim"
 
-      - name: Resolve digest
+      - name: Resolve digests
         id: digest
         env:
           VERSION: ${{ needs.build_cli.outputs.version }}
         run: |
           set -euo pipefail
-          digest="$(oras resolve "${TARGET_REPO}:${VERSION}")"
-          [[ "$digest" == sha256:* ]] || { echo "::error::oras resolve returned unexpected digest for ${TARGET_REPO}:${VERSION}: '$digest'"; exit 1; }
-          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          for tag in "${VERSION}" "${VERSION}-slim"; do
+            digest="$(oras resolve "${TARGET_REPO}:${tag}")"
+            [[ "$digest" == sha256:* ]] || { echo "::error::oras resolve returned unexpected digest for ${TARGET_REPO}:${tag}: '$digest'"; exit 1; }
+            if [[ "$tag" == *-slim ]]; then
+              echo "slim_digest=$digest" >> "$GITHUB_OUTPUT"
+            else
+              echo "digest=$digest" >> "$GITHUB_OUTPUT"
+            fi
+          done
 
       - name: Attest OCI image
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           subject-digest: ${{ steps.digest.outputs.digest }}
+          subject-name: ${{ env.TARGET_REPO }}
+          push-to-registry: true
+
+      - name: Attest slim OCI image
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          subject-digest: ${{ steps.digest.outputs.slim_digest }}
           subject-name: ${{ env.TARGET_REPO }}
           push-to-registry: true
   # === cli.yml::publish ===
@@ -233,7 +260,7 @@ jobs:
     name: Publish Controller
     needs: [build_controller, decide_publish]
     if: ${{ needs.decide_publish.outputs.publish == 'true' }}
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     outputs:
       image_digest: ${{ steps.image-digest.outputs.digest }}
       chart_digest: ${{ steps.chart-digest.outputs.digest }}
@@ -291,7 +318,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Download controller image artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: ${{ needs.build_controller.outputs.artifact_name }}
           path: ${{ env.CONTROLLER_DIR }}/tmp/oci
@@ -364,7 +391,7 @@ jobs:
           push-to-registry: true
 
       - name: Upload chart artifact (with digest)
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: controller-chart-${{ needs.build_controller.outputs.version }}
           retention-days: 1

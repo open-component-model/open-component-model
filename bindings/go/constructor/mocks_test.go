@@ -362,17 +362,3 @@ type mockCallbackTracker struct {
 	descriptor           *descriptor.Descriptor
 	err                  error
 }
-
-func (m *mockCallbackTracker) reset() {
-	m.startComponentCalled = false
-	m.endComponentCalled = false
-	m.startResourceCalled = false
-	m.endResourceCalled = false
-	m.startSourceCalled = false
-	m.endSourceCalled = false
-	m.component = nil
-	m.resource = nil
-	m.source = nil
-	m.descriptor = nil
-	m.err = nil
-}

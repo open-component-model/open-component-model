@@ -94,7 +94,7 @@ configurations:
 	require.NoError(t, os.WriteFile(cfgPath, []byte(cfg), os.ModePerm))
 
 	tempDir := t.TempDir()
-	outputPath := filepath.Join(tempDir)
+	outputPath := tempDir
 
 	downloadCMD := cmd.New()
 	downloadCMD.SetArgs([]string{
@@ -143,7 +143,7 @@ configurations:
 	require.NoError(t, os.WriteFile(cfgPath, []byte(cfg), os.ModePerm))
 
 	tempDir := t.TempDir()
-	outputPath := filepath.Join(tempDir)
+	outputPath := tempDir
 
 	downloadCMD := cmd.New()
 	downloadCMD.SetArgs([]string{
@@ -281,6 +281,7 @@ func getUserAndPasswordForTest(t *testing.T) (string, string) {
 }
 
 func getUsername(t *testing.T, gh string) (string, error) {
+	t.Helper()
 	if githubUser := os.Getenv("GITHUB_USER"); githubUser != "" {
 		return githubUser, nil
 	}

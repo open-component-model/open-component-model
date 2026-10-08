@@ -832,6 +832,7 @@ func TestConstructComponent_DuplicateResourceIdentity(t *testing.T) {
 }
 
 func collectDescriptors(t *testing.T, graph *syncdag.SyncedDirectedAcyclicGraph[string]) []*descriptor.Descriptor {
+	t.Helper()
 	var descs []*descriptor.Descriptor
 	_ = graph.WithReadLock(func(d *dag.DirectedAcyclicGraph[string]) error {
 		for id, vert := range d.Vertices {

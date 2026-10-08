@@ -12,7 +12,6 @@ import (
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	constructorv1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
 	credconfigv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
-	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -20,6 +19,7 @@ import (
 
 // setupTestComponent creates a basic component constructor for testing
 func setupTestComponent(t *testing.T, resourceYAML string) *constructorruntime.ComponentConstructor {
+	t.Helper()
 	yamlData := fmt.Sprintf(`
 components:
   - name: ocm.software/test-component
@@ -42,6 +42,7 @@ components:
 
 // verifyBasicComponent verifies the basic component properties
 func verifyBasicComponent(t *testing.T, desc *descriptor.Descriptor) {
+	t.Helper()
 	assert.Equal(t, "ocm.software/test-component", desc.Component.Name)
 	assert.Equal(t, "v1.0.0", desc.Component.Version)
 	assert.Equal(t, "test-provider", desc.Component.Provider.Name)
@@ -683,9 +684,8 @@ components:
 		ResourceInputMethodProvider: mockProvider,
 		TargetRepositoryProvider:    &mockTargetRepositoryProvider{repo: mockRepo},
 	}
-	graph := syncdag.NewSyncedDirectedAcyclicGraph[string]()
 	constructorInstance := NewDefaultConstructor(converted, opts)
-	graph = constructorInstance.GetGraph()
+	graph := constructorInstance.GetGraph()
 
 	// Process the constructor
 	err = constructorInstance.Construct(context.Background())

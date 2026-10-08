@@ -30,6 +30,7 @@ import (
 
 // setupTestRepositoryWithDescriptorLibrary creates a test repository with the given component versions
 func setupTestRepositoryWithDescriptorLibrary(t *testing.T, versions ...*descriptor.Descriptor) (string, error) {
+	t.Helper()
 	r := require.New(t)
 	archivePath := t.TempDir()
 	fs, err := filesystem.NewFS(archivePath, os.O_RDWR)
@@ -285,7 +286,7 @@ configurations:
 			spec := dryRunTransferSpec(t, sourceRef, fmt.Sprintf("ctf::%s", toPath))
 
 			_, err := test.OCM(t,
-				test.WithArgs("transfer", "component-version", "--transfer-spec", "-"),
+				test.WithArgs("transfer", "component-version", "--transfer-spec", "-", "--config", "-"),
 				test.WithInput(bytes.NewBufferString(tt.stdin(spec))),
 				test.WithOutput(new(bytes.Buffer)),
 				test.WithErrorOutput(test.NewJSONLogReader()),
@@ -300,15 +301,27 @@ configurations:
 }
 
 // TestTransferComponentVersionWithTransferSpecStdinAppliesConfig proves that configuration in
-// stdin is loaded: a broken configuration document fails the command.
+// stdin is loaded with --config -: a broken configuration document fails the command.
 func TestTransferComponentVersionWithTransferSpecStdinAppliesConfig(t *testing.T) {
 	_, err := test.OCM(t,
-		test.WithArgs("transfer", "component-version", "--transfer-spec", "-"),
+		test.WithArgs("transfer", "component-version", "--transfer-spec", "-", "--config", "-"),
 		test.WithInput(bytes.NewBufferString("type: generic.config.ocm.software/v1\nconfigurations: notalist\n")),
 		test.WithOutput(new(bytes.Buffer)),
 		test.WithErrorOutput(test.NewJSONLogReader()),
 	)
-	require.ErrorContains(t, err, "could not load configuration from stdin")
+	require.ErrorContains(t, err, "could not load configuration: stdin:")
+}
+
+// TestTransferComponentVersionWithTransferSpecStdinRejectsConfigWithoutFlag proves that
+// configuration in stdin is not applied silently: without --config - it is an error.
+func TestTransferComponentVersionWithTransferSpecStdinRejectsConfigWithoutFlag(t *testing.T) {
+	_, err := test.OCM(t,
+		test.WithArgs("transfer", "component-version", "--transfer-spec", "-"),
+		test.WithInput(bytes.NewBufferString("type: generic.config.ocm.software/v1\nconfigurations: []\n---\nenvironment: {}\ntransformations: []\n")),
+		test.WithOutput(new(bytes.Buffer)),
+		test.WithErrorOutput(test.NewJSONLogReader()),
+	)
+	require.ErrorContains(t, err, "configuration is not allowed in a transfer spec")
 }
 
 func TestTransferComponentVersionWithTransferSpecFileNotFound(t *testing.T) {

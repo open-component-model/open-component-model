@@ -259,6 +259,7 @@ func TestUploadResource(t *testing.T) {
 }
 
 func TestGetResourceCredentialConsumerIdentity(t *testing.T) {
+	r := require.New(t)
 	t.Parallel()
 
 	repo := repository.NewResourceRepository(nil)
@@ -267,14 +268,15 @@ func TestGetResourceCredentialConsumerIdentity(t *testing.T) {
 	resource.Name = "test"
 	resource.Version = "1.0.0"
 	resource.Type = "blob"
-	raw, _ := json.Marshal(map[string]any{"url": "https://example.com:443/path/file.tar.gz"})
+	raw, err := json.Marshal(map[string]any{"url": "https://example.com:443/path/file.tar.gz"})
+	r.NoError(err)
 	resource.Access = &runtime.Raw{
 		Type: runtime.NewVersionedType("wget", v1.Version),
 		Data: raw,
 	}
 
 	identity, err := repo.GetResourceCredentialConsumerIdentity(t.Context(), resource)
-	require.NoError(t, err)
+	r.NoError(err)
 	assert.Equal(t, "Wget", identity["type"])
 	assert.Equal(t, "https", identity["scheme"])
 	assert.Equal(t, "example.com", identity["hostname"])
@@ -447,7 +449,7 @@ func TestProcessResourceDigest_ConfigDriven(t *testing.T) {
 
 	t.Run("default policy verifies the RFC-9530 header source", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			w.Header().Set("x-checksum-sha256", sha256)
+			w.Header().Set("X-Checksum-Sha256", sha256)
 			_, _ = w.Write(content)
 		}))
 		defer server.Close()
@@ -468,7 +470,7 @@ func TestProcessResourceDigest_ConfigDriven(t *testing.T) {
 
 	t.Run("host override wins over default", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			w.Header().Set("x-checksum-sha256", sha256)
+			w.Header().Set("X-Checksum-Sha256", sha256)
 			_, _ = w.Write(content)
 		}))
 		defer server.Close()
@@ -612,7 +614,7 @@ func TestProcessResourceDigest_AccessFastPath(t *testing.T) {
 		// on the access fast path, so the processor downloads the body and pins
 		// SHA-256 — keeping the descriptor transferable by value.
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("x-checksum-sha1", sha1)
+			w.Header().Set("X-Checksum-Sha1", sha1)
 			if r.Method != http.MethodHead {
 				_, _ = w.Write(content)
 			}
@@ -709,7 +711,7 @@ func TestDownloadResource_ChecksumPolicy(t *testing.T) {
 
 	t.Run("Require verifies the advertised checksum over the downloaded bytes", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("x-checksum-sha256", sha256)
+			w.Header().Set("X-Checksum-Sha256", sha256)
 			_, _ = w.Write(content)
 		}))
 		defer server.Close()
@@ -724,7 +726,7 @@ func TestDownloadResource_ChecksumPolicy(t *testing.T) {
 
 	t.Run("Require aborts a transfer whose advertised checksum mismatches the bytes", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("x-checksum-sha256", strings.Repeat("0", 64))
+			w.Header().Set("X-Checksum-Sha256", strings.Repeat("0", 64))
 			_, _ = w.Write(content)
 		}))
 		defer server.Close()
@@ -783,7 +785,7 @@ func TestProcessResourceDigest_PeekRedirectSafety(t *testing.T) {
 			if r.Header.Get("Authorization") != "" {
 				leaked = true
 			}
-			w.Header().Set("x-checksum-sha256", sha256)
+			w.Header().Set("X-Checksum-Sha256", sha256)
 			w.WriteHeader(http.StatusOK)
 		}))
 		defer downstream.Close()
@@ -819,7 +821,7 @@ func TestProcessResourceDigest_PeekRedirectSafety(t *testing.T) {
 			}
 			// The advertised checksum is served only to the selected variant.
 			if r.Header.Get("Accept") == "application/vnd.custom" {
-				w.Header().Set("x-checksum-sha256", sha256)
+				w.Header().Set("X-Checksum-Sha256", sha256)
 			}
 			w.WriteHeader(http.StatusOK)
 		}))

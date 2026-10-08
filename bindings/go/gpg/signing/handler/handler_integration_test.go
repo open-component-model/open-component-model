@@ -2,6 +2,7 @@ package handler
 
 import (
 	"bytes"
+	"context"
 	"crypto"
 	"os"
 	"os/exec"
@@ -47,6 +48,7 @@ func Test_Integration_GPGHandler(t *testing.T) {
 		{
 			name: "signature format",
 			run: func(t *testing.T, r *require.Assertions) {
+				t.Helper()
 				sig, err := h.Sign(t.Context(), sha256Digest, &v1alpha1.Config{}, signer.privCreds())
 				r.NoError(err)
 				r.Equal(v1alpha1.AlgorithmGPG, sig.Algorithm)
@@ -57,6 +59,7 @@ func Test_Integration_GPGHandler(t *testing.T) {
 		{
 			name: "RSA key with every hash algorithm",
 			run: func(t *testing.T, r *require.Assertions) {
+				t.Helper()
 				for alg, hash := range map[v1alpha1.HashAlgorithm]crypto.Hash{
 					v1alpha1.HashAlgorithmSHA256: crypto.SHA256,
 					v1alpha1.HashAlgorithmSHA384: crypto.SHA384,
@@ -70,12 +73,14 @@ func Test_Integration_GPGHandler(t *testing.T) {
 		{
 			name: "passphrase-protected key",
 			run: func(t *testing.T, r *require.Assertions) {
+				t.Helper()
 				roundTrip(t, r, sha256Digest, &v1alpha1.Config{}, protected.privCreds(), protected.pubCreds())
 			},
 		},
 		{
 			name: "protected key with wrong passphrase",
 			run: func(t *testing.T, r *require.Assertions) {
+				t.Helper()
 				creds := protected.privCreds()
 				creds.Passphrase = "wrong"
 				_, err := h.Sign(t.Context(), sha256Digest, &v1alpha1.Config{}, creds)
@@ -85,6 +90,7 @@ func Test_Integration_GPGHandler(t *testing.T) {
 		{
 			name: "protected key without passphrase",
 			run: func(t *testing.T, r *require.Assertions) {
+				t.Helper()
 				creds := protected.privCreds()
 				creds.Passphrase = ""
 				_, err := h.Sign(t.Context(), sha256Digest, &v1alpha1.Config{}, creds)
@@ -94,12 +100,14 @@ func Test_Integration_GPGHandler(t *testing.T) {
 		{
 			name: "public key derived from private key material",
 			run: func(t *testing.T, r *require.Assertions) {
+				t.Helper()
 				roundTrip(t, r, sha256Digest, &v1alpha1.Config{}, signer.privCreds(), signer.privCreds())
 			},
 		},
 		{
 			name: "wrong public key",
 			run: func(t *testing.T, r *require.Assertions) {
+				t.Helper()
 				sig, err := h.Sign(t.Context(), sha256Digest, &v1alpha1.Config{}, signer.privCreds())
 				r.NoError(err)
 				r.Error(h.Verify(t.Context(), gpgSignature(sha256Digest, sig.Value), &v1alpha1.Config{}, other.pubCreds()))
@@ -108,6 +116,7 @@ func Test_Integration_GPGHandler(t *testing.T) {
 		{
 			name: "tampered digest",
 			run: func(t *testing.T, r *require.Assertions) {
+				t.Helper()
 				sig, err := h.Sign(t.Context(), sha256Digest, &v1alpha1.Config{}, signer.privCreds())
 				r.NoError(err)
 				tampered := makeDigest(t, crypto.SHA256, []byte("tampered"))
@@ -117,6 +126,7 @@ func Test_Integration_GPGHandler(t *testing.T) {
 		{
 			name: "key fingerprint selectors",
 			run: func(t *testing.T, r *require.Assertions) {
+				t.Helper()
 				for _, fp := range []string{signer.fpr, strings.ToLower(signer.fpr), signer.fpr[len(signer.fpr)-16:]} {
 					roundTrip(t, r, sha256Digest, &v1alpha1.Config{KeyFingerprint: fp}, signer.privCreds(), signer.pubCreds())
 				}
@@ -125,6 +135,7 @@ func Test_Integration_GPGHandler(t *testing.T) {
 		{
 			name: "unknown key fingerprint on sign",
 			run: func(t *testing.T, r *require.Assertions) {
+				t.Helper()
 				cfg := &v1alpha1.Config{KeyFingerprint: "DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF"}
 				_, err := h.Sign(t.Context(), sha256Digest, cfg, signer.privCreds())
 				r.Error(err)
@@ -133,6 +144,7 @@ func Test_Integration_GPGHandler(t *testing.T) {
 		{
 			name: "key fingerprint mismatch on verify",
 			run: func(t *testing.T, r *require.Assertions) {
+				t.Helper()
 				sig, err := h.Sign(t.Context(), sha256Digest, &v1alpha1.Config{}, other.privCreds())
 				r.NoError(err)
 				keyring := &gpgcredentialsv1.GPGCredentials{PublicKeyPGP: signer.public + "\n" + other.public}
@@ -144,6 +156,7 @@ func Test_Integration_GPGHandler(t *testing.T) {
 		{
 			name: "public-only material as private key",
 			run: func(t *testing.T, r *require.Assertions) {
+				t.Helper()
 				creds := &gpgcredentialsv1.GPGCredentials{PrivateKeyPGP: signer.public}
 				_, err := h.Sign(t.Context(), sha256Digest, &v1alpha1.Config{}, creds)
 				r.ErrorContains(err, "no secret key found in private key material")
@@ -152,6 +165,7 @@ func Test_Integration_GPGHandler(t *testing.T) {
 		{
 			name: "certify-only primary key with signing subkey",
 			run: func(t *testing.T, r *require.Assertions) {
+				t.Helper()
 				for _, fp := range []string{"", certifyOnly.fpr} {
 					roundTrip(t, r, sha256Digest, &v1alpha1.Config{KeyFingerprint: fp}, certifyOnly.privCreds(), certifyOnly.pubCreds())
 				}
@@ -160,6 +174,7 @@ func Test_Integration_GPGHandler(t *testing.T) {
 		{
 			name: "signatures of the former go-crypto implementation still verify",
 			run: func(t *testing.T, r *require.Assertions) {
+				t.Helper()
 				pub := &gpgcredentialsv1.GPGCredentials{PublicKeyPGPFile: filepath.Join("testdata", "gocrypto", "public.asc")}
 				for name, hashAlg := range map[string]string{"sha256": "SHA-256", "sha512": "SHA-512"} {
 					digest := readFixture(t, name+".digest")
@@ -299,6 +314,9 @@ func Test_Integration_GPGHandler_LongTMPDIR(t *testing.T) {
 	signer := gpgKey(t, "signer", "ed25519", "sign", "")
 	digest := makeDigest(t, crypto.SHA256, []byte("long TMPDIR"))
 
+	// Not t.TempDir(): this test deliberately builds a long $TMPDIR, and t.TempDir's own
+	// long path can overflow the Unix socket path limit of gpg-agent on macOS.
+	//nolint:usetesting // see above: deliberately using os.MkdirTemp to control $TMPDIR length
 	long, err := os.MkdirTemp("", "ocm-gpg-test-")
 	r.NoError(err)
 	t.Cleanup(func() { _ = os.RemoveAll(long) })
@@ -329,10 +347,11 @@ func (k *testKey) pubCreds() *gpgcredentialsv1.GPGCredentials {
 func gpgKey(t *testing.T, name, algo, usage, passphrase string) *testKey {
 	t.Helper()
 	// Not t.TempDir(): its long path can overflow the Unix socket path limit of gpg-agent on macOS.
+	//nolint:usetesting // see above: deliberately using a short base path for gpg-agent sockets
 	home, err := os.MkdirTemp("", "ocm-gpg-test-")
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		_ = exec.Command("gpgconf", "--homedir", home, "--kill", "all").Run()
+		_ = exec.CommandContext(context.Background(), "gpgconf", "--homedir", home, "--kill", "all").Run()
 		_ = os.RemoveAll(home)
 	})
 	k := &testKey{home: home, passphrase: passphrase}

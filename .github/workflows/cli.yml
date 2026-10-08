@@ -54,7 +54,7 @@ jobs:
   # assemble job, so all six binaries and the CTF carry an identical version.
   version:
     name: Compute Version
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     outputs:
       version: ${{ steps.version.outputs.version }}
       build_version: ${{ steps.build_version.outputs.build_version }}
@@ -95,7 +95,7 @@ jobs:
   build:
     name: ${{ matrix.goos }}/${{ matrix.goarch }}
     needs: version
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     permissions:
       contents: read
     strategy:
@@ -137,7 +137,7 @@ jobs:
             BUILD_VERSION="${BUILD_VERSION}"
 
       - name: Upload target artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           if-no-files-found: 'error'
           retention-days: 1
@@ -151,7 +151,7 @@ jobs:
   assemble:
     name: Assemble CTF
     needs: [ version, build ]
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     outputs:
       artifact_name: ${{ env.ARTIFACT_NAME }}
       artifact_id: ${{ steps.upload-artifacts.outputs.artifact_id }}
@@ -164,8 +164,10 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ env.CHECKOUT_REPO }}
+          # The handler/internal dir carries COSIGN_VERSION (.env) for the full CLI image.
           sparse-checkout: |
             ${{ env.CLI_DIR }}
+            bindings/go/sigstore/signing/handler/internal
           persist-credentials: 'false'
           ref: ${{ env.REF }}
 
@@ -181,7 +183,7 @@ jobs:
 
       # Restore every target's binary and resource manifest under cli/tmp
       - name: Download target binaries
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           path: ${{ env.CLI_DIR }}/tmp
           pattern: cli-target-*
@@ -208,7 +210,7 @@ jobs:
 
       # Upload CLI binaries and OCI layout as build artifacts
       - name: Upload Artifacts
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         id: upload-artifacts
         with:
           if-no-files-found: 'error'
