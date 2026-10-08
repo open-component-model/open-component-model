@@ -10,7 +10,6 @@ import (
 	"crypto/x509/pkix"
 	"encoding/asn1"
 	"encoding/hex"
-	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"log/slog"
@@ -18,64 +17,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/digitorus/pkcs7"
+	"github.com/digitorus/timestamp"
 	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/credentials"
-	credconfigv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/signing/tsa"
 )
-
-func mustRaw(t *testing.T, jsonStr string) *runtime.Raw {
-	t.Helper()
-	raw := &runtime.Raw{}
-	require.NoError(t, json.Unmarshal([]byte(jsonStr), raw))
-	return raw
-}
-
-func TestCredentialProperties_DirectCredentials(t *testing.T) {
-	r := require.New(t)
-	dc := &credconfigv1.DirectCredentials{
-		Type:       runtime.NewVersionedType(credconfigv1.CredentialsType, credconfigv1.Version),
-		Properties: map[string]string{"public_key_pem": "KEY", "extra": "x"},
-	}
-	props := credentialProperties(dc)
-	r.Equal("KEY", props["public_key_pem"])
-	r.Equal("x", props["extra"])
-}
-
-func TestCredentialProperties_RawWithNestedProperties(t *testing.T) {
-	r := require.New(t)
-	// A plugin-resolved credential arriving as *runtime.Raw that wraps
-	// DirectCredentials: the material lives under a nested "properties" object.
-	raw := mustRaw(t, `{"type":"Credentials/v1","properties":{"public_key_pem":"PUBKEY","private_key_pem":"PRIVKEY"}}`)
-	props := credentialProperties(raw)
-	r.Equal("PUBKEY", props["public_key_pem"], "nested properties must be preserved, not dropped")
-	r.Equal("PRIVKEY", props["private_key_pem"])
-}
-
-func TestCredentialProperties_RawWithFlatFields(t *testing.T) {
-	r := require.New(t)
-	// A typed credential (flat string fields) arriving as *runtime.Raw.
-	raw := mustRaw(t, `{"type":"RSA/v1alpha1","publicKeyPEM":"PUBKEY"}`)
-	props := credentialProperties(raw)
-	r.Equal("PUBKEY", props["publicKeyPEM"])
-	r.NotContains(props, "type")
-}
-
-func TestWithVerifiedTime_PreservesMaterialAndAddsTime(t *testing.T) {
-	r := require.New(t)
-	raw := mustRaw(t, `{"type":"Credentials/v1","properties":{"public_key_pem":"PUBKEY"}}`)
-	ts := time.Date(2020, 1, 2, 3, 4, 5, 0, time.UTC)
-
-	out := withVerifiedTime(raw, ts)
-	dc, ok := out.(*credconfigv1.DirectCredentials)
-	r.True(ok)
-	r.Equal("PUBKEY", dc.Properties["public_key_pem"], "credential material must survive re-wrapping")
-	r.Equal(ts.Format(time.RFC3339), dc.Properties[tsa.VerifiedTimeKey])
-}
 
 type staticResolver struct {
 	creds runtime.Typed
@@ -86,12 +35,14 @@ func (s staticResolver) Resolve(context.Context, runtime.Identity) (runtime.Type
 	return s.creds, s.err
 }
 
-type testTSTInfo struct {
-	Version        int
-	Policy         asn1.ObjectIdentifier
-	MessageImprint tsa.MessageImprint
-	SerialNumber   *big.Int
-	GenTime        time.Time `asn1:"generalized"`
+// recordingResolver records every resolved identity and finds no credentials.
+type recordingResolver struct {
+	identities *[]runtime.Identity
+}
+
+func (r recordingResolver) Resolve(_ context.Context, id runtime.Identity) (runtime.Typed, error) {
+	*r.identities = append(*r.identities, id)
+	return nil, credentials.ErrNotFound
 }
 
 // mustTimestampToken returns a DER timestamp token over imprint, signed by a
@@ -118,23 +69,17 @@ func mustTimestampToken(t *testing.T, imprint []byte) []byte {
 	cert, err := x509.ParseCertificate(der)
 	r.NoError(err)
 
-	mi, err := tsa.NewMessageImprint(crypto.SHA256, imprint)
+	resp, err := (&timestamp.Timestamp{
+		HashAlgorithm:     crypto.SHA256,
+		HashedMessage:     imprint,
+		Time:              time.Now().UTC().Truncate(time.Second),
+		Policy:            asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 0},
+		AddTSACertificate: true,
+	}).CreateResponseWithOpts(cert, key, crypto.SHA256)
 	r.NoError(err)
-	info, err := asn1.Marshal(testTSTInfo{
-		Version:        1,
-		Policy:         asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 0},
-		MessageImprint: mi,
-		SerialNumber:   big.NewInt(42),
-		GenTime:        time.Now().UTC().Truncate(time.Second),
-	})
+	ts, err := timestamp.ParseResponse(resp)
 	r.NoError(err)
-	sd, err := pkcs7.NewSignedData(info)
-	r.NoError(err)
-	sd.SetContentType(asn1.ObjectIdentifier{1, 2, 840, 113549, 1, 9, 16, 1, 4})
-	r.NoError(sd.AddSigner(cert, key, pkcs7.SignerInfoConfig{}))
-	p7, err := sd.Finish()
-	r.NoError(err)
-	return p7
+	return ts.RawToken
 }
 
 // timestampedSignature returns a signature whose timestamp token covers the
@@ -152,98 +97,88 @@ func timestampedSignature(t *testing.T) descruntime.Signature {
 	}
 }
 
-func TestVerifyTSATimestamp_CredentialResolution(t *testing.T) {
+func TestVerifyTSATimestamp(t *testing.T) {
+	notFound := staticResolver{err: credentials.ErrNotFound}
 	failure := errors.New("credential plugin crashed")
-	tests := []struct {
-		name    string
-		err     error
-		wantErr error
-	}{
-		{name: "no TSA credentials configured", err: credentials.ErrNotFound},
-		{name: "resolution failure is surfaced", err: failure, wantErr: failure},
+	descriptorDigest := func(t *testing.T, sig *descruntime.Signature) []byte {
+		t.Helper()
+		digest, err := hex.DecodeString(sig.Digest.Value)
+		require.NoError(t, err)
+		return digest
 	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			r := require.New(t)
-			_, trusted, err := verifyTSATimestamp(t.Context(), slog.Default(), staticResolver{err: tc.err}, &descruntime.Descriptor{}, timestampedSignature(t))
-			if tc.wantErr != nil {
-				r.ErrorIs(err, tc.wantErr)
-				return
-			}
-			r.NoError(err)
-			r.False(trusted)
-		})
-	}
-}
 
-func TestWithoutVerifiedTime(t *testing.T) {
 	tests := []struct {
-		name         string
-		creds        runtime.Typed
-		wantStripped bool
-		wantProps    map[string]string
+		name      string
+		resolver  credentials.Resolver
+		mutate    func(t *testing.T, sig *descruntime.Signature)
+		wantErr   string
+		wantErrIs error
 	}{
-		{name: "nil credentials"},
+		{name: "no TSA credentials configured", resolver: notFound},
+		{name: "resolution failure is surfaced", resolver: staticResolver{err: failure}, wantErrIs: failure},
 		{
-			name: "direct credentials carrying a verified time",
-			creds: &credconfigv1.DirectCredentials{
-				Type:       runtime.NewVersionedType(credconfigv1.CredentialsType, credconfigv1.Version),
-				Properties: map[string]string{"public_key_pem": "PUBKEY", tsa.VerifiedTimeKey: "2020-01-02T03:04:05Z"},
+			// The legacy OCM CLI stores a bare CMS SignedData over the descriptor
+			// digest under PEM block type "TIMESTAMP INFO".
+			name:     "legacy OCM timestamp over the descriptor digest",
+			resolver: notFound,
+			mutate: func(t *testing.T, sig *descruntime.Signature) {
+				t.Helper()
+				var contentInfo struct {
+					ContentType asn1.ObjectIdentifier
+					Content     asn1.RawValue `asn1:"explicit,tag:0"`
+				}
+				_, err := asn1.Unmarshal(mustTimestampToken(t, descriptorDigest(t, sig)), &contentInfo)
+				require.NoError(t, err)
+				sig.Timestamp.Value = string(pem.EncodeToMemory(&pem.Block{Type: "TIMESTAMP INFO", Bytes: contentInfo.Content.Bytes}))
 			},
-			wantStripped: true,
-			wantProps:    map[string]string{"public_key_pem": "PUBKEY"},
 		},
 		{
-			name:         "plugin credentials carrying a verified time",
-			creds:        mustRaw(t, `{"type":"Credentials/v1","properties":{"public_key_pem":"PUBKEY","tsa_verified_time":"2020-01-02T03:04:05Z"}}`),
-			wantStripped: true,
-			wantProps:    map[string]string{"public_key_pem": "PUBKEY"},
-		},
-		{
-			name:  "typed credentials without a verified time",
-			creds: mustRaw(t, `{"type":"RSA/v1alpha1","publicKeyPEM":"PUBKEY"}`),
+			name:     "current token not covering the signature value",
+			resolver: notFound,
+			mutate: func(t *testing.T, sig *descruntime.Signature) {
+				t.Helper()
+				sig.Timestamp.Value = string(tsa.ToPEM(mustTimestampToken(t, descriptorDigest(t, sig))))
+			},
+			wantErr: "message imprint does not match",
 		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
-			out, stripped := withoutVerifiedTime(tc.creds)
-			r.Equal(tc.wantStripped, stripped)
-			if !tc.wantStripped {
-				r.Equal(tc.creds, out)
-				return
+			sig := timestampedSignature(t)
+			if tc.mutate != nil {
+				tc.mutate(t, &sig)
 			}
-			dc, ok := out.(*credconfigv1.DirectCredentials)
-			r.True(ok)
-			r.Equal(tc.wantProps, dc.Properties)
+			_, trusted, err := verifyTSATimestamp(t.Context(), slog.Default(), tc.resolver, &descruntime.Descriptor{}, sig)
+			switch {
+			case tc.wantErrIs != nil:
+				r.ErrorIs(err, tc.wantErrIs)
+			case tc.wantErr != "":
+				r.ErrorContains(err, tc.wantErr)
+			default:
+				r.NoError(err)
+				r.False(trusted)
+			}
 		})
 	}
 }
 
-func TestVerifyTSATimestamp_LegacyAndMismatchedTokens(t *testing.T) {
+func TestVerifyTSATimestamp_UsesOnlySignedURLLabel(t *testing.T) {
 	r := require.New(t)
-	resolver := staticResolver{err: credentials.ErrNotFound}
-
-	// The legacy OCM CLI stores a bare CMS SignedData over the descriptor digest
-	// under PEM block type "TIMESTAMP INFO".
-	legacy := timestampedSignature(t)
-	digest, err := hex.DecodeString(legacy.Digest.Value)
-	r.NoError(err)
-	var contentInfo struct {
-		ContentType asn1.ObjectIdentifier
-		Content     asn1.RawValue `asn1:"explicit,tag:0"`
+	sig := timestampedSignature(t)
+	labelName := tsa.TSAURLLabelPrefix + sig.Name
+	desc := &descruntime.Descriptor{}
+	desc.Component.Labels = []descruntime.Label{
+		{Name: labelName, Value: []byte(`"https://forged.example/ts"`)},
+		{Name: labelName, Value: []byte(`"https://signed.example/ts"`), Signing: true},
 	}
-	_, err = asn1.Unmarshal(mustTimestampToken(t, digest), &contentInfo)
+
+	var identities []runtime.Identity
+	_, _, err := verifyTSATimestamp(t.Context(), slog.Default(), recordingResolver{identities: &identities}, desc, sig)
 	r.NoError(err)
-	legacy.Timestamp.Value = string(pem.EncodeToMemory(&pem.Block{Type: "TIMESTAMP INFO", Bytes: contentInfo.Content.Bytes}))
-
-	_, trusted, err := verifyTSATimestamp(t.Context(), slog.Default(), resolver, &descruntime.Descriptor{}, legacy)
-	r.NoError(err, "a legacy OCM timestamp must not fail an otherwise valid signature")
-	r.False(trusted)
-
-	// A current-format token that does not cover the signature value is still rejected.
-	mismatched := timestampedSignature(t)
-	mismatched.Timestamp.Value = string(tsa.ToPEM(mustTimestampToken(t, digest)))
-	_, _, err = verifyTSATimestamp(t.Context(), slog.Default(), resolver, &descruntime.Descriptor{}, mismatched)
-	r.ErrorContains(err, "message imprint does not match")
+	r.NotEmpty(identities)
+	r.Equal("signed.example", identities[0]["hostname"])
+	for _, id := range identities {
+		r.NotEqual("forged.example", id["hostname"])
+	}
 }

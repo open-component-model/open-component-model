@@ -71,19 +71,10 @@ func NewTransport(cfg *httpv1alpha1.TimeoutConfig) *nethttp.Transport {
 	return transport
 }
 
-// NewTransportWithTLS returns an *http.Transport built by NewTransport, with TLS
-// settings applied from tlsCfg. When tlsCfg is nil, or carries no TLS-relevant
-// settings, behaviour is identical to NewTransport.
-//
-// When InsecureSkipVerify is true, a fresh *tls.Config is allocated (or the
-// existing one cloned) with InsecureSkipVerify set, and a warning is emitted at
-// construction time; any configured root CAs are ignored because verification is
-// off. Otherwise, when RootCAsPEM or RootCAsPEMFile is set, those certificates
-// are appended to a copy of the system trust pool so both privately-issued and
-// publicly-issued servers keep verifying. A load or parse failure returns an
-// error rather than silently trusting or silently ignoring the configuration.
-//
-// This never mutates http.DefaultTransport or its TLSClientConfig.
+// NewTransportWithTLS returns NewTransport(cfg) with tlsCfg applied. Custom root
+// CAs are added to a copy of the system pool so public servers keep verifying; a
+// load failure is returned rather than silently ignored. InsecureSkipVerify wins
+// over root CAs. http.DefaultTransport is never mutated.
 func NewTransportWithTLS(cfg *httpv1alpha1.TimeoutConfig, tlsCfg *httpv1alpha1.TLSConfig) (*nethttp.Transport, error) {
 	transport := NewTransport(cfg)
 	if tlsCfg == nil {
@@ -94,15 +85,13 @@ func NewTransportWithTLS(cfg *httpv1alpha1.TimeoutConfig, tlsCfg *httpv1alpha1.T
 
 	var rootCAs *x509.CertPool
 	if !insecure {
-		pool, err := rootCAPoolFromTLSConfig(tlsCfg)
-		if err != nil {
+		var err error
+		if rootCAs, err = rootCAPoolFromTLSConfig(tlsCfg); err != nil {
 			return nil, err
 		}
-		rootCAs = pool
-	}
-
-	if !insecure && rootCAs == nil {
-		return transport, nil
+		if rootCAs == nil {
+			return transport, nil
+		}
 	}
 
 	var tlsConf *tls.Config

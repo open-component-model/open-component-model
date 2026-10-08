@@ -412,7 +412,8 @@ flowchart TB
 5. The token's PKCS#7 chain is verified against those roots at its GenTime, its message imprint is checked against a
    hash of the signature value, and — only when the chain is trusted — the attested time is used to validate an RSA/PEM
    signing certificate chain. Without trusted roots the token is checked structurally only and does not relax
-   certificate validity.
+   certificate validity. Only built-in signing handlers use the attested time; external signing plugins validate
+   certificates at the current time.
 
 ### Trust Model
 

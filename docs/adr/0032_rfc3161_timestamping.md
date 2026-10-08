@@ -155,7 +155,7 @@ The implementation supports three verification levels based on trust material av
 | **Structural**   | No                         | Yes                | PKCS#7 signature + imprint match + signer timestamping-EKU; no chain verification; **no** certificate-validation time derived; warning emitted |
 | **Full**         | Yes                        | Yes                | PKCS#7 chain verification against the root pool at GenTime + imprint match + timestamping-EKU; the attested time is used for RSA/PEM certificate validity |
 
-Only the **Full** level yields a certificate-validation time. The **Structural** level never propagates `GenTime` or sets `tsa_verified_time`: a token whose TSA identity is not trusted proves nothing about *when* the signature was made, so it must never relax X.509 certificate validity. Missing TSA roots therefore disable timestamp-based certificate validation entirely, while structural parsing and imprint matching still run as defense in depth. A tampered or fabricated token with a wrong imprint, no timestamping EKU, or a non-critical EKU is rejected regardless of root certificate configuration.
+Only the **Full** level yields a certificate-validation time. The **Structural** level never passes `GenTime` to the signature handler: a token whose TSA identity is not trusted proves nothing about *when* the signature was made, so it must never relax X.509 certificate validity. Missing TSA roots therefore disable timestamp-based certificate validation entirely, while structural parsing and imprint matching still run as defense in depth. A tampered or fabricated token with a wrong imprint, no timestamping EKU, or a non-critical EKU is rejected regardless of root certificate configuration.
 
 ### TSA URL as Signed Content
 
@@ -163,7 +163,7 @@ The TSA URL is stored as a **signed label** on the component descriptor. This me
 
 1. The label is added **before** digest computation, so it is included in the normalised descriptor hash
 2. Any modification to the TSA URL after signing invalidates the descriptor digest
-3. The verifier can trust that the TSA URL it reads from the descriptor is the one the signer intended
+3. The verifier can trust that the TSA URL it reads from the descriptor is the one the signer intended; it only reads labels marked `signing: true`, because an unsigned label with the same name is not covered by the digest and could be added by anyone
 
 This prevents an attacker from replacing the TSA URL with one pointing to a TSA they control (which could issue backdated timestamps), because doing so would break the signature over the descriptor.
 
@@ -191,15 +191,7 @@ However, the TSA URL is only a **hint** for credential resolution — it tells t
 
 ### New Package: `bindings/go/signing/tsa`
 
-A standalone TSA client library with no dependency on the RSA handler or CLI packages. It provides:
-
-| File             | Purpose                                                                                                                                                                                                            |
-|------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `oid.go`         | OID constants and hash-to-OID mappings for SHA-256/384/512                                                                                                                                                         |
-| `asn1.go`        | ASN.1 types (`Request`, `Response`, `Info`, `MessageImprint`, `PKIStatusInfo`, `Accuracy`) and nonce generation                                                                                                    |
-| `tsa.go`         | `RequestTimestamp()` — sends an RFC 3161 request and validates the response; `Verify()` — verifies a DER-encoded token against a digest and optional root pool; PEM encoding/decoding for `TIMESTAMP TOKEN` blocks |
-| `credentials.go` | `TSAConsumerIdentity()` — builds credential graph identities for TSA servers; `RootCertPoolFromCredentials()` — loads root CA pool from credential properties                                                      |
-| `tsa_test.go`    | 49 unit tests covering request/response round-trips, nonce/imprint validation, wrong-digest rejection, wrong-root rejection, PEM encoding, structural-only verification                                            |
+A standalone TSA client library with no dependency on the RSA handler or CLI packages. Request creation and response/token parsing use `github.com/digitorus/timestamp`. On top of it the package checks the nonce and the message imprint (hash algorithm and value), requires a single signer with a critical `id-kp-timeStamping` EKU, validates the signer chain against the configured roots as of `GenTime` using the token's embedded intermediates, and reads legacy `TIMESTAMP INFO` tokens. `credentials.go` builds the `TSA/v1alpha1` consumer identity and loads the TSA root pool from the credential graph.
 
 ### Descriptor Changes
 
@@ -246,10 +238,11 @@ sequenceDiagram
 Key details:
 
 1. A signed label `url.tsa.ocm.software/{signatureName}` is added to the component **before** digest computation, so the TSA URL becomes part of the signed content
-2. The label value is a plain JSON string (e.g., `"https://timestamp.digicert.com"`)
+2. The label value is a plain JSON string (e.g., `"http://timestamp.digicert.com"`)
 3. The TSA request is made **after** signing, using the same digest that was signed
-4. The `--tsa` flag uses a default public TSA (`https://timestamp.digicert.com`); `--tsa-url` overrides it
+4. The `--tsa` flag uses a default public TSA (`http://timestamp.digicert.com`; DigiCert offers no HTTPS endpoint, and the token is self-authenticating); `--tsa-url` overrides it
 5. Dry-run mode skips both the label addition and the TSA request
+6. Re-signing with `--force` but without a TSA removes the label of that signature, so no stale TSA URL remains; this is refused when another signature covers the label
 
 ### Verification Flow
 
@@ -271,9 +264,9 @@ sequenceDiagram
         CLI->>Creds: Resolve TSA/v1alpha1 identity (URL-specific)
         Creds-->>CLI: root_certs_pem / root_certs_pem_file
         CLI->>CLI: Verify PKCS#7 token against digest + root pool
-        CLI->>CLI: Pass verified time to handler via credentials
+        CLI->>CLI: Put trusted time into the context
     end
-    CLI->>Handler: Verify(signature, config, credentials + tsa_verified_time)
+    CLI->>Handler: Verify(ctx with trusted signing time, signature, config, credentials)
     Handler->>Handler: Use TSA time for X.509 chain validation
 ```
 
@@ -283,7 +276,7 @@ Key details:
 2. The URL is used to build a `TSA/v1alpha1` identity with `hostname`, `port`, and `scheme` attributes for URL-specific credential matching
 3. Root certificates are loaded from the credential graph (`root_certs_pem` or `root_certs_pem_file`)
 4. If no root certs are found, verification falls back to structural-only (PKCS#7 parsing + imprint match, no chain verification) with a warning
-5. The verified TSA time is passed to the signing handler via the `tsa_verified_time` credential key
+5. Only a trusted TSA time is passed to the signature handler, as a context value (`signing.WithTrustedSigningTime`)
 6. The RSA handler uses this time instead of `time.Now()` for X.509 chain validation, allowing verification of signatures with expired certificates
 
 ### Credential Graph Integration
@@ -299,7 +292,7 @@ TSA root certificates are managed through the standard OCM credential graph, not
 - identity:
     type: TSA/v1alpha1
     hostname: timestamp.digicert.com
-    scheme: https
+    scheme: http
   credentials:
   - type: Credentials/v1
     properties:
@@ -308,9 +301,9 @@ TSA root certificates are managed through the standard OCM credential graph, not
 
 The URL-specific identity enables different root certificates for different TSA servers, matched using the standard `runtime.ParseURLToIdentity` mechanism (scheme, hostname, port, path).
 
-### Cross-Module Boundary
+### Passing the Verified Time to the Handler
 
-The RSA handler (`bindings/go/rsa`) cannot import `bindings/go/signing/tsa` due to Go module boundaries. The verified TSA time is passed through the credentials map using the well-known key `tsa_verified_time`. The canonical constant `tsa.VerifiedTimeKey` lives in the TSA package; the RSA handler uses the string literal with a comment referencing it.
+The CLI verifies the timestamp and, only when the token is trusted, stores its `GenTime` in the context with `signing.WithTrustedSigningTime`. The RSA handler reads it with `signing.TrustedSigningTimeFrom` and validates the X.509 chain as of that time. The `Verifier` interface and the plugin contract stay unchanged. Context values do not cross the plugin process boundary, so only in-process handlers honour timestamps; external plugins keep validating at the current time. Callers that do not verify timestamps, such as the controller, never set the value, and credentials cannot inject a verification time.
 
 ---
 
@@ -322,28 +315,6 @@ The RSA handler (`bindings/go/rsa`) cannot import `bindings/go/signing/tsa` due 
 | `--tsa-url` | `sign cv` | Custom TSA server URL (implies `--tsa`)                    |
 
 No new flags on `verify cv` — TSA verification is automatic when a timestamp is present, and root certificates come from the credential graph.
-
----
-
-## Files Changed
-
-| File                                                      | Change                                                                          |
-|-----------------------------------------------------------|---------------------------------------------------------------------------------|
-| `bindings/go/signing/tsa/oid.go`                          | New: OID constants and hash mappings                                            |
-| `bindings/go/signing/tsa/asn1.go`                         | New: ASN.1 types, nonce generation, status parsing                              |
-| `bindings/go/signing/tsa/tsa.go`                          | New: TSA client (`RequestTimestamp`, `Verify`, PEM encoding)                    |
-| `bindings/go/signing/tsa/credentials.go`                  | New: `TSAConsumerIdentity`, `RootCertPoolFromCredentials`, credential constants |
-| `bindings/go/signing/tsa/tsa_test.go`                     | New: 49 unit tests with mock TSA server                                         |
-| `bindings/go/descriptor/runtime/descriptor.go`            | Add `TimestampSpec` type and `Timestamp` field to `Signature`                   |
-| `bindings/go/descriptor/v2/descriptor.go`                 | Add `TimestampSpec` type and `Timestamp` field to `Signature`                   |
-| `bindings/go/descriptor/runtime/convert_v2.go`            | Add `ConvertToV2TimestampSpec` / `ConvertFromV2TimestampSpec`                   |
-| `bindings/go/descriptor/runtime/zz_generated.deepcopy.go` | Generated deep copy for `TimestampSpec`                                         |
-| `bindings/go/descriptor/v2/zz_generated.deepcopy.go`      | Generated deep copy for `TimestampSpec`                                         |
-| `bindings/go/rsa/signing/handler/handler.go`              | Use `tsa_verified_time` from credentials for X.509 chain validation time        |
-| `bindings/go/signing/digest.go`                           | Export `GetSupportedHash` helper                                                |
-| `cli/cmd/sign/component-version/cmd.go`                   | Add `--tsa` / `--tsa-url` flags, TSA URL label, timestamp request               |
-| `cli/cmd/verify/component-version/cmd.go`                 | Per-signature TSA verification with URL-specific credential lookup              |
-| `cli/integration/signing_tsa_integration_test.go`         | New: integration tests for TSA sign+verify flow                                 |
 
 ---
 
@@ -367,14 +338,14 @@ No new flags on `verify cv` — TSA verification is automatic when a timestamp i
 * **Network dependency at signing time** — the TSA server must be reachable; signing fails if the TSA is unavailable (mitigated: TSA is optional, disabled by default)
 * **Timestamp verification latency** — PKCS#7 parsing and optional chain validation add compute overhead to the verify path (typically <10ms for a single token)
 * **Signing flow ordering** — the TSA URL label must be added before digest computation, coupling the timestamp decision to an early point in the signing flow; this is an inherent consequence of making the URL tamper-evident
-* **Cross-module string key** — the RSA handler cannot import `signing/tsa` due to Go module boundaries, so the verified time is passed via a string credential key (`tsa_verified_time`) rather than a typed interface; this is documented but not compiler-enforced
+* **In-process handlers only** — the trusted signing time travels as a context value, which does not cross the plugin process boundary; external signing plugins validate certificates at the current time
 * **Trust in the TSA** — a compromised TSA can issue backdated timestamps; this is a fundamental limitation of all timestamping systems, mitigated by choosing reputable TSAs and the per-TSA root certificate isolation
 
 ---
 
 ## Future Work
 
-* **TSA certificate chain verification time** — currently, the TSA's own PKCS#7 chain is verified at the current time. In a future iteration, the TSA certificate's validity could be checked against a separate trust policy.
+* **TSA certificate revocation and long-term validation** — the TSA chain is validated as of `GenTime`; revocation status and long-term validation are not checked, so a TSA certificate that has since expired or been revoked is still trusted for tokens it issued while valid.
 * **Multiple timestamps per signature** — the current design stores a single timestamp per signature. Multiple timestamps from different TSAs could provide redundancy if one TSA is later compromised.
 * **Timestamping for Sigstore plugin** — the Sigstore signing handler (ADR 0008) uses Rekor for transparency; a future integration could combine Rekor entries with RFC 3161 timestamps for defense-in-depth.
 * **TSA URL from credential graph for signing** — currently, the TSA URL is only provided via CLI flags. A future enhancement could also resolve the TSA URL from the credential graph during signing, enabling fully config-driven workflows.

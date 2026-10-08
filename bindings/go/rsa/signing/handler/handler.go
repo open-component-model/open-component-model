@@ -29,6 +29,7 @@ import (
 	rsacredentialsv1 "ocm.software/open-component-model/bindings/go/rsa/spec/credentials/v1"
 	identityv1 "ocm.software/open-component-model/bindings/go/rsa/spec/identity/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	"ocm.software/open-component-model/bindings/go/signing"
 )
 
 // Common errors for callers to test.
@@ -180,7 +181,7 @@ func (h *Handler) Verify(
 
 	case v1alpha1.MediaTypePEM:
 		slog.WarnContext(ctx, "verifying signatures with PEM encoding is experimental")
-		return h.verifyPEMSignature(signed, hash, dig, rsaCreds, creds)
+		return h.verifyPEMSignature(ctx, signed, hash, dig, rsaCreds)
 
 	default:
 		return fmt.Errorf("unsupported media type %q", signed.Signature.MediaType)
@@ -192,11 +193,11 @@ func (h *Handler) Verify(
 // optional root anchor, merges the two intermediate pools, validates the X.509
 // path and issuer constraint, and finally verifies the RSA signature bytes.
 func (h *Handler) verifyPEMSignature(
+	ctx context.Context,
 	signed descruntime.Signature,
 	hash crypto.Hash,
 	dig []byte,
 	creds *rsacredentialsv1.RSACredentials,
-	rawCreds runtime.Typed,
 ) error {
 	sig, algFromPEM, chain, err := rsasignature.GetSignatureFromPem([]byte(signed.Signature.Value))
 	if err != nil {
@@ -221,15 +222,11 @@ func (h *Handler) verifyPEMSignature(
 	allIntermediates = append(allIntermediates, chain[1:]...)
 	allIntermediates = append(allIntermediates, credIntermediates...)
 
-	// If a verified TSA time is present in the credentials, use it instead of
-	// h.now for certificate chain validation. This allows verifying signatures
-	// with expired certificates when the TSA timestamp proves the signature was
-	// created while the cert was still valid.
+	// A trusted signing time (e.g. from a verified TSA timestamp) lets a
+	// certificate that has since expired validate as of when it signed.
 	nowFn := h.now
-	if tsaTime, ok, err := rsacredentialsv1.VerifiedTimeFromCredentials(rawCreds); err != nil {
-		return err
-	} else if ok {
-		nowFn = func() time.Time { return tsaTime }
+	if signedAt, ok := signing.TrustedSigningTimeFrom(ctx); ok {
+		nowFn = func() time.Time { return signedAt }
 	}
 
 	if err := verifyChainWithOptionalAnchor(leaf, allIntermediates, credAnchor, h.roots, nowFn); err != nil {

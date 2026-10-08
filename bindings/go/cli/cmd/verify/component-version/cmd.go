@@ -5,7 +5,6 @@ import (
 	"crypto"
 	"crypto/x509"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -20,7 +19,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/cli/internal/repository/ocm"
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
-	credconfigv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/oci/compref"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
@@ -416,12 +414,8 @@ func VerifyComponentVersion(cmd *cobra.Command, args []string) error {
 				logger.DebugContext(egctx, "using discovered credentials for verification", "type", creds.GetType())
 			}
 
-			var stripped bool
-			if creds, stripped = withoutVerifiedTime(creds); stripped {
-				logger.WarnContext(egctx, "ignoring TSA verified time from resolved credentials; it is only set by a trusted TSA timestamp", "name", signature.Name, "property", tsa.VerifiedTimeKey)
-			}
-
 			// Verify an optional RFC 3161 timestamp attached to the signature.
+			verifyCtx := egctx
 			if signature.Timestamp != nil {
 				verifiedTime, trusted, err := verifyTSATimestamp(egctx, logger, credentialGraph, desc, signature)
 				if err != nil {
@@ -432,11 +426,11 @@ func VerifyComponentVersion(cmd *cobra.Command, args []string) error {
 				// about the signing time, so it must never override the handler's
 				// current-time certificate validation.
 				if trusted {
-					creds = withVerifiedTime(creds, verifiedTime)
+					verifyCtx = signing.WithTrustedSigningTime(egctx, verifiedTime)
 				}
 			}
 
-			return handler.Verify(egctx, signature, verifierSpec, creds)
+			return handler.Verify(verifyCtx, signature, verifierSpec, creds)
 		})
 	}
 
@@ -467,17 +461,9 @@ func loadVerifierConfig(config *genericv1.Config, signatureName string, logger *
 	return spec, nil
 }
 
-// verifyTSATimestamp verifies the RFC 3161 timestamp attached to a signature and
-// returns its generation time together with a trusted flag. The token's message
-// imprint is checked against the signature value (not the descriptor digest), so
-// the timestamp attests to the existence of the signature itself.
-//
-// TSA root certificates are resolved from the credential graph: if the descriptor
-// carries a signed TSA URL label for this signature, a URL-specific TSA/v1alpha1
-// identity is tried first; the generic TSA/v1alpha1 identity follows. trusted is
-// true only when the token's signer certificate chain validated against those
-// roots as of GenTime; without roots only structural validity is checked and
-// trusted is false.
+// verifyTSATimestamp verifies the timestamp attached to a signature. trusted is
+// true only when the token chained to TSA roots from the credential graph as of
+// GenTime; without roots only structural validity is checked.
 func verifyTSATimestamp(
 	ctx context.Context,
 	logger *slog.Logger,
@@ -486,11 +472,13 @@ func verifyTSATimestamp(
 	signature descruntime.Signature,
 ) (time.Time, bool, error) {
 	// The TSA URL stored as a signed label enables URL-specific credential lookup.
+	// An unsigned label is not covered by the digest, so anyone could add one to
+	// steer the lookup to a different TSA's roots; only signed labels count.
 	var tsaURL string
 	labelName := tsa.TSAURLLabelPrefix + signature.Name
 	for _, lbl := range desc.Component.Labels {
-		if lbl.Name == labelName {
-			if err := json.Unmarshal(lbl.Value, &tsaURL); err != nil {
+		if lbl.Name == labelName && lbl.Signing {
+			if err := lbl.GetValue(&tsaURL); err != nil {
 				logger.DebugContext(ctx, "failed to parse TSA URL label", "label", labelName, "error", err.Error())
 			}
 			break
@@ -502,7 +490,8 @@ func verifyTSATimestamp(
 		return time.Time{}, false, err
 	}
 	if tsaRootPool != nil {
-		logger.DebugContext(ctx, "TSA root certificates resolved from credential graph", "name", signature.Name, "tsaURL", tsa.RedactURL(tsaURL))
+		safeURL, _ := tsa.SanitizeURL(tsaURL)
+		logger.DebugContext(ctx, "TSA root certificates resolved from credential graph", "name", signature.Name, "tsaURL", safeURL)
 	} else {
 		logger.WarnContext(ctx, "verifying TSA timestamp without root certificates; only structural validity is checked. Configure TSA root certs in the credential graph (type: TSA/v1alpha1) for full trust verification.", "name", signature.Name)
 	}
@@ -527,12 +516,12 @@ func verifyTSATimestamp(
 // Tokens from the legacy OCM CLI ("TIMESTAMP INFO") cover the descriptor digest;
 // they are verified with that imprint so v1 data verifies as it did with v1.
 func timestampTokenAndImprint(signature descruntime.Signature) ([]byte, crypto.Hash, []byte, error) {
-	hash, err := signing.GetSupportedHash(signature.Digest.HashAlgorithm)
-	if err != nil {
-		return nil, 0, nil, fmt.Errorf("preparing TSA verification: %w", err)
-	}
 	value := []byte(signature.Timestamp.Value)
 	if tsa.IsLegacyPEM(value) {
+		hash, err := signing.GetSupportedHash(signature.Digest.HashAlgorithm)
+		if err != nil {
+			return nil, 0, nil, fmt.Errorf("preparing TSA verification: %w", err)
+		}
 		der, err := tsa.FromLegacyPEM(value)
 		if err != nil {
 			return nil, 0, nil, fmt.Errorf("parsing legacy OCM timestamp failed: %w", err)
@@ -547,9 +536,11 @@ func timestampTokenAndImprint(signature descruntime.Signature) ([]byte, crypto.H
 	if err != nil {
 		return nil, 0, nil, fmt.Errorf("parsing TSA timestamp PEM failed: %w", err)
 	}
-	h := hash.New()
-	h.Write([]byte(signature.Signature.Value))
-	return der, hash, h.Sum(nil), nil
+	hash, imprint, err := tsa.SignatureImprint(signature.Digest.HashAlgorithm, []byte(signature.Signature.Value))
+	if err != nil {
+		return nil, 0, nil, fmt.Errorf("preparing TSA verification: %w", err)
+	}
+	return der, hash, imprint, nil
 }
 
 // tsaRootPoolFromGraph resolves TSA root certificates from the credential graph.
@@ -585,95 +576,4 @@ func tsaRootPoolFromGraph(ctx context.Context, logger *slog.Logger, credentialGr
 		}
 	}
 	return nil, nil
-}
-
-// withoutVerifiedTime removes a tsa.VerifiedTimeKey property from resolved
-// credentials and reports whether one was present. The RSA handler relaxes
-// certificate validity to that time, so it must originate only from a trusted
-// TSA verification (withVerifiedTime), never from configuration or a plugin.
-func withoutVerifiedTime(creds runtime.Typed) (runtime.Typed, bool) {
-	if creds == nil {
-		return nil, false
-	}
-	properties := credentialProperties(creds)
-	if _, ok := properties[tsa.VerifiedTimeKey]; !ok {
-		return creds, false
-	}
-	delete(properties, tsa.VerifiedTimeKey)
-	return &credconfigv1.DirectCredentials{
-		Type:       runtime.NewVersionedType(credconfigv1.CredentialsType, credconfigv1.Version),
-		Properties: properties,
-	}, true
-}
-
-// withVerifiedTime returns credentials that carry the TSA-verified signing time
-// alongside the resolved credential material. It preserves every string field of
-// the resolved credential (e.g. an RSACredentials public key or trust anchor) by
-// flattening it into DirectCredentials properties, then adds the verified time.
-// The RSA verification handler reads the time property to validate the signing
-// certificate chain as of the signing time instead of the current time. Because
-// the flattened property keys mirror the credential's JSON field names, the
-// handler's credential conversion reconstructs the same typed values.
-func withVerifiedTime(creds runtime.Typed, verifiedTime time.Time) runtime.Typed {
-	properties := credentialProperties(creds)
-	properties[tsa.VerifiedTimeKey] = verifiedTime.Format(time.RFC3339)
-	return &credconfigv1.DirectCredentials{
-		Type:       runtime.NewVersionedType(credconfigv1.CredentialsType, credconfigv1.Version),
-		Properties: properties,
-	}
-}
-
-// credentialProperties flattens a resolved credential into a string property map
-// so its material survives being re-wrapped as DirectCredentials. It never returns
-// nil. Three shapes are handled:
-//
-//   - *DirectCredentials: its Properties are copied directly.
-//   - any other typed credential (including plugin-returned *runtime.Raw): the
-//     value is JSON-marshalled and every string-valued top-level field is kept
-//     (the "type" discriminator is dropped, since the result is re-typed as
-//     DirectCredentials). A top-level object field whose values are all strings —
-//     most importantly a nested "properties" object as produced by a Raw carrying
-//     DirectCredentials — is flattened so the public key or trust root is not lost.
-//
-// Because the retained keys mirror the credential's JSON field names, the RSA
-// handler's credential conversion reconstructs the same typed values.
-func credentialProperties(creds runtime.Typed) map[string]string {
-	properties := map[string]string{}
-	if creds == nil {
-		return properties
-	}
-	if dc, ok := creds.(*credconfigv1.DirectCredentials); ok {
-		for k, v := range dc.Properties {
-			properties[k] = v
-		}
-		return properties
-	}
-	raw, err := json.Marshal(creds)
-	if err != nil {
-		return properties
-	}
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &fields); err != nil {
-		return properties
-	}
-	for k, v := range fields {
-		if k == "type" {
-			continue
-		}
-		var s string
-		if err := json.Unmarshal(v, &s); err == nil {
-			properties[k] = s
-			continue
-		}
-		// A nested string→string object (e.g. the "properties" of a Raw that
-		// wraps DirectCredentials) carries the actual credential material; flatten
-		// its entries so they are not silently dropped.
-		var nested map[string]string
-		if err := json.Unmarshal(v, &nested); err == nil {
-			for nk, nv := range nested {
-				properties[nk] = nv
-			}
-		}
-	}
-	return properties
 }

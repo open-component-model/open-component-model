@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	nethttp "net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -95,6 +97,8 @@ func TestTLSRootCAs_Integration(t *testing.T) {
 		Type:  "CERTIFICATE",
 		Bytes: srv.Certificate().Raw,
 	}))
+	caFile := filepath.Join(t.TempDir(), "ca.pem")
+	require.NoError(t, os.WriteFile(caFile, []byte(caPEM), 0o600))
 	insecure := true
 
 	tests := []struct {
@@ -103,7 +107,9 @@ func TestTLSRootCAs_Integration(t *testing.T) {
 		wantErr string
 	}{
 		{name: "RootCAsPEM lets a verifying client trust the server cert", tls: httpv1alpha1.TLSConfig{RootCAsPEM: caPEM}},
+		{name: "RootCAsPEMFile lets a verifying client trust the server cert", tls: httpv1alpha1.TLSConfig{RootCAsPEMFile: caFile}},
 		{name: "invalid RootCAsPEM fails the request closed", tls: httpv1alpha1.TLSConfig{RootCAsPEM: "not a certificate"}, wantErr: "no valid certificates"},
+		{name: "unreadable RootCAsPEMFile fails the request closed", tls: httpv1alpha1.TLSConfig{RootCAsPEMFile: filepath.Join(t.TempDir(), "missing.pem")}, wantErr: "reading TLS root CA file"},
 		{
 			name: "InsecureSkipVerify overrides RootCAs and skips verification",
 			tls:  httpv1alpha1.TLSConfig{InsecureSkipVerify: &insecure, RootCAsPEM: "not a certificate"},
