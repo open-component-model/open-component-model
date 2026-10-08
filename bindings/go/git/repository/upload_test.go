@@ -45,7 +45,7 @@ func TestUploadGit(t *testing.T) {
 	}{
 		{name: "initial upload", commit: fixture.First},
 		{name: "idempotent upload", commit: fixture.First},
-		{name: "incremental upload", commit: fixture.Second},
+		{name: "fast-forward update", commit: fixture.Second},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			r := require.New(t)
@@ -96,6 +96,8 @@ func TestUploadGitPreservesAnnotatedTag(t *testing.T) {
 	r.NoError(err)
 	r.Equal(sourceTag.Hash(), targetTag.Hash())
 	_, err = target.TagObject(targetTag.Hash())
+	r.NoError(err)
+	_, err = uploader.UploadGit(t.Context(), source, repository.UploadOptions{Repository: targetPath, Ref: "refs/tags/annotated"}, nil, nil)
 	r.NoError(err)
 }
 

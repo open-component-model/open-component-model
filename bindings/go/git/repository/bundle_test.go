@@ -32,7 +32,7 @@ func TestUploadResourceBundle(t *testing.T) {
 	}{
 		{name: "initial upload", commit: fixture.First},
 		{name: "idempotent upload", commit: fixture.First},
-		{name: "incremental upload", commit: fixture.Second},
+		{name: "fast-forward update", commit: fixture.Second},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			r := require.New(t)

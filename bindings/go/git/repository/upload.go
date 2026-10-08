@@ -115,17 +115,19 @@ func (r *ResourceRepository) pushGitRepository(ctx context.Context, repo *git.Re
 		if existing.Name() != targetRef {
 			continue
 		}
+		if existing.Hash() != pushHash {
+			if strings.HasPrefix(string(targetRef), "refs/tags/") {
+				return nil, fmt.Errorf("target tag %q already exists at another object", targetRef)
+			}
+			if _, ok := commits[existing.Hash()]; !ok {
+				return nil, fmt.Errorf("target ref %q does not fast-forward to %s", targetRef, commit)
+			}
+		}
 		if err := r.verifyTargetHistory(ctx, targetRepository, string(targetRef), existing.Hash(), targetCreds); err != nil {
 			return nil, err
 		}
 		if existing.Hash() == pushHash {
 			return uploadedResource(source, targetRepository, string(targetRef), commit.String()), nil
-		}
-		if strings.HasPrefix(string(targetRef), "refs/tags/") {
-			return nil, fmt.Errorf("target tag %q already exists at another object", targetRef)
-		}
-		if _, ok := commits[existing.Hash()]; !ok {
-			return nil, fmt.Errorf("target ref %q does not fast-forward to %s", targetRef, commit)
 		}
 		break
 	}
@@ -145,7 +147,7 @@ func (r *ResourceRepository) pushGitRepository(ctx context.Context, repo *git.Re
 
 func (r *ResourceRepository) verifyTargetHistory(ctx context.Context, repository, ref string, tip plumbing.Hash, credentials *credsv1.GitCredentials) error {
 	opts := r.downloadOptions(r.tempFolder())
-	access := &accessv1.Git{Repository: repository, Ref: ref}
+	access := &accessv1.Git{Repository: repository, Ref: ref, Commit: tip.String()}
 	err := download.WithRepository(ctx, access, credentials, opts, func(target *git.Repository, _ *object.Commit) error {
 		_, _, err := verifyObjectClosure(target, tip)
 		return err
