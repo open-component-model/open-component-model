@@ -90,7 +90,7 @@ jobs:
         uses: docker/setup-docker-action@2bf61fb9464cc67f0cbdeabed6aa0380accd1c70 # v5
 
       - name: Download ocm CLI artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: ${{ inputs.cli_artifact }}
           path: ${{ env.CONTROLLER_DIR }}/tmp/cli
@@ -110,7 +110,7 @@ jobs:
           version: v4.2.4
 
       - name: Download build artifacts
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: ${{ inputs.controller_image_artifact }}
           path: ${{ env.CONTROLLER_DIR }}/tmp/oci
