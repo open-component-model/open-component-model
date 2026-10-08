@@ -61,6 +61,7 @@ func TestDownloadWgetResource_Transform(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	t.Run("downloads resource to a file", func(t *testing.T) {
+		t.Parallel()
 		r := require.New(t)
 		ctx := t.Context()
 
@@ -99,6 +100,7 @@ func TestDownloadWgetResource_Transform(t *testing.T) {
 	})
 
 	t.Run("downloads to specified output directory", func(t *testing.T) {
+		t.Parallel()
 		r := require.New(t)
 		ctx := t.Context()
 		outputDir := t.TempDir()
@@ -130,6 +132,7 @@ func TestDownloadWgetResource_Transform(t *testing.T) {
 	})
 
 	t.Run("removes the output file when the download fails", func(t *testing.T) {
+		t.Parallel()
 		r := require.New(t)
 		ctx := t.Context()
 		outputDir := t.TempDir()
@@ -163,6 +166,7 @@ func TestDownloadWgetResource_Transform(t *testing.T) {
 	})
 
 	t.Run("fails when spec is nil", func(t *testing.T) {
+		t.Parallel()
 		r := require.New(t)
 		ctx := t.Context()
 
@@ -184,6 +188,7 @@ func TestDownloadWgetResource_Transform(t *testing.T) {
 	})
 
 	t.Run("fails when resource is nil", func(t *testing.T) {
+		t.Parallel()
 		r := require.New(t)
 		ctx := t.Context()
 

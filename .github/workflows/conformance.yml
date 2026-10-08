@@ -61,7 +61,7 @@ env:
 jobs:
   conformance:
     name: Sovereign Scenario (${{ matrix.arch }})
-    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-26.04-arm' || 'ubuntu-latest' }}
     timeout-minutes: 30
     # Extend the matrix with additional architectures if needed in the future.
     strategy:
@@ -108,7 +108,7 @@ jobs:
       # Artifact mode: Download and prepare CLI image
       - name: Download CLI artifact
         if: ${{ inputs.cli_artifact != '' }}
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: ${{ inputs.cli_artifact }}
           path: tmp/cli-artifact
@@ -134,7 +134,7 @@ jobs:
       # Artifact mode: Download and prepare controller image + chart
       - name: Download controller image artifact
         if: ${{ inputs.toolkit_image_artifact != '' }}
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: ${{ inputs.toolkit_image_artifact }}
           path: tmp/controller-artifact
@@ -154,7 +154,7 @@ jobs:
 
       - name: Download chart artifact
         if: ${{ inputs.toolkit_chart_artifact != '' }}
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: ${{ inputs.toolkit_chart_artifact }}
           path: tmp/chart-artifact
@@ -215,7 +215,7 @@ jobs:
   # scenario has no architecture-specific path.
   fips-gpg:
     name: FIPS GPG Scenario (arm64)
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     timeout-minutes: 15
     steps:
       - name: Compute image refs
@@ -236,7 +236,7 @@ jobs:
 
       - name: Download CLI artifact
         if: ${{ inputs.cli_artifact != '' }}
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: ${{ inputs.cli_artifact }}
           path: tmp/cli-artifact
