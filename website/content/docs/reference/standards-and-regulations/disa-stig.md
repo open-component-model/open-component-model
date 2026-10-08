@@ -8,8 +8,9 @@ toc: true
 This page describes how the OCM CLI and OCM controller images and the controller
 Helm chart are hardened, and how the images are checked against DISA
 requirements. Since OCM 0.20.0, the release pipeline scans every image against
-the DISA GPOS SRG before publishing it. The images contain only a static binary
-and a CA bundle; see
+the DISA GPOS SRG before publishing it. The controller image and the slim CLI
+image contain only a static binary and a CA bundle; the default CLI image adds
+`cosign` and GnuPG with its shared libraries on Garden Linux `bare-libc`. See
 [FIPS 140-3: Artifacts]({{< relref "docs/reference/standards-and-regulations/fips.md#artifacts" >}})
 for how they are built.
 
@@ -45,11 +46,12 @@ DISA publishes no STIG for container images. Like vendors of hardened images,
 OCM scans its images against the DISA General Purpose Operating System Security
 Requirements Guide (GPOS SRG) with OpenSCAP, using the open source
 [Chainguard GPOS SRG profile](https://github.com/chainguard-dev/stigs). The
-release pipeline scans the linux/arm64 and linux/amd64 variants of the CLI and
-controller images it builds, and fails before publishing if any rule fails.
+release pipeline scans the linux/arm64 and linux/amd64 variants of the CLI,
+slim CLI and controller images it builds, and fails before publishing if any
+rule fails.
 
-The profile checks a Wolfi root filesystem in a few places. For OCM's `scratch`
-images, `.github/stig/tailoring.xml` deselects those rules, and
+The profile checks a Wolfi root filesystem in a few places.
+`.github/stig/tailoring.xml` deselects those rules, and
 `.github/stig/ocm-supplement-xccdf.xml` checks the same SRG requirements against
 what the images contain, with OVAL definitions in
 `.github/stig/ocm-supplement-oval.xml`:
@@ -58,13 +60,24 @@ what the images contain, with OVAL definitions in
 | --- | --- | --- |
 | SV-203649, SV-203739, SV-203750, SV-203751, SV-203776 | OpenSSL FIPS provider | The entrypoint has `GOFIPS140=v<version>` and `fips140=on` in its build information |
 | SV-263659 | Wolfi CA bundle digests | The only certificate file is the CA bundle of the digest-pinned Garden Linux base image |
-| SV-203675, SV-203716 | Shared library permissions | No shared libraries, dynamic loader, package manager, setuid/setgid files, world-writable paths without the sticky bit, or executable other than the entrypoint |
+| SV-203675 | Shared library permissions | Controller and slim CLI image: no shared libraries or dynamic loader. Default CLI image: every shared library and the dynamic loader are owned by root and not writable by group or others |
+| SV-203716 | Shared library permissions | No package manager, setuid/setgid files, world-writable files, world-writable directories without the sticky bit, or executables other than the entrypoint and those declared for the image |
 | SV-203616, SV-203617, SV-203664 | `/var/log` permissions | No on-disk log locations; logs go to stdout/stderr |
 
+Each image declares the executables it may contain besides its entrypoint and
+whether it ships shared libraries, in the matrix of
+`.github/workflows/image-scan.yml`. Only the default CLI image declares any:
+`/usr/local/bin/cosign` and the GnuPG binaries `gpg`, `gpg-agent`, `gpgconf`,
+`gpg-connect-agent` and `dirmngr` in `/usr/bin`. Any other executable fails the
+scan.
+
 The scan runs offline on the exported root filesystem. To scan an image
-locally:
+locally, pass the declarations of its matrix entry, for example for the default
+CLI image:
 
 ```shell
+EXECUTABLES="/usr/local/bin/cosign /usr/bin/gpg /usr/bin/gpg-agent /usr/bin/gpgconf /usr/bin/gpg-connect-agent /usr/bin/dirmngr" \
+SHARED_LIBRARIES=true \
 node .github/scripts/stig-scan.js <image> bindings/go/cli/Containerfile tmp/stig
 ```
 

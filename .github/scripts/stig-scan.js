@@ -7,15 +7,21 @@ import path from "node:path";
 import { promisify } from "node:util";
 
 /**
- * Scans an OCM container image against the DISA GPOS SRG, as tailored for
- * scratch images in .github/stig, and fails on any failed or errored rule.
+ * Scans an OCM container image against the DISA GPOS SRG, as tailored in
+ * .github/stig, and fails on any failed or errored rule.
  *
  * The scan runs offline on the exported root filesystem of the image, inside the
  * OpenSCAP image pinned as OPENSCAP_IMAGE in the root .env: no privileged
  * container and no docker socket. The digest-pinned base image of the image's
  * "certs" build stage is the expected source of its CA bundle.
  *
- * Locally: node .github/scripts/stig-scan.js <image> <containerfile> <output-dir>
+ * The entrypoint is always an allowed executable. Further executables, and
+ * whether the image ships shared libraries and a dynamic loader, are declared
+ * per image (see the matrix in .github/workflows/image-scan.yml), so anything
+ * else that ends up in an image fails the scan.
+ *
+ * Locally: [EXECUTABLES="<path> ..."] [SHARED_LIBRARIES=true] \
+ *   node .github/scripts/stig-scan.js <image> <containerfile> <output-dir>
  */
 
 const repo = path.resolve(import.meta.dirname, "../..");
@@ -103,6 +109,19 @@ export function failedOvalTests(ovalResults, ovalDefinitions) {
 /** @param {string} s */
 const xml = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
+/**
+ * Anchored regular expression matching exactly the given absolute paths, for
+ * the OVAL check that the image contains no other executable.
+ *
+ * @param {string[]} paths - allowed executables
+ * @returns {string}
+ */
+export function executablesPattern(paths) {
+    const relative = paths.filter((p) => !p.startsWith("/"));
+    if (paths.length === 0 || relative.length > 0) throw new Error(`executables must be absolute paths, got: ${paths.join(" ")}`);
+    return `^(?:${[...new Set(paths)].map((p) => p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})$`;
+}
+
 /** @param {string[]} args */
 async function docker(...args) {
     const { stdout } = await run("docker", args, { maxBuffer: 64 * 1024 * 1024 });
@@ -133,14 +152,18 @@ echo "ocm $?" >>exit
  * @param {string} image - image reference in the local docker daemon
  * @param {string} containerfile - the image's build file
  * @param {string} out - output directory
+ * @param {object} [options]
+ * @param {string[]} [options.executables] - executables the image may contain besides its entrypoint
+ * @param {boolean} [options.sharedLibraries] - whether the image ships shared libraries and a dynamic loader
  */
-export async function scan(image, containerfile, out) {
+export async function scan(image, containerfile, out, { executables = [], sharedLibraries = false } = {}) {
     const openscap = (await readFile(path.join(repo, ".env"), "utf8")).match(/^OPENSCAP_IMAGE=(\S+)$/m)?.[1];
     if (!openscap) throw new Error(`OPENSCAP_IMAGE not set in ${repo}/.env`);
     const base = (await readFile(containerfile, "utf8")).match(/^FROM .*\s(ghcr\.io\/gardenlinux\/\S+@sha256:[a-f0-9]{64})\s+AS\s+certs$/m)?.[1];
     if (!base) throw new Error(`no digest-pinned Garden Linux certs stage in ${containerfile}`);
     const entrypoint = await docker("image", "inspect", "-f", "{{index .Config.Entrypoint 0}}", image);
     if (!entrypoint.startsWith("/")) throw new Error(`image ${image} has no absolute entrypoint`);
+    const allowedExecutables = executablesPattern([entrypoint, ...executables]);
 
     const work = await mkdtemp(path.join(tmpdir(), "stig-"));
     /** @type {string[]} */
@@ -168,7 +191,9 @@ export async function scan(image, containerfile, out) {
   <version time="${new Date().toISOString().slice(0, 19)}">1</version>
   <Profile id="xccdf_software.ocm_profile_supplement-values" extends="xccdf_software.ocm_profile_supplement">
     <title>OCM GPOS SRG supplement for ${xml(image)}</title>
-    <set-value idref="xccdf_software.ocm_value_entrypoint">${xml(entrypoint)}</set-value>
+    <select idref="xccdf_software.ocm_rule_no_shared_libraries" selected="${!sharedLibraries}"/>
+    <select idref="xccdf_software.ocm_rule_shared_library_permissions" selected="${sharedLibraries}"/>
+    <set-value idref="xccdf_software.ocm_value_executables">${xml(allowedExecutables)}</set-value>
     <set-value idref="xccdf_software.ocm_value_expected_ca_sha256">${caSha256}</set-value>
     <set-value idref="xccdf_software.ocm_value_gofips140">${xml(settings.GOFIPS140 ?? "")}</set-value>
     <set-value idref="xccdf_software.ocm_value_default_godebug">${xml(settings.DefaultGODEBUG ?? "")}</set-value>
@@ -228,6 +253,10 @@ export async function evaluate(out) {
  * - CONTAINERFILE: the image's build file (required)
  * - RESULTS_DIR: output directory for results and reports (required)
  * - SUMMARY_TITLE: heading of the job summary; no summary is written without it
+ * - EXECUTABLES: whitespace-separated absolute paths of the executables the
+ *   image may contain besides its entrypoint (optional)
+ * - SHARED_LIBRARIES: "true" if the image ships shared libraries and a dynamic
+ *   loader (optional, default "false")
  *
  * @param {import('@actions/github-script').AsyncFunctionArguments} args
  */
@@ -237,11 +266,17 @@ export default async function stigScanAction({ core }) {
         core.setFailed("IMAGE_REF, CONTAINERFILE and RESULTS_DIR environment variables are required");
         return;
     }
+    const sharedLibraries = process.env.SHARED_LIBRARIES || "false";
+    if (sharedLibraries !== "true" && sharedLibraries !== "false") {
+        core.setFailed(`SHARED_LIBRARIES must be "true" or "false", got "${sharedLibraries}"`);
+        return;
+    }
+    const executables = (process.env.EXECUTABLES ?? "").split(/\s+/).filter(Boolean);
 
     /** @type {string[]} */
     const errors = [];
     try {
-        await scan(image, containerfile, out);
+        await scan(image, containerfile, out, { executables, sharedLibraries: sharedLibraries === "true" });
     } catch (error) {
         errors.push(`scan failed: ${error instanceof Error ? error.message : error}`);
     }
@@ -287,7 +322,7 @@ export default async function stigScanAction({ core }) {
 if (import.meta.main) {
     const [image, containerfile, out] = process.argv.slice(2);
     if (!image || !containerfile || !out) {
-        console.error("usage: node .github/scripts/stig-scan.js <image> <containerfile> <output-dir>");
+        console.error('usage: [EXECUTABLES="<path> ..."] [SHARED_LIBRARIES=true] node .github/scripts/stig-scan.js <image> <containerfile> <output-dir>');
         process.exit(2);
     }
     Object.assign(process.env, { IMAGE_REF: image, CONTAINERFILE: containerfile, RESULTS_DIR: out });

@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { countResults, failedOvalTests, goBuildSettings, parseXccdfResults } from "./stig-scan.js";
+import { countResults, executablesPattern, failedOvalTests, goBuildSettings, parseXccdfResults } from "./stig-scan.js";
 
 // Shape of oscap's --results output: the benchmark (rules) followed by the TestResult.
 const results = (prefix) => `<?xml version="1.0" encoding="UTF-8"?>
@@ -72,5 +72,20 @@ describe("failedOvalTests", () => {
 <test test_id="oval:t:tst:3" version="1" result="error"/>
 <test test_id="oval:t:tst:9" version="1" result="unknown"/>`;
         assert.deepEqual(failedOvalTests(results, definitions), ["setuid files", "log files", "oval:t:tst:9"]);
+    });
+});
+
+describe("executablesPattern", () => {
+    it("matches exactly the given paths", () => {
+        const re = new RegExp(executablesPattern(["/ocm", "/usr/bin/gpg-agent", "/usr/bin/gpg", "/ocm"]));
+        for (const p of ["/ocm", "/usr/bin/gpg", "/usr/bin/gpg-agent"]) assert.ok(re.test(p), p);
+        // "." must not match any character, and paths must not match as prefixes or suffixes.
+        for (const p of ["/ocmx", "/x/ocm", "/usr/bin/gpgconf", "/usr/bin/gpg-agentx"]) assert.ok(!re.test(p), p);
+        assert.ok(!new RegExp(executablesPattern(["/a.b"])).test("/axb"));
+    });
+
+    it("rejects relative and missing paths", () => {
+        assert.throws(() => executablesPattern(["/ocm", "usr/bin/gpg"]));
+        assert.throws(() => executablesPattern([]));
     });
 });
