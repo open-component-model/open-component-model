@@ -714,9 +714,12 @@ created the Flux `OCIRepository` and `HelmRelease`, which Flux then reconciles i
 
 ### Verify localization
 
-Check that the deployed pod uses the localized image from your registry (not the original `ghcr.io/stefanprodan/...`):
+Check that the deployed pod uses the localized image from your registry (not the original `ghcr.io/stefanprodan/...`).
+The claim can report `READY` before Flux has reconciled the chart into a running pod, so wait for the pod to appear
+first:
 
 ```bash
+kubectl wait --for=condition=Ready pod -l app.kubernetes.io/name=bootstrap-release-podinfo --timeout=300s
 kubectl get pods -l app.kubernetes.io/name=bootstrap-release-podinfo -o jsonpath='{.items[0].spec.containers[0].image}'
 ```
 
@@ -732,18 +735,6 @@ ghcr.io/$GITHUB_USERNAME/component-descriptors/ocm.software/ocm-k8s-toolkit/boot
 The image reference points to your registry with a digest. Localization worked!
 {{< /step >}}
 {{< /steps >}}
-
-{{< callout context="caution" title="Going to production: tighten Crossplane's RBAC" icon="outline/lock" >}}
-This tutorial uses a dev-friendly install with broad permissions (see [Prerequisites](#prerequisites)). A hardened
-cluster locks that down. Three distinct service accounts need grants. The OCM controller needs its own grant for the
-objects it manages, `compositions`/`compositeresourcedefinitions.apiextensions.crossplane.io` (the blob) and
-`resources.delivery.ocm.software` (the chart and image). Crossplane core itself needs RBAC for
-`resources.delivery.ocm.software` too, because the Composition declares those OCM `Resource` objects as composed
-resources that the engine applies (see [Crossplane core cannot patch the OCM `Resource`
-objects](#crossplane-core-cannot-patch-the-ocm-resource-objects)). Separately, the Crossplane Kubernetes provider's
-service account needs RBAC for the Flux objects it creates on your behalf,
-`ocirepositories.source.toolkit.fluxcd.io` and `helmreleases.helm.toolkit.fluxcd.io`.
-{{< /callout >}}
 
 ## Troubleshooting
 
@@ -825,45 +816,54 @@ controller. That account needs RBAC for the Flux objects it creates
 (`ocirepositories.source.toolkit.fluxcd.io`, `helmreleases.helm.toolkit.fluxcd.io`). The dev-friendly install
 grants this broadly. On a hardened cluster, bind an equivalent `ClusterRole` to the provider's service account.
 
-#### Crossplane core cannot patch the OCM `Resource` objects
+#### Composed OCM `Resource` objects stay forbidden
 
-A distinct, easy-to-miss case. If the composite's events show
+The two OCM `Resource` objects (the chart and the image) are applied by the Kubernetes provider, not by Crossplane
+core. If the provider's service account (`provider-kubernetes`) lacks the grant, the composed `Object` reports a
+`forbidden` error on its status, for example
 
 ```text
-cannot compose resources: cannot apply composed resource "ocm-resource-image":
-resources.delivery.ocm.software "<xr>-image" is forbidden: User
-"system:serviceaccount:crossplane-system:crossplane" cannot patch resource
+cannot apply object: resources.delivery.ocm.software "<xr>-image" is forbidden: User
+"system:serviceaccount:crossplane-system:provider-kubernetes" cannot patch resource
 "resources" in API group "delivery.ocm.software" at the cluster scope
 ```
 
-the blocked account is **Crossplane core itself** (`crossplane-system:crossplane`), not the OCM controller and
-not the Kubernetes provider. The Composition declares two OCM `Resource` objects as composed resources, so
-Crossplane core — the engine that reconciles the composite — needs to create and patch
-`resources.delivery.ocm.software`. The dev-friendly install does not grant this.
-
-Crossplane core aggregates any `ClusterRole` labeled `rbac.crossplane.io/aggregate-to-crossplane: "true"` into
-its own role, so no binding is needed — just add the labeled role:
+The dev-friendly install grants this broadly. On a hardened cluster, bind a `ClusterRole` for the OCM `Resource`
+objects to the provider's service account:
 
 ```bash
 cat << 'EOF' | kubectl apply -f -
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: crossplane-ocm-resources
-  labels:
-    rbac.crossplane.io/aggregate-to-crossplane: "true"
+  name: provider-kubernetes-ocm-resources
 rules:
   - apiGroups: ["delivery.ocm.software"]
     resources: ["resources", "resources/status"]
     verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: provider-kubernetes-ocm-resources
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: provider-kubernetes-ocm-resources
+subjects:
+  - kind: ServiceAccount
+    name: provider-kubernetes
+    namespace: crossplane-system
 EOF
 ```
 
+The provider's service account name is the one on its running pod. Look yours up with
+`kubectl get pod -n crossplane-system -l pkg.crossplane.io/provider=provider-kubernetes -o jsonpath='{.items[0].spec.serviceAccountName}'`.
 Confirm the grant propagated (Crossplane re-reconciles the composite within about a minute):
 
 ```bash
 kubectl auth can-i patch resources.delivery.ocm.software \
-  --as=system:serviceaccount:crossplane-system:crossplane
+  --as=system:serviceaccount:crossplane-system:provider-kubernetes
 ```
 
 ### Claim Not Becoming Ready
