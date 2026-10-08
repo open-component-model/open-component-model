@@ -509,7 +509,7 @@ func TestOCILayoutWriterWithTempFile_RemovesOnClose(t *testing.T) {
 
 	// Peek at the underlying file path via the removingCloser
 	rc := writer.buf.(*removingCloser)
-	tmpPath := rc.File.Name()
+	tmpPath := rc.Name()
 
 	_, err = os.Stat(tmpPath)
 	require.NoError(t, err, "temp file should exist before Close")

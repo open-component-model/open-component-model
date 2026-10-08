@@ -2,6 +2,7 @@ package handler
 
 import (
 	"bytes"
+	"context"
 	"crypto"
 	"os"
 	"os/exec"
@@ -350,7 +351,7 @@ func gpgKey(t *testing.T, name, algo, usage, passphrase string) *testKey {
 	home, err := os.MkdirTemp("", "ocm-gpg-test-")
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		_ = exec.Command("gpgconf", "--homedir", home, "--kill", "all").Run()
+		_ = exec.CommandContext(context.Background(), "gpgconf", "--homedir", home, "--kill", "all").Run()
 		_ = os.RemoveAll(home)
 	})
 	k := &testKey{home: home, passphrase: passphrase}

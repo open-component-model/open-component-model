@@ -6,6 +6,7 @@ package integration
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -215,7 +216,7 @@ func writeGPGKeyPair(t *testing.T, dir, name, passphrase string) (privPath, pubP
 	home, err := os.MkdirTemp("", "ocm-gpg-test-")
 	r.NoError(err)
 	t.Cleanup(func() {
-		_ = exec.Command("gpgconf", "--homedir", home, "--kill", "all").Run()
+		_ = exec.CommandContext(context.Background(), "gpgconf", "--homedir", home, "--kill", "all").Run()
 		_ = os.RemoveAll(home)
 	})
 	gpg := func(args ...string) []byte {

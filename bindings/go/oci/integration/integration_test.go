@@ -567,7 +567,7 @@ func uploadDownloadLocalResourceOCILayout(t *testing.T, repo *oci.Repository, co
 	err = repo.AddComponentVersion(ctx, cd)
 	r.NoError(err)
 
-	downloaded, newRes, err := repo.GetLocalResource(ctx, component, version, resource.ElementMeta.ToIdentity())
+	downloaded, _, err := repo.GetLocalResource(ctx, component, version, resource.ToIdentity())
 	r.NoError(err)
 	r.NotNil(downloaded)
 
@@ -700,7 +700,7 @@ func processResourceDigest(t *testing.T, repo *oci.Repository, from, to string) 
 
 	r.Equal("0aa67467eee1b66c5e549e6b67226e226778f689ccdb46c39fe706b6428c98a5", resource.Digest.Value)
 	r.Equal("SHA-256", resource.Digest.HashAlgorithm)
-	r.Equal("genericBlobDigest/v1", resource.Digest.NormalisationAlgorithm)
+	r.Equal("ociArtifactDigest/v1", resource.Digest.NormalisationAlgorithm)
 
 	r.NotNil(resource.Digest)
 }
@@ -911,7 +911,7 @@ func uploadDownloadLocalResource(t *testing.T, repo repository.ComponentVersionR
 	r.NoError(err)
 
 	// Get local resource
-	downloadedBlob, resFromGet, err := repo.GetLocalResource(ctx, name, version, resource.ElementMeta.ToIdentity())
+	downloadedBlob, resFromGet, err := repo.GetLocalResource(ctx, name, version, resource.ToIdentity())
 	r.NoError(err)
 	r.Equal(resFromGet.ElementMeta, newRes.ElementMeta)
 
@@ -987,7 +987,7 @@ func uploadDownloadLocalSource(t *testing.T, repo repository.ComponentVersionRep
 	r.NoError(err)
 
 	// Get local source
-	downloadedBlob, srcFromGet, err := repo.GetLocalSource(ctx, name, version, source.ElementMeta.ToIdentity())
+	downloadedBlob, srcFromGet, err := repo.GetLocalSource(ctx, name, version, source.ToIdentity())
 	r.NoError(err)
 	r.Equal(srcFromGet.ElementMeta, newSrc.ElementMeta)
 
