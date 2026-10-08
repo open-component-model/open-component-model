@@ -2,103 +2,107 @@ package repository
 
 import (
 	"context"
+	"crypto/fips140"
 	"errors"
 	"fmt"
+	"io"
+	"log/slog"
+	"os"
 	"strings"
 
 	git "github.com/go-git/go-git/v6"
 	"github.com/go-git/go-git/v6/config"
 	"github.com/go-git/go-git/v6/plumbing"
-	"github.com/go-git/go-git/v6/plumbing/filemode"
 	"github.com/go-git/go-git/v6/plumbing/object"
 	"github.com/go-git/go-git/v6/plumbing/transport"
+	"github.com/opencontainers/go-digest"
 
+	"ocm.software/open-component-model/bindings/go/blob"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/git/internal/download"
-	"ocm.software/open-component-model/bindings/go/git/internal/endpoint"
 	accessv1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
 	credsv1 "ocm.software/open-component-model/bindings/go/git/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-var errIncompleteObjects = errors.New("incomplete git object history")
-
-// UploadOptions identifies the target repository and ref.
-type UploadOptions struct {
-	Repository string
-	Ref        string
-}
-
-// UploadGit copies original Git objects to an existing repository and advances one ref.
-// It never creates a commit or force-updates a ref.
-func (r *ResourceRepository) UploadGit(ctx context.Context, source *descriptor.Resource, target UploadOptions, sourceCredentials, targetCredentials runtime.Typed) (*descriptor.Resource, error) {
-	spec, err := accessFrom(source)
+// UploadResource copies the Git history of an archive returned by DownloadResource
+// to an existing repository and points one branch or tag at its commit. The
+// resource access names the target repository and the full ref; a tag target
+// becomes a lightweight tag. It never creates a commit or force-updates a ref.
+func (r *ResourceRepository) UploadResource(ctx context.Context, resource *descriptor.Resource, content blob.ReadOnlyBlob, credentials runtime.Typed) (*descriptor.Resource, error) {
+	spec, err := accessFrom(resource)
 	if err != nil {
 		return nil, err
 	}
-	if spec.Commit == "" {
-		return nil, fmt.Errorf("git upload requires a pinned commit")
-	}
-	ref := plumbing.ReferenceName(target.Ref)
-	if !strings.HasPrefix(target.Ref, "refs/heads/") && !strings.HasPrefix(target.Ref, "refs/tags/") {
+	ref := plumbing.ReferenceName(spec.Ref)
+	if !ref.IsBranch() && !ref.IsTag() {
 		return nil, fmt.Errorf("target ref must be a full branch or tag ref")
 	}
-	if err := ref.Validate(); err != nil {
-		return nil, fmt.Errorf("invalid target ref: %w", err)
+	if content == nil {
+		return nil, fmt.Errorf("git archive content is required")
 	}
-	if target.Repository == "" {
-		return nil, fmt.Errorf("target repository is required")
-	}
-	sourceCreds, err := convertGitCredentials(sourceCredentials)
-	if err != nil {
-		return nil, fmt.Errorf("invalid source credentials: %w", err)
-	}
-	targetCreds, err := convertGitCredentials(targetCredentials)
+	creds, err := convertGitCredentials(credentials)
 	if err != nil {
 		return nil, fmt.Errorf("invalid target credentials: %w", err)
 	}
-	if _, err := endpoint.Parse(target.Repository); err != nil {
-		return nil, fmt.Errorf("invalid target repository: %w", err)
+
+	dir, err := os.MkdirTemp(r.tempFolder(), "ocm-git-upload-*")
+	if err != nil {
+		return nil, fmt.Errorf("cannot create temporary git storage: %w", err)
 	}
-	fetchOptions := r.downloadOptions(r.tempFolder())
+	defer func() {
+		if rmErr := os.RemoveAll(dir); rmErr != nil {
+			slog.WarnContext(ctx, "failed to remove temporary git storage", "path", dir, "err", rmErr)
+		}
+	}()
+
 	var uploaded *descriptor.Resource
-	upload := func(repo *git.Repository, selected *object.Commit) error {
-		result, err := r.uploadGitRepository(ctx, repo, selected, source, spec, target.Repository, ref, sourceCreds, targetCreds, fetchOptions)
-		uploaded = result
-		return err
-	}
-	if err := download.WithRepository(ctx, spec, sourceCreds, fetchOptions, upload); err != nil {
+	fips140.WithoutEnforcement(func() {
+		uploaded, err = r.upload(ctx, resource, spec, content, creds, dir)
+	})
+	if err != nil {
 		return nil, fmt.Errorf("cannot upload git resource: %w", err)
 	}
 	return uploaded, nil
 }
 
-func (r *ResourceRepository) uploadGitRepository(ctx context.Context, repo *git.Repository, selected *object.Commit, source *descriptor.Resource, sourceSpec *accessv1.Git, targetRepository string, targetRef plumbing.ReferenceName, sourceCreds, targetCreds *credsv1.GitCredentials, options download.Options) (*descriptor.Resource, error) {
-	pushHash := selected.Hash
-	if strings.HasPrefix(string(targetRef), "refs/tags/") && strings.HasPrefix(sourceSpec.Ref, "refs/tags/") {
-		var err error
-		pushHash, err = fetchPinnedTag(ctx, repo, sourceSpec.Ref, selected.Hash, sourceSpec.Repository, options, sourceCreds)
-		if err != nil {
-			return nil, err
-		}
+func (r *ResourceRepository) upload(ctx context.Context, resource *descriptor.Resource, spec *accessv1.Git, content blob.ReadOnlyBlob, creds *credsv1.GitCredentials, dir string) (*descriptor.Resource, error) {
+	stream, err := content.ReadCloser()
+	if err != nil {
+		return nil, fmt.Errorf("cannot read git archive: %w", err)
 	}
-	commits, _, err := verifyObjectClosure(repo, pushHash)
+	defer func() { _ = stream.Close() }()
+
+	digester := digest.Canonical.Digester()
+	tee := io.TeeReader(stream, digester.Hash())
+	repo, commit, err := download.Import(tee, dir)
+	if errors.Is(err, download.ErrNoHistory) {
+		return nil, fmt.Errorf("git upload needs history: %w", err)
+	}
 	if err != nil {
 		return nil, err
 	}
-	if source.Digest != nil {
-		archiveDigest, err := download.ArchiveDigest(ctx, selected, options)
-		if err != nil {
-			return nil, fmt.Errorf("cannot verify git resource digest: %w", err)
-		}
-		if err := verifyDigest(source.Digest, archiveDigest); err != nil {
-			return nil, err
-		}
+	if _, err := io.Copy(io.Discard, tee); err != nil {
+		return nil, fmt.Errorf("cannot read git archive: %w", err)
 	}
-	return r.pushGitRepository(ctx, repo, source, targetRepository, targetRef, selected.Hash, pushHash, commits, targetCreds, options)
+	if err := verifyDigest(resource.Digest, digester.Digest()); err != nil {
+		return nil, err
+	}
+
+	commits, _, err := download.VerifyObjectClosure(repo, commit)
+	if err != nil {
+		return nil, err
+	}
+	if _, ok := commits[commit]; !ok {
+		return nil, fmt.Errorf("git archive HEAD %s is not a commit", commit)
+	}
+	if spec.Commit != "" && !strings.EqualFold(spec.Commit, commit.String()) {
+		return nil, fmt.Errorf("git archive commit mismatch: expected %s, got %s", spec.Commit, commit)
+	}
+	return r.pushGitRepository(ctx, repo, resource, spec.Repository, plumbing.ReferenceName(spec.Ref), commit, commits, creds, r.downloadOptions(r.tempFolder()))
 }
 
-func (r *ResourceRepository) pushGitRepository(ctx context.Context, repo *git.Repository, source *descriptor.Resource, targetRepository string, targetRef plumbing.ReferenceName, commit, pushHash plumbing.Hash, commits map[plumbing.Hash]struct{}, targetCreds *credsv1.GitCredentials, options download.Options) (*descriptor.Resource, error) {
+func (r *ResourceRepository) pushGitRepository(ctx context.Context, repo *git.Repository, source *descriptor.Resource, targetRepository string, targetRef plumbing.ReferenceName, commit plumbing.Hash, commits map[plumbing.Hash]struct{}, targetCreds *credsv1.GitCredentials, options download.Options) (*descriptor.Resource, error) {
 	targetURL, targetOptions, err := download.RemoteOptions(targetRepository, targetCreds, options)
 	if err != nil {
 		return nil, fmt.Errorf("invalid target: %w", err)
@@ -115,7 +119,7 @@ func (r *ResourceRepository) pushGitRepository(ctx context.Context, repo *git.Re
 		if existing.Name() != targetRef {
 			continue
 		}
-		if existing.Hash() != pushHash {
+		if existing.Hash() != commit {
 			if strings.HasPrefix(string(targetRef), "refs/tags/") {
 				return nil, fmt.Errorf("target tag %q already exists at another object", targetRef)
 			}
@@ -126,13 +130,13 @@ func (r *ResourceRepository) pushGitRepository(ctx context.Context, repo *git.Re
 		if err := r.verifyTargetHistory(ctx, targetRepository, string(targetRef), existing.Hash(), targetCreds); err != nil {
 			return nil, err
 		}
-		if existing.Hash() == pushHash {
+		if existing.Hash() == commit {
 			return uploadedResource(source, targetRepository, string(targetRef), commit.String()), nil
 		}
 		break
 	}
 	const uploadRef = "refs/ocm/upload"
-	if err := repo.Storer.SetReference(plumbing.NewHashReference(uploadRef, pushHash)); err != nil {
+	if err := repo.Storer.SetReference(plumbing.NewHashReference(uploadRef, commit)); err != nil {
 		return nil, fmt.Errorf("cannot stage git upload ref: %w", err)
 	}
 	if err := remote.PushContext(ctx, &git.PushOptions{
@@ -149,7 +153,7 @@ func (r *ResourceRepository) verifyTargetHistory(ctx context.Context, repository
 	opts := r.downloadOptions(r.tempFolder())
 	access := &accessv1.Git{Repository: repository, Ref: ref, Commit: tip.String()}
 	err := download.WithRepository(ctx, access, credentials, opts, func(target *git.Repository, _ *object.Commit) error {
-		_, _, err := verifyObjectClosure(target, tip)
+		_, _, err := download.VerifyObjectClosure(target, tip)
 		return err
 	})
 	if err != nil {
@@ -174,84 +178,4 @@ func uploadedResource(source *descriptor.Resource, repository, ref, commit strin
 		Commit:     commit,
 	}
 	return result
-}
-
-func verifyObjectClosure(repo *git.Repository, tip plumbing.Hash) (map[plumbing.Hash]struct{}, map[plumbing.Hash]struct{}, error) {
-	seen := make(map[plumbing.Hash]struct{})
-	commits := make(map[plumbing.Hash]struct{})
-	pending := []plumbing.Hash{tip}
-	for len(pending) > 0 {
-		hash := pending[len(pending)-1]
-		pending = pending[:len(pending)-1]
-		if _, ok := seen[hash]; ok {
-			continue
-		}
-		seen[hash] = struct{}{}
-		encoded, err := repo.Storer.EncodedObject(plumbing.AnyObject, hash)
-		if err != nil {
-			return nil, nil, fmt.Errorf("%w: object %s: %w", errIncompleteObjects, hash, err)
-		}
-		switch encoded.Type() {
-		case plumbing.CommitObject:
-			commit, err := object.GetCommit(repo.Storer, hash)
-			if err != nil {
-				return nil, nil, fmt.Errorf("cannot read commit %s: %w", hash, err)
-			}
-			commits[hash] = struct{}{}
-			pending = append(pending, commit.TreeHash)
-			pending = append(pending, commit.ParentHashes...)
-		case plumbing.TreeObject:
-			tree, err := object.GetTree(repo.Storer, hash)
-			if err != nil {
-				return nil, nil, fmt.Errorf("cannot read tree %s: %w", hash, err)
-			}
-			for _, entry := range tree.Entries {
-				if entry.Mode != filemode.Submodule {
-					pending = append(pending, entry.Hash)
-				}
-			}
-		case plumbing.TagObject:
-			tag, err := object.GetTag(repo.Storer, hash)
-			if err != nil {
-				return nil, nil, fmt.Errorf("cannot read tag %s: %w", hash, err)
-			}
-			pending = append(pending, tag.Target)
-		case plumbing.BlobObject:
-		default:
-			return nil, nil, fmt.Errorf("unsupported git object type %s", encoded.Type())
-		}
-	}
-	return commits, seen, nil
-}
-
-func fetchPinnedTag(ctx context.Context, repo *git.Repository, sourceRef string, commit plumbing.Hash, sourceRepository string, options download.Options, sourceCreds *credsv1.GitCredentials) (plumbing.Hash, error) {
-	_, clientOptions, err := download.RemoteOptions(sourceRepository, sourceCreds, options)
-	if err != nil {
-		return plumbing.ZeroHash, err
-	}
-	const tagRef = "refs/ocm/source-tag"
-	err = repo.FetchContext(ctx, &git.FetchOptions{
-		RefSpecs:      []config.RefSpec{config.RefSpec("+" + sourceRef + ":" + tagRef)},
-		ClientOptions: clientOptions,
-		Tags:          git.NoTags,
-	})
-	if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
-		return plumbing.ZeroHash, download.TransportError(ctx, "cannot fetch source tag", err)
-	}
-	ref, err := repo.Reference(tagRef, true)
-	if err != nil {
-		return plumbing.ZeroHash, fmt.Errorf("cannot resolve source tag: %w", err)
-	}
-	hash := ref.Hash()
-	for range 32 {
-		if hash == commit {
-			return ref.Hash(), nil
-		}
-		tag, err := object.GetTag(repo.Storer, hash)
-		if err != nil {
-			return plumbing.ZeroHash, fmt.Errorf("source tag does not point to pinned commit: %w", err)
-		}
-		hash = tag.Target
-	}
-	return plumbing.ZeroHash, fmt.Errorf("source tag nesting exceeds the limit")
 }

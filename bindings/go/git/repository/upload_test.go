@@ -1,124 +1,225 @@
 package repository_test
 
 import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
+	"io"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	git "github.com/go-git/go-git/v6"
+	"github.com/go-git/go-git/v6/config"
 	"github.com/go-git/go-git/v6/plumbing"
+	"github.com/go-git/go-git/v6/plumbing/format/packfile"
 	"github.com/stretchr/testify/require"
 
+	"ocm.software/open-component-model/bindings/go/blob"
+	"ocm.software/open-component-model/bindings/go/blob/inmemory"
+	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/git/repository"
 	accessv1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-func TestUploadGit(t *testing.T) {
+func TestUploadResourceRoundTrip(t *testing.T) {
 	r := require.New(t)
 	fixture := newRepository(t)
 	targetPath := filepath.Join(t.TempDir(), "target.git")
-	target, err := git.PlainInit(targetPath, true)
+	_, err := git.PlainInit(targetPath, true)
 	r.NoError(err)
-	uploader := repository.NewResourceRepository(nil)
-
-	resource := func(commit plumbing.Hash) *descriptor.Resource {
-		return &descriptor.Resource{Access: &accessv1.Git{
-			Type:       runtime.NewVersionedType(accessv1.Type, accessv1.Version),
-			Repository: fixture.Path,
-			Ref:        "refs/heads/main",
-			Commit:     commit.String(),
-		}}
-	}
-	first := resource(fixture.First)
-	first.Digest = &descriptor.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: "genericBlobDigest/v1", Value: strings.Repeat("0", 64)}
-	_, err = uploader.UploadGit(t.Context(), first, repository.UploadOptions{Repository: targetPath, Ref: "refs/heads/main"}, nil, nil)
-	r.ErrorContains(err, "digest mismatch")
-	_, err = target.Reference("refs/heads/main", true)
-	r.Error(err)
-	first.Digest = nil
+	uploader := newUploader(t)
 
 	for _, testCase := range []struct {
-		name   string
-		commit plumbing.Hash
+		name      string
+		sourceRef string
+		commit    plumbing.Hash
+		targetRef string
+		wantHash  plumbing.Hash
+		wantErr   string
 	}{
-		{name: "initial upload", commit: fixture.First},
-		{name: "idempotent upload", commit: fixture.First},
-		{name: "fast-forward update", commit: fixture.Second},
+		{name: "initial upload", sourceRef: "refs/heads/main", commit: fixture.First, targetRef: "refs/heads/main", wantHash: fixture.First},
+		{name: "idempotent upload", sourceRef: "refs/heads/main", commit: fixture.First, targetRef: "refs/heads/main", wantHash: fixture.First},
+		{name: "fast-forward update", sourceRef: "refs/heads/main", commit: fixture.Second, targetRef: "refs/heads/main", wantHash: fixture.Second},
+		{name: "non-fast-forward update", sourceRef: "refs/heads/main", commit: fixture.First, targetRef: "refs/heads/main", wantHash: fixture.Second, wantErr: "does not fast-forward"},
+		{name: "branch to another branch", sourceRef: "refs/heads/main", commit: fixture.Second, targetRef: "refs/heads/release", wantHash: fixture.Second},
+		{name: "annotated tag to lightweight tag", sourceRef: "refs/tags/annotated", commit: fixture.First, targetRef: "refs/tags/copied", wantHash: fixture.First},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			r := require.New(t)
-			output, err := uploader.UploadGit(t.Context(), resource(testCase.commit), repository.UploadOptions{Repository: targetPath, Ref: "refs/heads/main"}, nil, nil)
+			source, content := downloadResource(t, uploader, fixture.Path, testCase.sourceRef, testCase.commit)
+			uploaded, err := uploader.UploadResource(t.Context(), targetResource(source, targetPath, testCase.targetRef), content, nil)
+			if testCase.wantErr != "" {
+				r.ErrorContains(err, testCase.wantErr)
+			} else {
+				r.NoError(err)
+				r.Equal(&accessv1.Git{
+					Type:       runtime.NewVersionedType(accessv1.Type, accessv1.Version),
+					Repository: targetPath,
+					Ref:        testCase.targetRef,
+					Commit:     testCase.commit.String(),
+				}, uploaded.Access)
+				verified, err := uploader.ProcessResourceDigest(t.Context(), uploaded, nil)
+				r.NoError(err, "the uploaded resource verifies when downloaded from the target")
+				r.Equal(source.Digest, verified.Digest)
+			}
+
+			target, err := git.PlainOpen(targetPath)
 			r.NoError(err)
-			access, ok := output.Access.(*accessv1.Git)
-			r.True(ok)
-			r.Equal(targetPath, access.Repository)
-			r.Equal("refs/heads/main", access.Ref)
-			r.Equal(testCase.commit.String(), access.Commit)
-			target, err = git.PlainOpen(targetPath)
+			ref, err := target.Reference(plumbing.ReferenceName(testCase.targetRef), false)
 			r.NoError(err)
-			ref, err := target.Reference("refs/heads/main", true)
+			r.Equal(testCase.wantHash, ref.Hash())
+			commit, err := target.CommitObject(testCase.commit)
 			r.NoError(err)
-			r.Equal(testCase.commit, ref.Hash())
-			got, err := target.CommitObject(testCase.commit)
+			original, err := fixture.Git.CommitObject(testCase.commit)
 			r.NoError(err)
-			want, err := fixture.Git.CommitObject(testCase.commit)
-			r.NoError(err)
-			r.Equal(want.Hash, got.Hash)
-			r.Equal(want.ParentHashes, got.ParentHashes)
-			r.Equal(want.Author, got.Author)
+			r.Equal(original.Author, commit.Author)
+			r.Equal(original.ParentHashes, commit.ParentHashes)
 		})
 	}
-	_, err = uploader.UploadGit(t.Context(), first, repository.UploadOptions{Repository: targetPath, Ref: "refs/heads/main"}, nil, nil)
-	r.ErrorContains(err, "does not fast-forward")
 }
 
-func TestUploadGitPreservesAnnotatedTag(t *testing.T) {
-	r := require.New(t)
+func TestDownloadResourceDependsOnCommitOnly(t *testing.T) {
 	fixture := newRepository(t)
-	targetPath := filepath.Join(t.TempDir(), "target.git")
-	target, err := git.PlainInit(targetPath, true)
-	r.NoError(err)
-	sourceTag, err := fixture.Git.Reference("refs/tags/annotated", true)
-	r.NoError(err)
-	source := &descriptor.Resource{Access: &accessv1.Git{
-		Type:       runtime.NewVersionedType(accessv1.Type, accessv1.Version),
-		Repository: fixture.Path,
-		Ref:        "refs/tags/annotated",
-		Commit:     fixture.First.String(),
-	}}
-	uploader := repository.NewResourceRepository(nil)
-	output, err := uploader.UploadGit(t.Context(), source, repository.UploadOptions{Repository: targetPath, Ref: "refs/tags/annotated"}, nil, nil)
-	r.NoError(err)
-	r.Equal(fixture.First.String(), output.Access.(*accessv1.Git).Commit)
-	targetTag, err := target.Reference("refs/tags/annotated", true)
-	r.NoError(err)
-	r.Equal(sourceTag.Hash(), targetTag.Hash())
-	_, err = target.TagObject(targetTag.Hash())
-	r.NoError(err)
-	_, err = uploader.UploadGit(t.Context(), source, repository.UploadOptions{Repository: targetPath, Ref: "refs/tags/annotated"}, nil, nil)
-	r.NoError(err)
+	want, _ := downloadResource(t, newUploader(t), fixture.Path, "refs/heads/main", fixture.First)
+
+	for _, testCase := range []struct {
+		name string
+		ref  string
+	}{
+		{name: "repeated download", ref: "refs/heads/main"},
+		{name: "annotated tag ref", ref: "refs/tags/annotated"},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			r := require.New(t)
+			got, _ := downloadResource(t, newUploader(t), fixture.Path, testCase.ref, fixture.First)
+			r.Equal(want.Digest, got.Digest)
+		})
+	}
 }
 
-func TestUploadGitOptionValidation(t *testing.T) {
-	source := &descriptor.Resource{Access: &accessv1.Git{
-		Type:       runtime.NewVersionedType(accessv1.Type, accessv1.Version),
-		Repository: "https://example.com/source.git",
-		Commit:     strings.Repeat("a", 40),
-	}}
+func TestUploadResourceRejectsArchive(t *testing.T) {
+	fixture := newRepository(t)
+	uploader := newUploader(t)
+	source, content := downloadResource(t, uploader, fixture.Path, "refs/heads/main", fixture.Second)
+
 	for _, testCase := range []struct {
 		name    string
-		target  repository.UploadOptions
+		digest  string
+		content blob.ReadOnlyBlob
 		wantErr string
 	}{
-		{name: "missing target repository", target: repository.UploadOptions{Ref: "refs/heads/main"}, wantErr: "target repository is required"},
-		{name: "short ref", target: repository.UploadOptions{Repository: "https://example.com/target.git", Ref: "main"}, wantErr: "target ref must be a full"},
+		{
+			name:    "digest mismatch",
+			digest:  strings.Repeat("0", 64),
+			content: content,
+			wantErr: "digest mismatch",
+		},
+		{
+			name:    "files-only snapshot",
+			content: rewriteArchive(t, content, func(name string, data []byte) (string, []byte) { return name, data }, true),
+			wantErr: "git upload needs history: the resource is a files-only snapshot (e.g. created by OCM v1); re-construct it with OCM v2",
+		},
+		{
+			name: "incomplete history",
+			content: rewriteArchive(t, content, func(name string, data []byte) (string, []byte) {
+				if !strings.HasSuffix(name, ".pack") {
+					return name, data
+				}
+				var pack bytes.Buffer
+				_, err := packfile.NewEncoder(&pack, fixture.Git.Storer, false).Encode([]plumbing.Hash{fixture.Second}, config.DefaultPackWindow)
+				require.NoError(t, err)
+				return name, pack.Bytes()
+			}, false),
+			wantErr: "incomplete git object history",
+		},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			r := require.New(t)
-			_, err := repository.NewResourceRepository(nil).UploadGit(t.Context(), source, testCase.target, nil, nil)
+			targetPath := filepath.Join(t.TempDir(), "target.git")
+			target, err := git.PlainInit(targetPath, true)
+			r.NoError(err)
+			resource := targetResource(source, targetPath, "refs/heads/main")
+			resource.Digest = nil
+			if testCase.digest != "" {
+				resource.Digest = source.Digest.DeepCopy()
+				resource.Digest.Value = testCase.digest
+			}
+
+			_, err = uploader.UploadResource(t.Context(), resource, testCase.content, nil)
 			r.ErrorContains(err, testCase.wantErr)
+			_, err = target.Reference("refs/heads/main", false)
+			r.ErrorIs(err, plumbing.ErrReferenceNotFound)
 		})
 	}
+}
+
+func newUploader(t *testing.T) *repository.ResourceRepository {
+	t.Helper()
+	tempDir := t.TempDir()
+	return repository.NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &tempDir})
+}
+
+// downloadResource pins and digests a source resource and returns its archive.
+func downloadResource(t *testing.T, repo *repository.ResourceRepository, path, ref string, commit plumbing.Hash) (*descriptor.Resource, blob.ReadOnlyBlob) {
+	t.Helper()
+	r := require.New(t)
+	source, err := repo.ProcessResourceDigest(t.Context(), &descriptor.Resource{Access: &accessv1.Git{
+		Type:       runtime.NewVersionedType(accessv1.Type, accessv1.Version),
+		Repository: path,
+		Ref:        ref,
+		Commit:     commit.String(),
+	}}, nil)
+	r.NoError(err)
+	content, err := repo.DownloadResource(t.Context(), source, nil)
+	r.NoError(err)
+	return source, content
+}
+
+func targetResource(source *descriptor.Resource, path, ref string) *descriptor.Resource {
+	target := source.DeepCopy()
+	target.Access = &accessv1.Git{
+		Type:       runtime.NewVersionedType(accessv1.Type, accessv1.Version),
+		Repository: path,
+		Ref:        ref,
+	}
+	return target
+}
+
+// rewriteArchive copies a tar.gz through edit, optionally without its .git directory.
+func rewriteArchive(t *testing.T, content blob.ReadOnlyBlob, edit func(string, []byte) (string, []byte), filesOnly bool) blob.ReadOnlyBlob {
+	t.Helper()
+	r := require.New(t)
+	reader, err := content.ReadCloser()
+	r.NoError(err)
+	defer func() { r.NoError(reader.Close()) }()
+	gz, err := gzip.NewReader(reader)
+	r.NoError(err)
+
+	var out bytes.Buffer
+	gw := gzip.NewWriter(&out)
+	tw := tar.NewWriter(gw)
+	tr := tar.NewReader(gz)
+	for {
+		header, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		r.NoError(err)
+		if filesOnly && (header.Name == ".git" || strings.HasPrefix(header.Name, ".git/")) {
+			continue
+		}
+		data, err := io.ReadAll(tr)
+		r.NoError(err)
+		header.Name, data = edit(header.Name, data)
+		header.Size = int64(len(data))
+		r.NoError(tw.WriteHeader(header))
+		_, err = tw.Write(data)
+		r.NoError(err)
+	}
+	r.NoError(tw.Close())
+	r.NoError(gw.Close())
+	return inmemory.New(bytes.NewReader(out.Bytes()))
 }

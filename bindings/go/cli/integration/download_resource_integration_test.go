@@ -50,33 +50,6 @@ func Test_Integration_DownloadUploadedGitResource(t *testing.T) {
 	target, err := git.PlainInit(targetPath, true)
 	r.NoError(err)
 
-	tempFolder := t.TempDir()
-	gitRepo := gitrepository.NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &tempFolder})
-	source := &descriptor.Resource{Access: &gitaccessv1.Git{
-		Type:       runtime.NewVersionedType(gitaccessv1.Type, gitaccessv1.Version),
-		Repository: sourcePath,
-		Ref:        "refs/heads/main",
-		Commit:     commit,
-	}}
-	source, err = gitRepo.ProcessResourceDigest(t.Context(), source, nil)
-	r.NoError(err)
-	bundle, err := gitRepo.DownloadGitBundle(t.Context(), source, nil)
-	r.NoError(err)
-
-	uploadTarget := source.DeepCopy()
-	uploadTarget.Access = &gitaccessv1.Git{
-		Type:       runtime.NewVersionedType(gitaccessv1.Type, gitaccessv1.Version),
-		Repository: targetPath,
-		Ref:        "refs/heads/main",
-		Commit:     commit,
-	}
-	uploaded, err := gitRepo.UploadResource(t.Context(), uploadTarget, bundle, nil)
-	r.NoError(err)
-	r.Equal(source.Digest, uploaded.Digest)
-	targetRef, err := target.Reference(plumbing.NewBranchReferenceName("main"), true)
-	r.NoError(err)
-	r.Equal(commit, targetRef.Hash().String())
-
 	const componentName = "ocm.software/uploaded-git-resource"
 	const componentVersion = "v1.0.0"
 	constructor := fmt.Sprintf(`components:
@@ -85,16 +58,15 @@ func Test_Integration_DownloadUploadedGitResource(t *testing.T) {
   provider:
     name: ocm.software
   resources:
-  - name: uploaded-repo
+  - name: git-repo
     version: v1.0.0
     type: directoryTree
-    relation: external
-    access:
+    input:
       type: Git/v1
       repository: file://%s
       ref: refs/heads/main
       commit: %s
-`, componentName, componentVersion, targetPath, commit)
+`, componentName, componentVersion, sourcePath, commit)
 	constructorPath := filepath.Join(t.TempDir(), "constructor.yaml")
 	r.NoError(os.WriteFile(constructorPath, []byte(constructor), 0o600))
 	ctfPath := filepath.Join(t.TempDir(), "ctf")
@@ -102,19 +74,45 @@ func Test_Integration_DownloadUploadedGitResource(t *testing.T) {
 	addCommand.SetArgs([]string{"add", "component-version", "--repository", "ctf::" + ctfPath, "--constructor", constructorPath})
 	r.NoError(addCommand.ExecuteContext(t.Context()))
 
-	output := filepath.Join(t.TempDir(), "uploaded-repo.tgz")
+	output := filepath.Join(t.TempDir(), "git-repo.tgz")
 	downloadCommand := cmd.New()
 	downloadCommand.SetArgs([]string{
 		"download", "resource", "ctf::" + ctfPath + "//" + componentName + ":" + componentVersion,
-		"--identity", "name=uploaded-repo,version=v1.0.0",
+		"--identity", "name=git-repo,version=v1.0.0",
 		"--output", output,
 		"--extraction-policy", "disable",
 	})
 	r.NoError(downloadCommand.ExecuteContext(t.Context()))
 	archive, err := os.ReadFile(output)
 	r.NoError(err)
-	r.Equal(source.Digest.Value, godigest.FromBytes(archive).Encoded())
 	assertGitArchiveAtFirstCommit(t, archive)
+
+	tempFolder := t.TempDir()
+	gitRepo := gitrepository.NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &tempFolder})
+	source, err := gitRepo.ProcessResourceDigest(t.Context(), &descriptor.Resource{Access: &gitaccessv1.Git{
+		Type:       runtime.NewVersionedType(gitaccessv1.Type, gitaccessv1.Version),
+		Repository: sourcePath,
+		Ref:        "refs/heads/main",
+		Commit:     commit,
+	}}, nil)
+	r.NoError(err)
+	r.Equal(source.Digest.Value, godigest.FromBytes(archive).Encoded(), "the input and the access archive the same carrier")
+
+	localBlob, err := filesystem.GetBlobFromOSPath(output)
+	r.NoError(err)
+	uploadTarget := source.DeepCopy()
+	uploadTarget.Access = &gitaccessv1.Git{
+		Type:       runtime.NewVersionedType(gitaccessv1.Type, gitaccessv1.Version),
+		Repository: targetPath,
+		Ref:        "refs/heads/main",
+	}
+	uploaded, err := gitRepo.UploadResource(t.Context(), uploadTarget, localBlob, nil)
+	r.NoError(err)
+	r.Equal(source.Digest, uploaded.Digest)
+	r.Equal(commit, uploaded.Access.(*gitaccessv1.Git).Commit)
+	targetRef, err := target.Reference(plumbing.NewBranchReferenceName("main"), true)
+	r.NoError(err)
+	r.Equal(commit, targetRef.Hash().String())
 }
 
 func Test_Integration_OCIRepository(t *testing.T) {

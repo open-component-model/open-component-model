@@ -26,7 +26,7 @@ import (
 	ocmhttp "ocm.software/open-component-model/bindings/go/http"
 )
 
-// Result is one downloaded snapshot of a Git repository, archived as tar.gz.
+// Result is one downloaded snapshot of a Git repository with its history, archived as tar.gz.
 type Result struct {
 	// Blob is backed by a file that outlives the call and is owned by the caller.
 	Blob *filesystem.Blob
@@ -36,10 +36,10 @@ type Result struct {
 	Digest digest.Digest
 }
 
-// Download resolves one snapshot of the repository and archives it.
+// Download resolves one snapshot of the repository and archives it with its history.
 func Download(ctx context.Context, access *accessv1.Git, creds *credsv1.GitCredentials, opts Options) (result *Result, err error) {
 	var archivePath string
-	err = WithRepository(ctx, access, creds, opts, func(_ *git.Repository, selected *object.Commit) error {
+	err = WithRepository(ctx, access, creds, opts, func(repo *git.Repository, selected *object.Commit) error {
 		if err := ctx.Err(); err != nil {
 			return fmt.Errorf("cannot archive git repository: %w", err)
 		}
@@ -48,7 +48,7 @@ func Download(ctx context.Context, access *accessv1.Git, creds *credsv1.GitCrede
 			return fmt.Errorf("cannot create git archive file: %w", err)
 		}
 		archivePath = file.Name()
-		b, archiveDigest, err := archive(ctx, selected, file, opts)
+		b, archiveDigest, err := archive(ctx, repo, selected, file, opts)
 		if err != nil {
 			return err
 		}
