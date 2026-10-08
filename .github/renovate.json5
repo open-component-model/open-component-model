@@ -235,22 +235,6 @@
       enabled: false,
     },
     {
-      // Batch non-major controller bumps. The chart subtree is excluded so the
-      // dedicated 'Kubernetes Controller chart' group above is not overwritten
-      // by this later rule (Renovate merges matching rules in order; last write
-      // wins on conflicting fields like groupName).
-      matchFileNames: [
-        'bindings/go/kubernetes/controller/**',
-        '!bindings/go/kubernetes/controller/chart/**',
-      ],
-      matchUpdateTypes: ['minor', 'patch'],
-      groupName: 'Kubernetes Controller dependencies (non-major)',
-      groupSlug: 'kubernetes-controller-deps',
-      schedule: [
-        '* * * * 0' // At every minute on Sunday it is allowed to create branches
-      ],
-    },
-    {
       // Batch all bumps (incl. majors) for the Hugo CLI-docs generator module.
       // separateMinorPatch overridden so minor+patch share one branch; majors
       // still get their own branches via separateMultipleMajor (global).
