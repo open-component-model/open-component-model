@@ -6,50 +6,85 @@ import (
 
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"oras.land/oras-go/v2/content"
+	"oras.land/oras-go/v2/registry/remote"
 
 	"ocm.software/open-component-model/bindings/go/oci/internal/remotestore"
 	"ocm.software/open-component-model/bindings/go/oci/spec"
 )
 
-// Repository decorates a [*remotestore.RemoteStore] with optional
-// [BlobCache] and [ReferenceCache] layers.
+// Repository decorates an oras [*remote.Repository] with optional
+// [BlobCache] and [ReferenceCache] layers, while preserving chunked and
+// streaming blob upload.
 //
-// The embedded [*remotestore.RemoteStore] carries the chunked and
-// streaming blob upload (its Push and PushStreaming), so those remain
-// available on the decorator and `pack`'s [remotestore.StreamingPusher]
-// type assertion keeps succeeding under caching. Because the store
-// itself embeds the oras [*remote.Repository], the promoted type
-// assertions used elsewhere in the codebase ([registry.TagLister],
-// [registry.ReferrerLister], `interface{ Blobs() registry.BlobStore }`)
-// keep working unchanged, as does the promoted `r.Repository` field.
+// The embedded [*remote.Repository] is exposed via Go field promotion so the
+// type assertions used elsewhere in the codebase ([registry.TagLister],
+// [registry.ReferrerLister], `interface{ Blobs() registry.BlobStore }`) keep
+// working unchanged. The decorator additionally implements Push and
+// PushStreaming by delegating to a [remotestore.RemoteStore] built over the
+// embedded repository with the configured chunk sizes, so chunked uploads and
+// `pack`'s [remotestore.StreamingPusher] type assertion keep working even when
+// the cache decorator is in the store chain.
 //
-// Either cache may be nil; the corresponding override degrades to a
-// pure passthrough to the embedded store.
+// chunkSize/chunkThreshold are zero for the plain [ProxyRepository] adapter
+// (monolithic push, unchanged behavior) and are set by
+// [ProxyRepositoryWithChunking].
+//
+// Either cache may be nil; the corresponding override degrades to a pure
+// passthrough to the embedded repository.
 type Repository struct {
-	*remotestore.RemoteStore
+	*remote.Repository
 	BlobCache      *BlobCache
 	ReferenceCache *ReferenceCache
+
+	chunkSize      int64
+	chunkThreshold int64
 }
 
-// Fetch consults [Repository.BlobCache] before delegating to the
-// underlying [*remote.Repository]. See [BlobCache.Fetch] for the exact
-// semantics: cache hit returns the on-disk file directly; miss
-// performs the upstream fetch and tees into the cache. Layer blobs
-// and other non-manifest media types pass through transparently.
+// chunkedStore wraps the embedded repository in a [remotestore.RemoteStore]
+// carrying the configured chunk sizes. A zero chunk size disables chunking, so
+// the store delegates to the embedded monolithic push.
+func (r *Repository) chunkedStore() *remotestore.RemoteStore {
+	return &remotestore.RemoteStore{
+		Repository:     r.Repository,
+		ChunkSize:      r.chunkSize,
+		ChunkThreshold: r.chunkThreshold,
+	}
+}
+
+// Push delegates to the chunked store so a large-blob push chunks even when the
+// cache decorator is in the chain. With a zero chunk size it falls back to the
+// embedded monolithic push, i.e. unchanged behavior for the plain adapter.
+func (r *Repository) Push(ctx context.Context, expected ociImageSpecV1.Descriptor, content io.Reader) error {
+	return r.chunkedStore().Push(ctx, expected, content)
+}
+
+// PushStreaming exposes the chunked streaming push through the decorator so
+// pack's [remotestore.StreamingPusher] assertion succeeds under caching. It
+// needs a positive chunk size; otherwise the store reports streaming
+// unavailable and the caller buffers and falls back to Push.
+func (r *Repository) PushStreaming(ctx context.Context, partial ociImageSpecV1.Descriptor, content io.Reader) (ociImageSpecV1.Descriptor, error) {
+	return r.chunkedStore().PushStreaming(ctx, partial, content)
+}
+
+// Fetch consults [Repository.BlobCache] before delegating to the embedded
+// [*remote.Repository]. See [BlobCache.Fetch] for the exact semantics: cache hit
+// returns the on-disk file directly; miss performs the upstream fetch and tees
+// into the cache. Layer blobs and other non-manifest media types pass through
+// transparently.
 //
 // When BlobCache is nil, this is a direct passthrough.
 func (r *Repository) Fetch(ctx context.Context, target ociImageSpecV1.Descriptor) (io.ReadCloser, error) {
 	return r.BlobCache.Fetch(ctx, r.Repository, target)
 }
 
-// Resolve consults [Repository.ReferenceCache] before delegating to
-// the underlying [*remote.Repository]. See [ReferenceCache.Resolve] for
-// the exact semantics. Successful resolves are appended to the
-// snapshot so they survive a process restart against the same Dir.
+// Resolve consults [Repository.ReferenceCache] before delegating to the embedded
+// [*remote.Repository]. See [ReferenceCache.Resolve] for the exact semantics.
+// Successful resolves are appended to the snapshot so they survive a process
+// restart against the same Dir.
 //
-// The cache key is namespaced by the underlying *remote.Repository's
-// registry/repository so two repositories that happen to share a
-// short reference (e.g. the tag "v1") cannot collide.
+// The cache key is namespaced by the embedded *remote.Repository's
+// registry/repository so two repositories that happen to share a short reference
+// (e.g. the tag "v1") cannot collide.
 //
 // When ReferenceCache is nil, this is a direct passthrough.
 func (r *Repository) Resolve(ctx context.Context, reference string) (ociImageSpecV1.Descriptor, error) {
@@ -63,21 +98,19 @@ func (r *Repository) Resolve(ctx context.Context, reference string) (ociImageSpe
 	return r.ReferenceCache.Resolve(ctx, r.Repository, ref)
 }
 
-// Unwrap returns the underlying oras [*remote.Repository] so consumers
-// that type-assert on the raw store (e.g. global-store detection in
-// internal/pack) can see through both this cache decorator and the
-// chunked-store wrapper.
+// Unwrap returns the embedded oras [*remote.Repository] so consumers that
+// type-assert on the raw store (e.g. global-store detection in internal/pack)
+// can see through the cache decorator.
 func (r *Repository) Unwrap() content.Storage {
 	return r.Repository
 }
 
-// Untag implements [content.Untagger] by delegating to the underlying
-// remote repository so alias deletion keeps working when the cache
-// decorator is in the store chain. On success it invalidates the
-// reference cache entry so a restart does not resurrect the stale
-// tag→descriptor mapping.
+// Untag implements [content.Untagger] by delegating to the underlying remote
+// repository so alias deletion keeps working when the cache decorator is in the
+// store chain. On success it invalidates the reference cache entry so a restart
+// does not resurrect the stale tag→descriptor mapping.
 func (r *Repository) Untag(ctx context.Context, reference string) error {
-	if err := r.RemoteStore.Untag(ctx, reference); err != nil {
+	if err := r.chunkedStore().Untag(ctx, reference); err != nil {
 		return err
 	}
 	if r.ReferenceCache != nil {
@@ -90,11 +123,10 @@ func (r *Repository) Untag(ctx context.Context, reference string) error {
 	return nil
 }
 
-// Tag associates reference with desc on the underlying remote
-// repository and, on success, refreshes the reference cache so the
-// mutable tag now resolves to the newly tagged descriptor. Without
-// this the cache would keep serving a previously resolved digest for
-// the tag until TTL expiry (OCI tags are mutable). A nil
+// Tag associates reference with desc on the underlying remote repository and, on
+// success, refreshes the reference cache so the mutable tag now resolves to the
+// newly tagged descriptor. Without this the cache would keep serving a previously
+// resolved digest for the tag until TTL expiry (OCI tags are mutable). A nil
 // ReferenceCache degrades to a pure passthrough.
 func (r *Repository) Tag(ctx context.Context, desc ociImageSpecV1.Descriptor, reference string) error {
 	if err := r.Repository.Tag(ctx, desc, reference); err != nil {
@@ -110,15 +142,36 @@ func (r *Repository) Tag(ctx context.Context, desc ociImageSpecV1.Descriptor, re
 	return nil
 }
 
-// ProxyRepository proxies the given chunked store with the configured
-// caches when at least one is non-nil; otherwise it returns the store
-// unchanged so the cache decorator only appears in the type chain when
-// there is something to cache. Taking the [*remotestore.RemoteStore]
-// (rather than the raw oras repository) keeps the chunked Push and
-// PushStreaming reachable through the decorator.
-func ProxyRepository(store *remotestore.RemoteStore, blob *BlobCache, refs *ReferenceCache) spec.Store {
+// ProxyRepository decorates the raw oras repository with the configured caches
+// when at least one is non-nil; otherwise it returns repo unchanged so the cache
+// decorator only appears in the type chain when there is something to cache.
+//
+// This is the public, raw-repository adapter: it takes and embeds the exported
+// [*remote.Repository] (no internal type in its signature) and performs a
+// monolithic push. Use [ProxyRepositoryWithChunking] to retain chunked and
+// streaming push.
+func ProxyRepository(repo *remote.Repository, blob *BlobCache, refs *ReferenceCache) spec.Store {
 	if blob == nil && refs == nil {
-		return store
+		return repo
 	}
-	return &Repository{RemoteStore: store, BlobCache: blob, ReferenceCache: refs}
+	return &Repository{Repository: repo, BlobCache: blob, ReferenceCache: refs}
+}
+
+// ProxyRepositoryWithChunking is like [ProxyRepository] but retains chunked and
+// streaming blob upload: the returned store chunks pushes at or above
+// chunkThreshold (chunkSize bytes per PATCH) and exposes PushStreaming, so a
+// large-blob or streaming push survives the cache instead of falling back to a
+// monolithic PUT. With no cache it returns a plain chunked store. The resolver
+// uses this so chunked/streaming push works through the cache decorator.
+func ProxyRepositoryWithChunking(repo *remote.Repository, blob *BlobCache, refs *ReferenceCache, chunkSize, chunkThreshold int64) spec.Store {
+	if blob == nil && refs == nil {
+		return &remotestore.RemoteStore{Repository: repo, ChunkSize: chunkSize, ChunkThreshold: chunkThreshold}
+	}
+	return &Repository{
+		Repository:     repo,
+		BlobCache:      blob,
+		ReferenceCache: refs,
+		chunkSize:      chunkSize,
+		chunkThreshold: chunkThreshold,
+	}
 }
