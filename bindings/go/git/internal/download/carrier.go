@@ -8,13 +8,13 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"sort"
 	"strings"
 
 	git "github.com/go-git/go-git/v6"
 	"github.com/go-git/go-git/v6/plumbing"
-	"github.com/go-git/go-git/v6/plumbing/filemode"
 	"github.com/go-git/go-git/v6/plumbing/format/packfile"
-	"github.com/go-git/go-git/v6/plumbing/object"
+	"github.com/go-git/go-git/v6/plumbing/revlist"
 )
 
 var (
@@ -27,55 +27,21 @@ var (
 // maxHeadSize bounds the HEAD file read from an archive.
 const maxHeadSize = 4096
 
-// VerifyObjectClosure walks the history of tip and fails on the first missing
-// object. It returns the commits and all objects of that history; submodule
-// commits are not part of it.
-func VerifyObjectClosure(repo *git.Repository, tip plumbing.Hash) (map[plumbing.Hash]struct{}, map[plumbing.Hash]struct{}, error) {
-	seen := make(map[plumbing.Hash]struct{})
-	commits := make(map[plumbing.Hash]struct{})
-	pending := []plumbing.Hash{tip}
-	for len(pending) > 0 {
-		hash := pending[len(pending)-1]
-		pending = pending[:len(pending)-1]
-		if _, ok := seen[hash]; ok {
-			continue
-		}
-		seen[hash] = struct{}{}
-		encoded, err := repo.Storer.EncodedObject(plumbing.AnyObject, hash)
-		if err != nil {
-			return nil, nil, fmt.Errorf("%w: object %s: %w", errIncompleteObjects, hash, err)
-		}
-		switch encoded.Type() {
-		case plumbing.CommitObject:
-			commit, err := object.GetCommit(repo.Storer, hash)
-			if err != nil {
-				return nil, nil, fmt.Errorf("cannot read commit %s: %w", hash, err)
-			}
-			commits[hash] = struct{}{}
-			pending = append(pending, commit.TreeHash)
-			pending = append(pending, commit.ParentHashes...)
-		case plumbing.TreeObject:
-			tree, err := object.GetTree(repo.Storer, hash)
-			if err != nil {
-				return nil, nil, fmt.Errorf("cannot read tree %s: %w", hash, err)
-			}
-			for _, entry := range tree.Entries {
-				if entry.Mode != filemode.Submodule {
-					pending = append(pending, entry.Hash)
-				}
-			}
-		case plumbing.TagObject:
-			tag, err := object.GetTag(repo.Storer, hash)
-			if err != nil {
-				return nil, nil, fmt.Errorf("cannot read tag %s: %w", hash, err)
-			}
-			pending = append(pending, tag.Target)
-		case plumbing.BlobObject:
-		default:
-			return nil, nil, fmt.Errorf("unsupported git object type %s", encoded.Type())
+// HistoryObjects returns the objects reachable from tip in hash order and
+// fails if one of them is missing. revlist only lists blobs from their trees,
+// so each object is also looked up. Submodule commits are not part of it.
+func HistoryObjects(repo *git.Repository, tip plumbing.Hash) ([]plumbing.Hash, error) {
+	hashes, err := revlist.Objects(repo.Storer, []plumbing.Hash{tip}, nil)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", errIncompleteObjects, err)
+	}
+	for _, hash := range hashes {
+		if err := repo.Storer.HasEncodedObject(hash); err != nil {
+			return nil, fmt.Errorf("%w: object %s: %w", errIncompleteObjects, hash, err)
 		}
 	}
-	return commits, seen, nil
+	sort.Sort(plumbing.HashSlice(hashes))
+	return hashes, nil
 }
 
 // Import stores the Git objects of an archive written by Download in a new bare
@@ -98,7 +64,7 @@ func Import(ctx context.Context, r io.Reader, dir string) (*git.Repository, plum
 		return nil, plumbing.ZeroHash, fmt.Errorf("cannot create git repository: %w", err)
 	}
 
-	history := false
+	history, packed := false, false
 	head := plumbing.ZeroHash
 	tr := tar.NewReader(gz)
 	for {
@@ -119,8 +85,15 @@ func Import(ctx context.Context, r io.Reader, dir string) (*git.Repository, plum
 		}
 		switch {
 		case strings.HasPrefix(rel, "objects/pack/") && strings.HasSuffix(rel, ".pack"):
+			if packed {
+				return nil, plumbing.ZeroHash, fmt.Errorf("git archive holds more than one packfile")
+			}
+			packed = true
 			err = packfile.UpdateObjectStorage(repo.Storer, tr)
 		case rel == "HEAD":
+			if !head.IsZero() {
+				return nil, plumbing.ZeroHash, fmt.Errorf("git archive holds more than one HEAD")
+			}
 			head, err = readHead(tr)
 		}
 		if err != nil {

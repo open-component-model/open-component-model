@@ -6,6 +6,7 @@ import (
 	"compress/gzip"
 	"io"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/go-git/go-git/v6/config"
 	"github.com/go-git/go-git/v6/plumbing"
 	"github.com/go-git/go-git/v6/plumbing/format/packfile"
+	"github.com/go-git/go-git/v6/plumbing/revlist"
 	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/blob"
@@ -118,22 +120,54 @@ func TestUploadResourceRejectsArchive(t *testing.T) {
 			wantErr: "digest mismatch",
 		},
 		{
-			name:    "files-only snapshot",
-			content: rewriteArchive(t, content, func(name string, data []byte) (string, []byte) { return name, data }, true),
+			name: "files-only snapshot",
+			content: rewriteArchive(t, content, func(name string, data []byte) []archiveEntry {
+				if name == ".git" || strings.HasPrefix(name, ".git/") {
+					return nil
+				}
+				return []archiveEntry{{name: name, data: data}}
+			}),
 			wantErr: "git upload needs history: the resource is a files-only snapshot (e.g. created by OCM v1); re-construct it with OCM v2",
 		},
 		{
-			name: "incomplete history",
-			content: rewriteArchive(t, content, func(name string, data []byte) (string, []byte) {
-				if !strings.HasSuffix(name, ".pack") {
-					return name, data
+			name: "missing tree",
+			content: rewriteArchive(t, content, func(name string, data []byte) []archiveEntry {
+				if strings.HasSuffix(name, ".pack") {
+					data = packWithout(t, fixture.Git, fixture.Second, func(typ plumbing.ObjectType) bool { return typ == plumbing.TreeObject })
 				}
-				var pack bytes.Buffer
-				_, err := packfile.NewEncoder(&pack, fixture.Git.Storer, false).Encode([]plumbing.Hash{fixture.Second}, config.DefaultPackWindow)
-				require.NoError(t, err)
-				return name, pack.Bytes()
-			}, false),
+				return []archiveEntry{{name: name, data: data}}
+			}),
 			wantErr: "incomplete git object history",
+		},
+		{
+			name: "missing blob",
+			content: rewriteArchive(t, content, func(name string, data []byte) []archiveEntry {
+				if strings.HasSuffix(name, ".pack") {
+					data = packWithout(t, fixture.Git, fixture.Second, func(typ plumbing.ObjectType) bool { return typ == plumbing.BlobObject })
+				}
+				return []archiveEntry{{name: name, data: data}}
+			}),
+			wantErr: "incomplete git object history",
+		},
+		{
+			name: "second packfile",
+			content: rewriteArchive(t, content, func(name string, data []byte) []archiveEntry {
+				if strings.HasSuffix(name, ".pack") {
+					return []archiveEntry{{name: name, data: data}, {name: strings.TrimSuffix(name, ".pack") + "-copy.pack", data: data}}
+				}
+				return []archiveEntry{{name: name, data: data}}
+			}),
+			wantErr: "git archive holds more than one packfile",
+		},
+		{
+			name: "second HEAD",
+			content: rewriteArchive(t, content, func(name string, data []byte) []archiveEntry {
+				if name == ".git/HEAD" {
+					return []archiveEntry{{name: name, data: data}, {name: name, data: data}}
+				}
+				return []archiveEntry{{name: name, data: data}}
+			}),
+			wantErr: "git archive holds more than one HEAD",
 		},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -188,8 +222,13 @@ func targetResource(source *descriptor.Resource, path, ref string) *descriptor.R
 	return target
 }
 
-// rewriteArchive copies a tar.gz through edit, optionally without its .git directory.
-func rewriteArchive(t *testing.T, content blob.ReadOnlyBlob, edit func(string, []byte) (string, []byte), filesOnly bool) blob.ReadOnlyBlob {
+type archiveEntry struct {
+	name string
+	data []byte
+}
+
+// rewriteArchive copies a tar.gz, replacing each entry with what edit returns.
+func rewriteArchive(t *testing.T, content blob.ReadOnlyBlob, edit func(name string, data []byte) []archiveEntry) blob.ReadOnlyBlob {
 	t.Helper()
 	r := require.New(t)
 	reader, err := content.ReadCloser()
@@ -208,18 +247,33 @@ func rewriteArchive(t *testing.T, content blob.ReadOnlyBlob, edit func(string, [
 			break
 		}
 		r.NoError(err)
-		if filesOnly && (header.Name == ".git" || strings.HasPrefix(header.Name, ".git/")) {
-			continue
-		}
 		data, err := io.ReadAll(tr)
 		r.NoError(err)
-		header.Name, data = edit(header.Name, data)
-		header.Size = int64(len(data))
-		r.NoError(tw.WriteHeader(header))
-		_, err = tw.Write(data)
-		r.NoError(err)
+		for _, entry := range edit(header.Name, data) {
+			header.Name, header.Size = entry.name, int64(len(entry.data))
+			r.NoError(tw.WriteHeader(header))
+			_, err = tw.Write(entry.data)
+			r.NoError(err)
+		}
 	}
 	r.NoError(tw.Close())
 	r.NoError(gw.Close())
 	return inmemory.New(bytes.NewReader(out.Bytes()))
+}
+
+// packWithout encodes the history of commit without the objects drop rejects.
+func packWithout(t *testing.T, repo *git.Repository, commit plumbing.Hash, drop func(plumbing.ObjectType) bool) []byte {
+	t.Helper()
+	r := require.New(t)
+	hashes, err := revlist.Objects(repo.Storer, []plumbing.Hash{commit}, nil)
+	r.NoError(err)
+	kept := slices.DeleteFunc(hashes, func(hash plumbing.Hash) bool {
+		o, err := repo.Storer.EncodedObject(plumbing.AnyObject, hash)
+		r.NoError(err)
+		return drop(o.Type())
+	})
+	var pack bytes.Buffer
+	_, err = packfile.NewEncoder(&pack, repo.Storer, false).Encode(kept, config.DefaultPackWindow)
+	r.NoError(err)
+	return pack.Bytes()
 }

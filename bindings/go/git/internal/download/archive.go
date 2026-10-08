@@ -9,7 +9,6 @@ import (
 	"io"
 	"io/fs"
 	"log/slog"
-	"maps"
 	"os"
 	"path"
 	"path/filepath"
@@ -90,11 +89,10 @@ func writeGitStorage(source *git.Repository, commit plumbing.Hash, dir string) e
 		return fmt.Errorf("cannot create git carrier storage: %w", err)
 	}
 
-	_, objects, err := VerifyObjectClosure(source, commit)
+	hashes, err := HistoryObjects(source, commit)
 	if err != nil {
 		return err
 	}
-	hashes := slices.SortedFunc(maps.Keys(objects), func(a, b plumbing.Hash) int { return strings.Compare(a.String(), b.String()) })
 
 	packer, ok := target.Storer.(storer.PackfileWriter)
 	if !ok {
