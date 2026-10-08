@@ -50,7 +50,7 @@ The configuration influences the way the transfer happens: `recursive` controls 
 By default, local blobs are copied and all other resources stay by reference. To copy all resources,
 add a `localblob.uploader.transfer.config.ocm.software/v1alpha1` catch-all entry. To upload resources as separate OCI artifacts, add an
 `oci.uploader.transfer.config.ocm.software/v1alpha1` uploader entry to the same config (see the
-[migration guide]({{< relref "docs/how-to/migrate-from-upload-as.md" >}})). A
+[migration guide]({{< relref "docs/migration-guides/migrate-from-upload-as.md" >}})). A
 `reference.uploader.transfer.config.ocm.software/v1alpha1` entry keeps selected resources by reference.
 The controller ignores `http.uploader.transfer.config.ocm.software` entries: they would stream resource
 content from the controller pod to arbitrary URLs.
@@ -224,7 +224,7 @@ and all other resources stay by reference. To copy all resources, add a
 upload resources as separate OCI artifacts, add an
 `oci.uploader.transfer.config.ocm.software/v1alpha1` entry to the same config.
 See the
-[Migrate from --upload-as to Uploader Configurations]({{< relref "docs/how-to/migrate-from-upload-as.md" >}})
+[Migrate from --upload-as to Uploader Configurations]({{< relref "docs/migration-guides/migrate-from-upload-as.md" >}})
 guide.
 
 {{< callout context="note" title="Propagating a single config" icon="outline/info-circle" >}}

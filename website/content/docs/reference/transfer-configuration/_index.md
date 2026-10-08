@@ -51,7 +51,7 @@ config when set.
 The `--copy-resources` and `--upload-as` flags are deprecated. They are
 translated into uploader configuration entries appended after all configured
 entries. See the
-[migration guide]({{< relref "docs/how-to/migrate-from-upload-as.md" >}}) for
+[migration guide]({{< relref "docs/migration-guides/migrate-from-upload-as.md" >}}) for
 details.
 
 ## Uploader Configurations
@@ -221,4 +221,4 @@ plan is rendered with human-readable labels such as
 - [Transfer and Transport]({{< relref "docs/concepts/transfer-concept.md" >}}) — the conceptual transfer model
 - [Working with HTTP Resources]({{< relref "docs/tutorials/wget-http-resources.md" >}}) — the `Wget/v1` type produced by the HTTP streaming uploader
 - [HTTP Client Configuration]({{< relref "docs/reference/http-client-configuration.md" >}}) — tuning the HTTP client used for the upload
-- [Migrate from --upload-as to Uploader Configurations]({{< relref "docs/how-to/migrate-from-upload-as.md" >}}) — migration from deprecated flags
+- [Migrate from --upload-as to Uploader Configurations]({{< relref "docs/migration-guides/migrate-from-upload-as.md" >}}) — migration from deprecated flags

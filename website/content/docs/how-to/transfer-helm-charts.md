@@ -111,7 +111,7 @@ This keeps the chart coupled to the component version but means it is not indepe
 CLI.
 
 For more on the OCI uploader and how it replaces the deprecated `--upload-as` flag, see
-[Migrate from --upload-as to Uploader Configurations]({{< relref "docs/how-to/migrate-from-upload-as.md" >}}).
+[Migrate from --upload-as to Uploader Configurations]({{< relref "docs/migration-guides/migrate-from-upload-as.md" >}}).
 
 To find the `imageReference`, inspect the component descriptor:
 
