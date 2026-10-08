@@ -3460,7 +3460,7 @@ func (s *blobValidatingStore) Push(ctx context.Context, expected ociImageSpecV1.
 		return err
 	}
 	for _, ref := range append([]ociImageSpecV1.Descriptor{m.Config}, m.Layers...) {
-		exists, err := s.Store.Exists(ctx, ref)
+		exists, err := s.Exists(ctx, ref)
 		if err != nil {
 			return err
 		}
