@@ -119,7 +119,7 @@ my-org.example/component-b         │ 1.0.0   │
 
 {{< callout context="tip" >}}
 If you are migrating from the deprecated `ocm.config.ocm.software` fallback resolvers,
-see [Migrate from Deprecated Resolvers]({{< relref "docs/migration-guides/migrate-from-deprecated-resolvers.md" >}}) for a step-by-step guide.
+see [Migrate from Deprecated Resolvers]({{< relref "docs/reference/migration-guides/migrate-from-deprecated-resolvers.md" >}}) for a step-by-step guide.
 {{< /callout >}}
 
 ## Tips
@@ -146,7 +146,7 @@ see [Migrate from Deprecated Resolvers]({{< relref "docs/migration-guides/migrat
 
 ## Related Documentation
 
-- [Migration Guide: Migrate from Deprecated Resolvers]({{< relref "docs/migration-guides/migrate-from-deprecated-resolvers.md" >}}) —
+- [Migration Guide: Migrate from Deprecated Resolvers]({{< relref "docs/reference/migration-guides/migrate-from-deprecated-resolvers.md" >}}) —
   Replace deprecated fallback
   resolvers with glob-based resolvers
 - [Concept: Resolvers]({{< relref "docs/concepts/resolvers.md" >}}) — High-level introduction to resolvers
