@@ -35,20 +35,38 @@
         <criterion test_ref="oval:software.ocm:tst:4" comment="no other certificate files"/>
       </criteria>
     </definition>
-    <definition class="compliance" id="oval:software.ocm:def:3" version="1">
+    <definition class="compliance" id="oval:software.ocm:def:3" version="2">
       <metadata>
-        <title>Static root filesystem</title>
-        <description>No shared libraries or dynamic loader, no package manager, no setuid/setgid files, no world-writable files or directories without the sticky bit, and no executable other than the entrypoint.</description>
+        <title>Minimal root filesystem</title>
+        <description>No package manager, no setuid/setgid files, no world-writable files or directories without the sticky bit, and no executable other than the allowed ones. Shared libraries are checked by def:5 or def:6.</description>
       </metadata>
       <criteria operator="AND">
-        <criterion test_ref="oval:software.ocm:tst:5" comment="no shared libraries or dynamic loader"/>
         <criterion test_ref="oval:software.ocm:tst:6" comment="no package manager binaries"/>
         <criterion test_ref="oval:software.ocm:tst:7" comment="no package databases"/>
         <criterion test_ref="oval:software.ocm:tst:8" comment="no setuid files"/>
         <criterion test_ref="oval:software.ocm:tst:9" comment="no setgid files"/>
         <criterion test_ref="oval:software.ocm:tst:10" comment="no world-writable files"/>
         <criterion test_ref="oval:software.ocm:tst:11" comment="no world-writable directories without the sticky bit"/>
-        <criterion test_ref="oval:software.ocm:tst:12" comment="no executable other than the entrypoint"/>
+        <criterion test_ref="oval:software.ocm:tst:12" comment="no executable other than the allowed ones"/>
+      </criteria>
+    </definition>
+    <definition class="compliance" id="oval:software.ocm:def:5" version="1">
+      <metadata>
+        <title>No shared libraries</title>
+        <description>No shared libraries or dynamic loader.</description>
+      </metadata>
+      <criteria>
+        <criterion test_ref="oval:software.ocm:tst:5" comment="no shared libraries or dynamic loader"/>
+      </criteria>
+    </definition>
+    <definition class="compliance" id="oval:software.ocm:def:6" version="1">
+      <metadata>
+        <title>Shared library permissions</title>
+        <description>Shared libraries and dynamic loaders are owned by root and not writable by group or others. World-writable files are already ruled out by def:3.</description>
+      </metadata>
+      <criteria operator="AND">
+        <criterion test_ref="oval:software.ocm:tst:15" comment="no shared library owned by a user other than root"/>
+        <criterion test_ref="oval:software.ocm:tst:16" comment="no group-writable shared library"/>
       </criteria>
     </definition>
     <definition class="compliance" id="oval:software.ocm:def:4" version="1">
@@ -100,7 +118,7 @@
     <unix:file_test id="oval:software.ocm:tst:11" version="1" check="all" check_existence="none_exist" comment="world-writable directories without sticky bit">
       <unix:object object_ref="oval:software.ocm:obj:11"/>
     </unix:file_test>
-    <unix:file_test id="oval:software.ocm:tst:12" version="1" check="all" check_existence="none_exist" comment="executables other than the entrypoint">
+    <unix:file_test id="oval:software.ocm:tst:12" version="2" check="all" check_existence="none_exist" comment="executables other than the allowed ones">
       <unix:object object_ref="oval:software.ocm:obj:12"/>
     </unix:file_test>
     <unix:file_test id="oval:software.ocm:tst:13" version="1" check="all" check_existence="none_exist" comment="/var/log">
@@ -108,6 +126,12 @@
     </unix:file_test>
     <unix:file_test id="oval:software.ocm:tst:14" version="1" check="all" check_existence="none_exist" comment="log files">
       <unix:object object_ref="oval:software.ocm:obj:14"/>
+    </unix:file_test>
+    <unix:file_test id="oval:software.ocm:tst:15" version="1" check="all" check_existence="none_exist" comment="shared libraries not owned by root">
+      <unix:object object_ref="oval:software.ocm:obj:15"/>
+    </unix:file_test>
+    <unix:file_test id="oval:software.ocm:tst:16" version="1" check="all" check_existence="none_exist" comment="group-writable shared libraries">
+      <unix:object object_ref="oval:software.ocm:obj:16"/>
     </unix:file_test>
   </tests>
 
@@ -166,12 +190,15 @@
       <unix:filename xsi:nil="true"/>
       <filter action="include">oval:software.ocm:ste:6</filter>
     </unix:file_object>
-    <unix:file_object id="oval:software.ocm:obj:12" version="1" comment="executables other than the entrypoint">
+    <!-- Shared libraries are excluded: some are executable (the dynamic loader,
+         libc) and def:5 or def:6 checks them. -->
+    <unix:file_object id="oval:software.ocm:obj:12" version="2" comment="executables other than the allowed ones">
       <unix:behaviors recurse_direction="down"/>
       <unix:path>/</unix:path>
       <unix:filename operation="pattern match">.*</unix:filename>
       <filter action="include">oval:software.ocm:ste:7</filter>
       <filter action="exclude">oval:software.ocm:ste:8</filter>
+      <filter action="exclude">oval:software.ocm:ste:11</filter>
     </unix:file_object>
     <unix:file_object id="oval:software.ocm:obj:13" version="1" comment="/var/log">
       <unix:path>/var/log</unix:path>
@@ -181,6 +208,18 @@
       <unix:behaviors recurse_direction="down"/>
       <unix:path>/</unix:path>
       <unix:filename operation="pattern match">\.log$</unix:filename>
+    </unix:file_object>
+    <unix:file_object id="oval:software.ocm:obj:15" version="1" comment="shared libraries not owned by root">
+      <unix:behaviors recurse_direction="down"/>
+      <unix:path>/</unix:path>
+      <unix:filename operation="pattern match">\.so(\.[0-9]+)*$|^ld-(linux|musl)</unix:filename>
+      <filter action="include">oval:software.ocm:ste:12</filter>
+    </unix:file_object>
+    <unix:file_object id="oval:software.ocm:obj:16" version="1" comment="group-writable shared libraries">
+      <unix:behaviors recurse_direction="down"/>
+      <unix:path>/</unix:path>
+      <unix:filename operation="pattern match">\.so(\.[0-9]+)*$|^ld-(linux|musl)</unix:filename>
+      <filter action="include">oval:software.ocm:ste:13</filter>
     </unix:file_object>
   </objects>
 
@@ -210,8 +249,8 @@
       <unix:type>regular</unix:type>
       <unix:uexec datatype="boolean">true</unix:uexec>
     </unix:file_state>
-    <unix:file_state id="oval:software.ocm:ste:8" version="1" comment="the entrypoint">
-      <unix:filepath var_ref="oval:software.ocm:var:1"/>
+    <unix:file_state id="oval:software.ocm:ste:8" version="2" comment="an allowed executable">
+      <unix:filepath operation="pattern match" var_ref="oval:software.ocm:var:1"/>
     </unix:file_state>
     <ind:variable_state id="oval:software.ocm:ste:9" version="1" comment="frozen module version">
       <ind:value operation="pattern match">^v\S+$</ind:value>
@@ -219,10 +258,21 @@
     <ind:variable_state id="oval:software.ocm:ste:10" version="1" comment="fips140 enabled by default">
       <ind:value operation="pattern match">(^|,)fips140=(on|only)(,|$)</ind:value>
     </ind:variable_state>
+    <unix:file_state id="oval:software.ocm:ste:11" version="1" comment="shared library or dynamic loader">
+      <unix:filename operation="pattern match">\.so(\.[0-9]+)*$|^ld-(linux|musl)</unix:filename>
+    </unix:file_state>
+    <unix:file_state id="oval:software.ocm:ste:12" version="1" comment="regular file not owned by root">
+      <unix:type>regular</unix:type>
+      <unix:user_id datatype="int" operation="not equal">0</unix:user_id>
+    </unix:file_state>
+    <unix:file_state id="oval:software.ocm:ste:13" version="1" comment="group-writable regular file">
+      <unix:type>regular</unix:type>
+      <unix:gwrite datatype="boolean">true</unix:gwrite>
+    </unix:file_state>
   </states>
 
   <variables>
-    <external_variable id="oval:software.ocm:var:1" version="1" datatype="string" comment="entrypoint binary of the image"/>
+    <external_variable id="oval:software.ocm:var:1" version="2" datatype="string" comment="anchored regular expression matching the allowed executables of the image"/>
     <external_variable id="oval:software.ocm:var:2" version="1" datatype="string" comment="sha256 of the pinned base image's CA bundle"/>
     <external_variable id="oval:software.ocm:var:3" version="1" datatype="string" comment="GOFIPS140 build setting of the entrypoint"/>
     <external_variable id="oval:software.ocm:var:4" version="1" datatype="string" comment="DefaultGODEBUG build setting of the entrypoint"/>

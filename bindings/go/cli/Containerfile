@@ -63,6 +63,9 @@ RUN apt-get update \
 RUN set -eu; \
     # ocm runs gpgconf --show-versions to check that libgcrypt is in FIPS mode
     # and gpgconf --kill (via gpg-connect-agent) to stop its temporary agents.
+    # The STIG scan allows exactly these executables (plus cosign and /ocm) and
+    # checks the shared libraries: keep the "cli" entry of the matrix in
+    # .github/workflows/image-scan.yml in sync.
     bins="/usr/bin/gpg /usr/bin/gpg-agent /usr/bin/gpgconf /usr/bin/gpg-connect-agent /usr/bin/dirmngr"; \
     for f in $bins $(ldd $bins | awk '$2 == "=>" {print $3}' | sort -u); do \
       dst="/rootfs$(readlink -f "$(dirname "$f")")"; \

@@ -7,9 +7,10 @@ toc: true
 
 This page describes how the OCM container images and the controller Helm chart
 perform against three widely used security benchmarks: the CIS Docker Benchmark,
-the CIS Kubernetes Benchmark, and the NSA/CISA Kubernetes Hardening Guide. Since
-OCM 0.20.0, both images are built `FROM scratch` with a static binary and a CA
-bundle. See
+the CIS Kubernetes Benchmark, and the NSA/CISA Kubernetes Hardening Guide. The
+controller image and the slim CLI image are built `FROM scratch` with a static
+binary and a CA bundle; the default CLI image adds `cosign` and GnuPG on Garden
+Linux `bare-libc`. See
 [FIPS 140-3: Artifacts]({{< relref "docs/reference/standards-and-regulations/fips.md#artifacts" >}})
 for build details and
 [DISA STIG]({{< relref "docs/reference/standards-and-regulations/disa-stig.md" >}})
@@ -66,21 +67,22 @@ Results are in the job summary and in the `image-scan-<image>-<arch>` and
 
 ## CIS Docker Benchmark (Section 4)
 
-Both images are scanned with dockle. The `scratch`-based images have no shell,
-no package manager, no setuid/setgid files, no secrets, no `ADD` instructions,
-and run as user `65532`. dockle produces no WARN or FATAL findings. Its two
-SKIP results (`DKL-LI-0001`, `DKL-LI-0002`) are checks specific to dockle of
-`/etc/passwd` and `/etc/shadow`, which a `scratch` image does not contain:
+All three images (CLI, slim CLI, controller) are scanned with dockle. They have
+no shell, no package manager, no setuid/setgid files, no secrets, no `ADD`
+instructions, and run as user `65532`. dockle produces no WARN or FATAL
+findings. Its two SKIP results (`DKL-LI-0001`, `DKL-LI-0002`) are checks
+specific to dockle of `/etc/passwd` and `/etc/shadow`, which none of the images
+contain:
 
 | Check | Description | CLI image | Controller image | Notes |
 | --- | --- | --- | --- | --- |
 | CIS-DI-0001 | Non-root user | ✅ | ✅ | `USER 65532:65532` |
-| CIS-DI-0002 | Trusted base images | ✅ | ✅ | Garden Linux FIPS (digest-pinned) and `scratch` |
-| CIS-DI-0003 | No unnecessary packages | ✅ | ✅ | `scratch`: only the binary and CA bundle |
+| CIS-DI-0002 | Trusted base images | ✅ | ✅ | Garden Linux FIPS and `bare-libc` (digest-pinned) and `scratch` |
+| CIS-DI-0003 | No unnecessary packages | ✅ | ✅ | Only the binary and CA bundle; the default CLI image also has `cosign`, GnuPG and their libraries |
 | CIS-DI-0005 | Content trust | ℹ️ INFO | ℹ️ INFO | `DOCKER_CONTENT_TRUST` is a client-side setting, not an image property |
 | CIS-DI-0006 | HEALTHCHECK instruction | ℹ️ INFO | ℹ️ INFO | Not applicable: on Kubernetes the chart sets liveness and readiness probes |
 | CIS-DI-0007 | No bare `update` instructions | ✅ | ✅ | No package manager |
-| CIS-DI-0008 | No setuid/setgid files | ✅ | ✅ | `scratch`: no files with elevated permissions |
+| CIS-DI-0008 | No setuid/setgid files | ✅ | ✅ | No files with elevated permissions |
 | CIS-DI-0009 | COPY instead of ADD | ✅ | ✅ | Only `COPY` is used |
 | CIS-DI-0010 | No secrets in Dockerfile | ✅ | ✅ | No secrets or credentials |
 

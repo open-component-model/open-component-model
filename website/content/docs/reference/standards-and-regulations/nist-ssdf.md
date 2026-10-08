@@ -55,7 +55,7 @@ the OCM evidence that supports it, and any gaps.
 
 | Practice | Name | OCM evidence | Gap |
 | --- | --- | --- | --- |
-| PW.1 | Design Software to Meet Security Requirements and Mitigate Risks | `docs/security/secure-design.md` documents security design principles. `docs/security/assurance-case.md` maps threats to mitigations with evidence. ADRs record architectural decisions. Container images are built `FROM scratch` with a static binary and CA bundle only, no shell or package manager. | — |
+| PW.1 | Design Software to Meet Security Requirements and Mitigate Risks | `docs/security/secure-design.md` documents security design principles. `docs/security/assurance-case.md` maps threats to mitigations with evidence. ADRs record architectural decisions. The controller and slim CLI images are built `FROM scratch` with a static binary and CA bundle only; the default CLI image adds `cosign` and GnuPG on Garden Linux `bare-libc`. No image has a shell or package manager. | — |
 | PW.2 | Review the Software Design | `.github/CODEOWNERS` requires review from the Maintainers team. ADRs in `docs/adr/` record design decisions for security-sensitive areas (credentials, signing). | — |
 | PW.4 | Reuse Existing, Well-Secured Software | OCM uses the Go standard library's Go Cryptographic Module for all internal cryptography instead of maintaining its own. Dependencies are tracked in `bindings/go/go.mod` and updated by Renovate with a 28-day minimum release age. | — |
 | PW.5 | Create Source Code by Adhering to Secure Coding Practices | golangci-lint with gosec runs on every PR (`.github/workflows/ci.yml`). The shared `golangci.yml` enables `default: all` linters. `CONTRIBUTING.md` and area-specific contributing guides document coding conventions. | — |

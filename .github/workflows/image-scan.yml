@@ -1,8 +1,8 @@
 name: Image scan
 
 on:
-  # Reusable scan of the CLI and controller images, invoked by the build &
-  # publish pipeline (pipeline.yml) with the image artifacts it built. Each
+  # Reusable scan of the CLI (default and slim) and controller images, invoked by
+  # the build & publish pipeline (pipeline.yml) with the image artifacts it built. Each
   # architecture is scanned for vulnerabilities (Trivy, with an OpenVEX document
   # from govulncheck; findings warn, they do not fail), against the DISA GPOS SRG
   # as tailored in .github/stig, and against the CIS Docker Benchmark (dockle).
@@ -16,7 +16,7 @@ on:
         type: string
         required: false
       cli_artifact:
-        description: "Artifact with the CLI OCI image (oci/cli.tar)."
+        description: "Artifact with the CLI OCI images (oci/cli.tar and oci/cli-slim.tar)."
         type: string
         required: true
       controller_artifact:
@@ -95,13 +95,25 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        image: [cli, controller]
+        image: [cli, cli-slim, controller]
         # The scans only read the image's files, so amd64 is scanned on the arm64 runner.
         arch: [arm64, amd64]
+        # executables: what the image may contain besides its entrypoint.
+        # shared_libraries: whether it ships shared libraries and a dynamic
+        # loader. Both come from the Containerfile; the STIG scan fails on
+        # anything else, so update them together with the image.
         include:
           - image: cli
             artifact: ${{ inputs.cli_artifact }}
             oci_tar: oci/cli.tar
+            containerfile: bindings/go/cli/Containerfile
+            executables: >-
+              /usr/local/bin/cosign
+              /usr/bin/gpg /usr/bin/gpg-agent /usr/bin/gpgconf /usr/bin/gpg-connect-agent /usr/bin/dirmngr
+            shared_libraries: true
+          - image: cli-slim
+            artifact: ${{ inputs.cli_artifact }}
+            oci_tar: oci/cli-slim.tar
             containerfile: bindings/go/cli/Containerfile
           - image: controller
             artifact: ${{ inputs.controller_artifact }}
@@ -209,6 +221,8 @@ jobs:
           CONTAINERFILE: ${{ matrix.containerfile }}
           RESULTS_DIR: tmp/image-scan/${{ matrix.image }}-${{ matrix.arch }}
           SUMMARY_TITLE: ${{ matrix.image }} (linux/${{ matrix.arch }})
+          EXECUTABLES: ${{ matrix.executables }}
+          SHARED_LIBRARIES: ${{ matrix.shared_libraries }}
         with:
           script: |
             const script = await import('${{ github.workspace }}/.github/scripts/stig-scan.js');
