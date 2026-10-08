@@ -703,7 +703,7 @@ func (r *Reconciler) downloadResourceBlob(
 		return nil, fmt.Errorf("failed to resolve access type: %w", err)
 	}
 
-	switch typed.(type) { //nolint:gocritic // no, I like switch for types better
+	switch typed.(type) {
 	// Both are local, repository-local accesses resolved by the component repository.
 	// relativeOciReference is a v1 compatibility access migrated into v2 descriptors.
 	case *v2.LocalBlob, *ociv1.RelativeOCIReference:
