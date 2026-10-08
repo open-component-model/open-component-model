@@ -914,9 +914,9 @@ Deletion is guarded by finalizers. `reconcileDelete` checks for dependent resour
 
 The deployer uses SSA (`client.Apply` with `client.ForceOwnership`) and ApplySet (KEP-3659) for resource lifecycle management. The workflow is: Project (compute scope) → Apply (SSA all resources) → Prune (delete orphans matching the ApplySet label).
 
-### Worker Pool with Cache
+### Download Cache
 
-Async resolution uses a worker pool with an expirable LRU cache. The `Load(key, fallbackFunc)` pattern checks cache first, then dispatches work. Multiple requesters can subscribe to the same in-progress resolution:
+The deployer keeps downloaded objects in an LRU cache. The `Load(key, fallbackFunc)` pattern checks the cache first and only runs the fallback on a miss:
 
 ```go
 result, err := cache.Load(key, func() (V, error) {

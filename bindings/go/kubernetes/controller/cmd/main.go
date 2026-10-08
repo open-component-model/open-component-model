@@ -7,14 +7,12 @@ import (
 	"flag"
 	"log/slog"
 	"os"
-	"time"
 
 	// to ensure that exec-entrypoint and run can make use of them.
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
 	"github.com/go-logr/logr"
-	"github.com/hashicorp/golang-lru/v2/expirable"
 	apiresource "k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -39,7 +37,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/controller/resource"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/resolution"
-	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/resolution/workerpool"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/setup"
 	ocirepository "ocm.software/open-component-model/bindings/go/oci/spec/repository"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
@@ -80,10 +77,6 @@ func main() {
 		deployerMaxResourceSize   string
 		resourceConcurrency       int
 		replicationConcurrency    int
-		resolverWorkerCount       int
-		resolverWorkerQueueLength int
-		resolverSubscriberBuffer  int
-		resolverCacheTTL          int
 	)
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metric endpoint binds to. "+
@@ -106,15 +99,6 @@ func main() {
 		"The resource controller concurrency. This is the number of active resource controller workers that can be kept alive.")
 	flag.IntVar(&replicationConcurrency, "replication-controller-concurrency", 4, //nolint:mnd // no magic number
 		"The replication controller concurrency. This is the number of active replication controller workers that can be kept alive.")
-	flag.IntVar(&resolverWorkerCount, "resolver-worker-count", 10, //nolint:mnd // no magic number
-		"This is the number of active resolver workers.")
-	flag.IntVar(&resolverWorkerQueueLength, "resolver-worker-queue-length", 1000, //nolint:mnd // no magic number
-		"The maximum number of work items in the queue for the workers to pick up component versions to resolve from.")
-	flag.IntVar(&resolverSubscriberBuffer, "resolver-subscriber-buffer-size", 100, //nolint:mnd // no magic number
-		"The buffer size for each subscriber's event channel. A larger buffer reduces the probability of dropped resolution events under load. "+
-			"Tune upward if the resolver_event_channel_drops_total metric is non-zero.")
-	flag.IntVar(&resolverCacheTTL, "resolver-cache-ttl", 30, //nolint:mnd // no magic number
-		"The time-to-live (TTL) for the resolver cache entries in minutes. Setting TTL to less than 30 minutes is discouraged in productive use as it can lead to unintended performance issues.")
 
 	opts := zap.Options{
 		Development: true,
@@ -130,25 +114,6 @@ func main() {
 	maxResourceSizeBytes := maxResourceQuantity.Value()
 	if maxResourceSizeBytes < 0 {
 		setupLog.Error(nil, "invalid flag value", "flag", "deployer-download-max-resource-size", "value", deployerMaxResourceSize, "reason", "must be >= 0")
-		os.Exit(1)
-	}
-
-	if resolverSubscriberBuffer <= 0 {
-		setupLog.Error(nil, "invalid flag value", "flag", "resolver-subscriber-buffer-size",
-			"value", resolverSubscriberBuffer, "reason", "must be > 0")
-		os.Exit(1)
-	}
-	// A subscriber channel deeper than the work queue is wasteful: the queue bounds
-	// how many resolution events can be in flight, so a larger buffer can never fill.
-	if resolverSubscriberBuffer > resolverWorkerQueueLength {
-		setupLog.Error(nil, "invalid flag value", "flag", "resolver-subscriber-buffer-size",
-			"value", resolverSubscriberBuffer, "reason", "must not exceed resolver-worker-queue-length")
-		os.Exit(1)
-	}
-
-	if resolverCacheTTL <= 0 {
-		setupLog.Error(nil, "invalid flag value", "flag", "resolver-cache-ttl",
-			"value", resolverCacheTTL, "reason", "must be > 0")
 		os.Exit(1)
 	}
 
@@ -224,28 +189,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	const unlimited = 0
-	ttl := time.Minute * time.Duration(resolverCacheTTL)
-	resolverCache := expirable.NewLRU[string, *workerpool.Result](unlimited, nil, ttl)
-
-	// Create worker pool with its own dependencies
-	workerPool := workerpool.NewWorkerPool(workerpool.PoolOptions{
-		WorkerCount:          resolverWorkerCount,
-		QueueSize:            resolverWorkerQueueLength,
-		SubscriberBufferSize: resolverSubscriberBuffer,
-		Logger:               &setupLog,
-		Client:               mgr.GetClient(),
-		Cache:                resolverCache,
-	})
-	if err := mgr.Add(workerPool); err != nil {
-		setupLog.Error(err, "unable to add worker pool")
-		os.Exit(1)
-	}
-
 	// TODO: migrate to mgr.GetEventRecorder() once BaseReconciler uses events.EventRecorder
 	eventsRecorder := mgr.GetEventRecorderFor("ocm-k8s-toolkit") //nolint:staticcheck,nolintlint
 
-	resolver := resolution.NewResolver(&setupLog, workerPool)
+	resolver := resolution.NewResolver(&setupLog)
 	if err = (&repository.Reconciler{
 		BaseReconciler: &ocm.BaseReconciler{
 			Client:           mgr.GetClient(),

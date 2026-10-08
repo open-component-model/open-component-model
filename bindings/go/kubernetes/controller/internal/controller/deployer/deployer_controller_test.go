@@ -20,7 +20,6 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/go-logr/logr"
-	"github.com/prometheus/client_golang/prometheus/testutil"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -38,7 +37,6 @@ import (
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
-	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/resolution/workerpool"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/status"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/test"
 	"ocm.software/open-component-model/bindings/go/oci"
@@ -801,8 +799,8 @@ consumers:
 		})
 	})
 
-	Context("verified component cache behavior", func() {
-		It("uses separate cache entries for verified and unverified component versions", Serial, func(ctx SpecContext) {
+	Context("verified component resolution", func() {
+		It("deploys a resource from a verified component version", Serial, func(ctx SpecContext) {
 			componentName := "ocm.software/deployer-verified-cache-test"
 			componentObjName := "deployer-verified-cache-test"
 			resourceName := "verified-yaml-resource"
@@ -975,27 +973,6 @@ data:
 				Name:      "verified-cache-cm",
 			}, gotCM)).To(Succeed())
 			Expect(gotCM.Data).To(HaveKeyWithValue("verified", "true"))
-
-			By("checking cache metrics for verified component")
-			verifiedMiss, err := workerpool.CacheMissCounterTotal.GetMetricWithLabelValues(componentName, componentVersion, "verified")
-			Expect(err).ToNot(HaveOccurred())
-			Expect(testutil.ToFloat64(verifiedMiss)).To(Equal(float64(1)),
-				"expected at least 1 cache miss for the verified component on first resolution")
-
-			unverifiedMiss, err := workerpool.CacheMissCounterTotal.GetMetricWithLabelValues(componentName, componentVersion, "unverified")
-			Expect(err).ToNot(HaveOccurred())
-			Expect(testutil.ToFloat64(unverifiedMiss)).To(Equal(float64(0)),
-				"expected 0 cache misses for unverified state — verifications should always be included in cache key")
-
-			verifiedHit, err := workerpool.CacheHitCounterTotal.GetMetricWithLabelValues(componentName, componentVersion, "verified")
-			Expect(err).ToNot(HaveOccurred())
-			// The exact hit count is non-deterministic: after the resource is applied, the reconciler
-			// registers a dynamic resource watch for the deployed object and retries until the watch has
-			// synced. Each retry reconciliation calls getEffectiveComponentDescriptor (which hits the
-			// component version cache) before reaching the download cache. How many retries occur depends
-			// on the timing between the informer sync and the controller's requeue.
-			Expect(testutil.ToFloat64(verifiedHit)).To(BeNumerically(">=", float64(1)),
-				"expected at least 1 cache hit for the verified component on subsequent reconciliation")
 		})
 
 		It("maintains integrity chain for referenced component via reference path", Serial, func(ctx SpecContext) {
@@ -1224,48 +1201,9 @@ data:
 				Name:      "ref-chain-cm",
 			}, gotCM)).To(Succeed())
 			Expect(gotCM.Data).To(HaveKeyWithValue("chain", "valid"))
-
-			By("checking cache metrics for verified parent component")
-			parentMissVerified, err := workerpool.CacheMissCounterTotal.GetMetricWithLabelValues(parentComponentName, componentVersion, "verified")
-			Expect(err).ToNot(HaveOccurred())
-			Expect(testutil.ToFloat64(parentMissVerified)).To(Equal(float64(1)),
-				"expected 1 cache miss for the verified parent component on first resolution")
-			parentHitVerified, err := workerpool.CacheHitCounterTotal.GetMetricWithLabelValues(parentComponentName, componentVersion, "verified")
-			Expect(err).ToNot(HaveOccurred())
-			// Hit 1 from first resolution (only deployer controller is running)
-			// Hit 2 from the child component resolution via reference path
-			// Hit count is non-deterministic for the same reason as above: resource watch sync retries
-			// cause additional reconciliations that each hit the component version cache.
-			Expect(testutil.ToFloat64(parentHitVerified)).To(BeNumerically(">=", float64(2)),
-				"expected at least 2 cache hits for the verified parent component on first resolution")
-
-			parentMissUnverified, err := workerpool.CacheMissCounterTotal.GetMetricWithLabelValues(parentComponentName, componentVersion, "unverified")
-			Expect(err).ToNot(HaveOccurred())
-			Expect(testutil.ToFloat64(parentMissUnverified)).To(Equal(float64(0)),
-				"expected 0 unverified cache misses for the parent — it should always be resolved with verifications")
-
-			By("checking cache metrics for child component resolved via integrity chain")
-			referencedMissVerified, err := workerpool.CacheMissCounterTotal.GetMetricWithLabelValues(childComponentName, componentVersion, "verified")
-			Expect(err).ToNot(HaveOccurred())
-			Expect(testutil.ToFloat64(referencedMissVerified)).To(Equal(float64(1)),
-				"expected 1 cache miss for the child component resolved via digest from parent reference")
-			referencedHitVerified, err := workerpool.CacheHitCounterTotal.GetMetricWithLabelValues(childComponentName, componentVersion, "verified")
-			Expect(err).ToNot(HaveOccurred())
-			// Hit count is non-deterministic for the same reason as above: resource watch sync retries
-			// cause additional reconciliations that each hit the component version cache.
-			Expect(testutil.ToFloat64(referencedHitVerified)).To(BeNumerically(">=", float64(1)),
-				"expected at least 1 cache hit for the child component resolved via digest from parent reference")
-
-			referencedMissUnverified, err := workerpool.CacheMissCounterTotal.GetMetricWithLabelValues(childComponentName, componentVersion, "unverified")
-			Expect(err).ToNot(HaveOccurred())
-			Expect(testutil.ToFloat64(referencedMissUnverified)).To(Equal(float64(0)),
-				"expected 0 unverified cache misses for the child — it should be resolved via integrity chain digest")
 		})
 
 		It("does not deploy when verification fails with wrong public key", Serial, func(ctx SpecContext) {
-			workerpool.CacheMissCounterTotal.Reset()
-			workerpool.CacheHitCounterTotal.Reset()
-
 			parentComponentName := "ocm.software/deployer-bad-verify-parent"
 			childComponentName := "ocm.software/deployer-bad-verify-child"
 			childRefName := "bad-verify-child-ref"
