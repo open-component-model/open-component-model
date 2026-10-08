@@ -2685,7 +2685,7 @@ type: generic.config.ocm.software/v1
 		{
 			name: "filesystem config - merge multiple files",
 			args: []string{"get", "config"},
-			// Config file combination covers: a value that gets overriden, a value that is preserved, and a value that is added from the second file
+			// Config file combination covers: a value that gets overridden, a value that is preserved, and a value that is added from the second file
 			configsYAML: []string{`
 type: generic.config.ocm.software/v1
 configurations:
