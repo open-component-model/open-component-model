@@ -83,6 +83,43 @@ func TestUploadResourceRoundTrip(t *testing.T) {
 	}
 }
 
+func TestUploadResourceToExistingAnnotatedTag(t *testing.T) {
+	fixture := newRepository(t)
+	uploader := newUploader(t)
+
+	for _, testCase := range []struct {
+		name    string
+		commit  plumbing.Hash
+		wantErr string
+	}{
+		{name: "tag at the uploaded commit", commit: fixture.First},
+		{name: "tag at another commit", commit: fixture.Second, wantErr: "already exists at another commit"},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			r := require.New(t)
+			targetPath := filepath.Join(t.TempDir(), "target.git")
+			_, err := git.PlainClone(targetPath, &git.CloneOptions{URL: fixture.Path, Bare: true, Tags: git.AllTags})
+			r.NoError(err)
+			target, err := git.PlainOpen(targetPath)
+			r.NoError(err)
+			// fixture.Path tags fixture.First as an annotated tag, as if it had been pushed by hand.
+			before, err := target.Reference("refs/tags/annotated", false)
+			r.NoError(err)
+
+			source, content := downloadResource(t, uploader, fixture.Path, "refs/heads/main", testCase.commit)
+			_, err = uploader.UploadResource(t.Context(), targetResource(source, targetPath, "refs/tags/annotated"), content, nil)
+			if testCase.wantErr != "" {
+				r.ErrorContains(err, testCase.wantErr)
+			} else {
+				r.NoError(err)
+			}
+			after, err := target.Reference("refs/tags/annotated", false)
+			r.NoError(err)
+			r.Equal(before.Hash(), after.Hash(), "the existing tag is left as it is")
+		})
+	}
+}
+
 func TestDownloadResourceDependsOnCommitOnly(t *testing.T) {
 	fixture := newRepository(t)
 	want, _ := downloadResource(t, newUploader(t), fixture.Path, "refs/heads/main", fixture.First)

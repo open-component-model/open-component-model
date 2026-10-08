@@ -94,6 +94,9 @@ func (r *ResourceRepository) upload(ctx context.Context, resource *descriptor.Re
 		return nil, err
 	}
 
+	if spec.Commit != "" && !strings.EqualFold(spec.Commit, commit.String()) {
+		return nil, fmt.Errorf("git archive commit mismatch: expected %s, got %s", spec.Commit, commit)
+	}
 	if _, err := object.GetCommit(repo.Storer, commit); err != nil {
 		return nil, fmt.Errorf("git archive HEAD %s is not a commit: %w", commit, err)
 	}
@@ -105,72 +108,59 @@ func (r *ResourceRepository) upload(ctx context.Context, resource *descriptor.Re
 	for _, hash := range objects {
 		history[hash] = struct{}{}
 	}
-	if spec.Commit != "" && !strings.EqualFold(spec.Commit, commit.String()) {
-		return nil, fmt.Errorf("git archive commit mismatch: expected %s, got %s", spec.Commit, commit)
+	if err := r.push(ctx, repo, spec, creds, commit, history); err != nil {
+		return nil, err
 	}
-	return r.pushGitRepository(ctx, repo, resource, spec.Repository, plumbing.ReferenceName(spec.Ref), commit, history, creds, r.downloadOptions(r.tempFolder()))
+	return uploadedResource(resource, spec.Repository, spec.Ref, commit.String()), nil
 }
 
-func (r *ResourceRepository) pushGitRepository(ctx context.Context, repo *git.Repository, source *descriptor.Resource, targetRepository string, targetRef plumbing.ReferenceName, commit plumbing.Hash, history map[plumbing.Hash]struct{}, targetCreds *credsv1.GitCredentials, options download.Options) (*descriptor.Resource, error) {
-	target, err := endpoint.Parse(targetRepository)
+// push points the target ref at commit. An existing ref must already name the
+// commit (directly or as an annotated tag of it) or, for a branch, fast-forward
+// to it within history, so the target never needs to be downloaded.
+func (r *ResourceRepository) push(ctx context.Context, repo *git.Repository, target *accessv1.Git, creds *credsv1.GitCredentials, commit plumbing.Hash, history map[plumbing.Hash]struct{}) error {
+	ep, err := endpoint.Parse(target.Repository)
 	if err != nil {
-		return nil, fmt.Errorf("invalid target: cannot address git repository: %w", err)
+		return fmt.Errorf("invalid target: cannot address git repository: %w", err)
 	}
-	targetOptions, err := download.ClientOptions(target, targetCreds, options)
+	options, err := download.ClientOptions(ep, creds, r.downloadOptions(r.tempFolder()))
 	if err != nil {
-		return nil, fmt.Errorf("invalid target: %w", err)
+		return fmt.Errorf("invalid target: %w", err)
 	}
-	remote, err := repo.CreateRemote(&config.RemoteConfig{Name: "ocm-target", URLs: []string{target.URL}})
+	remote, err := repo.CreateRemote(&config.RemoteConfig{Name: "ocm-target", URLs: []string{ep.URL}})
 	if err != nil {
-		return nil, fmt.Errorf("cannot configure target repository: %w", err)
+		return fmt.Errorf("cannot configure target repository: %w", err)
 	}
-	refs, err := remote.ListContext(ctx, &git.ListOptions{ClientOptions: targetOptions})
+	refs, err := remote.ListContext(ctx, &git.ListOptions{ClientOptions: options, PeelingOption: git.AppendPeeled})
 	if err != nil && !errors.Is(err, transport.ErrEmptyRemoteRepository) {
-		return nil, download.TransportError(ctx, "cannot inspect target refs", err)
+		return download.TransportError(ctx, "cannot inspect target refs", err)
 	}
-	for _, existing := range refs {
-		if existing.Name() != targetRef {
-			continue
-		}
-		if existing.Hash() != commit {
-			if targetRef.IsTag() {
-				return nil, fmt.Errorf("target tag %q already exists at another object", targetRef)
-			}
-			if _, ok := history[existing.Hash()]; !ok {
-				return nil, fmt.Errorf("target ref %q does not fast-forward to %s", targetRef, commit)
-			}
-		}
-		if err := r.verifyTargetHistory(ctx, targetRepository, string(targetRef), existing.Hash(), targetCreds); err != nil {
-			return nil, err
-		}
-		if existing.Hash() == commit {
-			return uploadedResource(source, targetRepository, string(targetRef), commit.String()), nil
-		}
-		break
+	targetRef := plumbing.ReferenceName(target.Ref)
+	advertised := make(map[plumbing.ReferenceName]plumbing.Hash, len(refs))
+	for _, ref := range refs {
+		advertised[ref.Name()] = ref.Hash()
 	}
+	if existing, ok := advertised[targetRef]; ok {
+		if existing == commit || advertised[targetRef+"^{}"] == commit {
+			return nil
+		}
+		if targetRef.IsTag() {
+			return fmt.Errorf("target tag %q already exists at another commit", targetRef)
+		}
+		if _, ok := history[existing]; !ok {
+			return fmt.Errorf("target ref %q does not fast-forward to %s", targetRef, commit)
+		}
+	}
+
 	const uploadRef = "refs/ocm/upload"
 	if err := repo.Storer.SetReference(plumbing.NewHashReference(uploadRef, commit)); err != nil {
-		return nil, fmt.Errorf("cannot stage git upload ref: %w", err)
+		return fmt.Errorf("cannot stage git upload ref: %w", err)
 	}
 	if err := remote.PushContext(ctx, &git.PushOptions{
 		RemoteName:    "ocm-target",
-		RefSpecs:      []config.RefSpec{config.RefSpec(uploadRef + ":" + string(targetRef))},
-		ClientOptions: targetOptions,
+		RefSpecs:      []config.RefSpec{config.RefSpec(uploadRef + ":" + target.Ref)},
+		ClientOptions: options,
 	}); err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
-		return nil, download.TransportError(ctx, "cannot push git ref", err)
-	}
-	return uploadedResource(source, targetRepository, string(targetRef), commit.String()), nil
-}
-
-func (r *ResourceRepository) verifyTargetHistory(ctx context.Context, repository, ref string, tip plumbing.Hash, credentials *credsv1.GitCredentials) error {
-	opts := r.downloadOptions(r.tempFolder())
-	access := &accessv1.Git{Repository: repository, Ref: ref, Commit: tip.String()}
-	err := download.WithRepository(ctx, access, credentials, opts, func(target *git.Repository, _ *object.Commit) error {
-		_, err := download.HistoryObjects(target, tip)
-		return err
-	})
-	if err != nil {
-		return fmt.Errorf("target repository has incomplete history at %s: %w", tip, err)
+		return download.TransportError(ctx, "cannot push git ref", err)
 	}
 	return nil
 }

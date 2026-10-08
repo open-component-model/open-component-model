@@ -31,7 +31,7 @@
 // repository and a full branch or tag ref; a set Commit must match the archived
 // commit. It verifies any resource digest against the archive bytes, stores every
 // object under the hash of its content, rejects non-fast-forward updates and tags
-// at another object, and returns Git/v1 access to the target, which downloads to
+// at another commit, and returns Git/v1 access to the target, which downloads to
 // the same digest. A tag target becomes a lightweight tag. Archives created by
 // OCM v1 hold the files only and are rejected; construct such resources again
 // with OCM v2.
