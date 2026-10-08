@@ -14,6 +14,7 @@ import (
 	"oras.land/oras-go/v2/registry/remote/auth"
 
 	ocmhttp "ocm.software/open-component-model/bindings/go/http"
+	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/oci"
 	"ocm.software/open-component-model/bindings/go/oci/cache"
 	"ocm.software/open-component-model/bindings/go/oci/credentials"
@@ -60,6 +61,11 @@ type CachingComponentVersionRepositoryProvider struct {
 
 	// httpClient is the shared HTTP client used by all repositories provided.
 	httpClient *http.Client
+
+	// httpConfig is the resolved HTTP client configuration. It is retained
+	// beyond httpClient construction so the OCI resolver can read its
+	// per-host/global ChunkedPush settings. May be nil (default behaviour).
+	httpConfig *httpv1alpha1.Config
 
 	// tempDir is the shared default temporary filesystem directory for any
 	// temporary data created by the repositories provided by the provider
@@ -133,6 +139,7 @@ func NewComponentVersionRepositoryProvider(opts ...Option) *CachingComponentVers
 			ocmhttp.WithConfig(options.HTTPConfig),
 			ocmhttp.WithUserAgent(options.UserAgent),
 		),
+		httpConfig:         options.HTTPConfig,
 		tempDir:            options.TempDir,
 		blobCacheOpts:      options.BlobCacheOptions,
 		referenceCacheOpts: options.ReferenceCacheOptions,
@@ -220,6 +227,11 @@ func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepositor
 			if rc := b.getOrCreateReferenceCache(identity); rc != nil {
 				resolverOpts = append(resolverOpts, urlresolver.WithReferenceCache(rc))
 			}
+		}
+		// Apply the configured chunked-push override for this repository's host.
+		// Appended last so it wins over NewResolver's default-on behaviour.
+		if opt, ok := chunkedPushResolverOption(b.httpConfig, ociRepositoryHost(obj)); ok {
+			resolverOpts = append(resolverOpts, opt)
 		}
 
 		resolver, err := ocirepository.NewResolver(ctx, &auth.Client{

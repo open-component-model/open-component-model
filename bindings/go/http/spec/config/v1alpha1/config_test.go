@@ -967,3 +967,133 @@ func TestConfig_ResolveHost(t *testing.T) {
 		assert.Equal(t, httpspec.Timeout(30*time.Second), *cfg.Timeout)
 	})
 }
+
+func TestChunkedPushConfig_ParseYAML(t *testing.T) {
+	r := require.New(t)
+	yaml := `
+type: generic.config.ocm.software/v1
+configurations:
+  - type: http.config.ocm.software/v1alpha1
+    chunkedPush:
+      chunkSize: 1048576
+      threshold: 2097152
+    hosts:
+      ghcr.io:443:
+        chunkedPush:
+          disabled: true
+`
+	var generic genericv1.Config
+	r.NoError(genericv1.Scheme.Decode(strings.NewReader(yaml), &generic))
+	r.Len(generic.Configurations, 1)
+
+	var cfg httpspec.Config
+	r.NoError(httpspec.Scheme.Convert(generic.Configurations[0], &cfg))
+
+	r.NotNil(cfg.ChunkedPush)
+	assert.False(t, cfg.ChunkedPush.Disabled)
+	assert.Equal(t, int64(1048576), cfg.ChunkedPush.ChunkSize)
+	assert.Equal(t, int64(2097152), cfg.ChunkedPush.Threshold)
+
+	host := cfg.Hosts["ghcr.io:443"]
+	r.NotNil(host)
+	r.NotNil(host.ChunkedPush)
+	assert.True(t, host.ChunkedPush.Disabled)
+}
+
+func TestChunkedPushConfig_Validate(t *testing.T) {
+	t.Run("valid defaults", func(t *testing.T) {
+		r := require.New(t)
+		r.NoError((&httpspec.ChunkedPushConfig{}).Validate())
+		r.NoError((&httpspec.ChunkedPushConfig{Disabled: true}).Validate())
+		r.NoError((&httpspec.ChunkedPushConfig{ChunkSize: 1 << 20, Threshold: 1 << 21}).Validate())
+	})
+
+	t.Run("negative chunkSize rejected", func(t *testing.T) {
+		r := require.New(t)
+		err := (&httpspec.ChunkedPushConfig{ChunkSize: -1}).Validate()
+		r.Error(err)
+		assert.Contains(t, err.Error(), "chunkSize")
+	})
+
+	t.Run("negative threshold rejected", func(t *testing.T) {
+		r := require.New(t)
+		err := (&httpspec.ChunkedPushConfig{Threshold: -1}).Validate()
+		r.Error(err)
+		assert.Contains(t, err.Error(), "threshold")
+	})
+
+	t.Run("global chunkedPush error surfaced by Config.Validate", func(t *testing.T) {
+		r := require.New(t)
+		cfg := &httpspec.Config{ChunkedPush: &httpspec.ChunkedPushConfig{ChunkSize: -5}}
+		err := cfg.Validate()
+		r.Error(err)
+		assert.Contains(t, err.Error(), "chunkedPush")
+	})
+
+	t.Run("per-host chunkedPush error wrapped with host key", func(t *testing.T) {
+		r := require.New(t)
+		cfg := &httpspec.Config{
+			Hosts: map[string]*httpspec.HostConfig{
+				"ghcr.io:443": {ChunkedPush: &httpspec.ChunkedPushConfig{Threshold: -2}},
+			},
+		}
+		err := cfg.Validate()
+		r.Error(err)
+		assert.Contains(t, err.Error(), `host "ghcr.io:443"`)
+		assert.Contains(t, err.Error(), "chunkedPush")
+	})
+}
+
+func TestChunkedPushConfig_ResolveHost(t *testing.T) {
+	t.Run("unset yields nil", func(t *testing.T) {
+		r := require.New(t)
+		cfg := &httpspec.Config{}
+		r.Nil(cfg.ResolveHost("ghcr.io:443").ChunkedPush)
+	})
+
+	t.Run("host with no entry falls back to global", func(t *testing.T) {
+		r := require.New(t)
+		cfg := &httpspec.Config{ChunkedPush: &httpspec.ChunkedPushConfig{ChunkSize: 1 << 20}}
+		resolved := cfg.ResolveHost("other.example.com").ChunkedPush
+		r.NotNil(resolved)
+		assert.Equal(t, int64(1<<20), resolved.ChunkSize)
+	})
+
+	t.Run("per-host overrides global wholesale", func(t *testing.T) {
+		r := require.New(t)
+		cfg := &httpspec.Config{
+			ChunkedPush: &httpspec.ChunkedPushConfig{ChunkSize: 1 << 20, Threshold: 1 << 21},
+			Hosts: map[string]*httpspec.HostConfig{
+				"ghcr.io:443": {ChunkedPush: &httpspec.ChunkedPushConfig{Disabled: true}},
+			},
+		}
+		resolved := cfg.ResolveHost("ghcr.io:443").ChunkedPush
+		r.NotNil(resolved)
+		assert.True(t, resolved.Disabled)
+		assert.Zero(t, resolved.ChunkSize)
+	})
+
+	t.Run("host entry without chunkedPush inherits global", func(t *testing.T) {
+		r := require.New(t)
+		cfg := &httpspec.Config{
+			ChunkedPush: &httpspec.ChunkedPushConfig{ChunkSize: 1 << 20},
+			Hosts: map[string]*httpspec.HostConfig{
+				"ghcr.io:443": {Retry: &httpspec.RetryConfig{}},
+			},
+		}
+		resolved := cfg.ResolveHost("ghcr.io:443").ChunkedPush
+		r.NotNil(resolved)
+		assert.Equal(t, int64(1<<20), resolved.ChunkSize)
+	})
+}
+
+func TestMergeChunkedPushConfig(t *testing.T) {
+	r := require.New(t)
+	global := &httpspec.ChunkedPushConfig{ChunkSize: 1 << 20}
+	host := &httpspec.ChunkedPushConfig{Disabled: true}
+
+	r.Nil(httpspec.MergeChunkedPushConfig(nil, nil))
+	assert.Same(t, global, httpspec.MergeChunkedPushConfig(global, nil))
+	assert.Same(t, host, httpspec.MergeChunkedPushConfig(global, host))
+	assert.Same(t, host, httpspec.MergeChunkedPushConfig(nil, host))
+}
