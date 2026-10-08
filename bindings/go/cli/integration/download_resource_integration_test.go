@@ -30,6 +30,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/cli/cmd"
 	resourceCMD "ocm.software/open-component-model/bindings/go/cli/cmd/download/resource"
 	"ocm.software/open-component-model/bindings/go/cli/integration/internal"
+	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	gitrepository "ocm.software/open-component-model/bindings/go/git/repository"
@@ -49,7 +50,8 @@ func Test_Integration_DownloadUploadedGitResource(t *testing.T) {
 	target, err := git.PlainInit(targetPath, true)
 	r.NoError(err)
 
-	gitRepo := gitrepository.NewResourceRepository(nil)
+	tempFolder := t.TempDir()
+	gitRepo := gitrepository.NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &tempFolder})
 	source := &descriptor.Resource{Access: &gitaccessv1.Git{
 		Type:       runtime.NewVersionedType(gitaccessv1.Type, gitaccessv1.Version),
 		Repository: sourcePath,
@@ -60,7 +62,6 @@ func Test_Integration_DownloadUploadedGitResource(t *testing.T) {
 	r.NoError(err)
 	bundle, err := gitRepo.DownloadGitBundle(t.Context(), source, nil)
 	r.NoError(err)
-	t.Cleanup(func() { r.NoError(bundle.(io.Closer).Close()) })
 
 	uploadTarget := source.DeepCopy()
 	uploadTarget.Access = &gitaccessv1.Git{

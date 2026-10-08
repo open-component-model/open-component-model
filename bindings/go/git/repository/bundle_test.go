@@ -1,7 +1,6 @@
 package repository_test
 
 import (
-	"io"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -47,7 +46,6 @@ func TestUploadResourceBundle(t *testing.T) {
 			r.NoError(err)
 			bundle, err := uploader.DownloadGitBundle(t.Context(), source, nil)
 			r.NoError(err)
-			t.Cleanup(func() { r.NoError(bundle.(io.Closer).Close()) })
 			targetResource := source.DeepCopy()
 			targetResource.Access = &accessv1.Git{
 				Type:       runtime.NewVersionedType(accessv1.Type, accessv1.Version),
@@ -90,14 +88,10 @@ func TestUploadResourceBundle(t *testing.T) {
 	r.ErrorContains(err, "not a Git object bundle")
 }
 
-func TestUploadResourceBundlePreservesAnnotatedTag(t *testing.T) {
-	r := require.New(t)
+func TestUploadResourceBundleFromAnnotatedTag(t *testing.T) {
 	fixture := newRepository(t)
 	tag, err := fixture.Git.Reference("refs/tags/annotated", true)
-	r.NoError(err)
-	targetPath := filepath.Join(t.TempDir(), "target.git")
-	target, err := git.PlainInit(targetPath, true)
-	r.NoError(err)
+	require.NoError(t, err)
 	tempDir := t.TempDir()
 	uploader := repository.NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &tempDir})
 	source := &descriptor.Resource{Access: &accessv1.Git{
@@ -107,20 +101,41 @@ func TestUploadResourceBundlePreservesAnnotatedTag(t *testing.T) {
 		Commit:     fixture.First.String(),
 	}}
 	bundle, err := uploader.DownloadGitBundle(t.Context(), source, nil)
-	r.NoError(err)
-	t.Cleanup(func() { r.NoError(bundle.(io.Closer).Close()) })
-	targetResource := source.DeepCopy()
-	targetResource.Access = &accessv1.Git{
-		Type:       runtime.NewVersionedType(accessv1.Type, accessv1.Version),
-		Repository: targetPath,
-		Ref:        "refs/tags/copied",
-		Commit:     fixture.First.String(),
+	require.NoError(t, err)
+
+	for _, testCase := range []struct {
+		name      string
+		targetRef string
+		wantHash  plumbing.Hash
+		wantTag   bool
+	}{
+		{name: "tag target keeps the tag object", targetRef: "refs/tags/copied", wantHash: tag.Hash(), wantTag: true},
+		{name: "branch target points at the commit", targetRef: "refs/heads/release", wantHash: fixture.First},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			r := require.New(t)
+			targetPath := filepath.Join(t.TempDir(), "target.git")
+			target, err := git.PlainInit(targetPath, true)
+			r.NoError(err)
+			targetResource := source.DeepCopy()
+			targetResource.Access = &accessv1.Git{
+				Type:       runtime.NewVersionedType(accessv1.Type, accessv1.Version),
+				Repository: targetPath,
+				Ref:        testCase.targetRef,
+				Commit:     fixture.First.String(),
+			}
+			uploaded, err := uploader.UploadResource(t.Context(), targetResource, bundle, nil)
+			r.NoError(err)
+			r.Equal(fixture.First.String(), uploaded.Access.(*accessv1.Git).Commit)
+			ref, err := target.Reference(plumbing.ReferenceName(testCase.targetRef), true)
+			r.NoError(err)
+			r.Equal(testCase.wantHash, ref.Hash())
+			_, err = target.TagObject(ref.Hash())
+			if testCase.wantTag {
+				r.NoError(err)
+			} else {
+				r.Error(err)
+			}
+		})
 	}
-	_, err = uploader.UploadResource(t.Context(), targetResource, bundle, nil)
-	r.NoError(err)
-	copied, err := target.Reference("refs/tags/copied", true)
-	r.NoError(err)
-	r.Equal(tag.Hash(), copied.Hash())
-	_, err = target.TagObject(copied.Hash())
-	r.NoError(err)
 }

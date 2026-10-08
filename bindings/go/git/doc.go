@@ -26,7 +26,6 @@
 // The generic ResourceRepository.UploadResource method accepts a complete Git
 // bundle produced by DownloadGitBundle. Its resource access identifies the
 // target repository and full ref; the bundle carries original Git objects.
-// Callers close the bundle blob after use to remove its temporary file.
 // DownloadResource continues to return a snapshot tar for local-blob transfers.
 //
 // # Constructor input

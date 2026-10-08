@@ -1,7 +1,6 @@
 package integration_test
 
 import (
-	"io"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -76,7 +75,6 @@ func Test_Integration_GitUploadOverHTTPS(t *testing.T) {
 	upload(secondResource)
 	bundle, err := resourceRepository.DownloadGitBundle(t.Context(), secondResource, credentials)
 	r.NoError(err)
-	t.Cleanup(func() { r.NoError(bundle.(io.Closer).Close()) })
 	bundlePath := filepath.Join(t.TempDir(), "source.bundle")
 	_, err = filesystem.BlobToSpec(bundle, bundlePath)
 	r.NoError(err)

@@ -5,11 +5,11 @@ import (
 	"context"
 	"crypto/fips140"
 	"fmt"
-	"io"
 	"os"
 	"strings"
 
 	git "github.com/go-git/go-git/v6"
+	"github.com/go-git/go-git/v6/config"
 	"github.com/go-git/go-git/v6/plumbing"
 	"github.com/go-git/go-git/v6/plumbing/format/packfile"
 	"github.com/go-git/go-git/v6/plumbing/object"
@@ -23,19 +23,8 @@ import (
 
 const bundleSignature = "# v2 git bundle"
 
-type bundleBlob struct {
-	blob.ReadOnlyBlob
-	path string
-}
-
-func (b *bundleBlob) Close() error {
-	return os.Remove(b.path)
-}
-
-var _ io.Closer = (*bundleBlob)(nil)
-
 // DownloadGitBundle returns a complete Git object bundle for a pinned resource.
-// The caller must close the returned blob after use to remove its temporary file.
+// The bundle file outlives the call and belongs to the caller.
 func (r *ResourceRepository) DownloadGitBundle(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) (_ blob.ReadOnlyBlob, err error) {
 	spec, err := accessFrom(resource)
 	if err != nil {
@@ -88,7 +77,7 @@ func (r *ResourceRepository) DownloadGitBundle(ctx context.Context, resource *de
 		for hash := range objects {
 			hashes = append(hashes, hash)
 		}
-		if _, err := packfile.NewEncoder(file, repo.Storer, false).Encode(hashes, 0); err != nil {
+		if _, err := packfile.NewEncoder(file, repo.Storer, false).Encode(hashes, config.DefaultPackWindow); err != nil {
 			return fmt.Errorf("cannot write git bundle objects: %w", err)
 		}
 		return file.Close()
@@ -104,7 +93,7 @@ func (r *ResourceRepository) DownloadGitBundle(ctx context.Context, resource *de
 		_ = os.Remove(path)
 		return nil, err
 	}
-	return &bundleBlob{ReadOnlyBlob: fileBlob, path: path}, nil
+	return fileBlob, nil
 }
 
 // UploadResource accepts a complete Git bundle, not the snapshot tar returned
@@ -181,9 +170,8 @@ func (r *ResourceRepository) UploadResource(ctx context.Context, resource *descr
 			err = fmt.Errorf("git bundle commit mismatch: expected %s, got %s", spec.Commit, commit)
 			return
 		}
-		if strings.HasPrefix(spec.Ref, "refs/heads/") && pushHash != commit {
-			err = fmt.Errorf("branch upload requires a commit tip")
-			return
+		if strings.HasPrefix(spec.Ref, "refs/heads/") {
+			pushHash = commit
 		}
 		var commits map[plumbing.Hash]struct{}
 		commits, _, err = verifyObjectClosure(repo, pushHash)
