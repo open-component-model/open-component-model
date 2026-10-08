@@ -40,9 +40,7 @@ func TestDAGDiscovery(t *testing.T) {
 					return nil, fmt.Errorf("no node found with ID %s", parent)
 				}
 				var neighbors []string
-				for _, id := range dep {
-					neighbors = append(neighbors, id)
-				}
+				neighbors = append(neighbors, dep...)
 				return neighbors, nil
 			}),
 		})
@@ -106,9 +104,7 @@ func TestDAGDiscovery(t *testing.T) {
 					return nil, fmt.Errorf("no node found with ID %s", parent)
 				}
 				var neighbors []string
-				for _, id := range dep {
-					neighbors = append(neighbors, id)
-				}
+				neighbors = append(neighbors, dep...)
 				return neighbors, nil
 			}),
 		})
@@ -149,9 +145,7 @@ func TestDAGDiscovery(t *testing.T) {
 					return nil, fmt.Errorf("no node found with ID %s", parent)
 				}
 				var neighbors []string
-				for _, id := range dep {
-					neighbors = append(neighbors, id)
-				}
+				neighbors = append(neighbors, dep...)
 				return neighbors, nil
 			}),
 		})
