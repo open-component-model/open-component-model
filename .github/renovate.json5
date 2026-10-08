@@ -302,6 +302,18 @@
   },
   customManagers: [
     {
+      // Track the azure/setup-helm `version:` input as the helm/helm release,
+      // so the Helm group above moves it in lockstep with helm.sh/helm/v4.
+      customType: 'regex',
+      managerFilePatterns: [
+        '/^\\.github/workflows/[^/]+\\.ya?ml$/',
+      ],
+      matchStrings: [
+        '# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s+version: (?<currentValue>\\S+)',
+      ],
+      versioningTemplate: 'semver',
+    },
+    {
       customType: 'regex',
       managerFilePatterns: [
         '/(^|/)\\.env(\\.local)?$/',
