@@ -126,6 +126,22 @@
       ],
     },
     {
+      // Keep the helm CLI pin (azure/setup-helm `version:` in the workflows,
+      // tracked as github-releases helm/helm) and the helm.sh/helm/v4 Go module
+      // moving together so CI's helm binary never drifts from the library.
+      // separateMinorPatch off so both land in one PR per bump.
+      groupName: 'Helm',
+      groupSlug: 'helm',
+      matchPackageNames: [
+        'helm.sh/helm/v4',
+        'helm/helm',
+      ],
+      separateMinorPatch: false,
+      schedule: [
+        '* * * * 0' // At every minute on Sunday it is allowed to create branches
+      ],
+    },
+    {
       groupName: 'Golang X Repositories',
       groupSlug: 'golang-x-repos',
       matchPackageNames: [
