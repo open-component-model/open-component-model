@@ -91,6 +91,7 @@ func TestGetResourceDigestProcessorCredentialConsumerIdentity(t *testing.T) {
 	p := digest.NewDigestProcessor("")
 
 	t.Run("returns identity for HTTPS helm repository", func(t *testing.T) {
+		t.Parallel()
 		resource := helmAccessResource(t, "https://charts.example.com/stable", "mychart:1.0.0")
 
 		identity, err := p.GetResourceDigestProcessorCredentialConsumerIdentity(t.Context(), resource)
@@ -104,6 +105,7 @@ func TestGetResourceDigestProcessorCredentialConsumerIdentity(t *testing.T) {
 	})
 
 	t.Run("returns identity for HTTP helm repository with port", func(t *testing.T) {
+		t.Parallel()
 		resource := helmAccessResource(t, "http://charts.example.com:8080/repo", "mychart:1.0.0")
 
 		identity, err := p.GetResourceDigestProcessorCredentialConsumerIdentity(t.Context(), resource)
@@ -118,6 +120,7 @@ func TestGetResourceDigestProcessorCredentialConsumerIdentity(t *testing.T) {
 	})
 
 	t.Run("returns nil for empty helm repository", func(t *testing.T) {
+		t.Parallel()
 		resource := helmAccessResource(t, "", "mychart:1.0.0")
 
 		identity, err := p.GetResourceDigestProcessorCredentialConsumerIdentity(t.Context(), resource)
@@ -126,6 +129,7 @@ func TestGetResourceDigestProcessorCredentialConsumerIdentity(t *testing.T) {
 	})
 
 	t.Run("returns error for nil access", func(t *testing.T) {
+		t.Parallel()
 		resource := &descruntime.Resource{}
 		identity, err := p.GetResourceDigestProcessorCredentialConsumerIdentity(t.Context(), resource)
 		require.Error(t, err)
@@ -133,6 +137,7 @@ func TestGetResourceDigestProcessorCredentialConsumerIdentity(t *testing.T) {
 	})
 
 	t.Run("returns error for invalid URL", func(t *testing.T) {
+		t.Parallel()
 		resource := helmAccessResource(t, "://invalid", "mychart:1.0.0")
 
 		identity, err := p.GetResourceDigestProcessorCredentialConsumerIdentity(t.Context(), resource)
@@ -142,6 +147,7 @@ func TestGetResourceDigestProcessorCredentialConsumerIdentity(t *testing.T) {
 	})
 
 	t.Run("returns identity for OCI helm repository", func(t *testing.T) {
+		t.Parallel()
 		resource := helmAccessResource(t, "oci://registry.example.com/charts/mychart:1.0.0", "")
 
 		identity, err := p.GetResourceDigestProcessorCredentialConsumerIdentity(t.Context(), resource)
@@ -165,9 +171,10 @@ func TestProcessResourceDigest_HTTP(t *testing.T) {
 		}
 		http.NotFound(w, r)
 	}))
-	defer srv.Close()
+	t.Cleanup(srv.Close)
 
 	t.Run("applies digest from index with sha256 prefix", func(t *testing.T) {
+		t.Parallel()
 		p := digest.NewDigestProcessor(t.TempDir())
 		resource := helmAccessResource(t, srv.URL, "mychart:1.0.0")
 
@@ -182,6 +189,7 @@ func TestProcessResourceDigest_HTTP(t *testing.T) {
 	})
 
 	t.Run("applies digest from index with bare hex", func(t *testing.T) {
+		t.Parallel()
 		p := digest.NewDigestProcessor(t.TempDir())
 		resource := helmAccessResource(t, srv.URL, "barehex:1.0.0")
 
@@ -195,6 +203,7 @@ func TestProcessResourceDigest_HTTP(t *testing.T) {
 	})
 
 	t.Run("does not mutate original resource", func(t *testing.T) {
+		t.Parallel()
 		p := digest.NewDigestProcessor(t.TempDir())
 		resource := helmAccessResource(t, srv.URL, "mychart:1.0.0")
 
@@ -207,6 +216,7 @@ func TestProcessResourceDigest_HTTP(t *testing.T) {
 	})
 
 	t.Run("verifies matching existing digest", func(t *testing.T) {
+		t.Parallel()
 		p := digest.NewDigestProcessor(t.TempDir())
 		resource := helmAccessResource(t, srv.URL, "mychart:1.0.0")
 		resource.Digest = &descruntime.Digest{
@@ -222,6 +232,7 @@ func TestProcessResourceDigest_HTTP(t *testing.T) {
 	})
 
 	t.Run("returns error on digest mismatch", func(t *testing.T) {
+		t.Parallel()
 		p := digest.NewDigestProcessor(t.TempDir())
 		resource := helmAccessResource(t, srv.URL, "mychart:1.0.0")
 		resource.Digest = &descruntime.Digest{
@@ -236,6 +247,7 @@ func TestProcessResourceDigest_HTTP(t *testing.T) {
 	})
 
 	t.Run("returns error when chart has no digest in index", func(t *testing.T) {
+		t.Parallel()
 		p := digest.NewDigestProcessor(t.TempDir())
 		resource := helmAccessResource(t, srv.URL, "nodigest:1.0.0")
 
@@ -245,6 +257,7 @@ func TestProcessResourceDigest_HTTP(t *testing.T) {
 	})
 
 	t.Run("returns error when chart not found in index", func(t *testing.T) {
+		t.Parallel()
 		p := digest.NewDigestProcessor(t.TempDir())
 		resource := helmAccessResource(t, srv.URL, "nonexistent:1.0.0")
 
@@ -254,6 +267,7 @@ func TestProcessResourceDigest_HTTP(t *testing.T) {
 	})
 
 	t.Run("returns error for empty helm repository", func(t *testing.T) {
+		t.Parallel()
 		p := digest.NewDigestProcessor(t.TempDir())
 		resource := helmAccessResource(t, "", "mychart:1.0.0")
 

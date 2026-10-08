@@ -120,7 +120,6 @@ linters:
           - maintidx        # 39: low maintainability index of large table tests
           - misspell        # 25: false positives on the `interm` abbreviation; fixer rewrites identifiers
           - nolintlint      # 4: unused //nolint directives tied to the linters disabled here
-          - tparallel       # 47: subtest t.Parallel() consistency
         path: _test\.go
       - path: (.+)\.go$
         text: composites
@@ -140,6 +139,13 @@ linters:
           - staticcheck
         path: _test\.go
         text: 'SA1019:.*configuration/ocm/v1/(runtime\.Resolver|spec\.(Config|Resolver)) is deprecated'
+      # Integration tests (in */integration/ packages) share expensive
+      # fixtures (registries/caches) and, for the CLI, mutate process-global 
+      # state (cobra finalizers, slog default) via cmd.New().ExecuteContext. 
+      # Their subtests have to run sequentially and tparallel is not helpful.
+      - linters:
+          - tparallel
+        path: (/integration/|_integration_test\.go$)
       - linters:
           - cyclop
         path: (.+)_test\.go
