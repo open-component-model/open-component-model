@@ -6,8 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
-	"slices"
 
 	"github.com/spf13/cobra"
 	k8syaml "k8s.io/apimachinery/pkg/util/yaml"
@@ -17,74 +15,39 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// SkipStdinConfigAnnotation marks a command that never uses configuration, together with
-// its subcommands. Piped stdin is not read for it: reading waits until stdin is closed,
-// which would hang the command in a shell or CI job that keeps stdin open.
-const SkipStdinConfigAnnotation = "ocm.software/skip-stdin-config"
+// StdinConfigPath is the --config entry that stands for stdin.
+const StdinConfigPath = "-"
 
-// builtinCommands are the commands cobra adds itself. They cannot carry
-// SkipStdinConfigAnnotation, so they are matched by name.
-var builtinCommands = []string{"help", "completion", cobra.ShellCompRequestCmd, cobra.ShellCompNoDescRequestCmd}
-
-// AddStdinConfig applies the configuration documents found in piped stdin on top of cfg,
-// so configuration such as credentials can be passed without writing a file.
+// readStdinConfigs returns the configuration documents piped into stdin, in stream order.
+// Stdin is read only on an explicit --config -: an unconditional read waits until stdin
+// is closed, which hangs the command in a shell or CI job that keeps stdin open.
 //
 // Stdin can be read only once, but the command may read it too (for example
 // --transfer-spec -). So the configuration is taken out here, before the command runs,
-// and every other document is put back for the command. If stdin holds no configuration
-// or is not valid YAML, it is put back unchanged. A terminal is never read.
-func AddStdinConfig(cmd *cobra.Command, cfg *genericv1.Config) (*genericv1.Config, error) {
-	in := cmd.InOrStdin()
-	if skipsStdinConfig(cmd) || !isPiped(in) {
-		return cfg, nil
-	}
-	data, err := io.ReadAll(in)
+// and every other document is put back for the command.
+func readStdinConfigs(cmd *cobra.Command) ([]*genericv1.Config, error) {
+	data, err := io.ReadAll(cmd.InOrStdin())
 	if err != nil {
 		return nil, fmt.Errorf("reading stdin: %w", err)
 	}
 	configs, others, err := SplitConfigStream(bytes.NewReader(data))
-	if err != nil || len(configs) == 0 {
-		cmd.SetIn(bytes.NewReader(data))
-		return cfg, nil
+	if err != nil {
+		return nil, fmt.Errorf("stdin: %w", err)
+	}
+	if len(configs) == 0 {
+		return nil, errors.New("stdin: no configuration document found")
 	}
 	cmd.SetIn(bytes.NewReader(bytes.Join(others, []byte("---\n"))))
 
-	cfgs := []*genericv1.Config{cfg}
+	cfgs := make([]*genericv1.Config, 0, len(configs))
 	for _, doc := range configs {
-		stdinCfg, err := decodeConfig(bytes.NewReader(doc))
+		cfg, err := decodeConfig(bytes.NewReader(doc))
 		if err != nil {
-			return nil, fmt.Errorf("could not load configuration from stdin: %w", err)
+			return nil, fmt.Errorf("stdin: %w", err)
 		}
-		cfgs = append(cfgs, stdinCfg)
+		cfgs = append(cfgs, cfg)
 	}
-	return genericv1.MergeConfigs(func(string, ...any) {}, cfgs...), nil
-}
-
-// skipsStdinConfig reports whether cmd or one of its parents never uses configuration.
-func skipsStdinConfig(cmd *cobra.Command) bool {
-	for c := cmd; c != nil; c = c.Parent() {
-		if _, ok := c.Annotations[SkipStdinConfigAnnotation]; ok {
-			return true
-		}
-		if slices.Contains(builtinCommands, c.Name()) {
-			return true
-		}
-	}
-	return false
-}
-
-// isPiped reports whether r is piped input and not a terminal. A reader that is not a
-// file, as set with cmd.SetIn, counts as piped.
-func isPiped(r io.Reader) bool {
-	f, ok := r.(*os.File)
-	if !ok {
-		return true
-	}
-	info, err := f.Stat()
-	if err != nil {
-		return false
-	}
-	return info.Mode()&os.ModeCharDevice == 0
+	return cfgs, nil
 }
 
 // SplitConfigStream splits a YAML stream on "---" into the documents typed as OCM
