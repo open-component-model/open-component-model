@@ -72,10 +72,12 @@ The algorithm determines how a resource's content is hashed to produce its diges
 
 | Algorithm | Description |
 | --- | --- |
-| `genericBlobDigest/v1` | Direct hash of blob content. For OCI artifacts (container images, Helm charts), this is the hash of the top-level OCI manifest, ensuring consistency with OCI registry behavior. For non-OCI content (executables, blueprints), it is the direct hash of the raw blob. |
-| `ociArtifactDigest/v1` | Computes the digest of the OCI manifest specifically. Effectively equivalent to `genericBlobDigest/v1` for OCI content. You may encounter this algorithm in older component descriptors. |
+| `genericBlobDigest/v1` | Direct hash of ordinary blob bytes, such as an HTTP chart archive. Historical OCI descriptors may use this label for a manifest hash. |
+| `ociArtifactDigest/v1` | Digest of the selected OCI manifest or index, used for newly created OCI resources. |
 
-While the architecture allows for multiple digest algorithms, in practice **`genericBlobDigest/v1` is the only algorithm currently used** across all artifact types.
+The two normalisations are not interchangeable: their names also contribute to
+the signed descriptor. See [OCI Resource Digests]({{< relref "docs/reference/oci-resource-digests.md" >}})
+for verification and compatibility rules.
 
 #### Recursive Component References
 
@@ -148,7 +150,7 @@ component:
         imageReference: ghcr.io/stefanprodan/podinfo:6.9.1@sha256:262578cd...
       digest:                          # Included in signature
         hashAlgorithm: SHA-256
-        normalisationAlgorithm: genericBlobDigest/v1
+        normalisationAlgorithm: ociArtifactDigest/v1
         value: 262578cde928d5c9eba3bce079976444f624c13ed0afb741d90d5423877496cb
 signatures:
   - name: default
