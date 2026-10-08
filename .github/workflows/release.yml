@@ -248,13 +248,13 @@ jobs:
           path: ${{ runner.temp }}/chart-assets
 
       - name: Download OpenVEX
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: ${{ needs.build_and_test.outputs.vex_artifact }}
           path: ${{ runner.temp }}/vex-assets
 
       - name: Download image SBOMs
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           pattern: image-sbom-*
           merge-multiple: true
@@ -339,7 +339,7 @@ jobs:
       # Vulnerability findings do not block the release; listing them here puts
       # them in front of the release manager before the release environment gate.
       - name: Download image scan reports
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           pattern: image-scan-*
           path: ${{ runner.temp }}/image-scan
@@ -675,7 +675,7 @@ jobs:
             ${{ needs.prepare.outputs.previous_tag && format('-- "{0}..{1}"', needs.prepare.outputs.previous_tag, needs.prepare.outputs.new_tag) || '--latest' }}
 
       - name: Download final chart artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: ${{ needs.final_chart.outputs.chart_artifact_name }}
           path: ${{ runner.temp }}/chart-assets
