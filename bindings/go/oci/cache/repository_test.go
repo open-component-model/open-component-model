@@ -103,6 +103,7 @@ func TestRepository_Unwrap_ReturnsEmbedded(t *testing.T) {
 // falling back to a monolithic PUT, while preserving the promoted type
 // assertions (TagLister / ReferrerLister / Blobs()) used across the codebase.
 func TestRepository_SatisfiesStoreAndStreamingPusher(t *testing.T) {
+	r := require.New(t)
 	repo := &Repository{
 		Repository:     &remote.Repository{},
 		BlobCache:      newTestCache(t, Options{}),
@@ -112,87 +113,93 @@ func TestRepository_SatisfiesStoreAndStreamingPusher(t *testing.T) {
 	}
 
 	_, ok := interface{}(repo).(remotestore.StreamingPusher)
-	assert.True(t, ok, "cached decorator must expose PushStreaming (chunked streaming survives the cache)")
+	r.True(ok, "cached decorator must expose PushStreaming (chunked streaming survives the cache)")
 
 	_, ok = interface{}(repo).(registry.TagLister)
-	assert.True(t, ok, "cached decorator must still promote TagLister")
+	r.True(ok, "cached decorator must still promote TagLister")
 
 	_, ok = interface{}(repo).(registry.ReferrerLister)
-	assert.True(t, ok, "cached decorator must still promote ReferrerLister")
+	r.True(ok, "cached decorator must still promote ReferrerLister")
 
 	_, ok = interface{}(repo).(interface {
 		Blobs() registry.BlobStore
 	})
-	assert.True(t, ok, "cached decorator must still promote Blobs()")
+	r.True(ok, "cached decorator must still promote Blobs()")
 
 	_, ok = interface{}(repo).(interface{ Unwrap() content.Storage })
-	assert.True(t, ok, "cached decorator must expose Unwrap for global-store detection")
+	r.True(ok, "cached decorator must expose Unwrap for global-store detection")
 }
 
 func TestProxyRepository_NilCachesReturnRawRepo(t *testing.T) {
+	r := require.New(t)
 	inner := &remote.Repository{}
 	got := ProxyRepository(inner, nil, nil)
 	// With no cache the raw-repository adapter is a pure passthrough.
-	assert.Same(t, inner, got)
+	r.Same(inner, got)
 }
 
 func TestProxyRepository_BlobCacheOnlyWraps(t *testing.T) {
+	r := require.New(t)
 	inner := &remote.Repository{}
 	c := newTestCache(t, Options{})
 	got := ProxyRepository(inner, c, nil)
 	wrapped, ok := got.(*Repository)
-	require.True(t, ok)
-	assert.Same(t, inner, wrapped.Repository)
-	assert.Same(t, c, wrapped.BlobCache)
-	assert.Nil(t, wrapped.ReferenceCache)
+	r.True(ok)
+	r.Same(inner, wrapped.Repository)
+	r.Same(c, wrapped.BlobCache)
+	r.Nil(wrapped.ReferenceCache)
 }
 
 func TestProxyRepository_ReferenceCacheOnlyWraps(t *testing.T) {
+	r := require.New(t)
 	inner := &remote.Repository{}
 	rc := newTestRefCache(t, Options{})
 	got := ProxyRepository(inner, nil, rc)
 	wrapped, ok := got.(*Repository)
-	require.True(t, ok)
-	assert.Same(t, inner, wrapped.Repository)
-	assert.Nil(t, wrapped.BlobCache)
-	assert.Same(t, rc, wrapped.ReferenceCache)
+	r.True(ok)
+	r.Same(inner, wrapped.Repository)
+	r.Nil(wrapped.BlobCache)
+	r.Same(rc, wrapped.ReferenceCache)
 }
 
 func TestProxyRepository_BothCachesWrap(t *testing.T) {
+	r := require.New(t)
 	inner := &remote.Repository{}
 	c := newTestCache(t, Options{})
 	rc := newTestRefCache(t, Options{})
 	got := ProxyRepository(inner, c, rc)
 	wrapped, ok := got.(*Repository)
-	require.True(t, ok)
-	assert.Same(t, inner, wrapped.Repository)
-	assert.Same(t, c, wrapped.BlobCache)
-	assert.Same(t, rc, wrapped.ReferenceCache)
+	r.True(ok)
+	r.Same(inner, wrapped.Repository)
+	r.Same(c, wrapped.BlobCache)
+	r.Same(rc, wrapped.ReferenceCache)
 }
 
 // TestProxyRepositoryWithChunking_NilCachesReturnsChunkedStore: with no cache the
 // chunking path returns a plain chunked store that still exposes PushStreaming.
 func TestProxyRepositoryWithChunking_NilCachesReturnsChunkedStore(t *testing.T) {
+	r := require.New(t)
 	inner := &remote.Repository{}
 	got := ProxyRepositoryWithChunking(inner, nil, nil, remotestore.DefaultChunkSize, remotestore.DefaultChunkThreshold)
 	_, ok := got.(remotestore.StreamingPusher)
-	assert.True(t, ok, "no-cache chunking path must be a StreamingPusher")
+	r.True(ok, "no-cache chunking path must be a StreamingPusher")
 }
 
 // TestProxyRepositoryWithChunking_WrapsWithChunkConfig: with a cache, the decorator
 // carries the chunk config and still exposes the chunked streaming push, so
 // chunking survives the cache.
 func TestProxyRepositoryWithChunking_WrapsWithChunkConfig(t *testing.T) {
+	r := require.New(t)
 	inner := &remote.Repository{}
 	c := newTestCache(t, Options{})
 	got := ProxyRepositoryWithChunking(inner, c, nil, remotestore.DefaultChunkSize, remotestore.DefaultChunkThreshold)
 	wrapped, ok := got.(*Repository)
-	require.True(t, ok)
-	assert.Same(t, inner, wrapped.Repository)
-	assert.Equal(t, remotestore.DefaultChunkSize, wrapped.chunkSize)
-	assert.Equal(t, remotestore.DefaultChunkThreshold, wrapped.chunkThreshold)
+	r.True(ok)
+	r.Same(inner, wrapped.Repository)
+	r.Equal(remotestore.DefaultChunkSize, wrapped.chunkSize)
+	r.Equal(remotestore.DefaultChunkThreshold, wrapped.chunkThreshold)
 	_, ok = got.(remotestore.StreamingPusher)
-	assert.True(t, ok, "cache-wrapped chunking path must be a StreamingPusher")
+	r.True(ok, "cache-wrapped chunking path must be a StreamingPusher")
 }
 
 // plainHTTPRepo builds a *remote.Repository pointed at srv over plain
