@@ -38,7 +38,7 @@ const (
 // history as a reproducible tar.gz into file and closes it. The storage depends
 // on the commit only: its history in one packfile and HEAD detached at the commit.
 // The file belongs to the caller.
-func archive(ctx context.Context, repo *git.Repository, selected *object.Commit, file *os.File, opts Options) (_ *filesystem.Blob, _ digest.Digest, err error) {
+func archive(ctx context.Context, repo *git.Repository, selected *object.Commit, file *os.File, opts Options) (*filesystem.Blob, digest.Digest, error) {
 	tree, err := selected.Tree()
 	if err != nil {
 		return nil, "", errors.Join(fmt.Errorf("cannot read git tree: %w", err), file.Close())

@@ -3,9 +3,11 @@ package download
 import (
 	"archive/tar"
 	"compress/gzip"
+	"context"
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"strings"
 
 	git "github.com/go-git/go-git/v6"
@@ -80,12 +82,16 @@ func VerifyObjectClosure(repo *git.Repository, tip plumbing.Hash) (map[plumbing.
 // repository in dir and returns the commit its HEAD names. Packfiles are parsed
 // again, so every object is stored under the hash of its content. Other entries
 // are skipped, and reading stops at the end of the tar archive.
-func Import(r io.Reader, dir string) (*git.Repository, plumbing.Hash, error) {
+func Import(ctx context.Context, r io.Reader, dir string) (*git.Repository, plumbing.Hash, error) {
 	gz, err := gzip.NewReader(r)
 	if err != nil {
 		return nil, plumbing.ZeroHash, fmt.Errorf("git archive is not gzip-compressed: %w", err)
 	}
-	defer func() { _ = gz.Close() }()
+	defer func() {
+		if err := gz.Close(); err != nil {
+			slog.WarnContext(ctx, "failed to close git archive reader", "err", err)
+		}
+	}()
 
 	repo, err := git.PlainInit(dir, true)
 	if err != nil {

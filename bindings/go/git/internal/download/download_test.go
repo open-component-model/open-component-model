@@ -167,7 +167,7 @@ func TestDownloadFailureCleanup(t *testing.T) {
 	}{
 		{name: "missing ref", ref: "absent", wantError: `cannot resolve git ref: reference name escapes the reference storage: "absent" is not under refs/ nor a valid pseudo-ref`},
 		{name: "missing commit", commit: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", wantError: "cannot fetch git repository"},
-		{name: "already canceled", ref: "main", cancel: true, wantError: "cannot download git repository: context canceled", wantCause: context.Canceled},
+		{name: "already canceled", ref: "main", cancel: true, wantError: "cannot fetch git repository: context canceled", wantCause: context.Canceled},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
@@ -291,7 +291,7 @@ func TestTransportErrorMessages(t *testing.T) {
 			"fetch: transport failed; check repository access and server trust: remote: https://xxxxx@example.invalid/repo.git rejected",
 		},
 	} {
-		err := transportError(t.Context(), "fetch", tc.err)
+		err := TransportError(t.Context(), "fetch", tc.err)
 		require.EqualError(t, err, tc.want)
 		require.NotContains(t, err.Error(), "token")
 	}

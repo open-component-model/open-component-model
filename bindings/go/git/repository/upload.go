@@ -20,6 +20,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/git/internal/download"
+	"ocm.software/open-component-model/bindings/go/git/internal/endpoint"
 	accessv1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
 	credsv1 "ocm.software/open-component-model/bindings/go/git/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -71,11 +72,15 @@ func (r *ResourceRepository) upload(ctx context.Context, resource *descriptor.Re
 	if err != nil {
 		return nil, fmt.Errorf("cannot read git archive: %w", err)
 	}
-	defer func() { _ = stream.Close() }()
+	defer func() {
+		if err := stream.Close(); err != nil {
+			slog.WarnContext(ctx, "failed to close git archive", "err", err)
+		}
+	}()
 
 	digester := digest.Canonical.Digester()
 	tee := io.TeeReader(stream, digester.Hash())
-	repo, commit, err := download.Import(tee, dir)
+	repo, commit, err := download.Import(ctx, tee, dir)
 	if errors.Is(err, download.ErrNoHistory) {
 		return nil, fmt.Errorf("git upload needs history: %w", err)
 	}
@@ -103,11 +108,15 @@ func (r *ResourceRepository) upload(ctx context.Context, resource *descriptor.Re
 }
 
 func (r *ResourceRepository) pushGitRepository(ctx context.Context, repo *git.Repository, source *descriptor.Resource, targetRepository string, targetRef plumbing.ReferenceName, commit plumbing.Hash, commits map[plumbing.Hash]struct{}, targetCreds *credsv1.GitCredentials, options download.Options) (*descriptor.Resource, error) {
-	targetURL, targetOptions, err := download.RemoteOptions(targetRepository, targetCreds, options)
+	target, err := endpoint.Parse(targetRepository)
+	if err != nil {
+		return nil, fmt.Errorf("invalid target: cannot address git repository: %w", err)
+	}
+	targetOptions, err := download.ClientOptions(target, targetCreds, options)
 	if err != nil {
 		return nil, fmt.Errorf("invalid target: %w", err)
 	}
-	remote, err := repo.CreateRemote(&config.RemoteConfig{Name: "ocm-target", URLs: []string{targetURL}})
+	remote, err := repo.CreateRemote(&config.RemoteConfig{Name: "ocm-target", URLs: []string{target.URL}})
 	if err != nil {
 		return nil, fmt.Errorf("cannot configure target repository: %w", err)
 	}
@@ -120,7 +129,7 @@ func (r *ResourceRepository) pushGitRepository(ctx context.Context, repo *git.Re
 			continue
 		}
 		if existing.Hash() != commit {
-			if strings.HasPrefix(string(targetRef), "refs/tags/") {
+			if targetRef.IsTag() {
 				return nil, fmt.Errorf("target tag %q already exists at another object", targetRef)
 			}
 			if _, ok := commits[existing.Hash()]; !ok {
