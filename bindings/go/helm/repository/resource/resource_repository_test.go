@@ -55,6 +55,7 @@ func TestGetResourceCredentialConsumerIdentity(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("returns identity for HTTP helm repository", func(t *testing.T) {
+		t.Parallel()
 		res := helmResource(t, "https://charts.example.com/stable", "")
 		identity, err := repo.GetResourceCredentialConsumerIdentity(ctx, res)
 		require.NoError(t, err)
@@ -63,6 +64,7 @@ func TestGetResourceCredentialConsumerIdentity(t *testing.T) {
 	})
 
 	t.Run("returns OCI identity for OCI helm repository", func(t *testing.T) {
+		t.Parallel()
 		res := helmResource(t, "oci://registry.example.com/charts/mychart:1.0.0", "")
 		identity, err := repo.GetResourceCredentialConsumerIdentity(ctx, res)
 		require.NoError(t, err)
@@ -71,6 +73,7 @@ func TestGetResourceCredentialConsumerIdentity(t *testing.T) {
 	})
 
 	t.Run("returns nil identity for empty helm repository", func(t *testing.T) {
+		t.Parallel()
 		res := helmResource(t, "", "")
 		identity, err := repo.GetResourceCredentialConsumerIdentity(ctx, res)
 		require.NoError(t, err)
@@ -84,12 +87,14 @@ func TestConvertAccessNilGuards(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("returns error for nil resource", func(t *testing.T) {
+		t.Parallel()
 		_, err := repo.GetResourceCredentialConsumerIdentity(ctx, nil)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "error converting resource access to helm spec")
 	})
 
 	t.Run("returns error for nil access", func(t *testing.T) {
+		t.Parallel()
 		res := &descriptor.Resource{}
 		_, err := repo.GetResourceCredentialConsumerIdentity(ctx, res)
 		require.Error(t, err)
@@ -115,6 +120,7 @@ func TestDownloadResource(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("downloads chart from HTTP server", func(t *testing.T) {
+		t.Parallel()
 		res := helmResource(t, srv.URL, "mychart-0.1.0.tgz")
 		blob, err := repo.DownloadResource(ctx, res, nil)
 		require.NoError(t, err)
@@ -126,6 +132,7 @@ func TestDownloadResource(t *testing.T) {
 	})
 
 	t.Run("downloads chart using configured temp folder", func(t *testing.T) {
+		t.Parallel()
 		tempDir := t.TempDir()
 		repoWithConfig := NewResourceRepository(&filesystemv1alpha1.Config{
 			TempFolder: &tempDir,
@@ -147,6 +154,7 @@ func TestDownloadResource(t *testing.T) {
 	})
 
 	t.Run("returns error when helmChart is empty", func(t *testing.T) {
+		t.Parallel()
 		res := helmResource(t, srv.URL, "")
 		_, err := repo.DownloadResource(ctx, res, nil)
 		require.Error(t, err)
@@ -154,6 +162,7 @@ func TestDownloadResource(t *testing.T) {
 	})
 
 	t.Run("returns error for empty helmRepository", func(t *testing.T) {
+		t.Parallel()
 		res := helmResource(t, "", "mychart-0.1.0.tgz")
 		_, err := repo.DownloadResource(ctx, res, nil)
 		require.Error(t, err)
@@ -161,6 +170,7 @@ func TestDownloadResource(t *testing.T) {
 	})
 
 	t.Run("returns error for invalid repository URL", func(t *testing.T) {
+		t.Parallel()
 		res := helmResource(t, "https://localhost:0/nonexistent", "mychart-0.1.0.tgz")
 		_, err := repo.DownloadResource(ctx, res, nil)
 		require.Error(t, err)
@@ -173,6 +183,7 @@ func TestDownloadResource(t *testing.T) {
 	// directory on each call. Without DirOptions.Reproducible those mtimes
 	// would leak into the tar headers and shift the digest.
 	t.Run("produces identical digest on repeated downloads", func(t *testing.T) {
+		t.Parallel()
 		res := helmResource(t, srv.URL, "mychart-0.1.0.tgz")
 
 		digest1 := downloadAndDigest(t, ctx, repo, res)

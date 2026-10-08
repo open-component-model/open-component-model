@@ -136,9 +136,15 @@ tasks:
 
   sign:libgcrypt-not-fips:
     desc: With libgcrypt out of FIPS mode, fips140=only must reject gpg
-    # libgcrypt enters FIPS mode when /etc/gcrypt/fips_enabled exists, whatever
-    # its content, so an empty tmpfs over /etc/gcrypt takes it out of FIPS mode.
+    # libgcrypt 1.11.3 enables FIPS when EITHER /etc/gcrypt/fips_enabled exists
+    # (maskable via tmpfs) OR /proc/sys/crypto/fips_enabled > 0 (kernel passthrough,
+    # not maskable in rootless containers). On a FIPS-enabled host kernel the
+    # non-FIPS state cannot be reached, so skip here.
     cmd: |
+      if [ "$(cat /proc/sys/crypto/fips_enabled 2>/dev/null || echo 0)" = "1" ]; then
+        echo "SKIP: host kernel enforces FIPS, cannot simulate non-FIPS libgcrypt"
+        exit 0
+      fi
       if out=$({{ .ocm }} --tmpfs /etc/gcrypt:ro {{ .CLI_IMAGE }} \
           sign componentversion \
           --config {{ .WORK }}/sign.ocmconfig {{ .COMPONENT }} 2>&1); then
