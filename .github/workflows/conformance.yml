@@ -61,7 +61,7 @@ env:
 jobs:
   conformance:
     name: Sovereign Scenario (${{ matrix.arch }})
-    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-26.04-arm' || 'ubuntu-latest' }}
     timeout-minutes: 30
     # Extend the matrix with additional architectures if needed in the future.
     strategy:
@@ -108,7 +108,7 @@ jobs:
       # Artifact mode: Download and prepare CLI image
       - name: Download CLI artifact
         if: ${{ inputs.cli_artifact != '' }}
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: ${{ inputs.cli_artifact }}
           path: tmp/cli-artifact
@@ -134,7 +134,7 @@ jobs:
       # Artifact mode: Download and prepare controller image + chart
       - name: Download controller image artifact
         if: ${{ inputs.toolkit_image_artifact != '' }}
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: ${{ inputs.toolkit_image_artifact }}
           path: tmp/controller-artifact
@@ -154,7 +154,7 @@ jobs:
 
       - name: Download chart artifact
         if: ${{ inputs.toolkit_chart_artifact != '' }}
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: ${{ inputs.toolkit_chart_artifact }}
           path: tmp/chart-artifact
@@ -208,4 +208,69 @@ jobs:
       - name: Cleanup
         if: always()
         working-directory: conformance/scenarios/sovereign
+        run: task clean
+
+  # GPG signing and verification with the full CLI image under
+  # GODEBUG=fips140=only. Needs only Docker, no cluster. arm64 only: the
+  # scenario has no architecture-specific path.
+  fips-gpg:
+    name: FIPS GPG Scenario (arm64)
+    runs-on: ubuntu-26.04-arm
+    timeout-minutes: 15
+    steps:
+      - name: Compute image refs
+        env:
+          OWNER: ${{ github.repository_owner }}
+        run: echo "CLI_IMAGE_NAME=${REGISTRY}/${OWNER,,}/cli" >> "$GITHUB_ENV"
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: conformance/scenarios/fips-gpg
+          persist-credentials: false
+      - name: Install Task
+        uses: arduino/setup-task@c0bc642852239c2689f73f4ea6459c29405f3c52 # v3.0.0
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download CLI artifact
+        if: ${{ inputs.cli_artifact != '' }}
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: ${{ inputs.cli_artifact }}
+          path: tmp/cli-artifact
+
+      - name: Ensure skopeo is installed
+        if: ${{ inputs.cli_artifact != '' }}
+        run: command -v skopeo || { sudo apt-get update -qq && sudo apt-get install -yqq skopeo; }
+
+      - name: Load CLI image into Docker daemon
+        if: ${{ inputs.cli_artifact != '' }}
+        env:
+          CLI_VERSION: ${{ inputs.cli_version }}
+          ARCH: arm64
+        run: |
+          mkdir -p tmp/cli-oci-dir
+          tar -xf tmp/cli-artifact/oci/cli.tar -C tmp/cli-oci-dir
+          skopeo --override-arch "${ARCH}" --override-os linux copy \
+            "oci:tmp/cli-oci-dir:${CLI_VERSION}" \
+            "docker-archive:tmp/cli-docker.tar:${CLI_IMAGE_NAME}:${CLI_VERSION}"
+          docker load < tmp/cli-docker.tar
+          echo "CLI_IMAGE=${CLI_IMAGE_NAME}:${CLI_VERSION}" >> "$GITHUB_ENV"
+
+      - name: Use published CLI image
+        if: ${{ inputs.cli_artifact == '' }}
+        env:
+          INPUT_CLI_IMAGE: ${{ inputs.cli_image }}
+        run: |
+          [ -n "$INPUT_CLI_IMAGE" ] || { echo "::error::CLI_IMAGE must be set via cli_image or cli_artifact."; exit 1; }
+          echo "CLI_IMAGE=${INPUT_CLI_IMAGE}" >> "$GITHUB_ENV"
+
+      - name: Run FIPS GPG scenario
+        working-directory: conformance/scenarios/fips-gpg
+        run: task run
+      - name: Cleanup
+        if: always()
+        working-directory: conformance/scenarios/fips-gpg
         run: task clean

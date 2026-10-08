@@ -221,12 +221,17 @@ func TestBinary_Resolve_FIPSMode(t *testing.T) {
 		mode         string // "off", "on" (fips140=on) or "only" (fips140=only)
 		gpgconf      bool
 		showVersions string
+		showErr      error // non-nil: gpgconf exits non-zero after printing showVersions
 		wantErr      string
 		wantQueried  bool
 	}{
 		{name: "only: FIPS-mode libgcrypt accepted", mode: "only", gpgconf: true, showVersions: fipsY, wantQueried: true},
 		{name: "only: non-FIPS libgcrypt rejected", mode: "only", gpgconf: true, showVersions: fipsN, wantErr: "reports fips-mode:n", wantQueried: true},
 		{name: "only: no fips-mode line rejected", mode: "only", gpgconf: true, showVersions: "* Libgcrypt 1.8.5\n", wantErr: "reports no fips-mode", wantQueried: true},
+		// gpgconf --show-versions spawns dirmngr after printing the libgcrypt section; on a
+		// FIPS kernel dirmngr's GnuTLS fails, so gpgconf exits non-zero despite fips-mode:y.
+		{name: "only: FIPS-mode libgcrypt accepted despite gpgconf failure", mode: "only", gpgconf: true, showVersions: fipsY, showErr: errors.New("exit status 1"), wantQueried: true},
+		{name: "only: gpgconf failure without fips-mode line rejected", mode: "only", gpgconf: true, showErr: errors.New("exit status 1"), wantErr: "exit status 1", wantQueried: true},
 		{name: "only: gpgconf missing rejected", mode: "only", wantErr: "gpgconf is not on PATH"},
 		{name: "on: non-FIPS libgcrypt accepted after the check", mode: "on", gpgconf: true, showVersions: fipsN, wantQueried: true},
 		{name: "on: gpgconf missing accepted", mode: "on"},
@@ -247,7 +252,7 @@ func TestBinary_Resolve_FIPSMode(t *testing.T) {
 				WithExec(func(_ context.Context, _ string, args []string, _ []byte) ([]byte, []byte, error) {
 					if args[0] == "--show-versions" {
 						queried = true
-						return []byte(tt.showVersions), nil, nil
+						return []byte(tt.showVersions), nil, tt.showErr
 					}
 					return []byte(version), nil, nil
 				}),
@@ -283,6 +288,7 @@ func TestBinary_KeyringInvocations(t *testing.T) {
 		{
 			name: "sign with agent unlocking",
 			run: func(t *testing.T, b *Binary) error {
+				t.Helper()
 				_, err := b.Sign(t.Context(), SignRequest{UseKeyring: true, KeyFingerprint: fpr, DigestAlgo: "SHA256", Data: []byte("d")})
 				return err
 			},
@@ -292,6 +298,7 @@ func TestBinary_KeyringInvocations(t *testing.T) {
 		{
 			name: "sign with passphrase",
 			run: func(t *testing.T, b *Binary) error {
+				t.Helper()
 				_, err := b.Sign(t.Context(), SignRequest{UseKeyring: true, Passphrase: "pw", DigestAlgo: "SHA256", Data: []byte("d")})
 				return err
 			},
@@ -302,6 +309,7 @@ func TestBinary_KeyringInvocations(t *testing.T) {
 		{
 			name: "verify",
 			run: func(t *testing.T, b *Binary) error {
+				t.Helper()
 				return b.Verify(t.Context(), VerifyRequest{UseKeyring: true, KeyFingerprint: fpr, Data: []byte("d"), Signature: "sig"})
 			},
 			wantArgs: []string{"--no-auto-key-retrieve", "--verify"},
@@ -439,6 +447,7 @@ func TestBinary_MkdirTemp(t *testing.T) {
 		t.Skip("gpg-agent uses no Unix sockets in the home directory on Windows")
 	}
 	// Under /tmp, not t.TempDir() or $TMPDIR: a base nested there can already be too long for gpg-agent sockets.
+	//nolint:usetesting // see above: deliberately using a short base path for gpg-agent sockets
 	short, err := os.MkdirTemp(shortTempBase, "ocm-gpg-test-")
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = os.RemoveAll(short) })

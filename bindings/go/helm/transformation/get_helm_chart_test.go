@@ -49,12 +49,15 @@ func TestGetHelmChart_Transform(t *testing.T) {
 	scheme := newTestScheme()
 
 	t.Run("downloads chart from classic helm repository with provenance", func(t *testing.T) {
+		t.Parallel()
 		// Start an HTTP file server with the test chart and provenance files
+
 		srv := newChartRepoServer(t, "../testdata/provenance")
 
 		t.Logf("Helm chart repo server at %s", srv.URL)
 
 		t.Run("downloads chart and provenance files", func(t *testing.T) {
+			t.Parallel()
 			r := require.New(t)
 			ctx := t.Context()
 
@@ -123,6 +126,7 @@ func TestGetHelmChart_Transform(t *testing.T) {
 		})
 
 		t.Run("downloads chart using helmChart and helmRepository fields", func(t *testing.T) {
+			t.Parallel()
 			r := require.New(t)
 			ctx := t.Context()
 
@@ -192,6 +196,7 @@ func TestGetHelmChart_Transform(t *testing.T) {
 		})
 
 		t.Run("downloads chart to specified output path", func(t *testing.T) {
+			t.Parallel()
 			r := require.New(t)
 			ctx := t.Context()
 			outputDir := t.TempDir()
@@ -247,7 +252,9 @@ func TestGetHelmChart_Transform(t *testing.T) {
 	})
 
 	t.Run("downloads chart from classic helm repository without provenance", func(t *testing.T) {
+		t.Parallel()
 		// Start an HTTP file server with the test chart (no provenance files)
+
 		srv := newChartRepoServer(t, "../testdata")
 
 		t.Logf("Helm chart repo server at %s", srv.URL)
@@ -319,6 +326,7 @@ func TestGetHelmChart_Transform(t *testing.T) {
 	})
 
 	t.Run("fails when spec is nil", func(t *testing.T) {
+		t.Parallel()
 		r := require.New(t)
 		ctx := t.Context()
 
@@ -341,6 +349,7 @@ func TestGetHelmChart_Transform(t *testing.T) {
 }
 
 func compareFiles(t *testing.T, original string, downloaded string) {
+	t.Helper()
 	r := require.New(t)
 
 	// read original file
@@ -358,9 +367,11 @@ func compareFiles(t *testing.T, original string, downloaded string) {
 }
 
 func compareProvFiles(t *testing.T, helmOutput *v1alpha1.GetHelmChart) {
+	t.Helper()
 	compareFiles(t, "../testdata/provenance/mychart-0.1.0.tgz.prov", helmOutput.Output.ProvFile.URI)
 }
 
 func compareChartFiles(t *testing.T, helmOutput *v1alpha1.GetHelmChart) {
+	t.Helper()
 	compareFiles(t, "../testdata/provenance/mychart-0.1.0.tgz", helmOutput.Output.ChartFile.URI)
 }

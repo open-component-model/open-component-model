@@ -23,6 +23,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
+//nolint:tparallel // subtests share mock input providers/constructor and must run sequentially (see TestConstruct* mocks)
 func TestConstructWithSourceAndResourceAndReferences(t *testing.T) {
 	t.Parallel()
 
@@ -832,6 +833,7 @@ func TestConstructComponent_DuplicateResourceIdentity(t *testing.T) {
 }
 
 func collectDescriptors(t *testing.T, graph *syncdag.SyncedDirectedAcyclicGraph[string]) []*descriptor.Descriptor {
+	t.Helper()
 	var descs []*descriptor.Descriptor
 	_ = graph.WithReadLock(func(d *dag.DirectedAcyclicGraph[string]) error {
 		for id, vert := range d.Vertices {

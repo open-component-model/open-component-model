@@ -33,6 +33,7 @@ func Test_Provider_Smoke(t *testing.T) {
 	r.Error(err)
 
 	t.Run("access provider concurrently", func(t *testing.T) {
+		t.Parallel()
 		r := require.New(t)
 
 		desc := descriptor.Descriptor{}
@@ -54,19 +55,19 @@ func Test_Provider_Smoke(t *testing.T) {
 					d.Component.Version = fmt.Sprintf("v1.0.%d", i)
 					repo, err := prov.GetComponentVersionRepository(ctx, repoSpec, nil)
 					if err != nil {
-						return fmt.Errorf("failed to get component version repository: %v", err)
+						return fmt.Errorf("failed to get component version repository: %w", err)
 					}
 					err = repo.AddComponentVersion(ctx, &d)
 					if err != nil {
-						return fmt.Errorf("failed to add component version: %v", err)
+						return fmt.Errorf("failed to add component version: %w", err)
 					}
 					retrievedDescs[i], err = repo.GetComponentVersion(ctx, d.Component.Name, d.Component.Version)
 					if err != nil {
-						return fmt.Errorf("failed to get component version: %v", err)
+						return fmt.Errorf("failed to get component version: %w", err)
 					}
 					retrievedVersions[i], err = repo.ListComponentVersions(ctx, d.Component.Name)
 					if err != nil {
-						return fmt.Errorf("failed to list component versions for index %d: %v", i, err)
+						return fmt.Errorf("failed to list component versions for index %d: %w", i, err)
 					}
 					return nil
 				})
@@ -92,19 +93,19 @@ func Test_Provider_Smoke(t *testing.T) {
 				eg.Go(func() error {
 					repo, err := prov.GetComponentVersionRepository(ctx, repoSpec, nil)
 					if err != nil {
-						return fmt.Errorf("failed to get component version repository: %v", err)
+						return fmt.Errorf("failed to get component version repository: %w", err)
 					}
 					err = repo.AddComponentVersion(ctx, &d)
 					if err != nil {
-						return fmt.Errorf("failed to add component version: %v", err)
+						return fmt.Errorf("failed to add component version: %w", err)
 					}
 					retrievedDescs[i], err = repo.GetComponentVersion(ctx, d.Component.Name, d.Component.Version)
 					if err != nil {
-						return fmt.Errorf("failed to get component version: %v", err)
+						return fmt.Errorf("failed to get component version: %w", err)
 					}
 					retrievedVersions[i], err = repo.ListComponentVersions(ctx, d.Component.Name)
 					if err != nil {
-						return fmt.Errorf("failed to list component versions for index %d: %v", i, err)
+						return fmt.Errorf("failed to list component versions for index %d: %w", i, err)
 					}
 					return nil
 				})

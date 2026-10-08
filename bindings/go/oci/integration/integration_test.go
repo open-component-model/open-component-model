@@ -506,6 +506,7 @@ func Test_Integration_Transformers(t *testing.T) {
 }
 
 func uploadDownloadLocalResourceOCILayout(t *testing.T, repo *oci.Repository, component string, version string) {
+	t.Helper()
 	ctx := t.Context()
 	r := require.New(t)
 
@@ -566,7 +567,7 @@ func uploadDownloadLocalResourceOCILayout(t *testing.T, repo *oci.Repository, co
 	err = repo.AddComponentVersion(ctx, cd)
 	r.NoError(err)
 
-	downloaded, newRes, err := repo.GetLocalResource(ctx, component, version, resource.ElementMeta.ToIdentity())
+	downloaded, _, err := repo.GetLocalResource(ctx, component, version, resource.ToIdentity())
 	r.NoError(err)
 	r.NotNil(downloaded)
 
@@ -580,6 +581,7 @@ func uploadDownloadLocalResourceOCILayout(t *testing.T, repo *oci.Repository, co
 }
 
 func uploadDownloadBarebonesOCIImage(t *testing.T, repo *oci.Repository, from, to string) {
+	t.Helper()
 	ctx := t.Context()
 	r := require.New(t)
 
@@ -656,6 +658,7 @@ func uploadDownloadBarebonesOCIImage(t *testing.T, repo *oci.Repository, from, t
 }
 
 func processResourceDigest(t *testing.T, repo *oci.Repository, from, to string) {
+	t.Helper()
 	ctx := t.Context()
 	r := require.New(t)
 
@@ -697,12 +700,13 @@ func processResourceDigest(t *testing.T, repo *oci.Repository, from, to string) 
 
 	r.Equal("0aa67467eee1b66c5e549e6b67226e226778f689ccdb46c39fe706b6428c98a5", resource.Digest.Value)
 	r.Equal("SHA-256", resource.Digest.HashAlgorithm)
-	r.Equal("genericBlobDigest/v1", resource.Digest.NormalisationAlgorithm)
+	r.Equal("ociArtifactDigest/v1", resource.Digest.NormalisationAlgorithm)
 
 	r.NotNil(resource.Digest)
 }
 
 func uploadDownloadBarebonesComponentVersion(t *testing.T, repo repository.ComponentVersionRepository, name, version string) {
+	t.Helper()
 	ctx := t.Context()
 	r := require.New(t)
 
@@ -728,6 +732,7 @@ func uploadDownloadBarebonesComponentVersion(t *testing.T, repo repository.Compo
 }
 
 func testResolverConnectivity(t *testing.T, address, reference string, client *auth.Client) {
+	t.Helper()
 	ctx := t.Context()
 	r := require.New(t)
 
@@ -782,6 +787,7 @@ func generateRandomPassword(t *testing.T, length int) string {
 }
 
 func createSingleLayerOCIImage(t *testing.T, data []byte, ref ...string) ([]byte, *v1.OCIImage) {
+	t.Helper()
 	r := require.New(t)
 	var buf bytes.Buffer
 	w, err := tar.NewOCILayoutWriterWithTempFile(&buf, t.TempDir())
@@ -839,6 +845,7 @@ func createSingleLayerOCIImage(t *testing.T, data []byte, ref ...string) ([]byte
 }
 
 func uploadDownloadLocalResource(t *testing.T, repo repository.ComponentVersionRepository, name, version string) {
+	t.Helper()
 	ctx := t.Context()
 	r := require.New(t)
 
@@ -904,7 +911,7 @@ func uploadDownloadLocalResource(t *testing.T, repo repository.ComponentVersionR
 	r.NoError(err)
 
 	// Get local resource
-	downloadedBlob, resFromGet, err := repo.GetLocalResource(ctx, name, version, resource.ElementMeta.ToIdentity())
+	downloadedBlob, resFromGet, err := repo.GetLocalResource(ctx, name, version, resource.ToIdentity())
 	r.NoError(err)
 	r.Equal(resFromGet.ElementMeta, newRes.ElementMeta)
 
@@ -915,6 +922,7 @@ func uploadDownloadLocalResource(t *testing.T, repo repository.ComponentVersionR
 }
 
 func uploadDownloadLocalSource(t *testing.T, repo repository.ComponentVersionRepository, name, version string) {
+	t.Helper()
 	ctx := t.Context()
 	r := require.New(t)
 
@@ -979,7 +987,7 @@ func uploadDownloadLocalSource(t *testing.T, repo repository.ComponentVersionRep
 	r.NoError(err)
 
 	// Get local source
-	downloadedBlob, srcFromGet, err := repo.GetLocalSource(ctx, name, version, source.ElementMeta.ToIdentity())
+	downloadedBlob, srcFromGet, err := repo.GetLocalSource(ctx, name, version, source.ToIdentity())
 	r.NoError(err)
 	r.Equal(srcFromGet.ElementMeta, newSrc.ElementMeta)
 
@@ -1013,6 +1021,7 @@ func getUserAndPasswordWithGitHubCLIAndJQ(t *testing.T) (string, string) {
 }
 
 func getUsername(t *testing.T, gh string) (string, error) {
+	t.Helper()
 	if githubUser := os.Getenv("GITHUB_USER"); githubUser != "" {
 		return githubUser, nil
 	}
@@ -1032,6 +1041,7 @@ func getUsername(t *testing.T, gh string) (string, error) {
 }
 
 func transformGetOCIArtifact(t *testing.T, repo repository.ResourceRepository, username, password, from, to string) {
+	t.Helper()
 	ctx := t.Context()
 	r := require.New(t)
 
@@ -1127,6 +1137,7 @@ func transformGetOCIArtifact(t *testing.T, repo repository.ResourceRepository, u
 }
 
 func transformAddOCIArtifact(t *testing.T, repo repository.ResourceRepository, username, password, to string) {
+	t.Helper()
 	ctx := t.Context()
 	r := require.New(t)
 

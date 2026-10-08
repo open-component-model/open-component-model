@@ -6,12 +6,14 @@ cni
 cnsa
 cra
 cvss
+dsa
 esv
 grype
 healthcheck
 init
 kube
 lex
+libgcrypt
 Runtime's
 acls
 accessmethod

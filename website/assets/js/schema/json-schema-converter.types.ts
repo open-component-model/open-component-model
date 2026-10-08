@@ -13,7 +13,7 @@ export interface SchemaNode {
     enum?: string[];
     const?: string;
     $defs?: Record<string, SchemaNode>;
-    "x-kubernetes-validations"?: Array<{ rule?: string }>;
-    spec?: { versions?: Array<{ schema?: { openAPIV3Schema?: SchemaNode } }> };
+    "x-kubernetes-validations"?: { rule?: string }[];
+    spec?: { versions?: { schema?: { openAPIV3Schema?: SchemaNode } }[] };
     [key: string]: unknown;
 }
