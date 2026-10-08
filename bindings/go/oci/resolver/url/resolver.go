@@ -162,7 +162,7 @@ func (resolver *CachingResolver) StoreForReference(_ context.Context, reference 
 		blobCache := resolver.blobCache.Load()
 		refCache := resolver.referenceCache.Load()
 		if blobCache != nil || refCache != nil {
-			return cache.ProxyRepository(remoteStore.Repository, blobCache, refCache), nil
+			return cache.ProxyRepository(remoteStore, blobCache, refCache), nil
 		}
 		return remoteStore, nil
 	}
@@ -197,7 +197,7 @@ func (resolver *CachingResolver) StoreForReference(_ context.Context, reference 
 	blobCache := resolver.blobCache.Load()
 	refCache := resolver.referenceCache.Load()
 	if blobCache != nil || refCache != nil {
-		return cache.ProxyRepository(repo, blobCache, refCache), nil
+		return cache.ProxyRepository(store, blobCache, refCache), nil
 	}
 	return store, nil
 }

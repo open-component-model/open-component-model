@@ -11,9 +11,18 @@ import (
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"oras.land/oras-go/v2/content"
 	"oras.land/oras-go/v2/registry"
 	"oras.land/oras-go/v2/registry/remote"
+
+	"ocm.software/open-component-model/bindings/go/oci/internal/remotestore"
 )
+
+// wrapRS wraps an oras *remote.Repository in a *remotestore.RemoteStore so the
+// cache decorator embeds the chunked store exactly as the resolver hands it out.
+func wrapRS(inner *remote.Repository) *remotestore.RemoteStore {
+	return &remotestore.RemoteStore{Repository: inner}
+}
 
 func TestRepository_Fetch_DelegatesToBlobCache(t *testing.T) {
 	c := newTestCache(t, Options{})
@@ -28,7 +37,7 @@ func TestRepository_Fetch_DelegatesToBlobCache(t *testing.T) {
 
 	// Cache hit serves the file; the embedded *remote.Repository is
 	// never reached, so an empty value is fine.
-	repo := &Repository{Repository: &remote.Repository{}, BlobCache: c}
+	repo := &Repository{RemoteStore: wrapRS(&remote.Repository{}), BlobCache: c}
 	rc, err := repo.Fetch(t.Context(), desc)
 	require.NoError(t, err)
 	defer rc.Close()
@@ -55,7 +64,7 @@ func TestRepository_Resolve_DelegatesToReferenceCache(t *testing.T) {
 	ref := desc.Digest.String()
 	rc.Add(registry.Reference{Registry: "ghcr.io", Repository: "owner/repo", Reference: ref}, desc)
 
-	repo := &Repository{Repository: inner, ReferenceCache: rc}
+	repo := &Repository{RemoteStore: wrapRS(inner), ReferenceCache: rc}
 	got, err := repo.Resolve(t.Context(), ref)
 	require.NoError(t, err)
 	assert.Equal(t, desc, got)
@@ -71,7 +80,7 @@ func TestRepository_Resolve_WithFullReferenceAndNormalization(t *testing.T) {
 	inner := &remote.Repository{
 		Reference: registry.Reference{Registry: "ghcr.io", Repository: "owner/repo"},
 	}
-	repo := &Repository{Repository: inner, ReferenceCache: rc}
+	repo := &Repository{RemoteStore: wrapRS(inner), ReferenceCache: rc}
 
 	// 1. Add as normalized digest reference to cache
 	rc.Add(registry.Reference{
@@ -88,33 +97,74 @@ func TestRepository_Resolve_WithFullReferenceAndNormalization(t *testing.T) {
 
 func TestRepository_Unwrap_ReturnsEmbedded(t *testing.T) {
 	inner := &remote.Repository{}
-	repo := &Repository{Repository: inner, BlobCache: newTestCache(t, Options{})}
+	repo := &Repository{RemoteStore: wrapRS(inner), BlobCache: newTestCache(t, Options{})}
+	// Unwrap must reach through the cache AND the chunked store wrapper to the
+	// raw oras repository so pack's global-store detection still fires.
 	assert.Same(t, inner, repo.Unwrap())
 }
 
-func TestProxyRepository_NilCachesReturnBase(t *testing.T) {
-	inner := &remote.Repository{}
-	got := ProxyRepository(inner, nil, nil)
-	assert.Same(t, inner, got)
+// TestRepository_SatisfiesStoreAndStreamingPusher is the regression guard for
+// this change: with a cache configured, the decorator must still satisfy the
+// chunked-upload interfaces so pushes keep chunking (and streaming) instead of
+// falling back to a monolithic PUT, while preserving the promoted type
+// assertions (TagLister / ReferrerLister / Blobs()) used across the codebase.
+func TestRepository_SatisfiesStoreAndStreamingPusher(t *testing.T) {
+	repo := &Repository{
+		RemoteStore:    wrapRS(&remote.Repository{}),
+		BlobCache:      newTestCache(t, Options{}),
+		ReferenceCache: newTestRefCache(t, Options{}),
+	}
+
+	_, ok := interface{}(repo).(remotestore.StreamingPusher)
+	assert.True(t, ok, "cached decorator must expose PushStreaming (chunked streaming survives the cache)")
+
+	_, ok = interface{}(repo).(registry.TagLister)
+	assert.True(t, ok, "cached decorator must still promote TagLister")
+
+	_, ok = interface{}(repo).(registry.ReferrerLister)
+	assert.True(t, ok, "cached decorator must still promote ReferrerLister")
+
+	_, ok = interface{}(repo).(interface {
+		Blobs() registry.BlobStore
+	})
+	assert.True(t, ok, "cached decorator must still promote Blobs()")
+
+	_, ok = interface{}(repo).(interface{ Unwrap() content.Storage })
+	assert.True(t, ok, "cached decorator must expose Unwrap for global-store detection")
+}
+
+func TestProxyRepository_NilCachesReturnStore(t *testing.T) {
+	store := wrapRS(&remote.Repository{})
+	got := ProxyRepository(store, nil, nil)
+	// Nil caches must return the chunked store unchanged so chunking stays live.
+	assert.Same(t, store, got)
+	_, ok := got.(remotestore.StreamingPusher)
+	assert.True(t, ok, "unwrapped store must still be a StreamingPusher")
 }
 
 func TestProxyRepository_BlobCacheOnlyWraps(t *testing.T) {
 	inner := &remote.Repository{}
+	store := wrapRS(inner)
 	c := newTestCache(t, Options{})
-	got := ProxyRepository(inner, c, nil)
+	got := ProxyRepository(store, c, nil)
 	wrapped, ok := got.(*Repository)
 	require.True(t, ok)
+	assert.Same(t, store, wrapped.RemoteStore)
 	assert.Same(t, inner, wrapped.Repository)
 	assert.Same(t, c, wrapped.BlobCache)
 	assert.Nil(t, wrapped.ReferenceCache)
+	_, ok = got.(remotestore.StreamingPusher)
+	assert.True(t, ok, "cache-wrapped store must still be a StreamingPusher")
 }
 
 func TestProxyRepository_ReferenceCacheOnlyWraps(t *testing.T) {
 	inner := &remote.Repository{}
+	store := wrapRS(inner)
 	rc := newTestRefCache(t, Options{})
-	got := ProxyRepository(inner, nil, rc)
+	got := ProxyRepository(store, nil, rc)
 	wrapped, ok := got.(*Repository)
 	require.True(t, ok)
+	assert.Same(t, store, wrapped.RemoteStore)
 	assert.Same(t, inner, wrapped.Repository)
 	assert.Nil(t, wrapped.BlobCache)
 	assert.Same(t, rc, wrapped.ReferenceCache)
@@ -122,11 +172,13 @@ func TestProxyRepository_ReferenceCacheOnlyWraps(t *testing.T) {
 
 func TestProxyRepository_BothCachesWrap(t *testing.T) {
 	inner := &remote.Repository{}
+	store := wrapRS(inner)
 	c := newTestCache(t, Options{})
 	rc := newTestRefCache(t, Options{})
-	got := ProxyRepository(inner, c, rc)
+	got := ProxyRepository(store, c, rc)
 	wrapped, ok := got.(*Repository)
 	require.True(t, ok)
+	assert.Same(t, store, wrapped.RemoteStore)
 	assert.Same(t, inner, wrapped.Repository)
 	assert.Same(t, c, wrapped.BlobCache)
 	assert.Same(t, rc, wrapped.ReferenceCache)
@@ -151,7 +203,7 @@ func TestRepository_Untag_SuccessInvalidatesCache(t *testing.T) {
 
 	inner := plainHTTPRepo(t, srv)
 	rc := newTestRefCache(t, Options{})
-	repo := &Repository{Repository: inner, ReferenceCache: rc}
+	repo := &Repository{RemoteStore: wrapRS(inner), ReferenceCache: rc}
 
 	ref := registry.Reference{
 		Registry:   inner.Reference.Registry,
@@ -177,7 +229,7 @@ func TestRepository_Untag_FailureKeepsCache(t *testing.T) {
 
 	inner := plainHTTPRepo(t, srv)
 	rc := newTestRefCache(t, Options{})
-	repo := &Repository{Repository: inner, ReferenceCache: rc}
+	repo := &Repository{RemoteStore: wrapRS(inner), ReferenceCache: rc}
 
 	ref := registry.Reference{
 		Registry:   inner.Reference.Registry,
@@ -199,7 +251,7 @@ func TestRepository_Untag_NilReferenceCache(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	repo := &Repository{Repository: plainHTTPRepo(t, srv)}
+	repo := &Repository{RemoteStore: wrapRS(plainHTTPRepo(t, srv))}
 	require.NoError(t, repo.Untag(t.Context(), "latest"))
 }
 
@@ -228,7 +280,7 @@ func TestRepository_Tag_SuccessRefreshesCache(t *testing.T) {
 
 	inner := plainHTTPRepo(t, srv)
 	rc := newTestRefCache(t, Options{})
-	repo := &Repository{Repository: inner, ReferenceCache: rc}
+	repo := &Repository{RemoteStore: wrapRS(inner), ReferenceCache: rc}
 
 	ref := registry.Reference{
 		Registry:   inner.Reference.Registry,
@@ -250,7 +302,7 @@ func TestRepository_Tag_FailureLeavesCacheEmpty(t *testing.T) {
 
 	inner := plainHTTPRepo(t, srv)
 	rc := newTestRefCache(t, Options{})
-	repo := &Repository{Repository: inner, ReferenceCache: rc}
+	repo := &Repository{RemoteStore: wrapRS(inner), ReferenceCache: rc}
 
 	ref := registry.Reference{
 		Registry:   inner.Reference.Registry,

@@ -6,29 +6,33 @@ import (
 
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"oras.land/oras-go/v2/content"
-	"oras.land/oras-go/v2/registry/remote"
 
 	"ocm.software/open-component-model/bindings/go/oci/internal/remotestore"
 	"ocm.software/open-component-model/bindings/go/oci/spec"
 )
 
-// Repository decorates an oras [*remote.Repository] with optional
-// [BlobCache] and [ReferenceCache] layers. The embedded
-// [*remote.Repository] is exposed via Go field promotion so type
-// assertions used elsewhere in the codebase
-// ([registry.TagLister], [registry.ReferrerLister],
-// `interface{ Blobs() registry.BlobStore }`) keep working unchanged.
+// Repository decorates a [*remotestore.RemoteStore] with optional
+// [BlobCache] and [ReferenceCache] layers.
+//
+// The embedded [*remotestore.RemoteStore] carries the chunked and
+// streaming blob upload (its Push and PushStreaming), so those remain
+// available on the decorator and `pack`'s [remotestore.StreamingPusher]
+// type assertion keeps succeeding under caching. Because the store
+// itself embeds the oras [*remote.Repository], the promoted type
+// assertions used elsewhere in the codebase ([registry.TagLister],
+// [registry.ReferrerLister], `interface{ Blobs() registry.BlobStore }`)
+// keep working unchanged, as does the promoted `r.Repository` field.
 //
 // Either cache may be nil; the corresponding override degrades to a
-// pure passthrough to the embedded *remote.Repository.
+// pure passthrough to the embedded store.
 type Repository struct {
-	*remote.Repository
+	*remotestore.RemoteStore
 	BlobCache      *BlobCache
 	ReferenceCache *ReferenceCache
 }
 
 // Fetch consults [Repository.BlobCache] before delegating to the
-// embedded [*remote.Repository]. See [BlobCache.Fetch] for the exact
+// underlying [*remote.Repository]. See [BlobCache.Fetch] for the exact
 // semantics: cache hit returns the on-disk file directly; miss
 // performs the upstream fetch and tees into the cache. Layer blobs
 // and other non-manifest media types pass through transparently.
@@ -39,11 +43,11 @@ func (r *Repository) Fetch(ctx context.Context, target ociImageSpecV1.Descriptor
 }
 
 // Resolve consults [Repository.ReferenceCache] before delegating to
-// the embedded [*remote.Repository]. See [ReferenceCache.Resolve] for
+// the underlying [*remote.Repository]. See [ReferenceCache.Resolve] for
 // the exact semantics. Successful resolves are appended to the
 // snapshot so they survive a process restart against the same Dir.
 //
-// The cache key is namespaced by the embedded *remote.Repository's
+// The cache key is namespaced by the underlying *remote.Repository's
 // registry/repository so two repositories that happen to share a
 // short reference (e.g. the tag "v1") cannot collide.
 //
@@ -59,9 +63,10 @@ func (r *Repository) Resolve(ctx context.Context, reference string) (ociImageSpe
 	return r.ReferenceCache.Resolve(ctx, r.Repository, ref)
 }
 
-// Unwrap returns the embedded [*remote.Repository] so consumers that
-// type-assert on the underlying store (e.g. global-store detection in
-// internal/pack) can see through the cache decorator.
+// Unwrap returns the underlying oras [*remote.Repository] so consumers
+// that type-assert on the raw store (e.g. global-store detection in
+// internal/pack) can see through both this cache decorator and the
+// chunked-store wrapper.
 func (r *Repository) Unwrap() content.Storage {
 	return r.Repository
 }
@@ -72,7 +77,7 @@ func (r *Repository) Unwrap() content.Storage {
 // reference cache entry so a restart does not resurrect the stale
 // tag→descriptor mapping.
 func (r *Repository) Untag(ctx context.Context, reference string) error {
-	if err := (&remotestore.RemoteStore{Repository: r.Repository}).Untag(ctx, reference); err != nil {
+	if err := r.RemoteStore.Untag(ctx, reference); err != nil {
 		return err
 	}
 	if r.ReferenceCache != nil {
@@ -105,13 +110,15 @@ func (r *Repository) Tag(ctx context.Context, desc ociImageSpecV1.Descriptor, re
 	return nil
 }
 
-// ProxyRepository proxies the given repo with the configured caches
-// when at least one is non-nil; otherwise it returns repo unchanged
-// so the cache decorator only appears in the type chain when there
-// is something to cache.
-func ProxyRepository(repo *remote.Repository, blob *BlobCache, refs *ReferenceCache) spec.Store {
+// ProxyRepository proxies the given chunked store with the configured
+// caches when at least one is non-nil; otherwise it returns the store
+// unchanged so the cache decorator only appears in the type chain when
+// there is something to cache. Taking the [*remotestore.RemoteStore]
+// (rather than the raw oras repository) keeps the chunked Push and
+// PushStreaming reachable through the decorator.
+func ProxyRepository(store *remotestore.RemoteStore, blob *BlobCache, refs *ReferenceCache) spec.Store {
 	if blob == nil && refs == nil {
-		return repo
+		return store
 	}
-	return &Repository{Repository: repo, BlobCache: blob, ReferenceCache: refs}
+	return &Repository{RemoteStore: store, BlobCache: blob, ReferenceCache: refs}
 }
