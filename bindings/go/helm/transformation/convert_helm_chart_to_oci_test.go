@@ -41,6 +41,7 @@ func TestConvertHelmChartToOCI_Transform(t *testing.T) {
 	testDataDir := filepath.Join("..", "testdata")
 
 	t.Run("converts packaged helm chart to OCI layout", func(t *testing.T) {
+		t.Parallel()
 		r := require.New(t)
 		ctx := t.Context()
 		outputDir := t.TempDir()
@@ -113,6 +114,7 @@ func TestConvertHelmChartToOCI_Transform(t *testing.T) {
 	})
 
 	t.Run("converts packaged helm chart with provenance to OCI layout", func(t *testing.T) {
+		t.Parallel()
 		r := require.New(t)
 		ctx := t.Context()
 		outputDir := t.TempDir()
@@ -190,6 +192,7 @@ func TestConvertHelmChartToOCI_Transform(t *testing.T) {
 	})
 
 	t.Run("creates output in temp dir when no output path specified", func(t *testing.T) {
+		t.Parallel()
 		r := require.New(t)
 		ctx := t.Context()
 
@@ -254,6 +257,7 @@ func TestConvertHelmChartToOCI_Transform(t *testing.T) {
 	})
 
 	t.Run("fails when spec is nil", func(t *testing.T) {
+		t.Parallel()
 		r := require.New(t)
 		ctx := t.Context()
 
