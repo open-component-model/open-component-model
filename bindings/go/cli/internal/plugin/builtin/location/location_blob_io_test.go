@@ -12,6 +12,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 )
 
@@ -94,7 +95,7 @@ func TestWriteAndRead(t *testing.T) {
 			defer tt.cleanup()
 
 			// Create a test blob
-			testBlob := blob.NewDirectReadOnlyBlob(bytes.NewReader(testData))
+			testBlob := inmemory.New(bytes.NewReader(testData))
 
 			write := func() {
 				err := Write(tt.location, testBlob)
@@ -149,7 +150,7 @@ func TestWriteErrors(t *testing.T) {
 				LocationType: types.LocationTypeLocalFile,
 				Value:        "/non/existent/path/test.txt",
 			},
-			blob:        blob.NewDirectReadOnlyBlob(bytes.NewReader([]byte("test"))),
+			blob:        inmemory.New(bytes.NewReader([]byte("test"))),
 			expectError: true,
 		},
 		{
@@ -158,7 +159,7 @@ func TestWriteErrors(t *testing.T) {
 				LocationType: types.LocationTypeUnixNamedPipe,
 				Value:        "/non/existent/path/test.pipe",
 			},
-			blob:        blob.NewDirectReadOnlyBlob(bytes.NewReader([]byte("test"))),
+			blob:        inmemory.New(bytes.NewReader([]byte("test"))),
 			expectError: true,
 		},
 	}

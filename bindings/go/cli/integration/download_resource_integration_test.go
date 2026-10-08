@@ -107,7 +107,7 @@ configurations:
 			"resource",
 			fmt.Sprintf("http://%s//%s:%s", registry.RegistryAddress, name, version),
 			"--identity",
-			fmt.Sprintf("name=%s,version=%s", localResource.Resource.Name, localResource.Resource.Version),
+			fmt.Sprintf("name=%s,version=%s", localResource.Name, localResource.Version),
 			"--output",
 			output,
 			"--config",
@@ -163,7 +163,7 @@ configurations:
 				"resource",
 				fmt.Sprintf("http://%s//%s:%s", registry.RegistryAddress, name, version),
 				"--identity",
-				fmt.Sprintf("name=%s,version=%s", localResource.Resource.Name, localResource.Resource.Version),
+				fmt.Sprintf("name=%s,version=%s", localResource.Name, localResource.Version),
 				"--output",
 				output,
 				"--config",
@@ -187,7 +187,7 @@ configurations:
 				"resource",
 				fmt.Sprintf("http://%s//%s:%s", registry.RegistryAddress, name, version),
 				"--identity",
-				fmt.Sprintf("name=%s,version=%s", localResource.Resource.Name, localResource.Resource.Version),
+				fmt.Sprintf("name=%s,version=%s", localResource.Name, localResource.Version),
 				"--output",
 				output,
 				"--config",
@@ -732,7 +732,7 @@ func uploadComponentVersion(t *testing.T, repo repository.ComponentVersionReposi
 
 	for _, resource := range resources {
 		var err error
-		switch resource.Resource.GetAccess().(type) {
+		switch resource.GetAccess().(type) {
 		case *v2.LocalBlob:
 			resource.Resource, err = repo.AddLocalResource(ctx, name, version, resource.Resource, resource.ReadOnlyBlob)
 		default:
