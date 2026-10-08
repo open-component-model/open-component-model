@@ -24,9 +24,6 @@ import (
 )
 
 const (
-	// impersonatedClientCacheSize bounds the number of cached clients, one per impersonated service account.
-	impersonatedClientCacheSize = 256
-
 	// namespacedDeployerAnnotation maps a deployed object back to its NamespacedDeployer ("namespace/name"), as
 	// cluster-scoped and cross-namespace objects cannot carry an owner reference to a namespaced owner.
 	namespacedDeployerAnnotation = "delivery.ocm.software/namespaced-deployer"
@@ -95,17 +92,12 @@ func (r *Reconciler) applyClient(ctx context.Context, deployer deliveryv1alpha1.
 	}
 
 	username := fmt.Sprintf("system:serviceaccount:%s:%s", key.Namespace, key.Name)
-	if c, ok := r.impersonatedClients.Get(username); ok {
-		return c, nil
-	}
-
 	cfg := rest.CopyConfig(r.restConfig)
 	cfg.Impersonate = rest.ImpersonationConfig{UserName: username}
 	c, err := client.New(cfg, client.Options{Scheme: r.Scheme, Mapper: r.resourceRESTMapper})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create client impersonating %s: %w", username, err)
 	}
-	r.impersonatedClients.Add(username, c)
 
 	return c, nil
 }

@@ -93,7 +93,7 @@ func (in *NamespacedDeployer) GetDeployerStatus() *DeployerStatus {
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Displays the Age of the NamespacedDeployer"
 
 // NamespacedDeployer is the Schema for the namespaceddeployers API.
-// Unlike the cluster-scoped Deployer, it applies objects with the permissions of the service account
+// It applies objects with the permissions of the service account
 // referenced in its spec. That service account's RBAC, not this resource, bounds which namespaces and
 // kinds it can deploy.
 type NamespacedDeployer struct {

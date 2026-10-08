@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	lru "github.com/hashicorp/golang-lru/v2"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/time/rate"
 	"k8s.io/apimachinery/pkg/api/equality"
@@ -86,8 +85,6 @@ type Reconciler struct {
 	apiReader client.Reader
 	// restConfig is the base config impersonated clients are derived from.
 	restConfig *rest.Config
-	// impersonatedClients caches one client per impersonated service account.
-	impersonatedClients *lru.Cache[string, client.Client]
 
 	// resourceWatchChannel is used to register watches for resources that are referenced by the deployer.
 	// It is used by the dynamic informer manager to register watches for resources deployed.
@@ -132,9 +129,6 @@ func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) err
 
 	r.apiReader = mgr.GetAPIReader()
 	r.restConfig = mgr.GetConfig()
-	if r.impersonatedClients, err = lru.New[string, client.Client](impersonatedClientCacheSize); err != nil {
-		return fmt.Errorf("failed to create impersonated client cache: %w", err)
-	}
 
 	// Build index for deployers that reference a resource to get notified about resource changes.
 	const fieldName = ".spec.resourceRef"

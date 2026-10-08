@@ -29,7 +29,7 @@ spec:
       openAPIV3Schema:
         description: |-
           NamespacedDeployer is the Schema for the namespaceddeployers API.
-          Unlike the cluster-scoped Deployer, it applies objects with the permissions of the service account
+          It applies objects with the permissions of the service account
           referenced in its spec. That service account's RBAC, not this resource, bounds which namespaces and
           kinds it can deploy.
         properties:

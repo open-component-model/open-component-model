@@ -18,6 +18,7 @@ manager:
   ## Cluster-scoped Deployer
   deployer:
     # -- Run the controller for the cluster-scoped Deployer. It applies with the permissions of the controller itself.
+    # Deprecated: Use NamespacedDeployer instead.
     enabled: true
   ## NamespacedDeployer
   namespacedDeployer:
