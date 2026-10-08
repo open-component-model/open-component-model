@@ -158,7 +158,7 @@ transfer component-version --transfer-spec spec.yaml</code></pre></figure></div>
   -o, --output enum             output format of the component descriptors
                                 (must be one of [json ndjson yaml]) (default yaml)
   -r, --recursive               recursively discover and transfer component versions
-      --transfer-spec string    path to a transfer specification file (use &#34;-&#34; for stdin). The input must hold exactly one transfer spec document; with &#34;-&#34;, OCM configuration documents in stdin are applied as configuration
+      --transfer-spec string    path to a transfer specification file (use &#34;-&#34; for stdin). The input must hold exactly one transfer spec document; OCM configuration documents in the same stdin stream are rejected unless --config - is also given
   -u, --upload-as enum          deprecated: define whether copied resources should be uploaded as OCI artifacts
                                 (must be one of [localBlob ociArtifact]) (default localBlob)</code></pre></figure></div><h3 id=options-inherited-from-parent-commands>Options inherited from parent commands<a href=#options-inherited-from-parent-commands class=anchor aria-hidden=true>#</a></h3><div class=expressive-code><figure class="frame not-content"><figcaption class=header><span class=title></span></figcaption><pre tabindex=0><code>      --config stringArray                 supply configuration by a given configuration file.
                                            By default (without specifying custom locations with this flag), the file will be read from one of the well known locations:
@@ -179,7 +179,9 @@ transfer component-version --transfer-spec spec.yaml</code></pre></figure></div>
                                            If multiple configuration files are found, they will be merged in the order they are discovered.
                                            Later entries have higher priority.
                                            Using the option, the specified configuration file(s) will be used instead of the lookup above.
-                                           Configuration documents piped into stdin are applied last, on top of these files.
+                                           Use &#34;-&#34; to read configuration documents from stdin. It is an entry like any other: on its own it
+                                           replaces the lookup above, so add --config &lt;file&gt; to keep a file, and a repeated &#34;-&#34; is ignored.
+                                           Other documents on stdin stay there for commands that read it, such as transfer with --transfer-spec -.
       --logformat enum                     set the log output format that is used to print individual logs
                                               json: Output logs in JSON format, suitable for machine processing
                                               text: Output logs in human-readable text format, suitable for console output
