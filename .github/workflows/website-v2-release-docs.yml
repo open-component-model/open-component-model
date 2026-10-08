@@ -18,7 +18,7 @@ concurrency:
 jobs:
   open_pr:
     name: Open website update PR for ${{ inputs.version }}
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     environment:
       name: automation
       deployment: false
