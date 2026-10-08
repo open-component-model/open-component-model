@@ -157,7 +157,7 @@ transfer component-version --transfer-spec spec.yaml
 	cmd.Flags().Bool(FlagDryRun, false, "build and validate the graph but do not execute")
 	cmd.Flags().BoolP(FlagRecursive, "r", false, "recursively discover and transfer component versions")
 	registerLegacyFlags(cmd.Flags())
-	cmd.Flags().String(FlagTransferSpec, "", "path to a transfer specification file (use \"-\" for stdin). The input must hold exactly one transfer spec document; with \"-\", OCM configuration documents in stdin are applied as configuration")
+	cmd.Flags().String(FlagTransferSpec, "", "path to a transfer specification file (use \"-\" for stdin). The input must hold exactly one transfer spec document; OCM configuration documents in the same stdin stream are rejected unless --config - is also given")
 	cmd.Flags().String(FlagConstraint, "", "version constraint evaluated by each version's configured scheme; versions with no applicable scheme are retained (e.g. \">= 1.0.0, < 2.0.0\"); only used when no version is specified in the reference")
 	cmd.Flags().Bool(FlagLatest, false, "if set, only the latest version of the component is transferred; only used when no version is specified in the reference")
 	cmd.Flags().Int(FlagConcurrency, 4, "maximum number of transformation nodes processed in parallel; independent nodes run concurrently while dependency ordering is preserved. Increase it to speed up large graphs, decrease it to reduce load on the registry")
@@ -360,17 +360,17 @@ func loadTransferSpec(path string, stdin io.Reader) (*transformv1alpha1.Transfor
 	return tgd, nil
 }
 
-// transferSpecDocument returns the only document of a transfer spec. OCM configuration
-// piped with --transfer-spec - is taken out of stdin before the command runs, so any
-// configuration left here came from a spec file, where it would not be applied.
-// A plain yaml.Unmarshal would silently take the first document and run an empty graph.
+// transferSpecDocument returns the only document of a transfer spec. With --config -,
+// OCM configuration is taken out of stdin before the command runs, so any configuration
+// left here would silently not be applied. A plain yaml.Unmarshal would also silently
+// take the first document and run an empty graph.
 func transferSpecDocument(data []byte) ([]byte, error) {
 	configs, specs, err := configuration.SplitConfigStream(bytes.NewReader(data))
 	if err != nil {
 		return nil, err
 	}
 	if len(configs) > 0 {
-		return nil, errors.New("OCM configuration is not allowed in a transfer spec file, pass it with --config or on stdin")
+		return nil, errors.New("OCM configuration is not allowed in a transfer spec, pass it with --config (use --config - for stdin)")
 	}
 	switch len(specs) {
 	case 0:
