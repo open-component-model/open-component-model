@@ -3,7 +3,6 @@ package generate
 import (
 	"github.com/spf13/cobra"
 
-	"ocm.software/open-component-model/bindings/go/cli/cmd/configuration"
 	"ocm.software/open-component-model/bindings/go/cli/cmd/generate/docs"
 )
 
@@ -12,9 +11,6 @@ func New() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "generate {docs}",
 		Short: "Generate documentation for the OCM CLI",
-
-		// Never uses configuration, so piped stdin must not be read.
-		Annotations: map[string]string{configuration.SkipStdinConfigAnnotation: ""},
 
 		Long: `A longer description that spans multiple lines and likely contains examples
 and usage of using your command. For example:
