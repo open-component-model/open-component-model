@@ -61,7 +61,7 @@ env:
 jobs:
   conformance:
     name: Sovereign Scenario (${{ matrix.arch }})
-    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-26.04-arm' || 'ubuntu-latest' }}
     timeout-minutes: 30
     # Extend the matrix with additional architectures if needed in the future.
     strategy:
@@ -216,7 +216,7 @@ jobs:
   # scenario has no architecture-specific path.
   fips-gpg:
     name: FIPS GPG Scenario (arm64)
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     timeout-minutes: 15
     steps:
       - name: Compute image refs

@@ -52,7 +52,7 @@ permissions:
 jobs:
   verify-chart:
     name: Verify Chart
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     timeout-minutes: 10
     steps:
       - name: Checkout
@@ -93,7 +93,7 @@ jobs:
 
   build:
     name: Build Controller
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     timeout-minutes: 20
     needs: verify-chart
     outputs:

@@ -134,7 +134,7 @@ jobs:
   decide_publish:
     name: Decide Publish
     needs: [conformance, e2e]
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     outputs:
       publish: ${{ steps.check.outputs.publish }}
       ref: ${{ steps.check.outputs.ref }}
@@ -163,7 +163,7 @@ jobs:
     name: Publish CLI
     needs: [build_cli, decide_publish]
     if: ${{ needs.decide_publish.outputs.publish == 'true' }}
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     outputs:
       image_digest: ${{ steps.digest.outputs.digest }}
       slim_image_digest: ${{ steps.digest.outputs.slim_digest }}
@@ -260,7 +260,7 @@ jobs:
     name: Publish Controller
     needs: [build_controller, decide_publish]
     if: ${{ needs.decide_publish.outputs.publish == 'true' }}
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     outputs:
       image_digest: ${{ steps.image-digest.outputs.digest }}
       chart_digest: ${{ steps.chart-digest.outputs.digest }}

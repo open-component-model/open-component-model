@@ -54,7 +54,7 @@ jobs:
   # assemble job, so all six binaries and the CTF carry an identical version.
   version:
     name: Compute Version
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     outputs:
       version: ${{ steps.version.outputs.version }}
       build_version: ${{ steps.build_version.outputs.build_version }}
@@ -95,7 +95,7 @@ jobs:
   build:
     name: ${{ matrix.goos }}/${{ matrix.goarch }}
     needs: version
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     permissions:
       contents: read
     strategy:
@@ -151,7 +151,7 @@ jobs:
   assemble:
     name: Assemble CTF
     needs: [ version, build ]
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     outputs:
       artifact_name: ${{ env.ARTIFACT_NAME }}
       artifact_id: ${{ steps.upload-artifacts.outputs.artifact_id }}
