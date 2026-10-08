@@ -541,6 +541,7 @@ func TestCompatibility(t *testing.T) {
 
 // TestConcurrentBlobOperations tests thread safety of blob operations
 func TestConcurrentBlobOperations(t *testing.T) {
+	t.Parallel()
 	ctf := setupTestCTF(t)
 	provider := NewFromCTF(ctf)
 	store, err := provider.StoreForReference(t.Context(), "test-repo:test-tag")
@@ -596,6 +597,7 @@ func TestConcurrentBlobOperations(t *testing.T) {
 
 	// Test concurrent operations on different blobs
 	t.Run("concurrent different blobs", func(t *testing.T) {
+		t.Parallel()
 		var wg sync.WaitGroup
 
 		for i := 0; i < numGoroutines; i++ {
