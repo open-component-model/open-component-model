@@ -46,7 +46,7 @@ jobs:
 
   prepare:
     name: Prepare Release Metadata
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     outputs:
       new_tag: ${{ steps.compute.outputs.new_tag }}
       new_version: ${{ steps.compute.outputs.new_version }}
@@ -140,7 +140,7 @@ jobs:
   # so bindings/go/v* is emitted on the same commit
   tag_rc:
     name: Create and Push RC Tags
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     environment:
       name: automation
       deployment: false
@@ -224,7 +224,7 @@ jobs:
     name: Create RC Pre-Release
     if: ${{ github.event.inputs.dry_run == 'false' && needs.tag_rc.outputs.pushed == 'true' }}
     needs: [prepare, tag_rc, build_and_test]
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     permissions:
       contents: write
       actions: read
@@ -292,7 +292,7 @@ jobs:
     name: Summarize RC Release
     if: ${{ github.event.inputs.dry_run == 'false' && needs.tag_rc.outputs.pushed == 'true' }}
     needs: [prepare, tag_rc, build_and_test, release_rc, publish_components_rc]
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     permissions:
       contents: read
     steps:
@@ -352,7 +352,7 @@ jobs:
   verify_attestations:
     name: Verify RC Attestations
     needs: [prepare, build_and_test, release_rc]
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     environment:
       name: release
     permissions:
@@ -415,7 +415,7 @@ jobs:
   promote_and_release_final:
     name: Promote and Release Final
     needs: [prepare, build_and_test, verify_attestations]
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     environment:
       name: automation
       deployment: false
@@ -700,7 +700,7 @@ jobs:
     name: Trigger website update PR workflow
     needs: [prepare, promote_and_release_final]
     if: ${{ github.event.inputs.dry_run == 'false' }}
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     permissions:
       actions: write
     steps:
