@@ -267,47 +267,6 @@ func MergeRetryConfig(dst, src *RetryConfig) *RetryConfig {
 	return out
 }
 
-// ChunkedPushConfig configures OCI chunked blob upload (POST session / PATCH
-// chunks / PUT close). Absent means enabled with default sizes.
-//
-// Placement note: this lives on the shared HTTP config to reuse its
-// global+per-host structure and because chunked upload is an HTTP-level OCI
-// push behaviour. It is kept dependency-free (plain ints/bool, where 0 means
-// "use the default") so this package never imports oci/* and non-OCI HTTP
-// consumers are unaffected; the OCI resolver layer maps 0 to its remotestore
-// defaults. A reviewer who prefers a dedicated OCI config may veto this.
-//
-// +k8s:deepcopy-gen=true
-type ChunkedPushConfig struct {
-	// Disabled turns chunked upload off, restoring the monolithic push.
-	Disabled bool `json:"disabled,omitempty"`
-	// ChunkSize is the PATCH chunk size in bytes; 0 means the default.
-	ChunkSize int64 `json:"chunkSize,omitempty"`
-	// Threshold is the minimum blob size for chunking in bytes; 0 means the default.
-	Threshold int64 `json:"threshold,omitempty"`
-}
-
-// Validate checks that chunk sizes are non-negative.
-func (c *ChunkedPushConfig) Validate() error {
-	if c.ChunkSize < 0 {
-		return fmt.Errorf("invalid value for chunkSize: %d, must be zero or positive", c.ChunkSize)
-	}
-	if c.Threshold < 0 {
-		return fmt.Errorf("invalid value for threshold: %d, must be zero or positive", c.Threshold)
-	}
-	return nil
-}
-
-// MergeChunkedPushConfig merges src into dst. A non-nil src wins wholesale,
-// so a per-host ChunkedPush overrides the global one in full; a nil src leaves
-// dst untouched. Returns nil when both inputs are nil.
-func MergeChunkedPushConfig(dst, src *ChunkedPushConfig) *ChunkedPushConfig {
-	if src != nil {
-		return src
-	}
-	return dst
-}
-
 // HostConfig contains per-host HTTP settings that override global values.
 // All fields are pointers; nil means "inherit from global".
 //
@@ -325,14 +284,9 @@ type HostConfig struct {
 	// Retry overrides the global retry policy for this host.
 	// Fields set here override the corresponding top-level retry value.
 	Retry *RetryConfig `json:"retry,omitempty"`
-
-	// ChunkedPush overrides OCI chunked blob upload for this host. A non-nil
-	// value replaces the global ChunkedPush wholesale.
-	ChunkedPush *ChunkedPushConfig `json:"chunkedPush,omitempty"`
 }
 
-// Validate checks the per-host timeout, retry, and chunked-push config for
-// valid values.
+// Validate checks the per-host timeout and retry config for valid values.
 func (h *HostConfig) Validate() error {
 	if err := h.TimeoutConfig.Validate(); err != nil {
 		return fmt.Errorf("invalid timeout config: %w", err)
@@ -340,11 +294,6 @@ func (h *HostConfig) Validate() error {
 	if h.Retry != nil {
 		if err := h.Retry.Validate(); err != nil {
 			return fmt.Errorf("invalid retry config: %w", err)
-		}
-	}
-	if h.ChunkedPush != nil {
-		if err := h.ChunkedPush.Validate(); err != nil {
-			return fmt.Errorf("invalid chunkedPush config: %w", err)
 		}
 	}
 	return nil
@@ -373,10 +322,6 @@ type Config struct {
 	// with 200ms–3s bounds).
 	Retry *RetryConfig `json:"retry,omitempty"`
 
-	// ChunkedPush configures OCI chunked blob upload globally. Per-host
-	// entries override it wholesale. Absent means enabled with default sizes.
-	ChunkedPush *ChunkedPushConfig `json:"chunkedPush,omitempty"`
-
 	// Hosts maps hostname (or hostname:port) to per-host settings.
 	// Fields set here override the corresponding top-level value for that host.
 	Hosts map[string]*HostConfig `json:"hosts,omitempty"`
@@ -391,11 +336,6 @@ func (c *Config) Validate() error {
 	if c.Retry != nil {
 		if err := c.Retry.Validate(); err != nil {
 			return fmt.Errorf("invalid retry config: %w", err)
-		}
-	}
-	if c.ChunkedPush != nil {
-		if err := c.ChunkedPush.Validate(); err != nil {
-			return fmt.Errorf("invalid chunkedPush config: %w", err)
 		}
 	}
 	for host, hc := range c.Hosts {
@@ -444,10 +384,9 @@ func (c *Config) ResolveHost(host string) HostConfig {
 	var timeout *TimeoutConfig
 	var tls *TLSConfig
 	var retry *RetryConfig
-	var chunked *ChunkedPushConfig
 	for _, key := range HostKeys(host) {
 		if hc := c.Hosts[key]; hc != nil {
-			timeout, tls, retry, chunked = &hc.TimeoutConfig, &hc.TLSConfig, hc.Retry, hc.ChunkedPush
+			timeout, tls, retry = &hc.TimeoutConfig, &hc.TLSConfig, hc.Retry
 			break
 		}
 	}
@@ -456,7 +395,6 @@ func (c *Config) ResolveHost(host string) HostConfig {
 		TimeoutConfig: MergeTimeoutConfig(&c.TimeoutConfig, timeout),
 		TLSConfig:     MergeTLSConfig(&c.TLSConfig, tls),
 		Retry:         MergeRetryConfig(c.Retry, retry),
-		ChunkedPush:   MergeChunkedPushConfig(c.ChunkedPush, chunked),
 	}
 }
 
@@ -528,7 +466,6 @@ func Merge(configs ...*Config) *Config {
 		merged.TimeoutConfig = MergeTimeoutConfig(&merged.TimeoutConfig, &c.TimeoutConfig)
 		merged.TLSConfig = MergeTLSConfig(&merged.TLSConfig, &c.TLSConfig)
 		merged.Retry = MergeRetryConfig(merged.Retry, c.Retry)
-		merged.ChunkedPush = MergeChunkedPushConfig(merged.ChunkedPush, c.ChunkedPush)
 
 		if len(c.Hosts) > 0 {
 			if merged.Hosts == nil {
