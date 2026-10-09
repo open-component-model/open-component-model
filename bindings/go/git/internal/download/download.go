@@ -22,8 +22,8 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/git/internal/endpoint"
 	accessv1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
-	credsv1 "ocm.software/open-component-model/bindings/go/git/spec/credentials/v1"
 	ocmhttp "ocm.software/open-component-model/bindings/go/http"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // Result is one downloaded snapshot of a Git repository, archived as tar.gz.
@@ -43,12 +43,12 @@ type Result struct {
 // outside strict enforcement, so it keeps working with GODEBUG=fips140=only.
 // FIPS mode itself stays on, so TLS and SSH still negotiate approved algorithms
 // only, and the archive OCM records is digested with SHA-256.
-func Download(ctx context.Context, access *accessv1.Git, creds *credsv1.GitCredentials, opts Options) (result *Result, err error) {
+func Download(ctx context.Context, access *accessv1.Git, creds runtime.Typed, opts Options) (result *Result, err error) {
 	fips140.WithoutEnforcement(func() { result, err = download(ctx, access, creds, opts) })
 	return result, err
 }
 
-func download(ctx context.Context, access *accessv1.Git, creds *credsv1.GitCredentials, opts Options) (_ *Result, err error) {
+func download(ctx context.Context, access *accessv1.Git, creds runtime.Typed, opts Options) (_ *Result, err error) {
 	if err := access.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid git access: %w", err)
 	}
@@ -67,9 +67,20 @@ func download(ctx context.Context, access *accessv1.Git, creds *credsv1.GitCrede
 		return nil, fmt.Errorf("cannot authenticate against git repository: %w", err)
 	}
 
+	if closer, ok := auth.(io.Closer); ok {
+		defer func() {
+			if closeErr := closer.Close(); closeErr != nil {
+				slog.WarnContext(ctx, "failed to close SSH agent connection", "err", closeErr)
+			}
+		}()
+	}
+
 	httpClient := opts.HTTPClient
 	if httpClient == nil {
 		httpClient = ocmhttp.New()
+	}
+	if _, authenticated := auth.(client.HTTPAuth); ep.Protocol == "https" && (authenticated || ep.User != "" || ep.Password != "") {
+		httpClient = authenticatedHTTPClient(httpClient)
 	}
 	clientOptions := []client.Option{client.WithHTTPClient(httpClient)}
 	if option, ok := authOption(auth); ok {

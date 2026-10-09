@@ -125,10 +125,10 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, res *descript
 }
 
 func (r *ResourceRepository) download(ctx context.Context, spec *accessv1.Git, expected *descriptor.Digest, creds runtime.Typed, tempDir string) (*download.Result, error) {
-	var typed *credsv1.GitCredentials
+	var typed runtime.Typed
 	if creds != nil {
 		var err error
-		if typed, err = credsv1.ConvertToGitCredentials(creds); err != nil {
+		if typed, err = credsv1.ConvertCredentials(creds); err != nil {
 			return nil, err
 		}
 	}

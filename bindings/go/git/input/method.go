@@ -64,9 +64,9 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 		return nil, err
 	}
 
-	var creds *credsv1.GitCredentials
+	var creds runtime.Typed
 	if credentials != nil {
-		creds, err = credsv1.ConvertToGitCredentials(credentials)
+		creds, err = credsv1.ConvertCredentials(credentials)
 		if err != nil {
 			return nil, err
 		}

@@ -12,6 +12,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -23,10 +24,13 @@ import (
 	"golang.org/x/crypto/ssh/agent"
 
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
+	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	gitinput "ocm.software/open-component-model/bindings/go/git/input"
 	gitrepository "ocm.software/open-component-model/bindings/go/git/repository"
 	accessv1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
 	credsv1 "ocm.software/open-component-model/bindings/go/git/spec/credentials/v1"
+	inputv1 "ocm.software/open-component-model/bindings/go/git/spec/input/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -42,17 +46,29 @@ func Test_Integration_GitHTTPSAuthentication(t *testing.T) {
 	authMethods := []struct {
 		name               string
 		authorization      string
-		credentials        *credsv1.GitCredentials
-		invalidCredentials *credsv1.GitCredentials
+		credentials        runtime.Typed
+		invalidCredentials runtime.Typed
 	}{
 		{
-			name:               "token",
+			name:               "explicit bearer",
+			authorization:      "Bearer fixture-token",
+			credentials:        &credsv1.GitBearerCredentials{Type: runtime.NewVersionedType(credsv1.GitBearerCredentialsType, credsv1.Version), Token: "fixture-token"},
+			invalidCredentials: &credsv1.GitBearerCredentials{Type: runtime.NewVersionedType(credsv1.GitBearerCredentialsType, credsv1.Version), Token: "wrong-secret"},
+		},
+		{
+			name:               "explicit HTTPS token as password",
+			authorization:      "Basic " + base64.StdEncoding.EncodeToString([]byte("fixture-user:fixture-token")),
+			credentials:        &credsv1.GitHTTPSCredentials{Type: runtime.NewVersionedType(credsv1.GitHTTPSCredentialsType, credsv1.Version), Username: "fixture-user", Password: "fixture-token"},
+			invalidCredentials: &credsv1.GitHTTPSCredentials{Type: runtime.NewVersionedType(credsv1.GitHTTPSCredentialsType, credsv1.Version), Username: "fixture-user", Password: "wrong-secret"},
+		},
+		{
+			name:               "legacy token",
 			authorization:      "Bearer fixture-token",
 			credentials:        &credsv1.GitCredentials{Type: credsType, Token: "fixture-token"},
 			invalidCredentials: &credsv1.GitCredentials{Type: credsType, Token: "wrong-secret"},
 		},
 		{
-			name:               "basic",
+			name:               "legacy basic",
 			authorization:      "Basic " + base64.StdEncoding.EncodeToString([]byte("fixture-user:fixture-password")),
 			credentials:        &credsv1.GitCredentials{Type: credsType, Username: "fixture-user", Password: "fixture-password"},
 			invalidCredentials: &credsv1.GitCredentials{Type: credsType, Username: "fixture-user", Password: "wrong-secret"},
@@ -94,6 +110,9 @@ func Test_Integration_GitHTTPSAuthentication(t *testing.T) {
 					pinned, err := repo.ProcessResourceDigest(t.Context(), res, method.credentials)
 					r.NoError(err)
 					r.Equal(digest.FromBytes(data).Encoded(), pinned.Digest.Value)
+					result, err := (&gitinput.InputMethod{TempFolder: t.TempDir()}).ProcessResource(t.Context(), &constructorruntime.Resource{Input: &inputv1.Git{Type: runtime.NewVersionedType("Git", "v1"), Repository: url, Ref: revision.ref, Commit: revision.commit}}, method.credentials)
+					r.NoError(err)
+					assertArchive(t, result.ProcessedBlobData, revision.content)
 				})
 			}
 
@@ -196,6 +215,9 @@ func Test_Integration_GitSSHAuthentication(t *testing.T) {
 		b, err := newRepo(t, hostKey).DownloadResource(t.Context(), resourceFor("HEAD", ""), gitCreds)
 		require.NoError(t, err)
 		assertArchive(t, b, "second\n")
+		result, err := (&gitinput.InputMethod{TempFolder: t.TempDir(), HostKeyCallback: ssh.FixedHostKey(hostKey)}).ProcessResource(t.Context(), &constructorruntime.Resource{Input: &inputv1.Git{Type: runtime.NewVersionedType("Git", "v1"), Repository: repository}}, gitCreds)
+		require.NoError(t, err)
+		assertArchive(t, result.ProcessedBlobData, "second\n")
 	}
 
 	t.Run("fetch for pinned commit", func(t *testing.T) {
@@ -240,10 +262,12 @@ func Test_Integration_GitSSHAuthentication(t *testing.T) {
 			keyPath := filepath.Join(t.TempDir(), "key")
 			require.NoError(t, os.WriteFile(keyPath, keyPEM, 0o600))
 			assertSSHAccess(t, &credsv1.GitCredentials{Type: runtime.NewVersionedType(credsv1.GitCredentialsType, credsv1.Version), PrivateKey: keyPath, Password: passphrase, Token: "ignored-by-key-precedence"})
+			assertSSHAccess(t, &credsv1.GitSSHCredentials{Type: runtime.NewVersionedType(credsv1.GitSSHCredentialsType, credsv1.Version), PrivateKey: keyPath, Passphrase: passphrase})
 		})
 
 		t.Run(fmt.Sprintf("inline/encrypted=%t", encrypted), func(t *testing.T) {
 			assertSSHAccess(t, &credsv1.GitCredentials{Type: runtime.NewVersionedType(credsv1.GitCredentialsType, credsv1.Version), PrivateKeyPEM: string(keyPEM), PrivateKey: "/ignored/by/inline/precedence", Password: passphrase})
+			assertSSHAccess(t, &credsv1.GitSSHCredentials{Type: runtime.NewVersionedType(credsv1.GitSSHCredentialsType, credsv1.Version), PrivateKeyPEM: string(keyPEM), Passphrase: passphrase})
 		})
 	}
 
@@ -262,6 +286,7 @@ func Test_Integration_GitSSHAuthentication(t *testing.T) {
 		listener, err := (&net.ListenConfig{}).Listen(t.Context(), "unix", filepath.Join(socketDir, "agent.sock"))
 		r.NoError(err)
 		t.Cleanup(func() { _ = listener.Close() })
+		closed := make(chan struct{}, 8)
 		go func() {
 			for {
 				conn, err := listener.Accept()
@@ -271,11 +296,26 @@ func Test_Integration_GitSSHAuthentication(t *testing.T) {
 				go func() {
 					defer func() { _ = conn.Close() }()
 					_ = agent.ServeAgent(keyring, conn)
+					closed <- struct{}{}
 				}()
 			}
 		}()
 
 		t.Setenv("SSH_AUTH_SOCK", listener.Addr().String())
 		assertSSHAccess(t, nil)
+		assertSSHAccess(t, &credsv1.GitSSHCredentials{Type: runtime.NewVersionedType(credsv1.GitSSHCredentialsType, credsv1.Version), Username: "git"})
+		res := resourceFor("HEAD", "")
+		res.Access.(*accessv1.Git).Repository = strings.Replace(repository, "git@", "url-user@", 1)
+		b, err := newRepo(t, hostKey).DownloadResource(t.Context(), res, &credsv1.GitSSHCredentials{Type: runtime.NewVersionedType(credsv1.GitSSHCredentialsType, credsv1.Version), Username: "git"})
+		r.NoError(err)
+		assertArchive(t, b, "second\n")
+		// Each access/input download must release its signing connection.
+		for range 5 {
+			select {
+			case <-closed:
+			case <-time.After(2 * time.Second):
+				t.Fatal("SSH agent connection remained open after successful Download")
+			}
+		}
 	})
 }
