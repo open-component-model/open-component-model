@@ -62,7 +62,9 @@ func TestProcessGit(t *testing.T) {
 			r.Equal(wantSpec.Data, get.Spec.Data)
 			addedResource := add.Spec.Data["resource"].(map[string]any)
 			r.Equal("${"+get.ID+".output.resource.name}", addedResource["name"])
-			r.Equal("my-source", addedResource["access"].(map[string]any)["referenceName"])
+			// referenceName is an OCI-only legacy field; a git resource must not carry it.
+			_, hasReferenceName := addedResource["access"].(map[string]any)["referenceName"]
+			r.False(hasReferenceName)
 		})
 	}
 }

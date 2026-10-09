@@ -39,7 +39,7 @@ func processGit(resource descriptorv2.Resource, access *gitv1.Git, id string, va
 		Spec: unstructured,
 	}
 
-	addResourceTransform, err := uploadAsLocalResource(toSpec, val.Descriptor.Component.Name, val.Descriptor.Component.Version, addResourceID, getResourceID, resource.Name, addLabel(&val.Descriptor.Component, resource.Name, "LocalBlob", toSpec))
+	addResourceTransform, err := uploadAsLocalResource(toSpec, val.Descriptor.Component.Name, val.Descriptor.Component.Version, addResourceID, getResourceID, "", addLabel(&val.Descriptor.Component, resource.Name, "LocalBlob", toSpec))
 	if err != nil {
 		return fmt.Errorf("failed to create local resource upload transformation: %w", err)
 	}
