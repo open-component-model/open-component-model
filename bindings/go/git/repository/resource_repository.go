@@ -150,6 +150,7 @@ func (r *ResourceRepository) GetResourceDigestProcessorCredentialConsumerIdentit
 }
 
 // ProcessResourceDigest pins the access and hashes the same snapshot in one download.
+// Pinning records the commit and the full name of the ref (see [download.WithRepository]).
 // The archive is only read here, so it is downloaded into a directory of its own
 // that this call removes again.
 func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, res *descriptor.Resource, creds runtime.Typed) (*descriptor.Resource, error) {
@@ -173,10 +174,12 @@ func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, res *des
 		return nil, err
 	}
 
-	// A set commit is authoritative, only a ref-only access gets pinned.
+	// A set commit is authoritative, only a ref-only access gets pinned. The ref is recorded by
+	// its full name, so a short name keeps saying whether it was a branch or a tag.
 	if spec.Commit == "" {
 		spec.Commit = downloaded.Commit
 	}
+	spec.Ref = downloaded.Ref
 	pinned := &runtime.Raw{}
 	if err := access.Scheme.Convert(spec, pinned); err != nil {
 		return nil, fmt.Errorf("cannot encode pinned git access: %w", err)

@@ -64,6 +64,41 @@ func TestResourceDigestPinning(t *testing.T) {
 	r.Len(files, 1)
 }
 
+func TestResourceDigestPinsFullRef(t *testing.T) {
+	fixture := newRepository(t)
+	dir := t.TempDir()
+	repo := repository.NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &dir})
+
+	for _, tc := range []struct {
+		name       string
+		ref        string
+		commit     plumbing.Hash
+		wantRef    string
+		wantCommit plumbing.Hash
+	}{
+		{name: "short branch", ref: "main", wantRef: "refs/heads/main", wantCommit: fixture.Second},
+		{name: "short tag", ref: "annotated", wantRef: "refs/tags/annotated", wantCommit: fixture.First},
+		{name: "short tag next to a pinned commit", ref: "annotated", commit: fixture.Second, wantRef: "refs/tags/annotated", wantCommit: fixture.Second},
+		{name: "HEAD is recorded as the branch it points to", ref: "HEAD", wantRef: "refs/heads/main", wantCommit: fixture.Second},
+		{name: "full ref", ref: "refs/tags/annotated", wantRef: "refs/tags/annotated", wantCommit: fixture.First},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			gitAccess := &v1.Git{Type: runtime.NewVersionedType(v1.Type, v1.Version), Repository: fixture.Path, Ref: tc.ref}
+			if !tc.commit.IsZero() {
+				gitAccess.Commit = tc.commit.String()
+			}
+			pinned, err := repo.ProcessResourceDigest(t.Context(), &descriptor.Resource{Access: gitAccess}, nil)
+			r.NoError(err)
+
+			var spec v1.Git
+			r.NoError(access.Scheme.Convert(pinned.Access, &spec))
+			r.Equal(tc.wantRef, spec.Ref)
+			r.Equal(tc.wantCommit.String(), spec.Commit)
+		})
+	}
+}
+
 func TestResourceDigestVerification(t *testing.T) {
 	r := require.New(t)
 	fixture := newRepository(t)

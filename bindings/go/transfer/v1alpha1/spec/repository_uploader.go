@@ -189,10 +189,8 @@ func (u *NexusUploaderConfig) Validate() error {
 }
 
 func validateRepositoryUploader(typ runtime.Type, name string, match string, rawURL, repository string) error {
-	if !typ.IsEmpty() {
-		if typ.Name != name || (typ.Version != "" && typ.Version != Version) {
-			return fmt.Errorf("invalid type %q (must be %q or %q)", typ, name, runtime.NewVersionedType(name, Version))
-		}
+	if err := validateUploaderType(typ, name); err != nil {
+		return err
 	}
 	if strings.TrimSpace(match) == "" {
 		return fmt.Errorf("match is required")

@@ -30,8 +30,9 @@ import (
 	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
 )
 
-// newGitRepository creates a local repository with two commits on main and returns its path
-// and the first commit. A local path is a valid Git/v1 repository, so no Git server is needed.
+// newGitRepository creates a local repository with two commits on main and the lightweight tag
+// v1.0.0 on the first, and returns its path and the first commit. A local path is a valid Git/v1
+// repository, so no Git server is needed.
 func newGitRepository(t *testing.T) (path string, first plumbing.Hash) {
 	t.Helper()
 	r := require.New(t)
@@ -62,6 +63,7 @@ func newGitRepository(t *testing.T) (path string, first plumbing.Hash) {
 			first = hash
 		}
 	}
+	r.NoError(repo.Storer.SetReference(plumbing.NewHashReference("refs/tags/v1.0.0", first)))
 	return path, first
 }
 
@@ -173,7 +175,8 @@ func Test_Integration_TransferGit_CTFToOCI(t *testing.T) {
 	var localBlob descriptorv2.LocalBlob
 	r.NoError(descriptorv2.Scheme.Convert(res.Access, &localBlob),
 		"transferred Git resource must be stored as a localBlob in the target")
-	r.Equal("application/x-tgz", localBlob.MediaType)
+	r.Equal(transferv1alpha1.GitLocalBlobMediaType, localBlob.MediaType)
+	r.Empty(localBlob.ReferenceName, "a by-value Git local blob must not carry a referenceName")
 
 	// If the pinned digest changes, a signature over the source stops verifying against the
 	// transferred component version.
@@ -191,4 +194,215 @@ func Test_Integration_TransferGit_CTFToOCI(t *testing.T) {
 	r.NoError(err)
 	r.Equal(pinnedDigest, digestOf(content).Encoded(),
 		"stored blob must be the exact archive the digest was taken over")
+}
+
+// Pushes a Git resource selected by the short tag name v1.0.0 with a Git uploader into an
+// existing repository, directly from the source CTF and air-gapped from a CTF holding it as a
+// localBlob, and reads it back from the target repository: digest processing records the full
+// ref, so the target gets a tag at the unchanged commit, and the published access downloads
+// to the pinned digest. A descriptor whose access still has the short name needs an explicit
+// ref.
+func Test_Integration_TransferGit_GitUploader(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
+
+	// 1. Start the target OCI registry and create the Git repository the resource is fetched
+	//    from and the existing (empty) repository it is pushed into.
+	registryAddr, user, password := startRegistry(t)
+	repoPath, first := newGitRepository(t)
+	targetGitPath := t.TempDir()
+	_, err := git.PlainInit(targetGitPath, true)
+	r.NoError(err)
+
+	// 2. Create a source CTF whose component has a Git resource pinned to the first commit,
+	//    with the digest the constructor would pin.
+	componentName := "ocm.software/git-uploader-integration-test"
+	componentVersion := "1.0.0"
+	sourceCTFPath := t.TempDir()
+	sourceScheme := runtime.NewScheme()
+	sourceScheme.MustRegisterScheme(oci.DefaultRepositoryScheme)
+	gitaccess.MustAddToScheme(sourceScheme)
+	ctfRepo := createCTFRepository(t, sourceCTFPath, oci.WithScheme(sourceScheme))
+
+	tempFolder := t.TempDir()
+	resourceRepo := gitrepository.NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &tempFolder})
+	digested, err := resourceRepo.ProcessResourceDigest(t.Context(), &descriptor.Resource{
+		ElementMeta: descriptor.ElementMeta{
+			ObjectMeta: descriptor.ObjectMeta{Name: "repo-source", Version: "1.0.0"},
+		},
+		Type:     "directoryTree",
+		Relation: descriptor.ExternalRelation,
+		Access: &gitv1.Git{
+			Type:       runtime.NewVersionedType(gitv1.Type, gitv1.Version),
+			Repository: repoPath,
+			Ref:        "v1.0.0",
+			Commit:     first.String(),
+		},
+	}, nil)
+	r.NoError(err)
+	r.NotNil(digested.Digest)
+	var pinnedAccess gitv1.Git
+	r.NoError(gitaccess.Scheme.Convert(digested.Access, &pinnedAccess))
+	r.Equal("refs/tags/v1.0.0", pinnedAccess.Ref, "digest processing must record the full ref")
+	r.NoError(ctfRepo.AddComponentVersion(t.Context(), &descriptor.Descriptor{
+		Meta: descriptor.Meta{Version: "v2"},
+		Component: descriptor.Component{
+			ComponentMeta: descriptor.ComponentMeta{
+				ObjectMeta: descriptor.ObjectMeta{Name: componentName, Version: componentVersion},
+			},
+			Provider:  descriptor.Provider{Name: "test-provider"},
+			Resources: []descriptor.Resource{*digested},
+		},
+	}))
+	sourceSpec := &ctfrepospec.Repository{
+		Type:     runtime.Type{Name: ctfrepospec.Type, Version: ctfrepospec.Version},
+		FilePath: sourceCTFPath,
+	}
+
+	credResolver := newCredResolver(t,
+		registryCreds{registryAddr + "/direct", user, password},
+		registryCreds{registryAddr + "/airgap", user, password},
+	)
+	targetSpec := func(subPath string) *ocirepospec.Repository {
+		return &ocirepospec.Repository{
+			Type:    runtime.Type{Name: ocirepospec.Type, Version: "v1"},
+			BaseUrl: fmt.Sprintf("http://%s/%s", registryAddr, subPath),
+		}
+	}
+
+	// assertPushed reads the transferred component version back from subPath of the target
+	// registry and the pushed commit back from the target Git repository.
+	assertPushed := func(t *testing.T, subPath, repository, ref string) {
+		t.Helper()
+		r := require.New(t)
+
+		urlRes, err := urlresolver.New(
+			urlresolver.WithBaseURL(registryAddr+"/"+subPath),
+			urlresolver.WithPlainHTTP(true),
+			urlresolver.WithBaseClient(createAuthClient(registryAddr, user, password)),
+		)
+		r.NoError(err)
+		targetRepo, err := oci.NewRepository(oci.WithResolver(urlRes), oci.WithTempDir(t.TempDir()))
+		r.NoError(err)
+		gotDesc, err := targetRepo.GetComponentVersion(t.Context(), componentName, componentVersion)
+		r.NoError(err)
+		r.Len(gotDesc.Component.Resources, 1)
+		res := gotDesc.Component.Resources[0]
+		var published gitv1.Git
+		r.NoError(gitaccess.Scheme.Convert(res.Access, &published), "the resource must be published with Git access")
+		r.Equal(repository, published.Repository)
+		r.Equal(ref, published.Ref)
+		r.Equal(first.String(), published.Commit, "the commit SHA must be unchanged")
+		r.NotNil(res.Digest)
+		r.Equal(digested.Digest.Value, res.Digest.Value, "the pinned digest must be preserved")
+
+		pushed, err := git.PlainOpen(repository)
+		r.NoError(err)
+		pushedRef, err := pushed.Reference(plumbing.ReferenceName(ref), false)
+		r.NoError(err)
+		r.Equal(first, pushedRef.Hash())
+		commit, err := pushed.CommitObject(first)
+		r.NoError(err)
+		r.Equal("first\n", commit.Message, "the original commit must be pushed, not a new one")
+
+		content, err := resourceRepo.DownloadResource(t.Context(), &res, nil)
+		r.NoError(err)
+		reader, err := content.ReadCloser()
+		r.NoError(err)
+		defer func() { r.NoError(reader.Close()) }()
+		archive, err := io.ReadAll(reader)
+		r.NoError(err)
+		r.Equal(digested.Digest.Value, digestOf(archive).Encoded(), "the target must download to the pinned digest")
+	}
+
+	t.Run("a Git access is pushed to its recorded full ref", func(t *testing.T) {
+		transferOnce(t, ctfRepo, sourceSpec, targetSpec("direct"),
+			&transferv1alpha1.GitUploaderConfig{Repository: targetGitPath}, resourceRepo, credResolver, componentName, componentVersion)
+		assertPushed(t, "direct", targetGitPath, "refs/tags/v1.0.0")
+	})
+
+	t.Run("a local blob carried through an air gap is pushed with explicit match, repository and ref", func(t *testing.T) {
+		r := require.New(t)
+
+		// Stage 1, connected side: copy the resource into a CTF as a localBlob, which records
+		// its origin.
+		airGapPath := t.TempDir()
+		airGapSpec := &ctfrepospec.Repository{
+			Type:       runtime.Type{Name: ctfrepospec.Type, Version: ctfrepospec.Version},
+			FilePath:   airGapPath,
+			AccessMode: ctfrepospec.AccessModeReadWrite + "|" + ctfrepospec.AccessModeCreate,
+		}
+		transferOnce(t, ctfRepo, sourceSpec, airGapSpec, &transferv1alpha1.LocalBlobUploaderConfig{}, resourceRepo, credResolver, componentName, componentVersion)
+		airGapRepo := createCTFRepository(t, airGapPath)
+		airGapDesc, err := airGapRepo.GetComponentVersion(t.Context(), componentName, componentVersion)
+		r.NoError(err)
+		var localBlob descriptorv2.LocalBlob
+		r.NoError(descriptorv2.Scheme.Convert(airGapDesc.Component.Resources[0].Access, &localBlob))
+		r.Equal(transferv1alpha1.GitLocalBlobMediaType, localBlob.MediaType)
+		r.Empty(localBlob.ReferenceName, "a by-value Git local blob must not carry a referenceName")
+
+		// Stage 2, air-gapped side: the local blob no longer carries its origin, so the
+		// uploader needs an explicit match, repository and ref to push it.
+		mirror := t.TempDir()
+		_, err = git.PlainInit(mirror, true)
+		r.NoError(err)
+		transferOnce(t, airGapRepo, airGapSpec, targetSpec("airgap"),
+			&transferv1alpha1.GitUploaderConfig{
+				Match:      `resource.access.isType("LocalBlob") && resource.access.mediaType == "` + transferv1alpha1.GitLocalBlobMediaType + `"`,
+				Repository: mirror,
+				Ref:        "refs/tags/v1.0.0",
+			},
+			resourceRepo, credResolver, componentName, componentVersion)
+		assertPushed(t, "airgap", mirror, "refs/tags/v1.0.0")
+	})
+
+	t.Run("a short ref from an old descriptor needs an explicit ref", func(t *testing.T) {
+		r := require.New(t)
+
+		old := digested.DeepCopy()
+		old.Access = &gitv1.Git{
+			Type:       runtime.NewVersionedType(gitv1.Type, gitv1.Version),
+			Repository: repoPath,
+			Ref:        "v1.0.0",
+			Commit:     first.String(),
+		}
+		oldCTFPath := t.TempDir()
+		oldRepo := createCTFRepository(t, oldCTFPath, oci.WithScheme(sourceScheme))
+		r.NoError(oldRepo.AddComponentVersion(t.Context(), &descriptor.Descriptor{
+			Meta: descriptor.Meta{Version: "v2"},
+			Component: descriptor.Component{
+				ComponentMeta: descriptor.ComponentMeta{
+					ObjectMeta: descriptor.ObjectMeta{Name: componentName, Version: componentVersion},
+				},
+				Provider:  descriptor.Provider{Name: "test-provider"},
+				Resources: []descriptor.Resource{*old},
+			},
+		}))
+		unpushed := t.TempDir()
+		_, err := git.PlainInit(unpushed, true)
+		r.NoError(err)
+
+		_, err = transfer.BuildGraphDefinition(t.Context(),
+			&transferv1alpha1.Config{},
+			[]transferv1alpha1.UploaderConfig{&transferv1alpha1.GitUploaderConfig{Repository: unpushed}},
+			transfer.Mapping{
+				Components: []transfer.ComponentID{{Component: componentName, Version: componentVersion}},
+				Target:     targetSpec("old"),
+				Resolver: transfer.NewRepositoryResolver(oldRepo, &ctfrepospec.Repository{
+					Type:     runtime.Type{Name: ctfrepospec.Type, Version: ctfrepospec.Version},
+					FilePath: oldCTFPath,
+				}),
+			},
+		)
+		r.ErrorContains(err, `ref "v1.0.0" is a short name, which does not say whether it is a branch or a tag; set ref in the git uploader config`)
+
+		target, err := git.PlainOpen(unpushed)
+		r.NoError(err)
+		refs, err := target.References()
+		r.NoError(err)
+		r.NoError(refs.ForEach(func(ref *plumbing.Reference) error {
+			r.Equal(plumbing.HEAD, ref.Name(), "nothing may be pushed to the target")
+			return nil
+		}))
+	})
 }

@@ -52,7 +52,7 @@ func (t *GetGitResource) Transform(ctx context.Context, step runtime.Typed) (_ r
 	}()
 
 	targetResource := descriptor.ConvertFromV2Resource(transformation.Spec.Resource)
-	creds, err := t.resolveCredentials(ctx, targetResource)
+	creds, err := resolveCredentials(ctx, t.ResourceRepository, t.CredentialProvider, targetResource)
 	if err != nil {
 		return nil, err
 	}
@@ -71,18 +71,20 @@ func (t *GetGitResource) Transform(ctx context.Context, step runtime.Typed) (_ r
 	return &transformation, nil
 }
 
-func (t *GetGitResource) resolveCredentials(ctx context.Context, targetResource *descriptor.Resource) (runtime.Typed, error) {
-	if t.CredentialProvider == nil {
+// resolveCredentials resolves the credentials for the consumer identity of res. Missing
+// credentials are not an error: public repositories need none.
+func resolveCredentials(ctx context.Context, repo repository.ResourceRepository, provider credentials.Resolver, res *descriptor.Resource) (runtime.Typed, error) {
+	if provider == nil {
 		return nil, nil
 	}
-	consumerID, err := t.ResourceRepository.GetResourceCredentialConsumerIdentity(ctx, targetResource)
+	consumerID, err := repo.GetResourceCredentialConsumerIdentity(ctx, res)
 	if err != nil {
 		return nil, fmt.Errorf("failed getting resource consumer identity for credential resolution: %w", err)
 	}
 	if consumerID == nil {
 		return nil, nil
 	}
-	typed, err := t.CredentialProvider.Resolve(ctx, consumerID)
+	typed, err := provider.Resolve(ctx, consumerID)
 	if err != nil {
 		if errors.Is(err, credentials.ErrNotFound) {
 			return nil, nil

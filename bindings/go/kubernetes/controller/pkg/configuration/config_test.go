@@ -752,6 +752,7 @@ func TestFilterAllowedConfigTypes(t *testing.T) {
 			`{"type":"http.uploader.transfer.config.ocm.software","match":"true","targetURL":"http://internal.example"}`,
 			`{"type":"artifactory.uploader.transfer.config.ocm.software/v1alpha1","match":"true","url":"http://internal.example","repository":"r"}`,
 			`{"type":"nexus.uploader.transfer.config.ocm.software","match":"true","url":"http://internal.example","repository":"r"}`,
+			`{"type":"git.uploader.transfer.config.ocm.software/v1alpha1","repository":"https://internal.example/repo.git"}`,
 			`{"type":"localblob.uploader.transfer.config.ocm.software/v1alpha1"}`,
 		)
 		result, err := filterAllowedConfigTypes(t.Context(), cfg)
