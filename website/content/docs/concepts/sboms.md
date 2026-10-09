@@ -33,11 +33,11 @@ all.
 
 OCM does not force you to normalize this up front. `ocm download resource --sbom` looks for a linked SBOM resource
 first and falls back to reading what is attached to the artifact. To understand how that works, please read our SBOM
-tutorial at [Working with SBOMs]({{< relref "docs/tutorials/working-with-sboms.md" >}}).
+tutorial at [Working with SBOMs]({{< relref "docs/guides/pack/add-sboms.md" >}}).
 
 ## What's Next?
 
-- [Tutorial: Working with SBOMs]({{< relref "docs/tutorials/working-with-sboms.md" >}}) — understand how SBOMs are 
+- [Tutorial: Working with SBOMs]({{< relref "docs/guides/pack/add-sboms.md" >}}) — understand how SBOMs are 
   attached to component versions or discovered.
 
 ## Related Documentation

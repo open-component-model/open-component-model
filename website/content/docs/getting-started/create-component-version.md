@@ -2,7 +2,7 @@
 title: "Create Component Versions"
 description: "Learn how to create and store component versions using the OCM CLI."
 icon: "📦"
-weight: 22
+weight: 30
 toc: true
 ---
 
@@ -479,7 +479,7 @@ ocm get cv ghcr.io/open-component-model//ocm.software/cli:0.12.0 --recursive -o 
 
 ## Next Steps
 
-- [How-to: Download Resources from OCM Components]({{< relref "../how-to/download-resources-from-component-versions.md" >}})  - How to extract resources from component versions
+- [How-to: Download Resources from OCM Components]({{< relref "docs/guides/transfer/download-resources.md" >}})  - How to extract resources from component versions
 
 ## Related Documentation
 

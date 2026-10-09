@@ -2,7 +2,7 @@
 title: "Deploy Helm Charts"
 description: "Deploy a Helm chart from an OCM component version with OCM Controllers, kro, and a GitOps deployer (Flux or Argo CD)."
 icon: "🚀"
-weight: 26
+weight: 50
 toc: true
 ---
 
@@ -28,7 +28,7 @@ You define a ResourceGraphDefinition that tells kro how to orchestrate the OCM a
 ## Prerequisites
 
 - [Controller environment]({{< relref "setup-controller-environment.md" >}}) set up (OCM Controllers, kro, and a deployer (Flux or Argo CD) in a Kubernetes cluster)
-- [Custom RBAC]({{< relref "custom-rbac.md" >}}) configured to allow the controller to manage `ResourceGraphDefinitions`
+- [Custom RBAC]({{< relref "docs/guides/deploy/configure-custom-rbac.md" >}}) configured to allow the controller to manage `ResourceGraphDefinitions`
 - [OCM CLI]({{< relref "ocm-cli-installation.md" >}}) installed
 - Access to an OCI registry (e.g., [ghcr.io](https://docs.github.com/en/packages/learn-github-packages/introduction-to-github-packages))
 - `envsubst` installed (pre-installed on most Linux/macOS systems; part of `gettext`)
@@ -81,7 +81,7 @@ EOF
 This component references the `podinfo` Helm chart, a simple web application that displays pod information.
 
 {{< callout title="Note" icon="outline/info-circle" >}}
-A self-contained component would also list the OCI image that the Helm chart pulls at runtime as a separate resource — that way the component carries everything needed to deploy it, and the image can be transferred and signed alongside the chart. We omit that here to keep the focus on referencing a Helm chart. The [Multi-Component Product tutorial]({{< relref "/docs/tutorials/advanced-component-constructor.md" >}}) shows how to combine charts and images in one component.
+A self-contained component would also list the OCI image that the Helm chart pulls at runtime as a separate resource — that way the component carries everything needed to deploy it, and the image can be transferred and signed alongside the chart. We omit that here to keep the focus on referencing a Helm chart. The [Multi-Component Product tutorial]({{< relref "/docs/guides/pack/compose-multi-component-product.md" >}}) shows how to combine charts and images in one component.
 {{< /callout >}}
 {{< /step >}}
 
@@ -117,7 +117,7 @@ ocm.software/ocm-k8s-toolkit/simple │ 1.0.0   │ ocm.software
 Use `ocm transfer cv` and specify the correct reference (`<path-to-your-ctf>//<component>:<version>`) and target repository:
 
 {{< callout title="Note" icon="outline/info-circle" >}}
-If your registry requires authentication, configure [Credentials for OCM CLI]({{< relref "/docs/how-to/configure-multiple-credentials.md" >}}) first.
+If your registry requires authentication, configure [Credentials for OCM CLI]({{< relref "/docs/guides/transfer/configure-registry-credentials.md" >}}) first.
 {{< /callout >}}
 
 ```shell
@@ -171,7 +171,7 @@ Keep this secret in mind — you will reference it later when you define the `Re
                 name: ghcr-secret
   ```
 
-For more details, see [Credentials for OCM Controllers]({{< relref "/docs/how-to/configure-credentials-ocm-controllers.md" >}}).
+For more details, see [Credentials for OCM Controllers]({{< relref "/docs/guides/deploy/configure-controller-credentials.md" >}}).
 {{< /details >}}
 
 {{< /step >}}
@@ -447,58 +447,10 @@ Values are injected via `helm.valuesObject` (a structured YAML object), which av
 
 {{< step >}}
 
-### Grant kro access to the instances
-
-kro needs a `ClusterRole` for the `Simple` instances that your ResourceGraphDefinition defines. The roles for OCM resources and for your deployer come from the [setup guide]({{< relref "setup-controller-environment.md" >}}). See [Access Control](https://kro.run/docs/advanced/access-control) in the kro documentation for details.
-
-Create `kro-rbac.yaml`:
-
-```shell
-cat > kro-rbac.yaml << 'EOF'
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: kro:controller:simples
-  labels:
-    # kro picks up every ClusterRole with this label, see https://kro.run/docs/advanced/access-control
-    rbac.kro.run/aggregate-to-controller: "true"
-rules:
-  - apiGroups:
-      - kro.run
-    resources:
-      - simples
-      - simples/status
-    verbs:
-      - get
-      - list
-      - patch
-      - update
-      - watch
-EOF
-```
-
-Apply it:
-
-```shell
-kubectl apply -f kro-rbac.yaml
-```
-
-<details>
-<summary>You should see this output</summary>
-
-```text
-clusterrole.rbac.authorization.k8s.io/kro:controller:simples created
-```
-
-</details>
-{{< /step >}}
-
-{{< step >}}
-
 ### Apply the ResourceGraphDefinition
 
 {{< callout context="caution" title="RBAC required before you apply" icon="outline/alert-triangle" >}}
-Apply `kro-rbac.yaml` from [Grant kro access to the instances]({{< relref "#grant-kro-access-to-the-instances" >}}) first. Without it, kro cannot reconcile `Simple` instances.
+Please make sure that you updated your RBAC permissions before applying this command. Follow our [Configure Custom RBAC for Deployers]({{< relref "docs/guides/deploy/configure-custom-rbac.md" >}}) guide to know how to do that.
 {{< /callout >}}
 
 ```shell
@@ -632,7 +584,7 @@ failed to list versions: response status code 401: unauthorized
 Your registry package is private. Either:
 
 - Make the package public in your registry settings, or
-- [Configure credentials]({{< relref "/docs/how-to/configure-credentials-ocm-controllers.md" >}}) as
+- [Configure credentials]({{< relref "/docs/guides/deploy/configure-controller-credentials.md" >}}) as
   described in the collapsible section after "Transfer to your registry"
 
 ### Resource Not Found
@@ -644,26 +596,7 @@ If the component isn't found, verify:
 
 ### RBAC Permission Errors
 
-If the controller logs show permission errors like `forbidden` or `cannot create resource`, the controller lacks RBAC permissions to manage `ResourceGraphDefinitions`. Follow the [Custom RBAC guide]({{< relref "custom-rbac.md" >}}) to grant the necessary permissions.
-
-### ResourceGraphDefinition Stays Inactive
-
-If `kubectl get rgd` shows the state `Inactive`, check the reason:
-
-```shell
-kubectl get rgd simple -o jsonpath='{.status.conditions[?(@.type=="Ready")].message}'
-```
-
-A message like `cache sync timeout for kro.run/v1alpha1, Resource=simples` often means that kro lacks access to the `Simple` instances.
-Check that you applied `kro-rbac.yaml`, as described in [Grant kro access to the instances](#grant-kro-access-to-the-instances).
-
-If the instance does not become `ACTIVE`, kro may lack access to a resource in the graph. The kro logs name the resource:
-
-```shell
-kubectl logs -n kro-system deployment/kro | grep forbidden
-```
-
-Check that you created the roles for OCM resources and for your deployer in the [setup guide]({{< relref "setup-controller-environment.md" >}}). See [Access Control](https://kro.run/docs/advanced/access-control) in the kro documentation for how kro gets its permissions.
+If the controller logs show permission errors like `forbidden` or `cannot create resource`, the controller lacks RBAC permissions to manage `ResourceGraphDefinitions`. Follow the [Custom RBAC guide]({{< relref "docs/guides/deploy/configure-custom-rbac.md" >}}) to grant the necessary permissions.
 
 ## Cleanup
 
@@ -672,7 +605,6 @@ Remove the deployed resources:
 ```shell
 kubectl delete -f instance.yaml
 kubectl delete -f rgd.yaml
-kubectl delete -f kro-rbac.yaml
 ```
 
 Remove the temporary files:
@@ -683,8 +615,8 @@ rm -rf /tmp/helm-deploy
 
 ## Next Steps
 
-- [Tutorial: Create a Multi-Component Product]({{< relref "docs/tutorials/advanced-component-constructor.md" >}}) - Learn how to structure complex applications with multiple components and resources
-- [Tutorial: Deploy a Helm Chart (with Bootstrap)]({{< relref "docs/tutorials/deploy-helm-chart-bootstrap.md" >}}) - Use the OCM Controllers to deploy a Helm chart without manual bootstrapping, using GitOps
+- [Tutorial: Create a Multi-Component Product]({{< relref "docs/guides/pack/compose-multi-component-product.md" >}}) - Learn how to structure complex applications with multiple components and resources
+- [Tutorial: Deploy a Helm Chart (with Bootstrap)]({{< relref "docs/guides/deploy/deploy-helm-chart-with-kro-and-gitops.md" >}}) - Use the OCM Controllers to deploy a Helm chart without manual bootstrapping, using GitOps
 
 ## Related Documentation
 

@@ -14,7 +14,7 @@ external resources, and provides no signature-verification guarantees for the
 descriptors it filters.
 
 For a worked example, see the
-[Discover Component Graphs]({{< relref "docs/how-to/discover-component-graphs.md" >}})
+[Discover Component Graphs]({{< relref "docs/guides/deploy/discover-component-graphs.md" >}})
 how-to guide.
 
 ## What Discovery does
@@ -255,7 +255,7 @@ finalizer of its own and sets no owner reference on the `Component`.
 
 ## Related Documentation
 
-- [How-To: Discover Component Graphs]({{< relref "docs/how-to/discover-component-graphs.md" >}}) -
+- [How-To: Discover Component Graphs]({{< relref "docs/guides/deploy/discover-component-graphs.md" >}}) -
   Create a `Discovery` and publish a filtered view of a component graph
 - [Concept: Kubernetes Controllers]({{< relref "docs/concepts/ocm-controllers.md#discovery" >}}) -
   How Discovery fits alongside the reconciliation chain
