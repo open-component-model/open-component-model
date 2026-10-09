@@ -67,7 +67,7 @@ the chart's OCI reference. Nothing is copied at build time.
 {{< steps >}}
 {{< step >}}
 
-### Create the component constructor
+### Create the component constructor (OCI access)
 
 ```yaml
 # yaml-language-server: $schema=https://ocm.software/{{< site-version >}}/schemas/bindings/go/constructor/schema-2020-12.json
@@ -96,7 +96,7 @@ helm pull oci://ghcr.io/stefanprodan/charts/podinfo --version 6.9.1
 {{< /step >}}
 {{< step >}}
 
-### Build the component version
+### Build the component version (OCI access)
 
 ```bash
 ocm add cv --repository ctf::./transport-archive \
@@ -131,7 +131,7 @@ build time, and the resource is marked `external`.
 {{< steps >}}
 {{< step >}}
 
-### Create the component constructor
+### Create the component constructor (Helm access)
 
 ```yaml
 # yaml-language-server: $schema=https://ocm.software/{{< site-version >}}/schemas/bindings/go/constructor/schema-2020-12.json
@@ -159,7 +159,7 @@ instead.
 {{< /step >}}
 {{< step >}}
 
-### Build the component version
+### Build the component version (Helm access)
 
 ```bash
 ocm add cv --repository ctf::./transport-archive \
@@ -183,7 +183,7 @@ chart to fetch and embed).
 {{< steps >}}
 {{< step >}}
 
-### Create the component constructor
+### Create the component constructor (embedded input)
 
 ```yaml
 # yaml-language-server: $schema=https://ocm.software/{{< site-version >}}/schemas/bindings/go/constructor/schema-2020-12.json
@@ -226,7 +226,7 @@ Supply exactly one of `path` or `helmRepository` per resource. For a local chart
 {{< /step >}}
 {{< step >}}
 
-### Build the component version
+### Build the component version (embedded input)
 
 ```bash
 ocm add cv --repository ctf::./transport-archive \

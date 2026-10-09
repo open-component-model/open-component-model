@@ -256,7 +256,7 @@ Signature Algorithm: RSASSA-PSS
 
 {{< step >}}
 
-### Verify right after signing
+### Verify right after signing (simple chain)
 
 ```bash
 ocm verify cv \
@@ -472,7 +472,7 @@ Signature Algorithm: RSASSA-PSS
 
 {{< step >}}
 
-### Verify right after signing
+### Verify right after signing (intermediate chain)
 
 ```bash
 ocm verify cv \
