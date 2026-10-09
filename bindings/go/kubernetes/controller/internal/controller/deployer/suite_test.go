@@ -165,17 +165,20 @@ var _ = BeforeSuite(func() {
 		GinkgoLogr.Info("DownloadCache eviction", "key", k, "value", fmt.Sprintf("%d objects", len(v)))
 	})
 
-	Expect((&Reconciler{
-		BaseReconciler: &ocm.BaseReconciler{
-			Client:           k8sManager.GetClient(),
-			Scheme:           testEnv.Scheme,
-			EventRecorder:    recorder,
-			NewPluginManager: test.StaticPluginManager(pm),
-		},
-		DownloadCache:        downloadCache,
-		Resolver:             resolver,
-		MaxResourceSizeBytes: 2 * 1024 * 1024,
-	}).SetupWithManager(ctx, k8sManager)).To(Succeed())
+	for _, namespaced := range []bool{false, true} {
+		Expect((&Reconciler{
+			BaseReconciler: &ocm.BaseReconciler{
+				Client:           k8sManager.GetClient(),
+				Scheme:           testEnv.Scheme,
+				EventRecorder:    recorder,
+				NewPluginManager: test.StaticPluginManager(pm),
+			},
+			Namespaced:           namespaced,
+			DownloadCache:        downloadCache,
+			Resolver:             resolver,
+			MaxResourceSizeBytes: 2 * 1024 * 1024,
+		}).SetupWithManager(ctx, k8sManager)).To(Succeed())
+	}
 
 	mgrDone := make(chan struct{})
 	go func() {

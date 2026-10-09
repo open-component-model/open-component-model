@@ -55,7 +55,7 @@ export OCM_REPO=ghcr.io/$GITHUB_USERNAME/ocm-tutorial
 
 ### The Bootstrap Pattern
 
-In the [basic Helm deployment guide]({{< relref "deploy-helm-chart.md" >}}), you manually created a `ResourceGraphDefinition` and applied it to the cluster. The **bootstrap pattern** improves on this by packaging the RGD inside the OCM component itself. The Deployer controller extracts and applies it automatically.
+In the [basic Helm deployment guide]({{< relref "deploy-helm-chart.md" >}}), you manually created a `ResourceGraphDefinition` and applied it to the cluster. The **bootstrap pattern** improves on this by packaging the RGD inside the OCM component itself. The NamespacedDeployer extracts and applies it automatically.
 
 This means:
 
@@ -83,7 +83,7 @@ refer back to it as you work through the steps.
 <summary>View Resource Overview Diagram</summary>
 
 (Continues from [Concept: Kubernetes Deployer]({{< relref "docs/concepts/kubernetes-deployer.md" >}}), which
-shows the `Repository` → `Component` → `Resource` → `Deployer` chain that gets the RGD here.)
+shows the `Repository` → `Component` → `Resource` → `NamespacedDeployer` chain that gets the RGD here.)
 
 ```mermaid
 flowchart TB
@@ -96,7 +96,7 @@ flowchart TB
                 k8sResourceHelm[Resource: HelmChart]
                 k8sResourceImage[Resource: Image]
             end
-            subgraph deployer[Deployer]
+            subgraph deployer[NamespacedDeployer]
                 source[Source]
                 helmRelease[Release]
             end
@@ -422,7 +422,7 @@ kubectl create secret docker-registry ghcr-secret \
 Then update the resources to use credentials:
 
 1. **OCM Controller resources**: Add `ocmConfig` to the Repository in `bootstrap.yaml`. The credentials propagate
-   automatically to Component, Resource, and Deployer objects that reference this
+   automatically to Component, Resource, and NamespacedDeployer objects that reference this
    Repository:
 
    ```yaml
@@ -513,7 +513,7 @@ Now create the bootstrap resources that will fetch and apply the RGD from the co
 
 ### Create bootstrap resources
 
-The bootstrap resources form a chain: Repository → Component → Resource → Deployer. The Deployer extracts the RGD and applies it to the cluster.
+The bootstrap resources form a chain: Repository → Component → Resource → NamespacedDeployer. The NamespacedDeployer extracts the RGD and applies it to the cluster with the permissions of the `bootstrap-deployer` service account. RGDs are cluster-scoped, so that service account needs a `ClusterRole` for them.
 
 Create `bootstrap.yaml` with the following content:
 
@@ -566,22 +566,46 @@ spec:
   # ocmConfig is required, if the OCM repository requires credentials to access it.
   # ocmConfig:
 ---
-apiVersion: delivery.ocm.software/v1alpha1
-kind: Deployer
+apiVersion: v1
+kind: ServiceAccount
 metadata:
   name: bootstrap-deployer
+  namespace: default
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: bootstrap-deployer
+rules:
+  - apiGroups: ["kro.run"]
+    resources: ["resourcegraphdefinitions"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: bootstrap-deployer
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: bootstrap-deployer
+subjects:
+  - kind: ServiceAccount
+    name: bootstrap-deployer
+    namespace: default
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: NamespacedDeployer
+metadata:
+  name: bootstrap-deployer
+  namespace: default
 spec:
   resourceRef:
     # Reference to the Kubernetes resource OCM resource that contains the ResourceGraphDefinition.
     name: bootstrap-rgd
-    # As kro processes resources in cluster-scope*, the deployer must also be cluster-scoped. Accordingly, we have to
-    # set the namespace of the resource here (usually, when the namespace is not specified, it is derived from the
-    # referencing Kubernetes resource).
-    # Check out the kro documentation for more details:
-    # https://github.com/kro-run/kro/blob/8f53372bfde232db7ddd6809eebb6a1d69b34f2e/website/docs/docs/concepts/20-access-control.md
-    namespace: default
+  # The deployer applies the RGD with the permissions of this service account.
+  serviceAccountName: bootstrap-deployer
   # ocmConfig is required, if the OCM repository requires credentials to access it.
-  # (You also need to specify the namespace of the reference as the 'deployer' is cluster-scoped.)
   # ocmConfig:
 EOF
 ```
@@ -593,8 +617,8 @@ EOF
 
 ### Apply the bootstrap resources
 
-{{< callout context="caution" title="RBAC required before you apply" icon="outline/alert-triangle" >}}
-Please make sure that you updated your RBAC permissions before applying this command. Follow our [Configure Custom RBAC for Deployers]({{< relref "custom-rbac.md" >}}) guide to know how to do that.
+{{< callout context="caution" title="Controller watch permissions" icon="outline/alert-triangle" >}}
+The controller watches deployed objects for drift with its own identity, so it needs `get`, `list` and `watch` on `ResourceGraphDefinitions`. Follow [Configure Custom RBAC for Deployers]({{< relref "custom-rbac.md" >}}) to grant them.
 {{< /callout >}}
 
 ```bash

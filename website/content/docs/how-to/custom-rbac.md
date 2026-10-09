@@ -6,7 +6,7 @@ toc: true
 ---
 
 The OCM Kubernetes Controller Toolkit ships with the minimum RBAC permissions needed to manage its own custom resources
-(`Repository`, `Component`, `Resource`, `Deployer`). It does **not** include permissions for third-party resources
+(`Repository`, `Component`, `Resource`, `Deployer`, `NamespacedDeployer`). It does **not** include permissions for third-party resources
 that your deployers may create or manage.
 
 If your `Deployer` resources produce custom resources (e.g. kro `ResourceGraphDefinitions`), you must grant the
@@ -31,9 +31,65 @@ This applies to both custom resources and standard Kubernetes resources. Common 
 - `Deployments` (`apps`) and `Services` (`core`)
 - Any other resource type your deployers create
 
+## NamespacedDeployer: grant the service account
+
+A `NamespacedDeployer` that sets `spec.serviceAccountName` does not apply with the controller's permissions. It
+impersonates that service account, so write access goes to it through a `Role` and `RoleBinding` in the deployer's
+namespace. Without `spec.serviceAccountName` it applies with the controller's service account, which you grant as
+described in the next section.
+
+For a deployer with a service account:
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: my-deployer
+  namespace: my-team
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: my-deployer
+  namespace: my-team
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: my-deployer
+subjects:
+  - kind: ServiceAccount
+    name: my-deployer
+    namespace: my-team
+```
+
+Bind the service account by name. The controller impersonates only the user name, so bindings to groups such as
+`system:serviceaccounts:my-team` do not apply.
+
+For cluster-scoped kinds such as kro `ResourceGraphDefinitions`, or for objects in other namespaces, bind the service
+account to a `ClusterRole` with a `ClusterRoleBinding` instead. Grant only the kinds the deployment needs.
+
+Keep these permissions until the `NamespacedDeployer` is deleted. It prunes with them, and without them it orphans
+cluster-scoped and cross-namespace objects.
+
+Check the service account's access:
+
+```bash
+kubectl auth can-i create deployments.apps -n my-team \
+  --as=system:serviceaccount:my-team:my-deployer
+```
+
+The controller itself still watches deployed objects for drift with its own identity. Grant it `get`, `list` and
+`watch` on the deployed kinds with the `ClusterRole` described below, without the write verbs.
+
 ## Create a ClusterRole and ClusterRoleBinding
 
 Create a `ClusterRole` with the permissions your deployers require, then bind it to the controller's service account.
+A cluster-scoped `Deployer` and a `NamespacedDeployer` without `spec.serviceAccountName` apply with these permissions. A
+`NamespacedDeployer` with a service account only needs the read verbs here.
 
 {{<callout context="note" title="The service account name depends on the Helm release name" icon="outline/info-circle">}}
 The binding below uses `ocm-k8s-toolkit-controller-manager` as the service account name only when the chart's release name contains `ocm-k8s-toolkit`. Other release names (and GitOps tools such as Flux) produce names like `<release-name>-ocm-k8s-toolkit-controller-manager`. Pin it with `fullnameOverride: ocm-k8s-toolkit`, or look it up: `kubectl get sa -n ocm-k8s-toolkit-system -l app.kubernetes.io/name=ocm-k8s-toolkit`.
@@ -54,6 +110,7 @@ rules:
     verbs:
       - create
       - delete
+      - get
       - list
       - patch
       - update

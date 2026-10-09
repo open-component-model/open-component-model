@@ -66,25 +66,59 @@ func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, con
 
 	// This index is required to get all deployers that reference a resource. This is required to make sure that when
 	// deleting the resource, no deployer exists anymore that references that resource.
-	if err := mgr.GetFieldIndexer().IndexField(
-		ctx,
-		&v1alpha1.Deployer{},
-		deployerIndex,
-		func(obj client.Object) []string {
-			deployer, ok := obj.(*v1alpha1.Deployer)
-			if !ok {
-				return nil
-			}
+	for _, deployerType := range []client.Object{&v1alpha1.Deployer{}, &v1alpha1.NamespacedDeployer{}} {
+		if err := mgr.GetFieldIndexer().IndexField(
+			ctx,
+			deployerType,
+			deployerIndex,
+			func(obj client.Object) []string {
+				deployer, ok := obj.(v1alpha1.DeployerObject)
+				if !ok {
+					return nil
+				}
 
-			return []string{fmt.Sprintf(
-				"%s/%s",
-				deployer.Spec.ResourceRef.Namespace,
-				deployer.Spec.ResourceRef.Name,
-			)}
-		},
-	); err != nil {
-		return fmt.Errorf("failed setting index fields: %w", err)
+				return []string{fmt.Sprintf(
+					"%s/%s",
+					deployer.GetResourceRef().Namespace,
+					deployer.GetResourceRef().Name,
+				)}
+			},
+		); err != nil {
+			return fmt.Errorf("failed setting index fields: %w", err)
+		}
 	}
+
+	// Ensure to reconcile the resource when a deployer changes that references this resource. We want to
+	// reconcile because the resource-finalizer makes sure that the resource is only deleted when
+	// it is not referenced by any deployer anymore. So, when the resource is already marked for deletion, we
+	// want to get notified about deployer changes (e.g. deletion) to remove the resource-finalizer
+	// respectively.
+	enqueueDeletingResource := handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
+		deployer, ok := obj.(v1alpha1.DeployerObject)
+		if !ok {
+			return []reconcile.Request{}
+		}
+
+		resource := &v1alpha1.Resource{}
+		if err := r.Get(ctx, client.ObjectKey{
+			Namespace: deployer.GetResourceRef().Namespace,
+			Name:      deployer.GetResourceRef().Name,
+		}, resource); err != nil {
+			return []reconcile.Request{}
+		}
+
+		// Only reconcile if the resource is marked for deletion
+		if resource.GetDeletionTimestamp().IsZero() {
+			return []reconcile.Request{}
+		}
+
+		return []reconcile.Request{
+			{NamespacedName: k8stypes.NamespacedName{
+				Namespace: resource.GetNamespace(),
+				Name:      resource.GetName(),
+			}},
+		}
+	})
 
 	// event source from resolver's worker pool to get notified when resolutions complete
 	eventSource := workerpool.NewEventSource(r.Resolver.WorkerPool())
@@ -120,39 +154,8 @@ func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, con
 
 				return requests
 			}), builder.WithPredicates(ocm.ComponentInfoChangedPredicate{})).
-		Watches(
-			// Ensure to reconcile the resource when a deployer changes that references this resource. We want to
-			// reconcile because the resource-finalizer makes sure that the resource is only deleted when
-			// it is not referenced by any deployer anymore. So, when the resource is already marked for deletion, we
-			// want to get notified about deployer changes (e.g. deletion) to remove the resource-finalizer
-			// respectively.
-			&v1alpha1.Deployer{},
-			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
-				deployer, ok := obj.(*v1alpha1.Deployer)
-				if !ok {
-					return []reconcile.Request{}
-				}
-
-				resource := &v1alpha1.Resource{}
-				if err := r.Get(ctx, client.ObjectKey{
-					Namespace: deployer.Spec.ResourceRef.Namespace,
-					Name:      deployer.Spec.ResourceRef.Name,
-				}, resource); err != nil {
-					return []reconcile.Request{}
-				}
-
-				// Only reconcile if the resource is marked for deletion
-				if resource.GetDeletionTimestamp().IsZero() {
-					return []reconcile.Request{}
-				}
-
-				return []reconcile.Request{
-					{NamespacedName: k8stypes.NamespacedName{
-						Namespace: resource.GetNamespace(),
-						Name:      resource.GetName(),
-					}},
-				}
-			})).
+		Watches(&v1alpha1.Deployer{}, enqueueDeletingResource).
+		Watches(&v1alpha1.NamespacedDeployer{}, enqueueDeletingResource).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: concurrency,
 			RateLimiter: workqueue.NewTypedMaxOfRateLimiter(
@@ -191,25 +194,15 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 
 	if !resource.GetDeletionTimestamp().IsZero() {
 		logger.Info("resource is marked for deletion, attempting cleanup")
-		// The resource should only be deleted if no deployer exists that references that resource.
-		deployerList := &v1alpha1.DeployerList{}
-		if err := r.List(ctx, deployerList, &client.ListOptions{
-			FieldSelector: fields.OneTermEqualSelector(
-				deployerIndex,
-				client.ObjectKeyFromObject(resource).String(),
-			),
-		}); err != nil {
+		// The resource should only be deleted if no deployer of either kind exists that references that resource.
+		names, err := r.referencingDeployers(ctx, resource)
+		if err != nil {
 			status.MarkNotReady(r.EventRecorder, resource, v1alpha1.DeletionFailedReason, err.Error())
 
-			return ctrl.Result{}, fmt.Errorf("failed to list deployers: %w", err)
+			return ctrl.Result{}, err
 		}
 
-		if len(deployerList.Items) > 0 {
-			var names []string
-			for _, deployer := range deployerList.Items {
-				names = append(names, deployer.Name)
-			}
-
+		if len(names) > 0 {
 			msg := fmt.Sprintf(
 				"resource cannot be removed as deployers are still referencing it: %s",
 				strings.Join(names, ","),
@@ -535,4 +528,34 @@ func convertLabels(in []descriptor.Label) ([]v1alpha1.Label, error) {
 	}
 
 	return out, nil
+}
+
+// referencingDeployers returns the names of all Deployers and NamespacedDeployers referencing the resource.
+func (r *Reconciler) referencingDeployers(ctx context.Context, resource *v1alpha1.Resource) ([]string, error) {
+	opts := &client.ListOptions{
+		FieldSelector: fields.OneTermEqualSelector(
+			deployerIndex,
+			client.ObjectKeyFromObject(resource).String(),
+		),
+	}
+
+	deployers := &v1alpha1.DeployerList{}
+	if err := r.List(ctx, deployers, opts); err != nil {
+		return nil, fmt.Errorf("failed to list deployers: %w", err)
+	}
+
+	namespacedDeployers := &v1alpha1.NamespacedDeployerList{}
+	if err := r.List(ctx, namespacedDeployers, opts); err != nil {
+		return nil, fmt.Errorf("failed to list namespaced deployers: %w", err)
+	}
+
+	names := make([]string, 0, len(deployers.Items)+len(namespacedDeployers.Items))
+	for _, deployer := range deployers.Items {
+		names = append(names, deployer.Name)
+	}
+	for _, deployer := range namespacedDeployers.Items {
+		names = append(names, client.ObjectKeyFromObject(&deployer).String())
+	}
+
+	return names, nil
 }

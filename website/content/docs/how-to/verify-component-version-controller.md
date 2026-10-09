@@ -165,7 +165,7 @@ kubectl apply -f component.yaml
 
 {{< callout context="note" title="Note" icon="outline/info-circle" >}}
 The Secret is looked up in the `Component`'s own namespace unless the reference sets a
-`namespace` field. The configuration also propagates: a `Resource` or `Deployer` that references
+`namespace` field. The configuration also propagates: a `Resource` or `NamespacedDeployer` that references
 this `Component` inherits it and verifies the same signature.
 {{< /callout >}}
 

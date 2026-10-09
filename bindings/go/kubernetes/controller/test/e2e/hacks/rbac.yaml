@@ -37,6 +37,7 @@ rules:
   - apiGroups:
       - ""
     resources:
+      - configmaps
       - services
     verbs:
       - create

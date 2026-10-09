@@ -24,7 +24,7 @@ const (
 )
 
 // These are common labels.
-func setOwnershipLabels(obj client.Object, resource *deliveryv1alpha1.Resource, deployer *deliveryv1alpha1.Deployer) {
+func setOwnershipLabels(obj client.Object, resource *deliveryv1alpha1.Resource, deployer client.Object, managedBy string) {
 	limit := func(v string) string {
 		if len(v) > validation.LabelValueMaxLength {
 			return v[:validation.LabelValueMaxLength]
@@ -53,6 +53,6 @@ func setOwnershipLabels(obj client.Object, resource *deliveryv1alpha1.Resource, 
 	lbls[instanceLabel] = limit(string(resource.GetUID()))
 	// the name of the higher level component the object is part of is always the deployer.
 	lbls[partOfLabel] = limit(deployer.GetName())
-	// the object is always managed by the deployer controller.
-	lbls[managedByLabel] = deployerManager
+	// the object is managed by the controller of the deployer's kind.
+	lbls[managedByLabel] = managedBy
 }

@@ -33,11 +33,40 @@ spec:
       resource:
         name: kro-rgd
 ---
+# The NamespacedDeployer applies the cluster-scoped ResourceGraphDefinition with the permissions of this
+# service account, so it needs a ClusterRole for ResourceGraphDefinitions.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: helm-configuration-localization-deployer
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: helm-configuration-localization-deployer
+rules:
+  - apiGroups: ["kro.run"]
+    resources: ["resourcegraphdefinitions"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: helm-configuration-localization-deployer
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: helm-configuration-localization-deployer
+subjects:
+  - kind: ServiceAccount
+    name: helm-configuration-localization-deployer
+    namespace: default
+---
 apiVersion: delivery.ocm.software/v1alpha1
-kind: Deployer
+kind: NamespacedDeployer
 metadata:
   name: helm-configuration-localization-deployer
 spec:
   resourceRef:
     name: helm-configuration-localization-resource-rgd
-    namespace: default
+  serviceAccountName: helm-configuration-localization-deployer
