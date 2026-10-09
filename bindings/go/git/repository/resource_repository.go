@@ -145,10 +145,6 @@ func (r *ResourceRepository) download(ctx context.Context, spec *accessv1.Git, e
 	return result, nil
 }
 
-func (r *ResourceRepository) UploadResource(context.Context, *descriptor.Resource, blob.ReadOnlyBlob, runtime.Typed) (*descriptor.Resource, error) {
-	return nil, fmt.Errorf("git repositories do not support upload operations")
-}
-
 func (r *ResourceRepository) GetResourceDigestProcessorCredentialConsumerIdentity(ctx context.Context, res *descriptor.Resource) (runtime.Identity, error) {
 	return r.GetResourceCredentialConsumerIdentity(ctx, res)
 }
