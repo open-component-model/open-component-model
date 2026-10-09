@@ -99,7 +99,7 @@ require (
 	github.com/cloudflare/cfssl v1.6.5 // indirect
 	github.com/cloudflare/circl v1.6.5 // indirect
 	github.com/common-nighthawk/go-figure v0.0.0-20210622060536-734e95fb86be // indirect
-	github.com/containerd/containerd/v2 v2.4.0 // indirect
+	github.com/containerd/containerd/v2 v2.4.1 // indirect
 	github.com/containerd/errdefs v1.0.0 // indirect
 	github.com/containerd/errdefs/pkg v0.3.0 // indirect
 	github.com/containerd/log v0.2.0 // indirect
@@ -134,7 +134,7 @@ require (
 	github.com/fluxcd/pkg/ssa v0.78.0 // indirect
 	github.com/fsnotify/fsnotify v1.10.1 // indirect
 	github.com/fvbommel/sortorder v1.2.0 // indirect
-	github.com/fxamacker/cbor/v2 v2.9.3 // indirect
+	github.com/fxamacker/cbor/v2 v2.9.4 // indirect
 	github.com/gertd/go-pluralize v0.2.1 // indirect
 	github.com/ghodss/yaml v1.0.0 // indirect
 	github.com/go-chi/chi/v5 v5.3.2 // indirect
