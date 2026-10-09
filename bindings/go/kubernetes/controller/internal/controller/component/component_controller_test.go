@@ -79,7 +79,7 @@ var _ = Describe("Component Controller", func() {
 			components := &v1alpha1.ComponentList{}
 
 			Expect(k8sClient.List(ctx, components, client.InNamespace(namespace.GetName()))).To(Succeed())
-			Expect(components.Items).To(HaveLen(0))
+			Expect(components.Items).To(BeEmpty())
 		})
 
 		It("reconciles a component", func(ctx SpecContext) {
@@ -1177,7 +1177,7 @@ var _ = Describe("Component Controller", func() {
 			Eventually(func(g Gomega, ctx SpecContext) {
 				components := &v1alpha1.ComponentList{}
 				g.Expect(k8sClient.List(ctx, components, client.InNamespace(namespace.GetName()))).To(Succeed())
-				g.Expect(components.Items).To(HaveLen(0))
+				g.Expect(components.Items).To(BeEmpty())
 			}, "15s").WithContext(ctx).Should(Succeed())
 		})
 
