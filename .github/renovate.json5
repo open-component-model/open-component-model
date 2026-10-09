@@ -126,6 +126,22 @@
       ],
     },
     {
+      // Keep the helm CLI pin (azure/setup-helm `version:` in the workflows,
+      // tracked as github-releases helm/helm) and the helm.sh/helm/v4 Go module
+      // moving together so CI's helm binary never drifts from the library.
+      // separateMinorPatch off so both land in one PR per bump.
+      groupName: 'Helm',
+      groupSlug: 'helm',
+      matchPackageNames: [
+        'helm.sh/helm/v4',
+        'helm/helm',
+      ],
+      separateMinorPatch: false,
+      schedule: [
+        '* * * * 0' // At every minute on Sunday it is allowed to create branches
+      ],
+    },
+    {
       groupName: 'Golang X Repositories',
       groupSlug: 'golang-x-repos',
       matchPackageNames: [
@@ -219,22 +235,6 @@
       enabled: false,
     },
     {
-      // Batch non-major controller bumps. The chart subtree is excluded so the
-      // dedicated 'Kubernetes Controller chart' group above is not overwritten
-      // by this later rule (Renovate merges matching rules in order; last write
-      // wins on conflicting fields like groupName).
-      matchFileNames: [
-        'bindings/go/kubernetes/controller/**',
-        '!bindings/go/kubernetes/controller/chart/**',
-      ],
-      matchUpdateTypes: ['minor', 'patch'],
-      groupName: 'Kubernetes Controller dependencies (non-major)',
-      groupSlug: 'kubernetes-controller-deps',
-      schedule: [
-        '* * * * 0' // At every minute on Sunday it is allowed to create branches
-      ],
-    },
-    {
       // Batch all bumps (incl. majors) for the Hugo CLI-docs generator module.
       // separateMinorPatch overridden so minor+patch share one branch; majors
       // still get their own branches via separateMultipleMajor (global).
@@ -292,6 +292,18 @@
     },
   },
   customManagers: [
+    {
+      // Track the azure/setup-helm `version:` input as the helm/helm release,
+      // so the Helm group above moves it in lockstep with helm.sh/helm/v4.
+      customType: 'regex',
+      managerFilePatterns: [
+        '/^\\.github/workflows/[^/]+\\.ya?ml$/',
+      ],
+      matchStrings: [
+        '# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s+version: (?<currentValue>\\S+)',
+      ],
+      versioningTemplate: 'semver',
+    },
     {
       customType: 'regex',
       managerFilePatterns: [
