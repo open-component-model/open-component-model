@@ -23,12 +23,10 @@ const gitArchiveMediaType = "application/x-tgz"
 // processGitUploader emits the transformations that push resource, selected by u, into a
 // Git repository: the archive holding its history is read (GetGitResource for a Git access
 // pinned to a commit, the source's GetLocalResource for a local blob holding such an archive)
-// and pushed (AddGitResource). For a Git access the repository and ref default to its origin
-// (see [transferv1alpha1.DefaultGitRepository], [transferv1alpha1.DefaultGitRef]); a local
-// blob no longer carries its origin, so repository and ref must be set explicitly. A resource
-// the uploader cannot push is an error: the uploader's match selected it, so the config must
-// be adjusted. It returns the CEL spec-field expressions of the file buffers produced, for
-// cleanup.
+// and pushed (AddGitResource). The target repository and ref come from the uploader config,
+// which must set both explicitly. A resource the uploader cannot push is an error: the
+// uploader's match selected it, so the config must be adjusted. It returns the CEL spec-field
+// expressions of the file buffers produced, for cleanup.
 func processGitUploader(ctx context.Context, resource descriptorv2.Resource, access runtime.Typed, u *transferv1alpha1.GitUploaderConfig, aliases map[string]string, env *uploaderEnv, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, resourceTransformIDs map[int]string, i int) ([]string, error) {
 	resourceID := identityToTransformationID(resource.ToIdentity())
 	getResourceID := fmt.Sprintf("%sGet%s", id, resourceID)
@@ -58,19 +56,11 @@ func processGitUploader(ctx context.Context, resource descriptorv2.Resource, acc
 		return nil, fmt.Errorf("git uploader cannot upload access type %s (adjust match)", resource.Access.Type)
 	}
 
-	repository := u.Repository
-	if repository == "" {
-		repository = transferv1alpha1.DefaultGitRepository(u.BaseURL)
-	}
-	ref := u.Ref
-	if ref == "" {
-		ref = transferv1alpha1.DefaultGitRef
-	}
-	repositoryTemplate, repositoryValue, err := uploaderTemplate(ctx, "repository", repository, aliases, env)
+	repositoryTemplate, repositoryValue, err := uploaderTemplate(ctx, "repository", u.Repository, aliases, env)
 	if err != nil {
 		return nil, err
 	}
-	refTemplate, refValue, err := uploaderTemplate(ctx, "ref", ref, aliases, env)
+	refTemplate, refValue, err := uploaderTemplate(ctx, "ref", u.Ref, aliases, env)
 	if err != nil {
 		return nil, err
 	}

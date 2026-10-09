@@ -7,7 +7,6 @@ import (
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
-	gitv1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
 	gitv1alpha1 "ocm.software/open-component-model/bindings/go/git/transformation/spec/v1alpha1"
 	ociv1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -24,15 +23,6 @@ func TestBuildGraphDefinition_GitUploader(t *testing.T) {
 	withoutOrigin := localBlobResource("my-source", "1.0.0")
 	withoutOrigin.Access.(*descriptorv2.LocalBlob).MediaType = gitArchiveMediaType
 
-	commitOnly := gitResource(commit)
-	commitOnly.Access.(*gitv1.Git).Ref = ""
-
-	shortRef := gitResource(commit)
-	shortRef.Access.(*gitv1.Git).Ref = "main"
-
-	headRef := gitResource(commit)
-	headRef.Access.(*gitv1.Git).Ref = "HEAD"
-
 	getAdd := func(get runtime.Type) []runtime.Type {
 		return []runtime.Type{get, gitv1alpha1.AddGitResourceV1alpha1, ociv1alpha1.OCIAddComponentVersionV1alpha1, FileCleanupVersionedType}
 	}
@@ -48,23 +38,12 @@ func TestBuildGraphDefinition_GitUploader(t *testing.T) {
 		wantErr    string
 	}{
 		{
-			name:      "Git access is pushed to the source ref at its commit",
+			name:      "Git access is pushed to the configured repository and ref",
 			resource:  gitResource(commit),
-			uploader:  &transferv1alpha1.GitUploaderConfig{Repository: "https://git.target.example/mirror/repo.git"},
+			uploader:  &transferv1alpha1.GitUploaderConfig{Repository: "https://git.target.example/mirror/repo.git", Ref: "refs/heads/main"},
 			wantTypes: getAdd(gitv1alpha1.GetGitResourceV1alpha1),
 			wantAccess: map[string]string{
 				"repository": "https://git.target.example/mirror/repo.git",
-				"ref":        "refs/heads/main",
-				"commit":     commit,
-			},
-		},
-		{
-			name:      "Git access is pushed below baseUrl under its repository path",
-			resource:  gitResource(commit),
-			uploader:  &transferv1alpha1.GitUploaderConfig{BaseURL: "https://git.target.example/mirror/"},
-			wantTypes: getAdd(gitv1alpha1.GetGitResourceV1alpha1),
-			wantAccess: map[string]string{
-				"repository": "https://git.target.example/mirror/org/repo.git",
 				"ref":        "refs/heads/main",
 				"commit":     commit,
 			},
@@ -112,27 +91,10 @@ func TestBuildGraphDefinition_GitUploader(t *testing.T) {
 			},
 		},
 		{
-			name:     "a short source ref from an old descriptor needs an explicit ref",
-			resource: shortRef,
-			uploader: &transferv1alpha1.GitUploaderConfig{Repository: "https://git.target.example/repo.git"},
-			wantErr:  `ref "main" is a short name, which does not say whether it is a branch or a tag; set ref in the git uploader config`,
-		},
-		{
-			name:      "an explicit ref replaces a short source ref",
-			resource:  shortRef,
-			uploader:  &transferv1alpha1.GitUploaderConfig{Repository: "https://git.target.example/repo.git", Ref: "refs/tags/main"},
-			wantTypes: getAdd(gitv1alpha1.GetGitResourceV1alpha1),
-			wantAccess: map[string]string{
-				"repository": "https://git.target.example/repo.git",
-				"ref":        "refs/tags/main",
-				"commit":     commit,
-			},
-		},
-		{
-			name:     "the default match pushes regardless of a CTF target",
-			target:   testCTFRepo("/tmp/target"),
-			resource: gitResource(commit),
-			uploader: &transferv1alpha1.GitUploaderConfig{BaseURL: "https://git.target.example"},
+			name:      "the default match pushes regardless of a CTF target",
+			target:    testCTFRepo("/tmp/target"),
+			resource:  gitResource(commit),
+			uploader:  &transferv1alpha1.GitUploaderConfig{Repository: "https://git.target.example/org/repo.git", Ref: "refs/heads/main"},
 			wantTypes: []runtime.Type{
 				gitv1alpha1.GetGitResourceV1alpha1, gitv1alpha1.AddGitResourceV1alpha1,
 				ociv1alpha1.CTFAddComponentVersionV1alpha1, FileCleanupVersionedType,
@@ -146,49 +108,43 @@ func TestBuildGraphDefinition_GitUploader(t *testing.T) {
 		{
 			name:      "the default match does not select other access types",
 			resource:  wgetResource("blob", "1.0.0", "https://source.example/blob.tar"),
-			uploader:  &transferv1alpha1.GitUploaderConfig{Repository: "https://git.target.example/repo.git"},
+			uploader:  &transferv1alpha1.GitUploaderConfig{Repository: "https://git.target.example/repo.git", Ref: "refs/heads/main"},
 			wantTypes: []runtime.Type{ociv1alpha1.OCIAddComponentVersionV1alpha1},
 		},
 		{
 			name:     "a Git access without a pinned commit fails the build",
 			resource: gitResource(""),
-			uploader: &transferv1alpha1.GitUploaderConfig{Repository: "https://git.target.example/repo.git"},
+			uploader: &transferv1alpha1.GitUploaderConfig{Repository: "https://git.target.example/repo.git", Ref: "refs/heads/main"},
 			wantErr:  "no pinned commit",
 		},
 		{
-			name:     "HEAD is not a branch or tag",
-			resource: headRef,
-			uploader: &transferv1alpha1.GitUploaderConfig{Repository: "https://git.target.example/repo.git"},
-			wantErr:  `ref "HEAD" is not a full branch or tag ref`,
+			name:     "a configured short ref fails the build",
+			resource: gitResource(commit),
+			uploader: &transferv1alpha1.GitUploaderConfig{Repository: "https://git.target.example/repo.git", Ref: "main"},
+			wantErr:  `ref "main" is a short name, which does not say whether it is a branch or a tag; set ref in the git uploader config`,
 		},
 		{
-			name:     "a commit-only access needs ref",
-			resource: commitOnly,
+			name:     "a Git access without a configured ref fails the build",
+			resource: gitResource(commit),
 			uploader: &transferv1alpha1.GitUploaderConfig{Repository: "https://git.target.example/repo.git"},
 			wantErr:  `ref "" is not a full branch or tag ref`,
 		},
 		{
-			name:     "a local blob with a Git archive media type needs ref",
+			name:     "a Git archive local blob needs repository and ref",
 			resource: withGitArchive,
 			uploader: &transferv1alpha1.GitUploaderConfig{Match: `resource.access.isType("LocalBlob")`, Repository: "https://git.target.example/repo.git"},
 			wantErr:  "set repository and ref in the git uploader config",
 		},
 		{
-			name:     "a local blob needs repository instead of baseUrl",
-			resource: withoutOrigin,
-			uploader: &transferv1alpha1.GitUploaderConfig{Match: `resource.access.isType("LocalBlob")`, BaseURL: "https://git.target.example", Ref: "refs/heads/main"},
-			wantErr:  "set repository and ref in the git uploader config",
-		},
-		{
 			name:      "the default match does not select a Git archive local blob",
 			resource:  withGitArchive,
-			uploader:  &transferv1alpha1.GitUploaderConfig{BaseURL: "https://git.target.example"},
+			uploader:  &transferv1alpha1.GitUploaderConfig{Repository: "https://git.target.example/repo.git", Ref: "refs/heads/main"},
 			wantTypes: []runtime.Type{ociv1alpha1.OCIGetLocalResourceV1alpha1, ociv1alpha1.OCIAddLocalResourceV1alpha1, ociv1alpha1.OCIAddComponentVersionV1alpha1, FileCleanupVersionedType},
 		},
 		{
 			name:      "the default match does not select a local blob without origin",
 			resource:  withoutOrigin,
-			uploader:  &transferv1alpha1.GitUploaderConfig{BaseURL: "https://git.target.example"},
+			uploader:  &transferv1alpha1.GitUploaderConfig{Repository: "https://git.target.example/repo.git", Ref: "refs/heads/main"},
 			wantTypes: []runtime.Type{ociv1alpha1.OCIGetLocalResourceV1alpha1, ociv1alpha1.OCIAddLocalResourceV1alpha1, ociv1alpha1.OCIAddComponentVersionV1alpha1, FileCleanupVersionedType},
 		},
 		{
@@ -200,19 +156,19 @@ func TestBuildGraphDefinition_GitUploader(t *testing.T) {
 		{
 			name:     "a selected access type the Git uploader cannot upload fails the build",
 			resource: wgetResource("blob", "1.0.0", "https://source.example/blob.tar"),
-			uploader: &transferv1alpha1.GitUploaderConfig{Match: `resource.access.isType("Wget")`, Repository: "https://git.target.example/repo.git"},
+			uploader: &transferv1alpha1.GitUploaderConfig{Match: `resource.access.isType("Wget")`, Repository: "https://git.target.example/repo.git", Ref: "refs/heads/main"},
 			wantErr:  "git uploader cannot upload access type",
 		},
 		{
 			name:     "a repository template that does not evaluate fails the build",
 			resource: gitResource(commit),
-			uploader: &transferv1alpha1.GitUploaderConfig{Repository: `${target.filePath}`},
+			uploader: &transferv1alpha1.GitUploaderConfig{Repository: `${target.filePath}`, Ref: "refs/heads/main"},
 			wantErr:  "repository does not evaluate",
 		},
 		{
 			name:     "an invalid repository fails the build",
 			resource: gitResource(commit),
-			uploader: &transferv1alpha1.GitUploaderConfig{Repository: "https://"},
+			uploader: &transferv1alpha1.GitUploaderConfig{Repository: "https://", Ref: "refs/heads/main"},
 			wantErr:  "invalid git upload target",
 		},
 	}

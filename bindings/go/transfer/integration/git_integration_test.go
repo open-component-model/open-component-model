@@ -243,7 +243,7 @@ func Test_Integration_TransferGit_GitUploader(t *testing.T) {
 	r.NotNil(digested.Digest)
 	var pinnedAccess gitv1.Git
 	r.NoError(gitaccess.Scheme.Convert(digested.Access, &pinnedAccess))
-	r.Equal("refs/tags/v1.0.0", pinnedAccess.Ref, "digest processing must record the full ref")
+	r.Equal("v1.0.0", pinnedAccess.Ref, "digest processing leaves the ref as authored, it does not expand a short name")
 	r.NoError(ctfRepo.AddComponentVersion(t.Context(), &descriptor.Descriptor{
 		Meta: descriptor.Meta{Version: "v2"},
 		Component: descriptor.Component{
@@ -315,9 +315,9 @@ func Test_Integration_TransferGit_GitUploader(t *testing.T) {
 		r.Equal(digested.Digest.Value, digestOf(archive).Encoded(), "the target must download to the pinned digest")
 	}
 
-	t.Run("a Git access is pushed to its recorded full ref", func(t *testing.T) {
+	t.Run("a Git access is pushed to the configured ref", func(t *testing.T) {
 		transferOnce(t, ctfRepo, sourceSpec, targetSpec("direct"),
-			&transferv1alpha1.GitUploaderConfig{Repository: targetGitPath}, resourceRepo, credResolver, componentName, componentVersion)
+			&transferv1alpha1.GitUploaderConfig{Repository: targetGitPath, Ref: "refs/tags/v1.0.0"}, resourceRepo, credResolver, componentName, componentVersion)
 		assertPushed(t, "direct", targetGitPath, "refs/tags/v1.0.0")
 	})
 
@@ -356,7 +356,7 @@ func Test_Integration_TransferGit_GitUploader(t *testing.T) {
 		assertPushed(t, "airgap", mirror, "refs/tags/v1.0.0")
 	})
 
-	t.Run("a short ref from an old descriptor needs an explicit ref", func(t *testing.T) {
+	t.Run("the git uploader requires an explicit ref", func(t *testing.T) {
 		r := require.New(t)
 
 		old := digested.DeepCopy()
@@ -394,7 +394,7 @@ func Test_Integration_TransferGit_GitUploader(t *testing.T) {
 				}),
 			},
 		)
-		r.ErrorContains(err, `ref "v1.0.0" is a short name, which does not say whether it is a branch or a tag; set ref in the git uploader config`)
+		r.ErrorContains(err, "ref is required")
 
 		target, err := git.PlainOpen(unpushed)
 		r.NoError(err)

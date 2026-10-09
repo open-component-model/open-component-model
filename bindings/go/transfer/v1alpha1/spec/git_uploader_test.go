@@ -26,34 +26,38 @@ func TestLookupUploaderConfigs_Git(t *testing.T) {
 			want: &spec.GitUploaderConfig{Repository: "https://git.example.com/mirror/repo.git", Ref: "refs/heads/main"},
 		},
 		{
-			name: "unversioned type with templated repository and match",
+			name: "unversioned type with templated repository, ref and match",
 			entry: `type: git.uploader.transfer.config.ocm.software
     match: resource.name == "sources"
-    repository: '${"https://git.example.com" + url(resource.access.repository).path}'`,
-			want: &spec.GitUploaderConfig{Match: `resource.name == "sources"`, Repository: `${"https://git.example.com" + url(resource.access.repository).path}`},
+    repository: '${"https://git.example.com" + url(resource.access.repository).path}'
+    ref: refs/heads/main`,
+			want: &spec.GitUploaderConfig{Match: `resource.name == "sources"`, Repository: `${"https://git.example.com" + url(resource.access.repository).path}`, Ref: "refs/heads/main"},
 		},
 		{
-			name: "baseUrl instead of repository",
+			name: "missing repository",
 			entry: `type: git.uploader.transfer.config.ocm.software/v1alpha1
-    baseUrl: https://git.example.com`,
-			want: &spec.GitUploaderConfig{BaseURL: "https://git.example.com"},
+    ref: refs/heads/main`,
+			wantErr: "repository is required",
 		},
 		{
-			name:    "neither repository nor baseUrl",
-			entry:   `type: git.uploader.transfer.config.ocm.software/v1alpha1`,
-			wantErr: "exactly one of repository and baseUrl is required",
+			name: "missing ref",
+			entry: `type: git.uploader.transfer.config.ocm.software/v1alpha1
+    repository: https://git.example.com/repo.git`,
+			wantErr: "ref is required",
 		},
 		{
-			name: "both repository and baseUrl",
+			name: "baseUrl is no longer a field",
 			entry: `type: git.uploader.transfer.config.ocm.software/v1alpha1
     repository: https://git.example.com/repo.git
+    ref: refs/heads/main
     baseUrl: https://git.example.com`,
-			wantErr: "exactly one of repository and baseUrl is required",
+			wantErr: `unknown field "baseUrl"`,
 		},
 		{
 			name: "unknown field",
 			entry: `type: git.uploader.transfer.config.ocm.software/v1alpha1
     repository: https://git.example.com/repo.git
+    ref: refs/heads/main
     depth: 1`,
 			wantErr: `unknown field "depth"`,
 		},
@@ -93,7 +97,7 @@ func TestGitUploaderConfig_Validate(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := require.New(t)
-			err := (&spec.GitUploaderConfig{Type: tt.typ, Repository: "https://git.example.com/repo.git"}).Validate()
+			err := (&spec.GitUploaderConfig{Type: tt.typ, Repository: "https://git.example.com/repo.git", Ref: "refs/heads/main"}).Validate()
 			if tt.wantErr != "" {
 				r.ErrorContains(err, tt.wantErr)
 				return

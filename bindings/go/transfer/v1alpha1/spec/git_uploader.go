@@ -2,7 +2,6 @@ package spec
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
 
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -26,19 +25,6 @@ const GitLocalBlobMediaType = "application/vnd.ocm.software.git.archive.v1+tar+g
 // Writing it explicitly into a config is equivalent to omitting match.
 const DefaultGitUploaderMatch = `resource.access.isType("Git")`
 
-// DefaultGitRef is the ref a [GitUploaderConfig] pushes to when Ref is empty: the ref of a
-// Git access. It needs a Git access; a local blob needs an explicit ref. Writing it
-// explicitly into a config is equivalent to omitting ref.
-const DefaultGitRef = "${resource.access.toGit().ref}"
-
-// DefaultGitRepository returns the repository a [GitUploaderConfig] pushes to when
-// Repository is empty: the repository path of a Git access below baseURL. It needs a Git
-// access; a local blob needs an explicit repository. Writing it explicitly into a config is
-// equivalent to omitting repository.
-func DefaultGitRepository(baseURL string) string {
-	return "${" + strconv.Quote(strings.TrimSuffix(baseURL, "/")+"/") + " + resource.access.toGit().repository}"
-}
-
 func init() {
 	Scheme.MustRegisterWithAlias(&GitUploaderConfig{},
 		runtime.NewVersionedType(GitUploaderConfigType, Version),
@@ -58,20 +44,19 @@ func init() {
 // published with a Git/v1 access on the repository, the full ref and the commit, which
 // downloads to the same digest.
 //
-// Without match it uses [DefaultGitUploaderMatch] (Git accesses), without ref
-// [DefaultGitRef], and without repository [DefaultGitRepository] below BaseURL. A Git
-// access must be pinned to a commit:
+// Without match it uses [DefaultGitUploaderMatch] (Git accesses). Repository and ref are
+// required and must be set explicitly: repository is the target Git repository URL, ref the
+// full branch or tag ref the commit is pushed to. A Git access must be pinned to a commit:
 //
 //	type: generic.config.ocm.software/v1
 //	configurations:
-//	  # push every Git resource below the same path on git.example.com, keeping its ref
 //	  - type: git.uploader.transfer.config.ocm.software/v1alpha1
-//	    baseUrl: https://git.example.com
+//	    repository: https://git.example.com/org/repo.git
+//	    ref: refs/heads/main
 //
 // A Git resource copied by value (e.g. across an air gap) becomes a local blob that no
 // longer carries its origin. The default match does not select it; push it with an explicit
-// match (on [GitLocalBlobMediaType]), repository and ref, because BaseURL and the ref
-// default need a Git access.
+// match (on [GitLocalBlobMediaType]), repository and ref.
 //
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
@@ -89,22 +74,13 @@ type GitUploaderConfig struct {
 
 	// Repository is the URL of the existing Git repository to push into, in any form a
 	// Git/v1 access accepts: a CEL expression wrapped in ${...} (seeing `resource`,
-	// `component` and `target`; resource.access.toGit() returns a Git access's repository
-	// path and ref) or a plain literal. Exactly one of Repository and BaseURL is required.
-	Repository string `json:"repository,omitempty"`
-
-	// BaseURL is the URL below which the repository is addressed by the repository path of
-	// a Git access's origin, e.g. https://git.example.com turns https://github.com/org/repo.git
-	// into https://git.example.com/org/repo.git. It needs a Git access; a local blob needs an
-	// explicit repository. Exactly one of Repository and BaseURL is required.
-	BaseURL string `json:"baseUrl,omitempty"`
+	// `component` and `target`) or a plain literal. Required.
+	Repository string `json:"repository"`
 
 	// Ref is the full branch or tag ref the commit is pushed to, e.g. refs/heads/main or
-	// refs/tags/v1.0.0: a CEL expression wrapped in ${...} or a plain literal. When empty,
-	// DefaultGitRef applies, which needs a Git access; a local blob, or a Git access whose
-	// recorded ref is a short name (pinned before digest processing recorded full refs),
-	// needs an explicit Ref.
-	Ref string `json:"ref,omitempty"`
+	// refs/tags/v1.0.0: a CEL expression wrapped in ${...} or a plain literal. Required; a
+	// short name is rejected because it does not say whether it is a branch or a tag.
+	Ref string `json:"ref"`
 }
 
 // EffectiveMatch returns the configured match, or [DefaultGitUploaderMatch]. It implements
@@ -113,8 +89,8 @@ func (u *GitUploaderConfig) EffectiveMatch() string {
 	return matchOrDefault(u.Match, DefaultGitUploaderMatch)
 }
 
-// Validate rejects a non-matching Type and a config that sets neither or both of
-// repository and baseUrl. An empty Type is allowed for programmatically constructed configs.
+// Validate rejects a non-matching Type and a config missing repository or ref, which must
+// both be set explicitly. An empty Type is allowed for programmatically constructed configs.
 func (u *GitUploaderConfig) Validate() error {
 	if u == nil {
 		return nil
@@ -122,9 +98,11 @@ func (u *GitUploaderConfig) Validate() error {
 	if err := validateUploaderType(u.Type, GitUploaderConfigType); err != nil {
 		return err
 	}
-	hasRepository, hasBaseURL := strings.TrimSpace(u.Repository) != "", strings.TrimSpace(u.BaseURL) != ""
-	if hasRepository == hasBaseURL {
-		return fmt.Errorf("exactly one of repository and baseUrl is required")
+	if strings.TrimSpace(u.Repository) == "" {
+		return fmt.Errorf("repository is required")
+	}
+	if strings.TrimSpace(u.Ref) == "" {
+		return fmt.Errorf("ref is required")
 	}
 	return nil
 }

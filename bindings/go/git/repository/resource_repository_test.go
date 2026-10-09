@@ -64,7 +64,10 @@ func TestResourceDigestPinning(t *testing.T) {
 	r.Len(files, 1)
 }
 
-func TestResourceDigestPinsFullRef(t *testing.T) {
+// TestResourceDigestLeavesRefUnchanged documents that digest processing pins the commit but
+// records the ref as authored: it does not expand a short name or HEAD to a full ref, which
+// could be ambiguous between a branch and a tag of the same name.
+func TestResourceDigestLeavesRefUnchanged(t *testing.T) {
 	fixture := newRepository(t)
 	dir := t.TempDir()
 	repo := repository.NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &dir})
@@ -73,14 +76,13 @@ func TestResourceDigestPinsFullRef(t *testing.T) {
 		name       string
 		ref        string
 		commit     plumbing.Hash
-		wantRef    string
 		wantCommit plumbing.Hash
 	}{
-		{name: "short branch", ref: "main", wantRef: "refs/heads/main", wantCommit: fixture.Second},
-		{name: "short tag", ref: "annotated", wantRef: "refs/tags/annotated", wantCommit: fixture.First},
-		{name: "short tag next to a pinned commit", ref: "annotated", commit: fixture.Second, wantRef: "refs/tags/annotated", wantCommit: fixture.Second},
-		{name: "HEAD is recorded as the branch it points to", ref: "HEAD", wantRef: "refs/heads/main", wantCommit: fixture.Second},
-		{name: "full ref", ref: "refs/tags/annotated", wantRef: "refs/tags/annotated", wantCommit: fixture.First},
+		{name: "short branch", ref: "main", wantCommit: fixture.Second},
+		{name: "short tag", ref: "annotated", wantCommit: fixture.First},
+		{name: "short tag next to a pinned commit", ref: "annotated", commit: fixture.Second, wantCommit: fixture.Second},
+		{name: "HEAD", ref: "HEAD", wantCommit: fixture.Second},
+		{name: "full ref", ref: "refs/tags/annotated", wantCommit: fixture.First},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
@@ -93,7 +95,7 @@ func TestResourceDigestPinsFullRef(t *testing.T) {
 
 			var spec v1.Git
 			r.NoError(access.Scheme.Convert(pinned.Access, &spec))
-			r.Equal(tc.wantRef, spec.Ref)
+			r.Equal(tc.ref, spec.Ref, "ref must be recorded as authored, not expanded")
 			r.Equal(tc.wantCommit.String(), spec.Commit)
 		})
 	}

@@ -20,9 +20,8 @@ the same digest.
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `match` | CEL expression | no | A CEL boolean expression selecting the resources this uploader handles (`resource`, `component` and `target` are available; test access types with `resource.access.isType`). When omitted, the default below applies. |
-| `repository` | CEL expression | one of `repository`, `baseUrl` | URL of the existing target repository in any form a `Git/v1` access accepts: a `${…}` CEL template or a plain literal. |
-| `baseUrl` | string | one of `repository`, `baseUrl` | URL below which the target repository is addressed by the repository path of a `Git` access's origin: `https://git.example.com` turns `https://github.com/org/repo.git` into `https://git.example.com/org/repo.git`. Needs a `Git` access; a local blob needs an explicit `repository`. |
-| `ref` | CEL expression | no | Full branch or tag ref the commit is pushed to, e.g. `refs/heads/main` or `refs/tags/v1.0.0`. Defaults to the ref of a `Git` access (see [Refs](#refs)); a local blob needs an explicit `ref`. |
+| `repository` | CEL expression | yes | URL of the existing target repository in any form a `Git/v1` access accepts: a `${…}` CEL template or a plain literal. |
+| `ref` | CEL expression | yes | Full branch or tag ref the commit is pushed to, e.g. `refs/heads/main` or `refs/tags/v1.0.0`: a `${…}` CEL template or a plain literal (see [Refs](#refs)). |
 
 `repository` and `ref` are evaluated while the transfer graph is built, so a
 template that does not evaluate, an invalid repository URL, or a ref that is not
@@ -50,35 +49,29 @@ with `repository` and `ref`:
 | --- | --- | --- |
 | `Git` `https://github.com/org/repo.git`, ref `refs/heads/main` | `org/repo.git` | `refs/heads/main` |
 
-The defaults use the origin:
+Use it in your own `repository` template, e.g. to mirror a Git resource below a
+different host while keeping its path:
 
 ```yaml
-ref: ${resource.access.toGit().ref}
-# with baseUrl: https://git.example.com
-repository: ${"https://git.example.com/" + resource.access.toGit().repository}
+repository: ${"https://git.internal.example/" + resource.access.toGit().repository}
+ref: refs/heads/main
 ```
 
-Copying a Git resource as a local blob keeps the archive and the resource digest
-unchanged and marks it with the media type
-`application/vnd.ocm.software.git.archive.v1+tar+gzip`, but does not record the
-origin. `toGit()` and the defaults need a `Git` access; a local blob is pushed
-with an explicit `repository` and `ref` (see [Air-gapped
-transfer](#air-gapped-transfer)).
+`toGit()` needs a `Git` access. `toGit().ref` can be a short name (construction does
+not expand it), so set `ref` to a full branch or tag ref explicitly. Copying a Git
+resource as a local blob keeps the archive and the resource digest unchanged and
+marks it with the media type `application/vnd.ocm.software.git.archive.v1+tar+gzip`,
+but does not record the origin, so it is pushed with an explicit `repository` and
+`ref` (see [Air-gapped transfer](#air-gapped-transfer)).
 
 ## Refs
 
-The target ref must be a full branch or tag ref. Constructing a component
-version records the ref of a `Git` access by its full name, so the
-origin says whether it was a branch or a tag: a short name becomes the branch
-it matched or, failing that, the tag (`ref: v1.0.0` is recorded as
-`refs/tags/v1.0.0`), and `HEAD` becomes the branch it pointed to. The archive and
-the resource digest do not contain the ref, and signing normalization excludes
-the access.
-
-Component versions constructed before full refs were recorded can carry a short
-name such as `main`, which does not say whether it is a branch or a tag. The
-transfer then fails and asks for an explicit `ref`, e.g. `ref: refs/heads/main`.
-`HEAD`, an empty ref and refs other than branches and tags fail the same way.
+The target ref must be a full branch or tag ref, set explicitly in the uploader
+config. A short name such as `main` does not say whether it is a branch or a tag,
+so it fails the transfer and asks for an explicit `ref`, e.g. `ref: refs/heads/main`.
+`HEAD`, an empty ref and refs other than branches and tags fail the same way. The
+archive and the resource digest do not contain the ref, and signing normalization
+excludes the access.
 
 The ref is then pointed at the commit:
 
@@ -104,7 +97,7 @@ uploader:
 The archive keeps its history and is marked with the media type
 `application/vnd.ocm.software.git.archive.v1+tar+gzip`, but it does not carry its
 origin. On the air-gapped side, select it explicitly and set `repository` and
-`ref` (`baseUrl` and the ref default need a `Git` access):
+`ref`:
 
 ```yaml
 - type: git.uploader.transfer.config.ocm.software/v1alpha1

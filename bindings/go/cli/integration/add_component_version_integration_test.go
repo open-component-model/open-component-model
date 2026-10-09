@@ -1365,7 +1365,7 @@ components:
 	var stored map[string]string
 	r.NoError(json.Unmarshal(raw, &stored))
 	r.Equal(commit, stored["commit"], "the digest processor must resolve the ref and pin the commit it points at")
-	r.Equal("refs/heads/main", stored["ref"], "the digest processor must record the full name of the ref next to the pinned commit")
+	r.Equal("main", stored["ref"], "the digest processor leaves the ref as authored, it does not expand a short name")
 
 	// download resource resolves the git access via the registered git resource repository.
 	output := filepath.Join(t.TempDir(), "archive.tgz")
