@@ -1,0 +1,200 @@
+name: Completion
+
+# Portable, always-running merge gate for pull requests.
+#
+# Native required checks in GitHub rulesets cannot be skipped: a required
+# check whose workflow is path-filtered (e.g. pipeline.yml on a docs-only PR)
+# or whose job is skipped stays "waiting to be reported" and blocks the merge
+# forever. This workflow works around that. It has no path filter, so it runs
+# on EVERY pull request, waits for all other check runs AND legacy commit
+# statuses on the PR head commit, and fails only if one of them failed.
+# Success, skipped, and neutral all count as green, as does "no other CI ran
+# at all".
+#
+# Intended ruleset setup: require ONLY "Completion" as a status check. Every
+# other check is then enforced transitively while remaining individually
+# skippable. A PR that triggers no other CI (e.g. docs-only) passes.
+#
+# A gate that blocks a merge has to say why somewhere the blocked PR can see,
+# so the verdict is written to the job summary and, on failure, to one sticky
+# PR comment. A passing run never creates a new comment.
+
+on:
+  pull_request:
+
+permissions:
+  checks: read
+  statuses: read
+  contents: read
+  # Needed to post the sticky verdict comment. On a fork PR the token is
+  # read-only regardless; the comment is attempted and its failure downgraded
+  # to a warning, so it can never turn a passing gate red.
+  pull-requests: write
+
+concurrency:
+  group: completion-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  completion:
+    name: Completion
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 60
+    steps:
+      - name: Wait for sibling checks/statuses and verify none failed
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            if (!pr) {
+              core.info('Not a pull_request event; nothing to gate.');
+              return;
+            }
+            const sha = pr.head.sha;
+            // This gate's own check name, matched case-insensitively but EXACTLY:
+            // a substring match would wrongly drop unrelated checks (e.g. a CLI
+            // `ocm completion` test) from the wait/verify set.
+            const SELF = 'completion';
+            // Advisory contexts that must never gate a merge: AI code reviewers,
+            // which post their own check runs. Matched case-insensitively as
+            // substrings and dropped from the wait/verify set.
+            const IGNORE_SUBSTRINGS = ['coderabbit', 'copilot'];
+            const SETTLE_MS = 20000;        // let sibling checks/statuses register
+            const POLL_MS = 15000;
+            const DEADLINE = Date.now() + 45 * 60 * 1000;
+            // Conclusions/states that should block a merge.
+            const BAD = new Set(['failure', 'cancelled', 'timed_out', 'action_required', 'startup_failure', 'stale', 'error']);
+            // Identifies this job's own comment so repeated runs edit one comment
+            // instead of adding to a pile.
+            const MARKER = '<!-- completion-gate-verdict -->';
+
+            const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+            // Collect both modern check runs and legacy commit statuses, normalized
+            // to { name, status, conclusion, url }. filter=latest on check runs
+            // returns only the most recent run per name, so a re-run-to-green
+            // check is treated as passing.
+            const gather = async () => {
+              const checkRuns = await github.paginate(github.rest.checks.listForRef, {
+                owner: context.repo.owner, repo: context.repo.repo, ref: sha, per_page: 100, filter: 'latest',
+              });
+              const items = checkRuns.map((r) => ({ name: r.name, status: r.status, conclusion: r.conclusion, url: r.html_url }));
+
+              const combined = await github.rest.repos.getCombinedStatusForRef({
+                owner: context.repo.owner, repo: context.repo.repo, ref: sha, per_page: 100,
+              });
+              for (const s of combined.data.statuses) {
+                items.push({
+                  name: s.context,
+                  status: s.state === 'pending' ? 'in_progress' : 'completed',
+                  conclusion: s.state === 'success' ? 'success' : (s.state === 'pending' ? null : 'failure'),
+                  url: s.target_url,
+                });
+              }
+
+              return items.filter((i) => {
+                const name = i.name.toLowerCase();
+                return name !== SELF && !IGNORE_SUBSTRINGS.some((n) => name.includes(n));
+              });
+            };
+
+            // Check names come from whatever CI this repo runs, so they are not
+            // trusted to be plain text: escaping keeps a name containing markdown
+            // from reshaping the comment it is reported in.
+            const escape = (text) => String(text)
+              .replace(/&/g, '&amp;')
+              .replace(/</g, '&lt;')
+              .replace(/>/g, '&gt;')
+              .replace(/@/g, '@\u200b')
+              .replace(/([\\`*_{}\[\]()#+\-.!|])/g, '\\$1');
+            const listItem = (i) => {
+              const label = `**${escape(i.name)}**${i.conclusion ? ` — ${escape(i.conclusion)}` : ''}`;
+              return `- ${i.url ? `[${label}](${i.url})` : label}`;
+            };
+
+            // Write the verdict where the blocked PR can read it: the job summary,
+            // and one sticky comment. A passing run only edits a comment that
+            // already exists — a gate that has nothing to report stays silent.
+            const report = async (body, { comment }) => {
+              try {
+                await core.summary.addRaw(body).write();
+                const comments = await github.paginate(github.rest.issues.listComments, {
+                  owner: context.repo.owner, repo: context.repo.repo, issue_number: pr.number, per_page: 100,
+                });
+                const mine = comments.find((c) => c.user?.login === 'github-actions[bot]' && (c.body || '').includes(MARKER));
+                const payload = `${MARKER}\n${body}`;
+                if (mine) {
+                  await github.rest.issues.updateComment({
+                    owner: context.repo.owner, repo: context.repo.repo, comment_id: mine.id, body: payload,
+                  });
+                } else if (comment) {
+                  await github.rest.issues.createComment({
+                    owner: context.repo.owner, repo: context.repo.repo, issue_number: pr.number, body: payload,
+                  });
+                }
+              } catch (error) {
+                // Never let the messenger decide the verdict.
+                core.warning(`Could not write the gate's verdict to the PR: ${error instanceof Error ? error.message : String(error)}`);
+              }
+            };
+
+            const fail = async (heading, offending, hint) => {
+              const body = [
+                `### ${heading}`,
+                '',
+                `Head commit \`${sha.slice(0, 7)}\`.`,
+                '',
+                ...offending.map(listItem),
+                '',
+                hint,
+              ].join('\n');
+              await report(body, { comment: true });
+              core.setFailed(`${heading}: ` + offending.map((i) => `${i.name}${i.conclusion ? ` (${i.conclusion})` : ''}`).join(', '));
+            };
+
+            const pass = async (message) => {
+              await report(`### Completion passed\n\n${message}`, { comment: false });
+              core.info(message);
+            };
+
+            await sleep(SETTLE_MS);
+
+            let emptyConfirmations = 0;
+            while (true) {
+              const items = await gather();
+              const pending = items.filter((i) => i.status !== 'completed');
+
+              if (items.length === 0) {
+                // No sibling CI (e.g. path-filtered docs-only PR). Confirm twice to
+                // avoid passing before slow-to-register checks appear.
+                if (++emptyConfirmations >= 2) {
+                  await pass('No other CI checks or statuses ran on this PR; nothing to fail.');
+                  return;
+                }
+              } else if (pending.length === 0) {
+                const failed = items.filter((i) => BAD.has(i.conclusion));
+                if (failed.length) {
+                  await fail(
+                    'Completion gate failed',
+                    failed,
+                    'This gate has no opinion of its own — it fails because the checks above did. Fix or re-run them and it goes green. Re-run this gate afterwards (or push) to re-evaluate.',
+                  );
+                } else {
+                  await pass(`All ${items.length} check(s)/status(es) passed (or were skipped/neutral).`);
+                }
+                return;
+              } else {
+                emptyConfirmations = 0;
+                core.info(`Waiting on ${pending.length} check(s): ${pending.map((p) => p.name).join(', ')}`);
+              }
+
+              if (Date.now() > DEADLINE) {
+                await fail(
+                  'Completion gate timed out',
+                  pending,
+                  'These checks never reported a conclusion within 45 minutes. A wedged or never-started job blocks the merge exactly as a failing one does.',
+                );
+                return;
+              }
+              await sleep(POLL_MS);
+            }
