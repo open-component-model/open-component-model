@@ -31,7 +31,7 @@ All `was:` paths below are the real current paths on `main`.
 
 ## Proposed Top-Level Navigation
 
-```
+```text
 Overview
 Getting Started
 Concepts
@@ -53,7 +53,7 @@ Getting Started and Concepts are shown alongside the merged Guides section:
 Getting Started gains one page moved in from How-to, and Concepts gains one page
 extracted from the old transfer credential tutorial. Both are otherwise unchanged.
 
-```
+```text
 Getting Started  [getting-started/]
 ├── Install the OCM CLI                             [ocm-cli-installation.md]                   unchanged (binary install; paired with the container-image page below)
 ├── Run the OCM CLI from a Container Image          [run-cli-from-container-image.md]           was: "How to use the OCM CLI container image" in how-to/container-image-usage.md  ← MOVED IN (phase-agnostic; retitled to pair with "Install the OCM CLI")
@@ -220,7 +220,7 @@ complete it first. This is the explicit tradeoff chosen over duplicating setup
 ### Split points
 
 | Document | Pack half ends at | Transfer half resumes at | Shared state carried across |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | "Working with SBOMs" | after "verify the label is in the descriptor" (`ocm get cv ./transport-archive`) | "Retrieve the linked SBOM" (`ocm download resource --sbom`) | `/tmp/ocm-sbom-tutorial` workspace + `./transport-archive` CTF |
 | "Working with OCI" | end of each tab's `ocm add cv` + CTF inspection | each tab's "Transfer with `--copy-resources`" step | per-tab `/tmp` workspace + the built component version |
 | "Working with Resolvers" | the callout "Do not call `add cv` yet" (components created, not pushed) | "Recursively Resolve the App with Resolvers" (`.ocmconfig` resolver block) | `/tmp/ocm-resolver-tutorial` workspace + the shared `.ocmconfig` |
@@ -274,14 +274,14 @@ repeat it.
 ### Getting Started
 
 | Current title | Proposed title | Reason |
-|---|---|---|
+| --- | --- | --- |
 | "How to use the OCM CLI container image" | **"Run the OCM CLI from a Container Image"** | Retitled to pair with "Install the OCM CLI": both lead with "the OCM CLI" and sit adjacent in Getting Started, so the reader reads them as two ways to get a working CLI (install a binary, or run from a container). Also moves out of How-to because running the CLI from a container is phase-agnostic (every phase invokes `ocm`). Filename `run-cli-from-container-image.md` matches the new title |
 | "Set up Controller Environments" | **"Set Up Your Controller Environment"** | "Your" adds reader context; singular matches single-cluster scope. Stays in Getting Started (essential onboarding step), only retitled |
 
 ### Pack
 
 | Current title | Proposed title | Reason |
-|---|---|---|
+| --- | --- | --- |
 | "Create a Multi-Component Product" | **"Compose a Multi-Component Product"** | "Compose" matches the page's own description and names the action the reader performs. This surviving tutorial covers a full 3-level hierarchy (platform → products → services) plus env vars |
 | "Add Resources from HTTP URLs" + "Working with HTTP Resources" | **"Add HTTP Resources"** | The how-to recipe and the tutorial deep-dive are merged into one guide: steps first, then reference sections (media type, auth methods, non-GET, tuning, v1 migration, troubleshooting). "Wget" dropped from the title since the type will be deprecated; `Wget/v1` API identifiers stay in the body |
 | "Working with OCI" (pack half) | **"Add OCI Artifacts"** | "Add" matches the sibling pack titles ("Add Resources from GitHub", "Add HTTP Resources"); names the concrete pack action. Transfer payoff moves to the transfer half |
@@ -300,7 +300,7 @@ redirects to the surviving page via an alias, so no inbound link breaks.
 ### Sign
 
 | Current title | Proposed title | Reason |
-|---|---|---|
+| --- | --- | --- |
 | "Configure Credentials for Signing" | **"Configure Signing Credentials"** | Reorders to the {scope} Credentials shape so all three credentials guides match: "Configure Signing Credentials" (sign), "Configure Registry Credentials" (transfer), "Configure Controller Credentials" (deploy) |
 | "Plain Signatures" | **"Sign with Plain RSA"** | Noun → verb phrase; algorithm explicit |
 | "Certificate Chains (PEM)" | **"Sign with a PEM Certificate Chain"** | Noun → verb phrase |
@@ -314,7 +314,7 @@ _Grouped by sub-theme, matching the tree order._
 **Move components**
 
 | Current title | Proposed title | Reason |
-|---|---|---|
+| --- | --- | --- |
 | _(no page on `main`)_ | **"Transfer Component Versions"** (NEW) | Base transfer guide added as the phase entry point. No `main` page teaches the default `ocm transfer cv <source> <target>`; it existed only as concept prose and copy-pasted boilerplate. See Pages Added |
 | "Transfer Helm Charts with OCM" | **"Transfer Components with Helm Charts"** | "with OCM" is implied by the section; "Components" restores the component framing of its siblings ("Transfer Components across an Air Gap", "Transfer Components Continuously"). The source transfers a component version that carries a Helm chart resource, not a standalone chart, so "with Helm Charts" scopes the specialization |
 | "Replicate Component Versions with the Controller" | **"Transfer Components Continuously"** | Renamed to surface what it is: a repo-to-repo transfer (moved from deploy for that reason), parallel to "Transfer Components across an Air Gap". "Replicate" buried the operation and "with the Controller" named the mechanism, not the value. "Continuously" captures the real differentiator from CLI transfer: the Replication controller re-runs the transfer on each new source version. The controller mechanism is explained in the body; the slug keeps the `Replication` CRD name |
@@ -324,7 +324,7 @@ _Grouped by sub-theme, matching the tree order._
 **Retrieve artifacts**
 
 | Current title | Proposed title | Reason |
-|---|---|---|
+| --- | --- | --- |
 | "Download Resources from Component Versions" | **"Download Resources"** | "from Component Versions" is redundant in context |
 | "Working with SBOMs" (transfer half) | **"Download SBOMs"** | Gerund → imperative "Download …" verb, paired with "Download Resources"; "from Component Versions" dropped |
 | "Working with OCI" (transfer half) | **"Pull OCI Artifacts Natively"** | The payoff half: once transferred, the embedded artifacts are pullable straight from the registry with standard OCI tooling (`docker pull`, `oras pull`, `crane`), no OCM CLI. "Pull" and "Natively" mark the OCI-index native-access concept and distinguish it from "Download Resources" (OCM-mediated download to a local file). "after transfer" is implied by the transfer section |
@@ -332,29 +332,29 @@ _Grouped by sub-theme, matching the tree order._
 **Resolve references**
 
 | Current title | Proposed title | Reason |
-|---|---|---|
+| --- | --- | --- |
 | "Working with Resolvers" (transfer half) + "Resolving Components across Multiple Registries" | **"Resolve Component References"** | The two pages taught the same task at different fidelity: the tutorial's transfer half walks a single-repo graph, the how-to is the multi-repo variant (it even ended by pointing back at the tutorial). Merged into one guide titled for the goal (resolve a reference graph), not the mechanism ("Resolvers"). The multi-repo how-to's enduring bits (glob patterns, `versionConstraint` for version-split repos, specificity ordering) are not procedure, so they lift into the Resolvers concept page (see below); the merged guide keeps the hands-on walkthrough and the realistic separate-repositories case |
 
 **Manage credentials**
 
 | Current title | Proposed title | Reason |
-|---|---|---|
+| --- | --- | --- |
 | "Configure Credentials for Multiple Registries" | **"Configure Registry Credentials"** | Names the concept object: credentials scoped to OCI registries (the `OCIRegistry` consumer-identity type). "Multiple" was the scenario, not the concept, the body still teaches explicit per-registry pins plus a Docker-config catch-all. Mirrors the deploy sibling "Configure Controller Credentials" ({scope} Credentials shape). "Understand Credential Resolution" is extracted into Concepts (see Documents That Move Between Sections). The configure → migrate pairing is preserved, but the migrate page now sits in the trailing "Migrate legacy configuration" group (see below). Slug renamed `configure-multiple-credentials.md` → `configure-registry-credentials.md` so the URL matches the new title and the sibling `configure-signing-credentials` / `configure-controller-credentials` slugs; old URL aliased (see Aliases) |
 
 **Tune networking**
 
 | Current title | Proposed title | Reason |
-|---|---|---|
-| "Configure HTTP Behaviour" (6 merged pages) | **"Configure HTTP Behaviour"** | Keeps the source `_index` title; the merged page covers timeouts, retry, TLS, custom CA, and proxy, i.e. HTTP behaviour knobs, not a client object. Sits next to "Configure Registry Credentials": both configure *how the client connects* to a registry (auth and transport), ahead of the pages that configure *what gets uploaded*. **Scope trimmed to task recipes:** the five source pages inline a lot of field-level documentation (the full `http.config.ocm.software/v1alpha1` schema, the per-field defaults table, Go `time.ParseDuration` syntax, per-host merge rules) that already lives in `reference/http-client-configuration.md`. The merged guide keeps only the task walkthroughs (route through a proxy, trust a private CA, bound timeouts for a slow link, per-host overrides) and links down to that reference for the schema and defaults instead of restating them, mirroring the uploader guides' link-down-to-reference pattern |
+| --- | --- | --- |
+| "Configure HTTP Behaviour" (6 merged pages) | **"Configure HTTP Behaviour"** | Keeps the source `_index` title; the merged page covers timeouts, retry, TLS, custom CA, and proxy, i.e. HTTP behaviour knobs, not a client object. Sits next to "Configure Registry Credentials": both configure _how the client connects_ to a registry (auth and transport), ahead of the pages that configure _what gets uploaded_. **Scope trimmed to task recipes:** the five source pages inline a lot of field-level documentation (the full `http.config.ocm.software/v1alpha1` schema, the per-field defaults table, Go `time.ParseDuration` syntax, per-host merge rules) that already lives in `reference/http-client-configuration.md`. The merged guide keeps only the task walkthroughs (route through a proxy, trust a private CA, bound timeouts for a slow link, per-host overrides) and links down to that reference for the schema and defaults instead of restating them, mirroring the uploader guides' link-down-to-reference pattern |
 
 **Configure uploads**
 
 _All four pages in this group use the imperative verb **Upload** and are co-located because each configures an uploader that writes resources into the target during transfer. Order runs from the built-in OCI uploader, to the generic custom-target uploader, to the two vendor-registry specializations._
 
 | Current title | Proposed title | Reason |
-|---|---|---|
+| --- | --- | --- |
 | _(no page on `main`)_ | **"Upload OCI Images"** (NEW) | Added to answer the common "how do I push my component's regular OCI images so they are directly pullable?" question via the built-in OCI uploader. Leads the uploads group as the simplest, no-config case (the default `match` already selects OCI image resources). Named **"Upload …"**, not "Publish …", to keep one verb for the write-to-target operation across the phase, matching "**Upload** to a Custom Target", "**Upload** to JFrog Artifactory", and "**Upload** to Sonatype Nexus". See Pages Added |
-| "Configure Custom Uploads During Transfer" | **"Upload to a Custom Target"** | Retitled from "Configure Custom Uploads" to the group's **Upload to \<target\>** shape (parallel to the JFrog and Nexus siblings): the page teaches the built-in HTTP streaming uploader that routes a matching resource to an arbitrary custom `PUT` endpoint, so it is the *generic* member of the vendor-specific uploads, not a config-knob page like "Configure Registry Credentials" / "Configure HTTP Behaviour". "During Transfer" is implied by the phase. Slug changes `configure-custom-uploads.md` → `upload-to-custom-target.md`, so the old URL gets an alias (see Aliases) |
+| "Configure Custom Uploads During Transfer" | **"Upload to a Custom Target"** | Retitled from "Configure Custom Uploads" to the group's **Upload to \<target\>** shape (parallel to the JFrog and Nexus siblings): the page teaches the built-in HTTP streaming uploader that routes a matching resource to an arbitrary custom `PUT` endpoint, so it is the _generic_ member of the vendor-specific uploads, not a config-knob page like "Configure Registry Credentials" / "Configure HTTP Behaviour". "During Transfer" is implied by the phase. Slug changes `configure-custom-uploads.md` → `upload-to-custom-target.md`, so the old URL gets an alias (see Aliases) |
 | "JFrog Artifactory" + 4 format pages (helm-charts, maven-artifacts, npm-packages, generic-files) | **"Upload to JFrog Artifactory"** | The vendor `_index.md` and its four format pages collapse into one flat guide with a per-format section. Imperative, names the action. The shared scaffold (credentials, transfer, verify, troubleshooting) is written once; per-format sections keep only the `match`/`path` snippet and consumer command. Repository-behaviour facts move to `reference/.../artifactory-uploader.md`; the uploader model moves to `concepts/vendor-uploaders.md` |
 | "Sonatype Nexus" + 4 format pages (helm-charts, maven-artifacts, npm-packages, raw-files) | **"Upload to Sonatype Nexus"** | Same collapse as the Artifactory guide. Repository-behaviour facts (never-overwrite semantics, Maven snapshot routing, components-API npm upload) move to `reference/.../nexus-uploader.md` |
 | "Using Vendor-Specific APIs" (top overview) | **dropped** | The `how-to/vendor-specific-apis/_index.md` overview is removed: its "How vendor uploaders work" section becomes `concepts/vendor-uploaders.md`, its product list is covered by the two guides above. Old URL redirects to the new concept (see aliases) |
@@ -364,7 +364,7 @@ _All four pages in this group use the imperative verb **Upload** and are co-loca
 _All one-time migration guides are grouped at the end of the transfer section, after the live-workflow pages, since they are run once to move off deprecated v1 configuration rather than as part of the recurring transfer workflow. Relative order follows their topics above (resolvers → credentials → uploads)._
 
 | Current title | Proposed title | Reason |
-|---|---|---|
+| --- | --- | --- |
 | "Migrate from Fallback to Deterministic Repository Resolvers" | **"Migrate Legacy Resolvers"** | Shortened; drops "Deterministic", which only makes sense as a contrast to the deprecated fallback resolver. In v2 there is a single resolver type (glob-based `resolvers.config.ocm.software/v1alpha1`), so the title names the legacy fallback config being migrated away from, exactly parallel to "Migrate Legacy Credentials". Slug renamed `migrate-from-deprecated-resolvers.md` → `migrate-legacy-resolvers.md` to match the new title and the sibling `migrate-legacy-credentials.md`; old URL aliased |
 | "Migrate Legacy Credentials" | (unchanged) | Already imperative/consistent |
 | "Migrate from --upload-as to Uploader Configurations" | **"Migrate --upload-as Flags"** | Shortened; drops the "to Uploader Configurations" tail (names the target mechanism, which the body explains). Keeps the recognizable deprecated flag so readers who use `--upload-as` find it. Full slug kept as alias |
@@ -372,7 +372,7 @@ _All one-time migration guides are grouped at the end of the transfer section, a
 ### Deploy
 
 | Current title | Proposed title | Reason |
-|---|---|---|
+| --- | --- | --- |
 | "Configure Credentials for OCM Controllers" | **"Configure Controller Credentials"** | Shorter; "OCM" implied by section |
 | "Verify Component Versions in the Controller" | **"Verify Component Signatures on Deployment"** | "Signatures" is what is actually verified (more precise than "Versions"); "on Deployment" replaces "in the Controller" to keep the deploy-time context and distinguish it from the sign-phase "Verify Component Versions" (CLI verification) |
 | "Deploy Manifests with Deployer" | **"Deploy Kubernetes Manifests with the OCM Deployer"** | Matches the source wording; "manifest" names the artifact stored in the component (like the sibling titles name their artifact: RGDs, Helm chart); "with the OCM Deployer" names the mechanism (applied directly, no kro/Helm/GitOps packaging layer) |
@@ -393,7 +393,7 @@ see the phase-assignment table below.
 ### From How-to → Getting Started
 
 | Document | Proposed location | Reason |
-|---|---|---|
+| --- | --- | --- |
 | `how-to/container-image-usage.md` | `getting-started/run-cli-from-container-image.md` | Running the CLI from a container image is phase-agnostic (every phase invokes `ocm`), not a pack-authoring task. Belongs beside `ocm-cli-installation.md` as the second way to get a working CLI, retitled to pair with it |
 
 No pages move out of Getting Started. It retains `ocm-cli-installation.md`,
@@ -404,31 +404,31 @@ How-to. Two of these pages are retitled in place (see Title Changes).
 ### From Deploy → Transfer (within Guides)
 
 | Document | Proposed location | Reason |
-|---|---|---|
+| --- | --- | --- |
 | `how-to/replicate-component-versions-controller.md` | `guides/transfer/replicate-component-versions.md` | "Transfer Components Continuously" copies a component version between two OCM repositories (repo-to-repo), which is a transfer operation. It sat under deploy only because the Replication controller drives it, but the controller is the mechanism, not the category. Moving it to the transfer phase matches its semantics; the title now says transfer and "Continuously" marks the controller's auto re-run on each new source version |
 
 ### From Tutorials → Concepts
 
 | Document | Proposed location | Reason |
-|---|---|---|
-| `tutorials/credential-resolution.md` ("Understand Credential Resolution") | `concepts/credential-resolution.md` ("Credential Resolution") | The page runs no procedure. It is a mental model of the matching algorithm: how a lookup identity is built, the three chained matchers (path glob, URL scheme/port, equality), first-match-wins, port and `oci`-scheme defaults, five worked examples, and a short 401 troubleshooting pair. None of it is transfer-specific; credential resolution applies to every phase. It belongs in Concepts beside `credential-system.md`, which it already links to as "the full concept". `credential-system.md` stays the *why/what* overview (consumers, repositories-as-fallback, identity/credential separation); the new page is the layered *how the matcher decides* detail. Extracting it simplifies the transfer credentials cluster to two how-tos (configure → migrate) and gives the "why did the wrong credential get picked?" reader a single Concepts home. "Configure Credentials for Multiple Registries" cross-links down to it |
+| --- | --- | --- |
+| `tutorials/credential-resolution.md` ("Understand Credential Resolution") | `concepts/credential-resolution.md` ("Credential Resolution") | The page runs no procedure. It is a mental model of the matching algorithm: how a lookup identity is built, the three chained matchers (path glob, URL scheme/port, equality), first-match-wins, port and `oci`-scheme defaults, five worked examples, and a short 401 troubleshooting pair. None of it is transfer-specific; credential resolution applies to every phase. It belongs in Concepts beside `credential-system.md`, which it already links to as "the full concept". `credential-system.md` stays the _why/what_ overview (consumers, repositories-as-fallback, identity/credential separation); the new page is the layered _how the matcher decides_ detail. Extracting it simplifies the transfer credentials cluster to two how-tos (configure → migrate) and gives the "why did the wrong credential get picked?" reader a single Concepts home. "Configure Credentials for Multiple Registries" cross-links down to it |
 
 ### From How-to → Concepts
 
 | Document | Proposed location | Reason |
-|---|---|---|
+| --- | --- | --- |
 | `how-to/vendor-specific-apis/jfrog-artifactory/_index.md` + `.../sonatype-nexus/_index.md` ("How vendor uploaders work" sections) | `concepts/vendor-uploaders.md` ("Vendor Repository Uploaders") | Both vendor overviews repeat the same server-side model: an uploader rule selects resources by access type (first-match-wins across rules), the uploader reads the repository type/format from the server at upload time, uploads the way that type expects, rewrites the resource access to `Helm/v1` (charts) or `Wget/v1` (files/packages), verifies a `genericBlobDigest/v1` digest, and only local/hosted repositories accept uploads. None of this is a procedure, so it becomes a single concept page beside `transfer-concept.md`. The two vendor guides and the reference uploader pages link to it instead of re-explaining it |
 
 ### Extended Concept: Resolvers
 
 Unlike the credential-resolution move, no page relocates here. The resolver
-*task* survives as the merged "Resolve Component References" guide; what moves is
-the enduring *mechanics* that the two resolver how-tos carried inline. These are
+_task_ survives as the merged "Resolve Component References" guide; what moves is
+the enduring _mechanics_ that the two resolver how-tos carried inline. These are
 lifted into the existing `concepts/resolvers.md`, which already sketches them:
 
 | Lifted from | Into `concepts/resolvers.md` | Reason |
-|---|---|---|
-| multi-repo how-to "Tips" (glob patterns, specificity ordering) + migrate how-to "Key Differences" / version-split section | the "Configuration" and a new "Matching and Ordering" section | Glob syntax, first-match ordering, specificity, and `versionConstraint` are the resolver *model*, not steps. The concept page already states first-match-wins and glob matching; it absorbs the worked specifics so the guides stop re-teaching them and link here instead |
+| --- | --- | --- |
+| multi-repo how-to "Tips" (glob patterns, specificity ordering) + migrate how-to "Key Differences" / version-split section | the "Configuration" and a new "Matching and Ordering" section | Glob syntax, first-match ordering, specificity, and `versionConstraint` are the resolver _model_, not steps. The concept page already states first-match-wins and glob matching; it absorbs the worked specifics so the guides stop re-teaching them and link here instead |
 
 The two guides keep their procedures and link to the concept for the "how
 matching decides" details, mirroring how the credential how-tos link to
@@ -451,7 +451,7 @@ Every other how-to and tutorial moves into a lifecycle phase. The non-obvious
 assignments:
 
 | Document | Current path | Phase | Reason |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `how-to/download-resources-from-component-versions.md` | How-to (flat) | transfer | Download is consumption from an existing component, not authoring |
 | `how-to/discover-component-graphs.md` | How-to (flat) | **deploy** | Driven by the `Discovery` controller: needs a controller environment and a `Ready` `Component`, and publishes a filtered graph view into Kubernetes `status`. A controller/cluster operation, not a CLI transfer step, so it lands in deploy with the other controller pages |
 | `how-to/migrate-from-upload-as.md` | How-to (flat) | transfer | Uploader configuration applied during transfer |
@@ -470,7 +470,7 @@ The pack halves of the three split documents stay in `guides/pack/`.
 ### Directories Flattened
 
 | Current | Proposed | Reason |
-|---|---|---|
+| --- | --- | --- |
 | `tutorials/working-with-oci/` (directory with single `_index.md`) | two flat files `add-oci-artifacts.md` (pack) + `pull-oci-artifacts-natively.md` (transfer) | No child pages; the split content lands in two flat files |
 | `how-to/configure-http/` (6 files: `_index.md` + 5 pages) | single `configure-http.md` | The five pages (proxy, tls, retry, timeouts, per-host) are task walkthroughs (Goal / Steps / Verify) that merge cleanly under `##` headings. Their inlined field-reference material (schema, defaults table, duration-format rules, per-host merge semantics) is **not** carried into the merged guide: it already exists in `reference/http-client-configuration.md`, so the guide defers to that page and keeps only the recipes |
 
@@ -484,8 +484,8 @@ and as copy-pasted boilerplate inside the specialized pages. Two net-new guides
 fill the gap and become the entry point the rest of the phase specializes:
 
 | New page | Covers | Content source |
-|---|---|---|
-| `guides/transfer/transfer-component-versions.md` ("Transfer Component Versions") | The default `ocm transfer cv <source> <target>`: CTF ↔ OCI-registry source/target combinations, metadata-only transfer (default: descriptor copied, resources referenced in place) vs a self-contained copy via a local-blob uploader, plus prerequisites, credentials, and verification | Procedure distilled from `concepts/transfer-concept.md` and the transfer/verify boilerplate currently duplicated across the air-gap and vendor pages. The concept page stays the *why/model*; this guide is the *how* |
+| --- | --- | --- |
+| `guides/transfer/transfer-component-versions.md` ("Transfer Component Versions") | The default `ocm transfer cv <source> <target>`: CTF ↔ OCI-registry source/target combinations, metadata-only transfer (default: descriptor copied, resources referenced in place) vs a self-contained copy via a local-blob uploader, plus prerequisites, credentials, and verification | Procedure distilled from `concepts/transfer-concept.md` and the transfer/verify boilerplate currently duplicated across the air-gap and vendor pages. The concept page stays the _why/model_; this guide is the _how_ |
 | `guides/transfer/upload-oci-images.md` ("Upload OCI Images") | Uploading regular OCI image resources as independently pullable OCI artifacts via the OCI uploader (`oci.uploader.transfer.config.ocm.software/v1alpha1`): the default `match` (OCIImage / Helm / LocalBlob-holding-an-OCI-manifest on OCI targets), `imageReference` templating, and the fact that this replaces the deprecated `--upload-as ociArtifact` | New content, grounded in `reference/transfer-configuration/oci-uploader.md`. Links to that reference for the full schema and to "Pull OCI Artifacts Natively" for the consume direction |
 
 Both are new authoring work, not relocations, so they carry no `aliases:` and
@@ -552,7 +552,7 @@ for the server-side uploader model (see Documents That Move Between Sections).
 ### Pages Merged
 
 | Current | Proposed | Reason |
-|---|---|---|
+| --- | --- | --- |
 | `how-to/add-resources-from-http-urls.md` (recipe) + `tutorials/wget-http-resources.md` (deep-dive) | single `add-http-resources.md` | Near-duplicate HTTP pages; the "Guides" merge removes the how-to/tutorial split that justified two pages. Steps first, then reference sections (media type, auth methods, non-GET, tuning, v1 migration, troubleshooting) |
 | `how-to/vendor-specific-apis/jfrog-artifactory/_index.md` + its 4 format pages | single `guides/transfer/upload-to-jfrog-artifactory.md` | Shared scaffold (credentials, transfer, verify, troubleshooting) written once; one `##` section per format (Helm, Maven, npm, generic) keeps only the per-format `match`/`path` snippet and consumer command. Repository-behaviour facts move to `reference/.../artifactory-uploader.md`; the uploader model to `concepts/vendor-uploaders.md` |
 | `how-to/vendor-specific-apis/sonatype-nexus/_index.md` + its 4 format pages | single `guides/transfer/upload-to-sonatype-nexus.md` | Same collapse as the Artifactory guide (Helm, Maven, npm, raw sections). Repository-behaviour facts move to `reference/.../nexus-uploader.md` |
@@ -568,7 +568,7 @@ link is a short banner at the top of each guide, reusing the existing
 state is carried.
 
 | Phase | Prerequisite page | Guides that link to it | Repeated setup it removes |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | pack | `getting-started/create-component-version.md` ("Create Component Versions") | every `guides/pack/*` guide (Add HTTP Resources, Add OCI Artifacts, Add Resources from GitHub, Add SBOMs, Add Git Repositories, Add Component References, Add and Verify Ownership, Compose a Multi-Component Product, Configure a Versioning Scheme) | Creating a workspace and the initial component version / constructor skeleton. Every pack guide opens by building a component version before adding to it; the prerequisite link replaces that boilerplate with one pointer to the Getting Started page that already teaches it |
 | sign | `guides/sign/generate-signing-keys.md` + `guides/sign/configure-signing-credentials.md` | `guides/sign/sign-component-version.md` (the signing overview) | Key generation and signing-credential setup. The sign overview already sits third behind these two pages in tree order; the banner makes that ordering an explicit prerequisite rather than mere adjacency, so the overview stops restating key/credential setup |
 | deploy | `getting-started/setup-controller-environment.md` ("Set Up Your Controller Environment") | every `guides/deploy/*` guide (Configure Controller Credentials, Configure Custom RBAC, Discover Component Graphs, Deploy with Chained kro RGDs, Deploy a Helm Chart with kro and GitOps, Deploy Kubernetes Manifests with the OCM Deployer, Verify Component Signatures on Deployment) | Bootstrapping a controller/cluster environment. Every deploy guide needs a running controller environment, which is exactly why `setup-controller-environment.md` lives in Getting Started; the prerequisite link replaces each guide's cluster-setup preamble with one pointer |
@@ -591,13 +591,13 @@ are deferred; they remove less duplication and can be added during authoring.
 ### Pages Dropped
 
 | Dropped | Reason | Old URL redirects to |
-|---|---|---|
+| --- | --- | --- |
 | `how-to/model-products.md` ("Model Software Products") | Redundant with the deeper `tutorials/advanced-component-constructor.md`: same subject (compose a multi-component product from references), only a shallow 2-level recipe. The surviving tutorial covers the full 3-level case | `/docs/how-to/model-products/` → `guides/pack/compose-multi-component-product.md` |
 | `how-to/vendor-specific-apis/_index.md` ("Using Vendor-Specific APIs") | Top overview of the vendor subtree. Its "How vendor uploaders work" section becomes `concepts/vendor-uploaders.md`; its product list is covered by the two new vendor guides. Nothing procedural is lost | `/docs/how-to/vendor-specific-apis/` → `concepts/vendor-uploaders.md` |
 
 ### Maximum Nesting Depth
 
-```
+```text
 docs/guides/<phase>/<page>.md   ← normal deepest level after restructure
 ```
 
@@ -773,7 +773,7 @@ follows is different from any single page on `main`. Each MUST be run top to
 bottom.
 
 | Guide | Why it must be tested | What to verify |
-|---|---|---|
+| --- | --- | --- |
 | `guides/pack/add-sboms.md` + `guides/transfer/download-sboms.md` | Split of "Working with SBOMs"; the transfer half is **not** independently runnable | Run the pack half, keep the workspace, follow the handoff callout into the transfer half, confirm the `./transport-archive` CTF and `/tmp/ocm-sbom-tutorial` state carry across and `ocm download resource --sbom` succeeds |
 | `guides/pack/add-oci-artifacts.md` + `guides/transfer/pull-oci-artifacts-natively.md` | Split of "Working with OCI" with **two independent tabs** (Embed an OCI Image Layout, Transfer by Value) | Run **both tabs** on both halves; confirm each tab's two "Continues in …" / "continues from" callouts point at the right half and each tab's `/tmp` workspace survives the handoff |
 | `guides/pack/add-component-references.md` + `guides/transfer/resolve-component-references.md` | Split of "Working with Resolvers"; the transfer half also **merges in the multi-repo how-to** | Run the pack half to the "Do not call `add cv` yet" boundary, cross into the transfer half, confirm the shared `.ocmconfig` resolver block works for both the single-repo and the merged separate-repositories case |
@@ -790,7 +790,7 @@ These pages are not split or merged, but gained lifted-in content, so only the
 added sections need checking, not a full rerun.
 
 | Page | Added content to verify |
-|---|---|
+| --- | --- |
 | `concepts/resolvers.md` | The new "Matching and Ordering" material (glob syntax, first-match ordering, specificity, `versionConstraint`) lifted from the two resolver how-tos reads correctly and the guides now link here instead of re-teaching it |
 | `reference/transfer-configuration/artifactory-uploader.md` | Per-format repository-behaviour facts moved in from the collapsed JFrog guide match the existing per-type tables |
 | `reference/transfer-configuration/nexus-uploader.md` | Per-format facts (never-overwrite, Maven snapshot routing, components-API npm upload) moved in from the collapsed Nexus guide are correct |
@@ -822,13 +822,13 @@ runs in its new transfer location.
 ## Summary of Changes by Type
 
 | Change type | Count |
-|---|---|
+| --- | --- |
 | Section renamed (How-to + Tutorials → Guides) | 1 |
 | New `_index.md` landing pages | 5 (guides + pack, sign, transfer, deploy) |
 | Documents split across phases (cross-link handoff) | 3 (SBOMs, OCI, Resolvers) → 6 new pages (the Resolvers transfer half also absorbs the multi-repo how-to, see Pages merged) |
 | Documents kept whole despite cross-phase commands | 1 (Add and Verify Ownership, stays pack) |
 | Documents moved between sections | 4 (How-to → Getting Started: container-image CLI; Tutorials → Concepts: credential resolution; How-to → Concepts: vendor-uploader model; deploy → transfer within Guides: continuous controller transfer) |
-| Pages merged | 5 (HTTP recipe + deep-dive → 1; configure-http 6 → 1; resolver tutorial transfer half + multi-repo how-to → "Resolve Component References"; JFrog vendor _index + 4 format pages → 1; Nexus vendor _index + 4 format pages → 1) |
+| Pages merged | 5 (HTTP recipe + deep-dive → 1; configure-http 6 → 1; resolver tutorial transfer half + multi-repo how-to → "Resolve Component References"; JFrog vendor _index + 4 format pages → 1; Nexus vendor_index + 4 format pages → 1) |
 | Pages dropped | 2 (Model Software Products, redundant with the multi-component tutorial; vendor-API overview `_index.md`, its model folds into the new concept) |
 | Pages added (new content) | 2 (Transfer Component Versions, the base transfer guide; Upload OCI Images, the OCI uploader guide. Both fill the missing core-transfer front door, see Pages Added) |
 | Directories flattened | 3 (working-with-oci/ → 2 flat files; configure-http/ → 1 file; vendor-specific-apis/ 11-page product→format tree → 2 flat guides) |
