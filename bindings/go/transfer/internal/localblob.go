@@ -138,6 +138,12 @@ func processRelativeOCIReference(resource descriptorv2.Resource, reference, id s
 // (OCI registry or CTF) via chooseAddLocalResourceType.
 // It uses the output of the preceding Get transformation to populate the fields of the
 // AddLocalResource transformation, ensuring that the same resource is referenced and uploaded.
+//
+// referenceName is a legacy OCI compatibility field: it names the global OCI artifact the
+// local blob can additionally be exposed as, and only makes sense for blobs that hold an OCI
+// manifest. It is set only by the OCI-family callers (OCI artifacts, Helm charts converted to
+// OCI, relativeOciReference). Non-OCI content types (git, github, s3, wget) pass an empty
+// referenceName, in which case the field is omitted from the generated access entirely.
 func uploadAsLocalResource(toSpec runtime.Typed, component, version, addResourceID, getResourceID, referenceName, label string) (transformv1alpha1.GenericTransformation, error) {
 	addLocalResourceType, err := chooseAddLocalResourceType(toSpec)
 	if err != nil {
@@ -147,6 +153,13 @@ func uploadAsLocalResource(toSpec runtime.Typed, component, version, addResource
 	toRepo, err := asUnstructured(toSpec)
 	if err != nil {
 		return transformv1alpha1.GenericTransformation{}, fmt.Errorf("cannot convert target spec to unstructured: %w", err)
+	}
+
+	access := map[string]any{
+		"type": descriptor.GetLocalBlobAccessType().String(),
+	}
+	if referenceName != "" {
+		access["referenceName"] = referenceName
 	}
 
 	addResourceTransform := transformv1alpha1.GenericTransformation{
@@ -160,14 +173,11 @@ func uploadAsLocalResource(toSpec runtime.Typed, component, version, addResource
 			"component":  component,
 			"version":    version,
 			"resource": map[string]any{
-				"name":     fmt.Sprintf("${%s.output.resource.name}", getResourceID),
-				"version":  fmt.Sprintf("${%s.output.resource.version}", getResourceID),
-				"type":     fmt.Sprintf("${%s.output.resource.type}", getResourceID),
-				"relation": fmt.Sprintf("${%s.output.resource.relation}", getResourceID),
-				"access": map[string]any{
-					"type":          descriptor.GetLocalBlobAccessType().String(),
-					"referenceName": referenceName,
-				},
+				"name":          fmt.Sprintf("${%s.output.resource.name}", getResourceID),
+				"version":       fmt.Sprintf("${%s.output.resource.version}", getResourceID),
+				"type":          fmt.Sprintf("${%s.output.resource.type}", getResourceID),
+				"relation":      fmt.Sprintf("${%s.output.resource.relation}", getResourceID),
+				"access":        access,
 				"digest":        fmt.Sprintf("${has(%s.output.resource.digest) ? %s.output.resource.digest : null}", getResourceID, getResourceID),
 				"labels":        fmt.Sprintf("${has(%s.output.resource.labels) ? %s.output.resource.labels  : []}", getResourceID, getResourceID),
 				"extraIdentity": fmt.Sprintf("${has(%s.output.resource.extraIdentity) ? %s.output.resource.extraIdentity  : {}}", getResourceID, getResourceID),
