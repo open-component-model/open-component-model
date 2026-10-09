@@ -17,6 +17,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/descriptor/v2"
+	ociaccess "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/resource"
 	"ocm.software/open-component-model/bindings/go/repository"
@@ -49,7 +50,7 @@ func DownloadResourceData(ctx context.Context, pluginManager *manager.PluginMana
 	var data blob.ReadOnlyBlob
 	var err error
 
-	if v2.IsLocalBlob(access) {
+	if v2.IsLocalBlob(access) || ociaccess.IsRelativeOCIReference(access) {
 		data, _, err = repo.GetLocalResource(ctx, component, version, identity)
 	} else {
 		if access == nil {

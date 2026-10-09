@@ -63,6 +63,8 @@ func processOCIUploader(ctx context.Context, resource descriptorv2.Resource, acc
 	switch acc := access.(type) {
 	case *ociv1.OCIImage:
 		defaultImageReference = transferv1alpha1.DefaultOCIImageReferenceOCIImage
+	case *ociv1.RelativeOCIReference:
+		defaultImageReference = transferv1alpha1.DefaultOCIImageReferenceRelative
 	case *helmv1.Helm:
 		defaultImageReference = transferv1alpha1.DefaultOCIImageReferenceHelm
 	case *descriptorv2.LocalBlob:
@@ -92,7 +94,7 @@ func processOCIUploader(ctx context.Context, resource descriptorv2.Resource, acc
 			return nil, fmt.Errorf("cannot process Helm Chart resource: %w", err)
 		}
 		return helmFileExpressions(id, resourceID), nil
-	default: // *descriptorv2.LocalBlob holding an OCI manifest, checked above
+	default: // *descriptorv2.LocalBlob holding an OCI manifest, or *ociv1.RelativeOCIReference
 		if err := processLocalBlob(resource, id, val, tgd, toSpec, resourceTransformIDs, i, imageReference); err != nil {
 			return nil, fmt.Errorf("failed processing local blob resource: %w", err)
 		}
