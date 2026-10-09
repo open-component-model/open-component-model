@@ -361,19 +361,25 @@ func processResource(resource descriptorv2.Resource, access runtime.Typed, id st
 		}
 		return helmFileExpressions(id, resourceID), nil
 	case *wgetv1.Wget:
-		// A wget resource is a plain blob: download it and embed it as a local blob in the
-		// target. There is no OCI-artifact representation.
-		if err := processWget(resource, id, val, tgd, toSpec, resourceTransformIDs, i); err != nil {
+		// A wget resource is a plain blob. For an OCI target it is streamed straight into
+		// the target as a local blob via a single fused node (no temporary file, no
+		// FileCleanup expression); for a CTF target it takes the split Download -> Add
+		// path, which writes a temporary file that must be cleaned up.
+		exprs, err := processWget(resource, id, val, tgd, toSpec, resourceTransformIDs, i)
+		if err != nil {
 			return nil, fmt.Errorf("cannot process wget resource: %w", err)
 		}
-		return []string{fmt.Sprintf("${%s.spec.file}", addResourceID)}, nil
+		return exprs, nil
 	case *s3v2.S3:
-		// An S3 resource is a plain blob: download it and embed it as a local blob in the
-		// target. There is no OCI-artifact representation.
-		if err := processS3(resource, id, val, tgd, toSpec, resourceTransformIDs, i); err != nil {
+		// An S3 resource is a plain blob. For an OCI target it is streamed straight into
+		// the target as a local blob via a single fused node (no temporary file, no
+		// FileCleanup expression); for a CTF target it takes the split Download -> Add
+		// path, which writes a temporary file that must be cleaned up.
+		exprs, err := processS3(resource, id, val, tgd, toSpec, resourceTransformIDs, i)
+		if err != nil {
 			return nil, fmt.Errorf("cannot process s3 resource: %w", err)
 		}
-		return []string{fmt.Sprintf("${%s.spec.file}", addResourceID)}, nil
+		return exprs, nil
 	case *gitv1.Git:
 		if err := processGit(resource, acc, id, val, tgd, toSpec, resourceTransformIDs, i); err != nil {
 			return nil, fmt.Errorf("cannot process Git resource: %w", err)

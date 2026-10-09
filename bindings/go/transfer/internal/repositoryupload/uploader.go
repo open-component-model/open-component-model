@@ -92,11 +92,78 @@ func (u *Uploader) source(ctx context.Context, spec *uploadv1alpha1.RepositoryUp
 	if err != nil {
 		return nil, "", err
 	}
-	b, err := u.ResourceRepository.DownloadResource(ctx, src, creds)
+	// Prefer the lazy streaming source so a remote-to-remote upload (e.g. wget/s3 ->
+	// Artifactory/Nexus) streams the source straight to the target instead of
+	// buffering it to a temporary file first. Integrity is preserved inline by the
+	// streaming blob, and the uploaded bytes are checked against the source digest
+	// after the upload (see knownDigest and the digest comparison in Upload). A
+	// repository without the capability falls back to a materialized download.
+	b, err := u.downloadRemoteSource(ctx, src, creds)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed downloading source resource %v: %w", src.ToIdentity(), err)
 	}
+	// A lazy streaming source only learns its media type (the response Content-Type)
+	// once a request is issued, whereas the old file-backed download captured it
+	// eagerly. Prime it here so a source whose access spec does not pin a media type
+	// still uploads with its real content type instead of application/octet-stream.
+	// Priming is safe only for an idempotent source; downloadRemoteSource guarantees
+	// that by materializing a non-idempotent source instead of streaming it.
+	primeMediaType(b)
 	return b, blobMediaType(b), nil
+}
+
+// primeMediaType best-effort populates the media type of a lazy streaming source
+// blob by opening its stream, which reads the response headers (and thus the
+// Content-Type) without downloading the whole body. It is a no-op for a blob that
+// already knows its media type (such as a materialized file-backed download) and
+// is best-effort: any error is ignored, leaving the caller to fall back to the
+// access media type or application/octet-stream, exactly as before.
+//
+// Under the re-issue-per-ReadCloser replay model this priming open is a separate
+// header-only source request (prime headers here, then stream the body on the
+// upload's own ReadCloser). That extra request is only issued when the source is
+// idempotent (see [repository.IdempotentSource]); priming is skipped otherwise so
+// a non-idempotent source request is never sent more than once.
+func primeMediaType(b blob.ReadOnlyBlob) {
+	aware, ok := b.(blob.MediaTypeAware)
+	if !ok {
+		return
+	}
+	if _, known := aware.MediaType(); known {
+		return
+	}
+	if idem, ok := b.(repository.IdempotentSource); !ok || !idem.Idempotent() {
+		return
+	}
+	rc, err := b.ReadCloser()
+	if err != nil {
+		return
+	}
+	_ = rc.Close()
+}
+
+// downloadRemoteSource obtains a remote source blob, preferring the lazy streaming
+// source when the resource repository implements
+// [repository.StreamingResourceRepository]. A streaming source whose request is
+// not idempotent (see [repository.IdempotentSource]) is materialized with
+// DownloadResource instead: the streaming upload path opens the source more than
+// once (prime the media type, then stream the body), which must not re-issue a
+// non-idempotent request. Materializing issues the single request the old path
+// always did. No request is sent while deciding, because DownloadResourceStream
+// defers all I/O until the blob's ReadCloser is called.
+func (u *Uploader) downloadRemoteSource(ctx context.Context, src *descriptor.Resource, creds runtime.Typed) (blob.ReadOnlyBlob, error) {
+	streamingRepo, ok := u.ResourceRepository.(repository.StreamingResourceRepository)
+	if !ok {
+		return u.ResourceRepository.DownloadResource(ctx, src, creds)
+	}
+	b, err := streamingRepo.DownloadResourceStream(ctx, src, creds)
+	if err != nil {
+		return nil, err
+	}
+	if idem, ok := b.(repository.IdempotentSource); ok && !idem.Idempotent() {
+		return u.ResourceRepository.DownloadResource(ctx, src, creds)
+	}
+	return b, nil
 }
 
 // ociSource reports that the source content of src with mediaType was downloaded from an OCI

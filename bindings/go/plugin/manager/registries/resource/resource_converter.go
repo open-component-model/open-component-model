@@ -12,6 +12,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts/resource/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/blobs"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
+	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -89,6 +90,19 @@ func (r *resourcePluginConverter) UploadResource(ctx context.Context, resource *
 }
 
 var _ Repository = (*resourcePluginConverter)(nil)
+
+// DownloadResourceStream forwards to the wrapped repository's streaming download
+// when it is streaming-capable, otherwise it falls back to the materialized
+// DownloadResource. An external binary plugin exposed through the v1 contract
+// cannot implement a Go streaming interface, so in practice this always falls
+// back; the forwarding keeps the capability correct should a wrapped repository
+// ever support streaming.
+func (r *resourcePluginConverter) DownloadResourceStream(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) (blob.ReadOnlyBlob, error) {
+	if streaming, ok := r.externalPlugin.(repository.StreamingResourceRepository); ok {
+		return streaming.DownloadResourceStream(ctx, resource, credentials)
+	}
+	return r.DownloadResource(ctx, resource, credentials)
+}
 
 func (r *ResourceRegistry) externalToResourcePluginConverter(plugin v1.ReadWriteResourcePluginContract, scheme *runtime.Scheme) *resourcePluginConverter {
 	return &resourcePluginConverter{

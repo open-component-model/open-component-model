@@ -140,3 +140,44 @@ func uploadAsLocalResource(toSpec runtime.Typed, component, version, addResource
 	}
 	return addResourceTransform, nil
 }
+
+// streamAsLocalResource creates a single fused streaming local-resource
+// transformation that downloads a by-value source (wget/s3) and embeds it as a
+// local blob in the target in one node. Fusing the download and the add keeps the
+// stream from crossing a graph node boundary, so the content is pushed straight
+// into the target registry via the OCI chunked streaming push with no temporary
+// file. The transformer internally falls back to a buffered add when the source
+// repository is not streaming-capable, so correctness is preserved either way.
+//
+// The source resource (with its original wget/s3 access and digest) is embedded
+// directly in the spec; the transformer derives the LocalBlob access itself.
+func streamAsLocalResource(toSpec runtime.Typed, component, version, addResourceID string, resource descriptorv2.Resource, label string) (transformv1alpha1.GenericTransformation, error) {
+	streamType, err := chooseStreamLocalResourceType(toSpec)
+	if err != nil {
+		return transformv1alpha1.GenericTransformation{}, fmt.Errorf("choosing stream local resource type for target repository: %w", err)
+	}
+
+	toRepo, err := asUnstructured(toSpec)
+	if err != nil {
+		return transformv1alpha1.GenericTransformation{}, fmt.Errorf("cannot convert target spec to unstructured: %w", err)
+	}
+
+	spec, err := runtime.UnstructuredFromMixedData(map[string]any{
+		"repository": toRepo.Data,
+		"component":  component,
+		"version":    version,
+		"resource":   resource,
+	})
+	if err != nil {
+		return transformv1alpha1.GenericTransformation{}, fmt.Errorf("cannot create unstructured spec for stream local resource transformation: %w", err)
+	}
+
+	return transformv1alpha1.GenericTransformation{
+		TransformationMeta: meta.TransformationMeta{
+			Type:  streamType,
+			ID:    addResourceID,
+			Label: label,
+		},
+		Spec: spec,
+	}, nil
+}

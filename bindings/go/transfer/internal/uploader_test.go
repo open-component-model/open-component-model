@@ -241,7 +241,7 @@ func TestBuildGraphDefinition_RepositoryUploaders(t *testing.T) {
 	})
 }
 
-func TestBuildGraphDefinition_NoUploader_KeepsDownloadWgetPath(t *testing.T) {
+func TestBuildGraphDefinition_NoUploader_StreamsWgetLocalBlob(t *testing.T) {
 	r := require.New(t)
 	sourceRepo := testOCIRepo("ghcr.io/source")
 	targetRepo := testOCIRepo("ghcr.io/target")
@@ -253,17 +253,17 @@ func TestBuildGraphDefinition_NoUploader_KeepsDownloadWgetPath(t *testing.T) {
 	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{}, withLocalBlobUploader())
 	r.NoError(err)
 
-	var sawDownloadWget, sawStreaming bool
+	var sawDownloadWget, sawStreamLocal bool
 	for i := range tgd.Transformations {
 		switch tgd.Transformations[i].Type {
 		case wgetv1alpha1.DownloadWgetResourceV1alpha1:
 			sawDownloadWget = true
-		case wgetv1alpha1.HTTPStreamingV1alpha1:
-			sawStreaming = true
+		case ociv1alpha1.OCIStreamLocalResourceV1alpha1:
+			sawStreamLocal = true
 		}
 	}
-	assert.True(t, sawDownloadWget, "without an uploader the wget resource must use the DownloadWgetResource path")
-	assert.False(t, sawStreaming, "no HTTPStreaming node should be emitted without an uploader")
+	assert.True(t, sawStreamLocal, "a wget local-blob target must use the fused streaming local-resource node")
+	assert.False(t, sawDownloadWget, "the split DownloadWgetResource node must not be emitted on the streaming path")
 }
 
 func TestBuildGraphDefinition_UploaderPreservesResourceInStringLiteral(t *testing.T) {
