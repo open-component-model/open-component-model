@@ -14,3 +14,13 @@ find . -type f -name "go.mod" -path "*/integration/*" -exec dirname {} \; | whil
     go mod tidy
   )
 done
+
+# Renovate drops gomodTidy on mixed-manager grouped branches, so tidy the root
+# module here to avoid orphan go.sum entries.
+if [ -f bindings/go/go.mod ]; then
+  echo "Running explicit go mod tidy for bindings/go"
+  (
+    cd bindings/go
+    go mod tidy
+  )
+fi
