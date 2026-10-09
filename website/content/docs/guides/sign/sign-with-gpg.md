@@ -396,7 +396,7 @@ Give the entry a `signature` field to scope it to a single signature; without on
 {{< /callout >}}
 
 {{< callout context="note" >}}
-`signature: default` applies to a signature *named* `default`; it is not a catch-all for an omitted `--signature` flag. If the signature was created with `--signature <name>`, set the same value in the consumer identity.
+`signature: default` applies to a signature _named_ `default`; it is not a catch-all for an omitted `--signature` flag. If the signature was created with `--signature <name>`, set the same value in the consumer identity.
 {{< /callout >}}
 
 {{< callout context="caution" >}}
@@ -555,7 +555,6 @@ OCM passes the passphrase to `gpg` on standard input; it is never written to dis
 {{< details "Can a component have both RSA and GPG signatures?" >}}
 Yes. Each signature has a distinct `name`. Use `--signature <name>` when signing to create named signatures, and OCM will store all of them on the component version.
 {{< /details >}}
-
 
 ## Cleanup
 
