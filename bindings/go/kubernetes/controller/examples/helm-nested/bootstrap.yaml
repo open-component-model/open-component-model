@@ -42,3 +42,26 @@ spec:
   resourceRef:
     name: helm-nested-resource-nested-rgd
     namespace: default
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Resource
+metadata:
+  name: helm-nested-crossplane-resource-xrd
+spec:
+  componentRef:
+    name: helm-nested-component
+  resource:
+    byReference:
+      resource:
+        name: crossplane-xrd
+      referencePath:
+        - name: nested-rgd
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Deployer
+metadata:
+  name: helm-nested-crossplane-deployer
+spec:
+  resourceRef:
+    name: helm-nested-crossplane-resource-xrd
+    namespace: default

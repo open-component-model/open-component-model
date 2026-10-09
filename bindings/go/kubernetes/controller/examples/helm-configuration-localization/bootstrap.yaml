@@ -41,3 +41,24 @@ spec:
   resourceRef:
     name: helm-configuration-localization-resource-rgd
     namespace: default
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Resource
+metadata:
+  name: helm-configuration-localization-crossplane-resource-xrd
+spec:
+  componentRef:
+    name: helm-configuration-localization-component
+  resource:
+    byReference:
+      resource:
+        name: crossplane-xrd
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Deployer
+metadata:
+  name: helm-configuration-localization-crossplane-deployer
+spec:
+  resourceRef:
+    name: helm-configuration-localization-crossplane-resource-xrd
+    namespace: default

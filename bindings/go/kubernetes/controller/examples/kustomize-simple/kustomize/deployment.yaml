@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: podinfo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: podinfo
+  template:
+    metadata:
+      labels:
+        app: podinfo
+    spec:
+      containers:
+        - name: podinfo
+          image: ghcr.io/stefanprodan/podinfo:6.9.1
+          ports:
+            - containerPort: 9898
+              name: http
+          env:
+            - name: PODINFO_UI_COLOR
+              value: "#34577c"
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 9898
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 9898
