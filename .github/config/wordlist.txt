@@ -929,6 +929,7 @@ withocm
 wsl
 xdg
 xml
+xrd
 xxxx
 yaml
 yitsushi
