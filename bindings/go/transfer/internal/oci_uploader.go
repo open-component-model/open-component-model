@@ -15,43 +15,53 @@ import (
 )
 
 // ociImageReference templates the target image reference under u, or def when u sets none,
-// with aliases (see uploaderAliases) rewritten.
-//
-// The template is evaluated once here, against the same environment the graph uses, so a
-// template that does not evaluate for the selected resource (e.g. reading target.baseUrl
-// on a CTF target, or a field the resource does not have) fails the build instead of the
-// running transfer. The emitted spec keeps the template, so the graph evaluates it again
-// when it runs.
+// with aliases (see uploaderAliases) rewritten (see uploaderTemplate).
 func ociImageReference(ctx context.Context, u *transferv1alpha1.OCIUploaderConfig, def string, aliases map[string]string, env *uploaderEnv) (string, error) {
 	template := u.ImageReference
 	if template == "" {
 		template = def
 	}
-	imageReference, _, err := templateString(template, aliases)
+	imageReference, _, err := uploaderTemplate(ctx, "imageReference", template, aliases, env)
+	return imageReference, err
+}
+
+// uploaderTemplate rewrites the aliases (see uploaderAliases) in the uploader template
+// of field and returns the rewritten template and its value.
+//
+// The template is evaluated here, against the same environment the graph uses, so a
+// template that does not evaluate for the selected resource (e.g. reading target.baseUrl
+// on a CTF target, or a field the resource does not have) fails the build instead of the
+// running transfer. The emitted spec keeps the template, so the graph evaluates it again
+// when it runs.
+func uploaderTemplate(ctx context.Context, field, template string, aliases map[string]string, env *uploaderEnv) (string, string, error) {
+	rewritten, _, err := templateString(template, aliases)
 	if err != nil {
-		return "", fmt.Errorf("cannot template imageReference: %w", err)
+		return "", "", fmt.Errorf("cannot template %s: %w", field, err)
 	}
 
-	fields, err := celparser.ParseSchemaless(map[string]any{"imageReference": imageReference})
+	fields, err := celparser.ParseSchemaless(map[string]any{field: rewritten})
 	if err != nil {
-		return "", fmt.Errorf("invalid imageReference: %w", err)
+		return "", "", fmt.Errorf("invalid %s: %w", field, err)
 	}
-	for _, field := range fields {
-		for _, expr := range field.Expressions {
+	value := rewritten
+	for _, f := range fields {
+		for _, expr := range f.Expressions {
 			prg, err := env.program(expr.Value)
 			if err != nil {
-				return "", fmt.Errorf("invalid imageReference: %w", err)
+				return "", "", fmt.Errorf("invalid %s: %w", field, err)
 			}
 			out, _, err := prg.ContextEval(ctx, map[string]any{})
 			if err != nil {
-				return "", fmt.Errorf("imageReference does not evaluate: %w", err)
+				return "", "", fmt.Errorf("%s does not evaluate: %w", field, err)
 			}
-			if _, ok := out.Value().(string); !ok {
-				return "", fmt.Errorf("invalid imageReference: expression %q evaluates to %T, not a string", strings.TrimSpace(expr.Value), out.Value())
+			s, ok := out.Value().(string)
+			if !ok {
+				return "", "", fmt.Errorf("invalid %s: expression %q evaluates to %T, not a string", field, strings.TrimSpace(expr.Value), out.Value())
 			}
+			value = strings.Replace(value, "${"+expr.Value+"}", s, 1)
 		}
 	}
-	return imageReference, nil
+	return rewritten, value, nil
 }
 
 // processOCIUploader emits the transformations that upload resource, selected by u, as a
