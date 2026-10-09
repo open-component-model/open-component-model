@@ -691,6 +691,13 @@ func (r *Reconciler) downloadResourceBlob(
 	// Both are local, repository-local accesses resolved by the component repository.
 	// relativeOciReference is a v1 compatibility access migrated into v2 descriptors.
 	case *v2.LocalBlob, *ociv1.RelativeOCIReference:
+		repo, err := repoResolver.GetComponentVersionRepositoryForComponent(ctx,
+			componentDescriptor.Component.Name,
+			componentDescriptor.Component.Version)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get repository for component %s:%s: %w",
+				componentDescriptor.Component.Name, componentDescriptor.Component.Version, err)
+		}
 		blob, _, err := repo.GetLocalResource(ctx,
 			componentDescriptor.Component.Name,
 			componentDescriptor.Component.Version,
