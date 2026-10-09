@@ -136,6 +136,11 @@
         'helm.sh/helm/v4',
         'helm/helm',
       ],
+      // Grouping the gomod bump with the github-releases helm pin drops the
+      // golang-category gomodTidy; force it on the group so go.sum stays tidy.
+      postUpdateOptions: [
+        'gomodTidy',
+      ],
       separateMinorPatch: false,
       schedule: [
         '* * * * 0' // At every minute on Sunday it is allowed to create branches
@@ -359,16 +364,6 @@
       versioningTemplate: 'semver',
     },
   ],
-  postUpgradeTasks: {
-    commands: [
-      './.github/scripts/renovate-post-upgrade.sh',
-    ],
-    fileFilters: [
-      '**/go.mod',
-      '**/go.sum',
-    ],
-    executionMode: 'branch',
-  },
   // Prevent a transient npm registry hiccup from aborting the whole run.
   // See renovatebot/renovate#26196.
   hostRules: [
