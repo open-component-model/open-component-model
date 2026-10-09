@@ -697,7 +697,7 @@ If an RGD stays `Inactive`, check the reason:
 kubectl get rgd podinfo -o jsonpath='{.status.conditions[?(@.type=="Ready")].message}'
 ```
 
-A message like `cache sync timeout for kro.run/v1alpha1, Resource=podinfoes` means that kro
+A message like `cache sync timeout for kro.run/v1alpha1, Resource=podinfoes` often means that kro
 lacks access to the instances of that kind. Check that you applied `kro-rbac.yaml`.
 
 **Resource not `Ready` / image pull errors**: the cluster cannot read the package. Make the

@@ -764,7 +764,7 @@ If the RGD exists but `kubectl get rgd` shows the state `Inactive`, check the re
 kubectl get rgd bootstrap -o jsonpath='{.status.conditions[?(@.type=="Ready")].message}'
 ```
 
-A message like `cache sync timeout for kro.run/v1alpha1, Resource=bootstraps` means that kro lacks access to the `Bootstrap` instances. Check that you applied `kro-rbac.yaml`, as described in [Grant kro access to the instances](#grant-kro-access-to-the-instances).
+A message like `cache sync timeout for kro.run/v1alpha1, Resource=bootstraps` often means that kro lacks access to the `Bootstrap` instances. Check that you applied `kro-rbac.yaml`, as described in [Grant kro access to the instances](#grant-kro-access-to-the-instances).
 
 ### RBAC Permission Errors
 

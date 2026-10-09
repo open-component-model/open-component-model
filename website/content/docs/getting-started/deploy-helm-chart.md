@@ -654,7 +654,7 @@ If `kubectl get rgd` shows the state `Inactive`, check the reason:
 kubectl get rgd simple -o jsonpath='{.status.conditions[?(@.type=="Ready")].message}'
 ```
 
-A message like `cache sync timeout for kro.run/v1alpha1, Resource=simples` means that kro lacks access to the `Simple` instances.
+A message like `cache sync timeout for kro.run/v1alpha1, Resource=simples` often means that kro lacks access to the `Simple` instances.
 Check that you applied `kro-rbac.yaml`, as described in [Grant kro access to the instances](#grant-kro-access-to-the-instances).
 
 If the instance does not become `ACTIVE`, kro may lack access to a resource in the graph. The kro logs name the resource:
