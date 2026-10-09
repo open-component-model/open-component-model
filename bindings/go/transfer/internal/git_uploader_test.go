@@ -91,10 +91,10 @@ func TestBuildGraphDefinition_GitUploader(t *testing.T) {
 			},
 		},
 		{
-			name:      "the default match pushes regardless of a CTF target",
-			target:    testCTFRepo("/tmp/target"),
-			resource:  gitResource(commit),
-			uploader:  &transferv1alpha1.GitUploaderConfig{Repository: "https://git.target.example/org/repo.git", Ref: "refs/heads/main"},
+			name:     "the default match pushes regardless of a CTF target",
+			target:   testCTFRepo("/tmp/target"),
+			resource: gitResource(commit),
+			uploader: &transferv1alpha1.GitUploaderConfig{Repository: "https://git.target.example/org/repo.git", Ref: "refs/heads/main"},
 			wantTypes: []runtime.Type{
 				gitv1alpha1.GetGitResourceV1alpha1, gitv1alpha1.AddGitResourceV1alpha1,
 				ociv1alpha1.CTFAddComponentVersionV1alpha1, FileCleanupVersionedType,
