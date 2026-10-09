@@ -4,6 +4,14 @@ go 1.27.0
 
 toolchain go1.27.1
 
+// Pin kube-openapi to the v0.37.0 k8s release line (structured-merge-diff v6).
+// apimachinery v0.37.0 compiles against smd/v6; newer kube-openapi pseudo-versions
+// moved to smd/v7, which breaks the managedfields typeconverter (PR #3770 recurrence).
+// go mod tidy never downgrades, so a plain require pin can't unstick a bad bump; this
+// replace holds through the workflow's `go get ocm@TAG && go mod tidy`.
+// Remove once apimachinery itself ships on smd/v7 (v0.38.0-alpha.1+).
+replace k8s.io/kube-openapi => k8s.io/kube-openapi v0.0.0-20260721132016-d427ff9ee9ad
+
 require (
 	github.com/spf13/cobra v1.10.2
 	ocm.software/ocm v0.50.0
@@ -146,11 +154,14 @@ require (
 	github.com/go-openapi/runtime/server-middleware v0.33.2 // indirect
 	github.com/go-openapi/spec v1.0.1 // indirect
 	github.com/go-openapi/strfmt v0.27.2 // indirect
+	github.com/go-openapi/swag v0.29.2 // indirect
+	github.com/go-openapi/swag/cmdutils v0.29.2 // indirect
 	github.com/go-openapi/swag/conv v0.29.2 // indirect
 	github.com/go-openapi/swag/fileutils v0.29.2 // indirect
 	github.com/go-openapi/swag/jsonutils v0.29.2 // indirect
 	github.com/go-openapi/swag/loading v0.29.2 // indirect
 	github.com/go-openapi/swag/mangling v0.29.2 // indirect
+	github.com/go-openapi/swag/netutils v0.29.2 // indirect
 	github.com/go-openapi/swag/pools v0.29.2 // indirect
 	github.com/go-openapi/swag/stringutils v0.29.2 // indirect
 	github.com/go-openapi/swag/typeutils v0.29.2 // indirect
@@ -363,6 +374,5 @@ require (
 	sigs.k8s.io/randfill v1.0.0 // indirect
 	sigs.k8s.io/release-utils v0.12.4 // indirect
 	sigs.k8s.io/structured-merge-diff/v6 v6.4.2 // indirect
-	sigs.k8s.io/structured-merge-diff/v7 v7.0.0 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
