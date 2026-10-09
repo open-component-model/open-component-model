@@ -93,6 +93,13 @@ func NewBlobCache(opts Options) (*BlobCache, error) {
 	return c, nil
 }
 
+// Close stops the background expiry goroutine. Cached files stay on disk and are
+// reseeded by the next [NewBlobCache] over the same Dir. A closed cache no longer
+// expires entries, so it must not be used afterwards.
+func (c *BlobCache) Close() {
+	c.lru.Close()
+}
+
 // Accept reports whether desc should be cached, per [Options.Accept].
 // The full descriptor is fed to the admission filter (not just the
 // media type) so future extensions can key on annotations, size, or

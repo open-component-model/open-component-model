@@ -20,7 +20,8 @@
 //	    resolution.Verification{Verifications: verifications}, component, version)
 //
 // GetComponentVersion blocks until the component version is fetched from the repository and verified.
-// Nothing is cached between calls, so every call reaches the repository.
+// Resolved descriptors are not cached between calls, so every call reaches the repository. Manifest and
+// descriptor blobs may be served from the shared OCI blob cache once the repository confirmed access to them.
 //
 // Everything that needs no verification (listing versions, local blobs, health checks, transfers) uses the
 // repository resolver from [Resolver.RepositoryResolver] directly.

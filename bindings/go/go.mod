@@ -25,7 +25,7 @@ require (
 	github.com/go-logr/logr v1.4.4
 	github.com/gobwas/glob v1.0.0
 	github.com/google/go-github/v91 v91.0.0
-	github.com/hashicorp/golang-lru/v2 v2.0.7
+	github.com/hashicorp/golang-lru/v2 v2.0.8-0.20260903152128-9c13c57de0be
 	github.com/invopop/jsonschema v0.14.0
 	github.com/jedib0t/go-pretty/v6 v6.8.3
 	github.com/nlepage/go-tarfs v1.2.1

@@ -180,8 +180,10 @@ func main() {
 
 	// Plugins use object config so they need to be request based.
 	pluginLogger := slog.New(logr.ToSlogHandler(setupLog))
+	// The OCI caches own their directory on disk, so the per-request plugin managers share one instance.
+	ociCaches := setup.NewOCICaches("")
 	newPluginManager := func(ctx context.Context, cfg *genericv1.Config) (*manager.PluginManager, error) {
-		return setup.NewPluginManager(ctx, cfg, pluginLogger)
+		return setup.NewPluginManager(ctx, cfg, pluginLogger, setup.WithOCICaches(ociCaches))
 	}
 
 	if _, err := newPluginManager(ctx, nil); err != nil {
@@ -308,7 +310,9 @@ func main() {
 	}()
 
 	setupLog.Info("starting manager")
-	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
+	err = mgr.Start(ctrl.SetupSignalHandler())
+	ociCaches.Close()
+	if err != nil {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
