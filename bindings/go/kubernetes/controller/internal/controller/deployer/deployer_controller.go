@@ -43,7 +43,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/event"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/resolution"
-	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/resolution/workerpool"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/setup"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/status"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/util"
@@ -52,6 +51,7 @@ import (
 	ociaccess "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
+	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -133,10 +133,8 @@ func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) err
 		return err
 	}
 
-	eventSource := workerpool.NewEventSource(r.Resolver.WorkerPool())
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&deliveryv1alpha1.Deployer{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
-		WatchesRawSource(eventSource).
 		WatchesRawSource(informerManager.Source()).
 		// Watch for events from OCM resources that are referenced by the deployer
 		Watches(
@@ -352,20 +350,20 @@ func (r *Reconciler) reconcileDeployment(ctx context.Context, deployer *delivery
 		return ctrl.Result{}, fmt.Errorf("failed to create plugin manager: %w", err)
 	}
 
-	cacheBackedRepo, err := r.createCacheBackedRepository(ctx, deployer, resource, cfg, pm)
+	repoResolver, err := r.createRepositoryResolver(ctx, deployer, resource, cfg, pm)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 
 	componentDescriptor, matchedResource, err := r.resolveComponentAndMatchResource(ctx, deployer, resource, cfg, pm)
-	if componentDescriptor == nil {
+	if err != nil {
 		return ctrl.Result{}, err
 	}
 
 	key := buildResourceCacheKey(matchedResource, componentDescriptor, cfg, resource.Spec.Resource.ByReference.Resource.String())
 
 	objs, err := r.DownloadCache.Load(key, func() ([]*unstructured.Unstructured, error) {
-		return r.DownloadResourceWithOCM(ctx, cacheBackedRepo, componentDescriptor, matchedResource, cfg, pm)
+		return r.DownloadResourceWithOCM(ctx, repoResolver, componentDescriptor, matchedResource, cfg, pm)
 	})
 	if err != nil {
 		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetOCMResourceFailedReason, err.Error())
@@ -465,14 +463,14 @@ func (r *Reconciler) resolveConfiguration(
 	return cfg, nil
 }
 
-// createCacheBackedRepository creates a cache-backed OCM repository from the resource's repository spec.
-func (r *Reconciler) createCacheBackedRepository(
+// createRepositoryResolver creates an OCM repository resolver from the resource's repository spec.
+func (r *Reconciler) createRepositoryResolver(
 	ctx context.Context,
 	deployer *deliveryv1alpha1.Deployer,
 	resource *deliveryv1alpha1.Resource,
 	cfg *configuration.Configuration,
 	pm *manager.PluginManager,
-) (*resolution.CacheBackedRepository, error) {
+) (resolvers.ComponentVersionRepositoryResolver, error) {
 	repoSpec := &ocmruntime.Raw{}
 	if err := repoSpec.UnmarshalJSON(resource.Status.Component.RepositorySpec.Raw); err != nil {
 		status.MarkNotReady(r.GetEventRecorder(), deployer, deliveryv1alpha1.GetRepositoryFailedReason, err.Error())
@@ -480,30 +478,21 @@ func (r *Reconciler) createCacheBackedRepository(
 		return nil, fmt.Errorf("failed to decode repository spec: %w", err)
 	}
 
-	cacheBackedRepo, err := r.Resolver.NewCacheBackedRepository(ctx, &resolution.RepositoryOptions{
+	repoResolver, err := r.Resolver.RepositoryResolver(ctx, &resolution.Options{
 		RepositorySpec: repoSpec,
 		Configuration:  cfg,
 		PluginManager:  pm,
-		RequesterFunc: func() workerpool.RequesterInfo {
-			return workerpool.RequesterInfo{
-				NamespacedName: k8stypes.NamespacedName{
-					Namespace: deployer.GetNamespace(),
-					Name:      deployer.GetName(),
-				},
-			}
-		},
 	})
 	if err != nil {
 		status.MarkNotReady(r.GetEventRecorder(), deployer, deliveryv1alpha1.GetRepositoryFailedReason, err.Error())
 
-		return nil, fmt.Errorf("failed to create cache-backed repository: %w", err)
+		return nil, fmt.Errorf("failed to create repository resolver: %w", err)
 	}
 
-	return cacheBackedRepo, nil
+	return repoResolver, nil
 }
 
 // resolveComponentAndMatchResource resolves the component descriptor and finds the matching resource within it.
-// Returns (nil, nil, nil) when resolution is in progress (non-retriable).
 func (r *Reconciler) resolveComponentAndMatchResource(
 	ctx context.Context,
 	deployer *deliveryv1alpha1.Deployer,
@@ -513,16 +502,11 @@ func (r *Reconciler) resolveComponentAndMatchResource(
 ) (*descriptor.Descriptor, *descriptor.Resource, error) {
 	componentDescriptor, err := r.getEffectiveComponentDescriptor(ctx, deployer, resource, cfg, pm)
 	switch {
-	case errors.Is(err, workerpool.ErrResolutionInProgress):
-		// Resolution is in progress, the controller will be re-triggered via event source when resolution completes
-		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.ResolutionInProgress, err.Error())
-
-		return nil, nil, nil
 	case errors.Is(err, ErrComponentVersionDrift):
 		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.ComponentDriftResolutionInProgress, err.Error())
 
 		return nil, nil, err
-	case errors.Is(err, workerpool.ErrNotSafelyDigestible):
+	case errors.Is(err, resolution.ErrNotSafelyDigestible):
 		// Ignore error, but log event
 		event.New(r.EventRecorder, deployer, nil, deliveryv1alpha1.EventSeverityError, "%s", err.Error())
 	default:
@@ -613,13 +597,13 @@ func (r *Reconciler) reconcileDeletionTimestamp(ctx context.Context, deployer *d
 
 func (r *Reconciler) DownloadResourceWithOCM(
 	ctx context.Context,
-	cacheBackedRepo *resolution.CacheBackedRepository,
+	repoResolver resolvers.ComponentVersionRepositoryResolver,
 	componentDescriptor *descriptor.Descriptor,
 	resource *descriptor.Resource,
 	cfg *configuration.Configuration,
 	pm *manager.PluginManager,
 ) (objs []*unstructured.Unstructured, err error) {
-	resourceBlob, err := r.downloadResourceBlob(ctx, cacheBackedRepo, componentDescriptor, resource, cfg, pm)
+	resourceBlob, err := r.downloadResourceBlob(ctx, repoResolver, componentDescriptor, resource, cfg, pm)
 	if err != nil {
 		return nil, fmt.Errorf("failed to download resource: %w", err)
 	}
@@ -692,7 +676,7 @@ func init() {
 // or the plugin manager (for external access types like OCI images).
 func (r *Reconciler) downloadResourceBlob(
 	ctx context.Context,
-	repo *resolution.CacheBackedRepository,
+	repoResolver resolvers.ComponentVersionRepositoryResolver,
 	componentDescriptor *descriptor.Descriptor,
 	resource *descriptor.Resource,
 	cfg *configuration.Configuration,
@@ -856,7 +840,11 @@ func (r *Reconciler) applyWithApplySet(ctx context.Context, resource *deliveryv1
 		return fmt.Errorf("failed to project ApplySet: %w", err)
 	}
 
-	if err := r.setApplySetMetadata(ctx, deployer, metadata); err != nil {
+	// The update replaces the in-memory deployer with the server's copy, dropping status set earlier in this reconcile.
+	deployerStatus := deployer.Status.DeepCopy()
+	err = r.setApplySetMetadata(ctx, deployer, metadata)
+	deployer.Status = *deployerStatus
+	if err != nil {
 		return fmt.Errorf("failed to set ApplySet metadata on deployer: %w", err)
 	}
 
@@ -965,12 +953,11 @@ func (r *Reconciler) track(ctx context.Context, deployer *deliveryv1alpha1.Deplo
 // integrity of that component version is still intact is tricky.
 //
 //   - If the resource is from the same component version as the component from the component CR, we need to check for
-//     verifications on the component CR and add them to the cache-backed repository to make sure they are included in
-//     the cache key and used for verification (if any).
+//     verifications on the component CR and add them to the repository to make sure they are used for
+//     verification (if any).
 //   - If the resource is from a component version that was resolved through a reference path in the resource
 //     controller, we need to resolve the path again starting from the component specified in the component CR, to make
 //     sure we get the same component version with an intact integrity chain (if a digest was provided to check it).
-//     This operation should be cheap as we expect the component to be in cache already.
 func (r *Reconciler) getEffectiveComponentDescriptor(
 	ctx context.Context,
 	deployer *deliveryv1alpha1.Deployer,
@@ -1001,42 +988,20 @@ func (r *Reconciler) getEffectiveComponentDescriptor(
 		return nil, fmt.Errorf("failed to get verifications: %w", err)
 	}
 
-	requesterFunc := func() workerpool.RequesterInfo {
-		return workerpool.RequesterInfo{
-			NamespacedName: k8stypes.NamespacedName{
-				Namespace: deployer.GetNamespace(),
-				Name:      deployer.GetName(),
-			},
-		}
-	}
-
-	verifiedOpts := resolution.RepositoryOptions{
+	resolveOpts := &resolution.Options{
 		RepositorySpec: repoSpecComponent,
 		Configuration:  cfg,
 		PluginManager:  pm,
-		Verifications:  verifications,
-		RequesterFunc:  requesterFunc,
 	}
 
-	refPathOpts := resolution.RepositoryOptions{
-		RepositorySpec: repoSpecComponent,
-		Configuration:  cfg,
-		PluginManager:  pm,
-		RequesterFunc:  requesterFunc,
-	}
-
-	repoComponent, err := r.Resolver.NewCacheBackedRepository(ctx, &verifiedOpts)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create cache-backed repository: %w", err)
-	}
-
-	componentDescriptorComponent, err := repoComponent.GetComponentVersion(ctx,
+	componentDescriptorComponent, err := r.Resolver.GetComponentVersion(ctx, resolveOpts,
+		resolution.Verification{Verifications: verifications},
 		component.Status.Component.Component,
 		component.Status.Component.Version)
 	// Only return the error if it is not of type `ErrNotSafelyDigestible`. If it is of that type, we need to check
 	// if there is a reference path to resolve.
-	if err != nil && !errors.Is(err, workerpool.ErrNotSafelyDigestible) {
-		return nil, fmt.Errorf("failed to get component version from cache-backed repository: %w", err)
+	if err != nil && !errors.Is(err, resolution.ErrNotSafelyDigestible) {
+		return nil, fmt.Errorf("failed to get component version: %w", err)
 	}
 
 	// Early return if the component version from the component and resource status are the same.
@@ -1066,9 +1031,9 @@ func (r *Reconciler) getEffectiveComponentDescriptor(
 		r.Resolver,
 		componentDescriptorComponent,
 		resource.Spec.Resource.ByReference.ReferencePath,
-		&refPathOpts,
+		resolveOpts,
 	)
-	if errReferencePath != nil && !errors.Is(errReferencePath, workerpool.ErrNotSafelyDigestible) {
+	if errReferencePath != nil && !errors.Is(errReferencePath, resolution.ErrNotSafelyDigestible) {
 		return nil, fmt.Errorf("failed to resolve resource reference path: %w", errReferencePath)
 	}
 

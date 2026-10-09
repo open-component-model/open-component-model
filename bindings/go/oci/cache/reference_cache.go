@@ -171,6 +171,13 @@ func NewReferenceCache(opts Options) (*ReferenceCache, error) {
 	return c, nil
 }
 
+// Close stops the background expiry goroutine. Snapshots stay on disk and are
+// reloaded by the next [NewReferenceCache] over the same Dir. A closed cache no
+// longer expires entries, so it must not be used afterwards.
+func (c *ReferenceCache) Close() {
+	c.lru.Close()
+}
+
 // Add stores a (namespace, reference) → descriptor mapping in the
 // in-memory LRU and persists the namespace's snapshot file so a
 // future run pointing at the same Dir reseeds the mapping.

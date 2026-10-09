@@ -14,7 +14,6 @@ import (
 	"golang.org/x/time/rate"
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/fields"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -31,7 +30,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/event"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/resolution"
-	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/resolution/workerpool"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/status"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/util"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/verification"
@@ -46,8 +44,7 @@ import (
 type Reconciler struct {
 	*ocm.BaseReconciler
 
-	// Resolver provides repository resolution and caching for component reconciliation.
-	// It ensures that repository access is efficient and consistent during reconciliation operations.
+	// Resolver provides repository resolution and verification for component reconciliation.
 	Resolver *resolution.Resolver
 }
 
@@ -99,11 +96,8 @@ func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) err
 		return fmt.Errorf("failed setting index fields: %w", err)
 	}
 
-	// event source from resolver's worker pool to get notified when resolutions complete
-	eventSource := workerpool.NewEventSource(r.Resolver.WorkerPool())
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha1.Component{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
-		WatchesRawSource(eventSource).
 		Watches(
 			&v1alpha1.Repository{},
 			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
@@ -123,10 +117,8 @@ func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) err
 				requests := make([]reconcile.Request, 0, len(list.Items))
 				for _, component := range list.Items {
 					requests = append(requests, reconcile.Request{
-						NamespacedName: types.NamespacedName{
-							Namespace: component.GetNamespace(),
-							Name:      component.GetName(),
-						},
+						Namespace: component.GetNamespace(),
+						Name:      component.GetName(),
 					})
 				}
 
@@ -297,44 +289,38 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, fmt.Errorf("failed to get verifications: %w", err)
 	}
 
-	cacheBackedRepo, err := r.Resolver.NewCacheBackedRepository(ctx, &resolution.RepositoryOptions{
+	resolveOpts := &resolution.Options{
 		RepositorySpec: repoSpec,
 		Configuration:  cfg,
 		PluginManager:  pm,
-		Verifications:  verifications,
-		RequesterFunc: func() workerpool.RequesterInfo {
-			return workerpool.RequesterInfo{
-				NamespacedName: types.NamespacedName{
-					Namespace: component.GetNamespace(),
-					Name:      component.GetName(),
-				},
-			}
-		},
-	})
+	}
+
+	repoResolver, err := r.Resolver.RepositoryResolver(ctx, resolveOpts)
 	if err != nil {
 		status.MarkNotReady(r.GetEventRecorder(), component, v1alpha1.GetRepositoryFailedReason, err.Error())
 
-		return ctrl.Result{}, fmt.Errorf("failed to create cache-backed repository: %w", err)
+		return ctrl.Result{}, fmt.Errorf("failed to create repository resolver: %w", err)
 	}
 
-	version, err := r.DetermineEffectiveVersionFromRepo(ctx, component, cacheBackedRepo)
+	cvRepo, err := repoResolver.GetComponentVersionRepositoryForComponent(ctx, component.Spec.Component, "")
+	if err != nil {
+		status.MarkNotReady(r.GetEventRecorder(), component, v1alpha1.GetRepositoryFailedReason, err.Error())
+
+		return ctrl.Result{}, fmt.Errorf("failed to get repository for component %s: %w", component.Spec.Component, err)
+	}
+
+	version, err := r.DetermineEffectiveVersionFromRepo(ctx, component, cvRepo)
 	if err != nil {
 		status.MarkNotReady(r.EventRecorder, component, v1alpha1.CheckVersionFailedReason, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to determine effective version: %w", err)
 	}
 
-	desc, err := cacheBackedRepo.GetComponentVersion(ctx, component.Spec.Component, version)
+	desc, err := r.Resolver.GetComponentVersion(ctx, resolveOpts,
+		resolution.Verification{Verifications: verifications},
+		component.Spec.Component, version)
 	switch {
-	case errors.Is(err, workerpool.ErrResolutionInProgress):
-		// Resolution is in progress, the controller will be re-triggered via event source when resolution completes
-		status.MarkNotReady(r.EventRecorder, component, v1alpha1.ResolutionInProgress, err.Error())
-		logger.Info("component version resolution in progress, waiting for event notification",
-			"component", component.Spec.Component,
-			"version", version)
-
-		return ctrl.Result{}, nil
-	case errors.Is(err, workerpool.ErrNotSafelyDigestible):
+	case errors.Is(err, resolution.ErrNotSafelyDigestible):
 		// Ignore error, but log event
 		event.New(r.EventRecorder, component, nil, v1alpha1.EventSeverityError, "%s", err.Error())
 	default:

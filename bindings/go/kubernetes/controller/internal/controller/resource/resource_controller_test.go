@@ -13,7 +13,6 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/go-logr/logr"
-	"github.com/prometheus/client_golang/prometheus/testutil"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -25,7 +24,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
-	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/resolution/workerpool"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/status"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/test"
 	ocirepository "ocm.software/open-component-model/bindings/go/oci/repository"
@@ -1303,23 +1301,6 @@ var _ = Describe("Resource Controller", func() {
 				"Status.Component.Component": nestedComponentName,
 				"Status.Component.Version":   componentVersion,
 			})
-
-			By("checking the metrics for cache hits and misses")
-			parentComponentMissCounter, err := workerpool.CacheMissCounterTotal.GetMetricWithLabelValues(componentName, componentVersion, "unverified")
-			Expect(err).ToNot(HaveOccurred())
-			Expect(testutil.ToFloat64(parentComponentMissCounter)).To(Equal(float64(1)))
-			parentComponentHitCounter, err := workerpool.CacheHitCounterTotal.GetMetricWithLabelValues(componentName, componentVersion, "unverified")
-			Expect(err).ToNot(HaveOccurred())
-			// Hit 1 after this component version was stored in the cache (ErrResolutionInProgress)
-			// Hit 2 after the nested component returned an ErrResolutionInProgress and the parent component version was re-queued for reconciliation
-			Expect(testutil.ToFloat64(parentComponentHitCounter)).To(BeNumerically("==", float64(2)))
-
-			childComponentMissCount, err := workerpool.CacheMissCounterTotal.GetMetricWithLabelValues(nestedComponentName, componentVersion, "unverified")
-			Expect(err).ToNot(HaveOccurred())
-			Expect(testutil.ToFloat64(childComponentMissCount)).To(Equal(float64(1)))
-			childComponentHitCounter, err := workerpool.CacheHitCounterTotal.GetMetricWithLabelValues(nestedComponentName, componentVersion, "unverified")
-			Expect(err).ToNot(HaveOccurred())
-			Expect(testutil.ToFloat64(childComponentHitCounter)).To(Equal(float64(1)))
 		})
 
 		It("reconcile a nested and verified component by reference path", func(ctx SpecContext) {
@@ -1607,61 +1588,6 @@ var _ = Describe("Resource Controller", func() {
 				"Status.Component.Component": nestedComponentName2,
 				"Status.Component.Version":   componentVersion,
 			})
-
-			By("checking the metrics for cache hits and misses")
-			parentComponentMissCounter, err := workerpool.CacheMissCounterTotal.GetMetricWithLabelValues(componentName, componentVersion, "unverified")
-			Expect(err).ToNot(HaveOccurred())
-			Expect(testutil.ToFloat64(parentComponentMissCounter)).To(Equal(float64(0)),
-				"expected 0 cache misses for the parent component as it should be verified")
-			parentComponentMissCounterVerified, err := workerpool.CacheMissCounterTotal.GetMetricWithLabelValues(componentName, componentVersion, "verified")
-			Expect(err).ToNot(HaveOccurred())
-			Expect(testutil.ToFloat64(parentComponentMissCounterVerified)).To(Equal(float64(1)),
-				"expected 1 cache miss for the verified parent component for the first run")
-			parentComponentHitCounter, err := workerpool.CacheHitCounterTotal.GetMetricWithLabelValues(componentName, componentVersion, "verified")
-			Expect(err).ToNot(HaveOccurred())
-			// (Only the resource controller is running!)
-			// Hit 1 after this component version was stored in the cache
-			// Hit 2 after the nested-component-1 returned an ErrResolutionInProgress and the parent component version was re-queued for reconciliation
-			// Hit 3 after the nested-component-11 returned an ErrResolutionInProgress and the parent component version was re-queued for reconciliation
-			// Hit 4 after the second resource got applied and queued for reconciliation
-			// Hit 5 after the nested-component-2 returned an ErrResolutionInProgress and the parent component version was re-queued for reconciliation
-			Expect(testutil.ToFloat64(parentComponentHitCounter)).To(BeNumerically("==", float64(5)),
-				"expected at least 5 cache hits for the verified parent component as it should be hit for both resources and the nested component reconciliations")
-
-			nestedComponentMissCounter, err := workerpool.CacheMissCounterTotal.GetMetricWithLabelValues(nestedComponentName1, componentVersion, "unverified")
-			Expect(err).ToNot(HaveOccurred())
-			Expect(testutil.ToFloat64(nestedComponentMissCounter)).To(Equal(float64(0)),
-				"expected 0 cache misses for the nested component as it should be verified")
-			nestedComponent1MissCounterVerified, err := workerpool.CacheMissCounterTotal.GetMetricWithLabelValues(nestedComponentName1, componentVersion, "verified")
-			Expect(err).ToNot(HaveOccurred())
-			Expect(testutil.ToFloat64(nestedComponent1MissCounterVerified)).To(Equal(float64(1)),
-				"expected 1 cache miss for the verified nested component for the first run")
-			nestedComponent1HitCounter, err := workerpool.CacheHitCounterTotal.GetMetricWithLabelValues(nestedComponentName1, componentVersion, "verified")
-			Expect(err).ToNot(HaveOccurred())
-			// (Only the resource controller is running!)
-			// Hit 1 after this component version was stored in the cache
-			// Hit 2 when nested-component-11 is resolved as the reference path resolver will return the ErrResolutionInProgress for nested-component-11
-			//   which will then trigger another reconciliation where we will go the full path again.
-			Expect(testutil.ToFloat64(nestedComponent1HitCounter)).To(Equal(float64(2)),
-				"expected 2 cache hits for the verified nested component as it should be hit for the resolution of the nested component again")
-
-			for _, nestedComponent := range []string{nestedComponentName11, nestedComponentName2} {
-				nestedComponentMissCounter, err := workerpool.CacheMissCounterTotal.GetMetricWithLabelValues(nestedComponent, componentVersion, "unverified")
-				Expect(err).ToNot(HaveOccurred())
-				Expect(testutil.ToFloat64(nestedComponentMissCounter)).To(Equal(float64(0)),
-					"expected 0 cache misses for the nested-component as it should be integrity checked",
-					nestedComponent)
-				nestedComponentMissCounterVerified, err := workerpool.CacheMissCounterTotal.GetMetricWithLabelValues(nestedComponent, componentVersion, "verified")
-				Expect(err).ToNot(HaveOccurred())
-				Expect(testutil.ToFloat64(nestedComponentMissCounterVerified)).To(Equal(float64(1)),
-					"expected 1 cache miss for the verified nested-component on the first run",
-					nestedComponent)
-				nestedComponentHitCounterVerified, err := workerpool.CacheHitCounterTotal.GetMetricWithLabelValues(nestedComponent, componentVersion, "verified")
-				Expect(err).ToNot(HaveOccurred())
-				Expect(testutil.ToFloat64(nestedComponentHitCounterVerified)).To(Equal(float64(1)),
-					"expected 1 cache hit for the verified nested-component",
-					nestedComponent)
-			}
 		})
 
 		It("reconcile a nested component with digest spec but unsigned by reference path", func(ctx SpecContext) {
@@ -1797,27 +1723,6 @@ var _ = Describe("Resource Controller", func() {
 				"Status.Component.Component": nestedComponentName,
 				"Status.Component.Version":   componentVersion,
 			})
-
-			By("checking the metrics for cache hits and misses")
-			parentComponentMissCounter, err := workerpool.CacheMissCounterTotal.GetMetricWithLabelValues(componentName, componentVersion, "unverified")
-			Expect(err).ToNot(HaveOccurred())
-			Expect(testutil.ToFloat64(parentComponentMissCounter)).To(Equal(float64(1)))
-			parentComponentHitCounter, err := workerpool.CacheHitCounterTotal.GetMetricWithLabelValues(componentName, componentVersion, "unverified")
-			Expect(err).ToNot(HaveOccurred())
-			// Hit 1 after this component version was stored in the cache (ErrResolutionInProgress)
-			// Hit 2 after the nested component returned an ErrResolutionInProgress and the parent component version was re-queued for reconciliation
-			Expect(testutil.ToFloat64(parentComponentHitCounter)).To(BeNumerically("==", float64(2)))
-
-			childComponentMissCount, err := workerpool.CacheMissCounterTotal.GetMetricWithLabelValues(nestedComponentName, componentVersion, "unverified")
-			Expect(err).ToNot(HaveOccurred())
-			Expect(testutil.ToFloat64(childComponentMissCount)).To(Equal(float64(0)))
-
-			childComponentVerifiedMissCount, err := workerpool.CacheMissCounterTotal.GetMetricWithLabelValues(nestedComponentName, componentVersion, "verified")
-			Expect(err).ToNot(HaveOccurred())
-			Expect(testutil.ToFloat64(childComponentVerifiedMissCount)).To(Equal(float64(1)))
-			childComponentVerifiedHitCounter, err := workerpool.CacheHitCounterTotal.GetMetricWithLabelValues(nestedComponentName, componentVersion, "verified")
-			Expect(err).ToNot(HaveOccurred())
-			Expect(testutil.ToFloat64(childComponentVerifiedHitCounter)).To(Equal(float64(1)))
 		})
 	})
 

@@ -26,11 +26,16 @@ import (
 // creator controller user-agent.
 const creator = "ocm.software/open-component-model/bindings/go/kubernetes/controller"
 
+// blobCacheMaxEntries sizes the one blob cache all reconciles share; a component version takes about three entries.
+const blobCacheMaxEntries = 10_000
+
 // PluginOptions since TempDir is dependent on the Pod and mounted temp folder
 // we set it separately from the ocm config. Also, filesystem config is not allowed.
 type PluginOptions struct {
 	// TempDir used to write temporary files into.
 	TempDir string
+	// OCICaches are the OCI caches shared by every plugin manager of the process.
+	OCICaches *ocicache.Caches
 }
 
 // PluginOption configures [NewPluginManager].
@@ -41,6 +46,22 @@ func WithTempDir(dir string) PluginOption {
 	return func(o *PluginOptions) {
 		o.TempDir = dir
 	}
+}
+
+// WithOCICaches shares the OCI caches between plugin managers. The caches own their directory,
+// so per-request plugin managers must not each build their own.
+func WithOCICaches(caches *ocicache.Caches) PluginOption {
+	return func(o *PluginOptions) {
+		o.OCICaches = caches
+	}
+}
+
+// NewOCICaches creates the OCI caches to pass to [WithOCICaches].
+func NewOCICaches(tempDir string) *ocicache.Caches {
+	blobs := &ocicache.Options{RemotePolicy: ocicache.RemotePolicyAlways, MaxEntries: blobCacheMaxEntries}
+	references := &ocicache.Options{RemotePolicy: ocicache.RemotePolicyAlways}
+
+	return ocicache.NewCaches(tempDir, blobs, references)
 }
 
 // NewPluginManager build a per-request plugin manager.
@@ -60,6 +81,11 @@ func NewPluginManager(ctx context.Context, cfg *genericv1.Config, logger *slog.L
 		fsCfg.TempFolder = &options.TempDir
 	}
 
+	ociCaches := options.OCICaches
+	if ociCaches == nil {
+		ociCaches = NewOCICaches(options.TempDir)
+	}
+
 	pm := manager.NewPluginManager(ctx)
 
 	repositoryProvider := provider.NewComponentVersionRepositoryProvider(
@@ -67,8 +93,7 @@ func NewPluginManager(ctx context.Context, cfg *genericv1.Config, logger *slog.L
 		provider.WithUserAgent(creator),
 		provider.WithTempDir(options.TempDir),
 		provider.WithHTTPConfig(httpCfg),
-		provider.WithBlobCacheOptions(&ocicache.Options{RemotePolicy: ocicache.RemotePolicyAlways}),
-		provider.WithReferenceCacheOptions(&ocicache.Options{RemotePolicy: ocicache.RemotePolicyAlways}),
+		provider.WithCaches(ociCaches),
 	)
 
 	signingHandler, err := handler.New(signingv1alpha1.Scheme, true)

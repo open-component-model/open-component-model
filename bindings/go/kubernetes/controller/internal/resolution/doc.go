@@ -1,66 +1,52 @@
-// Package resolution provides async, cache-backed component version fetching with optional
-// signature verification and digest integrity checking.
+// Package resolution provides component version fetching with optional signature verification
+// and digest integrity checking.
 //
 // # Usage
 //
-// Create a [Resolver] during controller setup using [NewResolver]. The worker pool must be
-// added to the controller manager separately so it starts and stops with the manager lifecycle.
+// Create a [Resolver] during controller setup using [NewResolver].
 //
-//	wp := workerpool.New(...)
-//	resolver := resolution.NewResolver(logger, wp)
-//	mgr.Add(wp)
+//	resolver := resolution.NewResolver(logger)
 //
-// To fetch a component version, create a [CacheBackedRepository] via [Resolver.NewCacheBackedRepository]
-// with [RepositoryOptions], then call GetComponentVersion on it:
+// To fetch a component version, call [Resolver.GetComponentVersion] with [Options] and a [Verification]:
 //
 //	cfg, err := configuration.LoadConfigurations(ctx, client, namespace, ocmConfigs)
 //	pm, err := setup.NewPluginManager(ctx, cfg.Config, logger)
-//	repo, err := resolver.NewCacheBackedRepository(ctx, &resolution.RepositoryOptions{
-//	    RepositorySpec:    repoSpec,
-//	    Configuration:     cfg,
-//	    PluginManager:     pm,                   // required; built from cfg
-//	    Verifications:     verifications,        // optional: signature verification
-//	    Digest:            digest,               // optional: integrity check for referenced components
-//	    RequesterFunc:     requesterFunc,        // identifies the requesting controller object
-//	})
-//	desc, err := repo.GetComponentVersion(ctx, component, version)
+//	opts := &resolution.Options{
+//	    RepositorySpec: repoSpec,
+//	    Configuration:  cfg,
+//	    PluginManager:  pm, // required; built from cfg
+//	}
+//	desc, err := resolver.GetComponentVersion(ctx, opts,
+//	    resolution.Verification{Verifications: verifications}, component, version)
 //
-// # Async Resolution
+// GetComponentVersion blocks until the component version is fetched from the repository and verified.
+// Resolved descriptors are not cached between calls, so every call reaches the repository. Manifest and
+// descriptor blobs may be served from the shared OCI blob cache once the repository confirmed access to them.
 //
-// GetComponentVersion is non-blocking. The first call enqueues work and returns
-// [ErrResolutionInProgress]. Controllers should mark their status accordingly and return. There is
-// no need to requeue the object because the workpool will enqueue reconcile events for the given
-// objects using RequesterFunc function.
+// Everything that needs no verification (listing versions, local blobs, health checks, transfers) uses the
+// repository resolver from [Resolver.RepositoryResolver] directly.
 //
 // # Request-Scoped Plugins
 //
 // Plugins are configured from the reconciled object's ocmConfig, so the caller builds a
 // PluginManager per reconcile and passes it in. The resolver caches resolvers under the
-// configuration hash. That works, because the manager is itself derived from the
+// configuration hash for 30 minutes. That works, because the manager is itself derived from the
 // same configuration.
 //
-// # Cache Keys and Verification Separation
+// # Verification
 //
-// Cache keys are an FNV-1a hash of: configHash | repoSpec | component | version | verifications | digest.
-//
-// Because verifications and digest are part of the key, a verified fetch and an unverified fetch
-// for the same component version produce separate cache entries. This prevents an unverified
-// cached result from being served to a requester that asked for verification.
-//
-// Use Verifications for top-level components, built from the signing.config.ocm.software entries of
-// the reconciled object's OCM configuration (see [verification.GetVerifications]).
-// Use Digest for child components resolved through a reference path, where integrity is
+// Set [Verification.Verifications] for top-level components, built from the signing.config.ocm.software
+// entries of the reconciled object's OCM configuration (see [verification.GetVerifications]).
+// Set [Verification.Digest] for child components resolved through a reference path, where integrity is
 // checked against the parent's reference digest rather than a standalone signature.
+// The two are mutually exclusive.
 //
 // # Error Handling
 //
-// Controllers must handle two sentinel errors from GetComponentVersion:
+// Controllers must handle one sentinel error from GetComponentVersion:
 //
-//   - [ErrResolutionInProgress]: resolution is queued and waiting to be done.
-//   - [workerpool.ErrNotSafelyDigestible]: the component was resolved but cannot be digested.
+//   - [ErrNotSafelyDigestible]: the component was resolved but cannot be digested.
 //     The descriptor is still returned alongside the error.
 //
 // All other errors indicate resolution failure (network, verification mismatch, etc.).
-//
-// See ADR docs/adr/0009_controller_v2_lib_migration.md for architectural context.
 package resolution
