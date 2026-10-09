@@ -190,7 +190,7 @@ changes will not verify against a previously recorded digest.
 A resource can carry a digest before it has ever been fetched: setting the optional `digest` field on the resource in
 `component-constructor.yaml` turns the recorded value into an assertion, so `ocm add cv` fails rather than recording
 whatever the server returned. See
-[Tutorial: Work with HTTP Resources]({{< relref "docs/tutorials/wget-http-resources.md#pin-a-digest" >}}).
+[Tutorial: Work with HTTP Resources]({{< relref "docs/guides/pack/add-http-resources.md#pin-a-digest" >}}).
 
 ---
 

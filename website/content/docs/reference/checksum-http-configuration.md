@@ -15,7 +15,7 @@ digest processor consult the same configuration, so a mirror trusted for the
 input side is also trusted when the descriptor is refreshed.
 
 For a task-oriented walkthrough, see
-[Working with HTTP Resources]({{< relref "docs/tutorials/wget-http-resources.md" >}}#checksum-verification).
+[Working with HTTP Resources]({{< relref "docs/guides/pack/add-http-resources.md" >}}#checksum-verification).
 
 ## Configuration Type
 
@@ -182,7 +182,7 @@ header cross-origin.
 
 ## Related Documentation
 
-- [Working with HTTP Resources]({{< relref "docs/tutorials/wget-http-resources.md" >}}) — task-oriented walkthrough of the wget input and access types
+- [Working with HTTP Resources]({{< relref "docs/guides/pack/add-http-resources.md" >}}) — task-oriented walkthrough of the wget input and access types
 - [Reference: Input and Access Types]({{< relref "input-and-access-types.md" >}}#wgetv1-input) — field reference for the `Wget/v1` input and access types
 - [Reference: HTTP Client Configuration]({{< relref "http-client-configuration.md" >}}) — the transport-level `http.config.ocm.software/v1alpha1` configuration
 - [Reference: Credential Consumer Identities: Wget]({{< relref "credential-consumer-identities.md" >}}#wget) — identity attributes and matching rules for `Wget` consumers

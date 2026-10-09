@@ -587,5 +587,5 @@ For details on how plugins declare and register credential types, see
   their attributes
 - [Concept: Credential System]({{< relref "docs/concepts/credential-system.md" >}}) — how credential resolution works
   end-to-end
-- [Tutorial: Understand Credential Resolution]({{< relref "docs/tutorials/credential-resolution.md" >}}) — step-by-step
+- [Tutorial: Understand Credential Resolution]({{< relref "docs/concepts/credential-resolution.md" >}}) — step-by-step
   matching examples

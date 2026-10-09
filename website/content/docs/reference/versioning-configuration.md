@@ -284,7 +284,7 @@ scheme.
 
 ## Related Documentation
 
-- [Configure a Versioning Scheme Tutorial]({{< relref "docs/tutorials/configure-versioning.md" >}}) — Hands-on
+- [Configure a Versioning Scheme Tutorial]({{< relref "docs/guides/pack/configure-versioning.md" >}}) — Hands-on
   walkthrough for calendar versioning.
 - [Resolver Configuration]({{< relref "docs/reference/resolver-configuration.md" >}}) — The `versionConstraint` field
   interplays with versioning schemes.

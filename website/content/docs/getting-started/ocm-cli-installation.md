@@ -2,8 +2,11 @@
 title: "Install the OCM CLI"
 description: "Learn how to install the OCM CLI on various platforms."
 icon: "💻"
-weight: 21
+weight: 10
 toc: true
+aliases:
+  - /docs/getting-started/run-cli-from-container-image/
+  - /docs/how-to/container-image-usage/
 ---
 
 The OCM CLI is the primary tool for creating, managing, and transferring component versions.
@@ -98,6 +101,48 @@ chmod +x "$HOME/.local/bin/ocm"
 Replace `os` and `architecture` with your platform. This approach works on Linux and macOS.
 
 </details>
+
+{{< /tab >}}
+{{< tab "Run in Container" >}}
+
+### Run from a container image
+
+Run the CLI straight from the official container image, no local install required. The image
+`ghcr.io/open-component-model/cli` ships the `ocm` binary (plus a FIPS build of `cosign` and
+`gpg`) on a minimal Garden Linux `bare-libc` base with no shell.
+
+Mount your working directory and run any `ocm` command as the container's entrypoint:
+
+```shell
+docker run --rm \
+  -v "$(pwd)":/workspace:ro \
+  -w /workspace \
+  ghcr.io/open-component-model/cli:{{< site-version "semver" >}} \
+  version
+```
+
+Pass credentials by mounting an `.ocmconfig` from the working directory (keep the mount
+writable, `:rw`, for commands that produce output such as `add cv`):
+
+```shell
+docker run --rm \
+  -v "$(pwd)":/workspace \
+  -w /workspace \
+  ghcr.io/open-component-model/cli:{{< site-version "semver" >}} \
+  get cv ghcr.io/<user>//ocm.software/<component>:1.0.0 -o yaml \
+  --config .ocmconfig
+```
+
+{{< callout title="Note" icon="outline/info-circle" >}}
+Pin a specific tag (for example `:{{< site-version "semver" >}}`) instead of `:latest` for
+reproducible runs. To let the CLI reach registries that need your system trust store, add
+`-v /etc/ssl/certs/:/etc/ssl/certs/:ro` (the certificate path may differ by OS). The image has
+no shell and does not yet bundle GnuPG, so run GPG signing where `gpg` is installed.
+{{< /callout >}}
+
+For a worked create-and-read walkthrough, see
+[Create Component Versions]({{< relref "create-component-version.md" >}}) and substitute the
+`docker run` invocation above for the local `ocm` command.
 
 {{< /tab >}}
 {{< tab "Build from Source" >}}

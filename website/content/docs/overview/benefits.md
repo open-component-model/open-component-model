@@ -38,7 +38,7 @@ and vulnerability scans easier and more reliable. With OCM, your software is ful
 it describes, so it is signed and transferred along with everything else. Where an SBOM is already attached to an OCI
 image, OCM discovers it instead.
 See [Software Bills of Materials]({{< relref "docs/concepts/sboms.md" >}}) for the why, and
-[Working with SBOMs]({{< relref "docs/tutorials/working-with-sboms.md" >}}) for the how.
+[Working with SBOMs]({{< relref "docs/guides/pack/add-sboms.md" >}}) for the how.
 
 ### Deploy Anywhere, Even Air-Gapped
 
