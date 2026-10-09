@@ -2,7 +2,7 @@
 title: "Migrate --upload-as Flags"
 slug: "migrate-from-upload-as"
 description: "Replace the deprecated --upload-as flag and the removed upload type transfer setting with the oci.uploader.transfer.config.ocm.software uploader configuration."
-weight: 170
+weight: 30
 toc: true
 aliases:
   - /docs/how-to/migrate-from-upload-as/
@@ -519,5 +519,5 @@ The following table maps old values to their replacements:
 
 - [Transfer Configuration Reference]({{< relref "docs/reference/transfer-configuration/_index.md" >}}) — Full configuration schema and field descriptions
 - [Configure Custom Uploads During Transfer]({{< relref "docs/guides/transfer/upload-to-custom-target.md" >}}) — Tutorial for the HTTP streaming uploader
-- [Transfer Helm Charts with OCM]({{< relref "docs/guides/transfer/transfer-helm-charts.md" >}}) — Transfer component versions containing Helm charts
+- [Upload OCI Images]({{< relref "docs/guides/transfer/upload-oci-images.md" >}}) — Upload component resources, including Helm charts, as standalone OCI artifacts
 - [Replicate Component Versions with the Controller]({{< relref "docs/guides/transfer/replicate-component-versions.md" >}}) — Controller-based replication

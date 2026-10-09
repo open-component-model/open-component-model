@@ -288,7 +288,7 @@ tools. See
 
 ## Next steps
 
-- [How-to: Transfer Helm Charts with OCM]({{< relref "docs/guides/transfer/transfer-helm-charts.md" >}})
+- [How-to: Upload OCI Images]({{< relref "docs/guides/transfer/upload-oci-images.md" >}}) — upload images and Helm charts as standalone OCI artifacts
 - [How-to: Transfer Components Across an Air Gap]({{< relref "docs/guides/transfer/air-gap-transfer.md" >}})
 
 ## Related documentation

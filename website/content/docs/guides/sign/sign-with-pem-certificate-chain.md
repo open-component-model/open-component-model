@@ -256,7 +256,7 @@ Signature Algorithm: RSASSA-PSS
 
 {{< step >}}
 
-### Verify the signature
+### Verify right after signing
 
 ```bash
 ocm verify cv \
@@ -472,7 +472,7 @@ Signature Algorithm: RSASSA-PSS
 
 {{< step >}}
 
-### Verify signature
+### Verify right after signing
 
 ```bash
 ocm verify cv \
@@ -505,6 +505,52 @@ If verification fails, see the troubleshooting section below.
 
 {{< /tab >}}
 {{< /tabs >}}
+
+## Verify a PEM-signed signature
+
+The tutorial above verifies right after signing, on the same machine. This section is for the **consumer side**: you received a PEM-signed component version and the signer's root CA, and you want to confirm authenticity before trusting it. You need the root CA on disk and pointed at by `publicKeyPEMFile` in a verifier `.ocmconfig` (the `~/.ocmconfig-pem-verify` file from [Configure `.ocmconfig`](#configure-ocmconfig) above). The verifier trusts the root CA; the leaf certificate and any intermediates travel embedded in the signature, so you never install them yourself.
+
+Run the verify command against the signed component:
+
+```bash
+ocm verify cv \
+  --config ~/.ocmconfig-pem-verify \
+  /tmp/helloworld/transport-archive//github.com/acme.org/helloworld:1.0.0
+```
+
+No `verifier` entry is needed in `.ocmconfig` -- OCM infers the PEM encoding from the
+`application/x-pem-file` media type stored alongside the signature and selects the correct
+handler automatically.
+
+<details>
+<summary>Expected output</summary>
+
+```text
+time=2026-04-01T10:00:00.000+02:00 level=INFO msg="verifying signature" name=default
+time=2026-04-01T10:00:00.001+02:00 level=INFO msg="signature verification completed" name=default duration=1.2ms
+time=2026-04-01T10:00:00.001+02:00 level=INFO msg="SIGNATURE VERIFICATION SUCCESSFUL"
+```
+
+</details>
+
+The command exits with status code `0` on success.
+
+### Verify a specific signature
+
+If the component carries multiple signatures, select the one to verify by name:
+
+```bash
+ocm verify cv \
+  --config ~/.ocmconfig-pem-verify \
+  --signature prod \
+  /tmp/helloworld/transport-archive//github.com/acme.org/helloworld:1.0.0
+```
+
+Without `--signature`, **every** signature on the descriptor is verified, each under its own name, so each needs a matching verifier entry.
+
+### Verification troubleshooting
+
+If verification fails with `certificate signed by unknown authority`, the root CA in your verifier config does not match the root that signed the embedded chain. See [the Troubleshooting section below](#certificate-signed-by-unknown-authority).
 
 ## Troubleshooting
 

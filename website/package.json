@@ -14,6 +14,7 @@
     "register-docs-version": "node scripts/register-docs-version.js",
     "dev:drafts": "HUGO_PARAMS_COMMITFULL=$(git log -1 --format=%H -- .) HUGO_PARAMS_COMMITSHORT=$(git log -1 --format=%h -- .) ./node_modules/.bin/hugo server --bind=0.0.0.0 --disableFastRender --baseURL=http://localhost --noHTTPCache --buildDrafts",
     "dev": "HUGO_PARAMS_COMMITFULL=$(git log -1 --format=%H -- .) HUGO_PARAMS_COMMITSHORT=$(git log -1 --format=%h -- .) ./node_modules/.bin/hugo server --bind=0.0.0.0 --disableFastRender --noHTTPCache",
+    "dev:local": "HUGO_BASEURL=http://localhost:1313/ HUGO_PARAMS_COMMITFULL=$(git log -1 --format=%H -- .) HUGO_PARAMS_COMMITSHORT=$(git log -1 --format=%h -- .) ./node_modules/.bin/hugo server --bind=127.0.0.1 --port 1313 --disableFastRender --noHTTPCache",
     "hugo": "./node_modules/.bin/hugo",
     "info": "npm list",
     "lint:markdown": "markdownlint-cli2 --config ../.github/config/website.markdownlint-cli2.yaml \"**/*.md\" \"!node_modules/**\" \"!content_versioned/version-legacy/**\"",

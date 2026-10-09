@@ -2,7 +2,7 @@
 title: "Migrate Legacy Credentials"
 description: "Update your legacy OCM credential configuration to use modern field names and optional typed credentials."
 icon: "🔑"
-weight: 160
+weight: 20
 toc: true
 aliases:
   - /docs/how-to/legacy-credential-compatibility/

@@ -105,12 +105,10 @@ You transferred a component version with the default settings. Depending on wher
 and how the resources must land, continue with a specialized guide:
 
 - [Upload OCI Images]({{< relref "docs/guides/transfer/upload-oci-images.md" >}})
-  makes the component's container images directly pullable with `docker`, `oras`,
-  or `crane`.
+  makes the component's container images and Helm charts directly pullable with
+  `docker`, `oras`, `crane`, or `helm`.
 - [Transfer Components across an Air Gap]({{< relref "docs/guides/transfer/air-gap-transfer.md" >}})
   moves a self-contained copy across a network boundary.
-- [Transfer Components with Helm Charts]({{< relref "docs/guides/transfer/transfer-helm-charts.md" >}})
-  handles components that carry a Helm chart resource.
 - [Upload to JFrog Artifactory]({{< relref "docs/guides/transfer/upload-to-jfrog-artifactory.md" >}})
   or [Upload to Sonatype Nexus]({{< relref "docs/guides/transfer/upload-to-sonatype-nexus.md" >}})
   route resources into a vendor registry's native layout.

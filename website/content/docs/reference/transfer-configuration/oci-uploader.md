@@ -148,4 +148,4 @@ full reference such as `ghcr.io/org/image:v1`:
   imageReference: '${resource.access.referenceName}'
 ```
 
-See [Migrate from --upload-as to Uploader Configurations]({{< relref "docs/guides/transfer/migrate-from-upload-as.md" >}}).
+See [Migrate from --upload-as to Uploader Configurations]({{< relref "docs/guides/migrate/migrate-from-upload-as.md" >}}).
