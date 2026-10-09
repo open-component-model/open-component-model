@@ -115,10 +115,8 @@ linters:
           - depguard        # 12: tests import siblings outside the prod allow-list
           - dupword         # 2: false positives on intentional repetition (CEL map(x,x*2)); fixer corrupts strings
           - fatcontext      # 3: all current hits are false positives (intentional ctx capture, Ginkgo suite lifecycle) and the fixer shadows outer vars; value is in prod loop-nesting, not tests
-          - ginkgolinter    # 5: Gomega length/error assertion idioms
           - gosmopolitan    # 5: time.Local / non-portable usage in tests
           - maintidx        # 39: low maintainability index of large table tests
-          - misspell        # 25: false positives on the `interm` abbreviation; fixer rewrites identifiers
           - nolintlint      # 4: unused //nolint directives tied to the linters disabled here
         path: _test\.go
       - path: (.+)\.go$
@@ -167,6 +165,11 @@ linters:
         - elseif
     lll:
       line-length: 120
+    misspell:
+      # `interm` is an intentional abbreviation for "intermediate" (intermediate CA
+      # certificates in the signing tests), not a misspelling of "interim".
+      ignore-rules:
+        - interm
     nolintlint:
       require-explanation: true
       require-specific: false
