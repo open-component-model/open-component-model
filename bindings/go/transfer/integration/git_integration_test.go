@@ -198,10 +198,9 @@ func Test_Integration_TransferGit_CTFToOCI(t *testing.T) {
 
 // Pushes a Git resource selected by the short tag name v1.0.0 with a Git uploader into an
 // existing repository, directly from the source CTF and air-gapped from a CTF holding it as a
-// localBlob, and reads it back from the target repository: digest processing records the full
-// ref, so the target gets a tag at the unchanged commit, and the published access downloads
-// to the pinned digest. A descriptor whose access still has the short name needs an explicit
-// ref.
+// localBlob, and reads it back from the target repository: the uploader config sets the full
+// target ref, so the target gets a tag at the unchanged commit, and the published access
+// downloads to the pinned digest. The uploader requires an explicit ref.
 func Test_Integration_TransferGit_GitUploader(t *testing.T) {
 	t.Parallel()
 	r := require.New(t)

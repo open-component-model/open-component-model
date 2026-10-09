@@ -12,7 +12,7 @@
     },
     "ref": {
       "type": "string",
-      "description": "Ref selects a branch, tag or full ref name. A bare name resolves to a\nmatching branch first and then to a tag, so use refs/tags/v1.0.0 to select\nthat tag unambiguously. Digest processing resolves it to a commit and records the\nfull name it matched, e.g. refs/tags/v1.0.0."
+      "description": "Ref selects a branch, tag or full ref name. A bare name resolves to a\nmatching branch first and then to a tag, so use refs/tags/v1.0.0 to select\nthat tag unambiguously. Digest processing resolves it to a commit and pins the\ncommit; the ref is recorded as written, not expanded to its full name."
     },
     "repository": {
       "type": "string",

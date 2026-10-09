@@ -30,8 +30,8 @@ type Git struct {
 
 	// Ref selects a branch, tag or full ref name. A bare name resolves to a
 	// matching branch first and then to a tag, so use refs/tags/v1.0.0 to select
-	// that tag unambiguously. Digest processing resolves it to a commit and records the
-	// full name it matched, e.g. refs/tags/v1.0.0.
+	// that tag unambiguously. Digest processing resolves it to a commit and pins the
+	// commit; the ref is recorded as written, not expanded to its full name.
 	Ref string `json:"ref,omitempty"`
 
 	// Commit pins a commit by its full 40-character hexadecimal SHA and takes

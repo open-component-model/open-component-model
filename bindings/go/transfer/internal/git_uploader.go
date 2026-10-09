@@ -103,9 +103,8 @@ func processGitUploader(ctx context.Context, resource descriptorv2.Resource, acc
 
 // validateGitTarget rejects a target the upload would reject, so a wrong uploader config
 // fails the build instead of the running transfer: the upload points a full branch or tag
-// ref at the commit. A short name comes from an access that was pinned before digest
-// processing recorded full refs; whether it named a branch or a tag is unknown, so the
-// uploader config has to say.
+// ref at the commit. The uploader config must set a full ref; a short name does not say
+// whether it names a branch or a tag.
 func validateGitTarget(repository, ref, commit string) error {
 	target := &gitv1.Git{Repository: repository, Ref: ref, Commit: commit}
 	if err := target.Validate(); err != nil {
