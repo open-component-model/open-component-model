@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -75,15 +76,22 @@ func assertGitArchiveAtFirstCommit(t *testing.T, data []byte) {
 	gz, err := gzip.NewReader(bytes.NewReader(data))
 	r.NoError(err)
 	defer func() { r.NoError(gz.Close()) }()
+	files := map[string]string{}
 	tr := tar.NewReader(gz)
-	header, err := tr.Next()
-	r.NoError(err)
-	r.Equal("README.md", header.Name)
-	content, err := io.ReadAll(tr)
-	r.NoError(err)
-	r.Equal("first\n", string(content), "the archive must hold the pinned commit, not main")
-	_, err = tr.Next()
-	r.ErrorIs(err, io.EOF)
+	for {
+		header, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		r.NoError(err)
+		if header.Name == ".git" || strings.HasPrefix(header.Name, ".git/") {
+			continue
+		}
+		content, err := io.ReadAll(tr)
+		r.NoError(err)
+		files[header.Name] = string(content)
+	}
+	r.Equal(map[string]string{"README.md": "first\n"}, files, "the archive must hold the pinned commit, not main")
 }
 
 // Test_Integration_Transfer_Git transfers a resource with a Git access from a CTF
