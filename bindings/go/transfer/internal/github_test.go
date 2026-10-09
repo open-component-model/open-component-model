@@ -54,12 +54,13 @@ func TestProcessGitHub_EmitsGetAndAdd(t *testing.T) {
 	assert.Equal(t, "${"+getID+".output.file}", tgd.Transformations[1].Spec.Data["file"])
 	assert.Equal(t, tgd.Transformations[1].ID, ids[0])
 
-	// referenceName must stay an OCI repository name, so it is the resource name.
+	// referenceName is an OCI-only legacy field; a github resource must not carry it.
 	addedResource, ok := tgd.Transformations[1].Spec.Data["resource"].(map[string]any)
 	require.True(t, ok)
 	addedAccess, ok := addedResource["access"].(map[string]any)
 	require.True(t, ok)
-	assert.Equal(t, "my-source", addedAccess["referenceName"])
+	_, hasReferenceName := addedAccess["referenceName"]
+	assert.False(t, hasReferenceName)
 }
 
 // A ref-only access would embed whatever the ref points at today, so it is refused.
