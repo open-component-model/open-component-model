@@ -14,6 +14,9 @@ import (
 	"testing"
 	"time"
 
+	git "github.com/go-git/go-git/v6"
+	"github.com/go-git/go-git/v6/plumbing"
+	godigest "github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/require"
 	"helm.sh/helm/v4/pkg/chart/v2/loader"
@@ -27,14 +30,90 @@ import (
 	"ocm.software/open-component-model/bindings/go/cli/cmd"
 	resourceCMD "ocm.software/open-component-model/bindings/go/cli/cmd/download/resource"
 	"ocm.software/open-component-model/bindings/go/cli/integration/internal"
+	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	gitrepository "ocm.software/open-component-model/bindings/go/git/repository"
+	gitaccessv1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
 	helmblob "ocm.software/open-component-model/bindings/go/helm/blob"
 	"ocm.software/open-component-model/bindings/go/oci"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	"ocm.software/open-component-model/bindings/go/repository"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
+
+func Test_Integration_DownloadUploadedGitResource(t *testing.T) {
+	r := require.New(t)
+	sourcePath, commit := newGitFixture(t)
+	targetPath := filepath.Join(t.TempDir(), "target.git")
+	target, err := git.PlainInit(targetPath, true)
+	r.NoError(err)
+
+	const componentName = "ocm.software/uploaded-git-resource"
+	const componentVersion = "v1.0.0"
+	constructor := fmt.Sprintf(`components:
+- name: %s
+  version: %s
+  provider:
+    name: ocm.software
+  resources:
+  - name: git-repo
+    version: v1.0.0
+    type: directoryTree
+    input:
+      type: Git/v1
+      repository: file://%s
+      ref: refs/heads/main
+      commit: %s
+`, componentName, componentVersion, sourcePath, commit)
+	constructorPath := filepath.Join(t.TempDir(), "constructor.yaml")
+	r.NoError(os.WriteFile(constructorPath, []byte(constructor), 0o600))
+	ctfPath := filepath.Join(t.TempDir(), "ctf")
+	addCommand := cmd.New()
+	addCommand.SetArgs([]string{"add", "component-version", "--repository", "ctf::" + ctfPath, "--constructor", constructorPath})
+	r.NoError(addCommand.ExecuteContext(t.Context()))
+
+	output := filepath.Join(t.TempDir(), "git-repo.tgz")
+	downloadCommand := cmd.New()
+	downloadCommand.SetArgs([]string{
+		"download", "resource", "ctf::" + ctfPath + "//" + componentName + ":" + componentVersion,
+		"--identity", "name=git-repo,version=v1.0.0",
+		"--output", output,
+		"--extraction-policy", "disable",
+	})
+	r.NoError(downloadCommand.ExecuteContext(t.Context()))
+	archive, err := os.ReadFile(output)
+	r.NoError(err)
+	assertGitArchiveAtFirstCommit(t, archive)
+
+	tempFolder := t.TempDir()
+	gitRepo := gitrepository.NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &tempFolder})
+	source, err := gitRepo.ProcessResourceDigest(t.Context(), &descriptor.Resource{Access: &gitaccessv1.Git{
+		Type:       runtime.NewVersionedType(gitaccessv1.Type, gitaccessv1.Version),
+		Repository: sourcePath,
+		Ref:        "refs/heads/main",
+		Commit:     commit,
+	}}, nil)
+	r.NoError(err)
+	r.Equal(source.Digest.Value, godigest.FromBytes(archive).Encoded(), "the input and the access archive the same carrier")
+
+	localBlob, err := filesystem.GetBlobFromOSPath(output)
+	r.NoError(err)
+	uploadTarget := source.DeepCopy()
+	uploadTarget.Access = &gitaccessv1.Git{
+		Type:       runtime.NewVersionedType(gitaccessv1.Type, gitaccessv1.Version),
+		Repository: targetPath,
+		Ref:        "refs/heads/main",
+	}
+	uploaded, err := gitRepo.UploadResource(t.Context(), uploadTarget, localBlob, nil)
+	r.NoError(err)
+	r.Equal(source.Digest, uploaded.Digest)
+	r.Equal(commit, uploaded.Access.(*gitaccessv1.Git).Commit)
+	targetRef, err := target.Reference(plumbing.NewBranchReferenceName("main"), true)
+	r.NoError(err)
+	r.Equal(commit, targetRef.Hash().String())
+}
 
 func Test_Integration_OCIRepository(t *testing.T) {
 	r := require.New(t)
