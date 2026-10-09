@@ -314,7 +314,8 @@ jobs:
         id: govulncheck
         working-directory: bindings/go
         run: |
-          set -uo pipefail
+          # The default shell is bash -e; +e lets the step see exit status 3.
+          set +e -uo pipefail
           "$RUNNER_TEMP/bin/govulncheck" ./... | tee "$RUNNER_TEMP/govulncheck.txt"
           rc=${PIPESTATUS[0]}
           echo "rc=${rc}" >> "$GITHUB_OUTPUT"

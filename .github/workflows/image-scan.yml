@@ -236,7 +236,8 @@ jobs:
           IMAGE: ${{ matrix.image }}
           ARCH: ${{ matrix.arch }}
         run: |
-          set -uo pipefail
+          # The default shell is bash -e; +e lets the summary be written on findings.
+          set +e -uo pipefail
           dockle="$(sed -n 's/^DOCKLE_IMAGE=//p' .env)"
           [[ -n "$dockle" ]] || { echo "::error::DOCKLE_IMAGE not set in .env"; exit 1; }
           out="tmp/image-scan/${IMAGE}-${ARCH}/dockle.json"
