@@ -182,7 +182,7 @@ configurations:
 For passphrase-protected private keys, add a top-level `passphrase: <secret>` field next to `privateKeyPGPFile`. OCM passes the passphrase to `gpg` on standard input, never as a command-line argument and never written to disk. GnuPG unlocks the key in a temporary GnuPG home directory, which OCM removes after each operation.
 {{< /callout >}}
 
-If your keyring contains multiple keys, pin the one to use by adding `keyFingerprint` to the GPG signer (set in the [sign how-to]({{< relref "docs/guides/sign/sign-component-version.md" >}})), next to the handler type rather than in the credentials.
+If your keyring contains multiple keys, pin the one to use by adding `keyFingerprint` to the GPG signer (set in the [GPG sign tutorial]({{< relref "docs/guides/sign/sign-with-gpg.md" >}})), next to the handler type rather than in the credentials.
 
 {{< /tab >}}
 {{< /tabs >}}
@@ -225,7 +225,7 @@ time=2026-03-12T17:05:46.437+01:00 level=INFO msg="dry run: signature not persis
 {{< /tab >}}
 
 {{< tab "GPG" >}}
-**GPG** (requires a `GPGSigningConfiguration/v1alpha1` signer in `.ocmconfig`, see the [sign how-to → GPG tab]({{< relref "docs/guides/sign/sign-component-version.md" >}}) for the entry):
+**GPG** (requires a `GPGSigningConfiguration/v1alpha1` signer in `.ocmconfig`, see [Sign with GPG]({{< relref "docs/guides/sign/sign-with-gpg.md" >}}) for the entry):
 
 ```bash
 ocm sign cv --dry-run /tmp/helloworld/transport-archive//github.com/acme.org/helloworld:1.0.0
@@ -293,7 +293,7 @@ configurations:
             publicKeyPEMFile: /tmp/keys/prod/public-key.pem
 ```
 
-The same name also selects the signer: a `signing.config.ocm.software/v1alpha1` entry with `signature: prod` applies to `prod` only, and an entry without a `signature` applies wherever no scoped entry matches. See [How-To: Sign Component Versions]({{< relref "docs/guides/sign/sign-component-version.md" >}}).
+The same name also selects the signer: a `signing.config.ocm.software/v1alpha1` entry with `signature: prod` applies to `prod` only, and an entry without a `signature` applies wherever no scoped entry matches. See [Sign Component Versions]({{< relref "docs/guides/sign/_index.md" >}}).
 
 Specify the signature name when signing:
 
@@ -346,9 +346,9 @@ ls -la /tmp/keys/private-key.pem
 
 ## Next Steps
 
-- [How-to: Sign Component Versions]({{< relref "docs/guides/sign/sign-component-version.md" >}}) - Sign components with your configured
+- [How-to: Sign Component Versions]({{< relref "docs/guides/sign/_index.md" >}}) - Sign components with your configured
   credentials
-- [How-to: Verify Component Versions]({{< relref "docs/guides/sign/verify-component-version.md" >}}) - Verify signatures using public
+- [All verification methods]({{< relref "docs/guides/sign/_index.md#verify-a-signature" >}}) - Verify signatures using public
   keys
 
 ## Related Documentation

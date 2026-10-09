@@ -349,7 +349,7 @@ Then retry the OCM command.
 ## Next Steps
 
 - [How-To: Configure Credentials for multiple Repositories ]({{< relref "docs/guides/transfer/configure-registry-credentials.md" >}}) - Configure OCM to authenticate against multiple OCI registries
-- [How-To: Migrate v1 Credentials to v2]({{< relref "docs/guides/transfer/migrate-legacy-credentials.md" >}}) - Migrate an existing OCM v1 `.ocmconfig` file so it works with OCM v2
+- [How-To: Migrate v1 Credentials to v2]({{< relref "docs/guides/migrate/migrate-legacy-credentials.md" >}}) - Migrate an existing OCM v1 `.ocmconfig` file so it works with OCM v2
 
 ## Related Documentation
 

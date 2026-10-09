@@ -109,7 +109,7 @@ This differs from the deprecated `ocm.config.ocm.software` fallback resolver, wh
 used priority-based ordering and probed every matching repository until one succeeded.
 Glob-based resolvers never probe: they return the first matching repository
 deterministically for both `get` and `add`. See
-[Migrate Legacy Resolvers]({{< relref "docs/guides/transfer/migrate-legacy-resolvers.md" >}})
+[Migrate Legacy Resolvers]({{< relref "docs/guides/migrate/migrate-legacy-resolvers.md" >}})
 for the migration procedure.
 {{< /callout >}}
 
@@ -145,7 +145,7 @@ resolver achieved through probe-and-retry. For the full version constraint synta
 
 - [Add Component References]({{< relref "docs/guides/pack/add-component-references.md" >}}) — Hands-on walkthrough for
   declaring component references and setting up resolvers for shared and multi-registry setups
-- [How-To: Migrate from Deprecated Resolvers]({{< relref "docs/guides/transfer/migrate-legacy-resolvers.md" >}}) —
+- [How-To: Migrate from Deprecated Resolvers]({{< relref "docs/guides/migrate/migrate-legacy-resolvers.md" >}}) —
   Replace deprecated fallback
   resolvers with glob-based resolvers
 

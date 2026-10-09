@@ -3,6 +3,9 @@ title: "Upload OCI Images"
 description: "Configure the OCI uploader so a transferred component's images and Helm charts land as separate OCI artifacts you can pull with docker, oras, or crane."
 weight: 115
 toc: true
+aliases:
+  - /docs/how-to/transfer-helm-charts/
+  - /docs/guides/transfer/transfer-helm-charts/
 ---
 
 {{< callout context="note" title="Start from the base transfer guide" >}}
@@ -84,6 +87,39 @@ docker pull ghcr.io/<target-namespace>/org/image:v1
 {{< /step >}}
 {{< /steps >}}
 
+## Helm charts
+
+The OCI uploader's default selection also covers `Helm` chart resources
+(a `helmChart` resource with `Helm/v1` access, see
+[Add Helm Chart Resources]({{< relref "docs/guides/pack/add-helm-chart-resources.md" >}})
+for authoring one). During transfer the chart is converted to an OCI artifact and,
+with the uploader applied, uploaded as a separate image in the target registry.
+Without the uploader the chart stays embedded as a local blob, coupled to the
+component version and not pullable with the Helm CLI.
+
+Inspect the component descriptor to find the resulting reference:
+
+```bash
+ocm get cv <target-registry>//<component-name>:<version> -o yaml
+```
+
+Look for the `resources[].access.imageReference` field:
+
+```yaml
+resources:
+  - name: my-chart
+    type: helmChart
+    access:
+      type: OCIImage/v1
+      imageReference: ghcr.io/my-org/charts/my-chart:1.0.0
+```
+
+Pull it with Helm's OCI support:
+
+```bash
+helm pull oci://ghcr.io/my-org/charts/my-chart --version 1.0.0
+```
+
 ## Targeting specific resources
 
 To upload only selected resources, or to control the exact target reference, set
@@ -109,4 +145,4 @@ selection examples, see
 - To consume images that were uploaded this way, see
   [Pull OCI Artifacts Natively]({{< relref "docs/guides/transfer/pull-oci-artifacts-natively.md" >}}).
 - If you are replacing the deprecated `--upload-as` flag, see
-  [Migrate --upload-as Flags]({{< relref "docs/guides/transfer/migrate-from-upload-as.md" >}}).
+  [Migrate --upload-as Flags]({{< relref "docs/guides/migrate/migrate-from-upload-as.md" >}}).

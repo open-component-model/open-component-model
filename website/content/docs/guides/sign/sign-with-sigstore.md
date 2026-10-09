@@ -6,6 +6,7 @@ toc: true
 hasMermaid: true
 aliases:
   - /docs/tutorials/signing/sigstore/
+  - /docs/guides/sign/verify-with-sigstore-keyless/
 ---
 
 In this tutorial you'll sign a component version with [Sigstore](https://www.sigstore.dev/) and verify it again — without generating a key pair.
@@ -179,6 +180,12 @@ The signer picks **how** to sign (which handler, which endpoints). The consumer 
 
 ### Sign the component version
 
+The configuration above is identical for interactive (local) and CI/CD runs. Only the sign invocation differs: locally OCM opens a browser for the OIDC login, in CI the runner's workload identity provides the token with no browser. The resulting signature, Fulcio certificate, and Rekor entry are produced the same way and verifiers cannot tell the difference.
+
+{{< tabs "sign-flow" >}}
+
+{{< tab "Interactive (browser)" >}}
+
 Run the sign command:
 
 ```bash
@@ -214,6 +221,105 @@ time=2026-05-20T15:32:55.725+02:00 level=INFO msg="signed successfully" name=def
 ```
 
 </details>
+
+{{< /tab >}}
+
+{{< tab "CI/CD (no browser)" >}}
+
+In a pipeline there is no browser, so the runner's workload identity becomes the signing identity. This walkthrough uses **GitHub Actions**; other providers work the same way (see the box at the end).
+
+**Grant the workflow permission to mint OIDC tokens.** GitHub Actions only emits a workload-identity token when the workflow declares `id-token: write`. Add it at workflow level (or per job):
+
+```yaml
+permissions:
+  contents: read
+  id-token: write   # required for Sigstore signing
+```
+
+Without this, the sign step fails with `unable to mint OIDC token`.
+
+**The same `.ocmconfig` works as-is.** OCM auto-detects GitHub Actions' `ACTIONS_ID_TOKEN_REQUEST_TOKEN` environment variable and uses it instead of opening a browser, so nothing changes between local interactive runs and CI runs.
+
+**Sign in a workflow step.** Drop a sign step into your workflow:
+
+```yaml
+jobs:
+  sign:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install OCM CLI
+        run: |
+          curl -sfL https://ocm.software/install-cli.sh | bash
+      - name: Sign component version
+        run: |
+          ocm sign cv \
+            ghcr.io/${{ github.repository_owner }}//github.com/acme.org/helloworld:1.0.0
+```
+
+A successful run logs `signed successfully` and embeds the Sigstore bundle into the component descriptor, the same shape as the interactive flow. The bundle's Fulcio cert records the workflow identity (`https://github.com/<org>/<repo>/.github/workflows/<file>@refs/heads/<branch>`) and the GitHub Actions OIDC issuer, which are what a verifier matches against.
+
+{{< callout context="caution" title="Mind the OIDC token's lifetime" icon="outline/alert-triangle" >}}
+GitHub Actions OIDC tokens expire quickly, often within minutes. The `ocm sign` step must complete before the token expires. For long pipelines, request the token (i.e. run the sign step) just before you need it, not at the start of the workflow.
+{{< /callout >}}
+
+{{< details "Alternative: run `ocm` from the OCM CLI container image" >}}
+
+Skip the install step by invoking `ocm` from the official container image (`ghcr.io/open-component-model/cli`) directly with `docker run`. The image is based on Garden Linux `bare-libc` for minimal attack surface (`ocm`, a FIPS build of `cosign`, `gpg` in FIPS mode, and CA certs, no shell), so it cannot be used as a GitHub Actions [`container:`]({{< relref "docs/getting-started/ocm-cli-installation.md" >}}#run-from-a-container-image) job runtime. Because `cosign` is on `PATH`, OCM does not download it. The `-slim` tags (`cli:<version>-slim`) are the `FROM scratch` variant with only `ocm` and CA certs, without `cosign` or `gpg`; see the [FIPS reference]({{< relref "docs/reference/standards-and-regulations/fips.md" >}}#artifacts) for the contents of both.
+
+```yaml
+jobs:
+  sign:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Sign component version
+        run: |
+          docker run --rm \
+            -v "$PWD":/work -w /work \
+            -e ACTIONS_ID_TOKEN_REQUEST_TOKEN \
+            -e ACTIONS_ID_TOKEN_REQUEST_URL \
+            ghcr.io/open-component-model/cli:0.6.0 \
+            sign cv \
+              ghcr.io/${{ github.repository_owner }}//github.com/acme.org/helloworld:1.0.0
+```
+
+The OIDC environment variables are forwarded explicitly so OCM can mint a workload-identity token from inside the container. Pin a specific tag (e.g. `:0.x.y`) instead of `:latest` for reproducible builds. See [How-to: Use the OCM CLI container image]({{< relref "docs/getting-started/ocm-cli-installation.md" >}}#run-from-a-container-image) for full image documentation.
+
+The OCM release workflow publishes a [GitHub artifact attestation](https://docs.github.com/en/actions/security-for-github-actions/using-artifact-attestations) for each CLI image. The attestation is a Sigstore bundle under the hood, the same Fulcio cert and Rekor log entry mechanics as the component-version signing this section is about, only the publication path differs (GitHub's attestation API instead of the OCM signature itself). Verify the image before pulling:
+
+```bash
+gh attestation verify oci://ghcr.io/open-component-model/cli:0.6.0 \
+  --owner open-component-model
+```
+
+{{< /details >}}
+
+{{< details "Other CI providers (GitLab, Buildkite, self-hosted, …)" >}}
+
+The mechanism is the same; only how the runner exposes the OIDC token differs. Two patterns:
+
+1. **The runner exports a known env var** that OCM auto-detects (like `ACTIONS_ID_TOKEN_REQUEST_TOKEN` for GitHub Actions). Check your provider's docs.
+2. **The runner gives you a token via an API or file.** Set `SIGSTORE_ID_TOKEN` from it before calling `ocm sign cv`:
+
+   ```bash
+   SIGSTORE_ID_TOKEN=$(your-runner-fetches-OIDC-token) \
+     ocm sign cv ...
+   ```
+
+OCM checks `SIGSTORE_ID_TOKEN` first, then `ACTIONS_ID_TOKEN_REQUEST_TOKEN`, then falls back to the credential provider configured in `.ocmconfig`. Whichever route the token takes, the signature, certificate, and Rekor entry are identical.
+
+{{< /details >}}
+
+{{< /tab >}}
+
+{{< /tabs >}}
 
 {{< /step >}}
 
@@ -312,7 +418,7 @@ The exact and regex variants are mutually exclusive per field — set `certifica
 
 {{< step >}}
 
-### Verify the signature
+### Verify right after signing
 
 Run verify. The Sigstore handler and the identity constraints both come from `.ocmconfig`:
 
@@ -342,6 +448,108 @@ What just ran: OCM extracted the Sigstore bundle from the descriptor, validated 
 
 {{< /steps >}}
 
+## Verify a Sigstore signature
+
+The tutorial above verifies the signature you just created, interactively, on the same machine. This section is for the **consumer side**: you received a Sigstore-signed component version and want to confirm it was signed by an identity you trust. There's no public key to install, you declare the expected identity and OCM checks the signature was made by it.
+
+The flow is the same whether the signature was made interactively (a person logging in via a browser) or in a CI pipeline (a workflow's workload identity). Only the identity you trust differs: a person's email and consumer OIDC issuer (Google, GitHub, Microsoft) for the interactive case, a workflow URL and CI-provider OIDC issuer for the CI case.
+
+If you've done classical key-based verification, here's what changes:
+
+| Aspect                  | RSA                                                    | Sigstore                                                        |
+|-------------------------|--------------------------------------------------------|-----------------------------------------------------------------|
+| Before you start        | Obtain the signer's public key, configure `.ocmconfig` | Nothing — declare expected identity in `.ocmconfig`             |
+| What proves trust       | Signature decrypts with the public key you have        | Signature ties back to an OIDC identity you've decided to trust |
+| What the verifier needs | The signer's public key (rotated and re-distributed)   | The expected OIDC identity and issuer — no long-lived key       |
+
+For the **interactive** case, the verifier config is exactly the `verifier` entry from [Configure the verifier identity](#configure-the-verifier-identity) above, matching the signer's email and consumer OIDC issuer. Run the same [`ocm verify cv`](#verify-right-after-signing) command. The rest of this section covers the CI case and reading the identity out of a signature someone else produced.
+
+### Verify a CI (workload identity) signature
+
+CI signatures are made by a workflow's workload identity, not a person. Trust them with a workflow URL and the CI provider's OIDC issuer:
+
+- **`certificateOIDCIssuer`** — which IdP minted the workload-identity token
+- **`certificateIdentity`** — the workflow URL the IdP stamps into the cert
+
+For **GitHub Actions** the values are:
+
+| Field                   | Value                                                                          |
+| ----------------------- | ------------------------------------------------------------------------------ |
+| `certificateOIDCIssuer` | `https://token.actions.githubusercontent.com`                                  |
+| `certificateIdentity`   | `https://github.com/<org>/<repo>/.github/workflows/<file>@refs/heads/<branch>` |
+
+Add the entry to the `configurations` list of your `.ocmconfig`:
+
+```yaml
+- type: signing.config.ocm.software/v1alpha1
+  verifier:
+    type: SigstoreVerificationConfiguration/v1alpha1
+    certificateOIDCIssuer: https://token.actions.githubusercontent.com
+    certificateIdentity: https://github.com/acme/helloworld/.github/workflows/release.yml@refs/heads/main
+```
+
+For GitHub Actions you often want to accept a release workflow on **any** ref (any branch, any tag). Use `certificateIdentityRegexp` instead of `certificateIdentity`:
+
+```yaml
+- type: signing.config.ocm.software/v1alpha1
+  verifier:
+    type: SigstoreVerificationConfiguration/v1alpha1
+    certificateOIDCIssuer: https://token.actions.githubusercontent.com
+    certificateIdentityRegexp: ^https://github\.com/acme/helloworld/\.github/workflows/release\.yml@refs/.*$
+```
+
+Exactly one of `certificateIdentity` or `certificateIdentityRegexp` is required (the same applies to the issuer's `*Regexp` form). Then run `ocm verify cv` exactly as in the interactive case.
+
+{{< details "Other CI providers (GitLab, Buildkite, self-hosted, …)" >}}
+
+The mechanism is the same; only the issuer URL and identity shape are provider-specific. Two ways to find them:
+
+- Read your provider's OIDC discovery document at `https://<provider>/.well-known/openid-configuration` — the `issuer` field is what goes into `certificateOIDCIssuer`.
+- Decode an existing signature to read the values directly (see the decode recipe below); the SAN identity is in the `URI:` line.
+
+{{< /details >}}
+
+### Read the identity from a received signature
+
+Verifying a signature **someone else** produced? Decode the Fulcio certificate to read the exact identity to paste into your spec. The OIDC issuer is recorded under the Sigstore-defined OID `1.3.6.1.4.1.57264.1.1`; the identity is the `email:` entry in the Subject Alternative Name for interactive logins, or the `URI:` entry for CI/workload signatures. The cert is buried two base64 layers deep:
+
+```bash
+REF=ctf::./ctf//github.com/acme.org/helloworld:1.0.0
+
+ocm get cv "$REF" -o yaml \
+  | yq '.[].signatures[]? | select(.signature.algorithm == "Sigstore/v1alpha1") | .signature.value' \
+  | head -1 | base64 -d | jq -r '.verificationMaterial.certificate.rawBytes' \
+  | base64 -d | openssl x509 -inform DER -noout -text \
+  | awk '
+    /1.3.6.1.4.1.57264.1.1:/ {flag="issuer"; next}
+    /^[[:space:]]*X509v3 /    {san=0}
+    /Subject Alternative Name/ {san=1}
+    san && /^ *email:/ {sub(/^[ \t]*email:/,""); print "certificateIdentity:    " $0; next}
+    san && /URI:/      {sub(/.*URI:[ \t]*/,""); print "certificateIdentity:    " $0; next}
+    flag=="issuer" {sub(/^[ \t]+/,""); print "certificateOIDCIssuer: " $0; flag=""}
+  '
+```
+
+Output is two lines you can paste straight under the `verifier` field.
+
+Note: `ocm get cv -o yaml` also shows a `signature.issuer` field on the OCM signature object — don't rely on it for verification. The cert is the authoritative source.
+
+### Verify a specific signature
+
+If the component carries multiple signatures (e.g. an RSA signature and a Sigstore signature), select one by **name** with `--signature`. The name is whatever was set at sign time, `default` if no `--signature` flag was passed *when signing*. Omitting the flag here verifies every signature rather than picking one:
+
+```bash
+ocm verify cv \
+  --signature default \
+  ghcr.io/<your namespace>//github.com/acme.org/helloworld:1.0.0
+```
+
+{{< callout context="note" >}}
+The verifier's `type` field decides **which algorithm/handler** verifies the signature. The `--signature` flag picks **which named signature** on the component to verify (matched by name, not by algorithm).
+
+You can also scope a config entry itself to one signature by giving it a `signature` field. The verifier is then resolved per signature, so a run without `--signature` verifies every signature, each with the handler its own name resolves to.
+{{< /callout >}}
+
 ## What You've Learned
 
 - ✅ Configured OCM to use your OIDC identity as a signing credential, with no key pair to manage
@@ -350,9 +558,91 @@ What just ran: OCM extracted the Sigstore bundle from the descriptor, validated 
 - ✅ Verified the signature by declaring which identity you trust
 - ✅ Saw how the configured signer and the `.ocmconfig` consumer identity link via `signature` name
 
+## Troubleshooting
+
+### Symptom: "browser did not open" or "timed out waiting for authentication callback"
+
+**Cause:** The OIDC flow needs a browser on the machine running `ocm sign`, plus a free loopback port (`127.0.0.1`) for the OAuth callback.
+
+**Fix:** Run on a workstation with a graphical browser. Headless environments need the CI flow above (workload identity tokens), the interactive flow is not designed for unattended use.
+
+### Symptom: "OIDC provider does not support PKCE S256"
+
+**Cause:** The OIDC provider you're using doesn't support a security feature the OCM CLI requires for browser-based login.
+
+**Fix:** Use a provider that supports it. Public Sigstore (Google/GitHub/Microsoft via `sigstore.dev`) does, and most modern enterprise IdPs do too. If you're pointing at a custom enterprise provider, check with your platform team.
+
+### Symptom: "issuer mismatch in callback"
+
+**Cause:** Your OIDC provider returned a different issuer URL than the one configured.
+
+**Fix:** Make sure the `issuer` in `.ocmconfig` matches your provider's canonical issuer URL exactly (scheme, host, path, trailing slashes matter). If you're using public Sigstore defaults, you don't need to set `issuer` at all.
+
+### Symptom: Permission denied on registry
+
+**Cause:** Missing write access to the OCI registry.
+
+**Fix:** Configure registry credentials in `.ocmconfig`. See [How-To: Configure Credentials for Multiple Registries]({{< relref "docs/guides/transfer/configure-registry-credentials.md" >}}).
+
+### Symptom: "unable to mint OIDC token" in GitHub Actions
+
+**Cause:** The workflow (or job) is missing `permissions: id-token: write`.
+
+**Fix:** Add it as shown above. Workflow-level scope works for all jobs; per-job scope works for that job only.
+
+### Symptom: "Fulcio returned 400: error processing the identity token"
+
+**Cause:** The OIDC token expired between minting and the actual sign call. Common in long pipelines that fetch the token early.
+
+**Fix:** Move the sign step closer to where the token is minted. If you absolutely need an earlier token, your CI may support refreshing it explicitly.
+
+### Symptom: OCM still asks for browser auth in CI
+
+**Cause:** Neither `SIGSTORE_ID_TOKEN` nor `ACTIONS_ID_TOKEN_REQUEST_TOKEN` is set in the env that OCM sees. Often a step-scoping or shell-quoting issue.
+
+**Fix:** From the same step, run `env | grep -E 'SIGSTORE_ID_TOKEN|ACTIONS_ID_TOKEN_REQUEST_TOKEN'` right before `ocm sign cv` to confirm what's actually exported. For GitHub Actions, also confirm `permissions: id-token: write` is in scope.
+
+### Symptom: "no matching CertificateIdentity found"
+
+**Cause:** The signature was made by a different identity than what your spec expects, or the same identity but via a different OIDC provider.
+
+The full error names which side did not match. For an identity mismatch:
+
+```text
+Error: SIGNATURE VERIFICATION FAILED: cosign verify-blob failed: exit status 1
+stderr: Error: failed to verify certificate identity: no matching CertificateIdentity found, last error: expected SAN value "nobody@nowhere.invalid", got "john.doe@gmail.com"
+```
+
+For an issuer mismatch:
+
+```text
+Error: SIGNATURE VERIFICATION FAILED: cosign verify-blob failed: exit status 1
+stderr: Error: failed to verify certificate identity: no matching CertificateIdentity found, last error: expected issuer value "https://accounts.google.com", got "https://github.com/login/oauth"
+```
+
+**Fix:** Update `certificateIdentity` / `certificateOIDCIssuer` in your verifier config to match the identity actually recorded in the signature. Watch for trailing slashes and capitalization. Read the actual identity with the decode recipe above.
+
+### Symptom: identity mismatch with a long workflow URL (CI)
+
+**Cause:** Subtle differences in the workflow path: ref type (`refs/heads/` vs `refs/tags/`), branch name, file casing, or trailing slashes.
+
+**Fix:** Decode the actual cert (recipe above) and copy the `URI:` line verbatim into `certificateIdentity`. For multi-ref signing, switch to `certificateIdentityRegexp`.
+
+### Symptom: "keyless verification requires both an issuer constraint ... and an identity constraint"
+
+**Cause:** Your verifier config is missing `certificateIdentity`, `certificateOIDCIssuer`, or both.
+
+The full error:
+
+```text
+Error: SIGNATURE VERIFICATION FAILED: invalid verification config: keyless verification requires both an issuer constraint (CertificateOIDCIssuer or CertificateOIDCIssuerRegexp) and an identity constraint (CertificateIdentity or CertificateIdentityRegexp)
+```
+
+**Fix:** Both are mandatory, they're how Sigstore knows whose signatures to accept. See [Configure the verifier identity](#configure-the-verifier-identity) above.
+
 ## Where to next
 
-- **Running an enterprise Sigstore stack?** [How-to: Sign Component Versions]({{< relref "docs/guides/sign/sign-component-version.md" >}}) covers the `signingConfig` field and the `trusted_root_json` credential for private deployments.
+- **Running an enterprise Sigstore stack?** [Concept: Signing and Verification]({{< relref "docs/concepts/signing-and-verification-concept.md#sigstore-keyless" >}}) and [ADR 0017: Sigstore Integration](https://github.com/open-component-model/open-component-model/blob/main/docs/adr/0017_sigstore_integration.md) cover the `signingConfig` field and the `trusted_root_json` credential for private deployments.
 - **Curious about the theory?** [Concept: Signing and Verification]({{< relref "docs/concepts/signing-and-verification-concept.md" >}}) explains identity-based trust, how it differs from RSA key pinning, and why Sigstore works in air-gapped scenarios.
 - **Other algorithms?** [Tutorial: Plain Signatures]({{< relref "docs/guides/sign/sign-with-plain-rsa.md" >}}) (RSA key pair) and [Tutorial: Certificate Chains (PEM)]({{< relref "docs/guides/sign/sign-with-pem-certificate-chain.md" >}}) (PKI-based).
 
@@ -365,6 +655,5 @@ rm -rf /tmp/ocm-sigstore-tutorial
 ## Related Documentation
 
 - [Concept: Signing and Verification]({{< relref "docs/concepts/signing-and-verification-concept.md" >}}) — Identity-based trust and the Sigstore stack
-- [How-to: Sign Component Versions]({{< relref "docs/guides/sign/sign-component-version.md" >}}) — Task-oriented sign reference (RSA and Sigstore)
-- [How-to: Verify Component Versions]({{< relref "docs/guides/sign/verify-component-version.md" >}}) — Task-oriented verify reference
+- [Verify a Sigstore signature](#verify-a-sigstore-signature) — Confirm a signature was made by an identity you trust
 - [ADR 0017: Sigstore Integration](https://github.com/open-component-model/open-component-model/blob/main/docs/adr/0017_sigstore_integration.md) — Sigstore design and OIDC flow details

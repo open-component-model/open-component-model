@@ -5,6 +5,7 @@ weight: 70
 toc: true
 aliases:
   - /docs/tutorials/signing/gpg/
+  - /docs/guides/sign/verify-with-gpg/
 ---
 
 In this tutorial, you'll sign a component version with a GPG private key and verify it with the corresponding public key.
@@ -230,6 +231,43 @@ To pin a specific key when the keyring contains multiple keys, add one line _key
       keyFingerprint: AABBCCDDEEFF00112233445566778899AABBCCDD   # added
 ```
 
+#### Use GPG for one signature only
+
+To keep RSA elsewhere and use GPG for a single named signature, add a `signature` field to the signer entry. GPG then applies only to `ocm sign cv --signature gpg-release`, and everything else falls back to the default RSA signer:
+
+```yaml
+  - type: signing.config.ocm.software/v1alpha1
+    signature: gpg-release                                     # added
+    signer:
+      type: GPGSigningConfiguration/v1alpha1
+```
+
+#### Sign with a key from your own GnuPG keyring
+
+The config above takes the key material from the GPG credentials (`keySource: credentials`, the default). To sign with a key from your own GnuPG keyring instead (`$GNUPGHOME`, or `~/.gnupg`), including keys on a hardware token such as a YubiKey, set `keySource: keyring`. OCM then uses your running `gpg-agent`, which unlocks the key from its cache, via pinentry, or with a `passphrase` from the credentials.
+
+Key material in the GPG credentials is rejected with `keySource: keyring`, so it is never ambiguous which key signs. Remove `privateKeyPGPFile` and `publicKeyPGPFile` (or `privateKeyPGP` and `publicKeyPGP`) from the GPG consumer entry. Keep the entry only if you pass a `passphrase`; otherwise remove it entirely:
+
+```yaml
+type: generic.config.ocm.software/v1
+configurations:
+  - type: credentials.config.ocm.software
+    consumers:
+      - identity:
+          type: GPG/v1alpha1
+          signature: default
+        credentials:
+          - type: GPGCredentials/v1alpha1
+            passphrase: my-secret-passphrase                   # optional; key files removed
+  - type: signing.config.ocm.software/v1alpha1
+    signer:
+      type: GPGSigningConfiguration/v1alpha1
+      keySource: keyring                                       # added
+      keyFingerprint: AABBCCDDEEFF00112233445566778899AABBCCDD
+```
+
+Without `keyFingerprint`, gpg signs with its default key. Every `gpg` invocation times out after 3 minutes, which includes waiting for pinentry or a touch on a hardware token.
+
 For more details, see [How-to: Configure Signing Credentials]({{< relref "docs/guides/sign/configure-signing-credentials.md" >}}).
 {{< /step >}}
 
@@ -241,6 +279,13 @@ Sign your component with the GPG private key. The GPG handler comes from the sig
 
 ```bash
 ocm sign cv ./transport-archive//github.com/acme.org/helloworld:1.0.0 \
+  --config /tmp/ocm-gpg-tutorial/.ocmconfig
+```
+
+The same command works against a remote OCI registry, point it at the registry reference instead of the local archive:
+
+```bash
+ocm sign cv ghcr.io/<your-namespace>//github.com/acme.org/helloworld:1.0.0 \
   --config /tmp/ocm-gpg-tutorial/.ocmconfig
 ```
 
@@ -278,7 +323,7 @@ You should see a `signatures:` section with algorithm `GPG` and a PGP signature 
 
 {{< step >}}
 
-### Verify the signature
+### Verify right after signing
 
 Verify the signature using the public key. The GPG handler comes from the `verifier` field of the same config entry:
 
@@ -304,6 +349,94 @@ time=... level=INFO msg="SIGNATURE VERIFICATION SUCCESSFUL"
 {{< /step >}}
 {{< /steps >}}
 
+## Verify a GPG signature
+
+The tutorial above verifies right after signing, with the same `.ocmconfig`. This section is for the **consumer side**: you received a GPG-signed component version and the signer's public key, and you want to confirm authenticity. You need the signer's public key on disk and pointed at by `publicKeyPGPFile` in `.ocmconfig`, or present in your GnuPG keyring. With Sigstore (see [Sign with Sigstore]({{< relref "docs/guides/sign/sign-with-sigstore.md" >}})) you don't install a public key at all, you just declare which identity you trust.
+
+### Point `.ocmconfig` at the signer's public key
+
+If you signed locally, the same `.ocmconfig` you wrote above already works, skip to the verify command.
+
+If you're verifying a signature **someone else** produced, follow [How-To: Configure Signing Credentials → GPG]({{< relref "docs/guides/sign/configure-signing-credentials.md" >}}) using only the signer's public key (`publicKeyPGPFile`); the `privateKeyPGPFile` entry is not needed for verification.
+
+Verification takes the handler from `.ocmconfig`, so put the `type: GPGSigningConfiguration/v1alpha1` under the `verifier` field. RSA is the default when no verifier is configured, so this is what tells `ocm verify` to use GPG:
+
+```yaml
+- type: signing.config.ocm.software/v1alpha1
+  signer:
+    type: GPGSigningConfiguration/v1alpha1
+  verifier:
+    type: GPGSigningConfiguration/v1alpha1                     # added
+```
+
+If you are only verifying, the `signer` field can be left out entirely:
+
+```yaml
+- type: signing.config.ocm.software/v1alpha1
+  verifier:
+    type: GPGSigningConfiguration/v1alpha1
+```
+
+If the signer's public key is already in your GnuPG keyring (`$GNUPGHOME`, or `~/.gnupg`), verify against the keyring instead of a key file by setting `keySource: keyring`. The keyring may hold many keys, so this requires the **full** fingerprint of the key you trust; a signature by any other key in the keyring fails. Keys revoked or expired in your keyring are rejected, and gpg never fetches keys from the network during verification.
+
+Key material in the GPG credentials is rejected with `keySource: keyring`, and verification needs no passphrase. Remove the GPG consumer entry with `publicKeyPGPFile` (or `privateKeyPGPFile`) from `.ocmconfig`; the verifier entry is all you need:
+
+```yaml
+type: generic.config.ocm.software/v1
+configurations:
+- type: signing.config.ocm.software/v1alpha1
+  verifier:
+    type: GPGSigningConfiguration/v1alpha1
+    keySource: keyring
+    keyFingerprint: B118BE3A32BE4AF28E37E881167C7102F8AC81E4
+```
+
+{{< callout context="note" >}}
+Give the entry a `signature` field to scope it to a single signature; without one it applies to every signature. Because the verifier is resolved per signature, a component carrying a GPG signature next to an RSA one can be verified in a single run, each with its own handler.
+{{< /callout >}}
+
+{{< callout context="note" >}}
+`signature: default` applies to a signature *named* `default`; it is not a catch-all for an omitted `--signature` flag. If the signature was created with `--signature <name>`, set the same value in the consumer identity.
+{{< /callout >}}
+
+{{< callout context="caution" >}}
+Consumer identities are matched **exactly**. Credentials are looked up under the name of the signature being verified, so a `signature: default` entry does not serve a signature named `prod`, and an entry with no `signature` field at all matches nothing. Give every signature its own consumer entry, otherwise a run without `--signature` fails on the signatures that have no matching credential.
+{{< /callout >}}
+
+### Run the verify command
+
+The GPG handler comes from the `verifier` field of the config entry.
+
+```bash
+ocm verify cv \
+  /tmp/helloworld/transport-archive//github.com/acme.org/helloworld:1.0.0
+```
+
+<details>
+<summary>Expected output</summary>
+
+```text
+time=2026-06-15T12:03:39.929+02:00 level=INFO msg="verifying signature" name=default
+time=2026-06-15T12:03:39.930+02:00 level=INFO msg="signature verification completed" name=default duration=894.458µs
+time=2026-06-15T12:03:39.930+02:00 level=INFO msg="SIGNATURE VERIFICATION SUCCESSFUL"
+```
+
+</details>
+
+The command exits with status code `0` on success.
+
+### Verify a specific signature
+
+If the component carries multiple signatures (e.g. a GPG signature alongside an RSA one), select the one to verify by name:
+
+```bash
+ocm verify cv \
+  --signature prod \
+  /tmp/helloworld/transport-archive//github.com/acme.org/helloworld:1.0.0
+```
+
+Without `--signature`, **every** signature on the descriptor is verified. Configuration and credentials are resolved separately for each one, under that signature's own name.
+
 ## What You've Learned
 
 Congratulations! You've successfully:
@@ -314,6 +447,68 @@ Congratulations! You've successfully:
 - ✅ Configured the GPG signer and verifier to select the GPG handler
 - ✅ Signed a component version with your GPG private key
 - ✅ Verified the signature using the public key
+
+## Troubleshooting
+
+### Symptom: `Error: signing failed: private key not found in credentials`
+
+**Cause:** No matching `GPG/v1alpha1` consumer entry in `.ocmconfig`, either the consumer block is missing, the `signature:` name doesn't match `--signature`, or `privateKeyPGPFile` isn't set.
+
+**Fix:** Confirm the consumer block exists and the `signature:` value matches. Without `--signature`, OCM looks for `signature: default`. See [How-to: Configure Signing Credentials]({{< relref "docs/guides/sign/configure-signing-credentials.md" >}}).
+
+### Symptom: `Error: signing failed: private key not found` (preceded by `no signer configured, using default`)
+
+**Cause:** No signing entry in `.ocmconfig`. OCM defaulted to RSA, then couldn't find an RSA private key.
+
+**Fix:** Add the `signing.config.ocm.software/v1alpha1` entry with the GPG signer, as shown in the configuration step. If the entry has a `signature` field, it only applies when `--signature` names that same signature.
+
+### Symptom: `Error: signature "default" already exists`
+
+**Cause:** The component version already carries a signature with that name.
+
+**Fix:** Pass `--force` to overwrite, or pick a different `--signature <name>` to add a second signature alongside the first.
+
+### Symptom: `Error: --signer-spec is no longer supported ...`
+
+**Cause:** The signer used to be passed as a file. It now lives in the OCM configuration.
+
+**Fix:** Move the contents of the old spec file under the `signer` field of a `signing.config.ocm.software/v1alpha1` entry and drop the flag.
+
+### Symptom: `GPG signing requires the GnuPG "gpg" binary (>= 2.2.0) on PATH`
+
+**Cause:** OCM delegates all OpenPGP operations to GnuPG, and no `gpg` binary was found on `PATH`.
+
+**Fix:** Install GnuPG 2.2 or later (`brew install gnupg`, `sudo apt-get install gnupg`, `sudo dnf install gnupg2`) and make sure `gpg` is on `PATH`.
+
+### Symptom: `with GODEBUG=fips140=only, GPG signing and verification require a gpg whose libgcrypt runs in FIPS mode`
+
+**Cause:** OCM runs with `GODEBUG=fips140=only`, and the `libgcrypt` of your `gpg` does not run in FIPS mode (`gpgconf --show-versions` reports `fips-mode:n`), or `gpgconf` is not on `PATH`.
+
+**Fix:** Use a GnuPG whose `libgcrypt` runs in FIPS mode, see [FIPS 140-3: GPG]({{< relref "docs/reference/standards-and-regulations/fips.md" >}}#gpg), or run OCM without `fips140=only`.
+
+### Symptom: `SIGNATURE VERIFICATION FAILED: gpg verify failed: exit status 2` with `Can't check signature: No public key`
+
+**Cause:** The public key in `.ocmconfig` doesn't match the key that signed, most often because you exported a different key, or the signer rotated their key after signing.
+
+**Fix:** Confirm `publicKeyPGPFile` points at the verifier-key file the signer actually shared. If you signed locally, re-run the export step above to regenerate `verify-key.asc` from the same fingerprint.
+
+### Symptom: `SIGNATURE VERIFICATION FAILED: load GPG public key: load public key: open ...: no such file or directory`
+
+**Cause:** The `publicKeyPGPFile` path in `.ocmconfig` doesn't exist on disk.
+
+**Fix:** Check the path is correct and readable. Absolute paths avoid working-directory surprises.
+
+### Symptom: `SIGNATURE VERIFICATION FAILED: signature was made by key ... which does not match the configured key fingerprint "..."`
+
+**Cause:** The verifier contains a `keyFingerprint` that matches neither the key that made the signature nor its primary key.
+
+**Fix:** Either remove `keyFingerprint` from the verifier (any key in the file will be tried) or correct it. Run `gpg --show-keys /tmp/keys/verify-key.asc` to confirm the actual fingerprint.
+
+### Symptom: `SIGNATURE VERIFICATION FAILED: verifying with the GnuPG keyring requires the full key fingerprint ...`
+
+**Cause:** The verifier sets `keySource: keyring` without a full 40-character `keyFingerprint`. A long key ID is not accepted, because it does not identify a key reliably among all keys in a keyring.
+
+**Fix:** Set `keyFingerprint` to the full fingerprint of the key you trust (`gpg --fingerprint <key>`; spaces and a `0x` prefix are accepted).
 
 ## Best Practices for Production
 
@@ -360,6 +555,7 @@ OCM passes the passphrase to `gpg` on standard input; it is never written to dis
 {{< details "Can a component have both RSA and GPG signatures?" >}}
 Yes. Each signature has a distinct `name`. Use `--signature <name>` when signing to create named signatures, and OCM will store all of them on the component version.
 {{< /details >}}
+
 
 ## Cleanup
 

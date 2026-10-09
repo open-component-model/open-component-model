@@ -366,8 +366,8 @@ For hands-on steps, see [Tutorial: Plain Signatures]({{< relref "docs/guides/sig
 
 - [How-to: Generate Signing Keys]({{< relref "generate-signing-keys.md" >}}) - Step-by-step creating RSA key pairs.
 - [How-to: Configure Signing Credentials]({{< relref "configure-signing-credentials.md" >}}) - Set up OCM to use your keys for signing and verification
-- [How-to: Sign a Component Version]({{< relref "sign-component-version.md" >}}) - Step-by-step signing instructions
-- [How-to: Verify a Component Version]({{< relref "verify-component-version.md" >}}) - Step-by-step verification instructions
+- [How-to: Sign a Component Version]({{< relref "docs/guides/sign/_index.md" >}}) - Step-by-step signing instructions
+- [How-to: Verify a Component Version]({{< relref "docs/guides/sign/_index.md#verify-a-signature" >}}) - Step-by-step verification instructions
 
 ## Related Documentation
 

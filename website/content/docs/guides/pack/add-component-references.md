@@ -418,7 +418,7 @@ my-org.example/component-b         │ 1.0.0   │
 
 ## Next Steps
 
-- [Migrate Legacy Resolvers]({{< relref "docs/guides/transfer/migrate-legacy-resolvers.md" >}}) — Replace deprecated
+- [Migrate Legacy Resolvers]({{< relref "docs/guides/migrate/migrate-legacy-resolvers.md" >}}) — Replace deprecated
   fallback resolvers with glob-based resolvers
 
 ## Related Documentation

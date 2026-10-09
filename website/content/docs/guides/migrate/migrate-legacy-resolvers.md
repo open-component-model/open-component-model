@@ -1,7 +1,7 @@
 ---
 title: "Migrate Legacy Resolvers"
 description: "Replace deprecated fallback resolvers with glob-based resolvers for deterministic and efficient component resolution."
-weight: 150
+weight: 10
 toc: true
 aliases:
   - /docs/how-to/migrate-from-deprecated-resolvers/

@@ -5,6 +5,7 @@ weight: 50
 toc: true
 aliases:
   - /docs/tutorials/signing/plain/
+  - /docs/guides/sign/verify-with-plain-rsa/
 ---
 
 In this tutorial, you'll sign a component version with a private key and verify it with the corresponding public key.
@@ -226,7 +227,7 @@ You should see a `signatures:` section with your signature.
 
 {{< step >}}
 
-### Verify the signature
+### Verify right after signing
 
 Now verify the signature using the public key:
 
@@ -251,6 +252,59 @@ time=2026-03-12T22:06:37.358+01:00 level=INFO msg="SIGNATURE VERIFICATION SUCCES
 
 {{< /step >}}
 {{< /steps >}}
+
+## Verify an RSA signature
+
+The tutorial above verifies right after signing, on the same machine, with the same `.ocmconfig`. This section is for the **consumer side**: you received a signed component version and the signer's public key, and you want to confirm authenticity before trusting it. You need the signer's public key on disk and pointed at by `.ocmconfig` (see [Configure Signing Credentials]({{< relref "docs/guides/sign/configure-signing-credentials.md" >}})). With Sigstore (see [Sign with Sigstore]({{< relref "docs/guides/sign/sign-with-sigstore.md" >}})) you don't install a public key at all, you just declare which identity you trust.
+
+Run the verify command against the signed component:
+
+```bash
+ocm verify cv <repository>//<component>:<version>
+```
+
+**Local CTF Archive:**
+
+```bash
+ocm verify cv /tmp/helloworld/transport-archive//github.com/acme.org/helloworld:1.0.0
+```
+
+**Remote OCI Registry:**
+
+```bash
+ocm verify cv ghcr.io/<your-namespace>//github.com/acme.org/helloworld:1.0.0
+```
+
+<details>
+<summary>Expected output</summary>
+
+```text
+time=2025-11-19T15:58:22.431+01:00 level=INFO msg="verifying signature" name=default
+time=2025-11-19T15:58:22.435+01:00 level=INFO msg="signature verification completed" name=default duration=4.287541ms
+time=2025-11-19T15:58:22.435+01:00 level=INFO msg="SIGNATURE VERIFICATION SUCCESSFUL"
+```
+
+</details>
+
+The command exits with status code `0` on success.
+
+### Verify a specific signature
+
+If the component has multiple signatures, specify which one to verify by name:
+
+```bash
+ocm verify cv --signature prod ghcr.io/<your-namespace>//github.com/acme.org/helloworld:1.0.0
+```
+
+> 👉 Without the `--signature` flag, **every** signature on the descriptor is verified, not just the one named `default`. Each is verified under its own name, so each needs a matching consumer entry.
+
+### List available signatures
+
+View all signatures on a component version:
+
+```bash
+ocm get cv /tmp/helloworld/transport-archive//github.com/acme.org/helloworld:1.0.0 -o yaml | grep -A 10 signatures:
+```
 
 ## What You've Learned
 
@@ -300,6 +354,38 @@ Yes! A component version can have multiple signatures from different parties. Th
 
 Use `--signature <name>` to specify which signature to create or verify.
 {{< /details >}}
+
+## Troubleshooting
+
+### Symptom: "signature verification failed"
+
+**Cause:** Public key doesn't match the signing private key, or the component was modified after signing.
+
+**Fix:** Ensure you're using the correct public key that corresponds to the private key used for signing:
+
+```bash
+# Check which signature names exist
+ocm get cv /tmp/helloworld/transport-archive//github.com/acme.org/helloworld:1.0.0 -o yaml | grep -A 3 "signatures:"
+
+# Verify with the correct signature name
+ocm verify cv --signature <name> /tmp/helloworld/transport-archive//github.com/acme.org/helloworld:1.0.0
+```
+
+### Symptom: "no public key found"
+
+**Cause:** OCM cannot find a matching verification configuration in `.ocmconfig`.
+
+**Fix:** Ensure your `.ocmconfig` has a consumer entry with the matching `signature` name and `public_key_pem_file` path. See [Configure Signing Credentials]({{< relref "docs/guides/sign/configure-signing-credentials.md" >}}).
+
+### Symptom: "invalid key format"
+
+**Cause:** The public key file is not in PEM format.
+
+**Fix:** Verify the key starts with `-----BEGIN PUBLIC KEY-----`:
+
+```bash
+head -n 1 /tmp/keys/public-key.pem
+```
 
 ## Cleanup
 

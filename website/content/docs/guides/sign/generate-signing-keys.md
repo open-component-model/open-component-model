@@ -221,8 +221,8 @@ You should see both files:
 ## Next Steps
 
 - [How-to: Configure Signing Credentials]({{< relref "docs/guides/sign/configure-signing-credentials.md" >}}) - Set up OCM to use your keys for signing and verification
-- [How-to: Sign a Component Version]({{< relref "docs/guides/sign/sign-component-version.md" >}}) - Use your private key to sign components
-- [How-to: Verify a Component Version]({{< relref "docs/guides/sign/verify-component-version.md" >}}) - Share your public key and verify signatures
+- [How-to: Sign a Component Version]({{< relref "docs/guides/sign/_index.md" >}}) - Use your private key to sign components
+- [All verification methods]({{< relref "docs/guides/sign/_index.md#verify-a-signature" >}}) - Share your public key and verify signatures
 
 ## Related documentation
 
