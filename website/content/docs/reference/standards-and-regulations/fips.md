@@ -104,7 +104,7 @@ version changes.
 | `ocm` CLI binaries (all OS/architectures) | `GOFIPS140=certified`, `CGO_ENABLED=0` | — |
 | OCM CLI image (`cli:<version>`, default) | `GOFIPS140=certified`, `CGO_ENABLED=0` | Garden Linux `bare-libc` with `ocm`, a FIPS build of `cosign`, `gpg` on Garden Linux's FIPS `libgcrypt`, and the CA bundle |
 | OCM CLI slim image (`cli:<version>-slim`) | `GOFIPS140=certified`, `CGO_ENABLED=0` | `scratch` with `ocm` and the CA bundle |
-| OCM controller image | `GOFIPS140=certified`, `CGO_ENABLED=0` | `gcr.io/distroless/static:nonroot` with `manager` |
+| OCM controller image | `GOFIPS140=certified`, `CGO_ENABLED=0` | Garden Linux `bare-libc` with `manager`, a FIPS build of `cosign`, `gpg` on Garden Linux's FIPS `libgcrypt`, and the CA bundle |
 
 The default CLI image is based on Garden Linux
 [`bare-libc`](https://docs.gardenlinux.org/how-to/container-base-image/bare.html).
@@ -117,8 +117,11 @@ bundle at `/etc/ssl/certs/ca-certificates.crt`. So GPG and Sigstore signing
 work in the image, also with `GODEBUG=fips140=only`. The slim image is built
 `FROM scratch` and contains only `/ocm` and the CA bundle; use it when you
 don't sign with GPG or Sigstore, or bring your own `cosign` and `gpg`.
-The controller image is based on distroless `static`, which adds CA
-certificates, time zone data and a `nonroot` user, but no cryptographic library.
+The controller image is built the same way: Garden Linux `bare-libc` with the
+static `/manager` binary (the entrypoint), the FIPS `cosign`, GnuPG on Garden
+Linux's FIPS `libgcrypt` (`/etc/gcrypt/fips_enabled`), and the CA bundle, so
+GPG and Sigstore verification work in the controller, also with
+`GODEBUG=fips140=only`.
 
 The images have no shell and no package manager. See
 [Sigstore and cosign](#sigstore-and-cosign) and [GPG](#gpg) for how OCM uses
@@ -338,7 +341,7 @@ verification.
 
 OCM does not implement Sigstore itself. Its Sigstore signing handler runs the
 external `cosign` binary, so all Sigstore cryptography runs in `cosign`. The CLI
-image includes a FIPS build of `cosign`; the OCM CLI binaries do not.
+and controller images include a FIPS build of `cosign`; the OCM CLI binaries do not.
 
 #### How OCM uses cosign
 
@@ -443,7 +446,7 @@ rejects these images' `cosign`; with the default `fips140=on` it uses them.
 ### GPG
 
 OCM signs and verifies GPG signatures by running the `gpg` binary on `PATH`.
-The CLI image includes `gpg` in FIPS mode (see below); the OCM CLI binaries do
+The CLI and controller images include `gpg` in FIPS mode (see below); the OCM CLI binaries do
 not.
 
 In FIPS mode, OCM checks whether the `libgcrypt` of `gpg` runs in FIPS mode by
