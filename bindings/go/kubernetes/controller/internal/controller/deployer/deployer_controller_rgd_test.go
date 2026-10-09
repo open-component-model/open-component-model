@@ -187,14 +187,14 @@ spec:
 			deployers := &v1alpha1.DeployerList{}
 			Eventually(func(g Gomega) {
 				g.Expect(k8sClient.List(ctx, deployers)).To(Succeed())
-				g.Expect(deployers.Items).To(HaveLen(0))
+				g.Expect(deployers.Items).To(BeEmpty())
 			}).WithTimeout(test.DefaultKubernetesOperationTimeout).WithContext(ctx).Should(Succeed())
 
 			RGDs := &unstructured.UnstructuredList{}
 			RGDs.SetGroupVersionKind(listGVK)
 			Eventually(func(g Gomega) {
 				g.Expect(k8sClient.List(ctx, RGDs)).To(Succeed())
-				g.Expect(RGDs.Items).To(HaveLen(0))
+				g.Expect(RGDs.Items).To(BeEmpty())
 			}).WithTimeout(test.DefaultKubernetesOperationTimeout).WithContext(ctx).Should(Succeed())
 		})
 
@@ -549,7 +549,7 @@ spec:
 			rgdObjUpdated := &unstructured.Unstructured{}
 			rgdObjUpdated.SetGroupVersionKind(gvk)
 			Eventually(func(g Gomega, ctx context.Context) {
-				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(rgdObj), rgdObjUpdated))
+				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(rgdObj), rgdObjUpdated)).To(Succeed())
 				g.Expect(rgdObjUpdated.Object["spec"]).To(Equal(rgdObjApplied.Object["spec"]))
 			}, "15s").WithContext(ctx).Should(Succeed())
 
