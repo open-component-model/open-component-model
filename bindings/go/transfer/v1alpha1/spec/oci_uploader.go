@@ -34,6 +34,11 @@ const (
 	// DefaultOCIImageReferenceLocalBlob names a local blob holding an OCI manifest by its
 	// referenceName, verbatim: org/image:v1 becomes <target>/org/image:v1.
 	DefaultOCIImageReferenceLocalBlob = "${" + ociTargetPrefix + ` + resource.access.referenceName}`
+
+	// DefaultOCIImageReferenceRelative names a relativeOciReference by its registry-relative
+	// reference, verbatim: org/image:v1 becomes <target>/org/image:v1. The reference is
+	// already a repository path; its tag/digest ride along.
+	DefaultOCIImageReferenceRelative = "${" + ociTargetPrefix + ` + resource.access.reference}`
 )
 
 // DefaultOCIUploaderMatch is the match an [OCIUploaderConfig] uses when none is set: OCI
@@ -42,7 +47,7 @@ const (
 //
 // Writing it explicitly into a config is equivalent to omitting match.
 const DefaultOCIUploaderMatch = `target.type == "OCIRepository"
-  && (resource.access.isType(["OCIImage", "Helm"])
+  && (resource.access.isType(["OCIImage", "Helm", "relativeOciReference"])
     || (resource.access.isType("LocalBlob")
       && has(resource.access.mediaType) && isOCIManifest(resource.access.mediaType)
       && has(resource.access.referenceName)))`

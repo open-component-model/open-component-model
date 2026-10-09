@@ -48,6 +48,8 @@ import (
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/util"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/verification"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/pkg/configuration"
+	ociaccess "ocm.software/open-component-model/bindings/go/oci/spec/access"
+	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
@@ -659,6 +661,17 @@ func decodeObjectsFromManifest(manifest io.ReadCloser) (_ []*unstructured.Unstru
 	return objs, nil
 }
 
+// localAccessScheme classifies the access types the component repository resolves locally
+// (by value): local blobs and the v1 compatibility relativeOciReference. It deliberately
+// does NOT register OCIImage or other remote accesses, which must go through the plugin
+// manager instead.
+var localAccessScheme = ocmruntime.NewScheme()
+
+func init() {
+	v2.MustAddToScheme(localAccessScheme)
+	ociaccess.MustAddRelativeOCIReferenceToScheme(localAccessScheme)
+}
+
 // downloadResourceBlob downloads a resource blob using either the repository (for local blobs)
 // or the plugin manager (for external access types like OCI images).
 func (r *Reconciler) downloadResourceBlob(
@@ -669,21 +682,15 @@ func (r *Reconciler) downloadResourceBlob(
 	cfg *configuration.Configuration,
 	pm *manager.PluginManager,
 ) (blob.ReadOnlyBlob, error) {
-	typed, err := v2.Scheme.NewObject(resource.Access.GetType())
+	typed, err := localAccessScheme.NewObject(resource.Access.GetType())
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve access type: %w", err)
 	}
 
-	switch typed.(type) { //nolint:gocritic // no, I like switch for types better
-	case *v2.LocalBlob:
-		repo, err := repoResolver.GetComponentVersionRepositoryForComponent(ctx,
-			componentDescriptor.Component.Name,
-			componentDescriptor.Component.Version)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get repository for component %s:%s: %w",
-				componentDescriptor.Component.Name, componentDescriptor.Component.Version, err)
-		}
-
+	switch typed.(type) {
+	// Both are local, repository-local accesses resolved by the component repository.
+	// relativeOciReference is a v1 compatibility access migrated into v2 descriptors.
+	case *v2.LocalBlob, *ociv1.RelativeOCIReference:
 		blob, _, err := repo.GetLocalResource(ctx,
 			componentDescriptor.Component.Name,
 			componentDescriptor.Component.Version,

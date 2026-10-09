@@ -6,6 +6,7 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -1389,15 +1390,24 @@ components:
 	r.NoError(err)
 	defer func() { r.NoError(gz.Close()) }()
 	tr := tar.NewReader(gz)
-	header, err := tr.Next()
-	r.NoError(err)
-	r.Equal("README.md", header.Name)
-	content, err := io.ReadAll(tr)
-	r.NoError(err)
-	r.Equal("hello from git access\n", string(content))
-	r.Equal(int64(len(content)), header.Size)
-	_, err = tr.Next()
-	r.ErrorIs(err, io.EOF)
+	files := map[string]string{}
+	var history []string
+	for {
+		header, err := tr.Next()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		r.NoError(err)
+		if header.Name == ".git" || strings.HasPrefix(header.Name, ".git/") {
+			history = append(history, header.Name)
+			continue
+		}
+		content, err := io.ReadAll(tr)
+		r.NoError(err)
+		files[header.Name] = string(content)
+	}
+	r.Equal(map[string]string{"README.md": "hello from git access\n"}, files)
+	r.Contains(history, ".git/HEAD", "the archive carries the commit history")
 }
 
 // startS3WithObject starts RustFS holding content at bucket/key and writes an ocmconfig

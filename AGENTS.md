@@ -84,7 +84,7 @@ Read a package's `doc.go` (if present) and `README.md` before changing it.
 
 ## Boundaries
 
-- **Before finishing**: run the affected area's lint + tests (`task tools:lint`, `task <module>:test`).
+- **Before finishing**: run the affected area's lint + tests (`task tools:lint`, `task <module>:test`). `task tools:lint` is Go-only; if you touched markdown, also lint the files you changed (the full `task tools:markdownlint` globs all ~360 `.md` and is slow): `git diff --name-only --diff-filter=ACMR HEAD -- '*.md' ':!website/**' | xargs -r npx markdownlint-cli2 --config .github/config/.markdownlint-cli2.yaml` (use `website.markdownlint-cli2.yaml` for `website/**`). CI enforces MD022/MD032.
 - **Ask first**: adding a dependency; changing a public API, CRD, or reconciliation path with broad blast radius; force-pushing (destructive).
 - **Never commit** secrets or credentials.
 - **Never hand-edit generated output** — run `task generate` and commit the result. Covers deepcopy, controller manifests, the **CLI reference** (`bindings/go/cli/docs/reference/` → mounted at `content/docs/reference/ocm-cli/`), and **JSON schemas** (generated from `bindings/go/` into the website's `static/schemas/`). The other `content/docs/reference/*.md` are hand-authored prose you edit directly — but they embed the generated schemas via a `{{< schema-renderer >}}` shortcode, so to change a documented schema field, edit the Go source and regenerate, not the page.
