@@ -16,6 +16,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/cli/internal/plugin/builtin/oidc"
 	"ocm.software/open-component-model/bindings/go/cli/internal/plugin/builtin/rsa"
 	"ocm.software/open-component-model/bindings/go/cli/internal/plugin/builtin/s3"
+	"ocm.software/open-component-model/bindings/go/cli/internal/plugin/builtin/tsa"
 	"ocm.software/open-component-model/bindings/go/cli/internal/plugin/builtin/wget"
 	checksumhttpv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/checksum/http/v1alpha1/spec"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
@@ -117,6 +118,9 @@ func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alph
 	}
 	if err := gpg.Register(manager.SigningRegistry, manager.CredentialTypeRegistry, filesystemConfig); err != nil {
 		return fmt.Errorf("could not register GPG signing plugin: %w", err)
+	}
+	if err := tsa.Register(manager.CredentialTypeRegistry); err != nil {
+		return fmt.Errorf("could not register TSA credential types: %w", err)
 	}
 
 	return nil

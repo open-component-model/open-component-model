@@ -16,11 +16,11 @@ import (
 )
 
 func TestGetSupportedHash(t *testing.T) {
-	h, err := getSupportedHash(crypto.SHA256.String())
+	h, err := GetSupportedHash(crypto.SHA256.String())
 	require.NoError(t, err)
 	assert.Equal(t, crypto.SHA256, h)
 
-	_, err = getSupportedHash("unknown-hash")
+	_, err = GetSupportedHash("unknown-hash")
 	assert.Error(t, err)
 }
 

@@ -2,9 +2,12 @@ package http
 
 import (
 	"crypto/tls"
+	"crypto/x509"
+	"fmt"
 	"log/slog"
 	"net"
 	nethttp "net/http"
+	"os"
 	"time"
 
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
@@ -68,18 +71,27 @@ func NewTransport(cfg *httpv1alpha1.TimeoutConfig) *nethttp.Transport {
 	return transport
 }
 
-// NewTransportWithTLS returns an *http.Transport built by NewTransport, with TLS
-// settings applied from tlsCfg. When tlsCfg is nil or InsecureSkipVerify is
-// not set, behaviour is identical to NewTransport.
-//
-// When InsecureSkipVerify is true, a fresh *tls.Config is allocated (or the
-// existing one cloned) and InsecureSkipVerify is set on it. A warning is
-// emitted at construction time. This does not mutate http.DefaultTransport or
-// its TLSClientConfig.
-func NewTransportWithTLS(cfg *httpv1alpha1.TimeoutConfig, tlsCfg *httpv1alpha1.TLSConfig) *nethttp.Transport {
+// NewTransportWithTLS returns NewTransport(cfg) with tlsCfg applied. Custom root
+// CAs are added to a copy of the system pool so public servers keep verifying; a
+// load failure is returned rather than silently ignored. InsecureSkipVerify wins
+// over root CAs. http.DefaultTransport is never mutated.
+func NewTransportWithTLS(cfg *httpv1alpha1.TimeoutConfig, tlsCfg *httpv1alpha1.TLSConfig) (*nethttp.Transport, error) {
 	transport := NewTransport(cfg)
-	if tlsCfg == nil || tlsCfg.InsecureSkipVerify == nil || !*tlsCfg.InsecureSkipVerify {
-		return transport
+	if tlsCfg == nil {
+		return transport, nil
+	}
+
+	insecure := tlsCfg.InsecureSkipVerify != nil && *tlsCfg.InsecureSkipVerify
+
+	var rootCAs *x509.CertPool
+	if !insecure {
+		var err error
+		if rootCAs, err = rootCAPoolFromTLSConfig(tlsCfg); err != nil {
+			return nil, err
+		}
+		if rootCAs == nil {
+			return transport, nil
+		}
 	}
 
 	var tlsConf *tls.Config
@@ -88,11 +100,45 @@ func NewTransportWithTLS(cfg *httpv1alpha1.TimeoutConfig, tlsCfg *httpv1alpha1.T
 	} else {
 		tlsConf = &tls.Config{MinVersion: tls.VersionTLS12}
 	}
-	tlsConf.InsecureSkipVerify = true
+	if insecure {
+		tlsConf.InsecureSkipVerify = true
+		slog.Warn("HTTP transport built with InsecureSkipVerify=true; TLS certificate verification is disabled — connections are vulnerable to MITM attacks")
+	} else {
+		tlsConf.RootCAs = rootCAs
+	}
 	transport.TLSClientConfig = tlsConf
 
-	slog.Warn("HTTP transport built with InsecureSkipVerify=true; TLS certificate verification is disabled — connections are vulnerable to MITM attacks")
-	return transport
+	return transport, nil
+}
+
+// rootCAPoolFromTLSConfig builds an x509 pool for the transport from the custom
+// root CA material on tlsCfg, appended to a clone of the system trust pool so
+// public CAs keep working. It returns nil, nil when no custom roots are set.
+// RootCAsPEM (inline) takes precedence over RootCAsPEMFile (path).
+func rootCAPoolFromTLSConfig(tlsCfg *httpv1alpha1.TLSConfig) (*x509.CertPool, error) {
+	var pem []byte
+	var source string
+	switch {
+	case tlsCfg.RootCAsPEM != "":
+		pem, source = []byte(tlsCfg.RootCAsPEM), "rootCAsPEM"
+	case tlsCfg.RootCAsPEMFile != "":
+		data, err := os.ReadFile(tlsCfg.RootCAsPEMFile)
+		if err != nil {
+			return nil, fmt.Errorf("http: reading TLS root CA file %q: %w", tlsCfg.RootCAsPEMFile, err)
+		}
+		pem, source = data, "rootCAsPEMFile"
+	default:
+		return nil, nil
+	}
+
+	pool, err := x509.SystemCertPool()
+	if err != nil || pool == nil {
+		pool = x509.NewCertPool()
+	}
+	if !pool.AppendCertsFromPEM(pem) {
+		return nil, fmt.Errorf("http: no valid certificates found in %s", source)
+	}
+	return pool, nil
 }
 
 // newDialer builds the net.Dialer used to replace DialContext when the
@@ -124,7 +170,11 @@ func newDialer(cfg *httpv1alpha1.TimeoutConfig) *net.Dialer {
 // retry-enabled client used for OCI registry traffic, use New.
 func NewClient(cfg *httpv1alpha1.Config) *nethttp.Client {
 	build := func(tc *httpv1alpha1.TimeoutConfig, _ *httpv1alpha1.RetryConfig, tlsc *httpv1alpha1.TLSConfig) nethttp.RoundTripper {
-		rt := nethttp.RoundTripper(NewTransportWithTLS(tc, tlsc))
+		base, err := NewTransportWithTLS(tc, tlsc)
+		if err != nil {
+			return errorRoundTripper{err: err}
+		}
+		rt := nethttp.RoundTripper(base)
 		if tlsc != nil && tlsc.InsecureSkipVerify != nil && *tlsc.InsecureSkipVerify {
 			rt = &insecureWarnTransport{base: rt}
 		}

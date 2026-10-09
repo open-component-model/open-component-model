@@ -18,12 +18,14 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	credentialsv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	internalpem "ocm.software/open-component-model/bindings/go/rsa/signing/handler/internal/pem"
 	"ocm.software/open-component-model/bindings/go/rsa/signing/v1alpha1"
 	rsacredentialsv1 "ocm.software/open-component-model/bindings/go/rsa/spec/credentials/v1"
 	identityv1 "ocm.software/open-component-model/bindings/go/rsa/spec/identity/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	"ocm.software/open-component-model/bindings/go/signing"
 )
 
 func Test_RSA_Handler(t *testing.T) {
@@ -1036,6 +1038,80 @@ func Test_RSA_Identity(t *testing.T) {
 			})
 		}
 	})
+}
+
+func Test_RSA_Verify_TrustedSigningTime(t *testing.T) {
+	h, err := New(v1alpha1.Scheme, false)
+	require.NoError(t, err)
+
+	key := mustKey(t)
+	cert := mustSelfSigned(t, "expiring-signer", key)
+	privPath, chainPath := writeKeyAndChain(t, t.TempDir(), key, cert)
+
+	d := digestHex(crypto.SHA256, []byte("payload"))
+	si, err := h.Sign(t.Context(), d, &v1alpha1.Config{
+		SignatureAlgorithm:      v1alpha1.AlgorithmRSASSAPSS,
+		SignatureEncodingPolicy: v1alpha1.SignatureEncodingPolicyPEM,
+	}, &rsacredentialsv1.RSACredentials{
+		Type:              rsacredentialsv1.VersionedType,
+		PrivateKeyPEMFile: privPath,
+		PublicKeyPEMFile:  chainPath,
+	})
+	require.NoError(t, err)
+	sig := descruntime.Signature{Digest: d, Signature: si}
+
+	// Verify after the signing certificate has expired.
+	h.now = func() time.Time { return cert.NotAfter.Add(time.Hour) }
+
+	tests := []struct {
+		name        string
+		trustedTime *time.Time
+		creds       runtime.Typed
+		wantErr     bool
+	}{
+		{
+			name:    "expired certificate without trusted signing time fails",
+			creds:   &rsacredentialsv1.RSACredentials{Type: rsacredentialsv1.VersionedType, PublicKeyPEMFile: chainPath},
+			wantErr: true,
+		},
+		{
+			name:        "trusted signing time within certificate validity verifies",
+			trustedTime: new(cert.NotBefore.Add(time.Minute)),
+			creds:       &rsacredentialsv1.RSACredentials{Type: rsacredentialsv1.VersionedType, PublicKeyPEMFile: chainPath},
+		},
+		{
+			name:        "trusted signing time after certificate expiry fails",
+			trustedTime: new(cert.NotAfter.Add(time.Minute)),
+			creds:       &rsacredentialsv1.RSACredentials{Type: rsacredentialsv1.VersionedType, PublicKeyPEMFile: chainPath},
+			wantErr:     true,
+		},
+		{
+			name: "verified time supplied as credential property is ignored",
+			creds: &credentialsv1.DirectCredentials{
+				Type: runtime.NewVersionedType(credentialsv1.CredentialsType, credentialsv1.Version),
+				Properties: map[string]string{
+					"publicKeyPEMFile":  chainPath,
+					"tsa_verified_time": cert.NotBefore.Add(time.Minute).Format(time.RFC3339),
+				},
+			},
+			wantErr: true,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			ctx := t.Context()
+			if tc.trustedTime != nil {
+				ctx = signing.WithTrustedSigningTime(ctx, *tc.trustedTime)
+			}
+			err := h.Verify(ctx, sig, nil, tc.creds)
+			if tc.wantErr {
+				r.ErrorContains(err, "certificate verification failed")
+				return
+			}
+			r.NoError(err)
+		})
+	}
 }
 
 func digestHex(algorithm crypto.Hash, b []byte) descruntime.Digest {
