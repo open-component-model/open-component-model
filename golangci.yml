@@ -112,7 +112,6 @@ linters:
       # (counts are the findings at enablement time). To fix a linter, remove it
       # from this list in the same PR that resolves its findings.
       - linters:
-          - depguard        # 12: tests import siblings outside the prod allow-list
           - dupword         # 2: false positives on intentional repetition (CEL map(x,x*2)); fixer corrupts strings
           - fatcontext      # 3: all current hits are false positives (intentional ctx capture, Ginkgo suite lifecycle) and the fixer shadows outer vars; value is in prod loop-nesting, not tests
           - gosmopolitan    # 5: time.Local / non-portable usage in tests
@@ -150,6 +149,13 @@ linters:
       - linters:
           - staticcheck
         path: (.+)repository/ocm/fallback.go
+      # git/integration's construct test drives the git input method through the
+      # constructor into a real OCM store and asserts the digest/pin round-trip
+      # of the git-sourced resource. This is done through oci/ctf. But we do not
+      # want to allow the non-test git code to import oci/ctf
+      - linters:
+          - depguard
+        path: git/integration/constructor_integration_test\.go
     paths:
       - third_party$
       - builtin$
@@ -521,6 +527,7 @@ linters:
             - "ocm.software/open-component-model/bindings/go/credentials"
             - "ocm.software/open-component-model/bindings/go/ctf"
             - "ocm.software/open-component-model/bindings/go/dag"
+            - "ocm.software/open-component-model/bindings/go/descriptor/normalisation"
             - "ocm.software/open-component-model/bindings/go/descriptor/runtime"
             - "ocm.software/open-component-model/bindings/go/descriptor/v2"
             - "ocm.software/open-component-model/bindings/go/git"
