@@ -47,7 +47,7 @@ env:
 jobs:
   e2e:
     name: E2E Tests (${{ matrix.arch }})
-    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-26.04-arm' || 'ubuntu-latest' }}
     timeout-minutes: 20
     # Extend the matrix with additional architectures if needed in the future.
     strategy:
@@ -90,7 +90,7 @@ jobs:
         uses: docker/setup-docker-action@2bf61fb9464cc67f0cbdeabed6aa0380accd1c70 # v5
 
       - name: Download ocm CLI artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: ${{ inputs.cli_artifact }}
           path: ${{ env.CONTROLLER_DIR }}/tmp/cli
@@ -107,10 +107,11 @@ jobs:
       - name: Install Helm
         uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
         with:
+          # renovate: datasource=github-releases depName=helm/helm
           version: v4.2.4
 
       - name: Download build artifacts
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: ${{ inputs.controller_image_artifact }}
           path: ${{ env.CONTROLLER_DIR }}/tmp/oci

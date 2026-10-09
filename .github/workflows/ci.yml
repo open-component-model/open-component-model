@@ -12,13 +12,14 @@ permissions:
 jobs:
   changes:
     name: "Detect Changes"
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     permissions:
       pull-requests: read
     outputs:
       run_go: ${{ steps.compute.outputs.run_go }}
       run_lint: ${{ steps.compute.outputs.run_lint }}
       dependency_list_changed: ${{ steps.filter.outputs.dependency_list }}
+      lint_changed: ${{ steps.filter.outputs.lint }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -73,7 +74,7 @@ jobs:
 
   golangci_lint_verify:
     name: "golangci-lint-verify"
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     permissions:
       # Optional: allow write access to checks to allow the action to annotate code in the PR.
       # Automatically downgraded to read-only for pull requests from forks
@@ -104,7 +105,7 @@ jobs:
   dependency_list_verify:
     name: "dependency-list-verify"
     needs: changes
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     if: ${{ needs.changes.outputs.dependency_list_changed == 'true' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -122,7 +123,7 @@ jobs:
             /.github/scripts/package.json
             /.github/scripts/package-lock.json
           persist-credentials: false
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 26
       - name: Install Task
@@ -142,7 +143,7 @@ jobs:
     needs:
      - changes
      - golangci_lint_verify
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     permissions:
       # Optional: allow write access to checks to allow the action to annotate code in the PR.
       # Automatically downgraded to read-only for pull requests from forks
@@ -180,11 +181,16 @@ jobs:
           version: ${{ steps.versions.outputs.golangci_lint }}
           working-directory: ${{ github.workspace }}/${{ matrix.module }}
           args: --timeout 10m --config=${{ github.workspace }}/golangci.yml
+          # Bust the analysis cache when lint config/tooling changes (the `lint`
+          # filter: .env / golangci.yml): the golangci-lint-action cache key is
+          # not derived from golangci.yml, so a config-only change would
+          # otherwise reuse stale per-package results and hide findings until main.
+          skip-cache: ${{ needs.changes.outputs.lint_changed == 'true' }}
 
   run_integration_tests:
     name: "Integration Tests"
     needs: changes
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     if: ${{ needs.changes.outputs.run_go == 'true' }}
     env:
       # All packages of one `go test ./...` share a single testcontainers reaper, which
@@ -239,7 +245,7 @@ jobs:
   run_unit_tests:
     name: "Unit Tests"
     needs: changes
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     if: ${{ needs.changes.outputs.run_go == 'true' }}
     steps:
       - name: Install Task
@@ -275,7 +281,7 @@ jobs:
             || { echo "::error::unit coverage ${pct}% is below the ${floor}% floor"; exit 1; }
 
   generate:
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     name: "Code Generation"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -310,7 +316,7 @@ jobs:
   # see https://github.com/orgs/community/discussions/60792 for details on why this is needed
   check-completion:
     name: "Completion"
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     needs:
       - changes
       - generate

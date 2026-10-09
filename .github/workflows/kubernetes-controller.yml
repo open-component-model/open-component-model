@@ -52,7 +52,7 @@ permissions:
 jobs:
   verify-chart:
     name: Verify Chart
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     timeout-minutes: 10
     steps:
       - name: Checkout
@@ -69,6 +69,7 @@ jobs:
       - name: Install Helm
         uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
         with:
+          # renovate: datasource=github-releases depName=helm/helm
           version: v4.2.4
 
       - name: Setup Go
@@ -92,7 +93,7 @@ jobs:
 
   build:
     name: Build Controller
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     timeout-minutes: 20
     needs: verify-chart
     outputs:
@@ -129,6 +130,7 @@ jobs:
       - name: Install Helm
         uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
         with:
+          # renovate: datasource=github-releases depName=helm/helm
           version: v4.2.4
 
       - name: Compute VERSION
@@ -170,7 +172,7 @@ jobs:
           task helm/package VERSION="${VERSION}" APP_VERSION="${VERSION}" IMAGE_REPOSITORY="${IMAGE_NAME}"
 
       - name: Upload Artifacts
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         id: upload-artifacts
         with:
           if-no-files-found: error
@@ -181,7 +183,7 @@ jobs:
 
       # Upload chart artifact separately for easier access in PR conformance testing
       - name: Upload Chart Artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           if-no-files-found: error
           retention-days: 1

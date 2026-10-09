@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 
+	godigest "github.com/opencontainers/go-digest"
+
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	descv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/helm/internal"
@@ -117,10 +119,21 @@ func (t *ConvertHelmChartToOCI) Transform(ctx context.Context, step runtime.Type
 	transformation.Output.Resource = transformation.Spec.Resource
 	transformation.Output.Resource.Type = access.HelmRepositoryType
 
+	var hashAlgorithm string
+	switch result.Desc.Digest.Algorithm() {
+	case godigest.SHA256:
+		hashAlgorithm = "SHA-256"
+	case godigest.SHA512:
+		hashAlgorithm = "SHA-512"
+	default:
+		return nil, fmt.Errorf("unsupported OCI manifest digest algorithm: %s", result.Desc.Digest.Algorithm())
+	}
+
 	// Use digest of top-level-manifest
 	transformation.Output.Resource.Digest = &descv2.Digest{
-		HashAlgorithm: string(result.Desc.Digest.Algorithm()),
-		Value:         result.Desc.Digest.Encoded(),
+		HashAlgorithm:          hashAlgorithm,
+		NormalisationAlgorithm: "ociArtifactDigest/v1",
+		Value:                  result.Desc.Digest.Encoded(),
 	}
 	slog.DebugContext(ctx, "Set OCI image imageReference digest in output resource", "value", transformation.Output.Resource.Digest.Value)
 

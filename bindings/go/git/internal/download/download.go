@@ -26,7 +26,7 @@ import (
 	ocmhttp "ocm.software/open-component-model/bindings/go/http"
 )
 
-// Result is one downloaded snapshot of a Git repository, archived as tar.gz.
+// Result is one downloaded snapshot of a Git repository with its history, archived as tar.gz.
 type Result struct {
 	// Blob is backed by a file that outlives the call and is owned by the caller.
 	Blob *filesystem.Blob
@@ -36,62 +36,69 @@ type Result struct {
 	Digest digest.Digest
 }
 
-// Download resolves one snapshot of the repository and archives it.
-//
-// Git identifies objects by SHA-1, which is not FIPS-approved, and go-git hashes
-// with it throughout clone, fetch and tree walks. The download therefore runs
-// outside strict enforcement, so it keeps working with GODEBUG=fips140=only.
-// FIPS mode itself stays on, so TLS and SSH still negotiate approved algorithms
-// only, and the archive OCM records is digested with SHA-256.
-func Download(ctx context.Context, access *accessv1.Git, creds *credsv1.GitCredentials, opts Options) (result *Result, err error) {
-	fips140.WithoutEnforcement(func() { result, err = download(ctx, access, creds, opts) })
+// Download resolves one snapshot of the repository and archives it with its history.
+func Download(ctx context.Context, access *accessv1.Git, creds *credsv1.GitCredentials, opts Options) (*Result, error) {
+	var (
+		result      *Result
+		archivePath string
+	)
+	err := WithRepository(ctx, access, creds, opts, func(repo *git.Repository, selected *object.Commit) error {
+		file, err := os.CreateTemp(opts.TempDir, "ocm-git-archive-*.tar.gz")
+		if err != nil {
+			return fmt.Errorf("cannot create git archive file: %w", err)
+		}
+		archivePath = file.Name()
+		b, archiveDigest, err := archive(ctx, repo, selected, file, opts)
+		if err != nil {
+			return err
+		}
+		result = &Result{Blob: b, Commit: selected.Hash.String(), Digest: archiveDigest}
+		return nil
+	})
+	if err != nil && archivePath != "" {
+		if removeErr := removeIgnoringMissing(archivePath); removeErr != nil {
+			slog.WarnContext(ctx, "failed to remove incomplete git archive", "path", archivePath, "err", removeErr)
+		}
+	}
 	return result, err
 }
 
-func download(ctx context.Context, access *accessv1.Git, creds *credsv1.GitCredentials, opts Options) (_ *Result, err error) {
-	if err := access.Validate(); err != nil {
-		return nil, fmt.Errorf("invalid git access: %w", err)
-	}
+// WithRepository supplies the selected commit and original Git objects to fn.
+//
+// Git identifies objects by SHA-1, which is not FIPS-approved, and go-git hashes
+// with it throughout clone, fetch and tree walks. The callback therefore runs
+// outside strict enforcement, so it keeps working with GODEBUG=fips140=only.
+// FIPS mode itself stays on, so TLS and SSH still negotiate approved algorithms
+// only, and the archive OCM records is digested with SHA-256.
+func WithRepository(ctx context.Context, access *accessv1.Git, creds *credsv1.GitCredentials, opts Options, fn func(*git.Repository, *object.Commit) error) error {
+	var err error
+	fips140.WithoutEnforcement(func() { err = withRepository(ctx, access, creds, opts, fn) })
+	return err
+}
 
-	if err := ctx.Err(); err != nil {
-		return nil, fmt.Errorf("cannot download git repository: %w", err)
+func withRepository(ctx context.Context, access *accessv1.Git, creds *credsv1.GitCredentials, opts Options, fn func(*git.Repository, *object.Commit) error) error {
+	if err := access.Validate(); err != nil {
+		return fmt.Errorf("invalid git access: %w", err)
 	}
 
 	ep, err := endpoint.Parse(access.Repository)
 	if err != nil {
-		return nil, fmt.Errorf("cannot address git repository: %w", err)
+		return fmt.Errorf("cannot address git repository: %w", err)
 	}
-
-	auth, err := authMethod(ep, creds, opts)
+	clientOptions, err := ClientOptions(ep, creds, opts)
 	if err != nil {
-		return nil, fmt.Errorf("cannot authenticate against git repository: %w", err)
-	}
-
-	httpClient := opts.HTTPClient
-	if httpClient == nil {
-		httpClient = ocmhttp.New()
-	}
-	clientOptions := []client.Option{client.WithHTTPClient(httpClient)}
-	if option, ok := authOption(auth); ok {
-		clientOptions = append(clientOptions, option)
+		return err
 	}
 
 	dir, err := os.MkdirTemp(opts.TempDir, "ocm-git-repository-*")
 	if err != nil {
-		return nil, fmt.Errorf("cannot create git storage: %w", err)
+		return fmt.Errorf("cannot create git storage: %w", err)
 	}
 
-	// Cleanup failures are logged, not returned; on success the archive belongs to the caller.
-	var archivePath string
+	// Cleanup failures are logged; the callback owns anything it creates outside dir.
 	defer func() {
 		if rmErr := os.RemoveAll(dir); rmErr != nil {
 			slog.WarnContext(ctx, "failed to remove temporary git storage", "path", dir, "err", rmErr)
-		}
-
-		if err != nil && archivePath != "" {
-			if rmErr := removeIgnoringMissing(archivePath); rmErr != nil {
-				slog.WarnContext(ctx, "failed to remove incomplete git archive", "path", archivePath, "err", rmErr)
-			}
 		}
 	}()
 
@@ -104,51 +111,56 @@ func download(ctx context.Context, access *accessv1.Git, creds *credsv1.GitCrede
 			Tags:          git.AllTags,
 		})
 		if err != nil {
-			err = transportError(ctx, "cannot fetch git repository", err)
+			err = TransportError(ctx, "cannot fetch git repository", err)
 		}
 	} else {
 		repo, err = fetchRepository(ctx, dir, ep.URL, access.Commit, clientOptions)
 	}
 
+	if err == nil {
+		err = useRepository(repo, access, fn)
+	}
 	if repo != nil {
 		if closer, ok := repo.Storer.(io.Closer); ok {
-			defer func() { err = errors.Join(err, closer.Close()) }()
+			err = errors.Join(err, closer.Close())
 		}
 	}
+	return err
+}
 
-	if err != nil {
-		return nil, err
-	}
-
+// useRepository passes the commit the access selects to fn.
+func useRepository(repo *git.Repository, access *accessv1.Git, fn func(*git.Repository, *object.Commit) error) error {
 	hash := plumbing.NewHash(access.Commit)
 	if access.Commit == "" {
+		var err error
 		hash, err = resolveRef(repo, access.Ref)
 		if err != nil {
-			return nil, fmt.Errorf("cannot resolve git ref: %w", err)
+			return fmt.Errorf("cannot resolve git ref: %w", err)
 		}
 	}
 
 	selected, err := peelCommit(repo, hash)
 	if err != nil {
-		return nil, err
+		return err
 	}
+	return fn(repo, selected)
+}
 
-	if err := ctx.Err(); err != nil {
-		return nil, fmt.Errorf("cannot archive git repository: %w", err)
-	}
-
-	file, err := os.CreateTemp(opts.TempDir, "ocm-git-archive-*.tar.gz")
+// ClientOptions applies the same credential and HTTP client rules to fetch and push.
+func ClientOptions(ep *endpoint.Endpoint, creds *credsv1.GitCredentials, opts Options) ([]client.Option, error) {
+	auth, err := authMethod(ep, creds, opts)
 	if err != nil {
-		return nil, fmt.Errorf("cannot create git archive file: %w", err)
+		return nil, fmt.Errorf("cannot authenticate against git repository: %w", err)
 	}
-	archivePath = file.Name()
-
-	b, archiveDigest, err := archive(ctx, selected, file, opts)
-	if err != nil {
-		return nil, err
+	httpClient := opts.HTTPClient
+	if httpClient == nil {
+		httpClient = ocmhttp.New()
 	}
-
-	return &Result{Blob: b, Commit: selected.Hash.String(), Digest: archiveDigest}, nil
+	clientOptions := []client.Option{client.WithHTTPClient(httpClient)}
+	if option, ok := authOption(auth); ok {
+		clientOptions = append(clientOptions, option)
+	}
+	return clientOptions, nil
 }
 
 // fetchRepository fetches explicit refs or a pinned commit without depending on a valid remote HEAD.
@@ -183,7 +195,7 @@ func fetchRepository(ctx context.Context, dir, url, commit string, clientOptions
 	}
 
 	if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
-		return repo, transportError(ctx, "cannot fetch git repository", err)
+		return repo, TransportError(ctx, "cannot fetch git repository", err)
 	}
 
 	return repo, nil
@@ -243,8 +255,9 @@ func removeIgnoringMissing(path string) error {
 	return nil
 }
 
-// transportError names the common transport failures and keeps a redacted cause.
-func transportError(ctx context.Context, operation string, err error) error {
+// TransportError names the common transport failures and keeps a redacted cause,
+// so Git transport failures do not expose repository credentials.
+func TransportError(ctx context.Context, operation string, err error) error {
 	if ctx.Err() != nil {
 		return fmt.Errorf("%s: %w", operation, ctx.Err())
 	}
