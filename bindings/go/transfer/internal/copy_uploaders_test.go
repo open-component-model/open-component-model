@@ -20,6 +20,7 @@ func TestBuildGraphDefinition_LocalBlobAndReferenceUploaders(t *testing.T) {
 
 	image := ociImageResource("my-image", "1.0.0", "oci://ghcr.io/org/image:v1")
 	blob := localBlobResource("my-blob", "1.0.0")
+	relative := relativeOCIReferenceResource("my-relative", "1.0.0", "ocm/value:v2.0")
 	custom := customAccessResource("custom", "1.0.0")
 	s3v1 := descriptor.Resource{
 		ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "models", Version: "1.0.0"}},
@@ -64,6 +65,17 @@ func TestBuildGraphDefinition_LocalBlobAndReferenceUploaders(t *testing.T) {
 			name:      "baseline copies a local blob",
 			resource:  blob,
 			wantTypes: localBlobNodes,
+		},
+		{
+			name:      "baseline copies a relative OCI reference by value",
+			resource:  relative,
+			wantTypes: localBlobNodes,
+		},
+		{
+			name:      "a relative OCI reference selected by a reference uploader fails the build",
+			resource:  relative,
+			uploaders: []transferv1alpha1.UploaderConfig{&transferv1alpha1.ReferenceUploaderConfig{Match: always}},
+			wantErr:   "local blobs cannot be kept by reference",
 		},
 		{
 			name:      "local blob uploader copies an OCI image",
