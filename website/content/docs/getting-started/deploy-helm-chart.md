@@ -447,6 +447,54 @@ Values are injected via `helm.valuesObject` (a structured YAML object), which av
 
 {{< step >}}
 
+### Grant kro access to the instances
+
+kro needs a `ClusterRole` for the `Simple` instances that your ResourceGraphDefinition defines. The roles for OCM resources and for your deployer come from the [setup guide]({{< relref "setup-controller-environment.md" >}}). See [Access Control](https://kro.run/docs/advanced/access-control) in the kro documentation for details.
+
+Create `kro-rbac.yaml`:
+
+```shell
+cat > kro-rbac.yaml << 'EOF'
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kro:controller:simples
+  labels:
+    # kro picks up every ClusterRole with this label, see https://kro.run/docs/advanced/access-control
+    rbac.kro.run/aggregate-to-controller: "true"
+rules:
+  - apiGroups:
+      - kro.run
+    resources:
+      - simples
+      - simples/status
+    verbs:
+      - get
+      - list
+      - patch
+      - update
+      - watch
+EOF
+```
+
+Apply it:
+
+```shell
+kubectl apply -f kro-rbac.yaml
+```
+
+<details>
+<summary>You should see this output</summary>
+
+```text
+clusterrole.rbac.authorization.k8s.io/kro:controller:simples created
+```
+
+</details>
+{{< /step >}}
+
+{{< step >}}
+
 ### Apply the ResourceGraphDefinition
 
 {{< callout context="caution" title="RBAC required before you apply" icon="outline/alert-triangle" >}}
@@ -598,6 +646,25 @@ If the component isn't found, verify:
 
 If the controller logs show permission errors like `forbidden` or `cannot create resource`, the controller lacks RBAC permissions to manage `ResourceGraphDefinitions`. Follow the [Custom RBAC guide]({{< relref "custom-rbac.md" >}}) to grant the necessary permissions.
 
+### ResourceGraphDefinition Stays Inactive
+
+If `kubectl get rgd` shows the state `Inactive`, check the reason:
+
+```shell
+kubectl get rgd simple -o jsonpath='{.status.conditions[?(@.type=="Ready")].message}'
+```
+
+A message like `cache sync timeout for kro.run/v1alpha1, Resource=simples` often means that kro lacks access to the `Simple` instances.
+Check that you applied `kro-rbac.yaml`, as described in [Grant kro access to the instances](#grant-kro-access-to-the-instances).
+
+If the instance does not become `ACTIVE`, kro may lack access to a resource in the graph. The kro logs name the resource:
+
+```shell
+kubectl logs -n kro-system deployment/kro | grep forbidden
+```
+
+Check that you created the roles for OCM resources and for your deployer in the [setup guide]({{< relref "setup-controller-environment.md" >}}). See [Access Control](https://kro.run/docs/advanced/access-control) in the kro documentation for how kro gets its permissions.
+
 ## Cleanup
 
 Remove the deployed resources:
@@ -605,6 +672,7 @@ Remove the deployed resources:
 ```shell
 kubectl delete -f instance.yaml
 kubectl delete -f rgd.yaml
+kubectl delete -f kro-rbac.yaml
 ```
 
 Remove the temporary files:

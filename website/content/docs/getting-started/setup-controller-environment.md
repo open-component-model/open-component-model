@@ -148,11 +148,12 @@ Install [kro](https://kro.run) following the [official installation guide](https
 ```shell
 helm install kro oci://registry.k8s.io/kro/charts/kro \
   --namespace kro-system \
-  --create-namespace
+  --create-namespace \
+  --set rbac.mode=aggregation
 ```
 
-{{< callout context="caution" title="Security consideration" icon="outline/alert-triangle" >}}
-This default installation grants kro cluster-wide access to all resources, which is suitable for local development but not recommended for production environments. See the [kro documentation](https://kro.run/next/docs/advanced/access-control) for guidance on configuring more restrictive RBAC.
+{{< callout context="note" title="kro access control" icon="outline/lock" >}}
+`rbac.mode=aggregation` limits kro to its own resources and to the resources that a labeled `ClusterRole` allows. See [Access Control](https://kro.run/docs/advanced/access-control) in the kro documentation. kro's default mode, `unrestricted`, is not recommended for production.
 {{< /callout >}}
 <details>
 <summary>You should see this output</summary>
@@ -185,6 +186,36 @@ NAME                   READY   STATUS    RESTARTS   AGE
 kro-5644d5759f-82nsx   1/1     Running   0          2m22s
 ```
 </details>
+<br>
+
+Allow kro to manage OCM resources:
+
+```shell
+kubectl apply -f - << 'EOF'
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kro:controller:ocm
+  labels:
+    # kro picks up every ClusterRole with this label, see https://kro.run/docs/advanced/access-control
+    rbac.kro.run/aggregate-to-controller: "true"
+rules:
+  - apiGroups:
+      - delivery.ocm.software
+    resources:
+      - repositories
+      - components
+      - resources
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+EOF
+```
 
 {{< /step >}}
 {{< step >}}
@@ -270,6 +301,46 @@ notification-controller-58ffd586f7-pr65t     1/1     Running     0              
 source-controller-6ff87cb475-2h2lv           1/1     Running     0               3h29m
 ```
 </details>
+<br>
+
+Allow kro to manage the Flux resources that the guides use. Add more kinds when your ResourceGraphDefinitions create them:
+
+```shell
+kubectl apply -f - << 'EOF'
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kro:controller:flux
+  labels:
+    # kro picks up every ClusterRole with this label, see https://kro.run/docs/advanced/access-control
+    rbac.kro.run/aggregate-to-controller: "true"
+rules:
+  - apiGroups:
+      - source.toolkit.fluxcd.io
+    resources:
+      - ocirepositories
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - helm.toolkit.fluxcd.io
+    resources:
+      - helmreleases
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+EOF
+```
 
 {{< /tab >}}
 {{< tab "Argo CD" >}}
@@ -291,10 +362,11 @@ helm upgrade --install argocd argo/argo-cd \
 
 ```
 
-Wait for all pods to become ready:
+Wait for all pods to become ready. The chart runs a setup Job (`argocd-redis-secret-init`) whose pod ends as `Completed` and never becomes ready. Without the field selector, `kubectl wait` would wait for it and time out:
 
 ```shell
-kubectl wait --for=condition=Ready pods --all -n argocd --timeout=120s
+kubectl wait --for=condition=Ready pods --all -n argocd \
+  --field-selector='status.phase!=Succeeded' --timeout=120s
 ```
 
 <details>
@@ -333,6 +405,33 @@ argocd-server-765575f778-j8krk                      1/1     Running   0         
 ```
 </details>
 <br>
+
+Allow kro to manage the Argo CD resources that the guides use. Add more kinds when your ResourceGraphDefinitions create them:
+
+```shell
+kubectl apply -f - << 'EOF'
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kro:controller:argocd
+  labels:
+    # kro picks up every ClusterRole with this label, see https://kro.run/docs/advanced/access-control
+    rbac.kro.run/aggregate-to-controller: "true"
+rules:
+  - apiGroups:
+      - argoproj.io
+    resources:
+      - applications
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+EOF
+```
 
 {{< callout context="note" title="OCI registry credentials" icon="outline/info-circle" >}}
 To deploy Helm charts from a [private OCI registry](https://argo-cd.readthedocs.io/en/stable/operator-manual/declarative-setup/#helm) (e.g. `ghcr.io`), create an Argo CD repository Secret with `enableOCI: "true"`:
