@@ -24,8 +24,11 @@ vars:
     -e HOME=/tmp -e TMPDIR=/tmp
     -e GODEBUG=fips140=only
     -e NAME={{ .NAME }} -e VERSION={{ .VERSION }}
+  # Key generation only (test setup): runs as root because a fresh named volume
+  # is root-owned and the image's default user 65532 cannot write to it.
   gpg: >-
     docker run --rm
+    --user 0:0
     -v {{ .GNUPG_VOLUME }}:/gnupg
     -e GNUPGHOME=/gnupg
     --entrypoint /usr/bin/gpg
