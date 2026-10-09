@@ -26,6 +26,9 @@ import (
 // creator controller user-agent.
 const creator = "ocm.software/open-component-model/bindings/go/kubernetes/controller"
 
+// blobCacheMaxEntries sizes the one blob cache all reconciles share; a component version takes about three entries.
+const blobCacheMaxEntries = 10_000
+
 // PluginOptions since TempDir is dependent on the Pod and mounted temp folder
 // we set it separately from the ocm config. Also, filesystem config is not allowed.
 type PluginOptions struct {
@@ -55,10 +58,10 @@ func WithOCICaches(caches *ocicache.Caches) PluginOption {
 
 // NewOCICaches creates the OCI caches to pass to [WithOCICaches].
 func NewOCICaches(tempDir string) *ocicache.Caches {
-	return ocicache.NewCaches(tempDir,
-		&ocicache.Options{RemotePolicy: ocicache.RemotePolicyAlways},
-		&ocicache.Options{RemotePolicy: ocicache.RemotePolicyAlways},
-	)
+	blobs := &ocicache.Options{RemotePolicy: ocicache.RemotePolicyAlways, MaxEntries: blobCacheMaxEntries}
+	references := &ocicache.Options{RemotePolicy: ocicache.RemotePolicyAlways}
+
+	return ocicache.NewCaches(tempDir, blobs, references)
 }
 
 // NewPluginManager build a per-request plugin manager.
