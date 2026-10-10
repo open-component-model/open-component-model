@@ -96,7 +96,7 @@ orchestrate the deployment or apply it directly with the `Deployer`.
 ### No orchestration: apply manifests directly
 
 If your application is already plain Kubernetes manifests and you don't need an RGD's templating or
-composition, skip kro entirely. The [Deploy Manifests with Deployer]({{< relref "/docs/how-to/deploy-manifests-with-deployer.md" >}})
+composition, skip kro entirely. The [Deploy Manifests with Deployer]({{< relref "/docs/guides/deploy/deploy-manifests-with-deployer.md" >}})
 how-to applies a Deployment straight from an OCM component using only the OCM Controllers.
 
 ### Helm chart, RGD applied manually
@@ -112,7 +112,7 @@ component itself, rather than applying it by hand, lets developers ship deployme
 their software. Once the Deployer applies the RGD, [kro](https://kro.run/) reconciles it into a CRD that
 operators instantiate. The RGD includes the deployer-specific CRDs — `HelmRelease` and `OCIRepository` for
 Flux, or `Application` for Argo CD. See [Deploy an Application from a Helm Chart with OCM and kro]({{< relref
-"deploy-helm-chart-bootstrap.md" >}}) for a full walkthrough.
+"docs/guides/deploy/deploy-helm-chart-with-kro-and-gitops.md" >}}) for a full walkthrough.
 
 ### Plain manifests, RGD shipped inside the component, no Helm
 
@@ -120,7 +120,7 @@ The same bootstrap pattern, but for applications that aren't packaged as a Helm 
 manifests directly, so there's no chart and no GitOps deployer in the path. Two RGDs are [chained
 together](https://kro.run/docs/building-abstractions/rgd-chaining/), one creating an instance of the other's
 kind, which gives the application its own typed Kubernetes API. See [Deploy an Application from Chained RGDs
-with OCM and kro]({{< relref "deploy-chained-rgds.md" >}}) for a full walkthrough.
+with OCM and kro]({{< relref "docs/guides/deploy/deploy-with-chained-kro-rgds.md" >}}) for a full walkthrough.
 
 ## Related Documentation
 

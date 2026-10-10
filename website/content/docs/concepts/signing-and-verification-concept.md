@@ -198,7 +198,7 @@ OCM's `signature.algorithm` field selects between two signing approaches: classi
 | RSA-PKCS#1 v1.5 | Asymmetric (RSA) | Public key or certificate chain | Deterministic, widely supported, compatible with legacy systems |
 | Sigstore (keyless, early access) | Asymmetric (ECDSA, ephemeral) | OIDC identity | Short-lived certificate from Fulcio bound to your OIDC identity, transparency-log entry in Rekor; no long-lived keys to manage |
 
-To override the default signing algorithm or encoding policy, add a `signing.config.ocm.software/v1alpha1` entry to your [`.ocmconfig`]({{< relref "configure-multiple-credentials.md" >}}) and put the signer under its `signer` field. See the [CLI reference]({{< relref "/docs/reference/ocm-cli/ocm_sign_component-version.md" >}}).
+To override the default signing algorithm or encoding policy, add a `signing.config.ocm.software/v1alpha1` entry to your [`.ocmconfig`]({{< relref "docs/guides/transfer/configure-registry-credentials.md" >}}) and put the signer under its `signer` field. See the [CLI reference]({{< relref "/docs/reference/ocm-cli/ocm_sign_component-version.md" >}}).
 The signer configures only the algorithm and encoding policy; credentials are always resolved separately from the credentials configuration.
 Give the entry a `signature` field to apply it to that one signature only, matching the `--signature` flag; without it the entry applies to every signature.
 The same entry carries the verification side under its `verifier` field, read by `ocm verify` (see the [CLI reference]({{< relref "/docs/reference/ocm-cli/ocm_verify_component-version.md" >}})).
@@ -360,14 +360,14 @@ The signer authenticates to an OIDC identity provider; Fulcio binds that identit
 | Audit trail | Build your own | Build your own | Built-in (Rekor) |
 | Recommended for | Simple setups, personal projects | Enterprise environments with existing PKI | Teams that want to skip key management entirely |
 
-For hands-on steps, see [Tutorial: Plain Signatures]({{< relref "docs/tutorials/signing/plain.md" >}}) and [Tutorial: Certificate Chains (PEM)]({{< relref "docs/tutorials/signing/pem.md" >}}).
+For hands-on steps, see [Tutorial: Plain Signatures]({{< relref "docs/guides/sign/sign-with-plain-rsa.md" >}}) and [Tutorial: Certificate Chains (PEM)]({{< relref "docs/guides/sign/sign-with-pem-certificate-chain.md" >}}).
 
 ## Next Steps
 
 - [How-to: Generate Signing Keys]({{< relref "generate-signing-keys.md" >}}) - Step-by-step creating RSA key pairs.
 - [How-to: Configure Signing Credentials]({{< relref "configure-signing-credentials.md" >}}) - Set up OCM to use your keys for signing and verification
-- [How-to: Sign a Component Version]({{< relref "sign-component-version.md" >}}) - Step-by-step signing instructions
-- [How-to: Verify a Component Version]({{< relref "verify-component-version.md" >}}) - Step-by-step verification instructions
+- [How-to: Sign a Component Version]({{< relref "docs/guides/sign/_index.md" >}}) - Step-by-step signing instructions
+- [How-to: Verify a Component Version]({{< relref "docs/guides/sign/_index.md#verify-a-signature" >}}) - Step-by-step verification instructions
 
 ## Related Documentation
 

@@ -178,10 +178,8 @@ resolvers:
 ## Related Documentation
 
 - [OCM Resolvers]({{< relref "docs/concepts/resolvers.md" >}}) — High-level introduction to resolvers
-- [Working with Resolvers Tutorial]({{< relref "docs/tutorials/configure-resolvers.md" >}}) — Hands-on walkthrough for
-  setting up resolvers
-- [How to Resolve Components Across Multiple Registries]
-- ({{< relref "docs/how-to/resolve-components-from-multiple-repositories.md" >}}) — Recipe for multi-registry resolution
-- [Migrate from Deprecated Resolvers]({{< relref "docs/how-to/migrate-from-deprecated-resolvers.md" >}}) — Replace
+- [Add Component References]({{< relref "docs/guides/pack/add-component-references.md" >}}) — Hands-on walkthrough for
+  declaring component references and setting up resolvers for shared and multi-registry setups
+- [Migrate from Deprecated Resolvers]({{< relref "docs/guides/migrate/migrate-legacy-resolvers.md" >}}) — Replace
   deprecated fallback
   resolvers with glob-based resolvers

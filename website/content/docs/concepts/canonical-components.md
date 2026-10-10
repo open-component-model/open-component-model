@@ -127,7 +127,7 @@ For example, if `app-a` resolves `shared-lib` from Registry A, and `app-b` resol
 
 ## Next Steps
 
-- [Working with Resolvers]({{< relref "docs/tutorials/configure-resolvers.md" >}}): Hands-on tutorial for configuring resolvers
+- [Working with Resolvers]({{< relref "docs/guides/pack/add-component-references.md" >}}): Hands-on tutorial for configuring resolvers
 - [Transfer and Transport]({{< relref "docs/concepts/transfer-concept.md" >}}): How location-free references enable transport across boundaries
 
 ## Related Documentation
