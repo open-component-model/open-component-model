@@ -11,6 +11,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/ctf"
 	"ocm.software/open-component-model/bindings/go/oci"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
+	"ocm.software/open-component-model/bindings/go/oci/internal/remotestore"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
 	ctfrepospecv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ocirepospecv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
@@ -122,6 +123,13 @@ func NewResolver(_ context.Context, client remote.Client, repository *ocirepospe
 	}
 
 	opts = append(opts, urlresolver.WithBaseClient(client))
+	// Enable chunked blob upload by default. Chunked upload (POST session,
+	// PATCH chunks, PUT close) is a standard part of the OCI Distribution
+	// Spec, so it is safe as a global default: blobs below the threshold and
+	// all manifests still use the monolithic push, while large blobs upload
+	// in bounded chunks and size-unknown blobs can stream without buffering.
+	// Placed before extra so a caller may still override it.
+	opts = append(opts, urlresolver.WithChunkedPush(remotestore.DefaultChunkSize, remotestore.DefaultChunkThreshold))
 	opts = append(opts, extra...)
 
 	resolver, err := urlresolver.New(opts...)
