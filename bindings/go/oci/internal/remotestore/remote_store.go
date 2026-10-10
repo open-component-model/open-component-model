@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"path"
 
+	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"oras.land/oras-go/v2/content"
 	"oras.land/oras-go/v2/errdef"
 	"oras.land/oras-go/v2/registry/remote"
@@ -88,4 +89,14 @@ func (r *RemoteStore) Untag(ctx context.Context, reference string) error {
 	default:
 		return parseErrorResponse(resp)
 	}
+}
+
+// Referrers lists referrers via [Referrers], falling back to the tag schema on NAME_UNKNOWN.
+func (r *RemoteStore) Referrers(ctx context.Context, desc ociImageSpecV1.Descriptor, artifactType string, fn func(referrers []ociImageSpecV1.Descriptor) error) error {
+	return Referrers(ctx, r.Repository, desc, artifactType, fn)
+}
+
+// Predecessors lists predecessors via [Predecessors], falling back to the tag schema on NAME_UNKNOWN.
+func (r *RemoteStore) Predecessors(ctx context.Context, desc ociImageSpecV1.Descriptor) ([]ociImageSpecV1.Descriptor, error) {
+	return Predecessors(ctx, r.Repository, desc)
 }
