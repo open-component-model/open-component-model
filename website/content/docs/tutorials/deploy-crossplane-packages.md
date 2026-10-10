@@ -206,7 +206,7 @@ components:
         relation: external
         access:
           type: OCIImage/v1
-          imageReference: xpkg.upbound.io/crossplane-contrib/function-patch-and-transform:v0.11.0
+          imageReference: xpkg.crossplane.io/crossplane-contrib/function-patch-and-transform:v0.11.0
 EOF
 ```
 
@@ -244,7 +244,7 @@ components:
         relation: external
         access:
           type: OCIImage/v1
-          imageReference: xpkg.upbound.io/crossplane-contrib/function-patch-and-transform:v0.11.0
+          imageReference: xpkg.crossplane.io/crossplane-contrib/function-patch-and-transform:v0.11.0
 EOF
 ```
 
@@ -254,13 +254,6 @@ EOF
 The resource `type` is free-form. This guide uses `ociImage` because an `.xpkg` is an OCI image. Use a dedicated type
 such as `crossplanePackage` if downstream tooling needs to tell packages apart from container images.
 Provider packages work the same way as the Function here.
-
-{{< callout context="caution" title="Copying packages from xpkg.crossplane.io" icon="outline/alert-triangle" >}}
-`xpkg.crossplane.io` answers the OCI referrers API with `NAME_UNKNOWN`. OCM, like ORAS, treats that as an error, so
-`ocm transfer` can't copy packages from there. The example references the same package through `xpkg.upbound.io`,
-which serves the identical digest. To keep a package from `xpkg.crossplane.io` by reference instead of copying it, see
-[Troubleshooting](#referrers-name-unknown).
-{{< /callout >}}
 
 Build the component version into a local CTF archive:
 
@@ -291,7 +284,7 @@ ocm get cv transport-archive//ocm.software/examples/crossplane-app:0.1.0 -o yaml
 ```yaml
 resources:
   - access:
-      imageReference: xpkg.upbound.io/crossplane-contrib/function-patch-and-transform:v0.11.0@sha256:677ad7d06eab2da219c9f28a7f6393fd74e5cfe445b98e324a23736163fb4e99
+      imageReference: xpkg.crossplane.io/crossplane-contrib/function-patch-and-transform:v0.11.0@sha256:677ad7d06eab2da219c9f28a7f6393fd74e5cfe445b98e324a23736163fb4e99
       type: OCIImage/v1
     digest:
       hashAlgorithm: SHA-256
@@ -761,24 +754,6 @@ rewritten location (`status.resolvedPackage` on the Function shows it). The trad
 version from the constraint in `crossplane.yaml`, not from the component version, so the digest isn't pinned by OCM.
 
 ## Troubleshooting
-
-### Symptom: `FindPredecessors ... referrers ... name unknown` {#referrers-name-unknown}
-
-The full error looks like:
-`failed to perform "FindPredecessors" on source: GET "https://xpkg.crossplane.io/v2/.../referrers/sha256:...": response status code 404: name unknown`.
-
-**Cause:** The source registry rejects the OCI referrers API request with `NAME_UNKNOWN` instead of signalling that it
-doesn't support the API. `xpkg.crossplane.io` behaves this way.
-
-**Fix:** Reference the package through a registry that serves the same digest, such as `xpkg.upbound.io`. Or keep that
-resource by reference with a `reference` uploader entry before the catch-all:
-
-```yaml
-- type: reference.uploader.transfer.config.ocm.software/v1alpha1
-  match: resource.name == "function-patch-and-transform"
-```
-
-The resource then keeps its `xpkg.crossplane.io` reference, and your cluster must be able to pull from there.
 
 ### Symptom: Configuration is `Healthy=False` with missing dependencies
 
