@@ -150,6 +150,7 @@ func (r *ResourceRepository) GetResourceDigestProcessorCredentialConsumerIdentit
 }
 
 // ProcessResourceDigest pins the access and hashes the same snapshot in one download.
+// Pinning records the commit (see [download.WithRepository]).
 // The archive is only read here, so it is downloaded into a directory of its own
 // that this call removes again.
 func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, res *descriptor.Resource, creds runtime.Typed) (*descriptor.Resource, error) {

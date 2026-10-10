@@ -293,6 +293,8 @@ func processResources(
 					err = processHTTPUploader(resource, cfg, baseID, id, val, tgd, resourceTransformIDs, i)
 				case *transferv1alpha1.OCIUploaderConfig:
 					exprs, err = processOCIUploader(ctx, resource, access, cfg, aliases, env, id, val, tgd, toSpec, resourceTransformIDs, i)
+				case *transferv1alpha1.GitUploaderConfig:
+					exprs, err = processGitUploader(ctx, resource, access, cfg, aliases, env, id, val, tgd, resourceTransformIDs, i)
 				case *transferv1alpha1.LocalBlobUploaderConfig:
 					exprs, err = processResource(resource, access, id, val, tgd, toSpec, resourceTransformIDs, i)
 				case *transferv1alpha1.ArtifactoryUploaderConfig:

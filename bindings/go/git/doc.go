@@ -49,8 +49,11 @@
 //
 // The Git download transformer buffers a pinned snapshot for the transfer graph.
 // Transfer with resource copying stores Git access resources as local blobs in
-// OCI or CTF targets, preserving the resource digest. It requires a pinned Commit;
-// constructor digest processing pins ref-only access before publication.
+// OCI or CTF targets, preserving the resource digest; the local blob is marked
+// with a Git archive media type but does not carry its origin. It requires a
+// pinned Commit; constructor digest processing pins ref-only access before
+// publication. A Git uploader pushes Git access resources into a Git repository
+// with UploadResource, and such local blobs when given an explicit repository and ref.
 // Without resource copying, external Git access remains unchanged.
 //
 // # Archive and digests
@@ -64,10 +67,16 @@
 // defaults are used; byte stability across Go releases is not guaranteed.
 //
 // ProcessResourceDigest pins a ref-only access and computes genericBlobDigest/v1
-// SHA-256 over the compressed bytes in the same download. Existing digests are
-// verified rather than silently replaced. Explicit refs work without remote HEAD;
-// annotated tags are peeled to commits. Pinned commits are fetched directly, with
-// an all-refs fallback when the server does not support fetching by commit hash.
+// SHA-256 over the compressed bytes in the same download. It also records the ref
+// by its full name: a short name becomes the branch or, failing that, the tag it
+// matched (v1.0.0 becomes refs/tags/v1.0.0), and HEAD the branch it points to. With
+// a set commit the name is looked up among the advertised refs and kept as given if
+// none matches, because the commit is authoritative. Neither the archive nor the
+// digest contains the ref, and signing normalization excludes the access. Existing
+// digests are verified rather than silently replaced. Explicit refs work without
+// remote HEAD; annotated tags are peeled to commits. Pinned commits are fetched
+// directly, with an all-refs fallback when the server does not support fetching by
+// commit hash.
 //
 // # Credentials
 //

@@ -32,6 +32,9 @@ type Result struct {
 	Blob *filesystem.Blob
 	// Commit is the full SHA the archive was taken from.
 	Commit string
+	// Ref is the full name of the ref the access selects (see WithRepository), or empty
+	// for an access without ref.
+	Ref string
 	// Digest covers the final compressed archive bytes.
 	Digest digest.Digest
 }
@@ -42,7 +45,7 @@ func Download(ctx context.Context, access *accessv1.Git, creds *credsv1.GitCrede
 		result      *Result
 		archivePath string
 	)
-	err := WithRepository(ctx, access, creds, opts, func(repo *git.Repository, selected *object.Commit) error {
+	err := WithRepository(ctx, access, creds, opts, func(repo *git.Repository, selected *object.Commit, ref plumbing.ReferenceName) error {
 		file, err := os.CreateTemp(opts.TempDir, "ocm-git-archive-*.tar.gz")
 		if err != nil {
 			return fmt.Errorf("cannot create git archive file: %w", err)
@@ -52,7 +55,7 @@ func Download(ctx context.Context, access *accessv1.Git, creds *credsv1.GitCrede
 		if err != nil {
 			return err
 		}
-		result = &Result{Blob: b, Commit: selected.Hash.String(), Digest: archiveDigest}
+		result = &Result{Blob: b, Commit: selected.Hash.String(), Ref: ref.String(), Digest: archiveDigest}
 		return nil
 	})
 	if err != nil && archivePath != "" {
@@ -63,20 +66,25 @@ func Download(ctx context.Context, access *accessv1.Git, creds *credsv1.GitCrede
 	return result, err
 }
 
-// WithRepository supplies the selected commit and original Git objects to fn.
+// WithRepository supplies the selected commit, the full name of the selecting ref and the
+// original Git objects to fn. A ref given by a short name is reported by the full name it
+// matched in the repository (a branch first, then a tag); HEAD is reported as the branch it
+// points to. A pinned commit selects the commit even if the ref names another one; the ref
+// is then looked up among the refs the repository advertises, and is reported as given if
+// none matches.
 //
 // Git identifies objects by SHA-1, which is not FIPS-approved, and go-git hashes
 // with it throughout clone, fetch and tree walks. The callback therefore runs
 // outside strict enforcement, so it keeps working with GODEBUG=fips140=only.
 // FIPS mode itself stays on, so TLS and SSH still negotiate approved algorithms
 // only, and the archive OCM records is digested with SHA-256.
-func WithRepository(ctx context.Context, access *accessv1.Git, creds *credsv1.GitCredentials, opts Options, fn func(*git.Repository, *object.Commit) error) error {
+func WithRepository(ctx context.Context, access *accessv1.Git, creds *credsv1.GitCredentials, opts Options, fn func(*git.Repository, *object.Commit, plumbing.ReferenceName) error) error {
 	var err error
 	fips140.WithoutEnforcement(func() { err = withRepository(ctx, access, creds, opts, fn) })
 	return err
 }
 
-func withRepository(ctx context.Context, access *accessv1.Git, creds *credsv1.GitCredentials, opts Options, fn func(*git.Repository, *object.Commit) error) error {
+func withRepository(ctx context.Context, access *accessv1.Git, creds *credsv1.GitCredentials, opts Options, fn func(*git.Repository, *object.Commit, plumbing.ReferenceName) error) error {
 	if err := access.Validate(); err != nil {
 		return fmt.Errorf("invalid git access: %w", err)
 	}
@@ -118,7 +126,7 @@ func withRepository(ctx context.Context, access *accessv1.Git, creds *credsv1.Gi
 	}
 
 	if err == nil {
-		err = useRepository(repo, access, fn)
+		err = useRepository(ctx, repo, access, clientOptions, fn)
 	}
 	if repo != nil {
 		if closer, ok := repo.Storer.(io.Closer); ok {
@@ -128,22 +136,59 @@ func withRepository(ctx context.Context, access *accessv1.Git, creds *credsv1.Gi
 	return err
 }
 
-// useRepository passes the commit the access selects to fn.
-func useRepository(repo *git.Repository, access *accessv1.Git, fn func(*git.Repository, *object.Commit) error) error {
+// useRepository passes the commit the access selects and the full name of its ref to fn.
+func useRepository(ctx context.Context, repo *git.Repository, access *accessv1.Git, clientOptions []client.Option, fn func(*git.Repository, *object.Commit, plumbing.ReferenceName) error) error {
 	hash := plumbing.NewHash(access.Commit)
+	var ref plumbing.ReferenceName
+	var err error
 	if access.Commit == "" {
-		var err error
-		hash, err = resolveRef(repo, access.Ref)
+		hash, ref, err = resolveRef(repo, access.Ref)
 		if err != nil {
 			return fmt.Errorf("cannot resolve git ref: %w", err)
 		}
+	} else if ref, err = pinnedRefName(ctx, repo, access.Ref, clientOptions); err != nil {
+		return err
 	}
 
 	selected, err := peelCommit(repo, hash)
 	if err != nil {
 		return err
 	}
-	return fn(repo, selected)
+	return fn(repo, selected, ref)
+}
+
+// pinnedRefName returns the full name of ref for an access with a pinned commit. The commit
+// alone was fetched, so a short name or HEAD is looked up among the advertised refs, with
+// the precedence of resolveRef. A name the repository does not advertise is returned as
+// given: the commit is authoritative and the ref informational.
+func pinnedRefName(ctx context.Context, repo *git.Repository, ref string, clientOptions []client.Option) (plumbing.ReferenceName, error) {
+	if ref == "" || strings.HasPrefix(ref, "refs/") {
+		return plumbing.ReferenceName(ref), nil
+	}
+	remote, err := repo.Remote("origin")
+	if err != nil {
+		return "", fmt.Errorf("cannot read git remote: %w", err)
+	}
+	advertised, err := remote.ListContext(ctx, &git.ListOptions{ClientOptions: clientOptions})
+	if err != nil {
+		return "", TransportError(ctx, "cannot list git refs", err)
+	}
+	names := make(map[plumbing.ReferenceName]*plumbing.Reference, len(advertised))
+	for _, r := range advertised {
+		names[r.Name()] = r
+	}
+	if ref == "HEAD" {
+		if head, ok := names[plumbing.HEAD]; ok && head.Type() == plumbing.SymbolicReference {
+			return head.Target(), nil
+		}
+		return plumbing.HEAD, nil
+	}
+	for _, name := range []plumbing.ReferenceName{plumbing.NewBranchReferenceName(ref), plumbing.NewTagReferenceName(ref)} {
+		if _, ok := names[name]; ok {
+			return name, nil
+		}
+	}
+	return plumbing.ReferenceName(ref), nil
 }
 
 // ClientOptions applies the same credential and HTTP client rules to fetch and push.
@@ -201,27 +246,40 @@ func fetchRepository(ctx context.Context, dir, url, commit string, clientOptions
 	return repo, nil
 }
 
-// resolveRef leaves annotated tags intact for peelCommit, including tag-to-tag targets.
-func resolveRef(repo *git.Repository, name string) (plumbing.Hash, error) {
+// resolveRef returns the object name selects and the full name of the ref it matched, as
+// the source repository names it: a fetched branch refs/remotes/origin/<name> as
+// refs/heads/<name>, HEAD as the branch it points to. It leaves annotated tags intact for
+// peelCommit, including tag-to-tag targets.
+func resolveRef(repo *git.Repository, name string) (plumbing.Hash, plumbing.ReferenceName, error) {
 	if name != "HEAD" && (strings.HasPrefix(name, "refs/heads/") || !strings.HasPrefix(name, "refs/")) {
 		ref, err := repo.Reference(plumbing.ReferenceName("refs/remotes/origin/"+strings.TrimPrefix(name, "refs/heads/")), true)
 		if err == nil {
-			return ref.Hash(), nil
+			return ref.Hash(), sourceRefName(ref.Name()), nil
 		}
 	}
 
 	var firstErr error
 	for _, rule := range plumbing.RefRevParseRules {
+		// Resolving follows symbolic refs, so the name of HEAD is the branch it points to.
 		ref, err := repo.Reference(plumbing.ReferenceName(fmt.Sprintf(rule, name)), true)
 		if err == nil {
-			return ref.Hash(), nil
+			return ref.Hash(), sourceRefName(ref.Name()), nil
 		}
 		if firstErr == nil {
 			firstErr = err
 		}
 	}
 
-	return plumbing.ZeroHash, firstErr
+	return plumbing.ZeroHash, "", firstErr
+}
+
+// sourceRefName maps the remote-tracking name a fetched branch is stored under back to
+// the name of the branch in the source repository.
+func sourceRefName(name plumbing.ReferenceName) plumbing.ReferenceName {
+	if branch, ok := strings.CutPrefix(name.String(), "refs/remotes/origin/"); ok {
+		return plumbing.NewBranchReferenceName(branch)
+	}
+	return name
 }
 
 // peelCommit follows an annotated tag to the commit it points at. A tag can
