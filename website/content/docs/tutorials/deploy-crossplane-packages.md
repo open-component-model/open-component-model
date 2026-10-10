@@ -3,26 +3,25 @@ title: "Deploy Crossplane Packages (xpkg) with OCM"
 slug: "deploy-crossplane-packages"
 description: "Ship Crossplane Configuration, Function, and Provider packages (.xpkg) in an OCM component version and install them with the OCM Controllers and kro."
 icon: "🧩"
-weight: 34
+weight: 62
 toc: true
+hasMermaid: true
 ---
 
-## Goal
+In this tutorial, you package a Crossplane Configuration and the Function it depends on in an OCM component version,
+transfer them to the registry your cluster pulls from, and let the OCM Controllers and kro install them into
+Crossplane, pinned by digest.
 
-Ship Crossplane packages (`.xpkg`) in an OCM component version, transfer them to the registry your clusters pull
-from, and let the OCM Controllers and kro install them into Crossplane, pinned by digest.
+## What You'll Learn
 
-## You'll end up with
+By the end of this tutorial, you will:
 
-- An OCM component version that holds a Crossplane Configuration package and the Function it depends on
-- Both packages copied into your target registry (for example, Artifactory) by `ocm transfer`
-- A kro `ResourceGraphDefinition` that installs the packages as Crossplane `Configuration` and `Function` objects,
-  using the location and digest that the OCM Controllers resolve from the component version
-- A composite resource that Crossplane renders with the installed packages
+- Build a Crossplane Configuration package (`.xpkg`) and add it to an OCM component version as a regular OCI resource
+- Transfer the packages to a target registry, either as standalone OCI images or embedded in the component version
+- Install the packages with a kro `ResourceGraphDefinition` that reads the location and digest the OCM Controllers resolve
+- Verify the result by creating a composite resource from the API that the Configuration installed
 
-**Estimated time:** ~20 minutes
-
-## How it works
+## How It Works
 
 A Crossplane package is an OCI image. Crossplane pulls it from a registry when you create a `Configuration`, `Function`,
 or `Provider` object. OCM stores and transfers OCI images natively, so an `.xpkg` is a regular OCM resource with an
@@ -40,6 +39,8 @@ flowchart LR
 The component version is the single source of truth for which package versions belong together. After a transfer,
 the OCM Controllers read the package locations from the component version in the target registry. Crossplane then pulls
 each package from there by digest, never from the original source.
+
+**Estimated time:** ~20 minutes
 
 ## Prerequisites
 
@@ -59,7 +60,15 @@ each package from there by digest, never from the original source.
   The kubelet on your nodes must also reach this registry, because Function and Provider packages run as pods.
 - `envsubst` installed (part of `gettext`)
 
-## Set up the environment
+## Scenario
+
+Your platform team publishes Crossplane packages to a registry such as Artifactory, and your clusters install them
+from there. You want one versioned, signable unit that says which package versions belong together, and that you can
+move to any registry, including an air-gapped one.
+
+You build an `App` API as a Configuration package that renders a `ConfigMap` with
+`function-patch-and-transform`, ship both packages in the component `ocm.software/examples/crossplane-app`, and
+install them into Crossplane. Set the registries you use throughout:
 
 ```shell
 # Where your team publishes .xpkg files today, for example an Artifactory OCI repository
@@ -68,14 +77,14 @@ export XPKG_REGISTRY=registry.example.com/crossplane
 export OCM_REPO=registry.example.com/ocm
 ```
 
-## Steps
+## Tutorial Steps
 
 {{< steps >}}
 {{< step >}}
 
 ### Build and publish the Crossplane package
 
-Skip this step if you already publish `.xpkg` files to a registry.
+If your team already publishes `.xpkg` files, you can reference one of those instead and continue with the next step.
 
 The example Configuration defines an `App` API that renders a `ConfigMap`. Its Composition calls
 `function-patch-and-transform`, so the Function is a dependency of the Configuration.
@@ -615,20 +624,96 @@ Installed from an OCM component version
 </details>
 
 {{< /step >}}
-{{< /steps >}}
+{{< step >}}
 
-## Upgrade the packages
+### Upgrade the packages
 
-Publish a new component version with the new package versions, transfer it, and point the instance at it:
+Change the package so that it gets a new digest. Here, you add a description to the package metadata:
+
+```shell
+cat > package/crossplane.yaml << 'EOF'
+apiVersion: meta.pkg.crossplane.io/v1
+kind: Configuration
+metadata:
+  name: configuration-app
+  annotations:
+    meta.crossplane.io/description: App API shipped with OCM
+spec:
+  crossplane:
+    version: ">=v2.0.0"
+  dependsOn:
+    - apiVersion: pkg.crossplane.io/v1
+      kind: Function
+      package: xpkg.crossplane.io/crossplane-contrib/function-patch-and-transform
+      version: ">=v0.11.0"
+EOF
+```
+
+Rebuild the package as `v0.2.0`, and publish a component version `0.2.0` that references it:
+
+```shell
+crossplane xpkg build --package-root=package --package-file=configuration-app.xpkg
+crossplane xpkg push -f configuration-app.xpkg $XPKG_REGISTRY/configuration-app:v0.2.0
+
+sed -e 's/version: 0.1.0/version: 0.2.0/' \
+    -e 's/configuration-app:v0.1.0/configuration-app:v0.2.0/' \
+    component-constructor.yaml > component-constructor.next.yaml
+mv component-constructor.next.yaml component-constructor.yaml
+
+ocm add cv
+ocm transfer cv transport-archive//ocm.software/examples/crossplane-app:0.2.0 $OCM_REPO
+```
+
+If you embedded the `.xpkg` file, re-run the `skopeo copy` command instead of `crossplane xpkg push`.
+
+Point the instance at the new component version:
 
 ```shell
 kubectl patch crossplaneapp crossplane-app --type merge -p '{"spec":{"version":"0.2.0"}}'
+kubectl get configurations.pkg.crossplane.io configuration-app
 ```
 
-The OCM Controllers resolve the new component version, kro updates `spec.package` on the `Function` and
-`Configuration` objects, and Crossplane rolls out the new package revisions.
+The OCM Controllers resolve the new component version, kro updates `spec.package` on the `Configuration`, and
+Crossplane rolls out a new package revision with the new digest.
 
-## Use private registries
+{{< /step >}}
+{{< /steps >}}
+
+## What you've learned
+
+- A Crossplane `.xpkg` is an OCI image, so it is an ordinary OCM resource with `OCIImage/v1` access, and OCM pins its
+  digest when you build the component version
+- Uploader configurations decide whether `ocm transfer` relocates packages as standalone OCI images or embeds them in
+  the component version
+- `resource.access.toOCI()` plus the resource digest gives Crossplane a digest-pinned package reference wherever the
+  transfer put the package
+- `skipDependencyResolution` hands dependency management from Crossplane to the component version
+
+**For deeper understanding:**
+
+- [Concept: OCM Controllers]({{< relref "docs/concepts/ocm-controllers.md" >}})
+- [Concept: Transfer and Transport]({{< relref "docs/concepts/transfer-concept.md" >}})
+
+## Check your understanding
+
+- [ ] Why does Crossplane pull the packages from `$OCM_REPO` and not from `$XPKG_REGISTRY`?
+- [ ] Why does the RGD append `resource.digest.value` instead of using the tag?
+- [ ] How would you add a Provider package to the component version?
+
+{{< details "Answers & Explanations" >}}
+
+- **Question 1:** The OCM Controllers read the package locations from the component version in `$OCM_REPO`, where
+  `ocm transfer` rewrote them. kro passes those locations to Crossplane.
+- **Question 2:** After a transfer with the OCI uploader, the relocated reference only carries a tag. The digest in the
+  component descriptor is the one OCM recorded (and that a signature covers), so the package can't change underneath you.
+- **Question 3:** Add another `OCIImage/v1` resource for the Provider package, a matching `Resource` in the RGD, and a
+  `pkg.crossplane.io/v1` `Provider` object whose `spec.package` reads that resource's status, exactly like the Function.
+
+{{< /details >}}
+
+## Going further
+
+### Use private registries
 
 Artifactory and most other production registries need credentials in two places:
 
@@ -651,7 +736,7 @@ Artifactory and most other production registries need credentials in two places:
   every package under a registry prefix with a Crossplane
   [ImageConfig](https://docs.crossplane.io/latest/packages/image-configs/) (`spec.registry.authentication.pullSecretRef`).
 
-## Alternative: keep Crossplane's dependency resolution
+### Keep Crossplane's dependency resolution
 
 If you prefer that Crossplane resolves `dependsOn` itself, transfer with the standalone OCI images option and redirect
 the dependency registry to the target with an `ImageConfig`. The OCI uploader keeps the source repository path, so
@@ -736,7 +821,5 @@ Deleting the instance removes the `Function` and `Configuration` objects, and Cr
 
 ## Related documentation
 
-- [Concept: OCM Controllers]({{< relref "docs/concepts/ocm-controllers.md" >}}) - How `Repository`, `Component`, and `Resource` resolve artifacts
-- [Concept: Transfer and Transport]({{< relref "docs/concepts/transfer-concept.md" >}}) - How OCM copies resources between repositories
-- [Tutorial: Working with OCI]({{< relref "docs/tutorials/working-with-oci" >}}) - Embed OCI image layouts and access them natively
 - [Crossplane: Configurations](https://docs.crossplane.io/latest/packages/configurations/) and [Functions](https://docs.crossplane.io/latest/packages/functions/)
+- [Tutorial: Working with OCI]({{< relref "docs/tutorials/working-with-oci" >}}) - Embed OCI image layouts and access them natively
