@@ -154,7 +154,6 @@ To run this you need the signer's public key on disk and pointed at by `publicKe
 ## Prerequisites
 
 - [OCM CLI installed]({{< relref "ocm-cli-installation.md" >}})
-- [GnuPG](https://gnupg.org/download/) 2.2 or later installed (`gpg` binary available in `$PATH`); OCM runs it to verify GPG signatures. The [OCM CLI container image]({{< relref "container-image-usage.md" >}}) does not contain GnuPG yet, so run `ocm` where GnuPG is installed. A follow-up moves the image to a base image that includes GnuPG
 - [Verification credentials configured]({{< relref "configure-signing-credentials.md" >}}) with the public key
 - A GPG-signed component version (see the [Sign Component Versions]({{< relref "sign-component-version.md" >}}) how-to)
 
@@ -189,18 +188,24 @@ If you are only verifying, the `signer` field can be left out entirely:
     type: GPGSigningConfiguration/v1alpha1
 ```
 
-If the signer's public key is already in your GnuPG keyring (`$GNUPGHOME`, or `~/.gnupg`), verify against the keyring instead of a key file by setting `keySource: keyring`. The keyring may hold many keys, so this requires the **full** fingerprint of the key you trust; a signature by any other key in the keyring fails. Keys revoked or expired in your keyring are rejected, and gpg never fetches keys from the network during verification.
+If the signer's public key is already in your GnuPG keyring (`$GNUPGHOME`, or `~/.gnupg`), verify against the keyring instead of a key file by setting `keyringFingerprint` in the GPG credentials to the **full** fingerprint (40 or 64 hex characters) of the key you trust. OCM runs `gpg --export` to export the public key, then verifies in-process. A signature by any other key fails. Keys revoked or expired in your keyring are rejected.
 
-Key material in the GPG credentials is rejected with `keySource: keyring`, and verification needs no passphrase. Remove the GPG consumer entry with `publicKeyPGPFile` (or `privateKeyPGPFile`) from `.ocmconfig`; the verifier entry is all you need:
+Key material in the GPG credentials is rejected with `keyringFingerprint`, and verification needs no passphrase. Replace `publicKeyPGPFile` (or `privateKeyPGPFile`) in the GPG consumer entry of `.ocmconfig` with `keyringFingerprint`:
 
 ```yaml
 type: generic.config.ocm.software/v1
 configurations:
+- type: credentials.config.ocm.software
+  consumers:
+  - identity:
+      type: GPG/v1alpha1
+      signature: default
+    credentials:
+    - type: GPGCredentials/v1alpha1
+      keyringFingerprint: B118BE3A32BE4AF28E37E881167C7102F8AC81E4
 - type: signing.config.ocm.software/v1alpha1
   verifier:
     type: GPGSigningConfiguration/v1alpha1
-    keySource: keyring
-    keyFingerprint: B118BE3A32BE4AF28E37E881167C7102F8AC81E4
 ```
 
 {{< callout context="note" >}}
@@ -281,23 +286,29 @@ Without `--signature`, **every** signature on the descriptor is verified. Config
 
 **Fix:** Either remove `keyFingerprint` from the verifier (any key in the file will be tried) or correct it. Run `gpg --show-keys /tmp/keys/verify-key.asc` to confirm the actual fingerprint.
 
-### Symptom: `SIGNATURE VERIFICATION FAILED: verifying with the GnuPG keyring requires the full key fingerprint ...`
+### Symptom: `keyringFingerprint must be a full key fingerprint (40 or 64 hex characters), because a shorter key ID could select another key in the keyring`
 
-**Cause:** The verifier sets `keySource: keyring` without a full 40-character `keyFingerprint`. A long key ID is not accepted, because it does not identify a key reliably among all keys in a keyring.
+**Cause:** `keyringFingerprint` in the GPG credentials is not a full fingerprint. A long key ID is not accepted, because it does not identify a key reliably among all keys in a keyring.
 
-**Fix:** Set `keyFingerprint` to the full fingerprint of the key you trust (`gpg --fingerprint <key>`; spaces and a `0x` prefix are accepted).
+**Fix:** Set `keyringFingerprint` to the full fingerprint of the key you trust (`gpg --fingerprint <key>`; spaces and a `0x` prefix are accepted).
 
-### Symptom: `GPG signing requires the GnuPG "gpg" binary (>= 2.2.0) on PATH`
+### Symptom: `reading keys from the GnuPG keyring (keyringFingerprint in the GPG credentials) requires the GnuPG "gpg" binary (>= 2.2.0) on PATH`
 
-**Cause:** OCM delegates all OpenPGP operations to GnuPG, and no `gpg` binary was found on `PATH`.
+**Cause:** You configured `keyringFingerprint` in the GPG credentials, but no `gpg` binary was found on `PATH`. Without `keyringFingerprint`, no `gpg` is needed — OCM performs all GPG cryptography in-process.
 
-**Fix:** Install GnuPG 2.2 or later (`brew install gnupg`, `sudo apt-get install gnupg`, `sudo dnf install gnupg2`) and make sure `gpg` is on `PATH`.
+**Fix:** Install GnuPG 2.2 or later (`brew install gnupg`, `sudo apt-get install gnupg`, `sudo dnf install gnupg2`) and make sure `gpg` is on `PATH`, or provide the key material directly via `publicKeyPGPFile`.
 
-### Symptom: `with GODEBUG=fips140=only, GPG signing and verification require a gpg whose libgcrypt runs in FIPS mode`
+### Symptom: `with GODEBUG=fips140=only, GPG signing and verification require OpenPGP v6 (RFC 9580) or v5 (LibrePGP) keys: v4 and older keys are identified by SHA-1 fingerprints`
 
-**Cause:** OCM runs with `GODEBUG=fips140=only`, and the `libgcrypt` of your `gpg` does not run in FIPS mode (`gpgconf --show-versions` reports `fips-mode:n`), or `gpgconf` is not on `PATH`.
+**Cause:** OCM runs with `GODEBUG=fips140=only` and the key is a v4 key.
 
-**Fix:** Use a GnuPG whose `libgcrypt` runs in FIPS mode, see [FIPS 140-3: GPG]({{< relref "docs/reference/standards-and-regulations/fips.md" >}}#gpg), or run OCM without `fips140=only`.
+**Fix:** Use an OpenPGP v6 key (RFC 9580). See [FIPS 140-3: GPG]({{< relref "docs/reference/standards-and-regulations/fips.md" >}}#gpg).
+
+### Symptom: `with GODEBUG=fips140=only, GPG signing and verification require an RSA or ECDSA (P-256, P-384, P-521) key`
+
+**Cause:** OCM runs with `GODEBUG=fips140=only` and the key uses an algorithm outside the Go Cryptographic Module.
+
+**Fix:** Use an RSA or ECDSA P-256/P-384/P-521 key. See [FIPS 140-3: GPG]({{< relref "docs/reference/standards-and-regulations/fips.md" >}}#gpg).
 
 {{< /tab >}}
 {{< tab "Sigstore (interactive)" >}}

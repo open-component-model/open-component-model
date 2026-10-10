@@ -18,4 +18,12 @@ secret:
     name: bindings/go/kubernetes/controller/test/e2e/hacks/image-registries.yaml e2e test passphrase
   - match: cdf813a2529ed038a81a04e73067019bc0ad1c336a021af63eab3b8ba57efcf8
     name: bindings/go/kubernetes/controller/test/e2e/hacks/image-registries.yaml e2e test passphrase
+  - match: 02cb7eba229690a1f417a5be816809754cd92016f16ae2f04b743da8eecb049b
+    name: bindings/go/gpg/signing/handler/testdata/gnupg/pqc.asc GnuPG PQC test-only private key
+  - match: 7af1f0006597d943f90e60ea6a12abea8e2a3b44b9eb4ac3e1c2c594222c9d7b
+    name: bindings/go/gpg/signing/handler/testdata/gnupg/card-stub.asc GnuPG smartcard stub test-only private key
+  - match: 911da7fa66413c3c2c0746f9603501bcf320743e58426c6266c71d57c9abc24f
+    name: bindings/go/gpg/signing/handler/testdata/gnupg/librepgp-v5.asc published rfc4880bis sample private key
+  - match: a0ff7be6e5e914a9250cf0327e3b0239f4edbbc00e4399a4c3c8acc4cecc5439
+    name: bindings/go/gpg/signing/handler/internal/gpgbinary/gpgbinary_test.go test passphrase
 version: 2

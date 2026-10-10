@@ -64,12 +64,12 @@ Helm provenance:
 
 ## Decision Outcome
 
-Chosen **E2**, **G2**, **C1** and **H1**.
+Chosen **E2**, **G1**, **C1** and **H1**.
 
 Justification:
 
 * **E2:** FIPS mode is on in every release build by default. Enforcing whenever it is on (E1) would remove features from every user, for example the automatic `cosign` download, which contradicts "no surprise for existing users". E2 keeps the default permissive and gives regulated users an explicit opt-in.
-* **G2:** GnuPG performs its cryptography in libgcrypt, which many Linux distributions ship with a FIPS 140-3 validation. Handing GPG to GnuPG puts every GPG operation, including passphrase unlocking, inside a validated module. G1 cannot support passphrase-protected keys, G3 breaks existing GPG users, and G4 breaks the one-artifact principle.
+* **G1:** go-crypto runs RSA, NIST ECDSA, SHA-2 and RNG through the Go Cryptographic Module. Strict mode allows only unprotected v6 RSA/ECDSA-P keys and SHA-2 signatures. Everything else (v4 keys with SHA-1 fingerprints, EdDSA/Ed25519/Ed448 via circl, DSA, other curves, passphrase-protected keys, secret-key export from the GnuPG keyring) runs with a debug log by default and is rejected in strict mode. The GnuPG keyring stays usable as a key source (`keyringFingerprint`): gpg only exports keys; no signing or verification runs in gpg. Nothing has to ship in images or stay in lockstep with a libc base image.
 * **C1:** OCM cannot vouch for an arbitrary program, but it can tell whether `cosign` was built against a frozen Go Cryptographic Module. That is enough to report in the default mode and refuse in strict mode. C2 would make OCM responsible for building and shipping a third-party tool. C3 is not compliant, because the upstream build has no validated module to switch on.
 * **H1:** treating Helm provenance like the other external cryptography keeps the rules uniform. H2 would mean rebuilding Helm's provenance check around GnuPG, which can follow if users need it.
 
@@ -86,17 +86,19 @@ OCM follows Go's three modes and attaches one rule to each:
 The steps covered by this rule:
 
 * a `cosign` that is not a FIPS build, or downloading the upstream `cosign`;
-* a GnuPG whose libgcrypt does not run in FIPS mode;
+* GPG keys other than unprotected v6 RSA or ECDSA P-256/P-384/P-521 keys, and exporting secret keys from the GnuPG keyring;
 * Helm chart provenance verification;
 * component digests that do not use SHA-256 or SHA-512, because a signature must not rest on a weak hash. In the other modes these are accepted with a warning, so existing component versions stay usable.
 
 ### GPG
 
-All GPG signing and verification goes through the GnuPG installed on the system, in every mode, not only in FIPS mode. A built-in fallback would only serve users who switch FIPS off, while doubling what has to be maintained and tested.
+GPG signing and verification run in-process with the Go OpenPGP library (`github.com/ProtonMail/go-crypto`), whose RSA, NIST ECDSA, SHA-2 and RNG run through the Go Cryptographic Module.
 
-* By default, OCM uses the keys from its own credential configuration and keeps them separate from the user's personal GnuPG keyring. On request, OCM uses the user's keyring instead, which also enables hardware tokens.
-* OCM checks whether libgcrypt reports FIPS mode. It cannot check whether the user's libgcrypt build holds a validation; choosing a validated distribution stays the operator's responsibility.
-* Signatures made by the old built-in implementation still verify.
+* `keySource` is replaced by `keyringFingerprint` and `keyringHome` in `GPGCredentials`. When set, OCM runs the `gpg` binary only to export key material (`gpg --export`, `gpg --export-secret-keys`); all signing and verification runs in OCM.
+* Signatures from the previous gpg-binary and former go-crypto implementations still verify (v4 keys outside strict mode). OCM reads v4, LibrePGP v5 and RFC 9580 v6 keys; encryption-only subkeys are ignored, so GnuPG's PQC keys with Kyber subkeys work.
+* Strict mode accepts exactly: OpenPGP v6 (RFC 9580) or v5 (LibrePGP) keys, both with SHA-256 fingerprints, whose primary key and signing subkeys all use RSA or ECDSA P-256/P-384/P-521 (reading a key verifies their self-signatures), unprotected secret keys, and SHA-256/384/512 signatures. It rejects exporting secret keys from the keyring.
+* Hardware-token keys are not supported: `--export-secret-keys` yields only card stubs, so signing fails with a clear error.
+* GnuPG creates v4 keys for RSA and ECDSA and cannot create or verify v6 keys (it implements LibrePGP), so keyring keys never pass strict mode. Strict-mode users create keys with an RFC 9580 implementation such as Sequoia (`sq key generate --profile rfc9580`).
 
 ### Sigstore
 
@@ -113,8 +115,8 @@ These run outside strict enforcement so they keep working in `fips140=only`. FIP
 
 ### Keeping it that way
 
-* A lint rule rejects imports of non-approved cryptography in OCM's own code.
-* A small set of test packages runs in strict mode on every CI run, so a change that pulls a non-approved algorithm into signing, Git or checksum handling fails CI. All other tests run in the default mode.
+* A lint rule rejects imports of non-approved cryptography in OCM's own code. The GPG signing handler (`bindings/go/gpg/signing/handler`) is exempted because it enforces the FIPS 140-3 mode rules itself.
+* A small set of test packages runs in strict mode on every CI run, including `bindings/go/gpg/fips140`, so a change that pulls a non-approved algorithm into signing, Git or checksum handling fails CI. All other tests run in the default mode.
 
 ## Pros and Cons of the Options
 
@@ -141,28 +143,30 @@ Cons:
 * In the default mode, steps outside the boundary are only visible in the debug log.
 * Strict mode is labelled by Go as not meant for production, and other tools that inherit the setting may fail.
 
-### [G1] Approved key types only
+### [G1] Approved key types only (go-crypto in-process)
 
 Pros:
 
-* No external program needed.
+* No external program needed for signing or verification; the GnuPG keyring stays usable as a key-export source.
+* RSA, NIST ECDSA, SHA-2 and RNG run through the Go Cryptographic Module.
+* Nothing has to ship in images or stay in lockstep with a libc base image.
 
 Cons:
 
-* Passphrase-protected keys cannot work, because unlocking them is never FIPS-approved.
-* Still fails in strict mode.
+* No FIPS path for passphrase-protected keys.
+* No hardware tokens and no gpg-agent passphrase cache (a follow-up would need a signer abstraction in the handler).
+* GnuPG cannot create or verify v6 keys (it implements LibrePGP), so strict-mode users create keys with an RFC 9580 implementation such as Sequoia, and keyring keys never pass strict mode.
 
 ### [G2] System GnuPG
 
 Pros:
 
 * All GPG cryptography, including passphrase unlocking, runs in a validated module on supported distributions.
-* Removes the non-FIPS OpenPGP library from OCM's own code.
 
 Cons:
 
 * GnuPG becomes a requirement for GPG signing in every mode.
-* Validated libgcrypt builds exist only for Linux distributions.
+* GnuPG must ship in every image, and validated libgcrypt exists only on some distributions.
 
 ### [G3] Remove GPG
 
@@ -238,9 +242,8 @@ Cons:
 ## Discovery and Distribution
 
 * All behavior ships in the one CLI binary and the one controller image.
-* The CLI image contains neither GnuPG nor `cosign`. Users who need them in a FIPS environment add their own validated tools, or copy the static `ocm` binary into an image that has them.
-* The controller only verifies RSA signatures today. When it gains GPG or Sigstore verification, the same rules apply, and FIPS users provide an image with a validated GnuPG.
-* The FIPS 140-3 reference documents the modes, the requirements for GnuPG and `cosign`, the exceptions and the known limitations.
+* The CLI `full` image is `scratch` with `ocm` and a FIPS `cosign`. The `slim` image is `scratch` with `ocm` only. The controller image is `scratch` with `manager` and a FIPS `cosign`. No image contains GnuPG or a libc. Keyring keys need a host GnuPG.
+* The FIPS 140-3 reference documents the modes, the requirements for `cosign`, the exceptions and the known limitations.
 
 Open follow-ups:
 
@@ -249,4 +252,4 @@ Open follow-ups:
 
 ## Conclusion
 
-OCM ships one artifact built against the certified Go Cryptographic Module. By default nothing changes for users, and steps that leave the FIPS boundary are reported. Users who need a guarantee switch to strict mode and get a clear error for every such step. GPG moves completely to the system GnuPG so that a validated libgcrypt can cover it, Sigstore keeps the external `cosign` with a FIPS check, and Helm provenance is refused in strict mode.
+OCM ships one artifact built against the certified Go Cryptographic Module. By default nothing changes for users, and steps that leave the FIPS boundary are reported. Users who need a guarantee switch to strict mode and get a clear error for every such step. GPG signing and verification run in-process with the Go OpenPGP library, with strict-mode rules for approved key types; the GnuPG keyring stays usable as a key source. Sigstore keeps the external `cosign` with a FIPS check, and Helm provenance is refused in strict mode.

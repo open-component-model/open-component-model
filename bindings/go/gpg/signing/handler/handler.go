@@ -1,18 +1,28 @@
 // Package handler implements OpenPGP (GPG) signing and verification for OCM.
-// It supports passphrase-protected private keys via the credential map.
-// Signatures are stored as ASCII-armored OpenPGP detached signatures.
+// Signatures are ASCII-armored OpenPGP detached signatures over the digest bytes.
 //
-// Sign and Verify delegate to the GnuPG gpg binary on PATH, so all OpenPGP
-// cryptography, including passphrase unwrapping, runs in libgcrypt. Operated
-// with a FIPS 140-3 validated libgcrypt this keeps GPG signing compliant; see ADR 0030.
+// All OpenPGP cryptography runs in-process in pure Go (github.com/ProtonMail/go-crypto), whose RSA,
+// NIST-curve ECDSA, SHA-2 and random number generation run in the Go Cryptographic Module. The key
+// material comes from the credentials, or, with keyringFingerprint, is exported from the user's GnuPG
+// keyring with the gpg binary, which performs no signing or verification.
+//
+// Steps outside the module (keys other than v6, algorithms other than RSA and ECDSA on NIST curves,
+// unlocking passphrase-protected keys, exporting secret keys from the GnuPG keyring) follow the FIPS
+// 140-3 mode rules of ADR 0030: with GODEBUG=fips140=on they are logged at debug level, with
+// GODEBUG=fips140=only they are rejected.
 package handler
 
 import (
+	"bytes"
+	"cmp"
 	"context"
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"log/slog"
+	"time"
+
+	"github.com/ProtonMail/go-crypto/openpgp"
+	"github.com/ProtonMail/go-crypto/openpgp/packet"
 
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	gpgcredentials "ocm.software/open-component-model/bindings/go/gpg/signing/handler/internal/credentials"
@@ -30,16 +40,27 @@ var (
 	ErrMissingPublicKey  = errors.New("public key not found in credentials")
 	ErrMissingHashAlg    = errors.New("missing hash algorithm in digest")
 	ErrMissingDigestVal  = errors.New("missing digest value")
-	// ErrGPGNotFound is returned when no gpg binary is found on PATH.
+	ErrNoSecretKey       = errors.New("no secret key found in private key material")
+	ErrMissingPassphrase = errors.New("private key is passphrase-protected but no passphrase was provided")
+	// ErrGPGNotFound is returned when keys are to be exported from the GnuPG keyring but no gpg binary is found on PATH.
 	ErrGPGNotFound = gpgbinary.ErrGPGNotFound
-	// ErrKeyMaterialWithKeyring rejects credentials carrying keys when the keyring is used,
+	// ErrKeyMaterialWithKeyring rejects credentials carrying key material next to keyringFingerprint,
 	// so that it is never ambiguous which key signs or verifies.
-	ErrKeyMaterialWithKeyring = gpgbinary.ErrKeyMaterialWithKeyring
-	// ErrKeyringRequiresFingerprint is returned when verifying against the keyring without a full key fingerprint.
-	ErrKeyringRequiresFingerprint = gpgbinary.ErrKeyringRequiresFingerprint
+	ErrKeyMaterialWithKeyring = errors.New("keyringFingerprint takes the keys from the GnuPG keyring; remove privateKeyPGP, privateKeyPGPFile, publicKeyPGP and publicKeyPGPFile from the GPG credentials")
+	// ErrKeyringRequiresFingerprint is returned when keyringFingerprint is not a full key fingerprint.
+	ErrKeyringRequiresFingerprint = errors.New("keyringFingerprint must be a full key fingerprint (40 or 64 hex characters), because a shorter key ID could select another key in the keyring")
+	// ErrHashTooShortForKey is returned when the configured hashAlgorithm is shorter than the signing key needs.
+	ErrHashTooShortForKey = errors.New("hashAlgorithm is too short for the signing key")
+
+	// Strict FIPS 140-3 mode (GODEBUG=fips140=only) errors.
+
+	ErrV4KeyInFIPSMode            = errors.New("with GODEBUG=fips140=only, GPG signing and verification require OpenPGP v6 (RFC 9580) or v5 (LibrePGP) keys: v4 and older keys are identified by SHA-1 fingerprints")
+	ErrAlgorithmInFIPSMode        = errors.New("with GODEBUG=fips140=only, GPG signing and verification require an RSA or ECDSA (P-256, P-384, P-521) key")
+	ErrProtectedKeyInFIPSMode     = errors.New("with GODEBUG=fips140=only, passphrase-protected GPG keys cannot be unlocked because OpenPGP key protection is not FIPS-approved; provide the private key without passphrase protection, for example from a secret store")
+	ErrKeyringSecretKeyInFIPSMode = errors.New("with GODEBUG=fips140=only, secret keys cannot be exported from the GnuPG keyring because gpg-agent processes them outside the Go Cryptographic Module; provide the private key in the GPG credentials")
 )
 
-// defaultGPGBinary serves zero-value Handlers. Its configuration is immutable; it only caches the resolved paths.
+// defaultGPGBinary serves zero-value Handlers. Its configuration is immutable; it only caches the resolved path.
 var defaultGPGBinary = gpgbinary.New()
 
 // Handler implements OpenPGP signing and verification.
@@ -48,26 +69,9 @@ type Handler struct {
 	gpgBinary *gpgbinary.Binary // nil means defaultGPGBinary
 }
 
-// Option configures a Handler.
-type Option func(*handlerOptions)
-
-type handlerOptions struct {
-	tempDir string
-}
-
-// WithTempDir sets the directory for the temporary files and GnuPG home directories of each
-// operation, typically the tempFolder of the filesystem configuration. "" means os.TempDir().
-func WithTempDir(dir string) Option {
-	return func(o *handlerOptions) { o.tempDir = dir }
-}
-
 // New returns a Handler.
-func New(_ *runtime.Scheme, opts ...Option) (*Handler, error) {
-	var o handlerOptions
-	for _, opt := range opts {
-		opt(&o)
-	}
-	return &Handler{gpgBinary: gpgbinary.New(gpgbinary.WithTempDir(o.tempDir))}, nil
+func New(_ *runtime.Scheme) (*Handler, error) {
+	return &Handler{}, nil
 }
 
 func (h *Handler) binary() *gpgbinary.Binary {
@@ -93,49 +97,61 @@ func (h *Handler) Sign(
 	if err := h.GetSigningHandlerScheme().Convert(cfg, &sigCfg); err != nil {
 		return descruntime.SignatureInfo{}, fmt.Errorf("convert config: %w", err)
 	}
-
-	useKeyring, err := isKeyring(sigCfg.GetKeySource())
-	if err != nil {
-		return descruntime.SignatureInfo{}, err
-	}
-
 	typedCreds, err := convertCredentials(creds)
 	if err != nil {
 		return descruntime.SignatureInfo{}, err
 	}
-
-	keyBytes, err := gpgcredentials.PrivateKeyBytes(typedCreds)
+	material, keyringFpr, err := h.privateKeyMaterial(ctx, typedCreds)
 	if err != nil {
-		return descruntime.SignatureInfo{}, fmt.Errorf("load GPG private key: %w", err)
+		return descruntime.SignatureInfo{}, err
 	}
-	if !useKeyring && len(keyBytes) == 0 {
+	if len(material) == 0 {
 		return descruntime.SignatureInfo{}, ErrMissingPrivateKey
 	}
 	digestBytes, err := parseDigest(unsigned)
 	if err != nil {
 		return descruntime.SignatureInfo{}, err
 	}
-	algo, err := gpgDigestAlgoForHash(sigCfg.GetHashAlgorithm())
+	configuredHash, err := hashForAlgorithm(sigCfg.HashAlgorithm)
 	if err != nil {
 		return descruntime.SignatureInfo{}, err
 	}
 
-	slog.DebugContext(ctx, "signing with the system gpg binary")
-	sig, err := h.binary().Sign(ctx, gpgbinary.SignRequest{
-		UseKeyring:     useKeyring,
-		PrivateKey:     keyBytes,
-		Passphrase:     typedCreds.Passphrase,
-		KeyFingerprint: sigCfg.GetKeyFingerprint(),
-		DigestAlgo:     algo,
-		Data:           digestBytes,
-	})
+	entities, err := readKeyRing(ctx, material)
+	if err != nil {
+		return descruntime.SignatureInfo{}, fmt.Errorf("load GPG private key: %w", err)
+	}
+	k, err := selectSigningKey(entities, cmp.Or(sigCfg.GetKeyFingerprint(), keyringFpr), time.Now())
 	if err != nil {
 		return descruntime.SignatureInfo{}, err
+	}
+	hash, err := signatureHash(configuredHash, k.PublicKey)
+	if err != nil {
+		return descruntime.SignatureInfo{}, err
+	}
+	if k.PrivateKey.Encrypted {
+		if err := fipsBoundary(ctx, ErrProtectedKeyInFIPSMode, "unlocking a passphrase-protected GPG key"); err != nil {
+			return descruntime.SignatureInfo{}, err
+		}
+		if typedCreds.Passphrase == "" {
+			return descruntime.SignatureInfo{}, ErrMissingPassphrase
+		}
+		if err := k.PrivateKey.Decrypt([]byte(typedCreds.Passphrase)); err != nil {
+			return descruntime.SignatureInfo{}, fmt.Errorf("decrypt GPG private key: %w", err)
+		}
+	}
+
+	var buf bytes.Buffer
+	if err := openpgp.ArmoredDetachSign(&buf, k.Entity, bytes.NewReader(digestBytes), &packet.Config{
+		DefaultHash:  hash,
+		SigningKeyId: k.PublicKey.KeyId,
+	}); err != nil {
+		return descruntime.SignatureInfo{}, fmt.Errorf("gpg sign failed: %w", err)
 	}
 	return descruntime.SignatureInfo{
 		Algorithm: v1alpha1.AlgorithmGPG,
 		MediaType: v1alpha1.MediaTypeGPG,
-		Value:     sig,
+		Value:     buf.String(),
 	}, nil
 }
 
@@ -154,22 +170,15 @@ func (h *Handler) Verify(
 	if err := h.GetSigningHandlerScheme().Convert(cfg, &sigCfg); err != nil {
 		return fmt.Errorf("convert config: %w", err)
 	}
-
-	useKeyring, err := isKeyring(sigCfg.GetKeySource())
-	if err != nil {
-		return err
-	}
-
 	typedCreds, err := convertCredentials(creds)
 	if err != nil {
 		return err
 	}
-
-	keyBytes, err := gpgcredentials.PublicKeyBytes(typedCreds)
+	material, keyringFpr, err := h.publicKeyMaterial(ctx, typedCreds)
 	if err != nil {
-		return fmt.Errorf("load GPG public key: %w", err)
+		return err
 	}
-	if !useKeyring && len(keyBytes) == 0 {
+	if len(material) == 0 {
 		return ErrMissingPublicKey
 	}
 	digestBytes, err := parseDigest(signed.Digest)
@@ -177,14 +186,102 @@ func (h *Handler) Verify(
 		return err
 	}
 
-	slog.DebugContext(ctx, "verifying with the system gpg binary")
-	return h.binary().Verify(ctx, gpgbinary.VerifyRequest{
-		UseKeyring:     useKeyring,
-		PublicKey:      keyBytes,
-		KeyFingerprint: sigCfg.GetKeyFingerprint(),
-		Data:           digestBytes,
-		Signature:      signed.Signature.Value,
-	})
+	keyring, err := readKeyRing(ctx, material)
+	if err != nil {
+		return fmt.Errorf("load GPG public key: %w", err)
+	}
+	sig, body, err := parseSignature(signed.Signature.Value)
+	if err != nil {
+		return err
+	}
+
+	// A nil config verifies at time.Now(): key and subkey expiry, revocations and the expiry of the binding and
+	// message signatures are all checked at that one time, so signatures stop verifying once their key expires or
+	// is retired. With TSA support, pass the verified timestamp token's genTime as packet.Config.Time instead; go-crypto
+	// v1 then runs every check at that time, and a "key compromised" revocation still applies at any date.
+	// Never use sig.CreationTime: the signer sets it and could backdate a signature into an expired key's validity.
+	// openpgp/v2 is not a substitute: it judges the key at sig.CreationTime regardless of Config.Time.
+	_, signer, err := openpgp.VerifyDetachedSignature(keyring, bytes.NewReader(digestBytes), bytes.NewReader(body), nil)
+	if err != nil {
+		return fmt.Errorf("gpg verify failed: %w", err)
+	}
+
+	want := cmp.Or(sigCfg.GetKeyFingerprint(), keyringFpr)
+	if want == "" {
+		return nil
+	}
+	signing := signer.PrimaryKey
+	for _, s := range signer.Subkeys {
+		if s.PublicKey.KeyId == *sig.IssuerKeyId {
+			signing = s.PublicKey
+			break
+		}
+	}
+	if matchesFingerprint(signing, want) || matchesFingerprint(signer.PrimaryKey, want) {
+		return nil
+	}
+	return fmt.Errorf("signature was made by key %X (primary key %X), which does not match the configured key fingerprint %q",
+		signing.Fingerprint, signer.PrimaryKey.Fingerprint, want)
+}
+
+// privateKeyMaterial returns the private key material of the credentials, or the secret key exported from the
+// GnuPG keyring together with its normalized keyring fingerprint.
+func (h *Handler) privateKeyMaterial(ctx context.Context, creds *gpgcredentialsv1.GPGCredentials) (material []byte, keyringFpr string, err error) {
+	if creds.KeyringFingerprint == "" {
+		material, err := gpgcredentials.PrivateKeyBytes(creds)
+		if err != nil {
+			return nil, "", fmt.Errorf("load GPG private key: %w", err)
+		}
+		return material, "", nil
+	}
+	fpr, err := keyringFingerprint(creds)
+	if err != nil {
+		return nil, "", err
+	}
+	if err := fipsBoundary(ctx, ErrKeyringSecretKeyInFIPSMode, "exporting a secret key from the GnuPG keyring"); err != nil {
+		return nil, "", err
+	}
+	material, err = h.binary().ExportSecretKey(ctx, creds.KeyringHome, fpr, creds.Passphrase)
+	if err != nil {
+		return nil, "", fmt.Errorf("export GPG private key from the GnuPG keyring: %w", err)
+	}
+	return material, fpr, nil
+}
+
+// publicKeyMaterial returns the public key material of the credentials, or the public key exported from the
+// GnuPG keyring together with its normalized keyring fingerprint.
+func (h *Handler) publicKeyMaterial(ctx context.Context, creds *gpgcredentialsv1.GPGCredentials) (material []byte, keyringFpr string, err error) {
+	if creds.KeyringFingerprint == "" {
+		material, err := gpgcredentials.PublicKeyBytes(creds)
+		if err != nil {
+			return nil, "", fmt.Errorf("load GPG public key: %w", err)
+		}
+		return material, "", nil
+	}
+	fpr, err := keyringFingerprint(creds)
+	if err != nil {
+		return nil, "", err
+	}
+	material, err = h.binary().ExportPublicKey(ctx, creds.KeyringHome, fpr)
+	if err != nil {
+		return nil, "", fmt.Errorf("export GPG public key from the GnuPG keyring: %w", err)
+	}
+	return material, fpr, nil
+}
+
+// keyringFingerprint validates the keyring credentials and returns the normalized keyring fingerprint.
+func keyringFingerprint(creds *gpgcredentialsv1.GPGCredentials) (string, error) {
+	if creds.PrivateKeyPGP != "" || creds.PrivateKeyPGPFile != "" || creds.PublicKeyPGP != "" || creds.PublicKeyPGPFile != "" {
+		return "", ErrKeyMaterialWithKeyring
+	}
+	fpr := v1alpha1.NormalizeFingerprint(creds.KeyringFingerprint)
+	if len(fpr) != 40 && len(fpr) != 64 {
+		return "", ErrKeyringRequiresFingerprint
+	}
+	if _, err := hex.DecodeString(fpr); err != nil {
+		return "", ErrKeyringRequiresFingerprint
+	}
+	return fpr, nil
 }
 
 // GetSigningCredentialConsumerIdentity returns the credential consumer identity for signing.
@@ -239,34 +336,6 @@ func gpgIdentityToMap(id *identityv1.GPGIdentity) runtime.Identity {
 	}
 	m.SetType(id.Type)
 	return m
-}
-
-// isKeyring reports whether keys come from the user's GnuPG keyring.
-// Returns an error for unknown or misspelled values so callers don't silently get credentials.
-func isKeyring(src v1alpha1.KeySource) (bool, error) {
-	switch src {
-	case v1alpha1.KeySourceCredentials:
-		return false, nil
-	case v1alpha1.KeySourceKeyring:
-		return true, nil
-	default:
-		return false, fmt.Errorf("unsupported GPG key source %q, expected %q or %q", src, v1alpha1.KeySourceCredentials, v1alpha1.KeySourceKeyring)
-	}
-}
-
-// gpgDigestAlgoForHash maps a HashAlgorithm to a gpg --digest-algo name.
-// Returns an error for unknown or misspelled values so callers don't silently get SHA-256.
-func gpgDigestAlgoForHash(alg v1alpha1.HashAlgorithm) (string, error) {
-	switch alg {
-	case "", v1alpha1.HashAlgorithmSHA256:
-		return "SHA256", nil
-	case v1alpha1.HashAlgorithmSHA384:
-		return "SHA384", nil
-	case v1alpha1.HashAlgorithmSHA512:
-		return "SHA512", nil
-	default:
-		return "", fmt.Errorf("unsupported GPG hash algorithm %q", alg)
-	}
 }
 
 // parseDigest validates and hex-decodes the digest value.

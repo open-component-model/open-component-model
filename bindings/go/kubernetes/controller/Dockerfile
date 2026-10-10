@@ -64,51 +64,30 @@ RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked \
       "github.com/sigstore/cosign/v3/cmd/cosign@${COSIGN_VERSION:?COSIGN_VERSION build arg is required}" \
     && mkdir -p /out && find /go/bin -name cosign -type f -exec cp {} /out/cosign \;
 
-# GnuPG comes from the Garden Linux FIPS image because its libgcrypt is the
-# FIPS-capable build. The image itself is a full distro (apt, shell), so gpg and
-# exactly its shared libraries are staged into /rootfs and copied into bare-libc.
-# Keep this image and bare-libc (final stage) on the SAME Garden Linux release:
-# the staged gpg libraries run under bare-libc's dynamic loader. Renovate updates
-# both in one PR (group "Garden Linux images" in .github/renovate.json5).
-FROM ghcr.io/gardenlinux/gardenlinux/fips:1877.25@sha256:74ae1f81d0723434024f591d8c2872852201b99b9f18c0fbe10221b16e60e01d AS gpg
-# gpg-agent is needed even for verification: the handler creates a temporary
-# GnuPG home and stops its agent with gpgconf --kill (gpg-connect-agent).
-# dirmngr: gpgconf --show-versions exits non-zero without it.
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends gpg gpg-agent gpgconf dirmngr \
-    && rm -rf /var/lib/apt/lists/*
-# Paths are canonicalised (Garden Linux is usrmerged: /lib -> usr/lib) so the
-# staged tree never replaces the symlinks already present in bare-libc.
+# Stage filesystem additions for the scratch final image. Only files are copied,
+# so the stage runs on the build platform.
+FROM --platform=${BUILDPLATFORM} ghcr.io/gardenlinux/gardenlinux/fips:1877.25@sha256:74ae1f81d0723434024f591d8c2872852201b99b9f18c0fbe10221b16e60e01d AS rootfs
 RUN set -eu; \
-    bins="/usr/bin/gpg /usr/bin/gpg-agent /usr/bin/gpgconf /usr/bin/gpg-connect-agent /usr/bin/dirmngr"; \
-    for f in $bins $(ldd $bins | awk '$2 == "=>" {print $3}' | sort -u); do \
-      dst="/rootfs$(readlink -f "$(dirname "$f")")"; \
-      mkdir -p "$dst" && cp -L "$f" "$dst/"; \
-    done; \
-    # libgcrypt enters FIPS mode when this file exists (its content is not
-    # read); there is no kernel fips=1 to rely on inside a container.
-    mkdir -p /rootfs/etc/gcrypt; \
-    echo 1 > /rootfs/etc/gcrypt/fips_enabled; \
-    # The handler writes temporary GnuPG homes under os.TempDir(); bare-libc has
-    # no /tmp. Stage a world-writable one so the nonroot user can create them.
+    # The manager and cosign write temporary files under os.TempDir(); scratch
+    # has no /tmp. Stage a world-writable one so the nonroot user can create them.
     mkdir -p -m 1777 /rootfs/tmp; \
-    # CA bundle for OCI/registry TLS (bare-libc ships none; distroless did).
+    # CA bundle for OCI/registry TLS (Garden Linux FIPS userland).
     mkdir -p /rootfs/etc/ssl/certs; \
     cp -L /etc/ssl/certs/ca-certificates.crt /rootfs/etc/ssl/certs/ca-certificates.crt
 
-# Garden Linux bare-libc: shell-less FIPS userland base.
-# https://docs.gardenlinux.org/how-to/container-base-image/bare.html
-FROM ghcr.io/gardenlinux/gardenlinux/bare-libc:1877.25@sha256:ea38f985cd155f7a36389da0952cc0f95609d013d4bceffd7a522f3758b954f0
+# manager and cosign are static (CGO_ENABLED=0), so the image needs no libc.
+FROM scratch
+# scratch defines no PATH; the sigstore signing handler looks up cosign on PATH.
+ENV PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 WORKDIR /
-COPY --from=gpg /rootfs/ /
+COPY --from=rootfs /rootfs/ /
 COPY --from=builder /workspace/manager .
 # No GODEBUG needed: GOFIPS140 already makes fips140=on the default of both the
 # manager and cosign (DefaultGODEBUG in their build info).
 COPY --from=cosign /out/cosign /usr/local/bin/cosign
-# cosign caches the Sigstore TUF trust root under $HOME/.sigstore. bare-libc
-# sets no HOME, which resolves to / and is not writable by the nonroot user, so
-# point it at the world-writable /tmp staged above. gpg is unaffected (explicit
-# --homedir).
+# cosign caches the Sigstore TUF trust root under $HOME/.sigstore. scratch sets
+# no HOME, which resolves to / and is not writable by the nonroot user, so point
+# it at the world-writable /tmp staged above.
 ENV HOME=/tmp
 USER 65532:65532
 

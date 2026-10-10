@@ -78,9 +78,9 @@ tasks:
     dotenv:
       - '{{.TASKFILE_DIR}}/../../../.env'
       - '{{.TASKFILE_DIR}}/../sigstore/signing/handler/internal/.env'
-    # One Containerfile, two targets: "full" (default tag; ocm plus FIPS gpg and
-    # cosign on Garden Linux bare-libc) and "slim" (scratch with only ocm and the
-    # CA bundle, tagged <version>-slim). full copies ocm from the slim stage.
+    # One Containerfile, two targets: "full" (default tag; ocm plus FIPS cosign
+    # on scratch) and "slim" (scratch with only ocm and the CA bundle, tagged
+    # <version>-slim). full copies ocm from the slim stage.
     cmds:
       - |
         mkdir -p {{ .TASKFILE_DIR }}/tmp/oci
