@@ -31,6 +31,7 @@ else
 fi
 
 repo=https://github.com/open-component-model/open-component-model
+revision=$(git rev-parse HEAD)
 annotate() { printf -- '--annotation=%s:org.opencontainers.image.%s=%s\n' "$levels" "$1" "$2"; }
 
 annotate created "$created"
@@ -39,7 +40,7 @@ annotate url "https://ocm.software"
 annotate documentation "https://ocm.software/docs/"
 annotate source "$repo"
 annotate version "$version"
-annotate revision "$(git rev-parse HEAD)"
+annotate revision "$revision"
 annotate vendor "Open Component Model"
 annotate licenses "Apache-2.0"
 annotate title "$title"

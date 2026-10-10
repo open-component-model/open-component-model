@@ -184,9 +184,10 @@ tasks:
       first_img="$(echo {{.CONTROLLER_IMG}} | cut -d' ' -f1)"
       levels=manifest
       [[ "{{.PLATFORMS}}" == *,* ]] && levels=manifest,index
-      while IFS= read -r a; do args+=("$a"); done < <('{{.PROJECT_ROOT}}/.github/scripts/oci-annotations.sh' \
+      out="$('{{.PROJECT_ROOT}}/.github/scripts/oci-annotations.sh' \
         '{{.TASKFILE_DIR}}/Dockerfile' "" "${first_img##*:}" "ocm-k8s-toolkit-controller" \
-        "Open Component Model Kubernetes controller" "$levels")
+        "Open Component Model Kubernetes controller" "$levels")" || exit 1
+      while IFS= read -r a; do args+=("$a"); done <<< "$out"
 
       # If LOAD is set, load single-arch image into local daemon
       if [ "{{.LOAD | default ""}}" = "true" ]; then

@@ -84,10 +84,11 @@ tasks:
     cmds:
       - |
         mkdir -p {{ .TASKFILE_DIR }}/tmp/oci
-        annotations=()
-        while IFS= read -r a; do annotations+=("$a"); done < <("$(git rev-parse --show-toplevel)/.github/scripts/oci-annotations.sh" \
+        out="$("$(git rev-parse --show-toplevel)/.github/scripts/oci-annotations.sh" \
           ./Containerfile full '{{ .VERSION }}' "ocm" \
-          "Open Component Model CLI with FIPS-capable GnuPG and cosign")
+          "Open Component Model CLI with FIPS-capable GnuPG and cosign")" || exit 1
+        annotations=()
+        while IFS= read -r a; do annotations+=("$a"); done <<< "$out"
         {{ .IMAGE_TOOL }} buildx build \
           --platform linux/amd64,linux/arm64 \
           --target full \
@@ -98,10 +99,11 @@ tasks:
           --output type=oci,dest={{ .TASKFILE_DIR }}/tmp/oci/cli.tar,oci-mediatypes=true,name=ghcr.io/open-component-model/cli \
           -f ./Containerfile .
       - |
-        annotations=()
-        while IFS= read -r a; do annotations+=("$a"); done < <("$(git rev-parse --show-toplevel)/.github/scripts/oci-annotations.sh" \
+        out="$("$(git rev-parse --show-toplevel)/.github/scripts/oci-annotations.sh" \
           ./Containerfile slim '{{ .VERSION }}' "ocm-slim" \
-          "Open Component Model CLI on scratch")
+          "Open Component Model CLI on scratch")" || exit 1
+        annotations=()
+        while IFS= read -r a; do annotations+=("$a"); done <<< "$out"
         {{ .IMAGE_TOOL }} buildx build \
           --platform linux/amd64,linux/arm64 \
           --target slim \
