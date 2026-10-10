@@ -187,7 +187,6 @@ With Sigstore (other tabs) you skip the key-pair setup entirely.
 ## Prerequisites
 
 - [OCM CLI installed]({{< relref "ocm-cli-installation.md" >}})
-- [GnuPG](https://gnupg.org/download/) 2.2 or later installed (`gpg` binary available in `$PATH`); OCM runs it to create GPG signatures, so all OpenPGP cryptography happens in GnuPG. The [OCM CLI container image]({{< relref "container-image-usage.md" >}}) does not contain GnuPG yet, so run `ocm` where GnuPG is installed. A follow-up moves the image to a base image that includes GnuPG
 - [Signing credentials configured]({{< relref "configure-signing-credentials.md" >}})
 - A component version in a CTF archive or OCI registry (we'll use `github.com/acme.org/helloworld:1.0.0` from the [getting started guide]({{< relref "create-component-version.md" >}}); any component you can write to works)
 
@@ -249,9 +248,9 @@ To use GPG for one signature only and keep RSA elsewhere, add `signature` to tha
     type: GPGSigningConfiguration/v1alpha1
 ```
 
-To sign with a key from your own GnuPG keyring (`$GNUPGHOME`, or `~/.gnupg`), including keys on a hardware token such as a YubiKey, set `keySource: keyring` (the default, `credentials`, takes the key from the GPG credentials). OCM then uses your running `gpg-agent`, which unlocks the key from its cache, via pinentry, or with a `passphrase` from the credentials.
+To sign with a key from your own GnuPG keyring (`$GNUPGHOME`, or `~/.gnupg`), set `keyringFingerprint` in the GPG credentials to the **full** fingerprint (40 or 64 hex characters) of the key to use. OCM runs `gpg --export-secret-keys` to export the key material, and then signs in-process. The `gpg` binary (>= 2.2.0) must be on `PATH`; OCM uses it only for the export.
 
-Key material in the GPG credentials is rejected with `keySource: keyring`, so it is never ambiguous which key signs. Remove `privateKeyPGPFile` and `publicKeyPGPFile` (or `privateKeyPGP` and `publicKeyPGP`) from the GPG consumer entry. Keep the entry only if you pass a `passphrase`; otherwise remove it entirely:
+Key material in the GPG credentials is rejected with `keyringFingerprint`, so it is never ambiguous which key signs. Remove `privateKeyPGPFile` and `publicKeyPGPFile` (or `privateKeyPGP` and `publicKeyPGP`) from the GPG consumer entry. A passphrase-protected key needs `passphrase` in the same entry: OCM does not use the gpg-agent passphrase cache. Hardware-token keys are not supported: `--export-secret-keys` yields only card stubs.
 
 ```yaml
 type: generic.config.ocm.software/v1
@@ -263,15 +262,14 @@ configurations:
       signature: default
     credentials:
     - type: GPGCredentials/v1alpha1
-      passphrase: my-secret-passphrase                         # optional; key files removed
+      keyringFingerprint: B118BE3A32BE4AF28E37E881167C7102F8AC81E4
+      passphrase: my-secret-passphrase                         # optional
 - type: signing.config.ocm.software/v1alpha1
   signer:
     type: GPGSigningConfiguration/v1alpha1
-    keySource: keyring                                          # added
-    keyFingerprint: B118BE3A32BE4AF28E37E881167C7102F8AC81E4
 ```
 
-Without `keyFingerprint`, gpg signs with its default key. Every `gpg` invocation times out after 3 minutes, which includes waiting for pinentry or a touch on a hardware token.
+To use a non-default GnuPG home directory, add `keyringHome: /path/to/gnupg` next to `keyringFingerprint`. Without `keyringFingerprint`, OCM uses the first secret key from the private key material in the credentials.
 
 {{< callout context="caution" >}}
 These are in the same file. Just append this signature in that relevant configuration value.
@@ -384,17 +382,29 @@ signatures:
 
 **Fix:** Move the contents of the old spec file under the `signer` field of a `signing.config.ocm.software/v1alpha1` entry and drop the flag.
 
-### Symptom: `GPG signing requires the GnuPG "gpg" binary (>= 2.2.0) on PATH`
+### Symptom: `reading keys from the GnuPG keyring (keyringFingerprint in the GPG credentials) requires the GnuPG "gpg" binary (>= 2.2.0) on PATH`
 
-**Cause:** OCM delegates all OpenPGP operations to GnuPG, and no `gpg` binary was found on `PATH`.
+**Cause:** You configured `keyringFingerprint` in the GPG credentials, but no `gpg` binary was found on `PATH`. Without `keyringFingerprint`, no `gpg` is needed — OCM performs all GPG cryptography in-process.
 
-**Fix:** Install GnuPG 2.2 or later (`brew install gnupg`, `sudo apt-get install gnupg`, `sudo dnf install gnupg2`) and make sure `gpg` is on `PATH`.
+**Fix:** Install GnuPG 2.2 or later (`brew install gnupg`, `sudo apt-get install gnupg`, `sudo dnf install gnupg2`) and make sure `gpg` is on `PATH`, or provide the key material directly via `privateKeyPGPFile`/`publicKeyPGPFile`.
 
-### Symptom: `with GODEBUG=fips140=only, GPG signing and verification require a gpg whose libgcrypt runs in FIPS mode`
+### Symptom: `with GODEBUG=fips140=only, GPG signing and verification require OpenPGP v6 (RFC 9580) or v5 (LibrePGP) keys: v4 and older keys are identified by SHA-1 fingerprints`
 
-**Cause:** OCM runs with `GODEBUG=fips140=only`, and the `libgcrypt` of your `gpg` does not run in FIPS mode (`gpgconf --show-versions` reports `fips-mode:n`), or `gpgconf` is not on `PATH`.
+**Cause:** OCM runs with `GODEBUG=fips140=only` and the key is a v4 key. v4 keys use SHA-1 fingerprints, which are outside the FIPS boundary.
 
-**Fix:** Use a GnuPG whose `libgcrypt` runs in FIPS mode, see [FIPS 140-3: GPG]({{< relref "docs/reference/standards-and-regulations/fips.md" >}}#gpg), or run OCM without `fips140=only`.
+**Fix:** Use an OpenPGP v6 key (RFC 9580). GnuPG creates v4 RSA and ECDSA keys and cannot create v6 keys; use Sequoia `sq key generate --profile rfc9580`. See [FIPS 140-3: GPG]({{< relref "docs/reference/standards-and-regulations/fips.md" >}}#gpg).
+
+### Symptom: `with GODEBUG=fips140=only, GPG signing and verification require an RSA or ECDSA (P-256, P-384, P-521) key`
+
+**Cause:** OCM runs with `GODEBUG=fips140=only` and the key uses an algorithm outside the Go Cryptographic Module (e.g. EdDSA, Ed25519).
+
+**Fix:** Use an RSA or ECDSA P-256/P-384/P-521 key. See [FIPS 140-3: GPG]({{< relref "docs/reference/standards-and-regulations/fips.md" >}}#gpg).
+
+### Symptom: `with GODEBUG=fips140=only, passphrase-protected GPG keys cannot be unlocked because OpenPGP key protection is not FIPS-approved`
+
+**Cause:** OCM runs with `GODEBUG=fips140=only` and the private key is passphrase-protected.
+
+**Fix:** Provide the private key without passphrase protection, for example from a secret store.
 
 {{< /tab >}}
 {{< tab "Sigstore (interactive)" >}}
@@ -697,7 +707,7 @@ A successful run logs `signed successfully` and embeds the Sigstore bundle into 
 
 {{< details "Alternative: run `ocm` from the OCM CLI container image" >}}
 
-Skip the install step by invoking `ocm` from the official container image (`ghcr.io/open-component-model/cli`) directly with `docker run`. The image is based on Garden Linux `bare-libc` for minimal attack surface — `ocm`, a FIPS build of `cosign`, `gpg` in FIPS mode and CA certs, no shell — so it cannot be used as a GitHub Actions [`container:`]({{< relref "container-image-usage.md" >}}) job runtime. Because `cosign` is on `PATH`, OCM does not download it. The `-slim` tags (`cli:<version>-slim`) are the `FROM scratch` variant with only `ocm` and CA certs, without `cosign` or `gpg`; see the [FIPS reference]({{< relref "docs/reference/standards-and-regulations/fips.md" >}}#artifacts) for the contents of both. The `docker run` pattern below is the supported way:
+Skip the install step by invoking `ocm` from the official container image (`ghcr.io/open-component-model/cli`) directly with `docker run`. The image is `scratch` with `ocm`, a FIPS build of `cosign`, and CA certs, no shell — so it cannot be used as a GitHub Actions [`container:`]({{< relref "container-image-usage.md" >}}) job runtime. Because `cosign` is on `PATH`, OCM does not download it. The `-slim` tags (`cli:<version>-slim`) are the `FROM scratch` variant with only `ocm` and CA certs, without `cosign`; see the [FIPS reference]({{< relref "docs/reference/standards-and-regulations/fips.md" >}}#artifacts) for the contents of both. The `docker run` pattern below is the supported way to use the image in CI:
 
 ```yaml
 jobs:

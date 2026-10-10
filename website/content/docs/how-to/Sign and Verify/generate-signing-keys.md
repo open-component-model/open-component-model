@@ -93,11 +93,11 @@ You should see both files:
 <!-- markdownlint-disable-next-line MD024 -->
 ## Prerequisites
 
-- [GnuPG](https://gnupg.org/download/) installed (`gpg` binary available in `$PATH`)
+- [GnuPG](https://gnupg.org/download/) installed (`gpg` binary available in `$PATH`), to generate keys
 
 ## Generate a GPG key pair
 
-If you already use a GPG key for signing Git tags or release artifacts, that key works as-is for OCM — skip ahead and just export it (Step 2). Otherwise, generate a new one in `/tmp/keys` so the file paths line up with the rest of the how-tos.
+If you already use a GPG key for signing Git tags or release artifacts, that key works as-is for OCM — skip ahead and just export it (Step 2). Otherwise, generate a new one in `/tmp/keys` so the file paths line up with the rest of the how-tos. For `keyringFingerprint` credentials, see [Configure Signing Credentials]({{< relref "configure-signing-credentials.md" >}}). For FIPS strict mode (v6 keys), see the [FIPS reference]({{< relref "docs/reference/standards-and-regulations/fips.md" >}}#gpg).
 
 {{< steps >}}
 
@@ -142,7 +142,7 @@ ssb   rsa4096/23F18B76957B0A91 2026-06-15 [SEA]
 {{< /details >}}
 
 > ⚠️ **Keep your private key secure!** ⚠️  
-> Never commit it to version control or share it. For production use, prefer a hardware token (YubiKey, OpenPGP card) or a passphrase-protected key.
+> Never commit it to version control or share it. For production use, prefer a passphrase-protected key or a secret store.
 
 {{< /step >}}
 

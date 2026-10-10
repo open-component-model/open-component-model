@@ -35,7 +35,15 @@ type GPGCredentials struct {
 	// PublicKeyPGPFile is a path to a file containing an ASCII-armored OpenPGP public key.
 	// Same semantics as PublicKeyPGP, but loaded from disk. Ignored when PublicKeyPGP is also set.
 	PublicKeyPGPFile string `json:"publicKeyPGPFile,omitempty"`
-	// Passphrase decrypts a passphrase-protected private key.
+	// KeyringFingerprint loads the keys from the user's GnuPG keyring instead of key material: the full fingerprint
+	// (40 or 64 hex characters, spaces and a 0x prefix allowed) of the key to use. OCM runs the GnuPG gpg binary (>= 2.2.0,
+	// on PATH) only to export this key: gpg --export for verification, gpg --export-secret-keys for signing. All
+	// cryptography runs in OCM. Mutually exclusive with PrivateKeyPGP, PrivateKeyPGPFile, PublicKeyPGP and PublicKeyPGPFile.
+	// A passphrase-protected key needs Passphrase. Keys on hardware tokens are not supported.
+	KeyringFingerprint string `json:"keyringFingerprint,omitempty"`
+	// KeyringHome is the GnuPG home directory of the keyring (gpg --homedir). Defaults to gpg's default ($GNUPGHOME or ~/.gnupg).
+	KeyringHome string `json:"keyringHome,omitempty"`
+	// Passphrase decrypts a passphrase-protected private key, also when exporting it from the keyring.
 	// Required when the private key is encrypted; omit for unprotected keys.
 	Passphrase string `json:"passphrase,omitempty"`
 }

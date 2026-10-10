@@ -117,8 +117,7 @@
       ]
     },
     {
-      // The CLI image runs gpg libraries from gardenlinux/fips under the dynamic
-      // loader of gardenlinux/bare-libc, so both must move to the same release.
+      // Garden Linux images (the CA bundle source of the CLI and controller images) are updated together in one PR.
       groupName: 'Garden Linux images',
       groupSlug: 'gardenlinux-images',
       matchPackageNames: [
