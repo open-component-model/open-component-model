@@ -431,6 +431,7 @@ Deleted nodes: ["kind-control-plane"]
 
 - [How-to: Deploy Manifests with Deployer]({{< relref "/docs/how-to/deploy-manifests-with-deployer.md" >}}) - Deploy raw Kubernetes manifests without kro or Flux
 - [Tutorial: Deploy a Helm Chart]({{< relref "deploy-helm-chart.md" >}}) - Learn to deploy Helm charts using OCM Controllers with kro and Flux
+- [Tutorial: Deploy Crossplane Packages (xpkg) with OCM]({{< relref "/docs/tutorials/deploy-crossplane-packages.md" >}}) - Install Crossplane Configurations, Functions, and Providers from an OCM component version
 
 ## Related Documentation
 
