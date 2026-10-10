@@ -139,12 +139,12 @@
 //		path:     <bucketName>/<objectKey>
 //
 // AWS carries no hostname because it is the default target and the matcher requires
-// equal hostnames, so a config that set one would not match. The path is matched with
-// path.Match, whose "*" does not cross "/", so a config either omits the path or gives
-// the exact bucketName/objectKey; region, mediaType, version and the path-style switch
-// take no part in matching. The identity type is the one ocmv1 uses, but ocmv1 scoped
-// entries by a pathprefix key, which is not resolved: such an entry never matches.
-// Tracked by https://github.com/open-component-model/ocm-project/issues/847
+// equal hostnames, so a config that set one would not match. The path is matched as a
+// glob whose "*" does not cross "/" and whose "**" does, so a config omits the path, gives
+// the exact bucketName/objectKey or a pattern such as bucketName/**; region, mediaType,
+// version and the path-style switch take no part in matching. The identity type is the one
+// ocmv1 uses. ocmv1 scoped entries by a pathprefix key, which the credential graph converts
+// into path patterns; a prefix that ends with an object version no longer matches.
 //
 // # Wire types
 //

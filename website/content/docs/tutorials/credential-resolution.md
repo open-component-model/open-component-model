@@ -57,7 +57,7 @@ flowchart TB
 
 Matching runs three chained matchers **in order** — all three must pass:
 
-1. **Path matcher** — compares `path` using Go's `path.Match` (glob). If the configured entry has no `path`, any request path is accepted. `*` matches exactly one segment (not across `/`).
+1. **Path matcher** — compares `path` as a glob. If the configured entry has no `path`, any request path is accepted. `*` matches within exactly one segment (not across `/`), `**` matches across `/`. For the full syntax, see [Path Patterns]({{< relref "docs/reference/credential-consumer-identities.md#path-patterns" >}}).
 2. **URL matcher** — compares `scheme`, `hostname`, and `port`. Applies default ports: `https` → `443`, `http` → `80`. Schemes must be equal (if neither side specifies one, they match).
 3. **Equality matcher** — all remaining attributes (like `type`) must be exactly equal.
 
@@ -72,12 +72,13 @@ Quick reference:
 | `type: OCIRegistry`<br>`hostname: ghcr.io` | `ghcr.io/my-org/my-repo` | ✅ | No path — accepts any |
 | `type: OCIRegistry`<br>`hostname: ghcr.io`<br>`path: my-org` | `ghcr.io/my-org/my-repo` | ❌ | `my-org` ≠ `my-org/my-repo` |
 | `type: OCIRegistry`<br>`hostname: ghcr.io`<br>`path: my-org/*` | `ghcr.io/other-org/foo` | ❌ | `other-org` ≠ `my-org` |
+| `type: OCIRegistry`<br>`hostname: ghcr.io`<br>`path: my-org/**` | `ghcr.io/my-org/team/repo` | ✅ | `**` matches `team/repo` |
 | `type: OCIRegistry`<br>`hostname: ghcr.io`<br>`scheme: https` | `https://ghcr.io:443/repo` | ✅ | Port defaults to `443` |
 | `type: OCIRegistry`<br>`hostname: ghcr.io`<br>`scheme: http` | `https://ghcr.io/repo` | ❌ | `http` ≠ `https` |
 | `type: OCIRegistry`<br>`hostname: ghcr.io`<br>`port: 5000` | `https://ghcr.io:443/repo` | ❌ | `5000` ≠ `443` |
 
 {{< callout context="note" >}}
-`*` matches exactly one path segment. It does **not** match across `/` separators. Use `my-org/*/*` to match two-level paths like `my-org/team/repo`.
+`*` matches exactly one path segment. It does **not** match across `/` separators. Use `my-org/*/*` to match two-level paths like `my-org/team/repo`, or `my-org/**` to match any depth below `my-org`.
 {{< /callout >}}
 
 ### Example A: Simple Hostname Match
@@ -155,7 +156,7 @@ configurations:
 | `ghcr.io/other-org/repo` | ❌ | ❌ | ✅ | `other-org` ≠ `my-org`; only the hostname catch-all matches |
 
 {{< callout context="note" >}}
-`*` matches exactly one path segment. It does **not** match across `/` separators. To match two levels like `my-org/team/repo`, use `my-org/*/*`.
+`*` matches exactly one path segment. It does **not** match across `/` separators. To match two levels like `my-org/team/repo`, use `my-org/*/*`, or `my-org/**` for any depth.
 {{< /callout >}}
 
 **Takeaway:** OCM first tries an exact string match on the full identity. If that fails, it iterates all configured entries and returns the first wildcard match.
@@ -199,7 +200,7 @@ configurations:
 | `ghcr.io/singlelevel` | ❌ | ❌ | ❌ No credentials | Path has 1 segment, `*/*` requires exactly 2 |
 
 {{< callout context="tip" >}}
-`*/*` matches **exactly** two path segments. For three levels, use `*/*/*`, and so on. Each `*` matches one segment between `/` separators.
+`*/*` matches **exactly** two path segments. For three levels, use `*/*/*`, and so on. Each `*` matches one segment between `/` separators. To match any depth, use `**`.
 {{< /callout >}}
 
 **Takeaway:** Use `*/*` when you want to match any two-segment path structure (like organization/repository) while still being more specific than a hostname-only catch-all.
