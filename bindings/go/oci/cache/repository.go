@@ -66,6 +66,17 @@ func (r *Repository) Unwrap() content.Storage {
 	return r.Repository
 }
 
+// Referrers delegates to [remotestore.Referrers], which falls back to the
+// referrers tag schema when the registry answers the API with NAME_UNKNOWN.
+func (r *Repository) Referrers(ctx context.Context, desc ociImageSpecV1.Descriptor, artifactType string, fn func(referrers []ociImageSpecV1.Descriptor) error) error {
+	return remotestore.Referrers(ctx, r.Repository, desc, artifactType, fn)
+}
+
+// Predecessors delegates to [remotestore.Predecessors]; see [Repository.Referrers].
+func (r *Repository) Predecessors(ctx context.Context, desc ociImageSpecV1.Descriptor) ([]ociImageSpecV1.Descriptor, error) {
+	return remotestore.Predecessors(ctx, r.Repository, desc)
+}
+
 // Untag implements [content.Untagger] by delegating to the underlying
 // remote repository so alias deletion keeps working when the cache
 // decorator is in the store chain. On success it invalidates the
