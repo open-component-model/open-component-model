@@ -23,14 +23,13 @@ import (
 	constructorv1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
 	"ocm.software/open-component-model/bindings/go/ctf"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
-	"ocm.software/open-component-model/bindings/go/input/file"
-	filev1 "ocm.software/open-component-model/bindings/go/input/file/spec/v1"
 	ocmoci "ocm.software/open-component-model/bindings/go/oci"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
 	"ocm.software/open-component-model/bindings/go/oci/spec/annotations"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	ocitar "ocm.software/open-component-model/bindings/go/oci/tar"
 	"ocm.software/open-component-model/bindings/go/repository"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 func Test_Integration_OCI_OwnershipPolicy_Always(t *testing.T) {
@@ -82,7 +81,7 @@ components:
         options:
           ownershipPolicy: Always
         input:
-          type: file/v1
+          type: testinput/v1
           path: image.tar.gz
           mediaType: ` + layout.MediaTypeOCIImageLayoutTarGzipV1 + `
 `)
@@ -90,10 +89,9 @@ components:
 	r.NoError(yaml.Unmarshal(specYAML, &spec))
 	converted := constructorruntime.ConvertToRuntimeConstructor(&spec)
 
-	fileMethod, err := file.NewInputMethod(workingDir)
-	r.NoError(err)
-	registry := constructor.New(file.Scheme)
-	registry.MustRegisterResourceInputMethod(&filev1.File{}, fileMethod)
+	inputScheme := newLocalFileInputScheme()
+	registry := constructor.New(inputScheme)
+	registry.MustRegisterResourceInputMethod(&localFileInput{}, &localFileInputMethod{scheme: inputScheme, workingDir: workingDir})
 
 	opts := constructor.Options{
 		ResourceInputMethodProvider: registry,
@@ -139,6 +137,51 @@ type ownershipTargetRepositoryProvider struct {
 
 func (p ownershipTargetRepositoryProvider) GetTargetRepository(_ context.Context, _ *constructorruntime.Component) (constructor.TargetRepository, error) {
 	return p.repo, nil
+}
+
+// localFileInput and localFileInputMethod are a minimal constructor input method
+// that reads a file from a working directory. They let this test exercise the
+// construction + ownership-referrer path without importing the input/file binding
+// (a higher layer, disallowed by depguard; see golangci.yml).
+type localFileInput struct {
+	Type      runtime.Type `json:"type"`
+	Path      string       `json:"path"`
+	MediaType string       `json:"mediaType,omitempty"`
+}
+
+func (s *localFileInput) GetType() runtime.Type        { return s.Type }
+func (s *localFileInput) SetType(t runtime.Type)       { s.Type = t }
+func (s *localFileInput) DeepCopyTyped() runtime.Typed { cp := *s; return &cp }
+
+func newLocalFileInputScheme() *runtime.Scheme {
+	scheme := runtime.NewScheme()
+	scheme.MustRegisterWithAlias(&localFileInput{},
+		runtime.NewVersionedType("testinput", "v1"),
+		runtime.NewUnversionedType("testinput"),
+	)
+	return scheme
+}
+
+type localFileInputMethod struct {
+	scheme     *runtime.Scheme
+	workingDir string
+}
+
+func (m *localFileInputMethod) GetResourceCredentialConsumerIdentity(context.Context, *constructorruntime.Resource) (runtime.Identity, error) {
+	return runtime.Identity{}, nil
+}
+
+func (m *localFileInputMethod) ProcessResource(_ context.Context, resource *constructorruntime.Resource, _ runtime.Typed) (*constructor.ResourceInputMethodResult, error) {
+	spec := localFileInput{}
+	if err := m.scheme.Convert(resource.Input, &spec); err != nil {
+		return nil, err
+	}
+	b, err := filesystem.GetBlobInWorkingDirectory(spec.Path, m.workingDir)
+	if err != nil {
+		return nil, err
+	}
+	b.SetMediaType(spec.MediaType)
+	return &constructor.ResourceInputMethodResult{ProcessedBlobData: b}, nil
 }
 
 func singleLayerOCILayoutTarGzip(t *testing.T, layerData []byte) []byte {

@@ -74,6 +74,7 @@ By default, local blobs are copied and all other resources stay by reference (th
 is unchanged in the target). Uploader configurations in the OCM configuration decide
 what happens to a resource: oci.uploader.transfer.config.ocm.software/v1alpha1 (separate OCI
 artifacts), http.uploader.transfer.config.ocm.software/v1alpha1 (custom HTTP targets),
+git.uploader.transfer.config.ocm.software/v1alpha1 (push Git history into an existing Git repository),
 localblob.uploader.transfer.config.ocm.software/v1alpha1 (copy as local blobs) and
 reference.uploader.transfer.config.ocm.software/v1alpha1 (keep by reference). Each selects
 resources with a CEL match expression over resource and target (test access types with
@@ -105,7 +106,8 @@ How the graph is built:
     1. CTFGetComponentVersion -> OCIGetComponentVersion
     2. CTFAddComponentVersion -> OCIAddComponentVersion
     3. GetOCIArtifact -> OCIAddLocalResource, or TransferOCIArtifact (OCI uploader)
-    4. GetHelmChart -> ConvertHelmToOCI -> OCIAddLocalResource / AddOCIArtifact (OCI uploader)`,
+    4. GetHelmChart -> ConvertHelmToOCI -> OCIAddLocalResource / AddOCIArtifact (OCI uploader)
+    5. GetGitResource -> OCIAddLocalResource, or GetGitResource / OCIGetLocalResource -> AddGitResource (Git uploader)`,
 		Example: strings.TrimSpace(`
 # Transfer a component version from a CTF archive to an OCI registry
 transfer component-version ctf::./my-archive//ocm.software/mycomponent:1.0.0 ghcr.io/my-org/ocm
