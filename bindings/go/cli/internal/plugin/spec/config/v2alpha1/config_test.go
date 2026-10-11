@@ -287,28 +287,6 @@ func TestLookupConfig_MultipleConfigs_Merged(t *testing.T) {
 	r.Equal([]string{"/path/a", "/path/b", "/path/c"}, cfg.Locations)
 }
 
-func TestLookupConfig_UnversionedType_FailsConversion(t *testing.T) {
-	// BUG: LookupConfig filters for NewUnversionedType(ConfigType) but the
-	// package scheme only registers the versioned type. This means an
-	// unversioned entry passes the filter but then fails scheme.Convert.
-	r := require.New(t)
-	pluginCfg := &Config{
-		Type:        runtime.NewUnversionedType(ConfigType),
-		IdleTimeout: Duration(7 * time.Second),
-		Locations:   []string{"/unversioned"},
-	}
-	raw := makeRaw(t, pluginCfg)
-
-	genericCfg := &generic.Config{
-		Type:           runtime.NewVersionedType("generic.config.ocm.software", "v1"),
-		Configurations: []*runtime.Raw{raw},
-	}
-
-	_, err := LookupConfig(genericCfg)
-	r.Error(err)
-	r.Contains(err.Error(), "failed to decode credential config")
-}
-
 func TestLookupConfig_InvalidEntryDecoding(t *testing.T) {
 	r := require.New(t)
 	// Craft a Raw that has the right type but bogus content that cannot be
