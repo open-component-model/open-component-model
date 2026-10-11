@@ -452,7 +452,8 @@ signing or verification. The `gpg` binary is used only when
 `keyringFingerprint` is set in the GPG credentials, to export key material
 from the user's GnuPG keyring (`gpg --export`, `gpg --export-secret-keys`).
 
-OCM reads v4 keys, LibrePGP v5 keys (GnuPG, RNP) and RFC 9580 v6 keys.
+OCM reads v4 keys, LibrePGP v5 keys (GnuPG, RNP) and RFC 9580 v6 keys,
+including v6 post-quantum signing keys (ML-DSA+EdDSA, SLH-DSA).
 Encryption-only subkeys are ignored, so GnuPG's PQC keys work: their primary
 key signs, and their Kyber encryption subkey is skipped. GnuPG's Ed448 keys
 are not supported, because the Go OpenPGP library cannot read their key
@@ -465,7 +466,7 @@ fall outside the Go Cryptographic Module:
 | Operation | `fips140=on` (default) | `fips140=only` | `fips140=off` |
 | --- | --- | --- | --- |
 | v4 keys (SHA-1 fingerprints) | Used; logged at debug level | `with GODEBUG=fips140=only, GPG signing and verification require OpenPGP v6 (RFC 9580) or v5 (LibrePGP) keys: v4 and older keys are identified by SHA-1 fingerprints` | Used |
-| EdDSA, Ed25519, Ed448, DSA, non-P curves | Used; logged at debug level | `with GODEBUG=fips140=only, GPG signing and verification require an RSA or ECDSA (P-256, P-384, P-521) key` | Used |
+| EdDSA, Ed25519, Ed448, ML-DSA, SLH-DSA, DSA, non-P curves | Used; logged at debug level | `with GODEBUG=fips140=only, GPG signing and verification require an RSA or ECDSA (P-256, P-384, P-521) key` | Used |
 | Passphrase-protected keys | Used; logged at debug level | `with GODEBUG=fips140=only, passphrase-protected GPG keys cannot be unlocked because OpenPGP key protection is not FIPS-approved; provide the private key without passphrase protection, for example from a secret store` | Used |
 | Exporting a secret key from the GnuPG keyring (`keyringFingerprint`) | Used; logged at debug level | `with GODEBUG=fips140=only, secret keys cannot be exported from the GnuPG keyring because gpg-agent processes them outside the Go Cryptographic Module; provide the private key in the GPG credentials` | Used |
 

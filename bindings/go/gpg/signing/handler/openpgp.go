@@ -272,6 +272,16 @@ func algorithmName(pk *packet.PublicKey) string {
 		return "Ed25519"
 	case packet.PubKeyAlgoEd448:
 		return "Ed448"
+	case packet.PubKeyAlgoMldsa65Ed25519:
+		return "ML-DSA-65+Ed25519"
+	case packet.PubKeyAlgoMldsa87Ed448:
+		return "ML-DSA-87+Ed448"
+	case packet.PubKeyAlgoSlhdsaShake128s:
+		return "SLH-DSA-SHAKE-128s"
+	case packet.PubKeyAlgoSlhdsaShake128f:
+		return "SLH-DSA-SHAKE-128f"
+	case packet.PubKeyAlgoSlhdsaShake256s:
+		return "SLH-DSA-SHAKE-256s"
 	case packet.PubKeyAlgoDSA:
 		return "DSA"
 	default:
@@ -375,14 +385,14 @@ func hashForAlgorithm(alg v1alpha1.HashAlgorithm) (crypto.Hash, error) {
 }
 
 // signatureHash returns the hash to sign with pk: the configured hash, or, if none is configured (0), SHA-256 or the
-// longer hash pk needs. ECDSA and EdDSA need a hash at least as long as the curve's group order (capped at SHA-512),
-// Ed448 needs SHA-512. go-crypto would silently replace a shorter hash and GnuPG refuses to sign with one, so a
-// configured hash that is too short is an error. The minimums mirror go-crypto's acceptableHashesToWrite
-// (openpgp/write.go); TestGPGHandler_SignatureHash fails if they drift apart.
+// longer hash pk needs. ECDSA and EdDSA need a hash at least as long as the curve's group order (capped at SHA-512);
+// Ed448, ML-DSA-87+Ed448 and SLH-DSA-SHAKE-256s need SHA-512. go-crypto would silently replace a shorter hash and
+// GnuPG refuses to sign with one, so a configured hash that is too short is an error. The minimums mirror go-crypto's
+// acceptableHashesToWrite (openpgp/write.go); TestGPGHandler_SignatureHash fails if they drift apart.
 func signatureHash(configured crypto.Hash, pk *packet.PublicKey) (crypto.Hash, error) {
 	minimum := crypto.SHA256
 	switch pk.PubKeyAlgo {
-	case packet.PubKeyAlgoEd448:
+	case packet.PubKeyAlgoEd448, packet.PubKeyAlgoMldsa87Ed448, packet.PubKeyAlgoSlhdsaShake256s:
 		minimum = crypto.SHA512
 	case packet.PubKeyAlgoECDSA, packet.PubKeyAlgoEdDSA:
 		switch curve, _ := pk.Curve(); curve {

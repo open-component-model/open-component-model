@@ -31,7 +31,8 @@ type Config struct {
 
 	// HashAlgorithm selects the hash function of the signature over the digest bytes.
 	// Supported values: SHA-256, SHA-384, SHA-512. When empty, SHA-256, unless the signing key needs a longer hash:
-	// SHA-384 for ECDSA P-384 and Brainpool P-384 keys, SHA-512 for ECDSA P-521, Brainpool P-512 and Ed448 keys.
+	// SHA-384 for ECDSA P-384 and Brainpool P-384 keys, SHA-512 for ECDSA P-521, Brainpool P-512, Ed448,
+	// ML-DSA-87+Ed448 and SLH-DSA-SHAKE-256s keys.
 	// A hash shorter than the signing key needs is an error.
 	HashAlgorithm HashAlgorithm `json:"hashAlgorithm,omitempty"`
 

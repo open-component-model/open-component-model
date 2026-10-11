@@ -135,6 +135,8 @@ func TestGPGHandler_RoundTrip(t *testing.T) {
 		{name: "v6 ECDSA P-256", key: handlertest.KeyConfig{V6: true, Algorithm: packet.PubKeyAlgoECDSA, Curve: packet.CurveNistP256}},
 		{name: "v6 Ed25519", key: handlertest.KeyConfig{V6: true, Algorithm: packet.PubKeyAlgoEd25519}},
 		{name: "v6 Ed448", key: handlertest.KeyConfig{V6: true, Algorithm: packet.PubKeyAlgoEd448}},
+		{name: "v6 ML-DSA-65+Ed25519", key: handlertest.KeyConfig{V6: true, Algorithm: packet.PubKeyAlgoMldsa65Ed25519}},
+		{name: "v6 SLH-DSA-SHAKE-128f", key: handlertest.KeyConfig{V6: true, Algorithm: packet.PubKeyAlgoSlhdsaShake128f}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -173,6 +175,10 @@ func TestGPGHandler_SignatureHash(t *testing.T) {
 		{name: "EdDSA Curve25519", key: handlertest.KeyConfig{Algorithm: packet.PubKeyAlgoEdDSA, Curve: packet.Curve25519}, minimum: crypto.SHA256},
 		{name: "v6 Ed25519", key: handlertest.KeyConfig{V6: true, Algorithm: packet.PubKeyAlgoEd25519}, minimum: crypto.SHA256},
 		{name: "v6 Ed448", key: handlertest.KeyConfig{V6: true, Algorithm: packet.PubKeyAlgoEd448}, minimum: crypto.SHA512},
+		{name: "v6 ML-DSA-65+Ed25519", key: handlertest.KeyConfig{V6: true, Algorithm: packet.PubKeyAlgoMldsa65Ed25519}, minimum: crypto.SHA256},
+		{name: "v6 ML-DSA-87+Ed448", key: handlertest.KeyConfig{V6: true, Algorithm: packet.PubKeyAlgoMldsa87Ed448}, minimum: crypto.SHA512},
+		{name: "v6 SLH-DSA-SHAKE-128f", key: handlertest.KeyConfig{V6: true, Algorithm: packet.PubKeyAlgoSlhdsaShake128f}, minimum: crypto.SHA256},
+		{name: "v6 SLH-DSA-SHAKE-256s", key: handlertest.KeyConfig{V6: true, Algorithm: packet.PubKeyAlgoSlhdsaShake256s}, minimum: crypto.SHA512},
 		{
 			// The signing subkey's algorithm decides, not the primary key's.
 			name:    "RSA primary key with ECDSA P-521 signing subkey",
@@ -729,6 +735,7 @@ func TestGPGHandler_FIPSBoundaryLogs(t *testing.T) {
 		{name: "v6 ECDSA P-384", key: handlertest.KeyConfig{V6: true, Algorithm: packet.PubKeyAlgoECDSA, Curve: packet.CurveNistP384}},
 		{name: "v4 key", key: handlertest.KeyConfig{}, wantLogs: []string{"OpenPGP key with a SHA-1 fingerprint"}},
 		{name: "v6 Ed25519", key: handlertest.KeyConfig{V6: true, Algorithm: packet.PubKeyAlgoEd25519}, wantLogs: []string{"GPG key algorithm Ed25519"}},
+		{name: "v6 ML-DSA-65+Ed25519", key: handlertest.KeyConfig{V6: true, Algorithm: packet.PubKeyAlgoMldsa65Ed25519}, wantLogs: []string{"GPG key algorithm ML-DSA-65+Ed25519"}},
 		{name: "v6 ECDSA brainpool", key: handlertest.KeyConfig{V6: true, Algorithm: packet.PubKeyAlgoECDSA, Curve: packet.CurveBrainpoolP256}, wantLogs: []string{"GPG key algorithm ECDSA BrainpoolP256"}},
 		{
 			name:     "v6 Ed25519 primary key with RSA signing subkey",

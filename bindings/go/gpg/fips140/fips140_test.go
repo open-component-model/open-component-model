@@ -70,6 +70,9 @@ func TestStrictMode_Rejected(t *testing.T) {
 		{name: "v4 ECDSA P-256", key: handlertest.KeyConfig{Algorithm: packet.PubKeyAlgoECDSA, Curve: packet.CurveNistP256}, wantErr: handler.ErrV4KeyInFIPSMode},
 		{name: "v6 Ed25519", key: handlertest.KeyConfig{V6: true, Algorithm: packet.PubKeyAlgoEd25519}, wantErr: handler.ErrAlgorithmInFIPSMode},
 		{name: "v6 Ed448", key: handlertest.KeyConfig{V6: true, Algorithm: packet.PubKeyAlgoEd448}, wantErr: handler.ErrAlgorithmInFIPSMode},
+		// Post-quantum signatures run in circl, outside the Go Cryptographic Module.
+		{name: "v6 ML-DSA-65+Ed25519", key: handlertest.KeyConfig{V6: true, Algorithm: packet.PubKeyAlgoMldsa65Ed25519}, wantErr: handler.ErrAlgorithmInFIPSMode},
+		{name: "v6 SLH-DSA-SHAKE-128f", key: handlertest.KeyConfig{V6: true, Algorithm: packet.PubKeyAlgoSlhdsaShake128f}, wantErr: handler.ErrAlgorithmInFIPSMode},
 		{name: "v6 ECDSA brainpool P-256", key: handlertest.KeyConfig{V6: true, Algorithm: packet.PubKeyAlgoECDSA, Curve: packet.CurveBrainpoolP256}, wantErr: handler.ErrAlgorithmInFIPSMode},
 		{
 			// go-crypto verifies the primary key's self-signatures while parsing, so an Ed25519 primary key

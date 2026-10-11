@@ -8,7 +8,7 @@
   "properties": {
     "hashAlgorithm": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.gpg.spec.signing.v1alpha1.HashAlgorithm",
-      "description": "HashAlgorithm selects the hash function of the signature over the digest bytes.\nSupported values: SHA-256, SHA-384, SHA-512. When empty, SHA-256, unless the signing key needs a longer hash:\nSHA-384 for ECDSA P-384 and Brainpool P-384 keys, SHA-512 for ECDSA P-521, Brainpool P-512 and Ed448 keys.\nA hash shorter than the signing key needs is an error."
+      "description": "HashAlgorithm selects the hash function of the signature over the digest bytes.\nSupported values: SHA-256, SHA-384, SHA-512. When empty, SHA-256, unless the signing key needs a longer hash:\nSHA-384 for ECDSA P-384 and Brainpool P-384 keys, SHA-512 for ECDSA P-521, Brainpool P-512, Ed448,\nML-DSA-87+Ed448 and SLH-DSA-SHAKE-256s keys.\nA hash shorter than the signing key needs is an error."
     },
     "keyFingerprint": {
       "type": "string",
