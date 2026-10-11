@@ -1,0 +1,287 @@
+Patch for helm.sh/helm/v4, applied only to ocm CLI builds (task build:helm in
+Taskfile.yml) through a go.work replace. Plain `go build`/`go test` use upstream helm.
+
+helm links k8s.io/client-go/kubernetes and .../kubernetes/scheme, whose init()
+registers every k8s.io/api type, via three imports the CLI never exercises.
+Cutting all three removes ~16 MB (~35%) from the binary; any one left in place
+keeps everything linked.
+
+1. internal/version: blank import of client-go/kubernetes, only there so
+   build info lists client-go (still true via pkg/helmpath).
+2. pkg/chart/common: default .Capabilities.APIVersions read from the client-go
+   scheme; replaced with a snapshot for the k8s.io/client-go version selected
+   by bindings/go/go.mod (v0.37.0). Refresh it when client-go is bumped.
+3. pkg/getter: All() and plugin getters import pkg/cli -> k8s.io/cli-runtime.
+   OCM builds its own providers (helm/internal/download.GetterProviders).
+
+If this stops applying after a helm bump, regenerate it against the new version.
+
+diff --git a/internal/version/clientgo.go b/internal/version/clientgo.go
+index 50a4fd5..850e5f8 100644
+--- a/internal/version/clientgo.go
++++ b/internal/version/clientgo.go
+@@ -20,8 +20,6 @@ import (
+ 	"errors"
+ 	"runtime/debug"
+ 	"slices"
+-
+-	_ "k8s.io/client-go/kubernetes" // Force k8s.io/client-go to be included in the build
+ )
+ 
+ func K8sIOClientGoModVersion() (string, error) {
+diff --git a/pkg/chart/common/capabilities.go b/pkg/chart/common/capabilities.go
+index 20f4953..2849889 100644
+--- a/pkg/chart/common/capabilities.go
++++ b/pkg/chart/common/capabilities.go
+@@ -23,10 +23,7 @@ import (
+ 	"testing"
+ 
+ 	"github.com/Masterminds/semver/v3"
+-	"k8s.io/client-go/kubernetes/scheme"
+ 
+-	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+-	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
+ 	k8sversion "k8s.io/apimachinery/pkg/util/version"
+ 
+ 	helmversion "helm.sh/helm/v4/internal/version"
+@@ -127,19 +124,68 @@ func (v VersionSet) Has(apiVersion string) bool {
+ 	return slices.Contains(v, apiVersion)
+ }
+ 
++// allKnownVersions is the client-go scheme's group versions plus apiextensions,
++// snapshotted so the scheme (and every k8s.io/api type) is not linked.
+ func allKnownVersions() VersionSet {
+-	// We should register the built in extension APIs as well so CRDs are
+-	// supported in the default version set. This has caused problems with `helm
+-	// template` in the past, so let's be safe
+-	apiextensionsv1beta1.AddToScheme(scheme.Scheme)
+-	apiextensionsv1.AddToScheme(scheme.Scheme)
+-
+-	groups := scheme.Scheme.PrioritizedVersionsAllGroups()
+-	vs := make(VersionSet, 0, len(groups))
+-	for _, gv := range groups {
+-		vs = append(vs, gv.String())
++	return VersionSet{
++		"v1",
++		"admissionregistration.k8s.io/v1",
++		"admissionregistration.k8s.io/v1alpha1",
++		"admissionregistration.k8s.io/v1beta1",
++		"internal.apiserver.k8s.io/v1alpha1",
++		"apps/v1",
++		"apps/v1beta1",
++		"apps/v1beta2",
++		"authentication.k8s.io/v1",
++		"authentication.k8s.io/v1alpha1",
++		"authentication.k8s.io/v1beta1",
++		"authorization.k8s.io/v1",
++		"authorization.k8s.io/v1beta1",
++		"autoscaling/v1",
++		"autoscaling/v2",
++		"batch/v1",
++		"batch/v1beta1",
++		"certificates.k8s.io/v1",
++		"certificates.k8s.io/v1beta1",
++		"certificates.k8s.io/v1alpha1",
++		"coordination.k8s.io/v1alpha2",
++		"coordination.k8s.io/v1beta1",
++		"coordination.k8s.io/v1",
++		"discovery.k8s.io/v1",
++		"discovery.k8s.io/v1beta1",
++		"events.k8s.io/v1",
++		"events.k8s.io/v1beta1",
++		"extensions/v1beta1",
++		"flowcontrol.apiserver.k8s.io/v1",
++		"flowcontrol.apiserver.k8s.io/v1beta1",
++		"flowcontrol.apiserver.k8s.io/v1beta2",
++		"flowcontrol.apiserver.k8s.io/v1beta3",
++		"lifecycle.k8s.io/v1alpha1",
++		"networking.k8s.io/v1",
++		"networking.k8s.io/v1beta1",
++		"node.k8s.io/v1",
++		"node.k8s.io/v1alpha1",
++		"node.k8s.io/v1beta1",
++		"policy/v1",
++		"policy/v1beta1",
++		"rbac.authorization.k8s.io/v1",
++		"rbac.authorization.k8s.io/v1beta1",
++		"rbac.authorization.k8s.io/v1alpha1",
++		"resource.k8s.io/v1",
++		"resource.k8s.io/v1beta2",
++		"resource.k8s.io/v1beta1",
++		"resource.k8s.io/v1alpha3",
++		"scheduling.k8s.io/v1alpha3",
++		"scheduling.k8s.io/v1beta1",
++		"scheduling.k8s.io/v1",
++		"storage.k8s.io/v1beta1",
++		"storage.k8s.io/v1",
++		"storage.k8s.io/v1alpha1",
++		"storagemigration.k8s.io/v1",
++		"storagemigration.k8s.io/v1beta1",
++		"apiextensions.k8s.io/v1beta1",
++		"apiextensions.k8s.io/v1",
+ 	}
+-	return vs
+ }
+ 
+ func makeDefaultCapabilities() (*Capabilities, error) {
+diff --git a/pkg/getter/getter.go b/pkg/getter/getter.go
+index a2d0f0e..5287aa4 100644
+--- a/pkg/getter/getter.go
++++ b/pkg/getter/getter.go
+@@ -23,7 +23,6 @@ import (
+ 	"slices"
+ 	"time"
+ 
+-	"helm.sh/helm/v4/pkg/cli"
+ 	"helm.sh/helm/v4/pkg/registry"
+ )
+ 
+@@ -220,13 +219,3 @@ func Getters(extraOpts ...Option) Providers {
+ 		},
+ 	}
+ }
+-
+-// All finds all of the registered getters as a list of Provider instances.
+-// Currently, the built-in getters and the discovered plugins with downloader
+-// notations are collected.
+-func All(settings *cli.EnvSettings, opts ...Option) Providers {
+-	result := Getters(opts...)
+-	pluginDownloaders, _ := collectGetterPlugins(settings)
+-	result = append(result, pluginDownloaders...)
+-	return result
+-}
+diff --git a/pkg/getter/plugingetter.go a/pkg/getter/plugingetter.go
+deleted file mode 100644
+index ef8b875..0000000
+--- a/pkg/getter/plugingetter.go
++++ /dev/null
+@@ -1,129 +0,0 @@
+-/*
+-Copyright The Helm Authors.
+-Licensed under the Apache License, Version 2.0 (the "License");
+-you may not use this file except in compliance with the License.
+-You may obtain a copy of the License at
+-
+-http://www.apache.org/licenses/LICENSE-2.0
+-
+-Unless required by applicable law or agreed to in writing, software
+-distributed under the License is distributed on an "AS IS" BASIS,
+-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-See the License for the specific language governing permissions and
+-limitations under the License.
+-*/
+-
+-package getter
+-
+-import (
+-	"bytes"
+-	"context"
+-	"fmt"
+-
+-	"net/url"
+-
+-	"helm.sh/helm/v4/internal/plugin"
+-
+-	"helm.sh/helm/v4/internal/plugin/schema"
+-	"helm.sh/helm/v4/pkg/cli"
+-)
+-
+-// collectGetterPlugins scans for getter plugins.
+-// This will load plugins according to the cli.
+-func collectGetterPlugins(settings *cli.EnvSettings) (Providers, error) {
+-	d := plugin.Descriptor{
+-		Type: "getter/v1",
+-	}
+-	plgs, err := plugin.FindPlugins([]string{settings.PluginsDirectory}, d)
+-	if err != nil {
+-		return nil, err
+-	}
+-	env := plugin.FormatEnv(settings.EnvVars())
+-	pluginConstructorBuilder := func(plg plugin.Plugin) Constructor {
+-		return func(option ...Option) (Getter, error) {
+-
+-			return &getterPlugin{
+-				options: append([]Option{}, option...),
+-				plg:     plg,
+-				env:     env,
+-			}, nil
+-		}
+-	}
+-	results := make([]Provider, 0, len(plgs))
+-	for _, plg := range plgs {
+-		if c, ok := plg.Metadata().Config.(*schema.ConfigGetterV1); ok {
+-			results = append(results, Provider{
+-				Schemes: c.Protocols,
+-				New:     pluginConstructorBuilder(plg),
+-			})
+-		}
+-	}
+-	return results, nil
+-}
+-
+-func convertOptions(globalOptions, options []Option) schema.GetterOptionsV1 {
+-	opts := getterOptions{}
+-	for _, opt := range globalOptions {
+-		opt(&opts)
+-	}
+-	for _, opt := range options {
+-		opt(&opts)
+-	}
+-
+-	result := schema.GetterOptionsV1{
+-		URL:                   opts.url,
+-		CertFile:              opts.certFile,
+-		KeyFile:               opts.keyFile,
+-		CAFile:                opts.caFile,
+-		UNTar:                 opts.unTar,
+-		InsecureSkipVerifyTLS: opts.insecureSkipVerifyTLS,
+-		PlainHTTP:             opts.plainHTTP,
+-		AcceptHeader:          opts.acceptHeader,
+-		Username:              opts.username,
+-		Password:              opts.password,
+-		PassCredentialsAll:    opts.passCredentialsAll,
+-		UserAgent:             opts.userAgent,
+-		Version:               opts.version,
+-		Timeout:               opts.timeout,
+-	}
+-
+-	return result
+-}
+-
+-type getterPlugin struct {
+-	options []Option
+-	plg     plugin.Plugin
+-	env     []string
+-}
+-
+-func (g *getterPlugin) Get(href string, options ...Option) (*bytes.Buffer, error) {
+-	opts := convertOptions(g.options, options)
+-
+-	// TODO optimization: pass this along to Get() instead of re-parsing here
+-	u, err := url.Parse(href)
+-	if err != nil {
+-		return nil, err
+-	}
+-
+-	input := &plugin.Input{
+-		Message: schema.InputMessageGetterV1{
+-			Href:     href,
+-			Options:  opts,
+-			Protocol: u.Scheme,
+-		},
+-		Env: g.env,
+-		// TODO should we pass Stdin, Stdout, and Stderr through Input here to getter plugins?
+-		// Stdout: os.Stdout,
+-	}
+-	output, err := g.plg.Invoke(context.Background(), input)
+-	if err != nil {
+-		return nil, fmt.Errorf("plugin %q failed to invoke: %w", g.plg, err)
+-	}
+-
+-	outputMessage, ok := output.Message.(schema.OutputMessageGetterV1)
+-	if !ok {
+-		return nil, fmt.Errorf("invalid output message type from plugin %q", g.plg.Metadata().Name)
+-	}
+-
+-	return bytes.NewBuffer(outputMessage.Data), nil
+-}

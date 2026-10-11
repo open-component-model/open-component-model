@@ -125,6 +125,23 @@ tasks:
     cmds:
       - task: package/image
 
+  build:helm:
+    # Links helm with helm.patch applied (see its header) via a go.work replace.
+    internal: true
+    run: once
+    dir: '{{ .TASKFILE_DIR }}/tmp'
+    set: [ errexit ]
+    cmds:
+      - |
+        rm -rf helm helm.work helm.work.sum
+        GOWORK=off go mod download helm.sh/helm/v4
+        cp -R "$(GOWORK=off go list -m -f '{{`{{.Dir}}`}}' helm.sh/helm/v4)" helm
+        chmod -R u+w helm
+        git init -q helm
+        git -C helm apply {{ .TASKFILE_DIR }}/helm.patch
+        GOWORK=$PWD/helm.work go work init ../..
+        GOWORK=$PWD/helm.work go work edit -replace helm.sh/helm/v4=./helm
+
   build:target:
     # GOFIPS140 (root .env) selects the Go FIPS 140-3 module for the build.
     # GOTOOLCHAIN=local: build with the installed Go only; a mismatch with the
@@ -134,12 +151,13 @@ tasks:
     internal: true
     silent: false
     prefix: '{{.GOOS}}-{{.GOARCH}}'
+    deps: [ build:helm ]
     generates:
       - tmp/bin/ocm-{{ .GOOS }}-{{ .GOARCH }}
       - tmp/resources/ocm-{{ .GOOS }}-{{ .GOARCH }}.yaml
     cmds:
       - cmd: |
-          CGO_ENABLED=0 GOTOOLCHAIN=local GOOS={{ .GOOS }} GOARCH={{ .GOARCH }} go build \
+          CGO_ENABLED=0 GOTOOLCHAIN=local GOWORK={{ .TASKFILE_DIR }}/tmp/helm.work GOOS={{ .GOOS }} GOARCH={{ .GOARCH }} go build \
             -ldflags "-s -w -X ocm.software/open-component-model/bindings/go/cli/cmd/version.BuildVersion={{ .BUILD_VERSION }}" \
             -o {{ .TASKFILE_DIR }}/tmp/bin/ocm-{{ .GOOS }}-{{ .GOARCH }}
       - |
