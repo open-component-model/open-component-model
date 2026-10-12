@@ -180,7 +180,8 @@ spec:
                 default: Always
                 description: |-
                   VerificationPolicy controls when resource digest verification is performed.
-                  Always (default): attempt to verify resource digest; if no processor plugin is found, log and continue.
+                  Always (default): verify the resource digest and do not mark the resource Ready if
+                  verification cannot be performed or fails.
                   Never: skip verification unconditionally.
                 enum:
                 - Always
