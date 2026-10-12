@@ -397,14 +397,18 @@ func (b *Binary) requireLibgcryptFIPSMode(ctx context.Context) error {
 	if b.gpgconfPath == "" {
 		return fmt.Errorf("%w: gpgconf is not on PATH, so the FIPS mode of libgcrypt cannot be determined", ErrGPGNotInFIPSMode)
 	}
-	out, err := b.run(ctx, "show-versions", b.gpgconfPath, []string{"--show-versions"}, nil)
-	if err != nil {
-		return fmt.Errorf("%w: %w", ErrGPGNotInFIPSMode, err)
-	}
+	// Parse stdout first. On a FIPS-enabled kernel, gpgconf exits non-zero even
+	// though it printed the fips-mode marker, because it spawns dirmngr as a side
+	// effect and dirmngr's GnuTLS self-test fails against the FIPS kernel. The
+	// marker line is the authoritative signal; the exit code is not.
+	out, runErr := b.run(ctx, "show-versions", b.gpgconfPath, []string{"--show-versions"}, nil)
 	switch mode := libgcryptFIPSMode(string(out)); mode {
 	case "y":
 		return nil
 	case "":
+		if runErr != nil {
+			return fmt.Errorf("%w: %w", ErrGPGNotInFIPSMode, runErr)
+		}
 		return fmt.Errorf("%w: gpgconf --show-versions reports no fips-mode for libgcrypt", ErrGPGNotInFIPSMode)
 	default:
 		return fmt.Errorf("%w: gpgconf --show-versions reports fips-mode:%s", ErrGPGNotInFIPSMode, mode)

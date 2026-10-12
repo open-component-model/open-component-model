@@ -50,8 +50,8 @@ var allowedConfigTypes = slices.Concat(
 		runtime.NewUnversionedType(resolversv1alpha1spec.ConfigType),
 	},
 	// transfer settings and the uploaders that only write into the replication target or keep
-	// resources by reference. The HTTP, Artifactory and Nexus uploaders are not accepted: they
-	// send resource content to configured URLs from the controller pod.
+	// resources by reference. The HTTP, Artifactory, Nexus and Git uploaders are not accepted:
+	// they send resource content to configured URLs from the controller pod.
 	versionedAndUnversioned(
 		transferspec.ConfigType,
 		transferspec.OCIUploaderConfigType,

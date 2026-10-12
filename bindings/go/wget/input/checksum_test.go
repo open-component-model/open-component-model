@@ -64,6 +64,7 @@ func TestProcessResource_ProvidedDigest(t *testing.T) {
 	}
 
 	t.Run("matching provided digest is verified and stored", func(t *testing.T) {
+		t.Parallel()
 		server := serve(t)
 		defer server.Close()
 
@@ -76,6 +77,7 @@ func TestProcessResource_ProvidedDigest(t *testing.T) {
 	})
 
 	t.Run("mismatching provided digest fails", func(t *testing.T) {
+		t.Parallel()
 		server := serve(t)
 		defer server.Close()
 
@@ -87,6 +89,7 @@ func TestProcessResource_ProvidedDigest(t *testing.T) {
 	})
 
 	t.Run("unsupported provided hash algorithm fails", func(t *testing.T) {
+		t.Parallel()
 		server := serve(t)
 		defer server.Close()
 
@@ -99,8 +102,9 @@ func TestProcessResource_ProvidedDigest(t *testing.T) {
 	})
 
 	t.Run("provided digest and policy are both verified", func(t *testing.T) {
+		t.Parallel()
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			w.Header().Set("x-checksum-sha1", hwSHA1)
+			w.Header().Set("X-Checksum-Sha1", hwSHA1)
 			_, _ = w.Write(content)
 		}))
 		defer server.Close()
@@ -138,10 +142,11 @@ func TestProcessResource_ChecksumPolicy_HeaderVerification(t *testing.T) {
 	}
 
 	t.Run("advertised header verifies and credentials reach the artifact", func(t *testing.T) {
+		t.Parallel()
 		var artifactAuth string
 		server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			artifactAuth = r.Header.Get("Authorization")
-			w.Header().Set("x-checksum-sha256", hwSHA256)
+			w.Header().Set("X-Checksum-Sha256", hwSHA256)
 			_, _ = w.Write(content)
 		}))
 		defer server.Close()
@@ -155,8 +160,9 @@ func TestProcessResource_ChecksumPolicy_HeaderVerification(t *testing.T) {
 	})
 
 	t.Run("tampered advertised header fails construction", func(t *testing.T) {
+		t.Parallel()
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			w.Header().Set("x-checksum-sha256", strings.Repeat("f", 64))
+			w.Header().Set("X-Checksum-Sha256", strings.Repeat("f", 64))
 			_, _ = w.Write(content)
 		}))
 		defer server.Close()
@@ -186,11 +192,12 @@ func TestProcessResource_ChecksumPolicy_ConfigDriven(t *testing.T) {
 			_, _ = w.Write([]byte(hwSHA256 + "  artifact\n"))
 			return
 		}
-		w.Header().Set("x-checksum-sha256", hwSHA256)
+		w.Header().Set("X-Checksum-Sha256", hwSHA256)
 		_, _ = w.Write(content)
 	})
 
 	t.Run("default mode applies to the resource", func(t *testing.T) {
+		t.Parallel()
 		server := httptest.NewServer(handler)
 		defer server.Close()
 
@@ -203,12 +210,14 @@ func TestProcessResource_ChecksumPolicy_ConfigDriven(t *testing.T) {
 	})
 
 	t.Run("host override wins over default", func(t *testing.T) {
+		t.Parallel()
 		// Default mode "Skip" accepts any bytes without verification; the
 		// host override for the artifact's actual host is "Require".
 		// A tampered advertised digest therefore fails against the override but
 		// would go unnoticed under the default.
+
 		badServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			w.Header().Set("x-checksum-sha256", strings.Repeat("f", 64))
+			w.Header().Set("X-Checksum-Sha256", strings.Repeat("f", 64))
 			_, _ = w.Write(content)
 		}))
 		defer badServer.Close()

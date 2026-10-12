@@ -33,6 +33,7 @@ func Test_Provider_Smoke(t *testing.T) {
 	r.Error(err)
 
 	t.Run("access provider concurrently", func(t *testing.T) {
+		t.Parallel()
 		r := require.New(t)
 
 		desc := descriptor.Descriptor{}

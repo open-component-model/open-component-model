@@ -15,6 +15,9 @@ var schemaArtifactoryUploaderConfig []byte
 //go:embed schemas/Config.schema.json
 var schemaConfig []byte
 
+//go:embed schemas/GitUploaderConfig.schema.json
+var schemaGitUploaderConfig []byte
+
 //go:embed schemas/HTTPUploaderConfig.schema.json
 var schemaHTTPUploaderConfig []byte
 
@@ -41,6 +44,11 @@ func (ArtifactoryUploaderConfig) JSONSchema() []byte {
 // JSONSchema returns the JSON Schema for Config.
 func (Config) JSONSchema() []byte {
 	return schemaConfig
+}
+
+// JSONSchema returns the JSON Schema for GitUploaderConfig.
+func (GitUploaderConfig) JSONSchema() []byte {
+	return schemaGitUploaderConfig
 }
 
 // JSONSchema returns the JSON Schema for HTTPUploaderConfig.

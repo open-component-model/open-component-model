@@ -29,8 +29,9 @@ func TestUpdateArtifactWithInformationFromBlob(t *testing.T) {
 			blob:         inmemory.New(bytes.NewReader([]byte("test data"))),
 			expectedSize: 2048,
 			expectedDigest: &descriptor.Digest{
-				HashAlgorithm: internaldigest.HashAlgorithmSHA256,
-				Value:         "916f0027a575074ce72a331777c3478d6513f786a591bd892da1a577bf2335f9",
+				HashAlgorithm:          internaldigest.HashAlgorithmSHA256,
+				NormalisationAlgorithm: internaldigest.GenericBlobDigestV1,
+				Value:                  "916f0027a575074ce72a331777c3478d6513f786a591bd892da1a577bf2335f9",
 			},
 			expectError: false,
 		},
@@ -65,8 +66,7 @@ func TestUpdateArtifactWithInformationFromBlob(t *testing.T) {
 				assert.Nil(t, resource.Digest)
 			} else {
 				require.NotNil(t, resource.Digest)
-				assert.Equal(t, tt.expectedDigest.HashAlgorithm, resource.Digest.HashAlgorithm)
-				assert.Equal(t, tt.expectedDigest.Value, resource.Digest.Value)
+				assert.Equal(t, tt.expectedDigest, resource.Digest)
 			}
 		})
 	}

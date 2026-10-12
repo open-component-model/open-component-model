@@ -63,12 +63,12 @@ func newFakeS3(t *testing.T, body []byte, versionID string) *fakeS3 {
 		f.mu.Unlock()
 
 		if f.versionID != "" {
-			w.Header().Set("x-amz-version-id", f.versionID)
+			w.Header().Set("X-Amz-Version-Id", f.versionID)
 		}
 		// Real S3 reports a checksum, and the SDK warns about every response carrying none.
 		sum := make([]byte, 4)
 		binary.BigEndian.PutUint32(sum, crc32.ChecksumIEEE(f.body))
-		w.Header().Set("x-amz-checksum-crc32", base64.StdEncoding.EncodeToString(sum))
+		w.Header().Set("X-Amz-Checksum-Crc32", base64.StdEncoding.EncodeToString(sum))
 
 		_, _ = w.Write(f.body)
 	}))

@@ -151,11 +151,7 @@ func TestIdleChecker(t *testing.T) {
 	}()
 	// wait until the plugin starts up
 	r.Eventually(func() bool {
-		if p.server == nil {
-			return false
-		}
-
-		return true
+		return p.server != nil
 	}, time.Second, 5*time.Millisecond)
 
 	httpClient := createHttpClient(location)
@@ -252,11 +248,7 @@ func waitForPlugin(ctx context.Context, r *require.Assertions, httpClient *http.
 		}
 		defer resp.Body.Close()
 
-		if resp.StatusCode != http.StatusOK {
-			return false
-		}
-
-		return true
+		return resp.StatusCode == http.StatusOK
 	}, 5*time.Second, 20*time.Millisecond)
 }
 

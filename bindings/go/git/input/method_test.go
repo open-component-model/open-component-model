@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -66,15 +67,22 @@ func TestProcessResourceSnapshots(t *testing.T) {
 			gz, err := gzip.NewReader(reader)
 			r.NoError(err)
 			t.Cleanup(func() { r.NoError(gz.Close()) })
+			archived := map[string]string{}
 			archive := tar.NewReader(gz)
-			header, err := archive.Next()
-			r.NoError(err)
-			r.Equal("README.md", header.Name)
-			content, err := io.ReadAll(archive)
-			r.NoError(err)
-			r.Equal(tc.want, string(content))
-			_, err = archive.Next()
-			r.ErrorIs(err, io.EOF)
+			for {
+				header, err := archive.Next()
+				if err == io.EOF {
+					break
+				}
+				r.NoError(err)
+				if header.Name == ".git" || strings.HasPrefix(header.Name, ".git/") {
+					continue
+				}
+				content, err := io.ReadAll(archive)
+				r.NoError(err)
+				archived[header.Name] = string(content)
+			}
+			r.Equal(map[string]string{"README.md": tc.want}, archived)
 
 			files, err := os.ReadDir(dir)
 			r.NoError(err)

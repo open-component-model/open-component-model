@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -26,10 +27,13 @@ import (
 	"ocm.software/open-component-model/bindings/go/credentials/spec/config/runtime"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	gitaccess "ocm.software/open-component-model/bindings/go/git/spec/access"
+	gitv1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
+	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
 )
 
 // newGitFixture creates a local repository with two commits on main and returns its
@@ -75,15 +79,22 @@ func assertGitArchiveAtFirstCommit(t *testing.T, data []byte) {
 	gz, err := gzip.NewReader(bytes.NewReader(data))
 	r.NoError(err)
 	defer func() { r.NoError(gz.Close()) }()
+	files := map[string]string{}
 	tr := tar.NewReader(gz)
-	header, err := tr.Next()
-	r.NoError(err)
-	r.Equal("README.md", header.Name)
-	content, err := io.ReadAll(tr)
-	r.NoError(err)
-	r.Equal("first\n", string(content), "the archive must hold the pinned commit, not main")
-	_, err = tr.Next()
-	r.ErrorIs(err, io.EOF)
+	for {
+		header, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		r.NoError(err)
+		if header.Name == ".git" || strings.HasPrefix(header.Name, ".git/") {
+			continue
+		}
+		content, err := io.ReadAll(tr)
+		r.NoError(err)
+		files[header.Name] = string(content)
+	}
+	r.Equal(map[string]string{"README.md": "first\n"}, files, "the archive must hold the pinned commit, not main")
 }
 
 // Test_Integration_Transfer_Git transfers a resource with a Git access from a CTF
@@ -239,7 +250,8 @@ func Test_Integration_Transfer_Git(t *testing.T) {
 		var localBlobAccess v2.LocalBlob
 		r.NoError(v2.Scheme.Convert(res.Access, &localBlobAccess),
 			"a Git access must become a local blob once copied")
-		r.Equal("application/x-tgz", localBlobAccess.MediaType)
+		r.Equal(transferv1alpha1.GitLocalBlobMediaType, localBlobAccess.MediaType)
+		r.Empty(localBlobAccess.ReferenceName, "a by-value Git local blob must not carry a referenceName")
 
 		// A signature over this component version covers the digest, so it must
 		// survive the hop exactly as the source recorded it.
@@ -269,6 +281,55 @@ func Test_Integration_Transfer_Git(t *testing.T) {
 		var localBlobAccess v2.LocalBlob
 		r.Error(v2.Scheme.Convert(res.Access, &localBlobAccess),
 			"a Git access must not convert to a local blob")
+	})
+
+	t.Run("a git uploader pushes the commit into the target repository", func(t *testing.T) {
+		r := require.New(t)
+
+		targetGit := t.TempDir()
+		_, err := git.PlainInit(targetGit, true)
+		r.NoError(err)
+		uploaderCfg := filepath.Join(t.TempDir(), "git-uploader.yaml")
+		r.NoError(os.WriteFile(uploaderCfg, []byte(fmt.Sprintf(`type: generic.config.ocm.software/v1
+configurations:
+- type: git.uploader.transfer.config.ocm.software/v1alpha1
+  repository: %q
+  ref: refs/heads/mirror
+`, targetGit)), 0o600))
+
+		desc, targetRef := transferAndFetch(t, "git-transfer-uploader", "--config", uploaderCfg)
+
+		res := desc.Component.Resources[0]
+		r.Equal("Git/v1", res.Access.GetType().String(), "the pushed resource must be published with Git access")
+		var published gitv1.Git
+		r.NoError(gitaccess.Scheme.Convert(res.Access, &published))
+		r.Equal(targetGit, published.Repository)
+		r.Equal("refs/heads/mirror", published.Ref)
+		r.Equal(commit, published.Commit, "the commit SHA must be unchanged")
+		r.Equal(sourceDigest.Value, res.Digest.Value)
+
+		pushed, err := git.PlainOpen(targetGit)
+		r.NoError(err)
+		ref, err := pushed.Reference("refs/heads/mirror", false)
+		r.NoError(err)
+		r.Equal(commit, ref.Hash().String())
+
+		// Downloading through the published access must yield the archive the digest
+		// was taken over.
+		output := filepath.Join(t.TempDir(), "git-repo.tgz")
+		downloadCMD := cmd.New()
+		downloadCMD.SetArgs([]string{
+			"download", "resource", fmt.Sprintf("%s//%s:%s", targetRef, componentName, componentVersion),
+			"--identity", fmt.Sprintf("name=%s,version=%s", resourceName, resourceVersion),
+			"--output", output,
+			"--extraction-policy", "disable",
+			"--config", cfgPath,
+		})
+		r.NoError(downloadCMD.ExecuteContext(t.Context()))
+		archive, err := os.ReadFile(output)
+		r.NoError(err)
+		r.Equal(sourceDigest.Value, godigest.FromBytes(archive).Encoded())
+		assertGitArchiveAtFirstCommit(t, archive)
 	})
 
 	t.Run("a resource that is not pinned to a commit is refused", func(t *testing.T) {

@@ -60,5 +60,5 @@ func TestLoadTransferSpecFileRejectsConfig(t *testing.T) {
 	r.NoError(os.WriteFile(path, []byte(streamConfig+streamTransferSpec), 0o600))
 
 	_, err := loadTransferSpec(path, strings.NewReader(""))
-	r.ErrorContains(err, "configuration is not allowed in a transfer spec file")
+	r.ErrorContains(err, "configuration is not allowed in a transfer spec")
 }

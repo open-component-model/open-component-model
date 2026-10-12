@@ -496,8 +496,7 @@ var _ = Describe("Resource Controller", func() {
 			})
 
 			By("checking that the resource has been reconciled successfully")
-			var expExtraIdentity map[string]string
-			expExtraIdentity = extraIdentity.DeepCopy()
+			var expExtraIdentity map[string]string = extraIdentity.DeepCopy()
 			test.WaitForReadyObject(ctx, k8sClient, resourceObj, map[string]any{
 				"Status.Component.Component":    componentName,
 				"Status.Component.Version":      componentVersion,

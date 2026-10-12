@@ -30,6 +30,7 @@ By default, local blobs are copied and all other resources stay by reference (th
 is unchanged in the target). Uploader configurations in the OCM configuration decide
 what happens to a resource: oci.uploader.transfer.config.ocm.software/v1alpha1 (separate OCI
 artifacts), http.uploader.transfer.config.ocm.software/v1alpha1 (custom HTTP targets),
+git.uploader.transfer.config.ocm.software/v1alpha1 (push Git history into an existing Git repository),
 localblob.uploader.transfer.config.ocm.software/v1alpha1 (copy as local blobs) and
 reference.uploader.transfer.config.ocm.software/v1alpha1 (keep by reference). Each selects
 resources with a CEL match expression over resource and target (test access types with
@@ -62,6 +63,7 @@ How the graph is built:
     2. CTFAddComponentVersion -> OCIAddComponentVersion
     3. GetOCIArtifact -> OCIAddLocalResource, or TransferOCIArtifact (OCI uploader)
     4. GetHelmChart -> ConvertHelmToOCI -> OCIAddLocalResource / AddOCIArtifact (OCI uploader)
+    5. GetGitResource -> OCIAddLocalResource, or GetGitResource / OCIGetLocalResource -> AddGitResource (Git uploader)
 
 ```
 ocm transfer component-version {reference} {target} [flags]
@@ -134,7 +136,7 @@ transfer component-version --transfer-spec spec.yaml
   -o, --output enum             output format of the component descriptors
                                 (must be one of [json ndjson yaml]) (default yaml)
   -r, --recursive               recursively discover and transfer component versions
-      --transfer-spec string    path to a transfer specification file (use "-" for stdin). The input must hold exactly one transfer spec document; with "-", OCM configuration documents in stdin are applied as configuration
+      --transfer-spec string    path to a transfer specification file (use "-" for stdin). The input must hold exactly one transfer spec document; OCM configuration documents in the same stdin stream are rejected unless --config - is also given
   -u, --upload-as enum          deprecated: define whether copied resources should be uploaded as OCI artifacts
                                 (must be one of [localBlob ociArtifact]) (default localBlob)
 ```
@@ -161,7 +163,9 @@ transfer component-version --transfer-spec spec.yaml
                                            If multiple configuration files are found, they will be merged in the order they are discovered.
                                            Later entries have higher priority.
                                            Using the option, the specified configuration file(s) will be used instead of the lookup above.
-                                           Configuration documents piped into stdin are applied last, on top of these files.
+                                           Use "-" to read configuration documents from stdin. It is an entry like any other: on its own it
+                                           replaces the lookup above, so add --config <file> to keep a file, and a repeated "-" is ignored.
+                                           Other documents on stdin stay there for commands that read it, such as transfer with --transfer-spec -.
       --logformat enum                     set the log output format that is used to print individual logs
                                               json: Output logs in JSON format, suitable for machine processing
                                               text: Output logs in human-readable text format, suitable for console output
