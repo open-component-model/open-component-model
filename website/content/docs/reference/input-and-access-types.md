@@ -453,10 +453,10 @@ only supports HTTP/HTTPS-based chart repositories.
 
 {{< callout context="caution" >}}
 `GitHub/v1` is **deprecated** and will be removed in a future release. Use
-[`Git/v1`](#gitv1-access) for new resources and sources. `ocm add componentversion` prints a
+[`Git/v1`]({{< relref "docs/reference/input-and-access-types.md#gitv1-access" >}}) for new resources and sources. `ocm add componentversion` prints a
 warning for every `GitHub/v1` access in a constructor. Existing component versions keep
 working, and a published resource must keep its type: see
-[`Git/v1` or `GitHub/v1`?](#gitv1-or-githubv1).
+[`Git/v1` or `GitHub/v1`?]({{< relref "docs/reference/input-and-access-types.md#gitv1-or-githubv1" >}}).
 {{< /callout >}}
 
 References a commit of a GitHub repository, downloaded as a source archive via the GitHub
