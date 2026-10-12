@@ -1,7 +1,6 @@
 package v1_test
 
 import (
-	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -77,7 +76,7 @@ func TestVerifyDigestMatchesDescriptor(t *testing.T) {
 			Value:                  digest_08_full_signed,
 		},
 	}
-	r.NoError(signing.VerifyDigestMatchesDescriptor(context.Background(), desc, sig, slog.Default()))
+	r.NoError(signing.VerifyDigestMatchesDescriptor(t.Context(), desc, sig, slog.Default()))
 }
 
 // TestGenerateDigestRoundTrip confirms creation reproduces the oracle digest via
@@ -85,7 +84,7 @@ func TestVerifyDigestMatchesDescriptor(t *testing.T) {
 func TestGenerateDigestRoundTrip(t *testing.T) {
 	r := require.New(t)
 	desc := fromJSON(t, input_08_full_signed)
-	d, err := signing.GenerateDigest(context.Background(), desc, slog.Default(), v1.Algorithm, "SHA-256")
+	d, err := signing.GenerateDigest(t.Context(), desc, slog.Default(), v1.Algorithm, "SHA-256")
 	r.NoError(err)
 	r.Equal(digest_08_full_signed, d.Value)
 	r.Equal(v1.Algorithm, d.NormalisationAlgorithm)
@@ -98,4 +97,14 @@ func TestSentinelAccepted(t *testing.T) {
 	desc := fromJSON(t, input_03_exclude_from_signature)
 	r.NoError(signing.IsSafelyDigestible(&desc.Component))
 	r.NoError(signing.ValidateDigestHashAlgorithms(&desc.Component))
+}
+
+// TestUnknownAlgorithmErrors locks in that an unregistered normalisation
+// algorithm still errors at the registry, so registering v1 did not weaken the
+// unknown-algorithm guard.
+func TestUnknownAlgorithmErrors(t *testing.T) {
+	r := require.New(t)
+	desc := fromJSON(t, input_01_minimal_oci)
+	_, err := normalisation.Normalise(desc, "jsonNormalisation/bogus")
+	r.ErrorIs(err, normalisation.ErrUnknownNormalisationAlgorithm)
 }
