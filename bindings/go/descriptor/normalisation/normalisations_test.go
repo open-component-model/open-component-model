@@ -2,6 +2,7 @@ package normalisation
 
 import (
 	"errors"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -17,6 +18,17 @@ type stubNorm struct {
 
 func (s stubNorm) Normalise(*runtime.Descriptor) ([]byte, error) {
 	return s.out, s.err
+}
+
+// recordingNorm captures the descriptor it is handed so tests can assert passthrough.
+type recordingNorm struct {
+	got *runtime.Descriptor
+	out []byte
+}
+
+func (n *recordingNorm) Normalise(cd *runtime.Descriptor) ([]byte, error) {
+	n.got = cd
+	return n.out, nil
 }
 
 func newAlgorithms(entries map[string]Normalisation) *Algorithms {
@@ -72,14 +84,16 @@ func TestAlgorithms_Normalise_unknown_algorithm(t *testing.T) {
 func TestAlgorithms_Normalise_delegates_result(t *testing.T) {
 	r := require.New(t)
 
-	want := []byte(`{"canonical":true}`)
+	rec := &recordingNorm{out: []byte(`{"canonical":true}`)}
 	a := newAlgorithms(map[string]Normalisation{
-		"test-algo": stubNorm{out: want},
+		"test-algo": rec,
 	})
+	cd := &runtime.Descriptor{}
 
-	got, err := a.Normalise(&runtime.Descriptor{}, "test-algo")
+	got, err := a.Normalise(cd, "test-algo")
 	r.NoError(err)
-	r.Equal(want, got)
+	r.Equal(rec.out, got)
+	r.Same(cd, rec.got, "descriptor must be passed through to the algorithm")
 }
 
 func TestAlgorithms_Normalise_delegates_error(t *testing.T) {
@@ -102,4 +116,35 @@ func TestNormalise_package_level_unknown(t *testing.T) {
 	_, err := Normalise(&runtime.Descriptor{}, "definitely-not-registered")
 	r.Error(err)
 	r.ErrorIs(err, ErrUnknownNormalisationAlgorithm)
+}
+
+func TestNormalise_package_level_uses_global(t *testing.T) {
+	r := require.New(t)
+
+	const name = "test-global-algo"
+	Normalisations.Register(name, stubNorm{out: []byte("global")})
+	t.Cleanup(func() {
+		Normalisations.Lock()
+		defer Normalisations.Unlock()
+		delete(Normalisations.algos, name)
+	})
+
+	got, err := Normalise(&runtime.Descriptor{}, name)
+	r.NoError(err)
+	r.Equal([]byte("global"), got)
+}
+
+// TestAlgorithms_concurrent_access only fails under -race if locking is broken.
+func TestAlgorithms_concurrent_access(t *testing.T) {
+	a := newAlgorithms(nil)
+	var wg sync.WaitGroup
+	for range 8 {
+		wg.Go(func() {
+			a.Register("x", stubNorm{})
+			_ = a.Get("x")
+			_ = a.Names()
+			_, _ = a.Normalise(&runtime.Descriptor{}, "x")
+		})
+	}
+	wg.Wait()
 }
