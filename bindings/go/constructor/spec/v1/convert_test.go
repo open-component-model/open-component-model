@@ -128,8 +128,8 @@ func TestConvertToRuntimeResource(t *testing.T) {
 			result := ConvertToRuntimeResource(tt.input)
 
 			// Check basic fields
-			assert.Equal(t, tt.expected.ElementMeta.ObjectMeta.Name, result.ElementMeta.ObjectMeta.Name)
-			assert.Equal(t, tt.expected.ElementMeta.ObjectMeta.Version, result.ElementMeta.ObjectMeta.Version)
+			assert.Equal(t, tt.expected.Name, result.Name)
+			assert.Equal(t, tt.expected.Version, result.Version)
 			assert.Equal(t, tt.expected.Type, result.Type)
 			assert.Equal(t, tt.expected.Relation, result.Relation)
 
@@ -138,7 +138,7 @@ func TestConvertToRuntimeResource(t *testing.T) {
 
 			// Check labels if present
 			if tt.input.Labels != nil {
-				assert.Equal(t, tt.expected.ElementMeta.ObjectMeta.Labels, result.ElementMeta.ObjectMeta.Labels)
+				assert.Equal(t, tt.expected.Labels, result.Labels)
 			}
 
 			// Check source refs if present
@@ -218,13 +218,13 @@ func TestConvertToRuntimeSource(t *testing.T) {
 			result := ConvertToRuntimeSource(tt.input)
 
 			// Check basic fields
-			assert.Equal(t, tt.expected.ElementMeta.ObjectMeta.Name, result.ElementMeta.ObjectMeta.Name)
-			assert.Equal(t, tt.expected.ElementMeta.ObjectMeta.Version, result.ElementMeta.ObjectMeta.Version)
+			assert.Equal(t, tt.expected.Name, result.Name)
+			assert.Equal(t, tt.expected.Version, result.Version)
 			assert.Equal(t, tt.expected.Type, result.Type)
 
 			// Check labels if present
 			if tt.input.Labels != nil {
-				assert.Equal(t, tt.expected.ElementMeta.ObjectMeta.Labels, result.ElementMeta.ObjectMeta.Labels)
+				assert.Equal(t, tt.expected.Labels, result.Labels)
 			}
 		})
 	}
@@ -299,13 +299,13 @@ func TestConvertToRuntimeReference(t *testing.T) {
 			result := ConvertToRuntimeReference(tt.input)
 
 			// Check basic fields
-			assert.Equal(t, tt.expected.ElementMeta.ObjectMeta.Name, result.ElementMeta.ObjectMeta.Name)
-			assert.Equal(t, tt.expected.ElementMeta.ObjectMeta.Version, result.ElementMeta.ObjectMeta.Version)
+			assert.Equal(t, tt.expected.Name, result.Name)
+			assert.Equal(t, tt.expected.Version, result.Version)
 			assert.Equal(t, tt.expected.Component, result.Component)
 
 			// Check labels if present
 			if tt.input.Labels != nil {
-				assert.Equal(t, tt.expected.ElementMeta.ObjectMeta.Labels, result.ElementMeta.ObjectMeta.Labels)
+				assert.Equal(t, tt.expected.Labels, result.Labels)
 			}
 		})
 	}
@@ -459,8 +459,8 @@ func TestConvertToRuntimeComponent(t *testing.T) {
 			result := ConvertToRuntimeComponent(tt.input)
 
 			// Check basic fields
-			assert.Equal(t, tt.expected.ComponentMeta.ObjectMeta.Name, result.ComponentMeta.ObjectMeta.Name)
-			assert.Equal(t, tt.expected.ComponentMeta.ObjectMeta.Version, result.ComponentMeta.ObjectMeta.Version)
+			assert.Equal(t, tt.expected.Name, result.Name)
+			assert.Equal(t, tt.expected.Version, result.Version)
 
 			// Check provider
 			assert.Equal(t, tt.expected.Provider, result.Provider)
@@ -469,8 +469,8 @@ func TestConvertToRuntimeComponent(t *testing.T) {
 			if tt.input.Resources != nil {
 				assert.Len(t, result.Resources, len(tt.expected.Resources))
 				for i := range tt.expected.Resources {
-					assert.Equal(t, tt.expected.Resources[i].ElementMeta.ObjectMeta.Name, result.Resources[i].ElementMeta.ObjectMeta.Name)
-					assert.Equal(t, tt.expected.Resources[i].ElementMeta.ObjectMeta.Version, result.Resources[i].ElementMeta.ObjectMeta.Version)
+					assert.Equal(t, tt.expected.Resources[i].Name, result.Resources[i].Name)
+					assert.Equal(t, tt.expected.Resources[i].Version, result.Resources[i].Version)
 					assert.Equal(t, tt.expected.Resources[i].Type, result.Resources[i].Type)
 					assert.Equal(t, tt.expected.Resources[i].Relation, result.Resources[i].Relation)
 				}
@@ -480,8 +480,8 @@ func TestConvertToRuntimeComponent(t *testing.T) {
 			if tt.input.Sources != nil {
 				assert.Len(t, result.Sources, len(tt.expected.Sources))
 				for i := range tt.expected.Sources {
-					assert.Equal(t, tt.expected.Sources[i].ElementMeta.ObjectMeta.Name, result.Sources[i].ElementMeta.ObjectMeta.Name)
-					assert.Equal(t, tt.expected.Sources[i].ElementMeta.ObjectMeta.Version, result.Sources[i].ElementMeta.ObjectMeta.Version)
+					assert.Equal(t, tt.expected.Sources[i].Name, result.Sources[i].Name)
+					assert.Equal(t, tt.expected.Sources[i].Version, result.Sources[i].Version)
 					assert.Equal(t, tt.expected.Sources[i].Type, result.Sources[i].Type)
 				}
 			}
@@ -550,8 +550,8 @@ func TestConvertToRuntimeDescriptor(t *testing.T) {
 			assert.Equal(t, tt.expected.Meta.Version, result.Meta.Version)
 
 			// Check component
-			assert.Equal(t, tt.expected.Component.ComponentMeta.ObjectMeta.Name, result.Component.ComponentMeta.ObjectMeta.Name)
-			assert.Equal(t, tt.expected.Component.ComponentMeta.ObjectMeta.Version, result.Component.ComponentMeta.ObjectMeta.Version)
+			assert.Equal(t, tt.expected.Component.Name, result.Component.Name)
+			assert.Equal(t, tt.expected.Component.Version, result.Component.Version)
 			assert.Equal(t, tt.expected.Component.Provider, result.Component.Provider)
 		})
 	}

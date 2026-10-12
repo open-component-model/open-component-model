@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -91,15 +92,22 @@ func assertArchive(t *testing.T, content blob.ReadOnlyBlob, expectedReadme strin
 	gz, err := gzip.NewReader(bytes.NewReader(data))
 	r.NoError(err)
 	defer func() { r.NoError(gz.Close()) }()
+	files := map[string]string{}
 	tr := tar.NewReader(gz)
-	header, err := tr.Next()
-	r.NoError(err)
-	r.Equal("README.md", header.Name)
-	payload, err := io.ReadAll(tr)
-	r.NoError(err)
-	r.Equal(expectedReadme, string(payload))
-	_, err = tr.Next()
-	r.ErrorIs(err, io.EOF)
+	for {
+		header, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		r.NoError(err)
+		if header.Name == ".git" || strings.HasPrefix(header.Name, ".git/") {
+			continue
+		}
+		payload, err := io.ReadAll(tr)
+		r.NoError(err)
+		files[header.Name] = string(payload)
+	}
+	r.Equal(map[string]string{"README.md": expectedReadme}, files)
 
 	return data
 }

@@ -65,7 +65,7 @@ func TestSingleFileEncodeDescriptor_AllFormats(t *testing.T) {
 				t.Helper()
 				var out v2.Descriptor
 				require.NoError(t, yaml.Unmarshal(buf.Bytes(), &out))
-				assert.Equal(t, "encode-test", out.Component.ComponentMeta.ObjectMeta.Name)
+				assert.Equal(t, "encode-test", out.Component.Name)
 			},
 		},
 		{
@@ -83,7 +83,7 @@ func TestSingleFileEncodeDescriptor_AllFormats(t *testing.T) {
 			validate: func(t *testing.T, buf *bytes.Buffer) {
 				t.Helper()
 				v2desc := decodeTar(t, buf)
-				assert.Equal(t, "encode-test", v2desc.Component.ComponentMeta.ObjectMeta.Name)
+				assert.Equal(t, "encode-test", v2desc.Component.Name)
 			},
 		},
 		{
