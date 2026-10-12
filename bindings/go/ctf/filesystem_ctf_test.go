@@ -152,7 +152,7 @@ func Test_FileSystemCTF_ErrorCases(t *testing.T) {
 	r.Error(err)
 
 	// Test SaveBlob on read-only CTF
-	testBlob := blob.NewDirectReadOnlyBlob(bytes.NewReader([]byte("test")))
+	testBlob := inmemory.New(bytes.NewReader([]byte("test")))
 	err = fs.SaveBlob(ctx, testBlob)
 	r.Error(err)
 

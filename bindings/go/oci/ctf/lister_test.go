@@ -78,8 +78,7 @@ func TestListComponents(t *testing.T) {
 			archive := NewMockCTF(tt.input)
 
 			// Create an instance of the CTFComponentLister.
-			var lister repo.ComponentLister
-			lister = NewComponentLister(archive)
+			var lister repo.ComponentLister = NewComponentLister(archive)
 
 			// Collect the returned component names.
 			result := []string{}
@@ -96,8 +95,7 @@ func TestListComponents(t *testing.T) {
 
 func TestListComponentsFnNil(t *testing.T) {
 	archive := NewMockCTF([]string{})
-	var lister repo.ComponentLister
-	lister = NewComponentLister(archive)
+	var lister repo.ComponentLister = NewComponentLister(archive)
 	err := lister.ListComponents(t.Context(), "", nil)
 	assert.EqualError(t, err, ErrFnNil.Error())
 }

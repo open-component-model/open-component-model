@@ -117,7 +117,7 @@ configurations:
 	transferErr := transferCMD.ExecuteContext(t.Context())
 	r.NoError(transferErr, "transfer failed with error: %s", transferOutput.String())
 
-	//errorOutput := transferOutput.String()
-	//r.Contains(errorOutput, "failed getting local resource",
+	// errorOutput := transferOutput.String()
+	// r.Contains(errorOutput, "failed getting local resource",
 	//	"error output should contain 'failed getting local resource'")
 }

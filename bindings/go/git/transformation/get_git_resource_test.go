@@ -130,15 +130,22 @@ func TestGetGitResourceLocalRepository(t *testing.T) {
 			gz, err := gzip.NewReader(bytes.NewReader(archive))
 			r.NoError(err)
 			defer gz.Close()
+			files := map[string]string{}
 			tr := tar.NewReader(gz)
-			header, err := tr.Next()
-			r.NoError(err)
-			r.Equal("README", header.Name)
-			content, err := io.ReadAll(tr)
-			r.NoError(err)
-			r.Equal(tc.content, string(content))
-			_, err = tr.Next()
-			r.ErrorIs(err, io.EOF)
+			for {
+				header, err := tr.Next()
+				if err == io.EOF {
+					break
+				}
+				r.NoError(err)
+				if header.Name == ".git" || strings.HasPrefix(header.Name, ".git/") {
+					continue
+				}
+				content, err := io.ReadAll(tr)
+				r.NoError(err)
+				files[header.Name] = string(content)
+			}
+			r.Equal(map[string]string{"README": tc.content}, files)
 		})
 	}
 }

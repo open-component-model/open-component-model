@@ -1042,7 +1042,7 @@ func digestHex(algorithm crypto.Hash, b []byte) descruntime.Digest {
 	h := algorithm.New()
 	h.Write(b)
 	hashSum := h.Sum(nil)
-	return descruntime.Digest{HashAlgorithm: algorithm.String(), Value: hex.EncodeToString(hashSum[:])}
+	return descruntime.Digest{HashAlgorithm: algorithm.String(), Value: hex.EncodeToString(hashSum)}
 }
 
 func mustKey(t *testing.T) *rsa.PrivateKey {

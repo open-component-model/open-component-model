@@ -23,7 +23,11 @@ import (
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 )
 
-const hashAlgorithmSHA256 = "SHA-256"
+const (
+	hashAlgorithmSHA256 = "SHA-256"
+	genericBlobDigestV1 = "genericBlobDigest/v1"
+	ociArtifactDigestV1 = "ociArtifactDigest/v1"
+)
 
 var _ digestprocessor.BuiltinDigestProcessorPlugin = (*DigestProcessor)(nil)
 
@@ -82,9 +86,11 @@ func (p *DigestProcessor) ProcessResourceDigest(
 	}
 
 	var resolvedDigest godigest.Digest
+	normalisation := genericBlobDigestV1
 
 	var err error
 	if strings.HasPrefix(helm.HelmRepository, "oci://") {
+		normalisation = ociArtifactDigestV1
 		var ociCreds *ocicredsv1.OCICredentials
 		if credentials != nil {
 			if ociCreds, err = helmcredsv1.ConvertToOCICredentials(credentials); err != nil {
@@ -109,10 +115,10 @@ func (p *DigestProcessor) ProcessResourceDigest(
 
 	if resource.Digest == nil {
 		resource.Digest = &runtime.Digest{}
-		if err := applyDigest(resource.Digest, resolvedDigest); err != nil {
+		if err := applyDigest(resource.Digest, resolvedDigest, normalisation); err != nil {
 			return nil, fmt.Errorf("failed to apply digest to resource: %w", err)
 		}
-	} else if err := verifyDigest(resource.Digest, resolvedDigest); err != nil {
+	} else if err := verifyDigest(resource.Digest, resolvedDigest, normalisation); err != nil {
 		return nil, fmt.Errorf("failed to verify digest of resource: %w", err)
 	}
 
@@ -277,30 +283,39 @@ func parseDigest(raw string) (godigest.Digest, error) {
 	return d, d.Validate()
 }
 
-func applyDigest(target *runtime.Digest, d godigest.Digest) error {
+func applyDigest(target *runtime.Digest, d godigest.Digest, normalisation string) error {
 	algo := algorithmName(d.Algorithm())
 	if algo == "" {
 		return fmt.Errorf("unknown digest algorithm: %s", d.Algorithm())
 	}
 	target.HashAlgorithm = algo
-	target.NormalisationAlgorithm = "genericBlobDigest/v1"
+	target.NormalisationAlgorithm = normalisation
 	target.Value = d.Encoded()
 	return nil
 }
 
-func verifyDigest(target *runtime.Digest, d godigest.Digest) error {
+func verifyDigest(target *runtime.Digest, d godigest.Digest, normalisation string) error {
 	if target == nil {
 		return fmt.Errorf("target digest is nil")
 	}
-	if target.Value != d.Encoded() {
+	complete := target.HashAlgorithm != "" && target.NormalisationAlgorithm != "" && target.Value != ""
+	if target.NormalisationAlgorithm != "" && target.NormalisationAlgorithm != normalisation &&
+		(normalisation != ociArtifactDigestV1 || target.NormalisationAlgorithm != genericBlobDigestV1) {
+		return fmt.Errorf("normalisation algorithm mismatch: expected %s, got %s", normalisation, target.NormalisationAlgorithm)
+	}
+	if target.Value != "" && target.Value != d.Encoded() {
 		return fmt.Errorf("digest value mismatch: expected %s, got %s", target.Value, d.Encoded())
 	}
 	algo := algorithmName(d.Algorithm())
 	if algo == "" {
 		return fmt.Errorf("unknown digest algorithm: %s", d.Algorithm())
 	}
-	if target.HashAlgorithm != algo {
+	if target.HashAlgorithm != "" && target.HashAlgorithm != algo &&
+		(complete || !strings.EqualFold(strings.ReplaceAll(target.HashAlgorithm, "-", ""), strings.ReplaceAll(algo, "-", ""))) {
 		return fmt.Errorf("hash algorithm mismatch: expected %s, got %s", target.HashAlgorithm, algo)
+	}
+	if !complete {
+		return applyDigest(target, d, normalisation)
 	}
 	return nil
 }
