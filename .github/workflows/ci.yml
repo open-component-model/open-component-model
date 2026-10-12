@@ -273,8 +273,8 @@ jobs:
             echo "### Unit coverage: n/a (tests did not run)" >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
-          # Floor = filtered baseline (~65%, generated files excluded) minus a margin for churn. Ratchet up over time.
-          floor=62
+          # Floor = filtered baseline (~79% with -coverpkg=./..., generated files excluded) minus a margin for churn. Ratchet up over time.
+          floor=75
           pct=$(go tool cover -func=output/coverage.unit.out | awk '/^total:/{gsub(/%/,"",$NF);print $NF}')
           echo "### Unit coverage: ${pct}% (floor ${floor}%)" >> "$GITHUB_STEP_SUMMARY"
           awk -v p="$pct" -v f="$floor" 'BEGIN{exit (p+0 < f+0)}' \

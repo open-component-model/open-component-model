@@ -17,6 +17,13 @@
   command = "npm ci && npm run build -- --baseURL=$DEPLOY_PRIME_URL --buildDrafts --buildFuture"
   publish = "public"
 
+[context.deploy-preview.environment]
+  # Serve the unversioned "main" docs at the preview root instead of the
+  # released default (hugo.yaml defaultContentVersion). Hugo maps HUGO_*
+  # env vars onto config keys, so this overrides only the preview build —
+  # production keeps its pinned default version.
+  HUGO_DEFAULTCONTENTVERSION = "main"
+
 [context.production]
   command = "npm ci && npm run build"
   publish = "public"
