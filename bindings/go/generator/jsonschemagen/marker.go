@@ -192,6 +192,7 @@ func ApplyEnumMarkers(s *JSONSchemaDraft202012, markers map[string]string) {
 
 	rawMain, hasMain := markers["enum"]
 	rawDep, hasDep := markers["enum:deprecated"]
+	hint := markers["enum:deprecated:hint"] // applies to every enum:deprecated value
 
 	// nothing to do
 	if !hasMain && !hasDep {
@@ -246,14 +247,17 @@ func ApplyEnumMarkers(s *JSONSchemaDraft202012, markers map[string]string) {
 
 		_, isDeprecated := depSet[v]
 		var deprecatedPtr *bool
+		var deprecationMessage string
 		if isDeprecated {
 			b := true
 			deprecatedPtr = &b // omit field when not deprecated
+			deprecationMessage = hint
 		}
 
 		oneOf = append(oneOf, &JSONSchemaDraft202012{
-			Const:      constVal,
-			Deprecated: deprecatedPtr,
+			Const:              constVal,
+			Deprecated:         deprecatedPtr,
+			DeprecationMessage: deprecationMessage,
 		})
 	}
 

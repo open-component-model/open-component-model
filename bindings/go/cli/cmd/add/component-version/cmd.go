@@ -316,6 +316,7 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return fmt.Errorf("getting component constructor failed: %w", err)
 	}
+	deprecatedAccess := findDeprecatedAccessTypes(pluginManager.ResourcePluginRegistry.ResourceScheme(), constructorSpec)
 
 	output, err := enum.Get(cmd.Flags(), FlagOutput)
 	if err != nil {
@@ -379,7 +380,11 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 	}
 
 	constr := constructor.NewDefaultConstructor(constructorSpec, opts)
-	if err := renderComponents(cmd, constr, output, displayMode); err != nil {
+	err = renderComponents(cmd, constr, output, displayMode)
+	// The notice goes below the result, and also below the error when the build
+	// fails, so authors still see what to migrate.
+	renderDeprecatedAccessNotice(cmd.ErrOrStderr(), deprecatedAccess)
+	if err != nil {
 		return fmt.Errorf("failed to render components recursively: %w", err)
 	}
 	return nil

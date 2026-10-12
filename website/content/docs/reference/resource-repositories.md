@@ -271,6 +271,12 @@ See
 
 Handles source archives of a pinned commit in a GitHub (or GitHub Enterprise) repository.
 
+{{< callout context="caution" >}}
+The `GitHub/v1` access type is **deprecated**. Use the
+[Git Resource Repository](#git-resource-repository) with `Git/v1` for new resources. This
+repository stays so component versions published with `GitHub/v1` keep working.
+{{< /callout >}}
+
 ### Supported Access Types
 
 | Access Type                                                        |

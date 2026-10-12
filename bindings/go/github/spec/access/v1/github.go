@@ -27,16 +27,24 @@ const (
 // The canonical type is "GitHub" (brand casing). The lowercase "github" and
 // camelCase "gitHub" spellings used by old OCM
 // (https://github.com/open-component-model/ocm/blob/main/api/ocm/extensions/accessmethods/github/method.go)
-// and the OCM spec are retained as deprecated aliases so existing component
-// descriptors keep resolving.
+// and the OCM spec are retained as aliases so existing component descriptors
+// keep resolving.
+//
+// Deprecated: use the Git access type (Git/v1,
+// ocm.software/open-component-model/bindings/go/git/spec/access/v1) instead;
+// it works with any Git server. GitHub stays supported so published
+// descriptors keep resolving: the two types produce different archive bytes,
+// so a published resource cannot switch without changing its digest.
+// "ocm add componentversion" warns when a constructor still uses it.
 //
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
 // +ocm:typegen=true
 // +ocm:jsonschema-gen=true
 type GitHub struct {
-	// +ocm:jsonschema-gen:enum=GitHub/v1,GitHub
-	// +ocm:jsonschema-gen:enum:deprecated=github/v1,github,gitHub/v1,gitHub
+	// Every spelling is deprecated: the type as a whole gives way to Git/v1.
+	// +ocm:jsonschema-gen:enum:deprecated=GitHub/v1,GitHub,github/v1,github,gitHub/v1,gitHub
+	// +ocm:jsonschema-gen:enum:deprecated:hint=use Git/v1 instead
 	Type runtime.Type `json:"type"`
 
 	// RepoURL is the repository URL (e.g. https://github.com/open-component-model/ocm).
