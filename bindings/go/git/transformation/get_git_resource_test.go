@@ -185,7 +185,7 @@ func (b *testBlob) ReadCloser() (io.ReadCloser, error) {
 func TestGetGitResourceCredentialsAndCleanup(t *testing.T) {
 	r := require.New(t)
 	failure := errors.New("test failure")
-	resolved := &credsv1.GitCredentials{Token: "test-token"}
+	resolved := &credsv1.GitBearerCredentials{Token: "test-token"}
 	r.NotNil(resolved)
 	for _, tc := range []struct {
 		name                                          string
