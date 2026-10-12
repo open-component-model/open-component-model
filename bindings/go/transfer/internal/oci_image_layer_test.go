@@ -70,15 +70,15 @@ func TestProcessOCIImageLayer(t *testing.T) {
 	r.Len(tgd.Transformations, 2)
 
 	getTransform := tgd.Transformations[0]
-	r.Equal(ociv1alpha1.GetOCIArtifactV1alpha1, getTransform.TransformationMeta.Type)
-	r.Contains(getTransform.TransformationMeta.ID, "Get")
+	r.Equal(ociv1alpha1.GetOCIArtifactV1alpha1, getTransform.Type)
+	r.Contains(getTransform.ID, "Get")
 	r.NotNil(getTransform.Spec)
 
 	addTransform := tgd.Transformations[1]
-	r.Equal(ociv1alpha1.OCIAddLocalResourceV1alpha1, addTransform.TransformationMeta.Type)
-	r.Contains(addTransform.TransformationMeta.ID, "Add")
+	r.Equal(ociv1alpha1.OCIAddLocalResourceV1alpha1, addTransform.Type)
+	r.Contains(addTransform.ID, "Add")
 
-	r.Equal(addTransform.TransformationMeta.ID, resourceTransformIDs[0])
+	r.Equal(addTransform.ID, resourceTransformIDs[0])
 }
 
 // TestProcessResource_OCIImageLayer covers the dispatch of the local blob uploader, which
@@ -110,8 +110,8 @@ func TestProcessResource_OCIImageLayer(t *testing.T) {
 			r.NoError(err)
 
 			r.Len(tgd.Transformations, 2, "layer must not be skipped")
-			r.Equal(ociv1alpha1.GetOCIArtifactV1alpha1, tgd.Transformations[0].TransformationMeta.Type)
-			r.Equal(ociv1alpha1.OCIAddLocalResourceV1alpha1, tgd.Transformations[1].TransformationMeta.Type)
+			r.Equal(ociv1alpha1.GetOCIArtifactV1alpha1, tgd.Transformations[0].Type)
+			r.Equal(ociv1alpha1.OCIAddLocalResourceV1alpha1, tgd.Transformations[1].Type)
 			// The downloaded file is temporary and must be cleaned up afterwards.
 			r.Len(files, 1)
 			r.Contains(files[0], ".spec.file")
