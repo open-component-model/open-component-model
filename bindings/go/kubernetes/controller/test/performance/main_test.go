@@ -29,6 +29,7 @@ func TestParseFlags(t *testing.T) {
 				r.Equal(defaultVersions, o.versions)
 				r.Equal(defaultDepth, o.depth)
 				r.Equal(defaultResources, o.resources)
+				r.Equal(defaultFanout, o.fanout)
 			},
 		},
 		{
@@ -44,7 +45,8 @@ func TestParseFlags(t *testing.T) {
 		{name: "unknown scenario", args: []string{"--scenarios=warm"}, wantErr: `unknown scenario "warm"`},
 		{name: "invalid size", args: []string{"--objects=100,0"}, wantErr: `invalid object count "0"`},
 		{name: "invalid repeats", args: []string{"--repeats=0"}, wantErr: "repeats must be at least 1"},
-		{name: "invalid depth", args: []string{"--depth=0"}, wantErr: "versions, depth and resources must be at least 1"},
+		{name: "invalid depth", args: []string{"--depth=0"}, wantErr: "versions, depth, resources and fanout must be at least 1"},
+		{name: "invalid fanout", args: []string{"--fanout=0"}, wantErr: "versions, depth, resources and fanout must be at least 1"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -107,4 +109,34 @@ func TestPercentile(t *testing.T) {
 		r.Equal(tt.want, percentile(sorted, tt.p), "p%v", tt.p)
 	}
 	require.Zero(t, percentile(nil, 50))
+}
+
+func TestSettledAt(t *testing.T) {
+	busy := sample{Gauges: map[string]float64{`workqueue_depth{controller="deployer"}`: 3}}
+	working := sample{Gauges: map[string]float64{`controller_runtime_active_workers{controller="deployer"}`: 1}}
+	idle := func(at float64) sample {
+		return sample{At: at, Gauges: map[string]float64{`workqueue_depth{controller="deployer"}`: 0, "go_goroutines": 250}}
+	}
+	tests := []struct {
+		name    string
+		samples []sample
+		after   float64
+		at      float64
+		settled bool
+	}{
+		{name: "too few samples", samples: []sample{idle(0), idle(2)}},
+		{name: "queue not empty", samples: []sample{idle(0), idle(2), busy}},
+		{name: "worker active", samples: []sample{idle(0), working, idle(4)}},
+		{name: "failed scrape is not idle", samples: []sample{idle(0), {At: 2}, idle(4)}},
+		{name: "idle before the objects were ready", samples: []sample{idle(0), idle(2), idle(4)}, after: 1},
+		{name: "settled", samples: []sample{busy, idle(2), idle(4), idle(6)}, at: 2, settled: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			at, settled := settledAt(tc.samples, tc.after)
+			r.Equal(tc.settled, settled)
+			r.InDelta(tc.at, at, 0)
+		})
+	}
 }

@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"net/http"
 	"net/url"
 	"os"
 
 	"github.com/opencontainers/go-digest"
 	"golang.org/x/sync/errgroup"
+	"oras.land/oras-go/v2/registry/remote/retry"
 
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
@@ -24,6 +26,8 @@ const (
 	resourceName      = "manifest"
 	manifestMediaType = "application/x-yaml"
 	publishWorkers    = 16
+	// publishConns caps the connections to the registry, see newPublisher.
+	publishConns = 4 * publishWorkers
 )
 
 // componentVersion is one component version the benchmark pushes.
@@ -65,6 +69,7 @@ type publisher struct {
 	host      string
 	plainHTTP bool
 	tempDir   string
+	client    *http.Client
 }
 
 func newPublisher(baseURL, tempDir string) (*publisher, error) {
@@ -72,7 +77,13 @@ func newPublisher(baseURL, tempDir string) (*publisher, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parsing registry URL: %w", err)
 	}
-	return &publisher{host: u.Host, plainHTTP: u.Scheme == "http", tempDir: tempDir}, nil
+	// http.DefaultTransport keeps 2 idle connections per host, so a parallel publish dials thousands.
+	// Docker Desktop's port forwarder drops connections under that churn, and oras does not retry the EOF.
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.MaxConnsPerHost = publishConns
+	transport.MaxIdleConnsPerHost = publishConns
+	client := &http.Client{Transport: retry.NewTransport(transport)}
+	return &publisher{host: u.Host, plainHTTP: u.Scheme == "http", tempDir: tempDir, client: client}, nil
 }
 
 func (p *publisher) publishImages(ctx context.Context, images []image) error {
@@ -80,7 +91,7 @@ func (p *publisher) publishImages(ctx context.Context, images []image) error {
 	g.SetLimit(publishWorkers)
 	for _, img := range images {
 		g.Go(func() error {
-			if err := pushImage(ctx, p.host, p.plainHTTP, img.Repository, img.Tag); err != nil {
+			if err := pushImage(ctx, p.client, p.host, p.plainHTTP, img.Repository, img.Tag); err != nil {
 				return fmt.Errorf("pushing image %s: %w", img.Repository, err)
 			}
 			return nil
@@ -133,6 +144,7 @@ func (p *publisher) repository(subPath string) (*oci.Repository, error) {
 		urlresolver.WithBaseURL(p.host),
 		urlresolver.WithSubPath(subPath),
 		urlresolver.WithPlainHTTP(p.plainHTTP),
+		urlresolver.WithBaseClient(p.client),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("creating resolver: %w", err)

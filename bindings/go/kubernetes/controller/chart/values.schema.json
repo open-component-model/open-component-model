@@ -141,6 +141,17 @@
                         }
                     }
                 },
+                "rateLimiter": {
+                    "type": "object",
+                    "properties": {
+                        "burst": {
+                            "type": "integer"
+                        },
+                        "qps": {
+                            "type": "integer"
+                        }
+                    }
+                },
                 "readinessProbe": {
                     "type": "object",
                     "properties": {

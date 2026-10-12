@@ -86,6 +86,8 @@ Kubernetes: `>=1.26.0-0`
 | manager.metricsServer.secure | bool | `false` | Serve metrics endpoint securely |
 | manager.nodeSelector | object | `{}` | Node selector for pod scheduling |
 | manager.podSecurityContext | object | `{"runAsNonRoot":true}` | Pod-level security context |
+| manager.rateLimiter.burst | int | `100` | Requeues a controller admits at once before qps applies |
+| manager.rateLimiter.qps | int | `10` | Requeues per second a controller admits once the burst is used up |
 | manager.readinessProbe.initialDelaySeconds | int | `5` | Initial delay before starting readiness probes |
 | manager.readinessProbe.path | string | `"/readyz"` | Path for the readiness probe |
 | manager.readinessProbe.periodSeconds | int | `10` | Period between readiness probes |

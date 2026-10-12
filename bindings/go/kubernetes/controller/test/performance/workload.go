@@ -39,11 +39,14 @@ const (
 	// scenarioComplex combines the others: pipelines over a few Repositories,
 	// with large descriptors, several versions and a reference chain each.
 	scenarioComplex scenario = "complex"
+	// scenarioFanout points many Resources at each Component, one per entry
+	// of a large descriptor, and stops at the Resources.
+	scenarioFanout scenario = "fanout"
 )
 
 var allScenarios = []scenario{
 	scenarioCold, scenarioShared, scenarioPipeline, scenarioUpdate,
-	scenarioVersions, scenarioNested, scenarioRepositories, scenarioComplex,
+	scenarioVersions, scenarioNested, scenarioRepositories, scenarioComplex, scenarioFanout,
 }
 
 const (
@@ -54,6 +57,7 @@ const (
 	defaultVersions   = 100
 	defaultDepth      = 5
 	defaultResources  = 100
+	defaultFanout     = 20
 	// Fixed shape of scenarioComplex; only its descriptor size and chain length are flags.
 	complexVersions     = 5
 	complexRepositories = 10
@@ -84,8 +88,10 @@ type workload struct {
 	versions int
 	// depth is the length of the reference chain in scenarioNested and scenarioComplex.
 	depth int
-	// resources is the number of resources per root component in scenarioComplex.
+	// resources is the number of resources per root component in scenarioComplex and scenarioFanout.
 	resources int
+	// fanout is the number of Resource objects per Component in scenarioFanout.
+	fanout int
 }
 
 func newWorkload(s scenario, objects int, runID, registryURL string) workload {
@@ -98,6 +104,7 @@ func newWorkload(s scenario, objects int, runID, registryURL string) workload {
 		versions:    defaultVersions,
 		depth:       defaultDepth,
 		resources:   defaultResources,
+		fanout:      defaultFanout,
 	}
 }
 
@@ -107,7 +114,28 @@ func (w workload) sharesComponent() bool {
 }
 
 func (w workload) hasResources() bool {
-	return w.hasDeployers() || w.scenario == scenarioNested
+	return w.hasDeployers() || w.scenario == scenarioNested || w.scenario == scenarioFanout
+}
+
+// hasImages reports whether descriptors list OCI images from the image pool.
+func (w workload) hasImages() bool {
+	return w.scenario == scenarioComplex || w.scenario == scenarioFanout
+}
+
+// resourcesPerComponent is the number of Resource objects that select from one Component.
+func (w workload) resourcesPerComponent() int {
+	if w.scenario == scenarioFanout {
+		return w.fanout
+	}
+	return 1
+}
+
+// targets is the number of objects whose readiness ends the measurement.
+func (w workload) targets() int {
+	if w.scenario == scenarioFanout {
+		return w.objects * w.fanout
+	}
+	return w.objects
 }
 
 func (w workload) hasDeployers() bool {
@@ -169,10 +197,10 @@ func (w workload) repositoryName(i int) string {
 	return fmt.Sprintf("%s-%04d", repositoryName, i%w.repositories())
 }
 
-// imagePool lists the images the complex scenario descriptors reference. A small
+// imagePool lists the images the complex and fanout descriptors reference. A small
 // shared pool keeps publishing cheap while every reference stays resolvable.
 func (w workload) imagePool() []image {
-	if w.scenario != scenarioComplex {
+	if !w.hasImages() {
 		return nil
 	}
 	pool := make([]image, imagePoolSize)
@@ -193,6 +221,8 @@ func (w workload) componentVersions() ([]componentVersion, error) {
 		return w.nestedComponentVersions()
 	case scenarioComplex:
 		return w.complexComponentVersions()
+	case scenarioFanout:
+		return w.fanoutComponentVersions(), nil
 	default:
 	}
 
@@ -250,13 +280,7 @@ func (w workload) complexComponentVersions() ([]componentVersion, error) {
 	pool := w.imagePool()
 	cvs := make([]componentVersion, 0, w.objects*(complexVersions+w.depth))
 	for i := range w.objects {
-		resources := make([]resource, w.resources)
-		for j := range resources {
-			resources[j] = resource{
-				Name:           fmt.Sprintf("image-%04d", j),
-				ImageReference: pool[(i+j)%len(pool)].Reference,
-			}
-		}
+		resources := w.imageResources(i, pool)
 		for patch := range complexVersions {
 			cvs = append(cvs, componentVersion{
 				Name:       w.nestedComponentName(i, 0),
@@ -273,6 +297,37 @@ func (w workload) complexComponentVersions() ([]componentVersion, error) {
 		cvs = append(cvs, chain...)
 	}
 	return cvs, nil
+}
+
+// fanoutComponentVersions gives every object one component version whose
+// descriptor is large and holds nothing but the images the Resources select.
+func (w workload) fanoutComponentVersions() []componentVersion {
+	pool := w.imagePool()
+	cvs := make([]componentVersion, w.objects)
+	for i := range cvs {
+		cvs[i] = componentVersion{
+			Name:      w.componentName(i),
+			Version:   initialVersion,
+			SubPath:   w.subPath(i),
+			Resources: w.imageResources(i, pool),
+		}
+	}
+	return cvs
+}
+
+func (w workload) imageResources(i int, pool []image) []resource {
+	resources := make([]resource, w.resources)
+	for j := range resources {
+		resources[j] = resource{
+			Name:           imageResourceName(j),
+			ImageReference: pool[(i+j)%len(pool)].Reference,
+		}
+	}
+	return resources
+}
+
+func imageResourceName(j int) string {
+	return fmt.Sprintf("image-%04d", j)
 }
 
 // chain returns object i's reference chain from level down to the leaf.
@@ -367,6 +422,20 @@ func (w workload) resource(i int) *v1alpha1.Resource {
 	}
 }
 
+// fanoutResource is the j-th Resource of object i. It wraps around when
+// there are more Resources than descriptor entries.
+func (w workload) fanoutResource(i, j int) *v1alpha1.Resource {
+	return &v1alpha1.Resource{
+		ObjectMeta: w.meta(fmt.Sprintf("r-%04d-%03d", i, j)),
+		Spec: v1alpha1.ResourceSpec{
+			ComponentRef: corev1.LocalObjectReference{Name: fmt.Sprintf("c-%04d", i)},
+			Resource: v1alpha1.ResourceID{ByReference: v1alpha1.ResourceReference{
+				Resource: ocmruntime.Identity{"name": imageResourceName(j % w.resources)},
+			}},
+		},
+	}
+}
+
 // deployer is cluster-scoped, so its name carries the run ID and namespace
 // deletion does not remove it; see cluster.deleteDeployers.
 func (w workload) deployer(i int) *v1alpha1.Deployer {
@@ -382,7 +451,7 @@ func (w workload) deployer(i int) *v1alpha1.Deployer {
 
 // objectsToCreate returns everything the run applies, Repositories first.
 func (w workload) objectsToCreate() ([]client.Object, error) {
-	objs := make([]client.Object, 0, w.repositories()+3*w.objects)
+	objs := make([]client.Object, 0, w.repositories()+(2+w.resourcesPerComponent())*w.objects)
 	for i := range w.repositories() {
 		repo, err := w.repository(i)
 		if err != nil {
@@ -392,7 +461,12 @@ func (w workload) objectsToCreate() ([]client.Object, error) {
 	}
 	for i := range w.objects {
 		objs = append(objs, w.component(i))
-		if w.hasResources() {
+		switch {
+		case w.scenario == scenarioFanout:
+			for j := range w.fanout {
+				objs = append(objs, w.fanoutResource(i, j))
+			}
+		case w.hasResources():
 			objs = append(objs, w.resource(i))
 		}
 		if w.hasDeployers() {
@@ -414,7 +488,7 @@ func (w workload) target() (schema.GroupVersionKind, func(*unstructured.Unstruct
 		return deployerGVK, readyState
 	case scenarioUpdate:
 		return configMapGVK, configMapVersionState(updatedVersion)
-	case scenarioNested:
+	case scenarioNested, scenarioFanout:
 		return resourceGVK, readyState
 	default:
 		return componentGVK, readyState

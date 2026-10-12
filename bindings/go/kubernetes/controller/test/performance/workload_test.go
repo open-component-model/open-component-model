@@ -25,6 +25,7 @@ func TestWorkloadComponentVersions(t *testing.T) {
 		{scenario: scenarioNested, wantVersions: 5 * (defaultDepth + 1), wantUniqueCVs: 5 * (defaultDepth + 1)},
 		{scenario: scenarioRepositories, wantVersions: 5, wantUniqueCVs: 5},
 		{scenario: scenarioComplex, wantVersions: 5 * (complexVersions + defaultDepth), wantUniqueCVs: 5 * (defaultDepth + 1)},
+		{scenario: scenarioFanout, wantVersions: 5, wantUniqueCVs: 5},
 	}
 	for _, tt := range tests {
 		t.Run(string(tt.scenario), func(t *testing.T) {
@@ -57,6 +58,7 @@ func TestWorkloadObjectsToCreate(t *testing.T) {
 		{scenario: scenarioNested, want: 1 + 3*2},
 		{scenario: scenarioRepositories, want: 3 + 3},
 		{scenario: scenarioComplex, want: 3 + 3*3},
+		{scenario: scenarioFanout, want: 1 + 3*(1+defaultFanout)},
 	}
 	for _, tt := range tests {
 		t.Run(string(tt.scenario), func(t *testing.T) {
@@ -123,6 +125,40 @@ func TestWorkloadComplex(t *testing.T) {
 		r.Equal(root.SubPath, cv.SubPath)
 	}
 	r.Equal(res.Spec.Resource.ByReference.Resource["name"], cv.Resources[0].Name)
+}
+
+func TestWorkloadFanout(t *testing.T) {
+	r := require.New(t)
+	w := newWorkload(scenarioFanout, 2, "run", "http://registry:5000")
+	w.resources, w.fanout = 3, 5
+
+	cvs, err := w.componentVersions()
+	r.NoError(err)
+	r.Len(cvs, 2)
+	r.Len(cvs[1].Resources, 3)
+	r.Equal(10, w.targets())
+	gvk, _ := w.target()
+	r.Equal(resourceGVK, gvk)
+
+	objs, err := w.objectsToCreate()
+	r.NoError(err)
+	names := map[string]bool{}
+	selected := map[string]int{}
+	for _, o := range objs {
+		res, ok := o.(*v1alpha1.Resource)
+		if !ok {
+			r.NotContains(o.GetName(), "-d-", "the fanout scenario creates no Deployers")
+			continue
+		}
+		names[res.Name] = true
+		if res.Spec.ComponentRef.Name == w.component(1).Name {
+			r.Empty(res.Spec.Resource.ByReference.ReferencePath)
+			selected[res.Spec.Resource.ByReference.Resource["name"]]++
+		}
+	}
+	r.Len(names, 10, "every Resource needs its own name")
+	// Five Resources over three descriptor entries wrap around onto the first two.
+	r.Equal(map[string]int{cvs[1].Resources[0].Name: 2, cvs[1].Resources[1].Name: 2, cvs[1].Resources[2].Name: 1}, selected)
 }
 
 func TestWorkloadNested(t *testing.T) {

@@ -30,6 +30,7 @@ type options struct {
 	versions            int
 	depth               int
 	resources           int
+	fanout              int
 	registryURL         string
 	clusterRegistryURL  string
 	registryMetricsURL  string
@@ -122,7 +123,8 @@ func parseFlags(args []string) (options, error) {
 	fs.StringVar(&scenarios, "scenarios", joinScenarios(allScenarios), "Comma-separated scenarios. See README.md for what each one creates.")
 	fs.IntVar(&opts.versions, "versions", defaultVersions, "Versions of the component in the versions scenario.")
 	fs.IntVar(&opts.depth, "depth", defaultDepth, "Length of the reference chain in the nested and complex scenarios.")
-	fs.IntVar(&opts.resources, "resources", defaultResources, "Resources per root component in the complex scenario.")
+	fs.IntVar(&opts.resources, "resources", defaultResources, "Resources per root component in the complex and fanout scenarios.")
+	fs.IntVar(&opts.fanout, "fanout", defaultFanout, "Resource objects per Component in the fanout scenario.")
 	fs.StringVar(&sizes, "objects", "100,500,1000", "Comma-separated object counts per run.")
 	fs.IntVar(&opts.repeats, "repeats", 3, "Repetitions of every scenario and object count.")
 	fs.StringVar(&opts.registryURL, "registry", "http://localhost:5555", "Registry URL the benchmark pushes component versions to.")
@@ -152,9 +154,9 @@ func parseFlags(args []string) (options, error) {
 	if opts.repeats < 1 {
 		return opts, fmt.Errorf("repeats must be at least 1, got %d", opts.repeats)
 	}
-	if opts.versions < 1 || opts.depth < 1 || opts.resources < 1 {
-		return opts, fmt.Errorf("versions, depth and resources must be at least 1, got %d, %d and %d",
-			opts.versions, opts.depth, opts.resources)
+	if opts.versions < 1 || opts.depth < 1 || opts.resources < 1 || opts.fanout < 1 {
+		return opts, fmt.Errorf("versions, depth, resources and fanout must be at least 1, got %d, %d, %d and %d",
+			opts.versions, opts.depth, opts.resources, opts.fanout)
 	}
 	return opts, nil
 }

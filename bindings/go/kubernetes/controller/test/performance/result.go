@@ -16,10 +16,11 @@ type result struct {
 	Scenario scenario `json:"scenario"`
 	Objects  int      `json:"objects"`
 	Repeat   int      `json:"repeat"`
-	// Versions, Depth and Resources are set for the scenarios they shape.
+	// Versions, Depth, Resources and Fanout are set for the scenarios they shape.
 	Versions    int         `json:"versions,omitempty"`
 	Depth       int         `json:"depth,omitempty"`
 	Resources   int         `json:"resources,omitempty"`
+	Fanout      int         `json:"fanout,omitempty"`
 	RunID       string      `json:"runID"`
 	StartedAt   time.Time   `json:"startedAt"`
 	Environment environment `json:"environment"`
@@ -55,6 +56,8 @@ type durations struct {
 	P50        float64 `json:"p50"`
 	P90        float64 `json:"p90"`
 	P99        float64 `json:"p99"`
+	// Settled is when the controller had no queued or running reconciles left.
+	Settled float64 `json:"settled"`
 }
 
 type outcome struct {
@@ -64,11 +67,14 @@ type outcome struct {
 	Pending        int            `json:"pending"`
 	TimedOut       bool           `json:"timedOut"`
 	FailureReasons map[string]int `json:"failureReasons,omitempty"`
+	// Unsettled is set when the controller queues did not drain within the timeout.
+	Unsettled bool `json:"unsettled"`
 }
 
 type usage struct {
 	CPUSeconds          float64 `json:"cpuSeconds"`
 	AvgCores            float64 `json:"avgCores"`
+	PeakCores           float64 `json:"peakCores"`
 	PeakWorkingSetBytes float64 `json:"peakWorkingSetBytes"`
 	PeakRSSBytes        float64 `json:"peakRSSBytes"`
 	// RegistryRequests is nil when the registry metrics could not be read.
@@ -80,6 +86,9 @@ func (r *result) notes() []string {
 	var notes []string
 	if r.Outcome.TimedOut {
 		notes = append(notes, "timed out")
+	}
+	if r.Outcome.Unsettled {
+		notes = append(notes, "queues not drained")
 	}
 	if r.ControllerRestarted {
 		notes = append(notes, "controller restarted")
@@ -111,16 +120,16 @@ func writeJSON(path string, v any) error {
 // invocation. result.json files remain the source of truth.
 func writeSummary(dir string, results []*result) error {
 	var b strings.Builder
-	b.WriteString("| Scenario | Objects | Repeat | Ready | Failed | Pending | Total (s) | p50 (s) | p90 (s) | CPU (s) | Peak WS (MiB) | Registry reqs | Notes |\n")
-	b.WriteString("|---|---|---|---|---|---|---|---|---|---|---|---|---|\n")
+	b.WriteString("| Scenario | Objects | Repeat | Ready | Failed | Pending | Total (s) | Settled (s) | p50 (s) | p90 (s) | CPU (s) | Avg cores | Peak cores | Peak WS (MiB) | Registry reqs | Notes |\n")
+	b.WriteString("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n")
 	for _, r := range results {
 		requests := "n/a"
 		if r.Usage.RegistryRequests != nil {
 			requests = fmt.Sprintf("%.0f", *r.Usage.RegistryRequests)
 		}
-		fmt.Fprintf(&b, "| %s | %d | %d | %d | %d | %d | %.1f | %.1f | %.1f | %.1f | %.0f | %s | %s |\n",
+		fmt.Fprintf(&b, "| %s | %d | %d | %d | %d | %d | %.1f | %.1f | %.1f | %.1f | %.1f | %.2f | %.2f | %.0f | %s | %s |\n",
 			r.Scenario, r.Objects, r.Repeat, r.Outcome.Ready, r.Outcome.Failed, r.Outcome.Pending,
-			r.Durations.Total, r.Durations.P50, r.Durations.P90, r.Usage.CPUSeconds,
+			r.Durations.Total, r.Durations.Settled, r.Durations.P50, r.Durations.P90, r.Usage.CPUSeconds, r.Usage.AvgCores, r.Usage.PeakCores,
 			r.Usage.PeakWorkingSetBytes/(1<<20), requests, strings.Join(r.notes(), ", "))
 	}
 	return os.WriteFile(filepath.Join(dir, "summary.md"), []byte(b.String()), 0o600)

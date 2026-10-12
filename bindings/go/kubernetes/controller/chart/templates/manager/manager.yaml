@@ -79,6 +79,15 @@ spec:
                     - --resolver-cache-ttl={{ .cacheTTL }}
                     {{- end }}
                     {{- end }}
+                    {{- /* Rate limiter */}}
+                    {{- with .Values.manager.rateLimiter }}
+                    {{- if .qps }}
+                    - --reconcile-rate-limit-qps={{ .qps }}
+                    {{- end }}
+                    {{- if .burst }}
+                    - --reconcile-rate-limit-burst={{ int .burst }}
+                    {{- end }}
+                    {{- end }}
                     {{- /* Cache */}}
                     {{- with .Values.manager.cache }}
                     {{- if .deployerDownloadSize }}

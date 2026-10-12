@@ -20,7 +20,10 @@ import (
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
 )
 
-const createWorkers = 32
+const (
+	createWorkers = 32
+	cpuCounter    = "process_cpu_seconds_total"
+)
 
 var (
 	controllerCounterPrefixes = []string{
@@ -28,7 +31,7 @@ var (
 		"workqueue_",
 		"ocm_system_",
 		"rest_client_requests_total",
-		"process_cpu_seconds_total",
+		cpuCounter,
 	}
 	registryCounterPrefixes = []string{"registry_http_"}
 )
@@ -49,7 +52,7 @@ type scrapes struct {
 func (r *runner) runOnce(ctx context.Context, s scenario, objects, repeat int) (*result, error) {
 	runID := fmt.Sprintf("%s-%d-r%d-%s", s, objects, repeat, randomSuffix())
 	w := newWorkload(s, objects, runID, r.opts.clusterRegistryURL)
-	w.versions, w.depth, w.resources = r.opts.versions, r.opts.depth, r.opts.resources
+	w.versions, w.depth, w.resources, w.fanout = r.opts.versions, r.opts.depth, r.opts.resources, r.opts.fanout
 	dir := filepath.Join(r.outDir, runID)
 	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return nil, err
@@ -63,6 +66,8 @@ func (r *runner) runOnce(ctx context.Context, s scenario, objects, repeat int) (
 		res.Depth = w.depth
 	case scenarioComplex:
 		res.Versions, res.Depth, res.Resources = complexVersions, w.depth, w.resources
+	case scenarioFanout:
+		res.Resources, res.Fanout = w.resources, w.fanout
 	default:
 	}
 
@@ -119,7 +124,7 @@ func (r *runner) runOnce(ctx context.Context, s scenario, objects, repeat int) (
 	}
 
 	gvk, state := w.target()
-	tr, err := startTracker(ctx, r.c, w, gvk, state, objects)
+	tr, err := startTracker(ctx, r.c, w, gvk, state, w.targets())
 	if err != nil {
 		return nil, err
 	}
@@ -135,7 +140,7 @@ func (r *runner) runOnce(ctx context.Context, s scenario, objects, repeat int) (
 	var wg sync.WaitGroup
 	wg.Go(func() { smp.run(smpCtx) })
 
-	log.Info("measuring", "target", gvk.Kind, "objects", objects)
+	log.Info("measuring", "target", gvk.Kind, "objects", objects, "targets", w.targets())
 	start := tr.markStart()
 	if s == scenarioUpdate {
 		err = r.updateComponents(ctx, w)
@@ -151,6 +156,17 @@ func (r *runner) runOnce(ctx context.Context, s scenario, objects, repeat int) (
 
 	allReady := tr.wait(ctx, r.opts.timeout)
 	elapsed := time.Since(start)
+	// Ready objects still leave reconciles queued; usage has to cover those too.
+	if allReady {
+		log.Info("waiting for controller queues to drain")
+		if settled, ok := smp.waitSettled(ctx, elapsed.Seconds(), r.opts.timeout); ok {
+			elapsed = max(elapsed, time.Duration(settled*float64(time.Second)))
+			res.Durations.Settled = elapsed.Seconds()
+		} else {
+			res.Outcome.Unsettled = true
+			elapsed = time.Since(start)
+		}
+	}
 	stopSampling()
 	wg.Wait()
 
@@ -161,11 +177,12 @@ func (r *runner) runOnce(ctx context.Context, s scenario, objects, repeat int) (
 
 	sum := tr.summary()
 	res.Outcome = outcome{
-		Expected:       objects,
+		Expected:       w.targets(),
 		Ready:          sum.ready,
 		Failed:         sum.failed,
 		Pending:        sum.pending,
 		TimedOut:       !allReady,
+		Unsettled:      res.Outcome.Unsettled,
 		FailureReasons: sum.failureReasons,
 	}
 	res.Durations.Total = elapsed.Seconds()
@@ -192,7 +209,7 @@ func (r *runner) runOnce(ctx context.Context, s scenario, objects, repeat int) (
 	if err := writeJSON(filepath.Join(dir, "result.json"), res); err != nil {
 		return nil, err
 	}
-	log.Info("run finished", "ready", sum.ready, "expected", objects, "total", res.Durations.Total)
+	log.Info("run finished", "ready", sum.ready, "expected", w.targets(), "total", res.Durations.Total)
 	return res, nil
 }
 
@@ -286,7 +303,7 @@ func (r *runner) summarize(res *result, before, after scrapes, samples []sample,
 		res.ControllerCounters = counterDeltas(ctlBefore, ctlAfter, controllerCounterPrefixes)
 		// The process counter is read at scrape time; kubelet's cAdvisor value
 		// lags by its housekeeping interval, which dominates short runs.
-		res.Usage.CPUSeconds = res.ControllerCounters["process_cpu_seconds_total"]
+		res.Usage.CPUSeconds = res.ControllerCounters[cpuCounter]
 		res.Usage.AvgCores = res.Usage.CPUSeconds / elapsed.Seconds()
 	}
 
@@ -306,6 +323,7 @@ func (r *runner) summarize(res *result, before, after scrapes, samples []sample,
 
 	res.Usage.PeakWorkingSetBytes, res.ControllerGaugePeaks = peaks(samples)
 	res.Usage.PeakRSSBytes = res.ControllerGaugePeaks["process_resident_memory_bytes"]
+	res.Usage.PeakCores = peakCores(samples)
 	return errors.Join(errs...)
 }
 

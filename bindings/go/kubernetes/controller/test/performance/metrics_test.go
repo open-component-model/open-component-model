@@ -122,3 +122,18 @@ func TestPeaks(t *testing.T) {
 	r.InDelta(30, ws, 0)
 	r.Equal(map[string]float64{"a": 4, "b": 5}, gauges)
 }
+
+func TestPeakCores(t *testing.T) {
+	r := require.New(t)
+	samples := []sample{
+		{At: 0, CPUSeconds: 10},
+		{At: 2, CPUSeconds: 11},
+		// A failed scrape carries no counter and must not read as a drop.
+		{At: 4},
+		{At: 6, CPUSeconds: 18},
+		{At: 8, CPUSeconds: 18.5},
+	}
+
+	r.InDelta(1.75, peakCores(samples), 1e-9)
+	r.Zero(peakCores(nil))
+}

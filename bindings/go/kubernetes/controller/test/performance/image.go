@@ -16,12 +16,13 @@ import (
 
 // pushImage pushes a minimal but valid single-layer image. The layer content
 // derives from the repository name, so every image has its own digest.
-func pushImage(ctx context.Context, host string, plainHTTP bool, repository, tag string) error {
+func pushImage(ctx context.Context, client remote.Client, host string, plainHTTP bool, repository, tag string) error {
 	repo, err := remote.NewRepository(host + "/" + repository)
 	if err != nil {
 		return err
 	}
 	repo.PlainHTTP = plainHTTP
+	repo.Client = client
 
 	layer, diffID, err := imageLayer(repository)
 	if err != nil {
