@@ -21,37 +21,57 @@ task test/performance/fresh            # teardown, setup and run in one go
 
 The flow mirrors the e2e tasks (`test/e2e/setup/local`, `test/e2e`, `test/e2e/setup/teardown`, `test/e2e/fresh`).
 
-On a laptop, `cold` and `pipeline` at 1,000 objects take about 1.5 and 3 minutes per run, plus restart and cleanup. `go run ./test/performance --help` lists every flag.
+`go run ./test/performance --help` lists every flag.
+
+## Structure
+
+The benchmark is a standalone Go program, run with `go run`. It builds and measures the working tree only.
+
+| File                     | Role                                                                      |
+|--------------------------|---------------------------------------------------------------------------|
+| `main.go`                | Flags and the matrix loop: scenarios x object counts x repeats            |
+| `workload.go`            | Per scenario: the component versions to publish and the objects to create |
+| `publish.go`, `image.go` | Push component versions and a small image pool to the registry            |
+| `cluster.go`             | Kubernetes client, controller restart, metric scrapes, cleanup            |
+| `tracker.go`             | A watch that records when each target object first becomes ready          |
+| `sampler.go`             | Polls gauges, CPU and memory every `--sample-interval`                    |
+| `metrics.go`             | Prometheus parsing, counter deltas, gauge values                          |
+| `run.go`                 | One run from start to finish                                              |
+| `result.go`              | `result.json` and `summary.md`                                            |
+| `hacks/`                 | Cluster and registry setup, benchmark RBAC, Helm values                   |
+
+One run restarts the controller, publishes fresh component names, scrapes the metrics, creates the objects,
+waits until they are ready and the controller queues are drained, scrapes again and cleans up.
 
 ## Environment
 
-| Part | Setup |
-|---|---|
-| Cluster | Kind `ocm-perf`, one control-plane node plus one worker that is tainted for the controller only. Node image pinned by `KIND_NODE_IMAGE_VERSION` in `../../.env`. |
-| Registry | `registry` container `ocm-perf-registry` outside Kind, pinned by `REGISTRY_IMAGE_VERSION` in `../../.env`. Host: `localhost:5555`, cluster: `ocm-perf-registry:5000`, metrics: `localhost:5556/metrics`. |
+| Part       | Setup                                                                                                                                                                                                                                                                                                                                                                          |
+|------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Cluster    | Kind `ocm-perf`, one control-plane node plus one worker that is tainted for the controller only. Node image pinned by `KIND_NODE_IMAGE_VERSION` in `../../.env`.                                                                                                                                                                                                               |
+| Registry   | `registry` container `ocm-perf-registry` outside Kind, pinned by `REGISTRY_IMAGE_VERSION` in `../../.env`. Host: `localhost:5555`, cluster: `ocm-perf-registry:5000`, metrics: `localhost:5556/metrics`.                                                                                                                                                                       |
 | Controller | The chart with [`hacks/values.yaml`](hacks/values.yaml): one replica, no leader election, Guaranteed QoS (2 CPU, 2Gi), and every concurrency, rate limiter and resolver knob set explicitly. The workqueue rate limiter is raised to 10000/s: at the chart default of 10/s the requeue after adding a finalizer admits 10 new objects per second, which hides everything else. |
 
 The controller restarts before every run, so each run starts with empty in-memory caches. Every run publishes
 fresh component names to the registry, so no run sees another run's component versions.
 
-Only the Resource controller has a concurrency flag today. The Component and Deployer controllers run with
-controller-runtime's default of one worker.
+Of the benchmarked controllers only the Resource controller has a concurrency flag. The Component and
+Deployer controllers run with controller-runtime's default of one worker.
 
 ## Scenarios
 
 `N` is the `--objects` value.
 
-| Scenario | Objects created | Measured until |
-|---|---|---|
-| `cold` | 1 Repository, N Components with N unique component versions | every Component is `Ready` for its current generation |
-| `shared` | 1 Repository, N Components that all resolve the same component version | every Component is `Ready` |
-| `pipeline` | 1 Repository, N each of Component, Resource and Deployer | every Deployer is `Ready` |
-| `update` | the `pipeline` objects, already rolled out at `1.0.0` (not measured) | every deployed ConfigMap carries `1.1.0` after all Components are patched to `1.1.0` |
-| `versions` | 1 Repository, N Components with the constraint `>=1.0.0` on one component that has `--versions` versions (default 100) | every Component is `Ready` |
-| `nested` | 1 Repository, N Components, N Resources that each walk a `--depth` long reference path (default 5) | every Resource is `Ready` |
-| `repositories` | N Repositories, each a different `subPath` of the one registry, and N Components | every Component is `Ready` |
-| `complex` | 10 Repositories on different `subPath`s, N each of Component, Resource and Deployer | every Deployer is `Ready` |
-| `fanout` | 1 Repository, N Components, `--fanout` Resources per Component (default 20) | every Resource is `Ready` |
+| Scenario       | Objects created                                                                                                        | Measured until                                                                       |
+|----------------|------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------|
+| `cold`         | 1 Repository, N Components with N unique component versions                                                            | every Component is `Ready` for its current generation                                |
+| `shared`       | 1 Repository, N Components that all resolve the same component version                                                 | every Component is `Ready`                                                           |
+| `pipeline`     | 1 Repository, N each of Component, Resource and Deployer                                                               | every Deployer is `Ready`                                                            |
+| `update`       | the `pipeline` objects, already rolled out at `1.0.0` (not measured)                                                   | every deployed ConfigMap carries `1.1.0` after all Components are patched to `1.1.0` |
+| `versions`     | 1 Repository, N Components with the constraint `>=1.0.0` on one component that has `--versions` versions (default 100) | every Component is `Ready`                                                           |
+| `nested`       | 1 Repository, N Components, N Resources that each walk a `--depth` long reference path (default 5)                     | every Resource is `Ready`                                                            |
+| `repositories` | N Repositories, each a different `subPath` of the one registry, and N Components                                       | every Component is `Ready`                                                           |
+| `complex`      | 10 Repositories on different `subPath`s, N each of Component, Resource and Deployer                                    | every Deployer is `Ready`                                                            |
+| `fanout`       | 1 Repository, N Components, `--fanout` Resources per Component (default 20)                                            | every Resource is `Ready`                                                            |
 
 What the last five add over the first four:
 
@@ -75,6 +95,9 @@ reads the rollout from the cluster itself, not from a status field.
 Objects are created in parallel, the Repository first, the way a GitOps tool applies a directory. A watch
 records when each object first becomes ready.
 
+The benchmark's own client is limited to 200 requests per second. A scenario that creates objects for longer
+than the controller needs to reconcile them is bound by that limit, not by the controller.
+
 ## Results
 
 Each invocation writes `test/performance/results/<timestamp>/`, which is git-ignored:
@@ -88,17 +111,21 @@ Each invocation writes `test/performance/results/<timestamp>/`, which is git-ign
 - `<run>/samples.json`: gauges, cumulative CPU seconds and memory over time, `at` in seconds since the
   measurement started.
 
+All durations count from the moment object creation starts, not from each object's own creation. `p50` and
+`p90` therefore include the time the benchmark needed to create the objects that came before.
+
 Metric sources:
 
-| Measurement | Source |
-|---|---|
-| CPU seconds | delta of the controller's `process_cpu_seconds_total`, up to the settled time |
-| Peak cores | highest rate of `process_cpu_seconds_total` between two consecutive samples. It is an average over one `--sample-interval`, so shorter bursts read lower. |
-| Settled | first of 3 consecutive samples with every `workqueue_depth` and `controller_runtime_active_workers` at zero, after all objects are ready. Counters and usage cover the run up to here. |
-| Peak RSS | max of the controller's `process_resident_memory_bytes`, sampled every `--sample-interval` |
-| Peak working set | max of kubelet `container_memory_working_set_bytes`. cAdvisor refreshes it on its own housekeeping interval, not per scrape, so it lags on short runs. |
-| OCI requests | delta of the registry's `registry_http_requests_total`, split by handler and method |
-| Controller metrics | deltas of every `controller_runtime_*`, `workqueue_*`, `ocm_system_*` and `rest_client_requests_total` series. Per-component labels are folded away. |
+| Measurement        | Source                                                                                                                                                                                 |
+|--------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| CPU seconds        | delta of the controller's `process_cpu_seconds_total`, up to the settled time                                                                                                          |
+| Avg cores          | CPU seconds divided by the settled time                                                                                                                                                |
+| Peak cores         | highest rate of `process_cpu_seconds_total` between two consecutive samples. It is an average over one `--sample-interval`, so shorter bursts read lower.                              |
+| Settled            | first of 3 consecutive samples with every `workqueue_depth` and `controller_runtime_active_workers` at zero, after all objects are ready. Counters and usage cover the run up to here. |
+| Peak RSS           | max of the controller's `process_resident_memory_bytes`, sampled every `--sample-interval`                                                                                             |
+| Peak working set   | max of kubelet `container_memory_working_set_bytes`. cAdvisor refreshes it on its own housekeeping interval, not per scrape, so it lags on short runs.                                 |
+| OCI requests       | delta of the registry's `registry_http_requests_total`, split by handler and method                                                                                                    |
+| Controller metrics | deltas of every `controller_runtime_*`, `workqueue_*`, `ocm_system_*` and `rest_client_requests_total` series. Per-component labels are folded away.                                   |
 
 ## Profiling
 
