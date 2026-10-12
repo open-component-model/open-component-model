@@ -11,8 +11,9 @@ import (
 	"log/slog"
 	"strings"
 
-	"ocm.software/open-component-model/bindings/go/descriptor/normalisation"
 	_ "ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v1"
+
+	"ocm.software/open-component-model/bindings/go/descriptor/normalisation"
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 )

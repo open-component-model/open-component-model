@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"log/slog"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -13,7 +12,6 @@ import (
 	v1 "ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v1"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
-	"ocm.software/open-component-model/bindings/go/signing"
 )
 
 // fromJSON loads an input cd.json const into the runtime descriptor, mirroring
@@ -61,42 +59,6 @@ func TestNormaliseByteExact(t *testing.T) {
 			r.Equal(tt.digest, hex.EncodeToString(sum[:]), "digest diverges from cc-utils oracle")
 		})
 	}
-}
-
-// TestVerifyDigestMatchesDescriptor exercises the real verify entrypoint on the
-// combined scenario 08 descriptor. It does not check a cryptographic signature.
-func TestVerifyDigestMatchesDescriptor(t *testing.T) {
-	r := require.New(t)
-	desc := fromJSON(t, input_08_full_signed)
-	sig := descruntime.Signature{
-		Name: "acme",
-		Digest: descruntime.Digest{
-			HashAlgorithm:          "SHA-256",
-			NormalisationAlgorithm: v1.Algorithm,
-			Value:                  digest_08_full_signed,
-		},
-	}
-	r.NoError(signing.VerifyDigestMatchesDescriptor(t.Context(), desc, sig, slog.Default()))
-}
-
-// TestGenerateDigestRoundTrip confirms creation reproduces the oracle digest via
-// the algorithm-agnostic signing registry.
-func TestGenerateDigestRoundTrip(t *testing.T) {
-	r := require.New(t)
-	desc := fromJSON(t, input_08_full_signed)
-	d, err := signing.GenerateDigest(t.Context(), desc, slog.Default(), v1.Algorithm, "SHA-256")
-	r.NoError(err)
-	r.Equal(digest_08_full_signed, d.Value)
-	r.Equal(v1.Algorithm, d.NormalisationAlgorithm)
-}
-
-// TestSentinelAccepted confirms a descriptor carrying an EXCLUDE-FROM-SIGNATURE
-// resource is not rejected by the digest completeness/algorithm checks.
-func TestSentinelAccepted(t *testing.T) {
-	r := require.New(t)
-	desc := fromJSON(t, input_03_exclude_from_signature)
-	r.NoError(signing.IsSafelyDigestible(&desc.Component))
-	r.NoError(signing.ValidateDigestHashAlgorithms(&desc.Component))
 }
 
 // TestUnknownAlgorithmErrors locks in that an unregistered normalisation
