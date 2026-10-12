@@ -67,22 +67,39 @@ func TestCaches(t *testing.T) {
 
 	t.Run("close stops the expiry goroutines", func(t *testing.T) {
 		r := require.New(t)
-		// Eventually runs its own goroutines, so count the LRU ones by stack instead.
-		expiryGoroutines := func() int {
+		// Caches closed by earlier tests stop their goroutines asynchronously, so a plain
+		// count moves on its own. Track the goroutines this test starts by header instead.
+		expiryGoroutines := func() map[string]bool {
 			var buf bytes.Buffer
 			r.NoError(pprof.Lookup("goroutine").WriteTo(&buf, 2))
-			return strings.Count(buf.String(), "golang-lru/v2/expirable.")
+			found := map[string]bool{}
+			for stack := range strings.SplitSeq(buf.String(), "\n\n") {
+				if strings.Contains(stack, "golang-lru/v2/expirable.") {
+					header, _, _ := strings.Cut(stack, " [")
+					found[header] = true
+				}
+			}
+			return found
 		}
 		before := expiryGoroutines()
+		started := func() []string {
+			var ids []string
+			for id := range expiryGoroutines() {
+				if !before[id] {
+					ids = append(ids, id)
+				}
+			}
+			return ids
+		}
 
 		caches := NewCaches(t.TempDir(), &Options{}, &Options{})
 		r.NotNil(caches.Blob())
 		r.NotNil(caches.Reference(identity))
-		r.Greater(expiryGoroutines(), before)
+		r.NotEmpty(started())
 		caches.Close()
 
 		r.Eventually(func() bool {
-			return expiryGoroutines() <= before
+			return len(started()) == 0
 		}, 5*time.Second, 10*time.Millisecond)
 	})
 }
