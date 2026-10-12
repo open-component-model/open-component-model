@@ -43,7 +43,7 @@ var _ = Describe("Deployer to NamespacedDeployer migration", func() {
 			configMap := "configmap/" + name
 
 			By("deploying with a Deployer")
-			Expect(utils.PrepareOCMComponent(ctx, name, filepath.Join(dir, ComponentConstructor), imageRegistry, "")).To(Succeed())
+			Expect(utils.PrepareOCMComponent(ctx, name, filepath.Join(dir, ComponentConstructor), imageRegistry)).To(Succeed())
 			Expect(utils.DeployResource(ctx, filepath.Join(dir, Bootstrap))).To(Succeed())
 			Expect(utils.DeployResourceWithoutCleanup(ctx, filepath.Join(dir, MigrationDeployer))).To(Succeed())
 			// A failed spec leaves the Deployer behind, which blocks the Resource deletion in the bootstrap cleanup.

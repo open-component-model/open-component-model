@@ -51,21 +51,27 @@ func TestDownloadRevisions(t *testing.T) {
 			for _, tc := range []struct {
 				name, ref, commit string
 				want              plumbing.Hash
-				missingHeadError  string
+				// wantRef is the full name of the selecting ref; for HEAD without a
+				// branch to point to it stays HEAD.
+				wantRef          string
+				missingHeadError string
 			}{
-				{"default HEAD", "HEAD", "", fixture.Second, "cannot fetch git repository: transport failed; check repository access and server trust: reference not found"},
-				{"short main branch", "main", "", fixture.Second, `cannot resolve git ref: reference name escapes the reference storage: "main" is not under refs/ nor a valid pseudo-ref`},
-				{"qualified main branch", "refs/heads/main", "", fixture.Second, "cannot resolve git ref: reference not found"},
-				{"branch wins over same-named tag", "feature", "", fixture.Second, ""},
-				{"remote tracking branch", "refs/remotes/origin/feature", "", fixture.Second, ""},
-				{"qualified tag wins over same-named branch", "refs/tags/feature", "", fixture.First, ""},
-				{"custom ref namespace", "refs/releases/stable", "", fixture.First, ""},
-				{"short lightweight tag", "v1", "", fixture.First, ""},
-				{"short annotated tag", "annotated", "", fixture.First, ""},
-				{"short nested tag", "nested", "", fixture.First, ""},
-				{"pinned commit only", "", fixture.First.String(), fixture.First, ""},
-				{"pinned commit overrides HEAD", "HEAD", fixture.First.String(), fixture.First, ""},
-				{"pinned commit ignores deleted branch", "refs/heads/deleted", fixture.First.String(), fixture.First, ""},
+				{name: "default HEAD", ref: "HEAD", want: fixture.Second, wantRef: "refs/heads/main", missingHeadError: "cannot fetch git repository: transport failed; check repository access and server trust: reference not found"},
+				{name: "short main branch", ref: "main", want: fixture.Second, wantRef: "refs/heads/main", missingHeadError: `cannot resolve git ref: reference name escapes the reference storage: "main" is not under refs/ nor a valid pseudo-ref`},
+				{name: "qualified main branch", ref: "refs/heads/main", want: fixture.Second, wantRef: "refs/heads/main", missingHeadError: "cannot resolve git ref: reference not found"},
+				{name: "branch wins over same-named tag", ref: "feature", want: fixture.Second, wantRef: "refs/heads/feature"},
+				{name: "remote tracking branch", ref: "refs/remotes/origin/feature", want: fixture.Second, wantRef: "refs/heads/feature"},
+				{name: "qualified tag wins over same-named branch", ref: "refs/tags/feature", want: fixture.First, wantRef: "refs/tags/feature"},
+				{name: "custom ref namespace", ref: "refs/releases/stable", want: fixture.First, wantRef: "refs/releases/stable"},
+				{name: "short lightweight tag", ref: "v1", want: fixture.First, wantRef: "refs/tags/v1"},
+				{name: "short annotated tag", ref: "annotated", want: fixture.First, wantRef: "refs/tags/annotated"},
+				{name: "short nested tag", ref: "nested", want: fixture.First, wantRef: "refs/tags/nested"},
+				{name: "pinned commit only", commit: fixture.First.String(), want: fixture.First},
+				{name: "pinned commit overrides HEAD", ref: "HEAD", commit: fixture.First.String(), want: fixture.First, wantRef: "refs/heads/main"},
+				{name: "pinned commit with short branch", ref: "feature", commit: fixture.First.String(), want: fixture.First, wantRef: "refs/heads/feature"},
+				{name: "pinned commit with short tag", ref: "v1", commit: fixture.First.String(), want: fixture.First, wantRef: "refs/tags/v1"},
+				{name: "pinned commit keeps unknown short ref", ref: "gone", commit: fixture.First.String(), want: fixture.First, wantRef: "gone"},
+				{name: "pinned commit ignores deleted branch", ref: "refs/heads/deleted", commit: fixture.First.String(), want: fixture.First, wantRef: "refs/heads/deleted"},
 			} {
 				t.Run(tc.name, func(t *testing.T) {
 					r := require.New(t)
@@ -78,6 +84,11 @@ func TestDownloadRevisions(t *testing.T) {
 					}
 					r.NoError(err)
 					r.Equal(tc.want.String(), result.Commit)
+					if head == "missing HEAD" && tc.ref == "HEAD" {
+						r.Equal("HEAD", result.Ref, "HEAD without a branch to point to stays HEAD")
+					} else {
+						r.Equal(tc.wantRef, result.Ref)
+					}
 					r.Equal(tc.commit, spec.Commit)
 					r.NotEmpty(readBlob(t, result.Blob))
 				})

@@ -16,12 +16,23 @@ import (
 	signingv1alpha1 "ocm.software/open-component-model/bindings/go/rsa/signing/v1alpha1"
 )
 
+// SignatureHandler selects the signing/verification handler variant emitted into .ocmconfig.
+// Empty defaults to RSA for backward compatibility with existing tests.
+type SignatureHandler string
+
+const (
+	SignatureHandlerRSA SignatureHandler = ""
+	SignatureHandlerGPG SignatureHandler = "gpg"
+)
+
 // SignatureVerification describes the public key that verifies a single component signature. The algorithm
 // is part of the credential consumer identity the RSA signing handler asks the credential graph for.
+// For GPG entries set Handler to SignatureHandlerGPG; Algorithm is then ignored.
 type SignatureVerification struct {
 	Signature string
 	Algorithm signingv1alpha1.SignatureAlgorithm
 	PublicKey string
+	Handler   SignatureHandler
 }
 
 // SetupSignatureVerificationConfig creates a Secret holding an .ocmconfig that makes the controller verify the
@@ -55,7 +66,25 @@ func SignatureVerificationOCMConfig(verifications ...SignatureVerification) stri
 	builder.WriteString("type: generic.config.ocm.software/v1\nconfigurations:\n")
 
 	for _, verification := range verifications {
-		fmt.Fprintf(&builder, `- type: signing.config.ocm.software/v1alpha1
+		switch verification.Handler {
+		case SignatureHandlerGPG:
+			fmt.Fprintf(&builder, `- type: signing.config.ocm.software/v1alpha1
+  signature: %[1]s
+  verifier:
+    type: GPGSigningConfiguration/v1alpha1
+- type: credentials.config.ocm.software
+  consumers:
+  - identity:
+      type: GPG/v1alpha1
+      signature: %[1]s
+    credentials:
+    - type: Credentials/v1
+      properties:
+        publicKeyPGP: |
+%[2]s
+`, verification.Signature, indentBlock(verification.PublicKey, 10))
+		default:
+			fmt.Fprintf(&builder, `- type: signing.config.ocm.software/v1alpha1
   signature: %[1]s
   verifier:
     type: RSASigningConfiguration/v1alpha1
@@ -71,6 +100,7 @@ func SignatureVerificationOCMConfig(verifications ...SignatureVerification) stri
         public_key_pem: |
 %[3]s
 `, verification.Signature, verification.Algorithm, indentBlock(verification.PublicKey, 10))
+		}
 	}
 
 	return builder.String()
