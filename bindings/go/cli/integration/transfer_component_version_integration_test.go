@@ -77,7 +77,7 @@ configurations:
 	r.NoError(err)
 
 	// We can use the 'add component-version' command to create a CTF archive easily
-	// Or we manually construct one using constructor.yaml and 'add component-version' command targetting a ctf path
+	// Or we manually construct one using constructor.yaml and 'add component-version' command targeting a ctf path
 
 	constructorContent := fmt.Sprintf(`
 components:

@@ -3,6 +3,7 @@ package internal
 import (
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
+	gitaccess "ocm.software/open-component-model/bindings/go/git/spec/access"
 	gittransformer "ocm.software/open-component-model/bindings/go/git/transformation"
 	gitv1alpha1 "ocm.software/open-component-model/bindings/go/git/transformation/spec/v1alpha1"
 	githubtransformer "ocm.software/open-component-model/bindings/go/github/transformation"
@@ -49,6 +50,7 @@ func NewDefaultBuilder(
 	transformerScheme.MustRegisterScheme(gitv1alpha1.Scheme)
 	transformerScheme.MustRegisterScheme(wgetaccess.Scheme)
 	transformerScheme.MustRegisterScheme(helmaccess.Scheme)
+	transformerScheme.MustRegisterScheme(gitaccess.Scheme)
 	transformerScheme.MustRegisterScheme(uploadv1alpha1.Scheme)
 
 	ociGet := &ocitransformer.GetComponentVersion{
@@ -146,6 +148,13 @@ func NewDefaultBuilder(
 		CredentialProvider: credentialProvider,
 	}
 
+	// Git upload transformer (git uploader configurations)
+	addGitResource := &gittransformer.AddGitResource{
+		Scheme:             transformerScheme,
+		ResourceRepository: resourceRepo,
+		CredentialProvider: credentialProvider,
+	}
+
 	// HTTP streaming transformer (uploader configurations)
 	httpStreaming := &wgettransformer.HTTPStreamingTransformer{
 		Scheme:             transformerScheme,
@@ -188,6 +197,7 @@ func NewDefaultBuilder(
 		WithTransformer(&s3v1alpha1.DownloadS3Resource{}, downloadS3).
 		WithTransformer(&githubv1alpha1.GetGitHubCommit{}, getGitHubCommit).
 		WithTransformer(&gitv1alpha1.GetGitResource{}, getGitResource).
+		WithTransformer(&gitv1alpha1.AddGitResource{}, addGitResource).
 		WithTransformer(&wgetv1alpha1.HTTPStreaming{}, httpStreaming).
 		WithTransformer(&uploadv1alpha1.ArtifactoryUpload{}, &artifactory.Transformer{Uploader: repositoryUpload}).
 		WithTransformer(&uploadv1alpha1.NexusUpload{}, &nexus.Transformer{Uploader: repositoryUpload}).

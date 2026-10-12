@@ -10,7 +10,6 @@ import (
 	credentialruntime "ocm.software/open-component-model/bindings/go/credentials/spec/config/runtime"
 	v1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
-	wgetidentityv1 "ocm.software/open-component-model/bindings/go/wget/spec/identity/v1"
 )
 
 type ingestTestCredentials struct {
@@ -172,21 +171,40 @@ func TestIngestDirectCredentialsWithArbitraryProperties(t *testing.T) {
 	r.Equal("yes", creds.Properties["anything-goes"])
 }
 
+// exampleConsumerIdentity is a local consumer-identity type used to exercise alias
+// canonicalization in the credential graph without importing a concrete identity
+// from another binding (disallowed by the layering rules, see golangci.yml
+// depguard). Its canonical+alias shape mirrors a real identity type.
+type exampleConsumerIdentity struct {
+	Type runtime.Type `json:"type"`
+}
+
+func (e *exampleConsumerIdentity) GetType() runtime.Type        { return e.Type }
+func (e *exampleConsumerIdentity) SetType(t runtime.Type)       { e.Type = t }
+func (e *exampleConsumerIdentity) DeepCopyTyped() runtime.Typed { cp := *e; return &cp }
+
 func TestIngestConsumerIdentityAliasCanonicalization(t *testing.T) {
 	ctx := t.Context()
 
 	identityScheme := runtime.NewScheme()
-	wgetidentityv1.MustRegisterIdentityType(identityScheme)
+	identityScheme.MustRegisterWithAlias(&exampleConsumerIdentity{},
+		runtime.NewVersionedType("Example", "v1"),
+		runtime.NewUnversionedType("Example"),
+		runtime.NewVersionedType("Alias", "v1"),
+		runtime.NewUnversionedType("Alias"),
+		runtime.NewVersionedType("alias", "v1"),
+		runtime.NewUnversionedType("alias"),
+	)
 
 	for _, tc := range []struct {
 		name         string
 		consumerType string
 	}{
-		{"canonical consumer matches", "Wget"},
-		{"HTTP alias matches", "HTTP"},
-		{"lowercase HTTP alias matches", "http"},
-		{"versioned HTTP alias matches", "HTTP/v1"},
-		{"versioned consumer matches", "Wget/v1"},
+		{"canonical consumer matches", "Example"},
+		{"Alias matches", "Alias"},
+		{"lowercase alias matches", "alias"},
+		{"versioned Alias matches", "Alias/v1"},
+		{"versioned consumer matches", "Example/v1"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
@@ -214,7 +232,7 @@ func TestIngestConsumerIdentityAliasCanonicalization(t *testing.T) {
 			r.NoError(err)
 
 			resolved, err := graph.Resolve(ctx, runtime.Identity{
-				runtime.IdentityAttributeType: "Wget",
+				runtime.IdentityAttributeType: "Example",
 				"hostname":                    "localhost",
 				"port":                        "8080",
 				"scheme":                      "http",
@@ -226,14 +244,14 @@ func TestIngestConsumerIdentityAliasCanonicalization(t *testing.T) {
 		})
 	}
 
-	t.Run("without scheme an HTTP entry is not canonicalized", func(t *testing.T) {
+	t.Run("without scheme an alias entry is not canonicalized", func(t *testing.T) {
 		r := require.New(t)
 
 		config := &credentialruntime.Config{
 			Consumers: []credentialruntime.Consumer{
 				{
 					Identities: []runtime.Identity{{
-						runtime.IdentityAttributeType: "HTTP",
+						runtime.IdentityAttributeType: "Alias",
 						"hostname":                    "localhost",
 					}},
 					Credentials: []runtime.Typed{&v1.DirectCredentials{
@@ -248,7 +266,7 @@ func TestIngestConsumerIdentityAliasCanonicalization(t *testing.T) {
 		r.NoError(err)
 
 		_, err = graph.Resolve(ctx, runtime.Identity{
-			runtime.IdentityAttributeType: "Wget",
+			runtime.IdentityAttributeType: "Example",
 			"hostname":                    "localhost",
 		})
 		r.ErrorIs(err, credentials.ErrNotFound)

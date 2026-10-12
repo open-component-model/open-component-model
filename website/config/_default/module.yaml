@@ -1413,7 +1413,7 @@ imports:
             versions:
               - '0.17'
   - path: ocm.software/open-component-model/website
-    version: v0.19.0
+    version: v0.19.1
     ignoreImports: true
     ignoreConfig: true
     mounts:
@@ -1428,7 +1428,7 @@ imports:
             versions:
               - '0.19'
   - path: ocm.software/open-component-model/bindings/go
-    version: v0.19.0
+    version: v0.19.1
     mounts:
       - source: constructor/spec/v1/resources
         target: static/0.19/schemas/bindings/go/constructor
