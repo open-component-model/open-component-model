@@ -45,8 +45,8 @@ Before starting, make sure you have set up your environment as described in the 
   `compositeresourcedefinitions` (`apiextensions.crossplane.io`), plus a grant letting Crossplane compose the Flux
   objects; see the Crossplane tab in that guide
 - The [Patch and Transform function](https://github.com/crossplane-contrib/function-patch-and-transform)
-  (`function-patch-and-transform`), which the `Composition` runs as its pipeline step. This tutorial installs it for
-  you in the deploy section, so it is not a prerequisite.
+  (`function-patch-and-transform`), which the `Composition` runs as its pipeline step. Install it via the Crossplane
+  tab of [Set up Controller Environments > Install an Orchestrator]({{< relref "setup-controller-environment.md#install-an-orchestrator" >}}).
 - [OCM CLI]({{< relref "ocm-cli-installation.md" >}}) installed
 - Access to an OCI registry (e.g., [ghcr.io](https://docs.github.com/en/packages/learn-github-packages/introduction-to-github-packages))
 - `envsubst` installed (pre-installed on most Linux/macOS systems as part of `gettext`)
@@ -481,32 +481,6 @@ identical to the kro variant. The Deployer applies whatever blob the component c
 Crossplane-specific.
 
 {{< steps >}}
-{{< step >}}
-
-### Install the Patch and Transform function
-
-The `Composition` runs in pipeline mode and references `function-patch-and-transform`, so install it before the
-Deployer applies the Composition:
-
-```bash
-cat << 'EOF' | kubectl apply -f -
-apiVersion: pkg.crossplane.io/v1
-kind: Function
-metadata:
-  name: function-patch-and-transform
-spec:
-  package: xpkg.crossplane.io/crossplane-contrib/function-patch-and-transform:v0.8.2
-EOF
-```
-
-Wait for the function to become healthy:
-
-```bash
-kubectl get function.pkg function-patch-and-transform -w
-```
-
-{{< /step >}}
-
 {{< step >}}
 
 ### Create bootstrap resources
