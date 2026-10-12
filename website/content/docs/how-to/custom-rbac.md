@@ -21,7 +21,7 @@ This guide assumes that you are already familiar with the concepts described in 
 
 - [Concept: OCM controllers]({{< relref "/docs/concepts/ocm-controllers.md" >}}) - OCM Controllers
 - [Concept: Kubernetes Deployer]({{< relref "/docs/concepts/kubernetes-deployer.md" >}}) - `Deployer` and `NamespacedDeployer`
-- An orchestrator installed, [kro](https://kro.run/docs/getting-started/Installation/) or [Crossplane](https://docs.crossplane.io/latest/software/install/)
+- An orchestrator installed, [kro](https://kro.run/docs/getting-started/Installation/) or [Crossplane](https://docs.crossplane.io/latest/get-started/install/)
 
 ## When is this needed?
 
@@ -438,4 +438,4 @@ for a worked example of the specific kinds this pattern needs.
 
 - [Concept: OCM controllers]({{< relref "/docs/concepts/ocm-controllers.md" >}}) - Learn how the OCM Controllers work and how they interact with deployers and Kubernetes resources.
 - [kro's access control guide](https://kro.run/docs/advanced/access-control) - Least-privilege RBAC setup for kro itself.
-- [Crossplane RBAC documentation](https://docs.crossplane.io/latest/concepts/) - Permissions for Crossplane core and its providers.
+- [Crossplane composition documentation](https://docs.crossplane.io/latest/composition/) - Permissions for Crossplane core and its providers.

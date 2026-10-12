@@ -13,8 +13,9 @@ aliases:
 Your application ships as a Helm chart, and you want its delivery to be repeatable: one versioned OCM component that
 carries the chart, its container image, and the instructions to deploy it, with image references that localize
 themselves as the component moves between registries. This tutorial builds that deployment on **Crossplane**, using
-a `CompositeResourceDefinition` (XRD) plus a `Composition` to reconcile the deployment graph. The XRD composes the
-Flux objects directly. We will use [Podinfo](https://github.com/stefanprodan/podinfo) as the example application.
+a `CompositeResourceDefinition` (XRD) plus a `Composition` to reconcile the deployment graph. The XRD registers the
+`Bootstrap` schema, and the `Composition` creates the OCM and Flux objects directly. We will use
+[Podinfo](https://github.com/stefanprodan/podinfo) as the example application.
 
 {{< callout context="note" title="Coming from the kro tutorial?" icon="outline/info-circle" >}}
 This tutorial reaches the same end state as [Deploy an Application from a Helm Chart with OCM and

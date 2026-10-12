@@ -229,7 +229,7 @@ EOF
 {{< tab "Crossplane" >}}
 
 Install [Crossplane](https://crossplane.io) **v2** core via Helm, following the
-[official installation guide](https://docs.crossplane.io/latest/software/install/). The `2.x` range installs the
+[official installation guide](https://docs.crossplane.io/latest/get-started/install/). The `2.x` range installs the
 latest Crossplane v2 release, which the bootstrap tutorial requires:
 
 ```shell
