@@ -1,0 +1,293 @@
+package v1
+
+import (
+	"encoding/json"
+	"fmt"
+	"sort"
+	"strconv"
+	"strings"
+
+	norms "ocm.software/open-component-model/bindings/go/descriptor/normalisation"
+	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/engine/entry"
+	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/runtime"
+)
+
+// Algorithm is the registered name for this normalisation algorithm. It
+// identifies the legacy gardener/cc-utils serialization (ocm/sign.py) that
+// precedes jsonNormalisation/v4alpha1.
+const Algorithm = "jsonNormalisation/v1"
+
+// init registers the normalisation algorithm so that a blank import of this
+// package makes jsonNormalisation/v1 resolvable from the signing registry.
+func init() {
+	norms.Normalisations.Register(Algorithm, algo{})
+}
+
+// algo implements the normalisation interface for the legacy entry-list
+// serialization.
+type algo struct{}
+
+// Normalise converts the descriptor to its v2 form, applies the v1 field
+// selection and transforms on the resulting dictionary, and serialises it via
+// the entry engine (list-of-single-key-maps). The output is byte-identical to
+// cc-utils' jsonNormalisation/v1.
+func (algo) Normalise(cd *descruntime.Descriptor) ([]byte, error) {
+	scheme := runtime.NewScheme(runtime.WithAllowUnknown())
+	desc, err := descruntime.ConvertToV2(scheme, cd)
+	if err != nil {
+		return nil, err
+	}
+
+	m, err := toMap(desc)
+	if err != nil {
+		return nil, err
+	}
+
+	out, err := transformDescriptor(m)
+	if err != nil {
+		return nil, err
+	}
+	return entry.Normalise(out)
+}
+
+// toMap marshals the v2 descriptor and unmarshals it into a generic map. This
+// expands Label.Value (json.RawMessage) into the real nested tree and lets the
+// transforms operate uniformly on map[string]any.
+func toMap(desc *v2.Descriptor) (map[string]any, error) {
+	data, err := json.Marshal(desc)
+	if err != nil {
+		return nil, err
+	}
+	var m map[string]any
+	if err := json.Unmarshal(data, &m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+// transformDescriptor keeps only meta and component (dropping signatures and
+// nestedDigests) and applies the component transforms. meta is kept verbatim.
+func transformDescriptor(m map[string]any) (map[string]any, error) {
+	out := map[string]any{}
+	if meta, ok := m["meta"]; ok {
+		out["meta"] = meta
+	}
+	comp, ok := m["component"].(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("descriptor is missing a component object")
+	}
+	if err := transformComponent(comp); err != nil {
+		return nil, err
+	}
+	out["component"] = comp
+	return out, nil
+}
+
+// transformComponent applies the v1 field selection to the component dict in
+// place.
+func transformComponent(c map[string]any) error {
+	delete(c, "repositoryContexts")
+	delete(c, "sources")
+
+	defaultEmptyArray(c, "resources")
+	defaultEmptyArray(c, "componentReferences")
+
+	normaliseProvider(c)
+
+	if err := normaliseCreationTime(c); err != nil {
+		return err
+	}
+
+	normaliseElementLabels(c)
+
+	resources, _ := c["resources"].([]any)
+	injectDuplicateIdentityVersion(resources)
+	for _, r := range resources {
+		if res, ok := r.(map[string]any); ok {
+			transformResource(res)
+		}
+	}
+
+	refs, _ := c["componentReferences"].([]any)
+	for _, r := range refs {
+		if ref, ok := r.(map[string]any); ok {
+			transformReference(ref)
+		}
+	}
+	return nil
+}
+
+// transformResource drops the transport-only fields, forces an explicit
+// extraIdentity null when empty, and applies the label rule. The digest is kept
+// verbatim, including the EXCLUDE-FROM-SIGNATURE sentinel.
+func transformResource(res map[string]any) {
+	delete(res, "access")
+	delete(res, "srcRefs")
+	nullExtraIdentity(res)
+	normaliseElementLabels(res)
+}
+
+// transformReference forces an explicit extraIdentity null when empty and
+// applies the label rule. The digest is the persisted recursive v1 digest of
+// the child and is kept verbatim.
+func transformReference(ref map[string]any) {
+	nullExtraIdentity(ref)
+	normaliseElementLabels(ref)
+}
+
+// defaultEmptyArray coerces a null or absent field to an empty array so that
+// resources/componentReferences serialise as [] rather than null.
+func defaultEmptyArray(m map[string]any, key string) {
+	if v, ok := m[key]; !ok || v == nil {
+		m[key] = []any{}
+	}
+}
+
+// normaliseProvider re-emits a structured provider (a JSON-object string
+// produced by ConvertToV2) as the original object; a bare provider string is
+// kept as-is.
+func normaliseProvider(c map[string]any) {
+	s, ok := c["provider"].(string)
+	if !ok {
+		return
+	}
+	if !strings.HasPrefix(strings.TrimSpace(s), "{") {
+		return
+	}
+	var obj map[string]any
+	if err := json.Unmarshal([]byte(s), &obj); err == nil {
+		c["provider"] = obj
+	}
+}
+
+// normaliseCreationTime canonicalises a present creationTime string through the
+// v2 Timestamp type (RFC3339 → UTC, rounded to the second, …Z). An absent or
+// empty value was already dropped by omitempty.
+func normaliseCreationTime(c map[string]any) error {
+	s, ok := c["creationTime"].(string)
+	if !ok || s == "" {
+		return nil
+	}
+	var ts v2.Timestamp
+	if err := ts.UnmarshalJSON([]byte(strconv.Quote(s))); err != nil {
+		return fmt.Errorf("parsing creationTime %q: %w", s, err)
+	}
+	b, err := ts.MarshalJSON()
+	if err != nil {
+		return fmt.Errorf("formatting creationTime %q: %w", s, err)
+	}
+	var canon string
+	if err := json.Unmarshal(b, &canon); err != nil {
+		return fmt.Errorf("decoding creationTime %q: %w", s, err)
+	}
+	c["creationTime"] = canon
+	return nil
+}
+
+// nullExtraIdentity injects an explicit null extraIdentity when it is absent or
+// empty, so the normalised form always carries the key.
+func nullExtraIdentity(m map[string]any) {
+	ei, ok := m["extraIdentity"]
+	if !ok {
+		m["extraIdentity"] = nil
+		return
+	}
+	if em, ok := ei.(map[string]any); ok && len(em) == 0 {
+		m["extraIdentity"] = nil
+	}
+}
+
+// normaliseElementLabels applies the label rule to the element's labels field,
+// dropping the field entirely when no signing labels remain.
+func normaliseElementLabels(m map[string]any) {
+	labels, ok := m["labels"].([]any)
+	if !ok {
+		return
+	}
+	kept := make([]any, 0, len(labels))
+	for _, l := range labels {
+		lm, ok := l.(map[string]any)
+		if !ok {
+			continue
+		}
+		sig := lm["signing"]
+		if sig != true && sig != "true" {
+			continue
+		}
+		label := map[string]any{
+			"name":    lm["name"],
+			"value":   lm["value"],
+			"signing": lm["signing"],
+		}
+		if ver, ok := lm["version"].(string); ok && ver != "" {
+			label["version"] = ver
+		}
+		kept = append(kept, label)
+	}
+	if len(kept) == 0 {
+		delete(m, "labels")
+		return
+	}
+	m["labels"] = kept
+}
+
+// injectDuplicateIdentityVersion mirrors cc-utils' OCM-cli compat behaviour:
+// for a resource whose identity (name + extraIdentity, ignoring version) is
+// shared by a later peer, and which has no version in its extraIdentity, the
+// resource version is injected as extraIdentity["version"]. The last member of
+// a duplicate group is left unchanged. It must run before extraIdentity is
+// nulled, as it reads the raw extraIdentity.
+func injectDuplicateIdentityVersion(resources []any) {
+	ids := make([]string, len(resources))
+	for i, r := range resources {
+		res, _ := r.(map[string]any)
+		ids[i] = identityWithoutVersion(res)
+	}
+	for i, r := range resources {
+		res, ok := r.(map[string]any)
+		if !ok {
+			continue
+		}
+		ei, _ := res["extraIdentity"].(map[string]any)
+		if _, hasVersion := ei["version"]; hasVersion {
+			continue
+		}
+		for j := i + 1; j < len(resources); j++ {
+			if ids[j] == ids[i] {
+				if ei == nil {
+					ei = map[string]any{}
+					res["extraIdentity"] = ei
+				}
+				ei["version"] = res["version"]
+				break
+			}
+		}
+	}
+}
+
+// identityWithoutVersion builds a stable key from a resource's name and
+// extraIdentity, excluding the version attribute. An absent extraIdentity is
+// treated as empty.
+func identityWithoutVersion(res map[string]any) string {
+	if res == nil {
+		return ""
+	}
+	name, _ := res["name"].(string)
+	parts := []string{"name=" + name}
+	if ei, ok := res["extraIdentity"].(map[string]any); ok {
+		keys := make([]string, 0, len(ei))
+		for k := range ei {
+			if k == "version" {
+				continue
+			}
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			parts = append(parts, fmt.Sprintf("%s=%v", k, ei[k]))
+		}
+	}
+	return strings.Join(parts, ";")
+}
