@@ -1,0 +1,90 @@
+name: Release Zulip Notification
+
+# Announces a promoted release to the Zulip channel neonephos-ocm-releases.
+#
+# Standalone + re-triggerable: dispatched by release.yml via `gh workflow run
+# --ref main` after promote_and_release_final, and runnable by hand against any
+# existing tag if the automatic post flakes or is missed. Mirrors the dispatch
+# pattern of website-v2-release-docs.yml so the logic always runs from main.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to announce (e.g. v0.15.0)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: notify-release-${{ inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  notify_zulip:
+    name: Notify Zulip
+    runs-on: ubuntu-24.04-arm
+    environment:
+      name: zulip-notifications
+      deployment: false
+    steps:
+      - name: Validate tag format
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$ ]] \
+            || { echo "::error::tag must be vX.Y.Z or vX.Y.Z-rc.N, got: $TAG"; exit 1; }
+
+      - name: Build message
+        id: msg
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          URL="https://github.com/$REPO/releases/tag/$TAG"
+          BODY=$(gh api "repos/$REPO/releases/tags/$TAG" --jq '.body // ""')
+
+          # One topic per release, titled with the tag, so each RC and the final
+          # get their own thread.
+          TOPIC="OCM $TAG released"
+
+          # Neutralize Zulip mentions/wildcards (@**all**, @*group*) that can ride in on a
+          # commit subject line (the only free-text in cliff.toml's template). A zero-width
+          # space after each @ breaks the mention token while rendering identically.
+          BODY=$(printf '%s' "$BODY" | perl -CS -pe 's/\@/\@\x{200b}/g')
+
+          # Zulip caps messages at 10000 characters; truncate (URL is already at the top).
+          if [ ${#BODY} -gt 9000 ]; then
+            BODY="${BODY:0:8500}
+
+          … _truncated, see release page above._"
+          fi
+
+          # Random delimiter: the body is untrusted, so a fixed marker could collide
+          # with a line in it and truncate the step output.
+          EOF="ZULIPMSGEOF_$(openssl rand -hex 16)"
+          {
+            echo "topic=$TOPIC"
+            echo "content<<$EOF"
+            echo "Release page: $URL"
+            echo
+            echo "$BODY"
+            echo "$EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      # One topic per release (titled with the tag), so each RC and the final get their own thread.
+      - name: Post to Zulip
+        uses: zulip/github-actions-zulip/send-message@f675f2b4eb2a95fae974215476dcb7ad8dfeff6b # v2.0.2
+        with:
+          api-key: ${{ secrets.ZULIP_API_KEY }}
+          email: ${{ secrets.ZULIP_BOT_EMAIL }}
+          organization-url: https://linuxfoundation.zulipchat.com
+          type: stream
+          to: neonephos-ocm-releases
+          topic: ${{ steps.msg.outputs.topic }}
+          content: ${{ steps.msg.outputs.content }}

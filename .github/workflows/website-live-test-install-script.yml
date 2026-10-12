@@ -25,7 +25,7 @@ permissions:
 
 jobs:
   resolve:
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     name: Resolve latest stable release
     outputs:
       version: ${{ steps.find.outputs.version }}
@@ -67,7 +67,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runner: [ubuntu-latest, ubuntu-24.04-arm]
+        runner: [ubuntu-latest, ubuntu-26.04-arm]
         # Pin both legacy (cli/v-prefixed) and modern (bare) URL shapes so each
         # release-tag scheme is verified end-to-end. The empty string opts into
         # the script's own autodetect path (extract_stable_version) - without
@@ -83,7 +83,7 @@ jobs:
         include:
           - runner: ubuntu-latest
             ocm_version: ${{ inputs.version }}
-          - runner: ubuntu-24.04-arm
+          - runner: ubuntu-26.04-arm
             ocm_version: ${{ inputs.version }}
     env:
       OCM_VERSION: ${{ matrix.ocm_version }}
@@ -129,7 +129,7 @@ jobs:
   install-without-auth:
     needs: resolve
     name: Install without attestation
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     env:
       EXPECTED_VERSION: ${{ needs.resolve.outputs.version }}
     steps:
@@ -179,7 +179,7 @@ jobs:
   install-custom-name:
     needs: resolve
     name: Install with custom binary name
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     permissions:
       contents: read
     env:

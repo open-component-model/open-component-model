@@ -221,12 +221,17 @@ func TestBinary_Resolve_FIPSMode(t *testing.T) {
 		mode         string // "off", "on" (fips140=on) or "only" (fips140=only)
 		gpgconf      bool
 		showVersions string
+		showErr      error // non-nil: gpgconf exits non-zero after printing showVersions
 		wantErr      string
 		wantQueried  bool
 	}{
 		{name: "only: FIPS-mode libgcrypt accepted", mode: "only", gpgconf: true, showVersions: fipsY, wantQueried: true},
 		{name: "only: non-FIPS libgcrypt rejected", mode: "only", gpgconf: true, showVersions: fipsN, wantErr: "reports fips-mode:n", wantQueried: true},
 		{name: "only: no fips-mode line rejected", mode: "only", gpgconf: true, showVersions: "* Libgcrypt 1.8.5\n", wantErr: "reports no fips-mode", wantQueried: true},
+		// gpgconf --show-versions spawns dirmngr after printing the libgcrypt section; on a
+		// FIPS kernel dirmngr's GnuTLS fails, so gpgconf exits non-zero despite fips-mode:y.
+		{name: "only: FIPS-mode libgcrypt accepted despite gpgconf failure", mode: "only", gpgconf: true, showVersions: fipsY, showErr: errors.New("exit status 1"), wantQueried: true},
+		{name: "only: gpgconf failure without fips-mode line rejected", mode: "only", gpgconf: true, showErr: errors.New("exit status 1"), wantErr: "exit status 1", wantQueried: true},
 		{name: "only: gpgconf missing rejected", mode: "only", wantErr: "gpgconf is not on PATH"},
 		{name: "on: non-FIPS libgcrypt accepted after the check", mode: "on", gpgconf: true, showVersions: fipsN, wantQueried: true},
 		{name: "on: gpgconf missing accepted", mode: "on"},
@@ -247,7 +252,7 @@ func TestBinary_Resolve_FIPSMode(t *testing.T) {
 				WithExec(func(_ context.Context, _ string, args []string, _ []byte) ([]byte, []byte, error) {
 					if args[0] == "--show-versions" {
 						queried = true
-						return []byte(tt.showVersions), nil, nil
+						return []byte(tt.showVersions), nil, tt.showErr
 					}
 					return []byte(version), nil, nil
 				}),

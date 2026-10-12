@@ -145,15 +145,12 @@ func (r *ResourceRepository) download(ctx context.Context, spec *accessv1.Git, e
 	return result, nil
 }
 
-func (r *ResourceRepository) UploadResource(context.Context, *descriptor.Resource, blob.ReadOnlyBlob, runtime.Typed) (*descriptor.Resource, error) {
-	return nil, fmt.Errorf("git repositories do not support upload operations")
-}
-
 func (r *ResourceRepository) GetResourceDigestProcessorCredentialConsumerIdentity(ctx context.Context, res *descriptor.Resource) (runtime.Identity, error) {
 	return r.GetResourceCredentialConsumerIdentity(ctx, res)
 }
 
 // ProcessResourceDigest pins the access and hashes the same snapshot in one download.
+// Pinning records the commit (see [download.WithRepository]).
 // The archive is only read here, so it is downloaded into a directory of its own
 // that this call removes again.
 func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, res *descriptor.Resource, creds runtime.Typed) (*descriptor.Resource, error) {

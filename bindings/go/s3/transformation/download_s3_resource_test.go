@@ -95,6 +95,7 @@ func TestDownloadS3Resource_Transform(t *testing.T) {
 	srv := newFakeS3(t, []byte(content))
 
 	t.Run("downloads resource to a file", func(t *testing.T) {
+		t.Parallel()
 		r := require.New(t)
 		ctx := t.Context()
 
@@ -134,6 +135,7 @@ func TestDownloadS3Resource_Transform(t *testing.T) {
 	})
 
 	t.Run("downloads to specified output directory", func(t *testing.T) {
+		t.Parallel()
 		r := require.New(t)
 		ctx := t.Context()
 		outputDir := t.TempDir()
@@ -166,6 +168,7 @@ func TestDownloadS3Resource_Transform(t *testing.T) {
 	})
 
 	t.Run("removes the output file when the download fails", func(t *testing.T) {
+		t.Parallel()
 		r := require.New(t)
 		ctx := t.Context()
 		outputDir := t.TempDir()
@@ -200,6 +203,7 @@ func TestDownloadS3Resource_Transform(t *testing.T) {
 	})
 
 	t.Run("fails when spec is nil", func(t *testing.T) {
+		t.Parallel()
 		r := require.New(t)
 		ctx := t.Context()
 
@@ -222,6 +226,7 @@ func TestDownloadS3Resource_Transform(t *testing.T) {
 	})
 
 	t.Run("fails when resource is nil", func(t *testing.T) {
+		t.Parallel()
 		r := require.New(t)
 		ctx := t.Context()
 

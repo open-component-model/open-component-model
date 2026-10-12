@@ -134,7 +134,7 @@ jobs:
   decide_publish:
     name: Decide Publish
     needs: [conformance, e2e]
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     outputs:
       publish: ${{ steps.check.outputs.publish }}
       ref: ${{ steps.check.outputs.ref }}
@@ -163,7 +163,7 @@ jobs:
     name: Publish CLI
     needs: [build_cli, decide_publish]
     if: ${{ needs.decide_publish.outputs.publish == 'true' }}
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     outputs:
       image_digest: ${{ steps.digest.outputs.digest }}
       slim_image_digest: ${{ steps.digest.outputs.slim_digest }}
@@ -260,7 +260,7 @@ jobs:
     name: Publish Controller
     needs: [build_controller, decide_publish]
     if: ${{ needs.decide_publish.outputs.publish == 'true' }}
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     outputs:
       image_digest: ${{ steps.image-digest.outputs.digest }}
       chart_digest: ${{ steps.chart-digest.outputs.digest }}
@@ -292,6 +292,7 @@ jobs:
           ref: ${{ inputs.ref || github.ref_name }}
           sparse-checkout: |
             ${{ env.CONTROLLER_DIR }}
+            bindings/go/sigstore/signing/handler/internal
             Taskfile.yml
             .env
           persist-credentials: false
@@ -308,7 +309,8 @@ jobs:
       - name: Install Helm
         uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
         with:
-          version: v4.2.4
+          # renovate: datasource=github-releases depName=helm/helm
+          version: v4.3.0
 
       - name: Log in to GHCR
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0

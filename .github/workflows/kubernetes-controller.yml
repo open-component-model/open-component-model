@@ -52,7 +52,7 @@ permissions:
 jobs:
   verify-chart:
     name: Verify Chart
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     timeout-minutes: 10
     steps:
       - name: Checkout
@@ -69,7 +69,8 @@ jobs:
       - name: Install Helm
         uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
         with:
-          version: v4.2.4
+          # renovate: datasource=github-releases depName=helm/helm
+          version: v4.3.0
 
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
@@ -92,7 +93,7 @@ jobs:
 
   build:
     name: Build Controller
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     timeout-minutes: 20
     needs: verify-chart
     outputs:
@@ -129,7 +130,8 @@ jobs:
       - name: Install Helm
         uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
         with:
-          version: v4.2.4
+          # renovate: datasource=github-releases depName=helm/helm
+          version: v4.3.0
 
       - name: Compute VERSION
         id: version

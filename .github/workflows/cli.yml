@@ -54,7 +54,7 @@ jobs:
   # assemble job, so all six binaries and the CTF carry an identical version.
   version:
     name: Compute Version
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     outputs:
       version: ${{ steps.version.outputs.version }}
       build_version: ${{ steps.build_version.outputs.build_version }}
@@ -95,7 +95,7 @@ jobs:
   build:
     name: ${{ matrix.goos }}/${{ matrix.goarch }}
     needs: version
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     permissions:
       contents: read
     strategy:
@@ -151,7 +151,7 @@ jobs:
   assemble:
     name: Assemble CTF
     needs: [ version, build ]
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     outputs:
       artifact_name: ${{ env.ARTIFACT_NAME }}
       artifact_id: ${{ steps.upload-artifacts.outputs.artifact_id }}
@@ -164,10 +164,12 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ env.CHECKOUT_REPO }}
-          # The handler/internal dir carries COSIGN_VERSION (.env) for the full CLI image.
+          # The handler/internal dir carries COSIGN_VERSION (.env) for the full CLI image;
+          # .github/scripts provides oci-annotations.sh for the image annotations.
           sparse-checkout: |
             ${{ env.CLI_DIR }}
             bindings/go/sigstore/signing/handler/internal
+            .github/scripts
           persist-credentials: 'false'
           ref: ${{ env.REF }}
 

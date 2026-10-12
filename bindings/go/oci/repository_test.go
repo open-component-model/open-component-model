@@ -2706,8 +2706,6 @@ func TestRepository_UploadDigestControls(t *testing.T) {
 			wantDigest := &descriptor.Digest{HashAlgorithm: hashAlgorithm, NormalisationAlgorithm: "ociArtifactDigest/v1", Value: root.Digest.Encoded()}
 			stream := &ocistream.OCIResourceStream{ReadOnlyGraphStorage: src, Descriptor: root, TempDir: t.TempDir()}
 
-			b, err := stream.Materialize(ctx)
-			r.NoError(err)
 			resource := &descriptor.Resource{Access: targetAccess}
 			if tt.state != "absent" {
 				resource.Digest = wantDigest.DeepCopy()
@@ -2720,12 +2718,17 @@ func TestRepository_UploadDigestControls(t *testing.T) {
 			var source *descriptor.Source
 			switch tt.method {
 			case "source":
+				b, materializeErr := stream.Materialize(ctx)
+				r.NoError(materializeErr)
 				if source, err = repo.UploadSource(ctx, &descriptor.Source{Access: targetAccess}, b); err == nil {
 					result = &descriptor.Resource{Access: source.Access, Digest: wantDigest}
 				}
 			case "stream":
+				// Don't materialize the blob here that we don't read, otherwise the fd leaks
 				result, err = repo.UploadResourceStream(ctx, resource, stream)
 			case "resource":
+				b, materializeErr := stream.Materialize(ctx)
+				r.NoError(materializeErr)
 				result, err = repo.UploadResource(ctx, resource, b)
 			}
 			r.Equal(original, resource, "input must not be mutated")
