@@ -8,8 +8,12 @@ import (
 
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
+	gitrepo "ocm.software/open-component-model/bindings/go/git/repository"
+	ghdigest "ocm.software/open-component-model/bindings/go/github/digest"
+	ghresource "ocm.software/open-component-model/bindings/go/github/repository/resource"
 	gpghandler "ocm.software/open-component-model/bindings/go/gpg/signing/handler"
 	helmdigest "ocm.software/open-component-model/bindings/go/helm/digest"
+	ocmhttp "ocm.software/open-component-model/bindings/go/http"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	ocicache "ocm.software/open-component-model/bindings/go/oci/cache"
 	ocicredentials "ocm.software/open-component-model/bindings/go/oci/credentials"
@@ -22,7 +26,9 @@ import (
 	"ocm.software/open-component-model/bindings/go/rsa/signing/handler"
 	signingv1alpha1 "ocm.software/open-component-model/bindings/go/rsa/signing/v1alpha1"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
+	s3repo "ocm.software/open-component-model/bindings/go/s3/repository"
 	sigstorehandler "ocm.software/open-component-model/bindings/go/sigstore/signing/handler"
+	wgetrepo "ocm.software/open-component-model/bindings/go/wget/repository"
 )
 
 // creator controller user-agent.
@@ -93,6 +99,11 @@ func NewPluginManager(ctx context.Context, cfg *genericv1.Config, logger *slog.L
 
 	helmDigestProcessor := helmdigest.NewDigestProcessor(options.TempDir)
 
+	s3DigestProcessor := s3repo.NewResourceRepository(fsCfg, s3repo.WithHTTPConfig(httpCfg))
+	wgetDigestProcessor := wgetrepo.NewResourceRepository(fsCfg, wgetrepo.WithHTTPClient(ocmhttp.New(ocmhttp.WithConfig(httpCfg))))
+	gitDigestProcessor := gitrepo.NewResourceRepository(fsCfg, gitrepo.WithHTTPClient(ocmhttp.New(ocmhttp.WithConfig(httpCfg))))
+	ghDigestProcessor := ghdigest.NewDigestProcessor(ghresource.WithHTTPConfig(httpCfg))
+
 	if err := errors.Join(
 		pm.ComponentVersionRepositoryRegistry.RegisterInternalComponentVersionRepositoryPlugin(repositoryProvider),
 		pm.SigningRegistry.RegisterInternalComponentSignatureHandler(signingHandler),
@@ -105,6 +116,10 @@ func NewPluginManager(ctx context.Context, cfg *genericv1.Config, logger *slog.L
 		pm.ResourcePluginRegistry.RegisterInternalResourcePlugin(ociResourceRepoPlugin),
 		pm.DigestProcessorRegistry.RegisterInternalDigestProcessorPlugin(ociResourceRepoPlugin),
 		pm.DigestProcessorRegistry.RegisterInternalDigestProcessorPlugin(helmDigestProcessor),
+		pm.DigestProcessorRegistry.RegisterInternalDigestProcessorPlugin(s3DigestProcessor),
+		pm.DigestProcessorRegistry.RegisterInternalDigestProcessorPlugin(wgetDigestProcessor),
+		pm.DigestProcessorRegistry.RegisterInternalDigestProcessorPlugin(gitDigestProcessor),
+		pm.DigestProcessorRegistry.RegisterInternalDigestProcessorPlugin(ghDigestProcessor),
 		pm.BlobTransformerRegistry.RegisterInternalBlobTransformerPlugin(transformer.New(logger)),
 	); err != nil {
 		return nil, fmt.Errorf("failed to register internal plugins: %w", err)
@@ -117,6 +132,10 @@ func NewPluginManager(ctx context.Context, cfg *genericv1.Config, logger *slog.L
 		pm.CredentialTypeRegistry.RegisterInternalCredentialTypeSchemeProvider(sigstoreSigningHandler),
 		pm.CredentialTypeRegistry.RegisterInternalCredentialTypeSchemeProvider(ociResourceRepoPlugin),
 		pm.CredentialTypeRegistry.RegisterInternalCredentialTypeSchemeProvider(helmDigestProcessor),
+		pm.CredentialTypeRegistry.RegisterInternalCredentialTypeSchemeProvider(s3DigestProcessor),
+		pm.CredentialTypeRegistry.RegisterInternalCredentialTypeSchemeProvider(wgetDigestProcessor),
+		pm.CredentialTypeRegistry.RegisterInternalCredentialTypeSchemeProvider(gitDigestProcessor),
+		pm.CredentialTypeRegistry.RegisterInternalCredentialTypeSchemeProvider(ghDigestProcessor),
 	); err != nil {
 		return nil, fmt.Errorf("failed to register credential types: %w", err)
 	}

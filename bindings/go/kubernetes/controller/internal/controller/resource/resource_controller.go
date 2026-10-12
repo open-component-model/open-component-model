@@ -425,24 +425,44 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, err
 	}
 
-	if resource.Spec.VerificationPolicy != v1alpha1.VerificationPolicyNever {
+	verifyStart := time.Now()
+	verifyResult := verificationResultVerified
+	// Captured before verification, which may reassign matchedResource (and return nil on error).
+	accessType := matchedResource.Access.GetType().Name
+	switch {
+	case resource.Spec.VerificationPolicy == v1alpha1.VerificationPolicyNever:
+		verifyResult = verificationResultSkipped
+		logger.V(1).Info("skip verifying resource: verification policy is Never")
+	case ocm.IsExcludedFromSignature(matchedResource.Digest):
+		verifyResult = verificationResultSkipped
+		logger.V(1).Info("skip verifying resource: resource is excluded from signature")
+		event.New(r.EventRecorder, resource, nil, v1alpha1.EventSeverityInfo,
+			"resource %q is excluded from signature; skipping digest verification", matchedResource.Name)
+	case matchedResource.Digest == nil || matchedResource.Digest.Value == "" || matchedResource.Digest.HashAlgorithm == "":
+		// Not Never and not the exclude marker (both handled above): a resource with no digest
+		// cannot be verified. Fail closed; the user opts out explicitly via VerificationPolicy: Never.
+		ResourceVerificationDurationHistogram.WithLabelValues(accessType, verificationResultFailed).Observe(time.Since(verifyStart).Seconds())
+		err := fmt.Errorf("resource %q has no digest to verify; set verificationPolicy to Never to accept unverified resources", matchedResource.Name)
+		status.MarkNotReady(r.EventRecorder, resource, v1alpha1.GetOCMResourceFailedReason, err.Error())
+
+		return ctrl.Result{}, err
+	default:
 		logger.V(1).Info("verifying resource")
 
-		matchedResource, err = ocm.VerifyResource(ctx, pm, matchedResource, cfg)
-		if err != nil {
-			if errors.Is(err, ocm.ErrPluginNotFound) {
-				// TODO(@frewilhelm): For now we skip resource types that do not have a digest processor plugin.
-				//                    We need to adjust this when the plugins are available
-				logger.V(1).Info("skipping resource verification as no suitable plugin was found")
-			} else {
-				status.MarkNotReady(r.EventRecorder, resource, v1alpha1.GetOCMResourceFailedReason, err.Error())
-
-				return ctrl.Result{}, fmt.Errorf("failed to verify resource: %w", err)
-			}
+		if ocm.IsLocalBlob(matchedResource.Access) {
+			err = ocm.VerifyLocalBlob(ctx, cacheBackedRepo,
+				resourceDescriptor.Component.Name, resourceDescriptor.Component.Version, matchedResource)
+		} else {
+			matchedResource, err = ocm.VerifyResource(ctx, pm, matchedResource, cfg)
 		}
-	} else {
-		logger.V(1).Info("skip verifying resource: verification policy is Never")
+		if err != nil {
+			ResourceVerificationDurationHistogram.WithLabelValues(accessType, verificationResultFailed).Observe(time.Since(verifyStart).Seconds())
+			status.MarkNotReady(r.EventRecorder, resource, v1alpha1.GetOCMResourceFailedReason, err.Error())
+
+			return ctrl.Result{}, fmt.Errorf("failed to verify resource: %w", err)
+		}
 	}
+	ResourceVerificationDurationHistogram.WithLabelValues(accessType, verifyResult).Observe(time.Since(verifyStart).Seconds())
 
 	logger.V(1).Info("retrieved resource", "component", fmt.Sprintf("%s:%s", resourceDescriptor.Component.Name, resourceDescriptor.Component.Version),
 		"resource", matchedResource.Name, "duration", time.Since(startRetrievingResource))
