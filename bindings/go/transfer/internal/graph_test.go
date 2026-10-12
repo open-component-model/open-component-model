@@ -435,6 +435,9 @@ func TestBuildGraphDefinition_PinnedRoot(t *testing.T) {
 	wrong := *actual
 	wrong.Value = strings.Repeat("0", len(actual.Value))
 	require.ErrorContains(t, build(wrong), "expected digest", "a root not matching its pin fails")
+	raw := *actual
+	raw.NormalisationAlgorithm = ""
+	require.ErrorContains(t, build(raw), "does not expose stored descriptors", "a raw pin is checked against the stored descriptor")
 }
 
 func TestBuildGraphDefinition_MultiTarget(t *testing.T) {

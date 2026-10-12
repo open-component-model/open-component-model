@@ -117,7 +117,7 @@ func GetPlugin(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return fmt.Errorf("creating component reference for plugin registry %q failed: %w", reg, err)
 		}
-		if err := ocm.ValidateDigestPin(ref); err != nil {
+		if _, err := ocm.DigestPin(ref); err != nil {
 			return err
 		}
 
@@ -149,12 +149,9 @@ func GetPlugin(cmd *cobra.Command, args []string) error {
 			// Add version to registry ref to be able to identify the source later
 			reg = fmt.Sprintf("%s:%s", reg, desc.Component.Version)
 		} else {
-			desc, err = repo.GetComponentVersion(ctx, ref.Component, ref.Version)
+			desc, err = ocm.GetPinnedComponentVersion(ctx, repo, ref)
 			if err != nil {
 				return fmt.Errorf("failed getting component constructor for plugin registry: %w", err)
-			}
-			if err := ocm.VerifyDigestPin(ctx, ref, desc); err != nil {
-				return err
 			}
 		}
 

@@ -21,7 +21,7 @@ Verify component version(s) inside an OCM repository based on signatures.
 
 - Prefixes: {component-descriptors|none} (default: "component-descriptors")  
 - Repo types: {OCIRepository|CommonTransportFormat} (short: {OCI|oci|CTF|ctf})
-- Digest: optional "@sha256:<hex>" pin; the command fails unless the fetched descriptor has this OCM component version digest (jsonNormalisation/v4alpha1)
+- Digest: optional pin, "@sha256:<hex>" (raw: the stored descriptor bytes) or "@jsonNormalisation.v4alpha1+sha256:<hex>" (normalized: the digest signatures sign); the command fails unless the fetched descriptor matches it
 
 ## OCM Verification explained in simple steps
 

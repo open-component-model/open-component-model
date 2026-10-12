@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"strings"
 
@@ -197,41 +198,43 @@ It is used to store the component descriptor manifest and other related blob man
 }
 
 // getDescriptorFromStore retrieves a component descriptor from a given Store using the provided reference.
-func getDescriptorFromStore(ctx context.Context, store spec.Store, reference string, unmarshal ocidescriptor.UnmarshalFunc) (desc *descriptor.Descriptor, manifestRef *ociImageSpecV1.Manifest, index *ociImageSpecV1.Index, err error) {
+// It also returns the stored descriptor layer the descriptor was decoded from.
+func getDescriptorFromStore(ctx context.Context, store spec.Store, reference string, unmarshal ocidescriptor.UnmarshalFunc) (desc *descriptor.Descriptor, raw []byte, manifestRef *ociImageSpecV1.Manifest, index *ociImageSpecV1.Index, err error) {
 	manifest, index, err := getDescriptorOCIImageManifest(ctx, store, reference)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to get manifest: %w", err)
+		return nil, nil, nil, nil, fmt.Errorf("failed to get manifest: %w", err)
 	}
 
 	slogcontext.Log(ctx, slog.LevelDebug, "fetching descriptor manifest config", log.DescriptorLogAttr(manifest.Config))
 	componentConfigRaw, err := store.Fetch(ctx, manifest.Config)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to get component config: %w", err)
+		return nil, nil, nil, nil, fmt.Errorf("failed to get component config: %w", err)
 	}
 	cfg := componentConfig.Config{}
 	if err := json.NewDecoder(componentConfigRaw).Decode(&cfg); err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 
 	if closeErr := componentConfigRaw.Close(); closeErr != nil {
-		return nil, nil, nil, fmt.Errorf("failed to close component config reader: %w", closeErr)
+		return nil, nil, nil, nil, fmt.Errorf("failed to close component config reader: %w", closeErr)
 	}
 
 	// Read component descriptor
 	descriptorLayer := *cfg.ComponentDescriptorLayer
 	slogcontext.Log(ctx, slog.LevelDebug, "fetching component descriptor layer", log.DescriptorLogAttr(descriptorLayer))
-	descriptorRaw, err := store.Fetch(ctx, descriptorLayer)
+	descriptorReader, err := store.Fetch(ctx, descriptorLayer)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to fetch descriptor layer: %w", err)
+		return nil, nil, nil, nil, fmt.Errorf("failed to fetch descriptor layer: %w", err)
 	}
-	defer func() {
-		err = errors.Join(err, descriptorRaw.Close())
-	}()
-
-	desc, err = ocidescriptor.SingleFileDecodeDescriptor(descriptorRaw, descriptorLayer.MediaType, unmarshal)
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to decode descriptor: %w", err)
+	raw, err = io.ReadAll(descriptorReader)
+	if err = errors.Join(err, descriptorReader.Close()); err != nil {
+		return nil, nil, nil, nil, fmt.Errorf("failed to read descriptor layer: %w", err)
 	}
 
-	return desc, &manifest, index, nil
+	desc, err = ocidescriptor.SingleFileDecodeDescriptor(bytes.NewReader(raw), descriptorLayer.MediaType, unmarshal)
+	if err != nil {
+		return nil, nil, nil, nil, fmt.Errorf("failed to decode descriptor: %w", err)
+	}
+
+	return desc, raw, &manifest, index, nil
 }

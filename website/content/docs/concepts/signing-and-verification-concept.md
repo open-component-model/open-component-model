@@ -190,13 +190,32 @@ A component version can have **multiple signatures** from different parties, ena
 
 ### Pinning a Component Version by Digest
 
-A component reference can name the digest of the component version it expects:
+A component reference can name the digest of the component version it expects. The digest uses the OCI digest
+notation, optionally prefixed with a normalization algorithm (`/` written as `.`):
 
 ```text
-ghcr.io/acme//acme.org/helloworld:1.0.0@sha256:<component-version-digest>
+ghcr.io/acme//acme.org/helloworld:1.0.0@sha256:<stored-descriptor-digest>
+ghcr.io/acme//acme.org/helloworld:1.0.0@jsonNormalisation.v4alpha1+sha256:<normalized-descriptor-digest>
 ```
 
-The digest is the **component version digest**: the SHA-256 (or SHA-512) hash of the descriptor normalized with `jsonNormalisation/v4alpha1` (see [Normalization and Digest Calculation](#normalization-and-digest-calculation)), the same value that OCM signatures sign. `ocm get`, `ocm download`, `ocm verify`, `ocm sign` and `ocm transfer` fail if the component version they read has a different digest, and `ocm download` verifies the downloaded content against the resource digests of the pinned descriptor. A pinned reference must still name the version. Because the digest excludes access information, it is the same in every repository the component version is transferred to, so a pin taken once binds every later read to the same content even if the version is overwritten in between. See the [CLI reference]({{< relref "/docs/reference/ocm-cli/ocm_get_component-version.md" >}}) for the reference format.
+`ocm get`, `ocm download`, `ocm verify`, `ocm sign` and `ocm transfer` fail if the component version they read does not
+match the pin, and `ocm download` verifies the downloaded content against the resource digests of the pinned
+descriptor. A pinned reference must still name the version. Both forms accept `sha256` and `sha512`.
+
+| | Raw pin `sha256:<hex>` | Normalized pin `jsonNormalisation.v4alpha1+sha256:<hex>` |
+| --- | --- | --- |
+| Hashes | the component descriptor bytes exactly as stored in the repository | the descriptor normalized with `jsonNormalisation/v4alpha1` (see [Normalization and Digest Calculation](#normalization-and-digest-calculation)) |
+| Covers | everything, including access information, all labels and signatures | what signatures cover: no access information, no labels excluded from signing |
+| Changes on | any change of the stored descriptor, including `ocm transfer` and `ocm sign` | changes of signed content only |
+| Where it works | the repository the pin was taken from | every repository the component version is transferred to |
+| How to obtain | in OCI registries and CTF archives, the digest of the `componentDescriptorLayer` referenced by the component version's OCI config | the digest `ocm sign` logs (`digest` in `signed successfully`) and records in the signature (`signatures[].digest.value` in `ocm get cv -o yaml`) |
+
+Use a raw pin when you need byte-exact identity of what you read from one repository, for example to bind a
+pipeline step to the exact descriptor an earlier step inspected. Use a normalized pin to identify a component version
+independent of where it is stored: it survives transfer and signing, so a pin taken once binds every later read to the
+same signed content, even if the version is overwritten in between. Raw pins need a repository that exposes the stored
+descriptor (OCI registries and CTF archives); for other repositories, use the normalized form. See the
+[CLI reference]({{< relref "/docs/reference/ocm-cli/ocm_get_component-version.md" >}}) for the reference format.
 
 ## Supported Signing Algorithms
 

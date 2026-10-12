@@ -17,8 +17,10 @@ type ComponentID struct {
 	// Version is the semantic version (e.g., "1.0.0").
 	Version string
 
-	// Digest optionally pins the component version digest. When set, the transfer fails unless
-	// the resolved descriptor has this digest.
+	// Digest optionally pins the component version (see [repository.ParseDigestPin]). When set,
+	// the transfer fails unless the resolved descriptor has this digest: with a normalisation
+	// algorithm, the digest of the normalised descriptor; without one, the digest of the
+	// descriptor bytes as stored in the source repository.
 	Digest *descriptor.Digest
 }
 

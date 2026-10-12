@@ -58,7 +58,11 @@ func New() *cobra.Command {
 This command fetches a specific plugin resource from the given OCM component version and stores it at the specified output location.
 The plugin binary can be identified by resource name and version, with optional extra identity parameters for platform-specific binaries.
 
-Resources can be accessed either locally or via a plugin that supports remote fetching, with optional credential resolution.`,
+Resources can be accessed either locally or via a plugin that supports remote fetching, with optional credential resolution.
+
+A reference can pin the component version with a digest, "{component}:{version}@sha256:<hex>" (raw: the
+descriptor bytes as stored) or "@jsonNormalisation.v4alpha1+sha256:<hex>" (normalized: the digest signatures
+sign). See "ocm get cv --help" for when to use which. The plugin binary is then verified against its digest in the pinned descriptor.`,
 		Example: ` # Download a plugin binary with resource name '<my-plugin-component>' and version '<version>'
   ocm download plugin <oci-repository>//<my-plugin-component>:<version>
 
@@ -140,12 +144,9 @@ func DownloadPlugin(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("could not access ocm repository: %w", err)
 	}
 
-	desc, err := repo.GetComponentVersion(cmd.Context(), ref.Component, ref.Version)
+	desc, err := ocm.GetPinnedComponentVersion(cmd.Context(), repo, ref)
 	if err != nil {
 		return fmt.Errorf("getting component version failed: %w", err)
-	}
-	if err := ocm.VerifyDigestPin(cmd.Context(), ref, desc); err != nil {
-		return err
 	}
 
 	resourceType, err := cmd.Flags().GetString(FlagPluginType)

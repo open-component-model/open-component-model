@@ -46,8 +46,10 @@ type multiResolver struct {
 //   - If the spec is nil (e.g., when using FromRepository which wraps a concrete repo directly),
 //     it falls back to GetComponentVersionRepositoryForComponent.
 //
-// After fetching the descriptor, it optionally verifies the digest against the expected value
-// recorded during recursive discovery of parent component references.
+// The descriptor is verified against the expected digest of the component version, if any:
+// a root pin or the digest recorded during recursive discovery of parent component references.
+// A raw expected digest (no normalisation algorithm, see [repository.ParseDigestPin]) is
+// checked against the stored descriptor bytes the descriptor is decoded from.
 func (r *multiResolver) Resolve(ctx context.Context, key string) (*discoveryValue, error) {
 	parts := strings.SplitN(key, ":", 2)
 	if len(parts) != 2 {
@@ -90,26 +92,39 @@ func (r *multiResolver) Resolve(ctx context.Context, key string) (*discoveryValu
 		repo = resolved
 	}
 
-	desc, err := repo.GetComponentVersion(ctx, component, version)
-	if err != nil {
-		return nil, fmt.Errorf("failed getting component version %s:%s: %w", component, version, err)
+	expected := r.expectedDigest(runtime.Identity{
+		descriptor.IdentityAttributeName:    component,
+		descriptor.IdentityAttributeVersion: version,
+	})
+
+	var desc *descriptor.Descriptor
+	if expected != nil && expected.NormalisationAlgorithm == "" {
+		// A raw pin hashes the stored descriptor bytes; the descriptor is decoded from the same bytes.
+		desc, err = repository.GetPinnedComponentVersion(ctx, repo, component, version, expected)
+		if err != nil {
+			return nil, fmt.Errorf("failed getting component version %s:%s: %w", component, version, err)
+		}
+	} else {
+		desc, err = repo.GetComponentVersion(ctx, component, version)
+		if err != nil {
+			return nil, fmt.Errorf("failed getting component version %s:%s: %w", component, version, err)
+		}
+		if expected != nil {
+			slog.DebugContext(ctx, "verifying digest for resolved descriptor",
+				"component", component, "version", version,
+				"expectedDigest", expected.Value)
+			if err := signing.VerifyDigestMatchesDescriptor(
+				ctx, desc, descriptor.Signature{Digest: *expected}, slog.Default(),
+			); err != nil {
+				return nil, fmt.Errorf("failed verifying resolved descriptor matches expected digest: %w", err)
+			}
+		}
 	}
 
 	slog.DebugContext(ctx, "resolved component version",
 		"component", component, "version", version,
 		"resources", len(desc.Component.Resources),
 		"references", len(desc.Component.References))
-
-	if expected := r.expectedDigest(desc.Component.ToIdentity()); expected != nil {
-		slog.DebugContext(ctx, "verifying digest for resolved descriptor",
-			"component", component, "version", version,
-			"expectedDigest", expected.Value)
-		if err := signing.VerifyDigestMatchesDescriptor(
-			ctx, desc, descriptor.Signature{Digest: *expected}, slog.Default(),
-		); err != nil {
-			return nil, fmt.Errorf("failed verifying resolved descriptor matches expected digest: %w", err)
-		}
-	}
 
 	return &discoveryValue{
 		Descriptor:       desc,

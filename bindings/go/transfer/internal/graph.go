@@ -52,8 +52,9 @@ type TransferRoot struct {
 	// SourceResolver resolves this root's component version from its source repository.
 	// One resolver per component — see the struct doc for the design rationale.
 	SourceResolver resolvers.ComponentVersionRepositoryResolver
-	// ExpectedDigest optionally pins the component version digest of the root. The resolved
-	// descriptor is verified against it like a digest of a component reference.
+	// ExpectedDigest optionally pins the root component version (see [repository.ParseDigestPin]):
+	// normalized digests are verified like the digest of a component reference, raw digests
+	// against the stored descriptor bytes.
 	ExpectedDigest *descruntime.Digest
 }
 

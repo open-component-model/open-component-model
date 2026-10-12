@@ -85,7 +85,7 @@ func (repo *Repository) DiscoverLocalSBOM(ctx context.Context, component, versio
 // localResourceFromDescriptor finds the unique resource matching identity in the
 // component version's descriptor.
 func (repo *Repository) localResourceFromDescriptor(ctx context.Context, store spec.Store, reference string, identity runtime.Identity) (*descriptor.Resource, error) {
-	desc, _, _, err := getDescriptorFromStore(ctx, store, reference, repo.unmarshalDescriptorFunc)
+	desc, _, _, _, err := getDescriptorFromStore(ctx, store, reference, repo.unmarshalDescriptorFunc)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get component version: %w", err)
 	}

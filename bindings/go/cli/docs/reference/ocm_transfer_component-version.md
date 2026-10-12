@@ -17,6 +17,10 @@ Transfer component version(s) from a source repository to
 a target repository using an internally generated transformation graph.
 
 When a version is included in the source reference, exactly that version is transferred.
+A digest after the version pins it: "@sha256:<hex>" (raw: the descriptor bytes as stored in the source)
+or "@jsonNormalisation.v4alpha1+sha256:<hex>" (normalized: the digest signatures sign). The transfer fails
+unless the source descriptor matches. A raw pin is specific to the source repository; a normalized pin
+also matches the transferred copy.
 When the version is omitted, all versions of the component are discovered and transferred.
 When the source is a repository reference (without a component), every component version
 the repository contains is transferred (component listing is currently CTF-only).

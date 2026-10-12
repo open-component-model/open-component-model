@@ -49,7 +49,7 @@ func New() *cobra.Command {
 
 - Prefixes: {%[1]s|none} (default: %[1]q)  
 - Repo types: {%[2]s} (short: {%[3]s})
-- Digest: optional "@sha256:<hex>" pin; the command fails unless the fetched descriptor has this OCM component version digest (jsonNormalisation/v4alpha1)
+- Digest: optional pin, "@sha256:<hex>" (raw: the stored descriptor bytes) or "@jsonNormalisation.v4alpha1+sha256:<hex>" (normalized: the digest signatures sign); the command fails unless the fetched descriptor matches it
 
 ## OCM Verification explained in simple steps
 
@@ -309,12 +309,9 @@ func VerifyComponentVersion(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("could not access ocm repository: %w", err)
 	}
 
-	desc, err := repo.GetComponentVersion(ctx, ref.Component, ref.Version)
+	desc, err := ocm.GetPinnedComponentVersion(ctx, repo, ref)
 	if err != nil {
 		return fmt.Errorf("getting component reference and versions failed: %w", err)
-	}
-	if err := ocm.VerifyDigestPin(ctx, ref, desc); err != nil {
-		return err
 	}
 
 	var sigs []descruntime.Signature

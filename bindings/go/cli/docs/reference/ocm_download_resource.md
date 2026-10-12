@@ -24,6 +24,10 @@ Resources can be accessed either locally or via a plugin that supports remote fe
 
 When --output is not provided, the output filename is the resource name.
 
+A reference can pin the component version with a digest, "{component}:{version}@sha256:<hex>" (raw: the
+descriptor bytes as stored) or "@jsonNormalisation.v4alpha1+sha256:<hex>" (normalized: the digest signatures
+sign). See "ocm get cv --help" for when to use which. The resource content is then verified against its digest in the pinned descriptor.
+
 With --sbom, the Software Bills of Materials describing the resource are downloaded instead of the
 resource itself. This is EXPERIMENTAL: what is discovered, how it is written out and the flags
 themselves may change in a future release. They are looked for in two ways, in order:

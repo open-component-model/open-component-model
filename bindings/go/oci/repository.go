@@ -50,9 +50,10 @@ import (
 )
 
 var (
-	_            ComponentVersionRepository          = (*Repository)(nil)
-	_            repository.OwnershipAwareRepository = (*Repository)(nil)
-	versionRegex                                     = regexp.MustCompile(compref.VersionRegex)
+	_            ComponentVersionRepository                 = (*Repository)(nil)
+	_            repository.OwnershipAwareRepository        = (*Repository)(nil)
+	_            repository.StoredComponentDescriptorReader = (*Repository)(nil)
+	versionRegex                                            = regexp.MustCompile(compref.VersionRegex)
 )
 
 // Repository implements the ComponentVersionRepository interface using OCI registries.
@@ -215,16 +216,35 @@ func (repo *Repository) GetComponentVersion(ctx context.Context, component, vers
 		done(err)
 	}()
 
+	desc, _, err = repo.getStoredComponentDescriptor(ctx, component, version)
+	return desc, err
+}
+
+// GetStoredComponentDescriptor implements [repository.StoredComponentDescriptorReader].
+// raw is the content of the componentDescriptorLayer of the component version, so its
+// digest is the digest of that layer.
+func (repo *Repository) GetStoredComponentDescriptor(ctx context.Context, component, version string) (desc *descriptor.Descriptor, raw []byte, err error) {
+	ctx = slogcontext.NewCtx(ctx, repo.logger)
+	done := log.Operation(ctx, "get stored component descriptor",
+		slog.String("component", component),
+		slog.String("version", version))
+	defer func() {
+		done(err)
+	}()
+	return repo.getStoredComponentDescriptor(ctx, component, version)
+}
+
+func (repo *Repository) getStoredComponentDescriptor(ctx context.Context, component, version string) (*descriptor.Descriptor, []byte, error) {
 	reference, store, err := repo.getStore(ctx, component, version)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	desc, _, _, err = getDescriptorFromStore(ctx, store, reference, repo.unmarshalDescriptorFunc)
+	desc, raw, _, _, err := getDescriptorFromStore(ctx, store, reference, repo.unmarshalDescriptorFunc)
 	if errors.Is(err, errdef.ErrNotFound) {
-		return desc, errors.Join(repository.ErrNotFound, fmt.Errorf("component version %s/%s not found: %w", component, version, err))
+		return nil, nil, errors.Join(repository.ErrNotFound, fmt.Errorf("component version %s/%s not found: %w", component, version, err))
 	}
-	return desc, err
+	return desc, raw, err
 }
 
 // AddLocalResource adds a local resource to the repository.
@@ -539,7 +559,7 @@ func (repo *Repository) localArtifact(ctx context.Context, component, version st
 	if err != nil {
 		return nil, nil, err
 	}
-	desc, manifest, index, err := getDescriptorFromStore(ctx, store, reference, repo.unmarshalDescriptorFunc)
+	desc, _, manifest, index, err := getDescriptorFromStore(ctx, store, reference, repo.unmarshalDescriptorFunc)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get component version: %w", err)
 	}
