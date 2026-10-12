@@ -80,7 +80,7 @@ For more information about OCM transfer, see the
 - [How-To: Resolve Components Across Multiple Registries]
   ({{< relref "docs/how-to/resolve-components-from-multiple-repositories.md" >}}) — Recipe for
   multi-registry resolution
-- [How-To: Migrate from Deprecated Resolvers]({{< relref "docs/how-to/migrate-from-deprecated-resolvers.md" >}}) —
+- [Migration Guide: Migrate from Deprecated Resolvers]({{< relref "docs/how-to/migration-guides/migrate-from-deprecated-resolvers.md" >}}) —
   Replace deprecated fallback
   resolvers with glob-based resolvers
 
