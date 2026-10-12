@@ -10,12 +10,17 @@ aliases:
 
 ## What You'll Learn
 
-This is the [Deploy an Application from a Helm Chart with OCM and kro]({{< relref "deploy-helm-chart-bootstrap.md" >}})
-tutorial, rebuilt on **Crossplane** instead of kro. The goal is unchanged: one versioned OCM component that carries a
-Helm chart, its container image, and the instructions to deploy it, with image references that localize themselves as
-the component moves between registries. The only thing that changes is the graph engine. See
-[How Crossplane fits in](#how-crossplane-fits-in) for the full mapping. [Podinfo](https://github.com/stefanprodan/podinfo)
-stands in for your application.
+Your application ships as a Helm chart, and you want its delivery to be repeatable: one versioned OCM component that
+carries the chart, its container image, and the instructions to deploy it, with image references that localize
+themselves as the component moves between registries. This tutorial builds that deployment on **Crossplane**, using a
+`CompositeResourceDefinition` (XRD) plus a `Composition` to reconcile the deployment graph. We will use
+[Podinfo](https://github.com/stefanprodan/podinfo) as the example application.
+
+{{< callout context="note" title="Coming from the kro tutorial?" icon="outline/info-circle" >}}
+This tutorial reaches the same end state as [Deploy an Application from a Helm Chart with OCM and
+kro]({{< relref "deploy-helm-chart-bootstrap.md" >}}), swapping kro's `ResourceGraphDefinition` for a Crossplane
+XRD + Composition. Reading the kro tutorial first is **not** required.
+{{< /callout >}}
 
 By the end, you'll have:
 
@@ -30,15 +35,19 @@ Before starting, make sure you have set up your environment as described in the 
 {{< /callout >}}
 
 - [Controller environment]({{< relref "setup-controller-environment.md" >}}) with OCM Controllers installed
-- [Crossplane](https://docs.crossplane.io/latest/get-started/install/) core, plus the
-  [Kubernetes provider](https://github.com/crossplane-contrib/provider-kubernetes) (`provider-kubernetes`) with a
-  `ProviderConfig` named `kubernetes-provider` using `InjectedIdentity`
-- The [Patch and Transform function](https://github.com/crossplane-contrib/function-patch-and-transform)
-  (`function-patch-and-transform`) installed, which the `Composition` runs as its pipeline step (installed below)
-- Flux's `source-controller` and `helm-controller` (Crossplane creates the Flux objects, so kro and a GitOps deployer
-  are not needed)
+- **Crossplane** installed as the orchestrator, following [Set up Controller Environments > Install an
+  Orchestrator]({{< relref "setup-controller-environment.md#install-an-orchestrator" >}}) (the Crossplane tab). That
+  step installs Crossplane core and the [Kubernetes provider](https://github.com/crossplane-contrib/provider-kubernetes)
+  (`provider-kubernetes`) with a `ProviderConfig` named `kubernetes-provider` using `InjectedIdentity`.
+- **Flux** installed as the deployer, following [Set up Controller Environments > Install a
+  Deployer]({{< relref "setup-controller-environment.md#install-a-deployer" >}}) (the Flux tab). Crossplane creates the
+  Flux `OCIRepository` and `HelmRelease` objects, so Flux's `source-controller` and `helm-controller` must be running.
+  kro and a GitOps deployer are not needed.
 - [Custom RBAC]({{< relref "custom-rbac.md" >}}) letting the OCM controller manage `compositions` and
-  `compositeresourcedefinitions` (`apiextensions.crossplane.io`)
+  `compositeresourcedefinitions` (`apiextensions.crossplane.io`); see the Crossplane tab in that guide
+- The [Patch and Transform function](https://github.com/crossplane-contrib/function-patch-and-transform)
+  (`function-patch-and-transform`), which the `Composition` runs as its pipeline step. This tutorial installs it for
+  you in the deploy section, so it is not a prerequisite.
 - [OCM CLI]({{< relref "ocm-cli-installation.md" >}}) installed
 - Access to an OCI registry (e.g., [ghcr.io](https://docs.github.com/en/packages/learn-github-packages/introduction-to-github-packages))
 - `envsubst` installed (pre-installed on most Linux/macOS systems as part of `gettext`)
@@ -60,19 +69,22 @@ export OCM_REPO=ghcr.io/$GITHUB_USERNAME/ocm-tutorial
 
 ### The Bootstrap Pattern
 
-The [bootstrap pattern]({{< relref "deploy-helm-chart-bootstrap.md" >}}) is unchanged from the kro variant: the
-deployment graph is packaged inside the OCM component, and the Deployer controller extracts the blob and applies it.
-The only difference is that the blob is a Crossplane XRD + Composition instead of a kro `ResourceGraphDefinition`.
+Instead of applying the deployment graph (the XRD + Composition) to the cluster by hand, the **bootstrap pattern**
+packages that graph as a resource *inside* the OCM component. The OCM Deployer controller then extracts the blob from
+the component and applies it for you. The deployment instructions travel with the component and stay versioned
+alongside the chart and image, so every environment installs the same graph. In this tutorial the packaged blob is a
+Crossplane XRD + Composition.
 
-### How Crossplane fits in
+### How the Pieces Fit Together
 
-The difference from the kro variant is the **graph engine**, meaning what reconciles the deployment graph and creates
-the Flux objects. Where the kro variant ships a `ResourceGraphDefinition` and lets kro register and reconcile a
-`Bootstrap` CRD, this variant ships a Crossplane `CompositeResourceDefinition` (XRD) plus a `Composition`. Crossplane
-offers a claimable `Bootstrap` kind, resolves the chart and image through OCM `Resource` objects, then uses the
+The **graph engine** is what reconciles the deployment graph and creates the Flux objects. This tutorial ships a
+Crossplane `CompositeResourceDefinition` (XRD) plus a `Composition`. The XRD offers a claimable `Bootstrap` kind. When
+you create a `Bootstrap` claim, Crossplane resolves the chart and image through OCM `Resource` objects, then uses the
 [Crossplane Kubernetes provider](https://github.com/crossplane-contrib/provider-kubernetes) (`provider-kubernetes`)
-to create the Flux `OCIRepository` and `HelmRelease`. Flux's `helm-controller` still renders the chart. Crossplane
-simply replaces kro as the reconciler. The building blocks map like this:
+to create the Flux `OCIRepository` and `HelmRelease`. Flux's `helm-controller` renders the chart into the running
+workload.
+
+If you already know the kro variant, the building blocks map like this (otherwise skip the table):
 
 | kro                                        | Crossplane                                                           |
 | ------------------------------------------ | -------------------------------------------------------------------- |
@@ -90,10 +102,10 @@ between two composed resources.
 
 ### Localization
 
-[Localization]({{< relref "deploy-helm-chart-bootstrap.md" >}}) works exactly as in the kro variant: the transfer
-updates image references in the descriptor, and at deploy time the **Composition** reads the resolved OCM `Resource`
-status and injects the current image into the Helm values, so the workload always runs the image from the current
-registry.
+**Localization** keeps image references in sync when a component moves between registries. Transferring the component
+rewrites the image references in its descriptor to point at the target registry. At deploy time the **Composition**
+reads the resolved OCM `Resource` status and injects the current image into the Helm values, so the workload always
+runs the image from the registry it was transferred to, not the original upstream location.
 
 ## Create and Publish a Component Version
 
@@ -123,7 +135,7 @@ Create a `component-constructor.yaml` file:
 ```shell
 cat > component-constructor.yaml << 'EOF'
 components:
-  - name: ocm.software/ocm-k8s-toolkit/bootstrap
+  - name: ocm.software/ocm-k8s-toolkit/bootstrap-crossplane
     version: "1.0.0"
     provider:
       name: ocm.software
@@ -467,12 +479,12 @@ EOF
 ```
 
 {{< /details >}}
-
-Make the component public in the GitHub `packages` tab by opening the
-`component-descriptors/ocm.software/ocm-k8s-toolkit/bootstrap` package and setting its visibility to `public`.
-Alternatively, keep it private and configure credentials for the OCM Controllers and Flux before `ocm add cv`. See
-[Credentials for OCM Controllers]({{< relref "/docs/how-to/configure-credentials-ocm-controllers.md" >}}),
-and add a `secretRef` to the `OCIRepository` manifest in the Composition's `ocirepository` resource.
+{{< callout context="note" title="Private registries" icon="outline/lock" >}}
+If you want to keep the component private instead of making it public after transfer, configure credentials for the
+OCM Controllers and Flux before running `ocm add cv`. See
+[Credentials for OCM Controllers]({{< relref "/docs/how-to/configure-credentials-ocm-controllers.md" >}}), and add a
+`secretRef` to the `OCIRepository` manifest in the Composition's `ocirepository` resource.
+{{< /callout >}}
 {{< /step >}}
 
 {{< step >}}
@@ -488,8 +500,12 @@ ocm add cv
 Transfer to your registry with `--copy-resources --upload-as ociArtifact` to enable localization. The `--upload-as ociArtifact` flag is required so the Helm chart and image land as OCI artifacts in the target registry, keeping image references the Composition can rewrite:
 
 ```bash
-ocm transfer cv --copy-resources --upload-as ociArtifact transport-archive//ocm.software/ocm-k8s-toolkit/bootstrap:1.0.0 $OCM_REPO
+ocm transfer cv --copy-resources --upload-as ociArtifact transport-archive//ocm.software/ocm-k8s-toolkit/bootstrap-crossplane:1.0.0 $OCM_REPO
 ```
+
+Now that the component is in your registry, make it public so the OCM Controllers and Flux can pull it without
+credentials: open the `component-descriptors/ocm.software/ocm-k8s-toolkit/bootstrap-crossplane` package in the GitHub
+`packages` tab and set its visibility to `public`. To keep it private instead, follow the private-registry note above.
 
 {{< /step >}}
 
@@ -500,7 +516,7 @@ ocm transfer cv --copy-resources --upload-as ociArtifact transport-archive//ocm.
 Check that the component was transferred and resources were localized:
 
 ```bash
-ocm get cv $OCM_REPO//ocm.software/ocm-k8s-toolkit/bootstrap:1.0.0 -o yaml | grep imageReference
+ocm get cv $OCM_REPO//ocm.software/ocm-k8s-toolkit/bootstrap-crossplane:1.0.0 -o yaml | grep imageReference
 ```
 
 You should see image references pointing to `$OCM_REPO/...` instead of the original locations. This confirms localization worked.
@@ -572,7 +588,7 @@ kind: Component
 metadata:
   name: bootstrap-component
 spec:
-  component: ocm.software/ocm-k8s-toolkit/bootstrap
+  component: ocm.software/ocm-k8s-toolkit/bootstrap-crossplane
   repositoryRef:
     name: bootstrap-repository
   semver: 1.0.0
@@ -627,10 +643,17 @@ Please make sure that you updated your RBAC permissions before applying this com
 envsubst < bootstrap.yaml | kubectl apply -f -
 ```
 
-Wait for the Composition and its XRD to be installed (this may take 30-60 seconds):
+Wait for the XRD to be installed (this may take 30-60 seconds). `kubectl` rejects `-w` with more than one resource
+type, so watch the XRD on its own:
 
 ```bash
-kubectl get xrd,composition -w
+kubectl get xrd -w
+```
+
+Once the XRD is `ESTABLISHED`/`OFFERED`, check the Composition:
+
+```bash
+kubectl get composition
 ```
 
 <details>
@@ -656,10 +679,10 @@ claimable `Bootstrap` kind.
 
 Now create a **claim** of the `Bootstrap` composite to trigger the actual deployment. `ocmComponent` selects the OCM
 `Component` CR created by the bootstrap resources (`bootstrap-component`), matching the XRD's default. Create
-`instance.yaml`:
+`claim.yaml`:
 
 ```shell
-cat > instance.yaml << 'EOF'
+cat > claim.yaml << 'EOF'
 apiVersion: ocm.software/v1alpha1
 kind: Bootstrap
 metadata:
@@ -678,7 +701,7 @@ EOF
 Apply the claim to the cluster:
 
 ```bash
-kubectl apply -f instance.yaml
+kubectl apply -f claim.yaml
 ```
 
 <details>
@@ -727,7 +750,7 @@ kubectl get pods -l app.kubernetes.io/name=bootstrap-release-podinfo -o jsonpath
 <summary>You should see this output</summary>
 
 ```console
-ghcr.io/$GITHUB_USERNAME/component-descriptors/ocm.software/ocm-k8s-toolkit/bootstrap:latest@sha256:262578cde928d5c9eba3bce079976444f624c13ed0afb741d90d5423877496cb
+ghcr.io/$GITHUB_USERNAME/ocm-tutorial/stefanprodan/podinfo:latest@sha256:8fa56908408de98f24aed2a162b1bb42c0b98df7abfcc5a76a14a8be510457c5
 ```
 
 </details>
