@@ -544,8 +544,8 @@ spec:
   resourceRef:
     # Reference to the OCM resource that contains the XRD + Composition blob.
     name: bootstrap-composition
-    # Crossplane XRDs and Compositions are cluster-scoped, so the deployer is
-    # cluster-scoped too. Set the namespace of the referenced resource here.
+    # The Deployer is cluster-scoped, so point it at the namespace of the
+    # referenced resource.
     namespace: default
   # ocmConfig is required, if the OCM repository requires credentials to access it.
   # (You also need to specify the namespace of the reference as the 'deployer' is cluster-scoped.)
@@ -708,51 +708,11 @@ Common causes: missing component, wrong repository URL, credential issues, or th
 ### RBAC Permission Errors
 
 If the controller logs show permission errors like `forbidden` or `cannot create resource`, the controller's
-`ServiceAccount` lacks RBAC for the Crossplane objects the Deployer applies. The
-[Custom RBAC guide]({{< relref "custom-rbac.md" >}}) covers the general pattern (its examples target kro, so the
-API groups differ). For this Crossplane variant, grant the groups the Deployer actually touches: the XRD and
-Composition (`apiextensions.crossplane.io`), the `Bootstrap` composite (`ocm.software`), and the OCM `Resource`
-objects (`delivery.ocm.software`).
-
-{{< callout context="note" title="Service account name" icon="outline/info-circle" >}}
-The binding below assumes the controller `ServiceAccount` is `ocm-k8s-toolkit-controller-manager` in
-`ocm-k8s-toolkit-system`. Other Helm release names produce different names. Look yours up with
-`kubectl get sa -n ocm-k8s-toolkit-system -l app.kubernetes.io/name=ocm-k8s-toolkit`.
-{{< /callout >}}
-
-```bash
-cat << 'EOF' | kubectl apply -f -
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: ocm-controller-crossplane
-rules:
-  - apiGroups: ["apiextensions.crossplane.io"]
-    resources: ["compositeresourcedefinitions", "compositions"]
-    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
-  - apiGroups: ["ocm.software"]
-    resources: ["bootstraps"]
-    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
-  - apiGroups: ["delivery.ocm.software"]
-    resources: ["resources"]
-    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: ocm-controller-crossplane
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: ocm-controller-crossplane
-subjects:
-  - kind: ServiceAccount
-    name: ocm-k8s-toolkit-controller-manager
-    namespace: ocm-k8s-toolkit-system
-EOF
-```
-
-Confirm the grant took effect:
+`ServiceAccount` lacks RBAC for the Crossplane objects the Deployer applies: the XRD and Composition
+(`apiextensions.crossplane.io`), the `Bootstrap` composite (`ocm.software`), and the OCM `Resource` objects
+(`delivery.ocm.software`). Apply the `ocm-controller-crossplane` `ClusterRole` and binding from
+[Configure Custom RBAC for Deployers]({{< relref "/docs/how-to/custom-rbac.md" >}}) (select the **Crossplane**
+tab), then confirm the grant with:
 
 ```bash
 kubectl auth can-i create compositions.apiextensions.crossplane.io \
