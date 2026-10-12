@@ -41,6 +41,7 @@ configurations:
 | `reference.uploader.transfer.config.ocm.software/v1alpha1`   | Per-match rule that keeps a resource by reference (no transformation).      | [Reference Uploader]({{< relref "docs/reference/transfer-configuration/reference-uploader.md" >}})           |
 | `artifactory.uploader.transfer.config.ocm.software/v1alpha1` | Per-match rule that uploads a resource into a JFrog Artifactory repository. | [JFrog Artifactory Uploader]({{< relref "docs/reference/transfer-configuration/artifactory-uploader.md" >}}) |
 | `nexus.uploader.transfer.config.ocm.software/v1alpha1`       | Per-match rule that uploads a resource into a Sonatype Nexus repository.    | [Sonatype Nexus Uploader]({{< relref "docs/reference/transfer-configuration/nexus-uploader.md" >}})          |
+| `git.uploader.transfer.config.ocm.software/v1alpha1`         | Per-match rule that pushes a Git resource into an existing Git repository.  | [Git Uploader]({{< relref "docs/reference/transfer-configuration/git-uploader.md" >}})                       |
 
 By default the CLI looks for configuration in `$HOME/.ocmconfig`. Pass
 `--config <file>` to use a different file. `--recursive` overrides the transfer
@@ -51,13 +52,13 @@ config when set.
 The `--copy-resources` and `--upload-as` flags are deprecated. They are
 translated into uploader configuration entries appended after all configured
 entries. See the
-[migration guide]({{< relref "docs/how-to/migrate-from-upload-as.md" >}}) for
+[migration guide]({{< relref "docs/how-to/migration-guides/migrate-from-upload-as.md" >}}) for
 details.
 
 ## Uploader Configurations
 
 An **uploader configuration** routes the resources it selects to a custom
-target instead of the default handling. Six config types are available:
+target instead of the default handling. Seven config types are available:
 
 | Uploader                | What it does                                       | Default `match`                                                                                                | `match` required? |
 | ----------------------- | -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | ----------------- |
@@ -67,6 +68,7 @@ target instead of the default handling. Six config types are available:
 | `http.uploader…`        | Streams a resource to an HTTP endpoint             | None                                                                                                           | **Yes**           |
 | `artifactory.uploader…` | Uploads into a JFrog Artifactory repository        | None                                                                                                           | **Yes**           |
 | `nexus.uploader…`       | Uploads into a Sonatype Nexus repository           | None                                                                                                           | **Yes**           |
+| `git.uploader…`         | Pushes Git history into an existing Git repository | Yes (see [Git Uploader]({{< relref "docs/reference/transfer-configuration/git-uploader.md#default-match" >}})) | No                |
 
 Each entry is an independent rule; you may declare several.
 
@@ -93,7 +95,7 @@ A warning is logged for an uploader whose match selected no resource.
 
 {{< callout context="note" >}}
 The OCM Kubernetes controller accepts transfer config and
-OCI, local blob and reference uploader entries. HTTP, Artifactory, and Nexus
+OCI, local blob and reference uploader entries. HTTP, Artifactory, Nexus, and Git
 uploader entries are ignored by the controller because they send content to
 configured URLs from the controller pod.
 {{< /callout >}}
@@ -221,4 +223,4 @@ plan is rendered with human-readable labels such as
 - [Transfer and Transport]({{< relref "docs/concepts/transfer-concept.md" >}}) — the conceptual transfer model
 - [Working with HTTP Resources]({{< relref "docs/tutorials/wget-http-resources.md" >}}) — the `Wget/v1` type produced by the HTTP streaming uploader
 - [HTTP Client Configuration]({{< relref "docs/reference/http-client-configuration.md" >}}) — tuning the HTTP client used for the upload
-- [Migrate from --upload-as to Uploader Configurations]({{< relref "docs/how-to/migrate-from-upload-as.md" >}}) — migration from deprecated flags
+- [Migrate from --upload-as to Uploader Configurations]({{< relref "docs/how-to/migration-guides/migrate-from-upload-as.md" >}}) — migration from deprecated flags

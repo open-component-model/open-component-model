@@ -1,0 +1,62 @@
+# This file is used by the e2e test harness for BOTH signing (with `ocm sign cv`) and verification
+# (mounted as a Kubernetes Secret and consumed by the controller). Signing needs the private key
+# material below; verification does not. For a real controller deployment, ship a config that
+# contains only the `verifier:` entries and the public-key credentials. Never hand a private key
+# to a production controller.
+type: generic.config.ocm.software/v1
+configurations:
+  - type: signing.config.ocm.software/v1alpha1
+    signature: ocm.software.helm.nested.signed.rsa
+    signer:
+      type: RSASigningConfiguration/v1alpha1
+      signatureAlgorithm: RSASSA-PSS
+      signatureEncodingPolicy: Plain
+    verifier:
+      type: RSASigningConfiguration/v1alpha1
+
+  - type: credentials.config.ocm.software
+    consumers:
+      - identity:
+          type: RSA/v1alpha1
+          algorithm: RSASSA-PSS
+          signature: ocm.software.helm.nested.signed.rsa
+        credentials:
+          - type: Credentials/v1
+            properties:
+              privateKeyPEM: |
+                -----BEGIN RSA PRIVATE KEY-----
+                MIIEpAIBAAKCAQEA29z+RRhfHTnjhSFwOEAp5KSyHoM5UNCN04nyjL+kZWqFxhwP
+                bVQhio81RUQ/vjR8UrfuNLH0/MSWASCbZXe1llnZlucRBNOxtaRt4pDv476uEmZT
+                ovf13wPUKV/t+NCipTOzcnAiz26DIOcm1yUGaD2kEoyZY5WLP8zIZkt3XWw7Fj5A
+                TwXqDr85+NfTi8paZemS6T845NK/rOH6gLkNTTw9regq1uPalxSyDnEDcR0hJREL
+                2CdR5JoCzuJtqnG2pdfZFAkak4ox8nWA+fYA0vgVB+UFJNYwrbQSVu4wHR5Zo9x5
+                UW4+nKSVBYHJU9blVSIT2X5Xe58k+IsOLT1+QwIDAQABAoIBAFSnOsm80AZvPxCH
+                5u7pmZe86A4ChYN9wVXVM+wIb9JSmO5F6JS2Q3HXoPGqDQb9q26n/hIRANyADqeh
+                d+OyG1sn/jTxg+aBYden111YY90jEl/oQUSqx2LWVQ6XLofSQQVtqiaiUWzfxqJZ
+                DeXhjh19ulogA4FJ14M5pGFqpit0JXwiovUOu0T++bXl99cRvk40wUv2BjwIcuSe
+                EDRO4hsCY3CsKAyZACiFS0e264X02v3oYfrvk4ERu4x3+Xir9CNOY/r+mIvm8YWs
+                iNCuFyIwUAaQt96lCmqDLfART24fZb7/ah/pMLam56Esw7FQ5uDC63m/b8IFoKDb
+                czJbQskCgYEA7e8IwRCQSCuWrg1HIzL5IrcKsn6P4aTMxOhMdH4K8l1JNY99fX4c
+                JdSIA2Vuz3Hriwd4157m5zg/PG0GU3EABq0NOBp76Co4nxzjBb/UKksCMAOTOeds
+                KzO/Jy+/ICt+FhNvr4C6QrKBOtbq3vbRZt5y0lAbgqYUqIz3FCVORvkCgYEA7I60
+                VkaIf8wI7pBL+QMJ0vyrNkIujhwjRQZ87udIL943LDmhXi5OeRCsaJENvGAjRuya
+                vIL4sgxz+C2bQTDXeLKq1KkyBCD6ZCUIw83RRDF6WpIwKHNh9yflXIDcNg9qCfcx
+                0/jvl1YVEJ42sG7myEn0zeeQs/qseJcudnwSkhsCgYEAzWHngZgFo3aUw7tMa7Ll
+                YTT1c+xR0KoL4/DNhkUCuAEUX7pzzW6dZ35UxfG5vDGO69zQT/enQ3HHDCbkLgS9
+                zAV3ArXBvT8szxQFV4Il5zgGNGHxpSsBsS0i1PWfGmrQlMfEQY9xuH8TlDHOXhZZ
+                3V0paieiB53K+U9tPCOTtSkCgYAyXRuV9sRe+RC5wez64iO4UOUe0y5YQTNdIcl9
+                j641ysjSWJ67j35TljIuvRtAjPNVyVAUbIoIVlBmeUdBtOVbJCbsye0FJgRJR/06
+                utof+6zCFbe9FPu5hDv32tOHivaXkpKAP9K61K/9bsHUBHiMEfrVz8RmHSuVLRLO
+                VRIbGwKBgQCrt+Ah9gXEsAgrd4Xhn09enPYrLCwiRBQ/W2IJJLbEfzVI1mXYZ7lU
+                PsyO1sfIf95N0zCPxi4RCUv4zqNE6/o2xmxmp4vLdXwQ67bW5lbOlOv5cmbPgqy+
+                cBDC2XpvASkmOnBuLLPhRFSxi7t8q1nVIqWxvyt6iziZu/N9nP+rKQ==
+                -----END RSA PRIVATE KEY-----
+              publicKeyPEM: |
+                -----BEGIN RSA PUBLIC KEY-----
+                MIIBCgKCAQEA29z+RRhfHTnjhSFwOEAp5KSyHoM5UNCN04nyjL+kZWqFxhwPbVQh
+                io81RUQ/vjR8UrfuNLH0/MSWASCbZXe1llnZlucRBNOxtaRt4pDv476uEmZTovf1
+                3wPUKV/t+NCipTOzcnAiz26DIOcm1yUGaD2kEoyZY5WLP8zIZkt3XWw7Fj5ATwXq
+                Dr85+NfTi8paZemS6T845NK/rOH6gLkNTTw9regq1uPalxSyDnEDcR0hJREL2CdR
+                5JoCzuJtqnG2pdfZFAkak4ox8nWA+fYA0vgVB+UFJNYwrbQSVu4wHR5Zo9x5UW4+
+                nKSVBYHJU9blVSIT2X5Xe58k+IsOLT1+QwIDAQAB
+                -----END RSA PUBLIC KEY-----

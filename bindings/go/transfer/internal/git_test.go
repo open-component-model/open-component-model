@@ -54,7 +54,6 @@ func TestProcessGit(t *testing.T) {
 			get, add := tgd.Transformations[0], tgd.Transformations[1]
 			r.Equal(gitv1alpha1.GetGitResourceV1alpha1, get.Type)
 			r.Equal(tt.wantType, add.Type)
-			r.Equal("${"+get.ID+".output.file}", add.Spec.Data["file"])
 			r.Equal([]string{"${" + add.ID + ".spec.file}"}, exprs)
 			r.Equal(map[int]string{0: "existing", 1: add.ID}, ids)
 			wantSpec, err := runtime.UnstructuredFromMixedData(map[string]any{"resource": resource})
@@ -62,9 +61,9 @@ func TestProcessGit(t *testing.T) {
 			r.Equal(wantSpec.Data, get.Spec.Data)
 			addedResource := add.Spec.Data["resource"].(map[string]any)
 			r.Equal("${"+get.ID+".output.resource.name}", addedResource["name"])
-			// referenceName is an OCI-only legacy field; a git resource must not carry it.
-			_, hasReferenceName := addedResource["access"].(map[string]any)["referenceName"]
-			r.False(hasReferenceName)
+			r.NotContains(addedResource["access"].(map[string]any), "referenceName", "a by-value Git local blob must not carry a referenceName")
+			r.Equal(transferv1alpha1.GitLocalBlobMediaType, add.Spec.Data["file"].(map[string]any)["mediaType"])
+			r.Equal("${"+get.ID+".output.file.uri}", add.Spec.Data["file"].(map[string]any)["uri"])
 		})
 	}
 }

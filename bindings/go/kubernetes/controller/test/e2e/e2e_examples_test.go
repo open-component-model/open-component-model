@@ -1,7 +1,9 @@
 package e2e
 
 import (
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -20,8 +22,7 @@ const (
 	Rgd                  = "rgd.yaml"
 	Instance             = "instance.yaml"
 	K8sManifest          = "k8s-manifest.yaml"
-	PublicKey            = "ocm.software.pub"
-	PrivateKey           = "ocm.software"
+	OCMConfig            = ".ocmconfig"
 )
 
 // ignoreExamples lists examples that are tested elsewhere or should be skipped.
@@ -72,17 +73,11 @@ var _ = Describe("controller", func() {
 				Expect(files).To(ContainElements(reqFiles), "required files %s not found in example directory %q", reqFiles, example.Name())
 
 				By("creating and transferring a component version for " + example.Name())
-				// If directory contains a private key, the component version must signed.
-				signingKey := ""
-				if slices.Contains(files, PrivateKey) {
-					signingKey = filepath.Join(examplesDir, example.Name(), PrivateKey)
-				}
 				Expect(utils.PrepareOCMComponent(
 					ctx,
 					example.Name(),
 					filepath.Join(examplesDir, example.Name(), ComponentConstructor),
 					imageRegistry,
-					signingKey,
 				)).To(Succeed())
 
 				By("bootstrapping the example")
@@ -137,6 +132,43 @@ var _ = Describe("controller", func() {
 					timeout,
 					"pod", "-l", "app.kubernetes.io/name="+example.Name()+"-podinfo",
 				)).To(Succeed())
+
+				// Check for verifications
+				if slices.Contains(files, OCMConfig) {
+					// Every signature configured in the example's .ocmconfig must produce a
+					// "verified signature" log entry naming it. Ready alone doesn't prove the
+					// handler ran (the resolver cache could serve a warmed descriptor).
+					sigNames, err := utils.SigningConfigSignatureNames(filepath.Join(examplesDir, example.Name(), OCMConfig))
+					Expect(err).ToNot(HaveOccurred())
+					for _, sig := range sigNames {
+						By(fmt.Sprintf("confirming signature %q was verified by the controller", sig))
+						// signature names are based on the example names, so this should be enough to make sure it got
+						// verified
+						expected := fmt.Sprintf(`"verified signature","signature":%q`, sig)
+						// The controller wraps every handler error (wrong key, missing
+						// credential, cosign/gpg failure) into this message. It is logged only
+						// after the descriptor and signature are fetched and verification
+						// actually ran, so it is terminal for a fixed-config example: a retry
+						// cannot make a bad key good. Transient fetch errors surface as a
+						// different message, so matching on this one does not flake. Abort the
+						// poll immediately instead of burning the full timeout.
+						failed := fmt.Sprintf("signature verification failed for signature %s:", sig)
+						Eventually(func(g Gomega) string {
+							out, err := utils.Run(exec.CommandContext(ctx,
+								"kubectl", "logs",
+								"-n", "ocm-k8s-toolkit-system",
+								"-l", "app.kubernetes.io/name=ocm-k8s-toolkit",
+								"--tail=-1",
+							))
+							g.Expect(err).ToNot(HaveOccurred())
+							logs := string(out)
+							if strings.Contains(logs, failed) {
+								StopTrying(fmt.Sprintf("controller reported a terminal verification failure for signature %q", sig)).Now()
+							}
+							return logs
+						}, timeout).Should(ContainSubstring(expected))
+					}
+				}
 
 				// Check for configuration and localization
 				if strings.HasSuffix(example.Name(), "-configuration-localization") {

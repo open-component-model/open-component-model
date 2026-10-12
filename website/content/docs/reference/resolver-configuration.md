@@ -182,6 +182,6 @@ resolvers:
   setting up resolvers
 - [How to Resolve Components Across Multiple Registries]
 - ({{< relref "docs/how-to/resolve-components-from-multiple-repositories.md" >}}) — Recipe for multi-registry resolution
-- [Migrate from Deprecated Resolvers]({{< relref "docs/how-to/migrate-from-deprecated-resolvers.md" >}}) — Replace
+- [Migrate from Deprecated Resolvers]({{< relref "docs/how-to/migration-guides/migrate-from-deprecated-resolvers.md" >}}) — Replace
   deprecated fallback
   resolvers with glob-based resolvers
