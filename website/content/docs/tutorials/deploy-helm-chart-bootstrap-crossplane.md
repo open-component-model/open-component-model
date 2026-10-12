@@ -1,6 +1,6 @@
 ---
 title: Deploy an Application from a Helm Chart with OCM and Crossplane
-description: "Bootstrap a Helm chart deployment with OCM and Crossplane, using provider-kubernetes to create Flux objects, for repeatable localized installs."
+description: "Bootstrap a Helm chart deployment with OCM and Crossplane, composing Flux objects directly from an XRD and Composition for repeatable localized installs."
 icon: "⚙️"
 weight: 62
 toc: true
@@ -12,9 +12,9 @@ aliases:
 
 Your application ships as a Helm chart, and you want its delivery to be repeatable: one versioned OCM component that
 carries the chart, its container image, and the instructions to deploy it, with image references that localize
-themselves as the component moves between registries. This tutorial builds that deployment on **Crossplane**, using a
-`CompositeResourceDefinition` (XRD) plus a `Composition` to reconcile the deployment graph. We will use
-[Podinfo](https://github.com/stefanprodan/podinfo) as the example application.
+themselves as the component moves between registries. This tutorial builds that deployment on **Crossplane**, using
+a `CompositeResourceDefinition` (XRD) plus a `Composition` to reconcile the deployment graph. The XRD composes the
+Flux objects directly. We will use [Podinfo](https://github.com/stefanprodan/podinfo) as the example application.
 
 {{< callout context="note" title="Coming from the kro tutorial?" icon="outline/info-circle" >}}
 This tutorial reaches the same end state as [Deploy an Application from a Helm Chart with OCM and
@@ -25,7 +25,7 @@ XRD + Composition. Reading the kro tutorial first is **not** required.
 By the end, you'll have:
 
 - An OCM component containing a Helm chart, an image reference, and a Crossplane XRD + Composition
-- A running Podinfo application deployed by claiming the `Bootstrap` composite
+- A running Podinfo application deployed by applying the `Bootstrap` composite resource
 - Understanding of how localization keeps image references in sync after transfers
 
 ## Prerequisites
@@ -36,15 +36,14 @@ Before starting, make sure you have set up your environment as described in the 
 
 - [Controller environment]({{< relref "setup-controller-environment.md" >}}) with OCM Controllers installed
 - **Crossplane** installed as the orchestrator, following [Set up Controller Environments > Install an
-  Orchestrator]({{< relref "setup-controller-environment.md#install-an-orchestrator" >}}) (the Crossplane tab). That
-  step installs Crossplane core and the [Kubernetes provider](https://github.com/crossplane-contrib/provider-kubernetes)
-  (`provider-kubernetes`) with a `ProviderConfig` named `kubernetes-provider` using `InjectedIdentity`.
+  Orchestrator]({{< relref "setup-controller-environment.md#install-an-orchestrator" >}}) (the Crossplane tab)
 - **Flux** installed as the deployer, following [Set up Controller Environments > Install a
   Deployer]({{< relref "setup-controller-environment.md#install-a-deployer" >}}) (the Flux tab). Crossplane creates the
   Flux `OCIRepository` and `HelmRelease` objects, so Flux's `source-controller` and `helm-controller` must be running.
   kro and a GitOps deployer are not needed.
 - [Custom RBAC]({{< relref "custom-rbac.md" >}}) letting the OCM controller manage `compositions` and
-  `compositeresourcedefinitions` (`apiextensions.crossplane.io`); see the Crossplane tab in that guide
+  `compositeresourcedefinitions` (`apiextensions.crossplane.io`), plus a grant letting Crossplane compose the Flux
+  objects; see the Crossplane tab in that guide
 - The [Patch and Transform function](https://github.com/crossplane-contrib/function-patch-and-transform)
   (`function-patch-and-transform`), which the `Composition` runs as its pipeline step. This tutorial installs it for
   you in the deploy section, so it is not a prerequisite.
@@ -78,27 +77,26 @@ Crossplane XRD + Composition.
 ### How the Pieces Fit Together
 
 The **graph engine** is what reconciles the deployment graph and creates the Flux objects. This tutorial ships a
-Crossplane `CompositeResourceDefinition` (XRD) plus a `Composition`. The XRD offers a claimable `Bootstrap` kind. When
-you create a `Bootstrap` claim, Crossplane resolves the chart and image through OCM `Resource` objects, then uses the
-[Crossplane Kubernetes provider](https://github.com/crossplane-contrib/provider-kubernetes) (`provider-kubernetes`)
-to create the Flux `OCIRepository` and `HelmRelease`. Flux's `helm-controller` renders the chart into the running
-workload.
+Crossplane `CompositeResourceDefinition` (XRD) plus a `Composition`. The XRD registers a `Bootstrap` composite
+kind. When you apply a `Bootstrap` resource, Crossplane resolves the chart and image through OCM `Resource` objects,
+then composes the Flux `OCIRepository` and `HelmRelease` directly. Flux's `helm-controller` renders the chart into the
+running workload.
+
+The OCM `Resource` and the Flux objects are composed directly by the Composition, with no intermediate wrapper.
 
 If you already know the kro variant, the building blocks map like this (otherwise skip the table):
 
 | kro                                        | Crossplane                                                           |
 | ------------------------------------------ | -------------------------------------------------------------------- |
 | `ResourceGraphDefinition`                  | `CompositeResourceDefinition` (XRD) + `Composition`                  |
-| Schema `kind: Bootstrap` registered by kro | Claim `kind: Bootstrap` offered by the XRD                           |
-| Instance of the `Bootstrap` CRD            | Claim of the `Bootstrap` composite                                   |
+| Schema `kind: Bootstrap` registered by kro | Composite `kind: Bootstrap` registered by the XRD                    |
+| Instance of the `Bootstrap` CRD            | A `Bootstrap` composite resource                                     |
 | kro reconciles the graph                   | Crossplane reconciles the composite, creating the composed resources |
 
-The `Composition` runs in **pipeline mode** (`mode: Pipeline`), the supported form since Crossplane v2 removed the
-legacy inline `resources` field. A single pipeline step invokes the `function-patch-and-transform` function, whose
-input holds the same patch-and-transform resource list the native engine used. The resolved chart and image OCI
-coordinates travel from the OCM `Resource` objects to the Flux objects through the composite's `status.atProvider`
-fields, since patch-and-transform wires values only between a composed resource and the composite, never directly
-between two composed resources.
+The `Composition` runs in **pipeline mode** (`mode: Pipeline`). A single pipeline step invokes the `function-patch-and-transform` function, whose
+input holds the patch-and-transform resource list. The resolved chart and image OCI coordinates travel from the OCM
+`Resource` objects to the Flux objects through the composite's `status.atProvider` fields, since patch-and-transform
+wires values only between a composed resource and the composite, never directly between two composed resources.
 
 ### Localization
 
@@ -169,22 +167,22 @@ The two OCM `Resource` objects (`ocm-resource-chart` and `ocm-resource-image`) r
 the OCM controllers, using `additionalStatusFields`/`toOCI()` to expose the registry, repository, and digest under
 `status.additional`. See [Concept: OCM Controllers]({{< relref "docs/concepts/ocm-controllers.md#additional-status-fields" >}})
 for how that mechanism works. `ToCompositeFieldPath` patches copy those resolved coordinates onto the composite
-status, where the two `Object` resources read them to build the Flux `OCIRepository` and `HelmRelease`.
+status, where the composed Flux `OCIRepository` and `HelmRelease` read them.
 
 ```shell
 cat > composition.yaml << 'EOF'
-apiVersion: apiextensions.crossplane.io/v1
+apiVersion: apiextensions.crossplane.io/v2
 kind: CompositeResourceDefinition
 metadata:
   name: xbootstraps.ocm.software
 spec:
   group: ocm.software
   names:
-    kind: XBootstrap
-    plural: xbootstraps
-  claimNames:
     kind: Bootstrap
     plural: bootstraps
+  # Namespaced keeps the composite and its composed resources in one namespace,
+  # the same one you apply the Bootstrap into. You apply the Bootstrap directly.
+  scope: Namespaced
   versions:
     - name: v1alpha1
       served: true
@@ -230,7 +228,7 @@ metadata:
 spec:
   compositeTypeRef:
     apiVersion: ocm.software/v1alpha1
-    kind: XBootstrap
+    kind: Bootstrap
   mode: Pipeline
   pipeline:
     - step: patch-and-transform
@@ -240,150 +238,114 @@ spec:
         apiVersion: pt.fn.crossplane.io/v1beta1
         kind: Resources
         resources:
-          # 1. OCM Resource (chart): resolve the Helm chart OCI reference. The OCM
-          #    Resource is namespace-scoped, and a Crossplane v1 Composition cannot
-          #    compose a namespaced resource directly: the composite's
-          #    spec.resourceRefs schema has only apiVersion/kind/name, so the engine
-          #    fails with ".spec.resourceRefs[].namespace: field not declared in
-          #    schema". Wrap the namespaced Resource inside a cluster-scoped
-          #    provider-kubernetes Object (the pattern the OCM Deployer itself uses):
-          #    the Object is what the composite references, and the namespaced
-          #    Resource lives in spec.forProvider.manifest. additionalStatusFields/
-          #    toOCI() exposes registry, repository, and digest under status.additional.
+          # 1. OCM Resource (chart): resolve the Helm chart OCI reference. The
+          #    composed OCM Resource inherits the composite's namespace.
+          #    additionalStatusFields/toOCI() exposes registry, repository, and
+          #    digest under status.additional.
           - name: ocm-resource-chart
             base:
-              apiVersion: kubernetes.crossplane.io/v1alpha2
-              kind: Object
+              apiVersion: delivery.ocm.software/v1alpha1
+              kind: Resource
               spec:
-                providerConfigRef:
-                  name: kubernetes-provider
-                forProvider:
-                  manifest:
-                    apiVersion: delivery.ocm.software/v1alpha1
-                    kind: Resource
-                    metadata:
-                      name: placeholder  # overwritten by name patch below
-                      namespace: default
-                    spec:
-                      resource:
-                        byReference:
-                          resource:
-                            name: helm-resource
-                      additionalStatusFields:
-                        oci: resource.access.toOCI()
+                resource:
+                  byReference:
+                    resource:
+                      name: helm-resource
+                additionalStatusFields:
+                  oci: resource.access.toOCI()
             patches:
               - type: FromCompositeFieldPath
                 fromFieldPath: spec.ocmComponent
-                toFieldPath: spec.forProvider.manifest.spec.componentRef.name
-              # Derive a claim-specific Resource name so parallel claims never
-              # share one default/<name> OCM Resource.
+                toFieldPath: spec.componentRef.name
+              # Derive a composite-specific Resource name so parallel composites
+              # never share one default/<name> OCM Resource.
               - type: FromCompositeFieldPath
                 fromFieldPath: metadata.name
-                toFieldPath: spec.forProvider.manifest.metadata.name
+                toFieldPath: metadata.name
                 transforms:
                   - type: string
                     string:
                       type: Format
                       fmt: "%s-chart"
               # Publish resolved chart coordinates onto composite status so the
-              # OCIRepository Object below can consume them.
+              # OCIRepository below can consume them. patch-and-transform wires
+              # values only between a composed resource and the composite, never
+              # directly between two composed resources, so this round-trip stays.
               - type: ToCompositeFieldPath
-                fromFieldPath: status.atProvider.manifest.status.additional.oci.registry
+                fromFieldPath: status.additional.oci.registry
                 policy:
                   fromFieldPath: Optional
                 toFieldPath: status.atProvider.chartRegistry
               - type: ToCompositeFieldPath
-                fromFieldPath: status.atProvider.manifest.status.additional.oci.repository
+                fromFieldPath: status.additional.oci.repository
                 policy:
                   fromFieldPath: Optional
                 toFieldPath: status.atProvider.chartRepository
               - type: ToCompositeFieldPath
-                fromFieldPath: status.atProvider.manifest.status.additional.oci.digest
+                fromFieldPath: status.additional.oci.digest
                 policy:
                   fromFieldPath: Optional
                 toFieldPath: status.atProvider.chartDigest
           # 2. OCM Resource (image): resolve the container image OCI reference for
-          #    localization. Same Object-wrapping as the chart resource above.
+          #    localization. Composed directly, same as the chart resource above.
           - name: ocm-resource-image
             base:
-              apiVersion: kubernetes.crossplane.io/v1alpha2
-              kind: Object
+              apiVersion: delivery.ocm.software/v1alpha1
+              kind: Resource
               spec:
-                providerConfigRef:
-                  name: kubernetes-provider
-                forProvider:
-                  manifest:
-                    apiVersion: delivery.ocm.software/v1alpha1
-                    kind: Resource
-                    metadata:
-                      name: placeholder  # overwritten by name patch below
-                      namespace: default
-                    spec:
-                      resource:
-                        byReference:
-                          resource:
-                            name: image-resource
-                      additionalStatusFields:
-                        oci: resource.access.toOCI()
+                resource:
+                  byReference:
+                    resource:
+                      name: image-resource
+                additionalStatusFields:
+                  oci: resource.access.toOCI()
             patches:
               - type: FromCompositeFieldPath
                 fromFieldPath: spec.ocmComponent
-                toFieldPath: spec.forProvider.manifest.spec.componentRef.name
-              # Derive a claim-specific Resource name so parallel claims never
-              # share one default/<name> OCM Resource.
+                toFieldPath: spec.componentRef.name
+              # Derive a composite-specific Resource name so parallel composites
+              # never share one default/<name> OCM Resource.
               - type: FromCompositeFieldPath
                 fromFieldPath: metadata.name
-                toFieldPath: spec.forProvider.manifest.metadata.name
+                toFieldPath: metadata.name
                 transforms:
                   - type: string
                     string:
                       type: Format
                       fmt: "%s-image"
               - type: ToCompositeFieldPath
-                fromFieldPath: status.atProvider.manifest.status.additional.oci.registry
+                fromFieldPath: status.additional.oci.registry
                 policy:
                   fromFieldPath: Optional
                 toFieldPath: status.atProvider.imageRegistry
               - type: ToCompositeFieldPath
-                fromFieldPath: status.atProvider.manifest.status.additional.oci.repository
+                fromFieldPath: status.additional.oci.repository
                 policy:
                   fromFieldPath: Optional
                 toFieldPath: status.atProvider.imageRepository
               - type: ToCompositeFieldPath
-                fromFieldPath: status.atProvider.manifest.status.additional.oci.digest
+                fromFieldPath: status.additional.oci.digest
                 policy:
                   fromFieldPath: Optional
                 toFieldPath: status.atProvider.imageDigest
-          # 3. Kubernetes Object: Flux OCIRepository, created directly by the
-          #    Crossplane Kubernetes provider instead of by kro. The chart URL and
-          #    digest come from the composite status populated in step 1.
+          # 3. Flux OCIRepository, composed directly by Crossplane. The chart URL
+          #    and digest come from the composite status populated in step 1.
           - name: ocirepository
             base:
-              apiVersion: kubernetes.crossplane.io/v1alpha2
-              kind: Object
+              apiVersion: source.toolkit.fluxcd.io/v1
+              kind: OCIRepository
               spec:
-                providerConfigRef:
-                  name: kubernetes-provider
-                forProvider:
-                  manifest:
-                    apiVersion: source.toolkit.fluxcd.io/v1
-                    kind: OCIRepository
-                    metadata:
-                      # The composite is cluster-scoped so its metadata.namespace is
-                      # empty; set the Flux manifest namespace statically instead.
-                      namespace: default
-                    spec:
-                      interval: 1m0s
-                      layerSelector:
-                        mediaType: "application/vnd.cncf.helm.chart.content.v1.tar+gzip"
-                        operation: copy
-                      url: placeholder  # overwritten by patch below
-                      ref:
-                        digest: placeholder  # overwritten by patch below
+                interval: 1m0s
+                layerSelector:
+                  mediaType: "application/vnd.cncf.helm.chart.content.v1.tar+gzip"
+                  operation: copy
+                url: placeholder  # overwritten by patch below
+                ref:
+                  digest: placeholder  # overwritten by patch below
             patches:
               - type: FromCompositeFieldPath
                 fromFieldPath: metadata.name
-                toFieldPath: spec.forProvider.manifest.metadata.name
+                toFieldPath: metadata.name
                 transforms:
                   - type: string
                     string:
@@ -397,50 +359,39 @@ spec:
                   strategy: string
                   string:
                     fmt: "oci://%s/%s"
-                toFieldPath: spec.forProvider.manifest.spec.url
+                toFieldPath: spec.url
               - type: FromCompositeFieldPath
                 fromFieldPath: status.atProvider.chartDigest
-                toFieldPath: spec.forProvider.manifest.spec.ref.digest
-          # 4. Kubernetes Object: Flux HelmRelease, again created by the Crossplane
-          #    Kubernetes provider. Localization happens here: the image repository and
-          #    a pseudo-tag+digest are injected into the chart values from composite
-          #    status, exactly as the kro RGD's helmrelease resource does.
+                toFieldPath: spec.ref.digest
+          # 4. Flux HelmRelease, composed directly by Crossplane. Localization
+          #    happens here: the image repository and a pseudo-tag+digest are
+          #    injected into the chart values from composite status, exactly as the
+          #    kro RGD's helmrelease resource does.
           - name: helmrelease
             base:
-              apiVersion: kubernetes.crossplane.io/v1alpha2
-              kind: Object
+              apiVersion: helm.toolkit.fluxcd.io/v2
+              kind: HelmRelease
               spec:
-                providerConfigRef:
-                  name: kubernetes-provider
-                forProvider:
-                  manifest:
-                    apiVersion: helm.toolkit.fluxcd.io/v2
-                    kind: HelmRelease
-                    metadata:
-                      # Static namespace: the cluster-scoped composite has no namespace.
-                      namespace: default
-                    spec:
-                      releaseName: placeholder  # overwritten by patch below
-                      interval: 1m
-                      timeout: 5m
-                      chartRef:
-                        kind: OCIRepository
-                        name: placeholder  # overwritten by patch below
-                        namespace: default
+                releaseName: placeholder  # overwritten by patch below
+                interval: 1m
+                timeout: 5m
+                chartRef:
+                  kind: OCIRepository
+                  name: placeholder  # overwritten by patch below
             patches:
               - type: FromCompositeFieldPath
                 fromFieldPath: metadata.name
-                toFieldPath: spec.forProvider.manifest.metadata.name
+                toFieldPath: metadata.name
                 transforms:
                   - type: string
                     string:
                       type: Format
                       fmt: "%s-helmrelease"
-              # Derive a claim-specific, reader-deterministic Helm release name from
-              # the claim name so parallel claims never share one Helm release.
+              # Derive a composite-specific, reader-deterministic Helm release name
+              # from the composite name so parallel composites never share a release.
               - type: FromCompositeFieldPath
-                fromFieldPath: spec.claimRef.name
-                toFieldPath: spec.forProvider.manifest.spec.releaseName
+                fromFieldPath: metadata.name
+                toFieldPath: spec.releaseName
                 transforms:
                   - type: string
                     string:
@@ -449,7 +400,7 @@ spec:
               # Point the HelmRelease at the OCIRepository created in step 3.
               - type: FromCompositeFieldPath
                 fromFieldPath: metadata.name
-                toFieldPath: spec.forProvider.manifest.spec.chartRef.name
+                toFieldPath: spec.chartRef.name
                 transforms:
                   - type: string
                     string:
@@ -464,12 +415,12 @@ spec:
                   strategy: string
                   string:
                     fmt: "%s/%s"
-                toFieldPath: spec.forProvider.manifest.spec.values.image.repository
+                toFieldPath: spec.values.image.repository
               # Pseudo-tag with @digest. Podinfo's chart builds repository:tag, and OCI
               # runtimes ignore the tag when a digest is present, so this pins by digest.
               - type: FromCompositeFieldPath
                 fromFieldPath: status.atProvider.imageDigest
-                toFieldPath: spec.forProvider.manifest.spec.values.image.tag
+                toFieldPath: spec.values.image.tag
                 transforms:
                   - type: string
                     string:
@@ -663,26 +614,27 @@ kubectl get composition
 NAME                                                     ESTABLISHED   OFFERED   AGE
 compositeresourcedefinition.../xbootstraps.ocm.software  True          True      2m56s
 
-NAME                                    XR-KIND      XR-APIVERSION           AGE
-composition.apiextensions.../bootstrap  XBootstrap   ocm.software/v1alpha1   2m56s
+NAME                                    XR-KIND     XR-APIVERSION           AGE
+composition.apiextensions.../bootstrap  Bootstrap   ocm.software/v1alpha1   2m56s
 ```
 
 </details>
 
 When the XRD is `ESTABLISHED`/`OFFERED`, the Deployer has applied the blob and Crossplane has registered the
-claimable `Bootstrap` kind.
+`Bootstrap` composite kind.
 {{< /step >}}
 
 {{< step >}}
 
-### Create a claim
+### Create the Bootstrap resource
 
-Now create a **claim** of the `Bootstrap` composite to trigger the actual deployment. `ocmComponent` selects the OCM
-`Component` CR created by the bootstrap resources (`bootstrap-component`), matching the XRD's default. Create
-`claim.yaml`:
+Now create a `Bootstrap` composite resource to trigger the actual deployment. You apply the composite kind directly.
+The composite and its composed resources live in the namespace you apply it into (`default` here).
+`ocmComponent` selects the OCM `Component` CR created by the bootstrap resources
+(`bootstrap-component`), matching the XRD's default. Create `bootstrap-xr.yaml`:
 
 ```shell
-cat > claim.yaml << 'EOF'
+cat > bootstrap-xr.yaml << 'EOF'
 apiVersion: ocm.software/v1alpha1
 kind: Bootstrap
 metadata:
@@ -698,10 +650,10 @@ EOF
 
 ### Deploy the application
 
-Apply the claim to the cluster:
+Apply the composite to the cluster:
 
 ```bash
-kubectl apply -f claim.yaml
+kubectl apply -f bootstrap-xr.yaml
 ```
 
 <details>
@@ -713,7 +665,7 @@ bootstrap.ocm.software/bootstrap created
 
 </details>
 
-Wait for the claim and its composed resources to become ready:
+Wait for the composite and its composed resources to become ready:
 
 ```bash
 kubectl get bootstrap.ocm.software -w
@@ -723,14 +675,14 @@ kubectl get bootstrap.ocm.software -w
 <summary>You should see this output</summary>
 
 ```console
-NAME        SYNCED   READY   CONNECTION-SECRET   AGE
-bootstrap   True     True                        3m23s
+NAME        SYNCED   READY   COMPOSITION   AGE
+bootstrap   True     True    bootstrap     3m23s
 ```
 
 </details>
 
-When `SYNCED` and `READY` are both `True`, Crossplane has resolved the OCM resources and the Kubernetes provider has
-created the Flux `OCIRepository` and `HelmRelease`, which Flux then reconciles into the running workload.
+When `SYNCED` and `READY` are both `True`, Crossplane has resolved the OCM resources and composed the Flux
+`OCIRepository` and `HelmRelease` directly, which Flux then reconciles into the running workload.
 {{< /step >}}
 
 {{< step >}}
@@ -738,8 +690,8 @@ created the Flux `OCIRepository` and `HelmRelease`, which Flux then reconciles i
 ### Verify localization
 
 Check that the deployed pod uses the localized image from your registry (not the original `ghcr.io/stefanprodan/...`).
-The claim can report `READY` before Flux has reconciled the chart into a running pod, so wait for the pod to appear
-first:
+The composite can report `READY` before Flux has reconciled the chart into a running pod, so wait for the pod to
+appear first:
 
 ```bash
 kubectl wait --for=condition=Ready pod -l app.kubernetes.io/name=bootstrap-release-podinfo --timeout=300s
@@ -785,7 +737,7 @@ If the controller logs show permission errors like `forbidden` or `cannot create
 `ServiceAccount` lacks RBAC for the Crossplane objects the Deployer applies. The
 [Custom RBAC guide]({{< relref "custom-rbac.md" >}}) covers the general pattern (its examples target kro, so the
 API groups differ). For this Crossplane variant, grant the groups the Deployer actually touches: the XRD and
-Composition (`apiextensions.crossplane.io`), the `Bootstrap` claim (`ocm.software`), and the OCM `Resource`
+Composition (`apiextensions.crossplane.io`), the `Bootstrap` composite (`ocm.software`), and the OCM `Resource`
 objects (`delivery.ocm.software`).
 
 {{< callout context="note" title="Service account name" icon="outline/info-circle" >}}
@@ -833,65 +785,29 @@ kubectl auth can-i create compositions.apiextensions.crossplane.io \
   --as=system:serviceaccount:ocm-k8s-toolkit-system:ocm-k8s-toolkit-controller-manager
 ```
 
-Separately, if the claim's composed `Object` resources stay stuck (see [Claim Not Becoming
-Ready](#claim-not-becoming-ready)), the fault is the Kubernetes provider's `ServiceAccount`, not the OCM
-controller. That account needs RBAC for the Flux objects it creates
-(`ocirepositories.source.toolkit.fluxcd.io`, `helmreleases.helm.toolkit.fluxcd.io`). The dev-friendly install
-grants this broadly. On a hardened cluster, bind an equivalent `ClusterRole` to the provider's service account.
+Separately, if the composite's composed resources stay stuck (see [Composite Not Becoming
+Ready](#composite-not-becoming-ready)), the fault is Crossplane's own service account. Crossplane composes the
+OCM `Resource` and Flux objects directly, so Crossplane core must be granted access to those non-Crossplane kinds.
+See the next section.
 
-#### Composed OCM `Resource` objects stay forbidden
+#### Composed resources stay forbidden
 
-The two OCM `Resource` objects (the chart and the image) are applied by the Kubernetes provider, not by Crossplane
-core. If the provider's service account (`provider-kubernetes`) lacks the grant, the composed `Object` reports a
-`forbidden` error on its status, for example
+Crossplane's service account can create any resource installed by a provider or defined by an XRD, but it must be
+granted access to compose any other kind of resource (the OCM `Resource` and the Flux objects here). Without that
+grant the composite reports a `forbidden` error, for example
 
 ```text
-cannot apply object: resources.delivery.ocm.software "<xr>-image" is forbidden: User
-"system:serviceaccount:crossplane-system:provider-kubernetes" cannot patch resource
-"resources" in API group "delivery.ocm.software" at the cluster scope
+cannot compose resources: ... resources.delivery.ocm.software "<xr>-image" is forbidden: User
+"system:serviceaccount:crossplane-system:crossplane" cannot create resource
+"resources" in API group "delivery.ocm.software" in the namespace "default"
 ```
 
-The dev-friendly install grants this broadly. On a hardened cluster, bind a `ClusterRole` for the OCM `Resource`
-objects to the provider's service account:
+Grant Crossplane's service account access to the composed kinds with an aggregated `ClusterRole`, as described in
+[Configure Custom RBAC for Deployers > Crossplane]({{< relref "/docs/how-to/custom-rbac.md#crossplane" >}}).
 
-```bash
-cat << 'EOF' | kubectl apply -f -
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: provider-kubernetes-ocm-resources
-rules:
-  - apiGroups: ["delivery.ocm.software"]
-    resources: ["resources", "resources/status"]
-    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: provider-kubernetes-ocm-resources
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: provider-kubernetes-ocm-resources
-subjects:
-  - kind: ServiceAccount
-    name: provider-kubernetes
-    namespace: crossplane-system
-EOF
-```
+### Composite Not Becoming Ready
 
-The provider's service account name is the one on its running pod. Look yours up with
-`kubectl get pod -n crossplane-system -l pkg.crossplane.io/provider=provider-kubernetes -o jsonpath='{.items[0].spec.serviceAccountName}'`.
-Confirm the grant propagated (Crossplane re-reconciles the composite within about a minute):
-
-```bash
-kubectl auth can-i patch resources.delivery.ocm.software \
-  --as=system:serviceaccount:crossplane-system:provider-kubernetes
-```
-
-### Claim Not Becoming Ready
-
-If the `Bootstrap` claim stays `SYNCED=False` or `READY=False`:
+If the `Bootstrap` composite stays `SYNCED=False` or `READY=False`:
 
 ```bash
 kubectl describe bootstrap.ocm.software bootstrap
@@ -900,29 +816,13 @@ kubectl describe bootstrap.ocm.software bootstrap
 Inspect the composed resources directly to see which one is stuck:
 
 ```bash
-kubectl get object,resource.delivery.ocm.software
-kubectl describe object <name>-helmrelease
+kubectl get resource.delivery.ocm.software,ocirepository,helmrelease
+kubectl describe helmrelease bootstrap-helmrelease
 ```
 
-Check the Events section and the composed `Object` status for error messages. A common cause is the Kubernetes
-provider's `ProviderConfig` (`kubernetes-provider`) missing or lacking RBAC for the Flux CRDs.
-
-#### `.spec.resourceRefs[].namespace: field not declared in schema`
-
-If the composite (`XBootstrap`) stays `SYNCED=False` with an error like `cannot compose resources: cannot update
-composite resource spec.resourceRefs: ... .spec.resourceRefs[0].namespace: field not declared in schema` (or the
-Crossplane logs show `an empty namespace may not be set when a resource name is provided`), you have hit a Crossplane
-v1 limitation: **a Composition cannot compose a namespace-scoped resource directly.** The composite records every
-composed resource in `spec.resourceRefs`, whose schema carries only `apiVersion`, `kind`, and `name`. When the
-composed resource is namespaced, the engine tries to persist its namespace into that ref and the write is rejected,
-so the resource is never created.
-
-The OCM `Resource` objects (`delivery.ocm.software`) are namespace-scoped, so they cannot be listed directly under
-`resources:`. The fix this tutorial uses is to **wrap each namespaced `Resource` in a cluster-scoped
-provider-kubernetes `Object`** (the same mechanism the OCM Deployer uses): the composite references only the
-cluster-scoped `Object`s, while the namespaced `Resource` lives in `spec.forProvider.manifest` and the provider
-applies it. Read its resolved coordinates back through `status.atProvider.manifest.status.additional.*`. If you ever
-place a namespaced kind directly under `resources:`, this error returns.
+Check the Events section and each composed resource's status for error messages. A common cause is Crossplane
+lacking RBAC for the composed OCM `Resource` or Flux CRDs (see [Composed resources stay
+forbidden](#composed-resources-stay-forbidden)).
 
 ### ImagePullBackOff Errors
 
@@ -934,10 +834,10 @@ You've successfully:
 
 - Created an OCM component with an embedded Crossplane XRD + Composition
 - Used `--copy-resources --upload-as ociArtifact` to enable localization during transfer
-- Deployed the component by claiming a `Bootstrap` composite, letting Crossplane's Kubernetes provider create the Flux objects
+- Deployed the component by applying a `Bootstrap` composite, letting Crossplane compose the Flux objects directly
 - Verified that localization kept image references in sync
 
-This pattern lets developers ship deployment instructions alongside their software while operators only claim a simple composite, with Crossplane, rather than kro, reconciling the graph.
+This pattern lets developers ship deployment instructions alongside their software while operators only apply a simple composite, with Crossplane, rather than kro, reconciling the graph.
 
 ## Next Steps
 

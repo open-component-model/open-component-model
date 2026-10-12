@@ -228,12 +228,14 @@ EOF
 {{< /tab >}}
 {{< tab "Crossplane" >}}
 
-Install [Crossplane](https://crossplane.io) core via Helm, following the
-[official installation guide](https://docs.crossplane.io/latest/software/install/):
+Install [Crossplane](https://crossplane.io) **v2** core via Helm, following the
+[official installation guide](https://docs.crossplane.io/latest/software/install/). The `2.x` range installs the
+latest Crossplane v2 release, which the bootstrap tutorial requires:
 
 ```shell
 helm install crossplane crossplane-stable/crossplane \
   --repo https://charts.crossplane.io/stable \
+  --version '2.x' \
   --namespace crossplane-system \
   --create-namespace
 ```
@@ -248,19 +250,12 @@ Verify Crossplane is running:
 kubectl get pods -n crossplane-system
 ```
 
-Crossplane reconciles graphs through providers and functions. For OCM bootstrap tutorials, install the
-[Kubernetes provider](https://github.com/crossplane-contrib/provider-kubernetes) and the
-[patch-and-transform function](https://github.com/crossplane-contrib/function-patch-and-transform):
+Crossplane reconciles graphs through composition functions. For OCM bootstrap tutorials, install the
+[patch-and-transform function](https://github.com/crossplane-contrib/function-patch-and-transform), which the
+`Composition` runs as its pipeline step:
 
 ```shell
 kubectl apply -f - << 'EOF'
-apiVersion: pkg.crossplane.io/v1
-kind: Provider
-metadata:
-  name: provider-kubernetes
-spec:
-  package: xpkg.crossplane.io/crossplane-contrib/provider-kubernetes:v0.18.0
----
 apiVersion: pkg.crossplane.io/v1
 kind: Function
 metadata:
@@ -270,25 +265,9 @@ spec:
 EOF
 ```
 
-Wait for the provider to become healthy, then create a `ProviderConfig` that lets it act with the in-cluster
-controller identity:
-
-```shell
-kubectl wait provider/provider-kubernetes --for=condition=Healthy --timeout=180s
-
-kubectl apply -f - << 'EOF'
-apiVersion: kubernetes.crossplane.io/v1alpha1
-kind: ProviderConfig
-metadata:
-  name: kubernetes-provider
-spec:
-  credentials:
-    source: InjectedIdentity
-EOF
-```
-
-{{< callout context="note" title="ProviderConfig name" icon="outline/info-circle" >}}
-The bootstrap tutorials reference a `ProviderConfig` named `kubernetes-provider`. Keep this name so the `Composition` can bind to it.
+{{< callout context="note" title="RBAC on a hardened cluster" icon="outline/info-circle" >}}
+Crossplane composes the OCM `Resource` and Flux objects, so on a hardened cluster you must grant Crossplane's service
+account access to those composed kinds. See [Configure Custom RBAC for Deployers]({{< relref "/docs/how-to/custom-rbac.md" >}}).
 {{< /callout >}}
 
 {{< /tab >}}

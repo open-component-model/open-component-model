@@ -180,8 +180,8 @@ subjects:
 {{< /tab >}}
 {{< tab "Crossplane" >}}
 
-Grant the groups the Deployer actually touches: the XRD and Composition (`apiextensions.crossplane.io`), the claim
-kind the XRD offers (`ocm.software`), and the OCM `Resource` objects (`delivery.ocm.software`).
+Grant the groups the Deployer actually touches: the XRD and Composition (`apiextensions.crossplane.io`), the composite
+kind the XRD registers (`ocm.software`), and the OCM `Resource` objects (`delivery.ocm.software`).
 
 ```yaml
 apiVersion: rbac.authorization.k8s.io/v1
@@ -213,7 +213,7 @@ subjects:
     namespace: ocm-k8s-toolkit-system
 ```
 
-Replace `bootstraps` with the claim kind your own XRD offers.
+Replace `bootstraps` with the composite kind your own XRD registers.
 
 {{< /tab >}}
 {{< /tabs >}}
@@ -391,26 +391,29 @@ and kro]({{< relref "/docs/tutorials/deploy-helm-chart-bootstrap.md" >}}) and [D
 Chained RGDs with OCM and kro]({{< relref "/docs/tutorials/deploy-chained-rgds.md" >}}) for two worked
 examples of the specific kinds each pattern needs.
 
-### Crossplane (provider-kubernetes)
+### Crossplane
 
-If your `Deployer` targets a Crossplane `CompositeResourceDefinition` (XRD) plus a `Composition`, Crossplane core
-reconciles the composite, but the composed `Object` resources are applied by the
-[Kubernetes provider](https://github.com/crossplane-contrib/provider-kubernetes)'s **own** `ServiceAccount`
-(`provider-kubernetes` in `crossplane-system`). The dev-friendly install grants this broadly. On a hardened cluster
-the provider's account needs RBAC for every kind it applies.
+If your `Deployer` targets a Crossplane `CompositeResourceDefinition` (XRD) plus a `Composition`, Crossplane
+reconciles the composite with its **own** `ServiceAccount` (`crossplane` in `crossplane-system`). Crossplane's
+service account can already create any resource installed by a provider or defined by an XRD, but **you must grant
+it access to compose any other kind of resource**. On a hardened cluster this is required before the composite can
+create its composed resources.
 
-For the bootstrap pattern the provider applies the two OCM `Resource` objects (the chart and the image) and the Flux
-objects (`ocirepositories.source.toolkit.fluxcd.io`, `helmreleases.helm.toolkit.fluxcd.io`). Grant the OCM `Resource`
-objects like this, and add the Flux groups the same way if they are not already covered:
+For the bootstrap pattern Crossplane composes the two OCM `Resource` objects (the chart and the image) and the Flux
+objects (`ocirepositories.source.toolkit.fluxcd.io`, `helmreleases.helm.toolkit.fluxcd.io`). Grant them with a
+`ClusterRole` that aggregates to Crossplane's primary role. The `rbac.crossplane.io/aggregate-to-crossplane: "true"`
+label is what wires it into Crossplane's service account:
 
 ```yaml
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: provider-kubernetes-ocm-resources
+  name: crossplane-compose-ocm-flux
+  labels:
+    rbac.crossplane.io/aggregate-to-crossplane: "true"
 rules:
   - apiGroups: ["delivery.ocm.software"]
-    resources: ["resources", "resources/status"]
+    resources: ["resources"]
     verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
   - apiGroups: ["source.toolkit.fluxcd.io"]
     resources: ["ocirepositories"]
@@ -418,23 +421,15 @@ rules:
   - apiGroups: ["helm.toolkit.fluxcd.io"]
     resources: ["helmreleases"]
     verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: provider-kubernetes-ocm-resources
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: provider-kubernetes-ocm-resources
-subjects:
-  - kind: ServiceAccount
-    name: provider-kubernetes # look yours up on the provider's running pod
-    namespace: crossplane-system
 ```
 
-The provider's service account name is the one on its running pod. Look yours up with
-`kubectl get pod -n crossplane-system -l pkg.crossplane.io/provider=provider-kubernetes -o jsonpath='{.items[0].spec.serviceAccountName}'`.
+The aggregation label is critical: without it the role is never folded into Crossplane's service account. Confirm the
+grant propagated:
+
+```bash
+kubectl auth can-i create resources.delivery.ocm.software \
+  --as=system:serviceaccount:crossplane-system:crossplane
+```
 
 See [Deploy an Application from a Helm Chart with OCM and Crossplane]({{< relref "/docs/tutorials/deploy-helm-chart-bootstrap-crossplane.md" >}})
 for a worked example of the specific kinds this pattern needs.
