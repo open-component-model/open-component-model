@@ -1,7 +1,6 @@
 package resource
 
 import (
-	"bytes"
 	"crypto"
 	"encoding/json"
 	"log/slog"
@@ -14,10 +13,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/go-logr/logr"
-	godigest "github.com/opencontainers/go-digest"
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
-	clientmodel "github.com/prometheus/client_model/go"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -25,11 +21,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/envtest/komega"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation"
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	ocmv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/resolution/workerpool"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/status"
@@ -439,65 +433,6 @@ var _ = Describe("Resource Controller", func() {
 				},
 			),
 		)
-
-		It("verifies a localBlob resource", func(ctx SpecContext) {
-			By("creating a CTF with a by-value (localBlob) resource")
-			verifiedBefore := verifiedObservations("LocalBlob")
-			ctfPath := filepath.Join(tempDir, "localblob")
-			Expect(os.MkdirAll(ctfPath, 0o777)).To(Succeed())
-			data := []byte("hello local blob verification content")
-
-			// A localBlob stored in the repository always carries a digest matching its content
-			// (the storage layer enforces this on write), so the controller's download-and-hash
-			// verification succeeds. The mismatch and missing-digest failure modes cannot be
-			// stored through the repository and are covered by the internal/ocm unit tests.
-			dig := &descruntime.Digest{
-				HashAlgorithm:          "SHA-256",
-				NormalisationAlgorithm: "genericBlobDigest/v1",
-				Value:                  godigest.FromBytes(data).Encoded(),
-			}
-			specData := setupLocalBlobCTF(ctx, ctfPath, componentName, componentVersion, resourceName, data, dig)
-
-			By("mocking a component")
-			namespace := test.NamespaceForTest(ctx)
-			componentObj := test.MockComponent(ctx, componentObjName, namespace.GetName(), &test.MockComponentOptions{
-				Client:   k8sClient,
-				Recorder: recorder,
-				Info: v1alpha1.ComponentInfo{
-					Component:      componentName,
-					Version:        componentVersion,
-					RepositorySpec: &apiextensionsv1.JSON{Raw: specData},
-				},
-				Repository: repositoryName,
-			})
-			DeferCleanup(func(ctx SpecContext) {
-				test.DeleteObject(ctx, k8sClient, componentObj)
-			})
-
-			By("creating a resource with the default (Always) verification policy")
-			resourceObj := &v1alpha1.Resource{
-				ObjectMeta: metav1.ObjectMeta{Name: resourceName, Namespace: namespace.GetName()},
-				Spec: v1alpha1.ResourceSpec{
-					ComponentRef: corev1.LocalObjectReference{Name: componentObj.GetName()},
-					Resource: v1alpha1.ResourceID{
-						ByReference: v1alpha1.ResourceReference{
-							Resource: runtime.Identity{"name": resourceName},
-						},
-					},
-				},
-			}
-			Expect(k8sClient.Create(ctx, resourceObj)).To(Succeed())
-			DeferCleanup(func(ctx SpecContext) {
-				test.DeleteObject(ctx, k8sClient, resourceObj)
-			})
-
-			test.WaitForReadyObject(ctx, k8sClient, resourceObj, nil)
-
-			By("confirming the controller actually ran verification (not skipped)")
-			Eventually(func() float64 { return verifiedObservations("LocalBlob") }).
-				Should(BeNumerically(">", verifiedBefore),
-					"expected a verified localBlob observation, meaning the digest was verified rather than skipped")
-		})
 
 		It("marks the resource not ready when no digest processor matches the access type", func(ctx SpecContext) {
 			By("creating a CTF with a by-reference resource whose access type has no digest processor")
@@ -2510,59 +2445,3 @@ const (
 	ocmcliImageDigestV0240 = "7a91508d9177f43552b60cfc0182d7c30a84e95bed03854855b3ab29b6a85db2"
 	ocmcliImageDigestV0230 = "0aab483741a3199f4abf8b03fbe8b04eb3c74b32f0d7604087aea5c25d8a8bd3"
 )
-
-// verifiedObservations returns how many times resource verification has been observed as
-// "verified" for the given access type. Used to prove the controller actually verified a
-// resource rather than skipping it, which a Ready status alone cannot distinguish.
-func verifiedObservations(accessType string) float64 {
-	GinkgoHelper()
-	obs, err := ResourceVerificationDurationHistogram.GetMetricWithLabelValues(accessType, verificationResultVerified)
-	Expect(err).NotTo(HaveOccurred())
-	m := &clientmodel.Metric{}
-	Expect(obs.(prometheus.Histogram).Write(m)).To(Succeed())
-	return float64(m.GetHistogram().GetSampleCount())
-}
-
-// setupLocalBlobCTF builds a CTF holding a single component whose resource is stored
-// by-value (localBlob) with real content and the given digest, so the controller can
-// verify it offline by downloading and hashing the blob.
-func setupLocalBlobCTF(ctx SpecContext, ctfPath, component, version, resourceName string, data []byte, dig *descruntime.Digest) []byte {
-	GinkgoHelper()
-
-	repoSpec := &ctfv1.Repository{Type: runtime.Type{Version: "v1", Name: "ctf"}, FilePath: ctfPath, AccessMode: ctfv1.AccessModeReadWrite}
-	repo, err := ocirepository.NewFromCTFRepoV1(ctx, repoSpec)
-	Expect(err).NotTo(HaveOccurred())
-
-	resource := &descruntime.Resource{
-		ElementMeta: descruntime.ElementMeta{
-			ObjectMeta: descruntime.ObjectMeta{Name: resourceName, Version: "1.0.0"},
-		},
-		Type:     "blob",
-		Relation: descruntime.LocalRelation,
-		Digest:   dig,
-		Access: &ocmv2.LocalBlob{
-			Type:           runtime.Type{Name: ocmv2.LocalBlobAccessType, Version: ocmv2.LocalBlobAccessTypeVersion},
-			MediaType:      "application/octet-stream",
-			LocalReference: godigest.FromBytes(data).String(),
-		},
-	}
-
-	newRes, err := repo.AddLocalResource(ctx, component, version, resource, inmemory.New(bytes.NewReader(data)))
-	Expect(err).NotTo(HaveOccurred())
-
-	desc := &descruntime.Descriptor{
-		Meta: descruntime.Meta{Version: "v2"},
-		Component: descruntime.Component{
-			ComponentMeta: descruntime.ComponentMeta{
-				ObjectMeta: descruntime.ObjectMeta{Name: component, Version: version},
-			},
-			Provider:  descruntime.Provider{Name: "ocm.software"},
-			Resources: []descruntime.Resource{*newRes},
-		},
-	}
-	Expect(repo.AddComponentVersion(ctx, desc)).To(Succeed())
-
-	specData, err := json.Marshal(repoSpec)
-	Expect(err).NotTo(HaveOccurred())
-	return specData
-}

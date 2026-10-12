@@ -438,6 +438,11 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		logger.V(1).Info("skip verifying resource: resource is excluded from signature")
 		event.New(r.EventRecorder, resource, nil, v1alpha1.EventSeverityInfo,
 			"resource %q is excluded from signature; skipping digest verification", matchedResource.Name)
+	case ocm.IsLocalBlob(matchedResource.Access):
+		// localBlob verification is deferred: by-value OCI artifacts need manifest-digest
+		// verification that belongs in the library's download/get path (tracked separately).
+		verifyResult = verificationResultSkipped
+		logger.V(1).Info("skip verifying resource: localBlob verification not yet supported")
 	case matchedResource.Digest == nil || matchedResource.Digest.Value == "" || matchedResource.Digest.HashAlgorithm == "":
 		// Not Never and not the exclude marker (both handled above): a resource with no digest
 		// cannot be verified. Fail closed; the user opts out explicitly via VerificationPolicy: Never.
@@ -449,12 +454,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 	default:
 		logger.V(1).Info("verifying resource")
 
-		if ocm.IsLocalBlob(matchedResource.Access) {
-			err = ocm.VerifyLocalBlob(ctx, cacheBackedRepo,
-				resourceDescriptor.Component.Name, resourceDescriptor.Component.Version, matchedResource)
-		} else {
-			matchedResource, err = ocm.VerifyResource(ctx, pm, matchedResource, cfg)
-		}
+		matchedResource, err = ocm.VerifyResource(ctx, pm, matchedResource, cfg)
 		if err != nil {
 			ResourceVerificationDurationHistogram.WithLabelValues(accessType, verificationResultFailed).Observe(time.Since(verifyStart).Seconds())
 			status.MarkNotReady(r.EventRecorder, resource, v1alpha1.GetOCMResourceFailedReason, err.Error())
