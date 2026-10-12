@@ -233,7 +233,7 @@ Install [Crossplane](https://crossplane.io) **v2** core via Helm, following the
 latest Crossplane v2 release, which the bootstrap tutorial requires:
 
 ```shell
-helm install crossplane crossplane-stable/crossplane \
+helm install crossplane crossplane \
   --repo https://charts.crossplane.io/stable \
   --version '2.x' \
   --namespace crossplane-system \
@@ -261,7 +261,7 @@ kind: Function
 metadata:
   name: function-patch-and-transform
 spec:
-  package: xpkg.crossplane.io/crossplane-contrib/function-patch-and-transform:v0.9.0
+  package: xpkg.crossplane.io/crossplane-contrib/function-patch-and-transform:v0.11.0
 EOF
 ```
 
@@ -524,7 +524,7 @@ Public OCI registries require no configuration. *Read more about ArgoCD OCI Supp
 Check all components are running:
 
 ```shell
-kubectl get pods --all-namespaces | grep -E '(kro-system|flux-system|argocd|ocm-k8s-toolkit-system)'
+kubectl get pods --all-namespaces | grep -E '(kro-system|crossplane-system|flux-system|argocd|ocm-k8s-toolkit-system)'
 ```
 
 <details>
@@ -541,6 +541,9 @@ argocd-notifications-controller-8669567fb-47fcj                                1
 argocd-redis-5d9668fdff-v2pbp                                                  1/1     Running            0               24m
 argocd-repo-server-95465d997-mbmcp                                             1/1     Running            0               24m
 argocd-server-767b9d54cf-q7bbz                                                 1/1     Running            0               24m
+crossplane-system        crossplane-6b8c9d7f54-nq8rk                           1/1     Running            0               12m
+crossplane-system        crossplane-rbac-manager-7d9f6c84b5-2xk7p              1/1     Running            0               12m
+crossplane-system        function-patch-and-transform-abc123-5f8d7c9b64-ltzqd  1/1     Running            0               10m
 flux-system              helm-controller-b6767d66-zbwws                        1/1     Running            0               3h39m
 flux-system              kustomize-controller-57c7ff5596-v6fvr                 1/1     Running            0               3h39m
 flux-system              notification-controller-58ffd586f7-pr65t              1/1     Running            0               3h39m

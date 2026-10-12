@@ -174,7 +174,7 @@ cat > composition.yaml << 'EOF'
 apiVersion: apiextensions.crossplane.io/v2
 kind: CompositeResourceDefinition
 metadata:
-  name: xbootstraps.ocm.software
+  name: bootstraps.ocm.software
 spec:
   group: ocm.software
   names:
@@ -224,7 +224,7 @@ kind: Composition
 metadata:
   name: bootstrap
   labels:
-    crossplane.io/xrd: xbootstraps.ocm.software
+    crossplane.io/xrd: bootstraps.ocm.software
 spec:
   compositeTypeRef:
     apiVersion: ocm.software/v1alpha1
@@ -575,7 +575,7 @@ type, so watch the XRD on its own:
 kubectl get xrd -w
 ```
 
-Once the XRD is `ESTABLISHED`/`OFFERED`, check the Composition:
+Once the XRD is `ESTABLISHED`, check the Composition:
 
 ```bash
 kubectl get composition
@@ -585,8 +585,8 @@ kubectl get composition
 <summary>You should see this output</summary>
 
 ```console
-NAME                                                     ESTABLISHED   OFFERED   AGE
-compositeresourcedefinition.../xbootstraps.ocm.software  True          True      2m56s
+NAME                                                     ESTABLISHED   AGE
+compositeresourcedefinition.../bootstraps.ocm.software   True          2m56s
 
 NAME                                    XR-KIND     XR-APIVERSION           AGE
 composition.apiextensions.../bootstrap  Bootstrap   ocm.software/v1alpha1   2m56s
@@ -594,7 +594,7 @@ composition.apiextensions.../bootstrap  Bootstrap   ocm.software/v1alpha1   2m56
 
 </details>
 
-When the XRD is `ESTABLISHED`/`OFFERED`, the Deployer has applied the blob and Crossplane has registered the
+When the XRD is `ESTABLISHED`, the Deployer has applied the blob and Crossplane has registered the
 `Bootstrap` composite kind.
 {{< /step >}}
 
