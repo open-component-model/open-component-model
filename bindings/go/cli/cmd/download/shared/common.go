@@ -17,6 +17,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/oci/compref"
 	ociaccess "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/resource"
@@ -44,8 +45,19 @@ func GetContextItems(cmd *cobra.Command) (*manager.PluginManager, credentials.Re
 	return pluginManager, credentialGraph, logger, nil
 }
 
-// DownloadResourceData handles the actual data download from repository
-func DownloadResourceData(ctx context.Context, pluginManager *manager.PluginManager, credentialGraph credentials.Resolver, component, version string, repo repository.ComponentVersionRepository, res *descriptor.Resource, identity runtime.Identity) (blob.ReadOnlyBlob, error) {
+// DownloadResourceData downloads the content of res, a resource of the component version ref names.
+// If ref is pinned to a digest, the content is verified against the digest of res (see
+// VerifyResourceContent), so it is bound to the pinned descriptor and not to whatever the
+// version tag resolves to by the time the blob is read.
+func DownloadResourceData(ctx context.Context, pluginManager *manager.PluginManager, credentialGraph credentials.Resolver, ref *compref.Ref, repo repository.ComponentVersionRepository, res *descriptor.Resource, identity runtime.Identity) (blob.ReadOnlyBlob, error) {
+	data, err := downloadResourceData(ctx, pluginManager, credentialGraph, ref.Component, ref.Version, repo, res, identity)
+	if err != nil || ref.Digest == "" {
+		return data, err
+	}
+	return VerifyResourceContent(ctx, res, data)
+}
+
+func downloadResourceData(ctx context.Context, pluginManager *manager.PluginManager, credentialGraph credentials.Resolver, component, version string, repo repository.ComponentVersionRepository, res *descriptor.Resource, identity runtime.Identity) (blob.ReadOnlyBlob, error) {
 	access := res.GetAccess()
 	var data blob.ReadOnlyBlob
 	var err error

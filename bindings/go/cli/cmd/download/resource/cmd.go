@@ -168,6 +168,9 @@ func DownloadResource(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("getting component version failed: %w", err)
 	}
+	if err := ocm.VerifyDigestPin(cmd.Context(), ref, desc); err != nil {
+		return err
+	}
 
 	artifacts := make([]descriptor.Artifact, len(desc.Component.Resources))
 	for i := range desc.Component.Resources {
@@ -198,7 +201,7 @@ func DownloadResource(cmd *cobra.Command, args []string) error {
 		})
 	}
 
-	data, err := shared.DownloadResourceData(cmd.Context(), pluginManager, credentialGraph, ref.Component, ref.Version, repo, res, requestedIdentity)
+	data, err := shared.DownloadResourceData(cmd.Context(), pluginManager, credentialGraph, ref, repo, res, requestedIdentity)
 	if err != nil {
 		return fmt.Errorf("downloading resource for identity %q failed: %w", requestedIdentity, err)
 	}

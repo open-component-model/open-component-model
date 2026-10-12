@@ -17,10 +17,11 @@ Verify component version(s) inside an OCM repository based on signatures.
 
 ## Reference Format
 
-	[type::]{repository}/[valid-prefix]/{component}[:version]
+	[type::]{repository}/[valid-prefix]/{component}[:version][@digest]
 
 - Prefixes: {component-descriptors|none} (default: "component-descriptors")  
 - Repo types: {OCIRepository|CommonTransportFormat} (short: {OCI|oci|CTF|ctf})
+- Digest: optional "@sha256:<hex>" pin; the command fails unless the fetched descriptor has this OCM component version digest (jsonNormalisation/v4alpha1)
 
 ## OCM Verification explained in simple steps
 

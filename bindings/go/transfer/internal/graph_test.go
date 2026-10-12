@@ -1,12 +1,15 @@
 package internal
 
 import (
+	"crypto"
+	"log/slog"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	v4alpha1 "ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	githubv1 "ocm.software/open-component-model/bindings/go/github/spec/access/v1"
@@ -20,6 +23,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	"ocm.software/open-component-model/bindings/go/signing"
 	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
 	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
 )
@@ -410,6 +414,27 @@ func TestBuildGraphDefinition_ResolverError(t *testing.T) {
 
 	_, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{}, nil)
 	require.Error(t, err)
+}
+
+func TestBuildGraphDefinition_PinnedRoot(t *testing.T) {
+	desc := testDescriptor("ocm.software/test", "1.0.0", nil, nil)
+	resolver := testResolverFor("ocm.software/test", "1.0.0", testOCIRepo("ghcr.io/source"), desc)
+	actual, err := signing.GenerateDigest(t.Context(), desc, slog.Default(), v4alpha1.Algorithm, crypto.SHA256.String())
+	require.NoError(t, err)
+
+	build := func(pin descriptor.Digest) error {
+		roots := testTransferRoots("ocm.software/test", "1.0.0", testOCIRepo("ghcr.io/target"), resolver)
+		root := roots["ocm.software/test:1.0.0"]
+		root.ExpectedDigest = &pin
+		roots["ocm.software/test:1.0.0"] = root
+		_, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{}, nil)
+		return err
+	}
+
+	require.NoError(t, build(*actual), "a root matching its pin transfers")
+	wrong := *actual
+	wrong.Value = strings.Repeat("0", len(actual.Value))
+	require.ErrorContains(t, build(wrong), "expected digest", "a root not matching its pin fails")
 }
 
 func TestBuildGraphDefinition_MultiTarget(t *testing.T) {

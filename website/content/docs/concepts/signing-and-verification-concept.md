@@ -188,6 +188,16 @@ A component version can have **multiple signatures** from different parties, ena
 - Multiple approval workflows
 - Cross-organizational trust chains
 
+### Pinning a Component Version by Digest
+
+A component reference can name the digest of the component version it expects:
+
+```text
+ghcr.io/acme//acme.org/helloworld:1.0.0@sha256:<component-version-digest>
+```
+
+The digest is the **component version digest**: the SHA-256 (or SHA-512) hash of the descriptor normalized with `jsonNormalisation/v4alpha1` (see [Normalization and Digest Calculation](#normalization-and-digest-calculation)), the same value that OCM signatures sign. `ocm get`, `ocm download`, `ocm verify`, `ocm sign` and `ocm transfer` fail if the component version they read has a different digest, and `ocm download` verifies the downloaded content against the resource digests of the pinned descriptor. A pinned reference must still name the version. Because the digest excludes access information, it is the same in every repository the component version is transferred to, so a pin taken once binds every later read to the same content even if the version is overwritten in between. See the [CLI reference]({{< relref "/docs/reference/ocm-cli/ocm_get_component-version.md" >}}) for the reference format.
+
 ## Supported Signing Algorithms
 
 OCM's `signature.algorithm` field selects between two signing approaches: classical RSA signatures over a long-lived key pair, and [Sigstore](https://www.sigstore.dev/)-based keyless signing, where each signature is made with a fresh, short-lived key bound to your OIDC identity. The two approaches differ not just in cryptography but in their trust model — see [Trust Models](#trust-models) below.

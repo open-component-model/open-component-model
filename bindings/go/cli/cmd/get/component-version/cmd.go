@@ -52,12 +52,17 @@ func New() *cobra.Command {
 		Long: fmt.Sprintf(`Get component version(s) from an OCM repository.
 
 The format of a component reference is:
-	[type::]{repository}/[valid-prefix]/{component}[:version]
+
+	[type::]{repository}/[valid-prefix]/{component}[:version][@digest]
 
 For valid prefixes {%[1]s|none} are available. If <none> is used, it defaults to %[1]q. This is because by default,
 OCM components are stored within a specific sub-repository.
 
 For known types, currently only {%[2]s} are supported, which can be shortened to {%[3]s} respectively for convenience.
+
+A digest ("@sha256:<hex>" or "@sha512:<hex>") pins the component version: it is the OCM component version digest,
+the hash of the descriptor normalised with jsonNormalisation/v4alpha1 (the value OCM signatures sign). The
+command fails if the resolved descriptor does not match it. A pinned reference must name the version.
 
 If no type is given, the repository path is interpreted based on introspection and heuristics.
 `,
@@ -71,6 +76,7 @@ Getting a single component version:
 get component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0
 get cv ./path/to/ctf//ocm.software/cli:0.12.0
 get cv ./path/to/ctf/component-descriptors/ocm.software/cli:0.12.0
+get cv ghcr.io/open-component-model//ocm.software/cli:0.12.0@sha256:<component-version-digest>
 
 Listing many component versions:
 
@@ -203,6 +209,10 @@ func processComponentReference(cmd *cobra.Command,
 	displayMode := params.displayMode
 	ctx := cmd.Context()
 
+	if err := ocm.ValidateDigestPin(ref); err != nil {
+		return err
+	}
+
 	repoProvider, err := ocm.NewComponentVersionRepositoryForComponentProvider(ctx, pluginManager.ComponentVersionRepositoryRegistry, credentialGraph, config, ref)
 	if err != nil {
 		return fmt.Errorf("could not initialize ocm repositoryProvider: %w", err)
@@ -236,17 +246,29 @@ func processComponentReference(cmd *cobra.Command,
 		roots = append(roots, identity)
 	}
 
-	if err := renderComponents(cmd, repoProvider, roots, output, displayMode, recursive); err != nil {
+	// A pinned reference names exactly one version, so the pin applies to every root.
+	var pin *compref.Ref
+	if ref.Digest != "" {
+		pin = ref
+	}
+	if err := renderComponents(cmd, repoProvider, roots, pin, output, displayMode, recursive); err != nil {
 		return fmt.Errorf("failed to render components: %w", err)
 	}
 
 	return nil
 }
 
-func renderComponents(cmd *cobra.Command, repoResolver resolvers.ComponentVersionRepositoryResolver, roots []string, format string, mode string, recursive int) error {
+func renderComponents(cmd *cobra.Command, repoResolver resolvers.ComponentVersionRepositoryResolver, roots []string, pin *compref.Ref, format string, mode string, recursive int) error {
+	pinned := make(map[string]*compref.Ref, len(roots))
+	if pin != nil {
+		for _, root := range roots {
+			pinned[root] = pin
+		}
+	}
 	resAndDis := resolverAndDiscoverer{
 		repositoryResolver: repoResolver,
 		recursive:          recursive,
+		pinned:             pinned,
 	}
 	discoverer := syncdag.NewGraphDiscoverer(&syncdag.GraphDiscovererOptions[string, *descruntime.Descriptor]{
 		Roots:      roots,
@@ -421,6 +443,8 @@ func serializeVerticesToTable(writer io.Writer, vertices []*dag.Vertex[string]) 
 type resolverAndDiscoverer struct {
 	repositoryResolver resolvers.ComponentVersionRepositoryResolver
 	recursive          int
+	// pinned maps root keys to the digest-pinned reference they were resolved from.
+	pinned map[string]*compref.Ref
 }
 
 var (
@@ -441,6 +465,11 @@ func (r *resolverAndDiscoverer) Resolve(ctx context.Context, key string) (*descr
 	desc, err := repo.GetComponentVersion(ctx, component, version)
 	if err != nil {
 		return nil, fmt.Errorf("getting component version for identity %q failed: %w", id, err)
+	}
+	if pin, ok := r.pinned[key]; ok {
+		if err := ocm.VerifyDigestPin(ctx, pin, desc); err != nil {
+			return nil, err
+		}
 	}
 	return desc, nil
 }
@@ -525,7 +554,7 @@ func processRepositoryReference(cmd *cobra.Command,
 		return fmt.Errorf("could not initialize ocm repositoryProvider: %w", err)
 	}
 
-	if err := renderComponents(cmd, repoProvider, roots, output, displayMode, recursive); err != nil {
+	if err := renderComponents(cmd, repoProvider, roots, nil, output, displayMode, recursive); err != nil {
 		return fmt.Errorf("failed to render components recursively: %w", err)
 	}
 

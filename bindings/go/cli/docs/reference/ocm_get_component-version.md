@@ -16,12 +16,17 @@ Get component version(s) from an OCM repository
 Get component version(s) from an OCM repository.
 
 The format of a component reference is:
-	[type::]{repository}/[valid-prefix]/{component}[:version]
+
+	[type::]{repository}/[valid-prefix]/{component}[:version][@digest]
 
 For valid prefixes {component-descriptors|none} are available. If <none> is used, it defaults to "component-descriptors". This is because by default,
 OCM components are stored within a specific sub-repository.
 
 For known types, currently only {OCIRepository|CommonTransportFormat} are supported, which can be shortened to {OCI|oci|CTF|ctf} respectively for convenience.
+
+A digest ("@sha256:<hex>" or "@sha512:<hex>") pins the component version: it is the OCM component version digest,
+the hash of the descriptor normalised with jsonNormalisation/v4alpha1 (the value OCM signatures sign). The
+command fails if the resolved descriptor does not match it. A pinned reference must name the version.
 
 If no type is given, the repository path is interpreted based on introspection and heuristics.
 
@@ -38,6 +43,7 @@ Getting a single component version:
 get component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0
 get cv ./path/to/ctf//ocm.software/cli:0.12.0
 get cv ./path/to/ctf/component-descriptors/ocm.software/cli:0.12.0
+get cv ghcr.io/open-component-model//ocm.software/cli:0.12.0@sha256:<component-version-digest>
 
 Listing many component versions:
 

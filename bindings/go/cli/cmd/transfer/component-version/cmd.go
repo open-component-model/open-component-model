@@ -540,14 +540,19 @@ func collectComponentIDs(
 
 	repositorySource := sourceComponents != nil
 
-	if !repositorySource && fromSpec.Version != "" {
+	if !repositorySource && (fromSpec.Version != "" || fromSpec.Digest != "") {
+		// The transfer verifies a digest pin against the descriptor it transfers.
+		pinned, err := ocm.PinnedDigest(fromSpec)
+		if err != nil {
+			return nil, err
+		}
 		if cmd.Flags().Changed(FlagConstraint) {
 			slog.WarnContext(ctx, fmt.Sprintf("--%s has no effect when a version is already specified in the reference", FlagConstraint))
 		}
 		if cmd.Flags().Changed(FlagLatest) {
 			slog.WarnContext(ctx, fmt.Sprintf("--%s has no effect when a version is already specified in the reference", FlagLatest))
 		}
-		return []transfer.ComponentID{{Component: fromSpec.Component, Version: fromSpec.Version}}, nil
+		return []transfer.ComponentID{{Component: fromSpec.Component, Version: fromSpec.Version, Digest: pinned}}, nil
 	}
 
 	registry, err := versioningspec.RegistryFromConfig(cfg)

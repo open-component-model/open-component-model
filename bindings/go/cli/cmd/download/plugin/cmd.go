@@ -144,6 +144,9 @@ func DownloadPlugin(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("getting component version failed: %w", err)
 	}
+	if err := ocm.VerifyDigestPin(cmd.Context(), ref, desc); err != nil {
+		return err
+	}
 
 	resourceType, err := cmd.Flags().GetString(FlagPluginType)
 	if err != nil {
@@ -206,7 +209,7 @@ func DownloadPlugin(cmd *cobra.Command, args []string) error {
 		slog.String("type", res.Type),
 		slog.Any("identity", res.ToIdentity()))
 
-	data, err := shared.DownloadResourceData(ctx, pluginManager, credentialGraph, ref.Component, ref.Version, repo, res, resourceIdentity)
+	data, err := shared.DownloadResourceData(ctx, pluginManager, credentialGraph, ref, repo, res, resourceIdentity)
 	if err != nil {
 		return fmt.Errorf("downloading plugin resource for identity %q failed: %w", resourceIdentity, err)
 	}
