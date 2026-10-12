@@ -1737,6 +1737,7 @@ func TestRepository_ProcessResourceDigest(t *testing.T) {
 				},
 			},
 			setup: func(t *testing.T) {
+				t.Helper()
 				ctx := t.Context()
 				r := require.New(t)
 				store, err := store.StoreForReference(ctx, "test-registry/test-layer")
@@ -1776,6 +1777,7 @@ func TestRepository_ProcessResourceDigest(t *testing.T) {
 				},
 			},
 			setup: func(t *testing.T) {
+				t.Helper()
 				ctx := t.Context()
 				r := require.New(t)
 				store, err := store.StoreForReference(ctx, "test-registry/test-layer")
@@ -1810,6 +1812,7 @@ func TestRepository_ProcessResourceDigest(t *testing.T) {
 				},
 			},
 			setup: func(t *testing.T) {
+				t.Helper()
 				ctx := t.Context()
 				r := require.New(t)
 				store, err := store.StoreForReference(ctx, "test-registry/test-layer")
@@ -1840,6 +1843,7 @@ func TestRepository_ProcessResourceDigest(t *testing.T) {
 				},
 			},
 			setup: func(t *testing.T) {
+				t.Helper()
 				ctx := t.Context()
 				r := require.New(t)
 				store, err := store.StoreForReference(ctx, "test-registry/test-layer")
