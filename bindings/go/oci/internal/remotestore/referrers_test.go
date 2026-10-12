@@ -13,12 +13,14 @@ import (
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/require"
 	"oras.land/oras-go/v2/registry/remote"
+	"oras.land/oras-go/v2/registry/remote/errcode"
 )
 
 // TestRemoteStore_Predecessors_NameUnknownReferrersAPI covers registries such as xpkg.crossplane.io that
 // answer the referrers API with 404 NAME_UNKNOWN for an existing repository. Referrers are optional, so
 // discovery must fall back to the referrers tag schema instead of failing the copy of the subject.
 func TestRemoteStore_Predecessors_NameUnknownReferrersAPI(t *testing.T) {
+	r := require.New(t)
 	subject := ociImageSpecV1.Descriptor{
 		MediaType: ociImageSpecV1.MediaTypeImageManifest,
 		Digest:    digest.FromString("subject"),
@@ -35,7 +37,7 @@ func TestRemoteStore_Predecessors_NameUnknownReferrersAPI(t *testing.T) {
 		MediaType: ociImageSpecV1.MediaTypeImageIndex,
 		Manifests: []ociImageSpecV1.Descriptor{referrer},
 	})
-	require.NoError(t, err)
+	r.NoError(err)
 	referrersTag := "sha256-" + subject.Digest.Encoded()
 
 	tests := []struct {
@@ -111,4 +113,55 @@ func TestRemoteStore_Predecessors_NameUnknownReferrersAPI(t *testing.T) {
 			r.EqualValues(2, referrersAPICalls.Load())
 		})
 	}
+}
+
+// TestReferrers_CallbackNameUnknownIsNotRetried ensures a NAME_UNKNOWN returned by the caller's
+// callback is propagated instead of being read as the registry's answer and hidden by the
+// tag schema retry.
+func TestReferrers_CallbackNameUnknownIsNotRetried(t *testing.T) {
+	r := require.New(t)
+	subject := ociImageSpecV1.Descriptor{
+		MediaType: ociImageSpecV1.MediaTypeImageManifest,
+		Digest:    digest.FromString("subject"),
+		Size:      7,
+	}
+	apiIndex, err := json.Marshal(ociImageSpecV1.Index{
+		Versioned: specs.Versioned{SchemaVersion: 2},
+		MediaType: ociImageSpecV1.MediaTypeImageIndex,
+		Manifests: []ociImageSpecV1.Descriptor{{
+			MediaType: ociImageSpecV1.MediaTypeImageManifest,
+			Digest:    digest.FromString("signature"),
+			Size:      9,
+		}},
+	})
+	r.NoError(err)
+
+	var tagSchemaCalls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if strings.HasPrefix(req.URL.Path, "/v2/test-repo/referrers/") {
+			w.Header().Set("Content-Type", ociImageSpecV1.MediaTypeImageIndex)
+			_, _ = w.Write(apiIndex)
+			return
+		}
+		tagSchemaCalls.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"errors":[{"code":"MANIFEST_UNKNOWN","message":"manifest unknown"}]}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	repo, err := remote.NewRepository(srv.Listener.Addr().String() + "/test-repo")
+	r.NoError(err)
+	repo.PlainHTTP = true
+	repo.Client = &http.Client{}
+
+	callbackErr := &errcode.ErrorResponse{
+		StatusCode: http.StatusNotFound,
+		Errors:     errcode.Errors{{Code: errcode.ErrorCodeNameUnknown}},
+	}
+	err = Referrers(t.Context(), repo, subject, "", func([]ociImageSpecV1.Descriptor) error {
+		return callbackErr
+	})
+	r.ErrorIs(err, callbackErr)
+	r.Zero(tagSchemaCalls.Load(), "a callback error must not trigger the tag schema retry")
 }

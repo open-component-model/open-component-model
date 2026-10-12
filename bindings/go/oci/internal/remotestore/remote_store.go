@@ -92,8 +92,8 @@ func (r *RemoteStore) Untag(ctx context.Context, reference string) error {
 }
 
 // Referrers lists referrers via [Referrers], falling back to the tag schema on NAME_UNKNOWN.
-func (r *RemoteStore) Referrers(ctx context.Context, desc ociImageSpecV1.Descriptor, artifactType string, fn func(referrers []ociImageSpecV1.Descriptor) error) error {
-	return Referrers(ctx, r.Repository, desc, artifactType, fn)
+func (r *RemoteStore) Referrers(ctx context.Context, desc ociImageSpecV1.Descriptor, artifactType string, onReferrers func(referrers []ociImageSpecV1.Descriptor) error) error {
+	return Referrers(ctx, r.Repository, desc, artifactType, onReferrers)
 }
 
 // Predecessors lists predecessors via [Predecessors], falling back to the tag schema on NAME_UNKNOWN.

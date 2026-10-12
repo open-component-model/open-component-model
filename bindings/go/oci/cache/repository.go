@@ -68,8 +68,8 @@ func (r *Repository) Unwrap() content.Storage {
 
 // Referrers delegates to [remotestore.Referrers], which falls back to the
 // referrers tag schema when the registry answers the API with NAME_UNKNOWN.
-func (r *Repository) Referrers(ctx context.Context, desc ociImageSpecV1.Descriptor, artifactType string, fn func(referrers []ociImageSpecV1.Descriptor) error) error {
-	return remotestore.Referrers(ctx, r.Repository, desc, artifactType, fn)
+func (r *Repository) Referrers(ctx context.Context, desc ociImageSpecV1.Descriptor, artifactType string, onReferrers func(referrers []ociImageSpecV1.Descriptor) error) error {
+	return remotestore.Referrers(ctx, r.Repository, desc, artifactType, onReferrers)
 }
 
 // Predecessors delegates to [remotestore.Predecessors]; see [Repository.Referrers].
