@@ -28,6 +28,7 @@ See the [installation notes in the root README](../README.md#installation) for d
 | [`kustomize-simple`](#kustomize-simple) | FluxCD + ArgoCD | Kustomize overlay from a Git-sourced OCM resource |
 | [`kustomize-configuration-localization`](#kustomize-configuration-localization) | FluxCD + ArgoCD | Image localization via Kustomize JSON patches |
 | [`k8s-manifest-simple`](#k8s-manifest-simple) | `NamespacedDeployer` | Applying a plain Kubernetes manifest from an OCM resource |
+| [`k8s-manifest-cross-namespace`](#k8s-manifest-cross-namespace) | `NamespacedDeployer` | Applying into a second namespace that granted the deployer's service account |
 | [`applyset-pruning`](#applyset-pruning) | `NamespacedDeployer` | Pruning orphaned resources with ApplySet |
 
 All examples except `helm-simple-nested-status` deploy with the `NamespacedDeployer`, which applies with the
@@ -158,6 +159,27 @@ Like `kustomize-simple`, but adds image localization and configuration via JSON 
 Applies a raw Kubernetes manifest stored as an OCM resource, without using kro or a GitOps deployer. Useful as
 a reference for the simplest possible OCM → cluster workflow. The `NamespacedDeployer` applies with the
 permissions of the `k8s-manifest-simple-deployer` service account.
+
+---
+
+## k8s-manifest-cross-namespace
+
+**Deployer:** `NamespacedDeployer`
+
+Deploys one OCM resource into two namespaces. The `Deployment` carries no namespace and lands next to the
+`NamespacedDeployer`. The dashboard `ConfigMap` names the `k8s-manifest-cross-namespace-monitoring` namespace.
+
+The service account's RBAC is the only thing that allows this. The bootstrap grants it `deployments` in its own
+namespace, and a second `Role` and `RoleBinding` inside the monitoring namespace grant it `configmaps` there.
+Remove that second pair and the `NamespacedDeployer` reports `ApplyFailed` with a `forbidden` error.
+
+Objects in another namespace cannot carry an owner reference to the `NamespacedDeployer`, so garbage collection
+does not remove them. Delete the `NamespacedDeployer` before its service account and RBAC, otherwise the
+`ConfigMap` is orphaned and listed in a `DeletionFailed` warning event.
+
+```bash
+task test/e2e -- --focus=k8s-manifest-cross-namespace
+```
 
 ---
 
