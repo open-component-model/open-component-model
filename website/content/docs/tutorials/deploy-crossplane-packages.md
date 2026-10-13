@@ -370,7 +370,7 @@ resources:
 
 The CLI merges `.ocmconfig` from the current directory with your other OCM configuration, so your registry
 credentials stay in effect. For details on uploaders, see
-[Migrate from --upload-as to Uploader Configurations]({{< relref "docs/how-to/migrate-from-upload-as.md" >}}).
+[Migrate from --upload-as to Uploader Configurations]({{< relref "docs/how-to/migration-guides/migrate-from-upload-as.md" >}}).
 
 {{< /step >}}
 {{< step >}}
