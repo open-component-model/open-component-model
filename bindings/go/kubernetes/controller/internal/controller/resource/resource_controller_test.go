@@ -453,6 +453,13 @@ var _ = Describe("Resource Controller", func() {
 								},
 								Type:     "blob",
 								Relation: descruntime.ExternalRelation,
+								// A digest is present so dispatch reaches VerifyResource and fails on the
+								// missing processor, rather than short-circuiting on the no-digest guard.
+								Digest: &descruntime.Digest{
+									HashAlgorithm:          "SHA-256",
+									NormalisationAlgorithm: "genericBlobDigest/v1",
+									Value:                  "0000000000000000000000000000000000000000000000000000000000000000",
+								},
 								Access: &runtime.Raw{
 									Type: runtime.Type{Name: "nonexistentaccess", Version: "v1"},
 									Data: mustMarshalJSON(map[string]any{"type": "nonexistentaccess/v1"}),
