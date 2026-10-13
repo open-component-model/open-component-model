@@ -41,7 +41,9 @@ Before starting, make sure you have set up your environment as described in the 
 - A **GitOps deployer** installed, either **Flux** or **Argo CD**, following [Set up Controller Environments > Install a
   Deployer]({{< relref "setup-controller-environment.md#install-a-deployer" >}}). Crossplane composes that deployer's
   objects directly: the Flux `OCIRepository` and `HelmRelease`, or the Argo CD `Application`. The matching controllers
-  must be running (Flux's `source-controller` and `helm-controller`, or Argo CD's `application-controller`).
+  must be running (Flux's `source-controller` and `helm-controller`, or Argo CD's `application-controller`). For Argo
+  CD, you also need the `default` `AppProject` to allow `Application` resources in the `default` namespace, see the
+  collapsible section below.
 - [Custom RBAC]({{< relref "custom-rbac.md" >}}) with **both** Crossplane grants, which live in two separate places in
   that guide:
   - The **Crossplane** tab under [Create a ClusterRole and ClusterRoleBinding]({{< relref "custom-rbac.md" >}}#tabs-ocm-controller-rbac-1)
@@ -58,6 +60,38 @@ Before starting, make sure you have set up your environment as described in the 
 {{< callout context="note" title="Private registries" icon="outline/lock" >}}
 If using a private registry, you'll need to configure credentials for both the OCM CLI and the controller resources. See [Configure Credentials for Controllers]({{< relref "docs/how-to/configure-credentials-ocm-controllers.md" >}}) for details.
 {{< /callout >}}
+
+{{< details "Argo CD only: allow Applications in the default namespace" >}}
+The XRD uses the recommended `Namespaced` scope, so Crossplane v2 composes the `Application` into the composite's
+namespace (`default`) and ignores any `metadata.namespace` in the template. The setup guide already sets
+`application.namespaces=default` so Argo CD watches `default`, but the `default` `AppProject` must also authorize that
+source namespace, otherwise the `Application` is rejected with `namespace 'default' is not permitted in project
+'default'`. Apply the project with `sourceNamespaces` set, keeping Argo CD's permissive defaults for the other fields:
+
+```shell
+kubectl apply -f - <<'EOF'
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: default
+  namespace: argocd
+spec:
+  sourceNamespaces:
+    - default
+  sourceRepos:
+    - '*'
+  destinations:
+    - namespace: '*'
+      server: '*'
+  clusterResourceWhitelist:
+    - group: '*'
+      kind: '*'
+EOF
+```
+
+In a real cluster, apply the `Bootstrap` in a dedicated namespace rather than `default`, and scope this project's
+`sourceNamespaces`, `sourceRepos`, and `destinations` to that tenant instead of the `'*'` wildcards shown here.
+{{< /details >}}
 
 ## Environment Setup
 
@@ -190,8 +224,9 @@ spec:
   names:
     kind: Bootstrap
     plural: bootstraps
-  # Namespaced keeps the composite and its composed resources in one namespace,
-  # the same one you apply the Bootstrap into. You apply the Bootstrap directly.
+  # Namespaced is the recommended scope for app delivery. It keeps the composite
+  # and its composed resources in one namespace, the same one you apply the
+  # Bootstrap into. You apply the Bootstrap directly.
   scope: Namespaced
   versions:
     - name: v1alpha1
@@ -468,8 +503,9 @@ spec:
   names:
     kind: Bootstrap
     plural: bootstraps
-  # Namespaced keeps the composite and its composed resources in one namespace,
-  # the same one you apply the Bootstrap into. You apply the Bootstrap directly.
+  # Namespaced is the recommended scope for app delivery. It keeps the composite
+  # and its composed resources in one namespace, the same one you apply the
+  # Bootstrap into. You apply the Bootstrap directly.
   scope: Namespaced
   versions:
     - name: v1alpha1
@@ -619,7 +655,6 @@ spec:
               apiVersion: argoproj.io/v1alpha1
               kind: Application
               metadata:
-                namespace: argocd
                 finalizers:
                   - resources-finalizer.argocd.argoproj.io
               spec:
@@ -691,6 +726,17 @@ spec:
                     string:
                       type: Format
                       fmt: "latest@%s"
+            # Argo CD Application objects never set a standard Ready condition.
+            # Without these checks Crossplane waits for status.conditions[Ready]
+            # forever and the Bootstrap stays READY=False. Treat the Application
+            # as ready only when Argo CD reports it Healthy and Synced.
+            readinessChecks:
+              - type: MatchString
+                fieldPath: status.health.status
+                matchString: Healthy
+              - type: MatchString
+                fieldPath: status.sync.status
+                matchString: Synced
 EOF
 ```
 
@@ -1024,7 +1070,8 @@ kubectl get resource.delivery.ocm.software,ocirepository,helmrelease
 kubectl describe helmrelease bootstrap-helmrelease
 # Argo CD deployer
 kubectl get resource.delivery.ocm.software -A
-kubectl describe -n argocd application bootstrap-application
+# The Application lands in the composite's namespace (default), not argocd.
+kubectl describe application bootstrap-application
 ```
 
 Check the Events section and each composed resource's status for error messages. A common cause is Crossplane

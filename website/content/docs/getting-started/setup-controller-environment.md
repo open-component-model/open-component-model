@@ -412,11 +412,18 @@ helm repo update argo
 helm upgrade --install argocd argo/argo-cd \
   --namespace argocd \
   --create-namespace \
+  --set-string 'configs.params.application\.namespaces=default' \
   --wait \
   --timeout 5m
 # ...
 
 ```
+
+{{< callout context="note" title="Why application.namespaces=default" icon="outline/info-circle" >}}
+By default Argo CD only reconciles `Application` resources in `argocd`. The Crossplane tutorial composes the
+`Application` into the composite's namespace (`default`), so `application.namespaces=default` makes Argo CD watch it
+too. That tutorial also configures the matching `AppProject`. Add more namespaces as a comma-separated list if needed.
+{{< /callout >}}
 
 Wait for all pods to become ready:
 

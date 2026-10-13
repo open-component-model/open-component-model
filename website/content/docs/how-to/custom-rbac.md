@@ -415,7 +415,7 @@ label is what wires it into Crossplane's service account:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: crossplane-compose-ocm-flux
+  name: crossplane-compose-ocm-deployer
   labels:
     rbac.crossplane.io/aggregate-to-crossplane: "true"
 rules:
