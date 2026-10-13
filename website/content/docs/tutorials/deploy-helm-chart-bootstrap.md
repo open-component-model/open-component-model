@@ -766,6 +766,12 @@ kubectl get rgd bootstrap -o jsonpath='{.status.conditions[?(@.type=="Ready")].m
 
 A message like `cache sync timeout for kro.run/v1alpha1, Resource=bootstraps` often means that kro lacks access to the `Bootstrap` instances. Check that you applied `kro-rbac.yaml`, as described in [Grant kro access to the instances](#grant-kro-access-to-the-instances).
 
+To see which access kro lacks, check its logs for `forbidden`:
+
+```bash
+kubectl logs -n kro-system deployment/kro | grep forbidden
+```
+
 ### RBAC Permission Errors
 
 If the controller logs show permission errors like `forbidden` or `cannot create resource`, the controller lacks RBAC permissions to manage `ResourceGraphDefinitions`. Follow the [Custom RBAC guide]({{< relref "custom-rbac.md" >}}) to grant the necessary permissions.
