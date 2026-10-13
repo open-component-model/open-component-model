@@ -174,8 +174,9 @@ namespace, and a second `Role` and `RoleBinding` inside the monitoring namespace
 Remove that second pair and the `NamespacedDeployer` reports `ApplyFailed` with a `forbidden` error.
 
 Objects in another namespace cannot carry an owner reference to the `NamespacedDeployer`, so garbage collection
-does not remove them. Delete the `NamespacedDeployer` before its service account and RBAC, otherwise the
-`ConfigMap` is orphaned and listed in a `DeletionFailed` warning event.
+does not remove them. Delete the `NamespacedDeployer` before its service account and RBAC. Without the RBAC the
+deletion waits with a `DeletionFailed` condition, and without the service account the `ConfigMap` is orphaned and
+listed in a `DeletionFailed` warning event.
 
 ```bash
 task test/e2e -- --focus=k8s-manifest-cross-namespace

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -111,7 +112,31 @@ func (r *Reconciler) applyClient(ctx context.Context, deployer deliveryv1alpha1.
 	return c, nil
 }
 
-// orphanOnDeletion reports what a deletion leaves behind when the service account cannot prune. GC removes children
+// blocksDeletion reports whether a failed prune keeps the deployer from being deleted. Missing permissions can be
+// restored, so a NamespacedDeployer stays and retries as long as its deletion would orphan objects.
+func (r *Reconciler) blocksDeletion(ctx context.Context, deployer deliveryv1alpha1.DeployerObject, metadata applyset.Metadata, pruneErr error) bool {
+	if !r.Namespaced || !apierrors.IsForbidden(pruneErr) {
+		return true
+	}
+
+	orphaned, err := r.orphanedObjects(ctx, metadata)
+	if err != nil {
+		log.FromContext(ctx).Error(err, "failed to list objects the deletion would orphan")
+		orphaned = []string{metadata.PruneScope().String()}
+	}
+	// A deployer that never applied outside of its namespace has nothing to lose, GC removes the rest.
+	if len(orphaned) == 0 {
+		return false
+	}
+
+	status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.DeletionFailedReason, fmt.Sprintf(
+		"service account %s cannot prune (%v), restore its permissions to delete the objects outside of namespace %s: %s",
+		serviceAccountName(deployer), pruneErr, deployer.GetNamespace(), strings.Join(orphaned, ", ")))
+
+	return true
+}
+
+// orphanOnDeletion reports what a deletion leaves behind when the service account is gone. GC removes children
 // in the deployer's namespace through their owner reference, the rest stays and is listed in a Warning event.
 func (r *Reconciler) orphanOnDeletion(ctx context.Context, deployer deliveryv1alpha1.DeployerObject, metadata applyset.Metadata, pruneErr error) {
 	logger := log.FromContext(ctx)
@@ -122,13 +147,13 @@ func (r *Reconciler) orphanOnDeletion(ctx context.Context, deployer deliveryv1al
 		logger.Error(err, "failed to list orphaned objects")
 		orphaned = []string{metadata.PruneScope().String()}
 	}
-	logger.Info("skipping ApplySet prune as the service account cannot prune", "reason", pruneErr.Error(), "orphaned", len(orphaned))
+	logger.Info("skipping ApplySet prune as the service account is gone", "reason", pruneErr.Error(), "orphaned", len(orphaned))
 	if len(orphaned) == 0 {
 		return
 	}
 
 	status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.DeletionFailedReason, fmt.Sprintf(
-		"service account %s cannot prune (%v), orphaning objects outside of namespace %s: %s",
+		"service account %s is gone (%v), orphaning objects outside of namespace %s: %s",
 		serviceAccountName(deployer), pruneErr, deployer.GetNamespace(), strings.Join(orphaned, ", ")))
 }
 

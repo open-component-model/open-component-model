@@ -71,7 +71,8 @@ Bind the service account by name. The controller impersonates only the user name
 For cluster-scoped kinds such as kro `ResourceGraphDefinitions`, or for objects in other namespaces, bind the service
 account to a `ClusterRole` with a `ClusterRoleBinding` instead. Grant only the kinds the deployment needs.
 
-Keep these permissions until the `NamespacedDeployer` is deleted. It prunes with them, and without them it orphans
+Keep these permissions until the `NamespacedDeployer` is deleted. It prunes with them. Without them its deletion
+waits with a `DeletionFailed` condition until you restore them, and without the service account itself it orphans
 cluster-scoped and cross-namespace objects.
 
 Check the service account's access:

@@ -152,7 +152,45 @@ metadata:
 		}).WithTimeout(test.DefaultKubernetesOperationTimeout).WithContext(ctx).Should(BeTrue())
 	})
 
-	It("orphans objects when its RBAC is gone", func(ctx SpecContext) {
+	It("blocks deletion until its service account may prune again", func(ctx SpecContext) {
+		createServiceAccount(ctx, namespace.GetName(), true)
+		other := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace.GetName() + "-other"}}
+		Expect(k8sClient.Create(ctx, other)).To(Succeed())
+		grantConfigMaps(ctx, other.GetName(), namespace.GetName(), namespacedDeployerSA)
+		resourceObj := mockYAMLResource(ctx, namespace.GetName(), fmt.Sprintf(`apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nd-blocked-cm
+  namespace: %s
+`, other.GetName()))
+
+		deployer := createNamespacedDeployer(ctx, namespace.GetName(), resourceObj.GetName(), nil)
+		test.WaitForReadyObject(ctx, k8sClient, deployer, map[string]any{})
+		cm := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "nd-blocked-cm", Namespace: other.GetName()}}
+		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(cm), cm)).To(Succeed())
+
+		By("revoking the permissions in the other namespace and deleting the NamespacedDeployer")
+		binding := &rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: namespacedDeployerSA, Namespace: other.GetName()}}
+		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(binding), binding)).To(Succeed())
+		test.DeleteObject(ctx, k8sClient, binding.DeepCopy())
+		Expect(k8sClient.Delete(ctx, deployer)).To(Succeed())
+
+		By("keeping the NamespacedDeployer and the object it would orphan")
+		waitForNotReadyMessage(ctx, deployer, v1alpha1.DeletionFailedReason, "ConfigMap "+other.GetName()+"/nd-blocked-cm")
+		Expect(deployer.GetDeletionTimestamp()).NotTo(BeNil())
+		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(cm), cm)).To(Succeed())
+
+		By("finishing the deletion once the permissions are back")
+		binding.ResourceVersion = ""
+		binding.UID = ""
+		Expect(k8sClient.Create(ctx, binding)).To(Succeed())
+		Eventually(func(g Gomega, ctx context.Context) {
+			g.Expect(errors.IsNotFound(k8sClient.Get(ctx, client.ObjectKeyFromObject(deployer), deployer))).To(BeTrue())
+			g.Expect(errors.IsNotFound(k8sClient.Get(ctx, client.ObjectKeyFromObject(cm), cm))).To(BeTrue())
+		}).WithTimeout(test.DefaultKubernetesOperationTimeout).WithContext(ctx).Should(Succeed())
+	})
+
+	It("orphans objects when its service account is gone", func(ctx SpecContext) {
 		createServiceAccount(ctx, namespace.GetName(), true)
 		grantClusterRoles(ctx, namespace.GetName())
 		other := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace.GetName() + "-other"}}

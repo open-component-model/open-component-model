@@ -293,8 +293,13 @@ func (r *Reconciler) pruneWithApplySet(ctx context.Context, deployer deliveryv1a
 
 	applyClient, err := r.applyClient(ctx, deployer)
 	if err != nil {
-		if r.Namespaced && (apierrors.IsNotFound(err) || apierrors.IsForbidden(err)) {
+		if r.Namespaced && apierrors.IsNotFound(err) {
+			// Either the entire namespace or the bootstrapping objects are being deleted
+			// so orphan everything and let the deletion happen.
 			r.orphanOnDeletion(ctx, deployer, metadata, err)
+			return true, nil
+		}
+		if !r.blocksDeletion(ctx, deployer, metadata, err) {
 			return true, nil
 		}
 		return false, err
@@ -309,8 +314,7 @@ func (r *Reconciler) pruneWithApplySet(ctx context.Context, deployer deliveryv1a
 		Concurrency: runtime.NumCPU(),
 	})
 	if err != nil {
-		if r.Namespaced && apierrors.IsForbidden(err) {
-			r.orphanOnDeletion(ctx, deployer, metadata, err)
+		if !r.blocksDeletion(ctx, deployer, metadata, err) {
 			return true, nil
 		}
 		return false, fmt.Errorf("failed to prune ApplySet: %w", err)

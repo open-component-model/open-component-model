@@ -91,14 +91,21 @@ When a `Deployer` object is deleted, cleanup happens in two phases. First, the `
 
 The `Deployer` will not be fully removed until both phases finish, ensuring no orphaned resources are left behind.
 
-A `NamespacedDeployer` prunes with its service account. If that service account or its permissions are already gone,
-it does not prune. Objects in its own namespace carry its owner reference, so the Kubernetes garbage collector
-removes them anyway. Cluster-scoped objects and objects in other namespaces are **orphaned**: the deployer reports
-them in a `DeletionFailed` Warning event and is removed without them.
+A `NamespacedDeployer` prunes with its service account. The following two things can happen during deletion:
+
+- **The service account lacks permissions:** the deployer is not removed. It reports `DeletionFailed` with the
+  objects it cannot delete and retries. Restore the permissions and the deletion finishes. A deployer that has no
+  such objects is removed right away.
+- **The service account is gone:** This is likely due to either the namespace being deleted or the bootstrapping
+  objects are being removed so we will not block the process. The deployer lists them as `orphaned` in a `DeletionFailed`
+  Warning event and is removed.
+
+Orphaned objects keep the annotation `delivery.ocm.software/namespaced-deployer` with the namespace and name of
+their deployer, and the label `app.kubernetes.io/managed-by: namespaceddeployer.delivery.ocm.software`.
 
 {{< callout context="caution" title="Delete the NamespacedDeployer before its RBAC" icon="outline/alert-triangle" >}}
 `kubectl delete -f` on a file that contains the `NamespacedDeployer` together with its service account, `Role`,
-`ClusterRole` or bindings removes the permissions at the same time and orphans cluster-scoped objects such as
+`ClusterRole` or bindings removes the service account at the same time and orphans cluster-scoped objects such as
 `ResourceGraphDefinitions`. Delete the `NamespacedDeployer` first and wait until it is gone, then delete its RBAC.
 If objects were orphaned, check the deployer's events and delete them by hand.
 {{< /callout >}}
