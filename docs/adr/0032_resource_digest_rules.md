@@ -17,6 +17,28 @@ Each binding (OCI, Helm, wget, S3, Git, GitHub, transfer, signing) implements th
 3. **Content kind is guessed repeatedly**: whether content is an OCI artifact or plain bytes is rediscovered at several steps, and the answers can disagree.
 4. **Excluded resources are mostly unsupported**: only signing and download verification detect `NO-DIGEST` / `EXCLUDE-FROM-SIGNATURE`. Elsewhere such resources fail to be added, or their marker is silently replaced by a real digest, which breaks the signature.
 
+Two examples show why a single fixed algorithm is not enough.
+
+**One OCI image, two valid labels.** An image added today records the digest of its manifest as `ociArtifactDigest/v1`. The same image added with an earlier v2 release records the same manifest digest, but labelled `genericBlobDigest/v1`, and that label is signed:
+
+```yaml
+# added today
+digest:
+  hashAlgorithm: SHA-256
+  normalisationAlgorithm: ociArtifactDigest/v1
+  value: 4f1c...   # digest of the image manifest
+---
+# the same image, added with an earlier v2 release
+digest:
+  hashAlgorithm: SHA-256
+  normalisationAlgorithm: genericBlobDigest/v1
+  value: 4f1c...   # the same manifest digest
+```
+
+When the second component is transferred, the label must stay as it is, or the signature breaks. It also must not be verified as plain bytes, because hashing the OCI layout archive gives a different value than the manifest digest. The OCI binding therefore has to accept both labels for an artifact, and decide that it holds an artifact from what it resolved, not from the label.
+
+**One resource type, different content.** A Helm chart from an HTTP repository is a `.tgz` file and gets a digest of its bytes. The same chart from an `oci://` repository is an OCI artifact and gets the manifest digest. wget, S3, Git and GitHub always hash bytes, but receive hash names in different spellings, such as `sha256` from S3 checksums. A resource marked `NO-DIGEST` must pass all of these paths untouched. Each binding knows what it computed; the shared rules only decide what to do with the recorded digest.
+
 ## Decision Drivers
 
 * **Compatibility**: Every digest accepted today stays accepted, and no recorded digest is ever rewritten.
@@ -54,6 +76,26 @@ A new package `bindings/go/digest` holds the vocabulary and the decision, and th
 ```go
 type Rule struct { Normalisation string; Accepted []string }
 func Check(recorded *runtime.Digest, computed Computed, rule Rule, mode Mode) (Result, error)
+```
+
+`Check` decides what happens to the recorded digest. It never writes anything itself; the binding applies the result:
+
+```mermaid
+flowchart TD
+    A[Recorded digest] --> B{NO-DIGEST /<br/>EXCLUDE-FROM-SIGNATURE?}
+    B -- yes --> X[Excluded:<br/>keep as is, nothing hashed]
+    B -- no --> C{How much is recorded?}
+    C -- nothing --> G[Generate from the<br/>computed digest]
+    C -- some fields --> D{Set fields agree with<br/>rule and computed digest?}
+    D -- yes --> P[Complete the<br/>missing fields]
+    D -- no --> R[Reject]
+    C -- complete --> E{Label is the rule's<br/>own or an accepted one?}
+    E -- yes --> F{Hash and value match<br/>the computed digest?}
+    F -- yes --> K[Keep exactly<br/>as recorded]
+    F -- no --> R
+    E -- no --> M{Mode}
+    M -- strict --> R
+    M -- lenient --> U[Keep unverified]
 ```
 
 #### Key Design Decisions
