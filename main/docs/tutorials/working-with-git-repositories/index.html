@@ -165,27 +165,27 @@ SSH</button></div></nav><div class=tab-content id=tabs-git-credentials-content><
 </span></span></span><span class=line><span class=cl><span class=s>  - type: credentials.config.ocm.software
 </span></span></span><span class=line><span class=cl><span class=s>    consumers:
 </span></span></span><span class=line><span class=cl><span class=s>      - identity:
-</span></span></span><span class=line><span class=cl><span class=s>          type: Git
+</span></span></span><span class=line><span class=cl><span class=s>          type: Git/v1
 </span></span></span><span class=line><span class=cl><span class=s>          hostname: gitlab.com
 </span></span></span><span class=line><span class=cl><span class=s>          scheme: https
 </span></span></span><span class=line><span class=cl><span class=s>          path: example-group/*
 </span></span></span><span class=line><span class=cl><span class=s>        credentials:
-</span></span></span><span class=line><span class=cl><span class=s>          - type: GitCredentials/v1
+</span></span></span><span class=line><span class=cl><span class=s>          - type: GitHTTPSCredentials/v1
 </span></span></span><span class=line><span class=cl><span class=s>            username: oauth2
 </span></span></span><span class=line><span class=cl><span class=s>            password: glpat-your-token
-</span></span></span><span class=line><span class=cl><span class=s>EOF</span></span></span></code></pre></div></figure></div><p>Most Git servers take an access token as the password. You can also set <code>token</code> instead, which OCM sends as a bearer
-token.</p></div><div data-pane=ssh class="tab-pane fade" id=tabs-git-credentials-1 role=tabpanel aria-labelledby=tabs-git-credentials-1-tab tabindex=0><p class=tab-pane-label aria-hidden=true>SSH</p><div class=expressive-code><figure class="frame is-terminal not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-bash data-lang=bash><span class=line><span class=cl>cat &gt; .ocmconfig <span class=s>&lt;&lt; &#39;EOF&#39;
+</span></span></span><span class=line><span class=cl><span class=s>EOF</span></span></span></code></pre></div></figure></div><p>Most Git servers take an access token as the password. Use <code>GitBearerCredentials/v1</code> only if your server explicitly
+requires Bearer authentication.</p></div><div data-pane=ssh class="tab-pane fade" id=tabs-git-credentials-1 role=tabpanel aria-labelledby=tabs-git-credentials-1-tab tabindex=0><p class=tab-pane-label aria-hidden=true>SSH</p><div class=expressive-code><figure class="frame is-terminal not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-bash data-lang=bash><span class=line><span class=cl>cat &gt; .ocmconfig <span class=s>&lt;&lt; &#39;EOF&#39;
 </span></span></span><span class=line><span class=cl><span class=s>type: generic.config.ocm.software/v1
 </span></span></span><span class=line><span class=cl><span class=s>configurations:
 </span></span></span><span class=line><span class=cl><span class=s>  - type: credentials.config.ocm.software
 </span></span></span><span class=line><span class=cl><span class=s>    consumers:
 </span></span></span><span class=line><span class=cl><span class=s>      - identity:
-</span></span></span><span class=line><span class=cl><span class=s>          type: Git
+</span></span></span><span class=line><span class=cl><span class=s>          type: Git/v1
 </span></span></span><span class=line><span class=cl><span class=s>          hostname: git.example.com
 </span></span></span><span class=line><span class=cl><span class=s>          scheme: ssh
 </span></span></span><span class=line><span class=cl><span class=s>          port: &#34;22&#34;
 </span></span></span><span class=line><span class=cl><span class=s>        credentials:
-</span></span></span><span class=line><span class=cl><span class=s>          - type: GitCredentials/v1
+</span></span></span><span class=line><span class=cl><span class=s>          - type: GitSSHCredentials/v1
 </span></span></span><span class=line><span class=cl><span class=s>            privateKey: /home/user/.ssh/id_ed25519
 </span></span></span><span class=line><span class=cl><span class=s>EOF</span></span></span></code></pre></div></figure></div><p>Use an SSH URL in the constructor, such as <code>git@git.example.com:org/repo.git</code>. Without a configured key, OCM uses your
 SSH agent. The server must be in your <code>~/.ssh/known_hosts</code>. Keep <code>port: "22"</code>: an SSH entry without a port does not
@@ -201,7 +201,7 @@ over plain HTTP.</p><h3 id=git-archive-digest-mismatch><code>git archive digest 
 compressed archive, so an OCM release built with a different Go version can also produce different bytes.</p><p><strong>Fix:</strong> Check that <code>commit</code> is the commit you expect. If it is, compare the OCM versions that built and that downloaded
 the component version.</p><h2 id=cleanup>Cleanup<a href=#cleanup class=anchor aria-hidden=true>#</a></h2><div class=expressive-code><figure class="frame is-terminal not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-bash data-lang=bash><span class=line><span class=cl>rm -rf transport-archive hello-world.tar.gz component-constructor.yaml .ocmconfig</span></span></code></pre></div></figure></div><h2 id=next-steps>Next steps<a href=#next-steps class=anchor aria-hidden=true>#</a></h2><ul><li><a href=/main/docs/how-to/add-resources-from-github/>How-to: Add Resources from GitHub</a>: the <code>GitHub/v1</code>
 access type, which downloads the archive through the GitHub REST API</li></ul><h2 id=related-documentation>Related documentation<a href=#related-documentation class=anchor aria-hidden=true>#</a></h2><ul><li><a href=/main/docs/reference/input-and-access-types/#gitv1-access>Reference: <code>Git/v1</code> access type</a>, including
-when to choose <code>Git/v1</code> or <code>GitHub/v1</code>, and migration from OCM v1</li><li><a href=/main/docs/reference/input-and-access-types/#gitv1-input>Reference: <code>Git/v1</code> input type</a></li><li><a href=/main/docs/reference/resource-repositories/#git-resource-repository>Reference: Git Resource Repository</a></li><li><a href=/main/docs/reference/credential-types/#gitcredentialsv1>Reference: <code>GitCredentials/v1</code></a></li></ul><div class="page-footer-meta d-flex flex-column flex-md-row justify-content-between"></div><div class="page-nav d-flex flex-column flex-sm-row"><div class="card w-100"><div class="card-body d-flex"><div class="d-flex flex-column justify-content-center"><svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-arrow-left" width="20" height="20" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+when to choose <code>Git/v1</code> or <code>GitHub/v1</code>, and migration from OCM v1</li><li><a href=/main/docs/reference/input-and-access-types/#gitv1-input>Reference: <code>Git/v1</code> input type</a></li><li><a href=/main/docs/reference/resource-repositories/#git-resource-repository>Reference: Git Resource Repository</a></li><li><a href=/main/docs/reference/credential-types/#git-credentials>Reference: Git credentials</a></li></ul><div class="page-footer-meta d-flex flex-column flex-md-row justify-content-between"></div><div class="page-nav d-flex flex-column flex-sm-row"><div class="card w-100"><div class="card-body d-flex"><div class="d-flex flex-column justify-content-center"><svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-arrow-left" width="20" height="20" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
 						<path stroke="none" d="M0 0h24v24H0z" fill="none"></path>
 						<path d="M5 12l14 0"></path>
 						<path d="M5 12l6 6"></path>
