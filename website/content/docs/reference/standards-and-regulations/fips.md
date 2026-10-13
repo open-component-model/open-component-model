@@ -40,7 +40,7 @@ Go Cryptographic Module, FIPS mode changes OCM's behavior in these places:
 | TLS connections | Only FIPS-approved TLS versions, cipher suites and key exchanges | Same | [Effects of FIPS Mode](#effects-of-fips-mode) |
 | Signing and verification | Resource and component reference digests must use SHA-256 or SHA-512 | Same | [Digest Algorithms](#digest-algorithms) |
 | Sigstore signing | A `cosign` that is not a FIPS build, or a downloaded one, is used and logged at debug level | Rejected; `cosign` must be on `PATH` and a FIPS build | [Sigstore and cosign](#sigstore-and-cosign) |
-| GPG signing | GPG keys other than unprotected v6 RSA or ECDSA P keys are used and logged at debug level | Rejected; see the four strict-mode errors | [GPG](#gpg) |
+| GPG signing | GPG keys other than unprotected v5 or v6 RSA or ECDSA P keys are used and logged at debug level | Rejected; see the four strict-mode errors | [GPG](#gpg) |
 
 **Module version.** OCM builds with `GOFIPS140=certified`, set once in the
 repository's root `.env`. `certified` selects the newest Go Cryptographic Module
@@ -122,7 +122,9 @@ The images have no shell and no package manager. See
 
 The binaries are statically linked and do not use any system cryptographic
 library. All cryptography in OCM itself goes through the Go Cryptographic
-Module.
+Module, except for the GPG operations listed under [GPG](#gpg): in the default
+mode they run outside the module and are logged at debug level, and in strict
+mode they are rejected.
 
 ## Runtime Modes
 
@@ -131,7 +133,7 @@ You control the runtime mode with the `GODEBUG` environment variable.
 | `GODEBUG` | Behavior |
 | --- | --- |
 | `fips140=on` (default) | FIPS mode is active. Approved algorithms run in their FIPS-compliant form, and non-approved algorithms such as MD5 and SHA-1 stay available. |
-| `fips140=only` | Like `on`, but non-approved algorithms return an error or panic. OCM also rejects GPG keys that are not unprotected v6 RSA or ECDSA P keys, a `cosign` that runs outside the FIPS boundary, Helm chart provenance verification (see [Known Limitations](#known-limitations)), and resource or reference digests other than SHA-256/SHA-512 (see [Digest Algorithms](#digest-algorithms)). Go documents this as a best-effort mode for testing and assessment, not for production. |
+| `fips140=only` | Like `on`, but non-approved algorithms return an error or panic. OCM also rejects GPG keys that are not unprotected v5 or v6 RSA or ECDSA P keys, a `cosign` that runs outside the FIPS boundary, Helm chart provenance verification (see [Known Limitations](#known-limitations)), and resource or reference digests other than SHA-256/SHA-512 (see [Digest Algorithms](#digest-algorithms)). Go documents this as a best-effort mode for testing and assessment, not for production. |
 | `fips140=off` | FIPS mode is disabled. |
 
 OCM runs in `fips140=on` mode by default, which allows non-approved algorithms

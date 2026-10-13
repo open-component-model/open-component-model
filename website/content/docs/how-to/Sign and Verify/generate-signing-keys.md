@@ -97,7 +97,7 @@ You should see both files:
 
 ## Generate a GPG key pair
 
-If you already use a GPG key for signing Git tags or release artifacts, that key works as-is for OCM — skip ahead and just export it (Step 2). Otherwise, generate a new one in `/tmp/keys` so the file paths line up with the rest of the how-tos. For `keyringFingerprint` credentials, see [Configure Signing Credentials]({{< relref "configure-signing-credentials.md" >}}). For FIPS strict mode (v6 keys), see the [FIPS reference]({{< relref "docs/reference/standards-and-regulations/fips.md" >}}#gpg).
+If you already use a GPG key for signing Git tags or release artifacts, that key works as-is for OCM — skip ahead and just export it (Step 2). Keys on a hardware token (smartcard, YubiKey) are the exception: `gpg --export-secret-keys` yields only a card stub without the secret key, so OCM cannot sign with them. Otherwise, generate a new one in `/tmp/keys` so the file paths line up with the rest of the how-tos. For `keyringFingerprint` credentials, see [Configure Signing Credentials]({{< relref "configure-signing-credentials.md" >}}). For FIPS strict mode (v5 or v6 keys), see the [FIPS reference]({{< relref "docs/reference/standards-and-regulations/fips.md" >}}#gpg).
 
 {{< steps >}}
 
