@@ -498,7 +498,7 @@ clusterrole.rbac.authorization.k8s.io/kro:controller:simples created
 ### Apply the ResourceGraphDefinition
 
 {{< callout context="caution" title="RBAC required before you apply" icon="outline/alert-triangle" >}}
-Please make sure that you updated your RBAC permissions before applying this command. Follow our [Configure Custom RBAC for Deployers]({{< relref "custom-rbac.md" >}}) guide to know how to do that.
+Apply `kro-rbac.yaml` from [Grant kro access to the instances]({{< relref "#grant-kro-access-to-the-instances" >}}) first. Without it, kro cannot reconcile `Simple` instances.
 {{< /callout >}}
 
 ```shell
