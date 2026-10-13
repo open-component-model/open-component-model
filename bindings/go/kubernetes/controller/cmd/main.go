@@ -118,7 +118,8 @@ func main() {
 		"The time-to-live (TTL) for the resolver cache entries in minutes. Setting TTL to less than 30 minutes is discouraged in productive use as it can lead to unintended performance issues.")
 	flag.Float64Var(&rateLimit.QPS, "reconcile-rate-limit-qps", ocm.DefaultRateLimitQPS,
 		"Requeues per second each controller admits once the burst is used up. "+
-			"New objects pass through it once, and so do retries after an error, so a higher value also speeds up retries.")
+			"New objects pass through it once, and so do retries after an error, so a higher value also speeds up retries. "+
+			"Must be at least 1.")
 	flag.IntVar(&rateLimit.Burst, "reconcile-rate-limit-burst", ocm.DefaultRateLimitBurst,
 		"Requeues each controller admits at once before reconcile-rate-limit-qps applies.")
 
@@ -160,9 +161,10 @@ func main() {
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
-	if rateLimit.QPS <= 0 || rateLimit.Burst < 1 {
+	// A qps of 0 would stop a controller for good once its burst is used up.
+	if rateLimit.QPS < 1 || rateLimit.Burst < 1 {
 		setupLog.Error(nil, "invalid flag value", "reconcile-rate-limit-qps", rateLimit.QPS, "reconcile-rate-limit-burst", rateLimit.Burst,
-			"reason", "qps must be > 0 and burst >= 1")
+			"reason", "qps must be >= 1 and burst >= 1")
 		os.Exit(1)
 	}
 	setupLog.Info("FIPS 140-3 mode", "enabled", fips140.Enabled(), "module", fips140.Version())

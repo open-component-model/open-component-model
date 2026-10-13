@@ -81,7 +81,7 @@ spec:
                     {{- end }}
                     {{- /* Rate limiter */}}
                     {{- with .Values.manager.rateLimiter }}
-                    {{- if .qps }}
+                    {{- if hasKey . "qps" }}
                     - --reconcile-rate-limit-qps={{ .qps }}
                     {{- end }}
                     {{- if .burst }}

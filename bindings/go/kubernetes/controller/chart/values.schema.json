@@ -145,10 +145,12 @@
                     "type": "object",
                     "properties": {
                         "burst": {
-                            "type": "integer"
+                            "type": "integer",
+                            "minimum": 1
                         },
                         "qps": {
-                            "type": "integer"
+                            "type": "integer",
+                            "minimum": 1
                         }
                     }
                 },
