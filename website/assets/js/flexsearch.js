@@ -39,7 +39,7 @@ import Index from 'flexsearch';
           weight: 3
         },
         {
-          field: {{ if site.Params.doks.indexSummary }}'summary'{{ else }}'content'{{ end }},
+          field: '{{ if site.Params.doks.indexSummary }}summary{{ else }}content{{ end }}',
           weight: 1
         },
         {
@@ -98,7 +98,7 @@ import Index from 'flexsearch';
 
   function doSearch() {
     const query = document.querySelector('.search-text').value.trim();
-    const limit = {{ .searchLimit }};
+    const limit = Number('{{ .searchLimit }}');
     const results = index.search({
       query: query,
       enrich: true,
