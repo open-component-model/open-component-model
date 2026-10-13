@@ -42,27 +42,11 @@ RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked \
     --mount=type=cache,target=/root/.cache/go-build,sharing=locked \
     CGO_ENABLED=0 GOTOOLCHAIN=local GOFIPS140="${GOFIPS140:?GOFIPS140 build arg is required, see root .env}" GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -tags "${GO_TAGS}" -o manager ./kubernetes/controller/cmd
 
-# cosign is built from source because upstream release binaries are not linked
-# against the Go Cryptographic Module. The sigstore signing handler in
-# bindings/go/sigstore shells out to this binary; the version is pinned once in
-# bindings/go/sigstore/signing/handler/internal/.env and passed in via
-# --build-arg COSIGN_VERSION by the controller Taskfile.
-FROM --platform=${BUILDPLATFORM} golang:1.27.1@sha256:162be5298a40ed317005c8339c6de4d10d3eef336d66dc8e9259b03ab9d3a6d2 AS cosign
-ARG TARGETOS
-ARG TARGETARCH
-ARG COSIGN_VERSION
-# Source of truth: root .env
-ARG GOFIPS140
-# go install refuses GOBIN for cross-compiles; the binary lands in /go/bin or
-# /go/bin/${GOOS}_${GOARCH} depending on whether host and target match.
-RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked \
-    --mount=type=cache,target=/root/.cache/go-build,sharing=locked \
-    CGO_ENABLED=0 GOTOOLCHAIN=local \
-    GOFIPS140="${GOFIPS140:?GOFIPS140 build arg is required, see root .env}" \
-    GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} \
-    go install -trimpath -ldflags="-s -w" \
-      "github.com/sigstore/cosign/v3/cmd/cosign@${COSIGN_VERSION:?COSIGN_VERSION build arg is required}" \
-    && mkdir -p /out && find /go/bin -name cosign -type f -exec cp {} /out/cosign \;
+# Static cosign linked against the Go Cryptographic Module (GOFIPS140=v1.0.0,
+# fips140=on by default), built and published from
+# https://github.com/open-component-model/cosign (Renovate group "OCM cosign"). The sigstore signing handler
+# in bindings/go/sigstore shells out to this binary.
+FROM ghcr.io/open-component-model/cosign:v3.1.3-ocm.10@sha256:9ed1f9b5ef6063939c0545552776172cea95e3d4249fd4f848ed11013ca0fafc AS cosign
 
 # Stage filesystem additions for the scratch final image. Only files are copied,
 # so the stage runs on the build platform.
@@ -84,7 +68,7 @@ COPY --from=rootfs /rootfs/ /
 COPY --from=builder /workspace/manager .
 # No GODEBUG needed: GOFIPS140 already makes fips140=on the default of both the
 # manager and cosign (DefaultGODEBUG in their build info).
-COPY --from=cosign /out/cosign /usr/local/bin/cosign
+COPY --from=cosign /cosign /usr/local/bin/cosign
 # cosign caches the Sigstore TUF trust root under $HOME/.sigstore. scratch sets
 # no HOME, which resolves to / and is not writable by the nonroot user, so point
 # it at the world-writable /tmp staged above.

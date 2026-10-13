@@ -75,9 +75,6 @@ tasks:
   package/image:
     internal: true
     dir: '{{ .TASKFILE_DIR }}'
-    dotenv:
-      - '{{.TASKFILE_DIR}}/../../../.env'
-      - '{{.TASKFILE_DIR}}/../sigstore/signing/handler/internal/.env'
     # One Containerfile, two targets: "full" (default tag; ocm plus FIPS cosign
     # on scratch) and "slim" (scratch with only ocm and the CA bundle, tagged
     # <version>-slim). full copies ocm from the slim stage.
@@ -92,8 +89,6 @@ tasks:
         {{ .IMAGE_TOOL }} buildx build \
           --platform linux/amd64,linux/arm64 \
           --target full \
-          --build-arg GOFIPS140="$GOFIPS140" \
-          --build-arg COSIGN_VERSION="$COSIGN_VERSION" \
           "${annotations[@]}" \
           --tag ghcr.io/open-component-model/cli:{{ .VERSION }} \
           --output type=oci,dest={{ .TASKFILE_DIR }}/tmp/oci/cli.tar,oci-mediatypes=true,name=ghcr.io/open-component-model/cli \
