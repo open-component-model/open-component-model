@@ -55,7 +55,7 @@ type DeployerObject interface {
 
 	// GetResourceRef returns the referenced Resource. An empty namespace defaults to the deployer's namespace.
 	GetResourceRef() ObjectKey
-	// GetServiceAccountName returns the service account to impersonate, or empty for the controller identity.
+	// GetServiceAccountName returns the service account named by the object, or empty if it names none.
 	GetServiceAccountName() string
 	IsSuspended() bool
 	GetDeployerStatus() *DeployerStatus

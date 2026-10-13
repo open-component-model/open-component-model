@@ -22,7 +22,7 @@ manager:
     enabled: true
   ## NamespacedDeployer
   namespacedDeployer:
-    # -- Run the controller for the NamespacedDeployer and grant the controller permission to impersonate service accounts. A NamespacedDeployer without spec.serviceAccountName applies with the permissions of the controller itself.
+    # -- Run the controller for the NamespacedDeployer and grant the controller permission to impersonate service accounts. A NamespacedDeployer without spec.serviceAccountName impersonates the default service account of its namespace.
     enabled: true
   ## Controller concurrency settings
   concurrency:

@@ -42,7 +42,7 @@ The controller offers two kinds with the same apply, prune and drift semantics:
 | | `Deployer` | `NamespacedDeployer` |
 | --- | --- | --- |
 | Scope | Cluster | Namespaced |
-| Applies with | The controller's own permissions | The service account in `spec.serviceAccountName`, or the controller's own permissions if empty |
+| Applies with | The controller's own permissions | The service account in `spec.serviceAccountName`, or the `default` service account of its namespace if empty |
 | Deploys | Anything the controller may manage | Anything its service account may manage |
 | Resource and OCM config references | Any namespace | Its own namespace only |
 
@@ -53,9 +53,9 @@ that RBAC: it stays in its namespace only if its service account does. Its `Reso
 references must always point to its own namespace, so teams cannot read other namespaces' credentials through it.
 Objects without a namespace default to the deployer's namespace.
 
-`spec.serviceAccountName` is optional. Without it, the `NamespacedDeployer` applies and prunes with the controller's
-own service account, so it can deploy anything the controller can. Set it whenever the deployer must be limited to its
-own RBAC.
+`spec.serviceAccountName` is optional. Without it, the `NamespacedDeployer` impersonates the `default` service account
+of its namespace. That service account has no permissions until you grant them, so such a deployer cannot apply
+anything out of the box. A `NamespacedDeployer` never applies with the controller's own permissions.
 
 {{< callout context="caution" title="The Deployer is discouraged" icon="outline/alert-triangle" >}}
 The cluster-scoped `Deployer` applies with the controller's own, cluster-wide permissions, so anyone who may create a

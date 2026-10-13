@@ -8,7 +8,8 @@ toc: false
 A **NamespacedDeployer** is a namespaced resource that deploys OCM resources. It references a `Resource` in the same
 namespace and applies and prunes the deployed objects with the permissions of the service account in
 `spec.serviceAccountName`, so that service account's RBAC decides what it may deploy. If `spec.serviceAccountName` is
-empty, it uses the controller's own service account.
+empty, it impersonates the `default` service account of its namespace. It never applies with the controller's own
+permissions.
 
 ---
 

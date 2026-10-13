@@ -106,7 +106,7 @@ metadata:
 		createServiceAccount(ctx, namespace.GetName(), true)
 		other := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace.GetName() + "-other"}}
 		Expect(k8sClient.Create(ctx, other)).To(Succeed())
-		grantConfigMaps(ctx, other.GetName(), namespace.GetName())
+		grantConfigMaps(ctx, other.GetName(), namespace.GetName(), namespacedDeployerSA)
 		grantClusterRoles(ctx, namespace.GetName())
 
 		clusterRoleName := "nd-" + namespace.GetName()
@@ -157,7 +157,7 @@ metadata:
 		grantClusterRoles(ctx, namespace.GetName())
 		other := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace.GetName() + "-other"}}
 		Expect(k8sClient.Create(ctx, other)).To(Succeed())
-		grantConfigMaps(ctx, other.GetName(), namespace.GetName())
+		grantConfigMaps(ctx, other.GetName(), namespace.GetName(), namespacedDeployerSA)
 
 		clusterRoleName := "nd-orphan-" + namespace.GetName()
 		resourceObj := mockYAMLResource(ctx, namespace.GetName(), fmt.Sprintf(`apiVersion: v1
@@ -243,12 +243,16 @@ metadata:
 		waitForNotReadyMessage(ctx, deployer, v1alpha1.GetConfigurationFailedReason, "outside of namespace")
 	})
 
-	It("applies and prunes as the controller without a service account", func(ctx SpecContext) {
+	It("falls back to the default service account", func(ctx SpecContext) {
 		resourceObj := mockYAMLResource(ctx, namespace.GetName(), `apiVersion: v1
 kind: ConfigMap
 metadata:
   name: nd-no-sa-cm
 `)
+		// envtest runs no service account controller, so the default service account has to be created.
+		Expect(k8sClient.Create(ctx, &corev1.ServiceAccount{
+			ObjectMeta: metav1.ObjectMeta{Name: defaultServiceAccount, Namespace: namespace.GetName()},
+		})).To(Succeed())
 
 		deployer := &v1alpha1.NamespacedDeployer{
 			ObjectMeta: metav1.ObjectMeta{Name: "nd-no-sa", Namespace: namespace.GetName()},
@@ -257,10 +261,19 @@ metadata:
 			},
 		}
 		Expect(k8sClient.Create(ctx, deployer)).To(Succeed())
-		test.WaitForReadyObject(ctx, k8sClient, deployer, map[string]any{})
+		DeferCleanup(func(ctx SpecContext) {
+			test.DeleteObject(ctx, k8sClient, deployer)
+		})
 
-		cm := &corev1.ConfigMap{}
-		Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace.GetName(), Name: "nd-no-sa-cm"}, cm)).To(Succeed())
+		By("not applying with the controller's permissions")
+		waitForNotReadyMessage(ctx, deployer, v1alpha1.ApplyFailed, "system:serviceaccount:"+namespace.GetName()+":"+defaultServiceAccount)
+		cm := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "nd-no-sa-cm", Namespace: namespace.GetName()}}
+		Expect(errors.IsNotFound(k8sClient.Get(ctx, client.ObjectKeyFromObject(cm), cm))).To(BeTrue())
+
+		By("applying once the default service account is granted")
+		grantConfigMaps(ctx, namespace.GetName(), namespace.GetName(), defaultServiceAccount)
+		test.WaitForReadyObject(ctx, k8sClient, deployer, map[string]any{})
+		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(cm), cm)).To(Succeed())
 
 		test.DeleteObject(ctx, k8sClient, deployer)
 		Eventually(func(ctx context.Context) bool {
@@ -305,15 +318,15 @@ func createServiceAccount(ctx SpecContext, namespace string, bind bool) {
 		return
 	}
 
-	grantConfigMaps(ctx, namespace, namespace)
+	grantConfigMaps(ctx, namespace, namespace, namespacedDeployerSA)
 }
 
-// grantConfigMaps grants the deployer service account of saNamespace full access to ConfigMaps in namespace.
-func grantConfigMaps(ctx SpecContext, namespace, saNamespace string) {
+// grantConfigMaps grants the service account sa of saNamespace full access to ConfigMaps in namespace.
+func grantConfigMaps(ctx SpecContext, namespace, saNamespace, sa string) {
 	GinkgoHelper()
 
 	role := &rbacv1.Role{
-		ObjectMeta: metav1.ObjectMeta{Name: namespacedDeployerSA, Namespace: namespace},
+		ObjectMeta: metav1.ObjectMeta{Name: sa, Namespace: namespace},
 		Rules: []rbacv1.PolicyRule{{
 			APIGroups: []string{""},
 			Resources: []string{"configmaps"},
@@ -323,9 +336,9 @@ func grantConfigMaps(ctx SpecContext, namespace, saNamespace string) {
 	Expect(k8sClient.Create(ctx, role)).To(Succeed())
 
 	binding := &rbacv1.RoleBinding{
-		ObjectMeta: metav1.ObjectMeta{Name: namespacedDeployerSA, Namespace: namespace},
+		ObjectMeta: metav1.ObjectMeta{Name: sa, Namespace: namespace},
 		RoleRef:    rbacv1.RoleRef{APIGroup: rbacv1.GroupName, Kind: "Role", Name: role.GetName()},
-		Subjects:   []rbacv1.Subject{{Kind: rbacv1.ServiceAccountKind, Name: namespacedDeployerSA, Namespace: saNamespace}},
+		Subjects:   []rbacv1.Subject{{Kind: rbacv1.ServiceAccountKind, Name: sa, Namespace: saNamespace}},
 	}
 	Expect(k8sClient.Create(ctx, binding)).To(Succeed())
 }

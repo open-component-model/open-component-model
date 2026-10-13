@@ -80,7 +80,7 @@ type Reconciler struct {
 	*ocm.BaseReconciler
 
 	// Namespaced selects NamespacedDeployer as the reconciled kind. A NamespacedDeployer applies and prunes by
-	// impersonating its service account, or with the controller's identity if it names none.
+	// impersonating its service account, or the default service account of its namespace if it names none.
 	Namespaced bool
 
 	// apiReader reads service accounts uncached to avoid a cluster-wide informer for them.
@@ -293,7 +293,7 @@ func (r *Reconciler) pruneWithApplySet(ctx context.Context, deployer deliveryv1a
 
 	applyClient, err := r.applyClient(ctx, deployer)
 	if err != nil {
-		if r.impersonates(deployer) && (apierrors.IsNotFound(err) || apierrors.IsForbidden(err)) {
+		if r.Namespaced && (apierrors.IsNotFound(err) || apierrors.IsForbidden(err)) {
 			r.orphanOnDeletion(ctx, deployer, metadata, err)
 			return true, nil
 		}
@@ -309,7 +309,7 @@ func (r *Reconciler) pruneWithApplySet(ctx context.Context, deployer deliveryv1a
 		Concurrency: runtime.NumCPU(),
 	})
 	if err != nil {
-		if r.impersonates(deployer) && apierrors.IsForbidden(err) {
+		if r.Namespaced && apierrors.IsForbidden(err) {
 			r.orphanOnDeletion(ctx, deployer, metadata, err)
 			return true, nil
 		}

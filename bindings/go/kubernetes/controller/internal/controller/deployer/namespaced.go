@@ -24,6 +24,9 @@ import (
 )
 
 const (
+	// defaultServiceAccount exists in every namespace and has no permissions unless an operator grants them.
+	defaultServiceAccount = "default"
+
 	// namespacedDeployerAnnotation maps a deployed object back to its NamespacedDeployer ("namespace/name"), as
 	// cluster-scoped and cross-namespace objects cannot carry an owner reference to a namespaced owner.
 	namespacedDeployerAnnotation = "delivery.ocm.software/namespaced-deployer"
@@ -75,18 +78,24 @@ func (r *Reconciler) ownerReferenceOptions() []controllerutil.OwnerReferenceOpti
 	return nil
 }
 
-// impersonates reports whether the deployer applies as a service account instead of the controller's own identity.
-func (r *Reconciler) impersonates(deployer deliveryv1alpha1.DeployerObject) bool {
-	return r.Namespaced && deployer.GetServiceAccountName() != ""
+// serviceAccountName returns the service account a NamespacedDeployer impersonates. Without one in its spec it falls
+// back to the namespace's default service account, never to the controller's identity.
+func serviceAccountName(deployer deliveryv1alpha1.DeployerObject) string {
+	if name := deployer.GetServiceAccountName(); name != "" {
+		return name
+	}
+
+	return defaultServiceAccount
 }
 
-// applyClient returns the client used to apply and prune the deployed objects.
+// applyClient returns the client used to apply and prune the deployed objects. A Deployer applies with the
+// controller's own identity, a NamespacedDeployer always impersonates a service account.
 func (r *Reconciler) applyClient(ctx context.Context, deployer deliveryv1alpha1.DeployerObject) (client.Client, error) {
-	if !r.impersonates(deployer) {
+	if !r.Namespaced {
 		return r.Client, nil
 	}
 
-	key := client.ObjectKey{Namespace: deployer.GetNamespace(), Name: deployer.GetServiceAccountName()}
+	key := client.ObjectKey{Namespace: deployer.GetNamespace(), Name: serviceAccountName(deployer)}
 	if err := r.apiReader.Get(ctx, key, &corev1.ServiceAccount{}); err != nil {
 		return nil, fmt.Errorf("failed to get service account %s: %w", key, err)
 	}
@@ -120,7 +129,7 @@ func (r *Reconciler) orphanOnDeletion(ctx context.Context, deployer deliveryv1al
 
 	status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.DeletionFailedReason, fmt.Sprintf(
 		"service account %s cannot prune (%v), orphaning objects outside of namespace %s: %s",
-		deployer.GetServiceAccountName(), pruneErr, deployer.GetNamespace(), strings.Join(orphaned, ", ")))
+		serviceAccountName(deployer), pruneErr, deployer.GetNamespace(), strings.Join(orphaned, ", ")))
 }
 
 // orphanedObjects lists the ApplySet members that are cluster-scoped or in the ApplySet's additional namespaces. The

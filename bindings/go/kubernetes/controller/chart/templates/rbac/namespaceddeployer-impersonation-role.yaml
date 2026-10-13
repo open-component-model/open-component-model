@@ -1,5 +1,6 @@
 {{- if dig "namespacedDeployer" "enabled" true .Values.manager }}
-# Lets the NamespacedDeployer apply and prune with the permissions of the service account in its spec, if it names one.
+# Lets the NamespacedDeployer apply and prune with the permissions of the service account in its spec, or of the
+# default service account of its namespace.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:

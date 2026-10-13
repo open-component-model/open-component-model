@@ -18,7 +18,7 @@ type NamespacedDeployerSpec struct {
 
 	// ServiceAccountName is the name of the service account in the same namespace that is impersonated
 	// to apply and prune the deployed objects. Its RBAC permissions define what the deployer may deploy.
-	// If empty, the deployer applies and prunes with the controller's own service account.
+	// If empty, the default service account of the namespace is impersonated.
 	// +optional
 	ServiceAccountName string `json:"serviceAccountName,omitempty"`
 
