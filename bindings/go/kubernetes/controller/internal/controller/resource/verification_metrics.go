@@ -10,7 +10,9 @@ const (
 	verificationMetricsNamespace = "ocm_system"
 	verificationMetricsComponent = "ocm_k8s_toolkit"
 
-	// access_type is bounded (LocalBlob, OCIImage, Helm, Git, GitHub, S3, Wget);
+	// access_type is bounded by boundedAccessType: a supported access type keeps its name,
+	// anything else collapses to verificationAccessTypeOther. The name comes from untrusted
+	// descriptor data (the access block is not signature-covered), so it must not be used raw.
 	// component/version/resource name are intentionally not labels to bound cardinality.
 	verificationAccessTypeLabel = "access_type"
 	verificationResultLabel     = "result"
@@ -18,6 +20,8 @@ const (
 	verificationResultVerified = "verified"
 	verificationResultSkipped  = "skipped"
 	verificationResultFailed   = "failed"
+
+	verificationAccessTypeOther = "other"
 )
 
 // ResourceVerificationDurationHistogram records resource digest verification duration by access

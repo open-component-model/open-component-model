@@ -35,6 +35,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/util"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/verification"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/pkg/configuration"
+	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -428,7 +429,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 	verifyStart := time.Now()
 	verifyResult := verificationResultVerified
 	// Captured before verification, which may reassign matchedResource (and return nil on error).
-	accessType := matchedResource.Access.GetType().Name
+	accessType := boundedAccessType(ctx, pm, matchedResource.Access)
 	switch {
 	case resource.Spec.VerificationPolicy == v1alpha1.VerificationPolicyNever:
 		verifyResult = verificationResultSkipped
@@ -555,4 +556,14 @@ func convertLabels(in []descriptor.Label) ([]v1alpha1.Label, error) {
 	}
 
 	return out, nil
+}
+
+// boundedAccessType returns the access type name for a supported type (localBlob, or one
+// with a registered digest processor), else verificationAccessTypeOther, so the metric label
+// stays bounded against untrusted descriptor access-type names.
+func boundedAccessType(ctx context.Context, pm *manager.PluginManager, access runtime.Typed) string {
+	if _, err := pm.DigestProcessorRegistry.GetPlugin(ctx, access); err != nil && !ocm.IsLocalBlob(access) {
+		return verificationAccessTypeOther
+	}
+	return access.GetType().Name
 }

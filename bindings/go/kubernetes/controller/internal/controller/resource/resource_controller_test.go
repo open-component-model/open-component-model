@@ -13,7 +13,9 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/go-logr/logr"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
+	clientmodel "github.com/prometheus/client_model/go"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -499,6 +501,7 @@ var _ = Describe("Resource Controller", func() {
 					},
 				},
 			}
+			failedOtherBefore := verificationObservations(verificationAccessTypeOther, verificationResultFailed)
 			Expect(k8sClient.Create(ctx, resourceObj)).To(Succeed())
 			DeferCleanup(func(ctx SpecContext) {
 				test.DeleteObject(ctx, k8sClient, resourceObj)
@@ -506,6 +509,11 @@ var _ = Describe("Resource Controller", func() {
 
 			By("expecting the resource to be not ready because verification could not be performed")
 			test.WaitForNotReadyObject(ctx, k8sClient, resourceObj, v1alpha1.GetOCMResourceFailedReason)
+
+			By("confirming the failure was recorded under the bounded 'other' access type")
+			Eventually(func() float64 { return verificationObservations(verificationAccessTypeOther, verificationResultFailed) }).
+				Should(BeNumerically(">", failedOtherBefore),
+					"unrecognized access type should record its verification failure under access_type=other, not its raw name")
 		})
 
 		It("should reconcile when the resource has extra identities", func(ctx SpecContext) {
@@ -2452,3 +2460,31 @@ const (
 	ocmcliImageDigestV0240 = "7a91508d9177f43552b60cfc0182d7c30a84e95bed03854855b3ab29b6a85db2"
 	ocmcliImageDigestV0230 = "0aab483741a3199f4abf8b03fbe8b04eb3c74b32f0d7604087aea5c25d8a8bd3"
 )
+
+// verificationObservations returns how many times resource verification has been observed for
+// the given access type and result, so a spec can prove which access_type label a verification
+// was recorded under (a Ready/NotReady status alone cannot distinguish the label value).
+func verificationObservations(accessType, result string) float64 {
+	GinkgoHelper()
+	obs, err := ResourceVerificationDurationHistogram.GetMetricWithLabelValues(accessType, result)
+	Expect(err).NotTo(HaveOccurred())
+	m := &clientmodel.Metric{}
+	Expect(obs.(prometheus.Histogram).Write(m)).To(Succeed())
+	return float64(m.GetHistogram().GetSampleCount())
+}
+
+var _ = Describe("boundedAccessType", func() {
+	It("preserves recognized access type names and collapses unknown ones to other", func(ctx SpecContext) {
+		By("keeping the name of a type with a registered digest processor")
+		Expect(boundedAccessType(ctx, pm, &runtime.Raw{Type: runtime.NewVersionedType("OCIImage", "v1")})).
+			To(Equal("OCIImage"))
+
+		By("keeping localBlob even though it has no processor")
+		Expect(boundedAccessType(ctx, pm, &runtime.Raw{Type: runtime.NewUnversionedType(descruntime.LocalBlobAccessType)})).
+			To(Equal(descruntime.LocalBlobAccessType))
+
+		By("collapsing an unrecognized access type to other")
+		Expect(boundedAccessType(ctx, pm, &runtime.Raw{Type: runtime.NewVersionedType("nonexistentaccess", "v1")})).
+			To(Equal(verificationAccessTypeOther))
+	})
+})
