@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os/exec"
+	"strings"
 	"testing"
 	"time"
 
@@ -64,6 +65,16 @@ func TestBinary_Resolve(t *testing.T) {
 			exec:     versionExec("gpg (GnuPG) 2.1.23\nlibgcrypt 1.8.5\n"),
 			check: func(r *require.Assertions, _ string, err error) {
 				r.EqualError(err, "gpg on PATH (/fake/bin/gpg) is version 2.1.23, minimum required is 2.2.0")
+			},
+		},
+		{
+			name:     "gpg --version fails",
+			lookPath: func(file string) (string, error) { return "/fake/bin/" + file, nil },
+			exec: func(context.Context, string, []string, []byte) ([]byte, []byte, error) {
+				return nil, []byte("gpg: cannot run"), errors.New("exit status 2")
+			},
+			check: func(r *require.Assertions, _ string, err error) {
+				r.EqualError(err, "gpg version failed: exit status 2\nstderr: gpg: cannot run")
 			},
 		},
 		{
@@ -137,6 +148,47 @@ func TestBinary_RunTimeout(t *testing.T) {
 	r.ErrorContains(err, "gpg sign timed out")
 }
 
+func TestBinary_RunTruncatesStderr(t *testing.T) {
+	r := require.New(t)
+	stderr := strings.Repeat("x", maxStderr+1)
+	b := New(WithExec(func(context.Context, string, []string, []byte) ([]byte, []byte, error) {
+		return nil, []byte(stderr), errors.New("exit status 2")
+	}))
+	_, err := b.run(t.Context(), "export", "/fake/bin/gpg", nil, nil)
+	r.EqualError(err, "gpg export failed: exit status 2\nstderr: "+stderr[:maxStderr]+" [truncated]")
+}
+
+// TestExecCommand runs a real subprocess: stdin reaches the process only if given, and stdout and stderr stay apart.
+func TestExecCommand(t *testing.T) {
+	sh, err := exec.LookPath("sh")
+	if err != nil {
+		t.Skip("no sh on PATH")
+	}
+	script := []string{"-c", `cat; echo err >&2; exit "$0"`}
+
+	t.Run("stdin and separate outputs", func(t *testing.T) {
+		r := require.New(t)
+		stdout, stderr, err := execCommand(t.Context(), sh, append(script, "0"), []byte("secret"))
+		r.NoError(err)
+		r.Equal("secret", string(stdout))
+		r.Equal("err\n", string(stderr))
+	})
+	t.Run("nil stdin is empty", func(t *testing.T) {
+		r := require.New(t)
+		stdout, _, err := execCommand(t.Context(), sh, append(script, "0"), nil)
+		r.NoError(err)
+		r.Empty(stdout)
+	})
+	t.Run("exit status", func(t *testing.T) {
+		r := require.New(t)
+		_, stderr, err := execCommand(t.Context(), sh, append(script, "3"), nil)
+		var exitErr *exec.ExitError
+		r.ErrorAs(err, &exitErr)
+		r.Equal(3, exitErr.ExitCode())
+		r.Equal("err\n", string(stderr))
+	})
+}
+
 func TestBinary_Export(t *testing.T) {
 	const fpr = "0123456789ABCDEF0123456789ABCDEF01234567"
 	secretArgs := []string{"--pinentry-mode", "loopback", "--passphrase-fd", "0", "--armor", "--export-secret-keys", fpr}
@@ -159,6 +211,7 @@ func TestBinary_Export(t *testing.T) {
 		{name: "unknown public key", wantErr: "key " + fpr + " not found in the GnuPG keyring"},
 		{name: "unknown secret key", secret: true, wantErr: "no secret key " + fpr + " found in the GnuPG keyring"},
 		{name: "gpg fails", secret: true, execErr: errors.New("exit status 2"), wantErr: "gpg export-secret-keys failed: exit status 2\nstderr: gpg: boom"},
+		{name: "gpg fails on public export", execErr: errors.New("exit status 2"), wantErr: "gpg export failed: exit status 2\nstderr: gpg: boom"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

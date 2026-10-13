@@ -31,12 +31,14 @@ import (
 	"github.com/ProtonMail/go-crypto/openpgp/packet"
 	"github.com/stretchr/testify/require"
 
+	credentialsv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/gpg/signing/handler/handlertest"
 	"ocm.software/open-component-model/bindings/go/gpg/signing/handler/internal/gpgbinary"
 	gpgcredentialsv1 "ocm.software/open-component-model/bindings/go/gpg/spec/credentials/v1alpha1"
 	identityv1 "ocm.software/open-component-model/bindings/go/gpg/spec/identity/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/gpg/spec/signing/v1alpha1"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 var (
@@ -91,6 +93,16 @@ func TestGPGHandler_InvalidInput(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("verify", func(t *testing.T) {
+		r := require.New(t)
+		key := mustGenerateKey(t, ecdsaKeyConfig)
+		signature := mustSign(t, h, valid, privCreds(key))
+		err := h.Verify(t.Context(), gpgSignature(descruntime.Digest{HashAlgorithm: "SHA-256", Value: "zz"}, signature), &v1alpha1.Config{}, pubCreds(key))
+		r.ErrorContains(err, "invalid hex digest")
+		err = h.Verify(t.Context(), gpgSignature(valid, signature), &v1alpha1.Config{}, &gpgcredentialsv1.GPGCredentials{PublicKeyPGPFile: t.TempDir() + "/missing.asc"})
+		r.ErrorContains(err, "load GPG public key")
+	})
 }
 
 func TestGPGHandler_MediaType(t *testing.T) {
@@ -101,6 +113,54 @@ func TestGPGHandler_MediaType(t *testing.T) {
 
 	err := h.Verify(t.Context(), signed, &v1alpha1.Config{}, pubCreds(mustGenerateKey(t, ecdsaKeyConfig)))
 	r.ErrorContains(err, `unsupported media type "application/vnd.ocm.signature.rsa"`)
+}
+
+// TestGPGHandler_CredentialsAndConfigTypes covers credentials and configs as the credential graph and the
+// signing configuration deliver them: untyped (runtime.Raw) and as generic Credentials/v1 properties.
+func TestGPGHandler_CredentialsAndConfigTypes(t *testing.T) {
+	h := handlerWithoutGPG(t)
+	key := mustGenerateKey(t, ecdsaKeyConfig)
+	digest := makeDigest(t, crypto.SHA256, testDigestContent)
+	direct := func(props map[string]string) *credentialsv1.DirectCredentials {
+		return &credentialsv1.DirectCredentials{Type: runtime.NewVersionedType(credentialsv1.CredentialsType, credentialsv1.Version), Properties: props}
+	}
+
+	t.Run("Credentials/v1 properties", func(t *testing.T) {
+		r := require.New(t)
+		info, err := h.Sign(t.Context(), digest, &v1alpha1.Config{}, direct(map[string]string{"privateKeyPGP": key.Private}))
+		r.NoError(err)
+		r.NoError(h.Verify(t.Context(), gpgSignature(digest, info.Value), &v1alpha1.Config{}, direct(map[string]string{"publicKeyPGP": key.Public})))
+	})
+	t.Run("raw config", func(t *testing.T) {
+		r := require.New(t)
+		cfg := &runtime.Raw{Type: runtime.NewVersionedType("GPGSigningConfiguration", "v1alpha1"), Data: []byte(`{"type":"GPGSigningConfiguration/v1alpha1","hashAlgorithm":"SHA-512"}`)}
+		info, err := h.Sign(t.Context(), digest, cfg, privCreds(key))
+		r.NoError(err)
+		sig, _, err := parseSignature(info.Value)
+		r.NoError(err)
+		r.Equal(crypto.SHA512, sig.Hash)
+	})
+
+	unknownCreds := &runtime.Raw{Type: runtime.NewVersionedType("OCIRegistryCredentials", "v1"), Data: []byte(`{"type":"OCIRegistryCredentials/v1"}`)}
+	unknownCfg := &runtime.Raw{Type: runtime.NewVersionedType("RSASigningConfiguration", "v1alpha1"), Data: []byte(`{"type":"RSASigningConfiguration/v1alpha1"}`)}
+	tests := []struct {
+		name    string
+		cfg     runtime.Typed
+		creds   runtime.Typed
+		wantMsg string
+	}{
+		{name: "unsupported credential type", cfg: &v1alpha1.Config{}, creds: unknownCreds, wantMsg: "parse GPG credentials"},
+		{name: "unsupported config type", cfg: unknownCfg, creds: privCreds(key), wantMsg: "convert config"},
+	}
+	signature := mustSign(t, h, digest, privCreds(key))
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := h.Sign(t.Context(), digest, tt.cfg, tt.creds)
+			require.ErrorContains(t, err, tt.wantMsg)
+			err = h.Verify(t.Context(), gpgSignature(digest, signature), tt.cfg, tt.creds)
+			require.ErrorContains(t, err, tt.wantMsg)
+		})
+	}
 }
 
 func TestGPGHandler_CredentialIdentities(t *testing.T) {
@@ -487,6 +547,11 @@ func TestGPGHandler_SignatureFormat(t *testing.T) {
 		{name: "two signature packets", signature: armorBlock(t, openpgp.SignatureType, append(slices.Clone(body), armorBody(t, otherSignature)...)), wantMsg: "exactly one signature packet"},
 		{name: "signature followed by a key packet", signature: armorBlock(t, openpgp.SignatureType, append(slices.Clone(body), armorBody(t, key.Public)...)), wantMsg: "exactly one signature packet"},
 		{name: "SHA-1 signature", signature: relabelHash(t, signature, 2), wantMsg: "unsupported hash algorithm SHA-1"},
+		{name: "armor without end line", signature: "-----BEGIN PGP SIGNATURE-----\n", wantMsg: "decode GPG signature"},
+		{name: "invalid base64 in armor", signature: "-----BEGIN PGP SIGNATURE-----\n\n!!!!\n-----END PGP SIGNATURE-----\n", wantMsg: "decode GPG signature"},
+		{name: "truncated signature packet", signature: armorBlock(t, openpgp.SignatureType, body[:len(body)-8]), wantMsg: "parse GPG signature"},
+		{name: "unknown signature version", signature: relabelByte(t, signature, 0, 9), wantMsg: "parse GPG signature"},
+		{name: "no issuer", signature: withoutIssuer(t, signature), wantMsg: "no issuer key ID"},
 		{name: "signer not in keyring", signature: mustSign(t, h, digest, privCreds(mustGenerateKey(t, ecdsaKeyConfig))), wantErr: pgperrors.ErrUnknownIssuer},
 		{name: "other digest", digest: makeDigest(t, crypto.SHA256, []byte("tampered")), signature: signature, wantMsg: "gpg verify failed"},
 		{name: "corrupted signature value", signature: corruptLastByte(t, signature), wantMsg: "gpg verify failed"},
@@ -989,9 +1054,48 @@ func armorBody(t *testing.T, armored string) []byte {
 // relabelHash changes the hash algorithm ID of a signature, the fourth byte of a v4 or v6 signature packet.
 func relabelHash(t *testing.T, signature string, hashID uint8) string {
 	t.Helper()
+	return relabelByte(t, signature, 3, hashID)
+}
+
+// relabelByte overwrites byte i of the signature packet's contents.
+func relabelByte(t *testing.T, signature string, i int, value byte) string {
+	t.Helper()
 	op, err := packet.NewOpaqueReader(bytes.NewReader(armorBody(t, signature))).Next()
 	require.NoError(t, err)
-	op.Contents[3] = hashID
+	op.Contents[i] = value
+	var buf bytes.Buffer
+	require.NoError(t, op.Serialize(&buf))
+	return armorBlock(t, openpgp.SignatureType, buf.Bytes())
+}
+
+// withoutIssuer removes the issuer key ID (16) and issuer fingerprint (33) subpackets from a v4 signature, which
+// go-crypto always writes. The signature value no longer verifies, but parseSignature rejects it before that.
+func withoutIssuer(t *testing.T, signature string) string {
+	t.Helper()
+	op, err := packet.NewOpaqueReader(bytes.NewReader(armorBody(t, signature))).Next()
+	require.NoError(t, err)
+	c := op.Contents
+	require.Equal(t, byte(4), c[0], "v4 signature expected")
+	out := slices.Clone(c[:4])
+	rest := c[4:]
+	for range 2 { // hashed, then unhashed subpacket area, each with a 2-byte length
+		n := int(rest[0])<<8 | int(rest[1])
+		area, kept := rest[2:2+n], []byte{}
+		for len(area) > 0 {
+			// v4 signatures written by go-crypto use one-byte subpacket lengths (< 192).
+			require.Less(t, area[0], byte(192))
+			sub := area[:1+int(area[0])]
+			if typ := sub[1] &^ 0x80; typ != 16 && typ != 33 {
+				kept = append(kept, sub...)
+			}
+			area = area[len(sub):]
+		}
+		out = append(out, byte(len(kept)>>8), byte(len(kept)))
+		out = append(out, kept...)
+		rest = rest[2+n:]
+	}
+	out = append(out, rest...)
+	op.Contents = out
 	var buf bytes.Buffer
 	require.NoError(t, op.Serialize(&buf))
 	return armorBlock(t, openpgp.SignatureType, buf.Bytes())
