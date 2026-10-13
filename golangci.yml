@@ -136,12 +136,6 @@ linters:
           - staticcheck
         path: _test\.go
         text: 'SA1019:.*configuration/ocm/v1/(runtime\.Resolver|spec\.(Config|Resolver)) is deprecated'
-      # The GitHub access type is deprecated in favor of Git/v1 but stays
-      # supported so published descriptors keep resolving. Its repository,
-      # digest processor, transfer handling and their tests must keep using it.
-      - linters:
-          - staticcheck
-        text: 'SA1019:.*github/spec/access/v1\.GitHub is deprecated'
       # Integration tests (in */integration/ packages) share expensive
       # fixtures (registries/caches) and, for the CLI, mutate process-global 
       # state (cobra finalizers, slog default) via cmd.New().ExecuteContext. 

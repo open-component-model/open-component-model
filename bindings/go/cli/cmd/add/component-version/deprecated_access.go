@@ -11,18 +11,12 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// Deprecation is read from the JSON schema generated for each type. A
-// "Deprecated:" paragraph in a type's doc comment lands in the schema as a
-// deprecated flag on the whole type, which "ocm describe types" shows as a
-// warning. The +ocm:jsonschema-gen:enum:deprecated marker flags single
-// spellings of the type, and the optional +ocm:jsonschema-gen:enum:deprecated:hint
-// marker adds the text that tells the user what to write instead. Checking the
-// schema keeps a single source of truth and needs no registration step: a
-// plugin deprecates a type by changing its doc and markers and regenerating.
+// Deprecation is read from each type's generated JSON schema: the
+// +ocm:jsonschema-gen:enum:deprecated marker flags a type name, and the optional
+// enum:deprecated:hint marker adds the text that says what to write instead.
 
 // typeSchema is the part of a generated schema that carries deprecation: the
-// flag on the whole type and the flag and hint on each accepted spelling of
-// "type".
+// flag on the whole type and the flag and hint on each accepted "type" value.
 type typeSchema struct {
 	Deprecated bool `json:"deprecated"`
 	Properties struct {
@@ -36,11 +30,9 @@ type typeSchema struct {
 	} `json:"properties"`
 }
 
-// isTypeDeprecated reports whether typ, as spelled, is marked deprecated in the
-// JSON schema of the object scheme builds for it, and the hint the schema
-// carries for that spelling, if any. A type the scheme does not know, or one
-// without an embedded schema, is not deprecated: the CLI cannot know, and a
-// false warning would train users to ignore the real ones.
+// isTypeDeprecated reports whether the schema of typ marks that exact name
+// deprecated, and the hint it carries, if any. A type the scheme does not know
+// or that has no schema is not deprecated: a false warning helps nobody.
 func isTypeDeprecated(scheme *runtime.Scheme, typ runtime.Type) (deprecated bool, hint string) {
 	obj, err := scheme.NewObject(typ)
 	if err != nil {
@@ -54,65 +46,50 @@ func isTypeDeprecated(scheme *runtime.Scheme, typ runtime.Type) (deprecated bool
 	if err := json.Unmarshal(introspectable.JSONSchema(), &schema); err != nil {
 		return false, ""
 	}
-	for _, spelling := range schema.Properties.Type.OneOf {
-		if spelling.Const == typ.String() {
-			return spelling.Deprecated || schema.Deprecated, spelling.DeprecationMessage
+	for _, name := range schema.Properties.Type.OneOf {
+		if name.Const == typ.String() {
+			return name.Deprecated || schema.Deprecated, name.DeprecationMessage
 		}
 	}
 	return schema.Deprecated, ""
 }
 
-// deprecatedAccessType is one deprecated access type spelling found in a
-// constructor, with the hint from its schema when the type has one.
+// deprecatedAccessType is one deprecated access type found in a constructor,
+// with the hint from its schema, if any.
 type deprecatedAccessType struct {
 	typ  string
 	hint string
 }
 
-// findDeprecatedAccessTypes lists the distinct access type spellings in spec
-// that scheme marks deprecated, in the order the constructor first uses them.
-// Call it before construction so the result is available even when the build
-// fails later.
-// Sources are included because they never reach a digest processor or resource
-// repository during construction. Elements fed by an input have no access and
-// are skipped.
+// findDeprecatedAccessTypes lists the distinct deprecated access types in spec,
+// in first-use order. Call it before construction so the result is there even
+// when the build fails. Elements fed by an input have no access.
 func findDeprecatedAccessTypes(scheme *runtime.Scheme, spec *constructorruntime.ComponentConstructor) []deprecatedAccessType {
 	var types []deprecatedAccessType
-	seen := map[string]struct{}{}
+	seen := map[string]bool{}
 	add := func(access runtime.Typed) {
-		if access == nil {
+		if access == nil || seen[access.GetType().String()] {
 			return
 		}
-		deprecated, hint := isTypeDeprecated(scheme, access.GetType())
-		if !deprecated {
-			return
+		seen[access.GetType().String()] = true
+		if deprecated, hint := isTypeDeprecated(scheme, access.GetType()); deprecated {
+			types = append(types, deprecatedAccessType{typ: access.GetType().String(), hint: hint})
 		}
-		typ := access.GetType().String()
-		if _, ok := seen[typ]; ok {
-			return
-		}
-		seen[typ] = struct{}{}
-		types = append(types, deprecatedAccessType{typ: typ, hint: hint})
 	}
-	for i := range spec.Components {
-		component := &spec.Components[i]
-		for j := range component.Resources {
-			add(component.Resources[j].Access)
+	for _, component := range spec.Components {
+		for _, resource := range component.Resources {
+			add(resource.Access)
 		}
-		for j := range component.Sources {
-			add(component.Sources[j].Access)
+		for _, source := range component.Sources {
+			add(source.Access)
 		}
 	}
 	return types
 }
 
-// renderDeprecatedAccessNotice writes a blank line and then one yellow line per
-// deprecated type to w. The line carries the schema's hint when the type has
-// one and always ends with a pointer to "ocm describe types". It writes
-// nothing when types is empty. Meant for stderr, right below the command's
-// result, so the result on stdout stays machine-readable. Like the result
-// table it does not care whether w is a terminal; the color library drops the
-// escape codes on its own when colors are off.
+// renderDeprecatedAccessNotice writes one yellow line per deprecated type to w,
+// after a blank line, and nothing when types is empty. Meant for stderr so
+// stdout stays machine-readable; the color library drops escapes when off.
 func renderDeprecatedAccessNotice(w io.Writer, types []deprecatedAccessType) {
 	if len(types) == 0 {
 		return

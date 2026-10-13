@@ -30,7 +30,7 @@ const (
 // and the OCM spec are retained as aliases so existing component descriptors
 // keep resolving.
 //
-// Deprecated: use the Git access type (Git/v1,
+// The GitHub access type is deprecated. Use the Git access type (Git/v1,
 // ocm.software/open-component-model/bindings/go/git/spec/access/v1) instead;
 // it works with any Git server. GitHub stays supported so published
 // descriptors keep resolving: the two types produce different archive bytes,
