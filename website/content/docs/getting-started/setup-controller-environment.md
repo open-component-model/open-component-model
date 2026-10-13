@@ -153,7 +153,7 @@ helm install kro oci://registry.k8s.io/kro/charts/kro \
 ```
 
 {{< callout context="note" title="kro access control" icon="outline/lock" >}}
-`rbac.mode=aggregation` limits kro to its own resources and to the resources that a labeled `ClusterRole` allows. See [Access Control](https://kro.run/docs/advanced/access-control) in the kro documentation. kro's default mode, `unrestricted`, is not recommended for production.
+`rbac.mode=aggregation` limits kro to its own resources and to the resources that a labeled `ClusterRole` allows. See [Access Control](https://kro.run/docs/advanced/access-control) in the kro documentation. kro's default mode, `unrestricted`, is not recommended for production. The roles below are not production-hardened either: they grant all verbs so the guides work. For production, limit them to what your RGDs create.
 {{< /callout >}}
 <details>
 <summary>You should see this output</summary>
