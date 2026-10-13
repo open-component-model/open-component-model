@@ -75,23 +75,22 @@ validated; FIPS 140-3 validation applies to the cryptographic module it uses.
 See <a href=#validation-status>Validation Status</a> for that module&rsquo;s current CMVP
 status.</p><p><strong>What you are responsible for.</strong> Whether a deployment meets your regulatory
 requirements depends on more than OCM: the node operating system and kernel,
-the external binaries OCM runs (<code>gpg</code>, <code>cosign</code>), your configuration, and your
+the external binaries OCM runs (<code>cosign</code>, and <code>gpg</code> when GPG credentials set
+<code>keyringFingerprint</code>, see <a href=#gpg>GPG</a>), your configuration, and your
 compliance regime. Check these with your compliance owner. OCM does not give
 compliance guarantees.</p><p><strong>Default and opt-out.</strong> FIPS mode is on by default (<code>fips140=on</code>), so there is
 no separate FIPS build. Outside regulated environments you can turn it off with
 <code>GODEBUG=fips140=off</code>. <code>GODEBUG=fips140=only</code> additionally rejects external
 binaries that run outside the FIPS boundary. It is meant for testing and
 assessment, not for production, see <a href=#runtime-modes>Runtime Modes</a>.</p><p><strong>What changes in FIPS mode.</strong> Besides the cryptography itself running in the
-Go Cryptographic Module, FIPS mode changes OCM&rsquo;s behavior in these places:</p><table><thead><tr><th>Area</th><th><code>fips140=on</code> (default)</th><th><code>fips140=only</code></th><th>Details</th></tr></thead><tbody><tr><td>TLS connections</td><td>Only FIPS-approved TLS versions, cipher suites and key exchanges</td><td>Same</td><td><a href=#effects-of-fips-mode>Effects of FIPS Mode</a></td></tr><tr><td>Signing and verification</td><td>Resource and component reference digests must use SHA-256 or SHA-512</td><td>Same</td><td><a href=#digest-algorithms>Digest Algorithms</a></td></tr><tr><td>Sigstore signing</td><td>A <code>cosign</code> that is not a FIPS build, or a downloaded one, is used and logged at debug level</td><td>Rejected; <code>cosign</code> must be on <code>PATH</code> and a FIPS build</td><td><a href=#sigstore-and-cosign>Sigstore and cosign</a></td></tr><tr><td>GPG signing</td><td>A <code>gpg</code> without a FIPS-mode <code>libgcrypt</code> is used and logged at debug level</td><td>Rejected</td><td><a href=#gpg>GPG</a></td></tr></tbody></table><p><strong>Module version.</strong> OCM builds with <code>GOFIPS140=certified</code>, set once in the
+Go Cryptographic Module, FIPS mode changes OCM&rsquo;s behavior in these places:</p><table><thead><tr><th>Area</th><th><code>fips140=on</code> (default)</th><th><code>fips140=only</code></th><th>Details</th></tr></thead><tbody><tr><td>TLS connections</td><td>Only FIPS-approved TLS versions, cipher suites and key exchanges</td><td>Same</td><td><a href=#effects-of-fips-mode>Effects of FIPS Mode</a></td></tr><tr><td>Signing and verification</td><td>Resource and component reference digests must use SHA-256 or SHA-512</td><td>Same</td><td><a href=#digest-algorithms>Digest Algorithms</a></td></tr><tr><td>Sigstore signing</td><td>A <code>cosign</code> that is not a FIPS build, or a downloaded one, is used and logged at debug level</td><td>Rejected; <code>cosign</code> must be on <code>PATH</code> and a FIPS build</td><td><a href=#sigstore-and-cosign>Sigstore and cosign</a></td></tr><tr><td>GPG signing</td><td>GPG keys other than unprotected v5 or v6 RSA or ECDSA P keys are used and logged at debug level</td><td>Rejected; see the four strict-mode errors</td><td><a href=#gpg>GPG</a></td></tr></tbody></table><p><strong>Module version.</strong> OCM builds with <code>GOFIPS140=certified</code>, set once in the
 repository&rsquo;s root <code>.env</code>. <code>certified</code> selects the newest Go Cryptographic Module
 version that has a CMVP validation certificate, as recorded by the Go
 toolchain the release is built with. When a newer module version is certified,
 OCM releases pick it up with the next Go toolchain update; no pin needs to
 change. The resolved version is part of every binary&rsquo;s build information, see
-<a href=#verifying-a-binary>Verifying a Binary</a>.</p><p><strong>Out of scope.</strong> Whether the <code>libgcrypt</code> that <code>gpg</code> uses is FIPS validated
-(OCM only checks that it runs in FIPS mode), and code outside the Go
-Cryptographic Module, such as <code>golang.org/x/crypto</code>. See
-<a href=#known-limitations>Known Limitations</a>.</p><p><strong>Reporting gaps.</strong> Report FIPS-related problems or gaps as
+<a href=#verifying-a-binary>Verifying a Binary</a>.</p><p><strong>Out of scope.</strong> Code outside the Go Cryptographic Module, such as
+<code>golang.org/x/crypto</code>. See <a href=#known-limitations>Known Limitations</a>.</p><p><strong>Reporting gaps.</strong> Report FIPS-related problems or gaps as
 <a href=https://github.com/open-component-model/open-component-model/issues target=_blank rel=noopener>GitHub issues</a>.
 Open work on GPG and cosign is tracked in
 <a href=https://github.com/open-component-model/ocm-project/issues/1327 target=_blank rel=noopener>ocm-project#1327</a>.</p><h2 id=cryptographic-module>Cryptographic Module<a href=#cryptographic-module class=anchor aria-hidden=true>#</a></h2><p>OCM uses the <a href=https://go.dev/doc/security/fips140 target=_blank rel=noopener>Go Cryptographic Module</a>,
@@ -109,26 +108,23 @@ information that marks a correctly configured binary:
 automatically through <code>GOFIPS140=certified</code> once it is certified and a Go
 release marks it as such.</li></ul><p>v1.0.0 was frozen from Go 1.24. Standard library features added to the module
 later, such as <code>crypto/mldsa</code>, are not available in OCM until the module
-version changes.</p><h2 id=artifacts>Artifacts<a href=#artifacts class=anchor aria-hidden=true>#</a></h2><table><thead><tr><th>Artifact</th><th>Build</th><th>Image contents</th></tr></thead><tbody><tr><td><code>ocm</code> CLI binaries (all OS/architectures)</td><td><code>GOFIPS140=certified</code>, <code>CGO_ENABLED=0</code></td><td>—</td></tr><tr><td>OCM CLI image (<code>cli:&lt;version></code>, default)</td><td><code>GOFIPS140=certified</code>, <code>CGO_ENABLED=0</code></td><td>Garden Linux <code>bare-libc</code> with <code>ocm</code>, a FIPS build of <code>cosign</code>, <code>gpg</code> on Garden Linux&rsquo;s FIPS <code>libgcrypt</code>, and the CA bundle</td></tr><tr><td>OCM CLI slim image (<code>cli:&lt;version>-slim</code>)</td><td><code>GOFIPS140=certified</code>, <code>CGO_ENABLED=0</code></td><td><code>scratch</code> with <code>ocm</code> and the CA bundle</td></tr><tr><td>OCM controller image</td><td><code>GOFIPS140=certified</code>, <code>CGO_ENABLED=0</code></td><td>Garden Linux <code>bare-libc</code> with <code>manager</code>, a FIPS build of <code>cosign</code>, <code>gpg</code> on Garden Linux&rsquo;s FIPS <code>libgcrypt</code>, and the CA bundle</td></tr></tbody></table><p>The default CLI image is based on Garden Linux
-<a href=https://docs.gardenlinux.org/how-to/container-base-image/bare.html target=_blank rel=noopener><code>bare-libc</code></a>.
-It contains the static <code>/ocm</code> binary (the entrypoint), <code>cosign</code> at
-<code>/usr/local/bin/cosign</code> built with the same <code>GOFIPS140</code> value as OCM, GnuPG
-(<code>gpg</code>, <code>gpg-agent</code>, <code>gpgconf</code>) from the
-<a href=https://github.com/gardenlinux/gardenlinux/pkgs/container/gardenlinux%2Ffips target=_blank rel=noopener>Garden Linux FIPS image</a>
-with <code>libgcrypt</code> forced into FIPS mode by <code>/etc/gcrypt/fips_enabled</code>, and a CA
-bundle at <code>/etc/ssl/certs/ca-certificates.crt</code>. So GPG and Sigstore signing
-work in the image, also with <code>GODEBUG=fips140=only</code>. The slim image is built
+version changes.</p><h2 id=artifacts>Artifacts<a href=#artifacts class=anchor aria-hidden=true>#</a></h2><table><thead><tr><th>Artifact</th><th>Build</th><th>Image contents</th></tr></thead><tbody><tr><td><code>ocm</code> CLI binaries (all OS/architectures)</td><td><code>GOFIPS140=certified</code>, <code>CGO_ENABLED=0</code></td><td>—</td></tr><tr><td>OCM CLI image (<code>cli:&lt;version></code>, default)</td><td><code>GOFIPS140=certified</code>, <code>CGO_ENABLED=0</code></td><td><code>scratch</code> with <code>ocm</code>, a FIPS build of <code>cosign</code>, and the CA bundle</td></tr><tr><td>OCM CLI slim image (<code>cli:&lt;version>-slim</code>)</td><td><code>GOFIPS140=certified</code>, <code>CGO_ENABLED=0</code></td><td><code>scratch</code> with <code>ocm</code> and the CA bundle</td></tr><tr><td>OCM controller image</td><td><code>GOFIPS140=certified</code>, <code>CGO_ENABLED=0</code></td><td><code>scratch</code> with <code>manager</code>, a FIPS build of <code>cosign</code>, and the CA bundle</td></tr></tbody></table><p>The default CLI image is built <code>FROM scratch</code>. It contains the static <code>/ocm</code>
+binary (the entrypoint), <code>cosign</code> at <code>/usr/local/bin/cosign</code> built with the
+same <code>GOFIPS140</code> value as OCM, and a CA bundle at
+<code>/etc/ssl/certs/ca-certificates.crt</code>. No GnuPG is included: OCM performs all
+GPG cryptography in-process with the Go OpenPGP library. Sigstore signing
+works in the image because <code>cosign</code> is on <code>PATH</code>. The slim image is built
 <code>FROM scratch</code> and contains only <code>/ocm</code> and the CA bundle; use it when you
-don&rsquo;t sign with GPG or Sigstore, or bring your own <code>cosign</code> and <code>gpg</code>.
-The controller image is built the same way: Garden Linux <code>bare-libc</code> with the
-static <code>/manager</code> binary (the entrypoint), the FIPS <code>cosign</code>, GnuPG on Garden
-Linux&rsquo;s FIPS <code>libgcrypt</code> (<code>/etc/gcrypt/fips_enabled</code>), and the CA bundle, so
-GPG and Sigstore verification work in the controller, also with
-<code>GODEBUG=fips140=only</code>.</p><p>The images have no shell and no package manager. See
+don&rsquo;t sign with Sigstore, or bring your own <code>cosign</code>.
+The controller image is built <code>FROM scratch</code> with the static <code>/manager</code> binary
+(the entrypoint), the FIPS <code>cosign</code>, the CA bundle, and a world-writable <code>/tmp</code>.
+No GnuPG is included.</p><p>The images have no shell and no package manager. See
 <a href=#sigstore-and-cosign>Sigstore and cosign</a> and <a href=#gpg>GPG</a> for how OCM uses
-<code>cosign</code> and <code>gpg</code>.</p><p>The binaries are statically linked and do not use any system cryptographic
+<code>cosign</code> and handles GPG signing.</p><p>The binaries are statically linked and do not use any system cryptographic
 library. All cryptography in OCM itself goes through the Go Cryptographic
-Module.</p><h2 id=runtime-modes>Runtime Modes<a href=#runtime-modes class=anchor aria-hidden=true>#</a></h2><p>You control the runtime mode with the <code>GODEBUG</code> environment variable.</p><table><thead><tr><th><code>GODEBUG</code></th><th>Behavior</th></tr></thead><tbody><tr><td><code>fips140=on</code> (default)</td><td>FIPS mode is active. Approved algorithms run in their FIPS-compliant form, and non-approved algorithms such as MD5 and SHA-1 stay available.</td></tr><tr><td><code>fips140=only</code></td><td>Like <code>on</code>, but non-approved algorithms return an error or panic. OCM also rejects a <code>cosign</code> or <code>gpg</code> that runs outside the FIPS boundary, Helm chart provenance verification (see <a href=#known-limitations>Known Limitations</a>), and resource or reference digests other than SHA-256/SHA-512 (see <a href=#digest-algorithms>Digest Algorithms</a>). Go documents this as a best-effort mode for testing and assessment, not for production.</td></tr><tr><td><code>fips140=off</code></td><td>FIPS mode is disabled.</td></tr></tbody></table><p>OCM runs in <code>fips140=on</code> mode by default, which allows non-approved algorithms
+Module, except for the GPG operations listed under <a href=#gpg>GPG</a>: in the default
+mode they run outside the module and are logged at debug level, and in strict
+mode they are rejected.</p><h2 id=runtime-modes>Runtime Modes<a href=#runtime-modes class=anchor aria-hidden=true>#</a></h2><p>You control the runtime mode with the <code>GODEBUG</code> environment variable.</p><table><thead><tr><th><code>GODEBUG</code></th><th>Behavior</th></tr></thead><tbody><tr><td><code>fips140=on</code> (default)</td><td>FIPS mode is active. Approved algorithms run in their FIPS-compliant form, and non-approved algorithms such as MD5 and SHA-1 stay available.</td></tr><tr><td><code>fips140=only</code></td><td>Like <code>on</code>, but non-approved algorithms return an error or panic. OCM also rejects GPG keys that are not unprotected v5 or v6 RSA or ECDSA P keys, a <code>cosign</code> that runs outside the FIPS boundary, Helm chart provenance verification (see <a href=#known-limitations>Known Limitations</a>), and resource or reference digests other than SHA-256/SHA-512 (see <a href=#digest-algorithms>Digest Algorithms</a>). Go documents this as a best-effort mode for testing and assessment, not for production.</td></tr><tr><td><code>fips140=off</code></td><td>FIPS mode is disabled.</td></tr></tbody></table><p>OCM runs in <code>fips140=on</code> mode by default, which allows non-approved algorithms
 instead of rejecting them. Parts of the dependency tree use non-approved
 algorithms for non-security purposes, such as content addressing and legacy
 digests. The Security Policy of the Go Cryptographic Module does not require
@@ -136,8 +132,8 @@ digests. The Security Policy of the Go Cryptographic Module does not require
 reports the state through a service indicator (Security Policy sections 2.4
 and 4.4), and Go
 <a href=https://go.dev/doc/security/fips140#the-fips140-godebug-option target=_blank rel=noopener>documents</a>
-<code>only</code> as &ldquo;not intended to be used in production&rdquo;.</p><p>With <code>fips140=only</code>, OCM refuses to run <code>cosign</code> or <code>gpg</code> outside the FIPS
-boundary. Go&rsquo;s own enforcement, however, applies to every Go program OCM starts,
+<code>only</code> as &ldquo;not intended to be used in production&rdquo;.</p><p>With <code>fips140=only</code>, OCM rejects GPG keys outside the strict-mode set and
+refuses to run a non-FIPS <code>cosign</code>. Go&rsquo;s own enforcement, however, applies to every Go program OCM starts,
 including programs OCM does not control. For example, the Docker Desktop
 credential helper (<code>docker-credential-desktop</code>) panics on an internal MD5 use, so
 OCM cannot resolve registry credentials. Use <code>fips140=only</code> where all such
@@ -150,11 +146,12 @@ repository runs outside strict enforcement; the archive OCM records is
 digested with SHA-256.</li><li><strong>wget checksum verification</strong> accepts MD5 and SHA-1 checksums that a server
 publishes. Only these hashes run outside strict enforcement; the digest OCM
 records and signs is always SHA-256.</li></ul><p>Test packages named <code>fips140</code> (<code>bindings/go/cli/cmd/fips140</code>,
-<code>bindings/go/git/fips140</code>, <code>bindings/go/helm/fips140</code>,
-<code>bindings/go/wget/fips140</code>) set <code>//go:debug fips140=only</code> and run in every
-unit test run, so CI exercises signing, verification, Git downloads, the Helm
-provenance rejection and legacy checksum verification in strict mode. All
-other tests run in the default <code>fips140=on</code> mode.</p><h3 id=effects-of-fips-mode>Effects of FIPS Mode<a href=#effects-of-fips-mode class=anchor aria-hidden=true>#</a></h3><p>In FIPS mode, the Go Cryptographic Module:</p><ul><li>Runs an integrity self-check and known-answer self-tests at startup or on
+<code>bindings/go/gpg/fips140</code>, <code>bindings/go/git/fips140</code>,
+<code>bindings/go/helm/fips140</code>, <code>bindings/go/wget/fips140</code>) set
+<code>//go:debug fips140=only</code> and run in every unit test run, so CI exercises
+signing, verification, Git downloads, the Helm provenance rejection and
+legacy checksum verification in strict mode. All other tests run in the
+default <code>fips140=on</code> mode.</p><h3 id=effects-of-fips-mode>Effects of FIPS Mode<a href=#effects-of-fips-mode class=anchor aria-hidden=true>#</a></h3><p>In FIPS mode, the Go Cryptographic Module:</p><ul><li>Runs an integrity self-check and known-answer self-tests at startup or on
 first use of an algorithm.</li><li>Runs pairwise consistency tests on generated keys, which can make key
 generation up to 2x slower.</li><li>Implements <code>crypto/rand</code> with a NIST SP 800-90A DRBG.</li><li>Restricts <code>crypto/tls</code> to FIPS-approved protocol versions, cipher suites,
 signature algorithms, and key exchanges: TLS 1.2 and 1.3 only, AES-GCM (and
@@ -194,19 +191,25 @@ are exempt. Digests that OCM computes itself, for example when adding a
 component version from a constructor, already use SHA-256, and downloading a
 resource accepts only SHA-256 digests in any mode.</p><p>MD5 and SHA-1 remain usable for purposes that are not security-relevant, such
 as Git object IDs or caching.</p><h2 id=known-limitations>Known Limitations<a href=#known-limitations class=anchor aria-hidden=true>#</a></h2><p>FIPS mode only covers cryptography that runs through the Go Cryptographic
-Module. The following signing mechanisms run their cryptography in an external
-binary:</p><table><thead><tr><th>Feature</th><th>Where the cryptography runs</th></tr></thead><tbody><tr><td>GPG signing and verification</td><td>OCM runs the GnuPG <code>gpg</code> binary (>= 2.2.0) from <code>PATH</code>, so all OpenPGP cryptography runs in its <code>libgcrypt</code>. OCM checks that <code>libgcrypt</code> runs in FIPS mode, but cannot check that it is FIPS validated, see <a href=#gpg>GPG</a>.</td></tr><tr><td>Sigstore/cosign signing and verification</td><td>OCM runs the <code>cosign</code> binary from <code>PATH</code>, or downloads the upstream release, which is not a FIPS build. OCM checks whether <code>cosign</code> is a FIPS build, see <a href=#sigstore-and-cosign>Sigstore and cosign</a>.</td></tr></tbody></table><p>In a FIPS-restricted environment, use RSA signing, Sigstore with a FIPS build
-of <code>cosign</code>, or GPG with a <code>gpg</code> whose <code>libgcrypt</code> runs in FIPS mode on an
-operating system with FIPS-validated cryptographic modules, see <a href=#gpg>GPG</a>.</p><p>Some dependencies bring cryptography that does not run through the Go
-Cryptographic Module. <code>github.com/ProtonMail/go-crypto</code> (OpenPGP) is imported by
-go-git (commit and tag signature verification) and Helm (chart provenance).
-OCM does not call go-git&rsquo;s verification. It does call Helm&rsquo;s provenance
-verification when downloading a chart from a Helm repository with Helm
-credentials that include a <code>keyring</code>:</p><table><thead><tr><th>Mode</th><th>Helm chart download with a <code>keyring</code></th></tr></thead><tbody><tr><td><code>fips140=on</code> (default)</td><td>Provenance verified with OpenPGP outside the module; logged at debug level</td></tr><tr><td><code>fips140=only</code></td><td>Rejected: <code>Helm chart provenance verification is not available</code>; remove the <code>keyring</code> to download without verification</td></tr><tr><td><code>fips140=off</code></td><td>Provenance verified</td></tr></tbody></table><p>Without a <code>keyring</code>, OCM only passes Helm provenance files through. In OCM&rsquo;s
+Module. The following signing mechanism runs its cryptography in an external
+binary:</p><table><thead><tr><th>Feature</th><th>Where the cryptography runs</th></tr></thead><tbody><tr><td>Sigstore/cosign signing and verification</td><td>OCM runs the <code>cosign</code> binary from <code>PATH</code>, or downloads the upstream release, which is not a FIPS build. OCM checks whether <code>cosign</code> is a FIPS build, see <a href=#sigstore-and-cosign>Sigstore and cosign</a>.</td></tr></tbody></table><p>GPG signing and verification run in-process with the Go OpenPGP library
+(<code>github.com/ProtonMail/go-crypto</code>), whose RSA, NIST ECDSA, SHA-2 and RNG run
+through the Go Cryptographic Module. Algorithms and operations outside the
+module (EdDSA/Ed25519/Ed448 via circl, v4 key fingerprints via SHA-1,
+passphrase-protected key unlocking via CFB, secret-key export from the GnuPG
+keyring) run with a debug log by default and are rejected in strict mode. See
+<a href=#gpg>GPG</a>.</p><p>In a FIPS-restricted environment, use RSA signing, Sigstore with a FIPS build
+of <code>cosign</code>, or GPG with v5 or v6 RSA or ECDSA P keys, see <a href=#gpg>GPG</a>.</p><p>Some dependencies bring cryptography that does not run through the Go
+Cryptographic Module. <code>github.com/ProtonMail/go-crypto</code> (OpenPGP) is also
+imported by go-git (commit and tag signature verification) and Helm (chart
+provenance). OCM does not call go-git&rsquo;s verification. It does call Helm&rsquo;s
+provenance verification when downloading a chart from a Helm repository with
+Helm credentials that include a <code>keyring</code>:</p><table><thead><tr><th>Mode</th><th>Helm chart download with a <code>keyring</code></th></tr></thead><tbody><tr><td><code>fips140=on</code> (default)</td><td>Provenance verified with OpenPGP outside the module; logged at debug level</td></tr><tr><td><code>fips140=only</code></td><td>Rejected: <code>Helm chart provenance verification is not available</code>; remove the <code>keyring</code> to download without verification</td></tr><tr><td><code>fips140=off</code></td><td>Provenance verified</td></tr></tbody></table><p>Without a <code>keyring</code>, OCM only passes Helm provenance files through. In OCM&rsquo;s
 own code, <code>golangci-lint</code> (<code>depguard</code>) rejects imports of non-approved
 algorithms (DES, RC4, DSA, secp256k1, <code>golang.org/x/crypto</code> outside reviewed
-exceptions, ProtonMail OpenPGP) and limits MD5 and SHA-1 to wget checksum
-verification.</p><h3 id=sigstore-and-cosign>Sigstore and cosign<a href=#sigstore-and-cosign class=anchor aria-hidden=true>#</a></h3><p>OCM does not implement Sigstore itself. Its Sigstore signing handler runs the
+exceptions) and limits MD5 and SHA-1 to wget checksum verification. The GPG
+signing handler (<code>bindings/go/gpg/signing/handler</code>) is exempted because it
+enforces the FIPS 140-3 mode rules itself.</p><h3 id=sigstore-and-cosign>Sigstore and cosign<a href=#sigstore-and-cosign class=anchor aria-hidden=true>#</a></h3><p>OCM does not implement Sigstore itself. Its Sigstore signing handler runs the
 external <code>cosign</code> binary, so all Sigstore cryptography runs in <code>cosign</code>. The CLI
 and controller images include a FIPS build of <code>cosign</code>; the OCM CLI binaries do not.</p><h4 id=how-ocm-uses-cosign>How OCM uses cosign<a href=#how-ocm-uses-cosign class=anchor aria-hidden=true>#</a></h4><table><thead><tr><th>Step</th><th>What OCM does</th></tr></thead><tbody><tr><td>Locate</td><td>Uses <code>cosign</code> from <code>PATH</code> (v3.0.4 or later). If none is found, OCM downloads the cosign release pinned in <code>bindings/go/sigstore/signing/handler/internal/.env</code> from GitHub, verifies it against the release&rsquo;s <code>cosign_checksums.txt</code>, and caches it under the user cache directory (<code>~/.cache/ocm/cosign/...</code> on Linux).</td></tr><tr><td>FIPS check</td><td>In FIPS mode, reads the Go build information of <code>cosign</code>, the same data that <code>go version -m</code> shows, and looks for <code>GOFIPS140=v&lt;version></code>. See the table below.</td></tr><tr><td>Sign</td><td><code>ocm sign cv</code> runs <code>cosign sign-blob &lt;digest file> --bundle &lt;file> --yes</code> for keyless signing. The OIDC token is passed in <code>SIGSTORE_ID_TOKEN</code> (or GitHub Actions OIDC), never on the command line. OCM stores the resulting Sigstore bundle as the signature.</td></tr><tr><td>Verify</td><td><code>ocm verify cv</code> and the controller write the bundle to a file and run <code>cosign verify-blob &lt;digest file> --bundle &lt;file></code> with the configured <code>--certificate-identity[-regexp]</code>, <code>--certificate-oidc-issuer[-regexp]</code>, and optionally <code>--trusted-root</code> or <code>--insecure-ignore-tlog</code>.</td></tr></tbody></table><p><code>cosign</code> inherits OCM&rsquo;s environment, including <code>GODEBUG</code>, so a FIPS build of
 <code>cosign</code> runs in the same FIPS mode as OCM.</p><p>In this keyless flow, <code>cosign</code> only uses the Go standard library for
@@ -243,31 +246,34 @@ Module, so their <code>cosign</code> only works inside the image. Copy the stati
 binary into such an image instead of copying <code>cosign</code> out:</p><div class=expressive-code><figure class="frame not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-dockerfile data-lang=dockerfile><span class=line><span class=cl><span class=k>FROM</span><span class=w> </span><span class=s>&lt;registry&gt;/cosign-fips:&lt;tag</span>&gt;<span class=err>
 </span></span></span><span class=line><span class=cl><span class=k>COPY</span> --from<span class=o>=</span>ghcr.io/open-component-model/cli:&lt;version&gt; /ocm /usr/local/bin/ocm<span class=err>
 </span></span></span><span class=line><span class=cl><span class=k>ENTRYPOINT</span> <span class=p>[</span><span class=s2>&#34;/usr/local/bin/ocm&#34;</span><span class=p>]</span></span></span></code></pre></div></figure></div><p>OCM&rsquo;s check only recognizes <code>GOFIPS140</code> builds, so with <code>fips140=only</code> it
-rejects these images&rsquo; <code>cosign</code>; with the default <code>fips140=on</code> it uses them.</p><h3 id=gpg>GPG<a href=#gpg class=anchor aria-hidden=true>#</a></h3><p>OCM signs and verifies GPG signatures by running the <code>gpg</code> binary on <code>PATH</code>.
-The CLI and controller images include <code>gpg</code> in FIPS mode (see below); the OCM CLI binaries do
-not.</p><p>In FIPS mode, OCM checks whether the <code>libgcrypt</code> of <code>gpg</code> runs in FIPS mode by
-asking <code>gpgconf --show-versions</code> for <code>fips-mode:y</code>. With <code>fips140=only</code>, a
-missing <code>gpgconf</code> also fails the check.</p><table><thead><tr><th>Mode</th><th><code>gpg</code> without a FIPS-mode <code>libgcrypt</code></th></tr></thead><tbody><tr><td><code>fips140=on</code> (default)</td><td>Used; logged at debug level</td></tr><tr><td><code>fips140=only</code></td><td>Rejected: <code>GPG signing and verification require a gpg whose libgcrypt runs in FIPS mode</code></td></tr><tr><td><code>fips140=off</code></td><td>Used</td></tr></tbody></table><p>GnuPG does its cryptography in <code>libgcrypt</code>. For an approved-algorithms-only
-<code>gpg</code>, use the one from the
-<a href=https://github.com/gardenlinux/gardenlinux/pkgs/container/gardenlinux%2Ffips target=_blank rel=noopener>Garden Linux FIPS image</a>
-(<a href=https://docs.gardenlinux.org/reference/glossary.html#fips target=_blank rel=noopener>Garden Linux</a> is,
-like OCM, a <a href=https://neonephos.org/ target=_blank rel=noopener>NeoNephos</a> project) and force <code>libgcrypt</code>
-into FIPS mode with <code>/etc/gcrypt/fips_enabled</code>. The CLI image does exactly that
-(<code>bindings/go/cli/Containerfile</code>), so use it as is. Mount the signing key and
-point <code>privateKeyPGPFile</code> in <code>.ocmconfig</code> at the path inside the container
-(<code>/signing-key.asc</code>):</p><div class=expressive-code><figure class="frame is-terminal not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-shell data-lang=shell><span class=line><span class=cl>docker run --rm <span class=se>\
-</span></span></span><span class=line><span class=cl>  -v <span class=s2>&#34;</span><span class=nv>$PWD</span><span class=s2>/.ocmconfig:/.ocmconfig:ro&#34;</span> <span class=se>\
-</span></span></span><span class=line><span class=cl>  -v <span class=s2>&#34;</span><span class=nv>$PWD</span><span class=s2>/signing-key.asc:/signing-key.asc:ro&#34;</span> <span class=se>\
-</span></span></span><span class=line><span class=cl>  -e <span class=nv>GODEBUG</span><span class=o>=</span><span class=nv>fips140</span><span class=o>=</span>only <span class=se>\
-</span></span></span><span class=line><span class=cl>  ghcr.io/open-component-model/cli:&lt;version&gt; <span class=se>\
-</span></span></span><span class=line><span class=cl>  sign cv --config /.ocmconfig ghcr.io/&lt;namespace&gt;//&lt;component&gt;:&lt;version&gt;</span></span></code></pre></div></figure></div><p>On a host, install GnuPG from your distribution. <code>libgcrypt</code> also enters FIPS
-mode automatically when the kernel runs in FIPS mode
-(<code>/proc/sys/crypto/fips_enabled</code> is <code>1</code>).</p><p>In FIPS mode:</p><ul><li>RSA, NIST P-curve and Ed25519 keys, SHA-2 and AES work.</li><li>SHA-1 signatures, MD5, CAST5 and cv25519 are rejected. cv25519 is gpg&rsquo;s
-default encryption subkey, so pass an explicit algorithm such as <code>rsa3072</code> to
-<code>gpg --quick-gen-key</code>.</li></ul><p>A statically linked <code>gpg</code> built from upstream sources is not a substitute:
-<code>libgcrypt</code>&rsquo;s FIPS integrity self-check works only on the shared library, and
-the upstream build does not reject non-approved algorithms such as MD5 in FIPS
-mode.</p><h2 id=building-from-source>Building from Source<a href=#building-from-source class=anchor aria-hidden=true>#</a></h2><p>To build FIPS binaries yourself, use the same settings as the release build
+rejects these images&rsquo; <code>cosign</code>; with the default <code>fips140=on</code> it uses them.</p><h3 id=gpg>GPG<a href=#gpg class=anchor aria-hidden=true>#</a></h3><p>OCM signs and verifies GPG signatures in-process with the Go OpenPGP library
+(<code>github.com/ProtonMail/go-crypto</code>). No external <code>gpg</code> binary is needed for
+signing or verification. The <code>gpg</code> binary is used only when
+<code>keyringFingerprint</code> is set in the GPG credentials, to export key material
+from the user&rsquo;s GnuPG keyring (<code>gpg --export</code>, <code>gpg --export-secret-keys</code>).</p><p>OCM reads v4 keys, LibrePGP v5 keys (GnuPG, RNP) and RFC 9580 v6 keys,
+including v6 post-quantum signing keys (ML-DSA+EdDSA, SLH-DSA).
+Encryption-only subkeys are ignored, so GnuPG&rsquo;s PQC keys work: their primary
+key signs, and their Kyber encryption subkey is skipped. GnuPG&rsquo;s Ed448 keys
+are not supported, because the Go OpenPGP library cannot read their key
+encoding. Keys on hardware tokens are not supported either: GnuPG exports only
+a stub of such a secret key.</p><p>The following table shows what happens in each mode for GPG operations that
+fall outside the Go Cryptographic Module:</p><table><thead><tr><th>Operation</th><th><code>fips140=on</code> (default)</th><th><code>fips140=only</code></th><th><code>fips140=off</code></th></tr></thead><tbody><tr><td>v4 keys (SHA-1 fingerprints)</td><td>Used; logged at debug level</td><td><code>with GODEBUG=fips140=only, GPG signing and verification require OpenPGP v6 (RFC 9580) or v5 (LibrePGP) keys: v4 and older keys are identified by SHA-1 fingerprints</code></td><td>Used</td></tr><tr><td>EdDSA, Ed25519, Ed448, ML-DSA, SLH-DSA, DSA, non-P curves, RSA below 2048 bits</td><td>Used; logged at debug level</td><td><code>with GODEBUG=fips140=only, GPG signing and verification require an RSA (at least 2048 bits) or ECDSA (P-256, P-384, P-521) key</code></td><td>Used</td></tr><tr><td>Passphrase-protected keys</td><td>Used; logged at debug level</td><td><code>with GODEBUG=fips140=only, passphrase-protected GPG keys cannot be unlocked because OpenPGP key protection is not FIPS-approved; provide the private key without passphrase protection, for example from a secret store</code></td><td>Used</td></tr><tr><td>Exporting a secret key from the GnuPG keyring (<code>keyringFingerprint</code>)</td><td>Used; logged at debug level</td><td><code>with GODEBUG=fips140=only, secret keys cannot be exported from the GnuPG keyring because gpg-agent processes them outside the Go Cryptographic Module; provide the private key in the GPG credentials</code></td><td>Used</td></tr></tbody></table><p>To use GPG in strict mode (<code>fips140=only</code>), provide:</p><ul><li><p>An OpenPGP <strong>v6</strong> key (RFC 9580) or <strong>v5</strong> key (LibrePGP); both use SHA-256
+fingerprints. GnuPG creates v4 keys for RSA and ECDSA (v5 only for Ed448 and
+PQC, which strict mode rejects for their algorithm), and it can neither
+create nor verify v6 keys. Use <a href=https://sequoia-pgp.org/ target=_blank rel=noopener>Sequoia</a> (<code>sq</code>) to
+generate a v6 key:</p><div class=expressive-code><figure class="frame is-terminal not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-shell data-lang=shell><span class=line><span class=cl>sq key generate --profile rfc9580 --signing-algorithm rsa3k <span class=se>\
+</span></span></span><span class=line><span class=cl>  --cannot-encrypt --cannot-authenticate --without-password <span class=se>\
+</span></span></span><span class=line><span class=cl>  --own-key --name <span class=s2>&#34;OCM Signing&#34;</span> --email <span class=s2>&#34;ocm@example.com&#34;</span> <span class=se>\
+</span></span></span><span class=line><span class=cl>  --output signing-key.pgp --rev-cert signing-key.rev
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1># Export the secret key (ASCII-armored):</span>
+</span></span><span class=line><span class=cl>sq key <span class=nb>export</span> --cert <span class=s2>&#34;OCM Signing&#34;</span> &gt; signing-key.asc
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1># Export the public certificate (ASCII-armored):</span>
+</span></span><span class=line><span class=cl>sq cert <span class=nb>export</span> --cert-email <span class=s2>&#34;ocm@example.com&#34;</span> &gt; verify-key.asc</span></span></code></pre></div></figure></div></li><li><p>An RSA (at least 2048 bits) or ECDSA (P-256, P-384, P-521) key. This applies
+to the primary key and every signing subkey, not only the key that signs,
+because OCM verifies their self-signatures when it reads the key.</p></li><li><p>An unprotected secret key (no passphrase). Use a secret store instead.</p></li><li><p>Key material in the GPG credentials (<code>privateKeyPGPFile</code>/<code>publicKeyPGPFile</code>
+or inline <code>privateKeyPGP</code>/<code>publicKeyPGP</code>), not <code>keyringFingerprint</code>.</p></li></ul><h2 id=building-from-source>Building from Source<a href=#building-from-source class=anchor aria-hidden=true>#</a></h2><p>To build FIPS binaries yourself, use the same settings as the release build
 (<code>build:target</code> in <code>bindings/go/cli/Taskfile.yml</code>). Run this from <code>bindings/go</code>:</p><div class=expressive-code><figure class="frame is-terminal not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-shell data-lang=shell><span class=line><span class=cl><span class=nv>CGO_ENABLED</span><span class=o>=</span><span class=m>0</span> <span class=nv>GOTOOLCHAIN</span><span class=o>=</span><span class=nb>local</span> <span class=nv>GOFIPS140</span><span class=o>=</span>certified go build <span class=se>\
 </span></span></span><span class=line><span class=cl>  -ldflags <span class=s2>&#34;-s -w -X ocm.software/open-component-model/bindings/go/cli/cmd/version.BuildVersion=&lt;version&gt;&#34;</span> <span class=se>\
 </span></span></span><span class=line><span class=cl>  -o ocm ./cli</span></span></code></pre></div></figure></div><p><code>GOTOOLCHAIN=local</code> makes the build fail if the installed Go does not match the
