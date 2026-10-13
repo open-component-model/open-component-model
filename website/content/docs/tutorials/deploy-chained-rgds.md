@@ -700,6 +700,32 @@ kubectl get rgd podinfo -o jsonpath='{.status.conditions[?(@.type=="Ready")].mes
 A message like `cache sync timeout for kro.run/v1alpha1, Resource=podinfoes` often means that kro
 lacks access to the instances of that kind. Check that you applied `kro-rbac.yaml`.
 
+Any other message means the RGD does not compile. It names the resource and the problem, for
+example `failed to compile template expression ... undefined field` for a typo in a CEL
+expression, or `cannot resolve group version kind ...: schema not found` for a kind whose CRD is
+not installed. Fix the RGD and apply it again.
+
+**Instance stuck**: an RGD can be `Active` while its instance is not. The instance's conditions
+name the resource that is waiting or failing:
+
+```bash
+kubectl describe system system -n default
+kubectl describe podinfo podinfo -n default
+```
+
+A message like `waiting for node "resourceImage": readyWhen condition evaluated to false` means
+that resource is not ready yet, and the resources after it wait for it. In this tutorial `app`
+waits for `resourceImage`, so check that `Resource` first.
+
+If the message says `forbidden`, kro lacks a permission. The kro logs name it:
+
+```bash
+kubectl logs -n kro-system deployment/kro | grep forbidden
+```
+
+Add that kind to a labeled `ClusterRole`, as the
+[setup guide]({{< relref "setup-controller-environment.md" >}}) does for the OCM resources.
+
 **Resource not `Ready` / image pull errors**: the cluster cannot read the package. Make the
 ghcr.io package public, or follow the private-registry steps above.
 
