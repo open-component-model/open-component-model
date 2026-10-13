@@ -394,11 +394,11 @@ signatures:
 
 **Fix:** Use an OpenPGP v6 key (RFC 9580). GnuPG creates v4 RSA and ECDSA keys and cannot create v6 keys; use Sequoia `sq key generate --profile rfc9580`. See [FIPS 140-3: GPG]({{< relref "docs/reference/standards-and-regulations/fips.md" >}}#gpg).
 
-### Symptom: `with GODEBUG=fips140=only, GPG signing and verification require an RSA or ECDSA (P-256, P-384, P-521) key`
+### Symptom: `with GODEBUG=fips140=only, GPG signing and verification require an RSA (at least 2048 bits) or ECDSA (P-256, P-384, P-521) key`
 
-**Cause:** OCM runs with `GODEBUG=fips140=only` and the key uses an algorithm outside the Go Cryptographic Module (e.g. EdDSA, Ed25519).
+**Cause:** OCM runs with `GODEBUG=fips140=only` and the key uses an algorithm outside the Go Cryptographic Module (e.g. EdDSA, Ed25519) or an RSA key shorter than 2048 bits.
 
-**Fix:** Use an RSA or ECDSA P-256/P-384/P-521 key. See [FIPS 140-3: GPG]({{< relref "docs/reference/standards-and-regulations/fips.md" >}}#gpg).
+**Fix:** Use an RSA key of at least 2048 bits or an ECDSA P-256/P-384/P-521 key. See [FIPS 140-3: GPG]({{< relref "docs/reference/standards-and-regulations/fips.md" >}}#gpg).
 
 ### Symptom: `with GODEBUG=fips140=only, passphrase-protected GPG keys cannot be unlocked because OpenPGP key protection is not FIPS-approved`
 

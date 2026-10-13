@@ -304,11 +304,11 @@ Without `--signature`, **every** signature on the descriptor is verified. Config
 
 **Fix:** Use an OpenPGP v6 key (RFC 9580). See [FIPS 140-3: GPG]({{< relref "docs/reference/standards-and-regulations/fips.md" >}}#gpg).
 
-### Symptom: `with GODEBUG=fips140=only, GPG signing and verification require an RSA or ECDSA (P-256, P-384, P-521) key`
+### Symptom: `with GODEBUG=fips140=only, GPG signing and verification require an RSA (at least 2048 bits) or ECDSA (P-256, P-384, P-521) key`
 
-**Cause:** OCM runs with `GODEBUG=fips140=only` and the key uses an algorithm outside the Go Cryptographic Module.
+**Cause:** OCM runs with `GODEBUG=fips140=only` and the key uses an algorithm outside the Go Cryptographic Module or an RSA key shorter than 2048 bits.
 
-**Fix:** Use an RSA or ECDSA P-256/P-384/P-521 key. See [FIPS 140-3: GPG]({{< relref "docs/reference/standards-and-regulations/fips.md" >}}#gpg).
+**Fix:** Use an RSA key of at least 2048 bits or an ECDSA P-256/P-384/P-521 key. See [FIPS 140-3: GPG]({{< relref "docs/reference/standards-and-regulations/fips.md" >}}#gpg).
 
 {{< /tab >}}
 {{< tab "Sigstore (interactive)" >}}

@@ -74,6 +74,7 @@ func TestStrictMode_Rejected(t *testing.T) {
 		{name: "v6 ML-DSA-65+Ed25519", key: handlertest.KeyConfig{V6: true, Algorithm: packet.PubKeyAlgoMldsa65Ed25519}, wantErr: handler.ErrAlgorithmInFIPSMode},
 		{name: "v6 SLH-DSA-SHAKE-128f", key: handlertest.KeyConfig{V6: true, Algorithm: packet.PubKeyAlgoSlhdsaShake128f}, wantErr: handler.ErrAlgorithmInFIPSMode},
 		{name: "v6 ECDSA brainpool P-256", key: handlertest.KeyConfig{V6: true, Algorithm: packet.PubKeyAlgoECDSA, Curve: packet.CurveBrainpoolP256}, wantErr: handler.ErrAlgorithmInFIPSMode},
+		{name: "v6 RSA-1024", key: handlertest.KeyConfig{V6: true, RSABits: 1024}, wantErr: handler.ErrAlgorithmInFIPSMode},
 		{
 			// go-crypto verifies the primary key's self-signatures while parsing, so an Ed25519 primary key
 			// leaves the module even if an approved subkey signs.

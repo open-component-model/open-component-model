@@ -96,7 +96,7 @@ GPG signing and verification run in-process with the Go OpenPGP library (`github
 
 * `keySource` is replaced by `keyringFingerprint` and `keyringHome` in `GPGCredentials`. When set, OCM runs the `gpg` binary only to export key material (`gpg --export`, `gpg --export-secret-keys`); all signing and verification runs in OCM.
 * Signatures from the previous gpg-binary and former go-crypto implementations still verify (v4 keys outside strict mode). OCM reads v4, LibrePGP v5 and RFC 9580 v6 keys; encryption-only subkeys are ignored, so GnuPG's PQC keys with Kyber subkeys work.
-* Strict mode accepts exactly: OpenPGP v6 (RFC 9580) or v5 (LibrePGP) keys, both with SHA-256 fingerprints, whose primary key and signing subkeys all use RSA or ECDSA P-256/P-384/P-521 (reading a key verifies their self-signatures), unprotected secret keys, and SHA-256/384/512 signatures. It rejects exporting secret keys from the keyring.
+* Strict mode accepts exactly: OpenPGP v6 (RFC 9580) or v5 (LibrePGP) keys, both with SHA-256 fingerprints, whose primary key and signing subkeys all use RSA with at least 2048 bits or ECDSA P-256/P-384/P-521 (reading a key verifies their self-signatures), unprotected secret keys, and SHA-256/384/512 signatures. It rejects exporting secret keys from the keyring.
 * Hardware-token keys are not supported: `--export-secret-keys` yields only card stubs, so signing fails with a clear error.
 * GnuPG creates v4 keys for RSA and ECDSA and cannot create or verify v6 keys (it implements LibrePGP), so keyring keys never pass strict mode. Strict-mode users create keys with an RFC 9580 implementation such as Sequoia (`sq key generate --profile rfc9580`).
 

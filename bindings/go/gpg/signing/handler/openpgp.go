@@ -52,8 +52,9 @@ func fipsBoundary(ctx context.Context, err error, msg string, attrs ...any) erro
 }
 
 // readKeyRing parses binary or ASCII-armored key material, which may hold several concatenated armored blocks.
-// All key packets are screened before parsing (see screenKeyPackets). Unlike openpgp.ReadKeyRing alone,
-// it fails on key material it cannot parse instead of skipping it.
+// All key packets are screened before parsing (see screenKeyPackets). openpgp.ReadKeyRing skips keys it cannot
+// parse (unsupported or structurally broken, such as an invalid self-signature) and fails only if no key parses,
+// so a broken key next to a good one would vanish silently; reading entity by entity fails on the first one instead.
 func readKeyRing(ctx context.Context, material []byte) (openpgp.EntityList, error) {
 	bodies, err := keyBodies(material)
 	if err != nil {
@@ -66,14 +67,22 @@ func readKeyRing(ctx context.Context, material []byte) (openpgp.EntityList, erro
 	}
 	var entities openpgp.EntityList
 	for _, body := range bodies {
-		el, err := openpgp.ReadKeyRing(bytes.NewReader(body))
-		if err != nil {
-			return nil, errParseKeyMaterial(err)
+		packets := packet.NewReader(bytes.NewReader(body))
+		n := 0
+		for {
+			e, err := openpgp.ReadEntity(packets)
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			if err != nil {
+				return nil, errParseKeyMaterial(err)
+			}
+			entities = append(entities, e)
+			n++
 		}
-		if len(el) == 0 {
+		if n == 0 {
 			return nil, errors.New("no OpenPGP key found in key material")
 		}
-		entities = append(entities, el...)
 	}
 	return entities, nil
 }
@@ -289,12 +298,22 @@ func algorithmName(pk *packet.PublicKey) string {
 	}
 }
 
-// checkKeyAlgorithm applies the FIPS boundary to keys whose algorithm the Go Cryptographic Module does not implement.
-// RSA sizes below 2048 bits are left to the module, which rejects them in strict mode.
+// checkKeyAlgorithm applies the FIPS boundary to keys whose algorithm or size the Go Cryptographic Module does not
+// approve. Checking RSA sizes here gives an error that says what to change: in strict mode the module would reject
+// a smaller key only while go-crypto verifies its self-signature, which surfaces as an invalid signature.
 func checkKeyAlgorithm(ctx context.Context, pk *packet.PublicKey) error {
 	switch pk.PubKeyAlgo {
 	case packet.PubKeyAlgoRSA, packet.PubKeyAlgoRSASignOnly:
-		return nil
+		bits, err := pk.BitLength()
+		if err != nil {
+			return fmt.Errorf("read RSA key size of key %X: %w", pk.Fingerprint, err)
+		}
+		if bits >= 2048 {
+			return nil
+		}
+		name := fmt.Sprintf("RSA-%d", bits)
+		return fipsBoundary(ctx, fmt.Errorf("%w: key %X uses %s", ErrAlgorithmInFIPSMode, pk.Fingerprint, name),
+			"GPG key algorithm "+name, "key", fmt.Sprintf("%X", pk.Fingerprint))
 	case packet.PubKeyAlgoECDSA:
 		switch curve, _ := pk.Curve(); curve {
 		case packet.CurveNistP256, packet.CurveNistP384, packet.CurveNistP521:

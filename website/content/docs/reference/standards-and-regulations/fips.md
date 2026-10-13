@@ -468,7 +468,7 @@ fall outside the Go Cryptographic Module:
 | Operation | `fips140=on` (default) | `fips140=only` | `fips140=off` |
 | --- | --- | --- | --- |
 | v4 keys (SHA-1 fingerprints) | Used; logged at debug level | `with GODEBUG=fips140=only, GPG signing and verification require OpenPGP v6 (RFC 9580) or v5 (LibrePGP) keys: v4 and older keys are identified by SHA-1 fingerprints` | Used |
-| EdDSA, Ed25519, Ed448, ML-DSA, SLH-DSA, DSA, non-P curves | Used; logged at debug level | `with GODEBUG=fips140=only, GPG signing and verification require an RSA or ECDSA (P-256, P-384, P-521) key` | Used |
+| EdDSA, Ed25519, Ed448, ML-DSA, SLH-DSA, DSA, non-P curves, RSA below 2048 bits | Used; logged at debug level | `with GODEBUG=fips140=only, GPG signing and verification require an RSA (at least 2048 bits) or ECDSA (P-256, P-384, P-521) key` | Used |
 | Passphrase-protected keys | Used; logged at debug level | `with GODEBUG=fips140=only, passphrase-protected GPG keys cannot be unlocked because OpenPGP key protection is not FIPS-approved; provide the private key without passphrase protection, for example from a secret store` | Used |
 | Exporting a secret key from the GnuPG keyring (`keyringFingerprint`) | Used; logged at debug level | `with GODEBUG=fips140=only, secret keys cannot be exported from the GnuPG keyring because gpg-agent processes them outside the Go Cryptographic Module; provide the private key in the GPG credentials` | Used |
 
@@ -493,9 +493,9 @@ To use GPG in strict mode (`fips140=only`), provide:
   sq cert export --cert-email "ocm@example.com" > verify-key.asc
   ```
 
-- An RSA or ECDSA (P-256, P-384, P-521) key. This applies to the primary key
-  and every signing subkey, not only the key that signs, because OCM verifies
-  their self-signatures when it reads the key.
+- An RSA (at least 2048 bits) or ECDSA (P-256, P-384, P-521) key. This applies
+  to the primary key and every signing subkey, not only the key that signs,
+  because OCM verifies their self-signatures when it reads the key.
 - An unprotected secret key (no passphrase). Use a secret store instead.
 - Key material in the GPG credentials (`privateKeyPGPFile`/`publicKeyPGPFile`
   or inline `privateKeyPGP`/`publicKeyPGP`), not `keyringFingerprint`.

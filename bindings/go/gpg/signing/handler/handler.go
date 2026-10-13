@@ -55,7 +55,7 @@ var (
 	// Strict FIPS 140-3 mode (GODEBUG=fips140=only) errors.
 
 	ErrV4KeyInFIPSMode            = errors.New("with GODEBUG=fips140=only, GPG signing and verification require OpenPGP v6 (RFC 9580) or v5 (LibrePGP) keys: v4 and older keys are identified by SHA-1 fingerprints")
-	ErrAlgorithmInFIPSMode        = errors.New("with GODEBUG=fips140=only, GPG signing and verification require an RSA or ECDSA (P-256, P-384, P-521) key")
+	ErrAlgorithmInFIPSMode        = errors.New("with GODEBUG=fips140=only, GPG signing and verification require an RSA (at least 2048 bits) or ECDSA (P-256, P-384, P-521) key")
 	ErrProtectedKeyInFIPSMode     = errors.New("with GODEBUG=fips140=only, passphrase-protected GPG keys cannot be unlocked because OpenPGP key protection is not FIPS-approved; provide the private key without passphrase protection, for example from a secret store")
 	ErrKeyringSecretKeyInFIPSMode = errors.New("with GODEBUG=fips140=only, secret keys cannot be exported from the GnuPG keyring because gpg-agent processes them outside the Go Cryptographic Module; provide the private key in the GPG credentials")
 )

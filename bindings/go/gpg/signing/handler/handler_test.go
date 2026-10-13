@@ -355,6 +355,9 @@ func TestGPGHandler_KeyMaterial(t *testing.T) {
 	revoked := mustGenerateKey(t, ecdsaKeyConfig)
 	require.NoError(t, revoked.Entity.RevokeKey(packet.KeyCompromised, "", nil))
 	revocationOnly := armorBlock(t, openpgp.PublicKeyType, entityBytes(t, revoked.Entity.Revocations[0].Serialize))
+	// openpgp.ReadKeyRing would skip the broken key and verify with the good one behind it.
+	brokenNextToGood := armorBlock(t, openpgp.PublicKeyType,
+		append(corruptFirstSignature(t, entityBytes(t, mustGenerateKey(t, ecdsaKeyConfig).Entity.Serialize)), binaryPublic...))
 
 	tests := []struct {
 		name     string
@@ -370,6 +373,7 @@ func TestGPGHandler_KeyMaterial(t *testing.T) {
 		{name: "CRLF line endings", material: strings.ReplaceAll(key.Private, "\n", "\r\n")},
 		{name: "signature block in key material", material: key.Public + signature, verify: true, wantMsg: `unexpected armored block "PGP SIGNATURE"`},
 		{name: "standalone revocation certificate", material: key.Public + revocationOnly, verify: true, wantMsg: "parse OpenPGP key material"},
+		{name: "key with invalid self-signature next to a good key", material: brokenNextToGood, verify: true, wantMsg: "parse OpenPGP key material"},
 		{name: "empty armored block", material: armorBlock(t, openpgp.PublicKeyType, nil), verify: true, wantMsg: "no OpenPGP key found"},
 		{name: "not OpenPGP", material: "not a key", wantMsg: "parse OpenPGP key material"},
 	}
@@ -732,6 +736,8 @@ func TestGPGHandler_FIPSBoundaryLogs(t *testing.T) {
 		wantLogs   []string
 	}{
 		{name: "v6 RSA", key: handlertest.KeyConfig{V6: true}},
+		// The RSA encryption subkey go-crypto adds is signing-capable, so it is screened and logged too.
+		{name: "v6 RSA-1024", key: handlertest.KeyConfig{V6: true, RSABits: 1024}, wantLogs: []string{"GPG key algorithm RSA-1024", "GPG key algorithm RSA-1024"}},
 		{name: "v6 ECDSA P-384", key: handlertest.KeyConfig{V6: true, Algorithm: packet.PubKeyAlgoECDSA, Curve: packet.CurveNistP384}},
 		{name: "v4 key", key: handlertest.KeyConfig{}, wantLogs: []string{"OpenPGP key with a SHA-1 fingerprint"}},
 		{name: "v6 Ed25519", key: handlertest.KeyConfig{V6: true, Algorithm: packet.PubKeyAlgoEd25519}, wantLogs: []string{"GPG key algorithm Ed25519"}},
@@ -996,6 +1002,28 @@ func corruptLastByte(t *testing.T, signature string) string {
 	body := armorBody(t, signature)
 	body[len(body)-1] ^= 0xFF
 	return armorBlock(t, openpgp.SignatureType, body)
+}
+
+// corruptFirstSignature flips the last byte of the first signature packet in a binary packet sequence.
+func corruptFirstSignature(t *testing.T, data []byte) []byte {
+	t.Helper()
+	var out bytes.Buffer
+	corrupted := false
+	r := packet.NewOpaqueReader(bytes.NewReader(data))
+	for {
+		op, err := r.Next()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		require.NoError(t, err)
+		if op.Tag == tagSignature && !corrupted {
+			op.Contents[len(op.Contents)-1] ^= 0xFF
+			corrupted = true
+		}
+		require.NoError(t, op.Serialize(&out))
+	}
+	require.True(t, corrupted, "no signature packet found")
+	return out.Bytes()
 }
 
 func spaced(fpr string) string {

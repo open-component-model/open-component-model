@@ -20,6 +20,7 @@ import (
 type KeyConfig struct {
 	V6            bool                      // RFC 9580 v6 key instead of v4
 	Algorithm     packet.PublicKeyAlgorithm // 0 means packet.PubKeyAlgoRSA
+	RSABits       int                       // RSA key size of the primary key and the signing subkey; 0 means 3072
 	Curve         packet.Curve              // for ECDSA / EdDSA, e.g. packet.CurveNistP256, packet.Curve25519
 	Passphrase    string                    // non-empty: secret keys are passphrase-protected in Private
 	SigningSubkey bool                      // add a signing subkey (go-crypto then signs with it)
@@ -43,13 +44,16 @@ func GenerateKey(cfg KeyConfig) (*Key, error) {
 	pcfg := &packet.Config{
 		V6Keys:          cfg.V6,
 		Algorithm:       cfg.Algorithm,
-		RSABits:         3072,
+		RSABits:         cfg.RSABits,
 		Curve:           cfg.Curve,
 		DefaultHash:     crypto.SHA256,
 		KeyLifetimeSecs: uint32(cfg.Lifetime / time.Second), //nolint:gosec // test key lifetimes are far below 136 years
 	}
 	if pcfg.Algorithm == 0 {
 		pcfg.Algorithm = packet.PubKeyAlgoRSA
+	}
+	if pcfg.RSABits == 0 {
+		pcfg.RSABits = 3072
 	}
 	if !cfg.Created.IsZero() {
 		pcfg.Time = func() time.Time { return cfg.Created }
