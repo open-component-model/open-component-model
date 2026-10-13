@@ -38,13 +38,16 @@ Before starting, make sure you have set up your environment as described in the 
 - [Controller environment]({{< relref "setup-controller-environment.md" >}}) with OCM Controllers installed
 - **Crossplane** installed as the orchestrator, following [Set up Controller Environments > Install an
   Orchestrator]({{< relref "setup-controller-environment.md#install-an-orchestrator" >}}) (the Crossplane tab)
-- **Flux** installed as the deployer, following [Set up Controller Environments > Install a
-  Deployer]({{< relref "setup-controller-environment.md#install-a-deployer" >}}) (the Flux tab). Crossplane creates the
-  Flux `OCIRepository` and `HelmRelease` objects, so Flux's `source-controller` and `helm-controller` must be running.
-  kro and a GitOps deployer are not needed.
-- [Custom RBAC]({{< relref "custom-rbac.md" >}}) letting the OCM controller manage `compositions` and
-  `compositeresourcedefinitions` (`apiextensions.crossplane.io`), plus a grant letting Crossplane compose the Flux
-  objects; see the Crossplane tab in that guide
+- A **GitOps deployer** installed, either **Flux** or **Argo CD**, following [Set up Controller Environments > Install a
+  Deployer]({{< relref "setup-controller-environment.md#install-a-deployer" >}}). Crossplane composes that deployer's
+  objects directly: the Flux `OCIRepository` and `HelmRelease`, or the Argo CD `Application`. The matching controllers
+  must be running (Flux's `source-controller` and `helm-controller`, or Argo CD's `application-controller`).
+- [Custom RBAC]({{< relref "custom-rbac.md" >}}) with **both** Crossplane grants, which live in two separate places in
+  that guide:
+  - The **Crossplane** tab under [Create a ClusterRole and ClusterRoleBinding]({{< relref "custom-rbac.md" >}}#tabs-ocm-controller-rbac-1)
+    lets the OCM controller manage `compositions` and `compositeresourcedefinitions` (`apiextensions.crossplane.io`).
+  - The [Crossplane subsection under RBAC for the orchestrator's own service account]({{< relref "custom-rbac.md#crossplane" >}})
+    lets Crossplane's own service account compose the OCM `Resource` and the deployer objects (Flux or Argo CD).
 - The [Patch and Transform function](https://github.com/crossplane-contrib/function-patch-and-transform)
   (`function-patch-and-transform`), which the `Composition` runs as its pipeline step. Install it via the Crossplane
   tab of [Set up Controller Environments > Install an Orchestrator]({{< relref "setup-controller-environment.md#install-an-orchestrator" >}}).
@@ -77,13 +80,13 @@ Crossplane XRD + Composition.
 
 ### How the Pieces Fit Together
 
-The **graph engine** is what reconciles the deployment graph and creates the Flux objects. This tutorial ships a
+The **graph engine** is what reconciles the deployment graph and creates the deployer objects. This tutorial ships a
 Crossplane `CompositeResourceDefinition` (XRD) plus a `Composition`. The XRD registers a `Bootstrap` composite
 kind. When you apply a `Bootstrap` resource, Crossplane resolves the chart and image through OCM `Resource` objects,
-then composes the Flux `OCIRepository` and `HelmRelease` directly. Flux's `helm-controller` renders the chart into the
-running workload.
+then composes the deployer objects directly: for Flux an `OCIRepository` and a `HelmRelease`, for Argo CD a single
+`Application`. The deployer then renders the chart into the running workload.
 
-The OCM `Resource` and the Flux objects are composed directly by the Composition, with no intermediate wrapper.
+The OCM `Resource` and the deployer objects are composed directly by the Composition, with no intermediate wrapper.
 
 If you already know the kro variant, the building blocks map like this (otherwise skip the table):
 
@@ -96,7 +99,7 @@ If you already know the kro variant, the building blocks map like this (otherwis
 
 The `Composition` runs in **pipeline mode** (`mode: Pipeline`). A single pipeline step invokes the `function-patch-and-transform` function, whose
 input holds the patch-and-transform resource list. The resolved chart and image OCI coordinates travel from the OCM
-`Resource` objects to the Flux objects through the composite's `status.atProvider` fields, since patch-and-transform
+`Resource` objects to the deployer objects through the composite's `status.atProvider` fields, since patch-and-transform
 wires values only between a composed resource and the composite, never directly between two composed resources.
 
 ### Localization
@@ -161,7 +164,13 @@ EOF
 ```
 
 The resource `composition` is of type `blob` and points to a file `composition.yaml`. For
-this variant that file holds a Crossplane XRD + Composition. Create it before building the component version:
+this variant that file holds a Crossplane XRD + Composition. The XRD and the two OCM `Resource` objects are the same
+for both deployers. The Composition's last composed resources differ: Flux uses an `OCIRepository` plus a
+`HelmRelease`, Argo CD uses a single `Application`. Pick the deployer you installed and create `composition.yaml`
+before building the component version:
+
+{{< tabs "composition-deployer" >}}
+{{< tab "Flux" >}}
 
 {{< details "XRD + Composition (composition.yaml)" >}}
 The two OCM `Resource` objects (`ocm-resource-chart` and `ocm-resource-image`) resolve the chart and image through
@@ -437,6 +446,265 @@ OCM Controllers and Flux before running `ocm add cv`. See
 [Credentials for OCM Controllers]({{< relref "/docs/how-to/configure-credentials-ocm-controllers.md" >}}), and add a
 `secretRef` to the `OCIRepository` manifest in the Composition's `ocirepository` resource.
 {{< /callout >}}
+
+{{< /tab >}}
+{{< tab "Argo CD" >}}
+
+{{< details "XRD + Composition (composition.yaml)" >}}
+The XRD and the two OCM `Resource` objects (`ocm-resource-chart` and `ocm-resource-image`) are identical to the Flux
+variant. They resolve the chart and image through the OCM controllers and publish the registry, repository, and
+digest onto the composite status. The final composed resource is an Argo CD `Application` instead of Flux objects.
+Localization happens in `spec.source.helm.valuesObject`, where the resolved image coordinates are injected from
+composite status.
+
+```shell
+cat > composition.yaml << 'EOF'
+apiVersion: apiextensions.crossplane.io/v2
+kind: CompositeResourceDefinition
+metadata:
+  name: bootstraps.ocm.software
+spec:
+  group: ocm.software
+  names:
+    kind: Bootstrap
+    plural: bootstraps
+  # Namespaced keeps the composite and its composed resources in one namespace,
+  # the same one you apply the Bootstrap into. You apply the Bootstrap directly.
+  scope: Namespaced
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                # Name of the OCM Component CR created by the bootstrap resources below.
+                ocmComponent:
+                  type: string
+                  default: bootstrap-component
+            status:
+              type: object
+              properties:
+                atProvider:
+                  type: object
+                  properties:
+                    # Resolved chart OCI coordinates, written back by the chart Resource patches.
+                    chartRegistry:
+                      type: string
+                    chartRepository:
+                      type: string
+                    chartTag:
+                      type: string
+                    # Resolved image OCI coordinates, used for localization.
+                    imageRegistry:
+                      type: string
+                    imageRepository:
+                      type: string
+                    imageDigest:
+                      type: string
+---
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: bootstrap
+  labels:
+    crossplane.io/xrd: bootstraps.ocm.software
+spec:
+  compositeTypeRef:
+    apiVersion: ocm.software/v1alpha1
+    kind: Bootstrap
+  mode: Pipeline
+  pipeline:
+    - step: patch-and-transform
+      functionRef:
+        name: function-patch-and-transform
+      input:
+        apiVersion: pt.fn.crossplane.io/v1beta1
+        kind: Resources
+        resources:
+          # 1. OCM Resource (chart): resolve the Helm chart OCI reference. The
+          #    composed OCM Resource inherits the composite's namespace.
+          - name: ocm-resource-chart
+            base:
+              apiVersion: delivery.ocm.software/v1alpha1
+              kind: Resource
+              spec:
+                resource:
+                  byReference:
+                    resource:
+                      name: helm-resource
+                additionalStatusFields:
+                  oci: resource.access.toOCI()
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.ocmComponent
+                toFieldPath: spec.componentRef.name
+              # Derive a composite-specific Resource name so parallel composites
+              # never share one default/<name> OCM Resource.
+              - type: FromCompositeFieldPath
+                fromFieldPath: metadata.name
+                toFieldPath: metadata.name
+                transforms:
+                  - type: string
+                    string:
+                      type: Format
+                      fmt: "%s-chart"
+              # Publish resolved chart coordinates onto composite status so the
+              # Application below can consume them.
+              - type: ToCompositeFieldPath
+                fromFieldPath: status.additional.oci.registry
+                policy:
+                  fromFieldPath: Optional
+                toFieldPath: status.atProvider.chartRegistry
+              - type: ToCompositeFieldPath
+                fromFieldPath: status.additional.oci.repository
+                policy:
+                  fromFieldPath: Optional
+                toFieldPath: status.atProvider.chartRepository
+              # Argo CD resolves the chart by tag, not digest, so publish the tag.
+              - type: ToCompositeFieldPath
+                fromFieldPath: status.additional.oci.tag
+                policy:
+                  fromFieldPath: Optional
+                toFieldPath: status.atProvider.chartTag
+          # 2. OCM Resource (image): resolve the container image OCI reference for
+          #    localization. Composed directly, same as the chart resource above.
+          - name: ocm-resource-image
+            base:
+              apiVersion: delivery.ocm.software/v1alpha1
+              kind: Resource
+              spec:
+                resource:
+                  byReference:
+                    resource:
+                      name: image-resource
+                additionalStatusFields:
+                  oci: resource.access.toOCI()
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.ocmComponent
+                toFieldPath: spec.componentRef.name
+              - type: FromCompositeFieldPath
+                fromFieldPath: metadata.name
+                toFieldPath: metadata.name
+                transforms:
+                  - type: string
+                    string:
+                      type: Format
+                      fmt: "%s-image"
+              - type: ToCompositeFieldPath
+                fromFieldPath: status.additional.oci.registry
+                policy:
+                  fromFieldPath: Optional
+                toFieldPath: status.atProvider.imageRegistry
+              - type: ToCompositeFieldPath
+                fromFieldPath: status.additional.oci.repository
+                policy:
+                  fromFieldPath: Optional
+                toFieldPath: status.atProvider.imageRepository
+              - type: ToCompositeFieldPath
+                fromFieldPath: status.additional.oci.digest
+                policy:
+                  fromFieldPath: Optional
+                toFieldPath: status.atProvider.imageDigest
+          # 3. Argo CD Application, composed directly by Crossplane. The chart
+          #    repoURL/targetRevision and the localized image values are patched
+          #    from the composite status populated above.
+          - name: application
+            base:
+              apiVersion: argoproj.io/v1alpha1
+              kind: Application
+              metadata:
+                namespace: argocd
+                finalizers:
+                  - resources-finalizer.argocd.argoproj.io
+              spec:
+                project: default
+                source:
+                  chart: podinfo
+                  repoURL: placeholder  # overwritten by patch below
+                  targetRevision: placeholder  # overwritten by patch below
+                  helm:
+                    releaseName: placeholder  # overwritten by patch below
+                destination:
+                  server: https://kubernetes.default.svc
+                  namespace: default
+                syncPolicy:
+                  automated:
+                    prune: true
+                    selfHeal: true
+                  syncOptions:
+                    - CreateNamespace=true
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: metadata.name
+                toFieldPath: metadata.name
+                transforms:
+                  - type: string
+                    string:
+                      type: Format
+                      fmt: "%s-application"
+              # Derive a composite-specific Helm release name from the composite
+              # name so parallel composites never share a release.
+              - type: FromCompositeFieldPath
+                fromFieldPath: metadata.name
+                toFieldPath: spec.source.helm.releaseName
+                transforms:
+                  - type: string
+                    string:
+                      type: Format
+                      fmt: "%s-release"
+              # Chart repoURL from the resolved chart coordinates.
+              - type: CombineFromComposite
+                combine:
+                  variables:
+                    - fromFieldPath: status.atProvider.chartRegistry
+                    - fromFieldPath: status.atProvider.chartRepository
+                  strategy: string
+                  string:
+                    fmt: "oci://%s/%s"
+                toFieldPath: spec.source.repoURL
+              - type: FromCompositeFieldPath
+                fromFieldPath: status.atProvider.chartTag
+                toFieldPath: spec.source.targetRevision
+              # Localized image: registry/repository from the resolved image resource.
+              - type: CombineFromComposite
+                combine:
+                  variables:
+                    - fromFieldPath: status.atProvider.imageRegistry
+                    - fromFieldPath: status.atProvider.imageRepository
+                  strategy: string
+                  string:
+                    fmt: "%s/%s"
+                toFieldPath: spec.source.helm.valuesObject.image.repository
+              # Pseudo-tag with @digest. Podinfo's chart builds repository:tag, and OCI
+              # runtimes ignore the tag when a digest is present, so this pins by digest.
+              - type: FromCompositeFieldPath
+                fromFieldPath: status.atProvider.imageDigest
+                toFieldPath: spec.source.helm.valuesObject.image.tag
+                transforms:
+                  - type: string
+                    string:
+                      type: Format
+                      fmt: "latest@%s"
+EOF
+```
+
+{{< /details >}}
+{{< callout context="note" title="Private registries" icon="outline/lock" >}}
+If you want to keep the component private instead of making it public after transfer, configure credentials for the
+OCM Controllers before running `ocm add cv`. See
+[Credentials for OCM Controllers]({{< relref "/docs/how-to/configure-credentials-ocm-controllers.md" >}}). For Argo CD,
+pull credentials are configured on the Argo CD repository, not in the Composition. See the
+[Argo CD private registry docs](https://argo-cd.readthedocs.io/en/stable/operator-manual/declarative-setup/#repositories).
+{{< /callout >}}
+
+{{< /tab >}}
+{{< /tabs >}}
 {{< /step >}}
 
 {{< step >}}
@@ -489,8 +757,8 @@ Crossplane-specific.
 Create `bootstrap.yaml`:
 
 {{< callout context="note" title="Private registries" icon="outline/lock" >}}
-If you chose to keep your package private, do not forget to add the
-secret to the repository's `ocmConfig`, as described above!
+If you chose to keep your package private, do not forget to add the secret to the repository's `ocmConfig`, as described in
+[Credentials for OCM Controllers]({{< relref "/docs/how-to/configure-credentials-ocm-controllers.md" >}}).
 {{< /callout >}}
 
 {{< details "Bootstrap Resources (bootstrap.yaml)" >}}
@@ -656,8 +924,8 @@ bootstrap   True     True    bootstrap     3m23s
 
 </details>
 
-When `SYNCED` and `READY` are both `True`, Crossplane has resolved the OCM resources and composed the Flux
-`OCIRepository` and `HelmRelease` directly, which Flux then reconciles into the running workload.
+When `SYNCED` and `READY` are both `True`, Crossplane has resolved the OCM resources and composed the deployer objects
+directly (the Flux `OCIRepository` and `HelmRelease`, or the Argo CD `Application`), which the deployer then reconciles into the running workload.
 {{< /step >}}
 
 {{< step >}}
@@ -665,7 +933,7 @@ When `SYNCED` and `READY` are both `True`, Crossplane has resolved the OCM resou
 ### Verify localization
 
 Check that the deployed pod uses the localized image from your registry (not the original `ghcr.io/stefanprodan/...`).
-The composite can report `READY` before Flux has reconciled the chart into a running pod, so wait for the pod to
+The composite can report `READY` before the deployer has reconciled the chart into a running pod, so wait for the pod to
 appear first:
 
 ```bash
@@ -722,13 +990,13 @@ kubectl auth can-i create compositions.apiextensions.crossplane.io \
 
 Separately, if the composite's composed resources stay stuck (see [Composite Not Becoming
 Ready](#composite-not-becoming-ready)), the fault is Crossplane's own service account. Crossplane composes the
-OCM `Resource` and Flux objects directly, so Crossplane core must be granted access to those non-Crossplane kinds.
+OCM `Resource` and the deployer objects directly, so Crossplane core must be granted access to those non-Crossplane kinds.
 See the next section.
 
 #### Composed resources stay forbidden
 
 Crossplane's service account can create any resource installed by a provider or defined by an XRD, but it must be
-granted access to compose any other kind of resource (the OCM `Resource` and the Flux objects here). Without that
+granted access to compose any other kind of resource (the OCM `Resource` and the deployer objects here). Without that
 grant the composite reports a `forbidden` error, for example
 
 ```text
@@ -751,17 +1019,21 @@ kubectl describe bootstrap.ocm.software bootstrap
 Inspect the composed resources directly to see which one is stuck:
 
 ```bash
+# Flux deployer
 kubectl get resource.delivery.ocm.software,ocirepository,helmrelease
 kubectl describe helmrelease bootstrap-helmrelease
+# Argo CD deployer
+kubectl get resource.delivery.ocm.software -A
+kubectl describe -n argocd application bootstrap-application
 ```
 
 Check the Events section and each composed resource's status for error messages. A common cause is Crossplane
-lacking RBAC for the composed OCM `Resource` or Flux CRDs (see [Composed resources stay
+lacking RBAC for the composed OCM `Resource` or the deployer CRDs (see [Composed resources stay
 forbidden](#composed-resources-stay-forbidden)).
 
 ### ImagePullBackOff Errors
 
-If pods show `ImagePullBackOff` or `ErrImagePull` errors, the kubelet cannot pull the localized image from your private registry. Add `imagePullSecrets` to the HelmRelease values in the Composition's `helmrelease` resource.
+If pods show `ImagePullBackOff` or `ErrImagePull` errors, the kubelet cannot pull the localized image from your private registry. Set `image.pullSecrets` (for example `image.pullSecrets: [{name: ghcr-secret}]`) in the chart values of the Composition's deployer resource: the Flux `helmrelease` `spec.values`, or the Argo CD `application` `spec.source.helm.valuesObject`. Podinfo reads pull secrets from `image.pullSecrets`, a top-level `imagePullSecrets` value is ignored.
 
 ## What You Learned
 
@@ -769,7 +1041,7 @@ You've successfully:
 
 - Created an OCM component with an embedded Crossplane XRD + Composition
 - Used `--copy-resources --upload-as ociArtifact` to enable localization during transfer
-- Deployed the component by applying a `Bootstrap` composite, letting Crossplane compose the Flux objects directly
+- Deployed the component by applying a `Bootstrap` composite, letting Crossplane compose the deployer objects directly
 - Verified that localization kept image references in sync
 
 This pattern lets developers ship deployment instructions alongside their software while operators only apply a simple composite, with Crossplane, rather than kro, reconciling the graph.

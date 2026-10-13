@@ -7,7 +7,7 @@ toc: true
 ---
 
 This guide helps you set up a local Kubernetes environment for testing OCM controller-based deployments.
-You'll install the OCM Controllers, an orchestrator (kro or Crossplane), and Flux to enable GitOps workflows with OCM component versions.
+You'll install the OCM Controllers, an orchestrator (kro or Crossplane), and a deployer (FluxCD or ArgoCD) to enable GitOps workflows with OCM component versions.
 
 {{< callout context="tip" title="Not all components are always required" icon="outline/info-circle" >}}
 Depending on your use case, you may not need the full setup. For example, if
@@ -103,7 +103,7 @@ helm install ocm-k8s-toolkit "oci://ghcr.io/open-component-model/kubernetes/cont
 ```
 
 {{<callout context="note" title="Resource names follow the release name" icon="outline/info-circle">}}
-The release name `ocm-k8s-toolkit` used above gives the controller's resources predictable names, such as the service account `ocm-k8s-toolkit-controller-manager`. If you install under a different release name — or via a GitOps tool such as Flux that alters the effective release name — add `--set fullnameOverride=ocm-k8s-toolkit` to keep these names stable. This matters when you [configure custom RBAC]({{< relref "/docs/how-to/custom-rbac.md" >}}), which binds to the service account by name.
+The release name `ocm-k8s-toolkit` used above gives the controller's resources predictable names, such as the service account `ocm-k8s-toolkit-controller-manager`. If you install under a different release name, or via a GitOps tool such as Flux that alters the effective release name, add `--set fullnameOverride=ocm-k8s-toolkit` to keep these names stable. This matters when you [configure custom RBAC]({{< relref "/docs/how-to/custom-rbac.md" >}}), which binds to the service account by name.
 {{</callout>}}
 
 <details>
@@ -266,7 +266,7 @@ EOF
 ```
 
 {{< callout context="note" title="RBAC on a hardened cluster" icon="outline/info-circle" >}}
-Crossplane composes the OCM `Resource` and Flux objects, so on a hardened cluster you must grant Crossplane's service
+Crossplane composes the OCM `Resource` and the deployer objects (Flux or Argo CD), so on a hardened cluster you must grant Crossplane's service
 account access to those composed kinds. See [Configure Custom RBAC for Deployers]({{< relref "/docs/how-to/custom-rbac.md" >}}).
 {{< /callout >}}
 
@@ -543,7 +543,7 @@ argocd-repo-server-95465d997-mbmcp                                             1
 argocd-server-767b9d54cf-q7bbz                                                 1/1     Running            0               24m
 crossplane-system        crossplane-6b8c9d7f54-nq8rk                           1/1     Running            0               12m
 crossplane-system        crossplane-rbac-manager-7d9f6c84b5-2xk7p              1/1     Running            0               12m
-crossplane-system        function-patch-and-transform-abc123-5f8d7c9b64-ltzqd  1/1     Running            0               10m
+crossplane-system        function-patch-and-transform-9d4f2a1c7b-5f8d7c9b64-ltzqd  1/1   Running            0               10m
 flux-system              helm-controller-b6767d66-zbwws                        1/1     Running            0               3h39m
 flux-system              kustomize-controller-57c7ff5596-v6fvr                 1/1     Running            0               3h39m
 flux-system              notification-controller-58ffd586f7-pr65t              1/1     Running            0               3h39m

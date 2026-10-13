@@ -177,6 +177,13 @@ subjects:
     namespace: ocm-k8s-toolkit-system
 ```
 
+After applying with `kubectl apply` below, confirm the controller has the expected access. The output should be `yes`:
+
+```bash
+kubectl auth can-i create resourcegraphdefinitions.kro.run \
+  --as=system:serviceaccount:ocm-k8s-toolkit-system:ocm-k8s-toolkit-controller-manager
+```
+
 {{< /tab >}}
 {{< tab "Crossplane" >}}
 
@@ -215,6 +222,13 @@ subjects:
 
 Replace `bootstraps` with the composite kind your own XRD registers.
 
+After applying with `kubectl apply` below, confirm the controller has the expected access. The output should be `yes`:
+
+```bash
+kubectl auth can-i create compositions.apiextensions.crossplane.io \
+  --as=system:serviceaccount:ocm-k8s-toolkit-system:ocm-k8s-toolkit-controller-manager
+```
+
 {{< /tab >}}
 {{< /tabs >}}
 
@@ -223,15 +237,6 @@ Apply it to your cluster:
 ```bash
 kubectl apply -f custom-rbac.yaml
 ```
-
-Confirm that the controller has the expected access:
-
-```bash
-kubectl auth can-i watch resourcegraphdefinitions.kro.run \
-  --as=system:serviceaccount:ocm-k8s-toolkit-system:ocm-k8s-toolkit-controller-manager
-```
-
-The output should be `yes`.
 
 ## Deployer: grant the controller write access
 
@@ -258,14 +263,14 @@ Confirm it with `kubectl auth can-i create` instead of `watch` in the check abov
 These verbs let every `Deployer` write those kinds anywhere in the cluster. After you
 [migrate to the NamespacedDeployer]({{< relref "migrate-to-namespaced-deployer.md" >}}), remove them again and keep
 only the read verbs.
-
 {{<callout context="caution" title="Least Privilege" icon="outline/alert-triangle">}}
 Follow the principle of least privilege. Only grant the verbs and resources your deployers actually need.
 {{</callout>}}
 
 ## Multiple deployer targets
 
-If your deployers target several resource types, add a rule per type to the same `ClusterRole`:
+If your deployers target several custom resource types, add additional rules to the same `ClusterRole`. The example
+below grants both a kro `ResourceGraphDefinition` and a Crossplane XRD plus `Composition`:
 
 ```yaml
 apiVersion: rbac.authorization.k8s.io/v1
@@ -282,9 +287,10 @@ rules:
       - list
       - watch
   - apiGroups:
-      - your.custom.group
+      - apiextensions.crossplane.io
     resources:
-      - yourresources
+      - compositeresourcedefinitions
+      - compositions
     verbs:
       - get
       - list
@@ -399,8 +405,9 @@ service account can already create any resource installed by a provider or defin
 it access to compose any other kind of resource**. On a hardened cluster this is required before the composite can
 create its composed resources.
 
-For the bootstrap pattern Crossplane composes the two OCM `Resource` objects (the chart and the image) and the Flux
-objects (`ocirepositories.source.toolkit.fluxcd.io`, `helmreleases.helm.toolkit.fluxcd.io`). Grant them with a
+For the bootstrap pattern Crossplane composes the two OCM `Resource` objects (the chart and the image) and the
+deployer objects. For Flux those are `ocirepositories.source.toolkit.fluxcd.io` and
+`helmreleases.helm.toolkit.fluxcd.io`. For Argo CD it is `applications.argoproj.io`. Grant them with a
 `ClusterRole` that aggregates to Crossplane's primary role. The `rbac.crossplane.io/aggregate-to-crossplane: "true"`
 label is what wires it into Crossplane's service account:
 
@@ -415,11 +422,16 @@ rules:
   - apiGroups: ["delivery.ocm.software"]
     resources: ["resources"]
     verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+  # Flux Helm Deployer
   - apiGroups: ["source.toolkit.fluxcd.io"]
     resources: ["ocirepositories"]
     verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
   - apiGroups: ["helm.toolkit.fluxcd.io"]
     resources: ["helmreleases"]
+    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+  # Argo CD deployer
+  - apiGroups: ["argoproj.io"]
+    resources: ["applications"]
     verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
 ```
 
@@ -438,4 +450,4 @@ for a worked example of the specific kinds this pattern needs.
 
 - [Concept: OCM controllers]({{< relref "/docs/concepts/ocm-controllers.md" >}}) - Learn how the OCM Controllers work and how they interact with deployers and Kubernetes resources.
 - [kro's access control guide](https://kro.run/docs/advanced/access-control) - Least-privilege RBAC setup for kro itself.
-- [Crossplane composition documentation](https://docs.crossplane.io/latest/composition/) - Permissions for Crossplane core and its providers.
+- [Crossplane composition documentation](https://docs.crossplane.io/latest/composition/) - How XRDs and Compositions reconcile a composite resource graph.
