@@ -552,7 +552,8 @@ Used when OCM fetches a repository with the
 [`Git/v1` access type]({{< relref "input-and-access-types.md#gitv1-access" >}}) or the
 [`Git/v1` input type]({{< relref "input-and-access-types.md#gitv1-input" >}}). The identity is derived from the
 `repository` URL. The access type and the input type derive it in the same way, so one consumer entry covers both.
-Credentials are optional. See [`GitCredentials/v1`]({{< relref "credential-types.md#gitcredentialsv1" >}}).
+Credentials are optional. See [Git credential selection]({{< relref "credential-types.md#git-credential-selection" >}})
+for supported types and their schemas.
 
 ### Identity Attributes
 
@@ -582,19 +583,6 @@ OCM lowercases the scheme and hostname of the URL before matching. It does not c
 configuration, so write `scheme` and `hostname` in lowercase there. The `path` keeps a `.git` suffix if the URL has one,
 so `path: org/repo` does not match `https://example.com/org/repo.git`. Use `org/*` or the exact path with `.git`.
 
-### Credential Properties
-
-| Property        | Description                                                            |
-|-----------------|------------------------------------------------------------------------|
-| `username`      | HTTPS Basic Auth user, or the SSH user                                 |
-| `password`      | HTTPS Basic Auth password, or the passphrase of the SSH key            |
-| `token`         | HTTPS bearer token                                                     |
-| `privateKey`    | Path to an SSH private key file                                        |
-| `privateKeyPEM` | Inline PEM-encoded SSH private key. Takes precedence over `privateKey` |
-
-Use [`GitCredentials/v1`]({{< relref "credential-types.md#gitcredentialsv1" >}}) for the typed field reference and the
-order in which OCM picks an authentication method.
-
 ### Matching Behavior
 
 The same three chained checks as [`OCIRegistry`](#ociregistry) apply: path glob, URL (scheme, hostname, port), then
@@ -615,12 +603,12 @@ server answers with an authentication error.
 
 ```yaml
 - identity:
-    type: Git
+    type: Git/v1
     hostname: gitlab.com
     scheme: https
     path: example-group/*
   credentials:
-    - type: GitCredentials/v1
+    - type: GitHTTPSCredentials/v1
       username: oauth2
       password: glpat-example-token
 ```
@@ -629,12 +617,12 @@ server answers with an authentication error.
 
 ```yaml
 - identity:
-    type: Git
+    type: Git/v1
     hostname: git.example.com
     scheme: ssh
     port: "22"
   credentials:
-    - type: GitCredentials/v1
+    - type: GitSSHCredentials/v1
       privateKey: /home/user/.ssh/id_ed25519
 ```
 
