@@ -206,6 +206,7 @@ rules:
       - repositories
       - components
       - resources
+      - deployers
     verbs:
       - create
       - delete
