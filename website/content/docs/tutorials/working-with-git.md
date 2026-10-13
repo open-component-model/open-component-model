@@ -235,19 +235,19 @@ configurations:
   - type: credentials.config.ocm.software
     consumers:
       - identity:
-          type: Git
+          type: Git/v1
           hostname: gitlab.com
           scheme: https
           path: example-group/*
         credentials:
-          - type: GitCredentials/v1
+          - type: GitHTTPSCredentials/v1
             username: oauth2
             password: glpat-your-token
 EOF
 ```
 
-Most Git servers take an access token as the password. You can also set `token` instead, which OCM sends as a bearer
-token.
+Most Git servers take an access token as the password. Use `GitBearerCredentials/v1` only if your server explicitly
+requires Bearer authentication.
 
 {{< /tab >}}
 {{< tab "SSH" >}}
@@ -259,12 +259,12 @@ configurations:
   - type: credentials.config.ocm.software
     consumers:
       - identity:
-          type: Git
+          type: Git/v1
           hostname: git.example.com
           scheme: ssh
           port: "22"
         credentials:
-          - type: GitCredentials/v1
+          - type: GitSSHCredentials/v1
             privateKey: /home/user/.ssh/id_ed25519
 EOF
 ```
@@ -362,4 +362,4 @@ rm -rf transport-archive hello-world.tar.gz component-constructor.yaml .ocmconfi
   when to choose `Git/v1` or `GitHub/v1`, and migration from OCM v1
 - [Reference: `Git/v1` input type]({{< relref "docs/reference/input-and-access-types.md#gitv1-input" >}})
 - [Reference: Git Resource Repository]({{< relref "docs/reference/resource-repositories.md#git-resource-repository" >}})
-- [Reference: `GitCredentials/v1`]({{< relref "docs/reference/credential-types.md#gitcredentialsv1" >}})
+- [Reference: Git credentials]({{< relref "docs/reference/credential-types.md#git-credentials" >}})

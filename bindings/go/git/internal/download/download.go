@@ -22,8 +22,8 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/git/internal/endpoint"
 	accessv1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
-	credsv1 "ocm.software/open-component-model/bindings/go/git/spec/credentials/v1"
 	ocmhttp "ocm.software/open-component-model/bindings/go/http"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // Result is one downloaded snapshot of a Git repository with its history, archived as tar.gz.
@@ -40,7 +40,7 @@ type Result struct {
 }
 
 // Download resolves one snapshot of the repository and archives it with its history.
-func Download(ctx context.Context, access *accessv1.Git, creds *credsv1.GitCredentials, opts Options) (*Result, error) {
+func Download(ctx context.Context, access *accessv1.Git, creds runtime.Typed, opts Options) (*Result, error) {
 	var (
 		result      *Result
 		archivePath string
@@ -78,13 +78,13 @@ func Download(ctx context.Context, access *accessv1.Git, creds *credsv1.GitCrede
 // outside strict enforcement, so it keeps working with GODEBUG=fips140=only.
 // FIPS mode itself stays on, so TLS and SSH still negotiate approved algorithms
 // only, and the archive OCM records is digested with SHA-256.
-func WithRepository(ctx context.Context, access *accessv1.Git, creds *credsv1.GitCredentials, opts Options, fn func(*git.Repository, *object.Commit, plumbing.ReferenceName) error) error {
+func WithRepository(ctx context.Context, access *accessv1.Git, creds runtime.Typed, opts Options, fn func(*git.Repository, *object.Commit, plumbing.ReferenceName) error) error {
 	var err error
 	fips140.WithoutEnforcement(func() { err = withRepository(ctx, access, creds, opts, fn) })
 	return err
 }
 
-func withRepository(ctx context.Context, access *accessv1.Git, creds *credsv1.GitCredentials, opts Options, fn func(*git.Repository, *object.Commit, plumbing.ReferenceName) error) error {
+func withRepository(ctx context.Context, access *accessv1.Git, creds runtime.Typed, opts Options, fn func(*git.Repository, *object.Commit, plumbing.ReferenceName) error) error {
 	if err := access.Validate(); err != nil {
 		return fmt.Errorf("invalid git access: %w", err)
 	}
@@ -93,10 +93,11 @@ func withRepository(ctx context.Context, access *accessv1.Git, creds *credsv1.Gi
 	if err != nil {
 		return fmt.Errorf("cannot address git repository: %w", err)
 	}
-	clientOptions, err := ClientOptions(ep, creds, opts)
+	clientOptions, release, err := ClientOptions(ctx, ep, creds, opts)
 	if err != nil {
 		return err
 	}
+	defer release()
 
 	dir, err := os.MkdirTemp(opts.TempDir, "ocm-git-repository-*")
 	if err != nil {
@@ -192,20 +193,34 @@ func pinnedRefName(ctx context.Context, repo *git.Repository, ref string, client
 }
 
 // ClientOptions applies the same credential and HTTP client rules to fetch and push.
-func ClientOptions(ep *endpoint.Endpoint, creds *credsv1.GitCredentials, opts Options) ([]client.Option, error) {
+// The caller calls release once it no longer uses the options; it closes the SSH agent
+// connection an agent authentication holds.
+func ClientOptions(ctx context.Context, ep *endpoint.Endpoint, creds runtime.Typed, opts Options) ([]client.Option, func(), error) {
 	auth, err := authMethod(ep, creds, opts)
 	if err != nil {
-		return nil, fmt.Errorf("cannot authenticate against git repository: %w", err)
+		return nil, nil, fmt.Errorf("cannot authenticate against git repository: %w", err)
 	}
+	release := func() {}
+	if closer, ok := auth.(io.Closer); ok {
+		release = func() {
+			if closeErr := closer.Close(); closeErr != nil {
+				slog.WarnContext(ctx, "failed to close SSH agent connection", "err", closeErr)
+			}
+		}
+	}
+
 	httpClient := opts.HTTPClient
 	if httpClient == nil {
 		httpClient = ocmhttp.New()
+	}
+	if _, authenticated := auth.(client.HTTPAuth); ep.Protocol == "https" && (authenticated || ep.User != "" || ep.Password != "") {
+		httpClient = authenticatedHTTPClient(httpClient)
 	}
 	clientOptions := []client.Option{client.WithHTTPClient(httpClient)}
 	if option, ok := authOption(auth); ok {
 		clientOptions = append(clientOptions, option)
 	}
-	return clientOptions, nil
+	return clientOptions, release, nil
 }
 
 // fetchRepository fetches explicit refs or a pinned commit without depending on a valid remote HEAD.
