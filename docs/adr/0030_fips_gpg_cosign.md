@@ -86,7 +86,7 @@ OCM follows Go's three modes and attaches one rule to each:
 The steps covered by this rule:
 
 * a `cosign` that is not a FIPS build, or downloading the upstream `cosign`;
-* GPG keys other than unprotected v6 RSA or ECDSA P-256/P-384/P-521 keys, and exporting secret keys from the GnuPG keyring;
+* GPG keys other than unprotected v5 (LibrePGP) or v6 (RFC 9580) keys using RSA with at least 2048 bits or ECDSA P-256/P-384/P-521, and exporting secret keys from the GnuPG keyring;
 * Helm chart provenance verification;
 * component digests that do not use SHA-256 or SHA-512, because a signature must not rest on a weak hash. In the other modes these are accepted with a warning, so existing component versions stay usable.
 

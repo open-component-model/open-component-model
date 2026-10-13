@@ -1,9 +1,9 @@
 // Package fips140 runs GPG signing and verification with GODEBUG=fips140=only.
 //
-// In strict mode the GPG signing handler accepts only unprotected v6 keys whose signing-capable keys all use RSA or
-// ECDSA on a NIST curve, and SHA-2 signatures; it rejects everything else with an error instead of panicking. The
-// mode is fixed per process, so the directive below applies to this package's test binary only. Fixtures are made
-// inside fips140.WithoutEnforcement: key generation is setup, not code under test.
+// In strict mode the GPG signing handler accepts only unprotected v5 or v6 keys whose signing-capable keys all use RSA
+// (at least 2048 bits) or ECDSA on a NIST curve, and SHA-2 signatures; it rejects everything else with an error
+// instead of panicking. The mode is fixed per process, so the directive below applies to this package's test binary
+// only. Fixtures are made inside fips140.WithoutEnforcement: key generation is setup, not code under test.
 //
 //go:debug fips140=only
 package fips140

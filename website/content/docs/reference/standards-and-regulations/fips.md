@@ -22,7 +22,8 @@ status.
 
 **What you are responsible for.** Whether a deployment meets your regulatory
 requirements depends on more than OCM: the node operating system and kernel,
-the external binaries OCM runs (`cosign`), your configuration, and your
+the external binaries OCM runs (`cosign`, and `gpg` when GPG credentials set
+`keyringFingerprint`, see [GPG](#gpg)), your configuration, and your
 compliance regime. Check these with your compliance owner. OCM does not give
 compliance guarantees.
 
@@ -318,7 +319,7 @@ keyring) run with a debug log by default and are rejected in strict mode. See
 [GPG](#gpg).
 
 In a FIPS-restricted environment, use RSA signing, Sigstore with a FIPS build
-of `cosign`, or GPG with v6 RSA or ECDSA P keys, see [GPG](#gpg).
+of `cosign`, or GPG with v5 or v6 RSA or ECDSA P keys, see [GPG](#gpg).
 
 Some dependencies bring cryptography that does not run through the Go
 Cryptographic Module. `github.com/ProtonMail/go-crypto` (OpenPGP) is also
