@@ -17,7 +17,7 @@ import (
 
 func TestCosignDownloadURL(t *testing.T) {
 	t.Parallel()
-	base := "https://github.com/sigstore/cosign/releases/download/" + cosignVersion + "/"
+	base := "https://github.com/open-component-model/cosign/releases/download/" + cosignVersion + "/"
 	tests := []struct{ name, version, goos, goarch, want string }{
 		{"linux amd64", cosignVersion, "linux", "amd64", base + "cosign-linux-amd64"},
 		{"darwin arm64", cosignVersion, "darwin", "arm64", base + "cosign-darwin-arm64"},
@@ -74,9 +74,9 @@ func TestParseChecksum(t *testing.T) {
 
 func TestCosignVersion_IsSet(t *testing.T) {
 	t.Parallel()
-	semverRE := regexp.MustCompile(`^v\d+\.\d+\.\d+$`)
+	semverRE := regexp.MustCompile(`^v\d+\.\d+\.\d+\+ocm\.\d+$`)
 	if !semverRE.MatchString(cosignVersion) {
-		t.Fatalf("cosignVersion %q does not match required format vMAJOR.MINOR.PATCH", cosignVersion)
+		t.Fatalf("cosignVersion %q does not match the OCM cosign release format vMAJOR.MINOR.PATCH+ocm.N", cosignVersion)
 	}
 }
 

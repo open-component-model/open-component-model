@@ -437,7 +437,7 @@ For the conceptual picture (how Fulcio, Rekor, and OIDC fit together), see [Iden
 - A browser on the same machine (signing opens a browser window to log you in)
 - An OIDC identity with a provider supported by your Sigstore stack — on public Sigstore that's Google, GitHub, or Microsoft
 - Network access to `*.sigstore.dev` (in particular `fulcio.sigstore.dev`, `oauth2.sigstore.dev`, `rekor.sigstore.dev`, `tuf-repo-cdn.sigstore.dev`) — corporate networks often block these
-- [cosign](https://github.com/sigstore/cosign) v3.0.4 or later on your PATH; if it isn't, OCM downloads and caches it under `~/.cache/ocm/cosign/...`. To keep Sigstore signing inside the [FIPS 140-3]({{< relref "docs/reference/standards-and-regulations/fips.md" >}}#sigstore-and-cosign) boundary, put a cosign built against the Go Cryptographic Module on your PATH, such as [OCM's FIPS build](https://github.com/open-component-model/cosign/releases); with `GODEBUG=fips140=only`, OCM requires one
+- [cosign](https://github.com/open-component-model/cosign) v3.0.4 or later on your PATH; if it isn't, OCM downloads [OCM's FIPS build of cosign](https://github.com/open-component-model/cosign/releases) and caches it under `~/.cache/ocm/cosign/...`. That build keeps Sigstore signing inside the [FIPS 140-3]({{< relref "docs/reference/standards-and-regulations/fips.md" >}}#sigstore-and-cosign) boundary; with `GODEBUG=fips140=only`, OCM rejects a cosign on PATH that is not a FIPS build
 - A component version in a CTF archive or OCI registry (we'll use `github.com/acme.org/helloworld:1.0.0` from the [getting started guide]({{< relref "create-component-version.md" >}}); any component you can write to works)
 
 {{< callout context="note" >}}

@@ -43,12 +43,16 @@ func parseCosignVersion() string {
 	panic("COSIGN_VERSION not found in .env")
 }
 
-const cosignChecksumsURLFmt = "https://github.com/sigstore/cosign/releases/download/%s/cosign_checksums.txt"
+// cosignReleaseURL is the OCM cosign fork: upstream cosign rebuilt as a static
+// FIPS 140-3 binary (GOFIPS140), so downloaded binaries stay inside the FIPS boundary.
+const cosignReleaseURL = "https://github.com/open-component-model/cosign/releases/download/"
+
+const cosignChecksumsURLFmt = cosignReleaseURL + "%s/cosign_checksums.txt"
 
 // cosignDownloadURL returns the GitHub release download URL for the given
 // cosign version and platform.
 func cosignDownloadURL(version, goos, goarch string) string {
-	return fmt.Sprintf("https://github.com/sigstore/cosign/releases/download/%s/%s", version, cosignBinaryName(goos, goarch))
+	return cosignReleaseURL + version + "/" + cosignBinaryName(goos, goarch)
 }
 
 // cosignBinaryName returns the platform-specific binary name.

@@ -125,13 +125,19 @@
       ],
     },
     {
-      // OCM's FIPS cosign image is pinned in the CLI Containerfile and the
-      // controller Dockerfile. Bump both in one PR. Regex versioning so -ocm.N
-      // counts as a build number, not a prerelease or docker compatibility suffix.
+      // OCM's FIPS cosign build is pinned twice: the release in the sigstore
+      // handler's .env (auto-download, integration tests) and the image in the
+      // CLI Containerfile and controller Dockerfile. Bump all in one PR. The
+      // release is tagged vX.Y.Z+ocm.N, the image vX.Y.Z-ocm.N (OCI tags allow
+      // no "+"). Regex versioning reads ocm.N as a build number in both, not a
+      // prerelease or docker compatibility suffix.
       groupName: 'OCM cosign',
       groupSlug: 'ocm-cosign',
-      matchPackageNames: ['ghcr.io/open-component-model/cosign'],
-      versioning: 'regex:^v(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)-ocm\\.(?<build>\\d+)$',
+      matchPackageNames: [
+        'open-component-model/cosign',
+        'ghcr.io/open-component-model/cosign',
+      ],
+      versioning: 'regex:^v(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)[-+]ocm\\.(?<build>\\d+)$',
     },
     {
       // Keep the helm CLI pin (azure/setup-helm `version:` in the workflows,
