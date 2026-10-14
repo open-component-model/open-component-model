@@ -3786,7 +3786,7 @@ func (r redeployDisabledResolver) StoreForReference(ctx context.Context, referen
 type redeployDisabledStore struct{ spec.Store }
 
 func (s *redeployDisabledStore) Tag(ctx context.Context, desc ociImageSpecV1.Descriptor, reference string) error {
-	if _, err := s.Store.Resolve(ctx, reference); err == nil {
+	if _, err := s.Resolve(ctx, reference); err == nil {
 		return fmt.Errorf("redeploy disabled: %q cannot be updated as asset already exists", reference)
 	}
 	return s.Store.Tag(ctx, desc, reference)
@@ -4007,7 +4007,7 @@ func (r pushOnceResolver) StoreForReference(ctx context.Context, reference strin
 type pushOnceStore struct{ spec.Store }
 
 func (s *pushOnceStore) Push(ctx context.Context, desc ociImageSpecV1.Descriptor, r io.Reader) error {
-	if exists, err := s.Store.Exists(ctx, desc); err == nil && exists {
+	if exists, err := s.Exists(ctx, desc); err == nil && exists {
 		return fmt.Errorf("redeploy disabled: asset %s already exists", desc.Digest)
 	}
 	return s.Store.Push(ctx, desc, r)
