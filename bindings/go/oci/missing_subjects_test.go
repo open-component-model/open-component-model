@@ -43,18 +43,19 @@ func missingDescriptor(name string) ociImageSpecV1.Descriptor {
 	return ociImageSpecV1.Descriptor{MediaType: ociImageSpecV1.MediaTypeImageManifest, Digest: digest.FromString(name), Size: 42}
 }
 
-// ghostReferrers lists a referrer without content for the subject.
-type ghostReferrers struct {
+// listedReferrer lists referrer for subject in addition to the referrers the
+// store derives from pushed manifests. The referrer's content may be absent.
+type listedReferrer struct {
 	*memory.Store
-	subject, ghost ociImageSpecV1.Descriptor
+	subject, referrer ociImageSpecV1.Descriptor
 }
 
-func (g *ghostReferrers) Predecessors(ctx context.Context, desc ociImageSpecV1.Descriptor) ([]ociImageSpecV1.Descriptor, error) {
-	predecessors, err := g.Store.Predecessors(ctx, desc)
-	if err != nil || desc.Digest != g.subject.Digest {
+func (l *listedReferrer) Predecessors(ctx context.Context, desc ociImageSpecV1.Descriptor) ([]ociImageSpecV1.Descriptor, error) {
+	predecessors, err := l.Store.Predecessors(ctx, desc)
+	if err != nil || desc.Digest != l.subject.Digest {
 		return predecessors, err
 	}
-	return append(predecessors, g.ghost), nil
+	return append(predecessors, l.referrer), nil
 }
 
 func TestCopySkipsMissingSubjects(t *testing.T) {
@@ -104,7 +105,7 @@ func TestCopySkipsMissingSubjects(t *testing.T) {
 				t.Helper()
 				store := newStore(t)
 				root := pushTestManifest(t, store, layer(t, store), nil)
-				return &ghostReferrers{Store: store, subject: root, ghost: missingDescriptor("referrer")}, root
+				return &listedReferrer{Store: store, subject: root, referrer: missingDescriptor("referrer")}, root
 			},
 		},
 		{
@@ -124,6 +125,28 @@ func TestCopySkipsMissingSubjects(t *testing.T) {
 				layers := layer(t, store)
 				subject := pushTestManifest(t, store, layers, nil)
 				return store, pushTestManifest(t, store, layers, &subject)
+			},
+		},
+		{
+			// Stores keyed by media type (CTF, memory) report the mislabeled
+			// subject missing, so the root would be dropped silently.
+			name: "referrer declares subject with wrong media type",
+			setup: func(t *testing.T) (oras.ReadOnlyGraphTarget, ociImageSpecV1.Descriptor) {
+				t.Helper()
+				store := newStore(t)
+				layers := layer(t, store)
+				child := pushTestManifest(t, store, layers, nil)
+				data, err := json.Marshal(ociImageSpecV1.Index{
+					Versioned: specs.Versioned{SchemaVersion: 2},
+					MediaType: ociImageSpecV1.MediaTypeImageIndex,
+					Manifests: []ociImageSpecV1.Descriptor{child},
+				})
+				require.NoError(t, err)
+				root := pushTestBlob(t, store, ociImageSpecV1.MediaTypeImageIndex, data)
+				declared := root
+				declared.MediaType = ociImageSpecV1.MediaTypeImageManifest
+				signature := pushTestManifest(t, store, layers, &declared)
+				return &listedReferrer{Store: store, subject: root, referrer: signature}, root
 			},
 		},
 	}
