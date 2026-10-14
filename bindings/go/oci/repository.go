@@ -949,38 +949,40 @@ func (repo *Repository) buildAndPushOwnershipReferrer(ctx context.Context, store
 	// (MANIFEST_BLOB_UNKNOWN), so push the referrer's empty config/layer blob
 	// before the manifest itself.
 	empty := ociImageSpecV1.DescriptorEmptyJSON
-	if err := pushIfAbsent(ctx, store, empty, empty.Data); err != nil {
+	if err := pushIdempotent(ctx, store, empty, empty.Data); err != nil {
 		return fmt.Errorf("failed to push ownership referrer empty blob %s: %w", empty.Digest, err)
 	}
-	if err := pushIfAbsent(ctx, store, desc, body); err != nil {
+	if err := pushIdempotent(ctx, store, desc, body); err != nil {
 		return fmt.Errorf("failed to push ownership referrer %s: %w", desc.Digest, err)
 	}
 	return nil
 }
 
-// pushIfAbsent pushes desc only when the store does not already hold the
-// content-addressed blob, skipping the write when it is already present.
+// pushIdempotent pushes desc, treating the write as a no-op success when the
+// store already holds the content-addressed blob.
 //
-// Like tagIdempotent, this keeps the ownership referrer attach idempotent on
-// immutable/write-once registries without classifying registry errors: such a
-// registry rejects re-pushing an existing asset even when byte-identical, and
-// (on registries without the Referrers API) a referrer push also drives an
-// oras-internal referrers-index tag update that would collide. The ownership
-// referrer manifest and its empty config/layer blob are content-addressed and
-// deterministic, so an existing blob already reflects a completed prior attach;
-// the Exists pre-check short-circuits before any write is attempted.
-func pushIfAbsent(ctx context.Context, store spec.Store, desc ociImageSpecV1.Descriptor, data []byte) error {
-	exists, err := store.Exists(ctx, desc)
-	if err != nil {
-		return err
-	}
-	if exists {
+// Mirrors tagIdempotent: a bare oras store.Push never pre-checks existence, so
+// on an immutable/write-once registry a re-push of existing content is rejected
+// (and with a plain conflict, not errdef.ErrAlreadyExists, which only local
+// stores return). We branch on the post-condition instead of classifying the
+// error - if the content-addressed blob is already present, the end state we
+// wanted holds. The Exists check runs only on the push error path, so the happy
+// path keeps its single round trip.
+//
+// For a referrer manifest (which carries a subject) this also sidesteps the
+// oras-internal referrers-index tag update that store.Push drives on registries
+// without the Referrers API: the manifest PUT fails first on an immutable
+// registry, before the index step, and a completed prior attach already left
+// the index correct.
+func pushIdempotent(ctx context.Context, store spec.Store, desc ociImageSpecV1.Descriptor, data []byte) error {
+	err := store.Push(ctx, desc, bytes.NewReader(data))
+	if err == nil || errors.Is(err, errdef.ErrAlreadyExists) {
 		return nil
 	}
-	if err := store.Push(ctx, desc, bytes.NewReader(data)); err != nil && !errors.Is(err, errdef.ErrAlreadyExists) {
-		return err
+	if exists, rerr := store.Exists(ctx, desc); rerr == nil && exists {
+		return nil
 	}
-	return nil
+	return err
 }
 
 func warnOnConflictingOwnership(ctx context.Context, store spec.Store, subject ociImageSpecV1.Descriptor, component string) {
