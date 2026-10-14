@@ -42,10 +42,12 @@ RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked \
     --mount=type=cache,target=/root/.cache/go-build,sharing=locked \
     CGO_ENABLED=0 GOTOOLCHAIN=local GOFIPS140="${GOFIPS140:?GOFIPS140 build arg is required, see root .env}" GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -tags "${GO_TAGS}" -o manager ./kubernetes/controller/cmd
 
-# Static cosign linked against the Go Cryptographic Module (GOFIPS140=v1.0.0,
+# Static cosign linked against the Go Cryptographic Module (GOFIPS140=certified,
 # fips140=on by default), built and published from
-# https://github.com/open-component-model/cosign (Renovate group "OCM cosign"). The sigstore signing handler
-# in bindings/go/sigstore shells out to this binary.
+# https://github.com/open-component-model/cosign. Same release as COSIGN_VERSION in
+# bindings/go/sigstore/signing/handler/internal/.env (Renovate group "OCM cosign";
+# pin_sync_test.go there fails if they diverge). The sigstore signing handler in
+# bindings/go/sigstore shells out to this binary.
 FROM ghcr.io/open-component-model/cosign:v3.1.3-ocm.24@sha256:988088ff954cd443bda06c43618c376b1bfc1655d5e0e4392cd59da7a19a9bab AS cosign
 
 # Stage filesystem additions for the scratch final image. Only files are copied,
