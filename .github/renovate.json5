@@ -348,9 +348,21 @@
         '/(^|/)\\.env(\\.local)?$/',
       ],
       matchStrings: [
-        '# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s+.*?_VERSION=v?(?<currentValue>\\d+\\.\\d+\\.\\d+)',
+        '# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s+.*?_VERSION=v?(?<currentValue>\\d+\\.\\d+\\.\\d+)(?:\\s|$)',
       ],
       versioningTemplate: 'semver',
+    },
+    {
+      // OCM cosign release pin (vX.Y.Z+ocm.N). The generic .env manager above
+      // skips it (only plain semver), so the full tag is captured here for the
+      // "OCM cosign" group's regex versioning.
+      customType: 'regex',
+      managerFilePatterns: [
+        '/(^|/)\\.env(\\.local)?$/',
+      ],
+      matchStrings: [
+        '# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>open-component-model/cosign)\\s+COSIGN_VERSION=(?<currentValue>v\\d+\\.\\d+\\.\\d+\\+ocm\\.\\d+)',
+      ],
     },
     {
       // Automatic version bump for GO_VERSION, NPM_VERSION and NODE_VERSION in Netlify.
