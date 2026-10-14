@@ -9,10 +9,34 @@ import (
 	_ "embed"
 )
 
+//go:embed schemas/GitBearerCredentials.schema.json
+var schemaGitBearerCredentials []byte
+
 //go:embed schemas/GitCredentials.schema.json
 var schemaGitCredentials []byte
+
+//go:embed schemas/GitHTTPSCredentials.schema.json
+var schemaGitHTTPSCredentials []byte
+
+//go:embed schemas/GitSSHCredentials.schema.json
+var schemaGitSSHCredentials []byte
+
+// JSONSchema returns the JSON Schema for GitBearerCredentials.
+func (GitBearerCredentials) JSONSchema() []byte {
+	return schemaGitBearerCredentials
+}
 
 // JSONSchema returns the JSON Schema for GitCredentials.
 func (GitCredentials) JSONSchema() []byte {
 	return schemaGitCredentials
+}
+
+// JSONSchema returns the JSON Schema for GitHTTPSCredentials.
+func (GitHTTPSCredentials) JSONSchema() []byte {
+	return schemaGitHTTPSCredentials
+}
+
+// JSONSchema returns the JSON Schema for GitSSHCredentials.
+func (GitSSHCredentials) JSONSchema() []byte {
+	return schemaGitSSHCredentials
 }

@@ -2,337 +2,246 @@ package handler
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"crypto"
+	"encoding/hex"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
+	"github.com/Masterminds/semver/v3"
+	pgperrors "github.com/ProtonMail/go-crypto/openpgp/errors"
 	"github.com/stretchr/testify/require"
 
-	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	gpgcredentialsv1 "ocm.software/open-component-model/bindings/go/gpg/spec/credentials/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/gpg/spec/signing/v1alpha1"
 )
 
-// Test_Integration_GPGHandler signs and verifies against a real GnuPG installation.
+// Test_Integration_GPGHandler checks interoperability with a real GnuPG in both directions,
+// with keys and signatures gpg created.
 func Test_Integration_GPGHandler(t *testing.T) {
-	_, err := exec.LookPath("gpg")
-	require.NoError(t, err, "GnuPG >= 2.2 must be on PATH")
-
+	requireGPG(t)
 	h := mustHandler(t)
 
-	const passphrase = "pw"
-	signer := gpgKey(t, "signer", "ed25519", "sign", "")
-	rsaKey := gpgKey(t, "rsa", "rsa3072", "sign", "")
-	protected := gpgKey(t, "protected", "ed25519", "sign", passphrase)
-	other := gpgKey(t, "other", "ed25519", "sign", "")
-	certifyOnly := gpgKey(t, "certify-only", "ed25519", "cert", "")
-	certifyOnly.addSubkey(t, "ed25519", "sign")
+	withSubkey := gpgKey(t, "certify-only with signing subkey", "ed25519", "cert", "")
+	withSubkey.addSubkey(t, "ed25519", "sign")
+	keys := []*testKey{
+		gpgKey(t, "ed25519", "ed25519", "sign", ""),
+		gpgKey(t, "rsa3072", "rsa3072", "sign", ""),
+		gpgKey(t, "nistp256", "nistp256", "sign", ""),
+		gpgKey(t, "nistp384", "nistp384", "sign", ""),
+		gpgKey(t, "protected ed25519", "ed25519", "sign", "pw"),
+		withSubkey,
+	}
 
-	sha256Digest := makeDigest(t, crypto.SHA256, []byte("gpg integration"))
+	// Without hashAlgorithm, OCM and gpg each choose the hash for the key; SHA-512 suits every key.
+	for _, hash := range []v1alpha1.HashAlgorithm{"", v1alpha1.HashAlgorithmSHA512} {
+		digest := makeDigest(t, crypto.SHA256, []byte("gpg integration"))
+		cfg := &v1alpha1.Config{HashAlgorithm: hash}
+		gpgSignArgs := []string{"--armor", "--detach-sign", "--output", "-"}
+		if hash != "" {
+			gpgSignArgs = append(gpgSignArgs, "--digest-algo", strings.ReplaceAll(string(hash), "-", ""))
+		}
+		hashName := cmp.Or(string(hash), "default hash")
 
-	roundTrip := func(t *testing.T, r *require.Assertions, digest descruntime.Digest, cfg *v1alpha1.Config, priv, pub *gpgcredentialsv1.GPGCredentials) {
-		t.Helper()
-		sig, err := h.Sign(t.Context(), digest, cfg, priv)
+		for _, k := range keys {
+			t.Run(fmt.Sprintf("OCM signs, gpg verifies: %s, %s", k.name, hashName), func(t *testing.T) {
+				r := require.New(t)
+				info, err := h.Sign(t.Context(), digest, cfg, k.privCreds())
+				r.NoError(err)
+				out := k.gpg(t, "--status-fd", "1", "--verify", k.file(t, "sig.asc", info.Value), k.digestFile(t, digest.Value))
+				r.Contains(out, "[GNUPG:] GOODSIG")
+			})
+
+			t.Run(fmt.Sprintf("gpg signs, OCM verifies: %s, %s", k.name, hashName), func(t *testing.T) {
+				r := require.New(t)
+				sig := k.gpg(t, slices.Concat(gpgSignArgs, []string{k.digestFile(t, digest.Value)})...)
+				r.NoError(h.Verify(t.Context(), gpgSignature(digest, sig), cfg, k.pubCreds()))
+				r.NoError(h.Verify(t.Context(), gpgSignature(digest, sig), &v1alpha1.Config{KeyFingerprint: k.fpr}, k.pubCreds()))
+			})
+		}
+	}
+
+	// gpg --export-secret-subkeys replaces the primary secret key with a stub (GNU S2K extension "gnu-dummy"),
+	// like a key whose primary key is kept offline.
+	digest := makeDigest(t, crypto.SHA256, []byte("gpg integration"))
+	t.Run("offline primary key: the signing subkey signs", func(t *testing.T) {
+		r := require.New(t)
+		subkeysOnly := withSubkey.gpg(t, "--armor", "--export-secret-subkeys", withSubkey.fpr)
+		info, err := h.Sign(t.Context(), digest, &v1alpha1.Config{}, &gpgcredentialsv1.GPGCredentials{PrivateKeyPGP: subkeysOnly})
 		r.NoError(err)
-		r.NoError(h.Verify(t.Context(), gpgSignature(digest, sig.Value), cfg, pub))
-	}
+		r.NoError(h.Verify(t.Context(), gpgSignature(digest, info.Value), &v1alpha1.Config{KeyFingerprint: withSubkey.fpr}, withSubkey.pubCreds()))
+	})
 
-	tests := []struct {
-		name string
-		run  func(t *testing.T, r *require.Assertions)
-	}{
-		{
-			name: "signature format",
-			run: func(t *testing.T, r *require.Assertions) {
-				t.Helper()
-				sig, err := h.Sign(t.Context(), sha256Digest, &v1alpha1.Config{}, signer.privCreds())
-				r.NoError(err)
-				r.Equal(v1alpha1.AlgorithmGPG, sig.Algorithm)
-				r.Equal(v1alpha1.MediaTypeGPG, sig.MediaType)
-				r.True(strings.HasPrefix(sig.Value, "-----BEGIN PGP SIGNATURE-----"), sig.Value)
-			},
-		},
-		{
-			name: "RSA key with every hash algorithm",
-			run: func(t *testing.T, r *require.Assertions) {
-				t.Helper()
-				for alg, hash := range map[v1alpha1.HashAlgorithm]crypto.Hash{
-					v1alpha1.HashAlgorithmSHA256: crypto.SHA256,
-					v1alpha1.HashAlgorithmSHA384: crypto.SHA384,
-					v1alpha1.HashAlgorithmSHA512: crypto.SHA512,
-				} {
-					digest := makeDigest(t, hash, []byte("gpg integration"))
-					roundTrip(t, r, digest, &v1alpha1.Config{HashAlgorithm: alg}, rsaKey.privCreds(), rsaKey.pubCreds())
-				}
-			},
-		},
-		{
-			name: "passphrase-protected key",
-			run: func(t *testing.T, r *require.Assertions) {
-				t.Helper()
-				roundTrip(t, r, sha256Digest, &v1alpha1.Config{}, protected.privCreds(), protected.pubCreds())
-			},
-		},
-		{
-			name: "protected key with wrong passphrase",
-			run: func(t *testing.T, r *require.Assertions) {
-				t.Helper()
-				creds := protected.privCreds()
-				creds.Passphrase = "wrong"
-				_, err := h.Sign(t.Context(), sha256Digest, &v1alpha1.Config{}, creds)
-				r.Error(err)
-			},
-		},
-		{
-			name: "protected key without passphrase",
-			run: func(t *testing.T, r *require.Assertions) {
-				t.Helper()
-				creds := protected.privCreds()
-				creds.Passphrase = ""
-				_, err := h.Sign(t.Context(), sha256Digest, &v1alpha1.Config{}, creds)
-				r.Error(err)
-			},
-		},
-		{
-			name: "public key derived from private key material",
-			run: func(t *testing.T, r *require.Assertions) {
-				t.Helper()
-				roundTrip(t, r, sha256Digest, &v1alpha1.Config{}, signer.privCreds(), signer.privCreds())
-			},
-		},
-		{
-			name: "wrong public key",
-			run: func(t *testing.T, r *require.Assertions) {
-				t.Helper()
-				sig, err := h.Sign(t.Context(), sha256Digest, &v1alpha1.Config{}, signer.privCreds())
-				r.NoError(err)
-				r.Error(h.Verify(t.Context(), gpgSignature(sha256Digest, sig.Value), &v1alpha1.Config{}, other.pubCreds()))
-			},
-		},
-		{
-			name: "tampered digest",
-			run: func(t *testing.T, r *require.Assertions) {
-				t.Helper()
-				sig, err := h.Sign(t.Context(), sha256Digest, &v1alpha1.Config{}, signer.privCreds())
-				r.NoError(err)
-				tampered := makeDigest(t, crypto.SHA256, []byte("tampered"))
-				r.Error(h.Verify(t.Context(), gpgSignature(tampered, sig.Value), &v1alpha1.Config{}, signer.pubCreds()))
-			},
-		},
-		{
-			name: "key fingerprint selectors",
-			run: func(t *testing.T, r *require.Assertions) {
-				t.Helper()
-				for _, fp := range []string{signer.fpr, strings.ToLower(signer.fpr), signer.fpr[len(signer.fpr)-16:]} {
-					roundTrip(t, r, sha256Digest, &v1alpha1.Config{KeyFingerprint: fp}, signer.privCreds(), signer.pubCreds())
-				}
-			},
-		},
-		{
-			name: "unknown key fingerprint on sign",
-			run: func(t *testing.T, r *require.Assertions) {
-				t.Helper()
-				cfg := &v1alpha1.Config{KeyFingerprint: "DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF"}
-				_, err := h.Sign(t.Context(), sha256Digest, cfg, signer.privCreds())
-				r.Error(err)
-			},
-		},
-		{
-			name: "key fingerprint mismatch on verify",
-			run: func(t *testing.T, r *require.Assertions) {
-				t.Helper()
-				sig, err := h.Sign(t.Context(), sha256Digest, &v1alpha1.Config{}, other.privCreds())
-				r.NoError(err)
-				keyring := &gpgcredentialsv1.GPGCredentials{PublicKeyPGP: signer.public + "\n" + other.public}
-				cfg := &v1alpha1.Config{KeyFingerprint: signer.fpr}
-				err = h.Verify(t.Context(), gpgSignature(sha256Digest, sig.Value), cfg, keyring)
-				r.ErrorContains(err, "does not match the configured key fingerprint")
-			},
-		},
-		{
-			name: "public-only material as private key",
-			run: func(t *testing.T, r *require.Assertions) {
-				t.Helper()
-				creds := &gpgcredentialsv1.GPGCredentials{PrivateKeyPGP: signer.public}
-				_, err := h.Sign(t.Context(), sha256Digest, &v1alpha1.Config{}, creds)
-				r.ErrorContains(err, "no secret key found in private key material")
-			},
-		},
-		{
-			name: "certify-only primary key with signing subkey",
-			run: func(t *testing.T, r *require.Assertions) {
-				t.Helper()
-				for _, fp := range []string{"", certifyOnly.fpr} {
-					roundTrip(t, r, sha256Digest, &v1alpha1.Config{KeyFingerprint: fp}, certifyOnly.privCreds(), certifyOnly.pubCreds())
-				}
-			},
-		},
-		{
-			name: "signatures of the former go-crypto implementation still verify",
-			run: func(t *testing.T, r *require.Assertions) {
-				t.Helper()
-				pub := &gpgcredentialsv1.GPGCredentials{PublicKeyPGPFile: filepath.Join("testdata", "gocrypto", "public.asc")}
-				for name, hashAlg := range map[string]string{"sha256": "SHA-256", "sha512": "SHA-512"} {
-					digest := readFixture(t, name+".digest")
-					sig := readFixture(t, name+".sig.asc")
-					d := descruntime.Digest{HashAlgorithm: hashAlg, Value: digest}
-					r.NoError(h.Verify(t.Context(), gpgSignature(d, sig), &v1alpha1.Config{}, pub), name)
-					r.Error(h.Verify(t.Context(), gpgSignature(sha256Digest, sig), &v1alpha1.Config{}, pub), name)
-				}
-			},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			tt.run(t, require.New(t))
-		})
-	}
+	t.Run("offline primary key without signing subkey", func(t *testing.T) {
+		k := gpgKey(t, "primary signs", "ed25519", "sign", "")
+		k.addSubkey(t, "cv25519", "encr")
+		subkeysOnly := k.gpg(t, "--armor", "--export-secret-subkeys", k.fpr)
+		_, err := h.Sign(t.Context(), digest, &v1alpha1.Config{}, &gpgcredentialsv1.GPGCredentials{PrivateKeyPGP: subkeysOnly})
+		require.ErrorContains(t, err, "is a stub without secret key material")
+	})
+
+	// GnuPG reads LibrePGP v5 keys since 2.3 and creates PQC keys since 2.5.
+	t.Run("LibrePGP v5 key", func(t *testing.T) {
+		requireGPGVersion(t, "2.3.0")
+		interop(t, h, importedKey(t, "librepgp-v5", readFixture(t, "gnupg/librepgp-v5.asc")))
+	})
+	t.Run("PQC key with Kyber encryption subkey", func(t *testing.T) {
+		requireGPGVersion(t, "2.5.0")
+		interop(t, h, gpgKey(t, "pqc", "pqc", "default", ""))
+	})
+}
+
+// interop signs with OCM and verifies with gpg, and the other way round.
+func interop(t *testing.T, h *Handler, k *testKey) {
+	t.Helper()
+	r := require.New(t)
+	digest := makeDigest(t, crypto.SHA256, []byte("gpg integration"))
+	info, err := h.Sign(t.Context(), digest, &v1alpha1.Config{}, k.privCreds())
+	r.NoError(err)
+	r.Contains(k.gpg(t, "--status-fd", "1", "--verify", k.file(t, "sig.asc", info.Value), k.digestFile(t, digest.Value)), "[GNUPG:] GOODSIG")
+	sig := k.gpg(t, "--armor", "--detach-sign", "--output", "-", k.digestFile(t, digest.Value))
+	r.NoError(h.Verify(t.Context(), gpgSignature(digest, sig), &v1alpha1.Config{KeyFingerprint: k.fpr}, k.pubCreds()))
 }
 
 // Test_Integration_GPGHandler_Keyring signs and verifies with the keys of a GnuPG keyring
-// selected through GNUPGHOME, as a user's ~/.gnupg would be.
+// selected through keyringFingerprint in the credentials.
 func Test_Integration_GPGHandler_Keyring(t *testing.T) {
-	_, err := exec.LookPath("gpg")
-	require.NoError(t, err, "GnuPG >= 2.2 must be on PATH")
-
-	const passphrase = "pw"
-	keyring := gpgKey(t, "keyring", "ed25519", "sign", "")
-	protected := gpgKey(t, "protected", "ed25519", "sign", passphrase)
-	other := gpgKey(t, "other", "ed25519", "sign", "")
-	outsider := gpgKey(t, "outsider", "ed25519", "sign", "")
-	for _, material := range []string{protected.secret, other.public} {
-		path := filepath.Join(t.TempDir(), "key.asc")
-		require.NoError(t, os.WriteFile(path, []byte(material), 0o600))
-		keyring.gpg(t, "--import", path)
-	}
-	t.Setenv("GNUPGHOME", keyring.home)
-
+	requireGPG(t)
 	h := mustHandler(t)
 	digest := makeDigest(t, crypto.SHA256, []byte("keyring integration"))
-	keyringCfg := func(fpr string) *v1alpha1.Config {
-		return &v1alpha1.Config{KeySource: v1alpha1.KeySourceKeyring, KeyFingerprint: fpr}
-	}
-
-	t.Run("sign and verify with a pinned key", func(t *testing.T) {
-		r := require.New(t)
-		sig, err := h.Sign(t.Context(), digest, keyringCfg(keyring.fpr), nil)
-		r.NoError(err)
-		r.NoError(h.Verify(t.Context(), gpgSignature(digest, sig.Value), keyringCfg(keyring.fpr), nil))
-		r.NoError(h.Verify(t.Context(), gpgSignature(digest, sig.Value), &v1alpha1.Config{}, keyring.pubCreds()), "isolated verification of a keyring signature")
-	})
-	t.Run("sign with the default key", func(t *testing.T) {
-		r := require.New(t)
-		sig, err := h.Sign(t.Context(), digest, keyringCfg(""), nil)
-		r.NoError(err)
-		r.NoError(h.Verify(t.Context(), gpgSignature(digest, sig.Value), keyringCfg(keyring.fpr), nil))
-	})
-	t.Run("sign with a protected key and the passphrase from the credentials", func(t *testing.T) {
-		r := require.New(t)
-		sig, err := h.Sign(t.Context(), digest, keyringCfg(protected.fpr), &gpgcredentialsv1.GPGCredentials{Passphrase: passphrase})
-		r.NoError(err)
-		r.NoError(h.Verify(t.Context(), gpgSignature(digest, sig.Value), keyringCfg(protected.fpr), nil))
-	})
-	t.Run("another key in the keyring is not accepted", func(t *testing.T) {
-		r := require.New(t)
-		sig, err := h.Sign(t.Context(), digest, keyringCfg(keyring.fpr), nil)
-		r.NoError(err)
-		err = h.Verify(t.Context(), gpgSignature(digest, sig.Value), keyringCfg(other.fpr), nil)
-		r.ErrorContains(err, "does not match the configured key fingerprint")
-	})
-	t.Run("a key missing from the keyring fails", func(t *testing.T) {
-		r := require.New(t)
-		sig, err := h.Sign(t.Context(), digest, &v1alpha1.Config{}, outsider.privCreds())
-		r.NoError(err)
-		r.Error(h.Verify(t.Context(), gpgSignature(digest, sig.Value), keyringCfg(outsider.fpr), nil))
-	})
-}
-
-// Test_Integration_GPGHandler_RevokedKeyWithCosigner checks that a signature by a revoked pinned key
-// fails even when another trusted key adds a second signature to the same detached signature.
-func Test_Integration_GPGHandler_RevokedKeyWithCosigner(t *testing.T) {
-	_, err := exec.LookPath("gpg")
-	require.NoError(t, err, "GnuPG >= 2.2 must be on PATH")
-
-	h := mustHandler(t)
-	digest := makeDigest(t, crypto.SHA256, []byte("signed with a revoked key"))
-
-	pinned := gpgKey(t, "pinned", "ed25519", "sign", "")
-	cosigner := gpgKey(t, "cosigner", "ed25519", "sign", "")
-	revocation := revocationCertificate(t, pinned)
-
-	sigPinned, err := h.Sign(t.Context(), digest, &v1alpha1.Config{}, pinned.privCreds())
-	require.NoError(t, err)
-	sigCosigner, err := h.Sign(t.Context(), digest, &v1alpha1.Config{}, cosigner.privCreds())
-	require.NoError(t, err)
 
 	keyring := gpgKey(t, "keyring", "ed25519", "sign", "")
-	for _, material := range []string{pinned.public, cosigner.public, revocation} {
-		path := filepath.Join(t.TempDir(), "key.asc")
-		require.NoError(t, os.WriteFile(path, []byte(material), 0o600))
-		keyring.gpg(t, "--import", path)
+	protected := gpgKey(t, "protected", "rsa3072", "sign", "pw")
+	other := gpgKey(t, "other", "ed25519", "sign", "")
+	withSubkey := gpgKey(t, "with signing subkey", "ed25519", "cert", "")
+	withSubkey.addSubkey(t, "nistp256", "sign")
+	keyring.importKeys(t, protected.secret, other.public, withSubkey.secret)
+	creds := func(fpr string) *gpgcredentialsv1.GPGCredentials {
+		return &gpgcredentialsv1.GPGCredentials{KeyringFingerprint: fpr, KeyringHome: keyring.home}
 	}
-	t.Setenv("GNUPGHOME", keyring.home)
 
-	tests := []struct {
-		name  string
-		cfg   *v1alpha1.Config
-		creds *gpgcredentialsv1.GPGCredentials
-	}{
-		{
-			name: "keyring",
-			cfg:  &v1alpha1.Config{KeySource: v1alpha1.KeySourceKeyring, KeyFingerprint: pinned.fpr},
-		},
-		{
-			name:  "isolated home with the revocation in the public key material",
-			cfg:   &v1alpha1.Config{KeyFingerprint: pinned.fpr},
-			creds: &gpgcredentialsv1.GPGCredentials{PublicKeyPGP: pinned.public + "\n" + revocation + "\n" + cosigner.public},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			r := require.New(t)
-			r.ErrorContains(h.Verify(t.Context(), gpgSignature(digest, sigPinned.Value), tt.cfg, tt.creds), "REVKEYSIG")
-			r.ErrorContains(h.Verify(t.Context(), gpgSignature(digest, sigCosigner.Value+sigPinned.Value), tt.cfg, tt.creds), "REVKEYSIG",
-				"a co-signature by another key must not make the revoked key's signature acceptable")
+	t.Run("sign and verify", func(t *testing.T) {
+		r := require.New(t)
+		info, err := h.Sign(t.Context(), digest, &v1alpha1.Config{}, creds(keyring.fpr))
+		r.NoError(err)
+		r.NoError(h.Verify(t.Context(), gpgSignature(digest, info.Value), &v1alpha1.Config{}, creds(keyring.fpr)))
+		r.NoError(h.Verify(t.Context(), gpgSignature(digest, info.Value), &v1alpha1.Config{}, keyring.pubCreds()), "exported public key material")
+		r.Contains(keyring.gpg(t, "--status-fd", "1", "--verify", keyring.file(t, "sig.asc", info.Value), keyring.digestFile(t, digest.Value)), "[GNUPG:] GOODSIG")
+	})
+
+	t.Run("GNUPGHOME selects the keyring when keyringHome is empty", func(t *testing.T) {
+		r := require.New(t)
+		t.Setenv("GNUPGHOME", keyring.home)
+		c := &gpgcredentialsv1.GPGCredentials{KeyringFingerprint: keyring.fpr}
+		info, err := h.Sign(t.Context(), digest, &v1alpha1.Config{}, c)
+		r.NoError(err)
+		r.NoError(h.Verify(t.Context(), gpgSignature(digest, info.Value), &v1alpha1.Config{}, c))
+	})
+
+	t.Run("fingerprint as printed by gpg --fingerprint", func(t *testing.T) {
+		_, err := h.Sign(t.Context(), digest, &v1alpha1.Config{}, creds(spaced(strings.ToLower(keyring.fpr))))
+		require.NoError(t, err)
+	})
+
+	t.Run("protected key with passphrase", func(t *testing.T) {
+		r := require.New(t)
+		c := creds(protected.fpr)
+		c.Passphrase = "pw"
+		info, err := h.Sign(t.Context(), digest, &v1alpha1.Config{}, c)
+		r.NoError(err)
+		r.NoError(h.Verify(t.Context(), gpgSignature(digest, info.Value), &v1alpha1.Config{}, c))
+	})
+
+	for name, passphrase := range map[string]string{"without passphrase": "", "with wrong passphrase": "wrong"} {
+		t.Run("protected key "+name, func(t *testing.T) {
+			c := creds(protected.fpr)
+			c.Passphrase = passphrase
+			_, err := h.Sign(t.Context(), digest, &v1alpha1.Config{}, c)
+			require.ErrorContains(t, err, "export GPG private key from the GnuPG keyring")
 		})
 	}
+
+	t.Run("subkey fingerprint signs with that subkey", func(t *testing.T) {
+		r := require.New(t)
+		subFpr := withSubkey.subkeyFingerprints(t)[0]
+		info, err := h.Sign(t.Context(), digest, &v1alpha1.Config{}, creds(subFpr))
+		r.NoError(err)
+		r.NoError(h.Verify(t.Context(), gpgSignature(digest, info.Value), &v1alpha1.Config{}, creds(withSubkey.fpr)))
+		r.NoError(h.Verify(t.Context(), gpgSignature(digest, info.Value), &v1alpha1.Config{}, creds(subFpr)))
+	})
+
+	t.Run("config pin of another key", func(t *testing.T) {
+		r := require.New(t)
+		info, err := h.Sign(t.Context(), digest, &v1alpha1.Config{}, creds(keyring.fpr))
+		r.NoError(err)
+		err = h.Verify(t.Context(), gpgSignature(digest, info.Value), &v1alpha1.Config{KeyFingerprint: other.fpr}, creds(keyring.fpr))
+		r.ErrorContains(err, "does not match the configured key fingerprint")
+	})
+
+	t.Run("signature by another key in the keyring", func(t *testing.T) {
+		info, err := h.Sign(t.Context(), digest, &v1alpha1.Config{}, other.privCreds())
+		require.NoError(t, err)
+		// Only the keyringFingerprint key is exported, so the other key in the keyring is unknown.
+		err = h.Verify(t.Context(), gpgSignature(digest, info.Value), &v1alpha1.Config{}, creds(keyring.fpr))
+		require.ErrorIs(t, err, pgperrors.ErrUnknownIssuer)
+	})
+
+	t.Run("public key only in the keyring", func(t *testing.T) {
+		_, err := h.Sign(t.Context(), digest, &v1alpha1.Config{}, creds(other.fpr))
+		require.ErrorContains(t, err, fmt.Sprintf("no secret key %s found in the GnuPG keyring", other.fpr))
+	})
+
+	t.Run("key not in the keyring", func(t *testing.T) {
+		outsider := gpgKey(t, "outsider", "ed25519", "sign", "")
+		err := h.Verify(t.Context(), gpgSignature(digest, "irrelevant"), &v1alpha1.Config{}, creds(outsider.fpr))
+		require.ErrorContains(t, err, fmt.Sprintf("key %s not found in the GnuPG keyring", outsider.fpr))
+	})
+
+	t.Run("revocation imported into the keyring", func(t *testing.T) {
+		r := require.New(t)
+		revoked := gpgKey(t, "revoked", "ed25519", "sign", "")
+		keyring.importKeys(t, revoked.public)
+		info, err := h.Sign(t.Context(), digest, &v1alpha1.Config{}, revoked.privCreds())
+		r.NoError(err)
+		r.NoError(h.Verify(t.Context(), gpgSignature(digest, info.Value), &v1alpha1.Config{}, creds(revoked.fpr)))
+
+		keyring.importKeys(t, revoked.revocationCertificate(t))
+		err = h.Verify(t.Context(), gpgSignature(digest, info.Value), &v1alpha1.Config{}, creds(revoked.fpr))
+		r.ErrorIs(err, pgperrors.ErrKeyRevoked)
+	})
 }
 
-// Test_Integration_GPGHandler_LongTMPDIR checks that signing works when the isolated GnuPG home
-// under $TMPDIR would exceed the Unix socket path limit of gpg-agent.
-func Test_Integration_GPGHandler_LongTMPDIR(t *testing.T) {
+func requireGPG(t *testing.T) {
+	t.Helper()
 	_, err := exec.LookPath("gpg")
 	require.NoError(t, err, "GnuPG >= 2.2 must be on PATH")
-	r := require.New(t)
+}
 
-	h := mustHandler(t)
-	signer := gpgKey(t, "signer", "ed25519", "sign", "")
-	digest := makeDigest(t, crypto.SHA256, []byte("long TMPDIR"))
-
-	// Not t.TempDir(): this test deliberately builds a long $TMPDIR, and t.TempDir's own
-	// long path can overflow the Unix socket path limit of gpg-agent on macOS.
-	//nolint:usetesting // see above: deliberately using os.MkdirTemp to control $TMPDIR length
-	long, err := os.MkdirTemp("", "ocm-gpg-test-")
-	r.NoError(err)
-	t.Cleanup(func() { _ = os.RemoveAll(long) })
-	long = filepath.Join(long, strings.Repeat("d", max(1, 100-len(long))))
-	r.NoError(os.MkdirAll(long, 0o700))
-	t.Setenv("TMPDIR", long)
-
-	sig, err := h.Sign(t.Context(), digest, &v1alpha1.Config{}, signer.privCreds())
-	r.NoError(err, "signing must not depend on the length of $TMPDIR (%d bytes)", len(long))
-	r.NoError(h.Verify(t.Context(), gpgSignature(digest, sig.Value), &v1alpha1.Config{}, signer.pubCreds()))
+// requireGPGVersion skips the test if the gpg on PATH is older than minimum.
+func requireGPGVersion(t *testing.T, minimum string) {
+	t.Helper()
+	out, err := exec.CommandContext(t.Context(), "gpg", "--version").Output()
+	require.NoError(t, err)
+	// The first line is "gpg (GnuPG) <version>".
+	firstLine, _, _ := strings.Cut(string(out), "\n")
+	fields := strings.Fields(firstLine)
+	require.NotEmpty(t, fields)
+	version := fields[len(fields)-1]
+	if semver.MustParse(version).LessThan(semver.MustParse(minimum)) {
+		t.Skipf("needs GnuPG >= %s, found %s", minimum, version)
+	}
 }
 
 // testKey is an OpenPGP key generated by gpg in its own home directory.
 type testKey struct {
-	home, passphrase, fpr string
-	secret, public        string
+	name, home, passphrase, fpr string
+	secret, public              string
 }
 
 func (k *testKey) privCreds() *gpgcredentialsv1.GPGCredentials {
@@ -346,6 +255,25 @@ func (k *testKey) pubCreds() *gpgcredentialsv1.GPGCredentials {
 // gpgKey generates a key whose primary key has the given algorithm and usage.
 func gpgKey(t *testing.T, name, algo, usage, passphrase string) *testKey {
 	t.Helper()
+	k := &testKey{name: name, home: gpgHome(t), passphrase: passphrase}
+	k.gpg(t, "--quick-gen-key", "OCM Test "+name+" <ocm-test@example.com>", algo, usage, "never")
+	k.fpr = k.fingerprints(t)[0]
+	k.export(t)
+	return k
+}
+
+// importedKey imports an unprotected armored secret key into its own home directory.
+func importedKey(t *testing.T, name, secret string) *testKey {
+	t.Helper()
+	k := &testKey{name: name, home: gpgHome(t), secret: secret}
+	k.importKeys(t, secret)
+	k.fpr = k.fingerprints(t)[0]
+	k.public = k.gpg(t, "--armor", "--export", k.fpr)
+	return k
+}
+
+func gpgHome(t *testing.T) string {
+	t.Helper()
 	// Not t.TempDir(): its long path can overflow the Unix socket path limit of gpg-agent on macOS.
 	//nolint:usetesting // see above: deliberately using a short base path for gpg-agent sockets
 	home, err := os.MkdirTemp("", "ocm-gpg-test-")
@@ -354,18 +282,7 @@ func gpgKey(t *testing.T, name, algo, usage, passphrase string) *testKey {
 		_ = exec.CommandContext(context.Background(), "gpgconf", "--homedir", home, "--kill", "all").Run()
 		_ = os.RemoveAll(home)
 	})
-	k := &testKey{home: home, passphrase: passphrase}
-	k.gpg(t, "--quick-gen-key", "OCM Test "+name+" <ocm-test@example.com>", algo, usage, "never")
-	// The first fpr record of a single-key listing belongs to the primary key.
-	for line := range strings.SplitSeq(k.gpg(t, "--with-colons", "--list-secret-keys"), "\n") {
-		if fields := strings.Split(line, ":"); fields[0] == "fpr" && len(fields) > 9 {
-			k.fpr = fields[9]
-			break
-		}
-	}
-	require.NotEmpty(t, k.fpr)
-	k.export(t)
-	return k
+	return home
 }
 
 func (k *testKey) addSubkey(t *testing.T, algo, usage string) {
@@ -380,6 +297,61 @@ func (k *testKey) export(t *testing.T) {
 	k.public = k.gpg(t, "--armor", "--export", k.fpr)
 }
 
+// subkeyFingerprints returns the fingerprints of k's subkeys.
+func (k *testKey) subkeyFingerprints(t *testing.T) []string {
+	t.Helper()
+	return k.fingerprints(t)[1:]
+}
+
+// fingerprints returns the fingerprints of k's key, the primary key first, then the subkeys. Before k.fpr is set,
+// it lists the only key in k's home directory.
+func (k *testKey) fingerprints(t *testing.T) []string {
+	t.Helper()
+	args := []string{"--with-colons", "--with-subkey-fingerprints", "--list-keys"}
+	if k.fpr != "" {
+		args = append(args, k.fpr)
+	}
+	var fprs []string
+	for line := range strings.SplitSeq(k.gpg(t, args...), "\n") {
+		if fields := strings.Split(line, ":"); fields[0] == "fpr" && len(fields) > 9 {
+			fprs = append(fprs, fields[9])
+		}
+	}
+	require.NotEmpty(t, fprs)
+	return fprs
+}
+
+func (k *testKey) importKeys(t *testing.T, keys ...string) {
+	t.Helper()
+	for i, key := range keys {
+		k.gpg(t, "--import", k.file(t, fmt.Sprintf("import-%d.asc", i), key))
+	}
+}
+
+// revocationCertificate returns the revocation certificate gpg generated for k, ready to import.
+func (k *testKey) revocationCertificate(t *testing.T) string {
+	t.Helper()
+	b, err := os.ReadFile(filepath.Join(k.home, "openpgp-revocs.d", k.fpr+".rev"))
+	require.NoError(t, err)
+	// gpg prefixes the armor header with ":" so that the certificate is not imported by accident.
+	return strings.ReplaceAll(string(b), ":-----BEGIN PGP PUBLIC KEY BLOCK-----", "-----BEGIN PGP PUBLIC KEY BLOCK-----")
+}
+
+// digestFile writes the digest bytes that OCM signs to a file for gpg.
+func (k *testKey) digestFile(t *testing.T, hexDigest string) string {
+	t.Helper()
+	b, err := hex.DecodeString(hexDigest)
+	require.NoError(t, err)
+	return k.file(t, "digest.bin", string(b))
+}
+
+func (k *testKey) file(t *testing.T, name, content string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), name)
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
+	return path
+}
+
 func (k *testKey) gpg(t *testing.T, args ...string) string {
 	t.Helper()
 	base := []string{"--batch", "--homedir", k.home, "--pinentry-mode", "loopback", "--passphrase", k.passphrase}
@@ -389,20 +361,4 @@ func (k *testKey) gpg(t *testing.T, args ...string) string {
 	out, err := cmd.Output()
 	require.NoError(t, err, "gpg %v: %s", args, stderr.String())
 	return string(out)
-}
-
-// revocationCertificate returns the revocation certificate gpg generated for k, ready to import.
-func revocationCertificate(t *testing.T, k *testKey) string {
-	t.Helper()
-	b, err := os.ReadFile(filepath.Join(k.home, "openpgp-revocs.d", k.fpr+".rev"))
-	require.NoError(t, err)
-	// gpg prefixes the armor header with ":" so that the certificate is not imported by accident.
-	return strings.ReplaceAll(string(b), ":-----BEGIN PGP PUBLIC KEY BLOCK-----", "-----BEGIN PGP PUBLIC KEY BLOCK-----")
-}
-
-func readFixture(t *testing.T, name string) string {
-	t.Helper()
-	b, err := os.ReadFile(filepath.Join("testdata", "gocrypto", name))
-	require.NoError(t, err)
-	return strings.TrimSpace(string(b))
 }
