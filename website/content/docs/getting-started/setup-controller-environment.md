@@ -363,7 +363,7 @@ helm upgrade --install argocd argo/argo-cd \
 
 ```
 
-Wait for all pods to become ready. The chart runs a setup Job (`argocd-redis-secret-init`) whose pod ends as `Completed` and never becomes ready. Without the field selector, `kubectl wait` would wait for it and time out:
+Wait for all pods to become ready:
 
 ```shell
 kubectl wait --for=condition=Ready pods --all -n argocd \
