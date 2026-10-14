@@ -161,7 +161,7 @@ An RGD can define a brand-new schema-based kind (for example, a `Podinfo` or `Bo
 least-privilege [aggregation mode](https://kro.run/docs/advanced/access-control), creating and managing
 instances of that kind, or any other object the RGD templates, requires extra RBAC for kro's own
 `ServiceAccount`. The [setup guide]({{< relref "/docs/getting-started/setup-controller-environment.md" >}})
-installs kro in this mode and already creates such roles for the OCM resources and for the Flux or Argo CD
+installs kro in this mode and already creates such roles for the OCM resources and for the Flux or ArgoCD
 resources.
 
 Create a `ClusterRole` scoped to the kinds your RGDs create and manage, and label it
