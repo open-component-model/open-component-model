@@ -46,7 +46,7 @@ RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked \
 # fips140=on by default), built and published from
 # https://github.com/open-component-model/cosign (Renovate group "OCM cosign"). The sigstore signing handler
 # in bindings/go/sigstore shells out to this binary.
-FROM ghcr.io/open-component-model/cosign:v3.1.3-ocm.23@sha256:04a3f2404c0bc9e79f507898f1d322031df86b9761e9f8a387d0786071182175 AS cosign
+FROM ghcr.io/open-component-model/cosign:v3.1.3-ocm.24@sha256:988088ff954cd443bda06c43618c376b1bfc1655d5e0e4392cd59da7a19a9bab AS cosign
 
 # Stage filesystem additions for the scratch final image. Only files are copied,
 # so the stage runs on the build platform.
