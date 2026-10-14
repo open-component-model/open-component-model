@@ -903,7 +903,7 @@ The composite and its composed resources live in `$BOOTSTRAP_NAMESPACE` (`defaul
 (`bootstrap-component`), matching the XRD's default. Create `bootstrap-xr.yaml`:
 
 ```shell
-cat > bootstrap-xr.yaml << EOF
+cat > bootstrap-xr.yaml << 'EOF'
 apiVersion: ocm.software/v1alpha1
 kind: Bootstrap
 metadata:
@@ -923,7 +923,7 @@ EOF
 Apply the composite to the cluster:
 
 ```bash
-kubectl apply -f bootstrap-xr.yaml
+envsubst < bootstrap-xr.yaml | kubectl apply -f -
 ```
 
 <details>
