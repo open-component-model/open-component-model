@@ -167,6 +167,8 @@ func tagIdempotent(ctx context.Context, store spec.Store, desc ociImageSpecV1.De
 		return nil
 	}
 	if existing, rerr := store.Resolve(ctx, reference); rerr == nil && existing.Digest == desc.Digest {
+		slogcontext.Log(ctx, slog.LevelDebug, "tag already points at the intended digest; treating rejected re-tag as a no-op",
+			slog.String("reference", reference), slog.String("digest", desc.Digest.String()), slog.Any("error", err))
 		return nil
 	}
 	return err
@@ -957,6 +959,8 @@ func pushIdempotent(ctx context.Context, store spec.Store, desc ociImageSpecV1.D
 		return nil
 	}
 	if exists, rerr := store.Exists(ctx, desc); rerr == nil && exists {
+		slogcontext.Log(ctx, slog.LevelDebug, "content already present; treating rejected re-push as a no-op",
+			slog.String("digest", desc.Digest.String()), slog.Any("error", err))
 		return nil
 	}
 	return err
