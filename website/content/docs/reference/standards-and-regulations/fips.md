@@ -295,7 +295,7 @@ versions with existing MD5 or SHA-1 digests keep working:
 Resources excluded from the signature (`NO-DIGEST` / `EXCLUDE-FROM-SIGNATURE`)
 are exempt. Digests that OCM computes itself, for example when adding a
 component version from a constructor, already use SHA-256, and downloading a
-resource accepts only SHA-256 digests in any mode.
+resource accepts only SHA-256 and SHA-512 digests in any mode.
 
 MD5 and SHA-1 remain usable for purposes that are not security-relevant, such
 as Git object IDs or caching.

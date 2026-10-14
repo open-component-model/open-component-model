@@ -35,8 +35,9 @@ func TestDigest_Parse(t *testing.T) {
 			expected: digest.NewDigestFromEncoded(digest.SHA256, value),
 		},
 		{
-			name:   "sha-512 is not supported",
-			digest: &descruntime.Digest{HashAlgorithm: "SHA-512", Value: digest.SHA512.FromString("content").Encoded()},
+			name:     "sha-512",
+			digest:   &descruntime.Digest{HashAlgorithm: "SHA-512", Value: digest.SHA512.FromString("content").Encoded()},
+			expected: digest.SHA512.FromString("content"),
 		},
 		{
 			name:     "nil digest",

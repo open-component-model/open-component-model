@@ -132,7 +132,15 @@ func ociDigest(d *descriptor.Digest) (digest.Digest, error) {
 	default:
 		return "", fmt.Errorf("unsupported hash algorithm %q", d.HashAlgorithm)
 	}
-	parsed := digest.NewDigestFromEncoded(algorithm, strings.ToLower(d.Value))
+	value := strings.ToLower(d.Value)
+	// accept a value spelled "<algorithm>:<hex>", as repository.VerifyDownload does
+	if prefix, encoded, prefixed := strings.Cut(value, ":"); prefixed {
+		if digest.Algorithm(strings.ReplaceAll(prefix, "-", "")) != algorithm {
+			return "", fmt.Errorf("digest value %q carries algorithm %q but hashAlgorithm is %q", d.Value, prefix, d.HashAlgorithm)
+		}
+		value = encoded
+	}
+	parsed := digest.NewDigestFromEncoded(algorithm, value)
 	if err := parsed.Validate(); err != nil {
 		return "", fmt.Errorf("invalid digest %q: %w", d.Value, err)
 	}

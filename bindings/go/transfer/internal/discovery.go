@@ -42,8 +42,8 @@ type multiResolver struct {
 	resolverMap map[string]resolvers.ComponentVersionRepositoryResolver
 	// rootPin returns the digest a root component key is pinned to, nil if it is not pinned.
 	rootPin func(key string) *descriptor.Digest
-	// expectedDigest returns the digest a parent's component reference expects for id, nil if none.
-	expectedDigest func(id runtime.Identity) *descriptor.Digest
+	// expectedDigests returns the digests parents' component references expect for id.
+	expectedDigests func(id runtime.Identity) []descriptor.Digest
 }
 
 // Resolve fetches the component descriptor for the given key from the appropriate resolver.
@@ -105,15 +105,17 @@ func (r *multiResolver) Resolve(ctx context.Context, key string) (*discoveryValu
 		return nil, fmt.Errorf("failed getting component version %s:%s: %w", component, version, err)
 	}
 
-	if expected := r.expectedDigest(runtime.Identity{
+	// Every digest a parent's reference expects must match. They may be spelled differently
+	// (hash or normalisation algorithm) and still all be valid for the same descriptor.
+	for _, expected := range r.expectedDigests(runtime.Identity{
 		descriptor.IdentityAttributeName:    component,
 		descriptor.IdentityAttributeVersion: version,
-	}); expected != nil {
+	}) {
 		slog.DebugContext(ctx, "verifying digest for resolved descriptor",
 			"component", component, "version", version,
 			"expectedDigest", expected.Value)
 		if err := signing.VerifyDigestMatchesDescriptor(
-			ctx, desc, descriptor.Signature{Digest: *expected}, slog.Default(),
+			ctx, desc, descriptor.Signature{Digest: expected}, slog.Default(),
 		); err != nil {
 			return nil, fmt.Errorf("failed verifying resolved descriptor matches expected digest: %w", err)
 		}
@@ -157,8 +159,9 @@ type discoverer struct {
 
 	// discoveredDigests stores expected digests from component references.
 	// When a parent references a child with a pinned digest, the digest is recorded here
-	// and later verified by the multiResolver after fetching the child descriptor.
-	discoveredDigests map[string]descriptor.Digest
+	// and later verified by the multiResolver after fetching the child descriptor. All
+	// distinct digests of a child are kept, so a later parent cannot replace an earlier one.
+	discoveredDigests map[string][]descriptor.Digest
 
 	// targetMap tracks which target repositories each component should be transferred to.
 	// Seeded from explicit TransferRoots and propagated to children during Discover.
@@ -202,21 +205,14 @@ func (d *discoverer) Discover(ctx context.Context, parent *discoveryValue) ([]st
 			"parent", parentKey, "child", key,
 			"hasDigest", ref.Digest.Value != "")
 
-		// Record expected digest for later verification during resolution. Parents that
-		// expect different digests for the same component version cannot both be satisfied.
+		// Record expected digest for later verification during resolution.
 		if ref.Digest.Value != "" {
 			id := ref.ToComponentIdentity().String()
 			d.mu.Lock()
-			existing, conflict := d.discoveredDigests[id]
-			conflict = conflict && existing != ref.Digest
-			if !conflict {
-				d.discoveredDigests[id] = ref.Digest
+			if !slices.Contains(d.discoveredDigests[id], ref.Digest) {
+				d.discoveredDigests[id] = append(d.discoveredDigests[id], ref.Digest)
 			}
 			d.mu.Unlock()
-			if conflict {
-				return nil, fmt.Errorf("component version %s is referenced with conflicting digests %s (by %s) and %s (recorded before)",
-					key, repository.FormatDigestPin(&ref.Digest), parentKey, repository.FormatDigestPin(&existing))
-			}
 		}
 
 		d.mu.Lock()

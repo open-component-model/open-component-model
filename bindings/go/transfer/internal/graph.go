@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"slices"
 
 	"ocm.software/open-component-model/bindings/go/dag"
 	dagsync "ocm.software/open-component-model/bindings/go/dag/sync"
@@ -101,7 +102,7 @@ func BuildGraphDefinition(
 
 	disc := &discoverer{
 		recursive:         cfg.Recursive,
-		discoveredDigests: make(map[string]descruntime.Digest),
+		discoveredDigests: make(map[string][]descruntime.Digest),
 		targetMap:         targetMap,
 		resolverMap:       resolverMap,
 	}
@@ -118,17 +119,13 @@ func BuildGraphDefinition(
 			}
 			return nil
 		},
-		expectedDigest: func(id runtime.Identity) *descruntime.Digest {
+		expectedDigests: func(id runtime.Identity) []descruntime.Digest {
 			disc.mu.Lock()
 			defer disc.mu.Unlock()
 			if disc.recursive == 0 {
 				return nil
 			}
-			dig, ok := disc.discoveredDigests[id.String()]
-			if !ok {
-				return nil
-			}
-			return &dig
+			return slices.Clone(disc.discoveredDigests[id.String()])
 		},
 	}
 
