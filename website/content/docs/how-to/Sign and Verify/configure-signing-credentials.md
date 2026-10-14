@@ -178,10 +178,20 @@ configurations:
 {{< /details >}}
 
 {{< callout context="note" >}}
-For passphrase-protected private keys, add a top-level `passphrase: <secret>` field next to `privateKeyPGPFile`. OCM passes the passphrase to `gpg` on standard input, never as a command-line argument and never written to disk. GnuPG unlocks the key in a temporary GnuPG home directory, which OCM removes after each operation.
+For passphrase-protected private keys, add a top-level `passphrase: <secret>` field next to `privateKeyPGPFile`. OCM unlocks the key in memory; with `GODEBUG=fips140=only`, protected keys are rejected. For `keyringFingerprint`, OCM also sends the passphrase to `gpg` on standard input to export the key.
 {{< /callout >}}
 
 If your keyring contains multiple keys, pin the one to use by adding `keyFingerprint` to the GPG signer (set in the [sign how-to]({{< relref "sign-component-version.md" >}})), next to the handler type rather than in the credentials.
+
+To use a key from your GnuPG keyring instead of key files, set `keyringFingerprint` in the credentials to the **full** fingerprint (40 or 64 hex characters) of the key, and optionally `keyringHome` to a non-default GnuPG home directory. Remove the key file fields — they are mutually exclusive with `keyringFingerprint`. OCM runs only `gpg --export` / `gpg --export-secret-keys`; all cryptography runs in OCM. Hardware-token keys are not supported.
+
+```yaml
+credentials:
+  - type: GPGCredentials/v1alpha1
+    keyringFingerprint: B118BE3A32BE4AF28E37E881167C7102F8AC81E4
+    keyringHome: /path/to/gnupg   # optional; defaults to gpg's default
+    passphrase: my-secret         # optional; needed for passphrase-protected keyring keys
+```
 
 {{< /tab >}}
 {{< /tabs >}}

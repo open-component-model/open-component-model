@@ -27,7 +27,7 @@ with `local blob uploader cannot copy access type …`.
 ## Default `match`
 
 ```yaml
-match: resource.access.isType(["LocalBlob", "OCIImage", "Helm", "Wget", "S3/v2", "GitHub", "Git"])
+match: resource.access.isType(["LocalBlob", "OCIImage", "OCIImageLayer", "Helm", "Wget", "S3/v2", "GitHub", "Git"])
 ```
 
 The default selects the access types the uploader can handle. An explicit `match`

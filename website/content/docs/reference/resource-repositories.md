@@ -377,9 +377,8 @@ is `Git`.
 | `port`     | `443`                                |
 | `path`     | `example-group/example-project.git`  |
 
-Credentials are optional. Without them, HTTPS requests are anonymous, and SSH uses the SSH agent. When credentials
-resolve, OCM uses an SSH private key first, then a token, then a username and password. See
-[`GitCredentials/v1`]({{< relref "credential-types.md#gitcredentialsv1" >}}).
+Credentials are optional. See [Git credential selection]({{< relref "credential-types.md#git-credential-selection" >}})
+for supported authentication methods.
 
 See [Credential Consumer Identities: Git]({{< relref "credential-consumer-identities.md" >}}#git) for how each URL form
 maps to the identity, and for matching rules.
