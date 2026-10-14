@@ -10,7 +10,7 @@
 
 A resource digest records three signed fields: the hash algorithm, the normalisation algorithm and the value. The spec defines the hash names SHA-256 and SHA-512, plus `NO-DIGEST` for resources that are excluded from the signature. It defines two normalisations: `genericBlobDigest/v1` describes the bytes of a blob, and `ociArtifactDigest/v1` describes an OCI artifact by the digest of its manifest or index.
 
-Each binding (OCI, Helm, wget, S3, Git, GitHub, transfer, signing) implements these rules on its own. Until the recent fix, v2 labelled every OCI artifact it created as a generic blob, so that label is now on every v2-created OCI resource and is signed. The current situation has the following problems:
+Each binding (OCI, Helm, wget, S3, Git, GitHub, transfer, signing) implements these rules on its own. Until the recent fix, a bug made v2 label every OCI artifact it created as a generic blob. That label is now signed on every OCI resource created with those releases, so it must stay valid. The current situation has the following problems:
 
 1. **Copied decision logic**: the same "generate, complete or verify" logic exists several times in the OCI binding and again, with different rules, in Helm and transfer.
 2. **No single answer for hash names**: bindings accept different spellings (`SHA-256`, `sha256`, case variants), and some rewrite complete digests to their own spelling, which changes signed data.
@@ -19,23 +19,25 @@ Each binding (OCI, Helm, wget, S3, Git, GitHub, transfer, signing) implements th
 
 Two examples show why a single fixed algorithm is not enough.
 
-**One OCI image, two valid labels.** An image added today records the digest of its manifest as `ociArtifactDigest/v1`. The same image added with an earlier v2 release records the same manifest digest, but labelled `genericBlobDigest/v1`, and that label is signed:
+**Same digest fields, different meaning.** An OCI image and a file downloaded with wget both record a SHA-256 digest, but they hash different things:
 
 ```yaml
-# added today
+# OCI image: digest of the image manifest
 digest:
   hashAlgorithm: SHA-256
   normalisationAlgorithm: ociArtifactDigest/v1
-  value: 4f1c...   # digest of the image manifest
+  value: 4f1c...
 ---
-# the same image, added with an earlier v2 release
+# wget resource: digest of the downloaded bytes
 digest:
   hashAlgorithm: SHA-256
   normalisationAlgorithm: genericBlobDigest/v1
-  value: 4f1c...   # the same manifest digest
+  value: 9a07...
 ```
 
-When the second component is transferred, the label must stay as it is, or the signature breaks. It also must not be verified as plain bytes, because hashing the OCI layout archive gives a different value than the manifest digest. The OCI binding therefore has to accept both labels for an artifact, and decide that it holds an artifact from what it resolved, not from the label.
+Only the binding knows which of the two it computed. The OCI binding resolves a manifest, so it must compare against the manifest digest; hashing the OCI layout archive would give a different value. The wget binding hashes the bytes it downloaded.
+
+The OCI case has one more twist. Earlier v2 releases had a bug: they recorded the manifest digest of an OCI image with the `genericBlobDigest/v1` label. Component versions created with those releases are signed with that label, so the OCI binding must keep accepting it, verify it against the manifest digest, and never relabel it. This is why the rule is chosen from what the binding computed, not from the recorded label.
 
 **One resource type, different content.** A Helm chart from an HTTP repository is a `.tgz` file and gets a digest of its bytes. The same chart from an `oci://` repository is an OCI artifact and gets the manifest digest. wget, S3, Git and GitHub always hash bytes, but receive hash names in different spellings, such as `sha256` from S3 checksums. A resource marked `NO-DIGEST` must pass all of these paths untouched. Each binding knows what it computed; the shared rules only decide what to do with the recorded digest.
 
@@ -66,7 +68,7 @@ Chosen **Option 1**: "Shared digest package with binding-supplied rules". Option
 
 * **One decision function**: Replaces the copied logic and can be tested once against the full set of cases.
 * **One hash-name parser**: Answers "which spellings do we accept?" in one place.
-* **Safe dispatch**: The rule follows from what was computed, so the historical generic label on OCI artifacts cannot send them down the wrong path.
+* **Safe dispatch**: The rule follows from what was computed, so the generic label that earlier v2 releases wrote on OCI artifacts by mistake cannot send them down the wrong path.
 * **No new registry**: Dispatch per access type already exists through the digest processor plugins.
 
 ### Implementation Details
@@ -103,7 +105,7 @@ flowchart TD
 1. **Shared package without OCI knowledge**: `bindings/go/digest` depends only on the runtime and descriptor packages, which a lint rule enforces. Normalisations stay plain strings. OCI rules live in the OCI binding.
 2. **Hash names in one place**: `ParseHashAlgorithm` accepts every spelling in use today, ignoring case and dashes. New and completed digests are written in the spec spelling (`SHA-256`, `SHA-512`).
 3. **The binding decides the kind**: A binding that resolved an OCI manifest uses the artifact rule; one that hashed bytes uses the blob rule. The recorded label is only validated against that rule and never chooses it.
-4. **Existing digests never break**: `Check` either generates a missing digest, completes an incomplete one, or verifies a complete one and keeps it exactly as recorded, including its label and spelling. The artifact rule accepts the historical generic label on OCI artifacts permanently, verified against the manifest, never against archive bytes.
+4. **Existing digests never break**: `Check` either generates a missing digest, completes an incomplete one, or verifies a complete one and keeps it exactly as recorded, including its label and spelling. The artifact rule keeps accepting the generic label that earlier v2 releases wrote on OCI artifacts by mistake, verified against the manifest, never against archive bytes.
 5. **Excluded resources are left alone**: A `NO-DIGEST` / `EXCLUDE-FROM-SIGNATURE` resource is detected first, exactly as signing does today. It is never hashed, completed or changed when adding (including the constructor, before any digest processor runs), getting or transferring a component version.
 6. **Strict and lenient modes**: Each entry point keeps today's handling of a complete digest with a foreign label. Processing and upload reject it (strict); packing local blobs keeps it unverified (lenient).
 7. **No entry point becomes stricter**: Changes only widen what is accepted, for example spelling variants and SHA-512 where only SHA-256 was accepted.
