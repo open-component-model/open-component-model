@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 
 	"helm.sh/helm/v4/pkg/chart/v2/loader"
 	chartutil "helm.sh/helm/v4/pkg/chart/v2/util"
@@ -50,7 +49,7 @@ func WithOCICredentials(credentials *ocicredsv1.OCICredentials) Option {
 }
 
 // WithWorkingDirectory sets the directory against which a relative local chart path is resolved.
-// Absolute paths are used as given. When empty, relative paths are resolved against the process working directory.
+// The chart path must not escape this directory. When empty, the path is used as given.
 func WithWorkingDirectory(dir string) Option {
 	return func(options *Options) {
 		options.WorkingDirectory = dir
@@ -92,8 +91,10 @@ func GetV1HelmBlob(ctx context.Context, helmSpec v1.Helm, tmpDir string, opts ..
 	switch {
 	case helmSpec.Path != "":
 		path := helmSpec.Path
-		if options.WorkingDirectory != "" && !filepath.IsAbs(path) {
-			path = filepath.Join(options.WorkingDirectory, path)
+		if options.WorkingDirectory != "" {
+			if path, err = filesystem.EnsurePathInWorkingDirectory(path, options.WorkingDirectory); err != nil {
+				return nil, nil, fmt.Errorf("error resolving local helm chart path %q in working directory %q: %w", helmSpec.Path, options.WorkingDirectory, err)
+			}
 		}
 		chart, err = newReadOnlyChart(path, tmpDir)
 		if err != nil {

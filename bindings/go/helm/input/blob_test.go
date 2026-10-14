@@ -315,9 +315,10 @@ func TestGetV1HelmBlob_WorkingDirectory(t *testing.T) {
 			path:       filepath.Join(testDataDir, "mychart"),
 		},
 		{
-			name:       "relative chart path outside the working directory",
+			name:       "chart path escaping the working directory",
 			workingDir: filepath.Join(testDataDir, "provenance"),
 			path:       "../mychart",
+			wantErrMsg: "path escapes from parent",
 		},
 	}
 
