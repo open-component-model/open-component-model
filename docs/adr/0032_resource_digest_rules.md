@@ -39,7 +39,13 @@ Only the binding knows which of the two it computed. The OCI binding resolves a 
 
 The OCI case has one more twist. Earlier v2 releases had a bug: they recorded the manifest digest of an OCI image with the `genericBlobDigest/v1` label. Component versions created with those releases are signed with that label, so the OCI binding must keep accepting it, verify it against the manifest digest, and never relabel it. This is why the rule is chosen from what the binding computed, not from the recorded label.
 
-**One resource type, different content.** A Helm chart from an HTTP repository is a `.tgz` file and gets a digest of its bytes. The same chart from an `oci://` repository is an OCI artifact and gets the manifest digest. wget, S3, Git and GitHub always hash bytes, but receive hash names in different spellings, such as `sha256` from S3 checksums. A resource marked `NO-DIGEST` must pass all of these paths untouched. Each binding knows what it computed; the shared rules only decide what to do with the recorded digest.
+**Same fields, inconsistent handling.** The other bindings show the same pattern:
+
+* **One resource type, two kinds of content**: A Helm chart from an HTTP repository is a `.tgz` file and gets a digest of its bytes. The same chart from an `oci://` repository is an OCI artifact and gets the manifest digest. Only the Helm binding can tell which applies.
+* **Hash names spelled differently**: Recorded digests use `SHA-256` as well as `sha256`. Some bindings reject the lowercase form, and some rewrite a complete digest to their own spelling, which changes signed data.
+* **Excluded resources**: A resource marked `NO-DIGEST` is rejected or given a real digest by most bindings, although it must pass every path untouched.
+
+Each binding knows what it computed; the shared rules decide, the same way everywhere, what happens to the recorded digest.
 
 ## Decision Drivers
 
@@ -80,24 +86,24 @@ type Rule struct { Normalisation string; Accepted []string }
 func Check(recorded *runtime.Digest, computed Computed, rule Rule, mode Mode) (Result, error)
 ```
 
-`Check` decides what happens to the recorded digest. It never writes anything itself; the binding applies the result:
+`Check` takes three inputs. The **recorded digest** is what the component descriptor already contains, possibly nothing. The **computed digest** is what the binding just resolved or hashed: the manifest digest for an OCI image, the hash of the downloaded bytes for wget. The **rule** says which labels the binding accepts for that content. `Check` never writes anything itself; the binding applies the result:
 
 ```mermaid
 flowchart TD
-    A[Recorded digest] --> B{NO-DIGEST /<br/>EXCLUDE-FROM-SIGNATURE?}
-    B -- yes --> X[Excluded:<br/>keep as is, nothing hashed]
-    B -- no --> C{How much is recorded?}
-    C -- nothing --> G[Generate from the<br/>computed digest]
-    C -- some fields --> D{Set fields agree with<br/>rule and computed digest?}
-    D -- yes --> P[Complete the<br/>missing fields]
-    D -- no --> R[Reject]
-    C -- complete --> E{Label is the rule's<br/>own or an accepted one?}
-    E -- yes --> F{Hash and value match<br/>the computed digest?}
-    F -- yes --> K[Keep exactly<br/>as recorded]
+    IN["Recorded digest + computed digest + rule"] --> B{"NO-DIGEST marker?"}
+    B -- yes --> X["Keep as is, hash nothing<br/><i>e.g. volatile resource excluded from signing</i>"]
+    B -- no --> C{"What is recorded?"}
+    C -- nothing --> G["Generate from computed digest<br/><i>e.g. new resource on add cv</i>"]
+    C -- some fields --> D{"Set fields match<br/>computed digest?"}
+    D -- yes --> P["Fill in missing fields<br/><i>e.g. value given, label missing</i>"]
+    D -- no --> R["Reject"]
+    C -- complete --> E{"Label accepted<br/>by the rule?"}
+    E -- yes --> F{"Hash and value match<br/>computed digest?"}
+    F -- yes --> K["Keep exactly as recorded<br/><i>e.g. image signed by an older v2 release</i>"]
     F -- no --> R
-    E -- no --> M{Mode}
-    M -- strict --> R
-    M -- lenient --> U[Keep unverified]
+    E -- no --> M{"Strict or lenient?"}
+    M -- "strict: add cv, upload" --> R
+    M -- "lenient: packing local blobs" --> U["Keep unverified<br/><i>e.g. unknown label in an existing descriptor</i>"]
 ```
 
 #### Key Design Decisions
