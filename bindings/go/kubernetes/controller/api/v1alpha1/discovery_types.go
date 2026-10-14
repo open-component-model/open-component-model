@@ -44,13 +44,13 @@ type DiscoverySpec struct {
 	ComponentRef corev1.LocalObjectReference `json:"componentRef"`
 
 	// RecursionDepth controls how deep component references are resolved.
-	// 0 resolves only the root component; -1 (the default) resolves the
-	// complete transitive graph. Positive depths are not yet supported by the
-	// underlying DAG discovery library.
+	// 0 resolves only the root component; -1 (the default when unset) resolves
+	// the complete transitive graph. Positive depths are not yet supported by
+	// the underlying DAG discovery library.
 	// +optional
 	// +kubebuilder:default=-1
-	// +kubebuilder:validation:XValidation:rule="self == -1 || self == 0",message="recursionDepth must be -1 (unlimited) or 0 (root only); positive depths are not yet supported"
-	RecursionDepth int `json:"recursionDepth,omitempty"`
+	// +kubebuilder:validation:XValidation:rule="self == -1 || self == 0",message="recursionDepth must be -1 (infinite) or 0 (root only); positive depths are not yet supported"
+	RecursionDepth *int `json:"recursionDepth,omitempty"`
 
 	// ReferenceSelector filters the references of all resolved descriptors.
 	// Only reference targets with at least one matching incoming reference are
