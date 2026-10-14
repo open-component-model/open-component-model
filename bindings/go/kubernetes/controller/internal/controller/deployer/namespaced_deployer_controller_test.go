@@ -90,7 +90,7 @@ metadata:
 `)
 
 		deployer := createNamespacedDeployer(ctx, namespace.GetName(), resourceObj.GetName(), nil)
-		waitForNotReadyMessage(ctx, deployer, v1alpha1.ApplyFailed, "forbidden")
+		test.WaitForNotReadyObjectWithMessage(ctx, k8sClient, deployer, v1alpha1.ApplyFailed, "forbidden")
 
 		err := k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace.GetName(), Name: "nd-forbidden-cm"}, &corev1.ConfigMap{})
 		Expect(errors.IsNotFound(err)).To(BeTrue())
@@ -104,7 +104,7 @@ metadata:
 `)
 
 		deployer := createNamespacedDeployer(ctx, namespace.GetName(), resourceObj.GetName(), nil)
-		waitForNotReadyMessage(ctx, deployer, v1alpha1.ApplyFailed, namespacedDeployerSA)
+		test.WaitForNotReadyObjectWithMessage(ctx, k8sClient, deployer, v1alpha1.ApplyFailed, namespacedDeployerSA)
 	})
 
 	It("applies cluster-scoped and cross-namespace objects", func(ctx SpecContext) {
@@ -181,7 +181,7 @@ metadata:
 		Expect(k8sClient.Delete(ctx, deployer)).To(Succeed())
 
 		By("keeping the NamespacedDeployer and the object it would orphan")
-		waitForNotReadyMessage(ctx, deployer, v1alpha1.DeletionFailedReason, "ConfigMap "+other.GetName()+"/nd-blocked-cm")
+		test.WaitForNotReadyObjectWithMessage(ctx, k8sClient, deployer, v1alpha1.DeletionFailedReason, "ConfigMap "+other.GetName()+"/nd-blocked-cm")
 		Expect(deployer.GetDeletionTimestamp()).NotTo(BeNil())
 		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(cm), cm)).To(Succeed())
 
@@ -286,7 +286,7 @@ metadata:
 		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(binding), binding)).To(Succeed())
 		test.DeleteObject(ctx, k8sClient, binding.DeepCopy())
 		Expect(k8sClient.Delete(ctx, deployer)).To(Succeed())
-		waitForNotReadyMessage(ctx, deployer, v1alpha1.DeletionFailedReason, "Orphan deletion policy")
+		test.WaitForNotReadyObjectWithMessage(ctx, k8sClient, deployer, v1alpha1.DeletionFailedReason, "Orphan deletion policy")
 
 		By("finishing the deletion once the permissions are back")
 		binding.ResourceVersion = ""
@@ -315,11 +315,11 @@ metadata:
 		forbidden := errors.NewForbidden(schema.GroupResource{Resource: "serviceaccounts"}, "default", nil)
 
 		By("letting a Background deletion go, as the garbage collector removes what is left")
-		Expect(probe.blocksDeletion(ctx, deployer, metadata, "cause", forbidden)).To(BeFalse())
+		Expect(probe.blocksDeletion(ctx, deployer, metadata, forbidden)).To(BeFalse())
 
 		By("blocking an Orphan deletion, as giving up would delete what it should keep")
 		deployer.Spec.DeletionPolicy = v1alpha1.DeletionPolicyOrphan
-		Expect(probe.blocksDeletion(ctx, deployer, metadata, "cause", forbidden)).To(BeTrue())
+		Expect(probe.blocksDeletion(ctx, deployer, metadata, forbidden)).To(BeTrue())
 		cond := apimeta.FindStatusCondition(deployer.Status.Conditions, v1alpha1.ReadyCondition)
 		Expect(cond).NotTo(BeNil())
 		Expect(cond.Reason).To(Equal(v1alpha1.DeletionFailedReason))
@@ -391,7 +391,7 @@ metadata:
 `)
 
 		deployer := createNamespacedDeployer(ctx, namespace.GetName(), resourceObj.GetName(), nil)
-		waitForNotReadyMessage(ctx, deployer, v1alpha1.ApplyFailed, "forbidden")
+		test.WaitForNotReadyObjectWithMessage(ctx, k8sClient, deployer, v1alpha1.ApplyFailed, "forbidden")
 
 		err := k8sClient.Get(ctx, client.ObjectKey{Namespace: metav1.NamespaceDefault, Name: "nd-foreign-cm"}, &corev1.ConfigMap{})
 		Expect(errors.IsNotFound(err)).To(BeTrue())
@@ -414,7 +414,7 @@ metadata:
 			},
 			Policy: v1alpha1.ConfigurationPolicyDoNotPropagate,
 		}})
-		waitForNotReadyMessage(ctx, deployer, v1alpha1.GetConfigurationFailedReason, "outside of namespace")
+		test.WaitForNotReadyObjectWithMessage(ctx, k8sClient, deployer, v1alpha1.GetConfigurationFailedReason, "outside of namespace")
 	})
 
 	It("falls back to the default service account", func(ctx SpecContext) {
@@ -440,7 +440,7 @@ metadata:
 		})
 
 		By("not applying with the controller's permissions")
-		waitForNotReadyMessage(ctx, deployer, v1alpha1.ApplyFailed, "system:serviceaccount:"+namespace.GetName()+":"+defaultServiceAccount)
+		test.WaitForNotReadyObjectWithMessage(ctx, k8sClient, deployer, v1alpha1.ApplyFailed, "system:serviceaccount:"+namespace.GetName()+":"+defaultServiceAccount)
 		cm := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "nd-no-sa-cm", Namespace: namespace.GetName()}}
 		Expect(errors.IsNotFound(k8sClient.Get(ctx, client.ObjectKeyFromObject(cm), cm))).To(BeTrue())
 
@@ -465,21 +465,6 @@ metadata:
 		Expect(err.Error()).To(ContainSubstring("resourceRef.name must be set"))
 	})
 })
-
-// waitForNotReadyMessage waits for a Ready=False condition with the given reason and message. Matching the reason
-// alone is racy, as a transient error such as an update conflict can carry the same reason.
-func waitForNotReadyMessage(ctx SpecContext, deployer *v1alpha1.NamespacedDeployer, reason, message string) {
-	GinkgoHelper()
-
-	Eventually(func(g Gomega, ctx context.Context) {
-		g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(deployer), deployer)).To(Succeed())
-		cond := apimeta.FindStatusCondition(deployer.Status.Conditions, v1alpha1.ReadyCondition)
-		g.Expect(cond).NotTo(BeNil())
-		g.Expect(cond.Status).To(Equal(metav1.ConditionFalse))
-		g.Expect(cond.Reason).To(Equal(reason))
-		g.Expect(cond.Message).To(ContainSubstring(message))
-	}).WithTimeout(test.DefaultKubernetesOperationTimeout).WithContext(ctx).Should(Succeed())
-}
 
 // createServiceAccount creates the deployer service account and, if bind is set, grants it full access to
 // ConfigMaps in the namespace.

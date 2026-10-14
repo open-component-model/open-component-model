@@ -114,17 +114,17 @@ func (r *Reconciler) applyClient(ctx context.Context, deployer deliveryv1alpha1.
 }
 
 // blocksDeletion reports whether a forbidden request keeps the deployer from being deleted. Missing permissions can
-// be restored, so a NamespacedDeployer stays and retries as long as its deletion would orphan objects. cause names
-// who lacks the permissions.
-func (r *Reconciler) blocksDeletion(ctx context.Context, deployer deliveryv1alpha1.DeployerObject, metadata applyset.Metadata, cause string, pruneErr error) bool {
+// be restored, so a NamespacedDeployer stays and retries as long as its deletion would orphan objects.
+func (r *Reconciler) blocksDeletion(ctx context.Context, deployer deliveryv1alpha1.DeployerObject, metadata applyset.Metadata, pruneErr error) bool {
 	if !r.Namespaced || !apierrors.IsForbidden(pruneErr) {
 		return true
 	}
 
-	// Giving up would let the garbage collector delete the objects in the deployer's namespace that Orphan keeps.
+	serviceAccount := fmt.Sprintf("the controller cannot read service account %s", serviceAccountName(deployer))
+
 	if deployer.GetDeletionPolicy() == deliveryv1alpha1.DeletionPolicyOrphan {
 		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.DeletionFailedReason, fmt.Sprintf(
-			"%s (%v), restore the permissions to release the objects for the Orphan deletion policy", cause, pruneErr))
+			"%s (%v), restore the permissions to release the objects for the Orphan deletion policy", serviceAccount, pruneErr))
 
 		return true
 	}
@@ -134,14 +134,14 @@ func (r *Reconciler) blocksDeletion(ctx context.Context, deployer deliveryv1alph
 		log.FromContext(ctx).Error(err, "failed to list objects the deletion would orphan")
 		orphaned = []string{metadata.PruneScope().String()}
 	}
-	// A deployer that never applied outside of its namespace has nothing to lose, GC removes the rest.
 	if len(orphaned) == 0 {
 		return false
 	}
 
 	status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.DeletionFailedReason, fmt.Sprintf(
 		"%s (%v), restore the permissions to delete the objects outside of namespace %s: %s",
-		cause, pruneErr, deployer.GetNamespace(), strings.Join(orphaned, ", ")))
+		serviceAccount, pruneErr, deployer.GetNamespace(), strings.Join(orphaned, ", ")))
+	log.FromContext(ctx).Error(errors.New("cannot read service account"), "failed to list objects the deletion would orphan", "serviceAccount", serviceAccount)
 
 	return true
 }
