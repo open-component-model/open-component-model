@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"strings"
 
 	"ocm.software/open-component-model/bindings/go/dag"
 	dagsync "ocm.software/open-component-model/bindings/go/dag/sync"
@@ -52,9 +51,9 @@ type TransferRoot struct {
 	// SourceResolver resolves this root's component version from its source repository.
 	// One resolver per component — see the struct doc for the design rationale.
 	SourceResolver resolvers.ComponentVersionRepositoryResolver
-	// ExpectedDigest optionally pins the root component version (see [repository.ParseDigestPin]):
-	// normalized digests are verified like the digest of a component reference, raw digests
-	// against the stored descriptor bytes.
+	// ExpectedDigest optionally pins the root component version (see [repository.GetPinnedComponentVersion]):
+	// a normalized digest is verified against the normalised descriptor, an OCI digest selects the
+	// source artifact the descriptor and all local resources are read from.
 	ExpectedDigest *descruntime.Digest
 }
 
@@ -90,36 +89,41 @@ func BuildGraphDefinition(
 	targetMap := make(map[string][]runtime.Typed)
 	resolverMap := make(map[string]resolvers.ComponentVersionRepositoryResolver)
 	dagRoots := make([]string, 0, len(roots))
-	discoveredDigests := make(map[string]descruntime.Digest)
+	rootPins := make(map[string]descruntime.Digest)
 	for key, root := range roots {
 		dagRoots = append(dagRoots, key)
 		targetMap[key] = AppendUniqueRepositories(targetMap[key], root.Targets)
 		resolverMap[key] = root.SourceResolver
 		if root.ExpectedDigest != nil {
-			component, version, _ := strings.Cut(key, ":")
-			discoveredDigests[runtime.Identity{
-				descruntime.IdentityAttributeName:    component,
-				descruntime.IdentityAttributeVersion: version,
-			}.String()] = *root.ExpectedDigest
+			rootPins[key] = *root.ExpectedDigest
 		}
 	}
 
 	disc := &discoverer{
 		recursive:         cfg.Recursive,
-		discoveredDigests: discoveredDigests,
+		discoveredDigests: make(map[string]descruntime.Digest),
 		targetMap:         targetMap,
 		resolverMap:       resolverMap,
 	}
 	// The multiResolver delegates to per-component resolvers from resolverMap.
-	// The expectedDigest closure checks whether a root is pinned to a digest or a recursively
-	// discovered child has a pinned digest from its parent's reference, enabling integrity
-	// verification.
+	// Root pins are kept apart from the digests parents' component references expect, so that
+	// neither can replace the other: a resolved component version is verified against both.
 	res := &multiResolver{
 		mu:          &disc.mu,
 		resolverMap: resolverMap,
+		rootPin: func(key string) *descruntime.Digest {
+			// rootPins is not written after discovery starts.
+			if dig, ok := rootPins[key]; ok {
+				return &dig
+			}
+			return nil
+		},
 		expectedDigest: func(id runtime.Identity) *descruntime.Digest {
 			disc.mu.Lock()
 			defer disc.mu.Unlock()
+			if disc.recursive == 0 {
+				return nil
+			}
 			dig, ok := disc.discoveredDigests[id.String()]
 			if !ok {
 				return nil

@@ -203,6 +203,28 @@ func TestDiscoverer_Recursive(t *testing.T) {
 	assert.Len(t, d.discoveredDigests, 1)
 }
 
+func TestDiscoverer_ConflictingReferenceDigests(t *testing.T) {
+	r := require.New(t)
+	d := &discoverer{recursive: -1, discoveredDigests: make(map[string]descriptor.Digest)}
+	parent := func(name, digest string) *discoveryValue {
+		return &discoveryValue{Descriptor: &descriptor.Descriptor{Component: descriptor.Component{
+			ComponentMeta: descriptor.ComponentMeta{ObjectMeta: descriptor.ObjectMeta{Name: name, Version: "1.0.0"}},
+			References: []descriptor.Reference{{
+				ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "child", Version: "2.0.0"}},
+				Component:   "ocm.software/child",
+				Digest:      descriptor.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: "jsonNormalisation/v4alpha1", Value: digest},
+			}},
+		}}}
+	}
+
+	_, err := d.Discover(t.Context(), parent("ocm.software/a", "aaaa"))
+	r.NoError(err)
+	_, err = d.Discover(t.Context(), parent("ocm.software/b", "aaaa"))
+	r.NoError(err, "parents agreeing on the digest are fine")
+	_, err = d.Discover(t.Context(), parent("ocm.software/c", "cccc"))
+	r.ErrorContains(err, "referenced with conflicting digests", "a later parent cannot replace the expected digest")
+}
+
 // --- resolver tests ---
 
 func TestResolver_ValidKey(t *testing.T) {
@@ -237,6 +259,7 @@ func TestResolver_ValidKey(t *testing.T) {
 			"ocm.software/test:1.0.0": mockResolver,
 		},
 		expectedDigest: func(_ runtime.Identity) *descriptor.Digest { return nil },
+		rootPin:        func(string) *descriptor.Digest { return nil },
 	}
 
 	val, err := r.Resolve(t.Context(), "ocm.software/test:1.0.0")
@@ -250,6 +273,7 @@ func TestResolver_InvalidKeyFormat(t *testing.T) {
 		mu:             &sync.Mutex{},
 		resolverMap:    map[string]resolvers.ComponentVersionRepositoryResolver{},
 		expectedDigest: func(_ runtime.Identity) *descriptor.Digest { return nil },
+		rootPin:        func(string) *descriptor.Digest { return nil },
 	}
 	_, err := r.Resolve(t.Context(), "invalid-no-colon")
 	require.Error(t, err)
@@ -268,6 +292,7 @@ func TestResolver_RepoSpecError(t *testing.T) {
 			"ocm.software/test:1.0.0": mockRes,
 		},
 		expectedDigest: func(_ runtime.Identity) *descriptor.Digest { return nil },
+		rootPin:        func(string) *descriptor.Digest { return nil },
 	}
 	_, err := r.Resolve(t.Context(), "ocm.software/test:1.0.0")
 	require.Error(t, err)
@@ -432,6 +457,7 @@ func TestMultiResolver_NoResolverForKey(t *testing.T) {
 		mu:             &sync.Mutex{},
 		resolverMap:    map[string]resolvers.ComponentVersionRepositoryResolver{},
 		expectedDigest: func(_ runtime.Identity) *descriptor.Digest { return nil },
+		rootPin:        func(string) *descriptor.Digest { return nil },
 	}
 	_, err := r.Resolve(t.Context(), "ocm.software/missing:1.0.0")
 	require.Error(t, err)
@@ -465,6 +491,7 @@ func TestMultiResolver_NilRepoSpec_FallsBackToDirectLookup(t *testing.T) {
 			"ocm.software/test:1.0.0": mockRes,
 		},
 		expectedDigest: func(_ runtime.Identity) *descriptor.Digest { return nil },
+		rootPin:        func(string) *descriptor.Digest { return nil },
 	}
 	val, err := r.Resolve(t.Context(), "ocm.software/test:1.0.0")
 	require.NoError(t, err)

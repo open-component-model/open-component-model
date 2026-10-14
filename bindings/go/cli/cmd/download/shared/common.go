@@ -45,12 +45,12 @@ func GetContextItems(cmd *cobra.Command) (*manager.PluginManager, credentials.Re
 	return pluginManager, credentialGraph, logger, nil
 }
 
-// DownloadResourceData downloads the content of res, a resource of the component version ref names.
-// If ref is pinned to a digest, the content is verified against the digest of res (see
-// VerifyResourceContent), so it is bound to the pinned descriptor and not to whatever the
-// version tag resolves to by the time the blob is read.
-func DownloadResourceData(ctx context.Context, pluginManager *manager.PluginManager, credentialGraph credentials.Resolver, ref *compref.Ref, repo repository.ComponentVersionRepository, res *descriptor.Resource, identity runtime.Identity) (blob.ReadOnlyBlob, error) {
-	data, err := downloadResourceData(ctx, pluginManager, credentialGraph, ref.Component, ref.Version, repo, res, identity)
+// DownloadResourceData downloads the content of res, a resource of desc, the component version
+// ref names, read through repo. If ref is pinned to a digest, the content is verified against the
+// digest of res (see VerifyResourceContent), so it is bound to the pinned descriptor also where it
+// is not read from the pinned artifact (external accesses, or local blobs under a normalized pin).
+func DownloadResourceData(ctx context.Context, pluginManager *manager.PluginManager, credentialGraph credentials.Resolver, ref *compref.Ref, desc *descriptor.Descriptor, repo repository.ComponentVersionRepository, res *descriptor.Resource, identity runtime.Identity) (blob.ReadOnlyBlob, error) {
+	data, err := downloadResourceData(ctx, pluginManager, credentialGraph, desc.Component.Name, desc.Component.Version, repo, res, identity)
 	if err != nil || ref.Digest == "" {
 		return data, err
 	}

@@ -61,8 +61,8 @@ type resolutionProgressRepository struct {
 }
 
 var (
-	_ repository.ComponentVersionRepository      = (*resolutionProgressRepository)(nil)
-	_ repository.StoredComponentDescriptorReader = (*resolutionProgressRepository)(nil)
+	_ repository.ComponentVersionRepository = (*resolutionProgressRepository)(nil)
+	_ repository.DigestPinnableRepository   = (*resolutionProgressRepository)(nil)
 )
 
 func (r *resolutionProgressRepository) GetComponentVersion(ctx context.Context, component, version string) (*descriptor.Descriptor, error) {
@@ -73,18 +73,18 @@ func (r *resolutionProgressRepository) GetComponentVersion(ctx context.Context, 
 	return desc, err
 }
 
-// GetStoredComponentDescriptor forwards to the wrapped repository, so raw digest pins can be
-// verified through the wrapper.
-func (r *resolutionProgressRepository) GetStoredComponentDescriptor(ctx context.Context, component, version string) (*descriptor.Descriptor, []byte, error) {
-	reader, ok := r.ComponentVersionRepository.(repository.StoredComponentDescriptorReader)
+// PinComponentVersion forwards to the wrapped repository and keeps reporting progress for
+// reads through the pinned view, so OCI digest pins work through the wrapper.
+func (r *resolutionProgressRepository) PinComponentVersion(component, version, digest string) (repository.ComponentVersionRepository, error) {
+	pinnable, ok := r.ComponentVersionRepository.(repository.DigestPinnableRepository)
 	if !ok {
-		return nil, nil, fmt.Errorf("repository %T does not expose stored component descriptors: %w", r.ComponentVersionRepository, errors.ErrUnsupported)
+		return nil, fmt.Errorf("repository %T cannot pin component versions to a digest: %w", r.ComponentVersionRepository, errors.ErrUnsupported)
 	}
-	id := component + ":" + version
-	r.events <- resolutionEvent{id: id, state: progress.Running}
-	desc, raw, err := reader.GetStoredComponentDescriptor(ctx, component, version)
-	r.events <- resolutionEvent{id: id, state: resolutionState(err), err: err}
-	return desc, raw, err
+	pinned, err := pinnable.PinComponentVersion(component, version, digest)
+	if err != nil {
+		return nil, err
+	}
+	return &resolutionProgressRepository{ComponentVersionRepository: pinned, events: r.events}, nil
 }
 
 func (r *resolutionProgressRepository) ListComponentVersions(ctx context.Context, component string) ([]string, error) {

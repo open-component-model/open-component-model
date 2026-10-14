@@ -17,10 +17,11 @@ type ComponentID struct {
 	// Version is the semantic version (e.g., "1.0.0").
 	Version string
 
-	// Digest optionally pins the component version (see [repository.ParseDigestPin]). When set,
-	// the transfer fails unless the resolved descriptor has this digest: with a normalisation
-	// algorithm, the digest of the normalised descriptor; without one, the digest of the
-	// descriptor bytes as stored in the source repository.
+	// Digest optionally pins the component version (see [repository.ParseDigestPin]). With a
+	// normalisation algorithm, the transfer fails unless the normalised source descriptor has
+	// this digest. Without one, it is the OCI digest of the artifact (image index or manifest)
+	// the component version is stored as in the source: the descriptor and all local resources
+	// are read from that artifact instead of from what the version tag resolves to.
 	Digest *descriptor.Digest
 }
 

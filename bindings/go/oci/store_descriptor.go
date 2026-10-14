@@ -15,6 +15,7 @@ import (
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	slogcontext "github.com/veqryn/slog-context"
 	"golang.org/x/sync/errgroup"
+	"oras.land/oras-go/v2/content"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/oci/internal/log"
@@ -198,43 +199,67 @@ It is used to store the component descriptor manifest and other related blob man
 }
 
 // getDescriptorFromStore retrieves a component descriptor from a given Store using the provided reference.
-// It also returns the stored descriptor layer the descriptor was decoded from.
-func getDescriptorFromStore(ctx context.Context, store spec.Store, reference string, unmarshal ocidescriptor.UnmarshalFunc) (desc *descriptor.Descriptor, raw []byte, manifestRef *ociImageSpecV1.Manifest, index *ociImageSpecV1.Index, err error) {
+// Every node from the artifact reference resolves to down to the descriptor layer is verified
+// against its digest, so the descriptor is bound to the digest of that artifact.
+func getDescriptorFromStore(ctx context.Context, store spec.Store, reference string, unmarshal ocidescriptor.UnmarshalFunc) (desc *descriptor.Descriptor, manifestRef *ociImageSpecV1.Manifest, index *ociImageSpecV1.Index, err error) {
 	manifest, index, err := getDescriptorOCIImageManifest(ctx, store, reference)
 	if err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("failed to get manifest: %w", err)
+		return nil, nil, nil, fmt.Errorf("failed to get manifest: %w", err)
 	}
 
 	slogcontext.Log(ctx, slog.LevelDebug, "fetching descriptor manifest config", log.DescriptorLogAttr(manifest.Config))
-	componentConfigRaw, err := store.Fetch(ctx, manifest.Config)
+	componentConfigRaw, err := fetchVerified(ctx, store, manifest.Config)
 	if err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("failed to get component config: %w", err)
+		return nil, nil, nil, fmt.Errorf("failed to get component config: %w", err)
 	}
 	cfg := componentConfig.Config{}
-	if err := json.NewDecoder(componentConfigRaw).Decode(&cfg); err != nil {
-		return nil, nil, nil, nil, err
+	if err := json.Unmarshal(componentConfigRaw, &cfg); err != nil {
+		return nil, nil, nil, err
 	}
-
-	if closeErr := componentConfigRaw.Close(); closeErr != nil {
-		return nil, nil, nil, nil, fmt.Errorf("failed to close component config reader: %w", closeErr)
+	if cfg.ComponentDescriptorLayer == nil {
+		return nil, nil, nil, fmt.Errorf("artifact %q is not an OCM component version: its config %s has no componentDescriptorLayer", reference, manifest.Config.Digest)
 	}
 
 	// Read component descriptor
 	descriptorLayer := *cfg.ComponentDescriptorLayer
 	slogcontext.Log(ctx, slog.LevelDebug, "fetching component descriptor layer", log.DescriptorLogAttr(descriptorLayer))
-	descriptorReader, err := store.Fetch(ctx, descriptorLayer)
+	descriptorRaw, err := fetchVerified(ctx, store, descriptorLayer)
 	if err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("failed to fetch descriptor layer: %w", err)
-	}
-	raw, err = io.ReadAll(descriptorReader)
-	if err = errors.Join(err, descriptorReader.Close()); err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("failed to read descriptor layer: %w", err)
+		return nil, nil, nil, fmt.Errorf("failed to fetch descriptor layer: %w", err)
 	}
 
-	desc, err = ocidescriptor.SingleFileDecodeDescriptor(bytes.NewReader(raw), descriptorLayer.MediaType, unmarshal)
+	desc, err = ocidescriptor.SingleFileDecodeDescriptor(bytes.NewReader(descriptorRaw), descriptorLayer.MediaType, unmarshal)
 	if err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("failed to decode descriptor: %w", err)
+		return nil, nil, nil, fmt.Errorf("failed to decode descriptor: %w", err)
 	}
 
-	return desc, raw, &manifest, index, nil
+	return desc, &manifest, index, nil
+}
+
+// fetchVerified reads desc from fetcher and checks the content against the digest of desc (and its
+// size, if known), so that an artifact whose digest is trusted vouches for everything read through it.
+func fetchVerified(ctx context.Context, fetcher content.Fetcher, desc ociImageSpecV1.Descriptor) ([]byte, error) {
+	if err := desc.Digest.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid digest %q of %s: %w", desc.Digest, desc.MediaType, err)
+	}
+	rc, err := fetcher.Fetch(ctx, desc)
+	if err != nil {
+		return nil, err
+	}
+	var r io.Reader = rc
+	if desc.Size > 0 {
+		// one byte more than expected detects oversized content without reading all of it
+		r = io.LimitReader(rc, desc.Size+1)
+	}
+	data, err := io.ReadAll(r)
+	if err = errors.Join(err, rc.Close()); err != nil {
+		return nil, fmt.Errorf("failed to read %s: %w", desc.Digest, err)
+	}
+	if desc.Size > 0 && int64(len(data)) != desc.Size {
+		return nil, fmt.Errorf("size mismatch for %s: expected %d bytes, got %d", desc.Digest, desc.Size, len(data))
+	}
+	if actual := desc.Digest.Algorithm().FromBytes(data); actual != desc.Digest {
+		return nil, fmt.Errorf("digest mismatch: expected %s, got %s", desc.Digest, actual)
+	}
+	return data, nil
 }

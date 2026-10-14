@@ -50,10 +50,10 @@ import (
 )
 
 var (
-	_            ComponentVersionRepository                 = (*Repository)(nil)
-	_            repository.OwnershipAwareRepository        = (*Repository)(nil)
-	_            repository.StoredComponentDescriptorReader = (*Repository)(nil)
-	versionRegex                                            = regexp.MustCompile(compref.VersionRegex)
+	_            ComponentVersionRepository          = (*Repository)(nil)
+	_            repository.OwnershipAwareRepository = (*Repository)(nil)
+	_            repository.DigestPinnableRepository = (*Repository)(nil)
+	versionRegex                                     = regexp.MustCompile(compref.VersionRegex)
 )
 
 // Repository implements the ComponentVersionRepository interface using OCI registries.
@@ -99,6 +99,10 @@ type Repository struct {
 	// globalAccessPolicy controls whether global access references are added to local blobs.
 	// Default (zero value) is Never, suppressing global access to discourage reliance on it.
 	globalAccessPolicy GlobalAccessPolicy
+
+	// pin, if set, serves reads of one component from a content-addressed artifact,
+	// see PinComponentVersion.
+	pin *componentVersionPin
 }
 
 // SetGlobalAccessPolicy overrides the global access policy for this repository.
@@ -216,35 +220,14 @@ func (repo *Repository) GetComponentVersion(ctx context.Context, component, vers
 		done(err)
 	}()
 
-	desc, _, err = repo.getStoredComponentDescriptor(ctx, component, version)
-	return desc, err
-}
-
-// GetStoredComponentDescriptor implements [repository.StoredComponentDescriptorReader].
-// raw is the content of the componentDescriptorLayer of the component version, so its
-// digest is the digest of that layer.
-func (repo *Repository) GetStoredComponentDescriptor(ctx context.Context, component, version string) (desc *descriptor.Descriptor, raw []byte, err error) {
-	ctx = slogcontext.NewCtx(ctx, repo.logger)
-	done := log.Operation(ctx, "get stored component descriptor",
-		slog.String("component", component),
-		slog.String("version", version))
-	defer func() {
-		done(err)
-	}()
-	return repo.getStoredComponentDescriptor(ctx, component, version)
-}
-
-func (repo *Repository) getStoredComponentDescriptor(ctx context.Context, component, version string) (*descriptor.Descriptor, []byte, error) {
-	reference, store, err := repo.getStore(ctx, component, version)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	desc, raw, _, _, err := getDescriptorFromStore(ctx, store, reference, repo.unmarshalDescriptorFunc)
+	cv, err := repo.readComponentVersion(ctx, component, version)
 	if errors.Is(err, errdef.ErrNotFound) {
-		return nil, nil, errors.Join(repository.ErrNotFound, fmt.Errorf("component version %s/%s not found: %w", component, version, err))
+		return nil, errors.Join(repository.ErrNotFound, fmt.Errorf("component version %s/%s not found: %w", component, version, err))
 	}
-	return desc, raw, err
+	if err != nil {
+		return nil, err
+	}
+	return cv.descriptor, nil
 }
 
 // AddLocalResource adds a local resource to the repository.
@@ -555,14 +538,11 @@ func (repo *Repository) GetLocalSource(ctx context.Context, component, version s
 }
 
 func (repo *Repository) localArtifact(ctx context.Context, component, version string, identity runtime.Identity, kind annotations.ArtifactKind) (fetch.LocalBlob, descriptor.Artifact, error) {
-	reference, store, err := repo.getStore(ctx, component, version)
-	if err != nil {
-		return nil, nil, err
-	}
-	desc, _, manifest, index, err := getDescriptorFromStore(ctx, store, reference, repo.unmarshalDescriptorFunc)
+	cv, err := repo.readComponentVersion(ctx, component, version)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get component version: %w", err)
 	}
+	desc, store := cv.descriptor, cv.store
 
 	var artifacts []descriptor.Artifact
 	switch kind {
@@ -599,12 +579,12 @@ func (repo *Repository) localArtifact(ctx context.Context, component, version st
 	switch typed := typed.(type) {
 	case *v2.LocalBlob:
 		b, err := repo.getLocalBlobFromIndexOrManifest(
-			ctx, store, index, manifest, typed.LocalReference,
+			ctx, store, cv.index, cv.manifest, typed.LocalReference,
 			artifact.GetElementMeta().Version,
 		)
 		return b, artifact, err
 	case *accessv1.RelativeOCIReference:
-		b, err := repo.getRelativeOCIReference(ctx, reference, typed)
+		b, err := repo.getRelativeOCIReference(ctx, cv.reference, typed)
 		return b, artifact, err
 	default:
 		return nil, nil, fmt.Errorf("unsupported resource access type: %T", typed)
@@ -622,8 +602,8 @@ func (repo *Repository) getRelativeOCIReference(ctx context.Context, reference s
 	if err := typed.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid relative OCI reference: %w", err)
 	}
-	// reference is already in scope from repo.getStore(...) above (= ComponentVersionReference);
-	// do not call the resolver a second time.
+	// reference is the reference the component version was resolved by (a tag or digest
+	// reference of the component repository); do not call the resolver a second time.
 	parsed, err := looseref.ParseReference(reference)
 	if err != nil {
 		return nil, fmt.Errorf("cannot derive registry for relative reference: %w", err)
@@ -972,7 +952,8 @@ func (repo *Repository) download(ctx context.Context, access runtime.Typed) (dat
 }
 
 // getDescriptorOCIImageManifest retrieves the manifest for a given reference from the store.
-// It handles both OCI image indexes and OCI image manifests.
+// It handles both OCI image indexes and OCI image manifests. Every node read is verified
+// against its digest, starting from the one reference resolves to.
 func getDescriptorOCIImageManifest(ctx context.Context, store spec.Store, reference string) (manifest ociImageSpecV1.Manifest, index *ociImageSpecV1.Index, err error) {
 	slogcontext.Log(ctx, slog.LevelDebug, "resolving descriptor", slog.String("reference", reference))
 	base, err := store.Resolve(ctx, reference)
@@ -980,7 +961,7 @@ func getDescriptorOCIImageManifest(ctx context.Context, store spec.Store, refere
 		return ociImageSpecV1.Manifest{}, nil, fmt.Errorf("failed to resolve reference %q: %w", reference, err)
 	}
 	slogcontext.Log(ctx, slog.LevelDebug, "fetching descriptor", log.DescriptorLogAttr(base))
-	manifestRaw, err := store.Fetch(ctx, ociImageSpecV1.Descriptor{
+	manifestRaw, err := fetchVerified(ctx, store, ociImageSpecV1.Descriptor{
 		MediaType: base.MediaType,
 		Digest:    base.Digest,
 		Size:      base.Size,
@@ -988,13 +969,10 @@ func getDescriptorOCIImageManifest(ctx context.Context, store spec.Store, refere
 	if err != nil {
 		return ociImageSpecV1.Manifest{}, nil, err
 	}
-	defer func() {
-		err = errors.Join(err, manifestRaw.Close())
-	}()
 
 	switch base.MediaType {
 	case ociImageSpecV1.MediaTypeImageIndex:
-		if err := json.NewDecoder(manifestRaw).Decode(&index); err != nil {
+		if err := json.Unmarshal(manifestRaw, &index); err != nil {
 			return ociImageSpecV1.Manifest{}, nil, err
 		}
 		if len(index.Manifests) == 0 {
@@ -1005,18 +983,15 @@ func getDescriptorOCIImageManifest(ctx context.Context, store spec.Store, refere
 			return ociImageSpecV1.Manifest{}, nil, fmt.Errorf("index manifest is not an OCI image manifest")
 		}
 		slogcontext.Log(ctx, slog.LevelDebug, "fetching first manifest from index", log.DescriptorLogAttr(descriptorManifest))
-		indexManifestRaw, err := store.Fetch(ctx, descriptorManifest)
-		defer func() {
-			err = errors.Join(err, indexManifestRaw.Close())
-		}()
+		indexManifestRaw, err := fetchVerified(ctx, store, descriptorManifest)
 		if err != nil {
 			return ociImageSpecV1.Manifest{}, nil, fmt.Errorf("failed to fetch manifest: %w", err)
 		}
-		if err := json.NewDecoder(indexManifestRaw).Decode(&manifest); err != nil {
+		if err := json.Unmarshal(indexManifestRaw, &manifest); err != nil {
 			return ociImageSpecV1.Manifest{}, nil, err
 		}
 	case ociImageSpecV1.MediaTypeImageManifest:
-		if err := json.NewDecoder(manifestRaw).Decode(&manifest); err != nil {
+		if err := json.Unmarshal(manifestRaw, &manifest); err != nil {
 			return ociImageSpecV1.Manifest{}, nil, err
 		}
 	default:

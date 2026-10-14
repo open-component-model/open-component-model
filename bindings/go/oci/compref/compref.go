@@ -89,12 +89,13 @@ type Ref struct {
 	Version string
 
 	// Digest is an optional pin of the component version, "[<normalisation>+]<hash>:<hex>".
-	// Without a normalisation (e.g. sha256:abcd...) it is the hash of the component descriptor
-	// bytes as stored in the repository (for OCI and CTF the digest of the componentDescriptorLayer).
+	// Without a normalisation (e.g. sha256:abcd...) it is the OCI digest of the image index or
+	// manifest the component version is stored as (what its version tag resolves to); the
+	// component version is read from that artifact, so the Version may be omitted.
 	// With one (e.g. jsonNormalisation.v4alpha1+sha256:abcd...) it is the hash of the descriptor
-	// normalised with that algorithm ("/" written as "."), the value OCM signatures sign.
-	// If present, the resolved component version MUST have this digest; it is more
-	// authoritative than the Version, which a pinned reference must still name.
+	// normalised with that algorithm ("/" written as "."), the value OCM signatures sign, and the
+	// Version must be set. If present, the resolved component version MUST have this digest; it is
+	// more authoritative than the Version.
 	// Validates as per DigestRegex; see repository.ParseDigestPin for its interpretation.
 	Digest string
 }

@@ -61,11 +61,12 @@ func New() *cobra.Command {
 a target repository using an internally generated transformation graph.
 
 When a version is included in the source reference, exactly that version is transferred.
-A digest after the version pins it: "@sha256:<hex>" (raw: the descriptor bytes as stored in the source)
-or "@jsonNormalisation.v4alpha1+sha256:<hex>" (normalized: the digest signatures sign). The transfer fails
-unless the source descriptor matches. A raw pin is specific to the source repository; a normalized pin
-also matches the transferred copy.
-When the version is omitted, all versions of the component are discovered and transferred.
+A digest pins it (see "ocm get cv --help"). With an OCI digest, "@sha256:<hex>", the descriptor and all
+local resources are read from the source artifact with that digest instead of through the version tag,
+and the version may be omitted. With a normalized digest, "@jsonNormalisation.v4alpha1+sha256:<hex>"
+(the digest signatures sign), the transfer fails unless the source descriptor matches it. An OCI digest
+is specific to the source repository; a normalized digest also matches the transferred copy.
+When the version is omitted (and no OCI digest is given), all versions of the component are discovered and transferred.
 When the source is a repository reference (without a component), every component version
 the repository contains is transferred (component listing is currently CTF-only).
 Use --constraint to restrict which versions are selected, and --latest to transfer
@@ -556,7 +557,20 @@ func collectComponentIDs(
 		if cmd.Flags().Changed(FlagLatest) {
 			slog.WarnContext(ctx, fmt.Sprintf("--%s has no effect when a version is already specified in the reference", FlagLatest))
 		}
-		return []transfer.ComponentID{{Component: fromSpec.Component, Version: fromSpec.Version, Digest: pinned}}, nil
+		version := fromSpec.Version
+		if version == "" {
+			// A reference pinned to an OCI digest may omit the version: take it from the pinned artifact.
+			repo, err := repoProvider.GetComponentVersionRepositoryForComponent(ctx, fromSpec.Component, "")
+			if err != nil {
+				return nil, fmt.Errorf("could not access ocm repository: %w", err)
+			}
+			_, desc, err := ocm.GetPinnedComponentVersion(ctx, repo, fromSpec)
+			if err != nil {
+				return nil, fmt.Errorf("resolving the version of the pinned component failed: %w", err)
+			}
+			version = desc.Component.Version
+		}
+		return []transfer.ComponentID{{Component: fromSpec.Component, Version: version, Digest: pinned}}, nil
 	}
 
 	registry, err := versioningspec.RegistryFromConfig(cfg)

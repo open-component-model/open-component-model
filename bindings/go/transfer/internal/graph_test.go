@@ -1,10 +1,12 @@
 package internal
 
 import (
+	"context"
 	"crypto"
 	"log/slog"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -434,10 +436,60 @@ func TestBuildGraphDefinition_PinnedRoot(t *testing.T) {
 	require.NoError(t, build(*actual), "a root matching its pin transfers")
 	wrong := *actual
 	wrong.Value = strings.Repeat("0", len(actual.Value))
-	require.ErrorContains(t, build(wrong), "expected digest", "a root not matching its pin fails")
-	raw := *actual
-	raw.NormalisationAlgorithm = ""
-	require.ErrorContains(t, build(raw), "does not expose stored descriptors", "a raw pin is checked against the stored descriptor")
+	require.ErrorContains(t, build(wrong), "does not match pinned digest", "a root not matching its pin fails")
+	ociPin := *actual
+	ociPin.NormalisationAlgorithm = ""
+	require.ErrorContains(t, build(ociPin), "does not store component versions content-addressed", "an OCI digest pin needs a content-addressed source")
+}
+
+// slowChildResolver opens the child's repository only after the parent's references were
+// discovered, one legal ordering of the concurrent graph discovery.
+type slowChildResolver struct {
+	*mockCVRepoResolver
+	childSpec runtime.Typed
+}
+
+func (r *slowChildResolver) GetComponentVersionRepositoryForSpecification(ctx context.Context, spec runtime.Typed) (repository.ComponentVersionRepository, error) {
+	if spec == r.childSpec {
+		time.Sleep(300 * time.Millisecond)
+	}
+	return r.mockCVRepoResolver.GetComponentVersionRepositoryForSpecification(ctx, spec)
+}
+
+// A pinned root is verified against its pin even when another root references it with a
+// digest of its own: the reference digest must not replace the pin.
+func TestBuildGraphDefinition_PinnedRootReferencedByOtherRoot(t *testing.T) {
+	r := require.New(t)
+	child := testDescriptor("ocm.software/child", "1.0.0", nil, nil)
+	childDigest, err := signing.GenerateDigest(t.Context(), child, slog.Default(), v4alpha1.Algorithm, crypto.SHA256.String())
+	r.NoError(err)
+	parent := testDescriptor("ocm.software/parent", "1.0.0", nil, []descriptor.Reference{{
+		ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "child", Version: "1.0.0"}},
+		Component:   "ocm.software/child",
+		Digest:      *childDigest,
+	}})
+
+	childSpec := testOCIRepo("ghcr.io/source")
+	resolver := &slowChildResolver{
+		mockCVRepoResolver: testMultiResolver(map[string]struct {
+			spec runtime.Typed
+			desc *descriptor.Descriptor
+		}{
+			"ocm.software/parent:1.0.0": {spec: testOCIRepo("ghcr.io/source"), desc: parent},
+			"ocm.software/child:1.0.0":  {spec: childSpec, desc: child},
+		}),
+		childSpec: childSpec,
+	}
+	wrongPin := *childDigest
+	wrongPin.Value = strings.Repeat("0", len(childDigest.Value))
+
+	target := testOCIRepo("ghcr.io/target")
+	roots := map[string]TransferRoot{
+		"ocm.software/parent:1.0.0": {RootComponentKey: "ocm.software/parent:1.0.0", Targets: []runtime.Typed{target}, SourceResolver: resolver},
+		"ocm.software/child:1.0.0":  {RootComponentKey: "ocm.software/child:1.0.0", Targets: []runtime.Typed{target}, SourceResolver: resolver, ExpectedDigest: &wrongPin},
+	}
+	_, err = BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{Recursive: transferv1alpha1.RecursiveInfinite}, nil)
+	r.ErrorContains(err, "does not match pinned digest", "the child root is checked against its pin")
 }
 
 func TestBuildGraphDefinition_MultiTarget(t *testing.T) {

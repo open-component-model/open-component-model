@@ -25,6 +25,10 @@ import (
 type discoveryValue struct {
 	Descriptor       *descriptor.Descriptor
 	SourceRepository runtime.Typed
+	// Pin is the OCI digest of the source artifact the descriptor was read from if the
+	// component version is pinned to it (see [repository.DigestPinnableRepository]), else empty.
+	// Local resources are then read from the same artifact.
+	Pin string
 }
 
 // multiResolver dispatches component version resolution to per-component resolvers.
@@ -34,8 +38,11 @@ type discoveryValue struct {
 // The resolverMap is shared with the discoverer so that recursively discovered children
 // inherit their parent's resolver (see discoverer.Discover).
 type multiResolver struct {
-	mu             *sync.Mutex // shared with discoverer to protect resolverMap
-	resolverMap    map[string]resolvers.ComponentVersionRepositoryResolver
+	mu          *sync.Mutex // shared with discoverer to protect resolverMap
+	resolverMap map[string]resolvers.ComponentVersionRepositoryResolver
+	// rootPin returns the digest a root component key is pinned to, nil if it is not pinned.
+	rootPin func(key string) *descriptor.Digest
+	// expectedDigest returns the digest a parent's component reference expects for id, nil if none.
 	expectedDigest func(id runtime.Identity) *descriptor.Digest
 }
 
@@ -46,10 +53,10 @@ type multiResolver struct {
 //   - If the spec is nil (e.g., when using FromRepository which wraps a concrete repo directly),
 //     it falls back to GetComponentVersionRepositoryForComponent.
 //
-// The descriptor is verified against the expected digest of the component version, if any:
-// a root pin or the digest recorded during recursive discovery of parent component references.
-// A raw expected digest (no normalisation algorithm, see [repository.ParseDigestPin]) is
-// checked against the stored descriptor bytes the descriptor is decoded from.
+// The descriptor is verified against the root pin of the component version and against the
+// digest recorded during recursive discovery of parent component references; if both exist,
+// both must match. An OCI digest root pin (see [repository.ParseDigestPin]) reads the component
+// version from the artifact with that digest instead of resolving the version tag.
 func (r *multiResolver) Resolve(ctx context.Context, key string) (*discoveryValue, error) {
 	parts := strings.SplitN(key, ":", 2)
 	if len(parts) != 2 {
@@ -92,32 +99,23 @@ func (r *multiResolver) Resolve(ctx context.Context, key string) (*discoveryValu
 		repo = resolved
 	}
 
-	expected := r.expectedDigest(runtime.Identity{
+	pin := r.rootPin(key)
+	_, desc, err := repository.GetPinnedComponentVersion(ctx, repo, component, version, pin)
+	if err != nil {
+		return nil, fmt.Errorf("failed getting component version %s:%s: %w", component, version, err)
+	}
+
+	if expected := r.expectedDigest(runtime.Identity{
 		descriptor.IdentityAttributeName:    component,
 		descriptor.IdentityAttributeVersion: version,
-	})
-
-	var desc *descriptor.Descriptor
-	if expected != nil && expected.NormalisationAlgorithm == "" {
-		// A raw pin hashes the stored descriptor bytes; the descriptor is decoded from the same bytes.
-		desc, err = repository.GetPinnedComponentVersion(ctx, repo, component, version, expected)
-		if err != nil {
-			return nil, fmt.Errorf("failed getting component version %s:%s: %w", component, version, err)
-		}
-	} else {
-		desc, err = repo.GetComponentVersion(ctx, component, version)
-		if err != nil {
-			return nil, fmt.Errorf("failed getting component version %s:%s: %w", component, version, err)
-		}
-		if expected != nil {
-			slog.DebugContext(ctx, "verifying digest for resolved descriptor",
-				"component", component, "version", version,
-				"expectedDigest", expected.Value)
-			if err := signing.VerifyDigestMatchesDescriptor(
-				ctx, desc, descriptor.Signature{Digest: *expected}, slog.Default(),
-			); err != nil {
-				return nil, fmt.Errorf("failed verifying resolved descriptor matches expected digest: %w", err)
-			}
+	}); expected != nil {
+		slog.DebugContext(ctx, "verifying digest for resolved descriptor",
+			"component", component, "version", version,
+			"expectedDigest", expected.Value)
+		if err := signing.VerifyDigestMatchesDescriptor(
+			ctx, desc, descriptor.Signature{Digest: *expected}, slog.Default(),
+		); err != nil {
+			return nil, fmt.Errorf("failed verifying resolved descriptor matches expected digest: %w", err)
 		}
 	}
 
@@ -126,10 +124,14 @@ func (r *multiResolver) Resolve(ctx context.Context, key string) (*discoveryValu
 		"resources", len(desc.Component.Resources),
 		"references", len(desc.Component.References))
 
-	return &discoveryValue{
+	value := &discoveryValue{
 		Descriptor:       desc,
 		SourceRepository: repoSpec,
-	}, nil
+	}
+	if pin != nil && pin.NormalisationAlgorithm == "" {
+		value.Pin = repository.FormatDigestPin(pin)
+	}
+	return value, nil
 }
 
 // discoverer implements the dagsync.Discoverer interface for recursive component reference traversal.
@@ -200,11 +202,21 @@ func (d *discoverer) Discover(ctx context.Context, parent *discoveryValue) ([]st
 			"parent", parentKey, "child", key,
 			"hasDigest", ref.Digest.Value != "")
 
-		// Record expected digest for later verification during resolution.
+		// Record expected digest for later verification during resolution. Parents that
+		// expect different digests for the same component version cannot both be satisfied.
 		if ref.Digest.Value != "" {
+			id := ref.ToComponentIdentity().String()
 			d.mu.Lock()
-			d.discoveredDigests[ref.ToComponentIdentity().String()] = ref.Digest
+			existing, conflict := d.discoveredDigests[id]
+			conflict = conflict && existing != ref.Digest
+			if !conflict {
+				d.discoveredDigests[id] = ref.Digest
+			}
 			d.mu.Unlock()
+			if conflict {
+				return nil, fmt.Errorf("component version %s is referenced with conflicting digests %s (by %s) and %s (recorded before)",
+					key, repository.FormatDigestPin(&ref.Digest), parentKey, repository.FormatDigestPin(&existing))
+			}
 		}
 
 		d.mu.Lock()

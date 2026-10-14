@@ -10,7 +10,6 @@ import (
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/oci/internal/attestation"
 	ociidentity "ocm.software/open-component-model/bindings/go/oci/internal/identity"
-	"ocm.software/open-component-model/bindings/go/oci/spec"
 	accessv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	ocmrepository "ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -48,12 +47,13 @@ func (repo *Repository) DiscoverSBOM(ctx context.Context, res *descriptor.Resour
 func (repo *Repository) DiscoverLocalSBOM(ctx context.Context, component, version string, identity runtime.Identity, opts ...ocmrepository.SBOMOption) ([]ocmrepository.SBOM, error) {
 	ctx = slogcontext.NewCtx(ctx, repo.logger)
 
-	reference, store, err := repo.getStore(ctx, component, version)
+	cv, err := repo.readComponentVersion(ctx, component, version)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get component version: %w", err)
 	}
+	store := cv.store
 
-	res, err := repo.localResourceFromDescriptor(ctx, store, reference, identity)
+	res, err := localResourceFromDescriptor(cv.descriptor, identity)
 	if err != nil {
 		return nil, err
 	}
@@ -73,7 +73,11 @@ func (repo *Repository) DiscoverLocalSBOM(ctx context.Context, component, versio
 	}
 
 	// LocalReference is always a digest, and this is OCI land, so we should be okay with doing this here.
-	root, err := store.Resolve(ctx, reference+"@"+local.LocalReference)
+	localRef, err := withDigest(cv.reference, local.LocalReference)
+	if err != nil {
+		return nil, err
+	}
+	root, err := store.Resolve(ctx, localRef)
 	if err != nil {
 		return nil, fmt.Errorf("resolving local blob %q of resource %q failed: %w", local.LocalReference, identity, err)
 	}
@@ -84,12 +88,7 @@ func (repo *Repository) DiscoverLocalSBOM(ctx context.Context, component, versio
 
 // localResourceFromDescriptor finds the unique resource matching identity in the
 // component version's descriptor.
-func (repo *Repository) localResourceFromDescriptor(ctx context.Context, store spec.Store, reference string, identity runtime.Identity) (*descriptor.Resource, error) {
-	desc, _, _, _, err := getDescriptorFromStore(ctx, store, reference, repo.unmarshalDescriptorFunc)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get component version: %w", err)
-	}
-
+func localResourceFromDescriptor(desc *descriptor.Descriptor, identity runtime.Identity) (*descriptor.Resource, error) {
 	artifacts := make([]descriptor.Artifact, 0, len(desc.Component.Resources))
 	for i := range desc.Component.Resources {
 		artifacts = append(artifacts, &desc.Component.Resources[i])
