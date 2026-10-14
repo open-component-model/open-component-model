@@ -30,14 +30,17 @@
         },
         {
           "deprecated": true,
+          "x-deprecationMessage": "use LocalBlob/v1 instead",
           "const": "localBlob/v1"
         },
         {
           "deprecated": true,
+          "x-deprecationMessage": "use LocalBlob/v1 instead",
           "const": "LocalBlob"
         },
         {
           "deprecated": true,
+          "x-deprecationMessage": "use LocalBlob/v1 instead",
           "const": "localBlob"
         }
       ]

@@ -19,6 +19,7 @@ const (
 type LocalBlob struct {
 	// +ocm:jsonschema-gen:enum=LocalBlob/v1
 	// +ocm:jsonschema-gen:enum:deprecated=localBlob/v1,LocalBlob,localBlob
+	// +ocm:jsonschema-gen:enum:deprecated:hint=use LocalBlob/v1 instead
 	Type runtime.Type `json:"type"`
 	// LocalReference is the repository local identity of the blob.
 	// it is used by the repository implementation to get access

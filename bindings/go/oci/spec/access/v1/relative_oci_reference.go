@@ -27,6 +27,7 @@ const RelativeOCIReferenceType = "relativeOciReference"
 type RelativeOCIReference struct {
 	// +ocm:jsonschema-gen:enum=relativeOciReference/v1
 	// +ocm:jsonschema-gen:enum:deprecated=relativeOciReference
+	// +ocm:jsonschema-gen:enum:deprecated:hint=use relativeOciReference/v1 instead
 	Type runtime.Type `json:"type"`
 	// Reference is the registry-relative OCI artifact reference
 	// (repository[:tag][@digest]); no scheme, no leading slash, no host:port prefix.

@@ -23,6 +23,7 @@ const (
 type S3 struct {
 	// +ocm:jsonschema-gen:enum=S3/v2,s3/v2
 	// +ocm:jsonschema-gen:enum:deprecated=S3,s3
+	// +ocm:jsonschema-gen:enum:deprecated:hint=use S3/v2 instead
 	Type runtime.Type `json:"type"`
 
 	// Region is the region of the bucket. Optional; when empty it is resolved from

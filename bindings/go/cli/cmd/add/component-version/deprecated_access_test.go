@@ -49,8 +49,8 @@ func TestIsTypeDeprecated(t *testing.T) {
 		{"GitHub camel unversioned", githubaccess.Scheme, "gitHub", true, "use Git/v1 instead"},
 		{"Git canonical", gitaccess.Scheme, "Git/v1", false, ""},
 		{"Git unversioned", gitaccess.Scheme, "Git", false, ""},
-		{"Git legacy spelling", gitaccess.Scheme, "git", true, ""},
-		{"Git legacy version", gitaccess.Scheme, "Git/v1alpha1", true, ""},
+		{"Git legacy spelling", gitaccess.Scheme, "git", true, "use Git/v1 instead"},
+		{"Git legacy version", gitaccess.Scheme, "Git/v1alpha1", true, "use Git/v1 instead"},
 		{"unknown type", gitaccess.Scheme, "ociArtifact/v1", false, ""},
 	}
 

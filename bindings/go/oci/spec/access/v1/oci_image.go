@@ -27,6 +27,7 @@ const (
 type OCIImage struct {
 	// +ocm:jsonschema-gen:enum=OCIImage/v1,ociArtifact/v1,ociRegistry/v1,ociImage/v1
 	// +ocm:jsonschema-gen:enum:deprecated=OCIImage,ociArtifact,ociRegistry,ociImage
+	// +ocm:jsonschema-gen:enum:deprecated:hint=use OCIImage/v1 instead
 	Type runtime.Type `json:"type"`
 	// ImageReference is the full OCI image reference, including registry, repository,
 	// and tag or digest.

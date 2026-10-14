@@ -35,10 +35,12 @@
         },
         {
           "deprecated": true,
+          "x-deprecationMessage": "use OCIImageLayer/v1 instead",
           "const": "OCIImageLayer"
         },
         {
           "deprecated": true,
+          "x-deprecationMessage": "use OCIImageLayer/v1 instead",
           "const": "ociBlob"
         }
       ]

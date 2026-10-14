@@ -27,18 +27,22 @@
         },
         {
           "deprecated": true,
+          "x-deprecationMessage": "use OCIImage/v1 instead",
           "const": "OCIImage"
         },
         {
           "deprecated": true,
+          "x-deprecationMessage": "use OCIImage/v1 instead",
           "const": "ociArtifact"
         },
         {
           "deprecated": true,
+          "x-deprecationMessage": "use OCIImage/v1 instead",
           "const": "ociRegistry"
         },
         {
           "deprecated": true,
+          "x-deprecationMessage": "use OCIImage/v1 instead",
           "const": "ociImage"
         }
       ]

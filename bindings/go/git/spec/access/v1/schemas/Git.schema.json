@@ -29,14 +29,17 @@
         },
         {
           "deprecated": true,
+          "x-deprecationMessage": "use Git/v1 instead",
           "const": "git"
         },
         {
           "deprecated": true,
+          "x-deprecationMessage": "use Git/v1 instead",
           "const": "git/v1alpha1"
         },
         {
           "deprecated": true,
+          "x-deprecationMessage": "use Git/v1 instead",
           "const": "Git/v1alpha1"
         }
       ]

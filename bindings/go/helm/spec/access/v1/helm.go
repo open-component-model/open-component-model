@@ -32,6 +32,7 @@ const (
 type Helm struct {
 	// +ocm:jsonschema-gen:enum=Helm/v1,helm/v1
 	// +ocm:jsonschema-gen:enum:deprecated=Helm,helm
+	// +ocm:jsonschema-gen:enum:deprecated:hint=use Helm/v1 instead
 	Type runtime.Type `json:"type"`
 
 	// HelmRepository is the URL of the helm repository to load the chart from.
