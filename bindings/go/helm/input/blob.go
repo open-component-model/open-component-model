@@ -91,10 +91,8 @@ func GetV1HelmBlob(ctx context.Context, helmSpec v1.Helm, tmpDir string, opts ..
 	switch {
 	case helmSpec.Path != "":
 		path := helmSpec.Path
-		if options.WorkingDirectory != "" {
-			if path, err = filesystem.EnsurePathInWorkingDirectory(path, options.WorkingDirectory); err != nil {
-				return nil, nil, fmt.Errorf("error resolving local helm chart path %q in working directory %q: %w", helmSpec.Path, options.WorkingDirectory, err)
-			}
+		if options.WorkingDirectory != "" && !filepath.IsAbs(path) {
+			path = filepath.Join(options.WorkingDirectory, path)
 		}
 		chart, err = newReadOnlyChart(path, tmpDir)
 		if err != nil {

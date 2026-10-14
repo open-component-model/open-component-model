@@ -66,17 +66,17 @@ func TestEnsurePathInWorkingDirectory_Internal(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := EnsurePathInWorkingDirectory(tt.args.path, tt.args.workingDirectory)
+			got, err := ensurePathInWorkingDirectory(tt.args.path, tt.args.workingDirectory)
 			if tt.wantErr {
 				if err == nil {
-					t.Errorf("EnsurePathInWorkingDirectory() error = %v, wantErr %v", err, tt.wantErr)
+					t.Errorf("ensurePathInWorkingDirectory() error = %v, wantErr %v", err, tt.wantErr)
 				} else {
-					t.Logf("EnsurePathInWorkingDirectory() error = %v, wantErr %v", err, tt.wantErr)
+					t.Logf("ensurePathInWorkingDirectory() error = %v, wantErr %v", err, tt.wantErr)
 				}
 				return
 			}
 			if got != tt.want {
-				t.Errorf("EnsurePathInWorkingDirectory() got = %v, want %v", got, tt.want)
+				t.Errorf("ensurePathInWorkingDirectory() got = %v, want %v", got, tt.want)
 			}
 		})
 	}
