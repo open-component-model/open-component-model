@@ -14,7 +14,7 @@
 //			 - identity:
 //				 type: OCIRegistry
 //				 hostname: ghcr.io
-//				 pathprefix: open-component-model
+//				 path: open-component-model/**
 //			   credentials:
 //				 - type: Credentials
 //				   properties:

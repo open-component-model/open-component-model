@@ -116,7 +116,7 @@ func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alph
 	if err := oidc.RegisterCredentialPlugin(manager.CredentialPluginRegistry); err != nil {
 		return fmt.Errorf("could not register OIDC credential plugin: %w", err)
 	}
-	if err := gpg.Register(manager.SigningRegistry, manager.CredentialTypeRegistry, filesystemConfig); err != nil {
+	if err := gpg.Register(manager.SigningRegistry, manager.CredentialTypeRegistry); err != nil {
 		return fmt.Errorf("could not register GPG signing plugin: %w", err)
 	}
 	if err := tsa.Register(manager.CredentialTypeRegistry); err != nil {

@@ -2,8 +2,10 @@
 title: "Migrate from Fallback to Deterministic Repository Resolvers"
 slug: "migrate-from-fallback-to-deterministic-repository-resolvers"
 description: "Replace deprecated fallback resolvers with glob-based resolvers for deterministic and efficient component resolution."
-weight: 12
+weight: 20
 toc: true
+aliases:
+  - /docs/how-to/migrate-from-fallback-to-deterministic-repository-resolvers/
 ---
 
 ## Goal
@@ -264,7 +266,7 @@ For the full version constraint syntax, see
 ## Next Steps
 
 - [How-To: Resolving Components Across Multiple Registries]
-  ({{< relref "resolve-components-from-multiple-repositories.md" >}}) — Configure resolver
+  ({{< relref "docs/how-to/resolve-components-from-multiple-repositories.md" >}}) — Configure resolver
   entries for multi-registry setups
 
 ## Related Documentation

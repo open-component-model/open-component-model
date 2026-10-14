@@ -18,7 +18,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/git/spec/access"
 	accessv1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
 	gitcreds "ocm.software/open-component-model/bindings/go/git/spec/credentials"
-	credsv1 "ocm.software/open-component-model/bindings/go/git/spec/credentials/v1"
 	identityv1 "ocm.software/open-component-model/bindings/go/git/spec/identity/v1"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -125,12 +124,9 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, res *descript
 }
 
 func (r *ResourceRepository) download(ctx context.Context, spec *accessv1.Git, expected *descriptor.Digest, creds runtime.Typed, tempDir string) (*download.Result, error) {
-	var typed *credsv1.GitCredentials
-	if creds != nil {
-		var err error
-		if typed, err = credsv1.ConvertToGitCredentials(creds); err != nil {
-			return nil, err
-		}
+	typed, err := convertGitCredentials(creds)
+	if err != nil {
+		return nil, err
 	}
 
 	result, err := download.Download(ctx, spec, typed, r.downloadOptions(tempDir))

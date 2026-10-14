@@ -67,7 +67,7 @@ func (r *ResourceRepository) UploadResource(ctx context.Context, resource *descr
 	return uploaded, nil
 }
 
-func (r *ResourceRepository) upload(ctx context.Context, resource *descriptor.Resource, spec *accessv1.Git, content blob.ReadOnlyBlob, creds *credsv1.GitCredentials, dir string) (*descriptor.Resource, error) {
+func (r *ResourceRepository) upload(ctx context.Context, resource *descriptor.Resource, spec *accessv1.Git, content blob.ReadOnlyBlob, creds runtime.Typed, dir string) (*descriptor.Resource, error) {
 	stream, err := content.ReadCloser()
 	if err != nil {
 		return nil, fmt.Errorf("cannot read git archive: %w", err)
@@ -117,15 +117,16 @@ func (r *ResourceRepository) upload(ctx context.Context, resource *descriptor.Re
 // push points the target ref at commit. An existing ref must already name the
 // commit (directly or as an annotated tag of it) or, for a branch, fast-forward
 // to it within history, so the target never needs to be downloaded.
-func (r *ResourceRepository) push(ctx context.Context, repo *git.Repository, target *accessv1.Git, creds *credsv1.GitCredentials, commit plumbing.Hash, history map[plumbing.Hash]struct{}) error {
+func (r *ResourceRepository) push(ctx context.Context, repo *git.Repository, target *accessv1.Git, creds runtime.Typed, commit plumbing.Hash, history map[plumbing.Hash]struct{}) error {
 	ep, err := endpoint.Parse(target.Repository)
 	if err != nil {
 		return fmt.Errorf("invalid target: cannot address git repository: %w", err)
 	}
-	options, err := download.ClientOptions(ep, creds, r.downloadOptions(r.tempFolder()))
+	options, release, err := download.ClientOptions(ctx, ep, creds, r.downloadOptions(r.tempFolder()))
 	if err != nil {
 		return fmt.Errorf("invalid target: %w", err)
 	}
+	defer release()
 	remote, err := repo.CreateRemote(&config.RemoteConfig{Name: "ocm-target", URLs: []string{ep.URL}})
 	if err != nil {
 		return fmt.Errorf("cannot configure target repository: %w", err)
@@ -165,11 +166,11 @@ func (r *ResourceRepository) push(ctx context.Context, repo *git.Repository, tar
 	return nil
 }
 
-func convertGitCredentials(typed runtime.Typed) (*credsv1.GitCredentials, error) {
+func convertGitCredentials(typed runtime.Typed) (runtime.Typed, error) {
 	if typed == nil {
 		return nil, nil
 	}
-	return credsv1.ConvertToGitCredentials(typed)
+	return credsv1.ConvertCredentials(typed)
 }
 
 func uploadedResource(source *descriptor.Resource, repository, ref, commit string) *descriptor.Resource {
