@@ -125,12 +125,13 @@
       ],
     },
     {
-      // OCM's FIPS cosign build is pinned twice: the release in the sigstore
-      // handler's .env (auto-download, integration tests) and the image in the
-      // CLI Containerfile and controller Dockerfile. Bump all in one PR. The
-      // release is tagged vX.Y.Z+ocm.N, the image vX.Y.Z-ocm.N (OCI tags allow
-      // no "+"). Regex versioning reads ocm.N as a build number in both, not a
-      // prerelease or docker compatibility suffix.
+      // OCM's FIPS cosign build is pinned twice: the release (and the digest of
+      // its cosign_checksums.txt) in the sigstore handler's .env (auto-download,
+      // integration tests) and the image in the CLI Containerfile and controller
+      // Dockerfile. Bump all in one PR; pin_sync_test.go fails if they diverge.
+      // The release is tagged vX.Y.Z+ocm.N, the image vX.Y.Z-ocm.N (OCI tags
+      // allow no "+"). Regex versioning reads ocm.N as a build number in both,
+      // not a prerelease or docker compatibility suffix.
       groupName: 'OCM cosign',
       groupSlug: 'ocm-cosign',
       matchPackageNames: [
@@ -353,15 +354,17 @@
       versioningTemplate: 'semver',
     },
     {
-      // OCM cosign release pin (vX.Y.Z+ocm.N). The generic .env manager above
-      // skips it (only plain semver), so the full tag is captured here for the
-      // "OCM cosign" group's regex versioning.
+      // OCM cosign release pin (vX.Y.Z+ocm.N) plus the SHA256 of that release's
+      // cosign_checksums.txt. The generic .env manager above skips it (only plain
+      // semver), so the full tag is captured here for the "OCM cosign" group's
+      // regex versioning; github-release-attachments recomputes the digest from
+      // the new release's cosign_checksums.txt.
       customType: 'regex',
       managerFilePatterns: [
         '/(^|/)\\.env(\\.local)?$/',
       ],
       matchStrings: [
-        '# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>open-component-model/cosign)\\s+COSIGN_VERSION=(?<currentValue>v\\d+\\.\\d+\\.\\d+\\+ocm\\.\\d+)',
+        '# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>open-component-model/cosign)\\s+COSIGN_VERSION=(?<currentValue>v\\d+\\.\\d+\\.\\d+\\+ocm\\.\\d+)\\s+COSIGN_CHECKSUMS_SHA256=(?<currentDigest>[0-9a-f]{64})',
       ],
     },
     {

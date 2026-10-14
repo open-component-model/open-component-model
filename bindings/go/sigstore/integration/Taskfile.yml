@@ -4,6 +4,8 @@ vars:
   INTEGRATION_TEST_IDENTIFIER: 'Integration'
   COSIGN_VERSION:
     sh: . ../signing/handler/internal/.env && echo "$COSIGN_VERSION"
+  COSIGN_CHECKSUMS_SHA256:
+    sh: . ../signing/handler/internal/.env && echo "$COSIGN_CHECKSUMS_SHA256"
   SCAFFOLDING_VERSION:
     sh: . ./.env && echo "$SCAFFOLDING_VERSION"
   # Absolute paths rooted via TASKFILE_DIR to make any call path (taskfiles in root,
@@ -166,7 +168,7 @@ tasks:
   cosign:install:
     desc: "Install OCM's FIPS cosign build at the version pinned in signing/handler/internal/.env"
     requires:
-      vars: [COSIGN_VERSION]
+      vars: [COSIGN_VERSION, COSIGN_CHECKSUMS_SHA256]
     vars:
       BIN: '{{.SIGSTORE_BIN_DIR}}/cosign'
     status:
@@ -180,10 +182,14 @@ tasks:
         NAME="cosign-${OS}-${ARCH}"
         BASE="https://github.com/open-component-model/cosign/releases/download/{{.COSIGN_VERSION}}"
         mkdir -p "{{.SIGSTORE_BIN_DIR}}"
+        sha256() { (sha256sum "$1" 2>/dev/null || shasum -a 256 "$1") | awk '{print $1}'; }
+        SUMS="{{.SIGSTORE_BIN_DIR}}/cosign_checksums.txt"
+        curl -fsSL "$BASE/cosign_checksums.txt" -o "$SUMS"
+        [ "$(sha256 "$SUMS")" = "{{.COSIGN_CHECKSUMS_SHA256}}" ] || { rm -f "$SUMS"; echo "cosign_checksums.txt does not match COSIGN_CHECKSUMS_SHA256" >&2; exit 1; }
+        WANT=$(awk -v n="$NAME" '$2 == n {print $1}' "$SUMS")
+        rm -f "$SUMS"
         curl -fsSL "$BASE/$NAME" -o "{{.BIN}}"
-        WANT=$(curl -fsSL "$BASE/cosign_checksums.txt" | awk -v n="$NAME" '$2 == n {print $1}')
-        GOT=$( (sha256sum "{{.BIN}}" 2>/dev/null || shasum -a 256 "{{.BIN}}") | awk '{print $1}')
-        [ -n "$WANT" ] && [ "$WANT" = "$GOT" ] || { rm -f "{{.BIN}}"; echo "cosign checksum mismatch for $NAME" >&2; exit 1; }
+        [ -n "$WANT" ] && [ "$WANT" = "$(sha256 "{{.BIN}}")" ] || { rm -f "{{.BIN}}"; echo "cosign checksum mismatch for $NAME" >&2; exit 1; }
         chmod +x "{{.BIN}}"
         echo "{{.COSIGN_VERSION}}" > "{{.BIN}}.version"
 
