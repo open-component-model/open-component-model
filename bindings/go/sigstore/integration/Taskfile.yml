@@ -4,6 +4,8 @@ vars:
   INTEGRATION_TEST_IDENTIFIER: 'Integration'
   COSIGN_VERSION:
     sh: . ../signing/handler/internal/.env && echo "$COSIGN_VERSION"
+  COSIGN_CHECKSUMS_SHA256:
+    sh: . ../signing/handler/internal/.env && echo "$COSIGN_CHECKSUMS_SHA256"
   SCAFFOLDING_VERSION:
     sh: . ./.env && echo "$SCAFFOLDING_VERSION"
   # Absolute paths rooted via TASKFILE_DIR to make any call path (taskfiles in root,
@@ -164,22 +166,32 @@ tasks:
         platforms: [linux]
 
   cosign:install:
-    desc: "Install cosign at the version pinned in signing/handler/internal/.env"
+    desc: "Install OCM's FIPS cosign build at the version pinned in signing/handler/internal/.env"
     requires:
-      vars: [COSIGN_VERSION]
+      vars: [COSIGN_VERSION, COSIGN_CHECKSUMS_SHA256]
     vars:
       BIN: '{{.SIGSTORE_BIN_DIR}}/cosign'
     status:
-      - 'cosign version 2>&1 | grep -qF "{{.COSIGN_VERSION}}"'
+      - 'test -x "{{.BIN}}" && [ "$(cat "{{.BIN}}.version" 2>/dev/null)" = "{{.COSIGN_VERSION}}" ]'
     cmds:
       - |
+        set -euo pipefail
         OS=$(uname -s | tr '[:upper:]' '[:lower:]')
         ARCH=$(uname -m)
         case "$ARCH" in x86_64) ARCH=amd64;; aarch64|arm64) ARCH=arm64;; esac
-        URL="https://github.com/sigstore/cosign/releases/download/{{.COSIGN_VERSION}}/cosign-${OS}-${ARCH}"
+        NAME="cosign-${OS}-${ARCH}"
+        BASE="https://github.com/open-component-model/cosign/releases/download/{{.COSIGN_VERSION}}"
         mkdir -p "{{.SIGSTORE_BIN_DIR}}"
-        curl -fsSL "$URL" -o "{{.BIN}}"
+        sha256() { (sha256sum "$1" 2>/dev/null || shasum -a 256 "$1") | awk '{print $1}'; }
+        SUMS="{{.SIGSTORE_BIN_DIR}}/cosign_checksums.txt"
+        curl -fsSL "$BASE/cosign_checksums.txt" -o "$SUMS"
+        [ "$(sha256 "$SUMS")" = "{{.COSIGN_CHECKSUMS_SHA256}}" ] || { rm -f "$SUMS"; echo "cosign_checksums.txt does not match COSIGN_CHECKSUMS_SHA256" >&2; exit 1; }
+        WANT=$(awk -v n="$NAME" '$2 == n {print $1}' "$SUMS")
+        rm -f "$SUMS"
+        curl -fsSL "$BASE/$NAME" -o "{{.BIN}}"
+        [ -n "$WANT" ] && [ "$WANT" = "$(sha256 "{{.BIN}}")" ] || { rm -f "{{.BIN}}"; echo "cosign checksum mismatch for $NAME" >&2; exit 1; }
         chmod +x "{{.BIN}}"
+        echo "{{.COSIGN_VERSION}}" > "{{.BIN}}.version"
 
   setup:
     desc: "Provision the sigstore scaffolding cluster and write the sourceable env file."
