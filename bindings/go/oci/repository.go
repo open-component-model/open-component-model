@@ -156,14 +156,11 @@ func (repo *Repository) AddComponentVersion(ctx context.Context, descriptor *des
 // tagIdempotent tags desc at reference, treating the write as a no-op success
 // when the reference already resolves to desc.Digest.
 //
-// Immutable/write-once registries (e.g. a Nexus hosted repo with "redeploy"
-// disabled) reject re-tagging an existing reference even to byte-identical
-// content. OCM manifests are content-addressed with no time-varying fields, so
-// re-transferring an unchanged version yields the same digest and only the tag
-// write collides. We branch on the post-condition rather than classify the
-// error (a 409 is not exclusively a redeploy rejection): if the reference
-// already points at the digest we meant to write, the end state holds; anything
-// else propagates. The Resolve runs only on the error path.
+// Immutable/write-once registries (e.g. Nexus with "redeploy" disabled) reject
+// re-tagging even to identical content. Rather than classify the error (a 409
+// is not only a redeploy rejection), we check the post-condition: if the tag
+// already points at our digest the end state holds; else propagate. The Resolve
+// runs only on the error path.
 func tagIdempotent(ctx context.Context, store spec.Store, desc ociImageSpecV1.Descriptor, reference string) error {
 	err := store.Tag(ctx, desc, reference)
 	if err == nil {
@@ -950,15 +947,10 @@ func (repo *Repository) buildAndPushOwnershipReferrer(ctx context.Context, store
 }
 
 // pushIdempotent pushes desc, treating the write as a no-op success when the
-// store already holds the content-addressed blob.
-//
-// Mirrors tagIdempotent: a bare oras store.Push never pre-checks existence, so
-// an immutable/write-once registry rejects re-pushing existing content with a
-// plain conflict (not errdef.ErrAlreadyExists, which only local stores return).
-// We branch on the post-condition, checking Exists only on the error path. For
-// a referrer manifest this also sidesteps the oras referrers-index tag update
-// (on registries without the Referrers API): the manifest PUT fails first, and
-// a completed prior attach already left the index correct.
+// store already holds the content-addressed blob (checked only on the error
+// path). Mirrors tagIdempotent for the push protocol: a write-once registry
+// rejects re-pushing existing content with a plain conflict, not the
+// errdef.ErrAlreadyExists that only local stores return.
 func pushIdempotent(ctx context.Context, store spec.Store, desc ociImageSpecV1.Descriptor, data []byte) error {
 	err := store.Push(ctx, desc, bytes.NewReader(data))
 	if err == nil || errors.Is(err, errdef.ErrAlreadyExists) {
