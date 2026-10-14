@@ -258,7 +258,8 @@ func (r *Reconciler) reconcile(ctx context.Context, discovery *v1alpha1.Discover
 
 	graph, err := internaldiscovery.Traverse(ctx,
 		internaldiscovery.ComponentKey{Name: info.Component, Version: info.Version},
-		resolver)
+		resolver,
+		discovery.Spec.RecursionDepth)
 	if err != nil {
 		status.MarkNotReady(r.EventRecorder, discovery, v1alpha1.ResolutionFailedReason, err.Error())
 
