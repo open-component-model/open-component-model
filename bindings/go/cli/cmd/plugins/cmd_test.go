@@ -98,8 +98,6 @@ func registryRefNoVersion(archivePath, component string) string {
 }
 
 func TestPluginRegistryList(t *testing.T) {
-	r := require.New(t)
-
 	refs := []descriptor.Reference{
 		{
 			ElementMeta: descriptor.ElementMeta{
@@ -289,6 +287,7 @@ func TestPluginRegistryList(t *testing.T) {
 	})
 
 	t.Run("invalid registry reference returns error", func(t *testing.T) {
+		r := require.New(t)
 		out := new(bytes.Buffer)
 		logs := test.NewJSONLogReader()
 		_, err := test.OCM(t,
@@ -321,8 +320,6 @@ func TestPluginRegistryList(t *testing.T) {
 }
 
 func TestPluginRegistryGet(t *testing.T) {
-	r := require.New(t)
-
 	refs := []descriptor.Reference{
 		{
 			ElementMeta: descriptor.ElementMeta{
@@ -439,6 +436,7 @@ func TestPluginRegistryGet(t *testing.T) {
 	})
 
 	t.Run("get nonexistent plugin returns error", func(t *testing.T) {
+		r := require.New(t)
 		out := new(bytes.Buffer)
 		logs := test.NewJSONLogReader()
 		_, err := test.OCM(t,
