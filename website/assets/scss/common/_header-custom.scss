@@ -26,7 +26,10 @@
 .header {
     position: sticky;
     top: 0;
-    z-index: 1100; // ensure header stays above page content and any overlays
+    // Keep above normal page content (inner overlay tokens up to 1002) but
+    // below Bootstrap modals ($zindex-modal: 1055), backdrop covers everything else.
+    // Was 1100: that put the header above the search modal, hiding its top.
+    z-index: 1010;
     width: 100%;
     height: var(--nav-height);
     border-bottom: 1px solid color-mix(in srgb, var(--lp-c-divider) 60%, transparent);

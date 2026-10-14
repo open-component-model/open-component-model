@@ -9,4 +9,5 @@ var Scheme = runtime.NewScheme()
 
 func init() {
 	v1.MustRegisterCredentialType(Scheme)
+	v1.MustRegisterTransportCredentialTypes(Scheme)
 }
