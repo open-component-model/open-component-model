@@ -795,6 +795,9 @@ apiVersion: delivery.ocm.software/v1alpha1
 kind: Repository
 metadata:
   name: bootstrap-repository
+  # Resource.componentRef and Component.repositoryRef are same-namespace
+  # references, so the whole OCM chain must share the composite's namespace.
+  namespace: ${BOOTSTRAP_NAMESPACE}
 spec:
   repositorySpec:
     baseUrl: $OCM_REPO
@@ -807,6 +810,7 @@ apiVersion: delivery.ocm.software/v1alpha1
 kind: Component
 metadata:
   name: bootstrap-component
+  namespace: ${BOOTSTRAP_NAMESPACE}
 spec:
   component: ocm.software/ocm-k8s-toolkit/bootstrap-crossplane
   repositoryRef:
@@ -820,7 +824,7 @@ apiVersion: delivery.ocm.software/v1alpha1
 kind: Resource
 metadata:
   name: bootstrap-composition
-  namespace: default
+  namespace: ${BOOTSTRAP_NAMESPACE}
 spec:
   componentRef:
     name: bootstrap-component
@@ -841,7 +845,7 @@ spec:
     name: bootstrap-composition
     # The Deployer is cluster-scoped, so point it at the namespace of the
     # referenced resource.
-    namespace: default
+    namespace: ${BOOTSTRAP_NAMESPACE}
   # ocmConfig is required, if the OCM repository requires credentials to access it.
   # (You also need to specify the namespace of the reference as the 'deployer' is cluster-scoped.)
   # ocmConfig:
