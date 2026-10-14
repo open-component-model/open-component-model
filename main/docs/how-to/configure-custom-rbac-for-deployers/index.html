@@ -152,14 +152,18 @@ controller needs RBAC permissions for that resource&rsquo;s API group.</p><p>Thi
 <code>ResourceGraphDefinition</code> (RGD), there is a second, separate RBAC concern: <strong>kro&rsquo;s own</strong> <code>ServiceAccount</code>.</p><p>An RGD can define a brand-new schema-based kind (for example, a <code>Podinfo</code> or <code>Bootstrap</code> kind). In kro&rsquo;s
 least-privilege <a href=https://kro.run/docs/advanced/access-control target=_blank rel=noopener>aggregation mode</a>, creating and managing
 instances of that kind, or any other object the RGD templates, requires extra RBAC for kro&rsquo;s own
-<code>ServiceAccount</code>. The dev-friendly <code>unrestricted</code> mode used in the <a href=/main/docs/getting-started/set-up-controller-environments/>setup guide</a>
-grants everything broadly, so this gap only surfaces on a hardened cluster.</p><p>Grant kro&rsquo;s <code>ServiceAccount</code> a <code>ClusterRole</code> scoped to the kinds your RGDs create and manage. In aggregation
-mode kro also folds in any <code>ClusterRole</code> labeled <code>rbac.kro.run/aggregate-to-controller: "true"</code>, as described in
-<a href=https://kro.run/docs/advanced/access-control target=_blank rel=noopener>kro&rsquo;s access control guide</a>. For example, an RGD that defines a
-<code>Podinfo</code> kind and renders a Deployment and Service needs:</p><div class=expressive-code><figure class="frame not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-yaml data-lang=yaml><span class=line><span class=cl><span class=nt>apiVersion</span><span class=p>:</span><span class=w> </span><span class=l>rbac.authorization.k8s.io/v1</span><span class=w>
+<code>ServiceAccount</code>. The <a href=/main/docs/getting-started/set-up-controller-environments/>setup guide</a>
+installs kro in this mode and already creates such roles for the OCM resources and for the Flux or ArgoCD
+resources.</p><p>Create a <code>ClusterRole</code> scoped to the kinds your RGDs create and manage, and label it
+<code>rbac.kro.run/aggregate-to-controller: "true"</code>. In aggregation mode kro picks up every <code>ClusterRole</code> with this
+label, so you do not need a binding. See <a href=https://kro.run/docs/advanced/access-control target=_blank rel=noopener>kro&rsquo;s access control guide</a>.
+For example, an RGD that defines a <code>Podinfo</code> kind and renders a Deployment and Service needs:</p><div class=expressive-code><figure class="frame not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-yaml data-lang=yaml><span class=line><span class=cl><span class=nt>apiVersion</span><span class=p>:</span><span class=w> </span><span class=l>rbac.authorization.k8s.io/v1</span><span class=w>
 </span></span></span><span class=line><span class=cl><span class=nt>kind</span><span class=p>:</span><span class=w> </span><span class=l>ClusterRole</span><span class=w>
 </span></span></span><span class=line><span class=cl><span class=nt>metadata</span><span class=p>:</span><span class=w>
 </span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>kro-custom</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>labels</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=c># kro picks up every ClusterRole with this label, see https://kro.run/docs/advanced/access-control</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>rbac.kro.run/aggregate-to-controller</span><span class=p>:</span><span class=w> </span><span class=s2>&#34;true&#34;</span><span class=w>
 </span></span></span><span class=line><span class=cl><span class=nt>rules</span><span class=p>:</span><span class=w>
 </span></span></span><span class=line><span class=cl><span class=w>  </span>- <span class=nt>apiGroups</span><span class=p>:</span><span class=w>
 </span></span></span><span class=line><span class=cl><span class=w>      </span>- <span class=l>kro.run</span><span class=w>
@@ -216,20 +220,7 @@ mode kro also folds in any <code>ClusterRole</code> labeled <code>rbac.kro.run/a
 </span></span></span><span class=line><span class=cl><span class=w>      </span>- <span class=l>list</span><span class=w>
 </span></span></span><span class=line><span class=cl><span class=w>      </span>- <span class=l>patch</span><span class=w>
 </span></span></span><span class=line><span class=cl><span class=w>      </span>- <span class=l>update</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>      </span>- <span class=l>watch</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=nn>---</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=nt>apiVersion</span><span class=p>:</span><span class=w> </span><span class=l>rbac.authorization.k8s.io/v1</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=nt>kind</span><span class=p>:</span><span class=w> </span><span class=l>ClusterRoleBinding</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=nt>metadata</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>kro-custom</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=nt>roleRef</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>apiGroup</span><span class=p>:</span><span class=w> </span><span class=l>rbac.authorization.k8s.io</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>kind</span><span class=p>:</span><span class=w> </span><span class=l>ClusterRole</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>  </span><span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>kro-custom</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=nt>subjects</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>  </span>- <span class=nt>kind</span><span class=p>:</span><span class=w> </span><span class=l>ServiceAccount</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>name</span><span class=p>:</span><span class=w> </span><span class=l>kro</span><span class=w> </span><span class=c># replace with your kro release&#39;s service account name if you did not use the default</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>namespace</span><span class=p>:</span><span class=w> </span><span class=l>kro-system</span></span></span></code></pre></div></figure></div><p>The exact kinds depend on what your own RGDs create. Grant the full set of verbs (not just <code>get</code>/<code>list</code>/<code>watch</code>)
+</span></span></span><span class=line><span class=cl><span class=w>      </span>- <span class=l>watch</span></span></span></code></pre></div></figure></div><p>The exact kinds depend on what your own RGDs create. Grant the full set of verbs (not just <code>get</code>/<code>list</code>/<code>watch</code>)
 for every kind that appears as a <code>template:</code> in an RGD&rsquo;s <code>resources:</code> list, even one owned by a different
 controller entirely, like the <code>delivery.ocm.software</code> <code>Resource</code> above: kro creates and deletes it as part of
 the resource graph the same way it does for a <code>Deployment</code> or <code>Service</code>, so read-only access isn&rsquo;t enough,
