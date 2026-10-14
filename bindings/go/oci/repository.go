@@ -949,11 +949,36 @@ func (repo *Repository) buildAndPushOwnershipReferrer(ctx context.Context, store
 	// (MANIFEST_BLOB_UNKNOWN), so push the referrer's empty config/layer blob
 	// before the manifest itself.
 	empty := ociImageSpecV1.DescriptorEmptyJSON
-	if err := store.Push(ctx, empty, bytes.NewReader(empty.Data)); err != nil && !errors.Is(err, errdef.ErrAlreadyExists) {
+	if err := pushIfAbsent(ctx, store, empty, empty.Data); err != nil {
 		return fmt.Errorf("failed to push ownership referrer empty blob %s: %w", empty.Digest, err)
 	}
-	if err := store.Push(ctx, desc, bytes.NewReader(body)); err != nil && !errors.Is(err, errdef.ErrAlreadyExists) {
+	if err := pushIfAbsent(ctx, store, desc, body); err != nil {
 		return fmt.Errorf("failed to push ownership referrer %s: %w", desc.Digest, err)
+	}
+	return nil
+}
+
+// pushIfAbsent pushes desc only when the store does not already hold the
+// content-addressed blob, skipping the write when it is already present.
+//
+// Like tagIdempotent, this keeps the ownership referrer attach idempotent on
+// immutable/write-once registries without classifying registry errors: such a
+// registry rejects re-pushing an existing asset even when byte-identical, and
+// (on registries without the Referrers API) a referrer push also drives an
+// oras-internal referrers-index tag update that would collide. The ownership
+// referrer manifest and its empty config/layer blob are content-addressed and
+// deterministic, so an existing blob already reflects a completed prior attach;
+// the Exists pre-check short-circuits before any write is attempted.
+func pushIfAbsent(ctx context.Context, store spec.Store, desc ociImageSpecV1.Descriptor, data []byte) error {
+	exists, err := store.Exists(ctx, desc)
+	if err != nil {
+		return err
+	}
+	if exists {
+		return nil
+	}
+	if err := store.Push(ctx, desc, bytes.NewReader(data)); err != nil && !errors.Is(err, errdef.ErrAlreadyExists) {
+		return err
 	}
 	return nil
 }
