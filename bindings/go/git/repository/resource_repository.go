@@ -14,6 +14,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	ocmdigest "ocm.software/open-component-model/bindings/go/digest"
 	"ocm.software/open-component-model/bindings/go/git/internal/download"
 	"ocm.software/open-component-model/bindings/go/git/spec/access"
 	accessv1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
@@ -163,6 +164,9 @@ func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, res *des
 	spec, err := accessFrom(res)
 	if err != nil {
 		return nil, err
+	}
+	if ocmdigest.IsExcluded(res.Digest) {
+		return res.DeepCopy(), nil
 	}
 
 	downloaded, err := r.download(ctx, spec, res.Digest, creds, tempDir)

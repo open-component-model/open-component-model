@@ -18,8 +18,9 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	ocmdigest "ocm.software/open-component-model/bindings/go/digest"
 	ociblob "ocm.software/open-component-model/bindings/go/oci/blob"
-	internaldigest "ocm.software/open-component-model/bindings/go/oci/internal/digest"
+	ocidigest "ocm.software/open-component-model/bindings/go/oci/digest"
 	"ocm.software/open-component-model/bindings/go/oci/internal/identity"
 	"ocm.software/open-component-model/bindings/go/oci/internal/introspection"
 	"ocm.software/open-component-model/bindings/go/oci/internal/policy"
@@ -194,15 +195,10 @@ func finishResourceLayer(b *ociblob.ArtifactBlob, access *v2.LocalBlob, layer oc
 	annotations := maps.Clone(layer.Annotations)
 	maps.Copy(annotations, opts.ManifestAnnotations)
 
-	if resource, ok := b.Artifact.(*descriptor.Resource); ok && internaldigest.IsComplete(resource.Digest) && resource.Digest.NormalisationAlgorithm == internaldigest.GenericBlobDigestV1 {
-		if err := internaldigest.Verify(resource.Digest, layer.Digest, internaldigest.GenericBlobDigestV1); err != nil {
-			return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to verify resource blob digest: %w", err)
-		}
-	}
 	global := resolveGlobalAccess(opts.GlobalAccessPolicy, storage)
 
 	if err := updateArtifactAccess(b.Artifact, access, layer, updateAccessOptions{
-		Options: opts, BackedByGlobalStore: global, NormalisationAlgorithm: internaldigest.GenericBlobDigestV1,
+		Options: opts, BackedByGlobalStore: global, NormalisationAlgorithm: ocmdigest.GenericBlobDigestV1,
 	}); err != nil {
 		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to update resource access: %w", err)
 	}
@@ -230,7 +226,7 @@ func ResourceLocalBlobOCILayout(ctx context.Context, storage content.Storage, b 
 	}
 	global := resolveGlobalAccess(opts.GlobalAccessPolicy, storage)
 	if err := updateArtifactAccess(b.Artifact, access, index, updateAccessOptions{
-		Options: opts, BackedByGlobalStore: global, NormalisationAlgorithm: internaldigest.OCIArtifactDigestV1,
+		Options: opts, BackedByGlobalStore: global, NormalisationAlgorithm: ocidigest.ArtifactDigestV1,
 	}); err != nil {
 		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to update resource access: %w", err)
 	}
@@ -238,21 +234,24 @@ func ResourceLocalBlobOCILayout(ctx context.Context, storage content.Storage, b 
 }
 
 // verifyLayoutRootDigest checks a resource digest against the selected layout root without
-// modifying it. Incomplete digests must be completable from the root; complete digests with
-// another normalisation are preserved unverified.
+// modifying it, so a mismatch is rejected before any graph writes.
 func verifyLayoutRootDigest(d *descriptor.Digest, root digest.Digest) error {
-	if !internaldigest.IsComplete(d) {
-		var completed descriptor.Digest
-		if d != nil {
-			completed = *d
-		}
-		return internaldigest.Complete(&completed, root, internaldigest.OCIArtifactDigestV1)
+	_, err := checkPackedDigest(d, root, ocidigest.ArtifactDigestV1)
+	return err
+}
+
+// checkPackedDigest checks a resource digest against the packed root. Packing is lenient: a
+// complete digest with another normalisation is kept unverified.
+func checkPackedDigest(recorded *descriptor.Digest, root digest.Digest, normalisation string) (ocmdigest.Result, error) {
+	rule := ocidigest.BlobRule
+	if normalisation == ocidigest.ArtifactDigestV1 {
+		rule = ocidigest.ArtifactRule
 	}
-	switch d.NormalisationAlgorithm {
-	case internaldigest.OCIArtifactDigestV1, internaldigest.GenericBlobDigestV1:
-		return internaldigest.VerifyOCIArtifact(d, root)
+	computed, err := ocidigest.FromOCI(root)
+	if err != nil {
+		return ocmdigest.Result{}, err
 	}
-	return nil
+	return ocmdigest.Check(recorded, computed, rule, ocmdigest.Lenient)
 }
 
 // ResourceBlobOCILayerOptions defines the configuration options for pushing a blob as a resource.
@@ -390,16 +389,13 @@ func updateArtifactAccess(artifact descriptor.Artifact, access *v2.LocalBlob, de
 	case *descriptor.Source:
 		typed.Access = access
 	case *descriptor.Resource:
+		result, err := checkPackedDigest(typed.Digest, desc.Digest, opts.NormalisationAlgorithm)
+		if err != nil {
+			return fmt.Errorf("failed to check artifact digest: %w", err)
+		}
 		typed.Access = access
-		// Preserve complete signed digest metadata; complete missing fields only
-		// when the fields already set match the packed content.
-		if !internaldigest.IsComplete(typed.Digest) {
-			if typed.Digest == nil {
-				typed.Digest = &descriptor.Digest{}
-			}
-			if err := internaldigest.Complete(typed.Digest, desc.Digest, opts.NormalisationAlgorithm); err != nil {
-				return fmt.Errorf("failed to complete artifact digest: %w", err)
-			}
+		if result.Decision == ocmdigest.Generate || result.Decision == ocmdigest.Complete {
+			typed.Digest = result.Digest
 		}
 	}
 

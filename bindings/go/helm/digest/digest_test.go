@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -294,4 +295,41 @@ func TestProcessResourceDigest_RealRepo(t *testing.T) {
 	assert.Equal(t, "SHA-256", result.Digest.HashAlgorithm)
 	assert.Equal(t, "genericBlobDigest/v1", result.Digest.NormalisationAlgorithm)
 	assert.Equal(t, "b244a04ccfac950853080eede6bf1b716b2966ca707e69f6f3623b3d690e36b8", result.Digest.Value)
+}
+
+// A resource excluded from signing (ocm-spec: NO-DIGEST / EXCLUDE-FROM-SIGNATURE) keeps its
+// digest unchanged, and the chart digest is never resolved to compare against it.
+func TestProcessResourceDigest_ExcludedFromSignature(t *testing.T) {
+	var hits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		if r.URL.Path == "/index.yaml" {
+			w.Header().Set("Content-Type", "application/x-yaml")
+			_, _ = w.Write([]byte(testIndexYAML))
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	t.Cleanup(srv.Close)
+
+	tests := []struct {
+		name  string
+		chart string
+	}{
+		{name: "chart with index digest", chart: "mychart:1.0.0"},
+		{name: "chart without index digest", chart: "nodigest:1.0.0"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+			hits.Store(0)
+			resource := helmAccessResource(t, srv.URL, tt.chart)
+			resource.Digest = descruntime.NewExcludeFromSignatureDigest()
+
+			result, err := digest.NewDigestProcessor(t.TempDir()).ProcessResourceDigest(t.Context(), resource, nil)
+			r.NoError(err)
+			r.Equal(descruntime.NewExcludeFromSignatureDigest(), result.Digest)
+			r.Zero(hits.Load(), "chart of an excluded resource must not be resolved")
+		})
+	}
 }

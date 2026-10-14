@@ -3,17 +3,16 @@ package signing
 import (
 	"bytes"
 	"context"
-	"crypto"
 	"crypto/fips140"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"log/slog"
-	"strings"
 
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation"
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	ocmdigest "ocm.software/open-component-model/bindings/go/digest"
 )
 
 const (
@@ -68,7 +67,7 @@ func VerifyDigestMatchesDescriptor(
 		return fmt.Errorf("normalising component version failed: %w", err)
 	}
 
-	hash, err := getSupportedHash(signature.Digest.HashAlgorithm)
+	hash, err := ocmdigest.ParseHashAlgorithm(signature.Digest.HashAlgorithm)
 	if err != nil {
 		return err
 	}
@@ -120,7 +119,7 @@ func GenerateDigest(
 		return nil, fmt.Errorf("normalising component version failed: %w", err)
 	}
 
-	hash, err := getSupportedHash(hashAlgorithm)
+	hash, err := ocmdigest.ParseHashAlgorithm(hashAlgorithm)
 	if err != nil {
 		return nil, err
 	}
@@ -199,7 +198,7 @@ func ValidateDigestHashAlgorithms(cd *descruntime.Component) error {
 		}
 	}
 	for _, res := range cd.Resources {
-		if res.Digest == nil || res.Digest.HashAlgorithm == "" || isExcludedFromSignature(res.Digest) {
+		if res.Digest == nil || res.Digest.HashAlgorithm == "" || ocmdigest.IsExcluded(res.Digest) {
 			continue
 		}
 		if !isApprovedDigestHash(res.Digest.HashAlgorithm) {
@@ -211,25 +210,12 @@ func ValidateDigestHashAlgorithms(cd *descruntime.Component) error {
 }
 
 // isApprovedDigestHash reports whether a reference or resource digest uses
-// SHA-256 or SHA-512. OCM writes "SHA-256"/"SHA-512"; the legacy names
-// "sha256"/"sha512" appear in older signed descriptors, which OCM v1
-// reproduces when verifying them (LegacyHashAlgorithm). They must keep
-// verifying, so the comparison ignores case and dashes.
+// SHA-256 or SHA-512. The legacy names "sha256"/"sha512" appear in older signed
+// descriptors, which OCM v1 reproduces when verifying them (LegacyHashAlgorithm),
+// so they must keep verifying.
 func isApprovedDigestHash(name string) bool {
-	switch strings.ToUpper(strings.ReplaceAll(name, "-", "")) {
-	case "SHA256", "SHA512":
-		return true
-	default:
-		return false
-	}
-}
-
-// isExcludedFromSignature reports whether a resource digest is the explicit
-// marker that keeps the resource content out of the signature. It matches the
-// marker the same way the repository's download verification does.
-func isExcludedFromSignature(d *descruntime.Digest) bool {
-	return strings.EqualFold(d.HashAlgorithm, descruntime.NoDigest) ||
-		strings.EqualFold(d.NormalisationAlgorithm, descruntime.ExcludeFromSignature)
+	_, err := ocmdigest.ParseHashAlgorithm(name)
+	return err == nil
 }
 
 // hasUsableAccess checks if a resource has an access type other than "None".
@@ -251,22 +237,4 @@ func ensureNormalisationAlgo(ctx context.Context, algo string, logger *slog.Logg
 		return v4alpha1.Algorithm
 	}
 	return algo
-}
-
-// supportedHashes lists supported hashing algorithms keyed by their identifier
-var supportedHashes = map[string]crypto.Hash{
-	crypto.SHA256.String(): crypto.SHA256,
-	crypto.SHA512.String(): crypto.SHA512,
-}
-
-// getSupportedHash looks up a crypto.Hash from its string identifier.
-// Returns an error if the identifier is not in supportedHashes.
-func getSupportedHash(name string) (crypto.Hash, error) {
-	n := strings.ToUpper(name)
-	h, ok := supportedHashes[n]
-	if !ok {
-		return 0, fmt.Errorf("unsupported hash algorithm %q (use: %q)", n, supportedHashes)
-	}
-
-	return h, nil
 }

@@ -259,3 +259,30 @@ func newRepository(t *testing.T) repositoryFixture {
 
 	return repositoryFixture{Path: path, Git: bare, First: first, Second: second}
 }
+
+// A resource excluded from signing (ocm-spec: NO-DIGEST / EXCLUDE-FROM-SIGNATURE) keeps its
+// digest unchanged instead of being verified against, or replaced by, the archive hash.
+func TestResourceDigestExcludedFromSignature(t *testing.T) {
+	fixture := newRepository(t)
+	require.NoError(t, fixture.Git.Storer.SetReference(plumbing.NewHashReference("refs/heads/main", fixture.First)))
+
+	tests := []struct {
+		name   string
+		access *v1.Git
+	}{
+		{name: "ref only", access: &v1.Git{Type: runtime.NewUnversionedType("git"), Repository: fixture.Path, Ref: "refs/heads/main"}},
+		{name: "pinned commit", access: &v1.Git{Type: runtime.NewUnversionedType("git"), Repository: fixture.Path, Commit: fixture.First.String()}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+			dir := t.TempDir()
+			repo := repository.NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &dir})
+			res := &descriptor.Resource{Access: tt.access, Digest: descriptor.NewExcludeFromSignatureDigest()}
+
+			processed, err := repo.ProcessResourceDigest(t.Context(), res, nil)
+			r.NoError(err)
+			r.Equal(descriptor.NewExcludeFromSignatureDigest(), processed.Digest)
+		})
+	}
+}

@@ -886,3 +886,62 @@ func TestDefaultConstructor_OwnershipAttachment(t *testing.T) {
 		})
 	}
 }
+
+// digestCheckingProcessor stands in for the access-specific digest processors: like them it
+// hashes the content and then either rejects a foreign digest or replaces it.
+type digestCheckingProcessor struct {
+	mockDigestProcessor
+	reject bool
+	calls  int
+}
+
+func (p *digestCheckingProcessor) ProcessResourceDigest(_ context.Context, resource *descriptor.Resource, _ runtime.Typed) (*descriptor.Resource, error) {
+	p.calls++
+	if p.reject {
+		return nil, fmt.Errorf("unsupported hash algorithm: expected SHA-256, got %s", resource.Digest.HashAlgorithm)
+	}
+	res := resource.DeepCopy()
+	res.Digest = &descriptor.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: "genericBlobDigest/v1", Value: "0123"}
+	return res, nil
+}
+
+// A by-reference resource excluded from signing (ocm-spec: NO-DIGEST / EXCLUDE-FROM-SIGNATURE)
+// is constructed with its digest unchanged, whatever the access type's digest processor does.
+func TestConstructWithResourceDigestExcludedFromSignature(t *testing.T) {
+	tests := []struct {
+		name      string
+		processor *digestCheckingProcessor
+	}{
+		{name: "processor that rejects a foreign digest (wget, s3, github, helm, oci)", processor: &digestCheckingProcessor{reject: true}},
+		{name: "processor that replaces the digest", processor: &digestCheckingProcessor{}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+			constructor := setupTestComponent(t, `
+      - name: test-resource
+        version: v1.0.0
+        relation: external
+        type: blob
+        access:
+          type: mock/v1
+          reference: test-ref
+        digest:
+          hashAlgorithm: NO-DIGEST
+          normalisationAlgorithm: EXCLUDE-FROM-SIGNATURE
+          value: NO-DIGEST
+`)
+			instance := NewDefaultConstructor(constructor, Options{
+				TargetRepositoryProvider:        &mockTargetRepositoryProvider{repo: newMockTargetRepository()},
+				ResourceDigestProcessorProvider: &mockDigestProcessorProvider{processor: tt.processor},
+			})
+
+			err := instance.Construct(t.Context())
+			t.Logf("digest processor calls: %d", tt.processor.calls)
+			r.NoError(err)
+			descs := collectDescriptors(t, instance.GetGraph())
+			r.Len(descs, 1)
+			r.Equal(descriptor.NewExcludeFromSignatureDigest(), descs[0].Component.Resources[0].Digest)
+		})
+	}
+}

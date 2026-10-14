@@ -248,6 +248,7 @@ linters:
             - "ocm.software/open-component-model/bindings/go/descriptor/normalisation"
             - "ocm.software/open-component-model/bindings/go/descriptor/runtime"
             - "ocm.software/open-component-model/bindings/go/descriptor/v2"
+            - "ocm.software/open-component-model/bindings/go/digest"
             - "ocm.software/open-component-model/bindings/go/oci"
             - "ocm.software/open-component-model/bindings/go/repository"
             - "ocm.software/open-component-model/bindings/go/runtime"
@@ -321,6 +322,16 @@ linters:
           deny:
             - pkg: "ocm.software/open-component-model/bindings/go/"
               desc: "descriptor/v2 must not import bindings outside its allowed set"
+        digest:
+          list-mode: lax
+          files: ["**/bindings/go/digest/**"]
+          allow:
+            - "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+            - "ocm.software/open-component-model/bindings/go/digest"
+            - "ocm.software/open-component-model/bindings/go/runtime"
+          deny:
+            - pkg: "ocm.software/open-component-model/bindings/go/"
+              desc: "digest must not import bindings outside its allowed set"
         github:
           list-mode: lax
           files: ["**/bindings/go/github/**"]
@@ -329,6 +340,7 @@ linters:
             - "ocm.software/open-component-model/bindings/go/credentials"
             - "ocm.software/open-component-model/bindings/go/descriptor/runtime"
             - "ocm.software/open-component-model/bindings/go/descriptor/v2"
+            - "ocm.software/open-component-model/bindings/go/digest"
             - "ocm.software/open-component-model/bindings/go/github"
             - "ocm.software/open-component-model/bindings/go/http"
             - "ocm.software/open-component-model/bindings/go/plugin"
@@ -358,6 +370,7 @@ linters:
             - "ocm.software/open-component-model/bindings/go/credentials"
             - "ocm.software/open-component-model/bindings/go/descriptor/runtime"
             - "ocm.software/open-component-model/bindings/go/descriptor/v2"
+            - "ocm.software/open-component-model/bindings/go/digest"
             - "ocm.software/open-component-model/bindings/go/helm"
             - "ocm.software/open-component-model/bindings/go/http"
             - "ocm.software/open-component-model/bindings/go/oci"
@@ -420,6 +433,7 @@ linters:
             - "ocm.software/open-component-model/bindings/go/ctf"
             - "ocm.software/open-component-model/bindings/go/descriptor/runtime"
             - "ocm.software/open-component-model/bindings/go/descriptor/v2"
+            - "ocm.software/open-component-model/bindings/go/digest"
             - "ocm.software/open-component-model/bindings/go/http"
             - "ocm.software/open-component-model/bindings/go/oci"
             - "ocm.software/open-component-model/bindings/go/repository"
@@ -486,6 +500,7 @@ linters:
             - "ocm.software/open-component-model/bindings/go/credentials"
             - "ocm.software/open-component-model/bindings/go/descriptor/runtime"
             - "ocm.software/open-component-model/bindings/go/descriptor/v2"
+            - "ocm.software/open-component-model/bindings/go/digest"
             - "ocm.software/open-component-model/bindings/go/http"
             - "ocm.software/open-component-model/bindings/go/repository"
             - "ocm.software/open-component-model/bindings/go/runtime"
@@ -500,6 +515,7 @@ linters:
             - "ocm.software/open-component-model/bindings/go/configuration"
             - "ocm.software/open-component-model/bindings/go/descriptor/normalisation"
             - "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+            - "ocm.software/open-component-model/bindings/go/digest"
             - "ocm.software/open-component-model/bindings/go/runtime"
             - "ocm.software/open-component-model/bindings/go/signing"
           deny:
@@ -567,6 +583,7 @@ linters:
             - "ocm.software/open-component-model/bindings/go/credentials"
             - "ocm.software/open-component-model/bindings/go/descriptor/runtime"
             - "ocm.software/open-component-model/bindings/go/descriptor/v2"
+            - "ocm.software/open-component-model/bindings/go/digest"
             - "ocm.software/open-component-model/bindings/go/git"
             - "ocm.software/open-component-model/bindings/go/http"
             - "ocm.software/open-component-model/bindings/go/repository"
@@ -584,6 +601,7 @@ linters:
             - "ocm.software/open-component-model/bindings/go/credentials"
             - "ocm.software/open-component-model/bindings/go/descriptor/runtime"
             - "ocm.software/open-component-model/bindings/go/descriptor/v2"
+            - "ocm.software/open-component-model/bindings/go/digest"
             - "ocm.software/open-component-model/bindings/go/http"
             - "ocm.software/open-component-model/bindings/go/repository"
             - "ocm.software/open-component-model/bindings/go/runtime"

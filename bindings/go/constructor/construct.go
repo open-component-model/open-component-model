@@ -22,6 +22,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	ocmdigest "ocm.software/open-component-model/bindings/go/digest"
 	"ocm.software/open-component-model/bindings/go/repository"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime/versioning"
@@ -485,7 +486,9 @@ func (c *DefaultConstructor) processResource(ctx context.Context, targetRepo Tar
 		logger.Debug("processing resource with existing access")
 		res = constructor.ConvertToDescriptorResource(resource)
 
-		if c.opts.ResourceDigestProcessorProvider != nil {
+		if ocmdigest.IsExcluded(res.Digest) {
+			logger.Debug("resource is excluded from the signature, skipping digest processing")
+		} else if c.opts.ResourceDigestProcessorProvider != nil {
 			digestProcessor, digestProcessorErr := c.opts.GetDigestProcessor(ctx, res)
 			switch {
 			case digestProcessorErr != nil:
