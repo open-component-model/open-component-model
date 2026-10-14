@@ -5,7 +5,6 @@ weight: 50
 toc: true
 aliases:
   - /docs/tutorials/signing/plain/
-  - /docs/guides/sign/verify-with-plain-rsa/
 ---
 
 In this tutorial, you'll sign a component version with a private key and verify it with the corresponding public key.
@@ -253,58 +252,9 @@ time=2026-03-12T22:06:37.358+01:00 level=INFO msg="SIGNATURE VERIFICATION SUCCES
 {{< /step >}}
 {{< /steps >}}
 
-## Verify an RSA signature
+## Verify the signature
 
-The tutorial above verifies right after signing, on the same machine, with the same `.ocmconfig`. This section is for the **consumer side**: you received a signed component version and the signer's public key, and you want to confirm authenticity before trusting it. You need the signer's public key on disk and pointed at by `.ocmconfig` (see [Configure Signing Credentials]({{< relref "docs/guides/sign/configure-signing-credentials.md" >}})). With Sigstore (see [Sign with Sigstore]({{< relref "docs/guides/sign/sign-with-sigstore.md" >}})) you don't install a public key at all, you just declare which identity you trust.
-
-Run the verify command against the signed component:
-
-```bash
-ocm verify cv <repository>//<component>:<version>
-```
-
-**Local CTF Archive:**
-
-```bash
-ocm verify cv /tmp/helloworld/transport-archive//github.com/acme.org/helloworld:1.0.0
-```
-
-**Remote OCI Registry:**
-
-```bash
-ocm verify cv ghcr.io/<your-namespace>//github.com/acme.org/helloworld:1.0.0
-```
-
-<details>
-<summary>Expected output</summary>
-
-```text
-time=2025-11-19T15:58:22.431+01:00 level=INFO msg="verifying signature" name=default
-time=2025-11-19T15:58:22.435+01:00 level=INFO msg="signature verification completed" name=default duration=4.287541ms
-time=2025-11-19T15:58:22.435+01:00 level=INFO msg="SIGNATURE VERIFICATION SUCCESSFUL"
-```
-
-</details>
-
-The command exits with status code `0` on success.
-
-### Verify a specific signature
-
-If the component has multiple signatures, specify which one to verify by name:
-
-```bash
-ocm verify cv --signature prod ghcr.io/<your-namespace>//github.com/acme.org/helloworld:1.0.0
-```
-
-> 👉 Without the `--signature` flag, **every** signature on the descriptor is verified, not just the one named `default`. Each is verified under its own name, so each needs a matching consumer entry.
-
-### List available signatures
-
-View all signatures on a component version:
-
-```bash
-ocm get cv /tmp/helloworld/transport-archive//github.com/acme.org/helloworld:1.0.0 -o yaml | grep -A 10 signatures:
-```
+Once a component version is signed, consumers confirm its authenticity on their own machines. See [Verify Plain RSA]({{< relref "docs/guides/sign/verify-with-plain-rsa.md" >}}) for the consumer-side walkthrough.
 
 ## What You've Learned
 

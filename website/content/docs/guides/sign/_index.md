@@ -14,17 +14,18 @@ sidebar:
   collapsed: true
 ---
 
-Signing certifies that a component version is authentic and has not been tampered with. These guides walk you through generating keys, configuring signing credentials, signing and verifying component versions, and using specific signing methods (plain RSA, PEM certificate chains, GPG, and keyless Sigstore).
+Signing certifies that a component version is authentic and has not been tampered with. These guides walk you through generating keys, configuring signing credentials, and both sides of each method: a sign guide for producers and a matching verify guide for consumers (plain RSA, PEM certificate chains, GPG, and keyless Sigstore).
 
 ## Verify a signature
 
 To validate a component version signature, pick the method that matches the algorithm the signature was made with. Each page is a self-contained walkthrough.
 
-| Method | When to use it | Guide |
-| --- | --- | --- |
-| **Plain RSA** | The signature was made with an RSA key and you have the signer's public key on disk. | [Verify an RSA signature]({{< relref "docs/guides/sign/sign-with-plain-rsa.md#verify-an-rsa-signature" >}}) |
-| **GPG** | The signature was made with a GPG (OpenPGP) key and you have the signer's public key or keyring. | [Verify a GPG signature]({{< relref "docs/guides/sign/sign-with-gpg.md#verify-a-gpg-signature" >}}) |
-| **Sigstore (keyless)** | The signature was made keyless with Sigstore, either interactively or in CI. You declare which OIDC identity you trust instead of installing a public key. | [Verify a Sigstore signature]({{< relref "docs/guides/sign/sign-with-sigstore.md#verify-a-sigstore-signature" >}}) |
+| Method | When to use it | Sign | Verify |
+| --- | --- | --- | --- |
+| **Plain RSA** | An RSA key pair; the consumer verifies with the signer's public key on disk. | [Sign with Plain RSA]({{< relref "docs/guides/sign/sign-with-plain-rsa.md" >}}) | [Verify Plain RSA]({{< relref "docs/guides/sign/verify-with-plain-rsa.md" >}}) |
+| **PEM certificate chain** | An X.509 chain embedded in the signature; the consumer pins the signer's root CA. | [Sign with a PEM Certificate Chain]({{< relref "docs/guides/sign/sign-with-pem-certificate-chain.md" >}}) | [Verify a PEM Certificate Chain]({{< relref "docs/guides/sign/verify-with-pem-certificate-chain.md" >}}) |
+| **GPG** | A GPG (OpenPGP) key; the consumer verifies with the signer's public key or keyring. | [Sign with GPG]({{< relref "docs/guides/sign/sign-with-gpg.md" >}}) | [Verify GPG]({{< relref "docs/guides/sign/verify-with-gpg.md" >}}) |
+| **Sigstore (keyless)** | No key pair; the consumer declares which OIDC identity to trust, interactively or in CI. | [Sign with Sigstore (Keyless)]({{< relref "docs/guides/sign/sign-with-sigstore.md" >}}) | [Verify Sigstore (Keyless)]({{< relref "docs/guides/sign/verify-with-sigstore.md" >}}) |
 
 Not sure which algorithm was used? List the signatures on the component and read the `algorithm` field:
 
@@ -32,6 +33,7 @@ Not sure which algorithm was used? List the signatures on the component and read
 ocm get cv <repository>//<component>:<version> -o yaml | grep -A 10 signatures:
 ```
 
-- `RSASSA-PSS` (default) or `RSASSA-PKCS1-V1_5`, mediaType `application/vnd.ocm.signature.rsa.pss` → [Verify an RSA signature]({{< relref "docs/guides/sign/sign-with-plain-rsa.md#verify-an-rsa-signature" >}})
-- an OpenPGP signature → [Verify a GPG signature]({{< relref "docs/guides/sign/sign-with-gpg.md#verify-a-gpg-signature" >}})
-- `Sigstore/v1alpha1` → [Verify a Sigstore signature]({{< relref "docs/guides/sign/sign-with-sigstore.md#verify-a-sigstore-signature" >}})
+- `RSASSA-PSS` (default) or `RSASSA-PKCS1-V1_5`, mediaType `application/vnd.ocm.signature.rsa.pss` → [Verify Plain RSA]({{< relref "docs/guides/sign/verify-with-plain-rsa.md" >}})
+- a PEM-encoded signature, mediaType `application/x-pem-file` → [Verify a PEM Certificate Chain]({{< relref "docs/guides/sign/verify-with-pem-certificate-chain.md" >}})
+- an OpenPGP signature → [Verify GPG]({{< relref "docs/guides/sign/verify-with-gpg.md" >}})
+- `Sigstore/v1alpha1` → [Verify Sigstore (Keyless)]({{< relref "docs/guides/sign/verify-with-sigstore.md" >}})
