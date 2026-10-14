@@ -723,8 +723,9 @@ If the message says `forbidden`, kro lacks a permission. The kro logs name it:
 kubectl logs -n kro-system deployment/kro | grep forbidden
 ```
 
-Add that kind to a labeled `ClusterRole`, as the
-[setup guide]({{< relref "setup-controller-environment.md" >}}) does for the OCM resources.
+Add that kind to `kro-rbac.yaml` from
+[Grant kro access to the resources in the graphs](#grant-kro-access-to-the-resources-in-the-graphs)
+and apply it again.
 
 **Resource not `Ready` / image pull errors**: the cluster cannot read the package. Make the
 ghcr.io package public, or follow the private-registry steps above.
