@@ -164,6 +164,9 @@ func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, res *des
 	if err != nil {
 		return nil, err
 	}
+	if spec, err = spec.Normalize(); err != nil {
+		return nil, err
+	}
 
 	downloaded, err := r.download(ctx, spec, res.Digest, creds, tempDir)
 	if err != nil {

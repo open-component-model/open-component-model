@@ -14,15 +14,76 @@ func TestValidate(t *testing.T) {
 		name, repository, ref, commit string
 		valid                         bool
 	}{
-		{"ref", "https://example.com/org/repo.git", "main", "", true},
-		{"commit", "https://example.com/org/repo.git", "", strings.Repeat("a", 40), true},
-		{"both", "ssh://git@example.com/org/repo.git", "refs/heads/main", strings.Repeat("A", 40), true},
-		{"empty repository", "", "main", "", false},
-		{"empty selectors", "https://example.com/repo", "", "", false},
-		{"short commit", "https://example.com/repo", "", "abc123", false},
-		{"nonhex commit", "https://example.com/repo", "", strings.Repeat("g", 40), false},
-		{"invalid ref", "https://example.com/repo", "refs/heads/../main", "", false},
-		{"unsupported URL", "ftp://example.com/repo", "main", "", false},
+		{
+			name:       "ref",
+			repository: "https://example.com/org/repo.git",
+			ref:        "main",
+			valid:      true,
+		},
+		{
+			name:       "commit",
+			repository: "https://example.com/org/repo.git",
+			commit:     strings.Repeat("a", 40),
+			valid:      true,
+		},
+		{
+			name:       "both",
+			repository: "ssh://git@example.com/org/repo.git",
+			ref:        "refs/heads/main",
+			commit:     strings.Repeat("A", 40),
+			valid:      true,
+		},
+		{
+			name: "empty repository",
+			ref:  "main",
+		},
+		{
+			name:       "empty selectors",
+			repository: "https://example.com/repo",
+		},
+		{
+			name:       "short commit",
+			repository: "https://example.com/repo",
+			commit:     "abc123",
+		},
+		{
+			name:       "nonhex commit",
+			repository: "https://example.com/repo",
+			commit:     strings.Repeat("g", 40),
+		},
+		{
+			name:       "invalid ref",
+			repository: "https://example.com/repo",
+			ref:        "refs/heads/../main",
+		},
+		{
+			name:       "unsupported URL",
+			repository: "ftp://example.com/repo",
+			ref:        "main",
+		},
+		{
+			name:       "fragment branch",
+			repository: "https://example.com/repo.git#branch=main",
+			valid:      true,
+		},
+		{
+			name:       "fragment commit",
+			repository: "https://example.com/repo.git#commit=" + strings.Repeat("a", 40),
+			valid:      true,
+		},
+		{
+			name:       "fragment short commit",
+			repository: "https://example.com/repo.git#commit=abc123",
+		},
+		{
+			name:       "fragment invalid branch",
+			repository: "https://example.com/repo.git#branch=..",
+		},
+		{
+			name:       "fragment conflicts with ref",
+			repository: "https://example.com/repo.git#branch=main",
+			ref:        "dev",
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)

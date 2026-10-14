@@ -25,7 +25,9 @@ type Git struct {
 	// Repository is the Git repository URL: an http(s)://, ssh:// or git:// URL with a
 	// host and a path, the scp-like form user@host:path, or a local repository as
 	// file:///path or a plain path. A value without a scheme that is not scp-like is a
-	// local path, relative to the working directory unless absolute.
+	// local path, relative to the working directory unless absolute. A fragment may
+	// select the ref or commit with branch=<name>, tag=<name> or commit=<sha>, as in
+	// https://github.com/org/repo.git#branch=main.
 	Repository string `json:"repository"`
 
 	// Ref selects a branch, tag or full ref name. A bare name resolves to a
@@ -42,11 +44,8 @@ type Git struct {
 var commitSHA = regexp.MustCompile(`^[0-9a-fA-F]{40}$`)
 
 func (g *Git) Validate() error {
-	if g == nil {
-		return fmt.Errorf("git access is required")
-	}
-
-	if _, err := endpoint.Parse(g.Repository); err != nil {
+	g, err := g.Normalize()
+	if err != nil {
 		return err
 	}
 
@@ -70,4 +69,27 @@ func (g *Git) Validate() error {
 	}
 
 	return nil
+}
+
+// Normalize returns a copy of g with the ref or commit selected by the repository URL
+// fragment moved into Ref and Commit and the fragment removed, so that readers without
+// fragment support, such as OCM v1, find the same revision. A fragment selector and a
+// set field must not name different revisions.
+func (g *Git) Normalize() (*Git, error) {
+	if g == nil {
+		return nil, fmt.Errorf("git access is required")
+	}
+
+	ep, err := endpoint.Parse(g.Repository)
+	if err != nil {
+		return nil, err
+	}
+
+	normalized := g.DeepCopy()
+	normalized.Repository = ep.Repository
+	if normalized.Ref, normalized.Commit, err = ep.Selectors(g.Ref, g.Commit); err != nil {
+		return nil, err
+	}
+
+	return normalized, nil
 }
