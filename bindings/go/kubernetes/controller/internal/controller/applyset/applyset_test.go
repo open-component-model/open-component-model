@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/go-logr/logr"
+	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -1219,5 +1220,55 @@ func TestApply_ConflictDetection_MultiGVK(t *testing.T) {
 	secretItem := byID["secret1"]
 	if secretItem.Error != nil {
 		t.Errorf("unexpected error for secret1: %v", secretItem.Error)
+	}
+}
+
+func TestPrune_PropagationPolicy(t *testing.T) {
+	foreground := metav1.DeletePropagationForeground
+	tests := map[string]struct {
+		policy *metav1.DeletionPropagation
+		want   *metav1.DeletionPropagation
+	}{
+		"server default": {},
+		"foreground":     {policy: &foreground, want: &foreground},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			r := require.New(t)
+			parent := newTestParent(schema.GroupVersionKind{Group: "delivery.ocm.software", Version: "v1alpha1", Kind: "TestKind"})
+			orphan := newConfigMap("orphan-cm", "default")
+			orphan.SetLabels(map[string]string{ApplysetPartOfLabel: ID(parent)})
+
+			var got []*metav1.DeletionPropagation
+			scheme := runtime.NewScheme()
+			r.NoError(corev1.AddToScheme(scheme))
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(orphan).
+				WithInterceptorFuncs(interceptor.Funcs{
+					Delete: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.DeleteOption) error {
+						deleteOpts := &client.DeleteOptions{}
+						deleteOpts.ApplyOptions(opts)
+						got = append(got, deleteOpts.PropagationPolicy)
+						return c.Delete(ctx, obj, opts...)
+					},
+				}).
+				Build()
+
+			applier := New(Config{
+				Client:          fakeClient,
+				RESTMapper:      newTestRESTMapper(),
+				Log:             logr.Discard(),
+				ParentNamespace: "default",
+			}, parent)
+			result, err := applier.Prune(t.Context(), PruneOptions{
+				Scope:             &PruneScope{GroupKinds: sets.New(schema.GroupKind{Kind: "ConfigMap"})},
+				PropagationPolicy: tt.policy,
+			})
+			r.NoError(err)
+			r.Len(result.Pruned, 1)
+			r.Equal([]*metav1.DeletionPropagation{tt.want}, got)
+		})
 	}
 }

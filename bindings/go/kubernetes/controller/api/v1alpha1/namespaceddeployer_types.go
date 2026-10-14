@@ -9,6 +9,19 @@ import (
 
 const KindNamespacedDeployer = "NamespacedDeployer"
 
+// DeletionPolicy controls how a NamespacedDeployer removes the objects it deployed.
+// +kubebuilder:validation:Enum=Background;Foreground;Orphan
+type DeletionPolicy string
+
+const (
+	// DeletionPolicyBackground deletes the objects and lets the garbage collector remove their dependents afterwards.
+	DeletionPolicyBackground DeletionPolicy = "Background"
+	// DeletionPolicyForeground deletes the objects and waits until their dependents are gone as well.
+	DeletionPolicyForeground DeletionPolicy = "Foreground"
+	// DeletionPolicyOrphan keeps the objects when the NamespacedDeployer is deleted, so another tool can adopt them.
+	DeletionPolicyOrphan DeletionPolicy = "Orphan"
+)
+
 // NamespacedDeployerSpec defines the desired state of NamespacedDeployer.
 type NamespacedDeployerSpec struct {
 	// ResourceRef is the name of an OCM resource in the same namespace containing the ResourceGroupDefinition.
@@ -32,6 +45,15 @@ type NamespacedDeployerSpec struct {
 	// NamespacedDeployer.
 	// +optional
 	Suspend bool `json:"suspend,omitempty"`
+
+	// DeletionPolicy controls how the deployed objects are removed. Background and Foreground are the propagation
+	// policies of every prune, including objects that a newer component version no longer contains. With Foreground
+	// the NamespacedDeployer waits until the dependents of its objects are gone as well. Orphan keeps the objects
+	// when the NamespacedDeployer is deleted and removes its ApplySet label, owner reference and annotation from them.
+	// Objects that a newer component version no longer contains are still deleted in the background.
+	// +kubebuilder:default=Background
+	// +optional
+	DeletionPolicy DeletionPolicy `json:"deletionPolicy,omitempty"`
 }
 
 func (in *NamespacedDeployer) GetConditions() []metav1.Condition {
@@ -76,6 +98,15 @@ func (in *NamespacedDeployer) GetResourceRef() ObjectKey {
 
 func (in *NamespacedDeployer) GetServiceAccountName() string {
 	return in.Spec.ServiceAccountName
+}
+
+// GetDeletionPolicy returns the deletion policy, Background if none is set.
+func (in *NamespacedDeployer) GetDeletionPolicy() DeletionPolicy {
+	if in.Spec.DeletionPolicy == "" {
+		return DeletionPolicyBackground
+	}
+
+	return in.Spec.DeletionPolicy
 }
 
 func (in *NamespacedDeployer) IsSuspended() bool {

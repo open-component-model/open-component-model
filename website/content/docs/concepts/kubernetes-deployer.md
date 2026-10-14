@@ -103,6 +103,25 @@ A `NamespacedDeployer` prunes with its service account. The following two things
 Orphaned objects keep the annotation `delivery.ocm.software/namespaced-deployer` with the namespace and name of
 their deployer, and the label `app.kubernetes.io/managed-by: namespaceddeployer.delivery.ocm.software`.
 
+### Deletion policy
+
+`spec.deletionPolicy` controls how a `NamespacedDeployer` removes the objects it deployed:
+
+| Policy                 | Pruned objects                             | Deleting the `NamespacedDeployer`                                                     |
+|------------------------|--------------------------------------------|---------------------------------------------------------------------------------------|
+| `Background` (default) | Deleted, dependents are removed afterwards | Finishes once its objects are gone, their dependents are removed in the background    |
+| `Foreground`           | Deleted together with their dependents     | Waits until its objects and their dependents, like the Pods of a Deployment, are gone |
+| `Orphan`               | Deleted, dependents are removed afterwards | Keeps its objects                                                                     |
+
+`Orphan` only applies to deleting the `NamespacedDeployer`. Objects that a newer component version no longer contains
+are still pruned. To keep its objects, the deployer removes the `applyset.kubernetes.io/part-of` label, its owner
+reference, its `app.kubernetes.io/managed-by` label and its `delivery.ocm.software/namespaced-deployer` annotation from
+them. Another tool, or another `NamespacedDeployer`, can adopt them afterwards. This needs `patch` on the deployed
+kinds for the service account. Without it, the deletion waits with `DeletionFailed` until you grant it.
+
+If the service account is gone, no policy can be executed. Therefore, objects in the NamespacedDeployer's namespace
+are left alone.
+
 {{< callout context="caution" title="Delete the NamespacedDeployer before its RBAC" icon="outline/alert-triangle" >}}
 `kubectl delete -f` on a file that contains the `NamespacedDeployer` together with its service account, `Role`,
 `ClusterRole` or bindings removes the service account at the same time and orphans cluster-scoped objects such as

@@ -57,6 +57,8 @@ type DeployerObject interface {
 	GetResourceRef() ObjectKey
 	// GetServiceAccountName returns the service account named by the object, or empty if it names none.
 	GetServiceAccountName() string
+	// GetDeletionPolicy returns how the deployed objects are removed, or empty for the API server's default.
+	GetDeletionPolicy() DeletionPolicy
 	IsSuspended() bool
 	GetDeployerStatus() *DeployerStatus
 }

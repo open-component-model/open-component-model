@@ -112,6 +112,11 @@ func (in *Deployer) GetServiceAccountName() string {
 	return ""
 }
 
+// GetDeletionPolicy returns an empty policy, so the Deployer keeps the API server's default propagation.
+func (in *Deployer) GetDeletionPolicy() DeletionPolicy {
+	return ""
+}
+
 func (in *Deployer) IsSuspended() bool {
 	return in.Spec.Suspend
 }

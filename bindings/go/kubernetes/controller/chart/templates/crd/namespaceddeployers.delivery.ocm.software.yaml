@@ -71,6 +71,19 @@ spec:
           spec:
             description: NamespacedDeployerSpec defines the desired state of NamespacedDeployer.
             properties:
+              deletionPolicy:
+                default: Background
+                description: |-
+                  DeletionPolicy controls how the deployed objects are removed. Background and Foreground are the propagation
+                  policies of every prune, including objects that a newer component version no longer contains. With Foreground
+                  the NamespacedDeployer waits until the dependents of its objects are gone as well. Orphan keeps the objects
+                  when the NamespacedDeployer is deleted and removes its ApplySet label, owner reference and annotation from them.
+                  Objects that a newer component version no longer contains are still deleted in the background.
+                enum:
+                - Background
+                - Foreground
+                - Orphan
+                type: string
               ocmConfig:
                 description: |-
                   OCMConfig defines references to secrets, config maps or ocm api

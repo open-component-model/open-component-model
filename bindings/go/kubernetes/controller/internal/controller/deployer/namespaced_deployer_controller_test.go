@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -68,6 +69,7 @@ data:
 		Expect(cm.GetLabels()).To(HaveKeyWithValue(applyset.ApplysetPartOfLabel, applyset.ID(deployer)))
 		Expect(cm.GetLabels()).To(HaveKeyWithValue(managedByLabel, namespacedDeployerManager))
 		Expect(deployer.Status.Deployed).To(ContainElement(HaveField("Name", "nd-cm")))
+		Expect(deployer.Spec.DeletionPolicy).To(Equal(v1alpha1.DeletionPolicyBackground))
 
 		By("deleting the NamespacedDeployer prunes the ConfigMap")
 		test.DeleteObject(ctx, k8sClient, deployer)
@@ -188,6 +190,111 @@ metadata:
 			g.Expect(errors.IsNotFound(k8sClient.Get(ctx, client.ObjectKeyFromObject(deployer), deployer))).To(BeTrue())
 			g.Expect(errors.IsNotFound(k8sClient.Get(ctx, client.ObjectKeyFromObject(cm), cm))).To(BeTrue())
 		}).WithTimeout(test.DefaultKubernetesOperationTimeout).WithContext(ctx).Should(Succeed())
+	})
+
+	It("waits for the dependents of its objects with the Foreground deletion policy", func(ctx SpecContext) {
+		createServiceAccount(ctx, namespace.GetName(), true)
+		resourceObj := mockYAMLResource(ctx, namespace.GetName(), `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nd-foreground-cm
+`)
+
+		deployer := createNamespacedDeployer(ctx, namespace.GetName(), resourceObj.GetName(), nil, func(d *v1alpha1.NamespacedDeployer) {
+			d.Spec.DeletionPolicy = v1alpha1.DeletionPolicyForeground
+		})
+		test.WaitForReadyObject(ctx, k8sClient, deployer, map[string]any{})
+
+		By("deleting the ConfigMap in the foreground")
+		Expect(k8sClient.Delete(ctx, deployer)).To(Succeed())
+		cm := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "nd-foreground-cm", Namespace: namespace.GetName()}}
+		Eventually(func(g Gomega, ctx context.Context) {
+			g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(cm), cm)).To(Succeed())
+			g.Expect(cm.GetFinalizers()).To(ContainElement(metav1.FinalizerDeleteDependents))
+		}).WithTimeout(test.DefaultKubernetesOperationTimeout).WithContext(ctx).Should(Succeed())
+
+		By("keeping the NamespacedDeployer until the ConfigMap is gone")
+		// envtest runs no garbage collector, so the foreground deletion is finished by hand.
+		Consistently(func(ctx context.Context) error {
+			return k8sClient.Get(ctx, client.ObjectKeyFromObject(deployer), &v1alpha1.NamespacedDeployer{})
+		}).WithTimeout(2 * time.Second).WithContext(ctx).Should(Succeed())
+		cm.SetFinalizers(nil)
+		Expect(k8sClient.Update(ctx, cm)).To(Succeed())
+		Eventually(func(ctx context.Context) bool {
+			return errors.IsNotFound(k8sClient.Get(ctx, client.ObjectKeyFromObject(deployer), &v1alpha1.NamespacedDeployer{}))
+		}).WithTimeout(test.DefaultKubernetesOperationTimeout).WithContext(ctx).Should(BeTrue())
+	})
+
+	It("releases its objects with the Orphan deletion policy", func(ctx SpecContext) {
+		createServiceAccount(ctx, namespace.GetName(), true)
+		other := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace.GetName() + "-other"}}
+		Expect(k8sClient.Create(ctx, other)).To(Succeed())
+		grantConfigMaps(ctx, other.GetName(), namespace.GetName(), namespacedDeployerSA)
+		resourceObj := mockYAMLResource(ctx, namespace.GetName(), fmt.Sprintf(`apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nd-orphan-own-cm
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nd-orphan-other-cm
+  namespace: %s
+`, other.GetName()))
+
+		deployer := createNamespacedDeployer(ctx, namespace.GetName(), resourceObj.GetName(), nil, func(d *v1alpha1.NamespacedDeployer) {
+			d.Spec.DeletionPolicy = v1alpha1.DeletionPolicyOrphan
+		})
+		test.WaitForReadyObject(ctx, k8sClient, deployer, map[string]any{})
+
+		By("deleting the NamespacedDeployer without its objects")
+		test.DeleteObject(ctx, k8sClient, deployer)
+
+		By("removing every trace of the NamespacedDeployer from its objects")
+		for _, key := range []client.ObjectKey{
+			{Namespace: namespace.GetName(), Name: "nd-orphan-own-cm"},
+			{Namespace: other.GetName(), Name: "nd-orphan-other-cm"},
+		} {
+			cm := &corev1.ConfigMap{}
+			Expect(k8sClient.Get(ctx, key, cm)).To(Succeed())
+			Expect(cm.GetDeletionTimestamp()).To(BeNil())
+			Expect(cm.GetOwnerReferences()).To(BeEmpty())
+			Expect(cm.GetLabels()).NotTo(HaveKey(applyset.ApplysetPartOfLabel))
+			Expect(cm.GetLabels()).NotTo(HaveKey(managedByLabel))
+			Expect(cm.GetAnnotations()).NotTo(HaveKey(namespacedDeployerAnnotation))
+		}
+	})
+
+	It("blocks the Orphan deletion policy until its service account may release the objects", func(ctx SpecContext) {
+		createServiceAccount(ctx, namespace.GetName(), true)
+		resourceObj := mockYAMLResource(ctx, namespace.GetName(), `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nd-orphan-blocked-cm
+`)
+
+		deployer := createNamespacedDeployer(ctx, namespace.GetName(), resourceObj.GetName(), nil, func(d *v1alpha1.NamespacedDeployer) {
+			d.Spec.DeletionPolicy = v1alpha1.DeletionPolicyOrphan
+		})
+		test.WaitForReadyObject(ctx, k8sClient, deployer, map[string]any{})
+
+		By("revoking the permissions of the service account and deleting the NamespacedDeployer")
+		binding := &rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: namespacedDeployerSA, Namespace: namespace.GetName()}}
+		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(binding), binding)).To(Succeed())
+		test.DeleteObject(ctx, k8sClient, binding.DeepCopy())
+		Expect(k8sClient.Delete(ctx, deployer)).To(Succeed())
+		waitForNotReadyMessage(ctx, deployer, v1alpha1.DeletionFailedReason, "Orphan deletion policy")
+
+		By("finishing the deletion once the permissions are back")
+		binding.ResourceVersion = ""
+		binding.UID = ""
+		Expect(k8sClient.Create(ctx, binding)).To(Succeed())
+		Eventually(func(ctx context.Context) bool {
+			return errors.IsNotFound(k8sClient.Get(ctx, client.ObjectKeyFromObject(deployer), &v1alpha1.NamespacedDeployer{}))
+		}).WithTimeout(test.DefaultKubernetesOperationTimeout).WithContext(ctx).Should(BeTrue())
+		cm := &corev1.ConfigMap{}
+		Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace.GetName(), Name: "nd-orphan-blocked-cm"}, cm)).To(Succeed())
+		Expect(cm.GetOwnerReferences()).To(BeEmpty())
 	})
 
 	It("orphans objects when its service account is gone", func(ctx SpecContext) {
@@ -407,7 +514,7 @@ func grantClusterRoles(ctx SpecContext, saNamespace string) {
 	})
 }
 
-func createNamespacedDeployer(ctx SpecContext, namespace, resourceName string, cfg []v1alpha1.OCMConfiguration) *v1alpha1.NamespacedDeployer {
+func createNamespacedDeployer(ctx SpecContext, namespace, resourceName string, cfg []v1alpha1.OCMConfiguration, mutate ...func(*v1alpha1.NamespacedDeployer)) *v1alpha1.NamespacedDeployer {
 	GinkgoHelper()
 
 	deployer := &v1alpha1.NamespacedDeployer{
@@ -417,6 +524,9 @@ func createNamespacedDeployer(ctx SpecContext, namespace, resourceName string, c
 			ServiceAccountName: namespacedDeployerSA,
 			OCMConfig:          cfg,
 		},
+	}
+	for _, m := range mutate {
+		m(deployer)
 	}
 	Expect(k8sClient.Create(ctx, deployer)).To(Succeed())
 	DeferCleanup(func(ctx SpecContext) {

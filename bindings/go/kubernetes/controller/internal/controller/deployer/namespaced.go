@@ -2,6 +2,7 @@ package deployer
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -160,37 +161,115 @@ func (r *Reconciler) orphanOnDeletion(ctx context.Context, deployer deliveryv1al
 // orphanedObjects lists the ApplySet members that are cluster-scoped or in the ApplySet's additional namespaces. The
 // controller reads them with its own identity, which it needs anyway to watch them for drift.
 func (r *Reconciler) orphanedObjects(ctx context.Context, metadata applyset.Metadata) ([]string, error) {
+	members, err := r.applySetMembers(ctx, metadata, sets.List(metadata.AdditionalNamespaces))
+	if err != nil {
+		return nil, err
+	}
+
+	orphaned := make([]string, 0, len(members))
+	for _, item := range members {
+		name := item.GetName()
+		if item.GetNamespace() != "" {
+			name = item.GetNamespace() + "/" + name
+		}
+		orphaned = append(orphaned, item.GroupVersionKind().GroupKind().String()+" "+name)
+	}
+	slices.Sort(orphaned)
+
+	return orphaned, nil
+}
+
+// applySetMembers lists the cluster-scoped ApplySet members and the namespaced ones in the given namespaces.
+func (r *Reconciler) applySetMembers(ctx context.Context, metadata applyset.Metadata, namespaces []string) ([]metav1.PartialObjectMetadata, error) {
 	selector := client.MatchingLabels{applyset.ApplysetPartOfLabel: metadata.ID}
 
-	var orphaned []string
+	var members []metav1.PartialObjectMetadata
 	for gk := range metadata.GroupKinds {
 		mapping, err := r.resourceRESTMapper.RESTMapping(gk)
 		if err != nil {
 			return nil, fmt.Errorf("failed to map %s: %w", gk, err)
 		}
 
-		namespaces := []string{""}
+		scopes := []string{""}
 		if mapping.Scope.Name() == meta.RESTScopeNameNamespace {
-			namespaces = sets.List(metadata.AdditionalNamespaces)
+			scopes = namespaces
 		}
-		for _, namespace := range namespaces {
+		for _, namespace := range scopes {
 			list := &metav1.PartialObjectMetadataList{}
 			list.SetGroupVersionKind(mapping.GroupVersionKind.GroupVersion().WithKind(mapping.GroupVersionKind.Kind + "List"))
 			if err := r.apiReader.List(ctx, list, selector, client.InNamespace(namespace)); err != nil {
 				return nil, fmt.Errorf("failed to list %s: %w", gk, err)
 			}
 			for _, item := range list.Items {
-				name := item.GetName()
-				if item.GetNamespace() != "" {
-					name = item.GetNamespace() + "/" + name
-				}
-				orphaned = append(orphaned, gk.String()+" "+name)
+				item.SetGroupVersionKind(mapping.GroupVersionKind)
+				members = append(members, item)
 			}
 		}
 	}
-	slices.Sort(orphaned)
 
-	return orphaned, nil
+	return members, nil
+}
+
+// propagationPolicy returns the propagation policy of every prune. Orphan only applies to deleting the deployer,
+// objects that a newer component version no longer contains are still deleted.
+func propagationPolicy(deployer deliveryv1alpha1.DeployerObject) *metav1.DeletionPropagation {
+	var policy metav1.DeletionPropagation
+	switch deployer.GetDeletionPolicy() {
+	case "":
+		return nil
+	case deliveryv1alpha1.DeletionPolicyForeground:
+		policy = metav1.DeletePropagationForeground
+	default:
+		policy = metav1.DeletePropagationBackground
+	}
+
+	return &policy
+}
+
+// releaseOnDeletion removes the ApplySet label, the owner reference and the deployer annotation from every deployed
+// object. Neither the garbage collector nor a later prune removes them then, and another ApplySet can adopt them.
+func (r *Reconciler) releaseOnDeletion(ctx context.Context, c client.Client, deployer deliveryv1alpha1.DeployerObject, metadata applyset.Metadata) error {
+	namespaces := append(sets.List(metadata.AdditionalNamespaces), deployer.GetNamespace())
+	members, err := r.applySetMembers(ctx, metadata, namespaces)
+	if err != nil {
+		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.DeletionFailedReason,
+			fmt.Sprintf("failed to list the objects to release for the Orphan deletion policy: %v", err))
+
+		return err
+	}
+
+	var errs []error
+	for i := range members {
+		obj := &members[i]
+		patch := client.MergeFromWithOptions(obj.DeepCopy(), client.MergeFromWithOptimisticLock{})
+
+		labels := obj.GetLabels()
+		delete(labels, applyset.ApplysetPartOfLabel)
+		if labels[managedByLabel] == namespacedDeployerManager {
+			delete(labels, managedByLabel)
+		}
+		obj.SetLabels(labels)
+		annotations := obj.GetAnnotations()
+		delete(annotations, namespacedDeployerAnnotation)
+		obj.SetAnnotations(annotations)
+		obj.SetOwnerReferences(slices.DeleteFunc(obj.GetOwnerReferences(), func(ref metav1.OwnerReference) bool {
+			return ref.UID == deployer.GetUID()
+		}))
+
+		if err := c.Patch(ctx, obj, patch); err != nil && !apierrors.IsNotFound(err) {
+			errs = append(errs, fmt.Errorf("failed to release %s %s/%s: %w", obj.GroupVersionKind().Kind, obj.GetNamespace(), obj.GetName(), err))
+		}
+	}
+	if err := errors.Join(errs...); err != nil {
+		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.DeletionFailedReason, fmt.Sprintf(
+			"service account %s cannot release the objects for the Orphan deletion policy: %v", serviceAccountName(deployer), err))
+
+		return err
+	}
+
+	log.FromContext(ctx).Info("released ApplySet members for the Orphan deletion policy", "released", len(members))
+
+	return nil
 }
 
 // canOwn reports whether the deployer can be the controller owner of obj. Kubernetes rejects namespaced owners for

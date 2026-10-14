@@ -305,13 +305,21 @@ func (r *Reconciler) pruneWithApplySet(ctx context.Context, deployer deliveryv1a
 		return false, err
 	}
 
+	if deployer.GetDeletionPolicy() == deliveryv1alpha1.DeletionPolicyOrphan {
+		if err := r.releaseOnDeletion(ctx, applyClient, deployer, metadata); err != nil {
+			return false, fmt.Errorf("failed to release ApplySet: %w", err)
+		}
+		return true, nil
+	}
+
 	set := r.createApplySet(applyClient, deployer, logger)
 
 	logger.Info("pruning ApplySet", "scope", metadata.PruneScope())
 	result, err := set.Prune(ctx, applyset.PruneOptions{
-		KeepUIDs:    nil,
-		Scope:       metadata.PruneScope(),
-		Concurrency: runtime.NumCPU(),
+		KeepUIDs:          nil,
+		Scope:             metadata.PruneScope(),
+		Concurrency:       runtime.NumCPU(),
+		PropagationPolicy: propagationPolicy(deployer),
 	})
 	if err != nil {
 		if !r.blocksDeletion(ctx, deployer, metadata, err) {
@@ -957,9 +965,10 @@ func (r *Reconciler) applyWithApplySet(ctx context.Context, resource *deliveryv1
 	logger.Info("ApplySet operation complete", "applied", len(applyResult.Applied))
 
 	pruneResult, err := set.Prune(ctx, applyset.PruneOptions{
-		KeepUIDs:    applyResult.ObservedUIDs(),
-		Scope:       metadata.PruneScope(),
-		Concurrency: runtime.NumCPU(),
+		KeepUIDs:          applyResult.ObservedUIDs(),
+		Scope:             metadata.PruneScope(),
+		Concurrency:       runtime.NumCPU(),
+		PropagationPolicy: propagationPolicy(deployer),
 	})
 	if err != nil {
 		return fmt.Errorf("failed to prune ApplySet: %w", err)
