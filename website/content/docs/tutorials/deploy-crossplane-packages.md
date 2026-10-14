@@ -310,6 +310,8 @@ Copy the component version and its packages to `$OCM_REPO`. Choose where the pac
 Each package becomes a normal image in the target registry. You can browse it in your registry UI, just like the
 `.xpkg` files you publish today.
 
+If you referenced a pushed package, the default OCI uploader relocates both packages:
+
 ```shell
 cat > .ocmconfig << 'EOF'
 type: generic.config.ocm.software/v1
@@ -317,7 +319,31 @@ configurations:
   - type: oci.uploader.transfer.config.ocm.software/v1alpha1
   - type: localblob.uploader.transfer.config.ocm.software/v1alpha1
 EOF
+```
 
+If you embedded the `.xpkg` file, the Configuration package is a local blob without a `referenceName`. The default OCI
+uploader only relocates local blobs that carry one, so the package would stay embedded in the component version. Use
+this configuration instead. Its second entry names the image after the resource:
+
+```shell
+cat > .ocmconfig << 'EOF'
+type: generic.config.ocm.software/v1
+configurations:
+  - type: oci.uploader.transfer.config.ocm.software/v1alpha1
+  - type: oci.uploader.transfer.config.ocm.software/v1alpha1
+    match: >-
+      target.type == "OCIRepository" && resource.access.isType("LocalBlob")
+      && has(resource.access.mediaType) && isOCIManifest(resource.access.mediaType)
+    imageReference: >-
+      ${target.baseUrl + (target.subPath == "" ? "" : "/" + target.subPath)
+      + "/" + resource.name + ":" + resource.version}
+  - type: localblob.uploader.transfer.config.ocm.software/v1alpha1
+EOF
+```
+
+Transfer the component version:
+
+```shell
 ocm transfer cv transport-archive//ocm.software/examples/crossplane-app:0.1.0 $OCM_REPO
 ```
 
@@ -334,6 +360,8 @@ resources:
       type: ociArtifact/v1
     name: function-patch-and-transform
 ```
+
+With the embedded package, `configuration-app` lands at `registry.example.com/ocm/configuration-app:0.1.0` instead.
 
 {{< /tab >}}
 {{< tab "Embedded in the component version" >}}
