@@ -92,6 +92,12 @@ func GetBlobInWorkingDirectory(path, workingDir string) (*Blob, error) {
 // If the path is relative, it resolves it against the working directory and prevents escaping the working directory.
 // If the path cannot be resolved or is invalid, it returns an error.
 func EnsurePathInWorkingDirectory(path, workingDirectory string) (_ string, retErr error) {
+	absWorkingDirectory, err := filepath.Abs(workingDirectory)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve working directory %q: %w", workingDirectory, err)
+	}
+	workingDirectory = absWorkingDirectory
+
 	if filepath.IsAbs(path) {
 		if path, retErr = filepath.Rel(workingDirectory, path); retErr != nil {
 			return "", fmt.Errorf("failed to create relative path for %q based on working directory %q: %w", path, workingDirectory, retErr)

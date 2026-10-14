@@ -282,8 +282,9 @@ func TestGetV1HelmBlob_BadCharts(t *testing.T) {
 }
 
 func TestGetV1HelmBlob_WorkingDirectory(t *testing.T) {
+	r := require.New(t)
 	workDir, err := os.Getwd()
-	require.NoError(t, err, "failed to get current working directory")
+	r.NoError(err, "failed to get current working directory")
 	testDataDir := filepath.Join(workDir, "../testdata")
 
 	tests := []struct {
@@ -312,6 +313,11 @@ func TestGetV1HelmBlob_WorkingDirectory(t *testing.T) {
 		{
 			name:       "absolute chart path inside working directory",
 			workingDir: testDataDir,
+			path:       filepath.Join(testDataDir, "mychart"),
+		},
+		{
+			name:       "absolute chart path inside relative working directory",
+			workingDir: "../testdata",
 			path:       filepath.Join(testDataDir, "mychart"),
 		},
 		{
