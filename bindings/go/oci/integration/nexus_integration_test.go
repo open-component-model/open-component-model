@@ -27,16 +27,12 @@ const (
 	nexusDockerRepository = "docker-hosted"
 )
 
-// Test_Integration_Nexus_RedeployDisabled drives the OCI uploader paths against
-// a real Nexus "docker (hosted)" repository with redeploy disabled
-// (storage.writePolicy = allow_once), the exact configuration that surfaced the
-// original 409 "redeploy disabled ... cannot be updated as asset already
-// exists" failure. It locks the idempotency contract for the tag write sites
-// the fix touches: the component-descriptor tag (AddComponentVersion) and the
-// re-materialised OCI artifact tag (UploadResource -> uploadOCIImage), both of
-// which 409 on re-tag without the fix. The ownership referrer attach
-// (AddOwnership) is included as a positive idempotency check (see the note on
-// that subtest for why Nexus does not 409 there).
+// Test_Integration_Nexus_RedeployDisabled drives the OCI uploader against a real
+// Nexus "docker (hosted)" repo with redeploy disabled (writePolicy=allow_once),
+// the configuration that produced the original 409 "redeploy disabled ... cannot
+// be updated as asset already exists". The component-descriptor and OCI artifact
+// tag subtests 409 on re-tag without the fix; the ownership subtest is a
+// positive check (Nexus does not 409 there - see its note).
 func Test_Integration_Nexus_RedeployDisabled(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping Nexus integration test in short mode")
@@ -88,13 +84,9 @@ func Test_Integration_Nexus_RedeployDisabled(t *testing.T) {
 	})
 
 	t.Run("ownership referrer re-attach is idempotent", func(t *testing.T) {
-		// Unlike the tag sites above, this does not reproduce the redeploy 409 on
-		// Nexus: the ownership referrer is pushed by digest (no human tag), and
-		// Nexus accepts a by-digest re-push of immutable content. It guards the
-		// positive idempotency contract end-to-end; the write-once-by-digest case
-		// that pushIdempotent actually protects (and the referrers-tag-schema
-		// fallback on registries without the Referrers API) is covered by the
-		// TestRepository_AddOwnership_ImmutableRegistry unit test.
+		// Positive check only: Nexus does not 409 here because the referrer is
+		// pushed by digest (no human tag). The write-once-by-digest path
+		// pushIdempotent guards is covered by TestRepository_AddOwnership_ImmutableRegistry.
 		r := require.New(t)
 		const component, version = "ocm.software/nexus/owned", "1.0.0"
 		imageRef := fmt.Sprintf("%s/nexus/owned-image:%s", dockerEndpoint, version)

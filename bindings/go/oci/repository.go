@@ -156,23 +156,14 @@ func (repo *Repository) AddComponentVersion(ctx context.Context, descriptor *des
 // tagIdempotent tags desc at reference, treating the write as a no-op success
 // when the reference already resolves to desc.Digest.
 //
-// Some registries (e.g. a Nexus hosted repository with "redeploy" disabled, or
-// any immutable/write-once policy) reject re-tagging an existing reference even
-// when the new target is byte-for-byte identical to the current one. OCM's
-// manifests are content-addressed and carry no time-varying fields, so
-// re-transferring an unchanged component version produces the same digest; the
-// only operation that collides is the tag write.
-//
-// Rather than classify the registry error (a 409 is not exclusively a redeploy
-// rejection, and the signalling is vendor-specific), we branch on the desired
-// post-condition: if Tag fails but the reference already points at exactly the
-// digest we intended to write, the end state we wanted already holds, so the
-// failure is moot. Any other outcome - the reference is absent, points at a
-// different digest, or the registry is genuinely unreachable - propagates the
-// original error unchanged.
-//
-// The extra Resolve is only ever issued on the Tag error path, so the happy
-// path keeps its single round trip.
+// Immutable/write-once registries (e.g. a Nexus hosted repo with "redeploy"
+// disabled) reject re-tagging an existing reference even to byte-identical
+// content. OCM manifests are content-addressed with no time-varying fields, so
+// re-transferring an unchanged version yields the same digest and only the tag
+// write collides. We branch on the post-condition rather than classify the
+// error (a 409 is not exclusively a redeploy rejection): if the reference
+// already points at the digest we meant to write, the end state holds; anything
+// else propagates. The Resolve runs only on the error path.
 func tagIdempotent(ctx context.Context, store spec.Store, desc ociImageSpecV1.Descriptor, reference string) error {
 	err := store.Tag(ctx, desc, reference)
 	if err == nil {
@@ -962,18 +953,12 @@ func (repo *Repository) buildAndPushOwnershipReferrer(ctx context.Context, store
 // store already holds the content-addressed blob.
 //
 // Mirrors tagIdempotent: a bare oras store.Push never pre-checks existence, so
-// on an immutable/write-once registry a re-push of existing content is rejected
-// (and with a plain conflict, not errdef.ErrAlreadyExists, which only local
-// stores return). We branch on the post-condition instead of classifying the
-// error - if the content-addressed blob is already present, the end state we
-// wanted holds. The Exists check runs only on the push error path, so the happy
-// path keeps its single round trip.
-//
-// For a referrer manifest (which carries a subject) this also sidesteps the
-// oras-internal referrers-index tag update that store.Push drives on registries
-// without the Referrers API: the manifest PUT fails first on an immutable
-// registry, before the index step, and a completed prior attach already left
-// the index correct.
+// an immutable/write-once registry rejects re-pushing existing content with a
+// plain conflict (not errdef.ErrAlreadyExists, which only local stores return).
+// We branch on the post-condition, checking Exists only on the error path. For
+// a referrer manifest this also sidesteps the oras referrers-index tag update
+// (on registries without the Referrers API): the manifest PUT fails first, and
+// a completed prior attach already left the index correct.
 func pushIdempotent(ctx context.Context, store spec.Store, desc ociImageSpecV1.Descriptor, data []byte) error {
 	err := store.Push(ctx, desc, bytes.NewReader(data))
 	if err == nil || errors.Is(err, errdef.ErrAlreadyExists) {

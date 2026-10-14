@@ -3769,9 +3769,8 @@ func TestRepository_AddOwnership_ResolveErrors(t *testing.T) {
 }
 
 // redeployDisabledResolver hands out stores that emulate an immutable OCI
-// repository (e.g. a Nexus hosted repo with "redeploy" disabled): once a
-// reference carries a tag, re-pointing that tag is rejected, even to identical
-// content.
+// repo (e.g. Nexus with "redeploy" disabled): once a reference carries a tag,
+// re-pointing it is rejected, even to identical content.
 type redeployDisabledResolver struct{ oci.Resolver }
 
 func (r redeployDisabledResolver) StoreForReference(ctx context.Context, reference string) (spec.Store, error) {
@@ -3782,9 +3781,8 @@ func (r redeployDisabledResolver) StoreForReference(ctx context.Context, referen
 	return &redeployDisabledStore{Store: s}, nil
 }
 
-// redeployDisabledStore rejects a Tag write whenever the reference already
-// resolves, mirroring a write-once registry policy. Reads and digest-addressed
-// pushes pass through unchanged.
+// redeployDisabledStore rejects a Tag write when the reference already resolves,
+// mirroring a write-once policy. Reads and digest-addressed pushes pass through.
 type redeployDisabledStore struct{ spec.Store }
 
 func (s *redeployDisabledStore) Tag(ctx context.Context, desc ociImageSpecV1.Descriptor, reference string) error {
@@ -3815,9 +3813,8 @@ func TestRepository_AddComponentVersion_ImmutableRegistry(t *testing.T) {
 		}
 	}
 
-	// Re-adding an unchanged component version produces the identical manifest
-	// digest, so the tag already points where we would write it: the redeploy
-	// rejection is a no-op and must be swallowed.
+	// Unchanged content yields the same manifest digest, so the tag already
+	// points where we would write it: the redeploy rejection is a no-op.
 	t.Run("identical content re-add is idempotent", func(t *testing.T) {
 		r := require.New(t)
 		ctx := t.Context()
@@ -3828,9 +3825,8 @@ func TestRepository_AddComponentVersion_ImmutableRegistry(t *testing.T) {
 			"re-adding identical content must succeed despite redeploy being disabled")
 	})
 
-	// Changed content yields a different manifest digest, so the existing tag
-	// points elsewhere. On an immutable registry that is a genuine conflict and
-	// must surface rather than be silently skipped.
+	// Changed content yields a different digest, so the tag points elsewhere: a
+	// genuine conflict that must surface rather than be skipped.
 	t.Run("changed content surfaces the conflict", func(t *testing.T) {
 		r := require.New(t)
 		ctx := t.Context()
@@ -3996,9 +3992,8 @@ func TestRepository_AddOwnership_CreatesByValueReferrer(t *testing.T) {
 	r.True(stillExists, "re-running AddOwnership must converge on the same referrer")
 }
 
-// pushOnceResolver hands out stores that emulate an immutable OCI repository
-// for writes: re-pushing an already-present content-addressed asset is
-// rejected, as a write-once/redeploy-disabled policy would.
+// pushOnceResolver hands out stores that emulate a write-once/redeploy-disabled
+// registry: re-pushing an already-present content-addressed asset is rejected.
 type pushOnceResolver struct{ oci.Resolver }
 
 func (r pushOnceResolver) StoreForReference(ctx context.Context, reference string) (spec.Store, error) {
@@ -4018,10 +4013,9 @@ func (s *pushOnceStore) Push(ctx context.Context, desc ociImageSpecV1.Descriptor
 	return s.Store.Push(ctx, desc, r)
 }
 
-// TestRepository_AddOwnership_ImmutableRegistry locks the idempotency of the
-// ownership referrer attach on a write-once registry: the referrer manifest and
-// its empty config/layer blob are content-addressed and deterministic, so a
-// second attach must converge without attempting a rejected re-push.
+// TestRepository_AddOwnership_ImmutableRegistry locks referrer-attach idempotency
+// on a write-once registry: the referrer manifest and its empty blob are
+// content-addressed, so a second attach must converge without a rejected re-push.
 func TestRepository_AddOwnership_ImmutableRegistry(t *testing.T) {
 	r := require.New(t)
 	ctx := context.Background()
