@@ -24,7 +24,6 @@ Conformance testing ensures that OCM implementations correctly handle:
 ## Current Scenarios
 
 - [`sovereign/`](./scenarios/sovereign) - Demonstrates modeling, signing, transporting, and deploying a multi-service product into an air-gapped sovereign cloud environment (ADR-0013)
-- [`fips-gpg/`](./scenarios/fips-gpg) - Signs and verifies a component version with GPG using the full OCM CLI image under `GODEBUG=fips140=only`, including rejection of a `gpg` outside FIPS mode
 
 ## Running Conformance Tests based on a scenario
 

@@ -59,7 +59,7 @@ Consumers verify using the corresponding public key to confirm authenticity and 
 ## Prerequisites
 
 - [OCM CLI installed]({{< relref "docs/getting-started/ocm-cli-installation.md" >}})
-- [GnuPG](https://gnupg.org/download/) 2.2 or later installed (`gpg` binary available in `$PATH`); OCM runs it to sign and verify
+- [GnuPG](https://gnupg.org/download/) installed (`gpg` binary available in `$PATH`), to generate keys and export them. OCM performs all GPG signing and verification in-process; `gpg` is only needed for key generation and for `keyringFingerprint` (see the [FIPS reference]({{< relref "docs/reference/standards-and-regulations/fips.md" >}}#gpg) for v6 keys and strict mode)
 - A component version to sign (we'll create one if you don't have one)
 
 ## Steps
@@ -319,7 +319,7 @@ Congratulations! You've successfully:
 Now that you understand the workflow, here are key practices for production environments:
 
 - **Reuse existing GPG keys** — If you already sign Git tags or release artifacts with a GPG key, the same key works for OCM.
-- **Protect private keys** — Use a hardware token (YubiKey, OpenPGP card) or a passphrase-protected key; OCM supports the `passphrase` credential property.
+- **Protect private keys** — Use a passphrase-protected key; OCM supports the `passphrase` credential property. With `GODEBUG=fips140=only`, passphrase-protected keys are rejected; use a secret store instead.
 - **Rotate keys periodically** — OCM supports multiple signatures per component version to ease key transitions.
 - **Distribute public keys securely** — Publish your public key to a key server (e.g. `keys.openpgp.org`) or share via a trusted channel.
 - **Verify before deployment** — Make signature verification a mandatory step in your deployment pipeline.
@@ -353,7 +353,7 @@ credentials:
     passphrase: my-secret-passphrase
 ```
 
-OCM passes the passphrase to `gpg` on standard input; it is never written to disk. GnuPG unlocks the key in a temporary GnuPG home directory, which OCM removes after each operation.
+OCM unlocks the key in memory. With `GODEBUG=fips140=only`, passphrase-protected keys are rejected; provide the key without passphrase protection from a secret store. For `keyringFingerprint`, OCM also sends the passphrase to `gpg` on standard input to export the key.
 {{< /details >}}
 
 {{< details "Can a component have both RSA and GPG signatures?" >}}

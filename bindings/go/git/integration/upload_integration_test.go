@@ -40,8 +40,8 @@ func Test_Integration_GitUploadOverHTTPS(t *testing.T) {
 	sourceURL, ca := newHTTPSServer(t, sourcePath, "Bearer "+token)
 	trustServerCertificate(t, ca)
 	targetURL := strings.TrimSuffix(sourceURL, filepath.Base(sourcePath)) + filepath.Base(targetPath)
-	credentials := &credsv1.GitCredentials{
-		Type:  runtime.NewVersionedType(credsv1.GitCredentialsType, credsv1.Version),
+	credentials := &credsv1.GitBearerCredentials{
+		Type:  runtime.NewVersionedType(credsv1.GitBearerCredentialsType, credsv1.Version),
 		Token: token,
 	}
 
