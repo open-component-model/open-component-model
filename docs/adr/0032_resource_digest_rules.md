@@ -2,7 +2,7 @@
 
 * **Status**: proposed
 * **Deciders**: Maintainers
-* **Date**: 2026-10-12
+* **Date**: 2026-10-14
 
 **Technical Story**: Resource digests are created, completed and verified separately in every binding, which led to OCI digests being relabelled on upload and breaking signatures; the fix is on main, and its review asked for one shared set of digest rules.
 
@@ -86,33 +86,26 @@ type Rule struct { Normalisation string; Accepted []string }
 func Check(recorded *runtime.Digest, computed Computed, rule Rule, mode Mode) (Result, error)
 ```
 
-`Check` takes three inputs. The **recorded digest** is what the component descriptor already contains, possibly nothing. The **computed digest** is what the binding just resolved or hashed: the manifest digest for an OCI image, the hash of the downloaded bytes for wget. The **rule** says which labels the binding accepts for that content. `Check` never writes anything itself; the binding applies the result:
+`Check` compares the **recorded digest** (what the component descriptor contains) with the **computed digest** (what the binding just resolved or hashed: the manifest digest for an OCI image, the hash of the downloaded bytes for wget). It never writes anything itself; the binding applies the result. There are three cases:
 
 ```mermaid
-flowchart TD
-    IN["Recorded digest + computed digest + rule"] --> B{"NO-DIGEST marker?"}
-    B -- yes --> X["Keep as is, hash nothing<br/><i>e.g. volatile resource excluded from signing</i>"]
-    B -- no --> C{"What is recorded?"}
-    C -- nothing --> G["Generate from computed digest<br/><i>e.g. new resource on add cv</i>"]
-    C -- some fields --> D{"Set fields match<br/>computed digest?"}
-    D -- yes --> P["Fill in missing fields<br/><i>e.g. value given, label missing</i>"]
-    D -- no --> R["Reject"]
-    C -- complete --> E{"Label accepted<br/>by the rule?"}
-    E -- yes --> F{"Hash and value match<br/>computed digest?"}
-    F -- yes --> K["Keep exactly as recorded<br/><i>e.g. image signed by an older v2 release</i>"]
-    F -- no --> R
-    E -- no --> M{"Strict or lenient?"}
-    M -- "strict: add cv, upload" --> R
-    M -- "lenient: packing local blobs" --> U["Keep unverified<br/><i>e.g. unknown label in an existing descriptor</i>"]
+flowchart LR
+    R["Recorded digest"] --> X["NO-DIGEST marker<br/>→ keep untouched, hash nothing"]
+    R --> N["Missing or incomplete<br/>→ fill in from the computed digest"]
+    R --> C["Complete<br/>→ verify against the computed digest,<br/>keep exactly as recorded"]
 ```
+
+* **NO-DIGEST marker**: The resource is excluded from signing, so nothing is hashed or changed.
+* **Missing or incomplete**: Happens while a component version is being built, before it is signed, so filling in the digest cannot break a signature. Fields that are already set must agree with the computed digest; otherwise the digest is rejected. The filled-in digest uses the rule's own label and the spec spelling.
+* **Complete**: The digest may be signed, so it is never rewritten. A mismatch is rejected. A label the rule does not know is rejected on add and upload (strict), and kept unverified when packing local blobs (lenient), because existing descriptors may carry it.
 
 #### Key Design Decisions
 
 1. **Shared package without OCI knowledge**: `bindings/go/digest` depends only on the runtime and descriptor packages, which a lint rule enforces. Normalisations stay plain strings. OCI rules live in the OCI binding.
 2. **Hash names in one place**: `ParseHashAlgorithm` accepts every spelling in use today, ignoring case and dashes. New and completed digests are written in the spec spelling (`SHA-256`, `SHA-512`).
 3. **The binding decides the kind**: A binding that resolved an OCI manifest uses the artifact rule; one that hashed bytes uses the blob rule. The recorded label is only validated against that rule and never chooses it.
-4. **Existing digests never break**: `Check` either generates a missing digest, completes an incomplete one, or verifies a complete one and keeps it exactly as recorded, including its label and spelling. The artifact rule keeps accepting the generic label that earlier v2 releases wrote on OCI artifacts by mistake, verified against the manifest, never against archive bytes.
-5. **Excluded resources are left alone**: A `NO-DIGEST` / `EXCLUDE-FROM-SIGNATURE` resource is detected first, exactly as signing does today. It is never hashed, completed or changed when adding (including the constructor, before any digest processor runs), getting or transferring a component version.
+4. **Existing digests never break**: `Check` either generates a missing digest, completes an incomplete one, or verifies a complete one and keeps it exactly as recorded, including its label and spelling. The artifact rule keeps accepting the generic label that earlier v2 releases wrote on OCI artifacts by mistake, and OCM v1's legacy spelling `ociArtefactDigest/v1`, both verified against the manifest, never against archive bytes.
+5. **Excluded resources are left alone**: A `NO-DIGEST` / `EXCLUDE-FROM-SIGNATURE` resource is detected first, exactly as signing does today. It is never hashed, completed or changed when adding, getting or transferring a component version. The constructor skips digest processing for it, and each digest processor also returns early, because the controller calls processors directly.
 6. **Strict and lenient modes**: Each entry point keeps today's handling of a complete digest with a foreign label. Processing and upload reject it (strict); packing local blobs keeps it unverified (lenient).
 7. **No entry point becomes stricter**: Changes only widen what is accepted, for example spelling variants and SHA-512 where only SHA-256 was accepted.
 8. **Behaviour specified by tests**: The detailed rules for each case are specified by table tests in the implementation PRs, and the tests from the earlier fix remain the regression suite.
@@ -140,6 +133,8 @@ flowchart TD
 * **Cons**: The copied decision logic and the repeated kind detection remain, so the main review concern is not addressed.
 
 ## Next Steps
+
+A proof of concept in [#3907](https://github.com/open-component-model/open-component-model/pull/3907) implements the shared package, the OCI rules, and their adoption in OCI, Helm, signing and the constructor. The regression tests from the earlier fix pass unchanged. The remaining steps:
 
 * Add `bindings/go/digest` with the hash-name parser and formatter, and move signing, download verification, transfer and the per-binding constants to it.
 * Introduce `Check`, `Rule` and the modes, and adopt them in the OCI, Helm and transfer bindings.
