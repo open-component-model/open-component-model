@@ -42,8 +42,8 @@ Before starting, make sure you have set up your environment as described in the 
   Deployer]({{< relref "setup-controller-environment.md#install-a-deployer" >}}). Crossplane composes that deployer's
   objects directly: the Flux `OCIRepository` and `HelmRelease`, or the Argo CD `Application`. The matching controllers
   must be running (Flux's `source-controller` and `helm-controller`, or Argo CD's `application-controller`). For Argo
-  CD, you also need the `default` `AppProject` to allow `Application` resources in the `default` namespace, see the
-  collapsible section below.
+  CD, apply the `Bootstrap` in the `argocd` namespace (via `BOOTSTRAP_NAMESPACE`, see Environment Setup), so no extra
+  Argo CD configuration is needed: the composed `Application` lands where stock Argo CD already watches.
 - [Custom RBAC]({{< relref "custom-rbac.md" >}}) with **both** Crossplane grants, which live in two separate places in
   that guide:
   - The **Crossplane** tab under [Create a ClusterRole and ClusterRoleBinding]({{< relref "custom-rbac.md" >}}#tabs-ocm-controller-rbac-1)
@@ -61,45 +61,16 @@ Before starting, make sure you have set up your environment as described in the 
 If using a private registry, you'll need to configure credentials for both the OCM CLI and the controller resources. See [Configure Credentials for Controllers]({{< relref "docs/how-to/configure-credentials-ocm-controllers.md" >}}) for details.
 {{< /callout >}}
 
-{{< details "Argo CD only: allow Applications in the default namespace" >}}
-The XRD uses the recommended `Namespaced` scope, so Crossplane v2 composes the `Application` into the composite's
-namespace (`default`) and ignores any `metadata.namespace` in the template. The setup guide already sets
-`application.namespaces=default` so Argo CD watches `default`, but the `default` `AppProject` must also authorize that
-source namespace, otherwise the `Application` is rejected with `namespace 'default' is not permitted in project
-'default'`. Apply the project with `sourceNamespaces` set, keeping Argo CD's permissive defaults for the other fields:
-
-```shell
-kubectl apply -f - <<'EOF'
-apiVersion: argoproj.io/v1alpha1
-kind: AppProject
-metadata:
-  name: default
-  namespace: argocd
-spec:
-  sourceNamespaces:
-    - default
-  sourceRepos:
-    - '*'
-  destinations:
-    - namespace: '*'
-      server: '*'
-  clusterResourceWhitelist:
-    - group: '*'
-      kind: '*'
-EOF
-```
-
-In a real cluster, apply the `Bootstrap` in a dedicated namespace rather than `default`, and scope this project's
-`sourceNamespaces`, `sourceRepos`, and `destinations` to that tenant instead of the `'*'` wildcards shown here.
-{{< /details >}}
-
 ## Environment Setup
 
-Set environment variables for your GitHub username and OCM repository:
+Set environment variables for your GitHub username, OCM repository, and the namespace the composite runs in:
 
 ```bash
 export GITHUB_USERNAME=<your-github-username>
 export OCM_REPO=ghcr.io/$GITHUB_USERNAME/ocm-tutorial
+# Namespace the Bootstrap composite and its composed objects run in.
+# Flux: default. Argo CD: argocd, so stock Argo CD watches the composed Application.
+export BOOTSTRAP_NAMESPACE=default   # set to argocd for the Argo CD deployer
 ```
 
 ## Concepts
@@ -225,8 +196,8 @@ spec:
     kind: Bootstrap
     plural: bootstraps
   # Namespaced is the recommended scope for app delivery. It keeps the composite
-  # and its composed resources in one namespace, the same one you apply the
-  # Bootstrap into. You apply the Bootstrap directly.
+  # and its composed resources in one namespace, BOOTSTRAP_NAMESPACE (default for
+  # Flux). Flux watches all namespaces, so the composed HelmRelease reconciles there.
   scope: Namespaced
   versions:
     - name: v1alpha1
@@ -420,6 +391,10 @@ spec:
                 releaseName: placeholder  # overwritten by patch below
                 interval: 1m
                 timeout: 5m
+                # Deploy the workload into its own namespace, created by Flux.
+                targetNamespace: podinfo
+                install:
+                  createNamespace: true
                 chartRef:
                   kind: OCIRepository
                   name: placeholder  # overwritten by patch below
@@ -504,8 +479,8 @@ spec:
     kind: Bootstrap
     plural: bootstraps
   # Namespaced is the recommended scope for app delivery. It keeps the composite
-  # and its composed resources in one namespace, the same one you apply the
-  # Bootstrap into. You apply the Bootstrap directly.
+  # and its composed resources in one namespace, BOOTSTRAP_NAMESPACE (argocd for
+  # Argo CD) so the composed Application lands where stock Argo CD watches.
   scope: Namespaced
   versions:
     - name: v1alpha1
@@ -655,6 +630,9 @@ spec:
               apiVersion: argoproj.io/v1alpha1
               kind: Application
               metadata:
+                # No namespace here: Crossplane composes the Application into the
+                # composite's namespace. Apply the Bootstrap in argocd so stock
+                # Argo CD watches it (see BOOTSTRAP_NAMESPACE in Environment Setup).
                 finalizers:
                   - resources-finalizer.argocd.argoproj.io
               spec:
@@ -667,7 +645,9 @@ spec:
                     releaseName: placeholder  # overwritten by patch below
                 destination:
                   server: https://kubernetes.default.svc
-                  namespace: default
+                  # Deploy the workload into its own namespace, created on sync
+                  # by the CreateNamespace=true sync option below.
+                  namespace: podinfo
                 syncPolicy:
                   automated:
                     prune: true
@@ -918,16 +898,17 @@ When the XRD is `ESTABLISHED`, the Deployer has applied the blob and Crossplane 
 ### Create the Bootstrap resource
 
 Now create a `Bootstrap` composite resource to trigger the actual deployment. You apply the composite kind directly.
-The composite and its composed resources live in the namespace you apply it into (`default` here).
+The composite and its composed resources live in `$BOOTSTRAP_NAMESPACE` (`default` for Flux, `argocd` for Argo CD).
 `ocmComponent` selects the OCM `Component` CR created by the bootstrap resources
 (`bootstrap-component`), matching the XRD's default. Create `bootstrap-xr.yaml`:
 
 ```shell
-cat > bootstrap-xr.yaml << 'EOF'
+cat > bootstrap-xr.yaml << EOF
 apiVersion: ocm.software/v1alpha1
 kind: Bootstrap
 metadata:
   name: bootstrap
+  namespace: ${BOOTSTRAP_NAMESPACE}
 spec:
   ocmComponent: bootstrap-component
 EOF
@@ -957,7 +938,7 @@ bootstrap.ocm.software/bootstrap created
 Wait for the composite and its composed resources to become ready:
 
 ```bash
-kubectl get bootstrap.ocm.software -w
+kubectl get bootstrap.ocm.software -n "$BOOTSTRAP_NAMESPACE" -w
 ```
 
 <details>
@@ -983,8 +964,8 @@ The composite can report `READY` before the deployer has reconciled the chart in
 appear first:
 
 ```bash
-kubectl wait --for=condition=Ready pod -l app.kubernetes.io/name=bootstrap-release-podinfo --timeout=300s
-kubectl get pods -l app.kubernetes.io/name=bootstrap-release-podinfo -o jsonpath='{.items[0].spec.containers[0].image}'
+kubectl wait -n podinfo --for=condition=Ready pod -l app.kubernetes.io/name=bootstrap-release-podinfo --timeout=300s
+kubectl get pods -n podinfo -l app.kubernetes.io/name=bootstrap-release-podinfo -o jsonpath='{.items[0].spec.containers[0].image}'
 ```
 
 <details>
@@ -1059,19 +1040,17 @@ Grant Crossplane's service account access to the composed kinds with an aggregat
 If the `Bootstrap` composite stays `SYNCED=False` or `READY=False`:
 
 ```bash
-kubectl describe bootstrap.ocm.software bootstrap
+kubectl describe bootstrap.ocm.software bootstrap -n "$BOOTSTRAP_NAMESPACE"
 ```
 
 Inspect the composed resources directly to see which one is stuck:
 
 ```bash
-# Flux deployer
-kubectl get resource.delivery.ocm.software,ocirepository,helmrelease
-kubectl describe helmrelease bootstrap-helmrelease
-# Argo CD deployer
-kubectl get resource.delivery.ocm.software -A
-# The Application lands in the composite's namespace (default), not argocd.
-kubectl describe application bootstrap-application
+# Flux deployer (composed into $BOOTSTRAP_NAMESPACE, default `default`)
+kubectl get resource.delivery.ocm.software,ocirepository,helmrelease -n "$BOOTSTRAP_NAMESPACE"
+kubectl describe helmrelease bootstrap-helmrelease -n "$BOOTSTRAP_NAMESPACE"
+# Argo CD deployer (composed into $BOOTSTRAP_NAMESPACE, default `argocd`)
+kubectl describe application bootstrap-application -n "$BOOTSTRAP_NAMESPACE"
 ```
 
 Check the Events section and each composed resource's status for error messages. A common cause is Crossplane
