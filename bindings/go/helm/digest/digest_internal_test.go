@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	ocidigest "ocm.software/open-component-model/bindings/go/oci/digest"
 )
 
 func TestResourceDigestNormalization(t *testing.T) {
@@ -71,23 +72,22 @@ func TestResourceDigestNormalization(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			r := require.New(t)
-			if test.existing == nil {
-				var got runtime.Digest
-				r.NoError(applyDigest(&got, resolved, test.normalization))
-				r.Equal(test.want, got)
-				return
+			rule := ocidigest.BlobRule
+			if test.normalization == ocidigest.ArtifactDigestV1 {
+				rule = ocidigest.ArtifactRule
 			}
-			before := *test.existing
-			err := verifyDigest(test.existing, resolved, test.normalization)
+			before := test.existing.DeepCopy()
+			got, err := checkDigest(test.existing, resolved, rule)
+			r.Equal(before, test.existing, "the recorded digest must not be written")
 			if test.wantError != "" {
 				r.ErrorContains(err, test.wantError)
-			} else {
-				r.NoError(err)
+				return
 			}
+			r.NoError(err)
 			if test.want.HashAlgorithm != "" {
-				r.Equal(test.want, *test.existing)
+				r.Equal(test.want, *got)
 			} else {
-				r.Equal(before, *test.existing)
+				r.Equal(before, got)
 			}
 		})
 	}

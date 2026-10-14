@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	_ "crypto/sha1"
@@ -879,4 +880,38 @@ func shaHex(b []byte, h crypto.Hash) string {
 	hh := h.New()
 	_, _ = hh.Write(b)
 	return hex.EncodeToString(hh.Sum(nil))
+}
+
+// A resource excluded from signing (ocm-spec: NO-DIGEST / EXCLUDE-FROM-SIGNATURE) keeps its
+// digest unchanged, and its content is never fetched to compute or compare a digest.
+func TestProcessResourceDigest_ExcludedFromSignature(t *testing.T) {
+	tests := []struct {
+		name string
+		mode checksumhttpv1alpha1.ChecksumMode
+	}{
+		{name: "skip", mode: checksumhttpv1alpha1.ChecksumModeSkip},
+		{name: "prefer", mode: checksumhttpv1alpha1.ChecksumModePrefer},
+		{name: "require", mode: checksumhttpv1alpha1.ChecksumModeRequire},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+			var hits atomic.Int32
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				hits.Add(1)
+				_, _ = w.Write([]byte("content that must not be hashed"))
+			}))
+			t.Cleanup(server.Close)
+
+			repo := repository.NewResourceRepository(nil, repository.WithHTTPClient(server.Client()),
+				repository.WithChecksumConfig(&checksumhttpv1alpha1.Config{Mode: tt.mode}))
+			resource := wgetResource(t, server.URL, map[string]any{})
+			resource.Digest = descruntime.NewExcludeFromSignatureDigest()
+
+			processed, err := repo.ProcessResourceDigest(t.Context(), resource, nil)
+			r.NoError(err)
+			r.Equal(descruntime.NewExcludeFromSignatureDigest(), processed.Digest)
+			r.Zero(hits.Load(), "content of an excluded resource must not be fetched")
+		})
+	}
 }

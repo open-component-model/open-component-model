@@ -14,6 +14,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	ocmdigest "ocm.software/open-component-model/bindings/go/digest"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -177,6 +178,9 @@ func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, resource
 	spec, err := r.convertAccess(resource)
 	if err != nil {
 		return nil, err
+	}
+	if ocmdigest.IsExcluded(resource.Digest) {
+		return resource.DeepCopy(), nil
 	}
 
 	tempFolder := ""

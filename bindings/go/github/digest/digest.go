@@ -15,6 +15,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	ocmdigest "ocm.software/open-component-model/bindings/go/digest"
 	githubinternal "ocm.software/open-component-model/bindings/go/github/internal"
 	"ocm.software/open-component-model/bindings/go/github/repository/resource"
 	"ocm.software/open-component-model/bindings/go/github/spec/access"
@@ -72,6 +73,9 @@ func (p *DigestProcessor) ProcessResourceDigest(
 	}
 	if err := gitHub.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid github access: %w", err)
+	}
+	if ocmdigest.IsExcluded(res.Digest) {
+		return res.DeepCopy(), nil
 	}
 
 	// Everything below works on a copy; the caller's resource is never touched.

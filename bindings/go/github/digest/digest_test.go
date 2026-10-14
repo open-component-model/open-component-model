@@ -213,3 +213,27 @@ func TestDigestProcessor(t *testing.T) {
 		assert.Equal(t, "GitHubRepository", identity[runtime.IdentityAttributeType])
 	})
 }
+
+// A resource excluded from signing (ocm-spec: NO-DIGEST / EXCLUDE-FROM-SIGNATURE) keeps its
+// digest unchanged instead of being verified against, or replaced by, the archive hash.
+func TestDigestProcessor_ExcludedFromSignature(t *testing.T) {
+	repoURL := mockGitHub(t, testCommit, nil)
+
+	tests := []struct {
+		name string
+		res  *descriptor.Resource
+	}{
+		{name: "pinned commit", res: githubResource(repoURL, testCommit)},
+		{name: "ref only", res: githubResourceRef(repoURL, "main", "")},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+			tt.res.Digest = descriptor.NewExcludeFromSignatureDigest()
+
+			processed, err := NewDigestProcessor().ProcessResourceDigest(t.Context(), tt.res, nil)
+			r.NoError(err)
+			r.Equal(descriptor.NewExcludeFromSignatureDigest(), processed.Digest)
+		})
+	}
+}

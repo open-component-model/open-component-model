@@ -398,3 +398,51 @@ func openFileAsBlob(path string) (*fileBlob, error) {
 func (f *fileBlob) ReadCloser() (io.ReadCloser, error) {
 	return os.Open(f.path)
 }
+
+// A resource excluded from signing (ocm-spec: NO-DIGEST / EXCLUDE-FROM-SIGNATURE) keeps its
+// digest when its chart is converted to OCI, instead of taking the OCI manifest digest.
+func TestConvertHelmChartToOCI_ExcludedFromSignature(t *testing.T) {
+	tests := []struct {
+		name  string
+		chart string
+	}{
+		{name: "packaged chart", chart: "mychart-0.1.0.tgz"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Skip("ADR 0032: pending maintainer agreement")
+			r := require.New(t)
+			chartPath, err := filepath.Abs(filepath.Join("..", "testdata", tt.chart))
+			r.NoError(err)
+
+			rawAccess := runtime.Raw{}
+			r.NoError(access.Scheme.Convert(&v1.Helm{
+				Type:           runtime.Type{Name: "helm", Version: "v1"},
+				HelmRepository: "https://example.com",
+				HelmChart:      "mychart",
+				Version:        "0.1.0",
+			}, &rawAccess))
+
+			spec := &v1alpha1.ConvertHelmToOCI{
+				Type: runtime.NewVersionedType(v1alpha1.ConvertHelmToOCIType, v1alpha1.Version),
+				ID:   "convert-excluded",
+				Spec: &v1alpha1.ConvertHelmToOCISpec{
+					ChartFile: filev1alpha1.File{URI: "file://" + chartPath},
+					Resource: &descv2.Resource{
+						ElementMeta: descv2.ElementMeta{ObjectMeta: descv2.ObjectMeta{Name: "mychart", Version: "0.1.0"}},
+						Type:        "helmChart",
+						Access:      &rawAccess,
+						Digest:      descv2.NewExcludeFromSignatureDigest(),
+					},
+					OutputPath: t.TempDir(),
+				},
+			}
+
+			result, err := (&transformation.ConvertHelmChartToOCI{Scheme: newConvertTestScheme()}).Transform(t.Context(), spec)
+			r.NoError(err)
+			output, ok := result.(*v1alpha1.ConvertHelmToOCI)
+			r.True(ok)
+			r.Equal(descv2.NewExcludeFromSignatureDigest(), output.Output.Resource.Digest)
+		})
+	}
+}
