@@ -299,7 +299,8 @@ func (r *Reconciler) pruneWithApplySet(ctx context.Context, deployer deliveryv1a
 			r.orphanOnDeletion(ctx, deployer, metadata, err)
 			return true, nil
 		}
-		if !r.blocksDeletion(ctx, deployer, metadata, err) {
+		cause := fmt.Sprintf("the controller cannot read service account %s", serviceAccountName(deployer))
+		if !r.blocksDeletion(ctx, deployer, metadata, cause, err) {
 			return true, nil
 		}
 		return false, err
@@ -322,7 +323,8 @@ func (r *Reconciler) pruneWithApplySet(ctx context.Context, deployer deliveryv1a
 		PropagationPolicy: propagationPolicy(deployer),
 	})
 	if err != nil {
-		if !r.blocksDeletion(ctx, deployer, metadata, err) {
+		cause := fmt.Sprintf("service account %s cannot prune", serviceAccountName(deployer))
+		if !r.blocksDeletion(ctx, deployer, metadata, cause, err) {
 			return true, nil
 		}
 		return false, fmt.Errorf("failed to prune ApplySet: %w", err)

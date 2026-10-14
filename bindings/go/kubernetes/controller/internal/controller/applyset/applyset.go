@@ -627,6 +627,14 @@ func (a *ApplySet) prune(
 
 	for _, c := range candidates {
 		eg.Go(func() error {
+			// A terminating object is still pending, deleting it again until it is gone only adds API calls.
+			if c.obj.GetDeletionTimestamp() != nil {
+				mu.Lock()
+				results = append(results, PruneResultItem{Object: c.obj})
+				mu.Unlock()
+				return nil
+			}
+
 			err := a.client.Delete(egCtx, c.obj, deleteOpts...)
 			if err != nil && !apierrors.IsNotFound(err) {
 				return fmt.Errorf("delete %s/%s: %w", c.obj.GetNamespace(), c.obj.GetName(), err)

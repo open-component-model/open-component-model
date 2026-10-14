@@ -17,6 +17,8 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
@@ -26,6 +28,7 @@ import (
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/controller/applyset"
+	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/test"
 	"ocm.software/open-component-model/bindings/go/oci"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
@@ -295,6 +298,32 @@ metadata:
 		cm := &corev1.ConfigMap{}
 		Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace.GetName(), Name: "nd-orphan-blocked-cm"}, cm)).To(Succeed())
 		Expect(cm.GetOwnerReferences()).To(BeEmpty())
+	})
+
+	It("blocks the Orphan deletion policy on any forbidden request", func(ctx SpecContext) {
+		probe := &Reconciler{
+			BaseReconciler:     &ocm.BaseReconciler{EventRecorder: recorder},
+			Namespaced:         true,
+			apiReader:          k8sManager.GetAPIReader(),
+			resourceRESTMapper: k8sManager.GetRESTMapper(),
+		}
+		deployer := &v1alpha1.NamespacedDeployer{
+			ObjectMeta: metav1.ObjectMeta{Name: "nd-orphan-forbidden", Namespace: namespace.GetName()},
+		}
+		// No member outside of the namespace, so only the policy decides.
+		metadata := applyset.Metadata{ID: "applyset-none-v1", GroupKinds: sets.New(schema.GroupKind{Kind: "ConfigMap"})}
+		forbidden := errors.NewForbidden(schema.GroupResource{Resource: "serviceaccounts"}, "default", nil)
+
+		By("letting a Background deletion go, as the garbage collector removes what is left")
+		Expect(probe.blocksDeletion(ctx, deployer, metadata, "cause", forbidden)).To(BeFalse())
+
+		By("blocking an Orphan deletion, as giving up would delete what it should keep")
+		deployer.Spec.DeletionPolicy = v1alpha1.DeletionPolicyOrphan
+		Expect(probe.blocksDeletion(ctx, deployer, metadata, "cause", forbidden)).To(BeTrue())
+		cond := apimeta.FindStatusCondition(deployer.Status.Conditions, v1alpha1.ReadyCondition)
+		Expect(cond).NotTo(BeNil())
+		Expect(cond.Reason).To(Equal(v1alpha1.DeletionFailedReason))
+		Expect(cond.Message).To(ContainSubstring("Orphan deletion policy"))
 	})
 
 	It("orphans objects when its service account is gone", func(ctx SpecContext) {

@@ -1272,3 +1272,40 @@ func TestPrune_PropagationPolicy(t *testing.T) {
 		})
 	}
 }
+
+func TestPrune_TerminatingObjectIsPendingWithoutDelete(t *testing.T) {
+	r := require.New(t)
+	parent := newTestParent(schema.GroupVersionKind{Group: "delivery.ocm.software", Version: "v1alpha1", Kind: "TestKind"})
+	terminating := newConfigMap("terminating-cm", "default")
+	terminating.SetLabels(map[string]string{ApplysetPartOfLabel: ID(parent)})
+	terminating.SetFinalizers([]string{metav1.FinalizerDeleteDependents})
+	now := metav1.Now()
+	terminating.SetDeletionTimestamp(&now)
+
+	deletes := 0
+	scheme := runtime.NewScheme()
+	r.NoError(corev1.AddToScheme(scheme))
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(terminating).
+		WithInterceptorFuncs(interceptor.Funcs{
+			Delete: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.DeleteOption) error {
+				deletes++
+				return c.Delete(ctx, obj, opts...)
+			},
+		}).
+		Build()
+
+	applier := New(Config{
+		Client:          fakeClient,
+		RESTMapper:      newTestRESTMapper(),
+		Log:             logr.Discard(),
+		ParentNamespace: "default",
+	}, parent)
+	result, err := applier.Prune(t.Context(), PruneOptions{
+		Scope: &PruneScope{GroupKinds: sets.New(schema.GroupKind{Kind: "ConfigMap"})},
+	})
+	r.NoError(err)
+	r.True(result.HasPruned(), "a terminating object keeps the prune pending")
+	r.Zero(deletes)
+}
