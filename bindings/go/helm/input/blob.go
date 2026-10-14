@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"helm.sh/helm/v4/pkg/chart/v2/loader"
 	chartutil "helm.sh/helm/v4/pkg/chart/v2/util"
@@ -49,7 +50,7 @@ func WithOCICredentials(credentials *ocicredsv1.OCICredentials) Option {
 }
 
 // WithWorkingDirectory sets the directory against which a relative local chart path is resolved.
-// The chart path must not escape this directory. When empty, the path is used as given.
+// Absolute paths are used as given. When empty, relative paths are resolved against the process working directory.
 func WithWorkingDirectory(dir string) Option {
 	return func(options *Options) {
 		options.WorkingDirectory = dir
