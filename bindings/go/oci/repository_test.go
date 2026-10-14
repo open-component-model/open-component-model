@@ -3768,6 +3768,81 @@ func TestRepository_AddOwnership_ResolveErrors(t *testing.T) {
 	}
 }
 
+// redeployDisabledResolver hands out stores that emulate an immutable OCI
+// repository (e.g. a Nexus hosted repo with "redeploy" disabled): once a
+// reference carries a tag, re-pointing that tag is rejected, even to identical
+// content.
+type redeployDisabledResolver struct{ oci.Resolver }
+
+func (r redeployDisabledResolver) StoreForReference(ctx context.Context, reference string) (spec.Store, error) {
+	s, err := r.Resolver.StoreForReference(ctx, reference)
+	if err != nil {
+		return nil, err
+	}
+	return &redeployDisabledStore{Store: s}, nil
+}
+
+// redeployDisabledStore rejects a Tag write whenever the reference already
+// resolves, mirroring a write-once registry policy. Reads and digest-addressed
+// pushes pass through unchanged.
+type redeployDisabledStore struct{ spec.Store }
+
+func (s *redeployDisabledStore) Tag(ctx context.Context, desc ociImageSpecV1.Descriptor, reference string) error {
+	if _, err := s.Store.Resolve(ctx, reference); err == nil {
+		return fmt.Errorf("redeploy disabled: %q cannot be updated as asset already exists", reference)
+	}
+	return s.Store.Tag(ctx, desc, reference)
+}
+
+func TestRepository_AddComponentVersion_ImmutableRegistry(t *testing.T) {
+	newRepo := func(t *testing.T) *oci.Repository {
+		t.Helper()
+		fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
+		require.NoError(t, err)
+		store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
+		return Repository(t, oci.WithResolver(redeployDisabledResolver{Resolver: store}))
+	}
+
+	desc := func(provider string) *descriptor.Descriptor {
+		return &descriptor.Descriptor{
+			Meta: descriptor.Meta{Version: "v2"},
+			Component: descriptor.Component{
+				Provider: descriptor.Provider{Name: provider},
+				ComponentMeta: descriptor.ComponentMeta{
+					ObjectMeta: descriptor.ObjectMeta{Name: "ocm.software/test-component", Version: "1.0.0"},
+				},
+			},
+		}
+	}
+
+	// Re-adding an unchanged component version produces the identical manifest
+	// digest, so the tag already points where we would write it: the redeploy
+	// rejection is a no-op and must be swallowed.
+	t.Run("identical content re-add is idempotent", func(t *testing.T) {
+		r := require.New(t)
+		ctx := t.Context()
+		repo := newRepo(t)
+
+		r.NoError(repo.AddComponentVersion(ctx, desc("test-provider")))
+		r.NoError(repo.AddComponentVersion(ctx, desc("test-provider")),
+			"re-adding identical content must succeed despite redeploy being disabled")
+	})
+
+	// Changed content yields a different manifest digest, so the existing tag
+	// points elsewhere. On an immutable registry that is a genuine conflict and
+	// must surface rather than be silently skipped.
+	t.Run("changed content surfaces the conflict", func(t *testing.T) {
+		r := require.New(t)
+		ctx := t.Context()
+		repo := newRepo(t)
+
+		r.NoError(repo.AddComponentVersion(ctx, desc("test-provider")))
+		err := repo.AddComponentVersion(ctx, desc("other-provider"))
+		r.Error(err, "re-tagging different content on an immutable registry must fail")
+		r.ErrorContains(err, "failed to tag manifest")
+	})
+}
+
 // blobValidatingResolver wraps a resolver so the stores it hands out reject a
 // manifest whose referenced config/layer blobs are not yet present — the
 // MANIFEST_BLOB_UNKNOWN behaviour of a conformant OCI registry, which the CTF

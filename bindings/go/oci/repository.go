@@ -146,11 +146,42 @@ func (repo *Repository) AddComponentVersion(ctx context.Context, descriptor *des
 		return fmt.Errorf("failed to add descriptor to store: %w", err)
 	}
 
-	if err := store.Tag(ctx, *manifest, reference); err != nil {
+	if err := tagIdempotent(ctx, store, *manifest, reference); err != nil {
 		return fmt.Errorf("failed to tag manifest: %w", err)
 	}
 
 	return nil
+}
+
+// tagIdempotent tags desc at reference, treating the write as a no-op success
+// when the reference already resolves to desc.Digest.
+//
+// Some registries (e.g. a Nexus hosted repository with "redeploy" disabled, or
+// any immutable/write-once policy) reject re-tagging an existing reference even
+// when the new target is byte-for-byte identical to the current one. OCM's
+// manifests are content-addressed and carry no time-varying fields, so
+// re-transferring an unchanged component version produces the same digest; the
+// only operation that collides is the tag write.
+//
+// Rather than classify the registry error (a 409 is not exclusively a redeploy
+// rejection, and the signalling is vendor-specific), we branch on the desired
+// post-condition: if Tag fails but the reference already points at exactly the
+// digest we intended to write, the end state we wanted already holds, so the
+// failure is moot. Any other outcome - the reference is absent, points at a
+// different digest, or the registry is genuinely unreachable - propagates the
+// original error unchanged.
+//
+// The extra Resolve is only ever issued on the Tag error path, so the happy
+// path keeps its single round trip.
+func tagIdempotent(ctx context.Context, store spec.Store, desc ociImageSpecV1.Descriptor, reference string) error {
+	err := store.Tag(ctx, desc, reference)
+	if err == nil {
+		return nil
+	}
+	if existing, rerr := store.Resolve(ctx, reference); rerr == nil && existing.Digest == desc.Digest {
+		return nil
+	}
+	return err
 }
 
 func (repo *Repository) ListComponentVersions(ctx context.Context, component string) (_ []string, err error) {
@@ -823,7 +854,7 @@ func (repo *Repository) uploadOCIImage(ctx context.Context, newAccess runtime.Ty
 	}
 
 	if ref.Tag != "" {
-		if err := store.Tag(ctx, main, ref.Tag); err != nil {
+		if err := tagIdempotent(ctx, store, main, ref.Tag); err != nil {
 			return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to tag main artifact with tag %q: %w", ref.Tag, err)
 		}
 	} else {
