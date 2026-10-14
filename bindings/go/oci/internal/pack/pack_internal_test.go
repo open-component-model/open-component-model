@@ -8,11 +8,9 @@ import (
 	"oras.land/oras-go/v2/content"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
-	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-func TestUpdateArtifactAccess_CompletesPartialDigest(t *testing.T) {
+func TestReconcileResourceDigest_CompletesPartialDigest(t *testing.T) {
 	root := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageManifest, []byte("test content"))
 	for _, normalization := range []string{"genericBlobDigest/v1", "ociArtifactDigest/v1"} {
 		for _, tc := range []struct {
@@ -30,13 +28,9 @@ func TestUpdateArtifactAccess_CompletesPartialDigest(t *testing.T) {
 		} {
 			t.Run(normalization+"/"+tc.name, func(t *testing.T) {
 				r := require.New(t)
-				scheme := runtime.NewScheme()
-				v2.MustAddToScheme(scheme)
 				resource := &descriptor.Resource{Digest: tc.digest.DeepCopy()}
 
-				err := updateArtifactAccess(resource, &v2.LocalBlob{}, root, updateAccessOptions{
-					Options: Options{AccessScheme: scheme}, NormalisationAlgorithm: normalization,
-				})
+				err := reconcileResourceDigest(resource, root.Digest, normalization)
 				if tc.wantError != "" {
 					r.ErrorContains(err, tc.wantError)
 					r.Equal(&tc.digest, resource.Digest, "a rejected digest must not be rewritten")
@@ -53,7 +47,7 @@ func TestUpdateArtifactAccess_CompletesPartialDigest(t *testing.T) {
 	}
 }
 
-func TestUpdateArtifactAccess_PartialLegacyLabel(t *testing.T) {
+func TestReconcileResourceDigest_PartialLegacyLabel(t *testing.T) {
 	root := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageManifest, []byte("test content"))
 	for _, tc := range []struct {
 		name          string
@@ -66,13 +60,9 @@ func TestUpdateArtifactAccess_PartialLegacyLabel(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
-			scheme := runtime.NewScheme()
-			v2.MustAddToScheme(scheme)
 			resource := &descriptor.Resource{Digest: &descriptor.Digest{NormalisationAlgorithm: tc.set, Value: root.Digest.Encoded()}}
 
-			err := updateArtifactAccess(resource, &v2.LocalBlob{}, root, updateAccessOptions{
-				Options: Options{AccessScheme: scheme}, NormalisationAlgorithm: tc.normalization,
-			})
+			err := reconcileResourceDigest(resource, root.Digest, tc.normalization)
 			if tc.wantError != "" {
 				r.ErrorContains(err, tc.wantError)
 				return

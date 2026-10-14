@@ -621,9 +621,14 @@ func (repo *Repository) localArtifact(ctx context.Context, component, version st
 
 	switch typed := typed.(type) {
 	case *v2.LocalBlob:
+		// A resource carries a recorded digest to verify against; a source does not.
+		var recorded *descriptor.Digest
+		if res, ok := artifact.(*descriptor.Resource); ok {
+			recorded = res.Digest
+		}
 		b, err := repo.getLocalBlobFromIndexOrManifest(
 			ctx, store, index, manifest, typed.LocalReference,
-			artifact.GetElementMeta().Version,
+			artifact.GetElementMeta().Version, recorded,
 		)
 		return b, artifact, err
 	case *accessv1.RelativeOCIReference:
@@ -678,12 +683,20 @@ func (repo *Repository) getLocalBlobFromIndexOrManifest(
 	index *ociImageSpecV1.Index,
 	manifest *ociImageSpecV1.Manifest,
 	ref, version string,
+	recorded *descriptor.Digest,
 ) (LocalBlob, error) {
 	descriptors := collectDescriptors(index, manifest)
 
 	artifact, err := findDescriptorFromReference(descriptors, ref)
 	if err != nil {
 		return nil, fmt.Errorf("resolve artifact %q: %w", ref, err)
+	}
+
+	// The content is addressed by artifact.Digest (its localReference), which the
+	// store verifies the bytes against. Checking the recorded resource digest
+	// against that same value rejects a tampered or forged digest without rehashing.
+	if err := internaldigest.VerifyRecorded(recorded, artifact.Digest); err != nil {
+		return nil, fmt.Errorf("resource digest verification failed for %q: %w", ref, err)
 	}
 
 	// Nested manifest: copy full OCI layout
@@ -966,7 +979,7 @@ func (repo *Repository) DownloadResource(ctx context.Context, res *descriptor.Re
 	if res.Access.GetType().IsEmpty() {
 		return nil, fmt.Errorf("resource access type is empty")
 	}
-	return repo.download(ctx, res.Access)
+	return repo.download(ctx, res.Access, res.Digest)
 }
 
 // DownloadSource downloads a [*descriptor.Source] from the repository.
@@ -980,13 +993,13 @@ func (repo *Repository) DownloadSource(ctx context.Context, src *descriptor.Sour
 	if src.Access.GetType().IsEmpty() {
 		return nil, fmt.Errorf("source access type is empty")
 	}
-	return repo.download(ctx, src.Access)
+	return repo.download(ctx, src.Access, nil)
 }
 
 // download downloads an artifact specified by an access from the repository into a blob.ReadOnlyBlob.
 // An OCI image layer is fetched as raw content. Everything else delegates to downloadStream
 // and materializes the result into a tar-based OCI layout blob.
-func (repo *Repository) download(ctx context.Context, access runtime.Typed) (data blob.ReadOnlyBlob, err error) {
+func (repo *Repository) download(ctx context.Context, access runtime.Typed, recorded *descriptor.Digest) (data blob.ReadOnlyBlob, err error) {
 	typed, err := repo.scheme.NewObject(access.GetType())
 	if err != nil {
 		return nil, fmt.Errorf("error creating resource access: %w", err)
@@ -995,11 +1008,35 @@ func (repo *Repository) download(ctx context.Context, access runtime.Typed) (dat
 		return nil, fmt.Errorf("error converting resource access: %w", err)
 	}
 	if layer, ok := typed.(*accessv1.OCIImageLayer); ok {
-		return repo.downloadLayer(ctx, layer)
+		b, err := repo.downloadLayer(ctx, layer)
+		if err != nil {
+			return nil, err
+		}
+		// A recorded digest must be verified; a layer blob that cannot report its own
+		// digest is a failure, not a reason to skip the check.
+		if recorded != nil {
+			da, ok := b.(blob.DigestAware)
+			if !ok {
+				return nil, fmt.Errorf("cannot verify resource digest: downloaded layer does not expose its digest")
+			}
+			actual, known := da.Digest()
+			if !known {
+				return nil, fmt.Errorf("cannot verify resource digest: downloaded layer digest unknown")
+			}
+			if err := internaldigest.VerifyRecorded(recorded, digest.Digest(actual)); err != nil {
+				return nil, fmt.Errorf("resource digest verification failed: %w", err)
+			}
+		}
+		return b, nil
 	}
 	stream, err := repo.downloadStream(ctx, typed)
 	if err != nil {
 		return nil, err
+	}
+	// The downloaded root digest is the content's actual digest; reject a tampered
+	// recorded resource digest before materialising the stream.
+	if err := internaldigest.VerifyRecorded(recorded, stream.Root().Digest); err != nil {
+		return nil, fmt.Errorf("resource digest verification failed: %w", err)
 	}
 	return stream.Materialize(ctx)
 }
