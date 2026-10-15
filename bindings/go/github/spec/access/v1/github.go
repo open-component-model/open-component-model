@@ -42,7 +42,6 @@ const (
 // +ocm:typegen=true
 // +ocm:jsonschema-gen=true
 type GitHub struct {
-	// Every spelling is deprecated: the type as a whole gives way to Git/v1.
 	// +ocm:jsonschema-gen:enum:deprecated=GitHub/v1,GitHub,github/v1,github,gitHub/v1,gitHub
 	// +ocm:jsonschema-gen:enum:deprecated:hint=use Git/v1 instead
 	Type runtime.Type `json:"type"`

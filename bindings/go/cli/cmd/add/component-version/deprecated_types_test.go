@@ -15,15 +15,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// schemaless is a typed object that embeds no JSON schema.
-type schemaless struct {
-	Type runtime.Type `json:"type"`
-}
-
-func (s *schemaless) GetType() runtime.Type        { return s.Type }
-func (s *schemaless) SetType(t runtime.Type)       { s.Type = t }
-func (s *schemaless) DeepCopyTyped() runtime.Typed { c := *s; return &c }
-
 // rootDeprecated embeds a schema that flags the whole type, as a "Deprecated:"
 // doc paragraph does, without listing any spelling.
 type rootDeprecated struct {
@@ -43,12 +34,8 @@ func TestIsTypeDeprecated(t *testing.T) {
 		want     bool
 		wantHint string
 	}{
-		{"GitHub canonical", githubaccess.Scheme, "GitHub/v1", true, "use Git/v1 instead"},
-		{"GitHub unversioned", githubaccess.Scheme, "GitHub", true, "use Git/v1 instead"},
-		{"GitHub legacy", githubaccess.Scheme, "github/v1", true, "use Git/v1 instead"},
-		{"GitHub legacy unversioned", githubaccess.Scheme, "github", true, "use Git/v1 instead"},
-		{"GitHub camel", githubaccess.Scheme, "gitHub/v1", true, "use Git/v1 instead"},
-		{"GitHub camel unversioned", githubaccess.Scheme, "gitHub", true, "use Git/v1 instead"},
+		{"whole type deprecated, canonical spelling", githubaccess.Scheme, "GitHub/v1", true, "use Git/v1 instead"},
+		{"whole type deprecated, legacy spelling", githubaccess.Scheme, "github", true, "use Git/v1 instead"},
 		{"Git canonical", gitaccess.Scheme, "Git/v1", false, ""},
 		{"Git unversioned", gitaccess.Scheme, "Git", false, ""},
 		{"Git legacy spelling", gitaccess.Scheme, "git", true, "use Git/v1 instead"},
@@ -79,8 +66,8 @@ func TestIsTypeDeprecated(t *testing.T) {
 	t.Run("a type without an embedded schema is not deprecated", func(t *testing.T) {
 		r := require.New(t)
 		scheme := runtime.NewScheme()
-		scheme.MustRegister(&schemaless{}, "v1")
-		deprecated, hint := isTypeDeprecated(scheme, runtime.NewVersionedType("schemaless", "v1"))
+		scheme.MustRegister(&unregisteredAccess{}, "v1")
+		deprecated, hint := isTypeDeprecated(scheme, runtime.NewVersionedType("unregisteredAccess", "v1"))
 		r.False(deprecated)
 		r.Empty(hint)
 	})

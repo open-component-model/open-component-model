@@ -385,8 +385,7 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 
 	constr := constructor.NewDefaultConstructor(constructorSpec, opts)
 	err = renderComponents(cmd, constr, output, displayMode)
-	// The notice goes below the result, and also below the error when the build
-	// fails, so authors still see what to migrate.
+	// Print the notice even when the build fails, so authors still see what to migrate.
 	renderDeprecatedTypeNotice(cmd.ErrOrStderr(), deprecatedTypes)
 	if err != nil {
 		return fmt.Errorf("failed to render components recursively: %w", err)

@@ -185,22 +185,6 @@ func ApplyNumericMarkers(s *JSONSchemaDraft202012, markers map[string]string) {
 	}
 }
 
-// deprecationHint is the message every enum:deprecated value carries: the
-// enum:deprecated:hint marker when set, otherwise a pointer at the first enum
-// value, which is the spelling the type treats as current. A type with no
-// current spelling gets no message.
-func deprecationHint(markers map[string]string, rawMain string) string {
-	if hint, ok := markers["enum:deprecated:hint"]; ok {
-		return hint
-	}
-	for _, e := range strings.Split(rawMain, ",") {
-		if v := strings.TrimSpace(e); v != "" {
-			return "use " + v + " instead"
-		}
-	}
-	return ""
-}
-
 func ApplyEnumMarkers(s *JSONSchemaDraft202012, markers map[string]string) {
 	if s == nil || len(markers) == 0 {
 		return
@@ -213,8 +197,6 @@ func ApplyEnumMarkers(s *JSONSchemaDraft202012, markers map[string]string) {
 	if !hasMain && !hasDep {
 		return
 	}
-
-	hint := deprecationHint(markers, rawMain)
 
 	// collect all values in order, with dedup:
 	// 1) all from enum
@@ -239,8 +221,15 @@ func ApplyEnumMarkers(s *JSONSchemaDraft202012, markers map[string]string) {
 		}
 	}
 
+	// Every deprecated value carries the enum:deprecated:hint marker when set,
+	// otherwise a pointer at the first enum value, which is the spelling the
+	// type treats as current. A type with no current spelling gets no message.
+	hint, hasHint := markers["enum:deprecated:hint"]
 	if hasMain {
 		addVals(rawMain)
+	}
+	if !hasHint && len(order) > 0 {
+		hint = "use " + order[0] + " instead"
 	}
 	if hasDep {
 		addVals(rawDep)

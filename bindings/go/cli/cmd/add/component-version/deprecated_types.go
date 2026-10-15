@@ -11,14 +11,11 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// Deprecation of access and input types is read from each type's generated
-// JSON schema: the +ocm:jsonschema-gen:enum:deprecated marker flags a type
-// name, and the schema carries the text that says what to write instead, which
-// the generator derives from the first enum value unless an
+// typeSchema is the part of a generated JSON schema that carries deprecation:
+// the flag on the whole type, and on each accepted "type" value the flag set by
+// the enum:deprecated marker plus the hint that says what to write instead,
+// which the generator derives from the first enum value unless an
 // enum:deprecated:hint marker overrides it.
-
-// typeSchema is the part of a generated schema that carries deprecation: the
-// flag on the whole type and the flag and hint on each accepted "type" value.
 type typeSchema struct {
 	Deprecated bool `json:"deprecated"`
 	Properties struct {
@@ -76,14 +73,14 @@ func findDeprecatedTypes(accessScheme, inputScheme *runtime.Scheme, spec *constr
 		if typed == nil {
 			return
 		}
-		key := deprecatedType{kind: kind, typ: typed.GetType().String()}
-		if seen[key] {
+		deprecated, hint := isTypeDeprecated(scheme, typed.GetType())
+		if !deprecated {
 			return
 		}
-		seen[key] = true
-		if deprecated, hint := isTypeDeprecated(scheme, typed.GetType()); deprecated {
-			key.hint = hint
-			types = append(types, key)
+		t := deprecatedType{kind: kind, typ: typed.GetType().String(), hint: hint}
+		if !seen[t] {
+			seen[t] = true
+			types = append(types, t)
 		}
 	}
 	for _, component := range spec.Components {

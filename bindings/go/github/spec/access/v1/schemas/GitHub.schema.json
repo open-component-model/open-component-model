@@ -24,7 +24,6 @@
     },
     "type": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",
-      "description": "Every spelling is deprecated: the type as a whole gives way to Git/v1.",
       "oneOf": [
         {
           "deprecated": true,
