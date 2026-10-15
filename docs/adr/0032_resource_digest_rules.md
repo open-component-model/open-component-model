@@ -51,7 +51,7 @@ Each binding knows what it computed; the shared rules decide, the same way every
 
 * **Compatibility**: Every digest accepted today stays accepted, and no recorded digest is ever rewritten.
 * **Single source of truth**: One place decides which hash names and normalisations are valid.
-* **Layering**: Shared code has no OCI knowledge; each binding owns the meaning of what it computes.
+* **Layering**: Shared code knows no binding (OCI, Helm, Git, wget, ...); each binding owns the meaning of what it computes.
 * **House style**: Plain string constants, small pure functions and sentinel errors, no new blob interfaces.
 * **Easy review**: Small PRs; only Go API breaks are marked as breaking.
 
@@ -91,24 +91,25 @@ func Check(recorded *runtime.Digest, computed Computed, rule Rule, mode Mode) (R
 ```mermaid
 flowchart LR
     R["Recorded digest"] --> X["NO-DIGEST marker<br/>→ keep untouched, hash nothing"]
-    R --> N["Missing or incomplete<br/>→ fill in from the computed digest"]
+    R --> N["Missing or incomplete<br/>→ fill in when adding,<br/>keep as is on transfer"]
     R --> C["Complete<br/>→ verify against the computed digest,<br/>keep exactly as recorded"]
 ```
 
 * **NO-DIGEST marker**: The resource is excluded from signing, so nothing is hashed or changed.
-* **Missing or incomplete**: Happens while a component version is being built, before it is signed, so filling in the digest cannot break a signature. Fields that are already set must agree with the computed digest; otherwise the digest is rejected. The filled-in digest uses the rule's own label and the spec spelling.
+* **Missing or incomplete**: Filled in only while a component version is added, before anything can reference it. Fields that are already set must agree with the computed digest; otherwise the digest is rejected. The filled-in digest uses the rule's own label and the spec spelling. A transfer keeps the recorded digest exactly as it is, even when it is missing or incomplete: signing refuses incomplete digests, but a parent component's reference digest may already cover this version, and changing the digest would break that reference.
 * **Complete**: The digest may be signed, so it is never rewritten. A mismatch is rejected. A label the rule does not know is rejected on add and upload (strict), and kept unverified when packing local blobs (lenient), because existing descriptors may carry it.
 
 #### Key Design Decisions
 
-1. **Shared package without OCI knowledge**: `bindings/go/digest` depends only on the runtime and descriptor packages, which a lint rule enforces. Normalisations stay plain strings. OCI rules live in the OCI binding.
+1. **Shared package without binding knowledge**: `bindings/go/digest` holds only the spec vocabulary and the decision. It depends only on the runtime and descriptor packages, which a lint rule enforces. Normalisations stay plain strings. Each binding defines its own rules, for example the OCI binding its artifact and blob rules.
 2. **Hash names in one place**: `ParseHashAlgorithm` accepts every spelling in use today, ignoring case and dashes. New and completed digests are written in the spec spelling (`SHA-256`, `SHA-512`).
 3. **The binding decides the kind**: A binding that resolved an OCI manifest uses the artifact rule; one that hashed bytes uses the blob rule. The recorded label is only validated against that rule and never chooses it.
 4. **Existing digests never break**: `Check` either generates a missing digest, completes an incomplete one, or verifies a complete one and keeps it exactly as recorded, including its label and spelling. The artifact rule keeps accepting the generic label that earlier v2 releases wrote on OCI artifacts by mistake. It also starts accepting `ociArtefactDigest/v1`, a legacy spelling that OCM v1 registers but v2 rejects today. Both are verified against the manifest, never against archive bytes.
 5. **Excluded resources are left alone**: A `NO-DIGEST` / `EXCLUDE-FROM-SIGNATURE` resource is detected first, exactly as signing does today. It is never hashed, completed or changed when adding, getting or transferring a component version, except by the two conversions listed under Out of Scope. The constructor skips digest processing for it, and each digest processor also returns early, because the controller calls processors directly.
 6. **Strict and lenient modes**: Each entry point keeps today's handling of a complete digest with a foreign label. Processing and upload reject it (strict); packing local blobs keeps it unverified (lenient).
 7. **No entry point becomes stricter**: Changes only widen what is accepted, for example spelling variants and SHA-512 where only SHA-256 was accepted.
-8. **Behaviour specified by tests**: The detailed rules for each case are specified by table tests in the implementation PRs, and the tests from the earlier fix remain the regression suite.
+8. **Transfer never changes a digest**: When a transfer copies content as is, the transfer layer writes the source digest into the target descriptor unchanged, whatever the target repository computed while uploading. Today an upload fills in missing and incomplete digests during transfer; that stops. Transfers that convert the content are listed under Out of Scope.
+9. **Behaviour specified by tests**: The detailed rules for each case are specified by table tests in the implementation PRs, and the tests from the earlier fix remain the regression suite.
 
 #### Out of Scope
 
@@ -119,7 +120,7 @@ flowchart LR
 
 ### Option 1: Shared Package with Binding-Supplied Rules (Chosen)
 
-* **Pros**: One tested decision with the never-rewrite guarantee in one place, one hash-name parser, no OCI knowledge in shared code, new rules (such as chunked blobs from ADR 0031) are plain values.
+* **Pros**: One tested decision with the never-rewrite guarantee in one place, one hash-name parser, no binding knowledge in shared code, new rules (such as chunked blobs from ADR 0031) are plain values.
 * **Cons**: Touches about ten packages; strict and lenient modes coexist by design; external plugins still implement digest processing themselves.
 
 ### Option 2: v1-Style Digester Registry
