@@ -190,8 +190,10 @@ component reference digest to use SHA-256 or SHA-512. In the default
 <code>fips140=on</code> mode and outside FIPS mode, it logs a warning instead, so component
 versions with existing MD5 or SHA-1 digests keep working:</p><table><thead><tr><th>Operation</th><th><code>fips140=only</code></th><th><code>fips140=on</code> (default) and <code>off</code></th></tr></thead><tbody><tr><td><code>ocm sign cv</code></td><td>Fails with <code>refusing to sign component version with GODEBUG=fips140=only: unsupported digest hash algorithm</code></td><td>Signs, logs a warning</td></tr><tr><td><code>ocm verify cv</code></td><td>Fails with <code>refusing to verify component version with GODEBUG=fips140=only: unsupported digest hash algorithm</code></td><td>Verifies, logs a warning</td></tr><tr><td>Controller signature verification</td><td>Fails the resolution</td><td>Verifies, logs the weak digest</td></tr></tbody></table><p>Resources excluded from the signature (<code>NO-DIGEST</code> / <code>EXCLUDE-FROM-SIGNATURE</code>)
 are exempt. Digests that OCM computes itself, for example when adding a
-component version from a constructor, already use SHA-256, and downloading a
-resource accepts only SHA-256 digests in any mode.</p><p>MD5 and SHA-1 remain usable for purposes that are not security-relevant, such
+component version from a constructor, already use SHA-256. Downloading a
+resource through a digest-pinned component reference verifies the content
+against its resource digest, which supports only SHA-256 and SHA-512 in any
+mode; an unpinned download does not check its content against the resource digest.</p><p>MD5 and SHA-1 remain usable for purposes that are not security-relevant, such
 as Git object IDs or caching.</p><h2 id=known-limitations>Known Limitations<a href=#known-limitations class=anchor aria-hidden=true>#</a></h2><p>FIPS mode only covers cryptography that runs through the Go Cryptographic
 Module. The following signing mechanism runs its cryptography in an external
 binary:</p><table><thead><tr><th>Feature</th><th>Where the cryptography runs</th></tr></thead><tbody><tr><td>Sigstore/cosign signing and verification</td><td>OCM runs the <code>cosign</code> binary from <code>PATH</code>, or downloads OCM&rsquo;s FIPS build of <code>cosign</code>. OCM checks whether <code>cosign</code> is a FIPS build, see <a href=#sigstore-and-cosign>Sigstore and cosign</a>.</td></tr></tbody></table><p>GPG signing and verification run in-process with the Go OpenPGP library
