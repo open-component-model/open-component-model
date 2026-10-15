@@ -5,8 +5,9 @@
 // JSON object, this engine recursively rewrites every JSON object into a JSON
 // array of single-key objects sorted by key. Arrays stay arrays; scalars and
 // explicit nulls are left unchanged. The result is marshalled compactly
-// (no spaces, no HTML escaping, UTF-8) so that sha256 over the bytes matches
-// the digests produced by gardener's cc-utils (ocm/sign.py).
+// (no spaces, HTML characters &<> kept literal, non-ASCII escaped to \uXXXX)
+// so that sha256 over the bytes matches the digests produced by gardener's
+// cc-utils (ocm/sign.py, which serialises with Python json.dumps).
 //
 // The engine is deliberately OCM-agnostic: it operates on an arbitrary
 // any tree (map[string]any, []any, scalars, explicit nil). Field selection
@@ -16,8 +17,11 @@ package entry
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"maps"
 	"slices"
+	"unicode/utf16"
+	"unicode/utf8"
 )
 
 // Normalise serialises v into the list-of-single-key-maps form and marshals it
@@ -52,8 +56,10 @@ func Transform(v any) any {
 	}
 }
 
-// marshal encodes an already-transformed tree to compact JSON without HTML
-// escaping and without the trailing newline json.Encoder appends.
+// marshal encodes an already-transformed tree to compact JSON. HTML escaping
+// is disabled (cc-utils keeps &<> literal) but non-ASCII runes are escaped to
+// \uXXXX to match Python json.dumps' default (ensure_ascii=True); the trailing
+// newline json.Encoder appends is trimmed.
 func marshal(v any) ([]byte, error) {
 	buf := new(bytes.Buffer)
 	enc := json.NewEncoder(buf)
@@ -61,5 +67,33 @@ func marshal(v any) ([]byte, error) {
 	if err := enc.Encode(v); err != nil {
 		return nil, err
 	}
-	return bytes.TrimRight(buf.Bytes(), "\n"), nil
+	return escapeNonASCII(bytes.TrimRight(buf.Bytes(), "\n")), nil
+}
+
+// escapeNonASCII rewrites every rune >= 0x80 as a lowercase \uXXXX escape
+// (surrogate pair above the BMP), mirroring cc-utils' json.dumps default
+// (ensure_ascii=True). All structural JSON bytes are ASCII, so scanning the
+// whole buffer is safe. Pure-ASCII input (the common case) is returned as-is.
+func escapeNonASCII(b []byte) []byte {
+	if utf8.RuneCount(b) == len(b) {
+		return b
+	}
+	out := new(bytes.Buffer)
+	out.Grow(len(b) + 8)
+	for i := 0; i < len(b); {
+		if b[i] < utf8.RuneSelf {
+			out.WriteByte(b[i])
+			i++
+			continue
+		}
+		r, size := utf8.DecodeRune(b[i:])
+		i += size
+		if r > 0xFFFF {
+			r1, r2 := utf16.EncodeRune(r)
+			fmt.Fprintf(out, `\u%04x\u%04x`, r1, r2)
+		} else {
+			fmt.Fprintf(out, `\u%04x`, r)
+		}
+	}
+	return out.Bytes()
 }
