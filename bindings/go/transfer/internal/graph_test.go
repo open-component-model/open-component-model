@@ -790,14 +790,14 @@ func TestBuildDescriptorSpec_CreationTime(t *testing.T) {
 				},
 			}
 
-			spec := buildDescriptorSpec(v2desc, "envID", map[int]string{0: "resourceAdd"})
+			spec := buildDescriptorSpec(v2desc, "envID", map[int]string{0: "resourceAdd"}, nil)
 			specMap, ok := spec.(map[string]any)
 			r.True(ok, "spec should be a map when resources are transformed")
 			componentMap, ok := specMap["component"].(map[string]any)
 			r.True(ok)
 			r.Contains(componentMap, "creationTime")
 			r.Equal(tt.want, componentMap["creationTime"])
-			r.Equal([]any{"${resourceAdd.output.resource}"}, componentMap["resources"])
+			r.Equal([]any{"${resourceAdd.output.resource.withSourceDigest(environment.envID.component.resources[0])}"}, componentMap["resources"])
 		})
 	}
 }
@@ -823,7 +823,7 @@ func TestBuildDescriptorSpec_LabelsIncluded(t *testing.T) {
 
 	// One resource so buildDescriptorSpec builds the composite map (resourceTransformIDs non-empty).
 	resourceTransformIDs := map[int]string{0: "someAddTransformID"}
-	spec := buildDescriptorSpec(v2desc, "envID", resourceTransformIDs)
+	spec := buildDescriptorSpec(v2desc, "envID", resourceTransformIDs, nil)
 
 	specMap, ok := spec.(map[string]any)
 	require.True(t, ok, "spec should be a map when resources are transformed")
@@ -852,7 +852,7 @@ func TestBuildDescriptorSpec_NoLabelsOmitted(t *testing.T) {
 	}
 
 	resourceTransformIDs := map[int]string{0: "someAddTransformID"}
-	spec := buildDescriptorSpec(v2desc, "envID", resourceTransformIDs)
+	spec := buildDescriptorSpec(v2desc, "envID", resourceTransformIDs, nil)
 
 	specMap, ok := spec.(map[string]any)
 	require.True(t, ok)
@@ -891,7 +891,7 @@ func TestBuildDescriptorSpec_SignaturesIncluded(t *testing.T) {
 	}
 
 	resourceTransformIDs := map[int]string{0: "someAddTransformID"}
-	spec := buildDescriptorSpec(v2desc, "envID", resourceTransformIDs)
+	spec := buildDescriptorSpec(v2desc, "envID", resourceTransformIDs, nil)
 
 	specMap, ok := spec.(map[string]any)
 	require.True(t, ok, "spec should be a map when resources are transformed")
@@ -925,7 +925,7 @@ func TestBuildDescriptorSpec_EmptyOptionalFields(t *testing.T) {
 	}
 
 	resourceTransformIDs := map[int]string{0: "someAddTransformID"}
-	spec := buildDescriptorSpec(v2desc, "envID", resourceTransformIDs)
+	spec := buildDescriptorSpec(v2desc, "envID", resourceTransformIDs, nil)
 
 	specMap, ok := spec.(map[string]any)
 	require.True(t, ok)
