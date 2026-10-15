@@ -27,6 +27,7 @@
         },
         {
           "deprecated": true,
+          "x-deprecationMessage": "use GPGSigningConfiguration/v1alpha1 instead",
           "const": "GPGSigningConfiguration"
         }
       ]

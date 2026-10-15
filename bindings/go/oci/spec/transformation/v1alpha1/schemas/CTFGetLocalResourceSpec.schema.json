@@ -70,14 +70,17 @@
             },
             {
               "deprecated": true,
+              "x-deprecationMessage": "use CommonTransportFormat/v1 instead",
               "const": "CommonTransportFormat"
             },
             {
               "deprecated": true,
+              "x-deprecationMessage": "use CommonTransportFormat/v1 instead",
               "const": "CTF"
             },
             {
               "deprecated": true,
+              "x-deprecationMessage": "use CommonTransportFormat/v1 instead",
               "const": "ctf"
             }
           ]

@@ -21,6 +21,7 @@
         },
         {
           "deprecated": true,
+          "x-deprecationMessage": "use RSASigningConfiguration/v1alpha1 instead",
           "const": "RSASigningConfiguration"
         }
       ]

@@ -70,22 +70,27 @@
             },
             {
               "deprecated": true,
+              "x-deprecationMessage": "use OCIRepository/v1 instead",
               "const": "OCIRepository"
             },
             {
               "deprecated": true,
+              "x-deprecationMessage": "use OCIRepository/v1 instead",
               "const": "OCI"
             },
             {
               "deprecated": true,
+              "x-deprecationMessage": "use OCIRepository/v1 instead",
               "const": "oci"
             },
             {
               "deprecated": true,
+              "x-deprecationMessage": "use OCIRepository/v1 instead",
               "const": "OCIRegistry"
             },
             {
               "deprecated": true,
+              "x-deprecationMessage": "use OCIRepository/v1 instead",
               "const": "ociRegistry"
             }
           ]

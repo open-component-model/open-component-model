@@ -12,8 +12,9 @@ import (
 )
 
 // Deprecation is read from each type's generated JSON schema: the
-// +ocm:jsonschema-gen:enum:deprecated marker flags a type name, and the optional
-// enum:deprecated:hint marker adds the text that says what to write instead.
+// +ocm:jsonschema-gen:enum:deprecated marker flags a type name, and the schema
+// carries the text that says what to write instead, which the generator derives
+// from the first enum value unless an enum:deprecated:hint marker overrides it.
 
 // typeSchema is the part of a generated schema that carries deprecation: the
 // flag on the whole type and the flag and hint on each accepted "type" value.

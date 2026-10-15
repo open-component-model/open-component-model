@@ -62,10 +62,12 @@
             },
             {
               "deprecated": true,
+              "x-deprecationMessage": "use File/v1alpha1 instead",
               "const": "File"
             },
             {
               "deprecated": true,
+              "x-deprecationMessage": "use File/v1alpha1 instead",
               "const": "file"
             }
           ]
@@ -334,14 +336,17 @@
             },
             {
               "deprecated": true,
+              "x-deprecationMessage": "use CommonTransportFormat/v1 instead",
               "const": "CommonTransportFormat"
             },
             {
               "deprecated": true,
+              "x-deprecationMessage": "use CommonTransportFormat/v1 instead",
               "const": "CTF"
             },
             {
               "deprecated": true,
+              "x-deprecationMessage": "use CommonTransportFormat/v1 instead",
               "const": "ctf"
             }
           ]

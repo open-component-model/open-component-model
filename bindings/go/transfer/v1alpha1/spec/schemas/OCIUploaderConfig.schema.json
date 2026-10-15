@@ -22,6 +22,7 @@
         },
         {
           "deprecated": true,
+          "x-deprecationMessage": "use oci.uploader.transfer.config.ocm.software/v1alpha1 instead",
           "const": "oci.uploader.transfer.config.ocm.software"
         }
       ]

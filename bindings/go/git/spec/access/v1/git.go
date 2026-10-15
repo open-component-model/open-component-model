@@ -20,7 +20,6 @@ import (
 type Git struct {
 	// +ocm:jsonschema-gen:enum=Git/v1,Git
 	// +ocm:jsonschema-gen:enum:deprecated=git,git/v1alpha1,Git/v1alpha1
-	// +ocm:jsonschema-gen:enum:deprecated:hint=use Git/v1 instead
 	Type runtime.Type `json:"type"`
 
 	// Repository is the Git repository URL: an http(s)://, ssh:// or git:// URL with a

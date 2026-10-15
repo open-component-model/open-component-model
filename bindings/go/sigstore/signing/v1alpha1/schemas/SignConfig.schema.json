@@ -59,6 +59,7 @@
         {
           "deprecated": true,
           "description": "AlgorithmSigstoreLegacy is the bare wire value emitted by OCM CLIs\nbefore the versioned identifier was introduced. Accepted on verify as\nan alias for AlgorithmSigstoreV1Alpha1; never produced on sign.",
+          "x-deprecationMessage": "use Sigstore/v1alpha1 instead",
           "const": "sigstore"
         }
       ]

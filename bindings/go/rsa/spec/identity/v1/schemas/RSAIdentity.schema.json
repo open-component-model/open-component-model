@@ -20,10 +20,12 @@
         },
         {
           "deprecated": true,
+          "x-deprecationMessage": "use RSA/v1 instead",
           "const": "RSA/v1alpha1"
         },
         {
           "deprecated": true,
+          "x-deprecationMessage": "use RSA/v1 instead",
           "const": "RSA"
         }
       ]
