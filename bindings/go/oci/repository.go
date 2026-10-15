@@ -753,12 +753,10 @@ func verifyArtifactSetRoot(ctx context.Context, store spec.Store, artifact ociIm
 	if err != nil {
 		return err
 	}
-	for _, root := range roots {
-		if internaldigest.VerifyRecorded(recorded, root) == nil {
-			return nil
-		}
+	if !internaldigest.MatchesAnyRoot(recorded, roots) {
+		return fmt.Errorf("recorded digest %s matches no artifact set root", recorded.Value)
 	}
-	return fmt.Errorf("recorded digest %s matches no artifact set root", recorded.Value)
+	return nil
 }
 
 func (repo *Repository) getStore(ctx context.Context, component string, version string) (ref string, store spec.Store, err error) {
@@ -1061,7 +1059,13 @@ func (repo *Repository) download(ctx context.Context, access runtime.Typed, reco
 				return nil, fmt.Errorf("cannot verify resource digest: downloaded layer digest unknown")
 			}
 			if err := internaldigest.VerifyRecorded(recorded, digest.Digest(actual)); err != nil {
-				return nil, fmt.Errorf("resource digest verification failed: %w", err)
+				// A v1 OCI artifact set reached here through its OCIImageLayer global access:
+				// the layer is the tar archive, whose hash is not the recorded manifest root.
+				// Verify against the archive's declared root instead.
+				roots, rerr := tar.ArtifactSetRoots(b)
+				if rerr != nil || !internaldigest.MatchesAnyRoot(recorded, roots) {
+					return nil, fmt.Errorf("resource digest verification failed: %w", err)
+				}
 			}
 		}
 		return b, nil

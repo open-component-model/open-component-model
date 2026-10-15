@@ -309,6 +309,10 @@ func TestLocalBlobDigest_DownloadResource(t *testing.T) {
 			name:  "OCIImageLayer raw (genericBlobDigest)",
 			setup: downloadLayerResource,
 		},
+		{
+			name:  "OCIImageLayer v1 artifact set (ociArtifactDigest)",
+			setup: downloadV1ArtifactSetResource,
+		},
 	}
 
 	for _, sc := range scenarios {
@@ -399,6 +403,53 @@ func downloadLayerResource(t *testing.T) (*oci.Repository, *descriptor.Resource)
 			HashAlgorithm:          "SHA-256",
 			NormalisationAlgorithm: "genericBlobDigest/v1",
 			Value:                  dig.Encoded(),
+		},
+	}
+}
+
+// downloadV1ArtifactSetResource pushes the real v1 artifact-set archive and returns a
+// resource whose OCIImageLayer access points at it (as pack.go assigns to a generically
+// stored local blob's global access). The access/layer digest is the archive hash, but
+// the recorded ociArtifactDigest is the manifest root, so download must fall back to the
+// archive's declared root instead of comparing against the archive hash.
+func downloadV1ArtifactSetResource(t *testing.T) (*oci.Repository, *descriptor.Resource) {
+	t.Helper()
+	r := require.New(t)
+	ctx := t.Context()
+
+	fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
+	r.NoError(err)
+	store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
+	repo := Repository(t, ocictf.WithCTF(store))
+
+	archive, err := os.ReadFile(filepath.Join("..", "ctf", "testdata", "compatibility", "02", "with-resource",
+		"blobs", "sha256.e40e3a2f1ab1a98328dfd14539a79d27aff5c4d5c34cd16a85f0288bfa76490b"))
+	r.NoError(err)
+	dig := digest.FromBytes(archive)
+	layerStore, err := store.StoreForReference(ctx, "test-registry/v1-artifact-set")
+	r.NoError(err)
+	r.NoError(layerStore.Push(ctx, ociImageSpecV1.Descriptor{
+		MediaType: "application/vnd.oci.image.manifest.v1+tar+gzip",
+		Digest:    dig,
+		Size:      int64(len(archive)),
+	}, bytes.NewReader(archive)))
+
+	return repo, &descriptor.Resource{
+		ElementMeta: descriptor.ElementMeta{
+			ObjectMeta: descriptor.ObjectMeta{Name: "mychart", Version: "6.7.1"},
+		},
+		Type: "test-type",
+		Access: &v1.OCIImageLayer{
+			Type:      runtime.NewVersionedType(v1.OCIImageLayerType, v1.Version),
+			Reference: "test-registry/v1-artifact-set@" + dig.String(),
+			MediaType: "application/vnd.oci.image.manifest.v1+tar+gzip",
+			Digest:    dig,
+			Size:      int64(len(archive)),
+		},
+		Digest: &descriptor.Digest{
+			HashAlgorithm:          "SHA-256",
+			NormalisationAlgorithm: "ociArtifactDigest/v1",
+			Value:                  "62be4af3382a4493cb7f1dd4ec47bcb28f1863b615fc9e4a1dceefbe93898dd0",
 		},
 	}
 }

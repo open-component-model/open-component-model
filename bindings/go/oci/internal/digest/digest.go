@@ -82,6 +82,22 @@ func VerifyRecorded(target *runtime.Digest, content digest.Digest) error {
 	return nil
 }
 
+// MatchesAnyRoot reports whether target is a complete digest that matches one of the
+// given OCI artifact-set roots. It fails closed: a nil, incomplete, or
+// non-recomputable-normalisation target matches nothing, so an unverifiable digest is
+// never accepted as a match.
+func MatchesAnyRoot(target *runtime.Digest, roots []digest.Digest) bool {
+	if !IsComplete(target) {
+		return false
+	}
+	for _, root := range roots {
+		if VerifyOCIArtifact(target, root) == nil {
+			return true
+		}
+	}
+	return false
+}
+
 // IsComplete reports whether hash algorithm, normalisation algorithm, and value are all set.
 func IsComplete(target *runtime.Digest) bool {
 	return target != nil && target.HashAlgorithm != "" && target.NormalisationAlgorithm != "" && target.Value != ""

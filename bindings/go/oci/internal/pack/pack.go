@@ -289,12 +289,7 @@ func verifyArtifactSetRoot(ctx context.Context, storage content.Storage, layer o
 	if err != nil {
 		return false
 	}
-	for _, root := range roots {
-		if internaldigest.VerifyRecorded(recorded, root) == nil {
-			return true
-		}
-	}
-	return false
+	return internaldigest.MatchesAnyRoot(recorded, roots)
 }
 
 // ResourceBlobOCILayerOptions defines the configuration options for pushing a blob as a resource.
