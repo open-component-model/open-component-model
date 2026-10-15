@@ -16,12 +16,27 @@ Get component version(s) from an OCM repository
 Get component version(s) from an OCM repository.
 
 The format of a component reference is:
-	[type::]{repository}/[valid-prefix]/{component}[:version]
+
+	[type::]{repository}/[valid-prefix]/{component}[:version][@digest]
 
 For valid prefixes {component-descriptors|none} are available. If <none> is used, it defaults to "component-descriptors". This is because by default,
 OCM components are stored within a specific sub-repository.
 
 For known types, currently only {OCIRepository|CommonTransportFormat} are supported, which can be shortened to {OCI|oci|CTF|ctf} respectively for convenience.
+
+A digest pins the component version: the command fails unless the component version matches it.
+Two forms are accepted, each with sha256 or sha512:
+
+- "@sha256:<hex>" (OCI digest) is the digest of the OCI image index or manifest the component version is
+  stored as, the digest its version tag resolves to (for example "oras resolve
+  {repository}/component-descriptors/{component}:{version}"). The component version is then read from that
+  artifact instead of through the tag, like an OCI image pinned by digest. The digest covers the descriptor
+  and all local blobs, so the version may be omitted; if given, the artifact must hold it. Only OCI
+  registries and CTF archives support it, and it changes when the version is transferred or signed.
+- "@jsonNormalisation.v4alpha1+sha256:<hex>" (normalized) is the hash of the descriptor normalised with
+  jsonNormalisation/v4alpha1, the digest "ocm sign" signs and logs. It stays the same across transfer and
+  signing, but does not cover access information or labels that are excluded from signing. A reference
+  pinned to it must name the version.
 
 If no type is given, the repository path is interpreted based on introspection and heuristics.
 
@@ -38,6 +53,8 @@ Getting a single component version:
 get component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0
 get cv ./path/to/ctf//ocm.software/cli:0.12.0
 get cv ./path/to/ctf/component-descriptors/ocm.software/cli:0.12.0
+get cv ghcr.io/open-component-model//ocm.software/cli@sha256:<oci-digest>
+get cv ghcr.io/open-component-model//ocm.software/cli:0.12.0@jsonNormalisation.v4alpha1+sha256:<signed-digest>
 
 Listing many component versions:
 

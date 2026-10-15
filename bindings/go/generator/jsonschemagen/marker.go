@@ -221,6 +221,9 @@ func ApplyEnumMarkers(s *JSONSchemaDraft202012, markers map[string]string) {
 		}
 	}
 
+	// Only an explicit enum:deprecated:hint lands in the schema. Without it a
+	// reader derives the message from the first current spelling in oneOf.
+	hint := markers["enum:deprecated:hint"]
 	if hasMain {
 		addVals(rawMain)
 	}
@@ -246,14 +249,17 @@ func ApplyEnumMarkers(s *JSONSchemaDraft202012, markers map[string]string) {
 
 		_, isDeprecated := depSet[v]
 		var deprecatedPtr *bool
+		var deprecationMessage string
 		if isDeprecated {
 			b := true
 			deprecatedPtr = &b // omit field when not deprecated
+			deprecationMessage = hint
 		}
 
 		oneOf = append(oneOf, &JSONSchemaDraft202012{
-			Const:      constVal,
-			Deprecated: deprecatedPtr,
+			Const:              constVal,
+			Deprecated:         deprecatedPtr,
+			DeprecationMessage: deprecationMessage,
 		})
 	}
 
