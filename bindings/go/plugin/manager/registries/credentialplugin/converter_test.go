@@ -74,5 +74,10 @@ func TestCredentialPluginConverter_Resolve(t *testing.T) {
 }
 
 func TestCredentialPluginConverter_Interface(t *testing.T) {
-	var _ credentials.CredentialPlugin = NewCredentialPluginConverter(&mockExternalCredentialPlugin{})
+	r := require.New(t)
+	converter := NewCredentialPluginConverter(&mockExternalCredentialPlugin{})
+
+	// The converter must be a usable, non-nil implementation of the plugin interface.
+	r.NotNil(converter)
+	r.Implements((*credentials.CredentialPlugin)(nil), converter)
 }

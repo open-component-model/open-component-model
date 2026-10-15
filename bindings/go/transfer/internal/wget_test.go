@@ -117,6 +117,12 @@ func TestProcessWget_CTFTarget(t *testing.T) {
 	assert.Equal(t, wgetv1alpha1.DownloadWgetResourceV1alpha1, tgd.Transformations[0].Type)
 	assert.Equal(t, ociv1alpha1.CTFAddLocalResourceV1alpha1, tgd.Transformations[1].Type)
 
+	// referenceName is an OCI-only legacy field; a wget resource must not carry it, even on the
+	// split CTF add node.
+	addedResource := tgd.Transformations[1].Spec.Data["resource"].(map[string]any)
+	_, hasReferenceName := addedResource["access"].(map[string]any)["referenceName"]
+	assert.False(t, hasReferenceName)
+
 	// The resource's tracked transformation is the Add node, which also writes the temp
 	// file that must be cleaned up.
 	addResourceID := tgd.Transformations[1].ID

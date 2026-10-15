@@ -79,59 +79,57 @@ func (b *CosignBinary) Verify(ctx context.Context, dataPath, bundlePath string, 
 	return b.ExecCosign(ctx, path, args, env)
 }
 
-// ErrCosignDownloadInFIPSMode is returned when no cosign is on PATH with GODEBUG=fips140=only. OCM then neither
-// downloads the upstream release nor uses a previously downloaded one, because those are not FIPS builds.
-var ErrCosignDownloadInFIPSMode = errors.New("cosign binary not found on PATH; with GODEBUG=fips140=only, downloading cosign is disabled " +
-	"because the upstream release is not a FIPS build: install a cosign built with GOFIPS140 and ensure it is on PATH")
-
 // ErrCosignNotFIPSBuild is returned with GODEBUG=fips140=only when the cosign on PATH is not built against a
 // frozen Go Cryptographic Module, because Sigstore signing and verification would then leave the FIPS boundary.
 var ErrCosignNotFIPSBuild = errors.New("with GODEBUG=fips140=only, Sigstore signing and verification require a cosign built against a frozen " +
 	"Go Cryptographic Module (GOFIPS140=v<version>, see go version -m)")
 
-// resolveBinary locates cosign. In FIPS 140-3 mode it checks that cosign is a FIPS build: with fips140=only a
-// non-FIPS cosign (or downloading one) is rejected, with fips140=on it is used and logged at debug level.
+// resolveBinary locates cosign on PATH, or downloads the pinned OCM cosign release. In FIPS 140-3 mode it checks
+// that cosign is a FIPS build: with fips140=only a non-FIPS cosign is rejected, with fips140=on it is used and logged
+// at debug level.
 func (b *CosignBinary) resolveBinary(ctx context.Context) (string, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if b.binaryPath != "" {
 		return b.binaryPath, nil
 	}
-	fipsMode := b.FIPSEnabled != nil && b.FIPSEnabled()
-	enforced := b.FIPSEnforced != nil && b.FIPSEnforced()
 	path, err := b.LookPath("cosign")
 	if err == nil {
 		if verr := b.ensureMinimumVersion(ctx, path); verr != nil {
 			return "", verr
 		}
-		if fipsMode || enforced {
-			if ferr := b.requireFIPSBuild(path); ferr != nil {
-				if enforced {
-					return "", ferr
-				}
-				slog.DebugContext(ctx, "cosign is not a FIPS build; Sigstore signing runs outside the FIPS 140-3 boundary "+
-					"(GODEBUG=fips140=only rejects it)", "path", path, "reason", ferr.Error())
-			}
+	} else {
+		var dlErr error
+		if path, dlErr = ensureOrDownloadCosign(ctx, b.HttpClient); dlErr != nil {
+			return "", fmt.Errorf(
+				"cosign binary not found on PATH and auto-download failed: %w "+
+					"(install cosign from https://github.com/open-component-model/cosign/releases "+
+					"and ensure it is on PATH, or fix the download error)", dlErr)
 		}
-		b.binaryPath = path
-		return path, nil
 	}
-	if enforced {
-		return "", ErrCosignDownloadInFIPSMode
-	}
-	if fipsMode {
-		slog.DebugContext(ctx, "no cosign on PATH; using the upstream release, which is not a FIPS build, so Sigstore signing "+
-			"runs outside the FIPS 140-3 boundary (GODEBUG=fips140=only rejects it)")
-	}
-	path, dlErr := ensureOrDownloadCosign(ctx, b.HttpClient)
-	if dlErr != nil {
-		return "", fmt.Errorf(
-			"cosign binary not found on PATH and auto-download failed: %w "+
-				"(install cosign from https://github.com/sigstore/cosign?tab=readme-ov-file#installation "+
-				"and ensure it is on PATH, or fix the download error)", dlErr)
+	if err := b.checkFIPSBuild(ctx, path); err != nil {
+		return "", err
 	}
 	b.binaryPath = path
 	return path, nil
+}
+
+// checkFIPSBuild rejects a non-FIPS cosign with fips140=only and logs it with fips140=on.
+func (b *CosignBinary) checkFIPSBuild(ctx context.Context, path string) error {
+	enforced := b.FIPSEnforced != nil && b.FIPSEnforced()
+	if !enforced && (b.FIPSEnabled == nil || !b.FIPSEnabled()) {
+		return nil
+	}
+	ferr := b.requireFIPSBuild(path)
+	if ferr == nil {
+		return nil
+	}
+	if enforced {
+		return ferr
+	}
+	slog.DebugContext(ctx, "cosign is not a FIPS build; Sigstore signing runs outside the FIPS 140-3 boundary "+
+		"(GODEBUG=fips140=only rejects it)", "path", path, "reason", ferr.Error())
+	return nil
 }
 
 // requireFIPSBuild checks the Go build information of the cosign binary for a GOFIPS140 setting that names a

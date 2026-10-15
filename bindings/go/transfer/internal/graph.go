@@ -13,6 +13,7 @@ import (
 	gitv1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
 	githubv1 "ocm.software/open-component-model/bindings/go/github/spec/access/v1"
 	helmv1 "ocm.software/open-component-model/bindings/go/helm/spec/access/v1"
+	ociaccess "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -292,6 +293,8 @@ func processResources(
 					err = processHTTPUploader(resource, cfg, baseID, id, val, tgd, resourceTransformIDs, i)
 				case *transferv1alpha1.OCIUploaderConfig:
 					exprs, err = processOCIUploader(ctx, resource, access, cfg, aliases, env, id, val, tgd, toSpec, resourceTransformIDs, i)
+				case *transferv1alpha1.GitUploaderConfig:
+					exprs, err = processGitUploader(ctx, resource, access, cfg, aliases, env, id, val, tgd, resourceTransformIDs, i)
 				case *transferv1alpha1.LocalBlobUploaderConfig:
 					exprs, err = processResource(resource, access, id, val, tgd, toSpec, resourceTransformIDs, i)
 				case *transferv1alpha1.ArtifactoryUploaderConfig:
@@ -300,7 +303,7 @@ func processResources(
 					err = processRepositoryUploader(resource, access, uploadv1alpha1.NexusUploadV1alpha1, cfg.URL, cfg.Repository, cfg.Path, baseID, id, val, tgd, resourceTransformIDs, i)
 				case *transferv1alpha1.ReferenceUploaderConfig:
 					// No transformation: buildDescriptorSpec keeps the environment resource.
-					if descriptorv2.IsLocalBlob(access) {
+					if isLocalByValue(access) {
 						err = fmt.Errorf("local blobs cannot be kept by reference (adjust match)")
 					}
 				default:
@@ -317,7 +320,7 @@ func processResources(
 		if handled {
 			continue
 		}
-		if !descriptorv2.IsLocalBlob(access) {
+		if !isLocalByValue(access) {
 			slog.DebugContext(ctx, "no uploader selects resource, keeping it by reference",
 				"component", component, "version", version,
 				"resource", resource.ToIdentity().String(), "accessType", resource.Access.Type.String())
@@ -331,6 +334,14 @@ func processResources(
 		fileExpressions = append(fileExpressions, exprs...)
 	}
 	return resourceTransformIDs, fileExpressions, nil
+}
+
+// isLocalByValue reports whether access must be copied into the target by value (embedded
+// as a local blob) rather than kept by reference. It covers v2 local blobs and migrated v1
+// relativeOciReference accesses, whose relative reference is meaningless in a different
+// origin.
+func isLocalByValue(access runtime.Typed) bool {
+	return descriptorv2.IsLocalBlob(access) || ociaccess.IsRelativeOCIReference(access)
 }
 
 // processResource copies a single resource into the target as a local blob, dispatching on
@@ -350,9 +361,24 @@ func processResource(resource descriptorv2.Resource, access runtime.Typed, id st
 			return nil, fmt.Errorf("failed processing local blob resource: %w", err)
 		}
 		return []string{fmt.Sprintf("${%s.spec.file}", addResourceID)}, nil
+	case *ociv1.RelativeOCIReference:
+		// A relativeOciReference is a local, repository-local access: copy by value as a
+		// local blob whose referenceName is the relative reference, so the relative type
+		// never leaks into the target descriptor and the artifact can be re-materialised as
+		// an OCI image on a later transfer.
+		if err := processRelativeOCIReference(resource, acc.Reference, id, val, tgd, toSpec, resourceTransformIDs, i); err != nil {
+			return nil, fmt.Errorf("failed processing relative OCI reference resource: %w", err)
+		}
+		return []string{fmt.Sprintf("${%s.spec.file}", addResourceID)}, nil
 	case *ociv1.OCIImage:
 		if err := processOCIArtifact(resource, id, val, tgd, toSpec, resourceTransformIDs, i); err != nil {
 			return nil, fmt.Errorf("cannot process OCI artifact resource: %w", err)
+		}
+		return []string{fmt.Sprintf("${%s.spec.file}", addResourceID)}, nil
+	case *ociv1.OCIImageLayer:
+		// A layer is a single blob, not an OCI artifact: it is always copied by value.
+		if err := processOCIImageLayer(resource, id, val, tgd, toSpec, resourceTransformIDs, i); err != nil {
+			return nil, fmt.Errorf("cannot process OCI image layer resource: %w", err)
 		}
 		return []string{fmt.Sprintf("${%s.spec.file}", addResourceID)}, nil
 	case *helmv1.Helm:
@@ -495,9 +521,9 @@ func buildDescriptorSpec(v2desc *descriptorv2.Descriptor, id string, resourceTra
 
 	setOptionalField(componentMap, "creationTime", id, v2desc.Component.CreationTime != "")
 	setOptionalField(componentMap, "labels", id, len(v2desc.Component.Labels) != 0)
-	setOptionalField(componentMap, "repositoryContexts", id, len(v2desc.Component.RepositoryContexts) != 0)
-	setOptionalField(componentMap, "sources", id, len(v2desc.Component.Sources) != 0)
-	setOptionalField(componentMap, "componentReferences", id, len(v2desc.Component.References) != 0)
+	setListField(componentMap, "repositoryContexts", id, v2desc.Component.RepositoryContexts)
+	setListField(componentMap, "sources", id, v2desc.Component.Sources)
+	setListField(componentMap, "componentReferences", id, v2desc.Component.References)
 
 	descSpecMap := map[string]any{
 		"meta":      fmt.Sprintf("${environment.%s.meta}", id),
@@ -518,5 +544,18 @@ func setOptionalField(componentMap map[string]any, field, id string, present boo
 		componentMap[field] = fmt.Sprintf("${environment.%s.component.%s}", id, field)
 	} else {
 		componentMap[field] = nil
+	}
+}
+
+// setListField is setOptionalField for list fields serialized without omitempty: an empty
+// list stays [] instead of becoming null.
+func setListField[T any](componentMap map[string]any, field, id string, list []T) {
+	switch {
+	case list == nil:
+		componentMap[field] = nil
+	case len(list) == 0:
+		componentMap[field] = []any{}
+	default:
+		componentMap[field] = fmt.Sprintf("${environment.%s.component.%s}", id, field)
 	}
 }

@@ -5,11 +5,8 @@
 package integration
 
 import (
-	"bytes"
-	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
@@ -21,6 +18,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/cli/integration/internal"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/gpg/signing/handler/handlertest"
 	"ocm.software/open-component-model/bindings/go/oci"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
 )
@@ -205,35 +203,17 @@ configurations:
 	})
 }
 
-// writeGPGKeyPair generates an RSA key pair with the gpg binary and writes the ASCII-armored
-// secret and public keys to <dir>/<name>.asc and <dir>/<name>.pub.asc.
-// A non-empty passphrase protects the exported secret key.
+// writeGPGKeyPair generates an RSA key pair with handlertest.GenerateKey and writes the
+// ASCII-armored secret and public keys to <dir>/<name>.asc and <dir>/<name>.pub.asc.
+// A non-empty passphrase protects the secret key.
 func writeGPGKeyPair(t *testing.T, dir, name, passphrase string) (privPath, pubPath string) {
 	t.Helper()
 	r := require.New(t)
-	// Not t.TempDir(): its long path can overflow the Unix socket path limit of gpg-agent on macOS.
-	//nolint:usetesting // see above: deliberately using a short base path for gpg-agent sockets
-	home, err := os.MkdirTemp("", "ocm-gpg-test-")
+	key, err := handlertest.GenerateKey(handlertest.KeyConfig{Passphrase: passphrase})
 	r.NoError(err)
-	t.Cleanup(func() {
-		_ = exec.CommandContext(context.Background(), "gpgconf", "--homedir", home, "--kill", "all").Run()
-		_ = os.RemoveAll(home)
-	})
-	gpg := func(args ...string) []byte {
-		base := []string{"--batch", "--homedir", home, "--pinentry-mode", "loopback", "--passphrase", passphrase}
-		var stderr bytes.Buffer
-		c := exec.CommandContext(t.Context(), "gpg", append(base, args...)...)
-		c.Stderr = &stderr
-		out, err := c.Output()
-		r.NoError(err, "gpg %v: %s", args, stderr.String())
-		return out
-	}
-
-	uid := fmt.Sprintf("OCM Test %s <%s@example.com>", name, name)
-	gpg("--quick-gen-key", uid, "rsa3072", "sign", "never")
 	privPath = filepath.Join(dir, name+".asc")
 	pubPath = filepath.Join(dir, name+".pub.asc")
-	r.NoError(os.WriteFile(privPath, gpg("--armor", "--export-secret-keys", uid), 0o600))
-	r.NoError(os.WriteFile(pubPath, gpg("--armor", "--export", uid), 0o600))
+	r.NoError(os.WriteFile(privPath, []byte(key.Private), 0o600))
+	r.NoError(os.WriteFile(pubPath, []byte(key.Public), 0o600))
 	return privPath, pubPath
 }

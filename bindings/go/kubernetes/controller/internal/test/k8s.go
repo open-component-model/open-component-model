@@ -98,6 +98,13 @@ func DeleteObject(ctx context.Context, k8sClient client.Client, obj client.Objec
 }
 
 func WaitForNotReadyObject(ctx context.Context, k8sClient client.Client, obj util.Getter, expectedReason string) {
+	WaitForNotReadyObjectWithMessage(ctx, k8sClient, obj, expectedReason, "")
+}
+
+// WaitForNotReadyObjectWithMessage is like WaitForNotReadyObject but also requires the Ready
+// condition message to contain expectedMessageSubstr. Pass an empty string to skip the message
+// check.
+func WaitForNotReadyObjectWithMessage(ctx context.Context, k8sClient client.Client, obj util.Getter, expectedReason, expectedMessageSubstr string) {
 	GinkgoHelper()
 
 	Eventually(func(ctx context.Context) error {
@@ -111,12 +118,16 @@ func WaitForNotReadyObject(ctx context.Context, k8sClient client.Client, obj uti
 		}
 
 		readyCond := apimeta.FindStatusCondition(obj.GetConditions(), v1alpha1.ReadyCondition)
-		var reason string
+		var reason, message string
 		if readyCond != nil {
 			reason = readyCond.Reason
+			message = readyCond.Message
 		}
 		if reason != expectedReason {
 			return fmt.Errorf("expected not-ready object reason %s, got %s", expectedReason, reason)
+		}
+		if expectedMessageSubstr != "" && !strings.Contains(message, expectedMessageSubstr) {
+			return fmt.Errorf("expected not-ready object message to contain %q, got %q", expectedMessageSubstr, message)
 		}
 
 		return nil

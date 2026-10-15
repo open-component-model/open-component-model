@@ -112,16 +112,11 @@ linters:
       # (counts are the findings at enablement time). To fix a linter, remove it
       # from this list in the same PR that resolves its findings.
       - linters:
-          - depguard        # 12: tests import siblings outside the prod allow-list
           - dupword         # 2: false positives on intentional repetition (CEL map(x,x*2)); fixer corrupts strings
           - fatcontext      # 3: all current hits are false positives (intentional ctx capture, Ginkgo suite lifecycle) and the fixer shadows outer vars; value is in prod loop-nesting, not tests
-          - ginkgolinter    # 5: Gomega length/error assertion idioms
           - gosmopolitan    # 5: time.Local / non-portable usage in tests
           - maintidx        # 39: low maintainability index of large table tests
-          - misspell        # 25: false positives on the `interm` abbreviation; fixer rewrites identifiers
           - nolintlint      # 4: unused //nolint directives tied to the linters disabled here
-          - staticcheck     # 115: assorted SA/ST checks across tests
-          - tparallel       # 47: subtest t.Parallel() consistency
         path: _test\.go
       - path: (.+)\.go$
         text: composites
@@ -133,12 +128,34 @@ linters:
           - errorlint
         path: _test\.go
         source: io\.EOF
+      # The ocm/v1 resolver config types (Resolver, spec.Config, spec.Resolver)
+      # are deprecated for backwards compatibility only, with no replacement yet
+      # ("New concepts will likely be introduced in the future"). Their tests must
+      # keep exercising them, so exempt SA1019 for exactly those symbols in tests.
+      - linters:
+          - staticcheck
+        path: _test\.go
+        text: 'SA1019:.*configuration/ocm/v1/(runtime\.Resolver|spec\.(Config|Resolver)) is deprecated'
+      # Integration tests (in */integration/ packages) share expensive
+      # fixtures (registries/caches) and, for the CLI, mutate process-global 
+      # state (cobra finalizers, slog default) via cmd.New().ExecuteContext. 
+      # Their subtests have to run sequentially and tparallel is not helpful.
+      - linters:
+          - tparallel
+        path: (/integration/|_integration_test\.go$)
       - linters:
           - cyclop
         path: (.+)_test\.go
       - linters:
           - staticcheck
         path: (.+)repository/ocm/fallback.go
+      # git/integration's construct test drives the git input method through the
+      # constructor into a real OCM store and asserts the digest/pin round-trip
+      # of the git-sourced resource. This is done through oci/ctf. But we do not
+      # want to allow the non-test git code to import oci/ctf
+      - linters:
+          - depguard
+        path: git/integration/constructor_integration_test\.go
     paths:
       - third_party$
       - builtin$
@@ -154,6 +171,11 @@ linters:
         - elseif
     lll:
       line-length: 120
+    misspell:
+      # `interm` is an intentional abbreviation for "intermediate" (intermediate CA
+      # certificates in the signing tests), not a misspelling of "interim".
+      ignore-rules:
+        - interm
     nolintlint:
       require-explanation: true
       require-specific: false
@@ -505,6 +527,7 @@ linters:
             - "ocm.software/open-component-model/bindings/go/credentials"
             - "ocm.software/open-component-model/bindings/go/ctf"
             - "ocm.software/open-component-model/bindings/go/dag"
+            - "ocm.software/open-component-model/bindings/go/descriptor/normalisation"
             - "ocm.software/open-component-model/bindings/go/descriptor/runtime"
             - "ocm.software/open-component-model/bindings/go/descriptor/v2"
             - "ocm.software/open-component-model/bindings/go/git"
@@ -627,6 +650,7 @@ linters:
             - "ocm.software/open-component-model/bindings/go/plugin"
             - "ocm.software/open-component-model/bindings/go/repository"
             - "ocm.software/open-component-model/bindings/go/rsa"
+            - "ocm.software/open-component-model/bindings/go/gpg"
             - "ocm.software/open-component-model/bindings/go/runtime"
             - "ocm.software/open-component-model/bindings/go/signing"
             - "ocm.software/open-component-model/bindings/go/sigstore"
@@ -644,7 +668,7 @@ linters:
         # website/content/docs/reference/standards-and-regulations/fips.md.
         fips-non-approved-crypto:
           list-mode: lax
-          files: ["$all", "!$test", "!**/integration/**"]
+          files: ["$all", "!$test", "!**/integration/**", "!**/bindings/go/gpg/signing/handler/**"]
           allow:
             # Reviewed: in FIPS 140-3 mode x/crypto/ssh negotiates only SP 800-140C/D
             # approved algorithms (see its package doc) and uses the standard library
@@ -660,7 +684,7 @@ linters:
             - pkg: "golang.org/x/crypto/"
               desc: "golang.org/x/crypto is outside the Go Cryptographic Module; use the standard library crypto packages (exceptions need a FIPS review and an allow entry)"
             - pkg: "github.com/ProtonMail/go-crypto"
-              desc: "OpenPGP implementation outside the Go Cryptographic Module; use the gpg signing handler"
+              desc: "OpenPGP implementation partly outside the Go Cryptographic Module; only the GPG signing handler (bindings/go/gpg/signing/handler), which enforces the FIPS 140-3 mode rules, may use it"
             - pkg: "github.com/decred/dcrd/dcrec/secp256k1"
               desc: "secp256k1 is not a FIPS-approved curve; use P-256, P-384 or P-521"
             - pkg: "github.com/btcsuite/btcd/btcec"

@@ -81,5 +81,11 @@ export default defineConfig([
         rules: {
             "@typescript-eslint/no-require-imports": "off"
         }
+    },
+    {
+        // Hugo-templated JS overrides (executed by resources.ExecuteAsTemplate,
+        // not plain JS). Raw source contains Go template placeholders and follows
+        // the upstream theme's style, not this site's.
+        ignores: ["assets/js/flexsearch.js"]
     }
 ]);

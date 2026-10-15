@@ -386,6 +386,43 @@ resources:
       mediaType: application/octet-stream
 ```
 
+### `relativeOciReference/v1`
+
+A **read/transfer compatibility type** for component versions migrated from OCM v1. It references an OCI artifact by a
+reference that is **relative to the registry root** that hosts the component version. Legacy (unversioned) alias:
+`relativeOciReference`.
+
+{{< schema-renderer url="/schemas/bindings/go/access/oci/v1/RelativeOCIReference.schema.json" >}}
+
+Semantics:
+
+- The `reference` is a registry-relative OCI reference `repository[:tag][@digest]` — no scheme, no leading slash, no
+  host. A dotted first segment (e.g. `acme.org/value`) is a repository path, not a host.
+- Resolution base is the **registry root** of the hosting repository, **not** the OCM `subPath` and never the
+  `component-descriptors` path. For `reference: ocm/value:v2.0` in a repository whose registry is `registry.example`
+  (even with OCM subPath `ocm-prefix`), the artifact is `registry.example/ocm/value:v2.0`. A prefix already present in
+  `reference` is preserved verbatim; only the registry is prepended.
+- Digest beats tag; both are preserved when present.
+- Resolution reuses the component repository's credentials and transport. Distinct per-namespace credentials for the
+  relative artifact are not supported.
+
+This type is **never emitted on write** by OCM v2. It is read like a local resource, and on transfer it is copied
+**by value** into the target (becoming a `LocalBlob/v1`), or **re-uploaded as an OCI image** when an
+[OCI uploader]({{< relref "transfer-configuration/oci-uploader" >}}) is configured.
+
+**Example**
+
+```yaml
+resources:
+  - name: value
+    type: ociImage
+    version: 2.0.0
+    relation: local
+    access:
+      type: relativeOciReference/v1
+      reference: ocm/value:v2.0
+```
+
 ### `Helm/v1`
 
 References a Helm chart in a Helm chart repository or OCI registry. Legacy alias: `helm`.
@@ -521,8 +558,8 @@ Two differences need attention:
 
 - **Scheme.** OCM v1 read `github.com/org/repo` as a remote repository. OCM v2 reads it as a local directory, so
   add the scheme. scp-style SSH addresses such as `git@github.com:org/repo.git` are unaffected.
-- **Credentials.** The consumer identity type is still `Git`, but the OCM v1 `pathprefix` attribute is gone. Use
-  `path`, which supports glob patterns. See
+- **Credentials.** The consumer identity type is still `Git`. Use `path`, which supports glob patterns, instead of the
+  OCM v1 `pathprefix` attribute. See
   [Credential Consumer Identities: Git]({{< relref "credential-consumer-identities.md" >}}#git).
 
 ### `File/v1alpha1`

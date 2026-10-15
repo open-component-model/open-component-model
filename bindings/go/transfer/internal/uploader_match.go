@@ -28,11 +28,12 @@ const (
 )
 
 // EnvOptions are the CEL functions the transfer graph offers beyond the graph's base
-// environment: toOCI() exactly as the controller offers it (OCI image accesses), the
-// string extensions (split, join, ...) used to compose image references, and
+// environment: toOCI() exactly as the controller offers it (OCI image accesses), toGit()
+// (Git origins, see gitOrigin), the string extensions (split, join, ...) used to compose
+// image references, and
 // isOCIManifest() and <access>.isType() for uploader match expressions.
 func EnvOptions() []cel.EnvOption {
-	return []cel.EnvOption{ocifunctions.ToOCI(), ext.Strings(), isOCIManifestFunction(), isTypeFunction()}
+	return []cel.EnvOption{ocifunctions.ToOCI(), toGitFunction(), ext.Strings(), isOCIManifestFunction(), isTypeFunction()}
 }
 
 // isOCIManifestFunction declares isOCIManifest(string) bool: whether a media type is an

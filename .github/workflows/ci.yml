@@ -12,7 +12,7 @@ permissions:
 jobs:
   changes:
     name: "Detect Changes"
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     permissions:
       pull-requests: read
     outputs:
@@ -74,7 +74,7 @@ jobs:
 
   golangci_lint_verify:
     name: "golangci-lint-verify"
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     permissions:
       # Optional: allow write access to checks to allow the action to annotate code in the PR.
       # Automatically downgraded to read-only for pull requests from forks
@@ -105,7 +105,7 @@ jobs:
   dependency_list_verify:
     name: "dependency-list-verify"
     needs: changes
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     if: ${{ needs.changes.outputs.dependency_list_changed == 'true' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -123,7 +123,7 @@ jobs:
             /.github/scripts/package.json
             /.github/scripts/package-lock.json
           persist-credentials: false
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 26
       - name: Install Task
@@ -143,7 +143,7 @@ jobs:
     needs:
      - changes
      - golangci_lint_verify
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     permissions:
       # Optional: allow write access to checks to allow the action to annotate code in the PR.
       # Automatically downgraded to read-only for pull requests from forks
@@ -190,7 +190,7 @@ jobs:
   run_integration_tests:
     name: "Integration Tests"
     needs: changes
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     if: ${{ needs.changes.outputs.run_go == 'true' }}
     env:
       # All packages of one `go test ./...` share a single testcontainers reaper, which
@@ -237,15 +237,20 @@ jobs:
         with:
           report_paths: '${{ github.workspace }}/bindings/go/output/junit*.xml'
           detailed_summary: true
+          flaky_summary: true
           include_passed: false
           # annotate inline + write the job summary without creating a check run,
           # so the report works on fork PRs (read-only token) too.
           annotate_only: true
+          # gotestsum --rerun-fails writes the failed attempt and the passing
+          # rerun as two testcases with the same name; honor only the final run
+          # so a flaky test that passed on retry is not annotated red.
+          check_retries: true
 
   run_unit_tests:
     name: "Unit Tests"
     needs: changes
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     if: ${{ needs.changes.outputs.run_go == 'true' }}
     steps:
       - name: Install Task
@@ -273,15 +278,15 @@ jobs:
             echo "### Unit coverage: n/a (tests did not run)" >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
-          # Floor = filtered baseline (~65%, generated files excluded) minus a margin for churn. Ratchet up over time.
-          floor=62
+          # Floor = filtered baseline (~79% with -coverpkg=./..., generated files excluded) minus a margin for churn. Ratchet up over time.
+          floor=75
           pct=$(go tool cover -func=output/coverage.unit.out | awk '/^total:/{gsub(/%/,"",$NF);print $NF}')
           echo "### Unit coverage: ${pct}% (floor ${floor}%)" >> "$GITHUB_STEP_SUMMARY"
           awk -v p="$pct" -v f="$floor" 'BEGIN{exit (p+0 < f+0)}' \
             || { echo "::error::unit coverage ${pct}% is below the ${floor}% floor"; exit 1; }
 
   generate:
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     name: "Code Generation"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -316,7 +321,7 @@ jobs:
   # see https://github.com/orgs/community/discussions/60792 for details on why this is needed
   check-completion:
     name: "Completion"
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     needs:
       - changes
       - generate
