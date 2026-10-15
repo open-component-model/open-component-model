@@ -56,6 +56,7 @@ var localBlobFixtures = []localBlobFixture{
 		name: "genericBlobDigest",
 		// genericBlobDigest/v1 is the SHA-256 of the raw blob bytes.
 		build: func(t *testing.T) ([]byte, string, *descriptor.Digest) {
+			t.Helper()
 			return []byte("hello local blob"), "text/plain", &descriptor.Digest{
 				HashAlgorithm:          "SHA-256",
 				NormalisationAlgorithm: "genericBlobDigest/v1",
