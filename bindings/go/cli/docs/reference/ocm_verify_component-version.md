@@ -48,7 +48,7 @@ Verify component version(s) inside an OCM repository based on signatures.
 - Without TSA root certificates the token structure and imprint are still checked, but the certificate chain is not verified and a warning is logged
 - Only a timestamp validated against trusted TSA roots is used to validate an (RSA/PEM) signing certificate as of the signing time; a merely structural token never relaxes certificate validity
 - The TSA URL label (url.tsa.ocm.software/<signature>) selects a URL-specific TSA/v1alpha1 entry; an entry without URL attributes applies to any TSA
-- Timestamps created by the OCM v1 CLI are verified as well
+- Timestamps created by the OCM v1 CLI are verified as well, but their time is not used to validate certificates unless --insecure-trust-legacy-timestamps is set: they cover only the descriptor digest, which is known before signing, so they do not prove the signature existed at that time
 
 Use to validate component versions before promotion, deployment, or further usage to ensure integrity and provenance.
 
@@ -237,10 +237,11 @@ verify component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0 -
 ### Options
 
 ```
-      --concurrency-limit int   maximum amount of parallel requests to the repository for resolving component versions (default 4)
-  -h, --help                    help for component-version
-      --signature string        name of the signature to verify. If not set, all signatures are verified.
-      --verifier-spec string    DEPRECATED: no longer supported, configure the verifier in the OCM configuration instead (signing.config.ocm.software/v1alpha1, field "verifier")
+      --concurrency-limit int              maximum amount of parallel requests to the repository for resolving component versions (default 4)
+  -h, --help                               help for component-version
+      --insecure-trust-legacy-timestamps   use the time of trusted timestamps created by the OCM v1 CLI to validate expired signing certificates; these timestamps cover only the descriptor digest, so a signature made after the certificate expired can reuse one
+      --signature string                   name of the signature to verify. If not set, all signatures are verified.
+      --verifier-spec string               DEPRECATED: no longer supported, configure the verifier in the OCM configuration instead (signing.config.ocm.software/v1alpha1, field "verifier")
 ```
 
 ### Options inherited from parent commands

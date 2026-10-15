@@ -149,7 +149,7 @@ func TestVerifyTSATimestamp(t *testing.T) {
 			if tc.mutate != nil {
 				tc.mutate(t, &sig)
 			}
-			_, trusted, err := verifyTSATimestamp(t.Context(), slog.Default(), tc.resolver, &descruntime.Descriptor{}, sig)
+			_, trusted, err := verifyTSATimestamp(t.Context(), slog.Default(), tc.resolver, &descruntime.Descriptor{}, sig, false)
 			switch {
 			case tc.wantErrIs != nil:
 				r.ErrorIs(err, tc.wantErrIs)
@@ -183,7 +183,7 @@ func TestVerifyTSATimestamp_ResolvesRootsByTSAURLLabel(t *testing.T) {
 			}
 
 			var identities []runtime.Identity
-			_, trusted, err := verifyTSATimestamp(t.Context(), slog.Default(), recordingResolver{identities: &identities}, desc, sig)
+			_, trusted, err := verifyTSATimestamp(t.Context(), slog.Default(), recordingResolver{identities: &identities}, desc, sig, false)
 			r.NoError(err)
 			r.False(trusted)
 			hostnames := make([]string, 0, len(identities))

@@ -35,6 +35,8 @@ const (
 	FlagConcurrencyLimit = "concurrency-limit"
 	FlagSignature        = "signature"
 	FlagVerifierSpec     = "verifier-spec"
+
+	FlagInsecureTrustLegacyTimestamps = "insecure-trust-legacy-timestamps"
 )
 
 // signingConfigType is the configuration entry that replaced FlagVerifierSpec.
@@ -82,13 +84,14 @@ func New() *cobra.Command {
 - Without TSA root certificates the token structure and imprint are still checked, but the certificate chain is not verified and a warning is logged
 - Only a timestamp validated against trusted TSA roots is used to validate an (RSA/PEM) signing certificate as of the signing time; a merely structural token never relaxes certificate validity
 - The TSA URL label (url.tsa.ocm.software/<signature>) selects a URL-specific TSA/v1alpha1 entry; an entry without URL attributes applies to any TSA
-- Timestamps created by the OCM v1 CLI are verified as well
+- Timestamps created by the OCM v1 CLI are verified as well, but their time is not used to validate certificates unless --%[5]s is set: they cover only the descriptor digest, which is known before signing, so they do not prove the signature existed at that time
 
 Use to validate component versions before promotion, deployment, or further usage to ensure integrity and provenance.`,
 			compref.DefaultPrefix,
 			strings.Join([]string{ociv1.Type, ctfv1.Type}, "|"),
 			strings.Join([]string{ociv1.ShortType, ociv1.ShortType2, ctfv1.ShortType, ctfv1.ShortType2}, "|"),
 			signingConfigType,
+			FlagInsecureTrustLegacyTimestamps,
 		),
 		Example: strings.TrimSpace(`
 # Verify all component version signatures found in a component version
@@ -271,6 +274,7 @@ verify component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0 -
 
 	cmd.Flags().Int(FlagConcurrencyLimit, 4, "maximum amount of parallel requests to the repository for resolving component versions")
 	cmd.Flags().String(FlagSignature, "", "name of the signature to verify. If not set, all signatures are verified.")
+	cmd.Flags().Bool(FlagInsecureTrustLegacyTimestamps, false, "use the time of trusted timestamps created by the OCM v1 CLI to validate expired signing certificates; these timestamps cover only the descriptor digest, so a signature made after the certificate expired can reuse one")
 	cmd.Flags().String(FlagVerifierSpec, "", fmt.Sprintf("DEPRECATED: no longer supported, configure the verifier in the OCM configuration instead (%s, field \"verifier\")", signingConfigType))
 
 	return cmd
@@ -315,6 +319,11 @@ func VerifyComponentVersion(cmd *cobra.Command, args []string) error {
 	signatureName, err := cmd.Flags().GetString(FlagSignature)
 	if err != nil {
 		return fmt.Errorf("getting signature name flag failed: %w", err)
+	}
+
+	trustLegacyTimestamps, err := cmd.Flags().GetBool(FlagInsecureTrustLegacyTimestamps)
+	if err != nil {
+		return fmt.Errorf("getting flag %q failed: %w", FlagInsecureTrustLegacyTimestamps, err)
 	}
 
 	concurrencyLimit, err := cmd.Flags().GetInt(FlagConcurrencyLimit)
@@ -418,7 +427,7 @@ func VerifyComponentVersion(cmd *cobra.Command, args []string) error {
 			// Verify an optional RFC 3161 timestamp attached to the signature.
 			verifyCtx := egctx
 			if signature.Timestamp != nil {
-				verifiedTime, trusted, err := verifyTSATimestamp(egctx, logger, credentialGraph, desc, signature)
+				verifiedTime, trusted, err := verifyTSATimestamp(egctx, logger, credentialGraph, desc, signature, trustLegacyTimestamps)
 				if err != nil {
 					return err
 				}
@@ -471,6 +480,7 @@ func verifyTSATimestamp(
 	credentialGraph credentials.Resolver,
 	desc *descruntime.Descriptor,
 	signature descruntime.Signature,
+	trustLegacy bool,
 ) (time.Time, bool, error) {
 	var tsaURL string
 	labelName := tsa.TSAURLLabelPrefix + signature.Name
@@ -499,6 +509,13 @@ func verifyTSATimestamp(
 	verifiedTime, trusted, err := tsa.Verify(tsaDER, hash, imprint, tsaRootPool)
 	if err != nil {
 		return time.Time{}, false, fmt.Errorf("TSA timestamp verification failed: %w", err)
+	}
+
+	// A legacy token covers the descriptor digest, which exists before the
+	// signature, so its time does not prove when the signature was made.
+	if trusted && !trustLegacy && tsa.IsLegacyPEM([]byte(signature.Timestamp.Value)) {
+		logger.WarnContext(ctx, "not using the time of a legacy OCM timestamp for certificate validation; it covers only the descriptor digest", "name", signature.Name, "flag", "--"+FlagInsecureTrustLegacyTimestamps)
+		trusted = false
 	}
 
 	logger.InfoContext(ctx, "TSA timestamp verified", "name", signature.Name, "time", verifiedTime, "trusted", trusted)

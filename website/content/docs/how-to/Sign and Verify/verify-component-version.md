@@ -682,7 +682,10 @@ structural-only mode (the token is parsed and its imprint checked, but the chain
 is **not** used to relax certificate validity, a warning is logged, and the signature itself still verifies normally.
 Errors from the credential graph other than "not found" fail the verification.
 
-Timestamps created by the OCM v1 CLI are verified as well, using the same TSA root configuration. See
+Timestamps created by the OCM v1 CLI are verified as well, using the same TSA root configuration. They cover only the
+descriptor digest, which is known before signing, so a signature made after its certificate expired could reuse one.
+Their time is therefore not used to validate an expired certificate unless you pass
+`--insecure-trust-legacy-timestamps`; only do so for component versions you know were signed with OCM v1. See
 [Concept: RFC 3161 Timestamping]({{< relref "docs/concepts/signing-and-verification-concept.md#rfc-3161-timestamping" >}})
 for the trust model and the difference between these TSA *token* roots and the HTTP client's TLS trust.
 

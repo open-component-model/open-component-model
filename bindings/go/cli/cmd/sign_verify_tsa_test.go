@@ -233,6 +233,9 @@ func Test_Verify_TSA_Timestamp_Validates_Expired_Certificate(t *testing.T) {
 		// timestamp, when set, attaches a timestamp to the persisted signature.
 		timestamp    func(t *testing.T, sig *descriptor.Signature)
 		verifyConfig string
+		verifyArgs   []string
+		// wantErr, when set, is expected from verifying with verifyConfig.
+		wantErr string
 	}{
 		{
 			name:         "URL-specific TSA identity",
@@ -240,7 +243,20 @@ func Test_Verify_TSA_Timestamp_Validates_Expired_Certificate(t *testing.T) {
 			verifyConfig: writeConfig("url.yaml", rsaConsumer+tsaConsumerYAML(fmt.Sprintf("\n      hostname: %q\n      port: %q\n      scheme: http", tsaURL.Hostname(), tsaURL.Port()), tsaRoot)),
 		},
 		{name: "generic TSA identity", signArgs: []string{"--tsa-url", tsaSrv.URL}, verifyConfig: genericRoots},
-		{name: "legacy OCM timestamp over the descriptor digest", timestamp: legacyTimestamp, verifyConfig: genericRoots},
+		{
+			name:         "legacy OCM timestamp over the descriptor digest",
+			timestamp:    legacyTimestamp,
+			verifyConfig: genericRoots,
+			verifyArgs:   []string{"--insecure-trust-legacy-timestamps"},
+		},
+		{
+			// A legacy token covers only the descriptor digest, which is known
+			// before signing, so its time is not used without the opt-in.
+			name:         "legacy OCM timestamp is not trusted without opt-in",
+			timestamp:    legacyTimestamp,
+			verifyConfig: genericRoots,
+			wantErr:      "certificate has expired",
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -259,7 +275,11 @@ func Test_Verify_TSA_Timestamp_Validates_Expired_Certificate(t *testing.T) {
 			_, err = test.OCM(t, test.WithArgs("verify", "cv", ref, "--config", withoutTSA))
 			r.ErrorContains(err, "certificate has expired", "without TSA roots the expired certificate must be rejected")
 
-			_, err = test.OCM(t, test.WithArgs("verify", "cv", ref, "--config", tc.verifyConfig))
+			_, err = test.OCM(t, test.WithArgs(append([]string{"verify", "cv", ref, "--config", tc.verifyConfig}, tc.verifyArgs...)...))
+			if tc.wantErr != "" {
+				r.ErrorContains(err, tc.wantErr)
+				return
+			}
 			r.NoError(err, "a trusted timestamp must validate the certificate as of the signing time")
 		})
 	}

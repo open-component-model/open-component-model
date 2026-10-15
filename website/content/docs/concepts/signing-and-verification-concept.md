@@ -379,7 +379,9 @@ they gain no post-expiry verification from a timestamp. Sigstore signatures are 
 TSAs from its signing config; `--tsa`/`--tsa-url` are rejected for Sigstore signers.
 
 Component versions signed and timestamped with the OCM v1 CLI keep verifying: their timestamps (PEM block
-`TIMESTAMP INFO`, taken over the descriptor digest) are checked the same way. Timestamps created by this CLI use a
+`TIMESTAMP INFO`, taken over the descriptor digest) are checked the same way. Because the descriptor digest is known
+before signing, such a timestamp does not prove when the signature was made, so its time is only used to validate an
+expired certificate with `ocm verify cv --insecure-trust-legacy-timestamps`. Timestamps created by this CLI use a
 newer format that OCM v1 cannot read.
 
 Timestamping is **optional**. A timestamp can be attached to Plain and PEM signatures alike, but only PEM
