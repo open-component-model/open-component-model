@@ -19,6 +19,7 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/oci"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
+	v1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 )
 
 const (
@@ -32,7 +33,8 @@ const (
 // the configuration that produced the original 409 "redeploy disabled ... cannot
 // be updated as asset already exists". The component-descriptor and OCI artifact
 // tag subtests (UploadResource and UploadResourceStream) 409 on re-tag without
-// the fix.
+// the fix; the ownership subtest confirms referrer attach works end-to-end on
+// Nexus (which serves the Referrers API, so redeploy-disabled never bites).
 func Test_Integration_Nexus_RedeployDisabled(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping Nexus integration test in short mode")
@@ -40,7 +42,7 @@ func Test_Integration_Nexus_RedeployDisabled(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 
-	_, repo, dockerEndpoint, _ := startNexusDockerHosted(t, ctx)
+	resolver, repo, dockerEndpoint, _ := startNexusDockerHosted(t, ctx)
 
 	t.Run("component version re-add is idempotent", func(t *testing.T) {
 		r := require.New(t)
@@ -103,6 +105,28 @@ func Test_Integration_Nexus_RedeployDisabled(t *testing.T) {
 		}
 		r.NoError(upload(), "first stream upload must succeed")
 		r.NoError(upload(), "identical stream re-upload must be idempotent despite redeploy being disabled")
+	})
+
+	// End-to-end ownership against Nexus. Nexus serves the Referrers API, so
+	// referrer manifests are pushed by digest with server-side discovery and
+	// never touch the sha256-<subject> tag schema - redeploy-disabled therefore
+	// does not bite, even for a second owner on the same subject (the case that
+	// 409s on a no-Referrers-API registry, covered by
+	// Test_Integration_WriteOnceNoReferrersAPI_Ownership).
+	t.Run("ownership attach works and is idempotent", func(t *testing.T) {
+		r := require.New(t)
+		const version = "1.0.0"
+		subject := byReferenceResource("owned-image", version, pushOwnershipByReferenceImage(t, ctx, repo,
+			fmt.Sprintf("%s/nexus/owned-image:%s", dockerEndpoint, version), []byte("nexus-ownership-payload")))
+
+		r.NoError(repo.AddOwnership(ctx, "ocm.software/owner-a", version, subject, nil), "first attach must succeed")
+		r.NoError(repo.AddOwnership(ctx, "ocm.software/owner-a", version, subject, nil), "identical re-attach must be idempotent")
+		r.NoError(repo.AddOwnership(ctx, "ocm.software/owner-b", version, subject, nil), "a second owner on the same subject must succeed")
+
+		subjectRef := subject.Access.(*v1.OCIImage).ImageReference
+		assertOwnershipReferrerCount(t, ctx, resolver, subjectRef, 2)
+		assertOwnershipReferrerPresent(t, ctx, resolver, subjectRef, "ocm.software/owner-a", version, "owned-image")
+		assertOwnershipReferrerPresent(t, ctx, resolver, subjectRef, "ocm.software/owner-b", version, "owned-image")
 	})
 }
 
