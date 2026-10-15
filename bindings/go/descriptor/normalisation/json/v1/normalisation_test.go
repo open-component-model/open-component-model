@@ -2,11 +2,13 @@ package v1_test
 
 import (
 	"crypto/sha256"
+	"embed"
 	"encoding/hex"
-	"encoding/json"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"sigs.k8s.io/yaml"
 
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation"
 	v1 "ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v1"
@@ -14,13 +16,26 @@ import (
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 )
 
-// fromJSON loads an input cd.json const into the runtime descriptor, mirroring
+// testdata holds known-answer fixtures transcribed from the cc-utils anchor
+// (ocm/sign.py). Each case folder carries:
+//   - input.yaml    the cd (readable YAML; equivalent to the exact cd.json)
+//   - expected.json the cc-utils oracle normalised bytes (byte-exact)
+//   - digest.txt    the cc-utils oracle sha256 of expected.json
+//
+// Do not recompute expected values with this normaliser — that would be circular.
+//
+//go:embed testdata
+var testdata embed.FS
+
+// loadDescriptor loads a case input.yaml into the runtime descriptor, mirroring
 // the signing flow (v2.Descriptor → ConvertFromV2).
-func fromJSON(t *testing.T, in string) *descruntime.Descriptor {
+func loadDescriptor(t *testing.T, folder string) *descruntime.Descriptor {
 	t.Helper()
 	r := require.New(t)
+	in, err := testdata.ReadFile(filepath.Join("testdata", folder, "input.yaml"))
+	r.NoError(err)
 	var desc v2.Descriptor
-	r.NoError(json.Unmarshal([]byte(in), &desc))
+	r.NoError(yaml.Unmarshal(in, &desc))
 	rt, err := descruntime.ConvertFromV2(&desc)
 	r.NoError(err)
 	return rt
@@ -29,34 +44,28 @@ func fromJSON(t *testing.T, in string) *descruntime.Descriptor {
 // TestNormaliseByteExact asserts the normalised output is byte-identical to the
 // cc-utils known-answer bytes and that sha256(output) matches the oracle digest.
 func TestNormaliseByteExact(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    string
-		expected string
-		digest   string
-	}{
-		{"01-minimal-oci", input_01_minimal_oci, norm_01_minimal_oci, digest_01_minimal_oci},
-		{"02-localblob-generic", input_02_localblob_generic, norm_02_localblob_generic, digest_02_localblob_generic},
-		{"03-exclude-from-signature", input_03_exclude_from_signature, norm_03_exclude_from_signature, digest_03_exclude_from_signature},
-		{"04-labels", input_04_labels, norm_04_labels, digest_04_labels},
-		{"05-duplicate-identity", input_05_duplicate_identity, norm_05_duplicate_identity, digest_05_duplicate_identity},
-		{"06-creationtime-rounding", input_06_creationtime_rounding, norm_06_creationtime_rounding, digest_06_creationtime_rounding},
-		{"07-child", input_07_child, norm_07_child, digest_07_child},
-		{"07-root-with-reference", input_07_root_with_reference, norm_07_root_with_reference, digest_07_root_with_reference},
-		{"08-full-signed", input_08_full_signed, norm_08_full_signed, digest_08_full_signed},
-		{"09-creationtime-offset-fraction", input_09_creationtime_offset_fraction, norm_09_creationtime_offset_fraction, digest_09_creationtime_offset_fraction},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			r := require.New(t)
-			desc := fromJSON(t, tt.input)
+	cases, err := testdata.ReadDir("testdata")
+	require.NoError(t, err)
+	require.NotEmpty(t, cases)
 
+	for _, c := range cases {
+		if !c.IsDir() {
+			continue
+		}
+		t.Run(c.Name(), func(t *testing.T) {
+			r := require.New(t)
+			expected, err := testdata.ReadFile(filepath.Join("testdata", c.Name(), "expected.json"))
+			r.NoError(err)
+			digest, err := testdata.ReadFile(filepath.Join("testdata", c.Name(), "digest.txt"))
+			r.NoError(err)
+
+			desc := loadDescriptor(t, c.Name())
 			got, err := normalisation.Normalise(desc, v1.Algorithm)
 			r.NoError(err)
-			r.Equal(tt.expected, string(got), "normalised bytes diverge from cc-utils oracle")
+			r.Equal(string(expected), string(got), "normalised bytes diverge from cc-utils oracle")
 
 			sum := sha256.Sum256(got)
-			r.Equal(tt.digest, hex.EncodeToString(sum[:]), "digest diverges from cc-utils oracle")
+			r.Equal(string(digest), hex.EncodeToString(sum[:]), "digest diverges from cc-utils oracle")
 		})
 	}
 }
@@ -66,7 +75,7 @@ func TestNormaliseByteExact(t *testing.T) {
 // unknown-algorithm guard.
 func TestUnknownAlgorithmErrors(t *testing.T) {
 	r := require.New(t)
-	desc := fromJSON(t, input_01_minimal_oci)
+	desc := loadDescriptor(t, "01-minimal-oci")
 	_, err := normalisation.Normalise(desc, "jsonNormalisation/bogus")
 	r.ErrorIs(err, normalisation.ErrUnknownNormalisationAlgorithm)
 }

@@ -1,0 +1,32 @@
+---
+component:
+  componentReferences: []
+  creationTime: null
+  labels: []
+  name: acme.org/excluded
+  provider: ACME
+  repositoryContexts: []
+  resources:
+  - access:
+      bucket: b
+      key: k
+      mediaType: null
+      region: null
+      type: s3
+    digest:
+      hashAlgorithm: NO-DIGEST
+      normalisationAlgorithm: EXCLUDE-FROM-SIGNATURE
+      value: NO-DIGEST
+    extraIdentity: {}
+    labels: []
+    name: blob
+    relation: external
+    srcRefs: []
+    type: blob
+    version: 1.0.0
+  sources: []
+  version: 1.0.0
+meta:
+  schemaVersion: v2
+nestedDigests: []
+signatures: []

@@ -1,0 +1,33 @@
+---
+component:
+  componentReferences: []
+  creationTime: null
+  labels: []
+  name: acme.org/localblob
+  provider: ACME
+  repositoryContexts: []
+  resources:
+  - access:
+      globalAccess: null
+      localReference: sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+      mediaType: application/vnd.oci.image.manifest.v1+tar+gzip
+      referenceName: null
+      size: null
+      type: localBlob/v1
+    digest:
+      hashAlgorithm: SHA-256
+      normalisationAlgorithm: genericBlobDigest/v1
+      value: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+    extraIdentity: {}
+    labels: []
+    name: chart
+    relation: local
+    srcRefs: []
+    type: helmChart
+    version: 1.0.0
+  sources: []
+  version: 1.0.0
+meta:
+  schemaVersion: v2
+nestedDigests: []
+signatures: []
