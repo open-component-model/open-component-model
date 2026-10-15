@@ -201,7 +201,7 @@ func finishResourceLayer(ctx context.Context, b *ociblob.ArtifactBlob, access *v
 		// manifest root. Accept when the recorded digest matches a root the archive declares;
 		// a plain blob that merely claims an ociArtifactDigest has no index.json and stays rejected.
 		resource, ok := b.Artifact.(*descriptor.Resource)
-		if !ok || !verifyArtifactSetRoot(ctx, storage, layer, resource.Digest) {
+		if !ok || !matchesArtifactSetRoot(ctx, storage, layer, resource.Digest) {
 			return ociImageSpecV1.Descriptor{}, err
 		}
 	}
@@ -275,12 +275,12 @@ func reconcileResourceDigest(artifact descriptor.Artifact, packed digest.Digest,
 	return nil
 }
 
-// verifyArtifactSetRoot reports whether recorded matches a root declared by an OCI
+// matchesArtifactSetRoot reports whether recorded matches a root declared by an OCI
 // artifact set already pushed to storage under layer. A v1 artifact set packs through
 // the generic path, so its layer digest is the tar archive hash, not the recorded
 // manifest root; the content is re-read from storage (never the original blob) and
 // only its index.json is parsed, so this stays cheap and leaves the pushed blob untouched.
-func verifyArtifactSetRoot(ctx context.Context, storage content.Storage, layer ociImageSpecV1.Descriptor, recorded *descriptor.Digest) bool {
+func matchesArtifactSetRoot(ctx context.Context, storage content.Storage, layer ociImageSpecV1.Descriptor, recorded *descriptor.Digest) bool {
 	data, err := storage.Fetch(ctx, layer)
 	if err != nil {
 		return false
