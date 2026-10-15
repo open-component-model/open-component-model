@@ -353,7 +353,7 @@ name: default
 signature:
   algorithm: Notation/v1alpha1
   mediaType: application/jose+json
-  value: eyJhbGciOiJSUzI1NiIsImtpZCI6InNpZ25pbmctY2VydCJ9.eyJmb3JtYXQiOiJqd2U...
+  value: eyJwYXlsb2FkIjoiZXlKMFlYSm5aWFJCY25ScFptRmpkQ0k2...
 
 time=2026-06-16T19:31:54.138+02:00 level=INFO msg="dry run: signature not persisted"
 ```

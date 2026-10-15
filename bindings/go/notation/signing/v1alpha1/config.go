@@ -92,6 +92,7 @@ type VerifyConfig struct {
 	// VerificationLevel selects the Notary Project verification level: one of
 	// "strict" (the default), "permissive", or "audit". Validate rejects
 	// unknown values.
+	// +ocm:jsonschema-gen:enum=strict,permissive,audit
 	VerificationLevel string `json:"verificationLevel,omitempty"`
 }
 

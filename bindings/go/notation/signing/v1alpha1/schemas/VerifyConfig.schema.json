@@ -24,7 +24,18 @@
     },
     "verificationLevel": {
       "type": "string",
-      "description": "VerificationLevel selects the Notary Project verification level: one of\n\"strict\" (the default), \"permissive\", or \"audit\". Validate rejects\nunknown values."
+      "description": "VerificationLevel selects the Notary Project verification level: one of\n\"strict\" (the default), \"permissive\", or \"audit\". Validate rejects\nunknown values.",
+      "oneOf": [
+        {
+          "const": "strict"
+        },
+        {
+          "const": "permissive"
+        },
+        {
+          "const": "audit"
+        }
+      ]
     }
   },
   "required": [

@@ -470,13 +470,13 @@ configurations:
 
 The certificate chain is required for signing — `notation-go` embeds it into the signature envelope, so a private key alone is not enough. The certificate must carry the **Code Signing** extended key usage and the **digitalSignature** key usage; the tutorial above shows the `openssl` recipe.
 
-By default the envelope is JWS (`application/jose+json`). To emit a COSE envelope instead, add one extra line:
+By default the envelope is JWS (`application/jose+json`). To emit a COSE envelope instead, add `envelopeMediaType` to the existing signer entry above (don't add a second entry):
 
 ```yaml
 - type: signing.config.ocm.software/v1alpha1
   signer:
     type: NotationSigningConfiguration/v1alpha1
-    envelopeMediaType: application/cose                               # added
+    envelopeMediaType: application/cose                               # added to the existing signer
 ```
 
 {{< callout context="note" >}}
