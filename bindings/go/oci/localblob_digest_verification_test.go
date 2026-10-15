@@ -293,6 +293,12 @@ func TestLocalBlobDigest_DownloadResource(t *testing.T) {
 			tamper:  func(d *descriptor.Digest) { d.Value = corrupt(d.Value) },
 			wantErr: true,
 		},
+		{
+			// A normalisation this package cannot recompute from content is served
+			// unverified, not rejected, on every download branch.
+			name:   "non-recomputable normalisation is not verified",
+			tamper: func(d *descriptor.Digest) { d.NormalisationAlgorithm = "jsonNormalisation/v1" },
+		},
 	}
 
 	scenarios := []struct {
