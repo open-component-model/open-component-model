@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sync"
 
 	"github.com/opencontainers/go-digest"
 
@@ -34,6 +35,7 @@ var (
 	_ blob.MediaTypeAware        = (*verifyingBlob)(nil)
 	_ blob.MediaTypeOverrideable = (*verifyingBlob)(nil)
 	_ io.Closer                  = (*verifyingBlob)(nil)
+	_ IdempotentSource           = idempotentVerifyingBlob{}
 )
 
 // newVerifyingBlob returns base wrapped so that its content is compared to `expected`.
@@ -103,6 +105,25 @@ func (b *verifyingBlob) SetMediaType(mediaType string) {
 	}
 }
 
+// idempotentVerifyingBlob is a verifyingBlob over a base that implements
+// [IdempotentSource], and forwards it. A verifyingBlob over any other base does not
+// implement IdempotentSource, so wrapping neither hides nor invents the report.
+type idempotentVerifyingBlob struct {
+	*verifyingBlob
+}
+
+func (b idempotentVerifyingBlob) Idempotent() bool {
+	return b.base.(IdempotentSource).Idempotent()
+}
+
+// withIdempotency returns b as an [IdempotentSource] if its base is one.
+func (b *verifyingBlob) withIdempotency() blob.ReadOnlyBlob {
+	if _, ok := b.base.(IdempotentSource); ok {
+		return idempotentVerifyingBlob{b}
+	}
+	return b
+}
+
 // Close forwards to the underlying blob so that wrapping does not leak the
 // resources it owns, such as a temporary file. It is a no-op if the underlying
 // blob is not an io.Closer.
@@ -116,6 +137,7 @@ func (b *verifyingBlob) Close() error {
 // verifyingReadCloser hashes everything read through it and compares the result
 // against the expected digest.
 type verifyingReadCloser struct {
+	mu       sync.Mutex
 	base     io.ReadCloser
 	digester digest.Digester
 	expected digest.Digest
@@ -129,6 +151,8 @@ type verifyingReadCloser struct {
 // error like _ = x.Close() MUST not be left as a possible loophole for skipping
 // verification.
 func (v *verifyingReadCloser) Read(p []byte) (int, error) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
 	n, err := v.base.Read(p)
 	if n > 0 {
 		if _, writeErr := v.digester.Hash().Write(p[:n]); writeErr != nil {
@@ -151,7 +175,11 @@ func (v *verifyingReadCloser) Read(p []byte) (int, error) {
 // content having been read only in part. The reader is closed either way, so a
 // failed verification does not leak what it was reading from.
 func (v *verifyingReadCloser) Close() error {
-	return errors.Join(v.verify(), v.base.Close())
+	// Closing the source first unblocks a concurrent HTTP upload read.
+	closeErr := v.base.Close()
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	return errors.Join(v.verify(), closeErr)
 }
 
 // verify refuses content that has not been read in full before comparing digests.

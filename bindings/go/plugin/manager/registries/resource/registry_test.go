@@ -182,3 +182,61 @@ func (m *mockResourcePlugin) DownloadResource(ctx context.Context, res *descript
 func (m *mockResourcePlugin) UploadResource(ctx context.Context, res *descriptor.Resource, content blob.ReadOnlyBlob, credentials runtime.Typed) (*descriptor.Resource, error) {
 	return res, nil
 }
+
+// streamingMockResourcePlugin is a builtin resource plugin that also implements
+// repository.StreamingResourceRepository, so the registry must delegate
+// DownloadResourceStream to it rather than falling back to DownloadResource.
+type streamingMockResourcePlugin struct {
+	mockResourcePlugin
+	streamCalled *bool
+}
+
+var _ repository.StreamingResourceRepository = (*streamingMockResourcePlugin)(nil)
+
+func (m *streamingMockResourcePlugin) DownloadResourceStream(ctx context.Context, res *descriptor.Resource, credentials runtime.Typed) (blob.ReadOnlyBlob, error) {
+	*m.streamCalled = true
+	return inmemory.New(strings.NewReader("streamed-resource")), nil
+}
+
+func readStreamContent(t *testing.T, b blob.ReadOnlyBlob) string {
+	t.Helper()
+	rc, err := b.ReadCloser()
+	require.NoError(t, err)
+	defer func() { _ = rc.Close() }()
+	content, err := io.ReadAll(rc)
+	require.NoError(t, err)
+	return string(content)
+}
+
+func TestResourceRegistry_DownloadResourceStream(t *testing.T) {
+	ctx := t.Context()
+
+	res := &descriptor.Resource{
+		ElementMeta: descriptor.ElementMeta{
+			ObjectMeta: descriptor.ObjectMeta{Name: "r", Version: "1.0.0"},
+		},
+		Access: &runtime.Raw{Type: runtime.Type{Name: dummyv1.Type, Version: dummyv1.Version}},
+	}
+
+	t.Run("delegates to a streaming-capable plugin", func(t *testing.T) {
+		r := require.New(t)
+		streamCalled := false
+		registry := NewResourceRegistry(ctx)
+		r.NoError(registry.RegisterInternalResourcePlugin(&streamingMockResourcePlugin{streamCalled: &streamCalled}))
+
+		b, err := registry.DownloadResourceStream(ctx, res, nil)
+		r.NoError(err)
+		r.True(streamCalled, "expected DownloadResourceStream to be delegated to the streaming plugin")
+		r.Equal("streamed-resource", readStreamContent(t, b))
+	})
+
+	t.Run("falls back to DownloadResource for a non-streaming plugin", func(t *testing.T) {
+		r := require.New(t)
+		registry := NewResourceRegistry(ctx)
+		r.NoError(registry.RegisterInternalResourcePlugin(&mockResourcePlugin{}))
+
+		b, err := registry.DownloadResourceStream(ctx, res, nil)
+		r.NoError(err)
+		r.Equal("test-resource", readStreamContent(t, b))
+	})
+}

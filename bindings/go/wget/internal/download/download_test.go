@@ -12,6 +12,7 @@ import (
 	"encoding/pem"
 	"fmt"
 	"io"
+	"math"
 	"math/big"
 	"net/http"
 	"net/http/httptest"
@@ -384,6 +385,8 @@ func TestDownload_MaxDownloadSize(t *testing.T) {
 		wantErr bool
 	}{
 		{name: "body below the limit", maxSize: 100},
+		{name: "maximum int64 limit", maxSize: math.MaxInt64},
+		{name: "maximum int64 chunked limit", maxSize: math.MaxInt64, chunked: true},
 		{name: "body exactly at the limit", maxSize: 10},
 		{name: "body one byte over the limit", maxSize: 9, wantErr: true},
 		{name: "zero disables the limit", maxSize: 0},
@@ -395,6 +398,7 @@ func TestDownload_MaxDownloadSize(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
 			tempDir := t.TempDir()
 
 			opts := []download.Option{download.WithTempDir(tempDir)}
@@ -404,16 +408,17 @@ func TestDownload_MaxDownloadSize(t *testing.T) {
 
 			b, err := download.Download(t.Context(), download.Request{URL: serveBody(t, content, tt.chunked).URL}, opts...)
 			if tt.wantErr {
-				require.Error(t, err)
+				r.Error(err)
 				assert.Contains(t, err.Error(), "exceeds maximum allowed size")
 
 				entries, err := os.ReadDir(tempDir)
-				require.NoError(t, err)
+				r.NoError(err)
 				assert.Empty(t, entries, "a rejected download must not leave a partial file behind")
 				return
 			}
-			require.NoError(t, err)
-			assert.Equal(t, content, readBlob(t, b))
+			r.NoError(err)
+			r.Equal(content, readBlob(t, b))
+			r.NoError(b.Close())
 		})
 	}
 }
