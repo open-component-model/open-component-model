@@ -80,6 +80,10 @@ func (u *Uploader) source(ctx context.Context, spec *uploadv1alpha1.RepositoryUp
 		if err != nil {
 			return nil, "", err
 		}
+		repo, err = repository.PinRepository(repo, spec.ComponentVersion.Component, spec.ComponentVersion.Version, spec.ComponentVersion.Digest)
+		if err != nil {
+			return nil, "", err
+		}
 		b, _, err := repo.GetLocalResource(ctx, spec.ComponentVersion.Component, spec.ComponentVersion.Version, src.ToIdentity())
 		if err != nil {
 			return nil, "", fmt.Errorf("failed getting local resource %v: %w", src.ToIdentity(), err)
