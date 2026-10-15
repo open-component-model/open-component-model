@@ -19,6 +19,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	s3v2 "ocm.software/open-component-model/bindings/go/s3/spec/access/v2"
+	"ocm.software/open-component-model/bindings/go/signing"
 	uploadv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/transformation/spec/v1alpha1"
 	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
 	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
@@ -144,6 +145,16 @@ func BuildGraphDefinition(
 
 	slog.DebugContext(ctx, "component discovery completed")
 
+	// Resolve checks only the digests recorded before a child is resolved; a parent
+	// discovered afterwards records its digest too late. Checking all of them once
+	// discovery is done makes the outcome independent of discovery order.
+	g := dr.Graph()
+	if err := g.WithReadLock(func(d *dag.DirectedAcyclicGraph[string]) error {
+		return verifyReferenceDigests(ctx, d, disc.discoveredDigests)
+	}); err != nil {
+		return nil, err
+	}
+
 	tgd := &transformv1alpha1.TransformationGraphDefinition{
 		Environment: &runtime.Unstructured{
 			Data: map[string]any{},
@@ -151,7 +162,6 @@ func BuildGraphDefinition(
 	}
 
 	// Phase 2: walk the discovered DAG and generate transformation nodes per (component, target) pair.
-	g := dr.Graph()
 	err := g.WithReadLock(func(d *dag.DirectedAcyclicGraph[string]) error {
 		return fillGraphDefinitionWithPrefetchedComponents(ctx, d, targetMap, tgd, uploaders)
 	})
@@ -160,6 +170,27 @@ func BuildGraphDefinition(
 	}
 
 	return tgd, nil
+}
+
+// verifyReferenceDigests verifies every digest a parent's component reference expects for a
+// discovered component version against its resolved descriptor. digests is keyed by the
+// string form of the component version identity.
+func verifyReferenceDigests(ctx context.Context, d *dag.DirectedAcyclicGraph[string], digests map[string][]descruntime.Digest) error {
+	for _, key := range d.GetVertices() {
+		val := d.Vertices[key].Attributes[dagsync.AttributeValue].(*discoveryValue)
+		id := runtime.Identity{
+			descruntime.IdentityAttributeName:    val.Descriptor.Component.Name,
+			descruntime.IdentityAttributeVersion: val.Descriptor.Component.Version,
+		}
+		for _, expected := range digests[id.String()] {
+			if err := signing.VerifyDigestMatchesDescriptor(
+				ctx, val.Descriptor, descruntime.Signature{Digest: expected}, slog.Default(),
+			); err != nil {
+				return fmt.Errorf("component version %s does not match the digest a component reference expects: %w", key, err)
+			}
+		}
+	}
+	return nil
 }
 
 // fillGraphDefinitionWithPrefetchedComponents iterates over all discovered components in the DAG

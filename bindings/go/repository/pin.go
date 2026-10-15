@@ -25,10 +25,16 @@ type DigestPinnableRepository interface {
 	// with the OCI digest ("<algorithm>:<hex>") instead of resolving a version tag. Every read of
 	// component through the view (descriptor, local resources and sources) is served from that artifact
 	// and fails unless the artifact holds component, in version if version is not empty.
-	// Writes are not affected by the pin.
+	// Adding a version of component through the view fails if its version tag exists and resolves
+	// to another artifact, so the view does not overwrite a tag that moved away from the pin.
 	// Implementations that wrap a repository without this capability return an error matching
 	// [errors.ErrUnsupported].
 	PinComponentVersion(component, version, digest string) (ComponentVersionRepository, error)
+	// ResolveComponentVersionDigest returns the OCI digest ("<algorithm>:<hex>") of the artifact the
+	// version tag of component currently resolves to, the digest [PinComponentVersion] accepts.
+	// Implementations that wrap a repository without this capability return an error matching
+	// [errors.ErrUnsupported].
+	ResolveComponentVersionDigest(ctx context.Context, component, version string) (string, error)
 }
 
 // digestPinPattern is the OCI digest grammar "[<normalisation>+]<hash>:<hex>",
@@ -140,17 +146,76 @@ func GetPinnedComponentVersion(ctx context.Context, repo ComponentVersionReposit
 	if err != nil {
 		return nil, nil, fmt.Errorf("getting component version %s:%s pinned to %s failed: %w", component, version, FormatDigestPin(pin), err)
 	}
+	if err := verifyNormalizedPin(desc, pin, h.new()); err != nil {
+		return nil, nil, err
+	}
+	return repo, desc, nil
+}
+
+// verifyNormalizedPin verifies desc against the normalized pin, hashing with hasher.
+func verifyNormalizedPin(desc *descriptor.Descriptor, pin *descriptor.Digest, hasher hash.Hash) error {
+	component, version := desc.Component.Name, desc.Component.Version
 	normalised, err := normalisation.Normalise(desc, pin.NormalisationAlgorithm)
 	if err != nil {
-		return nil, nil, fmt.Errorf("getting component version %s:%s pinned to %s failed: %w", component, version, FormatDigestPin(pin), err)
+		return fmt.Errorf("getting component version %s:%s pinned to %s failed: %w", component, version, FormatDigestPin(pin), err)
 	}
-	hasher := h.new()
 	hasher.Write(normalised)
 	resolved := *pin
 	resolved.Value = hex.EncodeToString(hasher.Sum(nil))
 	if !strings.EqualFold(resolved.Value, pin.Value) {
-		return nil, nil, fmt.Errorf("component version %s:%s does not match pinned digest %s: resolved digest is %s",
+		return fmt.Errorf("component version %s:%s does not match pinned digest %s: resolved digest is %s",
 			component, version, FormatDigestPin(pin), FormatDigestPin(&resolved))
 	}
-	return repo, desc, nil
+	return nil
+}
+
+// GetComponentVersionByArtifact is [GetPinnedComponentVersion] that, unless pin is an OCI digest
+// pin, also binds the read to an artifact: if repo implements [DigestPinnableRepository], the
+// version tag is resolved once and the component version is read from the artifact it resolved
+// to, never through the tag again. A normalized pin is verified against the descriptor read.
+//
+// It returns the OCI digest pin of the artifact read, which names exactly the returned
+// descriptor, or nil if repo does not store component versions content-addressed (or version is
+// empty without a pin).
+func GetComponentVersionByArtifact(ctx context.Context, repo ComponentVersionRepository, component, version string, pin *descriptor.Digest) (ComponentVersionRepository, *descriptor.Descriptor, *descriptor.Digest, error) {
+	if pin != nil && pin.NormalisationAlgorithm == "" {
+		pinned, desc, err := GetPinnedComponentVersion(ctx, repo, component, version, pin)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		return pinned, desc, pin, nil
+	}
+	unbound := func() (ComponentVersionRepository, *descriptor.Descriptor, *descriptor.Digest, error) {
+		r, desc, err := GetPinnedComponentVersion(ctx, repo, component, version, pin)
+		return r, desc, nil, err
+	}
+	pinnable, ok := repo.(DigestPinnableRepository)
+	if !ok || version == "" {
+		return unbound()
+	}
+	dgst, err := pinnable.ResolveComponentVersionDigest(ctx, component, version)
+	if errors.Is(err, errors.ErrUnsupported) {
+		return unbound()
+	}
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("resolving version tag of %s:%s failed: %w", component, version, err)
+	}
+	artifact, err := ParseDigestPin(dgst)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("version tag of %s:%s resolves to an unsupported digest: %w", component, version, err)
+	}
+	pinned, desc, err := GetPinnedComponentVersion(ctx, repo, component, version, artifact)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	if pin != nil {
+		h, ok := digestPinHashes[strings.ToLower(strings.ReplaceAll(pin.HashAlgorithm, "-", ""))]
+		if !ok {
+			return nil, nil, nil, fmt.Errorf("unsupported hash algorithm %q in digest pin: use sha256 or sha512", pin.HashAlgorithm)
+		}
+		if err := verifyNormalizedPin(desc, pin, h.new()); err != nil {
+			return nil, nil, nil, err
+		}
+	}
+	return pinned, desc, artifact, nil
 }

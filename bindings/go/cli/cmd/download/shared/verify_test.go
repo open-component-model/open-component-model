@@ -22,6 +22,7 @@ import (
 // A SHA-512 genericBlobDigest/v1 is a valid, signable resource digest, so a pinned
 // download of matching content verifies, and of other content fails.
 func TestVerifyResourceContent_SHA512BlobDigest(t *testing.T) {
+	r := require.New(t)
 	data := []byte("pinned content")
 	sum := sha512.Sum512(data)
 	res := &descriptor.Resource{
@@ -48,7 +49,6 @@ func TestVerifyResourceContent_SHA512BlobDigest(t *testing.T) {
 		return got, err
 	}
 
-	r := require.New(t)
 	got, err := read(data)
 	r.NoError(err)
 	r.Equal(data, got)

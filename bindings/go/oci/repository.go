@@ -130,6 +130,10 @@ func (repo *Repository) AddComponentVersion(ctx context.Context, descriptor *des
 		return err
 	}
 
+	if err := repo.checkPinnedTag(ctx, store, reference, component, version); err != nil {
+		return err
+	}
+
 	// Scan component descriptor for local blob references
 	localBlobs := scanLocalBlobs(descriptor)
 

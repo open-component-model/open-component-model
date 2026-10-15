@@ -51,6 +51,19 @@ func (repo *Repository) PinComponentVersion(component, version, dgst string) (re
 	return &pinned, nil
 }
 
+// ResolveComponentVersionDigest implements [repository.DigestPinnableRepository].
+func (repo *Repository) ResolveComponentVersionDigest(ctx context.Context, component, version string) (string, error) {
+	reference, store, err := repo.getStore(ctx, component, version)
+	if err != nil {
+		return "", err
+	}
+	desc, err := store.Resolve(ctx, reference)
+	if err != nil {
+		return "", fmt.Errorf("resolving component version %s:%s failed: %w", component, version, err)
+	}
+	return desc.Digest.String(), nil
+}
+
 // readComponentVersion reads the descriptor of component in version together with the OCI
 // artifact it is stored as. If the repository is pinned to an artifact of component, the
 // descriptor is read from that artifact instead of resolving the version tag.
@@ -119,6 +132,30 @@ func (repo *Repository) pinNotFoundError(ctx context.Context, pin *componentVers
 		}
 	}
 	return fmt.Errorf("component %s has no artifact with pinned digest %s: %w", pin.component, pin.digest, cause)
+}
+
+// checkPinnedTag fails if the repository is pinned to an artifact of component and the version
+// tag (reference in store) resolves to another artifact: writing would overwrite a tag that moved
+// away from the pin. A tag that does not exist yet is not overwritten and passes.
+// OCI distribution has no conditional tag update, so a tag moved between this check and the
+// write is still overwritten.
+func (repo *Repository) checkPinnedTag(ctx context.Context, store spec.Store, reference, component, version string) error {
+	pin := repo.pin
+	if pin == nil || pin.component != component {
+		return nil
+	}
+	current, err := store.Resolve(ctx, reference)
+	if errors.Is(err, errdef.ErrNotFound) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("resolving version tag of %s:%s pinned to %s failed: %w", component, version, pin.digest, err)
+	}
+	if current.Digest != pin.digest {
+		return fmt.Errorf("version tag of %s:%s resolves to %s, not to the pinned %s: "+
+			"refusing to overwrite the moved tag with the pinned component version", component, version, current.Digest, pin.digest)
+	}
+	return nil
 }
 
 // withDigest returns reference with its tag or digest replaced by dgst.

@@ -211,7 +211,7 @@ descriptor. Both forms accept `sha256` and `sha512`.
 | Version in the reference | optional; if given, the artifact must hold that version | required |
 | Changes on | any change of the stored artifact, including `ocm transfer` and `ocm sign` | changes of signed content only |
 | Where it works | the repository the pin was taken from; OCI registries and CTF archives only | every repository the component version is transferred to |
-| How to obtain | any OCI tool, for example `oras resolve ghcr.io/acme/component-descriptors/acme.org/helloworld:1.0.0` or `crane digest`; in a CTF archive, the `digest` of the version tag in `artifact-index.json` | the digest `ocm sign` logs (`digest` in `signed successfully`) and records in the signature (`signatures[].digest.value` in `ocm get cv -o yaml`) |
+| How to obtain | `ocm verify cv` in an OCI registry or CTF archive (`reference` in `SIGNATURE VERIFICATION SUCCESSFUL`); any OCI tool, for example `oras resolve ghcr.io/acme/component-descriptors/acme.org/helloworld:1.0.0` or `crane digest`; in a CTF archive, the `digest` of the version tag in `artifact-index.json` | the digest `ocm sign` logs (`digest` in `signed successfully`) and records in the signature (`signatures[].digest.value` in `ocm get cv -o yaml`) |
 
 An OCI digest pins a component version the way a digest pins a container image: because the digest of the image index
 or manifest covers everything stored below it, reading by digest yields exactly the content that was pinned, even if
@@ -221,6 +221,13 @@ inspected in one repository. Use a normalized pin to identify a component versio
 it survives transfer and signing, so a pin taken once binds every later read to the same signed content. For
 repositories that do not store component versions as OCI artifacts, use the normalized form. See the
 [CLI reference]({{< relref "/docs/reference/ocm-cli/ocm_get_component-version.md" >}}) for the reference format.
+
+`ocm verify cv` closes the gap between verifying a component version and using it: in an OCI registry or CTF archive it
+resolves the version tag once, verifies the artifact the tag resolved to, and logs the reference pinned to that
+artifact's OCI digest. Passing that reference to `ocm transfer` or `ocm download` reads exactly the verified content,
+even if the tag is moved in between. `ocm sign` with an OCI digest pin writes the signature to the version tag, so it
+refuses to sign if the tag no longer resolves to the pinned artifact instead of replacing the current version with
+the pinned one.
 
 ## Supported Signing Algorithms
 

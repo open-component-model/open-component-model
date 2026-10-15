@@ -69,6 +69,7 @@ func New() *cobra.Command {
 - An entry with a "signature" field only applies to that signature, one without applies to all
 - The verifier is resolved per signature, so a component carrying several signatures can be verified with a different handler for each
 - --verifier-spec is no longer supported and fails with an error
+- In an OCI registry or CTF, the version tag is resolved once and the component version is read from the artifact it resolved to; on success the log field "reference" holds the reference pinned to that artifact's OCI digest. Passing it to a subsequent command (e.g. transfer, download resource) reads exactly the verified content, even if the tag moves in between
 
 Use to validate component versions before promotion, deployment, or further usage to ensure integrity and provenance.`,
 			compref.DefaultPrefix,
@@ -309,7 +310,9 @@ func VerifyComponentVersion(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("could not access ocm repository: %w", err)
 	}
 
-	_, desc, err := ocm.GetPinnedComponentVersion(ctx, repo, ref)
+	// Read from the artifact the version tag resolves to, so the pinned reference reported on
+	// success names exactly the verified content.
+	_, desc, pinnedRef, err := ocm.GetComponentVersionByArtifact(ctx, repo, ref)
 	if err != nil {
 		return fmt.Errorf("getting component reference and versions failed: %w", err)
 	}
@@ -393,7 +396,12 @@ func VerifyComponentVersion(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("SIGNATURE VERIFICATION FAILED: %w", err)
 	}
 
-	logger.InfoContext(ctx, "SIGNATURE VERIFICATION SUCCESSFUL")
+	if pinnedRef == nil {
+		logger.InfoContext(ctx, "SIGNATURE VERIFICATION SUCCESSFUL")
+		return nil
+	}
+	// Feeding this reference to a subsequent command reads exactly the verified artifact.
+	logger.InfoContext(ctx, "SIGNATURE VERIFICATION SUCCESSFUL", "reference", pinnedRef.String())
 	return nil
 }
 

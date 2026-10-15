@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -96,11 +97,12 @@ func Test_Pinned_Reference(t *testing.T) {
 	}
 	requireDownloaded := func(t *testing.T, ref, want string) {
 		t.Helper()
+		r := require.New(t)
 		output, err := download(t, ref)
-		require.NoError(t, err)
+		r.NoError(err)
 		got, err := os.ReadFile(output)
-		require.NoError(t, err)
-		require.Equal(t, want, string(got))
+		r.NoError(err)
+		r.Equal(want, string(got))
 	}
 	versioned := pinComponent + ":" + pinVersion + "@"
 
@@ -120,8 +122,9 @@ func Test_Pinned_Reference(t *testing.T) {
 	})
 
 	t.Run("a normalized pin needs the version", func(t *testing.T) {
+		r := require.New(t)
 		_, err := download(t, pinComponent+"@"+normalized)
-		require.ErrorContains(t, err, "has no version")
+		r.ErrorContains(err, "has no version")
 	})
 
 	t.Run("a moved tag does not affect an OCI digest pin", func(t *testing.T) {
@@ -181,7 +184,96 @@ func Test_Pinned_Reference(t *testing.T) {
 	})
 
 	t.Run("an OCI digest pin must hold the named version", func(t *testing.T) {
+		r := require.New(t)
 		_, err := download(t, pinComponent+":2.0.0@"+ociDigest)
-		require.ErrorContains(t, err, "holds component version "+pinComponent+":"+pinVersion+", not "+pinComponent+":2.0.0")
+		r.ErrorContains(err, "holds component version "+pinComponent+":"+pinVersion+", not "+pinComponent+":2.0.0")
 	})
+
+	config := pinSigningConfig(t)
+
+	t.Run("signing an OCI digest pin does not overwrite a moved tag", func(t *testing.T) {
+		r := require.New(t)
+		sign := func(ref string) error {
+			_, err := test.OCM(t,
+				test.WithArgs("sign", "component-version", archive+"//"+ref, "--signature", "pin", "--config", config),
+				test.WithOutput(new(bytes.Buffer)),
+			)
+			return err
+		}
+		current, _ := pinDigests(t, archive)
+		r.NotEqual(ociDigest, current, "the tag moved in an earlier subtest")
+
+		r.ErrorContains(sign(versioned+ociDigest), "refusing to overwrite the moved tag")
+		after, _ := pinDigests(t, archive)
+		r.Equal(current, after, "the tag still resolves to what it resolved to before")
+
+		r.NoError(sign(versioned + current))
+		_, err := test.OCM(t, test.WithArgs("verify", "component-version", archive+"//"+pinComponent+":"+pinVersion,
+			"--signature", "pin", "--config", config), test.WithOutput(new(bytes.Buffer)))
+		r.NoError(err, "the signature was written to the version the tag resolved to")
+	})
+
+	t.Run("verify reports a reference pinned to the verified artifact", func(t *testing.T) {
+		r := require.New(t)
+		logs := test.NewJSONLogReader()
+		_, err := test.OCM(t, test.WithArgs("verify", "component-version", archive+"//"+pinComponent+":"+pinVersion,
+			"--signature", "pin", "--config", config), test.WithOutput(new(bytes.Buffer)), test.WithErrorOutput(logs))
+		r.NoError(err)
+		verified, _ := pinDigests(t, archive)
+		entries, err := logs.List()
+		r.NoError(err)
+		var reference string
+		for _, entry := range entries {
+			if entry.Msg == "SIGNATURE VERIFICATION SUCCESSFUL" {
+				reference, _ = entry.Extras["reference"].(string)
+			}
+		}
+		r.True(strings.HasSuffix(reference, archive+"//"+pinComponent+":"+pinVersion+"@"+verified), "reference %q pins the verified artifact", reference)
+
+		// Tamper with the tag between verify and use: the reference still names the verified content.
+		addPinTestVersion(t, archive, "tampered", "third")
+		target := filepath.Join(t.TempDir(), "target")
+		_, err = test.OCM(t,
+			test.WithArgs("transfer", "component-version", reference, target),
+			test.WithOutput(new(bytes.Buffer)),
+		)
+		r.NoError(err)
+		_, err = test.OCM(t, test.WithArgs("verify", "component-version", target+"//"+pinComponent+":"+pinVersion,
+			"--signature", "pin", "--config", config), test.WithOutput(new(bytes.Buffer)))
+		r.NoError(err, "the transferred component version is the verified, signed one")
+		output := filepath.Join(t.TempDir(), "data")
+		_, err = test.OCM(t, test.WithArgs("download", "resource", target+"//"+pinComponent+":"+pinVersion,
+			"--identity", "name=data",
+			"--output", output,
+		))
+		r.NoError(err)
+		got, err := os.ReadFile(output)
+		r.NoError(err)
+		r.Equal("substituted", string(got))
+	})
+}
+
+// pinSigningConfig writes an OCM configuration with RSA credentials for the signature "pin".
+func pinSigningConfig(t *testing.T) string {
+	t.Helper()
+	r := require.New(t)
+	key := mustKey(t)
+	privateKey, publicKey := writeKeyAndChain(t, t.TempDir(), key, mustSelfSigned(t, "CN=signer", key))
+	config := filepath.Join(t.TempDir(), "ocm-config.yaml")
+	r.NoError(os.WriteFile(config, fmt.Appendf(nil, `
+type: generic.config.ocm.software/v1
+configurations:
+- type: credentials.config.ocm.software
+  consumers:
+  - identity:
+      type: RSA/v1alpha1
+      algorithm: RSASSA-PSS
+      signature: pin
+    credentials:
+    - type: Credentials/v1
+      properties:
+        public_key_pem_file: %s
+        private_key_pem_file: %s
+`, publicKey, privateKey), 0o600))
+	return config
 }

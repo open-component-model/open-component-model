@@ -442,15 +442,15 @@ func TestBuildGraphDefinition_PinnedRoot(t *testing.T) {
 	require.ErrorContains(t, build(ociPin), "does not store component versions content-addressed", "an OCI digest pin needs a content-addressed source")
 }
 
-// slowChildResolver opens the child's repository only after the parent's references were
-// discovered, one legal ordering of the concurrent graph discovery.
-type slowChildResolver struct {
+// slowResolver opens the repository of slowSpec only after a delay, to force one legal
+// ordering of the concurrent graph discovery.
+type slowResolver struct {
 	*mockCVRepoResolver
-	childSpec runtime.Typed
+	slowSpec runtime.Typed
 }
 
-func (r *slowChildResolver) GetComponentVersionRepositoryForSpecification(ctx context.Context, spec runtime.Typed) (repository.ComponentVersionRepository, error) {
-	if spec == r.childSpec {
+func (r *slowResolver) GetComponentVersionRepositoryForSpecification(ctx context.Context, spec runtime.Typed) (repository.ComponentVersionRepository, error) {
+	if spec == r.slowSpec {
 		time.Sleep(300 * time.Millisecond)
 	}
 	return r.mockCVRepoResolver.GetComponentVersionRepositoryForSpecification(ctx, spec)
@@ -470,7 +470,7 @@ func TestBuildGraphDefinition_PinnedRootReferencedByOtherRoot(t *testing.T) {
 	}})
 
 	childSpec := testOCIRepo("ghcr.io/source")
-	resolver := &slowChildResolver{
+	resolver := &slowResolver{
 		mockCVRepoResolver: testMultiResolver(map[string]struct {
 			spec runtime.Typed
 			desc *descriptor.Descriptor
@@ -478,7 +478,7 @@ func TestBuildGraphDefinition_PinnedRootReferencedByOtherRoot(t *testing.T) {
 			"ocm.software/parent:1.0.0": {spec: testOCIRepo("ghcr.io/source"), desc: parent},
 			"ocm.software/child:1.0.0":  {spec: childSpec, desc: child},
 		}),
-		childSpec: childSpec,
+		slowSpec: childSpec,
 	}
 	wrongPin := *childDigest
 	wrongPin.Value = strings.Repeat("0", len(childDigest.Value))
@@ -495,12 +495,15 @@ func TestBuildGraphDefinition_PinnedRootReferencedByOtherRoot(t *testing.T) {
 // Parents may reference the same child with digests that are spelled differently but are all
 // valid for it (another hash, the legacy normalisation alias). Each is verified against the
 // child; only a digest that does not match fails, and it cannot be replaced by a later parent.
+// The outcome must not depend on whether the child is resolved before or after a parent's
+// references are discovered.
 func TestBuildGraphDefinition_ReferenceDigestsOfSeveralParents(t *testing.T) {
+	r := require.New(t)
 	child := testDescriptor("ocm.software/child", "1.0.0", nil, nil)
 	sha256Digest, err := signing.GenerateDigest(t.Context(), child, slog.Default(), v4alpha1.Algorithm, crypto.SHA256.String())
-	require.NoError(t, err)
+	r.NoError(err)
 	sha512Digest, err := signing.GenerateDigest(t.Context(), child, slog.Default(), v4alpha1.Algorithm, crypto.SHA512.String())
-	require.NoError(t, err)
+	r.NoError(err)
 	legacyDigest := *sha256Digest
 	legacyDigest.NormalisationAlgorithm = signing.LegacyNormalisationAlgo
 	wrongDigest := *sha256Digest
@@ -513,42 +516,48 @@ func TestBuildGraphDefinition_ReferenceDigestsOfSeveralParents(t *testing.T) {
 	}{
 		{name: "SHA-256 and SHA-512", a: *sha256Digest, b: *sha512Digest},
 		{name: "legacy normalisation alias", a: legacyDigest, b: *sha256Digest},
-		{name: "one parent expects another child", a: *sha256Digest, b: wrongDigest, wantErr: "expected digest"},
+		{name: "one parent expects another child", a: *sha256Digest, b: wrongDigest, wantErr: "digest mismatch"},
 	}
 	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			r := require.New(t)
-			parent := func(name string, dig descriptor.Digest) *descriptor.Descriptor {
-				return testDescriptor(name, "1.0.0", nil, []descriptor.Reference{{
-					ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "child", Version: "1.0.0"}},
-					Component:   "ocm.software/child",
-					Digest:      dig,
-				}})
-			}
-			childSpec := testOCIRepo("ghcr.io/source")
-			resolver := &slowChildResolver{
-				mockCVRepoResolver: testMultiResolver(map[string]struct {
-					spec runtime.Typed
-					desc *descriptor.Descriptor
-				}{
-					"ocm.software/a:1.0.0":     {spec: testOCIRepo("ghcr.io/source"), desc: parent("ocm.software/a", tc.a)},
-					"ocm.software/b:1.0.0":     {spec: testOCIRepo("ghcr.io/source"), desc: parent("ocm.software/b", tc.b)},
-					"ocm.software/child:1.0.0": {spec: childSpec, desc: child},
-				}),
-				childSpec: childSpec,
-			}
-			target := testOCIRepo("ghcr.io/target")
-			roots := map[string]TransferRoot{
-				"ocm.software/a:1.0.0": {RootComponentKey: "ocm.software/a:1.0.0", Targets: []runtime.Typed{target}, SourceResolver: resolver},
-				"ocm.software/b:1.0.0": {RootComponentKey: "ocm.software/b:1.0.0", Targets: []runtime.Typed{target}, SourceResolver: resolver},
-			}
-			_, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{Recursive: transferv1alpha1.RecursiveInfinite}, nil)
-			if tc.wantErr != "" {
-				r.ErrorContains(err, tc.wantErr)
-				return
-			}
-			r.NoError(err)
-		})
+		for _, slow := range []string{"child", "b"} {
+			t.Run(tc.name+"/"+slow+" resolved last", func(t *testing.T) {
+				r := require.New(t)
+				parent := func(name string, dig descriptor.Digest) *descriptor.Descriptor {
+					return testDescriptor(name, "1.0.0", nil, []descriptor.Reference{{
+						ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "child", Version: "1.0.0"}},
+						Component:   "ocm.software/child",
+						Digest:      dig,
+					}})
+				}
+				specs := map[string]runtime.Typed{
+					"a":     testOCIRepo("ghcr.io/source"),
+					"b":     testOCIRepo("ghcr.io/source"),
+					"child": testOCIRepo("ghcr.io/source"),
+				}
+				resolver := &slowResolver{
+					mockCVRepoResolver: testMultiResolver(map[string]struct {
+						spec runtime.Typed
+						desc *descriptor.Descriptor
+					}{
+						"ocm.software/a:1.0.0":     {spec: specs["a"], desc: parent("ocm.software/a", tc.a)},
+						"ocm.software/b:1.0.0":     {spec: specs["b"], desc: parent("ocm.software/b", tc.b)},
+						"ocm.software/child:1.0.0": {spec: specs["child"], desc: child},
+					}),
+					slowSpec: specs[slow],
+				}
+				target := testOCIRepo("ghcr.io/target")
+				roots := map[string]TransferRoot{
+					"ocm.software/a:1.0.0": {RootComponentKey: "ocm.software/a:1.0.0", Targets: []runtime.Typed{target}, SourceResolver: resolver},
+					"ocm.software/b:1.0.0": {RootComponentKey: "ocm.software/b:1.0.0", Targets: []runtime.Typed{target}, SourceResolver: resolver},
+				}
+				_, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{Recursive: transferv1alpha1.RecursiveInfinite}, nil)
+				if tc.wantErr != "" {
+					r.ErrorContains(err, tc.wantErr)
+					return
+				}
+				r.NoError(err)
+			})
+		}
 	}
 }
 

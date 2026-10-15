@@ -87,6 +87,15 @@ func (r *resolutionProgressRepository) PinComponentVersion(component, version, d
 	return &resolutionProgressRepository{ComponentVersionRepository: pinned, events: r.events}, nil
 }
 
+// ResolveComponentVersionDigest forwards to the wrapped repository.
+func (r *resolutionProgressRepository) ResolveComponentVersionDigest(ctx context.Context, component, version string) (string, error) {
+	pinnable, ok := r.ComponentVersionRepository.(repository.DigestPinnableRepository)
+	if !ok {
+		return "", fmt.Errorf("repository %T cannot resolve component versions to a digest: %w", r.ComponentVersionRepository, errors.ErrUnsupported)
+	}
+	return pinnable.ResolveComponentVersionDigest(ctx, component, version)
+}
+
 func (r *resolutionProgressRepository) ListComponentVersions(ctx context.Context, component string) ([]string, error) {
 	r.events <- resolutionEvent{id: component, state: progress.Running}
 	versions, err := r.ComponentVersionRepository.ListComponentVersions(ctx, component)
