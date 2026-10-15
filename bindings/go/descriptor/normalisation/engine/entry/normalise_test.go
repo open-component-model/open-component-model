@@ -45,6 +45,18 @@ func TestNormalise(t *testing.T) {
 			expected: `[{"digest":[{"hashAlgorithm":"SHA-256"},{"value":"aa"}]}]`,
 		},
 		{
+			name: "array elements are left raw, not recursed",
+			input: map[string]any{
+				"value": []any{map[string]any{"b": 1.0, "a": 2.0}},
+			},
+			expected: `[{"value":[{"a":2,"b":1}]}]`,
+		},
+		{
+			name:     "non-ASCII escaped to \\uXXXX",
+			input:    map[string]any{"k": "café"},
+			expected: `[{"k":"caf\u00e9"}]`,
+		},
+		{
 			name:     "no HTML escaping",
 			input:    map[string]any{"k": "a<b>&c"},
 			expected: `[{"k":"a<b>&c"}]`,

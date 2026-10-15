@@ -3,11 +3,14 @@
 //
 // Unlike the JCS engine (RFC 8785, see package jcs), which canonicalises to a
 // JSON object, this engine recursively rewrites every JSON object into a JSON
-// array of single-key objects sorted by key. Arrays stay arrays; scalars and
-// explicit nulls are left unchanged. The result is marshalled compactly
-// (no spaces, HTML characters &<> kept literal, non-ASCII escaped to \uXXXX)
-// so that sha256 over the bytes matches the digests produced by gardener's
-// cc-utils (ocm/sign.py, which serialises with Python json.dumps).
+// array of single-key objects sorted by key. Values that are themselves
+// objects are recursed into; arrays and scalars are left untouched — mirroring
+// cc-utils' normalise_obj, which only descends into dicts. The OCM-specific
+// lists (resources, componentReferences, labels) are normalised element-wise by
+// the json/v1 algorithm before they reach this engine. The result is marshalled
+// compactly (no spaces, HTML characters &<> kept literal, non-ASCII escaped to
+// \uXXXX) so that sha256 over the bytes matches the digests produced by
+// gardener's cc-utils (ocm/sign.py, which serialises with Python json.dumps).
 //
 // The engine is deliberately OCM-agnostic: it operates on an arbitrary
 // any tree (map[string]any, []any, scalars, explicit nil). Field selection
@@ -34,8 +37,11 @@ func Normalise(v any) ([]byte, error) {
 
 // Transform recursively rewrites v into the list-of-single-key-maps form.
 // A map[string]any becomes a []any of single-key map[string]any sorted by key.
-// A []any keeps its order with each element transformed. Everything else
-// (scalars, explicit nil) is returned unchanged.
+// Values that are objects are recursed into; arrays and scalars (including
+// explicit nil) are returned unchanged. This mirrors cc-utils' normalise_obj,
+// which descends into dicts only: a []any is never rewritten here, so callers
+// must transform the OCM element lists (resources, componentReferences, labels)
+// themselves before handing the tree to this engine.
 func Transform(v any) any {
 	switch t := v.(type) {
 	case map[string]any:
@@ -43,12 +49,6 @@ func Transform(v any) any {
 		out := make([]any, 0, len(keys))
 		for _, k := range keys {
 			out = append(out, map[string]any{k: Transform(t[k])})
-		}
-		return out
-	case []any:
-		out := make([]any, len(t))
-		for i := range t {
-			out[i] = Transform(t[i])
 		}
 		return out
 	default:

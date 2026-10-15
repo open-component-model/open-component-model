@@ -48,6 +48,7 @@ func TestNormaliseByteExact(t *testing.T) {
 		{"10-unicode-label", input_10_unicode_label, norm_10_unicode_label, digest_10_unicode_label},
 		{"11-dup-delimiter", input_11_dup_delimiter, norm_11_dup_delimiter, digest_11_dup_delimiter},
 		{"12-dup-explicit-version", input_12_dup_explicit_version, norm_12_dup_explicit_version, digest_12_dup_explicit_version},
+		{"14-label-list-value", input_14_label_list_value, norm_14_label_list_value, digest_14_label_list_value},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

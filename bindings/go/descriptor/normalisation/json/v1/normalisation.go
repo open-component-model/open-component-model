@@ -116,6 +116,7 @@ func transformComponent(c map[string]any) error {
 			transformResource(res)
 		}
 	}
+	c["resources"] = transformElementList(resources)
 
 	refs, _ := c["componentReferences"].([]any)
 	for _, r := range refs {
@@ -123,7 +124,20 @@ func transformComponent(c map[string]any) error {
 			transformReference(ref)
 		}
 	}
+	c["componentReferences"] = transformElementList(refs)
 	return nil
+}
+
+// transformElementList normalises each element of an OCM list (resources,
+// componentReferences, labels) into the entry form, leaving the list itself as
+// a raw []any. This mirrors cc-utils, which normalises these lists one element
+// at a time rather than recursing into arrays generically.
+func transformElementList(list []any) []any {
+	out := make([]any, len(list))
+	for i, e := range list {
+		out[i] = entry.Transform(e)
+	}
+	return out
 }
 
 // transformResource drops the transport-only fields, forces an explicit
@@ -239,7 +253,7 @@ func normaliseElementLabels(m map[string]any) {
 		delete(m, "labels")
 		return
 	}
-	m["labels"] = kept
+	m["labels"] = transformElementList(kept)
 }
 
 // injectDuplicateIdentityVersion mirrors cc-utils' OCM-cli compat behaviour:

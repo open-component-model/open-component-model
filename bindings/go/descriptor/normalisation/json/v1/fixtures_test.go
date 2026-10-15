@@ -618,3 +618,46 @@ signatures: []
 	norm_12_dup_explicit_version   = `[{"component":[{"componentReferences":[]},{"name":"acme.org/dup-ver"},{"provider":"ACME"},{"resources":[[{"digest":[{"hashAlgorithm":"SHA-256"},{"normalisationAlgorithm":"ociArtifactDigest/v1"},{"value":"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"}]},{"extraIdentity":null},{"name":"same"},{"relation":"external"},{"type":"ociImage"},{"version":"1.0.0"}],[{"digest":[{"hashAlgorithm":"SHA-256"},{"normalisationAlgorithm":"ociArtifactDigest/v1"},{"value":"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"}]},{"extraIdentity":[{"version":"9.9.9"}]},{"name":"same"},{"relation":"external"},{"type":"ociImage"},{"version":"1.0.0"}]]},{"version":"1.0.0"}]},{"meta":[{"schemaVersion":"v2"}]}]`
 	digest_12_dup_explicit_version = `2671e827b7ffb861f3d410e0e379e3a4f2c71b434488980157b87c4d2341926a`
 )
+
+const (
+	input_14_label_list_value = `
+component:
+  componentReferences: []
+  creationTime: null
+  labels: []
+  name: acme.org/label-list
+  provider: ACME
+  repositoryContexts: []
+  resources:
+  - access:
+      imageReference: registry.example/img@sha256:cc
+      type: ociRegistry
+    digest:
+      hashAlgorithm: SHA-256
+      normalisationAlgorithm: ociArtifactDigest/v1
+      value: cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+    extraIdentity: {}
+    labels:
+    - name: entries
+      signing: true
+      value:
+      - a: x
+        b: "y"
+      - a: p
+        b: q
+      version: null
+    name: img
+    relation: external
+    srcRefs: []
+    type: ociImage
+    version: 1.0.0
+  sources: []
+  version: 1.0.0
+meta:
+  schemaVersion: v2
+nestedDigests: []
+signatures: []
+`
+	norm_14_label_list_value   = `[{"component":[{"componentReferences":[]},{"name":"acme.org/label-list"},{"provider":"ACME"},{"resources":[[{"digest":[{"hashAlgorithm":"SHA-256"},{"normalisationAlgorithm":"ociArtifactDigest/v1"},{"value":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"}]},{"extraIdentity":null},{"labels":[[{"name":"entries"},{"signing":true},{"value":[{"a":"x","b":"y"},{"a":"p","b":"q"}]}]]},{"name":"img"},{"relation":"external"},{"type":"ociImage"},{"version":"1.0.0"}]]},{"version":"1.0.0"}]},{"meta":[{"schemaVersion":"v2"}]}]`
+	digest_14_label_list_value = `11adb9f00d4ff1b88dbc8f45de40dcde09d759f603145d17e3d83c8fdb5d8470`
+)
