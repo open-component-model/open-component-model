@@ -217,6 +217,17 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_USER: ${{ github.actor }}
         run: task bindings/go:test/integration
+      - name: Require sigstore report
+        if: always()
+        working-directory: bindings/go
+        run: |
+          # A sigstore run that dies before gotestsum writes its report (setup, build,
+          # or crash) leaves no junit-sigstore.xml, which the junit publisher silently
+          # skips — the suite would read as all-green. Surface the gap.
+          test -f output/junit-sigstore.xml || {
+            echo "### Integration: sigstore suite produced no JUnit report; it likely failed before tests ran (setup, build, or crash). See the Run Tests log." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          }
       - name: Coverage summary and threshold
         if: always()
         working-directory: bindings/go
