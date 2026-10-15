@@ -594,10 +594,11 @@ func Test_Integration_HelmInput_LocalPath(t *testing.T) {
     type: helmChart
     input:
       type: helm/v1
-      path: %s
-`, componentName, componentVersion, chartPath)
+      path: mychart
+`, componentName, componentVersion)
 
 	tempDir := t.TempDir()
+	r.NoError(os.CopyFS(filepath.Join(tempDir, "mychart"), os.DirFS(chartPath)))
 	constructorPath := filepath.Join(tempDir, "constructor.yaml")
 	r.NoError(os.WriteFile(constructorPath, []byte(constructor), os.ModePerm))
 

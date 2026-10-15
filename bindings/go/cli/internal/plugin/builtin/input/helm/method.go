@@ -19,9 +19,14 @@ func Register(inputRegistry *input.RepositoryRegistry,
 	if filesystemConfig.TempFolder != nil {
 		tempFolder = *filesystemConfig.TempFolder
 	}
+	var workingDirectory string
+	if filesystemConfig.WorkingDirectory != nil {
+		workingDirectory = *filesystemConfig.WorkingDirectory
+	}
 	method := &helminput.InputMethod{
-		TempFolder: tempFolder,
-		HTTPConfig: httpConfig,
+		TempFolder:       tempFolder,
+		HTTPConfig:       httpConfig,
+		WorkingDirectory: workingDirectory,
 	}
 
 	if err := credentialTypeRegistry.RegisterInternalCredentialTypeSchemeProvider(method); err != nil {
