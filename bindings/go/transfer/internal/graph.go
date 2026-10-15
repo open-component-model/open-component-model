@@ -375,6 +375,12 @@ func processResource(resource descriptorv2.Resource, access runtime.Typed, id st
 			return nil, fmt.Errorf("cannot process OCI artifact resource: %w", err)
 		}
 		return []string{fmt.Sprintf("${%s.spec.file}", addResourceID)}, nil
+	case *ociv1.OCIImageLayer:
+		// A layer is a single blob, not an OCI artifact: it is always copied by value.
+		if err := processOCIImageLayer(resource, id, val, tgd, toSpec, resourceTransformIDs, i); err != nil {
+			return nil, fmt.Errorf("cannot process OCI image layer resource: %w", err)
+		}
+		return []string{fmt.Sprintf("${%s.spec.file}", addResourceID)}, nil
 	case *helmv1.Helm:
 		if err := processHelm(resource, id, val, tgd, toSpec, resourceTransformIDs, i, ""); err != nil {
 			return nil, fmt.Errorf("cannot process Helm Chart resource: %w", err)
@@ -509,9 +515,9 @@ func buildDescriptorSpec(v2desc *descriptorv2.Descriptor, id string, resourceTra
 
 	setOptionalField(componentMap, "creationTime", id, v2desc.Component.CreationTime != "")
 	setOptionalField(componentMap, "labels", id, len(v2desc.Component.Labels) != 0)
-	setOptionalField(componentMap, "repositoryContexts", id, len(v2desc.Component.RepositoryContexts) != 0)
-	setOptionalField(componentMap, "sources", id, len(v2desc.Component.Sources) != 0)
-	setOptionalField(componentMap, "componentReferences", id, len(v2desc.Component.References) != 0)
+	setListField(componentMap, "repositoryContexts", id, v2desc.Component.RepositoryContexts)
+	setListField(componentMap, "sources", id, v2desc.Component.Sources)
+	setListField(componentMap, "componentReferences", id, v2desc.Component.References)
 
 	descSpecMap := map[string]any{
 		"meta":      fmt.Sprintf("${environment.%s.meta}", id),
@@ -532,5 +538,18 @@ func setOptionalField(componentMap map[string]any, field, id string, present boo
 		componentMap[field] = fmt.Sprintf("${environment.%s.component.%s}", id, field)
 	} else {
 		componentMap[field] = nil
+	}
+}
+
+// setListField is setOptionalField for list fields serialized without omitempty: an empty
+// list stays [] instead of becoming null.
+func setListField[T any](componentMap map[string]any, field, id string, list []T) {
+	switch {
+	case list == nil:
+		componentMap[field] = nil
+	case len(list) == 0:
+		componentMap[field] = []any{}
+	default:
+		componentMap[field] = fmt.Sprintf("${environment.%s.component.%s}", id, field)
 	}
 }
