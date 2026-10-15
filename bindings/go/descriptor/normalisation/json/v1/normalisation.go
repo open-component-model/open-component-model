@@ -69,7 +69,58 @@ func toMap(desc *v2.Descriptor) (map[string]any, error) {
 	if err := dec.Decode(&m); err != nil {
 		return nil, err
 	}
+	// Replace the (order-lost) expanded label values with their original raw
+	// bytes so that arrays nested in a label value keep source key order, which
+	// cc-utils preserves (it never recurses into arrays).
+	preserveRawLabelValues(m, desc)
 	return m, nil
+}
+
+// preserveRawLabelValues overwrites each label's expanded "value" in the generic
+// map with the verbatim json.RawMessage from the descriptor. Label order and
+// count match between the marshalled map and the descriptor, so a positional
+// walk is exact.
+func preserveRawLabelValues(m map[string]any, desc *v2.Descriptor) {
+	comp, ok := m["component"].(map[string]any)
+	if !ok {
+		return
+	}
+	setRawLabelValues(comp["labels"], desc.Component.Labels)
+	if resources, ok := comp["resources"].([]any); ok {
+		for i, r := range resources {
+			if i >= len(desc.Component.Resources) {
+				break
+			}
+			if res, ok := r.(map[string]any); ok {
+				setRawLabelValues(res["labels"], desc.Component.Resources[i].Labels)
+			}
+		}
+	}
+	if refs, ok := comp["componentReferences"].([]any); ok {
+		for i, r := range refs {
+			if i >= len(desc.Component.References) {
+				break
+			}
+			if ref, ok := r.(map[string]any); ok {
+				setRawLabelValues(ref["labels"], desc.Component.References[i].Labels)
+			}
+		}
+	}
+}
+
+func setRawLabelValues(labelsAny any, src []v2.Label) {
+	labels, ok := labelsAny.([]any)
+	if !ok {
+		return
+	}
+	for j, l := range labels {
+		if j >= len(src) {
+			break
+		}
+		if lm, ok := l.(map[string]any); ok {
+			lm["value"] = src[j].Value
+		}
+	}
 }
 
 // transformDescriptor keeps only meta and component (dropping signatures and
@@ -105,7 +156,9 @@ func transformComponent(c map[string]any) error {
 		return err
 	}
 
-	normaliseElementLabels(c)
+	if err := normaliseElementLabels(c); err != nil {
+		return err
+	}
 
 	resources, _ := c["resources"].([]any)
 	if err := injectDuplicateIdentityVersion(resources); err != nil {
@@ -113,7 +166,9 @@ func transformComponent(c map[string]any) error {
 	}
 	for _, r := range resources {
 		if res, ok := r.(map[string]any); ok {
-			transformResource(res)
+			if err := transformResource(res); err != nil {
+				return err
+			}
 		}
 	}
 	c["resources"] = transformElementList(resources)
@@ -121,7 +176,9 @@ func transformComponent(c map[string]any) error {
 	refs, _ := c["componentReferences"].([]any)
 	for _, r := range refs {
 		if ref, ok := r.(map[string]any); ok {
-			transformReference(ref)
+			if err := transformReference(ref); err != nil {
+				return err
+			}
 		}
 	}
 	c["componentReferences"] = transformElementList(refs)
@@ -145,19 +202,19 @@ func transformElementList(list []any) []any {
 // verbatim, including the EXCLUDE-FROM-SIGNATURE sentinel. (cc-utils drops the
 // digest for a resource with no access, but ConvertFromV2 rejects an access-less
 // resource upstream, so that case never reaches normalisation here.)
-func transformResource(res map[string]any) {
+func transformResource(res map[string]any) error {
 	delete(res, "access")
 	delete(res, "srcRefs")
 	nullExtraIdentity(res)
-	normaliseElementLabels(res)
+	return normaliseElementLabels(res)
 }
 
 // transformReference forces an explicit extraIdentity null when empty and
 // applies the label rule. The digest is the persisted recursive v1 digest of
 // the child and is kept verbatim.
-func transformReference(ref map[string]any) {
+func transformReference(ref map[string]any) error {
 	nullExtraIdentity(ref)
-	normaliseElementLabels(ref)
+	return normaliseElementLabels(ref)
 }
 
 // defaultEmptyArray coerces a null or absent field to an empty array so that
@@ -223,11 +280,13 @@ func nullExtraIdentity(m map[string]any) {
 }
 
 // normaliseElementLabels applies the label rule to the element's labels field,
-// dropping the field entirely when no signing labels remain.
-func normaliseElementLabels(m map[string]any) {
+// dropping the field entirely when no signing labels remain. Each kept label's
+// value is normalised through entry.TransformRaw so that arrays keep source key
+// order.
+func normaliseElementLabels(m map[string]any) error {
 	labels, ok := m["labels"].([]any)
 	if !ok {
-		return
+		return nil
 	}
 	kept := make([]any, 0, len(labels))
 	for _, l := range labels {
@@ -239,9 +298,13 @@ func normaliseElementLabels(m map[string]any) {
 		if sig != true && sig != "true" {
 			continue
 		}
+		value, err := normaliseLabelValue(lm["value"])
+		if err != nil {
+			return err
+		}
 		label := map[string]any{
 			"name":    lm["name"],
-			"value":   lm["value"],
+			"value":   value,
 			"signing": lm["signing"],
 		}
 		if ver, ok := lm["version"].(string); ok && ver != "" {
@@ -251,9 +314,20 @@ func normaliseElementLabels(m map[string]any) {
 	}
 	if len(kept) == 0 {
 		delete(m, "labels")
-		return
+		return nil
 	}
 	m["labels"] = transformElementList(kept)
+	return nil
+}
+
+// normaliseLabelValue normalises a label value. preserveRawLabelValues leaves it
+// as a json.RawMessage so order is kept; a non-raw value (should not occur) is
+// handled via the generic engine transform.
+func normaliseLabelValue(v any) (any, error) {
+	if raw, ok := v.(json.RawMessage); ok {
+		return entry.TransformRaw(raw)
+	}
+	return entry.Transform(v), nil
 }
 
 // injectDuplicateIdentityVersion mirrors cc-utils' OCM-cli compat behaviour:
