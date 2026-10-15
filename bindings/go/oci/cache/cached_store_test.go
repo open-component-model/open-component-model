@@ -18,13 +18,13 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/internal/remotestore"
 )
 
-// newRepo mirrors ProxyRepository's single-backing-store wiring without the
+// newCachedStore mirrors Wrap's single-backing-store wiring without the
 // chunk config.
-func newRepo(inner *remote.Repository, blob *BlobCache, refs *ReferenceCache) *repository {
-	return &repository{store: &remotestore.RemoteStore{Repository: inner}, BlobCache: blob, ReferenceCache: refs}
+func newCachedStore(inner *remote.Repository, blob *BlobCache, refs *ReferenceCache) *cachedStore {
+	return &cachedStore{RemoteStore: &remotestore.RemoteStore{Repository: inner}, BlobCache: blob, ReferenceCache: refs}
 }
 
-func TestRepository_Fetch_DelegatesToBlobCache(t *testing.T) {
+func TestCachedStore_Fetch_DelegatesToBlobCache(t *testing.T) {
 	c := newTestCache(t, Options{})
 	manifest := []byte(`{"schemaVersion":2}`)
 	desc := ociImageSpecV1.Descriptor{
@@ -37,7 +37,7 @@ func TestRepository_Fetch_DelegatesToBlobCache(t *testing.T) {
 
 	// Cache hit serves the file; the backing repository is never reached,
 	// so an empty value is fine.
-	repo := newRepo(&remote.Repository{}, c, nil)
+	repo := newCachedStore(&remote.Repository{}, c, nil)
 	rc, err := repo.Fetch(t.Context(), desc)
 	require.NoError(t, err)
 	defer rc.Close()
@@ -46,7 +46,7 @@ func TestRepository_Fetch_DelegatesToBlobCache(t *testing.T) {
 	assert.Equal(t, manifest, got)
 }
 
-func TestRepository_Resolve_DelegatesToReferenceCache(t *testing.T) {
+func TestCachedStore_Resolve_DelegatesToReferenceCache(t *testing.T) {
 	rc := newTestRefCache(t, Options{})
 	desc := ociImageSpecV1.Descriptor{
 		MediaType: ociImageSpecV1.MediaTypeImageManifest,
@@ -64,13 +64,13 @@ func TestRepository_Resolve_DelegatesToReferenceCache(t *testing.T) {
 	ref := desc.Digest.String()
 	rc.Add(registry.Reference{Registry: "ghcr.io", Repository: "owner/repo", Reference: ref}, desc)
 
-	repo := newRepo(inner, nil, rc)
+	repo := newCachedStore(inner, nil, rc)
 	got, err := repo.Resolve(t.Context(), ref)
 	require.NoError(t, err)
 	assert.Equal(t, desc, got)
 }
 
-func TestRepository_Resolve_WithFullReferenceAndNormalization(t *testing.T) {
+func TestCachedStore_Resolve_WithFullReferenceAndNormalization(t *testing.T) {
 	rc := newTestRefCache(t, Options{})
 	desc := ociImageSpecV1.Descriptor{
 		MediaType: ociImageSpecV1.MediaTypeImageManifest,
@@ -80,7 +80,7 @@ func TestRepository_Resolve_WithFullReferenceAndNormalization(t *testing.T) {
 	inner := &remote.Repository{
 		Reference: registry.Reference{Registry: "ghcr.io", Repository: "owner/repo"},
 	}
-	repo := newRepo(inner, nil, rc)
+	repo := newCachedStore(inner, nil, rc)
 
 	// 1. Add as normalized digest reference to cache
 	rc.Add(registry.Reference{
@@ -95,23 +95,23 @@ func TestRepository_Resolve_WithFullReferenceAndNormalization(t *testing.T) {
 	assert.Equal(t, desc, gotFull)
 }
 
-func TestRepository_Unwrap_ReturnsEmbedded(t *testing.T) {
+func TestCachedStore_Unwrap_ReturnsEmbedded(t *testing.T) {
 	inner := &remote.Repository{}
-	repo := newRepo(inner, newTestCache(t, Options{}), nil)
+	repo := newCachedStore(inner, newTestCache(t, Options{}), nil)
 	// Unwrap must reach through the cache AND the chunked store wrapper to the
 	// raw oras repository so pack's global-store detection still fires.
 	assert.Same(t, inner, repo.Unwrap())
 }
 
-// TestRepository_SatisfiesStoreAndStreamingPusher is the regression guard for
+// TestCachedStore_SatisfiesStoreAndStreamingPusher is the regression guard for
 // this change: with a cache configured, the decorator must still satisfy the
 // chunked-upload interfaces so pushes keep chunking (and streaming) instead of
 // falling back to a monolithic PUT, while preserving the promoted type
 // assertions (TagLister / ReferrerLister / Blobs()) used across the codebase.
-func TestRepository_SatisfiesStoreAndStreamingPusher(t *testing.T) {
+func TestCachedStore_SatisfiesStoreAndStreamingPusher(t *testing.T) {
 	r := require.New(t)
-	repo := &repository{
-		store:          &remotestore.RemoteStore{Repository: &remote.Repository{}, ChunkSize: remotestore.DefaultChunkSize, ChunkThreshold: remotestore.DefaultChunkThreshold},
+	repo := &cachedStore{
+		RemoteStore:    &remotestore.RemoteStore{Repository: &remote.Repository{}, ChunkSize: remotestore.DefaultChunkSize, ChunkThreshold: remotestore.DefaultChunkThreshold},
 		BlobCache:      newTestCache(t, Options{}),
 		ReferenceCache: newTestRefCache(t, Options{}),
 	}
@@ -134,13 +134,13 @@ func TestRepository_SatisfiesStoreAndStreamingPusher(t *testing.T) {
 	r.True(ok, "cached decorator must expose Unwrap for global-store detection")
 }
 
-// TestProxyRepository_NilCachesReturnsChunkedStore: with no cache ProxyRepository
-// returns a plain chunked store (wrapping the raw repo) that still exposes
-// PushStreaming, so chunking survives even without a cache in the chain.
-func TestProxyRepository_NilCachesReturnsChunkedStore(t *testing.T) {
+// TestWrap_NilCachesReturnsChunkedStore: with no cache Wrap returns a plain
+// chunked store (wrapping the raw repo) that still exposes PushStreaming, so
+// chunking survives even without a cache in the chain.
+func TestWrap_NilCachesReturnsChunkedStore(t *testing.T) {
 	r := require.New(t)
 	inner := &remote.Repository{}
-	got := ProxyRepository(inner, nil, nil, remotestore.DefaultChunkSize, remotestore.DefaultChunkThreshold)
+	got := Wrap(&remotestore.RemoteStore{Repository: inner, ChunkSize: remotestore.DefaultChunkSize, ChunkThreshold: remotestore.DefaultChunkThreshold}, nil, nil)
 	store, ok := got.(*remotestore.RemoteStore)
 	r.True(ok, "no-cache path must return the chunked store")
 	r.Same(inner, store.Repository)
@@ -148,52 +148,52 @@ func TestProxyRepository_NilCachesReturnsChunkedStore(t *testing.T) {
 	r.True(ok, "no-cache path must be a StreamingPusher")
 }
 
-func TestProxyRepository_BlobCacheOnlyWraps(t *testing.T) {
+func TestWrap_BlobCacheOnlyWraps(t *testing.T) {
 	r := require.New(t)
 	inner := &remote.Repository{}
 	c := newTestCache(t, Options{})
-	got := ProxyRepository(inner, c, nil, 0, 0)
-	wrapped, ok := got.(*repository)
+	got := Wrap(&remotestore.RemoteStore{Repository: inner}, c, nil)
+	wrapped, ok := got.(*cachedStore)
 	r.True(ok)
 	r.Same(inner, wrapped.Repository)
 	r.Same(c, wrapped.BlobCache)
 	r.Nil(wrapped.ReferenceCache)
 }
 
-func TestProxyRepository_ReferenceCacheOnlyWraps(t *testing.T) {
+func TestWrap_ReferenceCacheOnlyWraps(t *testing.T) {
 	r := require.New(t)
 	inner := &remote.Repository{}
 	rc := newTestRefCache(t, Options{})
-	got := ProxyRepository(inner, nil, rc, 0, 0)
-	wrapped, ok := got.(*repository)
+	got := Wrap(&remotestore.RemoteStore{Repository: inner}, nil, rc)
+	wrapped, ok := got.(*cachedStore)
 	r.True(ok)
 	r.Same(inner, wrapped.Repository)
 	r.Nil(wrapped.BlobCache)
 	r.Same(rc, wrapped.ReferenceCache)
 }
 
-func TestProxyRepository_BothCachesWrap(t *testing.T) {
+func TestWrap_BothCachesWrap(t *testing.T) {
 	r := require.New(t)
 	inner := &remote.Repository{}
 	c := newTestCache(t, Options{})
 	rc := newTestRefCache(t, Options{})
-	got := ProxyRepository(inner, c, rc, 0, 0)
-	wrapped, ok := got.(*repository)
+	got := Wrap(&remotestore.RemoteStore{Repository: inner}, c, rc)
+	wrapped, ok := got.(*cachedStore)
 	r.True(ok)
 	r.Same(inner, wrapped.Repository)
 	r.Same(c, wrapped.BlobCache)
 	r.Same(rc, wrapped.ReferenceCache)
 }
 
-// TestProxyRepository_WrapsWithChunkConfig: with a cache, the decorator carries
-// the chunk config and still exposes the chunked streaming push, so chunking
-// survives the cache.
-func TestProxyRepository_WrapsWithChunkConfig(t *testing.T) {
+// TestWrap_WrapsWithChunkConfig: with a cache, the decorator carries the chunk
+// config and still exposes the chunked streaming push, so chunking survives the
+// cache.
+func TestWrap_WrapsWithChunkConfig(t *testing.T) {
 	r := require.New(t)
 	inner := &remote.Repository{}
 	c := newTestCache(t, Options{})
-	got := ProxyRepository(inner, c, nil, remotestore.DefaultChunkSize, remotestore.DefaultChunkThreshold)
-	wrapped, ok := got.(*repository)
+	got := Wrap(&remotestore.RemoteStore{Repository: inner, ChunkSize: remotestore.DefaultChunkSize, ChunkThreshold: remotestore.DefaultChunkThreshold}, c, nil)
+	wrapped, ok := got.(*cachedStore)
 	r.True(ok)
 	r.Same(inner, wrapped.Repository)
 	r.Equal(remotestore.DefaultChunkSize, wrapped.ChunkSize)
@@ -213,7 +213,7 @@ func plainHTTPRepo(t *testing.T, srv *httptest.Server) *remote.Repository {
 	return repo
 }
 
-func TestRepository_Untag_SuccessInvalidatesCache(t *testing.T) {
+func TestCachedStore_Untag_SuccessInvalidatesCache(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusAccepted)
 	}))
@@ -221,7 +221,7 @@ func TestRepository_Untag_SuccessInvalidatesCache(t *testing.T) {
 
 	inner := plainHTTPRepo(t, srv)
 	rc := newTestRefCache(t, Options{})
-	repo := newRepo(inner, nil, rc)
+	repo := newCachedStore(inner, nil, rc)
 
 	ref := registry.Reference{
 		Registry:   inner.Reference.Registry,
@@ -239,7 +239,7 @@ func TestRepository_Untag_SuccessInvalidatesCache(t *testing.T) {
 	assert.False(t, ok, "successful Untag must invalidate the cached mapping")
 }
 
-func TestRepository_Untag_FailureKeepsCache(t *testing.T) {
+func TestCachedStore_Untag_FailureKeepsCache(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}))
@@ -247,7 +247,7 @@ func TestRepository_Untag_FailureKeepsCache(t *testing.T) {
 
 	inner := plainHTTPRepo(t, srv)
 	rc := newTestRefCache(t, Options{})
-	repo := newRepo(inner, nil, rc)
+	repo := newCachedStore(inner, nil, rc)
 
 	ref := registry.Reference{
 		Registry:   inner.Reference.Registry,
@@ -263,17 +263,17 @@ func TestRepository_Untag_FailureKeepsCache(t *testing.T) {
 	assert.True(t, ok, "a failed Untag must not invalidate the cached mapping")
 }
 
-func TestRepository_Untag_NilReferenceCache(t *testing.T) {
+func TestCachedStore_Untag_NilReferenceCache(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusAccepted)
 	}))
 	t.Cleanup(srv.Close)
 
-	repo := newRepo(plainHTTPRepo(t, srv), nil, nil)
+	repo := newCachedStore(plainHTTPRepo(t, srv), nil, nil)
 	require.NoError(t, repo.Untag(t.Context(), "latest"))
 }
 
-func TestRepository_Tag_SuccessRefreshesCache(t *testing.T) {
+func TestCachedStore_Tag_SuccessRefreshesCache(t *testing.T) {
 	manifest := []byte(`{"schemaVersion":2,"mediaType":"application/vnd.oci.image.manifest.v1+json"}`)
 	desc := ociImageSpecV1.Descriptor{
 		MediaType: ociImageSpecV1.MediaTypeImageManifest,
@@ -298,7 +298,7 @@ func TestRepository_Tag_SuccessRefreshesCache(t *testing.T) {
 
 	inner := plainHTTPRepo(t, srv)
 	rc := newTestRefCache(t, Options{})
-	repo := newRepo(inner, nil, rc)
+	repo := newCachedStore(inner, nil, rc)
 
 	ref := registry.Reference{
 		Registry:   inner.Reference.Registry,
@@ -312,7 +312,7 @@ func TestRepository_Tag_SuccessRefreshesCache(t *testing.T) {
 	assert.Equal(t, desc, got)
 }
 
-func TestRepository_Tag_FailureLeavesCacheEmpty(t *testing.T) {
+func TestCachedStore_Tag_FailureLeavesCacheEmpty(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
@@ -320,7 +320,7 @@ func TestRepository_Tag_FailureLeavesCacheEmpty(t *testing.T) {
 
 	inner := plainHTTPRepo(t, srv)
 	rc := newTestRefCache(t, Options{})
-	repo := newRepo(inner, nil, rc)
+	repo := newCachedStore(inner, nil, rc)
 
 	ref := registry.Reference{
 		Registry:   inner.Reference.Registry,
