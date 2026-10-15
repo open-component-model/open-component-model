@@ -26,7 +26,6 @@
         },
         {
           "deprecated": true,
-          "x-deprecationMessage": "use Git/v1 instead",
           "const": "Git"
         }
       ]

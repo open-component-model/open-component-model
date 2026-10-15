@@ -26,7 +26,6 @@
         },
         {
           "deprecated": true,
-          "x-deprecationMessage": "use git.uploader.transfer.config.ocm.software/v1alpha1 instead",
           "const": "git.uploader.transfer.config.ocm.software"
         }
       ]

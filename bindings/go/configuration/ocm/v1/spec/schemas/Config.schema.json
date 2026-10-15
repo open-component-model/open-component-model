@@ -37,7 +37,6 @@
         },
         {
           "deprecated": true,
-          "x-deprecationMessage": "use ocm.config.ocm.software/v1 instead",
           "const": "ocm.config.ocm.software"
         }
       ]

@@ -46,22 +46,18 @@
         },
         {
           "deprecated": true,
-          "x-deprecationMessage": "use Wget/v1 instead",
           "const": "Wget"
         },
         {
           "deprecated": true,
-          "x-deprecationMessage": "use Wget/v1 instead",
           "const": "wget"
         },
         {
           "deprecated": true,
-          "x-deprecationMessage": "use Wget/v1 instead",
           "const": "HTTP"
         },
         {
           "deprecated": true,
-          "x-deprecationMessage": "use Wget/v1 instead",
           "const": "http"
         }
       ]

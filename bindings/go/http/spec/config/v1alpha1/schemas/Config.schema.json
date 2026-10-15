@@ -53,7 +53,6 @@
         },
         {
           "deprecated": true,
-          "x-deprecationMessage": "use http.config.ocm.software/v1alpha1 instead",
           "const": "http.config.ocm.software"
         }
       ]

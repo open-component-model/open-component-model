@@ -28,7 +28,6 @@
         },
         {
           "deprecated": true,
-          "x-deprecationMessage": "use resolvers.config.ocm.software/v1alpha1 instead",
           "const": "resolvers.config.ocm.software"
         }
       ]

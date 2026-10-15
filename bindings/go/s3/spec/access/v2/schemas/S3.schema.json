@@ -37,12 +37,10 @@
         },
         {
           "deprecated": true,
-          "x-deprecationMessage": "use S3/v2 instead",
           "const": "S3"
         },
         {
           "deprecated": true,
-          "x-deprecationMessage": "use S3/v2 instead",
           "const": "s3"
         }
       ]

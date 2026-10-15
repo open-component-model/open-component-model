@@ -18,7 +18,6 @@
         },
         {
           "deprecated": true,
-          "x-deprecationMessage": "use SigstoreVerifier/v1alpha1 instead",
           "const": "SigstoreVerifier"
         }
       ]

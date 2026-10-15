@@ -25,12 +25,10 @@
         },
         {
           "deprecated": true,
-          "x-deprecationMessage": "use Helm/v1 instead",
           "const": "Helm"
         },
         {
           "deprecated": true,
-          "x-deprecationMessage": "use Helm/v1 instead",
           "const": "helm"
         }
       ]

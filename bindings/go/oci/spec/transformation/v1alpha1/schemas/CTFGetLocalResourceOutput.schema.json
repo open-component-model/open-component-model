@@ -47,12 +47,10 @@
             },
             {
               "deprecated": true,
-              "x-deprecationMessage": "use File/v1alpha1 instead",
               "const": "File"
             },
             {
               "deprecated": true,
-              "x-deprecationMessage": "use File/v1alpha1 instead",
               "const": "file"
             }
           ]

@@ -18,7 +18,6 @@
         },
         {
           "deprecated": true,
-          "x-deprecationMessage": "use relativeOciReference/v1 instead",
           "const": "relativeOciReference"
         }
       ]

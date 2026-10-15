@@ -44,7 +44,6 @@
         },
         {
           "deprecated": true,
-          "x-deprecationMessage": "use http.uploader.transfer.config.ocm.software/v1alpha1 instead",
           "const": "http.uploader.transfer.config.ocm.software"
         }
       ]

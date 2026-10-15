@@ -116,25 +116,17 @@ func TestApplyEnumMarkers(t *testing.T) {
 			},
 		},
 		{
-			name:    "deprecated spellings follow the current ones and point at the first current one",
+			name:    "deprecated spellings follow the current ones and carry no message of their own",
 			markers: map[string]string{"enum": "Git/v1,Git", "enum:deprecated": "git,git/v1alpha1"},
 			want: []*JSONSchemaDraft202012{
 				{Const: "Git/v1"},
 				{Const: "Git"},
-				{Const: "git", Deprecated: Ptr(true), DeprecationMessage: "use Git/v1 instead"},
-				{Const: "git/v1alpha1", Deprecated: Ptr(true), DeprecationMessage: "use Git/v1 instead"},
+				{Const: "git", Deprecated: Ptr(true)},
+				{Const: "git/v1alpha1", Deprecated: Ptr(true)},
 			},
 		},
 		{
-			name:    "no current spelling means no message",
-			markers: map[string]string{"enum:deprecated": "GitHub/v1,github"},
-			want: []*JSONSchemaDraft202012{
-				{Const: "GitHub/v1", Deprecated: Ptr(true)},
-				{Const: "github", Deprecated: Ptr(true)},
-			},
-		},
-		{
-			name: "hint overrides the default message on every deprecated spelling",
+			name: "hint lands on every deprecated spelling",
 			markers: map[string]string{
 				"enum":                 "Git/v1",
 				"enum:deprecated":      "GitHub/v1,github",

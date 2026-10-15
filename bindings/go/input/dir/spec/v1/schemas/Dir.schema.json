@@ -55,12 +55,10 @@
         },
         {
           "deprecated": true,
-          "x-deprecationMessage": "use dir/v1 instead",
           "const": "dir"
         },
         {
           "deprecated": true,
-          "x-deprecationMessage": "use dir/v1 instead",
           "const": "Dir"
         }
       ]

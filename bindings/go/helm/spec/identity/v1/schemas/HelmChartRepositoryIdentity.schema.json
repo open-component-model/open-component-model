@@ -26,7 +26,6 @@
         },
         {
           "deprecated": true,
-          "x-deprecationMessage": "use HelmChartRepository/v1 instead",
           "const": "HelmChartRepository"
         }
       ]

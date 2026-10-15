@@ -30,7 +30,6 @@
         },
         {
           "deprecated": true,
-          "x-deprecationMessage": "use OCIRegistry/v1 instead",
           "const": "OCIRegistry"
         }
       ]

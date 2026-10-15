@@ -36,7 +36,6 @@
         },
         {
           "deprecated": true,
-          "x-deprecationMessage": "use checksum.http.config.ocm.software/v1alpha1 instead",
           "const": "checksum.http.config.ocm.software"
         }
       ]

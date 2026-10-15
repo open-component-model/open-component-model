@@ -17,7 +17,6 @@
         },
         {
           "deprecated": true,
-          "x-deprecationMessage": "use GPG/v1alpha1 instead",
           "const": "GPG"
         }
       ]

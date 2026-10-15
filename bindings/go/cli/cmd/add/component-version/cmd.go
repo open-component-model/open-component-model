@@ -316,7 +316,7 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return fmt.Errorf("getting component constructor failed: %w", err)
 	}
-	deprecatedTypes := findDeprecatedTypes(
+	deprecationWarnings := findDeprecatedTypes(
 		pluginManager.ResourcePluginRegistry.ResourceScheme(),
 		pluginManager.InputRegistry.InputRepositoryScheme(),
 		constructorSpec,
@@ -386,7 +386,7 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 	constr := constructor.NewDefaultConstructor(constructorSpec, opts)
 	err = renderComponents(cmd, constr, output, displayMode)
 	// Print the notice even when the build fails, so authors still see what to migrate.
-	renderDeprecatedTypeNotice(cmd.ErrOrStderr(), deprecatedTypes)
+	renderDeprecatedTypeNotice(cmd.ErrOrStderr(), deprecationWarnings)
 	if err != nil {
 		return fmt.Errorf("failed to render components recursively: %w", err)
 	}

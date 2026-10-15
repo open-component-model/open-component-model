@@ -31,12 +31,10 @@
         },
         {
           "deprecated": true,
-          "x-deprecationMessage": "use utf8/v1 instead",
           "const": "utf8"
         },
         {
           "deprecated": true,
-          "x-deprecationMessage": "use utf8/v1 instead",
           "const": "UTF8"
         }
       ]

@@ -21,7 +21,6 @@
         },
         {
           "deprecated": true,
-          "x-deprecationMessage": "use versioning.config.ocm.software/v1alpha1 instead",
           "const": "versioning.config.ocm.software"
         }
       ]

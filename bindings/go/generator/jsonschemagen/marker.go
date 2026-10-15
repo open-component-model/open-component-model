@@ -221,15 +221,11 @@ func ApplyEnumMarkers(s *JSONSchemaDraft202012, markers map[string]string) {
 		}
 	}
 
-	// Every deprecated value carries the enum:deprecated:hint marker when set,
-	// otherwise a pointer at the first enum value, which is the spelling the
-	// type treats as current. A type with no current spelling gets no message.
-	hint, hasHint := markers["enum:deprecated:hint"]
+	// Only an explicit enum:deprecated:hint lands in the schema. Without it a
+	// reader derives the message from the first current spelling in oneOf.
+	hint := markers["enum:deprecated:hint"]
 	if hasMain {
 		addVals(rawMain)
-	}
-	if !hasHint && len(order) > 0 {
-		hint = "use " + order[0] + " instead"
 	}
 	if hasDep {
 		addVals(rawDep)

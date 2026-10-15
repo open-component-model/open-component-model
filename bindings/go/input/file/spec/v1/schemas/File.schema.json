@@ -29,12 +29,10 @@
         },
         {
           "deprecated": true,
-          "x-deprecationMessage": "use file/v1 instead",
           "const": "file"
         },
         {
           "deprecated": true,
-          "x-deprecationMessage": "use file/v1 instead",
           "const": "File"
         }
       ]
