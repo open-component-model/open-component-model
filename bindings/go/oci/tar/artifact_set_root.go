@@ -21,9 +21,19 @@ import (
 // software.ocm.layout.root marker.
 const ocmMainArtifactAnnotation = "software.ocm/main"
 
+// ocmArtifactDescriptorFile is the descriptor name of the OCM-native artifact set
+// format, as written by the legacy OCM v1 library (its artifactset
+// ArtifactSetDescriptorFileName constant). The OCI format uses index.json instead
+// (the default); both files are OCI image indexes.
+//
+// This follows what v1 actually writes, not the spec: the OCM spec names this file
+// "artifact-set-descriptor.json", a name no implementation writes.
+const ocmArtifactDescriptorFile = "artifact-descriptor.json"
+
 // ArtifactSetRoots returns the root artifact digests an OCI layout archive declares
-// in its index.json: the OCM main-artifact annotation if present, plus every
-// top-level manifest. It reads only index.json, never the blobs, so it stays cheap
+// in its descriptor (index.json for the OCI format, artifact-descriptor.json for the
+// OCM format): the OCM main-artifact annotation if present, plus every top-level
+// manifest. It reads only the descriptor, never the blobs, so it stays cheap
 // regardless of artifact size and tolerates the non-standard blob paths legacy v1
 // artifact sets use.
 func ArtifactSetRoots(b blob.ReadOnlyBlob) ([]digest.Digest, error) {
@@ -42,17 +52,18 @@ func ArtifactSetRoots(b blob.ReadOnlyBlob) ([]digest.Digest, error) {
 	for {
 		hdr, err := tr.Next()
 		if errors.Is(err, io.EOF) {
-			return nil, fmt.Errorf("archive declares no %s", ociImageSpecV1.ImageIndexFile)
+			return nil, fmt.Errorf("archive declares no %s or %s", ociImageSpecV1.ImageIndexFile, ocmArtifactDescriptorFile)
 		}
 		if err != nil {
 			return nil, fmt.Errorf("read artifact set: %w", err)
 		}
-		if path.Clean(hdr.Name) != ociImageSpecV1.ImageIndexFile {
+		name := path.Clean(hdr.Name)
+		if name != ociImageSpecV1.ImageIndexFile && name != ocmArtifactDescriptorFile {
 			continue
 		}
 		var idx ociImageSpecV1.Index
 		if err := json.NewDecoder(tr).Decode(&idx); err != nil {
-			return nil, fmt.Errorf("decode %s: %w", ociImageSpecV1.ImageIndexFile, err)
+			return nil, fmt.Errorf("decode %s: %w", name, err)
 		}
 		return indexRoots(idx), nil
 	}
