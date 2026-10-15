@@ -63,7 +63,8 @@ If using a private registry, you'll need to configure credentials for both the O
 
 ## Environment Setup
 
-Set environment variables for your GitHub username, OCM repository, and the namespace the composite runs in:
+Set environment variables for your GitHub username, OCM repository, and the namespace the composite runs in. Use a
+lowercase GitHub username, OCI registries such as `ghcr.io` reject uppercase letters in the repository path:
 
 ```bash
 export GITHUB_USERNAME=<your-github-username>
@@ -345,7 +346,10 @@ spec:
                   fromFieldPath: Optional
                 toFieldPath: status.atProvider.imageDigest
           # 3. Flux OCIRepository, composed directly by Crossplane. The chart URL
-          #    and digest come from the composite status populated in step 1.
+          #    and digest come from the composite status populated in step 1. Those
+          #    patches use policy.fromFieldPath: Required so Crossplane withholds this
+          #    resource until the OCM Resource has resolved. Without it the OCIRepository
+          #    would be created with the placeholder url and Flux would reject it.
           - name: ocirepository
             base:
               apiVersion: source.toolkit.fluxcd.io/v1
@@ -375,9 +379,13 @@ spec:
                   strategy: string
                   string:
                     fmt: "oci://%s/%s"
+                policy:
+                  fromFieldPath: Required
                 toFieldPath: spec.url
               - type: FromCompositeFieldPath
                 fromFieldPath: status.atProvider.chartDigest
+                policy:
+                  fromFieldPath: Required
                 toFieldPath: spec.ref.digest
           # 4. Flux HelmRelease, composed directly by Crossplane. Localization
           #    happens here: the image repository and a pseudo-tag+digest are
@@ -435,11 +443,15 @@ spec:
                   strategy: string
                   string:
                     fmt: "%s/%s"
+                policy:
+                  fromFieldPath: Required
                 toFieldPath: spec.values.image.repository
               # Pseudo-tag with @digest. Podinfo's chart builds repository:tag, and OCI
               # runtimes ignore the tag when a digest is present, so this pins by digest.
               - type: FromCompositeFieldPath
                 fromFieldPath: status.atProvider.imageDigest
+                policy:
+                  fromFieldPath: Required
                 toFieldPath: spec.values.image.tag
                 transforms:
                   - type: string
@@ -682,9 +694,13 @@ spec:
                   strategy: string
                   string:
                     fmt: "oci://%s/%s"
+                policy:
+                  fromFieldPath: Required
                 toFieldPath: spec.source.repoURL
               - type: FromCompositeFieldPath
                 fromFieldPath: status.atProvider.chartTag
+                policy:
+                  fromFieldPath: Required
                 toFieldPath: spec.source.targetRevision
               # Localized image: registry/repository from the resolved image resource.
               - type: CombineFromComposite
@@ -695,11 +711,15 @@ spec:
                   strategy: string
                   string:
                     fmt: "%s/%s"
+                policy:
+                  fromFieldPath: Required
                 toFieldPath: spec.source.helm.valuesObject.image.repository
               # Pseudo-tag with @digest. Podinfo's chart builds repository:tag, and OCI
               # runtimes ignore the tag when a digest is present, so this pins by digest.
               - type: FromCompositeFieldPath
                 fromFieldPath: status.atProvider.imageDigest
+                policy:
+                  fromFieldPath: Required
                 toFieldPath: spec.source.helm.valuesObject.image.tag
                 transforms:
                   - type: string

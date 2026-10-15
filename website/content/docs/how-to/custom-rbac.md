@@ -225,7 +225,7 @@ Replace `bootstraps` with the composite kind your own XRD registers.
 After applying with `kubectl apply` below, confirm the controller has the expected access. The output should be `yes`:
 
 ```bash
-kubectl auth can-i create compositions.apiextensions.crossplane.io \
+kubectl auth can-i -A create compositions.apiextensions.crossplane.io \
   --as=system:serviceaccount:ocm-k8s-toolkit-system:ocm-k8s-toolkit-controller-manager
 ```
 

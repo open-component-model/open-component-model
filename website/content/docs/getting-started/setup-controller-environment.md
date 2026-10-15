@@ -144,8 +144,9 @@ ocm-k8s-toolkit-controller-manager-79b7975755-vxtqt   1/1     Running   0       
 ### Install an Orchestrator
 
 An orchestrator reconciles the deployment graph that an OCM component carries. Install the one the tutorial or how-to
-you're following asks for. [kro](https://kro.run) reconciles a `ResourceGraphDefinition`.
-[Crossplane](https://crossplane.io) reconciles a `CompositeResourceDefinition` (XRD) plus a `Composition`.
+you're following asks for. [kro](https://kro.run) reconciles a `ResourceGraphDefinition`, generates a CRD from it, and
+reconciles the instances of that CRD. [Crossplane](https://crossplane.io) reconciles a `CompositeResourceDefinition`
+(XRD) plus a `Composition`, and reconciles the composite resources the XRD defines.
 
 {{< tabs "orchestrator-install" >}}
 {{< tab "kro" >}}
