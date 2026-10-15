@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"io"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/opencontainers/go-digest"
@@ -166,7 +167,32 @@ func TestLocalBlobDigest_AddAcceptsSwappedNormalisationLabel(t *testing.T) {
 	}
 }
 
-// TestLocalBlobDigest_GetLocalResource covers local read-time verification. The
+// TestLocalBlobDigest_GetLocalResource_V1ArtifactSet reads the legacy v1 fixture
+// whose OCI artifact is stored as a tar.gz artifact set: its localReference is the
+// archive hash, while the recorded ociArtifactDigest is the inner manifest root. The
+// read must verify the recorded digest against the archive's declared root, not the
+// archive hash, and so must succeed.
+func TestLocalBlobDigest_GetLocalResource_V1ArtifactSet(t *testing.T) {
+	r := require.New(t)
+	ctx := t.Context()
+
+	fs, err := filesystem.NewFS(
+		filepath.Join("..", "ctf", "testdata", "compatibility", "02", "with-resource"), os.O_RDONLY)
+	r.NoError(err)
+	repo := Repository(t, ocictf.WithCTF(ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))))
+
+	cv, err := repo.GetComponentVersion(ctx, "github.com/acme.org/helloworld", "1.0.0")
+	r.NoError(err)
+	r.Len(cv.Component.Resources, 1)
+	res := cv.Component.Resources[0]
+	r.Equal("ociArtifactDigest/v1", res.Digest.NormalisationAlgorithm)
+
+	blob, _, err := repo.GetLocalResource(ctx, "github.com/acme.org/helloworld", "1.0.0", res.ToIdentity())
+	r.NoError(err, "a v1 artifact set must verify against its declared root, not the archive hash")
+	_, err = io.ReadAll(mustReader(t, blob))
+	r.NoError(err)
+}
+
 // content stays addressed by its real localReference, so only res.Digest is
 // corrupted, exactly what a tampered or forged signed descriptor would carry.
 func TestLocalBlobDigest_GetLocalResource(t *testing.T) {
