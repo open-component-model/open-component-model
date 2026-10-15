@@ -11,10 +11,11 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// Deprecation is read from each type's generated JSON schema: the
-// +ocm:jsonschema-gen:enum:deprecated marker flags a type name, and the schema
-// carries the text that says what to write instead, which the generator derives
-// from the first enum value unless an enum:deprecated:hint marker overrides it.
+// Deprecation of access and input types is read from each type's generated
+// JSON schema: the +ocm:jsonschema-gen:enum:deprecated marker flags a type
+// name, and the schema carries the text that says what to write instead, which
+// the generator derives from the first enum value unless an
+// enum:deprecated:hint marker overrides it.
 
 // typeSchema is the part of a generated schema that carries deprecation: the
 // flag on the whole type and the flag and hint on each accepted "type" value.
@@ -55,49 +56,59 @@ func isTypeDeprecated(scheme *runtime.Scheme, typ runtime.Type) (deprecated bool
 	return schema.Deprecated, ""
 }
 
-// deprecatedAccessType is one deprecated access type found in a constructor,
-// with the hint from its schema, if any.
-type deprecatedAccessType struct {
+// deprecatedType is one deprecated access or input type found in a
+// constructor, with the hint from its schema, if any. kind is "access" or
+// "input" and names the field the type was found in.
+type deprecatedType struct {
+	kind string
 	typ  string
 	hint string
 }
 
-// findDeprecatedAccessTypes lists the distinct deprecated access types in spec,
-// in first-use order. Call it before construction so the result is there even
-// when the build fails. Elements fed by an input have no access.
-func findDeprecatedAccessTypes(scheme *runtime.Scheme, spec *constructorruntime.ComponentConstructor) []deprecatedAccessType {
-	var types []deprecatedAccessType
-	seen := map[string]bool{}
-	add := func(access runtime.Typed) {
-		if access == nil || seen[access.GetType().String()] {
+// findDeprecatedTypes lists the distinct deprecated access and input types in
+// spec, in first-use order. Access types are looked up in accessScheme, input
+// types in inputScheme. Call it before construction so the result is there
+// even when the build fails.
+func findDeprecatedTypes(accessScheme, inputScheme *runtime.Scheme, spec *constructorruntime.ComponentConstructor) []deprecatedType {
+	var types []deprecatedType
+	seen := map[deprecatedType]bool{}
+	add := func(kind string, scheme *runtime.Scheme, typed runtime.Typed) {
+		if typed == nil {
 			return
 		}
-		seen[access.GetType().String()] = true
-		if deprecated, hint := isTypeDeprecated(scheme, access.GetType()); deprecated {
-			types = append(types, deprecatedAccessType{typ: access.GetType().String(), hint: hint})
+		key := deprecatedType{kind: kind, typ: typed.GetType().String()}
+		if seen[key] {
+			return
+		}
+		seen[key] = true
+		if deprecated, hint := isTypeDeprecated(scheme, typed.GetType()); deprecated {
+			key.hint = hint
+			types = append(types, key)
 		}
 	}
 	for _, component := range spec.Components {
 		for _, resource := range component.Resources {
-			add(resource.Access)
+			add("access", accessScheme, resource.Access)
+			add("input", inputScheme, resource.Input)
 		}
 		for _, source := range component.Sources {
-			add(source.Access)
+			add("access", accessScheme, source.Access)
+			add("input", inputScheme, source.Input)
 		}
 	}
 	return types
 }
 
-// renderDeprecatedAccessNotice writes one yellow line per deprecated type to w,
+// renderDeprecatedTypeNotice writes one yellow line per deprecated type to w,
 // after a blank line, and nothing when types is empty. Meant for stderr so
 // stdout stays machine-readable; the color library drops escapes when off.
-func renderDeprecatedAccessNotice(w io.Writer, types []deprecatedAccessType) {
+func renderDeprecatedTypeNotice(w io.Writer, types []deprecatedType) {
 	if len(types) == 0 {
 		return
 	}
 	_, _ = fmt.Fprintln(w)
 	for _, t := range types {
-		msg := "WARNING: access type " + t.typ + " is deprecated"
+		msg := "WARNING: " + t.kind + " type " + t.typ + " is deprecated"
 		if t.hint != "" {
 			msg += ", " + t.hint
 		}

@@ -10,6 +10,8 @@ import (
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	gitaccess "ocm.software/open-component-model/bindings/go/git/spec/access"
 	githubaccess "ocm.software/open-component-model/bindings/go/github/spec/access"
+	fileinput "ocm.software/open-component-model/bindings/go/input/file"
+	utf8input "ocm.software/open-component-model/bindings/go/input/utf8"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -84,14 +86,16 @@ func TestIsTypeDeprecated(t *testing.T) {
 	})
 }
 
-func TestFindDeprecatedAccessTypes(t *testing.T) {
+func TestFindDeprecatedTypes(t *testing.T) {
 	r := require.New(t)
 
-	scheme := runtime.NewScheme()
-	githubaccess.MustAddToScheme(scheme)
-	gitaccess.MustAddToScheme(scheme)
+	accessScheme := runtime.NewScheme()
+	githubaccess.MustAddToScheme(accessScheme)
+	gitaccess.MustAddToScheme(accessScheme)
+	inputScheme := runtime.NewScheme()
+	r.NoError(inputScheme.RegisterSchemes(fileinput.Scheme, utf8input.Scheme))
 
-	access := func(typ string) runtime.Typed {
+	typed := func(typ string) runtime.Typed {
 		t, err := runtime.TypeFromString(typ)
 		r.NoError(err)
 		return &runtime.Raw{Type: t}
@@ -102,28 +106,33 @@ func TestFindDeprecatedAccessTypes(t *testing.T) {
 	spec := &constructorruntime.ComponentConstructor{Components: []constructorruntime.Component{{
 		ComponentMeta: constructorruntime.ComponentMeta{ObjectMeta: constructorruntime.ObjectMeta{Name: "ocm.software/demo", Version: "1.0.0"}},
 		Resources: []constructorruntime.Resource{
-			{ElementMeta: element("old-resource"), AccessOrInput: constructorruntime.AccessOrInput{Access: access("github")}},
-			{ElementMeta: element("new-resource"), AccessOrInput: constructorruntime.AccessOrInput{Access: access("Git/v1")}},
-			{ElementMeta: element("from-input")},
+			{ElementMeta: element("old-resource"), AccessOrInput: constructorruntime.AccessOrInput{Access: typed("github")}},
+			{ElementMeta: element("new-resource"), AccessOrInput: constructorruntime.AccessOrInput{Access: typed("Git/v1")}},
+			{ElementMeta: element("old-input"), AccessOrInput: constructorruntime.AccessOrInput{Input: typed("file")}},
+			{ElementMeta: element("new-input"), AccessOrInput: constructorruntime.AccessOrInput{Input: typed("utf8/v1")}},
+			{ElementMeta: element("nothing")},
 		},
 		Sources: []constructorruntime.Source{
-			{ElementMeta: element("old-source"), AccessOrInput: constructorruntime.AccessOrInput{Access: access("GitHub/v1")}},
-			{ElementMeta: element("old-source-again"), AccessOrInput: constructorruntime.AccessOrInput{Access: access("github")}},
-			{ElementMeta: element("new-source"), AccessOrInput: constructorruntime.AccessOrInput{Access: access("Git")}},
+			{ElementMeta: element("old-source"), AccessOrInput: constructorruntime.AccessOrInput{Access: typed("GitHub/v1")}},
+			{ElementMeta: element("old-source-again"), AccessOrInput: constructorruntime.AccessOrInput{Access: typed("github")}},
+			{ElementMeta: element("new-source"), AccessOrInput: constructorruntime.AccessOrInput{Access: typed("Git")}},
+			{ElementMeta: element("old-source-input"), AccessOrInput: constructorruntime.AccessOrInput{Input: typed("utf8")}},
 		},
 	}}}
 
-	r.Equal([]deprecatedAccessType{
-		{typ: "github", hint: "use Git/v1 instead"},
-		{typ: "GitHub/v1", hint: "use Git/v1 instead"},
-	}, findDeprecatedAccessTypes(scheme, spec), "distinct spellings in constructor order")
+	r.Equal([]deprecatedType{
+		{kind: "access", typ: "github", hint: "use Git/v1 instead"},
+		{kind: "input", typ: "file", hint: "use file/v1 instead"},
+		{kind: "access", typ: "GitHub/v1", hint: "use Git/v1 instead"},
+		{kind: "input", typ: "utf8", hint: "use utf8/v1 instead"},
+	}, findDeprecatedTypes(accessScheme, inputScheme, spec), "distinct access and input spellings in constructor order")
 }
 
-func TestRenderDeprecatedAccessNotice(t *testing.T) {
+func TestRenderDeprecatedTypeNotice(t *testing.T) {
 	t.Run("nothing deprecated prints nothing", func(t *testing.T) {
 		r := require.New(t)
 		var buf bytes.Buffer
-		renderDeprecatedAccessNotice(&buf, nil)
+		renderDeprecatedTypeNotice(&buf, nil)
 		r.Empty(buf.String())
 	})
 
@@ -132,12 +141,14 @@ func TestRenderDeprecatedAccessNotice(t *testing.T) {
 		var buf bytes.Buffer
 		text.EnableColors()
 		t.Cleanup(text.DisableColors)
-		renderDeprecatedAccessNotice(&buf, []deprecatedAccessType{
-			{typ: "GitHub/v1", hint: "use Git/v1 instead"},
-			{typ: "git"},
+		renderDeprecatedTypeNotice(&buf, []deprecatedType{
+			{kind: "access", typ: "GitHub/v1", hint: "use Git/v1 instead"},
+			{kind: "input", typ: "file", hint: "use file/v1 instead"},
+			{kind: "access", typ: "git"},
 		})
 		r.Equal(
 			"\n"+text.FgYellow.Sprint("WARNING: access type GitHub/v1 is deprecated, use Git/v1 instead")+"\n"+
+				text.FgYellow.Sprint("WARNING: input type file is deprecated, use file/v1 instead")+"\n"+
 				text.FgYellow.Sprint("WARNING: access type git is deprecated")+"\n",
 			buf.String())
 	})
@@ -146,7 +157,7 @@ func TestRenderDeprecatedAccessNotice(t *testing.T) {
 		r := require.New(t)
 		var buf bytes.Buffer
 		text.DisableColors()
-		renderDeprecatedAccessNotice(&buf, []deprecatedAccessType{{typ: "GitHub/v1", hint: "use Git/v1 instead"}})
-		r.Equal("\nWARNING: access type GitHub/v1 is deprecated, use Git/v1 instead\n", buf.String())
+		renderDeprecatedTypeNotice(&buf, []deprecatedType{{kind: "input", typ: "utf8", hint: "use utf8/v1 instead"}})
+		r.Equal("\nWARNING: input type utf8 is deprecated, use utf8/v1 instead\n", buf.String())
 	})
 }

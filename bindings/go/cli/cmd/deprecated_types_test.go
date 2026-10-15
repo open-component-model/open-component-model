@@ -107,3 +107,63 @@ sources:
 		})
 	}
 }
+
+// Input spellings are checked on a resource fed by an input that needs no
+// network: utf8 carries its content inline and file reads a local file.
+func TestAddComponentVersionWarnsAboutDeprecatedInputTypes(t *testing.T) {
+	tests := []struct {
+		spelling string
+		fields   string
+		// want is the text after "is deprecated, "; empty means no warning.
+		want string
+	}{
+		{"utf8/v1", "text: hello", ""},
+		{"UTF8/v1", "text: hello", ""},
+		{"utf8", "text: hello", "use utf8/v1 instead"},
+		{"UTF8", "text: hello", "use utf8/v1 instead"},
+
+		{"file/v1", "path: payload.txt", ""},
+		{"file", "path: payload.txt", "use file/v1 instead"},
+		{"File", "path: payload.txt", "use file/v1 instead"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.spelling, func(t *testing.T) {
+			r := require.New(t)
+			tmp := t.TempDir()
+			r.NoError(os.WriteFile(filepath.Join(tmp, "payload.txt"), []byte("hello"), 0o600))
+
+			constructorYAML := fmt.Sprintf(`
+name: ocm.software/deprecated-input
+version: 1.0.0
+provider:
+  name: ocm.software
+resources:
+  - name: probe
+    type: blob
+    input:
+      type: %s
+      %s
+`, tc.spelling, tc.fields)
+			constructorPath := filepath.Join(tmp, "component-constructor.yaml")
+			r.NoError(os.WriteFile(constructorPath, []byte(constructorYAML), 0o600))
+
+			logs := test.NewJSONLogReader()
+			_, err := test.OCM(t, test.WithArgs("add", "cv",
+				"--constructor", constructorPath,
+				"--repository", filepath.Join(tmp, "archive"),
+			), test.WithErrorOutput(logs))
+			r.NoError(err)
+
+			// List splits stderr into JSON log entries and the leftover text.
+			_, err = logs.List()
+			r.NoError(err)
+			notice := text.StripEscape(logs.Discarded.String())
+			if tc.want != "" {
+				r.Contains(notice, "\nWARNING: input type "+tc.spelling+" is deprecated, "+tc.want+"\n")
+			} else {
+				r.NotContains(notice, "WARNING", "current spelling must not warn")
+			}
+		})
+	}
+}
