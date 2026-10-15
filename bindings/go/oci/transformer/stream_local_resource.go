@@ -152,6 +152,9 @@ func (t *StreamLocalResource) resolveTargetCredentials(ctx context.Context, repo
 	}
 	consumerID, err := t.RepoProvider.GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, repoSpec)
 	if err != nil {
+		return nil, fmt.Errorf("failed deriving target consumer identity: %w", err)
+	}
+	if consumerID == nil {
 		return nil, nil
 	}
 	creds, err := t.CredentialProvider.Resolve(ctx, consumerID)
