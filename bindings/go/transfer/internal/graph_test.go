@@ -5,8 +5,8 @@ import (
 	"crypto"
 	"log/slog"
 	"strings"
+	"sync"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -419,10 +419,11 @@ func TestBuildGraphDefinition_ResolverError(t *testing.T) {
 }
 
 func TestBuildGraphDefinition_PinnedRoot(t *testing.T) {
+	r := require.New(t)
 	desc := testDescriptor("ocm.software/test", "1.0.0", nil, nil)
 	resolver := testResolverFor("ocm.software/test", "1.0.0", testOCIRepo("ghcr.io/source"), desc)
 	actual, err := signing.GenerateDigest(t.Context(), desc, slog.Default(), v4alpha1.Algorithm, crypto.SHA256.String())
-	require.NoError(t, err)
+	r.NoError(err)
 
 	build := func(pin descriptor.Digest) error {
 		roots := testTransferRoots("ocm.software/test", "1.0.0", testOCIRepo("ghcr.io/target"), resolver)
@@ -433,27 +434,68 @@ func TestBuildGraphDefinition_PinnedRoot(t *testing.T) {
 		return err
 	}
 
-	require.NoError(t, build(*actual), "a root matching its pin transfers")
+	r.NoError(build(*actual), "a root matching its pin transfers")
 	wrong := *actual
 	wrong.Value = strings.Repeat("0", len(actual.Value))
-	require.ErrorContains(t, build(wrong), "does not match pinned digest", "a root not matching its pin fails")
+	r.ErrorContains(build(wrong), "does not match pinned digest", "a root not matching its pin fails")
 	ociPin := *actual
 	ociPin.NormalisationAlgorithm = ""
-	require.ErrorContains(t, build(ociPin), "does not store component versions content-addressed", "an OCI digest pin needs a content-addressed source")
+	r.ErrorContains(build(ociPin), "does not store component versions content-addressed", "an OCI digest pin needs a content-addressed source")
 }
 
-// slowResolver opens the repository of slowSpec only after a delay, to force one legal
-// ordering of the concurrent graph discovery.
-type slowResolver struct {
+// gatedResolver forces one legal ordering of the concurrent graph discovery: it opens the
+// repository of slowSpec only once the descriptors of all components in after have been read.
+type gatedResolver struct {
 	*mockCVRepoResolver
 	slowSpec runtime.Typed
+	read     map[string]chan struct{}
+	once     map[string]*sync.Once
 }
 
-func (r *slowResolver) GetComponentVersionRepositoryForSpecification(ctx context.Context, spec runtime.Typed) (repository.ComponentVersionRepository, error) {
-	if spec == r.slowSpec {
-		time.Sleep(300 * time.Millisecond)
+func newGatedResolver(base *mockCVRepoResolver, slowSpec runtime.Typed, after ...string) *gatedResolver {
+	r := &gatedResolver{
+		mockCVRepoResolver: base,
+		slowSpec:           slowSpec,
+		read:               make(map[string]chan struct{}, len(after)),
+		once:               make(map[string]*sync.Once, len(after)),
 	}
-	return r.mockCVRepoResolver.GetComponentVersionRepositoryForSpecification(ctx, spec)
+	for _, component := range after {
+		r.read[component] = make(chan struct{})
+		r.once[component] = &sync.Once{}
+	}
+	return r
+}
+
+func (r *gatedResolver) GetComponentVersionRepositoryForSpecification(ctx context.Context, spec runtime.Typed) (repository.ComponentVersionRepository, error) {
+	repo, err := r.mockCVRepoResolver.GetComponentVersionRepositoryForSpecification(ctx, spec)
+	if err != nil {
+		return nil, err
+	}
+	if spec == r.slowSpec {
+		for _, read := range r.read {
+			select {
+			case <-read:
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+		}
+		return repo, nil
+	}
+	return &signallingRepo{ComponentVersionRepository: repo, resolver: r}, nil
+}
+
+// signallingRepo reports to its gatedResolver which descriptors have been read.
+type signallingRepo struct {
+	repository.ComponentVersionRepository
+	resolver *gatedResolver
+}
+
+func (s *signallingRepo) GetComponentVersion(ctx context.Context, component, version string) (*descriptor.Descriptor, error) {
+	desc, err := s.ComponentVersionRepository.GetComponentVersion(ctx, component, version)
+	if once, ok := s.resolver.once[component]; ok {
+		once.Do(func() { close(s.resolver.read[component]) })
+	}
+	return desc, err
 }
 
 // A pinned root is verified against its pin even when another root references it with a
@@ -470,16 +512,13 @@ func TestBuildGraphDefinition_PinnedRootReferencedByOtherRoot(t *testing.T) {
 	}})
 
 	childSpec := testOCIRepo("ghcr.io/source")
-	resolver := &slowResolver{
-		mockCVRepoResolver: testMultiResolver(map[string]struct {
-			spec runtime.Typed
-			desc *descriptor.Descriptor
-		}{
-			"ocm.software/parent:1.0.0": {spec: testOCIRepo("ghcr.io/source"), desc: parent},
-			"ocm.software/child:1.0.0":  {spec: childSpec, desc: child},
-		}),
-		slowSpec: childSpec,
-	}
+	resolver := newGatedResolver(testMultiResolver(map[string]struct {
+		spec runtime.Typed
+		desc *descriptor.Descriptor
+	}{
+		"ocm.software/parent:1.0.0": {spec: testOCIRepo("ghcr.io/source"), desc: parent},
+		"ocm.software/child:1.0.0":  {spec: childSpec, desc: child},
+	}), childSpec, "ocm.software/parent")
 	wrongPin := *childDigest
 	wrongPin.Value = strings.Repeat("0", len(childDigest.Value))
 
@@ -519,7 +558,11 @@ func TestBuildGraphDefinition_ReferenceDigestsOfSeveralParents(t *testing.T) {
 		{name: "one parent expects another child", a: *sha256Digest, b: wrongDigest, wantErr: "digest mismatch"},
 	}
 	for _, tc := range tests {
-		for _, slow := range []string{"child", "b"} {
+		// Open the child only after both parents were read, or parent b only after the child was read.
+		for slow, after := range map[string][]string{
+			"child": {"ocm.software/a", "ocm.software/b"},
+			"b":     {"ocm.software/a", "ocm.software/child"},
+		} {
 			t.Run(tc.name+"/"+slow+" resolved last", func(t *testing.T) {
 				r := require.New(t)
 				parent := func(name string, dig descriptor.Digest) *descriptor.Descriptor {
@@ -534,17 +577,14 @@ func TestBuildGraphDefinition_ReferenceDigestsOfSeveralParents(t *testing.T) {
 					"b":     testOCIRepo("ghcr.io/source"),
 					"child": testOCIRepo("ghcr.io/source"),
 				}
-				resolver := &slowResolver{
-					mockCVRepoResolver: testMultiResolver(map[string]struct {
-						spec runtime.Typed
-						desc *descriptor.Descriptor
-					}{
-						"ocm.software/a:1.0.0":     {spec: specs["a"], desc: parent("ocm.software/a", tc.a)},
-						"ocm.software/b:1.0.0":     {spec: specs["b"], desc: parent("ocm.software/b", tc.b)},
-						"ocm.software/child:1.0.0": {spec: specs["child"], desc: child},
-					}),
-					slowSpec: specs[slow],
-				}
+				resolver := newGatedResolver(testMultiResolver(map[string]struct {
+					spec runtime.Typed
+					desc *descriptor.Descriptor
+				}{
+					"ocm.software/a:1.0.0":     {spec: specs["a"], desc: parent("ocm.software/a", tc.a)},
+					"ocm.software/b:1.0.0":     {spec: specs["b"], desc: parent("ocm.software/b", tc.b)},
+					"ocm.software/child:1.0.0": {spec: specs["child"], desc: child},
+				}), specs[slow], after...)
 				target := testOCIRepo("ghcr.io/target")
 				roots := map[string]TransferRoot{
 					"ocm.software/a:1.0.0": {RootComponentKey: "ocm.software/a:1.0.0", Targets: []runtime.Typed{target}, SourceResolver: resolver},

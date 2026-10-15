@@ -81,39 +81,73 @@ func pinDigests(t *testing.T, archive string) (ociDigest, normalized string) {
 	return root.Digest.String(), "jsonNormalisation.v4alpha1+sha256:" + hex.EncodeToString(sum[:])
 }
 
-func Test_Pinned_Reference(t *testing.T) {
-	archive := filepath.Join(t.TempDir(), "archive")
+// newPinArchive creates a fresh CTF archive with pinComponent:pinVersion holding text "original"
+// and returns the archive path plus both digest pins.
+func newPinArchive(t *testing.T) (archive, ociDigest, normalized string) {
+	t.Helper()
+	archive = filepath.Join(t.TempDir(), "archive")
 	addPinTestVersion(t, archive, "original", "first")
-	ociDigest, normalized := pinDigests(t, archive)
+	ociDigest, normalized = pinDigests(t, archive)
+	return archive, ociDigest, normalized
+}
 
-	download := func(t *testing.T, ref string) (string, error) {
-		t.Helper()
-		output := filepath.Join(t.TempDir(), "data")
-		_, err := test.OCM(t, test.WithArgs("download", "resource", archive+"//"+ref,
-			"--identity", "name=data",
-			"--output", output,
-		))
-		return output, err
-	}
-	requireDownloaded := func(t *testing.T, ref, want string) {
-		t.Helper()
-		r := require.New(t)
-		output, err := download(t, ref)
-		r.NoError(err)
-		got, err := os.ReadFile(output)
-		r.NoError(err)
-		r.Equal(want, string(got))
-	}
+// downloadPinResource downloads the "data" resource from archive//ref.
+func downloadPinResource(t *testing.T, archive, ref string) (string, error) {
+	t.Helper()
+	output := filepath.Join(t.TempDir(), "data")
+	_, err := test.OCM(t, test.WithArgs("download", "resource", archive+"//"+ref,
+		"--identity", "name=data",
+		"--output", output,
+	))
+	return output, err
+}
+
+// requirePinDownloaded asserts downloading ref from archive yields want.
+func requirePinDownloaded(t *testing.T, archive, ref, want string) {
+	t.Helper()
+	r := require.New(t)
+	output, err := downloadPinResource(t, archive, ref)
+	r.NoError(err)
+	got, err := os.ReadFile(output)
+	r.NoError(err)
+	r.Equal(want, string(got))
+}
+
+// movePinTag adds a second version to archive, moving the tag away from the original.
+// It returns the new OCI and normalized digests the tag now points to.
+func movePinTag(t *testing.T, archive string) (moved, movedNormalized string) {
+	t.Helper()
+	addPinTestVersion(t, archive, "substituted", "second")
+	return pinDigests(t, archive)
+}
+
+// signPinVersion signs the version the tag currently points to in archive with the given config.
+func signPinVersion(t *testing.T, archive, config string) {
+	t.Helper()
+	r := require.New(t)
+	current, _ := pinDigests(t, archive)
+	versioned := pinComponent + ":" + pinVersion + "@"
+	_, err := test.OCM(t,
+		test.WithArgs("sign", "component-version", archive+"//"+versioned+current,
+			"--signature", "pin", "--config", config),
+		test.WithOutput(new(bytes.Buffer)),
+	)
+	r.NoError(err)
+}
+
+func Test_Pinned_Reference(t *testing.T) {
 	versioned := pinComponent + ":" + pinVersion + "@"
 
 	t.Run("OCI digest and normalized pins match", func(t *testing.T) {
-		requireDownloaded(t, versioned+ociDigest, "original")
-		requireDownloaded(t, versioned+normalized, "original")
+		archive, ociDigest, normalized := newPinArchive(t)
+		requirePinDownloaded(t, archive, versioned+ociDigest, "original")
+		requirePinDownloaded(t, archive, versioned+normalized, "original")
 	})
 
 	t.Run("an OCI digest pin needs no version", func(t *testing.T) {
 		r := require.New(t)
-		requireDownloaded(t, pinComponent+"@"+ociDigest, "original")
+		archive, ociDigest, _ := newPinArchive(t)
+		requirePinDownloaded(t, archive, pinComponent+"@"+ociDigest, "original")
 
 		out := new(bytes.Buffer)
 		_, err := test.OCM(t, test.WithArgs("get", "cv", archive+"//"+pinComponent+"@"+ociDigest, "-o", "yaml"), test.WithOutput(out))
@@ -123,29 +157,33 @@ func Test_Pinned_Reference(t *testing.T) {
 
 	t.Run("a normalized pin needs the version", func(t *testing.T) {
 		r := require.New(t)
-		_, err := download(t, pinComponent+"@"+normalized)
+		archive, _, normalized := newPinArchive(t)
+		_, err := downloadPinResource(t, archive, pinComponent+"@"+normalized)
 		r.ErrorContains(err, "has no version")
 	})
 
 	t.Run("a moved tag does not affect an OCI digest pin", func(t *testing.T) {
 		r := require.New(t)
-		addPinTestVersion(t, archive, "substituted", "second")
-		moved, movedNormalized := pinDigests(t, archive)
+		archive, ociDigest, normalized := newPinArchive(t)
+		moved, movedNormalized := movePinTag(t, archive)
 		r.NotEqual(ociDigest, moved)
 		r.NotEqual(normalized, movedNormalized)
 
 		// The pinned artifact is still stored, so the pin keeps serving its content
 		// (descriptor and local blob) instead of what the tag points to now.
-		requireDownloaded(t, versioned+ociDigest, "original")
-		requireDownloaded(t, pinComponent+":"+pinVersion, "substituted")
+		requirePinDownloaded(t, archive, versioned+ociDigest, "original")
+		requirePinDownloaded(t, archive, pinComponent+":"+pinVersion, "substituted")
 
-		output, err := download(t, versioned+normalized)
+		output, err := downloadPinResource(t, archive, versioned+normalized)
 		r.ErrorContains(err, "does not match pinned digest "+normalized+": resolved digest is "+movedNormalized)
 		r.NoFileExists(output)
 	})
 
 	t.Run("a transfer pinned to an OCI digest copies the pinned artifact", func(t *testing.T) {
 		r := require.New(t)
+		archive, ociDigest, _ := newPinArchive(t)
+		movePinTag(t, archive)
+
 		target := filepath.Join(t.TempDir(), "target")
 		_, err := test.OCM(t,
 			test.WithArgs("transfer", "component-version", archive+"//"+pinComponent+"@"+ociDigest, target),
@@ -172,27 +210,30 @@ func Test_Pinned_Reference(t *testing.T) {
 
 	t.Run("an unknown OCI digest reports what the tag resolves to", func(t *testing.T) {
 		r := require.New(t)
-		moved, _ := pinDigests(t, archive)
+		archive, current, _ := newPinArchive(t)
 		unknown := "sha256:" + hex.EncodeToString(make([]byte, sha256.Size))
 
-		output, err := download(t, versioned+unknown)
-		r.ErrorContains(err, "does not match pinned digest "+unknown+": resolved digest is "+moved)
+		output, err := downloadPinResource(t, archive, versioned+unknown)
+		r.ErrorContains(err, "does not match pinned digest "+unknown+": resolved digest is "+current)
 		r.NoFileExists(output)
 
-		_, err = download(t, pinComponent+"@"+unknown)
+		_, err = downloadPinResource(t, archive, pinComponent+"@"+unknown)
 		r.ErrorContains(err, "has no artifact with pinned digest "+unknown)
 	})
 
 	t.Run("an OCI digest pin must hold the named version", func(t *testing.T) {
 		r := require.New(t)
-		_, err := download(t, pinComponent+":2.0.0@"+ociDigest)
+		archive, ociDigest, _ := newPinArchive(t)
+		_, err := downloadPinResource(t, archive, pinComponent+":2.0.0@"+ociDigest)
 		r.ErrorContains(err, "holds component version "+pinComponent+":"+pinVersion+", not "+pinComponent+":2.0.0")
 	})
 
-	config := pinSigningConfig(t)
-
 	t.Run("signing an OCI digest pin does not overwrite a moved tag", func(t *testing.T) {
 		r := require.New(t)
+		archive, ociDigest, _ := newPinArchive(t)
+		movePinTag(t, archive)
+		config := pinSigningConfig(t)
+
 		sign := func(ref string) error {
 			_, err := test.OCM(t,
 				test.WithArgs("sign", "component-version", archive+"//"+ref, "--signature", "pin", "--config", config),
@@ -201,7 +242,7 @@ func Test_Pinned_Reference(t *testing.T) {
 			return err
 		}
 		current, _ := pinDigests(t, archive)
-		r.NotEqual(ociDigest, current, "the tag moved in an earlier subtest")
+		r.NotEqual(ociDigest, current, "the tag moved")
 
 		r.ErrorContains(sign(versioned+ociDigest), "refusing to overwrite the moved tag")
 		after, _ := pinDigests(t, archive)
@@ -215,6 +256,10 @@ func Test_Pinned_Reference(t *testing.T) {
 
 	t.Run("verify reports a reference pinned to the verified artifact", func(t *testing.T) {
 		r := require.New(t)
+		archive, _, _ := newPinArchive(t)
+		config := pinSigningConfig(t)
+		signPinVersion(t, archive, config)
+
 		logs := test.NewJSONLogReader()
 		_, err := test.OCM(t, test.WithArgs("verify", "component-version", archive+"//"+pinComponent+":"+pinVersion,
 			"--signature", "pin", "--config", config), test.WithOutput(new(bytes.Buffer)), test.WithErrorOutput(logs))
@@ -249,7 +294,7 @@ func Test_Pinned_Reference(t *testing.T) {
 		r.NoError(err)
 		got, err := os.ReadFile(output)
 		r.NoError(err)
-		r.Equal("substituted", string(got))
+		r.Equal("original", string(got))
 	})
 }
 
