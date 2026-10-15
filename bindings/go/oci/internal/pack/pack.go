@@ -100,7 +100,7 @@ func ResourceLocalBlobOCILayer(ctx context.Context, storage content.Storage, b *
 		if layer, streamed, err := streamResourceLayer(ctx, pusher, b, layerOpts); err != nil {
 			return ociImageSpecV1.Descriptor{}, err
 		} else if streamed {
-			return finishResourceLayer(b, access, layer, opts, storage)
+			return finishResourceLayer(ctx, b, access, layer, opts, storage)
 		}
 	}
 
@@ -113,7 +113,7 @@ func ResourceLocalBlobOCILayer(ctx context.Context, storage content.Storage, b *
 		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to push blob: %w", err)
 	}
 
-	return finishResourceLayer(b, access, layer, opts, storage)
+	return finishResourceLayer(ctx, b, access, layer, opts, storage)
 }
 
 // streamResourceLayer attempts a streaming chunked upload of b, computing (and
@@ -190,13 +190,20 @@ func streamResourceLayer(ctx context.Context, pusher remotestore.StreamingPusher
 
 // finishResourceLayer applies manifest annotations and updates the artifact
 // access for a pushed resource layer.
-func finishResourceLayer(b *ociblob.ArtifactBlob, access *v2.LocalBlob, layer ociImageSpecV1.Descriptor, opts Options, storage content.Storage) (ociImageSpecV1.Descriptor, error) {
+func finishResourceLayer(ctx context.Context, b *ociblob.ArtifactBlob, access *v2.LocalBlob, layer ociImageSpecV1.Descriptor, opts Options, storage content.Storage) (ociImageSpecV1.Descriptor, error) {
 	annotations := maps.Clone(layer.Annotations)
 	maps.Copy(annotations, opts.ManifestAnnotations)
 
 	// The packed layer's digest is the content digest to reconcile against.
 	if err := reconcileResourceDigest(b.Artifact, layer.Digest, internaldigest.GenericBlobDigestV1); err != nil {
-		return ociImageSpecV1.Descriptor{}, err
+		// A v1 OCI artifact set packs here (its media type is not a layout type): the
+		// layer digest is the tar archive hash, but the recorded digest is the artifact's
+		// manifest root. Accept when the recorded digest matches a root the archive declares;
+		// a plain blob that merely claims an ociArtifactDigest has no index.json and stays rejected.
+		resource, ok := b.Artifact.(*descriptor.Resource)
+		if !ok || !verifyArtifactSetRoot(ctx, storage, layer, resource.Digest) {
+			return ociImageSpecV1.Descriptor{}, err
+		}
 	}
 	global := resolveGlobalAccess(opts.GlobalAccessPolicy, storage)
 
@@ -266,6 +273,28 @@ func reconcileResourceDigest(artifact descriptor.Artifact, packed digest.Digest,
 		return fmt.Errorf("failed to complete resource digest: %w", err)
 	}
 	return nil
+}
+
+// verifyArtifactSetRoot reports whether recorded matches a root declared by an OCI
+// artifact set already pushed to storage under layer. A v1 artifact set packs through
+// the generic path, so its layer digest is the tar archive hash, not the recorded
+// manifest root; the content is re-read from storage (never the original blob) and
+// only its index.json is parsed, so this stays cheap and leaves the pushed blob untouched.
+func verifyArtifactSetRoot(ctx context.Context, storage content.Storage, layer ociImageSpecV1.Descriptor, recorded *descriptor.Digest) bool {
+	data, err := storage.Fetch(ctx, layer)
+	if err != nil {
+		return false
+	}
+	roots, err := tar.ArtifactSetRoots(ociblob.NewDescriptorBlob(data, layer))
+	if err != nil {
+		return false
+	}
+	for _, root := range roots {
+		if internaldigest.VerifyRecorded(recorded, root) == nil {
+			return true
+		}
+	}
+	return false
 }
 
 // ResourceBlobOCILayerOptions defines the configuration options for pushing a blob as a resource.

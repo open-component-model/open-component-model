@@ -193,6 +193,39 @@ func TestLocalBlobDigest_GetLocalResource_V1ArtifactSet(t *testing.T) {
 	r.NoError(err)
 }
 
+// TestLocalBlobDigest_AddLocalResource_V1ArtifactSet adds the real v1 artifact-set
+// archive through the generic pack path (its media type is not a layout type). The
+// layer digest is the archive hash, but the recorded ociArtifactDigest is the inner
+// manifest root, so the pack must verify against the archive's declared root. A wrong
+// root must still be rejected.
+func TestLocalBlobDigest_AddLocalResource_V1ArtifactSet(t *testing.T) {
+	r := require.New(t)
+	const root = "62be4af3382a4493cb7f1dd4ec47bcb28f1863b615fc9e4a1dceefbe93898dd0"
+	archive, err := os.ReadFile(filepath.Join("..", "ctf", "testdata", "compatibility", "02", "with-resource",
+		"blobs", "sha256.e40e3a2f1ab1a98328dfd14539a79d27aff5c4d5c34cd16a85f0288bfa76490b"))
+	r.NoError(err)
+
+	newV1Resource := func(value string) *descriptor.Resource {
+		return &descriptor.Resource{
+			Relation:    descriptor.LocalRelation,
+			ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "mychart", Version: "6.7.1"}},
+			Type:        "test-type",
+			Access:      &v2.LocalBlob{MediaType: "application/vnd.oci.image.manifest.v1+tar+gzip"},
+			Digest:      &descriptor.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: "ociArtifactDigest/v1", Value: value},
+		}
+	}
+
+	added, err := newCTFRepository(t).AddLocalResource(t.Context(), "ocm.software/repro", "1.0.0",
+		newV1Resource(root), inmemory.New(bytes.NewReader(archive)))
+	r.NoError(err, "a v1 artifact set must verify against its declared root, not the archive hash")
+	r.Equal(root, added.Digest.Value, "the recorded root must be preserved, not rewritten to the archive hash")
+
+	_, err = newCTFRepository(t).AddLocalResource(t.Context(), "ocm.software/repro", "1.0.0",
+		newV1Resource(corrupt(root)), inmemory.New(bytes.NewReader(archive)))
+	r.ErrorContains(err, "resource blob digest", "a wrong artifact-set root must be rejected")
+}
+
+// TestLocalBlobDigest_GetLocalResource covers local read-time verification. The
 // content stays addressed by its real localReference, so only res.Digest is
 // corrupted, exactly what a tampered or forged signed descriptor would carry.
 func TestLocalBlobDigest_GetLocalResource(t *testing.T) {
