@@ -137,8 +137,8 @@ func TestRenderDeprecatedAccessNotice(t *testing.T) {
 			{typ: "git"},
 		})
 		r.Equal(
-			"\n"+text.FgYellow.Sprint("WARNING: access type GitHub/v1 is deprecated, use Git/v1 instead, run 'ocm describe types access GitHub/v1' to learn more")+"\n"+
-				text.FgYellow.Sprint("WARNING: access type git is deprecated, run 'ocm describe types access git' to learn more")+"\n",
+			"\n"+text.FgYellow.Sprint("WARNING: access type GitHub/v1 is deprecated, use Git/v1 instead")+"\n"+
+				text.FgYellow.Sprint("WARNING: access type git is deprecated")+"\n",
 			buf.String())
 	})
 
@@ -147,6 +147,6 @@ func TestRenderDeprecatedAccessNotice(t *testing.T) {
 		var buf bytes.Buffer
 		text.DisableColors()
 		renderDeprecatedAccessNotice(&buf, []deprecatedAccessType{{typ: "GitHub/v1", hint: "use Git/v1 instead"}})
-		r.Equal("\nWARNING: access type GitHub/v1 is deprecated, use Git/v1 instead, run 'ocm describe types access GitHub/v1' to learn more\n", buf.String())
+		r.Equal("\nWARNING: access type GitHub/v1 is deprecated, use Git/v1 instead\n", buf.String())
 	})
 }

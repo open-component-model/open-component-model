@@ -101,7 +101,6 @@ func renderDeprecatedAccessNotice(w io.Writer, types []deprecatedAccessType) {
 		if t.hint != "" {
 			msg += ", " + t.hint
 		}
-		msg += ", run 'ocm describe types access " + t.typ + "' to learn more"
 		_, _ = fmt.Fprintln(w, text.FgYellow.Sprint(msg))
 	}
 }

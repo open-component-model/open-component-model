@@ -24,10 +24,9 @@ func TestAddComponentVersionWarnsAboutDeprecatedAccessTypes(t *testing.T) {
 	wget := "url: https://example.com/archive.tgz"
 	helm := "helmRepository: https://charts.example.com\n      helmChart: demo:1.0.0"
 
-	// Every line carries the hint from the schema and ends with the pointer at
-	// ocm describe types.
-	hinted := func(canonical, spelling string) string {
-		return "use " + canonical + " instead, run 'ocm describe types access " + spelling + "' to learn more"
+	// Every line carries the hint from the schema.
+	hinted := func(canonical string) string {
+		return "use " + canonical + " instead"
 	}
 
 	tests := []struct {
@@ -38,31 +37,31 @@ func TestAddComponentVersionWarnsAboutDeprecatedAccessTypes(t *testing.T) {
 	}{
 		// The GitHub type as a whole gives way to Git/v1, so even the canonical
 		// spelling warns, and the schema carries the hint for every spelling.
-		{"GitHub/v1", gitHub, hinted("Git/v1", "GitHub/v1")},
-		{"GitHub", gitHub, hinted("Git/v1", "GitHub")},
-		{"github/v1", gitHub, hinted("Git/v1", "github/v1")},
-		{"github", gitHub, hinted("Git/v1", "github")},
-		{"gitHub/v1", gitHub, hinted("Git/v1", "gitHub/v1")},
-		{"gitHub", gitHub, hinted("Git/v1", "gitHub")},
+		{"GitHub/v1", gitHub, hinted("Git/v1")},
+		{"GitHub", gitHub, hinted("Git/v1")},
+		{"github/v1", gitHub, hinted("Git/v1")},
+		{"github", gitHub, hinted("Git/v1")},
+		{"gitHub/v1", gitHub, hinted("Git/v1")},
+		{"gitHub", gitHub, hinted("Git/v1")},
 
 		{"Git/v1", git, ""},
 		{"Git", git, ""},
-		{"git", git, hinted("Git/v1", "git")},
-		{"git/v1alpha1", git, hinted("Git/v1", "git/v1alpha1")},
-		{"Git/v1alpha1", git, hinted("Git/v1", "Git/v1alpha1")},
+		{"git", git, hinted("Git/v1")},
+		{"git/v1alpha1", git, hinted("Git/v1")},
+		{"Git/v1alpha1", git, hinted("Git/v1")},
 
 		{"OCIImage/v1", oci, ""},
 		{"ociArtifact/v1", oci, ""},
-		{"ociArtifact", oci, hinted("OCIImage/v1", "ociArtifact")},
-		{"ociImage", oci, hinted("OCIImage/v1", "ociImage")},
+		{"ociArtifact", oci, hinted("OCIImage/v1")},
+		{"ociImage", oci, hinted("OCIImage/v1")},
 
 		{"Wget/v1", wget, ""},
 		{"http/v1", wget, ""},
-		{"wget", wget, hinted("Wget/v1", "wget")},
-		{"http", wget, hinted("Wget/v1", "http")},
+		{"wget", wget, hinted("Wget/v1")},
+		{"http", wget, hinted("Wget/v1")},
 
 		{"Helm/v1", helm, ""},
-		{"helm", helm, hinted("Helm/v1", "helm")},
+		{"helm", helm, hinted("Helm/v1")},
 	}
 
 	for _, tc := range tests {
