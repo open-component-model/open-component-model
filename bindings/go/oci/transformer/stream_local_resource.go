@@ -40,16 +40,26 @@ type StreamLocalResource struct {
 }
 
 func (t *StreamLocalResource) Transform(ctx context.Context, step runtime.Typed) (runtime.Typed, error) {
-	transformation, spec, err := t.decodeStreamSpec(step)
-	if err != nil {
-		return nil, err
+	var transformation v1alpha1.OCIStreamLocalResource
+	if err := t.Scheme.Convert(step, &transformation); err != nil {
+		return nil, fmt.Errorf("failed converting stream local resource transformation: %w", err)
 	}
-	repoSpec := spec.repoSpec
-	component := spec.component
-	version := spec.version
-	sourceResource := spec.sourceResource
-	output := spec.output
-	globalAccessPolicy := spec.globalAccessPolicy
+	spec := transformation.Spec
+	if spec == nil {
+		return nil, fmt.Errorf("spec is required for OCIStreamLocalResource transformation")
+	}
+	if spec.Component == "" {
+		return nil, fmt.Errorf("component name is required")
+	}
+	if spec.Version == "" {
+		return nil, fmt.Errorf("component version is required")
+	}
+	if spec.Resource == nil {
+		return nil, fmt.Errorf("source resource is required")
+	}
+	repoSpec := &spec.Repository
+	component, version := spec.Component, spec.Version
+	sourceResource := spec.Resource
 
 	srcResource := descriptor.ConvertFromV2Resource(sourceResource)
 	if srcResource == nil {
@@ -69,16 +79,10 @@ func (t *StreamLocalResource) Transform(ctx context.Context, step runtime.Typed)
 		return nil, fmt.Errorf("failed getting component version repository: %w", err)
 	}
 
-	if err := applyGlobalAccessPolicy(repo, globalAccessPolicy); err != nil {
+	if err := applyGlobalAccessPolicy(repo, spec.GlobalAccessPolicy); err != nil {
 		return nil, err
 	}
 
-	localResourceRepo, ok := repo.(localResourceAdder)
-	if !ok {
-		return nil, fmt.Errorf("target repository %T cannot add local resources", repo)
-	}
-
-	// Resolve source credentials by consumer identity (same approach as HTTPStreaming).
 	srcCreds, err := t.resolveSourceCredentials(ctx, srcResource)
 	if err != nil {
 		return nil, err
@@ -124,7 +128,7 @@ func (t *StreamLocalResource) Transform(ctx context.Context, step runtime.Typed)
 		"version", version,
 		"source", mode)
 
-	updatedResource, err := localResourceRepo.AddLocalResource(ctx, component, version, addResource, srcBlob)
+	updatedResource, err := repo.AddLocalResource(ctx, component, version, addResource, srcBlob)
 	if err != nil {
 		return nil, fmt.Errorf("failed adding local resource %q to component %s:%s: %w",
 			srcResource.Name, component, version, err)
@@ -135,64 +139,8 @@ func (t *StreamLocalResource) Transform(ctx context.Context, step runtime.Typed)
 		return nil, fmt.Errorf("failed converting updated resource to v2 format: %w", err)
 	}
 
-	if err := setStreamOutput(output, v2UpdatedResource); err != nil {
-		return nil, err
-	}
-
-	return transformation, nil
-}
-
-// streamSpecView is the decoded, validated view of a stream-local-resource step.
-type streamSpecView struct {
-	repoSpec           runtime.Typed
-	component          string
-	version            string
-	sourceResource     *v2.Resource
-	output             any
-	globalAccessPolicy ocirepospecv1.GlobalAccessPolicy
-}
-
-// decodeStreamSpec converts the generic step into the concrete OCI stream
-// transformation, validates it, and returns the concrete transformation (needed
-// for the output) together with a flat view of its fields.
-func (t *StreamLocalResource) decodeStreamSpec(step runtime.Typed) (runtime.Typed, *streamSpecView, error) {
-	transformation, err := t.Scheme.NewObject(step.GetType())
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed creating stream local resource transformation object: %w", err)
-	}
-	if err := t.Scheme.Convert(step, transformation); err != nil {
-		return nil, nil, fmt.Errorf("failed converting generic transformation to stream local resource transformation: %w", err)
-	}
-
-	v := &streamSpecView{}
-	switch tr := transformation.(type) {
-	case *v1alpha1.OCIStreamLocalResource:
-		if tr.Spec == nil {
-			return nil, nil, fmt.Errorf("spec is required for OCIStreamLocalResource transformation")
-		}
-		if tr.Output == nil {
-			tr.Output = &v1alpha1.OCIStreamLocalResourceOutput{}
-		}
-		v.repoSpec = &tr.Spec.Repository
-		v.component = tr.Spec.Component
-		v.version = tr.Spec.Version
-		v.sourceResource = tr.Spec.Resource
-		v.globalAccessPolicy = tr.Spec.GlobalAccessPolicy
-		v.output = tr.Output
-	default:
-		return nil, nil, fmt.Errorf("unexpected transformation type: %T", transformation)
-	}
-
-	if v.component == "" {
-		return nil, nil, fmt.Errorf("component name is required")
-	}
-	if v.version == "" {
-		return nil, nil, fmt.Errorf("component version is required")
-	}
-	if v.sourceResource == nil {
-		return nil, nil, fmt.Errorf("source resource is required")
-	}
-	return transformation, v, nil
+	transformation.Output = &v1alpha1.OCIStreamLocalResourceOutput{Resource: v2UpdatedResource}
+	return &transformation, nil
 }
 
 // resolveTargetCredentials best-effort resolves credentials for the target
@@ -236,23 +184,6 @@ func applyGlobalAccessPolicy(repo repository.ComponentVersionRepository, p ocire
 		return fmt.Errorf("unsupported globalAccessPolicy %q", p)
 	}
 	return nil
-}
-
-// setStreamOutput writes the updated resource onto the OCI output.
-func setStreamOutput(output any, resource *v2.Resource) error {
-	switch out := output.(type) {
-	case *v1alpha1.OCIStreamLocalResourceOutput:
-		out.Resource = resource
-	default:
-		return fmt.Errorf("unexpected output type: %T", output)
-	}
-	return nil
-}
-
-// localResourceAdder is the subset of the component version repository used to
-// embed a resource as a local blob.
-type localResourceAdder interface {
-	AddLocalResource(ctx context.Context, component, version string, resource *descriptor.Resource, content blob.ReadOnlyBlob) (*descriptor.Resource, error)
 }
 
 // octetStream is the media type a by-value source of unknown media type packs

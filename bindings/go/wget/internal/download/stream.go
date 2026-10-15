@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"hash"
 	"io"
+	"math"
 	"net/http"
-	"strings"
 	"sync"
 
 	"ocm.software/open-component-model/bindings/go/blob"
@@ -57,7 +57,8 @@ var (
 // example a POST carrying a body) is not safe to repeat, so the streaming
 // by-value path must not open such a blob more than once.
 func (s *Stream) Idempotent() bool {
-	switch strings.ToUpper(s.req.Verb) {
+	// HTTP method names are case-sensitive; custom spellings are not safe to retry.
+	switch s.req.Verb {
 	case "", http.MethodGet, http.MethodHead:
 		return true
 	default:
@@ -127,7 +128,11 @@ func (s *Stream) ReadCloser() (io.ReadCloser, error) {
 
 	src := io.Reader(resp.Body)
 	if maxDownloadSize > 0 {
-		src = io.LimitReader(resp.Body, maxDownloadSize+1)
+		limit := maxDownloadSize
+		if limit < math.MaxInt64 {
+			limit++
+		}
+		src = io.LimitReader(resp.Body, limit)
 	}
 
 	hashers := make(map[string]hash.Hash, len(s.o.DigestAlgorithms))
@@ -156,6 +161,7 @@ func (s *Stream) ReadCloser() (io.ReadCloser, error) {
 // stream's verification once the body ends. It owns the response body and closes
 // it on Close.
 type streamReader struct {
+	mu      sync.Mutex
 	body    io.ReadCloser
 	src     io.Reader
 	headers http.Header
@@ -170,6 +176,8 @@ type streamReader struct {
 }
 
 func (r *streamReader) Read(p []byte) (int, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	n, err := r.src.Read(p)
 	if n > 0 {
 		r.read += int64(n)
@@ -186,8 +194,11 @@ func (r *streamReader) Read(p []byte) (int, error) {
 // runs verification over whatever was read. A partial read fails verification, so a
 // caller cannot skip it by closing early.
 func (r *streamReader) Close() error {
-	vErr := r.finish()
+	// Closing the body first unblocks a concurrent HTTP upload read.
 	closeErr := r.body.Close()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	vErr := r.finish()
 	return errors.Join(vErr, closeErr)
 }
 

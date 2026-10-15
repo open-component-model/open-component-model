@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"io"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
@@ -152,6 +153,8 @@ func TestStream_MaxDownloadSize(t *testing.T) {
 		{name: "body one byte over the limit (announced length)", maxSize: 9, wantErr: true},
 		{name: "oversized chunked body caught while streaming", maxSize: 9, chunked: true, wantErr: true},
 		{name: "zero disables the limit", maxSize: 0},
+		{name: "maximum int64 limit", maxSize: math.MaxInt64},
+		{name: "maximum int64 chunked limit", maxSize: math.MaxInt64, chunked: true},
 	}
 
 	for _, tt := range tests {
@@ -169,7 +172,7 @@ func TestStream_MaxDownloadSize(t *testing.T) {
 				return
 			}
 			r.NoError(err)
-			_, readErr := io.ReadAll(rc)
+			got, readErr := io.ReadAll(rc)
 			closeErr := rc.Close()
 			if tt.wantErr {
 				if readErr == nil {
@@ -180,6 +183,8 @@ func TestStream_MaxDownloadSize(t *testing.T) {
 				return
 			}
 			r.NoError(readErr)
+			r.NoError(closeErr)
+			r.Equal(content, got)
 		})
 	}
 }
@@ -195,9 +200,9 @@ func TestStream_Idempotent(t *testing.T) {
 	}{
 		{verb: "", want: true},
 		{verb: "GET", want: true},
-		{verb: "get", want: true},
+		{verb: "get", want: false},
 		{verb: "HEAD", want: true},
-		{verb: "head", want: true},
+		{verb: "head", want: false},
 		{verb: "POST", want: false},
 		{verb: "PUT", want: false},
 		{verb: "DELETE", want: false},

@@ -2,7 +2,6 @@ package transformation
 
 import (
 	"context"
-	"crypto/sha256"
 	"errors"
 	"fmt"
 	"io"
@@ -40,7 +39,7 @@ const (
 // HTTPStreamingTransformer streams a resource's content from its source access
 // directly to an HTTP target (e.g. a PUT upload). The source blob is read through
 // the injected ResourceRepository (dispatched by the source access type) and the
-// body is piped straight into the request via an io.TeeReader, so the content is
+// body is hashed as the request reads it, so the content is
 // never buffered in memory or on disk by the transformer. The digest is computed
 // during the stream (or verified against an existing one) and recorded on the
 // target resource, which carries a Wget access at the resolved target URL.
@@ -51,7 +50,7 @@ type HTTPStreamingTransformer struct {
 	HTTPConfig         *httpv1alpha1.Config
 }
 
-func (t *HTTPStreamingTransformer) Transform(ctx context.Context, step runtime.Typed) (result runtime.Typed, err error) {
+func (t *HTTPStreamingTransformer) Transform(ctx context.Context, step runtime.Typed) (runtime.Typed, error) {
 	var transformation v1alpha1.HTTPStreaming
 	if err := t.Scheme.Convert(step, &transformation); err != nil {
 		return nil, fmt.Errorf("failed converting generic transformation to HTTPStreaming transformation: %w", err)
@@ -115,20 +114,12 @@ func (t *HTTPStreamingTransformer) Transform(ctx context.Context, step runtime.T
 	if err != nil {
 		return nil, fmt.Errorf("failed opening source resource stream: %w", err)
 	}
-	// A streamed source is verified when it is read to its end or closed. The
-	// target can answer before it read the whole body, so a verification error
-	// can first appear here and must fail the transformation.
-	defer func() {
-		if closeErr := rc.Close(); closeErr != nil && err == nil {
-			result = nil
-			err = fmt.Errorf("failed verifying source resource %v: %w", srcResource.ToIdentity(), closeErr)
-		}
-	}()
-
-	// TeeReader mirrors the streamed body into the hasher as it is uploaded, so the
-	// digest is computed in a single pass without buffering the content.
-	hasher := sha256.New()
-	body := io.TeeReader(rc, hasher)
+	size := blob.SizeUnknown
+	if sizer, ok := srcBlob.(blob.SizeAware); ok {
+		size = sizer.Size()
+	}
+	body := newUploadBody(rc, size, godigest.SHA256)
+	defer func() { _ = body.Close() }()
 
 	method := tw.Verb
 	if method == "" {
@@ -150,10 +141,8 @@ func (t *HTTPStreamingTransformer) Transform(ctx context.Context, step runtime.T
 			req.Header.Set("Content-Type", contentType)
 		}
 	}
-	if sizer, ok := srcBlob.(blob.SizeAware); ok {
-		if size := sizer.Size(); size != blob.SizeUnknown {
-			req.ContentLength = size
-		}
+	if size != blob.SizeUnknown {
+		req.ContentLength = size
 	}
 
 	client := ocmhttp.New(ocmhttp.WithConfig(t.HTTPConfig))
@@ -170,6 +159,7 @@ func (t *HTTPStreamingTransformer) Transform(ctx context.Context, step runtime.T
 		"method", method)
 
 	resp, err := client.Do(req)
+	closeErr := body.Close()
 	if err != nil {
 		// client.Do wraps errors in a *url.Error whose URL field carries the full
 		// request URL including any query token. Redact it so the token never reaches
@@ -191,8 +181,10 @@ func (t *HTTPStreamingTransformer) Transform(ctx context.Context, step runtime.T
 		return nil, fmt.Errorf("upload to %s returned status %d", safeURL.String(), resp.StatusCode)
 	}
 
-	// Finalize the digest only after the whole body has been streamed to the target.
-	computed := godigest.NewDigestFromBytes(godigest.SHA256, hasher.Sum(nil)).Encoded()
+	if closeErr != nil {
+		return nil, fmt.Errorf("failed verifying source resource %v: %w", srcResource.ToIdentity(), closeErr)
+	}
+	computed := body.Digest().Encoded()
 	slog.DebugContext(ctx, "streamed resource upload complete",
 		"resource", srcResource.ToIdentity(),
 		"digest", computed,
@@ -239,7 +231,8 @@ func uploadedDigest(src *descriptor.Digest, computed string) (*descriptor.Digest
 // downloadSource prefers the lazy streaming source, so the common wget/s3 -> remote
 // path needs no temporary file. The source is read exactly once, so a
 // non-idempotent request is safe to stream here. A repository without the
-// capability falls back to DownloadResource.
+// capability falls back to DownloadResource. The HTTP target may retain bytes if
+// verification fails at EOF. No delete operation is defined for this target.
 func (t *HTTPStreamingTransformer) downloadSource(ctx context.Context, resource *descriptor.Resource, creds runtime.Typed) (blob.ReadOnlyBlob, error) {
 	if streamingRepo, ok := t.ResourceRepository.(repository.StreamingResourceRepository); ok {
 		return streamingRepo.DownloadResourceStream(ctx, resource, creds)

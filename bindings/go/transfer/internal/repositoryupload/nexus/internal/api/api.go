@@ -4,6 +4,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"mime/multipart"
@@ -188,22 +189,22 @@ func (r *Repository) UploadComponent(ctx context.Context, fields [][2]string, as
 	if err != nil {
 		return "", fmt.Errorf("failed opening content: %w", err)
 	}
-	defer func() { _ = rc.Close() }()
-
-	digester := client.DigestAlgorithm(known).Digester()
+	source := client.NewUploadBody(rc, blob.SizeUnknown, client.DigestAlgorithm(known))
 	body, pw := io.Pipe()
 	form := multipart.NewWriter(pw)
-	written := make(chan struct{})
+	written := make(chan error, 1)
 	go func() {
-		defer close(written)
-		pw.CloseWithError(writeComponentForm(form, fields, assetField, filename, io.TeeReader(rc, digester.Hash()), mediaType))
+		err := writeComponentForm(form, fields, assetField, filename, source, mediaType)
+		pw.CloseWithError(err)
+		written <- err
 	}()
 	target := r.restURL + "/components?" + url.Values{"repository": {r.Name}}.Encode()
 	err = r.Client.Send(ctx, http.MethodPost, target, body, -1, http.Header{"Content-Type": {form.FormDataContentType()}}, nil)
 	// Unblock the writer if the request stopped reading, then wait until it stopped hashing.
 	_ = body.CloseWithError(io.ErrClosedPipe)
-	<-written
-	return digester.Digest(), err
+	closeErr := source.Close()
+	writeErr := <-written
+	return source.Digest(), errors.Join(err, closeErr, writeErr)
 }
 
 // writeComponentForm writes the components API form of a single asset.

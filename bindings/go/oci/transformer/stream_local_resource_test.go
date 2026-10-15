@@ -182,7 +182,7 @@ func wgetSourceResource(name string, digest *v2.Digest) *v2.Resource {
 // blob, deriving a LocalBlob access with the source media type.
 func TestStreamLocalResource_StreamingPath(t *testing.T) {
 	r := require.New(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	lazy := &fakeLazyBlob{data: "streamed content", mediaType: "application/x-test"}
 	resourceRepo := &fakeStreamingResourceRepo{blob: lazy}
@@ -244,7 +244,7 @@ func TestStreamLocalResource_StreamingPath(t *testing.T) {
 // AddLocalResource.
 func TestStreamLocalResource_FallbackPath(t *testing.T) {
 	r := require.New(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	lazy := &fakeLazyBlob{data: "buffered content", mediaType: "application/x-test"}
 	resourceRepo := &fakeResourceRepo{blob: lazy}
@@ -315,7 +315,7 @@ func TestStreamLocalResource_UntypedSourceMediaType(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
-			ctx := context.Background()
+			ctx := t.Context()
 
 			lazy := &primingLazyBlob{data: "streamed content", contentType: tc.contentType}
 			resourceRepo := &fakeStreamingResourceRepo{blob: lazy}
@@ -355,7 +355,7 @@ func TestStreamLocalResource_UntypedSourceMediaType(t *testing.T) {
 // TestSourceMaterializesNonIdempotentStream.
 func TestStreamLocalResource_MaterializesNonIdempotentStream(t *testing.T) {
 	r := require.New(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	stream := &nonIdempotentStreamBlob{}
 	materialized := &fakeLazyBlob{data: "materialized", mediaType: "text/plain"}
@@ -423,7 +423,7 @@ func (p *ociRepoProvider) GetJSONSchemaForRepositorySpecification(runtime.Type) 
 // simple in-memory lazy stub; only the target repository is real.
 func TestStreamLocalResource_RealPackOCI(t *testing.T) {
 	r := require.New(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	const content = "real pack streaming content"
 	lazy := &primingLazyBlob{data: content, contentType: "application/x-test"}
@@ -511,7 +511,7 @@ func (b *sizedBlob) Size() int64 { return int64(len(b.data)) }
 // size-known blob. A non-streaming resource repository forces the download path.
 func TestStreamLocalResource_MaterializedBlobKeepsSize(t *testing.T) {
 	r := require.New(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	content := "materialized sized content"
 	materialized := &sizedBlob{data: content}
@@ -570,4 +570,27 @@ func TestStreamLocalResource_ClosesSource(t *testing.T) {
 	_, err := tr.Transform(t.Context(), ociStreamSpec(wgetSourceResource("blob", nil)))
 	r.NoError(err)
 	r.True(src.closed, "the source blob must be closed after the add")
+}
+
+func TestStreamLocalResource_PreservesDescriptorMetadata(t *testing.T) {
+	r := require.New(t)
+	src := wgetSourceResource("blob", &v2.Digest{
+		HashAlgorithm: "SHA-256", NormalisationAlgorithm: "genericBlobDigest/v1", Value: godigest.FromString("content").Encoded(),
+	})
+	src.Labels = []v2.Label{{Name: "signed", Value: []byte(`"value"`), Signing: true}}
+	src.ExtraIdentity = runtime.Identity{"platform": "linux"}
+	src.SourceRefs = []v2.SourceRef{{IdentitySelector: map[string]string{"name": "source"}}}
+	original := src.DeepCopy()
+	repo := &mockRepository{}
+	tr := &StreamLocalResource{
+		Scheme:             streamTransformerScheme(t),
+		RepoProvider:       &mockRepoProvider{repo: repo},
+		ResourceRepository: &fakeStreamingResourceRepo{blob: &fakeLazyBlob{data: "content", mediaType: "text/plain"}},
+	}
+	out, err := tr.Transform(t.Context(), ociStreamSpec(src))
+	r.NoError(err)
+	got := out.(*v1alpha1.OCIStreamLocalResource).Output.Resource.DeepCopy()
+	got.Access = original.Access
+	r.Equal(original, got)
+	r.Equal(original, src)
 }

@@ -22,6 +22,7 @@ import (
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	wgetrepository "ocm.software/open-component-model/bindings/go/wget/repository"
 	wgetaccess "ocm.software/open-component-model/bindings/go/wget/spec/access"
 	wgetaccessv1 "ocm.software/open-component-model/bindings/go/wget/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/wget/transformation/spec/v1alpha1"
@@ -135,7 +136,7 @@ func runStreaming(t *testing.T, payload []byte, srcDigest *v2.Digest, recordedBo
 		Scheme:             scheme,
 		ResourceRepository: &stubResourceRepository{payload: payload, mediaType: "application/x-tar"},
 	}
-	return tr.Transform(context.Background(), step)
+	return tr.Transform(t.Context(), step)
 }
 
 func TestHTTPStreamingTransformer_ComputesDigestDuringStream(t *testing.T) {
@@ -200,7 +201,7 @@ func TestHTTPStreamingTransformer_PrefersStreamingSource(t *testing.T) {
 		},
 	}
 
-	_, err := tr.Transform(context.Background(), step)
+	_, err := tr.Transform(t.Context(), step)
 	r.NoError(err)
 	assert.True(t, streamCalled, "the transformer must prefer the streaming source")
 	assert.False(t, downloadCalled, "the materializing download must not be used when streaming is available")
@@ -294,7 +295,7 @@ func TestHTTPStreamingTransformer_UploadErrorRedactsQueryToken(t *testing.T) {
 		ResourceRepository: &stubResourceRepository{payload: []byte("x"), mediaType: "application/x-tar"},
 	}
 
-	_, err = tr.Transform(context.Background(), step)
+	_, err = tr.Transform(t.Context(), step)
 	r.Error(err)
 	assert.NotContains(t, err.Error(), token, "the upload error must not leak the target URL query token")
 }
@@ -331,7 +332,7 @@ func TestHTTPStreamingTransformer_UserContentTypeHeaderPreserved(t *testing.T) {
 		ResourceRepository: &stubResourceRepository{payload: []byte("payload"), mediaType: "application/x-tar"},
 	}
 
-	_, err := tr.Transform(context.Background(), step)
+	_, err := tr.Transform(t.Context(), step)
 	r.NoError(err)
 	assert.Equal(t, "application/vnd.custom+json", gotContentType,
 		"an explicit request Content-Type must not be overridden by the media-type default")
@@ -384,5 +385,39 @@ func TestHTTPStreamingTransformer_FailsOnSourceCloseError(t *testing.T) {
 
 	out, err := tr.Transform(t.Context(), step)
 	r.ErrorContains(err, "checksum verification failed")
+	r.Nil(out)
+}
+
+func TestHTTPStreamingTransformer_RejectsEarlySuccess(t *testing.T) {
+	r := require.New(t)
+	source := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		w.WriteHeader(http.StatusOK)
+		if err := http.NewResponseController(w).Flush(); err != nil {
+			t.Error(err)
+			return
+		}
+		<-req.Context().Done()
+	}))
+	t.Cleanup(source.Close)
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if err := http.NewResponseController(w).EnableFullDuplex(); err != nil {
+			t.Error(err)
+			return
+		}
+		w.WriteHeader(http.StatusCreated)
+	}))
+	t.Cleanup(target.Close)
+	step := &v1alpha1.HTTPStreaming{
+		Type: v1alpha1.HTTPStreamingV1alpha1,
+		Spec: &v1alpha1.HTTPStreamingSpec{
+			Resource:       wgetResourceV2("blob", source.URL, "", "", nil, nil),
+			Request:        wgetRequest(target.URL, http.MethodPut, "", nil),
+			TargetResource: wgetResourceV2("blob", target.URL, "", "", nil, nil),
+		},
+	}
+	tr := &HTTPStreamingTransformer{Scheme: newTransformerScheme(), ResourceRepository: wgetrepository.NewResourceRepository(nil)}
+	out, err := tr.Transform(t.Context(), step)
+	r.ErrorContains(err, "incomplete upload")
 	r.Nil(out)
 }

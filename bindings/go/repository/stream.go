@@ -24,6 +24,11 @@ import (
 // Close of the reader. A caller that streams the blob to a target must treat
 // the content as untrusted until the read completes without error.
 //
+// OCI chunked pushes do not commit a source that fails verification while reading.
+// HTTP targets can retain uploaded bytes after verification fails at EOF. Callers
+// must not publish a resource after such a failure; automatic deletion is unsafe
+// because the target can already hold legitimate content at the same location.
+//
 // Callers that need a size or digest before reading must use DownloadResource.
 // Use [StreamOrDownloadResource] to pick the right method for a single
 // by-value transfer.

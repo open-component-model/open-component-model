@@ -72,7 +72,8 @@ func (u *Uploader) target(ctx context.Context, helmRepo, repoURL string) (*clien
 
 // source returns the unmodified content of the source resource and its media type ("" when unknown):
 // local blobs from the source component version, remote resources downloaded with the resolved
-// source credentials.
+// source credentials. HTTP targets may retain bytes if verification fails at EOF.
+// Failed uploads are not deleted automatically: the location may hold older content.
 func (u *Uploader) source(ctx context.Context, spec *uploadv1alpha1.RepositoryUploadSpec, src *descriptor.Resource) (blob.ReadOnlyBlob, string, error) {
 	if spec.ComponentVersion.Repository != nil {
 		repo, err := u.localSource(ctx, spec.ComponentVersion)
