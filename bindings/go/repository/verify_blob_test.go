@@ -12,6 +12,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
+	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 )
 
 const verifyTestContent = "the content a digest was taken over"
@@ -242,41 +243,52 @@ type idempotentBase struct {
 
 func (b idempotentBase) Idempotent() bool { return b.idempotent }
 
-// TestVerifyingBlob_IdempotentForwarding checks that verifyingBlob forwards the
-// base's idempotency, and treats a base that does not implement IdempotentSource
-// as not safe to repeat.
+// TestVerifyingBlob_IdempotentForwarding checks that the verified blob reports the
+// base's idempotency, and does not report any when the base does not.
 func TestVerifyingBlob_IdempotentForwarding(t *testing.T) {
 	t.Parallel()
 	expected := digest.FromString(verifyTestContent)
 
 	tests := []struct {
-		name string
-		base blob.ReadOnlyBlob
-		want bool
+		name     string
+		base     blob.ReadOnlyBlob
+		reported bool
+		want     bool
 	}{
 		{
-			name: "forwards true",
-			base: idempotentBase{ReadOnlyBlob: inmemory.New(strings.NewReader(verifyTestContent)), idempotent: true},
-			want: true,
+			name:     "forwards true",
+			base:     idempotentBase{ReadOnlyBlob: inmemory.New(strings.NewReader(verifyTestContent)), idempotent: true},
+			reported: true,
+			want:     true,
 		},
 		{
-			name: "forwards false",
-			base: idempotentBase{ReadOnlyBlob: inmemory.New(strings.NewReader(verifyTestContent)), idempotent: false},
-			want: false,
+			name:     "forwards false",
+			base:     idempotentBase{ReadOnlyBlob: inmemory.New(strings.NewReader(verifyTestContent)), idempotent: false},
+			reported: true,
+			want:     false,
 		},
 		{
-			name: "defaults to false when base is not an IdempotentSource",
+			name: "reports nothing when base is not an IdempotentSource",
 			base: inmemory.New(strings.NewReader(verifyTestContent)),
-			want: false,
 		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			r := require.New(t)
-			b, err := newVerifyingBlob(tc.base, expected)
+			b, err := VerifyDownload(t.Context(), &descriptor.Resource{Digest: &descriptor.Digest{
+				HashAlgorithm:          "SHA-256",
+				NormalisationAlgorithm: "genericBlobDigest/v1",
+				Value:                  expected.Encoded(),
+			}}, tc.base)
 			r.NoError(err)
-			r.Equal(tc.want, b.Idempotent())
+			idem, ok := b.(IdempotentSource)
+			r.Equal(tc.reported, ok)
+			if ok {
+				r.Equal(tc.want, idem.Idempotent())
+			}
+			_, ok = b.(blob.SizeAware)
+			r.True(ok, "the verified blob keeps its other capabilities")
 		})
 	}
 }

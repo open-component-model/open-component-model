@@ -123,17 +123,9 @@ func NewResolver(_ context.Context, client remote.Client, repository *ocirepospe
 	}
 
 	opts = append(opts, urlresolver.WithBaseClient(client))
-	// Enable chunked blob upload by default so a by-value resource whose size or
-	// digest is unknown up front (for example a streamed wget/s3 source) can be
-	// pushed to the target registry via the OCI chunked streaming push without
-	// buffering it to a temporary file first.
-	//
-	// This default is global on purpose and is safe: chunked upload is the
-	// standard OCI distribution POST/PATCH/PUT protocol, it only applies to blob
-	// pushes above DefaultChunkThreshold (16 MiB) while smaller blobs and all
-	// manifests keep the monolithic upload, read/pull paths are unaffected, and a
-	// resolver that wraps the raw repository with a blob or reference cache
-	// bypasses streaming entirely. Callers may still override via extra.
+	// Enable chunked blob upload by default: it is standard OCI distribution
+	// behavior (blobs below the threshold and manifests stay monolithic).
+	// Placed before extra so callers can still override it.
 	opts = append(opts, urlresolver.WithChunkedPush(remotestore.DefaultChunkSize, remotestore.DefaultChunkThreshold))
 	opts = append(opts, extra...)
 

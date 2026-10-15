@@ -7,42 +7,31 @@ import (
 	"io"
 	"log/slog"
 
-	godigest "github.com/opencontainers/go-digest"
-
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/oci"
-	internaldigest "ocm.software/open-component-model/bindings/go/oci/internal/digest"
 	ocirepospecv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// StreamLocalResource is a fused transformer that streams a by-value source
-// resource (for example a wget or s3 access) straight into an OCI registry
-// target as a local blob, without buffering the content to a temporary file.
+// StreamLocalResource is a fused transformer that adds a by-value source
+// resource (for example a wget or s3 access) to an OCI registry target as a
+// local blob, without a temporary file.
 //
-// It serves OCI registry targets only: a CTF target is a local filesystem
-// archive where the blob must land on local disk regardless, so there is no
-// streaming benefit and CTF targets keep using the split Download* ->
-// AddLocalResource path.
+// Download and add run in one node, so the lazy source stream does not cross a
+// graph node boundary. The source is opened with
+// [repository.StreamOrDownloadResource] and handed to AddLocalResource as a
+// size-unknown blob, which pack uploads with the chunked streaming push
+// (PushStreaming) and verifies against the resource digest on the fly.
 //
-// It fuses the download and the add so the stream never has to cross a graph
-// node boundary: the source is obtained as a LAZY, size-unknown blob through a
-// [repository.StreamingResourceRepository] and handed to
-// [oci.Repository.AddLocalResource], where pack's streamResourceLayer routes it
-// to the OCI chunked streaming push (PushStreaming). It mirrors the fused
-// [TransferOCIArtifact] and HTTPStreaming pattern.
-//
-// When the injected ResourceRepository is not streaming-capable, or the source
-// request is not idempotent (see [repository.IdempotentSource]), the transformer
-// falls back to the materialized DownloadResource, which yields a file-backed
-// blob with a known size, digest and media type and therefore takes the regular
-// buffered push. The result is identical; only the temporary file is avoided on
-// the streaming path.
+// A source that cannot be streamed (a repository without the streaming
+// capability, or a non-idempotent request) is downloaded with DownloadResource
+// instead and takes the regular push. CTF targets do not use this transformer:
+// the blob must be stored on local disk there anyway.
 type StreamLocalResource struct {
 	Scheme             *runtime.Scheme
 	RepoProvider       repository.ComponentVersionRepositoryProvider
@@ -95,69 +84,37 @@ func (t *StreamLocalResource) Transform(ctx context.Context, step runtime.Typed)
 		return nil, err
 	}
 
-	// Obtain the source as a lazy, size-unknown stream when the resource
-	// repository is streaming-capable and the source request is idempotent;
-	// otherwise fall back to a materialized download (buffered push, same result).
-	srcBlob, streamed, err := t.openSource(ctx, srcResource, srcCreds)
+	srcBlob, streamed, err := repository.StreamOrDownloadResource(ctx, t.ResourceRepository, srcResource, srcCreds)
 	if err != nil {
 		return nil, fmt.Errorf("failed opening source resource %v: %w", srcResource.ToIdentity(), err)
 	}
+	// Releases the temporary file of a downloaded source, or a stream that was
+	// opened to read its media type but never consumed.
+	defer func() {
+		if c, ok := srcBlob.(io.Closer); ok {
+			_ = c.Close()
+		}
+	}()
 
-	// Resolve the media type the way the split DownloadResource -> AddLocalResource
-	// path effectively did, so an untyped wget/s3 source still packs: prefer the
-	// media type the blob already knows (the access-pinned media type), otherwise
-	// prime it from the stream's response headers (idempotent sources only, see
-	// primeMediaType), and finally default to application/octet-stream. Without
-	// this a source that does not pin a media type would report an empty media
-	// type and pack would reject it with "blob media type is unknown".
-	primeMediaType(srcBlob)
+	// Like the split DownloadResource -> AddLocalResource path, a source without a
+	// known media type packs as application/octet-stream.
 	mediaType := blobMediaType(srcBlob)
 	if mediaType == "" {
 		mediaType = octetStream
 	}
 
-	// Build the resource to add: a copy of the source resource with a LocalBlob
-	// access so pack can convert it. The reference name mirrors the split
-	// AddLocalResource path.
-	//
-	// The access MUST be a descriptor/v2.LocalBlob (not the typed
-	// descriptor/runtime.LocalBlob): pack converts the add resource's access with
-	// the OCI repository scheme via opts.AccessScheme.Convert(access, &v2.LocalBlob{}),
-	// and oci/blob/update.go UpdateArtifactWithInformationFromBlob type-switches on
-	// *v2.LocalBlob. A typed runtime.LocalBlob cannot be converted to v2.LocalBlob
-	// and would fail pack with "cannot assign value of type *runtime.LocalBlob to
-	// target of type *v2.LocalBlob". A *v2.LocalBlob satisfies runtime.Typed, so it
-	// assigns directly to the resource's Access field.
-	//
-	// LocalReference stays empty: there is no pre-materialized local file; the
-	// digest comes from the blob (knownDigestBlob) or is computed by PushStreaming.
+	// The access must be a *v2.LocalBlob: pack converts it with the OCI repository
+	// scheme to *v2.LocalBlob, which fails for the typed runtime.LocalBlob.
+	// LocalReference is set by pack from the pushed digest. ReferenceName stays
+	// empty like on the split path: it names an OCI artifact, which a plain blob
+	// is not. The copied source digest makes pack verify the streamed bytes.
 	addResource := srcResource.DeepCopy()
 	addResource.Access = &v2.LocalBlob{
-		Type:          runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
-		MediaType:     mediaType,
-		ReferenceName: srcResource.Name,
+		Type:      runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
+		MediaType: mediaType,
 	}
 
-	// If the source resource advertises a SHA-256/genericBlobDigest digest, expose
-	// it on the blob so the chunked push verifies the streamed bytes against it;
-	// otherwise let PushStreaming compute the digest from the stream.
-	//
-	// Only wrap the LAZY streaming blob (streamed): it has no known size, so this
-	// is additive. A materialized fallback blob is file-backed and SizeAware;
-	// wrapping it would hide SizeAware and make pack force PushStreaming on a
-	// size-known blob (buffering on fallback, or erroring after the first PATCH).
-	// DownloadResource already verified the materialized blob's integrity.
-	if streamed {
-		if dig, okDigest := knownSHA256Digest(srcResource.Digest); okDigest {
-			srcBlob = &knownDigestBlob{base: srcBlob, digest: dig}
-		}
-	}
-
-	// Report the push mode honestly so an e2e can trust the signal: "streamed"
-	// only when the lazy streaming path was actually taken, "materialized" when
-	// the source was buffered via DownloadResource (non-streaming repository or a
-	// non-idempotent source).
-	mode := "materialized"
+	mode := "downloaded"
 	if streamed {
 		mode = "streamed"
 	}
@@ -165,7 +122,7 @@ func (t *StreamLocalResource) Transform(ctx context.Context, step runtime.Typed)
 		"resource", srcResource.ToIdentity(),
 		"component", component,
 		"version", version,
-		"mode", mode)
+		"source", mode)
 
 	updatedResource, err := localResourceRepo.AddLocalResource(ctx, component, version, addResource, srcBlob)
 	if err != nil {
@@ -298,41 +255,6 @@ type localResourceAdder interface {
 	AddLocalResource(ctx context.Context, component, version string, resource *descriptor.Resource, content blob.ReadOnlyBlob) (*descriptor.Resource, error)
 }
 
-// openSource returns the source blob and whether it was obtained as a lazy
-// stream (true) or materialized via DownloadResource (false).
-//
-// A streaming source whose request is not idempotent (see
-// [repository.IdempotentSource]) is materialized with DownloadResource instead
-// of streamed, mirroring the uploader (transfer/internal/repositoryupload).
-// The streaming path opens the source more than once (prime the media type from
-// the response headers, then stream the body, plus a possible pack
-// chunking-unavailable fallback), which must never re-issue a non-idempotent
-// request. Materializing issues the single request the old split path always
-// did and carries a media type. No request is sent while deciding, because
-// DownloadResourceStream defers all I/O until the blob's ReadCloser is called.
-func (t *StreamLocalResource) openSource(ctx context.Context, resource *descriptor.Resource, creds runtime.Typed) (blob.ReadOnlyBlob, bool, error) {
-	streamingRepo, ok := t.ResourceRepository.(repository.StreamingResourceRepository)
-	if !ok {
-		b, err := t.ResourceRepository.DownloadResource(ctx, resource, creds)
-		if err != nil {
-			return nil, false, err
-		}
-		return b, false, nil
-	}
-	b, err := streamingRepo.DownloadResourceStream(ctx, resource, creds)
-	if err != nil {
-		return nil, false, err
-	}
-	if idem, ok := b.(repository.IdempotentSource); ok && !idem.Idempotent() {
-		mb, err := t.ResourceRepository.DownloadResource(ctx, resource, creds)
-		if err != nil {
-			return nil, false, err
-		}
-		return mb, false, nil
-	}
-	return b, true, nil
-}
-
 // octetStream is the media type a by-value source of unknown media type packs
 // with, matching the application/octet-stream default of the old split path.
 const octetStream = "application/octet-stream"
@@ -345,35 +267,6 @@ func blobMediaType(b blob.ReadOnlyBlob) string {
 		}
 	}
 	return ""
-}
-
-// primeMediaType best-effort populates the media type of a lazy streaming source
-// blob by opening its stream, which reads the response headers (and thus the
-// Content-Type) without downloading the whole body. It is a no-op for a blob
-// that already knows its media type (such as a materialized file-backed
-// download) and is best-effort: any error is ignored, leaving the caller to fall
-// back to application/octet-stream, exactly as the old split path did.
-//
-// The priming open is a separate header-only source request, so it is only
-// issued when the source is idempotent (see [repository.IdempotentSource]).
-// openSource already materializes a non-idempotent source, so this guard is a
-// defence in depth that keeps a non-idempotent request from ever being replayed.
-func primeMediaType(b blob.ReadOnlyBlob) {
-	aware, ok := b.(blob.MediaTypeAware)
-	if !ok {
-		return
-	}
-	if _, known := aware.MediaType(); known {
-		return
-	}
-	if idem, ok := b.(repository.IdempotentSource); !ok || !idem.Idempotent() {
-		return
-	}
-	rc, err := b.ReadCloser()
-	if err != nil {
-		return
-	}
-	_ = rc.Close()
 }
 
 // resolveSourceCredentials resolves credentials for the source resource by its
@@ -397,66 +290,4 @@ func (t *StreamLocalResource) resolveSourceCredentials(ctx context.Context, reso
 		return nil, fmt.Errorf("failed resolving source credentials: %w", err)
 	}
 	return creds, nil
-}
-
-// knownSHA256Digest returns the OCI digest string ("sha256:<hex>") for a
-// SHA-256/genericBlobDigest resource digest, and whether it applies.
-func knownSHA256Digest(d *descriptor.Digest) (string, bool) {
-	if d == nil || d.Value == "" {
-		return "", false
-	}
-	algo, ok := internaldigest.SHAMapping[d.HashAlgorithm]
-	if !ok || algo != godigest.SHA256 {
-		return "", false
-	}
-	dig := godigest.NewDigestFromEncoded(godigest.SHA256, d.Value)
-	if err := dig.Validate(); err != nil {
-		return "", false
-	}
-	return dig.String(), true
-}
-
-// knownDigestBlob re-exposes a lazy source blob with a digest known in advance
-// (from the source resource descriptor) so the chunked streaming push can verify
-// the streamed bytes against it. It deliberately does NOT implement
-// [blob.SizeAware]: the size stays unknown so pack routes the blob to the
-// streaming push instead of the buffered one. It forwards the media type, the
-// Close (to release any resources the underlying blob owns), and the idempotency
-// report so wrapping hides none of the base blob's capabilities.
-type knownDigestBlob struct {
-	base   blob.ReadOnlyBlob
-	digest string
-}
-
-var (
-	_ blob.ReadOnlyBlob           = (*knownDigestBlob)(nil)
-	_ blob.DigestAware            = (*knownDigestBlob)(nil)
-	_ blob.MediaTypeAware         = (*knownDigestBlob)(nil)
-	_ repository.IdempotentSource = (*knownDigestBlob)(nil)
-	_ io.Closer                   = (*knownDigestBlob)(nil)
-)
-
-func (b *knownDigestBlob) ReadCloser() (io.ReadCloser, error) { return b.base.ReadCloser() }
-
-func (b *knownDigestBlob) Digest() (string, bool) { return b.digest, true }
-
-func (b *knownDigestBlob) MediaType() (string, bool) {
-	if mt, ok := b.base.(blob.MediaTypeAware); ok {
-		return mt.MediaType()
-	}
-	return "", false
-}
-
-func (b *knownDigestBlob) Idempotent() bool {
-	if idem, ok := b.base.(repository.IdempotentSource); ok {
-		return idem.Idempotent()
-	}
-	return false
-}
-
-func (b *knownDigestBlob) Close() error {
-	if c, ok := b.base.(io.Closer); ok {
-		return c.Close()
-	}
-	return nil
 }

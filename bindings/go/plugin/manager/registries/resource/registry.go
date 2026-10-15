@@ -17,12 +17,8 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// ResourceRegistry satisfies the streaming resource repository capability so a
-// transformer can type-assert the injected ResourceRepository to
-// [repository.StreamingResourceRepository] and obtain a lazy source stream. The
-// registry only delegates streaming to a plugin that is itself streaming-capable
-// (the builtin wget/s3/oci repositories are); any other plugin falls back to a
-// materialized DownloadResource.
+// ResourceRegistry forwards the streaming capability of the plugin that serves a
+// resource, see [ResourceRegistry.DownloadResourceStream].
 var _ repository.StreamingResourceRepository = (*ResourceRegistry)(nil)
 
 // NewResourceRegistry creates a new registry and initializes maps.
@@ -211,16 +207,12 @@ func (r *ResourceRegistry) DownloadResource(ctx context.Context, res *descriptor
 	return plugin.DownloadResource(ctx, res, credentials)
 }
 
-// DownloadResourceStream returns a lazy, replayable source blob for the resource
-// when the dispatched plugin is streaming-capable, so a by-value transfer to a
-// remote target does not have to materialize the source to a temporary file.
-//
-// The plugin is resolved from the resource access type via GetResourcePlugin.
-// When it implements [repository.StreamingResourceRepository] (the builtin
-// wget/s3/oci repositories do) the call is delegated to its
-// DownloadResourceStream; otherwise (for example an external binary plugin that
-// cannot expose a Go streaming interface) it falls back to DownloadResource,
-// which returns already-materialized content.
+// DownloadResourceStream delegates to the plugin of the resource access type when
+// that plugin implements [repository.StreamingResourceRepository] (the builtin
+// wget and s3 repositories do). Any other plugin, including every external plugin,
+// falls back to DownloadResource. The fallback blob does not report
+// [repository.IdempotentSource], so [repository.StreamOrDownloadResource] uses it
+// as is and does not download it again.
 func (r *ResourceRegistry) DownloadResourceStream(ctx context.Context, res *descriptor.Resource, credentials runtime.Typed) (blob.ReadOnlyBlob, error) {
 	plugin, err := r.GetResourcePlugin(ctx, res.GetAccess())
 	if err != nil {

@@ -51,7 +51,7 @@ type HTTPStreamingTransformer struct {
 	HTTPConfig         *httpv1alpha1.Config
 }
 
-func (t *HTTPStreamingTransformer) Transform(ctx context.Context, step runtime.Typed) (runtime.Typed, error) {
+func (t *HTTPStreamingTransformer) Transform(ctx context.Context, step runtime.Typed) (result runtime.Typed, err error) {
 	var transformation v1alpha1.HTTPStreaming
 	if err := t.Scheme.Convert(step, &transformation); err != nil {
 		return nil, fmt.Errorf("failed converting generic transformation to HTTPStreaming transformation: %w", err)
@@ -105,11 +105,25 @@ func (t *HTTPStreamingTransformer) Transform(ctx context.Context, step runtime.T
 	if err != nil {
 		return nil, fmt.Errorf("failed downloading source resource %v: %w", srcResource.ToIdentity(), err)
 	}
+	// Releases the temporary file of a downloaded (not streamed) source.
+	defer func() {
+		if c, ok := srcBlob.(io.Closer); ok {
+			_ = c.Close()
+		}
+	}()
 	rc, err := srcBlob.ReadCloser()
 	if err != nil {
 		return nil, fmt.Errorf("failed opening source resource stream: %w", err)
 	}
-	defer func() { _ = rc.Close() }()
+	// A streamed source is verified when it is read to its end or closed. The
+	// target can answer before it read the whole body, so a verification error
+	// can first appear here and must fail the transformation.
+	defer func() {
+		if closeErr := rc.Close(); closeErr != nil && err == nil {
+			result = nil
+			err = fmt.Errorf("failed verifying source resource %v: %w", srcResource.ToIdentity(), closeErr)
+		}
+	}()
 
 	// TeeReader mirrors the streamed body into the hasher as it is uploaded, so the
 	// digest is computed in a single pass without buffering the content.
@@ -184,23 +198,8 @@ func (t *HTTPStreamingTransformer) Transform(ctx context.Context, step runtime.T
 		"digest", computed,
 		"status", resp.StatusCode)
 
-	if srcResource.Digest == nil {
-		targetResource.Digest = &descriptor.Digest{
-			HashAlgorithm:          hashAlgorithmSHA256,
-			NormalisationAlgorithm: genericBlobDigestV1,
-			Value:                  computed,
-		}
-	} else {
-		if srcResource.Digest.HashAlgorithm != hashAlgorithmSHA256 {
-			return nil, fmt.Errorf("unsupported hash algorithm: expected %s, got %s", hashAlgorithmSHA256, srcResource.Digest.HashAlgorithm)
-		}
-		if srcResource.Digest.NormalisationAlgorithm != genericBlobDigestV1 {
-			return nil, fmt.Errorf("unsupported normalisation algorithm: expected %s, got %s", genericBlobDigestV1, srcResource.Digest.NormalisationAlgorithm)
-		}
-		if srcResource.Digest.Value != computed {
-			return nil, fmt.Errorf("digest mismatch: expected %s, got %s", srcResource.Digest.Value, computed)
-		}
-		targetResource.Digest = srcResource.Digest.DeepCopy()
+	if targetResource.Digest, err = uploadedDigest(srcResource.Digest, computed); err != nil {
+		return nil, err
 	}
 
 	// TargetResource already carries the published read access built at graph-build time,
@@ -214,12 +213,33 @@ func (t *HTTPStreamingTransformer) Transform(ctx context.Context, step runtime.T
 	return &transformation, nil
 }
 
-// downloadSource obtains the source blob, preferring the lazy streaming source when
-// the source repository implements [repository.StreamingResourceRepository]. The
-// streaming blob re-issues its request on each read and verifies integrity inline,
-// so the source is never buffered to a temporary file for the common
-// wget/s3 -> remote path. A repository without the capability falls back to
-// DownloadResource, which materializes the source first.
+// uploadedDigest returns the digest of the uploaded resource: the source digest
+// after it was checked against the computed SHA-256 value, or the computed value
+// when the source has no digest.
+func uploadedDigest(src *descriptor.Digest, computed string) (*descriptor.Digest, error) {
+	if src == nil {
+		return &descriptor.Digest{
+			HashAlgorithm:          hashAlgorithmSHA256,
+			NormalisationAlgorithm: genericBlobDigestV1,
+			Value:                  computed,
+		}, nil
+	}
+	if src.HashAlgorithm != hashAlgorithmSHA256 {
+		return nil, fmt.Errorf("unsupported hash algorithm: expected %s, got %s", hashAlgorithmSHA256, src.HashAlgorithm)
+	}
+	if src.NormalisationAlgorithm != genericBlobDigestV1 {
+		return nil, fmt.Errorf("unsupported normalisation algorithm: expected %s, got %s", genericBlobDigestV1, src.NormalisationAlgorithm)
+	}
+	if src.Value != computed {
+		return nil, fmt.Errorf("digest mismatch: expected %s, got %s", src.Value, computed)
+	}
+	return src.DeepCopy(), nil
+}
+
+// downloadSource prefers the lazy streaming source, so the common wget/s3 -> remote
+// path needs no temporary file. The source is read exactly once, so a
+// non-idempotent request is safe to stream here. A repository without the
+// capability falls back to DownloadResource.
 func (t *HTTPStreamingTransformer) downloadSource(ctx context.Context, resource *descriptor.Resource, creds runtime.Typed) (blob.ReadOnlyBlob, error) {
 	if streamingRepo, ok := t.ResourceRepository.(repository.StreamingResourceRepository); ok {
 		return streamingRepo.DownloadResourceStream(ctx, resource, creds)

@@ -2,6 +2,7 @@ package download
 
 import (
 	"io"
+	"math"
 	"net/http"
 	"testing"
 
@@ -101,6 +102,7 @@ func TestStream_MaxDownloadSize(t *testing.T) {
 			wantErr: true,
 		},
 		{name: "zero disables the limit", maxSize: 0},
+		{name: "the largest limit does not overflow", maxSize: math.MaxInt64, object: s3Object{chunked: true}},
 	}
 
 	for _, tt := range tests {

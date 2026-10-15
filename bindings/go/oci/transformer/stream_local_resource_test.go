@@ -25,18 +25,24 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// fakeLazyBlob is a size-unknown, media-type-aware blob that is neither
-// blob.SizeAware nor blob.DigestAware, mirroring a lazy streaming source blob.
+// fakeLazyBlob is a size-unknown, media-type-aware, idempotent blob that is
+// neither blob.SizeAware nor blob.DigestAware, mirroring a lazy streaming source
+// blob.
 type fakeLazyBlob struct {
 	data      string
 	mediaType string
 }
 
-var _ blob.MediaTypeAware = (*fakeLazyBlob)(nil)
+var (
+	_ blob.MediaTypeAware         = (*fakeLazyBlob)(nil)
+	_ repository.IdempotentSource = (*fakeLazyBlob)(nil)
+)
 
 func (b *fakeLazyBlob) ReadCloser() (io.ReadCloser, error) {
 	return io.NopCloser(strings.NewReader(b.data)), nil
 }
+
+func (b *fakeLazyBlob) Idempotent() bool { return true }
 
 func (b *fakeLazyBlob) MediaType() (string, bool) {
 	if b.mediaType == "" {
@@ -78,8 +84,7 @@ func (f *fakeStreamingResourceRepo) DownloadResourceStream(ctx context.Context, 
 }
 
 // primingLazyBlob mirrors a wget/s3 lazy source: its media type (the response
-// Content-Type) is only known once its stream is opened. It is idempotent, so
-// the fused transformer may open it to prime the media type.
+// Content-Type) is only known once its stream is opened.
 type primingLazyBlob struct {
 	data        string
 	contentType string
@@ -224,7 +229,7 @@ func TestStreamLocalResource_StreamingPath(t *testing.T) {
 	localBlob, ok := mockRepo.addedResource.Access.(*v2.LocalBlob)
 	r.True(ok, "expected a *v2.LocalBlob access, got %T", mockRepo.addedResource.Access)
 	r.Equal("application/x-test", localBlob.MediaType)
-	r.Equal("blob", localBlob.ReferenceName)
+	r.Empty(localBlob.ReferenceName, "a plain blob must not name an OCI artifact")
 	r.Equal(v2.LocalBlobAccessType, localBlob.Type.Name)
 	r.Equal(v2.LocalBlobAccessTypeVersion, localBlob.Type.Version)
 
@@ -232,57 +237,6 @@ func TestStreamLocalResource_StreamingPath(t *testing.T) {
 	r.NotNil(transformed.Output)
 	r.NotNil(transformed.Output.Resource)
 	r.Equal(v2.LocalBlobAccessType, transformed.Output.Resource.Access.GetType().Name)
-}
-
-// TestStreamLocalResource_DigestWrapping verifies that a SHA-256 source digest is
-// exposed on the streamed blob so the chunked push can verify against it.
-func TestStreamLocalResource_DigestWrapping(t *testing.T) {
-	r := require.New(t)
-	ctx := context.Background()
-
-	lazy := &fakeLazyBlob{data: "streamed content", mediaType: "application/x-test"}
-	resourceRepo := &fakeStreamingResourceRepo{blob: lazy}
-	mockRepo := &mockRepository{}
-	provider := &mockRepoProvider{repo: mockRepo}
-
-	tr := &StreamLocalResource{
-		Scheme:             streamTransformerScheme(t),
-		RepoProvider:       provider,
-		ResourceRepository: resourceRepo,
-	}
-
-	hexValue := strings.Repeat("a", 64)
-	spec := &v1alpha1.OCIStreamLocalResource{
-		Type: v1alpha1.OCIStreamLocalResourceV1alpha1,
-		ID:   "stream",
-		Spec: &v1alpha1.OCIStreamLocalResourceSpec{
-			Repository: ocispec.Repository{
-				Type:    runtime.Type{Name: ocispec.Type, Version: "v1"},
-				BaseUrl: "ghcr.io/test",
-			},
-			Component: "ocm.software/test",
-			Version:   "1.0.0",
-			Resource: wgetSourceResource("blob", &v2.Digest{
-				HashAlgorithm:          "SHA-256",
-				NormalisationAlgorithm: "genericBlobDigest/v1",
-				Value:                  hexValue,
-			}),
-		},
-	}
-
-	_, err := tr.Transform(ctx, spec)
-	r.NoError(err)
-
-	r.NotNil(mockRepo.addedBlob)
-	digestAware, ok := mockRepo.addedBlob.(blob.DigestAware)
-	r.True(ok, "expected the streamed blob to expose a known digest")
-	dig, known := digestAware.Digest()
-	r.True(known)
-	r.Equal("sha256:"+hexValue, dig)
-	// Size must still be unknown so streaming engages.
-	if sizer, ok := mockRepo.addedBlob.(blob.SizeAware); ok {
-		r.Equal(blob.SizeUnknown, sizer.Size())
-	}
 }
 
 // TestStreamLocalResource_FallbackPath verifies that a non-streaming resource
@@ -389,6 +343,7 @@ func TestStreamLocalResource_UntypedSourceMediaType(t *testing.T) {
 			if sizer, ok := mockRepo.addedBlob.(blob.SizeAware); ok {
 				r.Equal(blob.SizeUnknown, sizer.Size())
 			}
+			r.Equal(1, lazy.opens, "reading the media type must open the source once")
 		})
 	}
 }
@@ -537,6 +492,7 @@ func TestStreamLocalResource_RealPackOCI(t *testing.T) {
 	r.Equal(content, string(gotBytes))
 	r.Equal(godigest.FromString(content).String(), godigest.FromBytes(gotBytes).String(),
 		"the retrieved blob must have the expected content digest")
+	r.Equal(1, lazy.opens, "the source must be requested once")
 }
 
 // sizedBlob is a materialized source blob that reports a size, used to prove the
@@ -551,10 +507,8 @@ func (b *sizedBlob) ReadCloser() (io.ReadCloser, error) {
 func (b *sizedBlob) Size() int64 { return int64(len(b.data)) }
 
 // TestStreamLocalResource_MaterializedBlobKeepsSize guards against wrapping a
-// materialized (fallback) source in knownDigestBlob, which would hide SizeAware
-// and wrongly force the streaming push for a size-known blob. The source carries
-// a SHA-256 digest (so the pre-fix code would have wrapped it) and a non-streaming
-// resource repository forces the materialized path.
+// downloaded source, which would hide SizeAware and force the streaming push for a
+// size-known blob. A non-streaming resource repository forces the download path.
 func TestStreamLocalResource_MaterializedBlobKeepsSize(t *testing.T) {
 	r := require.New(t)
 	ctx := context.Background()
@@ -586,4 +540,34 @@ func TestStreamLocalResource_MaterializedBlobKeepsSize(t *testing.T) {
 	sizer, ok := mockRepo.addedBlob.(blob.SizeAware)
 	r.True(ok, "materialized blob must remain SizeAware (not wrapped in knownDigestBlob), got %T", mockRepo.addedBlob)
 	r.Equal(int64(len(content)), sizer.Size())
+}
+
+// closingBlob records whether it was closed, standing in for a downloaded source
+// backed by a temporary file.
+type closingBlob struct {
+	sizedBlob
+	closed bool
+}
+
+func (b *closingBlob) Close() error {
+	b.closed = true
+	return nil
+}
+
+// TestStreamLocalResource_ClosesSource: the fused node has no FileCleanup node
+// behind it, so it must release the source (for example the temporary file of a
+// downloaded source) itself.
+func TestStreamLocalResource_ClosesSource(t *testing.T) {
+	r := require.New(t)
+
+	src := &closingBlob{sizedBlob: sizedBlob{data: "downloaded"}}
+	tr := &StreamLocalResource{
+		Scheme:             streamTransformerScheme(t),
+		RepoProvider:       &mockRepoProvider{repo: &mockRepository{}},
+		ResourceRepository: &fakeResourceRepo{blob: src},
+	}
+
+	_, err := tr.Transform(t.Context(), ociStreamSpec(wgetSourceResource("blob", nil)))
+	r.NoError(err)
+	r.True(src.closed, "the source blob must be closed after the add")
 }

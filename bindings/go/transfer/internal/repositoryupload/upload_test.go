@@ -83,10 +83,10 @@ func (s *streamingStubRepository) DownloadResource(context.Context, *descriptor.
 	return s.MaterializedBlob, nil
 }
 
-// TestSourcePrimesStreamingMediaType guards the primeMediaType/downloadRemoteSource
-// path: a lazy streaming source without a pinned media type must still upload with
-// the response Content-Type, not the application/octet-stream fallback.
-func TestSourcePrimesStreamingMediaType(t *testing.T) {
+// TestSourceStreamingMediaType: a lazy streaming source without a pinned media type
+// must still upload with the response Content-Type, not the application/octet-stream
+// fallback, and reading its content must not send a second source request.
+func TestSourceStreamingMediaType(t *testing.T) {
 	r := require.New(t)
 	src := &lazyMediaTypeBlob{content: []byte("hello"), contentType: "text/plain"}
 	u := &Uploader{ResourceRepository: &streamingStubRepository{StreamBlob: src}}
@@ -97,8 +97,16 @@ func TestSourcePrimesStreamingMediaType(t *testing.T) {
 	b, mediaType, err := u.source(t.Context(), spec, &descriptor.Resource{})
 	r.NoError(err)
 	r.NotNil(b)
-	r.Equal("text/plain", mediaType, "the response Content-Type is primed, not the octet-stream fallback")
-	r.NotEqual(octetStream, mediaType)
+	r.Equal("text/plain", mediaType, "the response Content-Type is used, not the octet-stream fallback")
+
+	rc, err := b.ReadCloser()
+	r.NoError(err)
+	content, err := io.ReadAll(rc)
+	r.NoError(err)
+	r.NoError(rc.Close())
+	r.Equal("hello", string(content))
+	r.Equal(1, src.opens, "reading the content must reuse the request that read the media type")
+	closeBlob(b)
 }
 
 // TestSourceMaterializesNonIdempotentStream guards the idempotency gate: a

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -334,4 +335,54 @@ func TestHTTPStreamingTransformer_UserContentTypeHeaderPreserved(t *testing.T) {
 	r.NoError(err)
 	assert.Equal(t, "application/vnd.custom+json", gotContentType,
 		"an explicit request Content-Type must not be overridden by the media-type default")
+}
+
+// closeErrBlob hands out a reader whose Close reports a verification failure, as a
+// streamed source does when it was not read to its end.
+type closeErrBlob struct{ payload []byte }
+
+func (b *closeErrBlob) ReadCloser() (io.ReadCloser, error) {
+	return &closeErrReader{Reader: strings.NewReader(string(b.payload))}, nil
+}
+
+type closeErrReader struct{ io.Reader }
+
+func (r *closeErrReader) Close() error { return errors.New("checksum verification failed") }
+
+type closeErrRepository struct {
+	stubResourceRepository
+}
+
+func (s *closeErrRepository) DownloadResource(context.Context, *descriptor.Resource, runtime.Typed) (blob.ReadOnlyBlob, error) {
+	return &closeErrBlob{payload: s.payload}, nil
+}
+
+// TestHTTPStreamingTransformer_FailsOnSourceCloseError: the target may answer before
+// it read the whole body, so a verification error that first appears when the source
+// reader is closed must fail the transformation.
+func TestHTTPStreamingTransformer_FailsOnSourceCloseError(t *testing.T) {
+	r := require.New(t)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusCreated)
+	}))
+	t.Cleanup(srv.Close)
+
+	step := &v1alpha1.HTTPStreaming{
+		Type: v1alpha1.HTTPStreamingV1alpha1,
+		ID:   "upload",
+		Spec: &v1alpha1.HTTPStreamingSpec{
+			Resource:       wgetResourceV2("blob", "https://source.example/blob.tar", "", "", nil, nil),
+			Request:        wgetRequest(srv.URL+"/target/blob.tar", http.MethodPut, "application/x-tar", nil),
+			TargetResource: wgetResourceV2("blob", srv.URL+"/target/blob.tar", "", "application/x-tar", nil, nil),
+		},
+	}
+	tr := &HTTPStreamingTransformer{
+		Scheme:             newTransformerScheme(),
+		ResourceRepository: &closeErrRepository{stubResourceRepository{payload: []byte("payload")}},
+	}
+
+	out, err := tr.Transform(t.Context(), step)
+	r.ErrorContains(err, "checksum verification failed")
+	r.Nil(out)
 }

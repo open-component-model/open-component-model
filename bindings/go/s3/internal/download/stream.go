@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math"
 	"sync"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -158,9 +159,14 @@ func (r *streamReader) Read(p []byte) (int, error) {
 	// Bound the read so a store that lies about ContentLength cannot stream past the
 	// limit; the extra byte separates reaching the limit from exceeding it.
 	if r.maxSize > 0 {
-		remaining := r.maxSize - r.read + 1
-		if remaining <= 0 {
+		if r.read > r.maxSize {
 			return 0, fmt.Errorf("s3 object %s/%s exceeds maximum allowed size of %d bytes", r.bucketName, r.objectKey, r.maxSize)
+		}
+		// Computed without the extra byte first so a maxSize of math.MaxInt64
+		// cannot overflow.
+		remaining := r.maxSize - r.read
+		if remaining < math.MaxInt64 {
+			remaining++
 		}
 		if int64(len(p)) > remaining {
 			p = p[:remaining]

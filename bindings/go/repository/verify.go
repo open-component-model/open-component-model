@@ -32,7 +32,7 @@ func VerifyDownload(ctx context.Context, res *descriptor.Resource, content blob.
 		return nil, fmt.Errorf("cannot verify resource %q against digest: %w", res.Name, handlerError(content, err))
 	}
 
-	return verifying, nil
+	return verifying.withIdempotency(), nil
 }
 
 // handlerError closes the reader and wraps the error into something that makes sense.
