@@ -28,12 +28,11 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
 	"ocm.software/open-component-model/bindings/go/repository"
+	"ocm.software/open-component-model/bindings/go/runtime"
 	s3access "ocm.software/open-component-model/bindings/go/s3/spec/access"
 	s3accessv2 "ocm.software/open-component-model/bindings/go/s3/spec/access/v2"
 	s3identityv1 "ocm.software/open-component-model/bindings/go/s3/spec/identity/v1"
-	"ocm.software/open-component-model/bindings/go/runtime"
 )
-
 
 // Test_Integration_TransferS3Resource_Stream_CLI is the end-to-end streaming proof through
 // the ocm CLI: an external s3 resource is transferred by value into an OCI registry. The
@@ -233,4 +232,3 @@ func writeS3StreamOCMConfig(t *testing.T, endpoint, bucket, key, accessKeyID, se
 	t.Logf("Generated config:\n%s", cfg)
 	return cfgPath
 }
-
