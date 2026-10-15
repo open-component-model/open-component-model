@@ -91,14 +91,8 @@ func (t *GetLocalResource) Transform(ctx context.Context, step runtime.Typed) (r
 	if err != nil {
 		return nil, fmt.Errorf("failed getting component version repository: %w", err)
 	}
-	if pin != "" {
-		pinnable, ok := repo.(repository.DigestPinnableRepository)
-		if !ok {
-			return nil, fmt.Errorf("repository %T cannot read component version %s:%s pinned to %s", repo, component, version, pin)
-		}
-		if repo, err = pinnable.PinComponentVersion(component, version, pin); err != nil {
-			return nil, fmt.Errorf("pinning component version %s:%s to %s failed: %w", component, version, pin, err)
-		}
+	if repo, err = repository.PinRepository(repo, component, version, pin); err != nil {
+		return nil, err
 	}
 
 	// Get local resource

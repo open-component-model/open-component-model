@@ -37,6 +37,25 @@ type DigestPinnableRepository interface {
 	ResolveComponentVersionDigest(ctx context.Context, component, version string) (string, error)
 }
 
+// PinRepository returns repo pinned to the OCI digest pin ("<algorithm>:<hex>") of component, see
+// [DigestPinnableRepository.PinComponentVersion], so that reads of component, e.g. local resources,
+// are served from the pinned artifact instead of resolving the version tag. An empty pin returns
+// repo unchanged. It fails if repo cannot be pinned.
+func PinRepository(repo ComponentVersionRepository, component, version, pin string) (ComponentVersionRepository, error) {
+	if pin == "" {
+		return repo, nil
+	}
+	pinnable, ok := repo.(DigestPinnableRepository)
+	if !ok {
+		return nil, fmt.Errorf("repository %T cannot read component version %s:%s pinned to %s", repo, component, version, pin)
+	}
+	pinned, err := pinnable.PinComponentVersion(component, version, pin)
+	if err != nil {
+		return nil, fmt.Errorf("pinning component version %s:%s to %s failed: %w", component, version, pin, err)
+	}
+	return pinned, nil
+}
+
 // digestPinPattern is the OCI digest grammar "[<normalisation>+]<hash>:<hex>",
 // with "/" of the normalisation algorithm written as ".".
 var digestPinPattern = regexp.MustCompile(`^(?:([A-Za-z][A-Za-z0-9]*(?:[-_.][A-Za-z][A-Za-z0-9]*)*)\+)?([A-Za-z][A-Za-z0-9]*):([0-9A-Fa-f]+)$`)
