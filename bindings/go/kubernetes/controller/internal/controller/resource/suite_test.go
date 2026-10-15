@@ -20,6 +20,9 @@ import (
 	metricserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
+	gitrepo "ocm.software/open-component-model/bindings/go/git/repository"
+	ghdigest "ocm.software/open-component-model/bindings/go/github/digest"
+	helmdigest "ocm.software/open-component-model/bindings/go/helm/digest"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/resolution"
@@ -34,6 +37,8 @@ import (
 	"ocm.software/open-component-model/bindings/go/rsa/signing/handler"
 	signingv1alpha1 "ocm.software/open-component-model/bindings/go/rsa/signing/v1alpha1"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
+	s3repo "ocm.software/open-component-model/bindings/go/s3/repository"
+	wgetrepo "ocm.software/open-component-model/bindings/go/wget/repository"
 )
 
 // +kubebuilder:scaffold:imports
@@ -124,6 +129,11 @@ var _ = BeforeSuite(func() {
 	ociResourceRepoPlugin := ocires.NewResourceRepository(&filesystemv1alpha1.Config{})
 	Expect(pm.ResourcePluginRegistry.RegisterInternalResourcePlugin(ociResourceRepoPlugin)).To(Succeed())
 	Expect(pm.DigestProcessorRegistry.RegisterInternalDigestProcessorPlugin(ociResourceRepoPlugin)).To(Succeed())
+	Expect(pm.DigestProcessorRegistry.RegisterInternalDigestProcessorPlugin(helmdigest.NewDigestProcessor(""))).To(Succeed())
+	Expect(pm.DigestProcessorRegistry.RegisterInternalDigestProcessorPlugin(s3repo.NewResourceRepository(&filesystemv1alpha1.Config{}))).To(Succeed())
+	Expect(pm.DigestProcessorRegistry.RegisterInternalDigestProcessorPlugin(wgetrepo.NewResourceRepository(&filesystemv1alpha1.Config{}))).To(Succeed())
+	Expect(pm.DigestProcessorRegistry.RegisterInternalDigestProcessorPlugin(gitrepo.NewResourceRepository(&filesystemv1alpha1.Config{}))).To(Succeed())
+	Expect(pm.DigestProcessorRegistry.RegisterInternalDigestProcessorPlugin(ghdigest.NewDigestProcessor())).To(Succeed())
 
 	// Setup resolver with worker pool
 	const unlimited = 0

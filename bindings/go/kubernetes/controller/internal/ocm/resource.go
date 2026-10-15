@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -19,6 +20,30 @@ import (
 )
 
 var ErrPluginNotFound = errors.New("digest processor plugin not found")
+
+// IsLocalBlob reports whether the access describes a component-local blob.
+func IsLocalBlob(access runtime.Typed) bool {
+	if access == nil {
+		return false
+	}
+	if _, ok := access.(*descriptor.LocalBlob); ok {
+		return true
+	}
+	name := access.GetType().Name
+	return name == descriptor.LocalBlobAccessType || name == descriptor.LegacyLocalBlobAccessType
+}
+
+// IsExcludedFromSignature reports whether the resource digest carries the explicit
+// marker that keeps the resource content out of the component signature. Such
+// resources have no digest to verify against, by author intent, so verification is
+// not applicable rather than failed.
+func IsExcludedFromSignature(d *descriptor.Digest) bool {
+	if d == nil {
+		return false
+	}
+	return strings.EqualFold(d.HashAlgorithm, descriptor.NoDigest) ||
+		strings.EqualFold(d.NormalisationAlgorithm, descriptor.ExcludeFromSignature)
+}
 
 // VerifyResource verifies and processes the resource digest using the appropriate digest processor plugin.
 func VerifyResource(ctx context.Context, pm *manager.PluginManager, resource *descriptor.Resource, cfg *configuration.Configuration) (*descriptor.Resource, error) {

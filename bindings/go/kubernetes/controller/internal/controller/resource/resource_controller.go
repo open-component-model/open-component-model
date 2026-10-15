@@ -35,6 +35,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/util"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/verification"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/pkg/configuration"
+	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -425,24 +426,44 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, err
 	}
 
-	if resource.Spec.VerificationPolicy != v1alpha1.VerificationPolicyNever {
+	verifyStart := time.Now()
+	verifyResult := verificationResultVerified
+	// Captured before verification, which may reassign matchedResource (and return nil on error).
+	accessType := boundedAccessType(ctx, pm, matchedResource.Access)
+	switch {
+	case resource.Spec.VerificationPolicy == v1alpha1.VerificationPolicyNever:
+		verifyResult = verificationResultSkipped
+		logger.V(1).Info("skip verifying resource: verification policy is Never")
+	case ocm.IsExcludedFromSignature(matchedResource.Digest):
+		verifyResult = verificationResultSkipped
+		logger.V(1).Info("skip verifying resource: resource is excluded from signature")
+		event.New(r.EventRecorder, resource, nil, v1alpha1.EventSeverityInfo,
+			"resource %q is excluded from signature; skipping digest verification", matchedResource.Name)
+	case ocm.IsLocalBlob(matchedResource.Access):
+		// localBlob verification is deferred: by-value OCI artifacts need manifest-digest
+		// verification that belongs in the library's download/get path (tracked separately).
+		verifyResult = verificationResultSkipped
+		logger.V(1).Info("skip verifying resource: localBlob verification not yet supported")
+	case matchedResource.Digest == nil || matchedResource.Digest.Value == "" || matchedResource.Digest.HashAlgorithm == "":
+		// Not Never and not the exclude marker (both handled above): a resource with no digest
+		// cannot be verified. Fail closed; the user opts out explicitly via VerificationPolicy: Never.
+		ResourceVerificationDurationHistogram.WithLabelValues(accessType, verificationResultFailed).Observe(time.Since(verifyStart).Seconds())
+		err := fmt.Errorf("resource %q has no digest to verify; set verificationPolicy to Never to accept unverified resources", matchedResource.Name)
+		status.MarkNotReady(r.EventRecorder, resource, v1alpha1.GetOCMResourceFailedReason, err.Error())
+
+		return ctrl.Result{}, err
+	default:
 		logger.V(1).Info("verifying resource")
 
 		matchedResource, err = ocm.VerifyResource(ctx, pm, matchedResource, cfg)
 		if err != nil {
-			if errors.Is(err, ocm.ErrPluginNotFound) {
-				// TODO(@frewilhelm): For now we skip resource types that do not have a digest processor plugin.
-				//                    We need to adjust this when the plugins are available
-				logger.V(1).Info("skipping resource verification as no suitable plugin was found")
-			} else {
-				status.MarkNotReady(r.EventRecorder, resource, v1alpha1.GetOCMResourceFailedReason, err.Error())
+			ResourceVerificationDurationHistogram.WithLabelValues(accessType, verificationResultFailed).Observe(time.Since(verifyStart).Seconds())
+			status.MarkNotReady(r.EventRecorder, resource, v1alpha1.GetOCMResourceFailedReason, err.Error())
 
-				return ctrl.Result{}, fmt.Errorf("failed to verify resource: %w", err)
-			}
+			return ctrl.Result{}, fmt.Errorf("failed to verify resource: %w", err)
 		}
-	} else {
-		logger.V(1).Info("skip verifying resource: verification policy is Never")
 	}
+	ResourceVerificationDurationHistogram.WithLabelValues(accessType, verifyResult).Observe(time.Since(verifyStart).Seconds())
 
 	logger.V(1).Info("retrieved resource", "component", fmt.Sprintf("%s:%s", resourceDescriptor.Component.Name, resourceDescriptor.Component.Version),
 		"resource", matchedResource.Name, "duration", time.Since(startRetrievingResource))
@@ -535,4 +556,14 @@ func convertLabels(in []descriptor.Label) ([]v1alpha1.Label, error) {
 	}
 
 	return out, nil
+}
+
+// boundedAccessType returns the access type name for a supported type (localBlob, or one
+// with a registered digest processor), else verificationAccessTypeOther, so the metric label
+// stays bounded against untrusted descriptor access-type names.
+func boundedAccessType(ctx context.Context, pm *manager.PluginManager, access runtime.Typed) string {
+	if _, err := pm.DigestProcessorRegistry.GetPlugin(ctx, access); err != nil && !ocm.IsLocalBlob(access) {
+		return verificationAccessTypeOther
+	}
+	return access.GetType().Name
 }

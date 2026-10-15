@@ -13,7 +13,9 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/go-logr/logr"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
+	clientmodel "github.com/prometheus/client_model/go"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -217,7 +219,12 @@ var _ = Describe("Resource Controller", func() {
 									},
 									Type:     "ociArtifact",
 									Relation: descruntime.ExternalRelation,
-									Access:   rawAccess,
+									Digest: &descruntime.Digest{
+										HashAlgorithm:          "SHA-256",
+										NormalisationAlgorithm: "ociArtifactDigest/v1",
+										Value:                  ocmcliImageDigestV0240,
+									},
+									Access: rawAccess,
 								},
 							},
 							Provider: descruntime.Provider{Name: "ocm.software"},
@@ -253,12 +260,18 @@ var _ = Describe("Resource Controller", func() {
 									},
 									Type:     "helmChart",
 									Relation: descruntime.ExternalRelation,
+									Digest: &descruntime.Digest{
+										HashAlgorithm:          "SHA-256",
+										NormalisationAlgorithm: "ociArtifactDigest/v1",
+										Value:                  "565d310746f1fa4be7f93ba7965bb393153a2d57a15cfe5befc909b790a73f8a",
+									},
 									Access: &runtime.Raw{
 										Type: runtime.Type{
-											Name:    "helmChart",
+											Name:    "Helm",
 											Version: "v1",
 										},
 										Data: mustMarshalJSON(map[string]any{
+											"type":           "Helm/v1",
 											"helmChart":      "podinfo:6.9.1",
 											"helmRepository": "oci://ghcr.io/stefanprodan/charts",
 										}),
@@ -296,15 +309,20 @@ var _ = Describe("Resource Controller", func() {
 									},
 									Type:     "directoryTree",
 									Relation: descruntime.ExternalRelation,
+									Digest: &descruntime.Digest{
+										HashAlgorithm:          "SHA-256",
+										NormalisationAlgorithm: "genericBlobDigest/v1",
+										Value:                  "9f40b519431e9754a1680244b820877ca975aa969ea4ae72798bfe3f67d0f139",
+									},
 									Access: &runtime.Raw{
 										Type: runtime.Type{
 											Name:    "github",
 											Version: "v1",
 										},
 										Data: mustMarshalJSON(map[string]any{
-											"repoUrl": "https://github.com/open-component-model/ocm-k8s-toolkit",
-											"apiUrl":  "/repos/open-component-model/ocm-k8s-toolkit",
-											"commit":  "8f7e04f4b58d2a9e22f88e79dddfc36183688f28",
+											"type":    "github/v1",
+											"repoUrl": "https://github.com/octocat/Hello-World",
+											"commit":  "7fd1a60b01f91b314f59955a4e4d4e80d8edf11d",
 										}),
 									},
 								},
@@ -315,7 +333,7 @@ var _ = Describe("Resource Controller", func() {
 				}, ctfPath
 			},
 				&testCase{
-					GithubRepoURL: "https://github.com/open-component-model/ocm-k8s-toolkit",
+					GithubRepoURL: "https://github.com/octocat/Hello-World",
 				},
 			),
 			Entry("git access", func() ([]*descruntime.Descriptor, string) {
@@ -340,14 +358,20 @@ var _ = Describe("Resource Controller", func() {
 									},
 									Type:     "directoryTree",
 									Relation: descruntime.ExternalRelation,
+									Digest: &descruntime.Digest{
+										HashAlgorithm:          "SHA-256",
+										NormalisationAlgorithm: "genericBlobDigest/v1",
+										Value:                  "7b590d6197839bc4face3b2d287a1d200e346e324e6e6abf1cca8b3015f2912c",
+									},
 									Access: &runtime.Raw{
 										Type: runtime.Type{
-											Name:    "git",
+											Name:    "Git",
 											Version: "v1",
 										},
 										Data: mustMarshalJSON(map[string]any{
-											"repository": "https://github.com/open-component-model/ocm-k8s-toolkit",
-											"ref":        "refs/heads/main",
+											"type":       "Git/v1",
+											"repository": "https://github.com/octocat/Hello-World",
+											"ref":        "refs/heads/master",
 										}),
 									},
 								},
@@ -358,7 +382,7 @@ var _ = Describe("Resource Controller", func() {
 				}, ctfPath
 			},
 				&testCase{
-					GitRepository: "https://github.com/open-component-model/ocm-k8s-toolkit",
+					GitRepository: "https://github.com/octocat/Hello-World",
 				},
 			),
 			Entry("OCIImage v1 typed access", func() ([]*descruntime.Descriptor, string) {
@@ -391,7 +415,12 @@ var _ = Describe("Resource Controller", func() {
 									},
 									Type:     "ociArtifact",
 									Relation: descruntime.ExternalRelation,
-									Access:   rawAccess,
+									Digest: &descruntime.Digest{
+										HashAlgorithm:          "SHA-256",
+										NormalisationAlgorithm: "ociArtifactDigest/v1",
+										Value:                  ocmcliImageDigestV0240,
+									},
+									Access: rawAccess,
 								},
 							},
 							Provider: descruntime.Provider{Name: "ocm.software"},
@@ -406,6 +435,86 @@ var _ = Describe("Resource Controller", func() {
 				},
 			),
 		)
+
+		It("marks the resource not ready when no digest processor matches the access type", func(ctx SpecContext) {
+			By("creating a CTF with a by-reference resource whose access type has no digest processor")
+			ctfPath := filepath.Join(tempDir, "no-processor")
+			Expect(os.MkdirAll(ctfPath, 0o777)).To(Succeed())
+			descs := []*descruntime.Descriptor{
+				{
+					Meta: descruntime.Meta{Version: "v2"},
+					Component: descruntime.Component{
+						ComponentMeta: descruntime.ComponentMeta{
+							ObjectMeta: descruntime.ObjectMeta{Name: componentName, Version: componentVersion},
+						},
+						Provider: descruntime.Provider{Name: "ocm.software"},
+						Resources: []descruntime.Resource{
+							{
+								ElementMeta: descruntime.ElementMeta{
+									ObjectMeta: descruntime.ObjectMeta{Name: resourceName, Version: "1.0.0"},
+								},
+								Type:     "blob",
+								Relation: descruntime.ExternalRelation,
+								// A digest is present so dispatch reaches VerifyResource and fails on the
+								// missing processor, rather than short-circuiting on the no-digest guard.
+								Digest: &descruntime.Digest{
+									HashAlgorithm:          "SHA-256",
+									NormalisationAlgorithm: "genericBlobDigest/v1",
+									Value:                  "0000000000000000000000000000000000000000000000000000000000000000",
+								},
+								Access: &runtime.Raw{
+									Type: runtime.Type{Name: "nonexistentaccess", Version: "v1"},
+									Data: mustMarshalJSON(map[string]any{"type": "nonexistentaccess/v1"}),
+								},
+							},
+						},
+					},
+				},
+			}
+			_, specData := test.SetupCTFComponentVersionRepository(ctx, ctfPath, descs)
+
+			By("mocking a component")
+			namespace := test.NamespaceForTest(ctx)
+			componentObj := test.MockComponent(ctx, componentObjName, namespace.GetName(), &test.MockComponentOptions{
+				Client:   k8sClient,
+				Recorder: recorder,
+				Info: v1alpha1.ComponentInfo{
+					Component:      componentName,
+					Version:        componentVersion,
+					RepositorySpec: &apiextensionsv1.JSON{Raw: specData},
+				},
+				Repository: repositoryName,
+			})
+			DeferCleanup(func(ctx SpecContext) {
+				test.DeleteObject(ctx, k8sClient, componentObj)
+			})
+
+			By("creating a resource with the default (Always) verification policy")
+			resourceObj := &v1alpha1.Resource{
+				ObjectMeta: metav1.ObjectMeta{Name: resourceName, Namespace: namespace.GetName()},
+				Spec: v1alpha1.ResourceSpec{
+					ComponentRef: corev1.LocalObjectReference{Name: componentObj.GetName()},
+					Resource: v1alpha1.ResourceID{
+						ByReference: v1alpha1.ResourceReference{
+							Resource: runtime.Identity{"name": resourceName},
+						},
+					},
+				},
+			}
+			failedOtherBefore := verificationObservations(verificationAccessTypeOther, verificationResultFailed)
+			Expect(k8sClient.Create(ctx, resourceObj)).To(Succeed())
+			DeferCleanup(func(ctx SpecContext) {
+				test.DeleteObject(ctx, k8sClient, resourceObj)
+			})
+
+			By("expecting the resource to be not ready because verification could not be performed")
+			test.WaitForNotReadyObject(ctx, k8sClient, resourceObj, v1alpha1.GetOCMResourceFailedReason)
+
+			By("confirming the failure was recorded under the bounded 'other' access type")
+			Eventually(func() float64 { return verificationObservations(verificationAccessTypeOther, verificationResultFailed) }).
+				Should(BeNumerically(">", failedOtherBefore),
+					"unrecognized access type should record its verification failure under access_type=other, not its raw name")
+		})
 
 		It("should reconcile when the resource has extra identities", func(ctx SpecContext) {
 			By("creating a CTF")
@@ -436,6 +545,11 @@ var _ = Describe("Resource Controller", func() {
 								},
 								Type:     "plainText",
 								Relation: descruntime.LocalRelation,
+								Digest: &descruntime.Digest{
+									HashAlgorithm:          "SHA-256",
+									NormalisationAlgorithm: "ociArtifactDigest/v1",
+									Value:                  ocmcliImageDigestV0240,
+								},
 								Access: &ocispec.OCIImage{
 									Type: runtime.Type{
 										Name:    "ociArtifact",
@@ -534,6 +648,11 @@ var _ = Describe("Resource Controller", func() {
 								},
 								Type:     "plainText",
 								Relation: descruntime.LocalRelation,
+								Digest: &descruntime.Digest{
+									HashAlgorithm:          "SHA-256",
+									NormalisationAlgorithm: "ociArtifactDigest/v1",
+									Value:                  ocmcliImageDigestV0240,
+								},
 								Access: &ocispec.OCIImage{
 									Type: runtime.Type{
 										Name:    "ociArtifact",
@@ -679,12 +798,18 @@ var _ = Describe("Resource Controller", func() {
 								},
 								Type:     "ociArtifact",
 								Relation: descruntime.ExternalRelation,
+								Digest: &descruntime.Digest{
+									HashAlgorithm:          "SHA-256",
+									NormalisationAlgorithm: "ociArtifactDigest/v1",
+									Value:                  ocmcliImageDigestV0240,
+								},
 								Access: &runtime.Raw{
 									Type: runtime.Type{
 										Name:    "ociArtifact",
 										Version: "v1",
 									},
 									Data: mustMarshalJSON(map[string]any{
+										"type":           "ociArtifact/v1",
 										"imageReference": "ghcr.io/open-component-model/ocm/ocm.software/ocmcli/ocmcli-image:0.24.0",
 									}),
 								},
@@ -766,9 +891,9 @@ var _ = Describe("Resource Controller", func() {
 				"Status.Resource.Type":       "ociArtifact",
 				"Status.Additional": &apiextensionsv1.JSON{Raw: mustMarshalJSON(map[string]any{
 					"oci": map[string]any{
-						"digest":     "",
+						"digest":     "sha256:7a91508d9177f43552b60cfc0182d7c30a84e95bed03854855b3ab29b6a85db2",
 						"host":       "ghcr.io",
-						"reference":  "0.24.0",
+						"reference":  "0.24.0@sha256:7a91508d9177f43552b60cfc0182d7c30a84e95bed03854855b3ab29b6a85db2",
 						"registry":   "ghcr.io",
 						"repository": "open-component-model/ocm/ocm.software/ocmcli/ocmcli-image",
 						"tag":        "0.24.0",
@@ -802,12 +927,18 @@ var _ = Describe("Resource Controller", func() {
 								},
 								Type:     "ociArtifact",
 								Relation: descruntime.ExternalRelation,
+								Digest: &descruntime.Digest{
+									HashAlgorithm:          "SHA-256",
+									NormalisationAlgorithm: "ociArtifactDigest/v1",
+									Value:                  ocmcliImageDigestV0240,
+								},
 								Access: &runtime.Raw{
 									Type: runtime.Type{
 										Name:    "ociArtifact",
 										Version: "v1",
 									},
 									Data: mustMarshalJSON(map[string]any{
+										"type":           "ociArtifact/v1",
 										"imageReference": "ghcr.io/open-component-model/ocm/ocm.software/ocmcli/ocmcli-image:0.24.0",
 									}),
 								},
@@ -878,7 +1009,7 @@ var _ = Describe("Resource Controller", func() {
 					"oci": map[string]any{
 						"registry":   "ghcr.io",
 						"repository": "open-component-model/ocm/ocm.software/ocmcli/ocmcli-image",
-						"reference":  "0.24.0",
+						"reference":  "0.24.0@sha256:7a91508d9177f43552b60cfc0182d7c30a84e95bed03854855b3ab29b6a85db2",
 					},
 				})},
 			})
@@ -910,12 +1041,18 @@ var _ = Describe("Resource Controller", func() {
 								},
 								Type:     "ociArtifact",
 								Relation: descruntime.ExternalRelation,
+								Digest: &descruntime.Digest{
+									HashAlgorithm:          "SHA-256",
+									NormalisationAlgorithm: "ociArtifactDigest/v1",
+									Value:                  ocmcliImageDigestV0230,
+								},
 								Access: &runtime.Raw{
 									Type: runtime.Type{
 										Name:    "ociArtifact",
 										Version: "v1",
 									},
 									Data: mustMarshalJSON(map[string]any{
+										"type":           "ociArtifact/v1",
 										"imageReference": "ghcr.io/open-component-model/ocm/ocm.software/ocmcli/ocmcli-image:0.23.0",
 									}),
 								},
@@ -929,12 +1066,18 @@ var _ = Describe("Resource Controller", func() {
 								},
 								Type:     "ociArtifact",
 								Relation: descruntime.ExternalRelation,
+								Digest: &descruntime.Digest{
+									HashAlgorithm:          "SHA-256",
+									NormalisationAlgorithm: "ociArtifactDigest/v1",
+									Value:                  ocmcliImageDigestV0240,
+								},
 								Access: &runtime.Raw{
 									Type: runtime.Type{
 										Name:    "ociArtifact",
 										Version: "v1",
 									},
 									Data: mustMarshalJSON(map[string]any{
+										"type":           "ociArtifact/v1",
 										"imageReference": "ghcr.io/open-component-model/ocm/ocm.software/ocmcli/ocmcli-image:0.24.0",
 									}),
 								},
@@ -994,7 +1137,7 @@ var _ = Describe("Resource Controller", func() {
 			By("checking that the resource has been reconciled successfully")
 			test.WaitForReadyObject(ctx, k8sClient, resourceObj, map[string]any{
 				"Status.Additional": &apiextensionsv1.JSON{Raw: mustMarshalJSON(map[string]any{
-					"reference": "0.23.0",
+					"reference": "0.23.0@sha256:0aab483741a3199f4abf8b03fbe8b04eb3c74b32f0d7604087aea5c25d8a8bd3",
 				})},
 			})
 
@@ -1013,7 +1156,7 @@ var _ = Describe("Resource Controller", func() {
 			test.WaitForReadyObject(ctx, k8sClient, resourceObj, map[string]any{
 				"Status.Resource.Version": resourceVersionUpdated,
 				"Status.Additional": &apiextensionsv1.JSON{Raw: mustMarshalJSON(map[string]any{
-					"reference": "0.24.0",
+					"reference": "0.24.0@sha256:7a91508d9177f43552b60cfc0182d7c30a84e95bed03854855b3ab29b6a85db2",
 				})},
 			})
 		})
@@ -1044,12 +1187,18 @@ var _ = Describe("Resource Controller", func() {
 								},
 								Type:     "ociArtifact",
 								Relation: descruntime.ExternalRelation,
+								Digest: &descruntime.Digest{
+									HashAlgorithm:          "SHA-256",
+									NormalisationAlgorithm: "ociArtifactDigest/v1",
+									Value:                  ocmcliImageDigestV0230,
+								},
 								Access: &runtime.Raw{
 									Type: runtime.Type{
 										Name:    "ociArtifact",
 										Version: "v1",
 									},
 									Data: mustMarshalJSON(map[string]any{
+										"type":           "ociArtifact/v1",
 										"imageReference": "ghcr.io/open-component-model/ocm/ocm.software/ocmcli/ocmcli-image:0.23.0",
 									}),
 								},
@@ -1110,7 +1259,7 @@ var _ = Describe("Resource Controller", func() {
 			expected := &testCase{
 				Registry:   "ghcr.io",
 				Repository: "open-component-model/ocm/ocm.software/ocmcli/ocmcli-image",
-				Reference:  "0.23.0",
+				Reference:  "0.23.0@sha256:0aab483741a3199f4abf8b03fbe8b04eb3c74b32f0d7604087aea5c25d8a8bd3",
 			}
 			test.WaitForReadyObject(ctx, k8sClient, resourceObj, map[string]any{
 				"Status.Additional": &apiextensionsv1.JSON{Raw: mustMarshalJSON(map[string]any{
@@ -1139,12 +1288,18 @@ var _ = Describe("Resource Controller", func() {
 								},
 								Type:     "ociArtifact",
 								Relation: descruntime.ExternalRelation,
+								Digest: &descruntime.Digest{
+									HashAlgorithm:          "SHA-256",
+									NormalisationAlgorithm: "ociArtifactDigest/v1",
+									Value:                  ocmcliImageDigestV0240,
+								},
 								Access: &runtime.Raw{
 									Type: runtime.Type{
 										Name:    "ociArtifact",
 										Version: "v1",
 									},
 									Data: mustMarshalJSON(map[string]any{
+										"type":           "ociArtifact/v1",
 										"imageReference": "ghcr.io/open-component-model/ocm/ocm.software/ocmcli/ocmcli-image:0.24.0",
 									}),
 								},
@@ -1174,7 +1329,7 @@ var _ = Describe("Resource Controller", func() {
 			expected = &testCase{
 				Registry:   "ghcr.io",
 				Repository: "open-component-model/ocm/ocm.software/ocmcli/ocmcli-image",
-				Reference:  "0.24.0",
+				Reference:  "0.24.0@sha256:7a91508d9177f43552b60cfc0182d7c30a84e95bed03854855b3ab29b6a85db2",
 			}
 			test.WaitForReadyObject(ctx, k8sClient, resourceObj, map[string]any{
 				"Status.Component.Version": componentVersionUpdated,
@@ -1232,12 +1387,18 @@ var _ = Describe("Resource Controller", func() {
 								},
 								Type:     "ociArtifact",
 								Relation: descruntime.ExternalRelation,
+								Digest: &descruntime.Digest{
+									HashAlgorithm:          "SHA-256",
+									NormalisationAlgorithm: "ociArtifactDigest/v1",
+									Value:                  ocmcliImageDigestV0230,
+								},
 								Access: &runtime.Raw{
 									Type: runtime.Type{
 										Name:    "ociArtifact",
 										Version: "v1",
 									},
 									Data: mustMarshalJSON(map[string]any{
+										"type":           "ociArtifact/v1",
 										"imageReference": "ghcr.io/open-component-model/ocm/ocm.software/ocmcli/ocmcli-image:0.23.0",
 									}),
 								},
@@ -1298,7 +1459,7 @@ var _ = Describe("Resource Controller", func() {
 			By("checking that the resource has been reconciled successfully")
 			test.WaitForReadyObject(ctx, k8sClient, resourceObj, map[string]any{
 				"Status.Additional": &apiextensionsv1.JSON{Raw: mustMarshalJSON(map[string]any{
-					"reference": "0.23.0",
+					"reference": "0.23.0@sha256:0aab483741a3199f4abf8b03fbe8b04eb3c74b32f0d7604087aea5c25d8a8bd3",
 				})},
 				"Status.Component.Component": nestedComponentName,
 				"Status.Component.Version":   componentVersion,
@@ -1420,12 +1581,18 @@ var _ = Describe("Resource Controller", func() {
 							},
 							Type:     "ociArtifact",
 							Relation: descruntime.ExternalRelation,
+							Digest: &descruntime.Digest{
+								HashAlgorithm:          "SHA-256",
+								NormalisationAlgorithm: "ociArtifactDigest/v1",
+								Value:                  ocmcliImageDigestV0230,
+							},
 							Access: &runtime.Raw{
 								Type: runtime.Type{
 									Name:    "ociArtifact",
 									Version: "v1",
 								},
 								Data: mustMarshalJSON(map[string]any{
+									"type":           "ociArtifact/v1",
 									"imageReference": "ghcr.io/open-component-model/ocm/ocm.software/ocmcli/ocmcli-image:" + imgReferenceResource1,
 								}),
 							},
@@ -1464,12 +1631,18 @@ var _ = Describe("Resource Controller", func() {
 							},
 							Type:     "ociArtifact",
 							Relation: descruntime.ExternalRelation,
+							Digest: &descruntime.Digest{
+								HashAlgorithm:          "SHA-256",
+								NormalisationAlgorithm: "ociArtifactDigest/v1",
+								Value:                  ocmcliImageDigestV0240,
+							},
 							Access: &runtime.Raw{
 								Type: runtime.Type{
 									Name:    "ociArtifact",
 									Version: "v1",
 								},
 								Data: mustMarshalJSON(map[string]any{
+									"type":           "ociArtifact/v1",
 									"imageReference": "ghcr.io/open-component-model/ocm/ocm.software/ocmcli/ocmcli-image:" + imgReferenceResource2,
 								}),
 							},
@@ -1565,7 +1738,7 @@ var _ = Describe("Resource Controller", func() {
 			By("checking that resource1 has been reconciled successfully")
 			test.WaitForReadyObject(ctx, k8sClient, resourceObj1, map[string]any{
 				"Status.Additional": &apiextensionsv1.JSON{Raw: mustMarshalJSON(map[string]any{
-					"reference": imgReferenceResource1,
+					"reference": imgReferenceResource1 + "@sha256:" + ocmcliImageDigestV0230,
 				})},
 				"Status.Component.Component": nestedComponentName11,
 				"Status.Component.Version":   componentVersion,
@@ -1602,7 +1775,7 @@ var _ = Describe("Resource Controller", func() {
 			By("checking that resource1 has been reconciled successfully")
 			test.WaitForReadyObject(ctx, k8sClient, resourceObj2, map[string]any{
 				"Status.Additional": &apiextensionsv1.JSON{Raw: mustMarshalJSON(map[string]any{
-					"reference": imgReferenceResource2,
+					"reference": imgReferenceResource2 + "@sha256:" + ocmcliImageDigestV0240,
 				})},
 				"Status.Component.Component": nestedComponentName2,
 				"Status.Component.Version":   componentVersion,
@@ -1691,12 +1864,18 @@ var _ = Describe("Resource Controller", func() {
 								},
 								Type:     "ociArtifact",
 								Relation: descruntime.ExternalRelation,
+								Digest: &descruntime.Digest{
+									HashAlgorithm:          "SHA-256",
+									NormalisationAlgorithm: "ociArtifactDigest/v1",
+									Value:                  ocmcliImageDigestV0230,
+								},
 								Access: &runtime.Raw{
 									Type: runtime.Type{
 										Name:    "ociArtifact",
 										Version: "v1",
 									},
 									Data: mustMarshalJSON(map[string]any{
+										"type":           "ociArtifact/v1",
 										"imageReference": "ghcr.io/open-component-model/ocm/ocm.software/ocmcli/ocmcli-image:0.23.0",
 									}),
 								},
@@ -1792,7 +1971,7 @@ var _ = Describe("Resource Controller", func() {
 			By("checking that the resource has been reconciled successfully")
 			test.WaitForReadyObject(ctx, k8sClient, resourceObj, map[string]any{
 				"Status.Additional": &apiextensionsv1.JSON{Raw: mustMarshalJSON(map[string]any{
-					"reference": "0.23.0",
+					"reference": "0.23.0@sha256:0aab483741a3199f4abf8b03fbe8b04eb3c74b32f0d7604087aea5c25d8a8bd3",
 				})},
 				"Status.Component.Component": nestedComponentName,
 				"Status.Component.Version":   componentVersion,
@@ -1864,6 +2043,11 @@ var _ = Describe("Resource Controller", func() {
 								},
 								Type:     "plainText",
 								Relation: descruntime.LocalRelation,
+								Digest: &descruntime.Digest{
+									HashAlgorithm:          "SHA-256",
+									NormalisationAlgorithm: "ociArtifactDigest/v1",
+									Value:                  ocmcliImageDigestV0240,
+								},
 								Access: &ocispec.OCIImage{
 									Type: runtime.Type{
 										Name:    "ociArtifact",
@@ -2012,6 +2196,11 @@ consumers:
 								},
 								Type:     "plainText",
 								Relation: descruntime.LocalRelation,
+								Digest: &descruntime.Digest{
+									HashAlgorithm:          "SHA-256",
+									NormalisationAlgorithm: "ociArtifactDigest/v1",
+									Value:                  ocmcliImageDigestV0240,
+								},
 								Access: &ocispec.OCIImage{
 									Type: runtime.Type{
 										Name:    "ociArtifact",
@@ -2263,3 +2452,39 @@ func mustMarshalJSON(v any) []byte {
 	Expect(err).ToNot(HaveOccurred())
 	return raw
 }
+
+// ocmcliImageDigestV0240 and ocmcliImageDigestV0230 are the ociArtifactDigest/v1 manifest
+// digests of the ocmcli image tags used in the by-reference OCI fixtures. By-reference OCI
+// resources must carry a digest or the strict Always policy marks them NotReady.
+const (
+	ocmcliImageDigestV0240 = "7a91508d9177f43552b60cfc0182d7c30a84e95bed03854855b3ab29b6a85db2"
+	ocmcliImageDigestV0230 = "0aab483741a3199f4abf8b03fbe8b04eb3c74b32f0d7604087aea5c25d8a8bd3"
+)
+
+// verificationObservations returns how many times resource verification has been observed for
+// the given access type and result, so a spec can prove which access_type label a verification
+// was recorded under (a Ready/NotReady status alone cannot distinguish the label value).
+func verificationObservations(accessType, result string) float64 {
+	GinkgoHelper()
+	obs, err := ResourceVerificationDurationHistogram.GetMetricWithLabelValues(accessType, result)
+	Expect(err).NotTo(HaveOccurred())
+	m := &clientmodel.Metric{}
+	Expect(obs.(prometheus.Histogram).Write(m)).To(Succeed())
+	return float64(m.GetHistogram().GetSampleCount())
+}
+
+var _ = Describe("boundedAccessType", func() {
+	It("preserves recognized access type names and collapses unknown ones to other", func(ctx SpecContext) {
+		By("keeping the name of a type with a registered digest processor")
+		Expect(boundedAccessType(ctx, pm, &runtime.Raw{Type: runtime.NewVersionedType("OCIImage", "v1")})).
+			To(Equal("OCIImage"))
+
+		By("keeping localBlob even though it has no processor")
+		Expect(boundedAccessType(ctx, pm, &runtime.Raw{Type: runtime.NewUnversionedType(descruntime.LocalBlobAccessType)})).
+			To(Equal(descruntime.LocalBlobAccessType))
+
+		By("collapsing an unrecognized access type to other")
+		Expect(boundedAccessType(ctx, pm, &runtime.Raw{Type: runtime.NewVersionedType("nonexistentaccess", "v1")})).
+			To(Equal(verificationAccessTypeOther))
+	})
+})
