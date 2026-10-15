@@ -221,7 +221,7 @@ EOF
 
 > 👉 The `signature: default` name is used when you don't specify `--signature` on the command line.
 
-To pin a specific key when the keyring contains multiple keys, add one line _keyFingerprint_ in the above config.
+To pin a specific key when the credentials carry multiple keys, add one line _keyFingerprint_ to the signer in the above config. Without it, signing uses the first secret key in the key material.
 
 ```yaml
   - type: signing.config.ocm.software/v1alpha1
@@ -243,9 +243,9 @@ To keep RSA elsewhere and use GPG for a single named signature, add a `signature
 
 #### Sign with a key from your own GnuPG keyring
 
-The config above takes the key material from the GPG credentials (`keySource: credentials`, the default). To sign with a key from your own GnuPG keyring instead (`$GNUPGHOME`, or `~/.gnupg`), including keys on a hardware token such as a YubiKey, set `keySource: keyring`. OCM then uses your running `gpg-agent`, which unlocks the key from its cache, via pinentry, or with a `passphrase` from the credentials.
+The config above takes the key material from the GPG credentials. To sign with a key from your own GnuPG keyring instead (`$GNUPGHOME`, or `~/.gnupg`), set `keyringFingerprint` in the GPG credentials to the **full** fingerprint (40 or 64 hex characters) of the key to use. OCM runs `gpg --export-secret-keys` to export the key material, and then signs in-process. The `gpg` binary (>= 2.2.0) must be on `PATH`; OCM uses it only for the export.
 
-Key material in the GPG credentials is rejected with `keySource: keyring`, so it is never ambiguous which key signs. Remove `privateKeyPGPFile` and `publicKeyPGPFile` (or `privateKeyPGP` and `publicKeyPGP`) from the GPG consumer entry. Keep the entry only if you pass a `passphrase`; otherwise remove it entirely:
+Key material in the GPG credentials is rejected with `keyringFingerprint`, so it is never ambiguous which key signs. Remove `privateKeyPGPFile` and `publicKeyPGPFile` (or `privateKeyPGP` and `publicKeyPGP`) from the GPG consumer entry. A passphrase-protected key needs `passphrase` in the same entry: OCM does not use the gpg-agent passphrase cache. Hardware-token keys (such as a YubiKey) are not supported: `--export-secret-keys` yields only card stubs.
 
 ```yaml
 type: generic.config.ocm.software/v1
@@ -257,15 +257,14 @@ configurations:
           signature: default
         credentials:
           - type: GPGCredentials/v1alpha1
-            passphrase: my-secret-passphrase                   # optional; key files removed
+            keyringFingerprint: AABBCCDDEEFF00112233445566778899AABBCCDD
+            passphrase: my-secret-passphrase                   # optional
   - type: signing.config.ocm.software/v1alpha1
     signer:
       type: GPGSigningConfiguration/v1alpha1
-      keySource: keyring                                       # added
-      keyFingerprint: AABBCCDDEEFF00112233445566778899AABBCCDD
 ```
 
-Without `keyFingerprint`, gpg signs with its default key. Every `gpg` invocation times out after 3 minutes, which includes waiting for pinentry or a touch on a hardware token.
+To use a non-default GnuPG home directory, add `keyringHome: /path/to/gnupg` next to `keyringFingerprint`. Without `keyringFingerprint`, OCM uses the first secret key from the private key material in the credentials.
 
 For more details, see [How-to: Configure Signing Credentials]({{< relref "docs/guides/sign/configure-signing-credentials.md" >}}).
 {{< /step >}}
@@ -389,17 +388,29 @@ Congratulations! You've successfully:
 
 **Fix:** Move the contents of the old spec file under the `signer` field of a `signing.config.ocm.software/v1alpha1` entry and drop the flag.
 
-### Symptom: `GPG signing requires the GnuPG "gpg" binary (>= 2.2.0) on PATH`
+### Symptom: `reading keys from the GnuPG keyring (keyringFingerprint in the GPG credentials) requires the GnuPG "gpg" binary (>= 2.2.0) on PATH`
 
-**Cause:** OCM delegates all OpenPGP operations to GnuPG, and no `gpg` binary was found on `PATH`.
+**Cause:** You configured `keyringFingerprint` in the GPG credentials, but no `gpg` binary was found on `PATH`. Without `keyringFingerprint`, no `gpg` is needed — OCM performs all GPG cryptography in-process.
 
-**Fix:** Install GnuPG 2.2 or later (`brew install gnupg`, `sudo apt-get install gnupg`, `sudo dnf install gnupg2`) and make sure `gpg` is on `PATH`.
+**Fix:** Install GnuPG 2.2 or later (`brew install gnupg`, `sudo apt-get install gnupg`, `sudo dnf install gnupg2`) and make sure `gpg` is on `PATH`, or provide the key material directly via `privateKeyPGPFile`/`publicKeyPGPFile`.
 
-### Symptom: `with GODEBUG=fips140=only, GPG signing and verification require a gpg whose libgcrypt runs in FIPS mode`
+### Symptom: `with GODEBUG=fips140=only, GPG signing and verification require OpenPGP v6 (RFC 9580) or v5 (LibrePGP) keys: v4 and older keys are identified by SHA-1 fingerprints`
 
-**Cause:** OCM runs with `GODEBUG=fips140=only`, and the `libgcrypt` of your `gpg` does not run in FIPS mode (`gpgconf --show-versions` reports `fips-mode:n`), or `gpgconf` is not on `PATH`.
+**Cause:** OCM runs with `GODEBUG=fips140=only` and the key is a v4 key. v4 keys use SHA-1 fingerprints, which are outside the FIPS boundary.
 
-**Fix:** Use a GnuPG whose `libgcrypt` runs in FIPS mode, see [FIPS 140-3: GPG]({{< relref "docs/reference/standards-and-regulations/fips.md" >}}#gpg), or run OCM without `fips140=only`.
+**Fix:** Use an OpenPGP v6 key (RFC 9580). GnuPG creates v4 RSA and ECDSA keys and cannot create v6 keys; use Sequoia `sq key generate --profile rfc9580`. See [FIPS 140-3: GPG]({{< relref "docs/reference/standards-and-regulations/fips.md" >}}#gpg).
+
+### Symptom: `with GODEBUG=fips140=only, GPG signing and verification require an RSA (at least 2048 bits) or ECDSA (P-256, P-384, P-521) key`
+
+**Cause:** OCM runs with `GODEBUG=fips140=only` and the key uses an algorithm outside the Go Cryptographic Module (e.g. EdDSA, Ed25519) or an RSA key shorter than 2048 bits.
+
+**Fix:** Use an RSA key of at least 2048 bits or an ECDSA P-256/P-384/P-521 key. See [FIPS 140-3: GPG]({{< relref "docs/reference/standards-and-regulations/fips.md" >}}#gpg).
+
+### Symptom: `with GODEBUG=fips140=only, passphrase-protected GPG keys cannot be unlocked because OpenPGP key protection is not FIPS-approved`
+
+**Cause:** OCM runs with `GODEBUG=fips140=only` and the private key is passphrase-protected.
+
+**Fix:** Provide the private key without passphrase protection, for example from a secret store.
 
 ### Symptom: `SIGNATURE VERIFICATION FAILED: gpg verify failed: exit status 2` with `Can't check signature: No public key`
 
@@ -419,11 +430,11 @@ Congratulations! You've successfully:
 
 **Fix:** Either remove `keyFingerprint` from the verifier (any key in the file will be tried) or correct it. Run `gpg --show-keys /tmp/keys/verify-key.asc` to confirm the actual fingerprint.
 
-### Symptom: `SIGNATURE VERIFICATION FAILED: verifying with the GnuPG keyring requires the full key fingerprint ...`
+### Symptom: `keyringFingerprint must be a full key fingerprint (40 or 64 hex characters), because a shorter key ID could select another key in the keyring`
 
-**Cause:** The verifier sets `keySource: keyring` without a full 40-character `keyFingerprint`. A long key ID is not accepted, because it does not identify a key reliably among all keys in a keyring.
+**Cause:** `keyringFingerprint` in the GPG credentials is not a full fingerprint. A long key ID is not accepted, because it does not identify a key reliably among all keys in a keyring.
 
-**Fix:** Set `keyFingerprint` to the full fingerprint of the key you trust (`gpg --fingerprint <key>`; spaces and a `0x` prefix are accepted).
+**Fix:** Set `keyringFingerprint` to the full fingerprint of the key you trust (`gpg --fingerprint <key>`; spaces and a `0x` prefix are accepted).
 
 ## Best Practices for Production
 

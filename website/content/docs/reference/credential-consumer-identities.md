@@ -67,7 +67,7 @@ them as an alias, a sequence, or a mapping.
 
 OCM v1 scoped entries with a `pathprefix` attribute instead. OCM still accepts `pathprefix: <prefix>`, converts it into
 `path: "{<prefix>,<prefix>/**}"`, and logs a warning. If an entry sets both, `path` wins. See
-[Migrate Legacy Credentials]({{< relref "docs/how-to/migration-guides/legacy-credential-compatibility.md" >}}).
+[Migrate Legacy Credentials]({{< relref "docs/changelog/migrate-legacy-credentials.md" >}}).
 
 ---
 

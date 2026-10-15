@@ -1,10 +1,13 @@
 ---
 title: "Migrate Legacy Resolvers"
+icon: "arrow-autofit-right"
 description: "Replace deprecated fallback resolvers with glob-based resolvers for deterministic and efficient component resolution."
 weight: 10
 toc: true
 aliases:
   - /docs/how-to/migrate-from-deprecated-resolvers/
+  - /docs/how-to/migrate-from-fallback-to-deterministic-repository-resolvers/
+  - /docs/guides/migrate/migrate-legacy-resolvers/
 ---
 
 ## Goal
@@ -30,11 +33,11 @@ against component names and optional semver version constraints, which is simple
   simpler to understand and debug.
 
 For the enduring model behind glob matching, first-match ordering, specificity, and
-`versionConstraint`, see [Resolvers]({{< relref "docs/concepts/resolvers.md" >}}).
+`versionConstraint`, see [Resolvers]({{< docref "docs/concepts/resolvers.md" >}}).
 
 ## Prerequisites
 
-- [OCM CLI]({{< relref "/docs/getting-started/ocm-cli-installation.md" >}}) installed
+- [OCM CLI]({{< docref "/docs/getting-started/ocm-cli-installation.md" >}}) installed
 - An existing `.ocmconfig` file that uses `ocm.config.ocm.software` resolver entries
 
 ## Steps
@@ -87,7 +90,7 @@ configurations:
 
 The fallback resolver uses `prefix` to match component names by string prefix. The glob-based resolver uses
 `componentNamePattern`,
-which supports [glob patterns]({{< relref "docs/reference/resolver-configuration.md#component-name-patterns" >}}).
+which supports [glob patterns]({{< docref "docs/reference/resolver-configuration.md#component-name-patterns" >}}).
 In most cases, appending `/*` to the old prefix is the closest equivalent. Note that the old `prefix` also matched the
 bare prefix itself as an exact
 component name (e.g. `prefix: my-org.example/services` matched both `my-org.example/services` and
@@ -206,7 +209,7 @@ configuration.
 The glob-based resolver uses **first-match** semantics — it does not probe or retry. If the same component has versions
 in different repositories, use the `versionConstraint` field to route each version range to the correct repository.
 For how `versionConstraint` and first-match ordering decide the outcome, see
-[Resolvers]({{< relref "docs/concepts/resolvers.md" >}}).
+[Resolvers]({{< docref "docs/concepts/resolvers.md" >}}).
 
 **Example:** `my-component` has older versions in `old-registry.example/legacy` and newer versions in
 `new-registry.example/current`:
@@ -255,15 +258,25 @@ For how `versionConstraint` and first-match ordering decide the outcome, see
 {{< /tabs >}}
 
 For the full version constraint syntax, see
-[Version Constraints]({{< relref "docs/reference/resolver-configuration.md#version-constraints" >}}).
+[Version Constraints]({{< docref "docs/reference/resolver-configuration.md#version-constraints" >}}).
+
+## Key Differences
+
+|                      | Fallback (`ocm.config.ocm.software`)                              | Glob-based (`resolvers.config.ocm.software/v1alpha1`)                                  |
+|----------------------|-------------------------------------------------------------------|----------------------------------------------------------------------------------------|
+| **Matching**         | String prefix on component name                                   | Glob pattern (`*`, `?`, `[...]`) on component name, optional semver version constraint |
+| **Resolution order** | Priority-based (highest first), then fallback through all matches | First match wins (list order)                                                          |
+| **Get behaviour**    | Tries all matching repos until one succeeds                       | Returns the first matching repo deterministically                                      |
+| **Add behaviour**    | Adds to the first matching repo by priority                       | Adds to the first matching repo by list order                                          |
+| **Status**           | Deprecated                                                        | Active                                                                                 |
 
 ## Next Steps
 
-- [Add Component References]({{< relref "docs/guides/pack/add-component-references.md" >}}) — Declare component
+- [Add Component References]({{< docref "docs/guides/pack/add-component-references.md" >}}) — Declare component
   references and configure resolver entries for multi-registry setups
 
 ## Related Documentation
 
-- [Resolver Configuration Reference]({{< relref "docs/reference/resolver-configuration.md" >}}) — Full configuration
+- [Resolver Configuration Reference]({{< docref "docs/reference/resolver-configuration.md" >}}) — Full configuration
   schema and pattern syntax
-- [Resolvers]({{< relref "docs/concepts/resolvers.md" >}}) — The resolver model: glob matching, first-match ordering, specificity, and version constraints
+- [Resolvers]({{< docref "docs/concepts/resolvers.md" >}}) — The resolver model: glob matching, first-match ordering, specificity, and version constraints

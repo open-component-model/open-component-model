@@ -119,10 +119,30 @@ mounts:
           - '0.10'
           - '0.9'
           - legacy
+  - source: content/docs/changelog
+    target: content/docs/changelog
+    files:
+      - '_index.md'
+    sites:
+      matrix:
+        versions:
+          - main
+          - '0.19'
+          - '0.17'
+          - '0.16'
+          - '0.15'
+          - '0.14'
+          - '0.13'
+          - '0.12'
+          - '0.11'
+          - '0.10'
+          - '0.9'
+          - legacy
   - files:
       - '! blog/**'
       - '! community/**'
       - '! governance/**'
+      - '! docs/changelog/_index.md'
     source: content_versioned/version-legacy
     target: content
     sites:
@@ -133,6 +153,7 @@ mounts:
       - '! blog/**'
       - '! community/**'
       - '! governance/**'
+      - '! docs/changelog/_index.md'
     source: content
     target: content
     sites:
@@ -353,6 +374,7 @@ imports:
           - '! blog/**'
           - '! community/**'
           - '! governance/**'
+          - '! docs/changelog/_index.md'
         source: content/
         target: content
         sites:
@@ -464,6 +486,7 @@ imports:
           - '! blog/**'
           - '! community/**'
           - '! governance/**'
+          - '! docs/changelog/_index.md'
         source: content/
         target: content
         sites:
@@ -584,6 +607,7 @@ imports:
           - '! blog/**'
           - '! community/**'
           - '! governance/**'
+          - '! docs/changelog/_index.md'
         source: content/
         target: content
         sites:
@@ -704,6 +728,7 @@ imports:
           - '! blog/**'
           - '! community/**'
           - '! governance/**'
+          - '! docs/changelog/_index.md'
         source: content/
         target: content
         sites:
@@ -824,6 +849,7 @@ imports:
           - '! blog/**'
           - '! community/**'
           - '! governance/**'
+          - '! docs/changelog/_index.md'
         source: content/
         target: content
         sites:
@@ -953,6 +979,7 @@ imports:
           - '! blog/**'
           - '! community/**'
           - '! governance/**'
+          - '! docs/changelog/_index.md'
         source: content/
         target: content
         sites:
@@ -1091,6 +1118,7 @@ imports:
           - '! blog/**'
           - '! community/**'
           - '! governance/**'
+          - '! docs/changelog/_index.md'
         source: content/
         target: content
         sites:
@@ -1199,6 +1227,7 @@ imports:
           - '! blog/**'
           - '! community/**'
           - '! governance/**'
+          - '! docs/changelog/_index.md'
         source: content/
         target: content
         sites:
@@ -1301,6 +1330,7 @@ imports:
           - '! blog/**'
           - '! community/**'
           - '! governance/**'
+          - '! docs/changelog/_index.md'
         source: content/
         target: content
         sites:
@@ -1421,6 +1451,7 @@ imports:
           - '! blog/**'
           - '! community/**'
           - '! governance/**'
+          - '! docs/changelog/_index.md'
         source: content/
         target: content
         sites:

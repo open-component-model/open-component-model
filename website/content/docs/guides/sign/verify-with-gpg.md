@@ -12,7 +12,7 @@ The signing tutorial verifies right after signing, with the same `.ocmconfig`. T
 ## Prerequisites
 
 - The [`ocm` CLI]({{< relref "docs/getting-started/ocm-cli-installation.md" >}}) installed.
-- The GnuPG `gpg` binary (>= 2.2.0) on your `PATH`.
+- The GnuPG `gpg` binary (>= 2.2.0) on your `PATH`, only if you verify against your keyring via `keyringFingerprint`. OCM performs all GPG verification in-process; with a public key file no `gpg` is needed.
 - The signed component version, reachable in a repository you can read (a local CTF archive or a remote OCI registry).
 - The signer's GPG **public** key, either exported to a file (`publicKeyPGPFile`) or already imported into your GnuPG keyring.
 
@@ -42,18 +42,24 @@ If you are only verifying, the `signer` field can be left out entirely:
     type: GPGSigningConfiguration/v1alpha1
 ```
 
-If the signer's public key is already in your GnuPG keyring (`$GNUPGHOME`, or `~/.gnupg`), verify against the keyring instead of a key file by setting `keySource: keyring`. The keyring may hold many keys, so this requires the **full** fingerprint of the key you trust; a signature by any other key in the keyring fails. Keys revoked or expired in your keyring are rejected, and gpg never fetches keys from the network during verification.
+If the signer's public key is already in your GnuPG keyring (`$GNUPGHOME`, or `~/.gnupg`), verify against the keyring instead of a key file by setting `keyringFingerprint` in the GPG credentials to the **full** fingerprint (40 or 64 hex characters) of the key you trust. OCM runs `gpg --export` to export the public key, then verifies in-process. A signature by any other key fails. Keys revoked or expired in your keyring are rejected.
 
-Key material in the GPG credentials is rejected with `keySource: keyring`, and verification needs no passphrase. Remove the GPG consumer entry with `publicKeyPGPFile` (or `privateKeyPGPFile`) from `.ocmconfig`; the verifier entry is all you need:
+Key material in the GPG credentials is rejected with `keyringFingerprint`, and verification needs no passphrase. Replace `publicKeyPGPFile` (or `privateKeyPGPFile`) in the GPG consumer entry of `.ocmconfig` with `keyringFingerprint`:
 
 ```yaml
 type: generic.config.ocm.software/v1
 configurations:
+- type: credentials.config.ocm.software
+  consumers:
+  - identity:
+      type: GPG/v1alpha1
+      signature: default
+    credentials:
+    - type: GPGCredentials/v1alpha1
+      keyringFingerprint: B118BE3A32BE4AF28E37E881167C7102F8AC81E4
 - type: signing.config.ocm.software/v1alpha1
   verifier:
     type: GPGSigningConfiguration/v1alpha1
-    keySource: keyring
-    keyFingerprint: B118BE3A32BE4AF28E37E881167C7102F8AC81E4
 ```
 
 {{< callout context="note" >}}

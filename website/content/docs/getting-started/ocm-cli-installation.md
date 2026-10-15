@@ -105,8 +105,6 @@ Replace `os` and `architecture` with your platform. This approach works on Linux
 {{< /tab >}}
 {{< tab "Run in Container" >}}
 
-### Run from a container image
-
 Run the CLI straight from the official container image, no local install required. The image
 `ghcr.io/open-component-model/cli` ships the `ocm` binary (plus a FIPS build of `cosign` and
 `gpg`) on a minimal Garden Linux `bare-libc` base with no shell.

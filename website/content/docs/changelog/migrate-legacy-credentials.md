@@ -1,16 +1,18 @@
 ---
 title: "Migrate Legacy Credentials"
 description: "Update your legacy OCM credential configuration to use modern field names and optional typed credentials."
-icon: "🔑"
+icon: "arrow-autofit-right"
 weight: 20
 toc: true
 aliases:
   - /docs/how-to/legacy-credential-compatibility/
+  - /docs/how-to/migrate-legacy-credentials/
+  - /docs/guides/migrate/migrate-legacy-credentials/
 ---
 
 ## Goal
 
-Update a legacy OCM `.ocmconfig` file to use modern field names and optional typed credentials. Most fields work unchanged in the new OCM; this guide covers the one renamed field (`pathprefix` → `path`) and the optional migration to typed credentials.
+Update a legacy OCM `.ocmconfig` file to use modern field names and optional typed credentials. Most fields work unchanged in the new OCM; this guide covers the renamed field (`pathprefix` → `path`) and the optional migration to typed credentials.
 
 {{< callout context="caution" >}}
 `HashiCorpVault/v1`, `GardenerConfig/v1`, and `NPMConfig/v1` are not yet available in the new OCM. If you rely on these,
@@ -19,7 +21,7 @@ stay on legacy OCM for now.
 
 ## Prerequisites
 
-- [OCM CLI]({{< relref "/docs/getting-started/ocm-cli-installation.md" >}}) installed
+- [OCM CLI]({{< docref "/docs/getting-started/ocm-cli-installation.md" >}}) installed
 - An existing `.ocmconfig` file from legacy OCM
 
 ## Steps
@@ -53,21 +55,32 @@ The following steps walk you through each change needed to make this config work
 {{< step >}}
 **Change `pathprefix` to `path` with a glob pattern**
 
-The field for matching repository paths was renamed from `pathprefix` to `path`. Because `pathprefix` matched any path
-starting with the given prefix, you need to append a glob pattern (`/*`) to preserve the same matching behavior:
+The field for matching repository paths was renamed from `pathprefix` to `path`. `pathprefix` matched the prefix and
+every path below it; `path` is a glob pattern, so append `/**` to cover every path below the prefix:
 
 ```yaml
     consumers:
       - identity:
           type: OCIRegistry
           hostname: ghcr.io
-          path: open-component-model/*  # was: pathprefix: open-component-model
+          path: open-component-model/**  # was: pathprefix: open-component-model
 ```
 
 {{< callout context="note" >}}
-`path` does **not** do prefix matching — `path: open-component-model` would only match the exact path
-`open-component-model`, not `open-component-model/my-repo`. Use `open-component-model/*` to match any single segment
-after the prefix, or `open-component-model/*/*` for two levels.
+`path` does **not** do prefix matching — `path: open-component-model` only matches the exact path
+`open-component-model`, not `open-component-model/my-repo`. `open-component-model/**` matches any depth below the
+prefix but not `open-component-model` itself, and `open-component-model/*` matches a single segment. To also match the
+prefix itself, use `"{open-component-model,open-component-model/**}"` (quoted: unquoted, YAML reads `{…}` as a
+mapping). For the full pattern syntax, see
+[Credential Consumer Identities: Path Patterns]({{< docref "/docs/reference/credential-consumer-identities.md#path-patterns" >}}).
+{{< /callout >}}
+
+{{< callout context="caution" >}}
+The new OCM still reads `pathprefix`, converts it into the equivalent `path` pattern
+(`pathprefix: open-component-model` becomes `path: "{open-component-model,open-component-model/**}"`), and logs a
+warning that points to this guide. If an entry sets both, `path` wins. Legacy OCM picked the entry with the longest
+matching `pathprefix`; the new OCM does not rank matching entries, so avoid overlapping entries with different
+credentials.
 {{< /callout >}}
 
 {{< /step >}}
@@ -75,14 +88,14 @@ after the prefix, or `open-component-model/*/*` for two levels.
 {{< step >}}
 **Change `identity` to `identities` (optional)**
 
-The new OCM still accepts the singular `identity` field, so this step is optional. However, switching to `identities` (a list) lets you share one credential across multiple registries. See [Multi-Identity Credentials]({{< relref "/docs/concepts/credential-resolution.md" >}}) for details.
+The new OCM still accepts the singular `identity` field, so this step is optional. However, switching to `identities` (a list) lets you share one credential across multiple registries. See [Multi-Identity Credentials]({{< docref "/docs/concepts/credential-resolution.md" >}}) for details.
 
 ```yaml
     consumers:
       - identities: # was: identity (now a list)
           - type: OCIRegistry
             hostname: ghcr.io
-            path: open-component-model/*
+            path: open-component-model/**
 ```
 
 {{< /step >}}
@@ -112,7 +125,7 @@ with:
             password: my-token
 ```
 
-`OCICredentials/v1` also supports `accessToken` and `refreshToken` for token-based auth. For all built-in typed credential types and their fields, see [Reference: Credential Types]({{< relref "/docs/reference/credential-types.md" >}}).
+`OCICredentials/v1` also supports `accessToken` and `refreshToken` for token-based auth. For all built-in typed credential types and their fields, see [Reference: Credential Types]({{< docref "/docs/reference/credential-types.md" >}}).
 
 {{< callout context="note" >}}
 `Credentials/v1` continues to work unchanged — it is an alias for `DirectCredentials/v1`. You only need this step if you
@@ -134,7 +147,7 @@ configurations:
       - identities:
           - type: OCIRegistry
             hostname: ghcr.io
-            path: open-component-model/*
+            path: open-component-model/**
         credentials:
           - type: OCICredentials/v1
             username: my-user
@@ -155,8 +168,8 @@ If you get `unknown credential repository type`, you may be using a repository t
 `HashiCorpVault/v1`, `NPMConfig/v1`, `GardenerConfig/v1`). Remove the unsupported entry or stay on legacy OCM until
 support is added.
 
-If you get `401 Unauthorized`, check that you renamed `pathprefix` → `path` (with a glob pattern) in all consumer
-entries.
+If you get `401 Unauthorized`, check the `path` and `pathprefix` values of your consumer entries. Both are compared with
+whole path segments: `pathprefix: org/repo` does not match `org/repo.git`.
 
 {{< /step >}}
 
@@ -164,13 +177,13 @@ entries.
 
 ## Next Steps
 
-- [How-To: Configure Credentials for Multiple Registries]({{< relref "docs/guides/transfer/configure-registry-credentials.md" >}}) - Set up credentials for multiple registries
-- [Tutorial: Credential Resolution]({{< relref "/docs/concepts/credential-resolution.md" >}}) - Learn how OCM resolves
+- [How-To: Configure Credentials for Multiple Registries]({{< docref "docs/guides/transfer/configure-registry-credentials.md" >}}) - Set up credentials for multiple registries
+- [Tutorial: Credential Resolution]({{< docref "/docs/concepts/credential-resolution.md" >}}) - Learn how OCM resolves
   credentials step-by-step
 
 ## Related Documentation
 
-- [Concept: Credential System]({{< relref "/docs/concepts/credential-system.md" >}}) - Learn how the credential system
+- [Concept: Credential System]({{< docref "/docs/concepts/credential-system.md" >}}) - Learn how the credential system
   automatically finds the right credentials for each operation
-- [Reference: Credential Types]({{< relref "/docs/reference/credential-types.md" >}}) - All built-in typed credential
+- [Reference: Credential Types]({{< docref "/docs/reference/credential-types.md" >}}) - All built-in typed credential
   types and their fields

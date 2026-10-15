@@ -1,11 +1,13 @@
 ---
 title: "Migrate --upload-as Flags"
+icon: "arrow-autofit-right"
 slug: "migrate-from-upload-as"
 description: "Replace the deprecated --upload-as flag and the removed upload type transfer setting with the oci.uploader.transfer.config.ocm.software uploader configuration."
 weight: 30
 toc: true
 aliases:
   - /docs/how-to/migrate-from-upload-as/
+  - /docs/guides/migrate/migrate-from-upload-as/
 ---
 
 ## Goal
@@ -32,7 +34,7 @@ location (`imageReference`), and shares one mechanism with the HTTP uploader.
 
 ## Prerequisites
 
-- [OCM CLI]({{< relref "/docs/getting-started/ocm-cli-installation.md" >}}) installed (the version that deprecated `--upload-as`)
+- [OCM CLI]({{< docref "/docs/getting-started/ocm-cli-installation.md" >}}) installed (the version that deprecated `--upload-as`)
 - An existing workflow that uses `--upload-as` or `uploadType`
 
 ## Deprecated flags
@@ -76,7 +78,7 @@ a Before / After pair showing the exact change.
 `<target baseUrl>[/<subPath>]/<name>`. The default
 `imageReference` produces the same layout, so you do not need to write one
 (the full template is in the
-[`imageReference` reference]({{< relref "docs/reference/transfer-configuration/oci-uploader.md#imagereference" >}})).
+[`imageReference` reference]({{< docref "docs/reference/transfer-configuration/oci-uploader.md#imagereference" >}})).
 
 The name component depends on the access type:
 
@@ -110,7 +112,7 @@ match: >-
 This is exactly what `--upload-as ociArtifact` uploaded. `resource.access.isType`
 resolves aliases, so `isType("OCIImage")` matches `ociArtifact/v1`,
 `ociImage/v1`, etc. An explicit `match` replaces the default. See
-[`match`]({{< relref "docs/reference/transfer-configuration/_index.md#match" >}})
+[`match`]({{< docref "docs/reference/transfer-configuration/_index.md#match" >}})
 for all identifiers and functions.
 
 ### 1. Local blob (default) — drop the flag
@@ -517,7 +519,7 @@ The following table maps old values to their replacements:
 
 ## Related documentation
 
-- [Transfer Configuration Reference]({{< relref "docs/reference/transfer-configuration/_index.md" >}}) — Full configuration schema and field descriptions
-- [Configure Custom Uploads During Transfer]({{< relref "docs/guides/transfer/upload-to-custom-target.md" >}}) — Tutorial for the HTTP streaming uploader
-- [Upload OCI Images]({{< relref "docs/guides/transfer/upload-oci-images.md" >}}) — Upload component resources, including Helm charts, as standalone OCI artifacts
-- [Replicate Component Versions with the Controller]({{< relref "docs/guides/transfer/replicate-component-versions.md" >}}) — Controller-based replication
+- [Transfer Configuration Reference]({{< docref "docs/reference/transfer-configuration/_index.md" >}}) — Full configuration schema and field descriptions
+- [Configure Custom Uploads During Transfer]({{< docref "docs/guides/transfer/upload-to-custom-target.md" >}}) — Tutorial for the HTTP streaming uploader
+- [Upload OCI Images]({{< docref "docs/guides/transfer/upload-oci-images.md" >}}) — Upload component resources, including Helm charts, as standalone OCI artifacts
+- [Replicate Component Versions with the Controller]({{< docref "docs/guides/transfer/replicate-component-versions.md" >}}) — Controller-based replication

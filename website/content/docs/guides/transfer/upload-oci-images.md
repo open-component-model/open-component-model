@@ -145,4 +145,4 @@ selection examples, see
 - To consume images that were uploaded this way, see
   [Pull OCI Artifacts Natively]({{< relref "docs/guides/transfer/pull-oci-artifacts-natively.md" >}}).
 - If you are replacing the deprecated `--upload-as` flag, see
-  [Migrate --upload-as Flags]({{< relref "docs/guides/migrate/migrate-from-upload-as.md" >}}).
+  [Migrate --upload-as Flags]({{< relref "docs/changelog/migrate-from-upload-as.md" >}}).

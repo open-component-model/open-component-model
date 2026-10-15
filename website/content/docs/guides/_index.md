@@ -19,8 +19,9 @@ by the stage of the component lifecycle you are working in:
   credentials and networking along the way.
 - **Deploy** — run components in a Kubernetes environment with the OCM controllers.
 
-Alongside these phases, the **Migrate** guides help you move legacy configuration (fallback
-resolvers, v1 credentials, `--upload-as` flags) to its modern equivalents as you upgrade.
+Moving legacy configuration (fallback resolvers, v1 credentials, `--upload-as` flags) to its
+modern equivalents is covered by the migration guides in the
+[Changelog]({{< relref "docs/changelog/_index.md" >}}) section.
 
 If you are new to OCM, start with [Getting Started]({{< relref "docs/getting-started/_index.md" >}})
 to install the CLI and create your first component version. For the ideas behind these tasks,
