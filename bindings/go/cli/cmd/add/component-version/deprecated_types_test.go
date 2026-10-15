@@ -15,6 +15,22 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
+// supersededType embeds a schema that marks every spelling deprecated without
+// saying what replaces the type.
+type supersededType struct {
+	Type runtime.Type `json:"type"`
+}
+
+func (s *supersededType) GetType() runtime.Type        { return s.Type }
+func (s *supersededType) SetType(t runtime.Type)       { s.Type = t }
+func (s *supersededType) DeepCopyTyped() runtime.Typed { c := *s; return &c }
+func (s *supersededType) JSONSchema() []byte {
+	return []byte(`{"properties": {"type": {"oneOf": [
+		{"const": "Superseded/v1", "deprecated": true},
+		{"const": "superseded", "deprecated": true}
+	]}}}`)
+}
+
 func TestIsTypeDeprecated(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -42,6 +58,18 @@ func TestIsTypeDeprecated(t *testing.T) {
 			r.Equal(tc.wantHint, hint)
 		})
 	}
+
+	t.Run("no hint when the canonical spelling is deprecated too and the schema names no replacement", func(t *testing.T) {
+		r := require.New(t)
+		scheme := runtime.NewScheme()
+		scheme.MustRegisterWithAlias(&supersededType{},
+			runtime.NewVersionedType("Superseded", "v1"),
+			runtime.NewUnversionedType("superseded"),
+		)
+		deprecated, hint := isTypeDeprecated(scheme, runtime.NewUnversionedType("superseded"))
+		r.True(deprecated)
+		r.Empty(hint)
+	})
 
 	t.Run("a type without an embedded schema is not deprecated", func(t *testing.T) {
 		r := require.New(t)
@@ -89,9 +117,9 @@ func TestFindDeprecatedTypes(t *testing.T) {
 
 	r.Equal([]string{
 		"access type github is deprecated, use Git/v1 instead",
-		"input type file is deprecated, use file/v1 instead",
+		"input type file is deprecated, use File/v1 instead",
 		"access type GitHub/v1 is deprecated, use Git/v1 instead",
-		"input type utf8 is deprecated, use utf8/v1 instead",
+		"input type utf8 is deprecated, use UTF8/v1 instead",
 	}, findDeprecatedTypes(accessScheme, inputScheme, spec), "distinct access and input spellings in constructor order")
 }
 
@@ -110,11 +138,11 @@ func TestRenderDeprecatedTypeNotice(t *testing.T) {
 		t.Cleanup(text.DisableColors)
 		renderDeprecatedTypeNotice(&buf, []string{
 			"access type GitHub/v1 is deprecated, use Git/v1 instead",
-			"input type file is deprecated, use file/v1 instead",
+			"input type file is deprecated, use File/v1 instead",
 		})
 		r.Equal(
 			"\n"+text.FgYellow.Sprint("WARNING: access type GitHub/v1 is deprecated, use Git/v1 instead")+"\n"+
-				text.FgYellow.Sprint("WARNING: input type file is deprecated, use file/v1 instead")+"\n",
+				text.FgYellow.Sprint("WARNING: input type file is deprecated, use File/v1 instead")+"\n",
 			buf.String())
 	})
 
@@ -122,7 +150,7 @@ func TestRenderDeprecatedTypeNotice(t *testing.T) {
 		r := require.New(t)
 		var buf bytes.Buffer
 		text.DisableColors()
-		renderDeprecatedTypeNotice(&buf, []string{"input type utf8 is deprecated, use utf8/v1 instead"})
-		r.Equal("\nWARNING: input type utf8 is deprecated, use utf8/v1 instead\n", buf.String())
+		renderDeprecatedTypeNotice(&buf, []string{"input type utf8 is deprecated, use UTF8/v1 instead"})
+		r.Equal("\nWARNING: input type utf8 is deprecated, use UTF8/v1 instead\n", buf.String())
 	})
 }

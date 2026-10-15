@@ -18,10 +18,12 @@ import (
 type typeSchema struct {
 	Properties struct {
 		Type struct {
-			OneOf []typeSpelling `json:"oneOf"`
+			OneOf typeSpellings `json:"oneOf"`
 		} `json:"type"`
 	} `json:"properties"`
 }
+
+type typeSpellings []typeSpelling
 
 type typeSpelling struct {
 	Const              string `json:"const"`
@@ -29,19 +31,13 @@ type typeSpelling struct {
 	DeprecationMessage string `json:"x-deprecationMessage"`
 }
 
-// hint is the text that says what to write instead of the deprecated spelling
-// s: the message from the schema when it has one, otherwise a pointer at the
-// first current spelling. A type with no current spelling gets no hint.
-func (s typeSpelling) hint(spellings []typeSpelling) string {
-	if s.DeprecationMessage != "" {
-		return s.DeprecationMessage
-	}
-	for _, other := range spellings {
-		if !other.Deprecated {
-			return "use " + other.Const + " instead"
+func (s typeSpellings) find(name string) (typeSpelling, bool) {
+	for _, spelling := range s {
+		if spelling.Const == name {
+			return spelling, true
 		}
 	}
-	return ""
+	return typeSpelling{}, false
 }
 
 // isTypeDeprecated reports whether the schema of typ marks that exact spelling
@@ -61,16 +57,18 @@ func isTypeDeprecated(scheme *runtime.Scheme, typ runtime.Type) (deprecated bool
 		return false, ""
 	}
 	spellings := schema.Properties.Type.OneOf
-	for _, s := range spellings {
-		if s.Const != typ.String() {
-			continue
-		}
-		if !s.Deprecated {
-			return false, ""
-		}
-		return true, s.hint(spellings)
+	spelling, ok := spellings.find(typ.String())
+	if !ok || !spelling.Deprecated {
+		return false, ""
 	}
-	return false, ""
+	if spelling.DeprecationMessage != "" {
+		return true, spelling.DeprecationMessage
+	}
+	canonical, _ := scheme.ResolveCanonicalType(typ)
+	if c, ok := spellings.find(canonical.String()); ok && c.Deprecated {
+		return true, ""
+	}
+	return true, "use " + canonical.String() + " instead"
 }
 
 // findDeprecatedTypes lists one warning per distinct deprecated access or input

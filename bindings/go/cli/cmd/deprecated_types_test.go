@@ -61,12 +61,12 @@ func TestAddComponentVersionWarnsAboutDeprecatedTypes(t *testing.T) {
 		// file reads a local file.
 		{"input", "utf8/v1", "text: hello", ""},
 		{"input", "UTF8/v1", "text: hello", ""},
-		{"input", "utf8", "text: hello", "use utf8/v1 instead"},
-		{"input", "UTF8", "text: hello", "use utf8/v1 instead"},
+		{"input", "utf8", "text: hello", "use UTF8/v1 instead"},
+		{"input", "UTF8", "text: hello", "use UTF8/v1 instead"},
 
 		{"input", "file/v1", "path: payload.txt", ""},
-		{"input", "file", "path: payload.txt", "use file/v1 instead"},
-		{"input", "File", "path: payload.txt", "use file/v1 instead"},
+		{"input", "file", "path: payload.txt", "use File/v1 instead"},
+		{"input", "File", "path: payload.txt", "use File/v1 instead"},
 	}
 
 	for _, tc := range tests {
