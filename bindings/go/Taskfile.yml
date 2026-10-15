@@ -50,9 +50,16 @@ tasks:
       # to the test binary without fighting gotestsum's flag ordering.
       - defer: |
           go tool covdata textfmt -i='{{.OUT_DIR}}/coverage.integration.covdir' -o '{{.OUT_DIR}}/coverage.integration.out'
-          # Drop generated files (zz_generated.*) so the number reflects hand-written code.
-          grep -v 'zz_generated\.' '{{.OUT_DIR}}/coverage.integration.out' > '{{.OUT_DIR}}/coverage.integration.out.tmp' && mv '{{.OUT_DIR}}/coverage.integration.out.tmp' '{{.OUT_DIR}}/coverage.integration.out'
-          go tool cover -func='{{.OUT_DIR}}/coverage.integration.out' | tail -1
+          # No coverage collected (every package failed before a test ran) leaves an empty
+          # profile. Drop it so the CI summary takes its "tests did not run" path instead
+          # of reporting a misleading 0% below the floor.
+          if [ ! -s '{{.OUT_DIR}}/coverage.integration.out' ]; then
+            rm -f '{{.OUT_DIR}}/coverage.integration.out'
+          else
+            # Drop generated files (zz_generated.*) so the number reflects hand-written code.
+            grep -v 'zz_generated\.' '{{.OUT_DIR}}/coverage.integration.out' > '{{.OUT_DIR}}/coverage.integration.out.tmp' && mv '{{.OUT_DIR}}/coverage.integration.out.tmp' '{{.OUT_DIR}}/coverage.integration.out'
+            go tool cover -func='{{.OUT_DIR}}/coverage.integration.out' | tail -1
+          fi
       - task: test/integration:run
 
   test/integration:run:
