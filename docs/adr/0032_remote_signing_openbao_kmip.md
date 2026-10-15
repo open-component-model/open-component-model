@@ -4,7 +4,7 @@
 * **Deciders**: OCM Technical Steering Committee
 * **Date**: 2026.10.15
 
-**Technical Story**: OCM v2 can only sign with key material that is available to the signing process (RSA, GPG) or with keyless Sigstore. Organizations that keep signing keys in an HSM or KMS cannot sign with OCM v2. In OCM v1 this gap was filled by the OCM-specific [signing-server](https://github.com/open-component-model/signing-server). Instead of porting signing-server, OCM v2 signs directly against existing key stores through two standard interfaces: the [OpenBao Transit secrets engine](https://openbao.org/docs/secrets/transit/) and [KMIP](https://docs.oasis-open.org/kmip/kmip-spec/v1.4/kmip-spec-v1.4.html). signing-server is deprecated.
+**Technical Story**: OCM v2 can only sign with key material that is available to the signing process (RSA, GPG) or with keyless Sigstore. Organizations that keep signing keys in an HSM or KMS cannot sign with OCM v2. In OCM v1 this gap was filled by the OCM-specific [signing-server](https://github.com/open-component-model/signing-server). Instead of porting signing-server, OCM v2 signs directly against existing key stores through two standard interfaces: the [OpenBao Transit secrets engine](https://openbao.org/docs/secrets/transit/) and [KMIP](https://docs.oasis-open.org/kmip/spec/v1.4/os/kmip-spec-v1.4-os.html). signing-server is deprecated.
 
 ---
 
