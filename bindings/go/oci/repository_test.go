@@ -4020,63 +4020,6 @@ func TestRepository_AddOwnership_CreatesByValueReferrer(t *testing.T) {
 	r.True(stillExists, "re-running AddOwnership must converge on the same referrer")
 }
 
-// pushOnceResolver hands out stores that emulate a write-once/redeploy-disabled
-// registry: re-pushing an already-present content-addressed asset is rejected.
-type pushOnceResolver struct{ oci.Resolver }
-
-func (r pushOnceResolver) StoreForReference(ctx context.Context, reference string) (spec.Store, error) {
-	s, err := r.Resolver.StoreForReference(ctx, reference)
-	if err != nil {
-		return nil, err
-	}
-	return &pushOnceStore{Store: s}, nil
-}
-
-type pushOnceStore struct{ spec.Store }
-
-func (s *pushOnceStore) Push(ctx context.Context, desc ociImageSpecV1.Descriptor, r io.Reader) error {
-	if exists, err := s.Exists(ctx, desc); err == nil && exists {
-		return fmt.Errorf("redeploy disabled: asset %s already exists", desc.Digest)
-	}
-	return s.Store.Push(ctx, desc, r)
-}
-
-// TestRepository_AddOwnership_ImmutableRegistry locks referrer-attach idempotency
-// on a write-once registry: the referrer manifest and its empty blob are
-// content-addressed, so a second attach must converge without a rejected re-push.
-func TestRepository_AddOwnership_ImmutableRegistry(t *testing.T) {
-	r := require.New(t)
-	ctx := context.Background()
-	const (
-		component = "ocm.software/test-component"
-		version   = "1.0.0"
-	)
-
-	layoutBytes, _ := createSingleLayerOCIImage(t, []byte("immutable payload"), "irrelevant:latest")
-
-	fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
-	r.NoError(err)
-	store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
-	repo := Repository(t, oci.WithResolver(pushOnceResolver{Resolver: store}))
-
-	resource := &descriptor.Resource{
-		Relation:    descriptor.LocalRelation,
-		ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "backend", Version: version}},
-		Type:        "ociArtifact",
-		Access: &v2.LocalBlob{
-			LocalReference: digest.FromBytes(layoutBytes).String(),
-			MediaType:      layout.MediaTypeOCIImageLayoutTarV1,
-		},
-	}
-
-	uploaded, err := repo.AddLocalResource(ctx, component, version, resource, inmemory.New(bytes.NewReader(layoutBytes)))
-	r.NoError(err)
-
-	r.NoError(repo.AddOwnership(ctx, component, version, uploaded, nil))
-	r.NoError(repo.AddOwnership(ctx, component, version, uploaded, nil),
-		"re-attaching the identical ownership referrer must succeed despite redeploy being disabled")
-}
-
 // The OCI-level opt-in gate was intentionally removed: AddOwnership now
 // builds a referrer unconditionally for the resource it is handed, and the
 // opt-in decision (options.ownershipPolicy: Always) lives in the constructor.

@@ -939,31 +939,13 @@ func (repo *Repository) buildAndPushOwnershipReferrer(ctx context.Context, store
 	// (MANIFEST_BLOB_UNKNOWN), so push the referrer's empty config/layer blob
 	// before the manifest itself.
 	empty := ociImageSpecV1.DescriptorEmptyJSON
-	if err := pushIdempotent(ctx, store, empty, empty.Data); err != nil {
+	if err := store.Push(ctx, empty, bytes.NewReader(empty.Data)); err != nil && !errors.Is(err, errdef.ErrAlreadyExists) {
 		return fmt.Errorf("failed to push ownership referrer empty blob %s: %w", empty.Digest, err)
 	}
-	if err := pushIdempotent(ctx, store, desc, body); err != nil {
+	if err := store.Push(ctx, desc, bytes.NewReader(body)); err != nil && !errors.Is(err, errdef.ErrAlreadyExists) {
 		return fmt.Errorf("failed to push ownership referrer %s: %w", desc.Digest, err)
 	}
 	return nil
-}
-
-// pushIdempotent pushes desc, treating the write as a no-op success when the
-// store already holds the content-addressed blob (checked only on the error
-// path). Mirrors tagIdempotent for the push protocol: a write-once registry
-// rejects re-pushing existing content with a plain conflict, not the
-// errdef.ErrAlreadyExists that only local stores return.
-func pushIdempotent(ctx context.Context, store spec.Store, desc ociImageSpecV1.Descriptor, data []byte) error {
-	err := store.Push(ctx, desc, bytes.NewReader(data))
-	if err == nil || errors.Is(err, errdef.ErrAlreadyExists) {
-		return nil
-	}
-	if exists, rerr := store.Exists(ctx, desc); rerr == nil && exists {
-		slogcontext.Log(ctx, slog.LevelDebug, "content already present; treating rejected re-push as a no-op",
-			slog.String("digest", desc.Digest.String()), slog.Any("error", err))
-		return nil
-	}
-	return err
 }
 
 func warnOnConflictingOwnership(ctx context.Context, store spec.Store, subject ociImageSpecV1.Descriptor, component string) {

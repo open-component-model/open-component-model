@@ -32,8 +32,7 @@ const (
 // the configuration that produced the original 409 "redeploy disabled ... cannot
 // be updated as asset already exists". The component-descriptor and OCI artifact
 // tag subtests (UploadResource and UploadResourceStream) 409 on re-tag without
-// the fix; the ownership subtest is a positive check (Nexus does not 409 there -
-// see its note).
+// the fix.
 func Test_Integration_Nexus_RedeployDisabled(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping Nexus integration test in short mode")
@@ -41,7 +40,7 @@ func Test_Integration_Nexus_RedeployDisabled(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 
-	resolver, repo, dockerEndpoint, _ := startNexusDockerHosted(t, ctx)
+	_, repo, dockerEndpoint, _ := startNexusDockerHosted(t, ctx)
 
 	t.Run("component version re-add is idempotent", func(t *testing.T) {
 		r := require.New(t)
@@ -104,24 +103,6 @@ func Test_Integration_Nexus_RedeployDisabled(t *testing.T) {
 		}
 		r.NoError(upload(), "first stream upload must succeed")
 		r.NoError(upload(), "identical stream re-upload must be idempotent despite redeploy being disabled")
-	})
-
-	t.Run("ownership referrer re-attach is idempotent", func(t *testing.T) {
-		// Positive check only: Nexus does not 409 here because the referrer is
-		// pushed by digest (no human tag). The write-once-by-digest path
-		// pushIdempotent guards is covered by TestRepository_AddOwnership_ImmutableRegistry.
-		r := require.New(t)
-		const component, version = "ocm.software/nexus/owned", "1.0.0"
-		imageRef := fmt.Sprintf("%s/nexus/owned-image:%s", dockerEndpoint, version)
-
-		subject := pushOwnershipByReferenceImage(t, ctx, repo, imageRef, []byte("nexus-ownership-payload"))
-		res := byReferenceResource("owned-image", version, subject)
-
-		r.NoError(repo.AddOwnership(ctx, component, version, res, nil), "first attach must succeed")
-		r.NoError(repo.AddOwnership(ctx, component, version, res, nil),
-			"identical re-attach must be idempotent despite redeploy being disabled")
-
-		assertOwnershipReferrerCount(t, ctx, resolver, subject, 1)
 	})
 }
 
