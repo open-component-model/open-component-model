@@ -33,7 +33,7 @@ Before starting, make sure you have set up your environment as described in the 
 {{< /callout >}}
 
 - [Controller environment]({{< relref "setup-controller-environment.md" >}}) with OCM Controllers, kro, and a deployer (Flux or Argo CD) installed
-- [Custom RBAC]({{< relref "custom-rbac.md" >}}) configured to allow the controller to manage `ResourceGraphDefinitions`
+- [Custom RBAC]({{< relref "custom-rbac.md#grant-the-controller-read-access" >}}) configured to allow the controller to watch `ResourceGraphDefinitions`
 - [OCM CLI]({{< relref "ocm-cli-installation.md" >}}) installed
 - Access to an OCI registry (e.g., [ghcr.io](https://docs.github.com/en/packages/learn-github-packages/introduction-to-github-packages))
 - `envsubst` installed (pre-installed on most Linux/macOS systems; part of `gettext`)
@@ -619,7 +619,7 @@ EOF
 
 kro needs a `ClusterRole` for the `Bootstrap` instances that the RGD in your component defines. The roles for OCM resources and for your deployer come from the [setup guide]({{< relref "setup-controller-environment.md" >}}). See [Access Control](https://kro.run/docs/advanced/access-control) in the kro documentation for details.
 
-This is separate from the [Custom RBAC]({{< relref "custom-rbac.md" >}}) of the OCM controller, which only allows the Deployer to apply the RGD itself.
+This is separate from the `bootstrap-deployer` service account, which only allows the NamespacedDeployer to apply the RGD itself.
 
 Create `kro-rbac.yaml`:
 
@@ -798,7 +798,9 @@ kubectl logs -n kro-system deployment/kro | grep forbidden
 
 ### RBAC Permission Errors
 
-If the controller logs show permission errors like `forbidden` or `cannot create resource`, the controller lacks RBAC permissions to manage `ResourceGraphDefinitions`. Follow the [Custom RBAC guide]({{< relref "custom-rbac.md" >}}) to grant the necessary permissions.
+If the NamespacedDeployer reports `forbidden` or `cannot create resource`, the `bootstrap-deployer` service account lacks write access to `ResourceGraphDefinitions`. Check its `ClusterRole` from [Create bootstrap resources](#create-bootstrap-resources).
+
+If the controller logs show that it cannot list or watch `ResourceGraphDefinitions`, the controller lacks read access. Follow the [Custom RBAC guide]({{< relref "custom-rbac.md#grant-the-controller-read-access" >}}) to grant it.
 
 ### Instance Not Syncing
 

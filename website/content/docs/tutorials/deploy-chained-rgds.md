@@ -34,8 +34,9 @@ Before starting, make sure you have set up your environment as described in the 
 
 - [Controller environment]({{< relref "setup-controller-environment.md" >}}) with the OCM
   Controllers and kro installed (no GitOps deployer needed)
-- [Custom RBAC]({{< relref "custom-rbac.md" >}}) configured so the OCM controller can manage
-  `ResourceGraphDefinitions`. kro's own access is granted in
+- [Custom RBAC]({{< relref "custom-rbac.md#grant-the-controller-read-access" >}}) configured so the OCM controller
+  can watch `ResourceGraphDefinitions`. The deployers' service account gets write access in
+  [Deliver both RGDs](#deliver-both-rgds), kro's own access in
   [Grant kro access to the resources in the graphs](#grant-kro-access-to-the-resources-in-the-graphs)
 - [OCM CLI]({{< relref "ocm-cli-installation.md" >}})
 - `envsubst` (part of `gettext`; on macOS install it with `brew install gettext`)
@@ -43,10 +44,10 @@ Before starting, make sure you have set up your environment as described in the 
 
 {{< callout context="note" title="Verify the OCM controller's RBAC" icon="outline/lock" >}}
 Once you've applied the [Custom RBAC]({{< relref "custom-rbac.md" >}}) guide, confirm the OCM
-controller `ServiceAccount` (not your admin user) can manage RGDs:
+controller `ServiceAccount` (not your admin user) can watch RGDs:
 
 ```bash
-kubectl auth can-i create resourcegraphdefinitions.kro.run \
+kubectl auth can-i watch resourcegraphdefinitions.kro.run \
   --as=system:serviceaccount:ocm-k8s-toolkit-system:ocm-k8s-toolkit-controller-manager
 ```
 
@@ -424,8 +425,8 @@ and for the Deployment and Service that the podinfo RGD renders. The role for OC
 comes from the [setup guide]({{< relref "setup-controller-environment.md" >}}). See
 [Access Control](https://kro.run/docs/advanced/access-control) in the kro documentation for details.
 
-This is separate from the [Custom RBAC]({{< relref "custom-rbac.md" >}}) of the OCM controller,
-which only allows the Deployers to apply the RGDs themselves.
+This is separate from the `system-deployer` service account, which only allows the NamespacedDeployers to apply
+the RGDs themselves.
 
 ```bash
 cat > kro-rbac.yaml << 'EOF'
@@ -769,8 +770,9 @@ ghcr.io package public, or follow the private-registry steps above.
 kubectl logs -n ocm-k8s-toolkit-system deploy/ocm-k8s-toolkit-controller-manager --tail=40
 ```
 
-**RBAC denied**: re-check the impersonation command in Prerequisites and apply the
-[Custom RBAC]({{< relref "custom-rbac.md" >}}) guide.
+**RBAC denied**: a `forbidden` on a NamespacedDeployer means the `system-deployer` service account lacks a
+write verb. A watch error in the controller logs means the controller lacks read access: re-check the impersonation
+command in Prerequisites and apply the [Custom RBAC]({{< relref "custom-rbac.md" >}}) guide.
 
 ## What you learned
 

@@ -121,6 +121,7 @@ var _ ocm.Reconciler = (*Reconciler)(nil)
 // +kubebuilder:rbac:groups=delivery.ocm.software,resources=namespaceddeployers,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=delivery.ocm.software,resources=namespaceddeployers/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=delivery.ocm.software,resources=namespaceddeployers/finalizers,verbs=update
+// +kubebuilder:rbac:groups="",resources=namespaces,verbs=get
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
@@ -294,6 +295,9 @@ func (r *Reconciler) pruneWithApplySet(ctx context.Context, deployer deliveryv1a
 	applyClient, err := r.applyClient(ctx, deployer)
 	if err != nil {
 		if r.Namespaced && apierrors.IsNotFound(err) {
+			if blocked, blockErr := r.blocksOrphanWithoutServiceAccount(ctx, deployer, err); blocked {
+				return false, blockErr
+			}
 			// Either the entire namespace or the bootstrapping objects are being deleted
 			// so orphan everything and let the deletion happen.
 			r.orphanOnDeletion(ctx, deployer, metadata, err)

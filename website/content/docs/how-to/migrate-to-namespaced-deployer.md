@@ -33,9 +33,9 @@ The examples use a `Deployer` named `my-deployer` that references the `Resource`
 ### Create the service account
 
 The `NamespacedDeployer` applies with a service account. Grant it the kinds the `Deployer` deploys, as shown in
-[Configure Custom RBAC for Deployers]({{< relref "custom-rbac.md" >}}). Use a `ClusterRole` and
-`ClusterRoleBinding` for cluster-scoped kinds such as kro `ResourceGraphDefinitions` or for objects in other
-namespaces:
+[Configure Custom RBAC for Deployers]({{< relref "custom-rbac.md" >}}). Use a `Role` and `RoleBinding` in the
+target namespace for objects in other namespaces, and a `ClusterRole` and `ClusterRoleBinding` only for
+cluster-scoped kinds such as kro `ResourceGraphDefinitions`:
 
 ```bash
 kubectl create serviceaccount my-deployer -n my-team
@@ -143,6 +143,18 @@ kubectl get namespaceddeployer.delivery.ocm.software my-deployer -n my-team
 
 You should see: `NotFound` for the `Deployer` and `Ready` for the `NamespacedDeployer`. The deployed objects keep
 their UIDs.
+
+### Reduce the controller's permissions
+
+Once no `Deployer` is left in the cluster, the controller only needs `get`, `list` and `watch` on the deployed kinds.
+Remove the write verbs that you granted it for the `Deployer`, as described in
+[Grant the controller read access]({{< relref "custom-rbac.md#grant-the-controller-read-access" >}}).
+
+```bash
+kubectl get deployers.delivery.ocm.software
+```
+
+You should see: `No resources found`.
 
 ## Troubleshooting
 

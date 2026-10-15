@@ -47,8 +47,8 @@ The controller offers two kinds with the same apply, prune and drift semantics:
 | Resource and OCM config references | Any namespace | Its own namespace only |
 
 Use the `NamespacedDeployer`. Its service account's RBAC is the only limit on what a deployment can do: a `Role`
-keeps it in its namespace, a `ClusterRole` and `ClusterRoleBinding` allow cluster-scoped objects such as kro
-`ResourceGraphDefinitions` or objects in other namespaces. The `NamespacedDeployer` is no security boundary beyond
+keeps it in its namespace, a `Role` in another namespace extends it to that namespace, and a `ClusterRole` and
+`ClusterRoleBinding` allow cluster-scoped objects such as kro `ResourceGraphDefinitions`. The `NamespacedDeployer` is no security boundary beyond
 that RBAC: it stays in its namespace only if its service account does. Its `Resource` and OCM configuration
 references must always point to its own namespace, so teams cannot read other namespaces' credentials through it.
 Objects without a namespace default to the deployer's namespace.
@@ -97,8 +97,10 @@ A `NamespacedDeployer` prunes with its service account. The following two things
   objects it cannot delete and retries. Restore the permissions and the deletion finishes. A deployer that has no
   such objects is removed right away.
 - **The service account is gone:** This is likely due to either the namespace being deleted or the bootstrapping
-  objects are being removed so we will not block the process. The deployer lists them as `orphaned` in a `DeletionFailed`
-  Warning event and is removed.
+  objects are being removed so we will not block the process. The Kubernetes garbage collector deletes the objects in
+  the deployer's namespace through their owner reference. The deployer lists the cluster-scoped and cross-namespace
+  objects as `orphaned` in a `DeletionFailed` Warning event and is removed. The `Orphan` deletion policy is the
+  exception, see below.
 
 Orphaned objects keep the annotation `delivery.ocm.software/namespaced-deployer` with the namespace and name of
 their deployer, and the label `app.kubernetes.io/managed-by: namespaceddeployer.delivery.ocm.software`.
@@ -119,13 +121,16 @@ reference, its `app.kubernetes.io/managed-by` label and its `delivery.ocm.softwa
 them. Another tool, or another `NamespacedDeployer`, can adopt them afterwards. This needs `patch` on the deployed
 kinds for the service account. Without it, the deletion waits with `DeletionFailed` until you grant it.
 
-If the service account is gone, no policy can be executed. Therefore, objects in the NamespacedDeployer's namespace
-are left alone.
+If the service account is gone, `Orphan` cannot release the objects, and the garbage collector would delete the
+ones in the deployer's namespace through their owner reference. The deletion therefore waits with `DeletionFailed`
+until you recreate the service account. In a terminating namespace it does not wait, as the namespace takes its
+objects with it anyway.
 
 {{< callout context="caution" title="Delete the NamespacedDeployer before its RBAC" icon="outline/alert-triangle" >}}
 `kubectl delete -f` on a file that contains the `NamespacedDeployer` together with its service account, `Role`,
 `ClusterRole` or bindings removes the service account at the same time and orphans cluster-scoped objects such as
-`ResourceGraphDefinitions`. Delete the `NamespacedDeployer` first and wait until it is gone, then delete its RBAC.
+`ResourceGraphDefinitions`. Delete the `NamespacedDeployer` first and wait until it is gone, then delete its RBAC. With the `Orphan` deletion
+policy, the deletion waits instead until you recreate the service account.
 If objects were orphaned, check the deployer's events and delete them by hand.
 {{< /callout >}}
 

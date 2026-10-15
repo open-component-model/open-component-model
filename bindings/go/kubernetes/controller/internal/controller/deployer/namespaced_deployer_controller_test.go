@@ -381,6 +381,54 @@ metadata:
 		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(clusterRole), &rbacv1.ClusterRole{})).To(Succeed())
 	})
 
+	It("blocks the Orphan deletion policy without its service account", func(ctx SpecContext) {
+		createServiceAccount(ctx, namespace.GetName(), true)
+		resourceObj := mockYAMLResource(ctx, namespace.GetName(), `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nd-orphan-sa-gone-cm
+`)
+
+		deployer := createNamespacedDeployer(ctx, namespace.GetName(), resourceObj.GetName(), nil, func(d *v1alpha1.NamespacedDeployer) {
+			d.Spec.DeletionPolicy = v1alpha1.DeletionPolicyOrphan
+		})
+		test.WaitForReadyObject(ctx, k8sClient, deployer, map[string]any{})
+
+		By("deleting the service account and the NamespacedDeployer like `kubectl delete -f` would")
+		test.DeleteObject(ctx, k8sClient, &corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: namespacedDeployerSA, Namespace: namespace.GetName()}})
+		Expect(k8sClient.Delete(ctx, deployer)).To(Succeed())
+		test.WaitForNotReadyObjectWithMessage(ctx, k8sClient, deployer, v1alpha1.DeletionFailedReason, "Orphan deletion policy")
+
+		By("releasing the objects once the service account is back")
+		createServiceAccount(ctx, namespace.GetName(), false)
+		Eventually(func(ctx context.Context) bool {
+			return errors.IsNotFound(k8sClient.Get(ctx, client.ObjectKeyFromObject(deployer), &v1alpha1.NamespacedDeployer{}))
+		}).WithTimeout(test.DefaultKubernetesOperationTimeout).WithContext(ctx).Should(BeTrue())
+		cm := &corev1.ConfigMap{}
+		Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace.GetName(), Name: "nd-orphan-sa-gone-cm"}, cm)).To(Succeed())
+		Expect(cm.GetOwnerReferences()).To(BeEmpty())
+	})
+
+	It("does not block the Orphan deletion policy in a terminating namespace", func(ctx SpecContext) {
+		createServiceAccount(ctx, namespace.GetName(), true)
+		resourceObj := mockYAMLResource(ctx, namespace.GetName(), `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nd-orphan-terminating-cm
+`)
+
+		deployer := createNamespacedDeployer(ctx, namespace.GetName(), resourceObj.GetName(), nil, func(d *v1alpha1.NamespacedDeployer) {
+			d.Spec.DeletionPolicy = v1alpha1.DeletionPolicyOrphan
+		})
+		test.WaitForReadyObject(ctx, k8sClient, deployer, map[string]any{})
+
+		// envtest runs no namespace controller, so the namespace stays in Terminating and the test deletes its objects.
+		By("terminating the namespace and deleting its service account and NamespacedDeployer")
+		Expect(k8sClient.Delete(ctx, namespace)).To(Succeed())
+		test.DeleteObject(ctx, k8sClient, &corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: namespacedDeployerSA, Namespace: namespace.GetName()}})
+		test.DeleteObject(ctx, k8sClient, deployer)
+	})
+
 	It("does not apply into another namespace without permissions there", func(ctx SpecContext) {
 		createServiceAccount(ctx, namespace.GetName(), true)
 		resourceObj := mockYAMLResource(ctx, namespace.GetName(), `apiVersion: v1

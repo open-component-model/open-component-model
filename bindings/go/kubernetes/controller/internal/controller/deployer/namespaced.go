@@ -146,6 +146,32 @@ func (r *Reconciler) blocksDeletion(ctx context.Context, deployer deliveryv1alph
 	return true
 }
 
+// blocksOrphanWithoutServiceAccount keeps a deployer with the Orphan deletion policy while its service account is
+// gone, as the garbage collector would delete the objects in its namespace through their owner reference.
+func (r *Reconciler) blocksOrphanWithoutServiceAccount(ctx context.Context, deployer deliveryv1alpha1.DeployerObject, saErr error) (bool, error) {
+	if deployer.GetDeletionPolicy() != deliveryv1alpha1.DeletionPolicyOrphan {
+		return false, nil
+	}
+
+	// A terminating namespace takes every object with it, so blocking would only keep it in Terminating.
+	ns := &corev1.Namespace{}
+	if err := r.apiReader.Get(ctx, client.ObjectKey{Name: deployer.GetNamespace()}, ns); err != nil {
+		if apierrors.IsNotFound(err) {
+			return false, nil
+		}
+		return true, fmt.Errorf("failed to get namespace %s: %w", deployer.GetNamespace(), err)
+	}
+	if !ns.GetDeletionTimestamp().IsZero() {
+		return false, nil
+	}
+
+	status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.DeletionFailedReason, fmt.Sprintf(
+		"service account %s is gone (%v), recreate it to release the objects for the Orphan deletion policy",
+		serviceAccountName(deployer), saErr))
+
+	return true, saErr
+}
+
 // orphanOnDeletion reports what a deletion leaves behind when the service account is gone. GC removes children
 // in the deployer's namespace through their owner reference, the rest stays and is listed in a Warning event.
 func (r *Reconciler) orphanOnDeletion(ctx context.Context, deployer deliveryv1alpha1.DeployerObject, metadata applyset.Metadata, pruneErr error) {

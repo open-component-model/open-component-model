@@ -24,6 +24,12 @@ rules:
   - apiGroups:
       - ""
     resources:
+      - namespaces
+    verbs:
+      - get
+  - apiGroups:
+      - ""
+    resources:
       - serviceaccounts/token
     verbs:
       - create
