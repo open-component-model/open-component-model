@@ -237,10 +237,15 @@ jobs:
         with:
           report_paths: '${{ github.workspace }}/bindings/go/output/junit*.xml'
           detailed_summary: true
+          flaky_summary: true
           include_passed: false
           # annotate inline + write the job summary without creating a check run,
           # so the report works on fork PRs (read-only token) too.
           annotate_only: true
+          # gotestsum --rerun-fails writes the failed attempt and the passing
+          # rerun as two testcases with the same name; honor only the final run
+          # so a flaky test that passed on retry is not annotated red.
+          check_retries: true
 
   run_unit_tests:
     name: "Unit Tests"

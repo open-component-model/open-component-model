@@ -9,7 +9,9 @@
 // # Prerequisites
 //
 // Cosign >= v3.0.4 is required (introduces --signing-config).
-// The tested/pinned version is defined in signing/handler/.env (COSIGN_VERSION).
+// The tested/pinned version is defined in signing/handler/internal/.env
+// (COSIGN_VERSION). Without cosign on PATH, the handler downloads that release
+// of OCM's FIPS cosign build (https://github.com/open-component-model/cosign).
 // At runtime the handler hard-fails below the minimum and warns below the
 // pinned version.
 //
