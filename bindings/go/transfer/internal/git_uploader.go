@@ -49,7 +49,7 @@ func processGitUploader(ctx context.Context, resource descriptorv2.Resource, acc
 		if strings.TrimSpace(u.Repository) == "" || strings.TrimSpace(u.Ref) == "" {
 			return nil, fmt.Errorf("git uploader cannot derive the target from a local blob, which does not carry its Git origin: set repository and ref in the git uploader config")
 		}
-		if err = appendGetLocalResourceTransform(tgd, resource, val.SourceRepository, val.Descriptor.Component.Name, val.Descriptor.Component.Version, getResourceID, getLabel(&val.Descriptor.Component, resource.Name)); err != nil {
+		if err = appendGetLocalResourceTransform(tgd, resource, val, getResourceID, getLabel(&val.Descriptor.Component, resource.Name)); err != nil {
 			return nil, err
 		}
 	default:

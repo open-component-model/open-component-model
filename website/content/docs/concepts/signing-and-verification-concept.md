@@ -188,6 +188,47 @@ A component version can have **multiple signatures** from different parties, ena
 - Multiple approval workflows
 - Cross-organizational trust chains
 
+### Pinning a Component Version by Digest
+
+A component reference can name the digest of the component version it expects. The digest uses the OCI digest
+notation, optionally prefixed with a normalization algorithm (`/` written as `.`):
+
+```text
+ghcr.io/acme//acme.org/helloworld@sha256:<oci-digest>
+ghcr.io/acme//acme.org/helloworld:1.0.0@sha256:<oci-digest>
+ghcr.io/acme//acme.org/helloworld:1.0.0@jsonNormalisation.v4alpha1+sha256:<normalized-descriptor-digest>
+```
+
+`ocm get`, `ocm download`, `ocm verify`, `ocm sign` and `ocm transfer` fail if the component version they read does not
+match the pin, and `ocm download` verifies the downloaded content against the resource digests of the pinned
+descriptor. Both forms accept `sha256` and `sha512`.
+
+| | OCI digest `sha256:<hex>` | Normalized pin `jsonNormalisation.v4alpha1+sha256:<hex>` |
+| --- | --- | --- |
+| Identifies | the OCI image index or manifest the component version is stored as, which is what its version tag resolves to | the descriptor normalized with `jsonNormalisation/v4alpha1` (see [Normalization and Digest Calculation](#normalization-and-digest-calculation)) |
+| Covers | the stored artifact graph: descriptor (including access information, all labels and signatures) and all local blobs | what signatures cover: no access information, no labels excluded from signing |
+| How it is checked | the component version is read from the artifact with that digest, never through the version tag; every node read is verified against its digest | the descriptor read through the version tag is normalized and hashed |
+| Version in the reference | optional; if given, the artifact must hold that version | required |
+| Changes on | any change of the stored artifact, including `ocm transfer` and `ocm sign` | changes of signed content only |
+| Where it works | the repository the pin was taken from; OCI registries and CTF archives only | every repository the component version is transferred to |
+| How to obtain | `ocm verify cv` in an OCI registry or CTF archive (`reference` in `SIGNATURE VERIFICATION SUCCESSFUL`); any OCI tool, for example `oras resolve ghcr.io/acme/component-descriptors/acme.org/helloworld:1.0.0` or `crane digest`; in a CTF archive, the `digest` of the version tag in `artifact-index.json` | the digest `ocm sign` logs (`digest` in `signed successfully`) and records in the signature (`signatures[].digest.value` in `ocm get cv -o yaml`) |
+
+An OCI digest pins a component version the way a digest pins a container image: because the digest of the image index
+or manifest covers everything stored below it, reading by digest yields exactly the content that was pinned, even if
+the version tag has been moved since. `ocm transfer` with an OCI digest pin copies the descriptor and all local
+resources from the pinned artifact. Use it to bind a pipeline step to the exact component version an earlier step
+inspected in one repository. Use a normalized pin to identify a component version independent of where it is stored:
+it survives transfer and signing, so a pin taken once binds every later read to the same signed content. For
+repositories that do not store component versions as OCI artifacts, use the normalized form. See the
+[CLI reference]({{< relref "/docs/reference/ocm-cli/ocm_get_component-version.md" >}}) for the reference format.
+
+`ocm verify cv` closes the gap between verifying a component version and using it: in an OCI registry or CTF archive it
+resolves the version tag once, verifies the artifact the tag resolved to, and logs the reference pinned to that
+artifact's OCI digest. Passing that reference to `ocm transfer` or `ocm download` reads exactly the verified content,
+even if the tag is moved in between. `ocm sign` with an OCI digest pin writes the signature to the version tag, so it
+refuses to sign if the tag no longer resolves to the pinned artifact instead of replacing the current version with
+the pinned one.
+
 ## Supported Signing Algorithms
 
 OCM's `signature.algorithm` field selects between two signing approaches: classical RSA signatures over a long-lived key pair, and [Sigstore](https://www.sigstore.dev/)-based keyless signing, where each signature is made with a fresh, short-lived key bound to your OIDC identity. The two approaches differ not just in cryptography but in their trust model — see [Trust Models](#trust-models) below.

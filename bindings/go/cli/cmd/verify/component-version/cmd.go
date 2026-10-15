@@ -53,10 +53,11 @@ func New() *cobra.Command {
 
 ## Reference Format
 
-	[type::]{repository}/[valid-prefix]/{component}[:version]
+	[type::]{repository}/[valid-prefix]/{component}[:version][@digest]
 
 - Prefixes: {%[1]s|none} (default: %[1]q)  
 - Repo types: {%[2]s} (short: {%[3]s})
+- Digest: optional pin (see "ocm get cv --help"), "@sha256:<hex>" (OCI digest of the artifact the component version is stored as; the version may be omitted) or "@jsonNormalisation.v4alpha1+sha256:<hex>" (normalized: the digest signatures sign); the command fails unless the component version matches it
 
 ## OCM Verification explained in simple steps
 
@@ -76,6 +77,7 @@ func New() *cobra.Command {
 - An entry with a "signature" field only applies to that signature, one without applies to all
 - The verifier is resolved per signature, so a component carrying several signatures can be verified with a different handler for each
 - --verifier-spec is no longer supported and fails with an error
+- In an OCI registry or CTF, the version tag is resolved once and the component version is read from the artifact it resolved to; on success the log field "reference" holds the reference pinned to that artifact's OCI digest. Passing it to a subsequent command (e.g. transfer, download resource) reads exactly the verified content, even if the tag moves in between
 
 ## Timestamp Verification (RFC 3161 TSA)
 
@@ -348,7 +350,9 @@ func VerifyComponentVersion(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("could not access ocm repository: %w", err)
 	}
 
-	desc, err := repo.GetComponentVersion(ctx, ref.Component, ref.Version)
+	// Read from the artifact the version tag resolves to, so the pinned reference reported on
+	// success names exactly the verified content.
+	_, desc, pinnedRef, err := ocm.GetComponentVersionByArtifact(ctx, repo, ref)
 	if err != nil {
 		return fmt.Errorf("getting component reference and versions failed: %w", err)
 	}
@@ -448,7 +452,12 @@ func VerifyComponentVersion(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("SIGNATURE VERIFICATION FAILED: %w", err)
 	}
 
-	logger.InfoContext(ctx, "SIGNATURE VERIFICATION SUCCESSFUL")
+	if pinnedRef == nil {
+		logger.InfoContext(ctx, "SIGNATURE VERIFICATION SUCCESSFUL")
+		return nil
+	}
+	// Feeding this reference to a subsequent command reads exactly the verified artifact.
+	logger.InfoContext(ctx, "SIGNATURE VERIFICATION SUCCESSFUL", "reference", pinnedRef.String())
 	return nil
 }
 

@@ -75,10 +75,11 @@ func New() *cobra.Command {
 
 ## Reference Format
 
-	[type::]{repository}/[valid-prefix]/{component}[:version]
+	[type::]{repository}/[valid-prefix]/{component}[:version][@digest]
 
 - Prefixes: {%[1]s|none} (default: %[1]q)  
 - Repo types: {%[2]s} (short: {%[3]s})  
+- Digest: optional pin (see "ocm get cv --help"), "@sha256:<hex>" (OCI digest of the artifact the component version is stored as; the version may be omitted) or "@jsonNormalisation.v4alpha1+sha256:<hex>" (normalized: the digest signatures sign); the command fails unless the component version matches it. The signed component version is written to its version tag; with an OCI digest pin, signing fails if the tag no longer resolves to the pinned artifact, rather than overwriting it
 
 ## OCM Signing explained in simple steps
 
@@ -349,7 +350,9 @@ func SignComponentVersion(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("could not access ocm repository: %w", err)
 	}
 
-	desc, err := repo.GetComponentVersion(ctx, ref.Component, ref.Version)
+	// Write through the returned repository: pinned to an OCI digest, it refuses to overwrite a
+	// version tag that no longer resolves to the pinned artifact.
+	repo, desc, err := ocm.GetPinnedComponentVersion(ctx, repo, ref)
 	if err != nil {
 		return fmt.Errorf("getting component version failed: %w", err)
 	}

@@ -17,10 +17,11 @@ Verify component version(s) inside an OCM repository based on signatures.
 
 ## Reference Format
 
-	[type::]{repository}/[valid-prefix]/{component}[:version]
+	[type::]{repository}/[valid-prefix]/{component}[:version][@digest]
 
 - Prefixes: {component-descriptors|none} (default: "component-descriptors")  
 - Repo types: {OCIRepository|CommonTransportFormat} (short: {OCI|oci|CTF|ctf})
+- Digest: optional pin (see "ocm get cv --help"), "@sha256:<hex>" (OCI digest of the artifact the component version is stored as; the version may be omitted) or "@jsonNormalisation.v4alpha1+sha256:<hex>" (normalized: the digest signatures sign); the command fails unless the component version matches it
 
 ## OCM Verification explained in simple steps
 
@@ -40,6 +41,7 @@ Verify component version(s) inside an OCM repository based on signatures.
 - An entry with a "signature" field only applies to that signature, one without applies to all
 - The verifier is resolved per signature, so a component carrying several signatures can be verified with a different handler for each
 - --verifier-spec is no longer supported and fails with an error
+- In an OCI registry or CTF, the version tag is resolved once and the component version is read from the artifact it resolved to; on success the log field "reference" holds the reference pinned to that artifact's OCI digest. Passing it to a subsequent command (e.g. transfer, download resource) reads exactly the verified content, even if the tag moves in between
 
 ## Timestamp Verification (RFC 3161 TSA)
 
