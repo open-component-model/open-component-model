@@ -56,11 +56,13 @@ func (m *mockResourceRepositoryForAddOCI) UploadResource(ctx context.Context, re
 		Type: access.Type,
 		Data: accessData,
 	}
-	// Simulate the sink back-filling a content digest.
-	updated.Digest = &descriptor.Digest{
-		HashAlgorithm:          "SHA-256",
-		NormalisationAlgorithm: "genericBlobDigest/v1",
-		Value:                  "injectedbythesink",
+	// The real sink only back-fills a *missing* digest; it does not change a present one.
+	if updated.Digest == nil {
+		updated.Digest = &descriptor.Digest{
+			HashAlgorithm:          "SHA-256",
+			NormalisationAlgorithm: "genericBlobDigest/v1",
+			Value:                  "injectedbythesink",
+		}
 	}
 	return updated, nil
 }

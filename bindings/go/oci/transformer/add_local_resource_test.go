@@ -27,6 +27,9 @@ type mockRepository struct {
 	addedBlob     blob.ReadOnlyBlob
 	component     string
 	version       string
+	// forceDigest, when set, is returned as the added resource's digest regardless of input,
+	// simulating a sink that disagrees with a source-provided digest.
+	forceDigest *descriptor.Digest
 }
 
 func (m *mockRepository) AddLocalResource(ctx context.Context, component, version string, res *descriptor.Resource, content blob.ReadOnlyBlob) (*descriptor.Resource, error) {
@@ -35,8 +38,8 @@ func (m *mockRepository) AddLocalResource(ctx context.Context, component, versio
 	m.addedResource = res
 	m.addedBlob = content
 
-	// Return updated resource with LocalBlob access, simulating the sink's
-	// back-fill of a content digest (as pack/artifact_blob do today).
+	// Return updated resource with LocalBlob access. The real sink only back-fills a
+	// *missing* digest from the content; it does not change a digest the source carried.
 	updated := res.DeepCopy()
 	updated.Access = &v2.LocalBlob{
 		Type: runtime.Type{
@@ -46,10 +49,15 @@ func (m *mockRepository) AddLocalResource(ctx context.Context, component, versio
 		MediaType:      "application/octet-stream",
 		LocalReference: "sha256:test-digest",
 	}
-	updated.Digest = &descriptor.Digest{
-		HashAlgorithm:          "SHA-256",
-		NormalisationAlgorithm: "genericBlobDigest/v1",
-		Value:                  "injectedbythesink",
+	if updated.Digest == nil {
+		updated.Digest = &descriptor.Digest{
+			HashAlgorithm:          "SHA-256",
+			NormalisationAlgorithm: "genericBlobDigest/v1",
+			Value:                  "injectedbythesink",
+		}
+	}
+	if m.forceDigest != nil {
+		updated.Digest = m.forceDigest
 	}
 	return updated, nil
 }
@@ -240,12 +248,12 @@ func TestAddLocalResource_Transform_PreservesInputDigest(t *testing.T) {
 	testFile := filepath.Join(tempDir, "res.bin")
 	require.NoError(t, os.WriteFile(testFile, []byte("data"), 0o644))
 
-	newTransformer := func() *AddLocalResource {
+	newTransformer := func(repo *mockRepository) *AddLocalResource {
 		combinedScheme := runtime.NewScheme()
 		v2.MustAddToScheme(combinedScheme)
 		combinedScheme.MustRegisterWithAlias(&v1alpha1.OCIAddLocalResource{}, v1alpha1.OCIAddLocalResourceV1alpha1)
 		combinedScheme.MustRegisterWithAlias(&v1alpha1.CTFAddLocalResource{}, v1alpha1.CTFAddLocalResourceV1alpha1)
-		return &AddLocalResource{Scheme: combinedScheme, RepoProvider: &mockRepoProvider{repo: &mockRepository{}}}
+		return &AddLocalResource{Scheme: combinedScheme, RepoProvider: &mockRepoProvider{repo: repo}}
 	}
 
 	specFor := func(dig *v2.Digest) *v1alpha1.OCIAddLocalResource {
@@ -268,7 +276,7 @@ func TestAddLocalResource_Transform_PreservesInputDigest(t *testing.T) {
 
 	t.Run("absent input digest stays absent", func(t *testing.T) {
 		r := require.New(t)
-		res, err := newTransformer().Transform(ctx, specFor(nil))
+		res, err := newTransformer(&mockRepository{}).Transform(ctx, specFor(nil))
 		r.NoError(err)
 		out := res.(*v1alpha1.OCIAddLocalResource).Output.Resource
 		r.Nil(out.Digest, "transfer must not inject a digest the source did not have")
@@ -277,11 +285,19 @@ func TestAddLocalResource_Transform_PreservesInputDigest(t *testing.T) {
 	t.Run("present input digest is preserved verbatim", func(t *testing.T) {
 		r := require.New(t)
 		in := &v2.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: "ociArtifactDigest/v1", Value: "abc123"}
-		res, err := newTransformer().Transform(ctx, specFor(in))
+		res, err := newTransformer(&mockRepository{}).Transform(ctx, specFor(in))
 		r.NoError(err)
 		out := res.(*v1alpha1.OCIAddLocalResource).Output.Resource
 		r.NotNil(out.Digest)
 		r.Equal(*in, *out.Digest, "a pipeline-supplied digest (e.g. from a transformation) must survive the sink")
+	})
+
+	t.Run("sink digest disagreeing with a present source digest is an error", func(t *testing.T) {
+		r := require.New(t)
+		in := &v2.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: "genericBlobDigest/v1", Value: "source"}
+		repo := &mockRepository{forceDigest: &descriptor.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: "genericBlobDigest/v1", Value: "different"}}
+		_, err := newTransformer(repo).Transform(ctx, specFor(in))
+		r.ErrorContains(err, "digest mismatch")
 	})
 }
 
