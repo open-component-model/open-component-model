@@ -1367,7 +1367,7 @@ func (repo *Repository) UploadResourceStream(ctx context.Context, res *descripto
 
 	if ref.Tag != "" {
 		// if we have a tag, we should also tag in the upload
-		if err := store.Tag(ctx, rs.Root(), ref.Tag); err != nil {
+		if err := tagIdempotent(ctx, store, rs.Root(), ref.Tag); err != nil {
 			return nil, fmt.Errorf("failed to tag artifact with tag %q: %w", ref.Tag, err)
 		}
 	} else {

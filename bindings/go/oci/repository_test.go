@@ -3839,6 +3839,34 @@ func TestRepository_AddComponentVersion_ImmutableRegistry(t *testing.T) {
 	})
 }
 
+// UploadResourceStream (the by-reference ociArtifact transfer path) must also
+// tolerate re-tagging an identical artifact on a redeploy-disabled registry.
+func TestRepository_UploadResourceStream_ImmutableRegistry(t *testing.T) {
+	r := require.New(t)
+	ctx := t.Context()
+
+	fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
+	r.NoError(err)
+	store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
+	repo := Repository(t, oci.WithResolver(redeployDisabledResolver{Resolver: store}), oci.WithScheme(testScheme))
+
+	memStore, root := buildTestManifestStream(t)
+	newStream := func() *ocistream.OCIResourceStream {
+		return &ocistream.OCIResourceStream{
+			ReadOnlyGraphStorage: memStore,
+			Descriptor:           root,
+			TempDir:              t.TempDir(),
+			Tags:                 []string{"test-image:1.0.0"},
+		}
+	}
+	res := &descriptor.Resource{Access: &v1.OCIImage{ImageReference: "test-image:1.0.0"}}
+
+	_, err = repo.UploadResourceStream(ctx, res, newStream())
+	r.NoError(err, "first upload must succeed")
+	_, err = repo.UploadResourceStream(ctx, res, newStream())
+	r.NoError(err, "identical re-upload must be idempotent despite redeploy being disabled")
+}
+
 // blobValidatingResolver wraps a resolver so the stores it hands out reject a
 // manifest whose referenced config/layer blobs are not yet present — the
 // MANIFEST_BLOB_UNKNOWN behaviour of a conformant OCI registry, which the CTF

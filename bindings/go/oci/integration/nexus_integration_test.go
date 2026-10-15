@@ -31,8 +31,9 @@ const (
 // Nexus "docker (hosted)" repo with redeploy disabled (writePolicy=allow_once),
 // the configuration that produced the original 409 "redeploy disabled ... cannot
 // be updated as asset already exists". The component-descriptor and OCI artifact
-// tag subtests 409 on re-tag without the fix; the ownership subtest is a
-// positive check (Nexus does not 409 there - see its note).
+// tag subtests (UploadResource and UploadResourceStream) 409 on re-tag without
+// the fix; the ownership subtest is a positive check (Nexus does not 409 there -
+// see its note).
 func Test_Integration_Nexus_RedeployDisabled(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping Nexus integration test in short mode")
@@ -81,6 +82,28 @@ func Test_Integration_Nexus_RedeployDisabled(t *testing.T) {
 		r.NoError(err, "first upload must succeed")
 		_, err = repo.UploadResource(ctx, res, inmemory.New(bytes.NewReader(data)))
 		r.NoError(err, "identical re-upload must be idempotent despite redeploy being disabled")
+	})
+
+	t.Run("oci artifact stream re-upload is idempotent", func(t *testing.T) {
+		// By-reference ociArtifact transfer goes through UploadResourceStream, a
+		// different tag site than UploadResource above.
+		r := require.New(t)
+		srcRef := fmt.Sprintf("%s/nexus/stream-src:1.0.0", dockerEndpoint)
+		dstRef := fmt.Sprintf("%s/nexus/stream-dst:1.0.0", dockerEndpoint)
+
+		src := byReferenceResource("artifact", "1.0.0",
+			pushOwnershipByReferenceImage(t, ctx, repo, srcRef, []byte("nexus-stream-payload")))
+
+		upload := func() error {
+			stream, err := repo.DownloadResourceStream(ctx, src)
+			if err != nil {
+				return err
+			}
+			_, err = repo.UploadResourceStream(ctx, byReferenceResource("artifact", "1.0.0", dstRef), stream)
+			return err
+		}
+		r.NoError(upload(), "first stream upload must succeed")
+		r.NoError(upload(), "identical stream re-upload must be idempotent despite redeploy being disabled")
 	})
 
 	t.Run("ownership referrer re-attach is idempotent", func(t *testing.T) {
