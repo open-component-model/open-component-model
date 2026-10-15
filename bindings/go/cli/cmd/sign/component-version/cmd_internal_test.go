@@ -4,7 +4,56 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/signing/tsa"
 )
+
+func TestSetTSALabel(t *testing.T) {
+	tsaLabel := func(url string) descruntime.Label {
+		return descruntime.Label{Name: tsa.TSAURLLabelPrefix + "default", Value: []byte(`"` + url + `"`), Version: "v1alpha1"}
+	}
+	otherLabel := descruntime.Label{Name: "other", Value: []byte(`"x"`)}
+
+	tests := []struct {
+		name       string
+		tsaURL     string
+		labels     []descruntime.Label
+		wantLabels []descruntime.Label
+	}{
+		{
+			name:       "adds an unsigned label with only scheme, host, port and path",
+			tsaURL:     "https://user:token@tsa.example:8443/ts?apikey=secret#frag",
+			labels:     []descruntime.Label{otherLabel},
+			wantLabels: []descruntime.Label{otherLabel, tsaLabel("https://tsa.example:8443/ts")},
+		},
+		{
+			name:       "replaces the label of a re-signed signature in place",
+			tsaURL:     "https://new.example/ts",
+			labels:     []descruntime.Label{tsaLabel("https://old.example/ts"), otherLabel},
+			wantLabels: []descruntime.Label{tsaLabel("https://new.example/ts"), otherLabel},
+		},
+		{
+			name:       "removes a stale label when re-signed without a TSA",
+			labels:     []descruntime.Label{tsaLabel("https://old.example/ts"), otherLabel},
+			wantLabels: []descruntime.Label{otherLabel},
+		},
+		{
+			name:       "nothing to remove",
+			labels:     []descruntime.Label{otherLabel},
+			wantLabels: []descruntime.Label{otherLabel},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			desc := &descruntime.Descriptor{}
+			desc.Component.Labels = tc.labels
+			r.NoError(setTSALabel(desc, "default", tc.tsaURL))
+			r.Equal(tc.wantLabels, desc.Component.Labels)
+		})
+	}
+}
 
 func TestEffectiveTSAURL(t *testing.T) {
 	tests := []struct {

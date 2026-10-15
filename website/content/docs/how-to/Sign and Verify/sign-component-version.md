@@ -821,9 +821,9 @@ ocm sign cv --tsa-url http://timestamp.digicert.com \
   /tmp/helloworld/transport-archive//github.com/acme.org/helloworld:1.0.0
 ```
 
-OCM requests a timestamp token over the signature value and stores it, together with the TSA URL, in the signature's
-`timestamp` field. The component itself is not changed, so its digest, references to it and other signatures stay
-valid. `--dry-run` skips the TSA request.
+OCM requests a timestamp token over the signature value, stores it in the signature's `timestamp` field, and records
+the TSA URL in the label `url.tsa.ocm.software/{signatureName}`. The label is not signing-relevant, so the component
+digest, references to it and other signatures stay valid. `--dry-run` skips the TSA request.
 
 For full certificate-chain verification of the token, verifiers need the TSA's root certificates in their credential
 graph; without them the token structure and imprint are still checked but the chain is not verified and the attested

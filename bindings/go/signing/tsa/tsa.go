@@ -306,7 +306,7 @@ func decodePEM(data []byte, blockType string) ([]byte, error) {
 
 // SanitizeURL returns raw with its sensitive components (userinfo, query,
 // fragment) removed, preserving only scheme, host, port, and path. The result
-// is safe for error messages, logs, and the URL stored with a timestamp:
+// is safe for error messages, logs, and the TSA URL label:
 // verification derives the credential-lookup identity from scheme/host/port/path
 // only (see runtime.ParseURLToIdentity). An error is returned for URLs that cannot be
 // parsed safely: a parse failure, or an opaque form (e.g. "user:pass@host/path",

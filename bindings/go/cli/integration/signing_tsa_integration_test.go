@@ -27,6 +27,7 @@ import (
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/oci"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
+	"ocm.software/open-component-model/bindings/go/signing/tsa"
 )
 
 // Test_Integration_Signing_TSA signs against a real registry with --tsa-url and
@@ -112,8 +113,14 @@ configurations:
 	r.NoError(err)
 	r.Len(desc.Signatures, 1)
 	r.NotNil(desc.Signatures[0].Timestamp)
-	r.Equal(tsaServer.URL, desc.Signatures[0].Timestamp.URL)
-	r.Empty(desc.Component.Labels, "timestamping must not change the signed descriptor")
+	var labelURL string
+	for _, l := range desc.Component.Labels {
+		if l.Name == tsa.TSAURLLabelPrefix+"default" {
+			r.False(l.Signing, "the TSA URL label must not be signing-relevant")
+			r.NoError(l.GetValue(&labelURL))
+		}
+	}
+	r.Equal(tsaServer.URL, labelURL)
 
 	verifyCMD := cmd.New()
 	verifyCMD.SetArgs([]string{"verify", "cv", ref, "--config", config})

@@ -91,7 +91,7 @@ Justification:
 
 * Works with all signature encodings (Plain hex, PEM, future formats)
 * The timestamp is stored alongside the signature in the component descriptor, keeping everything self-contained
-* The TSA URL is stored with the timestamp for verifier-side credential resolution; timestamping leaves the component digest unchanged
+* The TSA URL is recorded in an unsigned label for verifier-side credential resolution; timestamping leaves the component digest unchanged
 * Backward-compatible: the `timestamp` field is optional and omitted when empty
 
 ---
@@ -135,7 +135,7 @@ The design enforces strict separation between who controls trust material at eac
 **Signer-controlled** (embedded in the descriptor):
 
 - The signature itself (Plain hex or PEM-encoded with cert chain)
-- The TSA URL (stored in `Signature.Timestamp.URL`) — unsigned, only a hint for selecting verifier-configured roots
+- The TSA URL label (`url.tsa.ocm.software/{signatureName}`) — unsigned, only a hint for selecting verifier-configured roots
 - The PEM-encoded timestamp token (stored in `Signature.Timestamp.Value`)
 
 **Verifier-controlled** (resolved from the credential graph):
@@ -157,13 +157,13 @@ The implementation supports three verification levels based on trust material av
 
 Only the **Full** level yields a certificate-validation time. The **Structural** level never passes `GenTime` to the signature handler: a token whose TSA identity is not trusted proves nothing about *when* the signature was made, so it must never relax X.509 certificate validity. Missing TSA roots therefore disable timestamp-based certificate validation entirely, while structural parsing and imprint matching still run as defense in depth. A tampered or fabricated token with a wrong imprint, no timestamping EKU, or a non-critical EKU is rejected regardless of root certificate configuration.
 
-### TSA URL Stored with the Timestamp
+### TSA URL as an Unsigned Label
 
-The TSA URL is stored, sanitized to scheme, host, port and path, in the signature's `timestamp.url` field. Signatures are not part of the normalised descriptor, so the component digest is the same with and without a timestamp: references that other component versions pinned before signing and other signatures stay valid, and a component version can carry several timestamped signatures.
+The TSA URL is stored, sanitized to scheme, host, port and path, in the component label `url.tsa.ocm.software/{signatureName}` without `signing: true`. Labels that are not signing-relevant are excluded from the normalised descriptor, so the component digest is the same with and without a timestamp: references that other component versions pinned before signing and other signatures stay valid, and a component version can carry several timestamped signatures. Re-signing with `--force` replaces the label, or removes it when the new signature has no timestamp.
 
-The URL is not covered by any signature. It is only a **hint** for credential resolution: it tells the verifier which configured TSA root certificates to try first. Rewriting it can only select other roots the verifier already trusts, and a token is trusted only when it chains to one of them. If the credential graph has no matching entry, the generic `TSA/v1alpha1` entry is used; without that either, verification falls back to structural-only mode.
+The label is not covered by any signature. It is only a **hint** for credential resolution: it tells the verifier which configured TSA root certificates to try first. Rewriting it can only select other roots the verifier already trusts, and a token is trusted only when it chains to one of them. If the credential graph has no matching entry, the generic `TSA/v1alpha1` entry is used; without that either, verification falls back to structural-only mode.
 
-Recording the URL as a signed label was rejected: a signing-relevant label is part of the normalised descriptor, so adding it would change the component digest, break references pinned before signing and invalidate other signatures.
+Recording the URL as a signing-relevant label was rejected: it would be part of the normalised descriptor, so adding it would change the component digest, break references pinned before signing and invalidate other signatures. Storing it in the signature's `timestamp` field was rejected because it would extend the specified signature format.
 
 ### Threat Analysis
 
@@ -198,7 +198,6 @@ New types added to both `descriptor/runtime` and `descriptor/v2`:
 type TimestampSpec struct {
     Value string    // PEM-encoded RFC 3161 timestamp token
     Time  time.Time // parsed generation time (informational)
-    URL   string    // sanitized TSA URL, a hint for selecting verifier roots (not signed)
 }
 ```
 
@@ -228,13 +227,14 @@ sequenceDiagram
     TSA-->>CLI: Timestamp token (PKCS#7 SignedData)
     CLI->>CLI: Validate nonce + imprint match
     CLI->>CLI: Attach TimestampSpec to Signature
+    CLI->>CLI: Set unsigned label url.tsa.ocm.software/{sig}
     CLI->>Repo: Upload Descriptor with Signature + Timestamp
 ```
 
 Key details:
 
 1. The component is not modified, so the digest is the same with and without a timestamp
-2. The sanitized TSA URL is stored in `Signature.Timestamp.URL` next to the token
+2. The sanitized TSA URL is recorded in the unsigned label `url.tsa.ocm.software/{signatureName}`; re-signing with `--force` replaces it or, without a TSA, removes it
 3. The TSA request is made **after** signing, using the same digest that was signed
 4. The `--tsa` flag uses a default public TSA (`http://timestamp.digicert.com`; DigiCert offers no HTTPS endpoint, and the token is self-authenticating); `--tsa-url` overrides it
 5. Dry-run mode skips the TSA request
@@ -255,7 +255,7 @@ sequenceDiagram
     CLI->>Repo: Download Component Descriptor
     Repo-->>CLI: Component Descriptor + Signatures
     loop For each signature with timestamp
-        CLI->>CLI: Read TSA URL from the signature timestamp
+        CLI->>CLI: Read TSA URL from label url.tsa.ocm.software/{sig}
         CLI->>Creds: Resolve TSA/v1alpha1 identity (URL-specific)
         Creds-->>CLI: root_certs_pem / root_certs_pem_file
         CLI->>CLI: Verify PKCS#7 token against digest + root pool
@@ -267,7 +267,7 @@ sequenceDiagram
 
 Key details:
 
-1. If the signature has a `Timestamp`, the verifier reads the TSA URL from `Timestamp.URL`
+1. If the signature has a `Timestamp`, the verifier reads the TSA URL from the label `url.tsa.ocm.software/{sig}`
 2. The URL is used to build a `TSA/v1alpha1` identity with `hostname`, `port`, and `scheme` attributes for URL-specific credential matching
 3. Root certificates are loaded from the credential graph (`root_certs_pem` or `root_certs_pem_file`)
 4. If no root certs are found, verification falls back to structural-only (PKCS#7 parsing + imprint match, no chain verification) with a warning
@@ -332,7 +332,7 @@ No new flags on `verify cv` — TSA verification is automatic when a timestamp i
 
 * **Network dependency at signing time** — the TSA server must be reachable; signing fails if the TSA is unavailable (mitigated: TSA is optional, disabled by default)
 * **Timestamp verification latency** — PKCS#7 parsing and optional chain validation add compute overhead to the verify path (typically <10ms for a single token)
-* **Unsigned TSA URL** — the URL stored with the timestamp is not tamper-evident; it only selects among verifier-configured roots, so URL-specific entries organise trust but do not restrict which configured TSA may vouch for a token
+* **Unsigned TSA URL** — the TSA URL label is not tamper-evident; it only selects among verifier-configured roots, so URL-specific entries organise trust but do not restrict which configured TSA may vouch for a token
 * **In-process handlers only** — the trusted signing time travels as a context value, which does not cross the plugin process boundary; external signing plugins validate certificates at the current time
 * **Trust in the TSA** — a compromised TSA can issue backdated timestamps; this is a fundamental limitation of all timestamping systems, mitigated by choosing reputable TSAs and removing the root of a compromised TSA from the verifier's configuration
 

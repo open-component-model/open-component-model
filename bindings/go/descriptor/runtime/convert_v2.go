@@ -299,7 +299,6 @@ func ConvertFromV2TimestampSpec(ts *v2.TimestampSpec) *TimestampSpec {
 	}
 	result := &TimestampSpec{
 		Value: ts.Value,
-		URL:   ts.URL,
 	}
 	if ts.Time != nil {
 		result.Time = CreationTime(ts.Time.Time.Time)
@@ -314,7 +313,6 @@ func ConvertToV2TimestampSpec(ts *TimestampSpec) *v2.TimestampSpec {
 	}
 	result := &v2.TimestampSpec{
 		Value: ts.Value,
-		URL:   ts.URL,
 	}
 	if t := time.Time(ts.Time); !t.IsZero() {
 		result.Time = &v2.Timestamp{Time: v2.NewTime(t)}

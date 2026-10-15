@@ -149,7 +149,7 @@ func TestVerifyTSATimestamp(t *testing.T) {
 			if tc.mutate != nil {
 				tc.mutate(t, &sig)
 			}
-			_, trusted, err := verifyTSATimestamp(t.Context(), slog.Default(), tc.resolver, sig)
+			_, trusted, err := verifyTSATimestamp(t.Context(), slog.Default(), tc.resolver, &descruntime.Descriptor{}, sig)
 			switch {
 			case tc.wantErrIs != nil:
 				r.ErrorIs(err, tc.wantErrIs)
@@ -163,24 +163,27 @@ func TestVerifyTSATimestamp(t *testing.T) {
 	}
 }
 
-func TestVerifyTSATimestamp_ResolvesRootsByTimestampURL(t *testing.T) {
+func TestVerifyTSATimestamp_ResolvesRootsByTSAURLLabel(t *testing.T) {
 	tests := []struct {
 		name          string
-		url           string
+		labelValue    string
 		wantHostnames []string
 	}{
-		{name: "URL-specific identity first, then generic", url: "https://tsa.example/ts", wantHostnames: []string{"tsa.example", ""}},
-		{name: "generic identity without URL", wantHostnames: []string{""}},
-		{name: "unparsable URL falls back to generic", url: "://invalid", wantHostnames: []string{""}},
+		{name: "URL-specific identity first, then generic", labelValue: `"https://tsa.example/ts"`, wantHostnames: []string{"tsa.example", ""}},
+		{name: "generic identity without label", wantHostnames: []string{""}},
+		{name: "unparsable URL falls back to generic", labelValue: `"://invalid"`, wantHostnames: []string{""}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
 			sig := timestampedSignature(t)
-			sig.Timestamp.URL = tc.url
+			desc := &descruntime.Descriptor{}
+			if tc.labelValue != "" {
+				desc.Component.Labels = []descruntime.Label{{Name: tsa.TSAURLLabelPrefix + sig.Name, Value: []byte(tc.labelValue)}}
+			}
 
 			var identities []runtime.Identity
-			_, trusted, err := verifyTSATimestamp(t.Context(), slog.Default(), recordingResolver{identities: &identities}, sig)
+			_, trusted, err := verifyTSATimestamp(t.Context(), slog.Default(), recordingResolver{identities: &identities}, desc, sig)
 			r.NoError(err)
 			r.False(trusted)
 			hostnames := make([]string, 0, len(identities))

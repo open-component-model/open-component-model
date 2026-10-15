@@ -448,6 +448,9 @@ func SignComponentVersion(cmd *cobra.Command, args []string) error {
 	}
 
 	// persist signature
+	if err := setTSALabel(desc, signatureName, tsaURL); err != nil {
+		return err
+	}
 	if idx := slices.IndexFunc(desc.Signatures, sigExists); idx >= 0 {
 		desc.Signatures[idx] = out
 	} else {
@@ -539,14 +542,45 @@ func validateTSAForSigner(tsaURL string, signerConfig runtime.Typed) error {
 	return nil
 }
 
-// requestTSATimestamp obtains an RFC 3161 timestamp over the signature value.
-// The sanitized TSA URL is kept with the token so verifiers can select their
-// roots for that TSA.
-func requestTSATimestamp(ctx context.Context, logger *slog.Logger, config *genericv1.Config, tsaURL, hashAlgorithm string, signatureValue []byte) (*descruntime.TimestampSpec, error) {
+// setTSALabel records the sanitized TSA URL of a signature's timestamp as a
+// label so verifiers can look up URL-specific TSA roots, and removes a stale
+// label when the signature has no timestamp. The label is not signing-relevant:
+// it must not change the component digest, which other signatures and pinned
+// component references depend on. It is a lookup hint only; trust comes from
+// the token chaining to roots the verifier configured.
+func setTSALabel(desc *descruntime.Descriptor, signatureName, tsaURL string) error {
+	labelName := tsa.TSAURLLabelPrefix + signatureName
+	idx := slices.IndexFunc(desc.Component.Labels, func(l descruntime.Label) bool { return l.Name == labelName })
+	if tsaURL == "" {
+		if idx >= 0 {
+			desc.Component.Labels = slices.Delete(desc.Component.Labels, idx, idx+1)
+		}
+		return nil
+	}
+
 	sanitizedURL, err := tsa.SanitizeURL(tsaURL)
 	if err != nil {
-		return nil, fmt.Errorf("sanitizing TSA URL: %w", err)
+		return fmt.Errorf("sanitizing TSA URL label: %w", err)
 	}
+	tsaURLJSON, err := json.Marshal(sanitizedURL)
+	if err != nil {
+		return fmt.Errorf("marshalling TSA URL label: %w", err)
+	}
+	label := descruntime.Label{
+		Name:    labelName,
+		Value:   tsaURLJSON,
+		Version: "v1alpha1",
+	}
+	if idx >= 0 {
+		desc.Component.Labels[idx] = label
+	} else {
+		desc.Component.Labels = append(desc.Component.Labels, label)
+	}
+	return nil
+}
+
+// requestTSATimestamp obtains an RFC 3161 timestamp over the signature value.
+func requestTSATimestamp(ctx context.Context, logger *slog.Logger, config *genericv1.Config, tsaURL, hashAlgorithm string, signatureValue []byte) (*descruntime.TimestampSpec, error) {
 	httpConfig, err := httpv1alpha1.ResolveHTTPConfig(config)
 	if err != nil {
 		return nil, fmt.Errorf("resolving HTTP configuration for TSA request failed: %w", err)
@@ -565,6 +599,5 @@ func requestTSATimestamp(ctx context.Context, logger *slog.Logger, config *gener
 	return &descruntime.TimestampSpec{
 		Value: string(tsa.ToPEM(token.Raw)),
 		Time:  descruntime.CreationTime(token.Time),
-		URL:   sanitizedURL,
 	}, nil
 }

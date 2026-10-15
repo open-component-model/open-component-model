@@ -17,6 +17,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -411,6 +412,8 @@ components:
 	_, child := getTSATestComponentVersion(t, childRef, "ocm.software/tsa-child")
 	r.Len(child.Signatures, 1)
 	r.NotNil(child.Signatures[0].Timestamp)
-	r.Equal(tsaSrv.URL, child.Signatures[0].Timestamp.URL)
+	labelIdx := slices.IndexFunc(child.Component.Labels, func(l descriptor.Label) bool { return l.Name == tsa.TSAURLLabelPrefix+"default" })
+	r.GreaterOrEqual(labelIdx, 0, "the TSA URL label must be recorded")
+	r.False(child.Component.Labels[labelIdx].Signing, "the TSA URL label must not be signing-relevant")
 	r.Equal(pinned.Value, child.Signatures[0].Digest.Value, "the timestamped signature must cover the digest the parent pinned")
 }

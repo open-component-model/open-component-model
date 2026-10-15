@@ -335,10 +335,6 @@ type TimestampSpec struct {
 	Value string `json:"value"`
 	// Time is the parsed generation time from the TSA response.
 	Time *Timestamp `json:"time,omitempty"`
-	// URL is the sanitized URL of the TSA that issued the token. It is not
-	// covered by the signature; verifiers use it only to select which of their
-	// configured TSA root certificates to check the token against.
-	URL string `json:"url,omitempty"`
 }
 
 // SignatureInfo provides the metadata and cryptographic material for a signature.

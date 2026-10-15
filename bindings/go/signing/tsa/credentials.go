@@ -26,6 +26,13 @@ func (CredentialTypes) GetConsumerIdentityTypeScheme() *runtime.Scheme {
 	return tsaidentity.Scheme
 }
 
+const (
+	// TSAURLLabelPrefix is the label name prefix used to store the TSA URL
+	// in a component descriptor. The full label name is the prefix followed by
+	// the signature name (e.g. "url.tsa.ocm.software/default").
+	TSAURLLabelPrefix = "url.tsa.ocm.software/"
+)
+
 // TSAConsumerIdentity builds the credential consumer identity for a TSA server.
 // A URL is decomposed into scheme/hostname/port/path so the credential graph can
 // match URL-specific entries; the unversioned type is used because the graph

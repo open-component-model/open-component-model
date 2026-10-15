@@ -405,9 +405,10 @@ flowchart TB
 1. The signer selects a TSA with the `--tsa` (default public TSA) or `--tsa-url` flag on `ocm sign cv`.
 2. After signing, OCM sends a hash of the **signature value** to the TSA, which returns a PKCS#7 timestamp token whose
    signer certificate must carry a critical `id-kp-timeStamping` EKU. The token is attached to the signature's
-   `timestamp` field in the descriptor together with the TSA URL. Timestamping does not change the component, so its
-   digest stays the same and references to it as well as other signatures remain valid.
-3. At verification, OCM reads the TSA URL from the timestamp and resolves the TSA's root CA certificates from the
+   `timestamp` field in the descriptor, and the TSA URL is recorded in the label `url.tsa.ocm.software/{signatureName}`.
+   The label is not signing-relevant, so the component digest stays the same and references to the component as well
+   as other signatures remain valid.
+3. At verification, OCM reads the TSA URL from that label and resolves the TSA's root CA certificates from the
    credential graph via a [`TSA/v1alpha1`]({{< relref "docs/reference/credential-consumer-identities.md#tsav1alpha1" >}})
    consumer identity.
 4. The token's PKCS#7 chain is verified against those roots at its GenTime, its message imprint is checked against a
@@ -421,7 +422,7 @@ flowchart TB
 Timestamping keeps three trust domains separate: the **signer** proves *who* signed, the **TSA** proves *when*, and the
 **verifier** independently decides what to trust. Critically, the TSA root certificates come **exclusively** from the
 verifier's credential graph — never from the signature — so a signer cannot embed a self-signed TSA root and have it
-trusted. The TSA URL stored with the timestamp is not signed; it only selects among the roots the verifier configured.
+trusted. The TSA URL label is not signed; it only selects among the roots the verifier configured.
 A token is trusted only when it chains to one of them, so pointing the URL at a TSA an attacker controls does not get
 their timestamp accepted.
 
