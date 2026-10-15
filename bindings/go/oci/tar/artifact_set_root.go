@@ -36,6 +36,14 @@ const ocmArtifactDescriptorFile = "artifact-descriptor.json"
 // manifest. It reads only the descriptor, never the blobs, so it stays cheap
 // regardless of artifact size and tolerates the non-standard blob paths legacy v1
 // artifact sets use.
+//
+// This is a declaration check, not a content check: the returned digests are what the
+// descriptor declares, not verified against the blobs the archive actually carries.
+// Callers use it to confirm a recorded (signed) digest is one the archive declares;
+// integrity of the referenced manifest and layer blobs is enforced by content-addressing
+// when the artifact is consumed (fetch-by-digest), not here. A crafted archive that
+// declares the signed root but carries mismatched blobs therefore passes this check and
+// is rejected only at that later read.
 func ArtifactSetRoots(b blob.ReadOnlyBlob) ([]digest.Digest, error) {
 	rc, err := b.ReadCloser()
 	if err != nil {
