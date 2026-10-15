@@ -115,7 +115,7 @@ func (reg *writeOnceRegistry) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 }
 
 func (reg *writeOnceRegistry) handleUpload(w http.ResponseWriter, r *http.Request, path string) {
-	name := path[:strings.Index(path, "/blobs/uploads")]
+	name, _ := splitRef(path, "/blobs/uploads")
 	switch r.Method {
 	case http.MethodPost:
 		w.Header().Set("Location", fmt.Sprintf("/v2/%s/blobs/uploads/upload", name))
@@ -165,7 +165,7 @@ func (reg *writeOnceRegistry) handleManifest(w http.ResponseWriter, r *http.Requ
 			key := name + ":" + ref
 			if _, exists := reg.tags[key]; exists {
 				w.WriteHeader(http.StatusConflict)
-				_, _ = w.Write([]byte(fmt.Sprintf("redeploy disabled: %s cannot be updated as asset already exists", ref)))
+				_, _ = fmt.Fprintf(w, "redeploy disabled: %s cannot be updated as asset already exists", ref)
 				return
 			}
 			reg.tags[key] = dgst
