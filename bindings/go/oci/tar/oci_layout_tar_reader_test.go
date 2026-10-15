@@ -14,14 +14,15 @@ import (
 	v1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"ocm.software/open-component-model/bindings/go/oci/spec/annotations"
 	"oras.land/oras-go/v2"
 	"oras.land/oras-go/v2/content"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	"ocm.software/open-component-model/bindings/go/oci/spec/annotations"
 )
 
 func createTestOCILayout(t *testing.T, testBlobData []byte) []byte {
+	t.Helper()
 	var buf bytes.Buffer
 	tw := tar.NewWriter(&buf)
 
@@ -29,7 +30,7 @@ func createTestOCILayout(t *testing.T, testBlobData []byte) []byte {
 	layoutContent := `{"imageLayoutVersion": "1.0.0"}`
 	require.NoError(t, tw.WriteHeader(&tar.Header{
 		Name: "oci-layout",
-		Mode: 0644,
+		Mode: 0o644,
 		Size: int64(len(layoutContent)),
 	}))
 	_, err := tw.Write([]byte(layoutContent))
@@ -38,14 +39,14 @@ func createTestOCILayout(t *testing.T, testBlobData []byte) []byte {
 	// Create blobs directory
 	require.NoError(t, tw.WriteHeader(&tar.Header{
 		Name:     "blobs",
-		Mode:     0755,
+		Mode:     0o755,
 		Typeflag: tar.TypeDir,
 	}))
 
 	// Create sha256 directory
 	require.NoError(t, tw.WriteHeader(&tar.Header{
 		Name:     "blobs/sha256",
-		Mode:     0755,
+		Mode:     0o755,
 		Typeflag: tar.TypeDir,
 	}))
 
@@ -56,7 +57,7 @@ func createTestOCILayout(t *testing.T, testBlobData []byte) []byte {
 	blobPath := "blobs/sha256/" + blobDigest.Encoded()
 	require.NoError(t, tw.WriteHeader(&tar.Header{
 		Name: blobPath,
-		Mode: 0644,
+		Mode: 0o644,
 		Size: int64(len(testBlobData)),
 	}))
 	_, err = tw.Write(testBlobData)
@@ -66,7 +67,7 @@ func createTestOCILayout(t *testing.T, testBlobData []byte) []byte {
 	indexContent := `{"schemaVersion": 2, "manifests": []}`
 	require.NoError(t, tw.WriteHeader(&tar.Header{
 		Name: "index.json",
-		Mode: 0644,
+		Mode: 0o644,
 		Size: int64(len(indexContent)),
 	}))
 	_, err = tw.Write([]byte(indexContent))
@@ -78,6 +79,7 @@ func createTestOCILayout(t *testing.T, testBlobData []byte) []byte {
 }
 
 func createGzippedOCILayout(t *testing.T, data []byte) []byte {
+	t.Helper()
 	ociLayout := createTestOCILayout(t, data)
 	var buf bytes.Buffer
 	gw := gzip.NewWriter(&buf)
@@ -160,7 +162,7 @@ func TestReadOCILayout(t *testing.T) {
 				assert.NoError(t, err)
 				data, err := io.ReadAll(dataFromBlob)
 				assert.NoError(t, err)
-				assert.Equal(t, data, expected)
+				assert.Equal(t, expected, data)
 			}
 		})
 	}

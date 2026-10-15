@@ -38,7 +38,7 @@ func TestGetLocalBlobFromLocation(t *testing.T) {
 	r := require.New(t)
 	tempDir := t.TempDir()
 	filePath := filepath.Join(tempDir, "testfile.txt")
-	r.NoError(os.WriteFile(filePath, []byte("test data"), 0644))
+	r.NoError(os.WriteFile(filePath, []byte("test data"), 0o644))
 
 	b, err := filesystem.GetBlobFromOSPath(filePath)
 	r.NoError(err)

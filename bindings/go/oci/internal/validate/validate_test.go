@@ -50,7 +50,10 @@ func TestComponentVersionDescriptor(t *testing.T) {
 							annotations.OCMComponentVersion: annotations.NewComponentVersionAnnotation("example.com/component", "v1.0.0"),
 						},
 					}
-					data, _ := json.Marshal(manifest)
+					data, err := json.Marshal(manifest)
+					if err != nil {
+						return nil, err
+					}
 					return io.NopCloser(bytes.NewReader(data)), nil
 				},
 			},
@@ -70,7 +73,10 @@ func TestComponentVersionDescriptor(t *testing.T) {
 							annotations.OCMComponentVersion: annotations.NewComponentVersionAnnotation("example.com/component", "v2.0.0"),
 						},
 					}
-					data, _ := json.Marshal(index)
+					data, err := json.Marshal(index)
+					if err != nil {
+						return nil, err
+					}
 					return io.NopCloser(bytes.NewReader(data)), nil
 				},
 			},
@@ -90,7 +96,10 @@ func TestComponentVersionDescriptor(t *testing.T) {
 							annotations.OCMComponentVersion: annotations.NewComponentVersionAnnotation("example.com/component", "v1.5.0"),
 						},
 					}
-					data, _ := json.Marshal(manifest)
+					data, err := json.Marshal(manifest)
+					if err != nil {
+						return nil, err
+					}
 					return io.NopCloser(bytes.NewReader(data)), nil
 				},
 			},
@@ -110,7 +119,10 @@ func TestComponentVersionDescriptor(t *testing.T) {
 							MediaType: componentConfig.MediaType,
 						},
 					}
-					data, _ := json.Marshal(manifest)
+					data, err := json.Marshal(manifest)
+					if err != nil {
+						return nil, err
+					}
 					return io.NopCloser(bytes.NewReader(data)), nil
 				},
 			},
@@ -130,7 +142,10 @@ func TestComponentVersionDescriptor(t *testing.T) {
 							MediaType: componentConfig.LegacyMediaType,
 						},
 					}
-					data, _ := json.Marshal(manifest)
+					data, err := json.Marshal(manifest)
+					if err != nil {
+						return nil, err
+					}
 					return io.NopCloser(bytes.NewReader(data)), nil
 				},
 			},
@@ -150,7 +165,10 @@ func TestComponentVersionDescriptor(t *testing.T) {
 							MediaType: componentConfig.Legacy2MediaType,
 						},
 					}
-					data, _ := json.Marshal(manifest)
+					data, err := json.Marshal(manifest)
+					if err != nil {
+						return nil, err
+					}
 					return io.NopCloser(bytes.NewReader(data)), nil
 				},
 			},
@@ -179,7 +197,10 @@ func TestComponentVersionDescriptor(t *testing.T) {
 							MediaType: "application/vnd.oci.image.config.v1+json",
 						},
 					}
-					data, _ := json.Marshal(manifest)
+					data, err := json.Marshal(manifest)
+					if err != nil {
+						return nil, err
+					}
 					return io.NopCloser(bytes.NewReader(data)), nil
 				},
 			},
@@ -195,7 +216,10 @@ func TestComponentVersionDescriptor(t *testing.T) {
 			fetcher: &mockFetcher{
 				fetchFunc: func(ctx context.Context, desc ociImageSpecV1.Descriptor) (io.ReadCloser, error) {
 					index := ociImageSpecV1.Index{}
-					data, _ := json.Marshal(index)
+					data, err := json.Marshal(index)
+					if err != nil {
+						return nil, err
+					}
 					return io.NopCloser(bytes.NewReader(data)), nil
 				},
 			},
@@ -215,7 +239,10 @@ func TestComponentVersionDescriptor(t *testing.T) {
 							annotations.OCMComponentVersion: annotations.NewComponentVersionAnnotation("example.com/different", "v1.0.0"),
 						},
 					}
-					data, _ := json.Marshal(manifest)
+					data, err := json.Marshal(manifest)
+					if err != nil {
+						return nil, err
+					}
 					return io.NopCloser(bytes.NewReader(data)), nil
 				},
 			},
@@ -235,7 +262,10 @@ func TestComponentVersionDescriptor(t *testing.T) {
 							annotations.OCMComponentVersion: "malformed-no-colon",
 						},
 					}
-					data, _ := json.Marshal(manifest)
+					data, err := json.Marshal(manifest)
+					if err != nil {
+						return nil, err
+					}
 					return io.NopCloser(bytes.NewReader(data)), nil
 				},
 			},

@@ -8,11 +8,11 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
-	"ocm.software/open-component-model/bindings/go/runtime"
 
+	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/signing/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 func TestPing(t *testing.T) {
@@ -168,7 +168,8 @@ func TestGetVerifierIdentity(t *testing.T) {
 		{
 			name: "call_failed",
 			request: &v1.GetVerifierIdentityRequest[runtime.Typed]{VerifyRequest: v1.VerifyRequest[runtime.Typed]{
-				Config: &runtime.Raw{Type: dummyType, Data: []byte(`{"x":true}`)}}},
+				Config: &runtime.Raw{Type: dummyType, Data: []byte(`{"x":true}`)},
+			}},
 			setupMock: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					w.WriteHeader(http.StatusInternalServerError)

@@ -32,11 +32,11 @@ func TestFileSystemOperations(t *testing.T) {
 
 	// Test MkdirAll
 	dirPath := "testdir"
-	require.NoError(t, fsys.MkdirAll(dirPath, 0755))
+	require.NoError(t, fsys.MkdirAll(dirPath, 0o755))
 
 	// Test OpenFile
 	filePath := "testdir/testfile.txt"
-	file, err := fsys.OpenFile(filePath, os.O_CREATE|os.O_WRONLY, 0644)
+	file, err := fsys.OpenFile(filePath, os.O_CREATE|os.O_WRONLY, 0o644)
 	require.NoError(t, err)
 	require.NoError(t, file.Close())
 
@@ -68,10 +68,10 @@ func TestReadOnly(t *testing.T) {
 
 	// Test that write operations fail
 	dirPath := "testdir"
-	require.ErrorIs(t, fsys.MkdirAll(dirPath, 0755), filesystem.ErrReadOnly)
+	require.ErrorIs(t, fsys.MkdirAll(dirPath, 0o755), filesystem.ErrReadOnly)
 
 	filePath := "testfile.txt"
-	_, err = fsys.OpenFile(filePath, os.O_CREATE|os.O_WRONLY, 0644)
+	_, err = fsys.OpenFile(filePath, os.O_CREATE|os.O_WRONLY, 0o644)
 	require.ErrorIs(t, err, filesystem.ErrReadOnly)
 
 	// Test that force read only also works on an original RDWR instance
@@ -82,9 +82,9 @@ func TestReadOnly(t *testing.T) {
 	require.True(t, fsys.ReadOnly())
 
 	// Test that write operations fail
-	require.ErrorIs(t, fsys.MkdirAll(dirPath, 0755), filesystem.ErrReadOnly)
+	require.ErrorIs(t, fsys.MkdirAll(dirPath, 0o755), filesystem.ErrReadOnly)
 
-	_, err = fsys.OpenFile(filePath, os.O_CREATE|os.O_WRONLY, 0644)
+	_, err = fsys.OpenFile(filePath, os.O_CREATE|os.O_WRONLY, 0o644)
 	require.ErrorIs(t, err, filesystem.ErrReadOnly)
 }
 
@@ -94,7 +94,7 @@ func TestOpen(t *testing.T) {
 	require.NoError(t, err)
 
 	filePath := "testfile.txt"
-	_, err = fsys.OpenFile(filePath, os.O_CREATE|os.O_WRONLY, 0644)
+	_, err = fsys.OpenFile(filePath, os.O_CREATE|os.O_WRONLY, 0o644)
 	require.NoError(t, err)
 
 	file, err := fsys.Open(filePath)

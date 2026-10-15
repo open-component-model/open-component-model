@@ -163,7 +163,9 @@ func TestReferenceCache_Always_AlwaysCallsUpstream(t *testing.T) {
 
 func TestProviderScope_SameIdentityProducesSameKey(t *testing.T) {
 	id := &identityv1.OCIRegistryIdentity{Hostname: "ghcr.io", Path: "owner/repo"}
-	assert.Equal(t, RepositoryKey(id), RepositoryKey(id))
+	first := RepositoryKey(id)
+	second := RepositoryKey(id)
+	assert.Equal(t, first, second)
 }
 
 func TestProviderScope_DifferentRepositoryPathDifferentKey(t *testing.T) {

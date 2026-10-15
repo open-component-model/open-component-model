@@ -1,13 +1,15 @@
 package v1_test
 
 import (
+	"testing"
+
 	"github.com/stretchr/testify/require"
+
 	"ocm.software/open-component-model/bindings/go/credentials"
 	config "ocm.software/open-component-model/bindings/go/credentials/spec/config/runtime"
 	directv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	v1 "ocm.software/open-component-model/bindings/go/git/spec/identity/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
-	"testing"
 )
 
 const userinfo = "user:secret"

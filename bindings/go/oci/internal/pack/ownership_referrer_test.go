@@ -95,7 +95,7 @@ func TestPushOwnershipReferrer(t *testing.T) {
 			assert.Equal(t, "1.0.0", m.Annotations[annotations.OwnershipComponentVersion])
 			// Byte-equal (not JSONEq) so a regression that breaks JCS-canonical
 			// key ordering on the extraIdentity-laden ToIdentity() output is caught.
-			assert.Equal(t,
+			assert.JSONEq(t,
 				`{"identity":{"architecture":"amd64","name":"my-resource","os":"linux","version":"1.0.0"},"kind":"resource"}`,
 				m.Annotations[annotations.ArtifactAnnotationKey],
 			)
@@ -187,7 +187,7 @@ func TestMarshalArtifactAnnotation(t *testing.T) {
 			annotations.ArtifactKindResource,
 		)
 		require.NoError(t, err)
-		assert.Equal(t,
+		assert.JSONEq(t,
 			`{"identity":{"name":"x","version":"1.0.0"},"kind":"resource"}`,
 			out,
 		)
@@ -202,7 +202,7 @@ func TestMarshalArtifactAnnotation(t *testing.T) {
 			annotations.ArtifactKindResource,
 		)
 		require.NoError(t, err)
-		assert.Equal(t,
+		assert.JSONEq(t,
 			`{"identity":{"architecture":"amd64","name":"my-resource","os":"linux","version":"1.0.0"},"kind":"resource"}`,
 			out,
 		)

@@ -12,11 +12,11 @@
     },
     "endpoint": {
       "type": "string",
-      "description": "Endpoint is the base endpoint of an S3-compatible store (e.g. MinIO, Ceph,\nR2). When empty, AWS S3 is targeted."
+      "description": "Endpoint is the base endpoint of an S3-compatible store (e.g. MinIO, Ceph,\nR2), such as https://minio.internal:9000. When empty, AWS S3 is targeted."
     },
     "mediaType": {
       "type": "string",
-      "description": "MediaType is the media type of the referenced object."
+      "description": "MediaType is the media type of the referenced object. If empty, the Content-Type\nof the object is used, falling back to application/octet-stream."
     },
     "objectKey": {
       "type": "string",
@@ -24,7 +24,7 @@
     },
     "region": {
       "type": "string",
-      "description": "Region is the region of the bucket. Optional; when empty it is resolved from\nthe environment or defaulted, and is typically ignored for custom endpoints."
+      "description": "Region is the region of the bucket. Optional; when empty it is resolved from\nAWS_REGION or the shared AWS config, falling back to us-east-1, and is typically\nignored for custom endpoints."
     },
     "type": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",
@@ -47,7 +47,7 @@
     },
     "usePathStyle": {
       "type": "boolean",
-      "description": "UsePathStyle enables path-style addressing (bucket in the path instead of the\nhost). Required by most self-hosted S3-compatible stores."
+      "description": "UsePathStyle enables path-style addressing (\u003cendpoint\u003e/\u003cbucket\u003e/\u003ckey\u003e, bucket in\nthe path instead of the host). Required by most self-hosted S3-compatible stores.\nDefaults to false."
     },
     "version": {
       "type": "string",

@@ -23,7 +23,7 @@ func TestBlob_ReadCloser(t *testing.T) {
 	r.NoError(err)
 
 	filePath := "testfile.txt"
-	_, err = fsys.OpenFile(filePath, os.O_CREATE|os.O_WRONLY, 0644)
+	_, err = fsys.OpenFile(filePath, os.O_CREATE|os.O_WRONLY, 0o644)
 	r.NoError(err)
 
 	b := filesystem.NewFileBlob(fsys, filePath)
@@ -65,7 +65,7 @@ func TestBlob_Size(t *testing.T) {
 	r.NoError(writer.Close())
 
 	size := b.Size()
-	r.Greater(size, int64(blob.SizeUnknown))
+	r.Greater(size, blob.SizeUnknown)
 	r.Equal(int64(9), size)
 }
 
@@ -103,7 +103,7 @@ func TestBlob_FS_Compat(t *testing.T) {
 	fs := fstest.MapFS{
 		"testfile.txt": &fstest.MapFile{
 			Data:    td,
-			Mode:    0644,
+			Mode:    0o644,
 			ModTime: time.Now(),
 		},
 	}
@@ -133,7 +133,7 @@ func TestBlob_MediaType(t *testing.T) {
 	// Initially no media type
 	mediaType, ok := b.MediaType()
 	r.False(ok)
-	r.Equal("", mediaType)
+	r.Empty(mediaType)
 
 	// Set media type
 	expectedMediaType := "text/plain"
@@ -157,7 +157,7 @@ func TestBlob_FromPath(t *testing.T) {
 		td := []byte("bar")
 		r := require.New(t)
 		filePath := filepath.Join(t.TempDir(), "foo")
-		r.NoError(os.WriteFile(filePath, td, 0644))
+		r.NoError(os.WriteFile(filePath, td, 0o644))
 
 		b, err := filesystem.GetBlobFromOSPath(filePath)
 		r.NoError(err)
@@ -177,7 +177,7 @@ func TestBlob_FromPath(t *testing.T) {
 		td := []byte("bar")
 		r := require.New(t)
 		filePath := filepath.Join(t.TempDir(), "foo")
-		r.NoError(os.WriteFile(filePath, td, 0644))
+		r.NoError(os.WriteFile(filePath, td, 0o644))
 
 		b, err := filesystem.NewFileBlobFromPathWithFlag(filePath, os.O_RDWR)
 		r.NoError(err)

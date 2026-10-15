@@ -271,6 +271,9 @@ func TestRenderOnceNDJSON(t *testing.T) {
 	buf.Reset()
 	r.Equal(expected, output)
 
+	// Re-rendering without any graph changes must produce identical output.
 	r.NoError(render.RenderOnce(ctx, renderer, render.WithWriter(writer)))
 	output = buf.String()
+	buf.Reset()
+	r.Equal(expected, output)
 }

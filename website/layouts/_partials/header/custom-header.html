@@ -114,7 +114,7 @@
                         </a>
                         {{ end }}
 
-                        <!-- Version switcher using Hugo's built-in versions. Always show global versions via Home.Rotate. On unversioned top-level sections (community, governance, blog) the dropdown is hidden with visibility:hidden so the surrounding items keep their position. -->
+                        <!-- Version switcher using Hugo's built-in versions. Keep the full version list, but prefer the current page's counterpart in each version. On unversioned top-level sections (community, governance, blog) the dropdown is hidden with visibility:hidden so the surrounding items keep their position. -->
                         {{ $section := .Section }}
                         {{ $unversioned := slice "community" "governance" "blog" }}
                         {{ $hideVersion := in $unversioned $section }}
@@ -136,14 +136,27 @@
                             <ul class="dropdown-menu dropdown-menu-lg-end shadow rounded border-0"
                                 aria-labelledby="doks-versions">
                                 {{ $currentVersionName := $.Site.Version.Name }}
+                                {{ $versionPages := dict }}
+                                {{ range $currentPage.Rotate "version" }}
+                                  {{ $versionPages = merge $versionPages (dict .Site.Version.Name .) }}
+                                {{ end }}
                                 {{ with .Site.Home.Rotate "version" }}
                                   {{ range . }}
                                     {{ $isCurrent := eq .Site.Version.Name $currentVersionName }}
                                     {{ $isDefault := .Site.Version.IsDefault }}
                                     {{ $name := .Site.Version.Name }}
+                                    {{ $target := . }}
+                                    {{ $isFallback := true }}
+                                    {{/* Rotate may expose inherited pages whose URL belongs to another version. */}}
+                                    {{ with index $versionPages $name }}
+                                      {{ if or .Site.Version.IsDefault (strings.HasPrefix .RelPermalink .Site.Home.RelPermalink) }}
+                                        {{ $target = . }}
+                                        {{ $isFallback = false }}
+                                      {{ end }}
+                                    {{ end }}
                                     <li>
                                       <a class="dropdown-item{{ if $isCurrent }} current{{ end }}" {{ if $isCurrent }}aria-current="true" {{ end }}
-                                         href="{{ .RelPermalink }}">
+                                         href="{{ $target.RelPermalink }}"{{ if $isFallback }} title="This page is not available in {{ $name }}; open that version's landing page"{{ end }}>
                                         {{ $name }}{{ if $isDefault }} <span class="version-flag">(latest)</span>{{ end }}
                                       </a>
                                     </li>

@@ -6,13 +6,13 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	pluginruntime "ocm.software/open-component-model/bindings/go/plugin/manager/types/runtime"
 
 	"ocm.software/open-component-model/bindings/go/plugin/internal/dummytype"
 	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts/blobtransformer/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/endpoints"
+	pluginruntime "ocm.software/open-component-model/bindings/go/plugin/manager/types/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -43,6 +43,7 @@ func TestRegisterBlobTransformer(t *testing.T) {
 	r.NoError(err)
 	// Validate registered types
 	content, err := json.Marshal(rawPluginSpec)
+	r.NoError(err)
 	r.Contains(string(content), "blobTransformer")
 
 	handlers := builder.GetHandlers()

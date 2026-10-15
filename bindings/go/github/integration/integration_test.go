@@ -234,5 +234,4 @@ func Test_Integration_GitHub(t *testing.T) {
 			})
 		})
 	})
-
 }

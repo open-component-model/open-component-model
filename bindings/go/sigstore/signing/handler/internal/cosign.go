@@ -3,6 +3,8 @@ package internal
 import (
 	"bytes"
 	"context"
+	"crypto/fips140"
+	"debug/buildinfo"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -34,11 +36,17 @@ type CosignBinary struct {
 	OperationTimeout time.Duration                                                          // zero means use defaultOperationTimeout
 	ExecCosign       func(ctx context.Context, binaryPath string, args, env []string) error // runs a cosign subcommand; args[0] is the subcommand name
 	LookPath         func(file string) (string, error)                                      // locates the cosign binary on PATH
+	FIPSEnabled      func() bool                                                            // reports FIPS 140-3 mode (fips140=on or only); a non-FIPS cosign is then logged
+	FIPSEnforced     func() bool                                                            // reports strict FIPS 140-3 mode (fips140=only); a non-FIPS cosign is then rejected
+	ReadBuildInfo    func(path string) (*buildinfo.BuildInfo, error)                        // reads the Go build information of a binary
 }
 
 func NewCosignBinary() *CosignBinary {
 	b := &CosignBinary{
-		HttpClient: &http.Client{Timeout: defaultHTTPClientTimeout},
+		HttpClient:    &http.Client{Timeout: defaultHTTPClientTimeout},
+		FIPSEnabled:   fips140.Enabled,
+		FIPSEnforced:  fips140.Enforced,
+		ReadBuildInfo: buildinfo.ReadFile,
 	}
 	b.ExecCosign = b.execCosign
 	b.LookPath = exec.LookPath
@@ -71,6 +79,14 @@ func (b *CosignBinary) Verify(ctx context.Context, dataPath, bundlePath string, 
 	return b.ExecCosign(ctx, path, args, env)
 }
 
+// ErrCosignNotFIPSBuild is returned with GODEBUG=fips140=only when the cosign on PATH is not built against a
+// frozen Go Cryptographic Module, because Sigstore signing and verification would then leave the FIPS boundary.
+var ErrCosignNotFIPSBuild = errors.New("with GODEBUG=fips140=only, Sigstore signing and verification require a cosign built against a frozen " +
+	"Go Cryptographic Module (GOFIPS140=v<version>, see go version -m)")
+
+// resolveBinary locates cosign on PATH, or downloads the pinned OCM cosign release. In FIPS 140-3 mode it checks
+// that cosign is a FIPS build: with fips140=only a non-FIPS cosign is rejected, with fips140=on it is used and logged
+// at debug level.
 func (b *CosignBinary) resolveBinary(ctx context.Context) (string, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -82,18 +98,56 @@ func (b *CosignBinary) resolveBinary(ctx context.Context) (string, error) {
 		if verr := b.ensureMinimumVersion(ctx, path); verr != nil {
 			return "", verr
 		}
-		b.binaryPath = path
-		return path, nil
+	} else {
+		var dlErr error
+		if path, dlErr = ensureOrDownloadCosign(ctx, b.HttpClient); dlErr != nil {
+			return "", fmt.Errorf(
+				"cosign binary not found on PATH and auto-download failed: %w "+
+					"(install cosign from https://github.com/open-component-model/cosign/releases "+
+					"and ensure it is on PATH, or fix the download error)", dlErr)
+		}
 	}
-	path, dlErr := ensureOrDownloadCosign(ctx, b.HttpClient)
-	if dlErr != nil {
-		return "", fmt.Errorf(
-			"cosign binary not found on PATH and auto-download failed: %w "+
-				"(install cosign from https://github.com/sigstore/cosign?tab=readme-ov-file#installation "+
-				"and ensure it is on PATH, or fix the download error)", dlErr)
+	if err := b.checkFIPSBuild(ctx, path); err != nil {
+		return "", err
 	}
 	b.binaryPath = path
 	return path, nil
+}
+
+// checkFIPSBuild rejects a non-FIPS cosign with fips140=only and logs it with fips140=on.
+func (b *CosignBinary) checkFIPSBuild(ctx context.Context, path string) error {
+	enforced := b.FIPSEnforced != nil && b.FIPSEnforced()
+	if !enforced && (b.FIPSEnabled == nil || !b.FIPSEnabled()) {
+		return nil
+	}
+	ferr := b.requireFIPSBuild(path)
+	if ferr == nil {
+		return nil
+	}
+	if enforced {
+		return ferr
+	}
+	slog.DebugContext(ctx, "cosign is not a FIPS build; Sigstore signing runs outside the FIPS 140-3 boundary "+
+		"(GODEBUG=fips140=only rejects it)", "path", path, "reason", ferr.Error())
+	return nil
+}
+
+// requireFIPSBuild checks the Go build information of the cosign binary for a GOFIPS140 setting that names a
+// frozen module version (v<version>). "latest" or no setting means cosign does not use a frozen module.
+func (b *CosignBinary) requireFIPSBuild(path string) error {
+	info, err := b.ReadBuildInfo(path)
+	if err != nil {
+		return fmt.Errorf("%w: reading the Go build information of %s failed: %w", ErrCosignNotFIPSBuild, path, err)
+	}
+	for _, s := range info.Settings {
+		if s.Key == "GOFIPS140" {
+			if strings.HasPrefix(s.Value, "v") {
+				return nil
+			}
+			return fmt.Errorf("%w: %s was built with GOFIPS140=%s", ErrCosignNotFIPSBuild, path, s.Value)
+		}
+	}
+	return fmt.Errorf("%w: %s was built without GOFIPS140", ErrCosignNotFIPSBuild, path)
 }
 
 func (b *CosignBinary) execCosign(ctx context.Context, binaryPath string, args, env []string) error {

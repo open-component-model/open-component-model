@@ -125,7 +125,7 @@ func Test_Integration_TransferWgetResource_UploaderStreamsToHTTPTarget(t *testin
 	// source-resource node at execution time.
 	uploaders := []transferv1alpha1.UploaderConfig{&transferv1alpha1.HTTPUploaderConfig{
 		Type:      runtime.NewVersionedType(transferv1alpha1.HTTPUploaderConfigType, transferv1alpha1.Version),
-		MatchSpec: transferv1alpha1.UploaderMatch{AccessType: runtime.NewVersionedType("Wget", "v1")},
+		Match:     `resource.access.isType("Wget/v1")`,
 		TargetURL: fmt.Sprintf("${%q + url(resource.access.url).path}", targetSrv.URL+"/uploads"),
 		Method:    http.MethodPut,
 		Header: map[string][]string{
@@ -137,8 +137,8 @@ func Test_Integration_TransferWgetResource_UploaderStreamsToHTTPTarget(t *testin
 	}}
 
 	tgd, err := transfer.BuildGraphDefinition(t.Context(),
-		&transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeAllResources},
-		uploaders,
+		&transferv1alpha1.Config{},
+		append(uploaders, &transferv1alpha1.LocalBlobUploaderConfig{}),
 		transfer.Mapping{
 			Components: []transfer.ComponentID{{Component: componentName, Version: componentVersion}},
 			Target:     targetSpec,
@@ -204,7 +204,9 @@ func Test_Integration_TransferWgetResource_UploaderStreamsToHTTPTarget(t *testin
 		"resource digest should be the sha256 of the streamed content")
 
 	// The target server must re-serve exactly what was streamed.
-	getResp, err := http.Get(targetSrv.URL + expectedPath)
+	getReq, err := http.NewRequestWithContext(ctx, http.MethodGet, targetSrv.URL+expectedPath, nil)
+	r.NoError(err)
+	getResp, err := http.DefaultClient.Do(getReq)
 	r.NoError(err)
 	defer func() { r.NoError(getResp.Body.Close()) }()
 	reserved, err := io.ReadAll(getResp.Body)

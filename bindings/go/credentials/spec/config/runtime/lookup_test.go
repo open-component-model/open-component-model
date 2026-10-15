@@ -22,6 +22,7 @@ func TestLookupCredentialConfig(t *testing.T) {
 			name:   "nil config returns nil for config",
 			config: nil,
 			expectedConfig: func(t *testing.T, config *Config) {
+				t.Helper()
 				assert.Nil(t, config)
 			},
 		},
@@ -32,6 +33,7 @@ func TestLookupCredentialConfig(t *testing.T) {
 				Configurations: []*runtime.Raw{},
 			},
 			expectedConfig: func(t *testing.T, config *Config) {
+				t.Helper()
 				assert.Nil(t, config)
 			},
 		},
@@ -47,6 +49,7 @@ func TestLookupCredentialConfig(t *testing.T) {
 				},
 			},
 			expectedConfig: func(t *testing.T, config *Config) {
+				t.Helper()
 				assert.Nil(t, config)
 			},
 		},
@@ -71,6 +74,7 @@ func TestLookupCredentialConfig(t *testing.T) {
 				},
 			},
 			expectedConfig: func(t *testing.T, config *Config) {
+				t.Helper()
 				assert.NotNil(t, config)
 				assert.Len(t, config.Consumers, 1)
 				assert.Len(t, config.Consumers[0].Identities, 1)
@@ -96,6 +100,7 @@ func TestLookupCredentialConfig(t *testing.T) {
 				},
 			},
 			expectedConfig: func(t *testing.T, config *Config) {
+				t.Helper()
 				assert.NotNil(t, config)
 				assert.Len(t, config.Consumers, 1)
 				assert.Equal(t, "unversioned-identity", config.Consumers[0].Identities[0]["type"])
@@ -131,6 +136,7 @@ func TestLookupCredentialConfig(t *testing.T) {
 				},
 			},
 			expectedConfig: func(t *testing.T, config *Config) {
+				t.Helper()
 				assert.NotNil(t, config)
 				assert.Len(t, config.Consumers, 2)
 				assert.Equal(t, "identity-1", config.Consumers[0].Identities[0]["type"])
@@ -164,6 +170,7 @@ func TestLookupCredentialConfig(t *testing.T) {
 				},
 			},
 			expectedConfig: func(t *testing.T, config *Config) {
+				t.Helper()
 				assert.NotNil(t, config)
 				assert.Len(t, config.Consumers, 1)
 				assert.Equal(t, "filtered-identity", config.Consumers[0].Identities[0]["type"])
@@ -184,6 +191,7 @@ func TestLookupCredentialConfig(t *testing.T) {
 				},
 			},
 			expectedConfig: func(t *testing.T, config *Config) {
+				t.Helper()
 				assert.NotNil(t, config)
 				assert.Len(t, config.Repositories, 1)
 			},

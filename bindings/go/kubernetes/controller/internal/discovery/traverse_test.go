@@ -169,7 +169,7 @@ func TestTraverse_ResolvesEachComponentExactlyOnce(t *testing.T) {
 	for key, count := range resolver.calls {
 		r.Equal(1, count, "component %s resolved more than once", key)
 	}
-	r.Equal(4, len(resolver.calls), "deep matches behind unmatched-by-name ancestors must be resolved")
+	r.Len(resolver.calls, 4, "deep matches behind unmatched-by-name ancestors must be resolved")
 }
 
 func TestTraverse_DistinctVersionsOfOneComponent(t *testing.T) {

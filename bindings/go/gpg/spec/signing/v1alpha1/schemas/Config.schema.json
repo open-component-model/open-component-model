@@ -8,11 +8,11 @@
   "properties": {
     "hashAlgorithm": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.gpg.spec.signing.v1alpha1.HashAlgorithm",
-      "description": "HashAlgorithm selects the hash function applied to the digest bytes before signing.\nDefaults to SHA-256 when empty.\nSupported values: SHA-256, SHA-384, SHA-512."
+      "description": "HashAlgorithm selects the hash function of the signature over the digest bytes.\nSupported values: SHA-256, SHA-384, SHA-512. When empty, SHA-256, unless the signing key needs a longer hash:\nSHA-384 for ECDSA P-384 and Brainpool P-384 keys, SHA-512 for ECDSA P-521, Brainpool P-512, Ed448,\nML-DSA-87+Ed448 and SLH-DSA-SHAKE-256s keys.\nA hash shorter than the signing key needs is an error."
     },
     "keyFingerprint": {
       "type": "string",
-      "description": "KeyFingerprint pins which key in the keyring to use when signing or verifying.\nWhen empty the first available key is used.\nAccepts a full 40-hex-character v4 fingerprint or a 16-hex-character long key ID."
+      "description": "KeyFingerprint pins which key to use when signing or verifying.\nWhen empty, signing uses the first secret key in the private key material (or the keyringFingerprint\nkey of the credentials), and verification accepts a signature by any key in the public key material.\nAccepts a full fingerprint (40 hex characters for v4 keys, 64 for v6 keys) of the primary key or a\nsubkey, or a 16-hex-character long key ID, optionally with a 0x prefix and with spaces."
     },
     "type": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",

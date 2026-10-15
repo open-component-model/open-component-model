@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -172,7 +173,7 @@ func TestValidate(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			err := Validate(tt.descriptor)
 			if tt.expectError {
-				assert.Error(t, err)
+				require.Error(t, err)
 				assert.Equal(t, tt.errorMsg, err.Error())
 			} else {
 				assert.NoError(t, err)

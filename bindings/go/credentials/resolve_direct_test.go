@@ -111,7 +111,7 @@ func TestMergeTyped_MultipleWithoutSchemeFails(t *testing.T) {
 
 	got, err := mergeTyped([]runtime.Typed{first, second}, nil)
 	require.Error(t, err)
-	assert.ErrorContains(t, err, "scheme is nil", "error should indicate that scheme is required when merging multiple credentials")
+	require.ErrorContains(t, err, "scheme is nil", "error should indicate that scheme is required when merging multiple credentials")
 	assert.Nil(t, got)
 }
 

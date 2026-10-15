@@ -344,8 +344,8 @@ func TestConvertToDescriptorComponent(t *testing.T) {
 			assert.Equal(t, tt.expected.Name, result.Name)
 			assert.Equal(t, tt.expected.Version, result.Version)
 			assert.Equal(t, tt.expected.Provider, result.Provider)
-			assert.Equal(t, len(tt.expected.Resources), len(result.Resources))
-			assert.Equal(t, len(tt.expected.Sources), len(result.Sources))
+			assert.Len(t, result.Resources, len(tt.expected.Resources))
+			assert.Len(t, result.Sources, len(tt.expected.Sources))
 		})
 	}
 }
@@ -757,11 +757,11 @@ func TestConvertFromDescriptorSource(t *testing.T) {
 			assert.Equal(t, tt.expected.Version, result.Version)
 			assert.Equal(t, tt.expected.Type, result.Type)
 			assert.Equal(t, tt.expected.Labels, result.Labels)
-			if tt.expected.AccessOrInput.Access != nil {
-				assert.NotNil(t, result.AccessOrInput.Access)
-				assert.Equal(t, tt.expected.AccessOrInput.Access.GetType(), result.AccessOrInput.Access.GetType())
+			if tt.expected.Access != nil {
+				assert.NotNil(t, result.Access)
+				assert.Equal(t, tt.expected.Access.GetType(), result.Access.GetType())
 			} else {
-				assert.Nil(t, result.AccessOrInput.Access)
+				assert.Nil(t, result.Access)
 			}
 		})
 	}
@@ -1056,9 +1056,9 @@ func TestConvertFromDescriptorComponent(t *testing.T) {
 			assert.Equal(t, tt.expected.Version, result.Version)
 			assert.Equal(t, tt.expected.CreationTime, result.CreationTime)
 			assert.Equal(t, tt.expected.Provider, result.Provider)
-			assert.Equal(t, len(tt.expected.Resources), len(result.Resources))
-			assert.Equal(t, len(tt.expected.Sources), len(result.Sources))
-			assert.Equal(t, len(tt.expected.References), len(result.References))
+			assert.Len(t, result.Resources, len(tt.expected.Resources))
+			assert.Len(t, result.Sources, len(tt.expected.Sources))
+			assert.Len(t, result.References, len(tt.expected.References))
 
 			// Check resources if present
 			if tt.expected.Resources != nil {
@@ -1241,7 +1241,7 @@ func TestConvertFromDescriptorSourceRefs(t *testing.T) {
 				return
 			}
 
-			assert.Equal(t, len(tt.expected), len(result))
+			assert.Len(t, result, len(tt.expected))
 			for i := range tt.expected {
 				assert.Equal(t, tt.expected[i].IdentitySelector, result[i].IdentitySelector)
 				assert.Equal(t, tt.expected[i].Labels, result[i].Labels)

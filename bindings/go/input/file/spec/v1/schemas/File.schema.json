@@ -16,7 +16,7 @@
     },
     "path": {
       "type": "string",
-      "description": "Path is the path to the file."
+      "description": "Path is the path to the file.\nRelative paths are resolved against the working directory, which defaults to\nthe directory of the component constructor file."
     },
     "type": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",

@@ -128,13 +128,13 @@ func TestWorkerPool_SingleResolution(t *testing.T) {
 
 		result, err := env.Pool.GetComponentVersion(ctx, opts)
 		assert.Nil(t, result)
-		assert.True(t, errors.Is(err, resolution.ErrResolutionInProgress))
+		require.ErrorIs(t, err, resolution.ErrResolutionInProgress)
 
 		// Wait for all goroutines to become durably blocked (resolution complete)
 		synctest.Wait()
 
 		result, err = env.Pool.GetComponentVersion(ctx, opts)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.NotNil(t, result)
 	})
 }
@@ -435,7 +435,7 @@ func TestWorkerPool_ContextCancellation(t *testing.T) {
 		// Start resolution
 		result, err := env.Pool.GetComponentVersion(ctx, opts)
 		assert.Nil(t, result)
-		assert.True(t, errors.Is(err, resolution.ErrResolutionInProgress))
+		require.ErrorIs(t, err, resolution.ErrResolutionInProgress)
 
 		// Cancel context immediately
 		cancel()
@@ -593,7 +593,7 @@ func TestWorkerPool_CacheInvalidation(t *testing.T) {
 
 		// First resolution with config-1
 		_, err := env.Pool.GetComponentVersion(ctx, opts1)
-		assert.True(t, errors.Is(err, resolution.ErrResolutionInProgress))
+		require.ErrorIs(t, err, resolution.ErrResolutionInProgress)
 
 		synctest.Wait()
 
@@ -610,7 +610,7 @@ func TestWorkerPool_CacheInvalidation(t *testing.T) {
 
 		// Second resolution with config-2 (different config = cache miss)
 		_, err = env.Pool.GetComponentVersion(ctx, opts2)
-		assert.True(t, errors.Is(err, resolution.ErrResolutionInProgress))
+		require.ErrorIs(t, err, resolution.ErrResolutionInProgress)
 
 		synctest.Wait()
 
@@ -703,12 +703,30 @@ func TestWorkerPoolEventChannelNotifiesRequesters(t *testing.T) {
 			NamespacedName: client.ObjectKey{Namespace: "ns3", Name: "component3"},
 		}
 
+		// Hold the resolution until all requesters have joined; otherwise the worker can
+		// finish before opts2/opts3 arrive and they are served from the cache instead.
+		release := make(chan struct{})
 		opts1 := workerpool.ResolveOptions{
-			Component:  "shared-component",
-			Version:    "v1.0.0",
-			KeyFunc:    func() (string, error) { return "shared-key", nil },
-			Repository: &mockRepository{},
-			Requester:  requester1,
+			Component: "shared-component",
+			Version:   "v1.0.0",
+			KeyFunc:   func() (string, error) { return "shared-key", nil },
+			Repository: &mockRepository{
+				GetComponentVersionFn: func(ctx context.Context, component, version string) (*descriptor.Descriptor, error) {
+					select {
+					case <-release:
+					case <-ctx.Done():
+						return nil, ctx.Err()
+					}
+					return &descriptor.Descriptor{
+						Component: descriptor.Component{
+							ComponentMeta: descriptor.ComponentMeta{
+								ObjectMeta: descriptor.ObjectMeta{Name: component, Version: version},
+							},
+						},
+					}, nil
+				},
+			},
+			Requester: requester1,
 		}
 		opts2 := workerpool.ResolveOptions{
 			Component:  "shared-component",
@@ -736,12 +754,13 @@ func TestWorkerPoolEventChannelNotifiesRequesters(t *testing.T) {
 		}()
 
 		_, err := env.Pool.GetComponentVersion(ctx, opts1)
-		assert.True(t, errors.Is(err, resolution.ErrResolutionInProgress))
+		require.ErrorIs(t, err, resolution.ErrResolutionInProgress)
 		_, err = env.Pool.GetComponentVersion(ctx, opts2)
-		assert.True(t, errors.Is(err, resolution.ErrResolutionInProgress))
+		require.ErrorIs(t, err, resolution.ErrResolutionInProgress)
 		_, err = env.Pool.GetComponentVersion(ctx, opts3)
-		assert.True(t, errors.Is(err, resolution.ErrResolutionInProgress))
+		require.ErrorIs(t, err, resolution.ErrResolutionInProgress)
 
+		close(release)
 		synctest.Wait()
 
 		var requesters []workerpool.RequesterInfo

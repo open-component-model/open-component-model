@@ -21,11 +21,6 @@ func discoverEdges(ctx context.Context, edges map[string][]string) error {
 	return d.Discover(ctx)
 }
 
-// TestDiscoverReportsCycles pins that a cyclic key graph fails fast with the
-// DAG's own cycle error. Edges are added before descending precisely so
-// AddEdge's cycle check sees a back-edge to an in-flight ancestor; adding them
-// after the recursion makes the check unreachable and the traversal blocks on
-// the ancestor's done channel until the context is cancelled.
 func TestDiscoverReportsCycles(t *testing.T) {
 	// dag.HasCycle uses a map, so the reported path is an arbitrary rotation of the same.
 	// same as dag_test.go:159-166.
@@ -80,8 +75,6 @@ func TestDiscoverReportsCycles(t *testing.T) {
 	}
 }
 
-// TestDiscoverReportsSelfReference covers the degenerate cycle, which also used
-// to hang: the child goroutine waited on its own parent's done channel.
 func TestDiscoverReportsSelfReference(t *testing.T) {
 	r := require.New(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
@@ -92,8 +85,6 @@ func TestDiscoverReportsSelfReference(t *testing.T) {
 	r.ErrorIs(err, dag.ErrSelfReference)
 }
 
-// TestDiscoverAcyclicReconvergence guards the other direction: a vertex reached
-// by two distinct paths is legitimate and must still resolve exactly once.
 func TestDiscoverAcyclicReconvergence(t *testing.T) {
 	r := require.New(t)
 

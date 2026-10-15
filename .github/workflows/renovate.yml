@@ -1,7 +1,7 @@
 name: Renovate OCM
 on:
   schedule:
-    - cron: '0 0 * * *' # At 00:0, every day
+    - cron: '0 0 * * *' # At 00:00, every day: create branches
   workflow_dispatch:
     inputs:
       repoCache:
@@ -34,7 +34,7 @@ env:
 
 jobs:
   renovate:
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     environment:
       name: automation
       deployment: false
@@ -95,7 +95,7 @@ jobs:
         run: echo "RENOVATE_DRY_RUN=extract" >> $GITHUB_ENV
 
       - name: Run
-        uses: renovatebot/github-action@39b914146caeff8cd512e61c8992f1d5913af85c # v46.2.5
+        uses: renovatebot/github-action@dcfba84a42d1b5d5e49bf131b1bf53511851a123 # v46.3.1
         with:
           env-regex: |
             ^(?:RENOVATE_\w+|LOG_LEVEL|GITHUB_COM_TOKEN|NODE_OPTIONS|(?:HTTPS?|NO)_PROXY|(?:https?|no)_proxy)$
@@ -120,7 +120,7 @@ jobs:
 
       - name: Upload renovate cache artifact
         if: ${{ env.RENOVATE_DRY_RUN == '' && (github.event_name != 'workflow_dispatch' || inputs.repoCache != 'disabled') }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: ${{ env.cache_key }}
           path: ${{ env.cache_archive }}

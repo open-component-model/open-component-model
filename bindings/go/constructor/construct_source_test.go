@@ -19,6 +19,7 @@ import (
 
 // setupTestComponentWithSource creates a basic component constructor with a source for testing
 func setupTestComponentWithSource(t *testing.T, sourceYAML string) *constructorruntime.ComponentConstructor {
+	t.Helper()
 	yamlData := fmt.Sprintf(`
 components:
   - name: ocm.software/test-component
@@ -41,6 +42,7 @@ components:
 
 // verifyBasicComponentWithSource verifies the basic component properties for source tests
 func verifyBasicComponentWithSource(t *testing.T, desc *descriptor.Descriptor) {
+	t.Helper()
 	assert.Equal(t, "ocm.software/test-component", desc.Component.Name)
 	assert.Equal(t, "v1.0.0", desc.Component.Version)
 	assert.Equal(t, "test-provider", desc.Component.Provider.Name)
@@ -108,7 +110,7 @@ func TestConstructWithSourceInputMethod(t *testing.T) {
 	assert.NotNil(t, source.Access)
 
 	// Verify the repository was called correctly
-	assert.Len(t, mockRepo.addedSources, 0)
+	assert.Empty(t, mockRepo.addedSources)
 	assert.Len(t, mockRepo.addedVersions, 1)
 }
 
@@ -157,7 +159,7 @@ func TestConstructWithSourceAccess(t *testing.T) {
 	assert.Contains(t, string(access.Data), "application/octet-stream")
 
 	// Verify the repository was called correctly
-	assert.Len(t, mockRepo.addedSources, 0)
+	assert.Empty(t, mockRepo.addedSources)
 	assert.Len(t, mockRepo.addedVersions, 1)
 }
 
@@ -269,11 +271,11 @@ func TestConstructWithSourceCredentialResolution(t *testing.T) {
 	assert.Equal(t, "application/octet-stream", access.MediaType)
 
 	// Verify the repository was called correctly
-	assert.Len(t, mockRepo.addedSources, 0)
+	assert.Empty(t, mockRepo.addedSources)
 	assert.Len(t, mockRepo.addedVersions, 1)
 
 	// Verify the credential provider was called
-	assert.Equal(t, mockCredProvider.called["mock/v1"], 1)
+	assert.Equal(t, 1, mockCredProvider.called["mock/v1"])
 }
 
 func TestConstructWithSourceBlob(t *testing.T) {
@@ -577,6 +579,6 @@ components:
 	assert.Equal(t, "application/x-tar", access2.MediaType)
 
 	// Verify the repository was called correctly
-	assert.Len(t, mockRepo.addedSources, 0)
+	assert.Empty(t, mockRepo.addedSources)
 	assert.Len(t, mockRepo.addedVersions, 1)
 }

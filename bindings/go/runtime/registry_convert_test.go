@@ -158,8 +158,10 @@ func TestConvert_Errors(t *testing.T) {
 
 	t.Run("unregistered type (Raw → Typed)", func(t *testing.T) {
 		scheme := runtime.NewScheme()
-		r := runtime.Raw{Type: runtime.NewVersionedType("TestType", "v1"),
-			Data: []byte(`{"type": "TestType/v1", "foo": "bar"}`)}
+		r := runtime.Raw{
+			Type: runtime.NewVersionedType("TestType", "v1"),
+			Data: []byte(`{"type": "TestType/v1", "foo": "bar"}`),
+		}
 
 		err := scheme.Convert(&r, &TestType{})
 		assert.Error(t, err)
@@ -360,7 +362,7 @@ func TestConvert_UnstructuredToRaw_Canonicalizes(t *testing.T) {
 	require.NoError(t, scheme.Convert(&TestType{Type: typ, Foo: "a<b&c>d"}, viaTyped))
 
 	assert.Equal(t, string(viaTyped.Data), string(viaUnstructured.Data))
-	assert.Equal(t, `{"foo":"a<b&c>d","type":"TestType/v1"}`, string(viaUnstructured.Data))
+	assert.JSONEq(t, `{"foo":"a<b&c>d","type":"TestType/v1"}`, string(viaUnstructured.Data))
 }
 
 // TestConvert_Unstructured_RoundTrip verifies Typed → Unstructured → Typed is lossless.

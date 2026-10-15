@@ -3,8 +3,12 @@ package internal
 import (
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
+	gitaccess "ocm.software/open-component-model/bindings/go/git/spec/access"
+	gittransformer "ocm.software/open-component-model/bindings/go/git/transformation"
+	gitv1alpha1 "ocm.software/open-component-model/bindings/go/git/transformation/spec/v1alpha1"
 	githubtransformer "ocm.software/open-component-model/bindings/go/github/transformation"
 	githubv1alpha1 "ocm.software/open-component-model/bindings/go/github/transformation/spec/v1alpha1"
+	helmaccess "ocm.software/open-component-model/bindings/go/helm/spec/access"
 	helmtransformer "ocm.software/open-component-model/bindings/go/helm/transformation"
 	helmv1alpha1 "ocm.software/open-component-model/bindings/go/helm/transformation/spec/v1alpha1"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
@@ -16,6 +20,10 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 	s3transformer "ocm.software/open-component-model/bindings/go/s3/transformation"
 	s3v1alpha1 "ocm.software/open-component-model/bindings/go/s3/transformation/spec/v1alpha1"
+	"ocm.software/open-component-model/bindings/go/transfer/internal/repositoryupload"
+	"ocm.software/open-component-model/bindings/go/transfer/internal/repositoryupload/artifactory"
+	"ocm.software/open-component-model/bindings/go/transfer/internal/repositoryupload/nexus"
+	uploadv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/transformation/spec/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/transform/graph/builder"
 	wgetaccess "ocm.software/open-component-model/bindings/go/wget/spec/access"
 	wgettransformer "ocm.software/open-component-model/bindings/go/wget/transformation"
@@ -23,7 +31,7 @@ import (
 )
 
 // NewDefaultBuilder creates a builder.Builder pre-configured with all standard OCI, CTF,
-// Helm, wget, s3, and GitHub transformers.
+// Helm, wget, s3, Git, and GitHub transformers.
 // It accepts the repository provider, resource repository, and credential resolver interfaces
 // that are needed by the transformers to interact with repositories.
 func NewDefaultBuilder(
@@ -39,7 +47,11 @@ func NewDefaultBuilder(
 	transformerScheme.MustRegisterScheme(wgetv1alpha1.Scheme)
 	transformerScheme.MustRegisterScheme(s3v1alpha1.Scheme)
 	transformerScheme.MustRegisterScheme(githubv1alpha1.Scheme)
+	transformerScheme.MustRegisterScheme(gitv1alpha1.Scheme)
 	transformerScheme.MustRegisterScheme(wgetaccess.Scheme)
+	transformerScheme.MustRegisterScheme(helmaccess.Scheme)
+	transformerScheme.MustRegisterScheme(gitaccess.Scheme)
+	transformerScheme.MustRegisterScheme(uploadv1alpha1.Scheme)
 
 	ociGet := &ocitransformer.GetComponentVersion{
 		Scheme:             transformerScheme,
@@ -130,10 +142,32 @@ func NewDefaultBuilder(
 		CredentialProvider: credentialProvider,
 	}
 
+	getGitResource := &gittransformer.GetGitResource{
+		Scheme:             transformerScheme,
+		ResourceRepository: resourceRepo,
+		CredentialProvider: credentialProvider,
+	}
+
+	// Git upload transformer (git uploader configurations)
+	addGitResource := &gittransformer.AddGitResource{
+		Scheme:             transformerScheme,
+		ResourceRepository: resourceRepo,
+		CredentialProvider: credentialProvider,
+	}
+
 	// HTTP streaming transformer (uploader configurations)
 	httpStreaming := &wgettransformer.HTTPStreamingTransformer{
 		Scheme:             transformerScheme,
 		ResourceRepository: resourceRepo,
+		CredentialProvider: credentialProvider,
+		HTTPConfig:         httpConfig,
+	}
+
+	// Repository upload transformers (artifactory and nexus uploader configurations)
+	repositoryUpload := &repositoryupload.Uploader{
+		Scheme:             transformerScheme,
+		ResourceRepository: resourceRepo,
+		RepoProvider:       repoProvider,
 		CredentialProvider: credentialProvider,
 		HTTPConfig:         httpConfig,
 	}
@@ -145,6 +179,7 @@ func NewDefaultBuilder(
 	}
 
 	return builder.NewBuilder(transformerScheme).
+		WithEnvOptions(EnvOptions()...).
 		WithTransformer(&ociv1alpha1.OCIGetComponentVersion{}, ociGet).
 		WithTransformer(&ociv1alpha1.OCIAddComponentVersion{}, ociAdd).
 		WithTransformer(&ociv1alpha1.CTFGetComponentVersion{}, ociGet).
@@ -161,6 +196,10 @@ func NewDefaultBuilder(
 		WithTransformer(&wgetv1alpha1.DownloadWgetResource{}, downloadWget).
 		WithTransformer(&s3v1alpha1.DownloadS3Resource{}, downloadS3).
 		WithTransformer(&githubv1alpha1.GetGitHubCommit{}, getGitHubCommit).
+		WithTransformer(&gitv1alpha1.GetGitResource{}, getGitResource).
+		WithTransformer(&gitv1alpha1.AddGitResource{}, addGitResource).
 		WithTransformer(&wgetv1alpha1.HTTPStreaming{}, httpStreaming).
+		WithTransformer(&uploadv1alpha1.ArtifactoryUpload{}, &artifactory.Transformer{Uploader: repositoryUpload}).
+		WithTransformer(&uploadv1alpha1.NexusUpload{}, &nexus.Transformer{Uploader: repositoryUpload}).
 		WithTransformer(&FileCleanupTransformation{}, fileCleanup)
 }

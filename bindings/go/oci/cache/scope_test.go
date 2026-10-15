@@ -11,7 +11,9 @@ import (
 
 func TestRepositoryKey_Deterministic(t *testing.T) {
 	id := &identityv1.OCIRegistryIdentity{Hostname: "ghcr.io", Path: "owner/repo"}
-	assert.Equal(t, RepositoryKey(id), RepositoryKey(id))
+	first := RepositoryKey(id)
+	second := RepositoryKey(id)
+	assert.Equal(t, first, second)
 }
 
 func TestRepositoryKey_FormatIs16Hex(t *testing.T) {

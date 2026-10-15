@@ -41,7 +41,7 @@ For details on CTF structure and how to create component versions in a CTF archi
 
 By default, `ocm transfer` copies only the component descriptor (metadata). Resource artifacts such as container images or Helm charts stay in their original location, and the component descriptor references them by their original access coordinates.
 
-With the `--copy-resources` flag, transfer creates a self-contained copy: all resource artifacts are downloaded from the source and uploaded to the target. This is essential for air-gapped scenarios where the target environment cannot reach the original artifact locations.
+With a local blob uploader configuration (a `localblob.uploader.transfer.config.ocm.software/v1alpha1` entry in your OCM configuration, for example `.ocmconfig` in the working directory), transfer creates a self-contained copy: all resource artifacts are downloaded from the source and uploaded to the target. This is essential for air-gapped scenarios where the target environment cannot reach the original artifact locations.
 
 ```mermaid
 flowchart TB
@@ -73,15 +73,23 @@ flowchart TB
     end
 ```
 
-Use `--copy-resources` when:
+Use a local blob uploader configuration when:
 
 - The target environment has no network access to the source
 - You want a fully independent copy of all artifacts
 - You are preparing a CTF archive for offline transport
 
+### Git Repository Snapshots
+
+Resources with `Git/v1` access reference a snapshot of a Git repository. With a local blob uploader configuration, transfer downloads the pinned commit as a gzip-compressed tar archive (`application/x-tgz`) and stores it as a `localBlob` in the target OCI repository or CTF. The resource digest is preserved, and the target no longer needs access to the original Git repository.
+
+By-value Git transfer requires a full commit hash in the access specification. This prevents a moving branch or tag from changing the transferred content. When creating a component version, Git digest processing resolves ref-only access to a pinned commit; if both `ref` and `commit` are present, the commit takes precedence.
+
+Without a local blob uploader, external Git access remains a reference to the original repository. A constructor resource using the `git` input type is already stored as a local blob and follows normal local-blob transfer behavior. Transfer does not push commits or upload content to Git repositories.
+
 ## Localization
 
-When resources are copied with `--copy-resources`, the component descriptor access coordinates are updated to point to the target registry. However, deployment instructions **embedded inside** resources are not modified. For example, a Helm chart's `values.yaml` may still reference `registry-a.example.com/app:1.0` even after the image has been copied to the target registry. Resources are transferred byte-for-byte to preserve digest integrity, so these internal references remain unchanged.
+When resources are copied with a local blob uploader, the component descriptor access coordinates are updated to point to the target registry. However, deployment instructions **embedded inside** resources are not modified. For example, a Helm chart's `values.yaml` may still reference `registry-a.example.com/app:1.0` even after the image has been copied to the target registry. Resources are transferred byte-for-byte to preserve digest integrity, so these internal references remain unchanged.
 
 **Localization** solves this at deploy time, not at transfer time. In a Kubernetes environment, the OCM controller's Resource CR resolves the actual artifact location from the component descriptor and publishes it in its status. Deployment tools like kro or Flux then consume that published location instead of the stale reference embedded in the deployment manifest.
 
@@ -127,7 +135,7 @@ flowchart LR
     CTF2 -->|"verify signature"| Deploy["Deployment"]
 ```
 
-1. The build environment signs the component version and exports it to a CTF archive with `--copy-resources`
+1. The build environment signs the component version and exports it to a CTF archive with a local blob uploader configuration
 2. The archive is physically moved across the air-gap boundary
 3. The archive is imported into the target registry
 4. Before deployment, the signature is verified using the public key
@@ -148,5 +156,5 @@ The [sovereign conformance scenario](https://github.com/open-component-model/ope
 - [Tutorial: Signing and Verification]({{< relref "docs/tutorials/signing/plain.md" >}}) - Sign and verify component versions
 - [Tutorial: Working with OCI]({{< relref "docs/tutorials/working-with-oci" >}}) - Embed OCI images and access them natively after transfer
 - [Concept: OCM Controllers]({{< relref "docs/concepts/ocm-controllers.md" >}}) - Kubernetes controllers for deploying and transferring OCM components
-- [Reference: Transfer Configuration]({{< relref "docs/reference/transfer-configuration.md" >}}) - Configure transfer settings and custom uploaders
+- [Reference: Transfer Configuration]({{< relref "docs/reference/transfer-configuration/_index.md" >}}) - Configure transfer settings and custom uploaders
 - [Tutorial: Configure Custom Uploads During Transfer]({{< relref "docs/tutorials/configure-custom-uploads.md" >}}) - Route resources to a custom upload target during transfer

@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	v1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
 	rt "ocm.software/open-component-model/bindings/go/runtime"
@@ -661,7 +662,7 @@ func TestConvertToRuntimeConstructor(t *testing.T) {
 			}
 
 			// Check basic component fields
-			assert.Equal(t, len(tt.want.Components), len(got.Components))
+			assert.Len(t, got.Components, len(tt.want.Components))
 			if len(got.Components) > 0 {
 				assert.Equal(t, tt.want.Components[0].Name, got.Components[0].Name)
 				assert.Equal(t, tt.want.Components[0].Version, got.Components[0].Version)
@@ -669,7 +670,7 @@ func TestConvertToRuntimeConstructor(t *testing.T) {
 				assert.Equal(t, tt.want.Components[0].Provider.Name, got.Components[0].Provider.Name)
 
 				// Check provider labels
-				assert.Equal(t, len(tt.want.Components[0].Provider.Labels), len(got.Components[0].Provider.Labels))
+				assert.Len(t, got.Components[0].Provider.Labels, len(tt.want.Components[0].Provider.Labels))
 				if len(got.Components[0].Provider.Labels) > 0 {
 					assert.Equal(t, tt.want.Components[0].Provider.Labels[0].Name, got.Components[0].Provider.Labels[0].Name)
 					assert.Equal(t, tt.want.Components[0].Provider.Labels[0].Value, got.Components[0].Provider.Labels[0].Value)
@@ -677,7 +678,7 @@ func TestConvertToRuntimeConstructor(t *testing.T) {
 				}
 
 				// Check resources
-				assert.Equal(t, len(tt.want.Components[0].Resources), len(got.Components[0].Resources))
+				assert.Len(t, got.Components[0].Resources, len(tt.want.Components[0].Resources))
 				if len(got.Components[0].Resources) > 0 {
 					assert.Equal(t, tt.want.Components[0].Resources[0].Name, got.Components[0].Resources[0].Name)
 					assert.Equal(t, tt.want.Components[0].Resources[0].Version, got.Components[0].Resources[0].Version)
@@ -686,7 +687,7 @@ func TestConvertToRuntimeConstructor(t *testing.T) {
 				}
 
 				// Check sources
-				assert.Equal(t, len(tt.want.Components[0].Sources), len(got.Components[0].Sources))
+				assert.Len(t, got.Components[0].Sources, len(tt.want.Components[0].Sources))
 				if len(got.Components[0].Sources) > 0 {
 					assert.Equal(t, tt.want.Components[0].Sources[0].Name, got.Components[0].Sources[0].Name)
 					assert.Equal(t, tt.want.Components[0].Sources[0].Version, got.Components[0].Sources[0].Version)
@@ -1105,7 +1106,7 @@ func TestConvertToV1Component(t *testing.T) {
 				assert.Error(t, err)
 				return
 			}
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, tt.want, got)
 		})
 	}
@@ -1189,7 +1190,7 @@ func TestConvertToV1Reference(t *testing.T) {
 				assert.Error(t, err)
 				return
 			}
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, tt.want, got)
 		})
 	}
@@ -1518,7 +1519,7 @@ func TestConvertToV1Resource(t *testing.T) {
 				assert.Error(t, err)
 				return
 			}
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, tt.want, got)
 		})
 	}
@@ -1801,7 +1802,7 @@ func TestConvertResourceDigestV1RoundTrip(t *testing.T) {
 
 	// runtime -> v1 restores an equal, distinct digest.
 	back, err := ConvertToV1Resource(&rt)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, v1res.Digest, back.Digest)
 	assert.NotSame(t, rt.Digest, back.Digest)
 }
@@ -1817,7 +1818,7 @@ func TestConvertResourceDigestV1Nil(t *testing.T) {
 	assert.Nil(t, rt.Digest)
 
 	back, err := ConvertToV1Resource(&rt)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Nil(t, back.Digest)
 }
 
@@ -1842,7 +1843,7 @@ func TestConvertResourceDigestFullChain(t *testing.T) {
 	descRes := ConvertToDescriptorResource(&runtimeRes)
 	backToRuntime := ConvertFromDescriptorResource(descRes)
 	backToV1, err := ConvertToV1Resource(backToRuntime)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	assert.Equal(t, original, backToV1.Digest)
 }

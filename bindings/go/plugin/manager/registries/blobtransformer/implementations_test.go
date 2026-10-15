@@ -34,7 +34,7 @@ func TestPing(t *testing.T) {
 	}, server.URL, dummyCapability([]byte(`{}`)))
 
 	err := plugin.Ping(context.Background())
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	server.Close()
 	err = plugin.Ping(context.Background())

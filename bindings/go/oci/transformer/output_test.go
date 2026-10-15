@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 	"ocm.software/open-component-model/bindings/go/oci/transformer"
 )
 
@@ -21,7 +22,7 @@ func Test_DetermineOutputPath_EmptyPath(t *testing.T) {
 
 	// Verify file exists and clean up
 	_, err = os.Stat(outputPath)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	_ = os.Remove(outputPath)
 }
 

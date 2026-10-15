@@ -286,7 +286,7 @@ func TestComponentConstructorSchema(t *testing.T) {
 			if tt.wantErr {
 				assert.Error(t, err)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				// verify it unmarshals
 				var cc ComponentConstructor
 				err = json.Unmarshal([]byte(tt.json), &cc)
@@ -347,7 +347,7 @@ func TestUnmarshalJSONUnsafe(t *testing.T) {
 			if tt.wantErr {
 				assert.Error(t, err)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.NotEmpty(t, cc.Components)
 				assert.Equal(t, "1.0.0", cc.Components[0].Version)
 			}

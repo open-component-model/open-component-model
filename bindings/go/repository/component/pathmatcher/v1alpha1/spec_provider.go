@@ -20,7 +20,7 @@ import (
 // so the pattern is validated once at construction time instead of on every call.
 type compiledResolver struct {
 	resolver             *resolverspec.Resolver
-	componentNamePattern glob.Glob
+	componentNamePattern *glob.Pattern
 }
 
 // SpecProvider implements a ComponentVersionRepositorySpecProvider with

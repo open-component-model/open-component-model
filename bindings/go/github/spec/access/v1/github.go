@@ -39,7 +39,8 @@ type GitHub struct {
 	// +ocm:jsonschema-gen:enum:deprecated=github/v1,github,gitHub/v1,gitHub
 	Type runtime.Type `json:"type"`
 
-	// RepoURL is the full repository URL (e.g. https://github.com/open-component-model/ocm).
+	// RepoURL is the repository URL (e.g. https://github.com/open-component-model/ocm).
+	// The scheme is optional; https is assumed when it is missing.
 	RepoURL string `json:"repoUrl"`
 
 	// APIHostname overrides the GitHub REST API hostname for GitHub Enterprise.

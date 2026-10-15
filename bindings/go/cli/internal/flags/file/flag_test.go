@@ -13,15 +13,11 @@ import (
 
 func TestFlag(t *testing.T) {
 	// Create a temporary directory for test files
-	tempDir, err := os.MkdirTemp("", "file-flag-test-*")
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		require.NoError(t, os.RemoveAll(tempDir))
-	})
+	tempDir := t.TempDir()
 
 	// Create test files
 	regularFile := filepath.Join(tempDir, "regular.txt")
-	err = os.WriteFile(regularFile, []byte("test content"), 0o644)
+	err := os.WriteFile(regularFile, []byte("test content"), 0o644)
 	require.NoError(t, err)
 
 	// Test cases
@@ -59,7 +55,7 @@ func TestFlag(t *testing.T) {
 				require.Error(t, err)
 				assert.Contains(t, err.Error(), tt.errContains)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.Equal(t, tt.path, flag.String())
 			}
 			if tt.expectDirectory {
@@ -89,7 +85,7 @@ func TestFlagVar(t *testing.T) {
 
 func TestFlagOpen(t *testing.T) {
 	// Create a temporary file
-	tempFile, err := os.CreateTemp("", "file-flag-test-*")
+	tempFile, err := os.CreateTemp(t.TempDir(), "file-flag-test-*")
 	require.NoError(t, err)
 	defer os.Remove(tempFile.Name())
 
@@ -117,7 +113,7 @@ func TestFlagOpen(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = flag.Open()
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "does not exist")
 }
 

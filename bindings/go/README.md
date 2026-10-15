@@ -20,7 +20,7 @@ Go bindings for the Open Component Model.
 | **descriptor/runtime** | Defines an internal runtime to work with component descriptors in all schema versions without restricting the code to the public API for future major changes |
 | **descriptor/v2** | Defines the main objects that compose a component version descriptor |
 | **generator** | Contains the code generators of the Go bindings, including ocmtypegen and jsonschemagen |
-| **git** | Provides access to Git repositories as OCM resources |
+| **git** | Provides access to Git repositories as OCM resources and constructor inputs |
 | **github** | Provides access to GitHub repositories as OCM resources and sources |
 | **gpg** | Provides OpenPGP (GPG) signing and verification for OCM component descriptors |
 | **helm** | Provides Helm chart handling for OCM, including chart repositories, constructor input, and resource access |

@@ -67,7 +67,7 @@ in its respective repository — without them, recursive resolution across multi
 
 Resolvers play an important role in transferring component versions across registries. When transferring a component
 graph with `--recursive`, the CLI uses resolvers to locate each referenced component so it can copy the entire graph
-to the target repository. Combined with `--copy-resources`, this enables full transfers of component graphs —
+to the target repository. Combined with a local blob uploader configuration, this enables full transfers of component graphs —
 including all referenced resources — across registry boundaries or even air-gapped environments.
 
 For more information about OCM transfer, see the
@@ -80,7 +80,7 @@ For more information about OCM transfer, see the
 - [How-To: Resolve Components Across Multiple Registries]
   ({{< relref "docs/how-to/resolve-components-from-multiple-repositories.md" >}}) — Recipe for
   multi-registry resolution
-- [How-To: Migrate from Deprecated Resolvers]({{< relref "docs/how-to/migrate-from-deprecated-resolvers.md" >}}) —
+- [Migration Guide: Migrate from Deprecated Resolvers]({{< relref "docs/how-to/migration-guides/migrate-from-deprecated-resolvers.md" >}}) —
   Replace deprecated fallback
   resolvers with glob-based resolvers
 

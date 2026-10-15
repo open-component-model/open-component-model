@@ -2,6 +2,8 @@
 //
 // [NewVisualizer] creates an animated progress visualizer. For operations with
 // events (total > 0), it renders a scrolling item log above a progress bar.
+// For operations with an unknown item count (total = [progress.IndeterminateTotal]),
+// the item log is shown without a progress bar.
 // For simple operations (total = 0), only a spinner header is shown.
 //
 // Terminal layout for tracked phases:

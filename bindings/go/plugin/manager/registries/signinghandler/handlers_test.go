@@ -66,9 +66,13 @@ func TestHandleGetSignerIdentity(t *testing.T) {
 				return http.NewRequestWithContext(ctx, http.MethodPost, parse.String(), nil)
 			},
 			assertOutput: func(t *testing.T, resp *http.Response) {
+				t.Helper()
 				require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 			},
-			assertError: func(t *testing.T, err error) { require.NoError(t, err) },
+			assertError: func(t *testing.T, err error) {
+				t.Helper()
+				require.NoError(t, err)
+			},
 		},
 		{
 			name: "success",
@@ -93,10 +97,14 @@ func TestHandleGetSignerIdentity(t *testing.T) {
 				return http.NewRequestWithContext(ctx, http.MethodPost, parse.String(), bytes.NewReader(body))
 			},
 			assertOutput: func(t *testing.T, resp *http.Response) {
+				t.Helper()
 				defer resp.Body.Close()
 				require.Equal(t, http.StatusOK, resp.StatusCode)
 			},
-			assertError: func(t *testing.T, err error) { require.NoError(t, err) },
+			assertError: func(t *testing.T, err error) {
+				t.Helper()
+				require.NoError(t, err)
+			},
 		},
 	}
 
@@ -122,7 +130,10 @@ func TestHandleVerifyAndSign(t *testing.T) {
 		srv := httptest.NewServer(handler)
 		defer srv.Close()
 		reqBody := bytes.NewBufferString(`{"signature":{"name":"n","digest":{"hashAlgorithm":"sha256","normalisationAlgorithm":"ociArtifactDigest/v1","value":"abc"}},"config":{"type":"dummy/v1"}}`)
-		resp, err := srv.Client().Post(srv.URL, "application/json", reqBody)
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL, reqBody)
+		require.NoError(t, err)
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := srv.Client().Do(req)
 		require.NoError(t, err)
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 		_ = resp.Body.Close()

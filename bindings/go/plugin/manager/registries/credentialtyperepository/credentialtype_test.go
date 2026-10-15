@@ -205,7 +205,7 @@ func TestRegisterCustomTypes_MultipleTypesDoNotConflictWithRaw(t *testing.T) {
 		reg2 := newRegistry(t)
 		r.NoError(reg2.RegisterCustomTypes(types.Plugin{ID: "plugin-b"}, []types.Type{
 			{Type: aliasedType, Aliases: []runtime.Type{aliasType}},
-			types.Type{Type: unrelated},
+			{Type: unrelated},
 		}))
 
 		s := reg2.GetCredentialTypeScheme()

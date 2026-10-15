@@ -225,7 +225,7 @@ func TestConvertFromV2Provider(t *testing.T) {
 				assert.Error(t, err)
 				return
 			}
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, tt.want, got)
 		})
 	}
@@ -562,7 +562,7 @@ func TestConvertToV2Provider(t *testing.T) {
 				assert.Error(t, err)
 				return
 			}
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, tt.want, got)
 		})
 	}
@@ -846,7 +846,7 @@ func TestConvertFromV2LocalBlob(t *testing.T) {
 				assert.Error(t, err)
 				return
 			}
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, tt.want, got)
 		})
 	}
@@ -895,7 +895,7 @@ func TestConvertToV2LocalBlob(t *testing.T) {
 				assert.Error(t, err)
 				return
 			}
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, tt.want, got)
 		})
 	}
@@ -919,31 +919,31 @@ func TestLabels(t *testing.T) {
 			assert.Equal(t, "test", labels[0].Name)
 			assert.True(t, labels[0].Signing)
 			var val string
-			assert.NoError(t, labels[0].GetValue(&val))
+			require.NoError(t, labels[0].GetValue(&val))
 			assert.Equal(t, "value", val)
 		})
 
 		t.Run("set labels on component", func(t *testing.T) {
-			assert.NoError(t, c.ComponentMeta.Labels[0].SetValue("foobar"))
+			require.NoError(t, c.ComponentMeta.Labels[0].SetValue("foobar"))
 			labels := c.Labels
 			assert.Len(t, labels, 1)
 			assert.Equal(t, "test", labels[0].Name)
 			assert.True(t, labels[0].Signing)
 			var val string
-			assert.NoError(t, labels[0].GetValue(&val))
+			require.NoError(t, labels[0].GetValue(&val))
 			assert.Equal(t, "foobar", val)
 		})
 	})
 
 	t.Run("generic object", func(t *testing.T) {
 		t.Run("set labels on component", func(t *testing.T) {
-			assert.NoError(t, c.ComponentMeta.Labels[0].SetValue(map[string]interface{}{"value": "foobar"}))
+			require.NoError(t, c.ComponentMeta.Labels[0].SetValue(map[string]interface{}{"value": "foobar"}))
 			labels := c.Labels
 			assert.Len(t, labels, 1)
 			assert.Equal(t, "test", labels[0].Name)
 			assert.True(t, labels[0].Signing)
 			var val map[string]interface{}
-			assert.NoError(t, labels[0].GetValue(&val))
+			require.NoError(t, labels[0].GetValue(&val))
 			assert.Equal(t, "foobar", val["value"])
 		})
 		t.Run("json string", func(t *testing.T) {
@@ -953,7 +953,7 @@ func TestLabels(t *testing.T) {
 			assert.Equal(t, "test", labels[0].Name)
 			assert.True(t, labels[0].Signing)
 			var val map[string]interface{}
-			assert.NoError(t, labels[0].GetValue(&val))
+			require.NoError(t, labels[0].GetValue(&val))
 			assert.Equal(t, "value", val["key"])
 		})
 		t.Run("yaml string", func(t *testing.T) {
@@ -963,7 +963,7 @@ func TestLabels(t *testing.T) {
 			assert.Equal(t, "test", labels[0].Name)
 			assert.True(t, labels[0].Signing)
 			var val map[string]interface{}
-			assert.NoError(t, labels[0].GetValue(&val))
+			require.NoError(t, labels[0].GetValue(&val))
 			assert.Equal(t, "value2", val["key"])
 		})
 	})

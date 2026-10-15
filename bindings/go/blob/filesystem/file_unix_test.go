@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"golang.org/x/sys/unix"
-
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sys/unix"
 
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 )
@@ -20,7 +20,7 @@ func TestCopyBlobToOSPath_NamedPipe_Blocking(t *testing.T) {
 	r := require.New(t)
 	tempDir := t.TempDir()
 	pipePath := filepath.Join(tempDir, "pipe")
-	r.NoError(unix.Mkfifo(pipePath, 0666))
+	r.NoError(unix.Mkfifo(pipePath, 0o666))
 
 	testData := []byte("test data")
 
@@ -39,12 +39,12 @@ func TestCopyBlobToOSPath_NamedPipe_Blocking(t *testing.T) {
 
 	go func() {
 		f, err := os.OpenFile(pipePath, os.O_RDONLY, os.ModeNamedPipe)
-		r.NoError(err)
+		assert.NoError(t, err)
 		defer func() {
-			r.NoError(f.Close())
+			assert.NoError(t, f.Close())
 		}()
 		all, err := io.ReadAll(f)
-		r.NoError(err)
+		assert.NoError(t, err)
 		data <- all
 	}()
 
@@ -67,7 +67,7 @@ func Test_GetBlobInWorkingDirectory(t *testing.T) {
 	r := require.New(t)
 	tempDir := t.TempDir()
 	fp := filepath.Join(tempDir, "testfile.txt")
-	r.NoError(os.WriteFile(fp, []byte("test data"), 0644))
+	r.NoError(os.WriteFile(fp, []byte("test data"), 0o644))
 
 	type args struct {
 		path       string

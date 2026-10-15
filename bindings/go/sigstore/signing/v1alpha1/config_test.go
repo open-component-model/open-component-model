@@ -1,7 +1,6 @@
 package v1alpha1
 
 import (
-	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -38,7 +37,7 @@ func TestSignConfig_Validate(t *testing.T) {
 			switch {
 			case tc.wantErrIs != nil:
 				r.Error(err)
-				r.True(errors.Is(err, tc.wantErrIs), "expected %v, got %v", tc.wantErrIs, err)
+				r.ErrorIs(err, tc.wantErrIs, "expected %v, got %v", tc.wantErrIs, err)
 			case tc.wantErr != "":
 				r.ErrorContains(err, tc.wantErr)
 			default:

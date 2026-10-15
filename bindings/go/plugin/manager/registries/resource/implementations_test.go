@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
@@ -21,7 +22,7 @@ func TestGetGlobalResource(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == GetGlobalResource && r.Method == http.MethodPost {
 			err := json.NewEncoder(w).Encode(response)
-			require.NoError(t, err)
+			assert.NoError(t, err)
 			return
 		}
 
@@ -62,7 +63,7 @@ func TestAddGlobalResource(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == AddGlobalResource && r.Method == http.MethodPost {
 			err := json.NewEncoder(w).Encode(response)
-			require.NoError(t, err)
+			assert.NoError(t, err)
 			return
 		}
 

@@ -84,12 +84,12 @@ configurations:
     credentials:
     - type: Credentials/v1
       properties:
-        public_key_pem: |
+        publicKeyPEM: |
 $(sed 's/^/          /' /tmp/keys/public-key.pem)
 EOF
 ```
 
-The public key is embedded as PEM, indented under `public_key_pem`. No base64 encoding is needed.
+The public key is embedded as PEM, indented under `publicKeyPEM`. No base64 encoding is needed.
 
 {{< callout context="note" title="Note" icon="outline/info-circle" >}}
 Only an entry that names a `signature` requests verification of that signature. An entry without
@@ -97,7 +97,9 @@ one merely supplies the verifier that named entries fall back to, so it does not
 on by itself.
 
 The `verifier` field is optional and defaults to RSASSA-PSS. Set it to select a different
-verification handler, for example `SigstoreVerificationConfiguration/v1alpha1`.
+verification handler; the controller ships with `RSASigningConfiguration/v1alpha1`,
+`GPGSigningConfiguration/v1alpha1`, and `SigstoreVerificationConfiguration/v1alpha1` handlers
+registered.
 {{< /callout >}}
 
 Store the configuration in a Secret. The controller reads it from the `.ocmconfig` key:
@@ -190,17 +192,19 @@ helloworld-component   Applied version 1.0.0   98s
 ```
 </details>
 
-To confirm the signature was actually verified, check the controller logs:
+To confirm the signature was actually verified (and not served from the resolver cache without
+re-running verification), check the controller logs for the per-signature `verified signature`
+entry:
 
 ```bash
-kubectl logs -n ocm-k8s-toolkit-system deploy/ocm-k8s-toolkit-controller-manager | grep "verifying signature"
+kubectl logs -n ocm-k8s-toolkit-system deploy/ocm-k8s-toolkit-controller-manager | grep "verified signature"
 ```
 
 <details>
 <summary>Expected output</summary>
 
 ```text
-{"level":"info","ts":"2026-04-28T15:58:14Z","msg":"verifying signature","component":"github.com/acme.org/helloworld","version":"1.0.0"}
+{"level":"info","ts":"2026-04-28T15:58:14Z","msg":"verified signature","signature":"default","verifier":"RSASigningConfiguration/v1alpha1"}
 ```
 </details>
 

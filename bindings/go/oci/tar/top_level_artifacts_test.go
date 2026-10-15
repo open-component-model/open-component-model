@@ -22,6 +22,7 @@ func TestTopLevelArtifacts(t *testing.T) {
 		{
 			name: "artifact referencing another is not top-level",
 			setupFetcher: func(t *testing.T) (content.Fetcher, []ociImageSpecV1.Descriptor) {
+				t.Helper()
 				fetcher := memory.New()
 
 				child := ociImageSpecV1.Manifest{
@@ -64,6 +65,7 @@ func TestTopLevelArtifacts(t *testing.T) {
 		{
 			name: "single artifact is always top-level",
 			setupFetcher: func(t *testing.T) (content.Fetcher, []ociImageSpecV1.Descriptor) {
+				t.Helper()
 				fetcher := memory.New()
 
 				manifest := ociImageSpecV1.Manifest{
@@ -90,6 +92,7 @@ func TestTopLevelArtifacts(t *testing.T) {
 		{
 			name: "empty candidates returns empty result",
 			setupFetcher: func(t *testing.T) (content.Fetcher, []ociImageSpecV1.Descriptor) {
+				t.Helper()
 				fetcher := memory.New()
 				return fetcher, []ociImageSpecV1.Descriptor{}
 			},
@@ -98,6 +101,7 @@ func TestTopLevelArtifacts(t *testing.T) {
 		{
 			name: "multiple independent artifacts are all top-level",
 			setupFetcher: func(t *testing.T) (content.Fetcher, []ociImageSpecV1.Descriptor) {
+				t.Helper()
 				fetcher := memory.New()
 
 				// Create two independent manifests
@@ -146,6 +150,7 @@ func TestTopLevelArtifacts(t *testing.T) {
 		{
 			name: "complex dependency chain - only root is top-level",
 			setupFetcher: func(t *testing.T) (content.Fetcher, []ociImageSpecV1.Descriptor) {
+				t.Helper()
 				fetcher := memory.New()
 
 				// Create a chain: leaf -> middle -> root
@@ -205,6 +210,7 @@ func TestTopLevelArtifacts(t *testing.T) {
 		{
 			name: "multiple roots with shared dependencies",
 			setupFetcher: func(t *testing.T) (content.Fetcher, []ociImageSpecV1.Descriptor) {
+				t.Helper()
 				fetcher := memory.New()
 
 				// Create a shared dependency
@@ -276,6 +282,7 @@ func TestTopLevelArtifacts(t *testing.T) {
 		{
 			name: "circular reference - all artifacts are top-level",
 			setupFetcher: func(t *testing.T) (content.Fetcher, []ociImageSpecV1.Descriptor) {
+				t.Helper()
 				fetcher := memory.New()
 
 				// Create two manifests that reference each other (circular dependency)

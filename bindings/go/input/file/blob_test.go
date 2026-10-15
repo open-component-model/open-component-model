@@ -51,7 +51,7 @@ func TestInputFileBlob_MediaType(t *testing.T) {
 			// Create a temporary file for testing
 			tempDir := t.TempDir()
 			filePath := filepath.Join(tempDir, "test.txt")
-			err := os.WriteFile(filePath, []byte("test data"), 0644)
+			err := os.WriteFile(filePath, []byte("test data"), 0o644)
 			r.NoError(err)
 
 			// Create filesystem blob
@@ -78,7 +78,7 @@ func TestInputFileBlob_InterfaceCompliance(t *testing.T) {
 	// Create a temporary file for testing
 	tempDir := t.TempDir()
 	filePath := filepath.Join(tempDir, "test.txt")
-	err := os.WriteFile(filePath, []byte("test data"), 0644)
+	err := os.WriteFile(filePath, []byte("test data"), 0o644)
 	r.NoError(err)
 
 	// Create filesystem blob
@@ -102,7 +102,7 @@ func TestInputFileBlob_InterfaceCompliance(t *testing.T) {
 	r.True(known)
 
 	size := inputBlob.Size()
-	r.Greater(size, int64(0))
+	r.Positive(size)
 
 	digest, ok := inputBlob.Digest()
 	r.True(ok)
@@ -180,7 +180,7 @@ func TestGetV1FileBlob_Success(t *testing.T) {
 			// Create temporary file
 			tempDir := t.TempDir()
 			filePath := filepath.Join(tempDir, "test.txt")
-			err := os.WriteFile(filePath, []byte(tt.fileData), 0644)
+			err := os.WriteFile(filePath, []byte(tt.fileData), 0o644)
 			r.NoError(err)
 
 			// Create v1.File spec
@@ -290,7 +290,7 @@ func TestGetV1FileBlob_BinaryFile(t *testing.T) {
 
 	tempDir := t.TempDir()
 	filePath := filepath.Join(tempDir, "binary.bin")
-	err := os.WriteFile(filePath, binaryData, 0644)
+	err := os.WriteFile(filePath, binaryData, 0o644)
 	r.NoError(err)
 
 	// Create v1.File spec
@@ -333,7 +333,7 @@ func TestGetV1FileBlob_MultipleReads(t *testing.T) {
 
 	tempDir := t.TempDir()
 	filePath := filepath.Join(tempDir, "test.txt")
-	err := os.WriteFile(filePath, []byte(testData), 0644)
+	err := os.WriteFile(filePath, []byte(testData), 0o644)
 	r.NoError(err)
 
 	// Create v1.File spec
@@ -371,7 +371,7 @@ func TestGetV1FileBlob_Compression(t *testing.T) {
 
 	tempDir := t.TempDir()
 	filePath := filepath.Join(tempDir, "repetitive.txt")
-	err := os.WriteFile(filePath, repetitiveData, 0644)
+	err := os.WriteFile(filePath, repetitiveData, 0o644)
 	r.NoError(err)
 
 	// Test without compression

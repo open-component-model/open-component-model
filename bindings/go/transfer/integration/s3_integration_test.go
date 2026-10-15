@@ -33,11 +33,11 @@ import (
 	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
 )
 
-// Test_Integration_TransferS3Resource_CopyModeAllResources verifies that an s3 resource (an
+// Test_Integration_TransferS3Resource_LocalBlobUploader verifies that an s3 resource (an
 // object in a bucket, not stored in the source CTF) is transferred by value: the object is
 // downloaded from the bucket and embedded as a localBlob in the target OCI registry. s3
-// resources are external, so they are only copied under CopyModeAllResources.
-func Test_Integration_TransferS3Resource_CopyModeAllResources(t *testing.T) {
+// resources are external, so they are only copied when a local blob uploader is configured.
+func Test_Integration_TransferS3Resource_LocalBlobUploader(t *testing.T) {
 	t.Parallel()
 	r := require.New(t)
 	ctx := t.Context()
@@ -107,7 +107,7 @@ func Test_Integration_TransferS3Resource_CopyModeAllResources(t *testing.T) {
 	}
 	r.NoError(ctfRepo.AddComponentVersion(ctx, desc))
 
-	// 4. Build the transfer graph with CopyModeAllResources (external resources are skipped otherwise).
+	// 4. Build the transfer graph with a local blob uploader (external resources are kept by reference otherwise).
 	sourceSpec := &ctfrepospec.Repository{
 		Type:     runtime.Type{Name: ctfrepospec.Type, Version: ctfrepospec.Version},
 		FilePath: sourceCTFPath,
@@ -118,8 +118,8 @@ func Test_Integration_TransferS3Resource_CopyModeAllResources(t *testing.T) {
 	}
 
 	tgd, err := transfer.BuildGraphDefinition(ctx,
-		&transferv1alpha1.Config{CopyMode: transferv1alpha1.CopyModeAllResources},
-		nil,
+		&transferv1alpha1.Config{},
+		[]transferv1alpha1.UploaderConfig{&transferv1alpha1.LocalBlobUploaderConfig{}},
 		transfer.Mapping{
 			Components: []transfer.ComponentID{{Component: componentName, Version: componentVersion}},
 			Target:     targetSpec,

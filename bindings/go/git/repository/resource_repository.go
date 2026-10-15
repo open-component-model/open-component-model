@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"reflect"
 	"strings"
 
 	"github.com/opencontainers/go-digest"
@@ -19,7 +18,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/git/spec/access"
 	accessv1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
 	gitcreds "ocm.software/open-component-model/bindings/go/git/spec/credentials"
-	credsv1 "ocm.software/open-component-model/bindings/go/git/spec/credentials/v1"
 	identityv1 "ocm.software/open-component-model/bindings/go/git/spec/identity/v1"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -126,12 +124,9 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, res *descript
 }
 
 func (r *ResourceRepository) download(ctx context.Context, spec *accessv1.Git, expected *descriptor.Digest, creds runtime.Typed, tempDir string) (*download.Result, error) {
-	var typed *credsv1.GitCredentials
-	if creds != nil {
-		var err error
-		if typed, err = credsv1.ConvertToGitCredentials(creds); err != nil {
-			return nil, err
-		}
+	typed, err := convertGitCredentials(creds)
+	if err != nil {
+		return nil, err
 	}
 
 	result, err := download.Download(ctx, spec, typed, r.downloadOptions(tempDir))
@@ -146,15 +141,12 @@ func (r *ResourceRepository) download(ctx context.Context, spec *accessv1.Git, e
 	return result, nil
 }
 
-func (r *ResourceRepository) UploadResource(context.Context, *descriptor.Resource, blob.ReadOnlyBlob, runtime.Typed) (*descriptor.Resource, error) {
-	return nil, fmt.Errorf("git repositories do not support upload operations")
-}
-
 func (r *ResourceRepository) GetResourceDigestProcessorCredentialConsumerIdentity(ctx context.Context, res *descriptor.Resource) (runtime.Identity, error) {
 	return r.GetResourceCredentialConsumerIdentity(ctx, res)
 }
 
 // ProcessResourceDigest pins the access and hashes the same snapshot in one download.
+// Pinning records the commit (see [download.WithRepository]).
 // The archive is only read here, so it is downloaded into a directory of its own
 // that this call removes again.
 func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, res *descriptor.Resource, creds runtime.Typed) (*descriptor.Resource, error) {
@@ -205,7 +197,7 @@ func accessFrom(res *descriptor.Resource) (*accessv1.Git, error) {
 	}
 
 	spec := res.Access
-	if spec == nil || (reflect.ValueOf(spec).Kind() == reflect.Pointer && reflect.ValueOf(spec).IsNil()) {
+	if spec == nil {
 		return nil, fmt.Errorf("git access is required")
 	}
 

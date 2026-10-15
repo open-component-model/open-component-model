@@ -14,7 +14,7 @@ before(async () => {
 });
 
 /** Build a minimal CRD YAML string. */
-function crd(kind: string, group: string, versions: Array<{name: string; served?: boolean; storage?: boolean; props?: Record<string, string>}>) {
+function crd(kind: string, group: string, versions: { name: string; served?: boolean; storage?: boolean; props?: Record<string, string> }[]) {
     const versionEntries = versions.map((v) => `
     - name: ${v.name}
       served: ${v.served ?? true}
@@ -73,7 +73,7 @@ describe("crdYamlToModels", () => {
     it("multi-CRD documents", () => {
         const yaml = [
             crd("Foo", "example.com", [{ name: "v1", props: { spec: "object" } }]),
-            crd("Bar", "example.com", [{ name: "v1", props: { spec: "object" } }]),
+            crd("Bar", "example.com", [{ name: "v1", props: { spec: "object" } }])
         ].join("---\n");
         const models = crdYamlToModels(yaml);
         assert.equal(models.length, 2);
@@ -84,7 +84,7 @@ describe("crdYamlToModels", () => {
     it("multi-version CRDs", () => {
         const yaml = crd("Widget", "example.com", [
             { name: "v1alpha1", storage: false, props: { color: "string" } },
-            { name: "v1", props: { color: "string", size: "integer" } },
+            { name: "v1", props: { color: "string", size: "integer" } }
         ]);
         const models = crdYamlToModels(yaml);
         assert.equal(models.length, 2);
@@ -95,7 +95,7 @@ describe("crdYamlToModels", () => {
     it("skips non-served versions", () => {
         const yaml = crd("Thing", "example.com", [
             { name: "v1alpha1", served: false, storage: false },
-            { name: "v1" },
+            { name: "v1" }
         ]);
         const models = crdYamlToModels(yaml);
         assert.equal(models.length, 1);

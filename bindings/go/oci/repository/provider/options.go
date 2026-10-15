@@ -86,7 +86,7 @@ func WithHTTPConfig(cfg *httpv1alpha1.Config) Option {
 // WithBlobCacheOptions enables a shared manifest blob cache across every
 // OCI repository the provider hands out. Pass [cache.Options]{} for
 // sane defaults; pass nil (the default) to disable caching. The cache
-// directory defaults to <TempDir>/ocm-oci-blobcache and is deterministic
+// directory defaults to <TempDir>/ocm-oci-cas and is deterministic
 // so consecutive provider instances over the same TempDir reuse the
 // existing on-disk entries.
 func WithBlobCacheOptions(opts *cache.Options) Option {

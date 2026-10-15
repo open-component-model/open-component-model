@@ -106,7 +106,6 @@ func TestNew(t *testing.T) {
 		_, isRetry := c.Transport.(*retry.Transport)
 		assert.False(t, isRetry, "expected hostRouter to wrap the retry transport when Hosts is set")
 	})
-
 }
 
 func TestNewClient_PerHostRouting(t *testing.T) {
@@ -140,13 +139,13 @@ func TestNewClient_PerHostRouting(t *testing.T) {
 	}
 	c := ocmhttp.NewClient(cfg)
 
-	_, err := c.Get(slow.URL)
+	_, err := getURL(t, c, slow.URL)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "timeout awaiting response headers")
 
 	// Request to the unmatched host uses the global config (no
 	// responseHeaderTimeout) and completes normally.
-	resp, err := c.Get(fast.URL)
+	resp, err := getURL(t, c, fast.URL)
 	require.NoError(t, err)
 	_ = resp.Body.Close()
 }
@@ -160,7 +159,7 @@ func TestNew_UserAgent_RoundTrip(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	c := ocmhttp.New(ocmhttp.WithUserAgent("ocm/1.0"))
-	resp, err := c.Get(srv.URL)
+	resp, err := getURL(t, c, srv.URL)
 	require.NoError(t, err)
 	_ = resp.Body.Close()
 	assert.Equal(t, "ocm/1.0", gotUA)
@@ -193,7 +192,7 @@ func TestNew_Compression(t *testing.T) {
 	get := func(t *testing.T, c *nethttp.Client, path string) []byte {
 		t.Helper()
 		r := require.New(t)
-		resp, err := c.Get(srv.URL + path)
+		resp, err := getURL(t, c, srv.URL+path)
 		r.NoError(err)
 		t.Cleanup(func() { _ = resp.Body.Close() })
 		body, err := io.ReadAll(resp.Body)
@@ -269,7 +268,7 @@ func TestNew_NilHostEntry_Skipped(t *testing.T) {
 	_, isTransport := c.Transport.(*nethttp.Transport)
 	assert.True(t, isTransport, "expected plain *http.Transport, not a hostRouter, got %T", c.Transport)
 
-	resp, err := c.Get(srv.URL)
+	resp, err := getURL(t, c, srv.URL)
 	require.NoError(t, err)
 	_ = resp.Body.Close()
 }
@@ -301,7 +300,7 @@ func TestRetryConfig_Wiring(t *testing.T) {
 			},
 		}
 		c := ocmhttp.New(ocmhttp.WithConfig(cfg))
-		resp, err := c.Get(srv.URL)
+		resp, err := getURL(t, c, srv.URL)
 		require.NoError(t, err)
 		_ = resp.Body.Close()
 		assert.Equal(t, 6, hits, "default 5 retries = 1 initial + 5 attempts")
@@ -325,7 +324,7 @@ func TestRetryConfig_Wiring(t *testing.T) {
 			},
 		}
 		c := ocmhttp.New(ocmhttp.WithConfig(cfg))
-		resp, err := c.Get(srv.URL)
+		resp, err := getURL(t, c, srv.URL)
 		require.NoError(t, err)
 		_ = resp.Body.Close()
 		assert.Equal(t, 1, hits, "maxRetries:-1 must not retry")
@@ -351,7 +350,7 @@ func TestRetryConfig_Wiring(t *testing.T) {
 			},
 		}
 		c := ocmhttp.New(ocmhttp.WithConfig(cfg))
-		resp, err := c.Get(srv.URL)
+		resp, err := getURL(t, c, srv.URL)
 		require.NoError(t, err)
 		_ = resp.Body.Close()
 		assert.Equal(t, 3, hits, "maxRetries:2 = 1 initial + 2 retries")
@@ -386,10 +385,19 @@ func TestRetryConfig_Wiring(t *testing.T) {
 			},
 		}
 		c := ocmhttp.New(ocmhttp.WithConfig(cfg))
-		resp, err := c.Get(srv.URL)
+		resp, err := getURL(t, c, srv.URL)
 		require.NoError(t, err)
 		_ = resp.Body.Close()
 		// Per-host maxRetries:-1 overrides global maxRetries:2 — exactly 1 hit.
 		assert.Equal(t, 1, hits, "per-host maxRetries:-1 must override global maxRetries:2")
 	})
+}
+
+// getURL issues a GET with the test context, replacing (*http.Client).Get so the
+// request is cancellation-aware (noctx).
+func getURL(t *testing.T, c *nethttp.Client, url string) (*nethttp.Response, error) {
+	t.Helper()
+	req, err := nethttp.NewRequestWithContext(t.Context(), nethttp.MethodGet, url, nil)
+	require.NoError(t, err)
+	return c.Do(req)
 }

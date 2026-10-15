@@ -188,6 +188,26 @@ If you are only verifying, the `signer` field can be left out entirely:
     type: GPGSigningConfiguration/v1alpha1
 ```
 
+If the signer's public key is already in your GnuPG keyring (`$GNUPGHOME`, or `~/.gnupg`), verify against the keyring instead of a key file by setting `keyringFingerprint` in the GPG credentials to the **full** fingerprint (40 or 64 hex characters) of the key you trust. OCM runs `gpg --export` to export the public key, then verifies in-process. A signature by any other key fails. Keys revoked or expired in your keyring are rejected.
+
+Key material in the GPG credentials is rejected with `keyringFingerprint`, and verification needs no passphrase. Replace `publicKeyPGPFile` (or `privateKeyPGPFile`) in the GPG consumer entry of `.ocmconfig` with `keyringFingerprint`:
+
+```yaml
+type: generic.config.ocm.software/v1
+configurations:
+- type: credentials.config.ocm.software
+  consumers:
+  - identity:
+      type: GPG/v1alpha1
+      signature: default
+    credentials:
+    - type: GPGCredentials/v1alpha1
+      keyringFingerprint: B118BE3A32BE4AF28E37E881167C7102F8AC81E4
+- type: signing.config.ocm.software/v1alpha1
+  verifier:
+    type: GPGSigningConfiguration/v1alpha1
+```
+
 {{< callout context="note" >}}
 Give the entry a `signature` field to scope it to a single signature; without one it applies to every signature. Because the verifier is resolved per signature, a component carrying a GPG signature next to an RSA one can be verified in a single run, each with its own handler.
 {{< /callout >}}
@@ -248,7 +268,7 @@ Without `--signature`, **every** signature on the descriptor is verified. Config
 <!-- markdownlint-disable-next-line MD024 -->
 ## Troubleshooting
 
-### Symptom: `SIGNATURE VERIFICATION FAILED: gpg verify: openpgp: signature made by unknown entity`
+### Symptom: `SIGNATURE VERIFICATION FAILED: gpg verify failed: exit status 2` with `Can't check signature: No public key`
 
 **Cause:** The public key in `.ocmconfig` doesn't match the key that signed — most often because you exported a different key, or the signer rotated their key after signing.
 
@@ -260,11 +280,35 @@ Without `--signature`, **every** signature on the descriptor is verified. Config
 
 **Fix:** Check the path is correct and readable. Absolute paths avoid working-directory surprises.
 
-### Symptom: `SIGNATURE VERIFICATION FAILED: no key matching fingerprint "..." found in keyring`
+### Symptom: `SIGNATURE VERIFICATION FAILED: signature was made by key ... which does not match the configured key fingerprint "..."`
 
-**Cause:** The verifier contains a `keyFingerprint` that doesn't match any key resolved from the public-key file.
+**Cause:** The verifier contains a `keyFingerprint` that matches neither the key that made the signature nor its primary key.
 
 **Fix:** Either remove `keyFingerprint` from the verifier (any key in the file will be tried) or correct it. Run `gpg --show-keys /tmp/keys/verify-key.asc` to confirm the actual fingerprint.
+
+### Symptom: `keyringFingerprint must be a full key fingerprint (40 or 64 hex characters), because a shorter key ID could select another key in the keyring`
+
+**Cause:** `keyringFingerprint` in the GPG credentials is not a full fingerprint. A long key ID is not accepted, because it does not identify a key reliably among all keys in a keyring.
+
+**Fix:** Set `keyringFingerprint` to the full fingerprint of the key you trust (`gpg --fingerprint <key>`; spaces and a `0x` prefix are accepted).
+
+### Symptom: `reading keys from the GnuPG keyring (keyringFingerprint in the GPG credentials) requires the GnuPG "gpg" binary (>= 2.2.0) on PATH`
+
+**Cause:** You configured `keyringFingerprint` in the GPG credentials, but no `gpg` binary was found on `PATH`. Without `keyringFingerprint`, no `gpg` is needed — OCM performs all GPG cryptography in-process.
+
+**Fix:** Install GnuPG 2.2 or later (`brew install gnupg`, `sudo apt-get install gnupg`, `sudo dnf install gnupg2`) and make sure `gpg` is on `PATH`, or provide the key material directly via `publicKeyPGPFile`.
+
+### Symptom: `with GODEBUG=fips140=only, GPG signing and verification require OpenPGP v6 (RFC 9580) or v5 (LibrePGP) keys: v4 and older keys are identified by SHA-1 fingerprints`
+
+**Cause:** OCM runs with `GODEBUG=fips140=only` and the key is a v4 key.
+
+**Fix:** Use an OpenPGP v6 key (RFC 9580). See [FIPS 140-3: GPG]({{< relref "docs/reference/standards-and-regulations/fips.md" >}}#gpg).
+
+### Symptom: `with GODEBUG=fips140=only, GPG signing and verification require an RSA (at least 2048 bits) or ECDSA (P-256, P-384, P-521) key`
+
+**Cause:** OCM runs with `GODEBUG=fips140=only` and the key uses an algorithm outside the Go Cryptographic Module or an RSA key shorter than 2048 bits.
+
+**Fix:** Use an RSA key of at least 2048 bits or an ECDSA P-256/P-384/P-521 key. See [FIPS 140-3: GPG]({{< relref "docs/reference/standards-and-regulations/fips.md" >}}#gpg).
 
 {{< /tab >}}
 {{< tab "Sigstore (interactive)" >}}

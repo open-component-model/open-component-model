@@ -22,8 +22,8 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
-	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	ocmhttp "ocm.software/open-component-model/bindings/go/http"
+	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 )
 
 const (
@@ -145,7 +145,6 @@ func Test_Integration_HTTPClient(t *testing.T) {
 			}
 		})
 	})
-
 }
 
 // integrationEnv is the shared fixture for the HTTP client integration suite:
@@ -296,7 +295,7 @@ func reusesConnection(t *testing.T, ctx context.Context, client *nethttp.Client,
 // performs the TLS handshake, and returns an https URL pointing at it.
 func stalledTLSServer(t *testing.T) string {
 	t.Helper()
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	ln, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
 	require.NoError(t, err, "listen for stalled TLS server")
 
 	var mu sync.Mutex

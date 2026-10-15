@@ -166,7 +166,7 @@ var _ = Describe("Replication Controller", func() {
 					v1alpha1.OCMConfigKey: `{
 						"type": "generic.config.ocm.software/v1",
 						"configurations": [
-							{"type": "transfer.config.ocm.software/v1alpha1", "recursive": -1, "copyMode": "localBlob"}
+							{"type": "transfer.config.ocm.software/v1alpha1", "recursive": -1}
 						]
 					}`,
 				},

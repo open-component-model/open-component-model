@@ -19,6 +19,11 @@ spec:
           image: registry:2
           ports:
             - containerPort: 5000
+          # TCP, not HTTP: /v2/ answers 401 under htpasswd auth, which fails an httpGet probe.
+          readinessProbe:
+            tcpSocket:
+              port: 5000
+            periodSeconds: 1
           volumeMounts:
             - name: registry-auth-volume
               mountPath: /etc/registry
@@ -96,6 +101,10 @@ spec:
           image: registry:2
           ports:
             - containerPort: 5000
+          readinessProbe:
+            tcpSocket:
+              port: 5000
+            periodSeconds: 1
           volumeMounts:
             - name: registry-auth-volume
               mountPath: /etc/registry

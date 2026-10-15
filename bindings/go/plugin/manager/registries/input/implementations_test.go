@@ -7,7 +7,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 	constructorv1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
 	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/input/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
@@ -20,7 +22,7 @@ func TestProcessResourceHandler(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == ProcessResource && r.Method == http.MethodPost {
 			err := json.NewEncoder(w).Encode(response)
-			require.NoError(t, err)
+			assert.NoError(t, err)
 			return
 		}
 

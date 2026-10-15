@@ -2,11 +2,12 @@ package ctf
 
 import (
 	"bytes"
-	_ "crypto/sha512" // for digest.SHA512 in TestBuildReferrersTag
 	"encoding/json"
 	"strconv"
 	"sync"
 	"testing"
+
+	_ "crypto/sha512" // for digest.SHA512 in TestBuildReferrersTag
 
 	"github.com/opencontainers/go-digest"
 	"github.com/opencontainers/image-spec/specs-go"
@@ -310,7 +311,7 @@ func TestRepushReferrerIsIdempotent(t *testing.T) {
 
 	idx, err = archive.GetIndex(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, entriesAfterFirst, len(idx.GetArtifacts()))
+	assert.Len(t, idx.GetArtifacts(), entriesAfterFirst)
 	indexAfterSecond, err := repo.Resolve(ctx, referrersTag)
 	require.NoError(t, err)
 	assert.Equal(t, indexAfterFirst.Digest, indexAfterSecond.Digest)

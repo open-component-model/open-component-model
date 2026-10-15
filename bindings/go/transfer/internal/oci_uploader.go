@@ -1,0 +1,113 @@
+package internal
+
+import (
+	"context"
+	"fmt"
+	"strings"
+
+	celparser "ocm.software/open-component-model/bindings/go/cel/expression/parser"
+	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	helmv1 "ocm.software/open-component-model/bindings/go/helm/spec/access/v1"
+	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
+	"ocm.software/open-component-model/bindings/go/runtime"
+	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
+	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
+)
+
+// ociImageReference templates the target image reference under u, or def when u sets none,
+// with aliases (see uploaderAliases) rewritten (see uploaderTemplate).
+func ociImageReference(ctx context.Context, u *transferv1alpha1.OCIUploaderConfig, def string, aliases map[string]string, env *uploaderEnv) (string, error) {
+	template := u.ImageReference
+	if template == "" {
+		template = def
+	}
+	imageReference, _, err := uploaderTemplate(ctx, "imageReference", template, aliases, env)
+	return imageReference, err
+}
+
+// uploaderTemplate rewrites the aliases (see uploaderAliases) in the uploader template
+// of field and returns the rewritten template and its value.
+//
+// The template is evaluated here, against the same environment the graph uses, so a
+// template that does not evaluate for the selected resource (e.g. reading target.baseUrl
+// on a CTF target, or a field the resource does not have) fails the build instead of the
+// running transfer. The emitted spec keeps the template, so the graph evaluates it again
+// when it runs.
+func uploaderTemplate(ctx context.Context, field, template string, aliases map[string]string, env *uploaderEnv) (string, string, error) {
+	rewritten, _, err := templateString(template, aliases)
+	if err != nil {
+		return "", "", fmt.Errorf("cannot template %s: %w", field, err)
+	}
+
+	fields, err := celparser.ParseSchemaless(map[string]any{field: rewritten})
+	if err != nil {
+		return "", "", fmt.Errorf("invalid %s: %w", field, err)
+	}
+	value := rewritten
+	for _, f := range fields {
+		for _, expr := range f.Expressions {
+			prg, err := env.program(expr.Value)
+			if err != nil {
+				return "", "", fmt.Errorf("invalid %s: %w", field, err)
+			}
+			out, _, err := prg.ContextEval(ctx, map[string]any{})
+			if err != nil {
+				return "", "", fmt.Errorf("%s does not evaluate: %w", field, err)
+			}
+			s, ok := out.Value().(string)
+			if !ok {
+				return "", "", fmt.Errorf("invalid %s: expression %q evaluates to %T, not a string", field, strings.TrimSpace(expr.Value), out.Value())
+			}
+			value = strings.Replace(value, "${"+expr.Value+"}", s, 1)
+		}
+	}
+	return rewritten, value, nil
+}
+
+// processOCIUploader emits the transformations that upload resource, selected by u, as a
+// separate OCI artifact. A resource the uploader cannot upload is an error: the uploader's
+// match selected it, so the config must be adjusted. It returns the CEL spec-field
+// expressions of the file buffers produced, for cleanup.
+func processOCIUploader(ctx context.Context, resource descriptorv2.Resource, access runtime.Typed, u *transferv1alpha1.OCIUploaderConfig, aliases map[string]string, env *uploaderEnv, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int) ([]string, error) {
+	var defaultImageReference string
+	switch acc := access.(type) {
+	case *ociv1.OCIImage:
+		defaultImageReference = transferv1alpha1.DefaultOCIImageReferenceOCIImage
+	case *ociv1.RelativeOCIReference:
+		defaultImageReference = transferv1alpha1.DefaultOCIImageReferenceRelative
+	case *helmv1.Helm:
+		defaultImageReference = transferv1alpha1.DefaultOCIImageReferenceHelm
+	case *descriptorv2.LocalBlob:
+		if !isOCICompliantManifest(acc.MediaType) {
+			return nil, fmt.Errorf("oci uploader cannot upload local blob with media type %q: not an OCI manifest (adjust match)", acc.MediaType)
+		}
+		defaultImageReference = transferv1alpha1.DefaultOCIImageReferenceLocalBlob
+	default:
+		return nil, fmt.Errorf("oci uploader cannot upload access type %s (adjust match)", resource.Access.Type)
+	}
+
+	imageReference, err := ociImageReference(ctx, u, defaultImageReference, aliases, env)
+	if err != nil {
+		return nil, err
+	}
+
+	resourceID := identityToTransformationID(resource.ToIdentity())
+	switch access.(type) {
+	case *ociv1.OCIImage:
+		// Streaming (TransferOCIArtifact) produces no temp file, so there is nothing to clean up.
+		if err := processOCIArtifactStreaming(resource, id, tgd, resourceTransformIDs, i, imageReference, transferLabel(&val.Descriptor.Component, resource.Name, toSpec)); err != nil {
+			return nil, fmt.Errorf("cannot process OCI artifact resource: %w", err)
+		}
+		return nil, nil
+	case *helmv1.Helm:
+		if err := processHelm(resource, id, val, tgd, toSpec, resourceTransformIDs, i, imageReference); err != nil {
+			return nil, fmt.Errorf("cannot process Helm Chart resource: %w", err)
+		}
+		return helmFileExpressions(id, resourceID), nil
+	default: // *descriptorv2.LocalBlob holding an OCI manifest, or *ociv1.RelativeOCIReference
+		if err := processLocalBlob(resource, id, val, tgd, toSpec, resourceTransformIDs, i, imageReference); err != nil {
+			return nil, fmt.Errorf("failed processing local blob resource: %w", err)
+		}
+		return []string{fmt.Sprintf("${%sAdd%s.spec.file}", id, resourceID)}, nil
+	}
+}

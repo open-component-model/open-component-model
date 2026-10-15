@@ -127,7 +127,7 @@ func TestRegisterAndGetResourceInputMethod(t *testing.T) {
 
 	// Test error case - nil resource
 	_, err = registry.GetResourceInputMethod(context.Background(), nil)
-	assert.Error(t, err)
+	require.Error(t, err)
 
 	// Test error case - resource without input
 	emptyResource := &constructorruntime.Resource{}
@@ -171,7 +171,7 @@ func TestRegisterAndGetSourceInputMethod(t *testing.T) {
 
 	// Test error case - nil source
 	_, err = registry.GetSourceInputMethod(context.Background(), nil)
-	assert.Error(t, err)
+	require.Error(t, err)
 
 	// Test error case - source without input
 	emptySource := &constructorruntime.Source{}

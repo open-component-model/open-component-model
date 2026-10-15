@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
@@ -71,8 +72,6 @@ func TestFilesystemConfigFromNilContext(t *testing.T) {
 }
 
 func TestFilesystemConfigConcurrentAccess(t *testing.T) {
-	r := require.New(t)
-
 	// Create context with filesystem config
 	initialConfig := &filesystemv1alpha1.Config{
 		TempFolder: new("/tmp/initial"),
@@ -86,8 +85,8 @@ func TestFilesystemConfigConcurrentAccess(t *testing.T) {
 			defer func() { done <- true }()
 			ocmCtx := FromContext(ctx)
 			fsCfg := ocmCtx.FilesystemConfig()
-			r.NotNil(fsCfg, "filesystem config should be available")
-			r.Equal(new("/tmp/initial"), fsCfg.TempFolder, "temp folder should be consistent")
+			assert.NotNil(t, fsCfg, "filesystem config should be available")
+			assert.Equal(t, new("/tmp/initial"), fsCfg.TempFolder, "temp folder should be consistent")
 		}()
 	}
 
@@ -245,7 +244,7 @@ func TestSubsystemRegistryConcurrentAccess(t *testing.T) {
 			defer func() { done <- true }()
 			ocmCtx := FromContext(ctx)
 			reg := ocmCtx.SubsystemRegistry()
-			r.NotNil(reg, "subsystem registry should be available")
+			assert.NotNil(t, reg, "subsystem registry should be available")
 		}()
 	}
 

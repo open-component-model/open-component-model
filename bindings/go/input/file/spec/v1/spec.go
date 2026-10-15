@@ -17,6 +17,8 @@ type File struct {
 	// +ocm:jsonschema-gen:enum:deprecated=file,File
 	Type runtime.Type `json:"type"`
 	// Path is the path to the file.
+	// Relative paths are resolved against the working directory, which defaults to
+	// the directory of the component constructor file.
 	Path string `json:"path"`
 	// MediaType is the media type of the file.
 	MediaType string `json:"mediaType,omitempty"`

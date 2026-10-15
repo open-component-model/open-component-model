@@ -4,15 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
-
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -73,7 +70,7 @@ func realPluginReconciler(t *testing.T, objs ...client.Object) (*Reconciler, cli
 	t.Helper()
 	rec, c := newReconciler(t, objs...)
 	rec.NewPluginManager = func(ctx context.Context, cfg *genericv1.Config) (*manager.PluginManager, error) {
-		return setup.NewPluginManager(ctx, cfg, slog.New(slog.NewTextHandler(io.Discard, nil)))
+		return setup.NewPluginManager(ctx, cfg, slog.New(slog.DiscardHandler))
 	}
 	return rec, c
 }
@@ -160,7 +157,7 @@ func TestReconcile_TerminalSelectorFailureIsStalledAndNotRequeued(t *testing.T) 
 
 	result, err := rec.Reconcile(t.Context(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(discovery)})
 	g.Error(err)
-	g.True(errors.Is(err, reconcile.TerminalError(nil)), "selector compilation errors are terminal, got %v", err)
+	g.ErrorIs(err, reconcile.TerminalError(nil), "selector compilation errors are terminal, got %v", err)
 	g.Equal(ctrl.Result{}, result, "terminal failures do not schedule periodic work")
 
 	fresh := &v1alpha1.Discovery{}
@@ -275,7 +272,7 @@ func TestReconcile_UnreadyComponentIsRetryable(t *testing.T) {
 
 	_, err := rec.Reconcile(t.Context(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(discovery)})
 	g.Error(err)
-	g.False(errors.Is(err, reconcile.TerminalError(nil)), "a dependency that is not ready yet backs off, like the other controllers")
+	g.NotErrorIs(err, reconcile.TerminalError(nil), "a dependency that is not ready yet backs off, like the other controllers")
 
 	fresh := &v1alpha1.Discovery{}
 	g.NoError(c.Get(t.Context(), client.ObjectKeyFromObject(discovery), fresh))
@@ -323,7 +320,6 @@ func TestUpToDate(t *testing.T) {
 		{"unchanged with extracted payload", discovery(func(d *v1alpha1.Discovery) {
 			d.Status.Components = nil
 			d.Status.Extracted = []v1alpha1.ExtractedRecord{}
-
 		}), info("abc"), true},
 		{"no recorded digest", discovery(func(d *v1alpha1.Discovery) {
 			d.Status.ObservedComponentDigest = ""
@@ -432,7 +428,7 @@ func TestReconcile_ResolutionFailureIsRetryable(t *testing.T) {
 
 	_, err := rec.Reconcile(t.Context(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(discovery)})
 	r.Error(err)
-	r.False(errors.Is(err, reconcile.TerminalError(nil)), "an unreachable repository must back off, not stall")
+	r.NotErrorIs(err, reconcile.TerminalError(nil), "an unreachable repository must back off, not stall")
 
 	current := &v1alpha1.Discovery{}
 	r.NoError(c.Get(t.Context(), client.ObjectKeyFromObject(discovery), current))

@@ -35,8 +35,8 @@ Before starting, make sure you have set up your environment as described in the 
 - [Controller environment]({{< relref "setup-controller-environment.md" >}}) with the OCM
   Controllers and kro installed (no GitOps deployer needed)
 - [Custom RBAC]({{< relref "custom-rbac.md" >}}) configured so the OCM controller can manage
-  `ResourceGraphDefinitions`, and so kro can create the `Podinfo` instance, the OCM `Resource`,
-  and the Deployment and Service it renders — see [RBAC for CRDs kro creates at runtime]({{< relref "custom-rbac.md#rbac-for-crds-kro-creates-at-runtime" >}})
+  `ResourceGraphDefinitions`. kro's own access is granted in
+  [Grant kro access to the resources in the graphs](#grant-kro-access-to-the-resources-in-the-graphs)
 - [OCM CLI]({{< relref "ocm-cli-installation.md" >}})
 - `envsubst` (part of `gettext`; on macOS install it with `brew install gettext`)
 - An OCI registry you can push to, for example [ghcr.io](https://docs.github.com/en/packages/learn-github-packages/introduction-to-github-packages)
@@ -313,14 +313,25 @@ On success it prints a summary table:
  ocm.software/ocm-k8s-toolkit/system │ 1.0.0   │ ocm.software
 ```
 
-Transfer it to your registry. `--copy-resources` copies the image into your registry instead
-of leaving the component pointing back at `ghcr.io/stefanprodan`, and `--upload-as ociArtifact`
-is what creates a standalone oci image that can be pulled individually; see [Resource
+Transfer it to your registry. An OCI uploader entry uploads the image as a standalone OCI image in
+your registry that can be pulled individually, instead of leaving the component pointing back at
+`ghcr.io/stefanprodan`; a local blob catch-all copies every other resource. See [Resource
 Handling: References vs. Copies]({{< relref "docs/concepts/transfer-concept.md#resource-handling-references-vs-copies" >}})
 for why that distinction exists.
 
+```yaml
+cat > .ocmconfig << 'EOF'
+type: generic.config.ocm.software/v1
+configurations:
+  - type: oci.uploader.transfer.config.ocm.software/v1alpha1
+  - type: localblob.uploader.transfer.config.ocm.software/v1alpha1
+EOF
+```
+
+> **Note:** The CLI merges `.ocmconfig` from the current directory with your other OCM configuration (such as `$HOME/.ocmconfig`), so credentials and resolvers stay in effect.
+
 ```bash
-ocm transfer cv --copy-resources --upload-as ociArtifact \
+ocm transfer cv \
   "transport-archive//ocm.software/ocm-k8s-toolkit/system:1.0.0" $OCM_REPO
 ```
 
@@ -405,6 +416,81 @@ For more details, see [Configure Credentials for Controllers]({{< relref "/docs/
 {{< /details >}}
 
 ## Deploy the application
+
+### Grant kro access to the resources in the graphs
+
+kro needs a `ClusterRole` for the `System` and `Podinfo` instances that your two RGDs define,
+and for the Deployment and Service that the podinfo RGD renders. The role for OCM resources
+comes from the [setup guide]({{< relref "setup-controller-environment.md" >}}). See
+[Access Control](https://kro.run/docs/advanced/access-control) in the kro documentation for details.
+
+This is separate from the [Custom RBAC]({{< relref "custom-rbac.md" >}}) of the OCM controller,
+which only allows the Deployers to apply the RGDs themselves.
+
+```bash
+cat > kro-rbac.yaml << 'EOF'
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kro:controller:systems
+  labels:
+    # kro picks up every ClusterRole with this label, see https://kro.run/docs/advanced/access-control
+    rbac.kro.run/aggregate-to-controller: "true"
+rules:
+  # System instances: you create them, kro reconciles them
+  - apiGroups:
+      - kro.run
+    resources:
+      - systems
+      - systems/status
+    verbs:
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  # Podinfo instances: the system RGD creates one, so kro needs all verbs
+  - apiGroups:
+      - kro.run
+    resources:
+      - podinfoes
+      - podinfoes/status
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  # The workload in the podinfo RGD
+  - apiGroups:
+      - apps
+    resources:
+      - deployments
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - services
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+EOF
+kubectl apply -f kro-rbac.yaml
+```
 
 ### Deliver both RGDs
 
@@ -582,11 +668,6 @@ tunnel is ready and return nothing.
 Change the message or replica count by editing `instance.yaml` and re-applying. kro
 reconciles the running workload.
 
-{{< callout context="caution" title="Going to production: tighten kro's RBAC" icon="outline/lock" >}}
-This tutorial uses a dev-friendly kro install with broad permissions (see [Prerequisites](#prerequisites)).
-To harden the cluster and have more strict RBAC please read [RBAC for CRDs kro creates at runtime]({{< relref "custom-rbac.md#rbac-for-crds-kro-creates-at-runtime" >}}).
-{{< /callout >}}
-
 ## Clean up
 
 Delete the instance before the RGDs. Deleting an RGD while its instances still exist can
@@ -595,6 +676,7 @@ strand them on a finalizer.
 ```bash
 kubectl delete system system -n default
 envsubst < bootstrap.yaml | kubectl delete -f -
+kubectl delete -f kro-rbac.yaml
 ```
 
 By default kro keeps the `Podinfo` and `System` CRDs after the RGDs are gone. Installing kro
@@ -608,6 +690,42 @@ else if you tear down the whole cluster, for example with `kind delete cluster`.
 
 **RGD stuck `Inactive`**: the system RGD cannot compile until the `Podinfo` CRD exists. Check
 that the podinfo RGD is `Active` (`kubectl get rgd`). It converges automatically.
+
+If an RGD stays `Inactive`, check the reason:
+
+```bash
+kubectl get rgd podinfo -o jsonpath='{.status.conditions[?(@.type=="Ready")].message}'
+```
+
+A message like `cache sync timeout for kro.run/v1alpha1, Resource=podinfoes` often means that kro
+lacks access to the instances of that kind. Check that you applied `kro-rbac.yaml`.
+
+Any other message means the RGD does not compile. It names the resource and the problem, for
+example `failed to compile template expression ... undefined field` for a typo in a CEL
+expression, or `cannot resolve group version kind ...: schema not found` for a kind whose CRD is
+not installed. Fix the RGD and apply it again.
+
+**Instance stuck**: an RGD can be `Active` while its instance is not. The instance's conditions
+name the resource that is waiting or failing:
+
+```bash
+kubectl describe system system -n default
+kubectl describe podinfo podinfo -n default
+```
+
+A message like `waiting for node "resourceImage": readyWhen condition evaluated to false` means
+that resource is not ready yet, and the resources after it wait for it. In this tutorial `app`
+waits for `resourceImage`, so check that `Resource` first.
+
+If the message says `forbidden`, kro lacks a permission. The kro logs name it:
+
+```bash
+kubectl logs -n kro-system deployment/kro | grep forbidden
+```
+
+Add that kind to `kro-rbac.yaml` from
+[Grant kro access to the resources in the graphs](#grant-kro-access-to-the-resources-in-the-graphs)
+and apply it again.
 
 **Resource not `Ready` / image pull errors**: the cluster cannot read the package. Make the
 ghcr.io package public, or follow the private-registry steps above.
@@ -682,6 +800,10 @@ resources:
 Now `bootstrap.yaml` shrinks to almost nothing. It delivers the installer RGD once, and the
 running instance takes over its own delivery. Bump the component version and the whole graph
 reconciles. No more editing bootstrap files by hand.
+
+In this pattern kro creates the `Deployer` objects itself, so it also needs a labeled
+`ClusterRole` for `deployers.delivery.ocm.software`. See
+[RBAC for CRDs kro creates at runtime]({{< relref "custom-rbac.md#rbac-for-crds-kro-creates-at-runtime" >}}).
 
 This is not a new tool. It is the same `delivery.ocm.software/Resource` you already used for
 the localized image, now applied to delivery itself. There is no layering limit: an RGD can

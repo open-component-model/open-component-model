@@ -1,10 +1,12 @@
 package v1_test
 
 import (
-	"github.com/stretchr/testify/require"
-	v1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
+
+	v1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
 )
 
 func TestValidate(t *testing.T) {

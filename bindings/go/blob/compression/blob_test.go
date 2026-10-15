@@ -93,14 +93,14 @@ func TestCompressedBlob(t *testing.T) {
 		t.Run("decompressed blob", func(t *testing.T) {
 			a := assert.New(t)
 			decompressedBlob, err := compression.Decompress(compressedBlob)
-			a.NoError(err)
+			r.NoError(err)
 			a.IsType(&compression.DecompressedBlob{}, decompressedBlob)
 			mediaType, ok := decompressedBlob.(blob.MediaTypeAware).MediaType()
 			a.True(ok)
 			a.Equal("application/octet-stream", mediaType)
 
 			drc, err := decompressedBlob.ReadCloser()
-			a.NoError(err)
+			r.NoError(err)
 			t.Cleanup(func() { r.NoError(drc.Close()) })
 			decompressedData, err = io.ReadAll(drc)
 			r.NoError(err)
@@ -118,7 +118,7 @@ func TestCompressedBlob(t *testing.T) {
 
 		// Attempt to get reader
 		rc, err := compressedBlob.ReadCloser()
-		assert.ErrorIs(t, err, expectedErr)
+		require.ErrorIs(t, err, expectedErr)
 		assert.Nil(t, rc)
 	})
 
@@ -188,7 +188,7 @@ func TestCompressedBlob(t *testing.T) {
 		t.Cleanup(func() { r.NoError(rc.Close()) })
 
 		data, err := io.ReadAll(rc)
-		a.NoError(err)
+		r.NoError(err)
 		a.Equal(nogzip, data)
 	})
 

@@ -15,6 +15,9 @@ var schemaOCIImage []byte
 //go:embed schemas/OCIImageLayer.schema.json
 var schemaOCIImageLayer []byte
 
+//go:embed schemas/RelativeOCIReference.schema.json
+var schemaRelativeOCIReference []byte
+
 // JSONSchema returns the JSON Schema for OCIImage.
 func (OCIImage) JSONSchema() []byte {
 	return schemaOCIImage
@@ -23,4 +26,9 @@ func (OCIImage) JSONSchema() []byte {
 // JSONSchema returns the JSON Schema for OCIImageLayer.
 func (OCIImageLayer) JSONSchema() []byte {
 	return schemaOCIImageLayer
+}
+
+// JSONSchema returns the JSON Schema for RelativeOCIReference.
+func (RelativeOCIReference) JSONSchema() []byte {
+	return schemaRelativeOCIReference
 }

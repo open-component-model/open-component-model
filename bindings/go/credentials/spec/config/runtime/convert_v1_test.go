@@ -71,9 +71,9 @@ func TestConvertToV1_RoundTrip(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, original.Type, result.Type)
-	assert.Equal(t, len(original.Repositories), len(result.Repositories))
+	assert.Len(t, result.Repositories, len(original.Repositories))
 	assert.Equal(t, original.Repositories[0].Repository.Data, result.Repositories[0].Repository.Data)
-	assert.Equal(t, len(original.Consumers), len(result.Consumers))
+	assert.Len(t, result.Consumers, len(original.Consumers))
 
 	for i, consumer := range original.Consumers {
 		assert.Equal(t, consumer.Identities, result.Consumers[i].Identities)

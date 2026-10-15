@@ -33,7 +33,7 @@ Before starting, make sure you have set up your environment as described in the 
 {{< /callout >}}
 
 - [Controller environment]({{< relref "setup-controller-environment.md" >}}) with OCM Controllers, kro, and a deployer (Flux or Argo CD) installed
-- [Custom RBAC]({{< relref "custom-rbac.md" >}}) configured to allow the controller to manage `ResourceGraphDefinitions` (also see [RBAC for CRDs kro creates at runtime]({{< relref "custom-rbac.md#rbac-for-crds-kro-creates-at-runtime" >}}) if you're running a hardened cluster)
+- [Custom RBAC]({{< relref "custom-rbac.md" >}}) configured to allow the controller to manage `ResourceGraphDefinitions`
 - [OCM CLI]({{< relref "ocm-cli-installation.md" >}}) installed
 - Access to an OCI registry (e.g., [ghcr.io](https://docs.github.com/en/packages/learn-github-packages/introduction-to-github-packages))
 - `envsubst` installed (pre-installed on most Linux/macOS systems; part of `gettext`)
@@ -67,7 +67,7 @@ This means:
 
 **Localization** keeps image references in sync when components move between registries:
 
-1. **During transfer**: When you run `ocm transfer cv --copy-resources --upload-as ociArtifact`, OCM uploads artifacts to the new registry as OCI artifacts and updates the descriptor's image references accordingly
+1. **During transfer**: When you run `ocm transfer cv` with an OCI uploader configuration (in your OCM configuration, for example `.ocmconfig` in the working directory), OCM uploads artifacts to the new registry as OCI artifacts and updates the descriptor's image references accordingly
 2. **During deployment**: The RGD reads the updated image reference from the component and injects it into Helm values
 
 This ensures your deployment always uses images from the current registry, not hardcoded original locations.
@@ -471,10 +471,21 @@ Build the component version locally:
 ocm add cv
 ```
 
-Transfer to your registry with `--copy-resources --upload-as ociArtifact` to enable localization. The `--upload-as ociArtifact` flag is required so the Helm chart and image land as OCI artifacts in the target registry, keeping image references the RGD can rewrite:
+Transfer to your registry with the OCI uploader to enable localization. An OCI uploader entry makes the Helm chart and image land as OCI artifacts in the target registry, keeping image references the RGD can rewrite; a local blob catch-all copies every other resource:
+
+```yaml
+cat > .ocmconfig << 'EOF'
+type: generic.config.ocm.software/v1
+configurations:
+  - type: oci.uploader.transfer.config.ocm.software/v1alpha1
+  - type: localblob.uploader.transfer.config.ocm.software/v1alpha1
+EOF
+```
+
+> **Note:** The CLI merges `.ocmconfig` from the current directory with your other OCM configuration (such as `$HOME/.ocmconfig`), so credentials and resolvers stay in effect.
 
 ```bash
-ocm transfer cv --copy-resources --upload-as ociArtifact transport-archive//ocm.software/ocm-k8s-toolkit/bootstrap:1.0.0 $OCM_REPO
+ocm transfer cv transport-archive//ocm.software/ocm-k8s-toolkit/bootstrap:1.0.0 $OCM_REPO
 ```
 
 {{< /step >}}
@@ -576,6 +587,47 @@ EOF
 ```
 
 {{< /details >}}
+{{< /step >}}
+
+{{< step >}}
+
+### Grant kro access to the instances
+
+kro needs a `ClusterRole` for the `Bootstrap` instances that the RGD in your component defines. The roles for OCM resources and for your deployer come from the [setup guide]({{< relref "setup-controller-environment.md" >}}). See [Access Control](https://kro.run/docs/advanced/access-control) in the kro documentation for details.
+
+This is separate from the [Custom RBAC]({{< relref "custom-rbac.md" >}}) of the OCM controller, which only allows the Deployer to apply the RGD itself.
+
+Create `kro-rbac.yaml`:
+
+```shell
+cat > kro-rbac.yaml << 'EOF'
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kro:controller:bootstraps
+  labels:
+    # kro picks up every ClusterRole with this label, see https://kro.run/docs/advanced/access-control
+    rbac.kro.run/aggregate-to-controller: "true"
+rules:
+  - apiGroups:
+      - kro.run
+    resources:
+      - bootstraps
+      - bootstraps/status
+    verbs:
+      - get
+      - list
+      - patch
+      - update
+      - watch
+EOF
+```
+
+Apply it:
+
+```bash
+kubectl apply -f kro-rbac.yaml
+```
 {{< /step >}}
 
 {{< step >}}
@@ -687,16 +739,6 @@ The image reference points to your registry with a digest. Localization worked!
 {{< /step >}}
 {{< /steps >}}
 
-{{< callout context="caution" title="Going to production: tighten kro's RBAC" icon="outline/lock" >}}
-This tutorial uses a dev-friendly kro install with broad permissions (see [Prerequisites](#prerequisites)).
-A hardened cluster locks that down; see [RBAC for CRDs kro creates at runtime]({{< relref "custom-rbac.md#rbac-for-crds-kro-creates-at-runtime" >}})
-for why kro needs its own grant, separate from the `resourcegraphdefinitions.kro.run` grant the
-OCM controller already needs. For this tutorial, grant kro's service account
-`bootstraps.kro.run` (the instance) and `resources.delivery.ocm.software` (the chart and image),
-plus `ocirepositories.source.toolkit.fluxcd.io` and `helmreleases.helm.toolkit.fluxcd.io` for
-Flux, or `applications.argoproj.io` for Argo CD.
-{{< /callout >}}
-
 ## Troubleshooting
 
 ### Authentication Errors (401 Unauthorized)
@@ -715,6 +757,20 @@ kubectl logs -n ocm-k8s-toolkit-system deployment/ocm-k8s-toolkit-controller-man
 ```
 
 Common causes: missing component, wrong repository URL, credential issues.
+
+If the RGD exists but `kubectl get rgd` shows the state `Inactive`, check the reason:
+
+```bash
+kubectl get rgd bootstrap -o jsonpath='{.status.conditions[?(@.type=="Ready")].message}'
+```
+
+A message like `cache sync timeout for kro.run/v1alpha1, Resource=bootstraps` often means that kro lacks access to the `Bootstrap` instances. Check that you applied `kro-rbac.yaml`, as described in [Grant kro access to the instances](#grant-kro-access-to-the-instances).
+
+To see which access kro lacks, check its logs for `forbidden`:
+
+```bash
+kubectl logs -n kro-system deployment/kro | grep forbidden
+```
 
 ### RBAC Permission Errors
 
@@ -739,7 +795,7 @@ If pods show `ImagePullBackOff` or `ErrImagePull` errors, the kubelet cannot pul
 You've successfully:
 
 - Created an OCM component with embedded deployment instructions (RGD)
-- Used `--copy-resources --upload-as ociArtifact` to enable localization during transfer
+- Used an OCI uploader configuration to enable localization during transfer
 - Deployed the component using the bootstrap pattern
 - Verified that localization kept image references in sync
 

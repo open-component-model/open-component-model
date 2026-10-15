@@ -130,7 +130,7 @@ func TestCopyToOCILayoutInMemory(t *testing.T) {
 	require.NoError(t, err)
 
 	// Test copying with tags
-	testCopy(t, err, src, manifest, manifest)
+	testCopy(t, src, manifest, manifest)
 }
 
 // TestCopyToOCILayoutInMemoryBasedOnIndex tests the CopyToOCILayoutInMemory function with an index as source
@@ -161,10 +161,10 @@ func TestCopyToOCILayoutInMemoryBasedOnIndex(t *testing.T) {
 	require.NoError(t, src.Push(t.Context(), indexDesc, bytes.NewReader(indexSerialized)))
 
 	// Test copying with tags
-	testCopy(t, err, src, indexDesc, manifest)
+	testCopy(t, src, indexDesc, manifest)
 }
 
-func testCopy(t *testing.T, err error, src *memory.Store, indexDesc ociImageSpecV1.Descriptor, manifest ociImageSpecV1.Descriptor) {
+func testCopy(t *testing.T, src *memory.Store, indexDesc ociImageSpecV1.Descriptor, manifest ociImageSpecV1.Descriptor) {
 	t.Helper()
 	opts := CopyToOCILayoutOptions{
 		Tags: []string{"latest", "v1"},
@@ -193,17 +193,17 @@ func TestCopyToOCILayoutInMemory_ErrorCases(t *testing.T) {
 	invalidStore := &invalidStore{}
 	opts := CopyToOCILayoutOptions{}
 	b, err := CopyToOCILayoutInMemory(t.Context(), invalidStore, ociImageSpecV1.Descriptor{}, opts)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	rc, err := b.ReadCloser()
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Nil(t, rc)
 
 	// Test with invalid descriptor
 	src := memory.New()
 	b, err = CopyToOCILayoutInMemory(t.Context(), src, ociImageSpecV1.Descriptor{}, opts)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	rc, err = b.ReadCloser()
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Nil(t, rc)
 }
 
@@ -445,7 +445,7 @@ func TestCopyOCILayoutWithIndex_ErrorCases(t *testing.T) {
 	store := memory.New()
 	opts := CopyOCILayoutWithIndexOptions{}
 	_, err := CopyOCILayoutWithIndex(t.Context(), store, &testReadOnlyBlob{data: []byte("invalid")}, opts)
-	assert.Error(t, err)
+	require.Error(t, err)
 
 	// Test with invalid store
 	_, err = CopyOCILayoutWithIndex(t.Context(), &invalidStore{}, &testReadOnlyBlob{data: []byte("test")}, opts)

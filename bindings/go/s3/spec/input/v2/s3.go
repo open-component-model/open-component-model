@@ -28,7 +28,8 @@ type S3 struct {
 	Type runtime.Type `json:"type"`
 
 	// Region is the region of the bucket. It is optional. When it is empty, OCM reads
-	// it from the environment or applies a default. Most custom endpoints ignore it.
+	// AWS_REGION or the shared AWS config, and falls back to us-east-1. Most custom
+	// endpoints ignore it.
 	Region string `json:"region,omitempty"`
 
 	// BucketName is the name of the bucket that holds the object.
@@ -37,7 +38,8 @@ type S3 struct {
 	// ObjectKey is the key (path) of the object in the bucket.
 	ObjectKey string `json:"objectKey"`
 
-	// MediaType is the media type of the referenced object.
+	// MediaType is the media type of the referenced object. If empty, the Content-Type
+	// of the object is used, falling back to application/octet-stream.
 	MediaType string `json:"mediaType,omitempty"`
 
 	// Version pins one S3 object version (versionId). When it is empty, OCM reads the
@@ -45,11 +47,11 @@ type S3 struct {
 	Version string `json:"version,omitempty"`
 
 	// Endpoint is the base endpoint of an S3-compatible store, for example MinIO, Ceph
-	// or R2. When it is empty, OCM uses AWS S3.
+	// or R2, such as https://minio.internal:9000. When it is empty, OCM uses AWS S3.
 	Endpoint string `json:"endpoint,omitempty"`
 
-	// UsePathStyle puts the bucket in the path instead of in the host. Most self-hosted
-	// S3-compatible stores need this.
+	// UsePathStyle puts the bucket in the path (<endpoint>/<bucket>/<key>) instead of in
+	// the host. Most self-hosted S3-compatible stores need this. Defaults to false.
 	UsePathStyle bool `json:"usePathStyle,omitempty"`
 }
 

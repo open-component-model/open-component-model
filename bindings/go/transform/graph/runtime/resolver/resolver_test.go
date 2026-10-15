@@ -595,14 +595,14 @@ func TestResolveField(t *testing.T) {
 			assert.Equal(t, tt.want.Replaced, got.Replaced)
 
 			if tt.want.Error != nil {
-				assert.EqualError(t, got.Error, tt.want.Error.Error())
+				require.EqualError(t, got.Error, tt.want.Error.Error())
 			} else {
-				assert.NoError(t, got.Error)
+				require.NoError(t, got.Error)
 			}
 
 			if tt.want.Resolved {
 				value, err := r.GetValueFromPath(tt.field.Path)
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.Equal(t, tt.want.Replaced, value)
 			}
 		})
@@ -997,8 +997,8 @@ func TestResolver(t *testing.T) {
 		},
 	})
 
-	assert.Equal(t, summary.TotalExpressions, 1)
-	assert.Equal(t, summary.ResolvedExpressions, 1)
+	assert.Equal(t, 1, summary.TotalExpressions)
+	assert.Equal(t, 1, summary.ResolvedExpressions)
 	assert.Equal(t, "resolved-done", summary.Results[0].Replaced)
 }
 
@@ -1122,14 +1122,14 @@ func TestResolveFieldWithEmptyBraces(t *testing.T) {
 			assert.Equal(t, tt.want.Replaced, got.Replaced)
 
 			if tt.want.Error != nil {
-				assert.EqualError(t, got.Error, tt.want.Error.Error())
+				require.EqualError(t, got.Error, tt.want.Error.Error())
 			} else {
-				assert.NoError(t, got.Error)
+				require.NoError(t, got.Error)
 			}
 
 			if tt.want.Resolved {
 				value, err := r.GetValueFromPath(tt.field.Path)
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.Equal(t, tt.want.Replaced, value)
 			}
 		})

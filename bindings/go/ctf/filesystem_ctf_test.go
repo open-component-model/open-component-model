@@ -78,7 +78,7 @@ func Test_FileSystemCTF_BasicOperations(t *testing.T) {
 	// Verify blob is deleted
 	blobs, err = fs.ListBlobs(ctx)
 	r.NoError(err)
-	r.Len(blobs, 0)
+	r.Empty(blobs)
 }
 
 func Test_FileSystemCTF_MemFS(t *testing.T) {
@@ -105,7 +105,7 @@ func Test_FileSystemCTF_MemFS(t *testing.T) {
 		},
 		filepath.Join(ctf.BlobsDirectoryName, f): &fstest.MapFile{
 			Data:    content,
-			Mode:    0644,
+			Mode:    0o644,
 			ModTime: time.Now(),
 		},
 	}
@@ -152,7 +152,7 @@ func Test_FileSystemCTF_ErrorCases(t *testing.T) {
 	r.Error(err)
 
 	// Test SaveBlob on read-only CTF
-	testBlob := blob.NewDirectReadOnlyBlob(bytes.NewReader([]byte("test")))
+	testBlob := inmemory.New(bytes.NewReader([]byte("test")))
 	err = fs.SaveBlob(ctx, testBlob)
 	r.Error(err)
 
@@ -256,7 +256,7 @@ func Test_FileSystemCTF_IndexOperations(t *testing.T) {
 	// Verify index was saved correctly
 	savedIdx, err = fs.GetIndex(ctx)
 	r.NoError(err)
-	r.Len(savedIdx.GetArtifacts(), 0)
+	r.Empty(savedIdx.GetArtifacts())
 }
 
 func Test_FileSystemCTF_FileSystemOperations(t *testing.T) {
@@ -274,7 +274,7 @@ func Test_FileSystemCTF_FileSystemOperations(t *testing.T) {
 	// Test writing a file directly to the filesystem
 	testFile := "test.txt"
 	testContent := []byte("test content")
-	err = os.WriteFile(filepath.Join(tmpDir, testFile), testContent, 0644)
+	err = os.WriteFile(filepath.Join(tmpDir, testFile), testContent, 0o644)
 	r.NoError(err)
 
 	// Verify the file exists in the filesystem

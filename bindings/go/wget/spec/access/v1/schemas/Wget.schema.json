@@ -8,7 +8,7 @@
   "properties": {
     "body": {
       "type": "string",
-      "description": "Body is the HTTP body to send with the request.",
+      "description": "Body is the HTTP body to send with the request, base64-encoded in JSON and YAML.",
       "contentEncoding": "base64"
     },
     "header": {
@@ -23,7 +23,7 @@
     },
     "mediaType": {
       "type": "string",
-      "description": "MediaType is the media type of the resource with optional format qualifiers."
+      "description": "MediaType is the media type of the resource with optional format qualifiers.\nIf empty, the Content-Type response header is used, falling back to\napplication/octet-stream."
     },
     "noRedirect": {
       "type": "boolean",
@@ -64,7 +64,7 @@
     },
     "url": {
       "type": "string",
-      "description": "URL is the HTTP endpoint to download the resource from."
+      "description": "URL is the HTTP or HTTPS endpoint to download the resource from.\nOther URL schemes are rejected."
     },
     "verb": {
       "type": "string",

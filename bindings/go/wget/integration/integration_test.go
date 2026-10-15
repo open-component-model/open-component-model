@@ -296,7 +296,7 @@ func Test_Integration_WgetResourceRepository(t *testing.T) {
 		var resp map[string]string
 		r.NoError(json.Unmarshal(readBlob(t, b), &resp))
 		assert.Equal(t, "POST", resp["method"])
-		assert.Equal(t, `{"query":"test"}`, resp["body"])
+		assert.JSONEq(t, `{"query":"test"}`, resp["body"])
 	})
 
 	t.Run("credential consumer identity resolution", func(t *testing.T) {

@@ -26,7 +26,7 @@ import (
 
 func TestCopyChartToOCILayout_Success(t *testing.T) {
 	ctx := t.Context()
-	testDataDir := filepath.Join("../../testdata")
+	testDataDir := "../../testdata"
 
 	tests := []struct {
 		name      string
@@ -112,7 +112,7 @@ func TestCopyChartToOCILayout_Success(t *testing.T) {
 
 func TestCopyChartToOCILayout_TagMatchesVersion(t *testing.T) {
 	ctx := t.Context()
-	testDataDir := filepath.Join("../../testdata")
+	testDataDir := "../../testdata"
 
 	chart := newReadOnlyChart(t, filepath.Join(testDataDir, "mychart-0.1.0.tgz"))
 
@@ -134,7 +134,7 @@ func TestCopyChartToOCILayout_TagMatchesVersion(t *testing.T) {
 
 func TestCopyChartToOCILayout_ConfigContent(t *testing.T) {
 	ctx := t.Context()
-	testDataDir := filepath.Join("../../testdata")
+	testDataDir := "../../testdata"
 
 	chart := newReadOnlyChart(t, filepath.Join(testDataDir, "mychart-0.1.0.tgz"))
 
@@ -171,7 +171,7 @@ func TestCopyChartToOCILayout_ConfigContent(t *testing.T) {
 
 func TestCopyChartToOCILayout_Matrix(t *testing.T) {
 	ctx := t.Context()
-	testDataDir := filepath.Join("../../testdata")
+	testDataDir := "../../testdata"
 	chartPath := filepath.Join(testDataDir, "mychart-0.1.0.tgz")
 
 	tests := []struct {
@@ -228,7 +228,7 @@ func TestCopyChartToOCILayout_Matrix(t *testing.T) {
 			check: func(t *testing.T, result *oci.Result, _ *internal.ChartData) {
 				t.Helper()
 				assert.NotEmpty(t, result.Desc.Digest, "descriptor digest should not be empty")
-				assert.Greater(t, result.Desc.Size, int64(0), "descriptor size should be positive")
+				assert.Positive(t, result.Desc.Size, "descriptor size should be positive")
 			},
 		},
 		{
@@ -257,7 +257,7 @@ func TestCopyChartToOCILayout_Matrix(t *testing.T) {
 
 func TestCopyChartToOCILayout_DigestsMatchContent(t *testing.T) {
 	ctx := t.Context()
-	testDataDir := filepath.Join("../../testdata")
+	testDataDir := "../../testdata"
 
 	tests := []struct {
 		name string

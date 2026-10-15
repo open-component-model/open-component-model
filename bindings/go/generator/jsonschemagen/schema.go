@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"go/ast"
+	"go/types"
 	"slices"
 
 	"ocm.software/open-component-model/bindings/go/generator/universe"
@@ -179,6 +180,23 @@ func (g *generation) schemaForExpr(expr ast.Expr, ctx *universe.TypeInfo, field 
 		}
 	}
 
+	// A named type from another package without a registered schema (e.g.
+	// go-digest's Digest) marshals as its underlying basic type, unless it
+	// implements json.Marshaler or encoding.TextMarshaler.
+	if sel, ok := expr.(*ast.SelectorExpr); ok {
+		if obj, ok := ctx.Pkg.TypesInfo.Uses[sel.Sel].(*types.TypeName); ok {
+			// encoding/json writes a json.Number string as a JSON number.
+			if obj.Pkg() != nil && obj.Pkg().Path() == "encoding/json" && obj.Name() == "Number" {
+				return &JSONSchemaDraft202012{Type: "number"}
+			}
+			if basic, ok := externalBasicType(obj); ok {
+				if prim := newPrimitiveSchema(ast.NewIdent(basic.Name()), ctx.TypeSpec, ctx.GenDecl, field); prim != nil {
+					return prim
+				}
+			}
+		}
+	}
+
 	switch t := expr.(type) {
 	case *ast.StarExpr:
 		return g.schemaForExpr(t.X, ctx, field)
@@ -318,12 +336,19 @@ func (g *generation) buildStructRequired(st *ast.StructType, ti *universe.TypeIn
 			req = append(req, g.buildStructRequired(ti.Struct, ti)...)
 			continue
 		}
-		if name == "-" || slices.Contains(opts, "omitempty") {
+		if name == "-" || isOptionalField(opts) {
 			continue
 		}
 		req = append(req, name)
 	}
 	return req
+}
+
+// isOptionalField reports whether a field's JSON tag options make it optional on the
+// wire: omitempty and omitzero both drop the field from encoded output, so it cannot be
+// required.
+func isOptionalField(opts []string) bool {
+	return slices.Contains(opts, "omitempty") || slices.Contains(opts, "omitzero")
 }
 
 func unwrapStar(expr ast.Expr) ast.Expr {
@@ -361,7 +386,7 @@ func (g *generation) inlineAnonymousStruct(st *ast.StructType, ctx *universe.Typ
 		}
 
 		props[name] = &SchemaOrBool{Schema: sch}
-		if !slices.Contains(opts, "omitempty") {
+		if !isOptionalField(opts) {
 			req = append(req, name)
 		}
 	}
@@ -464,6 +489,30 @@ func byteSliceSchema() *JSONSchemaDraft202012 {
 		Type:            "string",
 		ContentEncoding: "base64",
 	}
+}
+
+// externalBasicType returns the basic type obj marshals as. encoding/json
+// prefers MarshalJSON over MarshalText, and MarshalText produces a JSON string.
+func externalBasicType(obj *types.TypeName) (*types.Basic, bool) {
+	typ := obj.Type()
+	if hasMethod(typ, "MarshalJSON") {
+		return nil, false
+	}
+	if hasMethod(typ, "MarshalText") {
+		return types.Typ[types.String], true
+	}
+	basic, ok := typ.Underlying().(*types.Basic)
+	return basic, ok
+}
+
+// hasMethod reports whether typ or *typ has the named method.
+func hasMethod(typ types.Type, name string) bool {
+	for _, t := range []types.Type{typ, types.NewPointer(typ)} {
+		if m, _, _ := types.LookupFieldOrMethod(t, true, nil, name); m != nil {
+			return true
+		}
+	}
+	return false
 }
 
 func anyObjectSchema() *JSONSchemaDraft202012 {

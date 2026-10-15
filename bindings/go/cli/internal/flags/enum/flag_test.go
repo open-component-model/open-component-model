@@ -5,6 +5,7 @@ import (
 
 	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNew(t *testing.T) {
@@ -50,10 +51,10 @@ func TestFlag_Set(t *testing.T) {
 			flag := New(tt.options...)
 			err := flag.Set(tt.value)
 			if tt.expectError {
-				assert.Error(t, err)
+				require.Error(t, err)
 				assert.Equal(t, tt.options[0], flag.String())
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.Equal(t, tt.expected, flag.String())
 			}
 		})
@@ -66,10 +67,10 @@ func TestGet(t *testing.T) {
 
 	t.Run("should get flag value", func(t *testing.T) {
 		err := fs.Set("test-flag", "option2")
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		value, err := Get(fs, "test-flag")
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, "option2", value)
 	})
 

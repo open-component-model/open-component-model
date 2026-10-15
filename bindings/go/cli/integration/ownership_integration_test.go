@@ -243,7 +243,7 @@ components:
           mediaType: application/vnd.ocm.software.oci.layout.v1+tar+gzip
 `, component, ownershipVersion, resourceName))
 
-	dstResolver, dstRepo := transferComponentVersion(t, ctx, srcReg, component, ownershipVersion, true, "localBlob")
+	dstResolver, dstRepo := transferComponentVersion(t, ctx, srcReg, component, ownershipVersion, true, false)
 	subject := localBlobSubjectReference(t, ctx, dstResolver, dstRepo, component, ownershipVersion, runtime.Identity{"name": resourceName, "version": ownershipVersion})
 	assertOwnershipReferrer(t, ctx, dstResolver, subject, component, ownershipVersion, resourceName, true)
 }
@@ -279,12 +279,12 @@ components:
           imageReference: http://%[4]s
 `, component, ownershipVersion, resourceName, ownedImageRef))
 
-	dstResolver, dstRepo := transferComponentVersion(t, ctx, srcReg, component, ownershipVersion, true, "ociArtifact")
+	dstResolver, dstRepo := transferComponentVersion(t, ctx, srcReg, component, ownershipVersion, true, true)
 	subject := ociImageReference(t, ctx, dstRepo, component, ownershipVersion, runtime.Identity{"name": resourceName, "version": ownershipVersion})
 	assertOwnershipReferrer(t, ctx, dstResolver, subject, component, ownershipVersion, resourceName, true)
 }
 
-func transferComponentVersion(t *testing.T, ctx context.Context, srcReg *internal.OCIRegistry, component, version string, copyResources bool, uploadAs string) (*urlresolver.CachingResolver, *oci.Repository) {
+func transferComponentVersion(t *testing.T, ctx context.Context, srcReg *internal.OCIRegistry, component, version string, copyResources, ociUploader bool) (*urlresolver.CachingResolver, *oci.Repository) {
 	t.Helper()
 	r := require.New(t)
 
@@ -306,8 +306,8 @@ func transferComponentVersion(t *testing.T, ctx context.Context, srcReg *interna
 	if copyResources {
 		args = append(args, "--copy-resources")
 	}
-	if uploadAs != "" {
-		args = append(args, "--upload-as", uploadAs)
+	if ociUploader {
+		args = append(args, "--config", writeOCIUploaderConfig(t))
 	}
 
 	transferCMD := cmd.New()
@@ -399,7 +399,7 @@ func localBlobSubjectReference(t *testing.T, ctx context.Context, resolver oci.R
 
 // ociImageReference reads the component version back, locates the resource matching
 // identity, and returns its OCIImage access's imageReference. Use when access is
-// expected to be OCIImage (e.g. after `transfer --upload-as ociArtifact`).
+// expected to be OCIImage (e.g. after a transfer with an OCI uploader configuration).
 func ociImageReference(t *testing.T, ctx context.Context, repo *oci.Repository, component, version string, identity runtime.Identity) string {
 	t.Helper()
 	r := require.New(t)

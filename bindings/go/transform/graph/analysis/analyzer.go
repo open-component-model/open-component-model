@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"sync"
 
 	"cel.dev/cel-go/cel"
 	"github.com/santhosh-tekuri/jsonschema/v6"
@@ -22,6 +23,8 @@ type StaticPluginAnalysisProcessor struct {
 	Scheme                  *runtime.Scheme
 	Builder                 *env.Builder
 	AnalyzedTransformations map[string]graph.Transformation
+
+	mu sync.Mutex
 }
 
 func (b *StaticPluginAnalysisProcessor) ProcessValue(_ context.Context, transformation graph.Transformation) error {
@@ -101,7 +104,9 @@ func (b *StaticPluginAnalysisProcessor) ProcessValue(_ context.Context, transfor
 	}
 	transformation.FieldDescriptors = specFieldDescriptors
 
+	b.mu.Lock()
 	b.AnalyzedTransformations[transformation.ID] = transformation
+	b.mu.Unlock()
 
 	return nil
 }

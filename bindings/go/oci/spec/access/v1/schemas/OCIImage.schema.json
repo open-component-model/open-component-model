@@ -8,7 +8,7 @@
   "properties": {
     "imageReference": {
       "type": "string",
-      "description": "ImageReference is the actual reference to the oci image repository and tag."
+      "description": "ImageReference is the full OCI image reference, including registry, repository,\nand tag or digest."
     },
     "type": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",

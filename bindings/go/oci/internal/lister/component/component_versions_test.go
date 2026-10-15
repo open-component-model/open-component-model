@@ -10,6 +10,7 @@ import (
 
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/oci/internal/lister"
 	"ocm.software/open-component-model/bindings/go/oci/internal/lister/component"
@@ -94,10 +95,10 @@ func TestReferrerAnnotationVersionResolver(t *testing.T) {
 			result, err := resolver(t.Context(), tt.descriptor)
 
 			if tt.expectedError != nil {
-				assert.Error(t, err)
+				require.Error(t, err)
 				assert.Equal(t, tt.expectedError.Error(), err.Error())
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.Equal(t, tt.expected, result)
 			}
 		})
@@ -313,10 +314,10 @@ func TestReferenceTagVersionResolver(t *testing.T) {
 			result, err := resolver(t.Context(), tt.tag)
 
 			if tt.expectedError != nil {
-				assert.Error(t, err)
+				require.Error(t, err)
 				assert.Contains(t, err.Error(), tt.expectedError.Error())
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.Equal(t, tt.expected, result)
 			}
 		})

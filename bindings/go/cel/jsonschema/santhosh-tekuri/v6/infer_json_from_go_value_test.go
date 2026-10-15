@@ -5,6 +5,7 @@ import (
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
 	"github.com/stretchr/testify/require"
+
 	stv6jsonschema "ocm.software/open-component-model/bindings/go/cel/jsonschema/santhosh-tekuri/v6"
 )
 
@@ -19,6 +20,7 @@ func TestInferFromGoValue(t *testing.T) {
 			name:  "boolean",
 			input: true,
 			validate: func(t *testing.T, s *jsonschema.Schema) {
+				t.Helper()
 				require.Contains(t, s.Types.ToStrings(), "boolean")
 				require.NotNil(t, s.Const)
 				require.Equal(t, true, *s.Const)
@@ -28,6 +30,7 @@ func TestInferFromGoValue(t *testing.T) {
 			name:  "integer_int64",
 			input: int64(42),
 			validate: func(t *testing.T, s *jsonschema.Schema) {
+				t.Helper()
 				require.Contains(t, s.Types.ToStrings(), "integer")
 				require.Equal(t, int64(42), *s.Const)
 			},
@@ -36,6 +39,7 @@ func TestInferFromGoValue(t *testing.T) {
 			name:  "integer_uint64",
 			input: uint64(123),
 			validate: func(t *testing.T, s *jsonschema.Schema) {
+				t.Helper()
 				require.Contains(t, s.Types.ToStrings(), "integer")
 				require.Equal(t, uint64(123), *s.Const)
 			},
@@ -44,14 +48,16 @@ func TestInferFromGoValue(t *testing.T) {
 			name:  "number_float64",
 			input: 3.14,
 			validate: func(t *testing.T, s *jsonschema.Schema) {
+				t.Helper()
 				require.Contains(t, s.Types.ToStrings(), "number")
-				require.Equal(t, 3.14, *s.Const)
+				require.InDelta(t, 3.14, *s.Const, 1e-9)
 			},
 		},
 		{
 			name:  "string",
 			input: "hello",
 			validate: func(t *testing.T, s *jsonschema.Schema) {
+				t.Helper()
 				require.Contains(t, s.Types.ToStrings(), "string")
 				require.Equal(t, "hello", *s.Const)
 			},
@@ -60,6 +66,7 @@ func TestInferFromGoValue(t *testing.T) {
 			name:  "empty_array",
 			input: []interface{}{},
 			validate: func(t *testing.T, s *jsonschema.Schema) {
+				t.Helper()
 				require.Contains(t, s.Types.ToStrings(), "array")
 				require.Nil(t, s.Items2020, "empty array should not infer items schema")
 			},
@@ -68,6 +75,7 @@ func TestInferFromGoValue(t *testing.T) {
 			name:  "array_with_single_type",
 			input: []interface{}{int64(5)},
 			validate: func(t *testing.T, s *jsonschema.Schema) {
+				t.Helper()
 				require.Contains(t, s.Types.ToStrings(), "array")
 				require.NotNil(t, s.Items2020)
 				require.Contains(t, s.Items2020.Types.ToStrings(), "integer")
@@ -80,6 +88,7 @@ func TestInferFromGoValue(t *testing.T) {
 				[]interface{}{"a"},
 			},
 			validate: func(t *testing.T, s *jsonschema.Schema) {
+				t.Helper()
 				require.Contains(t, s.Types.ToStrings(), "array")
 				require.NotNil(t, s.Items2020)
 
@@ -95,6 +104,7 @@ func TestInferFromGoValue(t *testing.T) {
 				"age":  int64(30),
 			},
 			validate: func(t *testing.T, s *jsonschema.Schema) {
+				t.Helper()
 				require.Contains(t, s.Types.ToStrings(), "object")
 
 				require.Contains(t, s.Properties, "name")
@@ -113,6 +123,7 @@ func TestInferFromGoValue(t *testing.T) {
 				},
 			},
 			validate: func(t *testing.T, s *jsonschema.Schema) {
+				t.Helper()
 				require.Contains(t, s.Types.ToStrings(), "object")
 
 				cfg := s.Properties["config"]
@@ -123,7 +134,7 @@ func TestInferFromGoValue(t *testing.T) {
 				limits := cfg.Properties["limits"]
 				require.Contains(t, limits.Types.ToStrings(), "array")
 				require.Contains(t, limits.Items2020.Types.ToStrings(), "number")
-				require.Equal(t, 1.0, *limits.Items2020.Const)
+				require.InDelta(t, 1.0, *limits.Items2020.Const, 1e-9)
 			},
 		},
 		{
@@ -136,6 +147,7 @@ func TestInferFromGoValue(t *testing.T) {
 			input:     nil,
 			expectErr: false,
 			validate: func(t *testing.T, s *jsonschema.Schema) {
+				t.Helper()
 				require.Contains(t, s.Types.ToStrings(), "null")
 			},
 		},
@@ -143,7 +155,6 @@ func TestInferFromGoValue(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-
 			sch, err := stv6jsonschema.InferFromGoValue(tt.input)
 
 			if tt.expectErr {

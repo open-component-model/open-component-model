@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -53,14 +54,16 @@ By default (without specifying custom locations with this flag), the file will b
 If multiple configuration files are found, they will be merged in the order they are discovered.
 Later entries have higher priority.
 Using the option, the specified configuration file(s) will be used instead of the lookup above.
-Configuration documents piped into stdin are applied last, on top of these files.`)
+Use "-" to read configuration documents from stdin. It is an entry like any other: on its own it
+replaces the lookup above, so add --config <file> to keep a file, and a repeated "-" is ignored.
+Other documents on stdin stay there for commands that read it, such as transfer with --transfer-spec -.`)
 }
 
 func GetOCMConfigForCommand(cmd *cobra.Command) (*genericv1.Config, error) {
 	flag := cmd.Flag(OCMConfigCommandArgument)
 	if flag != nil && flag.Changed {
 		paths := flag.Value.(pflag.SliceValue).GetSlice()
-		return loadAndMergeConfigs(paths, true)
+		return loadAndMergeConfigs(cmd, paths, true)
 	}
 	syscalls := ocmctx.FromContext(cmd.Context()).Syscalls()
 	options := OCMConfigOptions{
@@ -89,13 +92,33 @@ func GetOCMConfig(options OCMConfigOptions, additional ...string) (*genericv1.Co
 	if err != nil && len(additional) == 0 {
 		return nil, err
 	}
-	return loadAndMergeConfigs(paths, false)
+	return loadAndMergeConfigs(nil, paths, false)
 }
 
-func loadAndMergeConfigs(paths []string, strict bool) (*genericv1.Config, error) {
+// loadAndMergeConfigs loads the configuration behind each path in order and merges
+// them, later entries winning. With strict, a path that cannot be loaded fails: the user
+// named it with --config, so it must be used. Without strict, the path was discovered and
+// is skipped with a log line, so a broken file in a well known location does not block
+// the command. The entry "-" stands for stdin, which only --config can name, so it needs
+// the command; discovery passes nil. Stdin can be read only once, so a repeated "-" is
+// ignored.
+func loadAndMergeConfigs(cmd *cobra.Command, paths []string, strict bool) (*genericv1.Config, error) {
 	cfgs := make([]*genericv1.Config, 0, len(paths))
+	stdinRead := false
 	for _, path := range paths {
-		cfg, err := GetConfigFromPath(path)
+		var loaded []*genericv1.Config
+		var err error
+		if path == StdinConfigPath && cmd != nil {
+			if stdinRead {
+				continue
+			}
+			stdinRead = true
+			loaded, err = readStdinConfigs(cmd)
+		} else if cfg, fileErr := GetConfigFromPath(path); fileErr != nil {
+			err = fileErr
+		} else {
+			loaded = []*genericv1.Config{cfg}
+		}
 		if err != nil {
 			if strict {
 				return nil, err
@@ -107,7 +130,7 @@ func loadAndMergeConfigs(paths []string, strict bool) (*genericv1.Config, error)
 			continue
 		}
 		slog.Debug("ocm config was loaded successfully", slog.String("path", path))
-		cfgs = append(cfgs, cfg)
+		cfgs = append(cfgs, loaded...)
 	}
 	return genericv1.MergeConfigs(slog.Warn, cfgs...), nil
 }
@@ -139,6 +162,17 @@ func decodeConfig(r io.Reader) (*genericv1.Config, error) {
 	return &instance, nil
 }
 
+// appendIfNew appends entries in `toAdd` to `given` if not already present
+func appendIfNew(given []string, toAdd ...string) []string {
+	for _, entry := range toAdd {
+		entry = filepath.Clean(entry)
+		if !slices.Contains(given, entry) {
+			given = append(given, entry)
+		}
+	}
+	return given
+}
+
 // GetOCMConfigPaths searches for the OCM configuration file in the following locations (in order):
 // 1. The path specified in the OCM_CONFIG environment variable
 // 2. The XDG_CONFIG_HOME directory (if set), or the default XDG home ($HOME/.config), or the user's home directory
@@ -163,16 +197,16 @@ func decodeConfig(r io.Reader) (*genericv1.Config, error) {
 func GetOCMConfigPaths(options OCMConfigOptions) ([]string, error) {
 	var paths []string
 	if path := getFromEnvironment(options); path != "" {
-		paths = append(paths, path)
+		paths = appendIfNew(paths, path)
 	}
 	if subPaths := getFromXDGOrHomeDir(options); len(subPaths) > 0 {
-		paths = append(paths, subPaths...)
+		paths = appendIfNew(paths, subPaths...)
 	}
 	if subPaths := getFromWorkingDir(options); len(subPaths) > 0 {
-		paths = append(paths, subPaths...)
+		paths = appendIfNew(paths, subPaths...)
 	}
 	if subPaths := getFromExecutableDir(options); len(subPaths) > 0 {
-		paths = append(paths, subPaths...)
+		paths = appendIfNew(paths, subPaths...)
 	}
 
 	if len(paths) > 0 {

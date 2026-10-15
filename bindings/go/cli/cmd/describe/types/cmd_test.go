@@ -3,7 +3,6 @@ package types_test
 import (
 	"bytes"
 	"encoding/json"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -182,7 +181,7 @@ func TestDescribeTypesMarkdownOutput(t *testing.T) {
 	output := result.String()
 
 	// Markdown tables have | separators
-	assert.True(t, strings.Contains(output, "|"))
+	assert.Contains(t, output, "|")
 }
 
 func TestDescribeTypesHTMLOutput(t *testing.T) {

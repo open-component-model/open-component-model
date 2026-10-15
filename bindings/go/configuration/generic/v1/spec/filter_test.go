@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -119,11 +120,11 @@ func TestFilterWithRemainder(t *testing.T) {
 	entryB := &runtime.Raw{Type: runtime.Type{Version: "v1", Name: "typeB"}}
 
 	tests := []struct {
-		name              string
-		config            *Config
-		options           *FilterOptions
-		wantFiltered      []*runtime.Raw
-		wantRemainder     []*runtime.Raw
+		name          string
+		config        *Config
+		options       *FilterOptions
+		wantFiltered  []*runtime.Raw
+		wantRemainder []*runtime.Raw
 	}{
 		{
 			name: "empty options puts all entries in remainder",

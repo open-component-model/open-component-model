@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNormalise(t *testing.T) {
@@ -82,7 +83,7 @@ func TestNormalise(t *testing.T) {
 				assert.Error(t, err)
 				return
 			}
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.JSONEq(t, tt.expected, string(got))
 		})
 	}
@@ -242,7 +243,7 @@ func TestMapValue(t *testing.T) {
 				Continue: tt.cont,
 			}
 			got, err := Normalise(tt.input, rule)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.JSONEq(t, tt.expected, string(got))
 		})
 	}
@@ -360,7 +361,7 @@ func TestExcludeEmpty(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := Normalise(tt.input, tt.excludes)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.JSONEq(t, tt.expected, string(got))
 		})
 	}
@@ -462,7 +463,6 @@ func TestPrepareArray(t *testing.T) {
 				if !ok {
 					if tt.wantErr {
 						// For invalid type, we expect an error
-						assert.True(t, true) // Type assertion failed as expected
 						return
 					}
 					t.Fatalf("unexpected type: got %T, want []interface{}", tt.input)

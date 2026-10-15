@@ -8,7 +8,7 @@
   "properties": {
     "helmChart": {
       "type": "string",
-      "description": "HelmChart is the name of the helm chart and its version separated by a colon."
+      "description": "HelmChart is the name of the helm chart, optionally followed by a colon and its\nversion (for example mariadb:12.2.7)."
     },
     "helmRepository": {
       "type": "string",

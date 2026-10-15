@@ -151,10 +151,10 @@ func TestCopy(t *testing.T) {
 			err := blob.Copy(dst, src)
 
 			if tt.expectedError != nil {
-				assert.Error(t, err)
+				require.Error(t, err)
 				assert.Contains(t, err.Error(), tt.expectedError.Error())
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.Equal(t, "test data", dst.String())
 			}
 		})

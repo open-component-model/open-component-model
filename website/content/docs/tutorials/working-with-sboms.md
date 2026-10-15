@@ -345,10 +345,23 @@ Your numbers will differ, because the vulnerability database moves.
 
 ## Verify that after transfer the SBOMs are still there {#verify-after-transfer}
 
-Transfer the component version by value, which is what an air-gapped delivery does:
+Transfer the component version by value, which is what an air-gapped delivery does. Create a
+local blob uploader configuration and run the transfer:
+
+```yaml
+cat > .ocmconfig << 'EOF'
+type: generic.config.ocm.software/v1
+configurations:
+  - type: localblob.uploader.transfer.config.ocm.software/v1alpha1
+EOF
+```
+
+> **Note:** The CLI merges `.ocmconfig` from the current directory with your other OCM configuration (such as `$HOME/.ocmconfig`), so credentials and resolvers stay in effect.
 
 ```bash
-ocm transfer cv ./transport-archive//ocm.software/examples/sbom-demo:1.0.0 ./transport-archive-transferred --copy-resources
+ocm transfer cv \
+  ./transport-archive//ocm.software/examples/sbom-demo:1.0.0 \
+  ./transport-archive-transferred
 ```
 
 The linked SBOM is still there. It was a resource, so it was copied along with everything else:
@@ -428,7 +441,7 @@ rm -rf /tmp/ocm-sbom-tutorial
 
 - [How-to: Download Resources from Component Versions]({{< relref "docs/how-to/download-resources-from-component-versions.md" >}}) - The download command this tutorial builds on
 - [How-to: Air-Gap Transfer]({{< relref "docs/how-to/air-gap-transfer.md" >}}) - Moving a component version by value, the case that decides which SBOM strategy works
-- [Reference: Input and Access Types]({{< relref "docs/reference/input-and-access-types.md" >}}) - `File/v1`, `OCIImage/v1`, and what `--copy-resources` turns them into
+- [Reference: Input and Access Types]({{< relref "docs/reference/input-and-access-types.md" >}}) - `File/v1`, `OCIImage/v1`, and what a local blob uploader turns them into
 - [Tutorial: Plain Signatures]({{< relref "docs/tutorials/signing/plain.md" >}}) - Signing the component version, which is what makes a linked SBOM trustworthy
 - [Concept: Software Bills of Materials]({{< relref "docs/concepts/sboms.md" >}}) - What an SBOM is and why OCM binds it to the component version
 - [Blog: Shipping SBOMs with Your Components](/blog/2026-07-28-shipping-sboms-with-your-components/) - The proof of concept this feature grew out of

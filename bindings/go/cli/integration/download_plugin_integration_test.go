@@ -60,7 +60,7 @@ configurations:
 	info, err := os.Stat(pluginLocation)
 	require.NoError(t, err, "should be able to stat the downloaded file")
 	assert.True(t, info.Mode().IsRegular(), "downloaded file should be a regular file")
-	assert.Greater(t, info.Size(), int64(0), "downloaded file should not be empty")
+	assert.Positive(t, info.Size(), "downloaded file should not be empty")
 }
 
 func TestDownloadPluginIntegrationWithResolvers(t *testing.T) {
@@ -94,7 +94,7 @@ configurations:
 	require.NoError(t, os.WriteFile(cfgPath, []byte(cfg), os.ModePerm))
 
 	tempDir := t.TempDir()
-	outputPath := filepath.Join(tempDir)
+	outputPath := tempDir
 
 	downloadCMD := cmd.New()
 	downloadCMD.SetArgs([]string{
@@ -115,7 +115,7 @@ configurations:
 	info, err := os.Stat(pluginLocation)
 	require.NoError(t, err, "should be able to stat the downloaded file")
 	assert.True(t, info.Mode().IsRegular(), "downloaded file should be a regular file")
-	assert.Greater(t, info.Size(), int64(0), "downloaded file should not be empty")
+	assert.Positive(t, info.Size(), "downloaded file should not be empty")
 }
 
 func TestDownloadPluginMissingResourceIntegration(t *testing.T) {
@@ -143,7 +143,7 @@ configurations:
 	require.NoError(t, os.WriteFile(cfgPath, []byte(cfg), os.ModePerm))
 
 	tempDir := t.TempDir()
-	outputPath := filepath.Join(tempDir)
+	outputPath := tempDir
 
 	downloadCMD := cmd.New()
 	downloadCMD.SetArgs([]string{
@@ -281,6 +281,7 @@ func getUserAndPasswordForTest(t *testing.T) (string, string) {
 }
 
 func getUsername(t *testing.T, gh string) (string, error) {
+	t.Helper()
 	if githubUser := os.Getenv("GITHUB_USER"); githubUser != "" {
 		return githubUser, nil
 	}

@@ -115,7 +115,7 @@ func TestExtractFieldDocWhenMissing(t *testing.T) {
 
 	desc, deprecated := extractFieldDoc(field)
 
-	require.Equal(t, "", desc)
+	require.Empty(t, desc)
 	require.False(t, deprecated)
 }
 

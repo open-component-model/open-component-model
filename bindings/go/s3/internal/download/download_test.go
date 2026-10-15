@@ -126,13 +126,13 @@ func (f *fakeS3) serve(w http.ResponseWriter, r *http.Request) {
 		w.Header()["Content-Type"] = nil
 	}
 	if f.object.versionID != "" {
-		w.Header().Set("x-amz-version-id", f.object.versionID)
+		w.Header().Set("X-Amz-Version-Id", f.object.versionID)
 	}
 
 	// Real S3 reports a checksum, and the SDK warns about every response carrying
 	// none. A body that is cut short or never sent cannot be summed.
 	if !f.object.suppressBody && f.object.abortAfter == nil {
-		w.Header().Set("x-amz-checksum-crc32", checksumCRC32(f.object.body))
+		w.Header().Set("X-Amz-Checksum-Crc32", checksumCRC32(f.object.body))
 	}
 
 	length := int64(len(f.object.body))

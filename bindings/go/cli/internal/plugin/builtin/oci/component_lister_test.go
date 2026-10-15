@@ -1,7 +1,6 @@
 package oci
 
 import (
-	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -44,7 +43,7 @@ func TestCTFComponentListerPlugin_CredentialConsumerIdentity(t *testing.T) {
 	id, err := registry.GetComponentListerCredentialConsumerIdentity(t.Context(), ctfSpec)
 	require.Nil(t, id)
 	require.Error(t, err)
-	require.True(t, errors.Is(err, ErrWrongUsage), "expected: %v, got: %v", ErrWrongUsage, err)
+	require.ErrorIs(t, err, ErrWrongUsage, "expected: %v, got: %v", ErrWrongUsage, err)
 }
 
 func TestCTFComponentListerPlugin_NotCTFSpec(t *testing.T) {
@@ -53,5 +52,5 @@ func TestCTFComponentListerPlugin_NotCTFSpec(t *testing.T) {
 	// Try to get a lister for a non-CTF repository spec.
 	_, err := p.GetComponentLister(t.Context(), &ociv1.Repository{}, nil)
 	require.Error(t, err)
-	require.True(t, errors.Is(err, ErrWrongUsage), "expected: %v, got: %v", ErrWrongUsage, err)
+	require.ErrorIs(t, err, ErrWrongUsage, "expected: %v, got: %v", ErrWrongUsage, err)
 }

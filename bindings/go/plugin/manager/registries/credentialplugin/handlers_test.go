@@ -31,6 +31,7 @@ func TestGetConsumerIdentityHandlerFunc(t *testing.T) {
 				})
 			},
 			assertOutput: func(t *testing.T, resp *http.Response) {
+				t.Helper()
 				require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 			},
 			request: func(base string) *http.Request {
@@ -46,6 +47,7 @@ func TestGetConsumerIdentityHandlerFunc(t *testing.T) {
 				})
 			},
 			assertOutput: func(t *testing.T, resp *http.Response) {
+				t.Helper()
 				defer resp.Body.Close()
 				require.Equal(t, http.StatusOK, resp.StatusCode)
 				content, err := io.ReadAll(resp.Body)
@@ -94,6 +96,7 @@ func TestResolveHandlerFunc(t *testing.T) {
 				})
 			},
 			assertOutput: func(t *testing.T, resp *http.Response) {
+				t.Helper()
 				require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 			},
 			request: func(base string) *http.Request {
@@ -114,6 +117,7 @@ func TestResolveHandlerFunc(t *testing.T) {
 				})
 			},
 			assertOutput: func(t *testing.T, resp *http.Response) {
+				t.Helper()
 				require.Equal(t, http.StatusOK, resp.StatusCode)
 				require.True(t, nilCredsObserved, "missing Authorization header must yield nil credentials")
 			},
@@ -132,6 +136,7 @@ func TestResolveHandlerFunc(t *testing.T) {
 				})
 			},
 			assertOutput: func(t *testing.T, resp *http.Response) {
+				t.Helper()
 				require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 			},
 			request: func(base string) *http.Request {
@@ -151,6 +156,7 @@ func TestResolveHandlerFunc(t *testing.T) {
 				})
 			},
 			assertOutput: func(t *testing.T, resp *http.Response) {
+				t.Helper()
 				defer resp.Body.Close()
 				require.Equal(t, http.StatusOK, resp.StatusCode)
 				require.NotNil(t, successCreds)

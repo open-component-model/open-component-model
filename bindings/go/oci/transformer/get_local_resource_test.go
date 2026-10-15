@@ -328,7 +328,7 @@ func TestGetLocalResource_Transform_ValidationErrors(t *testing.T) {
 			}
 
 			result, err := transformer.Transform(ctx, spec)
-			assert.Error(t, err)
+			require.Error(t, err)
 			assert.Nil(t, result)
 			assert.Contains(t, err.Error(), tt.expectedErr)
 		})

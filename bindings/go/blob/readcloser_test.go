@@ -106,7 +106,7 @@ func TestReadCloserWrapper_CloseWithoutRead(t *testing.T) {
 
 	// Close without reading should not error
 	err := wrapper.Close()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, 0, blob.getReadCloserCalls())
 
 	// Reading after close should return error
@@ -129,7 +129,7 @@ func TestReadCloserWrapper_ReadAfterClose(t *testing.T) {
 
 	// Close the wrapper
 	err = wrapper.Close()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Reading after close should return error
 	n, err = wrapper.Read(buf)
@@ -148,10 +148,10 @@ func TestReadCloserWrapper_MultipleClose(t *testing.T) {
 
 	// Multiple closes should not error
 	err = wrapper.Close()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	err = wrapper.Close()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	err = wrapper.Close()
 	assert.NoError(t, err)

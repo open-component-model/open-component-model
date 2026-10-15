@@ -12,6 +12,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/signinghandler"
 )
 
+// Register registers the GPG signing handler and its credential types.
 func Register(
 	signingHandlerRegistry *signinghandler.SigningRegistry,
 	credentialTypeRegistry *credentialtyperepository.CredentialTypeRegistry,

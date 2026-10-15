@@ -168,7 +168,7 @@ Semantics:
 
 {{< callout context="caution" >}}
 The fast path applies to the access side only. Transferring a `Wget/v1` access
-**by value** (`--copy-resources`) promotes it to a `LocalBlob/v1` and re-runs
+**by value** (with a local blob uploader configuration) promotes it to a `LocalBlob/v1` and re-runs
 the input-side rules, re-digesting the streamed bytes as SHA-256 regardless of
 this configuration — every local blob stays self-describing.
 {{< /callout >}}

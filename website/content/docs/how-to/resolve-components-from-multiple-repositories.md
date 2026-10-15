@@ -119,7 +119,7 @@ my-org.example/component-b         │ 1.0.0   │
 
 {{< callout context="tip" >}}
 If you are migrating from the deprecated `ocm.config.ocm.software` fallback resolvers,
-see [Migrate from Deprecated Resolvers]({{< relref "migrate-from-deprecated-resolvers.md" >}}) for a step-by-step guide.
+see [Migrate from Deprecated Resolvers]({{< relref "docs/how-to/migration-guides/migrate-from-deprecated-resolvers.md" >}}) for a step-by-step guide.
 {{< /callout >}}
 
 ## Tips
@@ -131,8 +131,8 @@ see [Migrate from Deprecated Resolvers]({{< relref "migrate-from-deprecated-reso
 - **If different versions of the same component live in different registries**, use the `versionConstraint` field to
   route specific version ranges to the right repository. See
   [Version Constraints]({{< relref "docs/reference/resolver-configuration.md#version-constraints" >}}) for details.
-- **If you need to transfer components to another registry**, use `ocm transfer cv --recursive --copy-resources` with
-  the same config file. See
+- **If you need to transfer components to another registry**, use `ocm transfer cv --recursive` with a local blob uploader configuration (for example in `.ocmconfig` in the working directory) and
+  a resolver configuration. See
   [OCM Transfer]({{< relref "docs/concepts/resolvers.md#ocm-transfer" >}}) for details.
 - **Resolvers are evaluated in order** — place more specific patterns before broader ones so the right repository is
   matched first.
@@ -146,7 +146,7 @@ see [Migrate from Deprecated Resolvers]({{< relref "migrate-from-deprecated-reso
 
 ## Related Documentation
 
-- [How-To: Migrate from Deprecated Resolvers]({{< relref "docs/how-to/migrate-from-deprecated-resolvers.md" >}}) —
+- [Migration Guide: Migrate from Deprecated Resolvers]({{< relref "docs/how-to/migration-guides/migrate-from-deprecated-resolvers.md" >}}) —
   Replace deprecated fallback
   resolvers with glob-based resolvers
 - [Concept: Resolvers]({{< relref "docs/concepts/resolvers.md" >}}) — High-level introduction to resolvers
