@@ -108,7 +108,9 @@ func transformComponent(c map[string]any) error {
 	normaliseElementLabels(c)
 
 	resources, _ := c["resources"].([]any)
-	injectDuplicateIdentityVersion(resources)
+	if err := injectDuplicateIdentityVersion(resources); err != nil {
+		return err
+	}
 	for _, r := range resources {
 		if res, ok := r.(map[string]any); ok {
 			transformResource(res)
@@ -244,11 +246,15 @@ func normaliseElementLabels(m map[string]any) {
 // resource version is injected as extraIdentity["version"]. The last member of
 // a duplicate group is left unchanged. It must run before extraIdentity is
 // nulled, as it reads the raw extraIdentity.
-func injectDuplicateIdentityVersion(resources []any) {
+func injectDuplicateIdentityVersion(resources []any) error {
 	ids := make([]string, len(resources))
 	for i, r := range resources {
 		res, _ := r.(map[string]any)
-		ids[i] = identityWithoutVersion(res)
+		id, err := identityWithoutVersion(res)
+		if err != nil {
+			return err
+		}
+		ids[i] = id
 	}
 	for i, r := range resources {
 		res, ok := r.(map[string]any)
@@ -270,6 +276,7 @@ func injectDuplicateIdentityVersion(resources []any) {
 			}
 		}
 	}
+	return nil
 }
 
 // identityWithoutVersion builds a stable key from a resource's name and
@@ -277,9 +284,9 @@ func injectDuplicateIdentityVersion(resources []any) {
 // treated as empty. Name and extraIdentity are encoded as structured JSON
 // (not delimiter-joined) so identity values containing ';' or '=' cannot
 // collide across distinct resources.
-func identityWithoutVersion(res map[string]any) string {
+func identityWithoutVersion(res map[string]any) (string, error) {
 	if res == nil {
-		return ""
+		return "", nil
 	}
 	ei := map[string]any{}
 	if m, ok := res["extraIdentity"].(map[string]any); ok {
@@ -289,6 +296,9 @@ func identityWithoutVersion(res map[string]any) string {
 			}
 		}
 	}
-	b, _ := json.Marshal(map[string]any{"name": res["name"], "extraIdentity": ei})
-	return string(b)
+	b, err := json.Marshal(map[string]any{"name": res["name"], "extraIdentity": ei})
+	if err != nil {
+		return "", fmt.Errorf("encoding resource identity: %w", err)
+	}
+	return string(b), nil
 }
