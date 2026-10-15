@@ -141,6 +141,12 @@ func (t *AddLocalResource) Transform(ctx context.Context, step runtime.Typed) (r
 		return nil, fmt.Errorf("failed converting updated resource to v2 format: %w", err)
 	}
 
+	// Record the digest the transfer pipeline handed us (the Get output, or a prior
+	// transformation's new digest), never the sink's back-filled one: a resource that
+	// arrived without a digest must stay without one so signatures that excluded it keep
+	// verifying.
+	v2UpdatedResource.Digest = resource.Digest.DeepCopy()
+
 	// Populate output based on type
 	switch out := output.(type) {
 	case *v1alpha1.OCIAddLocalResourceOutput:

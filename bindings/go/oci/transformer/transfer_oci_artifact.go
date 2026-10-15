@@ -88,6 +88,9 @@ func (t *TransferOCIArtifact) Transform(ctx context.Context, step runtime.Typed)
 		return nil, fmt.Errorf("failed converting resource to v2 format: %w", err)
 	}
 
+	// Preserve the pipeline's digest verbatim; never record the sink's back-filled one.
+	v2UpdatedResource.Digest = transformation.Spec.TargetResource.Digest.DeepCopy()
+
 	transformation.Output.Resource = v2UpdatedResource
 	return &transformation, nil
 }
