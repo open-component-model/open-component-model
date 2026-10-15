@@ -298,6 +298,10 @@
           "type": "string",
           "description": "Component is the component name."
         },
+        "digest": {
+          "type": "string",
+          "description": "Digest is the OCI digest of the source artifact the component version is pinned to;\nlocal blobs are then read from that artifact instead of through the version tag.\nSet only together with Repository."
+        },
         "repository": {
           "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Raw",
           "description": "Repository is the specification of the repository holding the component version. It is\nset for local blob resources only, which are read from it."
