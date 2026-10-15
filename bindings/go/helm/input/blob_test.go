@@ -280,3 +280,70 @@ func TestGetV1HelmBlob_BadCharts(t *testing.T) {
 		})
 	}
 }
+
+func TestGetV1HelmBlob_WorkingDirectory(t *testing.T) {
+	r := require.New(t)
+	workDir, err := os.Getwd()
+	r.NoError(err, "failed to get current working directory")
+	testDataDir := filepath.Join(workDir, "../testdata")
+
+	tests := []struct {
+		name       string
+		workingDir string
+		path       string
+		wantProv   bool
+		wantErrMsg string
+	}{
+		{
+			name:       "relative chart directory",
+			workingDir: testDataDir,
+			path:       "./mychart",
+		},
+		{
+			name:       "relative packaged chart",
+			workingDir: testDataDir,
+			path:       "mychart-0.1.0.tgz",
+		},
+		{
+			name:       "relative packaged chart with provenance file",
+			workingDir: testDataDir,
+			path:       "provenance/mychart-0.1.0.tgz",
+			wantProv:   true,
+		},
+		{
+			name:       "absolute chart path inside working directory",
+			workingDir: testDataDir,
+			path:       filepath.Join(testDataDir, "mychart"),
+		},
+		{
+			name:       "absolute chart path inside relative working directory",
+			workingDir: "../testdata",
+			path:       filepath.Join(testDataDir, "mychart"),
+		},
+		{
+			name:       "chart path escaping the working directory",
+			workingDir: filepath.Join(testDataDir, "provenance"),
+			path:       "../mychart",
+			wantErrMsg: "path escapes from parent",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+			spec := v1.Helm{
+				Path: tt.path,
+			}
+			b, chart, err := input.GetV1HelmBlob(t.Context(), spec, t.TempDir(), input.WithWorkingDirectory(tt.workingDir))
+			if tt.wantErrMsg != "" {
+				r.ErrorContains(err, tt.wantErrMsg)
+				r.Nil(b)
+				return
+			}
+			r.NoError(err)
+			r.NotNil(b)
+			r.Equal("mychart", chart.Name)
+			r.Equal(tt.wantProv, chart.ProvBlob != nil)
+		})
+	}
+}

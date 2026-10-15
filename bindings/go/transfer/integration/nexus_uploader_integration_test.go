@@ -240,7 +240,10 @@ func startNexus(t *testing.T) (baseURL, adminPassword string) {
 		testcontainers.WithEnv(map[string]string{
 			"INSTALL4J_ADD_VM_PARAMS": "-Xms1g -Xmx1g -XX:MaxDirectMemorySize=1g -Djava.util.prefs.userRoot=/nexus-data/javaprefs",
 		}),
-		testcontainers.WithWaitStrategy(wait.ForHTTP("/service/rest/v1/status/writable").WithPort("8081/tcp").WithStartupTimeout(5*time.Minute)),
+		// WithWaitStrategy caps the wait at a 60s deadline regardless of the strategy's
+		// own timeout; the Nexus JVM routinely needs longer under CI load, so set the
+		// deadline explicitly. Both the deadline and the strategy timeout must allow 5m.
+		testcontainers.WithWaitStrategyAndDeadline(5*time.Minute, wait.ForHTTP("/service/rest/v1/status/writable").WithPort("8081/tcp").WithStartupTimeout(5*time.Minute)),
 	)
 	r.NoError(err)
 	t.Cleanup(func() { r.NoError(testcontainers.TerminateContainer(container)) })
