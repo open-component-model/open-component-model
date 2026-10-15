@@ -22,9 +22,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ProtonMail/go-crypto/openpgp/packet"
 	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/cli/cmd/internal/test"
+	"ocm.software/open-component-model/bindings/go/gpg/signing/handler/handlertest"
 )
 
 func TestSignAndVerifyRSA(t *testing.T) {
@@ -75,6 +77,78 @@ configurations:
 	r.NoError(err, "sign component version")
 	_, err = test.OCM(t, test.WithArgs("verify", "component-version", reference, "--signature", signature, "--config", config))
 	r.NoError(err, "verify component version")
+}
+
+func TestSignAndVerifyGPG(t *testing.T) {
+	r := require.New(t)
+	r.True(fips140.Enforced(), "test binary must run with fips140=only")
+	tmp := t.TempDir()
+
+	name, version := "ocm.software/fips140-gpg", "1.0.0"
+	constructor := filepath.Join(tmp, "component-constructor.yaml")
+	r.NoError(os.WriteFile(constructor, fmt.Appendf(nil, `
+name: %s
+version: %s
+provider:
+  name: ocm.software
+resources:
+  - name: data
+    type: blob
+    input:
+      type: utf8/v1
+      text: "signed in fips140=only with GPG"
+`, name, version), 0o600))
+
+	archive := filepath.Join(tmp, "transport-archive")
+	_, err := test.OCM(t, test.WithArgs("add", "cv", "--constructor", constructor, "--repository", archive))
+	r.NoError(err, "construct component version")
+
+	const signature = "fips-gpg"
+	privKeyPath, pubKeyPath := writeGPGV6Key(t, tmp)
+	config := filepath.Join(tmp, "ocm-config.yaml")
+	r.NoError(os.WriteFile(config, fmt.Appendf(nil, `
+type: generic.config.ocm.software/v1
+configurations:
+- type: credentials.config.ocm.software
+  consumers:
+  - identity:
+      type: GPG/v1alpha1
+      signature: %s
+    credentials:
+    - type: Credentials/v1
+      properties:
+        privateKeyPGPFile: %s
+        publicKeyPGPFile: %s
+- type: signing.config.ocm.software/v1alpha1
+  signer:
+    type: GPGSigningConfiguration/v1alpha1
+  verifier:
+    type: GPGSigningConfiguration/v1alpha1
+`, signature, privKeyPath, pubKeyPath), 0o600))
+
+	reference := archive + "//" + name + ":" + version
+	_, err = test.OCM(t, test.WithArgs("sign", "component-version", reference, "--signature", signature, "--config", config))
+	r.NoError(err, "sign component version")
+	_, err = test.OCM(t, test.WithArgs("verify", "component-version", reference, "--signature", signature, "--config", config))
+	r.NoError(err, "verify component version")
+}
+
+// writeGPGV6Key generates a v6 RSA-3072 key (FIPS-approved) with handlertest inside
+// fips140.WithoutEnforcement and writes the armored keys to files.
+func writeGPGV6Key(t *testing.T, dir string) (privPath, pubPath string) {
+	t.Helper()
+	r := require.New(t)
+	var key *handlertest.Key
+	fips140.WithoutEnforcement(func() {
+		var err error
+		key, err = handlertest.GenerateKey(handlertest.KeyConfig{V6: true, Algorithm: packet.PubKeyAlgoRSA})
+		r.NoError(err)
+	})
+	privPath = filepath.Join(dir, "gpg-key.asc")
+	pubPath = filepath.Join(dir, "gpg-key.pub.asc")
+	r.NoError(os.WriteFile(privPath, []byte(key.Private), 0o600))
+	r.NoError(os.WriteFile(pubPath, []byte(key.Public), 0o600))
+	return privPath, pubPath
 }
 
 // writeRSAKeyAndCert writes a 2048-bit RSA key and a self-signed certificate,

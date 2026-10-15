@@ -9,11 +9,13 @@ import (
 
 //nolint:gosec // G101: These are key names, not credentials.
 const (
-	credentialKeyPrivateKeyPGP     = "privateKeyPGP"
-	credentialKeyPrivateKeyPGPFile = "privateKeyPGPFile"
-	credentialKeyPublicKeyPGP      = "publicKeyPGP"
-	credentialKeyPublicKeyPGPFile  = "publicKeyPGPFile"
-	credentialKeyPassphrase        = "passphrase"
+	credentialKeyPrivateKeyPGP      = "privateKeyPGP"
+	credentialKeyPrivateKeyPGPFile  = "privateKeyPGPFile"
+	credentialKeyPublicKeyPGP       = "publicKeyPGP"
+	credentialKeyPublicKeyPGPFile   = "publicKeyPGPFile"
+	credentialKeyPassphrase         = "passphrase"
+	credentialKeyKeyringFingerprint = "keyringFingerprint"
+	credentialKeyKeyringHome        = "keyringHome"
 )
 
 var convertScheme = runtime.NewScheme()
@@ -56,11 +58,13 @@ func ConvertToGPGCredentials(creds runtime.Typed) (*GPGCredentials, error) {
 
 func fromDirectCredentials(properties map[string]string) *GPGCredentials {
 	return &GPGCredentials{
-		Type:              runtime.NewVersionedType(GPGCredentialsType, Version),
-		PrivateKeyPGP:     properties[credentialKeyPrivateKeyPGP],
-		PrivateKeyPGPFile: properties[credentialKeyPrivateKeyPGPFile],
-		PublicKeyPGP:      properties[credentialKeyPublicKeyPGP],
-		PublicKeyPGPFile:  properties[credentialKeyPublicKeyPGPFile],
-		Passphrase:        properties[credentialKeyPassphrase],
+		Type:               runtime.NewVersionedType(GPGCredentialsType, Version),
+		PrivateKeyPGP:      properties[credentialKeyPrivateKeyPGP],
+		PrivateKeyPGPFile:  properties[credentialKeyPrivateKeyPGPFile],
+		PublicKeyPGP:       properties[credentialKeyPublicKeyPGP],
+		PublicKeyPGPFile:   properties[credentialKeyPublicKeyPGPFile],
+		Passphrase:         properties[credentialKeyPassphrase],
+		KeyringFingerprint: properties[credentialKeyKeyringFingerprint],
+		KeyringHome:        properties[credentialKeyKeyringHome],
 	}
 }

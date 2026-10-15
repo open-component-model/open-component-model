@@ -11,6 +11,34 @@ import (
 	gpgcredentialsv1 "ocm.software/open-component-model/bindings/go/gpg/spec/credentials/v1alpha1"
 )
 
+func TestPrivateKeyBytes(t *testing.T) {
+	missingFile := filepath.Join(t.TempDir(), "nonexistent.asc")
+
+	tests := []struct {
+		name    string
+		creds   *gpgcredentialsv1.GPGCredentials
+		want    []byte
+		wantErr string
+	}{
+		{name: "nil credentials"},
+		{name: "inline private key", creds: &gpgcredentialsv1.GPGCredentials{PrivateKeyPGP: "priv", PublicKeyPGP: "pub"}, want: []byte("priv")},
+		{name: "no fallback to public key", creds: &gpgcredentialsv1.GPGCredentials{PublicKeyPGP: "pub"}},
+		{name: "unreadable private key file", creds: &gpgcredentialsv1.GPGCredentials{PrivateKeyPGPFile: missingFile}, wantErr: "load private key: "},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+			b, err := PrivateKeyBytes(tt.creds)
+			if tt.wantErr != "" {
+				r.ErrorContains(err, tt.wantErr)
+				return
+			}
+			r.NoError(err)
+			r.Equal(tt.want, b)
+		})
+	}
+}
+
 func TestPublicKeyBytes(t *testing.T) {
 	missingFile := filepath.Join(t.TempDir(), "nonexistent.asc")
 

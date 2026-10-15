@@ -75,25 +75,20 @@ tasks:
   package/image:
     internal: true
     dir: '{{ .TASKFILE_DIR }}'
-    dotenv:
-      - '{{.TASKFILE_DIR}}/../../../.env'
-      - '{{.TASKFILE_DIR}}/../sigstore/signing/handler/internal/.env'
-    # One Containerfile, two targets: "full" (default tag; ocm plus FIPS gpg and
-    # cosign on Garden Linux bare-libc) and "slim" (scratch with only ocm and the
-    # CA bundle, tagged <version>-slim). full copies ocm from the slim stage.
+    # One Containerfile, two targets: "full" (default tag; ocm plus FIPS cosign
+    # on scratch) and "slim" (scratch with only ocm and the CA bundle, tagged
+    # <version>-slim). full copies ocm from the slim stage.
     cmds:
       - |
         mkdir -p {{ .TASKFILE_DIR }}/tmp/oci
         out="$("$(git rev-parse --show-toplevel)/.github/scripts/oci-annotations.sh" \
           ./Containerfile full '{{ .VERSION }}' "ocm" \
-          "Open Component Model CLI with FIPS-capable GnuPG and cosign")" || exit 1
+          "Open Component Model CLI with FIPS cosign")" || exit 1
         annotations=()
         while IFS= read -r a; do annotations+=("$a"); done <<< "$out"
         {{ .IMAGE_TOOL }} buildx build \
           --platform linux/amd64,linux/arm64 \
           --target full \
-          --build-arg GOFIPS140="$GOFIPS140" \
-          --build-arg COSIGN_VERSION="$COSIGN_VERSION" \
           "${annotations[@]}" \
           --tag ghcr.io/open-component-model/cli:{{ .VERSION }} \
           --output type=oci,dest={{ .TASKFILE_DIR }}/tmp/oci/cli.tar,oci-mediatypes=true,name=ghcr.io/open-component-model/cli \

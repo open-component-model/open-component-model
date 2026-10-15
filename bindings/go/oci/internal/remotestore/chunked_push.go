@@ -160,7 +160,7 @@ func (r *RemoteStore) pushChunked(
 		return fallbackOrUnavailable(fallback, err)
 	}
 
-	if err := r.uploadChunks(ctx, up, content); err != nil {
+	if err := r.uploadChunks(ctx, up, content, knownSize); err != nil {
 		if !up.consumed {
 			// Failed before the first PATCH; fall back to monolithic push.
 			return fallbackOrUnavailable(fallback, err)
@@ -273,9 +273,13 @@ func (r *RemoteStore) openUploadSession(ctx context.Context, knownDigest digest.
 // up.consumed as soon as a read yields bytes; after that point the stream
 // cannot be rewound, so failures cancel the session rather than falling back to
 // the monolithic push.
-func (r *RemoteStore) uploadChunks(ctx context.Context, up *chunkedUpload, content io.Reader) error {
+func (r *RemoteStore) uploadChunks(ctx context.Context, up *chunkedUpload, content io.Reader, knownSize int64) error {
 	hasher := up.digester.Hash()
-	buf := make([]byte, up.chunk)
+	bufSize := up.chunk
+	if knownSize >= 0 && knownSize < bufSize {
+		bufSize = knownSize
+	}
+	buf := make([]byte, bufSize)
 	for {
 		n, readErr := io.ReadFull(content, buf)
 		if n > 0 {
