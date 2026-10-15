@@ -15,6 +15,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/cache"
 	"ocm.software/open-component-model/bindings/go/oci/internal/remotestore"
 	"ocm.software/open-component-model/bindings/go/oci/resolver/url"
+	"ocm.software/open-component-model/bindings/go/oci/spec"
 )
 
 // Custom transport to verify the custom client is being used
@@ -493,27 +494,29 @@ func TestURLPathResolver_DynamicCacheSwapping(t *testing.T) {
 	require.NoError(t, err)
 	assert.IsType(t, &remotestore.RemoteStore{}, store)
 
-	// 2. Set blob cache. StoreForReference for the same ref should return a wrapped *cache.Repository.
+	// 2. Set blob cache. StoreForReference for the same ref should no longer
+	// return the plain *remotestore.RemoteStore, but a store that still
+	// satisfies spec.Store and the chunked streaming push interface.
 	dummyBlobCache := &cache.BlobCache{}
 	resolver.SetBlobCache(dummyBlobCache)
 
 	store, err = resolver.StoreForReference(ctx, ref)
 	require.NoError(t, err)
-	require.IsType(t, &cache.Repository{}, store)
-	wrapped := store.(*cache.Repository)
-	assert.Equal(t, dummyBlobCache, wrapped.BlobCache)
-	assert.Nil(t, wrapped.ReferenceCache)
+	_, isPlain := store.(*remotestore.RemoteStore)
+	assert.False(t, isPlain, "a configured cache must wrap the plain remote store")
+	assert.Implements(t, (*spec.Store)(nil), store)
+	assert.Implements(t, (*remotestore.StreamingPusher)(nil), store)
 
-	// 3. Set reference cache too.
+	// 3. Set reference cache too; the wrapped store keeps the same contract.
 	dummyRefCache := &cache.ReferenceCache{}
 	resolver.SetReferenceCache(dummyRefCache)
 
 	store, err = resolver.StoreForReference(ctx, ref)
 	require.NoError(t, err)
-	require.IsType(t, &cache.Repository{}, store)
-	wrapped = store.(*cache.Repository)
-	assert.Equal(t, dummyBlobCache, wrapped.BlobCache)
-	assert.Equal(t, dummyRefCache, wrapped.ReferenceCache)
+	_, isPlain = store.(*remotestore.RemoteStore)
+	assert.False(t, isPlain, "a configured cache must wrap the plain remote store")
+	assert.Implements(t, (*spec.Store)(nil), store)
+	assert.Implements(t, (*remotestore.StreamingPusher)(nil), store)
 
 	// 4. Set both back to nil. StoreForReference should return the base *remotestore.RemoteStore again.
 	resolver.SetBlobCache(nil)

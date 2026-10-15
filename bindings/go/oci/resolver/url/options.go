@@ -50,8 +50,8 @@ func WithSubPath(subPath string) Option {
 }
 
 // WithBlobCache wires a manifest blob cache into the resolver. Stores
-// returned by [CachingResolver.StoreForReference] are wrapped with
-// [cache.Repository] so their Fetch consults the cache; layer blobs
+// returned by [CachingResolver.StoreForReference] are wrapped with the
+// cache decorator so their Fetch consults the cache; layer blobs
 // and other non-manifest media types pass through unchanged.
 //
 // Pass nil to disable blob caching (the default).
@@ -63,7 +63,7 @@ func WithBlobCache(blob *cache.BlobCache) Option {
 
 // WithReferenceCache wires a reference cache into the resolver.
 // Stores returned by [CachingResolver.StoreForReference] are wrapped
-// with [cache.Repository] so their Resolve consults the reference
+// with the cache decorator so their Resolve consults the reference
 // cache before performing a remote round-trip.
 //
 // Pass nil to disable reference caching (the default).
