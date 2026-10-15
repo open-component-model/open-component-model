@@ -932,13 +932,38 @@ func TestBuildDescriptorSpec_EmptyOptionalFields(t *testing.T) {
 	componentMap, ok := specMap["component"].(map[string]any)
 	require.True(t, ok)
 
-	for _, field := range []string{"labels", "repositoryContexts", "sources", "componentReferences"} {
-		if val, present := componentMap[field]; present {
-			assert.Nilf(t, val, "component[%q] must be nil for empty slice, got %v", field, val)
-		}
+	if val, present := componentMap["labels"]; present {
+		assert.Nilf(t, val, "labels must be nil for empty slice, got %v", val)
+	}
+	// Serialized without omitempty, so they must stay [] and not turn into null (#3885).
+	for _, field := range []string{"repositoryContexts", "sources", "componentReferences"} {
+		assert.Equalf(t, []any{}, componentMap[field], "component[%q] must be a literal empty list", field)
 	}
 	if val, present := specMap["signatures"]; present {
 		assert.Nilf(t, val, "signatures must be absent for empty slice, got %v", val)
+	}
+}
+
+func TestBuildDescriptorSpec_NilListFieldsStayNil(t *testing.T) {
+	r := require.New(t)
+	v2desc := &descriptorv2.Descriptor{
+		Component: descriptorv2.Component{
+			ComponentMeta: descriptorv2.ComponentMeta{
+				ObjectMeta: descriptorv2.ObjectMeta{Name: "ocm.software/test", Version: "1.0.0"},
+			},
+		},
+	}
+
+	spec := buildDescriptorSpec(v2desc, "envID", map[int]string{0: "someAddTransformID"})
+
+	specMap, ok := spec.(map[string]any)
+	r.True(ok)
+	componentMap, ok := specMap["component"].(map[string]any)
+	r.True(ok)
+	for _, field := range []string{"repositoryContexts", "sources", "componentReferences"} {
+		val, present := componentMap[field]
+		r.Truef(present, "component[%q] must be set", field)
+		r.Nilf(val, "component[%q] must stay nil for a nil slice", field)
 	}
 }
 
