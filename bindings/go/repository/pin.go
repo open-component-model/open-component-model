@@ -3,18 +3,17 @@ package repository
 import (
 	"context"
 	"crypto"
-	"crypto/sha256"
-	"crypto/sha512"
-	"encoding/hex"
 	"errors"
 	"fmt"
-	"hash"
+	"log/slog"
 	"regexp"
 	"strings"
 
-	"ocm.software/open-component-model/bindings/go/descriptor/normalisation"
+	"github.com/opencontainers/go-digest"
+
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/signing"
 )
 
 // DigestPinnableRepository is an optional interface of a [ComponentVersionRepository] that stores
@@ -60,13 +59,11 @@ func PinRepository(repo ComponentVersionRepository, component, version, pin stri
 // with "/" of the normalisation algorithm written as ".".
 var digestPinPattern = regexp.MustCompile(`^(?:([A-Za-z][A-Za-z0-9]*(?:[-_.][A-Za-z][A-Za-z0-9]*)*)\+)?([A-Za-z][A-Za-z0-9]*):([0-9A-Fa-f]+)$`)
 
-// digestPinHashes maps the hash names of a digest pin to the hash they select.
-var digestPinHashes = map[string]struct {
-	algorithm crypto.Hash
-	new       func() hash.Hash
-}{
-	"sha256": {crypto.SHA256, sha256.New},
-	"sha512": {crypto.SHA512, sha512.New},
+// hashAlgorithmNames maps the algorithms [verifiableAlgorithm] returns to the hash algorithm names
+// OCM descriptors use.
+var hashAlgorithmNames = map[digest.Algorithm]string{
+	digest.SHA256: crypto.SHA256.String(),
+	digest.SHA512: crypto.SHA512.String(),
 }
 
 // ParseDigestPin parses the digest of a pinned component reference, "[<normalisation>+]<hash>:<hex>".
@@ -84,15 +81,15 @@ func ParseDigestPin(pin string) (*descriptor.Digest, error) {
 		return nil, fmt.Errorf("invalid digest pin %q: expected [<normalisation>+]<hash>:<hex>", pin)
 	}
 	normalisationAlgorithm, hashName, value := match[1], strings.ToLower(match[2]), strings.ToLower(match[3])
-	h, ok := digestPinHashes[hashName]
-	if !ok {
+	alg, err := verifiableAlgorithm(hashName)
+	if err != nil {
 		return nil, fmt.Errorf("invalid digest pin %q: unsupported hash %q, use sha256 or sha512", pin, match[2])
 	}
-	if size := h.algorithm.Size(); len(value) != 2*size {
+	if size := alg.Size(); len(value) != 2*size {
 		return nil, fmt.Errorf("invalid digest pin %q: %s digest must have %d hex characters, got %d", pin, hashName, 2*size, len(value))
 	}
 	return &descriptor.Digest{
-		HashAlgorithm:          h.algorithm.String(),
+		HashAlgorithm:          hashAlgorithmNames[alg],
 		NormalisationAlgorithm: strings.ReplaceAll(normalisationAlgorithm, ".", "/"),
 		Value:                  value,
 	}, nil
@@ -127,8 +124,7 @@ func GetPinnedComponentVersion(ctx context.Context, repo ComponentVersionReposit
 		desc, err := repo.GetComponentVersion(ctx, component, version)
 		return repo, desc, err
 	}
-	h, ok := digestPinHashes[strings.ToLower(strings.ReplaceAll(pin.HashAlgorithm, "-", ""))]
-	if !ok {
+	if _, err := verifiableAlgorithm(pin.HashAlgorithm); err != nil {
 		return nil, nil, fmt.Errorf("unsupported hash algorithm %q in digest pin: use sha256 or sha512", pin.HashAlgorithm)
 	}
 
@@ -165,25 +161,24 @@ func GetPinnedComponentVersion(ctx context.Context, repo ComponentVersionReposit
 	if err != nil {
 		return nil, nil, fmt.Errorf("getting component version %s:%s pinned to %s failed: %w", component, version, FormatDigestPin(pin), err)
 	}
-	if err := verifyNormalizedPin(desc, pin, h.new()); err != nil {
+	if err := verifyNormalizedPin(ctx, desc, pin); err != nil {
 		return nil, nil, err
 	}
 	return repo, desc, nil
 }
 
-// verifyNormalizedPin verifies desc against the normalized pin, hashing with hasher.
-func verifyNormalizedPin(desc *descriptor.Descriptor, pin *descriptor.Digest, hasher hash.Hash) error {
+// verifyNormalizedPin verifies desc against the normalized pin. It hashes like signature verification,
+// which reads the legacy jsonNormalisation/v3 as jsonNormalisation/v4alpha1, so a pin taken from a
+// v1 signature or component reference verifies as it does in transfer.
+func verifyNormalizedPin(ctx context.Context, desc *descriptor.Descriptor, pin *descriptor.Digest) error {
 	component, version := desc.Component.Name, desc.Component.Version
-	normalised, err := normalisation.Normalise(desc, pin.NormalisationAlgorithm)
+	resolved, err := signing.GenerateDigest(ctx, desc, slog.Default(), pin.NormalisationAlgorithm, pin.HashAlgorithm)
 	if err != nil {
 		return fmt.Errorf("getting component version %s:%s pinned to %s failed: %w", component, version, FormatDigestPin(pin), err)
 	}
-	hasher.Write(normalised)
-	resolved := *pin
-	resolved.Value = hex.EncodeToString(hasher.Sum(nil))
 	if !strings.EqualFold(resolved.Value, pin.Value) {
 		return fmt.Errorf("component version %s:%s does not match pinned digest %s: resolved digest is %s",
-			component, version, FormatDigestPin(pin), FormatDigestPin(&resolved))
+			component, version, FormatDigestPin(pin), FormatDigestPin(resolved))
 	}
 	return nil
 }
@@ -228,11 +223,10 @@ func GetComponentVersionByArtifact(ctx context.Context, repo ComponentVersionRep
 		return nil, nil, nil, err
 	}
 	if pin != nil {
-		h, ok := digestPinHashes[strings.ToLower(strings.ReplaceAll(pin.HashAlgorithm, "-", ""))]
-		if !ok {
+		if _, err := verifiableAlgorithm(pin.HashAlgorithm); err != nil {
 			return nil, nil, nil, fmt.Errorf("unsupported hash algorithm %q in digest pin: use sha256 or sha512", pin.HashAlgorithm)
 		}
-		if err := verifyNormalizedPin(desc, pin, h.new()); err != nil {
+		if err := verifyNormalizedPin(ctx, desc, pin); err != nil {
 			return nil, nil, nil, err
 		}
 	}

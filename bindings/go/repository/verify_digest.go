@@ -9,14 +9,9 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 )
 
-// parseDigest returns d as a [digest.Digest] in canonical "algorithm:hex" form, so that
+// ParseDigest returns d as a [digest.Digest] in canonical "algorithm:hex" form, so that
 // content can be verified against it.
-//
-// Note: There are several places in the code today in which we are parsing digests in
-// one way or another. It will be a separate issue to pull them all together. Not in this one.
-// And we aren't using those to avoid having to import OCI package or some other package
-// and dilute the dependency graph.
-func parseDigest(d *descriptor.Digest) (digest.Digest, error) {
+func ParseDigest(d *descriptor.Digest) (digest.Digest, error) {
 	if d == nil {
 		return "", nil
 	}

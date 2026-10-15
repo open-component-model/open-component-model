@@ -93,7 +93,7 @@ func TestDigest_Parse(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			parsed, err := parseDigest(tt.digest)
+			parsed, err := ParseDigest(tt.digest)
 
 			switch {
 			case tt.noDigest:

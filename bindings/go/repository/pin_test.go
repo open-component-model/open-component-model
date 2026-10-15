@@ -1,12 +1,16 @@
 package repository
 
 import (
+	"crypto"
+	"log/slog"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
+	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/signing"
 )
 
 func TestParseDigestPin(t *testing.T) {
@@ -44,4 +48,29 @@ func TestParseDigestPin(t *testing.T) {
 			require.Equal(t, strings.ToLower(tt.pin), strings.ToLower(FormatDigestPin(got)), "formatting round-trips")
 		})
 	}
+}
+
+func TestVerifyNormalizedPin_LegacyV3(t *testing.T) {
+	r := require.New(t)
+	ctx := t.Context()
+
+	desc := &descruntime.Descriptor{
+		Component: descruntime.Component{
+			ComponentMeta: descruntime.ComponentMeta{
+				ObjectMeta: descruntime.ObjectMeta{Name: "acme.org/test", Version: "1.0.0"},
+			},
+			Provider: descruntime.Provider{Name: "acme"},
+		},
+	}
+
+	generated, err := signing.GenerateDigest(ctx, desc, slog.Default(), v4alpha1.Algorithm, crypto.SHA256.String())
+	r.NoError(err)
+
+	v3Pin, err := ParseDigestPin("jsonNormalisation.v3+sha256:" + generated.Value)
+	r.NoError(err)
+	r.NoError(verifyNormalizedPin(ctx, desc, v3Pin), "a legacy v3 pin verifies like a v4alpha1 pin")
+
+	wrong, err := ParseDigestPin("jsonNormalisation.v3+sha256:" + strings.Repeat("00", 32))
+	r.NoError(err)
+	r.ErrorContains(verifyNormalizedPin(ctx, desc, wrong), "does not match pinned digest")
 }

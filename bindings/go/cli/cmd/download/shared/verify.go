@@ -63,11 +63,11 @@ func isOCILayout(data blob.ReadOnlyBlob) bool {
 		return false
 	}
 	mediaType, ok := aware.MediaType()
-	return ok && strings.HasPrefix(mediaType, ocilayout.MediaTypeOCIImageLayoutV1)
+	return ok && ocilayout.IsOCILayoutMediaType(mediaType)
 }
 
 func verifyOCILayout(ctx context.Context, data blob.ReadOnlyBlob, expected *descriptor.Digest) (err error) {
-	want, err := ociDigest(expected)
+	want, err := repository.ParseDigest(expected)
 	if err != nil {
 		return err
 	}
@@ -120,29 +120,4 @@ func verifyGraph(ctx context.Context, fetcher content.Fetcher, desc ociImageSpec
 		}
 	}
 	return nil
-}
-
-func ociDigest(d *descriptor.Digest) (digest.Digest, error) {
-	var algorithm digest.Algorithm
-	switch strings.ToUpper(strings.ReplaceAll(d.HashAlgorithm, "-", "")) {
-	case "SHA256":
-		algorithm = digest.SHA256
-	case "SHA512":
-		algorithm = digest.SHA512
-	default:
-		return "", fmt.Errorf("unsupported hash algorithm %q", d.HashAlgorithm)
-	}
-	value := strings.ToLower(d.Value)
-	// accept a value spelled "<algorithm>:<hex>", as repository.VerifyDownload does
-	if prefix, encoded, prefixed := strings.Cut(value, ":"); prefixed {
-		if digest.Algorithm(strings.ReplaceAll(prefix, "-", "")) != algorithm {
-			return "", fmt.Errorf("digest value %q carries algorithm %q but hashAlgorithm is %q", d.Value, prefix, d.HashAlgorithm)
-		}
-		value = encoded
-	}
-	parsed := digest.NewDigestFromEncoded(algorithm, value)
-	if err := parsed.Validate(); err != nil {
-		return "", fmt.Errorf("invalid digest %q: %w", d.Value, err)
-	}
-	return parsed, nil
 }
