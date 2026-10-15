@@ -260,13 +260,13 @@ func fillGraphDefinitionWithPrefetchedComponents(
 				"targetIndex", targetIdx, "targetType", fmt.Sprintf("%T", target),
 				"transformID", id)
 
-			resourceTransformIDs, fileRefs, err := processResources(ctx, v2desc, baseID, id, val, tgd, target, uploaders, uploaderUsed)
+			resourceTransformIDs, converted, fileRefs, err := processResources(ctx, v2desc, baseID, id, val, tgd, target, uploaders, uploaderUsed)
 			if err != nil {
 				return err
 			}
 			allFileRefs = append(allFileRefs, fileRefs...)
 
-			if err := addUploadTransformation(v2desc, id, baseID, target, tgd, resourceTransformIDs,
+			if err := addUploadTransformation(v2desc, id, baseID, target, tgd, resourceTransformIDs, converted,
 				uploadLabel(&val.Descriptor.Component, target, targetIdx, len(targets))); err != nil {
 				return err
 			}
@@ -282,7 +282,9 @@ func fillGraphDefinitionWithPrefetchedComponents(
 // processResources iterates over resources in a v2 descriptor and creates the appropriate
 // transformations: the first uploader whose match selects a resource handles it. A resource no uploader selects follows the baseline: a local blob
 // is copied as a local blob, anything else stays by reference (no transformation).
-// It returns CEL spec-field expressions for all Get transformations that buffer content to disk.
+// It returns the indices of resources whose content is converted on the way (see
+// convertsContent) and CEL spec-field expressions for all Get transformations that buffer
+// content to disk.
 func processResources(
 	ctx context.Context,
 	v2desc *descriptorv2.Descriptor,
@@ -293,20 +295,21 @@ func processResources(
 	toSpec runtime.Typed,
 	uploaders []transferv1alpha1.UploaderConfig,
 	uploaderUsed []bool,
-) (map[int]string, []string, error) {
+) (map[int]string, map[int]bool, []string, error) {
 	component := val.Descriptor.Component.Name
 	version := val.Descriptor.Component.Version
 	resourceTransformIDs := make(map[int]string)
+	converted := make(map[int]bool)
 	var fileExpressions []string
 	env := &uploaderEnv{baseID: baseID, node: tgd.Environment.Data[baseID]}
 
 	for i, resource := range v2desc.Component.Resources {
 		access, err := scheme.NewObject(resource.Access.Type)
 		if err != nil {
-			return nil, nil, fmt.Errorf("cannot create new object for resource access type %q: %w", resource.Access.Type.String(), err)
+			return nil, nil, nil, fmt.Errorf("cannot create new object for resource access type %q: %w", resource.Access.Type.String(), err)
 		}
 		if err := scheme.Convert(resource.Access, access); err != nil {
-			return nil, nil, fmt.Errorf("cannot convert resource access to typed object: %w", err)
+			return nil, nil, nil, fmt.Errorf("cannot convert resource access to typed object: %w", err)
 		}
 		if git, ok := access.(*gitv1.Git); ok {
 			if access, err = git.Normalize(); err != nil {
@@ -321,7 +324,7 @@ func processResources(
 		if len(uploaders) > 0 {
 			aliases, err := uploaderAliases(env, i, toSpec)
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, nil, err
 			}
 			for ui, u := range uploaders {
 				if u == nil {
@@ -329,7 +332,7 @@ func processResources(
 				}
 				selected, err := matches(ctx, u.EffectiveMatch(), aliases, env)
 				if err != nil {
-					return nil, nil, fmt.Errorf("uploader %d (%s) for resource %v: %w", ui, u.GetType(), resource.ToIdentity(), err)
+					return nil, nil, nil, fmt.Errorf("uploader %d (%s) for resource %v: %w", ui, u.GetType(), resource.ToIdentity(), err)
 				}
 				if !selected {
 					continue
@@ -355,12 +358,13 @@ func processResources(
 						err = fmt.Errorf("local blobs cannot be kept by reference (adjust match)")
 					}
 				default:
-					return nil, nil, fmt.Errorf("unsupported uploader config type %T for resource %v", u, resource.ToIdentity())
+					return nil, nil, nil, fmt.Errorf("unsupported uploader config type %T for resource %v", u, resource.ToIdentity())
 				}
 				if err != nil {
-					return nil, nil, fmt.Errorf("cannot process uploader for resource %v: %w", resource.ToIdentity(), err)
+					return nil, nil, nil, fmt.Errorf("cannot process uploader for resource %v: %w", resource.ToIdentity(), err)
 				}
 				fileExpressions = append(fileExpressions, exprs...)
+				converted[i] = convertsContent(access, u)
 				handled = true
 				break
 			}
@@ -377,11 +381,25 @@ func processResources(
 
 		exprs, err := processResource(resource, access, id, val, tgd, toSpec, resourceTransformIDs, i)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		fileExpressions = append(fileExpressions, exprs...)
+		converted[i] = convertsContent(access, nil)
 	}
-	return resourceTransformIDs, fileExpressions, nil
+	return resourceTransformIDs, converted, fileExpressions, nil
+}
+
+// convertsContent reports whether a transfer converts the content of a resource instead of
+// copying it as is: a Helm chart is repackaged as an OCI artifact, and a repository upload
+// stores OCI content in another format. The digest such a transfer writes describes the
+// converted content, so it is not replaced by the source digest.
+func convertsContent(access runtime.Typed, uploader transferv1alpha1.UploaderConfig) bool {
+	switch uploader.(type) {
+	case *transferv1alpha1.ArtifactoryUploaderConfig, *transferv1alpha1.NexusUploaderConfig:
+		return true
+	}
+	_, isHelm := access.(*helmv1.Helm)
+	return isHelm
 }
 
 // isLocalByValue reports whether access must be copied into the target by value (embedded
@@ -508,8 +526,8 @@ func addDescriptorToEnvironment(v2desc *descriptorv2.Descriptor, id string, tgd 
 // addUploadTransformation creates the final upload (AddComponentVersion) transformation
 // for a component, reconstructing the descriptor with CEL references to modified resources.
 // envID is the base ID used to reference the descriptor in the environment (without target suffix).
-func addUploadTransformation(v2desc *descriptorv2.Descriptor, id string, envID string, toSpec runtime.Typed, tgd *transformv1alpha1.TransformationGraphDefinition, resourceTransformIDs map[int]string, label string) error {
-	descriptorSpec := buildDescriptorSpec(v2desc, envID, resourceTransformIDs)
+func addUploadTransformation(v2desc *descriptorv2.Descriptor, id string, envID string, toSpec runtime.Typed, tgd *transformv1alpha1.TransformationGraphDefinition, resourceTransformIDs map[int]string, converted map[int]bool, label string) error {
+	descriptorSpec := buildDescriptorSpec(v2desc, envID, resourceTransformIDs, converted)
 
 	addType, err := chooseAddType(toSpec)
 	if err != nil {
@@ -541,17 +559,23 @@ func addUploadTransformation(v2desc *descriptorv2.Descriptor, id string, envID s
 // If no resources were modified (no resource transformations), it returns a CEL reference to
 // the original descriptor in the environment. Otherwise, it builds a composite descriptor where
 // each modified resource is referenced via its Add transformation's output, and unmodified
-// resources reference the original environment data.
-func buildDescriptorSpec(v2desc *descriptorv2.Descriptor, id string, resourceTransformIDs map[int]string) any {
+// resources reference the original environment data. A modified resource keeps the digest
+// recorded in the source (see withSourceDigestFunction) unless its content was converted.
+func buildDescriptorSpec(v2desc *descriptorv2.Descriptor, id string, resourceTransformIDs map[int]string, converted map[int]bool) any {
 	if len(resourceTransformIDs) == 0 {
 		return fmt.Sprintf("${environment.%s}", id)
 	}
 
 	resourcesArray := make([]any, len(v2desc.Component.Resources))
 	for i := range v2desc.Component.Resources {
-		if addID, ok := resourceTransformIDs[i]; ok {
+		addID, ok := resourceTransformIDs[i]
+		switch {
+		case ok && converted[i]:
 			resourcesArray[i] = fmt.Sprintf("${%s.output.resource}", addID)
-		} else {
+		case ok:
+			resourcesArray[i] = fmt.Sprintf("${%s.output.resource.%s(environment.%s.component.resources[%d])}",
+				addID, withSourceDigestFunctionName, id, i)
+		default:
 			resourcesArray[i] = fmt.Sprintf("${environment.%s.component.resources[%d]}", id, i)
 		}
 	}
