@@ -1,1 +1,0 @@
-[{"component":[{"componentReferences":[]},{"name":"acme.org/excluded"},{"provider":"ACME"},{"resources":[[{"digest":[{"hashAlgorithm":"NO-DIGEST"},{"normalisationAlgorithm":"EXCLUDE-FROM-SIGNATURE"},{"value":"NO-DIGEST"}]},{"extraIdentity":null},{"name":"blob"},{"relation":"external"},{"type":"blob"},{"version":"1.0.0"}]]},{"version":"1.0.0"}]},{"meta":[{"schemaVersion":"v2"}]}]
