@@ -17,7 +17,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -323,16 +322,18 @@ configurations:
 			},
 		},
 		{
-			// The signed TSA URL label would invalidate the existing signature.
-			name: "foreign signature is refused before contacting the TSA",
+			name: "timestamping a second signature keeps the first one valid",
 			run: func(t *testing.T, ref string) error {
 				t.Helper()
-				if err := ocm(t, "sign", "cv", ref, "--config", config, "--signature", "other"); err != nil {
+				if err := ocm(t, "sign", "cv", ref, "--config", config, "--signature", "other", "--tsa-url", tsaSrv.URL); err != nil {
 					return err
 				}
-				return ocm(t, "sign", "cv", ref, "--config", config, "--tsa-url", tsaSrv.URL)
+				if err := ocm(t, "sign", "cv", ref, "--config", config, "--tsa-url", tsaSrv.URL); err != nil {
+					return err
+				}
+				return ocm(t, "verify", "cv", ref, "--config", config)
 			},
-			wantErr: `would invalidate the existing signature "other"`,
+			wantTSARequests: 2,
 		},
 		{
 			name: "wrong TSA root fails verification",
@@ -363,9 +364,9 @@ configurations:
 	}
 }
 
-// Re-signing with --force but without --tsa must drop the TSA URL label of the
-// previous timestamped signature, so no stale signed label remains.
-func Test_Sign_Force_Without_TSA_Removes_TSA_URL_Label(t *testing.T) {
+// Signing with --tsa must not change the descriptor digest, so a digest that a
+// parent pinned for the component at construction time stays valid.
+func Test_Sign_TSA_Keeps_Descriptor_Digest(t *testing.T) {
 	r := require.New(t)
 	tsaSrv, _, _ := newMockTSA(t, time.Now())
 	dir := t.TempDir()
@@ -374,26 +375,42 @@ func Test_Sign_Force_Without_TSA_Removes_TSA_URL_Label(t *testing.T) {
 	config := filepath.Join(dir, "config.yaml")
 	r.NoError(os.WriteFile(config, []byte(pemSigningConfigYAML(rsaConsumerYAML("default", chainPath, keyPath, ""))), 0o600))
 
-	name := "ocm.software/tsa-force-resign"
-	ref := addTSATestComponentVersion(t, name)
-	labelName := tsa.TSAURLLabelPrefix + "default"
-	hasLabel := func(desc *descriptor.Descriptor) bool {
-		return slices.ContainsFunc(desc.Component.Labels, func(l descriptor.Label) bool { return l.Name == labelName })
-	}
-
-	_, err := test.OCM(t, test.WithArgs("sign", "cv", ref, "--config", config, "--tsa-url", tsaSrv.URL))
+	constructor := filepath.Join(dir, "component-constructor.yaml")
+	r.NoError(os.WriteFile(constructor, []byte(`
+components:
+  - name: ocm.software/tsa-child
+    version: 1.0.0
+    provider:
+      name: ocm.software
+    resources:
+      - name: data
+        type: blob
+        input:
+          type: utf8/v1
+          text: "tsa test"
+  - name: ocm.software/tsa-parent
+    version: 1.0.0
+    provider:
+      name: ocm.software
+    componentReferences:
+      - name: child
+        componentName: ocm.software/tsa-child
+        version: 1.0.0
+`), 0o600))
+	archive := filepath.Join(dir, "transport-archive")
+	_, err := test.OCM(t, test.WithArgs("add", "cv", "--constructor", constructor, "--repository", archive))
 	r.NoError(err)
-	_, desc := getTSATestComponentVersion(t, ref, name)
-	r.True(hasLabel(desc))
-	r.NotNil(desc.Signatures[0].Timestamp)
+	_, parent := getTSATestComponentVersion(t, archive+"//ocm.software/tsa-parent:1.0.0", "ocm.software/tsa-parent")
+	r.Len(parent.Component.References, 1)
+	pinned := parent.Component.References[0].Digest
 
-	_, err = test.OCM(t, test.WithArgs("sign", "cv", ref, "--config", config, "--force"))
+	childRef := archive + "//ocm.software/tsa-child:1.0.0"
+	_, err = test.OCM(t, test.WithArgs("sign", "cv", childRef, "--config", config, "--tsa-url", tsaSrv.URL))
 	r.NoError(err)
-	_, desc = getTSATestComponentVersion(t, ref, name)
-	r.False(hasLabel(desc), "the stale TSA URL label must be removed")
-	r.Len(desc.Signatures, 1)
-	r.Nil(desc.Signatures[0].Timestamp)
 
-	_, err = test.OCM(t, test.WithArgs("verify", "cv", ref, "--config", config))
-	r.NoError(err)
+	_, child := getTSATestComponentVersion(t, childRef, "ocm.software/tsa-child")
+	r.Len(child.Signatures, 1)
+	r.NotNil(child.Signatures[0].Timestamp)
+	r.Equal(tsaSrv.URL, child.Signatures[0].Timestamp.URL)
+	r.Equal(pinned.Value, child.Signatures[0].Digest.Value, "the timestamped signature must cover the digest the parent pinned")
 }

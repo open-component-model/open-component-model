@@ -47,7 +47,7 @@ Verify component version(s) inside an OCM repository based on signatures.
 - Full certificate-chain verification of the timestamp token requires the TSA's root CA certificate, supplied via the credential graph under a TSA/v1alpha1 identity
 - Without TSA root certificates the token structure and imprint are still checked, but the certificate chain is not verified and a warning is logged
 - Only a timestamp validated against trusted TSA roots is used to validate an (RSA/PEM) signing certificate as of the signing time; a merely structural token never relaxes certificate validity
-- The TSA URL stored as a signed label in the descriptor selects a URL-specific TSA/v1alpha1 entry; an entry without URL attributes applies to any TSA
+- The TSA URL stored with the timestamp selects a URL-specific TSA/v1alpha1 entry; an entry without URL attributes applies to any TSA
 - Timestamps created by the OCM v1 CLI are verified as well
 
 Use to validate component versions before promotion, deployment, or further usage to ensure integrity and provenance.

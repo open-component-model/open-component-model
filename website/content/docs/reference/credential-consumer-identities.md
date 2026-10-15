@@ -769,14 +769,14 @@ consumer identity. The signing path does **not** consult this identity — the T
 | Attribute  | Required | Description                                                                                                                        |
 |------------|----------|------------------------------------------------------------------------------------------------------------------------------------|
 | `type`     | Yes      | Must be `TSA/v1alpha1`                                                                                                             |
-| `hostname` | No       | TSA server hostname (e.g. `timestamp.digicert.com`). Derived from the signed TSA URL label during verification.                    |
+| `hostname` | No       | TSA server hostname (e.g. `timestamp.digicert.com`). Derived from the TSA URL stored with the timestamp during verification.       |
 | `scheme`   | No       | URL scheme (`https`, `http`). If omitted, matches any scheme.                                                                      |
 | `port`     | No       | Port number as string. Default ports are applied when `scheme` is set: `https` → `443`, `http` → `80`.                             |
 | `path`     | No       | URL path of the TSA endpoint. Supports glob patterns (`*` matches one path segment). If omitted, matches any path on the hostname. |
 
-The verifier reads the TSA URL from the signed `url.tsa.ocm.software/{signature}` label on the descriptor and
-decomposes it into these URL attributes for URL-specific matching. A consumer entry with only `type: TSA/v1alpha1`
-(no URL attributes) acts as a generic fallback that matches any TSA.
+The verifier reads the TSA URL from the signature's `timestamp.url` field and decomposes it into these URL attributes
+for URL-specific matching. A consumer entry with only `type: TSA/v1alpha1` (no URL attributes) acts as a generic
+fallback that matches any TSA, including timestamps created by the OCM v1 CLI, which carry no URL.
 
 ### Credential Properties
 

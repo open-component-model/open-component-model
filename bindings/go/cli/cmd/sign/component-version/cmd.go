@@ -391,12 +391,6 @@ func SignComponentVersion(cmd *cobra.Command, args []string) error {
 		logger.InfoContext(ctx, "overwriting existing signature", "name", signatureName)
 	}
 
-	// The TSA URL label is signing-relevant, so it must be set before the digest
-	// is computed.
-	if err := setTSALabel(desc, signatureName, tsaURL); err != nil {
-		return err
-	}
-
 	// digest
 	unsignedDigest, err := signing.GenerateDigest(
 		ctx, desc, logger,
@@ -545,58 +539,14 @@ func validateTSAForSigner(tsaURL string, signerConfig runtime.Typed) error {
 	return nil
 }
 
-// setTSALabel records the sanitized TSA URL as a signed label so verifiers can
-// look up URL-specific TSA roots from a tamper-evident value. A stale label is
-// replaced or removed; any change is refused while another signature covers the
-// descriptor, since that signature would be invalidated.
-func setTSALabel(desc *descruntime.Descriptor, signatureName, tsaURL string) error {
-	labelName := tsa.TSAURLLabelPrefix + signatureName
-	idx := slices.IndexFunc(desc.Component.Labels, func(l descruntime.Label) bool { return l.Name == labelName })
-	if tsaURL == "" && idx < 0 {
-		return nil
-	}
-	if other, ok := otherSignature(desc, signatureName); ok {
-		return fmt.Errorf("cannot change the signing-relevant TSA URL label %q: it would invalidate the existing signature %q; timestamp this signature before adding other signatures", labelName, other)
-	}
-	if tsaURL == "" {
-		desc.Component.Labels = slices.Delete(desc.Component.Labels, idx, idx+1)
-		return nil
-	}
-
+// requestTSATimestamp obtains an RFC 3161 timestamp over the signature value.
+// The sanitized TSA URL is kept with the token so verifiers can select their
+// roots for that TSA.
+func requestTSATimestamp(ctx context.Context, logger *slog.Logger, config *genericv1.Config, tsaURL, hashAlgorithm string, signatureValue []byte) (*descruntime.TimestampSpec, error) {
 	sanitizedURL, err := tsa.SanitizeURL(tsaURL)
 	if err != nil {
-		return fmt.Errorf("sanitizing TSA URL label: %w", err)
+		return nil, fmt.Errorf("sanitizing TSA URL: %w", err)
 	}
-	tsaURLJSON, err := json.Marshal(sanitizedURL)
-	if err != nil {
-		return fmt.Errorf("marshalling TSA URL label: %w", err)
-	}
-	label := descruntime.Label{
-		Name:    labelName,
-		Value:   tsaURLJSON,
-		Signing: true,
-		Version: "v1alpha1",
-	}
-	if idx >= 0 {
-		desc.Component.Labels[idx] = label
-	} else {
-		desc.Component.Labels = append(desc.Component.Labels, label)
-	}
-	return nil
-}
-
-// otherSignature returns the name of a signature other than signatureName.
-func otherSignature(desc *descruntime.Descriptor, signatureName string) (string, bool) {
-	for _, sig := range desc.Signatures {
-		if sig.Name != signatureName {
-			return sig.Name, true
-		}
-	}
-	return "", false
-}
-
-// requestTSATimestamp obtains an RFC 3161 timestamp over the signature value.
-func requestTSATimestamp(ctx context.Context, logger *slog.Logger, config *genericv1.Config, tsaURL, hashAlgorithm string, signatureValue []byte) (*descruntime.TimestampSpec, error) {
 	httpConfig, err := httpv1alpha1.ResolveHTTPConfig(config)
 	if err != nil {
 		return nil, fmt.Errorf("resolving HTTP configuration for TSA request failed: %w", err)
@@ -615,5 +565,6 @@ func requestTSATimestamp(ctx context.Context, logger *slog.Logger, config *gener
 	return &descruntime.TimestampSpec{
 		Value: string(tsa.ToPEM(token.Raw)),
 		Time:  descruntime.CreationTime(token.Time),
+		URL:   sanitizedURL,
 	}, nil
 }

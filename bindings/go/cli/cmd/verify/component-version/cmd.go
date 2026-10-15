@@ -80,7 +80,7 @@ func New() *cobra.Command {
 - Full certificate-chain verification of the timestamp token requires the TSA's root CA certificate, supplied via the credential graph under a TSA/v1alpha1 identity
 - Without TSA root certificates the token structure and imprint are still checked, but the certificate chain is not verified and a warning is logged
 - Only a timestamp validated against trusted TSA roots is used to validate an (RSA/PEM) signing certificate as of the signing time; a merely structural token never relaxes certificate validity
-- The TSA URL stored as a signed label in the descriptor selects a URL-specific TSA/v1alpha1 entry; an entry without URL attributes applies to any TSA
+- The TSA URL stored with the timestamp selects a URL-specific TSA/v1alpha1 entry; an entry without URL attributes applies to any TSA
 - Timestamps created by the OCM v1 CLI are verified as well
 
 Use to validate component versions before promotion, deployment, or further usage to ensure integrity and provenance.`,
@@ -417,7 +417,7 @@ func VerifyComponentVersion(cmd *cobra.Command, args []string) error {
 			// Verify an optional RFC 3161 timestamp attached to the signature.
 			verifyCtx := egctx
 			if signature.Timestamp != nil {
-				verifiedTime, trusted, err := verifyTSATimestamp(egctx, logger, credentialGraph, desc, signature)
+				verifiedTime, trusted, err := verifyTSATimestamp(egctx, logger, credentialGraph, signature)
 				if err != nil {
 					return err
 				}
@@ -468,30 +468,14 @@ func verifyTSATimestamp(
 	ctx context.Context,
 	logger *slog.Logger,
 	credentialGraph credentials.Resolver,
-	desc *descruntime.Descriptor,
 	signature descruntime.Signature,
 ) (time.Time, bool, error) {
-	// The TSA URL stored as a signed label enables URL-specific credential lookup.
-	// An unsigned label is not covered by the digest, so anyone could add one to
-	// steer the lookup to a different TSA's roots; only signed labels count.
-	var tsaURL string
-	labelName := tsa.TSAURLLabelPrefix + signature.Name
-	for _, lbl := range desc.Component.Labels {
-		if lbl.Name == labelName && lbl.Signing {
-			if err := lbl.GetValue(&tsaURL); err != nil {
-				logger.DebugContext(ctx, "failed to parse TSA URL label", "label", labelName, "error", err.Error())
-			}
-			break
-		}
-	}
-
-	tsaRootPool, err := tsaRootPoolFromGraph(ctx, logger, credentialGraph, tsaURL)
+	tsaRootPool, err := tsaRootPoolFromGraph(ctx, logger, credentialGraph, signature.Timestamp.URL)
 	if err != nil {
 		return time.Time{}, false, err
 	}
 	if tsaRootPool != nil {
-		safeURL, _ := tsa.SanitizeURL(tsaURL)
-		logger.DebugContext(ctx, "TSA root certificates resolved from credential graph", "name", signature.Name, "tsaURL", safeURL)
+		logger.DebugContext(ctx, "TSA root certificates resolved from credential graph", "name", signature.Name)
 	} else {
 		logger.WarnContext(ctx, "verifying TSA timestamp without root certificates; only structural validity is checked. Configure TSA root certs in the credential graph (type: TSA/v1alpha1) for full trust verification.", "name", signature.Name)
 	}
@@ -544,10 +528,12 @@ func timestampTokenAndImprint(signature descruntime.Signature) ([]byte, crypto.H
 }
 
 // tsaRootPoolFromGraph resolves TSA root certificates from the credential graph.
-// The identity derived from the TSA URL label is tried first; the generic
-// TSA/v1alpha1 identity follows, so a consumer entry without URL attributes
-// matches any TSA. URL matching requires equal hostnames, so a type-only entry
-// never matches the URL-derived identity on its own.
+// The identity derived from the TSA URL stored with the timestamp is tried
+// first; the generic TSA/v1alpha1 identity follows, so a consumer entry without
+// URL attributes matches any TSA. URL matching requires equal hostnames, so a
+// type-only entry never matches the URL-derived identity on its own. The URL is
+// not signed: it only selects among roots the verifier configured, and a token
+// is trusted only when it chains to one of them.
 func tsaRootPoolFromGraph(ctx context.Context, logger *slog.Logger, credentialGraph credentials.Resolver, tsaURL string) (*x509.CertPool, error) {
 	candidates := []string{tsaURL}
 	if tsaURL != "" {
@@ -556,7 +542,7 @@ func tsaRootPoolFromGraph(ctx context.Context, logger *slog.Logger, credentialGr
 	for _, candidate := range candidates {
 		tsaID, err := tsa.TSAConsumerIdentity(candidate)
 		if err != nil {
-			logger.WarnContext(ctx, "ignoring unparsable TSA URL label for credential lookup", "error", err.Error())
+			logger.WarnContext(ctx, "ignoring unparsable TSA URL for credential lookup", "error", err.Error())
 			continue
 		}
 		tsaCreds, err := credentialGraph.Resolve(ctx, tsaID)
