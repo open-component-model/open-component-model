@@ -167,6 +167,8 @@ tasks:
 
   cosign:install:
     desc: "Install OCM's FIPS cosign build at the version pinned in signing/handler/internal/.env"
+    # Both setup and scaffolding:env depend on this. Parallel runs race on cosign_checksums.txt.
+    run: once
     requires:
       vars: [COSIGN_VERSION, COSIGN_CHECKSUMS_SHA256]
     vars:

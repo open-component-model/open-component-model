@@ -155,7 +155,9 @@ func startQuayLayerLimitEnvironment(t *testing.T, ctx context.Context) *quayLaye
 			ContainerFilePath: "/conf/stack/config.yaml",
 			FileMode:          0o644,
 		}),
-		testcontainers.WithWaitStrategy(
+		// WithWaitStrategy caps the wait at a 60s deadline regardless of the strategy's
+		// own timeout; Quay needs longer to boot, so set the deadline explicitly.
+		testcontainers.WithWaitStrategyAndDeadline(5*time.Minute,
 			wait.ForHTTP("/health/instance").
 				WithPort("8080/tcp").
 				WithPollInterval(time.Second).
