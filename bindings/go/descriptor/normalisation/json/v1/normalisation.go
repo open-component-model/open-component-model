@@ -128,7 +128,9 @@ func transformComponent(c map[string]any) error {
 
 // transformResource drops the transport-only fields, forces an explicit
 // extraIdentity null when empty, and applies the label rule. The digest is kept
-// verbatim, including the EXCLUDE-FROM-SIGNATURE sentinel.
+// verbatim, including the EXCLUDE-FROM-SIGNATURE sentinel. (cc-utils drops the
+// digest for a resource with no access, but ConvertFromV2 rejects an access-less
+// resource upstream, so that case never reaches normalisation here.)
 func transformResource(res map[string]any) {
 	delete(res, "access")
 	delete(res, "srcRefs")
