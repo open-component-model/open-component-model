@@ -428,8 +428,8 @@ Unlike Sigstore (other tabs), you skip the browser login and instead bring a key
 - A component version in a CTF archive or OCI registry (we'll use `github.com/acme.org/helloworld:1.0.0` from the [getting started guide]({{< relref "create-component-version.md" >}}); any component you can write to works)
 
 {{< callout context="note" >}}
-<!-- TODO(#3625): restore the link to https://github.com/open-component-model/open-component-model/blob/main/docs/adr/0030_notation_signing.md once this PR lands on main. -->
-For the end-to-end learning walkthrough including key generation and identity pinning, see [Tutorial: Notation (Notary Project)]({{< relref "docs/tutorials/signing/notation.md" >}}). Design background lives in ADR 0030: Notation Signing.
+<!-- TODO(#3625): restore the link to https://github.com/open-component-model/open-component-model/blob/main/docs/adr/0032_notation_signing.md once this PR lands on main. -->
+For the end-to-end learning walkthrough including key generation and identity pinning, see [Tutorial: Notation (Notary Project)]({{< relref "docs/tutorials/signing/notation.md" >}}). Design background lives in ADR 0032: Notation Signing.
 {{< /callout >}}
 
 <!-- markdownlint-disable-next-line MD024 -->

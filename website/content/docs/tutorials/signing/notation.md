@@ -290,5 +290,5 @@ rm -rf /tmp/ocm-notation-tutorial
 ## Related Documentation
 
 - [Concept: Signing and Verification]({{< relref "docs/concepts/signing-and-verification-concept.md" >}}) — trust models and digest normalization
-<!-- TODO(#3625): restore the link to https://github.com/open-component-model/open-component-model/blob/main/docs/adr/0030_notation_signing.md once this PR lands on main. -->
-- ADR 0030: Notation Signing — design and trust model
+<!-- TODO(#3625): restore the link to https://github.com/open-component-model/open-component-model/blob/main/docs/adr/0032_notation_signing.md once this PR lands on main. -->
+- ADR 0032: Notation Signing — design and trust model
