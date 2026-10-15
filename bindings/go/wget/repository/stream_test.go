@@ -95,7 +95,7 @@ func TestDownloadResourceStream_ChecksumPolicyMismatch(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		// Advertise a checksum that does not describe the served bytes.
-		w.Header().Set("x-checksum-sha256", godigest.FromString("different content").Encoded())
+		w.Header().Set("X-Checksum-Sha256", godigest.FromString("different content").Encoded())
 		_, _ = w.Write([]byte("served bytes"))
 	}))
 	t.Cleanup(server.Close)

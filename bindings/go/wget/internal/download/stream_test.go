@@ -78,7 +78,7 @@ func TestStream_VerificationSuccess(t *testing.T) {
 
 	content := []byte("verify me correctly")
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("x-checksum-sha256", sha256Hex(content))
+		w.Header().Set("X-Checksum-Sha256", sha256Hex(content))
 		_, _ = w.Write(content)
 	}))
 	t.Cleanup(srv.Close)
@@ -111,7 +111,7 @@ func TestStream_VerificationMismatch(t *testing.T) {
 	content := []byte("the bytes actually served")
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		// Advertise a checksum of different content, so verification must fail.
-		w.Header().Set("x-checksum-sha256", sha256Hex([]byte("something else entirely")))
+		w.Header().Set("X-Checksum-Sha256", sha256Hex([]byte("something else entirely")))
 		_, _ = w.Write(content)
 	}))
 	t.Cleanup(srv.Close)
