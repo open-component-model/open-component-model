@@ -44,14 +44,23 @@ tasks:
       # single -coverprofile, which gotestsum's final rerun overwrites). Both
       # runs write into it concurrently; file names are unique per process.
       - rm -rf '{{.OUT_DIR}}/coverage.integration.covdir' && mkdir -p '{{.OUT_DIR}}/coverage.integration.covdir'
+      # Merge in a defer so a failing package (e.g. the sigstore scaffolding cluster)
+      # still yields a profile. Otherwise errexit aborts before the merge and the CI
+      # summary reports a full test run as "tests did not run". -args passes gocoverdir
+      # to the test binary without fighting gotestsum's flag ordering.
+      - defer: |
+          go tool covdata textfmt -i='{{.OUT_DIR}}/coverage.integration.covdir' -o '{{.OUT_DIR}}/coverage.integration.out'
+          # No coverage collected (every package failed before a test ran) leaves an empty
+          # profile. Drop it so the CI summary takes its "tests did not run" path instead
+          # of reporting a misleading 0% below the floor.
+          if [ ! -s '{{.OUT_DIR}}/coverage.integration.out' ]; then
+            rm -f '{{.OUT_DIR}}/coverage.integration.out'
+          else
+            # Drop generated files (zz_generated.*) so the number reflects hand-written code.
+            grep -v 'zz_generated\.' '{{.OUT_DIR}}/coverage.integration.out' > '{{.OUT_DIR}}/coverage.integration.out.tmp' && mv '{{.OUT_DIR}}/coverage.integration.out.tmp' '{{.OUT_DIR}}/coverage.integration.out'
+            go tool cover -func='{{.OUT_DIR}}/coverage.integration.out' | tail -1
+          fi
       - task: test/integration:run
-      - |
-        # Merge every run's data into one profile. -args passes gocoverdir to the
-        # test binary without fighting gotestsum's flag ordering.
-        go tool covdata textfmt -i='{{.OUT_DIR}}/coverage.integration.covdir' -o '{{.OUT_DIR}}/coverage.integration.out'
-        # Drop generated files (zz_generated.*) so the number reflects hand-written code.
-        grep -v 'zz_generated\.' '{{.OUT_DIR}}/coverage.integration.out' > '{{.OUT_DIR}}/coverage.integration.out.tmp' && mv '{{.OUT_DIR}}/coverage.integration.out.tmp' '{{.OUT_DIR}}/coverage.integration.out'
-        go tool cover -func='{{.OUT_DIR}}/coverage.integration.out' | tail -1
 
   test/integration:run:
     internal: true

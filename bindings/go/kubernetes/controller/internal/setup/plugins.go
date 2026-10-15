@@ -78,7 +78,7 @@ func NewPluginManager(ctx context.Context, cfg *genericv1.Config, logger *slog.L
 		return nil, fmt.Errorf("failed to create signing handler: %w", err)
 	}
 
-	gpgSigningHandler, err := gpghandler.New(nil, gpghandler.WithTempDir(options.TempDir))
+	gpgSigningHandler, err := gpghandler.New(nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create GPG signing handler: %w", err)
 	}

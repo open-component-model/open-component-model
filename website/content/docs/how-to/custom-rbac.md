@@ -160,19 +160,23 @@ Everything above grants RBAC to the **OCM controller's** `ServiceAccount`. If yo
 An RGD can define a brand-new schema-based kind (for example, a `Podinfo` or `Bootstrap` kind). In kro's
 least-privilege [aggregation mode](https://kro.run/docs/advanced/access-control), creating and managing
 instances of that kind, or any other object the RGD templates, requires extra RBAC for kro's own
-`ServiceAccount`. The dev-friendly `unrestricted` mode used in the [setup guide]({{< relref "/docs/getting-started/setup-controller-environment.md" >}})
-grants everything broadly, so this gap only surfaces on a hardened cluster.
+`ServiceAccount`. The [setup guide]({{< relref "/docs/getting-started/setup-controller-environment.md" >}})
+installs kro in this mode and already creates such roles for the OCM resources and for the Flux or ArgoCD
+resources.
 
-Grant kro's `ServiceAccount` a `ClusterRole` scoped to the kinds your RGDs create and manage. In aggregation
-mode kro also folds in any `ClusterRole` labeled `rbac.kro.run/aggregate-to-controller: "true"`, as described in
-[kro's access control guide](https://kro.run/docs/advanced/access-control). For example, an RGD that defines a
-`Podinfo` kind and renders a Deployment and Service needs:
+Create a `ClusterRole` scoped to the kinds your RGDs create and manage, and label it
+`rbac.kro.run/aggregate-to-controller: "true"`. In aggregation mode kro picks up every `ClusterRole` with this
+label, so you do not need a binding. See [kro's access control guide](https://kro.run/docs/advanced/access-control).
+For example, an RGD that defines a `Podinfo` kind and renders a Deployment and Service needs:
 
 ```yaml
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   name: kro-custom
+  labels:
+    # kro picks up every ClusterRole with this label, see https://kro.run/docs/advanced/access-control
+    rbac.kro.run/aggregate-to-controller: "true"
 rules:
   - apiGroups:
       - kro.run
@@ -230,19 +234,6 @@ rules:
       - patch
       - update
       - watch
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: kro-custom
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: kro-custom
-subjects:
-  - kind: ServiceAccount
-    name: kro # replace with your kro release's service account name if you did not use the default
-    namespace: kro-system
 ```
 
 The exact kinds depend on what your own RGDs create. Grant the full set of verbs (not just `get`/`list`/`watch`)
