@@ -27,7 +27,7 @@ func fromYAML(t *testing.T, in string) *descruntime.Descriptor {
 }
 
 // TestNormaliseByteExact asserts the normalised output is byte-identical to the
-// cc-utils known-answer bytes and that sha256(output) matches the oracle digest.
+// cc-utils reference bytes and that sha256(output) matches cc-utils' digest.
 func TestNormaliseByteExact(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -54,10 +54,10 @@ func TestNormaliseByteExact(t *testing.T) {
 
 			got, err := normalisation.Normalise(desc, v1.Algorithm)
 			r.NoError(err)
-			r.Equal(tt.expected, string(got), "normalised bytes diverge from cc-utils oracle")
+			r.Equal(tt.expected, string(got), "normalised bytes diverge from cc-utils")
 
 			sum := sha256.Sum256(got)
-			r.Equal(tt.digest, hex.EncodeToString(sum[:]), "digest diverges from cc-utils oracle")
+			r.Equal(tt.digest, hex.EncodeToString(sum[:]), "digest diverges from cc-utils")
 		})
 	}
 }

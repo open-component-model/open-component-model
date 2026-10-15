@@ -1,7 +1,7 @@
 package v1_test
 
 // Known-answer fixtures transcribed from the cc-utils anchor (ocm/sign.py).
-// input is the cd as readable YAML; norm is the cc-utils oracle normalised
+// input is the cd as readable YAML; norm is the cc-utils reference normalised
 // bytes (byte-exact) and digest is sha256(norm). Do not recompute expected
 // values with this normaliser — that would be circular.
 

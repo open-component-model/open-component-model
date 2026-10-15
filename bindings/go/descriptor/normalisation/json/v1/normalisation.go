@@ -62,7 +62,7 @@ func toMap(desc *v2.Descriptor) (map[string]any, error) {
 	}
 	// UseNumber keeps numeric label values in their original textual form
 	// (large integers, trailing zeros) instead of collapsing them to float64,
-	// so the re-marshalled bytes stay identical to the cc-utils oracle.
+	// so the re-marshalled bytes stay identical to cc-utils' output.
 	var m map[string]any
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.UseNumber()
