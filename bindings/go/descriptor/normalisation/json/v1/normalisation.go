@@ -241,16 +241,16 @@ func normaliseElementLabels(m map[string]any) {
 }
 
 // injectDuplicateIdentityVersion mirrors cc-utils' OCM-cli compat behaviour:
-// for a resource whose identity (name + extraIdentity, ignoring version) is
-// shared by a later peer, and which has no version in its extraIdentity, the
-// resource version is injected as extraIdentity["version"]. The last member of
-// a duplicate group is left unchanged. It must run before extraIdentity is
+// for a resource whose identity (name + full extraIdentity) is shared by a
+// later peer, and which has no version in its extraIdentity, the resource
+// version is injected as extraIdentity["version"]. The last member of a
+// duplicate group is left unchanged. It must run before extraIdentity is
 // nulled, as it reads the raw extraIdentity.
 func injectDuplicateIdentityVersion(resources []any) error {
 	ids := make([]string, len(resources))
 	for i, r := range resources {
 		res, _ := r.(map[string]any)
-		id, err := identityWithoutVersion(res)
+		id, err := resourceIdentity(res)
 		if err != nil {
 			return err
 		}
@@ -279,21 +279,20 @@ func injectDuplicateIdentityVersion(resources []any) error {
 	return nil
 }
 
-// identityWithoutVersion builds a stable key from a resource's name and
-// extraIdentity, excluding the version attribute. An absent extraIdentity is
-// treated as empty. Name and extraIdentity are encoded as structured JSON
-// (not delimiter-joined) so identity values containing ';' or '=' cannot
-// collide across distinct resources.
-func identityWithoutVersion(res map[string]any) (string, error) {
+// resourceIdentity builds a stable key from a resource's name and full
+// extraIdentity, matching cc-utils' Resource.identity() (which includes an
+// explicit extraIdentity["version"]). An absent extraIdentity is treated as
+// empty. Name and extraIdentity are encoded as structured JSON (not
+// delimiter-joined) so identity values containing ';' or '=' cannot collide
+// across distinct resources.
+func resourceIdentity(res map[string]any) (string, error) {
 	if res == nil {
 		return "", nil
 	}
 	ei := map[string]any{}
 	if m, ok := res["extraIdentity"].(map[string]any); ok {
 		for k, v := range m {
-			if k != "version" {
-				ei[k] = v
-			}
+			ei[k] = v
 		}
 	}
 	b, err := json.Marshal(map[string]any{"name": res["name"], "extraIdentity": ei})

@@ -516,3 +516,105 @@ signatures: []
 	norm_10_unicode_label   = `[{"component":[{"componentReferences":[]},{"name":"acme.org/unicode"},{"provider":"ACME"},{"resources":[[{"digest":[{"hashAlgorithm":"SHA-256"},{"normalisationAlgorithm":"ociArtifactDigest/v1"},{"value":"7777777777777777777777777777777777777777777777777777777777777777"}]},{"extraIdentity":null},{"labels":[[{"name":"desc"},{"signing":true},{"value":"caf\u00e9 \ud83d\ude00 <&>"}]]},{"name":"img"},{"relation":"external"},{"type":"ociImage"},{"version":"1.0.0"}]]},{"version":"1.0.0"}]},{"meta":[{"schemaVersion":"v2"}]}]`
 	digest_10_unicode_label = `5f181460957c670cd753457020cf09a00860e6251f31948bcceb2ab2d950f728`
 )
+
+const (
+	input_11_dup_delimiter = `
+component:
+  componentReferences: []
+  creationTime: null
+  labels: []
+  name: acme.org/dup-delim
+  provider: ACME
+  repositoryContexts: []
+  resources:
+  - access:
+      imageReference: registry.example/a@sha256:d1
+      type: ociRegistry
+    digest:
+      hashAlgorithm: SHA-256
+      normalisationAlgorithm: ociArtifactDigest/v1
+      value: dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+    extraIdentity:
+      aa: b;cc=dd
+    labels: []
+    name: res
+    relation: external
+    srcRefs: []
+    type: ociImage
+    version: 1.0.0
+  - access:
+      imageReference: registry.example/a@sha256:d2
+      type: ociRegistry
+    digest:
+      hashAlgorithm: SHA-256
+      normalisationAlgorithm: ociArtifactDigest/v1
+      value: eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+    extraIdentity:
+      aa: b
+      cc: dd
+    labels: []
+    name: res
+    relation: external
+    srcRefs: []
+    type: ociImage
+    version: 1.0.0
+  sources: []
+  version: 1.0.0
+meta:
+  schemaVersion: v2
+nestedDigests: []
+signatures: []
+`
+	norm_11_dup_delimiter   = `[{"component":[{"componentReferences":[]},{"name":"acme.org/dup-delim"},{"provider":"ACME"},{"resources":[[{"digest":[{"hashAlgorithm":"SHA-256"},{"normalisationAlgorithm":"ociArtifactDigest/v1"},{"value":"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"}]},{"extraIdentity":[{"aa":"b;cc=dd"}]},{"name":"res"},{"relation":"external"},{"type":"ociImage"},{"version":"1.0.0"}],[{"digest":[{"hashAlgorithm":"SHA-256"},{"normalisationAlgorithm":"ociArtifactDigest/v1"},{"value":"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"}]},{"extraIdentity":[{"aa":"b"},{"cc":"dd"}]},{"name":"res"},{"relation":"external"},{"type":"ociImage"},{"version":"1.0.0"}]]},{"version":"1.0.0"}]},{"meta":[{"schemaVersion":"v2"}]}]`
+	digest_11_dup_delimiter = `77ccb387feb90c986de9b14f2c034d09368ab487d37599d1028e81ccb89f649f`
+)
+
+const (
+	input_12_dup_explicit_version = `
+component:
+  componentReferences: []
+  creationTime: null
+  labels: []
+  name: acme.org/dup-ver
+  provider: ACME
+  repositoryContexts: []
+  resources:
+  - access:
+      imageReference: registry.example/a@sha256:d1
+      type: ociRegistry
+    digest:
+      hashAlgorithm: SHA-256
+      normalisationAlgorithm: ociArtifactDigest/v1
+      value: dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+    extraIdentity: {}
+    labels: []
+    name: same
+    relation: external
+    srcRefs: []
+    type: ociImage
+    version: 1.0.0
+  - access:
+      imageReference: registry.example/a@sha256:d2
+      type: ociRegistry
+    digest:
+      hashAlgorithm: SHA-256
+      normalisationAlgorithm: ociArtifactDigest/v1
+      value: eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+    extraIdentity:
+      version: 9.9.9
+    labels: []
+    name: same
+    relation: external
+    srcRefs: []
+    type: ociImage
+    version: 1.0.0
+  sources: []
+  version: 1.0.0
+meta:
+  schemaVersion: v2
+nestedDigests: []
+signatures: []
+`
+	norm_12_dup_explicit_version   = `[{"component":[{"componentReferences":[]},{"name":"acme.org/dup-ver"},{"provider":"ACME"},{"resources":[[{"digest":[{"hashAlgorithm":"SHA-256"},{"normalisationAlgorithm":"ociArtifactDigest/v1"},{"value":"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"}]},{"extraIdentity":null},{"name":"same"},{"relation":"external"},{"type":"ociImage"},{"version":"1.0.0"}],[{"digest":[{"hashAlgorithm":"SHA-256"},{"normalisationAlgorithm":"ociArtifactDigest/v1"},{"value":"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"}]},{"extraIdentity":[{"version":"9.9.9"}]},{"name":"same"},{"relation":"external"},{"type":"ociImage"},{"version":"1.0.0"}]]},{"version":"1.0.0"}]},{"meta":[{"schemaVersion":"v2"}]}]`
+	digest_12_dup_explicit_version = `2671e827b7ffb861f3d410e0e379e3a4f2c71b434488980157b87c4d2341926a`
+)
