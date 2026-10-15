@@ -16,7 +16,8 @@ package entry
 import (
 	"bytes"
 	"encoding/json"
-	"sort"
+	"maps"
+	"slices"
 )
 
 // Normalise serialises v into the list-of-single-key-maps form and marshals it
@@ -34,11 +35,7 @@ func Normalise(v any) ([]byte, error) {
 func Transform(v any) any {
 	switch t := v.(type) {
 	case map[string]any:
-		keys := make([]string, 0, len(t))
-		for k := range t {
-			keys = append(keys, k)
-		}
-		sort.Strings(keys)
+		keys := slices.Sorted(maps.Keys(t))
 		out := make([]any, 0, len(keys))
 		for _, k := range keys {
 			out = append(out, map[string]any{k: Transform(t[k])})

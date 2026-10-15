@@ -1,9 +1,9 @@
 package v1
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -60,8 +60,13 @@ func toMap(desc *v2.Descriptor) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
+	// UseNumber keeps numeric label values in their original textual form
+	// (large integers, trailing zeros) instead of collapsing them to float64,
+	// so the re-marshalled bytes stay identical to the cc-utils oracle.
 	var m map[string]any
-	if err := json.Unmarshal(data, &m); err != nil {
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.UseNumber()
+	if err := dec.Decode(&m); err != nil {
 		return nil, err
 	}
 	return m, nil
@@ -269,25 +274,21 @@ func injectDuplicateIdentityVersion(resources []any) {
 
 // identityWithoutVersion builds a stable key from a resource's name and
 // extraIdentity, excluding the version attribute. An absent extraIdentity is
-// treated as empty.
+// treated as empty. Name and extraIdentity are encoded as structured JSON
+// (not delimiter-joined) so identity values containing ';' or '=' cannot
+// collide across distinct resources.
 func identityWithoutVersion(res map[string]any) string {
 	if res == nil {
 		return ""
 	}
-	name, _ := res["name"].(string)
-	parts := []string{"name=" + name}
-	if ei, ok := res["extraIdentity"].(map[string]any); ok {
-		keys := make([]string, 0, len(ei))
-		for k := range ei {
-			if k == "version" {
-				continue
+	ei := map[string]any{}
+	if m, ok := res["extraIdentity"].(map[string]any); ok {
+		for k, v := range m {
+			if k != "version" {
+				ei[k] = v
 			}
-			keys = append(keys, k)
-		}
-		sort.Strings(keys)
-		for _, k := range keys {
-			parts = append(parts, fmt.Sprintf("%s=%v", k, ei[k]))
 		}
 	}
-	return strings.Join(parts, ";")
+	b, _ := json.Marshal(map[string]any{"name": res["name"], "extraIdentity": ei})
+	return string(b)
 }
