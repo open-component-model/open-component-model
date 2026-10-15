@@ -1,6 +1,10 @@
 package layout
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/stretchr/testify/require"
+)
 
 func TestIsOCILayoutMediaType(t *testing.T) {
 	tests := []struct {
@@ -16,9 +20,8 @@ func TestIsOCILayoutMediaType(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.mediaType, func(t *testing.T) {
-			if got := IsOCILayoutMediaType(tt.mediaType); got != tt.want {
-				t.Errorf("IsOCILayoutMediaType(%q) = %v, want %v", tt.mediaType, got, tt.want)
-			}
+			r := require.New(t)
+			r.Equal(tt.want, IsOCILayoutMediaType(tt.mediaType))
 		})
 	}
 }
