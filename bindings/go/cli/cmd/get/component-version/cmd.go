@@ -28,6 +28,7 @@ import (
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
+	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime/versioning"
@@ -52,12 +53,27 @@ func New() *cobra.Command {
 		Long: fmt.Sprintf(`Get component version(s) from an OCM repository.
 
 The format of a component reference is:
-	[type::]{repository}/[valid-prefix]/{component}[:version]
+
+	[type::]{repository}/[valid-prefix]/{component}[:version][@digest]
 
 For valid prefixes {%[1]s|none} are available. If <none> is used, it defaults to %[1]q. This is because by default,
 OCM components are stored within a specific sub-repository.
 
 For known types, currently only {%[2]s} are supported, which can be shortened to {%[3]s} respectively for convenience.
+
+A digest pins the component version: the command fails unless the component version matches it.
+Two forms are accepted, each with sha256 or sha512:
+
+- "@sha256:<hex>" (OCI digest) is the digest of the OCI image index or manifest the component version is
+  stored as, the digest its version tag resolves to (for example "oras resolve
+  {repository}/component-descriptors/{component}:{version}"). The component version is then read from that
+  artifact instead of through the tag, like an OCI image pinned by digest. The digest covers the descriptor
+  and all local blobs, so the version may be omitted; if given, the artifact must hold it. Only OCI
+  registries and CTF archives support it, and it changes when the version is transferred or signed.
+- "@jsonNormalisation.v4alpha1+sha256:<hex>" (normalized) is the hash of the descriptor normalised with
+  jsonNormalisation/v4alpha1, the digest "ocm sign" signs and logs. It stays the same across transfer and
+  signing, but does not cover access information or labels that are excluded from signing. A reference
+  pinned to it must name the version.
 
 If no type is given, the repository path is interpreted based on introspection and heuristics.
 `,
@@ -71,6 +87,8 @@ Getting a single component version:
 get component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0
 get cv ./path/to/ctf//ocm.software/cli:0.12.0
 get cv ./path/to/ctf/component-descriptors/ocm.software/cli:0.12.0
+get cv ghcr.io/open-component-model//ocm.software/cli@sha256:<oci-digest>
+get cv ghcr.io/open-component-model//ocm.software/cli:0.12.0@jsonNormalisation.v4alpha1+sha256:<signed-digest>
 
 Listing many component versions:
 
@@ -203,6 +221,11 @@ func processComponentReference(cmd *cobra.Command,
 	displayMode := params.displayMode
 	ctx := cmd.Context()
 
+	pin, err := ocm.DigestPin(ref)
+	if err != nil {
+		return err
+	}
+
 	repoProvider, err := ocm.NewComponentVersionRepositoryForComponentProvider(ctx, pluginManager.ComponentVersionRepositoryRegistry, credentialGraph, config, ref)
 	if err != nil {
 		return fmt.Errorf("could not initialize ocm repositoryProvider: %w", err)
@@ -213,19 +236,29 @@ func processComponentReference(cmd *cobra.Command,
 		return fmt.Errorf("could not access ocm repository: %w", err)
 	}
 
-	registry, err := versioningspec.RegistryFromConfig(config)
-	if err != nil {
-		return fmt.Errorf("could not build versioning registry: %w", err)
-	}
-	descs, err := ocm.GetComponentVersions(ctx, ocm.GetComponentVersionsOptions{
-		VersionOptions: ocm.VersionOptions{
-			SemverConstraint: constraint,
-			LatestOnly:       latestOnly,
-			Registry:         registry,
-		},
-	}, ref.Component, ref.Version, repo)
-	if err != nil {
-		return fmt.Errorf("getting component reference and versions failed: %w", err)
+	var descs []*descruntime.Descriptor
+	if pin != nil {
+		// A pinned reference names exactly one component version; with an OCI digest it may
+		// omit the version, which is then taken from the pinned descriptor.
+		_, desc, err := ocm.GetPinnedComponentVersion(ctx, repo, ref)
+		if err != nil {
+			return fmt.Errorf("getting pinned component version failed: %w", err)
+		}
+		descs = []*descruntime.Descriptor{desc}
+	} else {
+		registry, err := versioningspec.RegistryFromConfig(config)
+		if err != nil {
+			return fmt.Errorf("could not build versioning registry: %w", err)
+		}
+		if descs, err = ocm.GetComponentVersions(ctx, ocm.GetComponentVersionsOptions{
+			VersionOptions: ocm.VersionOptions{
+				SemverConstraint: constraint,
+				LatestOnly:       latestOnly,
+				Registry:         registry,
+			},
+		}, ref.Component, ref.Version, repo); err != nil {
+			return fmt.Errorf("getting component reference and versions failed: %w", err)
+		}
 	}
 	roots := make([]string, 0, len(descs))
 	for _, desc := range descs {
@@ -236,17 +269,25 @@ func processComponentReference(cmd *cobra.Command,
 		roots = append(roots, identity)
 	}
 
-	if err := renderComponents(cmd, repoProvider, roots, output, displayMode, recursive); err != nil {
+	// A pinned reference names exactly one component version, the only root.
+	if err := renderComponents(cmd, repoProvider, roots, pin, output, displayMode, recursive); err != nil {
 		return fmt.Errorf("failed to render components: %w", err)
 	}
 
 	return nil
 }
 
-func renderComponents(cmd *cobra.Command, repoResolver resolvers.ComponentVersionRepositoryResolver, roots []string, format string, mode string, recursive int) error {
+func renderComponents(cmd *cobra.Command, repoResolver resolvers.ComponentVersionRepositoryResolver, roots []string, pin *descruntime.Digest, format string, mode string, recursive int) error {
+	pinned := make(map[string]*descruntime.Digest, len(roots))
+	if pin != nil {
+		for _, root := range roots {
+			pinned[root] = pin
+		}
+	}
 	resAndDis := resolverAndDiscoverer{
 		repositoryResolver: repoResolver,
 		recursive:          recursive,
+		pinned:             pinned,
 	}
 	discoverer := syncdag.NewGraphDiscoverer(&syncdag.GraphDiscovererOptions[string, *descruntime.Descriptor]{
 		Roots:      roots,
@@ -421,6 +462,8 @@ func serializeVerticesToTable(writer io.Writer, vertices []*dag.Vertex[string]) 
 type resolverAndDiscoverer struct {
 	repositoryResolver resolvers.ComponentVersionRepositoryResolver
 	recursive          int
+	// pinned maps root keys to the digest they are pinned to.
+	pinned map[string]*descruntime.Digest
 }
 
 var (
@@ -438,7 +481,7 @@ func (r *resolverAndDiscoverer) Resolve(ctx context.Context, key string) (*descr
 	if err != nil {
 		return nil, fmt.Errorf("getting component version repository for identity %q failed: %w", id, err)
 	}
-	desc, err := repo.GetComponentVersion(ctx, component, version)
+	_, desc, err := repository.GetPinnedComponentVersion(ctx, repo, component, version, r.pinned[key])
 	if err != nil {
 		return nil, fmt.Errorf("getting component version for identity %q failed: %w", id, err)
 	}
@@ -525,7 +568,7 @@ func processRepositoryReference(cmd *cobra.Command,
 		return fmt.Errorf("could not initialize ocm repositoryProvider: %w", err)
 	}
 
-	if err := renderComponents(cmd, repoProvider, roots, output, displayMode, recursive); err != nil {
+	if err := renderComponents(cmd, repoProvider, roots, nil, output, displayMode, recursive); err != nil {
 		return fmt.Errorf("failed to render components recursively: %w", err)
 	}
 
