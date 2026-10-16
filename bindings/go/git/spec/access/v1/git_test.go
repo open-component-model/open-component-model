@@ -83,6 +83,11 @@ func TestValidate(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("nil access", func(t *testing.T) {
+		var g *v1.Git
+		require.Error(t, g.Validate())
+	})
 }
 
 func TestUnmarshalJSON(t *testing.T) {

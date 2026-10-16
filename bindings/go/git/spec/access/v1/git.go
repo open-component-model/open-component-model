@@ -48,6 +48,9 @@ var commitSHA = regexp.MustCompile(`^[0-9a-fA-F]{40}$`)
 // with a fragment in Repository must be normalized first, so that no reader has to
 // look for selectors in the URL.
 func (g *Git) Validate() error {
+	if g == nil {
+		return fmt.Errorf("git access is required")
+	}
 	if strings.Contains(g.Repository, "#") {
 		return fmt.Errorf("git repository URL fragment must be moved into ref or commit, see Normalize")
 	}
