@@ -37,11 +37,9 @@ type RemoteStore struct {
 
 	// ChunkSize is the target size in bytes for each PATCH chunk of a streaming
 	// upload. If <= 0, chunked upload is disabled and PushStreaming reports
-	// ErrStreamingUnavailable for incomplete descriptors. A known registry
-	// limit caps it, down to disabling chunked upload for registries without
-	// support (see registryMaxChunkSize). The registry-advertised
-	// OCI-Chunk-Min-Length (from the session POST response) raises this floor
-	// for all but the final chunk.
+	// ErrStreamingUnavailable for incomplete descriptors. The
+	// registry-advertised OCI-Chunk-Min-Length (from the session POST
+	// response) raises this floor for all but the final chunk.
 	ChunkSize int64
 }
 
