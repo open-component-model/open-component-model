@@ -453,7 +453,7 @@ kubectl auth can-i create resources.delivery.ocm.software \
   --as=system:serviceaccount:crossplane-system:crossplane
 ```
 
-See [Deploy an Application from a Helm Chart with OCM and Crossplane]({{< relref "/docs/guides/deploy/deploy-helm-chart-bootstrap-crossplane.md" >}})
+See [Deploy a Helm Chart with Crossplane]({{< relref "/docs/guides/deploy/deploy-helm-chart-bootstrap-crossplane.md" >}})
 for a worked example of the specific kinds this pattern needs.
 
 ## Related Documentation
