@@ -1,18 +1,18 @@
 ---
-title: "Set Up Your Controller Environment"
-description: "Set up a local Kubernetes environment with the OCM Controllers, kro, and Flux for testing OCM deployments."
+title: "Set up Controller Environments"
+description: "Set up a local Kubernetes environment with the OCM Controllers, an orchestrator (kro or Crossplane), and a deployer such as Flux or Argo CD."
 icon: "⚓"
 weight: 40
 toc: true
 ---
 
 This guide helps you set up a local Kubernetes environment for testing OCM controller-based deployments.
-You'll install the OCM Controllers, kro, and Flux to enable GitOps workflows with OCM component versions.
+You'll install the OCM Controllers, an orchestrator (kro or Crossplane), and a deployer (FluxCD or ArgoCD) to enable GitOps workflows with OCM component versions.
 
 {{< callout context="tip" title="Not all components are always required" icon="outline/info-circle" >}}
-Depending on your use case, you may not need the full setup. For example, if 
-you're only deploying raw k8s deployment from an ocm resource, you may be 
-able to skip kro and a deployer like FluxCD or ArgoCD. 
+Depending on your use case, you may not need the full setup. For example, if
+you're only deploying a raw k8s deployment from an ocm resource, you may be
+able to skip the orchestrator and a deployer like FluxCD or ArgoCD.
 
 Check the prerequisites of the tutorial or how-to you're following to see what's 
 actually needed. This guide installs everything so you're covered for any 
@@ -21,7 +21,7 @@ scenario.
 
 ## You'll end up with
 
-- A local or remote Kubernetes cluster with OCM Controllers, kro, and a deployer like FluxCD or ArgoCD installed
+- A local or remote Kubernetes cluster with OCM Controllers, an orchestrator (kro or Crossplane), and a deployer like FluxCD or ArgoCD installed
 
 ## Estimated time
 
@@ -141,7 +141,15 @@ ocm-k8s-toolkit-controller-manager-79b7975755-vxtqt   1/1     Running   0       
 {{< /step >}}
 {{< step >}}
 
-### Install kro
+### Install an Orchestrator
+
+An orchestrator reconciles the deployment graph that an OCM component carries. Install the one the tutorial or how-to
+you're following asks for. [kro](https://kro.run) reconciles a `ResourceGraphDefinition`, generates a CRD from it, and
+reconciles the instances of that CRD. [Crossplane](https://crossplane.io) reconciles a `CompositeResourceDefinition`
+(XRD) plus a `Composition`, and reconciles the composite resources the XRD defines.
+
+{{< tabs "orchestrator-install" >}}
+{{< tab "kro" >}}
 
 Install [kro](https://kro.run) following the [official installation guide](https://kro.run/docs/getting-started/Installation). The easiest way is via Helm:
 
@@ -217,6 +225,54 @@ rules:
       - watch
 EOF
 ```
+
+{{< /tab >}}
+{{< tab "Crossplane" >}}
+
+Install [Crossplane](https://crossplane.io) **v2** core via Helm, following the
+[official installation guide](https://docs.crossplane.io/latest/get-started/install/). The `2.x` range installs the
+latest Crossplane v2 release, which the bootstrap tutorial requires:
+
+```shell
+helm install crossplane crossplane \
+  --repo https://charts.crossplane.io/stable \
+  --version '2.x' \
+  --namespace crossplane-system \
+  --create-namespace
+```
+
+{{< callout context="caution" title="Security consideration" icon="outline/alert-triangle" >}}
+This installs Crossplane with cluster-wide permissions, which is suitable for local development but not recommended for production environments. See the [Crossplane documentation](https://docs.crossplane.io/latest/) for guidance on hardening RBAC.
+{{< /callout >}}
+
+Verify Crossplane is running:
+
+```shell
+kubectl get pods -n crossplane-system
+```
+
+Crossplane reconciles graphs through composition functions. For OCM bootstrap tutorials, install the
+[patch-and-transform function](https://github.com/crossplane-contrib/function-patch-and-transform), which the
+`Composition` runs as its pipeline step:
+
+```shell
+kubectl apply -f - << 'EOF'
+apiVersion: pkg.crossplane.io/v1
+kind: Function
+metadata:
+  name: function-patch-and-transform
+spec:
+  package: xpkg.crossplane.io/crossplane-contrib/function-patch-and-transform:v0.11.0
+EOF
+```
+
+{{< callout context="note" title="RBAC on a hardened cluster" icon="outline/info-circle" >}}
+Crossplane composes the OCM `Resource` and the deployer objects (Flux or Argo CD), so on a hardened cluster you must grant Crossplane's service
+account access to those composed kinds. See [Configure Custom RBAC for Deployers]({{< relref "/docs/guides/deploy/configure-custom-rbac.md" >}}).
+{{< /callout >}}
+
+{{< /tab >}}
+{{< /tabs >}}
 
 {{< /step >}}
 {{< step >}}
@@ -469,7 +525,7 @@ Public OCI registries require no configuration. *Read more about ArgoCD OCI Supp
 Check all components are running:
 
 ```shell
-kubectl get pods --all-namespaces | grep -E '(kro-system|flux-system|argocd|ocm-k8s-toolkit-system)'
+kubectl get pods --all-namespaces | grep -E '(kro-system|crossplane-system|flux-system|argocd|ocm-k8s-toolkit-system)'
 ```
 
 <details>
@@ -486,6 +542,9 @@ argocd-notifications-controller-8669567fb-47fcj                                1
 argocd-redis-5d9668fdff-v2pbp                                                  1/1     Running            0               24m
 argocd-repo-server-95465d997-mbmcp                                             1/1     Running            0               24m
 argocd-server-767b9d54cf-q7bbz                                                 1/1     Running            0               24m
+crossplane-system        crossplane-6b8c9d7f54-nq8rk                           1/1     Running            0               12m
+crossplane-system        crossplane-rbac-manager-7d9f6c84b5-2xk7p              1/1     Running            0               12m
+crossplane-system        function-patch-and-transform-9d4f2a1c7b-5f8d7c9b64-ltzqd  1/1   Running            0               10m
 flux-system              helm-controller-b6767d66-zbwws                        1/1     Running            0               3h39m
 flux-system              kustomize-controller-57c7ff5596-v6fvr                 1/1     Running            0               3h39m
 flux-system              notification-controller-58ffd586f7-pr65t              1/1     Running            0               3h39m

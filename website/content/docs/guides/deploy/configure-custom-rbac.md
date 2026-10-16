@@ -23,7 +23,7 @@ This guide assumes that you are already familiar with the concepts described in 
 
 - [Concept: OCM controllers]({{< relref "/docs/concepts/ocm-controllers.md" >}}) - OCM Controllers
 - [Concept: Kubernetes Deployer]({{< relref "/docs/concepts/kubernetes-deployer.md" >}}) - `Deployer` and `NamespacedDeployer`
-- [kro installed](https://kro.run/docs/getting-started/Installation/)
+- An orchestrator installed, [kro](https://kro.run/docs/getting-started/Installation/) or [Crossplane](https://docs.crossplane.io/latest/get-started/install/)
 
 ## When is this needed?
 
@@ -32,6 +32,7 @@ and manage the objects in the deployed resource, and the controller watches thos
 deployer creates needs RBAC, custom resources and standard Kubernetes resources alike. Common examples:
 
 - **kro** `ResourceGraphDefinitions` (`kro.run`)
+- **Crossplane** `CompositeResourceDefinitions` and `Compositions` (`apiextensions.crossplane.io`)
 - `Deployments` (`apps`) and `Services` (`core`)
 - Any other resource type your deployers create
 
@@ -127,7 +128,12 @@ service account.
 The binding below uses `ocm-k8s-toolkit-controller-manager` as the service account name only when the chart's release name contains `ocm-k8s-toolkit`. Other release names (and GitOps tools such as Flux) produce names like `<release-name>-ocm-k8s-toolkit-controller-manager`. Pin it with `fullnameOverride: ocm-k8s-toolkit`, or look it up: `kubectl get sa -n ocm-k8s-toolkit-system -l app.kubernetes.io/name=ocm-k8s-toolkit`.
 {{</callout>}}
 
-Below is an example for kro `ResourceGraphDefinitions` and the Kubernetes resources that the deployer manages:
+Pick the tab for your orchestrator. Each example grants the controller read access to the orchestrator's resources
+and the Kubernetes resources the deployer manages. Save your tab's manifest as `custom-rbac.yaml`, apply it, then
+confirm the access.
+
+{{< tabs "ocm-controller-rbac" >}}
+{{< tab "kro" >}}
 
 ```yaml
 apiVersion: rbac.authorization.k8s.io/v1
@@ -180,14 +186,66 @@ Apply it to your cluster:
 kubectl apply -f custom-rbac.yaml
 ```
 
-Confirm that the controller has the expected access:
+Confirm the controller has the expected access. The output should be `yes`:
 
 ```bash
 kubectl auth can-i watch resourcegraphdefinitions.kro.run \
   --as=system:serviceaccount:ocm-k8s-toolkit-system:ocm-k8s-toolkit-controller-manager
 ```
 
-The output should be `yes`.
+{{< /tab >}}
+{{< tab "Crossplane" >}}
+
+Grant read access to the groups the deployer touches: the XRD and Composition (`apiextensions.crossplane.io`), the
+composite kind the XRD registers (`ocm.software`), and the OCM `Resource` objects (`delivery.ocm.software`).
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ocm-controller-crossplane
+rules:
+  - apiGroups: ["apiextensions.crossplane.io"]
+    resources: ["compositeresourcedefinitions", "compositions"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["ocm.software"]
+    resources: ["bootstraps"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["delivery.ocm.software"]
+    resources: ["resources"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: ocm-controller-crossplane
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: ocm-controller-crossplane
+subjects:
+  - kind: ServiceAccount
+    name: ocm-k8s-toolkit-controller-manager # replace with your service account name if you did not pin it (see above)
+    namespace: ocm-k8s-toolkit-system
+```
+
+Replace `bootstraps` with the composite kind your own XRD registers.
+
+Apply it to your cluster:
+
+```bash
+kubectl apply -f custom-rbac.yaml
+```
+
+Confirm the controller has the expected access. The output should be `yes`:
+
+```bash
+kubectl auth can-i watch -A compositions.apiextensions.crossplane.io \
+  --as=system:serviceaccount:ocm-k8s-toolkit-system:ocm-k8s-toolkit-controller-manager
+```
+
+{{< /tab >}}
+{{< /tabs >}}
 
 ## Deployer: grant the controller write access
 
@@ -221,7 +279,8 @@ Follow the principle of least privilege. Only grant the verbs and resources your
 
 ## Multiple deployer targets
 
-If your deployers target several resource types, add a rule per type to the same `ClusterRole`:
+If your deployers target several custom resource types, add additional rules to the same `ClusterRole`. The example
+below grants both a kro `ResourceGraphDefinition` and a Crossplane XRD plus `Composition`:
 
 ```yaml
 apiVersion: rbac.authorization.k8s.io/v1
@@ -238,21 +297,24 @@ rules:
       - list
       - watch
   - apiGroups:
-      - your.custom.group
+      - apiextensions.crossplane.io
     resources:
-      - yourresources
+      - compositeresourcedefinitions
+      - compositions
     verbs:
       - get
       - list
       - watch
 ```
 
-Grant the same kinds with write verbs to the `NamespacedDeployer`'s service account.
+## RBAC for the orchestrator's own service account
 
-## RBAC for CRDs kro creates at runtime
+Everything above grants RBAC to the **OCM controller's** `ServiceAccount`. The orchestrator reconciles the graph with
+its **own** `ServiceAccount`, which is a second, separate RBAC concern.
 
-Everything above grants RBAC to the **OCM controller's** and your **deployer's** `ServiceAccount`. If your deployer
-targets a kro `ResourceGraphDefinition` (RGD), there is a second, separate RBAC concern: **kro's own**
+### kro
+
+If your `Deployer` targets a kro `ResourceGraphDefinition` (RGD), kro reconciles the graph with **kro's own**
 `ServiceAccount`.
 
 An RGD can define a brand-new schema-based kind (for example, a `Podinfo` or `Bootstrap` kind). In kro's
@@ -345,7 +407,57 @@ and kro]({{< relref "/docs/guides/deploy/deploy-helm-chart-with-kro-and-gitops.m
 Chained RGDs with OCM and kro]({{< relref "/docs/guides/deploy/deploy-with-chained-kro-rgds.md" >}}) for two worked
 examples of the specific kinds each pattern needs.
 
+### Crossplane
+
+If your `Deployer` targets a Crossplane `CompositeResourceDefinition` (XRD) plus a `Composition`, Crossplane
+reconciles the composite with its **own** `ServiceAccount` (`crossplane` in `crossplane-system`). Crossplane's
+service account can already create any resource installed by a provider or defined by an XRD, but **you must grant
+it access to compose any other kind of resource**. On a hardened cluster this is required before the composite can
+create its composed resources.
+
+For the bootstrap pattern Crossplane composes the two OCM `Resource` objects (the chart and the image) and the
+deployer objects. For Flux those are `ocirepositories.source.toolkit.fluxcd.io` and
+`helmreleases.helm.toolkit.fluxcd.io`. For Argo CD it is `applications.argoproj.io`. Grant them with a
+`ClusterRole` that aggregates to Crossplane's primary role. The `rbac.crossplane.io/aggregate-to-crossplane: "true"`
+label is what wires it into Crossplane's service account:
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: crossplane-compose-ocm-deployer
+  labels:
+    rbac.crossplane.io/aggregate-to-crossplane: "true"
+rules:
+  - apiGroups: ["delivery.ocm.software"]
+    resources: ["resources"]
+    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+  # Flux Helm Deployer
+  - apiGroups: ["source.toolkit.fluxcd.io"]
+    resources: ["ocirepositories"]
+    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+  - apiGroups: ["helm.toolkit.fluxcd.io"]
+    resources: ["helmreleases"]
+    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+  # Argo CD deployer
+  - apiGroups: ["argoproj.io"]
+    resources: ["applications"]
+    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+```
+
+The aggregation label is critical: without it the role is never folded into Crossplane's service account. Confirm the
+grant propagated:
+
+```bash
+kubectl auth can-i create resources.delivery.ocm.software \
+  --as=system:serviceaccount:crossplane-system:crossplane
+```
+
+See [Deploy an Application from a Helm Chart with OCM and Crossplane]({{< relref "/docs/guides/deploy/deploy-helm-chart-bootstrap-crossplane.md" >}})
+for a worked example of the specific kinds this pattern needs.
+
 ## Related Documentation
 
 - [Concept: OCM controllers]({{< relref "/docs/concepts/ocm-controllers.md" >}}) - Learn how the OCM Controllers work and how they interact with deployers and Kubernetes resources.
 - [kro's access control guide](https://kro.run/docs/advanced/access-control) - Least-privilege RBAC setup for kro itself.
+- [Crossplane composition documentation](https://docs.crossplane.io/latest/composition/) - How XRDs and Compositions reconcile a composite resource graph.
