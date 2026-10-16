@@ -40,7 +40,7 @@ func ParseHashAlgorithm(name string) (crypto.Hash, error) {
 	}
 }
 
-// FormatHashAlgorithm returns the spec spelling of a hash, used for new and completed digests.
+// FormatHashAlgorithm returns the spec spelling of a hash, used for generated digests.
 func FormatHashAlgorithm(hash crypto.Hash) (string, error) {
 	switch hash {
 	case crypto.SHA256:

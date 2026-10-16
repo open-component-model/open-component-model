@@ -16,11 +16,11 @@ const withSourceDigestFunctionName = "withSourceDigest"
 // resource with the digest of the source resource, or without a digest when the source has
 // none.
 //
-// A transfer copies the digest of a resource exactly as recorded, even a missing or
-// incomplete one that the target repository completes while storing the content. A
-// parent's reference digest may already cover the child descriptor with that digest, so
-// completing it during transfer breaks the parent's reference. Digests are filled in only
-// while a component version is added.
+// A transfer copies the digest of a resource exactly as recorded, even a missing one that
+// the target repository computes while storing the content. A parent's reference digest may
+// already cover the child descriptor without that digest, so adding it during transfer
+// breaks the parent's reference. Digests are computed only while a component version is
+// added. A partial digest never reaches this point: the target repository rejects it.
 func withSourceDigestFunction() cel.EnvOption {
 	return cel.Function(withSourceDigestFunctionName,
 		cel.MemberOverload("withSourceDigest_dyn_dyn", []*cel.Type{cel.DynType, cel.DynType}, cel.DynType,

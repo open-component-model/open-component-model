@@ -28,15 +28,17 @@ import (
 var digestTestContent = []byte("transferred content")
 
 // A transfer copies every resource digest exactly as recorded in the source, even a missing
-// or incomplete one that the target repository completes while storing the local blob.
+// one that the target repository computes while storing the local blob. A partial digest is
+// rejected by the target repository, so the transfer fails instead of completing it.
 func TestTransferKeepsSourceDigest(t *testing.T) {
 	value := godigest.FromBytes(digestTestContent).Encoded()
 	for _, tc := range []struct {
-		name   string
-		digest *descriptor.Digest
+		name    string
+		digest  *descriptor.Digest
+		wantErr string
 	}{
 		{name: "missing"},
-		{name: "incomplete", digest: &descriptor.Digest{HashAlgorithm: "sha256", Value: value}},
+		{name: "partial", digest: &descriptor.Digest{HashAlgorithm: "sha256", Value: value}, wantErr: "a digest must be complete or absent"},
 		{name: "complete", digest: &descriptor.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: "genericBlobDigest/v1", Value: value}},
 		{name: "excluded from the signature", digest: descriptor.NewExcludeFromSignatureDigest()},
 	} {
@@ -45,7 +47,12 @@ func TestTransferKeepsSourceDigest(t *testing.T) {
 			source, sourceSpec := newDigestTestCTF(t)
 			addDigestTestComponent(t, source, "ocm.software/child", tc.digest, nil)
 
-			target := transferDigestTestComponent(t, source, sourceSpec, "ocm.software/child", 0)
+			target, err := transferDigestTestComponent(t, source, sourceSpec, "ocm.software/child", 0)
+			if tc.wantErr != "" {
+				r.ErrorContains(err, tc.wantErr)
+				return
+			}
+			r.NoError(err)
 
 			got, err := target.GetComponentVersion(t.Context(), "ocm.software/child", "1.0.0")
 			r.NoError(err)
@@ -55,25 +62,25 @@ func TestTransferKeepsSourceDigest(t *testing.T) {
 }
 
 // A parent's reference digest covers the child descriptor including its resource digests,
-// so it still matches the child after a transfer when the child digest is incomplete.
-func TestTransferKeepsReferenceDigestOfIncompleteChild(t *testing.T) {
+// so it still matches the child after a transfer when the child resource has no digest.
+func TestTransferKeepsReferenceDigestOfChildWithoutDigest(t *testing.T) {
 	r := require.New(t)
 	source, sourceSpec := newDigestTestCTF(t)
-	incomplete := &descriptor.Digest{Value: godigest.FromBytes(digestTestContent).Encoded()}
-	child := addDigestTestComponent(t, source, "ocm.software/child", incomplete, nil)
+	child := addDigestTestComponent(t, source, "ocm.software/child", nil, nil)
 	addDigestTestComponent(t, source, "ocm.software/parent", nil, []descriptor.Reference{{
 		ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "child", Version: "1.0.0"}},
 		Component:   "ocm.software/child",
 		Digest:      *referenceDigest(t, child),
 	}})
 
-	target := transferDigestTestComponent(t, source, sourceSpec, "ocm.software/parent", transferv1alpha1.RecursiveInfinite)
+	target, err := transferDigestTestComponent(t, source, sourceSpec, "ocm.software/parent", transferv1alpha1.RecursiveInfinite)
+	r.NoError(err)
 
 	parent, err := target.GetComponentVersion(t.Context(), "ocm.software/parent", "1.0.0")
 	r.NoError(err)
 	transferred, err := target.GetComponentVersion(t.Context(), "ocm.software/child", "1.0.0")
 	r.NoError(err)
-	r.Equal(incomplete, transferred.Component.Resources[0].Digest)
+	r.Nil(transferred.Component.Resources[0].Digest)
 	r.Equal(parent.Component.References[0].Digest, *referenceDigest(t, transferred))
 }
 
@@ -123,7 +130,9 @@ func addDigestTestComponent(t *testing.T, repo *oci.Repository, name string, dig
 	return desc
 }
 
-func transferDigestTestComponent(t *testing.T, source *oci.Repository, sourceSpec *ctfrepospec.Repository, name string, recursive transferv1alpha1.Recursive) *oci.Repository {
+// transferDigestTestComponent transfers a component version into a new CTF and returns the
+// target with the error of processing the transfer graph.
+func transferDigestTestComponent(t *testing.T, source *oci.Repository, sourceSpec *ctfrepospec.Repository, name string, recursive transferv1alpha1.Recursive) (*oci.Repository, error) {
 	t.Helper()
 	r := require.New(t)
 	target, targetSpec := newDigestTestCTF(t)
@@ -136,8 +145,7 @@ func transferDigestTestComponent(t *testing.T, source *oci.Repository, sourceSpe
 	repoProvider := provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()))
 	graph, err := transfer.NewDefaultBuilder(repoProvider, ociresource.NewResourceRepository(nil), nil).BuildAndCheck(tgd)
 	r.NoError(err)
-	r.NoError(graph.Process(t.Context()))
-	return target
+	return target, graph.Process(t.Context())
 }
 
 // referenceDigest computes a reference digest the way the constructor does.
