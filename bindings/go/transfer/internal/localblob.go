@@ -11,38 +11,42 @@ import (
 )
 
 // appendGetLocalResourceTransform appends the GetLocalResource transformation that fetches
-// a repository-local resource (a local blob or a relativeOciReference) from the source.
-// These accesses are only resolvable with component context, so the concrete transformation
-// type is chosen from the source repository (OCI registry or CTF) via
-// chooseGetLocalResourceType.
-func appendGetLocalResourceTransform(tgd *transformv1alpha1.TransformationGraphDefinition, resource descriptorv2.Resource, sourceRepo runtime.Typed, component, version, getResourceID, label string) error {
+// a repository-local resource (a local blob or a relativeOciReference) of the component version
+// in val from its source. These accesses are only resolvable with component context, so the
+// concrete transformation type is chosen from the source repository (OCI registry or CTF) via
+// chooseGetLocalResourceType. If val is pinned to a source artifact, the resource is read from it.
+func appendGetLocalResourceTransform(tgd *transformv1alpha1.TransformationGraphDefinition, resource descriptorv2.Resource, val *discoveryValue, getResourceID, label string) error {
 	resourceIdentityMap := make(map[string]any)
 	for k, v := range resource.ToIdentity() {
 		resourceIdentityMap[k] = v
 	}
 
-	getLocalResourceType, err := chooseGetLocalResourceType(sourceRepo)
+	getLocalResourceType, err := chooseGetLocalResourceType(val.SourceRepository)
 	if err != nil {
 		return fmt.Errorf("choosing get local resource type for source repository: %w", err)
 	}
 
-	sourceRepoUnstructured, err := asUnstructured(sourceRepo)
+	sourceRepoUnstructured, err := asUnstructured(val.SourceRepository)
 	if err != nil {
 		return fmt.Errorf("cannot convert source repository spec to unstructured: %w", err)
 	}
 
+	spec := map[string]any{
+		"repository":       sourceRepoUnstructured.Data,
+		"component":        val.Descriptor.Component.Name,
+		"version":          val.Descriptor.Component.Version,
+		"resourceIdentity": resourceIdentityMap,
+	}
+	if val.Pin != "" {
+		spec["digest"] = val.Pin
+	}
 	tgd.Transformations = append(tgd.Transformations, transformv1alpha1.GenericTransformation{
 		TransformationMeta: meta.TransformationMeta{
 			Type:  getLocalResourceType,
 			ID:    getResourceID,
 			Label: label,
 		},
-		Spec: &runtime.Unstructured{Data: map[string]any{
-			"repository":       sourceRepoUnstructured.Data,
-			"component":        component,
-			"version":          version,
-			"resourceIdentity": resourceIdentityMap,
-		}},
+		Spec: &runtime.Unstructured{Data: spec},
 	})
 	return nil
 }
@@ -53,7 +57,6 @@ func appendGetLocalResourceTransform(tgd *transformv1alpha1.TransformationGraphD
 func processLocalBlob(resource descriptorv2.Resource, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int, ociImageReference string) error {
 	component := val.Descriptor.Component.Name
 	version := val.Descriptor.Component.Version
-	sourceRepo := val.SourceRepository
 
 	// Generate transformation IDs
 	resourceIdentity := resource.ToIdentity()
@@ -61,7 +64,7 @@ func processLocalBlob(resource descriptorv2.Resource, id string, val *discoveryV
 	getResourceID := fmt.Sprintf("%sGet%s", id, resourceID)
 	addResourceID := fmt.Sprintf("%sAdd%s", id, resourceID)
 
-	if err := appendGetLocalResourceTransform(tgd, resource, sourceRepo, component, version, getResourceID, getLabel(&val.Descriptor.Component, resource.Name)); err != nil {
+	if err := appendGetLocalResourceTransform(tgd, resource, val, getResourceID, getLabel(&val.Descriptor.Component, resource.Name)); err != nil {
 		return err
 	}
 
@@ -117,7 +120,7 @@ func processRelativeOCIReference(resource descriptorv2.Resource, reference, id s
 	getResourceID := fmt.Sprintf("%sGet%s", id, resourceID)
 	addResourceID := fmt.Sprintf("%sAdd%s", id, resourceID)
 
-	if err := appendGetLocalResourceTransform(tgd, resource, val.SourceRepository, component, version, getResourceID, getLabel(&val.Descriptor.Component, resource.Name)); err != nil {
+	if err := appendGetLocalResourceTransform(tgd, resource, val, getResourceID, getLabel(&val.Descriptor.Component, resource.Name)); err != nil {
 		return err
 	}
 
