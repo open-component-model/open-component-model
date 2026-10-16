@@ -1,4 +1,4 @@
-# ADR 0032: Shared Resource Digest Rules
+# ADR 0033: Shared Resource Digest Rules
 
 * **Status**: proposed
 * **Deciders**: Maintainers
@@ -86,17 +86,19 @@ type Rule struct { Normalisation string; Accepted []string }
 func Check(recorded *runtime.Digest, computed Computed, rule Rule, mode Mode) (Result, error)
 ```
 
-`Check` compares the **recorded digest** (what the component descriptor contains) with the **computed digest** (what the binding just resolved or hashed: the manifest digest for an OCI image, the hash of the downloaded bytes for wget). It never writes anything itself; the binding applies the result. There are three cases:
+`Check` compares the **recorded digest** (what the component descriptor contains) with the **computed digest** (what the binding just resolved or hashed: the manifest digest for an OCI image, the hash of the downloaded bytes for wget). It never writes anything itself; the binding applies the result. There are four cases:
 
 ```mermaid
 flowchart LR
     R["Recorded digest"] --> X["NO-DIGEST marker<br/>→ keep untouched, hash nothing"]
-    R --> N["Missing or incomplete<br/>→ fill in when adding,<br/>keep as is on transfer"]
+    R --> N["Absent<br/>→ compute from the content"]
+    R --> P["Partial<br/>→ reject"]
     R --> C["Complete<br/>→ verify against the computed digest,<br/>keep exactly as recorded"]
 ```
 
 * **NO-DIGEST marker**: The resource is excluded from signing, so nothing is hashed or changed.
-* **Missing or incomplete**: Filled in only while a component version is added, before anything can reference it. Fields that are already set must agree with the computed digest; otherwise the digest is rejected. The filled-in digest uses the rule's own label and the spec spelling. A transfer keeps the recorded digest exactly as it is, even when it is missing or incomplete: signing refuses incomplete digests, but a parent component's reference digest may already cover this version, and changing the digest would break that reference.
+* **Absent**: The resource has no digest yet, so the binding computes it from the content, with the rule's own label and the spec spelling.
+* **Partial**: Some fields are set and some are missing. The digest is rejected with "a digest must be complete or absent". Missing fields are never inferred: every digest field is part of the signed descriptor, so filling them in would change what a signature or a parent's reference digest covers.
 * **Complete**: The digest may be signed, so it is never rewritten. A mismatch is rejected. A label the rule does not know is rejected on add and upload (strict), and kept unverified when packing local blobs (lenient), because existing descriptors may carry it.
 
 #### Key Design Decisions
@@ -104,11 +106,11 @@ flowchart LR
 1. **Shared package without binding knowledge**: `bindings/go/digest` holds only the spec vocabulary and the decision. It depends only on the runtime and descriptor packages, which a lint rule enforces. Normalisations stay plain strings. Each binding defines its own rules, for example the OCI binding its artifact and blob rules.
 2. **Hash names in one place**: `ParseHashAlgorithm` accepts every spelling in use today, ignoring case and dashes. New and completed digests are written in the spec spelling (`SHA-256`, `SHA-512`).
 3. **The binding decides the kind**: A binding that resolved an OCI manifest uses the artifact rule; one that hashed bytes uses the blob rule. The recorded label is only validated against that rule and never chooses it.
-4. **Existing digests never break**: `Check` either generates a missing digest, completes an incomplete one, or verifies a complete one and keeps it exactly as recorded, including its label and spelling. The artifact rule keeps accepting the generic label that earlier v2 releases wrote on OCI artifacts by mistake. It also starts accepting `ociArtefactDigest/v1`, a legacy spelling that OCM v1 registers but v2 rejects today. Both are verified against the manifest, never against archive bytes.
+4. **Existing digests never break**: `Check` either generates an absent digest or verifies a complete one and keeps it exactly as recorded, including its label and spelling. It never completes a partial one. The artifact rule keeps accepting the generic label that earlier v2 releases wrote on OCI artifacts by mistake. It also starts accepting `ociArtefactDigest/v1`, a legacy spelling that OCM v1 registers but v2 rejects today. Both are verified against the manifest, never against archive bytes.
 5. **Excluded resources are left alone**: A `NO-DIGEST` / `EXCLUDE-FROM-SIGNATURE` resource is detected first, exactly as signing does today. It is never hashed, completed or changed when adding, getting or transferring a component version, except by the two conversions listed under Out of Scope. The constructor skips digest processing for it, and each digest processor also returns early, because the controller calls processors directly.
 6. **Strict and lenient modes**: Each entry point keeps today's handling of a complete digest with a foreign label. Processing and upload reject it (strict); packing local blobs keeps it unverified (lenient).
-7. **No entry point becomes stricter**: Changes only widen what is accepted, for example spelling variants and SHA-512 where only SHA-256 was accepted.
-8. **Transfer never changes a digest**: When a transfer copies content as is, the transfer layer writes the source digest into the target descriptor unchanged, whatever the target repository computed while uploading. Today an upload fills in missing and incomplete digests during transfer; that stops. Transfers that convert the content are listed under Out of Scope.
+7. **No entry point becomes stricter, except for partial digests**: Changes widen what is accepted, for example spelling variants and SHA-512 where only SHA-256 was accepted. The one deliberate tightening is that partial digests are rejected instead of completed. Signed component versions carry complete or absent digests, so they are not affected.
+8. **Transfer never changes a digest**: When a transfer copies content as is, the transfer layer writes the source digest into the target descriptor unchanged, whatever the target repository computed while uploading. Today an upload fills in missing digests during transfer; that stops. A partial digest makes the transfer fail. Transfers that convert the content are listed under Out of Scope.
 9. **Behaviour specified by tests**: The detailed rules for each case are specified by table tests in the implementation PRs, and the tests from the earlier fix remain the regression suite.
 
 #### Out of Scope
@@ -135,7 +137,7 @@ flowchart LR
 
 ## Next Steps
 
-A proof of concept in [#3907](https://github.com/open-component-model/open-component-model/pull/3907) implements the shared package, the OCI rules, and their adoption in OCI, Helm, signing and the constructor. The regression tests from the earlier fix pass unchanged. The remaining steps:
+A proof of concept implements the shared package, the OCI rules, and their adoption in OCI, Helm, signing and the constructor. The regression tests from the earlier fix pass unchanged. The remaining steps:
 
 * Add `bindings/go/digest` with the hash-name parser and formatter, and move signing, download verification, transfer and the per-binding constants to it.
 * Introduce `Check`, `Rule` and the modes, and adopt them in the OCI, Helm and transfer bindings.
