@@ -7,9 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
-	"sync"
 
-	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	slogcontext "github.com/veqryn/slog-context"
 	"oras.land/oras-go/v2"
@@ -27,44 +25,17 @@ import (
 // children still fail the copy.
 func (repo *Repository) copyGraphOptions() oras.CopyGraphOptions {
 	opts := repo.resourceCopyOptions.CopyGraphOptions
-	opts.FindSuccessors = skipMissingSubject(opts.FindSuccessors, nil)
+	opts.FindSuccessors = skipMissingSubject(opts.FindSuccessors)
 	return opts
 }
 
 // extendedCopyGraphOptions is [Repository.copyGraphOptions] for copies that
-// also walk referrers. A referrer's subject edge is followed with the
-// descriptor the copy walked predecessors from, because producers can misstate
-// the subject's media type.
+// also walk referrers.
 func (repo *Repository) extendedCopyGraphOptions() oras.ExtendedCopyGraphOptions {
-	walked := &walkedNodes{}
-	opts := repo.resourceCopyOptions.CopyGraphOptions
-	opts.FindSuccessors = skipMissingSubject(opts.FindSuccessors, walked)
 	return oras.ExtendedCopyGraphOptions{
-		CopyGraphOptions: opts,
-		FindPredecessors: func(ctx context.Context, src content.ReadOnlyGraphStorage, desc ociImageSpecV1.Descriptor) ([]ociImageSpecV1.Descriptor, error) {
-			walked.m.Store(desc.Digest, desc)
-			return skipMissingReferrers(ctx, src, desc)
-		},
+		CopyGraphOptions: repo.copyGraphOptions(),
+		FindPredecessors: skipMissingReferrers,
 	}
-}
-
-// walkedNodes records by digest the descriptors whose predecessors an
-// extended copy listed. They come from the source (resolve or referrers
-// listing), so they are authoritative for their digest, unlike the subject
-// field a referrer's producer wrote.
-type walkedNodes struct {
-	m sync.Map // digest.Digest -> ociImageSpecV1.Descriptor
-}
-
-func (w *walkedNodes) lookup(d digest.Digest) (ociImageSpecV1.Descriptor, bool) {
-	if w == nil {
-		return ociImageSpecV1.Descriptor{}, false
-	}
-	v, ok := w.m.Load(d)
-	if !ok {
-		return ociImageSpecV1.Descriptor{}, false
-	}
-	return v.(ociImageSpecV1.Descriptor), true
 }
 
 // mediaTypeArtifactManifest is the deprecated OCI artifact manifest, which
@@ -74,10 +45,8 @@ const mediaTypeArtifactManifest = "application/vnd.oci.artifact.manifest.v1+json
 type findSuccessorsFunc func(ctx context.Context, fetcher content.Fetcher, desc ociImageSpecV1.Descriptor) ([]ociImageSpecV1.Descriptor, error)
 
 // skipMissingSubject removes the subject from the successors of desc if the
-// subject does not exist in the source. A subject that walked holds is
-// replaced with the walked descriptor and not checked, since it was resolved
-// or listed from the source.
-func skipMissingSubject(next findSuccessorsFunc, walked *walkedNodes) findSuccessorsFunc {
+// subject does not exist in the source.
+func skipMissingSubject(next findSuccessorsFunc) findSuccessorsFunc {
 	if next == nil {
 		next = content.Successors
 	}
@@ -103,20 +72,6 @@ func skipMissingSubject(next findSuccessorsFunc, walked *walkedNodes) findSucces
 			return nil, err
 		}
 		if manifest.Subject == nil {
-			return successors, nil
-		}
-		if known, ok := walked.lookup(manifest.Subject.Digest); ok {
-			if known.MediaType != manifest.Subject.MediaType || known.Size != manifest.Subject.Size {
-				slogcontext.Debug(ctx, "referrer subject descriptor differs from source, following the source descriptor",
-					slog.String("referrer", desc.Digest.String()),
-					slog.String("subjectMediaType", manifest.Subject.MediaType),
-					log.DescriptorLogAttr(known))
-			}
-			for i := range successors {
-				if successors[i].Digest == known.Digest {
-					successors[i] = known
-				}
-			}
 			return successors, nil
 		}
 		exists, err := contentExists(ctx, fetcher, *manifest.Subject)
