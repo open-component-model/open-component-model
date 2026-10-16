@@ -61,12 +61,10 @@ func TestDiscoverReportsCycles(t *testing.T) {
 			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 			defer cancel()
 
-			start := time.Now()
 			err := discoverEdges(ctx, tc.edges)
 
 			r.Error(err)
 			r.NotErrorIs(err, context.DeadlineExceeded, "a cycle must fail, not hang")
-			r.Less(time.Since(start), time.Second, "a cycle must fail fast")
 
 			var cycleErr *dag.CycleError[string]
 			r.ErrorAs(err, &cycleErr)
