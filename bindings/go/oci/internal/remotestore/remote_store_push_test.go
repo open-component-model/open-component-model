@@ -2,6 +2,7 @@ package remotestore
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha512"
 	"encoding/base64"
 	"fmt"
@@ -44,7 +45,10 @@ type chunkedRegistry struct {
 	patchRejectStatus int // status for an oversized PATCH; 0 = 416, as ghcr.io answers
 	chunkMinLength    string
 	warning           string
-	patchAcceptStatus int // status for an accepted PATCH; 0 = 202. ECR answers 201 with a stale Range header.
+	patchAcceptStatus int    // status for an accepted PATCH; 0 = 202. ECR answers 201 with a stale Range header.
+	dropPatchConn     bool   // close the connection on PATCH without sending a response
+	rejectPUT         bool   // answer the closing PUT with 400
+	onPatch           func() // called while handling each PATCH, before responding
 }
 
 func newChunkedRegistry(t *testing.T) *chunkedRegistry {
@@ -102,6 +106,15 @@ func (reg *chunkedRegistry) handler() http.HandlerFunc {
 			w.WriteHeader(http.StatusAccepted)
 
 		case r.Method == http.MethodPatch:
+			if reg.onPatch != nil {
+				reg.onPatch()
+			}
+			if reg.dropPatchConn {
+				if conn, _, err := http.NewResponseController(w).Hijack(); err == nil {
+					_ = conn.Close()
+				}
+				return
+			}
 			if reg.patchLimit > 0 && len(body) > reg.patchLimit {
 				status := reg.patchRejectStatus
 				if status == 0 {
@@ -123,6 +136,10 @@ func (reg *chunkedRegistry) handler() http.HandlerFunc {
 			w.WriteHeader(http.StatusAccepted)
 
 		case r.Method == http.MethodPut:
+			if reg.rejectPUT {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
 			// Close chunked session; body may carry a final chunk (unused here).
 			reg.mu.Lock()
 			reg.uploaded = append(reg.uploaded, body...)
@@ -665,6 +682,55 @@ func TestRemoteStore_PushStreaming_MidStreamReadErrorCancelsSession(t *testing.T
 		ociImageSpecV1.Descriptor{MediaType: "application/octet-stream"}, rdr)
 	r.ErrorContains(err, "boom")
 	r.Equal([]string{http.MethodPost, http.MethodDelete}, reg.methods())
+}
+
+// TestRemoteStore_PushStreaming_FailureCancelsSession verifies that once the
+// upload session is open, failures without a usable registry answer release it
+// too: a dropped connection, a rejected closing PUT, and a cancelled context,
+// whose DELETE must still go out.
+func TestRemoteStore_PushStreaming_FailureCancelsSession(t *testing.T) {
+	tests := []struct {
+		name        string
+		setup       func(reg *chunkedRegistry, cancel context.CancelFunc)
+		check       func(r *require.Assertions, err error)
+		wantMethods []string
+	}{
+		{
+			name:        "connection dropped on PATCH",
+			setup:       func(reg *chunkedRegistry, _ context.CancelFunc) { reg.dropPatchConn = true },
+			check:       func(r *require.Assertions, err error) { r.ErrorContains(err, "PATCH failed after 0 bytes") },
+			wantMethods: []string{http.MethodPost, http.MethodPatch, http.MethodDelete},
+		},
+		{
+			name:        "closing PUT rejected",
+			setup:       func(reg *chunkedRegistry, _ context.CancelFunc) { reg.rejectPUT = true },
+			check:       func(r *require.Assertions, err error) { r.ErrorContains(err, "unexpected PUT status 400") },
+			wantMethods: []string{http.MethodPost, http.MethodPatch, http.MethodPatch, http.MethodPatch, http.MethodPut, http.MethodDelete},
+		},
+		{
+			name:        "context cancelled mid-upload",
+			setup:       func(reg *chunkedRegistry, cancel context.CancelFunc) { reg.onPatch = cancel },
+			check:       func(r *require.Assertions, err error) { r.ErrorIs(err, context.Canceled) },
+			wantMethods: []string{http.MethodPost, http.MethodPatch, http.MethodDelete},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			reg := newChunkedRegistry(t)
+			ctx, cancel := context.WithCancel(t.Context())
+			t.Cleanup(cancel)
+			tc.setup(reg, cancel)
+			srv := httptest.NewServer(reg.handler())
+			t.Cleanup(srv.Close)
+
+			_, err := newTestStore(t, srv, 4).PushStreaming(ctx,
+				ociImageSpecV1.Descriptor{MediaType: "application/octet-stream"},
+				bytes.NewReader([]byte("0123456789")))
+			tc.check(r, err)
+			r.Equal(tc.wantMethods, reg.methods())
+		})
+	}
 }
 
 // TestRemoteStore_PushStreaming_DoesNotFollowPATCHRedirectToOtherHost verifies

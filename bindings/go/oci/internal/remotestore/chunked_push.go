@@ -12,6 +12,7 @@ import (
 	"path"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
@@ -120,41 +121,44 @@ func (up *chunkedUpload) shrink(rejected int64) bool {
 // upload PATCH chunks, close with PUT) and returns the completed descriptor.
 //
 // A chunk the registry rejects as too large is retried in smaller pieces on the
-// same session (see patchChunk); any other failure after the session opened
-// returns a wrapped error and best-effort cancels the session. Content is never
-// buffered beyond one chunk. When knownDigest is set it is verified against the
-// streamed content and used to close the session; when empty the digest is
-// computed from the stream.
+// same session (see patchChunk). Once the session is open, every other failure,
+// including network errors and a cancelled ctx, cancels it (see cancelUpload)
+// and is returned wrapped. Content is never buffered beyond one chunk. When
+// knownDigest is set it is verified against the streamed content and used to
+// close the session; when empty the digest is computed from the stream.
 func (r *RemoteStore) pushChunked(
 	ctx context.Context,
 	mediaType string,
 	knownDigest digest.Digest,
 	knownSize int64,
 	content io.Reader,
-) (ociImageSpecV1.Descriptor, error) {
+) (_ ociImageSpecV1.Descriptor, err error) {
 	ctx = auth.AppendRepositoryScope(ctx, r.Reference, auth.ActionPull, auth.ActionPush)
 
 	up, err := r.openUploadSession(ctx, knownDigest)
 	if err != nil {
 		return ociImageSpecV1.Descriptor{}, fmt.Errorf("chunked blob push: failed to open upload session: %w", err)
 	}
+	defer func() {
+		if err != nil {
+			r.cancelUpload(ctx, up.location)
+		}
+	}()
 
-	if err := r.uploadChunks(ctx, up, content, knownSize); err != nil {
+	if err = r.uploadChunks(ctx, up, content, knownSize); err != nil {
 		return ociImageSpecV1.Descriptor{}, err
 	}
 
 	finalDigest, err := resolveFinalDigest(up.digester.Digest(), knownDigest)
 	if err != nil {
-		r.cancelUpload(ctx, up.location)
 		return ociImageSpecV1.Descriptor{}, err
 	}
 
 	if knownSize != blob.SizeUnknown && knownSize >= 0 && up.offset != knownSize {
-		r.cancelUpload(ctx, up.location)
 		return ociImageSpecV1.Descriptor{}, fmt.Errorf("chunked blob push: uploaded %d bytes, expected %d", up.offset, knownSize)
 	}
 
-	if err := r.closeUploadSession(ctx, up, finalDigest); err != nil {
+	if err = r.closeUploadSession(ctx, up, finalDigest); err != nil {
 		return ociImageSpecV1.Descriptor{}, err
 	}
 
@@ -247,7 +251,7 @@ func (r *RemoteStore) chunkSize() int64 {
 // uploadChunks streams content in PATCH requests of up.chunk bytes, updating the
 // running digest, byte offset, and push location as it goes. The buffer is
 // allocated once at the initial chunk size; after a shrink only its prefix is
-// used. A read error cancels the session.
+// used.
 func (r *RemoteStore) uploadChunks(ctx context.Context, up *chunkedUpload, content io.Reader, knownSize int64) error {
 	hasher := up.digester.Hash()
 	bufSize := up.chunk
@@ -261,7 +265,6 @@ func (r *RemoteStore) uploadChunks(ctx context.Context, up *chunkedUpload, conte
 			return nil
 		}
 		if readErr != nil && readErr != io.ErrUnexpectedEOF {
-			r.cancelUpload(ctx, up.location)
 			return fmt.Errorf("chunked blob push: failed to read content after %d bytes: %w", up.offset, readErr)
 		}
 		if n == 0 {
@@ -289,9 +292,6 @@ func (r *RemoteStore) patchChunk(ctx context.Context, up *chunkedUpload, data []
 			continue
 		}
 		if (status != http.StatusRequestEntityTooLarge && status != http.StatusRequestedRangeNotSatisfiable) || !up.shrink(int64(len(part))) {
-			if status != 0 {
-				r.cancelUpload(ctx, up.location)
-			}
 			return err
 		}
 		slogcontext.FromCtx(ctx).Log(ctx, slog.LevelWarn, "registry rejected blob chunk, retrying with a smaller chunk size",
@@ -332,14 +332,16 @@ func (r *RemoteStore) sendPatch(ctx context.Context, up *chunkedUpload, part []b
 }
 
 // closeUploadSession issues the final PUT that commits the blob under
-// finalDigest and verifies the registry-reported digest when present.
+// finalDigest and verifies the registry-reported digest when present. The
+// digest query goes on a copy of the push location, so a failed close cancels
+// the session at its plain location.
 func (r *RemoteStore) closeUploadSession(ctx context.Context, up *chunkedUpload, finalDigest digest.Digest) error {
-	q := up.location.Query()
+	putURL := *up.location
+	q := putURL.Query()
 	q.Set("digest", finalDigest.String())
-	up.location.RawQuery = q.Encode()
-	req, err := http.NewRequestWithContext(ctx, http.MethodPut, up.location.String(), http.NoBody)
+	putURL.RawQuery = q.Encode()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, putURL.String(), http.NoBody)
 	if err != nil {
-		r.cancelUpload(ctx, up.location)
 		return fmt.Errorf("chunked blob push: failed to build PUT request: %w", err)
 	}
 	req.ContentLength = 0
@@ -475,9 +477,17 @@ func (r *RemoteStore) endpoint(p string) *url.URL {
 	return &url.URL{Scheme: scheme, Host: r.Reference.Host(), Path: p}
 }
 
+// cancelTimeout bounds the best-effort DELETE that releases a failed upload
+// session.
+const cancelTimeout = 5 * time.Second
+
 // cancelUpload issues a best-effort DELETE to release an in-progress upload
-// session. Per the OCI spec, clients SHOULD ignore any failures.
+// session. Per the OCI spec, clients SHOULD ignore any failures. It runs on a
+// context detached from ctx's cancellation, so a session is also released when
+// the upload failed because ctx was cancelled, and is bounded by cancelTimeout.
 func (r *RemoteStore) cancelUpload(ctx context.Context, location *url.URL) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), cancelTimeout)
+	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, location.String(), http.NoBody)
 	if err != nil {
 		return
