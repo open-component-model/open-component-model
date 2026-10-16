@@ -27,9 +27,6 @@ type mockRepository struct {
 	addedBlob     blob.ReadOnlyBlob
 	component     string
 	version       string
-	// forceDigest, when set, is returned as the added resource's digest regardless of input,
-	// simulating a sink that disagrees with a source-provided digest.
-	forceDigest *descriptor.Digest
 }
 
 func (m *mockRepository) AddLocalResource(ctx context.Context, component, version string, res *descriptor.Resource, content blob.ReadOnlyBlob) (*descriptor.Resource, error) {
@@ -55,9 +52,6 @@ func (m *mockRepository) AddLocalResource(ctx context.Context, component, versio
 			NormalisationAlgorithm: "genericBlobDigest/v1",
 			Value:                  "injectedbythesink",
 		}
-	}
-	if m.forceDigest != nil {
-		updated.Digest = m.forceDigest
 	}
 	return updated, nil
 }
@@ -290,14 +284,6 @@ func TestAddLocalResource_Transform_PreservesInputDigest(t *testing.T) {
 		out := res.(*v1alpha1.OCIAddLocalResource).Output.Resource
 		r.NotNil(out.Digest)
 		r.Equal(*in, *out.Digest, "a pipeline-supplied digest (e.g. from a transformation) must survive the sink")
-	})
-
-	t.Run("sink digest disagreeing with a present source digest is an error", func(t *testing.T) {
-		r := require.New(t)
-		in := &v2.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: "genericBlobDigest/v1", Value: "source"}
-		repo := &mockRepository{forceDigest: &descriptor.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: "genericBlobDigest/v1", Value: "different"}}
-		_, err := newTransformer(repo).Transform(ctx, specFor(in))
-		r.ErrorContains(err, "digest mismatch")
 	})
 }
 

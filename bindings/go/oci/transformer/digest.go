@@ -1,37 +1,20 @@
 package transformer
 
 import (
-	"fmt"
-
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 )
 
-// reconcileSourceDigest keeps the transfer pipeline's resource digest authoritative over
-// whatever the add/upload sink produced.
+// dropInjectedDigest removes a digest the add/upload sink filled in for a resource whose
+// source carried none.
 //
-// The sink (pack/blob) only fills a *missing* OCM resource digest from the content and does
-// not re-verify a digest the source already carries, so transfer must not let an injected or
-// altered digest reach the target descriptor:
-//
-//   - Source carried no digest -> record none. Injecting one would change the signed,
-//     normalized descriptor and break a signature that excluded the resource.
-//   - Source carried a digest -> record it verbatim. If the sink nonetheless produced a
-//     different digest, that is a content/integrity disagreement we surface rather than
-//     silently paper over.
-//
-// src is the digest the pipeline handed the sink (the Get output, or a prior transformation's
-// new digest); out is the resource the sink returned.
-func reconcileSourceDigest(src, out *v2.Resource) error {
+// The sink (pack/blob) back-fills a *missing* OCM resource digest from the content. For a
+// resource whose source descriptor had no digest that injection would change the signed,
+// normalized descriptor and break a signature that deliberately excluded the resource, so
+// transfer drops it again. A digest the source did carry is left as the sink returned it:
+// the sink verifies a complete digest against the content and completes an incomplete one,
+// so its result is authoritative and must survive the transfer.
+func dropInjectedDigest(src, out *v2.Resource) {
 	if src.Digest == nil {
 		out.Digest = nil
-		return nil
 	}
-	if out.Digest != nil && *out.Digest != *src.Digest {
-		return fmt.Errorf("digest mismatch for resource %q: source descriptor declares %s=%s but transfer produced %s=%s",
-			src.ToIdentity(),
-			src.Digest.NormalisationAlgorithm, src.Digest.Value,
-			out.Digest.NormalisationAlgorithm, out.Digest.Value)
-	}
-	out.Digest = src.Digest.DeepCopy()
-	return nil
 }

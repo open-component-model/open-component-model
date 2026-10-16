@@ -73,10 +73,8 @@ func (t *AddOCIArtifact) Transform(ctx context.Context, step runtime.Typed) (run
 		return nil, fmt.Errorf("failed converting resource to v2 format: %w", err)
 	}
 
-	// Keep the source digest authoritative over the sink's (see reconcileSourceDigest).
-	if err := reconcileSourceDigest(transformation.Spec.Resource, v2UpdatedResource); err != nil {
-		return nil, err
-	}
+	// A resource whose source carried no digest must stay without one (see dropInjectedDigest).
+	dropInjectedDigest(transformation.Spec.Resource, v2UpdatedResource)
 
 	// Populate output
 	transformation.Output.Resource = v2UpdatedResource

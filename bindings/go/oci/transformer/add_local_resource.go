@@ -141,11 +141,9 @@ func (t *AddLocalResource) Transform(ctx context.Context, step runtime.Typed) (r
 		return nil, fmt.Errorf("failed converting updated resource to v2 format: %w", err)
 	}
 
-	// Keep the source digest authoritative over the sink's: record none when the source had
-	// none, otherwise verify the sink agrees and record the source verbatim.
-	if err := reconcileSourceDigest(resource, v2UpdatedResource); err != nil {
-		return nil, err
-	}
+	// A resource whose source carried no digest must stay without one; a digest the source
+	// did carry is left as the sink verified/completed it (see dropInjectedDigest).
+	dropInjectedDigest(resource, v2UpdatedResource)
 
 	// Populate output based on type
 	switch out := output.(type) {
