@@ -260,7 +260,7 @@ func createRepository(
 
 	urlResolver, err := urlresolver.New(
 		urlresolver.WithBaseURL(urlString),
-		urlresolver.WithChunkedPush(remotestore.DefaultChunkSize, remotestore.DefaultChunkThreshold),
+		urlresolver.WithChunkedPush(remotestore.DefaultChunkSize),
 		urlresolver.WithBaseClient(&auth.Client{
 			Client: httpClient,
 			Header: map[string][]string{

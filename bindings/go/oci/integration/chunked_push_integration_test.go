@@ -30,8 +30,8 @@ import (
 
 // Test_Integration_OCIRepository_ChunkedPush verifies that RemoteStore uploads
 // blobs to a real registry via the OCI chunked blob push protocol (POST/PATCH/
-// PUT), for both a known-digest Push and an unknown-digest streaming push, and
-// that the content round-trips.
+// PUT) for an unknown-digest streaming push, confirms that a known-digest Push
+// is always monolithic (no PATCH), and that the content round-trips.
 func Test_Integration_OCIRepository_ChunkedPush(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping chunked push integration test in short mode")
@@ -55,11 +55,21 @@ func Test_Integration_OCIRepository_ChunkedPush(t *testing.T) {
 
 	// Small chunk size so a modest blob spans several PATCH requests.
 	const chunkSize = 1024
+	authClient := createAuthClient(address, testUsername, password)
+	base := http.DefaultTransport
+	if authClient.Client != nil && authClient.Client.Transport != nil {
+		base = authClient.Client.Transport
+	}
+	counter := &patchCountTransport{base: base}
+	clientCopy := *authClient.Client
+	clientCopy.Transport = counter
+	authClient.Client = &clientCopy
+
 	resolver, err := urlresolver.New(
 		urlresolver.WithBaseURL(address),
 		urlresolver.WithPlainHTTP(true),
-		urlresolver.WithBaseClient(createAuthClient(address, testUsername, password)),
-		urlresolver.WithChunkedPush(chunkSize, 1),
+		urlresolver.WithBaseClient(authClient),
+		urlresolver.WithChunkedPush(chunkSize),
 	)
 	r.NoError(err)
 
@@ -72,23 +82,27 @@ func Test_Integration_OCIRepository_ChunkedPush(t *testing.T) {
 	data := bytes.Repeat([]byte("chunked-blob-payload!"), 220)
 	r.Greater(int64(len(data)), int64(chunkSize*4))
 
-	t.Run("known-digest chunked Push round-trips", func(t *testing.T) {
+	t.Run("known-digest Push is monolithic (no PATCH)", func(t *testing.T) {
 		r := require.New(t)
 		dig := digest.FromBytes(data)
 		desc := ociImageSpecV1.Descriptor{MediaType: "application/octet-stream", Digest: dig, Size: int64(len(data))}
+		counter.reset()
 		r.NoError(rs.Push(ctx, desc, bytes.NewReader(data)))
+		r.Zero(counter.patchCount(), "a known-digest Push must be monolithic (no PATCH requests)")
 		assertBlobRoundTrips(t, ctx, rs, desc, data)
 	})
 
-	t.Run("unknown-digest streaming push computes digest and round-trips", func(t *testing.T) {
+	t.Run("incomplete-descriptor PushStreaming chunks and round-trips", func(t *testing.T) {
 		r := require.New(t)
 		streamData := append([]byte("streamed-"), data...)
+		counter.reset()
 		got, err := rs.PushStreaming(ctx,
 			ociImageSpecV1.Descriptor{MediaType: "application/octet-stream"},
 			bytes.NewReader(streamData))
 		r.NoError(err)
 		r.Equal(digest.FromBytes(streamData), got.Digest)
 		r.Equal(int64(len(streamData)), got.Size)
+		r.Positive(counter.patchCount(), "PushStreaming with an incomplete descriptor must use PATCH chunks")
 		assertBlobRoundTrips(t, ctx, rs, got, streamData)
 	})
 }
@@ -122,6 +136,35 @@ func (t *patchSignalTransport) RoundTrip(req *http.Request) (*http.Response, err
 		t.once.Do(func() { close(t.seen) })
 	}
 	return t.base.RoundTrip(req)
+}
+
+// patchCountTransport wraps an http.RoundTripper and counts PATCH requests,
+// letting a test assert whether a push used chunked (PATCH) or monolithic upload.
+type patchCountTransport struct {
+	base  http.RoundTripper
+	mu    sync.Mutex
+	count int
+}
+
+func (t *patchCountTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	if req.Method == http.MethodPatch {
+		t.mu.Lock()
+		t.count++
+		t.mu.Unlock()
+	}
+	return t.base.RoundTrip(req)
+}
+
+func (t *patchCountTransport) patchCount() int {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.count
+}
+
+func (t *patchCountTransport) reset() {
+	t.mu.Lock()
+	t.count = 0
+	t.mu.Unlock()
 }
 
 // interleavingReader yields firstChunk, then blocks until `patched` is closed
@@ -219,7 +262,7 @@ func Test_Integration_OCIRepository_StreamingDoesNotBuffer(t *testing.T) {
 		urlresolver.WithBaseURL(address),
 		urlresolver.WithPlainHTTP(true),
 		urlresolver.WithBaseClient(authClient),
-		urlresolver.WithChunkedPush(chunkSize, 1),
+		urlresolver.WithChunkedPush(chunkSize),
 	)
 	r.NoError(err)
 
@@ -285,9 +328,9 @@ func Test_Integration_OCIRepository_StreamingDoesNotBuffer(t *testing.T) {
 //
 //	blob size | blob digest | transfer behavior
 //	----------+-------------+--------------------------------------------------
-//	known     | known       | monolithic POST/PUT if size < threshold, else
-//	          |             | chunked PATCH upload (RemoteStore.Push, threshold-
-//	          |             | gated). No buffering; digest already present.
+//	known     | known       | always monolithic POST/PUT via RemoteStore.Push
+//	          |             | (the embedded oras push). No chunking, no
+//	          |             | threshold. No buffering; digest already present.
 //	known     | unknown     | streamed: PushStreaming computes the digest during
 //	          |             | upload. No buffering.
 //	unknown   | known       | streamed: PushStreaming discovers the size during
@@ -301,10 +344,12 @@ func Test_Integration_OCIRepository_StreamingDoesNotBuffer(t *testing.T) {
 //	implement StreamingPusher, so an unknown size or digest falls back to
 //	buffering the whole blob in memory to build the descriptor before a
 //	monolithic push. Manifests are never chunked; they use the manifests
-//	endpoint. A chunked-protocol failure before the first byte is consumed falls
-//	back to the monolithic push so no registry regresses. A rejected first chunk
-//	(e.g. ghcr.io's 4 MiB PATCH limit) also falls back, with a warning: Push
-//	replays the read chunk ahead of the rest, PushStreaming buffers the blob.
+//	endpoint. A pre-consumption streaming failure (POST rejected, registry
+//	without chunked upload support, etc.) wraps ErrStreamingUnavailable: the
+//	pack layer buffers the blob and pushes monolithically. A rejected first
+//	chunk (e.g. ghcr.io's 4 MiB PATCH limit) is also recovered by
+//	PushStreaming itself: it buffers the remainder and retries monolithically,
+//	logging a warning.
 func Test_Integration_OCIRepository_AddComponentVersion_Streaming(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping add-cv streaming integration test in short mode")
@@ -334,7 +379,7 @@ func Test_Integration_OCIRepository_AddComponentVersion_Streaming(t *testing.T) 
 		urlresolver.WithBaseURL(address),
 		urlresolver.WithPlainHTTP(true),
 		urlresolver.WithBaseClient(createAuthClient(address, testUsername, password)),
-		urlresolver.WithChunkedPush(1024 /*1 KiB chunks*/, 1 /*threshold*/),
+		urlresolver.WithChunkedPush(1024 /*1 KiB chunks*/),
 	)
 	r.NoError(err)
 

@@ -40,7 +40,7 @@ func sinkRegistryHandler() http.HandlerFunc {
 	}
 }
 
-func benchStore(b *testing.B, srv *httptest.Server, chunkSize, threshold int64) *RemoteStore {
+func benchStore(b *testing.B, srv *httptest.Server, chunkSize int64) *RemoteStore {
 	b.Helper()
 	repo, err := remote.NewRepository(srv.Listener.Addr().String() + "/test-repo")
 	if err != nil {
@@ -48,7 +48,7 @@ func benchStore(b *testing.B, srv *httptest.Server, chunkSize, threshold int64) 
 	}
 	repo.PlainHTTP = true
 	repo.Client = &http.Client{}
-	return &RemoteStore{Repository: repo, ChunkSize: chunkSize, ChunkThreshold: threshold}
+	return &RemoteStore{Repository: repo, ChunkSize: chunkSize}
 }
 
 // blobSizes exercised by the push benchmarks.
@@ -61,10 +61,9 @@ var benchBlobSizes = []struct {
 	{"64MiB", 64 << 20},
 }
 
-// BenchmarkRemoteStore_Push compares the monolithic push (chunking disabled)
-// against chunked push at several chunk sizes, for known-digest blobs. The
-// server discards bytes, so this isolates the client-side request/loop/hashing
-// overhead of the chunked protocol versus a single PUT.
+// BenchmarkRemoteStore_Push benchmarks monolithic Push (the only Push path now
+// that chunking is only available via PushStreaming). The server discards bytes,
+// so this isolates the client-side POST/PUT overhead.
 //
 // Run with:
 //
@@ -78,9 +77,8 @@ func BenchmarkRemoteStore_Push(b *testing.B) {
 		dig := digest.FromBytes(data)
 		desc := ociImageSpecV1.Descriptor{MediaType: "application/octet-stream", Digest: dig, Size: int64(len(data))}
 
-		// Monolithic: chunking disabled -> single POST/PUT via oras.
-		b.Run(bs.name+"/monolithic", func(b *testing.B) {
-			store := benchStore(b, srv, 0, 0)
+		b.Run(bs.name, func(b *testing.B) {
+			store := benchStore(b, srv, 0)
 			b.SetBytes(int64(len(data)))
 			b.ReportAllocs()
 			b.ResetTimer()
@@ -90,20 +88,6 @@ func BenchmarkRemoteStore_Push(b *testing.B) {
 				}
 			}
 		})
-
-		for _, chunk := range []int64{1 << 20, 4 << 20, 16 << 20} {
-			b.Run(fmt.Sprintf("%s/chunked_%dMiB", bs.name, chunk>>20), func(b *testing.B) {
-				store := benchStore(b, srv, chunk, 1)
-				b.SetBytes(int64(len(data)))
-				b.ReportAllocs()
-				b.ResetTimer()
-				for range b.N {
-					if err := store.Push(b.Context(), desc, bytes.NewReader(data)); err != nil {
-						b.Fatal(err)
-					}
-				}
-			})
-		}
 	}
 }
 
@@ -123,7 +107,7 @@ func BenchmarkRemoteStore_PushStreaming(b *testing.B) {
 		data := bytes.Repeat([]byte("x"), bs.size)
 		for _, chunk := range []int64{1 << 20, 4 << 20, 16 << 20} {
 			b.Run(fmt.Sprintf("%s/chunked_%dMiB", bs.name, chunk>>20), func(b *testing.B) {
-				store := benchStore(b, srv, chunk, 1)
+				store := benchStore(b, srv, chunk)
 				partial := ociImageSpecV1.Descriptor{MediaType: "application/octet-stream"}
 				b.SetBytes(int64(len(data)))
 				b.ReportAllocs()

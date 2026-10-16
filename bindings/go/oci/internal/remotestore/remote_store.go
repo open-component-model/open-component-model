@@ -22,32 +22,27 @@ import (
 var ErrTagDeletionDisabled = fmt.Errorf("registry does not support tag deletion (405 Method Not Allowed)")
 
 // RemoteStore wraps *remote.Repository and adds content.Untagger support plus
-// chunked blob upload (see Push).
+// chunked streaming upload (see PushStreaming).
 //
 // oras-go implements content.Untagger only for its local OCI layout store
 // (content/oci.Store). The remote registry client (registry/remote.Repository)
 // intentionally omits it: the OCI Distribution Spec treats
 // DELETE /v2/<name>/manifests/<tag> as optional, and not all registries honor it.
 //
-// oras-go's remote.Repository also pushes blobs monolithically only; RemoteStore
-// overrides Push to optionally upload large blobs in chunks.
+// Push is the embedded monolithic oras push: a blob with a known digest and
+// size is always uploaded in one request. Only PushStreaming, for blobs whose
+// digest or size is unknown up front, uploads in chunks.
 type RemoteStore struct {
 	*remote.Repository
 
-	// ChunkSize is the target size in bytes for each PATCH chunk. If <= 0,
-	// chunked upload is disabled and Push always delegates to the embedded
-	// monolithic push. A known registry limit caps it, down to disabling
-	// chunked upload for registries without support (see registryMaxChunkSize).
-	// The registry-advertised OCI-Chunk-Min-Length (from the session POST
-	// response) raises this floor for all but the final chunk.
+	// ChunkSize is the target size in bytes for each PATCH chunk of a streaming
+	// upload. If <= 0, chunked upload is disabled and PushStreaming reports
+	// ErrStreamingUnavailable for incomplete descriptors. A known registry
+	// limit caps it, down to disabling chunked upload for registries without
+	// support (see registryMaxChunkSize). The registry-advertised
+	// OCI-Chunk-Min-Length (from the session POST response) raises this floor
+	// for all but the final chunk.
 	ChunkSize int64
-
-	// ChunkThreshold is the minimum blob size in bytes for chunked upload to
-	// engage. Blobs of Size < ChunkThreshold (and all manifests) use the
-	// embedded monolithic Push. If <= 0, DefaultChunkThreshold is used. The
-	// effective threshold is never below the effective chunk size, so a blob
-	// that fits in a single chunk is always pushed monolithically.
-	ChunkThreshold int64
 }
 
 var (

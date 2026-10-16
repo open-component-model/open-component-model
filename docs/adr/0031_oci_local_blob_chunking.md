@@ -26,7 +26,7 @@ OCI Distribution chunked upload and this ADR's representation-level chunking sol
 | Request-body limit | One HTTP request | Each `PATCH` can remain below the limit, so transport chunking helps. |
 | Blob or layer-size limit | All bytes accumulated in one upload session and committed under one digest | Transport chunking does not help because the registry still creates one blob. |
 
-The implemented `urlresolver.WithChunkedPush` path is transport chunking. It bounds individual requests and enables streaming when the final descriptor is initially unknown, but it does not split the stored blob.
+The implemented `urlresolver.WithChunkedPush` path is transport chunking. It applies only to streaming uploads whose final descriptor is initially unknown, bounding their individual requests; blobs with a known digest and size are pushed in a single request. It does not split the stored blob.
 
 Project Quay demonstrates the distinction. With `MAXIMUM_LAYER_SIZE: 1M`, a 768 KiB blob succeeds as three 256 KiB `PATCH` requests followed by one `PUT`. A 1.5 MiB blob has multiple 256 KiB `PATCH` requests accepted, then a later `PATCH` rejected when the cumulative upload crosses the configured limit. No final `PUT` succeeds and the oversized digest is absent. This behavior is covered by `bindings/go/oci/integration/quay_chunked_push_integration_test.go`.
 

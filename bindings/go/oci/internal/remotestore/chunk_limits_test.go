@@ -43,7 +43,7 @@ func TestRegistryMaxChunkSize(t *testing.T) {
 
 // storeForHost returns a RemoteStore whose repository is addressed by host, so
 // registry-specific limits apply, while every connection is served by srv.
-func storeForHost(t *testing.T, srv *httptest.Server, host string, chunkSize, threshold int64) *RemoteStore {
+func storeForHost(t *testing.T, srv *httptest.Server, host string, chunkSize int64) *RemoteStore {
 	t.Helper()
 	repo, err := remote.NewRepository(host + "/test-repo")
 	require.NoError(t, err)
@@ -54,30 +54,18 @@ func storeForHost(t *testing.T, srv *httptest.Server, host string, chunkSize, th
 			return (&net.Dialer{}).DialContext(ctx, network, addr)
 		},
 	}}
-	return &RemoteStore{Repository: repo, ChunkSize: chunkSize, ChunkThreshold: threshold}
+	return &RemoteStore{Repository: repo, ChunkSize: chunkSize}
 }
 
-// TestRemoteStore_KnownRegistryChunkLimit verifies that pushes to ghcr.io use
-// chunks within its 4 MiB PATCH limit instead of the configured 16 MiB, so no
-// chunk is rejected, and that a registry-advertised OCI-Chunk-Min-Length still
-// takes precedence over the hardcoded limit.
+// TestRemoteStore_KnownRegistryChunkLimit verifies that PushStreaming to
+// ghcr.io uses chunks within its 4 MiB PATCH limit instead of the configured
+// 16 MiB, so no chunk is rejected, and that a registry-advertised
+// OCI-Chunk-Min-Length still takes precedence over the hardcoded limit.
 func TestRemoteStore_KnownRegistryChunkLimit(t *testing.T) {
 	const ghcrLimit = 4 << 20
 	data := bytes.Repeat([]byte("0123456789abcdef"), (10<<20)/16)
-	dig := digest.FromBytes(data)
 	mediaType := "application/octet-stream"
 
-	pushes := map[string]func(t *testing.T, store *RemoteStore) error{
-		"Push": func(t *testing.T, store *RemoteStore) error {
-			t.Helper()
-			return store.Push(t.Context(), ociImageSpecV1.Descriptor{MediaType: mediaType, Digest: dig, Size: int64(len(data))}, bytes.NewReader(data))
-		},
-		"PushStreaming": func(t *testing.T, store *RemoteStore) error {
-			t.Helper()
-			_, err := store.PushStreaming(t.Context(), ociImageSpecV1.Descriptor{MediaType: mediaType}, bytes.NewReader(data))
-			return err
-		},
-	}
 	tests := []struct {
 		name           string
 		patchLimit     int
@@ -96,28 +84,31 @@ func TestRemoteStore_KnownRegistryChunkLimit(t *testing.T) {
 		},
 	}
 	for _, tc := range tests {
-		for pushName, push := range pushes {
-			t.Run(tc.name+"/"+pushName, func(t *testing.T) {
-				r := require.New(t)
-				reg := newChunkedRegistry(t)
-				reg.patchLimit = tc.patchLimit
-				reg.chunkMinLength = tc.chunkMinLength
-				srv := httptest.NewServer(reg.handler())
-				t.Cleanup(srv.Close)
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			reg := newChunkedRegistry(t)
+			reg.patchLimit = tc.patchLimit
+			reg.chunkMinLength = tc.chunkMinLength
+			srv := httptest.NewServer(reg.handler())
+			t.Cleanup(srv.Close)
 
-				r.NoError(push(t, storeForHost(t, srv, "ghcr.io", DefaultChunkSize, 1)))
+			// PushStreaming with incomplete descriptor to exercise chunked path.
+			store := storeForHost(t, srv, "ghcr.io", DefaultChunkSize)
+			_, err := store.PushStreaming(t.Context(),
+				ociImageSpecV1.Descriptor{MediaType: mediaType},
+				bytes.NewReader(data))
+			r.NoError(err)
 
-				var patchSizes []int
-				for _, req := range reg.requests {
-					if req.method == http.MethodPatch {
-						patchSizes = append(patchSizes, len(req.body))
-					}
+			var patchSizes []int
+			for _, req := range reg.requests {
+				if req.method == http.MethodPatch {
+					patchSizes = append(patchSizes, len(req.body))
 				}
-				r.Equal(tc.wantPatchSizes, patchSizes)
-				r.NotContains(reg.methods(), http.MethodDelete, "no chunk may be rejected")
-				r.Equal(data, reg.uploaded)
-			})
-		}
+			}
+			r.Equal(tc.wantPatchSizes, patchSizes)
+			r.NotContains(reg.methods(), http.MethodDelete, "no chunk may be rejected")
+			r.Equal(data, reg.uploaded)
+		})
 	}
 }
 
@@ -130,7 +121,7 @@ func TestRemoteStore_RegistryWithoutChunkedUpload(t *testing.T) {
 	reg := newChunkedRegistry(t)
 	srv := httptest.NewServer(reg.monolithicHandler())
 	t.Cleanup(srv.Close)
-	store := storeForHost(t, srv, "europe-docker.pkg.dev", DefaultChunkSize, 1)
+	store := storeForHost(t, srv, "europe-docker.pkg.dev", DefaultChunkSize)
 
 	data := bytes.Repeat([]byte("x"), 20<<20)
 	dig := digest.FromBytes(data)
