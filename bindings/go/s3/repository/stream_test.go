@@ -1,7 +1,6 @@
 package repository
 
 import (
-	"context"
 	"io"
 	"os"
 	"testing"
@@ -28,7 +27,7 @@ func TestDownloadResource_StreamsLazily(t *testing.T) {
 		repository := NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &tempDir})
 
 		resource := s3Resource(servedBy(srv, &v2.S3{BucketName: "my-bucket", ObjectKey: "path/blob.txt", MediaType: "text/plain"}))
-		b, err := repository.DownloadResource(context.Background(), resource, fakeCredentials())
+		b, err := repository.DownloadResource(t.Context(), resource, fakeCredentials())
 		r.NoError(err)
 		r.Empty(srv.recorded(), "no request may be sent before the blob is read")
 
@@ -47,7 +46,7 @@ func TestDownloadResource_StreamsLazily(t *testing.T) {
 		repository := NewResourceRepository(nil)
 
 		resource := s3Resource(servedBy(srv, &v2.S3{BucketName: "my-bucket", ObjectKey: "path/blob.txt"}))
-		b, err := repository.DownloadResource(context.Background(), resource, fakeCredentials())
+		b, err := repository.DownloadResource(t.Context(), resource, fakeCredentials())
 		r.NoError(err)
 		r.Len(srv.recorded(), 1, "the object is requested once to read the media type")
 
@@ -72,7 +71,7 @@ func TestDownloadResource_DigestMismatch(t *testing.T) {
 		Value:                  godigest.FromString("hello world").Encoded(),
 	}
 
-	b, err := repository.DownloadResource(context.Background(), resource, fakeCredentials())
+	b, err := repository.DownloadResource(t.Context(), resource, fakeCredentials())
 	r.NoError(err)
 
 	rc, err := b.ReadCloser()

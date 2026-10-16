@@ -55,13 +55,13 @@ var (
 	_ io.Closer           = (*Stream)(nil)
 )
 
-// Idempotent reports whether the request can be safely re-issued. It is true for
-// a GET or HEAD (and the empty verb, which defaults to GET). Any other verb (for
-// example a POST carrying a body) is not safe to repeat, so such a request must
-// not be streamed: a consumer can open the blob more than once.
-func (s *Stream) Idempotent() bool {
+// IdempotentVerb reports whether a request with verb can be safely re-issued. It
+// is true for GET and HEAD (and the empty verb, which defaults to GET). Any other
+// verb (for example a POST carrying a body) is not safe to repeat, so such a
+// request must not be streamed: a consumer can open a [Stream] more than once.
+func IdempotentVerb(verb string) bool {
 	// HTTP method names are case-sensitive; custom spellings are not safe to retry.
-	switch s.req.Verb {
+	switch verb {
 	case "", http.MethodGet, http.MethodHead:
 		return true
 	default:

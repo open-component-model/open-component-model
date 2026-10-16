@@ -20,10 +20,15 @@
 //	    return err
 //	}
 //
-// Objects are streamed into a file under the TempFolder of the supplied filesystem
-// config (a nil config selects the OS temporary directory) rather than buffered, so
-// memory use does not scale with object size. That file outlives the call and is
-// owned by the caller. Upload is not supported yet (download-first, matching ocmv1),
+// The returned blob is lazy: the object body streams from the store when the blob
+// is read, nothing is buffered or written to disk, and each ReadCloser call sends
+// GetObject again. When the access pins no media type, the object is requested once
+// in DownloadResource to read it from the response, and the first read uses that
+// response. A digest mismatch fails the final read and the close of the reader.
+// Callers must close the blob, which releases a response that was opened but never
+// read. ProcessResourceDigest downloads into a file under the TempFolder of the
+// supplied filesystem config (a nil config selects the OS temporary directory) and
+// removes it again. Upload is not supported yet (download-first, matching ocmv1),
 // and integrity uses OCM's own SHA-256 over the content (see ProcessResourceDigest)
 // rather than the S3 ETag, which is not a reliable whole-object hash for multipart
 // objects.

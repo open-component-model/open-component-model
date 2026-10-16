@@ -17,6 +17,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 
 	ocmblob "ocm.software/open-component-model/bindings/go/blob"
@@ -110,8 +111,13 @@ func fromArtifactReferences(ctx context.Context, req Request) ([]repository.SBOM
 			return nil, fmt.Errorf("downloading sbom resource %q failed: %w", identity, err)
 		}
 		var buf bytes.Buffer
-		if err := ocmblob.Copy(&buf, data); err != nil {
-			return nil, fmt.Errorf("reading sbom resource %q failed: %w", identity, err)
+		copyErr := ocmblob.Copy(&buf, data)
+		// Release an open response or a temporary file of the downloaded blob.
+		if c, ok := data.(io.Closer); ok {
+			_ = c.Close()
+		}
+		if copyErr != nil {
+			return nil, fmt.Errorf("reading sbom resource %q failed: %w", identity, copyErr)
 		}
 
 		req.Logger.Info("found an sbom resource referencing the requested resource",

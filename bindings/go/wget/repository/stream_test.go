@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -122,6 +123,48 @@ func TestDownloadResource_NonIdempotentIsDownloadedOnce(t *testing.T) {
 	r.NotEmpty(entries, "the content is held in a temporary file")
 	closeBlob(b)
 	assertEmptyDir(t, tempDir)
+}
+
+// TestDownloadResource_NonIdempotentChecksumPolicy asserts that on the download
+// path of a request that is not safe to repeat, the checksum policy is verified
+// before DownloadResource returns, and that a violation leaves no temporary file.
+func TestDownloadResource_NonIdempotentChecksumPolicy(t *testing.T) {
+	t.Parallel()
+	content := []byte("response to a POST")
+	tests := []struct {
+		name       string
+		advertised string
+	}{
+		{name: "advertised checksum mismatches", advertised: strings.Repeat("0", 64)},
+		{name: "no checksum advertised"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			r := require.New(t)
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				if tt.advertised != "" {
+					w.Header().Set("X-Checksum-Sha256", tt.advertised)
+				}
+				_, _ = w.Write(content)
+			}))
+			t.Cleanup(srv.Close)
+
+			tempDir := t.TempDir()
+			repo := repository.NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &tempDir},
+				repository.WithHTTPClient(srv.Client()),
+				repository.WithChecksumConfig(&checksumhttpv1alpha1.Config{Mode: checksumhttpv1alpha1.ChecksumModeRequire}),
+			)
+			resource := wgetResource(t, srv.URL, map[string]any{
+				"verb": http.MethodPost,
+				"body": base64.StdEncoding.EncodeToString([]byte("q=1")),
+			})
+
+			_, err := repo.DownloadResource(t.Context(), resource, nil)
+			r.ErrorContains(err, "checksum verification failed", "the policy must fail DownloadResource itself")
+			assertEmptyDir(t, tempDir)
+		})
+	}
 }
 
 // TestDownloadResource_DigestMismatch is the stream-then-verify path at the

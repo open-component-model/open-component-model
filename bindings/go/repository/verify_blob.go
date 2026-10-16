@@ -124,6 +124,8 @@ type verifyingReadCloser struct {
 	size     int64
 	read     int64
 	complete bool
+	// readErr is the first error other than io.EOF that base returned.
+	readErr error
 }
 
 // Read is a tee reader implementation that will not only error on Close but
@@ -134,6 +136,9 @@ func (v *verifyingReadCloser) Read(p []byte) (int, error) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 	n, err := v.base.Read(p)
+	if err != nil && !errors.Is(err, io.EOF) && v.readErr == nil {
+		v.readErr = err
+	}
 	if n > 0 {
 		if _, writeErr := v.digester.Hash().Write(p[:n]); writeErr != nil {
 			return n, writeErr
@@ -163,8 +168,14 @@ func (v *verifyingReadCloser) Close() error {
 }
 
 // verify refuses content that has not been read in full before comparing digests.
+// When the base reader failed, the content is refused as well, but the message
+// names the failed read instead of a partial read by the caller: the base error
+// itself was already returned by Read.
 func (v *verifyingReadCloser) verify() error {
 	if !v.complete {
+		if v.readErr != nil {
+			return fmt.Errorf("digest %s not verified: the read failed before the end of the content", v.expected)
+		}
 		return fmt.Errorf("digest mismatch: incomplete read for digest %s", v.expected)
 	}
 	if actual := v.digester.Digest(); actual != v.expected {

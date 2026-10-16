@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	godigest "github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -163,6 +164,53 @@ func TestDownloadWgetResource_Transform(t *testing.T) {
 		entries, err := os.ReadDir(outputDir)
 		r.NoError(err)
 		assert.Empty(t, entries, "temporary output file should be removed after a failed download")
+	})
+
+	t.Run("removes the output file when verification fails while reading", func(t *testing.T) {
+		t.Parallel()
+		r := require.New(t)
+		ctx := t.Context()
+		outputDir := t.TempDir()
+
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte("not what was promised"))
+		}))
+		t.Cleanup(srv.Close)
+
+		// A pinned media type keeps DownloadResource from sending the request, so the
+		// blob is lazy and the digest mismatch only fails the read in the copy.
+		access := &wgetv1.Wget{
+			Type:      runtime.NewVersionedType(wgetaccess.WgetConsumerType, "v1"),
+			URL:       srv.URL + "/myfile",
+			MediaType: "text/plain",
+		}
+		raw := &runtime.Raw{}
+		r.NoError(wgetaccess.Scheme.Convert(access, raw))
+		resource := wgetResource(t, srv.URL+"/myfile")
+		resource.Access = raw
+		resource.Digest = &v2.Digest{
+			HashAlgorithm:          "SHA-256",
+			NormalisationAlgorithm: "genericBlobDigest/v1",
+			Value:                  godigest.FromString(content).Encoded(),
+		}
+
+		transform := &transformation.DownloadWgetResource{
+			Scheme:             scheme,
+			ResourceRepository: repository.NewResourceRepository(nil, repository.WithHTTPClient(srv.Client())),
+		}
+		spec := &v1alpha1.DownloadWgetResource{
+			Type: v1alpha1.DownloadWgetResourceV1alpha1,
+			ID:   "test-cleanup-on-read-failure",
+			Spec: &v1alpha1.DownloadWgetResourceSpec{Resource: resource, OutputPath: outputDir},
+		}
+
+		result, err := transform.Transform(ctx, spec)
+		r.ErrorContains(err, "digest mismatch")
+		r.Nil(result)
+
+		entries, err := os.ReadDir(outputDir)
+		r.NoError(err)
+		assert.Empty(t, entries, "the output file must be removed when the read fails")
 	})
 
 	t.Run("fails when spec is nil", func(t *testing.T) {

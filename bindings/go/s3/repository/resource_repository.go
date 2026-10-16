@@ -41,8 +41,9 @@ type ResourceRepository struct {
 }
 
 // NewResourceRepository creates a new S3 resource repository. If filesystemConfig
-// is non-nil, its TempFolder is used for the files downloaded objects are streamed
-// into; otherwise os.CreateTemp's default directory is used.
+// is non-nil, its TempFolder is used for the files ProcessResourceDigest downloads
+// objects into; otherwise os.CreateTemp's default directory is used.
+// DownloadResource writes no file.
 func NewResourceRepository(filesystemConfig *filesystemv1alpha1.Config, opts ...Option) *ResourceRepository {
 	if filesystemConfig == nil {
 		filesystemConfig = &filesystemv1alpha1.Config{}

@@ -100,11 +100,17 @@ func (t *HTTPStreamingTransformer) Transform(ctx context.Context, step runtime.T
 		return nil, err
 	}
 
-	srcBlob, err := t.downloadSource(ctx, srcResource, srcCreds)
+	// The wget and s3 repositories return a lazy blob, so the common wget/s3 ->
+	// remote path needs no temporary file. A non-idempotent wget request is
+	// downloaded once into a temporary file instead. The HTTP target may retain
+	// bytes if verification fails at EOF. No delete operation is defined for this
+	// target.
+	srcBlob, err := t.ResourceRepository.DownloadResource(ctx, srcResource, srcCreds)
 	if err != nil {
 		return nil, fmt.Errorf("failed downloading source resource %v: %w", srcResource.ToIdentity(), err)
 	}
-	// Releases the temporary file of a downloaded (not streamed) source.
+	// Releases an open response of a streamed source, or the temporary file of a
+	// downloaded one.
 	defer func() {
 		if c, ok := srcBlob.(io.Closer); ok {
 			_ = c.Close()
@@ -226,15 +232,6 @@ func uploadedDigest(src *descriptor.Digest, computed string) (*descriptor.Digest
 		return nil, fmt.Errorf("digest mismatch: expected %s, got %s", src.Value, computed)
 	}
 	return src.DeepCopy(), nil
-}
-
-// downloadSource returns the source content. The wget and s3 repositories return a
-// lazy blob, so the common wget/s3 -> remote path needs no temporary file. A
-// non-idempotent wget request is downloaded once into a temporary file instead.
-// The HTTP target may retain bytes if verification fails at EOF. No delete
-// operation is defined for this target.
-func (t *HTTPStreamingTransformer) downloadSource(ctx context.Context, resource *descriptor.Resource, creds runtime.Typed) (blob.ReadOnlyBlob, error) {
-	return t.ResourceRepository.DownloadResource(ctx, resource, creds)
 }
 
 // resolveSourceCredentials resolves credentials for the source resource by its consumer

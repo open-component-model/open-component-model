@@ -28,14 +28,17 @@ import (
 // fakeLazyBlob is a size-unknown, media-type-aware blob that is neither
 // blob.SizeAware nor blob.DigestAware, mirroring the lazy blob that the wget and
 // s3 repositories return from DownloadResource.
+// It counts the ReadCloser calls, so a test can assert how often the source is read.
 type fakeLazyBlob struct {
 	data      string
 	mediaType string
+	opens     int
 }
 
 var _ blob.MediaTypeAware = (*fakeLazyBlob)(nil)
 
 func (b *fakeLazyBlob) ReadCloser() (io.ReadCloser, error) {
+	b.opens++
 	return io.NopCloser(strings.NewReader(b.data)), nil
 }
 
@@ -44,30 +47,6 @@ func (b *fakeLazyBlob) MediaType() (string, bool) {
 		return "", false
 	}
 	return b.mediaType, true
-}
-
-// primingLazyBlob mirrors a wget/s3 lazy source: its media type (the response
-// Content-Type) is only known once its stream is opened.
-type primingLazyBlob struct {
-	data        string
-	contentType string
-	primed      bool
-	opens       int
-}
-
-var _ blob.MediaTypeAware = (*primingLazyBlob)(nil)
-
-func (b *primingLazyBlob) ReadCloser() (io.ReadCloser, error) {
-	b.primed = true
-	b.opens++
-	return io.NopCloser(strings.NewReader(b.data)), nil
-}
-
-func (b *primingLazyBlob) MediaType() (string, bool) {
-	if !b.primed || b.contentType == "" {
-		return "", false
-	}
-	return b.contentType, true
 }
 
 // fakeResourceRepo implements repository.ResourceRepository and records the download.
@@ -282,7 +261,7 @@ func TestStreamLocalResource_RealPackOCI(t *testing.T) {
 	ctx := t.Context()
 
 	const content = "real pack streaming content"
-	lazy := &primingLazyBlob{data: content, contentType: "application/x-test", primed: true}
+	lazy := &fakeLazyBlob{data: content, mediaType: "application/x-test"}
 	resourceRepo := &fakeResourceRepo{blob: lazy}
 
 	repo := newInProcessOCIRepository(t)
@@ -363,15 +342,16 @@ func (b *sizedBlob) ReadCloser() (io.ReadCloser, error) {
 func (b *sizedBlob) Size() int64 { return int64(len(b.data)) }
 
 // TestStreamLocalResource_MaterializedBlobKeepsSize guards against wrapping a
-// downloaded source, which would hide SizeAware and force the streaming push for a
-// size-known blob. A non-streaming resource repository forces the download path.
+// materialized source (for example a non-idempotent wget request downloaded into a
+// temporary file), which would hide SizeAware and force the streaming push for a
+// size-known blob.
 func TestStreamLocalResource_MaterializedBlobKeepsSize(t *testing.T) {
 	r := require.New(t)
 	ctx := t.Context()
 
 	content := "materialized sized content"
 	materialized := &sizedBlob{data: content}
-	resourceRepo := &fakeResourceRepo{blob: materialized} // ResourceRepository only (not streaming)
+	resourceRepo := &fakeResourceRepo{blob: materialized}
 	mockRepo := &mockRepository{}
 	provider := &mockRepoProvider{repo: mockRepo}
 
@@ -391,10 +371,10 @@ func TestStreamLocalResource_MaterializedBlobKeepsSize(t *testing.T) {
 	r.NoError(err)
 	r.NotNil(result)
 
-	r.True(resourceRepo.downloadCalled, "a non-streaming repo must take the materialized path")
+	r.True(resourceRepo.downloadCalled, "the source must be read with DownloadResource")
 	r.NotNil(mockRepo.addedBlob)
 	sizer, ok := mockRepo.addedBlob.(blob.SizeAware)
-	r.True(ok, "materialized blob must remain SizeAware (not wrapped in knownDigestBlob), got %T", mockRepo.addedBlob)
+	r.True(ok, "materialized blob must remain SizeAware (not wrapped), got %T", mockRepo.addedBlob)
 	r.Equal(int64(len(content)), sizer.Size())
 }
 

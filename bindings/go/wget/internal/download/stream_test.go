@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -189,10 +190,10 @@ func TestStream_MaxDownloadSize(t *testing.T) {
 	}
 }
 
-// TestStream_Idempotent reports true only for a repeatable verb (GET/HEAD and the
+// TestIdempotentVerb reports true only for a repeatable verb (GET/HEAD and the
 // empty default), so DownloadResource streams only a request that is safe to
 // repeat.
-func TestStream_Idempotent(t *testing.T) {
+func TestIdempotentVerb(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		verb string
@@ -211,8 +212,7 @@ func TestStream_Idempotent(t *testing.T) {
 		t.Run(tt.verb, func(t *testing.T) {
 			t.Parallel()
 			r := require.New(t)
-			s := download.NewStream(t.Context(), download.Request{URL: "http://example.com", Verb: tt.verb}, nil)
-			r.Equal(tt.want, s.Idempotent())
+			r.Equal(tt.want, download.IdempotentVerb(tt.verb))
 		})
 	}
 }
@@ -268,5 +268,54 @@ func TestStream_Prime(t *testing.T) {
 		r.NoError(s.Close())
 		r.Equal(content, readBlob(t, s))
 		r.Equal(int64(2), hits.Load(), "after Close the primed response must not be reused")
+	})
+
+	// hangingServer sends the headers and part of the body and then waits until the
+	// client closes the response, which it reports on released.
+	hangingServer := func(t *testing.T) (*httptest.Server, <-chan struct{}) {
+		t.Helper()
+		released := make(chan struct{}, 2)
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			w.Header().Set("Content-Type", "text/plain")
+			_, _ = w.Write([]byte("partial"))
+			w.(http.Flusher).Flush()
+			<-req.Context().Done()
+			released <- struct{}{}
+		}))
+		t.Cleanup(srv.Close)
+		return srv, released
+	}
+	waitReleased := func(t *testing.T, released <-chan struct{}, msg string) {
+		t.Helper()
+		select {
+		case <-released:
+		case <-time.After(10 * time.Second):
+			t.Fatal(msg)
+		}
+	}
+
+	t.Run("close releases the open response", func(t *testing.T) {
+		t.Parallel()
+		r := require.New(t)
+		srv, released := hangingServer(t)
+		s := download.NewStream(t.Context(), download.Request{URL: srv.URL}, nil, download.WithClient(srv.Client()))
+
+		r.NoError(s.Prime())
+		r.NoError(s.Close())
+		waitReleased(t, released, "Close must release the primed response")
+		r.NoError(s.Close(), "a second Close must be a no-op")
+	})
+
+	t.Run("a second Prime releases the first response", func(t *testing.T) {
+		t.Parallel()
+		r := require.New(t)
+		srv, released := hangingServer(t)
+		s := download.NewStream(t.Context(), download.Request{URL: srv.URL}, nil, download.WithClient(srv.Client()))
+
+		r.NoError(s.Prime())
+		r.NoError(s.Prime())
+		waitReleased(t, released, "a second Prime must release the first response")
+		r.NoError(s.Close())
+		waitReleased(t, released, "Close must release the second response")
 	})
 }

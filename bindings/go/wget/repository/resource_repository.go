@@ -124,10 +124,10 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 	if err != nil {
 		return nil, err
 	}
-	if stream := r.newStream(ctx, wget, credentials); stream.Idempotent() {
-		return streamResource(ctx, resource, stream)
+	if !download.IdempotentVerb(wget.Verb) {
+		return r.downloadToFile(ctx, resource, credentials)
 	}
-	return r.downloadToFile(ctx, resource, credentials)
+	return streamResource(ctx, resource, r.newStream(ctx, wget, credentials))
 }
 
 // downloadToFile downloads the resource once into a temporary file and verifies

@@ -44,7 +44,8 @@ var (
 )
 
 // NewStream builds a lazy streaming blob for the S3 object described by req. The
-// S3 client is created on the first read and reused on subsequent reads. Options
+// S3 client is created on the first request (the first read or [Stream.Prime])
+// and reused on subsequent requests. Options
 // mirror those of [Download] (credentials, max size, HTTP client/config);
 // [WithTempDir] has no effect because nothing is written to disk.
 func NewStream(ctx context.Context, req Request, opts ...Option) *Stream {
