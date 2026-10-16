@@ -418,7 +418,6 @@ For more details, see [Configure Credentials for Controllers]({{< relref "/docs/
 
 ## Deploy the application
 
-
 ### Deliver both RGDs
 
 The bootstrap resources are OCM controller objects: a `Repository` and `Component` fetch the
