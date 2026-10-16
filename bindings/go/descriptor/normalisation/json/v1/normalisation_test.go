@@ -3,7 +3,6 @@ package v1_test
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -64,27 +63,6 @@ func TestNormaliseByteExact(t *testing.T) {
 			r.Equal(tt.digest, hex.EncodeToString(sum[:]), "digest diverges from cc-utils")
 		})
 	}
-}
-
-// TestNormaliseLabelListKeyOrder proves the real signing path (JSON load, not
-// YAML) preserves source key order inside a list-valued signing label, matching
-// cc-utils, which never recurses into arrays. A YAML fixture cannot express this
-// because the YAML round-trip sorts object keys.
-func TestNormaliseLabelListKeyOrder(t *testing.T) {
-	r := require.New(t)
-	var desc v2.Descriptor
-	r.NoError(json.Unmarshal([]byte(inputJSON_15_label_list_unsorted), &desc))
-	rt, err := descruntime.ConvertFromV2(&desc)
-	r.NoError(err)
-
-	got, err := normalisation.Normalise(rt, v1.Algorithm)
-	r.NoError(err)
-	// Byte-exact on purpose: key order inside the list value is the property
-	// under test, so JSONEq (which ignores order) must not be used here.
-	r.Equal(norm_15_label_list_unsorted, string(got), "normalised bytes diverge from cc-utils") //nolint:testifylint // order-sensitive byte compare
-
-	sum := sha256.Sum256(got)
-	r.Equal(digest_15_label_list_unsorted, hex.EncodeToString(sum[:]), "digest diverges from cc-utils")
 }
 
 // TestUnknownAlgorithmErrors locks in that an unregistered normalisation

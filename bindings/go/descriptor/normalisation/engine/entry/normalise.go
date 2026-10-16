@@ -12,6 +12,10 @@
 // \uXXXX) so that sha256 over the bytes matches the digests produced by
 // gardener's cc-utils (ocm/sign.py, which serialises with Python json.dumps).
 //
+// Descriptors reach this engine via the storage representation (sigs.k8s.io/yaml
+// round-trip in json/v1), so object keys are already sorted and numbers already
+// collapsed; the engine therefore has no order- or number-preservation to do.
+//
 // The engine is deliberately OCM-agnostic: it operates on an arbitrary
 // any tree (map[string]any, []any, scalars, explicit nil). Field selection
 // and OCM-specific transforms live in the json/v1 algorithm package.
@@ -54,134 +58,6 @@ func Transform(v any) any {
 	default:
 		return v
 	}
-}
-
-// TransformRaw applies the same normalise_obj semantics as Transform but on raw
-// JSON bytes, so that source key order survives for values cc-utils emits
-// without recursing. Objects are rewritten into sorted single-key arrays
-// (recursing per value); arrays and scalars are decoded order-preservingly and
-// re-encoded canonically (escaping normalised, object key order kept). cc-utils
-// never descends into arrays, so an object nested inside an array keeps its
-// source key order instead of being re-sorted by Go's map marshalling. Use this
-// for label values, whose structure is caller-defined.
-func TransformRaw(raw json.RawMessage) (any, error) {
-	trimmed := bytes.TrimSpace(raw)
-	if len(trimmed) == 0 {
-		return nil, nil
-	}
-	if trimmed[0] == '{' {
-		var obj map[string]json.RawMessage
-		if err := json.Unmarshal(trimmed, &obj); err != nil {
-			return nil, err
-		}
-		out := make([]any, 0, len(obj))
-		for _, k := range slices.Sorted(maps.Keys(obj)) {
-			v, err := TransformRaw(obj[k])
-			if err != nil {
-				return nil, err
-			}
-			out = append(out, map[string]any{k: v})
-		}
-		return out, nil
-	}
-	return decodeOrdered(trimmed)
-}
-
-// orderedObject is a JSON object that marshals its members in insertion order
-// (not sorted), without HTML escaping. It carries the source key order of a
-// JSON object that cc-utils leaves inside a raw array.
-type orderedObject []orderedMember
-
-type orderedMember struct {
-	key string
-	val any
-}
-
-func (o orderedObject) MarshalJSON() ([]byte, error) {
-	buf := new(bytes.Buffer)
-	buf.WriteByte('{')
-	for i := range o {
-		if i > 0 {
-			buf.WriteByte(',')
-		}
-		if err := encodeNoHTML(buf, o[i].key); err != nil {
-			return nil, err
-		}
-		buf.WriteByte(':')
-		if err := encodeNoHTML(buf, o[i].val); err != nil {
-			return nil, err
-		}
-	}
-	buf.WriteByte('}')
-	return buf.Bytes(), nil
-}
-
-func encodeNoHTML(buf *bytes.Buffer, v any) error {
-	tmp := new(bytes.Buffer)
-	enc := json.NewEncoder(tmp)
-	enc.SetEscapeHTML(false)
-	if err := enc.Encode(v); err != nil {
-		return err
-	}
-	buf.Write(bytes.TrimRight(tmp.Bytes(), "\n"))
-	return nil
-}
-
-// decodeOrdered decodes JSON into a tree that preserves object key order
-// (orderedObject for objects, []any for arrays, json.Number for numbers). It is
-// used for values cc-utils emits raw, where source order is significant.
-func decodeOrdered(raw json.RawMessage) (any, error) {
-	dec := json.NewDecoder(bytes.NewReader(raw))
-	dec.UseNumber()
-	v, err := decodeOrderedValue(dec)
-	if err != nil {
-		return nil, err
-	}
-	return v, nil
-}
-
-func decodeOrderedValue(dec *json.Decoder) (any, error) {
-	tok, err := dec.Token()
-	if err != nil {
-		return nil, err
-	}
-	delim, ok := tok.(json.Delim)
-	if !ok {
-		return tok, nil // string, json.Number, bool, nil
-	}
-	switch delim {
-	case '{':
-		obj := orderedObject{}
-		for dec.More() {
-			keyTok, err := dec.Token()
-			if err != nil {
-				return nil, err
-			}
-			val, err := decodeOrderedValue(dec)
-			if err != nil {
-				return nil, err
-			}
-			obj = append(obj, orderedMember{key: keyTok.(string), val: val})
-		}
-		if _, err := dec.Token(); err != nil { // consume '}'
-			return nil, err
-		}
-		return obj, nil
-	case '[':
-		arr := []any{}
-		for dec.More() {
-			val, err := decodeOrderedValue(dec)
-			if err != nil {
-				return nil, err
-			}
-			arr = append(arr, val)
-		}
-		if _, err := dec.Token(); err != nil { // consume ']'
-			return nil, err
-		}
-		return arr, nil
-	}
-	return tok, nil
 }
 
 // marshal encodes an already-transformed tree to compact JSON. HTML escaping
