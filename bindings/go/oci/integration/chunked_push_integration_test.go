@@ -324,7 +324,7 @@ func Test_Integration_OCIRepository_StreamingDoesNotBuffer(t *testing.T) {
 // buffered) and the component version round-trips.
 //
 // Behavior of the transfer as a function of the input blob (remote registry
-// store with chunked push enabled via WithChunkedPush):
+// store; chunked streaming is always on, WithChunkedPush only tunes the size):
 //
 //	blob size | blob digest | transfer behavior
 //	----------+-------------+--------------------------------------------------
@@ -340,15 +340,13 @@ func Test_Integration_OCIRepository_StreamingDoesNotBuffer(t *testing.T) {
 //	unknown   | unknown     | streamed: PushStreaming computes both size and
 //	          |             | digest during upload. No buffering.
 //
-//	Non-streaming stores (CTF, memory, or remote with chunking disabled) do not
-//	implement StreamingPusher, so an unknown size or digest falls back to
-//	buffering the whole blob in memory to build the descriptor before a
-//	monolithic push. Manifests are never chunked; they use the manifests
-//	endpoint. A pre-consumption streaming failure (POST rejected, etc.) wraps
-//	ErrStreamingUnavailable and the pack layer falls back to buffering. A chunk
-//	the registry rejects as too large (413, or 416 as ghcr.io answers above
-//	4 MiB) is resent in halves on the same session, logging a warning; only
-//	that chunk is held in memory.
+//	Non-streaming stores (CTF, memory) do not implement StreamingPusher, so an
+//	unknown size or digest falls back to buffering the whole blob in memory to
+//	build the descriptor before a monolithic push. Manifests are never chunked;
+//	they use the manifests endpoint. A streaming failure fails the push; it is
+//	never retried by buffering. A chunk the registry rejects as too large (413,
+//	or 416 as ghcr.io answers above 4 MiB) is resent in halves on the same
+//	session, logging a warning; only that chunk is held in memory.
 func Test_Integration_OCIRepository_AddComponentVersion_Streaming(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping add-cv streaming integration test in short mode")

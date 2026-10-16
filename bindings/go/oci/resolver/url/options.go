@@ -73,14 +73,13 @@ func WithReferenceCache(refs *cache.ReferenceCache) Option {
 	})
 }
 
-// WithChunkedPush enables chunked upload for streaming pushes (see
-// remotestore.StreamingPusher) on remote repositories handed out by this
-// resolver, so blobs of unknown size or digest can be uploaded without
-// buffering. chunkSize is the target PATCH chunk size in bytes; a chunkSize
-// <= 0 disables it. Blobs with a known digest and size are always pushed
-// monolithically. Chunked streaming survives an active blob or reference cache
-// on the resolver: the cache decorator carries the chunk size (see
-// cache.ProxyRepository), so its PushStreaming remains reachable.
+// WithChunkedPush sets the target PATCH chunk size in bytes for streaming
+// pushes (see remotestore.StreamingPusher) on remote repositories handed out by
+// this resolver. Streaming uploads blobs of unknown size or digest in chunks so
+// they are never buffered; it is always on, and a chunkSize <= 0 uses
+// remotestore.DefaultChunkSize. Blobs with a known digest and size are always
+// pushed monolithically. The chunk size survives an active blob or reference
+// cache on the resolver (see cache.ProxyRepository).
 func WithChunkedPush(chunkSize int64) Option {
 	return OptionFunc(func(resolver *CachingResolver) {
 		resolver.chunkSize = chunkSize

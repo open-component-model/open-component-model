@@ -121,9 +121,9 @@ func ResourceLocalBlobOCILayer(ctx context.Context, storage content.Storage, b *
 // never buffered into memory. It returns (descriptor, true, nil) on success.
 //
 // It returns ok=false (no error, no content consumed) when streaming does not
-// apply — the blob already exposes BOTH a size and a digest (so no buffering is
-// needed and the regular monolithic push applies), or the store reports
-// streaming unavailable — so the caller falls back to the buffering push path.
+// apply: the blob already exposes BOTH a size and a digest, so no buffering is
+// needed and the regular monolithic push applies. A streaming failure is
+// returned as an error; it never falls back to buffering the blob.
 //
 // A digest known in advance (from the blob or the access LocalReference) is
 // passed through and verified against the streamed bytes; an unknown digest is
@@ -172,10 +172,6 @@ func streamResourceLayer(ctx context.Context, pusher remotestore.StreamingPusher
 	}
 	partial := ociImageSpecV1.Descriptor{MediaType: mediaType, Digest: knownDigest, Size: partialSize}
 	layer, err := pusher.PushStreaming(ctx, partial, reader)
-	if errors.Is(err, remotestore.ErrStreamingUnavailable) {
-		// No bytes were consumed; fall back to the buffering push path.
-		return ociImageSpecV1.Descriptor{}, false, nil
-	}
 	if err != nil {
 		return ociImageSpecV1.Descriptor{}, false, fmt.Errorf("failed to stream blob: %w", err)
 	}

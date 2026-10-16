@@ -45,8 +45,9 @@ type CachingResolver struct {
 
 	DisableCacheProxy bool
 
-	// chunkSize configures chunked streaming upload on the RemoteStores this
-	// resolver hands out. See WithChunkedPush. Zero disables it.
+	// chunkSize is the PATCH chunk size of streaming uploads on the
+	// RemoteStores this resolver hands out. See WithChunkedPush; zero uses the
+	// default.
 	chunkSize int64
 
 	cacheMu sync.RWMutex

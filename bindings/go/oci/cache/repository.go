@@ -32,8 +32,8 @@ type Repository struct {
 }
 
 // getStore returns the store backing PushStreaming and Untag. A bare struct
-// literal leaves store nil, so it falls back to a store without chunking over
-// the embedded repository to avoid a panic.
+// literal leaves store nil, so it falls back to a store with the default chunk
+// size over the embedded repository to avoid a panic.
 func (r *Repository) getStore() *remotestore.RemoteStore {
 	if r.store != nil {
 		return r.store
@@ -120,8 +120,8 @@ func (r *Repository) Tag(ctx context.Context, desc ociImageSpecV1.Descriptor, re
 }
 
 // ProxyRepository decorates repo with the configured caches, carrying the chunk
-// size so chunked streaming push survives the cache (a zero chunkSize disables
-// it). With no cache it returns the chunked store directly. It takes
+// size so chunked streaming push survives the cache (zero uses the default).
+// With no cache it returns the chunked store directly. It takes
 // [*remote.Repository] to keep the internal store type out of its signature.
 func ProxyRepository(repo *remote.Repository, blob *BlobCache, refs *ReferenceCache, chunkSize int64) spec.Store {
 	store := &remotestore.RemoteStore{Repository: repo, ChunkSize: chunkSize}

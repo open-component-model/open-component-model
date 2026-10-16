@@ -36,10 +36,9 @@ type RemoteStore struct {
 	*remote.Repository
 
 	// ChunkSize is the target size in bytes for each PATCH chunk of a streaming
-	// upload. If <= 0, chunked upload is disabled and PushStreaming reports
-	// ErrStreamingUnavailable for incomplete descriptors. The
-	// registry-advertised OCI-Chunk-Min-Length (from the session POST
-	// response) raises this floor for all but the final chunk.
+	// upload. If <= 0, DefaultChunkSize is used. The registry-advertised
+	// OCI-Chunk-Min-Length (from the session POST response) raises this floor
+	// for all but the final chunk.
 	ChunkSize int64
 }
 

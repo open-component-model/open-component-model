@@ -44,6 +44,7 @@ type chunkedRegistry struct {
 	patchRejectStatus int // status for an oversized PATCH; 0 = 416, as ghcr.io answers
 	chunkMinLength    string
 	warning           string
+	patchAcceptStatus int // status for an accepted PATCH; 0 = 202. ECR answers 201 with a stale Range header.
 }
 
 func newChunkedRegistry(t *testing.T) *chunkedRegistry {
@@ -114,6 +115,11 @@ func (reg *chunkedRegistry) handler() http.HandlerFunc {
 			reg.uploaded = append(reg.uploaded, body...)
 			reg.mu.Unlock()
 			w.Header().Set("Location", r.URL.Path)
+			if reg.patchAcceptStatus != 0 {
+				w.Header().Set("Range", "0-0")
+				w.WriteHeader(reg.patchAcceptStatus)
+				return
+			}
 			w.WriteHeader(http.StatusAccepted)
 
 		case r.Method == http.MethodPut:
@@ -340,7 +346,6 @@ func TestRemoteStore_PushStreaming_RejectedChunkBelowFloorFails(t *testing.T) {
 			_, err := newTestStore(t, srv, 1<<20).PushStreaming(t.Context(),
 				ociImageSpecV1.Descriptor{MediaType: "application/octet-stream"}, bytes.NewReader(data))
 			r.ErrorContains(err, "unexpected PATCH status 416 after 0 bytes")
-			r.NotErrorIs(err, ErrStreamingUnavailable, "content was consumed, so no caller fallback may replay it")
 			r.Equal(tc.wantPatchSizes, reg.patchSizes())
 			r.Equal(http.MethodDelete, reg.methods()[len(reg.methods())-1])
 			r.NotContains(reg.methods(), http.MethodPut)
@@ -453,22 +458,53 @@ func TestRemoteStore_PushStreaming_DigestMismatchErrors(t *testing.T) {
 	r.NotContains(reg.methods(), http.MethodPut)
 }
 
-func TestRemoteStore_PushStreaming_UnavailableWhenChunkingDisabled(t *testing.T) {
+// TestRemoteStore_PushStreaming_ZeroChunkSizeUsesDefault verifies that an
+// unset ChunkSize still streams, with DefaultChunkSize chunks, so a resolver
+// without WithChunkedPush never falls back to buffering the blob.
+func TestRemoteStore_PushStreaming_ZeroChunkSizeUsesDefault(t *testing.T) {
 	r := require.New(t)
 
 	reg := newChunkedRegistry(t)
 	srv := httptest.NewServer(reg.handler())
 	t.Cleanup(srv.Close)
 
-	store := newTestStore(t, srv, 0 /*disabled*/)
-	_, err := store.PushStreaming(t.Context(),
-		ociImageSpecV1.Descriptor{MediaType: "application/octet-stream"},
-		strings.NewReader("data"))
-	r.ErrorIs(err, ErrStreamingUnavailable)
-	r.Empty(reg.requests, "no request should be made when streaming is unavailable")
+	data := bytes.Repeat([]byte("d"), int(DefaultChunkSize)+1<<20)
+	got, err := newTestStore(t, srv, 0).PushStreaming(t.Context(),
+		ociImageSpecV1.Descriptor{MediaType: "application/octet-stream"}, bytes.NewReader(data))
+	r.NoError(err)
+	r.Equal(digest.FromBytes(data), got.Digest)
+	r.Equal([]int{int(DefaultChunkSize), 1 << 20}, reg.patchSizes())
+	r.Equal(data, reg.uploaded)
 }
 
-func TestRemoteStore_PushStreaming_UnavailableOnPOSTRejection(t *testing.T) {
+// TestRemoteStore_PushStreaming_AcceptsAny2xxForPATCH covers registries that
+// acknowledge a chunk with a 2xx other than the spec's 202: ECR answers 201
+// with a Range header that does not advance. The offset is tracked from what
+// was sent, so the upload completes with the right content.
+func TestRemoteStore_PushStreaming_AcceptsAny2xxForPATCH(t *testing.T) {
+	for _, status := range []int{http.StatusCreated, http.StatusNoContent} {
+		t.Run(http.StatusText(status), func(t *testing.T) {
+			r := require.New(t)
+			reg := newChunkedRegistry(t)
+			reg.patchAcceptStatus = status
+			srv := httptest.NewServer(reg.handler())
+			t.Cleanup(srv.Close)
+
+			data := []byte("hello chunked world")
+			got, err := newTestStore(t, srv, 4).PushStreaming(t.Context(),
+				ociImageSpecV1.Descriptor{MediaType: "application/octet-stream"}, bytes.NewReader(data))
+			r.NoError(err)
+			r.Equal(digest.FromBytes(data), got.Digest)
+			r.Equal([]int{4, 4, 4, 4, 3}, reg.patchSizes())
+			r.Equal(data, reg.uploaded)
+		})
+	}
+}
+
+// TestRemoteStore_PushStreaming_POSTRejectionFails verifies that a registry
+// refusing to open an upload session fails the push: there is no fallback that
+// would buffer the blob, and no chunk is sent.
+func TestRemoteStore_PushStreaming_POSTRejectionFails(t *testing.T) {
 	r := require.New(t)
 
 	reg := newChunkedRegistry(t)
@@ -480,9 +516,8 @@ func TestRemoteStore_PushStreaming_UnavailableOnPOSTRejection(t *testing.T) {
 	_, err := store.PushStreaming(t.Context(),
 		ociImageSpecV1.Descriptor{MediaType: "application/octet-stream"},
 		strings.NewReader("some data here"))
-	// Pre-consumption failure with no fallback => streaming unavailable, so the
-	// caller can buffer and retry via Push.
-	r.ErrorIs(err, ErrStreamingUnavailable)
+	r.ErrorContains(err, "failed to open upload session")
+	r.Equal([]string{http.MethodPost}, reg.methods())
 }
 
 // TestRemoteStore_PushStreaming_InvokesHandleWarning verifies that chunked push
@@ -552,8 +587,7 @@ func TestRemoteStore_PushStreaming_ChunkedNonSHA256Digest(t *testing.T) {
 
 // TestRemoteStore_PushStreaming_RejectsOversizedChunkMinLength verifies that an
 // implausible registry-advertised OCI-Chunk-Min-Length does not make the client
-// allocate a matching buffer. Streaming has no monolithic fallback and therefore
-// reports ErrStreamingUnavailable without consuming content.
+// allocate a matching buffer: the push fails before any chunk is sent.
 func TestRemoteStore_PushStreaming_RejectsOversizedChunkMinLength(t *testing.T) {
 	r := require.New(t)
 
@@ -566,14 +600,14 @@ func TestRemoteStore_PushStreaming_RejectsOversizedChunkMinLength(t *testing.T) 
 	_, err := store.PushStreaming(t.Context(),
 		ociImageSpecV1.Descriptor{MediaType: "application/octet-stream"},
 		bytes.NewReader(bytes.Repeat([]byte("a"), 40)))
-	r.ErrorIs(err, ErrStreamingUnavailable)
+	r.ErrorContains(err, "advertised OCI-Chunk-Min-Length")
+	r.NotContains(reg.methods(), http.MethodPatch)
 }
 
 // TestRemoteStore_PushStreaming_RejectsOversizedChunkSize verifies that a
-// user-configured ChunkSize above MaxChunkSize is rejected before any byte is
+// configured ChunkSize above MaxChunkSize is rejected before any byte is
 // consumed, so the client never allocates an unbounded PATCH buffer via
-// make([]byte, up.chunk). Streaming has no monolithic fallback, so it reports
-// ErrStreamingUnavailable.
+// make([]byte, up.chunk).
 func TestRemoteStore_PushStreaming_RejectsOversizedChunkSize(t *testing.T) {
 	r := require.New(t)
 
@@ -585,7 +619,7 @@ func TestRemoteStore_PushStreaming_RejectsOversizedChunkSize(t *testing.T) {
 	_, err := store.PushStreaming(t.Context(),
 		ociImageSpecV1.Descriptor{MediaType: "application/octet-stream"},
 		bytes.NewReader(bytes.Repeat([]byte("a"), 40)))
-	r.ErrorIs(err, ErrStreamingUnavailable)
+	r.ErrorContains(err, "exceeds the maximum supported chunk size")
 
 	// The reader is untouched: the bound is checked before the session POST.
 	for _, m := range reg.methods() {
@@ -609,17 +643,14 @@ func (e *errAfterReader) Read(p []byte) (int, error) {
 	e.done = true
 	n := copy(p, e.data)
 	// Return bytes and the error together so io.ReadFull surfaces n>0 with a
-	// non-EOF error, exercising the mid-read consumed-state path.
+	// non-EOF error, exercising the mid-read failure path.
 	return n, e.err
 }
 
-// TestRemoteStore_PushStreaming_MidStreamReadErrorIsPostConsumption verifies
-// that a read error accompanying already-yielded bytes is treated as
-// post-consumption. PushStreaming must surface the read error, not
-// ErrStreamingUnavailable — the latter's contract promises no content was
-// consumed, which a caller relies on to safely buffer and retry. Reporting it
-// after bytes have left the reader would corrupt that retry.
-func TestRemoteStore_PushStreaming_MidStreamReadErrorIsPostConsumption(t *testing.T) {
+// TestRemoteStore_PushStreaming_MidStreamReadErrorCancelsSession verifies that
+// a read error accompanying already-yielded bytes fails the push with the
+// reader's error and cancels the session without committing anything.
+func TestRemoteStore_PushStreaming_MidStreamReadErrorCancelsSession(t *testing.T) {
 	r := require.New(t)
 
 	reg := newChunkedRegistry(t)
@@ -628,15 +659,12 @@ func TestRemoteStore_PushStreaming_MidStreamReadErrorIsPostConsumption(t *testin
 
 	store := newTestStore(t, srv, 8)
 	// Chunk size (8) exceeds the 4 bytes the reader yields, so io.ReadFull
-	// returns n=4 together with the reader's non-EOF error in a single call —
-	// the exact n>0-with-error path that must count as consumed.
+	// returns n=4 together with the reader's non-EOF error in a single call.
 	rdr := &errAfterReader{data: bytes.Repeat([]byte("a"), 4), err: fmt.Errorf("boom")}
 	_, err := store.PushStreaming(t.Context(),
 		ociImageSpecV1.Descriptor{MediaType: "application/octet-stream"}, rdr)
-	r.Error(err)
-	r.Contains(err.Error(), "boom")
-	r.NotErrorIs(err, ErrStreamingUnavailable,
-		"a mid-read error after bytes were consumed must not masquerade as unavailable")
+	r.ErrorContains(err, "boom")
+	r.Equal([]string{http.MethodPost, http.MethodDelete}, reg.methods())
 }
 
 // TestRemoteStore_PushStreaming_DoesNotFollowPATCHRedirectToOtherHost verifies

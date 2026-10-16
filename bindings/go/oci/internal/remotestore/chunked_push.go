@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -42,12 +41,6 @@ const MinRetryChunkSize int64 = 256 << 10
 // or exhaust memory.
 const MaxChunkSize int64 = 128 << 20
 
-// ErrStreamingUnavailable is returned by PushStreaming when chunked upload is
-// disabled (ChunkSize <= 0) or when the session cannot be established before
-// any content is consumed. No content has been read at that point, so the
-// caller may fall back to another push path.
-var ErrStreamingUnavailable = errors.New("streaming chunked upload unavailable")
-
 // StreamingPusher is implemented by stores that can upload a blob whose digest
 // and/or size is not known before the upload starts, computing (or verifying)
 // both from the streamed bytes. The regular Push also streams its content to
@@ -60,10 +53,6 @@ type StreamingPusher interface {
 	// non-negative, non-zero partial.Size are treated as expected values and
 	// verified against the streamed bytes; when either is absent it is computed
 	// during upload. The returned descriptor carries the final Digest and Size.
-	//
-	// If streaming is unavailable it returns an error wrapping
-	// ErrStreamingUnavailable and no content is consumed, so the caller may
-	// safely buffer and fall back to Push.
 	PushStreaming(ctx context.Context, partial ociImageSpecV1.Descriptor, content io.Reader) (ociImageSpecV1.Descriptor, error)
 }
 
@@ -81,11 +70,9 @@ var _ StreamingPusher = (*RemoteStore)(nil)
 // empty the digest is computed from the streamed bytes. partial.Size, when
 // non-negative, is verified against the number of bytes streamed.
 //
-// If chunking is disabled (ChunkSize <= 0) or the session cannot be opened
-// before any byte is consumed, it returns an error wrapping
-// ErrStreamingUnavailable without consuming content. A chunk the registry
-// rejects as too large is retried in smaller pieces on the same session; at
-// most one chunk of content is held in memory.
+// A chunk the registry rejects as too large is retried in smaller pieces on
+// the same session; at most one chunk of content is held in memory. Any other
+// failure is returned: there is no fallback that would buffer the blob.
 //
 // Reference: https://github.com/opencontainers/distribution-spec/blob/v1.1.1/spec.md#pushing-a-blob-in-chunks
 func (r *RemoteStore) PushStreaming(ctx context.Context, partial ociImageSpecV1.Descriptor, content io.Reader) (ociImageSpecV1.Descriptor, error) {
@@ -94,9 +81,6 @@ func (r *RemoteStore) PushStreaming(ctx context.Context, partial ociImageSpecV1.
 			return ociImageSpecV1.Descriptor{}, err
 		}
 		return partial, nil
-	}
-	if r.ChunkSize <= 0 {
-		return ociImageSpecV1.Descriptor{}, fmt.Errorf("chunk size not configured: %w", ErrStreamingUnavailable)
 	}
 	size := partial.Size
 	if size == 0 {
@@ -110,14 +94,13 @@ func (r *RemoteStore) PushStreaming(ctx context.Context, partial ociImageSpecV1.
 // chunkedUpload holds the mutable state of one chunked upload session: the
 // current push location (updated after each PATCH), the current chunk size
 // (lowered when the registry rejects a chunk as too large), the smallest chunk
-// size the registry allows, how many bytes the registry has accepted, whether
-// any byte has been consumed, and the running digest of the streamed content.
+// size the registry allows, how many bytes the registry has accepted, and the
+// running digest of the streamed content.
 type chunkedUpload struct {
 	location *url.URL
 	chunk    int64
 	minChunk int64
 	offset   int64
-	consumed bool
 	digester digest.Digester
 }
 
@@ -136,12 +119,12 @@ func (up *chunkedUpload) shrink(rejected int64) bool {
 // pushChunked runs the three-phase chunked upload protocol (open session,
 // upload PATCH chunks, close with PUT) and returns the completed descriptor.
 //
-// A failure before the first byte is consumed reports ErrStreamingUnavailable.
 // A chunk the registry rejects as too large is retried in smaller pieces on the
-// same session (see patchChunk); any other failure returns a wrapped error and
-// best-effort cancels the session. Content is never buffered beyond one chunk.
-// When knownDigest is set it is verified against the streamed content and used
-// to close the session; when empty the digest is computed from the stream.
+// same session (see patchChunk); any other failure after the session opened
+// returns a wrapped error and best-effort cancels the session. Content is never
+// buffered beyond one chunk. When knownDigest is set it is verified against the
+// streamed content and used to close the session; when empty the digest is
+// computed from the stream.
 func (r *RemoteStore) pushChunked(
 	ctx context.Context,
 	mediaType string,
@@ -153,13 +136,10 @@ func (r *RemoteStore) pushChunked(
 
 	up, err := r.openUploadSession(ctx, knownDigest)
 	if err != nil {
-		return ociImageSpecV1.Descriptor{}, fmt.Errorf("%w: %w", ErrStreamingUnavailable, err)
+		return ociImageSpecV1.Descriptor{}, fmt.Errorf("chunked blob push: failed to open upload session: %w", err)
 	}
 
 	if err := r.uploadChunks(ctx, up, content, knownSize); err != nil {
-		if !up.consumed {
-			return ociImageSpecV1.Descriptor{}, fmt.Errorf("%w: %w", ErrStreamingUnavailable, err)
-		}
 		return ociImageSpecV1.Descriptor{}, err
 	}
 
@@ -203,13 +183,15 @@ func resolveFinalDigest(computed, known digest.Digest) (digest.Digest, error) {
 // initialised session state. Its digester matches knownDigest's algorithm (the
 // canonical algorithm when no digest is declared), and a non-sha256 knownDigest
 // additionally advertises that algorithm via the digest-algorithm query
-// parameter. The returned chunkedUpload has its chunk size raised to any
-// registry-advertised OCI-Chunk-Min-Length. Both the configured chunk size and
-// the advertised minimum are bounded by MaxChunkSize so the PATCH buffer stays
-// allocatable; an over-bound value fails here, before any content is consumed.
+// parameter. The returned chunkedUpload has its chunk size (see chunkSize)
+// raised to any registry-advertised OCI-Chunk-Min-Length. Both the configured
+// chunk size and the advertised minimum are bounded by MaxChunkSize so the
+// PATCH buffer stays allocatable; an over-bound value fails here, before any
+// content is consumed.
 func (r *RemoteStore) openUploadSession(ctx context.Context, knownDigest digest.Digest) (*chunkedUpload, error) {
-	if r.ChunkSize > MaxChunkSize {
-		return nil, fmt.Errorf("chunked blob push: configured chunk size %d exceeds the maximum supported chunk size %d", r.ChunkSize, MaxChunkSize)
+	chunk := r.chunkSize()
+	if chunk > MaxChunkSize {
+		return nil, fmt.Errorf("configured chunk size %d exceeds the maximum supported chunk size %d", chunk, MaxChunkSize)
 	}
 	uploads := r.endpoint(path.Join("/v2", r.Reference.Repository, "blobs", "uploads") + "/")
 	// The running digest must use the declared algorithm; otherwise the
@@ -243,22 +225,29 @@ func (r *RemoteStore) openUploadSession(ctx context.Context, knownDigest digest.
 	if err != nil {
 		return nil, err
 	}
-	chunk := r.ChunkSize
 	minLen := parseChunkMinLength(resp)
 	if minLen > chunk {
 		if minLen > MaxChunkSize {
-			return nil, fmt.Errorf("chunked blob push: advertised OCI-Chunk-Min-Length %d exceeds the maximum supported chunk size %d", minLen, MaxChunkSize)
+			return nil, fmt.Errorf("advertised OCI-Chunk-Min-Length %d exceeds the maximum supported chunk size %d", minLen, MaxChunkSize)
 		}
 		chunk = minLen
 	}
 	return &chunkedUpload{location: location, chunk: chunk, minChunk: minLen, digester: algo.Digester()}, nil
 }
 
+// chunkSize returns the configured ChunkSize, or DefaultChunkSize when it is
+// not set (<= 0).
+func (r *RemoteStore) chunkSize() int64 {
+	if r.ChunkSize > 0 {
+		return r.ChunkSize
+	}
+	return DefaultChunkSize
+}
+
 // uploadChunks streams content in PATCH requests of up.chunk bytes, updating the
-// running digest, byte offset, and push location as it goes. It sets
-// up.consumed as soon as a read yields bytes; after that point the reader
-// cannot be rewound. The buffer is allocated once at the initial chunk size;
-// after a shrink only its prefix is used.
+// running digest, byte offset, and push location as it goes. The buffer is
+// allocated once at the initial chunk size; after a shrink only its prefix is
+// used. A read error cancels the session.
 func (r *RemoteStore) uploadChunks(ctx context.Context, up *chunkedUpload, content io.Reader, knownSize int64) error {
 	hasher := up.digester.Hash()
 	bufSize := up.chunk
@@ -268,19 +257,11 @@ func (r *RemoteStore) uploadChunks(ctx context.Context, up *chunkedUpload, conte
 	buf := make([]byte, bufSize)
 	for {
 		n, readErr := io.ReadFull(content, buf[:min(int64(len(buf)), up.chunk)])
-		if n > 0 {
-			// Bytes have left the reader: the stream can no longer be rewound.
-			// Mark consumed before any error path so a mid-read failure is
-			// treated as post-consumption.
-			up.consumed = true
-		}
 		if readErr == io.EOF {
 			return nil
 		}
 		if readErr != nil && readErr != io.ErrUnexpectedEOF {
-			if up.consumed {
-				r.cancelUpload(ctx, up.location)
-			}
+			r.cancelUpload(ctx, up.location)
 			return fmt.Errorf("chunked blob push: failed to read content after %d bytes: %w", up.offset, readErr)
 		}
 		if n == 0 {
@@ -319,8 +300,10 @@ func (r *RemoteStore) patchChunk(ctx context.Context, up *chunkedUpload, data []
 	return nil
 }
 
-// sendPatch issues one PATCH carrying part at up.offset and, on 202, advances
-// the offset and push location. It returns the response status (0 when no
+// sendPatch issues one PATCH carrying part at up.offset and, on any 2xx,
+// advances the offset and push location. The spec requires 202, but ECR
+// answers 201; the offset is tracked from what was sent, not from the
+// response's Range header. It returns the response status (0 when no
 // response was received) with any error.
 func (r *RemoteStore) sendPatch(ctx context.Context, up *chunkedUpload, part []byte) (int, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPatch, up.location.String(), bytes.NewReader(part))
@@ -336,7 +319,7 @@ func (r *RemoteStore) sendPatch(ctx context.Context, up *chunkedUpload, part []b
 		return 0, fmt.Errorf("chunked blob push: PATCH failed after %d bytes: %w", up.offset, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusAccepted {
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
 		return resp.StatusCode, fmt.Errorf("chunked blob push: unexpected PATCH status %d after %d bytes: %w", resp.StatusCode, up.offset, parseErrorResponse(resp))
 	}
 	next, err := resolveUploadLocation(resp, req)

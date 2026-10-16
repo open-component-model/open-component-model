@@ -1149,6 +1149,7 @@ type streamingStore struct {
 	pushed        bool
 	partialDigest digest.Digest
 	partialSize   int64
+	streamErr     error // returned by PushStreaming when set
 }
 
 func (s *streamingStore) Push(_ context.Context, _ ociImageSpecV1.Descriptor, r io.Reader) error {
@@ -1167,6 +1168,9 @@ func (s *streamingStore) Exists(_ context.Context, _ ociImageSpecV1.Descriptor) 
 
 func (s *streamingStore) PushStreaming(_ context.Context, partial ociImageSpecV1.Descriptor, r io.Reader) (ociImageSpecV1.Descriptor, error) {
 	s.streamed64 = true
+	if s.streamErr != nil {
+		return ociImageSpecV1.Descriptor{}, s.streamErr
+	}
 	data, err := io.ReadAll(r)
 	if err != nil {
 		return ociImageSpecV1.Descriptor{}, err
@@ -1222,6 +1226,28 @@ func TestResourceLocalBlobOCILayer_StreamsUnknownDigest(t *testing.T) {
 	r.Equal(int64(len(store.streamed)), desc.Size)
 	r.NotNil(resource.Digest)
 	r.Equal(want.Encoded(), resource.Digest.Value)
+}
+
+// TestResourceLocalBlobOCILayer_StreamingFailureIsNotBuffered verifies that a
+// failed streaming upload is reported instead of falling back to buffering the
+// whole blob in memory for a monolithic Push.
+func TestResourceLocalBlobOCILayer_StreamingFailureIsNotBuffered(t *testing.T) {
+	r := require.New(t)
+
+	var b blob.ReadOnlyBlob = &testBlob{content: []byte("never buffered"), mediaType: "text/plain"}
+	resourceBlob, err := resourceblob.NewArtifactBlob(&descriptor.Resource{}, compression.Compress(b))
+	r.NoError(err)
+
+	access := &v2.LocalBlob{MediaType: "text/plain+gzip"}
+	opts := Options{AccessScheme: runtime.NewScheme(), BaseReference: "test-ref"}
+	v2.MustAddToScheme(opts.AccessScheme)
+	oci.MustAddToScheme(opts.AccessScheme)
+
+	store := &streamingStore{streamErr: errors.New("registry refused upload session")}
+	_, err = ResourceLocalBlobOCILayer(t.Context(), store, resourceBlob, access, opts)
+	r.ErrorContains(err, "registry refused upload session")
+	r.True(store.streamed64)
+	r.False(store.pushed, "a streaming failure must not fall back to a buffered monolithic Push")
 }
 
 // knownDigestUnknownSizeBlob exposes a digest (DigestAware) but reports an

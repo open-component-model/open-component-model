@@ -11,7 +11,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/ctf"
 	"ocm.software/open-component-model/bindings/go/oci"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
-	"ocm.software/open-component-model/bindings/go/oci/internal/remotestore"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
 	ctfrepospecv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ocirepospecv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
@@ -123,10 +122,6 @@ func NewResolver(_ context.Context, client remote.Client, repository *ocirepospe
 	}
 
 	opts = append(opts, urlresolver.WithBaseClient(client))
-	// Enable chunked streaming upload by default so blobs of unknown size or
-	// digest need not be buffered. Blobs with a known descriptor and manifests
-	// stay monolithic. Placed before extra so callers can still override it.
-	opts = append(opts, urlresolver.WithChunkedPush(remotestore.DefaultChunkSize))
 	opts = append(opts, extra...)
 
 	resolver, err := urlresolver.New(opts...)
