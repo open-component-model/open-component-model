@@ -174,9 +174,9 @@ func TestResourceDigestMovesURLFragmentIntoFields(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
 			repo := repository.NewResourceRepository(nil)
-			res := &descriptor.Resource{Access: &v1.Git{
+			res := &descriptor.Resource{Access: rawAccess(t, &v1.Git{
 				Type: runtime.NewVersionedType("Git", "v1"), Repository: fixture.Path + "#" + tc.fragment,
-			}}
+			})}
 
 			pinned, err := repo.ProcessResourceDigest(t.Context(), res, nil)
 			r.NoError(err)
@@ -285,4 +285,12 @@ func newRepository(t *testing.T) repositoryFixture {
 	r.NoError(err)
 
 	return repositoryFixture{Path: path, Git: bare, First: first, Second: second}
+}
+
+// rawAccess encodes spec as a descriptor stores it, so that reading it decodes and normalizes it.
+func rawAccess(t *testing.T, spec *v1.Git) *runtime.Raw {
+	t.Helper()
+	raw := &runtime.Raw{}
+	require.NoError(t, access.Scheme.Convert(spec, raw))
+	return raw
 }

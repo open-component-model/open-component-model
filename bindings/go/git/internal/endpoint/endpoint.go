@@ -110,6 +110,16 @@ func Parse(repository string) (*Endpoint, error) {
 	return ep, nil
 }
 
+// ParseFragment returns an Endpoint that carries only the Ref and Commit selected by a
+// repository URL fragment such as branch=main.
+func ParseFragment(fragment string) (*Endpoint, error) {
+	ep := &Endpoint{}
+	if err := ep.parseFragment(fragment); err != nil {
+		return nil, err
+	}
+	return ep, nil
+}
+
 // parseFragment decodes with url.PathUnescape rather than url.ParseQuery, which
 // reads + as a space and would break tags such as v1.2.3+build.1.
 func (ep *Endpoint) parseFragment(fragment string) error {

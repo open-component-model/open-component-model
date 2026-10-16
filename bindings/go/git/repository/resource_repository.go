@@ -214,7 +214,7 @@ func accessFrom(res *descriptor.Resource) (*accessv1.Git, error) {
 		return nil, err
 	}
 
-	return result.Normalize()
+	return &result, nil
 }
 
 func verifyDigest(expected *descriptor.Digest, actual digest.Digest) error {

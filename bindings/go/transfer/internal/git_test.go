@@ -3,6 +3,7 @@ package internal
 import (
 	"testing"
 
+	"cel.dev/cel-go/common/types"
 	"github.com/stretchr/testify/require"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
@@ -97,11 +98,15 @@ func TestBuildGraphDefinition_GitResource_PinnedByURLFragment(t *testing.T) {
 	r.Equal(gitv1alpha1.GetGitResourceV1alpha1, tgd.Transformations[0].Type)
 }
 
-func TestGitOriginOf_URLFragment(t *testing.T) {
+func TestToGit_URLFragment(t *testing.T) {
 	r := require.New(t)
-	origin, err := gitOriginOf(&gitv1.Git{Repository: "https://example.com/org/repo.git#branch=main"})
-	r.NoError(err)
-	r.Equal(gitOrigin{Repository: "org/repo.git", Ref: "refs/heads/main"}, origin)
+	access := types.DefaultTypeAdapter.NativeToValue(map[string]any{
+		"type":       "Git/v1",
+		"repository": "https://example.com/org/repo.git#branch=main",
+	})
+	origin, ok := bindToGit(access).Value().(map[string]string)
+	r.True(ok, "toGit() returns the origin map")
+	r.Equal(map[string]string{"repository": "org/repo.git", "ref": "refs/heads/main"}, origin)
 }
 
 func TestProcessGit_UnsupportedTargetDoesNotEmitNodes(t *testing.T) {
