@@ -753,6 +753,8 @@ func (repo *Repository) getLocalBlobFromIndexOrManifest(
 		// v1 OCI artifact set: verify the recorded manifest root against the blobs the archive
 		// carries, rather than against the archive hash the localReference carries.
 		if err := verifyArtifactSetRoot(ctx, store, artifact, recorded); err != nil {
+			// Ownership of data transfers to the returned blob only on success; close it here.
+			_ = data.Close()
 			return nil, fmt.Errorf("resource digest verification failed for %q: %w", ref, errors.Join(cheapErr, err))
 		}
 	}
