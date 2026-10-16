@@ -1,6 +1,6 @@
 ---
 title: Deploy an Application from a Helm Chart with OCM and Crossplane
-description: "Bootstrap a Helm chart deployment with OCM and Crossplane, composing Flux objects directly from an XRD and Composition for repeatable localized installs."
+description: "Bootstrap a Helm chart deployment with OCM and Crossplane, composing GitOps deployer objects (Flux or Argo CD) directly from an XRD and Composition for repeatable localized installs."
 icon: "⚙️"
 weight: 62
 toc: true
@@ -14,8 +14,8 @@ Your application ships as a Helm chart, and you want its delivery to be repeatab
 carries the chart, its container image, and the instructions to deploy it, with image references that localize
 themselves as the component moves between registries. This tutorial builds that deployment on **Crossplane**, using
 a `CompositeResourceDefinition` (XRD) plus a `Composition` to reconcile the deployment graph. The XRD registers the
-`Bootstrap` schema, and the `Composition` creates the OCM and Flux objects directly. We will use
-[Podinfo](https://github.com/stefanprodan/podinfo) as the example application.
+`Bootstrap` schema, and the `Composition` creates the OCM and GitOps deployer objects (Flux or Argo CD) directly. We
+will use [Podinfo](https://github.com/stefanprodan/podinfo) as the example application.
 
 {{< callout context="note" title="Coming from the kro tutorial?" icon="outline/info-circle" >}}
 This tutorial reaches the same end state as [Deploy an Application from a Helm Chart with OCM and
@@ -47,7 +47,9 @@ Before starting, make sure you have set up your environment as described in the 
 - [Custom RBAC]({{< relref "custom-rbac.md" >}}) with **both** Crossplane grants, which live in two separate places in
   that guide:
   - The **Crossplane** tab under [Create a ClusterRole and ClusterRoleBinding]({{< relref "custom-rbac.md" >}}#tabs-ocm-controller-rbac-1)
-    lets the OCM controller manage `compositions` and `compositeresourcedefinitions` (`apiextensions.crossplane.io`).
+    gives the OCM controller read access (`get`, `list`, `watch`) on `compositions` and `compositeresourcedefinitions`
+    (`apiextensions.crossplane.io`) so it can check the deployed objects for drift. The `bootstrap-deployer` service
+    account gets its own write access from the `ClusterRole` in `bootstrap.yaml` later in this tutorial.
   - The [Crossplane subsection under RBAC for the orchestrator's own service account]({{< relref "custom-rbac.md#crossplane" >}})
     lets Crossplane's own service account compose the OCM `Resource` and the deployer objects (Flux or Argo CD).
 - The [Patch and Transform function](https://github.com/crossplane-contrib/function-patch-and-transform)
@@ -1063,22 +1065,32 @@ Check controller logs:
 kubectl logs -n ocm-k8s-toolkit-system deployment/ocm-k8s-toolkit-controller-manager
 ```
 
-Common causes: missing component, wrong repository URL, credential issues, or the OCM controller lacking RBAC for
-`compositions`/`compositeresourcedefinitions`.
+Common causes: missing component, wrong repository URL, credential issues, or an RBAC gap. The
+`bootstrap-deployer` service account needs write access to apply the XRD and Composition, and the controller needs
+read access to watch them for drift. See RBAC Permission Errors below.
 
 ### RBAC Permission Errors
 
-If the controller logs show permission errors like `forbidden` or `cannot create resource`, the controller's
-`ServiceAccount` lacks RBAC for the Crossplane objects the Deployer applies: the XRD and Composition
-(`apiextensions.crossplane.io`), the `Bootstrap` composite (`ocm.software`), and the OCM `Resource` objects
-(`delivery.ocm.software`). Apply the `ocm-controller-crossplane` `ClusterRole` and binding from
-[Configure Custom RBAC for Deployers]({{< relref "/docs/how-to/custom-rbac.md" >}}) (select the **Crossplane**
-tab), then confirm the grant with:
+The `NamespacedDeployer` applies the XRD and Composition as its `bootstrap-deployer` service account, while the
+controller only watches them with its own identity. A `forbidden` error can come from either side:
 
-```bash
-kubectl auth can-i create compositions.apiextensions.crossplane.io \
-  --as=system:serviceaccount:ocm-k8s-toolkit-system:ocm-k8s-toolkit-controller-manager
-```
+- If the deployer logs show `cannot create resource`, the `bootstrap-deployer` service account lacks write access.
+  It gets that from the `bootstrap-deployer` `ClusterRole` and binding in `bootstrap.yaml`. Confirm the grant with:
+
+  ```bash
+  kubectl auth can-i create compositions.apiextensions.crossplane.io \
+    --as=system:serviceaccount:${BOOTSTRAP_NAMESPACE}:bootstrap-deployer
+  ```
+
+- If the controller logs show it `cannot list` or `cannot watch` the XRD and Composition, the controller lacks read
+  access. Apply the `ocm-controller-crossplane` `ClusterRole` and binding from
+  [Configure Custom RBAC for Deployers]({{< relref "/docs/how-to/custom-rbac.md#grant-the-controller-read-access" >}})
+  (select the **Crossplane** tab), then confirm the grant with:
+
+  ```bash
+  kubectl auth can-i watch compositions.apiextensions.crossplane.io \
+    --as=system:serviceaccount:ocm-k8s-toolkit-system:ocm-k8s-toolkit-controller-manager
+  ```
 
 Separately, if the composite's composed resources stay stuck (see [Composite Not Becoming
 Ready](#composite-not-becoming-ready)), the fault is Crossplane's own service account. Crossplane composes the
@@ -1131,7 +1143,7 @@ If pods show `ImagePullBackOff` or `ErrImagePull` errors, the kubelet cannot pul
 You've successfully:
 
 - Created an OCM component with an embedded Crossplane XRD + Composition
-- Used `--copy-resources --upload-as ociArtifact` to enable localization during transfer
+- Configured an OCI uploader in `.ocmconfig` to enable localization during transfer
 - Deployed the component by applying a `Bootstrap` composite, letting Crossplane compose the deployer objects directly
 - Verified that localization kept image references in sync
 

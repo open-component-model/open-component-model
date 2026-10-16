@@ -238,7 +238,7 @@ kubectl apply -f custom-rbac.yaml
 Confirm the controller has the expected access. The output should be `yes`:
 
 ```bash
-kubectl auth can-i watch compositions.apiextensions.crossplane.io \
+kubectl auth can-i watch -A compositions.apiextensions.crossplane.io \
   --as=system:serviceaccount:ocm-k8s-toolkit-system:ocm-k8s-toolkit-controller-manager
 ```
 
