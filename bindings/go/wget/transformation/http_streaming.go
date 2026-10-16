@@ -196,6 +196,10 @@ func (t *HTTPStreamingTransformer) Transform(ctx context.Context, step runtime.T
 		"digest", computed,
 		"status", resp.StatusCode)
 
+	// The streaming transformer records the source digest, verifying the streamed bytes
+	// against it when present, and leaves it absent otherwise. Transfer never injects a
+	// digest the source lacked: doing so would change the signed descriptor and break a
+	// signature that deliberately excluded this resource.
 	if targetResource.Digest, err = uploadedDigest(srcResource.Digest, computed); err != nil {
 		return nil, err
 	}
@@ -211,16 +215,13 @@ func (t *HTTPStreamingTransformer) Transform(ctx context.Context, step runtime.T
 	return &transformation, nil
 }
 
-// uploadedDigest returns the digest of the uploaded resource: the source digest
-// after it was checked against the computed SHA-256 value, or the computed value
-// when the source has no digest.
+// uploadedDigest returns the digest to record for the uploaded resource: the source
+// digest after it was checked against the computed SHA-256 value, or nil when the
+// source has no digest. The computed value is never recorded on its own, because
+// transfer must not inject a digest the source lacked.
 func uploadedDigest(src *descriptor.Digest, computed string) (*descriptor.Digest, error) {
 	if src == nil {
-		return &descriptor.Digest{
-			HashAlgorithm:          hashAlgorithmSHA256,
-			NormalisationAlgorithm: genericBlobDigestV1,
-			Value:                  computed,
-		}, nil
+		return nil, nil
 	}
 	if src.HashAlgorithm != hashAlgorithmSHA256 {
 		return nil, fmt.Errorf("unsupported hash algorithm: expected %s, got %s", hashAlgorithmSHA256, src.HashAlgorithm)

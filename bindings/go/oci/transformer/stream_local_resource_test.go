@@ -295,6 +295,8 @@ func TestStreamLocalResource_RealPackOCI(t *testing.T) {
 	r.NotNil(out.Output)
 	r.NotNil(out.Output.Resource)
 	r.True(resourceRepo.downloadCalled, "the source must be read with DownloadResource")
+	r.Nil(out.Output.Resource.Digest,
+		"the source carried no digest, so transfer must not record the digest pack computed")
 	r.NotNil(out.Output.Resource.Access, "the transferred resource must carry an access")
 	r.Contains(strings.ToLower(out.Output.Resource.Access.GetType().Name), "localblob",
 		"the transferred resource must end up with a LocalBlob access")

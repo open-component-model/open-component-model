@@ -181,10 +181,9 @@ func Test_Integration_TransferS3Resource_LocalBlobUploader(t *testing.T) {
 	r.Nil(typedLocalBlob.GlobalAccess, "localBlob should not have globalAccess after transfer")
 	r.Equal("text/plain", typedLocalBlob.MediaType, "localBlob should preserve the s3 media type")
 
-	// The stored resource must be fully described: a digest over the downloaded content.
-	r.NotNil(gotDesc.Component.Resources[0].Digest, "transferred resource should carry a digest")
-	r.Equal(digestOf(resourceData).Encoded(), gotDesc.Component.Resources[0].Digest.Value,
-		"resource digest should be the sha256 of the object content")
+	// The source resource carried no digest, so transfer must preserve that absence rather
+	// than inventing one over the downloaded content.
+	r.Nil(gotDesc.Component.Resources[0].Digest, "transfer must not inject a digest the source resource lacked")
 
 	// 7. Verify the blob is present and its content matches the object in the bucket.
 	resourceIdentity := gotDesc.Component.Resources[0].ToIdentity()

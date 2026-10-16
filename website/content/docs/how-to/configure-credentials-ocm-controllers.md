@@ -160,7 +160,7 @@ my-repository   Successfully reconciled OCM repository   2026-02-25T15:45:49Z
 
 ### Credential inheritance for dependent resources
 
-`ocmConfig` is propagated by default. A `Component`, `Resource`, or `Deployer` resource will automatically
+`ocmConfig` is propagated by default. A `Component`, `Resource`, or `NamespacedDeployer` resource will automatically
 inherit the `ocmConfig` from the resource it references (e.g. a `Repository`) **if it does not specify its own
 `ocmConfig`**. This means you do not need to repeat the credential configuration in every dependent resource.
 

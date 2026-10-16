@@ -14,7 +14,6 @@ import (
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	awscreds "github.com/aws/aws-sdk-go-v2/credentials"
 	awss3 "github.com/aws/aws-sdk-go-v2/service/s3"
-	godigest "github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
@@ -144,9 +143,9 @@ func Test_Integration_TransferS3Resource_Stream_CLI(t *testing.T) {
 	r.NotNil(gotAccess)
 	r.Equal(descriptorv2.LocalBlobAccessType, gotAccess.GetType().Name,
 		"the streamed s3 resource must be stored as a localBlob after transfer")
-	r.NotNil(gotDesc.Component.Resources[0].Digest, "the transferred resource must carry a digest")
-	r.Equal(godigest.FromBytes(resourceData).Encoded(), gotDesc.Component.Resources[0].Digest.Value,
-		"the resource digest must be the sha256 of the streamed content")
+	// The source resource carries no digest, so the transfer must not record one (it
+	// would change the signed descriptor). The content check below covers integrity.
+	r.Nil(gotDesc.Component.Resources[0].Digest, "transfer must not inject a digest the source lacked")
 
 	localBlob, _, err := repo.GetLocalResource(ctx, componentName, componentVersion,
 		gotDesc.Component.Resources[0].ToIdentity())

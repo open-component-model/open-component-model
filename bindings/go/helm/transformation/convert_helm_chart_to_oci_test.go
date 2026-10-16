@@ -80,7 +80,12 @@ func TestConvertHelmChartToOCI_Transform(t *testing.T) {
 							Version: "0.1.0",
 						},
 					},
-					Type:   "helmChart",
+					Type: "helmChart",
+					Digest: &descv2.Digest{
+						HashAlgorithm:          "SHA-256",
+						NormalisationAlgorithm: "genericBlobDigest/v1",
+						Value:                  "0000000000000000000000000000000000000000000000000000000000000000",
+					},
 					Access: &rawAccess,
 				},
 				OutputPath: outputDir,
@@ -99,6 +104,8 @@ func TestConvertHelmChartToOCI_Transform(t *testing.T) {
 		r.NotEmpty(output.Output.Resource.Digest.Value)
 		r.Equal("SHA-256", output.Output.Resource.Digest.HashAlgorithm)
 		r.Equal("ociArtifactDigest/v1", output.Output.Resource.Digest.NormalisationAlgorithm)
+		// The source resource carried a digest, so conversion replaces it with the new OCI
+		// artifact digest.
 
 		// Verify the output file was created
 		ociPath := strings.TrimPrefix(output.Output.File.URI, "file://")
@@ -174,8 +181,7 @@ func TestConvertHelmChartToOCI_Transform(t *testing.T) {
 		r.True(ok)
 		r.NotNil(output.Output)
 		r.NotNil(output.Output.Resource)
-		r.NotNil(output.Output.Resource.Digest)
-		r.NotEmpty(output.Output.Resource.Digest.Value)
+		r.Nil(output.Output.Resource.Digest, "convert must not inject a digest when the source has none")
 
 		ociPath := strings.TrimPrefix(output.Output.File.URI, "file://")
 		assert.FileExists(t, ociPath)
@@ -246,8 +252,7 @@ func TestConvertHelmChartToOCI_Transform(t *testing.T) {
 		r.True(ok)
 		r.NotNil(output.Output)
 		r.NotNil(output.Output.Resource)
-		r.NotNil(output.Output.Resource.Digest)
-		r.NotEmpty(output.Output.Resource.Digest.Value)
+		r.Nil(output.Output.Resource.Digest, "convert must not inject a digest when the source has none")
 
 		ociPath := strings.TrimPrefix(output.Output.File.URI, "file://")
 		assert.FileExists(t, ociPath)

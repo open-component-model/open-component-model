@@ -140,6 +140,13 @@ func (t *StreamLocalResource) Transform(ctx context.Context, step runtime.Typed)
 		return nil, fmt.Errorf("failed converting updated resource to v2 format: %w", err)
 	}
 
+	// Like AddLocalResource: a resource whose source carried no digest must stay without
+	// one. Pack computes the digest of the streamed bytes, but transfer never injects a
+	// digest the source lacked, because that would change the signed descriptor.
+	if srcResource.Digest == nil {
+		v2UpdatedResource.Digest = nil
+	}
+
 	transformation.Output = &v1alpha1.OCIStreamLocalResourceOutput{Resource: v2UpdatedResource}
 	return &transformation, nil
 }

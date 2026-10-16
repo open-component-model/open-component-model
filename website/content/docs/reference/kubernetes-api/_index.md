@@ -11,11 +11,12 @@ This section documents the Custom Resource Definitions (CRDs) provided by the
 OCM Kubernetes controller. All resources belong to the API group
 **`delivery.ocm.software/v1alpha1`**.
 
-| Kind                                        | Scope      | Description                                                  |
-|---------------------------------------------|------------|--------------------------------------------------------------|
-| [Repository]({{< relref "repository" >}})   | Namespaced | Represents an OCM repository to be validated                 |
-| [Component]({{< relref "component" >}})     | Namespaced | Tracks an OCM component version from a repository            |
-| [Resource]({{< relref "resource" >}})       | Namespaced | References a specific resource within a component version    |
-| [Discovery]({{< relref "discovery" >}})     | Namespaced | Publishes a filtered view of a Component's reference graph   |
-| [Deployer]({{< relref "deployer" >}})       | Cluster    | Deploys OCM resources into the cluster                       |
-| [Replication]({{< relref "replication" >}}) | Namespaced | Replicates an OCM component version into a target repository |
+| Kind                                                      | Scope      | Description                                                  |
+|-----------------------------------------------------------|------------|--------------------------------------------------------------|
+| [Repository]({{< relref "repository" >}})                 | Namespaced | Represents an OCM repository to be validated                 |
+| [Component]({{< relref "component" >}})                   | Namespaced | Tracks an OCM component version from a repository            |
+| [Resource]({{< relref "resource" >}})                     | Namespaced | References a specific resource within a component version    |
+| [Discovery]({{< relref "discovery" >}})                   | Namespaced | Publishes a filtered view of a Component's reference graph   |
+| [Deployer]({{< relref "deployer" >}})                     | Cluster    | Deploys OCM resources into the cluster (discouraged)         |
+| [NamespacedDeployer]({{< relref "namespaceddeployer" >}}) | Namespaced | Deploys OCM resources as a service account                   |
+| [Replication]({{< relref "replication" >}})               | Namespaced | Replicates an OCM component version into a target repository |

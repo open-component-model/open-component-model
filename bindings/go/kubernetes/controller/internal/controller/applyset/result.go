@@ -14,7 +14,7 @@ type ApplyResult struct {
 }
 
 // PruneResult contains outcomes for prune operations.
-// All items in Pruned are successful deletes (errors return from Prune directly).
+// All items in Pruned are successful deletes or objects that are still terminating (errors return from Prune directly).
 type PruneResult struct {
 	Pruned []PruneResultItem
 }

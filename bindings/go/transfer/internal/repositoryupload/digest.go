@@ -56,11 +56,17 @@ func knownDigest(src *descriptor.Digest, content blob.ReadOnlyBlob, fromOCI bool
 	return "", "", nil
 }
 
-// uploadedDigest is the digest of the published resource: the source digest if it describes the
-// uploaded content, else the digest of the uploaded bytes.
+// uploadedDigest is the digest recorded on the published resource. A source digest that
+// describes the uploaded bytes is kept verbatim; a source without any digest stays without
+// one (transfer never synthesizes a digest the source lacked). Otherwise the source digest
+// describes a different byte representation (the content was re-packaged from an OCI
+// artifact), so the digest of the uploaded bytes is recorded.
 func uploadedDigest(src *descriptor.Digest, expected, uploaded digest.Digest) *descriptor.Digest {
 	if expected != "" {
 		return src.DeepCopy()
+	}
+	if src == nil {
+		return nil
 	}
 	var hashAlgorithm string
 	for name, alg := range hashAlgorithms {
