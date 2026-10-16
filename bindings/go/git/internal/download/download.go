@@ -88,6 +88,12 @@ func withRepository(ctx context.Context, access *accessv1.Git, creds runtime.Typ
 	if err := access.Validate(); err != nil {
 		return fmt.Errorf("invalid git access: %w", err)
 	}
+	// go-git appends its request path to the URL, so a fragment must not reach it.
+	access, err := access.Normalize()
+	if err != nil {
+		return fmt.Errorf("invalid git access: %w", err)
+	}
+
 	ep, err := endpoint.Parse(access.Repository)
 	if err != nil {
 		return fmt.Errorf("cannot address git repository: %w", err)

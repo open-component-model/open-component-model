@@ -7,10 +7,8 @@
 // The repository URL may select them with a fragment instead, as in
 // https://github.com/org/repo.git#branch=main; the keys are branch, tag and
 // commit. A fragment selector and a set field must not name different revisions.
-// Decoding an access moves the fragment into Ref or Commit, so no reader has to
-// look for selectors in the URL; an access built in code is normalized with
-// Normalize. Descriptors written by ProcessResourceDigest and the constructor
-// input therefore carry a plain repository URL.
+// ProcessResourceDigest and the constructor input move it into Ref or Commit,
+// so stored descriptors carry a plain repository URL.
 //
 // [ocm.software/open-component-model/bindings/go/git/repository.ResourceRepository]
 // downloads the resolved commit as a gzip-compressed tar (application/x-tgz):

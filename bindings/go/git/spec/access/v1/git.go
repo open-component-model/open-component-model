@@ -1,7 +1,6 @@
 package v1
 
 import (
-	"encoding/json"
 	"fmt"
 	"regexp"
 	"strings"
@@ -44,17 +43,9 @@ type Git struct {
 
 var commitSHA = regexp.MustCompile(`^[0-9a-fA-F]{40}$`)
 
-// Validate checks a normalized access. Decoding normalizes; an access built in code
-// with a fragment in Repository must be normalized first, so that no reader has to
-// look for selectors in the URL.
 func (g *Git) Validate() error {
-	if g == nil {
-		return fmt.Errorf("git access is required")
-	}
-	if strings.Contains(g.Repository, "#") {
-		return fmt.Errorf("git repository URL fragment must be moved into ref or commit, see Normalize")
-	}
-	if _, err := endpoint.Parse(g.Repository); err != nil {
+	g, err := g.Normalize()
+	if err != nil {
 		return err
 	}
 
@@ -80,49 +71,25 @@ func (g *Git) Validate() error {
 	return nil
 }
 
-// UnmarshalJSON normalizes the decoded access, see Normalize.
-func (g *Git) UnmarshalJSON(data []byte) error {
-	type plain Git
-	if err := json.Unmarshal(data, (*plain)(g)); err != nil {
-		return err
-	}
-	return g.moveFragment()
-}
-
 // Normalize returns a copy of g with the ref or commit selected by the repository URL
 // fragment moved into Ref and Commit and the fragment removed, so that readers without
 // fragment support, such as OCM v1, find the same revision. A fragment selector and a
-// set field must not name different revisions. Decoding normalizes already; only an
-// access built in code needs this.
+// set field must not name different revisions.
 func (g *Git) Normalize() (*Git, error) {
 	if g == nil {
 		return nil, fmt.Errorf("git access is required")
 	}
 
+	ep, err := endpoint.Parse(g.Repository)
+	if err != nil {
+		return nil, err
+	}
+
 	normalized := g.DeepCopy()
-	if err := normalized.moveFragment(); err != nil {
+	normalized.Repository = ep.Repository
+	if normalized.Ref, normalized.Commit, err = ep.Selectors(g.Ref, g.Commit); err != nil {
 		return nil, err
 	}
 
 	return normalized, nil
-}
-
-func (g *Git) moveFragment() error {
-	repository, fragment, found := strings.Cut(g.Repository, "#")
-	if !found {
-		return nil
-	}
-
-	selected, err := endpoint.ParseFragment(fragment)
-	if err != nil {
-		return err
-	}
-
-	ref, commit, err := selected.Selectors(g.Ref, g.Commit)
-	if err != nil {
-		return err
-	}
-
-	g.Repository, g.Ref, g.Commit = repository, ref, commit
-	return nil
 }

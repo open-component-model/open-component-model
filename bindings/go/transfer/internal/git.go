@@ -32,6 +32,10 @@ type gitOrigin struct {
 
 // gitOriginOf returns the origin of a Git access.
 func gitOriginOf(access *gitv1.Git) (gitOrigin, error) {
+	access, err := access.Normalize()
+	if err != nil {
+		return gitOrigin{}, err
+	}
 	id, err := identityv1.IdentityFromURL(access.Repository)
 	if err != nil {
 		return gitOrigin{}, fmt.Errorf("cannot address git repository: %w", err)
@@ -66,11 +70,7 @@ func bindToGit(val ref.Val) ref.Val {
 	case accessTypeIs(accessType, runtime.NewUnversionedType(gitv1.Type)):
 		repository, _ := access["repository"].(string)
 		reference, _ := access["ref"].(string)
-		git, err := (&gitv1.Git{Repository: repository, Ref: reference}).Normalize()
-		if err != nil {
-			return types.NewErr("%s(): %v", toGitFunctionName, err)
-		}
-		if origin, err = gitOriginOf(git); err != nil {
+		if origin, err = gitOriginOf(&gitv1.Git{Repository: repository, Ref: reference}); err != nil {
 			return types.NewErr("%s(): %v", toGitFunctionName, err)
 		}
 	default:

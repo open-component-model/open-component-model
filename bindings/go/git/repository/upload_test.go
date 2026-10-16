@@ -92,9 +92,7 @@ func TestUploadResourceToURLFragmentTarget(t *testing.T) {
 	uploader := newUploader(t)
 
 	source, content := downloadResource(t, uploader, fixture.Path, "refs/heads/main", fixture.First)
-	target := targetResource(source, targetPath+"#branch=release", "")
-	target.Access = rawAccess(t, target.Access.(*accessv1.Git))
-	uploaded, err := uploader.UploadResource(t.Context(), target, content, nil)
+	uploaded, err := uploader.UploadResource(t.Context(), targetResource(source, targetPath+"#branch=release", ""), content, nil)
 	r.NoError(err)
 	r.Equal(&accessv1.Git{
 		Type:       runtime.NewVersionedType(accessv1.Type, accessv1.Version),
@@ -103,9 +101,9 @@ func TestUploadResourceToURLFragmentTarget(t *testing.T) {
 		Commit:     fixture.First.String(),
 	}, uploaded.Access, "the uploaded access carries the selector in Ref, not in the repository URL")
 
-	pushed, err := git.PlainOpen(targetPath)
+	target, err := git.PlainOpen(targetPath)
 	r.NoError(err)
-	ref, err := pushed.Reference(plumbing.NewBranchReferenceName("release"), false)
+	ref, err := target.Reference(plumbing.NewBranchReferenceName("release"), false)
 	r.NoError(err)
 	r.Equal(fixture.First, ref.Hash())
 }

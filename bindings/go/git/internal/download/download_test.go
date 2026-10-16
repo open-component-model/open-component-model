@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -25,7 +24,6 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	v1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
-	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 func TestDownloadRevisions(t *testing.T) {
@@ -116,7 +114,7 @@ func TestDownloadURLFragment(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
-			spec := decoded(t, &v1.Git{Repository: fixture.Path + "#" + tc.fragment, Ref: tc.ref})
+			spec := &v1.Git{Repository: fixture.Path + "#" + tc.fragment, Ref: tc.ref}
 			result, err := Download(t.Context(), spec, nil, Options{TempDir: t.TempDir()})
 			r.NoError(err)
 			r.Equal(tc.want.String(), result.Commit)
@@ -134,29 +132,10 @@ func TestDownloadURLFragmentNotSent(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	_, err := Download(t.Context(), decoded(t, &v1.Git{Repository: server.URL + "/repo.git#branch=main"}), nil,
+	_, err := Download(t.Context(), &v1.Git{Repository: server.URL + "/repo.git#branch=main"}, nil,
 		Options{TempDir: t.TempDir(), HTTPClient: server.Client()})
 	r.ErrorContains(err, "repository not found")
 	r.Equal([]string{"/repo.git/info/refs?service=git-upload-pack"}, requests)
-}
-
-func TestDownloadRejectsURLFragment(t *testing.T) {
-	r := require.New(t)
-	fixture := newRepository(t)
-	_, err := Download(t.Context(), &v1.Git{Repository: fixture.Path + "#branch=main"}, nil, Options{TempDir: t.TempDir()})
-	r.ErrorContains(err, "fragment must be moved into ref or commit")
-}
-
-// decoded returns spec as decoding a descriptor yields it, with the URL fragment normalized.
-func decoded(t *testing.T, spec *v1.Git) *v1.Git {
-	t.Helper()
-	typed := spec.DeepCopy()
-	typed.Type = runtime.NewVersionedType(v1.Type, v1.Version)
-	data, err := json.Marshal(typed)
-	require.NoError(t, err)
-	var result v1.Git
-	require.NoError(t, json.Unmarshal(data, &result))
-	return &result
 }
 
 func TestDownloadArchive(t *testing.T) {
