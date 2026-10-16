@@ -389,6 +389,10 @@
           "type": "string",
           "description": "Component is the component name"
         },
+        "digest": {
+          "type": "string",
+          "description": "Digest optionally pins the component version to the OCI digest (\"\u003calgorithm\u003e:\u003chex\u003e\") of the\nimage index or manifest it is stored as. The resource is then read from that artifact\ninstead of from the one the version tag resolves to."
+        },
         "outputPath": {
           "type": "string",
           "description": "OutputPath is the path where the blob should be buffered.\nIf empty, a temporary file will be created."

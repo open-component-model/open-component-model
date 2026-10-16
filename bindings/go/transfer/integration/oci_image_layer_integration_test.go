@@ -125,7 +125,9 @@ func Test_Integration_TransferOCIImageLayer(t *testing.T) {
 			r.NoError(err)
 			r.Len(gotDesc.Component.Resources, 1)
 			resource := gotDesc.Component.Resources[0]
-			r.Equal(layerDigest.Encoded(), resource.Digest.Value)
+			// The source resource carried no OCM digest (only its access did); transfer must
+			// preserve that absence rather than injecting one.
+			r.Nil(resource.Digest, "transfer must not inject a digest the source resource lacked")
 
 			accessScheme := runtime.NewScheme(runtime.WithAllowUnknown())
 			descriptorv2.MustAddToScheme(accessScheme)

@@ -1,0 +1,8 @@
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Deployer
+metadata:
+  name: deployer-migration-orphan
+spec:
+  resourceRef:
+    name: deployer-migration-orphan
+    namespace: default

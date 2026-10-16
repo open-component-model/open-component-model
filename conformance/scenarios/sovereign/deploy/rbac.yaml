@@ -1,11 +1,17 @@
-# Custom RBAC for the OCM controller in the sovereign scenario.
+# RBAC for the sovereign scenario. Two controllers need permissions
+# beyond what their Helm charts ship:
 #
-# The Deployer controller uses server-side apply (ApplySet) to push
-# ResourceGraphDefinitions into the cluster. The default manager-role
-# shipped with the Helm chart does not include kro.run permissions,
-# so we add them here.
+# 1. The OCM controller. Its Deployer uses server-side apply (ApplySet)
+#    to push the product ResourceGraphDefinition into the cluster. The
+#    default manager-role does not include kro.run permissions.
+#    See https://ocm.software/docs/how-to/configure-custom-rbac-for-deployers/
 #
-# See also: https://ocm.software/docs/how-to/configure-custom-rbac-for-deployers/
+# 2. kro. The scenario installs kro with rbac.mode=aggregation, so kro
+#    can only manage the kinds a labeled ClusterRole grants. The role
+#    below lists exactly what the product RGD creates. No binding is
+#    needed: kro aggregates every ClusterRole labeled
+#    rbac.kro.run/aggregate-to-controller into its own.
+#    See https://kro.run/docs/advanced/access-control
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -37,3 +43,89 @@ subjects:
   - kind: ServiceAccount
     name: ocm-k8s-toolkit-controller-manager
     namespace: ocm-k8s-toolkit-system
+---
+# Everything the sovereign-product RGD templates, grouped by controller.
+# kro's own static role already covers RGDs, CRDs, configmaps, leases and events.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kro-controller-sovereign-scenario
+  labels:
+    rbac.kro.run/aggregate-to-controller: "true"
+rules:
+  # Instances of the kind the RGD defines
+  - apiGroups:
+      - kro.run
+    resources:
+      - sovereignproducts
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - kro.run
+    resources:
+      - sovereignproducts/status
+    verbs:
+      - get
+      - patch
+      - update
+  # Namespace and application secret
+  - apiGroups:
+      - ""
+    resources:
+      - namespaces
+      - secrets
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  # OCM delivery chain
+  - apiGroups:
+      - delivery.ocm.software
+    resources:
+      - repositories
+      - components
+      - resources
+      - deployers
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  # Flux deployment
+  - apiGroups:
+      - source.toolkit.fluxcd.io
+    resources:
+      - ocirepositories
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - helm.toolkit.fluxcd.io
+    resources:
+      - helmreleases
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch

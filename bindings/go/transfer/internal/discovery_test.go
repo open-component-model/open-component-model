@@ -160,7 +160,7 @@ func TestIdentityToTransformationID_DistinctIdentitiesGetDistinctIDs(t *testing.
 // --- discoverer tests ---
 
 func TestDiscoverer_NonRecursive(t *testing.T) {
-	d := &discoverer{recursive: 0, discoveredDigests: make(map[string]descriptor.Digest)}
+	d := &discoverer{recursive: 0, discoveredDigests: make(map[string][]descriptor.Digest)}
 	parent := &discoveryValue{
 		Descriptor: &descriptor.Descriptor{
 			Component: descriptor.Component{
@@ -179,7 +179,7 @@ func TestDiscoverer_NonRecursive(t *testing.T) {
 }
 
 func TestDiscoverer_Recursive(t *testing.T) {
-	d := &discoverer{recursive: -1, discoveredDigests: make(map[string]descriptor.Digest)}
+	d := &discoverer{recursive: -1, discoveredDigests: make(map[string][]descriptor.Digest)}
 	parent := &discoveryValue{
 		Descriptor: &descriptor.Descriptor{
 			Component: descriptor.Component{
@@ -236,7 +236,8 @@ func TestResolver_ValidKey(t *testing.T) {
 		resolverMap: map[string]resolvers.ComponentVersionRepositoryResolver{
 			"ocm.software/test:1.0.0": mockResolver,
 		},
-		expectedDigest: func(_ runtime.Identity) *descriptor.Digest { return nil },
+		expectedDigests: func(runtime.Identity) []descriptor.Digest { return nil },
+		rootPin:         func(string) *descriptor.Digest { return nil },
 	}
 
 	val, err := r.Resolve(t.Context(), "ocm.software/test:1.0.0")
@@ -247,9 +248,10 @@ func TestResolver_ValidKey(t *testing.T) {
 
 func TestResolver_InvalidKeyFormat(t *testing.T) {
 	r := &multiResolver{
-		mu:             &sync.Mutex{},
-		resolverMap:    map[string]resolvers.ComponentVersionRepositoryResolver{},
-		expectedDigest: func(_ runtime.Identity) *descriptor.Digest { return nil },
+		mu:              &sync.Mutex{},
+		resolverMap:     map[string]resolvers.ComponentVersionRepositoryResolver{},
+		expectedDigests: func(runtime.Identity) []descriptor.Digest { return nil },
+		rootPin:         func(string) *descriptor.Digest { return nil },
 	}
 	_, err := r.Resolve(t.Context(), "invalid-no-colon")
 	require.Error(t, err)
@@ -267,7 +269,8 @@ func TestResolver_RepoSpecError(t *testing.T) {
 		resolverMap: map[string]resolvers.ComponentVersionRepositoryResolver{
 			"ocm.software/test:1.0.0": mockRes,
 		},
-		expectedDigest: func(_ runtime.Identity) *descriptor.Digest { return nil },
+		expectedDigests: func(runtime.Identity) []descriptor.Digest { return nil },
+		rootPin:         func(string) *descriptor.Digest { return nil },
 	}
 	_, err := r.Resolve(t.Context(), "ocm.software/test:1.0.0")
 	require.Error(t, err)
@@ -281,7 +284,7 @@ func TestDiscoverer_RecursiveTargetPropagation(t *testing.T) {
 	}
 	d := &discoverer{
 		recursive:         -1,
-		discoveredDigests: make(map[string]descriptor.Digest),
+		discoveredDigests: make(map[string][]descriptor.Digest),
 		targetMap:         map[string][]runtime.Typed{"parent.comp/name:1.0.0": {someTarget}},
 		resolverMap:       map[string]resolvers.ComponentVersionRepositoryResolver{},
 	}
@@ -313,7 +316,7 @@ func TestDiscoverer_RecursiveResolverPropagation(t *testing.T) {
 	}
 	d := &discoverer{
 		recursive:         -1,
-		discoveredDigests: make(map[string]descriptor.Digest),
+		discoveredDigests: make(map[string][]descriptor.Digest),
 		targetMap:         map[string][]runtime.Typed{},
 		resolverMap: map[string]resolvers.ComponentVersionRepositoryResolver{
 			"parent.comp/name:1.0.0": parentResolver,
@@ -358,7 +361,7 @@ func TestDiscoverer_ConflictingResolversForSameChild(t *testing.T) {
 	// Simulate: A already discovered D first and assigned resolverA.
 	d := &discoverer{
 		recursive:         -1,
-		discoveredDigests: make(map[string]descriptor.Digest),
+		discoveredDigests: make(map[string][]descriptor.Digest),
 		targetMap:         map[string][]runtime.Typed{},
 		resolverMap: map[string]resolvers.ComponentVersionRepositoryResolver{
 			"parent.comp/b:1.0.0": resolverB,
@@ -397,7 +400,7 @@ func TestDiscoverer_SameResolverForSameChildFromTwoParents(t *testing.T) {
 
 	d := &discoverer{
 		recursive:         -1,
-		discoveredDigests: make(map[string]descriptor.Digest),
+		discoveredDigests: make(map[string][]descriptor.Digest),
 		targetMap:         map[string][]runtime.Typed{},
 		resolverMap: map[string]resolvers.ComponentVersionRepositoryResolver{
 			"parent.comp/b:1.0.0": sharedResolver,
@@ -429,9 +432,10 @@ func TestDiscoverer_SameResolverForSameChildFromTwoParents(t *testing.T) {
 
 func TestMultiResolver_NoResolverForKey(t *testing.T) {
 	r := &multiResolver{
-		mu:             &sync.Mutex{},
-		resolverMap:    map[string]resolvers.ComponentVersionRepositoryResolver{},
-		expectedDigest: func(_ runtime.Identity) *descriptor.Digest { return nil },
+		mu:              &sync.Mutex{},
+		resolverMap:     map[string]resolvers.ComponentVersionRepositoryResolver{},
+		expectedDigests: func(runtime.Identity) []descriptor.Digest { return nil },
+		rootPin:         func(string) *descriptor.Digest { return nil },
 	}
 	_, err := r.Resolve(t.Context(), "ocm.software/missing:1.0.0")
 	require.Error(t, err)
@@ -464,7 +468,8 @@ func TestMultiResolver_NilRepoSpec_FallsBackToDirectLookup(t *testing.T) {
 		resolverMap: map[string]resolvers.ComponentVersionRepositoryResolver{
 			"ocm.software/test:1.0.0": mockRes,
 		},
-		expectedDigest: func(_ runtime.Identity) *descriptor.Digest { return nil },
+		expectedDigests: func(runtime.Identity) []descriptor.Digest { return nil },
+		rootPin:         func(string) *descriptor.Digest { return nil },
 	}
 	val, err := r.Resolve(t.Context(), "ocm.software/test:1.0.0")
 	require.NoError(t, err)

@@ -334,6 +334,82 @@ func Test_Integration_TransferCTFToCTF(t *testing.T) {
 	r.Equal("my-resource", gotDesc.Component.Resources[0].Name)
 }
 
+// Test_Integration_TransferCTFToCTF_PreservesMissingDigest proves transfer never injects a
+// digest a resource did not have at the source (a cc-utils component signed without resource
+// digests), while a resource that does carry a digest keeps it. Injecting a digest would
+// change the signed, normalized descriptor and break the signature.
+func Test_Integration_TransferCTFToCTF_PreservesMissingDigest(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
+
+	componentName := "ocm.software/no-digest"
+	componentVersion := "1.0.0"
+	sourceCTFPath := t.TempDir()
+	ctfRepo := createCTFRepository(t, sourceCTFPath)
+
+	desc := &descriptor.Descriptor{
+		Meta: descriptor.Meta{Version: "v2"},
+		Component: descriptor.Component{
+			ComponentMeta: descriptor.ComponentMeta{ObjectMeta: descriptor.ObjectMeta{Name: componentName, Version: componentVersion}},
+			Provider:      descriptor.Provider{Name: "test-provider"},
+		},
+	}
+	// addBlob stores a local blob and appends its resource to desc. With keepDigest=false the
+	// computed digest is stripped afterwards, mimicking a source resource that carries none.
+	addBlob := func(name string, data []byte, keepDigest bool) {
+		res := descriptor.Resource{
+			ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: name, Version: "1.0.0"}},
+			Type:        "plainText",
+			Relation:    descriptor.LocalRelation,
+			Access: &descriptorv2.LocalBlob{
+				Type:      runtime.NewVersionedType(descriptorv2.LocalBlobAccessType, descriptorv2.LocalBlobAccessTypeVersion),
+				MediaType: "text/plain",
+			},
+		}
+		updated, err := ctfRepo.AddLocalResource(t.Context(), componentName, componentVersion, &res, inmemory.New(bytes.NewReader(data)))
+		r.NoError(err)
+		r.NotNil(updated.Digest, "sanity: AddLocalResource computes a digest")
+		if !keepDigest {
+			updated.Digest = nil
+		}
+		desc.Component.Resources = append(desc.Component.Resources, *updated)
+	}
+	addBlob("with-digest", []byte("signed data"), true)
+	addBlob("without-digest", []byte("cc-utils data"), false)
+	r.NoError(ctfRepo.AddComponentVersion(t.Context(), desc))
+
+	sourceSpec := &ctfrepospec.Repository{Type: runtime.Type{Name: ctfrepospec.Type, Version: ctfrepospec.Version}, FilePath: sourceCTFPath}
+	targetCTFPath := t.TempDir()
+	targetSpec := &ctfrepospec.Repository{Type: runtime.Type{Name: ctfrepospec.Type, Version: ctfrepospec.Version}, FilePath: targetCTFPath, AccessMode: "readwrite|create"}
+
+	tgd, err := transfer.BuildGraphDefinition(t.Context(), nil, nil, transfer.Mapping{
+		Components: []transfer.ComponentID{{Component: componentName, Version: componentVersion}},
+		Target:     targetSpec,
+		Resolver:   transfer.NewRepositoryResolver(ctfRepo, sourceSpec),
+	})
+	r.NoError(err)
+
+	ctx := t.Context()
+	repoProvider := provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()))
+	resourceRepo := ociresource.NewResourceRepository(nil)
+	b := transfer.NewDefaultBuilder(repoProvider, resourceRepo, nil)
+	graph, err := b.BuildAndCheck(tgd)
+	r.NoError(err)
+	r.NoError(graph.Process(ctx))
+
+	targetRepo := createCTFRepository(t, targetCTFPath)
+	got, err := targetRepo.GetComponentVersion(ctx, componentName, componentVersion)
+	r.NoError(err)
+	byName := map[string]*descriptor.Resource{}
+	for i := range got.Component.Resources {
+		byName[got.Component.Resources[i].Name] = &got.Component.Resources[i]
+	}
+	r.NotNil(byName["with-digest"], "with-digest resource transferred")
+	r.NotNil(byName["without-digest"], "without-digest resource transferred")
+	r.NotNil(byName["with-digest"].Digest, "a resource that had a digest keeps it")
+	r.Nil(byName["without-digest"].Digest, "transfer must not inject a digest the source lacked")
+}
+
 func Test_Integration_TransferMultipleComponents_CTFToOCI(t *testing.T) {
 	t.Parallel()
 	r := require.New(t)

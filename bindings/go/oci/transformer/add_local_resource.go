@@ -141,6 +141,13 @@ func (t *AddLocalResource) Transform(ctx context.Context, step runtime.Typed) (r
 		return nil, fmt.Errorf("failed converting updated resource to v2 format: %w", err)
 	}
 
+	// A resource whose source carried no digest must stay without one (never inject a digest
+	// a source lacked — it would change the signed descriptor); a digest the source did carry
+	// is left as the sink verified/completed it.
+	if resource.Digest == nil {
+		v2UpdatedResource.Digest = nil
+	}
+
 	// Populate output based on type
 	switch out := output.(type) {
 	case *v1alpha1.OCIAddLocalResourceOutput:
