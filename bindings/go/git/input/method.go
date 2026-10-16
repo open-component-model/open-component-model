@@ -52,8 +52,12 @@ func (i *InputMethod) GetResourceCredentialConsumerIdentity(_ context.Context, r
 	if err != nil {
 		return nil, err
 	}
+	access, err := spec.ToAccess()
+	if err != nil {
+		return nil, err
+	}
 
-	return identityv1.IdentityFromURL(spec.Repository)
+	return identityv1.IdentityFromURL(access.Repository)
 }
 
 // ProcessResource returns the selected repository snapshot as a gzip-compressed tar.
