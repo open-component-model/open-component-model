@@ -48,7 +48,7 @@ RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked \
 # bindings/go/sigstore/signing/handler/internal/.env (Renovate group "OCM cosign";
 # pin_sync_test.go there fails if they diverge). The sigstore signing handler in
 # bindings/go/sigstore shells out to this binary.
-FROM ghcr.io/open-component-model/cosign:v3.1.3-ocm.24@sha256:988088ff954cd443bda06c43618c376b1bfc1655d5e0e4392cd59da7a19a9bab AS cosign
+FROM ghcr.io/open-component-model/cosign:v3.1.3-ocm.27@sha256:ca2b9b32ab93f51c61db25c651ef8d13e7c60553fecf667c4f758e19e69db555 AS cosign
 
 # Stage filesystem additions for the scratch final image. Only files are copied,
 # so the stage runs on the build platform.
