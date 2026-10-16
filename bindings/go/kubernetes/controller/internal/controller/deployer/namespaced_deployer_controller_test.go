@@ -315,11 +315,11 @@ metadata:
 		forbidden := errors.NewForbidden(schema.GroupResource{Resource: "serviceaccounts"}, "default", nil)
 
 		By("letting a Background deletion go, as the garbage collector removes what is left")
-		Expect(probe.blocksDeletion(ctx, deployer, metadata, forbidden)).To(BeFalse())
+		Expect(probe.blocksDeletion(ctx, deployer, metadata, "reason", forbidden)).To(BeFalse())
 
 		By("blocking an Orphan deletion, as giving up would delete what it should keep")
 		deployer.Spec.DeletionPolicy = v1alpha1.DeletionPolicyOrphan
-		Expect(probe.blocksDeletion(ctx, deployer, metadata, forbidden)).To(BeTrue())
+		Expect(probe.blocksDeletion(ctx, deployer, metadata, "reason", forbidden)).To(BeTrue())
 		cond := apimeta.FindStatusCondition(deployer.Status.Conditions, v1alpha1.ReadyCondition)
 		Expect(cond).NotTo(BeNil())
 		Expect(cond.Reason).To(Equal(v1alpha1.DeletionFailedReason))

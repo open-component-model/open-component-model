@@ -115,16 +115,15 @@ func (r *Reconciler) applyClient(ctx context.Context, deployer deliveryv1alpha1.
 
 // blocksDeletion reports whether a forbidden request keeps the deployer from being deleted. Missing permissions can
 // be restored, so a NamespacedDeployer stays and retries as long as its deletion would orphan objects.
-func (r *Reconciler) blocksDeletion(ctx context.Context, deployer deliveryv1alpha1.DeployerObject, metadata applyset.Metadata, pruneErr error) bool {
+// `reason` parameter has the context of the cause for the deletion error.
+func (r *Reconciler) blocksDeletion(ctx context.Context, deployer deliveryv1alpha1.DeployerObject, metadata applyset.Metadata, reason string, pruneErr error) bool {
 	if !r.Namespaced || !apierrors.IsForbidden(pruneErr) {
 		return true
 	}
 
-	serviceAccount := fmt.Sprintf("the controller cannot read service account %s", serviceAccountName(deployer))
-
 	if deployer.GetDeletionPolicy() == deliveryv1alpha1.DeletionPolicyOrphan {
 		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.DeletionFailedReason, fmt.Sprintf(
-			"%s (%v), restore the permissions to release the objects for the Orphan deletion policy", serviceAccount, pruneErr))
+			"%s (%v), restore the permissions to release the objects for the Orphan deletion policy", reason, pruneErr))
 
 		return true
 	}
@@ -140,8 +139,9 @@ func (r *Reconciler) blocksDeletion(ctx context.Context, deployer deliveryv1alph
 
 	status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.DeletionFailedReason, fmt.Sprintf(
 		"%s (%v), restore the permissions to delete the objects outside of namespace %s: %s",
-		serviceAccount, pruneErr, deployer.GetNamespace(), strings.Join(orphaned, ", ")))
-	log.FromContext(ctx).Error(errors.New("cannot read service account"), "failed to list objects the deletion would orphan", "serviceAccount", serviceAccount)
+		reason, pruneErr, deployer.GetNamespace(), strings.Join(orphaned, ", ")))
+
+	log.FromContext(ctx).Error(errors.New(reason), "restore the permissions to delete the objects out of namespace", "namespace", deployer.GetNamespace())
 
 	return true
 }
