@@ -17,7 +17,7 @@ import (
 // digest that is present and unusable errors. Content that cannot be checked
 // against the digest must not pass as verified.
 func VerifyDownload(ctx context.Context, res *descriptor.Resource, content blob.ReadOnlyBlob) (blob.ReadOnlyBlob, error) {
-	expected, err := parseDigest(res.Digest)
+	expected, err := ParseDigest(res.Digest)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse digest for resource %q: %w", res.Name, handlerError(content, err))
 	}

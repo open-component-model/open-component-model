@@ -3,6 +3,7 @@ package signing
 import (
 	"bytes"
 	"context"
+	"crypto"
 	"crypto/fips140"
 	"encoding/hex"
 	"errors"
@@ -237,4 +238,10 @@ func ensureNormalisationAlgo(ctx context.Context, algo string, logger *slog.Logg
 		return v4alpha1.Algorithm
 	}
 	return algo
+}
+
+// GetSupportedHash looks up a crypto.Hash from its string identifier.
+// The accepted spellings are defined once in [ocmdigest.ParseHashAlgorithm].
+func GetSupportedHash(name string) (crypto.Hash, error) {
+	return ocmdigest.ParseHashAlgorithm(name)
 }

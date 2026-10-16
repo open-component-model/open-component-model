@@ -17,6 +17,15 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
+func TestGetSupportedHash(t *testing.T) {
+	h, err := GetSupportedHash(crypto.SHA256.String())
+	require.NoError(t, err)
+	assert.Equal(t, crypto.SHA256, h)
+
+	_, err = GetSupportedHash("unknown-hash")
+	assert.Error(t, err)
+}
+
 func TestEnsureNormalisationAlgo(t *testing.T) {
 	logger := slog.New(slog.DiscardHandler)
 	ctx := context.Background()

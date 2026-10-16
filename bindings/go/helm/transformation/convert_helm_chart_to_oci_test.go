@@ -410,7 +410,7 @@ func TestConvertHelmChartToOCI_ExcludedFromSignature(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Skip("ADR 0032: pending maintainer agreement")
+			t.Skip("ADR 0033: pending maintainer agreement")
 			r := require.New(t)
 			chartPath, err := filepath.Abs(filepath.Join("..", "testdata", tt.chart))
 			r.NoError(err)

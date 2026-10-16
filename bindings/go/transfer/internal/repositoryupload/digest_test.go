@@ -21,8 +21,8 @@ func TestUploadDigestExcludedFromSignature(t *testing.T) {
 		fromOCI bool
 		skip    string
 	}{
-		{name: "plain blob source", skip: "ADR 0032: transfer adoption is outside the proof of concept"},
-		{name: "OCI artifact source", fromOCI: true, skip: "ADR 0032: pending maintainer agreement"},
+		{name: "plain blob source", skip: "ADR 0033: transfer adoption is outside the proof of concept"},
+		{name: "OCI artifact source", fromOCI: true, skip: "ADR 0033: pending maintainer agreement"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

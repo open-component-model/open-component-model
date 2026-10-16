@@ -31,18 +31,12 @@ import (
 // fromOCI reports that the chart came from an OCI artifact, so the source digest does not describe it.
 // The chart is located, not parsed: the target repository reads and validates it.
 func Locate(ctx context.Context, content blob.ReadOnlyBlob, mediaType string, id runtime.Identity) (chart blob.ReadOnlyBlob, fromOCI bool, err error) {
-	if IsOCILayout(mediaType) {
+	if layout.IsOCILayoutMediaType(mediaType) {
 		chart, err := fromLayout(ctx, content, id)
 		return chart, true, err
 	}
 	chart, err = fromArchive(content, id)
 	return chart, false, err
-}
-
-// IsOCILayout reports whether mediaType is that of an OCM OCI layout, the form OCI artifacts are
-// downloaded in.
-func IsOCILayout(mediaType string) bool {
-	return strings.HasPrefix(mediaType, layout.MediaTypeOCIImageLayout)
 }
 
 // FromOCIRegistry reports whether src is a Helm chart stored in an OCI registry. Its digest is that

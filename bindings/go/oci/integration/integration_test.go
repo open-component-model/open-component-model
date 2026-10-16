@@ -146,8 +146,14 @@ func Test_Integration_OCIRepository_BackwardsCompatibility(t *testing.T) {
 		r.NoError(blob.Copy(cliFile, cliDataBlob))
 		r.NoError(cliFile.Close())
 
-		out, err := exec.CommandContext(t.Context(), cliPath, "version").CombinedOutput()
-		r.NoError(err)
+		// The released CLI reads ~/.ocmconfig and errors if it holds a config type
+		// newer than that release. Pin a throwaway empty config so the test does not
+		// depend on the developer's environment.
+		emptyConfig := filepath.Join(t.TempDir(), "empty.ocmconfig")
+		r.NoError(os.WriteFile(emptyConfig, []byte("type: generic.config.ocm.software/v1\n"), 0o600))
+
+		out, err := exec.CommandContext(t.Context(), cliPath, "--config", emptyConfig, "version").CombinedOutput()
+		r.NoError(err, "ocm version failed: %s", out)
 		r.Contains(string(out), version)
 	})
 }
