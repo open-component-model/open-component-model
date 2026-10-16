@@ -8,40 +8,126 @@ aliases:
 ---
 
 The OCM Kubernetes Controller Toolkit ships with the minimum RBAC permissions needed to manage its own custom resources
-(`Repository`, `Component`, `Resource`, `Deployer`). It does **not** include permissions for third-party resources
-that your deployers may create or manage.
+(`Repository`, `Component`, `Resource`, `Deployer`, `NamespacedDeployer`). It does **not** include permissions for
+the objects your deployers create, such as kro `ResourceGraphDefinitions`. You grant those yourself, and who needs
+which verbs depends on the deployer kind:
 
-If your `Deployer` resources produce custom resources (e.g. kro `ResourceGraphDefinitions`), you must grant the
-controller's service account the necessary permissions yourself.
+| Deployer kind        | Write verbs (`create`, `update`, `patch`, `delete`)  | Read verbs (`get`, `list`, `watch`) |
+|----------------------|------------------------------------------------------|-------------------------------------|
+| `NamespacedDeployer` | Its service account                                  | The controller's service account    |
+| `Deployer`           | The controller's service account                     | The controller's service account    |
 
 ## Prerequisites
 
 This guide assumes that you are already familiar with the concepts described in the following documents:
 
 - [Concept: OCM controllers]({{< relref "/docs/concepts/ocm-controllers.md" >}}) - OCM Controllers
+- [Concept: Kubernetes Deployer]({{< relref "/docs/concepts/kubernetes-deployer.md" >}}) - `Deployer` and `NamespacedDeployer`
 - [kro installed](https://kro.run/docs/getting-started/Installation/)
 
 ## When is this needed?
 
-The controller uses [server-side apply](https://kubernetes.io/docs/reference/using-api/server-side-apply/) to create
-and manage the resources defined in your `Deployer` specs. If a `Deployer` targets a custom resource type, the
-controller needs RBAC permissions for that resource's API group.
-
-This applies to both custom resources and standard Kubernetes resources. Common examples:
+The deployers use [server-side apply](https://kubernetes.io/docs/reference/using-api/server-side-apply/) to create
+and manage the objects in the deployed resource, and the controller watches those objects for drift. Every kind a
+deployer creates needs RBAC, custom resources and standard Kubernetes resources alike. Common examples:
 
 - **kro** `ResourceGraphDefinitions` (`kro.run`)
 - `Deployments` (`apps`) and `Services` (`core`)
 - Any other resource type your deployers create
 
-## Create a ClusterRole and ClusterRoleBinding
+## NamespacedDeployer: grant the service account
 
-Create a `ClusterRole` with the permissions your deployers require, then bind it to the controller's service account.
+A `NamespacedDeployer` does not apply with the controller's permissions. It impersonates the service account in
+`spec.serviceAccountName`, so write access goes to it through a `Role` and `RoleBinding` in the deployer's
+namespace. Without `spec.serviceAccountName` it impersonates the `default` service account of its namespace, which
+you grant in the same way. Prefer a dedicated service account, as every pod in the namespace that names none runs as
+`default`.
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: my-deployer
+  namespace: my-team
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: my-deployer
+  namespace: my-team
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: my-deployer
+subjects:
+  - kind: ServiceAccount
+    name: my-deployer
+    namespace: my-team
+```
+
+Bind the service account by name. The controller impersonates only the user name, so bindings to groups such as
+`system:serviceaccounts:my-team` do not apply.
+
+For objects in another namespace, create the `Role` and `RoleBinding` in that namespace instead. The subject keeps
+the service account's own namespace (`my-team`), and the deployer gets access to `shared-services` only:
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: my-deployer
+  namespace: shared-services
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: my-deployer
+  namespace: shared-services
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: my-deployer
+subjects:
+  - kind: ServiceAccount
+    name: my-deployer
+    namespace: my-team
+```
+
+Only cluster-scoped kinds such as kro `ResourceGraphDefinitions` need a `ClusterRole` with a `ClusterRoleBinding`.
+Grant only the kinds the deployment needs.
+
+Keep these permissions until the `NamespacedDeployer` is deleted. It prunes with them. Without them its deletion
+waits with a `DeletionFailed` condition until you restore them, and without the service account itself it orphans
+cluster-scoped and cross-namespace objects.
+
+Check the service account's access:
+
+```bash
+kubectl auth can-i create deployments.apps -n my-team \
+  --as=system:serviceaccount:my-team:my-deployer
+```
+
+The controller additionally needs read access to the same kinds, see the next section.
+
+## Grant the controller read access
+
+The controller watches deployed objects for drift with its own identity, for both deployer kinds. Create a
+`ClusterRole` with `get`, `list` and `watch` on every kind your deployers deploy, then bind it to the controller's
+service account.
 
 {{<callout context="note" title="The service account name depends on the Helm release name" icon="outline/info-circle">}}
 The binding below uses `ocm-k8s-toolkit-controller-manager` as the service account name only when the chart's release name contains `ocm-k8s-toolkit`. Other release names (and GitOps tools such as Flux) produce names like `<release-name>-ocm-k8s-toolkit-controller-manager`. Pin it with `fullnameOverride: ocm-k8s-toolkit`, or look it up: `kubectl get sa -n ocm-k8s-toolkit-system -l app.kubernetes.io/name=ocm-k8s-toolkit`.
 {{</callout>}}
 
-Below is an example granting permissions for kro `ResourceGraphDefinitions` and the Kubernetes resources that the deployer manages:
+Below is an example for kro `ResourceGraphDefinitions` and the Kubernetes resources that the deployer manages:
 
 ```yaml
 apiVersion: rbac.authorization.k8s.io/v1
@@ -54,35 +140,24 @@ rules:
     resources:
       - resourcegraphdefinitions
     verbs:
-      - create
-      - delete
+      - get
       - list
-      - patch
-      - update
       - watch
   - apiGroups:
       - apps
     resources:
       - deployments
     verbs:
-      - create
-      - delete
       - get
       - list
-      - patch
-      - update
       - watch
   - apiGroups:
       - ""
     resources:
       - services
     verbs:
-      - create
-      - delete
       - get
       - list
-      - patch
-      - update
       - watch
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -105,24 +180,48 @@ Apply it to your cluster:
 kubectl apply -f custom-rbac.yaml
 ```
 
-{{<callout context="caution" title="Least Privilege" icon="outline/alert-triangle">}}
-Follow the principle of least privilege. Only grant the verbs and resources your deployers actually need.
-{{</callout>}}
-
-## Verifying permissions
-
-After applying, confirm that the controller has the expected access:
+Confirm that the controller has the expected access:
 
 ```bash
-kubectl auth can-i create resourcegraphdefinitions.kro.run \
+kubectl auth can-i watch resourcegraphdefinitions.kro.run \
   --as=system:serviceaccount:ocm-k8s-toolkit-system:ocm-k8s-toolkit-controller-manager
 ```
 
 The output should be `yes`.
 
+## Deployer: grant the controller write access
+
+A cluster-scoped `Deployer` applies and prunes with the controller's own permissions. Only if you still run one, add
+the write verbs to the rules in `ocm-controller-custom` for the kinds it deploys:
+
+```yaml
+  - apiGroups:
+      - kro.run
+    resources:
+      - resourcegraphdefinitions
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+```
+
+Confirm it with `kubectl auth can-i create` instead of `watch` in the check above.
+
+These verbs let every `Deployer` write those kinds anywhere in the cluster. After you
+[migrate to the NamespacedDeployer]({{< relref "migrate-to-namespaced-deployer.md" >}}), remove them again and keep
+only the read verbs.
+
+{{<callout context="caution" title="Least Privilege" icon="outline/alert-triangle">}}
+Follow the principle of least privilege. Only grant the verbs and resources your deployers actually need.
+{{</callout>}}
+
 ## Multiple deployer targets
 
-If your deployers target several custom resource types, add additional rules to the same `ClusterRole`:
+If your deployers target several resource types, add a rule per type to the same `ClusterRole`:
 
 ```yaml
 apiVersion: rbac.authorization.k8s.io/v1
@@ -135,29 +234,26 @@ rules:
     resources:
       - resourcegraphdefinitions
     verbs:
-      - create
-      - delete
+      - get
       - list
-      - patch
-      - update
       - watch
   - apiGroups:
       - your.custom.group
     resources:
       - yourresources
     verbs:
-      - create
-      - delete
+      - get
       - list
-      - patch
-      - update
       - watch
 ```
 
+Grant the same kinds with write verbs to the `NamespacedDeployer`'s service account.
+
 ## RBAC for CRDs kro creates at runtime
 
-Everything above grants RBAC to the **OCM controller's** `ServiceAccount`. If your `Deployer` targets a kro
-`ResourceGraphDefinition` (RGD), there is a second, separate RBAC concern: **kro's own** `ServiceAccount`.
+Everything above grants RBAC to the **OCM controller's** and your **deployer's** `ServiceAccount`. If your deployer
+targets a kro `ResourceGraphDefinition` (RGD), there is a second, separate RBAC concern: **kro's own**
+`ServiceAccount`.
 
 An RGD can define a brand-new schema-based kind (for example, a `Podinfo` or `Bootstrap` kind). In kro's
 least-privilege [aggregation mode](https://kro.run/docs/advanced/access-control), creating and managing

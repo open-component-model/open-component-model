@@ -256,6 +256,25 @@ time=2026-03-12T22:06:37.358+01:00 level=INFO msg="SIGNATURE VERIFICATION SUCCES
 
 Once a component version is signed, consumers confirm its authenticity on their own machines. See [Verify Plain RSA]({{< relref "docs/guides/sign/verify-with-plain-rsa.md" >}}) for the consumer-side walkthrough.
 
+## Optional: Add an RFC 3161 timestamp
+
+{{< callout context="note" title="Early access" >}}
+RFC 3161 timestamping is currently being rolled out and we are awaiting feedback. The interface may evolve.
+{{< /callout >}}
+
+Add `--tsa` (uses the default public TSA, `http://timestamp.digicert.com`) or `--tsa-url <url>` to the sign command to
+record a trusted timestamp proving *when* the signature was created:
+
+```bash
+ocm sign cv --tsa-url http://timestamp.digicert.com \
+  ./transport-archive//github.com/acme.org/helloworld:1.0.0
+```
+
+Plain RSA signatures carry no certificate, so a timestamp does not extend their validity past any expiry. Post-expiry
+verification applies only to certificate-chain signatures. See [Sign with a PEM Certificate
+Chain]({{< relref "docs/guides/sign/sign-with-pem-certificate-chain.md" >}}) for that case and [Concept: RFC 3161
+Timestamping]({{< relref "docs/concepts/signing-and-verification-concept.md#rfc-3161-timestamping" >}}) for the trust model.
+
 ## What You've Learned
 
 Congratulations! You've successfully:

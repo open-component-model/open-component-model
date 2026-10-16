@@ -451,6 +451,14 @@ only supports HTTP/HTTPS-based chart repositories.
 
 ### `GitHub/v1`
 
+{{< callout context="caution" >}}
+`GitHub/v1` is **deprecated** and will be removed in a future release. Use
+[`Git/v1`]({{< relref "docs/reference/input-and-access-types.md#gitv1-access" >}}) for new resources and sources. `ocm add componentversion` prints a
+warning when a constructor uses `GitHub/v1`. Existing component versions keep
+working, and a published resource must keep its type: see
+[`Git/v1` or `GitHub/v1`?]({{< relref "docs/reference/input-and-access-types.md#gitv1-or-githubv1" >}}).
+{{< /callout >}}
+
 References a commit of a GitHub repository, downloaded as a source archive via the GitHub
 REST API. Also usable unversioned as `GitHub`. Legacy aliases: `github`, `github/v1`,
 `gitHub`, `gitHub/v1`.
@@ -536,17 +544,16 @@ such as `git@github.com:org/repo.git` are the exception and always mean SSH.
 
 OCM checks the server's host key against your `~/.ssh/known_hosts`. Without a configured SSH key, OCM uses the SSH agent.
 
-#### `Git/v1` or `GitHub/v1`?
+#### `Git/v1` or `GitHub/v1`? {#gitv1-or-githubv1}
 
-Both types reference a commit and return a tar archive of it, but they fetch it in different ways.
+Use `Git/v1`. It works with GitHub too, over HTTPS or SSH, and `GitHub/v1` is deprecated.
 
-| Use                      | When                                                                                                                                               |
-|--------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------|
-| [`GitHub/v1`](#githubv1) | The repository is on GitHub or GitHub Enterprise and you have HTTPS access to its REST API. The archive is one HTTP download, with no Git history. |
-| `Git/v1`                 | The repository is not on GitHub (GitLab, Gitea, Azure DevOps, Bitbucket, a self-hosted server), you need SSH, or the REST API is not reachable.    |
+Both types reference a commit and return a tar archive of it, but they fetch it in different ways: `GitHub/v1` downloads
+the archive from the GitHub REST API, `Git/v1` fetches the commit over the Git protocol.
 
 The two archives are not the same bytes, so the same commit has different digests with `GitHub/v1` and `Git/v1`. Do not
-switch a published resource from one type to the other.
+switch a published resource from one type to the other. Keep `GitHub/v1` only for resources that are already published
+with it.
 
 #### Migrating from OCM v1 {#git-migration-from-ocm-v1}
 

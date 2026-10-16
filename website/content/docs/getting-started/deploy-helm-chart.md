@@ -598,6 +598,25 @@ If the component isn't found, verify:
 
 If the controller logs show permission errors like `forbidden` or `cannot create resource`, the controller lacks RBAC permissions to manage `ResourceGraphDefinitions`. Follow the [Custom RBAC guide]({{< relref "docs/guides/deploy/configure-custom-rbac.md" >}}) to grant the necessary permissions.
 
+### ResourceGraphDefinition Stays Inactive
+
+If `kubectl get rgd` shows the state `Inactive`, check the reason:
+
+```shell
+kubectl get rgd simple -o jsonpath='{.status.conditions[?(@.type=="Ready")].message}'
+```
+
+A message like `cache sync timeout for kro.run/v1alpha1, Resource=simples` often means that kro lacks access to the `Simple` instances.
+Check that you applied the kro access permissions, as described in [RBAC for CRDs kro creates at runtime]({{< relref "docs/guides/deploy/configure-custom-rbac.md#rbac-for-crds-kro-creates-at-runtime" >}}).
+
+If the instance does not become `ACTIVE`, kro may lack access to a resource in the graph. The kro logs name the resource:
+
+```shell
+kubectl logs -n kro-system deployment/kro | grep forbidden
+```
+
+Check that you created the roles for OCM resources and for your deployer in the [setup guide]({{< relref "setup-controller-environment.md" >}}). See [Access Control](https://kro.run/docs/advanced/access-control) in the kro documentation for how kro gets its permissions.
+
 ## Cleanup
 
 Remove the deployed resources:

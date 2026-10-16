@@ -170,6 +170,36 @@ on the manifest step but fail on the blob step.
 
 ## Trust a private CA
 
+Set `rootCAsPEM` (inline PEM bundle) or `rootCAsPEMFile` (path) in the
+`http.config.ocm.software/v1alpha1` config to trust a private CA. These
+certificates are **appended** to the system trust pool, so public registries
+keep verifying while your internal CA is also trusted. Scope it globally or to
+a single host — the same setting reaches self-hosted OCI registries, Helm
+repositories, and RFC 3161 timestamping servers. This is the recommended
+approach.
+
+```yaml
+type: generic.config.ocm.software/v1
+configurations:
+  - type: http.config.ocm.software/v1alpha1
+    # Global: trust this CA for every host.
+    rootCAsPEMFile: /etc/ocm/corp-ca.pem
+    hosts:
+      # Per-host: trust an internal TSA's serving certificate only here.
+      "timestamp.corp:8443":
+        rootCAsPEMFile: /etc/ocm/internal-tsa-ca.pem
+```
+
+{{< callout context="note" title="Additive, unlike SSL_CERT_FILE" >}}
+`rootCAsPEM` / `rootCAsPEMFile` are **added** to the system roots, so you do not
+need to concatenate the system bundle. `rootCAsPEM` takes precedence over
+`rootCAsPEMFile`, and both are ignored when `insecureSkipVerify` is `true`. An
+invalid or unreadable bundle fails requests closed rather than silently falling
+back to system trust.
+{{< /callout >}}
+
+### Trust a private CA via environment variables
+
 The OCM CLI uses Go's standard `crypto/tls` stack; the system root CA pool is
 consulted automatically. To trust an additional internal or self-signed CA,
 point `SSL_CERT_FILE` and/or `SSL_CERT_DIR` at your bundle. TLS verification
@@ -413,11 +443,13 @@ trust store, and no env var override has been set.
 
 **Fix,** in order of preference:
 
-1. Point `SSL_CERT_FILE` at a PEM bundle containing the issuing CA — TLS
+1. Set `rootCAsPEM` / `rootCAsPEMFile` in the `http.config.ocm.software/v1alpha1`
+   config — additive to the system trust pool, so public registries keep working.
+2. Point `SSL_CERT_FILE` at a PEM bundle containing the issuing CA — TLS
    verification stays enabled.
-2. Install the CA into the system trust store so all tools on the machine
+3. Install the CA into the system trust store so all tools on the machine
    accept it.
-3. Set `insecureSkipVerify: true` for that host only as a last resort.
+4. Set `insecureSkipVerify: true` for that host only as a last resort.
 
 ### `SSL_CERT_FILE` is set but the registry still fails verification
 

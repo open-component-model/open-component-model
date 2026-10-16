@@ -68,6 +68,14 @@ View all signatures on a component version:
 ocm get cv /tmp/helloworld/transport-archive//github.com/acme.org/helloworld:1.0.0 -o yaml | grep -A 10 signatures:
 ```
 
+## RFC 3161 timestamps
+
+If a signature carries an RFC 3161 timestamp, `ocm verify cv` checks it automatically with no extra flag. Plain RSA
+signatures carry no certificate, so a timestamp does not extend their validity past any expiry. For the full trust
+model and the `TSA/v1alpha1` credential needed to verify timestamp token chains, see [Verify a PEM Certificate
+Chain]({{< relref "docs/guides/sign/verify-with-pem-certificate-chain.md#verifying-signatures-with-an-rfc-3161-timestamp" >}})
+and [Concept: RFC 3161 Timestamping]({{< relref "docs/concepts/signing-and-verification-concept.md#rfc-3161-timestamping" >}}).
+
 ## Troubleshooting
 
 Verification errors (`signature verification failed`, `no public key found`, `invalid key format`) and their fixes are covered in the [Troubleshooting section of Sign with Plain RSA]({{< relref "docs/guides/sign/sign-with-plain-rsa.md#troubleshooting" >}}).

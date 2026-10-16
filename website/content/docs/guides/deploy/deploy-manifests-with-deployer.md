@@ -7,7 +7,9 @@ aliases:
   - /docs/how-to/deploy-manifests-with-deployer/
 ---
 
-This guide shows how to deploy raw Kubernetes manifests from an OCM component version using the OCM Controllers' built-in Deployer. This approach requires only the OCM Controllers—no kro or Flux needed.
+This guide shows how to deploy raw Kubernetes manifests from an OCM component version using the OCM Controllers' built-in `NamespacedDeployer`. This approach requires only the OCM Controllers—no kro or Flux needed.
+
+The `NamespacedDeployer` applies the manifests with the permissions of a service account, so you grant exactly the rights the deployment needs.
 
 {{< callout context="tip" title="What you'll deploy" icon="outline/package" >}}
 A Podinfo application (single pod) deployed directly from a Kubernetes Deployment manifest stored in an OCM component.
@@ -241,15 +243,45 @@ spec:
       resource:
         name: deployment-resource
 ---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: bootstrap-deployer
+  namespace: default
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: bootstrap-deployer
+  namespace: default
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: bootstrap-deployer
+  namespace: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: bootstrap-deployer
+subjects:
+  - kind: ServiceAccount
+    name: bootstrap-deployer
+    namespace: default
+---
 apiVersion: delivery.ocm.software/v1alpha1
-kind: Deployer
+kind: NamespacedDeployer
 metadata:
   name: bootstrap-deployer
   namespace: default
 spec:
   resourceRef:
     name: bootstrap-deployment
-    namespace: default
+  serviceAccountName: bootstrap-deployer
 ```
 
 The resource chain works as follows:
@@ -257,10 +289,11 @@ The resource chain works as follows:
 - **Repository** — points to the OCM repository
 - **Component** — references a specific component version
 - **Resource** — selects the manifest resource from the component
-- **Deployer** — downloads, verifies, and applies the manifest using server-side apply with ApplySets
+- **ServiceAccount, Role, RoleBinding** — the permissions the `NamespacedDeployer` applies and prunes with
+- **NamespacedDeployer** — downloads, verifies, and applies the manifest as the service account using server-side apply with ApplySets
 
 {{< callout context="note" >}}
-For details on how the Deployer uses ApplySets, see [OCM Controllers]({{< relref "/docs/concepts/ocm-controllers.md" >}}).
+For details on how the deployers use ApplySets and service accounts, see [Kubernetes Deployer]({{< relref "/docs/concepts/kubernetes-deployer.md" >}}).
 {{< /callout >}}
 {{< /step >}}
 
@@ -287,7 +320,7 @@ kubectl apply -f deployment-subst.yaml
 Check the controller resources:
 
 ```shell
-kubectl get resource,deployer,component,repository -owide
+kubectl get resource,namespaceddeployer,component,repository -owide
 ```
 
 <details>
@@ -297,8 +330,8 @@ kubectl get resource,deployer,component,repository -owide
 NAME                                                  READY                   AGE
 resource.delivery.ocm.software/bootstrap-deployment   Applied version 1.0.0   20s
 
-NAME                                                AGE
-deployer.delivery.ocm.software/bootstrap-deployer   20s
+NAME                                                          AGE
+namespaceddeployer.delivery.ocm.software/bootstrap-deployer   20s
 
 NAME                                                  READY                   AGE
 component.delivery.ocm.software/bootstrap-component   Applied version 1.0.0   20s
@@ -350,7 +383,7 @@ Delete the controller resources to remove all tracked objects:
 kubectl delete -f deployment-subst.yaml
 ```
 
-The Deployer uses ApplySets, so deleting the resources automatically cleans up the deployed manifest:
+The `NamespacedDeployer` uses ApplySets, so deleting the resources automatically cleans up the deployed manifest:
 
 ```shell
 kubectl get pods -l app=podinfo

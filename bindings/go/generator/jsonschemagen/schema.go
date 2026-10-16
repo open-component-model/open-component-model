@@ -26,6 +26,10 @@ type JSONSchemaDraft202012 struct {
 	Description string `json:"description,omitempty"`
 	Format      string `json:"format,omitempty"`
 
+	// DeprecationMessage is a custom keyword; JSON Schema permits unknown keywords and treats them as annotations,
+	// see https://json-schema.org/draft/2020-12/json-schema-core#section-4.3.1. The x- prefix marks it as custom.
+	DeprecationMessage string `json:"x-deprecationMessage,omitempty"`
+
 	ContentEncoding string `json:"contentEncoding,omitempty"`
 
 	Const any `json:"const,omitempty"`

@@ -188,6 +188,47 @@ A component version can have **multiple signatures** from different parties, ena
 - Multiple approval workflows
 - Cross-organizational trust chains
 
+### Pinning a Component Version by Digest
+
+A component reference can name the digest of the component version it expects. The digest uses the OCI digest
+notation, optionally prefixed with a normalization algorithm (`/` written as `.`):
+
+```text
+ghcr.io/acme//acme.org/helloworld@sha256:<oci-digest>
+ghcr.io/acme//acme.org/helloworld:1.0.0@sha256:<oci-digest>
+ghcr.io/acme//acme.org/helloworld:1.0.0@jsonNormalisation.v4alpha1+sha256:<normalized-descriptor-digest>
+```
+
+`ocm get`, `ocm download`, `ocm verify`, `ocm sign` and `ocm transfer` fail if the component version they read does not
+match the pin, and `ocm download` verifies the downloaded content against the resource digests of the pinned
+descriptor. Both forms accept `sha256` and `sha512`.
+
+| | OCI digest `sha256:<hex>` | Normalized pin `jsonNormalisation.v4alpha1+sha256:<hex>` |
+| --- | --- | --- |
+| Identifies | the OCI image index or manifest the component version is stored as, which is what its version tag resolves to | the descriptor normalized with `jsonNormalisation/v4alpha1` (see [Normalization and Digest Calculation](#normalization-and-digest-calculation)) |
+| Covers | the stored artifact graph: descriptor (including access information, all labels and signatures) and all local blobs | what signatures cover: no access information, no labels excluded from signing |
+| How it is checked | the component version is read from the artifact with that digest, never through the version tag; every node read is verified against its digest | the descriptor read through the version tag is normalized and hashed |
+| Version in the reference | optional; if given, the artifact must hold that version | required |
+| Changes on | any change of the stored artifact, including `ocm transfer` and `ocm sign` | changes of signed content only |
+| Where it works | the repository the pin was taken from; OCI registries and CTF archives only | every repository the component version is transferred to |
+| How to obtain | `ocm verify cv` in an OCI registry or CTF archive (`reference` in `SIGNATURE VERIFICATION SUCCESSFUL`); any OCI tool, for example `oras resolve ghcr.io/acme/component-descriptors/acme.org/helloworld:1.0.0` or `crane digest`; in a CTF archive, the `digest` of the version tag in `artifact-index.json` | the digest `ocm sign` logs (`digest` in `signed successfully`) and records in the signature (`signatures[].digest.value` in `ocm get cv -o yaml`) |
+
+An OCI digest pins a component version the way a digest pins a container image: because the digest of the image index
+or manifest covers everything stored below it, reading by digest yields exactly the content that was pinned, even if
+the version tag has been moved since. `ocm transfer` with an OCI digest pin copies the descriptor and all local
+resources from the pinned artifact. Use it to bind a pipeline step to the exact component version an earlier step
+inspected in one repository. Use a normalized pin to identify a component version independent of where it is stored:
+it survives transfer and signing, so a pin taken once binds every later read to the same signed content. For
+repositories that do not store component versions as OCI artifacts, use the normalized form. See the
+[CLI reference]({{< relref "/docs/reference/ocm-cli/ocm_get_component-version.md" >}}) for the reference format.
+
+`ocm verify cv` closes the gap between verifying a component version and using it: in an OCI registry or CTF archive it
+resolves the version tag once, verifies the artifact the tag resolved to, and logs the reference pinned to that
+artifact's OCI digest. Passing that reference to `ocm transfer` or `ocm download` reads exactly the verified content,
+even if the tag is moved in between. `ocm sign` with an OCI digest pin writes the signature to the version tag, so it
+refuses to sign if the tag no longer resolves to the pinned artifact instead of replacing the current version with
+the pinned one.
+
 ## Supported Signing Algorithms
 
 OCM's `signature.algorithm` field selects between two signing approaches: classical RSA signatures over a long-lived key pair, and [Sigstore](https://www.sigstore.dev/)-based keyless signing, where each signature is made with a fresh, short-lived key bound to your OIDC identity. The two approaches differ not just in cryptography but in their trust model — see [Trust Models](#trust-models) below.
@@ -361,6 +402,122 @@ The signer authenticates to an OIDC identity provider; Fulcio binds that identit
 | Recommended for | Simple setups, personal projects | Enterprise environments with existing PKI | Teams that want to skip key management entirely |
 
 For hands-on steps, see [Tutorial: Plain Signatures]({{< relref "docs/guides/sign/sign-with-plain-rsa.md" >}}) and [Tutorial: Certificate Chains (PEM)]({{< relref "docs/guides/sign/sign-with-pem-certificate-chain.md" >}}).
+
+## RFC 3161 Timestamping
+
+{{< callout context="note" title="TSA timestamping is in early access" icon="outline/info-circle" >}}
+RFC 3161 timestamping is currently being rolled out and we are awaiting feedback. The interface may evolve based on that feedback.
+{{< /callout >}}
+
+A signature verifies only while the signing certificate is valid. With certificate-chain trust (PEM encoding), a
+signature can become unverifiable once the certificate expires — even though it was valid when created. RFC 3161
+timestamping solves this: at signing time a trusted **Timestamping Authority (TSA)** counter-signs the signature,
+proving *when* it was made. At verification time — for RSA/PEM certificate-chain signatures — the certificate chain is
+then validated against the TSA-attested time instead of the current time, so a signature created while the certificate
+was valid keeps verifying after it expires. This certificate-expiry extension applies only when the timestamp is
+**trusted** (its chain validates against TSA roots the verifier configured). Plain signatures carry no certificate, so
+they gain no post-expiry verification from a timestamp. Sigstore signatures are timestamped by Sigstore itself, with the
+TSAs from its signing config; `--tsa`/`--tsa-url` are rejected for Sigstore signers.
+
+Component versions signed and timestamped with the OCM v1 CLI keep verifying: their timestamps (PEM block
+`TIMESTAMP INFO`, taken over the descriptor digest) are checked the same way. Because the descriptor digest is known
+before signing, such a timestamp does not prove when the signature was made, so its time is only used to validate an
+expired certificate with `ocm verify cv --insecure-trust-legacy-timestamps`. Timestamps created by this CLI use a
+newer format that OCM v1 cannot read.
+
+Timestamping is **optional**. A timestamp can be attached to Plain and PEM signatures alike, but only PEM
+certificate-chain (RSA) signatures benefit from the certificate-expiry extension. Signatures without a timestamp
+continue to verify unchanged.
+
+### How It Works
+
+```mermaid
+flowchart TB
+    subgraph sign ["Sign"]
+        A[Compute digest] --> B[Sign digest]
+        B --> C[Request timestamp of signature from TSA]
+        C --> D["Attach timestamp token to signature"]
+    end
+    sign --> V
+    subgraph V ["Verify"]
+        E[Resolve TSA roots from credential graph] --> F[Verify timestamp token chain at GenTime]
+        F --> G["If trusted, validate signing cert at TSA-attested time"]
+    end
+```
+
+1. The signer selects a TSA with the `--tsa` (default public TSA) or `--tsa-url` flag on `ocm sign cv`.
+2. After signing, OCM sends a hash of the **signature value** to the TSA, which returns a PKCS#7 timestamp token whose
+   signer certificate must carry a critical `id-kp-timeStamping` EKU. The token is attached to the signature's
+   `timestamp` field in the descriptor, and the TSA URL is recorded in the label `url.tsa.ocm.software/{signatureName}`.
+   The label is not signing-relevant, so the component digest stays the same and references to the component as well
+   as other signatures remain valid.
+3. At verification, OCM reads the TSA URL from that label and resolves the TSA's root CA certificates from the
+   credential graph via a [`TSA/v1alpha1`]({{< relref "docs/reference/credential-consumer-identities.md#tsav1alpha1" >}})
+   consumer identity.
+4. The token's PKCS#7 chain is verified against those roots at its GenTime, its message imprint is checked against a
+   hash of the signature value, and — only when the chain is trusted — the attested time is used to validate an RSA/PEM
+   signing certificate chain. Without trusted roots the token is checked structurally only and does not relax
+   certificate validity. Only built-in signing handlers use the attested time; external signing plugins validate
+   certificates at the current time.
+
+### Trust Model
+
+Timestamping keeps three trust domains separate: the **signer** proves *who* signed, the **TSA** proves *when*, and the
+**verifier** independently decides what to trust. Critically, the TSA root certificates come **exclusively** from the
+verifier's credential graph — never from the signature — so a signer cannot embed a self-signed TSA root and have it
+trusted. The TSA URL label is not signed; it only selects among the roots the verifier configured.
+A token is trusted only when it chains to one of them, so pointing the URL at a TSA an attacker controls does not get
+their timestamp accepted.
+
+Verification degrades gracefully across three levels:
+
+| Level | TSA roots configured? | Timestamp present? | What is verified |
+| ----- | --------------------- | ------------------ | ---------------- |
+| **No timestamp** | N/A | No | Standard signature verification only |
+| **Structural** | No | Yes | PKCS#7 parsing + imprint match; no chain verification; a warning is logged |
+| **Full** | Yes | Yes | PKCS#7 chain verification + imprint match + TSA time used for certificate validity |
+
+### Configuring TSA Trust
+
+TSA root certificates are configured on the **verifier** side through the credential graph, using the typed
+[`TSACredentials/v1alpha1`]({{< relref "docs/reference/credential-types.md#tsacredentialsv1alpha1" >}}) credential:
+
+```yaml
+type: generic.config.ocm.software/v1
+configurations:
+  - type: credentials.config.ocm.software
+    consumers:
+      - identity:
+          type: TSA/v1alpha1
+          hostname: timestamp.digicert.com
+          scheme: http
+        credentials:
+          - type: TSACredentials/v1alpha1
+            rootCertsPEMFile: /path/to/digicert-tsa-root.pem
+```
+
+The signing side needs no TSA credentials; the TSA is chosen with the CLI flags. For the full attribute and field
+reference, see [Consumer Identities → TSA/v1alpha1]({{< relref "docs/reference/credential-consumer-identities.md#tsav1alpha1" >}})
+and [Credential Types → TSACredentials/v1alpha1]({{< relref "docs/reference/credential-types.md#tsacredentialsv1alpha1" >}}).
+
+#### Two certificates, two mechanisms
+
+Two distinct certificates are easy to conflate — especially with a **self-hosted TSA**, where both are often issued
+by the same internal CA:
+
+| Certificate | Validated when | Trusted via |
+| ----------- | -------------- | ----------- |
+| The TSA's **token-signing** cert (PKCS#7 chain over the timestamp token) | Verifying | [`TSACredentials/v1alpha1`]({{< relref "docs/reference/credential-types.md#tsacredentialsv1alpha1" >}}) `rootCertsPEM` |
+| The TSA server's **HTTPS serving** cert (the TLS connection when requesting a timestamp) | Signing | [HTTP client config]({{< relref "docs/reference/http-client-configuration.md" >}}) `rootCAsPEM` (or `insecureSkipVerify` for dev) |
+
+`TSACredentials` roots verify the *token*, not the *connection*. To make the signer trust a private TSA's HTTPS
+serving certificate, add its CA to the HTTP client configuration
+(`http.config.ocm.software`, field `rootCAsPEM` / `rootCAsPEMFile`, per-host capable), which the signing-time TSA
+request now honours. For a throwaway self-signed dev TSA, `insecureSkipVerify: true` scoped to that host disables
+connection verification without affecting token trust.
+
+For the complete trust analysis and design rationale, see ADR 0032 (RFC 3161 Timestamping) in the repository's
+`docs/adr/` directory.
 
 ## Next Steps
 
