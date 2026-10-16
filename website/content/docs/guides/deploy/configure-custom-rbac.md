@@ -270,7 +270,7 @@ the write verbs to the rules in `ocm-controller-custom` for the kinds it deploys
 Confirm it with `kubectl auth can-i create` instead of `watch` in the check above.
 
 These verbs let every `Deployer` write those kinds anywhere in the cluster. After you
-[migrate to the NamespacedDeployer]({{< relref "migrate-to-namespaced-deployer.md" >}}), remove them again and keep
+[migrate to the NamespacedDeployer]({{< relref "/docs/changelog/migrate-to-namespaced-deployer.md" >}}), remove them again and keep
 only the read verbs.
 
 {{<callout context="caution" title="Least Privilege" icon="outline/alert-triangle">}}

@@ -1,8 +1,11 @@
 ---
 title: "Migrate a Deployer to a NamespacedDeployer"
 description: "Hand the objects of a cluster-scoped Deployer over to a NamespacedDeployer without deleting or recreating them."
-weight: 39
+icon: "arrow-autofit-right"
+weight: 40
 toc: true
+aliases:
+  - /docs/guides/deploy/migrate-to-namespaced-deployer/
 ---
 
 ## Goal
