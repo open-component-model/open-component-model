@@ -164,9 +164,6 @@ func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, res *des
 	if err != nil {
 		return nil, err
 	}
-	if spec, err = spec.Normalize(); err != nil {
-		return nil, err
-	}
 
 	downloaded, err := r.download(ctx, spec, res.Digest, creds, tempDir)
 	if err != nil {
@@ -217,7 +214,7 @@ func accessFrom(res *descriptor.Resource) (*accessv1.Git, error) {
 		return nil, err
 	}
 
-	return &result, nil
+	return result.Normalize()
 }
 
 func verifyDigest(expected *descriptor.Digest, actual digest.Digest) error {

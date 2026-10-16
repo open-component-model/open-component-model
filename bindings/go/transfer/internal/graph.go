@@ -310,6 +310,11 @@ func processResources(
 		if err := scheme.Convert(resource.Access, access); err != nil {
 			return nil, nil, fmt.Errorf("cannot convert resource access to typed object: %w", err)
 		}
+		if git, ok := access.(*gitv1.Git); ok {
+			if access, err = git.Normalize(); err != nil {
+				return nil, nil, fmt.Errorf("invalid git access of resource %v: %w", resource.ToIdentity(), err)
+			}
+		}
 
 		// Declaration order is significant: the first uploader whose match selects the
 		// resource handles it, so more specific rules should precede broader ones. A
