@@ -302,7 +302,9 @@ func Test_Integration_OCIRepository_StreamingDoesNotBuffer(t *testing.T) {
 //	buffering the whole blob in memory to build the descriptor before a
 //	monolithic push. Manifests are never chunked; they use the manifests
 //	endpoint. A chunked-protocol failure before the first byte is consumed falls
-//	back to the monolithic push so no registry regresses.
+//	back to the monolithic push so no registry regresses. A rejected first chunk
+//	(e.g. ghcr.io's 4 MiB PATCH limit) also falls back, with a warning: Push
+//	replays the read chunk ahead of the rest, PushStreaming buffers the blob.
 func Test_Integration_OCIRepository_AddComponentVersion_Streaming(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping add-cv streaming integration test in short mode")

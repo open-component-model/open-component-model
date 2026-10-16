@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"path"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
+	slogcontext "github.com/veqryn/slog-context"
 	"oras.land/oras-go/v2/registry/remote"
 	"oras.land/oras-go/v2/registry/remote/auth"
 	"oras.land/oras-go/v2/registry/remote/errcode"
@@ -41,9 +43,9 @@ const MaxChunkSize int64 = 128 << 20
 
 // ErrStreamingUnavailable is returned by PushStreaming when chunked upload is
 // disabled (ChunkSize <= 0) or when the session cannot be established before
-// any content is consumed. In streaming mode there is no monolithic fallback
-// (the digest is unknown up front), so the caller must buffer and retry via
-// the regular Push path.
+// any content is consumed. Streaming has no monolithic fallback at that point
+// (the size is unknown up front), so the caller must buffer and retry via the
+// regular Push path.
 var ErrStreamingUnavailable = errors.New("streaming chunked upload unavailable")
 
 // StreamingPusher is implemented by stores that can upload a blob whose digest
@@ -72,8 +74,10 @@ var _ StreamingPusher = (*RemoteStore)(nil)
 // uploaded in chunks per the OCI Distribution Spec (POST session, PATCH chunks,
 // PUT close); manifests, blobs that fit in a single chunk, and blobs below the
 // threshold delegate to the embedded monolithic push. If chunking is disabled
-// (ChunkSize <= 0) or the chunk protocol fails before any byte is consumed,
-// Push falls back to the embedded monolithic push so no registry regresses.
+// (ChunkSize <= 0), the chunk protocol fails before any byte is consumed, or
+// the registry rejects the first chunk (e.g. a PATCH body limit below
+// ChunkSize), Push falls back to the embedded monolithic push so no registry
+// regresses.
 //
 // Reference: https://github.com/opencontainers/distribution-spec/blob/v1.1.1/spec.md#pushing-a-blob-in-chunks
 func (r *RemoteStore) Push(ctx context.Context, expected ociImageSpecV1.Descriptor, content io.Reader) error {
@@ -90,9 +94,10 @@ func (r *RemoteStore) Push(ctx context.Context, expected ociImageSpecV1.Descript
 	if r.ChunkSize <= 0 || expected.Size < threshold || introspection.IsOCICompliantManifest(expected) {
 		return r.Repository.Push(ctx, expected, content)
 	}
-	_, err := r.pushChunked(ctx, expected.MediaType, expected.Digest, expected.Size, content, func() error {
-		return r.Repository.Push(ctx, expected, content)
-	})
+	monolithic := func(content io.Reader) (ociImageSpecV1.Descriptor, error) {
+		return expected, r.Repository.Push(ctx, expected, content)
+	}
+	_, err := r.pushChunked(ctx, expected.MediaType, expected.Digest, expected.Size, content, monolithic, monolithic)
 	return err
 }
 
@@ -105,11 +110,12 @@ func (r *RemoteStore) Push(ctx context.Context, expected ociImageSpecV1.Descript
 // empty the digest is computed from the streamed bytes. partial.Size, when
 // non-negative, is verified against the number of bytes streamed.
 //
-// Unlike Push there is no monolithic fallback, because a monolithic upload
-// requires the size (Content-Length) up front. If chunking is disabled or the
-// session cannot be opened before any byte is consumed, it returns an error
-// wrapping ErrStreamingUnavailable without consuming content, so the caller can
-// buffer and retry via Push.
+// If chunking is disabled or the session cannot be opened before any byte is
+// consumed, it returns an error wrapping ErrStreamingUnavailable without
+// consuming content, so the caller can buffer and retry via Push. If the
+// registry rejects the first chunk, the content has already been partially
+// read, so PushStreaming itself buffers the remainder in memory and retries as
+// a monolithic push (see pushBuffered).
 func (r *RemoteStore) PushStreaming(ctx context.Context, partial ociImageSpecV1.Descriptor, content io.Reader) (ociImageSpecV1.Descriptor, error) {
 	if r.ChunkSize <= 0 {
 		return ociImageSpecV1.Descriptor{}, fmt.Errorf("chunk size not configured: %w", ErrStreamingUnavailable)
@@ -120,52 +126,84 @@ func (r *RemoteStore) PushStreaming(ctx context.Context, partial ociImageSpecV1.
 		// blob is uploaded as a single empty chunk and verified by digest.
 		size = blob.SizeUnknown
 	}
-	return r.pushChunked(ctx, partial.MediaType, partial.Digest, size, content, nil)
+	return r.pushChunked(ctx, partial.MediaType, partial.Digest, size, content, nil, func(content io.Reader) (ociImageSpecV1.Descriptor, error) {
+		return r.pushBuffered(ctx, partial.MediaType, partial.Digest, size, content)
+	})
 }
 
+// monolithicPush uploads content in a single request and returns the stored
+// descriptor.
+type monolithicPush func(content io.Reader) (ociImageSpecV1.Descriptor, error)
+
 // chunkedUpload holds the mutable state of one chunked upload session: the
-// current push location (updated after each PATCH), how many bytes have been
-// streamed, whether any byte has been consumed (after which no monolithic
-// fallback is possible), and the running digest of the streamed content.
+// current push location (updated after each PATCH), how many bytes the
+// registry has accepted, whether any byte has been consumed (after which the
+// original reader cannot be replayed), the running digest of the streamed
+// content, and the first chunk if the registry rejected it (see
+// keepForReplay).
 type chunkedUpload struct {
 	location *url.URL
 	chunk    int64
 	offset   int64
 	consumed bool
 	digester digest.Digester
+	rejected []byte
+}
+
+// keepForReplay retains chunk when the registry failed the session's first
+// PATCH. No byte of the session was accepted, so the blob can still be
+// uploaded monolithically by replaying chunk ahead of the unread content.
+// Registries with a PATCH body limit below the chunk size (ghcr.io: 4 MiB)
+// fail exactly here. A cancelled context is never replayed.
+func (up *chunkedUpload) keepForReplay(ctx context.Context, chunk []byte) {
+	if up.offset == 0 && ctx.Err() == nil {
+		up.rejected = chunk
+	}
 }
 
 // pushChunked runs the three-phase chunked upload protocol (open session,
 // upload PATCH chunks, close with PUT) and returns the completed descriptor.
 //
-// When fallback is non-nil it is invoked for any failure that occurs before the
-// first byte is consumed (so no registry regresses); once a chunk has been
-// sent, an io.Reader cannot be rewound, so later failures return a wrapped
-// error and best-effort cancel the session. When knownDigest is set it is
-// verified against the streamed content and used to close the session; when
-// empty the digest is computed from the stream.
+// When fallback is non-nil it is invoked with the untouched content for any
+// failure that occurs before the first byte is consumed; a nil fallback
+// reports ErrStreamingUnavailable instead. If the registry rejects the first
+// chunk, replay is invoked with that chunk followed by the unread content,
+// after logging a warning. Any later failure returns a wrapped error and
+// best-effort cancels the session, since the registry already holds part of
+// the blob. When knownDigest is set it is verified against the streamed
+// content and used to close the session; when empty the digest is computed
+// from the stream.
 func (r *RemoteStore) pushChunked(
 	ctx context.Context,
 	mediaType string,
 	knownDigest digest.Digest,
 	knownSize int64,
 	content io.Reader,
-	fallback func() error,
+	fallback, replay monolithicPush,
 ) (ociImageSpecV1.Descriptor, error) {
 	ctx = auth.AppendRepositoryScope(ctx, r.Reference, auth.ActionPull, auth.ActionPush)
 
 	up, err := r.openUploadSession(ctx, knownDigest)
 	if err != nil {
 		// The session never opened: no bytes consumed, fallback is always safe.
-		return fallbackOrUnavailable(fallback, err)
+		return fallbackOrUnavailable(fallback, content, err)
 	}
 
 	if err := r.uploadChunks(ctx, up, content, knownSize); err != nil {
 		if !up.consumed {
 			// Failed before the first PATCH; fall back to monolithic push.
-			return fallbackOrUnavailable(fallback, err)
+			return fallbackOrUnavailable(fallback, content, err)
 		}
-		return ociImageSpecV1.Descriptor{}, err
+		if up.rejected == nil {
+			return ociImageSpecV1.Descriptor{}, err
+		}
+		slogcontext.FromCtx(ctx).Log(ctx, slog.LevelWarn, "registry rejected the first chunk of a chunked blob upload, retrying as monolithic upload",
+			slog.String("repository", r.Reference.String()), slog.Int64("chunkSize", up.chunk), slog.Any("error", err))
+		desc, monoErr := replay(io.MultiReader(bytes.NewReader(up.rejected), content))
+		if monoErr != nil {
+			return ociImageSpecV1.Descriptor{}, fmt.Errorf("monolithic fallback after rejected chunked upload failed: %w; chunked upload: %w", monoErr, err)
+		}
+		return desc, nil
 	}
 
 	finalDigest, err := resolveFinalDigest(up.digester.Digest(), knownDigest)
@@ -191,13 +229,41 @@ func (r *RemoteStore) pushChunked(
 }
 
 // fallbackOrUnavailable reports a pre-consumption failure: it runs the
-// monolithic fallback when available, otherwise wraps ErrStreamingUnavailable
-// so the caller can buffer and retry.
-func fallbackOrUnavailable(fallback func() error, cause error) (ociImageSpecV1.Descriptor, error) {
+// monolithic fallback on content when available, otherwise wraps
+// ErrStreamingUnavailable so the caller can buffer and retry.
+func fallbackOrUnavailable(fallback monolithicPush, content io.Reader, cause error) (ociImageSpecV1.Descriptor, error) {
 	if fallback != nil {
-		return ociImageSpecV1.Descriptor{}, fallback()
+		return fallback(content)
 	}
 	return ociImageSpecV1.Descriptor{}, fmt.Errorf("%w: %w", ErrStreamingUnavailable, cause)
+}
+
+// pushBuffered is PushStreaming's monolithic fallback after the registry
+// rejected the first chunk. A monolithic upload needs the digest and size up
+// front, so content is read into memory (as pack does for stores without
+// streaming support), verified against any declared digest and size, and
+// pushed in a single request.
+func (r *RemoteStore) pushBuffered(ctx context.Context, mediaType string, knownDigest digest.Digest, knownSize int64, content io.Reader) (ociImageSpecV1.Descriptor, error) {
+	data, err := io.ReadAll(content)
+	if err != nil {
+		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to buffer content for monolithic push: %w", err)
+	}
+	algo := digest.Canonical
+	if knownDigest != "" {
+		algo = knownDigest.Algorithm()
+	}
+	dig, err := resolveFinalDigest(algo.FromBytes(data), knownDigest)
+	if err != nil {
+		return ociImageSpecV1.Descriptor{}, err
+	}
+	if knownSize >= 0 && int64(len(data)) != knownSize {
+		return ociImageSpecV1.Descriptor{}, fmt.Errorf("monolithic blob push: read %d bytes, expected %d", len(data), knownSize)
+	}
+	desc := ociImageSpecV1.Descriptor{MediaType: mediaType, Digest: dig, Size: int64(len(data))}
+	if err := r.Repository.Push(ctx, desc, bytes.NewReader(data)); err != nil {
+		return ociImageSpecV1.Descriptor{}, err
+	}
+	return desc, nil
 }
 
 // resolveFinalDigest picks the digest used to close the session: the computed
@@ -270,9 +336,9 @@ func (r *RemoteStore) openUploadSession(ctx context.Context, knownDigest digest.
 
 // uploadChunks streams content in PATCH requests of up.chunk bytes, updating the
 // running digest, byte offset, and push location as it goes. It sets
-// up.consumed as soon as a read yields bytes; after that point the stream
-// cannot be rewound, so failures cancel the session rather than falling back to
-// the monolithic push.
+// up.consumed as soon as a read yields bytes; after that point the reader
+// cannot be rewound. A failed first PATCH keeps its chunk for a monolithic
+// replay (see keepForReplay); any later failure cancels the session.
 func (r *RemoteStore) uploadChunks(ctx context.Context, up *chunkedUpload, content io.Reader, knownSize int64) error {
 	hasher := up.digester.Hash()
 	bufSize := up.chunk
@@ -314,12 +380,14 @@ func (r *RemoteStore) uploadChunks(ctx context.Context, up *chunkedUpload, conte
 
 		resp, err := r.do(req)
 		if err != nil {
+			up.keepForReplay(ctx, buf[:n])
 			return fmt.Errorf("chunked blob push: PATCH failed after %d bytes: %w", up.offset, err)
 		}
 		if resp.StatusCode != http.StatusAccepted {
 			respErr := parseErrorResponse(resp)
 			_ = resp.Body.Close()
 			r.cancelUpload(ctx, up.location)
+			up.keepForReplay(ctx, buf[:n])
 			return fmt.Errorf("chunked blob push: unexpected PATCH status %d after %d bytes: %w", resp.StatusCode, up.offset, respErr)
 		}
 		next, err := resolveUploadLocation(resp, req)

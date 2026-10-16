@@ -42,6 +42,7 @@ type chunkedRegistry struct {
 	rejectUploadPOST bool   // simulate a registry that does not support the uploads endpoint
 	monolithicBlobs  map[string][]byte
 	warning          string // value emitted via the Warning header on the POST response
+	patchLimit       int    // PATCH bodies above this many bytes get 416, like ghcr.io's 4 MiB cap; 0 = no limit
 }
 
 func newChunkedRegistry(t *testing.T) *chunkedRegistry {
@@ -99,6 +100,11 @@ func (reg *chunkedRegistry) handler() http.HandlerFunc {
 			w.WriteHeader(http.StatusAccepted)
 
 		case r.Method == http.MethodPatch:
+			if reg.patchLimit > 0 && len(body) > reg.patchLimit {
+				w.WriteHeader(http.StatusRequestedRangeNotSatisfiable)
+				_, _ = io.WriteString(w, `{"errors":[{"code":"RANGE_INVALID","message":"the request body is too large"}]}`)
+				return
+			}
 			reg.mu.Lock()
 			reg.uploaded = append(reg.uploaded, body...)
 			reg.mu.Unlock()
@@ -233,11 +239,13 @@ func TestRemoteStore_Push_FallbackToMonolithicOnPOSTRejection(t *testing.T) {
 	require.Equal(t, data, reg.monolithicBlobs[dig.String()])
 }
 
-func TestRemoteStore_Push_ErrorsWhenPATCHRejectedAfterConsuming(t *testing.T) {
-	// Registry accepts the session POST (202) but rejects the PATCH. Bytes have
-	// been consumed by then, so there is no safe monolithic fallback: Push must
-	// return an error rather than silently succeed.
+func TestRemoteStore_Push_ErrorsWhenPATCHRejectedAfterAcceptedChunk(t *testing.T) {
+	// Registry accepts the session POST and the first PATCH, then rejects the
+	// second. The registry already holds part of the blob and the reader cannot
+	// be rewound, so there is no safe monolithic fallback: Push must return an
+	// error rather than silently succeed.
 	reg := newChunkedRegistry(t)
+	var patches int
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
 		reg.record(recordedRequest{method: r.Method, path: r.URL.Path, body: body})
@@ -246,7 +254,16 @@ func TestRemoteStore_Push_ErrorsWhenPATCHRejectedAfterConsuming(t *testing.T) {
 			w.Header().Set("Location", "/v2/test-repo/blobs/uploads/1")
 			w.WriteHeader(http.StatusAccepted)
 		case r.Method == http.MethodPatch:
-			w.WriteHeader(http.StatusBadRequest)
+			reg.mu.Lock()
+			patches++
+			n := patches
+			reg.mu.Unlock()
+			if n > 1 {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			w.Header().Set("Location", r.URL.Path)
+			w.WriteHeader(http.StatusAccepted)
 		default:
 			w.WriteHeader(http.StatusOK)
 		}
@@ -260,7 +277,104 @@ func TestRemoteStore_Push_ErrorsWhenPATCHRejectedAfterConsuming(t *testing.T) {
 	store := newTestStore(t, srv, 4, 1)
 	err := store.Push(t.Context(), desc, bytes.NewReader(data))
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "PATCH")
+	require.Contains(t, err.Error(), "unexpected PATCH status 400 after 4 bytes")
+	require.Equal(t, []string{http.MethodPost, http.MethodPatch, http.MethodPatch, http.MethodDelete}, reg.methods())
+}
+
+// TestRemoteStore_FirstChunkRejectedFallsBackToMonolithic covers registries
+// that cap the PATCH body below the chunk size (ghcr.io answers 416 above
+// 4 MiB). No byte was accepted, so both push paths replay the already-read
+// chunk ahead of the rest of the content in one monolithic upload.
+func TestRemoteStore_FirstChunkRejectedFallsBackToMonolithic(t *testing.T) {
+	data := bytes.Repeat([]byte("0123456789"), 3)
+	dig := digest.FromBytes(data)
+	mediaType := "application/octet-stream"
+
+	tests := []struct {
+		name string
+		push func(t *testing.T, store *RemoteStore) (ociImageSpecV1.Descriptor, error)
+	}{
+		{
+			name: "Push with known descriptor",
+			push: func(t *testing.T, store *RemoteStore) (ociImageSpecV1.Descriptor, error) {
+				t.Helper()
+				desc := ociImageSpecV1.Descriptor{MediaType: mediaType, Digest: dig, Size: int64(len(data))}
+				return desc, store.Push(t.Context(), desc, bytes.NewReader(data))
+			},
+		},
+		{
+			name: "PushStreaming with unknown digest and size",
+			push: func(t *testing.T, store *RemoteStore) (ociImageSpecV1.Descriptor, error) {
+				t.Helper()
+				return store.PushStreaming(t.Context(), ociImageSpecV1.Descriptor{MediaType: mediaType}, bytes.NewReader(data))
+			},
+		},
+		{
+			name: "PushStreaming with known digest and size",
+			push: func(t *testing.T, store *RemoteStore) (ociImageSpecV1.Descriptor, error) {
+				t.Helper()
+				return store.PushStreaming(t.Context(),
+					ociImageSpecV1.Descriptor{MediaType: mediaType, Digest: dig, Size: int64(len(data))},
+					bytes.NewReader(data))
+			},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			reg := newChunkedRegistry(t)
+			reg.patchLimit = 4
+			srv := httptest.NewServer(reg.handler())
+			t.Cleanup(srv.Close)
+
+			got, err := tc.push(t, newTestStore(t, srv, 8, 1))
+			r.NoError(err)
+			r.Equal(ociImageSpecV1.Descriptor{MediaType: mediaType, Digest: dig, Size: int64(len(data))}, got)
+
+			// Rejected chunked session is cancelled, then a fresh monolithic
+			// POST/PUT carries the whole blob.
+			r.Equal([]string{http.MethodPost, http.MethodPatch, http.MethodDelete, http.MethodPost, http.MethodPut}, reg.methods())
+			r.Equal(dig.String(), reg.requests[4].digestQuery)
+			r.Equal(data, reg.uploaded)
+		})
+	}
+}
+
+// TestRemoteStore_PushStreaming_FirstChunkRejectedVerifiesDeclared ensures the
+// buffered monolithic fallback still refuses content that does not match the
+// declared digest or size instead of committing it under a false descriptor.
+func TestRemoteStore_PushStreaming_FirstChunkRejectedVerifiesDeclared(t *testing.T) {
+	data := bytes.Repeat([]byte("0123456789"), 3)
+	tests := []struct {
+		name    string
+		partial ociImageSpecV1.Descriptor
+		wantErr string
+	}{
+		{
+			name:    "digest mismatch",
+			partial: ociImageSpecV1.Descriptor{MediaType: "application/octet-stream", Digest: digest.FromString("other")},
+			wantErr: "does not match declared digest",
+		},
+		{
+			name:    "size mismatch",
+			partial: ociImageSpecV1.Descriptor{MediaType: "application/octet-stream", Size: int64(len(data)) + 1},
+			wantErr: "read 30 bytes, expected 31",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			reg := newChunkedRegistry(t)
+			reg.patchLimit = 4
+			srv := httptest.NewServer(reg.handler())
+			t.Cleanup(srv.Close)
+
+			_, err := newTestStore(t, srv, 8, 1).PushStreaming(t.Context(), tc.partial, bytes.NewReader(data))
+			r.ErrorContains(err, tc.wantErr)
+			r.ErrorContains(err, "unexpected PATCH status 416")
+			r.NotContains(reg.methods(), http.MethodPut)
+		})
+	}
 }
 
 func TestRemoteStore_Push_ChunkDisabledIsMonolithic(t *testing.T) {
