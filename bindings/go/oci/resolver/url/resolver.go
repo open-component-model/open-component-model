@@ -45,10 +45,11 @@ type CachingResolver struct {
 
 	DisableCacheProxy bool
 
-	// chunkSize is the PATCH chunk size of streaming uploads on the
+	// chunkSize and chunkThreshold configure chunked blob upload on the
 	// RemoteStores this resolver hands out. See WithChunkedPush; zero uses the
-	// default.
-	chunkSize int64
+	// defaults.
+	chunkSize      int64
+	chunkThreshold int64
 
 	cacheMu sync.RWMutex
 	cache   map[string]*remotestore.RemoteStore
@@ -161,7 +162,7 @@ func (resolver *CachingResolver) StoreForReference(_ context.Context, reference 
 		blobCache := resolver.blobCache.Load()
 		refCache := resolver.referenceCache.Load()
 		if blobCache != nil || refCache != nil {
-			return cache.ProxyRepository(remoteStore.Repository, blobCache, refCache, remoteStore.ChunkSize), nil
+			return cache.ProxyRepository(remoteStore.Repository, blobCache, refCache, remoteStore.ChunkSize, remoteStore.ChunkThreshold), nil
 		}
 		return remoteStore, nil
 	}
@@ -187,15 +188,16 @@ func (resolver *CachingResolver) StoreForReference(_ context.Context, reference 
 	}
 
 	store := &remotestore.RemoteStore{
-		Repository: repo,
-		ChunkSize:  resolver.chunkSize,
+		Repository:     repo,
+		ChunkSize:      resolver.chunkSize,
+		ChunkThreshold: resolver.chunkThreshold,
 	}
 	resolver.addToCache(key, store)
 
 	blobCache := resolver.blobCache.Load()
 	refCache := resolver.referenceCache.Load()
 	if blobCache != nil || refCache != nil {
-		return cache.ProxyRepository(store.Repository, blobCache, refCache, store.ChunkSize), nil
+		return cache.ProxyRepository(store.Repository, blobCache, refCache, store.ChunkSize, store.ChunkThreshold), nil
 	}
 	return store, nil
 }

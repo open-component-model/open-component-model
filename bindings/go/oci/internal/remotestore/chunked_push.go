@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -22,24 +23,32 @@ import (
 	"oras.land/oras-go/v2/registry/remote/errcode"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	"ocm.software/open-component-model/bindings/go/oci/internal/introspection"
 )
 
-// DefaultChunkSize is the target PATCH chunk size when chunked upload is
-// enabled without an explicit size (4 MiB). It is the largest chunk ghcr.io
-// accepts; larger chunks are answered with 416 there.
+// DefaultChunkSize is the target PATCH chunk size when none is configured
+// (4 MiB). It is the largest chunk ghcr.io accepts; larger chunks are answered
+// with 416 there.
 const DefaultChunkSize int64 = 4 << 20
+
+// DefaultChunkThreshold is the smallest blob with a known digest and size that
+// Push uploads in chunks when no explicit threshold is configured (512 MiB).
+// Below it a single request is faster and works on every registry; from it on,
+// bounded requests that are retried individually pay off. Blobs of unknown size
+// or digest are always chunked (see PushStreaming).
+const DefaultChunkThreshold int64 = 512 << 20
 
 // MinRetryChunkSize is the smallest chunk a rejected PATCH is retried with
 // (256 KiB). Halving stops here (or at the registry's OCI-Chunk-Min-Length)
 // and the upload fails instead.
 const MinRetryChunkSize int64 = 256 << 10
 
-// MaxChunkSize bounds the PATCH buffer the client will allocate (128 MiB). The
-// buffer is sized to the effective chunk length, so both inputs to that length
-// are capped against it: a user-configured ChunkSize above this is rejected,
-// and so is a registry-advertised OCI-Chunk-Min-Length above it. Without this
-// bound an implausible value (up to math.MaxInt64) would panic make([]byte, n)
-// or exhaust memory.
+// MaxChunkSize bounds the PATCH buffer the client will allocate (128 MiB),
+// which is sized to the effective chunk length: a configured ChunkSize above
+// it is capped to it, and an upload whose registry advertises a larger
+// OCI-Chunk-Min-Length is refused (Push then falls back to a single request).
+// Without this bound an implausible value (up to math.MaxInt64) would panic
+// make([]byte, n) or exhaust memory.
 const MaxChunkSize int64 = 128 << 20
 
 // StreamingPusher is implemented by stores that can upload a blob whose digest
@@ -59,10 +68,71 @@ type StreamingPusher interface {
 
 var _ StreamingPusher = (*RemoteStore)(nil)
 
+// Push pushes the content matching the expected descriptor. Blobs of at least
+// the chunk threshold (see RemoteStore.ChunkThreshold) that do not fit in a
+// single chunk are uploaded in chunks per the OCI Distribution Spec (POST
+// session, PATCH chunks, PUT close), so every request stays bounded and is
+// retried on its own; smaller blobs and all manifests use the embedded
+// monolithic push.
+//
+// If the registry refuses the chunked upload before accepting any byte of it,
+// Push logs a warning and pushes the blob monolithically instead, replaying the
+// chunk already read ahead of the unread content, so at most one chunk is held
+// in memory. Once the registry accepted a chunk the content cannot be rewound,
+// so a later failure is returned.
+//
+// Reference: https://github.com/opencontainers/distribution-spec/blob/v1.1.1/spec.md#pushing-a-blob-in-chunks
+func (r *RemoteStore) Push(ctx context.Context, expected ociImageSpecV1.Descriptor, content io.Reader) error {
+	if !r.chunked(expected) {
+		return r.Repository.Push(ctx, expected, content)
+	}
+	_, err := r.pushChunked(ctx, expected.MediaType, expected.Digest, expected.Size, content)
+	var refused *refusedError
+	if !errors.As(err, &refused) {
+		return err
+	}
+	if ctx.Err() != nil {
+		return refused.err
+	}
+	slogcontext.FromCtx(ctx).Log(ctx, slog.LevelWarn, "registry refused chunked blob upload, retrying as monolithic upload",
+		slog.String("repository", r.Reference.String()), slog.Any("error", refused.err))
+	body := content
+	if len(refused.read) > 0 {
+		body = io.MultiReader(bytes.NewReader(refused.read), content)
+	}
+	if err := r.Repository.Push(ctx, expected, body); err != nil {
+		return fmt.Errorf("monolithic push after refused chunked upload failed: %w (chunked upload: %w)", err, refused.err)
+	}
+	return nil
+}
+
+// chunked reports whether Push uploads desc in chunks: a blob of at least the
+// chunk threshold (ChunkThreshold, or DefaultChunkThreshold when unset) that
+// does not fit in a single chunk. Manifests are never chunked; they are pushed
+// to the manifests endpoint.
+func (r *RemoteStore) chunked(desc ociImageSpecV1.Descriptor) bool {
+	threshold := r.ChunkThreshold
+	if threshold <= 0 {
+		threshold = DefaultChunkThreshold
+	}
+	return desc.Size >= threshold && desc.Size > r.chunkSize() && !introspection.IsOCICompliantManifest(desc)
+}
+
+// refusedError reports that the registry refused a chunked upload before
+// accepting any byte of it. read holds the content already consumed from the
+// source for that upload (at most one chunk), so Push can still upload the blob
+// monolithically by replaying it ahead of the unread content.
+type refusedError struct {
+	read []byte
+	err  error
+}
+
+func (e *refusedError) Error() string { return e.err.Error() }
+func (e *refusedError) Unwrap() error { return e.err }
+
 // PushStreaming implements StreamingPusher. A complete descriptor (digest and
-// size known) is uploaded monolithically like Push: chunking a blob whose
-// descriptor is known gains nothing and breaks on registries that limit or
-// lack chunked upload. Otherwise content is uploaded in chunks per the OCI
+// size known) is pushed like Push: in one request below the chunk threshold, in
+// chunks from it on. Otherwise content is uploaded in chunks per the OCI
 // Distribution Spec (POST session, PATCH chunks, PUT close), computing the
 // digest and size during the upload. The MediaType is taken from partial.
 //
@@ -73,7 +143,8 @@ var _ StreamingPusher = (*RemoteStore)(nil)
 //
 // A chunk the registry rejects as too large is retried in smaller pieces on
 // the same session; at most one chunk of content is held in memory. Any other
-// failure is returned: there is no fallback that would buffer the blob.
+// failure is returned: without a complete descriptor there is no monolithic
+// fallback, and the blob is never buffered to build one.
 //
 // Reference: https://github.com/opencontainers/distribution-spec/blob/v1.1.1/spec.md#pushing-a-blob-in-chunks
 func (r *RemoteStore) PushStreaming(ctx context.Context, partial ociImageSpecV1.Descriptor, content io.Reader) (ociImageSpecV1.Descriptor, error) {
@@ -89,7 +160,14 @@ func (r *RemoteStore) PushStreaming(ctx context.Context, partial ociImageSpecV1.
 		// blob is uploaded as a single empty chunk and verified by digest.
 		size = blob.SizeUnknown
 	}
-	return r.pushChunked(ctx, partial.MediaType, partial.Digest, size, content)
+	desc, err := r.pushChunked(ctx, partial.MediaType, partial.Digest, size, content)
+	// Without a complete descriptor there is no fallback; drop the chunk a
+	// refusal carries for one.
+	var refused *refusedError
+	if errors.As(err, &refused) {
+		return ociImageSpecV1.Descriptor{}, refused.err
+	}
+	return desc, err
 }
 
 // chunkedUpload holds the mutable state of one chunked upload session: the
@@ -105,11 +183,12 @@ type chunkedUpload struct {
 	digester digest.Digester
 }
 
-// shrink halves the chunk size after the registry rejected a chunk of rejected
-// bytes as too large. It reports false when the halved size would drop below
-// MinRetryChunkSize or the registry's OCI-Chunk-Min-Length.
+// shrink halves the chunk size, rounding up, after the registry rejected a
+// chunk of rejected bytes as too large; rounding up avoids a stray short PATCH
+// in the middle of the upload. It reports false when the halved size would drop
+// below MinRetryChunkSize or the registry's OCI-Chunk-Min-Length.
 func (up *chunkedUpload) shrink(rejected int64) bool {
-	next := rejected / 2
+	next := (rejected + 1) / 2
 	if next < max(MinRetryChunkSize, up.minChunk) {
 		return false
 	}
@@ -121,11 +200,14 @@ func (up *chunkedUpload) shrink(rejected int64) bool {
 // upload PATCH chunks, close with PUT) and returns the completed descriptor.
 //
 // A chunk the registry rejects as too large is retried in smaller pieces on the
-// same session (see patchChunk). Once the session is open, every other failure,
-// including network errors and a cancelled ctx, cancels it (see cancelUpload)
-// and is returned wrapped. Content is never buffered beyond one chunk. When
-// knownDigest is set it is verified against the streamed content and used to
-// close the session; when empty the digest is computed from the stream.
+// same session (see patchChunk). If the registry refuses the upload before
+// accepting any byte (the session cannot be opened, or the first chunk is
+// rejected), the error is a *refusedError. Once the session is open, every
+// failure, including network errors and a cancelled ctx, cancels it (see
+// cancelUpload) and is returned wrapped. Content is never buffered beyond one
+// chunk. When knownDigest is set it is verified against the streamed content
+// and used to close the session; when empty the digest is computed from the
+// stream.
 func (r *RemoteStore) pushChunked(
 	ctx context.Context,
 	mediaType string,
@@ -137,7 +219,7 @@ func (r *RemoteStore) pushChunked(
 
 	up, err := r.openUploadSession(ctx, knownDigest)
 	if err != nil {
-		return ociImageSpecV1.Descriptor{}, fmt.Errorf("chunked blob push: failed to open upload session: %w", err)
+		return ociImageSpecV1.Descriptor{}, &refusedError{err: fmt.Errorf("chunked blob push: failed to open upload session: %w", err)}
 	}
 	defer func() {
 		if err != nil {
@@ -188,15 +270,11 @@ func resolveFinalDigest(computed, known digest.Digest) (digest.Digest, error) {
 // canonical algorithm when no digest is declared), and a non-sha256 knownDigest
 // additionally advertises that algorithm via the digest-algorithm query
 // parameter. The returned chunkedUpload has its chunk size (see chunkSize)
-// raised to any registry-advertised OCI-Chunk-Min-Length. Both the configured
-// chunk size and the advertised minimum are bounded by MaxChunkSize so the
-// PATCH buffer stays allocatable; an over-bound value fails here, before any
-// content is consumed.
+// raised to any registry-advertised OCI-Chunk-Min-Length. An advertised
+// minimum above MaxChunkSize is refused here, releasing the session, before
+// any content is consumed.
 func (r *RemoteStore) openUploadSession(ctx context.Context, knownDigest digest.Digest) (*chunkedUpload, error) {
 	chunk := r.chunkSize()
-	if chunk > MaxChunkSize {
-		return nil, fmt.Errorf("configured chunk size %d exceeds the maximum supported chunk size %d", chunk, MaxChunkSize)
-	}
 	uploads := r.endpoint(path.Join("/v2", r.Reference.Repository, "blobs", "uploads") + "/")
 	// The running digest must use the declared algorithm; otherwise the
 	// computed digest could never match knownDigest for non-sha256 blobs.
@@ -232,6 +310,7 @@ func (r *RemoteStore) openUploadSession(ctx context.Context, knownDigest digest.
 	minLen := parseChunkMinLength(resp)
 	if minLen > chunk {
 		if minLen > MaxChunkSize {
+			r.cancelUpload(ctx, location)
 			return nil, fmt.Errorf("advertised OCI-Chunk-Min-Length %d exceeds the maximum supported chunk size %d", minLen, MaxChunkSize)
 		}
 		chunk = minLen
@@ -240,10 +319,10 @@ func (r *RemoteStore) openUploadSession(ctx context.Context, knownDigest digest.
 }
 
 // chunkSize returns the configured ChunkSize, or DefaultChunkSize when it is
-// not set (<= 0).
+// not set (<= 0), capped at MaxChunkSize.
 func (r *RemoteStore) chunkSize() int64 {
 	if r.ChunkSize > 0 {
-		return r.ChunkSize
+		return min(r.ChunkSize, MaxChunkSize)
 	}
 	return DefaultChunkSize
 }
@@ -282,7 +361,9 @@ func (r *RemoteStore) uploadChunks(ctx context.Context, up *chunkedUpload, conte
 // limit) keeps the session at the last accepted offset, so data is resent on
 // the same session in pieces of half the rejected size, and the smaller size
 // is kept for the rest of the upload. Only data, already held in the chunk
-// buffer, is retried; the reader is never rewound.
+// buffer, is retried; the reader is never rewound. A failure before the
+// registry accepted any byte of the session is returned as a *refusedError
+// carrying data, which is then all content read so far.
 func (r *RemoteStore) patchChunk(ctx context.Context, up *chunkedUpload, data []byte) error {
 	for len(data) > 0 {
 		part := data[:min(int64(len(data)), up.chunk)]
@@ -291,11 +372,15 @@ func (r *RemoteStore) patchChunk(ctx context.Context, up *chunkedUpload, data []
 			data = data[len(part):]
 			continue
 		}
-		if (status != http.StatusRequestEntityTooLarge && status != http.StatusRequestedRangeNotSatisfiable) || !up.shrink(int64(len(part))) {
-			return err
+		if (status == http.StatusRequestEntityTooLarge || status == http.StatusRequestedRangeNotSatisfiable) && up.shrink(int64(len(part))) {
+			slogcontext.FromCtx(ctx).Log(ctx, slog.LevelWarn, "registry rejected blob chunk, retrying with a smaller chunk size",
+				slog.String("repository", r.Reference.String()), slog.Int("rejectedSize", len(part)), slog.Int64("chunkSize", up.chunk), slog.Any("error", err))
+			continue
 		}
-		slogcontext.FromCtx(ctx).Log(ctx, slog.LevelWarn, "registry rejected blob chunk, retrying with a smaller chunk size",
-			slog.String("repository", r.Reference.String()), slog.Int("rejectedSize", len(part)), slog.Int64("chunkSize", up.chunk), slog.Any("error", err))
+		if up.offset == 0 && (status < 200 || status > 299) {
+			return &refusedError{read: data, err: err}
+		}
+		return err
 	}
 	return nil
 }

@@ -41,14 +41,16 @@ type chunkedRegistry struct {
 	uploaded          []byte
 	monolithicBlobs   map[string][]byte
 	rejectUploadPOST  bool
-	patchLimit        int // PATCH bodies above this many bytes are rejected with patchRejectStatus; 0 = no limit
-	patchRejectStatus int // status for an oversized PATCH; 0 = 416, as ghcr.io answers
+	rejectFirstPOST   bool // answer only the first upload POST with 404
+	patchLimit        int  // PATCH bodies above this many bytes are rejected with patchRejectStatus; 0 = no limit
+	patchRejectStatus int  // status for an oversized PATCH; 0 = 416, as ghcr.io answers
 	chunkMinLength    string
 	warning           string
 	patchAcceptStatus int    // status for an accepted PATCH; 0 = 202. ECR answers 201 with a stale Range header.
 	dropPatchConn     bool   // close the connection on PATCH without sending a response
 	rejectPUT         bool   // answer the closing PUT with 400
 	onPatch           func() // called while handling each PATCH, before responding
+	onPost            func() // called while handling each upload POST, before responding
 }
 
 func newChunkedRegistry(t *testing.T) *chunkedRegistry {
@@ -87,7 +89,14 @@ func (reg *chunkedRegistry) handler() http.HandlerFunc {
 		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/blobs/uploads/"):
 			// Single-POST monolithic upload with digest query is not offered;
 			// clients must use POST-then-PATCH/PUT or POST-then-PUT.
-			if reg.rejectUploadPOST {
+			if reg.onPost != nil {
+				reg.onPost()
+			}
+			reg.mu.Lock()
+			rejectThis := reg.rejectUploadPOST || reg.rejectFirstPOST
+			reg.rejectFirstPOST = false
+			reg.mu.Unlock()
+			if rejectThis {
 				w.WriteHeader(http.StatusNotFound)
 				return
 			}
@@ -189,94 +198,261 @@ func newTestStore(t *testing.T, srv *httptest.Server, chunkSize int64) *RemoteSt
 	return &RemoteStore{Repository: repo, ChunkSize: chunkSize}
 }
 
-// TestRemoteStore_Push_LargeBlobStaysMonolithic verifies that Push of a blob
-// larger than ChunkSize with chunking enabled performs only POST then PUT (no
-// PATCH) and the registry stores the full blob under its digest.
-func TestRemoteStore_Push_LargeBlobStaysMonolithic(t *testing.T) {
+// TestRemoteStore_Push_DefaultsKeepCommonBlobsMonolithic is the regression
+// guard for transfers to registries that limit the PATCH body (ghcr.io answers
+// 416 above 4 MiB): with the default configuration, a known 20 MiB blob is
+// pushed in a single request instead of being chunked.
+func TestRemoteStore_Push_DefaultsKeepCommonBlobsMonolithic(t *testing.T) {
 	r := require.New(t)
 
 	reg := newChunkedRegistry(t)
 	srv := httptest.NewServer(reg.monolithicHandler())
 	t.Cleanup(srv.Close)
 
-	data := bytes.Repeat([]byte("x"), 40) // 40 bytes, well above ChunkSize 4
+	data := bytes.Repeat([]byte("x"), 20<<20)
 	dig := digest.FromBytes(data)
 	desc := ociImageSpecV1.Descriptor{MediaType: "application/octet-stream", Digest: dig, Size: int64(len(data))}
 
-	store := newTestStore(t, srv, 4)
-	r.NoError(store.Push(t.Context(), desc, bytes.NewReader(data)))
-
-	// Push is always monolithic: POST then PUT, no PATCH.
+	r.NoError(newTestStore(t, srv, 0).Push(t.Context(), desc, bytes.NewReader(data)))
 	r.Equal([]string{http.MethodPost, http.MethodPut}, reg.methods())
 	r.Equal(data, reg.monolithicBlobs[dig.String()])
 }
 
-// TestRemoteStore_PushStreaming_CompleteDescriptorIsMonolithic verifies that
-// PushStreaming with a complete descriptor (digest+size) performs only POST then
-// PUT, returns the descriptor, and issues no PATCH.
-func TestRemoteStore_PushStreaming_CompleteDescriptorIsMonolithic(t *testing.T) {
-	r := require.New(t)
+// TestRemoteStore_Push_ChunkThreshold verifies which blobs with a known
+// descriptor are uploaded in chunks: those of at least the threshold that do
+// not fit in a single chunk. PushStreaming routes a complete descriptor the
+// same way as Push.
+func TestRemoteStore_Push_ChunkThreshold(t *testing.T) {
+	tests := []struct {
+		name        string
+		chunkSize   int64
+		threshold   int64
+		size        int
+		streaming   bool
+		wantPatches []int // nil: pushed in one request
+	}{
+		{name: "below threshold", chunkSize: 4, threshold: 10, size: 9},
+		{name: "at threshold", chunkSize: 4, threshold: 10, size: 10, wantPatches: []int{4, 4, 2}},
+		{name: "fits in a single chunk", chunkSize: 16, threshold: 1, size: 16},
+		{name: "PushStreaming, below threshold", chunkSize: 4, threshold: 10, size: 9, streaming: true},
+		{name: "PushStreaming, at threshold", chunkSize: 4, threshold: 10, size: 10, streaming: true, wantPatches: []int{4, 4, 2}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			reg := newChunkedRegistry(t)
+			srv := httptest.NewServer(reg.handler())
+			t.Cleanup(srv.Close)
 
-	reg := newChunkedRegistry(t)
-	srv := httptest.NewServer(reg.monolithicHandler())
-	t.Cleanup(srv.Close)
+			data := bytes.Repeat([]byte("x"), tc.size)
+			desc := ociImageSpecV1.Descriptor{MediaType: "application/octet-stream", Digest: digest.FromBytes(data), Size: int64(len(data))}
+			store := newTestStore(t, srv, tc.chunkSize)
+			store.ChunkThreshold = tc.threshold
+			if tc.streaming {
+				got, err := store.PushStreaming(t.Context(), desc, bytes.NewReader(data))
+				r.NoError(err)
+				r.Equal(desc, got)
+			} else {
+				r.NoError(store.Push(t.Context(), desc, bytes.NewReader(data)))
+			}
 
-	data := bytes.Repeat([]byte("y"), 40)
-	dig := digest.FromBytes(data)
-	desc := ociImageSpecV1.Descriptor{MediaType: "application/octet-stream", Digest: dig, Size: int64(len(data))}
-
-	store := newTestStore(t, srv, 4)
-	got, err := store.PushStreaming(t.Context(), desc, bytes.NewReader(data))
-	r.NoError(err)
-	r.Equal(desc, got)
-
-	// Monolithic: POST then PUT, no PATCH.
-	r.Equal([]string{http.MethodPost, http.MethodPut}, reg.methods())
-	r.Equal(data, reg.monolithicBlobs[dig.String()])
+			r.Equal(tc.wantPatches, reg.patchSizes())
+			last := reg.requests[len(reg.requests)-1]
+			r.Equal(http.MethodPut, last.method)
+			r.Equal(desc.Digest.String(), last.digestQuery)
+			r.Equal(data, reg.uploaded)
+		})
+	}
 }
 
-// TestRemoteStore_PushStreaming_ErrorsWhenPATCHRejectedAfterAcceptedChunk
-// verifies that a registry rejecting the second PATCH after accepting the first
-// causes an error (and a DELETE to cancel the session) rather than a silent
-// success, because the reader cannot be rewound.
-func TestRemoteStore_PushStreaming_ErrorsWhenPATCHRejectedAfterAcceptedChunk(t *testing.T) {
+// TestRemoteStore_Push_ManifestIsNeverChunked verifies that a manifest above
+// the threshold goes to the manifests endpoint in one request instead of the
+// chunked blob path.
+func TestRemoteStore_Push_ManifestIsNeverChunked(t *testing.T) {
 	r := require.New(t)
 
 	reg := newChunkedRegistry(t)
-	var patches int
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		body, _ := io.ReadAll(req.Body)
 		reg.record(recordedRequest{method: req.Method, path: req.URL.Path, body: body})
-		switch {
-		case req.Method == http.MethodPost && strings.HasSuffix(req.URL.Path, "/blobs/uploads/"):
-			w.Header().Set("Location", "/v2/test-repo/blobs/uploads/1")
-			w.WriteHeader(http.StatusAccepted)
-		case req.Method == http.MethodPatch:
-			reg.mu.Lock()
-			patches++
-			n := patches
-			reg.mu.Unlock()
-			if n > 1 {
-				w.WriteHeader(http.StatusBadRequest)
-				return
-			}
-			w.Header().Set("Location", req.URL.Path)
-			w.WriteHeader(http.StatusAccepted)
-		default:
-			w.WriteHeader(http.StatusOK)
+		if req.Method == http.MethodPut && strings.Contains(req.URL.Path, "/manifests/") {
+			w.Header().Set("Docker-Content-Digest", req.URL.Path[strings.LastIndex(req.URL.Path, "/")+1:])
+			w.WriteHeader(http.StatusCreated)
+			return
 		}
+		w.WriteHeader(http.StatusOK)
 	}))
 	t.Cleanup(srv.Close)
 
-	data := bytes.Repeat([]byte("x"), 10)
+	data := []byte(`{"schemaVersion":2,"mediaType":"application/vnd.oci.image.manifest.v1+json"}`)
+	desc := ociImageSpecV1.Descriptor{MediaType: ociImageSpecV1.MediaTypeImageManifest, Digest: digest.FromBytes(data), Size: int64(len(data))}
 
-	store := newTestStore(t, srv, 4)
-	_, err := store.PushStreaming(t.Context(),
-		ociImageSpecV1.Descriptor{MediaType: "application/octet-stream"},
-		bytes.NewReader(data))
-	r.Error(err)
-	r.Contains(err.Error(), "unexpected PATCH status 400 after 4 bytes")
-	r.Equal([]string{http.MethodPost, http.MethodPatch, http.MethodPatch, http.MethodDelete}, reg.methods())
+	store := newTestStore(t, srv, 2)
+	store.ChunkThreshold = 1
+	r.NoError(store.Push(t.Context(), desc, bytes.NewReader(data)))
+	r.Equal([]string{http.MethodPut}, reg.methods())
+	r.Contains(reg.requests[0].path, "/manifests/")
+}
+
+// TestRemoteStore_Push_RefusedChunkingFallsBackToMonolithic covers registries
+// that refuse chunked upload before accepting any byte (Google Artifact
+// Registry documents no chunked-upload support): Push releases the session and
+// uploads the blob in one request, replaying the chunk it already read, so the
+// registry still receives the complete blob.
+func TestRemoteStore_Push_RefusedChunkingFallsBackToMonolithic(t *testing.T) {
+	tests := []struct {
+		name        string
+		chunkSize   int64
+		size        int
+		setup       func(reg *chunkedRegistry)
+		wantMethods []string
+	}{
+		{
+			name: "upload session refused", chunkSize: 4, size: 30,
+			setup:       func(reg *chunkedRegistry) { reg.rejectFirstPOST = true },
+			wantMethods: []string{http.MethodPost, http.MethodPost, http.MethodPut},
+		},
+		{
+			name: "first chunk refused", chunkSize: 4, size: 30,
+			setup: func(reg *chunkedRegistry) {
+				reg.patchLimit = 1
+				reg.patchRejectStatus = http.StatusBadRequest
+			},
+			wantMethods: []string{http.MethodPost, http.MethodPatch, http.MethodDelete, http.MethodPost, http.MethodPut},
+		},
+		{
+			name: "connection dropped on first chunk", chunkSize: 4, size: 30,
+			setup:       func(reg *chunkedRegistry) { reg.dropPatchConn = true },
+			wantMethods: []string{http.MethodPost, http.MethodPatch, http.MethodDelete, http.MethodPost, http.MethodPut},
+		},
+		{
+			name: "first chunk too large even at the retry floor", chunkSize: 1 << 20, size: 2 << 20,
+			setup: func(reg *chunkedRegistry) { reg.patchLimit = 200 << 10 },
+			wantMethods: []string{
+				http.MethodPost, http.MethodPatch, http.MethodPatch, http.MethodPatch, http.MethodDelete,
+				http.MethodPost, http.MethodPut,
+			},
+		},
+		{
+			name: "advertised minimum chunk length unusable", chunkSize: 4, size: 30,
+			setup:       func(reg *chunkedRegistry) { reg.chunkMinLength = fmt.Sprintf("%d", MaxChunkSize+1) },
+			wantMethods: []string{http.MethodPost, http.MethodDelete, http.MethodPost, http.MethodPut},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			reg := newChunkedRegistry(t)
+			tc.setup(reg)
+			srv := httptest.NewServer(reg.handler())
+			t.Cleanup(srv.Close)
+
+			data := bytes.Repeat([]byte("0123456789"), tc.size/10)
+			dig := digest.FromBytes(data)
+			store := newTestStore(t, srv, tc.chunkSize)
+			store.ChunkThreshold = 1
+			r.NoError(store.Push(t.Context(),
+				ociImageSpecV1.Descriptor{MediaType: "application/octet-stream", Digest: dig, Size: int64(len(data))},
+				bytes.NewReader(data)))
+
+			r.Equal(tc.wantMethods, reg.methods())
+			r.Equal(dig.String(), reg.requests[len(reg.requests)-1].digestQuery)
+			r.Equal(data, reg.uploaded, "the registry must receive the complete blob, including the replayed chunk")
+		})
+	}
+}
+
+// TestRemoteStore_Push_NoMonolithicRetryAfterCancel verifies that a context
+// cancelled during a chunked upload ends the push: an open session is released
+// and no monolithic upload is started.
+func TestRemoteStore_Push_NoMonolithicRetryAfterCancel(t *testing.T) {
+	for _, during := range []string{http.MethodPost, http.MethodPatch} {
+		t.Run("cancelled during "+during, func(t *testing.T) {
+			r := require.New(t)
+			reg := newChunkedRegistry(t)
+			ctx, cancel := context.WithCancel(t.Context())
+			t.Cleanup(cancel)
+			if during == http.MethodPost {
+				reg.onPost = cancel
+			} else {
+				reg.onPatch = cancel
+			}
+			srv := httptest.NewServer(reg.handler())
+			t.Cleanup(srv.Close)
+
+			data := []byte("0123456789")
+			store := newTestStore(t, srv, 4)
+			store.ChunkThreshold = 1
+			err := store.Push(ctx,
+				ociImageSpecV1.Descriptor{MediaType: "application/octet-stream", Digest: digest.FromBytes(data), Size: int64(len(data))},
+				bytes.NewReader(data))
+			r.ErrorIs(err, context.Canceled)
+			methods := reg.methods()
+			r.Equal(http.MethodPost, methods[0])
+			r.NotContains(methods[1:], http.MethodPost, "no monolithic upload may start after cancellation")
+			r.NotContains(methods, http.MethodPut)
+			if during == http.MethodPatch {
+				r.Equal([]string{http.MethodPost, http.MethodPatch, http.MethodDelete}, methods)
+			}
+		})
+	}
+}
+
+// TestRemoteStore_ErrorsWhenPATCHRejectedAfterAcceptedChunk verifies that a
+// registry rejecting the second PATCH after accepting the first fails the push
+// and cancels the session instead of silently succeeding. The reader cannot be
+// rewound past the accepted chunk, so not even a complete descriptor falls
+// back to a monolithic upload.
+func TestRemoteStore_ErrorsWhenPATCHRejectedAfterAcceptedChunk(t *testing.T) {
+	data := bytes.Repeat([]byte("x"), 10)
+	pushes := map[string]func(t *testing.T, store *RemoteStore) error{
+		"Push": func(t *testing.T, store *RemoteStore) error {
+			t.Helper()
+			store.ChunkThreshold = 1
+			return store.Push(t.Context(),
+				ociImageSpecV1.Descriptor{MediaType: "application/octet-stream", Digest: digest.FromBytes(data), Size: int64(len(data))},
+				bytes.NewReader(data))
+		},
+		"PushStreaming": func(t *testing.T, store *RemoteStore) error {
+			t.Helper()
+			_, err := store.PushStreaming(t.Context(), ociImageSpecV1.Descriptor{MediaType: "application/octet-stream"}, bytes.NewReader(data))
+			return err
+		},
+	}
+	for name, push := range pushes {
+		t.Run(name, func(t *testing.T) {
+			r := require.New(t)
+			reg := newChunkedRegistry(t)
+			var patches int
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+				body, _ := io.ReadAll(req.Body)
+				reg.record(recordedRequest{method: req.Method, path: req.URL.Path, body: body})
+				switch {
+				case req.Method == http.MethodPost && strings.HasSuffix(req.URL.Path, "/blobs/uploads/"):
+					w.Header().Set("Location", "/v2/test-repo/blobs/uploads/1")
+					w.WriteHeader(http.StatusAccepted)
+				case req.Method == http.MethodPatch:
+					reg.mu.Lock()
+					patches++
+					n := patches
+					reg.mu.Unlock()
+					if n > 1 {
+						w.WriteHeader(http.StatusBadRequest)
+						return
+					}
+					w.Header().Set("Location", req.URL.Path)
+					w.WriteHeader(http.StatusAccepted)
+				default:
+					w.WriteHeader(http.StatusOK)
+				}
+			}))
+			t.Cleanup(srv.Close)
+
+			err := push(t, newTestStore(t, srv, 4))
+			r.ErrorContains(err, "unexpected PATCH status 400 after 4 bytes")
+			r.Equal([]string{http.MethodPost, http.MethodPatch, http.MethodPatch, http.MethodDelete}, reg.methods())
+		})
+	}
 }
 
 // patchSizes returns the body size of every PATCH the registry received,
@@ -604,7 +780,8 @@ func TestRemoteStore_PushStreaming_ChunkedNonSHA256Digest(t *testing.T) {
 
 // TestRemoteStore_PushStreaming_RejectsOversizedChunkMinLength verifies that an
 // implausible registry-advertised OCI-Chunk-Min-Length does not make the client
-// allocate a matching buffer: the push fails before any chunk is sent.
+// allocate a matching buffer: the push fails before any chunk is sent, and the
+// session opened by the POST is released.
 func TestRemoteStore_PushStreaming_RejectsOversizedChunkMinLength(t *testing.T) {
 	r := require.New(t)
 
@@ -618,30 +795,28 @@ func TestRemoteStore_PushStreaming_RejectsOversizedChunkMinLength(t *testing.T) 
 		ociImageSpecV1.Descriptor{MediaType: "application/octet-stream"},
 		bytes.NewReader(bytes.Repeat([]byte("a"), 40)))
 	r.ErrorContains(err, "advertised OCI-Chunk-Min-Length")
-	r.NotContains(reg.methods(), http.MethodPatch)
+	r.Equal([]string{http.MethodPost, http.MethodDelete}, reg.methods())
 }
 
-// TestRemoteStore_PushStreaming_RejectsOversizedChunkSize verifies that a
-// configured ChunkSize above MaxChunkSize is rejected before any byte is
-// consumed, so the client never allocates an unbounded PATCH buffer via
-// make([]byte, up.chunk).
-func TestRemoteStore_PushStreaming_RejectsOversizedChunkSize(t *testing.T) {
+// TestRemoteStore_PushStreaming_CapsOversizedChunkSize verifies that a
+// configured ChunkSize above MaxChunkSize is capped instead of failing every
+// streaming push, so the PATCH buffer never exceeds MaxChunkSize (here it is
+// sized to the known 40-byte blob).
+func TestRemoteStore_PushStreaming_CapsOversizedChunkSize(t *testing.T) {
 	r := require.New(t)
 
 	reg := newChunkedRegistry(t)
 	srv := httptest.NewServer(reg.handler())
 	t.Cleanup(srv.Close)
 
+	data := bytes.Repeat([]byte("a"), 40)
 	store := newTestStore(t, srv, MaxChunkSize+1 /*oversized configured chunk*/)
-	_, err := store.PushStreaming(t.Context(),
-		ociImageSpecV1.Descriptor{MediaType: "application/octet-stream"},
-		bytes.NewReader(bytes.Repeat([]byte("a"), 40)))
-	r.ErrorContains(err, "exceeds the maximum supported chunk size")
-
-	// The reader is untouched: the bound is checked before the session POST.
-	for _, m := range reg.methods() {
-		r.NotEqual(http.MethodPatch, m, "oversized configured chunk must abort before any PATCH")
-	}
+	got, err := store.PushStreaming(t.Context(),
+		ociImageSpecV1.Descriptor{MediaType: "application/octet-stream", Size: int64(len(data))},
+		bytes.NewReader(data))
+	r.NoError(err)
+	r.Equal(digest.FromBytes(data), got.Digest)
+	r.Equal([]int{40}, reg.patchSizes())
 }
 
 // errAfterReader yields data once (n>0) and then fails with a non-EOF error on

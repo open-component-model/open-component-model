@@ -73,15 +73,20 @@ func WithReferenceCache(refs *cache.ReferenceCache) Option {
 	})
 }
 
-// WithChunkedPush sets the target PATCH chunk size in bytes for streaming
-// pushes (see remotestore.StreamingPusher) on remote repositories handed out by
-// this resolver. Streaming uploads blobs of unknown size or digest in chunks so
-// they are never buffered; it is always on, and a chunkSize <= 0 uses
-// remotestore.DefaultChunkSize. Blobs with a known digest and size are always
-// pushed monolithically. The chunk size survives an active blob or reference
-// cache on the resolver (see cache.ProxyRepository).
-func WithChunkedPush(chunkSize int64) Option {
+// WithChunkedPush configures chunked blob upload on remote repositories handed
+// out by this resolver. chunkSize is the target PATCH chunk size in bytes;
+// threshold is the minimum size of a blob with a known digest and size for it
+// to be uploaded in chunks (smaller blobs and all manifests go up in one
+// request). A chunkSize <= 0 uses remotestore.DefaultChunkSize and a threshold
+// <= 0 remotestore.DefaultChunkThreshold.
+//
+// Blobs of unknown size or digest (see remotestore.StreamingPusher) always
+// stream in chunks of chunkSize, regardless of threshold, so they are never
+// buffered. The configuration survives an active blob or reference cache on
+// the resolver (see cache.ProxyRepository).
+func WithChunkedPush(chunkSize, threshold int64) Option {
 	return OptionFunc(func(resolver *CachingResolver) {
 		resolver.chunkSize = chunkSize
+		resolver.chunkThreshold = threshold
 	})
 }

@@ -55,7 +55,7 @@ func Test_Integration_OCIRepository_ChunkedPush_QuayLayerLimit(t *testing.T) {
 		urlresolver.WithBaseURL(quayLogicalHost),
 		urlresolver.WithPlainHTTP(true),
 		urlresolver.WithBaseClient(client),
-		urlresolver.WithChunkedPush(quayChunkSize),
+		urlresolver.WithChunkedPush(quayChunkSize, 1),
 	)
 	r.NoError(err)
 
@@ -64,24 +64,26 @@ func Test_Integration_OCIRepository_ChunkedPush_QuayLayerLimit(t *testing.T) {
 	rs, ok := store.(*remotestore.RemoteStore)
 	r.Truef(ok, "store %T must be *remotestore.RemoteStore", store)
 
-	// PushStreaming with an incomplete descriptor (empty digest) triggers the
-	// chunked upload path: POST session → PATCH chunks → PUT close.
 	below := deterministicPayload(768<<10, "below-limit-")
-	belowGot, err := rs.PushStreaming(ctx,
-		ociImageSpecV1.Descriptor{MediaType: "application/octet-stream"},
-		bytes.NewReader(below))
-	r.NoError(err)
-	r.Equal(digest.FromBytes(below), belowGot.Digest)
-	assertBlobRoundTrips(t, ctx, rs, belowGot, below)
+	belowDesc := ociImageSpecV1.Descriptor{
+		MediaType: "application/octet-stream",
+		Digest:    digest.FromBytes(below),
+		Size:      int64(len(below)),
+	}
+	r.NoError(rs.Push(ctx, belowDesc, bytes.NewReader(below)))
+	assertBlobRoundTrips(t, ctx, rs, belowDesc, below)
 	belowEvents := recorder.Events()
 	t.Logf("below limit upload events: %+v", belowEvents)
 	assertSuccessfulChunkedUpload(t, belowEvents)
 
 	recorder.Reset()
 	above := deterministicPayload(1536<<10, "above-limit-")
-	_, err = rs.PushStreaming(ctx,
-		ociImageSpecV1.Descriptor{MediaType: "application/octet-stream"},
-		bytes.NewReader(above))
+	aboveDesc := ociImageSpecV1.Descriptor{
+		MediaType: "application/octet-stream",
+		Digest:    digest.FromBytes(above),
+		Size:      int64(len(above)),
+	}
+	err = rs.Push(ctx, aboveDesc, bytes.NewReader(above))
 	r.Error(err)
 	r.ErrorContains(err, "chunked blob push")
 	r.ErrorContains(err, "PATCH")
@@ -90,11 +92,6 @@ func Test_Integration_OCIRepository_ChunkedPush_QuayLayerLimit(t *testing.T) {
 	t.Logf("above limit upload events: %+v", aboveEvents)
 	assertCumulativeLimitRejection(t, aboveEvents)
 
-	aboveDesc := ociImageSpecV1.Descriptor{
-		MediaType: "application/octet-stream",
-		Digest:    digest.FromBytes(above),
-		Size:      int64(len(above)),
-	}
 	exists, err := rs.Exists(ctx, aboveDesc)
 	r.NoError(err)
 	r.False(exists, "oversized blob must not be committed")
