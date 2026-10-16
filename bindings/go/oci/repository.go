@@ -155,11 +155,32 @@ func (repo *Repository) AddComponentVersion(ctx context.Context, descriptor *des
 		return fmt.Errorf("failed to add descriptor to store: %w", err)
 	}
 
-	if err := store.Tag(ctx, *manifest, reference); err != nil {
+	if err := tagIdempotent(ctx, store, *manifest, reference); err != nil {
 		return fmt.Errorf("failed to tag manifest: %w", err)
 	}
 
 	return nil
+}
+
+// tagIdempotent tags desc at reference, treating the write as a no-op success
+// when the reference already resolves to desc.Digest.
+//
+// Immutable/write-once registries (e.g. Nexus with "redeploy" disabled) reject
+// re-tagging even to identical content. Rather than classify the error (a 409
+// is not only a redeploy rejection), we check the post-condition: if the tag
+// already points at our digest the end state holds; else propagate. The Resolve
+// runs only on the error path.
+func tagIdempotent(ctx context.Context, store spec.Store, desc ociImageSpecV1.Descriptor, reference string) error {
+	err := store.Tag(ctx, desc, reference)
+	if err == nil {
+		return nil
+	}
+	if existing, rerr := store.Resolve(ctx, reference); rerr == nil && existing.Digest == desc.Digest {
+		slogcontext.Log(ctx, slog.LevelDebug, "tag already points at the intended digest; treating rejected re-tag as a no-op",
+			slog.String("reference", reference), slog.String("digest", desc.Digest.String()), slog.Any("error", err))
+		return nil
+	}
+	return err
 }
 
 func (repo *Repository) ListComponentVersions(ctx context.Context, component string) (_ []string, err error) {
@@ -827,7 +848,7 @@ func (repo *Repository) uploadOCIImage(ctx context.Context, newAccess runtime.Ty
 	}
 
 	if ref.Tag != "" {
-		if err := store.Tag(ctx, main, ref.Tag); err != nil {
+		if err := tagIdempotent(ctx, store, main, ref.Tag); err != nil {
 			return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to tag main artifact with tag %q: %w", ref.Tag, err)
 		}
 	} else {
@@ -1327,7 +1348,7 @@ func (repo *Repository) UploadResourceStream(ctx context.Context, res *descripto
 
 	if ref.Tag != "" {
 		// if we have a tag, we should also tag in the upload
-		if err := store.Tag(ctx, rs.Root(), ref.Tag); err != nil {
+		if err := tagIdempotent(ctx, store, rs.Root(), ref.Tag); err != nil {
 			return nil, fmt.Errorf("failed to tag artifact with tag %q: %w", ref.Tag, err)
 		}
 	} else {
