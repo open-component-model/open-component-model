@@ -50,9 +50,10 @@ func WithSubPath(subPath string) Option {
 }
 
 // WithBlobCache wires a manifest blob cache into the resolver. Stores
-// returned by [CachingResolver.StoreForReference] are wrapped with
-// [cache.Repository] so their Fetch consults the cache; layer blobs
-// and other non-manifest media types pass through unchanged.
+// returned by [CachingResolver.StoreForReference] are wrapped by the
+// cache store decorator (see [cache.Wrap]) so their Fetch consults the
+// cache; layer blobs and other non-manifest media types pass through
+// unchanged.
 //
 // Pass nil to disable blob caching (the default).
 func WithBlobCache(blob *cache.BlobCache) Option {
@@ -63,8 +64,8 @@ func WithBlobCache(blob *cache.BlobCache) Option {
 
 // WithReferenceCache wires a reference cache into the resolver.
 // Stores returned by [CachingResolver.StoreForReference] are wrapped
-// with [cache.Repository] so their Resolve consults the reference
-// cache before performing a remote round-trip.
+// by the cache store decorator (see [cache.Wrap]) so their Resolve
+// consults the reference cache before performing a remote round-trip.
 //
 // Pass nil to disable reference caching (the default).
 func WithReferenceCache(refs *cache.ReferenceCache) Option {
@@ -82,8 +83,8 @@ func WithReferenceCache(refs *cache.ReferenceCache) Option {
 // Chunked upload also enables streaming pushes (see remotestore.StreamingPusher)
 // so blobs of unknown size or digest can be uploaded without buffering. Chunked
 // upload survives an active blob or reference cache on the resolver: the cache
-// decorator carries the chunk configuration (see cache.ProxyRepository),
-// so its Push and PushStreaming remain reachable.
+// store decorator embeds the backing store (see [cache.Wrap]), so its Push and
+// PushStreaming remain reachable.
 func WithChunkedPush(chunkSize, threshold int64) Option {
 	return OptionFunc(func(resolver *CachingResolver) {
 		resolver.chunkSize = chunkSize
