@@ -47,7 +47,7 @@ func Test_Integration_OCICache_ChunkingSurvivesCache(t *testing.T) {
 		version   = "v1.0.0"
 	)
 
-	// A payload comfortably above the default chunk size (16 MiB) so chunking
+	// A payload comfortably above the default chunk size (4 MiB) so chunking
 	// spans more than one chunk.
 	payload := deterministicPayload(20<<20, "cache-chunk-payload-")
 	wantDigest := digest.FromBytes(payload)

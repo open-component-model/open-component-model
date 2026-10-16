@@ -344,12 +344,11 @@ func Test_Integration_OCIRepository_StreamingDoesNotBuffer(t *testing.T) {
 //	implement StreamingPusher, so an unknown size or digest falls back to
 //	buffering the whole blob in memory to build the descriptor before a
 //	monolithic push. Manifests are never chunked; they use the manifests
-//	endpoint. A pre-consumption streaming failure (POST rejected, registry
-//	without chunked upload support, etc.) wraps ErrStreamingUnavailable: the
-//	pack layer buffers the blob and pushes monolithically. A rejected first
-//	chunk (e.g. ghcr.io's 4 MiB PATCH limit) is also recovered by
-//	PushStreaming itself: it buffers the remainder and retries monolithically,
-//	logging a warning.
+//	endpoint. A pre-consumption streaming failure (POST rejected, etc.) wraps
+//	ErrStreamingUnavailable and the pack layer falls back to buffering. A chunk
+//	the registry rejects as too large (413, or 416 as ghcr.io answers above
+//	4 MiB) is resent in halves on the same session, logging a warning; only
+//	that chunk is held in memory.
 func Test_Integration_OCIRepository_AddComponentVersion_Streaming(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping add-cv streaming integration test in short mode")

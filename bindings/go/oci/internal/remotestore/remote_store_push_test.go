@@ -33,16 +33,17 @@ type recordedRequest struct {
 // chunked (and monolithic) blob upload protocol against a single repository. It
 // records the request sequence so tests can assert exact protocol behavior.
 type chunkedRegistry struct {
-	t                *testing.T
-	mu               sync.Mutex
-	requests         []recordedRequest
-	sessionID        int
-	uploaded         []byte
-	monolithicBlobs  map[string][]byte
-	rejectUploadPOST bool
-	patchLimit       int
-	chunkMinLength   string
-	warning          string
+	t                 *testing.T
+	mu                sync.Mutex
+	requests          []recordedRequest
+	sessionID         int
+	uploaded          []byte
+	monolithicBlobs   map[string][]byte
+	rejectUploadPOST  bool
+	patchLimit        int // PATCH bodies above this many bytes are rejected with patchRejectStatus; 0 = no limit
+	patchRejectStatus int // status for an oversized PATCH; 0 = 416, as ghcr.io answers
+	chunkMinLength    string
+	warning           string
 }
 
 func newChunkedRegistry(t *testing.T) *chunkedRegistry {
@@ -101,7 +102,11 @@ func (reg *chunkedRegistry) handler() http.HandlerFunc {
 
 		case r.Method == http.MethodPatch:
 			if reg.patchLimit > 0 && len(body) > reg.patchLimit {
-				w.WriteHeader(http.StatusRequestedRangeNotSatisfiable)
+				status := reg.patchRejectStatus
+				if status == 0 {
+					status = http.StatusRequestedRangeNotSatisfiable
+				}
+				w.WriteHeader(status)
 				_, _ = io.WriteString(w, `{"errors":[{"code":"RANGE_INVALID","message":"the request body is too large"}]}`)
 				return
 			}
@@ -251,89 +256,93 @@ func TestRemoteStore_PushStreaming_ErrorsWhenPATCHRejectedAfterAcceptedChunk(t *
 	r.Equal([]string{http.MethodPost, http.MethodPatch, http.MethodPatch, http.MethodDelete}, reg.methods())
 }
 
-// TestRemoteStore_PushStreaming_FirstChunkRejectedFallsBackToMonolithic covers
-// registries that cap the PATCH body below the chunk size (ghcr.io answers 416
-// above 4 MiB). No byte was accepted, so both push paths replay the
-// already-read chunk ahead of the rest of the content in one monolithic upload.
-func TestRemoteStore_PushStreaming_FirstChunkRejectedFallsBackToMonolithic(t *testing.T) {
-	data := bytes.Repeat([]byte("0123456789"), 3)
+// patchSizes returns the body size of every PATCH the registry received,
+// including rejected ones.
+func (reg *chunkedRegistry) patchSizes() []int {
+	reg.mu.Lock()
+	defer reg.mu.Unlock()
+	var sizes []int
+	for _, req := range reg.requests {
+		if req.method == http.MethodPatch {
+			sizes = append(sizes, len(req.body))
+		}
+	}
+	return sizes
+}
+
+// TestRemoteStore_PushStreaming_RetriesRejectedChunkSmaller covers registries
+// and proxies that cap the PATCH body below the chunk size (ghcr.io answers
+// 416 above 4 MiB, proxies 413). The rejected chunk is still in the chunk
+// buffer, so it is resent in halves on the same session, and the smaller size
+// is kept for the rest of the upload: one session, no buffering of the blob.
+func TestRemoteStore_PushStreaming_RetriesRejectedChunkSmaller(t *testing.T) {
+	data := bytes.Repeat([]byte("0123456789abcdef"), (1<<20+100<<10)/16)
 	dig := digest.FromBytes(data)
 	mediaType := "application/octet-stream"
 
 	tests := []struct {
-		name string
-		push func(t *testing.T, store *RemoteStore) (ociImageSpecV1.Descriptor, error)
+		name    string
+		status  int
+		partial ociImageSpecV1.Descriptor
 	}{
-		{
-			name: "PushStreaming with unknown digest and size",
-			push: func(t *testing.T, store *RemoteStore) (ociImageSpecV1.Descriptor, error) {
-				t.Helper()
-				return store.PushStreaming(t.Context(), ociImageSpecV1.Descriptor{MediaType: mediaType}, bytes.NewReader(data))
-			},
-		},
-		{
-			name: "PushStreaming with known digest unknown size",
-			push: func(t *testing.T, store *RemoteStore) (ociImageSpecV1.Descriptor, error) {
-				t.Helper()
-				return store.PushStreaming(t.Context(),
-					ociImageSpecV1.Descriptor{MediaType: mediaType, Digest: dig, Size: 0},
-					bytes.NewReader(data))
-			},
-		},
+		{name: "416 with unknown digest and size", status: http.StatusRequestedRangeNotSatisfiable, partial: ociImageSpecV1.Descriptor{MediaType: mediaType}},
+		{name: "413 with unknown digest and size", status: http.StatusRequestEntityTooLarge, partial: ociImageSpecV1.Descriptor{MediaType: mediaType}},
+		{name: "416 with known digest, unknown size", status: http.StatusRequestedRangeNotSatisfiable, partial: ociImageSpecV1.Descriptor{MediaType: mediaType, Digest: dig}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
 			reg := newChunkedRegistry(t)
-			reg.patchLimit = 4
+			reg.patchLimit = 300 << 10
+			reg.patchRejectStatus = tc.status
 			srv := httptest.NewServer(reg.handler())
 			t.Cleanup(srv.Close)
 
-			got, err := tc.push(t, newTestStore(t, srv, 8))
+			got, err := newTestStore(t, srv, 1<<20).PushStreaming(t.Context(), tc.partial, bytes.NewReader(data))
 			r.NoError(err)
 			r.Equal(ociImageSpecV1.Descriptor{MediaType: mediaType, Digest: dig, Size: int64(len(data))}, got)
 
-			// Rejected chunked session is cancelled, then a fresh monolithic
-			// POST/PUT carries the whole blob.
-			r.Equal([]string{http.MethodPost, http.MethodPatch, http.MethodDelete, http.MethodPost, http.MethodPut}, reg.methods())
-			r.Equal(dig.String(), reg.requests[4].digestQuery)
+			// 1 MiB and 512 KiB are rejected, then 256 KiB fits and is kept.
+			r.Equal([]int{1 << 20, 512 << 10, 256 << 10, 256 << 10, 256 << 10, 256 << 10, 100 << 10}, reg.patchSizes())
+			methods := reg.methods()
+			r.Equal(http.MethodPost, methods[0])
+			r.Equal(http.MethodPut, methods[len(methods)-1])
+			r.NotContains(methods[1:], http.MethodPost, "the retry must stay on the same session")
+			r.NotContains(methods, http.MethodDelete)
 			r.Equal(data, reg.uploaded)
 		})
 	}
 }
 
-// TestRemoteStore_PushStreaming_FirstChunkRejectedVerifiesDeclared ensures the
-// buffered monolithic fallback still refuses content that does not match the
-// declared digest or size instead of committing it under a false descriptor.
-func TestRemoteStore_PushStreaming_FirstChunkRejectedVerifiesDeclared(t *testing.T) {
-	data := bytes.Repeat([]byte("0123456789"), 3)
+// TestRemoteStore_PushStreaming_RejectedChunkBelowFloorFails verifies that
+// halving stops at MinRetryChunkSize or the registry's OCI-Chunk-Min-Length:
+// the upload then fails and the session is cancelled without committing.
+func TestRemoteStore_PushStreaming_RejectedChunkBelowFloorFails(t *testing.T) {
+	data := bytes.Repeat([]byte("x"), 2<<20)
 	tests := []struct {
-		name    string
-		partial ociImageSpecV1.Descriptor
-		wantErr string
+		name           string
+		patchLimit     int
+		chunkMinLength string
+		wantPatchSizes []int
 	}{
-		{
-			name:    "digest mismatch",
-			partial: ociImageSpecV1.Descriptor{MediaType: "application/octet-stream", Digest: digest.FromString("other")},
-			wantErr: "does not match declared digest",
-		},
-		{
-			name:    "size mismatch",
-			partial: ociImageSpecV1.Descriptor{MediaType: "application/octet-stream", Size: int64(len(data)) + 1},
-			wantErr: "read 30 bytes, expected 31",
-		},
+		{name: "limit below MinRetryChunkSize", patchLimit: 200 << 10, wantPatchSizes: []int{1 << 20, 512 << 10, 256 << 10}},
+		{name: "limit below advertised minimum", patchLimit: 600 << 10, chunkMinLength: "786432", wantPatchSizes: []int{1 << 20}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
 			reg := newChunkedRegistry(t)
-			reg.patchLimit = 4
+			reg.patchLimit = tc.patchLimit
+			reg.chunkMinLength = tc.chunkMinLength
 			srv := httptest.NewServer(reg.handler())
 			t.Cleanup(srv.Close)
 
-			_, err := newTestStore(t, srv, 8).PushStreaming(t.Context(), tc.partial, bytes.NewReader(data))
-			r.ErrorContains(err, tc.wantErr)
-			r.ErrorContains(err, "unexpected PATCH status 416")
+			_, err := newTestStore(t, srv, 1<<20).PushStreaming(t.Context(),
+				ociImageSpecV1.Descriptor{MediaType: "application/octet-stream"}, bytes.NewReader(data))
+			r.ErrorContains(err, "unexpected PATCH status 416 after 0 bytes")
+			r.NotErrorIs(err, ErrStreamingUnavailable, "content was consumed, so no caller fallback may replay it")
+			r.Equal(tc.wantPatchSizes, reg.patchSizes())
+			r.Equal(http.MethodDelete, reg.methods()[len(reg.methods())-1])
 			r.NotContains(reg.methods(), http.MethodPut)
 		})
 	}
