@@ -289,14 +289,17 @@ ocm add cv
 
 </details>
 
-OCM resolves each tag and pins the package digest in the component descriptor:
+Check that OCM pinned each package by digest. The `OCIImage/v1` access only names a tag, but `ocm add cv` resolves
+it and records the manifest digest in the component descriptor. The RGD later builds the package reference from this
+digest, so Crossplane installs exactly the package you built the component version from, even if someone moves the
+tag afterwards:
 
 ```shell
 ocm get cv transport-archive//ocm.software/examples/crossplane-app:0.1.0 -o yaml
 ```
 
 <details>
-<summary>Excerpt</summary>
+<summary>You should see this output (excerpt for <code>function-patch-and-transform</code>)</summary>
 
 ```yaml
 resources:
@@ -737,8 +740,29 @@ metadata:
 spec:
   message: "Installed from an OCM component version"
 EOF
+```
 
+Wait until Crossplane has composed the `App`:
+
+```shell
+kubectl wait app hello -n default --for=condition=Ready --timeout=2m
 kubectl get app hello -n default
+```
+
+<details>
+<summary>You should see this output</summary>
+
+```text
+app.example.ocm.software/hello condition met
+NAME    SYNCED   READY   COMPOSITION                 AGE
+hello   True     True    apps.example.ocm.software   15s
+```
+
+</details>
+
+Read the message from the `ConfigMap` that the Composition rendered:
+
+```shell
 kubectl get configmap -n default -l crossplane.io/composite=hello \
   -o jsonpath='{.items[0].data.message}'
 ```
@@ -747,8 +771,6 @@ kubectl get configmap -n default -l crossplane.io/composite=hello \
 <summary>You should see this output</summary>
 
 ```text
-NAME    SYNCED   READY   COMPOSITION                 AGE
-hello   True     True    apps.example.ocm.software   15s
 Installed from an OCM component version
 ```
 
