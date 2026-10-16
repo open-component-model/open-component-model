@@ -269,6 +269,7 @@ tasks:
         --namespace kro \
         --create-namespace \
         --version={{.KRO_VERSION}} \
+        --set rbac.mode=aggregation \
         --wait --timeout=5m
   cluster:install:flux:
     silent: true
