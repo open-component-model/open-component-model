@@ -77,32 +77,26 @@ func (r *ResourceRepository) GetResourceCredentialConsumerIdentity(ctx context.C
 	return identityv1.IdentityFromObject(spec.BucketName, spec.ObjectKey, spec.Endpoint)
 }
 
-// DownloadResource downloads a resource from the bucket/key described by the
-// S3 access spec.
+// DownloadResource returns the content of the object described by the S3 access
+// spec.
 //
-// The object is streamed into a file under the configured TempFolder, and the
-// returned blob reads from that file, which outlives this call and is owned by the
-// caller.
+// The returned blob is lazy: the object body streams from the store when the blob
+// is read, nothing is written to disk, and each ReadCloser call sends the
+// GetObject request again, which is safe because GetObject has no side effects.
+// When the access does not pin a media type, the object is requested once here to
+// read it from the response.
 //
 // The content is held to the digest the resource declares, which is the digest over
-// exactly these bytes, so a store serving something else fails the read.
+// exactly these bytes, so a store serving something else fails the final read and
+// the close.
+//
+// Callers must close the returned blob if it implements io.Closer.
 func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) (blob.ReadOnlyBlob, error) {
 	spec, err := r.convertAccess(resource)
 	if err != nil {
 		return nil, err
 	}
-
-	var tempFolder string
-	if r.filesystemConfig.TempFolder != nil {
-		tempFolder = *r.filesystemConfig.TempFolder
-	}
-
-	result, err := r.download(ctx, spec, credentials, tempFolder)
-	if err != nil {
-		return nil, err
-	}
-
-	return repository.VerifyDownload(ctx, resource, result.Blob)
+	return streamResource(ctx, resource, r.newStream(ctx, spec, credentials))
 }
 
 func (r *ResourceRepository) convertAccess(resource *descriptor.Resource) (*v2.S3, error) {

@@ -151,11 +151,45 @@ func TestStream_GetObjectErrorIsWrapped(t *testing.T) {
 	r.ErrorContains(err, "AccessDenied")
 }
 
-// TestStream_Idempotent reports that an S3 source (a GetObject) is always safe to
-// repeat.
-func TestStream_Idempotent(t *testing.T) {
+// TestStream_Prime: Prime sends one GetObject to read the media type, the next
+// ReadCloser returns that response without a second request, and later calls
+// request the object again.
+func TestStream_Prime(t *testing.T) {
 	t.Parallel()
 	r := require.New(t)
-	s := NewStream(t.Context(), Request{BucketName: "b", ObjectKey: "k", Region: "r"}, WithCredentials(fakeCredentials()))
-	r.True(s.Idempotent())
+
+	content := []byte("primed s3 object")
+	srv := newFakeS3(t, s3Object{body: content, contentType: "text/plain"})
+	s := streamFrom(t, srv, Request{BucketName: "b", ObjectKey: "k"})
+
+	_, known := s.MediaType()
+	r.False(known, "the media type is unknown before the first request")
+
+	r.NoError(s.Prime())
+	r.Len(srv.recorded(), 1, "Prime must send exactly one request")
+	mt, known := s.MediaType()
+	r.True(known)
+	r.Equal("text/plain", mt)
+
+	r.Equal(content, readBlob(t, s))
+	r.Len(srv.recorded(), 1, "the first read must use the primed response")
+
+	r.Equal(content, readBlob(t, s))
+	r.Len(srv.recorded(), 2, "a later read must request the object again")
+}
+
+// TestStream_CloseReleasesPrimedReader: Close releases a primed reader that was
+// never read, and the next ReadCloser sends a new request.
+func TestStream_CloseReleasesPrimedReader(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
+
+	content := []byte("released")
+	srv := newFakeS3(t, s3Object{body: content})
+	s := streamFrom(t, srv, Request{BucketName: "b", ObjectKey: "k"})
+
+	r.NoError(s.Prime())
+	r.NoError(s.Close())
+	r.Equal(content, readBlob(t, s))
+	r.Len(srv.recorded(), 2, "after Close the primed response must not be reused")
 }

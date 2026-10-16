@@ -22,16 +22,16 @@ import (
 // resource (for example a wget or s3 access) to an OCI registry target as a
 // local blob, without a temporary file.
 //
-// Download and add run in one node, so the lazy source stream does not cross a
-// graph node boundary. The source is opened with
-// [repository.StreamOrDownloadResource] and handed to AddLocalResource as a
-// size-unknown blob, which pack uploads with the chunked streaming push
-// (PushStreaming) and verifies against the resource digest on the fly.
+// Download and add run in one node, so the lazy source blob that DownloadResource
+// returns for wget and s3 does not cross a graph node boundary. The blob is handed
+// to AddLocalResource as a size-unknown blob, which pack uploads with the chunked
+// streaming push (PushStreaming) and verifies against the resource digest on the
+// fly.
 //
-// A source that cannot be streamed (a repository without the streaming
-// capability, or a non-idempotent request) is downloaded with DownloadResource
-// instead and takes the regular push. CTF targets do not use this transformer:
-// the blob must be stored on local disk there anyway.
+// A repository that returns materialized content (for example a non-idempotent
+// wget request, which is downloaded once into a temporary file) takes the regular
+// push. CTF targets do not use this transformer: the blob must be stored on local
+// disk there anyway.
 type StreamLocalResource struct {
 	Scheme             *runtime.Scheme
 	RepoProvider       repository.ComponentVersionRepositoryProvider
@@ -88,7 +88,7 @@ func (t *StreamLocalResource) Transform(ctx context.Context, step runtime.Typed)
 		return nil, err
 	}
 
-	srcBlob, streamed, err := repository.StreamOrDownloadResource(ctx, t.ResourceRepository, srcResource, srcCreds)
+	srcBlob, err := t.ResourceRepository.DownloadResource(ctx, srcResource, srcCreds)
 	if err != nil {
 		return nil, fmt.Errorf("failed opening source resource %v: %w", srcResource.ToIdentity(), err)
 	}
@@ -118,8 +118,9 @@ func (t *StreamLocalResource) Transform(ctx context.Context, step runtime.Typed)
 		MediaType: mediaType,
 	}
 
+	// A lazy source does not know its size, a materialized one does.
 	mode := "downloaded"
-	if streamed {
+	if blobSize(srcBlob) == blob.SizeUnknown {
 		mode = "streamed"
 	}
 	slog.InfoContext(ctx, "adding local resource to target",
@@ -192,6 +193,14 @@ func applyGlobalAccessPolicy(repo repository.ComponentVersionRepository, p ocire
 // octetStream is the media type a by-value source of unknown media type packs
 // with, matching the application/octet-stream default of the old split path.
 const octetStream = "application/octet-stream"
+
+// blobSize returns the size b reports, blob.SizeUnknown when unknown.
+func blobSize(b blob.ReadOnlyBlob) int64 {
+	if s, ok := b.(blob.SizeAware); ok {
+		return s.Size()
+	}
+	return blob.SizeUnknown
+}
 
 // blobMediaType returns the media type b reports, "" when unknown.
 func blobMediaType(b blob.ReadOnlyBlob) string {

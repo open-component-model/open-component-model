@@ -190,8 +190,8 @@ func TestStream_MaxDownloadSize(t *testing.T) {
 }
 
 // TestStream_Idempotent reports true only for a repeatable verb (GET/HEAD and the
-// empty default), so the streaming by-value path never re-issues a non-idempotent
-// request.
+// empty default), so DownloadResource streams only a request that is safe to
+// repeat.
 func TestStream_Idempotent(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -215,4 +215,58 @@ func TestStream_Idempotent(t *testing.T) {
 			r.Equal(tt.want, s.Idempotent())
 		})
 	}
+}
+
+// TestStream_Prime: Prime sends one request to read the media type, the next
+// ReadCloser returns that response without a second request, and later calls send
+// the request again. Close releases a primed reader that was never read.
+func TestStream_Prime(t *testing.T) {
+	t.Parallel()
+
+	content := []byte("primed body")
+	newServer := func(t *testing.T) (*httptest.Server, *atomic.Int64) {
+		t.Helper()
+		var hits atomic.Int64
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			hits.Add(1)
+			w.Header().Set("Content-Type", "text/plain")
+			_, _ = w.Write(content)
+		}))
+		t.Cleanup(srv.Close)
+		return srv, &hits
+	}
+
+	t.Run("first read uses the primed response", func(t *testing.T) {
+		t.Parallel()
+		r := require.New(t)
+		srv, hits := newServer(t)
+		s := download.NewStream(t.Context(), download.Request{URL: srv.URL}, nil, download.WithClient(srv.Client()))
+
+		_, known := s.MediaType()
+		r.False(known, "the media type is unknown before the first request")
+
+		r.NoError(s.Prime())
+		r.Equal(int64(1), hits.Load(), "Prime must send exactly one request")
+		mt, known := s.MediaType()
+		r.True(known)
+		r.Equal("text/plain", mt)
+
+		r.Equal(content, readBlob(t, s))
+		r.Equal(int64(1), hits.Load(), "the first read must use the primed response")
+
+		r.Equal(content, readBlob(t, s))
+		r.Equal(int64(2), hits.Load(), "a later read must send the request again")
+	})
+
+	t.Run("close releases an unread primed reader", func(t *testing.T) {
+		t.Parallel()
+		r := require.New(t)
+		srv, hits := newServer(t)
+		s := download.NewStream(t.Context(), download.Request{URL: srv.URL}, nil, download.WithClient(srv.Client()))
+
+		r.NoError(s.Prime())
+		r.NoError(s.Close())
+		r.Equal(content, readBlob(t, s))
+		r.Equal(int64(2), hits.Load(), "after Close the primed response must not be reused")
+	})
 }

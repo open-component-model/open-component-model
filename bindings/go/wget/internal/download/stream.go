@@ -45,17 +45,20 @@ type Stream struct {
 
 	mu        sync.Mutex
 	mediaType string
+	// pending is a reader that Prime opened and that ReadCloser did not return yet.
+	pending io.ReadCloser
 }
 
 var (
 	_ blob.ReadOnlyBlob   = (*Stream)(nil)
 	_ blob.MediaTypeAware = (*Stream)(nil)
+	_ io.Closer           = (*Stream)(nil)
 )
 
 // Idempotent reports whether the request can be safely re-issued. It is true for
-// a GET or HEAD (and the empty verb, which defaults to GET); any other verb (for
-// example a POST carrying a body) is not safe to repeat, so the streaming
-// by-value path must not open such a blob more than once.
+// a GET or HEAD (and the empty verb, which defaults to GET). Any other verb (for
+// example a POST carrying a body) is not safe to repeat, so such a request must
+// not be streamed: a consumer can open the blob more than once.
 func (s *Stream) Idempotent() bool {
 	// HTTP method names are case-sensitive; custom spellings are not safe to retry.
 	switch s.req.Verb {
@@ -97,10 +100,56 @@ func (s *Stream) MediaType() (string, bool) {
 	return s.mediaType, true
 }
 
-// ReadCloser issues the request and returns a reader over the response body. Each
-// call starts a fresh request, so the blob is replayable. The returned reader
-// computes the requested digests inline and verifies them once the body ends.
+// Prime sends the request once and keeps the open reader, so that the media type
+// is read from the Content-Type of the response when the request does not pin
+// one. The next ReadCloser call returns this reader, so no second request is
+// sent. Close releases the reader if ReadCloser never returns it.
+func (s *Stream) Prime() error {
+	rc, err := s.request()
+	if err != nil {
+		return err
+	}
+	s.mu.Lock()
+	previous := s.pending
+	s.pending = rc
+	s.mu.Unlock()
+	if previous != nil {
+		_ = previous.Close()
+	}
+	return nil
+}
+
+// ReadCloser returns a reader over the response body. The first call after Prime
+// returns the reader that Prime opened. Every other call sends a new request, so
+// the blob is replayable. The returned reader computes the requested digests
+// inline and verifies them once the body ends.
 func (s *Stream) ReadCloser() (io.ReadCloser, error) {
+	s.mu.Lock()
+	rc := s.pending
+	s.pending = nil
+	s.mu.Unlock()
+	if rc != nil {
+		return rc, nil
+	}
+	return s.request()
+}
+
+// Close releases a reader that Prime opened and that ReadCloser did not return.
+// The error of that reader is ignored: it reports the incomplete read, which is
+// expected here.
+func (s *Stream) Close() error {
+	s.mu.Lock()
+	rc := s.pending
+	s.pending = nil
+	s.mu.Unlock()
+	if rc != nil {
+		_ = rc.Close()
+	}
+	return nil
+}
+
+// request sends the request and returns a reader over the response body.
+func (s *Stream) request() (io.ReadCloser, error) {
 	resp, safeURL, err := open(s.ctx, s.req, s.o)
 	if err != nil {
 		return nil, err

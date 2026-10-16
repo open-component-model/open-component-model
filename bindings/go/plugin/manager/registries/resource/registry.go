@@ -13,13 +13,8 @@ import (
 	resourcev1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/resource/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/plugins"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
-	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
-
-// ResourceRegistry forwards the streaming capability of the plugin that serves a
-// resource, see [ResourceRegistry.DownloadResourceStream].
-var _ repository.StreamingResourceRepository = (*ResourceRegistry)(nil)
 
 // NewResourceRegistry creates a new registry and initializes maps.
 func NewResourceRegistry(ctx context.Context) *ResourceRegistry {
@@ -202,25 +197,6 @@ func (r *ResourceRegistry) DownloadResource(ctx context.Context, res *descriptor
 	plugin, err := r.GetResourcePlugin(ctx, res.GetAccess())
 	if err != nil {
 		return nil, fmt.Errorf("failed to get plugin for resource: %w", err)
-	}
-
-	return plugin.DownloadResource(ctx, res, credentials)
-}
-
-// DownloadResourceStream delegates to the plugin of the resource access type when
-// that plugin implements [repository.StreamingResourceRepository] (the builtin
-// wget and s3 repositories do). Any other plugin, including every external plugin,
-// falls back to DownloadResource. The fallback blob does not report
-// [repository.IdempotentSource], so [repository.StreamOrDownloadResource] uses it
-// as is and does not download it again.
-func (r *ResourceRegistry) DownloadResourceStream(ctx context.Context, res *descriptor.Resource, credentials runtime.Typed) (blob.ReadOnlyBlob, error) {
-	plugin, err := r.GetResourcePlugin(ctx, res.GetAccess())
-	if err != nil {
-		return nil, fmt.Errorf("failed to get plugin for resource: %w", err)
-	}
-
-	if streaming, ok := plugin.(repository.StreamingResourceRepository); ok {
-		return streaming.DownloadResourceStream(ctx, res, credentials)
 	}
 
 	return plugin.DownloadResource(ctx, res, credentials)

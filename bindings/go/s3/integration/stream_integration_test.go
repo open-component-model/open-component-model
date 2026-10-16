@@ -13,7 +13,6 @@ import (
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
-	"ocm.software/open-component-model/bindings/go/repository"
 	s3repo "ocm.software/open-component-model/bindings/go/s3/repository"
 	accessspec "ocm.software/open-component-model/bindings/go/s3/spec/access"
 	accessv2 "ocm.software/open-component-model/bindings/go/s3/spec/access/v2"
@@ -35,14 +34,14 @@ func (c *countingRoundTripper) RoundTrip(req *http.Request) (*http.Response, err
 
 func (c *countingRoundTripper) requests() int64 { return c.count.Load() }
 
-// Test_Integration_S3Stream exercises the streaming resource capability end to end
-// against a RustFS container and the real AWS SDK: it proves that DownloadResourceStream
-// (via the public StreamOrDownloadResource dispatcher) defers all I/O until the blob is
-// read, re-issues the request on replay, and never materializes a temporary file.
+// Test_Integration_S3Stream exercises the lazy DownloadResource of the s3 repository
+// end to end against a RustFS container and the real AWS SDK: it proves that the
+// returned blob defers all I/O until it is read, sends GetObject again on replay, and
+// never writes a temporary file.
 //
 // The stream-then-verify digest-mismatch path is covered by the repository unit test
-// (TestDownloadResourceStream_DigestMismatch); this test focuses on the behaviours that
-// only a real store and the real SDK can confirm: laziness, replay and no temp file.
+// (TestDownloadResource_DigestMismatch); this test focuses on the behaviours that only
+// a real store and the real SDK can confirm: laziness, replay and no temp file.
 func Test_Integration_S3Stream(t *testing.T) {
 	ctx := t.Context()
 
@@ -93,7 +92,7 @@ func Test_Integration_S3Stream(t *testing.T) {
 		return repo, counter
 	}
 
-	t.Run("streams lazily, replays, and verifies via StreamOrDownloadResource", func(t *testing.T) {
+	t.Run("streams lazily, replays, and verifies", func(t *testing.T) {
 		r := require.New(t)
 		const bucket, key = "stream-bucket", "path/to/blob.txt"
 		content := []byte("hello streaming ocm from s3")
@@ -103,23 +102,17 @@ func Test_Integration_S3Stream(t *testing.T) {
 		repo, counter := newRepo(t.TempDir())
 		res := resourceFor(access(bucket, key), content)
 
-		b, streamed, err := repository.StreamOrDownloadResource(ctx, repo, res, creds)
+		b, err := repo.DownloadResource(ctx, res, creds)
 		r.NoError(err)
-		r.True(streamed, "an s3 resource must be served as a lazy stream, not a materialized download")
 		t.Cleanup(func() {
 			if c, ok := b.(io.Closer); ok {
 				_ = c.Close()
 			}
 		})
 
-		// Lazy: the media type is pinned up front, so the dispatcher does not pre-open
-		// the body. No request has been sent yet.
+		// Lazy: the media type is pinned up front, so DownloadResource does not open
+		// the object to read it. No request has been sent yet.
 		r.Equal(int64(0), counter.requests(), "no request may be sent before the stream is read")
-
-		// The stream reports itself as a safely repeatable source.
-		idem, ok := b.(repository.IdempotentSource)
-		r.True(ok, "a streamed s3 blob must report its idempotency")
-		r.True(idem.Idempotent(), "an s3 GetObject source is idempotent")
 
 		// First read issues exactly one request and returns the full content.
 		rc, err := b.ReadCloser()
@@ -152,9 +145,8 @@ func Test_Integration_S3Stream(t *testing.T) {
 		res := resourceFor(access(bucket, key), content)
 
 		// Stream the whole body, then assert the temp folder stayed empty.
-		b, streamed, err := repository.StreamOrDownloadResource(ctx, repo, res, creds)
+		b, err := repo.DownloadResource(ctx, res, creds)
 		r.NoError(err)
-		r.True(streamed)
 		rc, err := b.ReadCloser()
 		r.NoError(err)
 		got, err := io.ReadAll(rc)
@@ -168,18 +160,5 @@ func Test_Integration_S3Stream(t *testing.T) {
 		entries, err := os.ReadDir(tempDir)
 		r.NoError(err)
 		r.Empty(entries, "streaming must not write any temporary file")
-
-		// Control: the materializing DownloadResource writes a file into the same temp
-		// folder, which confirms the folder is where materialization would land.
-		dl, err := repo.DownloadResource(ctx, res, creds)
-		r.NoError(err)
-		t.Cleanup(func() {
-			if c, ok := dl.(io.Closer); ok {
-				_ = c.Close()
-			}
-		})
-		entries, err = os.ReadDir(tempDir)
-		r.NoError(err)
-		r.NotEmpty(entries, "DownloadResource must materialize a file, proving the contrast with streaming")
 	})
 }

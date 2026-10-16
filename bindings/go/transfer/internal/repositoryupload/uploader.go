@@ -94,10 +94,11 @@ func (u *Uploader) source(ctx context.Context, spec *uploadv1alpha1.RepositoryUp
 		return nil, "", err
 	}
 	// A remote-to-remote upload (e.g. wget/s3 -> Artifactory/Nexus) streams the
-	// source to the target without a temporary file where possible. The streamed
-	// bytes are verified inline and checked against the source digest after the
-	// upload (see knownDigest and the digest comparison in Upload).
-	b, _, err := repository.StreamOrDownloadResource(ctx, u.ResourceRepository, src, creds)
+	// source to the target without a temporary file, because the wget and s3
+	// repositories return a lazy blob. The streamed bytes are verified inline and
+	// checked against the source digest after the upload (see knownDigest and the
+	// digest comparison in Upload).
+	b, err := u.ResourceRepository.DownloadResource(ctx, src, creds)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed downloading source resource %v: %w", src.ToIdentity(), err)
 	}

@@ -22,7 +22,6 @@ import (
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
 	ocispec "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
-	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -57,8 +56,8 @@ func (t *methodRecordingTransport) count(method string) int {
 	return t.methods[method]
 }
 
-// knownDigestSizeBlob is an idempotent, media-type-aware lazy source that ALSO
-// exposes its size and digest up front, modeling a source whose digest is known
+// knownDigestSizeBlob is a media-type-aware source that ALSO exposes its size and
+// digest up front, modeling a source whose digest is known
 // before the fetch (for example an OCI local blob). pack routes such a blob to the
 // regular oras.Push instead of the chunked streaming push.
 type knownDigestSizeBlob struct {
@@ -67,11 +66,10 @@ type knownDigestSizeBlob struct {
 }
 
 var (
-	_ blob.ReadOnlyBlob           = (*knownDigestSizeBlob)(nil)
-	_ blob.SizeAware              = (*knownDigestSizeBlob)(nil)
-	_ blob.DigestAware            = (*knownDigestSizeBlob)(nil)
-	_ blob.MediaTypeAware         = (*knownDigestSizeBlob)(nil)
-	_ repository.IdempotentSource = (*knownDigestSizeBlob)(nil)
+	_ blob.ReadOnlyBlob   = (*knownDigestSizeBlob)(nil)
+	_ blob.SizeAware      = (*knownDigestSizeBlob)(nil)
+	_ blob.DigestAware    = (*knownDigestSizeBlob)(nil)
+	_ blob.MediaTypeAware = (*knownDigestSizeBlob)(nil)
 )
 
 func (b *knownDigestSizeBlob) ReadCloser() (io.ReadCloser, error) {
@@ -82,7 +80,6 @@ func (b *knownDigestSizeBlob) Digest() (string, bool) {
 	return godigest.FromString(b.data).String(), true
 }
 func (b *knownDigestSizeBlob) MediaType() (string, bool) { return b.mediaType, true }
-func (b *knownDigestSizeBlob) Idempotent() bool          { return true }
 
 // startStreamTargetRegistry starts a real OCI registry (anonymous push, validation off
 // like the chunked push test) and returns its host:port address.
@@ -135,7 +132,7 @@ func Test_Integration_StreamLocalResource_ChunkedPush_DigestUnknown(t *testing.T
 	// digest-unknown case. Content is larger than one chunk so chunking is observable.
 	content := strings.Repeat("chunked-stream-payload!", 300) // ~6.6 KiB, > chunkSize*4
 	lazy := &fakeLazyBlob{data: content, mediaType: "application/octet-stream"}
-	resourceRepo := &fakeStreamingResourceRepo{blob: lazy}
+	resourceRepo := &fakeResourceRepo{blob: lazy}
 
 	tr := &StreamLocalResource{
 		Scheme:             streamTransformerScheme(t),
@@ -165,8 +162,7 @@ func Test_Integration_StreamLocalResource_ChunkedPush_DigestUnknown(t *testing.T
 	r.NotNil(out.Output)
 	r.NotNil(out.Output.Resource)
 
-	r.True(resourceRepo.streamCalled, "an idempotent, digest-unknown source must take the streaming path")
-	r.False(resourceRepo.downloadCalled, "the materialized download must not be used")
+	r.True(resourceRepo.downloadCalled, "the source must be read with DownloadResource")
 
 	// The chunked upload protocol was used: a POST started the upload, one or more PATCH
 	// requests streamed the chunks, and a PUT finalized it. A buffered monolithic push would
@@ -228,7 +224,7 @@ func Test_Integration_StreamLocalResource_RegularPush_DigestKnown(t *testing.T) 
 	// than chunkSize so that, had it streamed, several PATCH requests would be observable.
 	content := strings.Repeat("known-digest-stream-payload!", 60) // ~1.6 KiB, > chunkSize*4, < threshold
 	src := &knownDigestSizeBlob{data: content, mediaType: "application/octet-stream"}
-	resourceRepo := &fakeStreamingResourceRepo{blob: src}
+	resourceRepo := &fakeResourceRepo{blob: src}
 
 	tr := &StreamLocalResource{
 		Scheme:             streamTransformerScheme(t),
@@ -258,8 +254,7 @@ func Test_Integration_StreamLocalResource_RegularPush_DigestKnown(t *testing.T) 
 	r.NotNil(out.Output)
 	r.NotNil(out.Output.Resource)
 
-	r.True(resourceRepo.streamCalled, "an idempotent source must take the streaming path")
-	r.False(resourceRepo.downloadCalled, "the materialized download must not be used")
+	r.True(resourceRepo.downloadCalled, "the source must be read with DownloadResource")
 
 	// The regular (non-streaming) push was used: the blob was uploaded monolithically
 	// (POST then PUT) with NO PATCH, because pack skips the chunked streaming push when the

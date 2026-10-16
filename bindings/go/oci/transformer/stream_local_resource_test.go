@@ -25,62 +25,25 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// fakeLazyBlob is a size-unknown, media-type-aware, idempotent blob that is
-// neither blob.SizeAware nor blob.DigestAware, mirroring a lazy streaming source
-// blob.
+// fakeLazyBlob is a size-unknown, media-type-aware blob that is neither
+// blob.SizeAware nor blob.DigestAware, mirroring the lazy blob that the wget and
+// s3 repositories return from DownloadResource.
 type fakeLazyBlob struct {
 	data      string
 	mediaType string
 }
 
-var (
-	_ blob.MediaTypeAware         = (*fakeLazyBlob)(nil)
-	_ repository.IdempotentSource = (*fakeLazyBlob)(nil)
-)
+var _ blob.MediaTypeAware = (*fakeLazyBlob)(nil)
 
 func (b *fakeLazyBlob) ReadCloser() (io.ReadCloser, error) {
 	return io.NopCloser(strings.NewReader(b.data)), nil
 }
-
-func (b *fakeLazyBlob) Idempotent() bool { return true }
 
 func (b *fakeLazyBlob) MediaType() (string, bool) {
 	if b.mediaType == "" {
 		return "", false
 	}
 	return b.mediaType, true
-}
-
-// fakeStreamingResourceRepo implements repository.StreamingResourceRepository and
-// records which download method was used.
-type fakeStreamingResourceRepo struct {
-	blob           blob.ReadOnlyBlob
-	materialized   blob.ReadOnlyBlob
-	streamCalled   bool
-	downloadCalled bool
-}
-
-var _ repository.StreamingResourceRepository = (*fakeStreamingResourceRepo)(nil)
-
-func (f *fakeStreamingResourceRepo) GetResourceCredentialConsumerIdentity(ctx context.Context, resource *descriptor.Resource) (runtime.Identity, error) {
-	return nil, nil
-}
-
-func (f *fakeStreamingResourceRepo) UploadResource(ctx context.Context, res *descriptor.Resource, content blob.ReadOnlyBlob, credentials runtime.Typed) (*descriptor.Resource, error) {
-	return res, nil
-}
-
-func (f *fakeStreamingResourceRepo) DownloadResource(ctx context.Context, res *descriptor.Resource, credentials runtime.Typed) (blob.ReadOnlyBlob, error) {
-	f.downloadCalled = true
-	if f.materialized != nil {
-		return f.materialized, nil
-	}
-	return f.blob, nil
-}
-
-func (f *fakeStreamingResourceRepo) DownloadResourceStream(ctx context.Context, res *descriptor.Resource, credentials runtime.Typed) (blob.ReadOnlyBlob, error) {
-	f.streamCalled = true
-	return f.blob, nil
 }
 
 // primingLazyBlob mirrors a wget/s3 lazy source: its media type (the response
@@ -92,10 +55,7 @@ type primingLazyBlob struct {
 	opens       int
 }
 
-var (
-	_ blob.MediaTypeAware         = (*primingLazyBlob)(nil)
-	_ repository.IdempotentSource = (*primingLazyBlob)(nil)
-)
+var _ blob.MediaTypeAware = (*primingLazyBlob)(nil)
 
 func (b *primingLazyBlob) ReadCloser() (io.ReadCloser, error) {
 	b.primed = true
@@ -110,30 +70,7 @@ func (b *primingLazyBlob) MediaType() (string, bool) {
 	return b.contentType, true
 }
 
-func (b *primingLazyBlob) Idempotent() bool { return true }
-
-// nonIdempotentStreamBlob mirrors a source whose request must not be repeated
-// (for example a wget access with a non-GET verb and a body). It records every
-// open so a test can assert the streaming path never issued the request.
-type nonIdempotentStreamBlob struct {
-	opens int
-}
-
-var (
-	_ blob.MediaTypeAware         = (*nonIdempotentStreamBlob)(nil)
-	_ repository.IdempotentSource = (*nonIdempotentStreamBlob)(nil)
-)
-
-func (b *nonIdempotentStreamBlob) ReadCloser() (io.ReadCloser, error) {
-	b.opens++
-	return io.NopCloser(strings.NewReader("")), nil
-}
-
-func (b *nonIdempotentStreamBlob) MediaType() (string, bool) { return "", false }
-
-func (b *nonIdempotentStreamBlob) Idempotent() bool { return false }
-
-// fakeResourceRepo implements only repository.ResourceRepository (no streaming).
+// fakeResourceRepo implements repository.ResourceRepository and records the download.
 type fakeResourceRepo struct {
 	blob           blob.ReadOnlyBlob
 	downloadCalled bool
@@ -177,76 +114,14 @@ func wgetSourceResource(name string, digest *v2.Digest) *v2.Resource {
 	}
 }
 
-// TestStreamLocalResource_StreamingPath verifies the fused transformer opens the
-// source as a lazy, size-unknown stream and reaches AddLocalResource with that
-// blob, deriving a LocalBlob access with the source media type.
+// TestStreamLocalResource_StreamingPath verifies the fused transformer reads the
+// source with DownloadResource and hands the lazy, size-unknown blob to
+// AddLocalResource, deriving a LocalBlob access with the source media type.
 func TestStreamLocalResource_StreamingPath(t *testing.T) {
 	r := require.New(t)
 	ctx := t.Context()
 
 	lazy := &fakeLazyBlob{data: "streamed content", mediaType: "application/x-test"}
-	resourceRepo := &fakeStreamingResourceRepo{blob: lazy}
-	mockRepo := &mockRepository{}
-	provider := &mockRepoProvider{repo: mockRepo}
-
-	tr := &StreamLocalResource{
-		Scheme:             streamTransformerScheme(t),
-		RepoProvider:       provider,
-		ResourceRepository: resourceRepo,
-	}
-
-	spec := &v1alpha1.OCIStreamLocalResource{
-		Type: v1alpha1.OCIStreamLocalResourceV1alpha1,
-		ID:   "stream",
-		Spec: &v1alpha1.OCIStreamLocalResourceSpec{
-			Repository: ocispec.Repository{
-				Type:    runtime.Type{Name: ocispec.Type, Version: "v1"},
-				BaseUrl: "ghcr.io/test",
-			},
-			Component: "ocm.software/test",
-			Version:   "1.0.0",
-			Resource:  wgetSourceResource("blob", nil),
-		},
-	}
-
-	result, err := tr.Transform(ctx, spec)
-	r.NoError(err)
-	r.NotNil(result)
-
-	r.True(resourceRepo.streamCalled, "expected the streaming download to be used")
-	r.False(resourceRepo.downloadCalled, "the buffered download must not be used on the streaming path")
-
-	// The blob handed to AddLocalResource must have unknown size so pack routes it
-	// to the chunked streaming push.
-	r.NotNil(mockRepo.addedBlob)
-	if sizer, ok := mockRepo.addedBlob.(blob.SizeAware); ok {
-		r.Equal(blob.SizeUnknown, sizer.Size(), "streaming blob must report an unknown size")
-	}
-
-	// The derived access is a v2.LocalBlob carrying the source media type. It MUST
-	// be the descriptor/v2 type (not the typed runtime.LocalBlob) so pack can
-	// convert it with the OCI repository scheme.
-	localBlob, ok := mockRepo.addedResource.Access.(*v2.LocalBlob)
-	r.True(ok, "expected a *v2.LocalBlob access, got %T", mockRepo.addedResource.Access)
-	r.Equal("application/x-test", localBlob.MediaType)
-	r.Empty(localBlob.ReferenceName, "a plain blob must not name an OCI artifact")
-	r.Equal(v2.LocalBlobAccessType, localBlob.Type.Name)
-	r.Equal(v2.LocalBlobAccessTypeVersion, localBlob.Type.Version)
-
-	transformed := result.(*v1alpha1.OCIStreamLocalResource)
-	r.NotNil(transformed.Output)
-	r.NotNil(transformed.Output.Resource)
-	r.Equal(v2.LocalBlobAccessType, transformed.Output.Resource.Access.GetType().Name)
-}
-
-// TestStreamLocalResource_FallbackPath verifies that a non-streaming resource
-// repository falls back to the buffered DownloadResource and still reaches
-// AddLocalResource.
-func TestStreamLocalResource_FallbackPath(t *testing.T) {
-	r := require.New(t)
-	ctx := t.Context()
-
-	lazy := &fakeLazyBlob{data: "buffered content", mediaType: "application/x-test"}
 	resourceRepo := &fakeResourceRepo{blob: lazy}
 	mockRepo := &mockRepository{}
 	provider := &mockRepoProvider{repo: mockRepo}
@@ -275,9 +150,30 @@ func TestStreamLocalResource_FallbackPath(t *testing.T) {
 	r.NoError(err)
 	r.NotNil(result)
 
-	r.True(resourceRepo.downloadCalled, "the buffered download must be used in the fallback path")
-	r.NotNil(mockRepo.addedResource)
-	r.Equal("ocm.software/test", mockRepo.component)
+	r.True(resourceRepo.downloadCalled, "the source must be read with DownloadResource")
+	r.Same(lazy, mockRepo.addedBlob, "the lazy blob must reach AddLocalResource as is")
+
+	// The blob handed to AddLocalResource must have unknown size so pack routes it
+	// to the chunked streaming push.
+	r.NotNil(mockRepo.addedBlob)
+	if sizer, ok := mockRepo.addedBlob.(blob.SizeAware); ok {
+		r.Equal(blob.SizeUnknown, sizer.Size(), "streaming blob must report an unknown size")
+	}
+
+	// The derived access is a v2.LocalBlob carrying the source media type. It MUST
+	// be the descriptor/v2 type (not the typed runtime.LocalBlob) so pack can
+	// convert it with the OCI repository scheme.
+	localBlob, ok := mockRepo.addedResource.Access.(*v2.LocalBlob)
+	r.True(ok, "expected a *v2.LocalBlob access, got %T", mockRepo.addedResource.Access)
+	r.Equal("application/x-test", localBlob.MediaType)
+	r.Empty(localBlob.ReferenceName, "a plain blob must not name an OCI artifact")
+	r.Equal(v2.LocalBlobAccessType, localBlob.Type.Name)
+	r.Equal(v2.LocalBlobAccessTypeVersion, localBlob.Type.Version)
+
+	transformed := result.(*v1alpha1.OCIStreamLocalResource)
+	r.NotNil(transformed.Output)
+	r.NotNil(transformed.Output.Resource)
+	r.Equal(v2.LocalBlobAccessType, transformed.Output.Resource.Access.GetType().Name)
 }
 
 // ociStreamSpec builds an OCIStreamLocalResource step for the given source
@@ -298,41 +194,36 @@ func ociStreamSpec(src *v2.Resource) *v1alpha1.OCIStreamLocalResource {
 	}
 }
 
-// TestStreamLocalResource_UntypedSourceMediaType verifies that a wget/s3 source
-// with NO pinned media type still packs: the response Content-Type is primed from
-// the stream when the server sends one, and application/octet-stream is used as
-// the fallback when it does not. This guards the media-type regression where an
+// TestStreamLocalResource_UntypedSourceMediaType verifies that a source with NO
+// pinned media type still packs: the media type the blob reports is used (the wget
+// and s3 repositories read it from the response), and application/octet-stream is
+// used when the blob reports none. This guards the media-type regression where an
 // untyped source derived an empty LocalBlob media type and pack rejected it.
 func TestStreamLocalResource_UntypedSourceMediaType(t *testing.T) {
 	tests := []struct {
 		name          string
-		contentType   string
+		mediaType     string
 		wantMediaType string
 	}{
-		{name: "server sends content type", contentType: "text/plain", wantMediaType: "text/plain"},
-		{name: "server sends none falls back to octet-stream", contentType: "", wantMediaType: "application/octet-stream"},
+		{name: "blob reports a media type", mediaType: "text/plain", wantMediaType: "text/plain"},
+		{name: "blob reports none falls back to octet-stream", mediaType: "", wantMediaType: "application/octet-stream"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
 			ctx := t.Context()
 
-			lazy := &primingLazyBlob{data: "streamed content", contentType: tc.contentType}
-			resourceRepo := &fakeStreamingResourceRepo{blob: lazy}
+			lazy := &fakeLazyBlob{data: "streamed content", mediaType: tc.mediaType}
 			mockRepo := &mockRepository{}
-			provider := &mockRepoProvider{repo: mockRepo}
-
 			tr := &StreamLocalResource{
 				Scheme:             streamTransformerScheme(t),
-				RepoProvider:       provider,
-				ResourceRepository: resourceRepo,
+				RepoProvider:       &mockRepoProvider{repo: mockRepo},
+				ResourceRepository: &fakeResourceRepo{blob: lazy},
 			}
 
 			result, err := tr.Transform(ctx, ociStreamSpec(wgetSourceResource("blob", nil)))
 			r.NoError(err)
 			r.NotNil(result)
-
-			r.True(resourceRepo.streamCalled, "the streaming download must be used for an idempotent source")
 
 			localBlob, ok := mockRepo.addedResource.Access.(*v2.LocalBlob)
 			r.True(ok, "expected a *v2.LocalBlob access, got %T", mockRepo.addedResource.Access)
@@ -343,43 +234,8 @@ func TestStreamLocalResource_UntypedSourceMediaType(t *testing.T) {
 			if sizer, ok := mockRepo.addedBlob.(blob.SizeAware); ok {
 				r.Equal(blob.SizeUnknown, sizer.Size())
 			}
-			r.Equal(1, lazy.opens, "reading the media type must open the source once")
 		})
 	}
-}
-
-// TestStreamLocalResource_MaterializesNonIdempotentStream guards the idempotency
-// gate on the fused path: a streaming source whose request is not idempotent must
-// be materialized via DownloadResource and must never be opened by the streaming
-// path, so the non-idempotent request is issued only once. Mirrors the uploader's
-// TestSourceMaterializesNonIdempotentStream.
-func TestStreamLocalResource_MaterializesNonIdempotentStream(t *testing.T) {
-	r := require.New(t)
-	ctx := t.Context()
-
-	stream := &nonIdempotentStreamBlob{}
-	materialized := &fakeLazyBlob{data: "materialized", mediaType: "text/plain"}
-	resourceRepo := &fakeStreamingResourceRepo{blob: stream, materialized: materialized}
-	mockRepo := &mockRepository{}
-	provider := &mockRepoProvider{repo: mockRepo}
-
-	tr := &StreamLocalResource{
-		Scheme:             streamTransformerScheme(t),
-		RepoProvider:       provider,
-		ResourceRepository: resourceRepo,
-	}
-
-	result, err := tr.Transform(ctx, ociStreamSpec(wgetSourceResource("blob", nil)))
-	r.NoError(err)
-	r.NotNil(result)
-
-	r.Equal(0, stream.opens, "the non-idempotent streaming source must never be opened")
-	r.True(resourceRepo.downloadCalled, "the non-idempotent source must be materialized via DownloadResource")
-	r.Equal(materialized, mockRepo.addedBlob, "the materialized blob must be the one added")
-
-	localBlob, ok := mockRepo.addedResource.Access.(*v2.LocalBlob)
-	r.True(ok, "expected a *v2.LocalBlob access, got %T", mockRepo.addedResource.Access)
-	r.Equal("text/plain", localBlob.MediaType)
 }
 
 // newInProcessOCIRepository builds a real *oci.Repository backed by an in-process
@@ -426,8 +282,8 @@ func TestStreamLocalResource_RealPackOCI(t *testing.T) {
 	ctx := t.Context()
 
 	const content = "real pack streaming content"
-	lazy := &primingLazyBlob{data: content, contentType: "application/x-test"}
-	resourceRepo := &fakeStreamingResourceRepo{blob: lazy}
+	lazy := &primingLazyBlob{data: content, contentType: "application/x-test", primed: true}
+	resourceRepo := &fakeResourceRepo{blob: lazy}
 
 	repo := newInProcessOCIRepository(t)
 
@@ -459,7 +315,7 @@ func TestStreamLocalResource_RealPackOCI(t *testing.T) {
 	r.True(ok)
 	r.NotNil(out.Output)
 	r.NotNil(out.Output.Resource)
-	r.True(resourceRepo.streamCalled, "an idempotent source must take the streaming path")
+	r.True(resourceRepo.downloadCalled, "the source must be read with DownloadResource")
 	r.NotNil(out.Output.Resource.Access, "the transferred resource must carry an access")
 	r.Contains(strings.ToLower(out.Output.Resource.Access.GetType().Name), "localblob",
 		"the transferred resource must end up with a LocalBlob access")
@@ -585,7 +441,7 @@ func TestStreamLocalResource_PreservesDescriptorMetadata(t *testing.T) {
 	tr := &StreamLocalResource{
 		Scheme:             streamTransformerScheme(t),
 		RepoProvider:       &mockRepoProvider{repo: repo},
-		ResourceRepository: &fakeStreamingResourceRepo{blob: &fakeLazyBlob{data: "content", mediaType: "text/plain"}},
+		ResourceRepository: &fakeResourceRepo{blob: &fakeLazyBlob{data: "content", mediaType: "text/plain"}},
 	}
 	out, err := tr.Transform(t.Context(), ociStreamSpec(src))
 	r.NoError(err)

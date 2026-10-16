@@ -228,15 +228,12 @@ func uploadedDigest(src *descriptor.Digest, computed string) (*descriptor.Digest
 	return src.DeepCopy(), nil
 }
 
-// downloadSource prefers the lazy streaming source, so the common wget/s3 -> remote
-// path needs no temporary file. The source is read exactly once, so a
-// non-idempotent request is safe to stream here. A repository without the
-// capability falls back to DownloadResource. The HTTP target may retain bytes if
-// verification fails at EOF. No delete operation is defined for this target.
+// downloadSource returns the source content. The wget and s3 repositories return a
+// lazy blob, so the common wget/s3 -> remote path needs no temporary file. A
+// non-idempotent wget request is downloaded once into a temporary file instead.
+// The HTTP target may retain bytes if verification fails at EOF. No delete
+// operation is defined for this target.
 func (t *HTTPStreamingTransformer) downloadSource(ctx context.Context, resource *descriptor.Resource, creds runtime.Typed) (blob.ReadOnlyBlob, error) {
-	if streamingRepo, ok := t.ResourceRepository.(repository.StreamingResourceRepository); ok {
-		return streamingRepo.DownloadResourceStream(ctx, resource, creds)
-	}
 	return t.ResourceRepository.DownloadResource(ctx, resource, creds)
 }
 

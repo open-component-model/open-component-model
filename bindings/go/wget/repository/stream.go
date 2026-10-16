@@ -12,39 +12,15 @@ import (
 	"ocm.software/open-component-model/bindings/go/wget/checksum"
 	"ocm.software/open-component-model/bindings/go/wget/checksum/httpverify"
 	"ocm.software/open-component-model/bindings/go/wget/internal/download"
-	accessspec "ocm.software/open-component-model/bindings/go/wget/spec/access"
 	v1 "ocm.software/open-component-model/bindings/go/wget/spec/access/v1"
 )
 
-// Assert that the wget resource repository offers the streaming capability.
-var _ repository.StreamingResourceRepository = (*ResourceRepository)(nil)
-
-// DownloadResourceStream returns a lazy, replayable blob for a wget resource that
-// streams the HTTP body on demand instead of materializing it to a temporary file.
-// It is the streaming counterpart of [ResourceRepository.DownloadResource] and
-// backs the by-value transfer path to a remote target.
+// newStream builds the lazy blob for the wget access. No request is sent.
 //
-// Both verification legs of DownloadResource are preserved, inline and
-// stream-then-verify. The configured checksum policy runs over the streamed bytes
-// once the body ends: under Require and Prefer the source-advertised checksum is
-// verified, and Skip performs no policy verification. The resource digest is
-// verified by wrapping the lazy blob with [repository.VerifyDownload], which checks
-// the content against the descriptor digest as it is read. A mismatch on either leg
-// fails the read and the close, so a corrupted transfer still fails even though the
-// body has already been forwarded to the target.
-func (r *ResourceRepository) DownloadResourceStream(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) (blob.ReadOnlyBlob, error) {
-	if resource == nil {
-		return nil, fmt.Errorf("resource is required")
-	}
-	if resource.Access == nil {
-		return nil, fmt.Errorf("resource access is required")
-	}
-
-	wget := &v1.Wget{}
-	if err := accessspec.Scheme.Convert(resource.Access, wget); err != nil {
-		return nil, fmt.Errorf("error converting resource access spec: %w", err)
-	}
-
+// The configured checksum policy runs over the streamed bytes once the body ends:
+// under Require and Prefer the source-advertised checksum is verified, and Skip
+// performs no policy verification. A mismatch fails the final read and the close.
+func (r *ResourceRepository) newStream(ctx context.Context, wget *v1.Wget, credentials runtime.Typed) *download.Stream {
 	policy, hasPolicy := httpverify.PolicyForMode(r.checksumConfig.ModeForURL(wget.URL))
 
 	opts := []download.Option{
@@ -69,7 +45,7 @@ func (r *ResourceRepository) DownloadResourceStream(ctx context.Context, resourc
 		}
 	}
 
-	stream := download.NewStream(ctx, download.Request{
+	return download.NewStream(ctx, download.Request{
 		URL:        wget.URL,
 		MediaType:  wget.MediaType,
 		Header:     wget.Header,
@@ -77,6 +53,22 @@ func (r *ResourceRepository) DownloadResourceStream(ctx context.Context, resourc
 		Body:       wget.Body,
 		NoRedirect: wget.NoRedirect,
 	}, verify, opts...)
+}
 
-	return repository.VerifyDownload(ctx, resource, stream)
+// streamResource wraps stream so that the content is verified against the
+// resource digest as it is read. When the access does not pin a media type, the
+// request is sent once here to read it from the response; the first read of the
+// returned blob uses that response, so no second request is sent.
+func streamResource(ctx context.Context, resource *descriptor.Resource, stream *download.Stream) (blob.ReadOnlyBlob, error) {
+	verified, err := repository.VerifyDownload(ctx, resource, stream)
+	if err != nil {
+		return nil, err
+	}
+	if _, known := stream.MediaType(); !known {
+		if err := stream.Prime(); err != nil {
+			_ = stream.Close()
+			return nil, err
+		}
+	}
+	return verified, nil
 }

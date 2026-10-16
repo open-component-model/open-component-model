@@ -9,27 +9,11 @@ import (
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/s3/internal/download"
+	v2 "ocm.software/open-component-model/bindings/go/s3/spec/access/v2"
 )
 
-// Assert that the s3 resource repository offers the streaming capability.
-var _ repository.StreamingResourceRepository = (*ResourceRepository)(nil)
-
-// DownloadResourceStream returns a lazy, replayable blob for an S3 resource that
-// streams the object body on demand instead of materializing it to a temporary
-// file. It is the streaming counterpart of [ResourceRepository.DownloadResource]
-// and backs the by-value transfer path to a remote target.
-//
-// The resource digest is verified inline, stream-then-verify: the lazy blob is
-// wrapped with [repository.VerifyDownload], which checks the content against the
-// descriptor digest as it is read and reports a mismatch at end-of-stream. A
-// corrupted transfer therefore still fails even though the body has already been
-// forwarded to the target.
-func (r *ResourceRepository) DownloadResourceStream(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) (blob.ReadOnlyBlob, error) {
-	spec, err := r.convertAccess(resource)
-	if err != nil {
-		return nil, err
-	}
-
+// newStream builds the lazy blob for the S3 object. No request is sent.
+func (r *ResourceRepository) newStream(ctx context.Context, spec *v2.S3, credentials runtime.Typed) *download.Stream {
 	opts := []download.Option{
 		download.WithCredentials(credentials),
 	}
@@ -43,7 +27,7 @@ func (r *ResourceRepository) DownloadResourceStream(ctx context.Context, resourc
 		opts = append(opts, download.WithHTTPClient(r.httpClient))
 	}
 
-	stream := download.NewStream(ctx, download.Request{
+	return download.NewStream(ctx, download.Request{
 		Region:       spec.Region,
 		BucketName:   spec.BucketName,
 		ObjectKey:    spec.ObjectKey,
@@ -52,10 +36,22 @@ func (r *ResourceRepository) DownloadResourceStream(ctx context.Context, resourc
 		Endpoint:     spec.Endpoint,
 		UsePathStyle: spec.UsePathStyle,
 	}, opts...)
+}
 
+// streamResource wraps stream so that the content is verified against the
+// resource digest as it is read. When the access does not pin a media type, the
+// object is requested once here to read it from the response; the first read of
+// the returned blob uses that response, so no second request is sent.
+func streamResource(ctx context.Context, resource *descriptor.Resource, stream *download.Stream) (blob.ReadOnlyBlob, error) {
 	verified, err := repository.VerifyDownload(ctx, resource, stream)
 	if err != nil {
 		return nil, fmt.Errorf("failed preparing s3 resource stream for verification: %w", err)
+	}
+	if _, known := stream.MediaType(); !known {
+		if err := stream.Prime(); err != nil {
+			_ = stream.Close()
+			return nil, err
+		}
 	}
 	return verified, nil
 }

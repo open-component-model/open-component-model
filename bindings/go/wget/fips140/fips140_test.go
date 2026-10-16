@@ -51,15 +51,16 @@ func TestDownloadResource_LegacyChecksums(t *testing.T) {
 			repo := repository.NewResourceRepository(nil, repository.WithHTTPClient(server.Client()),
 				repository.WithChecksumConfig(&checksumhttpv1alpha1.Config{Mode: checksumhttpv1alpha1.ChecksumModeRequire}))
 			b, err := repo.DownloadResource(t.Context(), wgetResource(t, server.URL+"/resource"), nil)
-			if tt.wantErr != "" {
-				r.ErrorContains(err, tt.wantErr)
-				return
-			}
 			r.NoError(err)
 			rc, err := b.ReadCloser()
 			r.NoError(err)
 			t.Cleanup(func() { _ = rc.Close() })
+			// The blob of a GET is lazy, so the checksum is verified when the body ends.
 			data, err := io.ReadAll(rc)
+			if tt.wantErr != "" {
+				r.ErrorContains(err, tt.wantErr)
+				return
+			}
 			r.NoError(err)
 			r.Equal(content, data)
 		})

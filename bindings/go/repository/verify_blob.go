@@ -35,7 +35,6 @@ var (
 	_ blob.MediaTypeAware        = (*verifyingBlob)(nil)
 	_ blob.MediaTypeOverrideable = (*verifyingBlob)(nil)
 	_ io.Closer                  = (*verifyingBlob)(nil)
-	_ IdempotentSource           = idempotentVerifyingBlob{}
 )
 
 // newVerifyingBlob returns base wrapped so that its content is compared to `expected`.
@@ -103,25 +102,6 @@ func (b *verifyingBlob) SetMediaType(mediaType string) {
 	if overrideable, ok := b.base.(blob.MediaTypeOverrideable); ok {
 		overrideable.SetMediaType(mediaType)
 	}
-}
-
-// idempotentVerifyingBlob is a verifyingBlob over a base that implements
-// [IdempotentSource], and forwards it. A verifyingBlob over any other base does not
-// implement IdempotentSource, so wrapping neither hides nor invents the report.
-type idempotentVerifyingBlob struct {
-	*verifyingBlob
-}
-
-func (b idempotentVerifyingBlob) Idempotent() bool {
-	return b.base.(IdempotentSource).Idempotent()
-}
-
-// withIdempotency returns b as an [IdempotentSource] if its base is one.
-func (b *verifyingBlob) withIdempotency() blob.ReadOnlyBlob {
-	if _, ok := b.base.(IdempotentSource); ok {
-		return idempotentVerifyingBlob{b}
-	}
-	return b
 }
 
 // Close forwards to the underlying blob so that wrapping does not leak the

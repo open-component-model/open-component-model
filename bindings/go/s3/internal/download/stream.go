@@ -33,18 +33,15 @@ type Stream struct {
 	mu        sync.Mutex
 	client    *s3.Client
 	mediaType string
+	// pending is a reader that Prime opened and that ReadCloser did not return yet.
+	pending io.ReadCloser
 }
 
 var (
 	_ blob.ReadOnlyBlob   = (*Stream)(nil)
 	_ blob.MediaTypeAware = (*Stream)(nil)
+	_ io.Closer           = (*Stream)(nil)
 )
-
-// Idempotent reports that the source request can be safely re-issued. The S3
-// source is always a GetObject, so repeating it is safe.
-func (s *Stream) Idempotent() bool {
-	return true
-}
 
 // NewStream builds a lazy streaming blob for the S3 object described by req. The
 // S3 client is created on the first read and reused on subsequent reads. Options
@@ -80,9 +77,53 @@ func (s *Stream) MediaType() (string, bool) {
 	return s.mediaType, true
 }
 
-// ReadCloser issues a GetObject request and returns a reader over the object body.
-// Each call starts a fresh request, so the blob is replayable.
+// Prime sends the GetObject request once and keeps the open reader, so that the
+// media type is read from the Content-Type of the response when the request does
+// not pin one. The next ReadCloser call returns this reader, so no second request
+// is sent. Close releases the reader if ReadCloser never returns it.
+func (s *Stream) Prime() error {
+	rc, err := s.request()
+	if err != nil {
+		return err
+	}
+	s.mu.Lock()
+	previous := s.pending
+	s.pending = rc
+	s.mu.Unlock()
+	if previous != nil {
+		_ = previous.Close()
+	}
+	return nil
+}
+
+// ReadCloser returns a reader over the object body. The first call after Prime
+// returns the reader that Prime opened. Every other call sends a new GetObject
+// request, so the blob is replayable.
 func (s *Stream) ReadCloser() (io.ReadCloser, error) {
+	s.mu.Lock()
+	rc := s.pending
+	s.pending = nil
+	s.mu.Unlock()
+	if rc != nil {
+		return rc, nil
+	}
+	return s.request()
+}
+
+// Close releases a reader that Prime opened and that ReadCloser did not return.
+func (s *Stream) Close() error {
+	s.mu.Lock()
+	rc := s.pending
+	s.pending = nil
+	s.mu.Unlock()
+	if rc != nil {
+		_ = rc.Close()
+	}
+	return nil
+}
+
+// request sends a GetObject request and returns a reader over the object body.
+func (s *Stream) request() (io.ReadCloser, error) {
 	if s.req.BucketName == "" {
 		return nil, fmt.Errorf("bucketName is required")
 	}
