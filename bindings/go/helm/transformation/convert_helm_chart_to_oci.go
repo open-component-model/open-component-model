@@ -119,23 +119,29 @@ func (t *ConvertHelmChartToOCI) Transform(ctx context.Context, step runtime.Type
 	transformation.Output.Resource = transformation.Spec.Resource
 	transformation.Output.Resource.Type = access.HelmRepositoryType
 
-	var hashAlgorithm string
-	switch result.Desc.Digest.Algorithm() {
-	case godigest.SHA256:
-		hashAlgorithm = "SHA-256"
-	case godigest.SHA512:
-		hashAlgorithm = "SHA-512"
-	default:
-		return nil, fmt.Errorf("unsupported OCI manifest digest algorithm: %s", result.Desc.Digest.Algorithm())
+	// Record the converted artifact's digest only when the source resource carried one.
+	// Conversion changes the resource's representation, so a present digest is replaced by
+	// the new OCI artifact digest; an absent one stays absent — transfer must not inject a
+	// digest a resource lacked, which would change the signed descriptor and break a
+	// signature that excluded it.
+	if transformation.Spec.Resource.Digest != nil {
+		var hashAlgorithm string
+		switch result.Desc.Digest.Algorithm() {
+		case godigest.SHA256:
+			hashAlgorithm = "SHA-256"
+		case godigest.SHA512:
+			hashAlgorithm = "SHA-512"
+		default:
+			return nil, fmt.Errorf("unsupported OCI manifest digest algorithm: %s", result.Desc.Digest.Algorithm())
+		}
+		// Use digest of top-level-manifest
+		transformation.Output.Resource.Digest = &descv2.Digest{
+			HashAlgorithm:          hashAlgorithm,
+			NormalisationAlgorithm: "ociArtifactDigest/v1",
+			Value:                  result.Desc.Digest.Encoded(),
+		}
+		slog.DebugContext(ctx, "Set OCI image imageReference digest in output resource", "value", transformation.Output.Resource.Digest.Value)
 	}
-
-	// Use digest of top-level-manifest
-	transformation.Output.Resource.Digest = &descv2.Digest{
-		HashAlgorithm:          hashAlgorithm,
-		NormalisationAlgorithm: "ociArtifactDigest/v1",
-		Value:                  result.Desc.Digest.Encoded(),
-	}
-	slog.DebugContext(ctx, "Set OCI image imageReference digest in output resource", "value", transformation.Output.Resource.Digest.Value)
 
 	imageReference, err := imageReferenceFromHelmAccess(helmAccess)
 	if err != nil {
