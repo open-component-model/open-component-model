@@ -170,6 +170,13 @@ var _ = Describe("controller", func() {
 					}
 				}
 
+				if strings.HasSuffix(example.Name(), "-cross-namespace") {
+					By("validating the object in the other namespace")
+					Expect(utils.WaitForResource(ctx, "create", timeout,
+						"configmap/"+example.Name()+"-dashboard", "-n", example.Name()+"-monitoring",
+					)).To(Succeed())
+				}
+
 				// Check for configuration and localization
 				if strings.HasSuffix(example.Name(), "-configuration-localization") {
 					expectedRegistry, err := looseref.ParseReference(imageRegistry + "/")

@@ -88,6 +88,10 @@ spec:
                     - --deployer-download-max-resource-size={{ .deployerDownloadMaxResourceSize }}
                     {{- end }}
                     {{- end }}
+                    {{- /* Deployers */}}
+                    {{- /* dig: a helm upgrade --reuse-values from a release without these keys must not fail */}}
+                    - --enable-deployer={{ dig "deployer" "enabled" true .Values.manager }}
+                    - --enable-namespaced-deployer={{ dig "namespacedDeployer" "enabled" true .Values.manager }}
                     {{- /* Logging */}}
                     {{- with .Values.manager.logging }}
                     {{- if .level }}

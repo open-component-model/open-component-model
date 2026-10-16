@@ -73,6 +73,12 @@ func (t *AddOCIArtifact) Transform(ctx context.Context, step runtime.Typed) (run
 		return nil, fmt.Errorf("failed converting resource to v2 format: %w", err)
 	}
 
+	// A resource whose source carried no digest must stay without one (never inject a digest
+	// a source lacked — it would change the signed descriptor).
+	if transformation.Spec.Resource.Digest == nil {
+		v2UpdatedResource.Digest = nil
+	}
+
 	// Populate output
 	transformation.Output.Resource = v2UpdatedResource
 
