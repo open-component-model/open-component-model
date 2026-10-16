@@ -126,8 +126,9 @@ service account.
 The binding below uses `ocm-k8s-toolkit-controller-manager` as the service account name only when the chart's release name contains `ocm-k8s-toolkit`. Other release names (and GitOps tools such as Flux) produce names like `<release-name>-ocm-k8s-toolkit-controller-manager`. Pin it with `fullnameOverride: ocm-k8s-toolkit`, or look it up: `kubectl get sa -n ocm-k8s-toolkit-system -l app.kubernetes.io/name=ocm-k8s-toolkit`.
 {{</callout>}}
 
-Pick the tab for your orchestrator. Each example grants the controller permissions for the orchestrator's resources
-and the Kubernetes resources the deployer manages.
+Pick the tab for your orchestrator. Each example grants the controller read access to the orchestrator's resources
+and the Kubernetes resources the deployer manages. Save your tab's manifest as `custom-rbac.yaml`, apply it, then
+confirm the access.
 
 {{< tabs "ocm-controller-rbac" >}}
 {{< tab "kro" >}}
@@ -177,18 +178,24 @@ subjects:
     namespace: ocm-k8s-toolkit-system
 ```
 
-After applying with `kubectl apply` below, confirm the controller has the expected access. The output should be `yes`:
+Apply it to your cluster:
 
 ```bash
-kubectl auth can-i create resourcegraphdefinitions.kro.run \
+kubectl apply -f custom-rbac.yaml
+```
+
+Confirm the controller has the expected access. The output should be `yes`:
+
+```bash
+kubectl auth can-i watch resourcegraphdefinitions.kro.run \
   --as=system:serviceaccount:ocm-k8s-toolkit-system:ocm-k8s-toolkit-controller-manager
 ```
 
 {{< /tab >}}
 {{< tab "Crossplane" >}}
 
-Grant the groups the Deployer actually touches: the XRD and Composition (`apiextensions.crossplane.io`), the composite
-kind the XRD registers (`ocm.software`), and the OCM `Resource` objects (`delivery.ocm.software`).
+Grant read access to the groups the deployer touches: the XRD and Composition (`apiextensions.crossplane.io`), the
+composite kind the XRD registers (`ocm.software`), and the OCM `Resource` objects (`delivery.ocm.software`).
 
 ```yaml
 apiVersion: rbac.authorization.k8s.io/v1
@@ -198,13 +205,13 @@ metadata:
 rules:
   - apiGroups: ["apiextensions.crossplane.io"]
     resources: ["compositeresourcedefinitions", "compositions"]
-    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+    verbs: ["get", "list", "watch"]
   - apiGroups: ["ocm.software"]
     resources: ["bootstraps"]
-    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+    verbs: ["get", "list", "watch"]
   - apiGroups: ["delivery.ocm.software"]
     resources: ["resources"]
-    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+    verbs: ["get", "list", "watch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -222,21 +229,21 @@ subjects:
 
 Replace `bootstraps` with the composite kind your own XRD registers.
 
-After applying with `kubectl apply` below, confirm the controller has the expected access. The output should be `yes`:
-
-```bash
-kubectl auth can-i -A create compositions.apiextensions.crossplane.io \
-  --as=system:serviceaccount:ocm-k8s-toolkit-system:ocm-k8s-toolkit-controller-manager
-```
-
-{{< /tab >}}
-{{< /tabs >}}
-
 Apply it to your cluster:
 
 ```bash
 kubectl apply -f custom-rbac.yaml
 ```
+
+Confirm the controller has the expected access. The output should be `yes`:
+
+```bash
+kubectl auth can-i watch compositions.apiextensions.crossplane.io \
+  --as=system:serviceaccount:ocm-k8s-toolkit-system:ocm-k8s-toolkit-controller-manager
+```
+
+{{< /tab >}}
+{{< /tabs >}}
 
 ## Deployer: grant the controller write access
 
@@ -263,6 +270,7 @@ Confirm it with `kubectl auth can-i create` instead of `watch` in the check abov
 These verbs let every `Deployer` write those kinds anywhere in the cluster. After you
 [migrate to the NamespacedDeployer]({{< relref "migrate-to-namespaced-deployer.md" >}}), remove them again and keep
 only the read verbs.
+
 {{<callout context="caution" title="Least Privilege" icon="outline/alert-triangle">}}
 Follow the principle of least privilege. Only grant the verbs and resources your deployers actually need.
 {{</callout>}}

@@ -2,7 +2,7 @@
 title: Deploy an Application from Chained RGDs with OCM and kro
 description: "Package an OCM component with two chained kro ResourceGraphDefinitions and deploy it as plain manifests, no Helm chart or GitOps deployer needed."
 icon: "⚙️"
-weight: 62
+weight: 66
 toc: true
 ---
 

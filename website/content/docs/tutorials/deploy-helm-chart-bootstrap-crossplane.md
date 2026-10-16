@@ -763,10 +763,21 @@ Build the component version locally:
 ocm add cv
 ```
 
-Transfer to your registry with `--copy-resources --upload-as ociArtifact` to enable localization. The `--upload-as ociArtifact` flag is required so the Helm chart and image land as OCI artifacts in the target registry, keeping image references the Composition can rewrite:
+Transfer to your registry with the OCI uploader to enable localization. An OCI uploader entry makes the Helm chart and image land as OCI artifacts in the target registry, keeping image references the Composition can rewrite. A local blob catch-all copies every other resource:
+
+```yaml
+cat > .ocmconfig << 'EOF'
+type: generic.config.ocm.software/v1
+configurations:
+  - type: oci.uploader.transfer.config.ocm.software/v1alpha1
+  - type: localblob.uploader.transfer.config.ocm.software/v1alpha1
+EOF
+```
+
+> **Note:** The CLI merges `.ocmconfig` from the current directory with your other OCM configuration (such as `$HOME/.ocmconfig`), so credentials and resolvers stay in effect.
 
 ```bash
-ocm transfer cv --copy-resources --upload-as ociArtifact transport-archive//ocm.software/ocm-k8s-toolkit/bootstrap-crossplane:1.0.0 $OCM_REPO
+ocm transfer cv transport-archive//ocm.software/ocm-k8s-toolkit/bootstrap-crossplane:1.0.0 $OCM_REPO
 ```
 
 Now that the component is in your registry, make it public so the OCM Controllers and Flux can pull it without
@@ -792,8 +803,8 @@ You should see image references pointing to `$OCM_REPO/...` instead of the origi
 ## Deploy the Helm Chart
 
 Now create the bootstrap resources that fetch and apply the XRD + Composition from the component. This chain is
-identical to the kro variant. The Deployer applies whatever blob the component carries, so nothing here is
-Crossplane-specific.
+identical to the kro variant. The `NamespacedDeployer` applies whatever blob the component carries with its own
+service account, so nothing here is Crossplane-specific.
 
 {{< steps >}}
 {{< step >}}
@@ -855,19 +866,49 @@ spec:
   # ocmConfig is required, if the OCM repository requires credentials to access it.
   # ocmConfig:
 ---
-apiVersion: delivery.ocm.software/v1alpha1
-kind: Deployer
+apiVersion: v1
+kind: ServiceAccount
 metadata:
   name: bootstrap-deployer
+  namespace: ${BOOTSTRAP_NAMESPACE}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: bootstrap-deployer
+rules:
+  # The XRD and Composition are cluster-scoped, so the service account needs a
+  # ClusterRole and ClusterRoleBinding rather than a namespaced Role.
+  - apiGroups: ["apiextensions.crossplane.io"]
+    resources: ["compositeresourcedefinitions", "compositions"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: bootstrap-deployer
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: bootstrap-deployer
+subjects:
+  - kind: ServiceAccount
+    name: bootstrap-deployer
+    namespace: ${BOOTSTRAP_NAMESPACE}
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: NamespacedDeployer
+metadata:
+  name: bootstrap-deployer
+  namespace: ${BOOTSTRAP_NAMESPACE}
 spec:
   resourceRef:
     # Reference to the OCM resource that contains the XRD + Composition blob.
+    # NamespacedDeployer is namespace-scoped, so this is a same-namespace reference.
     name: bootstrap-composition
-    # The Deployer is cluster-scoped, so point it at the namespace of the
-    # referenced resource.
-    namespace: ${BOOTSTRAP_NAMESPACE}
+  # The deployer applies the XRD + Composition with the permissions of this service account.
+  serviceAccountName: bootstrap-deployer
   # ocmConfig is required, if the OCM repository requires credentials to access it.
-  # (You also need to specify the namespace of the reference as the 'deployer' is cluster-scoped.)
   # ocmConfig:
 EOF
 ```
@@ -880,7 +921,7 @@ EOF
 ### Apply the bootstrap resources
 
 {{< callout context="caution" title="RBAC required before you apply" icon="outline/alert-triangle" >}}
-Please make sure that you updated your RBAC permissions before applying this command. Follow our [Configure Custom RBAC for Deployers]({{< relref "custom-rbac.md" >}}) guide to know how to do that.
+The `bootstrap-deployer` service account above gets write access from the `ClusterRole` in `bootstrap.yaml`. The controller also watches the deployed objects for drift with its own identity, so it still needs `get`, `list` and `watch` on the XRD and Composition. Follow [Configure Custom RBAC for Deployers]({{< relref "custom-rbac.md#grant-the-controller-read-access" >}}) to grant them before you apply.
 {{< /callout >}}
 
 ```bash
