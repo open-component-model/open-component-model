@@ -743,7 +743,6 @@ func TestResourceLocalBlobDigestMatchesStoredContent(t *testing.T) {
 	}{
 		{name: "oci layout", content: layoutContent, media: layout.MediaTypeOCIImageLayoutTarV1, expectedNormalization: "ociArtifactDigest/v1"},
 		{name: "oci layer", content: layerContent, media: "application/octet-stream", expectedNormalization: "genericBlobDigest/v1"},
-		{name: "oci layer with partial digest", content: layerContent, media: "application/octet-stream", initialDigest: &descriptor.Digest{NormalisationAlgorithm: "genericBlobDigest/v1"}, expectedNormalization: "genericBlobDigest/v1"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			r := require.New(t)
@@ -921,7 +920,7 @@ func TestPackingPreservesResourceDigest(t *testing.T) {
 				{name: "legacy OCI digest", normalization: "ociArtifactDigest/v1", hasDigest: true},
 				{name: "generic blob digest", normalization: "genericBlobDigest/v1", hasDigest: true},
 				{name: "normalized JSON digest", normalization: "jsonNormalisation/v1", hasDigest: true},
-				{name: "intermediate blob digest", hasDigest: true},
+				{name: "partial digest is rejected", hasDigest: true},
 				{name: "missing digest"},
 			} {
 				t.Run(tc.name, func(t *testing.T) {
@@ -954,6 +953,12 @@ func TestPackingPreservesResourceDigest(t *testing.T) {
 						},
 					}
 					packed, err := ArtifactBlob(t.Context(), store, b, Options{AccessScheme: scheme})
+					// hasDigest with no normalisation is a partially specified digest, which is
+					// rejected rather than inferred.
+					if tc.hasDigest && tc.normalization == "" {
+						r.ErrorContains(err, "a digest must be complete or absent")
+						return
+					}
 					r.NoError(err)
 					r.True(content.Equal(root, packed))
 					updated, ok := resource.Access.(*v2.LocalBlob)
