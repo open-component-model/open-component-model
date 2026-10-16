@@ -36,6 +36,9 @@ func processRepositoryUploader(resource descriptorv2.Resource, access runtime.Ty
 			return fmt.Errorf("cannot convert source repository spec to unstructured: %w", err)
 		}
 		cv["repository"] = sourceRepo.Data
+		if val.Pin != "" {
+			cv["digest"] = val.Pin
+		}
 	}
 	data := map[string]any{
 		"resource":         resource,
