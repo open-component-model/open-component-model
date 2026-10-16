@@ -95,7 +95,7 @@ func ResourceLocalBlobOCILayer(ctx context.Context, storage content.Storage, b *
 	// so we stream in either case: the digest and size are discovered/verified
 	// during the chunked upload instead of by reading the whole blob into memory
 	// first. Blobs that already expose both a size and a digest need no buffer
-	// and take the regular push path (which still chunks large blobs by size).
+	// and take the regular, monolithic push path.
 	if pusher, ok := storage.(remotestore.StreamingPusher); ok {
 		if layer, streamed, err := streamResourceLayer(ctx, pusher, b, layerOpts); err != nil {
 			return ociImageSpecV1.Descriptor{}, err
@@ -122,9 +122,8 @@ func ResourceLocalBlobOCILayer(ctx context.Context, storage content.Storage, b *
 //
 // It returns ok=false (no error, no content consumed) when streaming does not
 // apply — the blob already exposes BOTH a size and a digest (so no buffering is
-// needed; the regular push path chunks large blobs by size anyway), or the
-// store reports streaming unavailable — so the caller falls back to the
-// buffering push path.
+// needed and the regular monolithic push applies), or the store reports
+// streaming unavailable — so the caller falls back to the buffering push path.
 //
 // A digest known in advance (from the blob or the access LocalReference) is
 // passed through and verified against the streamed bytes; an unknown digest is
@@ -136,8 +135,8 @@ func streamResourceLayer(ctx context.Context, pusher remotestore.StreamingPusher
 	}
 	sizeKnown := b.Size() != blob.SizeUnknown
 
-	// Both known: no buffering would occur, so let the regular push path handle
-	// it (RemoteStore.Push still chunks large blobs by the configured threshold).
+	// Both known: no buffering would occur, so let the regular monolithic push
+	// path handle it.
 	if sizeKnown && len(knownDigest) > 0 {
 		return ociImageSpecV1.Descriptor{}, false, nil
 	}
