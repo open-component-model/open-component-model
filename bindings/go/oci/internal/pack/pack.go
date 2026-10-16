@@ -198,8 +198,8 @@ func finishResourceLayer(ctx context.Context, b *ociblob.ArtifactBlob, access *v
 	if err := reconcileResourceDigest(b.Artifact, layer.Digest, internaldigest.GenericBlobDigestV1); err != nil {
 		// A v1 OCI artifact set packs here (its media type is not a layout type): the
 		// layer digest is the tar archive hash, but the recorded digest is the artifact's
-		// manifest root. Accept when the recorded digest matches a root the archive declares;
-		// a plain blob that merely claims an ociArtifactDigest has no index.json and stays rejected.
+		// manifest root. Accept when the archive carries a blob hashing to the recorded root;
+		// a plain blob that merely claims an ociArtifactDigest carries no such blob and stays rejected.
 		resource, ok := b.Artifact.(*descriptor.Resource)
 		if !ok || !matchesArtifactSetRoot(ctx, storage, layer, resource.Digest) {
 			return ociImageSpecV1.Descriptor{}, err
@@ -275,21 +275,22 @@ func reconcileResourceDigest(artifact descriptor.Artifact, packed digest.Digest,
 	return nil
 }
 
-// matchesArtifactSetRoot reports whether recorded matches a root declared by an OCI
-// artifact set already pushed to storage under layer. A v1 artifact set packs through
-// the generic path, so its layer digest is the tar archive hash, not the recorded
-// manifest root; the content is re-read from storage (never the original blob) and
-// only its index.json is parsed, so this stays cheap and leaves the pushed blob untouched.
+// matchesArtifactSetRoot reports whether an OCI artifact set already pushed to storage
+// under layer carries a blob whose bytes hash to recorded. A v1 artifact set packs
+// through the generic path, so its layer digest is the tar archive hash, not the recorded
+// manifest root; the content is re-read from storage (never the original blob) and only
+// the blob named by recorded is hashed, leaving the pushed blob untouched.
 func matchesArtifactSetRoot(ctx context.Context, storage content.Storage, layer ociImageSpecV1.Descriptor, recorded *descriptor.Digest) bool {
+	want, ok := internaldigest.RecordedDigest(recorded)
+	if !ok {
+		return false
+	}
 	data, err := storage.Fetch(ctx, layer)
 	if err != nil {
 		return false
 	}
-	roots, err := tar.ArtifactSetRoots(ociblob.NewDescriptorBlob(data, layer))
-	if err != nil {
-		return false
-	}
-	return internaldigest.MatchesAnyRoot(recorded, roots)
+	found, err := tar.ArtifactSetContainsDigest(ociblob.NewDescriptorBlob(data, layer), want)
+	return err == nil && found
 }
 
 // ResourceBlobOCILayerOptions defines the configuration options for pushing a blob as a resource.

@@ -82,20 +82,23 @@ func VerifyRecorded(target *runtime.Digest, content digest.Digest) error {
 	return nil
 }
 
-// MatchesAnyRoot reports whether target is a complete digest that matches one of the
-// given OCI artifact-set roots. It fails closed: a nil, incomplete, or
-// non-recomputable-normalisation target matches nothing, so an unverifiable digest is
-// never accepted as a match.
-func MatchesAnyRoot(target *runtime.Digest, roots []digest.Digest) bool {
+// RecordedDigest reconstructs the go-digest a complete recorded digest refers to.
+// It returns false unless the digest is complete and its hash algorithm is known, and
+// validates the result so a malformed value is rejected rather than silently never
+// matching. Callers use it to look up content by the recorded (signed) digest.
+func RecordedDigest(target *runtime.Digest) (digest.Digest, bool) {
 	if !IsComplete(target) {
-		return false
+		return "", false
 	}
-	for _, root := range roots {
-		if VerifyOCIArtifact(target, root) == nil {
-			return true
-		}
+	algo, ok := SHAMapping[target.HashAlgorithm]
+	if !ok {
+		return "", false
 	}
-	return false
+	d := digest.NewDigestFromEncoded(algo, target.Value)
+	if d.Validate() != nil {
+		return "", false
+	}
+	return d, true
 }
 
 // IsComplete reports whether hash algorithm, normalisation algorithm, and value are all set.

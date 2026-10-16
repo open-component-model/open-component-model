@@ -170,7 +170,7 @@ func TestLocalBlobDigest_AddAcceptsSwappedNormalisationLabel(t *testing.T) {
 // TestLocalBlobDigest_GetLocalResource_V1ArtifactSet reads the legacy v1 fixture
 // whose OCI artifact is stored as a tar.gz artifact set: its localReference is the
 // archive hash, while the recorded ociArtifactDigest is the inner manifest root. The
-// read must verify the recorded digest against the archive's declared root, not the
+// read must verify the recorded digest against a blob the archive carries, not the
 // archive hash, and so must succeed.
 func TestLocalBlobDigest_GetLocalResource_V1ArtifactSet(t *testing.T) {
 	r := require.New(t)
@@ -188,7 +188,7 @@ func TestLocalBlobDigest_GetLocalResource_V1ArtifactSet(t *testing.T) {
 	r.Equal("ociArtifactDigest/v1", res.Digest.NormalisationAlgorithm)
 
 	blob, _, err := repo.GetLocalResource(ctx, "github.com/acme.org/helloworld", "1.0.0", res.ToIdentity())
-	r.NoError(err, "a v1 artifact set must verify against its declared root, not the archive hash")
+	r.NoError(err, "a v1 artifact set must verify against a blob it carries, not the archive hash")
 	_, err = io.ReadAll(mustReader(t, blob))
 	r.NoError(err)
 }
@@ -196,8 +196,8 @@ func TestLocalBlobDigest_GetLocalResource_V1ArtifactSet(t *testing.T) {
 // TestLocalBlobDigest_AddLocalResource_V1ArtifactSet adds the real v1 artifact-set
 // archive through the generic pack path (its media type is not a layout type). The
 // layer digest is the archive hash, but the recorded ociArtifactDigest is the inner
-// manifest root, so the pack must verify against the archive's declared root. A wrong
-// root must still be rejected.
+// manifest root, so the pack must verify the archive carries a blob hashing to the
+// recorded root. A wrong root must still be rejected.
 func TestLocalBlobDigest_AddLocalResource_V1ArtifactSet(t *testing.T) {
 	r := require.New(t)
 	const root = "62be4af3382a4493cb7f1dd4ec47bcb28f1863b615fc9e4a1dceefbe93898dd0"
@@ -217,7 +217,7 @@ func TestLocalBlobDigest_AddLocalResource_V1ArtifactSet(t *testing.T) {
 
 	added, err := newCTFRepository(t).AddLocalResource(t.Context(), "ocm.software/repro", "1.0.0",
 		newV1Resource(root), inmemory.New(bytes.NewReader(archive)))
-	r.NoError(err, "a v1 artifact set must verify against its declared root, not the archive hash")
+	r.NoError(err, "a v1 artifact set must verify against a blob it carries, not the archive hash")
 	r.Equal(root, added.Digest.Value, "the recorded root must be preserved, not rewritten to the archive hash")
 
 	_, err = newCTFRepository(t).AddLocalResource(t.Context(), "ocm.software/repro", "1.0.0",
@@ -416,8 +416,9 @@ func downloadLayerResource(t *testing.T) (*oci.Repository, *descriptor.Resource)
 // downloadV1ArtifactSetResource pushes the real v1 artifact-set archive and returns a
 // resource whose OCIImageLayer access points at it (as pack.go assigns to a generically
 // stored local blob's global access). The access/layer digest is the archive hash, but
-// the recorded ociArtifactDigest is the manifest root, so download must fall back to the
-// archive's declared root instead of comparing against the archive hash.
+// the recorded ociArtifactDigest is the manifest root, so download must fall back to
+// checking the archive carries a blob hashing to the recorded root instead of comparing
+// against the archive hash.
 func downloadV1ArtifactSetResource(t *testing.T) (*oci.Repository, *descriptor.Resource) {
 	t.Helper()
 	r := require.New(t)
