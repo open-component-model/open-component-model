@@ -65,17 +65,11 @@ func Test_Integration_OCIRepository_ChunkedPush(t *testing.T) {
 	clientCopy.Transport = counter
 	authClient.Client = &clientCopy
 
-	// ~4.5 chunks of pseudo-random-ish content; known blobs of this size and up
-	// are chunked.
-	data := bytes.Repeat([]byte("chunked-blob-payload!"), 220)
-	r.Greater(int64(len(data)), int64(chunkSize*4))
-	threshold := int64(len(data))
-
 	resolver, err := urlresolver.New(
 		urlresolver.WithBaseURL(address),
 		urlresolver.WithPlainHTTP(true),
 		urlresolver.WithBaseClient(authClient),
-		urlresolver.WithChunkedPush(chunkSize, threshold),
+		urlresolver.WithChunkedPush(chunkSize),
 	)
 	r.NoError(err)
 
@@ -84,22 +78,17 @@ func Test_Integration_OCIRepository_ChunkedPush(t *testing.T) {
 	rs, ok := store.(*remotestore.RemoteStore)
 	r.Truef(ok, "store %T must be *remotestore.RemoteStore", store)
 
-	t.Run("known-digest Push below the threshold is monolithic", func(t *testing.T) {
-		r := require.New(t)
-		small := data[:threshold-1]
-		desc := ociImageSpecV1.Descriptor{MediaType: "application/octet-stream", Digest: digest.FromBytes(small), Size: int64(len(small))}
-		counter.reset()
-		r.NoError(rs.Push(ctx, desc, bytes.NewReader(small)))
-		r.Zero(counter.patchCount(), "a known blob below the threshold must be pushed in one request")
-		assertBlobRoundTrips(t, ctx, rs, desc, small)
-	})
+	// ~4.5 chunks of pseudo-random-ish content.
+	data := bytes.Repeat([]byte("chunked-blob-payload!"), 220)
+	r.Greater(int64(len(data)), int64(chunkSize*4))
 
-	t.Run("known-digest Push at the threshold is chunked", func(t *testing.T) {
+	t.Run("known-digest Push is monolithic (no PATCH)", func(t *testing.T) {
 		r := require.New(t)
-		desc := ociImageSpecV1.Descriptor{MediaType: "application/octet-stream", Digest: digest.FromBytes(data), Size: int64(len(data))}
+		dig := digest.FromBytes(data)
+		desc := ociImageSpecV1.Descriptor{MediaType: "application/octet-stream", Digest: dig, Size: int64(len(data))}
 		counter.reset()
 		r.NoError(rs.Push(ctx, desc, bytes.NewReader(data)))
-		r.Positive(counter.patchCount(), "a known blob at the threshold must be uploaded in chunks")
+		r.Zero(counter.patchCount(), "a known-digest Push must be monolithic (no PATCH requests)")
 		assertBlobRoundTrips(t, ctx, rs, desc, data)
 	})
 
@@ -273,7 +262,7 @@ func Test_Integration_OCIRepository_StreamingDoesNotBuffer(t *testing.T) {
 		urlresolver.WithBaseURL(address),
 		urlresolver.WithPlainHTTP(true),
 		urlresolver.WithBaseClient(authClient),
-		urlresolver.WithChunkedPush(chunkSize, 0),
+		urlresolver.WithChunkedPush(chunkSize),
 	)
 	r.NoError(err)
 
@@ -335,16 +324,13 @@ func Test_Integration_OCIRepository_StreamingDoesNotBuffer(t *testing.T) {
 // buffered) and the component version round-trips.
 //
 // Behavior of the transfer as a function of the input blob (remote registry
-// store; chunking is always on, WithChunkedPush tunes chunk size and threshold):
+// store; chunked streaming is always on, WithChunkedPush only tunes the size):
 //
 //	blob size | blob digest | transfer behavior
 //	----------+-------------+--------------------------------------------------
-//	known     | known       | RemoteStore.Push: one POST/PUT below the chunk
-//	          |             | threshold (512 MiB by default), chunked PATCH
-//	          |             | upload at or above it. If the registry refuses
-//	          |             | chunking before accepting a byte, the blob is
-//	          |             | pushed in one request, replaying the chunk
-//	          |             | already read. No buffering; digest present.
+//	known     | known       | always monolithic POST/PUT via RemoteStore.Push
+//	          |             | (the embedded oras push). No chunking, no
+//	          |             | threshold. No buffering; digest already present.
 //	known     | unknown     | streamed: PushStreaming computes the digest during
 //	          |             | upload. No buffering.
 //	unknown   | known       | streamed: PushStreaming discovers the size during
@@ -390,7 +376,7 @@ func Test_Integration_OCIRepository_AddComponentVersion_Streaming(t *testing.T) 
 		urlresolver.WithBaseURL(address),
 		urlresolver.WithPlainHTTP(true),
 		urlresolver.WithBaseClient(createAuthClient(address, testUsername, password)),
-		urlresolver.WithChunkedPush(1024 /*1 KiB chunks*/, 0),
+		urlresolver.WithChunkedPush(1024 /*1 KiB chunks*/),
 	)
 	r.NoError(err)
 

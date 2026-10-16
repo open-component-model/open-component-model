@@ -61,9 +61,9 @@ var benchBlobSizes = []struct {
 	{"64MiB", 64 << 20},
 }
 
-// BenchmarkRemoteStore_Push benchmarks Push of blobs below the default chunk
-// threshold, which go up in one POST/PUT. The server discards bytes, so this
-// isolates the client-side POST/PUT overhead.
+// BenchmarkRemoteStore_Push benchmarks monolithic Push (the only Push path now
+// that chunking is only available via PushStreaming). The server discards bytes,
+// so this isolates the client-side POST/PUT overhead.
 //
 // Run with:
 //

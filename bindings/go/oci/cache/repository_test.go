@@ -5,7 +5,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"sync"
 	"testing"
 
 	"github.com/opencontainers/go-digest"
@@ -136,7 +135,7 @@ func TestRepository_SatisfiesStoreAndStreamingPusher(t *testing.T) {
 func TestProxyRepository_NilCachesReturnsChunkedStore(t *testing.T) {
 	r := require.New(t)
 	inner := &remote.Repository{}
-	got := ProxyRepository(inner, nil, nil, remotestore.DefaultChunkSize, remotestore.DefaultChunkThreshold)
+	got := ProxyRepository(inner, nil, nil, remotestore.DefaultChunkSize)
 	store, ok := got.(*remotestore.RemoteStore)
 	r.True(ok, "no-cache path must return the chunked store")
 	r.Same(inner, store.Repository)
@@ -148,7 +147,7 @@ func TestProxyRepository_BlobCacheOnlyWraps(t *testing.T) {
 	r := require.New(t)
 	inner := &remote.Repository{}
 	c := newTestCache(t, Options{})
-	got := ProxyRepository(inner, c, nil, 0, 0)
+	got := ProxyRepository(inner, c, nil, 0)
 	wrapped, ok := got.(*Repository)
 	r.True(ok)
 	r.Same(inner, wrapped.Repository)
@@ -160,7 +159,7 @@ func TestProxyRepository_ReferenceCacheOnlyWraps(t *testing.T) {
 	r := require.New(t)
 	inner := &remote.Repository{}
 	rc := newTestRefCache(t, Options{})
-	got := ProxyRepository(inner, nil, rc, 0, 0)
+	got := ProxyRepository(inner, nil, rc, 0)
 	wrapped, ok := got.(*Repository)
 	r.True(ok)
 	r.Same(inner, wrapped.Repository)
@@ -173,7 +172,7 @@ func TestProxyRepository_BothCachesWrap(t *testing.T) {
 	inner := &remote.Repository{}
 	c := newTestCache(t, Options{})
 	rc := newTestRefCache(t, Options{})
-	got := ProxyRepository(inner, c, rc, 0, 0)
+	got := ProxyRepository(inner, c, rc, 0)
 	wrapped, ok := got.(*Repository)
 	r.True(ok)
 	r.Same(inner, wrapped.Repository)
@@ -182,55 +181,19 @@ func TestProxyRepository_BothCachesWrap(t *testing.T) {
 }
 
 // TestProxyRepository_WrapsWithChunkConfig: with a cache, the decorator carries
-// the chunk config and still exposes the chunked streaming push, so chunking
+// the chunk size and still exposes the chunked streaming push, so streaming
 // survives the cache.
 func TestProxyRepository_WrapsWithChunkConfig(t *testing.T) {
 	r := require.New(t)
 	inner := &remote.Repository{}
 	c := newTestCache(t, Options{})
-	got := ProxyRepository(inner, c, nil, remotestore.DefaultChunkSize, remotestore.DefaultChunkThreshold)
+	got := ProxyRepository(inner, c, nil, remotestore.DefaultChunkSize)
 	wrapped, ok := got.(*Repository)
 	r.True(ok)
 	r.Same(inner, wrapped.Repository)
 	r.Equal(remotestore.DefaultChunkSize, wrapped.store.ChunkSize)
-	r.Equal(remotestore.DefaultChunkThreshold, wrapped.store.ChunkThreshold)
 	_, ok = got.(remotestore.StreamingPusher)
 	r.True(ok, "cache-wrapped chunking path must be a StreamingPusher")
-}
-
-// TestRepository_PushChunksFromThresholdUnderCache guards that Push goes
-// through the chunked store when a cache is configured, which is the CLI
-// default: the promoted embedded Push would upload every blob in one request.
-func TestRepository_PushChunksFromThresholdUnderCache(t *testing.T) {
-	r := require.New(t)
-	var mu sync.Mutex
-	var methods []string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		_, _ = io.Copy(io.Discard, req.Body)
-		mu.Lock()
-		methods = append(methods, req.Method)
-		mu.Unlock()
-		switch req.Method {
-		case http.MethodPost:
-			w.Header().Set("Location", "/v2/test-repo/blobs/uploads/1")
-			w.WriteHeader(http.StatusAccepted)
-		case http.MethodPatch:
-			w.Header().Set("Location", req.URL.Path)
-			w.WriteHeader(http.StatusAccepted)
-		case http.MethodPut:
-			w.WriteHeader(http.StatusCreated)
-		default:
-			w.WriteHeader(http.StatusOK)
-		}
-	}))
-	t.Cleanup(srv.Close)
-
-	store := ProxyRepository(plainHTTPRepo(t, srv), newTestCache(t, Options{}), nil, 4 /*chunk*/, 8 /*threshold*/)
-	data := []byte("0123456789")
-	r.NoError(store.Push(t.Context(),
-		ociImageSpecV1.Descriptor{MediaType: "application/octet-stream", Digest: digest.FromBytes(data), Size: int64(len(data))},
-		bytes.NewReader(data)))
-	r.Equal([]string{http.MethodPost, http.MethodPatch, http.MethodPatch, http.MethodPatch, http.MethodPut}, methods)
 }
 
 // plainHTTPRepo builds a *remote.Repository pointed at srv over plain

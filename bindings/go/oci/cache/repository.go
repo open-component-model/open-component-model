@@ -13,12 +13,13 @@ import (
 )
 
 // Repository decorates an oras [*remote.Repository] with optional [BlobCache]
-// and [ReferenceCache] layers while preserving chunked and streaming push.
+// and [ReferenceCache] layers while preserving chunked streaming push.
 //
 // The embedded [*remote.Repository] keeps the promoted type assertions used
-// elsewhere ([registry.TagLister], [registry.ReferrerLister], Blobs()) working.
-// Push, PushStreaming and Untag go through the chunked store (see getStore).
-// Either cache may be nil, degrading that override to a passthrough.
+// elsewhere ([registry.TagLister], [registry.ReferrerLister], Blobs()) working,
+// and its monolithic Push. PushStreaming and Untag go through the chunked store
+// (see getStore). Either cache may be nil, degrading that override to a
+// passthrough.
 type Repository struct {
 	*remote.Repository
 
@@ -30,20 +31,14 @@ type Repository struct {
 	ReferenceCache *ReferenceCache
 }
 
-// getStore returns the store backing Push, PushStreaming and Untag. A bare
-// struct literal leaves store nil, so it falls back to a store with the default
-// chunk configuration over the embedded repository to avoid a panic.
+// getStore returns the store backing PushStreaming and Untag. A bare struct
+// literal leaves store nil, so it falls back to a store with the default chunk
+// size over the embedded repository to avoid a panic.
 func (r *Repository) getStore() *remotestore.RemoteStore {
 	if r.store != nil {
 		return r.store
 	}
 	return &remotestore.RemoteStore{Repository: r.Repository}
-}
-
-// Push delegates to the chunked store, so blobs of at least the chunk threshold
-// are uploaded in chunks under caching as well.
-func (r *Repository) Push(ctx context.Context, expected ociImageSpecV1.Descriptor, content io.Reader) error {
-	return r.getStore().Push(ctx, expected, content)
 }
 
 // PushStreaming exposes the chunked streaming push so pack's
@@ -125,12 +120,11 @@ func (r *Repository) Tag(ctx context.Context, desc ociImageSpecV1.Descriptor, re
 }
 
 // ProxyRepository decorates repo with the configured caches, carrying the chunk
-// config so chunked and streaming push survive the cache (chunkSize bytes per
-// PATCH, known blobs chunked from chunkThreshold; zero uses the defaults). With
-// no cache it returns the chunked store directly. It takes [*remote.Repository]
-// to keep the internal store type out of its signature.
-func ProxyRepository(repo *remote.Repository, blob *BlobCache, refs *ReferenceCache, chunkSize, chunkThreshold int64) spec.Store {
-	store := &remotestore.RemoteStore{Repository: repo, ChunkSize: chunkSize, ChunkThreshold: chunkThreshold}
+// size so chunked streaming push survives the cache (zero uses the default).
+// With no cache it returns the chunked store directly. It takes
+// [*remote.Repository] to keep the internal store type out of its signature.
+func ProxyRepository(repo *remote.Repository, blob *BlobCache, refs *ReferenceCache, chunkSize int64) spec.Store {
+	store := &remotestore.RemoteStore{Repository: repo, ChunkSize: chunkSize}
 	if blob == nil && refs == nil {
 		return store
 	}

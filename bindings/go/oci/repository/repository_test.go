@@ -1,16 +1,8 @@
 package repository
 
 import (
-	"bytes"
-	"fmt"
-	"io"
-	"net/http"
-	"net/http/httptest"
-	"sync"
 	"testing"
 
-	"github.com/opencontainers/go-digest"
-	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -277,48 +269,4 @@ func TestBuildResolver_SubPathExtraction(t *testing.T) {
 			assert.Equal(t, tt.expectedReference, stringer.String())
 		})
 	}
-}
-
-// TestNewResolver_DefaultsPushCommonBlobsInOneRequest is the regression test
-// for transfers to ghcr.io failing with "unexpected PATCH status 416": with the
-// default resolver, a known 20 MiB blob must go up in one request to a registry
-// that rejects PATCH bodies above 4 MiB, as ghcr.io does.
-func TestNewResolver_DefaultsPushCommonBlobsInOneRequest(t *testing.T) {
-	r := require.New(t)
-	var mu sync.Mutex
-	var requests []string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		n, _ := io.Copy(io.Discard, req.Body)
-		mu.Lock()
-		requests = append(requests, fmt.Sprintf("%s %d", req.Method, n))
-		mu.Unlock()
-		switch req.Method {
-		case http.MethodPost:
-			w.Header().Set("Location", req.URL.Path+"session")
-			w.WriteHeader(http.StatusAccepted)
-		case http.MethodPatch:
-			if n > 4<<20 {
-				w.WriteHeader(http.StatusRequestedRangeNotSatisfiable)
-				return
-			}
-			w.Header().Set("Location", req.URL.Path)
-			w.WriteHeader(http.StatusAccepted)
-		case http.MethodPut:
-			w.WriteHeader(http.StatusCreated)
-		default:
-			w.WriteHeader(http.StatusNotFound)
-		}
-	}))
-	t.Cleanup(srv.Close)
-
-	resolver, err := NewResolver(t.Context(), &http.Client{}, &ocirepospecv1.Repository{BaseUrl: srv.URL + "/org"})
-	r.NoError(err)
-	store, err := resolver.StoreForReference(t.Context(), resolver.ComponentVersionReference(t.Context(), "ocm.software/test", "1.0.0"))
-	r.NoError(err)
-
-	data := bytes.Repeat([]byte("x"), 20<<20)
-	r.NoError(store.Push(t.Context(),
-		ociImageSpecV1.Descriptor{MediaType: "application/octet-stream", Digest: digest.FromBytes(data), Size: int64(len(data))},
-		bytes.NewReader(data)))
-	r.Equal([]string{"POST 0", fmt.Sprintf("PUT %d", len(data))}, requests)
 }

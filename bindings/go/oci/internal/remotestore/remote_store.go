@@ -22,32 +22,24 @@ import (
 var ErrTagDeletionDisabled = fmt.Errorf("registry does not support tag deletion (405 Method Not Allowed)")
 
 // RemoteStore wraps *remote.Repository and adds content.Untagger support plus
-// chunked blob upload (see Push and PushStreaming).
+// chunked streaming upload (see PushStreaming).
 //
 // oras-go implements content.Untagger only for its local OCI layout store
 // (content/oci.Store). The remote registry client (registry/remote.Repository)
 // intentionally omits it: the OCI Distribution Spec treats
 // DELETE /v2/<name>/manifests/<tag> as optional, and not all registries honor it.
 //
-// oras-go's remote.Repository pushes blobs in one request only. RemoteStore
-// uploads blobs of at least ChunkThreshold in chunks (see Push), and blobs
-// whose digest or size is unknown up front in chunks while computing them (see
-// PushStreaming).
+// Push is the embedded monolithic oras push: a blob with a known digest and
+// size is always uploaded in one request. Only PushStreaming, for blobs whose
+// digest or size is unknown up front, uploads in chunks.
 type RemoteStore struct {
 	*remote.Repository
 
-	// ChunkSize is the target size in bytes for each PATCH chunk. If <= 0,
-	// DefaultChunkSize is used; it is capped at MaxChunkSize. The
-	// registry-advertised OCI-Chunk-Min-Length (from the session POST response)
-	// raises this floor for all but the final chunk.
+	// ChunkSize is the target size in bytes for each PATCH chunk of a streaming
+	// upload. If <= 0, DefaultChunkSize is used. The registry-advertised
+	// OCI-Chunk-Min-Length (from the session POST response) raises this floor
+	// for all but the final chunk.
 	ChunkSize int64
-
-	// ChunkThreshold is the minimum size in bytes of a blob with a known digest
-	// and size for Push to upload it in chunks. Smaller blobs, blobs that fit in
-	// a single chunk and all manifests are pushed in one request. If <= 0,
-	// DefaultChunkThreshold is used. Blobs of unknown size or digest are always
-	// chunked (see PushStreaming).
-	ChunkThreshold int64
 }
 
 var (
