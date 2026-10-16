@@ -36,15 +36,17 @@ type RemoteStore struct {
 
 	// ChunkSize is the target size in bytes for each PATCH chunk. If <= 0,
 	// chunked upload is disabled and Push always delegates to the embedded
-	// monolithic push. The registry-advertised OCI-Chunk-Min-Length (from the
-	// session POST response) raises this floor for all but the final chunk.
+	// monolithic push. A known registry limit caps it, down to disabling
+	// chunked upload for registries without support (see registryMaxChunkSize).
+	// The registry-advertised OCI-Chunk-Min-Length (from the session POST
+	// response) raises this floor for all but the final chunk.
 	ChunkSize int64
 
 	// ChunkThreshold is the minimum blob size in bytes for chunked upload to
 	// engage. Blobs of Size < ChunkThreshold (and all manifests) use the
 	// embedded monolithic Push. If <= 0, DefaultChunkThreshold is used. The
-	// effective threshold is never below ChunkSize, so a blob that fits in a
-	// single chunk is always pushed monolithically.
+	// effective threshold is never below the effective chunk size, so a blob
+	// that fits in a single chunk is always pushed monolithically.
 	ChunkThreshold int64
 }
 

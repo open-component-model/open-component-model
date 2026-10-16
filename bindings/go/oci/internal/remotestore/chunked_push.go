@@ -88,10 +88,11 @@ func (r *RemoteStore) Push(ctx context.Context, expected ociImageSpecV1.Descript
 	// Never chunk a blob that fits in a single chunk: a lone PATCH plus the
 	// closing PUT is strictly worse than a monolithic POST/PUT. This holds even
 	// when a caller configures ChunkThreshold below ChunkSize.
-	if threshold < r.ChunkSize {
-		threshold = r.ChunkSize
+	chunkSize := r.chunkSize()
+	if threshold < chunkSize {
+		threshold = chunkSize
 	}
-	if r.ChunkSize <= 0 || expected.Size < threshold || introspection.IsOCICompliantManifest(expected) {
+	if chunkSize <= 0 || expected.Size < threshold || introspection.IsOCICompliantManifest(expected) {
 		return r.Repository.Push(ctx, expected, content)
 	}
 	monolithic := func(content io.Reader) (ociImageSpecV1.Descriptor, error) {
@@ -110,15 +111,16 @@ func (r *RemoteStore) Push(ctx context.Context, expected ociImageSpecV1.Descript
 // empty the digest is computed from the streamed bytes. partial.Size, when
 // non-negative, is verified against the number of bytes streamed.
 //
-// If chunking is disabled or the session cannot be opened before any byte is
-// consumed, it returns an error wrapping ErrStreamingUnavailable without
-// consuming content, so the caller can buffer and retry via Push. If the
-// registry rejects the first chunk, the content has already been partially
+// If chunking is disabled (including for registries without chunked upload
+// support, see registryMaxChunkSize) or the session cannot be opened before any
+// byte is consumed, it returns an error wrapping ErrStreamingUnavailable
+// without consuming content, so the caller can buffer and retry via Push. If
+// the registry rejects the first chunk, the content has already been partially
 // read, so PushStreaming itself buffers the remainder in memory and retries as
 // a monolithic push (see pushBuffered).
 func (r *RemoteStore) PushStreaming(ctx context.Context, partial ociImageSpecV1.Descriptor, content io.Reader) (ociImageSpecV1.Descriptor, error) {
-	if r.ChunkSize <= 0 {
-		return ociImageSpecV1.Descriptor{}, fmt.Errorf("chunk size not configured: %w", ErrStreamingUnavailable)
+	if r.chunkSize() <= 0 {
+		return ociImageSpecV1.Descriptor{}, fmt.Errorf("chunked upload disabled for registry %q: %w", r.Reference.Registry, ErrStreamingUnavailable)
 	}
 	size := partial.Size
 	if size == 0 {
@@ -284,10 +286,12 @@ func resolveFinalDigest(computed, known digest.Digest) (digest.Digest, error) {
 // initialised session state. Its digester matches knownDigest's algorithm (the
 // canonical algorithm when no digest is declared), and a non-sha256 knownDigest
 // additionally advertises that algorithm via the digest-algorithm query
-// parameter. The returned chunkedUpload has its chunk size raised to any
-// registry-advertised OCI-Chunk-Min-Length. Both the configured chunk size and
-// the advertised minimum are bounded by MaxChunkSize so the PATCH buffer stays
-// allocatable; an over-bound value fails here, before any content is consumed.
+// parameter. The returned chunkedUpload uses the registry's chunk size (see
+// chunkSize), raised to any registry-advertised OCI-Chunk-Min-Length, which
+// takes precedence over a known registry limit. Both the configured chunk size
+// and the advertised minimum are bounded by MaxChunkSize so the PATCH buffer
+// stays allocatable; an over-bound value fails here, before any content is
+// consumed.
 func (r *RemoteStore) openUploadSession(ctx context.Context, knownDigest digest.Digest) (*chunkedUpload, error) {
 	if r.ChunkSize > MaxChunkSize {
 		return nil, fmt.Errorf("chunked blob push: configured chunk size %d exceeds the maximum supported chunk size %d", r.ChunkSize, MaxChunkSize)
@@ -324,7 +328,7 @@ func (r *RemoteStore) openUploadSession(ctx context.Context, knownDigest digest.
 	if err != nil {
 		return nil, err
 	}
-	chunk := r.ChunkSize
+	chunk := r.chunkSize()
 	if minLen := parseChunkMinLength(resp); minLen > chunk {
 		if minLen > MaxChunkSize {
 			return nil, fmt.Errorf("chunked blob push: advertised OCI-Chunk-Min-Length %d exceeds the maximum supported chunk size %d", minLen, MaxChunkSize)
