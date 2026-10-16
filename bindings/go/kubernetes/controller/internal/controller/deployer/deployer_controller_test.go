@@ -253,6 +253,7 @@ stringData:
 				Name:      "sample-cm",
 			}, gotCM)).To(Succeed())
 			Expect(gotCM.Data).To(HaveKeyWithValue("hello", "world"))
+			Expect(gotCM.GetLabels()).To(HaveKeyWithValue(managedByLabel, deployerManager))
 
 			By("verifying the Secret has been applied")
 			gotSec := &corev1.Secret{}

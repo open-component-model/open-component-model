@@ -1,0 +1,70 @@
+# Without a namespace the Deployment lands in the namespace of the NamespacedDeployer.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: k8s-manifest-cross-namespace-podinfo
+  labels:
+    app: podinfo
+spec:
+  selector:
+    matchLabels:
+      app: podinfo
+      app.kubernetes.io/name: k8s-manifest-cross-namespace-podinfo
+  template:
+    metadata:
+      labels:
+        app: podinfo
+        app.kubernetes.io/name: k8s-manifest-cross-namespace-podinfo
+    spec:
+      containers:
+        - name: podinfod
+          image: ghcr.io/stefanprodan/podinfo:6.9.2
+          imagePullPolicy: IfNotPresent
+          command:
+            - ./podinfo
+            - --port=9898
+            - --port-metrics=9797
+          ports:
+            - containerPort: 9898
+              name: http
+              protocol: TCP
+            - containerPort: 9797
+              name: http-metrics
+              protocol: TCP
+          readinessProbe:
+            exec:
+              command:
+                - podcli
+                - check
+                - http
+                - localhost:9898/readyz
+            initialDelaySeconds: 5
+            timeoutSeconds: 5
+          resources:
+            limits:
+              cpu: 2000m
+              memory: 512Mi
+            requests:
+              cpu: 100m
+              memory: 64Mi
+---
+# The dashboard belongs to the workload but lives in the namespace of the monitoring stack.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: k8s-manifest-cross-namespace-dashboard
+  namespace: k8s-manifest-cross-namespace-monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  podinfo.json: |
+    {
+      "title": "podinfo",
+      "panels": [
+        {
+          "title": "Request rate",
+          "type": "timeseries",
+          "targets": [{"expr": "sum(rate(http_requests_total{app=\"podinfo\"}[1m]))"}]
+        }
+      ]
+    }
