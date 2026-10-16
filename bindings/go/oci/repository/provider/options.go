@@ -45,6 +45,10 @@ type Options struct {
 	// sane defaults — only Dir is auto-derived from TempDir when left
 	// empty. Leave nil to disable reference caching entirely.
 	ReferenceCacheOptions *cache.Options
+
+	// Caches, when non-nil, is used instead of building caches from
+	// BlobCacheOptions and ReferenceCacheOptions, which are then ignored.
+	Caches *cache.Caches
 }
 
 type Option func(*Options)
@@ -104,5 +108,15 @@ func WithBlobCacheOptions(opts *cache.Options) Option {
 func WithReferenceCacheOptions(opts *cache.Options) Option {
 	return func(o *Options) {
 		o.ReferenceCacheOptions = opts
+	}
+}
+
+// WithCaches makes the provider use c instead of building its own caches.
+// Share one [cache.Caches] between all providers that would otherwise resolve to the
+// same cache directory. Takes precedence over [WithBlobCacheOptions] and
+// [WithReferenceCacheOptions].
+func WithCaches(c *cache.Caches) Option {
+	return func(o *Options) {
+		o.Caches = c
 	}
 }

@@ -12,7 +12,6 @@ import (
 	"golang.org/x/time/rate"
 	"k8s.io/apimachinery/pkg/api/equality"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -28,12 +27,12 @@ import (
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/resolution"
-	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/resolution/workerpool"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/setup"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/status"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/util"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/pkg/configuration"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
+	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/transfer"
 	transferspec "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
@@ -49,7 +48,7 @@ const (
 type Reconciler struct {
 	*ocm.BaseReconciler
 
-	// Resolver provides repository resolution and caching for the transfer source.
+	// Resolver provides repository resolution for the transfer source.
 	Resolver *resolution.Resolver
 
 	// RepositoryScheme decodes repository specs into their concrete types for
@@ -86,11 +85,8 @@ func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, con
 		return fmt.Errorf("failed setting targetRepositoryRef index: %w", err)
 	}
 
-	eventSource := workerpool.NewEventSource(r.Resolver.WorkerPool())
-
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha1.Replication{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
-		WatchesRawSource(eventSource).
 		Watches(
 			&v1alpha1.Component{},
 			handler.EnqueueRequestsFromMapFunc(r.replicationsForIndex(componentRefIndex)),
@@ -122,10 +118,8 @@ func (r *Reconciler) replicationsForIndex(index string) handler.MapFunc {
 		requests := make([]reconcile.Request, 0, len(list.Items))
 		for _, replication := range list.Items {
 			requests = append(requests, reconcile.Request{
-				NamespacedName: k8stypes.NamespacedName{
-					Namespace: replication.GetNamespace(),
-					Name:      replication.GetName(),
-				},
+				Namespace: replication.GetNamespace(),
+				Name:      replication.GetName(),
 			})
 		}
 
@@ -307,23 +301,15 @@ func (r *Reconciler) reconcile(ctx context.Context, replication *v1alpha1.Replic
 		return ctrl.Result{}, fmt.Errorf("failed to create plugin manager: %w", err)
 	}
 
-	cacheBackedRepo, err := r.Resolver.NewCacheBackedRepository(ctx, &resolution.RepositoryOptions{
+	sourceResolver, err := r.Resolver.RepositoryResolver(ctx, &resolution.Options{
 		RepositorySpec: sourceSpec,
 		Configuration:  cfg,
 		PluginManager:  pm,
-		RequesterFunc: func() workerpool.RequesterInfo {
-			return workerpool.RequesterInfo{
-				NamespacedName: k8stypes.NamespacedName{
-					Namespace: replication.GetNamespace(),
-					Name:      replication.GetName(),
-				},
-			}
-		},
 	})
 	if err != nil {
 		status.MarkNotReady(r.EventRecorder, replication, v1alpha1.GetRepositoryFailedReason, err.Error())
 
-		return ctrl.Result{}, fmt.Errorf("failed to create cache-backed repository: %w", err)
+		return ctrl.Result{}, fmt.Errorf("failed to create repository resolver: %w", err)
 	}
 
 	// Reuse the configurations already loaded above to look up transfer and uploader settings; a nil cfg is valid.
@@ -344,30 +330,15 @@ func (r *Reconciler) reconcile(ctx context.Context, replication *v1alpha1.Replic
 		}
 	}
 
-	// Descriptor fetches for discovery go through the resolution service. Uncached component version
-	// aborts the walk with `ErrResolutionInProgress` and the event from the resolution service will retrigger
-	// this object once done fetching.
-	//
-	// The process takes turns to complete: resolved descriptors are cache hits, each
-	// pass enqueues the next component version of the graph until all component versions are in the cache and
-	// accounted for.
 	tgd, err := transfer.BuildGraphDefinition(ctx, transferCfg, uploaderCfgs, transfer.Mapping{
 		Components: []transfer.ComponentID{{
 			Component: component.Status.Component.Component,
 			Version:   component.Status.Component.Version,
 		}},
 		Target:   targetSpec,
-		Resolver: transfer.NewRepositoryResolver(cacheBackedRepo, sourceSpec),
+		Resolver: &concreteSpecResolver{ComponentVersionRepositoryResolver: sourceResolver, scheme: r.RepositoryScheme},
 	})
-	switch {
-	case errors.Is(err, workerpool.ErrResolutionInProgress):
-		status.MarkNotReady(r.EventRecorder, replication, v1alpha1.ResolutionInProgress, err.Error())
-		logger.Info("transfer graph discovery in progress, waiting for resolution event",
-			"component", component.Status.Component.Component,
-			"version", component.Status.Component.Version)
-
-		return ctrl.Result{}, nil
-	case err != nil:
+	if err != nil {
 		status.MarkNotReady(r.EventRecorder, replication, v1alpha1.ReplicationFailedReason, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to build transfer graph definition: %w", err)
@@ -430,15 +401,13 @@ func (r *Reconciler) transfer(ctx context.Context, logger logr.Logger, replicati
 	var failed []v1alpha1.TransferEvent
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		for e := range events {
 			if e.Err != nil {
 				failed = append(failed, toFailedTransferEvent(e))
 			}
 		}
-	}()
+	})
 
 	logger.Info("executing transfer",
 		"component", component.Status.Component.Component,
@@ -495,14 +464,35 @@ func convertToTyped(scheme *runtime.Scheme, data []byte) (runtime.Typed, error) 
 		return nil, fmt.Errorf("failed to decode repository spec: %w", err)
 	}
 
-	obj, err := scheme.NewObject(raw.Type)
+	return toConcreteSpec(scheme, raw)
+}
+
+func toConcreteSpec(scheme *runtime.Scheme, spec runtime.Typed) (runtime.Typed, error) {
+	obj, err := scheme.NewObject(spec.GetType())
 	if err != nil {
-		return nil, fmt.Errorf("unsupported repository spec type %q for transfer: %w", raw.Type, err)
+		return nil, fmt.Errorf("unsupported repository spec type %q for transfer: %w", spec.GetType(), err)
 	}
 
-	if err := scheme.Convert(raw, obj); err != nil {
+	if err := scheme.Convert(spec, obj); err != nil {
 		return nil, fmt.Errorf("failed to convert repository spec to concrete type: %w", err)
 	}
 
 	return obj, nil
+}
+
+// concreteSpecResolver returns repository specs as concrete types. The transfer library picks its transformations
+// by the concrete spec type, while the wrapped resolver returns raw specs.
+type concreteSpecResolver struct {
+	resolvers.ComponentVersionRepositoryResolver
+
+	scheme *runtime.Scheme
+}
+
+func (r *concreteSpecResolver) GetRepositorySpecificationForComponent(ctx context.Context, component, version string) (runtime.Typed, error) {
+	spec, err := r.ComponentVersionRepositoryResolver.GetRepositorySpecificationForComponent(ctx, component, version)
+	if err != nil || spec == nil {
+		return spec, err
+	}
+
+	return toConcreteSpec(r.scheme, spec)
 }

@@ -238,6 +238,38 @@ func TestCache_Fetch_CollapsesConcurrentMisses(t *testing.T) {
 	assert.True(t, c.Has(desc.Digest), "blob must be persisted after the collapsed fetch")
 }
 
+// A caller can miss the cache just before an earlier flight publishes the blob and then
+// start a flight of its own. That flight must serve the published blob, not fetch again.
+func TestCache_FetchAndStore_LateLeaderServesPublishedBlob(t *testing.T) {
+	tests := []struct {
+		name       string
+		policy     RemotePolicy
+		wantExists int64
+	}{
+		{name: "if not present", policy: RemotePolicyIfNotPresent},
+		{name: "always still verifies remote access", policy: RemotePolicyAlways, wantExists: 1},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			c := newTestCache(t, Options{RemotePolicy: tc.policy})
+			base := newFakeReadOnly()
+			manifest := bytes.Repeat([]byte("m"), 4096)
+			desc := base.put(ociImageSpecV1.MediaTypeImageManifest, manifest)
+
+			first, err := c.fetchAndStore(t.Context(), base, desc)
+			r.NoError(err)
+			late, err := c.fetchAndStore(t.Context(), base, desc)
+			r.NoError(err)
+
+			r.Equal(manifest, first)
+			r.Equal(manifest, late)
+			r.EqualValues(1, base.fetches.Load())
+			r.Equal(tc.wantExists, base.exists.Load())
+		})
+	}
+}
+
 func TestCache_Fetch_UpstreamErrorPropagates(t *testing.T) {
 	c := newTestCache(t, Options{})
 	base := newFakeReadOnly()
