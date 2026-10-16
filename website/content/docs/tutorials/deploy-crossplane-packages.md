@@ -44,6 +44,10 @@ each package from there by digest, never from the original source.
 
 ## Prerequisites
 
+{{< callout context="note" title="Set up your environment" icon="outline/settings-check" >}}
+Before starting, make sure you have set up your environment as described in the [setup guide]({{< relref "docs/getting-started/setup-controller-environment.md" >}}).
+{{< /callout >}}
+
 - [Controller environment]({{< relref "docs/getting-started/setup-controller-environment.md" >}}) with the OCM Controllers and kro installed. You don't need Flux or Argo CD.
 - [Crossplane v2](https://docs.crossplane.io/latest/get-started/install/) installed in the same cluster:
 
@@ -55,10 +59,17 @@ each package from there by digest, never from the original source.
 
 - [Crossplane CLI](https://docs.crossplane.io/latest/cli/) installed, to build `.xpkg` files
 - [OCM CLI]({{< relref "docs/getting-started/ocm-cli-installation.md" >}}) installed
-- An OCI registry that you can push to and that your cluster can pull from, with
-  [credentials configured]({{< relref "docs/how-to/configure-multiple-credentials.md" >}}) for the OCM CLI.
+- Access to an OCI registry that your cluster can pull from (e.g.,
+  [ghcr.io](https://docs.github.com/en/packages/learn-github-packages/introduction-to-github-packages)).
   The kubelet on your nodes must also reach this registry, because Function and Provider packages run as pods.
-- `envsubst` installed (part of `gettext`)
+- [skopeo](https://github.com/containers/skopeo) installed, if you want to embed a local `.xpkg` file instead of
+  pushing it first
+- `envsubst` installed (pre-installed on most Linux/macOS systems; part of `gettext`)
+
+{{< callout context="note" title="Private registries" icon="outline/lock" >}}
+If you use a private registry, three parties need credentials: the OCM CLI, the OCM Controllers, and Crossplane.
+The [Verify the transfer](#verify-the-transfer) step shows how to configure each of them.
+{{< /callout >}}
 
 ## Scenario
 
@@ -68,13 +79,19 @@ move to any registry, including an air-gapped one.
 
 You build an `App` API as a Configuration package that renders a `ConfigMap` with
 `function-patch-and-transform`, ship both packages in the component `ocm.software/examples/crossplane-app`, and
-install them into Crossplane. Set the registries you use throughout:
+install them into Crossplane.
+
+## Environment Setup
+
+Set environment variables for your GitHub username and the registries you use throughout. Replace them with your
+own registries, for example an Artifactory OCI repository, if you don't use GitHub Container Registry:
 
 ```shell
-# Where your team publishes .xpkg files today, for example an Artifactory OCI repository
-export XPKG_REGISTRY=registry.example.com/crossplane
+export GITHUB_USERNAME=<your-github-username>
+# Where your team publishes .xpkg files today
+export XPKG_REGISTRY=ghcr.io/$GITHUB_USERNAME/crossplane
 # The OCM repository your clusters read from; can be the same registry
-export OCM_REPO=registry.example.com/ocm
+export OCM_REPO=ghcr.io/$GITHUB_USERNAME/ocm-tutorial
 ```
 
 ## Tutorial Steps
@@ -302,7 +319,13 @@ resources:
 
 ### Transfer the component version to your registry
 
-Copy the component version and its packages to `$OCM_REPO`. Choose where the packages land:
+Copy the component version and its packages to `$OCM_REPO`.
+
+{{< callout context="note" title="Registry credentials" icon="outline/info-circle" >}}
+If your registry requires authentication, configure [Credentials for OCM CLI]({{< relref "docs/how-to/configure-multiple-credentials.md" >}}) first.
+{{< /callout >}}
+
+Choose where the packages land:
 
 {{< tabs "xpkg-transfer" >}}
 {{< tab "As standalone OCI images" >}}
@@ -347,22 +370,6 @@ Transfer the component version:
 ocm transfer cv transport-archive//ocm.software/examples/crossplane-app:0.1.0 $OCM_REPO
 ```
 
-The descriptor in the target now points at the relocated images:
-
-```yaml
-resources:
-  - access:
-      imageReference: registry.example.com/ocm/crossplane/configuration-app:v0.1.0
-      type: ociArtifact/v1
-    name: configuration-app
-  - access:
-      imageReference: registry.example.com/ocm/crossplane-contrib/function-patch-and-transform:v0.11.0
-      type: ociArtifact/v1
-    name: function-patch-and-transform
-```
-
-With the embedded package, `configuration-app` lands at `registry.example.com/ocm/configuration-app:0.1.0` instead.
-
 {{< /tab >}}
 {{< tab "Embedded in the component version" >}}
 
@@ -380,6 +387,50 @@ EOF
 ocm transfer cv transport-archive//ocm.software/examples/crossplane-app:0.1.0 $OCM_REPO
 ```
 
+{{< /tab >}}
+{{< /tabs >}}
+
+The CLI merges `.ocmconfig` from the current directory with your other OCM configuration, so your registry
+credentials stay in effect. For details on uploaders, see
+[Migrate from --upload-as to Uploader Configurations]({{< relref "docs/how-to/migration-guides/migrate-from-upload-as.md" >}}).
+
+{{< /step >}}
+{{< step >}}
+
+### Verify the transfer
+
+Check that the component version is available in the target registry and where its packages now live:
+
+```shell
+ocm get cv $OCM_REPO//ocm.software/examples/crossplane-app:0.1.0 -o yaml
+```
+
+<details>
+<summary>You should see this output (standalone OCI images)</summary>
+
+The descriptor in the target points at the relocated images. The OCI uploader keeps the source repository path below
+`$OCM_REPO`:
+
+```yaml
+resources:
+  - access:
+      imageReference: ghcr.io/<your-github-username>/ocm-tutorial/<your-github-username>/crossplane/configuration-app:v0.1.0
+      type: ociArtifact/v1
+    name: configuration-app
+  - access:
+      imageReference: ghcr.io/<your-github-username>/ocm-tutorial/crossplane-contrib/function-patch-and-transform:v0.11.0
+      type: ociArtifact/v1
+    name: function-patch-and-transform
+```
+
+With the embedded `.xpkg` file, `configuration-app` lands at
+`ghcr.io/<your-github-username>/ocm-tutorial/configuration-app:0.1.0` instead.
+
+</details>
+
+<details>
+<summary>You should see this output (embedded in the component version)</summary>
+
 The descriptor in the target holds local blobs. Each one is a native OCI manifest that you can pull as
 `$OCM_REPO/component-descriptors/<component>@<localReference>`:
 
@@ -393,12 +444,45 @@ resources:
     name: function-patch-and-transform
 ```
 
-{{< /tab >}}
-{{< /tabs >}}
+</details>
 
-The CLI merges `.ocmconfig` from the current directory with your other OCM configuration, so your registry
-credentials stay in effect. For details on uploaders, see
-[Migrate from --upload-as to Uploader Configurations]({{< relref "docs/how-to/migration-guides/migrate-from-upload-as.md" >}}).
+GitHub Container Registry creates new packages as private. To make them public, go to the `packages` tab of your
+GitHub profile `https://github.com/$GITHUB_USERNAME?tab=packages`, and under "Package settings" change the
+visibility of every package below `ocm-tutorial` that the transfer created to `public`.
+
+Alternatively, if you want to keep your packages private, configure credentials for the OCM Controllers and Crossplane:
+
+{{< details "Configure credentials for private registries" >}}
+The **OCM Controllers** read the component version. Create a `docker-registry` secret in the namespace of the
+instance you create later (here `default`). For GitHub Container Registry, you can use a short-lived token from the
+GitHub CLI:
+
+```shell
+kubectl create secret docker-registry ghcr-secret \
+  --namespace default \
+  --docker-username=$GITHUB_USERNAME \
+  --docker-password="$(gh auth token)" \
+  --docker-server=ghcr.io
+```
+
+Then uncomment `ocmConfig` on the `Repository` in the RGD of the next step. The `Component` and `Resource` objects
+inherit it. See [Configure Credentials for OCM Controllers]({{< relref "docs/how-to/configure-credentials-ocm-controllers.md" >}}).
+
+**Crossplane** pulls the packages, and the kubelet pulls the Function and Provider runtime images. Create the same
+secret in Crossplane's namespace:
+
+```shell
+kubectl create secret docker-registry xpkg-pull-secret \
+  --namespace crossplane-system \
+  --docker-username=$GITHUB_USERNAME \
+  --docker-password="$(gh auth token)" \
+  --docker-server=ghcr.io
+```
+
+Then uncomment `packagePullSecrets` in the RGD. Crossplane passes the secret on to the runtime Deployments. Instead of
+setting secrets per package, you can attach the secret to every package under a registry prefix with a Crossplane
+[ImageConfig](https://docs.crossplane.io/latest/packages/image-configs/) (`spec.registry.authentication.pullSecretRef`).
+{{< /details >}}
 
 {{< /step >}}
 {{< step >}}
@@ -438,7 +522,7 @@ spec:
           # Required if the OCM repository needs credentials:
           # ocmConfig:
           #   - kind: Secret
-          #     name: ocm-registry-credentials
+          #     name: ghcr-secret
     - id: component
       readyWhen:
         - ${component.status.conditions.exists(c, c.type == 'Ready' && c.status == 'True')}
@@ -535,7 +619,40 @@ Key points:
 - The `Function` name must match `functionRef.name` in the Composition. `crossplane-contrib-function-patch-and-transform`
   is also the name that Crossplane's dependency resolver would generate.
 
-Apply it:
+kro needs permission to manage every kind the RGD templates, and the `CrossplaneApp` kind it generates. Grant it with
+a `ClusterRole` labeled for kro's [aggregation mode](https://kro.run/docs/advanced/access-control). If kro runs in
+`unrestricted` mode, the role is redundant but harmless:
+
+```shell
+cat > kro-rbac.yaml << 'EOF'
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kro-crossplane-app
+  labels:
+    rbac.kro.run/aggregate-to-controller: "true"
+rules:
+  - apiGroups: ["kro.run"]
+    resources: ["crossplaneapps"]
+    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+  - apiGroups: ["kro.run"]
+    resources: ["crossplaneapps/status"]
+    verbs: ["get", "patch", "update"]
+  - apiGroups: ["delivery.ocm.software"]
+    resources: ["repositories", "components", "resources"]
+    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+  - apiGroups: ["pkg.crossplane.io"]
+    resources: ["functions", "configurations"]
+    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+EOF
+
+kubectl apply -f kro-rbac.yaml
+```
+
+If you bind kro's permissions explicitly instead of through aggregation, bind this role to kro's `ServiceAccount` as
+described in [RBAC for CRDs kro creates at runtime]({{< relref "docs/how-to/custom-rbac.md#rbac-for-crds-kro-creates-at-runtime" >}}).
+
+Apply the RGD:
 
 ```shell
 envsubst < rgd.yaml | kubectl apply -f -
@@ -551,13 +668,6 @@ crossplane-app   v1alpha1     CrossplaneApp   Active   True    8s
 ```
 
 </details>
-
-{{< callout context="note" title="kro in aggregation mode" icon="outline/info-circle" >}}
-The default kro installation from the setup guide can create any kind. If you run kro with least-privilege RBAC, grant
-its `ServiceAccount` access to `delivery.ocm.software` `resources`, `repositories`, and `components`, and to
-`pkg.crossplane.io` `functions` and `configurations`, as described in
-[Configure Custom RBAC]({{< relref "docs/how-to/custom-rbac.md#rbac-for-crds-kro-creates-at-runtime" >}}).
-{{< /callout >}}
 
 {{< /step >}}
 {{< step >}}
@@ -599,14 +709,14 @@ kubectl get functions.pkg.crossplane.io,configurations.pkg.crossplane.io
 
 ```text
 NAME                                                                         INSTALLED   HEALTHY   PACKAGE
-function.pkg.crossplane.io/crossplane-contrib-function-patch-and-transform   True        True      registry.example.com/ocm/crossplane-contrib/function-patch-and-transform@sha256:677ad7d0...
+function.pkg.crossplane.io/crossplane-contrib-function-patch-and-transform   True        True      ghcr.io/<your-github-username>/ocm-tutorial/crossplane-contrib/function-patch-and-transform@sha256:677ad7d0...
 
 NAME                                                INSTALLED   HEALTHY   PACKAGE
-configuration.pkg.crossplane.io/configuration-app   True        True      registry.example.com/ocm/crossplane/configuration-app@sha256:5d7a04b0...
+configuration.pkg.crossplane.io/configuration-app   True        True      ghcr.io/<your-github-username>/ocm-tutorial/<your-github-username>/crossplane/configuration-app@sha256:5d7a04b0...
 ```
 
 With embedded packages, `PACKAGE` reads
-`registry.example.com/ocm/component-descriptors/ocm.software/examples/crossplane-app@sha256:...`.
+`ghcr.io/<your-github-username>/ocm-tutorial/component-descriptors/ocm.software/examples/crossplane-app@sha256:...`.
 
 </details>
 
@@ -717,9 +827,9 @@ Crossplane rolls out a new package revision with the new digest.
 
 ## Check your understanding
 
-- [ ] Why does Crossplane pull the packages from `$OCM_REPO` and not from `$XPKG_REGISTRY`?
-- [ ] Why does the RGD append `resource.digest.value` instead of using the tag?
-- [ ] How would you add a Provider package to the component version?
+1. Why does Crossplane pull the packages from `$OCM_REPO` and not from `$XPKG_REGISTRY`?
+2. Why does the RGD append `resource.digest.value` instead of using the tag?
+3. How would you add a Provider package to the component version?
 
 {{< details "Answers & Explanations" >}}
 
@@ -733,29 +843,6 @@ Crossplane rolls out a new package revision with the new digest.
 {{< /details >}}
 
 ## Going further
-
-### Use private registries
-
-Artifactory and most other production registries need credentials in two places:
-
-- **OCM Controllers** read the component version. Reference a credentials `Secret` with `ocmConfig` on the
-  `Repository`. The `Component` and `Resource` objects inherit it. See
-  [Configure Credentials for OCM Controllers]({{< relref "docs/how-to/configure-credentials-ocm-controllers.md" >}}).
-- **Crossplane** pulls the packages, and the kubelet pulls the Function and Provider runtime images. Create a
-  `docker-registry` secret in Crossplane's namespace and list it in `packagePullSecrets`. Crossplane passes it on to
-  the runtime Deployments:
-
-  ```shell
-  kubectl create secret docker-registry xpkg-pull-secret \
-    --namespace crossplane-system \
-    --docker-server=registry.example.com \
-    --docker-username=<user> \
-    --docker-password=<token>
-  ```
-
-  Then uncomment `packagePullSecrets` in the RGD. Instead of setting secrets per package, you can attach the secret to
-  every package under a registry prefix with a Crossplane
-  [ImageConfig](https://docs.crossplane.io/latest/packages/image-configs/) (`spec.registry.authentication.pullSecretRef`).
 
 ### Keep Crossplane's dependency resolution
 
@@ -774,7 +861,7 @@ spec:
     - type: Prefix
       prefix: xpkg.crossplane.io/
   rewriteImage:
-    prefix: registry.example.com/ocm/
+    prefix: ghcr.io/<your-github-username>/ocm-tutorial/
 ```
 
 Drop the `Function` and `skipDependencyResolution` from the RGD. Crossplane then installs the Function from the
@@ -796,7 +883,7 @@ references it.
 **Cause:** Crossplane fetched the package, but the kubelet can't pull the same image to run the Function. This happens
 when the nodes have no route or no credentials for the target registry.
 
-**Fix:** Add `packagePullSecrets` to the `Function` (see [Use private registries](#use-private-registries)), and make sure
+**Fix:** Add `packagePullSecrets` to the `Function` (see [Verify the transfer](#verify-the-transfer)), and make sure
 the nodes can reach and trust the registry.
 
 ### Symptom: `id function is a reserved keyword in KRO`
@@ -811,6 +898,7 @@ the nodes can reach and trust the registry.
 kubectl delete app hello -n default
 kubectl delete -f instance.yaml
 envsubst < rgd.yaml | kubectl delete -f -
+kubectl delete -f kro-rbac.yaml
 rm -rf /tmp/xpkg-ocm
 ```
 
