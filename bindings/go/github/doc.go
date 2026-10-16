@@ -1,6 +1,16 @@
 // Package github provides access to GitHub repositories as OCM resources and
 // sources.
 //
+// # Deprecation
+//
+// The GitHub access type is deprecated in favor of the Git access type in
+// [ocm.software/open-component-model/bindings/go/git], which fetches the same
+// commit over the Git protocol from any server. New constructors should use
+// Git/v1; the CLI warns when a constructor still uses GitHub. This package stays
+// so published descriptors keep resolving: the two types produce different
+// archive bytes, so a published resource cannot switch types without changing
+// its digest.
+//
 // It implements the "GitHub" access type: a resource whose bytes are a
 // repository's source archive at a pinned commit, described by a
 // [ocm.software/open-component-model/bindings/go/github/spec/access/v1.GitHub]

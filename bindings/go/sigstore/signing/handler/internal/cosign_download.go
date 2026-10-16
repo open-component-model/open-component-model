@@ -2,6 +2,7 @@ package internal
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -23,7 +24,11 @@ import (
 var envFile string
 
 // cosignVersion is the pinned cosign version for auto-download, parsed from .env.
-var cosignVersion = parseCosignVersion()
+var cosignVersion = envValue("COSIGN_VERSION")
+
+// cosignChecksumsSHA256 is the pinned SHA256 of the release's cosign_checksums.txt, parsed from .env.
+// It anchors the download in OCM's source: a release whose checksums file was replaced is rejected.
+var cosignChecksumsSHA256 = envValue("COSIGN_CHECKSUMS_SHA256")
 
 // platformBinaryName is the platform-specific cosign binary name for the current OS/arch.
 var platformBinaryName = cosignBinaryName(runtime.GOOS, runtime.GOARCH)
@@ -34,21 +39,25 @@ var pinnedDownloadURL = cosignDownloadURL(cosignVersion, runtime.GOOS, runtime.G
 // pinnedChecksumsURL is the resolved checksums URL for the pinned cosign version.
 var pinnedChecksumsURL = fmt.Sprintf(cosignChecksumsURLFmt, cosignVersion)
 
-func parseCosignVersion() string {
+func envValue(key string) string {
 	for _, line := range strings.Split(envFile, "\n") {
-		if v, ok := strings.CutPrefix(line, "COSIGN_VERSION="); ok {
+		if v, ok := strings.CutPrefix(line, key+"="); ok {
 			return strings.TrimSpace(v)
 		}
 	}
-	panic("COSIGN_VERSION not found in .env")
+	panic(key + " not found in .env")
 }
 
-const cosignChecksumsURLFmt = "https://github.com/sigstore/cosign/releases/download/%s/cosign_checksums.txt"
+// cosignReleaseURL is the OCM cosign fork: upstream cosign rebuilt as a static
+// FIPS 140-3 binary (GOFIPS140), so downloaded binaries stay inside the FIPS boundary.
+const cosignReleaseURL = "https://github.com/open-component-model/cosign/releases/download/"
+
+const cosignChecksumsURLFmt = cosignReleaseURL + "%s/cosign_checksums.txt"
 
 // cosignDownloadURL returns the GitHub release download URL for the given
 // cosign version and platform.
 func cosignDownloadURL(version, goos, goarch string) string {
-	return fmt.Sprintf("https://github.com/sigstore/cosign/releases/download/%s/%s", version, cosignBinaryName(goos, goarch))
+	return cosignReleaseURL + version + "/" + cosignBinaryName(goos, goarch)
 }
 
 // cosignBinaryName returns the platform-specific binary name.
@@ -108,7 +117,7 @@ func ensureOrDownloadCosign(ctx context.Context, client *http.Client) (string, e
 		}
 	}
 
-	expectedHash, err := fetchExpectedChecksumWith(ctx, client, platformBinaryName)
+	expectedHash, err := fetchExpectedChecksumWith(ctx, client, platformBinaryName, cosignChecksumsSHA256)
 	if err != nil {
 		return "", fmt.Errorf("fetch checksums: %w", err)
 	}
@@ -127,12 +136,12 @@ const (
 	userAgent               = "ocm.software/open-component-model/bindings/go/sigstore"
 )
 
-// fetchExpectedChecksumWith downloads cosign_checksums.txt for the pinned version
-// and returns the SHA256 hash for the specified binary name.
-// The checksum guards against download corruption and partial CDN cache poisoning.
-// Full Sigstore bundle verification of the release is not implemented: verifying
-// the bundle requires cosign itself (chicken-and-egg for an auto-download fallback).
-func fetchExpectedChecksumWith(ctx context.Context, client *http.Client, binaryName string) (result string, err error) {
+// fetchExpectedChecksumWith downloads cosign_checksums.txt for the pinned version,
+// verifies it against checksumsSHA256 (pinned in .env), and returns the SHA256 hash
+// for the specified binary name. The pin makes the release immutable for OCM: the
+// binary hash is trusted only because the checksums file matches what OCM was built
+// with, not because it comes from the same release.
+func fetchExpectedChecksumWith(ctx context.Context, client *http.Client, binaryName, checksumsSHA256 string) (result string, err error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, pinnedChecksumsURL, nil)
 	if err != nil {
 		return "", fmt.Errorf("create checksums request: %w", err)
@@ -152,7 +161,15 @@ func fetchExpectedChecksumWith(ctx context.Context, client *http.Client, binaryN
 		return "", fmt.Errorf("download checksums file: HTTP %d", resp.StatusCode)
 	}
 
-	return parseChecksum(io.LimitReader(resp.Body, maxChecksumDownloadSize), binaryName)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxChecksumDownloadSize))
+	if err != nil {
+		return "", fmt.Errorf("read checksums file: %w", err)
+	}
+	sum := sha256.Sum256(body)
+	if got := hex.EncodeToString(sum[:]); got != checksumsSHA256 {
+		return "", fmt.Errorf("checksums file mismatch: SHA256 %s, pinned %s", got, checksumsSHA256)
+	}
+	return parseChecksum(bytes.NewReader(body), binaryName)
 }
 
 // parseChecksum reads a checksums file (format: "<hash>  <filename>\n") and

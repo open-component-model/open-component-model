@@ -33,6 +33,7 @@ func (t *GetLocalResource) Transform(ctx context.Context, step runtime.Typed) (r
 	var repoSpec runtime.Typed
 	var component, version string
 	var resourceIdentity runtime.Identity
+	var pin string
 	var outputPath string
 	var output interface{}
 
@@ -41,6 +42,7 @@ func (t *GetLocalResource) Transform(ctx context.Context, step runtime.Typed) (r
 		repoSpec = &tr.Spec.Repository
 		component = tr.Spec.Component
 		version = tr.Spec.Version
+		pin = tr.Spec.Digest
 		resourceIdentity = tr.Spec.ResourceIdentity
 		outputPath = tr.Spec.OutputPath
 		if tr.Output == nil {
@@ -51,6 +53,7 @@ func (t *GetLocalResource) Transform(ctx context.Context, step runtime.Typed) (r
 		repoSpec = &tr.Spec.Repository
 		component = tr.Spec.Component
 		version = tr.Spec.Version
+		pin = tr.Spec.Digest
 		resourceIdentity = tr.Spec.ResourceIdentity
 		outputPath = tr.Spec.OutputPath
 		if tr.Output == nil {
@@ -87,6 +90,9 @@ func (t *GetLocalResource) Transform(ctx context.Context, step runtime.Typed) (r
 	repo, err := t.RepoProvider.GetComponentVersionRepository(ctx, repoSpec, creds)
 	if err != nil {
 		return nil, fmt.Errorf("failed getting component version repository: %w", err)
+	}
+	if repo, err = repository.PinRepository(repo, component, version, pin); err != nil {
+		return nil, err
 	}
 
 	// Get local resource

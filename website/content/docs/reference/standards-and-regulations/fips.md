@@ -40,7 +40,7 @@ Go Cryptographic Module, FIPS mode changes OCM's behavior in these places:
 | --- | --- | --- | --- |
 | TLS connections | Only FIPS-approved TLS versions, cipher suites and key exchanges | Same | [Effects of FIPS Mode](#effects-of-fips-mode) |
 | Signing and verification | Resource and component reference digests must use SHA-256 or SHA-512 | Same | [Digest Algorithms](#digest-algorithms) |
-| Sigstore signing | A `cosign` that is not a FIPS build, or a downloaded one, is used and logged at debug level | Rejected; `cosign` must be on `PATH` and a FIPS build | [Sigstore and cosign](#sigstore-and-cosign) |
+| Sigstore signing | A `cosign` that is not a FIPS build is used and logged at debug level | Rejected; `cosign`, on `PATH` or downloaded, must be a FIPS build | [Sigstore and cosign](#sigstore-and-cosign) |
 | GPG signing | GPG keys other than unprotected v5 or v6 RSA or ECDSA P keys are used and logged at debug level | Rejected; see the four strict-mode errors | [GPG](#gpg) |
 
 **Module version.** OCM builds with `GOFIPS140=certified`, set once in the
@@ -106,11 +106,13 @@ version changes.
 | OCM controller image | `GOFIPS140=certified`, `CGO_ENABLED=0` | `scratch` with `manager`, a FIPS build of `cosign`, and the CA bundle |
 
 The default CLI image is built `FROM scratch`. It contains the static `/ocm`
-binary (the entrypoint), `cosign` at `/usr/local/bin/cosign` built with the
-same `GOFIPS140` value as OCM, and a CA bundle at
-`/etc/ssl/certs/ca-certificates.crt`. No GnuPG is included: OCM performs all
-GPG cryptography in-process with the Go OpenPGP library. Sigstore signing
-works in the image because `cosign` is on `PATH`. The slim image is built
+binary (the entrypoint), `cosign` at `/usr/local/bin/cosign` from the prebuilt
+[`ghcr.io/open-component-model/cosign`](https://github.com/open-component-model/cosign)
+image (static, built with `GOFIPS140=certified` like OCM, see
+[OCM's FIPS cosign](#ocms-fips-cosign)), and a CA
+bundle at `/etc/ssl/certs/ca-certificates.crt`. No GnuPG is included: OCM
+performs all GPG cryptography in-process with the Go OpenPGP library. Sigstore
+signing works in the image because `cosign` is on `PATH`. The slim image is built
 `FROM scratch` and contains only `/ocm` and the CA bundle; use it when you
 don't sign with Sigstore, or bring your own `cosign`.
 The controller image is built `FROM scratch` with the static `/manager` binary
@@ -294,8 +296,10 @@ versions with existing MD5 or SHA-1 digests keep working:
 
 Resources excluded from the signature (`NO-DIGEST` / `EXCLUDE-FROM-SIGNATURE`)
 are exempt. Digests that OCM computes itself, for example when adding a
-component version from a constructor, already use SHA-256, and downloading a
-resource accepts only SHA-256 digests in any mode.
+component version from a constructor, already use SHA-256. Downloading a
+resource through a digest-pinned component reference verifies the content
+against its resource digest, which supports only SHA-256 and SHA-512 in any
+mode; an unpinned download does not check its content against the resource digest.
 
 MD5 and SHA-1 remain usable for purposes that are not security-relevant, such
 as Git object IDs or caching.
@@ -308,7 +312,7 @@ binary:
 
 | Feature | Where the cryptography runs |
 | --- | --- |
-| Sigstore/cosign signing and verification | OCM runs the `cosign` binary from `PATH`, or downloads the upstream release, which is not a FIPS build. OCM checks whether `cosign` is a FIPS build, see [Sigstore and cosign](#sigstore-and-cosign). |
+| Sigstore/cosign signing and verification | OCM runs the `cosign` binary from `PATH`, or downloads OCM's FIPS build of `cosign`. OCM checks whether `cosign` is a FIPS build, see [Sigstore and cosign](#sigstore-and-cosign). |
 
 GPG signing and verification run in-process with the Go OpenPGP library
 (`github.com/ProtonMail/go-crypto`), whose RSA, NIST ECDSA, SHA-2 and RNG run
@@ -345,13 +349,13 @@ enforces the FIPS 140-3 mode rules itself.
 
 OCM does not implement Sigstore itself. Its Sigstore signing handler runs the
 external `cosign` binary, so all Sigstore cryptography runs in `cosign`. The CLI
-and controller images include a FIPS build of `cosign`; the OCM CLI binaries do not.
+and controller images include a FIPS build of `cosign`; the OCM CLI binaries download it on first use.
 
 #### How OCM uses cosign
 
 | Step | What OCM does |
 | --- | --- |
-| Locate | Uses `cosign` from `PATH` (v3.0.4 or later). If none is found, OCM downloads the cosign release pinned in `bindings/go/sigstore/signing/handler/internal/.env` from GitHub, verifies it against the release's `cosign_checksums.txt`, and caches it under the user cache directory (`~/.cache/ocm/cosign/...` on Linux). |
+| Locate | Uses `cosign` from `PATH` (v3.0.4 or later). If none is found, OCM downloads the [OCM's FIPS cosign](#ocms-fips-cosign) release pinned in `bindings/go/sigstore/signing/handler/internal/.env` from GitHub, also in `fips140=only`. Before it trusts the release's `cosign_checksums.txt`, OCM checks the file's SHA-256 against `COSIGN_CHECKSUMS_SHA256`, pinned in the same `.env`, then verifies the binary against it and caches it under the user cache directory (`~/.cache/ocm/cosign/...` on Linux). |
 | FIPS check | In FIPS mode, reads the Go build information of `cosign`, the same data that `go version -m` shows, and looks for `GOFIPS140=v<version>`. See the table below. |
 | Sign | `ocm sign cv` runs `cosign sign-blob <digest file> --bundle <file> --yes` for keyless signing. The OIDC token is passed in `SIGSTORE_ID_TOKEN` (or GitHub Actions OIDC), never on the command line. OCM stores the resulting Sigstore bundle as the signature. |
 | Verify | `ocm verify cv` and the controller write the bundle to a file and run `cosign verify-blob <digest file> --bundle <file>` with the configured `--certificate-identity[-regexp]`, `--certificate-oidc-issuer[-regexp]`, and optionally `--trusted-root` or `--insecure-ignore-tlog`. |
@@ -378,46 +382,55 @@ Go Cryptographic Module. OCM's keyless flow uses none of them:
 
 #### FIPS Check
 
-The upstream cosign releases are not FIPS builds.
+The OCM cosign build is a FIPS build. Other cosign builds, such as the upstream
+[sigstore/cosign](https://github.com/sigstore/cosign) releases, usually are not.
 
-| Mode | `cosign` that is not a FIPS build | No `cosign` on `PATH` |
-| --- | --- | --- |
-| `fips140=on` (default) | Used; logged at debug level | Downloaded; logged at debug level |
-| `fips140=only` | Rejected: `Sigstore signing and verification require a cosign built against a frozen Go Cryptographic Module` | Rejected: `downloading cosign is disabled`; a previously downloaded one is not used either |
-| `fips140=off` | Used | Downloaded |
+| Mode | `cosign` that is not a FIPS build |
+| --- | --- |
+| `fips140=on` (default) | Used; logged at debug level |
+| `fips140=only` | Rejected: `Sigstore signing and verification require a cosign built against a frozen Go Cryptographic Module` |
+| `fips140=off` | Used |
 
-To keep Sigstore signing inside the FIPS boundary, put a FIPS build of `cosign`
-on `PATH`. The CLI image already does.
+The check applies to the `cosign` on `PATH` and to the downloaded one alike.
 
-#### Build a Static FIPS cosign
+#### OCM's FIPS cosign
 
-cosign builds unmodified against the Go Cryptographic Module. Build it with the
-same `GOFIPS140` value as OCM, and with cgo disabled so that the binary is
-statically linked and runs on any Linux distribution. This is how the CLI image
-builds it. The cosign version OCM is tested with is pinned in
-`bindings/go/sigstore/signing/handler/internal/.env`:
+OCM publishes [cosign](https://github.com/open-component-model/cosign) built
+unmodified from upstream sources against the Go Cryptographic Module, with cgo
+disabled, so the binary is statically linked and runs on any Linux
+distribution. It is available as release binaries for the same platforms as
+upstream and as the image `ghcr.io/open-component-model/cosign`, whose binary
+is `/cosign`. The CLI and controller images copy it from there. The version
+OCM downloads is pinned in `bindings/go/sigstore/signing/handler/internal/.env`,
+together with the SHA-256 of that release's `cosign_checksums.txt`; the images
+use the same release.
 
-```shell
-CGO_ENABLED=0 GOFIPS140=certified \
-  go install -trimpath -ldflags="-s -w" github.com/sigstore/cosign/v3/cmd/cosign@v3.1.3
-```
+The fork follows upstream automatically: it mirrors every upstream stable
+release hourly, applies dependency and Go toolchain updates daily, and
+publishes a new `vX.Y.Z+ocm.N` release when a maintenance branch changed.
+Releases carry GitHub SLSA build provenance, which you can check with
+`gh attestation verify <binary> --repo open-component-model/cosign`.
+
+Like OCM, the fork builds with `GOFIPS140=certified`, but with its own pinned Go
+toolchain. Both resolve `certified` to the newest certified module version
+their toolchain knows, so after a new module version is certified, `ocm` and
+`cosign` can run different module versions until both toolchains are updated.
+Both are frozen, certified modules, which is what the [FIPS check](#fips-check)
+requires.
 
 Check the build information. The output must contain `GOFIPS140=v<version>`,
 `CGO_ENABLED=0`, and `fips140=on` in `DefaultGODEBUG`:
 
 ```shell
-$ go version -m "$(go env GOPATH)/bin/cosign" | grep -E 'GOFIPS140|CGO_ENABLED|DefaultGODEBUG'
-        build   DefaultGODEBUG=fips140=on,tracebacklabels=0,x509sslcertoverrideplatform=0
+$ go version -m cosign | grep -E 'GOFIPS140|CGO_ENABLED|DefaultGODEBUG'
+        build   DefaultGODEBUG=fips140=on
         build   CGO_ENABLED=0
         build   GOFIPS140=v1.0.0-c2097c7c
 ```
 
-To build for another platform, set `GOOS` and `GOARCH`. `go install` then writes
-the binary to `$(go env GOPATH)/bin/<os>_<arch>/cosign`, for example
-`GOOS=linux GOARCH=amd64` writes `bin/linux_amd64/cosign`.
-
-- **Local `ocm` binary:** put that `cosign` on `PATH` before running `ocm`.
-- **Slim CLI image:** build cosign for the image's platform and mount it at
+- **Local `ocm` binary:** put that `cosign` on `PATH` before running `ocm`, or
+  let OCM download it.
+- **Slim CLI image:** mount the `cosign` for the image's platform at
   `/usr/local/bin/cosign`, which is on the default `PATH`:
 
   ```shell
