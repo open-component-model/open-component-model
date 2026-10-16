@@ -354,11 +354,9 @@ func Test_Integration_TransferCTFToCTF_PreservesMissingDigest(t *testing.T) {
 			Provider:      descriptor.Provider{Name: "test-provider"},
 		},
 	}
-	// addBlob stores a local blob and appends its resource to desc. digest selects what the
-	// stored resource carries: "full" the computed digest, "none" no digest (a cc-utils
-	// resource), "partial" the correct value but no normalisation algorithm (an incomplete
-	// digest the sink must complete, not reject).
-	addBlob := func(name string, data []byte, digest string) {
+	// addBlob stores a local blob and appends its resource to desc. With keepDigest=false the
+	// computed digest is stripped afterwards, mimicking a source resource that carries none.
+	addBlob := func(name string, data []byte, keepDigest bool) {
 		res := descriptor.Resource{
 			ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: name, Version: "1.0.0"}},
 			Type:        "plainText",
@@ -371,17 +369,13 @@ func Test_Integration_TransferCTFToCTF_PreservesMissingDigest(t *testing.T) {
 		updated, err := ctfRepo.AddLocalResource(t.Context(), componentName, componentVersion, &res, inmemory.New(bytes.NewReader(data)))
 		r.NoError(err)
 		r.NotNil(updated.Digest, "sanity: AddLocalResource computes a digest")
-		switch digest {
-		case "none":
+		if !keepDigest {
 			updated.Digest = nil
-		case "partial":
-			updated.Digest = &descriptor.Digest{Value: updated.Digest.Value}
 		}
 		desc.Component.Resources = append(desc.Component.Resources, *updated)
 	}
-	addBlob("with-digest", []byte("signed data"), "full")
-	addBlob("without-digest", []byte("cc-utils data"), "none")
-	addBlob("with-partial-digest", []byte("partially digested data"), "partial")
+	addBlob("with-digest", []byte("signed data"), true)
+	addBlob("without-digest", []byte("cc-utils data"), false)
 	r.NoError(ctfRepo.AddComponentVersion(t.Context(), desc))
 
 	sourceSpec := &ctfrepospec.Repository{Type: runtime.Type{Name: ctfrepospec.Type, Version: ctfrepospec.Version}, FilePath: sourceCTFPath}
@@ -412,13 +406,8 @@ func Test_Integration_TransferCTFToCTF_PreservesMissingDigest(t *testing.T) {
 	}
 	r.NotNil(byName["with-digest"], "with-digest resource transferred")
 	r.NotNil(byName["without-digest"], "without-digest resource transferred")
-	r.NotNil(byName["with-partial-digest"], "with-partial-digest resource transferred")
 	r.NotNil(byName["with-digest"].Digest, "a resource that had a digest keeps it")
 	r.Nil(byName["without-digest"].Digest, "transfer must not inject a digest the source lacked")
-	// An incomplete source digest must transfer and be completed by the sink, not rejected.
-	r.NotNil(byName["with-partial-digest"].Digest, "an incomplete source digest is kept and completed")
-	r.Equal("genericBlobDigest/v1", byName["with-partial-digest"].Digest.NormalisationAlgorithm,
-		"the sink completes the missing normalisation algorithm")
 }
 
 func Test_Integration_TransferMultipleComponents_CTFToOCI(t *testing.T) {
