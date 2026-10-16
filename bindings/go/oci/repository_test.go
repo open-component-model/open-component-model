@@ -2897,10 +2897,10 @@ func testRepositoryResourceDigest(t *testing.T, operation string) {
 					if normalization == "unexpected/v1" {
 						wantErr = "unsupported OCI artifact normalisation algorithm"
 					}
-					// An empty normalization is completed, but set fields must still match.
-					// Incomplete metadata copied from OCI descriptors uses the OCI spelling (Helm does).
-					if normalization == "" && mismatch != "algorithm" {
-						candidate.HashAlgorithm = "sha256"
+					// A digest without a normalisation algorithm is partially specified and
+					// rejected rather than inferred (a digest is complete or absent).
+					if normalization == "" {
+						wantErr = "a digest must be complete or absent"
 					}
 					tests = append(tests, testCase{
 						name:   fmt.Sprintf("normalization=%s/mismatch=%s", normalization, mismatch),
@@ -2912,12 +2912,8 @@ func testRepositoryResourceDigest(t *testing.T, operation string) {
 			for _, missing := range []string{"hash", "value", "hash and value"} {
 				for _, mismatch := range []bool{false, true} {
 					candidate := correct.DeepCopy()
-					var wantErr string
 					if mismatch {
 						candidate.Value = digest.FromString("different content").Encoded()
-						if missing == "hash" {
-							wantErr = "digest value mismatch"
-						}
 					}
 					if missing == "hash" || missing == "hash and value" {
 						candidate.HashAlgorithm = ""
@@ -2925,10 +2921,11 @@ func testRepositoryResourceDigest(t *testing.T, operation string) {
 					if missing == "value" || missing == "hash and value" {
 						candidate.Value = ""
 					}
+					// A digest missing any field is partially specified and rejected.
 					tests = append(tests, testCase{
 						name:   fmt.Sprintf("missing=%s/mismatch=%t", missing, mismatch),
 						digest: candidate,
-						err:    wantErr,
+						err:    "a digest must be complete or absent",
 					})
 				}
 			}
@@ -2995,10 +2992,10 @@ func testRepositoryResourceDigest(t *testing.T, operation string) {
 					}
 					r.NoError(err)
 					r.NotNil(result)
-					if tt.digest == nil || tt.digest.HashAlgorithm == "" || tt.digest.NormalisationAlgorithm == "" || tt.digest.Value == "" {
-						r.Equal(&correct, result.Digest, "new and incomplete digests must use OCI normalization and the root hash")
+					if tt.digest == nil {
+						r.Equal(&correct, result.Digest, "an absent digest is computed with OCI normalization and the root hash")
 					} else {
-						r.Equal(tt.digest, result.Digest, "existing digest triples must be preserved")
+						r.Equal(tt.digest, result.Digest, "an existing complete digest is preserved")
 					}
 					copiedRoot, err := targetStore.Resolve(ctx, "1.0.0")
 					r.NoError(err)
@@ -3025,7 +3022,7 @@ func TestRepository_UploadDigestControls(t *testing.T) {
 	}
 	var tests []testCase
 	for _, method := range []string{"resource", "stream", "source"} {
-		states := []string{"absent", "incomplete", "correct"}
+		states := []string{"absent", "correct"}
 		if method == "source" {
 			states = states[:1] // sources carry no digest
 		}
@@ -3077,9 +3074,6 @@ func TestRepository_UploadDigestControls(t *testing.T) {
 			resource := &descriptor.Resource{Access: targetAccess}
 			if tt.state != "absent" {
 				resource.Digest = wantDigest.DeepCopy()
-				if tt.state == "incomplete" {
-					resource.Digest.NormalisationAlgorithm = ""
-				}
 			}
 			original := resource.DeepCopy() // the source shares targetAccess, so this also guards it
 			var result *descriptor.Resource

@@ -40,16 +40,16 @@ func TestResourceDigestNormalization(t *testing.T) {
 			existing:      &runtime.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: "genericBlobDigest/v1", Value: resolved.Encoded()},
 		},
 		{
-			name:          "partial historical OCI chart",
+			name:          "partial historical OCI chart is rejected",
 			normalization: "ociArtifactDigest/v1",
 			existing:      &runtime.Digest{NormalisationAlgorithm: "genericBlobDigest/v1", Value: resolved.Encoded()},
-			want:          runtime.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: "ociArtifactDigest/v1", Value: resolved.Encoded()},
+			wantError:     "a digest must be complete or absent",
 		},
 		{
-			name:          "partial OCI hash spelling",
+			name:          "partial OCI hash spelling is rejected",
 			normalization: "ociArtifactDigest/v1",
 			existing:      &runtime.Digest{HashAlgorithm: "sha256", Value: resolved.Encoded()},
-			want:          runtime.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: "ociArtifactDigest/v1", Value: resolved.Encoded()},
+			wantError:     "a digest must be complete or absent",
 		},
 		{
 			name:          "wrong OCI normalization",
@@ -58,10 +58,10 @@ func TestResourceDigestNormalization(t *testing.T) {
 			wantError:     "normalisation algorithm mismatch",
 		},
 		{
-			name:          "partial OCI chart with wrong value",
+			name:          "partial OCI chart with wrong value is rejected",
 			normalization: "ociArtifactDigest/v1",
 			existing:      &runtime.Digest{HashAlgorithm: "SHA-256", Value: ociDigest.FromString("other manifest").Encoded()},
-			wantError:     "digest value mismatch",
+			wantError:     "a digest must be complete or absent",
 		},
 		{
 			name:          "wrong HTTP normalization",
