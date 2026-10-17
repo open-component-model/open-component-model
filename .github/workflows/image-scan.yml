@@ -174,8 +174,11 @@ jobs:
             await script.default({ core });
 
       # Reports, but does not fail on, vulnerabilities the OpenVEX document does
-      # not mark as not_affected: those are the findings govulncheck reports as
-      # reachable. They show up as warning annotations and in the job summary.
+      # not mark as not_affected. Its statements apply to OCM's own binary (the
+      # entrypoint) only, so what remains there is what govulncheck reports as
+      # reachable; findings in the other declared executables (cosign) were not
+      # analyzed by govulncheck. They show up as warning annotations and in the
+      # job summary.
       # Nothing is uploaded to code scanning, so Dependabot alerts stay the only
       # alert surface.
       - name: Vulnerability scan
@@ -195,11 +198,15 @@ jobs:
         env:
           IMAGE: ${{ matrix.image }}
           ARCH: ${{ matrix.arch }}
+          EXECUTABLES: ${{ matrix.executables }}
         run: |
           set -euo pipefail
           report="tmp/image-scan/${IMAGE}-${ARCH}/trivy.json"
           [[ -s "$report" ]] || { echo "::error::Trivy wrote no report for ${IMAGE} (linux/${ARCH})"; exit 1; }
-          vulns="$(jq -c '[.Results[]? | .Vulnerabilities[]? | {id: .VulnerabilityID, pkg: .PkgName, installed: .InstalledVersion, fixed: (.FixedVersion // ""), severity: .Severity, title: (.Title // "")}]' "$report")"
+          vulns="$(jq -c --arg other "${EXECUTABLES:-}" '($other | split(" ") | map(select(. != ""))) as $other
+            | [.Results[]? | .Target as $t | .Vulnerabilities[]?
+            | {binary: $t, verdict: (if ($other | index("/" + $t)) then "not analyzed (not built by OCM)" else "reachable (govulncheck)" end),
+               id: .VulnerabilityID, pkg: .PkgName, installed: .InstalledVersion, fixed: (.FixedVersion // ""), severity: .Severity, title: (.Title // "")}]' "$report")"
           count="$(jq length <<< "$vulns")"
           echo "count=${count}" >> "$GITHUB_OUTPUT"
           {
@@ -208,11 +215,11 @@ jobs:
             if [[ "$count" -eq 0 ]]; then
               echo "No vulnerabilities beyond those the OpenVEX document marks as not_affected."
             else
-              echo "⚠️ ${count} reachable vulnerabilities (does not block publishing):"
+              echo "⚠️ ${count} vulnerabilities (do not block publishing). The OpenVEX document from govulncheck covers OCM's own binary; findings there are reachable:"
               echo
-              echo "| ID | Severity | Package | Installed | Fixed | Title |"
-              echo "| --- | --- | --- | --- | --- | --- |"
-              jq -r '.[] | "| \(.id) | \(.severity) | \(.pkg) | \(.installed) | \(.fixed) | \(.title | gsub("\\|"; "\\\\|")) |"' <<< "$vulns"
+              echo "| Binary | Verdict | ID | Severity | Package | Installed | Fixed | Title |"
+              echo "| --- | --- | --- | --- | --- | --- | --- | --- |"
+              jq -r '.[] | "| \(.binary) | \(.verdict) | \(.id) | \(.severity) | \(.pkg) | \(.installed) | \(.fixed) | \(.title | gsub("\\|"; "\\\\|")) |"' <<< "$vulns"
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -225,7 +232,7 @@ jobs:
           COUNT: ${{ steps.vulns.outputs.count }}
         run: |
           [[ "$COUNT" -eq 0 ]] && exit 0
-          echo "${COUNT} reachable vulnerabilities, listed in the job summary."
+          echo "${COUNT} vulnerabilities, listed with their binary in the job summary."
           exit 1
 
       # Scans, writes the job summary, and fails on any failed rule.

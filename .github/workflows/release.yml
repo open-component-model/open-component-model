@@ -482,10 +482,13 @@ jobs:
           IMAGE_DIGEST: ${{ needs.build_and_test.outputs.cli_image_digest }}
           SLIM_IMAGE_DIGEST: ${{ needs.build_and_test.outputs.cli_slim_image_digest }}
         run: |
-          gh attestation verify "oci://$CLI_IMAGE@${IMAGE_DIGEST}" --repo "$GH_REPO" \
-            --signer-workflow "$GH_REPO/.github/workflows/pipeline.yml"
-          gh attestation verify "oci://$CLI_IMAGE@${SLIM_IMAGE_DIGEST}" --repo "$GH_REPO" \
-            --signer-workflow "$GH_REPO/.github/workflows/pipeline.yml"
+          for digest in "$IMAGE_DIGEST" "$SLIM_IMAGE_DIGEST"; do
+            gh attestation verify "oci://$CLI_IMAGE@${digest}" --repo "$GH_REPO" \
+              --signer-workflow "$GH_REPO/.github/workflows/pipeline.yml"
+            gh attestation verify "oci://$CLI_IMAGE@${digest}" --repo "$GH_REPO" \
+              --predicate-type https://openvex.dev/ns/v0.2.0 \
+              --signer-workflow "$GH_REPO/.github/workflows/pipeline.yml" > /dev/null
+          done
 
       - name: Verify controller image attestation
         env:
@@ -494,6 +497,9 @@ jobs:
         run: |
           gh attestation verify "oci://$CONTROLLER_IMAGE@${IMAGE_DIGEST}" --repo "$GH_REPO" \
             --signer-workflow "$GH_REPO/.github/workflows/pipeline.yml"
+          gh attestation verify "oci://$CONTROLLER_IMAGE@${IMAGE_DIGEST}" --repo "$GH_REPO" \
+            --predicate-type https://openvex.dev/ns/v0.2.0 \
+            --signer-workflow "$GH_REPO/.github/workflows/pipeline.yml" > /dev/null
 
       - name: Verify chart attestation
         env:
