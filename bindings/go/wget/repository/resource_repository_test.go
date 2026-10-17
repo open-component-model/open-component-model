@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strings"
 	"testing"
 
@@ -20,7 +19,6 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	checksumhttpv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/checksum/http/v1alpha1/spec"
-	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/wget/repository"
@@ -60,7 +58,7 @@ func TestDownloadResource(t *testing.T) {
 		}))
 		defer server.Close()
 
-		repo := repository.NewResourceRepository(nil, repository.WithHTTPClient(server.Client()))
+		repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()))
 		resource := wgetResource(t, server.URL, map[string]any{
 			"url": server.URL + "/resource",
 		})
@@ -90,7 +88,7 @@ func TestDownloadResource(t *testing.T) {
 		}))
 		defer server.Close()
 
-		repo := repository.NewResourceRepository(nil, repository.WithHTTPClient(server.Client()))
+		repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()))
 		resource := wgetResource(t, server.URL, map[string]any{
 			"url": server.URL + "/resource",
 		})
@@ -112,7 +110,7 @@ func TestDownloadResource(t *testing.T) {
 		}))
 		defer server.Close()
 
-		repo := repository.NewResourceRepository(nil, repository.WithHTTPClient(server.Client()),
+		repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()),
 			repository.WithMaxDownloadSize(10),
 		)
 		resource := wgetResource(t, server.URL, map[string]any{
@@ -124,36 +122,9 @@ func TestDownloadResource(t *testing.T) {
 		assert.Contains(t, err.Error(), "exceeds maximum allowed size")
 	})
 
-	t.Run("closing the downloaded blob reclaims the temporary file", func(t *testing.T) {
-		t.Parallel()
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			_, _ = w.Write([]byte("hello world"))
-		}))
-		defer server.Close()
-
-		tempFolder := t.TempDir()
-		repo := repository.NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &tempFolder},
-			repository.WithHTTPClient(server.Client()))
-
-		b, err := repo.DownloadResource(t.Context(), wgetResource(t, server.URL, map[string]any{}), nil)
-		require.NoError(t, err)
-
-		entries, err := os.ReadDir(tempFolder)
-		require.NoError(t, err)
-		require.Len(t, entries, 1, "the body must be streamed into the configured temp folder")
-
-		closer, ok := b.(io.Closer)
-		require.True(t, ok, "the downloaded blob must be closeable so callers can reclaim it")
-		require.NoError(t, closer.Close())
-
-		entries, err = os.ReadDir(tempFolder)
-		require.NoError(t, err)
-		assert.Empty(t, entries, "closing the blob must remove the temporary file")
-	})
-
 	t.Run("returns error for nil resource", func(t *testing.T) {
 		t.Parallel()
-		repo := repository.NewResourceRepository(nil)
+		repo := repository.NewResourceRepository()
 		_, err := repo.DownloadResource(t.Context(), nil, nil)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "resource is required")
@@ -161,7 +132,7 @@ func TestDownloadResource(t *testing.T) {
 
 	t.Run("returns error for nil access", func(t *testing.T) {
 		t.Parallel()
-		repo := repository.NewResourceRepository(nil)
+		repo := repository.NewResourceRepository()
 		resource := &descruntime.Resource{}
 		resource.Name = "test"
 		_, err := repo.DownloadResource(t.Context(), resource, nil)
@@ -183,7 +154,7 @@ func TestDownloadResource_DigestVerification(t *testing.T) {
 		}))
 		t.Cleanup(server.Close)
 
-		return repository.NewResourceRepository(nil, repository.WithHTTPClient(server.Client())),
+		return repository.NewResourceRepository(repository.WithHTTPClient(server.Client())),
 			wgetResource(t, server.URL, map[string]any{"url": server.URL + "/resource"})
 	}
 
@@ -263,7 +234,7 @@ func TestDownloadResource_DigestVerification(t *testing.T) {
 func TestUploadResource(t *testing.T) {
 	t.Parallel()
 
-	repo := repository.NewResourceRepository(nil)
+	repo := repository.NewResourceRepository()
 	_, err := repo.UploadResource(t.Context(), nil, nil, nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not supported")
@@ -273,7 +244,7 @@ func TestGetResourceCredentialConsumerIdentity(t *testing.T) {
 	r := require.New(t)
 	t.Parallel()
 
-	repo := repository.NewResourceRepository(nil)
+	repo := repository.NewResourceRepository()
 
 	resource := &descruntime.Resource{}
 	resource.Name = "test"
@@ -298,7 +269,7 @@ func TestGetResourceCredentialConsumerIdentity(t *testing.T) {
 func TestGetResourceRepositoryScheme(t *testing.T) {
 	t.Parallel()
 
-	repo := repository.NewResourceRepository(nil)
+	repo := repository.NewResourceRepository()
 	scheme := repo.GetResourceRepositoryScheme()
 	require.NotNil(t, scheme)
 	assert.True(t, scheme.IsRegistered(runtime.NewVersionedType("wget", v1.Version)))
@@ -330,7 +301,7 @@ func TestProcessResourceDigest(t *testing.T) {
 		}))
 		defer server.Close()
 
-		repo := repository.NewResourceRepository(nil, repository.WithHTTPClient(server.Client()),
+		repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()),
 			repository.WithChecksumConfig(&checksumhttpv1alpha1.Config{Mode: checksumhttpv1alpha1.ChecksumModeSkip}))
 		resource := wgetResource(t, server.URL, map[string]any{"url": server.URL + "/resource"})
 
@@ -344,26 +315,6 @@ func TestProcessResourceDigest(t *testing.T) {
 		assert.Nil(t, resource.Digest, "the input resource must not be mutated")
 	})
 
-	t.Run("leaves no temporary file behind", func(t *testing.T) {
-		t.Parallel()
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			_, _ = w.Write([]byte("hello digest world"))
-		}))
-		defer server.Close()
-
-		tempFolder := t.TempDir()
-		repo := repository.NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &tempFolder},
-			repository.WithHTTPClient(server.Client()),
-			repository.WithChecksumConfig(&checksumhttpv1alpha1.Config{Mode: checksumhttpv1alpha1.ChecksumModeSkip}))
-
-		_, err := repo.ProcessResourceDigest(t.Context(), wgetResource(t, server.URL, map[string]any{}), nil)
-		require.NoError(t, err)
-
-		entries, err := os.ReadDir(tempFolder)
-		require.NoError(t, err)
-		assert.Empty(t, entries, "digest processing must reclaim the file it downloaded")
-	})
-
 	t.Run("verifies a matching pre-existing digest", func(t *testing.T) {
 		t.Parallel()
 		content := []byte("verify me")
@@ -372,7 +323,7 @@ func TestProcessResourceDigest(t *testing.T) {
 		}))
 		defer server.Close()
 
-		repo := repository.NewResourceRepository(nil, repository.WithHTTPClient(server.Client()),
+		repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()),
 			repository.WithChecksumConfig(&checksumhttpv1alpha1.Config{Mode: checksumhttpv1alpha1.ChecksumModeSkip}))
 		resource := wgetResource(t, server.URL, map[string]any{"url": server.URL + "/resource"})
 		resource.Digest = &descruntime.Digest{
@@ -392,7 +343,7 @@ func TestProcessResourceDigest(t *testing.T) {
 		}))
 		defer server.Close()
 
-		repo := repository.NewResourceRepository(nil, repository.WithHTTPClient(server.Client()),
+		repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()),
 			repository.WithChecksumConfig(&checksumhttpv1alpha1.Config{Mode: checksumhttpv1alpha1.ChecksumModeSkip}))
 		resource := wgetResource(t, server.URL, map[string]any{"url": server.URL + "/resource"})
 		resource.Digest = &descruntime.Digest{
@@ -414,7 +365,7 @@ func TestProcessResourceDigest(t *testing.T) {
 		}))
 		defer server.Close()
 
-		repo := repository.NewResourceRepository(nil, repository.WithHTTPClient(server.Client()),
+		repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()),
 			repository.WithChecksumConfig(&checksumhttpv1alpha1.Config{Mode: checksumhttpv1alpha1.ChecksumModeSkip}))
 		resource := wgetResource(t, server.URL, map[string]any{"url": server.URL + "/resource"})
 		resource.Digest = &descruntime.Digest{
@@ -436,7 +387,7 @@ func TestProcessResourceDigest(t *testing.T) {
 		}))
 		defer server.Close()
 
-		repo := repository.NewResourceRepository(nil, repository.WithHTTPClient(server.Client()),
+		repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()),
 			repository.WithChecksumConfig(&checksumhttpv1alpha1.Config{Mode: checksumhttpv1alpha1.ChecksumModeSkip}))
 		resource := wgetResource(t, server.URL, map[string]any{"url": server.URL + "/resource"})
 		resource.Digest = &descruntime.Digest{
@@ -475,8 +426,7 @@ func TestProcessResourceDigest_ConfigDriven(t *testing.T) {
 		cfg := &checksumhttpv1alpha1.Config{
 			Mode: checksumhttpv1alpha1.ChecksumModeRequire,
 		}
-		repo := repository.NewResourceRepository(nil,
-			repository.WithHTTPClient(server.Client()),
+		repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()),
 			repository.WithChecksumConfig(cfg),
 		)
 		resource := wgetResource(t, server.URL, map[string]any{"url": server.URL + "/resource"})
@@ -506,8 +456,7 @@ func TestProcessResourceDigest_ConfigDriven(t *testing.T) {
 				host: {Mode: checksumhttpv1alpha1.ChecksumModeRequire},
 			},
 		}
-		repo := repository.NewResourceRepository(nil,
-			repository.WithHTTPClient(server.Client()),
+		repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()),
 			repository.WithChecksumConfig(cfg),
 		)
 		processed, err := repo.ProcessResourceDigest(t.Context(),
@@ -530,7 +479,7 @@ func TestProcessResourceDigest_AcceptsPrefixedPinnedDigest(t *testing.T) {
 	}))
 	defer server.Close()
 
-	repo := repository.NewResourceRepository(nil, repository.WithHTTPClient(server.Client()),
+	repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()),
 		repository.WithChecksumConfig(&checksumhttpv1alpha1.Config{Mode: checksumhttpv1alpha1.ChecksumModeSkip}))
 	resource := wgetResource(t, server.URL, map[string]any{"url": server.URL + "/resource"})
 	resource.Digest = &descruntime.Digest{
@@ -579,8 +528,7 @@ func TestProcessResourceDigest_AccessFastPath(t *testing.T) {
 		cfg := &checksumhttpv1alpha1.Config{
 			Mode: checksumhttpv1alpha1.ChecksumModeRequire,
 		}
-		repo := repository.NewResourceRepository(nil,
-			repository.WithHTTPClient(server.Client()),
+		repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()),
 			repository.WithChecksumConfig(cfg),
 		)
 		processed, err := repo.ProcessResourceDigest(t.Context(),
@@ -597,8 +545,7 @@ func TestProcessResourceDigest_AccessFastPath(t *testing.T) {
 		server := httptest.NewServer(noBodyGET(map[string]string{"x-checksum-sha512": sha512}))
 		defer server.Close()
 
-		repo := repository.NewResourceRepository(nil,
-			repository.WithHTTPClient(server.Client()),
+		repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()),
 			repository.WithChecksumConfig(&checksumhttpv1alpha1.Config{Mode: checksumhttpv1alpha1.ChecksumModeRequire}),
 		)
 		processed, err := repo.ProcessResourceDigest(t.Context(),
@@ -622,8 +569,7 @@ func TestProcessResourceDigest_AccessFastPath(t *testing.T) {
 		cfg := &checksumhttpv1alpha1.Config{
 			Mode: checksumhttpv1alpha1.ChecksumModeRequire,
 		}
-		repo := repository.NewResourceRepository(nil,
-			repository.WithHTTPClient(server.Client()),
+		repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()),
 			repository.WithChecksumConfig(cfg),
 		)
 		_, err := repo.ProcessResourceDigest(t.Context(),
@@ -646,8 +592,7 @@ func TestProcessResourceDigest_AccessFastPath(t *testing.T) {
 		}))
 		defer server.Close()
 
-		repo := repository.NewResourceRepository(nil,
-			repository.WithHTTPClient(server.Client()),
+		repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()),
 			repository.WithChecksumConfig(&checksumhttpv1alpha1.Config{Mode: checksumhttpv1alpha1.ChecksumModePrefer}),
 		)
 		processed, err := repo.ProcessResourceDigest(t.Context(),
@@ -669,8 +614,7 @@ func TestProcessResourceDigest_AccessFastPath(t *testing.T) {
 		cfg := &checksumhttpv1alpha1.Config{
 			Mode: checksumhttpv1alpha1.ChecksumModeRequire,
 		}
-		repo := repository.NewResourceRepository(nil,
-			repository.WithHTTPClient(server.Client()),
+		repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()),
 			repository.WithChecksumConfig(cfg),
 		)
 		processed, err := repo.ProcessResourceDigest(t.Context(),
@@ -688,8 +632,7 @@ func TestProcessResourceDigest_AccessFastPath(t *testing.T) {
 		cfg := &checksumhttpv1alpha1.Config{
 			Mode: checksumhttpv1alpha1.ChecksumModeRequire,
 		}
-		repo := repository.NewResourceRepository(nil,
-			repository.WithHTTPClient(server.Client()),
+		repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()),
 			repository.WithChecksumConfig(cfg),
 		)
 		_, err := repo.ProcessResourceDigest(t.Context(),
@@ -706,8 +649,7 @@ func TestProcessResourceDigest_AccessFastPath(t *testing.T) {
 		cfg := &checksumhttpv1alpha1.Config{
 			Mode: checksumhttpv1alpha1.ChecksumModeRequire,
 		}
-		repo := repository.NewResourceRepository(nil,
-			repository.WithHTTPClient(server.Client()),
+		repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()),
 			repository.WithChecksumConfig(cfg),
 		)
 
@@ -745,7 +687,7 @@ func TestDownloadResource_ChecksumPolicy(t *testing.T) {
 		}))
 		defer server.Close()
 
-		repo := repository.NewResourceRepository(nil, repository.WithHTTPClient(server.Client()),
+		repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()),
 			repository.WithChecksumConfig(&checksumhttpv1alpha1.Config{Mode: checksumhttpv1alpha1.ChecksumModeRequire}))
 		b, err := repo.DownloadResource(t.Context(),
 			wgetResource(t, server.URL, map[string]any{"url": server.URL + "/resource"}), nil)
@@ -761,12 +703,20 @@ func TestDownloadResource_ChecksumPolicy(t *testing.T) {
 		}))
 		defer server.Close()
 
-		repo := repository.NewResourceRepository(nil, repository.WithHTTPClient(server.Client()),
+		repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()),
 			repository.WithChecksumConfig(&checksumhttpv1alpha1.Config{Mode: checksumhttpv1alpha1.ChecksumModeRequire}))
-		_, err := repo.DownloadResource(t.Context(),
+		b, err := repo.DownloadResource(t.Context(),
 			wgetResource(t, server.URL, map[string]any{"url": server.URL + "/resource"}), nil)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "checksum verification failed")
+		require.NoError(t, err, "a mismatch can only be detected once the bytes are read")
+
+		rc, err := b.ReadCloser()
+		require.NoError(t, err)
+		_, readErr := io.ReadAll(rc)
+		require.Error(t, readErr)
+		assert.Contains(t, readErr.Error(), "checksum verification failed")
+		closeErr := rc.Close()
+		require.Error(t, closeErr)
+		assert.Contains(t, closeErr.Error(), "checksum verification failed")
 	})
 
 	t.Run("Require aborts a transfer when no checksum is advertised", func(t *testing.T) {
@@ -776,7 +726,7 @@ func TestDownloadResource_ChecksumPolicy(t *testing.T) {
 		}))
 		defer server.Close()
 
-		repo := repository.NewResourceRepository(nil, repository.WithHTTPClient(server.Client()),
+		repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()),
 			repository.WithChecksumConfig(&checksumhttpv1alpha1.Config{Mode: checksumhttpv1alpha1.ChecksumModeRequire}))
 		_, err := repo.DownloadResource(t.Context(),
 			wgetResource(t, server.URL, map[string]any{"url": server.URL + "/resource"}), nil)
@@ -791,7 +741,7 @@ func TestDownloadResource_ChecksumPolicy(t *testing.T) {
 		}))
 		defer server.Close()
 
-		repo := repository.NewResourceRepository(nil, repository.WithHTTPClient(server.Client()),
+		repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()),
 			repository.WithChecksumConfig(&checksumhttpv1alpha1.Config{Mode: checksumhttpv1alpha1.ChecksumModeSkip}))
 		b, err := repo.DownloadResource(t.Context(),
 			wgetResource(t, server.URL, map[string]any{"url": server.URL + "/resource"}), nil)
@@ -828,7 +778,7 @@ func TestProcessResourceDigest_PeekRedirectSafety(t *testing.T) {
 		}))
 		defer origin.Close()
 
-		repo := repository.NewResourceRepository(nil, repository.WithHTTPClient(downstream.Client()),
+		repo := repository.NewResourceRepository(repository.WithHTTPClient(downstream.Client()),
 			repository.WithChecksumConfig(&checksumhttpv1alpha1.Config{Mode: checksumhttpv1alpha1.ChecksumModeRequire}))
 		creds := &credv1.WgetCredentials{
 			Type:          runtime.NewVersionedType(credv1.WgetCredentialsType, credv1.Version),
@@ -861,7 +811,7 @@ func TestProcessResourceDigest_PeekRedirectSafety(t *testing.T) {
 		}))
 		defer server.Close()
 
-		repo := repository.NewResourceRepository(nil, repository.WithHTTPClient(server.Client()),
+		repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()),
 			repository.WithChecksumConfig(&checksumhttpv1alpha1.Config{Mode: checksumhttpv1alpha1.ChecksumModeRequire}))
 		resource := wgetResource(t, server.URL, map[string]any{
 			"url":    server.URL + "/resource",

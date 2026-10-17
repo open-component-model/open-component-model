@@ -151,7 +151,7 @@ func Test_Integration_TransferWgetResource_UploaderStreamsToHTTPTarget(t *testin
 	ctx := t.Context()
 	credResolver := newCredResolver(t, registryCreds{registryAddr, user, password})
 	repoProvider := provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()))
-	resourceRepo := wgetrepository.NewResourceRepository(nil)
+	resourceRepo := wgetrepository.NewResourceRepository()
 	b := transfer.NewDefaultBuilder(repoProvider, resourceRepo, credResolver)
 	graph, err := b.BuildAndCheck(tgd)
 	r.NoError(err)
