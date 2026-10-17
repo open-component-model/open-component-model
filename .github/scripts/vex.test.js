@@ -57,34 +57,42 @@ describe("normalizeGoPurl", () => {
 });
 
 describe("importAttested", () => {
-    // govulncheck -format openvex output as the cosign release attests it
-    const verified = [{
+    const digest = "sha256:3b5ad42851c0a2c37f55a680c0f95aa1a6ef7a3ca01edf9d4e6926edfd66be9d";
+    const target = { product: "pkg:golang/github.com/sigstore/cosign/v3", subject: `ghcr.io/o/cosign@${digest}` };
+    const attestation = (statements) => [{
         verificationResult: {
             signature: { certificate: { buildSignerURI: "https://github.com/o/cosign/.github/workflows/release.yml@refs/heads/x" } },
-            statement: {
-                predicate: {
-                    statements: [
-                        { vulnerability: { name: "GO-1" }, products: [{ "@id": "Unknown Product", subcomponents: [{ "@id": "pkg:golang/golang.org%2Fx%2Fcrypto@v0.58.0" }] }], status: "not_affected", justification: "vulnerable_code_not_present" },
-                        { vulnerability: { name: "GO-2" }, products: [{ "@id": "Unknown Product" }], status: "not_affected", justification: "vulnerable_code_not_present" },
-                    ],
-                },
-            },
+            statement: { predicate: { statements } },
         },
     }];
-    const target = { product: "pkg:golang/github.com/sigstore/cosign/v3", subject: "ghcr.io/o/cosign@sha256:abc" };
+    const notAffected = (name, product, sub) => ({ vulnerability: { name }, products: [{ "@id": product, ...(sub && { subcomponents: [{ "@id": sub }] }) }], status: "not_affected", justification: "vulnerable_code_not_present" });
 
-    it("scopes statements to the binary's main module with scanner-style purls and aliases", async () => {
-        const { statements } = await importAttested(verified, target, async (id) => (id === "GO-1" ? ["CVE-1"] : []));
+    it("scopes statements about the attested image digest to the binary's main module, with aliases", async () => {
+        const { statements } = await importAttested(
+            attestation([notAffected("GO-1", `pkg:oci/cosign@${digest.replace(":", "%3A")}`, "pkg:golang/golang.org/x/crypto@v0.58.0")]),
+            target,
+            async (id) => (id === "GO-1" ? ["CVE-1"] : []),
+        );
         assert.equal(statements.length, 1);
         const [s] = statements;
         assert.deepEqual(s.vulnerability, { "@id": "https://pkg.go.dev/vuln/GO-1", name: "GO-1", aliases: ["CVE-1"] });
         assert.deepEqual(s.products, [{ "@id": target.product, subcomponents: [{ "@id": "pkg:golang/golang.org/x/crypto@v0.58.0" }] }]);
         assert.deepEqual([s.status, s.justification], ["not_affected", "vulnerable_code_not_present"]);
-        assert.match(s.status_notes, /ghcr\.io\/o\/cosign@sha256:abc, signed by https:\/\/github\.com\/o\/cosign/);
+        assert.match(s.status_notes, /ghcr\.io\/o\/cosign@sha256:3b5a.*, signed by https:\/\/github\.com\/o\/cosign/);
     });
 
-    it("skips statements that name no module instead of covering the whole binary", async () => {
-        const { skipped } = await importAttested(verified, target, async () => []);
-        assert.deepEqual(skipped, ["GO-2"]);
+    it("skips statements that are not about the attested image digest or name no module", async () => {
+        const { statements, skipped } = await importAttested(attestation([
+            // govulncheck's default product, as older cosign releases attested it
+            notAffected("GO-UNKNOWN", "Unknown Product", "pkg:golang/golang.org%2Fx%2Fcrypto@v0.58.0"),
+            notAffected("GO-OTHER", "pkg:oci/cosign@sha256%3A0000000000000000000000000000000000000000000000000000000000000000", "pkg:golang/golang.org/x/crypto@v0.58.0"),
+            notAffected("GO-NOMODULE", `pkg:oci/cosign@${digest}`),
+        ]), target, async () => []);
+        assert.deepEqual(statements, []);
+        assert.deepEqual(skipped, ["GO-UNKNOWN", "GO-OTHER", "GO-NOMODULE"]);
+    });
+
+    it("requires the attested image by digest", async () => {
+        await assert.rejects(importAttested([], { ...target, subject: "ghcr.io/o/cosign:v1" }, async () => []), /not referenced by digest/);
     });
 });
