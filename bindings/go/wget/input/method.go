@@ -83,8 +83,15 @@ func (i *InputMethod) GetResourceCredentialConsumerIdentity(_ context.Context, r
 // ProcessResource opens the resource described by the wget input specification and
 // returns a blob streaming it as local blob data to be stored in the component version.
 //
+// Compression is a transport concern: gzip is requested, and the stored content
+// and its digest are what a request accepting no compression would return
+// (docs/adr/0031_wget_transfer_compression.md). Negotiated gzip is decoded, while
+// a Content-Encoding the server keeps for uncompressed requests is part of the
+// content. Content-Digest headers, which cover the transferred bytes, are verified
+// against those but never pin the content digest.
+//
 // The blob's digest is known up front when the resource pins a SHA-256 digest or
-// the source advertises one. The pinned digest and the checksum
+// the source advertises one for the content. The pinned digest and the checksum
 // policy are verified against the bytes as they are read: a mismatch fails the
 // blob's reader at the end of the body (its last Read and its Close).
 func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructorruntime.Resource, credentials runtime.Typed) (*constructor.ResourceInputMethodResult, error) {
@@ -151,9 +158,10 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 			}),
 			// Report an advertised SHA-256 as the blob's digest; the verifier checks
 			// it against the bytes even when the policy verified another algorithm.
-			download.WithAdvertisedDigest(func(header nethttp.Header) (string, bool) {
+			download.WithAdvertisedDigest(func(header nethttp.Header, decoded bool) (string, bool) {
+				// A checksum over the transferred bytes does not describe decoded content.
 				exp, ok, err := checksum.ResolveAdvertised(ctx, policy,
-					checksum.Input{URL: wget.URL, Headers: header},
+					checksum.Input{URL: wget.URL, Headers: header, Decoded: decoded},
 					[]checksum.Algorithm{checksum.StorageAlgorithm})
 				if err != nil || !ok {
 					return "", false
@@ -164,12 +172,13 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 	}
 
 	data, err := download.Download(ctx, download.Request{
-		URL:        wget.URL,
-		MediaType:  wget.MediaType,
-		Header:     wget.Header,
-		Verb:       wget.Verb,
-		Body:       wget.Body,
-		NoRedirect: wget.NoRedirect,
+		URL:              wget.URL,
+		MediaType:        wget.MediaType,
+		Header:           wget.Header,
+		Verb:             wget.Verb,
+		Body:             wget.Body,
+		NoRedirect:       wget.NoRedirect,
+		CompressTransfer: true,
 	}, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("error downloading wget input from %q: %w", wget.URL, err)

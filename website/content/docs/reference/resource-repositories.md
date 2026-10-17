@@ -179,8 +179,9 @@ no size limit by default. The request is sent when the blob is read, and every r
 than `GET` and `HEAD` a second read is refused, because repeating the request may have side effects. A reader closed
 before it reads any content sends no request. Size, media type, and advertised checksum are learned once: from a
 `HEAD` request when they are needed before the first read (`GET` and `HEAD` downloads only), otherwise from the first
-response. Every later response must match the learned size. The media type of the blob is taken from `mediaType`,
-falling back to the `Content-Type` learned this way and then to `application/octet-stream`.
+response. Every later response must match the learned size. The response bytes are returned as served; no compression
+is negotiated or decoded. The media type of the blob is taken from `mediaType`, falling back to the `Content-Type`
+learned this way and then to `application/octet-stream`.
 
 Request timeouts, retries, and per-host settings come from the
 [HTTP client configuration]({{< relref "http-client.md" >}}).
