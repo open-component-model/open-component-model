@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	ocmhttp "ocm.software/open-component-model/bindings/go/http"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	credv1 "ocm.software/open-component-model/bindings/go/wget/spec/credentials/v1"
 )
@@ -51,38 +52,27 @@ func Apply(ctx context.Context, req *http.Request, client **http.Client, credent
 			return fmt.Errorf("invalid certificate/privateKey for mTLS: %w", err)
 		}
 
-		tlsCfg := &tls.Config{
-			MinVersion:   tls.VersionTLS12,
-			Certificates: []tls.Certificate{cert},
-		}
-
+		var rootCAs *x509.CertPool
 		if creds.CertificateAuthority != "" {
-			pool := x509.NewCertPool()
-			if !pool.AppendCertsFromPEM([]byte(creds.CertificateAuthority)) {
+			rootCAs = x509.NewCertPool()
+			if !rootCAs.AppendCertsFromPEM([]byte(creds.CertificateAuthority)) {
 				return fmt.Errorf("failed to parse certificateAuthority PEM")
 			}
-			tlsCfg.RootCAs = pool
 		}
 
-		// Clone the client and install an mTLS transport, preserving the
-		// original transport's settings (proxy, timeouts, connection pooling).
-		existing := *client
-		var baseTransport *http.Transport
-		if t, ok := existing.Transport.(*http.Transport); ok && t != nil {
-			baseTransport = t.Clone()
-		} else {
-			if t, ok = http.DefaultTransport.(*http.Transport); ok && t != nil {
-				baseTransport = t.Clone()
-			} else {
-				baseTransport = &http.Transport{}
+		// Install the certificate on the client's own transports so its
+		// configuration (timeouts, retries, proxy, compression, TLS) is kept.
+		cloned, err := ocmhttp.CloneWithTLS(*client, func(cfg *tls.Config) {
+			cfg.Certificates = []tls.Certificate{cert}
+			if rootCAs != nil {
+				cfg.RootCAs = rootCAs
 			}
-		}
-		baseTransport.TLSClientConfig = tlsCfg
-		cloned := &http.Client{
-			Timeout:       existing.Timeout,
-			Jar:           existing.Jar,
-			CheckRedirect: existing.CheckRedirect,
-			Transport:     baseTransport,
+			if cfg.MinVersion < tls.VersionTLS12 {
+				cfg.MinVersion = tls.VersionTLS12
+			}
+		})
+		if err != nil {
+			return fmt.Errorf("cannot apply mTLS client certificate: %w", err)
 		}
 		*client = cloned
 	}
