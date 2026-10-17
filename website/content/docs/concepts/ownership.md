@@ -29,7 +29,7 @@ For the full picture of how artifacts move between repositories, see [Transfer a
 
 ## What's Next?
 
-- [How-To: Add and Verify Ownership Information]({{< relref "docs/how-to/add-and-verify-ownership.md" >}}) — opt a
+- [How-To: Add and Verify Ownership Information]({{< relref "docs/guides/pack/add-and-verify-ownership.md" >}}) — opt a
   resource into ownership tracking and verify the ownership record.
 
 ## Related Documentation

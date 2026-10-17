@@ -8,7 +8,7 @@ toc: true
 
 This page is the technical reference for OCM HTTP client configuration. For a
 task-oriented walkthrough, see the
-[Configure HTTP Client Behaviour]({{< relref "docs/how-to/configure-http/_index.md" >}}) how-to guides.
+[Configure HTTP Client Behaviour]({{< relref "docs/guides/transfer/configure-http.md" >}}) how-to guides.
 
 ## Configuration Type
 
@@ -106,7 +106,7 @@ non-standard ports. Keys must be lowercase — Go normalises URL hostnames.
 Proxy configuration is not a field in this type. OCM inherits Go's standard
 `http.ProxyFromEnvironment` — set `HTTPS_PROXY`, `HTTP_PROXY`, and `NO_PROXY`
 environment variables. See
-[Route Traffic Through a Proxy]({{< relref "docs/how-to/configure-http/proxy.md" >}}).
+[Route Traffic Through a Proxy]({{< relref "docs/guides/transfer/configure-http.md" >}}).
 
 ### TLS Trust: Custom Root CAs
 
@@ -131,10 +131,10 @@ configurations:
 
 Alternatively, Go's `SSL_CERT_FILE` / `SSL_CERT_DIR` environment variables **replace**
 (not extend) the built-in system CA path lists in `crypto/x509`. Prefer `rootCAsPEM`
-for additive, per-host trust. See [TLS and Custom CA]({{< relref "docs/how-to/configure-http/tls.md" >}}).
+for additive, per-host trust. See [TLS and Custom CA]({{< relref "docs/guides/transfer/configure-http.md" >}}).
 
 ## Related Documentation
 
-- [Configure HTTP Client Behaviour]({{< relref "docs/how-to/configure-http/_index.md" >}}) — task-oriented how-to guides
-- [Configure Credentials for Multiple Registries]({{< relref "docs/how-to/configure-multiple-credentials.md" >}}) — pairing HTTP config with credential setup
+- [Configure HTTP Client Behaviour]({{< relref "docs/guides/transfer/configure-http.md" >}}) — task-oriented how-to guides
+- [Configure Credentials for Multiple Registries]({{< relref "docs/guides/transfer/configure-registry-credentials.md" >}}) — pairing HTTP config with credential setup
 - [Resolver Configuration]({{< relref "docs/reference/resolver-configuration.md" >}}) — reference for resolver config in the same file

@@ -41,5 +41,5 @@ They deepen your understanding of OCM's architecture and design principles.
 If you're new to OCM, we recommend trying the [Getting Started]({{< relref "docs/getting-started/_index.md" >}})
 guides first to see OCM in action.
 
-For task-specific guidance, check the [How-to Guides]({{< relref "docs/how-to/_index.md" >}}) section.
-For hands-on learning experiences, explore the [Tutorials]({{< relref "docs/tutorials/_index.md" >}}) section.
+For task-specific guidance, check the [How-to Guides]({{< relref "docs/guides/_index.md" >}}) section.
+For hands-on learning experiences, explore the [Tutorials]({{< relref "docs/guides/_index.md" >}}) section.

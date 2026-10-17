@@ -421,7 +421,12 @@ function buildModuleBlocks(version, fullVersion, deps) {
             ignoreImports: true,
             ignoreConfig: true,
             mounts: [{
-                files: ["! blog/**", "! community/**", "! governance/**"],
+                // Exclude only the changelog index: it is fanned from the
+                // working-tree overlay (version-bounded release list) into
+                // every version site. The migration guides under
+                // docs/changelog/ are NOT excluded, so each release's frozen
+                // snapshot supplies its own guides, versioned with that release.
+                files: ["! blog/**", "! community/**", "! governance/**", "! docs/changelog/_index.md"],
                 source: "content/",
                 target: "content",
                 sites: { matrix: { versions: [version] } }
@@ -584,20 +589,27 @@ async function updateHugoConfig(version) {
     return { retired, added: alreadyExists ? null : version };
 }
 
-// Keep the unversioned top-level content mounts (blog, community, governance)
-// in sync with the registered version set. These sections have no per-version
-// content of their own - the same source renders under every version's URL
-// prefix so that ref/relref links from frozen module-cache snapshots (v0.9.1
-// ... v0.14.0 today) keep resolving inside their own version site. Without
-// this fan-out, a cached v0.14 docs page containing
-// `{{< relref "community/_index.md" >}}` fails the build because community
-// is not part of the versioned docs tree. Called from updateModuleConfig
-// with the version just added (or null) and the version just retired (or
-// undefined); a no-op re-registration passes both as falsy and the lists
-// are left untouched. Once every snapshot carrying such refs has been
-// retired, this fan-out is no longer required.
+// Keep the unversioned content mounts (blog, community, governance, and the
+// docs/changelog index) in sync with the registered version set. For the
+// changelog, only `_index.md` is fanned out (see the content/docs/changelog
+// mount's `files: ['_index.md']` filter): the index hosts the build-time
+// release list that each version site bounds to releases up to its own
+// version, so it must render under every version prefix. The migration
+// guides under docs/changelog/ are deliberately NOT fanned; each release's
+// frozen snapshot supplies its own guides (versioned with the release), and
+// buildModuleBlocks excludes only `docs/changelog/_index.md` from the frozen
+// self-import so those guides mount while the overlay stays authoritative for
+// the index. blog/community/governance have no per-version content of their
+// own - the same source renders under every version's URL prefix so that
+// ref/relref links from frozen module-cache snapshots (v0.9.1 ... today) keep
+// resolving inside their own version site. Without this fan-out, a cached
+// v0.14 docs page containing `{{< relref "community/_index.md" >}}` fails the
+// build because community is not part of the versioned docs tree. Called from
+// updateModuleConfig with the version just added (or null) and the version
+// just retired (or undefined); a no-op re-registration passes both as falsy
+// and the lists are left untouched.
 function syncUnversionedMountVersions(parsed, { added, retired } = {}) {
-    const targets = new Set(["content/blog", "content/community", "content/governance"]);
+    const targets = new Set(["content/blog", "content/community", "content/governance", "content/docs/changelog"]);
     let changed = 0;
     for (const m of parsed.mounts || []) {
         if (!targets.has(m.source)) {

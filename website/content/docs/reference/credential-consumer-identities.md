@@ -68,7 +68,7 @@ them as an alias, a sequence, or a mapping.
 
 OCM v1 scoped entries with a `pathprefix` attribute instead. OCM still accepts `pathprefix: <prefix>`, converts it into
 `path: "{<prefix>,<prefix>/**}"`, and logs a warning. If an entry sets both, `path` wins. See
-[Migrate Legacy Credentials]({{< relref "docs/how-to/migration-guides/legacy-credential-compatibility.md" >}}).
+[Migrate Legacy Credentials]({{< relref "docs/changelog/migrate-legacy-credentials.md" >}}).
 
 ---
 
@@ -107,7 +107,7 @@ Matching runs three chained checks — all must pass:
    `https` → `443`, `http` → `80`).
 3. **Equality matcher** — all remaining attributes (like `type`) must be exactly equal.
 
-For detailed matching examples and edge cases, see [Tutorial: Understand Credential Resolution]({{< relref "docs/tutorials/credential-resolution.md" >}}).
+For detailed matching examples and edge cases, see [Tutorial: Understand Credential Resolution]({{< relref "docs/concepts/credential-resolution.md" >}}).
 
 ### Examples
 
@@ -320,7 +320,7 @@ request goes out unauthenticated, so the symptom is a `401` from the server rath
 
 For migrating a Wget consumer entry from OCM v1, covering the renamed identity type, the `pathprefix` to `path`
 conversion, and the inverted authentication precedence, see
-[Tutorial: Work with HTTP Resources]({{< relref "docs/tutorials/wget-http-resources.md#credential-changes" >}}).
+[Tutorial: Work with HTTP Resources]({{< relref "docs/guides/pack/add-http-resources.md#credential-changes" >}}).
 
 ---
 
@@ -870,8 +870,8 @@ added by installed plugins — and `ocm describe types credentials <type>` to in
 - [Concept: Credential System]({{< relref "docs/concepts/credential-system.md" >}}) — How the credential system works
 - [Reference: Credential Types]({{< relref "credential-types.md" >}}) — All built-in typed credential types and their
   fields
-- [Tutorial: Understand Credential Resolution]({{< relref "docs/tutorials/credential-resolution.md" >}}) — Step-by-step
+- [Tutorial: Understand Credential Resolution]({{< relref "docs/concepts/credential-resolution.md" >}}) — Step-by-step
   matching examples for OCI registries
-- [How-To: Configure Credentials for Multiple Registries]({{< relref "docs/how-to/configure-multiple-credentials.md" >}}) — Task-oriented registry credential setup
+- [How-To: Configure Credentials for Multiple Registries]({{< relref "docs/guides/transfer/configure-registry-credentials.md" >}}) — Task-oriented registry credential setup
 - [How-To: Configure Credentials for Signing]({{< relref "configure-signing-credentials.md" >}}) — Task-oriented signing
   credential setup
