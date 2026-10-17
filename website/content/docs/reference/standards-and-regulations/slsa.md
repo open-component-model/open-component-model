@@ -169,8 +169,9 @@ gh attestation verify /tmp/ocm/ocm-linux-amd64 \
 
 Besides build provenance, the release pipeline attests an SPDX SBOM to every CLI
 binary and to both OCI images (one per platform), and attests the OpenVEX
-document to every CLI binary and both OCI images. The images are scanned with
-that same document. Select the attestations by predicate type:
+document to every CLI binary and to the CLI, slim CLI and controller images. The
+images are scanned with that same document. Select the attestations by predicate
+type:
 
 ```shell
 # SBOM (SPDX 2.3) of an image
@@ -189,7 +190,7 @@ gh attestation verify /tmp/ocm/ocm-linux-amd64 \
 
 SBOMs and VEX documents are not SLSA provenance; they are signed by the same
 workflows and verified the same way. The release verifies the OpenVEX
-attestation of every binary before promoting a release. The same documents are
+attestation of every binary and image before promoting a release. The same documents are
 also release assets and resources of the OCM component versions; see
 [EU Cyber Resilience Act: SBOMs and VEX Documents]({{< relref "docs/reference/standards-and-regulations/cra.md#sboms-and-vex-documents" >}}).
 

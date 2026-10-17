@@ -125,7 +125,7 @@ manufacturers building on OCM.
 | Build provenance / SLSA attestation | `actions/attest-build-provenance` (SLSA) attests CLI binaries (`.github/workflows/cli.yml`), OCI images and Helm charts (`.github/workflows/pipeline.yml`, `.github/workflows/release.yml`). Attestations are published alongside artifacts. | — |
 | Component version signing | Release component versions are signed keyless with Sigstore (Fulcio + Rekor) in the publish-components workflow (`.github/workflows/publish-components.yml`). Git tags are GPG-signed (`.github/workflows/release.yml`). | — |
 | SBOM generation | The release pipeline generates SPDX JSON SBOMs with Syft for every CLI binary (`cli.yml`, `assemble` job) and for the CLI and controller OCI images per platform (`pipeline.yml`, `publish_cli` / `publish_controller`). See [SBOMs and VEX Documents](#sboms-and-vex-documents) for where to get them. | The Helm chart has no SBOM (it contains no software beyond Kubernetes manifests). |
-| CSAF / VEX advisories | An [OpenVEX](https://openvex.dev/) document is generated from `govulncheck` reachability analysis (`.github/workflows/image-scan.yml`). Advisories whose code is not called receive `not_affected` (justification `vulnerable_code_not_present` or `vulnerable_code_not_in_execute_path`); called ones receive `affected`. The image scan uses the same document, and it applies to the CLI binaries and both images. See [SBOMs and VEX Documents](#sboms-and-vex-documents). | OCM does not publish machine-readable CSAF advisories. BSI [TR-03183 Part 3](https://www.bsi.bund.de/EN/Themen/Unternehmen-und-Organisationen/Standards-und-Zertifizierung/Technische-Richtlinien/TR-nach-Thema-sortiert/tr03183/tr-03183.html) describes vulnerability report and notification formats. |
+| CSAF / VEX advisories | An [OpenVEX](https://openvex.dev/) document is generated from `govulncheck` reachability analysis in source mode (`.github/workflows/image-scan.yml`). Advisories whose code is not called receive `not_affected` (justification `vulnerable_code_not_present` or `vulnerable_code_not_in_execute_path`); called ones receive `affected`. Each statement names the advisory's aliases (CVE IDs, as image scanners report them), and its product is the OCM Go module with the vulnerable modules as subcomponents, so it applies only to OCM's own binaries (`ocm`, `manager`), not to other binaries in an image such as `cosign`. The image scan uses the same document, and it is attached to the CLI binaries and all images. See [SBOMs and VEX Documents](#sboms-and-vex-documents). | OCM does not publish machine-readable CSAF advisories. BSI [TR-03183 Part 3](https://www.bsi.bund.de/EN/Themen/Unternehmen-und-Organisationen/Standards-und-Zertifizierung/Technische-Richtlinien/TR-nach-Thema-sortiert/tr03183/tr-03183.html) describes vulnerability report and notification formats. |
 | OpenSSF Scorecard | Runs weekly and on push to `main` via `ossf/scorecard-action` (`.github/workflows/openssf-scorecard.yml`). Results are published to the OpenSSF API and uploaded to GitHub code scanning. | — |
 | Cryptographic hardening | FIPS 140-3 mode on by default. See [FIPS 140-3]({{< relref "docs/reference/standards-and-regulations/fips.md" >}}). | — |
 | Container and chart hardening | Minimal `scratch` images, DISA GPOS SRG scan, restricted pod security. See [DISA STIG]({{< relref "docs/reference/standards-and-regulations/disa-stig.md" >}}). | — |
@@ -137,7 +137,7 @@ through three channels:
 
 | Channel | CLI binaries | CLI image | Controller image | Use when |
 | --- | --- | --- | --- | --- |
-| GitHub artifact attestation | SBOM, OpenVEX | SBOM per platform, OpenVEX | SBOM per platform, OpenVEX | You need proof the document was produced by the OCM release workflows |
+| GitHub artifact attestation | SBOM, OpenVEX | SBOM per platform, OpenVEX (default and slim image) | SBOM per platform, OpenVEX | You need proof the document was produced by the OCM release workflows, or scan images with `trivy image --vex oci` |
 | GitHub release assets | `ocm-<os>-<arch>.spdx.json`, `ocm.openvex.json` | `ocm-cli-image-linux-<arch>.spdx.json`, `ocm.openvex.json` | `ocm-controller-image-linux-<arch>.spdx.json`, `ocm.openvex.json` | You download OCM from GitHub |
 | OCM component version resources | `cli-sbom` (per os/architecture), `openvex` in `ocm.software/cli` | `image-sbom` (per architecture), `openvex` in `ocm.software/cli` | `image-sbom` (per architecture), `openvex` in `ocm.software/kubernetes/controller` | You consume OCM as a component, including after `ocm transfer` into another registry or an air-gapped environment |
 
@@ -163,6 +163,20 @@ ocm download resource "$CV" --identity name=openvex --output ocm.openvex.json
 chmod +x ocm-linux-amd64
 trivy rootfs --vex ocm.openvex.json ocm-linux-amd64
 ```
+
+The OpenVEX attestations of the images are stored as OCI referrers next to the
+images, so Trivy 0.73 or later finds and applies them when scanning a published
+image:
+
+```shell
+trivy image --vex oci --show-suppressed ghcr.io/open-component-model/cli:0.20.0
+```
+
+Trivy does not verify the signature of a VEX attestation it discovers; verify it
+with `gh attestation verify` as shown on the
+[SLSA]({{< relref "docs/reference/standards-and-regulations/slsa.md#sbom-and-openvex-attestations" >}})
+page if that matters to you. Findings in `cosign` are not covered: `govulncheck`
+analyzes OCM's source, not third-party binaries.
 
 A component version cannot change after it is signed, so its OpenVEX document
 reflects what `govulncheck` reported at release time. Advisories published

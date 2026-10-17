@@ -6,10 +6,15 @@ import { readFile, writeFile } from "node:fs/promises";
  *
  * govulncheck reports, per advisory, whether the vulnerable code is required
  * (module), imported (package) or called (function). Advisories that are not
- * called get a `not_affected` statement, called ones `affected`. Products are
- * the vulnerable modules' package URLs, so image scanners (Trivy) that find the
- * same module in the binary's build information apply the statement instead of
- * reporting a finding that govulncheck already ruled out.
+ * called get a `not_affected` statement, called ones `affected`.
+ *
+ * The product of every statement is the scanned main module (the binaries built
+ * from it: ocm, manager), with the vulnerable modules as subcomponents. Image
+ * scanners (Trivy) see the main module as the parent of its dependencies in a Go
+ * binary's build information, so a statement applies to the vulnerable module
+ * inside OCM's binaries only, never to the same module in another binary of the
+ * image (cosign), which govulncheck did not analyze. Statements carry the
+ * advisory's aliases (CVE IDs), the IDs image scanners report.
  */
 
 /**
@@ -47,6 +52,10 @@ export function parseJsonStream(text) {
  * @param {{id: string, author: string, timestamp: string}} meta
  */
 export function buildVex(messages, meta) {
+    const main = messages.find((m) => m.SBOM)?.SBOM?.modules?.find((/** @type {any} */ m) => !m.version)?.path;
+    if (!main) throw new Error("govulncheck output names no main module (SBOM message without an unversioned module)");
+    /** @type {Map<string, string[]>} */
+    const aliases = new Map(messages.filter((m) => m.osv).map((m) => [m.osv.id, m.osv.aliases ?? []]));
     /** @type {Map<string, {called: boolean, imported: boolean, products: Set<string>}>} */
     const byOsv = new Map();
     for (const { finding } of messages) {
@@ -60,8 +69,8 @@ export function buildVex(messages, meta) {
     }
 
     const statements = [...byOsv].map(([osv, e]) => ({
-        vulnerability: { "@id": `https://pkg.go.dev/vuln/${osv}`, name: osv },
-        products: [...e.products].sort().map((id) => ({ "@id": id })),
+        vulnerability: { "@id": `https://pkg.go.dev/vuln/${osv}`, name: osv, aliases: [...(aliases.get(osv) ?? [])].sort() },
+        products: [{ "@id": `pkg:golang/${main}`, subcomponents: [...e.products].sort().map((id) => ({ "@id": id })) }],
         ...(e.called
             ? { status: "affected", action_statement: "The vulnerable code is called; see the govulncheck report." }
             : {
@@ -111,8 +120,12 @@ export default async function vexAction({ core, context }) {
     await core.summary
         .addHeading("📄 OpenVEX from govulncheck", 3)
         .addTable([
-            [{ data: "Advisory", header: true }, { data: "Status", header: true }, { data: "Products", header: true }],
-            ...vex.statements.map((s) => [s.vulnerability.name, s.status + (s.justification ? ` (${s.justification})` : ""), s.products.map((p) => p["@id"]).join(", ")]),
+            [{ data: "Advisory", header: true }, { data: "Status", header: true }, { data: `Modules (in ${vex.statements[0]?.products[0]["@id"] ?? "—"})`, header: true }],
+            ...vex.statements.map((s) => [
+                [s.vulnerability.name, ...s.vulnerability.aliases].join(", "),
+                s.status + (s.justification ? ` (${s.justification})` : ""),
+                s.products.flatMap((p) => p.subcomponents.map((c) => c["@id"])).join(", "),
+            ]),
         ])
         .write();
 }

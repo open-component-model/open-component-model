@@ -324,8 +324,9 @@ jobs:
           name: ${{ needs.image_scan.outputs.vex_artifact }}
           path: tmp/vex
 
-      # The OpenVEX document the image was scanned with, so consumers' scanners
-      # apply the same reachability verdicts.
+      # The OpenVEX document the image was scanned with, as an OCI referrer, so
+      # consumers' scanners apply the same reachability verdicts (trivy image
+      # --vex oci, Trivy >= 0.73).
       - name: Attest OpenVEX
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
@@ -350,6 +351,15 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           subject-digest: ${{ steps.digest.outputs.slim_digest }}
           subject-name: ${{ env.TARGET_REPO }}
+          push-to-registry: true
+
+      - name: Attest OpenVEX (slim OCI image)
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-digest: ${{ steps.digest.outputs.slim_digest }}
+          subject-name: ${{ env.TARGET_REPO }}
+          predicate-type: https://openvex.dev/ns/v0.2.0
+          predicate-path: tmp/vex/ocm.openvex.json
           push-to-registry: true
   # === cli.yml::publish ===
 
