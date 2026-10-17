@@ -12,21 +12,17 @@ import (
 	"helm.sh/helm/v4/pkg/repo/v1"
 
 	"ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	ocmdigest "ocm.software/open-component-model/bindings/go/digest"
 	helminternal "ocm.software/open-component-model/bindings/go/helm/internal"
 	"ocm.software/open-component-model/bindings/go/helm/internal/download"
 	"ocm.software/open-component-model/bindings/go/helm/spec/access"
 	helmv1 "ocm.software/open-component-model/bindings/go/helm/spec/access/v1"
 	helmcreds "ocm.software/open-component-model/bindings/go/helm/spec/credentials"
 	helmcredsv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/v1"
+	ocidigest "ocm.software/open-component-model/bindings/go/oci/digest"
 	ocicredsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/digestprocessor"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
-)
-
-const (
-	hashAlgorithmSHA256 = "SHA-256"
-	genericBlobDigestV1 = "genericBlobDigest/v1"
-	ociArtifactDigestV1 = "ociArtifactDigest/v1"
 )
 
 var _ digestprocessor.BuiltinDigestProcessorPlugin = (*DigestProcessor)(nil)
@@ -85,12 +81,16 @@ func (p *DigestProcessor) ProcessResourceDigest(
 		return nil, fmt.Errorf("helm repository URL is required for digest processing")
 	}
 
+	if ocmdigest.IsExcluded(resource.Digest) {
+		return resource.DeepCopy(), nil
+	}
+
 	var resolvedDigest godigest.Digest
-	normalisation := genericBlobDigestV1
+	rule := ocidigest.BlobRule
 
 	var err error
 	if strings.HasPrefix(helm.HelmRepository, "oci://") {
-		normalisation = ociArtifactDigestV1
+		rule = ocidigest.ArtifactRule
 		var ociCreds *ocicredsv1.OCICredentials
 		if credentials != nil {
 			if ociCreds, err = helmcredsv1.ConvertToOCICredentials(credentials); err != nil {
@@ -111,18 +111,28 @@ func (p *DigestProcessor) ProcessResourceDigest(
 		return nil, err
 	}
 
-	resource = resource.DeepCopy()
-
-	if resource.Digest == nil {
-		resource.Digest = &runtime.Digest{}
-		if err := applyDigest(resource.Digest, resolvedDigest, normalisation); err != nil {
-			return nil, fmt.Errorf("failed to apply digest to resource: %w", err)
-		}
-	} else if err := verifyDigest(resource.Digest, resolvedDigest, normalisation); err != nil {
-		return nil, fmt.Errorf("failed to verify digest of resource: %w", err)
+	checked, err := checkDigest(resource.Digest, resolvedDigest, rule)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check digest of resource: %w", err)
 	}
+	resource = resource.DeepCopy()
+	resource.Digest = checked
 
 	return resource, nil
+}
+
+// checkDigest checks the recorded digest of a chart against the resolved one and returns the
+// digest to record.
+func checkDigest(recorded *runtime.Digest, resolved godigest.Digest, rule ocmdigest.Rule) (*runtime.Digest, error) {
+	computed, err := ocidigest.FromOCI(resolved)
+	if err != nil {
+		return nil, err
+	}
+	result, err := ocmdigest.Check(recorded, computed, rule, ocmdigest.Strict)
+	if err != nil {
+		return nil, err
+	}
+	return result.Digest, nil
 }
 
 func (p *DigestProcessor) resolveHTTPDigest(ctx context.Context, helm helmv1.Helm, credentials *helmcredsv1.HelmHTTPCredentials) (godigest.Digest, error) {
@@ -281,50 +291,4 @@ func parseDigest(raw string) (godigest.Digest, error) {
 	// Bare hex string — assume SHA-256
 	d := godigest.NewDigestFromEncoded(godigest.SHA256, raw)
 	return d, d.Validate()
-}
-
-func applyDigest(target *runtime.Digest, d godigest.Digest, normalisation string) error {
-	algo := algorithmName(d.Algorithm())
-	if algo == "" {
-		return fmt.Errorf("unknown digest algorithm: %s", d.Algorithm())
-	}
-	target.HashAlgorithm = algo
-	target.NormalisationAlgorithm = normalisation
-	target.Value = d.Encoded()
-	return nil
-}
-
-func verifyDigest(target *runtime.Digest, d godigest.Digest, normalisation string) error {
-	if target == nil {
-		return fmt.Errorf("target digest is nil")
-	}
-	complete := target.HashAlgorithm != "" && target.NormalisationAlgorithm != "" && target.Value != ""
-	if target.NormalisationAlgorithm != "" && target.NormalisationAlgorithm != normalisation &&
-		(normalisation != ociArtifactDigestV1 || target.NormalisationAlgorithm != genericBlobDigestV1) {
-		return fmt.Errorf("normalisation algorithm mismatch: expected %s, got %s", normalisation, target.NormalisationAlgorithm)
-	}
-	if target.Value != "" && target.Value != d.Encoded() {
-		return fmt.Errorf("digest value mismatch: expected %s, got %s", target.Value, d.Encoded())
-	}
-	algo := algorithmName(d.Algorithm())
-	if algo == "" {
-		return fmt.Errorf("unknown digest algorithm: %s", d.Algorithm())
-	}
-	if target.HashAlgorithm != "" && target.HashAlgorithm != algo &&
-		(complete || !strings.EqualFold(strings.ReplaceAll(target.HashAlgorithm, "-", ""), strings.ReplaceAll(algo, "-", ""))) {
-		return fmt.Errorf("hash algorithm mismatch: expected %s, got %s", target.HashAlgorithm, algo)
-	}
-	if !complete {
-		return applyDigest(target, d, normalisation)
-	}
-	return nil
-}
-
-func algorithmName(algo godigest.Algorithm) string {
-	switch algo {
-	case godigest.SHA256:
-		return hashAlgorithmSHA256
-	default:
-		return ""
-	}
 }

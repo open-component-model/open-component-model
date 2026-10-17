@@ -3,6 +3,8 @@ package signing
 import (
 	"context"
 	"crypto"
+	"crypto/rand"
+	"crypto/rsa"
 	"encoding/hex"
 	"log/slog"
 	"testing"
@@ -279,4 +281,65 @@ func TestVerifyDigestMatchesDescriptor_LegacyNormalisation(t *testing.T) {
 	sig := descruntime.Signature{Name: "s4", Digest: *dg}
 
 	require.NoError(t, VerifyDigestMatchesDescriptor(ctx, d, sig, logger))
+}
+
+// A component version with a resource excluded from signing (ocm-spec: NO-DIGEST /
+// EXCLUDE-FROM-SIGNATURE) can be signed and verified; the exclusion marker itself is signed,
+// but where the resource content lives is not.
+func TestSignVerifyWithResourceExcludedFromSignature(t *testing.T) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	logger := slog.New(slog.DiscardHandler)
+
+	tests := []struct {
+		name    string
+		mutate  func(res *descruntime.Resource)
+		wantErr string
+	}{
+		{name: "unchanged", mutate: func(*descruntime.Resource) {}},
+		{name: "content moved to another access", mutate: func(res *descruntime.Resource) {
+			res.Access = &runtime.Raw{Type: runtime.NewVersionedType("ociArtifact", "v1"), Data: []byte(`{"type":"ociArtifact/v1","imageReference":"elsewhere/image:2.0.0"}`)}
+		}},
+		{name: "exclusion replaced by a content digest", wantErr: "digest mismatch", mutate: func(res *descruntime.Resource) {
+			res.Digest = &descruntime.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: "genericBlobDigest/v1", Value: "0123"}
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+			desc := &descruntime.Descriptor{
+				Meta: descruntime.Meta{Version: "v2"},
+				Component: descruntime.Component{
+					ComponentMeta: descruntime.ComponentMeta{ObjectMeta: descruntime.ObjectMeta{Name: "ocm.software/excluded", Version: "1.0.0"}},
+					Provider:      descruntime.Provider{Name: "test-provider"},
+					Resources: []descruntime.Resource{{
+						ElementMeta: descruntime.ElementMeta{ObjectMeta: descruntime.ObjectMeta{Name: "excluded", Version: "1.0.0"}},
+						Type:        "ociImage",
+						Relation:    descruntime.ExternalRelation,
+						Access:      &runtime.Raw{Type: runtime.NewVersionedType("ociArtifact", "v1"), Data: []byte(`{"type":"ociArtifact/v1","imageReference":"example/image:1.0.0"}`)},
+						Digest:      descruntime.NewExcludeFromSignatureDigest(),
+					}},
+				},
+			}
+
+			r.NoError(IsSafelyDigestible(&desc.Component))
+			d, err := GenerateDigest(t.Context(), desc, logger, v4alpha1.Algorithm, crypto.SHA256.String())
+			r.NoError(err)
+			raw, err := hex.DecodeString(d.Value)
+			r.NoError(err)
+			sig, err := rsa.SignPKCS1v15(rand.Reader, key, crypto.SHA256, raw)
+			r.NoError(err)
+			r.Equal(descruntime.NewExcludeFromSignatureDigest(), desc.Component.Resources[0].Digest, "signing must not rewrite the resource digest")
+
+			tt.mutate(&desc.Component.Resources[0])
+
+			err = VerifyDigestMatchesDescriptor(t.Context(), desc, descruntime.Signature{Name: "sig", Digest: *d}, logger)
+			if tt.wantErr != "" {
+				r.ErrorContains(err, tt.wantErr)
+				return
+			}
+			r.NoError(err)
+			r.NoError(rsa.VerifyPKCS1v15(&key.PublicKey, crypto.SHA256, raw, sig))
+		})
+	}
 }

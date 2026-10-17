@@ -25,9 +25,10 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	ocmdigest "ocm.software/open-component-model/bindings/go/digest"
 	ociblob "ocm.software/open-component-model/bindings/go/oci/blob"
 	"ocm.software/open-component-model/bindings/go/oci/compref"
-	internaldigest "ocm.software/open-component-model/bindings/go/oci/internal/digest"
+	ocidigest "ocm.software/open-component-model/bindings/go/oci/digest"
 	"ocm.software/open-component-model/bindings/go/oci/internal/fetch"
 	"ocm.software/open-component-model/bindings/go/oci/internal/identity"
 	"ocm.software/open-component-model/bindings/go/oci/internal/introspection"
@@ -355,16 +356,15 @@ func (repo *Repository) processOCIImageLayerDigest(ctx context.Context, res *des
 		return nil, fmt.Errorf("layer %q in %q has size %d, but the access declares %d", typed.Digest, typed.Reference, layer.Size, typed.Size)
 	}
 
-	if !internaldigest.IsComplete(res.Digest) {
-		if res.Digest == nil {
-			res.Digest = &descriptor.Digest{}
-		}
-		if err := internaldigest.Complete(res.Digest, typed.Digest, internaldigest.GenericBlobDigestV1); err != nil {
-			return nil, fmt.Errorf("failed to complete digest of resource %q: %w", res.ToIdentity(), err)
-		}
-	} else if err := internaldigest.Verify(res.Digest, typed.Digest, internaldigest.GenericBlobDigestV1); err != nil {
-		return nil, fmt.Errorf("failed to verify digest of resource %q: %w", res.ToIdentity(), err)
+	computed, err := ocidigest.FromOCI(typed.Digest)
+	if err != nil {
+		return nil, err
 	}
+	result, err := ocmdigest.Check(res.Digest, computed, ocidigest.BlobRule, ocmdigest.Strict)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check digest of resource %q: %w", res.ToIdentity(), err)
+	}
+	res.Digest = result.Digest
 
 	res.Access = typed
 
@@ -403,17 +403,8 @@ func (repo *Repository) processOCIImageDigest(ctx context.Context, res *descript
 		}
 	}
 
-	// A missing or incomplete digest is completed from the descriptor; fields that are
-	// already set must match it. A complete digest is verified against the descriptor.
-	if !internaldigest.IsComplete(res.Digest) {
-		if res.Digest == nil {
-			res.Digest = &descriptor.Digest{}
-		}
-		if err := internaldigest.Complete(res.Digest, desc.Digest, internaldigest.OCIArtifactDigestV1); err != nil {
-			return nil, fmt.Errorf("failed to complete digest of resource %q: %w", res.ToIdentity(), err)
-		}
-	} else if err := internaldigest.VerifyOCIArtifact(res.Digest, desc.Digest); err != nil {
-		return nil, fmt.Errorf("failed to verify digest of resource %q: %w", res.ToIdentity(), err)
+	if res.Digest, err = checkArtifactDigest(res.Digest, desc.Digest); err != nil {
+		return nil, fmt.Errorf("failed to check digest of resource %q: %w", res.ToIdentity(), err)
 	}
 
 	if pinnedDigest != "" && pinnedDigest.String() != desc.Digest.String() {
@@ -427,6 +418,23 @@ func (repo *Repository) processOCIImageDigest(ctx context.Context, res *descript
 	res.Access = typed
 
 	return res, nil
+}
+
+// checkArtifactDigest checks a resource digest against the root manifest or index of an OCI
+// artifact and returns the digest to record.
+func checkArtifactDigest(recorded *descriptor.Digest, root digest.Digest) (*descriptor.Digest, error) {
+	computed, err := ocidigest.FromOCI(root)
+	if err != nil {
+		return nil, err
+	}
+	result, err := ocmdigest.Check(recorded, computed, ocidigest.ArtifactRule, ocmdigest.Strict)
+	if errors.Is(err, ocmdigest.ErrNormalisationMismatch) {
+		return nil, fmt.Errorf("unsupported OCI artifact normalisation algorithm: %w", err)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return result.Digest, nil
 }
 
 // scanLocalBlobs scans the component descriptor for all LocalBlob access specifications and returns them
@@ -826,13 +834,11 @@ func (repo *Repository) uploadOCIImage(ctx context.Context, newAccess runtime.Ty
 	// A nil digest denotes a source. Resources must validate or complete their
 	// digest before any destination writes, including the incomplete-digest case.
 	if resourceDigest != nil {
-		if !internaldigest.IsComplete(resourceDigest) {
-			if err := internaldigest.Complete(resourceDigest, main.Digest, internaldigest.OCIArtifactDigestV1); err != nil {
-				return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to complete resource digest: %w", err)
-			}
-		} else if err := internaldigest.VerifyOCIArtifact(resourceDigest, main.Digest); err != nil {
-			return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to verify resource digest: %w", err)
+		checked, err := checkArtifactDigest(resourceDigest, main.Digest)
+		if err != nil {
+			return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to check resource digest: %w", err)
 		}
+		*resourceDigest = *checked
 	}
 
 	ref, err := looseref.ParseReference(access.ImageReference)
@@ -1328,15 +1334,8 @@ func (repo *Repository) UploadResourceStream(ctx context.Context, res *descripto
 	}
 
 	res = res.DeepCopy()
-	if !internaldigest.IsComplete(res.Digest) {
-		if res.Digest == nil {
-			res.Digest = &descriptor.Digest{}
-		}
-		if err := internaldigest.Complete(res.Digest, rs.Root().Digest, internaldigest.OCIArtifactDigestV1); err != nil {
-			return nil, fmt.Errorf("failed to complete resource digest: %w", err)
-		}
-	} else if err := internaldigest.VerifyOCIArtifact(res.Digest, rs.Root().Digest); err != nil {
-		return nil, fmt.Errorf("failed to verify resource digest: %w", err)
+	if res.Digest, err = checkArtifactDigest(res.Digest, rs.Root().Digest); err != nil {
+		return nil, fmt.Errorf("failed to check resource digest: %w", err)
 	}
 
 	// ExtendedCopyGraph copies the root together with its referrers, which a
