@@ -48,7 +48,7 @@ func TestPluginFlow(t *testing.T) {
 	registry := NewResourceRegistry(ctx)
 	config := mtypes.Config{
 		ID:         "test-plugin-1-resource",
-		Type:       mtypes.Socket,
+		Type:       osutil.ConnectionType(t.Context()),
 		PluginType: resourcev1.ResourceRepositoryPluginType,
 	}
 	serialized, err := json.Marshal(config)
@@ -71,7 +71,7 @@ func TestPluginFlow(t *testing.T) {
 		Stderr: stderr,
 		Config: mtypes.Config{
 			ID:         "test-plugin-1-resource",
-			Type:       mtypes.Socket,
+			Type:       osutil.ConnectionType(t.Context()),
 			PluginType: resourcev1.ResourceRepositoryPluginType,
 		},
 		Cmd:    pluginCmd,

@@ -47,7 +47,7 @@ func TestPluginFlow(t *testing.T) {
 	registry := NewDigestProcessorRegistry(ctx)
 	config := mtypes.Config{
 		ID:         "test-plugin-1-digester",
-		Type:       mtypes.Socket,
+		Type:       osutil.ConnectionType(t.Context()),
 		PluginType: inputv1.InputPluginType,
 	}
 	serialized, err := json.Marshal(config)
@@ -70,7 +70,7 @@ func TestPluginFlow(t *testing.T) {
 		Stderr: stderr,
 		Config: mtypes.Config{
 			ID:         "test-plugin-1-construction",
-			Type:       mtypes.Socket,
+			Type:       osutil.ConnectionType(t.Context()),
 			PluginType: v1.DigestProcessorPluginType,
 		},
 		Cmd:    pluginCmd,
@@ -113,7 +113,7 @@ func TestShutdown(t *testing.T) {
 	registry := NewDigestProcessorRegistry(ctx)
 	config := mtypes.Config{
 		ID:         "test-plugin-1-digester",
-		Type:       mtypes.Socket,
+		Type:       osutil.ConnectionType(t.Context()),
 		PluginType: inputv1.InputPluginType,
 	}
 	serialized, err := json.Marshal(config)
@@ -136,7 +136,7 @@ func TestShutdown(t *testing.T) {
 		Stderr: stderr,
 		Config: mtypes.Config{
 			ID:         "test-plugin-1-construction",
-			Type:       mtypes.Socket,
+			Type:       osutil.ConnectionType(t.Context()),
 			PluginType: v1.DigestProcessorPluginType,
 		},
 		Cmd:    pluginCmd,

@@ -634,11 +634,12 @@ func TestGetBlobFromPath_PreserveSymlinks(t *testing.T) {
 	r.NoError(os.MkdirAll(filepath.Join(tmpDir, "realdir"), 0o755))
 	createTestFile(t, filepath.Join(tmpDir, "realdir"), "inner.txt", "inner")
 
+	absolute := filepath.Join(tmpDir, "target.txt")
 	links := map[string]string{
 		"relative.txt": "target.txt",
-		"absolute.txt": "/etc/hosts",
+		"absolute.txt": absolute,
 		"dangling.txt": "nonexistent.txt",
-		"escaping.txt": "../../outside.txt",
+		"escaping.txt": filepath.Join("..", "..", "outside.txt"),
 		"dirlink":      "realdir",
 	}
 	for name, target := range links {
@@ -660,7 +661,11 @@ func TestGetBlobFromPath_PreserveSymlinks(t *testing.T) {
 		}
 	}
 
-	r.Equal(links, targets, "every link is stored as a link, with its target as written")
+	want := map[string]string{}
+	for name, target := range links {
+		want[name] = filepath.ToSlash(target)
+	}
+	r.Equal(want, targets, "every link is stored as a link, with its target as written")
 
 	// The link to a directory contributes the link alone; the directory itself is
 	// still walked under its own name.
