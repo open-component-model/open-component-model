@@ -171,11 +171,12 @@ See [Credential Consumer Identities: Wget / HTTP]({{< relref "credential-consume
 
 ### Download Behavior
 
-Performs the request described by the access specification (`verb`, `header`, `body`, `noRedirect`) and returns the
-response body as a file-backed blob. Only 2xx responses are accepted. The body is streamed to a file under the
-`tempFolder` of the `filesystem.config.ocm.software/v1alpha1` configuration type rather than buffered in memory, and
-there is no size limit by default. The media type of the blob is taken from `mediaType`, falling back to the response
-`Content-Type` and then to `application/octet-stream`.
+Performs the request described by the access specification (`verb`, `header`, `body`, `noRedirect`) and returns a blob
+that streams the response body. Only 2xx responses are accepted. Nothing is buffered in memory or on disk, and there is
+no size limit by default. Reading the blob a second time sends the request again; for methods other than `GET` and
+`HEAD` a second read is refused, because repeating the request may have side effects. The response bytes are returned as
+served; no compression is negotiated or decoded. The media type of the blob is taken from `mediaType`, falling back to
+the response `Content-Type` and then to `application/octet-stream`.
 
 Request timeouts, retries, and per-host settings come from the
 [HTTP client configuration]({{< relref "http-client-configuration.md" >}}).

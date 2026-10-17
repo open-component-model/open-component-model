@@ -604,7 +604,8 @@ Because the content is not under your control, the expected digest can be pinned
 `Wget/v1` is the canonical type name. OCM also accepts `wget/v1`, `Wget`, `wget`, and the additional aliases
 `HTTP/v1`, `HTTP`, `http/v1`, and `http`. The fields are identical to those of the
 [`Wget/v1` input type]({{< relref "input-and-access-types.md" >}}#wgetv1-input), so the same request can be expressed
-either by value or by reference.
+either by value or by reference. Unlike the input type, the access type does not ask for compression and returns the
+bytes as served.
 
 {{< schema-renderer url="/schemas/bindings/go/access/wget/v1/Wget.schema.json" >}}
 

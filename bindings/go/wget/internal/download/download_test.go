@@ -6,18 +6,22 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/hex"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"io"
 	"math/big"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
-	"runtime"
+	"strconv"
+	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -105,7 +109,7 @@ func TestDownload_StoredGzipIsNotDecoded(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	b, err := download.Download(t.Context(), download.Request{URL: srv.URL + "/stored.gz"}, download.WithTempDir(t.TempDir()))
+	b, err := download.Download(t.Context(), download.Request{URL: srv.URL + "/stored.gz"})
 	r.NoError(err)
 	t.Cleanup(func() { _ = b.Close() })
 	r.Equal(stored, readBlob(t, b))
@@ -304,116 +308,507 @@ func serveBody(t *testing.T, content []byte, chunked bool) *httptest.Server {
 	return srv
 }
 
-// TestDownload_StreamsIntoTempDir asserts that the body lands in the directory given
-// by WithTempDir, which is what lets callers place downloads on a configured volume.
-func TestDownload_StreamsIntoTempDir(t *testing.T) {
-	tempDir := t.TempDir()
-	content := []byte("streamed to disk")
+// TestDownload_StreamsBeforeBodyCompletes asserts that the blob is handed out while
+// the server is still sending the body, so nothing is buffered before it is exposed.
+func TestDownload_StreamsBeforeBodyCompletes(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
 
-	b, err := download.Download(t.Context(), download.Request{URL: serveBody(t, content, false).URL},
-		download.WithTempDir(tempDir))
-	require.NoError(t, err)
+	release := make(chan struct{})
+	var once sync.Once
+	unblock := func() { once.Do(func() { close(release) }) }
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		_, _ = w.Write([]byte("first"))
+		w.(http.Flusher).Flush()
+		select {
+		case <-release:
+		case <-req.Context().Done():
+			return
+		}
+		_, _ = w.Write([]byte("second"))
+	}))
+	t.Cleanup(srv.Close)
+	// Registered after srv.Close so it runs first: the handler must not block Close.
+	t.Cleanup(unblock)
 
-	entries, err := os.ReadDir(tempDir)
-	require.NoError(t, err)
-	require.Len(t, entries, 1, "the body must be streamed into the configured directory")
+	b, err := download.Download(t.Context(), download.Request{URL: srv.URL}, download.WithClient(srv.Client()))
+	r.NoError(err)
+	rc, err := b.ReadCloser()
+	r.NoError(err)
+	defer func() { _ = rc.Close() }()
 
-	onDisk, err := os.ReadFile(filepath.Join(tempDir, entries[0].Name()))
-	require.NoError(t, err)
-	assert.Equal(t, content, onDisk)
-	assert.Equal(t, content, readBlob(t, b))
+	first := make([]byte, len("first"))
+	_, err = io.ReadFull(rc, first)
+	r.NoError(err)
+	r.Equal("first", string(first), "the first bytes must be readable before the server finishes")
+
+	unblock()
+	rest, err := io.ReadAll(rc)
+	r.NoError(err)
+	r.Equal("second", string(rest))
 }
 
-// TestDownload_CloseRemovesTempFile asserts that closing the returned blob reclaims
-// the temporary file, so a caller that is done with a download leaves nothing behind.
-func TestDownload_CloseRemovesTempFile(t *testing.T) {
-	tempDir := t.TempDir()
+// TestDownload_ReRead asserts that the first read uses the response Download
+// opened, that a later read of a GET sends the request, including its headers,
+// again, and that a request with side effects is never sent twice.
+func TestDownload_ReRead(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name       string
+		verb       string
+		wantReread bool
+	}{
+		{name: "GET is sent again", verb: http.MethodGet, wantReread: true},
+		{name: "POST is not sent again", verb: http.MethodPost},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			r := require.New(t)
 
-	b, err := download.Download(t.Context(), download.Request{URL: serveBody(t, []byte("payload"), false).URL},
-		download.WithTempDir(tempDir))
-	require.NoError(t, err)
+			var hits atomic.Int32
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+				hits.Add(1)
+				_, _ = io.WriteString(w, req.Header.Get("X-Echo"))
+			}))
+			t.Cleanup(srv.Close)
 
-	entries, err := os.ReadDir(tempDir)
-	require.NoError(t, err)
-	require.Len(t, entries, 1)
+			b, err := download.Download(t.Context(), download.Request{
+				URL: srv.URL, Verb: tt.verb, Header: map[string][]string{"X-Echo": {"echoed header"}},
+			}, download.WithClient(srv.Client()))
+			r.NoError(err)
+			r.Equal(int32(1), hits.Load())
 
-	require.NoError(t, b.Close())
-	entries, err = os.ReadDir(tempDir)
-	require.NoError(t, err)
-	assert.Empty(t, entries, "closing the blob must remove the temporary file")
+			r.Equal("echoed header", string(readBlob(t, b)))
+			r.Equal(int32(1), hits.Load(), "the first read must use the response Download opened")
 
-	assert.NoError(t, b.Close(), "closing twice must not fail")
+			if !tt.wantReread {
+				_, err := b.ReadCloser()
+				r.ErrorContains(err, "cannot be read again")
+				r.Equal(int32(1), hits.Load(), "the request must not be sent again")
+				return
+			}
+			r.Equal("echoed header", string(readBlob(t, b)))
+			r.Equal(int32(2), hits.Load(), "a second read must send the request again")
+		})
+	}
 }
 
-// TestDownload_AbandonedBlobIsReclaimed asserts that a blob dropped without being
-// closed still has its temporary file removed, so callers that cannot close it do
-// not accumulate downloads for the lifetime of the process.
-func TestDownload_AbandonedBlobIsReclaimed(t *testing.T) {
-	tempDir := t.TempDir()
-	srv := serveBody(t, []byte("payload"), false)
-
-	func() {
-		b, err := download.Download(t.Context(), download.Request{URL: srv.URL},
-			download.WithTempDir(tempDir))
-		require.NoError(t, err)
-		require.NotNil(t, b)
-
-		entries, err := os.ReadDir(tempDir)
-		require.NoError(t, err)
-		require.Len(t, entries, 1)
-	}()
-
-	// The cleanup runs asynchronously once the blob is unreachable, so collect and poll.
-	require.Eventually(t, func() bool {
-		runtime.GC()
-		entries, err := os.ReadDir(tempDir)
-		return err == nil && len(entries) == 0
-	}, 10*time.Second, 20*time.Millisecond, "an abandoned download must not leave its temporary file behind")
-}
-
-// TestDownload_MaxDownloadSize covers both rejection paths: a response that announces
-// its length is rejected before transfer, a chunked one only while streaming.
-func TestDownload_MaxDownloadSize(t *testing.T) {
-	content := []byte("0123456789") // 10 bytes
+func TestDownload_Size(t *testing.T) {
+	t.Parallel()
+	content := []byte("sized content")
 
 	tests := []struct {
 		name    string
-		maxSize int64
-		unset   bool
 		chunked bool
-		wantErr bool
+		want    int64
+	}{
+		{name: "announced length is the size", want: int64(len(content))},
+		{name: "chunked body has unknown size", chunked: true, want: blob.SizeUnknown},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			r := require.New(t)
+			b, err := download.Download(t.Context(), download.Request{URL: serveBody(t, content, tt.chunked).URL})
+			r.NoError(err)
+			r.Equal(tt.want, b.Size())
+			r.Equal(content, readBlob(t, b))
+		})
+	}
+}
+
+// TestDownload_Verifier asserts that the verifier sees the response header and the
+// digests of the bytes read, and that its rejection fails the reader.
+func TestDownload_Verifier(t *testing.T) {
+	t.Parallel()
+	content := []byte("verified content")
+	sum := sha256.Sum256(content)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("X-Test", "v")
+		_, _ = w.Write(content)
+	}))
+	t.Cleanup(srv.Close)
+
+	readToEOF := func(rc io.Reader) error {
+		_, err := io.ReadAll(rc)
+		return err
+	}
+	// io.ReadFull drops an error that arrives with the last requested byte.
+	readKnownSize := func(rc io.Reader) error {
+		_, err := io.ReadFull(rc, make([]byte, len(content)))
+		return err
+	}
+
+	tests := []struct {
+		name         string
+		pinned       string
+		reject       bool
+		consume      func(io.Reader) error
+		wantReadErr  bool
+		wantCloseErr bool
+	}{
+		{name: "accepted body reads without error", consume: readToEOF},
+		{name: "the pinned digest is handed to the verifier", pinned: "sha256:" + hex.EncodeToString(sum[:]), consume: readToEOF},
+		{name: "rejection fails the last read and close", reject: true, consume: readToEOF, wantReadErr: true, wantCloseErr: true},
+		{name: "rejection at the known size fails close without EOF", reject: true, consume: readKnownSize, wantCloseErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			r := require.New(t)
+
+			var gotHeader http.Header
+			var gotComputed download.Computed
+			verifier := func(header http.Header, computed download.Computed) error {
+				gotHeader, gotComputed = header, computed
+				if tt.reject {
+					return errors.New("rejected")
+				}
+				return nil
+			}
+			b, err := download.Download(t.Context(), download.Request{URL: srv.URL},
+				download.WithClient(srv.Client()),
+				download.WithDigestAlgorithms(download.DigestAlgorithm{Name: "sha256", New: sha256.New}),
+				download.WithVerifier(verifier))
+			r.NoError(err)
+			if tt.pinned != "" {
+				b.SetPrecalculatedDigest(tt.pinned)
+			}
+
+			rc, err := b.ReadCloser()
+			r.NoError(err)
+			readErr := tt.consume(rc)
+			closeErr := rc.Close()
+
+			if tt.wantReadErr {
+				r.ErrorContains(readErr, "rejected")
+			} else {
+				r.NoError(readErr)
+			}
+			if tt.wantCloseErr {
+				r.ErrorContains(closeErr, "rejected")
+			} else {
+				r.NoError(closeErr)
+			}
+			r.Equal("v", gotHeader.Get("X-Test"))
+			r.Equal(hex.EncodeToString(sum[:]), gotComputed.Content["sha256"])
+			r.Equal(tt.pinned, gotComputed.Pinned)
+			r.Equal(gotComputed.Content, gotComputed.Transferred, "undecoded bytes are transferred as read")
+		})
+	}
+}
+
+// compressible is gzip-compressible content and its gzip encoding.
+func compressible(t *testing.T) (content, encoded []byte) {
+	t.Helper()
+	content = bytes.Repeat([]byte("compressible content "), 100)
+	return content, gzipBytes(t, content)
+}
+
+// serveIdentity serves body for requests not accepting gzip, honouring ranges.
+func serveIdentity(body []byte) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		http.ServeContent(w, r, "", time.Time{}, bytes.NewReader(body))
+	}
+}
+
+// serveNegotiated compresses only for requests accepting gzip, like a proxy or CDN.
+func serveNegotiated(compressed []byte, coding string, otherwise http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+			w.Header().Set("Content-Encoding", coding)
+			_, _ = w.Write(compressed)
+			return
+		}
+		otherwise(w, r)
+	}
+}
+
+// serveStored always labels body with coding, like httpd AddEncoding or S3 metadata.
+func serveStored(body []byte, coding string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Encoding", coding)
+		http.ServeContent(w, r, "", time.Time{}, bytes.NewReader(body))
+	}
+}
+
+func serveForbidden(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusForbidden) }
+
+// probeRecorder serves requests and records the Accept-Encoding of downloads and
+// whether an identity range probe was sent.
+type probeRecorder struct {
+	mu      sync.Mutex
+	accepts []string
+	probed  bool
+}
+
+func (p *probeRecorder) serve(t *testing.T, handler http.HandlerFunc) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		p.mu.Lock()
+		if req.Header.Get("Range") != "" {
+			p.probed = true
+		} else {
+			p.accepts = append(p.accepts, req.Header.Get("Accept-Encoding"))
+		}
+		p.mu.Unlock()
+		handler(w, req)
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func (p *probeRecorder) observed() ([]string, bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.accepts, p.probed
+}
+
+// TestDownload_CompressTransfer covers compression as a transport concern: the blob
+// yields what a request accepting no compression would, and an identity range
+// probe tells negotiated gzip from a content coding that is part of the content
+// and announces the content size.
+func TestDownload_CompressTransfer(t *testing.T) {
+	t.Parallel()
+	content, encoded := compressible(t)
+	hexSum := func(b []byte) string {
+		s := sha256.Sum256(b)
+		return hex.EncodeToString(s[:])
+	}
+
+	tests := []struct {
+		name          string
+		noCompression bool
+		header        map[string][]string
+		serve         http.HandlerFunc
+		wantAccept    string
+		wantProbe     bool
+		want          []byte
+		wantDecoded   bool
+		wantSize      int64
+	}{
+		{
+			name:  "negotiated gzip is decoded and sized by the probe",
+			serve: serveNegotiated(encoded, "gzip", serveIdentity(content)), wantAccept: "gzip", wantProbe: true,
+			want: content, wantDecoded: true, wantSize: int64(len(content)),
+		},
+		{
+			name: "a probe answered without range support is sized by its Content-Length",
+			serve: serveNegotiated(encoded, "gzip", func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Length", strconv.Itoa(len(content)))
+				_, _ = w.Write(content)
+			}),
+			wantAccept: "gzip", wantProbe: true, want: content, wantDecoded: true, wantSize: int64(len(content)),
+		},
+		{
+			name:  "a failing probe still decodes negotiated gzip with unknown size",
+			serve: serveNegotiated(encoded, "gzip", serveForbidden), wantAccept: "gzip", wantProbe: true,
+			want: content, wantDecoded: true, wantSize: blob.SizeUnknown,
+		},
+		{
+			name:  "a coding kept for identity requests is part of the content",
+			serve: serveStored(encoded, "gzip"), wantAccept: "gzip", wantProbe: true,
+			want: encoded, wantSize: int64(len(encoded)),
+		},
+		{
+			name:  "an unknown coding kept for identity requests is part of the content",
+			serve: serveStored(encoded, "br"), wantAccept: "gzip", wantProbe: true,
+			want: encoded, wantSize: int64(len(encoded)),
+		},
+		{
+			name:  "an uncompressed response needs no probe",
+			serve: serveIdentity(content), wantAccept: "gzip",
+			want: content, wantSize: int64(len(content)),
+		},
+		{
+			name: "an Accept-Encoding of the request wins", header: map[string][]string{"Accept-Encoding": {"identity"}},
+			serve: serveNegotiated(encoded, "gzip", serveIdentity(content)), wantAccept: "identity",
+			want: content, wantSize: int64(len(content)),
+		},
+		{
+			name: "without transfer compression the bytes are kept as served", noCompression: true,
+			serve: serveStored(encoded, "gzip"), wantAccept: "",
+			want: encoded, wantSize: int64(len(encoded)),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			r := require.New(t)
+			var rec probeRecorder
+			srv := rec.serve(t, tt.serve)
+
+			var computed download.Computed
+			b, err := download.Download(t.Context(),
+				download.Request{URL: srv.URL, Header: tt.header, CompressTransfer: !tt.noCompression},
+				download.WithDigestAlgorithms(download.DigestAlgorithm{Name: "sha256", New: sha256.New}),
+				download.WithVerifier(func(_ http.Header, c download.Computed) error {
+					computed = c
+					return nil
+				}))
+			r.NoError(err)
+			accepts, probed := rec.observed()
+			r.Equal([]string{tt.wantAccept}, accepts)
+			r.Equal(tt.wantProbe, probed, "probe sent")
+			r.Equal(tt.wantDecoded, b.Decoded())
+			r.Equal(tt.wantSize, b.Size())
+
+			r.Equal(tt.want, readBlob(t, b))
+			r.Equal(hexSum(tt.want), computed.Content["sha256"])
+			wantTransferred := tt.want
+			if tt.wantDecoded {
+				wantTransferred = encoded
+			}
+			r.Equal(hexSum(wantTransferred), computed.Transferred["sha256"], "transferred bytes are digested as received")
+		})
+	}
+}
+
+// TestDownload_CompressTransferFailures covers responses that cannot be turned
+// into the content and limits that apply to the decoded content.
+func TestDownload_CompressTransferFailures(t *testing.T) {
+	t.Parallel()
+	content, encoded := compressible(t)
+
+	tests := []struct {
+		name            string
+		serve           http.HandlerFunc
+		maxSize         int64
+		wantDownloadErr string
+		wantReadErr     string
+	}{
+		{
+			name:            "an unknown negotiated coding is rejected",
+			serve:           serveNegotiated(encoded, "br", serveIdentity(content)),
+			wantDownloadErr: `unsupported content encoding "br"`,
+		},
+		{
+			name:        "corrupt gzip fails the read",
+			serve:       serveNegotiated(content, "gzip", serveIdentity(content)),
+			wantReadErr: "gzip",
+		},
+		{
+			name:        "a probe announcing the wrong size fails the read",
+			serve:       serveNegotiated(encoded, "gzip", serveIdentity(append(bytes.Clone(content), '!'))),
+			wantReadErr: fmt.Sprintf("has %d bytes, expected %d", len(content), len(content)+1),
+		},
+		{
+			name:            "probed content above the size limit is rejected up front",
+			serve:           serveNegotiated(encoded, "gzip", serveIdentity(content)),
+			maxSize:         int64(len(content)) - 1,
+			wantDownloadErr: "exceeds maximum allowed size",
+		},
+		{
+			name:        "unprobed content above the size limit fails the read",
+			serve:       serveNegotiated(encoded, "gzip", serveForbidden),
+			maxSize:     int64(len(content)) - 1,
+			wantReadErr: "exceeds maximum allowed size",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			r := require.New(t)
+			var rec probeRecorder
+			srv := rec.serve(t, tt.serve)
+
+			var opts []download.Option
+			if tt.maxSize > 0 {
+				opts = append(opts, download.WithMaxDownloadSize(tt.maxSize))
+			}
+			b, err := download.Download(t.Context(), download.Request{URL: srv.URL, CompressTransfer: true}, opts...)
+			if tt.wantDownloadErr != "" {
+				r.ErrorContains(err, tt.wantDownloadErr)
+				return
+			}
+			r.NoError(err)
+
+			rc, err := b.ReadCloser()
+			r.NoError(err)
+			_, readErr := io.ReadAll(rc)
+			r.ErrorContains(readErr, tt.wantReadErr)
+			r.ErrorContains(rc.Close(), tt.wantReadErr)
+		})
+	}
+}
+
+func gzipBytes(t *testing.T, b []byte) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	zw := gzip.NewWriter(&buf)
+	_, err := zw.Write(b)
+	require.NoError(t, err)
+	require.NoError(t, zw.Close())
+	return buf.Bytes()
+}
+
+func TestDownload_ClosedBlobRefusesReads(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
+
+	b, err := download.Download(t.Context(), download.Request{URL: serveBody(t, []byte("payload"), false).URL})
+	r.NoError(err)
+	r.NoError(b.Close())
+
+	_, err = b.ReadCloser()
+	r.ErrorContains(err, "is closed")
+	r.NoError(b.Close(), "closing twice must not fail")
+}
+
+// TestDownload_MaxDownloadSize covers both rejection paths: a response that announces
+// its length is rejected by Download, a chunked one only while it is read.
+func TestDownload_MaxDownloadSize(t *testing.T) {
+	t.Parallel()
+	content := []byte("0123456789") // 10 bytes
+
+	tests := []struct {
+		name            string
+		maxSize         int64
+		unset           bool
+		chunked         bool
+		wantDownloadErr bool
+		wantReadErr     bool
 	}{
 		{name: "body below the limit", maxSize: 100},
 		{name: "body exactly at the limit", maxSize: 10},
-		{name: "body one byte over the limit", maxSize: 9, wantErr: true},
+		{name: "body one byte over the limit", maxSize: 9, wantDownloadErr: true},
 		{name: "zero disables the limit", maxSize: 0},
 		{name: "negative disables the limit", maxSize: -1},
 		{name: "unset means unlimited", unset: true},
-		{name: "oversized chunked body is caught while streaming", maxSize: 9, chunked: true, wantErr: true},
+		{name: "oversized chunked body is caught while streaming", maxSize: 9, chunked: true, wantReadErr: true},
 		{name: "chunked body below the limit", maxSize: 100, chunked: true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tempDir := t.TempDir()
+			t.Parallel()
+			r := require.New(t)
 
-			opts := []download.Option{download.WithTempDir(tempDir)}
+			var opts []download.Option
 			if !tt.unset {
 				opts = append(opts, download.WithMaxDownloadSize(tt.maxSize))
 			}
 
 			b, err := download.Download(t.Context(), download.Request{URL: serveBody(t, content, tt.chunked).URL}, opts...)
-			if tt.wantErr {
-				require.Error(t, err)
-				assert.Contains(t, err.Error(), "exceeds maximum allowed size")
-
-				entries, err := os.ReadDir(tempDir)
-				require.NoError(t, err)
-				assert.Empty(t, entries, "a rejected download must not leave a partial file behind")
+			if tt.wantDownloadErr {
+				r.ErrorContains(err, "exceeds maximum allowed size")
 				return
 			}
-			require.NoError(t, err)
-			assert.Equal(t, content, readBlob(t, b))
+			r.NoError(err)
+
+			rc, err := b.ReadCloser()
+			r.NoError(err)
+			data, readErr := io.ReadAll(rc)
+			closeErr := rc.Close()
+			if tt.wantReadErr {
+				r.ErrorContains(readErr, "exceeds maximum allowed size")
+				r.ErrorContains(closeErr, "exceeds maximum allowed size")
+				return
+			}
+			r.NoError(readErr)
+			r.NoError(closeErr)
+			r.Equal(content, data)
 		})
 	}
 }

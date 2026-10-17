@@ -29,7 +29,7 @@ type is decided, how digest pinning protects you, and what changed since OCM v1.
 - How OCM resolves a resource's media type
 - How credentials are matched to a request, and how the three authentication methods interact
 - How to pin a resource by digest so a changed file is rejected instead of silently accepted
-- How to send a non-GET request and tune timeouts, retries, and the download directory
+- How to send a non-GET request, tune timeouts and retries, and handle compressed responses
 - What changed between OCM v1 and OCM v2, and how to migrate
 
 ## Prerequisites
@@ -197,10 +197,23 @@ resources:
 **Only successful responses are accepted.** OCM accepts a 2xx status and fails on anything else. Redirects are followed by
 default. If you set `noRedirect: true`, the request fails.
 
-**Downloads are streamed to disk, not held in memory.** The response body is written straight to a temporary file, so
-memory use stays flat no matter how big the file is. There is no size limit by default. That temporary file is created
-under the `tempFolder` of the `filesystem.config.ocm.software/v1alpha1` attribute in the .ocmconfig configuration file, falling back to the operating
-system's temp directory if no configuration is provided.
+**Downloads are streamed, not held in memory or on disk.** The response body flows straight to wherever OCM stores or
+uploads it, so memory use stays flat no matter how big the file is. There is no size limit by default. Checksum and
+digest checks run while the body is read, so a mismatch fails that read.
+
+**Compression is only a transport optimisation (input type).** The input type asks the server for gzip, but it stores
+exactly what a download without compression would return, so the content and its digest never depend on whether the
+server compressed:
+
+- A server that compresses because OCM asked for it (CDNs, proxies, `mod_deflate`, nginx `gzip`) is decoded.
+- A server that labels a stored file as compressed for every request (Apache `AddEncoding x-gzip .gz`, S3 objects
+  with `Content-Encoding` metadata) keeps the file as served, so a `.tar.gz` stays a `.tar.gz`.
+
+To tell the two apart, OCM sends one small follow-up request whenever a response is compressed. It asks for the
+first byte without compression, which also tells OCM the exact size of the content. A `Content-Digest` header
+covers the compressed bytes and is verified against them.
+
+The access type always stores the bytes as served, without asking for compression.
 
 **Timeouts, retries, and per-host settings** come from the `http.config.ocm.software/v1alpha1` configuration and apply
 to every Wget request:
@@ -208,8 +221,6 @@ to every Wget request:
 ```yaml
 type: generic.config.ocm.software/v1
 configurations:
-  - type: filesystem.config.ocm.software/v1alpha1
-    tempFolder: /var/tmp/ocm
   - type: http.config.ocm.software/v1alpha1
     timeout: 2m
     retry:
