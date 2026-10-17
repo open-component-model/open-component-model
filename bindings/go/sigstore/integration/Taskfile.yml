@@ -87,6 +87,24 @@ tasks:
           fi
       - |
         curl -fLo /tmp/setup-kind.sh "{{.SCAFFOLDING_URL}}/setup-kind.sh"
+        # On Linux, setup-kind.sh tunes the host with sudo (swapoff, a tmpfs at /tmp/etcd mounted as
+        # etcd storage), installs kind when missing and adds registry.local to /etc/hosts (only
+        # needed for ko publishing, which this setup does not use). That is meant for disposable
+        # GitHub Actions runners; on a developer machine it fails without a TTY, modifies the host,
+        # and a non-tmpfs /tmp/etcd keeps stale etcd state across cluster recreation. Elsewhere,
+        # require kind to be installed and take the script's macOS path: no host tuning, etcd in
+        # the node container, and no /etc/hosts edit. Also drop the host's DNS search domains from
+        # the nodes right after cluster creation: pods inherit them, and with ndots:5 every cluster
+        # lookup is also tried against those domains via Docker's embedded DNS, which can time out
+        # (e.g. with systemd-resolved/Tailscale search domains) and break Knative startup.
+        if [ "${GITHUB_ACTIONS:-}" != "true" ]; then
+          command -v kind >/dev/null || { echo "kind is required: install it (https://kind.sigs.k8s.io)"; exit 1; }
+          tmp=$(mktemp) && sed \
+            -e 's/if \[\[ ${RUNNING_ON_MAC} == "false" \]\]; then/if false; then/' \
+            -e 's@| sudo tee -a /etc/hosts@> /dev/null@' \
+            -e '/^kind create cluster /a for n in $(kind get nodes); do docker exec "$n" sh -c '"'"'sed "/^search /d" /etc/resolv.conf > /tmp/resolv.conf \&\& cat /tmp/resolv.conf > /etc/resolv.conf'"'"'; done' \
+            /tmp/setup-kind.sh > "$tmp" && mv "$tmp" /tmp/setup-kind.sh
+        fi
         chmod u+x /tmp/setup-kind.sh
         cd /tmp && ./setup-kind.sh
       - |

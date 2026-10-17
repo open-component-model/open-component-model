@@ -7,6 +7,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/cli/internal/render/progress"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -101,6 +102,15 @@ func (r *resolutionProgressRepository) ListComponentVersions(ctx context.Context
 	versions, err := r.ComponentVersionRepository.ListComponentVersions(ctx, component)
 	r.events <- resolutionEvent{id: component, state: resolutionState(err), err: err}
 	return versions, err
+}
+
+// GetComponentVersionLayout forwards layout detection, so the transfer can inherit the
+// source layout through this wrapper. A repository without layouts stores v2.
+func (r *resolutionProgressRepository) GetComponentVersionLayout(ctx context.Context, component, version string) (string, error) {
+	if detector, ok := r.ComponentVersionRepository.(repository.ComponentVersionLayoutDetector); ok {
+		return detector.GetComponentVersionLayout(ctx, component, version)
+	}
+	return string(layout.ComponentVersionLayoutV2), nil
 }
 
 func resolutionState(err error) progress.State {

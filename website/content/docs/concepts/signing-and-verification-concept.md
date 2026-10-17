@@ -188,6 +188,16 @@ A component version can have **multiple signatures** from different parties, ena
 - Multiple approval workflows
 - Cross-organizational trust chains
 
+### Cosign Signatures and the Normalized OCI Layout
+
+OCM signatures live inside the component descriptor, so OCI tools such as `cosign verify` or admission controllers cannot see them. For component versions stored in an OCI registry or CTF archive, the opt-in **normalized layout** makes a component version signable with standard cosign as well:
+
+- The version tag points to a *normalized manifest* whose only layer is the normalized component descriptor, the exact bytes from which the OCM component version digest is computed. The manifest contains nothing that depends on the registry, so its digest is the same in every registry.
+- The access information and local blobs are stored in an unsigned *access referrer* of that manifest. Before OCM uses it, OCM checks that normalizing its descriptor yields exactly the signed layer, and that every resource with an access and every component reference carries a digest. Content OCM downloads is verified against these digests.
+- `cosign sign` signs the normalized manifest like any image, and `ocm transfer` carries the signature to the target (see [Signatures Across Boundaries]({{< relref "docs/concepts/transfer-concept.md" >}}#signatures-across-boundaries)).
+
+The check against the signed layer protects the **integrity** of what OCM reads relative to the manifest the tag points to. It does not establish **authenticity**: anyone who can push to the registry can also move the tag. Authenticity comes from the cosign signature, which you verify with `cosign verify`; OCM does not verify cosign signatures itself. OCM must then read the component version that cosign verified: the digest of the single layer of the verified manifest is the OCM component version digest, so a normalized digest pin (`<component>:<version>@jsonNormalisation.v4alpha1+<layer digest>`) binds the OCM command to exactly that content, even if the tag moves in between. OCM signatures and cosign signatures can be combined; `ocm sign` keeps a component version in the normalized layout.
+
 ### Pinning a Component Version by Digest
 
 A component reference can name the digest of the component version it expects. The digest uses the OCI digest

@@ -36,6 +36,15 @@ var schemaCTFAddLocalResourceOutput []byte
 //go:embed schemas/CTFAddLocalResourceSpec.schema.json
 var schemaCTFAddLocalResourceSpec []byte
 
+//go:embed schemas/CTFCarryComponentSignatures.schema.json
+var schemaCTFCarryComponentSignatures []byte
+
+//go:embed schemas/CTFCarryComponentSignaturesOutput.schema.json
+var schemaCTFCarryComponentSignaturesOutput []byte
+
+//go:embed schemas/CTFCarryComponentSignaturesSpec.schema.json
+var schemaCTFCarryComponentSignaturesSpec []byte
+
 //go:embed schemas/CTFGetComponentVersion.schema.json
 var schemaCTFGetComponentVersion []byte
 
@@ -80,6 +89,15 @@ var schemaOCIAddLocalResourceOutput []byte
 
 //go:embed schemas/OCIAddLocalResourceSpec.schema.json
 var schemaOCIAddLocalResourceSpec []byte
+
+//go:embed schemas/OCICarryComponentSignatures.schema.json
+var schemaOCICarryComponentSignatures []byte
+
+//go:embed schemas/OCICarryComponentSignaturesOutput.schema.json
+var schemaOCICarryComponentSignaturesOutput []byte
+
+//go:embed schemas/OCICarryComponentSignaturesSpec.schema.json
+var schemaOCICarryComponentSignaturesSpec []byte
 
 //go:embed schemas/OCIGetComponentVersion.schema.json
 var schemaOCIGetComponentVersion []byte
@@ -151,6 +169,21 @@ func (CTFAddLocalResourceOutput) JSONSchema() []byte {
 // JSONSchema returns the JSON Schema for CTFAddLocalResourceSpec.
 func (CTFAddLocalResourceSpec) JSONSchema() []byte {
 	return schemaCTFAddLocalResourceSpec
+}
+
+// JSONSchema returns the JSON Schema for CTFCarryComponentSignatures.
+func (CTFCarryComponentSignatures) JSONSchema() []byte {
+	return schemaCTFCarryComponentSignatures
+}
+
+// JSONSchema returns the JSON Schema for CTFCarryComponentSignaturesOutput.
+func (CTFCarryComponentSignaturesOutput) JSONSchema() []byte {
+	return schemaCTFCarryComponentSignaturesOutput
+}
+
+// JSONSchema returns the JSON Schema for CTFCarryComponentSignaturesSpec.
+func (CTFCarryComponentSignaturesSpec) JSONSchema() []byte {
+	return schemaCTFCarryComponentSignaturesSpec
 }
 
 // JSONSchema returns the JSON Schema for CTFGetComponentVersion.
@@ -226,6 +259,21 @@ func (OCIAddLocalResourceOutput) JSONSchema() []byte {
 // JSONSchema returns the JSON Schema for OCIAddLocalResourceSpec.
 func (OCIAddLocalResourceSpec) JSONSchema() []byte {
 	return schemaOCIAddLocalResourceSpec
+}
+
+// JSONSchema returns the JSON Schema for OCICarryComponentSignatures.
+func (OCICarryComponentSignatures) JSONSchema() []byte {
+	return schemaOCICarryComponentSignatures
+}
+
+// JSONSchema returns the JSON Schema for OCICarryComponentSignaturesOutput.
+func (OCICarryComponentSignaturesOutput) JSONSchema() []byte {
+	return schemaOCICarryComponentSignaturesOutput
+}
+
+// JSONSchema returns the JSON Schema for OCICarryComponentSignaturesSpec.
+func (OCICarryComponentSignaturesSpec) JSONSchema() []byte {
+	return schemaOCICarryComponentSignaturesSpec
 }
 
 // JSONSchema returns the JSON Schema for OCIGetComponentVersion.

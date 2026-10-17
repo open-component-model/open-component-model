@@ -73,6 +73,7 @@ func TestConfig_Validate(t *testing.T) {
 		{"valid recursive none", spec.Config{Recursive: spec.RecursiveNone}, ""},
 		{"recursive depth not implemented", spec.Config{Recursive: 3}, "not implemented"},
 		{"invalid recursive below -1", spec.Config{Recursive: -5}, "invalid recursive"},
+		{"unknown layout", spec.Config{ComponentVersionLayout: "Normalized"}, "invalid componentVersionLayout"},
 	}
 
 	for _, tc := range tests {

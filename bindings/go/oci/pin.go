@@ -31,9 +31,12 @@ type storedComponentVersion struct {
 	reference  string
 	store      spec.Store
 	descriptor *descriptor.Descriptor
-	manifest   *ociImageSpecV1.Manifest
-	// index is the index the manifest is part of, nil if the component version is stored as manifest.
-	index *ociImageSpecV1.Index
+	// manifest and index list the descriptors local blobs are resolved from: the tagged manifest
+	// (and index) for LayoutV2, the selected access referrer for LayoutNormalized.
+	// index is nil if the component version is stored as manifest.
+	manifest *ociImageSpecV1.Manifest
+	index    *ociImageSpecV1.Index
+	layout   Layout
 }
 
 // PinComponentVersion implements [repository.DigestPinnableRepository].
@@ -74,18 +77,19 @@ func (repo *Repository) readComponentVersion(ctx context.Context, component, ver
 		if err != nil {
 			return nil, err
 		}
-		desc, manifest, index, err := getDescriptorFromStore(ctx, store, reference, repo.unmarshalDescriptorFunc)
+		cv, err := getDescriptorFromStore(ctx, store, reference, repo.unmarshalDescriptorFunc)
 		if err != nil {
 			return nil, err
 		}
-		return &storedComponentVersion{reference: reference, store: store, descriptor: desc, manifest: manifest, index: index}, nil
+		cv.reference, cv.store = reference, store
+		return cv, nil
 	}
 
 	reference, store, err := repo.getPinnedStore(ctx, pin)
 	if err != nil {
 		return nil, err
 	}
-	desc, manifest, index, err := getDescriptorFromStore(ctx, store, reference, repo.unmarshalDescriptorFunc)
+	cv, err := getDescriptorFromStore(ctx, store, reference, repo.unmarshalDescriptorFunc)
 	if err != nil {
 		if errors.Is(err, errdef.ErrNotFound) {
 			return nil, repo.pinNotFoundError(ctx, pin, version, err)
@@ -93,13 +97,15 @@ func (repo *Repository) readComponentVersion(ctx context.Context, component, ver
 		return nil, err
 	}
 	// The descriptor is part of the pinned artifact, so it authentically names what the artifact holds.
+	desc := cv.descriptor
 	for _, want := range []string{pin.version, version} {
 		if desc.Component.Name != component || want != "" && desc.Component.Version != want {
 			return nil, fmt.Errorf("artifact %s holds component version %s:%s, not %s%s",
 				pin.digest, desc.Component.Name, desc.Component.Version, component, versionSuffix(want))
 		}
 	}
-	return &storedComponentVersion{reference: reference, store: store, descriptor: desc, manifest: manifest, index: index}, nil
+	cv.reference, cv.store = reference, store
+	return cv, nil
 }
 
 // getPinnedStore returns the store of the pinned component and the reference of the pinned artifact in it.

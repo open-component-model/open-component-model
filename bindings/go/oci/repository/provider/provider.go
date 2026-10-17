@@ -202,6 +202,12 @@ func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepositor
 			return nil, err
 		}
 
+		layout, err := oci.LayoutFromSpec(obj.ComponentVersionLayout)
+		if err != nil {
+			return nil, err
+		}
+		opts = append(opts, oci.WithComponentVersionLayout(layout))
+
 		var ociCredentials *v2.OCICredentials
 		if creds != nil {
 			ociCredentials, err = v2.ConvertToOCICredentials(creds)
@@ -237,6 +243,12 @@ func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepositor
 
 		return oci.NewRepository(opts...)
 	case *ctfrepospecv1.Repository:
+		layout, err := oci.LayoutFromSpec(obj.ComponentVersionLayout)
+		if err != nil {
+			return nil, err
+		}
+		opts = append(opts, oci.WithComponentVersionLayout(layout))
+
 		loadFunc := func(path string) (*ocictf.Store, error) {
 			return ocirepository.NewStoreFromCTFRepoV1(ctx, obj, opts...)
 		}
