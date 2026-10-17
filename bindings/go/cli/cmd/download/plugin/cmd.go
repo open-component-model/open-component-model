@@ -218,6 +218,10 @@ func DownloadPlugin(cmd *cobra.Command, args []string) error {
 
 	// ocm.software/plugins/[my-plugin]
 	pluginFileName := path.Base(ref.Component)
+	// The plugin manager only discovers (and Windows only executes) plugins with the .exe extension there.
+	if runtime.GOOS == "windows" {
+		pluginFileName += ".exe"
+	}
 	output = filepath.Join(output, pluginFileName)
 
 	if err := shared.SaveBlobToFile(data, output); err != nil {

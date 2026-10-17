@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"sync"
 
 	signingv1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/signing/v1"
@@ -137,20 +136,19 @@ func (r *SigningRegistry) RegisterInternalComponentSignatureHandler(
 }
 
 type constructedPlugin struct {
-	Plugin signingv1.SignatureHandlerContract[runtime.Typed]
-	cmd    *exec.Cmd
+	Plugin  signingv1.SignatureHandlerContract[runtime.Typed]
+	process plugins.Process
 }
 
-// Shutdown will loop through all _STARTED_ plugins and will send an Interrupt signal to them.
-// All plugins should handle interrupt signals gracefully. For Go, this is done automatically by
+// Shutdown will loop through all _STARTED_ plugins and will interrupt them.
+// All plugins should handle interrupts gracefully. For Go, this is done automatically by
 // the plugin SDK.
 func (r *SigningRegistry) Shutdown(ctx context.Context) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	var errs error
 	for _, p := range r.constructedPlugins {
-		// The plugins should handle the Interrupt signal for shutdowns.
-		if perr := p.cmd.Process.Signal(os.Interrupt); perr != nil && !errors.Is(perr, os.ErrProcessDone) {
+		if perr := p.process.Interrupt(ctx); perr != nil && !errors.Is(perr, os.ErrProcessDone) {
 			errs = errors.Join(errs, perr)
 		}
 	}
@@ -173,8 +171,8 @@ func startAndReturnPlugin(ctx context.Context, r *SigningRegistry, plugin *types
 
 	instance := NewSigningHandlerPlugin(client, plugin.ID, plugin.Path, plugin.Config, loc, r.capabilities[plugin.ID])
 	r.constructedPlugins[plugin.ID] = &constructedPlugin{
-		Plugin: instance,
-		cmd:    plugin.Cmd,
+		Plugin:  instance,
+		process: plugins.NewProcess(plugin, client, loc),
 	}
 
 	return instance, nil

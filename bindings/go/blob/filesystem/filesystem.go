@@ -97,16 +97,17 @@ func NewFS(base string, flag int) (*RootFileSystem, error) {
 	if fi != nil && !fi.IsDir() {
 		return nil, fmt.Errorf("path is not a directory: %s", base)
 	}
-	r, err := os.OpenRoot(base)
-	if err != nil {
-		return nil, fmt.Errorf("unable to open root on base: %w", err)
-	}
-	return &RootFileSystem{root: r, flag: flag}, nil
+	return &RootFileSystem{base: base, flag: flag}, nil
 }
 
+// RootFileSystem confines all operations to the directory tree below base.
+// Every operation opens its own os.Root and closes it before returning: a
+// long-lived root would hold a handle on base, which on Windows prevents
+// deleting or renaming the directory for as long as the filesystem is in use.
+// Files opened through it stay valid after the root is closed.
 type RootFileSystem struct {
-	// root may be used to only access files within a single directory tree.
-	root *os.Root
+	// base is the absolute path of the directory tree.
+	base string
 	// flagMu is a mutex to protect the flag read / write access
 	flagMu sync.RWMutex
 	// flag is the bitmask applied to limit fs operations with e.g. os.O_RDONLY
@@ -116,22 +117,43 @@ type RootFileSystem struct {
 
 var _ fs.ReadLinkFS = (*RootFileSystem)(nil)
 
+// inRoot runs op against a root opened on base for the duration of the call.
+func inRoot[T any](s *RootFileSystem, op func(root *os.Root) (T, error)) (T, error) {
+	root, err := os.OpenRoot(s.base)
+	if err != nil {
+		var zero T
+		return zero, err
+	}
+	defer func() { _ = root.Close() }()
+	return op(root)
+}
+
 func (s *RootFileSystem) String() string {
-	return s.root.Name()
+	return s.base
 }
 
 func (s *RootFileSystem) Remove(name string) error {
 	if s.ReadOnly() {
 		return ErrReadOnly
 	}
-	return s.root.Remove(name)
+	_, err := inRoot(s, func(root *os.Root) (struct{}, error) {
+		return struct{}{}, root.Remove(name)
+	})
+	return err
 }
 
 func (s *RootFileSystem) OpenFile(name string, flag int, perm os.FileMode) (fs.File, error) {
 	if s.ReadOnly() && !isFlagReadOnly(flag) {
 		return nil, ErrReadOnly
 	}
-	return s.root.OpenFile(name, flag, perm)
+	file, err := inRoot(s, func(root *os.Root) (*os.File, error) {
+		return root.OpenFile(name, flag, perm)
+	})
+	if err != nil {
+		// avoid returning a typed nil *os.File as a non-nil fs.File
+		return nil, err
+	}
+	return file, nil
 }
 
 func (s *RootFileSystem) Open(name string) (fs.File, error) {
@@ -139,37 +161,51 @@ func (s *RootFileSystem) Open(name string) (fs.File, error) {
 }
 
 func (s *RootFileSystem) ReadDir(name string) ([]fs.DirEntry, error) {
-	return s.root.FS().(fs.ReadDirFS).ReadDir(name)
+	return inRoot(s, func(root *os.Root) ([]fs.DirEntry, error) {
+		return root.FS().(fs.ReadDirFS).ReadDir(name)
+	})
 }
 
 func (s *RootFileSystem) MkdirAll(name string, perm os.FileMode) error {
 	if s.ReadOnly() {
 		return ErrReadOnly
 	}
-	return s.root.MkdirAll(name, perm)
+	_, err := inRoot(s, func(root *os.Root) (struct{}, error) {
+		return struct{}{}, root.MkdirAll(name, perm)
+	})
+	return err
 }
 
 func (s *RootFileSystem) RemoveAll(path string) error {
 	if s.ReadOnly() {
 		return ErrReadOnly
 	}
-	return s.root.RemoveAll(path)
+	_, err := inRoot(s, func(root *os.Root) (struct{}, error) {
+		return struct{}{}, root.RemoveAll(path)
+	})
+	return err
 }
 
 func (s *RootFileSystem) Stat(name string) (fs.FileInfo, error) {
-	return s.root.Stat(name)
+	return inRoot(s, func(root *os.Root) (fs.FileInfo, error) {
+		return root.Stat(name)
+	})
 }
 
 // ReadLink returns the destination of the named symbolic link. The link is read
 // rather than followed, so the result is the target as stored, which may not
 // exist and may point outside this filesystem.
 func (s *RootFileSystem) ReadLink(name string) (string, error) {
-	return s.root.Readlink(name)
+	return inRoot(s, func(root *os.Root) (string, error) {
+		return root.Readlink(name)
+	})
 }
 
 // Lstat describes the named file without following a symbolic link.
 func (s *RootFileSystem) Lstat(name string) (fs.FileInfo, error) {
-	return s.root.Lstat(name)
+	return inRoot(s, func(root *os.Root) (fs.FileInfo, error) {
+		return root.Lstat(name)
+	})
 }
 
 func (s *RootFileSystem) ReadOnly() bool {

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 
@@ -87,12 +88,13 @@ func Parse(repository string) (*Endpoint, error) {
 			return nil, fmt.Errorf("file repository path must not be empty")
 		}
 
+		ep.Path = localPath(ep.Path)
 		if !filepath.IsAbs(ep.Path) {
 			if ep.Path, err = filepath.Abs(ep.Path); err != nil {
 				return nil, fmt.Errorf("cannot resolve file repository path: %w", err)
 			}
 		}
-		ep.URL = "file://" + ep.Path
+		ep.URL = fileURL(ep.Path)
 	default:
 		return nil, fmt.Errorf("unsupported git transport %q", ep.Protocol)
 	}
@@ -118,6 +120,26 @@ var ErrLocalRepository = errors.New("git access must not reference a local git r
 // IsLocal reports whether the endpoint refers to a local repository, i.e. a
 // file:// URL or a plain local path, which a remote consumer cannot reach.
 func (ep *Endpoint) IsLocal() bool { return ep.Protocol == protocolFile }
+
+// localPath turns the path of a file URL or a plain path into an OS path. A file
+// URL carries a Windows drive as /C:/path, which is not a valid path on its own.
+func localPath(p string) string {
+	if runtime.GOOS == "windows" && len(p) >= 3 && p[0] == '/' && p[2] == ':' {
+		p = p[1:]
+	}
+	return filepath.FromSlash(p)
+}
+
+// fileURL renders an absolute OS path as a file URL. go-git takes everything after
+// file:// verbatim as the path, so the path is not escaped; on Windows the drive is
+// written as /C:/path, which go-git strips back to C:/path.
+func fileURL(path string) string {
+	path = filepath.ToSlash(path)
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+	return "file://" + path
+}
 
 func Port(ep *Endpoint) string {
 	if ep.Port != 0 {

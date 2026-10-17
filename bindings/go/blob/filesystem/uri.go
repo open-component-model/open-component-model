@@ -3,6 +3,7 @@ package filesystem
 import (
 	"fmt"
 	"net/url"
+	"path/filepath"
 	"strings"
 )
 
@@ -12,6 +13,10 @@ import (
 //   - opaque form (e.g. "file:relative/path") is rejected
 //   - host must be empty or "localhost"
 //   - path must be non-empty
+//
+// The returned path uses the separators of the host OS. On Windows the leading
+// slash before a drive letter is dropped, so "file:///C:/dir/file" yields
+// "C:\dir\file".
 func FilePathFromURI(uri string) (string, error) {
 	parsed, err := url.Parse(uri)
 	if err != nil {
@@ -29,5 +34,21 @@ func FilePathFromURI(uri string) (string, error) {
 	if parsed.Path == "" {
 		return "", fmt.Errorf("file URI %q has no path", uri)
 	}
-	return parsed.Path, nil
+	path := parsed.Path
+	// VolumeName is only non-empty on Windows, where "/C:/dir" must become "C:/dir".
+	if len(path) > 1 && path[0] == '/' && filepath.VolumeName(path[1:]) != "" {
+		path = path[1:]
+	}
+	return filepath.FromSlash(path), nil
+}
+
+// URIFromFilePath returns the file:// URI for an absolute filesystem path, e.g.
+// "file:///dir/file" for "/dir/file" and "file:///C:/dir/file" for "C:\dir\file".
+// It is the inverse of FilePathFromURI.
+func URIFromFilePath(path string) string {
+	path = filepath.ToSlash(path)
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+	return (&url.URL{Scheme: "file", Path: path}).String()
 }

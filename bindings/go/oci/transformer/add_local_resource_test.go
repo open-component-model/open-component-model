@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	blobv1alpha1 "ocm.software/open-component-model/bindings/go/blob/filesystem/spec/access/v1alpha1"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
@@ -122,7 +123,7 @@ func TestAddLocalResource_Transform_OCI(t *testing.T) {
 					Name:    blobv1alpha1.FileType,
 					Version: blobv1alpha1.Version,
 				},
-				URI:       "file://" + testFile,
+				URI:       filesystem.URIFromFilePath(testFile),
 				MediaType: "application/test",
 			},
 		},
@@ -202,7 +203,7 @@ func TestAddLocalResource_Transform_CTF(t *testing.T) {
 					Name:    blobv1alpha1.FileType,
 					Version: blobv1alpha1.Version,
 				},
-				URI:       "file://" + testFile,
+				URI:       filesystem.URIFromFilePath(testFile),
 				MediaType: "application/octet-stream",
 			},
 		},

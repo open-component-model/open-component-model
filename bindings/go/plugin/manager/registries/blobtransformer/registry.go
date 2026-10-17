@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"sync"
 
 	"ocm.software/open-component-model/bindings/go/blob/transformer"
@@ -18,7 +17,7 @@ import (
 type constructedPlugin struct {
 	Plugin blobtransformerv1.BlobTransformerPluginContract[runtime.Typed]
 
-	cmd *exec.Cmd
+	process plugins.Process
 }
 
 // Registry holds all plugins that implement capabilities corresponding to RepositoryPlugin operations.
@@ -60,17 +59,16 @@ func (r *Registry) RegisterInternalBlobTransformerPlugin(
 	return nil
 }
 
-// Shutdown will loop through all _STARTED_ plugins and will send an Interrupt signal to them.
-// All plugins should handle interrupt signals gracefully. For Go, this is done automatically by
+// Shutdown will loop through all _STARTED_ plugins and will interrupt them.
+// All plugins should handle interrupts gracefully. For Go, this is done automatically by
 // the plugin SDK.
 func (r *Registry) Shutdown(ctx context.Context) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	var errs error
 	for _, p := range r.constructedPlugins {
-		// The plugins should handle the Interrupt signal for shutdowns.
 		// TODO(Skarlso): Use context to wait for the plugin to actually shut down.
-		if perr := p.cmd.Process.Signal(os.Interrupt); perr != nil && !errors.Is(perr, os.ErrProcessDone) {
+		if perr := p.process.Interrupt(ctx); perr != nil && !errors.Is(perr, os.ErrProcessDone) {
 			errs = errors.Join(errs, perr)
 		}
 	}
@@ -121,8 +119,8 @@ func startAndReturnPlugin(ctx context.Context, r *Registry, plugin *mtypes.Plugi
 
 	repoPlugin := NewPlugin(client, plugin.ID, plugin.Path, plugin.Config, loc, r.capabilities[plugin.ID])
 	r.constructedPlugins[plugin.ID] = &constructedPlugin{
-		Plugin: repoPlugin,
-		cmd:    plugin.Cmd,
+		Plugin:  repoPlugin,
+		process: plugins.NewProcess(plugin, client, loc),
 	}
 
 	// wrap the untyped internal plugin into a typed representation.

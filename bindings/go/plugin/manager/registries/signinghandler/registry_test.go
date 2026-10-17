@@ -16,6 +16,7 @@ import (
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/plugin/internal/dummytype"
 	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
+	"ocm.software/open-component-model/bindings/go/plugin/internal/osutil"
 	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/signing/v1"
 	mtypes "ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -36,7 +37,7 @@ func dummyCapability(schema []byte) v1.CapabilitySpec {
 
 func TestPluginFlow(t *testing.T) {
 	slog.SetLogLoggerLevel(slog.LevelDebug)
-	path := filepath.Join("..", "..", "..", "tmp", "testdata", "test-plugin-signinghandler")
+	path := filepath.Join("..", "..", "..", "tmp", "testdata", osutil.ExecutableName("test-plugin-signinghandler"))
 	_, err := os.Stat(path)
 	require.NoError(t, err, "test plugin not found, please build the plugin under tmp/testdata/test-plugin-signinghandler first")
 
@@ -58,8 +59,10 @@ func TestPluginFlow(t *testing.T) {
 	stderr, err := pluginCmd.StderrPipe()
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		_ = os.Remove("/tmp/test-plugin-signinghandler-plugin.socket")
-		_ = pluginCmd.Process.Kill()
+		if pluginCmd.Process != nil {
+			_ = pluginCmd.Process.Kill()
+		}
+		_ = os.Remove(osutil.SocketPath("test-plugin-signinghandler"))
 	})
 	plugin := mtypes.Plugin{
 		ID:     "test-plugin-signinghandler",
@@ -83,7 +86,7 @@ func TestPluginFlow(t *testing.T) {
 
 func TestShutdown(t *testing.T) {
 	slog.SetLogLoggerLevel(slog.LevelDebug)
-	path := filepath.Join("..", "..", "..", "tmp", "testdata", "test-plugin-signinghandler")
+	path := filepath.Join("..", "..", "..", "tmp", "testdata", osutil.ExecutableName("test-plugin-signinghandler"))
 	_, err := os.Stat(path)
 	require.NoError(t, err, "test plugin not found, please build the plugin under tmp/testdata/test-plugin-signinghandler first")
 	ctx := context.Background()
@@ -100,8 +103,10 @@ func TestShutdown(t *testing.T) {
 	stderr, err := pluginCmd.StderrPipe()
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		_ = os.Remove("/tmp/test-plugin-signinghandler-plugin.socket")
-		_ = pluginCmd.Process.Kill()
+		if pluginCmd.Process != nil {
+			_ = pluginCmd.Process.Kill()
+		}
+		_ = os.Remove(osutil.SocketPath("test-plugin-signinghandler"))
 	})
 	plugin := mtypes.Plugin{
 		ID:     "test-plugin-signinghandler",

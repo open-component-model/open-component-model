@@ -1,0 +1,3 @@
+# Tests compare checked-out files (golden files, fixtures, embedded testdata) byte-for-byte;
+# keep LF on Windows checkouts regardless of core.autocrlf.
+* text=auto eol=lf
