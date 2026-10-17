@@ -54,7 +54,7 @@ func TestPluginFlow(t *testing.T) {
 	registry := NewBlobTransformerRegistry(ctx)
 	config := mtypes.Config{
 		ID:         id,
-		Type:       mtypes.Socket,
+		Type:       osutil.ConnectionType(t.Context()),
 		PluginType: v1.BlobTransformerPluginType,
 	}
 	serialized, err := json.Marshal(config)
@@ -204,7 +204,7 @@ func TestAddPluginDuplicate(t *testing.T) {
 		Path: "/path/to/plugin",
 		Config: mtypes.Config{
 			ID:         "test-plugin-duplicate",
-			Type:       mtypes.Socket,
+			Type:       osutil.ConnectionType(t.Context()),
 			PluginType: v1.BlobTransformerPluginType,
 		},
 	}

@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -23,6 +25,7 @@ import (
 const testPluginType = "test-plugin-type"
 
 func TestPluginSDK(t *testing.T) {
+	skipWithoutUnixSockets(t)
 	slog.SetLogLoggerLevel(slog.LevelDebug)
 	r := require.New(t)
 
@@ -70,6 +73,7 @@ func TestPluginSDK(t *testing.T) {
 }
 
 func TestPluginSDKForceShutdownContext(t *testing.T) {
+	skipWithoutUnixSockets(t)
 	r := require.New(t)
 
 	output := bytes.NewBuffer(nil)
@@ -124,6 +128,7 @@ func TestPluginSDKForceShutdownContext(t *testing.T) {
 }
 
 func TestIdleChecker(t *testing.T) {
+	skipWithoutUnixSockets(t)
 	r := require.New(t)
 	location := osutil.SocketPath("test-plugin-idle")
 	output := bytes.NewBuffer(nil)
@@ -160,6 +165,7 @@ func TestIdleChecker(t *testing.T) {
 }
 
 func TestHealthCheckInvalidMethod(t *testing.T) {
+	skipWithoutUnixSockets(t)
 	r := require.New(t)
 	location := osutil.SocketPath("test-plugin-invalid")
 	output := bytes.NewBuffer(nil)
@@ -192,6 +198,7 @@ func TestHealthCheckInvalidMethod(t *testing.T) {
 }
 
 func TestPanicRecovery(t *testing.T) {
+	skipWithoutUnixSockets(t)
 	r := require.New(t)
 	location := osutil.SocketPath("test-plugin-panic")
 	output := bytes.NewBuffer(nil)
@@ -243,6 +250,7 @@ func waitForPlugin(ctx context.Context, r *require.Assertions, httpClient *http.
 }
 
 func TestLockFileCreationAndCleanup(t *testing.T) {
+	skipWithoutUnixSockets(t)
 	r := require.New(t)
 	location := osutil.SocketPath("test-plugin-lock")
 	lockFile := location + ".lock"
@@ -288,6 +296,7 @@ func TestLockFileCreationAndCleanup(t *testing.T) {
 }
 
 func TestLockFileProcessValidation(t *testing.T) {
+	skipWithoutUnixSockets(t)
 	location := osutil.SocketPath("test-plugin-process-validation")
 	lockFile := location + ".lock"
 
@@ -328,7 +337,7 @@ func TestLockFileProcessValidation(t *testing.T) {
 			PluginType: testPluginType,
 		}, os.Stdout)
 
-		_, err = p2.determineLocation(t.Context())
+		_, err = p2.determineLocation()
 		r.Error(err)
 		r.Contains(err.Error(), "process using socket file is still alive")
 
@@ -359,7 +368,7 @@ func TestLockFileProcessValidation(t *testing.T) {
 			PluginType: testPluginType,
 		}, os.Stdout)
 
-		loc, err := p.determineLocation(t.Context())
+		loc, err := p.determineLocation()
 		r.NoError(err)
 		r.Equal(location, loc)
 
@@ -404,4 +413,72 @@ func httpPost(ctx context.Context, c *http.Client, url, contentType string, body
 	}
 	req.Header.Set("Content-Type", contentType)
 	return c.Do(req)
+}
+
+// skipWithoutUnixSockets skips socket-specific tests where AF_UNIX is unavailable
+// (e.g. Wine); plugins fall back to TCP there, covered by TestPluginSDKTCP.
+func skipWithoutUnixSockets(t *testing.T) {
+	t.Helper()
+	if osutil.ConnectionType(t.Context()) != types.Socket {
+		t.Skip("unix domain sockets are not supported on this system")
+	}
+}
+
+func TestPluginSDKTCP(t *testing.T) {
+	r := require.New(t)
+
+	output := &lockedBuffer{}
+	ctx := t.Context()
+	p := NewPlugin(ctx, slog.Default(), types.Config{
+		ID:         "test-plugin-tcp",
+		Type:       types.TCP,
+		PluginType: testPluginType,
+	}, output)
+	r.NoError(p.RegisterHandlers(endpoints.Handler{
+		Handler: func(writer http.ResponseWriter, request *http.Request) {
+			_, _ = writer.Write([]byte("hello"))
+		},
+		Location: "/test-location",
+	}))
+
+	go func() {
+		_ = p.Start(ctx)
+	}()
+
+	var location string
+	r.Eventually(func() bool {
+		location = strings.TrimSpace(output.String())
+		return location != ""
+	}, 5*time.Second, 20*time.Millisecond)
+
+	// The manager only accepts http:// or http+unix:// locations, and the
+	// plugin API must only be reachable from this host.
+	r.True(strings.HasPrefix(location, "http://127.0.0.1:"), "location %q", location)
+
+	resp, err := httpGet(ctx, http.DefaultClient, location+"/test-location")
+	r.NoError(err)
+	defer resp.Body.Close()
+	content, err := io.ReadAll(resp.Body)
+	r.NoError(err)
+	r.Equal("hello", string(content))
+
+	r.NoError(p.GracefulShutdown(ctx))
+}
+
+// lockedBuffer is written by the plugin goroutine and read by the test.
+type lockedBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *lockedBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *lockedBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
 }

@@ -159,17 +159,18 @@ func (p *Plugin) Healthz(w http.ResponseWriter, r *http.Request) {
 
 // listen starts listening for connections from the plugin manager.
 func (p *Plugin) listen(ctx context.Context) error {
-	loc, err := p.determineLocation(ctx)
+	loc, err := p.determineLocation()
 	if err != nil {
 		return fmt.Errorf("could not determine location: %w", err)
 	}
-	p.location = loc
 
 	var lc net.ListenConfig
 	conn, err := lc.Listen(ctx, string(p.Config.Type), loc)
 	if err != nil {
 		return fmt.Errorf("failed to connect to socket from client: %w", err)
 	}
+	// For TCP the port is only known once listening.
+	p.location = conn.Addr().String()
 
 	m := http.NewServeMux()
 	for _, h := range p.handlers {
@@ -197,9 +198,9 @@ func (p *Plugin) listen(ctx context.Context) error {
 	var schemedLocation string
 	switch p.Config.Type {
 	case types.TCP:
-		schemedLocation = loc // http is already included in tcp output
+		schemedLocation = "http://" + p.location
 	case types.Socket:
-		schemedLocation = "http+unix://" + loc
+		schemedLocation = "http+unix://" + p.location
 	}
 
 	if _, err := fmt.Fprintln(p.output, schemedLocation); err != nil {
@@ -225,7 +226,7 @@ func (p *Plugin) panicRecovery(f func(w http.ResponseWriter, r *http.Request)) h
 	}
 }
 
-func (p *Plugin) determineLocation(ctx context.Context) (_ string, err error) {
+func (p *Plugin) determineLocation() (string, error) {
 	switch p.Config.Type {
 	case types.Socket:
 		loc := osutil.SocketPath(p.Config.ID)
@@ -241,21 +242,9 @@ func (p *Plugin) determineLocation(ctx context.Context) (_ string, err error) {
 
 		return loc, nil
 	case types.TCP:
-		// Listen `:0` gives back a random _free_ port for the plugin to listen on.
-		// Once we have this port, this listener is immediately closed and a purpose listener
-		// will be opened with the specific port.
-		var lc net.ListenConfig
-		loc, err := lc.Listen(ctx, "tcp", ":0")
-		if err != nil {
-			return "", fmt.Errorf("failed to start tcp listener: %w", err)
-		}
-
-		// Close the listener and return the address to be specific.
-		defer func() {
-			err = errors.Join(err, loc.Close())
-		}()
-
-		return loc.Addr().String(), nil
+		// Port 0 lets the kernel pick a free port on the single listener; loopback
+		// only, the plugin API must not be reachable from other hosts.
+		return "127.0.0.1:0", nil
 	}
 
 	return "", fmt.Errorf("unknown plugin type: %s", p.Config.Type)

@@ -47,7 +47,7 @@ func TestPluginFlow(t *testing.T) {
 	registry := NewSigningRegistry(ctx)
 	config := mtypes.Config{
 		ID:         "test-plugin-signinghandler",
-		Type:       mtypes.Socket,
+		Type:       osutil.ConnectionType(t.Context()),
 		PluginType: v1.SigningHandlerPluginType,
 	}
 	serialized, err := json.Marshal(config)
@@ -93,7 +93,7 @@ func TestShutdown(t *testing.T) {
 	scheme := runtime.NewScheme()
 	dummytype.MustAddToScheme(scheme)
 	registry := NewSigningRegistry(ctx)
-	config := mtypes.Config{ID: "test-plugin-signinghandler", Type: mtypes.Socket, PluginType: v1.SigningHandlerPluginType}
+	config := mtypes.Config{ID: "test-plugin-signinghandler", Type: osutil.ConnectionType(t.Context()), PluginType: v1.SigningHandlerPluginType}
 	serialized, err := json.Marshal(config)
 	require.NoError(t, err)
 

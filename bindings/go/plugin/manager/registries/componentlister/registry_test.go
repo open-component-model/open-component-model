@@ -49,7 +49,7 @@ func TestPluginFlow(t *testing.T) {
 	registry := NewComponentListerRegistry(ctx)
 	config := mtypes.Config{
 		ID:         id,
-		Type:       mtypes.Socket,
+		Type:       osutil.ConnectionType(t.Context()),
 		PluginType: v1.ComponentListerPluginType,
 	}
 	serialized, err := json.Marshal(config)

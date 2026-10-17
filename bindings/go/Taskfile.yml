@@ -10,15 +10,14 @@ tasks:
     # GOFIPS140 (root .env): test plugins and suites use the shipped FIPS module.
     dotenv: ['{{.TASKFILE_DIR}}/../../.env']
     dir: plugin
+    vars:
+      # test/wine cross-builds with GOOS=windows EXE=.exe.
+      EXE: '{{.EXE | default exeExt}}'
+    env:
+      GOOS: '{{.GOOS}}'
     cmds:
-      - go build -o tmp/testdata/test-plugin-component-version{{exeExt}} internal/testplugin-component-version/main.go
-      - go build -o tmp/testdata/test-plugin-resource{{exeExt}} internal/testplugin-resource/main.go
-      - go build -o tmp/testdata/test-plugin-input{{exeExt}} internal/testplugin-input/main.go
-      - go build -o tmp/testdata/test-plugin-digester{{exeExt}} internal/testplugin-digester/main.go
-      - go build -o tmp/testdata/test-plugin-blobtransformer{{exeExt}} internal/testplugin-blobtransformer/main.go
-      - go build -o tmp/testdata/test-plugin-signinghandler{{exeExt}} internal/testplugin-signinghandler/main.go
-      - go build -o tmp/testdata/test-plugin-component-lister{{exeExt}} internal/testplugin-component-lister/main.go
-      - go build -o tmp/testdata/test-plugin-credential-repository{{exeExt}} internal/testplugin-credential-repository/main.go
+      - for: [component-version, resource, input, digester, blobtransformer, signinghandler, component-lister, credential-repository]
+        cmd: go build -o tmp/testdata/test-plugin-{{.ITEM}}{{.EXE}} internal/testplugin-{{.ITEM}}/main.go
 
   test:
     dotenv: ['{{.TASKFILE_DIR}}/../../.env']
@@ -36,6 +35,44 @@ tasks:
         {{.CLI_ARGS}}
       # Drop generated files (zz_generated.*) so the number reflects hand-written code.
       - grep -v 'zz_generated\.' '{{.OUT_DIR}}/coverage.unit.out' > '{{.OUT_DIR}}/coverage.unit.out.tmp' && mv '{{.OUT_DIR}}/coverage.unit.out.tmp' '{{.OUT_DIR}}/coverage.unit.out'
+
+  test/wine:
+    desc: "Run the unit tests as windows binaries under Wine (needs wine, curl, unzip)"
+    dotenv: ['{{.TASKFILE_DIR}}/../../.env']
+    vars:
+      WINE: '{{.WINE | default "wine"}}'
+      # Outside the module: the prefix holds a Go toolchain that `go list ./...` would pick up.
+      WINEPREFIX: '{{.WINEPREFIX | default (print .HOME "/.cache/ocm/wine")}}'
+    env:
+      GOOS: windows
+      GOARCH: amd64
+      WINEDEBUG: -all
+      WINEPREFIX: '{{.WINEPREFIX}}'
+      # generator/universe tests run `go list` from inside the test binary.
+      WINEPATH: 'C:\go\bin'
+    cmds:
+      - task: build/plugins
+        vars: { GOOS: windows, EXE: .exe }
+      - mkdir -p "$WINEPREFIX" && {{.WINE}} wineboot -i >/dev/null 2>&1
+      - |
+        if [ ! -f "$WINEPREFIX/drive_c/go/bin/go.exe" ]; then
+          zip="$(mktemp)"
+          curl -fsSL -o "$zip" "https://go.dev/dl/$(GOOS= GOARCH= go env GOVERSION).windows-amd64.zip"
+          unzip -q "$zip" -d "$WINEPREFIX/drive_c"
+          rm -f "$zip"
+        fi
+      # Keep wineserver and its services up before tests start: services spawned
+      # by the first test binary would inherit its stdout and stall `go test`.
+      - |
+        wineserver="$(dirname "$(command -v {{.WINE}})")/wineserver"
+        "$wineserver" -k 2>/dev/null || true
+        "$wineserver" -w
+        "$wineserver" -p
+      - '{{.WINE}} cmd /c exit </dev/null >/dev/null 2>&1'
+      - >
+        go test -exec '{{.WINE}}' -short -skip "Integration" -count=1
+        $(go list ./... | grep -v /integration | grep -v /kubernetes/controller/)
+        {{.CLI_ARGS}}
 
   test/integration:
     dotenv: ['{{.TASKFILE_DIR}}/../../.env']
