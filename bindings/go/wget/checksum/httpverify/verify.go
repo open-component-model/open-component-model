@@ -23,12 +23,14 @@ import (
 // Verify resolves policy against a fully read response body. header is the
 // response header and computed the digests of the body keyed by OCM name (see
 // [DigestAlgorithms]). A checksum advertised in header whose value mismatches the
-// body is a hard error.
+// body is a hard error; checksums over the transferred bytes (Content-Digest) are
+// checked against the transferred bytes.
 func Verify(ctx context.Context, artifactURL string, policy checksum.Policy, header http.Header, computed download.Computed) error {
 	_, _, err := checksum.Resolve(ctx, policy, checksum.Input{
-		URL:      artifactURL,
-		Headers:  header,
-		Computed: computed.Content,
+		URL:                 artifactURL,
+		Headers:             header,
+		Computed:            computed.Content,
+		ComputedTransferred: computed.Transferred,
 	})
 	return err
 }

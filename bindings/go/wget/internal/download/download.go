@@ -24,6 +24,9 @@ import (
 type Computed struct {
 	// Content covers the bytes the reader returned.
 	Content map[string]string
+	// Transferred covers the bytes as received. It equals Content unless the
+	// response was decoded from a gzip content coding.
+	Transferred map[string]string
 	// Pinned is the digest set with [Blob.SetPrecalculatedDigest], or empty. The
 	// content has to match it.
 	Pinned string
@@ -49,6 +52,12 @@ type Request struct {
 	Body []byte
 	// NoRedirect disables following HTTP redirects when set.
 	NoRedirect bool
+	// CompressTransfer makes compression a transport concern: the request accepts
+	// gzip (unless Header sets Accept-Encoding), and the blob yields what a request
+	// accepting no compression would, decoding negotiated gzip and keeping a content
+	// coding that is part of the content. See [resolve]. When unset, the response
+	// bytes are returned as received.
+	CompressTransfer bool
 }
 
 // Download sends the HTTP request described by req and returns a blob streaming
@@ -97,15 +106,16 @@ func Download(ctx context.Context, req Request, opts ...Option) (*Blob, error) {
 	return newBlob(f, rep, mediaType, o), nil
 }
 
-// fetcher sends the request of a download.
+// fetcher sends the request of a download and resolves its responses.
 type fetcher struct {
 	client *http.Client
 	// request is the authenticated request; it is sent again for every re-read.
 	request *http.Request
 	// safeURL is the request URL without userinfo, query and fragment, for use
 	// in errors and logs.
-	safeURL string
-	maxSize int64 // <=0 means unlimited
+	safeURL          string
+	maxSize          int64 // <=0 means unlimited
+	compressTransfer bool
 }
 
 // newFetcher builds the authenticated request and the client to send it with.
@@ -154,6 +164,9 @@ func newFetcher(ctx context.Context, req Request, o *option, maxSize int64) (*fe
 			httpReq.Header.Add(k, v)
 		}
 	}
+	if req.CompressTransfer && httpReq.Header.Get("Accept-Encoding") == "" {
+		httpReq.Header.Set("Accept-Encoding", "gzip")
+	}
 	if req.NoRedirect {
 		client = CloneClientWithNoRedirect(client)
 	}
@@ -162,10 +175,11 @@ func newFetcher(ctx context.Context, req Request, o *option, maxSize int64) (*fe
 		return nil, fmt.Errorf("error applying credentials: %w", err)
 	}
 	return &fetcher{
-		client:  client,
-		request: httpReq,
-		safeURL: safeURL.String(),
-		maxSize: maxSize,
+		client:           client,
+		request:          httpReq,
+		safeURL:          safeURL.String(),
+		maxSize:          maxSize,
+		compressTransfer: req.CompressTransfer,
 	}, nil
 }
 
@@ -182,8 +196,9 @@ func (f *fetcher) clone() (*http.Request, error) {
 	return r, nil
 }
 
-// send performs r, checks the response status and checks the content size
-// against the maximum. On success the caller owns the response body.
+// send performs r, checks the response status, resolves how the body maps to the
+// content and checks the content size against the maximum. On success the caller
+// owns the response body.
 func (f *fetcher) send(r *http.Request) (representation, error) {
 	resp, err := f.client.Do(r)
 	if err != nil {
@@ -193,7 +208,11 @@ func (f *fetcher) send(r *http.Request) (representation, error) {
 		_ = resp.Body.Close()
 		return representation{}, fmt.Errorf("HTTP request to %s returned status %d", f.safeURL, resp.StatusCode)
 	}
-	rep := representation{resp: resp, size: bodySize(resp)}
+	rep, err := f.resolve(r, resp)
+	if err != nil {
+		_ = resp.Body.Close()
+		return representation{}, err
+	}
 	// When the content size is known up front, oversized content is rejected
 	// before any of it is transferred.
 	if f.maxSize > 0 && rep.size > f.maxSize {
