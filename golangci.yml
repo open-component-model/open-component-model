@@ -98,6 +98,12 @@ linters:
       - linters:
           - lll
         source: https://
+      # The code generators are run by developers on paths they pass; opening
+      # those paths is their purpose, not a traversal (gosec G703 since v2.15).
+      - linters:
+          - gosec
+        path: bindings/go/generator/
+        text: G703
       - linters:
           - dupl
           - err113
