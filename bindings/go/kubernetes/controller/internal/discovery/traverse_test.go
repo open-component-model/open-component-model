@@ -111,7 +111,7 @@ func graphKeys(g *Graph) []ComponentKey {
 func TestTraverse_NilResolver(t *testing.T) {
 	r := require.New(t)
 
-	_, err := Traverse(t.Context(), ComponentKey{Name: "root", Version: "1.0.0"}, nil)
+	_, err := Traverse(t.Context(), ComponentKey{Name: "root", Version: "1.0.0"}, nil, -1)
 	r.ErrorContains(err, "resolver must not be nil")
 }
 
@@ -131,7 +131,7 @@ func TestTraverse_ResolvesCompleteGraph(t *testing.T) {
 	c := newDescriptor("c", "1.0.0")
 	resolver := newFakeResolver(root, a, b, c)
 
-	graph, err := Traverse(t.Context(), ComponentKey{Name: "root", Version: "1.0.0"}, resolver)
+	graph, err := Traverse(t.Context(), ComponentKey{Name: "root", Version: "1.0.0"}, resolver, -1)
 	r.NoError(err)
 	r.Equal([]ComponentKey{
 		{Name: "a", Version: "1.0.0"},
@@ -164,7 +164,7 @@ func TestTraverse_ResolvesEachComponentExactlyOnce(t *testing.T) {
 	resolver := newFakeResolver(root, a, b, c)
 	resolver.delay = 20 * time.Millisecond
 
-	_, err := Traverse(t.Context(), ComponentKey{Name: "root", Version: "1.0.0"}, resolver)
+	_, err := Traverse(t.Context(), ComponentKey{Name: "root", Version: "1.0.0"}, resolver, -1)
 	r.NoError(err)
 	for key, count := range resolver.calls {
 		r.Equal(1, count, "component %s resolved more than once", key)
@@ -184,7 +184,7 @@ func TestTraverse_DistinctVersionsOfOneComponent(t *testing.T) {
 	aNew := newDescriptor("a", "2.0.0")
 	resolver := newFakeResolver(root, aOld, aNew)
 
-	graph, err := Traverse(t.Context(), ComponentKey{Name: "root", Version: "1.0.0"}, resolver)
+	graph, err := Traverse(t.Context(), ComponentKey{Name: "root", Version: "1.0.0"}, resolver, -1)
 	r.NoError(err)
 	r.Equal([]ComponentKey{
 		{Name: "a", Version: "1.0.0"},
@@ -203,9 +203,40 @@ func TestTraverse_DeepMatchesBehindUnmatchedAncestors(t *testing.T) {
 	leaf := newDescriptor("leaf", "1.0.0")
 	resolver := newFakeResolver(root, mid, leaf)
 
-	graph, err := Traverse(t.Context(), ComponentKey{Name: "root", Version: "1.0.0"}, resolver)
+	graph, err := Traverse(t.Context(), ComponentKey{Name: "root", Version: "1.0.0"}, resolver, -1)
 	r.NoError(err)
 	r.Len(graph.Descriptors, 3)
+}
+
+func TestTraverse_Depth(t *testing.T) {
+	root := newDescriptor("root", "1.0.0", withReferences(newReference("a", "a", "1.0.0")))
+	a := newDescriptor("a", "1.0.0")
+
+	t.Run("depth 0 resolves root only", func(t *testing.T) {
+		r := require.New(t)
+		graph, err := Traverse(t.Context(), ComponentKey{Name: "root", Version: "1.0.0"}, newFakeResolver(root, a), 0)
+		r.NoError(err)
+		r.Equal([]ComponentKey{{Name: "root", Version: "1.0.0"}}, graphKeys(graph))
+	})
+
+	t.Run("depth -1 resolves the whole graph", func(t *testing.T) {
+		r := require.New(t)
+		graph, err := Traverse(t.Context(), ComponentKey{Name: "root", Version: "1.0.0"}, newFakeResolver(root, a), -1)
+		r.NoError(err)
+		r.Len(graph.Descriptors, 2)
+	})
+
+	t.Run("positive depth is rejected", func(t *testing.T) {
+		r := require.New(t)
+		_, err := Traverse(t.Context(), ComponentKey{Name: "root", Version: "1.0.0"}, newFakeResolver(root, a), 1)
+		r.ErrorContains(err, "not yet supported")
+	})
+
+	t.Run("depth below -1 is rejected", func(t *testing.T) {
+		r := require.New(t)
+		_, err := Traverse(t.Context(), ComponentKey{Name: "root", Version: "1.0.0"}, newFakeResolver(root, a), -2)
+		r.ErrorContains(err, "invalid recursion depth")
+	})
 }
 
 func TestTraverse_RootResolutionFailure(t *testing.T) {
@@ -213,7 +244,7 @@ func TestTraverse_RootResolutionFailure(t *testing.T) {
 
 	resolver := newFakeResolver().failFetch(ComponentKey{Name: "root", Version: "1.0.0"}, fmt.Errorf("boom"))
 
-	graph, err := Traverse(t.Context(), ComponentKey{Name: "root", Version: "1.0.0"}, resolver)
+	graph, err := Traverse(t.Context(), ComponentKey{Name: "root", Version: "1.0.0"}, resolver, -1)
 	r.Nil(graph)
 	r.ErrorContains(err, "boom")
 	r.ErrorContains(err, "name=root,version=1.0.0")
@@ -228,7 +259,7 @@ func TestTraverse_RepositorySelectionFailure(t *testing.T) {
 	// and no graph is returned.
 	resolver := newFakeResolver().failResolve(ComponentKey{Name: "root", Version: "1.0.0"}, fmt.Errorf("no repository"))
 
-	graph, err := Traverse(t.Context(), ComponentKey{Name: "root", Version: "1.0.0"}, resolver)
+	graph, err := Traverse(t.Context(), ComponentKey{Name: "root", Version: "1.0.0"}, resolver, -1)
 	r.Nil(graph)
 	r.ErrorContains(err, "no repository")
 	r.ErrorContains(err, "failed to resolve repository for component")
@@ -247,7 +278,7 @@ func TestTraverse_MissingSiblingFailsEntireTraversal(t *testing.T) {
 	ok := newDescriptor("ok", "1.0.0")
 	resolver := newFakeResolver(root, ok)
 
-	graph, err := Traverse(t.Context(), ComponentKey{Name: "root", Version: "1.0.0"}, resolver)
+	graph, err := Traverse(t.Context(), ComponentKey{Name: "root", Version: "1.0.0"}, resolver, -1)
 	r.Nil(graph)
 	r.ErrorContains(err, "missing:1.0.0 not found")
 }
@@ -263,7 +294,7 @@ func TestTraverse_Cancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 
-	graph, err := Traverse(ctx, ComponentKey{Name: "root", Version: "1.0.0"}, resolver)
+	graph, err := Traverse(ctx, ComponentKey{Name: "root", Version: "1.0.0"}, resolver, -1)
 	r.Nil(graph)
 	r.ErrorIs(err, context.Canceled)
 }
@@ -275,7 +306,7 @@ func TestTraverse_NilDescriptorIsAFailure(t *testing.T) {
 	resolver := newFakeResolver()
 	resolver.descs[ComponentKey{Name: "root", Version: "1.0.0"}] = nil
 
-	graph, err := Traverse(t.Context(), ComponentKey{Name: "root", Version: "1.0.0"}, resolver)
+	graph, err := Traverse(t.Context(), ComponentKey{Name: "root", Version: "1.0.0"}, resolver, -1)
 	r.Nil(graph)
 	r.ErrorContains(err, "resolved descriptor is nil")
 }

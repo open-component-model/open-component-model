@@ -196,6 +196,18 @@ spec:
                       == "Repository" || self.kind == "Component" || self.kind ==
                       "Resource"))
                 type: array
+              recursionDepth:
+                default: -1
+                description: |-
+                  RecursionDepth controls how deep component references are resolved.
+                  0 resolves only the root component; -1 (the default when unset) resolves
+                  the complete transitive graph. Positive depths are not yet supported by
+                  the underlying DAG discovery library.
+                type: integer
+                x-kubernetes-validations:
+                - message: recursionDepth must be -1 (infinite) or 0 (root only);
+                    positive depths are not yet supported
+                  rule: self == -1 || self == 0
               referenceSelector:
                 description: |-
                   ReferenceSelector filters the references of all resolved descriptors.

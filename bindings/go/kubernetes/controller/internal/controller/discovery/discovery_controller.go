@@ -256,9 +256,15 @@ func (r *Reconciler) reconcile(ctx context.Context, discovery *v1alpha1.Discover
 		return ctrl.Result{}, fmt.Errorf("failed to create repository resolver: %w", err)
 	}
 
+	depth := -1
+	if discovery.Spec.RecursionDepth != nil {
+		depth = *discovery.Spec.RecursionDepth
+	}
+
 	graph, err := internaldiscovery.Traverse(ctx,
 		internaldiscovery.ComponentKey{Name: info.Component, Version: info.Version},
-		resolver)
+		resolver,
+		depth)
 	if err != nil {
 		status.MarkNotReady(r.EventRecorder, discovery, v1alpha1.ResolutionFailedReason, err.Error())
 

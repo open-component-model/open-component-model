@@ -336,6 +336,11 @@ func (in *DiscoveryList) DeepCopyObject() pkgruntime.Object {
 func (in *DiscoverySpec) DeepCopyInto(out *DiscoverySpec) {
 	*out = *in
 	out.ComponentRef = in.ComponentRef
+	if in.RecursionDepth != nil {
+		in, out := &in.RecursionDepth, &out.RecursionDepth
+		*out = new(int)
+		**out = **in
+	}
 	if in.ReferenceSelector != nil {
 		in, out := &in.ReferenceSelector, &out.ReferenceSelector
 		*out = new(Selector)
