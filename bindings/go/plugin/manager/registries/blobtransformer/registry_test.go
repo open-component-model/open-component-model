@@ -4,11 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -21,6 +21,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob/transformer"
 	"ocm.software/open-component-model/bindings/go/plugin/internal/dummytype"
 	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
+	"ocm.software/open-component-model/bindings/go/plugin/internal/osutil"
 	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/blobtransformer/v1"
 	mtypes "ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -39,14 +40,14 @@ func dummyCapability(schema []byte) v1.CapabilitySpec {
 }
 
 func TestPluginFlow(t *testing.T) {
-	path := filepath.Join("..", "..", "..", "tmp", "testdata", "test-plugin-blobtransformer")
+	path := filepath.Join("..", "..", "..", "tmp", "testdata", osutil.ExecutableName("test-plugin-blobtransformer"))
 	_, err := os.Stat(path)
 	require.NoError(t, err, "test plugin not found, please build the plugin under tmp/testdata/test-plugin-blobtransformer first")
 	slog.SetLogLoggerLevel(slog.LevelDebug)
 
 	ctx := t.Context()
 
-	id := "test-plugin-blob-transformer" + time.Now().Format(time.RFC3339)
+	id := "test-plugin-blob-transformer" + strconv.FormatInt(time.Now().UnixNano(), 10)
 
 	scheme := runtime.NewScheme()
 	dummytype.MustAddToScheme(scheme)
@@ -61,9 +62,13 @@ func TestPluginFlow(t *testing.T) {
 
 	pluginCmd := exec.CommandContext(ctx, path, "--config", string(serialized))
 	t.Cleanup(func() {
+		if pluginCmd.Process == nil {
+			return
+		}
 		assert.NoError(t, pluginCmd.Process.Kill())
-		err := os.Remove(fmt.Sprintf("/tmp/%s-plugin.socket", id))
+		err := os.Remove(osutil.SocketPath(id))
 		assert.True(t, err == nil || errors.Is(err, os.ErrNotExist))
+		_ = os.Remove(osutil.SocketPath(id) + ".lock")
 	})
 	pipe, err := pluginCmd.StdoutPipe()
 	require.NoError(t, err)

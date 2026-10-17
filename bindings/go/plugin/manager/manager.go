@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	goruntime "runtime"
 	"strings"
 	"sync"
 	"time"
@@ -209,13 +210,10 @@ func (pm *PluginManager) fetchPlugins(ctx context.Context, conf *mtypes.Config, 
 			return nil
 		}
 
-		// TODO(Skarlso): Determine plugin extension.
-		ext := filepath.Ext(info.Name())
-		if ext != "" {
+		id, ok := pluginID(info.Name())
+		if !ok {
 			return nil
 		}
-
-		id := filepath.Base(path)
 
 		p := &mtypes.Plugin{
 			ID:     id,
@@ -233,6 +231,20 @@ func (pm *PluginManager) fetchPlugins(ctx context.Context, conf *mtypes.Config, 
 	}
 
 	return plugins, nil
+}
+
+// pluginID returns the ID of the plugin executable with the given file name and whether the file is a plugin.
+// Plugins are files without extension, on Windows executables have to carry the .exe extension.
+func pluginID(name string) (string, bool) {
+	ext := filepath.Ext(name)
+	switch {
+	case ext == "":
+		return name, goruntime.GOOS != "windows"
+	case goruntime.GOOS == "windows" && strings.EqualFold(ext, ".exe"):
+		return strings.TrimSuffix(name, ext), true
+	default:
+		return "", false
+	}
 }
 
 var scheme *runtime.Scheme

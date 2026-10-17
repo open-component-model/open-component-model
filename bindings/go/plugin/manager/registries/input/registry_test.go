@@ -15,6 +15,7 @@ import (
 	constructor "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	"ocm.software/open-component-model/bindings/go/plugin/internal/dummytype"
 	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
+	"ocm.software/open-component-model/bindings/go/plugin/internal/osutil"
 	inputv1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/input/v1"
 	mtypes "ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -34,7 +35,7 @@ func dummyCapability(schema []byte) inputv1.CapabilitySpec {
 
 func TestPluginFlow(t *testing.T) {
 	slog.SetLogLoggerLevel(slog.LevelDebug)
-	path := filepath.Join("..", "..", "..", "tmp", "testdata", "test-plugin-input")
+	path := filepath.Join("..", "..", "..", "tmp", "testdata", osutil.ExecutableName("test-plugin-input"))
 	_, err := os.Stat(path)
 	require.NoError(t, err, "test plugin not found, please build the plugin under tmp/testdata/test-plugin-input first")
 	ctx := context.Background()
@@ -55,8 +56,10 @@ func TestPluginFlow(t *testing.T) {
 	stderr, err := pluginCmd.StderrPipe()
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		_ = os.Remove("/tmp/test-plugin-1-construction-plugin.socket")
-		_ = pluginCmd.Process.Kill()
+		if pluginCmd.Process != nil {
+			_ = pluginCmd.Process.Kill()
+		}
+		_ = os.Remove(osutil.SocketPath("test-plugin-1-construction"))
 	})
 	plugin := mtypes.Plugin{
 		ID:     "test-plugin-1-construction",

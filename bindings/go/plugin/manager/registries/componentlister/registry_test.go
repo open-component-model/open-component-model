@@ -3,11 +3,11 @@ package componentlister
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 
@@ -15,6 +15,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/plugin/internal/dummytype"
 	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
+	"ocm.software/open-component-model/bindings/go/plugin/internal/osutil"
 	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/componentlister/v1"
 	mtypes "ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/repository"
@@ -35,13 +36,13 @@ func dummyCapability(schema []byte) v1.CapabilitySpec {
 
 func TestPluginFlow(t *testing.T) {
 	slog.SetLogLoggerLevel(slog.LevelDebug)
-	path := filepath.Join("..", "..", "..", "tmp", "testdata", "test-plugin-component-lister")
+	path := filepath.Join("..", "..", "..", "tmp", "testdata", osutil.ExecutableName("test-plugin-component-lister"))
 	_, err := os.Stat(path)
 	require.NoError(t, err, "test plugin not found, please build the plugin under tmp/testdata/test-plugin-component-lister first")
 
 	ctx := context.Background()
 
-	id := "test-plugin-component-lister" + time.Now().Format(time.RFC3339)
+	id := "test-plugin-component-lister" + strconv.FormatInt(time.Now().UnixNano(), 10)
 
 	scheme := runtime.NewScheme()
 	dummytype.MustAddToScheme(scheme)
@@ -56,8 +57,11 @@ func TestPluginFlow(t *testing.T) {
 
 	pluginCmd := exec.CommandContext(ctx, path, "--config", string(serialized))
 	t.Cleanup(func() {
-		_ = os.Remove(fmt.Sprintf("/tmp/%s-plugin.socket", id))
-		_ = pluginCmd.Process.Kill()
+		if pluginCmd.Process != nil {
+			_ = pluginCmd.Process.Kill()
+		}
+		_ = os.Remove(osutil.SocketPath(id))
+		_ = os.Remove(osutil.SocketPath(id) + ".lock")
 	})
 	pipe, err := pluginCmd.StdoutPipe()
 	require.NoError(t, err)

@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"path/filepath"
+	"path"
 
 	"github.com/nlepage/go-tarfs"
 	"github.com/opencontainers/go-digest"
@@ -142,6 +142,14 @@ func NewArtifactSetFromBlob(b blob.ReadOnlyBlob) (*ArtifactSet, error) {
 		return nil, fmt.Errorf("unable to open blob: %w", err)
 	}
 
+	as, err := newArtifactSetFromReader(raw)
+	if err != nil {
+		return nil, errors.Join(err, raw.Close())
+	}
+	return as, nil
+}
+
+func newArtifactSetFromReader(raw io.ReadCloser) (*ArtifactSet, error) {
 	// Read the first 512 bytes (Tar header size)
 	buf := make([]byte, 512)
 	n, err := raw.Read(buf)
@@ -266,7 +274,7 @@ func ConvertToOCIImageLayout(ctx context.Context, as *ArtifactSet, writer io.Wri
 		}
 
 		if err := tw.WriteHeader(&tar.Header{
-			Name: filepath.Join(BlobsDirectoryName, dig.Algorithm().String(), dig.Encoded()),
+			Name: path.Join(BlobsDirectoryName, dig.Algorithm().String(), dig.Encoded()),
 			Size: bsizeAware.Size(),
 		}); err != nil {
 			return fmt.Errorf("unable to write header for blob %s: %w", b, err)
@@ -276,7 +284,8 @@ func ConvertToOCIImageLayout(ctx context.Context, as *ArtifactSet, writer io.Wri
 		if err != nil {
 			return fmt.Errorf("unable to read blob %s: %w", b, err)
 		}
-		if _, err := io.Copy(tw, rc); err != nil {
+		_, err = io.Copy(tw, rc)
+		if err = errors.Join(err, rc.Close()); err != nil {
 			return fmt.Errorf("unable to copy blob %s: %w", b, err)
 		}
 	}
@@ -315,11 +324,11 @@ func (a *ArtifactSet) ListBlobs(ctx context.Context) (digests []string, err erro
 	case ArtifactSetFormatOCI:
 		for _, entry := range dir {
 			if entry.IsDir() {
-				algoDir, err := a.fs.ReadDir(filepath.Join(BlobsDirectoryName, entry.Name()))
+				algoDir, err := a.fs.ReadDir(path.Join(BlobsDirectoryName, entry.Name()))
 				if err != nil {
 					return nil, fmt.Errorf("unable to list blobs: %w", err)
 				}
-				algo := filepath.Base(entry.Name())
+				algo := entry.Name()
 				for _, entry := range algoDir {
 					if entry.Type().IsRegular() {
 						digests = append(digests, algo+":"+entry.Name())
@@ -365,10 +374,10 @@ func newArtifactBlob(fs fileSystem, dig string, format ArtifactSetFormat) (blob.
 		if err != nil {
 			return nil, err
 		}
-		name = filepath.Join(BlobsDirectoryName, file)
+		name = path.Join(BlobsDirectoryName, file)
 	case ArtifactSetFormatOCI:
 		dig := digest.Digest(dig)
-		name = filepath.Join(BlobsDirectoryName, dig.Algorithm().String(), dig.Encoded())
+		name = path.Join(BlobsDirectoryName, dig.Algorithm().String(), dig.Encoded())
 	}
 
 	f, err := fs.Stat(name)
@@ -430,7 +439,7 @@ func determineArtifactSetOCIFormat(filesystem fs.FS) ArtifactSetFormat {
 	} {
 		// the subdirectory for algos is unique to new generation blob directories and we can deduce the
 		// new OCI artifact set format from that.
-		if algoDir, err := filesystem.Open(filepath.Join(BlobsDirectoryName, algo.String())); err == nil {
+		if algoDir, err := filesystem.Open(path.Join(BlobsDirectoryName, algo.String())); err == nil {
 			_ = algoDir.Close()
 			return ArtifactSetFormatOCI
 		}

@@ -107,8 +107,6 @@ func TestGetBlobFromPath_RelativeDirectory(t *testing.T) {
 
 // PATTERN FILTERING: Include/exclude pattern functionality
 func TestGetBlobFromPath_PatternSemantics(t *testing.T) {
-	r := require.New(t)
-
 	tests := []struct {
 		name            string
 		includePatterns []string
@@ -150,6 +148,7 @@ func TestGetBlobFromPath_PatternSemantics(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
 			// Setup
 			tmpDir := t.TempDir()
 			createTestFile(t, tmpDir, "main.go", "package main")

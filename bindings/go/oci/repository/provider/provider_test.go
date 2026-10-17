@@ -34,8 +34,6 @@ func Test_Provider_Smoke(t *testing.T) {
 
 	t.Run("access provider concurrently", func(t *testing.T) {
 		t.Parallel()
-		r := require.New(t)
-
 		desc := descriptor.Descriptor{}
 		desc.Meta.Version = "v2"
 		desc.Component.Name = "github.com/ocm/test-component"
@@ -44,6 +42,7 @@ func Test_Provider_Smoke(t *testing.T) {
 
 		t.Run("different versions", func(t *testing.T) {
 			t.Parallel()
+			r := require.New(t)
 
 			retrievedDescs := make([]*descriptor.Descriptor, 10)
 			retrievedVersions := make([][]string, 10)
@@ -83,6 +82,7 @@ func Test_Provider_Smoke(t *testing.T) {
 		})
 		t.Run("same version", func(t *testing.T) {
 			t.Parallel()
+			r := require.New(t)
 
 			retrievedDescs := make([]*descriptor.Descriptor, 10)
 			retrievedVersions := make([][]string, 10)
