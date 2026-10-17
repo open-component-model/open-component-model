@@ -8,6 +8,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -44,7 +45,7 @@ const DefaultFileMediaType = "application/octet-stream"
 // Exclude and include patterns can be used to filter files when adding directories.
 //
 // Note on pattern option semantics:
-// Include/exclude patterns are matched using `filepath.Match`
+// Include/exclude patterns are matched using `path.Match`
 // No additional globbing extensions (like `**`) are performed.
 // Exclude patterns take precedence over include patterns.
 // Patterns are not supported for single file paths and will result in an error.
@@ -162,10 +163,11 @@ func createSingleFileBlob(path string, opt DirOptions) (blob.ReadOnlyBlob, error
 		return nil, fmt.Errorf("include/exclude patterns are not supported for single files")
 	}
 
-	// Open file for reading
-	fr, err := os.Open(path)
+	// The file is opened per ReadCloser and released on Close, instead of
+	// holding a handle open for the lifetime of the blob.
+	fileBlob, err := NewFileBlobFromPathWithFlag(path, os.O_RDONLY)
 	if err != nil {
-		return nil, fmt.Errorf("error opening single file %q for reading: %w", path, err)
+		return nil, fmt.Errorf("error creating blob for single file %q: %w", path, err)
 	}
 
 	// Determine media type for single file
@@ -173,9 +175,8 @@ func createSingleFileBlob(path string, opt DirOptions) (blob.ReadOnlyBlob, error
 	if opt.MediaType != "" {
 		mediaType = opt.MediaType
 	}
+	fileBlob.SetMediaType(mediaType)
 
-	// Create ReadOnlyBlob from file
-	var fileBlob blob.ReadOnlyBlob = direct.New(fr, direct.WithMediaType(mediaType))
 	// Apply compression if requested
 	if opt.Compress {
 		compressed := compression.Compress(fileBlob)
@@ -299,6 +300,9 @@ func processSymlink(path string, fi fs.FileInfo, fileSystem fs.FS, opt DirOption
 	if err != nil {
 		return fmt.Errorf("error reading symlink %q: %w", path, err)
 	}
+	// Tar link names are slash-separated regardless of the host OS; Windows
+	// stores link targets with backslashes.
+	target = filepath.ToSlash(target)
 
 	header, err := createTarHeader(fi, target, opt.Reproducible)
 	if err != nil {
@@ -353,17 +357,19 @@ func processFile(path string, fi fs.FileInfo, fileSystem fs.FS, opt DirOptions, 
 }
 
 // isPathIncluded checks if a given path should be included based on include and exclude patterns.
-// Simple pattern matching using filepath.Match is used. Patterns are matched against the entire path, no globbing.
+// Simple pattern matching using path.Match is used. Patterns are matched against the entire path, no globbing.
 // Exclude patterns take precedence over include patterns and apply to both files and directories.
-func isPathIncluded(path string, includePatterns, excludePatterns []string) (bool, error) {
+func isPathIncluded(name string, includePatterns, excludePatterns []string) (bool, error) {
 	// Normalize path for consistent matching.
-	np := normalizePathOrPattern(path)
+	np := normalizePathOrPattern(name)
 
 	// Exclude patterns take precedence.
 	for _, pattern := range excludePatterns {
 		pp := normalizePathOrPattern(pattern)
-		if ok, err := filepath.Match(pp, np); err != nil {
-			return false, fmt.Errorf("error matching exclude pattern %q with path %q: %w", pattern, path, err)
+		// path.Match rather than filepath.Match: both sides are slash-separated, and on
+		// Windows filepath.Match would let "*" match across "/".
+		if ok, err := path.Match(pp, np); err != nil {
+			return false, fmt.Errorf("error matching exclude pattern %q with path %q: %w", pattern, name, err)
 		} else if ok {
 			return false, nil
 		}
@@ -377,8 +383,8 @@ func isPathIncluded(path string, includePatterns, excludePatterns []string) (boo
 	// Check include patterns.
 	for _, pattern := range includePatterns {
 		pp := normalizePathOrPattern(pattern)
-		if ok, err := filepath.Match(pp, np); err != nil {
-			return false, fmt.Errorf("error matching include pattern %q with path %q: %w", pattern, path, err)
+		if ok, err := path.Match(pp, np); err != nil {
+			return false, fmt.Errorf("error matching include pattern %q with path %q: %w", pattern, name, err)
 		} else if ok {
 			return true, nil
 		}

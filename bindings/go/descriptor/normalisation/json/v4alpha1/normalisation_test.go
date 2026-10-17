@@ -2,7 +2,7 @@ package v4alpha1_test
 
 import (
 	"embed"
-	"path/filepath"
+	"path"
 	"strings"
 	"testing"
 
@@ -24,18 +24,19 @@ var testdata embed.FS
 
 func TestConformance(t *testing.T) {
 	baseName := t.Name()
-	prefix := filepath.Join("testdata", "conformance")
+	// embed.FS paths are always slash-separated, so path rather than filepath.
+	prefix := path.Join("testdata", "conformance")
 
 	run := func(t *testing.T, folder string) {
 		t.Helper()
 		r := require.New(t)
-		desc, err := testdata.ReadFile(filepath.Join(prefix, folder, "README.md"))
+		desc, err := testdata.ReadFile(path.Join(prefix, folder, "README.md"))
 		r.NoError(err, "failed to read test README")
 		t.Log(string(desc))
 
-		input, err := testdata.ReadFile(filepath.Join(prefix, folder, "input.yaml"))
+		input, err := testdata.ReadFile(path.Join(prefix, folder, "input.yaml"))
 		r.NoError(err, "failed to read test input")
-		expected, err := testdata.ReadFile(filepath.Join(prefix, folder, "expected.json"))
+		expected, err := testdata.ReadFile(path.Join(prefix, folder, "expected.json"))
 		r.NoError(err, "failed to read test expected output")
 
 		var descriptor descriptorv2.Descriptor
@@ -54,8 +55,8 @@ func TestConformance(t *testing.T) {
 		)
 	}
 
-	t.Run(filepath.Join("legacy", "jsonNormalisation", "v3"), func(t *testing.T) {
-		prefix = filepath.Join(prefix, strings.TrimPrefix(t.Name(), baseName))
+	t.Run(path.Join("legacy", "jsonNormalisation", "v3"), func(t *testing.T) {
+		prefix = path.Join(prefix, strings.TrimPrefix(t.Name(), baseName))
 		tests, err := testdata.ReadDir(prefix)
 		require.NoError(t, err, "failed to read conformance test directory")
 		for _, folder := range tests {

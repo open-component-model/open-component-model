@@ -1,6 +1,8 @@
 package filesystem_test
 
 import (
+	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -70,8 +72,30 @@ func TestFilePathFromURI(t *testing.T) {
 				assert.Error(t, err)
 			} else {
 				require.NoError(t, err)
-				assert.Equal(t, tt.expected, result)
+				assert.Equal(t, filepath.FromSlash(tt.expected), result)
 			}
 		})
 	}
+}
+
+func TestFilePathFromURI_WindowsDrive(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("drive letters only form a volume on windows")
+	}
+	r := require.New(t)
+	result, err := filesystem.FilePathFromURI("file:///C:/Users/some%20dir/file")
+	r.NoError(err)
+	r.Equal(`C:\Users\some dir\file`, result)
+}
+
+func TestURIFromFilePath_Roundtrip(t *testing.T) {
+	r := require.New(t)
+	path := filepath.Join(t.TempDir(), "dir with space", "file#1.txt")
+
+	uri := filesystem.URIFromFilePath(path)
+	r.Regexp(`^file:///[^/]`, uri)
+
+	result, err := filesystem.FilePathFromURI(uri)
+	r.NoError(err)
+	r.Equal(path, result)
 }

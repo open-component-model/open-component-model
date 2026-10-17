@@ -12,10 +12,12 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strconv"
+	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
 
+	"ocm.software/open-component-model/bindings/go/plugin/internal/osutil"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/endpoints"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/plugins"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
@@ -38,6 +40,10 @@ type Plugin struct {
 	baseCtx       context.Context
 	// this should be a logger using stderr instead of default logger.
 	logger slog.Logger
+
+	shutdownOnce sync.Once
+	// shutdownDone is closed once the first GracefulShutdown finished.
+	shutdownDone chan struct{}
 }
 
 // NewPlugin creates a new Go based plugin. After creation,
@@ -49,11 +55,12 @@ type Plugin struct {
 // setup and certificate generation. At least start a document / issue.
 func NewPlugin(ctx context.Context, logger *slog.Logger, conf types.Config, output io.Writer) *Plugin {
 	return &Plugin{
-		Config:    conf,
-		interrupt: make(chan bool, 1), // to not block any new work coming in
-		output:    output,
-		baseCtx:   ctx, // base context is used for graceful shutdown operation to finish properly
-		logger:    *logger,
+		Config:       conf,
+		interrupt:    make(chan bool, 1), // to not block any new work coming in
+		output:       output,
+		baseCtx:      ctx, // base context is used for graceful shutdown operation to finish properly
+		logger:       *logger,
+		shutdownDone: make(chan struct{}),
 	}
 }
 
@@ -125,6 +132,9 @@ func (p *Plugin) Start(ctx context.Context) error {
 	err := p.listen(ctx)
 
 	if errors.Is(err, http.ErrServerClosed) {
+		// Serve returns as soon as the shutdown begins. Wait for the cleanup so the
+		// plugin process does not exit before its socket and lock file are removed.
+		<-p.shutdownDone
 		return nil
 	}
 
@@ -218,7 +228,7 @@ func (p *Plugin) panicRecovery(f func(w http.ResponseWriter, r *http.Request)) h
 func (p *Plugin) determineLocation(ctx context.Context) (_ string, err error) {
 	switch p.Config.Type {
 	case types.Socket:
-		loc := "/tmp/" + p.Config.ID + "-plugin.socket"
+		loc := osutil.SocketPath(p.Config.ID)
 		if _, err := os.Stat(loc); err == nil {
 			if cleanupErr := p.performCleanUp(loc); cleanupErr != nil {
 				return "", fmt.Errorf("could not cleanup socket: %w", cleanupErr)
@@ -254,6 +264,8 @@ func (p *Plugin) determineLocation(ctx context.Context) (_ string, err error) {
 // GracefulShutdown will stop the server and do cleanup if necessary.
 // In the case of sockets, it will remove the created socket.
 func (p *Plugin) GracefulShutdown(ctx context.Context) error {
+	defer p.shutdownOnce.Do(func() { close(p.shutdownDone) })
+
 	p.logger.InfoContext(ctx, "gracefully shutting down plugin", "id", p.Config.ID)
 	// We ignore server closed errors because server closing might race with the listener.
 	if err := p.server.Shutdown(ctx); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -312,9 +324,13 @@ func (p *Plugin) workerHandler(h http.HandlerFunc) http.HandlerFunc {
 func (p *Plugin) Shutdown(w http.ResponseWriter, _ *http.Request) {
 	p.logger.InfoContext(p.baseCtx, "Shutting down plugin", "id", p.Config.ID)
 	w.WriteHeader(http.StatusOK)
-	if err := p.GracefulShutdown(p.baseCtx); err != nil {
-		p.logger.ErrorContext(p.baseCtx, "Error shutting down plugin", "error", err)
-	}
+	// The server shutdown waits for all active connections, including this one,
+	// so it has to run after this handler returned.
+	go func() {
+		if err := p.GracefulShutdown(p.baseCtx); err != nil {
+			p.logger.ErrorContext(p.baseCtx, "Error shutting down plugin", "error", err)
+		}
+	}()
 }
 
 // performCleanUp looks for a lock file that contains the pid of the process using the corresponding socket file.
@@ -335,24 +351,11 @@ func (p *Plugin) performCleanUp(loc string) error {
 		return fmt.Errorf("could not parse PID: %w", err)
 	}
 
-	process, err := os.FindProcess(pid)
-	if err != nil {
+	if !osutil.ProcessAlive(pid) {
 		return p.removeFiles(loc, lockFile)
 	}
 
-	// Check if the process is actually running by sending signal 0.
-	// For more information see https://man7.org/linux/man-pages/man2/kill.2.html#description
-	// Section:
-	// If sig is 0, then no signal is sent, but existence and permission
-	// checks are still performed; this can be used to check for the
-	// existence of a process ID or process group ID that the caller is
-	// permitted to signal.
-	if err := process.Signal(syscall.Signal(0)); err != nil {
-		// error means the process is gone; it's safe to remove the files.
-		return p.removeFiles(loc, lockFile)
-	}
-
-	return fmt.Errorf("process using socket file is still alive under pid %d", process.Pid)
+	return fmt.Errorf("process using socket file is still alive under pid %d", pid)
 }
 
 func (p *Plugin) removeFiles(loc string, lockFile string) error {

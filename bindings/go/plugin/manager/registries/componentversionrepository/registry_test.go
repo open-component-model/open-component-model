@@ -14,6 +14,7 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/plugin/internal/dummytype"
 	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
+	"ocm.software/open-component-model/bindings/go/plugin/internal/osutil"
 	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/ocmrepository/v1"
 	mtypes "ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/repository"
@@ -33,7 +34,7 @@ func dummyCapability(schema []byte) v1.CapabilitySpec {
 }
 
 func TestPluginFlow(t *testing.T) {
-	path := filepath.Join("..", "..", "..", "tmp", "testdata", "test-plugin-component-version")
+	path := filepath.Join("..", "..", "..", "tmp", "testdata", osutil.ExecutableName("test-plugin-component-version"))
 	_, err := os.Stat(path)
 	require.NoError(t, err, "test plugin not found, please build the plugin under tmp/testdata/test-plugin-component-version first")
 	slog.SetLogLoggerLevel(slog.LevelDebug)
@@ -56,8 +57,10 @@ func TestPluginFlow(t *testing.T) {
 
 	pluginCmd := exec.CommandContext(ctx, path, "--config", string(serialized))
 	t.Cleanup(func() {
-		_ = pluginCmd.Process.Kill()
-		_ = os.Remove("/tmp/test-plugin-1-plugin.socket")
+		if pluginCmd.Process != nil {
+			_ = pluginCmd.Process.Kill()
+		}
+		_ = os.Remove(osutil.SocketPath("test-plugin-1"))
 	})
 	pipe, err := pluginCmd.StdoutPipe()
 	require.NoError(t, err)

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"sync"
 
 	"golang.org/x/sync/errgroup"
@@ -19,8 +18,8 @@ import (
 
 // constructedPlugin only contains EXTERNAL plugins that have been started and need to be shut down.
 type constructedPlugin struct {
-	Plugin componentlisterv1.ComponentListerPluginContract[runtime.Typed]
-	cmd    *exec.Cmd
+	Plugin  componentlisterv1.ComponentListerPluginContract[runtime.Typed]
+	process plugins.Process
 }
 
 // RegisterInternalComponentListerPlugin is called to register an internal implementation for a component lister plugin.
@@ -59,8 +58,8 @@ func (r *ComponentListerRegistry) GetComponentVersionRepositoryScheme() *runtime
 	return r.scheme
 }
 
-// Shutdown will loop through all _STARTED_ plugins and will send an Interrupt signal to them.
-// All plugins should handle interrupt signals gracefully. For Go, this is done automatically by
+// Shutdown will loop through all _STARTED_ plugins and will interrupt them.
+// All plugins should handle interrupts gracefully. For Go, this is done automatically by
 // the plugin SDK.
 func (r *ComponentListerRegistry) Shutdown(ctx context.Context) error {
 	r.mu.Lock()
@@ -68,9 +67,8 @@ func (r *ComponentListerRegistry) Shutdown(ctx context.Context) error {
 	eg, ctx := errgroup.WithContext(ctx)
 	for _, p := range r.constructedPlugins {
 		eg.Go(func() error {
-			// The plugins should handle the Interrupt signal for shutdowns.
-			if err := p.cmd.Process.Signal(os.Interrupt); err != nil && !errors.Is(err, os.ErrProcessDone) {
-				return fmt.Errorf("failed to send interrupt signal to plugin: %w", errors.Join(err, p.cmd.Process.Kill()))
+			if err := p.process.Interrupt(ctx); err != nil && !errors.Is(err, os.ErrProcessDone) {
+				return fmt.Errorf("failed to interrupt plugin: %w", errors.Join(err, p.process.Cmd.Process.Kill()))
 			}
 
 			shutdownSig := make(chan error, 1)
@@ -78,7 +76,7 @@ func (r *ComponentListerRegistry) Shutdown(ctx context.Context) error {
 				close(shutdownSig)
 			}()
 			go func() {
-				_, err := p.cmd.Process.Wait()
+				_, err := p.process.Cmd.Process.Wait()
 				shutdownSig <- err
 			}()
 
@@ -86,7 +84,7 @@ func (r *ComponentListerRegistry) Shutdown(ctx context.Context) error {
 			case err := <-shutdownSig:
 				return err
 			case <-ctx.Done():
-				return errors.Join(ctx.Err(), p.cmd.Process.Kill())
+				return errors.Join(ctx.Err(), p.process.Cmd.Process.Kill())
 			}
 		})
 	}
@@ -137,8 +135,8 @@ func startAndReturnPlugin(ctx context.Context, r *ComponentListerRegistry, plugi
 
 	listerPlugin := NewComponentListerPlugin(client, plugin.ID, plugin.Path, plugin.Config, loc, r.capabilities[plugin.ID])
 	r.constructedPlugins[plugin.ID] = &constructedPlugin{
-		Plugin: listerPlugin,
-		cmd:    plugin.Cmd,
+		Plugin:  listerPlugin,
+		process: plugins.NewProcess(plugin, client, loc),
 	}
 
 	// wrap the untyped internal plugin into a typed representation.

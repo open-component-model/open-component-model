@@ -176,7 +176,12 @@ func (b *CosignBinary) execCosign(ctx context.Context, binaryPath string, args, 
 		if len(msg) > maxStderr {
 			msg = msg[:maxStderr]
 		}
-		if errors.Is(err, context.DeadlineExceeded) {
+		// A process killed because the deadline passed while it ran exits with an ExitError,
+		// so the context has to be consulted as well.
+		if ctxErr := ctx.Err(); errors.Is(ctxErr, context.DeadlineExceeded) {
+			if !errors.Is(err, context.DeadlineExceeded) {
+				err = errors.Join(ctxErr, err)
+			}
 			return fmt.Errorf("cosign %s timed out: %w\nstderr: %s", args[0], err, msg)
 		}
 		return fmt.Errorf("cosign %s failed: %w\nstderr: %s", args[0], err, msg)

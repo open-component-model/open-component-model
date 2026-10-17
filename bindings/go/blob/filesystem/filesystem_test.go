@@ -94,8 +94,9 @@ func TestOpen(t *testing.T) {
 	require.NoError(t, err)
 
 	filePath := "testfile.txt"
-	_, err = fsys.OpenFile(filePath, os.O_CREATE|os.O_WRONLY, 0o644)
+	f, err := fsys.OpenFile(filePath, os.O_CREATE|os.O_WRONLY, 0o644)
 	require.NoError(t, err)
+	require.NoError(t, f.Close())
 
 	file, err := fsys.Open(filePath)
 	require.NoError(t, err)
