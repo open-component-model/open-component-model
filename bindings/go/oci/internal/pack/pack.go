@@ -238,21 +238,19 @@ func ResourceLocalBlobOCILayout(ctx context.Context, storage content.Storage, b 
 }
 
 // verifyLayoutRootDigest checks a resource digest against the selected layout root without
-// modifying it. Incomplete digests must be completable from the root; complete digests with
-// another normalisation are preserved unverified.
+// modifying it. An absent digest needs no check; a complete digest is verified against the
+// root; a partially specified digest is rejected (a resource digest is complete or absent).
 func verifyLayoutRootDigest(d *descriptor.Digest, root digest.Digest) error {
-	if !internaldigest.IsComplete(d) {
-		var completed descriptor.Digest
-		if d != nil {
-			completed = *d
-		}
-		return internaldigest.Complete(&completed, root, internaldigest.OCIArtifactDigestV1)
-	}
-	switch d.NormalisationAlgorithm {
-	case internaldigest.OCIArtifactDigestV1, internaldigest.GenericBlobDigestV1:
+	switch {
+	case internaldigest.IsEmpty(d):
+		return nil
+	case !internaldigest.IsComplete(d):
+		return fmt.Errorf("incomplete resource digest %+v: a digest must be complete or absent", *d)
+	case d.NormalisationAlgorithm == internaldigest.OCIArtifactDigestV1 || d.NormalisationAlgorithm == internaldigest.GenericBlobDigestV1:
 		return internaldigest.VerifyOCIArtifact(d, root)
+	default:
+		return nil
 	}
-	return nil
 }
 
 // ResourceBlobOCILayerOptions defines the configuration options for pushing a blob as a resource.
@@ -391,14 +389,18 @@ func updateArtifactAccess(artifact descriptor.Artifact, access *v2.LocalBlob, de
 		typed.Access = access
 	case *descriptor.Resource:
 		typed.Access = access
-		// Preserve complete signed digest metadata; complete missing fields only
-		// when the fields already set match the packed content.
+		// Preserve a complete signed digest as-is; compute an absent one from the packed
+		// content. A partially specified digest is rejected (a resource digest is complete
+		// or absent) rather than inferred.
 		if !internaldigest.IsComplete(typed.Digest) {
+			if !internaldigest.IsEmpty(typed.Digest) {
+				return fmt.Errorf("incomplete artifact digest %+v: a digest must be complete or absent", *typed.Digest)
+			}
 			if typed.Digest == nil {
 				typed.Digest = &descriptor.Digest{}
 			}
-			if err := internaldigest.Complete(typed.Digest, desc.Digest, opts.NormalisationAlgorithm); err != nil {
-				return fmt.Errorf("failed to complete artifact digest: %w", err)
+			if err := internaldigest.Apply(typed.Digest, desc.Digest, opts.NormalisationAlgorithm); err != nil {
+				return fmt.Errorf("failed to compute artifact digest: %w", err)
 			}
 		}
 	}

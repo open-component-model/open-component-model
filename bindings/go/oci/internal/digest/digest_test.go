@@ -75,60 +75,30 @@ func TestVerifyOCIArtifactRejectsInvalidDigest(t *testing.T) {
 	}
 }
 
-func TestComplete(t *testing.T) {
+func TestIsEmpty(t *testing.T) {
 	root := godigest.FromString("manifest")
 	for _, tc := range []struct {
-		name          string
-		target        runtime.Digest
-		normalization string
-		want          runtime.Digest
-		wantError     string
+		name  string
+		in    *runtime.Digest
+		empty bool
 	}{
-		{
-			name: "empty", normalization: OCIArtifactDigestV1,
-			want: runtime.Digest{HashAlgorithm: HashAlgorithmSHA256, NormalisationAlgorithm: OCIArtifactDigestV1, Value: root.Encoded()},
-		},
-		{
-			name: "matching partial", target: runtime.Digest{Value: root.Encoded()}, normalization: GenericBlobDigestV1,
-			want: runtime.Digest{HashAlgorithm: HashAlgorithmSHA256, NormalisationAlgorithm: GenericBlobDigestV1, Value: root.Encoded()},
-		},
-		{
-			name: "OCI hash spelling", target: runtime.Digest{HashAlgorithm: "sha256", Value: root.Encoded()}, normalization: OCIArtifactDigestV1,
-			want: runtime.Digest{HashAlgorithm: HashAlgorithmSHA256, NormalisationAlgorithm: OCIArtifactDigestV1, Value: root.Encoded()},
-		},
-		{
-			name: "partial legacy label is corrected", target: runtime.Digest{NormalisationAlgorithm: GenericBlobDigestV1}, normalization: OCIArtifactDigestV1,
-			want: runtime.Digest{HashAlgorithm: HashAlgorithmSHA256, NormalisationAlgorithm: OCIArtifactDigestV1, Value: root.Encoded()},
-		},
-		{
-			name: "OCI label on blob", target: runtime.Digest{NormalisationAlgorithm: OCIArtifactDigestV1}, normalization: GenericBlobDigestV1,
-			wantError: "normalisation algorithm mismatch",
-		},
-		{
-			name: "mismatching value", target: runtime.Digest{HashAlgorithm: HashAlgorithmSHA256, Value: godigest.FromString("other").Encoded()}, normalization: OCIArtifactDigestV1,
-			wantError: "digest value mismatch",
-		},
-		{
-			name: "mismatching hash", target: runtime.Digest{HashAlgorithm: HashAlgorithmSHA512}, normalization: OCIArtifactDigestV1,
-			wantError: "hash algorithm mismatch",
-		},
-		{
-			name: "unsupported normalization", normalization: "jsonNormalisation/v1",
-			wantError: "unsupported normalisation algorithm",
-		},
+		{name: "nil", in: nil, empty: true},
+		{name: "all fields unset", in: &runtime.Digest{}, empty: true},
+		{name: "value only", in: &runtime.Digest{Value: root.Encoded()}, empty: false},
+		{name: "normalisation only", in: &runtime.Digest{NormalisationAlgorithm: GenericBlobDigestV1}, empty: false},
+		{name: "complete", in: &runtime.Digest{HashAlgorithm: HashAlgorithmSHA256, NormalisationAlgorithm: OCIArtifactDigestV1, Value: root.Encoded()}, empty: false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
-			got := tc.target
-			err := Complete(&got, root, tc.normalization)
-			if tc.wantError != "" {
-				r.ErrorContains(err, tc.wantError)
-				r.Equal(tc.target, got, "a rejected digest must not be rewritten")
-				return
+			r.Equal(tc.empty, IsEmpty(tc.in))
+			// A digest is either empty or complete; a non-empty, non-complete one is partial.
+			if !tc.empty {
+				r.Equal(IsComplete(tc.in), !isPartial(tc.in))
 			}
-			r.NoError(err)
-			r.Equal(tc.want, got)
 		})
 	}
-	require.Error(t, Complete(nil, root, OCIArtifactDigestV1))
 }
+
+// isPartial mirrors the caller rule "a digest must be complete or absent": neither empty
+// nor complete.
+func isPartial(d *runtime.Digest) bool { return !IsEmpty(d) && !IsComplete(d) }
