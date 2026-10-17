@@ -29,6 +29,7 @@ task tidy                    # go mod tidy across all modules
 task tools:lint              # golangci-lint on all modules
 task tools:lint -- --fix     # auto-fix lint findings
 task bindings/go/cli:build   # build ocm CLI into bindings/go/cli/tmp/bin/ocm
+task bindings/go:test/wine -- -run TestFoo   # unit tests as windows binaries under Wine (WINE=<path> if not on PATH)
 ```
 
 Controller e2e (own flow): `task bindings/go/kubernetes/controller:test/e2e -- --focus=<scenario>` (Ginkgo CLI, 4 parallel processes; `--procs=1` for serial), with Kind setup/teardown under the same `test/e2e/*` tasks.
