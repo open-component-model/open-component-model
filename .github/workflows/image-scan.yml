@@ -107,10 +107,7 @@ jobs:
             artifact: ${{ inputs.cli_artifact }}
             oci_tar: oci/cli.tar
             containerfile: bindings/go/cli/Containerfile
-            executables: >-
-              /usr/local/bin/cosign
-              /usr/bin/gpg /usr/bin/gpg-agent /usr/bin/gpgconf /usr/bin/gpg-connect-agent /usr/bin/dirmngr
-            shared_libraries: true
+            executables: /usr/local/bin/cosign
           - image: cli-slim
             artifact: ${{ inputs.cli_artifact }}
             oci_tar: oci/cli-slim.tar
@@ -119,6 +116,7 @@ jobs:
             artifact: ${{ inputs.controller_artifact }}
             oci_tar: controller.tar
             containerfile: bindings/go/kubernetes/controller/Dockerfile
+            executables: /usr/local/bin/cosign
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
