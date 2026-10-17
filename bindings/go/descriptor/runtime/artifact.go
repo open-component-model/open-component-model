@@ -18,6 +18,8 @@ type Artifact interface {
 	GetType() string
 	// GetAccess returns the access information
 	GetAccess() runtime.Typed
+	// SetAccess sets the access information
+	SetAccess(runtime.Typed)
 }
 
 func (s *Source) GetElementMeta() ElementMeta {
@@ -32,6 +34,10 @@ func (s *Source) GetAccess() runtime.Typed {
 	return s.Access
 }
 
+func (s *Source) SetAccess(access runtime.Typed) {
+	s.Access = access
+}
+
 func (r *Resource) GetElementMeta() ElementMeta {
 	return r.ElementMeta
 }
@@ -42,6 +48,10 @@ func (r *Resource) GetType() string {
 
 func (r *Resource) GetAccess() runtime.Typed {
 	return r.Access
+}
+
+func (r *Resource) SetAccess(access runtime.Typed) {
+	r.Access = access
 }
 
 // FindArtifactsByIdentity returns the artifacts from candidates whose identity
