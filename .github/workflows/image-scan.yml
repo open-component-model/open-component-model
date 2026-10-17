@@ -8,7 +8,8 @@ on:
   # as tailored in .github/stig, and against the CIS Docker Benchmark (dockle).
   # The controller Helm chart, rendered with its opt-in NetworkPolicy, is scanned
   # against the CIS Kubernetes Benchmark (Trivy config) and the NSA/CISA and MITRE
-  # frameworks (Kubescape), with accepted findings in .github/benchmarks.
+  # frameworks (Kubescape), with accepted findings in .github/benchmarks. The
+  # results are then mapped to BSI IT-Grundschutz requirements (.github/benchmarks/bsi).
   workflow_call:
     inputs:
       ref:
@@ -301,6 +302,10 @@ jobs:
 
       - name: CIS Kubernetes Benchmark (Trivy config)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        env:
+          # Passed checks too, so the BSI report can tell a passed check from one
+          # that was not run. The gate below only counts failures.
+          TRIVY_INCLUDE_NON_FAILURES: "true"
         with:
           scan-type: config
           scan-ref: tmp/chart-scan/rendered
@@ -341,4 +346,61 @@ jobs:
         with:
           name: chart-scan
           path: tmp/chart-scan
+          if-no-files-found: ignore
+
+  # Maps the reports of the jobs above to BSI IT-Grundschutz SYS.1.6 and
+  # APP.4.4 requirements (.github/benchmarks/bsi). Fails on a failed mapped
+  # rule and on a mapped rule that no scan evaluated.
+  bsi:
+    name: BSI IT-Grundschutz
+    needs: [scan, chart]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-26.04-arm
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          sparse-checkout: |
+            .github/benchmarks
+            .github/scripts
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version-file: .github/scripts/package.json
+
+      - name: Install dependencies
+        working-directory: .github/scripts
+        run: npm ci
+
+      - name: Download image reports
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          pattern: image-scan-*
+          path: tmp/reports
+
+      - name: Download chart reports
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: chart-scan
+          path: tmp/reports/chart-scan
+
+      - name: BSI report
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        env:
+          REPORTS_DIR: tmp/reports
+          OUTPUT: tmp/reports/bsi-it-grundschutz.json
+        with:
+          script: |
+            const script = await import('${{ github.workspace }}/.github/scripts/bsi-report.js');
+            await script.default({ core });
+
+      - name: Upload report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: bsi-it-grundschutz
+          path: tmp/reports/bsi-it-grundschutz.json
           if-no-files-found: ignore

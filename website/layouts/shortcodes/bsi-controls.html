@@ -1,0 +1,41 @@
+{{- $name := .Get 0 -}}
+{{- if not $name -}}
+  {{- errorf "bsi-controls shortcode: missing required positional parameter (control file name, e.g. \"sys-1-6\") at %s" .Position -}}
+{{- end -}}
+{{- $module := index (hugo.Data).benchmarks.bsi $name -}}
+{{- if not $module -}}
+  {{- errorf "bsi-controls shortcode: data file benchmarks/bsi/%s.yaml not found — check the data mount in module.yaml" $name -}}
+{{- end -}}
+{{- $levels := dict "basic" "B" "standard" "S" "elevated" "H" -}}
+<table>
+<thead><tr><th>Requirement</th><th>OCM provides</th><th>Operator responsibility / gap</th><th>Checked by</th></tr></thead>
+<tbody>
+  {{- range $module.controls }}
+  {{- $rules := slice -}}
+  {{- range .rules -}}
+    {{- $parts := split . ":" -}}
+    {{- $scanner := index $parts 0 -}}
+    {{- $check := index $parts 1 -}}
+    {{- $link := "" -}}
+    {{- if eq $scanner "trivy" -}}
+      {{- $link = printf "https://avd.aquasec.com/misconfig/%s" (lower $check) -}}
+    {{- else if eq $scanner "kubescape" -}}
+      {{- $link = printf "https://hub.armosec.io/docs/%s" (lower $check) -}}
+    {{- else if eq $scanner "dockle" -}}
+      {{- $link = printf "https://github.com/goodwithtech/dockle/blob/master/CHECKPOINT.md#%s" (lower $check) -}}
+    {{- end -}}
+    {{- if $link -}}
+      {{- $rules = $rules | append (printf "<a href=\"%s\"><code>%s</code></a>" $link $check) -}}
+    {{- else -}}
+      {{- $rules = $rules | append (printf "<code>%s</code>" $check) -}}
+    {{- end -}}
+  {{- end }}
+<tr>
+<td><strong>{{ .id }}</strong> {{ .title }} ({{ index $levels .level }}){{ with .gspp }}<br>Grundschutz++: {{ delimit . ", " }}{{ end }}</td>
+<td>{{ with .ocm }}{{ . | markdownify }}{{ else }}—{{ end }}</td>
+<td>{{ with .operator }}{{ . | markdownify }}{{ else }}—{{ end }}</td>
+<td>{{ if $rules }}{{ .status }}: {{ delimit $rules ", " | safeHTML }}{{ else }}{{ .status }}{{ end }}</td>
+</tr>
+  {{- end }}
+</tbody>
+</table>
