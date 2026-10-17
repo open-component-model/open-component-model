@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	nethttp "net/http"
+	"slices"
 
 	"ocm.software/open-component-model/bindings/go/http/internal/retry"
 )
@@ -39,6 +40,12 @@ func cloneTransportWithTLS(rt nethttp.RoundTripper, apply func(*tls.Config)) (ne
 		if c.TLSClientConfig == nil {
 			c.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12}
 		}
+		// Transport.Clone copies the TLS configuration shallowly; give apply its
+		// own certificate pool and list so it cannot change the original client.
+		if c.TLSClientConfig.RootCAs != nil {
+			c.TLSClientConfig.RootCAs = c.TLSClientConfig.RootCAs.Clone()
+		}
+		c.TLSClientConfig.Certificates = slices.Clone(c.TLSClientConfig.Certificates)
 		apply(c.TLSClientConfig)
 		return c, nil
 	case *retry.Transport:
