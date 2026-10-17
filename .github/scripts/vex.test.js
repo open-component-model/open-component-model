@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { buildVex, parseJsonStream } from "./vex.js";
+import { buildVex, importAttested, normalizeGoPurl, parseJsonStream } from "./vex.js";
 
 const meta = { id: "urn:test", author: "test", timestamp: "2026-10-03T00:00:00Z" };
 
@@ -45,5 +45,46 @@ describe("buildVex", () => {
 
     it("refuses output that names no main module", () => {
         assert.throws(() => buildVex([{ config: {} }], meta), /no main module/);
+    });
+});
+
+describe("normalizeGoPurl", () => {
+    it("decodes the module path govulncheck percent-encodes, keeping version and qualifiers", () => {
+        assert.equal(normalizeGoPurl("pkg:golang/golang.org%2Fx%2Fcrypto@v0.58.0"), "pkg:golang/golang.org/x/crypto@v0.58.0");
+        assert.equal(normalizeGoPurl("pkg:golang/stdlib@v1.27.2?arch=amd64"), "pkg:golang/stdlib@v1.27.2?arch=amd64");
+        assert.equal(normalizeGoPurl("pkg:oci/cosign"), "pkg:oci/cosign");
+    });
+});
+
+describe("importAttested", () => {
+    // govulncheck -format openvex output as the cosign release attests it
+    const verified = [{
+        verificationResult: {
+            signature: { certificate: { buildSignerURI: "https://github.com/o/cosign/.github/workflows/release.yml@refs/heads/x" } },
+            statement: {
+                predicate: {
+                    statements: [
+                        { vulnerability: { name: "GO-1" }, products: [{ "@id": "Unknown Product", subcomponents: [{ "@id": "pkg:golang/golang.org%2Fx%2Fcrypto@v0.58.0" }] }], status: "not_affected", justification: "vulnerable_code_not_present" },
+                        { vulnerability: { name: "GO-2" }, products: [{ "@id": "Unknown Product" }], status: "not_affected", justification: "vulnerable_code_not_present" },
+                    ],
+                },
+            },
+        },
+    }];
+    const target = { product: "pkg:golang/github.com/sigstore/cosign/v3", subject: "ghcr.io/o/cosign@sha256:abc" };
+
+    it("scopes statements to the binary's main module with scanner-style purls and aliases", async () => {
+        const { statements } = await importAttested(verified, target, async (id) => (id === "GO-1" ? ["CVE-1"] : []));
+        assert.equal(statements.length, 1);
+        const [s] = statements;
+        assert.deepEqual(s.vulnerability, { "@id": "https://pkg.go.dev/vuln/GO-1", name: "GO-1", aliases: ["CVE-1"] });
+        assert.deepEqual(s.products, [{ "@id": target.product, subcomponents: [{ "@id": "pkg:golang/golang.org/x/crypto@v0.58.0" }] }]);
+        assert.deepEqual([s.status, s.justification], ["not_affected", "vulnerable_code_not_present"]);
+        assert.match(s.status_notes, /ghcr\.io\/o\/cosign@sha256:abc, signed by https:\/\/github\.com\/o\/cosign/);
+    });
+
+    it("skips statements that name no module instead of covering the whole binary", async () => {
+        const { skipped } = await importAttested(verified, target, async () => []);
+        assert.deepEqual(skipped, ["GO-2"]);
     });
 });

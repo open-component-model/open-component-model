@@ -39,7 +39,9 @@ jobs:
   # govulncheck knows whether vulnerable code is reachable; image scanners only
   # see module versions. The OpenVEX document carries govulncheck's verdicts to
   # Trivy, so the image scan reports the same findings as govulncheck and none
-  # that it already ruled out.
+  # that it already ruled out. cosign is not built from this repository; its
+  # release attests the verdicts of its own govulncheck run, which are verified
+  # and merged in, scoped to the cosign binary.
   vex:
     name: OpenVEX
     runs-on: ubuntu-26.04-arm
@@ -55,6 +57,25 @@ jobs:
             .github/scripts
             .env
           persist-credentials: false
+
+      # The cosign image both images copy cosign from (pinned by digest in the CLI
+      # Containerfile; pin_sync_test.go keeps the controller Dockerfile on the same
+      # release). Only an attestation signed by the cosign release workflow is used.
+      - name: Fetch cosign OpenVEX attestation
+        id: cosign
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          ref="$(sed -n 's/^FROM \(ghcr\.io\/open-component-model\/cosign\):[^@ ]*\(@sha256:[a-f0-9]\{64\}\) AS cosign$/\1\2/p' bindings/go/cli/Containerfile)"
+          [[ -n "$ref" ]] || { echo "::error::no digest-pinned cosign stage in bindings/go/cli/Containerfile"; exit 1; }
+          mkdir -p tmp/vex
+          gh attestation verify "oci://${ref}" --bundle-from-oci \
+            --repo open-component-model/cosign \
+            --signer-workflow open-component-model/cosign/.github/workflows/ocm-release.yml \
+            --predicate-type https://openvex.dev/ns \
+            --format json > tmp/vex/cosign-attestation.json
+          echo "ref=${ref}" >> "$GITHUB_OUTPUT"
 
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
@@ -76,6 +97,10 @@ jobs:
         env:
           GOVULNCHECK_JSON: tmp/vex/govulncheck.json
           VEX_OUTPUT: tmp/vex/ocm.openvex.json
+          ATTESTED_VEX: tmp/vex/cosign-attestation.json
+          # Main module of the cosign binary, as scanners see it in its build information.
+          ATTESTED_VEX_PRODUCT: pkg:golang/github.com/sigstore/cosign/v3
+          ATTESTED_VEX_SUBJECT: ${{ steps.cosign.outputs.ref }}
         with:
           script: |
             const script = await import('${{ github.workspace }}/.github/scripts/vex.js');
@@ -174,11 +199,10 @@ jobs:
             await script.default({ core });
 
       # Reports, but does not fail on, vulnerabilities the OpenVEX document does
-      # not mark as not_affected. Its statements apply to OCM's own binary (the
-      # entrypoint) only, so what remains there is what govulncheck reports as
-      # reachable; findings in the other declared executables (cosign) were not
-      # analyzed by govulncheck. They show up as warning annotations and in the
-      # job summary.
+      # not mark as not_affected. Each statement applies to one binary: OCM's own
+      # (the entrypoint), from govulncheck, or cosign, from its release's attested
+      # VEX. What remains in OCM's binary is reachable per govulncheck. They show
+      # up as warning annotations and in the job summary.
       # Nothing is uploaded to code scanning, so Dependabot alerts stay the only
       # alert surface.
       - name: Vulnerability scan
@@ -205,7 +229,7 @@ jobs:
           [[ -s "$report" ]] || { echo "::error::Trivy wrote no report for ${IMAGE} (linux/${ARCH})"; exit 1; }
           vulns="$(jq -c --arg other "${EXECUTABLES:-}" '($other | split(" ") | map(select(. != ""))) as $other
             | [.Results[]? | .Target as $t | .Vulnerabilities[]?
-            | {binary: $t, verdict: (if ($other | index("/" + $t)) then "not analyzed (not built by OCM)" else "reachable (govulncheck)" end),
+            | {binary: $t, verdict: (if ($other | index("/" + $t)) then "not ruled out by its attested VEX" else "reachable (govulncheck)" end),
                id: .VulnerabilityID, pkg: .PkgName, installed: .InstalledVersion, fixed: (.FixedVersion // ""), severity: .Severity, title: (.Title // "")}]' "$report")"
           count="$(jq length <<< "$vulns")"
           echo "count=${count}" >> "$GITHUB_OUTPUT"
@@ -215,7 +239,7 @@ jobs:
             if [[ "$count" -eq 0 ]]; then
               echo "No vulnerabilities beyond those the OpenVEX document marks as not_affected."
             else
-              echo "⚠️ ${count} vulnerabilities (do not block publishing). The OpenVEX document from govulncheck covers OCM's own binary; findings there are reachable:"
+              echo "⚠️ ${count} vulnerabilities (do not block publishing). Findings in OCM's own binary are reachable per govulncheck; findings in other binaries are not ruled out by the OpenVEX their release attests:"
               echo
               echo "| Binary | Verdict | ID | Severity | Package | Installed | Fixed | Title |"
               echo "| --- | --- | --- | --- | --- | --- | --- | --- |"
