@@ -47,7 +47,7 @@ ocm transfer cv <ctf> <registry>
 
 Without the OCI uploader, the OCI artifact does not exist at the reference the
 RGD expects. After transfer, `resource.access.toOCI()` exposes `registry`,
-`repository`, and `digest` fields that `rgd.yaml` reads into the
+`repository`, and `digest` fields that `kro-rgd.yaml` reads into the
 `OCIRepository` and ArgoCD `Application`.
 
 ## Editing the kustomize manifests

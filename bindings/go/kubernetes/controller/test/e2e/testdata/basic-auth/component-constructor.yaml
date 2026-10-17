@@ -15,4 +15,4 @@ components:
         version: "1.0.0"
         input:
           type: file
-          path: ./rgd.yaml
+          path: ./kro-rgd.yaml

@@ -1,13 +1,10 @@
 # Examples
 
-This directory contains end-to-end examples demonstrating how to use the OCM Kubernetes Controller Toolkit.
-Each example is self-contained: it includes a component definition (`component-constructor.yaml`), a bootstrap
-manifest (`bootstrap.yaml`), and — where deployment is needed — a kro `ResourceGraphDefinition` (`rgd.yaml`)
-and an instance manifest (`instance.yaml`).
+This directory contains end-to-end examples demonstrating how to use the OCM Kubernetes Controller Toolkit. Each example is self-contained: it includes a component definition (`component-constructor.yaml`), a bootstrap manifest (`bootstrap.yaml`), and a kro `ResourceGraphDefinition` (`kro-rgd.yaml`) and an instance manifest (`kro-instance.yaml`).
 
 ## Prerequisites
 
-A local Kind cluster with kro, FluxCD, and ArgoCD installed. Use the Taskfile to set it up:
+A local Kind cluster with kro, FluxCD, ArgoCD, and Crossplane installed. Use the Taskfile to set it up:
 
 ```bash
 task test/e2e/setup/local
@@ -35,9 +32,6 @@ All examples except `helm-simple-nested-status` deploy with the `NamespacedDeplo
 permissions of a service account defined in the example's bootstrap. The RGD examples bind that service account
 to a `ClusterRole` for `ResourceGraphDefinitions`, as RGDs are cluster-scoped. `helm-simple-nested-status` keeps
 the cluster-scoped `Deployer`, which is discouraged because it applies with the controller's own permissions.
-
-All examples that use FluxCD and ArgoCD include **both deployer blocks** in the same `rgd.yaml`. kro
-instantiates both; on a cluster where only one is installed, remove the block for the absent deployer.
 
 ---
 
@@ -148,7 +142,7 @@ Like `kustomize-simple`, but adds image localization and configuration via JSON 
 > **Note on kro + ArgoCD kustomize patches:** kro cannot parse multi-line YAML block scalars that contain
 > `${…}` CEL expression references inside ArgoCD `kustomize.patches`. The workaround is to express those
 > patches as inline JSON arrays (e.g. `'[{"op":"replace",…}]'`). Static patches (no CEL expressions) can
-> continue to use normal YAML block scalars. See the `rgd.yaml` in this example for the pattern.
+> continue to use normal YAML block scalars. See the `kro-rgd.yaml` in this example for the pattern.
 
 ---
 

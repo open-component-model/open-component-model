@@ -58,7 +58,7 @@ Take a look at our [installation guide](https://ocm.software/docs/getting-starte
 The OCM Kubernetes Controller Toolkit is deployer-agnostic: the kro.run `ResourceGraphDefinition` (RGD) you write determines
 which tool reconciles the final workload. Both **FluxCD** and **ArgoCD** are supported and tested.
 
-See the working examples under [`examples/`](./examples/) — each `rgd.yaml` contains both a FluxCD and an
+See the working examples under [`examples/`](./examples/) — each `kro-rgd.yaml` contains both a FluxCD and an
 ArgoCD deployer block side by side.
 
 
