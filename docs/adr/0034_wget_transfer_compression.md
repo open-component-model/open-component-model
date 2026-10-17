@@ -130,8 +130,10 @@ flowchart TD
 #### Contract
 
 * `download.Request.CompressTransfer` enables the policy; the wget input sets it.
-* `download.Blob.Size` reports the content size or `blob.SizeUnknown`; `download.Blob.Decoded` reports whether
-  the first response was decoded.
+* Every reader resolves its own response. Metadata learned before the first read comes from a `HEAD` request
+  accepting no compression, so `download.Blob.Size` reports the content size or `blob.SizeUnknown`.
+* `download.AdvertisedDigest` is told whether the response was decoded, so a `Content-Digest` over the
+  transferred bytes never pins the content digest.
 * A reader of a decoded response hands the verifier digests of both the content and the transferred bytes.
 
 ## Pros and Cons of the Options

@@ -12,7 +12,7 @@ import (
 
 // resolve decides how resp's body maps to the content. Without compressTransfer
 // the body is the content. Otherwise the content is what a request accepting no
-// compression yields (see docs/adr/0031_wget_transfer_compression.md): a
+// compression yields (see docs/adr/0034_wget_transfer_compression.md): a
 // Content-Encoding the server keeps for an identity request is part of the
 // content, a negotiated gzip encoding is decoded.
 func (f *fetcher) resolve(r *http.Request, resp *http.Response) (representation, error) {

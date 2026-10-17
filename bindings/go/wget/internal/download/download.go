@@ -55,7 +55,7 @@ type Request struct {
 	// CompressTransfer makes compression a transport concern: the request accepts
 	// gzip (unless Header sets Accept-Encoding), and the blob yields what a request
 	// accepting no compression would, decoding negotiated gzip and keeping a content
-	// coding that is part of the content (docs/adr/0031_wget_transfer_compression.md).
+	// coding that is part of the content (docs/adr/0034_wget_transfer_compression.md).
 	// When unset, the response bytes are returned as served.
 	CompressTransfer bool
 }

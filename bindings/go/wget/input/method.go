@@ -85,7 +85,7 @@ func (i *InputMethod) GetResourceCredentialConsumerIdentity(_ context.Context, r
 //
 // Compression is a transport concern: gzip is requested, and the stored content
 // and its digest are what a request accepting no compression would return
-// (docs/adr/0031_wget_transfer_compression.md). Negotiated gzip is decoded, while
+// (docs/adr/0034_wget_transfer_compression.md). Negotiated gzip is decoded, while
 // a Content-Encoding the server keeps for uncompressed requests is part of the
 // content. Content-Digest headers, which cover the transferred bytes, are verified
 // against those but never pin the content digest.
