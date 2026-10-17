@@ -38,6 +38,7 @@ on:
       - '.github/scripts/vex.js'
       - '.github/benchmarks/**'
       - '.github/scripts/chart-benchmarks.js'
+      - '.github/scripts/bsi-report.js'
   workflow_call:
     inputs:
       ref:

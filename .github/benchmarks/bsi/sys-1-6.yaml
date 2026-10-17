@@ -1,0 +1,270 @@
+# BSI IT-Grundschutz SYS.1.6 Containerisation (Edition 2022), mapped to the
+# checks the image-scan workflow runs on every build. Modeled on the
+# ComplianceAsCode control files (controls/bsi_sys_1_6.yml).
+#
+# status describes the part OCM can influence, not the requirement as a whole:
+#   automated  every measure OCM provides for the requirement is checked by the rules
+#   partial    the rules check some of OCM's measures; the rest is described in ocm
+#   manual     no automated check; ocm and operator describe who does what
+# rules: <scanner>:<check>, evaluated by .github/scripts/bsi-report.js
+#   stig       OCM supplement rule (ocm_rule_*) or DISA GPOS SRG rule (SV-*), all images
+#   dockle     CIS Docker Benchmark check (dockle), all images
+#   trivy      Trivy Kubernetes check (KSV-*) on the rendered controller chart
+#   kubescape  Kubescape NSA/CISA or MITRE control (C-*) on the rendered controller chart
+# gspp: Grundschutz++ controls the BSI maps this requirement to (Stand-der-Technik-Bibliothek,
+#   control_layer/Mappings/IT-GS2023-zu-GSpp), where a mapping exists.
+# This file is also rendered on the website (bsi-it-grundschutz.md, shortcode bsi-controls).
+module: SYS.1.6
+title: Containerisation
+edition: "2022"
+source: https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2022/07_SYS_IT_Systeme/SYS_1_6_Containerisierung_Edition_2022.pdf
+controls:
+  - id: SYS.1.6.A1
+    title: Planning the use of containers
+    level: basic
+    status: manual
+    operator: Entirely the operator's planning task.
+
+  - id: SYS.1.6.A2
+    title: Planning the management of containers
+    level: basic
+    status: manual
+    operator: Operator plans lifecycle, management tooling, and admin processes.
+
+  - id: SYS.1.6.A3
+    title: Secure deployment of containerized IT systems
+    level: basic
+    status: manual
+    ocm: "The chart sets liveness and readiness probes with configurable intervals (`values.yaml`)."
+    operator: Operator verifies isolation, virtual networking, and monitors performance.
+
+  - id: SYS.1.6.A4
+    title: Planning the deployment and distribution of images
+    level: basic
+    status: manual
+    ocm: "OCM images are published to `ghcr.io` with digest-pinned tags. The release pipeline builds, scans, and signs every image before publishing."
+    operator: Operator documents their image distribution process and controls access to the registry.
+
+  - id: SYS.1.6.A5
+    title: Separation of the administration and access networks for containers
+    level: basic
+    status: partial
+    gspp: [ARCH.2.2.7, ARCH.2.3]
+    ocm: The chart includes an opt-in `NetworkPolicy` (`manager.networkPolicy.enabled`, default `false`). When enabled, it allows ingress to the health-probe port (and the metrics port when metrics are enabled), and defaults egress to DNS (UDP/TCP 53) and HTTPS/Kubernetes API (TCP 443, 6443). Egress rules are replaceable via `manager.networkPolicy.egress`; extra ingress rules can be added via `manager.networkPolicy.ingress`. The scan renders the chart with the policy enabled.
+    operator: Operator must enable the policy, tighten the rules for their environment, and use a CNI plugin that enforces `NetworkPolicy`.
+    rules:
+      - kubescape:C-0030
+      - trivy:KSV-0038
+
+  - id: SYS.1.6.A6
+    title: Use of secure images
+    level: basic
+    status: partial
+    ocm: All images are built `FROM scratch` with only static binaries and a CA bundle from a digest-pinned Garden Linux FIPS base image. The default CLI image and the controller image add `cosign` from the digest-pinned OCM `cosign` image. No shell, no package manager, no setuid binaries. The chart pins the image by digest. Images are scanned for vulnerabilities (Trivy with govulncheck's OpenVEX) on every build; findings are reported but do not block.
+    operator: Operator must track OCM releases and apply updates.
+    rules:
+      - stig:ocm_rule_minimal_rootfs
+      - stig:ocm_rule_no_shared_libraries
+      - stig:ocm_rule_ca_bundle
+      - dockle:CIS-DI-0008
+      - dockle:DKL-DI-0006
+      - trivy:KSV-0013
+      - trivy:KSV-0125
+
+  - id: SYS.1.6.A7
+    title: Persistence of container logging data
+    level: basic
+    status: automated
+    ocm: The controller logs to stdout/stderr (JSON by default). No log files are written inside the container.
+    operator: Operator collects logs externally (e.g. a cluster-level log aggregator).
+    rules:
+      - stig:ocm_rule_no_local_logs
+
+  - id: SYS.1.6.A8
+    title: Secure storage of access data for containers
+    level: basic
+    status: partial
+    ocm: The controller reads registry credentials and signing keys from Kubernetes Secrets referenced in custom resources. No credentials are baked into images.
+    operator: Operator manages Secret lifecycle, encryption at rest (etcd encryption), and RBAC. The controller's `ClusterRole` has cluster-wide get/list/watch on Secrets, see [RBAC scope](#rbac-scope).
+    rules:
+      - dockle:CIS-DI-0010
+      - kubescape:C-0012
+      - kubescape:C-0015
+      - trivy:KSV-0041
+      - trivy:KSV-0113
+
+  - id: SYS.1.6.A9
+    title: Suitability for container operation
+    level: standard
+    status: partial
+    ocm: All binaries are statically linked, require no shared libraries, and handle `SIGTERM` gracefully. The chart sets `terminationGracePeriodSeconds` to 10.
+    operator: Operator documents suitability assessment.
+    rules:
+      - stig:ocm_rule_no_shared_libraries
+
+  - id: SYS.1.6.A10
+    title: Policy for images and container operations
+    level: standard
+    status: manual
+    operator: Operator creates and enforces the image policy.
+
+  - id: SYS.1.6.A11
+    title: Only one service per container
+    level: standard
+    status: automated
+    gspp: [ARCH.7.1]
+    ocm: Each image has one entrypoint (`/ocm` or `/manager`). `ocm` and the manager start `cosign` only as a subprocess for Sigstore signing and verification; the scan fails on any other executable.
+    rules:
+      - stig:ocm_rule_minimal_rootfs
+
+  - id: SYS.1.6.A12
+    title: Distribution of secure images
+    level: standard
+    status: manual
+    ocm: OCM images are signed (Sigstore `cosign` keyless) and carry SLSA provenance, verified in the release workflow before promotion. The Helm chart pins the image by digest in `values.yaml`.
+    operator: Operator verifies signatures before deployment and documents trusted sources.
+
+  - id: SYS.1.6.A13
+    title: Release of images
+    level: standard
+    status: manual
+    ocm: The release pipeline runs unit tests, integration tests, and the image scan, which gates publishing, and signs before publishing.
+    operator: Operator integrates OCM image releases into their own approval workflow.
+
+  - id: SYS.1.6.A14
+    title: Updating images
+    level: standard
+    status: manual
+    ocm: Base images are digest-pinned; updates are tracked by Renovate and produce a new release.
+    operator: Operator plans patch and change management for OCM updates.
+
+  - id: SYS.1.6.A15
+    title: Limitation of resources per container
+    level: standard
+    status: automated
+    ocm: The chart sets default CPU and memory requests and limits (100m / 256Mi request, 500m / 512Mi limit).
+    operator: Operator tunes limits and defines behavior on exceeded quotas.
+    rules:
+      - trivy:KSV-0011
+      - trivy:KSV-0015
+      - trivy:KSV-0016
+      - trivy:KSV-0018
+      - kubescape:C-0270
+      - kubescape:C-0271
+
+  - id: SYS.1.6.A16
+    title: Remote administrative access to containers
+    level: standard
+    status: automated
+    ocm: No shell, no SSH, no remote admin port in any image. The chart grants no exec or attach on pods.
+    operator: "Operator ensures no `kubectl exec` access beyond break-glass."
+    rules:
+      - stig:ocm_rule_minimal_rootfs
+      - kubescape:C-0042
+      - trivy:KSV-0053
+      - trivy:KSV-0054
+
+  - id: SYS.1.6.A17
+    title: Execution of containers without privileges
+    level: standard
+    status: automated
+    ocm: All images run as non-root user `65532`. The chart sets `runAsNonRoot`, `allowPrivilegeEscalation` to false, and drops all capabilities.
+    operator: Operator secures the container runtime and node.
+    rules:
+      - dockle:CIS-DI-0001
+      - dockle:CIS-DI-0008
+      - trivy:KSV-0001
+      - trivy:KSV-0003
+      - trivy:KSV-0004
+      - trivy:KSV-0005
+      - trivy:KSV-0012
+      - trivy:KSV-0017
+      - trivy:KSV-0022
+      - trivy:KSV-0106
+      - trivy:KSV-0118
+      - kubescape:C-0013
+      - kubescape:C-0016
+      - kubescape:C-0046
+      - kubescape:C-0057
+
+  - id: SYS.1.6.A18
+    title: Application services accounts
+    level: standard
+    status: automated
+    ocm: User and group `65532` have no host-level privileges.
+    operator: Operator maps UIDs if host integration is needed.
+    rules:
+      - trivy:KSV-0020
+      - trivy:KSV-0021
+      - trivy:KSV-0105
+      - trivy:KSV-0116
+
+  - id: SYS.1.6.A19
+    title: Integrating data stores into containers
+    level: standard
+    status: automated
+    ocm: The chart mounts two `emptyDir` volumes (`/data`, `/tmp`) and, when the webhook is enabled, a read-only Secret volume for TLS certificates. No hostPath volumes.
+    operator: Operator controls persistent volumes and network storage.
+    rules:
+      - trivy:KSV-0006
+      - trivy:KSV-0023
+      - trivy:KSV-0028
+      - trivy:KSV-0121
+      - kubescape:C-0045
+      - kubescape:C-0048
+
+  - id: SYS.1.6.A20
+    title: Securing configuration data
+    level: standard
+    status: manual
+    gspp: [TEST.2.1]
+    ocm: The Helm chart and all Kubernetes manifests are version-controlled in the OCM repository.
+    operator: Operator versions and audits their own values overrides.
+
+  - id: SYS.1.6.A21
+    title: Advanced security policies
+    level: elevated
+    status: partial
+    ocm: The chart sets `seccompProfile` to `RuntimeDefault` and no custom SELinux options, sysctls, or /proc masks.
+    operator: Operator adds AppArmor/SELinux profiles and network-level MAC if required.
+    rules:
+      - trivy:KSV-0025
+      - trivy:KSV-0026
+      - trivy:KSV-0027
+      - trivy:KSV-0030
+      - trivy:KSV-0104
+      - kubescape:C-0055
+
+  - id: SYS.1.6.A22
+    title: Provision for examinations
+    level: elevated
+    status: manual
+    operator: Entirely the operator's responsibility.
+
+  - id: SYS.1.6.A23
+    title: Container immutability
+    level: elevated
+    status: automated
+    ocm: The root filesystem is read-only; only `emptyDir` mounts are writable.
+    rules:
+      - trivy:KSV-0014
+      - kubescape:C-0017
+
+  - id: SYS.1.6.A24
+    title: Host-based intrusion detection
+    level: elevated
+    status: manual
+    gspp: [DET.4.6]
+    operator: Entirely the operator's responsibility.
+
+  - id: SYS.1.6.A25
+    title: High availability of containerised applications
+    level: elevated
+    status: manual
+    operator: Entirely the operator's responsibility.
+
+  - id: SYS.1.6.A26
+    title: Further isolation and encapsulation of containers
+    level: elevated
+    status: manual
+    operator: Entirely the operator's responsibility.

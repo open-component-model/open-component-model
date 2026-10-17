@@ -1,0 +1,193 @@
+# BSI IT-Grundschutz APP.4.4 Kubernetes (Edition 2023), mapped to the checks
+# the image-scan workflow runs on every build. Field and status semantics: see
+# sys-1-6.yaml. Modeled on the ComplianceAsCode control file controls/bsi_app_4_4.yml.
+module: APP.4.4
+title: Kubernetes
+edition: "2023"
+source: https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2023/06_APP_Anwendungen/APP_4_4_Kubernetes_Edition_2023.pdf
+controls:
+  - id: APP.4.4.A1
+    title: Planning the separation of applications
+    level: basic
+    status: manual
+    gspp: [ARCH.7.3]
+    operator: Operator plans namespace layout, network zones, and cluster separation.
+
+  - id: APP.4.4.A2
+    title: Planning automation with CI/CD
+    level: basic
+    status: manual
+    gspp: [TEST.3.1.5]
+    operator: Operator plans CI/CD lifecycle and secrets handling for their own pipelines.
+
+  - id: APP.4.4.A3
+    title: Identity and permission management in Kubernetes
+    level: basic
+    status: partial
+    gspp: [TEST.1.3]
+    ocm: The chart creates a dedicated `ServiceAccount` for the controller and binds it to a `ClusterRole` with least-privilege verbs on OCM custom resources. It grants no wildcards, impersonation, escalate/bind, or write access to RBAC, workloads, webhooks, or Secrets. Read access to Secrets is accepted, see [RBAC scope](#rbac-scope).
+    operator: "Operator manages cluster-wide RBAC, authentication, and restricts who can modify the OCM `ClusterRole`."
+    rules:
+      - trivy:KSV-0041
+      - trivy:KSV-0043
+      - trivy:KSV-0044
+      - trivy:KSV-0045
+      - trivy:KSV-0046
+      - trivy:KSV-0047
+      - trivy:KSV-0048
+      - trivy:KSV-0050
+      - trivy:KSV-0051
+      - trivy:KSV-0052
+      - trivy:KSV-0055
+      - trivy:KSV-0056
+      - trivy:KSV-0111
+      - trivy:KSV-0112
+      - trivy:KSV-0114
+      - trivy:KSV-0122
+      - trivy:KSV-0123
+      - kubescape:C-0007
+      - kubescape:C-0015
+      - kubescape:C-0031
+      - kubescape:C-0035
+
+  - id: APP.4.4.A4
+    title: Separation of pods
+    level: basic
+    status: automated
+    ocm: The pod spec meets the Kubernetes restricted Pod Security Standard (`runAsNonRoot`, all capabilities dropped, seccomp `RuntimeDefault`) and uses no host namespaces or host ports. It is deployed to its own namespace.
+    operator: Operator enforces Pod Security Admission or an equivalent policy engine and ensures kernel namespace isolation on nodes.
+    rules:
+      - trivy:KSV-0008
+      - trivy:KSV-0009
+      - trivy:KSV-0010
+      - trivy:KSV-0024
+      - trivy:KSV-0037
+      - trivy:KSV-0103
+      - trivy:KSV-0110
+      - kubescape:C-0038
+      - kubescape:C-0041
+      - kubescape:C-0044
+
+  - id: APP.4.4.A5
+    title: Data backup in the cluster
+    level: basic
+    status: manual
+    operator: Operator backs up etcd, persistent volumes, and cluster configuration.
+
+  - id: APP.4.4.A6
+    title: Initialization of pods
+    level: standard
+    status: manual
+    ocm: The controller uses no init containers; initialization happens inside the manager binary.
+    operator: Operator ensures initialization of their own pods follows this requirement.
+
+  - id: APP.4.4.A7
+    title: Separation of networks in Kubernetes
+    level: standard
+    status: partial
+    gspp: [ARCH.2.1]
+    ocm: "The chart includes an opt-in `NetworkPolicy` (`manager.networkPolicy.enabled`). When enabled, it restricts ingress to the health-probe port (and the metrics port when metrics are enabled) and limits egress to DNS and HTTPS/Kubernetes API by default. Rules are configurable via `manager.networkPolicy.egress` and `manager.networkPolicy.ingress`."
+    operator: "Operator must enable the policy, adjust rules as needed, and ensure the cluster's CNI enforces `NetworkPolicy`."
+    rules:
+      - kubescape:C-0030
+      - kubescape:C-0054
+      - trivy:KSV-0038
+
+  - id: APP.4.4.A8
+    title: Securing configuration files in Kubernetes
+    level: standard
+    status: manual
+    ocm: Chart templates, CRDs, and RBAC manifests are version-controlled and annotated with Helm metadata.
+    operator: Operator controls access to the Helm release secrets and the Git repository.
+
+  - id: APP.4.4.A9
+    title: Use of Kubernetes service accounts
+    level: standard
+    status: partial
+    ocm: The chart creates a named `ServiceAccount` bound only to the controller's `ClusterRole`. The controller does not use the default `ServiceAccount`. The token is mounted because the controller needs API access; this is accepted.
+    operator: Operator restricts token projection for pods that do not need API access.
+    rules:
+      - trivy:KSV-0036
+      - kubescape:C-0034
+      - kubescape:C-0053
+
+  - id: APP.4.4.A10
+    title: Securing automation processes
+    level: standard
+    status: manual
+    operator: Operator secures CI/CD tooling used to deploy OCM.
+
+  - id: APP.4.4.A11
+    title: Monitoring of containers
+    level: standard
+    status: manual
+    ocm: "The chart defines liveness (`/healthz`) and readiness (`/readyz`) probes with configurable timing."
+    operator: Operator monitors pod health and integrates alerts.
+
+  - id: APP.4.4.A12
+    title: Securing infrastructure applications
+    level: standard
+    status: manual
+    ocm: "OCM images are stored in `ghcr.io` with signed, digest-pinned references."
+    operator: Operator secures registry access, enables encrypted communication, and audits changes.
+
+  - id: APP.4.4.A13
+    title: Automated configuration auditing
+    level: elevated
+    status: manual
+    ocm: Every build scans the images (DISA GPOS SRG, CIS Docker Benchmark) and the rendered chart (CIS Kubernetes Benchmark, NSA/CISA, MITRE) and reports the results per BSI requirement; publishing is gated on the scans.
+    operator: Operator runs CIS Kubernetes Benchmark, kube-bench, or equivalent tools against the cluster.
+
+  - id: APP.4.4.A14
+    title: Use of dedicated nodes
+    level: elevated
+    status: manual
+    operator: Entirely the operator's responsibility.
+
+  - id: APP.4.4.A15
+    title: Separation of applications at node and cluster levels
+    level: elevated
+    status: manual
+    gspp: [ARCH.7.1, KONF.6.1.2]
+    operator: Entirely the operator's responsibility.
+
+  - id: APP.4.4.A16
+    title: Use of operators
+    level: elevated
+    status: manual
+    operator: Entirely the operator's responsibility.
+
+  - id: APP.4.4.A17
+    title: Attestation of nodes
+    level: elevated
+    status: manual
+    operator: Entirely the operator's responsibility.
+
+  - id: APP.4.4.A18
+    title: Use of micro-segmentation
+    level: elevated
+    status: partial
+    gspp: [ARCH.2.2]
+    ocm: "The chart includes an opt-in `NetworkPolicy` that implements pod-level micro-segmentation when enabled (`manager.networkPolicy.enabled`)."
+    operator: "Operator enables the policy and tightens the default rules for their namespace layout and registry topology. Requires a CNI that enforces `NetworkPolicy`."
+    rules:
+      - kubescape:C-0030
+      - trivy:KSV-0038
+
+  - id: APP.4.4.A19
+    title: Kubernetes high availability
+    level: elevated
+    status: manual
+    operator: Entirely the operator's responsibility.
+
+  - id: APP.4.4.A20
+    title: Encrypted data storage for pods
+    level: elevated
+    status: manual
+    operator: Entirely the operator's responsibility.
+
+  - id: APP.4.4.A21
+    title: Regular restart of pods
+    level: elevated
+    status: manual
+    operator: Entirely the operator's responsibility.
