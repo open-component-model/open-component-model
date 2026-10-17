@@ -110,23 +110,40 @@ export function normalizeGoPurl(purl) {
 }
 
 /**
- * Statements of verified OpenVEX attestations, scoped to the main module of the
- * binary they describe. A statement without subcomponents names no module, so
- * scoping it would cover every module of the binary; it is skipped.
+ * Digest of an OCI package URL (pkg:oci/name@sha256%3A...), or undefined.
+ *
+ * @param {string} purl
+ */
+function ociDigest(purl) {
+    const m = purl.match(/^pkg:oci\/[^@?#]+@([^?#]+)/);
+    return m ? decodeURIComponent(m[1]) : undefined;
+}
+
+/**
+ * Statements of verified OpenVEX attestations about the image `target.subject`
+ * (<repository>@sha256:<digest>), scoped to the main module of the binary the
+ * image provides. Only products naming that image digest (pkg:oci/...@<digest>)
+ * count, so an attestation that does not say which build it is about cannot
+ * suppress anything. A statement without such a product, or whose product names
+ * no subcomponent (no module; scoping it would cover every module of the
+ * binary), is skipped.
  *
  * @param {any[]} verified - `gh attestation verify --format json` output
- * @param {{ product: string, subject: string }} target - main module purl of the binary, and the attested image
+ * @param {{ product: string, subject: string }} target - main module purl of the binary, and the attested image by digest
  * @param {(id: string) => Promise<string[]>} aliasesOf - aliases of an advisory
  * @returns {Promise<{ statements: any[], skipped: string[] }>}
  */
 export async function importAttested(verified, target, aliasesOf) {
+    const digest = target.subject.split("@")[1];
+    if (!digest?.startsWith("sha256:")) throw new Error(`attested image ${target.subject} is not referenced by digest`);
     const statements = [];
     const skipped = [];
     for (const v of verified) {
         const signer = v.verificationResult?.signature?.certificate?.buildSignerURI ?? "unknown signer";
         for (const s of v.verificationResult?.statement?.predicate?.statements ?? []) {
             const name = s.vulnerability?.name;
-            const subcomponents = [...new Set((s.products ?? []).flatMap((/** @type {any} */ p) => (p.subcomponents ?? []).map((/** @type {any} */ c) => normalizeGoPurl(c["@id"]))))].sort();
+            const products = (s.products ?? []).filter((/** @type {any} */ p) => ociDigest(p["@id"] ?? "") === digest);
+            const subcomponents = [...new Set(products.flatMap((/** @type {any} */ p) => (p.subcomponents ?? []).map((/** @type {any} */ c) => normalizeGoPurl(c["@id"]))))].sort();
             if (!name || subcomponents.length === 0) {
                 skipped.push(name ?? "statement without vulnerability");
                 continue;
@@ -168,7 +185,7 @@ async function goAliases(id) {
  * - ATTESTED_VEX: `gh attestation verify --format json` output of another
  *   binary's OpenVEX attestation, merged into the document (optional)
  * - ATTESTED_VEX_PRODUCT: main module purl of that binary (required with ATTESTED_VEX)
- * - ATTESTED_VEX_SUBJECT: the attested image reference, for the statement notes
+ * - ATTESTED_VEX_SUBJECT: the attested image as <repository>@sha256:<digest> (required with ATTESTED_VEX)
  *
  * @param {import('@actions/github-script').AsyncFunctionArguments} args
  */
@@ -184,14 +201,14 @@ export default async function vexAction({ core, context }) {
         author: `${context.repo.owner}/${context.repo.repo}`,
         timestamp: new Date().toISOString(),
     });
-    const { ATTESTED_VEX: attested, ATTESTED_VEX_PRODUCT: product, ATTESTED_VEX_SUBJECT: subject = "an attested image" } = process.env;
+    const { ATTESTED_VEX: attested, ATTESTED_VEX_PRODUCT: product, ATTESTED_VEX_SUBJECT: subject } = process.env;
     if (attested) {
-        if (!product) {
-            core.setFailed("ATTESTED_VEX_PRODUCT is required with ATTESTED_VEX");
+        if (!product || !subject) {
+            core.setFailed("ATTESTED_VEX_PRODUCT and ATTESTED_VEX_SUBJECT are required with ATTESTED_VEX");
             return;
         }
         const imported = await importAttested(JSON.parse(await readFile(attested, "utf8")), { product, subject }, goAliases);
-        for (const name of imported.skipped) core.warning(`${subject}: skipped ${name}, which names no module`);
+        for (const name of imported.skipped) core.warning(`${subject}: skipped ${name}: no product names this image digest with a module`);
         core.info(`${subject}: imported ${imported.statements.length} attested statement(s) for ${product}`);
         vex.statements.push(...imported.statements);
     }
