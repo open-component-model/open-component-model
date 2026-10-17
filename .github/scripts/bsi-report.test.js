@@ -32,8 +32,14 @@ describe("validateModule", () => {
     });
 
     it("rejects unknown scanners and dockle checks it cannot count as passed", () => {
-        assert.match(validateModule(module({ status: "automated", rules: ["kube-bench:1.1"] })).join(), /must be <stig\|dockle\|trivy\|kubescape>/);
+        assert.match(validateModule(module({ status: "automated", rules: ["kube-bench:1.1"] })).join(), /must be <stig\|dockle\|oci\|trivy\|kubescape>/);
         assert.match(validateModule(module({ status: "automated", rules: ["dockle:CIS-DI-0999"] })).join(), /unknown dockle check/);
+    });
+
+    it("keeps operator controls to the operator's part and manual controls to OCM measures", () => {
+        assert.deepEqual(validateModule(module({ status: "operator", ocm: undefined, operator: "o" })), []);
+        assert.match(validateModule(module({ status: "operator", operator: "o" })).join(), /operator controls describe only the operator's part/);
+        assert.match(validateModule(module({ status: "manual", ocm: undefined, operator: "o" })).join(), /manual controls describe what OCM provides/);
     });
 
     it("rejects ids outside the module", () => {

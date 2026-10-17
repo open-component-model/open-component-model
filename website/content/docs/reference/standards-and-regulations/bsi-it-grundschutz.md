@@ -39,8 +39,9 @@ profiles, OCM maps each requirement to the checks that cover it. The mapping
 lives in `.github/benchmarks/bsi/` and the tables below are rendered from it.
 After every build, the `Image scan / BSI IT-Grundschutz` job evaluates the
 mapping against the reports of the image and chart scans (OCM's DISA GPOS SRG
-supplement, the CIS Docker Benchmark with dockle, Trivy's Kubernetes checks,
-and Kubescape's NSA/CISA and MITRE controls; see
+supplement, the CIS Docker Benchmark with dockle, the OCI metadata and
+provenance of each image, Trivy's Kubernetes and Dockerfile checks plus OCM's
+own Trivy checks, and Kubescape's NSA/CISA and MITRE controls; see
 [DISA STIG]({{< relref "docs/reference/standards-and-regulations/disa-stig.md" >}})
 and [Security Benchmarks]({{< relref "docs/reference/standards-and-regulations/benchmarks.md" >}})).
 It writes the result per requirement to the job summary and to the
@@ -53,8 +54,11 @@ The status in the **Checked by** column describes the part OCM can influence:
 - **automated**: every measure OCM provides for the requirement is checked.
 - **partial**: some of OCM's measures are checked; the rest is described in
   the table.
-- **manual**: no automated check; the table describes what OCM provides and
-  what the operator must do.
+- **manual**: OCM provides a measure that no image or chart scan can observe,
+  such as a property of the release process or the repository; the table says
+  why.
+- **operator**: entirely the operator's responsibility; OCM's artifacts do not
+  influence it.
 
 Where the BSI maps a requirement to [Grundschutz++](https://github.com/BSI-Bund/Stand-der-Technik-Bibliothek),
 the successor of the IT-Grundschutz Compendium, the Grundschutz++ controls are
@@ -69,8 +73,7 @@ applies whenever containerized services are operated. The requirement IDs and
 English titles below are taken from the
 [SYS.1.6 PDF](https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium_Einzel_PDFs_2022/07_SYS_IT_Systeme/SYS_1_6_Containerisierung_Edition_2022.pdf)
 (Edition 2022, February 2022). **(B)** = basic, **(S)** = standard,
-**(H)** = increased protection needs. Requirements without an OCM measure are
-entirely the operator's responsibility.
+**(H)** = increased protection needs.
 
 {{< bsi-controls "sys-1-6" >}}
 

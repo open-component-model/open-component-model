@@ -17,7 +17,9 @@
     {{- $scanner := index $parts 0 -}}
     {{- $check := index $parts 1 -}}
     {{- $link := "" -}}
-    {{- if eq $scanner "trivy" -}}
+    {{- if and (eq $scanner "trivy") (hasPrefix $check "OCM-") -}}
+      {{- $link = printf "https://github.com/open-component-model/open-component-model/blob/main/.github/trivy-checks/%s.rego" (lower $check) -}}
+    {{- else if eq $scanner "trivy" -}}
       {{- $link = printf "https://avd.aquasec.com/misconfig/%s" (lower $check) -}}
     {{- else if eq $scanner "kubescape" -}}
       {{- $link = printf "https://hub.armosec.io/docs/%s" (lower $check) -}}
@@ -27,7 +29,7 @@
     {{- if $link -}}
       {{- $rules = $rules | append (printf "<a href=\"%s\"><code>%s</code></a>" $link $check) -}}
     {{- else -}}
-      {{- $rules = $rules | append (printf "<code>%s</code>" $check) -}}
+      {{- $rules = $rules | append (printf "<code>%s</code>" (cond (eq $scanner "oci") (printf "oci:%s" $check) $check)) -}}
     {{- end -}}
   {{- end }}
 <tr>

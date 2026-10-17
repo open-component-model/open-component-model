@@ -9,14 +9,14 @@ controls:
   - id: APP.4.4.A1
     title: Planning the separation of applications
     level: basic
-    status: manual
+    status: operator
     gspp: [ARCH.7.3]
     operator: Operator plans namespace layout, network zones, and cluster separation.
 
   - id: APP.4.4.A2
     title: Planning automation with CI/CD
     level: basic
-    status: manual
+    status: operator
     gspp: [TEST.3.1.5]
     operator: Operator plans CI/CD lifecycle and secrets handling for their own pipelines.
 
@@ -71,14 +71,14 @@ controls:
   - id: APP.4.4.A5
     title: Data backup in the cluster
     level: basic
-    status: manual
+    status: operator
     operator: Operator backs up etcd, persistent volumes, and cluster configuration.
 
   - id: APP.4.4.A6
     title: Initialization of pods
     level: standard
     status: manual
-    ocm: The controller uses no init containers; initialization happens inside the manager binary.
+    ocm: The controller uses no init containers; initialization happens inside the manager binary. The requirement asks for init containers where initialization is needed, so there is nothing to check.
     operator: Operator ensures initialization of their own pods follows this requirement.
 
   - id: APP.4.4.A7
@@ -97,7 +97,7 @@ controls:
     title: Securing configuration files in Kubernetes
     level: standard
     status: manual
-    ocm: Chart templates, CRDs, and RBAC manifests are version-controlled and annotated with Helm metadata.
+    ocm: Chart templates, CRDs, and RBAC manifests are version-controlled and annotated with Helm metadata. Version control is a property of the repository, not of the scanned artifacts.
     operator: Operator controls access to the Helm release secrets and the Git repository.
 
   - id: APP.4.4.A9
@@ -114,53 +114,58 @@ controls:
   - id: APP.4.4.A10
     title: Securing automation processes
     level: standard
-    status: manual
+    status: operator
     operator: Operator secures CI/CD tooling used to deploy OCM.
 
   - id: APP.4.4.A11
     title: Monitoring of containers
     level: standard
-    status: manual
+    status: partial
     ocm: "The chart defines liveness (`/healthz`) and readiness (`/readyz`) probes with configurable timing."
     operator: Operator monitors pod health and integrates alerts.
+    rules:
+      - trivy:OCM-KSV-0002
 
   - id: APP.4.4.A12
     title: Securing infrastructure applications
     level: standard
-    status: manual
-    ocm: "OCM images are stored in `ghcr.io` with signed, digest-pinned references."
+    status: partial
+    ocm: OCM images are stored in `ghcr.io`, referenced by digest in the chart, and carry a SLSA provenance attestation; released images are signed.
     operator: Operator secures registry access, enables encrypted communication, and audits changes.
+    rules:
+      - trivy:OCM-KSV-0001
+      - oci:provenance
 
   - id: APP.4.4.A13
     title: Automated configuration auditing
     level: elevated
     status: manual
-    ocm: Every build scans the images (DISA GPOS SRG, CIS Docker Benchmark) and the rendered chart (CIS Kubernetes Benchmark, NSA/CISA, MITRE) and reports the results per BSI requirement; publishing is gated on the scans.
+    ocm: Every build scans the images (DISA GPOS SRG, CIS Docker Benchmark, OCI metadata) and the rendered chart and build files (CIS Kubernetes Benchmark, NSA/CISA, MITRE, Trivy Dockerfile checks) and reports the results per BSI requirement; publishing is gated on the scans. The requirement is about auditing the operator's cluster, which OCM's scans do not reach.
     operator: Operator runs CIS Kubernetes Benchmark, kube-bench, or equivalent tools against the cluster.
 
   - id: APP.4.4.A14
     title: Use of dedicated nodes
     level: elevated
-    status: manual
+    status: operator
     operator: Entirely the operator's responsibility.
 
   - id: APP.4.4.A15
     title: Separation of applications at node and cluster levels
     level: elevated
-    status: manual
+    status: operator
     gspp: [ARCH.7.1, KONF.6.1.2]
     operator: Entirely the operator's responsibility.
 
   - id: APP.4.4.A16
     title: Use of operators
     level: elevated
-    status: manual
+    status: operator
     operator: Entirely the operator's responsibility.
 
   - id: APP.4.4.A17
     title: Attestation of nodes
     level: elevated
-    status: manual
+    status: operator
     operator: Entirely the operator's responsibility.
 
   - id: APP.4.4.A18
@@ -177,17 +182,17 @@ controls:
   - id: APP.4.4.A19
     title: Kubernetes high availability
     level: elevated
-    status: manual
+    status: operator
     operator: Entirely the operator's responsibility.
 
   - id: APP.4.4.A20
     title: Encrypted data storage for pods
     level: elevated
-    status: manual
+    status: operator
     operator: Entirely the operator's responsibility.
 
   - id: APP.4.4.A21
     title: Regular restart of pods
     level: elevated
-    status: manual
+    status: operator
     operator: Entirely the operator's responsibility.

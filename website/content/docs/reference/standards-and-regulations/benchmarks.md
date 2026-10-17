@@ -47,22 +47,31 @@ scan:
 | Tool | What it checks | Runs on | Fails on |
 | --- | --- | --- | --- |
 | [dockle](https://github.com/goodwithtech/dockle) | CIS Docker Benchmark section 4 | Each image and architecture | Any WARN or FATAL check |
-| [Trivy](https://github.com/aquasecurity/trivy) `config` | CIS Kubernetes Benchmark and the built-in Kubernetes checks of Trivy | Rendered chart | Any finding not in `.github/benchmarks/trivyignore.yaml`, or no manifests checked |
+| [Trivy](https://github.com/aquasecurity/trivy) `config` | CIS Kubernetes Benchmark, the built-in Kubernetes and Dockerfile checks of Trivy, and OCM's own checks | Rendered chart and the image build files | Any finding not in `.github/benchmarks/trivyignore.yaml`, or no manifests checked |
 | [Kubescape](https://github.com/kubescape/kubescape) | NSA and MITRE ATT&CK frameworks | Rendered chart | Any failed control on a resource without an exception in `.github/benchmarks/kubescape-exceptions.json`, or no resources scanned |
 
 The chart is rendered with `helm template` and
 `manager.networkPolicy.enabled=true`. That render is the default render plus the
 `NetworkPolicy`, so it covers every template a default installation gets. Each
 template is written to its own file, so each accepted Trivy finding applies only
-to the template that needs it.
+to the template that needs it. The scan job places the image build files
+(`Containerfile`, `Dockerfile`) next to the rendered chart under `build/`, so
+Trivy checks them in the same run.
 Every accepted finding is explained below. The dockle and Kubescape images are
 pinned by digest in the root `.env` (`DOCKLE_IMAGE`, `KUBESCAPE_IMAGE`), and
 Trivy by the `trivy-action` version. Kubescape downloads its framework
 definitions at scan time, so a new upstream control can fail the scan without
 any change in OCM.
 
+Each image is also checked for the metadata that makes its function and history
+traceable (`.github/scripts/image-metadata.js`): its platform manifest must carry
+the OCI annotations `title`, `description`, `version`, `revision`, `source`,
+`created`, `vendor` and `licenses`, and a SLSA provenance attestation.
+
 Results are in the job summary and in the `image-scan-<image>-<arch>` and
-`chart-scan` workflow artifacts.
+`chart-scan` workflow artifacts. The
+[BSI IT-Grundschutz]({{< relref "docs/reference/standards-and-regulations/bsi-it-grundschutz.md" >}})
+page maps all of these checks to BSI requirements.
 
 ## CIS Docker Benchmark (Section 4)
 
@@ -132,9 +141,10 @@ docker rmi local/ocm-cli:bench local/ocm-controller:bench
 
 ## CIS Kubernetes Benchmark (Section 5)
 
-The rendered Helm chart is scanned with Trivy `config`. Every finding it reports
-is accepted for the listed template only. The table below is rendered from
-`.github/benchmarks/trivyignore.yaml`, the same file the CI scan uses:
+The rendered Helm chart and the image build files are scanned with Trivy
+`config`. Every finding it reports is accepted for the listed file only. The
+table below is rendered from `.github/benchmarks/trivyignore.yaml`, the same file
+the CI scan uses:
 
 {{< benchmark-exceptions "trivy" >}}
 
@@ -143,6 +153,15 @@ All other checks pass. The pod spec sets `runAsNonRoot: true`,
 `readOnlyRootFilesystem: true`, drops all capabilities, and uses
 `seccompProfile: RuntimeDefault`. These settings satisfy the CIS Kubernetes
 Benchmark section 5.2 (Pod Security Standards) controls.
+
+Trivy also runs OCM's own checks from `.github/trivy-checks`, for
+requirements no built-in check covers:
+
+| Check | Runs on | Requires |
+| --- | --- | --- |
+| `OCM-KSV-0001` | Rendered chart | Every container image is pinned by digest |
+| `OCM-KSV-0002` | Rendered chart | Every container has a liveness and a readiness probe |
+| `OCM-DS-0001` | Image build files | Every base image is `scratch`, an earlier build stage, or pinned by digest |
 
 ### Reproducing with Trivy
 
@@ -157,12 +176,15 @@ helm template ocm-k8s-toolkit bindings/go/kubernetes/controller/chart \
   --namespace ocm-k8s-toolkit-system --kube-version 1.35.1 \
   --set manager.networkPolicy.enabled=true \
   --output-dir /tmp/ocm-bench/rendered
-cp -R .github/benchmarks /tmp/ocm-bench/
+install -D -m 0644 bindings/go/cli/Containerfile /tmp/ocm-bench/rendered/build/cli/Containerfile
+install -D -m 0644 bindings/go/kubernetes/controller/Dockerfile /tmp/ocm-bench/rendered/build/controller/Dockerfile
+cp -R .github/benchmarks .github/trivy-checks /tmp/ocm-bench/
 tar cf - --no-mac-metadata -C /tmp/ocm-bench . \
   | docker run --rm -i -v ocm-bench:/data alpine:latest sh -c 'cd /data && tar xf - && chown -R 1001 /data'
 
 docker run --rm -v ocm-bench:/data -w /data aquasec/trivy:0.70.0 \
-  config --ignorefile benchmarks/trivyignore.yaml rendered
+  config --ignorefile benchmarks/trivyignore.yaml \
+  --config-check trivy-checks --check-namespaces user rendered
 ```
 
 Omit `--ignorefile` to see the accepted findings, or add
