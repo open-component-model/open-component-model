@@ -349,6 +349,15 @@ mounts:
       matrix:
         versions:
           - main
+  - source: content_overrides
+    target: content
+    sites:
+      matrix:
+        versions:
+          - '0.9'
+          - '0.10'
+          - '0.11'
+          - '0.12'
 imports:
   - path: ocm.software/open-component-model/website
     version: v0.9.1
