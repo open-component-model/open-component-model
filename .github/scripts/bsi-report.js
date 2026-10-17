@@ -16,8 +16,12 @@ import { parseXccdfResults } from "./stig-scan.js";
  * mapping cannot silently drift from what the scanners check.
  */
 
-export const SCANNERS = /** @type {const} */ (["stig", "dockle", "trivy", "kubescape"]);
-export const STATUSES = /** @type {const} */ (["automated", "partial", "manual"]);
+export const SCANNERS = /** @type {const} */ (["stig", "dockle", "oci", "trivy", "kubescape"]);
+export const STATUSES = /** @type {const} */ (["automated", "partial", "manual", "operator"]);
+/** Checks of image-metadata.js. */
+export const OCI_CHECKS = new Set(["annotations", "provenance"]);
+/** Statuses without rules: no automated check, or nothing OCM can influence. */
+const UNCHECKED = new Set(["manual", "operator"]);
 export const LEVELS = /** @type {const} */ (["basic", "standard", "elevated"]);
 
 /**
@@ -60,20 +64,21 @@ export function validateModule(module) {
         if (typeof c?.title !== "string" || c.title === "") errors.push(`${where}: missing title`);
         if (!LEVELS.includes(c?.level)) errors.push(`${where}: level must be one of ${LEVELS.join(", ")}`);
         if (!STATUSES.includes(c?.status)) errors.push(`${where}: status must be one of ${STATUSES.join(", ")}`);
-        if (!c?.ocm && !c?.operator) errors.push(`${where}: needs ocm or operator`);
+        if (c?.status === "operator" && (c?.ocm || !c?.operator)) errors.push(`${where}: operator controls describe only the operator's part`);
+        else if (c?.status !== "operator" && !c?.ocm) errors.push(`${where}: ${c?.status} controls describe what OCM provides`);
         const rules = c?.rules ?? [];
         if (!Array.isArray(rules)) {
             errors.push(`${where}: rules must be a list`);
             continue;
         }
-        if (c?.status === "manual" && rules.length > 0) errors.push(`${where}: manual controls have no rules`);
-        if (c?.status !== "manual" && rules.length === 0) errors.push(`${where}: ${c?.status} controls need rules`);
-        if (c?.status !== "manual" && !c?.ocm) errors.push(`${where}: ${c?.status} controls describe what OCM provides`);
+        if (UNCHECKED.has(c?.status) && rules.length > 0) errors.push(`${where}: ${c?.status} controls have no rules`);
+        if (!UNCHECKED.has(c?.status) && rules.length === 0) errors.push(`${where}: ${c?.status} controls need rules`);
         if (new Set(rules).size !== rules.length) errors.push(`${where}: duplicate rule`);
         for (const rule of rules) {
             const [scanner, check] = String(rule).split(":");
             if (!SCANNERS.includes(/** @type {any} */ (scanner)) || !check) errors.push(`${where}: rule ${rule} must be <${SCANNERS.join("|")}>:<check>`);
             else if (scanner === "dockle" && !DOCKLE_CHECKS.has(check)) errors.push(`${where}: unknown dockle check ${check}`);
+            else if (scanner === "oci" && !OCI_CHECKS.has(check)) errors.push(`${where}: unknown oci check ${check}`);
         }
     }
     return errors;
@@ -149,6 +154,15 @@ export function addDockle(results, report, target) {
 }
 
 /**
+ * @param {Results} results
+ * @param {{ id: string, result: string }[]} checks - image-metadata.js result
+ * @param {string} target
+ */
+export function addOci(results, checks, target) {
+    for (const c of checks) observe(results, `oci:${c.id}`, { target, outcome: c.result === "pass" ? "pass" : "fail" });
+}
+
+/**
  * Trivy config report run with --include-non-failures. Findings accepted in
  * the ignore file are dropped by Trivy, so they are added back as accepted.
  *
@@ -213,7 +227,7 @@ export function evaluate(modules, results) {
         controls: module.controls.map((control) => {
             const rules = (control.rules ?? []).map((rule) => ({ rule, ...ruleVerdict(results.get(rule)) }));
             const verdicts = new Set(rules.map((r) => r.verdict));
-            const result = control.status === "manual" ? "manual"
+            const result = UNCHECKED.has(control.status) ? control.status
                 : verdicts.has("fail") || verdicts.has("missing") ? "fail"
                 : verdicts.has("accepted") ? "accepted" : "pass";
             return { id: control.id, title: control.title, level: control.level, status: control.status, gspp: control.gspp ?? [], result, rules };
@@ -233,7 +247,7 @@ async function readOptional(file) {
 
 /**
  * Collect the results of a directory holding the downloaded scan artifacts:
- * image-scan-<image>-<arch>/{ocm,gpos}-results.xml and dockle.json, and
+ * image-scan-<image>-<arch>/{ocm,gpos}-results.xml, dockle.json and metadata.json, and
  * chart-scan/{trivy,kubescape}.json.
  *
  * @param {string} reportsDir
@@ -256,6 +270,9 @@ export async function collect(reportsDir, trivyIgnore) {
         const dockle = await readOptional(path.join(reportsDir, dir, "dockle.json"));
         if (dockle === undefined) errors.push(`${dir}: missing dockle.json`);
         else addDockle(results, JSON.parse(dockle), target);
+        const metadata = await readOptional(path.join(reportsDir, dir, "metadata.json"));
+        if (metadata === undefined) errors.push(`${dir}: missing metadata.json`);
+        else addOci(results, JSON.parse(metadata), target);
     }
     const trivy = await readOptional(path.join(reportsDir, "chart-scan", "trivy.json"));
     if (trivy === undefined) errors.push("chart-scan: missing trivy.json");
@@ -266,7 +283,7 @@ export async function collect(reportsDir, trivyIgnore) {
     return { results, errors };
 }
 
-const ICON = { pass: "✅", accepted: "☑️", fail: "❌", missing: "❓", manual: "📝" };
+const ICON = { pass: "✅", accepted: "☑️", fail: "❌", missing: "❓", manual: "📝", operator: "👤" };
 
 /**
  * GitHub Actions entrypoint.
@@ -308,7 +325,7 @@ export default async function bsiReportAction({ core }) {
 
     if (process.env.GITHUB_STEP_SUMMARY) {
         const summary = core.summary.addHeading("🛡️ BSI IT-Grundschutz");
-        summary.addRaw("Status describes the part OCM can influence: automated and partial requirements are checked by the listed rules; manual ones are documented only. ☑️ = accepted finding, see .github/benchmarks.", true);
+        summary.addRaw("Status describes the part OCM can influence: automated and partial requirements are checked by the listed rules; manual ones are documented only; operator ones are entirely the operator's responsibility. ☑️ = accepted finding, see .github/benchmarks.", true);
         for (const module of report) {
             summary.addHeading(`${module.module} ${module.title} (Edition ${module.edition})`, 3);
             summary.addTable([

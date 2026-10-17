@@ -1,6 +1,7 @@
 # Accepted Trivy misconfiguration findings for the rendered controller Helm chart
-# (image-scan.yml, job "chart"). Paths are relative to the helm template
-# --output-dir, so each finding is accepted only for the template that needs it.
+# and the image build files (image-scan.yml, job "chart"). Paths are relative to
+# the helm template --output-dir, where the job also places the build files under
+# build/, so each finding is accepted only for the file that needs it.
 # The statement field is rendered on the Security Benchmarks documentation page.
 misconfigurations:
   - id: KSV-0041
@@ -15,3 +16,8 @@ misconfigurations:
     paths:
       - chart/templates/manager/manager.yaml
     statement: The default values.yaml references ghcr.io/open-component-model/kubernetes/controller. Trivy flags any registry not on its built-in allowlist. Override manager.image.repository if your policy requires a mirror.
+  - id: DS-0026
+    paths:
+      - build/cli/Containerfile
+      - build/controller/Dockerfile
+    statement: The images are FROM scratch and have no shell or HTTP client a HEALTHCHECK command could run. The controller chart defines Kubernetes liveness and readiness probes instead (checked by OCM-KSV-0002); the CLI is not a long-running service.

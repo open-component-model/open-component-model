@@ -3,12 +3,15 @@ name: Image scan
 on:
   # Reusable scan of the CLI (default and slim) and controller images, invoked by
   # the build & publish pipeline (pipeline.yml) with the image artifacts it built. Each
-  # architecture is scanned for vulnerabilities (Trivy, with an OpenVEX document
-  # from govulncheck; findings warn, they do not fail), against the DISA GPOS SRG
-  # as tailored in .github/stig, and against the CIS Docker Benchmark (dockle).
-  # The controller Helm chart, rendered with its opt-in NetworkPolicy, is scanned
-  # against the CIS Kubernetes Benchmark (Trivy config) and the NSA/CISA and MITRE
-  # frameworks (Kubescape), with accepted findings in .github/benchmarks. The
+  # architecture is checked for its OCI metadata and provenance, scanned for
+  # vulnerabilities (Trivy, with an OpenVEX document from govulncheck; findings
+  # warn, they do not fail), against the DISA GPOS SRG as tailored in
+  # .github/stig, and against the CIS Docker Benchmark (dockle). The controller
+  # Helm chart, rendered with its opt-in NetworkPolicy, is scanned against the CIS
+  # Kubernetes Benchmark (Trivy config) and the NSA/CISA and MITRE frameworks
+  # (Kubescape); the image build files get Trivy's Dockerfile checks. OCM's own
+  # Trivy checks are in .github/trivy-checks, accepted findings in
+  # .github/benchmarks. The
   # results are then mapped to BSI IT-Grundschutz requirements (.github/benchmarks/bsi).
   workflow_call:
     inputs:
@@ -156,6 +159,20 @@ jobs:
             "oci-archive:tmp/artifact/${OCI_TAR}" "docker-daemon:ocm-scan:${IMAGE}-${ARCH}"
           mkdir -p "tmp/image-scan/${IMAGE}-${ARCH}"
 
+      # OCI annotations and SLSA provenance attestation of the platform manifest,
+      # which make the image's function and history traceable (BSI SYS.1.6.A12).
+      - name: Image metadata
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        env:
+          OCI_ARCHIVE: tmp/artifact/${{ matrix.oci_tar }}
+          ARCH: ${{ matrix.arch }}
+          OUTPUT: tmp/image-scan/${{ matrix.image }}-${{ matrix.arch }}/metadata.json
+          SUMMARY_TITLE: ${{ matrix.image }} (linux/${{ matrix.arch }})
+        with:
+          script: |
+            const script = await import('${{ github.workspace }}/.github/scripts/image-metadata.js');
+            await script.default({ core });
+
       # Reports, but does not fail on, vulnerabilities the OpenVEX document does
       # not mark as not_affected: those are the findings govulncheck reports as
       # reachable. They show up as warning annotations and in the job summary.
@@ -273,10 +290,13 @@ jobs:
           ref: ${{ inputs.ref }}
           sparse-checkout: |
             .github/benchmarks
+            .github/trivy-checks
             .github/scripts
             .env
             bindings/go/kubernetes/controller/.env
             bindings/go/kubernetes/controller/chart
+            bindings/go/kubernetes/controller/Dockerfile
+            bindings/go/cli/Containerfile
           sparse-checkout-cone-mode: false
           persist-credentials: false
 
@@ -299,6 +319,10 @@ jobs:
             --namespace ocm-k8s-toolkit-system --kube-version "$kube" \
             --set manager.networkPolicy.enabled=true \
             --output-dir tmp/chart-scan/rendered
+          # The image build files get Trivy's Dockerfile checks in the same run.
+          # Kubescape ignores them.
+          install -D -m 0644 bindings/go/cli/Containerfile tmp/chart-scan/rendered/build/cli/Containerfile
+          install -D -m 0644 bindings/go/kubernetes/controller/Dockerfile tmp/chart-scan/rendered/build/controller/Dockerfile
 
       - name: CIS Kubernetes Benchmark (Trivy config)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
@@ -306,6 +330,9 @@ jobs:
           # Passed checks too, so the BSI report can tell a passed check from one
           # that was not run. The gate below only counts failures.
           TRIVY_INCLUDE_NON_FAILURES: "true"
+          # OCM's own checks (OCM-*) for what no built-in check covers.
+          TRIVY_CONFIG_CHECK: .github/trivy-checks
+          TRIVY_CHECK_NAMESPACES: user
         with:
           scan-type: config
           scan-ref: tmp/chart-scan/rendered

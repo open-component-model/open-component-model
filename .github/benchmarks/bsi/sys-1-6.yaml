@@ -5,11 +5,15 @@
 # status describes the part OCM can influence, not the requirement as a whole:
 #   automated  every measure OCM provides for the requirement is checked by the rules
 #   partial    the rules check some of OCM's measures; the rest is described in ocm
-#   manual     no automated check; ocm and operator describe who does what
+#   manual     OCM provides a measure that no scan can observe (a process or repository
+#              property); ocm says why, operator what remains
+#   operator   nothing OCM can influence; operator describes the operator's part
 # rules: <scanner>:<check>, evaluated by .github/scripts/bsi-report.js
 #   stig       OCM supplement rule (ocm_rule_*) or DISA GPOS SRG rule (SV-*), all images
 #   dockle     CIS Docker Benchmark check (dockle), all images
-#   trivy      Trivy Kubernetes check (KSV-*) on the rendered controller chart
+#   oci        image-metadata.js check (annotations, provenance), all images
+#   trivy      Trivy check on the rendered controller chart (KSV-*) or the image build
+#              files (DS-*); OCM-* are OCM's own checks in .github/trivy-checks
 #   kubescape  Kubescape NSA/CISA or MITRE control (C-*) on the rendered controller chart
 # gspp: Grundschutz++ controls the BSI maps this requirement to (Stand-der-Technik-Bibliothek,
 #   control_layer/Mappings/IT-GS2023-zu-GSpp), where a mapping exists.
@@ -22,28 +26,32 @@ controls:
   - id: SYS.1.6.A1
     title: Planning the use of containers
     level: basic
-    status: manual
+    status: operator
     operator: Entirely the operator's planning task.
 
   - id: SYS.1.6.A2
     title: Planning the management of containers
     level: basic
-    status: manual
+    status: operator
     operator: Operator plans lifecycle, management tooling, and admin processes.
 
   - id: SYS.1.6.A3
     title: Secure deployment of containerized IT systems
     level: basic
-    status: manual
-    ocm: "The chart sets liveness and readiness probes with configurable intervals (`values.yaml`)."
+    status: partial
+    ocm: The chart sets liveness and readiness probes with configurable intervals (`values.yaml`) on the controller container.
     operator: Operator verifies isolation, virtual networking, and monitors performance.
+    rules:
+      - trivy:OCM-KSV-0002
 
   - id: SYS.1.6.A4
     title: Planning the deployment and distribution of images
     level: basic
-    status: manual
-    ocm: "OCM images are published to `ghcr.io` with digest-pinned tags. The release pipeline builds, scans, and signs every image before publishing."
+    status: partial
+    ocm: OCM images are published to `ghcr.io`, and the chart references the controller image by digest. The release pipeline builds, scans, and signs every image before publishing.
     operator: Operator documents their image distribution process and controls access to the registry.
+    rules:
+      - trivy:OCM-KSV-0001
 
   - id: SYS.1.6.A5
     title: Separation of the administration and access networks for containers
@@ -70,6 +78,8 @@ controls:
       - dockle:DKL-DI-0006
       - trivy:KSV-0013
       - trivy:KSV-0125
+      - trivy:OCM-DS-0001
+      - trivy:DS-0001
 
   - id: SYS.1.6.A7
     title: Persistence of container logging data
@@ -92,6 +102,7 @@ controls:
       - kubescape:C-0015
       - trivy:KSV-0041
       - trivy:KSV-0113
+      - trivy:DS-0031
 
   - id: SYS.1.6.A9
     title: Suitability for container operation
@@ -105,7 +116,7 @@ controls:
   - id: SYS.1.6.A10
     title: Policy for images and container operations
     level: standard
-    status: manual
+    status: operator
     operator: Operator creates and enforces the image policy.
 
   - id: SYS.1.6.A11
@@ -120,23 +131,29 @@ controls:
   - id: SYS.1.6.A12
     title: Distribution of secure images
     level: standard
-    status: manual
-    ocm: OCM images are signed (Sigstore `cosign` keyless) and carry SLSA provenance, verified in the release workflow before promotion. The Helm chart pins the image by digest in `values.yaml`.
+    status: partial
+    ocm: Every image manifest carries the OCI annotations `title`, `description`, `version`, `revision`, `source`, `created`, `vendor` and `licenses`, and a SLSA provenance attestation, so its function and history are traceable. The Helm chart pins the image by digest in `values.yaml`. Images are signed (Sigstore `cosign` keyless) and their SLSA provenance is verified in the release workflow before promotion; signatures exist only for released images, so the per-build scan does not check them.
     operator: Operator verifies signatures before deployment and documents trusted sources.
+    rules:
+      - oci:annotations
+      - oci:provenance
+      - trivy:OCM-KSV-0001
 
   - id: SYS.1.6.A13
     title: Release of images
     level: standard
     status: manual
-    ocm: The release pipeline runs unit tests, integration tests, and the image scan, which gates publishing, and signs before publishing.
+    ocm: The release pipeline runs unit tests, integration tests, and the image scan, which gates publishing, and signs before publishing. This is a property of the release process, which no image or chart scan can observe.
     operator: Operator integrates OCM image releases into their own approval workflow.
 
   - id: SYS.1.6.A14
     title: Updating images
     level: standard
-    status: manual
-    ocm: Base images are digest-pinned; updates are tracked by Renovate and produce a new release.
+    status: partial
+    ocm: All base images are pinned by digest, so updates arrive as reviewed digest changes; Renovate proposes them and each produces a new release.
     operator: Operator plans patch and change management for OCM updates.
+    rules:
+      - trivy:OCM-DS-0001
 
   - id: SYS.1.6.A15
     title: Limitation of resources per container
@@ -163,6 +180,7 @@ controls:
       - kubescape:C-0042
       - trivy:KSV-0053
       - trivy:KSV-0054
+      - trivy:DS-0004
 
   - id: SYS.1.6.A17
     title: Execution of containers without privileges
@@ -186,6 +204,7 @@ controls:
       - kubescape:C-0016
       - kubescape:C-0046
       - kubescape:C-0057
+      - trivy:DS-0002
 
   - id: SYS.1.6.A18
     title: Application services accounts
@@ -218,7 +237,7 @@ controls:
     level: standard
     status: manual
     gspp: [TEST.2.1]
-    ocm: The Helm chart and all Kubernetes manifests are version-controlled in the OCM repository.
+    ocm: The Helm chart and all Kubernetes manifests are version-controlled in the OCM repository. Version control is a property of the repository, not of the scanned artifacts.
     operator: Operator versions and audits their own values overrides.
 
   - id: SYS.1.6.A21
@@ -238,7 +257,7 @@ controls:
   - id: SYS.1.6.A22
     title: Provision for examinations
     level: elevated
-    status: manual
+    status: operator
     operator: Entirely the operator's responsibility.
 
   - id: SYS.1.6.A23
@@ -253,18 +272,18 @@ controls:
   - id: SYS.1.6.A24
     title: Host-based intrusion detection
     level: elevated
-    status: manual
+    status: operator
     gspp: [DET.4.6]
     operator: Entirely the operator's responsibility.
 
   - id: SYS.1.6.A25
     title: High availability of containerised applications
     level: elevated
-    status: manual
+    status: operator
     operator: Entirely the operator's responsibility.
 
   - id: SYS.1.6.A26
     title: Further isolation and encapsulation of containers
     level: elevated
-    status: manual
+    status: operator
     operator: Entirely the operator's responsibility.
