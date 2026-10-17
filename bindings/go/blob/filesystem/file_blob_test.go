@@ -23,8 +23,9 @@ func TestBlob_ReadCloser(t *testing.T) {
 	r.NoError(err)
 
 	filePath := "testfile.txt"
-	_, err = fsys.OpenFile(filePath, os.O_CREATE|os.O_WRONLY, 0o644)
+	f, err := fsys.OpenFile(filePath, os.O_CREATE|os.O_WRONLY, 0o644)
 	r.NoError(err)
+	r.NoError(f.Close())
 
 	b := filesystem.NewFileBlob(fsys, filePath)
 	reader, err := b.ReadCloser()

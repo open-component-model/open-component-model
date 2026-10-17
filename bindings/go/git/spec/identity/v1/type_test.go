@@ -1,6 +1,8 @@
 package v1_test
 
 import (
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -24,7 +26,7 @@ func TestIdentityFromURL(t *testing.T) {
 		{"git@example.com:org/repo.git", "ssh", "example.com", "22", "org/repo.git"},
 		{"ssh://git@example.com:2222/org/repo.git", "ssh", "example.com", "2222", "org/repo.git"},
 		{"git://example.com/org/repo.git", "git", "example.com", "9418", "org/repo.git"},
-		{"file:///workspace/repo.git", "file", "localhost", "", "workspace/repo.git"},
+		{"file:///workspace/repo.git", "file", "localhost", "", identityPath(t, "/workspace/repo.git")},
 	} {
 		t.Run(tc.url, func(t *testing.T) {
 			r := require.New(t)
@@ -40,6 +42,15 @@ func TestIdentityFromURL(t *testing.T) {
 			r.NotContains(id.String(), "secret")
 		})
 	}
+}
+
+// identityPath is the identity path of the slash separated path p, which on
+// windows resolves against the drive of the working directory.
+func identityPath(t *testing.T, p string) string {
+	t.Helper()
+	abs, err := filepath.Abs(filepath.FromSlash(p))
+	require.NoError(t, err)
+	return strings.TrimPrefix(filepath.ToSlash(abs), "/")
 }
 
 func TestIdentityCredentialGraph(t *testing.T) {

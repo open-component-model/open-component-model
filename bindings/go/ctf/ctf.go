@@ -142,6 +142,9 @@ func OpenCTF(ctx context.Context, opts OpenCTFOptions) (CTF, error) {
 		if errors.Is(err, os.ErrNotExist) && opts.Flag&O_CREATE != 0 {
 			return OpenCTFFromOSPath(tmp, opts.Flag)
 		}
+		if err != nil {
+			return nil, fmt.Errorf("unable to extract ctf: %w", errors.Join(err, os.RemoveAll(tmp)))
+		}
 		return ctf, nil
 	default:
 		return nil, ErrUnsupportedFormat

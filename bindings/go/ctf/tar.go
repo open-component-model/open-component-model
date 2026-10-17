@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
+	"path"
 	"runtime"
 	"strings"
 
@@ -94,11 +94,14 @@ func extractTARToFilesystemCTF(reader *tar.Reader, ctf *FileSystemCTF) (err erro
 		}
 		switch header.Typeflag {
 		case tar.TypeReg:
-			if err := ctf.writeFile(header.Name, reader, header.Size); err != nil {
+			if err := ctf.writeFile(header.Name, reader, header.Size, false); err != nil {
 				return fmt.Errorf("unable to write file: %w", err)
 			}
 		case tar.TypeDir:
-			if err = os.MkdirAll(header.Name, 0o755); err != nil {
+			if ctf.mkdirFS == nil {
+				return fmt.Errorf("filesystem does not support creating directories: %T", ctf.fs)
+			}
+			if err = ctf.mkdirFS.MkdirAll(header.Name, 0o755); err != nil {
 				return fmt.Errorf("unable to create directory: %w", err)
 			}
 		}
@@ -238,7 +241,7 @@ func ArchiveTARToWriter(ctx context.Context, ctf CTF, writer io.Writer, format F
 		if err != nil {
 			return err
 		}
-		name := filepath.Join(BlobsDirectoryName, file)
+		name := path.Join(BlobsDirectoryName, file)
 		if err := blob.ArchiveBlob(name, size.Size(), digest, b, tarWriter, copyBuffer); err != nil {
 			return err
 		}

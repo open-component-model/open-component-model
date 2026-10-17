@@ -3,6 +3,8 @@ package endpoint_test
 import (
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -20,10 +22,10 @@ func TestParse(t *testing.T) {
 		{"ssh://git@example.com:2222/org/repo.git", "ssh", "example.com", "2222", "ssh://git@example.com:2222/org/repo.git"},
 		{"git@example.com:org/repo.git", "ssh", "example.com", "22", "git@example.com:org/repo.git"},
 		{"git://example.com/repo.git", "git", "example.com", "9418", "git://example.com/repo.git"},
-		{"file:///srv/repo.git", "file", "", "", "file:///srv/repo.git"},
+		{"file:///srv/repo.git", "file", "", "", fileURL(t, "/srv/repo.git")},
 		// go-git would read the host as the first element of a relative path.
-		{"file://localhost/srv/repo.git", "file", "localhost", "", "file:///srv/repo.git"},
-		{"/srv/repo.git", "file", "", "", "file:///srv/repo.git"},
+		{"file://localhost/srv/repo.git", "file", "localhost", "", fileURL(t, "/srv/repo.git")},
+		{"/srv/repo.git", "file", "", "", fileURL(t, "/srv/repo.git")},
 	} {
 		t.Run(tc.repository, func(t *testing.T) {
 			r := require.New(t)
@@ -38,6 +40,23 @@ func TestParse(t *testing.T) {
 	}
 }
 
+func TestParseWindowsPath(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("drive letter paths only exist on windows")
+	}
+	for _, repository := range []string{`C:\srv\repo.git`, "C:/srv/repo.git", "file:///C:/srv/repo.git"} {
+		t.Run(repository, func(t *testing.T) {
+			r := require.New(t)
+
+			ep, err := endpoint.Parse(repository)
+			r.NoError(err)
+			r.Equal("file", ep.Protocol)
+			r.Equal(`C:\srv\repo.git`, ep.Path)
+			r.Equal("file:///C:/srv/repo.git", ep.URL)
+		})
+	}
+}
+
 func TestParseRelativePath(t *testing.T) {
 	r := require.New(t)
 	wd, err := os.Getwd()
@@ -47,8 +66,9 @@ func TestParseRelativePath(t *testing.T) {
 	ep, err := endpoint.Parse("example.com/org/repo.git")
 	r.NoError(err)
 	r.Equal("file", ep.Protocol)
-	r.Equal(filepath.Join(wd, "example.com/org/repo.git"), ep.Path)
-	r.Equal("file://"+filepath.Join(wd, "example.com/org/repo.git"), ep.URL)
+	want := filepath.Join(wd, "example.com", "org", "repo.git")
+	r.Equal(want, ep.Path)
+	r.Equal(fileURL(t, filepath.ToSlash(want)), ep.URL)
 }
 
 func TestParseRejects(t *testing.T) {
@@ -69,4 +89,17 @@ func TestParseRejects(t *testing.T) {
 			require.ErrorContains(t, err, tc.err)
 		})
 	}
+}
+
+// fileURL is the URL Parse gives the slash separated path p, which on windows
+// resolves against the drive of the working directory.
+func fileURL(t *testing.T, p string) string {
+	t.Helper()
+	abs, err := filepath.Abs(filepath.FromSlash(p))
+	require.NoError(t, err)
+	abs = filepath.ToSlash(abs)
+	if !strings.HasPrefix(abs, "/") {
+		abs = "/" + abs
+	}
+	return "file://" + abs
 }

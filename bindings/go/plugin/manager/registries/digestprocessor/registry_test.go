@@ -17,6 +17,7 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/plugin/internal/dummytype"
 	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
+	"ocm.software/open-component-model/bindings/go/plugin/internal/osutil"
 	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/digestprocessor/v1"
 	inputv1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/input/v1"
 	mtypes "ocm.software/open-component-model/bindings/go/plugin/manager/types"
@@ -37,7 +38,7 @@ func dummyCapability(schema []byte) v1.CapabilitySpec {
 
 func TestPluginFlow(t *testing.T) {
 	slog.SetLogLoggerLevel(slog.LevelDebug)
-	path := filepath.Join("..", "..", "..", "tmp", "testdata", "test-plugin-digester")
+	path := filepath.Join("..", "..", "..", "tmp", "testdata", osutil.ExecutableName("test-plugin-digester"))
 	_, err := os.Stat(path)
 	require.NoError(t, err, "test plugin not found, please build the plugin under tmp/testdata/test-plugin-digester first")
 	ctx := context.Background()
@@ -46,7 +47,7 @@ func TestPluginFlow(t *testing.T) {
 	registry := NewDigestProcessorRegistry(ctx)
 	config := mtypes.Config{
 		ID:         "test-plugin-1-digester",
-		Type:       mtypes.Socket,
+		Type:       osutil.ConnectionType(t.Context()),
 		PluginType: inputv1.InputPluginType,
 	}
 	serialized, err := json.Marshal(config)
@@ -58,8 +59,10 @@ func TestPluginFlow(t *testing.T) {
 	stderr, err := pluginCmd.StderrPipe()
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		_ = os.Remove("/tmp/test-plugin-1-digester-plugin.socket")
-		_ = pluginCmd.Process.Kill()
+		if pluginCmd.Process != nil {
+			_ = pluginCmd.Process.Kill()
+		}
+		_ = os.Remove(osutil.SocketPath("test-plugin-1-digester"))
 	})
 	plugin := mtypes.Plugin{
 		ID:     "test-plugin-1-construction",
@@ -67,7 +70,7 @@ func TestPluginFlow(t *testing.T) {
 		Stderr: stderr,
 		Config: mtypes.Config{
 			ID:         "test-plugin-1-construction",
-			Type:       mtypes.Socket,
+			Type:       osutil.ConnectionType(t.Context()),
 			PluginType: v1.DigestProcessorPluginType,
 		},
 		Cmd:    pluginCmd,
@@ -101,7 +104,7 @@ func TestPluginFlow(t *testing.T) {
 func TestShutdown(t *testing.T) {
 	// start up the plugin
 	slog.SetLogLoggerLevel(slog.LevelDebug)
-	path := filepath.Join("..", "..", "..", "tmp", "testdata", "test-plugin-digester")
+	path := filepath.Join("..", "..", "..", "tmp", "testdata", osutil.ExecutableName("test-plugin-digester"))
 	_, err := os.Stat(path)
 	require.NoError(t, err, "test plugin not found, please build the plugin under tmp/testdata/test-plugin-digester first")
 	ctx := context.Background()
@@ -110,7 +113,7 @@ func TestShutdown(t *testing.T) {
 	registry := NewDigestProcessorRegistry(ctx)
 	config := mtypes.Config{
 		ID:         "test-plugin-1-digester",
-		Type:       mtypes.Socket,
+		Type:       osutil.ConnectionType(t.Context()),
 		PluginType: inputv1.InputPluginType,
 	}
 	serialized, err := json.Marshal(config)
@@ -122,8 +125,10 @@ func TestShutdown(t *testing.T) {
 	stderr, err := pluginCmd.StderrPipe()
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		_ = os.Remove("/tmp/test-plugin-1-digester-plugin.socket")
-		_ = pluginCmd.Process.Kill()
+		if pluginCmd.Process != nil {
+			_ = pluginCmd.Process.Kill()
+		}
+		_ = os.Remove(osutil.SocketPath("test-plugin-1-digester"))
 	})
 	plugin := mtypes.Plugin{
 		ID:     "test-plugin-1-construction",
@@ -131,7 +136,7 @@ func TestShutdown(t *testing.T) {
 		Stderr: stderr,
 		Config: mtypes.Config{
 			ID:         "test-plugin-1-construction",
-			Type:       mtypes.Socket,
+			Type:       osutil.ConnectionType(t.Context()),
 			PluginType: v1.DigestProcessorPluginType,
 		},
 		Cmd:    pluginCmd,

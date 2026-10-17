@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	blobv1alpha1 "ocm.software/open-component-model/bindings/go/blob/filesystem/spec/access/v1alpha1"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
@@ -124,7 +125,7 @@ func TestAddOCIArtifact_Transform(t *testing.T) {
 					Name:    blobv1alpha1.FileType,
 					Version: blobv1alpha1.Version,
 				},
-				URI:       "file://" + testFile,
+				URI:       filesystem.URIFromFilePath(testFile),
 				MediaType: "application/vnd.oci.image.layer.v1.tar+gzip",
 			},
 		},
@@ -197,7 +198,7 @@ func TestAddOCIArtifact_Transform_PreservesInputDigest(t *testing.T) {
 					Relation:    v2.LocalRelation,
 					Digest:      dig,
 				},
-				File: blobv1alpha1.File{Type: runtime.Type{Name: blobv1alpha1.FileType, Version: blobv1alpha1.Version}, URI: "file://" + testFile, MediaType: "application/vnd.oci.image.layer.v1.tar+gzip"},
+				File: blobv1alpha1.File{Type: runtime.Type{Name: blobv1alpha1.FileType, Version: blobv1alpha1.Version}, URI: filesystem.URIFromFilePath(testFile), MediaType: "application/vnd.oci.image.layer.v1.tar+gzip"},
 			},
 		}
 	}

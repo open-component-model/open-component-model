@@ -5,7 +5,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
@@ -14,6 +13,7 @@ import (
 	"helm.sh/helm/v4/pkg/provenance"
 	"helm.sh/helm/v4/pkg/registry"
 
+	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	filesystemaccess "ocm.software/open-component-model/bindings/go/blob/filesystem/spec/access"
 	filev1alpha1 "ocm.software/open-component-model/bindings/go/blob/filesystem/spec/access/v1alpha1"
 	descv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
@@ -71,7 +71,7 @@ func TestConvertHelmChartToOCI_Transform(t *testing.T) {
 			ID:   "test-convert-helm-to-oci",
 			Spec: &v1alpha1.ConvertHelmToOCISpec{
 				ChartFile: filev1alpha1.File{
-					URI: "file://" + chartPath,
+					URI: filesystem.URIFromFilePath(chartPath),
 				},
 				Resource: &descv2.Resource{
 					ElementMeta: descv2.ElementMeta{
@@ -108,7 +108,7 @@ func TestConvertHelmChartToOCI_Transform(t *testing.T) {
 		// artifact digest.
 
 		// Verify the output file was created
-		ociPath := strings.TrimPrefix(output.Output.File.URI, "file://")
+		ociPath := filePath(t, output.Output.File.URI)
 		assert.FileExists(t, ociPath)
 		t.Cleanup(func() {
 			_ = os.RemoveAll(ociPath)
@@ -148,10 +148,10 @@ func TestConvertHelmChartToOCI_Transform(t *testing.T) {
 			ID:   "test-convert-helm-to-oci-prov",
 			Spec: &v1alpha1.ConvertHelmToOCISpec{
 				ChartFile: filev1alpha1.File{
-					URI: "file://" + chartPath,
+					URI: filesystem.URIFromFilePath(chartPath),
 				},
 				ProvFile: &filev1alpha1.File{
-					URI: "file://" + provPath,
+					URI: filesystem.URIFromFilePath(provPath),
 				},
 				Resource: &descv2.Resource{
 					ElementMeta: descv2.ElementMeta{
@@ -183,7 +183,7 @@ func TestConvertHelmChartToOCI_Transform(t *testing.T) {
 		r.NotNil(output.Output.Resource)
 		r.Nil(output.Output.Resource.Digest, "convert must not inject a digest when the source has none")
 
-		ociPath := strings.TrimPrefix(output.Output.File.URI, "file://")
+		ociPath := filePath(t, output.Output.File.URI)
 		assert.FileExists(t, ociPath)
 		t.Cleanup(func() {
 			_ = os.RemoveAll(ociPath)
@@ -222,7 +222,7 @@ func TestConvertHelmChartToOCI_Transform(t *testing.T) {
 			ID:   "test-convert-no-output-path",
 			Spec: &v1alpha1.ConvertHelmToOCISpec{
 				ChartFile: filev1alpha1.File{
-					URI: "file://" + chartPath,
+					URI: filesystem.URIFromFilePath(chartPath),
 				},
 				Resource: &descv2.Resource{
 					ElementMeta: descv2.ElementMeta{
@@ -254,7 +254,7 @@ func TestConvertHelmChartToOCI_Transform(t *testing.T) {
 		r.NotNil(output.Output.Resource)
 		r.Nil(output.Output.Resource.Digest, "convert must not inject a digest when the source has none")
 
-		ociPath := strings.TrimPrefix(output.Output.File.URI, "file://")
+		ociPath := filePath(t, output.Output.File.URI)
 		assert.FileExists(t, ociPath)
 		t.Cleanup(func() {
 			_ = os.RemoveAll(ociPath)

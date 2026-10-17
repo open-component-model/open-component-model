@@ -25,7 +25,7 @@ func TestGetBlobFromSpec_SingleFile(t *testing.T) {
 
 	// Create File spec with file:// URI
 	spec := &v1alpha1.File{
-		URI:       "file://" + testFile,
+		URI:       filesystem.URIFromFilePath(testFile),
 		MediaType: "text/plain",
 	}
 
@@ -49,7 +49,7 @@ func TestGetBlobFromSpec_Directory(t *testing.T) {
 
 	// Create File spec with file:// URI pointing to directory
 	spec := &v1alpha1.File{
-		URI:       "file://" + tmpDir,
+		URI:       filesystem.URIFromFilePath(tmpDir),
 		MediaType: "application/x-tar",
 	}
 
@@ -73,7 +73,7 @@ func TestGetBlobFromSpec_MediaTypePreserved(t *testing.T) {
 	// Create File spec with custom media type
 	customMediaType := "application/json"
 	spec := &v1alpha1.File{
-		URI:       "file://" + testFile,
+		URI:       filesystem.URIFromFilePath(testFile),
 		MediaType: customMediaType,
 	}
 
@@ -92,31 +92,18 @@ func TestGetBlobFromSpec_MediaTypePreserved(t *testing.T) {
 	}
 }
 
-func TestGetBlobFromSpec_RelativePath(t *testing.T) {
+func TestGetBlobFromSpec_UncleanPath(t *testing.T) {
 	r := require.New(t)
 
 	// Setup: create test file
 	tmpDir := t.TempDir()
 	testContent := "Test content"
-	testFile := createTestFile(t, tmpDir, "test.txt", testContent)
+	createTestFile(t, tmpDir, "test.txt", testContent)
 
-	// Get relative path
-	cwd, err := os.Getwd()
-	r.NoError(err)
-
-	relPath, err := filepath.Rel(cwd, testFile)
-	r.NoError(err)
-
-	// Skip test if we can't create a relative path
-	if err != nil || relPath == "" {
-		t.Skip("Cannot create relative path")
-	}
-
-	// Create File spec with relative file:// URI
-	// Note: file:// URIs must use absolute paths per RFC 8089.
-	// Use file:///abs/path form with the resolved absolute path.
+	// file:// URIs must use absolute paths per RFC 8089; dot segments are
+	// resolved lexically, so the missing "sub" directory does not matter.
 	spec := &v1alpha1.File{
-		URI: "file://" + testFile,
+		URI: filesystem.URIFromFilePath(tmpDir) + "/sub/../test.txt",
 	}
 
 	// Test: get blob from spec (should resolve to absolute path)
@@ -233,7 +220,7 @@ func TestBlobToSpec_SingleFile(t *testing.T) {
 	r.NotNil(spec)
 
 	// Verify: spec has correct URI
-	r.Equal("file://"+targetPath, spec.URI)
+	r.Equal(filesystem.URIFromFilePath(targetPath), spec.URI)
 
 	// Verify: spec has correct media type
 	r.Equal("text/plain", spec.MediaType)
@@ -331,7 +318,7 @@ func TestBlobToSpec_DirectoryBlob(t *testing.T) {
 	r.NotNil(spec)
 
 	// Verify: spec has correct URI and media type
-	r.Equal("file://"+targetPath, spec.URI)
+	r.Equal(filesystem.URIFromFilePath(targetPath), spec.URI)
 	r.Equal("application/x-tar", spec.MediaType)
 
 	// Verify: TAR file was created
@@ -363,7 +350,7 @@ func TestBlobSpec_Roundtrip(t *testing.T) {
 
 	// Step 1: Create spec from original file
 	originalSpec := &v1alpha1.File{
-		URI:       "file://" + originalFile,
+		URI:       filesystem.URIFromFilePath(originalFile),
 		MediaType: "text/plain",
 	}
 

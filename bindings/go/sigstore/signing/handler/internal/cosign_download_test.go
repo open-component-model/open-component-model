@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -97,7 +98,9 @@ func TestDownloadAndVerify(t *testing.T) {
 		info, err := os.Stat(destPath)
 		r.NoError(err)
 		r.True(info.Mode().IsRegular())
-		r.NotZero(info.Mode() & 0o100)
+		if runtime.GOOS != "windows" { // Windows has no executable permission bit.
+			r.NotZero(info.Mode() & 0o100)
+		}
 	})
 	t.Run("checksum mismatch", func(t *testing.T) {
 		t.Parallel()

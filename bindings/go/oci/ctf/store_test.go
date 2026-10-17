@@ -577,8 +577,9 @@ func TestConcurrentBlobOperations(t *testing.T) {
 
 				// Fetch operation
 				reader, err := store.Fetch(ctx, desc)
-				assert.NoError(t, err, "goroutine %d: fetch should succeed", id)
-				assert.NotNil(t, reader, "goroutine %d: reader should not be nil", id)
+				if !assert.NoError(t, err, "goroutine %d: fetch should succeed", id) {
+					return
+				}
 
 				data, err := io.ReadAll(reader)
 				reader.Close()
@@ -620,8 +621,9 @@ func TestConcurrentBlobOperations(t *testing.T) {
 
 					// Fetch
 					reader, err := store.Fetch(ctx, desc)
-					assert.NoError(t, err, "goroutine %d blob %d: fetch should succeed", goroutineID, j)
-					assert.NotNil(t, reader, "goroutine %d blob %d: reader should not be nil", goroutineID, j)
+					if !assert.NoError(t, err, "goroutine %d blob %d: fetch should succeed", goroutineID, j) {
+						return
+					}
 
 					data, err := io.ReadAll(reader)
 					reader.Close()
