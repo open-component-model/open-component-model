@@ -15,6 +15,10 @@ import { readFile, writeFile } from "node:fs/promises";
  * inside OCM's binaries only, never to the same module in another binary of the
  * image (cosign), which govulncheck did not analyze. Statements carry the
  * advisory's aliases (CVE IDs), the IDs image scanners report.
+ *
+ * Other binaries in the images get the statements their publisher attested:
+ * importAttested() takes a verified OpenVEX attestation (gh attestation verify
+ * output) and scopes its statements to that binary's main module the same way.
  */
 
 /**
@@ -94,11 +98,77 @@ export function buildVex(messages, meta) {
 }
 
 /**
+ * govulncheck writes Go package URLs with the module path percent-encoded
+ * (pkg:golang/golang.org%2Fx%2Fcrypto@v0.58.0); scanners use the plain path
+ * (pkg:golang/golang.org/x/crypto@v0.58.0), and the encoded form does not match it.
+ *
+ * @param {string} purl
+ */
+export function normalizeGoPurl(purl) {
+    const m = purl.match(/^pkg:golang\/([^@?#]+)(.*)$/);
+    return m ? `pkg:golang/${decodeURIComponent(m[1])}${m[2]}` : purl;
+}
+
+/**
+ * Statements of verified OpenVEX attestations, scoped to the main module of the
+ * binary they describe. A statement without subcomponents names no module, so
+ * scoping it would cover every module of the binary; it is skipped.
+ *
+ * @param {any[]} verified - `gh attestation verify --format json` output
+ * @param {{ product: string, subject: string }} target - main module purl of the binary, and the attested image
+ * @param {(id: string) => Promise<string[]>} aliasesOf - aliases of an advisory
+ * @returns {Promise<{ statements: any[], skipped: string[] }>}
+ */
+export async function importAttested(verified, target, aliasesOf) {
+    const statements = [];
+    const skipped = [];
+    for (const v of verified) {
+        const signer = v.verificationResult?.signature?.certificate?.buildSignerURI ?? "unknown signer";
+        for (const s of v.verificationResult?.statement?.predicate?.statements ?? []) {
+            const name = s.vulnerability?.name;
+            const subcomponents = [...new Set((s.products ?? []).flatMap((/** @type {any} */ p) => (p.subcomponents ?? []).map((/** @type {any} */ c) => normalizeGoPurl(c["@id"]))))].sort();
+            if (!name || subcomponents.length === 0) {
+                skipped.push(name ?? "statement without vulnerability");
+                continue;
+            }
+            const aliases = [...new Set([...(s.vulnerability.aliases ?? []), ...(await aliasesOf(name))])].sort();
+            statements.push({
+                vulnerability: { ...(name.startsWith("GO-") && { "@id": `https://pkg.go.dev/vuln/${name}` }), name, aliases },
+                products: [{ "@id": target.product, subcomponents: subcomponents.map((id) => ({ "@id": id })) }],
+                status: s.status,
+                ...(s.justification && { justification: s.justification }),
+                ...(s.impact_statement && { impact_statement: s.impact_statement }),
+                ...(s.action_statement && { action_statement: s.action_statement }),
+                status_notes: `From the OpenVEX attestation of ${target.subject}, signed by ${signer}.`,
+            });
+        }
+    }
+    return { statements, skipped };
+}
+
+/**
+ * Aliases of a Go advisory from the Go vulnerability database.
+ *
+ * @param {string} id
+ * @returns {Promise<string[]>}
+ */
+async function goAliases(id) {
+    if (!id.startsWith("GO-")) return [];
+    const res = await fetch(`https://vuln.go.dev/ID/${id}.json`);
+    if (!res.ok) throw new Error(`vuln.go.dev: ${id}: HTTP ${res.status}`);
+    return (await res.json()).aliases ?? [];
+}
+
+/**
  * GitHub Actions entrypoint.
  *
  * Environment variables:
  * - GOVULNCHECK_JSON: govulncheck -format json output (required)
  * - VEX_OUTPUT: path of the OpenVEX document to write (required)
+ * - ATTESTED_VEX: `gh attestation verify --format json` output of another
+ *   binary's OpenVEX attestation, merged into the document (optional)
+ * - ATTESTED_VEX_PRODUCT: main module purl of that binary (required with ATTESTED_VEX)
+ * - ATTESTED_VEX_SUBJECT: the attested image reference, for the statement notes
  *
  * @param {import('@actions/github-script').AsyncFunctionArguments} args
  */
@@ -114,17 +184,29 @@ export default async function vexAction({ core, context }) {
         author: `${context.repo.owner}/${context.repo.repo}`,
         timestamp: new Date().toISOString(),
     });
+    const { ATTESTED_VEX: attested, ATTESTED_VEX_PRODUCT: product, ATTESTED_VEX_SUBJECT: subject = "an attested image" } = process.env;
+    if (attested) {
+        if (!product) {
+            core.setFailed("ATTESTED_VEX_PRODUCT is required with ATTESTED_VEX");
+            return;
+        }
+        const imported = await importAttested(JSON.parse(await readFile(attested, "utf8")), { product, subject }, goAliases);
+        for (const name of imported.skipped) core.warning(`${subject}: skipped ${name}, which names no module`);
+        core.info(`${subject}: imported ${imported.statements.length} attested statement(s) for ${product}`);
+        vex.statements.push(...imported.statements);
+    }
     await writeFile(output, JSON.stringify(vex, null, 2));
     const affected = vex.statements.filter((s) => s.status === "affected");
     core.info(`OpenVEX: ${vex.statements.length} statement(s), ${affected.length} affected`);
     await core.summary
         .addHeading("📄 OpenVEX from govulncheck", 3)
         .addTable([
-            [{ data: "Advisory", header: true }, { data: "Status", header: true }, { data: `Modules (in ${vex.statements[0]?.products[0]["@id"] ?? "—"})`, header: true }],
+            [{ data: "Advisory", header: true }, { data: "Status", header: true }, { data: "Binary (main module)", header: true }, { data: "Modules", header: true }],
             ...vex.statements.map((s) => [
                 [s.vulnerability.name, ...s.vulnerability.aliases].join(", "),
                 s.status + (s.justification ? ` (${s.justification})` : ""),
-                s.products.flatMap((p) => p.subcomponents.map((c) => c["@id"])).join(", "),
+                s.products[0]["@id"],
+                s.products.flatMap((/** @type {any} */ p) => p.subcomponents.map((/** @type {any} */ c) => c["@id"])).join(", "),
             ]),
         ])
         .write();
