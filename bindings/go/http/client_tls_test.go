@@ -99,6 +99,28 @@ func TestCloneWithTLS(t *testing.T) {
 	}
 }
 
+// TestCloneWithTLS_IsolatesOriginal asserts that changes apply makes to the
+// certificate pool and list of the clone do not reach the original client.
+func TestCloneWithTLS_IsolatesOriginal(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
+	roots := x509.NewCertPool()
+	original := &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots, Certificates: make([]tls.Certificate, 0, 1)}
+	client := &nethttp.Client{Transport: &nethttp.Transport{TLSClientConfig: original}}
+	cert := selfSignedClientCert(t)
+	leaf, err := x509.ParseCertificate(cert.Certificate[0])
+	r.NoError(err)
+
+	_, err = ocmhttp.CloneWithTLS(client, func(c *tls.Config) {
+		c.RootCAs.AddCert(leaf)
+		c.Certificates = append(c.Certificates, cert)
+	})
+	r.NoError(err)
+
+	r.True(roots.Equal(x509.NewCertPool()), "the original certificate pool must not change")
+	r.Empty(original.Certificates[:cap(original.Certificates)][0].Certificate, "the original certificate list must not change")
+}
+
 func TestCloneWithTLS_RejectsForeignTransport(t *testing.T) {
 	t.Parallel()
 	r := require.New(t)
