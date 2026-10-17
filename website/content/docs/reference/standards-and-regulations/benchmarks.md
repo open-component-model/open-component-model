@@ -8,9 +8,8 @@ toc: true
 This page describes how the OCM container images and the controller Helm chart
 perform against three widely used security benchmarks: the CIS Docker Benchmark,
 the CIS Kubernetes Benchmark, and the NSA/CISA Kubernetes Hardening Guide. The
-controller image and the slim CLI image are built `FROM scratch` with a static
-binary and a CA bundle; the default CLI image adds `cosign` and GnuPG on Garden
-Linux `bare-libc`. See
+images are built `FROM scratch` with static binaries and a CA bundle; the
+default CLI image and the controller image add a FIPS build of `cosign`. See
 [FIPS 140-3: Artifacts]({{< relref "docs/reference/standards-and-regulations/fips.md#artifacts" >}})
 for build details and
 [DISA STIG]({{< relref "docs/reference/standards-and-regulations/disa-stig.md" >}})
@@ -77,8 +76,8 @@ contain:
 | Check | Description | CLI image | Controller image | Notes |
 | --- | --- | --- | --- | --- |
 | CIS-DI-0001 | Non-root user | ✅ | ✅ | `USER 65532:65532` |
-| CIS-DI-0002 | Trusted base images | ✅ | ✅ | Garden Linux FIPS and `bare-libc` (digest-pinned) and `scratch` |
-| CIS-DI-0003 | No unnecessary packages | ✅ | ✅ | Only the binary and CA bundle; the default CLI image also has `cosign`, GnuPG and their libraries |
+| CIS-DI-0002 | Trusted base images | ✅ | ✅ | `scratch`, with the CA bundle from the digest-pinned Garden Linux FIPS image and `cosign` from the digest-pinned OCM cosign image |
+| CIS-DI-0003 | No unnecessary packages | ✅ | ✅ | Only the binary and CA bundle; the default CLI image and the controller image also have `cosign` |
 | CIS-DI-0005 | Content trust | ℹ️ INFO | ℹ️ INFO | `DOCKER_CONTENT_TRUST` is a client-side setting, not an image property |
 | CIS-DI-0006 | HEALTHCHECK instruction | ℹ️ INFO | ℹ️ INFO | Not applicable: on Kubernetes the chart sets liveness and readiness probes |
 | CIS-DI-0007 | No bare `update` instructions | ✅ | ✅ | No package manager |

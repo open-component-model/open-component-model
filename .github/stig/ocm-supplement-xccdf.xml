@@ -50,7 +50,7 @@
 
   <Rule id="xccdf_software.ocm_rule_go_fips_module" selected="true" severity="high">
     <title>Cryptography runs in a FIPS-validated module</title>
-    <description>The entrypoint is built with GOFIPS140=v&lt;version&gt; and defaults to fips140=on, so all of OCM's own cryptography runs in the Go Cryptographic Module (CMVP certificate #5247 for v1.0.0). Further executables declared for an image, such as cosign and GnuPG in the default CLI image, are not covered by this check.</description>
+    <description>The entrypoint is built with GOFIPS140=v&lt;version&gt; and defaults to fips140=on, so all of OCM's own cryptography runs in the Go Cryptographic Module (CMVP certificate #5247 for v1.0.0). Further executables declared for an image, such as cosign, are not covered by this check.</description>
     <reference href="https://public.cyber.mil/stigs/">SV-203649</reference>
     <reference href="https://public.cyber.mil/stigs/">SV-203739</reference>
     <reference href="https://public.cyber.mil/stigs/">SV-203750</reference>

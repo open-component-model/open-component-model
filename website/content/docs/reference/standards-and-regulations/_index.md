@@ -27,7 +27,7 @@ system-hardening configuration baselines that mandate those validated modules.
 
 - [FIPS 140-3]({{< relref "docs/reference/standards-and-regulations/fips.md" >}}):
   the Go Cryptographic Module in the OCM binaries, runtime modes, digest
-  algorithms, and external signing binaries (`cosign`, `gpg`).
+  algorithms, and the external signing binary `cosign`.
 - [DISA STIG]({{< relref "docs/reference/standards-and-regulations/disa-stig.md" >}}):
   container image and chart hardening, and the GPOS SRG scan of the OCM images.
 

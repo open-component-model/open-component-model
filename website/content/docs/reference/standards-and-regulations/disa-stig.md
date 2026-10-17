@@ -8,9 +8,9 @@ toc: true
 This page describes how the OCM CLI and OCM controller images and the controller
 Helm chart are hardened, and how the images are checked against DISA
 requirements. Since OCM 0.20.0, the release pipeline scans every image against
-the DISA GPOS SRG before publishing it. The controller image and the slim CLI
-image contain only a static binary and a CA bundle; the default CLI image adds
-`cosign` and GnuPG with its shared libraries on Garden Linux `bare-libc`. See
+the DISA GPOS SRG before publishing it. All images are built `FROM scratch` and
+contain only static binaries and a CA bundle: the slim CLI image only `ocm`, the
+default CLI image and the controller image also a FIPS build of `cosign`. See
 [FIPS 140-3: Artifacts]({{< relref "docs/reference/standards-and-regulations/fips.md#artifacts" >}})
 for how they are built.
 
@@ -60,24 +60,22 @@ what the images contain, with OVAL definitions in
 | --- | --- | --- |
 | SV-203649, SV-203739, SV-203750, SV-203751, SV-203776 | OpenSSL FIPS provider | The entrypoint has `GOFIPS140=v<version>` and `fips140=on` in its build information |
 | SV-263659 | Wolfi CA bundle digests | The only certificate file is the CA bundle of the digest-pinned Garden Linux base image |
-| SV-203675 | Shared library permissions | Controller and slim CLI image: no shared libraries or dynamic loader. Default CLI image: every shared library and the dynamic loader are owned by root and not writable by group or others |
+| SV-203675 | Shared library permissions | No shared libraries or dynamic loader |
 | SV-203716 | Shared library permissions | No package manager, setuid/setgid files, world-writable files, world-writable directories without the sticky bit, or executables other than the entrypoint and those declared for the image |
 | SV-203616, SV-203617, SV-203664 | `/var/log` permissions | No on-disk log locations; logs go to stdout/stderr |
 
 Each image declares the executables it may contain besides its entrypoint and
 whether it ships shared libraries, in the matrix of
-`.github/workflows/image-scan.yml`. Only the default CLI image declares any:
-`/usr/local/bin/cosign` and the GnuPG binaries `gpg`, `gpg-agent`, `gpgconf`,
-`gpg-connect-agent` and `dirmngr` in `/usr/bin`. Any other executable fails the
-scan.
+`.github/workflows/image-scan.yml`. The default CLI image and the controller
+image declare `/usr/local/bin/cosign`; none ships shared libraries. Any other
+executable fails the scan.
 
 The scan runs offline on the exported root filesystem. To scan an image
 locally, pass the declarations of its matrix entry, for example for the default
 CLI image:
 
 ```shell
-EXECUTABLES="/usr/local/bin/cosign /usr/bin/gpg /usr/bin/gpg-agent /usr/bin/gpgconf /usr/bin/gpg-connect-agent /usr/bin/dirmngr" \
-SHARED_LIBRARIES=true \
+EXECUTABLES="/usr/local/bin/cosign" \
 node .github/scripts/stig-scan.js <image> bindings/go/cli/Containerfile tmp/stig
 ```
 
