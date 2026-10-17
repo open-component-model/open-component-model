@@ -7,13 +7,21 @@
 # binary. To build full around an already published slim image instead, pass
 #   --build-context slim=docker-image://ghcr.io/open-component-model/cli:<version>-slim
 
-FROM --platform=${BUILDPLATFORM} ghcr.io/gardenlinux/gardenlinux/fips:1877.25@sha256:74ae1f81d0723434024f591d8c2872852201b99b9f18c0fbe10221b16e60e01d AS certs
+# CA bundle from the Garden Linux FIPS image, plus world-writable /tmp and the
+# default cache directories under HOME=/ (Docker's HOME for a user without a
+# passwd entry): /.cache for OCM's caches and a downloaded cosign, /.sigstore
+# for cosign's trust root. Files only, so this runs on the build platform.
+FROM --platform=$BUILDPLATFORM ghcr.io/gardenlinux/gardenlinux/fips:1877.25@sha256:74ae1f81d0723434024f591d8c2872852201b99b9f18c0fbe10221b16e60e01d AS certs
+RUN mkdir -p /out/etc/ssl/certs \
+ && cp /etc/ssl/certs/ca-certificates.crt /out/etc/ssl/certs/ \
+ && mkdir -m 1777 /out/tmp /out/.cache /out/.sigstore
 
 FROM scratch AS slim
 ARG TARGETOS
 ARG TARGETARCH
-COPY --from=certs /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+COPY --from=certs /out /
 COPY tmp/bin/ocm-${TARGETOS}-${TARGETARCH} /ocm
+USER 65532:65532
 ENTRYPOINT ["/ocm"]
 
 # Static cosign linked against the Go Cryptographic Module (GOFIPS140=certified,
@@ -21,7 +29,7 @@ ENTRYPOINT ["/ocm"]
 # https://github.com/open-component-model/cosign. Same release as COSIGN_VERSION in
 # bindings/go/sigstore/signing/handler/internal/.env (Renovate group "OCM cosign";
 # pin_sync_test.go there fails if they diverge).
-FROM ghcr.io/open-component-model/cosign:v3.1.3-ocm.27@sha256:ca2b9b32ab93f51c61db25c651ef8d13e7c60553fecf667c4f758e19e69db555 AS cosign
+FROM ghcr.io/open-component-model/cosign:v3.1.3-ocm.29@sha256:3b5ad42851c0a2c37f55a680c0f95aa1a6ef7a3ca01edf9d4e6926edfd66be9d AS cosign
 
 FROM scratch AS full
 # scratch defines no PATH; ocm looks up cosign on PATH.
@@ -29,7 +37,8 @@ ENV PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 # No GODEBUG needed: GOFIPS140 already makes fips140=on the default of both
 # ocm and cosign (DefaultGODEBUG in their build info).
 COPY --from=cosign /cosign /usr/local/bin/cosign
-COPY --from=slim /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+COPY --from=certs /out /
 # /ocm keeps the path of the previous scratch image for COPY --from users.
 COPY --from=slim /ocm /ocm
+USER 65532:65532
 ENTRYPOINT ["/ocm"]

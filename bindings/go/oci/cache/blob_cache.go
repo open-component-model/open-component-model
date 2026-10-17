@@ -212,16 +212,9 @@ func (c *BlobCache) Fetch(ctx context.Context, upstream content.ReadOnlyStorage,
 		c.logger.DebugContext(ctx, "blobcache: get failed, falling through",
 			slog.String("digest", target.Digest.String()), slog.String("err", err.Error()))
 	} else if hit {
-		if c.opts.RemotePolicy == RemotePolicyAlways {
-			ok, err := upstream.Exists(ctx, target)
-			if err != nil {
-				_ = f.Close()
-				return nil, fmt.Errorf("blobcache: verify remote access: %w", err)
-			}
-			if !ok {
-				_ = f.Close()
-				return nil, fmt.Errorf("blobcache: remote does not contain or allow access to %s", target.Digest)
-			}
+		if err := c.verifyRemote(ctx, upstream, target); err != nil {
+			_ = f.Close()
+			return nil, err
 		}
 		c.logger.DebugContext(ctx, "blobcache: hit",
 			slog.String("digest", target.Digest.String()), slog.Int64("size", target.Size))
@@ -248,6 +241,15 @@ func (c *BlobCache) Fetch(ctx context.Context, upstream content.ReadOnlyStorage,
 	// last waiter leaves would be the more principled alternative.
 	fetchCtx := context.Background()
 	ch := c.sf.DoChan(target.Digest.String(), func() (any, error) {
+		// A caller that missed the cache before the previous leader
+		// populated it, but reaches DoChan after that leader finished,
+		// becomes a leader itself; serve it the populated copy instead of
+		// fetching upstream again.
+		if data, hit, err := c.readCached(fetchCtx, upstream, target); err != nil {
+			return nil, err
+		} else if hit {
+			return data, nil
+		}
 		c.logger.Debug("blobcache: singleflight leader: starting upstream fetch",
 			slog.String("digest", target.Digest.String()))
 		data, err := content.FetchAll(fetchCtx, upstream, target)
@@ -279,6 +281,40 @@ func (c *BlobCache) Fetch(ctx context.Context, upstream content.ReadOnlyStorage,
 		}
 		return io.NopCloser(bytes.NewReader(res.Val.([]byte))), nil
 	}
+}
+
+// verifyRemote enforces [RemotePolicyAlways] for a cache hit: the
+// upstream must still contain, and grant access to, the blob.
+func (c *BlobCache) verifyRemote(ctx context.Context, upstream content.ReadOnlyStorage, target ociImageSpecV1.Descriptor) error {
+	if c.opts.RemotePolicy != RemotePolicyAlways {
+		return nil
+	}
+	ok, err := upstream.Exists(ctx, target)
+	if err != nil {
+		return fmt.Errorf("blobcache: verify remote access: %w", err)
+	}
+	if !ok {
+		return fmt.Errorf("blobcache: remote does not contain or allow access to %s", target.Digest)
+	}
+	return nil
+}
+
+// readCached returns the cached bytes of target, subject to the remote
+// policy. A failure to read the cached copy is a miss, as in [BlobCache.Fetch].
+func (c *BlobCache) readCached(ctx context.Context, upstream content.ReadOnlyStorage, target ociImageSpecV1.Descriptor) ([]byte, bool, error) {
+	f, hit, err := c.Get(target.Digest)
+	if err != nil || !hit {
+		return nil, false, nil
+	}
+	defer f.Close()
+	if err := c.verifyRemote(ctx, upstream, target); err != nil {
+		return nil, false, err
+	}
+	data, err := io.ReadAll(f)
+	if err != nil {
+		return nil, false, nil
+	}
+	return data, true, nil
 }
 
 // onEvict is the LRU's eviction callback. It removes the on-disk file
