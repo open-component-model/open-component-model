@@ -1,0 +1,321 @@
+package download_test
+
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"io"
+	"math"
+	"net/http"
+	"net/http/httptest"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"ocm.software/open-component-model/bindings/go/wget/checksum"
+	"ocm.software/open-component-model/bindings/go/wget/internal/download"
+)
+
+// sha256Hex returns the lowercase hex SHA-256 of content.
+func sha256Hex(content []byte) string {
+	sum := sha256.Sum256(content)
+	return hex.EncodeToString(sum[:])
+}
+
+// requirePolicy builds a Require policy that verifies against advertised headers,
+// failing when nothing is advertised (OnMissing: Fail). It is the body-verification
+// counterpart of the wget Require mode.
+func requirePolicy() checksum.Policy {
+	return checksum.Policy{Sources: checksum.BuiltinSources(), OnMissing: checksum.Fail}
+}
+
+func TestStream_HappyPathAndReplayable(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
+
+	content := []byte("streamed without a temp file")
+	var hits atomic.Int64
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hits.Add(1)
+		w.Header().Set("Content-Type", "text/plain")
+		_, _ = w.Write(content)
+	}))
+	t.Cleanup(srv.Close)
+
+	s := download.NewStream(t.Context(), download.Request{URL: srv.URL}, nil, download.WithClient(srv.Client()))
+
+	// First read.
+	r.Equal(content, readBlob(t, s))
+	// A second ReadCloser re-issues the request and starts from the beginning.
+	r.Equal(content, readBlob(t, s))
+	r.Equal(int64(2), hits.Load(), "each ReadCloser call must issue its own request")
+
+	mt, ok := s.MediaType()
+	r.True(ok)
+	r.Equal("text/plain", mt)
+}
+
+func TestStream_MediaTypeFromRequestOverridesResponse(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		_, _ = w.Write([]byte("x"))
+	}))
+	t.Cleanup(srv.Close)
+
+	s := download.NewStream(t.Context(), download.Request{URL: srv.URL, MediaType: "application/custom"}, nil,
+		download.WithClient(srv.Client()))
+	mt, ok := s.MediaType()
+	r.True(ok)
+	r.Equal("application/custom", mt)
+}
+
+func TestStream_VerificationSuccess(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
+
+	content := []byte("verify me correctly")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("X-Checksum-Sha256", sha256Hex(content))
+		_, _ = w.Write(content)
+	}))
+	t.Cleanup(srv.Close)
+
+	policy := requirePolicy()
+	verify := func(headers http.Header, digests map[string]string) error {
+		_, _, err := checksum.Resolve(t.Context(), policy, checksum.Input{URL: srv.URL, Headers: headers, Computed: digests})
+		return err
+	}
+
+	s := download.NewStream(t.Context(), download.Request{URL: srv.URL}, verify,
+		download.WithClient(srv.Client()),
+		download.WithDigestAlgorithms(download.DigestAlgorithm{Name: checksum.SHA256.OCMName, New: checksum.SHA256.New}))
+
+	rc, err := s.ReadCloser()
+	r.NoError(err)
+	got, err := io.ReadAll(rc)
+	r.NoError(err)
+	r.Equal(content, got)
+	r.NoError(rc.Close())
+}
+
+// TestStream_VerificationMismatch is the stream-then-verify digest-mismatch path:
+// the body streams out in full, but the advertised checksum does not match, so the
+// final read and the close both report the error.
+func TestStream_VerificationMismatch(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
+
+	content := []byte("the bytes actually served")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		// Advertise a checksum of different content, so verification must fail.
+		w.Header().Set("X-Checksum-Sha256", sha256Hex([]byte("something else entirely")))
+		_, _ = w.Write(content)
+	}))
+	t.Cleanup(srv.Close)
+
+	policy := requirePolicy()
+	verify := func(headers http.Header, digests map[string]string) error {
+		_, _, err := checksum.Resolve(t.Context(), policy, checksum.Input{URL: srv.URL, Headers: headers, Computed: digests})
+		return err
+	}
+
+	s := download.NewStream(t.Context(), download.Request{URL: srv.URL}, verify,
+		download.WithClient(srv.Client()),
+		download.WithDigestAlgorithms(download.DigestAlgorithm{Name: checksum.SHA256.OCMName, New: checksum.SHA256.New}))
+
+	rc, err := s.ReadCloser()
+	r.NoError(err)
+	// io.ReadAll drains to the end; the mismatch surfaces from the final Read.
+	_, err = io.ReadAll(rc)
+	r.Error(err)
+	r.Contains(err.Error(), "checksum mismatch")
+	// Close reports the same cached error, so a caller that only checks Close still fails.
+	r.Error(rc.Close())
+}
+
+func TestStream_MaxDownloadSize(t *testing.T) {
+	t.Parallel()
+
+	content := []byte("0123456789") // 10 bytes
+
+	tests := []struct {
+		name    string
+		maxSize int64
+		chunked bool
+		wantErr bool
+	}{
+		{name: "body below the limit", maxSize: 100},
+		{name: "body exactly at the limit", maxSize: 10},
+		{name: "body one byte over the limit (announced length)", maxSize: 9, wantErr: true},
+		{name: "oversized chunked body caught while streaming", maxSize: 9, chunked: true, wantErr: true},
+		{name: "zero disables the limit", maxSize: 0},
+		{name: "maximum int64 limit", maxSize: math.MaxInt64},
+		{name: "maximum int64 chunked limit", maxSize: math.MaxInt64, chunked: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			r := require.New(t)
+
+			srv := serveBody(t, content, tt.chunked)
+			s := download.NewStream(t.Context(), download.Request{URL: srv.URL}, nil,
+				download.WithClient(srv.Client()), download.WithMaxDownloadSize(tt.maxSize))
+
+			rc, err := s.ReadCloser()
+			if tt.wantErr && err != nil {
+				assert.Contains(t, err.Error(), "exceeds maximum allowed size")
+				return
+			}
+			r.NoError(err)
+			got, readErr := io.ReadAll(rc)
+			closeErr := rc.Close()
+			if tt.wantErr {
+				if readErr == nil {
+					readErr = closeErr
+				}
+				r.Error(readErr)
+				assert.Contains(t, readErr.Error(), "exceeds maximum allowed size")
+				return
+			}
+			r.NoError(readErr)
+			r.NoError(closeErr)
+			r.Equal(content, got)
+		})
+	}
+}
+
+// TestIdempotentVerb reports true only for a repeatable verb (GET/HEAD and the
+// empty default), so DownloadResource streams only a request that is safe to
+// repeat.
+func TestIdempotentVerb(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		verb string
+		want bool
+	}{
+		{verb: "", want: true},
+		{verb: "GET", want: true},
+		{verb: "get", want: false},
+		{verb: "HEAD", want: true},
+		{verb: "head", want: false},
+		{verb: "POST", want: false},
+		{verb: "PUT", want: false},
+		{verb: "DELETE", want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.verb, func(t *testing.T) {
+			t.Parallel()
+			r := require.New(t)
+			r.Equal(tt.want, download.IdempotentVerb(tt.verb))
+		})
+	}
+}
+
+// TestStream_Prime: Prime sends one request to read the media type, the next
+// ReadCloser returns that response without a second request, and later calls send
+// the request again. Close releases a primed reader that was never read.
+func TestStream_Prime(t *testing.T) {
+	t.Parallel()
+
+	content := []byte("primed body")
+	newServer := func(t *testing.T) (*httptest.Server, *atomic.Int64) {
+		t.Helper()
+		var hits atomic.Int64
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			hits.Add(1)
+			w.Header().Set("Content-Type", "text/plain")
+			_, _ = w.Write(content)
+		}))
+		t.Cleanup(srv.Close)
+		return srv, &hits
+	}
+
+	t.Run("first read uses the primed response", func(t *testing.T) {
+		t.Parallel()
+		r := require.New(t)
+		srv, hits := newServer(t)
+		s := download.NewStream(t.Context(), download.Request{URL: srv.URL}, nil, download.WithClient(srv.Client()))
+
+		_, known := s.MediaType()
+		r.False(known, "the media type is unknown before the first request")
+
+		r.NoError(s.Prime())
+		r.Equal(int64(1), hits.Load(), "Prime must send exactly one request")
+		mt, known := s.MediaType()
+		r.True(known)
+		r.Equal("text/plain", mt)
+
+		r.Equal(content, readBlob(t, s))
+		r.Equal(int64(1), hits.Load(), "the first read must use the primed response")
+
+		r.Equal(content, readBlob(t, s))
+		r.Equal(int64(2), hits.Load(), "a later read must send the request again")
+	})
+
+	t.Run("close releases an unread primed reader", func(t *testing.T) {
+		t.Parallel()
+		r := require.New(t)
+		srv, hits := newServer(t)
+		s := download.NewStream(t.Context(), download.Request{URL: srv.URL}, nil, download.WithClient(srv.Client()))
+
+		r.NoError(s.Prime())
+		r.NoError(s.Close())
+		r.Equal(content, readBlob(t, s))
+		r.Equal(int64(2), hits.Load(), "after Close the primed response must not be reused")
+	})
+
+	// hangingServer sends the headers and part of the body and then waits until the
+	// client closes the response, which it reports on released.
+	hangingServer := func(t *testing.T) (*httptest.Server, <-chan struct{}) {
+		t.Helper()
+		released := make(chan struct{}, 2)
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			w.Header().Set("Content-Type", "text/plain")
+			_, _ = w.Write([]byte("partial"))
+			w.(http.Flusher).Flush()
+			<-req.Context().Done()
+			released <- struct{}{}
+		}))
+		t.Cleanup(srv.Close)
+		return srv, released
+	}
+	waitReleased := func(t *testing.T, released <-chan struct{}, msg string) {
+		t.Helper()
+		select {
+		case <-released:
+		case <-time.After(10 * time.Second):
+			t.Fatal(msg)
+		}
+	}
+
+	t.Run("close releases the open response", func(t *testing.T) {
+		t.Parallel()
+		r := require.New(t)
+		srv, released := hangingServer(t)
+		s := download.NewStream(t.Context(), download.Request{URL: srv.URL}, nil, download.WithClient(srv.Client()))
+
+		r.NoError(s.Prime())
+		r.NoError(s.Close())
+		waitReleased(t, released, "Close must release the primed response")
+		r.NoError(s.Close(), "a second Close must be a no-op")
+	})
+
+	t.Run("a second Prime releases the first response", func(t *testing.T) {
+		t.Parallel()
+		r := require.New(t)
+		srv, released := hangingServer(t)
+		s := download.NewStream(t.Context(), download.Request{URL: srv.URL}, nil, download.WithClient(srv.Client()))
+
+		r.NoError(s.Prime())
+		r.NoError(s.Prime())
+		waitReleased(t, released, "a second Prime must release the first response")
+		r.NoError(s.Close())
+		waitReleased(t, released, "Close must release the second response")
+	})
+}

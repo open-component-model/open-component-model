@@ -11,8 +11,7 @@
 // [ocm.software/open-component-model/bindings/go/wget/repository.ResourceRepository]
 // is the entry point. It resolves the access spec of a resource, performs the
 // request (following redirects unless the spec disables them in the access), and
-// returns the response body as a blob. Bodies are streamed into a file under the
-// temp folder of the supplied filesystem configuration rather than buffered, so
+// returns the response body as a blob. The body is never buffered in memory, so
 // memory use stays flat regardless of response size. There is no size limit by
 // default; [repository.WithMaxDownloadSize] adds one:
 //
@@ -25,10 +24,20 @@
 //	}
 //	defer b.(io.Closer).Close()
 //
-// The returned blob owns the file it is backed by. Closing it removes that file;
-// a blob that is dropped without being closed has its file removed once it becomes
-// unreachable, so downloads do not pile up in the temp folder of a long-running
-// process.
+// For a GET or HEAD request (the default) the returned blob is lazy: the body
+// streams from the network when the blob is read, nothing is written to disk, and
+// each ReadCloser call sends the request again. When the access pins no media type,
+// the request is sent once in DownloadResource to read it from the response, and
+// the first read uses that response. A checksum or digest mismatch fails the final
+// read and the close of the reader. Closing the blob releases a response that was
+// opened but never read.
+//
+// Any other verb, for example a POST with a body, is not safe to repeat. Such a
+// body is downloaded once into a file under the temp folder of the supplied
+// filesystem configuration, and the returned blob owns that file. Closing it
+// removes the file; a blob that is dropped without being closed has its file
+// removed once it becomes unreachable, so downloads do not pile up in the temp
+// folder of a long-running process.
 //
 // Credentials are optional. When supplied as
 // [ocm.software/open-component-model/bindings/go/wget/spec/credentials/v1.WgetCredentials]

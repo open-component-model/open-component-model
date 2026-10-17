@@ -129,15 +129,14 @@ func (c *Client) PutBlob(ctx context.Context, target string, content blob.ReadOn
 	if err != nil {
 		return "", false, fmt.Errorf("failed opening content: %w", err)
 	}
-	defer func() { _ = rc.Close() }()
 	size := blob.SizeUnknown
 	if sized, ok := content.(blob.SizeAware); ok {
 		size = sized.Size()
 	}
-	digester := DigestAlgorithm(known).Digester()
-	body := &eofReader{r: rc}
-	err = c.Send(ctx, http.MethodPut, target, io.TeeReader(body, digester.Hash()), size, header, out)
-	return digester.Digest(), body.eof, err
+	body := NewUploadBody(rc, size, DigestAlgorithm(known))
+	err = c.Send(ctx, http.MethodPut, target, body, size, header, out)
+	err = errors.Join(err, body.Close())
+	return body.Digest(), body.Complete(), err
 }
 
 // DigestAlgorithm is the algorithm uploaded content is hashed with: that of the digest the
@@ -168,18 +167,4 @@ func RedactURL(raw string) string {
 	u.RawQuery = ""
 	u.Fragment = ""
 	return u.String()
-}
-
-// eofReader records whether its reader returned io.EOF, i.e. was read to its end.
-type eofReader struct {
-	r   io.Reader
-	eof bool
-}
-
-func (e *eofReader) Read(p []byte) (int, error) {
-	n, err := e.r.Read(p)
-	if errors.Is(err, io.EOF) {
-		e.eof = true
-	}
-	return n, err
 }

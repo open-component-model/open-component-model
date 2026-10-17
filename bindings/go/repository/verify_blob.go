@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sync"
 
 	"github.com/opencontainers/go-digest"
 
@@ -116,12 +117,15 @@ func (b *verifyingBlob) Close() error {
 // verifyingReadCloser hashes everything read through it and compares the result
 // against the expected digest.
 type verifyingReadCloser struct {
+	mu       sync.Mutex
 	base     io.ReadCloser
 	digester digest.Digester
 	expected digest.Digest
 	size     int64
 	read     int64
 	complete bool
+	// readErr is the first error other than io.EOF that base returned.
+	readErr error
 }
 
 // Read is a tee reader implementation that will not only error on Close but
@@ -129,7 +133,12 @@ type verifyingReadCloser struct {
 // error like _ = x.Close() MUST not be left as a possible loophole for skipping
 // verification.
 func (v *verifyingReadCloser) Read(p []byte) (int, error) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
 	n, err := v.base.Read(p)
+	if err != nil && !errors.Is(err, io.EOF) && v.readErr == nil {
+		v.readErr = err
+	}
 	if n > 0 {
 		if _, writeErr := v.digester.Hash().Write(p[:n]); writeErr != nil {
 			return n, writeErr
@@ -151,12 +160,22 @@ func (v *verifyingReadCloser) Read(p []byte) (int, error) {
 // content having been read only in part. The reader is closed either way, so a
 // failed verification does not leak what it was reading from.
 func (v *verifyingReadCloser) Close() error {
-	return errors.Join(v.verify(), v.base.Close())
+	// Closing the source first unblocks a concurrent HTTP upload read.
+	closeErr := v.base.Close()
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	return errors.Join(v.verify(), closeErr)
 }
 
 // verify refuses content that has not been read in full before comparing digests.
+// When the base reader failed, the content is refused as well, but the message
+// names the failed read instead of a partial read by the caller: the base error
+// itself was already returned by Read.
 func (v *verifyingReadCloser) verify() error {
 	if !v.complete {
+		if v.readErr != nil {
+			return fmt.Errorf("digest %s not verified: the read failed before the end of the content", v.expected)
+		}
 		return fmt.Errorf("digest mismatch: incomplete read for digest %s", v.expected)
 	}
 	if actual := v.digester.Digest(); actual != v.expected {

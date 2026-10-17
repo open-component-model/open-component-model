@@ -215,6 +215,12 @@ func DownloadPlugin(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("downloading plugin resource for identity %q failed: %w", resourceIdentity, err)
 	}
+	// Release an open response or a temporary file of the downloaded blob.
+	defer func() {
+		if c, ok := data.(io.Closer); ok {
+			_ = c.Close()
+		}
+	}()
 
 	// ocm.software/plugins/[my-plugin]
 	pluginFileName := path.Base(ref.Component)

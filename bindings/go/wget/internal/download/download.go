@@ -11,6 +11,7 @@ import (
 	"hash"
 	"io"
 	"log/slog"
+	"math"
 	"net/http"
 	"net/url"
 	"os"
@@ -79,7 +80,11 @@ func Download(ctx context.Context, req Request, opts ...Option) (_ *Blob, err er
 
 	respBody := io.Reader(resp.Body)
 	if maxDownloadSize > 0 {
-		respBody = io.LimitReader(resp.Body, maxDownloadSize+1)
+		limit := maxDownloadSize
+		if limit < math.MaxInt64 {
+			limit++
+		}
+		respBody = io.LimitReader(resp.Body, limit)
 	}
 
 	file, err := os.CreateTemp(o.TempDir, tempFilePattern)

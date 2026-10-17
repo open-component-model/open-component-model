@@ -111,6 +111,13 @@ type ResourceRepository interface {
 	UploadResource(ctx context.Context, res *descriptor.Resource, content blob.ReadOnlyBlob, credentials runtime.Typed) (*descriptor.Resource, error)
 	// DownloadResource downloads and verifies the integrity of a [descriptor.Resource] from the repository.
 	// The credentials map must contain necessary authentication information to access the resource.
+	//
+	// The returned blob can be lazy: an implementation may defer the transfer until the blob is read,
+	// so that the content streams from the source without a temporary file. Then the size and digest
+	// can be unknown before the read, each ReadCloser call can send the source request again, and a
+	// verification failure surfaces at the final read and at the close of the reader. Callers must
+	// read the content to its end and check those errors before they use it. Callers must close the
+	// returned blob if it implements io.Closer.
 	DownloadResource(ctx context.Context, res *descriptor.Resource, credentials runtime.Typed) (blob.ReadOnlyBlob, error)
 }
 

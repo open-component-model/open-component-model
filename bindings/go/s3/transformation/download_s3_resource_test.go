@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	godigest "github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -200,6 +201,53 @@ func TestDownloadS3Resource_Transform(t *testing.T) {
 		entries, err := os.ReadDir(outputDir)
 		r.NoError(err)
 		assert.Empty(t, entries, "temporary output file should be removed after a failed download")
+	})
+
+	t.Run("removes the output file when verification fails while reading", func(t *testing.T) {
+		t.Parallel()
+		r := require.New(t)
+		ctx := t.Context()
+		outputDir := t.TempDir()
+
+		// A pinned media type keeps DownloadResource from requesting the object, so
+		// the blob is lazy and the digest mismatch only fails the read in the copy.
+		access := &s3v2.S3{
+			Type:         s3access.V2VersionedType,
+			Region:       "us-east-1",
+			BucketName:   "my-bucket",
+			ObjectKey:    "path/to/myfile",
+			Endpoint:     srv.URL,
+			UsePathStyle: true,
+			MediaType:    "text/plain",
+		}
+		raw := &runtime.Raw{}
+		r.NoError(s3access.Scheme.Convert(access, raw))
+		resource := s3Resource(t, srv.URL)
+		resource.Access = raw
+		resource.Digest = &v2.Digest{
+			HashAlgorithm:          "SHA-256",
+			NormalisationAlgorithm: "genericBlobDigest/v1",
+			Value:                  godigest.FromString("something else").Encoded(),
+		}
+
+		transform := &transformation.DownloadS3Resource{
+			Scheme:             scheme,
+			ResourceRepository: repository.NewResourceRepository(nil),
+			CredentialProvider: staticCredentials{},
+		}
+		spec := &v1alpha1.DownloadS3Resource{
+			Type: v1alpha1.DownloadS3ResourceV1alpha1,
+			ID:   "test-cleanup-on-read-failure",
+			Spec: &v1alpha1.DownloadS3ResourceSpec{Resource: resource, OutputPath: outputDir},
+		}
+
+		result, err := transform.Transform(ctx, spec)
+		r.ErrorContains(err, "digest mismatch")
+		r.Nil(result)
+
+		entries, err := os.ReadDir(outputDir)
+		r.NoError(err)
+		assert.Empty(t, entries, "the output file must be removed when the read fails")
 	})
 
 	t.Run("fails when spec is nil", func(t *testing.T) {
