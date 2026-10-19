@@ -2,23 +2,26 @@ package signing
 
 import (
 	"crypto"
+	"encoding/hex"
 	"log/slog"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
+	"ocm.software/open-component-model/bindings/go/descriptor/normalisation"
 	v1 "ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v1"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// TestGenerateAndVerifyDigest_JSONNormalisationV1 proves jsonNormalisation/v1
-// resolves through the real signing entrypoints: GenerateDigest produces a v1
-// digest and VerifyDigestMatchesDescriptor accepts it. Byte-exactness against
-// the cc-utils oracle is locked separately in the json/v1 package; this only
-// exercises the wiring (normalise → hash → compare), not a cryptographic
-// signature (see the plan's non-goals).
-func TestGenerateAndVerifyDigest_JSONNormalisationV1(t *testing.T) {
+// TestGenerateDigestRejected_JSONNormalisationV1 proves jsonNormalisation/v1 is
+// verify-only: GenerateDigest refuses to mint a new v1 digest, while
+// VerifyDigestMatchesDescriptor still accepts one. Byte-exactness against the
+// cc-utils oracle is locked separately in the json/v1 package; this only
+// exercises the signing-vs-verification split and the verify wiring
+// (normalise → hash → compare), not a cryptographic signature (see the plan's
+// non-goals).
+func TestGenerateDigestRejected_JSONNormalisationV1(t *testing.T) {
 	r := require.New(t)
 	logger := slog.New(slog.DiscardHandler)
 
@@ -43,11 +46,23 @@ func TestGenerateAndVerifyDigest_JSONNormalisationV1(t *testing.T) {
 		},
 	}
 
-	dg, err := GenerateDigest(t.Context(), desc, logger, v1.Algorithm, crypto.SHA256.String())
-	r.NoError(err)
-	r.Equal(v1.Algorithm, dg.NormalisationAlgorithm)
+	// Signing with v1 is refused: this repo verifies legacy cc-utils signatures
+	// but never produces them.
+	_, err := GenerateDigest(t.Context(), desc, logger, v1.Algorithm, crypto.SHA256.String())
+	r.ErrorIs(err, ErrSigningUnsupported)
 
-	sig := descruntime.Signature{Name: "acme", Digest: *dg}
+	// Verification still resolves v1. Build the expected digest the way verify
+	// does (normalise → sha256) — not via GenerateDigest, which is now blocked.
+	normalised, err := normalisation.Normalise(desc, v1.Algorithm)
+	r.NoError(err)
+	h := crypto.SHA256.New()
+	_, err = h.Write(normalised)
+	r.NoError(err)
+	sig := descruntime.Signature{Name: "acme", Digest: descruntime.Digest{
+		HashAlgorithm:          crypto.SHA256.String(),
+		NormalisationAlgorithm: v1.Algorithm,
+		Value:                  hex.EncodeToString(h.Sum(nil)),
+	}}
 	r.NoError(VerifyDigestMatchesDescriptor(t.Context(), desc, sig, logger))
 }
 

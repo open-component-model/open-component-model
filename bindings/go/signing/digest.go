@@ -11,9 +11,8 @@ import (
 	"log/slog"
 	"strings"
 
-	_ "ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v1"
-
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation"
+	jsonv1 "ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v1"
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 )
@@ -31,6 +30,16 @@ const (
 // ErrUnsupportedDigestHash is returned when a resource or component reference
 // digest uses a hash algorithm other than SHA-256 or SHA-512.
 var ErrUnsupportedDigestHash = errors.New("unsupported digest hash algorithm")
+
+// ErrSigningUnsupported is returned by GenerateDigest for a normalisation
+// algorithm this library supports for verification only. jsonNormalisation/v1
+// is the legacy gardener/cc-utils format: OCM v2 exists to verify existing
+// signatures that use it, but must not mint new ones. The stored form it reads
+// has documented fidelity gaps against cc-utils (e.g. an integral float 1.0 is
+// collapsed to 1 by the store read before normalisation), so a signature
+// produced here could bind bytes cc-utils would not reproduce. New signatures
+// must use the current algorithm (v4alpha1).
+var ErrSigningUnsupported = errors.New("normalisation algorithm is supported for verification only, not signing")
 
 // fipsEnforced reports whether the Go Cryptographic Module enforces FIPS 140-3
 // mode (GODEBUG=fips140=only). It is a variable so tests can exercise both modes.
@@ -116,6 +125,10 @@ func GenerateDigest(
 	hashAlgorithm string,
 ) (*descruntime.Digest, error) {
 	normalisationAlgorithm = ensureNormalisationAlgo(ctx, normalisationAlgorithm, logger)
+
+	if normalisationAlgorithm == jsonv1.Algorithm {
+		return nil, fmt.Errorf("%w: %q", ErrSigningUnsupported, normalisationAlgorithm)
+	}
 
 	normalised, err := normalisation.Normalise(desc, normalisationAlgorithm)
 	if err != nil {
