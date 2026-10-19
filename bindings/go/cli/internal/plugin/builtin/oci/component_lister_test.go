@@ -1,7 +1,9 @@
 package oci
 
 import (
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -57,10 +59,11 @@ func TestCTFComponentListerPlugin_NotCTFSpec(t *testing.T) {
 }
 
 func TestCTFComponentListerPlugin_Archive(t *testing.T) {
+	root := getRepoRootBasedOnGit(t)
 	for _, name := range []string{"transport-archive.tar", "transport-archive.tar.gz"} {
 		t.Run(name, func(t *testing.T) {
 			r := require.New(t)
-			path := filepath.Join("..", "..", "..", "..", "..", "oci", "ctf", "testdata", "compatibility", "01", name)
+			path := filepath.Join(root, "bindings", "go", "oci", "ctf", "testdata", "compatibility", "01", name)
 			lister, err := (&CTFComponentListerPlugin{}).GetComponentLister(t.Context(), &ctfv1.Repository{FilePath: path}, nil)
 			r.NoError(err)
 			var names []string
@@ -71,4 +74,14 @@ func TestCTFComponentListerPlugin_Archive(t *testing.T) {
 			r.Equal([]string{"github.com/acme.org/helloworld"}, names)
 		})
 	}
+}
+
+func getRepoRootBasedOnGit(t *testing.T) string {
+	t.Helper()
+	r := require.New(t)
+	git, err := exec.LookPath("git")
+	r.NoError(err, "git binary should be available in PATH to locate test data")
+	rootRaw, err := exec.CommandContext(t.Context(), git, "rev-parse", "--show-toplevel").Output()
+	r.NoError(err, "git rev-parse --show-toplevel must succeed to get repository root")
+	return strings.TrimSpace(string(rootRaw))
 }
