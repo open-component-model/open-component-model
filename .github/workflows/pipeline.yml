@@ -29,8 +29,10 @@ on:
       - '.github/workflows/cli.yml'
       - '.github/workflows/kubernetes-controller.yml'
       - '.github/workflows/conformance.yml'
+      - '.github/workflows/compatibility.yml'
       - '.github/workflows/e2e.yml'
       - '.github/workflows/pipeline.yml'
+      - 'Taskfile.yml'
       - '.env'
   workflow_call:
     inputs:
@@ -112,6 +114,16 @@ jobs:
       toolkit_version: ${{ needs.build_controller.outputs.version }}
   # === end replace ===
 
+  compatibility:
+    name: OCM v1 compatibility
+    needs: [build_cli]
+    uses: ./.github/workflows/compatibility.yml
+    permissions:
+      contents: read
+      actions: read
+    with:
+      cli_artifact: ${{ needs.build_cli.outputs.artifact_name }}
+
   # === New: E2E lifted out of kubernetes-controller.yml so it runs concurrently
   # with conformance instead of serializing ahead of it. Needs only the
   # controller build; gates publish alongside conformance. ===
@@ -133,7 +145,7 @@ jobs:
   # Changes include things for the modified tag regex.
   decide_publish:
     name: Decide Publish
-    needs: [conformance, e2e]
+    needs: [conformance, compatibility, e2e]
     runs-on: ubuntu-26.04-arm
     outputs:
       publish: ${{ steps.check.outputs.publish }}

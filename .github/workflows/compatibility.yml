@@ -1,14 +1,12 @@
 name: OCM v1 compatibility
 
 on:
-  push:
-    branches:
-      - main
-  pull_request:
-    paths:
-      - 'bindings/go/**'
-      - 'Taskfile.yml'
-      - '.github/workflows/compatibility.yml'
+  workflow_call:
+    inputs:
+      cli_artifact:
+        description: "Artifact name containing the prebuilt OCM v2 CLI binaries"
+        type: string
+        required: true
 
 permissions:
   contents: read
@@ -18,6 +16,9 @@ jobs:
     name: OCM v1 to v2
     runs-on: ubuntu-26.04-arm
     timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -31,5 +32,12 @@ jobs:
         with:
           version: 3.x
           repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Download OCM v2 CLI artifact
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: ${{ inputs.cli_artifact }}
+          path: bindings/go/cli/tmp
+      - name: Make OCM v2 CLI executable
+        run: chmod +x bindings/go/cli/tmp/bin/ocm-linux-arm64
       - name: Test OCM v1 to v2 compatibility
-        run: task compat/ocmv1:test
+        run: task compat/ocmv1:test/prebuilt OCM_V2_BIN="${{ github.workspace }}/bindings/go/cli/tmp/bin/ocm-linux-arm64"

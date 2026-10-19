@@ -9,6 +9,7 @@ includes:
   tools:
     taskfile: ./tools.Taskfile.yml
   compat/ocmv1:
+    optional: true
     taskfile: ./bindings/go/cli/integration/ocmv1/Taskfile.yml
     dir: ./bindings/go/cli/integration/ocmv1
   # bindings/go is a single Go module. Unit tests are run via `bindings/go:test`,

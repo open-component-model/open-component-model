@@ -7,11 +7,18 @@ tasks:
 
   test:
     desc: Generate OCM v1 artifacts and verify them with the current OCM CLI
+    cmds:
+      - task: build
+      - task: test/prebuilt
+
+  build:
+    internal: true
+    cmd: task -t '{{.TASKFILE_DIR}}/../../../../../Taskfile.yml' bindings/go/cli:build
+
+  test/prebuilt:
+    desc: Run OCM v1 compatibility tests with a prebuilt OCM v2 CLI
     deps: [install]
     env:
       OCM_V1_BIN: '{{.TASKFILE_DIR}}/../../tmp/ocmv1/{{.OCM_V1_VERSION}}/ocm'
-      OCM_V2_BIN: '{{.TASKFILE_DIR}}/../../tmp/bin/ocm'
-    cmds:
-      - cmd: task -t '{{.TASKFILE_DIR}}/../../../../../Taskfile.yml' bindings/go/cli:build
-        dir: '{{.TASKFILE_DIR}}/../../../../..'
-      - cmd: cd '{{.TASKFILE_DIR}}/../../..' && go test ./cli/integration -run '^Test_Integration_OCMv1Compatibility$' -count=1 -v
+      OCM_V2_BIN: '{{.OCM_V2_BIN | default (printf "%s/../../tmp/bin/ocm" .TASKFILE_DIR)}}'
+    cmd: cd '{{.TASKFILE_DIR}}/../../..' && go test ./cli/integration -run '^Test_Integration_OCMv1Compatibility$' -count=1 -v
