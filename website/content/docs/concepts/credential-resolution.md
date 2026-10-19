@@ -2,7 +2,7 @@
 title: "Credential Resolution"
 description: "Learn how OCM resolves credentials by building a config and observing which credentials get picked for different requests."
 icon: "🔑"
-weight: 5
+weight: 3
 toc: true
 aliases:
   - /docs/tutorials/credential-resolution/
@@ -349,10 +349,10 @@ Then retry the OCM command.
 
 ## Next Steps
 
-- [How-To: Configure Credentials for multiple Repositories ]({{< relref "docs/guides/transfer/configure-registry-credentials.md" >}}) - Configure OCM to authenticate against multiple OCI registries
-- [How-To: Migrate v1 Credentials to v2]({{< relref "docs/changelog/migrate-legacy-credentials.md" >}}) - Migrate an existing OCM v1 `.ocmconfig` file so it works with OCM v2
+- [Guides: Configure Credentials for multiple Repositories ]({{< relref "docs/guides/transfer/configure-registry-credentials.md" >}}) - Configure OCM to authenticate against multiple OCI registries
+- [Changelog: Migrate v1 Credentials to v2]({{< relref "docs/changelog/migrate-legacy-credentials.md" >}}) - Migrate an existing OCM v1 `.ocmconfig` file so it works with OCM v2
 
 ## Related Documentation
 
 - [Concept: Credential System]({{< relref "/docs/concepts/credential-system.md" >}}) - Learn how the credential system automatically finds the right credentials for each operation
-- [Reference: Consumer Identities]({{< relref "/docs/reference/credential-consumer-identities.md" >}}) — Complete reference for all identity types (OCI registries and RSA signing)
+- [Reference: Consumer Identities]({{< relref "/docs/reference/credential-consumer-identities.md" >}}) - Complete reference for all identity types (OCI registries and RSA signing)

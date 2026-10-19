@@ -191,7 +191,7 @@ kubectl get discovery platform-components -o jsonpath='{.spec.suspend}{"\n"}'
 
 ## Next Steps
 
-- [Verify Component Versions in the Controller]({{< relref "docs/guides/deploy/verify-component-signatures-on-deployment.md" >}}) -
+- [Guides: Verify Component Versions in the Controller]({{< relref "docs/guides/deploy/verify-component-signatures-on-deployment.md" >}}) -
   Verify component version signatures on reconciliation
 
 ## Related Documentation
@@ -202,5 +202,5 @@ kubectl get discovery platform-components -o jsonpath='{.spec.suspend}{"\n"}'
   How Discovery fits alongside the reconciliation chain
 - [Reference: Discovery CRD]({{< relref "docs/reference/kubernetes-api/discovery.md" >}}) -
   Full field reference for the Discovery resource
-- [How-To: Configure Credentials for OCM Controllers]({{< relref "docs/guides/deploy/configure-controller-credentials.md" >}}) -
+- [Guides: Configure Credentials for OCM Controllers]({{< relref "docs/guides/deploy/configure-controller-credentials.md" >}}) -
   Set up registry credentials for the controller

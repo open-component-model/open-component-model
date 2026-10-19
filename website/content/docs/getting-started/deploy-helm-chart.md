@@ -634,8 +634,8 @@ rm -rf /tmp/helm-deploy
 
 ## Next Steps
 
-- [Tutorial: Create a Multi-Component Product]({{< relref "docs/guides/pack/compose-multi-component-product.md" >}}) - Learn how to structure complex applications with multiple components and resources
-- [Tutorial: Deploy a Helm Chart (with Bootstrap)]({{< relref "docs/guides/deploy/deploy-helm-chart-with-kro-and-gitops.md" >}}) - Use the OCM Controllers to deploy a Helm chart without manual bootstrapping, using GitOps
+- [Guides: Create a Multi-Component Product]({{< relref "docs/guides/pack/compose-multi-component-product.md" >}}) - Learn how to structure complex applications with multiple components and resources
+- [Guides: Deploy a Helm Chart (with Bootstrap)]({{< relref "docs/guides/deploy/deploy-helm-chart-with-kro-and-gitops.md" >}}) - Use the OCM Controllers to deploy a Helm chart without manual bootstrapping, using GitOps
 
 ## Related Documentation
 

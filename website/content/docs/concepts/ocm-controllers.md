@@ -190,8 +190,8 @@ deployer. Please refer to the respective installation guides for these tools:
 
 ## Related Documentation
 
-- [Concept: Kubernetes Deployer]({{< relref "kubernetes-deployer.md" >}}), how the Deployer applies and manages resources
-- [Getting-Started: Setup Controller Environment]({{< relref "setup-controller-environment.md" >}}), prerequisites for running the controllers
-- [How-To: Configuring Credentials for OCM Controllers]({{< relref "docs/guides/deploy/configure-controller-credentials.md" >}}), setting up access to private OCM repositories
-- [How-To: Replicate Component Versions with the Controller]({{< relref "docs/guides/transfer/replicate-component-versions.md" >}}), transferring component versions between repositories
-- [How-To: Discover Component Graphs]({{< relref "docs/guides/deploy/discover-component-graphs.md" >}}), publishing a filtered view of a Component's reference graph
+- [Concept: Kubernetes Deployer]({{< relref "kubernetes-deployer.md" >}}) - how the Deployer applies and manages resources
+- [Getting Started: Setup Controller Environment]({{< relref "setup-controller-environment.md" >}}) - prerequisites for running the controllers
+- [Guides: Configuring Credentials for OCM Controllers]({{< relref "docs/guides/deploy/configure-controller-credentials.md" >}}) - setting up access to private OCM repositories
+- [Guides: Replicate Component Versions with the Controller]({{< relref "docs/guides/transfer/replicate-component-versions.md" >}}) - transferring component versions between repositories
+- [Guides: Discover Component Graphs]({{< relref "docs/guides/deploy/discover-component-graphs.md" >}}) - publishing a filtered view of a Component's reference graph

@@ -366,11 +366,11 @@ rm -rf /tmp/ocm-signing-tutorial
 
 ## Next Steps
 
-- [How-to: Generate Signing Keys]({{< relref "docs/guides/sign/generate-signing-keys.md" >}}) - Step-by-step creating RSA key pairs.
-- [How-to: Configure Signing Credentials]({{< relref "docs/guides/sign/configure-signing-credentials.md" >}}) - Set up OCM to use your keys for signing and verification.
+- [Guides: Generate Signing Keys]({{< relref "docs/guides/sign/generate-signing-keys.md" >}}) - Step-by-step creating RSA key pairs.
+- [Guides: Configure Signing Credentials]({{< relref "docs/guides/sign/configure-signing-credentials.md" >}}) - Set up OCM to use your keys for signing and verification.
 
 ## Related Documentation
 
 - [Concept: Signing and Verification]({{< relref "docs/concepts/signing-and-verification-concept.md" >}}) - Understand the theory behind OCM signing
-- [Tutorial: Certificate Chains (PEM)]({{< relref "docs/guides/sign/sign-with-pem-certificate-chain.md" >}}) - Same RSA key pair, but with an X.509 chain instead of a bare public key
-- [Tutorial: Sigstore (Keyless)]({{< relref "docs/guides/sign/sign-with-sigstore.md" >}}) - Identity-based signing — no keys to manage
+- [Guides: Certificate Chains (PEM)]({{< relref "docs/guides/sign/sign-with-pem-certificate-chain.md" >}}) - Same RSA key pair, but with an X.509 chain instead of a bare public key
+- [Guides: Sigstore (Keyless)]({{< relref "docs/guides/sign/sign-with-sigstore.md" >}}) - Identity-based signing, no keys to manage

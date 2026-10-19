@@ -415,7 +415,7 @@ kubectl get repository replication-target -o wide
 
 ## Next Steps
 
-- [Verify Component Versions in the Controller]({{< relref "docs/guides/deploy/verify-component-signatures-on-deployment.md" >}}) -
+- [Guides: Verify Component Versions in the Controller]({{< relref "docs/guides/deploy/verify-component-signatures-on-deployment.md" >}}) -
   Verify signatures on the source version before it is replicated
 
 ## Related Documentation
@@ -424,7 +424,7 @@ kubectl get repository replication-target -o wide
   How Replication fits alongside the reconciliation chain
 - [Reference: Replication CRD]({{< relref "docs/reference/kubernetes-api/replication.md" >}}) -
   Full API specification
-- [How-To: Configure Credentials for OCM Controllers]({{< relref "docs/guides/deploy/configure-controller-credentials.md" >}}) -
+- [Guides: Configure Credentials for OCM Controllers]({{< relref "docs/guides/deploy/configure-controller-credentials.md" >}}) -
   Set up registry credentials for the controller
 - [Example: `replication-simple`](https://github.com/open-component-model/open-component-model/tree/main/bindings/go/kubernetes/controller/examples/replication-simple) -
   A complete, runnable manifest set used by the controller end-to-end tests

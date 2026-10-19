@@ -354,12 +354,12 @@ rm -rf transport-archive hello-world.tar.gz component-constructor.yaml .ocmconfi
 
 ## Next steps
 
-- [How-to: Add Resources from GitHub]({{< relref "docs/guides/pack/add-resources-from-github.md" >}}): the `GitHub/v1`
+- [Guides: Add Resources from GitHub]({{< relref "docs/guides/pack/add-resources-from-github.md" >}}) - the `GitHub/v1`
   access type, which downloads the archive through the GitHub REST API
 
 ## Related documentation
 
-- [Reference: `Git/v1` access type]({{< relref "docs/reference/input-and-access-types.md#gitv1-access" >}}), including
+- [Reference: `Git/v1` access type]({{< relref "docs/reference/input-and-access-types.md#gitv1-access" >}}) - including
   why `Git/v1` replaces the deprecated `GitHub/v1`, and migration from OCM v1
 - [Reference: `Git/v1` input type]({{< relref "docs/reference/input-and-access-types.md#gitv1-input" >}})
 - [Reference: Git Resource Repository]({{< relref "docs/reference/resource-repositories.md#git-resource-repository" >}})

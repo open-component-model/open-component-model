@@ -1150,7 +1150,10 @@ This pattern lets developers ship deployment instructions alongside their softwa
 
 ## Next Steps
 
-- [Deploy an Application from a Helm Chart with OCM and kro]({{< relref "/docs/guides/deploy/deploy-helm-chart-with-kro-and-gitops.md" >}}) covers the same delivery driven by kro with a Flux or Argo CD deployer
-- [How-to: Air-Gap Transfer]({{< relref "/docs/guides/transfer/air-gap-transfer.md" >}}) transfers components to disconnected environments
-- [How-to: Configure Credentials for Controllers]({{< relref "/docs/guides/deploy/configure-controller-credentials.md" >}}) sets up private registry access
-- [Concept: OCM Controllers]({{< relref "/docs/concepts/ocm-controllers.md" >}}) explains the controller architecture
+- [Guides: Deploy a Helm Chart with kro and GitOps]({{< relref "/docs/guides/deploy/deploy-helm-chart-with-kro-and-gitops.md" >}}) - Drive the same delivery with kro and a Flux or Argo CD deployer
+- [Guides: Transfer Components across an Air Gap]({{< relref "/docs/guides/transfer/air-gap-transfer.md" >}}) - Transfer components to disconnected environments
+- [Guides: Configure Credentials for OCM Controllers]({{< relref "/docs/guides/deploy/configure-controller-credentials.md" >}}) - Set up private registry access
+
+## Related Documentation
+
+- [Concept: OCM Controllers]({{< relref "/docs/concepts/ocm-controllers.md" >}}) - Understand the controller architecture

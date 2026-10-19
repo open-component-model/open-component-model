@@ -288,11 +288,11 @@ tools. See
 
 ## Next steps
 
-- [How-to: Upload OCI Images]({{< relref "docs/guides/transfer/upload-oci-images.md" >}}) — upload images and Helm charts as standalone OCI artifacts
-- [How-to: Transfer Components Across an Air Gap]({{< relref "docs/guides/transfer/air-gap-transfer.md" >}})
+- [Guides: Upload OCI Images]({{< relref "docs/guides/transfer/upload-oci-images.md" >}}) - upload images and Helm charts as standalone OCI artifacts
+- [Guides: Transfer Components Across an Air Gap]({{< relref "docs/guides/transfer/air-gap-transfer.md" >}})
 
 ## Related documentation
 
-- [Reference: Transfer Configuration]({{< relref "docs/reference/transfer-configuration/_index.md" >}}) — full field reference for transfer and uploader configuration
-- [Concept: Transfer and Transport]({{< relref "docs/concepts/transfer-concept.md" >}}) — how OCM moves component versions between repositories
-- [Tutorial: Working with HTTP Resources]({{< relref "docs/guides/pack/add-http-resources.md" >}}) — the `Wget/v1` type produced by the uploader
+- [Reference: Transfer Configuration]({{< relref "docs/reference/transfer-configuration/_index.md" >}}) - full field reference for transfer and uploader configuration
+- [Concept: Transfer and Transport]({{< relref "docs/concepts/transfer-concept.md" >}}) - how OCM moves component versions between repositories
+- [Guides: Working with HTTP Resources]({{< relref "docs/guides/pack/add-http-resources.md" >}}) - the `Wget/v1` type produced by the uploader

@@ -157,7 +157,7 @@ but that rewrite is not reversed on read, so the version you list differs from t
 
 ## Related documentation
 
-- [Versioning Configuration]({{< relref "docs/reference/versioning-configuration.md" >}}) — Full schema, scheme catalog,
+- [Reference: Versioning Configuration]({{< relref "docs/reference/versioning-configuration.md" >}}) - Full schema, scheme catalog,
   and OCI tag constraints.
-- [Resolver Configuration]({{< relref "docs/reference/resolver-configuration.md" >}}) — How `versionConstraint`
+- [Reference: Resolver Configuration]({{< relref "docs/reference/resolver-configuration.md" >}}) - How `versionConstraint`
   interacts with versioning schemes.

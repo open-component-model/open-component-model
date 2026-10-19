@@ -191,9 +191,9 @@ Only delete the archive after you have verified the component in the target regi
 
 ## Next Steps
 
-- [How-To: Deploy a Helm Chart (Bootstrap)]({{< relref "docs/guides/deploy/deploy-helm-chart-with-kro-and-gitops.md" >}}) - Deploy component resources into a Kubernetes cluster
+- [Guides: Deploy a Helm Chart (Bootstrap)]({{< relref "docs/guides/deploy/deploy-helm-chart-with-kro-and-gitops.md" >}}) - Deploy component resources into a Kubernetes cluster
 
 ## Related Documentation
 
 - [Concept: Transfer and Transport]({{< relref "docs/concepts/transfer-concept.md" >}}) - Understand the transfer model, resource handling, and signature preservation
-- [Tutorial: Signing and Verification]({{< relref "docs/guides/sign/sign-with-plain-rsa.md" >}}) - Learn how to sign and verify component versions
+- [Guides: Signing and Verification]({{< relref "docs/guides/sign/sign-with-plain-rsa.md" >}}) - Learn how to sign and verify component versions

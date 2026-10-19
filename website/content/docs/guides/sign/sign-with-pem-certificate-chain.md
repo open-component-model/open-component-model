@@ -586,6 +586,6 @@ Use `--force` to overwrite or choose a different name with `--signature`.
 
 ## Related Documentation
 
-- [Plain Signatures]({{< relref "docs/guides/sign/sign-with-plain-rsa.md" >}}) -- Basic key-pair signing without certificate chains
-- [Sigstore (Keyless)]({{< relref "docs/guides/sign/sign-with-sigstore.md" >}}) -- Identity-based signing — no keys to manage
-- [Configure Credentials for Signing]({{< relref "docs/guides/sign/configure-signing-credentials.md" >}}) -- Full credential configuration reference
+- [Guides: Plain Signatures]({{< relref "docs/guides/sign/sign-with-plain-rsa.md" >}}) - Basic key-pair signing without certificate chains
+- [Guides: Sigstore (Keyless)]({{< relref "docs/guides/sign/sign-with-sigstore.md" >}}) - Identity-based signing, no keys to manage
+- [Guides: Configure Credentials for Signing]({{< relref "docs/guides/sign/configure-signing-credentials.md" >}}) - Full credential configuration reference

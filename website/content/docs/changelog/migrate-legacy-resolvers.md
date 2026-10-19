@@ -272,11 +272,11 @@ For the full version constraint syntax, see
 
 ## Next Steps
 
-- [Add Component References]({{< docref "docs/guides/pack/add-component-references.md" >}}) — Declare component
+- [Guides: Add Component References]({{< docref "docs/guides/pack/add-component-references.md" >}}) - Declare component
   references and configure resolver entries for multi-registry setups
 
 ## Related Documentation
 
-- [Resolver Configuration Reference]({{< docref "docs/reference/resolver-configuration.md" >}}) — Full configuration
+- [Reference: Resolver Configuration Reference]({{< docref "docs/reference/resolver-configuration.md" >}}) - Full configuration
   schema and pattern syntax
-- [Resolvers]({{< docref "docs/concepts/resolvers.md" >}}) — The resolver model: glob matching, first-match ordering, specificity, and version constraints
+- [Concept: Resolvers]({{< docref "docs/concepts/resolvers.md" >}}) - The resolver model: glob matching, first-match ordering, specificity, and version constraints

@@ -305,8 +305,8 @@ rm -rf /tmp/ocm-sbom-tutorial
 
 ## Related Documentation
 
-- [Download Resources]({{< relref "docs/guides/transfer/download-resources.md" >}}) - The download command this guide builds on
-- [Transfer Components across an Air Gap]({{< relref "docs/guides/transfer/air-gap-transfer.md" >}}) - Moving a component version by value, the case that decides which SBOM strategy works
+- [Guides: Download Resources]({{< relref "docs/guides/transfer/download-resources.md" >}}) - The download command this guide builds on
+- [Guides: Transfer Components across an Air Gap]({{< relref "docs/guides/transfer/air-gap-transfer.md" >}}) - Moving a component version by value, the case that decides which SBOM strategy works
 - [Reference: Input and Access Types]({{< relref "docs/reference/input-and-access-types.md" >}}) - `File/v1`, `OCIImage/v1`, and what a local blob uploader turns them into
 - [Concept: Software Bills of Materials]({{< relref "docs/concepts/sboms.md" >}}) - What an SBOM is and why OCM binds it to the component version
 - [Blog: Shipping SBOMs with Your Components](/blog/2026-07-28-shipping-sboms-with-your-components/) - The proof of concept this feature grew out of

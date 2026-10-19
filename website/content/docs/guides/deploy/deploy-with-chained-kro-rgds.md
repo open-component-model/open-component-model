@@ -753,6 +753,6 @@ installer RGD once, and that stays in `bootstrap.yaml`.
 
 ## Next steps
 
-- [Deploy an Application from a Helm Chart with OCM and kro]({{< relref "docs/guides/deploy/deploy-helm-chart-with-kro-and-gitops.md" >}}) compares this with the Helm approach
-- [kro Resource Graph Definitions](https://kro.run/docs/getting-started/deploy-a-resource-graph-definition/) for composing more applications
-- [Configure Credentials for Controllers]({{< relref "/docs/guides/deploy/configure-controller-credentials.md" >}}) for private registries
+- [Guides: Deploy an Application from a Helm Chart with OCM and kro]({{< relref "docs/guides/deploy/deploy-helm-chart-with-kro-and-gitops.md" >}}) - compares this with the Helm approach
+- [kro Resource Graph Definitions](https://kro.run/docs/getting-started/deploy-a-resource-graph-definition/) - for composing more applications
+- [Guides: Configure Credentials for Controllers]({{< relref "/docs/guides/deploy/configure-controller-credentials.md" >}}) - for private registries

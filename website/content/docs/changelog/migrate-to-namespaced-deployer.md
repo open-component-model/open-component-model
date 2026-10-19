@@ -188,4 +188,4 @@ You should see: `No resources found`.
 ## Related documentation
 
 - [Concept: Kubernetes Deployer]({{< relref "docs/concepts/kubernetes-deployer.md" >}})
-- [How-to: Configure Custom RBAC for Deployers]({{< relref "docs/guides/deploy/configure-custom-rbac.md" >}})
+- [Guides: Configure Custom RBAC for Deployers]({{< relref "docs/guides/deploy/configure-custom-rbac.md" >}})

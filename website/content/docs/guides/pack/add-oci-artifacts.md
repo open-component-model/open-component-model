@@ -378,6 +378,6 @@ Keep this terminal and the `/tmp/ocm-native-oci`, `/tmp/ocm-transfer-native`, an
 
 ## Related Documentation
 
-- [Concept: Transfer and Transport]({{< relref "docs/concepts/transfer-concept.md" >}}) — Understand resource handling during transfer
-- [Reference: Input and Access Types]({{< relref "docs/reference/input-and-access-types.md" >}}) — All supported resource types
-- [OCM OCI Storage Spec: Index Representation](https://github.com/open-component-model/ocm-spec/blob/main/doc/04-extensions/03-storage-backends/oci.md#62-index-representation) — How component versions map to OCI indexes
+- [Concept: Transfer and Transport]({{< relref "docs/concepts/transfer-concept.md" >}}) - Understand resource handling during transfer
+- [Reference: Input and Access Types]({{< relref "docs/reference/input-and-access-types.md" >}}) - All supported resource types
+- [OCM OCI Storage Spec: Index Representation](https://github.com/open-component-model/ocm-spec/blob/main/doc/04-extensions/03-storage-backends/oci.md#62-index-representation) - How component versions map to OCI indexes

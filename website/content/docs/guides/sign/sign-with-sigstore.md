@@ -555,6 +555,6 @@ rm -rf /tmp/ocm-sigstore-tutorial
 
 ## Related Documentation
 
-- [Concept: Signing and Verification]({{< relref "docs/concepts/signing-and-verification-concept.md" >}}) — Identity-based trust and the Sigstore stack
-- [Verify Sigstore (Keyless)]({{< relref "docs/guides/sign/verify-with-sigstore.md" >}}) — Confirm a signature was made by an identity you trust
-- [ADR 0017: Sigstore Integration](https://github.com/open-component-model/open-component-model/blob/main/docs/adr/0017_sigstore_integration.md) — Sigstore design and OIDC flow details
+- [Concept: Signing and Verification]({{< relref "docs/concepts/signing-and-verification-concept.md" >}}) - Identity-based trust and the Sigstore stack
+- [Guides: Verify Sigstore (Keyless)]({{< relref "docs/guides/sign/verify-with-sigstore.md" >}}) - Confirm a signature was made by an identity you trust
+- [ADR 0017: Sigstore Integration](https://github.com/open-component-model/open-component-model/blob/main/docs/adr/0017_sigstore_integration.md) - Sigstore design and OIDC flow details

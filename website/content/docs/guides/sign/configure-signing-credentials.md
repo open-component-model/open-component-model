@@ -356,14 +356,14 @@ ls -la /tmp/keys/private-key.pem
 
 ## Next Steps
 
-- [How-to: Sign Component Versions]({{< relref "docs/guides/sign/_index.md" >}}) - Sign components with your configured
+- [Guides: Sign Component Versions]({{< relref "docs/guides/sign/_index.md" >}}) - Sign components with your configured
   credentials
-- [All verification methods]({{< relref "docs/guides/sign/_index.md#verify-a-signature" >}}) - Verify signatures using public
+- [Guides: All verification methods]({{< relref "docs/guides/sign/_index.md#verify-a-signature" >}}) - Verify signatures using public
   keys
 
 ## Related Documentation
 
-- [How-to: Generate Signing Keys]({{< relref "docs/guides/sign/generate-signing-keys.md" >}}) - Create the key pair needed for this
+- [Guides: Generate Signing Keys]({{< relref "docs/guides/sign/generate-signing-keys.md" >}}) - Create the key pair needed for this
   configuration
 - [Concept: Signing and Verification]({{< relref "docs/concepts/signing-and-verification-concept.md" >}}) - Understand how OCM signing
   works

@@ -32,6 +32,12 @@ For the complete field reference — accepted fields, types, defaults, duration
 syntax, and host-key matching rules — see
 [HTTP Client Configuration Reference]({{< relref "docs/reference/http-client-configuration.md" >}}).
 
+## Prerequisites
+
+- [OCM CLI]({{< relref "docs/getting-started/ocm-cli-installation.md" >}}) installed
+- An OCM config file (`$HOME/.ocmconfig`) you can edit, or the ability to pass one with `--config`
+- An OCI registry or Helm repository OCM needs to reach over a slow, flaky, or restricted network
+
 ## Set HTTP timeouts
 
 Set the time limits OCM uses for each phase of an HTTP request so slow or
@@ -519,6 +525,6 @@ ocm --loglevel debug get componentversion <ref>
 
 ## Related Documentation
 
-- [HTTP Client Configuration Reference]({{< relref "docs/reference/http-client-configuration.md" >}}) — complete field reference and schema
-- [Transfer Components across an Air Gap]({{< relref "docs/guides/transfer/air-gap-transfer.md" >}}) — move component versions into isolated networks
-- [Configure Registry Credentials]({{< relref "docs/guides/transfer/configure-registry-credentials.md" >}}) — pair HTTP config with credential setup in the same config file
+- [Reference: HTTP Client Configuration Reference]({{< relref "docs/reference/http-client-configuration.md" >}}) - complete field reference and schema
+- [Guides: Transfer Components across an Air Gap]({{< relref "docs/guides/transfer/air-gap-transfer.md" >}}) - move component versions into isolated networks
+- [Guides: Configure Registry Credentials]({{< relref "docs/guides/transfer/configure-registry-credentials.md" >}}) - pair HTTP config with credential setup in the same config file

@@ -519,7 +519,7 @@ The following table maps old values to their replacements:
 
 ## Related documentation
 
-- [Transfer Configuration Reference]({{< docref "docs/reference/transfer-configuration/_index.md" >}}) — Full configuration schema and field descriptions
-- [Configure Custom Uploads During Transfer]({{< docref "docs/guides/transfer/upload-to-custom-target.md" >}}) — Tutorial for the HTTP streaming uploader
-- [Upload OCI Images]({{< docref "docs/guides/transfer/upload-oci-images.md" >}}) — Upload component resources, including Helm charts, as standalone OCI artifacts
-- [Replicate Component Versions with the Controller]({{< docref "docs/guides/transfer/replicate-component-versions.md" >}}) — Controller-based replication
+- [Reference: Transfer Configuration Reference]({{< docref "docs/reference/transfer-configuration/_index.md" >}}) - Full configuration schema and field descriptions
+- [Guides: Configure Custom Uploads During Transfer]({{< docref "docs/guides/transfer/upload-to-custom-target.md" >}}) - Tutorial for the HTTP streaming uploader
+- [Guides: Upload OCI Images]({{< docref "docs/guides/transfer/upload-oci-images.md" >}}) - Upload component resources, including Helm charts, as standalone OCI artifacts
+- [Guides: Replicate Component Versions with the Controller]({{< docref "docs/guides/transfer/replicate-component-versions.md" >}}) - Controller-based replication

@@ -150,7 +150,7 @@ treats the entry as a cache miss and downloads the content again.
 
 ## Related Documentation
 
-- [HTTP Client Configuration]({{< relref "docs/reference/http-client-configuration.md" >}}) — timeouts and retries for requests that miss the cache
-- [Resolver Configuration]({{< relref "docs/reference/resolver-configuration.md" >}}) — configuration types in the same file
-- [OCM Controllers]({{< relref "docs/concepts/ocm-controllers.md" >}}) — configuration types the controller accepts
-- [`ocm` CLI reference]({{< relref "docs/reference/ocm-cli/ocm.md" >}}) — global flags, including `--temp-folder`
+- [Reference: HTTP Client Configuration]({{< relref "docs/reference/http-client-configuration.md" >}}) - timeouts and retries for requests that miss the cache
+- [Reference: Resolver Configuration]({{< relref "docs/reference/resolver-configuration.md" >}}) - configuration types in the same file
+- [Concept: OCM Controllers]({{< relref "docs/concepts/ocm-controllers.md" >}}) - configuration types the controller accepts
+- [Reference: `ocm` CLI reference]({{< relref "docs/reference/ocm-cli/ocm.md" >}}) - global flags, including `--temp-folder`

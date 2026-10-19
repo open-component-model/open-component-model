@@ -135,6 +135,6 @@ for additive, per-host trust. See [TLS and Custom CA]({{< relref "docs/guides/tr
 
 ## Related Documentation
 
-- [Configure HTTP Client Behaviour]({{< relref "docs/guides/transfer/configure-http.md" >}}) — task-oriented how-to guides
-- [Configure Credentials for Multiple Registries]({{< relref "docs/guides/transfer/configure-registry-credentials.md" >}}) — pairing HTTP config with credential setup
-- [Resolver Configuration]({{< relref "docs/reference/resolver-configuration.md" >}}) — reference for resolver config in the same file
+- [Guides: Configure HTTP Client Behaviour]({{< relref "docs/guides/transfer/configure-http.md" >}}) - task-oriented how-to guides
+- [Guides: Configure Credentials for Multiple Registries]({{< relref "docs/guides/transfer/configure-registry-credentials.md" >}}) - pairing HTTP config with credential setup
+- [Reference: Resolver Configuration]({{< relref "docs/reference/resolver-configuration.md" >}}) - reference for resolver config in the same file

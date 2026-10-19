@@ -418,19 +418,19 @@ my-org.example/component-b         │ 1.0.0   │
 
 ## Next Steps
 
-- [Migrate Legacy Resolvers]({{< relref "docs/changelog/migrate-legacy-resolvers.md" >}}) — Replace deprecated
+- [Changelog: Migrate Legacy Resolvers]({{< relref "docs/changelog/migrate-legacy-resolvers.md" >}}) - Replace deprecated
   fallback resolvers with glob-based resolvers
 
 ## Related Documentation
 
-- [Resolvers]({{< relref "docs/concepts/resolvers.md" >}}) — High-level introduction to resolvers
-- [Resolver Configuration Reference]({{< relref "docs/reference/resolver-configuration.md" >}}) — Full configuration
+- [Concept: Resolvers]({{< relref "docs/concepts/resolvers.md" >}}) - High-level introduction to resolvers
+- [Reference: Resolver Configuration Reference]({{< relref "docs/reference/resolver-configuration.md" >}}) - Full configuration
   schema, repository types, and pattern syntax
-- [Component Identity]({{< relref "docs/concepts/component-identity.md" >}}) — Core concepts behind component versions, identities, and
+- [Concept: Component Identity]({{< relref "docs/concepts/component-identity.md" >}}) - Core concepts behind component versions, identities, and
   references
-- [Creating a Component Version]({{< relref "docs/getting-started/create-component-version.md" >}}) — Build component
+- [Getting Started: Creating a Component Version]({{< relref "docs/getting-started/create-component-version.md" >}}) - Build component
   versions and work with CTF archives
-- [Input and Access Types]({{< relref "docs/reference/input-and-access-types.md" >}}) — Reference for resource input types (by value)
+- [Reference: Input and Access Types]({{< relref "docs/reference/input-and-access-types.md" >}}) - Reference for resource input types (by value)
   and access types (by reference)
 - Component
   references in the spec: [Referencing Components](https://github.com/open-component-model/ocm-spec/blob/main/doc/02-processing/01-references.md)

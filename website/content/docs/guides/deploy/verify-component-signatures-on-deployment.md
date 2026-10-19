@@ -360,7 +360,7 @@ ocm get cv ghcr.io/<your-namespace>//github.com/acme.org/helloworld:1.0.0 -o yam
 
 - [Concept: Signing and Verification]({{< relref "docs/concepts/signing-and-verification-concept.md" >}}) -
   Understand how OCM signing works
-- [How-To: Verify Component Versions (CLI)]({{< relref "docs/guides/sign/_index.md" >}}) -
+- [Guides: Verify Component Versions (CLI)]({{< relref "docs/guides/sign/_index.md" >}}) -
   Verify signatures using the CLI
-- [How-To: Configure Credentials for OCM Controllers]({{< relref "docs/guides/deploy/configure-controller-credentials.md" >}}) -
+- [Guides: Configure Credentials for OCM Controllers]({{< relref "docs/guides/deploy/configure-controller-credentials.md" >}}) -
   Set up registry credentials for the controller

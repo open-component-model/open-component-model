@@ -202,7 +202,7 @@ Read together, these three annotations are the full answer to "who owns this ima
 
 ## Related Documentation
 
-- [Concept: Ownership]({{< relref "docs/concepts/ownership.md" >}}) — what ownership records are and why OCM links artifacts this way
-- [Install the OCM CLI: Container Image]({{< relref "docs/getting-started/ocm-cli-installation.md" >}}#run-from-a-container-image) — run `ocm` from the official container image
-- [Tutorial: Create Component Versions]({{< relref "docs/getting-started/create-component-version.md" >}}) — author and store component versions
-- [Concept: Transfer and Transport]({{< relref "docs/concepts/transfer-concept.md" >}}) — how resources and their ownership records move between repositories
+- [Concept: Ownership]({{< relref "docs/concepts/ownership.md" >}}) - what ownership records are and why OCM links artifacts this way
+- [Getting Started: Install the OCM CLI: Container Image]({{< relref "docs/getting-started/ocm-cli-installation.md" >}}#run-from-a-container-image) - run `ocm` from the official container image
+- [Getting Started: Create Component Versions]({{< relref "docs/getting-started/create-component-version.md" >}}) - author and store component versions
+- [Concept: Transfer and Transport]({{< relref "docs/concepts/transfer-concept.md" >}}) - how resources and their ownership records move between repositories

@@ -2,7 +2,7 @@
 title: "Component Identity"
 description: "How OCM identifies components, versions, and artifacts — from naming to descriptors."
 icon: "🪪"
-weight: 1
+weight: 2
 toc: true
 ---
 
@@ -166,11 +166,11 @@ For hands-on signing instructions, see [Sign Component Versions]({{< relref "doc
 
 ## Next Steps
 
-- [Create Component Versions]({{< relref "docs/getting-started/create-component-version.md" >}}) — build component versions with the OCM CLI.
+- [Getting Started: Create Component Versions]({{< relref "docs/getting-started/create-component-version.md" >}}) - build component versions with the OCM CLI.
 
 ## Related Documentation
 
-- [The OCM Core Model]({{< relref "docs/overview/core-model.md" >}}): high-level introduction to OCM's building blocks.
-- [Resource Repositories]({{< relref "docs/concepts/resource-repositories.md" >}}): how access types map to storage backends for downloading and uploading resources.
-- [Component Descriptor Reference]({{< relref "docs/reference/component-descriptor.md" >}}): field-by-field reference for the component descriptor.
-- [OCM Specification](https://github.com/open-component-model/ocm-spec): the formal specification of the Open Component Model.
+- [Overview: The OCM Core Model]({{< relref "docs/overview/core-model.md" >}}) - high-level introduction to OCM's building blocks.
+- [Concept: Resource Repositories]({{< relref "docs/concepts/resource-repositories.md" >}}) - how access types map to storage backends for downloading and uploading resources.
+- [Reference: Component Descriptor Reference]({{< relref "docs/reference/component-descriptor.md" >}}) - field-by-field reference for the component descriptor.
+- [OCM Specification](https://github.com/open-component-model/ocm-spec) - the formal specification of the Open Component Model.

@@ -177,9 +177,9 @@ resolvers:
 
 ## Related Documentation
 
-- [OCM Resolvers]({{< relref "docs/concepts/resolvers.md" >}}) — High-level introduction to resolvers
-- [Add Component References]({{< relref "docs/guides/pack/add-component-references.md" >}}) — Hands-on walkthrough for
+- [Concept: OCM Resolvers]({{< relref "docs/concepts/resolvers.md" >}}) - High-level introduction to resolvers
+- [Guides: Add Component References]({{< relref "docs/guides/pack/add-component-references.md" >}}) - Hands-on walkthrough for
   declaring component references and setting up resolvers for shared and multi-registry setups
-- [Migrate from Deprecated Resolvers]({{< relref "docs/changelog/migrate-legacy-resolvers.md" >}}) — Replace
+- [Changelog: Migrate from Deprecated Resolvers]({{< relref "docs/changelog/migrate-legacy-resolvers.md" >}}) - Replace
   deprecated fallback
   resolvers with glob-based resolvers

@@ -288,11 +288,11 @@ The output is the gzipped tar archive GitHub serves, written as a single file. U
 
 ## Next Steps
 
-- [How-To: Download Resources from Component Versions]({{< relref "docs/guides/transfer/download-resources.md" >}}) -
+- [Guides: Download Resources from Component Versions]({{< relref "docs/guides/transfer/download-resources.md" >}}) -
   Fetch the resource you just added
-- [How-To: Air-Gap Transfer]({{< relref "docs/guides/transfer/air-gap-transfer.md" >}}) - Move component versions into
+- [Guides: Air-Gap Transfer]({{< relref "docs/guides/transfer/air-gap-transfer.md" >}}) - Move component versions into
   disconnected environments
-- [How-To: Sign a Component Version]({{< relref "docs/guides/sign/_index.md" >}}) - Cover the digest you just recorded with
+- [Guides: Sign a Component Version]({{< relref "docs/guides/sign/_index.md" >}}) - Cover the digest you just recorded with
   a signature
 
 ## Related Documentation

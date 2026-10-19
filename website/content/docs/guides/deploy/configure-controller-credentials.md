@@ -307,8 +307,8 @@ spec:
 
 ## Next Steps
 
-- [Tutorial: Deploy a Helm Chart]({{< relref "deploy-helm-chart.md" >}}) - Use the OCM Controllers to deploy applications from component versions
-- [How-To: Configure Credentials for Multiple Registries]({{< relref "docs/guides/transfer/configure-registry-credentials.md" >}}) - Configure credentials for multiple registries in an `.ocmconfig` file
+- [Getting Started: Deploy a Helm Chart]({{< relref "deploy-helm-chart.md" >}}) - Use the OCM Controllers to deploy applications from component versions
+- [Guides: Configure Credentials for Multiple Registries]({{< relref "docs/guides/transfer/configure-registry-credentials.md" >}}) - Configure credentials for multiple registries in an `.ocmconfig` file
 
 ## Related documentation
 

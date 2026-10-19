@@ -867,11 +867,11 @@ added by installed plugins — and `ocm describe types credentials <type>` to in
 
 ## Related Documentation
 
-- [Concept: Credential System]({{< relref "docs/concepts/credential-system.md" >}}) — How the credential system works
-- [Reference: Credential Types]({{< relref "credential-types.md" >}}) — All built-in typed credential types and their
+- [Concept: Credential System]({{< relref "docs/concepts/credential-system.md" >}}) - How the credential system works
+- [Reference: Credential Types]({{< relref "credential-types.md" >}}) - All built-in typed credential types and their
   fields
-- [Tutorial: Understand Credential Resolution]({{< relref "docs/concepts/credential-resolution.md" >}}) — Step-by-step
+- [Concept: Understand Credential Resolution]({{< relref "docs/concepts/credential-resolution.md" >}}) - Step-by-step
   matching examples for OCI registries
-- [How-To: Configure Credentials for Multiple Registries]({{< relref "docs/guides/transfer/configure-registry-credentials.md" >}}) — Task-oriented registry credential setup
-- [How-To: Configure Credentials for Signing]({{< relref "configure-signing-credentials.md" >}}) — Task-oriented signing
+- [Guides: Configure Credentials for Multiple Registries]({{< relref "docs/guides/transfer/configure-registry-credentials.md" >}}) - Task-oriented registry credential setup
+- [Guides: Configure Credentials for Signing]({{< relref "configure-signing-credentials.md" >}}) - Task-oriented signing
   credential setup

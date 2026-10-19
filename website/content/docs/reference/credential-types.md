@@ -668,9 +668,9 @@ For details on how plugins declare and register credential types, see
 
 ## Related Documentation
 
-- [Reference: Credential Consumer Identities]({{< relref "credential-consumer-identities.md" >}}) — identity types and
+- [Reference: Credential Consumer Identities]({{< relref "credential-consumer-identities.md" >}}) - identity types and
   their attributes
-- [Concept: Credential System]({{< relref "docs/concepts/credential-system.md" >}}) — how credential resolution works
+- [Concept: Credential System]({{< relref "docs/concepts/credential-system.md" >}}) - how credential resolution works
   end-to-end
-- [Tutorial: Understand Credential Resolution]({{< relref "docs/concepts/credential-resolution.md" >}}) — step-by-step
+- [Concept: Understand Credential Resolution]({{< relref "docs/concepts/credential-resolution.md" >}}) - step-by-step
   matching examples

@@ -588,8 +588,8 @@ Deleted nodes: ["kind-control-plane"]
 
 ## Next Steps
 
-- [How-to: Deploy Manifests with Deployer]({{< relref "/docs/guides/deploy/deploy-manifests-with-deployer.md" >}}) - Deploy raw Kubernetes manifests without kro or Flux
-- [Tutorial: Deploy a Helm Chart]({{< relref "deploy-helm-chart.md" >}}) - Learn to deploy Helm charts using OCM Controllers with kro and Flux
+- [Guides: Deploy Manifests with Deployer]({{< relref "/docs/guides/deploy/deploy-manifests-with-deployer.md" >}}) - Deploy raw Kubernetes manifests without kro or Flux
+- [Getting Started: Deploy a Helm Chart]({{< relref "deploy-helm-chart.md" >}}) - Learn to deploy Helm charts using OCM Controllers with kro and Flux
 
 ## Related Documentation
 

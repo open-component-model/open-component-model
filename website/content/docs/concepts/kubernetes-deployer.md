@@ -203,5 +203,5 @@ with OCM and kro]({{< relref "docs/guides/deploy/deploy-with-chained-kro-rgds.md
 
 ## Related Documentation
 
-- [OCM Controllers]({{< relref "ocm-controllers.md" >}}), overview of the controller ecosystem
-- [Setup Controller Environment]({{< relref "setup-controller-environment.md" >}}), prerequisites for running the controllers
+- [Concept: OCM Controllers]({{< relref "ocm-controllers.md" >}}) - overview of the controller ecosystem
+- [Getting Started: Setup Controller Environment]({{< relref "setup-controller-environment.md" >}}) - prerequisites for running the controllers

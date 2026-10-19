@@ -479,7 +479,7 @@ ocm get cv ghcr.io/open-component-model//ocm.software/cli:0.12.0 --recursive -o 
 
 ## Next Steps
 
-- [How-to: Download Resources from OCM Components]({{< relref "docs/guides/transfer/download-resources.md" >}})  - How to extract resources from component versions
+- [Guides: Download Resources from OCM Components]({{< relref "docs/guides/transfer/download-resources.md" >}}) - How to extract resources from component versions
 
 ## Related Documentation
 

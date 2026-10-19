@@ -1,7 +1,7 @@
 ---
 title: "Transfer and Transport"
 description: "Understand how OCM moves component versions between repositories while preserving identity, integrity, and signatures."
-weight: 2
+weight: 14
 toc: true
 hasMermaid: true
 ---
@@ -148,13 +148,13 @@ The [sovereign conformance scenario](https://github.com/open-component-model/ope
 
 ## Next Steps
 
-- [Create and Examine Component Versions]({{< relref "docs/getting-started/create-component-version.md" >}}) - Create component versions and store them in CTF archives
-- [How-To: Transfer Components Across an Air Gap]({{< relref "docs/guides/transfer/air-gap-transfer.md" >}}) - Step-by-step guide for air-gapped transfer workflows
+- [Getting Started: Create and Examine Component Versions]({{< relref "docs/getting-started/create-component-version.md" >}}) - Create component versions and store them in CTF archives
+- [Guides: Transfer Components Across an Air Gap]({{< relref "docs/guides/transfer/air-gap-transfer.md" >}}) - Step-by-step guide for air-gapped transfer workflows
 
 ## Related Documentation
 
-- [Tutorial: Signing and Verification]({{< relref "docs/guides/sign/sign-with-plain-rsa.md" >}}) - Sign and verify component versions
-- [Tutorial: Working with OCI]({{< relref "docs/guides/pack/add-oci-artifacts.md" >}}) - Embed OCI images and access them natively after transfer
+- [Guides: Signing and Verification]({{< relref "docs/guides/sign/sign-with-plain-rsa.md" >}}) - Sign and verify component versions
+- [Guides: Working with OCI]({{< relref "docs/guides/pack/add-oci-artifacts.md" >}}) - Embed OCI images and access them natively after transfer
 - [Concept: OCM Controllers]({{< relref "docs/concepts/ocm-controllers.md" >}}) - Kubernetes controllers for deploying and transferring OCM components
 - [Reference: Transfer Configuration]({{< relref "docs/reference/transfer-configuration/_index.md" >}}) - Configure transfer settings and custom uploaders
-- [Tutorial: Configure Custom Uploads During Transfer]({{< relref "docs/guides/transfer/upload-to-custom-target.md" >}}) - Route resources to a custom upload target during transfer
+- [Guides: Configure Custom Uploads During Transfer]({{< relref "docs/guides/transfer/upload-to-custom-target.md" >}}) - Route resources to a custom upload target during transfer

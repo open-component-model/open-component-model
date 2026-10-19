@@ -562,9 +562,9 @@ isn't, the content changed.
 
 ## Next Steps
 
-- [Download Resources]({{< relref "docs/guides/transfer/download-resources.md" >}}) -
+- [Guides: Download Resources]({{< relref "docs/guides/transfer/download-resources.md" >}}) -
   Fetch the resource you just added
-- [Transfer Components across an Air Gap]({{< relref "docs/guides/transfer/air-gap-transfer.md" >}}) - Move component versions into
+- [Guides: Transfer Components across an Air Gap]({{< relref "docs/guides/transfer/air-gap-transfer.md" >}}) - Move component versions into
   disconnected environments
 
 ## Related Documentation

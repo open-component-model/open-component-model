@@ -2,7 +2,7 @@
 title: "Vendor Repository Uploaders"
 description: "How OCM's JFrog Artifactory and Sonatype Nexus uploaders move matched resources into a vendor repository during transfer and republish them as native access."
 icon: "📤"
-weight: 3
+weight: 15
 toc: true
 aliases:
   - /docs/how-to/vendor-specific-apis/
@@ -111,8 +111,8 @@ for how OCM matches a request to a consumer.
 
 ## Related Documentation
 
-- [Guide: Upload to JFrog Artifactory]({{< relref "docs/guides/transfer/upload-to-jfrog-artifactory.md" >}}) — Step-by-step per-format recipes
-- [Guide: Upload to Sonatype Nexus]({{< relref "docs/guides/transfer/upload-to-sonatype-nexus.md" >}}) — Step-by-step per-format recipes
-- [Reference: JFrog Artifactory Uploader]({{< relref "docs/reference/transfer-configuration/artifactory-uploader.md" >}}) — Full field and repository-behaviour reference
-- [Reference: Sonatype Nexus Uploader]({{< relref "docs/reference/transfer-configuration/nexus-uploader.md" >}}) — Full field and repository-behaviour reference
-- [Concept: Transfer and Transport]({{< relref "docs/concepts/transfer-concept.md" >}}) — How OCM moves component versions between repositories
+- [Guides: Upload to JFrog Artifactory]({{< relref "docs/guides/transfer/upload-to-jfrog-artifactory.md" >}}) - Step-by-step per-format recipes
+- [Guides: Upload to Sonatype Nexus]({{< relref "docs/guides/transfer/upload-to-sonatype-nexus.md" >}}) - Step-by-step per-format recipes
+- [Reference: JFrog Artifactory Uploader]({{< relref "docs/reference/transfer-configuration/artifactory-uploader.md" >}}) - Full field and repository-behaviour reference
+- [Reference: Sonatype Nexus Uploader]({{< relref "docs/reference/transfer-configuration/nexus-uploader.md" >}}) - Full field and repository-behaviour reference
+- [Concept: Transfer and Transport]({{< relref "docs/concepts/transfer-concept.md" >}}) - How OCM moves component versions between repositories

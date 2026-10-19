@@ -264,10 +264,10 @@ ocm download resource \
 
 ## Next Steps
 
-- [Upload OCI Images]({{< relref "docs/guides/transfer/upload-oci-images.md" >}}) — transfer the component version so the chart lands as a standalone, `helm pull`-able OCI artifact
-- [Add OCI Artifacts]({{< relref "docs/guides/pack/add-oci-artifacts.md" >}}) — embed container images and OCI-hosted charts as native OCI artifacts
+- [Guides: Upload OCI Images]({{< relref "docs/guides/transfer/upload-oci-images.md" >}}) - transfer the component version so the chart lands as a standalone, `helm pull`-able OCI artifact
+- [Guides: Add OCI Artifacts]({{< relref "docs/guides/pack/add-oci-artifacts.md" >}}) - embed container images and OCI-hosted charts as native OCI artifacts
 
 ## Related Documentation
 
-- [Reference: Input and Access Types]({{< relref "docs/reference/input-and-access-types.md" >}}#helmv1) — full field schema for the `Helm/v1` input and access
-- [Concept: Transfer and Transport]({{< relref "docs/concepts/transfer-concept.md" >}}) — how OCM moves component versions and resources between repositories
+- [Reference: Input and Access Types]({{< relref "docs/reference/input-and-access-types.md" >}}#helmv1) - full field schema for the `Helm/v1` input and access
+- [Concept: Transfer and Transport]({{< relref "docs/concepts/transfer-concept.md" >}}) - how OCM moves component versions and resources between repositories

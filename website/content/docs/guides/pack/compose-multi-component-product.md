@@ -636,8 +636,8 @@ rm -rf /tmp/ocm-multi-component
 
 ## Next Steps
 
-- [Tutorial: Plain Signatures]({{< relref "docs/guides/sign/sign-with-plain-rsa.md" >}}) - add signing to your components
-- [How-to: Transfer Component Versions]({{< relref "docs/guides/transfer/transfer-component-versions.md" >}}) - transfer components to a remote registry
+- [Guides: Plain Signatures]({{< relref "docs/guides/sign/sign-with-plain-rsa.md" >}}) - add signing to your components
+- [Guides: Transfer Component Versions]({{< relref "docs/guides/transfer/transfer-component-versions.md" >}}) - transfer components to a remote registry
 
 ## Related documentation
 

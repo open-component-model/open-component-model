@@ -74,6 +74,6 @@ For more details, see [Resource Repositories]({{< relref "docs/concepts/resource
 
 ## Related Documentation
 
-- [Component Identity]({{< relref "docs/concepts/component-identity.md" >}}): deep dive into how OCM identifies components, versions, and artifacts.
-- [Resource Repositories]({{< relref "docs/concepts/resource-repositories.md" >}}): how OCM downloads and uploads resource artifacts from storage backends.
-- [Create Component Versions]({{< relref "docs/getting-started/create-component-version.md" >}}): build your first component version with the OCM CLI.
+- [Concept: Component Identity]({{< relref "docs/concepts/component-identity.md" >}}) - deep dive into how OCM identifies components, versions, and artifacts.
+- [Concept: Resource Repositories]({{< relref "docs/concepts/resource-repositories.md" >}}) - how OCM downloads and uploads resource artifacts from storage backends.
+- [Getting Started: Create Component Versions]({{< relref "docs/getting-started/create-component-version.md" >}}) - build your first component version with the OCM CLI.

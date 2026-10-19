@@ -36,6 +36,13 @@ is exactly the scope of the deprecated `--upload-as ociArtifact` flag. With no
 `imageReference` field, the uploader derives the target reference automatically
 from each resource's access type.
 
+## Prerequisites
+
+- [OCM CLI]({{< relref "docs/getting-started/ocm-cli-installation.md" >}}) installed
+- A source component version and a writable target OCI registry, as set up in
+  [Transfer Component Versions]({{< relref "docs/guides/transfer/transfer-component-versions.md" >}})
+- An OCI client such as `docker`, `oras`, or `crane` to pull the uploaded artifacts
+
 ## Steps
 
 {{< steps >}}

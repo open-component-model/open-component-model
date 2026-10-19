@@ -219,8 +219,8 @@ plan is rendered with human-readable labels such as
 
 ## Related Documentation
 
-- [Configure Custom Uploads During Transfer]({{< relref "docs/guides/transfer/upload-to-custom-target.md" >}}) — tutorial that walks through an uploader end to end
-- [Transfer and Transport]({{< relref "docs/concepts/transfer-concept.md" >}}) — the conceptual transfer model
-- [Working with HTTP Resources]({{< relref "docs/guides/pack/add-http-resources.md" >}}) — the `Wget/v1` type produced by the HTTP streaming uploader
-- [HTTP Client Configuration]({{< relref "docs/reference/http-client-configuration.md" >}}) — tuning the HTTP client used for the upload
-- [Migrate from --upload-as to Uploader Configurations]({{< relref "docs/changelog/migrate-from-upload-as.md" >}}) — migration from deprecated flags
+- [Guides: Configure Custom Uploads During Transfer]({{< relref "docs/guides/transfer/upload-to-custom-target.md" >}}) - tutorial that walks through an uploader end to end
+- [Concept: Transfer and Transport]({{< relref "docs/concepts/transfer-concept.md" >}}) - the conceptual transfer model
+- [Guides: Working with HTTP Resources]({{< relref "docs/guides/pack/add-http-resources.md" >}}) - the `Wget/v1` type produced by the HTTP streaming uploader
+- [Reference: HTTP Client Configuration]({{< relref "docs/reference/http-client-configuration.md" >}}) - tuning the HTTP client used for the upload
+- [Changelog: Migrate from --upload-as to Uploader Configurations]({{< relref "docs/changelog/migrate-from-upload-as.md" >}}) - migration from deprecated flags

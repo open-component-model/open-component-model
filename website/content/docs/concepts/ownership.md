@@ -1,7 +1,7 @@
 ---
 title: "Ownership"
 description: "How OCM traces a resource back to the component version that owns it, without modifying the resource."
-weight: 9
+weight: 8
 toc: true
 hasMermaid: true
 ---
@@ -29,16 +29,15 @@ For the full picture of how artifacts move between repositories, see [Transfer a
 
 ## What's Next?
 
-- [How-To: Add and Verify Ownership Information]({{< relref "docs/guides/pack/add-and-verify-ownership.md" >}}) — opt a
+- [Guides: Add and Verify Ownership Information]({{< relref "docs/guides/pack/add-and-verify-ownership.md" >}}) - opt a
   resource into ownership tracking and verify the ownership record.
 
 ## Related Documentation
 
-- [Concept: Resource Repositories]({{< relref "docs/concepts/resource-repositories.md" >}}) — how OCM stores and
+- [Concept: Resource Repositories]({{< relref "docs/concepts/resource-repositories.md" >}}) - how OCM stores and
   authenticates against the registries where resources (and their ownership records) live.
-- [Concept: Transfer and Transport]({{< relref "docs/concepts/transfer-concept.md" >}}) — how component versions and
+- [Concept: Transfer and Transport]({{< relref "docs/concepts/transfer-concept.md" >}}) - how component versions and
   their resources move between repositories.
-- [Concept: Signing and Verification]({{< relref "docs/concepts/signing-and-verification-concept.md" >}}) — how OCM
+- [Concept: Signing and Verification]({{< relref "docs/concepts/signing-and-verification-concept.md" >}}) - how OCM
   establishes the authenticity of a component version.
-- [ADR 0016: Ownership Annotations](https://github.com/open-component-model/open-component-model/blob/main/docs/adr/0016_ownership_annotations.md)
-  — the design decision and the alternatives that were considered.
+- [ADR 0016: Ownership Annotations](https://github.com/open-component-model/open-component-model/blob/main/docs/adr/0016_ownership_annotations.md) - the design decision and the alternatives that were considered.

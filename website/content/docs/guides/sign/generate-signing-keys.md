@@ -220,12 +220,12 @@ You should see both files:
 
 ## Next Steps
 
-- [How-to: Configure Signing Credentials]({{< relref "docs/guides/sign/configure-signing-credentials.md" >}}) - Set up OCM to use your keys for signing and verification
-- [How-to: Sign a Component Version]({{< relref "docs/guides/sign/_index.md" >}}) - Use your private key to sign components
-- [All verification methods]({{< relref "docs/guides/sign/_index.md#verify-a-signature" >}}) - Share your public key and verify signatures
+- [Guides: Configure Signing Credentials]({{< relref "docs/guides/sign/configure-signing-credentials.md" >}}) - Set up OCM to use your keys for signing and verification
+- [Guides: Sign a Component Version]({{< relref "docs/guides/sign/_index.md" >}}) - Use your private key to sign components
+- [Guides: All verification methods]({{< relref "docs/guides/sign/_index.md#verify-a-signature" >}}) - Share your public key and verify signatures
 
 ## Related documentation
 
 - [Concept: Signing and Verification]({{< relref "docs/concepts/signing-and-verification-concept.md" >}}) - Understand how OCM signing and verification works
-- [Tutorial: Sign Your First Component]({{< relref "docs/guides/sign/sign-with-plain-rsa.md" >}}) - A hands-on tutorial for signing components end-to-end
-- [Tutorial: GPG Signatures]({{< relref "docs/guides/sign/sign-with-gpg.md" >}}) - End-to-end GPG signing tutorial
+- [Guides: Sign Your First Component]({{< relref "docs/guides/sign/sign-with-plain-rsa.md" >}}) - A hands-on tutorial for signing components end-to-end
+- [Guides: GPG Signatures]({{< relref "docs/guides/sign/sign-with-gpg.md" >}}) - End-to-end GPG signing tutorial

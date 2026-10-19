@@ -415,12 +415,12 @@ rm -rf /tmp/ocm-native-oci /tmp/ocm-transfer-native /tmp/ocm-fetch-oci
 
 ## Next Steps
 
-- [Transfer Components across an Air Gap]({{< relref "docs/guides/transfer/air-gap-transfer.md" >}}) — Transfer signed components through air-gapped environments
-- [Download Resources]({{< relref "docs/guides/transfer/download-resources.md" >}}) — Extract resources from components
-- [Upload OCI Images]({{< relref "docs/guides/transfer/upload-oci-images.md" >}}) — Upload embedded images as standalone OCI artifacts in the target
+- [Guides: Transfer Components across an Air Gap]({{< relref "docs/guides/transfer/air-gap-transfer.md" >}}) - Transfer signed components through air-gapped environments
+- [Guides: Download Resources]({{< relref "docs/guides/transfer/download-resources.md" >}}) - Extract resources from components
+- [Guides: Upload OCI Images]({{< relref "docs/guides/transfer/upload-oci-images.md" >}}) - Upload embedded images as standalone OCI artifacts in the target
 
 ## Related Documentation
 
-- [Concept: Transfer and Transport]({{< relref "docs/concepts/transfer-concept.md" >}}) — Understand resource handling during transfer
-- [Reference: Input and Access Types]({{< relref "docs/reference/input-and-access-types.md" >}}) — All supported resource types
-- [OCM OCI Storage Spec: Index Representation](https://github.com/open-component-model/ocm-spec/blob/main/doc/04-extensions/03-storage-backends/oci.md#62-index-representation) — How component versions map to OCI indexes
+- [Concept: Transfer and Transport]({{< relref "docs/concepts/transfer-concept.md" >}}) - Understand resource handling during transfer
+- [Reference: Input and Access Types]({{< relref "docs/reference/input-and-access-types.md" >}}) - All supported resource types
+- [OCM OCI Storage Spec: Index Representation](https://github.com/open-component-model/ocm-spec/blob/main/doc/04-extensions/03-storage-backends/oci.md#62-index-representation) - How component versions map to OCI indexes

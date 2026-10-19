@@ -1,7 +1,7 @@
 ---
 title: "Signing and Verification"
 description: "Understanding how OCM ensures component integrity and authenticity through cryptographic signatures."
-weight: 3
+weight: 12
 toc: true
 ---
 
@@ -521,10 +521,10 @@ For the complete trust analysis and design rationale, see ADR 0032 (RFC 3161 Tim
 
 ## Next Steps
 
-- [How-to: Generate Signing Keys]({{< relref "generate-signing-keys.md" >}}) - Step-by-step creating RSA key pairs.
-- [How-to: Configure Signing Credentials]({{< relref "configure-signing-credentials.md" >}}) - Set up OCM to use your keys for signing and verification
-- [How-to: Sign a Component Version]({{< relref "docs/guides/sign/_index.md" >}}) - Step-by-step signing instructions
-- [How-to: Verify a Component Version]({{< relref "docs/guides/sign/_index.md#verify-a-signature" >}}) - Step-by-step verification instructions
+- [Guides: Generate Signing Keys]({{< relref "generate-signing-keys.md" >}}) - Step-by-step creating RSA key pairs.
+- [Guides: Configure Signing Credentials]({{< relref "configure-signing-credentials.md" >}}) - Set up OCM to use your keys for signing and verification
+- [Guides: Sign a Component Version]({{< relref "docs/guides/sign/_index.md" >}}) - Step-by-step signing instructions
+- [Guides: Verify a Component Version]({{< relref "docs/guides/sign/_index.md#verify-a-signature" >}}) - Step-by-step verification instructions
 
 ## Related Documentation
 

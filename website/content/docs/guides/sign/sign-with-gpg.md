@@ -492,11 +492,11 @@ rm -rf /tmp/ocm-gpg-tutorial
 
 ## Next Steps
 
-- [Tutorial: Plain RSA Signatures]({{< relref "docs/guides/sign/sign-with-plain-rsa.md" >}}) — Sign with raw RSA keys instead of GPG.
-- [Tutorial: PEM-encoded Signatures]({{< relref "docs/guides/sign/sign-with-pem-certificate-chain.md" >}}) — Use X.509 certificate chains with RSA for enterprise PKI trust.
-- [How-to: Generate Signing Keys]({{< relref "docs/guides/sign/generate-signing-keys.md" >}}) — Step-by-step creating key pairs.
-- [How-to: Configure Signing Credentials]({{< relref "docs/guides/sign/configure-signing-credentials.md" >}}) — Set up OCM to use your keys for signing and verification.
+- [Guides: Plain RSA Signatures]({{< relref "docs/guides/sign/sign-with-plain-rsa.md" >}}) - Sign with raw RSA keys instead of GPG.
+- [Guides: PEM-encoded Signatures]({{< relref "docs/guides/sign/sign-with-pem-certificate-chain.md" >}}) - Use X.509 certificate chains with RSA for enterprise PKI trust.
+- [Guides: Generate Signing Keys]({{< relref "docs/guides/sign/generate-signing-keys.md" >}}) - Step-by-step creating key pairs.
+- [Guides: Configure Signing Credentials]({{< relref "docs/guides/sign/configure-signing-credentials.md" >}}) - Set up OCM to use your keys for signing and verification.
 
 ## Related Documentation
 
-- [Concept: Signing and Verification]({{< relref "docs/concepts/signing-and-verification-concept.md" >}}) — Understand the theory behind OCM signing
+- [Concept: Signing and Verification]({{< relref "docs/concepts/signing-and-verification-concept.md" >}}) - Understand the theory behind OCM signing

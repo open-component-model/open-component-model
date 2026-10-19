@@ -2,7 +2,7 @@
 title: "Resolvers"
 description: "Learn how OCM resolvers map component name patterns to repositories for recursive resolution."
 icon: "🔍"
-weight: 5
+weight: 10
 toc: true
 ---
 
@@ -143,20 +143,20 @@ resolver achieved through probe-and-retry. For the full version constraint synta
 
 ## Next Steps
 
-- [Add Component References]({{< relref "docs/guides/pack/add-component-references.md" >}}) — Hands-on walkthrough for
+- [Guides: Add Component References]({{< relref "docs/guides/pack/add-component-references.md" >}}) - Hands-on walkthrough for
   declaring component references and setting up resolvers for shared and multi-registry setups
-- [How-To: Migrate from Deprecated Resolvers]({{< relref "docs/changelog/migrate-legacy-resolvers.md" >}}) —
+- [Changelog: Migrate from Deprecated Resolvers]({{< relref "docs/changelog/migrate-legacy-resolvers.md" >}}) -
   Replace deprecated fallback
   resolvers with glob-based resolvers
 
 ## Related Documentation
 
-- [Reference: Resolver Configuration]({{< relref "docs/reference/resolver-configuration.md" >}}) — Full schema,
+- [Reference: Resolver Configuration]({{< relref "docs/reference/resolver-configuration.md" >}}) - Full schema,
   repository types, and pattern syntax
-- [Canonical Component Repositories]({{< relref "docs/concepts/canonical-components.md" >}}) — Why references are location-free and how resolvers bridge the gap
-- [Component Identity]({{< relref "docs/concepts/component-identity.md" >}}) — Core concepts behind component versions,
+- [Concept: Canonical Component Repositories]({{< relref "docs/concepts/canonical-components.md" >}}) - Why references are location-free and how resolvers bridge the gap
+- [Concept: Component Identity]({{< relref "docs/concepts/component-identity.md" >}}) - Core concepts behind component versions,
   identities, and references
-- [How-To: Transfer Components Across an Air Gap]({{< relref "docs/guides/transfer/air-gap-transfer.md" >}}) — Use OCM Transfer
+- [Guides: Transfer Components Across an Air Gap]({{< relref "docs/guides/transfer/air-gap-transfer.md" >}}) - Use OCM Transfer
   to move components between air-gapped environments
-- [Tutorial: Understand Credential Resolution]({{< relref "docs/concepts/credential-resolution.md" >}}) — Configure
+- [Concept: Understand Credential Resolution]({{< relref "docs/concepts/credential-resolution.md" >}}) - Configure
   credentials for OCI registries

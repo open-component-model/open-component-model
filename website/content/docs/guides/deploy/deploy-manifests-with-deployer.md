@@ -392,6 +392,6 @@ kubectl get pods -l app=podinfo
 
 ## Next Steps
 
-- [Tutorial: Deploy Helm Charts with Bootstrap]({{< relref "/docs/guides/deploy/deploy-helm-chart-with-kro-and-gitops.md" >}}) — Advanced deployment with kro and Flux orchestration
-- [How-to: Configure Credentials for Controllers]({{< relref "docs/guides/deploy/configure-controller-credentials.md" >}}) — Set up private registry access
-- [How-to: Custom RBAC]({{< relref "docs/guides/deploy/configure-custom-rbac.md" >}}) — Configure permissions for Deployer
+- [Guides: Deploy Helm Charts with Bootstrap]({{< relref "/docs/guides/deploy/deploy-helm-chart-with-kro-and-gitops.md" >}}) - Advanced deployment with kro and Flux orchestration
+- [Guides: Configure Credentials for Controllers]({{< relref "docs/guides/deploy/configure-controller-credentials.md" >}}) - Set up private registry access
+- [Guides: Custom RBAC]({{< relref "docs/guides/deploy/configure-custom-rbac.md" >}}) - Configure permissions for Deployer

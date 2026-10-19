@@ -782,8 +782,8 @@ This pattern allows developers to ship deployment instructions alongside their s
 
 ## Next Steps
 
-- [Deploy an Application from Chained RGDs with OCM and kro]({{< relref "docs/guides/deploy/deploy-with-chained-kro-rgds.md" >}}) covers the same delivery with two RGDs chained together instead of a Helm chart
-- [Deploy a Helm Chart with Crossplane and GitOps]({{< relref "docs/guides/deploy/deploy-helm-chart-bootstrap-crossplane.md" >}}) delivers the same Helm chart using Crossplane instead of kro
-- [How-to: Air-Gap Transfer]({{< relref "air-gap-transfer.md" >}}) — Transfer components to disconnected environments
-- [How-to: Configure Credentials for Controllers]({{< relref "docs/guides/deploy/configure-controller-credentials.md" >}}) — Set up private registry access
-- [Concept: OCM Controllers]({{< relref "ocm-controllers.md" >}}) — Understand the controller architecture
+- [Guides: Deploy an Application from Chained RGDs with OCM and kro]({{< relref "docs/guides/deploy/deploy-with-chained-kro-rgds.md" >}}) - covers the same delivery with two RGDs chained together instead of a Helm chart
+- [Guides: Deploy a Helm Chart with Crossplane and GitOps]({{< relref "docs/guides/deploy/deploy-helm-chart-bootstrap-crossplane.md" >}}) - delivers the same Helm chart using Crossplane instead of kro
+- [Guides: Air-Gap Transfer]({{< relref "air-gap-transfer.md" >}}) - Transfer components to disconnected environments
+- [Guides: Configure Credentials for Controllers]({{< relref "docs/guides/deploy/configure-controller-credentials.md" >}}) - Set up private registry access
+- [Concept: OCM Controllers]({{< relref "ocm-controllers.md" >}}) - Understand the controller architecture

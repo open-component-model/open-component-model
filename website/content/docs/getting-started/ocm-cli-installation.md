@@ -338,4 +338,4 @@ For detailed command documentation, see the [OCM CLI Reference]({{< relref "/doc
 
 ## Next Steps
 
-- [Tutorial: Create component versions]({{< relref "create-component-version.md" >}}) - Learn how to create and store component versions using the OCM CLI
+- [Getting Started: Create component versions]({{< relref "create-component-version.md" >}}) - Learn how to create and store component versions using the OCM CLI

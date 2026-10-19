@@ -112,11 +112,11 @@ For the full list of built-in typed credential types and their fields, see [Refe
 
 ## What's Next?
 
-- [Tutorial: Credential Resolution]({{< relref "/docs/concepts/credential-resolution.md" >}}) — Learn how OCM picks the right credentials by experimenting with a config
-- [How-To: Configure Credentials for Multiple Registries]({{< relref "/docs/guides/transfer/configure-registry-credentials.md" >}}) — Quick task-oriented setup
-- [Tutorial: Credentials for OCM Controllers]({{< relref "/docs/guides/deploy/configure-controller-credentials.md" >}}) — How to provide credentials in Kubernetes environments
+- [Concept: Credential Resolution]({{< relref "/docs/concepts/credential-resolution.md" >}}) - Learn how OCM picks the right credentials by experimenting with a config
+- [Guides: Configure Credentials for Multiple Registries]({{< relref "/docs/guides/transfer/configure-registry-credentials.md" >}}) - Quick task-oriented setup
+- [Guides: Credentials for OCM Controllers]({{< relref "/docs/guides/deploy/configure-controller-credentials.md" >}}) - How to provide credentials in Kubernetes environments
 
 ## Related Documentation
 
-- [Reference: Consumer Identities]({{< relref "/docs/reference/credential-consumer-identities.md" >}}) — Complete list of identity types, attributes, and credential properties
-- [Reference: Credential Types]({{< relref "/docs/reference/credential-types.md" >}}) — All built-in typed credential types and their fields
+- [Reference: Consumer Identities]({{< relref "/docs/reference/credential-consumer-identities.md" >}}) - Complete list of identity types, attributes, and credential properties
+- [Reference: Credential Types]({{< relref "/docs/reference/credential-types.md" >}}) - All built-in typed credential types and their fields

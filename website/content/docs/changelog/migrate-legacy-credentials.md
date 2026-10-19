@@ -177,8 +177,8 @@ whole path segments: `pathprefix: org/repo` does not match `org/repo.git`.
 
 ## Next Steps
 
-- [How-To: Configure Credentials for Multiple Registries]({{< docref "docs/guides/transfer/configure-registry-credentials.md" >}}) - Set up credentials for multiple registries
-- [Tutorial: Credential Resolution]({{< docref "/docs/concepts/credential-resolution.md" >}}) - Learn how OCM resolves
+- [Guides: Configure Credentials for Multiple Registries]({{< docref "docs/guides/transfer/configure-registry-credentials.md" >}}) - Set up credentials for multiple registries
+- [Concept: Credential Resolution]({{< docref "/docs/concepts/credential-resolution.md" >}}) - Learn how OCM resolves
   credentials step-by-step
 
 ## Related Documentation
