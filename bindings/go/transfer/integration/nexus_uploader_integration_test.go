@@ -115,7 +115,7 @@ func Test_Integration_NexusUploader(t *testing.T) {
 		r.NoError(helmaccess.Scheme.Convert(gotResource.Access, &typedHelm))
 		r.Equal(helmRepo, typedHelm.HelmRepository)
 		r.Equal("mychart:0.1.0", typedHelm.HelmChart, "helmChart is the chart name and version nexus records")
-		r.Equal(&descriptor.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: "genericBlobDigest/v1", Value: digestOf(chartTgzBytes).Encoded()}, gotResource.Digest)
+		r.Nil(gotResource.Digest, "transfer must not inject a digest the source resource lacked")
 
 		// Nexus stores the chart under the path it derives from Chart.yaml and indexes it.
 		r.Equal(chartTgzBytes, nexusGet(t, helmRepo+"/mychart-0.1.0.tgz", adminPassword))
@@ -240,7 +240,10 @@ func startNexus(t *testing.T) (baseURL, adminPassword string) {
 		testcontainers.WithEnv(map[string]string{
 			"INSTALL4J_ADD_VM_PARAMS": "-Xms1g -Xmx1g -XX:MaxDirectMemorySize=1g -Djava.util.prefs.userRoot=/nexus-data/javaprefs",
 		}),
-		testcontainers.WithWaitStrategy(wait.ForHTTP("/service/rest/v1/status/writable").WithPort("8081/tcp").WithStartupTimeout(5*time.Minute)),
+		// WithWaitStrategy caps the wait at a 60s deadline regardless of the strategy's
+		// own timeout; the Nexus JVM routinely needs longer under CI load, so set the
+		// deadline explicitly. Both the deadline and the strategy timeout must allow 5m.
+		testcontainers.WithWaitStrategyAndDeadline(5*time.Minute, wait.ForHTTP("/service/rest/v1/status/writable").WithPort("8081/tcp").WithStartupTimeout(5*time.Minute)),
 	)
 	r.NoError(err)
 	t.Cleanup(func() { r.NoError(testcontainers.TerminateContainer(container)) })

@@ -809,6 +809,14 @@ func TestMergeTLSConfig(t *testing.T) {
 		require.NotNil(t, result.InsecureSkipVerify)
 		assert.False(t, *result.InsecureSkipVerify)
 	})
+
+	t.Run("src root CAs replace dst RootCAsPEM and RootCAsPEMFile together", func(t *testing.T) {
+		dst := &httpspec.TLSConfig{RootCAsPEM: "global inline"}
+		src := &httpspec.TLSConfig{RootCAsPEMFile: "/host/ca.pem"}
+		result := httpspec.MergeTLSConfig(dst, src)
+		assert.Empty(t, result.RootCAsPEM)
+		assert.Equal(t, "/host/ca.pem", result.RootCAsPEMFile)
+	})
 }
 
 func TestConfig_ParseYAML_TLS(t *testing.T) {

@@ -2,7 +2,7 @@
 title: Deploy an Application from Chained RGDs with OCM and kro
 description: "Package an OCM component with two chained kro ResourceGraphDefinitions and deploy it as plain manifests, no Helm chart or GitOps deployer needed."
 icon: "⚙️"
-weight: 62
+weight: 66
 toc: true
 ---
 
@@ -34,19 +34,20 @@ Before starting, make sure you have set up your environment as described in the 
 
 - [Controller environment]({{< relref "setup-controller-environment.md" >}}) with the OCM
   Controllers and kro installed (no GitOps deployer needed)
-- [Custom RBAC]({{< relref "custom-rbac.md" >}}) configured so the OCM controller can manage
-  `ResourceGraphDefinitions`, and so kro can create the `Podinfo` instance, the OCM `Resource`,
-  and the Deployment and Service it renders — see [RBAC for CRDs kro creates at runtime]({{< relref "custom-rbac.md#rbac-for-crds-kro-creates-at-runtime" >}})
+- [Custom RBAC]({{< relref "custom-rbac.md#grant-the-controller-read-access" >}}) configured so the OCM controller
+  can watch `ResourceGraphDefinitions`. The deployers' service account gets write access in
+  [Deliver both RGDs](#deliver-both-rgds), kro's own access in
+  [Grant kro access to the resources in the graphs](#grant-kro-access-to-the-resources-in-the-graphs)
 - [OCM CLI]({{< relref "ocm-cli-installation.md" >}})
 - `envsubst` (part of `gettext`; on macOS install it with `brew install gettext`)
 - An OCI registry you can push to, for example [ghcr.io](https://docs.github.com/en/packages/learn-github-packages/introduction-to-github-packages)
 
 {{< callout context="note" title="Verify the OCM controller's RBAC" icon="outline/lock" >}}
 Once you've applied the [Custom RBAC]({{< relref "custom-rbac.md" >}}) guide, confirm the OCM
-controller `ServiceAccount` (not your admin user) can manage RGDs:
+controller `ServiceAccount` (not your admin user) can watch RGDs:
 
 ```bash
-kubectl auth can-i create resourcegraphdefinitions.kro.run \
+kubectl auth can-i watch resourcegraphdefinitions.kro.run \
   --as=system:serviceaccount:ocm-k8s-toolkit-system:ocm-k8s-toolkit-controller-manager
 ```
 
@@ -68,7 +69,7 @@ You deliver **two** RGDs inside one OCM component. The first (`podinfo`) defines
 kind: the application as its own Kubernetes API. The second (`system`) creates a `Podinfo`
 instance and sets its image to the one OCM localized into your registry. The OCM controllers
 deliver both the same way described in [Concept: Kubernetes Deployer]({{< relref "docs/concepts/kubernetes-deployer.md" >}}):
-a `Repository` and `Component` fetch the component, and one `Resource` + `Deployer` pair per
+a `Repository` and `Component` fetch the component, and one `Resource` + `NamespacedDeployer` pair per
 RGD applies it to the cluster. You then create a single `System` instance, and reconciliation
 converges to a running Podinfo.
 
@@ -84,7 +85,7 @@ with them.
 <summary>Architecture diagram</summary>
 
 (Continues from [Concept: Kubernetes Deployer]({{< relref "docs/concepts/kubernetes-deployer.md" >}}), which
-shows the `Repository` → `Component` → `Resource` → `Deployer` sequence that gets the RGD here.)
+shows the `Repository` → `Component` → `Resource` → `NamespacedDeployer` sequence that gets the RGD here.)
 
 ```mermaid
 flowchart TB
@@ -417,13 +418,89 @@ For more details, see [Configure Credentials for Controllers]({{< relref "/docs/
 
 ## Deploy the application
 
+### Grant kro access to the resources in the graphs
+
+kro needs a `ClusterRole` for the `System` and `Podinfo` instances that your two RGDs define,
+and for the Deployment and Service that the podinfo RGD renders. The role for OCM resources
+comes from the [setup guide]({{< relref "setup-controller-environment.md" >}}). See
+[Access Control](https://kro.run/docs/advanced/access-control) in the kro documentation for details.
+
+This is separate from the `system-deployer` service account, which only allows the NamespacedDeployers to apply
+the RGDs themselves.
+
+```bash
+cat > kro-rbac.yaml << 'EOF'
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kro:controller:systems
+  labels:
+    # kro picks up every ClusterRole with this label, see https://kro.run/docs/advanced/access-control
+    rbac.kro.run/aggregate-to-controller: "true"
+rules:
+  # System instances: you create them, kro reconciles them
+  - apiGroups:
+      - kro.run
+    resources:
+      - systems
+      - systems/status
+    verbs:
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  # Podinfo instances: the system RGD creates one, so kro needs all verbs
+  - apiGroups:
+      - kro.run
+    resources:
+      - podinfoes
+      - podinfoes/status
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  # The workload in the podinfo RGD
+  - apiGroups:
+      - apps
+    resources:
+      - deployments
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - services
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+EOF
+kubectl apply -f kro-rbac.yaml
+```
+
 ### Deliver both RGDs
 
 The bootstrap resources are OCM controller objects: a `Repository` and `Component` fetch the
-component from your registry; then a `Resource` + `Deployer` pair per RGD applies it to the
-cluster. The namespaced objects all live in `default`, so their cross-references and the
-verification commands below work no matter which namespace your kubectl context points at. The
-`Deployer` is cluster-scoped and finds its `Resource` through `resourceRef.namespace`.
+component from your registry; then a `Resource` + `NamespacedDeployer` pair per RGD applies it to the
+cluster. The objects all live in `default`, so their cross-references and the verification
+commands below work no matter which namespace your kubectl context points at. Each
+`NamespacedDeployer` applies as the `system-deployer` service account. RGDs are cluster-scoped, so
+that service account needs a `ClusterRole` for them.
 
 ```bash
 cat > bootstrap.yaml << 'EOF'
@@ -463,14 +540,43 @@ spec:
       resource:
         name: rgd-podinfo
 ---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: system-deployer
+  namespace: default
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: system-deployer
+rules:
+  - apiGroups: ["kro.run"]
+    resources: ["resourcegraphdefinitions"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: system-deployer
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system-deployer
+subjects:
+  - kind: ServiceAccount
+    name: system-deployer
+    namespace: default
+---
 apiVersion: delivery.ocm.software/v1alpha1
-kind: Deployer
+kind: NamespacedDeployer
 metadata:
   name: system-deployer-podinfo
+  namespace: default
 spec:
   resourceRef:
     name: system-rgd-podinfo
-    namespace: default
+  serviceAccountName: system-deployer
 ---
 apiVersion: delivery.ocm.software/v1alpha1
 kind: Resource
@@ -486,13 +592,14 @@ spec:
         name: rgd-system
 ---
 apiVersion: delivery.ocm.software/v1alpha1
-kind: Deployer
+kind: NamespacedDeployer
 metadata:
   name: system-deployer-system
+  namespace: default
 spec:
   resourceRef:
     name: system-rgd-system
-    namespace: default
+  serviceAccountName: system-deployer
 EOF
 ```
 
@@ -593,19 +700,17 @@ tunnel is ready and return nothing.
 Change the message or replica count by editing `instance.yaml` and re-applying. kro
 reconciles the running workload.
 
-{{< callout context="caution" title="Going to production: tighten kro's RBAC" icon="outline/lock" >}}
-This tutorial uses a dev-friendly kro install with broad permissions (see [Prerequisites](#prerequisites)).
-To harden the cluster and have more strict RBAC please read [RBAC for CRDs kro creates at runtime]({{< relref "custom-rbac.md#rbac-for-crds-kro-creates-at-runtime" >}}).
-{{< /callout >}}
-
 ## Clean up
 
 Delete the instance before the RGDs. Deleting an RGD while its instances still exist can
-strand them on a finalizer.
+strand them on a finalizer. Then delete the `NamespacedDeployers` before their service account:
+they prune the RGDs with its permissions.
 
 ```bash
 kubectl delete system system -n default
-envsubst < bootstrap.yaml | kubectl delete -f -
+kubectl delete namespaceddeployer system-deployer-podinfo system-deployer-system -n default --wait
+envsubst < bootstrap.yaml | kubectl delete -f - --ignore-not-found
+kubectl delete -f kro-rbac.yaml
 ```
 
 By default kro keeps the `Podinfo` and `System` CRDs after the RGDs are gone. Installing kro
@@ -620,6 +725,42 @@ else if you tear down the whole cluster, for example with `kind delete cluster`.
 **RGD stuck `Inactive`**: the system RGD cannot compile until the `Podinfo` CRD exists. Check
 that the podinfo RGD is `Active` (`kubectl get rgd`). It converges automatically.
 
+If an RGD stays `Inactive`, check the reason:
+
+```bash
+kubectl get rgd podinfo -o jsonpath='{.status.conditions[?(@.type=="Ready")].message}'
+```
+
+A message like `cache sync timeout for kro.run/v1alpha1, Resource=podinfoes` often means that kro
+lacks access to the instances of that kind. Check that you applied `kro-rbac.yaml`.
+
+Any other message means the RGD does not compile. It names the resource and the problem, for
+example `failed to compile template expression ... undefined field` for a typo in a CEL
+expression, or `cannot resolve group version kind ...: schema not found` for a kind whose CRD is
+not installed. Fix the RGD and apply it again.
+
+**Instance stuck**: an RGD can be `Active` while its instance is not. The instance's conditions
+name the resource that is waiting or failing:
+
+```bash
+kubectl describe system system -n default
+kubectl describe podinfo podinfo -n default
+```
+
+A message like `waiting for node "resourceImage": readyWhen condition evaluated to false` means
+that resource is not ready yet, and the resources after it wait for it. In this tutorial `app`
+waits for `resourceImage`, so check that `Resource` first.
+
+If the message says `forbidden`, kro lacks a permission. The kro logs name it:
+
+```bash
+kubectl logs -n kro-system deployment/kro | grep forbidden
+```
+
+Add that kind to `kro-rbac.yaml` from
+[Grant kro access to the resources in the graphs](#grant-kro-access-to-the-resources-in-the-graphs)
+and apply it again.
+
 **Resource not `Ready` / image pull errors**: the cluster cannot read the package. Make the
 ghcr.io package public, or follow the private-registry steps above.
 
@@ -629,8 +770,9 @@ ghcr.io package public, or follow the private-registry steps above.
 kubectl logs -n ocm-k8s-toolkit-system deploy/ocm-k8s-toolkit-controller-manager --tail=40
 ```
 
-**RBAC denied**: re-check the impersonation command in Prerequisites and apply the
-[Custom RBAC]({{< relref "custom-rbac.md" >}}) guide.
+**RBAC denied**: a `forbidden` on a NamespacedDeployer means the `system-deployer` service account lacks a
+write verb. A watch error in the controller logs means the controller lacks read access: re-check the impersonation
+command in Prerequisites and apply the [Custom RBAC]({{< relref "custom-rbac.md" >}}) guide.
 
 ## What you learned
 
@@ -656,14 +798,20 @@ dependencies from references. You saw that in this tutorial: because `app` refer
 same way, and one `System` instance drives the entire product.
 
 One thing is still hand-written: the delivery plumbing in `bootstrap.yaml`. Today you list a
-`Resource` + `Deployer` pair for every RGD yourself. For a dozen apps that is a wall of
+`Resource` + `NamespacedDeployer` pair for every RGD yourself. For a dozen apps that is a wall of
 boilerplate, and every version bump means editing that file again.
 
 The pattern that scales moves the plumbing *into* an RGD. An **installer RGD** templates those
-`Resource` + `Deployer` pairs itself, one per app, all sharing a single `Component` you pass
-in by name:
+`Resource` + `NamespacedDeployer` pairs itself, one per app, all sharing a single `Component` you pass
+in by name. The installer's schema declares both inputs:
 
 ```yaml
+schema:
+  apiVersion: v1alpha1
+  kind: Installer
+  spec:
+    componentRef: string                # the Component that holds the app RGDs
+    serviceAccountName: string          # needs RBAC for the app RGDs
 resources:
   - id: appResource
     template:
@@ -679,24 +827,40 @@ resources:
   - id: appDeployer
     template:
       apiVersion: delivery.ocm.software/v1alpha1
-      kind: Deployer
+      kind: NamespacedDeployer
       metadata: { name: app-rgd }
       spec:
         resourceRef:
           name: ${appResource.metadata.name}
-          # Deployer is cluster-scoped, so the namespace of the namespaced Resource is required
-          namespace: ${schema.metadata.namespace}
+        serviceAccountName: ${schema.spec.serviceAccountName}
     readyWhen:
       - ${appDeployer.status.conditions.exists(c, c.type == "Ready" && c.status == "True")}
+```
+
+An `Installer` instance supplies them:
+
+```yaml
+apiVersion: kro.run/v1alpha1
+kind: Installer
+metadata:
+  name: system
+  namespace: default
+spec:
+  componentRef: system-component
+  serviceAccountName: system-deployer
 ```
 
 Now `bootstrap.yaml` shrinks to almost nothing. It delivers the installer RGD once, and the
 running instance takes over its own delivery. Bump the component version and the whole graph
 reconciles. No more editing bootstrap files by hand.
 
+In this pattern kro creates the `Deployer` objects itself, so it also needs a labeled
+`ClusterRole` for `deployers.delivery.ocm.software`. See
+[RBAC for CRDs kro creates at runtime]({{< relref "custom-rbac.md#rbac-for-crds-kro-creates-at-runtime" >}}).
+
 This is not a new tool. It is the same `delivery.ocm.software/Resource` you already used for
 the localized image, now applied to delivery itself. There is no layering limit: an RGD can
-create other RGDs, which is exactly what the installer's `Resource` + `Deployer` pairs do for
+create other RGDs, which is exactly what the installer's `Resource` + `NamespacedDeployer` pairs do for
 the app RGDs. The one thing it cannot do is apply itself: something has to deliver the
 installer RGD once, and that stays in `bootstrap.yaml`.
 

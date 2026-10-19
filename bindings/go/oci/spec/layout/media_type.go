@@ -1,5 +1,7 @@
 package layout
 
+import "strings"
+
 // Media type constants for OCI image layouts
 const (
 	// MediaTypeOCIImageLayout is the media type for a complete OCI image layout
@@ -11,3 +13,8 @@ const (
 	MediaTypeOCIImageLayoutTarV1     = MediaTypeOCIImageLayoutV1 + "+tar"
 	MediaTypeOCIImageLayoutTarGzipV1 = MediaTypeOCIImageLayoutV1 + "+tar+gzip"
 )
+
+// IsOCILayoutMediaType reports whether mediaType is an OCM OCI layout media type.
+func IsOCILayoutMediaType(mediaType string) bool {
+	return strings.HasPrefix(mediaType, MediaTypeOCIImageLayout)
+}

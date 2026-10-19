@@ -16,6 +16,7 @@ import (
 	helmcredsv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/v1"
 	helmidentityv1 "ocm.software/open-component-model/bindings/go/helm/spec/identity/v1"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
+	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/transfer/internal/repositoryupload/chart"
@@ -79,6 +80,10 @@ func (u *Uploader) source(ctx context.Context, spec *uploadv1alpha1.RepositoryUp
 		if err != nil {
 			return nil, "", err
 		}
+		repo, err = repository.PinRepository(repo, spec.ComponentVersion.Component, spec.ComponentVersion.Version, spec.ComponentVersion.Digest)
+		if err != nil {
+			return nil, "", err
+		}
 		b, _, err := repo.GetLocalResource(ctx, spec.ComponentVersion.Component, spec.ComponentVersion.Version, src.ToIdentity())
 		if err != nil {
 			return nil, "", fmt.Errorf("failed getting local resource %v: %w", src.ToIdentity(), err)
@@ -102,7 +107,7 @@ func (u *Uploader) source(ctx context.Context, spec *uploadv1alpha1.RepositoryUp
 // ociSource reports that the source content of src with mediaType was downloaded from an OCI
 // artifact, so the source digest does not describe it.
 func ociSource(src *descriptor.Resource, mediaType string) bool {
-	return chart.IsOCILayout(mediaType) || chart.FromOCIRegistry(src)
+	return layout.IsOCILayoutMediaType(mediaType) || chart.FromOCIRegistry(src)
 }
 
 // blobMediaType returns the media type b reports, "" when unknown.
