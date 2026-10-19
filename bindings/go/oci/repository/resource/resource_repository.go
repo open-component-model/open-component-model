@@ -14,7 +14,6 @@ import (
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/oci"
 	ocicredentials "ocm.software/open-component-model/bindings/go/oci/credentials"
-	"ocm.software/open-component-model/bindings/go/oci/internal/remotestore"
 	"ocm.software/open-component-model/bindings/go/oci/looseref"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
@@ -260,7 +259,6 @@ func createRepository(
 
 	urlResolver, err := urlresolver.New(
 		urlresolver.WithBaseURL(urlString),
-		urlresolver.WithChunkedPush(remotestore.DefaultChunkSize, remotestore.DefaultChunkThreshold),
 		urlresolver.WithBaseClient(&auth.Client{
 			Client: httpClient,
 			Header: map[string][]string{

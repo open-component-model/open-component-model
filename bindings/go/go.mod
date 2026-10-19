@@ -6,7 +6,7 @@ toolchain go1.27.1
 
 // Replace digest lib to master to gather access to BLAKE3.
 // xref: https://github.com/opencontainers/go-digest/pull/66
-replace github.com/opencontainers/go-digest => github.com/opencontainers/go-digest v1.0.1-0.20260914153615-3650f26df2a1
+replace github.com/opencontainers/go-digest => github.com/opencontainers/go-digest v1.0.1-0.20261015205711-63db54280247
 
 require (
 	cel.dev/cel-go v0.32.0
@@ -20,8 +20,8 @@ require (
 	github.com/aws/smithy-go v1.28.1
 	github.com/coreos/go-oidc/v3 v3.21.0
 	github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467
-	github.com/digitorus/pkcs7 v0.0.0-20250730155240-ffadbf3f398c
-	github.com/digitorus/timestamp v0.0.0-20250524132541-c45532741eea
+	github.com/digitorus/pkcs7 v0.0.0-20260914070511-d678ea5ea03f
+	github.com/digitorus/timestamp v0.0.0-20260914073129-b4b58b92aa51
 	github.com/docker/cli v29.8.0+incompatible
 	github.com/gabriel-vasile/mimetype v1.4.15
 	github.com/go-git/go-git/v6 v6.0.0-alpha.5
@@ -115,7 +115,7 @@ require (
 	github.com/extism/go-sdk v1.7.1 // indirect
 	github.com/felixge/httpsnoop v1.1.0 // indirect
 	github.com/fsnotify/fsnotify v1.10.1 // indirect
-	github.com/fxamacker/cbor/v2 v2.9.3 // indirect
+	github.com/fxamacker/cbor/v2 v2.9.4 // indirect
 	github.com/go-errors/errors v1.5.1 // indirect
 	github.com/go-git/gcfg/v2 v2.0.2 // indirect
 	github.com/go-git/go-billy/v6 v6.0.0-alpha.2 // indirect
@@ -173,7 +173,7 @@ require (
 	github.com/peterbourgon/diskv v2.0.1+incompatible // indirect
 	github.com/pjbgf/sha1cd v0.6.0 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
-	github.com/power-devops/perfstat v0.0.0-20260805114148-88456608a4f6 // indirect
+	github.com/power-devops/perfstat v0.0.0-20260916203055-22a1a467d9f0 // indirect
 	github.com/prometheus/client_model v0.6.3 // indirect
 	github.com/prometheus/common v0.71.0 // indirect
 	github.com/prometheus/procfs v0.22.0 // indirect
