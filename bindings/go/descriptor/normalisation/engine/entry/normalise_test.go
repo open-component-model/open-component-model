@@ -61,6 +61,16 @@ func TestNormalise(t *testing.T) {
 			input:    map[string]any{"k": "a<b>&c"},
 			expected: `[{"k":"a<b>&c"}]`,
 		},
+		{
+			name:     "integral float keeps encoding/json rendering",
+			input:    map[string]any{"k": 1.0},
+			expected: `[{"k":1}]`,
+		},
+		{
+			name:     "fractional floats use Python repr spelling",
+			input:    []any{0.0000001, 0.00001, 0.0001, 1.25, 0.5},
+			expected: `[1e-07,1e-05,0.0001,1.25,0.5]`,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

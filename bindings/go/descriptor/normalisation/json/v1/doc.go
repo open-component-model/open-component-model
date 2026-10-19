@@ -14,8 +14,14 @@
 //     excludes it.
 //   - v1 emits a bare provider string as-is ({"provider":"ACME"}); v4alpha1
 //     wraps it as a map.
-//   - v1 canonicalises creationTime through the v2 Timestamp type (RFC3339 →
-//     UTC, rounded to the second, trailing Z); v4alpha1 hashes the raw string.
+//   - v1 canonicalises creationTime the way cc-utils does: the wall-clock time
+//     is rounded to the second and relabelled with a literal Z, WITHOUT
+//     converting the offset to UTC (07:16:30.6+02:00 → 07:16:31Z); v4alpha1
+//     hashes the raw string.
+//   - v1 canonicalises resource types through cc-utils' ArtefactType alias
+//     table (optional /v1 suffix stripped; e.g. helmChart → helmChart/v1,
+//     ociImage/v1 → ociImage, filesystem → directoryTree); unknown types are
+//     kept verbatim.
 //
 // Field selection (drop repositoryContexts/sources/access/srcRefs/signatures/
 // nestedDigests, default empty resources/componentReferences to [], inject an

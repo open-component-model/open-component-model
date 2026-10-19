@@ -49,6 +49,10 @@ func TestNormaliseByteExact(t *testing.T) {
 		{"11-dup-delimiter", input_11_dup_delimiter, norm_11_dup_delimiter, digest_11_dup_delimiter},
 		{"12-dup-explicit-version", input_12_dup_explicit_version, norm_12_dup_explicit_version, digest_12_dup_explicit_version},
 		{"14-label-list-value", input_14_label_list_value, norm_14_label_list_value, digest_14_label_list_value},
+		{"15-creationtime-offset-positive", input_15_creationtime_offset_positive, norm_15_creationtime_offset_positive, digest_15_creationtime_offset_positive},
+		{"16-creationtime-offset-negative", input_16_creationtime_offset_negative, norm_16_creationtime_offset_negative, digest_16_creationtime_offset_negative},
+		{"17-resource-type-aliases", input_17_resource_type_aliases, norm_17_resource_type_aliases, digest_17_resource_type_aliases},
+		{"18-label-float", input_18_label_float, norm_18_label_float, digest_18_label_float},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

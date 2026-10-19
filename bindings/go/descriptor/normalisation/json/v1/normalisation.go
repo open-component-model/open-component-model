@@ -3,8 +3,8 @@ package v1
 import (
 	"encoding/json"
 	"fmt"
-	"strconv"
 	"strings"
+	"time"
 
 	"sigs.k8s.io/yaml"
 
@@ -148,17 +148,39 @@ func transformElementList(list []any) []any {
 // ccutilsArtefactTypes mirrors cc-utils' ArtefactType alias table
 // (ocm/__init__.py): on load it canonicalises resource types to the enum's
 // serialised value. OCM v2 stores the type verbatim, so to match a cc-utils
-// signature we apply the same canonicalisation. Only the transforming entries
-// are listed; already-canonical types (e.g. ociImage, git, blob/v1) pass
-// through unchanged, and unknown types are left as-is (cc-utils keeps them as
-// plain strings).
+// signature we apply the same canonicalisation. Keys are the non-"/v1" spelling
+// (cc-utils strips an optional "/v1" before resolving); each maps to the enum's
+// serialised value. canonicaliseArtefactType does the lookup.
 var ccutilsArtefactTypes = map[string]string{
-	"blob":        "blob/v1",
-	"filesystem":  "directoryTree",
-	"git/v1":      "git",
-	"helmChart":   "helmChart/v1",
-	"ociArtifact": "ociArtifact/v1",
-	"ociImage/v1": "ociImage",
+	"blob":            "blob/v1",
+	"cosignSignature": "cosignSignature",
+	"directoryTree":   "directoryTree",
+	"executable":      "executable",
+	"filesystem":      "directoryTree",
+	"git":             "git",
+	"helmChart":       "helmChart/v1",
+	"npmPackage":      "npmPackage",
+	"ociArtifact":     "ociArtifact/v1",
+	"ociImage":        "ociImage",
+	"sbom":            "sbom",
+}
+
+// canonicaliseArtefactType mirrors cc-utils' enum_or_string(enum_type=
+// ArtefactType, omit_v1_version=True) (ocm/__init__.py): a trailing "/v1" is
+// optional and stripped before resolving, a resolved type is replaced by the
+// enum's canonical spelling, and an unresolved type is kept verbatim (so an
+// unknown "custom/v1" stays "custom/v1").
+func canonicaliseArtefactType(t string) string {
+	if stripped, hadSuffix := strings.CutSuffix(t, "/v1"); hadSuffix {
+		if canon, ok := ccutilsArtefactTypes[stripped]; ok {
+			return canon
+		}
+		return t
+	}
+	if canon, ok := ccutilsArtefactTypes[t]; ok {
+		return canon
+	}
+	return t
 }
 
 // transformResource drops the transport-only fields, canonicalises the resource
@@ -171,9 +193,7 @@ func transformResource(res map[string]any) {
 	delete(res, "access")
 	delete(res, "srcRefs")
 	if t, ok := res["type"].(string); ok {
-		if canon, ok := ccutilsArtefactTypes[t]; ok {
-			res["type"] = canon
-		}
+		res["type"] = canonicaliseArtefactType(t)
 	}
 	nullExtraIdentity(res)
 	normaliseElementLabels(res)
@@ -212,27 +232,25 @@ func normaliseProvider(c map[string]any) {
 	}
 }
 
-// normaliseCreationTime canonicalises a present creationTime string through the
-// v2 Timestamp type (RFC3339 → UTC, rounded to the second, …Z). An absent or
-// empty value was already dropped by omitempty.
+// normaliseCreationTime canonicalises a present creationTime the way cc-utils
+// (ocm/sign.py) does: parse the RFC3339 value, round it to the second, and
+// format the WALL-CLOCK time with a literal "Z" — the UTC offset is not
+// converted, only relabelled. So 2026-06-19T07:16:30.6+02:00 becomes
+// 2026-06-19T07:16:31Z (not 05:16:31Z). cc-utils rounds up when the fractional
+// part is >= 0.5s (time.Round rounds half away from zero, which agrees for the
+// microsecond-precision timestamps the store emits). An absent or empty value
+// was already dropped by omitempty.
 func normaliseCreationTime(c map[string]any) error {
 	s, ok := c["creationTime"].(string)
 	if !ok || s == "" {
 		return nil
 	}
-	var ts v2.Timestamp
-	if err := ts.UnmarshalJSON([]byte(strconv.Quote(s))); err != nil {
+	t, err := time.Parse(time.RFC3339, s)
+	if err != nil {
 		return fmt.Errorf("parsing creationTime %q: %w", s, err)
 	}
-	b, err := ts.MarshalJSON()
-	if err != nil {
-		return fmt.Errorf("formatting creationTime %q: %w", s, err)
-	}
-	var canon string
-	if err := json.Unmarshal(b, &canon); err != nil {
-		return fmt.Errorf("decoding creationTime %q: %w", s, err)
-	}
-	c["creationTime"] = canon
+	t = t.Round(time.Second)
+	c["creationTime"] = t.Format("2006-01-02T15:04:05") + "Z"
 	return nil
 }
 
