@@ -11,11 +11,8 @@ import (
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"oras.land/oras-go/v2/content"
 	"oras.land/oras-go/v2/registry"
 	"oras.land/oras-go/v2/registry/remote"
-
-	"ocm.software/open-component-model/bindings/go/oci/internal/remotestore"
 )
 
 func TestRepository_Fetch_DelegatesToBlobCache(t *testing.T) {
@@ -92,109 +89,47 @@ func TestRepository_Resolve_WithFullReferenceAndNormalization(t *testing.T) {
 func TestRepository_Unwrap_ReturnsEmbedded(t *testing.T) {
 	inner := &remote.Repository{}
 	repo := &Repository{Repository: inner, BlobCache: newTestCache(t, Options{})}
-	// Unwrap must reach through the cache AND the chunked store wrapper to the
-	// raw oras repository so pack's global-store detection still fires.
 	assert.Same(t, inner, repo.Unwrap())
 }
 
-// TestRepository_SatisfiesStoreAndStreamingPusher is the regression guard for
-// this change: with a cache configured, the decorator must still satisfy the
-// chunked-upload interfaces so pushes keep chunking (and streaming) instead of
-// falling back to a monolithic PUT, while preserving the promoted type
-// assertions (TagLister / ReferrerLister / Blobs()) used across the codebase.
-func TestRepository_SatisfiesStoreAndStreamingPusher(t *testing.T) {
-	r := require.New(t)
-	repo := &Repository{
-		Repository:     &remote.Repository{},
-		store:          &remotestore.RemoteStore{ChunkSize: remotestore.DefaultChunkSize, ChunkThreshold: remotestore.DefaultChunkThreshold},
-		BlobCache:      newTestCache(t, Options{}),
-		ReferenceCache: newTestRefCache(t, Options{}),
-	}
-
-	_, ok := interface{}(repo).(remotestore.StreamingPusher)
-	r.True(ok, "cached decorator must expose PushStreaming (chunked streaming survives the cache)")
-
-	_, ok = interface{}(repo).(registry.TagLister)
-	r.True(ok, "cached decorator must still promote TagLister")
-
-	_, ok = interface{}(repo).(registry.ReferrerLister)
-	r.True(ok, "cached decorator must still promote ReferrerLister")
-
-	_, ok = interface{}(repo).(interface {
-		Blobs() registry.BlobStore
-	})
-	r.True(ok, "cached decorator must still promote Blobs()")
-
-	_, ok = interface{}(repo).(interface{ Unwrap() content.Storage })
-	r.True(ok, "cached decorator must expose Unwrap for global-store detection")
-}
-
-// TestProxyRepository_NilCachesReturnsChunkedStore: with no cache ProxyRepository
-// returns a plain chunked store (wrapping the raw repo) that still exposes
-// PushStreaming, so chunking survives even without a cache in the chain.
-func TestProxyRepository_NilCachesReturnsChunkedStore(t *testing.T) {
-	r := require.New(t)
+func TestProxyRepository_NilCachesReturnBase(t *testing.T) {
 	inner := &remote.Repository{}
-	got := ProxyRepository(inner, nil, nil, remotestore.DefaultChunkSize, remotestore.DefaultChunkThreshold)
-	store, ok := got.(*remotestore.RemoteStore)
-	r.True(ok, "no-cache path must return the chunked store")
-	r.Same(inner, store.Repository)
-	_, ok = got.(remotestore.StreamingPusher)
-	r.True(ok, "no-cache path must be a StreamingPusher")
+	got := ProxyRepository(inner, nil, nil)
+	assert.Same(t, inner, got)
 }
 
 func TestProxyRepository_BlobCacheOnlyWraps(t *testing.T) {
-	r := require.New(t)
 	inner := &remote.Repository{}
 	c := newTestCache(t, Options{})
-	got := ProxyRepository(inner, c, nil, 0, 0)
+	got := ProxyRepository(inner, c, nil)
 	wrapped, ok := got.(*Repository)
-	r.True(ok)
-	r.Same(inner, wrapped.Repository)
-	r.Same(c, wrapped.BlobCache)
-	r.Nil(wrapped.ReferenceCache)
+	require.True(t, ok)
+	assert.Same(t, inner, wrapped.Repository)
+	assert.Same(t, c, wrapped.BlobCache)
+	assert.Nil(t, wrapped.ReferenceCache)
 }
 
 func TestProxyRepository_ReferenceCacheOnlyWraps(t *testing.T) {
-	r := require.New(t)
 	inner := &remote.Repository{}
 	rc := newTestRefCache(t, Options{})
-	got := ProxyRepository(inner, nil, rc, 0, 0)
+	got := ProxyRepository(inner, nil, rc)
 	wrapped, ok := got.(*Repository)
-	r.True(ok)
-	r.Same(inner, wrapped.Repository)
-	r.Nil(wrapped.BlobCache)
-	r.Same(rc, wrapped.ReferenceCache)
+	require.True(t, ok)
+	assert.Same(t, inner, wrapped.Repository)
+	assert.Nil(t, wrapped.BlobCache)
+	assert.Same(t, rc, wrapped.ReferenceCache)
 }
 
 func TestProxyRepository_BothCachesWrap(t *testing.T) {
-	r := require.New(t)
 	inner := &remote.Repository{}
 	c := newTestCache(t, Options{})
 	rc := newTestRefCache(t, Options{})
-	got := ProxyRepository(inner, c, rc, 0, 0)
+	got := ProxyRepository(inner, c, rc)
 	wrapped, ok := got.(*Repository)
-	r.True(ok)
-	r.Same(inner, wrapped.Repository)
-	r.Same(c, wrapped.BlobCache)
-	r.Same(rc, wrapped.ReferenceCache)
-}
-
-// TestProxyRepository_WrapsWithChunkConfig: with a cache, the decorator carries
-// the chunk config and still exposes the chunked streaming push, so chunking
-// survives the cache.
-func TestProxyRepository_WrapsWithChunkConfig(t *testing.T) {
-	r := require.New(t)
-	inner := &remote.Repository{}
-	c := newTestCache(t, Options{})
-	got := ProxyRepository(inner, c, nil, remotestore.DefaultChunkSize, remotestore.DefaultChunkThreshold)
-	wrapped, ok := got.(*Repository)
-	r.True(ok)
-	r.Same(inner, wrapped.Repository)
-	r.Equal(remotestore.DefaultChunkSize, wrapped.store.ChunkSize)
-	r.Equal(remotestore.DefaultChunkThreshold, wrapped.store.ChunkThreshold)
-	_, ok = got.(remotestore.StreamingPusher)
-	r.True(ok, "cache-wrapped chunking path must be a StreamingPusher")
+	require.True(t, ok)
+	assert.Same(t, inner, wrapped.Repository)
+	assert.Same(t, c, wrapped.BlobCache)
+	assert.Same(t, rc, wrapped.ReferenceCache)
 }
 
 // plainHTTPRepo builds a *remote.Repository pointed at srv over plain
@@ -264,10 +199,7 @@ func TestRepository_Untag_NilReferenceCache(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	// Bare struct literal: store is nil (only ProxyRepository sets it). Untag must
-	// fall back to a monolithic store over the embedded repository, not panic.
 	repo := &Repository{Repository: plainHTTPRepo(t, srv)}
-	require.NotNil(t, repo.getStore())
 	require.NoError(t, repo.Untag(t.Context(), "latest"))
 }
 
