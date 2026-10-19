@@ -200,7 +200,7 @@ func (r *Reconciler) reconcile(ctx context.Context, discovery *v1alpha1.Discover
 		return ctrl.Result{}, nil
 	}
 
-	query, err := internaldiscovery.Compile(ctx, &discovery.Spec)
+	query, err := internaldiscovery.Compile(ctx, &discovery.Spec, internaldiscovery.WithComponentInfo(&info))
 	if err != nil {
 		status.MarkAsStalled(r.EventRecorder, discovery, v1alpha1.SelectorFailedReason, err.Error())
 

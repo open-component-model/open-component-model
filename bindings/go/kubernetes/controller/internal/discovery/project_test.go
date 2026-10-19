@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
@@ -537,4 +538,119 @@ func TestProjectUnknownExtractMode(t *testing.T) {
 	var extErr *ExtractError
 	r.ErrorAs(err, &extErr)
 	r.ErrorContains(err, "unknown extraction mode")
+}
+
+func TestProjectByResourcesToOCIWithComponentInfo(t *testing.T) {
+	r := require.New(t)
+	digest := "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+	byValue := newResource("blob", func(res *descriptor.Resource) {
+		res.Access = &runtime.Raw{
+			Type: runtime.NewVersionedType("localBlob", "v1"),
+			Data: []byte(`{"type":"localBlob/v1","localReference":"` + digest + `","mediaType":"application/vnd.oci.image.manifest.v1+json","referenceName":"mirror/blob:1.0.0"}`),
+		}
+	})
+	info := &v1alpha1.ComponentInfo{
+		Component: "comp",
+		Version:   "1.0.0",
+		RepositorySpec: &apiextensionsv1.JSON{
+			Raw: []byte(`{"type":"OCIRepository/v1","baseUrl":"https://ghcr.io","subPath":"org"}`),
+		},
+	}
+	spec := specWithExtract(&v1alpha1.Extract{ByResources: map[string]string{
+		"name": `resource.name`,
+		"oci":  `resource.access.toOCI()`,
+	}})
+	q, err := Compile(t.Context(), spec, WithComponentInfo(info))
+	r.NoError(err)
+	f, err := q.Filter(t.Context(), Graph{Descriptors: []*descriptor.Descriptor{
+		newDescriptor("comp", "1.0.0", withResources(newResource("img"), byValue)),
+	}})
+	r.NoError(err)
+	p, err := q.Project(t.Context(), f)
+	r.NoError(err)
+	r.Len(p.Extracted, 2)
+
+	// by reference: the imageReference is parsed as before
+	img, ok := p.Extracted[0]["oci"].(map[string]any)
+	r.True(ok, "oci field must be a map, got %T", p.Extracted[0]["oci"])
+	r.Equal("ghcr.io", img["registry"])
+	r.Equal("ocm/img", img["repository"])
+	r.Equal("1.0.0", img["tag"])
+
+	// by value: the address is built from the component's repository
+	blob, ok := p.Extracted[1]["oci"].(map[string]any)
+	r.True(ok, "oci field must be a map, got %T", p.Extracted[1]["oci"])
+	r.Equal("ghcr.io", blob["registry"])
+	r.Equal("org/component-descriptors/comp", blob["repository"])
+	r.Equal(digest, blob["digest"])
+}
+
+func TestProjectByResourcesToOCIWithoutComponentInfoFailsToCompile(t *testing.T) {
+	r := require.New(t)
+	_, err := Compile(t.Context(), specWithExtract(&v1alpha1.Extract{ByResources: map[string]string{
+		"oci": `resource.access.toOCI()`,
+	}}))
+	r.Error(err, "toOCI is only available when a component info is given")
+}
+
+func TestProjectByResourcesToOCIUsesEachComponentsOwnRepository(t *testing.T) {
+	r := require.New(t)
+	digestRoot := "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+	digestChild := "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+	localBlob := func(name, digest string) descriptor.Resource {
+		return newResource(name, func(res *descriptor.Resource) {
+			res.Access = &runtime.Raw{
+				Type: runtime.NewVersionedType("localBlob", "v1"),
+				Data: []byte(`{"type":"localBlob/v1","localReference":"` + digest + `","mediaType":"application/vnd.oci.image.manifest.v1+json"}`),
+			}
+		})
+	}
+	root := newDescriptor("root", "1.0.0",
+		withResources(localBlob("root-blob", digestRoot)),
+		withReferences(newReference("child", "child", "2.0.0")))
+	child := newDescriptor("child", "2.0.0", withResources(localBlob("child-blob", digestChild)))
+
+	// The root's own info, as the controller has it; the child was resolved from another repository.
+	rootInfo := &v1alpha1.ComponentInfo{
+		Component: "root", Version: "1.0.0",
+		RepositorySpec: &apiextensionsv1.JSON{Raw: []byte(`{"type":"OCIRepository/v1","baseUrl":"https://ghcr.io","subPath":"org"}`)},
+	}
+	childRepo := &runtime.Raw{
+		Type: runtime.NewVersionedType("OCIRepository", "v1"),
+		Data: []byte(`{"type":"OCIRepository/v1","baseUrl":"https://other.example","subPath":"team"}`),
+	}
+	rootRepo := &runtime.Raw{
+		Type: runtime.NewVersionedType("OCIRepository", "v1"),
+		Data: []byte(`{"type":"OCIRepository/v1","baseUrl":"https://ghcr.io","subPath":"org"}`),
+	}
+
+	spec := specWithExtract(&v1alpha1.Extract{ByResources: map[string]string{
+		"name": `resource.name`,
+		"oci":  `resource.access.toOCI()`,
+	}})
+	q, err := Compile(t.Context(), spec, WithComponentInfo(rootInfo))
+	r.NoError(err)
+	f, err := q.Filter(t.Context(), Graph{
+		Descriptors: []*descriptor.Descriptor{root, child},
+		Repositories: map[ComponentKey]runtime.Typed{
+			{Name: "root", Version: "1.0.0"}:  rootRepo,
+			{Name: "child", Version: "2.0.0"}: childRepo,
+		},
+	})
+	r.NoError(err)
+	p, err := q.Project(t.Context(), f)
+	r.NoError(err)
+	r.Len(p.Extracted, 2)
+
+	byName := map[string]map[string]any{}
+	for _, rec := range p.Extracted {
+		byName[rec["name"].(string)] = rec["oci"].(map[string]any)
+	}
+	r.Equal("ghcr.io", byName["root-blob"]["registry"])
+	r.Equal("org/component-descriptors/root", byName["root-blob"]["repository"])
+	r.Equal(digestRoot, byName["root-blob"]["digest"])
+
+	r.Equal("other.example", byName["child-blob"]["registry"])
+	r.Equal("team/component-descriptors/child", byName["child-blob"]["repository"])
+	r.Equal(digestChild, byName["child-blob"]["digest"])
 }
