@@ -7,15 +7,16 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
+	goruntime "runtime"
 	"strings"
 	"sync"
 	"time"
 
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
+	"ocm.software/open-component-model/bindings/go/plugin/internal/osutil"
 	blobtransformerv1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/blobtransformer/v1"
 	componentlisterv1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/componentlister/v1"
 	credentialpluginv1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/credentialplugin/v1"
@@ -126,11 +127,7 @@ func (pm *PluginManager) RegisterPlugins(ctx context.Context, dir string, opts .
 		IdleTimeout: &defaultOpts.IdleTimeout,
 	}
 
-	t, err := determineConnectionType(ctx)
-	if err != nil {
-		return fmt.Errorf("could not determine connection type: %w", err)
-	}
-	conf.Type = t
+	conf.Type = osutil.ConnectionType(ctx)
 
 	plugins, err := pm.fetchPlugins(ctx, conf, dir)
 	if err != nil {
@@ -209,13 +206,10 @@ func (pm *PluginManager) fetchPlugins(ctx context.Context, conf *mtypes.Config, 
 			return nil
 		}
 
-		// TODO(Skarlso): Determine plugin extension.
-		ext := filepath.Ext(info.Name())
-		if ext != "" {
+		id, ok := pluginID(info.Name())
+		if !ok {
 			return nil
 		}
-
-		id := filepath.Base(path)
 
 		p := &mtypes.Plugin{
 			ID:     id,
@@ -233,6 +227,20 @@ func (pm *PluginManager) fetchPlugins(ctx context.Context, conf *mtypes.Config, 
 	}
 
 	return plugins, nil
+}
+
+// pluginID returns the ID of the plugin executable with the given file name and whether the file is a plugin.
+// Plugins are files without extension, on Windows executables have to carry the .exe extension.
+func pluginID(name string) (string, bool) {
+	ext := filepath.Ext(name)
+	switch {
+	case ext == "":
+		return name, goruntime.GOOS != "windows"
+	case goruntime.GOOS == "windows" && strings.EqualFold(ext, ".exe"):
+		return strings.TrimSuffix(name, ext), true
+	default:
+		return "", false
+	}
 }
 
 var scheme *runtime.Scheme
@@ -361,30 +369,4 @@ func (pm *PluginManager) addPlugin(ctx context.Context, ocmConfig *genericv1.Con
 	}
 
 	return nil
-}
-
-func determineConnectionType(ctx context.Context) (mtypes.ConnectionType, error) {
-	// if we can't create a temp folder ( for example we are in a scratch container ) we default to TCP
-	tmp, err := os.MkdirTemp("", "")
-	if err != nil {
-		slog.DebugContext(ctx, "failed to create temporary folder, falling back to TCP connection", "err", err.Error())
-		return mtypes.TCP, nil
-	}
-
-	defer func() {
-		_ = os.RemoveAll(tmp)
-	}()
-
-	socketPath := filepath.Join(tmp, "plugin.sock")
-	var lc net.ListenConfig
-	listener, err := lc.Listen(ctx, "unix", socketPath)
-	if err != nil {
-		return mtypes.TCP, nil
-	}
-
-	if err := listener.Close(); err != nil {
-		return "", fmt.Errorf("failed to close socket: %w", err)
-	}
-
-	return mtypes.Socket, nil
 }

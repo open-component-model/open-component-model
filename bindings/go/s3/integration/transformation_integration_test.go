@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	filesystemaccess "ocm.software/open-component-model/bindings/go/blob/filesystem/spec/access"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
@@ -94,7 +95,8 @@ func Test_Integration_S3Transformation(t *testing.T) {
 	r.NotNil(out.Output.Resource)
 	r.Equal("blob", out.Output.Resource.Name)
 
-	filePath := strings.TrimPrefix(out.Output.File.URI, "file://")
+	filePath, err := filesystem.FilePathFromURI(out.Output.File.URI)
+	r.NoError(err)
 	r.True(strings.HasPrefix(filePath, outputDir), "content should be buffered into the requested output directory")
 	got, err := os.ReadFile(filePath)
 	r.NoError(err)

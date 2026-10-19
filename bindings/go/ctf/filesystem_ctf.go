@@ -8,6 +8,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -121,7 +122,7 @@ func (c *FileSystemCTF) SetIndex(_ context.Context, index v1.Index) (err error) 
 		return fmt.Errorf("unable to encode artifact index: %w", err)
 	}
 
-	return c.writeFile(v1.ArtifactIndexFileName, bytes.NewReader(data), int64(len(data)))
+	return c.writeFile(v1.ArtifactIndexFileName, bytes.NewReader(data), int64(len(data)), false)
 }
 
 // ioBufPool is a pool of byte buffers that can be reused for copying content
@@ -139,10 +140,12 @@ var ioBufPool = sync.Pool{
 // writeFile writes the given raw data to the given name in the CTF.
 // If the directory does not exist, it will be created.
 // Always uses atomic write (temp file + rename) for safe concurrent access.
-func (c *FileSystemCTF) writeFile(name string, raw io.Reader, size int64) (err error) {
+// contentAddressed marks names derived from the content digest: an existing target
+// then already holds identical bytes, so failing to replace it is not an error.
+func (c *FileSystemCTF) writeFile(name string, raw io.Reader, size int64, contentAddressed bool) (err error) {
 	// Ensure directory exists
 	if c.mkdirFS != nil {
-		if err := c.mkdirFS.MkdirAll(filepath.Dir(name), 0o755); err != nil {
+		if err := c.mkdirFS.MkdirAll(path.Dir(name), 0o755); err != nil {
 			return fmt.Errorf("unable to create directory: %w", err)
 		}
 	}
@@ -162,15 +165,16 @@ func (c *FileSystemCTF) writeFile(name string, raw io.Reader, size int64) (err e
 	tempPath := tempFile.Name()
 
 	// Write content to temp file
+	var written int64
 	if size <= blob.SizeUnknown {
 		buf := ioBufPool.Get().(*[]byte)
 		defer ioBufPool.Put(buf)
-		if _, err = io.CopyBuffer(tempFile, raw, *buf); err != nil {
+		if written, err = io.CopyBuffer(tempFile, raw, *buf); err != nil {
 			err = errors.Join(err, tempFile.Close(), os.Remove(tempPath))
-			return fmt.Errorf("unable to write content: %w", errors.Join(err, tempFile.Close(), os.Remove(tempPath)))
+			return fmt.Errorf("unable to write content: %w", err)
 		}
 	} else {
-		if _, err = io.CopyN(tempFile, raw, size); err != nil {
+		if written, err = io.CopyN(tempFile, raw, size); err != nil {
 			err = errors.Join(err, tempFile.Close(), os.Remove(tempPath))
 			return fmt.Errorf("unable to write content: %w", err)
 		}
@@ -195,7 +199,12 @@ func (c *FileSystemCTF) writeFile(name string, raw io.Reader, size int64) (err e
 	}
 
 	// Atomic rename
-	if err = os.Rename(tempPath, targetPath); err != nil {
+	if err = replaceFile(tempPath, targetPath); err != nil {
+		// Windows refuses to replace a file that is open (e.g. a blob being read)
+		// or concurrently being replaced.
+		if fi, statErr := os.Stat(targetPath); contentAddressed && statErr == nil && fi.Size() == written {
+			return os.Remove(tempPath)
+		}
 		return fmt.Errorf("unable to rename temp file: %w", err)
 	}
 
@@ -212,7 +221,7 @@ func (c *FileSystemCTF) DeleteBlob(_ context.Context, digest string) (err error)
 	if err != nil {
 		return err
 	}
-	if err = c.remFS.Remove(filepath.Join(BlobsDirectoryName, file)); err != nil {
+	if err = c.remFS.Remove(path.Join(BlobsDirectoryName, file)); err != nil {
 		return fmt.Errorf("unable to delete blob: %w", err)
 	}
 
@@ -229,15 +238,15 @@ func (c *FileSystemCTF) GetBlob(_ context.Context, digest string) (blob.ReadOnly
 	if err != nil {
 		return nil, err
 	}
-	path := filepath.Join(BlobsDirectoryName, file)
-	if _, err := c.statFS.Stat(path); err != nil {
+	name := path.Join(BlobsDirectoryName, file)
+	if _, err := c.statFS.Stat(name); err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return nil, fmt.Errorf("blob %s not found: %w", digest, err)
 		}
 		return nil, fmt.Errorf("unable to stat blob: %w", err)
 	}
 
-	b := NewCASFileBlob(c.fs, filepath.Join(BlobsDirectoryName, file))
+	b := NewCASFileBlob(c.fs, name)
 	b.SetPrecalculatedDigest(digest)
 	return b, nil
 }
@@ -283,13 +292,18 @@ func (c *FileSystemCTF) SaveBlob(ctx context.Context, b blob.ReadOnlyBlob) (err 
 	if err != nil {
 		return fmt.Errorf("unable to read blob: %w", err)
 	}
+	written := false
 	defer func() {
 		// first close the data stream, then delete the blob if closing fails
-		// this is important to avoid having a dangling possibly corrupt blob in the CTF
-		if err = errors.Join(err, data.Close()); err != nil {
-			// if closing the data stream fails, we need to delete the blob
-			// but we should use a background context as the original ctx might already be cancelled
-			err = errors.Join(err, c.DeleteBlob(context.Background(), dig))
+		// this is important to avoid having a dangling possibly corrupt blob in the CTF.
+		// A failed write never replaced the target (writes are atomic), so a blob that
+		// already existed before this call must not be deleted in that case.
+		if closeErr := data.Close(); closeErr != nil {
+			err = errors.Join(err, closeErr)
+			if written {
+				// use a background context as the original ctx might already be cancelled
+				err = errors.Join(err, c.DeleteBlob(context.Background(), dig))
+			}
 		}
 	}()
 
@@ -303,10 +317,11 @@ func (c *FileSystemCTF) SaveBlob(ctx context.Context, b blob.ReadOnlyBlob) (err 
 		return fmt.Errorf("unable to create context reader: %w", err)
 	}
 
-	return c.writeFile(filepath.Join(
-		BlobsDirectoryName,
-		file,
-	), ctxRead, size)
+	if err = c.writeFile(path.Join(BlobsDirectoryName, file), ctxRead, size, true); err != nil {
+		return err
+	}
+	written = true
+	return nil
 }
 
 // ToBlobFileName converts a digest to a blob file name by replacing the ":" with ".", which is the

@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 
@@ -227,14 +228,15 @@ func createFileBasedStore(ctx context.Context, configPath string) (remotecredent
 }
 
 // expandConfigPath handles shell expansion for the config file path.
-// Currently supports basic home directory expansion (~).
+// Currently supports basic home directory expansion of a leading "~"; a "~"
+// elsewhere is literal (e.g. Windows 8.3 short names such as RUNNER~1).
 func expandConfigPath(path string) (string, error) {
-	if idx := strings.Index(path, "~"); idx != -1 {
-		dirname, err := os.UserHomeDir()
-		if err != nil {
-			return "", fmt.Errorf("failed to get user home directory: %w", err)
-		}
-		return strings.ReplaceAll(path, "~", dirname), nil
+	if path != "~" && !strings.HasPrefix(path, "~/") && !strings.HasPrefix(path, "~"+string(filepath.Separator)) {
+		return path, nil
 	}
-	return path, nil
+	dirname, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("failed to get user home directory: %w", err)
+	}
+	return filepath.Join(dirname, path[1:]), nil
 }

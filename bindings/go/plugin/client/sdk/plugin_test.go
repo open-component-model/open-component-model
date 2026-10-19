@@ -3,19 +3,22 @@ package sdk
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
+	"io/fs"
 	"log/slog"
 	"net"
 	"net/http"
-	"net/url"
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 
+	"ocm.software/open-component-model/bindings/go/plugin/internal/osutil"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/endpoints"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 )
@@ -23,11 +26,12 @@ import (
 const testPluginType = "test-plugin-type"
 
 func TestPluginSDK(t *testing.T) {
+	skipWithoutUnixSockets(t)
 	slog.SetLogLoggerLevel(slog.LevelDebug)
 	r := require.New(t)
 
 	output := bytes.NewBuffer(nil)
-	location := "/tmp/test-plugin-flow-plugin.socket"
+	location := osutil.SocketPath("test-plugin-flow")
 	ctx := context.Background()
 	p := NewPlugin(ctx, slog.Default(), types.Config{
 		ID:         "test-plugin-flow",
@@ -70,10 +74,11 @@ func TestPluginSDK(t *testing.T) {
 }
 
 func TestPluginSDKForceShutdownContext(t *testing.T) {
+	skipWithoutUnixSockets(t)
 	r := require.New(t)
 
 	output := bytes.NewBuffer(nil)
-	location := "/tmp/test-plugin-force-plugin.socket"
+	location := osutil.SocketPath("test-plugin-force")
 	ctx := context.Background()
 	baseCtx := context.Background()
 	p := NewPlugin(baseCtx, slog.Default(), types.Config{
@@ -108,19 +113,13 @@ func TestPluginSDKForceShutdownContext(t *testing.T) {
 	r.NoError(err)
 	r.Equal("hello", string(content))
 
-	// Shutdown endpoint should be added automatically.
+	// The shutdown endpoint should be added automatically. It answers before shutting down,
+	// and the shutdown continues even though the request context is cancelled afterward.
 	forceCTX, cancel := context.WithTimeout(context.Background(), time.Second)
-	parse, err := url.Parse("http://unix/shutdown")
+	resp, err = httpGet(forceCTX, httpClient, "http://unix/shutdown")
 	r.NoError(err)
-	req := &http.Request{
-		Method: http.MethodGet,
-		URL:    parse,
-	}
-	req = req.WithContext(forceCTX)
-
-	_, err = httpClient.Do(req)
-	// The above cancel doesn't kill the shutdown process
-	r.Error(err)
+	r.NoError(resp.Body.Close())
+	r.Equal(http.StatusOK, resp.StatusCode)
 	cancel()
 	r.Eventually(func() bool {
 		_, err := httpGet(ctx, httpClient, "http://unix/healthz")
@@ -130,8 +129,9 @@ func TestPluginSDKForceShutdownContext(t *testing.T) {
 }
 
 func TestIdleChecker(t *testing.T) {
+	skipWithoutUnixSockets(t)
 	r := require.New(t)
-	location := "/tmp/test-plugin-idle-plugin.socket"
+	location := osutil.SocketPath("test-plugin-idle")
 	output := bytes.NewBuffer(nil)
 	timeout := 10 * time.Millisecond
 	ctx := context.Background()
@@ -158,20 +158,21 @@ func TestIdleChecker(t *testing.T) {
 
 	// idle timeout should kill the plugin and remove the socket prematurely.
 	r.Eventually(func() bool {
-		_, err := httpGet(ctx, httpClient, "http://unix/healthz")
-		if err == nil {
+		if _, err := httpGet(ctx, httpClient, "http://unix/healthz"); err == nil {
 			return false
 		}
 
 		// The socket may return EOF while it's still shutting down before
 		// being removed. Only consider the test done once the socket is gone.
-		return strings.Contains(err.Error(), "no such file or directory")
+		_, err := os.Stat(location)
+		return errors.Is(err, fs.ErrNotExist)
 	}, 5*time.Second, 20*time.Millisecond)
 }
 
 func TestHealthCheckInvalidMethod(t *testing.T) {
+	skipWithoutUnixSockets(t)
 	r := require.New(t)
-	location := "/tmp/test-plugin-invalid-plugin.socket"
+	location := osutil.SocketPath("test-plugin-invalid")
 	output := bytes.NewBuffer(nil)
 	ctx := context.Background()
 	p := NewPlugin(ctx, slog.Default(), types.Config{
@@ -202,8 +203,9 @@ func TestHealthCheckInvalidMethod(t *testing.T) {
 }
 
 func TestPanicRecovery(t *testing.T) {
+	skipWithoutUnixSockets(t)
 	r := require.New(t)
-	location := "/tmp/test-plugin-panic-plugin.socket"
+	location := osutil.SocketPath("test-plugin-panic")
 	output := bytes.NewBuffer(nil)
 	ctx := context.Background()
 	p := NewPlugin(ctx, slog.Default(), types.Config{
@@ -253,8 +255,9 @@ func waitForPlugin(ctx context.Context, r *require.Assertions, httpClient *http.
 }
 
 func TestLockFileCreationAndCleanup(t *testing.T) {
+	skipWithoutUnixSockets(t)
 	r := require.New(t)
-	location := "/tmp/test-plugin-lock-plugin.socket"
+	location := osutil.SocketPath("test-plugin-lock")
 	lockFile := location + ".lock"
 
 	t.Cleanup(func() {
@@ -298,7 +301,8 @@ func TestLockFileCreationAndCleanup(t *testing.T) {
 }
 
 func TestLockFileProcessValidation(t *testing.T) {
-	location := "/tmp/test-plugin-process-validation-plugin.socket"
+	skipWithoutUnixSockets(t)
+	location := osutil.SocketPath("test-plugin-process-validation")
 	lockFile := location + ".lock"
 
 	t.Cleanup(func() {
@@ -338,7 +342,7 @@ func TestLockFileProcessValidation(t *testing.T) {
 			PluginType: testPluginType,
 		}, os.Stdout)
 
-		_, err = p2.determineLocation(t.Context())
+		_, err = p2.determineLocation()
 		r.Error(err)
 		r.Contains(err.Error(), "process using socket file is still alive")
 
@@ -369,7 +373,7 @@ func TestLockFileProcessValidation(t *testing.T) {
 			PluginType: testPluginType,
 		}, os.Stdout)
 
-		loc, err := p.determineLocation(t.Context())
+		loc, err := p.determineLocation()
 		r.NoError(err)
 		r.Equal(location, loc)
 
@@ -414,4 +418,72 @@ func httpPost(ctx context.Context, c *http.Client, url, contentType string, body
 	}
 	req.Header.Set("Content-Type", contentType)
 	return c.Do(req)
+}
+
+// skipWithoutUnixSockets skips socket-specific tests where AF_UNIX is unavailable
+// (e.g. Wine); plugins fall back to TCP there, covered by TestPluginSDKTCP.
+func skipWithoutUnixSockets(t *testing.T) {
+	t.Helper()
+	if osutil.ConnectionType(t.Context()) != types.Socket {
+		t.Skip("unix domain sockets are not supported on this system")
+	}
+}
+
+func TestPluginSDKTCP(t *testing.T) {
+	r := require.New(t)
+
+	output := &lockedBuffer{}
+	ctx := t.Context()
+	p := NewPlugin(ctx, slog.Default(), types.Config{
+		ID:         "test-plugin-tcp",
+		Type:       types.TCP,
+		PluginType: testPluginType,
+	}, output)
+	r.NoError(p.RegisterHandlers(endpoints.Handler{
+		Handler: func(writer http.ResponseWriter, request *http.Request) {
+			_, _ = writer.Write([]byte("hello"))
+		},
+		Location: "/test-location",
+	}))
+
+	go func() {
+		_ = p.Start(ctx)
+	}()
+
+	var location string
+	r.Eventually(func() bool {
+		location = strings.TrimSpace(output.String())
+		return location != ""
+	}, 5*time.Second, 20*time.Millisecond)
+
+	// The manager only accepts http:// or http+unix:// locations, and the
+	// plugin API must only be reachable from this host.
+	r.True(strings.HasPrefix(location, "http://127.0.0.1:"), "location %q", location)
+
+	resp, err := httpGet(ctx, http.DefaultClient, location+"/test-location")
+	r.NoError(err)
+	defer resp.Body.Close()
+	content, err := io.ReadAll(resp.Body)
+	r.NoError(err)
+	r.Equal("hello", string(content))
+
+	r.NoError(p.GracefulShutdown(ctx))
+}
+
+// lockedBuffer is written by the plugin goroutine and read by the test.
+type lockedBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *lockedBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *lockedBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
 }

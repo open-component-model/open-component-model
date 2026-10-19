@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"sync"
 
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"oras.land/oras-go/v2"
@@ -27,19 +28,33 @@ type CopyToOCILayoutOptions struct {
 
 // CopyToOCILayoutInMemory streams the contents of an OCI graph from the given
 // ReadOnlyGraphStorage into an in-memory OCI layout archive (gzipped tar),
-// returning a Blob that can be read by consumers. The actual copy happens
-// asynchronously in a goroutine; if the caller never reads from the returned
-// Blob, the copy will block.
+// returning a Blob that can be read by consumers. The copy runs asynchronously
+// in a goroutine that is only started on the first read of the returned Blob,
+// so a Blob that is never read holds no goroutine or scratch file.
 //
 // Returns an inmemory.Blob wrapping the read side of a pipe, with media type
 // [layout.MediaTypeOCIImageLayoutTarGzipV1].
 func CopyToOCILayoutInMemory(ctx context.Context, src content.ReadOnlyGraphStorage, base ociImageSpecV1.Descriptor, opts CopyToOCILayoutOptions) (*inmemory.Blob, error) {
 	r, w := io.Pipe()
+	lazy := &lazyStartReader{
+		r:     r,
+		start: func() { go copyToOCILayoutInMemoryAsync(ctx, src, base, opts, w) },
+	}
 
-	go copyToOCILayoutInMemoryAsync(ctx, src, base, opts, w)
-
-	downloaded := inmemory.New(r, inmemory.WithMediaType(layout.MediaTypeOCIImageLayoutTarGzipV1))
+	downloaded := inmemory.New(lazy, inmemory.WithMediaType(layout.MediaTypeOCIImageLayoutTarGzipV1))
 	return downloaded, nil
+}
+
+// lazyStartReader runs start once before the first Read from r.
+type lazyStartReader struct {
+	once  sync.Once
+	start func()
+	r     io.Reader
+}
+
+func (l *lazyStartReader) Read(p []byte) (int, error) {
+	l.once.Do(l.start)
+	return l.r.Read(p)
 }
 
 // copyToOCILayoutInMemoryAsync performs the actual OCI‐layout archive creation
