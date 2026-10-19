@@ -32,8 +32,8 @@ configurations:
     method: PUT
 ```
 
-| Type                                                         | Purpose                                                                     | Reference                                                                                                    |
-| ------------------------------------------------------------ | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Type                                                         | Purpose                                                                     | Reference                                                                                                                  |
+| ------------------------------------------------------------ | --------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
 | `transfer.config.ocm.software/v1alpha1`                      | Global transfer settings: recursion depth.                                  | [Transfer Settings]({{< relref "docs/reference/configuration/transfer-configuration/transfer-settings.md" >}})             |
 | `oci.uploader.transfer.config.ocm.software/v1alpha1`         | Per-match rule that uploads a resource as a separate OCI artifact.          | [OCI Uploader]({{< relref "docs/reference/configuration/transfer-configuration/oci-uploader.md" >}})                       |
 | `http.uploader.transfer.config.ocm.software/v1alpha1`        | Per-match rule that streams a resource to a custom HTTP target.             | [HTTP Uploader]({{< relref "docs/reference/configuration/transfer-configuration/http-uploader.md" >}})                     |
@@ -60,14 +60,14 @@ details.
 An **uploader configuration** routes the resources it selects to a custom
 target instead of the default handling. Seven config types are available:
 
-| Uploader                | What it does                                       | Default `match`                                                                                                | `match` required? |
-| ----------------------- | -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | ----------------- |
+| Uploader                | What it does                                       | Default `match`                                                                                                              | `match` required? |
+| ----------------------- | -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ----------------- |
 | `oci.uploader…`         | Uploads a resource as a separate OCI artifact      | Yes (see [OCI Uploader]({{< relref "docs/reference/configuration/transfer-configuration/oci-uploader.md#default-match" >}})) | No                |
-| `localblob.uploader…`   | Downloads a resource and embeds it as a local blob | `resource.access.isType(["LocalBlob", "OCIImage", "OCIImageLayer", "Helm", "Wget", "S3/v2", "GitHub"])`        | No                |
-| `reference.uploader…`   | Keeps a resource by reference (no transformation)  | `!resource.access.isType("LocalBlob")`                                                                         | No                |
-| `http.uploader…`        | Streams a resource to an HTTP endpoint             | None                                                                                                           | **Yes**           |
-| `artifactory.uploader…` | Uploads into a JFrog Artifactory repository        | None                                                                                                           | **Yes**           |
-| `nexus.uploader…`       | Uploads into a Sonatype Nexus repository           | None                                                                                                           | **Yes**           |
+| `localblob.uploader…`   | Downloads a resource and embeds it as a local blob | `resource.access.isType(["LocalBlob", "OCIImage", "OCIImageLayer", "Helm", "Wget", "S3/v2", "GitHub"])`                      | No                |
+| `reference.uploader…`   | Keeps a resource by reference (no transformation)  | `!resource.access.isType("LocalBlob")`                                                                                       | No                |
+| `http.uploader…`        | Streams a resource to an HTTP endpoint             | None                                                                                                                         | **Yes**           |
+| `artifactory.uploader…` | Uploads into a JFrog Artifactory repository        | None                                                                                                                         | **Yes**           |
+| `nexus.uploader…`       | Uploads into a Sonatype Nexus repository           | None                                                                                                                         | **Yes**           |
 | `git.uploader…`         | Pushes Git history into an existing Git repository | Yes (see [Git Uploader]({{< relref "docs/reference/configuration/transfer-configuration/git-uploader.md#default-match" >}})) | No                |
 
 Each entry is an independent rule; you may declare several.

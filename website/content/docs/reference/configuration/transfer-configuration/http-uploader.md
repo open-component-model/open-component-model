@@ -35,14 +35,14 @@ content to configured URLs from the controller pod.
 `targetURL` and `mediaType` also become the published `Wget/v1` download access;
 `method`, `header`, `body` and `noRedirect` apply to the upload request only:
 
-| Field                 | Type                  | Applies to                        | Description                                                                                                                                        |
-| --------------------- | --------------------- | --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `match`               | CEL expression        | —                                 | A CEL boolean expression selecting the resources this uploader handles. **Required:** the HTTP uploader has no default match.                      |
-| `targetURL`           | CEL expression        | request + published (`url`)       | The upload URL; also the published download URL. See [CEL Expressions]({{< relref "docs/reference/configuration/transfer-configuration/cel-expressions.md" >}}). |
-| `method`              | string                | request (`verb`)                  | HTTP method for the upload request. Defaults to PUT. Not on the published access.                                                                  |
-| `header`              | `map[string][]string` | request                           | HTTP headers sent with the upload request. May be CEL-templated. Request only.                                                                     |
-| `noRedirect`          | bool                  | request                           | Disable following HTTP redirects on the upload. Not on the published access.                                                                       |
-| `mediaType`           | string                | request + published (`mediaType`) | Media type recorded on the resource. Defaults to the source's.                                                                                     |
+| Field        | Type                  | Applies to                        | Description                                                                                                                                                      |
+| ------------ | --------------------- | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `match`      | CEL expression        | —                                 | A CEL boolean expression selecting the resources this uploader handles. **Required:** the HTTP uploader has no default match.                                    |
+| `targetURL`  | CEL expression        | request + published (`url`)       | The upload URL; also the published download URL. See [CEL Expressions]({{< relref "docs/reference/configuration/transfer-configuration/cel-expressions.md" >}}). |
+| `method`     | string                | request (`verb`)                  | HTTP method for the upload request. Defaults to PUT. Not on the published access.                                                                                |
+| `header`     | `map[string][]string` | request                           | HTTP headers sent with the upload request. May be CEL-templated. Request only.                                                                                   |
+| `noRedirect` | bool                  | request                           | Disable following HTTP redirects on the upload. Not on the published access.                                                                                     |
+| `mediaType`  | string                | request + published (`mediaType`) | Media type recorded on the resource. Defaults to the source's.                                                                                                   |
 
 ## Routing Resources to Different Targets
 
