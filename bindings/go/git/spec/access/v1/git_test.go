@@ -132,6 +132,20 @@ func TestNormalize(t *testing.T) {
 			wantRef:        "refs/tags/v1.0.0",
 		},
 		{
+			name:           "full branch fragment",
+			repository:     "https://example.com/repo.git#branch=refs/heads/main",
+			wantRepository: "https://example.com/repo.git",
+			wantRef:        "refs/heads/main",
+		},
+		{
+			name:           "full tag fragment",
+			repository:     "https://example.com/repo.git#tag=refs/tags/v1",
+			wantRepository: "https://example.com/repo.git",
+			wantRef:        "refs/tags/v1",
+		},
+		{name: "tag ref as branch", repository: "https://example.com/repo.git#branch=refs/tags/v1", err: "branch fragment requires a branch ref"},
+		{name: "branch ref as tag", repository: "https://example.com/repo.git#tag=refs/heads/main", err: "tag fragment requires a tag ref"},
+		{
 			name:           "commit on local path",
 			repository:     "/srv/repo.git#commit=" + commit,
 			wantRepository: "/srv/repo.git",

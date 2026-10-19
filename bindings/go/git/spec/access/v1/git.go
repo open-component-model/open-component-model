@@ -107,6 +107,10 @@ func (g *Git) Normalize() (*Git, error) {
 	return normalized, nil
 }
 
+func (g *Git) NormalizeTyped() (runtime.Typed, error) {
+	return g.Normalize()
+}
+
 // parseFragment decodes with url.PathUnescape rather than url.ParseQuery, which
 // reads + as a space and would break tags such as v1.2.3+build.1.
 func parseFragment(fragment string) (string, string, error) {
@@ -128,9 +132,23 @@ func parseFragment(fragment string) (string, string, error) {
 
 		switch key {
 		case "branch":
-			ref = plumbing.NewBranchReferenceName(value).String()
+			if strings.HasPrefix(value, "refs/") {
+				if !plumbing.ReferenceName(value).IsBranch() {
+					return "", "", fmt.Errorf("branch fragment requires a branch ref")
+				}
+				ref = value
+			} else {
+				ref = plumbing.NewBranchReferenceName(value).String()
+			}
 		case "tag":
-			ref = plumbing.NewTagReferenceName(value).String()
+			if strings.HasPrefix(value, "refs/") {
+				if !plumbing.ReferenceName(value).IsTag() {
+					return "", "", fmt.Errorf("tag fragment requires a tag ref")
+				}
+				ref = value
+			} else {
+				ref = plumbing.NewTagReferenceName(value).String()
+			}
 		case "commit":
 			commit = value
 		default:
