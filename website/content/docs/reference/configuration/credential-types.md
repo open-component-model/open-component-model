@@ -2,7 +2,7 @@
 title: "Credential Types"
 description: "Reference for all built-in OCM credential types and their configuration fields."
 icon: "🔑"
-weight: 4
+weight: 3
 toc: true
 ---
 

@@ -1,8 +1,8 @@
 ---
-title: "Versioning Configuration"
+title: "Versioning"
 description: "Reference for OCM versioning configuration: schema, built-in scheme catalog, custom schemes, and OCI tag constraints."
 icon: "🔢"
-weight: 6
+weight: 8
 toc: true
 ---
 
@@ -286,5 +286,5 @@ scheme.
 
 - [Guides: Configure a Versioning Scheme Tutorial]({{< relref "docs/guides/pack/configure-versioning.md" >}}) - Hands-on
   walkthrough for calendar versioning.
-- [Reference: Resolver Configuration]({{< relref "docs/reference/resolver-configuration.md" >}}) - The `versionConstraint` field
+- [Reference: Resolver Configuration]({{< relref "docs/reference/configuration/resolver.md" >}}) - The `versionConstraint` field
   interplays with versioning schemes.

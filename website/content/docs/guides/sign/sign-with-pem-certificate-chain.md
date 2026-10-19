@@ -208,7 +208,7 @@ OCM uses it as an **isolated trust anchor** and bypasses the system root store e
 Only signatures rooted in that specific CA will verify successfully.
 {{< /callout >}}
 
-For the full credential property and consumer identity reference, see [Credential Consumer Identities -- RSA/v1alpha1]({{< relref "docs/reference/credential-consumer-identities.md" >}}).
+For the full credential property and consumer identity reference, see [Credential Consumer Identities -- RSA/v1alpha1]({{< relref "docs/reference/configuration/credential-consumer-identities.md" >}}).
 
 {{< /step >}}
 
@@ -424,7 +424,7 @@ OCM uses it as an **isolated trust anchor** and bypasses the system root store e
 Only signatures rooted in that specific CA will verify successfully.
 {{< /callout >}}
 
-For the full credential property and consumer identity reference, see [Credential Consumer Identities -- RSA/v1alpha1]({{< relref "docs/reference/credential-consumer-identities.md" >}}).
+For the full credential property and consumer identity reference, see [Credential Consumer Identities -- RSA/v1alpha1]({{< relref "docs/reference/configuration/credential-consumer-identities.md" >}}).
 
 {{< /step >}}
 
@@ -542,7 +542,7 @@ trust model and the transport-vs-token certificate distinction,
 
 {{< callout context="note" title="Reaching a private TSA over HTTPS" >}}
 If your TSA presents a certificate issued by an internal CA, add that CA to the
-[HTTP client configuration]({{< relref "docs/reference/http-client-configuration.md#tls-trust-custom-root-cas" >}})
+[HTTP client configuration]({{< relref "docs/reference/configuration/http-client.md#tls-trust-custom-root-cas" >}})
 (`rootCAsPEM` / `rootCAsPEMFile`) so the signing-time request can establish TLS. This is separate from the TSA
 *token* roots that verifiers configure.
 {{< /callout >}}

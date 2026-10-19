@@ -72,7 +72,7 @@ The `target` alias exposes the transfer target as a map:
 
 `resource.access.isType(arg)` tests the access type against the argument, with
 alias and version resolution. See
-[`isType` semantics]({{< relref "docs/reference/transfer-configuration/_index.md#istype-semantics" >}})
+[`isType` semantics]({{< relref "docs/reference/configuration/transfer-configuration/_index.md#istype-semantics" >}})
 on the overview page.
 
 - `resource.access.isType(string)` — true when the access type matches.
@@ -106,7 +106,7 @@ the [CEL string extensions](https://github.com/google/cel-go/blob/master/ext/REA
 `Content-Digest`/`Repr-Digest` key (`SHA-256` → `sha-256`); `hex.decode`/`hex.encode`
 and the CEL encoders extension's `base64.encode`/`base64.decode` convert a hex digest
 to the base64 value those fields expect. See
-[Templating Headers]({{< relref "docs/reference/transfer-configuration/http-uploader.md#templating-headers" >}}).
+[Templating Headers]({{< relref "docs/reference/configuration/transfer-configuration/http-uploader.md#templating-headers" >}}).
 
 ## Expression scope
 

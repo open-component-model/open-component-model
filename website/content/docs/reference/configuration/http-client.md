@@ -1,8 +1,8 @@
 ---
-title: "HTTP Client Configuration"
+title: "HTTP Client"
 description: "Complete reference for OCM HTTP client configuration: schema, field descriptions, defaults, and per-host merge semantics."
 icon: "🌐"
-weight: 6
+weight: 5
 toc: true
 ---
 
@@ -137,4 +137,4 @@ for additive, per-host trust. See [TLS and Custom CA]({{< relref "docs/guides/tr
 
 - [Guides: Configure HTTP Client Behaviour]({{< relref "docs/guides/transfer/configure-http.md" >}}) - task-oriented how-to guides
 - [Guides: Configure Credentials for Multiple Registries]({{< relref "docs/guides/transfer/configure-registry-credentials.md" >}}) - pairing HTTP config with credential setup
-- [Reference: Resolver Configuration]({{< relref "docs/reference/resolver-configuration.md" >}}) - reference for resolver config in the same file
+- [Reference: Resolver Configuration]({{< relref "docs/reference/configuration/resolver.md" >}}) - reference for resolver config in the same file

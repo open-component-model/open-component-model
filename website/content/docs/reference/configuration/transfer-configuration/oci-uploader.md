@@ -108,7 +108,7 @@ default for an access type into an entry that selects only that access type is
 equivalent to omitting it. An explicit `imageReference` applies to every
 resource the entry selects, so an entry that selects several access types needs
 a template that works for all of them, or one entry per access type (see E2 in
-the [selection examples]({{< relref "docs/reference/transfer-configuration/selection-examples.md" >}})).
+the [selection examples]({{< relref "docs/reference/configuration/transfer-configuration/selection-examples.md" >}})).
 
 The template is evaluated for every selected resource while the graph is built.
 A template that does not evaluate for a selected resource fails the transfer
@@ -118,7 +118,7 @@ chart. A template that does not use `target` (for example an absolute registry
 prefix) also works for CTF targets, because `TransferOCIArtifact` and
 `AddOCIArtifact` push to the templated image reference independently of the
 component target; its `match` must then select CTF targets (see E7 in the
-[selection examples]({{< relref "docs/reference/transfer-configuration/selection-examples.md" >}})).
+[selection examples]({{< relref "docs/reference/configuration/transfer-configuration/selection-examples.md" >}})).
 
 ## More examples
 

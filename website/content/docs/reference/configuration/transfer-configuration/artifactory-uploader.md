@@ -26,7 +26,7 @@ send content to configured URLs from the controller pod.
 | `match`      | CEL expression    | A CEL boolean expression selecting the resources this uploader handles. **Required:** the Artifactory uploader has no default match.                                                                                                                                   |
 | `url`        | string (required) | Server base URL **without** the `/artifactory` segment, e.g. `https://myorg.jfrog.io`.                                                                                                                                                                                 |
 | `repository` | string (required) | Repository key, e.g. `helm-local`.                                                                                                                                                                                                                                     |
-| `path`       | string            | Content location relative to the repository root. Literal or `${…}` CEL expression (see [CEL Expressions]({{< relref "docs/reference/transfer-configuration/cel-expressions.md" >}})). Must be relative, without `.`/`..` segments; helm and npm need a `.tgz` suffix. |
+| `path`       | string            | Content location relative to the repository root. Literal or `${…}` CEL expression (see [CEL Expressions]({{< relref "docs/reference/configuration/transfer-configuration/cel-expressions.md" >}})). Must be relative, without `.`/`..` segments; helm and npm need a `.tgz` suffix. |
 
 ## Repository types
 
@@ -144,7 +144,7 @@ of `<url>/artifactory/<repository>`:
 `WgetCredentials/v1` additionally supports a bearer `identityToken` and mutual TLS
 (`certificate`/`privateKey`); `HelmHTTPCredentials/v1` `certFile`/`keyFile` are
 not supported. See
-[Credential Consumer Identities]({{< relref "docs/reference/credential-consumer-identities.md" >}}).
+[Credential Consumer Identities]({{< relref "docs/reference/configuration/credential-consumer-identities.md" >}}).
 
 ## Example
 

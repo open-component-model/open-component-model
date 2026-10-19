@@ -406,11 +406,11 @@ my-org.example/component-b         │ 1.0.0   │
 
 - **If multiple components share a registry path**, use a glob pattern (e.g. `example.com/services/*`) instead of
   listing each component individually. See
-  [Component Name Patterns]({{< relref "docs/reference/resolver-configuration.md#component-name-patterns" >}}) for the
+  [Component Name Patterns]({{< relref "docs/reference/configuration/resolver.md#component-name-patterns" >}}) for the
   full syntax.
 - **If different versions of the same component live in different registries**, use the `versionConstraint` field to
   route specific version ranges to the right repository. See
-  [Version Constraints]({{< relref "docs/reference/resolver-configuration.md#version-constraints" >}}) for details.
+  [Version Constraints]({{< relref "docs/reference/configuration/resolver.md#version-constraints" >}}) for details.
 - **If you need to transfer components to another registry**, use `ocm transfer cv --recursive` with a local blob uploader configuration (for example in `.ocmconfig` in the working directory) and
   a resolver configuration. See [Transfer Component Versions]({{< relref "docs/guides/transfer/transfer-component-versions.md" >}}).
 - **Resolvers are evaluated in order** — place more specific patterns before broader ones so the right repository is
@@ -424,7 +424,7 @@ my-org.example/component-b         │ 1.0.0   │
 ## Related Documentation
 
 - [Concept: Resolvers]({{< relref "docs/concepts/resolvers.md" >}}) - High-level introduction to resolvers
-- [Reference: Resolver Configuration Reference]({{< relref "docs/reference/resolver-configuration.md" >}}) - Full configuration
+- [Reference: Resolver Configuration Reference]({{< relref "docs/reference/configuration/resolver.md" >}}) - Full configuration
   schema, repository types, and pattern syntax
 - [Concept: Component Identity]({{< relref "docs/concepts/component-identity.md" >}}) - Core concepts behind component versions, identities, and
   references

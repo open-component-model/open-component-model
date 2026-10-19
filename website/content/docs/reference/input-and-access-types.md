@@ -1,7 +1,7 @@
 ---
 title: "Input and Access Types"
 description: "Reference for input and access types used to add resources to a component version."
-weight: 4
+weight: 3
 toc: true
 aliases:
   - /docs/guides/input_and_access/
@@ -215,7 +215,7 @@ HTTP downloads can additionally be verified against a source-side checksum
 advertised in response headers, steered centrally by the
 `checksum.http.config.ocm.software/v1alpha1` configuration (the wget spec itself
 carries no checksum field). See
-[HTTP Checksum Configuration]({{< relref "checksum-http-configuration.md" >}})
+[HTTP Checksum Configuration]({{< relref "http-checksum.md" >}})
 for the schema, checksum modes, and the access-side pin-from-source fast path.
 
 ### `S3/v2` {#s3v2-input}
@@ -408,7 +408,7 @@ Semantics:
 
 This type is **never emitted on write** by OCM v2. It is read like a local resource, and on transfer it is copied
 **by value** into the target (becoming a `LocalBlob/v1`), or **re-uploaded as an OCI image** when an
-[OCI uploader]({{< relref "transfer-configuration/oci-uploader" >}}) is configured.
+[OCI uploader]({{< relref "configuration/transfer-configuration/oci-uploader" >}}) is configured.
 
 **Example**
 
@@ -638,13 +638,13 @@ location. Without a matching uploader, a `Wget/v1` access stays by reference in 
 local blob uploader downloads the content and stores it as a
 [`LocalBlob/v1`]({{< relref "input-and-access-types.md" >}}#localblobv1). An HTTP, Artifactory
 or Nexus uploader uploads the content to its configured target and publishes a new remote
-access there (see [Transfer Configuration]({{< relref "docs/reference/transfer-configuration/_index.md" >}})).
+access there (see [Transfer Configuration]({{< relref "docs/reference/configuration/transfer-configuration/_index.md" >}})).
 {{< /callout >}}
 
 The `checksum.http.config.ocm.software/v1alpha1` configuration can pin the
 access digest from source-advertised response headers via a single HEAD, with
 no body download. See
-[HTTP Checksum Configuration]({{< relref "checksum-http-configuration.md" >}}).
+[HTTP Checksum Configuration]({{< relref "http-checksum.md" >}}).
 
 For guidance on choosing between the input and the access type, and for media type resolution, redirects, download
 tuning, and credential configuration, see

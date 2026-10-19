@@ -13,9 +13,9 @@ aliases:
 OCM can push the resources of a component version straight into a vendor artifact
 repository while it transfers the component. Two uploaders implement this model:
 
-- [`artifactory.uploader.transfer.config.ocm.software/v1alpha1`]({{< relref "docs/reference/transfer-configuration/artifactory-uploader.md" >}})
+- [`artifactory.uploader.transfer.config.ocm.software/v1alpha1`]({{< relref "docs/reference/configuration/transfer-configuration/artifactory-uploader.md" >}})
   for JFrog Artifactory, and
-- [`nexus.uploader.transfer.config.ocm.software/v1alpha1`]({{< relref "docs/reference/transfer-configuration/nexus-uploader.md" >}})
+- [`nexus.uploader.transfer.config.ocm.software/v1alpha1`]({{< relref "docs/reference/configuration/transfer-configuration/nexus-uploader.md" >}})
   for Sonatype Nexus Repository 3.
 
 Both follow the same server-side model: a resource that an uploader rule matches is
@@ -113,6 +113,6 @@ for how OCM matches a request to a consumer.
 
 - [Guides: Upload to JFrog Artifactory]({{< relref "docs/guides/transfer/upload-to-jfrog-artifactory.md" >}}) - Step-by-step per-format recipes
 - [Guides: Upload to Sonatype Nexus]({{< relref "docs/guides/transfer/upload-to-sonatype-nexus.md" >}}) - Step-by-step per-format recipes
-- [Reference: JFrog Artifactory Uploader]({{< relref "docs/reference/transfer-configuration/artifactory-uploader.md" >}}) - Full field and repository-behaviour reference
-- [Reference: Sonatype Nexus Uploader]({{< relref "docs/reference/transfer-configuration/nexus-uploader.md" >}}) - Full field and repository-behaviour reference
+- [Reference: JFrog Artifactory Uploader]({{< relref "docs/reference/configuration/transfer-configuration/artifactory-uploader.md" >}}) - Full field and repository-behaviour reference
+- [Reference: Sonatype Nexus Uploader]({{< relref "docs/reference/configuration/transfer-configuration/nexus-uploader.md" >}}) - Full field and repository-behaviour reference
 - [Concept: Transfer and Transport]({{< relref "docs/concepts/transfer-concept.md" >}}) - How OCM moves component versions between repositories

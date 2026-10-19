@@ -54,7 +54,7 @@ Resolver entries can also include an optional version constraint to restrict mat
 
 {{<callout context="tip">}}
 For the full configuration schema, supported repository types, and pattern syntax details, see the
-[Resolver Configuration Reference]({{< relref "docs/reference/resolver-configuration.md" >}}).
+[Resolver Configuration Reference]({{< relref "docs/reference/configuration/resolver.md" >}}).
 {{</callout>}}
 
 ## Recursive Resolution
@@ -94,7 +94,7 @@ the position of entries in the list alone.
   component name.
 
 For the complete pattern syntax and supported repository types, see the
-[Resolver Configuration Reference]({{< relref "docs/reference/resolver-configuration.md#component-name-patterns" >}}).
+[Resolver Configuration Reference]({{< relref "docs/reference/configuration/resolver.md#component-name-patterns" >}}).
 
 ### Ordering and specificity
 
@@ -139,7 +139,7 @@ so the first entry whose pattern **and** constraint match wins:
 
 This reproduces, deterministically, the version spread that the deprecated fallback
 resolver achieved through probe-and-retry. For the full version constraint syntax, see
-[Version Constraints]({{< relref "docs/reference/resolver-configuration.md#version-constraints" >}}).
+[Version Constraints]({{< relref "docs/reference/configuration/resolver.md#version-constraints" >}}).
 
 ## Next Steps
 
@@ -151,7 +151,7 @@ resolver achieved through probe-and-retry. For the full version constraint synta
 
 ## Related Documentation
 
-- [Reference: Resolver Configuration]({{< relref "docs/reference/resolver-configuration.md" >}}) - Full schema,
+- [Reference: Resolver Configuration]({{< relref "docs/reference/configuration/resolver.md" >}}) - Full schema,
   repository types, and pattern syntax
 - [Concept: Canonical Component Repositories]({{< relref "docs/concepts/canonical-components.md" >}}) - Why references are location-free and how resolvers bridge the gap
 - [Concept: Component Identity]({{< relref "docs/concepts/component-identity.md" >}}) - Core concepts behind component versions,

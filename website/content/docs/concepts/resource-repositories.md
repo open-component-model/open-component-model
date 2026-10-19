@@ -25,7 +25,7 @@ This separation exists for practical reasons:
   these differences, so each needs its own implementation.
 - **Credentials differ per backend.** Accessing an OCI registry requires OCI credentials. Accessing a Helm repository
   requires Helm-style credentials. Resource repositories resolve the correct
-  [credential consumer identity]({{< relref "docs/reference/credential-consumer-identities.md" >}}) for each backend,
+  [credential consumer identity]({{< relref "docs/reference/configuration/credential-consumer-identities.md" >}}) for each backend,
   integrating with OCM's [credential system]({{< relref "docs/concepts/credential-system.md" >}}).
 
 ```mermaid

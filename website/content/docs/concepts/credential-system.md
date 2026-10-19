@@ -108,7 +108,7 @@ credentials:
       password: my-password
 ```
 
-For the full list of built-in typed credential types and their fields, see [Reference: Credential Types]({{< relref "/docs/reference/credential-types.md" >}}).
+For the full list of built-in typed credential types and their fields, see [Reference: Credential Types]({{< relref "/docs/reference/configuration/credential-types.md" >}}).
 
 ## What's Next?
 
@@ -118,5 +118,5 @@ For the full list of built-in typed credential types and their fields, see [Refe
 
 ## Related Documentation
 
-- [Reference: Consumer Identities]({{< relref "/docs/reference/credential-consumer-identities.md" >}}) - Complete list of identity types, attributes, and credential properties
-- [Reference: Credential Types]({{< relref "/docs/reference/credential-types.md" >}}) - All built-in typed credential types and their fields
+- [Reference: Consumer Identities]({{< relref "/docs/reference/configuration/credential-consumer-identities.md" >}}) - Complete list of identity types, attributes, and credential properties
+- [Reference: Credential Types]({{< relref "/docs/reference/configuration/credential-types.md" >}}) - All built-in typed credential types and their fields

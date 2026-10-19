@@ -133,4 +133,4 @@ For example, if `app-a` resolves `shared-lib` from Registry A, and `app-b` resol
 ## Related Documentation
 
 - [Concept: Resolvers]({{< relref "docs/concepts/resolvers.md" >}}) - The resolver concept and configuration overview
-- [Reference: Resolver Configuration Reference]({{< relref "docs/reference/resolver-configuration.md" >}}) - Full schema, repository types, and pattern syntax
+- [Reference: Resolver Configuration Reference]({{< relref "docs/reference/configuration/resolver.md" >}}) - Full schema, repository types, and pattern syntax

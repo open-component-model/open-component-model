@@ -30,7 +30,7 @@ configurations:
 
 For the complete field reference — accepted fields, types, defaults, duration
 syntax, and host-key matching rules — see
-[HTTP Client Configuration Reference]({{< relref "docs/reference/http-client-configuration.md" >}}).
+[HTTP Client Configuration Reference]({{< relref "docs/reference/configuration/http-client.md" >}}).
 
 ## Prerequisites
 
@@ -333,7 +333,7 @@ The host key is matched against `request.URL.Host` by exact string — first
 against `hostname:port`, then against the bare `hostname`. Use the bare
 hostname for default-port registries (Go strips `:443`/`:80`), and
 `hostname:port` only for non-standard ports. The
-[HTTP Client Configuration Reference — HostConfig]({{< relref "docs/reference/http-client-configuration.md#hostconfig" >}})
+[HTTP Client Configuration Reference — HostConfig]({{< relref "docs/reference/configuration/http-client.md#hostconfig" >}})
 has the full key-matching rules.
 
 ## Complete example
@@ -525,6 +525,6 @@ ocm --loglevel debug get componentversion <ref>
 
 ## Related Documentation
 
-- [Reference: HTTP Client Configuration Reference]({{< relref "docs/reference/http-client-configuration.md" >}}) - complete field reference and schema
+- [Reference: HTTP Client Configuration Reference]({{< relref "docs/reference/configuration/http-client.md" >}}) - complete field reference and schema
 - [Guides: Transfer Components across an Air Gap]({{< relref "docs/guides/transfer/air-gap-transfer.md" >}}) - move component versions into isolated networks
 - [Guides: Configure Registry Credentials]({{< relref "docs/guides/transfer/configure-registry-credentials.md" >}}) - pair HTTP config with credential setup in the same config file

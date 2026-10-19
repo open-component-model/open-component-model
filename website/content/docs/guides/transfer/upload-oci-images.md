@@ -145,7 +145,7 @@ else fails the transfer.
 
 For the full `match` / `imageReference` schema, the default expressions, and more
 selection examples, see
-[OCI Uploader]({{< relref "docs/reference/transfer-configuration/oci-uploader.md" >}}).
+[OCI Uploader]({{< relref "docs/reference/configuration/transfer-configuration/oci-uploader.md" >}}).
 
 ## Next steps
 

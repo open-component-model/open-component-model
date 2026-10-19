@@ -56,12 +56,12 @@ Copy the following YAML into your `.ocmconfig` file.
 We use the key pair you created in the [How-To: Generate Signing Keys]({{< relref "docs/guides/sign/generate-signing-keys.md" >}}).
 If you already have a key pair that is located in a different location, simply update the file paths accordingly.
 
-Identity attributes are required for credential matching. The `type` and `signature` attributes apply to every identity. The `algorithm` attribute only applies to RSA — GPG and Sigstore each have a single algorithm, so it is resolved implicitly and must not be set in the identity. See the [Consumer Identities Reference]({{< relref "docs/reference/credential-consumer-identities.md" >}}) for details.
+Identity attributes are required for credential matching. The `type` and `signature` attributes apply to every identity. The `algorithm` attribute only applies to RSA — GPG and Sigstore each have a single algorithm, so it is resolved implicitly and must not be set in the identity. See the [Consumer Identities Reference]({{< relref "docs/reference/configuration/credential-consumer-identities.md" >}}) for details.
 
 There are two ways to configure signing credentials, either using file paths that point to your key files,
 or by including the key material directly in the config file.
 For more details on the supported attributes and configuration options, see
-[Credential Consumer Identities Reference]({{< relref "docs/reference/credential-consumer-identities.md" >}}).
+[Credential Consumer Identities Reference]({{< relref "docs/reference/configuration/credential-consumer-identities.md" >}}).
 
 The most convenient way to configure signing credentials is to add a consumer block to your `.ocmconfig` with the key
 file paths.
@@ -87,7 +87,7 @@ configurations:
 ```
 
 `RSACredentials/v1` uses flat `camelCase` fields validated at parse time. For all supported fields, see
-[Reference: Credential Types]({{< relref "docs/reference/credential-types.md" >}}).
+[Reference: Credential Types]({{< relref "docs/reference/configuration/credential-types.md" >}}).
 
 **Key paths:**
 
@@ -144,7 +144,7 @@ configurations:
 ```
 
 `GPGCredentials/v1alpha1` uses flat `camelCase` fields validated at parse time. For all supported fields, see
-[Reference: Credential Types]({{< relref "docs/reference/credential-types.md" >}}).
+[Reference: Credential Types]({{< relref "docs/reference/configuration/credential-types.md" >}}).
 
 **Key paths:**
 
@@ -332,7 +332,7 @@ The consumer identity for RSA signing/verification supports these attributes:
 
 - The key file path is correct and the file exists (`privateKeyPEMFile` for RSA, `privateKeyPGPFile` for GPG)
 - The `algorithm` attribute is present in the identity (e.g. `algorithm: RSASSA-PSS`).
-  See [Consumer Identities Reference]({{< relref "docs/reference/credential-consumer-identities.md" >}}).
+  See [Consumer Identities Reference]({{< relref "docs/reference/configuration/credential-consumer-identities.md" >}}).
 - The `signature` name matches what you're using (or is `default` if not specified)
 - The file is valid YAML with correct indentation
 

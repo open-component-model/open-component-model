@@ -1,7 +1,7 @@
 ---
 title: "Resource Repositories"
 description: "Technical reference for built-in resource repositories: supported access types, credential resolution, and capabilities."
-weight: 6
+weight: 4
 toc: true
 ---
 
@@ -178,7 +178,7 @@ there is no size limit by default. The media type of the blob is taken from `med
 `Content-Type` and then to `application/octet-stream`.
 
 Request timeouts, retries, and per-host settings come from the
-[HTTP client configuration]({{< relref "http-client-configuration.md" >}}).
+[HTTP client configuration]({{< relref "http-client.md" >}}).
 
 ### Digest Processing
 
@@ -249,7 +249,7 @@ limit by default. The media type of the blob comes from `mediaType`. If `mediaTy
 `Content-Type` of the object, and then `application/octet-stream`.
 
 Requests go through the shared OCM HTTP client, so timeouts, TLS settings and per-host overrides come from the
-[HTTP client configuration]({{< relref "http-client-configuration.md" >}}). The AWS SDK does the retries. It retries
+[HTTP client configuration]({{< relref "http-client.md" >}}). The AWS SDK does the retries. It retries
 the whole operation and signs each attempt again. The configured `retry.maxRetries` sets its attempt count. The SDK
 resolves the request host for AWS, so a per-host retry entry takes effect only for a custom `endpoint`. For AWS, the
 global setting applies.

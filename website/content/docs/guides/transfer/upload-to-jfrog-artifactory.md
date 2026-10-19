@@ -19,7 +19,7 @@ first, then return here to route resources into Artifactory repositories.
 {{< /callout >}}
 
 The
-[`artifactory.uploader.transfer.config.ocm.software/v1alpha1`]({{< relref "docs/reference/transfer-configuration/artifactory-uploader.md" >}})
+[`artifactory.uploader.transfer.config.ocm.software/v1alpha1`]({{< relref "docs/reference/configuration/transfer-configuration/artifactory-uploader.md" >}})
 uploader uploads the resources it matches into one Artifactory repository during
 transfer. At upload time the uploader reads the package type from the server with
 `GET <url>/artifactory/api/repositories/<repository>` and publishes the way that
@@ -91,7 +91,7 @@ and owner properties:
 - **Anything else:** the transfer fails and asks for a different `path`.
 
 The property names are listed in the
-[reference]({{< relref "docs/reference/transfer-configuration/artifactory-uploader.md#owner-properties" >}}).
+[reference]({{< relref "docs/reference/configuration/transfer-configuration/artifactory-uploader.md#owner-properties" >}}).
 
 ## Helm charts
 
@@ -411,11 +411,11 @@ resource, component version or was not uploaded by OCM.
 
 - [Concept: Vendor Repository Uploaders]({{< relref "docs/concepts/vendor-uploaders.md" >}})
 - [Guides: Upload to Sonatype Nexus]({{< relref "docs/guides/transfer/upload-to-sonatype-nexus.md" >}})
-- [Reference: JFrog Artifactory Uploader]({{< relref "docs/reference/transfer-configuration/artifactory-uploader.md" >}})
-- [Reference: Transfer Configuration]({{< relref "docs/reference/transfer-configuration/_index.md" >}})
+- [Reference: JFrog Artifactory Uploader]({{< relref "docs/reference/configuration/transfer-configuration/artifactory-uploader.md" >}})
+- [Reference: Transfer Configuration]({{< relref "docs/reference/configuration/transfer-configuration/_index.md" >}})
 - [Guides: Upload to a Custom Target]({{< relref "docs/guides/transfer/upload-to-custom-target.md" >}})
 - [Concept: Transfer and Transport]({{< relref "docs/concepts/transfer-concept.md" >}})
-- [Reference: Credential Consumer Identities]({{< relref "docs/reference/credential-consumer-identities.md" >}})
+- [Reference: Credential Consumer Identities]({{< relref "docs/reference/configuration/credential-consumer-identities.md" >}})
 - [JFrog: Local Repositories](https://jfrog.com/help/r/jfrog-artifactory-documentation/local-repositories)
 - [JFrog: Helm Chart Repositories](https://jfrog.com/help/r/jfrog-artifactory-documentation/helm-chart-repositories)
 - [JFrog: Maven Repositories](https://jfrog.com/help/r/jfrog-artifactory-documentation/maven-repositories)

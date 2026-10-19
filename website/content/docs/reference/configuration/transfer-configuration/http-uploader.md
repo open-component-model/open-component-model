@@ -38,7 +38,7 @@ content to configured URLs from the controller pod.
 | Field                 | Type                  | Applies to                        | Description                                                                                                                                        |
 | --------------------- | --------------------- | --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `match`               | CEL expression        | —                                 | A CEL boolean expression selecting the resources this uploader handles. **Required:** the HTTP uploader has no default match.                      |
-| `targetURL`           | CEL expression        | request + published (`url`)       | The upload URL; also the published download URL. See [CEL Expressions]({{< relref "docs/reference/transfer-configuration/cel-expressions.md" >}}). |
+| `targetURL`           | CEL expression        | request + published (`url`)       | The upload URL; also the published download URL. See [CEL Expressions]({{< relref "docs/reference/configuration/transfer-configuration/cel-expressions.md" >}}). |
 | `method`              | string                | request (`verb`)                  | HTTP method for the upload request. Defaults to PUT. Not on the published access.                                                                  |
 | `header`              | `map[string][]string` | request                           | HTTP headers sent with the upload request. May be CEL-templated. Request only.                                                                     |
 | `noRedirect`          | bool                  | request                           | Disable following HTTP redirects on the upload. Not on the published access.                                                                       |
@@ -103,15 +103,15 @@ standard
 
 To upload into JFrog Artifactory or Sonatype Nexus repositories, use the vendor
 uploaders
-[`artifactory.uploader.transfer.config.ocm.software/v1alpha1`]({{< relref "docs/reference/transfer-configuration/artifactory-uploader.md" >}})
-or [`nexus.uploader.transfer.config.ocm.software/v1alpha1`]({{< relref "docs/reference/transfer-configuration/nexus-uploader.md" >}})
+[`artifactory.uploader.transfer.config.ocm.software/v1alpha1`]({{< relref "docs/reference/configuration/transfer-configuration/artifactory-uploader.md" >}})
+or [`nexus.uploader.transfer.config.ocm.software/v1alpha1`]({{< relref "docs/reference/configuration/transfer-configuration/nexus-uploader.md" >}})
 instead.
 
 ## Credentials
 
 The uploader resolves credentials for the **target** URL independently from the
 source resource, using the target host's
-[consumer identity]({{< relref "docs/reference/credential-consumer-identities.md" >}})
+[consumer identity]({{< relref "docs/reference/configuration/credential-consumer-identities.md" >}})
 (the same `Wget` identity used for downloads). Configure target-side credentials
 the same way you would for any HTTP endpoint; see
-[Credential Types]({{< relref "docs/reference/credential-types.md" >}}).
+[Credential Types]({{< relref "docs/reference/configuration/credential-types.md" >}}).

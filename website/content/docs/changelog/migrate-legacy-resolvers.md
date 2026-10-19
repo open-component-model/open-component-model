@@ -90,7 +90,7 @@ configurations:
 
 The fallback resolver uses `prefix` to match component names by string prefix. The glob-based resolver uses
 `componentNamePattern`,
-which supports [glob patterns]({{< docref "docs/reference/resolver-configuration.md#component-name-patterns" >}}).
+which supports [glob patterns]({{< docref "docs/reference/configuration/resolver.md#component-name-patterns" >}}).
 In most cases, appending `/*` to the old prefix is the closest equivalent. Note that the old `prefix` also matched the
 bare prefix itself as an exact
 component name (e.g. `prefix: my-org.example/services` matched both `my-org.example/services` and
@@ -258,7 +258,7 @@ For how `versionConstraint` and first-match ordering decide the outcome, see
 {{< /tabs >}}
 
 For the full version constraint syntax, see
-[Version Constraints]({{< docref "docs/reference/resolver-configuration.md#version-constraints" >}}).
+[Version Constraints]({{< docref "docs/reference/configuration/resolver.md#version-constraints" >}}).
 
 ## Key Differences
 
@@ -277,6 +277,6 @@ For the full version constraint syntax, see
 
 ## Related Documentation
 
-- [Reference: Resolver Configuration Reference]({{< docref "docs/reference/resolver-configuration.md" >}}) - Full configuration
+- [Reference: Resolver Configuration Reference]({{< docref "docs/reference/configuration/resolver.md" >}}) - Full configuration
   schema and pattern syntax
 - [Concept: Resolvers]({{< docref "docs/concepts/resolvers.md" >}}) - The resolver model: glob matching, first-match ordering, specificity, and version constraints

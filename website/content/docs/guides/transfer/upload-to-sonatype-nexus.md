@@ -19,7 +19,7 @@ first, then return here to route resources into Nexus hosted repositories.
 {{< /callout >}}
 
 The
-[`nexus.uploader.transfer.config.ocm.software/v1alpha1`]({{< relref "docs/reference/transfer-configuration/nexus-uploader.md" >}})
+[`nexus.uploader.transfer.config.ocm.software/v1alpha1`]({{< relref "docs/reference/configuration/transfer-configuration/nexus-uploader.md" >}})
 uploader uploads the resources it matches into one Nexus hosted repository during
 transfer. At upload time the uploader reads the format from the server with
 `GET <url>/service/rest/v1/repositories/<repository>` and publishes the way that
@@ -426,11 +426,11 @@ version.
 
 - [Concept: Vendor Repository Uploaders]({{< relref "docs/concepts/vendor-uploaders.md" >}})
 - [Guides: Upload to JFrog Artifactory]({{< relref "docs/guides/transfer/upload-to-jfrog-artifactory.md" >}})
-- [Reference: Sonatype Nexus Uploader]({{< relref "docs/reference/transfer-configuration/nexus-uploader.md" >}})
-- [Reference: Transfer Configuration]({{< relref "docs/reference/transfer-configuration/_index.md" >}})
+- [Reference: Sonatype Nexus Uploader]({{< relref "docs/reference/configuration/transfer-configuration/nexus-uploader.md" >}})
+- [Reference: Transfer Configuration]({{< relref "docs/reference/configuration/transfer-configuration/_index.md" >}})
 - [Guides: Upload to a Custom Target]({{< relref "docs/guides/transfer/upload-to-custom-target.md" >}})
 - [Concept: Transfer and Transport]({{< relref "docs/concepts/transfer-concept.md" >}})
-- [Reference: Credential Consumer Identities]({{< relref "docs/reference/credential-consumer-identities.md" >}})
+- [Reference: Credential Consumer Identities]({{< relref "docs/reference/configuration/credential-consumer-identities.md" >}})
 - [Sonatype: REST and Integration API](https://help.sonatype.com/en/rest-and-integration-api.html)
 - [Sonatype: Helm Repositories](https://help.sonatype.com/en/helm-repositories.html)
 - [Sonatype: Maven Repositories](https://help.sonatype.com/en/maven-repositories.html)

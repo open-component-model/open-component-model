@@ -224,4 +224,4 @@ Use `ocm --loglevel debug` to enable debug logging. This shows which consumers a
 - [Changelog: Migrate Legacy Credentials]({{< relref "docs/changelog/migrate-legacy-credentials.md" >}}) - Migrate an existing legacy OCM `.ocmconfig` file so it works with the new OCM
 - [Concept: Credential Resolution]({{< relref "/docs/concepts/credential-resolution.md" >}}) - learn how OCM resolves credentials by experimenting step-by-step
 - [Concept: Credential System]({{< relref "/docs/concepts/credential-system.md" >}}) - Learn how the credential system automatically finds the right credentials for each operation
-- [Reference: Credential Types]({{< relref "/docs/reference/credential-types.md" >}}) - all built-in typed credential types and their fields
+- [Reference: Credential Types]({{< relref "/docs/reference/configuration/credential-types.md" >}}) - all built-in typed credential types and their fields

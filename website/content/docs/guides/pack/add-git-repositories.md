@@ -280,7 +280,7 @@ match.
 Pass the file with `--config .ocmconfig`, or put it in one of the
 [well-known locations]({{< relref "docs/reference/ocm-cli/ocm.md" >}}). The same entry covers the access type and the
 input type. The derived `path` includes the `.git` suffix of the URL, so the glob `example-group/*` is the easy choice.
-See [Credential Consumer Identities: Git]({{< relref "docs/reference/credential-consumer-identities.md#git" >}}) for
+See [Credential Consumer Identities: Git]({{< relref "docs/reference/configuration/credential-consumer-identities.md#git" >}}) for
 all attributes.
 
 {{< /step >}}
@@ -363,4 +363,4 @@ rm -rf transport-archive hello-world.tar.gz component-constructor.yaml .ocmconfi
   why `Git/v1` replaces the deprecated `GitHub/v1`, and migration from OCM v1
 - [Reference: `Git/v1` input type]({{< relref "docs/reference/input-and-access-types.md#gitv1-input" >}})
 - [Reference: Git Resource Repository]({{< relref "docs/reference/resource-repositories.md#git-resource-repository" >}})
-- [Reference: Git credentials]({{< relref "docs/reference/credential-types.md#git-credentials" >}})
+- [Reference: Git credentials]({{< relref "docs/reference/configuration/credential-types.md#git-credentials" >}})

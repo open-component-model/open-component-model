@@ -51,7 +51,7 @@ configurations:
 ## E2 — the same as one entry per access type
 
 One entry per access type, each with the default
-[`imageReference`]({{< relref "docs/reference/transfer-configuration/oci-uploader.md#imagereference" >}})
+[`imageReference`]({{< relref "docs/reference/configuration/transfer-configuration/oci-uploader.md#imagereference" >}})
 for its access type spelled out, gives the same outcome as E1. This is the
 starting point for changing the reference of one access type only.
 
@@ -307,4 +307,4 @@ Each case transfers a component with only the named resource.
 | reference, `match: "true"` | `bundle`                                     | `local blobs cannot be kept by reference`               |
 | localblob, `match: "true"` | `custom` with access `{"type": "Custom/v1"}` | `local blob uploader cannot copy access type Custom/v1` |
 
-The [Complete Example]({{< relref "docs/reference/transfer-configuration/_index.md#complete-example" >}}) on the overview page is executed as E16.
+The [Complete Example]({{< relref "docs/reference/configuration/transfer-configuration/_index.md#complete-example" >}}) on the overview page is executed as E16.

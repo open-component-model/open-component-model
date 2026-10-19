@@ -65,7 +65,7 @@ RFC 3161 timestamping is currently being rolled out and we are awaiting feedback
 
 When a signature carries a timestamp (added at signing time with `--tsa` / `--tsa-url`), `ocm verify cv` checks it
 automatically — no extra flag. To fully verify the timestamp, provide the TSA's **root certificates** through the
-credential graph with a [`TSA/v1alpha1`]({{< relref "docs/reference/credential-consumer-identities.md#tsav1alpha1" >}})
+credential graph with a [`TSA/v1alpha1`]({{< relref "docs/reference/configuration/credential-consumer-identities.md#tsav1alpha1" >}})
 consumer entry:
 
 ```yaml

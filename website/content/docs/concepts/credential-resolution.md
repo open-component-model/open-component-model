@@ -12,7 +12,7 @@ aliases:
 
 Every time OCM accesses a registry, it resolves credentials automatically. This tutorial walks you through how that resolution works — given a config, which credentials does OCM pick for each request, and why?
 
-This tutorial focuses on OCI registry credentials. For signing credential identities (`RSA/v1alpha1`), see the [Consumer Identities Reference]({{< relref "/docs/reference/credential-consumer-identities.md" >}}).
+This tutorial focuses on OCI registry credentials. For signing credential identities (`RSA/v1alpha1`), see the [Consumer Identities Reference]({{< relref "/docs/reference/configuration/credential-consumer-identities.md" >}}).
 
 For the full concept, see [Credential System]({{< relref "/docs/concepts/credential-system.md" >}}).
 
@@ -59,7 +59,7 @@ flowchart TB
 
 Matching runs three chained matchers **in order** — all three must pass:
 
-1. **Path matcher** — compares `path` as a glob. If the configured entry has no `path`, any request path is accepted. `*` matches within exactly one segment (not across `/`), `**` matches across `/`. For the full syntax, see [Path Patterns]({{< relref "docs/reference/credential-consumer-identities.md#path-patterns" >}}).
+1. **Path matcher** — compares `path` as a glob. If the configured entry has no `path`, any request path is accepted. `*` matches within exactly one segment (not across `/`), `**` matches across `/`. For the full syntax, see [Path Patterns]({{< relref "docs/reference/configuration/credential-consumer-identities.md#path-patterns" >}}).
 2. **URL matcher** — compares `scheme`, `hostname`, and `port`. Applies default ports: `https` → `443`, `http` → `80`. Schemes must be equal (if neither side specifies one, they match).
 3. **Equality matcher** — all remaining attributes (like `type`) must be exactly equal.
 
@@ -355,4 +355,4 @@ Then retry the OCM command.
 ## Related Documentation
 
 - [Concept: Credential System]({{< relref "/docs/concepts/credential-system.md" >}}) - Learn how the credential system automatically finds the right credentials for each operation
-- [Reference: Consumer Identities]({{< relref "/docs/reference/credential-consumer-identities.md" >}}) - Complete reference for all identity types (OCI registries and RSA signing)
+- [Reference: Consumer Identities]({{< relref "/docs/reference/configuration/credential-consumer-identities.md" >}}) - Complete reference for all identity types (OCI registries and RSA signing)

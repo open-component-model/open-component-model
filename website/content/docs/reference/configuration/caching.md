@@ -1,8 +1,8 @@
 ---
-title: "Caching Configuration"
+title: "Caching"
 description: "Reference for the OCI caches used by the OCM CLI and controller: cache location, temporary folder, limits, admission rules, and remote policy."
 icon: "🗄️"
-weight: 8
+weight: 1
 toc: true
 ---
 
@@ -150,7 +150,7 @@ treats the entry as a cache miss and downloads the content again.
 
 ## Related Documentation
 
-- [Reference: HTTP Client Configuration]({{< relref "docs/reference/http-client-configuration.md" >}}) - timeouts and retries for requests that miss the cache
-- [Reference: Resolver Configuration]({{< relref "docs/reference/resolver-configuration.md" >}}) - configuration types in the same file
+- [Reference: HTTP Client Configuration]({{< relref "docs/reference/configuration/http-client.md" >}}) - timeouts and retries for requests that miss the cache
+- [Reference: Resolver Configuration]({{< relref "docs/reference/configuration/resolver.md" >}}) - configuration types in the same file
 - [Concept: OCM Controllers]({{< relref "docs/concepts/ocm-controllers.md" >}}) - configuration types the controller accepts
 - [Reference: `ocm` CLI reference]({{< relref "docs/reference/ocm-cli/ocm.md" >}}) - global flags, including `--temp-folder`

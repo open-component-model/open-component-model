@@ -156,5 +156,5 @@ The [sovereign conformance scenario](https://github.com/open-component-model/ope
 - [Guides: Signing and Verification]({{< relref "docs/guides/sign/sign-with-plain-rsa.md" >}}) - Sign and verify component versions
 - [Guides: Working with OCI]({{< relref "docs/guides/pack/add-oci-artifacts.md" >}}) - Embed OCI images and access them natively after transfer
 - [Concept: OCM Controllers]({{< relref "docs/concepts/ocm-controllers.md" >}}) - Kubernetes controllers for deploying and transferring OCM components
-- [Reference: Transfer Configuration]({{< relref "docs/reference/transfer-configuration/_index.md" >}}) - Configure transfer settings and custom uploaders
+- [Reference: Transfer Configuration]({{< relref "docs/reference/configuration/transfer-configuration/_index.md" >}}) - Configure transfer settings and custom uploaders
 - [Guides: Configure Custom Uploads During Transfer]({{< relref "docs/guides/transfer/upload-to-custom-target.md" >}}) - Route resources to a custom upload target during transfer

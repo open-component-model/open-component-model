@@ -34,14 +34,14 @@ configurations:
 
 | Type                                                         | Purpose                                                                     | Reference                                                                                                    |
 | ------------------------------------------------------------ | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `transfer.config.ocm.software/v1alpha1`                      | Global transfer settings: recursion depth.                                  | [Transfer Settings]({{< relref "docs/reference/transfer-configuration/transfer-settings.md" >}})             |
-| `oci.uploader.transfer.config.ocm.software/v1alpha1`         | Per-match rule that uploads a resource as a separate OCI artifact.          | [OCI Uploader]({{< relref "docs/reference/transfer-configuration/oci-uploader.md" >}})                       |
-| `http.uploader.transfer.config.ocm.software/v1alpha1`        | Per-match rule that streams a resource to a custom HTTP target.             | [HTTP Uploader]({{< relref "docs/reference/transfer-configuration/http-uploader.md" >}})                     |
-| `localblob.uploader.transfer.config.ocm.software/v1alpha1`   | Per-match rule that downloads a resource and embeds it as a local blob.     | [Local Blob Uploader]({{< relref "docs/reference/transfer-configuration/localblob-uploader.md" >}})          |
-| `reference.uploader.transfer.config.ocm.software/v1alpha1`   | Per-match rule that keeps a resource by reference (no transformation).      | [Reference Uploader]({{< relref "docs/reference/transfer-configuration/reference-uploader.md" >}})           |
-| `artifactory.uploader.transfer.config.ocm.software/v1alpha1` | Per-match rule that uploads a resource into a JFrog Artifactory repository. | [JFrog Artifactory Uploader]({{< relref "docs/reference/transfer-configuration/artifactory-uploader.md" >}}) |
-| `nexus.uploader.transfer.config.ocm.software/v1alpha1`       | Per-match rule that uploads a resource into a Sonatype Nexus repository.    | [Sonatype Nexus Uploader]({{< relref "docs/reference/transfer-configuration/nexus-uploader.md" >}})          |
-| `git.uploader.transfer.config.ocm.software/v1alpha1`         | Per-match rule that pushes a Git resource into an existing Git repository.  | [Git Uploader]({{< relref "docs/reference/transfer-configuration/git-uploader.md" >}})                       |
+| `transfer.config.ocm.software/v1alpha1`                      | Global transfer settings: recursion depth.                                  | [Transfer Settings]({{< relref "docs/reference/configuration/transfer-configuration/transfer-settings.md" >}})             |
+| `oci.uploader.transfer.config.ocm.software/v1alpha1`         | Per-match rule that uploads a resource as a separate OCI artifact.          | [OCI Uploader]({{< relref "docs/reference/configuration/transfer-configuration/oci-uploader.md" >}})                       |
+| `http.uploader.transfer.config.ocm.software/v1alpha1`        | Per-match rule that streams a resource to a custom HTTP target.             | [HTTP Uploader]({{< relref "docs/reference/configuration/transfer-configuration/http-uploader.md" >}})                     |
+| `localblob.uploader.transfer.config.ocm.software/v1alpha1`   | Per-match rule that downloads a resource and embeds it as a local blob.     | [Local Blob Uploader]({{< relref "docs/reference/configuration/transfer-configuration/localblob-uploader.md" >}})          |
+| `reference.uploader.transfer.config.ocm.software/v1alpha1`   | Per-match rule that keeps a resource by reference (no transformation).      | [Reference Uploader]({{< relref "docs/reference/configuration/transfer-configuration/reference-uploader.md" >}})           |
+| `artifactory.uploader.transfer.config.ocm.software/v1alpha1` | Per-match rule that uploads a resource into a JFrog Artifactory repository. | [JFrog Artifactory Uploader]({{< relref "docs/reference/configuration/transfer-configuration/artifactory-uploader.md" >}}) |
+| `nexus.uploader.transfer.config.ocm.software/v1alpha1`       | Per-match rule that uploads a resource into a Sonatype Nexus repository.    | [Sonatype Nexus Uploader]({{< relref "docs/reference/configuration/transfer-configuration/nexus-uploader.md" >}})          |
+| `git.uploader.transfer.config.ocm.software/v1alpha1`         | Per-match rule that pushes a Git resource into an existing Git repository.  | [Git Uploader]({{< relref "docs/reference/configuration/transfer-configuration/git-uploader.md" >}})                       |
 
 By default the CLI looks for configuration in `$HOME/.ocmconfig`. Pass
 `--config <file>` to use a different file. `--recursive` overrides the transfer
@@ -62,13 +62,13 @@ target instead of the default handling. Seven config types are available:
 
 | Uploader                | What it does                                       | Default `match`                                                                                                | `match` required? |
 | ----------------------- | -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | ----------------- |
-| `oci.uploader…`         | Uploads a resource as a separate OCI artifact      | Yes (see [OCI Uploader]({{< relref "docs/reference/transfer-configuration/oci-uploader.md#default-match" >}})) | No                |
+| `oci.uploader…`         | Uploads a resource as a separate OCI artifact      | Yes (see [OCI Uploader]({{< relref "docs/reference/configuration/transfer-configuration/oci-uploader.md#default-match" >}})) | No                |
 | `localblob.uploader…`   | Downloads a resource and embeds it as a local blob | `resource.access.isType(["LocalBlob", "OCIImage", "OCIImageLayer", "Helm", "Wget", "S3/v2", "GitHub"])`        | No                |
 | `reference.uploader…`   | Keeps a resource by reference (no transformation)  | `!resource.access.isType("LocalBlob")`                                                                         | No                |
 | `http.uploader…`        | Streams a resource to an HTTP endpoint             | None                                                                                                           | **Yes**           |
 | `artifactory.uploader…` | Uploads into a JFrog Artifactory repository        | None                                                                                                           | **Yes**           |
 | `nexus.uploader…`       | Uploads into a Sonatype Nexus repository           | None                                                                                                           | **Yes**           |
-| `git.uploader…`         | Pushes Git history into an existing Git repository | Yes (see [Git Uploader]({{< relref "docs/reference/transfer-configuration/git-uploader.md#default-match" >}})) | No                |
+| `git.uploader…`         | Pushes Git history into an existing Git repository | Yes (see [Git Uploader]({{< relref "docs/reference/configuration/transfer-configuration/git-uploader.md#default-match" >}})) | No                |
 
 Each entry is an independent rule; you may declare several.
 
@@ -181,8 +181,8 @@ configurations:
 ```
 
 Entries 3 and 4 need no fields: their default `match` (see the
-[OCI Uploader]({{< relref "docs/reference/transfer-configuration/oci-uploader.md#default-match" >}}) and
-[Local Blob Uploader]({{< relref "docs/reference/transfer-configuration/localblob-uploader.md#default-match" >}})
+[OCI Uploader]({{< relref "docs/reference/configuration/transfer-configuration/oci-uploader.md#default-match" >}}) and
+[Local Blob Uploader]({{< relref "docs/reference/configuration/transfer-configuration/localblob-uploader.md#default-match" >}})
 sections) and the default `imageReference` are what the former settings did.
 
 Outcome for `ocm.software/demo:1.0.0` transferred to `ghcr.io/target-org/ocm`:
@@ -222,5 +222,5 @@ plan is rendered with human-readable labels such as
 - [Guides: Configure Custom Uploads During Transfer]({{< relref "docs/guides/transfer/upload-to-custom-target.md" >}}) - tutorial that walks through an uploader end to end
 - [Concept: Transfer and Transport]({{< relref "docs/concepts/transfer-concept.md" >}}) - the conceptual transfer model
 - [Guides: Working with HTTP Resources]({{< relref "docs/guides/pack/add-http-resources.md" >}}) - the `Wget/v1` type produced by the HTTP streaming uploader
-- [Reference: HTTP Client Configuration]({{< relref "docs/reference/http-client-configuration.md" >}}) - tuning the HTTP client used for the upload
+- [Reference: HTTP Client Configuration]({{< relref "docs/reference/configuration/http-client.md" >}}) - tuning the HTTP client used for the upload
 - [Changelog: Migrate from --upload-as to Uploader Configurations]({{< relref "docs/changelog/migrate-from-upload-as.md" >}}) - migration from deprecated flags

@@ -26,7 +26,7 @@ content to configured URLs from the controller pod.
 | `match`      | CEL expression    | A CEL boolean expression selecting the resources this uploader handles. **Required:** the Nexus uploader has no default match.                                                                                                                                                                                     |
 | `url`        | string (required) | Server base URL **without** the `/repository` segment, e.g. `https://nexus.example.com`.                                                                                                                                                                                                                           |
 | `repository` | string (required) | Repository name, e.g. `helm-hosted`.                                                                                                                                                                                                                                                                               |
-| `path`       | string            | Content location relative to the root; required in Maven repository layout for `maven2` repositories. Literal or `${…}` CEL expression (see [CEL Expressions]({{< relref "docs/reference/transfer-configuration/cel-expressions.md" >}})). Must be relative, without `.`/`..` segments. Not for helm or npm repos. |
+| `path`       | string            | Content location relative to the root; required in Maven repository layout for `maven2` repositories. Literal or `${…}` CEL expression (see [CEL Expressions]({{< relref "docs/reference/configuration/transfer-configuration/cel-expressions.md" >}})). Must be relative, without `.`/`..` segments. Not for helm or npm repos. |
 
 ## Repository types
 
@@ -139,7 +139,7 @@ Resolved for the `HelmChartRepository` identity of
 `WgetCredentials/v1` additionally supports a bearer `identityToken` and mutual TLS
 (`certificate`/`privateKey`); `HelmHTTPCredentials/v1` `certFile`/`keyFile` are
 not supported. See
-[Credential Consumer Identities]({{< relref "docs/reference/credential-consumer-identities.md" >}}).
+[Credential Consumer Identities]({{< relref "docs/reference/configuration/credential-consumer-identities.md" >}}).
 
 ## Example
 

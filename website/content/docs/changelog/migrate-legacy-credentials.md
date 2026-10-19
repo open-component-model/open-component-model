@@ -72,7 +72,7 @@ every path below it; `path` is a glob pattern, so append `/**` to cover every pa
 prefix but not `open-component-model` itself, and `open-component-model/*` matches a single segment. To also match the
 prefix itself, use `"{open-component-model,open-component-model/**}"` (quoted: unquoted, YAML reads `{…}` as a
 mapping). For the full pattern syntax, see
-[Credential Consumer Identities: Path Patterns]({{< docref "/docs/reference/credential-consumer-identities.md#path-patterns" >}}).
+[Credential Consumer Identities: Path Patterns]({{< docref "/docs/reference/configuration/credential-consumer-identities.md#path-patterns" >}}).
 {{< /callout >}}
 
 {{< callout context="caution" >}}
@@ -125,7 +125,7 @@ with:
             password: my-token
 ```
 
-`OCICredentials/v1` also supports `accessToken` and `refreshToken` for token-based auth. For all built-in typed credential types and their fields, see [Reference: Credential Types]({{< docref "/docs/reference/credential-types.md" >}}).
+`OCICredentials/v1` also supports `accessToken` and `refreshToken` for token-based auth. For all built-in typed credential types and their fields, see [Reference: Credential Types]({{< docref "/docs/reference/configuration/credential-types.md" >}}).
 
 {{< callout context="note" >}}
 `Credentials/v1` continues to work unchanged — it is an alias for `DirectCredentials/v1`. You only need this step if you
@@ -185,5 +185,5 @@ whole path segments: `pathprefix: org/repo` does not match `org/repo.git`.
 
 - [Concept: Credential System]({{< docref "/docs/concepts/credential-system.md" >}}) - Learn how the credential system
   automatically finds the right credentials for each operation
-- [Reference: Credential Types]({{< docref "/docs/reference/credential-types.md" >}}) - All built-in typed credential
+- [Reference: Credential Types]({{< docref "/docs/reference/configuration/credential-types.md" >}}) - All built-in typed credential
   types and their fields

@@ -348,7 +348,7 @@ reject the upload.
 
 `resource.digest` is only present when the source resource carries a digest (for
 example when it is pinned from the source via the checksum-http configuration). See
-[Templating Headers]({{< relref "docs/reference/transfer-configuration/http-uploader.md" >}}#templating-headers)
+[Templating Headers]({{< relref "docs/reference/configuration/transfer-configuration/http-uploader.md" >}}#templating-headers)
 for the full field reference.
 
 For a target such as JFrog Artifactory, which verifies uploads against a **hex**
@@ -385,7 +385,7 @@ OCM v2 does **not** guess the media type from the file extension in the URL. OCM
 ## Authentication {#authentication}
 
 Credentials are resolved through OCM's normal [credential system]({{< relref "docs/concepts/credential-system.md" >}}). Never add authentication to a URL directly. OCM
-builds a [consumer identity]({{< relref "docs/reference/credential-consumer-identities.md#wget" >}}) of type `Wget` from
+builds a [consumer identity]({{< relref "docs/reference/configuration/credential-consumer-identities.md#wget" >}}) of type `Wget` from
 the URL and uses the matching consumer entry's credentials for the request. Because the input type and the access type
 build that identity the same way, one entry will work for both, building the component version, and downloading the resource.
 For how identities are matched and resolved, see [Understand Credential Resolution]({{< relref "docs/concepts/credential-resolution.md" >}}).
@@ -414,7 +414,7 @@ Put secrets in your credential configuration, never in the specification. Anythi
 {{< /callout >}}
 
 For the full field reference, see
-[Credential Types: WgetCredentials/v1]({{< relref "docs/reference/credential-types.md#wgetcredentialsv1" >}}).
+[Credential Types: WgetCredentials/v1]({{< relref "docs/reference/configuration/credential-types.md#wgetcredentialsv1" >}}).
 
 ## Send a non-GET request {#non-get-requests}
 
@@ -467,7 +467,7 @@ configurations:
         timeout: 5m
 ```
 
-See [HTTP Client Configuration]({{< relref "docs/reference/http-client-configuration.md" >}}) for the full schema,
+See [HTTP Client Configuration]({{< relref "docs/reference/configuration/http-client.md" >}}) for the full schema,
 defaults, and how per-host settings are merged.
 
 ## Verifying downloads against the source {#checksum-verification}
@@ -478,7 +478,7 @@ closes that gap: OCM compares the downloaded bytes against a digest the source
 advertises in response headers (RFC 9530 `Content-Digest`, `x-checksum-*`) and
 fails on a mismatch. It is configured centrally via
 `checksum.http.config.ocm.software/v1alpha1`, not in the constructor. See
-[HTTP Checksum Configuration]({{< relref "docs/reference/checksum-http-configuration.md" >}})
+[HTTP Checksum Configuration]({{< relref "docs/reference/configuration/http-checksum.md" >}})
 for the schema, checksum modes, precedence, and the access-side fast path.
 
 ## Migrate from OCM v1 {#migrating-from-ocm-v1}
@@ -528,7 +528,7 @@ needs an explicit `mediaType`.
 
 **Fix:** Check the credentials first, then check that the entry matches. `hostname` must equal the URL host; `scheme`,
 `port`, and `path` narrow the match only when set, so the broadest entry is the one that sets only `hostname`. See
-[Credential Consumer Identities: Wget]({{< relref "docs/reference/credential-consumer-identities.md#wget" >}}).
+[Credential Consumer Identities: Wget]({{< relref "docs/reference/configuration/credential-consumer-identities.md#wget" >}}).
 
 ### `401 Unauthorized` right after migrating from OCM v1
 
@@ -573,9 +573,9 @@ isn't, the content changed.
   the `Wget/v1` input and access types
 - [Reference: Resource Repositories]({{< relref "docs/reference/resource-repositories.md" >}}) - Capabilities,
   credential resolution, and digest processing of the Wget resource repository
-- [Reference: Credential Consumer Identities]({{< relref "docs/reference/credential-consumer-identities.md#wget" >}}) -
+- [Reference: Credential Consumer Identities]({{< relref "docs/reference/configuration/credential-consumer-identities.md#wget" >}}) -
   Identity attributes and matching rules for `Wget` consumers
-- [Reference: Credential Types]({{< relref "docs/reference/credential-types.md#wgetcredentialsv1" >}}) - Full field
+- [Reference: Credential Types]({{< relref "docs/reference/configuration/credential-types.md#wgetcredentialsv1" >}}) - Full field
   reference for `WgetCredentials/v1`
-- [Reference: HTTP Client Configuration]({{< relref "docs/reference/http-client-configuration.md" >}}) - Timeouts,
+- [Reference: HTTP Client Configuration]({{< relref "docs/reference/configuration/http-client.md" >}}) - Timeouts,
   retries, and per-host settings

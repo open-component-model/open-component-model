@@ -40,7 +40,7 @@ By the end of this tutorial, you will:
 ### Write the versioning configuration
 
 Create `versioning.ocmconfig` with a CalVer scheme. Here we use the built-in `calver-full` scheme (see the
-[catalog]({{< relref "docs/reference/versioning-configuration.md" >}})); it is equivalent to writing the CalVer
+[catalog]({{< relref "docs/reference/configuration/versioning.md" >}})); it is equivalent to writing the CalVer
 `pattern` by hand. Once you configure schemes, the built-in loose-semver scheme is no longer added automatically, so add
 an explicit `builtin: loose-semver` entry to keep semver versions working.
 
@@ -153,11 +153,11 @@ is rejected at publish time. A `+` (semver build metadata) is the exception: it 
 but that rewrite is not reversed on read, so the version you list differs from the one you added — avoid `+` too.
 
 **Fix:** Choose a scheme whose versions are valid OCI tags. See
-[OCI Tag Constraints]({{< relref "docs/reference/versioning-configuration.md" >}}).
+[OCI Tag Constraints]({{< relref "docs/reference/configuration/versioning.md" >}}).
 
 ## Related documentation
 
-- [Reference: Versioning Configuration]({{< relref "docs/reference/versioning-configuration.md" >}}) - Full schema, scheme catalog,
+- [Reference: Versioning Configuration]({{< relref "docs/reference/configuration/versioning.md" >}}) - Full schema, scheme catalog,
   and OCI tag constraints.
-- [Reference: Resolver Configuration]({{< relref "docs/reference/resolver-configuration.md" >}}) - How `versionConstraint`
+- [Reference: Resolver Configuration]({{< relref "docs/reference/configuration/resolver.md" >}}) - How `versionConstraint`
   interacts with versioning schemes.

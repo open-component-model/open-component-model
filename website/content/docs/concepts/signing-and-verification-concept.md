@@ -452,7 +452,7 @@ flowchart TB
    The label is not signing-relevant, so the component digest stays the same and references to the component as well
    as other signatures remain valid.
 3. At verification, OCM reads the TSA URL from that label and resolves the TSA's root CA certificates from the
-   credential graph via a [`TSA/v1alpha1`]({{< relref "docs/reference/credential-consumer-identities.md#tsav1alpha1" >}})
+   credential graph via a [`TSA/v1alpha1`]({{< relref "docs/reference/configuration/credential-consumer-identities.md#tsav1alpha1" >}})
    consumer identity.
 4. The token's PKCS#7 chain is verified against those roots at its GenTime, its message imprint is checked against a
    hash of the signature value, and — only when the chain is trusted — the attested time is used to validate an RSA/PEM
@@ -480,7 +480,7 @@ Verification degrades gracefully across three levels:
 ### Configuring TSA Trust
 
 TSA root certificates are configured on the **verifier** side through the credential graph, using the typed
-[`TSACredentials/v1alpha1`]({{< relref "docs/reference/credential-types.md#tsacredentialsv1alpha1" >}}) credential:
+[`TSACredentials/v1alpha1`]({{< relref "docs/reference/configuration/credential-types.md#tsacredentialsv1alpha1" >}}) credential:
 
 ```yaml
 type: generic.config.ocm.software/v1
@@ -497,8 +497,8 @@ configurations:
 ```
 
 The signing side needs no TSA credentials; the TSA is chosen with the CLI flags. For the full attribute and field
-reference, see [Consumer Identities → TSA/v1alpha1]({{< relref "docs/reference/credential-consumer-identities.md#tsav1alpha1" >}})
-and [Credential Types → TSACredentials/v1alpha1]({{< relref "docs/reference/credential-types.md#tsacredentialsv1alpha1" >}}).
+reference, see [Consumer Identities → TSA/v1alpha1]({{< relref "docs/reference/configuration/credential-consumer-identities.md#tsav1alpha1" >}})
+and [Credential Types → TSACredentials/v1alpha1]({{< relref "docs/reference/configuration/credential-types.md#tsacredentialsv1alpha1" >}}).
 
 #### Two certificates, two mechanisms
 
@@ -507,8 +507,8 @@ by the same internal CA:
 
 | Certificate | Validated when | Trusted via |
 | ----------- | -------------- | ----------- |
-| The TSA's **token-signing** cert (PKCS#7 chain over the timestamp token) | Verifying | [`TSACredentials/v1alpha1`]({{< relref "docs/reference/credential-types.md#tsacredentialsv1alpha1" >}}) `rootCertsPEM` |
-| The TSA server's **HTTPS serving** cert (the TLS connection when requesting a timestamp) | Signing | [HTTP client config]({{< relref "docs/reference/http-client-configuration.md" >}}) `rootCAsPEM` (or `insecureSkipVerify` for dev) |
+| The TSA's **token-signing** cert (PKCS#7 chain over the timestamp token) | Verifying | [`TSACredentials/v1alpha1`]({{< relref "docs/reference/configuration/credential-types.md#tsacredentialsv1alpha1" >}}) `rootCertsPEM` |
+| The TSA server's **HTTPS serving** cert (the TLS connection when requesting a timestamp) | Signing | [HTTP client config]({{< relref "docs/reference/configuration/http-client.md" >}}) `rootCAsPEM` (or `insecureSkipVerify` for dev) |
 
 `TSACredentials` roots verify the *token*, not the *connection*. To make the signer trust a private TSA's HTTPS
 serving certificate, add its CA to the HTTP client configuration

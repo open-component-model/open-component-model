@@ -102,7 +102,7 @@ conditionals. The uploader is not limited to
 wget sources: every field of the source access is exposed under
 `resource.access.<field>` (e.g. `resource.access.imageReference` for an OCI
 source), so you can route any access type to an HTTP target — see the
-[Transfer Configuration reference]({{< relref "docs/reference/transfer-configuration/cel-expressions.md" >}}).
+[Transfer Configuration reference]({{< relref "docs/reference/configuration/transfer-configuration/cel-expressions.md" >}}).
 
 Uploaders are evaluated in declaration order and the first one that selects a
 resource handles it, so the HTTP uploader takes the `Wget/v1` resource and the
@@ -141,7 +141,7 @@ every matched resource has one.
 OCM algorithm name (e.g. `SHA-256`). `contentDigestAlgorithm()` maps that name to the
 RFC 9530 field key (`sha-256`), and `base64.encode(hex.decode(...))` converts the hex
 digest to the base64 value RFC 9530 expects — see the
-[Templating Headers reference]({{< relref "docs/reference/transfer-configuration/http-uploader.md" >}}#templating-headers).
+[Templating Headers reference]({{< relref "docs/reference/configuration/transfer-configuration/http-uploader.md" >}}#templating-headers).
 
 {{< /step >}}
 
@@ -167,8 +167,8 @@ identity, independently of the source resource:
 ```
 
 Add this entry to the `configurations` list in `.ocmconfig`. See
-[`WgetCredentials/v1`]({{< relref "docs/reference/credential-types.md#wgetcredentialsv1" >}}) and
-[Credential Consumer Identities]({{< relref "docs/reference/credential-consumer-identities.md" >}})
+[`WgetCredentials/v1`]({{< relref "docs/reference/configuration/credential-types.md#wgetcredentialsv1" >}}) and
+[Credential Consumer Identities]({{< relref "docs/reference/configuration/credential-consumer-identities.md" >}})
 for details.
 
 {{< /step >}}
@@ -293,6 +293,6 @@ tools. See
 
 ## Related documentation
 
-- [Reference: Transfer Configuration]({{< relref "docs/reference/transfer-configuration/_index.md" >}}) - full field reference for transfer and uploader configuration
+- [Reference: Transfer Configuration]({{< relref "docs/reference/configuration/transfer-configuration/_index.md" >}}) - full field reference for transfer and uploader configuration
 - [Concept: Transfer and Transport]({{< relref "docs/concepts/transfer-concept.md" >}}) - how OCM moves component versions between repositories
 - [Guides: Working with HTTP Resources]({{< relref "docs/guides/pack/add-http-resources.md" >}}) - the `Wget/v1` type produced by the uploader

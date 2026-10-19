@@ -68,7 +68,7 @@ EOF
 ```
 
 Omitting `path` matches every repository on that host. See
-[Credential Consumer Identities: GitHubRepository]({{< relref "docs/reference/credential-consumer-identities.md#githubrepository" >}})
+[Credential Consumer Identities: GitHubRepository]({{< relref "docs/reference/configuration/credential-consumer-identities.md#githubrepository" >}})
 for the full attribute set.
 
 {{< callout context="note" >}}
@@ -301,7 +301,7 @@ The output is the gzipped tar archive GitHub serves, written as a single file. U
   reference for the `GitHub/v1` access type
 - [Reference: Resource Repositories]({{< relref "docs/reference/resource-repositories.md#github-resource-repository" >}}) -
   Capabilities, download and digest processing
-- [Reference: Credential Consumer Identities]({{< relref "docs/reference/credential-consumer-identities.md#githubrepository" >}}) -
+- [Reference: Credential Consumer Identities]({{< relref "docs/reference/configuration/credential-consumer-identities.md#githubrepository" >}}) -
   Identity attributes and matching rules for `GitHubRepository` consumers
-- [Reference: Credential Types]({{< relref "docs/reference/credential-types.md#githubcredentialsv1" >}}) - Full field
+- [Reference: Credential Types]({{< relref "docs/reference/configuration/credential-types.md#githubcredentialsv1" >}}) - Full field
   reference for `GitHubCredentials/v1`
