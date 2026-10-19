@@ -73,8 +73,10 @@ func Test_Integration_AddGitFragmentWithoutDigestProcessing(t *testing.T) {
 			r.NoError(os.WriteFile(constructorPath, []byte(constructor), 0o600))
 			ctf := filepath.Join(dir, "ctf")
 			command := cmd.New()
-			command.SetArgs([]string{"add", "component-version", "--repository", "ctf::" + ctf,
-				"--constructor", constructorPath, "--config", configPath, "--skip-reference-digest-processing"})
+			command.SetArgs([]string{
+				"add", "component-version", "--repository", "ctf::" + ctf,
+				"--constructor", constructorPath, "--config", configPath, "--skip-reference-digest-processing",
+			})
 			r.NoError(command.ExecuteContext(t.Context()))
 			repo, err := provider.NewComponentVersionRepositoryProvider().GetComponentVersionRepository(t.Context(), &ctfv1.Repository{FilePath: ctf}, nil)
 			r.NoError(err)
