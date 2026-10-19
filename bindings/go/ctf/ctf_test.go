@@ -16,6 +16,24 @@ import (
 	v1 "ocm.software/open-component-model/bindings/go/ctf/index/v1"
 )
 
+func Test_CTF_RejectOCMv1ComponentArchive(t *testing.T) {
+	for _, path := range []string{
+		"testdata/ocmv1-component-archive",
+		"testdata/ocmv1-component-archive.tgz",
+	} {
+		t.Run(path, func(t *testing.T) {
+			r := require.New(t)
+			_, _, err := ctf.OpenCTFByFileExtension(t.Context(), ctf.OpenCTFOptions{
+				Path:    path,
+				Flag:    ctf.O_RDONLY,
+				TempDir: t.TempDir(),
+			})
+			r.ErrorContains(err, "component archive")
+			r.ErrorContains(err, "not supported")
+		})
+	}
+}
+
 func Test_CTF_ReadWrite(t *testing.T) {
 	for _, format := range []ctf.FileFormat{
 		ctf.FormatDirectory,

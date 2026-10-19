@@ -1,6 +1,7 @@
 package oci
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -53,4 +54,21 @@ func TestCTFComponentListerPlugin_NotCTFSpec(t *testing.T) {
 	_, err := p.GetComponentLister(t.Context(), &ociv1.Repository{}, nil)
 	require.Error(t, err)
 	require.ErrorIs(t, err, ErrWrongUsage, "expected: %v, got: %v", ErrWrongUsage, err)
+}
+
+func TestCTFComponentListerPlugin_Archive(t *testing.T) {
+	for _, name := range []string{"transport-archive.tar", "transport-archive.tar.gz"} {
+		t.Run(name, func(t *testing.T) {
+			r := require.New(t)
+			path := filepath.Join("..", "..", "..", "..", "..", "oci", "ctf", "testdata", "compatibility", "01", name)
+			lister, err := (&CTFComponentListerPlugin{}).GetComponentLister(t.Context(), &ctfv1.Repository{FilePath: path}, nil)
+			r.NoError(err)
+			var names []string
+			r.NoError(lister.ListComponents(t.Context(), "", func(found []string) error {
+				names = found
+				return nil
+			}))
+			r.Equal([]string{"github.com/acme.org/helloworld"}, names)
+		})
+	}
 }
