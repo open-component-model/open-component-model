@@ -1,9 +1,11 @@
 package filesystem_test
 
 import (
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -52,4 +54,42 @@ func TestGetLocalBlobFromLocation(t *testing.T) {
 	data, err := io.ReadAll(reader)
 	r.NoError(err)
 	r.Equal("test data", string(data))
+}
+
+func TestCopyBlobToOSPathReplacesExistingFile(t *testing.T) {
+	r := require.New(t)
+	tempDir := t.TempDir()
+	src := filepath.Join(tempDir, "src.txt")
+	r.NoError(os.WriteFile(src, []byte("new"), 0o600))
+	b, err := filesystem.GetBlobFromOSPath(src)
+	r.NoError(err)
+
+	dst := filepath.Join(tempDir, "dst.txt")
+	r.NoError(os.WriteFile(dst, []byte("old"), 0o600))
+	r.NoError(filesystem.CopyBlobToOSPath(b, dst))
+
+	got, err := os.ReadFile(dst)
+	r.NoError(err)
+	r.Equal("new", string(got))
+}
+
+type closeErrBlob struct{ io.Reader }
+
+func (b closeErrBlob) ReadCloser() (io.ReadCloser, error) { return b, nil }
+func (closeErrBlob) Close() error                         { return errors.New("verification failed on close") }
+
+func TestCopyBlobToOSPathKeepsTargetWhenCloseFails(t *testing.T) {
+	r := require.New(t)
+	dst := filepath.Join(t.TempDir(), "dst.txt")
+	r.NoError(os.WriteFile(dst, []byte("old"), 0o600))
+
+	err := filesystem.CopyBlobToOSPath(closeErrBlob{strings.NewReader("new")}, dst)
+	r.ErrorContains(err, "verification failed on close")
+
+	got, err := os.ReadFile(dst)
+	r.NoError(err)
+	r.Equal("old", string(got))
+	entries, err := os.ReadDir(filepath.Dir(dst))
+	r.NoError(err)
+	r.Len(entries, 1, "temporary file must be removed")
 }

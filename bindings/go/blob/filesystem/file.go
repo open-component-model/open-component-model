@@ -26,45 +26,52 @@ var ioBufPool = sync.Pool{
 }
 
 // CopyBlobToOSPath copies the content of a blob.ReadOnlyBlob to a local path on the operating system's filesystem.
-// It opens the file in os.O_APPEND mode.
-// If the file does not exist, it will be created (os.O_CREATE).
-// The function also handles named pipes by setting the appropriate file mode (os.ModeNamedPipe).
+// A regular file is written to a temporary file in the same directory and renamed over path only after the
+// content was read completely without error, so a failed copy (for example a digest mismatch reported by a
+// verifying blob at EOF) leaves path untouched and an existing file is replaced, not appended to.
+// A path that exists and is not a regular file, such as a named pipe or a device, is written to directly;
+// content already written to it cannot be retracted on error.
 // It uses a buffered I/O operation to improve performance, leveraing the internal ioBufPool.
 func CopyBlobToOSPath(blob blob.ReadOnlyBlob, path string) (err error) {
 	data, err := blob.ReadCloser()
 	if err != nil {
 		return fmt.Errorf("failed to get resource data: %w", err)
 	}
-	defer func() {
-		err = errors.Join(err, data.Close())
-	}()
 
-	var isNamedPipe bool
-	fi, err := os.Stat(path)
-	if err == nil {
-		isNamedPipe = fi.Mode()&os.ModeNamedPipe != 0
+	if fi, statErr := os.Stat(path); statErr == nil && !fi.Mode().IsRegular() {
+		defer func() {
+			err = errors.Join(err, data.Close())
+		}()
+		var file *os.File
+		if file, err = os.OpenFile(path, os.O_WRONLY, 0); err != nil {
+			return fmt.Errorf("failed to open target file %s: %w", path, err)
+		}
+		defer func() {
+			err = errors.Join(err, file.Close())
+		}()
+		return copyBuffered(file, data)
 	}
 
-	var mode os.FileMode
-	if isNamedPipe {
-		mode = os.ModeNamedPipe
-	} else {
-		mode = 0o600
-	}
-	file, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, mode)
+	tmp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".*.tmp")
 	if err != nil {
-		return fmt.Errorf("failed to open target file %s: %w", path, err)
+		return errors.Join(fmt.Errorf("failed to create temporary file for %s: %w", path, err), data.Close())
 	}
-	defer func() {
-		err = errors.Join(err, file.Close())
-	}()
+	// Close data before the rename: verifying readers may report a mismatch only on Close.
+	if err := errors.Join(copyBuffered(tmp, data), data.Close(), tmp.Close()); err != nil {
+		return errors.Join(err, os.Remove(tmp.Name()))
+	}
+	if err := os.Rename(tmp.Name(), path); err != nil {
+		return errors.Join(fmt.Errorf("failed to move resource data to %s: %w", path, err), os.Remove(tmp.Name()))
+	}
+	return nil
+}
 
+func copyBuffered(dst io.Writer, src io.Reader) error {
 	buf := ioBufPool.Get().(*[]byte)
 	defer ioBufPool.Put(buf)
-	if _, err := io.CopyBuffer(file, data, *buf); err != nil {
+	if _, err := io.CopyBuffer(dst, src, *buf); err != nil {
 		return fmt.Errorf("failed to copy resource data: %w", err)
 	}
-
 	return nil
 }
 
