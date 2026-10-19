@@ -1,27 +1,16 @@
 package integration
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
 
-type ocmv1ArtifactIndex struct {
-	Artifacts []struct {
-		Repository string `json:"repository"`
-		Tag        string `json:"tag"`
-		Digest     string `json:"digest"`
-		MediaType  string `json:"mediaType"`
-	} `json:"artifacts"`
-}
-
-func prepareOCMv1Scenario(t *testing.T) (ctfPath, layoutPath, publicKey string, artifactSet []byte) {
+func prepareOCMv1Scenario(t *testing.T) (signedPath, accessPath, inputPath, publicKey string) {
 	t.Helper()
 	r := require.New(t)
 	workingDirectory := t.TempDir()
@@ -33,11 +22,7 @@ func prepareOCMv1Scenario(t *testing.T) (ctfPath, layoutPath, publicKey string, 
 	runCompatibilityTool(t, "openssl", "genpkey", "-algorithm", "RSA", "-pkeyopt", "rsa_keygen_bits:2048", "-out", privateKey)
 	runCompatibilityTool(t, "openssl", "pkey", "-in", privateKey, "-pubout", "-out", publicKey)
 
-	artifactSetPath, err := filepath.Abs(filepath.Join("..", "..", "oci", "transformer", "testdata", "oci-layout.tar.gz"))
-	r.NoError(err)
-	artifactSet, err = os.ReadFile(artifactSetPath)
-	r.NoError(err)
-	constructor := fmt.Sprintf(`name: %s
+	signedConstructor := fmt.Sprintf(`name: %s
 version: %s
 provider:
   name: ocm.software
@@ -49,72 +34,81 @@ resources:
     input:
       type: utf8
       text: OCM v1 compatibility fixture
-  - name: artifact-set
-    version: %s
-    type: ociImage
-    relation: local
-    input:
-      type: file
-      path: %q
-      mediaType: application/vnd.oci.image.manifest.v1+tar+gzip
-`, ocmv1ComponentName, ocmv1Version, ocmv1Version, ocmv1Version, artifactSetPath)
-	constructorPath := filepath.Join(workingDirectory, "constructor.yaml")
-	r.NoError(os.WriteFile(constructorPath, []byte(constructor), 0o600))
-	ctfPath = filepath.Join(workingDirectory, "v1-ctf")
-	runCompatibilityTool(t, v1Binary, "--config", v1Config, "add", "cv", "--create", "--file", ctfPath, constructorPath)
-	v1Reference := ctfPath + "//" + ocmv1ComponentName + ":" + ocmv1Version
+`, ocmv1ComponentName, ocmv1Version, ocmv1Version)
+	signedConstructorPath := filepath.Join(workingDirectory, "signed-constructor.yaml")
+	r.NoError(os.WriteFile(signedConstructorPath, []byte(signedConstructor), 0o600))
+	signedPath = filepath.Join(workingDirectory, "v1-signed-ctf")
+	runCompatibilityTool(t, v1Binary, "--config", v1Config, "add", "cv", "--create", "--file", signedPath, signedConstructorPath)
+	v1Reference := signedPath + "//" + ocmv1ComponentName + ":" + ocmv1Version
 	runCompatibilityTool(t, v1Binary, "--config", v1Config, "sign", "cv", "--signature", "default", "--private-key", privateKey, v1Reference)
 	runCompatibilityTool(t, v1Binary, "--config", v1Config, "verify", "cv", "--signature", "default", "--public-key", publicKey, v1Reference)
-	layoutPath = filepath.Join(workingDirectory, "oci-layout")
-	createOCMv1Layout(t, ctfPath, layoutPath)
-	return ctfPath, layoutPath, publicKey, artifactSet
-}
 
-func createOCMv1Layout(t *testing.T, ctfPath, layoutPath string) {
-	t.Helper()
-	r := require.New(t)
-	indexData, err := os.ReadFile(filepath.Join(ctfPath, "artifact-index.json"))
-	r.NoError(err)
-	var artifactIndex ocmv1ArtifactIndex
-	r.NoError(json.Unmarshal(indexData, &artifactIndex))
-	r.NoError(os.MkdirAll(filepath.Join(layoutPath, "blobs", "sha256"), 0o700))
-	blobs, err := os.ReadDir(filepath.Join(ctfPath, "blobs"))
-	r.NoError(err)
-	for _, entry := range blobs {
-		digest, ok := strings.CutPrefix(entry.Name(), "sha256.")
-		if !ok {
-			continue
-		}
-		data, readErr := os.ReadFile(filepath.Join(ctfPath, "blobs", entry.Name()))
-		r.NoError(readErr)
-		r.NoError(os.WriteFile(filepath.Join(layoutPath, "blobs", "sha256", digest), data, 0o600))
-	}
-	r.NoError(os.WriteFile(filepath.Join(layoutPath, "oci-layout"), []byte(`{"imageLayoutVersion":"1.0.0"}`), 0o600))
-	for _, artifact := range artifactIndex.Artifacts {
-		if artifact.Repository != "component-descriptors/"+ocmv1ComponentName || artifact.Tag != ocmv1Version {
-			continue
-		}
-		manifestDigest, ok := strings.CutPrefix(artifact.Digest, "sha256:")
-		r.True(ok)
-		manifestData, readErr := os.ReadFile(filepath.Join(ctfPath, "blobs", "sha256."+manifestDigest))
-		r.NoError(readErr)
-		index := map[string]any{
-			"schemaVersion": 2,
-			"manifests": []map[string]any{{
-				"mediaType": artifact.MediaType,
-				"digest":    artifact.Digest,
-				"size":      len(manifestData),
-				"annotations": map[string]string{
-					"org.opencontainers.image.ref.name": artifact.Tag,
-				},
-			}},
-		}
-		encoded, marshalErr := json.Marshal(index)
-		r.NoError(marshalErr)
-		r.NoError(os.WriteFile(filepath.Join(layoutPath, "index.json"), encoded, 0o600))
-		return
-	}
-	t.Fatal("OCM v1 CTF has no signed component version")
+	accessConstructor := fmt.Sprintf(`name: %s
+version: %s
+provider:
+  name: ocm.software
+resources:
+  - name: helm
+    version: %s
+    type: helmChart
+    access:
+      type: helm
+      helmRepository: https://example.invalid/charts
+      helmChart: sample:1.0.0
+  - name: oci
+    version: %s
+    type: ociImage
+    access:
+      type: ociArtifact
+      imageReference: example.invalid/sample/image:1.0.0
+  - name: git
+    version: %s
+    type: directoryTree
+    access:
+      type: git
+      repository: https://example.invalid/sample/repository.git
+      ref: refs/heads/main
+      commit: 0123456789abcdef0123456789abcdef01234567
+  - name: s3
+    version: %s
+    type: blob
+    access:
+      type: s3
+      region: eu-central-1
+      bucket: sample-bucket
+      key: sample/object.txt
+`, ocmv1AccessComponentName, ocmv1Version, ocmv1Version, ocmv1Version, ocmv1Version, ocmv1Version)
+	accessConstructorPath := filepath.Join(workingDirectory, "access-constructor.yaml")
+	r.NoError(os.WriteFile(accessConstructorPath, []byte(accessConstructor), 0o600))
+	accessPath = filepath.Join(workingDirectory, "v1-access-ctf")
+	runCompatibilityTool(t, v1Binary, "--config", v1Config, "add", "cv", "--skip-digest-generation", "--create", "--file", accessPath, accessConstructorPath)
+
+	repoRoot := getRepoRootBasedOnGit(t)
+	chartPath := filepath.Join(repoRoot, "bindings", "go", "helm", "testdata", "mychart")
+	gitPath, _ := newGitFixture(t)
+	inputConstructor := fmt.Sprintf(`name: %s
+version: %s
+provider:
+  name: ocm.software
+resources:
+  - name: helm-input
+    version: %s
+    type: helmChart
+    input:
+      type: helm
+      path: %q
+  - name: git-input
+    version: %s
+    type: directoryTree
+    input:
+      type: git
+      repository: %q
+`, ocmv1InputComponentName, ocmv1Version, ocmv1Version, chartPath, ocmv1Version, "file://"+gitPath)
+	inputConstructorPath := filepath.Join(workingDirectory, "input-constructor.yaml")
+	r.NoError(os.WriteFile(inputConstructorPath, []byte(inputConstructor), 0o600))
+	inputPath = filepath.Join(workingDirectory, "v1-input-ctf")
+	runCompatibilityTool(t, v1Binary, "--config", v1Config, "add", "cv", "--create", "--file", inputPath, inputConstructorPath)
+	return signedPath, accessPath, inputPath, publicKey
 }
 
 func runCompatibilityTool(t *testing.T, binary string, arguments ...string) []byte {
