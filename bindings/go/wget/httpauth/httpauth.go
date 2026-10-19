@@ -62,17 +62,29 @@ func Apply(ctx context.Context, req *http.Request, client **http.Client, credent
 
 		// Install the certificate on the client's own transports so its
 		// configuration (timeouts, retries, proxy, compression, TLS) is kept.
+		var raisedMinVersion uint16
 		cloned, err := ocmhttp.CloneWithTLS(*client, func(cfg *tls.Config) {
 			cfg.Certificates = []tls.Certificate{cert}
+			// Go ignores Certificates when GetClientCertificate is set, which
+			// would keep the explicit credential from being presented.
+			cfg.GetClientCertificate = nil
 			if rootCAs != nil {
 				cfg.RootCAs = rootCAs
 			}
 			if cfg.MinVersion < tls.VersionTLS12 {
+				// Zero means the Go default, which is already TLS 1.2 for clients.
+				if cfg.MinVersion != 0 {
+					raisedMinVersion = cfg.MinVersion
+				}
 				cfg.MinVersion = tls.VersionTLS12
 			}
 		})
 		if err != nil {
 			return fmt.Errorf("cannot apply mTLS client certificate: %w", err)
+		}
+		if raisedMinVersion != 0 {
+			slog.WarnContext(ctx, "raising the client's minimum TLS version to TLS 1.2 for the mTLS client certificate",
+				"configured", tls.VersionName(raisedMinVersion))
 		}
 		*client = cloned
 	}

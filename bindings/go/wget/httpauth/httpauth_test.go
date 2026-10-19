@@ -27,6 +27,68 @@ import (
 func TestApply_MTLSKeepsClientConfiguration(t *testing.T) {
 	r := require.New(t)
 
+	var peerCerts int
+	var userAgent, acceptEncoding string
+	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(_ http.ResponseWriter, req *http.Request) {
+		peerCerts = len(req.TLS.PeerCertificates)
+		userAgent, acceptEncoding = req.UserAgent(), req.Header.Get("Accept-Encoding")
+	}))
+	srv.TLS = &tls.Config{MinVersion: tls.VersionTLS12, ClientAuth: tls.RequireAnyClientCert}
+	srv.StartTLS()
+	t.Cleanup(srv.Close)
+
+	creds := mtlsCredentials(t, srv.Certificate())
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL, nil)
+	r.NoError(err)
+	client := ocmhttp.New(ocmhttp.WithUserAgent("ocm-test"))
+	r.NoError(httpauth.Apply(t.Context(), req, &client, creds))
+
+	resp, err := client.Do(req)
+	r.NoError(err)
+	r.NoError(resp.Body.Close())
+	r.Equal(http.StatusOK, resp.StatusCode)
+	r.Equal(1, peerCerts, "the client certificate must be presented")
+	r.Equal("ocm-test", userAgent, "the client's user agent transport must be kept")
+	r.Empty(acceptEncoding, "the client's disabled compression must be kept")
+}
+
+// TestApply_MTLSOverridesClientCertificateSelector asserts that the wget
+// credential is presented even if the client already selects its certificate
+// via GetClientCertificate, which Go would otherwise prefer over Certificates.
+func TestApply_MTLSOverridesClientCertificateSelector(t *testing.T) {
+	r := require.New(t)
+
+	var peerCerts int
+	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(_ http.ResponseWriter, req *http.Request) {
+		peerCerts = len(req.TLS.PeerCertificates)
+	}))
+	srv.TLS = &tls.Config{MinVersion: tls.VersionTLS12, ClientAuth: tls.RequireAnyClientCert}
+	srv.StartTLS()
+	t.Cleanup(srv.Close)
+
+	client := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{
+		MinVersion: tls.VersionTLS12,
+		GetClientCertificate: func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
+			return &tls.Certificate{}, nil
+		},
+	}}}
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL, nil)
+	r.NoError(err)
+	r.NoError(httpauth.Apply(t.Context(), req, &client, mtlsCredentials(t, srv.Certificate())))
+
+	resp, err := client.Do(req)
+	r.NoError(err)
+	r.NoError(resp.Body.Close())
+	r.Equal(http.StatusOK, resp.StatusCode)
+	r.Equal(1, peerCerts, "the wget client certificate must be presented")
+}
+
+// mtlsCredentials returns wget credentials with a fresh self-signed client
+// certificate that trusts serverCert as certificate authority.
+func mtlsCredentials(t *testing.T, serverCert *x509.Certificate) *credv1.WgetCredentials {
+	t.Helper()
+	r := require.New(t)
+
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	r.NoError(err)
 	tmpl := &x509.Certificate{
@@ -41,34 +103,12 @@ func TestApply_MTLSKeepsClientConfiguration(t *testing.T) {
 	keyDER, err := x509.MarshalECPrivateKey(key)
 	r.NoError(err)
 
-	var peerCerts int
-	var userAgent, acceptEncoding string
-	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(_ http.ResponseWriter, req *http.Request) {
-		peerCerts = len(req.TLS.PeerCertificates)
-		userAgent, acceptEncoding = req.UserAgent(), req.Header.Get("Accept-Encoding")
-	}))
-	srv.TLS = &tls.Config{MinVersion: tls.VersionTLS12, ClientAuth: tls.RequireAnyClientCert}
-	srv.StartTLS()
-	t.Cleanup(srv.Close)
-
-	creds := &credv1.WgetCredentials{
+	return &credv1.WgetCredentials{
 		Type:                 credv1.WgetCredentialsVersionedType,
 		Certificate:          string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})),
 		PrivateKey:           string(pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDER})),
-		CertificateAuthority: string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: srv.Certificate().Raw})),
+		CertificateAuthority: string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: serverCert.Raw})),
 	}
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL, nil)
-	r.NoError(err)
-	client := ocmhttp.New(ocmhttp.WithUserAgent("ocm-test"))
-	r.NoError(httpauth.Apply(t.Context(), req, &client, creds))
-
-	resp, err := client.Do(req)
-	r.NoError(err)
-	r.NoError(resp.Body.Close())
-	r.Equal(http.StatusOK, resp.StatusCode)
-	r.Equal(1, peerCerts, "the client certificate must be presented")
-	r.Equal("ocm-test", userAgent, "the client's user agent transport must be kept")
-	r.Empty(acceptEncoding, "the client's disabled compression must be kept")
 }
 
 func TestApply_Redirect(t *testing.T) {
