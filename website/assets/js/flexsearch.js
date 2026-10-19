@@ -137,9 +137,21 @@ import Index from 'flexsearch';
     document.querySelector('.search-text').focus();
   }
 
+  // The docs are built as one Hugo site per OCM version ("main", "0.19", ...)
+  // mounted under a prefix: "/" for the default version, "/<version>/" for the
+  // rest, and each has its own search-index.json. Hugo caches a rendered asset
+  // once per build, so a template cannot inject the fetch URL server-side.
+  // The custom header stamps the current version's home path into a
+  // data-attribute; read it here. Fall back to "/" (default version) when the
+  // attribute is missing, e.g. on pages that don't render the custom header.
+  function versionHome() {
+    const header = document.querySelector('header[data-version-home]');
+    return (header && header.dataset.versionHome) || '/';
+  }
+
   function buildIndex() {
     document.querySelector('.search-loading').classList.remove('d-none');
-    fetch("{{ site.LanguagePrefix }}/search-index.json")
+    fetch(versionHome() + 'search-index.json')
       .then(function (response) {
         return response.json();
       })
