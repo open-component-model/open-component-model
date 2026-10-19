@@ -208,23 +208,11 @@ func (c *BlobCache) Fetch(ctx context.Context, upstream content.ReadOnlyStorage,
 		return upstream.Fetch(ctx, target)
 	}
 
-	if f, hit, err := c.Get(target.Digest); err != nil {
-		c.logger.DebugContext(ctx, "blobcache: get failed, falling through",
-			slog.String("digest", target.Digest.String()), slog.String("err", err.Error()))
-	} else if hit {
-		if c.opts.RemotePolicy == RemotePolicyAlways {
-			ok, err := upstream.Exists(ctx, target)
-			if err != nil {
-				_ = f.Close()
-				return nil, fmt.Errorf("blobcache: verify remote access: %w", err)
-			}
-			if !ok {
-				_ = f.Close()
-				return nil, fmt.Errorf("blobcache: remote does not contain or allow access to %s", target.Digest)
-			}
-		}
-		c.logger.DebugContext(ctx, "blobcache: hit",
-			slog.String("digest", target.Digest.String()), slog.Int64("size", target.Size))
+	f, err := c.cached(ctx, upstream, target)
+	if err != nil {
+		return nil, err
+	}
+	if f != nil {
 		return f, nil
 	}
 
@@ -248,6 +236,23 @@ func (c *BlobCache) Fetch(ctx context.Context, upstream content.ReadOnlyStorage,
 	// last waiter leaves would be the more principled alternative.
 	fetchCtx := context.Background()
 	ch := c.sf.DoChan(target.Digest.String(), func() (any, error) {
+		// singleflight only collapses calls that overlap in time: a caller
+		// whose lookup above missed just before the previous flight
+		// populated the cache, but whose DoChan arrives after that flight
+		// returned, would otherwise start a second upstream fetch.
+		f, err := c.cached(fetchCtx, upstream, target)
+		if err != nil {
+			return nil, err
+		}
+		if f != nil {
+			data, rerr := io.ReadAll(f)
+			_ = f.Close()
+			if rerr == nil {
+				return data, nil
+			}
+			c.logger.DebugContext(ctx, "blobcache: read cached file failed, falling through",
+				slog.String("digest", target.Digest.String()), slog.String("err", rerr.Error()))
+		}
 		c.logger.Debug("blobcache: singleflight leader: starting upstream fetch",
 			slog.String("digest", target.Digest.String()))
 		data, err := content.FetchAll(fetchCtx, upstream, target)
@@ -279,6 +284,36 @@ func (c *BlobCache) Fetch(ctx context.Context, upstream content.ReadOnlyStorage,
 		}
 		return io.NopCloser(bytes.NewReader(res.Val.([]byte))), nil
 	}
+}
+
+// cached returns an open file for target if it is in the cache and,
+// under [RemotePolicyAlways], upstream confirms access. A nil file
+// with a nil error is a miss; a failing local lookup is logged and
+// reported as a miss so the caller falls through to upstream.
+func (c *BlobCache) cached(ctx context.Context, upstream content.ReadOnlyStorage, target ociImageSpecV1.Descriptor) (*os.File, error) {
+	f, hit, err := c.Get(target.Digest)
+	if err != nil {
+		c.logger.DebugContext(ctx, "blobcache: get failed, falling through",
+			slog.String("digest", target.Digest.String()), slog.String("err", err.Error()))
+		return nil, nil
+	}
+	if !hit {
+		return nil, nil
+	}
+	if c.opts.RemotePolicy == RemotePolicyAlways {
+		ok, err := upstream.Exists(ctx, target)
+		if err != nil {
+			_ = f.Close()
+			return nil, fmt.Errorf("blobcache: verify remote access: %w", err)
+		}
+		if !ok {
+			_ = f.Close()
+			return nil, fmt.Errorf("blobcache: remote does not contain or allow access to %s", target.Digest)
+		}
+	}
+	c.logger.DebugContext(ctx, "blobcache: hit",
+		slog.String("digest", target.Digest.String()), slog.Int64("size", target.Size))
+	return f, nil
 }
 
 // onEvict is the LRU's eviction callback. It removes the on-disk file
