@@ -117,7 +117,7 @@ jobs:
   compatibility:
     name: OCM v1 compatibility
     needs: [build_cli]
-    uses: ./.github/workflows/compatibility.yml
+    uses: $/.github/workflows/compatibility.yml
     permissions:
       contents: read
       actions: read
