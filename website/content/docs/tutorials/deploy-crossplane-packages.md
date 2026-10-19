@@ -83,8 +83,9 @@ install them into Crossplane.
 
 ## Environment Setup
 
-Set environment variables for your GitHub username and the registries you use throughout. Replace them with your
-own registries, for example an Artifactory OCI repository, if you don't use GitHub Container Registry:
+Set environment variables for your GitHub username and the registries you use throughout. Use a lowercase GitHub
+username, OCI registries such as `ghcr.io` reject uppercase letters in the repository path. If you don't use GitHub
+Container Registry, replace the registries with your own, for example an Artifactory OCI repository:
 
 ```shell
 export GITHUB_USERNAME=<your-github-username>
@@ -802,7 +803,13 @@ spec:
 EOF
 ```
 
-Rebuild the package as `v0.2.0`, and publish a component version `0.2.0` that references it:
+Rebuild the package and prepare a component version `0.2.0` that contains it. Follow the tab you chose when you added
+the packages:
+
+{{< tabs "xpkg-upgrade" >}}
+{{< tab "Reference a pushed package" >}}
+
+Push the package as `v0.2.0` and point the constructor at it:
 
 ```shell
 crossplane xpkg build --package-root=package --package-file=configuration-app.xpkg
@@ -812,12 +819,31 @@ sed -e 's/version: 0.1.0/version: 0.2.0/' \
     -e 's/configuration-app:v0.1.0/configuration-app:v0.2.0/' \
     component-constructor.yaml > component-constructor.next.yaml
 mv component-constructor.next.yaml component-constructor.yaml
+```
 
+{{< /tab >}}
+{{< tab "Embed a local .xpkg file" >}}
+
+Convert the rebuilt package again, so that the constructor embeds the new file:
+
+```shell
+crossplane xpkg build --package-root=package --package-file=configuration-app.xpkg
+skopeo copy docker-archive:configuration-app.xpkg oci-archive:configuration-app.tar
+
+sed -e 's/version: 0.1.0/version: 0.2.0/' \
+    component-constructor.yaml > component-constructor.next.yaml
+mv component-constructor.next.yaml component-constructor.yaml
+```
+
+{{< /tab >}}
+{{< /tabs >}}
+
+Build the new component version and transfer it with the `.ocmconfig` from the transfer step:
+
+```shell
 ocm add cv
 ocm transfer cv transport-archive//ocm.software/examples/crossplane-app:0.2.0 $OCM_REPO
 ```
-
-If you embedded the `.xpkg` file, re-run the `skopeo copy` command instead of `crossplane xpkg push`.
 
 Point the instance at the new component version:
 
