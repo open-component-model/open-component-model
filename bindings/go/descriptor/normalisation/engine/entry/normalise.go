@@ -68,41 +68,59 @@ func Transform(v any) any {
 // marshal encodes an already-transformed tree to compact JSON. HTML escaping
 // is disabled (cc-utils keeps &<> literal) but non-ASCII runes are escaped to
 // \uXXXX to match Python json.dumps' default (ensure_ascii=True); the trailing
-// newline json.Encoder appends is trimmed. Non-integral floats are re-spelled
-// to match Python's repr (see pythoniseFloats) before encoding.
+// newline json.Encoder appends is trimmed. Numbers are re-spelled to Python's
+// json.dumps form (see pythoniseNumbers) before encoding.
 func marshal(v any) ([]byte, error) {
 	buf := new(bytes.Buffer)
 	enc := json.NewEncoder(buf)
 	enc.SetEscapeHTML(false)
-	if err := enc.Encode(pythoniseFloats(v)); err != nil {
+	if err := enc.Encode(pythoniseNumbers(v)); err != nil {
 		return nil, err
 	}
 	return escapeNonASCII(bytes.TrimRight(buf.Bytes(), "\n")), nil
 }
 
-// pythoniseFloats returns a copy of the tree in which every non-integral
-// float64 is replaced by a json.Number spelled the way Python's json.dumps
-// (float repr) would render it. cc-utils serialises label values with
-// json.dumps, and Go's encoding/json spells some fractional values differently
-// (e.g. 1e-7 vs 1e-07, 0.00001 vs 1e-05), which would change the signed bytes.
-// Integral floats are left untouched so encoding/json keeps its existing
-// rendering (1.0 -> 1, large integral values unchanged); matching OCM v1, which
-// also loads numbers via float64, that collapse is intentional and in scope of
-// neither this fix nor the digests already verified on the branch.
-func pythoniseFloats(v any) any {
+// pythoniseNumbers returns a copy of the tree with every number re-spelled to
+// match Python's json.dumps, which is what cc-utils serialises with. Two number
+// representations reach it:
+//
+//   - json.Number (the json/v1 algorithm decodes with UseNumber): an integer
+//     token is emitted verbatim — this preserves full precision for big ints
+//     that exceed float64, matching Python's arbitrary-precision int. A
+//     fractional token is parsed and re-spelled via pythonFloatRepr.
+//   - float64 (values constructed directly in Go, e.g. in tests): integral
+//     values keep encoding/json's rendering (1.0 -> 1); fractional values are
+//     re-spelled.
+//
+// NOTE: the json.Number spellings here DIVERGE from OCM v1, which decodes every
+// number into float64 and emits Go's encoding/json spelling (big ints lose
+// precision, 1e-05 renders as 0.00001). This engine deliberately matches
+// cc-utils, the primary compatibility target; an OCM-v1-signed descriptor with
+// numeric signing-label values will not verify.
+func pythoniseNumbers(v any) any {
 	switch t := v.(type) {
 	case map[string]any:
 		out := make(map[string]any, len(t))
 		for k, val := range t {
-			out[k] = pythoniseFloats(val)
+			out[k] = pythoniseNumbers(val)
 		}
 		return out
 	case []any:
 		out := make([]any, len(t))
 		for i, val := range t {
-			out[i] = pythoniseFloats(val)
+			out[i] = pythoniseNumbers(val)
 		}
 		return out
+	case json.Number:
+		s := string(t)
+		if !strings.ContainsAny(s, ".eE") {
+			return t // integer token: verbatim, full precision
+		}
+		f, err := strconv.ParseFloat(s, 64)
+		if err != nil {
+			return t
+		}
+		return json.Number(pythonFloatRepr(f))
 	case float64:
 		if t == math.Trunc(t) && !math.IsInf(t, 0) {
 			return t

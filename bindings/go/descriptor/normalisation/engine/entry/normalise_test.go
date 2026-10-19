@@ -1,6 +1,7 @@
 package entry_test
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -70,6 +71,16 @@ func TestNormalise(t *testing.T) {
 			name:     "fractional floats use Python repr spelling",
 			input:    []any{0.0000001, 0.00001, 0.0001, 1.25, 0.5},
 			expected: `[1e-07,1e-05,0.0001,1.25,0.5]`,
+		},
+		{
+			// json.Number is what the json/v1 algorithm feeds in (UseNumber).
+			// Integer tokens are emitted verbatim at full precision and
+			// fractional tokens re-spelled to Python's form. Both DIVERGE from
+			// OCM v1 (float64): OCM v1 would emit 12345678901234567000 and
+			// 0.00001 respectively.
+			name:     "json.Number: big int verbatim, fractional re-spelled",
+			input:    []any{json.Number("12345678901234567890"), json.Number("0.00001"), json.Number("42")},
+			expected: `[12345678901234567890,1e-05,42]`,
 		},
 	}
 	for _, tt := range tests {

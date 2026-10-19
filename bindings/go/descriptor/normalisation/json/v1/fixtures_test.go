@@ -864,3 +864,79 @@ signatures: []
 	norm_18_label_float   = `[{"component":[{"componentReferences":[]},{"name":"acme.org/label-float"},{"provider":"ACME"},{"resources":[[{"digest":[{"hashAlgorithm":"SHA-256"},{"normalisationAlgorithm":"ociArtifactDigest/v1"},{"value":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"}]},{"extraIdentity":null},{"labels":[[{"name":"f-small"},{"signing":true},{"value":1e-07}],[{"name":"f-mid"},{"signing":true},{"value":1e-05}],[{"name":"f-ctrl"},{"signing":true},{"value":1.25}]]},{"name":"img"},{"relation":"external"},{"type":"ociImage"},{"version":"1.0.0"}]]},{"version":"1.0.0"}]},{"meta":[{"schemaVersion":"v2"}]}]`
 	digest_18_label_float = `f27005a5878762dacdb9cfbe853b2b68517df8e580c0fe4cd1586eefce6e1494`
 )
+
+// Fixture 19 matches cc-utils byte-exact BUT diverges from OCM v1: OCM v1
+// decodes every number into float64 + Go encoding/json, so it would emit the
+// big int as 12345678901234567000 (precision lost) and 1e-05 as 0.00001. This
+// engine preserves the integer token and uses Python's float repr to match
+// cc-utils, the primary compatibility target.
+const (
+	input_19_label_numbers = `
+component:
+  componentReferences: []
+  creationTime: null
+  labels: []
+  name: acme.org/label-numbers
+  provider: ACME
+  repositoryContexts: []
+  resources:
+  - access: {imageReference: registry.example/img@sha256:cc, type: ociRegistry}
+    digest: {hashAlgorithm: SHA-256, normalisationAlgorithm: ociArtifactDigest/v1, value: cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc}
+    extraIdentity: {}
+    labels:
+    - {name: n-bigint, signing: true, value: 12345678901234567890, version: null}
+    - {name: n-small, signing: true, value: 0.0000001, version: null}
+    - {name: n-mid, signing: true, value: 0.00001, version: null}
+    - {name: n-ctrl, signing: true, value: 2.5, version: null}
+    name: img
+    relation: external
+    srcRefs: []
+    type: ociImage
+    version: 1.0.0
+  sources: []
+  version: 1.0.0
+meta:
+  schemaVersion: v2
+nestedDigests: []
+signatures: []
+`
+	norm_19_label_numbers   = `[{"component":[{"componentReferences":[]},{"name":"acme.org/label-numbers"},{"provider":"ACME"},{"resources":[[{"digest":[{"hashAlgorithm":"SHA-256"},{"normalisationAlgorithm":"ociArtifactDigest/v1"},{"value":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"}]},{"extraIdentity":null},{"labels":[[{"name":"n-bigint"},{"signing":true},{"value":12345678901234567890}],[{"name":"n-small"},{"signing":true},{"value":1e-07}],[{"name":"n-mid"},{"signing":true},{"value":1e-05}],[{"name":"n-ctrl"},{"signing":true},{"value":2.5}]]},{"name":"img"},{"relation":"external"},{"type":"ociImage"},{"version":"1.0.0"}]]},{"version":"1.0.0"}]},{"meta":[{"schemaVersion":"v2"}]}]`
+	digest_19_label_numbers = `1b63254182b250f2a35c6aa17c5983ad8b17c88f09f00693b6eefc227f9adf25`
+)
+
+// Fixture 20 is the one numeric case OCM v2 CANNOT reproduce: cc-utils signs an
+// integral float as "1.0", but OCM v2's store read (sigs.k8s.io/yaml ->
+// YAMLToJSON) collapses 1.0 -> 1 before normalisation ever runs, so the "1.0"
+// text is gone. norm_20_ccutils is what cc-utils emits (unreachable here);
+// norm_20_ocmv2 is what this engine emits. TestNumberDivergenceOneFloat locks
+// the gap so a future reader sees it is known, not accidental.
+const (
+	input_20_label_one_float = `
+component:
+  componentReferences: []
+  creationTime: null
+  labels: []
+  name: acme.org/label-one
+  provider: ACME
+  repositoryContexts: []
+  resources:
+  - access: {imageReference: registry.example/img@sha256:cc, type: ociRegistry}
+    digest: {hashAlgorithm: SHA-256, normalisationAlgorithm: ociArtifactDigest/v1, value: cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc}
+    extraIdentity: {}
+    labels:
+    - {name: n-one, signing: true, value: 1.0, version: null}
+    name: img
+    relation: external
+    srcRefs: []
+    type: ociImage
+    version: 1.0.0
+  sources: []
+  version: 1.0.0
+meta:
+  schemaVersion: v2
+nestedDigests: []
+signatures: []
+`
+	norm_20_ccutils = `[{"component":[{"componentReferences":[]},{"name":"acme.org/label-one"},{"provider":"ACME"},{"resources":[[{"digest":[{"hashAlgorithm":"SHA-256"},{"normalisationAlgorithm":"ociArtifactDigest/v1"},{"value":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"}]},{"extraIdentity":null},{"labels":[[{"name":"n-one"},{"signing":true},{"value":1.0}]]},{"name":"img"},{"relation":"external"},{"type":"ociImage"},{"version":"1.0.0"}]]},{"version":"1.0.0"}]},{"meta":[{"schemaVersion":"v2"}]}]`
+	norm_20_ocmv2   = `[{"component":[{"componentReferences":[]},{"name":"acme.org/label-one"},{"provider":"ACME"},{"resources":[[{"digest":[{"hashAlgorithm":"SHA-256"},{"normalisationAlgorithm":"ociArtifactDigest/v1"},{"value":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"}]},{"extraIdentity":null},{"labels":[[{"name":"n-one"},{"signing":true},{"value":1}]]},{"name":"img"},{"relation":"external"},{"type":"ociImage"},{"version":"1.0.0"}]]},{"version":"1.0.0"}]},{"meta":[{"schemaVersion":"v2"}]}]`
+)

@@ -1,6 +1,7 @@
 package v1
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -57,10 +58,16 @@ func (algo) Normalise(cd *descruntime.Descriptor) ([]byte, error) {
 // on, modelling the storage round-trip rather than the in-memory bytes. The OCI
 // store writes descriptors with yaml.Marshal and reads them back with
 // sigs.k8s.io/yaml (oci/spec/descriptor/{encode,decode}.go), which sorts object
-// keys and collapses numbers (1.0 -> 1, large ints lose precision). Signing and
-// verification always operate on this stored form, and OCM v1 normalises the
-// same way, so we normalise through the same representation. Expanding
-// Label.Value (json.RawMessage) also falls out of this for free.
+// keys. Signing and verification always operate on this stored form, so we
+// normalise through the same representation. Expanding Label.Value
+// (json.RawMessage) also falls out of this for free.
+//
+// Numbers are decoded with UseNumber so integer label values keep full
+// precision (cc-utils serialises them via Python json.dumps, which never loses
+// precision); the entry engine then re-spells them to match Python. The one
+// value this cannot recover is an integral float such as 1.0: YAMLToJSON in the
+// store read collapses it to 1 before normalisation runs, whereas cc-utils
+// keeps 1.0 — see the engine's number handling and the divergence tests.
 func toMap(desc *v2.Descriptor) (map[string]any, error) {
 	y, err := yaml.Marshal(desc)
 	if err != nil {
@@ -70,8 +77,10 @@ func toMap(desc *v2.Descriptor) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.UseNumber()
 	var m map[string]any
-	if err := json.Unmarshal(data, &m); err != nil {
+	if err := dec.Decode(&m); err != nil {
 		return nil, err
 	}
 	return m, nil

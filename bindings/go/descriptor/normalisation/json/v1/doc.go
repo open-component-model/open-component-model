@@ -31,4 +31,13 @@
 // EXCLUDE-FROM-SIGNATURE sentinel, are kept verbatim — this is a pure, offline
 // serialization of the stored descriptor with no digest resolution or graph
 // recursion.
+//
+// Numbers in signing-label values are decoded with UseNumber and re-spelled to
+// Python's json.dumps form: integer tokens keep full precision (matching
+// cc-utils' arbitrary-precision ints) and fractional values use Python's float
+// repr (1e-05, not Go's 0.00001). These spellings intentionally DIVERGE from
+// OCM v1, which routes every number through float64; cc-utils is the primary
+// compatibility target. The one value this cannot reproduce is an integral
+// float such as 1.0: the store read (sigs.k8s.io/yaml) collapses it to 1 before
+// normalisation runs, while cc-utils keeps 1.0.
 package v1

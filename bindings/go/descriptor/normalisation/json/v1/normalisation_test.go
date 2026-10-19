@@ -53,6 +53,7 @@ func TestNormaliseByteExact(t *testing.T) {
 		{"16-creationtime-offset-negative", input_16_creationtime_offset_negative, norm_16_creationtime_offset_negative, digest_16_creationtime_offset_negative},
 		{"17-resource-type-aliases", input_17_resource_type_aliases, norm_17_resource_type_aliases, digest_17_resource_type_aliases},
 		{"18-label-float", input_18_label_float, norm_18_label_float, digest_18_label_float},
+		{"19-label-numbers", input_19_label_numbers, norm_19_label_numbers, digest_19_label_numbers},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -67,6 +68,24 @@ func TestNormaliseByteExact(t *testing.T) {
 			r.Equal(tt.digest, hex.EncodeToString(sum[:]), "digest diverges from cc-utils")
 		})
 	}
+}
+
+// TestNumberDivergenceOneFloat documents the one numeric case OCM v2 cannot
+// reproduce against cc-utils: an integral float label value. cc-utils signs it
+// as "1.0"; OCM v2's store read collapses 1.0 -> 1 before normalisation, so
+// this engine emits "1". The test locks the actual (divergent) output and
+// asserts it is NOT the cc-utils form, so the gap stays visible and any future
+// change that accidentally "fixes" or worsens it is caught.
+func TestNumberDivergenceOneFloat(t *testing.T) {
+	r := require.New(t)
+	desc := fromYAML(t, input_20_label_one_float)
+
+	got, err := normalisation.Normalise(desc, v1.Algorithm)
+	r.NoError(err)
+	// Byte-exact, NOT JSONEq: the whole point is the spelling 1 vs 1.0, which
+	// JSONEq treats as equal.
+	r.Equal(norm_20_ocmv2, string(got))      //nolint:testifylint // byte-exact spelling check, JSONEq would mask 1 vs 1.0
+	r.NotEqual(norm_20_ccutils, string(got)) //nolint:testifylint // byte-exact spelling check, JSONEq would mask 1 vs 1.0
 }
 
 // TestUnknownAlgorithmErrors locks in that an unregistered normalisation
