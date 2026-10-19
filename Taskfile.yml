@@ -1,13 +1,16 @@
 # https://ocm.software/docs/getting-started/
 version: '3'
 
-dotenv: ['.env', '.env.local']
+dotenv: ['.env', '.env.local', 'bindings/go/cli/integration/.env']
 
 output: prefixed
 
 includes:
   tools:
     taskfile: ./tools.Taskfile.yml
+  compat/ocmv1:
+    taskfile: ./bindings/go/cli/integration/ocmv1/Taskfile.yml
+    dir: ./bindings/go/cli/integration/ocmv1
   # bindings/go is a single Go module. Unit tests are run via `bindings/go:test`,
   # integration tests via `bindings/go:test/integration`.
   bindings/go:
