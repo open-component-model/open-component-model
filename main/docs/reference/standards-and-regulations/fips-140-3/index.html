@@ -117,10 +117,12 @@ bundle at <code>/etc/ssl/certs/ca-certificates.crt</code>. No GnuPG is included:
 performs all GPG cryptography in-process with the Go OpenPGP library. Sigstore
 signing works in the image because <code>cosign</code> is on <code>PATH</code>. The slim image is built
 <code>FROM scratch</code> and contains only <code>/ocm</code> and the CA bundle; use it when you
-don&rsquo;t sign with Sigstore, or bring your own <code>cosign</code>.
-The controller image is built <code>FROM scratch</code> with the static <code>/manager</code> binary
-(the entrypoint), the FIPS <code>cosign</code>, the CA bundle, and a world-writable <code>/tmp</code>.
-No GnuPG is included.</p><p>The images have no shell and no package manager. See
+don&rsquo;t sign with Sigstore, or bring your own <code>cosign</code>. Both CLI images run as
+user <code>65532</code> and have world-writable <code>/tmp</code>, <code>/.cache</code> and <code>/.sigstore</code>
+directories.</p><p>The controller image is built <code>FROM scratch</code> with the static <code>/manager</code> binary
+(the entrypoint), the FIPS <code>cosign</code>, the CA bundle, and a world-writable <code>/tmp</code>;
+the controller chart additionally mounts an <code>emptyDir</code> at <code>/tmp</code>. No GnuPG is
+included.</p><p>The images have no shell and no package manager. See
 <a href=#sigstore-and-cosign>Sigstore and cosign</a> and <a href=#gpg>GPG</a> for how OCM uses
 <code>cosign</code> and handles GPG signing.</p><p>The binaries are statically linked and do not use any system cryptographic
 library. All cryptography in OCM itself goes through the Go Cryptographic
@@ -248,7 +250,9 @@ requires.</p><p>Check the build information. The output must contain <code>GOFIP
 </span></span><span class=line><span class=cl>        build   <span class=nv>CGO_ENABLED</span><span class=o>=</span><span class=m>0</span>
 </span></span><span class=line><span class=cl>        build   <span class=nv>GOFIPS140</span><span class=o>=</span>v1.0.0-c2097c7c</span></span></code></pre></div></figure></div><ul><li><p><strong>Local <code>ocm</code> binary:</strong> put that <code>cosign</code> on <code>PATH</code> before running <code>ocm</code>, or
 let OCM download it.</p></li><li><p><strong>Slim CLI image:</strong> mount the <code>cosign</code> for the image&rsquo;s platform at
-<code>/usr/local/bin/cosign</code>, which is on the default <code>PATH</code>:</p><div class=expressive-code><figure class="frame is-terminal not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-shell data-lang=shell><span class=line><span class=cl>docker run --rm <span class=se>\
+<code>/usr/local/bin/cosign</code>, which is on the default <code>PATH</code>. cosign keeps its
+trust-root cache in the image&rsquo;s world-writable <code>/.sigstore</code>, so it works for
+any user ID:</p><div class=expressive-code><figure class="frame is-terminal not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-shell data-lang=shell><span class=line><span class=cl>docker run --rm <span class=se>\
 </span></span></span><span class=line><span class=cl>  -v <span class=s2>&#34;</span><span class=nv>$PWD</span><span class=s2>/cosign:/usr/local/bin/cosign:ro&#34;</span> <span class=se>\
 </span></span></span><span class=line><span class=cl>  -v <span class=s2>&#34;</span><span class=nv>$PWD</span><span class=s2>/.ocmconfig:/.ocmconfig:ro&#34;</span> <span class=se>\
 </span></span></span><span class=line><span class=cl>  ghcr.io/open-component-model/cli:latest-slim <span class=se>\
