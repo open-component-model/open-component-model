@@ -124,7 +124,7 @@ func TestDownloadResource(t *testing.T) {
 		assert.Contains(t, err.Error(), "exceeds maximum allowed size")
 	})
 
-	t.Run("closing the downloaded blob reclaims the temporary file", func(t *testing.T) {
+	t.Run("a GET is streamed without a temporary file", func(t *testing.T) {
 		t.Parallel()
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			_, _ = w.Write([]byte("hello world"))
@@ -137,18 +137,15 @@ func TestDownloadResource(t *testing.T) {
 
 		b, err := repo.DownloadResource(t.Context(), wgetResource(t, server.URL, map[string]any{}), nil)
 		require.NoError(t, err)
+		assert.Equal(t, []byte("hello world"), readBlob(t, b))
 
 		entries, err := os.ReadDir(tempFolder)
 		require.NoError(t, err)
-		require.Len(t, entries, 1, "the body must be streamed into the configured temp folder")
+		assert.Empty(t, entries, "a GET must not write the body into the temp folder")
 
 		closer, ok := b.(io.Closer)
-		require.True(t, ok, "the downloaded blob must be closeable so callers can reclaim it")
+		require.True(t, ok, "the blob must be closeable so callers can release an open response")
 		require.NoError(t, closer.Close())
-
-		entries, err = os.ReadDir(tempFolder)
-		require.NoError(t, err)
-		assert.Empty(t, entries, "closing the blob must remove the temporary file")
 	})
 
 	t.Run("returns error for nil resource", func(t *testing.T) {
@@ -303,6 +300,21 @@ func TestGetResourceRepositoryScheme(t *testing.T) {
 	require.NotNil(t, scheme)
 	assert.True(t, scheme.IsRegistered(runtime.NewVersionedType("wget", v1.Version)))
 	assert.True(t, scheme.IsRegistered(runtime.NewUnversionedType("wget")))
+}
+
+// readFails downloads resource, reads the blob to its end and returns the error,
+// which must not be nil. The blob of a GET is lazy, so verification fails the read.
+func readFails(t *testing.T, repo *repository.ResourceRepository, resource *descruntime.Resource) error {
+	t.Helper()
+	b, err := repo.DownloadResource(t.Context(), resource, nil)
+	require.NoError(t, err)
+	rc, err := b.ReadCloser()
+	require.NoError(t, err)
+	_, err = io.ReadAll(rc)
+	closeErr := rc.Close()
+	require.Error(t, err, "the read must fail")
+	require.Error(t, closeErr, "the close must fail too")
+	return err
 }
 
 func readBlob(t *testing.T, b blob.ReadOnlyBlob) []byte {
@@ -731,7 +743,8 @@ func TestProcessResourceDigest_AccessFastPath(t *testing.T) {
 
 // TestDownloadResource_ChecksumPolicy proves the by-value transfer path
 // (DownloadResource) enforces the configured checksum policy over the
-// transferred bytes, not just the target-side SHA-256 re-hash.
+// transferred bytes, not just the target-side SHA-256 re-hash. The blob of a GET
+// is lazy, so a violation fails the final read of the stream.
 func TestDownloadResource_ChecksumPolicy(t *testing.T) {
 	t.Parallel()
 	content := []byte("transfer me by value")
@@ -763,9 +776,7 @@ func TestDownloadResource_ChecksumPolicy(t *testing.T) {
 
 		repo := repository.NewResourceRepository(nil, repository.WithHTTPClient(server.Client()),
 			repository.WithChecksumConfig(&checksumhttpv1alpha1.Config{Mode: checksumhttpv1alpha1.ChecksumModeRequire}))
-		_, err := repo.DownloadResource(t.Context(),
-			wgetResource(t, server.URL, map[string]any{"url": server.URL + "/resource"}), nil)
-		require.Error(t, err)
+		err := readFails(t, repo, wgetResource(t, server.URL, map[string]any{"url": server.URL + "/resource"}))
 		assert.Contains(t, err.Error(), "checksum verification failed")
 	})
 
@@ -778,10 +789,9 @@ func TestDownloadResource_ChecksumPolicy(t *testing.T) {
 
 		repo := repository.NewResourceRepository(nil, repository.WithHTTPClient(server.Client()),
 			repository.WithChecksumConfig(&checksumhttpv1alpha1.Config{Mode: checksumhttpv1alpha1.ChecksumModeRequire}))
-		_, err := repo.DownloadResource(t.Context(),
-			wgetResource(t, server.URL, map[string]any{"url": server.URL + "/resource"}), nil)
-		require.Error(t, err, "Require must not transfer bytes with no source-advertised checksum")
-		assert.Contains(t, err.Error(), "checksum verification failed")
+		err := readFails(t, repo, wgetResource(t, server.URL, map[string]any{"url": server.URL + "/resource"}))
+		assert.Contains(t, err.Error(), "checksum verification failed",
+			"Require must fail the read when no source-advertised checksum exists")
 	})
 
 	t.Run("Skip performs no verification", func(t *testing.T) {

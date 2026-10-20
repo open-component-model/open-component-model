@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"errors"
 	"io"
 	"path/filepath"
 	"strings"
@@ -231,4 +232,38 @@ type plainBlob struct {
 
 func (p plainBlob) ReadCloser() (io.ReadCloser, error) {
 	return io.NopCloser(strings.NewReader(p.content)), nil
+}
+
+// failingBlob hands out readers that return content and then fail with err
+// instead of io.EOF, like a lazy stream whose own checksum check fails at the end.
+type failingBlob struct {
+	content string
+	err     error
+}
+
+func (f failingBlob) ReadCloser() (io.ReadCloser, error) {
+	return io.NopCloser(io.MultiReader(strings.NewReader(f.content), errReader{f.err})), nil
+}
+
+type errReader struct{ err error }
+
+func (e errReader) Read([]byte) (int, error) { return 0, e.err }
+
+// TestVerifyingBlob_BaseReadFailureIsNamed: when the base reader fails, Read
+// returns that error and Close still refuses the content, but names the failed
+// read instead of a partial read by the caller.
+func TestVerifyingBlob_BaseReadFailureIsNamed(t *testing.T) {
+	r := require.New(t)
+	baseErr := errors.New("checksum verification failed")
+	b, err := newVerifyingBlob(failingBlob{content: verifyTestContent, err: baseErr}, digest.FromString(verifyTestContent))
+	r.NoError(err)
+
+	rc, err := b.ReadCloser()
+	r.NoError(err)
+	_, err = io.ReadAll(rc)
+	r.ErrorIs(err, baseErr, "Read must return the error of the base reader")
+
+	closeErr := rc.Close()
+	r.ErrorContains(closeErr, "not verified: the read failed before the end of the content")
+	r.NotContains(closeErr.Error(), "incomplete read", "a failed base read is not a partial read by the caller")
 }

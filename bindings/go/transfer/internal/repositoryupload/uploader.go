@@ -73,7 +73,8 @@ func (u *Uploader) target(ctx context.Context, helmRepo, repoURL string) (*clien
 
 // source returns the unmodified content of the source resource and its media type ("" when unknown):
 // local blobs from the source component version, remote resources downloaded with the resolved
-// source credentials.
+// source credentials. HTTP targets may retain bytes if verification fails at EOF.
+// Failed uploads are not deleted automatically: the location may hold older content.
 func (u *Uploader) source(ctx context.Context, spec *uploadv1alpha1.RepositoryUploadSpec, src *descriptor.Resource) (blob.ReadOnlyBlob, string, error) {
 	if spec.ComponentVersion.Repository != nil {
 		repo, err := u.localSource(ctx, spec.ComponentVersion)
@@ -97,6 +98,11 @@ func (u *Uploader) source(ctx context.Context, spec *uploadv1alpha1.RepositoryUp
 	if err != nil {
 		return nil, "", err
 	}
+	// A remote-to-remote upload (e.g. wget/s3 -> Artifactory/Nexus) streams the
+	// source to the target without a temporary file, because the wget and s3
+	// repositories return a lazy blob. The streamed bytes are verified inline and
+	// checked against the source digest after the upload (see knownDigest and the
+	// digest comparison in Upload).
 	b, err := u.ResourceRepository.DownloadResource(ctx, src, creds)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed downloading source resource %v: %w", src.ToIdentity(), err)

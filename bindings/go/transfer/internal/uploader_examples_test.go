@@ -131,7 +131,8 @@ func uploaderOutcomes(t *testing.T, tgd *transformv1alpha1.TransformationGraphDe
 			switch tr.Type {
 			case ociv1alpha1.TransferOCIArtifactV1alpha1, addOCIArtifact:
 				outcome = "oci " + evaluateTemplate(t, tgd, specImageReference(t, tr))
-			case ociv1alpha1.OCIAddLocalResourceV1alpha1, ociv1alpha1.CTFAddLocalResourceV1alpha1:
+			case ociv1alpha1.OCIAddLocalResourceV1alpha1, ociv1alpha1.CTFAddLocalResourceV1alpha1,
+				ociv1alpha1.OCIStreamLocalResourceV1alpha1:
 				outcome = "local blob"
 			case wgetv1alpha1.HTTPStreamingV1alpha1:
 				outcome = "http"

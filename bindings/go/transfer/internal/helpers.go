@@ -97,6 +97,42 @@ func chooseAddLocalResourceType(repo runtime.Typed) (runtime.Type, error) {
 	}
 }
 
+// chooseStreamLocalResourceType selects the fused streaming local-resource
+// transformation type for the target repository. Streaming into a local blob is
+// only used for OCI registry targets; a CTF target is a local filesystem archive
+// and keeps the split Download* -> AddLocalResource path.
+func chooseStreamLocalResourceType(repo runtime.Typed) (runtime.Type, error) {
+	concreteRepo, err := convertToConcreteRepo(repo)
+	if err != nil {
+		return runtime.Type{}, fmt.Errorf("converting repository spec: %w", err)
+	}
+	switch concreteRepo.(type) {
+	case *oci.Repository:
+		return ociv1alpha1.OCIStreamLocalResourceV1alpha1, nil
+	default:
+		return runtime.Type{}, fmt.Errorf("unsupported repository type %T for stream local resource operation", concreteRepo)
+	}
+}
+
+// targetIsOCI reports whether the target repository is an OCI registry (true) or
+// a CTF local filesystem archive (false). It drives the choice between the fused
+// streaming local-resource node (OCI) and the split Download* -> AddLocalResource
+// path (CTF).
+func targetIsOCI(repo runtime.Typed) (bool, error) {
+	concreteRepo, err := convertToConcreteRepo(repo)
+	if err != nil {
+		return false, fmt.Errorf("converting repository spec: %w", err)
+	}
+	switch concreteRepo.(type) {
+	case *oci.Repository:
+		return true, nil
+	case *ctfv1.Repository:
+		return false, nil
+	default:
+		return false, fmt.Errorf("unsupported repository type %T for stream local resource operation", concreteRepo)
+	}
+}
+
 func getReferenceName(imageReference string) (string, error) {
 	if imageReference == "" {
 		return "", fmt.Errorf("cannot get reference name from empty image reference")

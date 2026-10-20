@@ -2,7 +2,6 @@ package transformation
 
 import (
 	"context"
-	"crypto/sha256"
 	"errors"
 	"fmt"
 	"io"
@@ -40,7 +39,7 @@ const (
 // HTTPStreamingTransformer streams a resource's content from its source access
 // directly to an HTTP target (e.g. a PUT upload). The source blob is read through
 // the injected ResourceRepository (dispatched by the source access type) and the
-// body is piped straight into the request via an io.TeeReader, so the content is
+// body is hashed as the request reads it, so the content is
 // never buffered in memory or on disk by the transformer. The digest is computed
 // during the stream (or verified against an existing one) and recorded on the
 // target resource, which carries a Wget access at the resolved target URL.
@@ -101,20 +100,32 @@ func (t *HTTPStreamingTransformer) Transform(ctx context.Context, step runtime.T
 		return nil, err
 	}
 
+	// The wget and s3 repositories return a lazy blob, so the common wget/s3 ->
+	// remote path needs no temporary file. A non-idempotent wget request is
+	// downloaded once into a temporary file instead. The HTTP target may retain
+	// bytes if verification fails at EOF. No delete operation is defined for this
+	// target.
 	srcBlob, err := t.ResourceRepository.DownloadResource(ctx, srcResource, srcCreds)
 	if err != nil {
 		return nil, fmt.Errorf("failed downloading source resource %v: %w", srcResource.ToIdentity(), err)
 	}
+	// Releases an open response of a streamed source, or the temporary file of a
+	// downloaded one.
+	defer func() {
+		if c, ok := srcBlob.(io.Closer); ok {
+			_ = c.Close()
+		}
+	}()
 	rc, err := srcBlob.ReadCloser()
 	if err != nil {
 		return nil, fmt.Errorf("failed opening source resource stream: %w", err)
 	}
-	defer func() { _ = rc.Close() }()
-
-	// TeeReader mirrors the streamed body into the hasher as it is uploaded, so the
-	// digest is computed in a single pass without buffering the content.
-	hasher := sha256.New()
-	body := io.TeeReader(rc, hasher)
+	size := blob.SizeUnknown
+	if sizer, ok := srcBlob.(blob.SizeAware); ok {
+		size = sizer.Size()
+	}
+	body := newUploadBody(rc, size, godigest.SHA256)
+	defer func() { _ = body.Close() }()
 
 	method := tw.Verb
 	if method == "" {
@@ -136,10 +147,8 @@ func (t *HTTPStreamingTransformer) Transform(ctx context.Context, step runtime.T
 			req.Header.Set("Content-Type", contentType)
 		}
 	}
-	if sizer, ok := srcBlob.(blob.SizeAware); ok {
-		if size := sizer.Size(); size != blob.SizeUnknown {
-			req.ContentLength = size
-		}
+	if size != blob.SizeUnknown {
+		req.ContentLength = size
 	}
 
 	client := ocmhttp.New(ocmhttp.WithConfig(t.HTTPConfig))
@@ -156,6 +165,7 @@ func (t *HTTPStreamingTransformer) Transform(ctx context.Context, step runtime.T
 		"method", method)
 
 	resp, err := client.Do(req)
+	closeErr := body.Close()
 	if err != nil {
 		// client.Do wraps errors in a *url.Error whose URL field carries the full
 		// request URL including any query token. Redact it so the token never reaches
@@ -177,8 +187,10 @@ func (t *HTTPStreamingTransformer) Transform(ctx context.Context, step runtime.T
 		return nil, fmt.Errorf("upload to %s returned status %d", safeURL.String(), resp.StatusCode)
 	}
 
-	// Finalize the digest only after the whole body has been streamed to the target.
-	computed := godigest.NewDigestFromBytes(godigest.SHA256, hasher.Sum(nil)).Encoded()
+	if closeErr != nil {
+		return nil, fmt.Errorf("failed verifying source resource %v: %w", srcResource.ToIdentity(), closeErr)
+	}
+	computed := body.Digest().Encoded()
 	slog.DebugContext(ctx, "streamed resource upload complete",
 		"resource", srcResource.ToIdentity(),
 		"digest", computed,
@@ -187,21 +199,9 @@ func (t *HTTPStreamingTransformer) Transform(ctx context.Context, step runtime.T
 	// The streaming transformer records the source digest, verifying the streamed bytes
 	// against it when present, and leaves it absent otherwise. Transfer never injects a
 	// digest the source lacked: doing so would change the signed descriptor and break a
-	// signature that deliberately excluded this resource. (`computed` is still used to
-	// verify a present source digest below.)
-	if srcResource.Digest == nil {
-		targetResource.Digest = nil
-	} else {
-		if srcResource.Digest.HashAlgorithm != hashAlgorithmSHA256 {
-			return nil, fmt.Errorf("unsupported hash algorithm: expected %s, got %s", hashAlgorithmSHA256, srcResource.Digest.HashAlgorithm)
-		}
-		if srcResource.Digest.NormalisationAlgorithm != genericBlobDigestV1 {
-			return nil, fmt.Errorf("unsupported normalisation algorithm: expected %s, got %s", genericBlobDigestV1, srcResource.Digest.NormalisationAlgorithm)
-		}
-		if srcResource.Digest.Value != computed {
-			return nil, fmt.Errorf("digest mismatch: expected %s, got %s", srcResource.Digest.Value, computed)
-		}
-		targetResource.Digest = srcResource.Digest.DeepCopy()
+	// signature that deliberately excluded this resource.
+	if targetResource.Digest, err = uploadedDigest(srcResource.Digest, computed); err != nil {
+		return nil, err
 	}
 
 	// TargetResource already carries the published read access built at graph-build time,
@@ -213,6 +213,26 @@ func (t *HTTPStreamingTransformer) Transform(ctx context.Context, step runtime.T
 	}
 	transformation.Output.Resource = v2Out
 	return &transformation, nil
+}
+
+// uploadedDigest returns the digest to record for the uploaded resource: the source
+// digest after it was checked against the computed SHA-256 value, or nil when the
+// source has no digest. The computed value is never recorded on its own, because
+// transfer must not inject a digest the source lacked.
+func uploadedDigest(src *descriptor.Digest, computed string) (*descriptor.Digest, error) {
+	if src == nil {
+		return nil, nil
+	}
+	if src.HashAlgorithm != hashAlgorithmSHA256 {
+		return nil, fmt.Errorf("unsupported hash algorithm: expected %s, got %s", hashAlgorithmSHA256, src.HashAlgorithm)
+	}
+	if src.NormalisationAlgorithm != genericBlobDigestV1 {
+		return nil, fmt.Errorf("unsupported normalisation algorithm: expected %s, got %s", genericBlobDigestV1, src.NormalisationAlgorithm)
+	}
+	if src.Value != computed {
+		return nil, fmt.Errorf("digest mismatch: expected %s, got %s", src.Value, computed)
+	}
+	return src.DeepCopy(), nil
 }
 
 // resolveSourceCredentials resolves credentials for the source resource by its consumer

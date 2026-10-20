@@ -1321,3 +1321,22 @@ func TestResourceLocalBlobOCILayer_ForwardsKnownSize(t *testing.T) {
 	r.False(store.pushed, "monolithic Push must not be used")
 	r.Equal(int64(len(content)), store.partialSize, "known size must be forwarded to PushStreaming")
 }
+
+type closeErrorBlob struct{}
+
+func (closeErrorBlob) ReadCloser() (io.ReadCloser, error) {
+	return closeErrorReader{Reader: bytes.NewReader([]byte("content"))}, nil
+}
+
+type closeErrorReader struct{ io.Reader }
+
+func (closeErrorReader) Close() error { return errors.New("source verification failed") }
+
+func TestResourceLocalBlobOCILayer_RejectsSourceCloseError(t *testing.T) {
+	r := require.New(t)
+	resourceBlob, err := resourceblob.NewArtifactBlob(&descriptor.Resource{}, closeErrorBlob{})
+	r.NoError(err)
+	_, err = ResourceLocalBlobOCILayer(t.Context(), &streamingStore{}, resourceBlob,
+		&v2.LocalBlob{MediaType: "text/plain"}, Options{})
+	r.ErrorContains(err, "source verification failed")
+}

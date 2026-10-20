@@ -18,6 +18,7 @@ var (
 	CTFGetLocalResourceV1alpha1    = runtime.NewVersionedType(CTFGetLocalResourceType, Version)
 	AddOCIArtifactV1alpha1         = runtime.NewVersionedType(AddOCIArtifactType, Version)
 	TransferOCIArtifactV1alpha1    = runtime.NewVersionedType(TransferOCIArtifactType, Version)
+	OCIStreamLocalResourceV1alpha1 = runtime.NewVersionedType(OCIStreamLocalResourceType, Version)
 )
 
 func init() {
@@ -32,4 +33,5 @@ func init() {
 	Scheme.MustRegisterWithAlias(&CTFGetLocalResource{}, CTFGetLocalResourceV1alpha1)
 	Scheme.MustRegisterWithAlias(&AddOCIArtifact{}, AddOCIArtifactV1alpha1)
 	Scheme.MustRegisterWithAlias(&TransferOCIArtifact{}, TransferOCIArtifactV1alpha1)
+	Scheme.MustRegisterWithAlias(&OCIStreamLocalResource{}, OCIStreamLocalResourceV1alpha1)
 }

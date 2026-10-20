@@ -7,7 +7,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/oci"
+	"ocm.software/open-component-model/bindings/go/oci/cache"
+	"ocm.software/open-component-model/bindings/go/oci/internal/remotestore"
 	"ocm.software/open-component-model/bindings/go/oci/looseref"
+	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
 	ctfrepospecv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ocirepospecv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 )
@@ -269,4 +272,42 @@ func TestBuildResolver_SubPathExtraction(t *testing.T) {
 			assert.Equal(t, tt.expectedReference, stringer.String())
 		})
 	}
+}
+
+func TestNewResolver_EnablesChunkedPushByDefault(t *testing.T) {
+	r := require.New(t)
+
+	resolver, err := NewResolver(t.Context(), nil, &ocirepospecv1.Repository{BaseUrl: "http://localhost:5000"})
+	r.NoError(err)
+
+	store, err := resolver.StoreForReference(t.Context(), "localhost:5000/example/component:1.0.0")
+	r.NoError(err)
+
+	remoteStore, ok := store.(*remotestore.RemoteStore)
+	r.True(ok, "expected a *remotestore.RemoteStore, got %T", store)
+	// Chunked (and therefore streaming) push must be enabled by default so a
+	// size-unknown by-value resource streams into the target.
+	assert.Equal(t, remotestore.DefaultChunkSize, remoteStore.ChunkSize)
+	assert.Equal(t, remotestore.DefaultChunkThreshold, remoteStore.ChunkThreshold)
+	assert.Positive(t, remoteStore.ChunkSize)
+}
+
+// TestNewResolver_CachedStoreStreams: the CLI always configures a blob cache, so the
+// cache decorator must keep the streaming push reachable for a by-value resource.
+func TestNewResolver_CachedStoreStreams(t *testing.T) {
+	r := require.New(t)
+
+	blobCache, err := cache.NewBlobCache(cache.Options{Dir: t.TempDir(), Accept: cache.DefaultAccept})
+	r.NoError(err)
+	resolver, err := NewResolver(t.Context(), nil, &ocirepospecv1.Repository{BaseUrl: "http://localhost:5000"},
+		urlresolver.WithBlobCache(blobCache))
+	r.NoError(err)
+
+	store, err := resolver.StoreForReference(t.Context(), "localhost:5000/example/component:1.0.0")
+	r.NoError(err)
+
+	_, ok := store.(*cache.Repository)
+	r.True(ok, "expected the cache decorator, got %T", store)
+	_, ok = store.(remotestore.StreamingPusher)
+	r.True(ok, "the cached store must expose the streaming push")
 }

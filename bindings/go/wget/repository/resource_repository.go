@@ -101,14 +101,38 @@ func (r *ResourceRepository) GetResourceCredentialConsumerIdentity(ctx context.C
 	return identity, nil
 }
 
-// DownloadResource downloads the resource and enforces the configured checksum
-// policy over the transferred bytes. This is the by-value transfer path
-// (access → local blob), so it re-runs the source-side verification rules:
-// under Require the advertised checksum must verify (and must exist), under
+// DownloadResource returns the content of the resource and enforces the
+// configured checksum policy over the transferred bytes. This is the by-value
+// transfer path (access → local blob), so it re-runs the source-side verification
+// rules: under Require the advertised checksum must verify (and must exist), under
 // Prefer it verifies when advertised, and Skip performs no verification. The
-// returned blob owns a temp file callers should close; unclosed blobs have
-// their file removed on GC.
+// content is also verified against the resource digest.
+//
+// For a GET or HEAD request (the default) the returned blob is lazy: the body
+// streams from the network when the blob is read, nothing is written to disk, and
+// each ReadCloser call sends the request again. A checksum or digest mismatch
+// fails the final read and the close. When the access does not pin a media type,
+// the request is sent once here to read it from the response.
+//
+// Any other verb, for example a POST with a body, is not safe to repeat. Such a
+// resource is downloaded once into a temporary file, the checksum policy is
+// verified before return, and the returned blob owns the file.
+//
+// Callers must close the returned blob if it implements io.Closer.
 func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) (blob.ReadOnlyBlob, error) {
+	wget, err := decodeAccess(resource)
+	if err != nil {
+		return nil, err
+	}
+	if !download.IdempotentVerb(wget.Verb) {
+		return r.downloadToFile(ctx, resource, credentials)
+	}
+	return streamResource(ctx, resource, r.newStream(ctx, wget, credentials))
+}
+
+// downloadToFile downloads the resource once into a temporary file and verifies
+// the checksum policy before it returns the file-backed blob.
+func (r *ResourceRepository) downloadToFile(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) (blob.ReadOnlyBlob, error) {
 	policy, hasPolicy := httpverify.PolicyForMode(r.checksumConfig.ModeForURL(policyURL(resource)))
 
 	var extra []download.Option
@@ -135,16 +159,9 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 // after the repository defaults so callers (notably [ProcessResourceDigest])
 // can hash the stream inline via [download.WithDigestAlgorithms].
 func (r *ResourceRepository) download(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed, extra ...download.Option) (*download.Blob, *v1.Wget, error) {
-	if resource == nil {
-		return nil, nil, fmt.Errorf("resource is required")
-	}
-	if resource.Access == nil {
-		return nil, nil, fmt.Errorf("resource access is required")
-	}
-
-	wget := &v1.Wget{}
-	if err := accessspec.Scheme.Convert(resource.Access, wget); err != nil {
-		return nil, nil, fmt.Errorf("error converting resource access spec: %w", err)
+	wget, err := decodeAccess(resource)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	var tempDir string
@@ -171,6 +188,22 @@ func (r *ResourceRepository) download(ctx context.Context, resource *descriptor.
 		return nil, nil, err
 	}
 	return b, wget, nil
+}
+
+// decodeAccess returns the wget access of resource.
+func decodeAccess(resource *descriptor.Resource) (*v1.Wget, error) {
+	if resource == nil {
+		return nil, fmt.Errorf("resource is required")
+	}
+	if resource.Access == nil {
+		return nil, fmt.Errorf("resource access is required")
+	}
+
+	wget := &v1.Wget{}
+	if err := accessspec.Scheme.Convert(resource.Access, wget); err != nil {
+		return nil, fmt.Errorf("error converting resource access spec: %w", err)
+	}
+	return wget, nil
 }
 
 // UploadResource is not supported for wget access types.

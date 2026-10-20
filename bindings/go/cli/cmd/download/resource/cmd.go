@@ -3,6 +3,7 @@ package resource
 import (
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"log/slog"
 	"maps"
@@ -207,6 +208,14 @@ func DownloadResource(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("downloading resource for identity %q failed: %w", requestedIdentity, err)
 	}
+	// Release an open response or a temporary file of the downloaded blob on every
+	// return path. A transformer replaces data below, so keep the original.
+	downloaded := data
+	defer func() {
+		if c, ok := downloaded.(io.Closer); ok {
+			_ = c.Close()
+		}
+	}()
 
 	finalOutputPath, err := processResourceOutput(output, res, logger)
 	if err != nil {

@@ -169,14 +169,11 @@ func Test_DownloadResource(t *testing.T) {
 		fakeCredentials())
 	require.NoError(t, err)
 
+	// The access pins no media type, so the object is requested once to read it.
 	requests := srv.recorded()
 	require.Len(t, requests, 1)
 	require.Equal(t, "/my-bucket/path/blob.txt", requests[0].path)
 	require.Equal(t, "v-1", requests[0].versionID)
-
-	entries, err := os.ReadDir(tempFolder)
-	require.NoError(t, err)
-	require.Len(t, entries, 1, "the object must be streamed into the configured temp folder")
 
 	rc, err := b.ReadCloser()
 	require.NoError(t, err)
@@ -184,10 +181,11 @@ func Test_DownloadResource(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, rc.Close())
 	require.Equal(t, content, got)
+	require.Len(t, srv.recorded(), 1, "the first read must use the response that was already open")
 
-	entries, err = os.ReadDir(tempFolder)
+	entries, err := os.ReadDir(tempFolder)
 	require.NoError(t, err)
-	require.Len(t, entries, 1, "the downloaded file is owned by the caller and must outlive the download")
+	require.Empty(t, entries, "the object must be streamed, not written into the temp folder")
 }
 
 func Test_DownloadResource_DigestVerification(t *testing.T) {

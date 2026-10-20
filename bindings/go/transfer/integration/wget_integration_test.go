@@ -16,13 +16,13 @@ import (
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
 	ctfrepospec "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ocirepospec "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
+	ocitransformv1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/transfer"
 	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
 	wgetrepository "ocm.software/open-component-model/bindings/go/wget/repository"
 	wgetaccess "ocm.software/open-component-model/bindings/go/wget/spec/access"
 	wgetaccessv1 "ocm.software/open-component-model/bindings/go/wget/spec/access/v1"
-	wgetv1alpha1 "ocm.software/open-component-model/bindings/go/wget/transformation/spec/v1alpha1"
 )
 
 // Test_Integration_TransferWgetResource_LocalBlobUploader verifies that a wget resource (content
@@ -107,15 +107,16 @@ func Test_Integration_TransferWgetResource_LocalBlobUploader(t *testing.T) {
 	r.NoError(err)
 	r.NotNil(tgd)
 
-	// A wget resource should generate a DownloadWgetResource transformation.
-	hasDownloadWget := false
+	// A wget resource transferred by value into an OCI target is streamed straight into a
+	// local blob via a single fused OCIStreamLocalResource node (no DownloadWgetResource + temp file).
+	hasStreamLocalResource := false
 	for _, tr := range tgd.Transformations {
-		if tr.Type.Name == wgetv1alpha1.DownloadWgetResourceType {
-			hasDownloadWget = true
+		if tr.Type.Name == ocitransformv1alpha1.OCIStreamLocalResourceType {
+			hasStreamLocalResource = true
 			break
 		}
 	}
-	r.True(hasDownloadWget, "wget resource should generate a DownloadWgetResource transformation")
+	r.True(hasStreamLocalResource, "wget resource should generate an OCIStreamLocalResource transformation")
 
 	// 5. Build and execute the graph.
 	ctx := t.Context()

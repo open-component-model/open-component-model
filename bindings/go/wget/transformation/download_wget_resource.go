@@ -69,13 +69,13 @@ func (t *DownloadWgetResource) Transform(ctx context.Context, step runtime.Typed
 	if err != nil {
 		return nil, fmt.Errorf("error downloading wget resource: %w", err)
 	}
-	// The downloaded blob is backed by a temporary file the repository hands over to
-	// us. Its content is copied to outputPath below, so release it afterwards instead
-	// of leaving a second copy behind.
+	// The content is copied to outputPath below. Release the downloaded blob
+	// afterwards: it can hold an open response, or a temporary file that would
+	// otherwise stay behind as a second copy.
 	defer func() {
 		if closer, ok := downloadedBlob.(io.Closer); ok {
 			if closeErr := closer.Close(); closeErr != nil {
-				slog.WarnContext(ctx, "failed to remove temporary wget download file", "err", closeErr)
+				slog.WarnContext(ctx, "failed to release downloaded wget resource", "err", closeErr)
 			}
 		}
 	}()
