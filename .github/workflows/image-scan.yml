@@ -6,7 +6,11 @@ on:
   # architecture is scanned for vulnerabilities (Trivy, with an OpenVEX document
   # from govulncheck; findings warn, they do not fail). Each image is also
   # scanned against the DISA GPOS SRG as tailored in .github/stig, and against
-  # the CIS Docker Benchmark (dockle).
+  # the CIS Docker Benchmark (dockle). The controller Helm chart, rendered with
+  # its opt-in NetworkPolicy, is scanned against the CIS Kubernetes Benchmark
+  # (Trivy config) and the NSA/CISA and MITRE frameworks (Kubescape); the image
+  # build files get Trivy's Dockerfile checks. OCM's own Trivy checks are in
+  # .github/trivy-checks, accepted findings in .github/benchmarks.
   workflow_call:
     inputs:
       ref:
@@ -286,4 +290,99 @@ jobs:
         with:
           name: image-scan-${{ matrix.image }}-${{ matrix.arch }}
           path: tmp/image-scan/${{ matrix.image }}-${{ matrix.arch }}
+          if-no-files-found: ignore
+
+  # The chart is rendered with the opt-in NetworkPolicy. That render is the
+  # default render plus the NetworkPolicy, so it covers every default template
+  # and lets Kubescape check the policy against C-0030 (Ingress and Egress blocked).
+  chart:
+    name: chart
+    runs-on: ubuntu-26.04-arm
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          sparse-checkout: |
+            .github/benchmarks
+            .github/trivy-checks
+            .github/scripts
+            .env
+            bindings/go/kubernetes/controller/.env
+            bindings/go/kubernetes/controller/chart
+            bindings/go/kubernetes/controller/Dockerfile
+            bindings/go/cli/Containerfile
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - name: Install Helm
+        uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with:
+          # renovate: datasource=github-releases depName=helm/helm
+          version: v4.2.4
+
+      # One file per template, so accepted Trivy findings are scoped to the
+      # template that needs them. The chart requires a kubeVersion that Trivy's
+      # own Helm renderer does not default to, so the scanners get rendered YAML.
+      - name: Render chart
+        run: |
+          set -euo pipefail
+          kube="$(sed -n 's/^KIND_NODE_IMAGE_VERSION=//p' bindings/go/kubernetes/controller/.env)"
+          [[ -n "$kube" ]] || { echo "::error::KIND_NODE_IMAGE_VERSION not set in bindings/go/kubernetes/controller/.env"; exit 1; }
+          mkdir -p tmp/chart-scan
+          helm template ocm-k8s-toolkit bindings/go/kubernetes/controller/chart \
+            --namespace ocm-k8s-toolkit-system --kube-version "$kube" \
+            --set manager.networkPolicy.enabled=true \
+            --output-dir tmp/chart-scan/rendered
+          # The image build files get Trivy's Dockerfile checks in the same run.
+          # Kubescape ignores them.
+          install -D -m 0644 bindings/go/cli/Containerfile tmp/chart-scan/rendered/build/cli/Containerfile
+          install -D -m 0644 bindings/go/kubernetes/controller/Dockerfile tmp/chart-scan/rendered/build/controller/Dockerfile
+
+      - name: CIS Kubernetes Benchmark (Trivy config)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        env:
+          # OCM's own checks (OCM-*) for what no built-in check covers.
+          TRIVY_CONFIG_CHECK: .github/trivy-checks
+          TRIVY_CHECK_NAMESPACES: user
+        with:
+          scan-type: config
+          scan-ref: tmp/chart-scan/rendered
+          trivyignores: .github/benchmarks/trivyignore.yaml
+          # The gate below fails on findings and on an empty scan.
+          exit-code: '0'
+          format: json
+          output: tmp/chart-scan/trivy.json
+
+      # Kubescape fetches the framework definitions at scan time. It reports
+      # controls as failed even when an exception covers them, so the gate below
+      # decides.
+      - name: NSA/CISA and MITRE (Kubescape)
+        if: ${{ !cancelled() }}
+        run: |
+          set -euo pipefail
+          kubescape="$(sed -n 's/^KUBESCAPE_IMAGE=//p' .env)"
+          [[ -n "$kubescape" ]] || { echo "::error::KUBESCAPE_IMAGE not set in .env"; exit 1; }
+          docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD/tmp/chart-scan:/scan" \
+            -v "$PWD/.github/benchmarks:/benchmarks:ro" -w /scan "$kubescape" \
+            scan framework nsa,mitre rendered --exceptions /benchmarks/kubescape-exceptions.json --format json --output kubescape.json
+
+      - name: Benchmark gate
+        if: ${{ !cancelled() }}
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        env:
+          TRIVY_JSON: tmp/chart-scan/trivy.json
+          KUBESCAPE_JSON: tmp/chart-scan/kubescape.json
+          SUMMARY_TITLE: controller chart (manager.networkPolicy.enabled=true)
+        with:
+          script: |
+            const script = await import('${{ github.workspace }}/.github/scripts/chart-benchmarks.js');
+            await script.default({ core });
+
+      - name: Upload reports
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: chart-scan
+          path: tmp/chart-scan
           if-no-files-found: ignore
