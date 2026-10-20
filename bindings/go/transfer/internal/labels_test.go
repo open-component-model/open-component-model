@@ -56,10 +56,10 @@ func TestResourceLabels(t *testing.T) {
 	ctfTgt := testCTFRepo("./out")
 
 	r.Equal("test@0.1.0 [Get myapp]", getLabel(c, "myapp"))
-	r.Equal("test@0.1.0 [Add icons as LocalBlob to CTF]", addLabel(c, "icons", "LocalBlob", ctfTgt))
-	r.Equal("test@0.1.0 [Add icons as OCIArtifact to OCI]", addLabel(c, "icons", "OCIArtifact", ociTgt))
+	r.Equal("test@0.1.0 [Add icons as LocalBlob to CTF ./out]", addLabel(c, "icons", "LocalBlob", ctfTgt))
+	r.Equal("test@0.1.0 [Add icons as OCIArtifact to OCI ghcr.io/t]", addLabel(c, "icons", "OCIArtifact", ociTgt))
 	r.Equal("test@0.1.0 [Convert chart to OCIArtifact]", convertLabel(c, "chart"))
-	r.Equal("test@0.1.0 [Transfer icons to OCI]", transferLabel(c, "icons", ociTgt))
+	r.Equal("test@0.1.0 [Transfer icons to OCI ghcr.io/t]", transferLabel(c, "icons", ociTgt))
 }
 
 // assertLabel checks the label of the transformation with the given ID.
@@ -101,7 +101,7 @@ func TestBuildGraphDefinition_Labels(t *testing.T) {
 
 	assertLabel(t, r, tgd, componentID+"Upload", "my-app@1.0.0 [Upload to OCI ghcr.io/target]")
 	assertLabel(t, r, tgd, componentID+"Get"+resourceID, "my-app@1.0.0 [Get icons]")
-	assertLabel(t, r, tgd, componentID+"Add"+resourceID, "my-app@1.0.0 [Add icons as LocalBlob to OCI]")
+	assertLabel(t, r, tgd, componentID+"Add"+resourceID, "my-app@1.0.0 [Add icons as LocalBlob to OCI ghcr.io/target]")
 	// the cleanup transformation buffers the Add outputs, so it must exist and carry
 	// the shared cleanup label
 	assertLabel(t, r, tgd, "fileBufferCleanup", cleanupLabel)
