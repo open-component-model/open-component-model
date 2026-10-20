@@ -53,7 +53,7 @@ on:
         required: false
     outputs:
       cli_artifact_name:
-        description: "CLI artifact name (binaries + OCI layout) from the build job."
+        description: "CLI artifact name (binaries, their SPDX SBOMs under sbom/, OCI layout) from the build job."
         value: ${{ jobs.build_cli.outputs.artifact_name }}
       cli_version:
         description: "Version computed/embedded for the CLI build."
@@ -76,6 +76,15 @@ on:
       controller_chart_digest:
         description: "Digest of the pushed Helm chart."
         value: ${{ jobs.publish_controller.outputs.chart_digest }}
+      vex_artifact:
+        description: "Artifact with the OpenVEX document (ocm.openvex.json) the images were scanned with."
+        value: ${{ jobs.image_scan.outputs.vex_artifact }}
+      cli_image_sbom_artifact:
+        description: "Artifact with the per-platform SPDX SBOMs of the pushed CLI image (when published)."
+        value: ${{ jobs.publish_cli.outputs.image_sbom_artifact }}
+      controller_image_sbom_artifact:
+        description: "Artifact with the per-platform SPDX SBOMs of the pushed controller image (when published)."
+        value: ${{ jobs.publish_controller.outputs.image_sbom_artifact }}
 
 permissions:
   contents: read
@@ -191,6 +200,7 @@ jobs:
     outputs:
       image_digest: ${{ steps.digest.outputs.digest }}
       slim_image_digest: ${{ steps.digest.outputs.slim_digest }}
+      image_sbom_artifact: image-sbom-cli
     permissions:
       contents: read
       actions: read
@@ -270,12 +280,86 @@ jobs:
           subject-name: ${{ env.TARGET_REPO }}
           push-to-registry: true
 
+      - name: Install Syft
+        uses: anchore/sbom-action/download-syft@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+
+      - name: Generate image SBOM (linux/amd64)
+        env:
+          DIGEST: ${{ steps.digest.outputs.digest }}
+        run: syft scan "registry:${TARGET_REPO}@${DIGEST}" --platform linux/amd64 -o spdx-json=ocm-cli-image-linux-amd64.spdx.json
+
+      - name: Generate image SBOM (linux/arm64)
+        env:
+          DIGEST: ${{ steps.digest.outputs.digest }}
+        run: syft scan "registry:${TARGET_REPO}@${DIGEST}" --platform linux/arm64 -o spdx-json=ocm-cli-image-linux-arm64.spdx.json
+
+      - name: Attest image SBOM (linux/amd64)
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-digest: ${{ steps.digest.outputs.digest }}
+          subject-name: ${{ env.TARGET_REPO }}
+          sbom-path: ocm-cli-image-linux-amd64.spdx.json
+          push-to-registry: true
+
+      - name: Attest image SBOM (linux/arm64)
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-digest: ${{ steps.digest.outputs.digest }}
+          subject-name: ${{ env.TARGET_REPO }}
+          sbom-path: ocm-cli-image-linux-arm64.spdx.json
+          push-to-registry: true
+
+      # Release assets and component-version resources (release.yml).
+      - name: Upload image SBOMs
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: image-sbom-cli
+          retention-days: 1
+          path: ocm-cli-image-linux-*.spdx.json
+          if-no-files-found: error
+
+      - name: Download OpenVEX
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: ${{ needs.image_scan.outputs.vex_artifact }}
+          path: tmp/vex
+
+      # The OpenVEX document the image was scanned with, as an OCI referrer, so
+      # consumers' scanners apply the same reachability verdicts (trivy image
+      # --vex oci, Trivy >= 0.73).
+      - name: Attest OpenVEX
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-digest: ${{ steps.digest.outputs.digest }}
+          subject-name: ${{ env.TARGET_REPO }}
+          predicate-type: https://openvex.dev/ns/v0.2.0
+          predicate-path: tmp/vex/ocm.openvex.json
+          push-to-registry: true
+
+      # The VEX statements are about the Go modules in bindings/go, which the
+      # binaries are built from just like the image.
+      - name: Attest OpenVEX (binaries)
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: bin/ocm-*
+          predicate-type: https://openvex.dev/ns/v0.2.0
+          predicate-path: tmp/vex/ocm.openvex.json
+
       - name: Attest slim OCI image
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           subject-digest: ${{ steps.digest.outputs.slim_digest }}
           subject-name: ${{ env.TARGET_REPO }}
+          push-to-registry: true
+
+      - name: Attest OpenVEX (slim OCI image)
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-digest: ${{ steps.digest.outputs.slim_digest }}
+          subject-name: ${{ env.TARGET_REPO }}
+          predicate-type: https://openvex.dev/ns/v0.2.0
+          predicate-path: tmp/vex/ocm.openvex.json
           push-to-registry: true
   # === cli.yml::publish ===
 
@@ -289,6 +373,7 @@ jobs:
       image_digest: ${{ steps.image-digest.outputs.digest }}
       chart_digest: ${{ steps.chart-digest.outputs.digest }}
       chart_artifact_name: controller-chart-${{ needs.build_controller.outputs.version }}
+      image_sbom_artifact: image-sbom-controller
     permissions:
       contents: read
       actions: read
@@ -381,6 +466,58 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           subject-digest: ${{ steps.image-digest.outputs.digest }}
           subject-name: ${{ env.IMAGE_NAME }}
+          push-to-registry: true
+
+      - name: Install Syft
+        uses: anchore/sbom-action/download-syft@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+
+      - name: Generate image SBOM (linux/amd64)
+        env:
+          DIGEST: ${{ steps.image-digest.outputs.digest }}
+        run: syft scan "registry:${IMAGE_NAME}@${DIGEST}" --platform linux/amd64 -o spdx-json=ocm-controller-image-linux-amd64.spdx.json
+
+      - name: Generate image SBOM (linux/arm64)
+        env:
+          DIGEST: ${{ steps.image-digest.outputs.digest }}
+        run: syft scan "registry:${IMAGE_NAME}@${DIGEST}" --platform linux/arm64 -o spdx-json=ocm-controller-image-linux-arm64.spdx.json
+
+      - name: Attest image SBOM (linux/amd64)
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-digest: ${{ steps.image-digest.outputs.digest }}
+          subject-name: ${{ env.IMAGE_NAME }}
+          sbom-path: ocm-controller-image-linux-amd64.spdx.json
+          push-to-registry: true
+
+      - name: Attest image SBOM (linux/arm64)
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-digest: ${{ steps.image-digest.outputs.digest }}
+          subject-name: ${{ env.IMAGE_NAME }}
+          sbom-path: ocm-controller-image-linux-arm64.spdx.json
+          push-to-registry: true
+
+      - name: Upload image SBOMs
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: image-sbom-controller
+          retention-days: 1
+          path: ocm-controller-image-linux-*.spdx.json
+          if-no-files-found: error
+
+      - name: Download OpenVEX
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: ${{ needs.image_scan.outputs.vex_artifact }}
+          path: tmp/vex
+
+      - name: Attest OpenVEX
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-digest: ${{ steps.image-digest.outputs.digest }}
+          subject-name: ${{ env.IMAGE_NAME }}
+          predicate-type: https://openvex.dev/ns/v0.2.0
+          predicate-path: tmp/vex/ocm.openvex.json
           push-to-registry: true
 
       - name: Package and push chart with digest
