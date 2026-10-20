@@ -1,17 +1,20 @@
-# OCM v1 to v2 compatibility lane
+# OCM conformance scenario: OCM v1 compatibility
 
-Run `task compat/ocmv1:test` from the repository root. The task downloads the
+Run `task conformance/ocmv1:run` from the repository root. The task downloads the
 checksum-verified OCM v1 CLI release pinned in
-`bindings/go/cli/integration/.env`, builds the current CLI, then runs the
-cross-version integration test.
+`conformance/scenarios/ocmv1/.env`, builds the current CLI, then runs the
+cross-version conformance test. You can also run `task run` from this directory.
+The tests in `tests/conformance/` reuse the dependencies pinned by
+`bindings/go/go.mod`; no separate Go module is needed.
+Prerequisites: Go, Task, Git, OpenSSL, curl, and tar.
 
-CI runs the same test as a sibling of conformance and controller E2E after the
-shared CLI build. It downloads that build's artifact and runs
-`task compat/ocmv1:test/prebuilt OCM_V2_BIN=<path>` without rebuilding the CLI.
+CI runs this scenario alongside the sovereign scenario in the conformance
+workflow after the shared builds. It downloads that build's artifact and runs
+`task conformance/ocmv1:test OCM_V2_BIN=<path>` without rebuilding the CLI.
 
 The test invokes OCM v1 to create three component versions in temporary CTFs.
 The signed version contains a local text resource; OCM v2 reads it, verifies
-the signature, downloads its bytes, and checks its recorded digest. The other
+the signature, downloads its bytes, and checks its recorded digest. The second
 version contains v1 Helm, OCI, Git, and S3 access specifications; OCM v2 reads
 each one and checks its type and fields. OCM v1 creates that version with
 digest generation disabled because its external resources are deliberately

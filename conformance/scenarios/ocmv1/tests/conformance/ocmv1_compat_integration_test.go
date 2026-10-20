@@ -1,4 +1,4 @@
-package integration
+package conformance
 
 import (
 	"crypto/sha256"
@@ -40,7 +40,7 @@ type ocmv1Descriptor struct {
 func Test_Integration_OCMv1Compatibility(t *testing.T) {
 	r := require.New(t)
 	if os.Getenv("OCM_V1_BIN") == "" || os.Getenv("OCM_V2_BIN") == "" {
-		t.Skip("run through task compat/ocmv1:test with both CLI binaries")
+		t.Skip("run through task conformance/ocmv1:run with both CLI binaries")
 	}
 	signedPath, accessPath, inputPath, publicKey := prepareOCMv1Scenario(t)
 

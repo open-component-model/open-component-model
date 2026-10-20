@@ -1,4 +1,4 @@
-package integration
+package conformance
 
 import (
 	"fmt"
@@ -6,7 +6,11 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
+	"time"
 
+	"github.com/go-git/go-git/v6"
+	"github.com/go-git/go-git/v6/config"
+	"github.com/go-git/go-git/v6/plumbing/object"
 	"github.com/stretchr/testify/require"
 )
 
@@ -83,9 +87,10 @@ resources:
 	accessPath = filepath.Join(workingDirectory, "v1-access-ctf")
 	runCompatibilityTool(t, v1Binary, "--config", v1Config, "add", "cv", "--skip-digest-generation", "--create", "--file", accessPath, accessConstructorPath)
 
-	repoRoot := getRepoRootBasedOnGit(t)
-	chartPath := filepath.Join(repoRoot, "bindings", "go", "helm", "testdata", "mychart")
-	gitPath, _ := newGitFixture(t)
+	chartPath := filepath.Join(workingDirectory, "chart")
+	r.NoError(os.MkdirAll(chartPath, 0o700))
+	r.NoError(os.WriteFile(filepath.Join(chartPath, "Chart.yaml"), []byte("apiVersion: v2\nname: sample\nversion: 1.0.0\n"), 0o600))
+	gitPath := newGitFixture(t)
 	inputConstructor := fmt.Sprintf(`name: %s
 version: %s
 provider:
@@ -117,4 +122,26 @@ func runCompatibilityTool(t *testing.T, binary string, arguments ...string) []by
 	output, err := command.CombinedOutput()
 	require.NoError(t, err, "%s %v: %s", binary, arguments, output)
 	return output
+}
+
+func newGitFixture(t *testing.T) string {
+	t.Helper()
+	r := require.New(t)
+	path := t.TempDir()
+	repo, err := git.PlainInit(path, false)
+	r.NoError(err)
+	cfg, err := repo.Config()
+	r.NoError(err)
+	cfg.Commit.GpgSign = config.OptBoolFalse
+	r.NoError(repo.SetConfig(cfg))
+	tree, err := repo.Worktree()
+	r.NoError(err)
+	r.NoError(os.WriteFile(filepath.Join(path, "README.md"), []byte("OCM v1 Git input fixture\n"), 0o600))
+	_, err = tree.Add("README.md")
+	r.NoError(err)
+	_, err = tree.Commit("Add fixture", &git.CommitOptions{Author: &object.Signature{
+		Name: "OCM fixture", Email: "fixture@example.invalid", When: time.Unix(1700000000, 0).UTC(),
+	}})
+	r.NoError(err)
+	return path
 }
