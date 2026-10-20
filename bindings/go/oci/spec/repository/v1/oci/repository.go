@@ -1,6 +1,7 @@
 package oci
 
 import (
+	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -57,6 +58,12 @@ type Repository struct {
 	//     BaseUrl="ghcr.io/open-component-model/ocm" + SubPath=""
 	//     → Auto-extracts to: BaseUrl="ghcr.io", SubPath="open-component-model/ocm"
 	SubPath string `json:"subPath,omitempty"`
+	// ComponentVersionLayout selects the storage layout used when adding component versions
+	// to this repository. Empty keeps the layout of an already stored version and defaults to
+	// "v2" (the access-bearing descriptor manifest as the tag target); "normalized" stores a
+	// stable, access-free descriptor manifest as the tag target that cosign can sign.
+	// +ocm:jsonschema-gen:enum=v2,normalized
+	ComponentVersionLayout layout.ComponentVersionLayout `json:"componentVersionLayout,omitempty"`
 }
 
 func (spec *Repository) String() string {

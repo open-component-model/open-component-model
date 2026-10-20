@@ -314,6 +314,41 @@ func Test_Integration_OCIRepository(t *testing.T) {
 		t.Run("oci image digest processing", func(t *testing.T) {
 			processResourceDigest(t, repo, "ghcr.io/test:v1.0.0", reference("new-test:v1.0.0"))
 		})
+
+		t.Run("normalized layout", func(t *testing.T) {
+			for name, policy := range map[string]oci.ReferrerTrackingPolicy{
+				"tags":              oci.ReferrerTrackingPolicyNone,
+				"index and subject": oci.ReferrerTrackingPolicyByIndexAndSubject,
+			} {
+				t.Run(name, func(t *testing.T) {
+					r := require.New(t)
+					component := "ocm.software/normalized-" + strings.ReplaceAll(name, " ", "-")
+					repo, err := oci.NewRepository(oci.WithResolver(resolver), oci.WithReferrerTrackingPolicy(policy),
+						oci.WithComponentVersionLayout(oci.LayoutNormalized), oci.WithTempDir(t.TempDir()))
+					r.NoError(err)
+
+					uploadDownloadBarebonesComponentVersion(t, repo, component, "v1.0.0")
+					uploadDownloadLocalResource(t, repo, component, "v1.0.0")
+					uploadDownloadLocalSource(t, repo, component, "v1.0.0")
+					uploadDownloadLocalResourceOCILayout(t, repo, component, "v1.0.0")
+
+					// Re-adding through a repository without a configured layout keeps the version
+					// normalized, and the access referrer tags are never listed as versions.
+					auto, err := oci.NewRepository(oci.WithResolver(resolver), oci.WithReferrerTrackingPolicy(policy), oci.WithTempDir(t.TempDir()))
+					r.NoError(err)
+					desc, err := auto.GetComponentVersion(ctx, component, "v1.0.0")
+					r.NoError(err)
+					r.NoError(auto.AddComponentVersion(ctx, desc))
+					stored, err := auto.GetComponentVersionLayout(ctx, component, "v1.0.0")
+					r.NoError(err)
+					r.Equal("normalized", stored)
+
+					versions, err := auto.ListComponentVersions(ctx, component)
+					r.NoError(err)
+					r.Equal([]string{"v1.0.0"}, versions)
+				})
+			}
+		})
 	})
 
 	t.Run("specification-based", func(t *testing.T) {
