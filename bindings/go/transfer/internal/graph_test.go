@@ -1134,7 +1134,7 @@ func TestBuildDescriptorSpec_NilListFieldsStayNil(t *testing.T) {
 		},
 	}
 
-	spec := buildDescriptorSpec(v2desc, "envID", map[int]string{0: "someAddTransformID"})
+	spec := buildDescriptorSpec(v2desc, "envID", map[int]string{0: "someAddTransformID"}, nil)
 
 	specMap, ok := spec.(map[string]any)
 	r.True(ok)

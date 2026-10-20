@@ -356,16 +356,15 @@ func (repo *Repository) processOCIImageLayerDigest(ctx context.Context, res *des
 		return nil, fmt.Errorf("layer %q in %q has size %d, but the access declares %d", typed.Digest, typed.Reference, layer.Size, typed.Size)
 	}
 
-	if !internaldigest.IsComplete(res.Digest) {
-		if res.Digest == nil {
-			res.Digest = &descriptor.Digest{}
-		}
-		if err := internaldigest.Complete(res.Digest, typed.Digest, internaldigest.GenericBlobDigestV1); err != nil {
-			return nil, fmt.Errorf("failed to complete digest of resource %q: %w", res.ToIdentity(), err)
-		}
-	} else if err := internaldigest.Verify(res.Digest, typed.Digest, internaldigest.GenericBlobDigestV1); err != nil {
+	computed, err := ocidigest.FromOCI(typed.Digest)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert digest of resource %q: %w", res.ToIdentity(), err)
+	}
+	result, err := ocmdigest.Check(res.Digest, computed, ocidigest.BlobRule, ocmdigest.Strict)
+	if err != nil {
 		return nil, fmt.Errorf("failed to verify digest of resource %q: %w", res.ToIdentity(), err)
 	}
+	res.Digest = result.Digest
 
 	res.Access = typed
 

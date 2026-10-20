@@ -1,4 +1,4 @@
-# ADR 0032: Shared Resource Digest Rules
+# ADR 0033: Shared Resource Digest Rules
 
 * **Status**: proposed
 * **Deciders**: Maintainers
