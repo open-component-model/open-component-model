@@ -52,7 +52,7 @@ FROM ghcr.io/open-component-model/cosign:v3.1.4-ocm.2@sha256:abc86b4330048abfaa2
 
 # Stage filesystem additions for the scratch final image. Only files are copied,
 # so the stage runs on the build platform.
-FROM --platform=${BUILDPLATFORM} ghcr.io/gardenlinux/gardenlinux/fips:1877.25@sha256:74ae1f81d0723434024f591d8c2872852201b99b9f18c0fbe10221b16e60e01d AS rootfs
+FROM --platform=${BUILDPLATFORM} ghcr.io/gardenlinux/gardenlinux/fips:1877.25@sha256:74ae1f81d0723434024f591d8c2872852201b99b9f18c0fbe10221b16e60e01d AS certs
 RUN set -eu; \
     # The manager and cosign write temporary files under os.TempDir(); scratch
     # has no /tmp. Stage a world-writable one so the nonroot user can create them.
@@ -66,7 +66,7 @@ FROM scratch
 # scratch defines no PATH; the sigstore signing handler looks up cosign on PATH.
 ENV PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 WORKDIR /
-COPY --from=rootfs /rootfs/ /
+COPY --from=certs /rootfs/ /
 COPY --from=builder /workspace/manager .
 # No GODEBUG needed: GOFIPS140 already makes fips140=on the default of both the
 # manager and cosign (DefaultGODEBUG in their build info).
