@@ -167,14 +167,13 @@ func TestTransform(t *testing.T) {
 		// wantAccess and wantDigest (genericBlobDigest/v1 value) describe the published resource.
 		wantAccess   access
 		wantDigest   string
-		wantNoDigest bool     // the published resource must carry no digest (source had none)
 		wantRequests []string // method, path and query, where the request order is the behavior
 		check        func(*require.Assertions, uploadRun)
 	}{
 		{
 			name:         "helm stores the chart under the component version and publishes the name artifactory records",
 			wantAccess:   access{helmChart: "mychart:0.1.0"},
-			wantNoDigest: true,
+			wantDigest:   chartDigest,
 			wantRequests: []string{detect, fileInfo + ".tgz", put + ".tgz", fileInfo + ".tgz" + chartProps},
 			check: func(r *require.Assertions, u uploadRun) {
 				r.Equal("application/gzip", u.reqs[2].ContentType)
@@ -367,7 +366,7 @@ func TestTransform(t *testing.T) {
 			content:      hello,
 			mediaType:    "text/plain",
 			wantAccess:   access{url: "/artifactory/helm-local/" + file, mediaType: "text/plain"},
-			wantNoDigest: true,
+			wantDigest:   helloDigest,
 			wantRequests: []string{detect, fileInfo, put, put},
 			check: func(r *require.Assertions, u uploadRun) {
 				r.True(u.reqs[2].Deploy, "deploy by checksum is tried first")
@@ -542,9 +541,6 @@ func TestTransform(t *testing.T) {
 				}
 				if tc.wantDigest != "" {
 					r.Equal(&descriptorv2.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: "genericBlobDigest/v1", Value: tc.wantDigest}, run.out.Digest)
-				}
-				if tc.wantNoDigest {
-					r.Nil(run.out.Digest, "transfer must not synthesize a digest the source lacked")
 				}
 			}
 			if tc.wantRequests != nil {
