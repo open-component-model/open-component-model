@@ -110,6 +110,8 @@ jobs:
           EOF
 
       # The CLI image ENTRYPOINT is `/ocm`; args after the image name go straight to the CLI.
+      # The image runs as a non-root user; run as the runner user so the mounted
+      # docker config (mode 0600) is readable.
       - name: Publish component-versions
         env:
           VERSION: ${{ inputs.version }}
@@ -119,6 +121,7 @@ jobs:
         run: |
           set -euo pipefail
           docker run --rm \
+            --user "$(id -u):$(id -g)" \
             --tmpfs /tmp:rw,exec \
             -e TMPDIR=/tmp \
             -v "${HOME}/.docker/config.json:/.docker/config.json:ro" \
@@ -149,6 +152,7 @@ jobs:
           for ref in "$OCM_COMPONENT_REF" "$CLI_COMPONENT_REF" "$CONTROLLER_COMPONENT_REF"; do
             echo "::group::Signing ${ref}"
             docker run --rm \
+              --user "$(id -u):$(id -g)" \
               --tmpfs /tmp:rw,exec \
               -e HOME=/tmp \
               -e TMPDIR=/tmp \
