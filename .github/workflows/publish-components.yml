@@ -31,6 +31,11 @@ on:
         description: "Digest of the Helm chart already pushed to ghcr.io/<owner>/kubernetes/controller/chart."
         required: true
         type: string
+      conflict_policy:
+        description: "Policy for an already existing component version, as the CLI's --component-version-conflict-policy takes it: abort-and-fail (default), replace or skip. The final release republishes the RC's components under the release version, so it passes replace."
+        required: false
+        default: abort-and-fail
+        type: string
 
 permissions:
   contents: read
@@ -79,6 +84,20 @@ jobs:
             echo "CONTROLLER_COMPONENT_REF=$REGISTRY/$OWNER//ocm.software/kubernetes/controller:${VERSION}"
           } >> "$GITHUB_ENV"
 
+      # SBOMs and the OpenVEX document become local resources of the component
+      # versions (signed with them, carried along by `ocm transfer`).
+      - name: Download SBOMs and OpenVEX from the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          ASSETS_DIR="${GITHUB_WORKSPACE}/tmp/release-assets"
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --pattern "ocm-*.spdx.json" --pattern "ocm-*.openvex.json" --dir "$ASSETS_DIR"
+          ls -l "$ASSETS_DIR"
+          echo "ASSETS_DIR=$ASSETS_DIR" >> "$GITHUB_ENV"
+
       - name: Log in to GHCR
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
@@ -113,6 +132,7 @@ jobs:
           VERSION: ${{ inputs.version }}
           WORKSPACE: ${{ github.workspace }}
           CONSTRUCTOR: ${{ github.workspace }}/.github/components/ocm-release/component-constructor.yaml
+          CONFLICT_POLICY: ${{ inputs.conflict_policy }}
         run: |
           set -euo pipefail
           docker run --rm \
@@ -125,6 +145,7 @@ jobs:
             -v "${WORKSPACE}:${WORKSPACE}:ro" \
             -w "${WORKSPACE}" \
             -e VERSION \
+            -e ASSETS_DIR \
             -e CLI_DOWNLOAD_URL \
             -e CLI_IMAGE_REF \
             -e CLI_SLIM_IMAGE_REF \
@@ -134,7 +155,9 @@ jobs:
               add component-version \
               --config "/.ocmconfig" \
               --repository "$REPO_ROOT" \
-              --constructor "$CONSTRUCTOR"
+              --constructor "$CONSTRUCTOR" \
+              --working-directory "${WORKSPACE}" \
+              --component-version-conflict-policy "$CONFLICT_POLICY"
 
       # The full CLI image ships a FIPS build of cosign on PATH, so no cosign is
       # installed on the runner. Forward the GHA OIDC vars explicitly.
