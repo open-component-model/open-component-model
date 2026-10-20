@@ -8,10 +8,10 @@ output: prefixed
 includes:
   tools:
     taskfile: ./tools.Taskfile.yml
-  conformance/ocmv1:
+  conformance/compatibility:
     optional: true
-    taskfile: ./conformance/scenarios/ocmv1/Taskfile.yml
-    dir: ./conformance/scenarios/ocmv1
+    taskfile: ./conformance/scenarios/compatibility/Taskfile.yml
+    dir: ./conformance/scenarios/compatibility
   # bindings/go is a single Go module. Unit tests are run via `bindings/go:test`,
   # integration tests via `bindings/go:test/integration`.
   bindings/go:

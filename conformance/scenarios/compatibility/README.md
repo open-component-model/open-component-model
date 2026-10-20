@@ -1,8 +1,8 @@
-# OCM conformance scenario: OCM v1 compatibility
+# OCM conformance scenario: Compatibility
 
-Run `task conformance/ocmv1:run` from the repository root. The task downloads the
+Run `task conformance/compatibility:run` from the repository root. The task downloads the
 checksum-verified OCM v1 CLI release pinned in
-`conformance/scenarios/ocmv1/.env`, builds the current CLI, then runs the
+`conformance/scenarios/compatibility/.env`, builds the current CLI, then runs the
 cross-version conformance test. You can also run `task run` from this directory.
 The tests in `tests/conformance/` reuse the dependencies pinned by
 `bindings/go/go.mod`; no separate Go module is needed.
@@ -10,7 +10,7 @@ Prerequisites: Go, Task, Git, OpenSSL, curl, and tar.
 
 CI runs this scenario alongside the sovereign scenario in the conformance
 workflow after the shared builds. It downloads that build's artifact and runs
-`task conformance/ocmv1:test OCM_V2_BIN=<path>` without rebuilding the CLI.
+`task conformance/compatibility:test OCM_V2_BIN=<path>` without rebuilding the CLI.
 
 The test invokes OCM v1 to create three component versions in temporary CTFs.
 The signed version contains a local text resource; OCM v2 reads it, verifies

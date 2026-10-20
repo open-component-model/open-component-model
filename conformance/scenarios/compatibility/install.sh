@@ -3,7 +3,7 @@ set -euo pipefail
 
 version="$1"
 root="$(git rev-parse --show-toplevel)"
-target="$root/conformance/scenarios/ocmv1/tmp/ocmv1/$version"
+target="$root/conformance/scenarios/compatibility/tmp/ocmv1/$version"
 
 if [ -x "$target/ocm" ]; then
   exit 0

@@ -216,8 +216,8 @@ jobs:
         working-directory: conformance/scenarios/sovereign
         run: task clean
 
-  ocmv1:
-    name: OCM v1 Scenario (arm64)
+  compatibility:
+    name: Compatibility Scenario (arm64)
     if: ${{ inputs.cli_artifact != '' }}
     runs-on: ubuntu-26.04-arm
     timeout-minutes: 20
@@ -247,6 +247,6 @@ jobs:
       - name: Make OCM v2 CLI executable
         run: chmod +x bindings/go/cli/tmp/bin/ocm-linux-arm64
       - name: Test OCM v1 to v2 compatibility
-        run: task conformance/ocmv1:test OCM_V2_BIN="${{ github.workspace }}/bindings/go/cli/tmp/bin/ocm-linux-arm64"
-      - name: Lint OCM v1 scenario
-        run: task conformance/ocmv1:lint
+        run: task conformance/compatibility:test OCM_V2_BIN="${{ github.workspace }}/bindings/go/cli/tmp/bin/ocm-linux-arm64"
+      - name: Lint compatibility scenario
+        run: task conformance/compatibility:lint
