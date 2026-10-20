@@ -39,6 +39,8 @@ on:
       - '.github/benchmarks/**'
       - '.github/trivy-checks/**'
       - '.github/scripts/chart-benchmarks.js'
+      - '.github/scripts/bsi-report.js'
+      - '.github/scripts/image-metadata.js'
   workflow_call:
     inputs:
       ref:
