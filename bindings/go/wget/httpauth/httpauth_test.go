@@ -1,6 +1,7 @@
 package httpauth_test
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -8,7 +9,10 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"errors"
+	"io"
 	"math/big"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -85,6 +89,73 @@ func TestApply_MTLSOverridesClientCertificateSelector(t *testing.T) {
 	r.NoError(resp.Body.Close())
 	r.Equal(http.StatusOK, resp.StatusCode)
 	r.Equal(1, peerCerts, "the wget client certificate must be presented")
+}
+
+// TestApply_MTLSDoesNotResumeClientSession asserts that the wget credential is
+// presented even if the client caches TLS sessions, since resuming a session
+// keeps the identity of the certificate it was established with.
+func TestApply_MTLSDoesNotResumeClientSession(t *testing.T) {
+	r := require.New(t)
+
+	var peerCert []byte
+	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(_ http.ResponseWriter, req *http.Request) {
+		peerCert = req.TLS.PeerCertificates[0].Raw
+	}))
+	srv.TLS = &tls.Config{MinVersion: tls.VersionTLS12, ClientAuth: tls.RequireAnyClientCert}
+	srv.StartTLS()
+	t.Cleanup(srv.Close)
+
+	previous := mtlsCredentials(t, srv.Certificate())
+	previousCert, err := tls.X509KeyPair([]byte(previous.Certificate), []byte(previous.PrivateKey))
+	r.NoError(err)
+	roots := x509.NewCertPool()
+	roots.AddCert(srv.Certificate())
+	client := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{
+		MinVersion:         tls.VersionTLS12,
+		RootCAs:            roots,
+		Certificates:       []tls.Certificate{previousCert},
+		ClientSessionCache: tls.NewLRUClientSessionCache(1),
+	}}}
+	get := func(c *http.Client, req *http.Request) {
+		resp, err := c.Do(req)
+		r.NoError(err)
+		// Reading the body lets the client process the server's session ticket.
+		_, err = io.Copy(io.Discard, resp.Body)
+		r.NoError(err)
+		r.NoError(resp.Body.Close())
+		r.Equal(http.StatusOK, resp.StatusCode)
+	}
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL, nil)
+	r.NoError(err)
+	get(client, req)
+	r.Equal(previousCert.Certificate[0], peerCert, "the first request caches a session for the previous certificate")
+
+	creds := mtlsCredentials(t, srv.Certificate())
+	req, err = http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL, nil)
+	r.NoError(err)
+	r.NoError(httpauth.Apply(t.Context(), req, &client, creds))
+	get(client, req)
+	block, _ := pem.Decode([]byte(creds.Certificate))
+	r.Equal(block.Bytes, peerCert, "the wget client certificate must be presented")
+}
+
+// TestApply_MTLSRejectsCustomTLSDialer asserts that Apply fails instead of
+// silently not presenting the credential when a custom TLS dialer would bypass
+// the TLS configuration.
+func TestApply_MTLSRejectsCustomTLSDialer(t *testing.T) {
+	r := require.New(t)
+	client := &http.Client{Transport: &http.Transport{
+		DialTLSContext: func(context.Context, string, string) (net.Conn, error) {
+			return nil, errors.New("unused")
+		},
+	}}
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "https://example.com", nil)
+	r.NoError(err)
+	creds := mtlsCredentials(t, &x509.Certificate{})
+	creds.CertificateAuthority = ""
+	err = httpauth.Apply(t.Context(), req, &client, creds)
+	r.ErrorContains(err, "custom TLS dialer")
 }
 
 // mtlsCredentials returns wget credentials with a fresh self-signed client
