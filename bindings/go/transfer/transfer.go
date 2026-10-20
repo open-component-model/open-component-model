@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 
+	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/transfer/internal"
@@ -70,6 +71,7 @@ func collectTransferRoots(ctx context.Context, mappings []Mapping) (map[string]i
 	type rootData struct {
 		targets  []runtime.Typed
 		resolver resolvers.ComponentVersionRepositoryResolver
+		digest   *descriptor.Digest
 	}
 
 	byKey := make(map[string]*rootData)
@@ -101,6 +103,12 @@ func collectTransferRoots(ctx context.Context, mappings []Mapping) (map[string]i
 			} else if rd.resolver != m.Resolver {
 				return nil, fmt.Errorf("conflicting resolvers for component %s: each component must use the same resolver across all mappings", key)
 			}
+			if id.Digest != nil {
+				if rd.digest != nil && *rd.digest != *id.Digest {
+					return nil, fmt.Errorf("conflicting digests for component %s: each component must be pinned to the same digest across all mappings", key)
+				}
+				rd.digest = id.Digest
+			}
 			rd.targets = internal.AppendUniqueRepositories(rd.targets, []runtime.Typed{m.Target})
 		}
 	}
@@ -111,6 +119,7 @@ func collectTransferRoots(ctx context.Context, mappings []Mapping) (map[string]i
 			RootComponentKey: key,
 			Targets:          rd.targets,
 			SourceResolver:   rd.resolver,
+			ExpectedDigest:   rd.digest,
 		}
 	}
 	return roots, nil
