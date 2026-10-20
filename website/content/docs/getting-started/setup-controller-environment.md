@@ -107,7 +107,7 @@ The release name `ocm-k8s-toolkit` used above gives the controller's resources p
 {{</callout>}}
 
 {{<callout context="tip" title="Hardened installations" icon="outline/shield-check">}}
-The chart ships an opt-in NetworkPolicy for the controller. Add `--set manager.networkPolicy.enabled=true` to admit only the health-probe (and, if enabled, metrics) port and allow egress to DNS, HTTPS and the Kubernetes API. It needs a CNI that enforces NetworkPolicy. For how the controller relates to FIPS 140-3 and other standards, see [Standards & Regulations]({{< relref "docs/reference/standards-and-regulations/_index.md" >}}).
+The chart ships an opt-in NetworkPolicy for the controller. Add `--set manager.networkPolicy.enabled=true` to admit only the health-probe (and, if enabled, metrics) port and allow egress to DNS, HTTPS and the Kubernetes API. It needs a CNI that enforces NetworkPolicy. For how the controller relates to FIPS 140-3, the DISA STIG, BSI IT-Grundschutz and other standards, see [Standards & Regulations]({{< relref "docs/reference/standards-and-regulations/_index.md" >}}).
 {{</callout>}}
 
 <details>

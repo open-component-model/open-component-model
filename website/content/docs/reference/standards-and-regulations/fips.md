@@ -133,6 +133,10 @@ Module, except for the GPG operations listed under [GPG](#gpg): in the default
 mode they run outside the module and are logged at debug level, and in strict
 mode they are rejected.
 
+For how the images and the controller chart are hardened, and how they are
+scanned against the DISA GPOS SRG, see
+[DISA STIG]({{< relref "docs/reference/standards-and-regulations/disa-stig.md" >}}).
+
 ## Runtime Modes
 
 You control the runtime mode with the `GODEBUG` environment variable.
