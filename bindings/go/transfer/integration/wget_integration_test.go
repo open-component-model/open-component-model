@@ -160,10 +160,10 @@ func Test_Integration_TransferWgetResource_LocalBlobUploader(t *testing.T) {
 	r.Nil(typedLocalBlob.GlobalAccess, "localBlob should not have globalAccess after transfer")
 	r.Equal("text/plain", typedLocalBlob.MediaType, "localBlob should preserve the wget media type")
 
-	// The source resource carried no digest, so transfer must preserve that absence rather
-	// than inventing one over the downloaded content (which would break a signature that
-	// excluded this resource).
-	r.Nil(gotDesc.Component.Resources[0].Digest, "transfer must not inject a digest the source resource lacked")
+	// The stored resource must be fully described: a digest over the downloaded content.
+	r.NotNil(gotDesc.Component.Resources[0].Digest, "transferred resource should carry a digest")
+	r.Equal(digestOf(resourceData).Encoded(), gotDesc.Component.Resources[0].Digest.Value,
+		"resource digest should be the sha256 of the served content")
 
 	// 7. Verify the blob is present and its content matches what the HTTP server served.
 	resourceIdentity := gotDesc.Component.Resources[0].ToIdentity()
