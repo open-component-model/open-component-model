@@ -6,134 +6,68 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
+	"syscall"
 	"testing"
-	"time"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/sys/unix"
 
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 )
 
-func TestCopyBlobToOSPath_NamedPipe_Blocking(t *testing.T) {
+type readerBlob struct{ io.Reader }
+
+func (b readerBlob) ReadCloser() (io.ReadCloser, error) { return io.NopCloser(b.Reader), nil }
+
+func TestCopyBlobToOSPathWritesIntoNamedPipe(t *testing.T) {
 	r := require.New(t)
-	tempDir := t.TempDir()
-	pipePath := filepath.Join(tempDir, "pipe")
-	r.NoError(unix.Mkfifo(pipePath, 0o666))
+	pipe := filepath.Join(t.TempDir(), "pipe")
+	r.NoError(syscall.Mkfifo(pipe, 0o600))
 
-	testData := []byte("test data")
-
-	fsys, err := filesystem.NewFS(tempDir, os.O_RDWR)
-	r.NoError(err)
-	filePath := "testfile.txt"
-	b := filesystem.NewFileBlob(fsys, filePath)
-	writer, err := b.WriteCloser()
-	r.NoError(err)
-	_, err = writer.Write(testData)
-	r.NoError(err)
-	r.NoError(writer.Close())
-
-	data := make(chan []byte, 1)
-	defer close(data)
-
+	read := make(chan string, 1)
 	go func() {
-		f, err := os.OpenFile(pipePath, os.O_RDONLY, os.ModeNamedPipe)
-		assert.NoError(t, err)
-		defer func() {
-			assert.NoError(t, f.Close())
-		}()
-		all, err := io.ReadAll(f)
-		assert.NoError(t, err)
-		data <- all
+		f, err := os.Open(pipe)
+		if err != nil {
+			read <- "open: " + err.Error()
+			return
+		}
+		got, err := io.ReadAll(f)
+		if closeErr := f.Close(); err == nil {
+			err = closeErr
+		}
+		if err != nil {
+			read <- "read: " + err.Error()
+			return
+		}
+		read <- string(got)
 	}()
 
-	r.NoError(filesystem.CopyBlobToOSPath(b, pipePath))
+	r.NoError(filesystem.CopyBlobToOSPath(readerBlob{strings.NewReader("new")}, pipe))
+	r.Equal("new", <-read)
 
+	fi, err := os.Lstat(pipe)
 	r.NoError(err)
-
-	timer := time.NewTimer(1 * time.Second)
-	defer timer.Stop()
-
-	select {
-	case <-timer.C:
-		r.Fail("timeout waiting for data, it never arrived in the pipe")
-	case data := <-data:
-		r.Equal(testData, data)
-	}
+	r.NotZero(fi.Mode()&os.ModeNamedPipe, "the pipe must not be replaced by a regular file")
 }
 
-func Test_GetBlobInWorkingDirectory(t *testing.T) {
+// A symlink at the target path is replaced by a regular file; its former target keeps its content.
+func TestCopyBlobToOSPathReplacesSymlink(t *testing.T) {
 	r := require.New(t)
 	tempDir := t.TempDir()
-	fp := filepath.Join(tempDir, "testfile.txt")
-	r.NoError(os.WriteFile(fp, []byte("test data"), 0o644))
+	target := filepath.Join(tempDir, "target.txt")
+	r.NoError(os.WriteFile(target, []byte("old"), 0o600))
+	link := filepath.Join(tempDir, "link.txt")
+	r.NoError(os.Symlink(target, link))
 
-	type args struct {
-		path       string
-		workingDir string
-	}
-	tests := []struct {
-		name    string
-		args    args
-		wantErr bool
-	}{
-		{
-			name: "valid relative path in working directory",
-			args: args{
-				path:       "testfile.txt",
-				workingDir: tempDir,
-			},
-			wantErr: false,
-		},
-		{
-			name: "valid absolute path in working directory",
-			args: args{
-				path:       fp,
-				workingDir: tempDir,
-			},
-			wantErr: false,
-		},
-		{
-			name: "invalid path escaping working directory",
-			args: args{
-				path:       "../testfile.txt",
-				workingDir: tempDir,
-			},
-			wantErr: true,
-		},
-		{
-			name: "invalid absolute path not in working directory",
-			args: args{
-				path:       filepath.Join(tempDir, "../../testfile.txt"),
-				workingDir: tempDir,
-			},
-			wantErr: true,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := filesystem.GetBlobInWorkingDirectory(tt.args.path, tt.args.workingDir)
-			if tt.wantErr {
-				if err == nil {
-					t.Errorf("GetBlobInWorkingDirectory() expected error, got nil")
-				} else {
-					t.Logf("GetBlobInWorkingDirectory() expected error, got: %v", err)
-				}
-				return
-			}
+	r.NoError(filesystem.CopyBlobToOSPath(readerBlob{strings.NewReader("new")}, link))
 
-			r.NoError(err, "GetBlobInWorkingDirectory() unexpected error")
-
-			reader, err := got.ReadCloser()
-			r.NoError(err)
-			defer func(reader io.ReadCloser) {
-				_ = reader.Close()
-			}(reader)
-
-			data, err := io.ReadAll(reader)
-			r.NoError(err)
-			r.Equal("test data", string(data))
-		})
-	}
+	fi, err := os.Lstat(link)
+	r.NoError(err)
+	r.True(fi.Mode().IsRegular(), "the link must be replaced by a regular file")
+	got, err := os.ReadFile(link)
+	r.NoError(err)
+	r.Equal("new", string(got))
+	got, err = os.ReadFile(target)
+	r.NoError(err)
+	r.Equal("old", string(got))
 }

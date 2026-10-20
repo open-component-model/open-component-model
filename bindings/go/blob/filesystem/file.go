@@ -28,7 +28,8 @@ var ioBufPool = sync.Pool{
 // CopyBlobToOSPath copies the content of a blob.ReadOnlyBlob to a local path on the operating system's filesystem.
 // A regular file is written to a temporary file in the same directory and renamed over path only after the
 // content was read completely without error, so a failed copy (for example a digest mismatch reported by a
-// verifying blob at EOF) leaves path untouched and an existing file is replaced, not appended to.
+// verifying blob at EOF) leaves path untouched and an existing file is replaced, not appended to. A replaced
+// file keeps its permission bits; a new file is created with 0600.
 // A path that exists and is not a regular file, such as a named pipe or a device, is written to directly;
 // content already written to it cannot be retracted on error.
 // It uses a buffered I/O operation to improve performance, leveraing the internal ioBufPool.
@@ -38,7 +39,8 @@ func CopyBlobToOSPath(blob blob.ReadOnlyBlob, path string) (err error) {
 		return fmt.Errorf("failed to get resource data: %w", err)
 	}
 
-	if fi, statErr := os.Stat(path); statErr == nil && !fi.Mode().IsRegular() {
+	fi, statErr := os.Stat(path)
+	if statErr == nil && !fi.Mode().IsRegular() {
 		defer func() {
 			err = errors.Join(err, data.Close())
 		}()
@@ -55,6 +57,12 @@ func CopyBlobToOSPath(blob blob.ReadOnlyBlob, path string) (err error) {
 	tmp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".*.tmp")
 	if err != nil {
 		return errors.Join(fmt.Errorf("failed to create temporary file for %s: %w", path, err), data.Close())
+	}
+	if statErr == nil {
+		if err := tmp.Chmod(fi.Mode().Perm()); err != nil {
+			return errors.Join(fmt.Errorf("failed to set permissions of %s: %w", path, err),
+				data.Close(), tmp.Close(), os.Remove(tmp.Name()))
+		}
 	}
 	// Close data before the rename: verifying readers may report a mismatch only on Close.
 	if err := errors.Join(copyBuffered(tmp, data), data.Close(), tmp.Close()); err != nil {
