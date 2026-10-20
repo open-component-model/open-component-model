@@ -43,6 +43,7 @@ modes, status and scheduling semantics, see
 
 {{< steps >}}
 {{< step >}}
+
 ### Create and push the component version
 
 The `Discovery` filter matches components with label `tier=platform`. Create a

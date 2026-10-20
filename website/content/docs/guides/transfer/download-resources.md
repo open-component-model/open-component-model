@@ -169,6 +169,7 @@ drwxr-xr-x  3 D032990  96 März  4 13:38 blobs
 jq . helmchart-oci/index.json
 ```
 
+```json
 {
   "schemaVersion": 2,
   "manifests": [

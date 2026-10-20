@@ -294,7 +294,6 @@ rules:
 EOF
 ```
 
-
 {{< /tab >}}
 {{< tab "Crossplane" >}}
 
