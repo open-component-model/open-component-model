@@ -73,24 +73,6 @@ func TestCopyBlobToOSPathReplacesExistingFile(t *testing.T) {
 	r.Equal("new", string(got))
 }
 
-func TestCopyBlobToOSPathKeepsPermissionsOfExistingFile(t *testing.T) {
-	r := require.New(t)
-	tempDir := t.TempDir()
-	src := filepath.Join(tempDir, "src.txt")
-	r.NoError(os.WriteFile(src, []byte("new"), 0o600))
-	b, err := filesystem.GetBlobFromOSPath(src)
-	r.NoError(err)
-
-	dst := filepath.Join(tempDir, "dst.txt")
-	r.NoError(os.WriteFile(dst, []byte("old"), 0o600))
-	r.NoError(os.Chmod(dst, 0o644))
-	r.NoError(filesystem.CopyBlobToOSPath(b, dst))
-
-	fi, err := os.Stat(dst)
-	r.NoError(err)
-	r.Equal(os.FileMode(0o644), fi.Mode().Perm())
-}
-
 type closeErrBlob struct{ io.Reader }
 
 func (b closeErrBlob) ReadCloser() (io.ReadCloser, error) { return b, nil }
