@@ -74,6 +74,32 @@ func processOCIArtifactStreaming(resource descriptorv2.Resource, id string, tgd 
 	resourceID := identityToTransformationID(resourceIdentity)
 	transferID := fmt.Sprintf("%sTransfer%s", id, resourceID)
 
+	unstructured, err := runtime.UnstructuredFromMixedData(map[string]any{
+		"resource":       resource,
+		"targetResource": ociArtifactTargetResource(resource, imageReference),
+	})
+	if err != nil {
+		return fmt.Errorf("cannot create unstructured spec for TransferOCIArtifact transformation: %w", err)
+	}
+
+	transferTransform := transformv1alpha1.GenericTransformation{
+		TransformationMeta: meta.TransformationMeta{
+			Type:  ociv1alpha1.TransferOCIArtifactV1alpha1,
+			ID:    transferID,
+			Label: label,
+		},
+		Spec: unstructured,
+	}
+	tgd.Transformations = append(tgd.Transformations, transferTransform)
+
+	resourceTransformIDs[i] = transferID
+
+	return nil
+}
+
+// ociArtifactTargetResource returns resource with an OCI image access to imageReference,
+// the target resource of a transfer that uploads it as a separate OCI artifact.
+func ociArtifactTargetResource(resource descriptorv2.Resource, imageReference string) map[string]any {
 	targetResource := map[string]any{
 		"name":     resource.Name,
 		"version":  resource.Version,
@@ -96,28 +122,7 @@ func processOCIArtifactStreaming(resource descriptorv2.Resource, id string, tgd 
 	if len(resource.SourceRefs) > 0 {
 		targetResource["srcRefs"] = resource.SourceRefs
 	}
-
-	unstructured, err := runtime.UnstructuredFromMixedData(map[string]any{
-		"resource":       resource,
-		"targetResource": targetResource,
-	})
-	if err != nil {
-		return fmt.Errorf("cannot create unstructured spec for TransferOCIArtifact transformation: %w", err)
-	}
-
-	transferTransform := transformv1alpha1.GenericTransformation{
-		TransformationMeta: meta.TransformationMeta{
-			Type:  ociv1alpha1.TransferOCIArtifactV1alpha1,
-			ID:    transferID,
-			Label: label,
-		},
-		Spec: unstructured,
-	}
-	tgd.Transformations = append(tgd.Transformations, transferTransform)
-
-	resourceTransformIDs[i] = transferID
-
-	return nil
+	return targetResource
 }
 
 // ociAddArtifact creates an AddOCIArtifact transformation that pushes the artifact

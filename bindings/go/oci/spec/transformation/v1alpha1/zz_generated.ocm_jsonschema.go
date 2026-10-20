@@ -63,6 +63,9 @@ var schemaGetOCIArtifactOutput []byte
 //go:embed schemas/GetOCIArtifactSpec.schema.json
 var schemaGetOCIArtifactSpec []byte
 
+//go:embed schemas/LocalBlobSource.schema.json
+var schemaLocalBlobSource []byte
+
 //go:embed schemas/OCIAddComponentVersion.schema.json
 var schemaOCIAddComponentVersion []byte
 
@@ -98,6 +101,24 @@ var schemaOCIGetLocalResourceOutput []byte
 
 //go:embed schemas/OCIGetLocalResourceSpec.schema.json
 var schemaOCIGetLocalResourceSpec []byte
+
+//go:embed schemas/TransferLocalBlob.schema.json
+var schemaTransferLocalBlob []byte
+
+//go:embed schemas/TransferLocalBlobOutput.schema.json
+var schemaTransferLocalBlobOutput []byte
+
+//go:embed schemas/TransferLocalBlobSpec.schema.json
+var schemaTransferLocalBlobSpec []byte
+
+//go:embed schemas/TransferLocalBlobToOCIArtifact.schema.json
+var schemaTransferLocalBlobToOCIArtifact []byte
+
+//go:embed schemas/TransferLocalBlobToOCIArtifactOutput.schema.json
+var schemaTransferLocalBlobToOCIArtifactOutput []byte
+
+//go:embed schemas/TransferLocalBlobToOCIArtifactSpec.schema.json
+var schemaTransferLocalBlobToOCIArtifactSpec []byte
 
 //go:embed schemas/TransferOCIArtifact.schema.json
 var schemaTransferOCIArtifact []byte
@@ -198,6 +219,11 @@ func (GetOCIArtifactSpec) JSONSchema() []byte {
 	return schemaGetOCIArtifactSpec
 }
 
+// JSONSchema returns the JSON Schema for LocalBlobSource.
+func (LocalBlobSource) JSONSchema() []byte {
+	return schemaLocalBlobSource
+}
+
 // JSONSchema returns the JSON Schema for OCIAddComponentVersion.
 func (OCIAddComponentVersion) JSONSchema() []byte {
 	return schemaOCIAddComponentVersion
@@ -256,6 +282,36 @@ func (OCIGetLocalResourceOutput) JSONSchema() []byte {
 // JSONSchema returns the JSON Schema for OCIGetLocalResourceSpec.
 func (OCIGetLocalResourceSpec) JSONSchema() []byte {
 	return schemaOCIGetLocalResourceSpec
+}
+
+// JSONSchema returns the JSON Schema for TransferLocalBlob.
+func (TransferLocalBlob) JSONSchema() []byte {
+	return schemaTransferLocalBlob
+}
+
+// JSONSchema returns the JSON Schema for TransferLocalBlobOutput.
+func (TransferLocalBlobOutput) JSONSchema() []byte {
+	return schemaTransferLocalBlobOutput
+}
+
+// JSONSchema returns the JSON Schema for TransferLocalBlobSpec.
+func (TransferLocalBlobSpec) JSONSchema() []byte {
+	return schemaTransferLocalBlobSpec
+}
+
+// JSONSchema returns the JSON Schema for TransferLocalBlobToOCIArtifact.
+func (TransferLocalBlobToOCIArtifact) JSONSchema() []byte {
+	return schemaTransferLocalBlobToOCIArtifact
+}
+
+// JSONSchema returns the JSON Schema for TransferLocalBlobToOCIArtifactOutput.
+func (TransferLocalBlobToOCIArtifactOutput) JSONSchema() []byte {
+	return schemaTransferLocalBlobToOCIArtifactOutput
+}
+
+// JSONSchema returns the JSON Schema for TransferLocalBlobToOCIArtifactSpec.
+func (TransferLocalBlobToOCIArtifactSpec) JSONSchema() []byte {
+	return schemaTransferLocalBlobToOCIArtifactSpec
 }
 
 // JSONSchema returns the JSON Schema for TransferOCIArtifact.

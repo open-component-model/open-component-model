@@ -3,6 +3,7 @@ package internal
 import (
 	"context"
 	"crypto"
+	"fmt"
 	"log/slog"
 	"strings"
 	"sync"
@@ -219,12 +220,12 @@ func TestBuildGraphDefinition_LocalBlobResource(t *testing.T) {
 	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{}, nil)
 	require.NoError(t, err)
 
-	assert.Len(t, tgd.Transformations, 4)
-	assert.Equal(t, ociv1alpha1.OCIGetLocalResourceV1alpha1, tgd.Transformations[0].Type)
-	assert.Equal(t, ociv1alpha1.OCIAddLocalResourceV1alpha1, tgd.Transformations[1].Type)
-	assert.Contains(t, tgd.Transformations[2].ID, "Upload")
-	assert.Equal(t, FileCleanupVersionedType, tgd.Transformations[3].Type)
-	assert.Equal(t, "fileBufferCleanup", tgd.Transformations[3].ID)
+	// A local blob is streamed by one fused node: no file buffer and no cleanup node.
+	require.Len(t, tgd.Transformations, 2)
+	assert.Equal(t, ociv1alpha1.TransferLocalBlobV1alpha1, tgd.Transformations[0].Type)
+	assert.Contains(t, tgd.Transformations[1].ID, "Upload")
+	assert.Equal(t, fmt.Sprintf("${%s.output.resource}", tgd.Transformations[0].ID),
+		tgd.Transformations[1].Spec.Data["descriptor"].(map[string]any)["component"].(map[string]any)["resources"].([]any)[0])
 }
 
 // TestBuildGraphDefinition_RelativeOCIReference_CopiesAsLocalBlob proves the baseline copy
@@ -370,10 +371,9 @@ func TestBuildGraphDefinition_CTFTarget(t *testing.T) {
 	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{}, nil)
 	require.NoError(t, err)
 
-	assert.Len(t, tgd.Transformations, 4)
-	assert.Equal(t, ociv1alpha1.OCIGetLocalResourceV1alpha1, tgd.Transformations[0].Type)
-	assert.Equal(t, ociv1alpha1.CTFAddLocalResourceV1alpha1, tgd.Transformations[1].Type)
-	assert.Equal(t, ociv1alpha1.CTFAddComponentVersionV1alpha1, tgd.Transformations[2].Type)
+	require.Len(t, tgd.Transformations, 2)
+	assert.Equal(t, ociv1alpha1.TransferLocalBlobV1alpha1, tgd.Transformations[0].Type)
+	assert.Equal(t, ociv1alpha1.CTFAddComponentVersionV1alpha1, tgd.Transformations[1].Type)
 }
 
 func TestBuildGraphDefinition_Recursive(t *testing.T) {
@@ -679,8 +679,8 @@ func TestBuildGraphDefinition_MultiTargetWithResources(t *testing.T) {
 	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{}, nil)
 	require.NoError(t, err)
 
-	// With 1 resource and 2 targets: each target needs get + add + upload = 3, total 6, plus 1 cleanup = 7
-	assert.Len(t, tgd.Transformations, 7)
+	// With 1 resource and 2 targets: each target needs a streamed transfer + upload = 2, total 4.
+	assert.Len(t, tgd.Transformations, 4)
 }
 
 func TestBuildGraphDefinition_RecursiveTargetPropagation(t *testing.T) {
@@ -793,7 +793,7 @@ func cleanupFileExpressions(t *testing.T, cleanup *transformv1alpha1.GenericTran
 	return exprs
 }
 
-func TestBuildGraphDefinition_CleanupReferencesAddSpec_LocalBlob(t *testing.T) {
+func TestBuildGraphDefinition_NoCleanupForStreamedLocalBlob(t *testing.T) {
 	sourceRepo := testOCIRepo("ghcr.io/source")
 	targetRepo := testOCIRepo("ghcr.io/target")
 	desc := testDescriptor("ocm.software/test", "1.0.0",
@@ -804,17 +804,7 @@ func TestBuildGraphDefinition_CleanupReferencesAddSpec_LocalBlob(t *testing.T) {
 	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{}, nil)
 	require.NoError(t, err)
 
-	cleanup := findCleanupTransformation(tgd)
-	require.NotNil(t, cleanup, "cleanup node should be present when resources exist")
-
-	exprs := cleanupFileExpressions(t, cleanup)
-	require.Len(t, exprs, 1)
-
-	// The expression should reference the Add transformation's spec.file,
-	// not the Get transformation's output.file.
-	assert.Contains(t, exprs[0], "Add")
-	assert.Contains(t, exprs[0], ".spec.file")
-	assert.NotContains(t, exprs[0], ".output.")
+	assert.Nil(t, findCleanupTransformation(tgd), "a streamed local blob buffers no file, so no FileCleanup node")
 }
 
 func TestBuildGraphDefinition_CleanupReferencesAddSpec_OCIArtifact(t *testing.T) {
@@ -925,7 +915,7 @@ func TestBuildGraphDefinition_CleanupMultiTarget_AggregatesAllRefs(t *testing.T)
 	target2 := testOCIRepo("ghcr.io/target2")
 
 	desc := testDescriptor("ocm.software/test", "1.0.0",
-		[]descriptor.Resource{localBlobResource("my-resource", "1.0.0")}, nil)
+		[]descriptor.Resource{ociImageResource("my-image", "1.0.0", "oci://ghcr.io/org/image:v1")}, nil)
 	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
 
 	roots := map[string]TransferRoot{
@@ -936,7 +926,7 @@ func TestBuildGraphDefinition_CleanupMultiTarget_AggregatesAllRefs(t *testing.T)
 		},
 	}
 
-	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{}, nil)
+	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{}, withLocalBlobUploader())
 	require.NoError(t, err)
 
 	cleanup := findCleanupTransformation(tgd)
@@ -1183,10 +1173,9 @@ func TestBuildGraphDefinition_DockerManifestLocalBlob_OCIUploader(t *testing.T) 
 	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{}, ociUploaders())
 	require.NoError(t, err)
 
-	addOCIType := runtime.NewVersionedType(ociv1alpha1.AddOCIArtifactType, ociv1alpha1.Version)
-	require.Len(t, tgd.Transformations, 4)
-	assert.Equal(t, ociv1alpha1.OCIGetLocalResourceV1alpha1, tgd.Transformations[0].Type)
-	assert.Equal(t, addOCIType, tgd.Transformations[1].Type, "Docker manifest LocalBlob should be uploaded as OCI artifact")
+	require.Len(t, tgd.Transformations, 2)
+	assert.Equal(t, ociv1alpha1.TransferLocalBlobToOCIArtifactV1alpha1, tgd.Transformations[0].Type,
+		"Docker manifest LocalBlob should be streamed as OCI artifact")
 }
 
 func TestBuildGraphDefinition_DockerManifestLocalBlob_FallsBackToLocalBlobWithoutOCIUploader(t *testing.T) {
@@ -1200,7 +1189,6 @@ func TestBuildGraphDefinition_DockerManifestLocalBlob_FallsBackToLocalBlobWithou
 	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{}, nil)
 	require.NoError(t, err)
 
-	require.Len(t, tgd.Transformations, 4)
-	assert.Equal(t, ociv1alpha1.OCIGetLocalResourceV1alpha1, tgd.Transformations[0].Type)
-	assert.Equal(t, ociv1alpha1.OCIAddLocalResourceV1alpha1, tgd.Transformations[1].Type)
+	require.Len(t, tgd.Transformations, 2)
+	assert.Equal(t, ociv1alpha1.TransferLocalBlobV1alpha1, tgd.Transformations[0].Type)
 }

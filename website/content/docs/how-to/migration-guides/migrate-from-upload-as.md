@@ -382,9 +382,10 @@ to the target:
 ocm transfer cv --dry-run -o yaml <src> <target>
 ```
 
-Check for `TransferOCIArtifact` / `AddOCIArtifact` nodes. Their `imageReference`
-is your template with the identifiers replaced by their resolved values; it is
-evaluated when the transfer runs.
+Check for `TransferOCIArtifact`, `TransferLocalBlobToOCIArtifact`, and
+`AddOCIArtifact` nodes. Their `imageReference` is your template with the
+identifiers replaced by their resolved values; it is evaluated when the
+transfer runs.
 
 {{< details "Expected output (TransferOCIArtifact)" >}}
 

@@ -75,6 +75,17 @@ func NewDefaultBuilder(
 		RepoProvider:       repoProvider,
 		CredentialProvider: credentialProvider,
 	}
+	transferLocalBlob := &ocitransformer.TransferLocalBlob{
+		Scheme:             transformerScheme,
+		RepoProvider:       repoProvider,
+		CredentialProvider: credentialProvider,
+	}
+	transferLocalBlobToOCIArtifact := &ocitransformer.TransferLocalBlobToOCIArtifact{
+		Scheme:             transformerScheme,
+		RepoProvider:       repoProvider,
+		Repository:         resourceRepo,
+		CredentialProvider: credentialProvider,
+	}
 
 	// OCI Artifact transformers
 	ociGetOCIArtifact := &ocitransformer.GetOCIArtifact{
@@ -191,6 +202,8 @@ func NewDefaultBuilder(
 		WithTransformer(&ociv1alpha1.GetOCIArtifact{}, ociGetOCIArtifact).
 		WithTransformer(&ociv1alpha1.AddOCIArtifact{}, ociAddOCIArtifact).
 		WithTransformer(&ociv1alpha1.TransferOCIArtifact{}, ociTransferOCIArtifact).
+		WithTransformer(&ociv1alpha1.TransferLocalBlob{}, transferLocalBlob).
+		WithTransformer(&ociv1alpha1.TransferLocalBlobToOCIArtifact{}, transferLocalBlobToOCIArtifact).
 		WithTransformer(&helmv1alpha1.GetHelmChart{}, getHelmChart).
 		WithTransformer(&helmv1alpha1.ConvertHelmToOCI{}, convertHelmToOCI).
 		WithTransformer(&wgetv1alpha1.DownloadWgetResource{}, downloadWget).

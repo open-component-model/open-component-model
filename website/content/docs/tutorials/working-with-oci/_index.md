@@ -630,10 +630,14 @@ By default, `globalAccess` is not populated. To opt in, use the two-step transfe
      <your-registry> > spec.yaml
    ```
 
-2. Edit `spec.yaml` and add `globalAccessPolicy: auto` to each `OCIAddLocalResource` node's `spec` field:
+2. Edit `spec.yaml` and add `globalAccessPolicy: auto` to the `spec` of each node that writes a local blob to the OCI registry: `OCIAddLocalResource` nodes, and `TransferLocalBlob` nodes for resources that already are local blobs in the source:
 
    ```yaml
    - type: OCIAddLocalResource/v1alpha1
+     spec:
+       globalAccessPolicy: auto
+       # ... other fields ...
+   - type: TransferLocalBlob/v1alpha1
      spec:
        globalAccessPolicy: auto
        # ... other fields ...

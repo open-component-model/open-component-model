@@ -139,13 +139,13 @@ func TestBuildGraphDefinition_GitUploader(t *testing.T) {
 			name:      "the default match does not select a Git archive local blob",
 			resource:  withGitArchive,
 			uploader:  &transferv1alpha1.GitUploaderConfig{Repository: "https://git.target.example/repo.git", Ref: "refs/heads/main"},
-			wantTypes: []runtime.Type{ociv1alpha1.OCIGetLocalResourceV1alpha1, ociv1alpha1.OCIAddLocalResourceV1alpha1, ociv1alpha1.OCIAddComponentVersionV1alpha1, FileCleanupVersionedType},
+			wantTypes: []runtime.Type{ociv1alpha1.TransferLocalBlobV1alpha1, ociv1alpha1.OCIAddComponentVersionV1alpha1},
 		},
 		{
 			name:      "the default match does not select a local blob without origin",
 			resource:  withoutOrigin,
 			uploader:  &transferv1alpha1.GitUploaderConfig{Repository: "https://git.target.example/repo.git", Ref: "refs/heads/main"},
-			wantTypes: []runtime.Type{ociv1alpha1.OCIGetLocalResourceV1alpha1, ociv1alpha1.OCIAddLocalResourceV1alpha1, ociv1alpha1.OCIAddComponentVersionV1alpha1, FileCleanupVersionedType},
+			wantTypes: []runtime.Type{ociv1alpha1.TransferLocalBlobV1alpha1, ociv1alpha1.OCIAddComponentVersionV1alpha1},
 		},
 		{
 			name:     "a local blob that is not a Git archive fails the build",

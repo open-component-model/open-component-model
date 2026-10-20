@@ -79,12 +79,12 @@ func TestBuildGraphDefinition_Labels(t *testing.T) {
 	sourceRepo := testOCIRepo("ghcr.io/source")
 	targetRepo := testOCIRepo("ghcr.io/target")
 	desc := testDescriptor("ocm.software/my-app", "1.0.0",
-		[]descriptor.Resource{localBlobResource("icons", "1.0.0")}, nil)
+		[]descriptor.Resource{localBlobResource("icons", "1.0.0"), ociImageResource("image", "1.0.0", "oci://ghcr.io/org/image:v1")}, nil)
 	resolver := testResolverFor("ocm.software/my-app", "1.0.0", sourceRepo, desc)
 
 	tgd, err := BuildGraphDefinition(t.Context(),
 		testTransferRoots("ocm.software/my-app", "1.0.0", targetRepo, resolver),
-		transferv1alpha1.Config{}, nil)
+		transferv1alpha1.Config{}, withLocalBlobUploader())
 	r.NoError(err)
 
 	r.NotEmpty(tgd.Transformations)
@@ -96,13 +96,14 @@ func TestBuildGraphDefinition_Labels(t *testing.T) {
 		descriptor.IdentityAttributeName:    "ocm.software/my-app",
 		descriptor.IdentityAttributeVersion: "1.0.0",
 	})
-	iconsResource := localBlobResource("icons", "1.0.0")
-	resourceID := identityToTransformationID(iconsResource.ToIdentity())
+	icons, image := localBlobResource("icons", "1.0.0"), ociImageResource("image", "1.0.0", "oci://ghcr.io/org/image:v1")
+	iconsID, imageID := identityToTransformationID(icons.ToIdentity()), identityToTransformationID(image.ToIdentity())
 
 	assertLabel(t, r, tgd, componentID+"Upload", "my-app@1.0.0 [Upload to OCI ghcr.io/target]")
-	assertLabel(t, r, tgd, componentID+"Get"+resourceID, "my-app@1.0.0 [Get icons]")
-	assertLabel(t, r, tgd, componentID+"Add"+resourceID, "my-app@1.0.0 [Add icons as LocalBlob to OCI ghcr.io/target]")
-	// the cleanup transformation buffers the Add outputs, so it must exist and carry
+	assertLabel(t, r, tgd, componentID+"Transfer"+iconsID, "my-app@1.0.0 [Add icons as LocalBlob to OCI ghcr.io/target]")
+	assertLabel(t, r, tgd, componentID+"Get"+imageID, "my-app@1.0.0 [Get image]")
+	assertLabel(t, r, tgd, componentID+"Add"+imageID, "my-app@1.0.0 [Add image as LocalBlob to OCI ghcr.io/target]")
+	// the cleanup transformation buffers the image's Add input, so it must exist and carry
 	// the shared cleanup label
 	assertLabel(t, r, tgd, "fileBufferCleanup", cleanupLabel)
 }

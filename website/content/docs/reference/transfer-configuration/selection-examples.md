@@ -223,7 +223,9 @@ configurations:
 | `docs`   | local blob |
 
 `chart` goes through GetHelmChart → ConvertHelmToOCI → OCIAddLocalResource;
-`docs` through DownloadWgetResource → OCIAddLocalResource.
+`docs` through DownloadWgetResource → OCIAddLocalResource. `bundle` and `notes`
+are local blobs already, so a single TransferLocalBlob node streams each of them
+into the target without buffering it in a file.
 A config with only a `localblob.uploader…` entry (no other uploaders) produces the same graph.
 
 ## E11 — OCI artifacts plus everything else copied

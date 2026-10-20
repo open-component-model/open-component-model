@@ -115,9 +115,10 @@ A template that does not evaluate for a selected resource fails the transfer
 with `imageReference does not evaluate`, for example a default reference on a
 CTF target (it reads `target.baseUrl`), or `resource.access.toOCI()` on a Helm
 chart. A template that does not use `target` (for example an absolute registry
-prefix) also works for CTF targets, because `TransferOCIArtifact` and
-`AddOCIArtifact` push to the templated image reference independently of the
-component target; its `match` must then select CTF targets (see E7 in the
+prefix) also works for CTF targets, because `TransferOCIArtifact`,
+`TransferLocalBlobToOCIArtifact`, and `AddOCIArtifact` push to the templated
+image reference independently of the component target; its `match` must then
+select CTF targets (see E7 in the
 [selection examples]({{< relref "docs/reference/transfer-configuration/selection-examples.md" >}})).
 
 ## More examples

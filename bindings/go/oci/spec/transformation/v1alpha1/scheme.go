@@ -18,6 +18,9 @@ var (
 	CTFGetLocalResourceV1alpha1    = runtime.NewVersionedType(CTFGetLocalResourceType, Version)
 	AddOCIArtifactV1alpha1         = runtime.NewVersionedType(AddOCIArtifactType, Version)
 	TransferOCIArtifactV1alpha1    = runtime.NewVersionedType(TransferOCIArtifactType, Version)
+	TransferLocalBlobV1alpha1      = runtime.NewVersionedType(TransferLocalBlobType, Version)
+
+	TransferLocalBlobToOCIArtifactV1alpha1 = runtime.NewVersionedType(TransferLocalBlobToOCIArtifactType, Version)
 )
 
 func init() {
@@ -32,4 +35,6 @@ func init() {
 	Scheme.MustRegisterWithAlias(&CTFGetLocalResource{}, CTFGetLocalResourceV1alpha1)
 	Scheme.MustRegisterWithAlias(&AddOCIArtifact{}, AddOCIArtifactV1alpha1)
 	Scheme.MustRegisterWithAlias(&TransferOCIArtifact{}, TransferOCIArtifactV1alpha1)
+	Scheme.MustRegisterWithAlias(&TransferLocalBlob{}, TransferLocalBlobV1alpha1)
+	Scheme.MustRegisterWithAlias(&TransferLocalBlobToOCIArtifact{}, TransferLocalBlobToOCIArtifactV1alpha1)
 }

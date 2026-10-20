@@ -400,10 +400,11 @@ func processResource(resource descriptorv2.Resource, access runtime.Typed, id st
 
 	switch acc := access.(type) {
 	case *descriptorv2.LocalBlob:
+		// Streamed (TransferLocalBlob): no file buffer to clean up.
 		if err := processLocalBlob(resource, id, val, tgd, toSpec, resourceTransformIDs, i, ""); err != nil {
 			return nil, fmt.Errorf("failed processing local blob resource: %w", err)
 		}
-		return []string{fmt.Sprintf("${%s.spec.file}", addResourceID)}, nil
+		return nil, nil
 	case *ociv1.RelativeOCIReference:
 		// A relativeOciReference is a local, repository-local access: copy by value as a
 		// local blob whose referenceName is the relative reference, so the relative type
