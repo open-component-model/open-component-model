@@ -8,6 +8,9 @@ import { readFile, writeFile } from "node:fs/promises";
  * (module), imported (package) or called (function). Advisories that are not
  * called get a `not_affected` statement, called ones `affected`.
  *
+ * govulncheck's verdicts hold for the build configuration it analyzed (GOOS,
+ * GOARCH, build tags), so a document applies to the images of that one platform.
+ *
  * The product of every statement is the scanned main module (the binaries built
  * from it: ocm, manager), with the vulnerable modules as subcomponents. Image
  * scanners (Trivy) see the main module as the parent of its dependencies in a Go
@@ -182,6 +185,7 @@ async function goAliases(id) {
  * Environment variables:
  * - GOVULNCHECK_JSON: govulncheck -format json output (required)
  * - VEX_OUTPUT: path of the OpenVEX document to write (required)
+ * - VEX_PLATFORM: os/arch govulncheck analyzed, e.g. linux/amd64 (required)
  * - ATTESTED_VEX: `gh attestation verify --format json` output of another
  *   binary's OpenVEX attestation, merged into the document (optional)
  * - ATTESTED_VEX_PRODUCT: main module purl of that binary (required with ATTESTED_VEX)
@@ -190,14 +194,13 @@ async function goAliases(id) {
  * @param {import('@actions/github-script').AsyncFunctionArguments} args
  */
 export default async function vexAction({ core, context }) {
-    const input = process.env.GOVULNCHECK_JSON;
-    const output = process.env.VEX_OUTPUT;
-    if (!input || !output) {
-        core.setFailed("GOVULNCHECK_JSON and VEX_OUTPUT environment variables are required");
+    const { GOVULNCHECK_JSON: input, VEX_OUTPUT: output, VEX_PLATFORM: platform } = process.env;
+    if (!input || !output || !platform) {
+        core.setFailed("GOVULNCHECK_JSON, VEX_OUTPUT and VEX_PLATFORM environment variables are required");
         return;
     }
     const vex = buildVex(parseJsonStream(await readFile(input, "utf8")), {
-        id: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}/vex`,
+        id: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}/vex/${platform}`,
         author: `${context.repo.owner}/${context.repo.repo}`,
         timestamp: new Date().toISOString(),
     });
@@ -214,9 +217,9 @@ export default async function vexAction({ core, context }) {
     }
     await writeFile(output, JSON.stringify(vex, null, 2));
     const affected = vex.statements.filter((s) => s.status === "affected");
-    core.info(`OpenVEX: ${vex.statements.length} statement(s), ${affected.length} affected`);
+    core.info(`OpenVEX (${platform}): ${vex.statements.length} statement(s), ${affected.length} affected`);
     await core.summary
-        .addHeading("📄 OpenVEX from govulncheck", 3)
+        .addHeading(`📄 OpenVEX from govulncheck (${platform})`, 3)
         .addTable([
             [{ data: "Advisory", header: true }, { data: "Status", header: true }, { data: "Binary (main module)", header: true }, { data: "Modules", header: true }],
             ...vex.statements.map((s) => [
