@@ -2,7 +2,7 @@ module ocm.software/open-component-model/bindings/go
 
 go 1.27.0
 
-toolchain go1.27.1
+toolchain go1.27.3
 
 // Replace digest lib to master to gather access to BLAKE3.
 // xref: https://github.com/opencontainers/go-digest/pull/66
