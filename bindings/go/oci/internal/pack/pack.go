@@ -451,7 +451,7 @@ func updateArtifactAccess(artifact descriptor.Artifact, access *v2.LocalBlob, de
 			return fmt.Errorf("failed to check artifact digest: %w", err)
 		}
 		typed.Access = access
-		if result.Decision == ocmdigest.Generate {
+		if result.Generated {
 			typed.Digest = result.Digest
 		}
 	}

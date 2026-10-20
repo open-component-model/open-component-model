@@ -16,7 +16,7 @@ func TestParseHashAlgorithm(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
 		want    crypto.Hash
-		wantErr error
+		wantErr string
 	}{
 		{name: "SHA-256", want: crypto.SHA256},
 		{name: "sha-256", want: crypto.SHA256},
@@ -27,35 +27,23 @@ func TestParseHashAlgorithm(t *testing.T) {
 		{name: "sha-512", want: crypto.SHA512},
 		{name: "sha512", want: crypto.SHA512},
 		{name: "SHA512", want: crypto.SHA512},
-		{name: "NO-DIGEST", wantErr: ocmdigest.ErrNoDigest},
-		{name: "no-digest", wantErr: ocmdigest.ErrNoDigest},
-		{name: "SHA-384", wantErr: ocmdigest.ErrUnsupportedHashAlgorithm},
-		{name: "MD5", wantErr: ocmdigest.ErrUnsupportedHashAlgorithm},
-		{name: "", wantErr: ocmdigest.ErrUnsupportedHashAlgorithm},
+		{name: "NO-DIGEST", wantErr: "resource is excluded from the signature and has no digest"},
+		{name: "no-digest", wantErr: "resource is excluded from the signature and has no digest"},
+		{name: "SHA-384", wantErr: ocmdigest.ErrUnsupportedHashAlgorithm.Error()},
+		{name: "MD5", wantErr: ocmdigest.ErrUnsupportedHashAlgorithm.Error()},
+		{name: "", wantErr: ocmdigest.ErrUnsupportedHashAlgorithm.Error()},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
 			got, err := ocmdigest.ParseHashAlgorithm(tc.name)
-			if tc.wantErr != nil {
-				r.ErrorIs(err, tc.wantErr)
+			if tc.wantErr != "" {
+				r.ErrorContains(err, tc.wantErr)
 				return
 			}
 			r.NoError(err)
 			r.Equal(tc.want, got)
 		})
 	}
-}
-
-func TestFormatHashAlgorithm(t *testing.T) {
-	r := require.New(t)
-	name, err := ocmdigest.FormatHashAlgorithm(crypto.SHA256)
-	r.NoError(err)
-	r.Equal(ocmdigest.HashAlgorithmSHA256, name)
-	name, err = ocmdigest.FormatHashAlgorithm(crypto.SHA512)
-	r.NoError(err)
-	r.Equal(ocmdigest.HashAlgorithmSHA512, name)
-	_, err = ocmdigest.FormatHashAlgorithm(crypto.SHA384)
-	r.ErrorIs(err, ocmdigest.ErrUnsupportedHashAlgorithm)
 }
 
 func TestIsExcluded(t *testing.T) {
@@ -87,14 +75,14 @@ func TestCheck(t *testing.T) {
 	blobRule := ocmdigest.Rule{Normalisation: ocmdigest.GenericBlobDigestV1}
 
 	for _, tc := range []struct {
-		name     string
-		recorded *descriptor.Digest
-		computed *ocmdigest.Computed
-		rule     ocmdigest.Rule
-		mode     ocmdigest.Mode
-		want     *descriptor.Digest
-		decision ocmdigest.Decision
-		wantErr  string
+		name      string
+		recorded  *descriptor.Digest
+		computed  *ocmdigest.Computed
+		rule      ocmdigest.Rule
+		mode      ocmdigest.Mode
+		want      *descriptor.Digest
+		generated bool
+		wantErr   string
 	}{
 		{
 			name:     "excluded marker is kept and nothing is computed",
@@ -102,28 +90,26 @@ func TestCheck(t *testing.T) {
 			computed: &ocmdigest.Computed{},
 			rule:     artifactRule,
 			want:     descriptor.NewExcludeFromSignatureDigest(),
-			decision: ocmdigest.Excluded,
 		},
 		{
 			name:     "excluded by normalisation only",
 			recorded: &descriptor.Digest{NormalisationAlgorithm: "Exclude-From-Signature"},
 			rule:     blobRule,
 			want:     &descriptor.Digest{NormalisationAlgorithm: "Exclude-From-Signature"},
-			decision: ocmdigest.Excluded,
 		},
 		{
-			name:     "nothing recorded is generated",
-			rule:     artifactRule,
-			want:     &descriptor.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: artifact, Value: value},
-			decision: ocmdigest.Generate,
+			name:      "nothing recorded is generated",
+			rule:      artifactRule,
+			want:      &descriptor.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: artifact, Value: value},
+			generated: true,
 		},
 		{
-			name:     "empty digest is generated in SHA-512",
-			recorded: &descriptor.Digest{},
-			computed: &ocmdigest.Computed{Hash: crypto.SHA512, Value: value},
-			rule:     blobRule,
-			want:     &descriptor.Digest{HashAlgorithm: "SHA-512", NormalisationAlgorithm: ocmdigest.GenericBlobDigestV1, Value: value},
-			decision: ocmdigest.Generate,
+			name:      "empty digest is generated in SHA-512",
+			recorded:  &descriptor.Digest{},
+			computed:  &ocmdigest.Computed{Hash: crypto.SHA512, Value: value},
+			rule:      blobRule,
+			want:      &descriptor.Digest{HashAlgorithm: "SHA-512", NormalisationAlgorithm: ocmdigest.GenericBlobDigestV1, Value: value},
+			generated: true,
 		},
 		{
 			name:     "unsupported computed hash is rejected",
@@ -136,39 +122,37 @@ func TestCheck(t *testing.T) {
 			recorded: &descriptor.Digest{Value: value},
 			rule:     blobRule,
 			mode:     ocmdigest.Lenient,
-			wantErr:  ocmdigest.ErrIncomplete.Error(),
+			wantErr:  "a digest must be complete or absent",
 		},
 		{
 			name:     "OCI hash spelling without a label is rejected",
 			recorded: &descriptor.Digest{HashAlgorithm: "sha256", Value: value},
 			rule:     artifactRule,
-			wantErr:  ocmdigest.ErrIncomplete.Error(),
+			wantErr:  "a digest must be complete or absent",
 		},
 		{
 			name:     "accepted label without a hash is rejected, not relabelled",
 			recorded: &descriptor.Digest{NormalisationAlgorithm: ocmdigest.GenericBlobDigestV1, Value: value},
 			rule:     artifactRule,
-			wantErr:  ocmdigest.ErrIncomplete.Error(),
+			wantErr:  "a digest must be complete or absent",
 		},
 		{
 			name:     "missing value is rejected",
 			recorded: &descriptor.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: artifact},
 			rule:     artifactRule,
-			wantErr:  ocmdigest.ErrIncomplete.Error(),
+			wantErr:  "a digest must be complete or absent",
 		},
 		{
 			name:     "complete digest is kept",
 			recorded: &descriptor.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: artifact, Value: value},
 			rule:     artifactRule,
 			want:     &descriptor.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: artifact, Value: value},
-			decision: ocmdigest.Keep,
 		},
 		{
 			name:     "complete digest keeps an accepted label and its spelling",
 			recorded: &descriptor.Digest{HashAlgorithm: "sha256", NormalisationAlgorithm: ocmdigest.GenericBlobDigestV1, Value: value},
 			rule:     artifactRule,
 			want:     &descriptor.Digest{HashAlgorithm: "sha256", NormalisationAlgorithm: ocmdigest.GenericBlobDigestV1, Value: value},
-			decision: ocmdigest.Keep,
 		},
 		{
 			name:     "complete digest with a mismatching value is rejected",
@@ -196,7 +180,6 @@ func TestCheck(t *testing.T) {
 			rule:     blobRule,
 			mode:     ocmdigest.Lenient,
 			want:     &descriptor.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: artifact, Value: other},
-			decision: ocmdigest.KeepUnverified,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -214,7 +197,7 @@ func TestCheck(t *testing.T) {
 				return
 			}
 			r.NoError(err)
-			r.Equal(tc.decision, got.Decision)
+			r.Equal(tc.generated, got.Generated)
 			r.Equal(tc.want, got.Digest)
 			if tc.recorded != nil {
 				r.NotSame(tc.recorded, got.Digest)

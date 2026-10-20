@@ -10,16 +10,16 @@ import (
 )
 
 const (
-	HashAlgorithmSHA256 = "SHA-256"
-	HashAlgorithmSHA512 = "SHA-512"
+	hashAlgorithmSHA256 = "SHA-256"
+	hashAlgorithmSHA512 = "SHA-512"
 	// GenericBlobDigestV1 is the normalisation of a digest over the bytes of a blob.
 	GenericBlobDigestV1 = "genericBlobDigest/v1"
 )
 
 var (
-	// ErrNoDigest is returned when a hash algorithm is the NO-DIGEST marker of a resource
+	// errNoDigest is returned when a hash algorithm is the NO-DIGEST marker of a resource
 	// that is excluded from the signature.
-	ErrNoDigest = errors.New("resource is excluded from the signature and has no digest")
+	errNoDigest = errors.New("resource is excluded from the signature and has no digest")
 	// ErrUnsupportedHashAlgorithm is returned for a hash algorithm other than SHA-256 or SHA-512.
 	ErrUnsupportedHashAlgorithm = errors.New("unsupported hash algorithm")
 )
@@ -34,21 +34,21 @@ func ParseHashAlgorithm(name string) (crypto.Hash, error) {
 	case "SHA512":
 		return crypto.SHA512, nil
 	case "NODIGEST":
-		return 0, ErrNoDigest
+		return 0, errNoDigest
 	default:
-		return 0, fmt.Errorf("%w %q: use %s or %s", ErrUnsupportedHashAlgorithm, name, HashAlgorithmSHA256, HashAlgorithmSHA512)
+		return 0, fmt.Errorf("%w %q: use %s or %s", ErrUnsupportedHashAlgorithm, name, hashAlgorithmSHA256, hashAlgorithmSHA512)
 	}
 }
 
-// FormatHashAlgorithm returns the spec spelling of a hash, used for generated digests.
-func FormatHashAlgorithm(hash crypto.Hash) (string, error) {
+// formatHashAlgorithm returns the spec spelling of a hash, used for generated digests.
+func formatHashAlgorithm(hash crypto.Hash) (string, error) {
 	switch hash {
 	case crypto.SHA256:
-		return HashAlgorithmSHA256, nil
+		return hashAlgorithmSHA256, nil
 	case crypto.SHA512:
-		return HashAlgorithmSHA512, nil
+		return hashAlgorithmSHA512, nil
 	default:
-		return "", fmt.Errorf("%w %q: use %s or %s", ErrUnsupportedHashAlgorithm, hash, HashAlgorithmSHA256, HashAlgorithmSHA512)
+		return "", fmt.Errorf("%w %q: use %s or %s", ErrUnsupportedHashAlgorithm, hash, hashAlgorithmSHA256, hashAlgorithmSHA512)
 	}
 }
 

@@ -49,7 +49,7 @@ func TestRules(t *testing.T) {
 		legacy := &descriptor.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: label, Value: computed.Value}
 		res, err := ocmdigest.Check(legacy, computed, ocidigest.ArtifactRule, ocmdigest.Strict)
 		r.NoError(err, label)
-		r.Equal(ocmdigest.Keep, res.Decision, label)
+		r.False(res.Generated, label)
 		r.Equal(legacy, res.Digest, label)
 	}
 

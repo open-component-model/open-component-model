@@ -12,10 +12,10 @@ import (
 var (
 	// ErrNormalisationMismatch is returned when the rule does not accept the recorded normalisation.
 	ErrNormalisationMismatch = errors.New("normalisation algorithm mismatch")
-	// ErrIncomplete is returned for a recorded digest with some but not all fields set. Its
+	// errIncomplete is returned for a recorded digest with some but not all fields set. Its
 	// missing fields are never inferred: they are part of the signed descriptor, so filling
 	// them in breaks a signature or a reference digest that already covers the partial digest.
-	ErrIncomplete = errors.New("a digest must be complete or absent")
+	errIncomplete = errors.New("a digest must be complete or absent")
 )
 
 // Computed is the digest a binding resolved or hashed for a resource, for example the
@@ -48,26 +48,12 @@ const (
 	Lenient
 )
 
-// Decision is what [Check] decided for the recorded digest.
-type Decision string
-
-const (
-	// Generate means nothing was recorded and the digest was generated from the computed one.
-	Generate Decision = "Generate"
-	// Keep means a complete digest was verified and is kept exactly as recorded.
-	Keep Decision = "Keep"
-	// KeepUnverified means a complete digest with a label the rule does not accept is kept
-	// exactly as recorded without verification (lenient mode only).
-	KeepUnverified Decision = "KeepUnverified"
-	// Excluded means the resource is excluded from the signature and its marker is kept.
-	Excluded Decision = "Excluded"
-)
-
 // Result is the outcome of [Check]. Digest is the digest the binding records; it is a copy
-// that never aliases the recorded digest.
+// that never aliases the recorded digest. Generated reports whether an absent digest was
+// generated, allowing callers to preserve an existing digest object.
 type Result struct {
-	Digest   *descriptor.Digest
-	Decision Decision
+	Digest    *descriptor.Digest
+	Generated bool
 }
 
 // Check decides what happens to the recorded digest of a resource, given the digest the binding
@@ -75,37 +61,37 @@ type Result struct {
 //
 // A recorded digest is either absent, and generated from computed, or complete, and kept
 // exactly as recorded, not even its label or hash spelling rewritten, because it may be signed.
-// A partial digest is rejected with [ErrIncomplete]. An excluded resource is kept as is and
+// A partial digest is rejected. An excluded resource is kept as is and
 // computed is not used, so callers may skip computing a digest when [IsExcluded] reports true.
 func Check(recorded *descriptor.Digest, computed Computed, rule Rule, mode Mode) (Result, error) {
 	switch {
 	case IsExcluded(recorded):
-		return Result{Digest: recorded.DeepCopy(), Decision: Excluded}, nil
+		return Result{Digest: recorded.DeepCopy()}, nil
 	case recorded == nil || (recorded.HashAlgorithm == "" && recorded.NormalisationAlgorithm == "" && recorded.Value == ""):
 		generated, err := generate(computed, rule)
 		if err != nil {
 			return Result{}, err
 		}
-		return Result{Digest: generated, Decision: Generate}, nil
+		return Result{Digest: generated, Generated: true}, nil
 	case recorded.HashAlgorithm == "" || recorded.NormalisationAlgorithm == "" || recorded.Value == "":
 		return Result{}, fmt.Errorf("%w: hashAlgorithm=%q, normalisationAlgorithm=%q, value=%q",
-			ErrIncomplete, recorded.HashAlgorithm, recorded.NormalisationAlgorithm, recorded.Value)
+			errIncomplete, recorded.HashAlgorithm, recorded.NormalisationAlgorithm, recorded.Value)
 	default:
 		if !rule.accepts(recorded.NormalisationAlgorithm) {
 			if mode == Lenient {
-				return Result{Digest: recorded.DeepCopy(), Decision: KeepUnverified}, nil
+				return Result{Digest: recorded.DeepCopy()}, nil
 			}
 			return Result{}, fmt.Errorf("%w: expected %s, got %s", ErrNormalisationMismatch, rule.Normalisation, recorded.NormalisationAlgorithm)
 		}
 		if err := matchHash(recorded, computed); err != nil {
 			return Result{}, err
 		}
-		return Result{Digest: recorded.DeepCopy(), Decision: Keep}, nil
+		return Result{Digest: recorded.DeepCopy()}, nil
 	}
 }
 
 func generate(computed Computed, rule Rule) (*descriptor.Digest, error) {
-	hashAlgorithm, err := FormatHashAlgorithm(computed.Hash)
+	hashAlgorithm, err := formatHashAlgorithm(computed.Hash)
 	if err != nil {
 		return nil, err
 	}
