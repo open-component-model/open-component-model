@@ -169,7 +169,6 @@ drwxr-xr-x  3 D032990  96 März  4 13:38 blobs
 jq . helmchart-oci/index.json
 ```
 
-```json
 {
   "schemaVersion": 2,
   "manifests": [
@@ -178,8 +177,19 @@ jq . helmchart-oci/index.json
       "digest": "sha256:2360bdf32ddc50c05f8e128118173343b0a012a338daf145b16e0da9c80081a4",
       "size": 828,
       "annotations": {
-        "org.opencontainers.image.ref.name": "ghcr.io/stefanprodan/charts/podinfo:6.8.0"
+        "org.opencontainers.image.ref.name": "ghcr.io/stefanprodan/charts/podinfo:6.8.0",
+        "software.ocm.layout.root": "true"
       }
+    },
+    {
+      "mediaType": "application/vnd.oci.image.manifest.v1+json",
+      "digest": "sha256:2f147973805972b3fe12a991574938d1896efe65c1eec1532245691aff452371",
+      "size": 723,
+      "annotations": {
+        "io.cncf.notary.x509chain.thumbprint#S256": "[\"4f3ae198d532e262c59edfc3cf6c84023ffb30edfcafd7224600857c357be0ff\"]",
+        "org.opencontainers.image.created": "2025-03-11T09:32:34Z"
+      },
+      "artifactType": "application/vnd.cncf.notary.signature"
     }
   ]
 }
@@ -229,12 +239,12 @@ The output shows the component version descriptor. We're interested in the `mylo
         type: blob
         version: 1.0.0
       - access:
-          imageReference: ghcr.io/stefanprodan/podinfo:6.11.1@sha256:8fa56908408de98f24aed2a162b1bb42c0b98df7abfcc5a76a14a8be510457c5
+          imageReference: ghcr.io/stefanprodan/podinfo:6.9.1@sha256:262578cde928d5c9eba3bce079976444f624c13ed0afb741d90d5423877496cb
           type: OCIImage/v1
         digest:
           hashAlgorithm: SHA-256
           normalisationAlgorithm: genericBlobDigest/v1
-          value: 8fa56908408de98f24aed2a162b1bb42c0b98df7abfcc5a76a14a8be510457c5
+          value: 262578cde928d5c9eba3bce079976444f624c13ed0afb741d90d5423877496cb
         name: image
         relation: external
         type: ociImage

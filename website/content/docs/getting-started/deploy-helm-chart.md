@@ -188,9 +188,8 @@ ocm get cv $OCM_REPO//ocm.software/ocm-k8s-toolkit/simple:1.0.0
 <summary>You should see this output</summary>
 
 ```text
- COMPONENT                           │ VERSION │ PROVIDER
-─────────────────────────────────────┼─────────┼──────────────
- ocm.software/ocm-k8s-toolkit/simple │ 1.0.0   │ ocm.software
+ NESTING  COMPONENT                            VERSION  PROVIDER      IDENTITY
+ └─       ocm.software/ocm-k8s-toolkit/simple  1.0.0    ocm.software  name=ocm.software/ocm-k8s-toolkit/simple,version=1.0.0
 ```
 
 </details>

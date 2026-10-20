@@ -51,9 +51,8 @@ ocm get cv ghcr.io/<your-namespace>//github.com/acme.org/helloworld:1.0.0
 <summary>Expected output</summary>
 
 ```text
-COMPONENT                          │ VERSION │ PROVIDER
-───────────────────────────────────┼─────────┼──────────────
-github.com/acme.org/helloworld     │ 1.0.0   │ acme.org
+ NESTING  COMPONENT                       VERSION  PROVIDER  IDENTITY
+ └─       github.com/acme.org/helloworld  1.0.0    acme.org  name=github.com/acme.org/helloworld,version=1.0.0
 ```
 </details>
 

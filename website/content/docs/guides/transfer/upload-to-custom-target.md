@@ -190,10 +190,11 @@ with the resource and target host:
 
 {{< details "Expected progress output" >}}
 ```text
-✓ Transferring component versions...
-    ✓ demo@1.0.0 [Stream docs to mytarget.example.com]
-    ✓ demo@1.0.0 [Upload to OCI]
-    ✓ Cleanup temp files
+level=INFO msg="Resolving component versions: item completed" item=demo:1.0.0
+level=INFO msg="Building transformation graph: item completed" item="demo@1.0.0 [Stream docs to mytarget.example.com]"
+level=INFO msg="Transferring component versions: item completed" item="demo@1.0.0 [Stream docs to mytarget.example.com]"
+level=INFO msg="Transferring component versions: item completed" item="demo@1.0.0 [Upload to OCI]"
+level=INFO msg="Transferring component versions: operation finished"
 ```
 {{< /details >}}
 

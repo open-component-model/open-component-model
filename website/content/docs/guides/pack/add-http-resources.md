@@ -195,10 +195,21 @@ ocm download resource ./transport-archive//github.com/acme.org/myapp:1.0.0 \
 You should see: `level=INFO msg="resource downloaded successfully" output=./ocm-cli`.
 
 {{< callout context="note" >}}
-When the media type is an archive the CLI can unpack, `--output` is a **directory** with the extracted contents.
-Other media types are written to a file at that path. `cli.tar` is a `.tar`, so `./ocm-cli` is a directory here.
-{{< /callout >}}
+`--output` is a **directory** containing an OCI layout (`blobs/`, `index.json`, `oci-layout`). OCM
+stores every resource uniformly as an OCI artifact, so the download unpacks the outer OCI layout
+rather than writing a bare file.
 
+To get the raw blob (the original `.tar` as fetched from the URL), add `--extraction-policy disable`:
+
+```bash
+ocm download resource ./transport-archive//github.com/acme.org/myapp:1.0.0 \
+  --identity name=ocm-cli \
+  --extraction-policy disable \
+  --output ./ocm-cli.tar
+```
+
+That writes a single file you can inspect or unpack with `tar -tf ./ocm-cli.tar`.
+{{< /callout >}}
 {{< /step >}}
 
 {{< /steps >}}

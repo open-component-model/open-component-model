@@ -272,9 +272,9 @@ spec:
 
 3. Ensure the `ocmConfig` field references the correct secret name in your resource.
 
-### Symptom: "failed to read OCM config: key .ocmconfig not found in secret"
+### Symptom: "failed to load configurations: secret does not contain supported keys [\".ocmconfig\" \".dockerconfigjson\"]"
 
-**Cause:** When using the OCM config method, the secret key must be named `.ocmconfig`.
+**Cause:** When using the OCM config method, the secret must contain a key named either `.ocmconfig` or `.dockerconfigjson` — the controller checks for both and rejects secrets that contain neither.
 
 **Fix:**
 

@@ -138,7 +138,7 @@ authenticates, and lists the component version without changing anything:
 ocm get cv ghcr.io/my-org/production//ocm.software/examples/demo:1.0.0
 ```
 
-To see **which** consumer matched and how the credential was resolved, raise the
+To see **how** credentials were resolved, raise the
 log level:
 
 ```bash

@@ -154,7 +154,7 @@ while read -r resource; do
   if ocm download resource "$REF" \
        --identity "name=$resource" \
        --sbom \
-       --output "$OUT/$resource" >/dev/null 2>&1; then
+       --output "$OUT/$resource" < /dev/null >/dev/null 2>&1; then
     echo "ok      $resource"
   else
     echo "no sbom $resource" >&2

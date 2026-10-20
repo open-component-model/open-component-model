@@ -262,17 +262,16 @@ After transfer, inspect the component version in the registry:
 ocm get cv <your-registry>//github.com/acme.org/fetched-oci-demo:1.0.0 -o yaml
 ```
 
-The resource access now shows a local blob reference:
+The resource access shows a local blob reference:
 
 ```yaml
 resources:
   - access:
-      localReference: sha256:abc123...
+      localReference: sha256:262578cde928d5c9eba3bce079976444f624c13ed0afb741d90d5423877496cb
       mediaType: application/vnd.oci.image.index.v1+json
-      referenceName: stefanprodan/podinfo:6.9.1
       type: LocalBlob/v1
     name: app-image
-    relation: external
+    relation: local
     type: ociArtifact
     version: 1.0.0
 ```
@@ -281,8 +280,7 @@ Key observations:
 
 - `localReference` contains the digest of the stored image manifest/index — this is the value you need for native access
 - `mediaType` is `application/vnd.oci.image.index.v1+json` (multi-platform) or `application/vnd.oci.image.manifest.v1+json` (single-platform)
-- `referenceName` preserves the original image reference for traceability
-
+- `relation: local` confirms the artifact is stored inside the component version, not referenced externally
 {{< /step >}}
 
 {{< step >}}

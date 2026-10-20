@@ -73,7 +73,7 @@ Create a simple helloworld component:
 
 ```bash
 # Create a directory for the tutorial
-mkdir -p /tmp/ocm-signing-tutorial && cd /tmp/ocm-signing-tutorial
+mkdir -p /tmp/helloworld && cd /tmp/helloworld
 
 # Create a basic `component-constructor.yaml` without any resources:
 cat > component-constructor.yaml << 'EOF'
@@ -110,22 +110,22 @@ Create a directory for your keys and generate a 4096-bit RSA key pair:
 
 ```bash
 # Create a directory for the generated keys
-mkdir keys
+mkdir -p /tmp/helloworld/keys
 
 # Generate private key
-openssl genpkey -algorithm RSA -out ./keys/private-key.pem -pkeyopt rsa_keygen_bits:4096
+openssl genpkey -algorithm RSA -out /tmp/helloworld/keys/private-key.pem -pkeyopt rsa_keygen_bits:4096
 
 # Extract public key
-openssl rsa -in ./keys/private-key.pem -pubout -out ./keys/public-key.pem
+openssl rsa -in /tmp/helloworld/keys/private-key.pem -pubout -out /tmp/helloworld/keys/public-key.pem
 
 # Secure the private key
-chmod 600 ./keys/private-key.pem
+chmod 600 /tmp/helloworld/keys/private-key.pem
 ```
 
 Verify both files exist:
 
 ```bash
-ls -la ./keys/*.pem
+ls -la /tmp/helloworld/keys/*.pem
 ```
 
 {{< callout context="caution" title="Keep your private key secure!" icon="outline/warning">}}
@@ -158,8 +158,8 @@ configurations:
           signature: default
         credentials:
           - type: RSACredentials/v1
-            privateKeyPEMFile: /tmp/ocm-signing-tutorial/keys/private-key.pem
-            publicKeyPEMFile: /tmp/ocm-signing-tutorial/keys/public-key.pem  
+            privateKeyPEMFile: /tmp/helloworld/keys/private-key.pem
+            publicKeyPEMFile: /tmp/helloworld/keys/public-key.pem
 EOF
 ```
 
@@ -361,7 +361,7 @@ head -n 1 /tmp/keys/public-key.pem
 Remove the tutorial artifacts:
 
 ```bash
-rm -rf /tmp/ocm-signing-tutorial
+rm -rf /tmp/helloworld
 ```
 
 ## Next Steps

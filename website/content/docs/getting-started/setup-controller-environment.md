@@ -167,8 +167,8 @@ helm install kro oci://registry.k8s.io/kro/charts/kro \
 <summary>You should see this output</summary>
 
 ```text
-Pulled: registry.k8s.io/kro/charts/kro:0.8.5
-Digest: sha256:c9a9dc0133f43a25711f4bdbce1eeb4b6448015958f901c6fad61a049e54415e
+Pulled: registry.k8s.io/kro/charts/kro:0.9.4
+# digest omitted — varies by version
 NAME: kro
 LAST DEPLOYED: Wed Feb 25 12:02:15 2026
 NAMESPACE: kro-system
@@ -225,6 +225,71 @@ rules:
       - watch
 EOF
 ```
+
+Allow kro to manage its own generated CRDs:
+
+```shell
+kubectl apply -f - << 'EOF'
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kro:controller:dynamic-crds
+  labels:
+    rbac.kro.run/aggregate-to-controller: "true"
+rules:
+  - apiGroups:
+      - kro.run
+    resources:
+      - "*"
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+EOF
+```
+
+Allow kro to manage workload resources (Deployments and Services):
+
+```shell
+kubectl apply -f - << 'EOF'
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kro:controller:workloads
+  labels:
+    rbac.kro.run/aggregate-to-controller: "true"
+rules:
+  - apiGroups:
+      - apps
+    resources:
+      - deployments
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - services
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+EOF
+```
+
 
 {{< /tab >}}
 {{< tab "Crossplane" >}}

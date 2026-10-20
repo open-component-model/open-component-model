@@ -43,6 +43,42 @@ modes, status and scheduling semantics, see
 
 {{< steps >}}
 {{< step >}}
+### Create and push the component version
+
+The `Discovery` filter matches components with label `tier=platform`. Create a
+`component-constructor.yaml` that defines the `releasechannel` aggregator and
+the platform component that carries the label:
+
+```bash
+cat > component-constructor.yaml << 'EOF'
+components:
+  - name: acm.org/platform/system
+    version: "1.0.0"
+    provider:
+      name: acme.org
+    labels:
+      - name: tier
+        value: platform
+  - name: acm.org/releasechannel
+    version: "1.0.0"
+    provider:
+      name: acme.org
+    componentReferences:
+      - name: platform-system
+        componentName: acm.org/platform/system
+        version: "1.0.0"
+EOF
+```
+
+Build and push both component versions:
+
+```bash
+ocm add cv --repository $OCM_REPO
+```
+
+{{< /step >}}
+
+{{< step >}}
 
 ### Publish the filtered descriptors
 

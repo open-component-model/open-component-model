@@ -78,7 +78,7 @@ Create a simple helloworld component:
 
 ```bash
 # Create a directory for the tutorial
-mkdir -p /tmp/ocm-gpg-tutorial && cd /tmp/ocm-gpg-tutorial
+mkdir -p /tmp/helloworld && cd /tmp/helloworld
 
 # Create a basic `component-constructor.yaml` without any resources:
 cat > component-constructor.yaml << 'EOF'
@@ -115,7 +115,7 @@ Create a directory for your keys and generate a GPG key pair:
 
 ```bash
 # Create a directory for the generated keys
-mkdir -p /tmp/ocm-gpg-tutorial/keys
+mkdir -p /tmp/helloworld/keys
 
 # Non-interactive batch generation (RSA 4096, no expiry, no passphrase protection)
 gpg --batch --gen-key << 'EOF'
@@ -167,19 +167,19 @@ Export the private and public keys as ASCII-armored files that OCM can load:
 
 ```bash
 # Export private key — replace FINGERPRINT with the fingerprint from the previous step
-gpg --export-secret-keys --armor FINGERPRINT > /tmp/ocm-gpg-tutorial/keys/signing-key.asc
+gpg --export-secret-keys --armor FINGERPRINT > /tmp/helloworld/keys/signing-key.asc
 
 # Export public key
-gpg --export --armor FINGERPRINT > /tmp/ocm-gpg-tutorial/keys/verify-key.asc
+gpg --export --armor FINGERPRINT > /tmp/helloworld/keys/verify-key.asc
 
 # Secure the private key file
-chmod 600 /tmp/ocm-gpg-tutorial/keys/signing-key.asc
+chmod 600 /tmp/helloworld/keys/signing-key.asc
 ```
 
 Verify both files exist:
 
 ```bash
-ls -la /tmp/ocm-gpg-tutorial/keys/*.asc
+ls -la /tmp/helloworld/keys/*.asc
 ```
 
 {{< /step >}}
@@ -197,9 +197,9 @@ Unlike RSA (the default when no signer is configured), GPG has to be selected ex
 A detailed How-To guide is available here: [How-to: Configure Signing Credentials]({{< relref "docs/guides/sign/configure-signing-credentials.md" >}}).
 
 ```bash
-touch /tmp/ocm-gpg-tutorial/.ocmconfig
+touch /tmp/helloworld/.ocmconfig
 
-cat > /tmp/ocm-gpg-tutorial/.ocmconfig << 'EOF'
+cat > /tmp/helloworld/.ocmconfig << 'EOF'
 type: generic.config.ocm.software/v1
 configurations:
   - type: credentials.config.ocm.software
@@ -209,8 +209,8 @@ configurations:
           signature: default
         credentials:
           - type: GPGCredentials/v1alpha1
-            privateKeyPGPFile: /tmp/ocm-gpg-tutorial/keys/signing-key.asc
-            publicKeyPGPFile: /tmp/ocm-gpg-tutorial/keys/verify-key.asc
+            privateKeyPGPFile: /tmp/helloworld/keys/signing-key.asc
+            publicKeyPGPFile: /tmp/helloworld/keys/verify-key.asc
   - type: signing.config.ocm.software/v1alpha1
     signer:
       type: GPGSigningConfiguration/v1alpha1
@@ -277,14 +277,14 @@ Sign your component with the GPG private key. The GPG handler comes from the sig
 
 ```bash
 ocm sign cv ./transport-archive//github.com/acme.org/helloworld:1.0.0 \
-  --config /tmp/ocm-gpg-tutorial/.ocmconfig
+  --config /tmp/helloworld/.ocmconfig
 ```
 
 The same command works against a remote OCI registry, point it at the registry reference instead of the local archive:
 
 ```bash
 ocm sign cv ghcr.io/<your-namespace>//github.com/acme.org/helloworld:1.0.0 \
-  --config /tmp/ocm-gpg-tutorial/.ocmconfig
+  --config /tmp/helloworld/.ocmconfig
 ```
 
 <details>
@@ -327,7 +327,7 @@ Verify the signature using the public key. The GPG handler comes from the `verif
 
 ```bash
 ocm verify cv ./transport-archive//github.com/acme.org/helloworld:1.0.0 \
-  --config /tmp/ocm-gpg-tutorial/.ocmconfig
+  --config /tmp/helloworld/.ocmconfig
 ```
 
 <details>
@@ -487,7 +487,7 @@ Yes. Each signature has a distinct `name`. Use `--signature <name>` when signing
 Remove the tutorial artifacts:
 
 ```bash
-rm -rf /tmp/ocm-gpg-tutorial
+rm -rf /tmp/helloworld
 ```
 
 ## Next Steps
