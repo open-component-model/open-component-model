@@ -9,7 +9,7 @@ on:
   workflow_call:
     inputs:
       ref:
-        description: "Ref used to build the CLI"
+        description: "Commit used to build the CLI artifact"
         type: string
         required: false
         default: ""
@@ -228,7 +228,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
-          ref: ${{ inputs.ref || github.head_ref || github.ref_name }}
+          ref: ${{ inputs.ref || github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
