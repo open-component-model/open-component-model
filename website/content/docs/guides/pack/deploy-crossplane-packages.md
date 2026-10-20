@@ -322,7 +322,7 @@ resources:
 Copy the component version and its packages to `$OCM_REPO`.
 
 {{< callout context="note" title="Registry credentials" icon="outline/info-circle" >}}
-If your registry requires authentication, configure [Credentials for OCM CLI]({{< relref "docs/how-to/configure-multiple-credentials.md" >}}) first.
+If your registry requires authentication, configure [Credentials for OCM CLI]({{< relref "docs/guides/transfer/configure-registry-credentials.md" >}}) first.
 {{< /callout >}}
 
 Choose where the packages land:
@@ -375,7 +375,7 @@ ocm transfer cv transport-archive//ocm.software/examples/crossplane-app:0.1.0 $O
 
 The packages are stored inside the component version's OCI index, so the component version is self-contained. This
 fits air-gapped setups: transfer to a CTF archive, carry it across, and import it. See
-[Transfer Components Across an Air Gap]({{< relref "docs/how-to/air-gap-transfer.md" >}}).
+[Transfer Components Across an Air Gap]({{< relref "docs/guides/transfer/air-gap-transfer.md" >}}).
 
 ```shell
 cat > .ocmconfig << 'EOF'
@@ -392,7 +392,7 @@ ocm transfer cv transport-archive//ocm.software/examples/crossplane-app:0.1.0 $O
 
 The CLI merges `.ocmconfig` from the current directory with your other OCM configuration, so your registry
 credentials stay in effect. For details on uploaders, see
-[Migrate from --upload-as to Uploader Configurations]({{< relref "docs/how-to/migration-guides/migrate-from-upload-as.md" >}}).
+[Migrate from --upload-as to Uploader Configurations]({{< relref "docs/changelog/migrate-from-upload-as.md" >}}).
 
 {{< /step >}}
 {{< step >}}
@@ -466,7 +466,7 @@ kubectl create secret docker-registry ghcr-secret \
 ```
 
 Then uncomment `ocmConfig` on the `Repository` in the RGD of the next step. The `Component` and `Resource` objects
-inherit it. See [Configure Credentials for OCM Controllers]({{< relref "docs/how-to/configure-credentials-ocm-controllers.md" >}}).
+inherit it. See [Configure Credentials for OCM Controllers]({{< relref "docs/guides/deploy/configure-controller-credentials.md" >}}).
 
 **Crossplane** pulls the packages, and the kubelet pulls the Function and Provider runtime images. Create the same
 secret in Crossplane's namespace:
@@ -650,7 +650,7 @@ kubectl apply -f kro-rbac.yaml
 ```
 
 If you bind kro's permissions explicitly instead of through aggregation, bind this role to kro's `ServiceAccount` as
-described in [RBAC for CRDs kro creates at runtime]({{< relref "docs/how-to/custom-rbac.md#rbac-for-crds-kro-creates-at-runtime" >}}).
+described in [RBAC for CRDs kro creates at runtime]({{< relref "docs/guides/deploy/configure-custom-rbac.md#rbac-for-crds-kro-creates-at-runtime" >}}).
 
 Apply the RGD:
 
@@ -950,11 +950,11 @@ Deleting the instance removes the `Function` and `Configuration` objects, and Cr
 
 ## Next steps
 
-- [How-to: Transfer Components Across an Air Gap]({{< relref "docs/how-to/air-gap-transfer.md" >}}) - Move the component version and its packages into a disconnected registry
-- [How-to: Verify Component Versions with the Controller]({{< relref "docs/how-to/verify-component-version-controller.md" >}}) - Check signatures before kro installs anything
-- [Tutorial: Deploy a Helm Chart (with Bootstrap)]({{< relref "docs/tutorials/deploy-helm-chart-bootstrap.md" >}}) - Ship the RGD itself in the component version and apply it with a `Deployer`
+- [Guides: Transfer Components Across an Air Gap]({{< relref "docs/guides/transfer/air-gap-transfer.md" >}}) - Move the component version and its packages into a disconnected registry
+- [Guides: Verify Component Signatures on Deployment]({{< relref "docs/guides/deploy/verify-component-signatures-on-deployment.md" >}}) - Check signatures before kro installs anything
+- [Guides: Deploy a Helm Chart (with Bootstrap)]({{< relref "docs/guides/deploy/deploy-helm-chart-bootstrap-crossplane.md" >}}) - Ship the RGD itself in the component version and apply it with a `Deployer`
 
 ## Related documentation
 
 - [Crossplane: Configurations](https://docs.crossplane.io/latest/packages/configurations/) and [Functions](https://docs.crossplane.io/latest/packages/functions/)
-- [Tutorial: Working with OCI]({{< relref "docs/tutorials/working-with-oci" >}}) - Embed OCI image layouts and access them natively
+- [Guides: Add OCI Artifacts]({{< relref "docs/guides/pack/add-oci-artifacts.md" >}}) - Embed OCI image layouts and access them natively
