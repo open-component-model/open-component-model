@@ -88,7 +88,7 @@ func processLocalBlob(resource descriptorv2.Resource, id string, val *discoveryV
 			TransformationMeta: meta.TransformationMeta{
 				Type:  ociv1alpha1.TransferLocalBlobV1alpha1,
 				ID:    transferID,
-				Label: addLabel(&val.Descriptor.Component, resource.Name, "LocalBlob", toSpec),
+				Label: transferLabel(&val.Descriptor.Component, resource.Name, "LocalBlob", toSpec),
 			},
 			Spec: &runtime.Unstructured{Data: map[string]any{
 				"source":     source,
@@ -107,7 +107,7 @@ func processLocalBlob(resource descriptorv2.Resource, id string, val *discoveryV
 			TransformationMeta: meta.TransformationMeta{
 				Type:  ociv1alpha1.TransferLocalBlobToOCIArtifactV1alpha1,
 				ID:    transferID,
-				Label: addLabel(&val.Descriptor.Component, resource.Name, "OCIArtifact", toSpec),
+				Label: transferLabel(&val.Descriptor.Component, resource.Name, "OCIArtifact", toSpec),
 			},
 			Spec: spec,
 		}

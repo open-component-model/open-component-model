@@ -75,7 +75,7 @@ func transferOCIArtifactToLocalBlob(resource descriptorv2.Resource, id string, v
 		TransformationMeta: meta.TransformationMeta{
 			Type:  ociv1alpha1.TransferOCIArtifactToLocalBlobV1alpha1,
 			ID:    transferID,
-			Label: addLabel(&val.Descriptor.Component, resource.Name, "LocalBlob", toSpec),
+			Label: transferLabel(&val.Descriptor.Component, resource.Name, "LocalBlob", toSpec),
 		},
 		Spec: spec,
 	})

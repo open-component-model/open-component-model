@@ -395,7 +395,7 @@ transferred to `ghcr.io/target-org/ocm` with the plain OCI uploader entry
 
 ```yaml
 - id: ...Transfer...
-  label: uploader-demo@1.0.0 [Transfer image to OCI]
+  label: uploader-demo@1.0.0 [Transfer image as OCIArtifact to OCI]
   spec:
     resource:
       access:
