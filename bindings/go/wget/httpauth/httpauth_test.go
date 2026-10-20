@@ -23,15 +23,18 @@ import (
 
 // TestApply_MTLSKeepsClientConfiguration asserts that a client certificate is
 // installed on the client's own transport chain instead of replacing it, so
-// settings such as the user agent and disabled compression still apply.
+// settings such as the user agent and disabled compression still apply, and
+// that the single-use clone does not leave idle connections behind.
 func TestApply_MTLSKeepsClientConfiguration(t *testing.T) {
 	r := require.New(t)
 
 	var peerCerts int
 	var userAgent, acceptEncoding string
+	var connClose bool
 	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(_ http.ResponseWriter, req *http.Request) {
 		peerCerts = len(req.TLS.PeerCertificates)
 		userAgent, acceptEncoding = req.UserAgent(), req.Header.Get("Accept-Encoding")
+		connClose = req.Close
 	}))
 	srv.TLS = &tls.Config{MinVersion: tls.VersionTLS12, ClientAuth: tls.RequireAnyClientCert}
 	srv.StartTLS()
@@ -50,6 +53,7 @@ func TestApply_MTLSKeepsClientConfiguration(t *testing.T) {
 	r.Equal(1, peerCerts, "the client certificate must be presented")
 	r.Equal("ocm-test", userAgent, "the client's user agent transport must be kept")
 	r.Empty(acceptEncoding, "the client's disabled compression must be kept")
+	r.True(connClose, "the per-request clone must not keep the connection alive")
 }
 
 // TestApply_MTLSOverridesClientCertificateSelector asserts that the wget

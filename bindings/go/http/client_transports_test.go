@@ -35,11 +35,11 @@ func selfSignedClientCert(t *testing.T) tls.Certificate {
 	return tls.Certificate{Certificate: [][]byte{der}, PrivateKey: key}
 }
 
-// TestCloneWithTLS asserts that a client certificate installed via CloneWithTLS
-// reaches the server through every chain New builds, while the rest of the
-// client's behaviour (TLS trust, user agent, disabled compression) is kept and
-// the original client stays untouched.
-func TestCloneWithTLS(t *testing.T) {
+// TestCloneTransports asserts that a client certificate installed via
+// CloneTransports reaches the server through every chain New builds, while the
+// rest of the client's behaviour (TLS trust, user agent, disabled compression)
+// is kept and the original client stays untouched.
+func TestCloneTransports(t *testing.T) {
 	t.Parallel()
 
 	type seen struct {
@@ -79,8 +79,8 @@ func TestCloneWithTLS(t *testing.T) {
 			cert := selfSignedClientCert(t)
 			client := ocmhttp.New(ocmhttp.WithConfig(tt.cfg(mustHost(t, srv.URL))), ocmhttp.WithUserAgent("ocm-test"))
 
-			withCert, err := ocmhttp.CloneWithTLS(client, func(c *tls.Config) {
-				c.Certificates = []tls.Certificate{cert}
+			withCert, err := ocmhttp.CloneTransports(client, func(tr *nethttp.Transport) {
+				tr.TLSClientConfig.Certificates = []tls.Certificate{cert}
 			})
 			r.NoError(err)
 
@@ -99,9 +99,9 @@ func TestCloneWithTLS(t *testing.T) {
 	}
 }
 
-// TestCloneWithTLS_IsolatesOriginal asserts that changes apply makes to the
+// TestCloneTransports_IsolatesOriginal asserts that changes apply makes to the
 // certificate pool and list of the clone do not reach the original client.
-func TestCloneWithTLS_IsolatesOriginal(t *testing.T) {
+func TestCloneTransports_IsolatesOriginal(t *testing.T) {
 	t.Parallel()
 	r := require.New(t)
 	roots := x509.NewCertPool()
@@ -111,9 +111,9 @@ func TestCloneWithTLS_IsolatesOriginal(t *testing.T) {
 	leaf, err := x509.ParseCertificate(cert.Certificate[0])
 	r.NoError(err)
 
-	_, err = ocmhttp.CloneWithTLS(client, func(c *tls.Config) {
-		c.RootCAs.AddCert(leaf)
-		c.Certificates = append(c.Certificates, cert)
+	_, err = ocmhttp.CloneTransports(client, func(tr *nethttp.Transport) {
+		tr.TLSClientConfig.RootCAs.AddCert(leaf)
+		tr.TLSClientConfig.Certificates = append(tr.TLSClientConfig.Certificates, cert)
 	})
 	r.NoError(err)
 
@@ -121,14 +121,14 @@ func TestCloneWithTLS_IsolatesOriginal(t *testing.T) {
 	r.Empty(original.Certificates[:cap(original.Certificates)][0].Certificate, "the original certificate list must not change")
 }
 
-func TestCloneWithTLS_RejectsForeignTransport(t *testing.T) {
+func TestCloneTransports_RejectsForeignTransport(t *testing.T) {
 	t.Parallel()
 	r := require.New(t)
 	foreign := &nethttp.Client{Transport: roundTripperFunc(func(*nethttp.Request) (*nethttp.Response, error) {
 		return nil, nil
 	})}
-	_, err := ocmhttp.CloneWithTLS(foreign, func(*tls.Config) {})
-	r.ErrorContains(err, "cannot configure TLS")
+	_, err := ocmhttp.CloneTransports(foreign, func(*nethttp.Transport) {})
+	r.ErrorContains(err, "cannot clone HTTP transport")
 }
 
 type roundTripperFunc func(*nethttp.Request) (*nethttp.Response, error)

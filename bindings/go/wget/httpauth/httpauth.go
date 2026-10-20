@@ -63,7 +63,12 @@ func Apply(ctx context.Context, req *http.Request, client **http.Client, credent
 		// Install the certificate on the client's own transports so its
 		// configuration (timeouts, retries, proxy, compression, TLS) is kept.
 		var raisedMinVersion uint16
-		cloned, err := ocmhttp.CloneWithTLS(*client, func(cfg *tls.Config) {
+		cloned, err := ocmhttp.CloneTransports(*client, func(tr *http.Transport) {
+			// The clone serves this request only and is then dropped, so its
+			// idle connections could never be reused; close them instead of
+			// leaving them open until IdleConnTimeout, which may be unlimited.
+			tr.DisableKeepAlives = true
+			cfg := tr.TLSClientConfig
 			cfg.Certificates = []tls.Certificate{cert}
 			// Go ignores Certificates when GetClientCertificate is set, which
 			// would keep the explicit credential from being presented.
