@@ -4,7 +4,9 @@ on:
   # Reusable scan of the CLI (default and slim) and controller images, invoked by
   # the build & publish pipeline (pipeline.yml) with the image artifacts it built. Each
   # architecture is scanned for vulnerabilities (Trivy, with an OpenVEX document
-  # from govulncheck; findings warn, they do not fail).
+  # from govulncheck; findings warn, they do not fail). Each image is also
+  # scanned against the DISA GPOS SRG as tailored in .github/stig, and against
+  # the CIS Docker Benchmark (dockle).
   workflow_call:
     inputs:
       ref:
@@ -119,21 +121,38 @@ jobs:
         image: [cli, cli-slim, controller]
         # The scans only read the image's files, so amd64 is scanned on the arm64 runner.
         arch: [arm64, amd64]
-        # executables: what the image may contain besides its entrypoint; the
-        # vulnerability summary attributes findings there to that binary's attested VEX.
+        # executables: what the image may contain besides its entrypoint.
+        # shared_libraries: whether it ships shared libraries and a dynamic
+        # loader. Both come from the Containerfile; the STIG scan fails on
+        # anything else, so update them together with the image.
         include:
           - image: cli
             artifact: ${{ inputs.cli_artifact }}
             oci_tar: oci/cli.tar
+            containerfile: bindings/go/cli/Containerfile
             executables: /usr/local/bin/cosign
           - image: cli-slim
             artifact: ${{ inputs.cli_artifact }}
             oci_tar: oci/cli-slim.tar
+            containerfile: bindings/go/cli/Containerfile
           - image: controller
             artifact: ${{ inputs.controller_artifact }}
             oci_tar: controller.tar
+            containerfile: bindings/go/kubernetes/controller/Dockerfile
             executables: /usr/local/bin/cosign
     steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          sparse-checkout: |
+            .github/stig
+            .github/scripts
+            .env
+            ${{ matrix.containerfile }}
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
       - name: Download image artifact
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
@@ -219,6 +238,47 @@ jobs:
           [[ "$COUNT" -eq 0 ]] && exit 0
           echo "${COUNT} vulnerabilities, listed with their binary in the job summary."
           exit 1
+
+      # Scans, writes the job summary, and fails on any failed rule.
+      - name: STIG scan
+        if: ${{ !cancelled() }}
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        env:
+          IMAGE_REF: ocm-scan:${{ matrix.image }}-${{ matrix.arch }}
+          CONTAINERFILE: ${{ matrix.containerfile }}
+          RESULTS_DIR: tmp/image-scan/${{ matrix.image }}-${{ matrix.arch }}
+          SUMMARY_TITLE: ${{ matrix.image }} (linux/${{ matrix.arch }})
+          EXECUTABLES: ${{ matrix.executables }}
+          SHARED_LIBRARIES: ${{ matrix.shared_libraries }}
+        with:
+          script: |
+            const script = await import('${{ github.workspace }}/.github/scripts/stig-scan.js');
+            await script.default({ core });
+
+      # CIS Docker Benchmark section 4. Fails on WARN and FATAL; INFO (content
+      # trust, HEALTHCHECK) and SKIP (no /etc/passwd in scratch) do not fail.
+      - name: CIS Docker Benchmark (dockle)
+        if: ${{ !cancelled() }}
+        env:
+          IMAGE: ${{ matrix.image }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          # The default shell is bash -e; +e lets the summary be written on findings.
+          set +e -uo pipefail
+          dockle="$(sed -n 's/^DOCKLE_IMAGE=//p' .env)"
+          [[ -n "$dockle" ]] || { echo "::error::DOCKLE_IMAGE not set in .env"; exit 1; }
+          out="tmp/image-scan/${IMAGE}-${ARCH}/dockle.json"
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock "$dockle" \
+            --exit-code 1 --exit-level warn --format json "ocm-scan:${IMAGE}-${ARCH}" > "$out"
+          rc=$?
+          {
+            echo "### 🐳 CIS Docker Benchmark: ${IMAGE} (linux/${ARCH})"
+            echo
+            jq -r '"\(.summary.pass) pass, \(.summary.warn) warn, \(.summary.fatal) fatal, \(.summary.info) info, \(.summary.skip) skip\n",
+              "| Check | Level | Title |", "| --- | --- | --- |",
+              (.details[] | "| \(.code) | \(.level) | \(.title) |")' "$out" 2>/dev/null || echo "no report"
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$rc"
 
       - name: Upload reports
         if: ${{ !cancelled() }}

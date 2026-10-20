@@ -153,7 +153,7 @@ jobs:
         working-directory: ${{ env.CONTROLLER_DIR }}
         env:
           VERSION: ${{ steps.version.outputs.version }}
-        # Always multi-arch: the pipeline's image scan checks both variants of
+        # Always multi-arch: the pipeline's STIG scan checks both variants of
         # the image, on PRs as well as on push/release builds.
         run: |
           task docker-build/multi-arch \
