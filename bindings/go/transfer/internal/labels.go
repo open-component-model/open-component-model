@@ -32,14 +32,40 @@ func targetKind(toSpec runtime.Typed) string {
 	return toSpec.GetType().GetName()
 }
 
-// uploadLabel renders the label for an AddComponentVersion transformation. When a
-// component is transferred to more than one target, the target index (0-based)
-// disambiguates the labels, mirroring the T<idx> suffix on the transformation ID.
-func uploadLabel(c *descriptor.Component, toSpec runtime.Typed, targetIdx, numTargets int) string {
-	if numTargets > 1 {
-		return fmt.Sprintf("%s [Upload to %s \u2192 target %d]", componentLabel(c), targetKind(toSpec), targetIdx+1)
+// targetLocation renders where in the target repository content goes: the registry
+// and repository prefix for OCI, the archive path for CTF. Other repository types
+// have no known location and render empty.
+func targetLocation(toSpec runtime.Typed) string {
+	repo, err := convertToConcreteRepo(toSpec)
+	if err != nil {
+		return ""
 	}
-	return fmt.Sprintf("%s [Upload to %s]", componentLabel(c), targetKind(toSpec))
+	switch repo := repo.(type) {
+	case *ctfv1.Repository:
+		return repo.FilePath
+	case *oci.Repository:
+		if repo.SubPath == "" {
+			return repo.BaseUrl
+		}
+		return strings.TrimSuffix(repo.BaseUrl, "/") + "/" + strings.TrimPrefix(repo.SubPath, "/")
+	}
+	return ""
+}
+
+// uploadLabel renders the label for an AddComponentVersion transformation, naming
+// the target kind and location, e.g. "my-app@1.0.0 [Upload to OCI ghcr.io/org]".
+// When a component is transferred to more than one target, the target index
+// (0-based) disambiguates the labels, mirroring the T<idx> suffix on the
+// transformation ID.
+func uploadLabel(c *descriptor.Component, toSpec runtime.Typed, targetIdx, numTargets int) string {
+	target := targetKind(toSpec)
+	if loc := targetLocation(toSpec); loc != "" {
+		target += " " + loc
+	}
+	if numTargets > 1 {
+		return fmt.Sprintf("%s [Upload to %s \u2192 target %d]", componentLabel(c), target, targetIdx+1)
+	}
+	return fmt.Sprintf("%s [Upload to %s]", componentLabel(c), target)
 }
 
 // getLabel renders the label for a resource Get transformation,
