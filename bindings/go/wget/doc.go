@@ -13,7 +13,8 @@
 // request (following redirects unless the spec disables them in the access), and
 // returns a blob streaming the response body. Nothing is buffered in memory or
 // on disk. Reading the blob a second time sends the request again, which is only
-// done for GET and HEAD requests: other methods may have side effects. The blob is
+// done for GET and HEAD requests: other methods may have side effects. A reader
+// closed before it read any content does not count as a read. The blob is
 // readable only while the context passed to the download is alive. There is no
 // size limit by default; [repository.WithMaxDownloadSize] adds one:
 //

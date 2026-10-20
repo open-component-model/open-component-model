@@ -176,8 +176,9 @@ See [Credential Consumer Identities: Wget / HTTP]({{< relref "credential-consume
 Performs the request described by the access specification (`verb`, `header`, `body`, `noRedirect`) and returns a blob
 that streams the response body. Only 2xx responses are accepted. Nothing is buffered in memory or on disk, and there is
 no size limit by default. Reading the blob a second time sends the request again; for methods other than `GET` and
-`HEAD` a second read is refused, because repeating the request may have side effects. The media type of the blob is
-taken from `mediaType`, falling back to the response `Content-Type` and then to `application/octet-stream`.
+`HEAD` a second read is refused, because repeating the request may have side effects. A reader closed before it reads
+any content does not count as a read. The media type of the blob is taken from `mediaType`, falling back to the
+response `Content-Type` and then to `application/octet-stream`.
 
 Request timeouts, retries, and per-host settings come from the
 [HTTP client configuration]({{< relref "http-client.md" >}}).

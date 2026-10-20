@@ -392,6 +392,106 @@ func TestDownload_ReRead(t *testing.T) {
 	}
 }
 
+// TestDownload_UnconsumedReaderHandsBackResponse asserts that a reader closed
+// before it consumed any content leaves its response to the next reader, so a
+// caller that gives up before reading (such as a push falling back to another
+// path) can read a POST download again without sending it twice.
+func TestDownload_UnconsumedReaderHandsBackResponse(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
+
+	var hits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hits.Add(1)
+		_, _ = io.WriteString(w, "posted")
+	}))
+	t.Cleanup(srv.Close)
+
+	b, err := download.Download(t.Context(), download.Request{URL: srv.URL, Verb: http.MethodPost},
+		download.WithClient(srv.Client()))
+	r.NoError(err)
+
+	rc, err := b.ReadCloser()
+	r.NoError(err)
+	r.NoError(rc.Close())
+	_, err = rc.Read(make([]byte, 1))
+	r.ErrorContains(err, "after close", "a closed reader must not read the handed back response")
+
+	r.Equal("posted", string(readBlob(t, b)))
+	r.Equal(int32(1), hits.Load(), "the request must not be sent again")
+
+	_, err = b.ReadCloser()
+	r.ErrorContains(err, "cannot be read again", "a consumed response is not handed back")
+}
+
+// TestDownload_RereadWithoutLengthIsCheckedAgainstKnownSize asserts that a
+// re-read whose response announces no length is read to its end and checked
+// against the size of the first response, instead of being cut at that size.
+func TestDownload_RereadWithoutLengthIsCheckedAgainstKnownSize(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name    string
+		reread  string
+		wantErr bool
+	}{
+		{name: "same length is accepted", reread: "xyz"},
+		{name: "longer body is rejected", reread: "xyzdef", wantErr: true},
+		{name: "shorter body is rejected", reread: "x", wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			r := require.New(t)
+
+			var hits atomic.Int32
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				if hits.Add(1) == 1 {
+					_, _ = io.WriteString(w, "abc")
+					return
+				}
+				w.(http.Flusher).Flush()
+				_, _ = io.WriteString(w, tt.reread)
+			}))
+			t.Cleanup(srv.Close)
+
+			b, err := download.Download(t.Context(), download.Request{URL: srv.URL}, download.WithClient(srv.Client()))
+			r.NoError(err)
+			r.Equal(int64(3), b.Size())
+			r.Equal("abc", string(readBlob(t, b)))
+
+			// Stop at the known size like a consumer copying exactly Size bytes.
+			rc, err := b.ReadCloser()
+			r.NoError(err)
+			got := make([]byte, 3)
+			n, readErr := io.ReadFull(rc, got)
+			closeErr := rc.Close()
+			if !tt.wantErr {
+				r.NoError(readErr)
+				r.NoError(closeErr)
+				r.Equal(tt.reread, string(got[:n]))
+				return
+			}
+			r.ErrorContains(errors.Join(readErr, closeErr), "does not have the expected 3 bytes")
+		})
+	}
+}
+
+// TestDownload_EmptyContentIsVerifiedOnClose asserts that empty content is
+// verified even when the consumer, knowing the size is zero, never reads.
+func TestDownload_EmptyContentIsVerifiedOnClose(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
+
+	b, err := download.Download(t.Context(), download.Request{URL: serveBody(t, nil, false).URL},
+		download.WithVerifier(func(http.Header, download.Computed) error { return errors.New("rejected") }))
+	r.NoError(err)
+	r.Equal(int64(0), b.Size())
+
+	rc, err := b.ReadCloser()
+	r.NoError(err)
+	r.ErrorContains(rc.Close(), "rejected")
+}
+
 func TestDownload_Size(t *testing.T) {
 	t.Parallel()
 	content := []byte("sized content")
