@@ -3,7 +3,7 @@ name: Release Zulip Notification
 # Announces a promoted release to the Zulip channel neonephos-ocm-releases.
 #
 # Standalone + re-triggerable: dispatched by release.yml via `gh workflow run
-# --ref main` after promote_and_release_final, and runnable by hand against any
+# --ref main` after release_final, and runnable by hand against any
 # existing tag if the automatic post flakes or is missed. Mirrors the dispatch
 # pattern of website-v2-release-docs.yml so the logic always runs from main.
 
