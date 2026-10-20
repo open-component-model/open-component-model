@@ -41,12 +41,26 @@
 // single-key object, while the array l keeps its order and stays a plain array
 // (the engine never descends into or rewrites arrays).
 //
-// # Scope and gap
+// # Compatibility: cc-utils vs OCM v1
 //
-// Normalisation is purely offline and assumes resource and reference digests are
-// already persisted in the descriptor. cc-utils instead resolves them on the fly
-// at sign time (per-resource artifact digests, recursive reference digests), so a
-// descriptor stored without those digests — e.g. real gardener shipments whose
-// resources use relativeOciReference — cannot be reproduced offline by this
-// engine alone; the digests must first be resolved and persisted.
+// jsonNormalisation/v1 has two legacy implementations that are NOT
+// byte-identical: gardener's cc-utils (Python) and OCM v1 (Go). We deliberately
+// target cc-utils, because it produced the signatures OCM v2 needs to verify;
+// where the two disagree we match cc-utils and accept divergence from OCM v1.
+//
+// Engine-level differences from OCM v1:
+//
+//   - Numbers are re-spelled to Python's json.dumps form (see pythoniseNumbers):
+//     big integers keep full precision and fractional values use Python's repr
+//     (1e-05, not 0.00001). OCM v1 routes every number through float64. Neither
+//     target can reproduce an integral float like 1.0 offline: the storage read
+//     (sigs.k8s.io/yaml) collapses it to 1 before normalisation, while cc-utils
+//     keeps 1.0.
+//   - HTML characters &, < and > are kept literal (Python json.dumps default);
+//     OCM v1 escapes them to \u0026, \u003c, \u003e.
+//
+// Field-selection divergences from OCM v1 (provider labels, duplicate-identity
+// injection, none-access resources, …) are decided in the json/v1 algorithm
+// package; see its package doc. Normalisation itself is a pure offline
+// serialization that assumes digests are already persisted (no resolution).
 package entry

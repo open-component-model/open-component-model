@@ -40,4 +40,27 @@
 // compatibility target. The one value this cannot reproduce is an integral
 // float such as 1.0: the store read (sigs.k8s.io/yaml) collapses it to 1 before
 // normalisation runs, while cc-utils keeps 1.0.
+//
+// # Compatibility: cc-utils vs OCM v1
+//
+// jsonNormalisation/v1 also has a Go implementation in OCM v1
+// (api/ocm/compdesc/normalizations/jsonv1 + legacy). It is NOT byte-identical to
+// cc-utils. We deliberately align with cc-utils, since it signed the gardener
+// artifacts OCM v2 must verify; where the two disagree we match cc-utils and
+// knowingly diverge from OCM v1. An OCM-v1-signed descriptor that exercises one
+// of these cases will not verify:
+//
+//   - Numbers: cc-utils' Python spellings (above), not OCM v1's float64.
+//   - HTML characters &, < and > are kept literal (done in the entry engine);
+//     OCM v1 escapes them to \u0026, \u003c, \u003e.
+//   - Provider: a bare provider string is emitted as-is; OCM v1 applies
+//     LabelExcludes to provider labels — we do not, matching cc-utils.
+//   - Duplicate-identity version injection scans forward only, skips a resource
+//     that already has extraIdentity.version, and keys on the full
+//     extraIdentity — as cc-utils does; OCM v1 also scans backward and
+//     overwrites an existing version.
+//   - A resource whose access type is none keeps its digest, as cc-utils does;
+//     OCM v1 drops it (MapResourcesWithNoneAccess). (A resource with no access
+//     at all would have its digest dropped by cc-utils too, but ConvertFromV2
+//     rejects that upstream, so it never reaches normalisation.)
 package v1
