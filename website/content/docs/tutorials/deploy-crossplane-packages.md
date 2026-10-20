@@ -48,15 +48,11 @@ each package from there by digest, never from the original source.
 Before starting, make sure you have set up your environment as described in the [setup guide]({{< relref "docs/getting-started/setup-controller-environment.md" >}}).
 {{< /callout >}}
 
-- [Controller environment]({{< relref "docs/getting-started/setup-controller-environment.md" >}}) with the OCM Controllers and kro installed. You don't need Flux or Argo CD.
-- [Crossplane v2](https://docs.crossplane.io/latest/get-started/install/) installed in the same cluster:
-
-  ```shell
-  helm repo add crossplane-stable https://charts.crossplane.io/stable
-  helm install crossplane crossplane-stable/crossplane \
-    --namespace crossplane-system --create-namespace
-  ```
-
+- [Controller environment]({{< relref "docs/getting-started/setup-controller-environment.md" >}}) with the OCM Controllers,
+  kro, and Crossplane v2 installed in the same cluster. Install Crossplane via the
+  [Crossplane tab]({{< relref "docs/getting-started/setup-controller-environment.md" >}}#tabs-orchestrator-install-1)
+  of the orchestrator step. You don't need Flux or Argo CD, nor the patch-and-transform Function from that tab: this
+  tutorial installs the Function from the component version.
 - [Crossplane CLI](https://docs.crossplane.io/latest/cli/) installed, to build `.xpkg` files
 - [OCM CLI]({{< relref "docs/getting-started/ocm-cli-installation.md" >}}) installed
 - Access to an OCI registry that your cluster can pull from (e.g.,
