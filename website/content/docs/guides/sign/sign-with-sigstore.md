@@ -267,7 +267,7 @@ GitHub Actions OIDC tokens expire quickly, often within minutes. The `ocm sign` 
 
 {{< details "Alternative: run `ocm` from the OCM CLI container image" >}}
 
-Skip the install step by invoking `ocm` from the official container image (`ghcr.io/open-component-model/cli`) directly with `docker run`. The image is based on Garden Linux `bare-libc` for minimal attack surface (`ocm`, a FIPS build of `cosign`, `gpg` in FIPS mode, and CA certs, no shell), so it cannot be used as a GitHub Actions [`container:`]({{< relref "docs/getting-started/ocm-cli-installation.md" >}}#run-from-a-container-image) job runtime. Because `cosign` is on `PATH`, OCM does not download it. The `-slim` tags (`cli:<version>-slim`) are the `FROM scratch` variant with only `ocm` and CA certs, without `cosign` or `gpg`; see the [FIPS reference]({{< relref "docs/reference/standards-and-regulations/fips.md" >}}#artifacts) for the contents of both.
+Skip the install step by invoking `ocm` from the official container image (`ghcr.io/open-component-model/cli`) directly with `docker run`. The image runs as the non-root user `65532` and is based on Garden Linux `bare-libc` for minimal attack surface (`ocm`, a FIPS build of `cosign`, `gpg` in FIPS mode, and CA certs, no shell), so it cannot be used as a GitHub Actions [`container:`]({{< relref "docs/getting-started/ocm-cli-installation.md" >}}#run-from-a-container-image) job runtime. Because `cosign` is on `PATH`, OCM does not download it. The `-slim` tags (`cli:<version>-slim`) are the `FROM scratch` variant with only `ocm` and CA certs, without `cosign` or `gpg`; see the [FIPS reference]({{< relref "docs/reference/standards-and-regulations/fips.md" >}}#artifacts) for the contents of both.
 
 ```yaml
 jobs:

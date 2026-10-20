@@ -138,6 +138,14 @@ reproducible runs. To let the CLI reach registries that need your system trust s
 no shell and does not yet bundle GnuPG, so run GPG signing where `gpg` is installed.
 {{< /callout >}}
 
+{{< callout title="Note" icon="outline/info-circle" >}}
+The image runs `ocm` as the non-root user `65532`. If the command needs to read files that only
+your user can read (for example a Docker `config.json` with mode `0600`) or write into a mounted
+directory, run the container as your own user by adding `--user "$(id -u):$(id -g)"`. For commands
+that write, also remove `:ro` from the bind mount and make sure that user can write to the mounted
+directory.
+{{< /callout >}}
+
 For a worked create-and-read walkthrough, see
 [Create Component Versions]({{< relref "create-component-version.md" >}}) and substitute the
 `docker run` invocation above for the local `ocm` command.
