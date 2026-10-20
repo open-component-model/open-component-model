@@ -245,7 +245,7 @@ func TestBuildGraphDefinition_OCIUploader(t *testing.T) {
 			target:    testCTFRepo("/tmp/target"),
 			resource:  ociImageResource("my-image", "1.0.0", "oci://ghcr.io/org/image:v1"),
 			uploaders: withLocalBlobUploader(ociUploaders()...),
-			wantTypes: []runtime.Type{ociv1alpha1.GetOCIArtifactV1alpha1, ociv1alpha1.CTFAddLocalResourceV1alpha1, ociv1alpha1.CTFAddComponentVersionV1alpha1, FileCleanupVersionedType},
+			wantTypes: []runtime.Type{ociv1alpha1.TransferOCIArtifactToLocalBlobV1alpha1, ociv1alpha1.CTFAddComponentVersionV1alpha1},
 		},
 		{
 			name:     "CTF target with an absolute template streams to the templated reference",

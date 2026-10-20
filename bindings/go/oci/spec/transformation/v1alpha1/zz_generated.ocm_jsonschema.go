@@ -129,6 +129,15 @@ var schemaTransferOCIArtifactOutput []byte
 //go:embed schemas/TransferOCIArtifactSpec.schema.json
 var schemaTransferOCIArtifactSpec []byte
 
+//go:embed schemas/TransferOCIArtifactToLocalBlob.schema.json
+var schemaTransferOCIArtifactToLocalBlob []byte
+
+//go:embed schemas/TransferOCIArtifactToLocalBlobOutput.schema.json
+var schemaTransferOCIArtifactToLocalBlobOutput []byte
+
+//go:embed schemas/TransferOCIArtifactToLocalBlobSpec.schema.json
+var schemaTransferOCIArtifactToLocalBlobSpec []byte
+
 // JSONSchema returns the JSON Schema for AddOCIArtifact.
 func (AddOCIArtifact) JSONSchema() []byte {
 	return schemaAddOCIArtifact
@@ -327,4 +336,19 @@ func (TransferOCIArtifactOutput) JSONSchema() []byte {
 // JSONSchema returns the JSON Schema for TransferOCIArtifactSpec.
 func (TransferOCIArtifactSpec) JSONSchema() []byte {
 	return schemaTransferOCIArtifactSpec
+}
+
+// JSONSchema returns the JSON Schema for TransferOCIArtifactToLocalBlob.
+func (TransferOCIArtifactToLocalBlob) JSONSchema() []byte {
+	return schemaTransferOCIArtifactToLocalBlob
+}
+
+// JSONSchema returns the JSON Schema for TransferOCIArtifactToLocalBlobOutput.
+func (TransferOCIArtifactToLocalBlobOutput) JSONSchema() []byte {
+	return schemaTransferOCIArtifactToLocalBlobOutput
+}
+
+// JSONSchema returns the JSON Schema for TransferOCIArtifactToLocalBlobSpec.
+func (TransferOCIArtifactToLocalBlobSpec) JSONSchema() []byte {
+	return schemaTransferOCIArtifactToLocalBlobSpec
 }

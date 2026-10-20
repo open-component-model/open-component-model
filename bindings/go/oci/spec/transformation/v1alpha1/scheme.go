@@ -21,6 +21,7 @@ var (
 	TransferLocalBlobV1alpha1      = runtime.NewVersionedType(TransferLocalBlobType, Version)
 
 	TransferLocalBlobToOCIArtifactV1alpha1 = runtime.NewVersionedType(TransferLocalBlobToOCIArtifactType, Version)
+	TransferOCIArtifactToLocalBlobV1alpha1 = runtime.NewVersionedType(TransferOCIArtifactToLocalBlobType, Version)
 )
 
 func init() {
@@ -37,4 +38,5 @@ func init() {
 	Scheme.MustRegisterWithAlias(&TransferOCIArtifact{}, TransferOCIArtifactV1alpha1)
 	Scheme.MustRegisterWithAlias(&TransferLocalBlob{}, TransferLocalBlobV1alpha1)
 	Scheme.MustRegisterWithAlias(&TransferLocalBlobToOCIArtifact{}, TransferLocalBlobToOCIArtifactV1alpha1)
+	Scheme.MustRegisterWithAlias(&TransferOCIArtifactToLocalBlob{}, TransferOCIArtifactToLocalBlobV1alpha1)
 }

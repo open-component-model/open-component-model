@@ -40,23 +40,9 @@ func (t *TransferLocalBlob) Transform(ctx context.Context, step runtime.Typed) (
 	}
 	src := transformation.Spec.Source
 
-	target, err := componentVersionRepository(ctx, t.RepoProvider, t.CredentialProvider, transformation.Spec.Repository)
+	target, err := localBlobTarget(ctx, t.RepoProvider, t.CredentialProvider, transformation.Spec.Repository, transformation.Spec.GlobalAccessPolicy)
 	if err != nil {
-		return nil, fmt.Errorf("target: %w", err)
-	}
-	// Always set explicitly (including Never) to avoid leaking state from prior transforms
-	// on the same cached repository instance.
-	if ociRepo, ok := target.(*oci.Repository); ok {
-		switch transformation.Spec.GlobalAccessPolicy {
-		case ocirepospecv1.GlobalAccessPolicyNever:
-			ociRepo.SetGlobalAccessPolicy(oci.GlobalAccessPolicyNever)
-		case ocirepospecv1.GlobalAccessPolicyAuto:
-			ociRepo.SetGlobalAccessPolicy(oci.GlobalAccessPolicyAuto)
-		default:
-			return nil, fmt.Errorf("unsupported globalAccessPolicy %q", transformation.Spec.GlobalAccessPolicy)
-		}
-	} else if transformation.Spec.GlobalAccessPolicy != ocirepospecv1.GlobalAccessPolicyNever {
-		return nil, fmt.Errorf("globalAccessPolicy is only supported for OCI repositories, got %T", target)
+		return nil, err
 	}
 
 	content, resource, err := getLocalBlob(ctx, t.RepoProvider, t.CredentialProvider, src)
@@ -73,6 +59,93 @@ func (t *TransferLocalBlob) Transform(ctx context.Context, step runtime.Typed) (
 		return nil, fmt.Errorf("failed converting resource to v2 format: %w", err)
 	}
 	return &transformation, nil
+}
+
+// TransferOCIArtifactToLocalBlob is a fused transformer that streams an OCI artifact (or a
+// single layer) from its registry into a component version in an OCI or CTF repository as a
+// local blob, without buffering it in a file.
+type TransferOCIArtifactToLocalBlob struct {
+	Scheme             *runtime.Scheme
+	RepoProvider       repository.ComponentVersionRepositoryProvider
+	Repository         repository.ResourceRepository
+	CredentialProvider credentials.Resolver
+}
+
+func (t *TransferOCIArtifactToLocalBlob) Transform(ctx context.Context, step runtime.Typed) (runtime.Typed, error) {
+	var transformation v1alpha1.TransferOCIArtifactToLocalBlob
+	if err := t.Scheme.Convert(step, &transformation); err != nil {
+		return nil, fmt.Errorf("failed converting generic transformation to transfer oci artifact to local blob transformation: %w", err)
+	}
+	spec := transformation.Spec
+	switch {
+	case spec == nil:
+		return nil, fmt.Errorf("spec is required for transfer oci artifact to local blob transformation")
+	case spec.Resource == nil:
+		return nil, fmt.Errorf("source resource is required")
+	case spec.TargetResource == nil:
+		return nil, fmt.Errorf("target resource is required")
+	case spec.Repository == nil:
+		return nil, fmt.Errorf("target repository is required")
+	case spec.Component == "":
+		return nil, fmt.Errorf("component name is required")
+	case spec.Version == "":
+		return nil, fmt.Errorf("component version is required")
+	}
+	if transformation.Output == nil {
+		transformation.Output = &v1alpha1.TransferOCIArtifactToLocalBlobOutput{}
+	}
+	srcResource := descriptor.ConvertFromV2Resource(spec.Resource)
+	targetResource := descriptor.ConvertFromV2Resource(spec.TargetResource)
+
+	target, err := localBlobTarget(ctx, t.RepoProvider, t.CredentialProvider, spec.Repository, spec.GlobalAccessPolicy)
+	if err != nil {
+		return nil, err
+	}
+
+	var creds runtime.Typed
+	if t.CredentialProvider != nil {
+		if consumerID, err := t.Repository.GetResourceCredentialConsumerIdentity(ctx, srcResource); err == nil {
+			if creds, err = t.CredentialProvider.Resolve(ctx, consumerID); err != nil && !errors.Is(err, credentials.ErrNotFound) {
+				return nil, fmt.Errorf("failed resolving source credentials: %w", err)
+			}
+		}
+	}
+	content, err := t.Repository.DownloadResource(ctx, srcResource, creds)
+	if err != nil {
+		return nil, fmt.Errorf("failed downloading OCI artifact %v: %w", srcResource.ToIdentity(), err)
+	}
+
+	updated, err := target.AddLocalResource(ctx, spec.Component, spec.Version, targetResource, content)
+	if err != nil {
+		return nil, fmt.Errorf("failed adding local resource %q to component %s:%s: %w", targetResource.Name, spec.Component, spec.Version, err)
+	}
+	if transformation.Output.Resource, err = descriptor.ConvertToV2Resource(oci.DefaultRepositoryScheme, updated); err != nil {
+		return nil, fmt.Errorf("failed converting resource to v2 format: %w", err)
+	}
+	return &transformation, nil
+}
+
+// localBlobTarget returns the repository local blobs are added to, with the global access
+// policy applied. The policy is always set explicitly (including Never) to avoid leaking
+// state from prior transforms on the same cached repository instance.
+func localBlobTarget(ctx context.Context, provider repository.ComponentVersionRepositoryProvider, resolver credentials.Resolver, spec runtime.Typed, policy ocirepospecv1.GlobalAccessPolicy) (repository.ComponentVersionRepository, error) {
+	target, err := componentVersionRepository(ctx, provider, resolver, spec)
+	if err != nil {
+		return nil, fmt.Errorf("target: %w", err)
+	}
+	if ociRepo, ok := target.(*oci.Repository); ok {
+		switch policy {
+		case ocirepospecv1.GlobalAccessPolicyNever:
+			ociRepo.SetGlobalAccessPolicy(oci.GlobalAccessPolicyNever)
+		case ocirepospecv1.GlobalAccessPolicyAuto:
+			ociRepo.SetGlobalAccessPolicy(oci.GlobalAccessPolicyAuto)
+		default:
+			return nil, fmt.Errorf("unsupported globalAccessPolicy %q", policy)
+		}
+	} else if policy != ocirepospecv1.GlobalAccessPolicyNever {
+		return nil, fmt.Errorf("globalAccessPolicy is only supported for OCI repositories, got %T", target)
+	}
+	return target, nil
 }
 
 // TransferLocalBlobToOCIArtifact is a fused transformer that streams a local resource

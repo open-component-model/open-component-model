@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	ociv1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
@@ -12,17 +13,9 @@ import (
 	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1/meta"
 )
 
-// processOCIArtifact fetches an OCI artifact from the source and embeds it as a local blob
-// in the target (GetOCIArtifact -> AddLocalResource).
+// processOCIArtifact streams an OCI artifact from its registry into the target as a local
+// blob in a single TransferOCIArtifactToLocalBlob transformation, without buffering it in a file.
 func processOCIArtifact(resource descriptorv2.Resource, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int) error {
-	component := val.Descriptor.Component.Name
-	version := val.Descriptor.Component.Version
-
-	resourceIdentity := resource.ToIdentity()
-	resourceID := identityToTransformationID(resourceIdentity)
-	getResourceID := fmt.Sprintf("%sGet%s", id, resourceID)
-	addResourceID := fmt.Sprintf("%sAdd%s", id, resourceID)
-
 	var ociAccess ociv1.OCIImage
 	if err := json.Unmarshal(resource.Access.Data, &ociAccess); err != nil {
 		return fmt.Errorf("cannot unmarshal OCI access: %w", err)
@@ -34,36 +27,59 @@ func processOCIArtifact(resource descriptorv2.Resource, id string, val *discover
 	if err != nil {
 		return fmt.Errorf("cannot get reference name: %w", err)
 	}
+	return transferOCIArtifactToLocalBlob(resource, id, val, tgd, toSpec, resourceTransformIDs, i, referenceName)
+}
 
-	// Create GetOCIArtifact transformation
-	unstructured, err := runtime.UnstructuredFromMixedData(map[string]any{
-		"resource": resource,
+// transferOCIArtifactToLocalBlob appends the TransferOCIArtifactToLocalBlob transformation that
+// streams resource from its registry into the target as a local blob named referenceName.
+func transferOCIArtifactToLocalBlob(resource descriptorv2.Resource, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int, referenceName string) error {
+	transferID := fmt.Sprintf("%sTransfer%s", id, identityToTransformationID(resource.ToIdentity()))
+	toRepo, err := asUnstructured(toSpec)
+	if err != nil {
+		return fmt.Errorf("cannot convert target spec to unstructured: %w", err)
+	}
+	access := map[string]any{"type": descriptor.GetLocalBlobAccessType().String()}
+	if referenceName != "" {
+		access["referenceName"] = referenceName
+	}
+	targetResource := map[string]any{
+		"name":     resource.Name,
+		"version":  resource.Version,
+		"type":     resource.Type,
+		"relation": resource.Relation,
+		"access":   access,
+	}
+	if resource.Digest != nil {
+		targetResource["digest"] = resource.Digest
+	}
+	if len(resource.Labels) > 0 {
+		targetResource["labels"] = resource.Labels
+	}
+	if len(resource.ExtraIdentity) > 0 {
+		targetResource["extraIdentity"] = resource.ExtraIdentity
+	}
+	if len(resource.SourceRefs) > 0 {
+		targetResource["srcRefs"] = resource.SourceRefs
+	}
+	spec, err := runtime.UnstructuredFromMixedData(map[string]any{
+		"resource":       resource,
+		"repository":     toRepo.Data,
+		"component":      val.Descriptor.Component.Name,
+		"version":        val.Descriptor.Component.Version,
+		"targetResource": targetResource,
 	})
 	if err != nil {
-		return fmt.Errorf("cannot create unstructured spec for GetOCIArtifact transformation: %w", err)
+		return fmt.Errorf("cannot create unstructured spec for TransferOCIArtifactToLocalBlob transformation: %w", err)
 	}
-
-	getArtifactTransform := transformv1alpha1.GenericTransformation{
+	tgd.Transformations = append(tgd.Transformations, transformv1alpha1.GenericTransformation{
 		TransformationMeta: meta.TransformationMeta{
-			Type:  ociv1alpha1.GetOCIArtifactV1alpha1,
-			ID:    getResourceID,
-			Label: getLabel(&val.Descriptor.Component, resource.Name),
+			Type:  ociv1alpha1.TransferOCIArtifactToLocalBlobV1alpha1,
+			ID:    transferID,
+			Label: addLabel(&val.Descriptor.Component, resource.Name, "LocalBlob", toSpec),
 		},
-		Spec: unstructured,
-	}
-	tgd.Transformations = append(tgd.Transformations, getArtifactTransform)
-
-	// Create AddLocalResource transformation
-	var addResourceTransform transformv1alpha1.GenericTransformation
-	if addResourceTransform, err = uploadAsLocalResource(toSpec, component, version, addResourceID, getResourceID, referenceName, addLabel(&val.Descriptor.Component, resource.Name, "LocalBlob", toSpec)); err != nil {
-		return fmt.Errorf("failed to create local resource upload transformation: %w", err)
-	}
-
-	tgd.Transformations = append(tgd.Transformations, addResourceTransform)
-
-	// Track this resource's transformation
-	resourceTransformIDs[i] = addResourceID
-
+		Spec: spec,
+	})
+	resourceTransformIDs[i] = transferID
 	return nil
 }
 
@@ -155,41 +171,12 @@ func ociAddArtifact(addResourceID, getResourceID, imageReference, label string) 
 	}
 }
 
-// processOCIImageLayer emits the transformation nodes copying an OCIImageLayer resource as
-// a local blob. A layer addresses one blob inside an OCI repository rather than a whole
-// artifact: the blob is downloaded to a file (GetOCIArtifact, whose download path handles
-// the layer access) and then embedded as a local blob in the target (AddLocalResource).
-// There is no OCI-artifact representation, so the OCI uploader does not handle layers.
+// processOCIImageLayer streams an OCIImageLayer resource into the target as a local blob
+// (TransferOCIArtifactToLocalBlob, whose download path handles the layer access). A layer
+// addresses one blob inside an OCI repository rather than a whole artifact, so there is no
+// OCI-artifact representation and the OCI uploader does not handle layers. A layer carries
+// no repository or tag that would name it in the target, so the resource name is used, as it
+// is for other by-value resources.
 func processOCIImageLayer(resource descriptorv2.Resource, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int) error {
-	resourceIdentity := resource.ToIdentity()
-	resourceID := identityToTransformationID(resourceIdentity)
-	getResourceID := fmt.Sprintf("%sGet%s", id, resourceID)
-	addResourceID := fmt.Sprintf("%sAdd%s", id, resourceID)
-
-	unstructured, err := runtime.UnstructuredFromMixedData(map[string]any{
-		"resource": resource,
-	})
-	if err != nil {
-		return fmt.Errorf("cannot create unstructured spec for GetOCIArtifact transformation: %w", err)
-	}
-
-	tgd.Transformations = append(tgd.Transformations, transformv1alpha1.GenericTransformation{
-		TransformationMeta: meta.TransformationMeta{
-			Type: ociv1alpha1.GetOCIArtifactV1alpha1,
-			ID:   getResourceID,
-		},
-		Spec: unstructured,
-	})
-
-	// A layer carries no repository or tag that would name it in the target, so the
-	// resource name is used, as it is for other by-value resources.
-	addResourceTransform, err := uploadAsLocalResource(toSpec, val.Descriptor.Component.Name, val.Descriptor.Component.Version, addResourceID, getResourceID, resource.Name, addLabel(&val.Descriptor.Component, resource.Name, "LocalBlob", toSpec))
-	if err != nil {
-		return fmt.Errorf("failed to create local resource upload transformation: %w", err)
-	}
-	tgd.Transformations = append(tgd.Transformations, addResourceTransform)
-
-	resourceTransformIDs[i] = addResourceID
-
-	return nil
+	return transferOCIArtifactToLocalBlob(resource, id, val, tgd, toSpec, resourceTransformIDs, i, resource.Name)
 }

@@ -866,12 +866,12 @@ func TestTransferUploaderConfig(t *testing.T) {
 		{
 			name:        "oci config alone does not select an image for a CTF target",
 			args:        []string{"--config", ociConfig},
-			notContains: []string{"GetOCIArtifact"},
+			notContains: []string{"TransferOCIArtifactToLocalBlob"},
 		},
 		{
 			name:     "oci and localblob config copies the image to a CTF target",
 			args:     []string{"--config", ociAndLocalBlobConfig},
-			contains: []string{"GetOCIArtifact", "CTFAddLocalResource"},
+			contains: []string{"TransferOCIArtifactToLocalBlob", "CTFAddComponentVersion"},
 		},
 		{
 			name:    "http without match fails validation",
@@ -882,18 +882,18 @@ func TestTransferUploaderConfig(t *testing.T) {
 		{
 			name:     "deprecated --copy-resources copies the image like a local blob uploader",
 			args:     []string{"--copy-resources"},
-			contains: []string{"GetOCIArtifact", "CTFAddLocalResource"},
+			contains: []string{"TransferOCIArtifactToLocalBlob", "CTFAddComponentVersion"},
 		},
 		{
 			name:        "deprecated --copy-resources comes after configured uploaders",
 			args:        []string{"--config", referenceConfig, "--copy-resources"},
-			notContains: []string{"GetOCIArtifact"},
+			notContains: []string{"TransferOCIArtifactToLocalBlob"},
 		},
 		{
 			name:        "deprecated --upload-as ociArtifact alone keeps an OCI image by reference",
 			args:        []string{"--upload-as", "ociArtifact"},
 			target:      "ghcr.io/target-org/ocm",
-			notContains: []string{"TransferOCIArtifact", "GetOCIArtifact"},
+			notContains: []string{"TransferOCIArtifact"},
 		},
 		{
 			name:     "deprecated --copy-resources --upload-as ociArtifact uploads an OCI image as an artifact",

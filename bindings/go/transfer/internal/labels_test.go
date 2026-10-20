@@ -79,7 +79,7 @@ func TestBuildGraphDefinition_Labels(t *testing.T) {
 	sourceRepo := testOCIRepo("ghcr.io/source")
 	targetRepo := testOCIRepo("ghcr.io/target")
 	desc := testDescriptor("ocm.software/my-app", "1.0.0",
-		[]descriptor.Resource{localBlobResource("icons", "1.0.0"), ociImageResource("image", "1.0.0", "oci://ghcr.io/org/image:v1")}, nil)
+		[]descriptor.Resource{localBlobResource("icons", "1.0.0"), wgetResource("docs", "1.0.0", "https://source.example/docs.tar")}, nil)
 	resolver := testResolverFor("ocm.software/my-app", "1.0.0", sourceRepo, desc)
 
 	tgd, err := BuildGraphDefinition(t.Context(),
@@ -96,14 +96,14 @@ func TestBuildGraphDefinition_Labels(t *testing.T) {
 		descriptor.IdentityAttributeName:    "ocm.software/my-app",
 		descriptor.IdentityAttributeVersion: "1.0.0",
 	})
-	icons, image := localBlobResource("icons", "1.0.0"), ociImageResource("image", "1.0.0", "oci://ghcr.io/org/image:v1")
-	iconsID, imageID := identityToTransformationID(icons.ToIdentity()), identityToTransformationID(image.ToIdentity())
+	icons, docs := localBlobResource("icons", "1.0.0"), wgetResource("docs", "1.0.0", "https://source.example/docs.tar")
+	iconsID, docsID := identityToTransformationID(icons.ToIdentity()), identityToTransformationID(docs.ToIdentity())
 
 	assertLabel(t, r, tgd, componentID+"Upload", "my-app@1.0.0 [Upload to OCI ghcr.io/target]")
 	assertLabel(t, r, tgd, componentID+"Transfer"+iconsID, "my-app@1.0.0 [Add icons as LocalBlob to OCI ghcr.io/target]")
-	assertLabel(t, r, tgd, componentID+"Get"+imageID, "my-app@1.0.0 [Get image]")
-	assertLabel(t, r, tgd, componentID+"Add"+imageID, "my-app@1.0.0 [Add image as LocalBlob to OCI ghcr.io/target]")
-	// the cleanup transformation buffers the image's Add input, so it must exist and carry
+	assertLabel(t, r, tgd, componentID+"Get"+docsID, "my-app@1.0.0 [Get docs]")
+	assertLabel(t, r, tgd, componentID+"Add"+docsID, "my-app@1.0.0 [Add docs as LocalBlob to OCI ghcr.io/target]")
+	// the cleanup transformation buffers the downloaded docs, so it must exist and carry
 	// the shared cleanup label
 	assertLabel(t, r, tgd, "fileBufferCleanup", cleanupLabel)
 }

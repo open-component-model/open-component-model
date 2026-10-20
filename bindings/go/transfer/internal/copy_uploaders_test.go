@@ -16,7 +16,7 @@ import (
 func TestBuildGraphDefinition_LocalBlobAndReferenceUploaders(t *testing.T) {
 	localBlobNodes := []runtime.Type{ociv1alpha1.TransferLocalBlobV1alpha1, ociv1alpha1.OCIAddComponentVersionV1alpha1}
 	relativeNodes := []runtime.Type{ociv1alpha1.OCIGetLocalResourceV1alpha1, ociv1alpha1.OCIAddLocalResourceV1alpha1, ociv1alpha1.OCIAddComponentVersionV1alpha1, FileCleanupVersionedType}
-	copiedImageNodes := []runtime.Type{ociv1alpha1.GetOCIArtifactV1alpha1, ociv1alpha1.OCIAddLocalResourceV1alpha1, ociv1alpha1.OCIAddComponentVersionV1alpha1, FileCleanupVersionedType}
+	copiedImageNodes := []runtime.Type{ociv1alpha1.TransferOCIArtifactToLocalBlobV1alpha1, ociv1alpha1.OCIAddComponentVersionV1alpha1}
 	byReference := []runtime.Type{ociv1alpha1.OCIAddComponentVersionV1alpha1}
 
 	image := ociImageResource("my-image", "1.0.0", "oci://ghcr.io/org/image:v1")

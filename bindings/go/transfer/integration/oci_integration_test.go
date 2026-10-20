@@ -172,14 +172,14 @@ func Test_Integration_TransferOCIImageResource_LocalBlobUploader(t *testing.T) {
 
 	// Verify that the local blob uploader generated OCI artifact transformations.
 	// Without the local blob uploader, an OCIImage resource would be kept by reference.
-	hasGetOCIArtifact := false
+	hasStreamedCopy := false
 	for _, tr := range tgd.Transformations {
-		if tr.Type.Name == "GetOCIArtifact" {
-			hasGetOCIArtifact = true
+		if tr.Type.Name == "TransferOCIArtifactToLocalBlob" {
+			hasStreamedCopy = true
 			break
 		}
 	}
-	r.True(hasGetOCIArtifact, "local blob uploader should generate GetOCIArtifact transformation for OCIImage resource")
+	r.True(hasStreamedCopy, "local blob uploader should generate TransferOCIArtifactToLocalBlob transformation for OCIImage resource")
 
 	// 5. Build and execute the graph.
 	ctx := t.Context()

@@ -284,8 +284,9 @@ func TestBuildGraphDefinition_OCIImageWithLocalBlobUploader(t *testing.T) {
 	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{}, withLocalBlobUploader())
 	require.NoError(t, err)
 
-	assert.Len(t, tgd.Transformations, 4)
-	assert.Equal(t, ociv1alpha1.GetOCIArtifactV1alpha1, tgd.Transformations[0].Type)
+	require.Len(t, tgd.Transformations, 2)
+	assert.Equal(t, ociv1alpha1.TransferOCIArtifactToLocalBlobV1alpha1, tgd.Transformations[0].Type)
+	assert.Nil(t, findCleanupTransformation(tgd), "a streamed OCI artifact buffers no file, so no FileCleanup node")
 }
 
 func TestBuildGraphDefinition_OCIImage_OCIUploader(t *testing.T) {
@@ -807,11 +808,11 @@ func TestBuildGraphDefinition_NoCleanupForStreamedLocalBlob(t *testing.T) {
 	assert.Nil(t, findCleanupTransformation(tgd), "a streamed local blob buffers no file, so no FileCleanup node")
 }
 
-func TestBuildGraphDefinition_CleanupReferencesAddSpec_OCIArtifact(t *testing.T) {
+func TestBuildGraphDefinition_CleanupReferencesAddSpec_Wget(t *testing.T) {
 	sourceRepo := testOCIRepo("ghcr.io/source")
 	targetRepo := testOCIRepo("ghcr.io/target")
 	desc := testDescriptor("ocm.software/test", "1.0.0",
-		[]descriptor.Resource{ociImageResource("my-image", "1.0.0", "oci://ghcr.io/org/image:v1")}, nil)
+		[]descriptor.Resource{wgetResource("blob", "1.0.0", "https://source.example/blob.tar")}, nil)
 	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
 	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
 
@@ -915,7 +916,7 @@ func TestBuildGraphDefinition_CleanupMultiTarget_AggregatesAllRefs(t *testing.T)
 	target2 := testOCIRepo("ghcr.io/target2")
 
 	desc := testDescriptor("ocm.software/test", "1.0.0",
-		[]descriptor.Resource{ociImageResource("my-image", "1.0.0", "oci://ghcr.io/org/image:v1")}, nil)
+		[]descriptor.Resource{wgetResource("blob", "1.0.0", "https://source.example/blob.tar")}, nil)
 	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
 
 	roots := map[string]TransferRoot{

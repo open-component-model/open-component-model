@@ -7,7 +7,7 @@ toc: true
 
 Downloads a selected resource and embeds it in the target as a local blob. This
 is the same operation the baseline applies to local blobs, extended to any
-supported access type: OCI images are fetched via `GetOCIArtifact`, Helm charts
+supported access type: OCI images are streamed via `TransferOCIArtifactToLocalBlob`, Helm charts
 converted to OCI via `GetHelmChart` → `ConvertHelmToOCI`, and wget, S3 and
 GitHub resources are downloaded through their access-specific downloaders.
 
