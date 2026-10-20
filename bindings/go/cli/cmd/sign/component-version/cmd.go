@@ -85,7 +85,6 @@ func New() *cobra.Command {
 
 - Resolve OCM repository
 - Fetch component version  
-- Verify digests (--verify-digest-consistency)
 - Normalise descriptor (--normalisation)
 - Hash normalised descriptor (--hash)
 - Sign hash (signer from the OCM configuration)
