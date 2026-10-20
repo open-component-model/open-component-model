@@ -125,9 +125,9 @@ manager:
   networkPolicy:
     # -- Enable NetworkPolicy for the controller manager
     enabled: false
-    # -- Extra ingress rules appended after the default health-probe (and metrics) rule
+    # -- Extra ingress rules appended after the default rule, which admits the health-probe port and, if enabled, the metrics and webhook ports
     ingress: []
-    # -- Egress rules replacing the defaults (DNS + HTTPS + Kubernetes API). Leave empty to keep defaults
+    # -- Egress rules replacing the defaults (DNS on 53, TCP 443 and 6443 to any destination). Set this to reach registries on other ports; it replaces all defaults, so include DNS. Leave empty to keep defaults
     egress: []
 ## Helper RBAC roles for managing custom resources
 rbacHelpers:

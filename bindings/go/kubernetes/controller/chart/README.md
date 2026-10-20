@@ -87,9 +87,9 @@ Kubernetes: `>=1.26.0-0`
 | manager.metricsServer.enableHttp2 | bool | `false` | Enable HTTP/2 for metrics and webhook servers |
 | manager.metricsServer.secure | bool | `false` | Serve metrics endpoint securely |
 | manager.namespacedDeployer.enabled | bool | `true` | Run the controller for the NamespacedDeployer and grant the controller permission to impersonate service accounts. A NamespacedDeployer without spec.serviceAccountName impersonates the default service account of its namespace. |
-| manager.networkPolicy.egress | list | `[]` | Egress rules replacing the defaults (DNS + HTTPS + Kubernetes API). Leave empty to keep defaults |
+| manager.networkPolicy.egress | list | `[]` | Egress rules replacing the defaults (DNS on 53, TCP 443 and 6443 to any destination). Set this to reach registries on other ports; it replaces all defaults, so include DNS. Leave empty to keep defaults |
 | manager.networkPolicy.enabled | bool | `false` | Enable NetworkPolicy for the controller manager |
-| manager.networkPolicy.ingress | list | `[]` | Extra ingress rules appended after the default health-probe (and metrics) rule |
+| manager.networkPolicy.ingress | list | `[]` | Extra ingress rules appended after the default rule, which admits the health-probe port and, if enabled, the metrics and webhook ports |
 | manager.nodeSelector | object | `{}` | Node selector for pod scheduling |
 | manager.podSecurityContext | object | `{"runAsGroup":65532,"runAsNonRoot":true,"runAsUser":65532,"seccompProfile":{"type":"RuntimeDefault"}}` | Pod-level security context |
 | manager.readinessProbe.initialDelaySeconds | int | `5` | Initial delay before starting readiness probes |
