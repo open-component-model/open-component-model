@@ -11,9 +11,12 @@
 //
 //   - Objects become a JSON array of single-key objects, sorted by key; the
 //     engine recurses into object values only (mirroring normalise_obj).
-//   - Arrays and scalars are left untouched. The OCM element lists (resources,
-//     componentReferences, labels) are normalised element-wise by the json/v1
-//     algorithm before they reach the engine, not by generic array recursion.
+//   - Arrays and scalars are left untouched; the engine never descends into an
+//     array. cc-utils only normalises the named lists (resources,
+//     componentReferences, labels) element-wise — any other array, e.g. a
+//     list-valued signing label, must stay raw. Being OCM-agnostic the engine
+//     can't tell them apart, so json/v1 transforms those element lists itself
+//     (via Transform) before calling Normalise.
 //   - Marshalling is compact: no spaces, HTML characters &<> kept literal,
 //     non-ASCII escaped to \uXXXX, and non-integral floats re-spelled to match
 //     Python's json.dumps (see marshal / pythoniseNumbers).
