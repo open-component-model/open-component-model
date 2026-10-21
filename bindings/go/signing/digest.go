@@ -117,6 +117,7 @@ func VerifyDigestMatchesDescriptor(
 // this, so verifying existing v1 signatures, pins and reference digests keeps
 // working. Any signing entry point must call it before producing a signature.
 func EnsureSignable(normalisationAlgorithm string) error {
+	//nolint:staticcheck // intentionally references the deprecated verify-only v1 algorithm in order to reject it for signing
 	if normalisationAlgorithm == jsonv1.Algorithm {
 		return fmt.Errorf("%w: %q", ErrSigningUnsupported, normalisationAlgorithm)
 	}

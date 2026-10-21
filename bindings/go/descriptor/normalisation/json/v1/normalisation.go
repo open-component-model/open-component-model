@@ -18,7 +18,15 @@ import (
 
 // Algorithm is the registered name for this normalisation algorithm. It
 // identifies the legacy gardener/cc-utils serialization (ocm/sign.py) that
-// precedes jsonNormalisation/v4alpha1.
+// precedes jsonNormalisation/v4alpha1. It is verify-only: existing v1
+// signatures, pins and reference digests are verified, but a new v1 signature
+// must never be minted (enforced at the signing boundary by
+// signing.EnsureSignable). Use jsonNormalisation/v4alpha1 for new signatures.
+//
+// Deprecated: jsonNormalisation/v1 is a legacy cc-utils compatibility format
+// kept for verification only; do not use it to produce new signatures (use
+// jsonNormalisation/v4alpha1). It stays registered so existing signatures and
+// pins remain verifiable.
 const Algorithm = "jsonNormalisation/v1"
 
 // init registers the normalisation algorithm so that a blank import of this

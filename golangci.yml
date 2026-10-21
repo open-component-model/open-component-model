@@ -136,6 +136,13 @@ linters:
           - staticcheck
         path: _test\.go
         text: 'SA1019:.*configuration/ocm/v1/(runtime\.Resolver|spec\.(Config|Resolver)) is deprecated'
+      # jsonNormalisation/v1 is deprecated (legacy cc-utils format, verify-only),
+      # but the normalisation and signing tests must keep exercising it to lock
+      # verification byte-exactness. Exempt SA1019 for that symbol in tests.
+      - linters:
+          - staticcheck
+        path: _test\.go
+        text: 'SA1019:.*normalisation/json/v1\.Algorithm is deprecated'
       # Integration tests (in */integration/ packages) share expensive
       # fixtures (registries/caches) and, for the CLI, mutate process-global 
       # state (cobra finalizers, slog default) via cmd.New().ExecuteContext. 
