@@ -103,14 +103,14 @@ Only components matching the pattern will be routed to that repository.
 
 | Pattern                  | Matches                                                 |
 |--------------------------|---------------------------------------------------------|
-| `example.com/services/*` | Any component directly under `example.com/services/`    |
-| `example.com/core/**`    | Any component under `example.com/core/` or its subpaths |
+| `example.com/services/*` | Any component whose name starts with `example.com/services/` |
+| `example.com/core/**`    | Any component whose name starts with `example.com/core/` |
 | `*`                      | All components (wildcard catch-all)                     |
 
 **Pattern syntax:**
 
-- `*` — Matches any sequence of characters within a path segment
-- `**` — Matches any sequence of characters in subpath segments
+- `*` — Matches any sequence of characters, including `/`
+- `**` — Equivalent to `*`; no path-separator semantics (the pattern compiler has no separator configured)
 - `?` — Matches any single character
 - `[abc]` — Matches any character in the set (a, b, or c)
 - `[a-z]` — Matches any character in the range
