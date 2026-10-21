@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"log/slog"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/credentials"
@@ -81,6 +83,7 @@ func (t *TransferLocalBlob) Transform(ctx context.Context, step runtime.Typed) (
 	if err != nil {
 		return nil, err
 	}
+	defer releaseBlob(ctx, content)
 
 	updated, err := target.AddLocalResource(ctx, src.component, src.version, resource, content)
 	if err != nil {
@@ -169,6 +172,7 @@ func (t *TransferOCIArtifactToLocalBlob) Transform(ctx context.Context, step run
 	if err != nil {
 		return nil, fmt.Errorf("failed downloading OCI artifact %v: %w", sourceResource.ToIdentity(), err)
 	}
+	defer releaseBlob(ctx, content)
 
 	updated, err := target.AddLocalResource(ctx, component, version, targetResource, content)
 	if err != nil {
@@ -242,6 +246,7 @@ func (t *TransferLocalBlobToOCIArtifact) Transform(ctx context.Context, step run
 	if err != nil {
 		return nil, err
 	}
+	defer releaseBlob(ctx, content)
 
 	updated, err := t.Repository.UploadResource(ctx, targetResource, content, creds)
 	if err != nil {
@@ -308,6 +313,19 @@ func (src localBlobSource) open(ctx context.Context, provider repository.Compone
 		return nil, nil, fmt.Errorf("failed getting local resource %v from component %s:%s: %w", src.resourceIdentity, src.component, src.version, err)
 	}
 	return content, resource, nil
+}
+
+// releaseBlob releases a source blob that holds an open stream or file. The target may
+// fail before reading the blob, or stop reading early, so the fused transformers own
+// the blob's lifetime instead of relying on the target to drain and close it.
+func releaseBlob(ctx context.Context, b blob.ReadOnlyBlob) {
+	closer, ok := b.(io.Closer)
+	if !ok {
+		return
+	}
+	if err := closer.Close(); err != nil {
+		slog.DebugContext(ctx, "failed to release source blob", "err", err)
+	}
 }
 
 // localBlobTarget is the repository local blobs are added to. globalAccessPolicy is only
