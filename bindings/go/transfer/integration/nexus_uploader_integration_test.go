@@ -132,7 +132,7 @@ func Test_Integration_NexusUploader(t *testing.T) {
 		ctfRepo, sourceSpec := addWgetComponent(t, component, version, wgetFile{name: "blob.txt", resource: "raw-resource", version: "1.0.0", mediaType: "text/plain", data: data})
 		targetPath, targetSpec := newTargetCTF(t)
 		for range 2 {
-			transferOnce(t, ctfRepo, sourceSpec, targetSpec, uploader(wgetType, "raw-hosted", ""), wgetrepository.NewResourceRepository(nil), creds, component, version)
+			transferOnce(t, ctfRepo, sourceSpec, targetSpec, uploader(wgetType, "raw-hosted", ""), wgetrepository.NewResourceRepository(), creds, component, version)
 		}
 
 		want := baseURL + "/repository/raw-hosted/ocm.software/nexus-raw-uploader-test/1.0.0/raw-resource-1.0.0"
@@ -161,7 +161,7 @@ func Test_Integration_NexusUploader(t *testing.T) {
 		up := uploader(wgetType, "maven-releases",
 			`${"com/example/demo/" + resource.version + "/demo-" + resource.version + (resource.name == "pom" ? ".pom" : ".jar")}`)
 		for range 2 {
-			transferOnce(t, ctfRepo, sourceSpec, targetSpec, up, wgetrepository.NewResourceRepository(nil), creds, component, version)
+			transferOnce(t, ctfRepo, sourceSpec, targetSpec, up, wgetrepository.NewResourceRepository(), creds, component, version)
 		}
 
 		base := baseURL + "/repository/maven-releases/com/example/demo"
@@ -182,7 +182,7 @@ func Test_Integration_NexusUploader(t *testing.T) {
 		ctfRepo, sourceSpec := addWgetComponent(t, component, version, wgetFile{name: "pkg.tgz", resource: "pkg", version: "1.0.0", mediaType: "application/gzip", data: tarball})
 		targetPath, targetSpec := newTargetCTF(t)
 		for range 2 {
-			transferOnce(t, ctfRepo, sourceSpec, targetSpec, uploader(wgetType, nexusNpmRepository, ""), wgetrepository.NewResourceRepository(nil), creds, component, version)
+			transferOnce(t, ctfRepo, sourceSpec, targetSpec, uploader(wgetType, nexusNpmRepository, ""), wgetrepository.NewResourceRepository(), creds, component, version)
 		}
 
 		want := baseURL + "/repository/" + nexusNpmRepository + "/ocm-integration-demo/-/ocm-integration-demo-1.0.0.tgz"
