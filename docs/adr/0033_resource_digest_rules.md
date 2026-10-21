@@ -37,7 +37,7 @@ digest:
 
 Only the binding knows which of the two it computed. The OCI binding resolves a manifest, so it must compare against the manifest digest; hashing the OCI layout archive would give a different value. The wget binding hashes the bytes it downloaded.
 
-The OCI case has one more twist. Earlier v2 releases had a bug: they recorded the manifest digest of an OCI image with the `genericBlobDigest/v1` label. Component versions created with those releases are signed with that label, so the OCI binding must keep accepting it, verify it against the manifest digest, and never relabel it. This is why the rule is chosen from what the binding computed, not from the recorded label.
+The OCI case has one more twist. Earlier v2 releases had a bug, documented and fixed in [#3681](https://github.com/open-component-model/open-component-model/pull/3681): they recorded the manifest digest of an OCI image with the `genericBlobDigest/v1` label. Component versions created with those releases are signed with that label, so the OCI binding must keep accepting it, verify it against the manifest digest, and never relabel it. This is why the rule is chosen from what the binding computed, not from the recorded label.
 
 **Same fields, inconsistent handling.** The other bindings show the same pattern:
 
@@ -104,9 +104,11 @@ flowchart LR
 7. **Reject partial digests**: A digest must be complete or absent. Rejecting partial digests instead of completing them is a deliberate compatibility change; the shared rules otherwise preserve existing acceptance of complete digests.
 8. **Preserve digests on content-preserving transfer**: Keep the source digest, including its absence, unchanged in the target descriptor. Reject partial digests. This prevents changes to a child's descriptor from invalidating a parent's reference digest.
 
+Lenient packing preserves compatibility with descriptors whose normalisation the packing layer cannot interpret. A checksum of the packed bytes cannot verify an arbitrary normalised resource digest: an OCI manifest digest, for example, differs from the checksum of its layout archive. Packing therefore preserves an unknown complete digest without claiming to verify it; replacing it with a byte checksum would change signed metadata. Known byte digests are still checked, and the strict processing and upload checks remain in place.
+
 #### Out of Scope
 
-* Verifying OCI downloads against the recorded digest.
+* Changing download verification. The CLI already checks an OCI layout's main artifact against the recorded resource digest and verifies the blobs in its graph through `VerifyResourceContent` ([#3889](https://github.com/open-component-model/open-component-model/pull/3889)). This ADR leaves that download contract unchanged; it does not exempt downloads from verification.
 * The digest written when transferring OCI content to non-OCI targets, and by the Helm to OCI conversion. Both currently replace a `NO-DIGEST` marker with a real digest; keeping the marker there needs maintainer agreement.
 
 ## Pros and Cons of the Options
