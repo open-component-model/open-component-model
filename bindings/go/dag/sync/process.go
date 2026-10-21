@@ -1,13 +1,13 @@
 // Package sync provides concurrency-safe utilities for processing directed
 // acyclic graphs (DAGs). It supports concurrent, dependency-respecting graph
-// traversal using Kahn's algorithm with configurable parallelism.
+// traversal using Kahn's algorithm with a bounded worker pool.
 package sync
 
 import (
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
-	"slices"
 
 	"golang.org/x/sync/errgroup"
 
@@ -45,31 +45,30 @@ func (d *GraphProcessor[K, V]) CurrentValue(key K) V {
 }
 
 // Process traverses the DAG in topological order and applies the configured
-// Processor to each node. It implements a batched, parallel form of Kahn's
-// algorithm:
+// Processor to each node. It implements a parallel form of Kahn's algorithm
+// with a bounded worker pool:
 //
 //  1. Compute in-degrees for all vertices.
-//  2. Collect roots (in-degree == 0) into a queue.
-//  3. For each batch of ready nodes:
-//     - Process them concurrently (bounded by Concurrency).
-//     - Decrement children in-degrees.
-//     - Add newly unlocked nodes to the queue.
-//  4. Repeat until the graph is fully processed.
+//  2. Schedule roots (in-degree == 0).
+//  3. Whenever a node finishes, decrement its children's in-degrees and
+//     schedule each child that reaches zero immediately.
+//  4. Repeat until every node is processed or one fails.
 //
-// Concurrency ensures that independent nodes are processed in parallel while
-// respecting dependency ordering.
+// At most Concurrency nodes are processed at once (no limit if <= 0). There is
+// no barrier between dependency levels: a node starts as soon as all of its
+// own predecessors are done, regardless of unrelated slow nodes.
 func (d *GraphProcessor[K, V]) Process(ctx context.Context) error {
 	g := d.graph
 
 	inDegree := make(map[K]int)
-	var queue []K
+	var ready []K
 
 	// Initialize in-degree map and root nodes.
 	err := g.WithReadLock(func(g *dag.DirectedAcyclicGraph[K]) error {
 		for id, v := range g.Vertices {
 			inDegree[id] = v.InDegree
 			if v.InDegree == 0 {
-				queue = append(queue, id)
+				ready = append(ready, id)
 			}
 		}
 		return nil
@@ -78,44 +77,53 @@ func (d *GraphProcessor[K, V]) Process(ctx context.Context) error {
 		return fmt.Errorf("failed to read graph: %w", err)
 	}
 
-	for len(queue) > 0 {
-		errGroup, gctx := errgroup.WithContext(ctx)
-		if d.opts.Concurrency > 0 {
-			errGroup.SetLimit(d.opts.Concurrency)
-		}
+	total := len(inDegree)
+	eg, gctx := errgroup.WithContext(ctx)
+	if d.opts.Concurrency > 0 {
+		eg.SetLimit(d.opts.Concurrency)
+	}
+	// Each node completes at most once, so sends never block. This matters:
+	// the coordinator may be blocked in eg.Go while all workers report back.
+	done := make(chan K, total)
 
-		batch := slices.Clone(queue)
-		queue = nil
-
-		for _, node := range batch {
-			errGroup.Go(func() error {
+	for finished := 0; finished < total; {
+		for _, node := range ready {
+			if gctx.Err() != nil {
+				break
+			}
+			// Blocks while Concurrency nodes are in flight.
+			eg.Go(func() error {
 				if err := d.opts.Processor.ProcessValue(gctx, d.CurrentValue(node)); err != nil {
 					return fmt.Errorf("failed to process value for node %v in graph: %w", node, err)
 				}
+				done <- node
 				return nil
 			})
 		}
+		ready = ready[:0]
 
-		// Wait until the batch is fully processed.
-		if err := errGroup.Wait(); err != nil {
-			return err
-		}
-
-		// Update in-degrees of children and enqueue unlocked nodes.
-		if err := g.WithReadLock(func(g *dag.DirectedAcyclicGraph[K]) error {
-			for _, node := range batch {
+		select {
+		case node := <-done:
+			finished++
+			if err := g.WithReadLock(func(g *dag.DirectedAcyclicGraph[K]) error {
 				for child := range g.Vertices[node].Edges {
 					inDegree[child]--
 					if inDegree[child] == 0 {
-						queue = append(queue, child)
+						ready = append(ready, child)
 					}
 				}
+				return nil
+			}); err != nil {
+				return errors.Join(err, eg.Wait())
 			}
-			return nil
-		}); err != nil {
-			return err
+		case <-gctx.Done():
+			if err := eg.Wait(); err != nil {
+				return err
+			}
+			// Parent context cancelled without a worker error.
+			return ctx.Err()
 		}
 	}
 
-	return nil
+	return eg.Wait()
 }
