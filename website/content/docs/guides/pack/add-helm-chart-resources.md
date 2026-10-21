@@ -3,6 +3,8 @@ title: "Add Helm Chart Resources"
 description: "Add a Helm chart to a component version as a helmChart resource, either embedded with the Helm/v1 input or referenced with the Helm/v1 access, ready to transfer to an OCI registry."
 weight: 35
 toc: true
+aliases:
+  - /docs/how-to/transfer-helm-charts/
 ---
 
 Package a Helm chart into an OCM component version as a `helmChart` resource. A
