@@ -15,10 +15,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 )
 
-type readerBlob struct{ io.Reader }
-
-func (b readerBlob) ReadCloser() (io.ReadCloser, error) { return io.NopCloser(b.Reader), nil }
-
 func TestCopyBlobToOSPathWritesIntoNamedPipe(t *testing.T) {
 	r := require.New(t)
 	pipe := filepath.Join(t.TempDir(), "pipe")
@@ -43,11 +39,12 @@ func TestCopyBlobToOSPathWritesIntoNamedPipe(t *testing.T) {
 	}()
 
 	r.NoError(filesystem.CopyBlobToOSPath(readerBlob{strings.NewReader("new")}, pipe))
-	r.Equal("new", <-read)
 
+	// Checked before receiving: a replaced pipe never gets a writer, so the receive would block.
 	fi, err := os.Lstat(pipe)
 	r.NoError(err)
 	r.NotZero(fi.Mode()&os.ModeNamedPipe, "the pipe must not be replaced by a regular file")
+	r.Equal("new", <-read)
 }
 
 // A symlink at the target path is replaced by a regular file; its former target keeps its content.

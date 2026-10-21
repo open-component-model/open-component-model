@@ -54,7 +54,7 @@ func CopyBlobToOSPath(blob blob.ReadOnlyBlob, path string) (err error) {
 		return copyBuffered(file, data)
 	}
 
-	tmp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".*.tmp")
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".ocm-download-*.tmp")
 	if err != nil {
 		return errors.Join(fmt.Errorf("failed to create temporary file for %s: %w", path, err), data.Close())
 	}

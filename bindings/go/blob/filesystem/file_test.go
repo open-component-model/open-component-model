@@ -13,6 +13,10 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 )
 
+type readerBlob struct{ io.Reader }
+
+func (b readerBlob) ReadCloser() (io.ReadCloser, error) { return io.NopCloser(b.Reader), nil }
+
 func TestCopyBlobToOSPath(t *testing.T) {
 	r := require.New(t)
 	tempDir := t.TempDir()
@@ -92,4 +96,16 @@ func TestCopyBlobToOSPathKeepsTargetWhenCloseFails(t *testing.T) {
 	entries, err := os.ReadDir(filepath.Dir(dst))
 	r.NoError(err)
 	r.Len(entries, 1, "temporary file must be removed")
+}
+
+// The temporary file must not derive its name from the target, or a target name close to the
+// filesystem's limit fails with "file name too long".
+func TestCopyBlobToOSPathAcceptsLongFileName(t *testing.T) {
+	r := require.New(t)
+	dst := filepath.Join(t.TempDir(), strings.Repeat("a", 250))
+	r.NoError(filesystem.CopyBlobToOSPath(readerBlob{strings.NewReader("new")}, dst))
+
+	got, err := os.ReadFile(dst)
+	r.NoError(err)
+	r.Equal("new", string(got))
 }
