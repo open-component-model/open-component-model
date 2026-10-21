@@ -95,9 +95,26 @@ First confirm the component version arrived:
 ocm get cv ghcr.io/<target-namespace>//ocm.software/examples/demo:1.0.0
 ```
 
-Then verify the signature. `ocm verify` reads the public key from your `.ocmconfig`; see
-[Guides: Configure Signing Credentials]({{< relref "docs/guides/sign/configure-signing-credentials.md" >}})
-for the setup. With credentials in place:
+Then verify the signature. `ocm verify` reads the public key from `.ocmconfig`. Add a
+consumer entry with the public key path (verification does not need the private key):
+
+```yaml
+# .ocmconfig
+type: generic.config.ocm.software/v1
+configurations:
+  - type: credentials.config.ocm.software
+    consumers:
+      - identity:
+          type: RSA/v1alpha1
+          algorithm: RSASSA-PSS
+          signature: default
+        credentials:
+          - type: RSACredentials/v1
+            publicKeyPEMFile: /path/to/public-key.pem
+```
+
+See [Guides: Configure Signing Credentials]({{< relref "docs/guides/sign/configure-signing-credentials.md" >}})
+for GPG and Sigstore variants. With the config in place:
 
 ```bash
 ocm verify cv ghcr.io/<target-namespace>//ocm.software/examples/demo:1.0.0
