@@ -3,6 +3,8 @@ title: "Sonatype Nexus Uploader"
 description: "Reference for nexus.uploader.transfer.config.ocm.software/v1alpha1: upload matched resources into Sonatype Nexus helm, raw, maven2 and npm hosted repositories."
 weight: 7
 toc: true
+aliases:
+  - /docs/reference/transfer-configuration/nexus-uploader/
 ---
 
 Uploads a matched resource into a hosted repository of a Sonatype Nexus

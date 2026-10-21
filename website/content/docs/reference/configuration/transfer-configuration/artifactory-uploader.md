@@ -3,6 +3,8 @@ title: "JFrog Artifactory Uploader"
 description: "Reference for artifactory.uploader.transfer.config.ocm.software/v1alpha1: upload resources into JFrog Artifactory helm, generic, maven and npm repositories."
 weight: 6
 toc: true
+aliases:
+  - /docs/reference/transfer-configuration/artifactory-uploader/
 ---
 
 Uploads a matched resource into a local repository of a JFrog Artifactory server,

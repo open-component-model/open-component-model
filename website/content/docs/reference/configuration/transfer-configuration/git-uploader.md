@@ -3,6 +3,8 @@ title: "Git Uploader"
 description: "Reference for git.uploader.transfer.config.ocm.software/v1alpha1: push matched Git resources with their history into an existing Git repository."
 weight: 9
 toc: true
+aliases:
+  - /docs/reference/transfer-configuration/git-uploader/
 ---
 
 Pushes a selected Git resource into an existing Git repository. The commits are

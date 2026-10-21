@@ -4,6 +4,8 @@ description: "Complete reference for OCM HTTP client configuration: schema, fiel
 icon: "🌐"
 weight: 5
 toc: true
+aliases:
+  - /docs/reference/http-client-configuration/
 ---
 
 This page is the technical reference for OCM HTTP client configuration. For a

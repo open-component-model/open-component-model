@@ -3,6 +3,8 @@ title: "Transfer Settings"
 description: "Reference for transfer.config.ocm.software/v1alpha1: global transfer settings."
 weight: 1
 toc: true
+aliases:
+  - /docs/reference/transfer-configuration/transfer-settings/
 ---
 
 The `transfer.config.ocm.software/v1alpha1` type controls the global transfer

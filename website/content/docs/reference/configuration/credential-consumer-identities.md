@@ -4,6 +4,8 @@ description: "Complete reference for OCM credential consumer identity types, the
 icon: "🔑"
 weight: 2
 toc: true
+aliases:
+  - /docs/reference/credential-consumer-identities/
 ---
 
 This page is the technical reference for credential consumer identities — the key-value maps OCM uses to look up credentials for a given operation. For a high-level introduction, see [Credential System]({{< relref "docs/concepts/credential-system.md" >}}).

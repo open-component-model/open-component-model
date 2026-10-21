@@ -4,6 +4,8 @@ description: "Reference for all built-in OCM credential types and their configur
 icon: "🔑"
 weight: 3
 toc: true
+aliases:
+  - /docs/reference/credential-types/
 ---
 
 This page is the technical reference for OCM's built-in credential types — the values you place in the `credentials:` field of a consumer entry. For a high-level introduction, see [Credential System]({{< relref "docs/concepts/credential-system.md" >}}).

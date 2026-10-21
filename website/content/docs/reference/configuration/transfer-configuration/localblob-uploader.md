@@ -3,6 +3,8 @@ title: "Local Blob Uploader"
 description: "Reference for localblob.uploader.transfer.config.ocm.software/v1alpha1: download matched resources and embed them as local blobs."
 weight: 3
 toc: true
+aliases:
+  - /docs/reference/transfer-configuration/localblob-uploader/
 ---
 
 Downloads a selected resource and embeds it in the target as a local blob. This

@@ -6,6 +6,8 @@ weight: 7
 toc: true
 sidebar:
   collapsed: true
+aliases:
+  - /docs/reference/transfer-configuration/
 ---
 
 This page is the technical reference for OCM transfer configuration. For a

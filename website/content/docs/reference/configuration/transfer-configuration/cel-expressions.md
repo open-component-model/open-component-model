@@ -3,6 +3,8 @@ title: "CEL Expressions"
 description: "Reference for the CEL expressions in match, target URL, header, path and imageReference fields of uploaders."
 weight: 8
 toc: true
+aliases:
+  - /docs/reference/transfer-configuration/cel-expressions/
 ---
 
 Uploader fields use two forms of [CEL](https://cel.dev/) expressions:

@@ -3,6 +3,8 @@ title: "Reference Uploader"
 description: "Reference for reference.uploader.transfer.config.ocm.software/v1alpha1: keep matched resources by reference with no transformation."
 weight: 4
 toc: true
+aliases:
+  - /docs/reference/transfer-configuration/reference-uploader/
 ---
 
 Keeps a selected resource by reference: no transformation is applied and the

@@ -632,11 +632,12 @@ To harden the cluster and have more strict RBAC please read [RBAC for CRDs kro c
 
 ## Clean up
 
-Delete the instance before the RGDs and wait for it to fully terminate.
-Deleting an RGD while its instances still exist can strand them on a finalizer.
+Delete the instance first, then the `NamespacedDeployers` — they need the service account
+to prune the cluster-scoped RGDs before the bootstrap manifest removes it.
 
 ```bash
 kubectl delete system system -n default --wait
+kubectl delete namespaceddeployer system-deployer-podinfo system-deployer-system -n default --wait
 envsubst < bootstrap.yaml | kubectl delete -f - --ignore-not-found
 ```
 

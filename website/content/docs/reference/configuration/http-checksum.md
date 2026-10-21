@@ -4,6 +4,8 @@ description: "Complete reference for OCM HTTP checksum verification: schema, che
 icon: "🔒"
 weight: 4
 toc: true
+aliases:
+  - /docs/reference/checksum-http-configuration/
 ---
 
 This page is the technical reference for OCM HTTP checksum verification — the

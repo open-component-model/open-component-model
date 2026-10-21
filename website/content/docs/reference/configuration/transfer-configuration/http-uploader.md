@@ -3,6 +3,8 @@ title: "HTTP Uploader"
 description: "Reference for http.uploader.transfer.config.ocm.software/v1alpha1: stream matched resources to an HTTP endpoint and publish a Wget/v1 access."
 weight: 5
 toc: true
+aliases:
+  - /docs/reference/transfer-configuration/http-uploader/
 ---
 
 Streams a matched resource's content directly to an HTTP endpoint (typically a

@@ -3,6 +3,8 @@ title: "Selection Examples"
 description: "Executed selection examples for uploader configurations: which resources the OCI, local blob and reference uploaders select, and the resulting errors."
 weight: 10
 toc: true
+aliases:
+  - /docs/reference/transfer-configuration/selection-examples/
 ---
 
 The following examples are executed as tests (`TestUploaderExamples` in

@@ -4,6 +4,8 @@ description: "Complete reference for OCM resolver configuration: schema, reposit
 icon: "🔍"
 weight: 6
 toc: true
+aliases:
+  - /docs/reference/resolver-configuration/
 ---
 
 This page is the technical reference for OCM resolver configuration. For a high-level introduction, see

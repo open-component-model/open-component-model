@@ -4,6 +4,8 @@ description: "Reference for OCM versioning configuration: schema, built-in schem
 icon: "🔢"
 weight: 8
 toc: true
+aliases:
+  - /docs/reference/versioning-configuration/
 ---
 
 This page is the technical reference for OCM versioning configuration. It lets OCM order, filter, and validate

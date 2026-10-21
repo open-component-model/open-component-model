@@ -4,6 +4,8 @@ description: "Reference for the OCI caches used by the OCM CLI and controller: c
 icon: "🗄️"
 weight: 1
 toc: true
+aliases:
+  - /docs/reference/caching-configuration/
 ---
 
 This page is the technical reference for the on-disk caches OCM uses when it reads component versions from OCI

@@ -3,6 +3,8 @@ title: "OCI Uploader"
 description: "Reference for oci.uploader.transfer.config.ocm.software/v1alpha1: upload matched resources as separate OCI artifacts."
 weight: 2
 toc: true
+aliases:
+  - /docs/reference/transfer-configuration/oci-uploader/
 ---
 
 Uploads a selected resource as a separate OCI artifact in the target registry.
