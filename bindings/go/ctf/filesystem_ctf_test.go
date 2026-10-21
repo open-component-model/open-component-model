@@ -116,8 +116,10 @@ func Test_FileSystemCTF_MemFS(t *testing.T) {
 	r.NoError(err)
 	r.NotNil(b)
 
-	// read only fs => no write or delete should be possible
-	r.Error(archive.SaveBlob(ctx, b))
+	// read only fs => no write or delete should be possible; saving content that is already
+	// stored writes nothing and is allowed
+	r.NoError(archive.SaveBlob(ctx, b))
+	r.Error(archive.SaveBlob(ctx, inmemory.New(bytes.NewReader([]byte("new content")))))
 	r.Error(archive.DeleteBlob(ctx, dig.String()))
 
 	stream, err := b.ReadCloser()
@@ -331,7 +333,7 @@ func TestFileSystemCTF_SaveBlob_ErrorCases(t *testing.T) {
 		{
 			name: "read error",
 			blob: &mockBlob{
-				digest: "sha256:123",
+				digest: digest.FromString("unreadable").String(),
 				known:  true,
 				size:   100,
 				err:    fmt.Errorf("read error"),

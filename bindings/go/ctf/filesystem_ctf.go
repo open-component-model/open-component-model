@@ -282,6 +282,23 @@ func (c *FileSystemCTF) SaveBlob(ctx context.Context, b blob.ReadOnlyBlob) (err 
 		return errors.New("blob does not have a digest that can be used to save it")
 	}
 
+	file, err := ToBlobFileName(dig)
+	if err != nil {
+		return err
+	}
+	path := filepath.Join(BlobsDirectoryName, file)
+
+	// Blobs are content-addressed, so an existing blob already holds this content and is
+	// kept. The content is still read and verified, as callers rely on it being consumed.
+	// Not replacing it also means a blob is never renamed over while a reader may hold it
+	// open: readers do not lock against writers for the whole read, and renaming over an
+	// open file fails on Windows.
+	exists := false
+	if c.statFS != nil {
+		_, statErr := c.statFS.Stat(path)
+		exists = statErr == nil
+	}
+
 	size := blob.SizeUnknown
 	if sizeable, ok := b.(blob.SizeAware); ok {
 		size = sizeable.Size()
@@ -293,7 +310,7 @@ func (c *FileSystemCTF) SaveBlob(ctx context.Context, b blob.ReadOnlyBlob) (err 
 	}
 	// Closing data can fail when the content does not match its digest (e.g. a verifying
 	// reader). It is closed before the staged content is published, so unverified content
-	// never replaces a blob that already exists under the same digest.
+	// is never stored under its digest.
 	closed := false
 	closeData := func() error {
 		closed = true
@@ -305,20 +322,18 @@ func (c *FileSystemCTF) SaveBlob(ctx context.Context, b blob.ReadOnlyBlob) (err 
 		}
 	}()
 
-	file, err := ToBlobFileName(dig)
-	if err != nil {
-		return err
-	}
-
 	ctxRead, err := newCtxReader(ctx, data)
 	if err != nil {
 		return fmt.Errorf("unable to create context reader: %w", err)
 	}
 
-	return c.writeFile(filepath.Join(
-		BlobsDirectoryName,
-		file,
-	), ctxRead, size, closeData)
+	if exists {
+		if _, err := io.Copy(io.Discard, ctxRead); err != nil {
+			return fmt.Errorf("unable to read content: %w", err)
+		}
+		return closeData()
+	}
+	return c.writeFile(path, ctxRead, size, closeData)
 }
 
 // ToBlobFileName converts a digest to a blob file name by replacing the ":" with ".", which is the

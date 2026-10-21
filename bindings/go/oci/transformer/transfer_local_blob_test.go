@@ -23,10 +23,26 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// TestTransferCTFLocalBlobToCTFLocalBlob streams a local blob between two CTF archives and
+// TestTransferCTFLocalBlobToCTFLocalBlob streams a local blob between CTF archives and
 // reads it back from the target: the content arrives intact although the source blob can
-// only be read once, and the source access's referenceName is kept.
+// only be read once, and the source access's referenceName is kept. Within a single
+// archive the open source stream must not block the write to the target.
 func TestTransferCTFLocalBlobToCTFLocalBlob(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		sameArchive bool
+	}{
+		{name: "separate archives"},
+		{name: "same archive", sameArchive: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			testTransferCTFLocalBlobToCTFLocalBlob(t, tc.sameArchive)
+		})
+	}
+}
+
+func testTransferCTFLocalBlobToCTFLocalBlob(t *testing.T, sameArchive bool) {
+	t.Helper()
 	r := require.New(t)
 	ctx := t.Context()
 	const component, version = "ocm.software/test", "1.0.0"
@@ -39,7 +55,11 @@ func TestTransferCTFLocalBlobToCTFLocalBlob(t *testing.T) {
 			AccessMode: ctfspec.AccessModeReadWrite + "|" + ctfspec.AccessModeCreate,
 		}
 	}
-	sourceSpec, targetSpec := ctfRepoSpec(t.TempDir()), ctfRepoSpec(t.TempDir())
+	sourceSpec := ctfRepoSpec(t.TempDir())
+	targetSpec := sourceSpec
+	if !sameArchive {
+		targetSpec = ctfRepoSpec(t.TempDir())
+	}
 	repos := provider.NewComponentVersionRepositoryProvider()
 
 	desc := &descriptor.Descriptor{
