@@ -167,24 +167,52 @@ meta:
 }
 
 // TestVersionedLabelExcluded pins jsonNormalisation/v4alpha1 to its historical
-// bytes: a signed label's "version" must NOT appear in the normalised output.
-// The runtime<->v2 label conversion started preserving Label.Version for
-// jsonNormalisation/v1 (which signs it); v4alpha1 must stay byte-stable, or
-// existing signatures over versioned signing labels would fail verification.
+// bytes: a signed label's "version" must NOT appear in the normalised output,
+// at every label position — including component references, which previously
+// bypassed label filtering entirely (the rule was keyed "references" while the
+// JSON key is "componentReferences"). The runtime<->v2 conversion started
+// preserving Label.Version for jsonNormalisation/v1; v4alpha1 must stay
+// byte-stable, or existing signatures over versioned signing labels would fail.
+//
+// It also pins the deliberately-unchanged behaviour: non-signing reference
+// labels are still kept (v4alpha1 never filtered reference labels; proper
+// signing-only filtering is deferred to v4alpha2). Only label.version is
+// stripped from references.
 func TestVersionedLabelExcluded(t *testing.T) {
 	r := require.New(t)
-	d := &runtime.Descriptor{}
-	d.Component.Name = "acme.org/x"
-	d.Component.Version = "1.0.0"
-	d.Component.Provider.Name = "acme"
-	d.Component.Labels = []runtime.Label{{
-		Name: "k", Value: []byte(`"v"`), Signing: true, Version: "v1",
-	}}
 
-	got, err := normalisation.Normalise(d, v4alpha1.Algorithm)
+	mk := func(ver string) *runtime.Descriptor {
+		d := &runtime.Descriptor{}
+		d.Component.Name = "acme.org/x"
+		d.Component.Version = "1.0.0"
+		d.Component.Provider.Name = "acme"
+		d.Component.Labels = []runtime.Label{{Name: "k", Value: []byte(`"v"`), Signing: true, Version: ver}}
+		d.Component.References = []runtime.Reference{{
+			ElementMeta: runtime.ElementMeta{ObjectMeta: runtime.ObjectMeta{
+				Name: "ref", Version: "1.0.0",
+				Labels: []runtime.Label{
+					{Name: "sig", Value: []byte(`"v"`), Signing: true, Version: ver},
+					{Name: "nosig", Value: []byte(`"x"`), Signing: false, Version: ver},
+				},
+			}},
+			Component: "acme.org/child",
+		}}
+		return d
+	}
+
+	withVer, err := normalisation.Normalise(mk("v1"), v4alpha1.Algorithm)
 	r.NoError(err)
-	r.NotContains(string(got), `"version":"v1"`, "v4alpha1 must not emit the label version")
-	r.Contains(string(got), `"labels":[{"name":"k","signing":true,"value":"v"}]`)
+	noVer, err := normalisation.Normalise(mk(""), v4alpha1.Algorithm)
+	r.NoError(err)
+
+	// Label version must have no effect on v4alpha1 output, anywhere.
+	r.Equal(string(noVer), string(withVer), "label version must not change v4alpha1 bytes")
+	r.NotContains(string(withVer), `"version":"v1"`)
+	// Component label: filtered to name/value/signing.
+	r.Contains(string(withVer), `"labels":[{"name":"k","signing":true,"value":"v"}]`)
+	// Reference labels: version stripped, but the non-signing label is still kept
+	// (pre-v1 behaviour; full filtering is a v4alpha2 change).
+	r.Contains(string(withVer), `"labels":[{"name":"sig","signing":true,"value":"v"},{"name":"nosig","value":"x"}]`)
 }
 
 func TestMapResourcesWithAccessType(t *testing.T) {

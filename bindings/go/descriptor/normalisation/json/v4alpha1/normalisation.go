@@ -67,9 +67,23 @@ var ExclusionRules = jcs.MapExcludes{
 				"labels": LabelExcludes,
 			},
 		},
-		"references": jcs.ArrayExcludes{
+		// componentReferences carry labels too. Historically this rule was keyed
+		// "references" while the descriptor JSON key is "componentReferences", so it
+		// never matched and reference labels were emitted unfiltered. Their
+		// label.version nonetheless stayed absent because the runtime<->v2
+		// conversion dropped it. Now that the conversion preserves version (for
+		// jsonNormalisation/v1), exclude ONLY label.version here to keep v4alpha1
+		// byte-stable; do NOT apply the full LabelExcludes, which would also drop
+		// non-signing reference labels and change existing digests. Proper
+		// signing-only filtering for reference labels is a deliberate v4alpha1
+		// change deferred to v4alpha2.
+		"componentReferences": jcs.ArrayExcludes{
 			Continue: jcs.MapExcludes{
-				"labels": LabelExcludes,
+				"labels": jcs.ArrayExcludes{
+					Continue: jcs.MapExcludes{
+						"version": nil,
+					},
+				},
 			},
 		},
 	},
