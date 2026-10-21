@@ -34,6 +34,34 @@ func Test_CTF_RejectOCMv1ComponentArchive(t *testing.T) {
 	}
 }
 
+func Test_CTF_ArchiveExtractionErrors(t *testing.T) {
+	for _, extension := range []string{".tar", ".tgz"} {
+		for _, missing := range []bool{true, false} {
+			name := "corrupt"
+			if missing {
+				name = "missing"
+			}
+			t.Run(name+extension, func(t *testing.T) {
+				r := require.New(t)
+				path := filepath.Join(t.TempDir(), "archive"+extension)
+				if !missing {
+					r.NoError(os.WriteFile(path, []byte("invalid archive"), 0o600))
+				}
+				archive, _, err := ctf.OpenCTFByFileExtension(t.Context(), ctf.OpenCTFOptions{
+					Path:    path,
+					Flag:    ctf.O_RDONLY,
+					TempDir: t.TempDir(),
+				})
+				r.Error(err)
+				r.Nil(archive)
+				if missing {
+					r.ErrorIs(err, os.ErrNotExist)
+				}
+			})
+		}
+	}
+}
+
 func Test_CTF_ReadWrite(t *testing.T) {
 	for _, format := range []ctf.FileFormat{
 		ctf.FormatDirectory,
