@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	ocmhttp "ocm.software/open-component-model/bindings/go/http"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	credv1 "ocm.software/open-component-model/bindings/go/wget/spec/credentials/v1"
 )
@@ -51,38 +52,58 @@ func Apply(ctx context.Context, req *http.Request, client **http.Client, credent
 			return fmt.Errorf("invalid certificate/privateKey for mTLS: %w", err)
 		}
 
-		tlsCfg := &tls.Config{
-			MinVersion:   tls.VersionTLS12,
-			Certificates: []tls.Certificate{cert},
-		}
-
+		var rootCAs *x509.CertPool
 		if creds.CertificateAuthority != "" {
-			pool := x509.NewCertPool()
-			if !pool.AppendCertsFromPEM([]byte(creds.CertificateAuthority)) {
+			rootCAs = x509.NewCertPool()
+			if !rootCAs.AppendCertsFromPEM([]byte(creds.CertificateAuthority)) {
 				return fmt.Errorf("failed to parse certificateAuthority PEM")
 			}
-			tlsCfg.RootCAs = pool
 		}
 
-		// Clone the client and install an mTLS transport, preserving the
-		// original transport's settings (proxy, timeouts, connection pooling).
-		existing := *client
-		var baseTransport *http.Transport
-		if t, ok := existing.Transport.(*http.Transport); ok && t != nil {
-			baseTransport = t.Clone()
-		} else {
-			if t, ok = http.DefaultTransport.(*http.Transport); ok && t != nil {
-				baseTransport = t.Clone()
-			} else {
-				baseTransport = &http.Transport{}
+		// Install the certificate on the client's own transports so its
+		// configuration (timeouts, retries, proxy, compression, TLS) is kept.
+		var raisedMinVersion uint16
+		var customTLSDialer bool
+		cloned, err := ocmhttp.CloneTransports(*client, func(tr *http.Transport) {
+			// A custom TLS dialer does its own handshake and never sees
+			// TLSClientConfig, so the credential could not be presented.
+			if tr.DialTLSContext != nil || tr.DialTLS != nil { //nolint:staticcheck // DialTLS is deprecated but still honored by net/http.
+				customTLSDialer = true
+				return
 			}
+			// The clone serves this request only and is then dropped, so its
+			// idle connections could never be reused; close them instead of
+			// leaving them open until IdleConnTimeout, which may be unlimited.
+			tr.DisableKeepAlives = true
+			cfg := tr.TLSClientConfig
+			cfg.Certificates = []tls.Certificate{cert}
+			// Go ignores Certificates when GetClientCertificate is set, which
+			// would keep the explicit credential from being presented.
+			cfg.GetClientCertificate = nil
+			// A resumed session keeps the identity it was established with, so
+			// a shared session cache could present the client's previous
+			// certificate instead of this one.
+			cfg.ClientSessionCache = nil
+			if rootCAs != nil {
+				cfg.RootCAs = rootCAs
+			}
+			if cfg.MinVersion < tls.VersionTLS12 {
+				// Zero means the Go default, which is already TLS 1.2 for clients.
+				if cfg.MinVersion != 0 {
+					raisedMinVersion = cfg.MinVersion
+				}
+				cfg.MinVersion = tls.VersionTLS12
+			}
+		})
+		if err != nil {
+			return fmt.Errorf("cannot apply mTLS client certificate: %w", err)
 		}
-		baseTransport.TLSClientConfig = tlsCfg
-		cloned := &http.Client{
-			Timeout:       existing.Timeout,
-			Jar:           existing.Jar,
-			CheckRedirect: existing.CheckRedirect,
-			Transport:     baseTransport,
+		if customTLSDialer {
+			return errors.New("cannot apply mTLS client certificate: the client uses a custom TLS dialer that bypasses its TLS configuration")
+		}
+		if raisedMinVersion != 0 {
+			slog.WarnContext(ctx, "raising the client's minimum TLS version to TLS 1.2 for the mTLS client certificate",
+				"configured", tls.VersionName(raisedMinVersion))
 		}
 		*client = cloned
 	}
