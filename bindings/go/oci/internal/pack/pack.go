@@ -13,6 +13,8 @@ import (
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"oras.land/oras-go/v2"
 	"oras.land/oras-go/v2/content"
+	"oras.land/oras-go/v2/errdef"
+	"oras.land/oras-go/v2/registry"
 	"oras.land/oras-go/v2/registry/remote"
 
 	"ocm.software/open-component-model/bindings/go/blob"
@@ -89,6 +91,16 @@ func ResourceLocalBlobOCILayer(ctx context.Context, storage content.Storage, b *
 		BlobDigest:    digest.Digest(access.LocalReference),
 	}
 
+	// Like oras.CopyGraph, skip blobs the target already holds: starting an
+	// upload session for an existing digest is not a no-op on every registry
+	// (Artifactory deletes the staged duplicate on finalize, which fails
+	// without delete permission).
+	if layer, exists, err := existingResourceLayer(ctx, storage, b, layerOpts); err != nil {
+		return ociImageSpecV1.Descriptor{}, err
+	} else if exists {
+		return finishResourceLayer(b, access, layer, opts, storage)
+	}
+
 	// Stream the blob directly when the storage supports streaming chunked
 	// upload and buffering would otherwise be required. Buffering happens
 	// (in PrepareArtifactBlobForOCI) whenever the size OR the digest is unknown,
@@ -114,6 +126,69 @@ func ResourceLocalBlobOCILayer(ctx context.Context, storage content.Storage, b *
 	}
 
 	return finishResourceLayer(b, access, layer, opts, storage)
+}
+
+// blobResolver is implemented by remote repositories, whose blob store can
+// resolve a digest to a descriptor (including its size) with a HEAD request.
+type blobResolver interface {
+	Blobs() registry.BlobStore
+}
+
+// existingResourceLayer reports whether the blob's layer is already present in
+// storage and, if so, returns its layer descriptor so the upload can be
+// skipped. Without a known digest the blob cannot be looked up and the result
+// is (zero, false, nil). With a known digest but unknown size, the size is
+// resolved from storage when it supports blob resolution; otherwise the blob
+// is treated as absent.
+func existingResourceLayer(ctx context.Context, storage content.Storage, b *ociblob.ArtifactBlob, opts ResourceBlobOCILayerOptions) (ociImageSpecV1.Descriptor, bool, error) {
+	dig := opts.BlobDigest
+	if blobDig, ok := b.Digest(); ok {
+		dig = digest.Digest(blobDig)
+	}
+	if len(dig) == 0 {
+		return ociImageSpecV1.Descriptor{}, false, nil
+	}
+	if err := dig.Validate(); err != nil {
+		return ociImageSpecV1.Descriptor{}, false, fmt.Errorf("failed to validate blob digest: %w", err)
+	}
+
+	mediaType := opts.BlobMediaType
+	if mt, ok := b.MediaType(); ok && mt != "" {
+		mediaType = mt
+	}
+	if mediaType == "" {
+		return ociImageSpecV1.Descriptor{}, false, errors.New("blob media type is unknown and cannot be packed into an oci blob")
+	}
+
+	layer := ociImageSpecV1.Descriptor{MediaType: mediaType, Digest: dig, Size: b.Size()}
+	if layer.Size == blob.SizeUnknown {
+		resolver, ok := storage.(blobResolver)
+		if !ok {
+			return ociImageSpecV1.Descriptor{}, false, nil
+		}
+		resolved, err := resolver.Blobs().Resolve(ctx, dig.String())
+		if errors.Is(err, errdef.ErrNotFound) {
+			return ociImageSpecV1.Descriptor{}, false, nil
+		}
+		if err != nil {
+			return ociImageSpecV1.Descriptor{}, false, fmt.Errorf("failed to resolve blob %s in target: %w", dig, err)
+		}
+		layer.Size = resolved.Size
+	} else {
+		exists, err := storage.Exists(ctx, layer)
+		if err != nil {
+			return ociImageSpecV1.Descriptor{}, false, fmt.Errorf("failed to check existence of blob %s in target: %w", dig, err)
+		}
+		if !exists {
+			return ociImageSpecV1.Descriptor{}, false, nil
+		}
+	}
+
+	layer.Annotations = maps.Clone(opts.BlobLayerAnnotations)
+	if err := identity.Adopt(&layer, b.Artifact); err != nil {
+		return ociImageSpecV1.Descriptor{}, false, fmt.Errorf("failed to adopt descriptor based on resource: %w", err)
+	}
+	return layer, true, nil
 }
 
 // streamResourceLayer attempts a streaming chunked upload of b, computing (and
