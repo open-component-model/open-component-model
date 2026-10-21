@@ -98,8 +98,8 @@ ocm get cv ghcr.io/<target-namespace>//ocm.software/examples/demo:1.0.0
 Then verify the signature. `ocm verify` reads the public key from `.ocmconfig`. Add a
 consumer entry with the public key path (verification does not need the private key):
 
-```yaml
-# .ocmconfig
+```bash
+cat > .ocmconfig << 'EOF'
 type: generic.config.ocm.software/v1
 configurations:
   - type: credentials.config.ocm.software
@@ -110,11 +110,12 @@ configurations:
           signature: default
         credentials:
           - type: RSACredentials/v1
-            publicKeyPEMFile: /path/to/public-key.pem
+            publicKeyPEMFile: /tmp/keys/public-key.pem
+EOF
 ```
 
 See [Guides: Configure Signing Credentials]({{< relref "docs/guides/sign/configure-signing-credentials.md" >}})
-for GPG and Sigstore variants. With the config in place:
+for GPG and Sigstore variants and full `.ocmconfig` structure. With the config in place:
 
 ```bash
 ocm verify cv ghcr.io/<target-namespace>//ocm.software/examples/demo:1.0.0

@@ -638,7 +638,7 @@ they prune the RGDs with its permissions.
 
 ```bash
 kubectl delete system system -n default
-kubectl delete namespaceddeployer --all -n default --wait
+kubectl delete namespaceddeployer system-deployer-podinfo system-deployer-system -n default --wait
 envsubst < bootstrap.yaml | kubectl delete -f - --ignore-not-found
 ```
 
