@@ -638,7 +638,8 @@ they prune the RGDs with its permissions.
 
 ```bash
 kubectl delete system system -n default
-envsubst < bootstrap.yaml | kubectl delete -f -
+kubectl delete namespaceddeployer --all -n default --wait
+envsubst < bootstrap.yaml | kubectl delete -f - --ignore-not-found
 ```
 
 By default kro keeps the `Podinfo` and `System` CRDs after the RGDs are gone. Installing kro

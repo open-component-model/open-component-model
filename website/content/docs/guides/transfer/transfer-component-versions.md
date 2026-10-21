@@ -87,13 +87,20 @@ ocm transfer cv --copy-resources \
 
 Confirm the component version is present in the target and, if it was signed,
 that its signature still verifies. Signatures travel inside the component
-descriptor, so they survive the transfer intact:
+descriptor, so they survive the transfer intact.
+
+First confirm the component version arrived:
 
 ```bash
 ocm get cv ghcr.io/<target-namespace>//ocm.software/examples/demo:1.0.0
+```
 
-ocm verify cv ghcr.io/<target-namespace>//ocm.software/examples/demo:1.0.0 \
-  --public-key my-key.pub
+Then verify the signature. `ocm verify` reads the public key from your `.ocmconfig`; see
+[Guides: Configure Signing Credentials]({{< relref "docs/guides/sign/configure-signing-credentials.md" >}})
+for the setup. With credentials in place:
+
+```bash
+ocm verify cv ghcr.io/<target-namespace>//ocm.software/examples/demo:1.0.0
 ```
 
 {{< /step >}}
