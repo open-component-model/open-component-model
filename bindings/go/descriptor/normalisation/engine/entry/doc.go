@@ -22,8 +22,10 @@
 //     Python's json.dumps (see marshal / pythoniseNumbers).
 //   - Input already arrives storage-normalised: json/v1 renders the descriptor
 //     through a sigs.k8s.io/yaml round-trip, so object keys are already sorted
-//     and numbers already collapsed to float64 — matching what signing and
-//     verification read from the OCI store.
+//     and an integral float such as 1.0 is already collapsed to 1 — matching
+//     what signing and verification read from the OCI store. json/v1 decodes
+//     with UseNumber, so numbers arrive as json.Number and integers keep full
+//     precision.
 //
 // The engine is deliberately OCM-agnostic: it operates on an arbitrary any tree
 // (map[string]any, []any, scalars, explicit nil). Field selection and
