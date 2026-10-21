@@ -32,14 +32,45 @@ func targetKind(toSpec runtime.Typed) string {
 	return toSpec.GetType().GetName()
 }
 
-// uploadLabel renders the label for an AddComponentVersion transformation. When a
-// component is transferred to more than one target, the target index (0-based)
-// disambiguates the labels, mirroring the T<idx> suffix on the transformation ID.
+// targetLocation renders where in the target repository content goes: the registry
+// and repository prefix for OCI, the archive path for CTF. Other repository types
+// have no known location and render empty.
+func targetLocation(toSpec runtime.Typed) string {
+	repo, err := convertToConcreteRepo(toSpec)
+	if err != nil {
+		return ""
+	}
+	switch repo := repo.(type) {
+	case *ctfv1.Repository:
+		return repo.FilePath
+	case *oci.Repository:
+		if repo.SubPath == "" {
+			return repo.BaseUrl
+		}
+		return strings.TrimSuffix(repo.BaseUrl, "/") + "/" + strings.TrimPrefix(repo.SubPath, "/")
+	}
+	return ""
+}
+
+// targetName renders the target kind followed by its location, if known,
+// e.g. "OCI ghcr.io/org" or "CTF ./out".
+func targetName(toSpec runtime.Typed) string {
+	if loc := targetLocation(toSpec); loc != "" {
+		return targetKind(toSpec) + " " + loc
+	}
+	return targetKind(toSpec)
+}
+
+// uploadLabel renders the label for an AddComponentVersion transformation, naming
+// the target kind and location, e.g. "my-app@1.0.0 [Upload to OCI ghcr.io/org]".
+// When a component is transferred to more than one target, the target index
+// (0-based) disambiguates the labels, mirroring the T<idx> suffix on the
+// transformation ID.
 func uploadLabel(c *descriptor.Component, toSpec runtime.Typed, targetIdx, numTargets int) string {
 	if numTargets > 1 {
-		return fmt.Sprintf("%s [Upload to %s \u2192 target %d]", componentLabel(c), targetKind(toSpec), targetIdx+1)
+		return fmt.Sprintf("%s [Upload to %s \u2192 target %d]", componentLabel(c), targetName(toSpec), targetIdx+1)
 	}
-	return fmt.Sprintf("%s [Upload to %s]", componentLabel(c), targetKind(toSpec))
+	return fmt.Sprintf("%s [Upload to %s]", componentLabel(c), targetName(toSpec))
 }
 
 // getLabel renders the label for a resource Get transformation,
@@ -49,9 +80,9 @@ func getLabel(c *descriptor.Component, resourceName string) string {
 }
 
 // addLabel renders the label for a resource Add transformation,
-// e.g. "my-app@1.0.0 [Add icons as LocalBlob to CTF]".
+// e.g. "my-app@1.0.0 [Add icons as LocalBlob to CTF ./out]".
 func addLabel(c *descriptor.Component, resourceName, kind string, toSpec runtime.Typed) string {
-	return fmt.Sprintf("%s [Add %s as %s to %s]", componentLabel(c), resourceName, kind, targetKind(toSpec))
+	return fmt.Sprintf("%s [Add %s as %s to %s]", componentLabel(c), resourceName, kind, targetName(toSpec))
 }
 
 // convertLabel renders the label for the Helm chart conversion, which always produces
@@ -61,9 +92,9 @@ func convertLabel(c *descriptor.Component, resourceName string) string {
 }
 
 // transferLabel renders the label for the OCI streaming path
-// e.g. "my-app@1.0.0 [Transfer icons as OCIArtifact to OCI]".
+// e.g. "my-app@1.0.0 [Transfer icons to OCI ghcr.io/org]".
 func transferLabel(c *descriptor.Component, resourceName string, toSpec runtime.Typed) string {
-	return fmt.Sprintf("%s [Transfer %s to %s]", componentLabel(c), resourceName, targetKind(toSpec))
+	return fmt.Sprintf("%s [Transfer %s to %s]", componentLabel(c), resourceName, targetName(toSpec))
 }
 
 // uploaderLabel renders the label for the HTTP streaming uploader path, which
