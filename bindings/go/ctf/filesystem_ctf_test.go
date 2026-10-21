@@ -354,3 +354,46 @@ func TestFileSystemCTF_SaveBlob_ErrorCases(t *testing.T) {
 		})
 	}
 }
+
+// failingCloseReader fails on Close, like a verifying reader whose content does not
+// match its digest.
+type failingCloseReader struct{ io.Reader }
+
+func (failingCloseReader) Close() error { return fmt.Errorf("digest mismatch") }
+
+// TestFileSystemCTF_SaveBlob_KeepsExistingBlobOnFailedVerification checks that content
+// failing verification on close neither replaces nor deletes a blob already stored under
+// the same digest, and leaves no staged file behind.
+func TestFileSystemCTF_SaveBlob_KeepsExistingBlobOnFailedVerification(t *testing.T) {
+	r := require.New(t)
+	dir := t.TempDir()
+	archive, err := ctf.OpenCTFFromOSPath(dir, ctf.O_RDWR)
+	r.NoError(err)
+
+	valid := []byte("valid content")
+	dig := digest.FromBytes(valid).String()
+	r.NoError(archive.SaveBlob(t.Context(), inmemory.New(bytes.NewReader(valid))))
+
+	corrupt := []byte("other content")
+	r.Len(corrupt, len(valid))
+	err = archive.SaveBlob(t.Context(), &mockBlob{
+		digest: dig,
+		known:  true,
+		size:   int64(len(corrupt)),
+		reader: failingCloseReader{bytes.NewReader(corrupt)},
+	})
+	r.ErrorContains(err, "digest mismatch")
+
+	stored, err := archive.GetBlob(t.Context(), dig)
+	r.NoError(err)
+	rc, err := stored.ReadCloser()
+	r.NoError(err)
+	t.Cleanup(func() { _ = rc.Close() })
+	data, err := io.ReadAll(rc)
+	r.NoError(err)
+	r.Equal(valid, data)
+
+	entries, err := os.ReadDir(filepath.Join(dir, ctf.BlobsDirectoryName))
+	r.NoError(err)
+	r.Len(entries, 1, "the staged file must be removed")
+}

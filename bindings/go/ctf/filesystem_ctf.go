@@ -121,7 +121,7 @@ func (c *FileSystemCTF) SetIndex(_ context.Context, index v1.Index) (err error) 
 		return fmt.Errorf("unable to encode artifact index: %w", err)
 	}
 
-	return c.writeFile(v1.ArtifactIndexFileName, bytes.NewReader(data), int64(len(data)))
+	return c.writeFile(v1.ArtifactIndexFileName, bytes.NewReader(data), int64(len(data)), nil)
 }
 
 // ioBufPool is a pool of byte buffers that can be reused for copying content
@@ -139,7 +139,9 @@ var ioBufPool = sync.Pool{
 // writeFile writes the given raw data to the given name in the CTF.
 // If the directory does not exist, it will be created.
 // Always uses atomic write (temp file + rename) for safe concurrent access.
-func (c *FileSystemCTF) writeFile(name string, raw io.Reader, size int64) (err error) {
+// If beforeCommit is set, it runs after the content is staged and before it replaces name;
+// if it fails, only the staged content is removed and name stays untouched.
+func (c *FileSystemCTF) writeFile(name string, raw io.Reader, size int64, beforeCommit func() error) (err error) {
 	// Ensure directory exists
 	if c.mkdirFS != nil {
 		if err := c.mkdirFS.MkdirAll(filepath.Dir(name), 0o755); err != nil {
@@ -188,6 +190,12 @@ func (c *FileSystemCTF) writeFile(name string, raw io.Reader, size int64) (err e
 			err = errors.Join(err, os.Remove(tempPath))
 		}
 	}()
+
+	if beforeCommit != nil {
+		if err = beforeCommit(); err != nil {
+			return err
+		}
+	}
 
 	// Make read-only
 	if err = os.Chmod(tempPath, 0o444); err != nil {
@@ -283,13 +291,17 @@ func (c *FileSystemCTF) SaveBlob(ctx context.Context, b blob.ReadOnlyBlob) (err 
 	if err != nil {
 		return fmt.Errorf("unable to read blob: %w", err)
 	}
+	// Closing data can fail when the content does not match its digest (e.g. a verifying
+	// reader). It is closed before the staged content is published, so unverified content
+	// never replaces a blob that already exists under the same digest.
+	closed := false
+	closeData := func() error {
+		closed = true
+		return data.Close()
+	}
 	defer func() {
-		// first close the data stream, then delete the blob if closing fails
-		// this is important to avoid having a dangling possibly corrupt blob in the CTF
-		if err = errors.Join(err, data.Close()); err != nil {
-			// if closing the data stream fails, we need to delete the blob
-			// but we should use a background context as the original ctx might already be cancelled
-			err = errors.Join(err, c.DeleteBlob(context.Background(), dig))
+		if !closed {
+			err = errors.Join(err, data.Close())
 		}
 	}()
 
@@ -306,7 +318,7 @@ func (c *FileSystemCTF) SaveBlob(ctx context.Context, b blob.ReadOnlyBlob) (err 
 	return c.writeFile(filepath.Join(
 		BlobsDirectoryName,
 		file,
-	), ctxRead, size)
+	), ctxRead, size, closeData)
 }
 
 // ToBlobFileName converts a digest to a blob file name by replacing the ":" with ".", which is the
