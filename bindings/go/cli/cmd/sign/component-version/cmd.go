@@ -394,9 +394,13 @@ func SignComponentVersion(cmd *cobra.Command, args []string) error {
 	}
 
 	// digest
+	normalisationAlgorithm := cmd.Flag(FlagNormalisationAlgorithm).Value.String()
+	if err := signing.EnsureSignable(normalisationAlgorithm); err != nil {
+		return fmt.Errorf("cannot sign component version: %w", err)
+	}
 	unsignedDigest, err := signing.GenerateDigest(
 		ctx, desc, logger,
-		cmd.Flag(FlagNormalisationAlgorithm).Value.String(),
+		normalisationAlgorithm,
 		cmd.Flag(FlagHashAlgorithm).Value.String(),
 	)
 	if err != nil {

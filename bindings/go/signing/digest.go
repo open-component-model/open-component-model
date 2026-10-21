@@ -31,10 +31,12 @@ const (
 // digest uses a hash algorithm other than SHA-256 or SHA-512.
 var ErrUnsupportedDigestHash = errors.New("unsupported digest hash algorithm")
 
-// ErrSigningUnsupported is returned by GenerateDigest for a normalisation
+// ErrSigningUnsupported is returned by EnsureSignable for a normalisation
 // algorithm this library supports for verification only. jsonNormalisation/v1
 // is the legacy gardener/cc-utils format: OCM v2 verifies existing signatures
-// that use it but must never mint new ones.
+// that use it but must never mint new ones. Digest computation (GenerateDigest)
+// and verification are unrestricted — only the signing boundary calls
+// EnsureSignable.
 //
 // The reason is blast radius. Verify-only means OCM v2 never puts a v1 artifact
 // into the wild, so nothing is bound to the exact bytes we emit: if our v1
@@ -108,6 +110,19 @@ func VerifyDigestMatchesDescriptor(
 	return nil
 }
 
+// EnsureSignable is the signing boundary for the verify-only policy: it reports
+// whether a fresh signature may be minted with the given normalisation
+// algorithm. jsonNormalisation/v1 is rejected (see ErrSigningUnsupported);
+// everything else is allowed. Digest computation and verification do not call
+// this, so verifying existing v1 signatures, pins and reference digests keeps
+// working. Any signing entry point must call it before producing a signature.
+func EnsureSignable(normalisationAlgorithm string) error {
+	if normalisationAlgorithm == jsonv1.Algorithm {
+		return fmt.Errorf("%w: %q", ErrSigningUnsupported, normalisationAlgorithm)
+	}
+	return nil
+}
+
 // GenerateDigest computes a new digest for a descriptor with the given
 // normalisation and hashing algorithms.
 //
@@ -132,10 +147,6 @@ func GenerateDigest(
 	hashAlgorithm string,
 ) (*descruntime.Digest, error) {
 	normalisationAlgorithm = ensureNormalisationAlgo(ctx, normalisationAlgorithm, logger)
-
-	if normalisationAlgorithm == jsonv1.Algorithm {
-		return nil, fmt.Errorf("%w: %q", ErrSigningUnsupported, normalisationAlgorithm)
-	}
 
 	normalised, err := normalisation.Normalise(desc, normalisationAlgorithm)
 	if err != nil {

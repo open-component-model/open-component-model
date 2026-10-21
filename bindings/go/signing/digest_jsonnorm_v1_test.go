@@ -10,18 +10,20 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation"
 	v1 "ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v1"
+	v4alpha1 "ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// TestGenerateDigestRejected_JSONNormalisationV1 proves jsonNormalisation/v1 is
-// verify-only: GenerateDigest refuses to mint a new v1 digest, while
-// VerifyDigestMatchesDescriptor still accepts one. Byte-exactness against the
-// cc-utils oracle is locked separately in the json/v1 package; this only
-// exercises the signing-vs-verification split and the verify wiring
-// (normalise → hash → compare), not a cryptographic signature (see the plan's
-// non-goals).
-func TestGenerateDigestRejected_JSONNormalisationV1(t *testing.T) {
+// TestSigningBoundary_JSONNormalisationV1 proves jsonNormalisation/v1 is
+// verify-only and that the restriction lives at the signing boundary, not in
+// digest computation: EnsureSignable refuses v1, while GenerateDigest and
+// VerifyDigestMatchesDescriptor both accept it (verification, pins and
+// reference digests must keep working). Byte-exactness against the cc-utils
+// oracle is locked separately in the json/v1 package; this only exercises the
+// signing-vs-verification split and the verify wiring (normalise → hash →
+// compare), not a cryptographic signature (see the plan's non-goals).
+func TestSigningBoundary_JSONNormalisationV1(t *testing.T) {
 	r := require.New(t)
 	logger := slog.New(slog.DiscardHandler)
 
@@ -46,22 +48,29 @@ func TestGenerateDigestRejected_JSONNormalisationV1(t *testing.T) {
 		},
 	}
 
-	// Signing with v1 is refused: this repo verifies legacy cc-utils signatures
-	// but never produces them.
-	_, err := GenerateDigest(t.Context(), desc, logger, v1.Algorithm, crypto.SHA256.String())
-	r.ErrorIs(err, ErrSigningUnsupported)
+	// Minting a new v1 signature is refused at the signing boundary.
+	r.ErrorIs(EnsureSignable(v1.Algorithm), ErrSigningUnsupported)
+	// A current algorithm is signable.
+	r.NoError(EnsureSignable(v4alpha1.Algorithm))
+
+	// GenerateDigest is a neutral compute step shared with verification, so it
+	// must resolve v1 rather than block it.
+	gen, err := GenerateDigest(t.Context(), desc, logger, v1.Algorithm, crypto.SHA256.String())
+	r.NoError(err)
+	r.Equal(v1.Algorithm, gen.NormalisationAlgorithm)
 
 	// Verification still resolves v1. Build the expected digest the way verify
-	// does (normalise → sha256) — not via GenerateDigest, which is now blocked.
+	// does (normalise → sha256).
 	normalised, err := normalisation.Normalise(desc, v1.Algorithm)
 	r.NoError(err)
 	h := crypto.SHA256.New()
 	_, err = h.Write(normalised)
 	r.NoError(err)
+	r.Equal(hex.EncodeToString(h.Sum(nil)), gen.Value)
 	sig := descruntime.Signature{Name: "acme", Digest: descruntime.Digest{
 		HashAlgorithm:          crypto.SHA256.String(),
 		NormalisationAlgorithm: v1.Algorithm,
-		Value:                  hex.EncodeToString(h.Sum(nil)),
+		Value:                  gen.Value,
 	}}
 	r.NoError(VerifyDigestMatchesDescriptor(t.Context(), desc, sig, logger))
 }
