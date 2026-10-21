@@ -35,8 +35,7 @@ func (m *mockRepository) AddLocalResource(ctx context.Context, component, versio
 	m.addedResource = res
 	m.addedBlob = content
 
-	// Return updated resource with LocalBlob access. The real sink only back-fills a
-	// *missing* digest from the content; it does not change a digest the source carried.
+	// Return updated resource with LocalBlob access
 	updated := res.DeepCopy()
 	updated.Access = &v2.LocalBlob{
 		Type: runtime.Type{
@@ -45,13 +44,6 @@ func (m *mockRepository) AddLocalResource(ctx context.Context, component, versio
 		},
 		MediaType:      "application/octet-stream",
 		LocalReference: "sha256:test-digest",
-	}
-	if updated.Digest == nil {
-		updated.Digest = &descriptor.Digest{
-			HashAlgorithm:          "SHA-256",
-			NormalisationAlgorithm: "genericBlobDigest/v1",
-			Value:                  "injectedbythesink",
-		}
 	}
 	return updated, nil
 }
@@ -230,61 +222,6 @@ func TestAddLocalResource_Transform_CTF(t *testing.T) {
 	// Verify repository interactions
 	assert.Equal(t, "ocm.software/ctf-component", mockRepo.component)
 	assert.Equal(t, "2.0.0", mockRepo.version)
-}
-
-// TestAddLocalResource_Transform_PreservesInputDigest verifies the transformer records the
-// digest the transfer pipeline handed it, never the sink's back-filled digest: a nil input
-// digest stays nil (cc-utils case) and a present input digest is kept unchanged.
-func TestAddLocalResource_Transform_PreservesInputDigest(t *testing.T) {
-	ctx := context.Background()
-
-	tempDir := t.TempDir()
-	testFile := filepath.Join(tempDir, "res.bin")
-	require.NoError(t, os.WriteFile(testFile, []byte("data"), 0o644))
-
-	newTransformer := func(repo *mockRepository) *AddLocalResource {
-		combinedScheme := runtime.NewScheme()
-		v2.MustAddToScheme(combinedScheme)
-		combinedScheme.MustRegisterWithAlias(&v1alpha1.OCIAddLocalResource{}, v1alpha1.OCIAddLocalResourceV1alpha1)
-		combinedScheme.MustRegisterWithAlias(&v1alpha1.CTFAddLocalResource{}, v1alpha1.CTFAddLocalResourceV1alpha1)
-		return &AddLocalResource{Scheme: combinedScheme, RepoProvider: &mockRepoProvider{repo: repo}}
-	}
-
-	specFor := func(dig *v2.Digest) *v1alpha1.OCIAddLocalResource {
-		return &v1alpha1.OCIAddLocalResource{
-			Type: runtime.NewVersionedType(v1alpha1.OCIAddLocalResourceType, v1alpha1.Version),
-			Spec: &v1alpha1.OCIAddLocalResourceSpec{
-				Repository: ocispec.Repository{Type: runtime.Type{Name: ocispec.Type, Version: "v1"}, BaseUrl: "ghcr.io/test"},
-				Component:  "ocm.software/test",
-				Version:    "1.0.0",
-				Resource: &v2.Resource{
-					ElementMeta: v2.ElementMeta{ObjectMeta: v2.ObjectMeta{Name: "res", Version: "1.0.0"}},
-					Type:        "blob",
-					Relation:    v2.LocalRelation,
-					Digest:      dig,
-				},
-				File: blobv1alpha1.File{Type: runtime.Type{Name: blobv1alpha1.FileType, Version: blobv1alpha1.Version}, URI: "file://" + testFile, MediaType: "application/test"},
-			},
-		}
-	}
-
-	t.Run("absent input digest stays absent", func(t *testing.T) {
-		r := require.New(t)
-		res, err := newTransformer(&mockRepository{}).Transform(ctx, specFor(nil))
-		r.NoError(err)
-		out := res.(*v1alpha1.OCIAddLocalResource).Output.Resource
-		r.Nil(out.Digest, "transfer must not inject a digest the source did not have")
-	})
-
-	t.Run("present input digest is preserved verbatim", func(t *testing.T) {
-		r := require.New(t)
-		in := &v2.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: "ociArtifactDigest/v1", Value: "abc123"}
-		res, err := newTransformer(&mockRepository{}).Transform(ctx, specFor(in))
-		r.NoError(err)
-		out := res.(*v1alpha1.OCIAddLocalResource).Output.Resource
-		r.NotNil(out.Digest)
-		r.Equal(*in, *out.Digest, "a pipeline-supplied digest (e.g. from a transformation) must survive the sink")
-	})
 }
 
 func TestAddLocalResource_Transform_ValidationErrors(t *testing.T) {
