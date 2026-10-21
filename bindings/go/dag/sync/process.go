@@ -86,11 +86,12 @@ func (d *GraphProcessor[K, V]) Process(ctx context.Context) error {
 	// the coordinator may be blocked in eg.Go while all workers report back.
 	done := make(chan K, total)
 
-	for finished := 0; finished < total; {
+	for finished, inFlight := 0, 0; finished < total; {
 		for _, node := range ready {
 			if gctx.Err() != nil {
 				break
 			}
+			inFlight++
 			// Blocks while Concurrency nodes are in flight.
 			eg.Go(func() error {
 				if err := d.opts.Processor.ProcessValue(gctx, d.CurrentValue(node)); err != nil {
@@ -102,9 +103,17 @@ func (d *GraphProcessor[K, V]) Process(ctx context.Context) error {
 		}
 		ready = ready[:0]
 
+		// Nothing running and nothing ready, yet vertices remain: they can never
+		// be unlocked (cycle or in-degrees inconsistent with edges). Without this
+		// check the loop would block on done forever.
+		if inFlight == 0 && gctx.Err() == nil {
+			return fmt.Errorf("graph processing stalled: %d of %d vertices can never become ready; graph contains a cycle or inconsistent in-degrees", total-finished, total)
+		}
+
 		select {
 		case node := <-done:
 			finished++
+			inFlight--
 			if err := g.WithReadLock(func(g *dag.DirectedAcyclicGraph[K]) error {
 				for child := range g.Vertices[node].Edges {
 					inDegree[child]--
