@@ -291,13 +291,15 @@ func (s *repository) resolve(ctx context.Context, idx v1.Index, reference string
 	repo := s.repo
 
 	// We need to parse the reference loosely because the registry/repository information may be prefixed to the actual reference.
+	// looseref reads a bare tag as a repository name, which must be lower-case, so a valid tag such as
+	// "1.0.0-T0" fails to parse. Only in that case is the raw reference used as is.
 	if ref, err := looseref.ParseReference(reference); err != nil {
-		return ociImageSpecV1.Descriptor{}, fmt.Errorf("invalid reference %q: %w", reference, err)
-	} else {
-		// If we have a valid digest or tag, use it instead of the reference.
-		if refOrTag := ref.ReferenceOrTag(); refOrTag != "" {
-			reference = refOrTag
+		if (registry.Reference{Reference: reference}).ValidateReferenceAsTag() != nil {
+			return ociImageSpecV1.Descriptor{}, fmt.Errorf("invalid reference %q: %w", reference, err)
 		}
+	} else if refOrTag := ref.ReferenceOrTag(); refOrTag != "" {
+		// If we have a valid digest or tag, use it instead of the reference.
+		reference = refOrTag
 	}
 
 	for _, artifact := range idx.GetArtifacts() {
@@ -403,7 +405,17 @@ func (s *repository) applyTag(ctx context.Context, idx v1.Index, desc ociImageSp
 func artifactMetadataForReference(repo string, desc ociImageSpecV1.Descriptor, reference string) (v1.ArtifactMetadata, error) {
 	ref, err := looseref.ParseReference(reference)
 	if err != nil {
-		return v1.ArtifactMetadata{}, fmt.Errorf("invalid reference %q: %w", reference, err)
+		// looseref reads a bare tag as a repository name, which must be
+		// lower-case, so a valid tag such as "1.0.0-T0" fails to parse.
+		if (registry.Reference{Reference: reference}).ValidateReferenceAsTag() != nil {
+			return v1.ArtifactMetadata{}, fmt.Errorf("invalid reference %q: %w", reference, err)
+		}
+		return v1.ArtifactMetadata{
+			Repository: repo,
+			Tag:        reference,
+			Digest:     desc.Digest.String(),
+			MediaType:  desc.MediaType,
+		}, nil
 	}
 
 	if err := ref.ValidateReferenceAsTag(); err == nil {
