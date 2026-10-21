@@ -154,6 +154,13 @@ func newFetcher(ctx context.Context, req Request, o *option, maxSize int64) (*fe
 			httpReq.Header.Add(k, v)
 		}
 	}
+	// A client with compression enabled (e.g. a plain *http.Client injected via
+	// WithClient) adds Accept-Encoding: gzip and transparently decodes the body,
+	// so the blob would no longer be the served bytes that sizes, advertised
+	// checksums and pinned digests describe. An explicit header disables that.
+	if httpReq.Header.Get("Accept-Encoding") == "" {
+		httpReq.Header.Set("Accept-Encoding", "identity")
+	}
 	if req.NoRedirect {
 		client = CloneClientWithNoRedirect(client)
 	}
