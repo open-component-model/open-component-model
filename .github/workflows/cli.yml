@@ -25,6 +25,9 @@ on:
       artifact_id:
         description: "The artifact id that was built."
         value: ${{ jobs.assemble.outputs.artifact_id }}
+      source_sha:
+        description: "Commit used to build the CLI artifact."
+        value: ${{ jobs.version.outputs.source_sha }}
       version:
         description: "Version computed for this build."
         value: ${{ jobs.version.outputs.version }}
@@ -56,6 +59,7 @@ jobs:
     name: Compute Version
     runs-on: ubuntu-26.04-arm
     outputs:
+      source_sha: ${{ steps.source.outputs.sha }}
       version: ${{ steps.version.outputs.version }}
       build_version: ${{ steps.build_version.outputs.build_version }}
     steps:
@@ -66,7 +70,11 @@ jobs:
           sparse-checkout: |
             .github/scripts
           persist-credentials: 'false'
-          ref: ${{ env.REF }}
+          ref: ${{ inputs.ref || github.event.pull_request.head.sha || github.sha }}
+
+      - name: Record source commit
+        id: source
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       # Compute VERSION from env.REF
       - name: Compute VERSION
@@ -111,7 +119,7 @@ jobs:
           sparse-checkout: |
             ${{ env.GO_MODULE_ROOT }}
           persist-credentials: 'false'
-          ref: ${{ env.REF }}
+          ref: ${{ needs.version.outputs.source_sha }}
 
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
@@ -169,7 +177,7 @@ jobs:
             ${{ env.CLI_DIR }}
             .github/scripts
           persist-credentials: 'false'
-          ref: ${{ env.REF }}
+          ref: ${{ needs.version.outputs.source_sha }}
 
       - name: Install Task
         uses: arduino/setup-task@c0bc642852239c2689f73f4ea6459c29405f3c52 # v3.0.0
