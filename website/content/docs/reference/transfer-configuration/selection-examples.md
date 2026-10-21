@@ -224,9 +224,10 @@ configurations:
 
 `chart` goes through GetHelmChart → ConvertHelmToOCI → OCIAddLocalResource;
 `docs` through DownloadWgetResource → OCIAddLocalResource. The OCI images `app`
-and `nginx` are streamed by a single TransferOCIArtifactToLocalBlob node each, and
-`bundle` and `notes`, which are local blobs already, by a single TransferLocalBlob
-node each; none of them is buffered in a file.
+and `nginx` are streamed by a single TransferOCIArtifactToOCILocalBlob node each, and
+`bundle` and `notes`, which are local blobs already, by a single
+TransferOCILocalBlobToOCILocalBlob node each (TransferCTFLocalBlobToOCILocalBlob
+when the source is a CTF); none of them is buffered in a file.
 A config with only a `localblob.uploader…` entry (no other uploaders) produces the same graph.
 
 ## E11 — OCI artifacts plus everything else copied

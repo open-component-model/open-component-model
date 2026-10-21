@@ -54,6 +54,9 @@ var schemaCTFGetLocalResourceOutput []byte
 //go:embed schemas/CTFGetLocalResourceSpec.schema.json
 var schemaCTFGetLocalResourceSpec []byte
 
+//go:embed schemas/CTFLocalBlobSource.schema.json
+var schemaCTFLocalBlobSource []byte
+
 //go:embed schemas/GetOCIArtifact.schema.json
 var schemaGetOCIArtifact []byte
 
@@ -62,9 +65,6 @@ var schemaGetOCIArtifactOutput []byte
 
 //go:embed schemas/GetOCIArtifactSpec.schema.json
 var schemaGetOCIArtifactSpec []byte
-
-//go:embed schemas/LocalBlobSource.schema.json
-var schemaLocalBlobSource []byte
 
 //go:embed schemas/OCIAddComponentVersion.schema.json
 var schemaOCIAddComponentVersion []byte
@@ -102,23 +102,32 @@ var schemaOCIGetLocalResourceOutput []byte
 //go:embed schemas/OCIGetLocalResourceSpec.schema.json
 var schemaOCIGetLocalResourceSpec []byte
 
-//go:embed schemas/TransferLocalBlob.schema.json
-var schemaTransferLocalBlob []byte
+//go:embed schemas/OCILocalBlobSource.schema.json
+var schemaOCILocalBlobSource []byte
+
+//go:embed schemas/TransferCTFLocalBlobToCTFLocalBlob.schema.json
+var schemaTransferCTFLocalBlobToCTFLocalBlob []byte
+
+//go:embed schemas/TransferCTFLocalBlobToCTFLocalBlobSpec.schema.json
+var schemaTransferCTFLocalBlobToCTFLocalBlobSpec []byte
+
+//go:embed schemas/TransferCTFLocalBlobToOCIArtifact.schema.json
+var schemaTransferCTFLocalBlobToOCIArtifact []byte
+
+//go:embed schemas/TransferCTFLocalBlobToOCIArtifactSpec.schema.json
+var schemaTransferCTFLocalBlobToOCIArtifactSpec []byte
+
+//go:embed schemas/TransferCTFLocalBlobToOCILocalBlob.schema.json
+var schemaTransferCTFLocalBlobToOCILocalBlob []byte
+
+//go:embed schemas/TransferCTFLocalBlobToOCILocalBlobSpec.schema.json
+var schemaTransferCTFLocalBlobToOCILocalBlobSpec []byte
 
 //go:embed schemas/TransferLocalBlobOutput.schema.json
 var schemaTransferLocalBlobOutput []byte
 
-//go:embed schemas/TransferLocalBlobSpec.schema.json
-var schemaTransferLocalBlobSpec []byte
-
-//go:embed schemas/TransferLocalBlobToOCIArtifact.schema.json
-var schemaTransferLocalBlobToOCIArtifact []byte
-
 //go:embed schemas/TransferLocalBlobToOCIArtifactOutput.schema.json
 var schemaTransferLocalBlobToOCIArtifactOutput []byte
-
-//go:embed schemas/TransferLocalBlobToOCIArtifactSpec.schema.json
-var schemaTransferLocalBlobToOCIArtifactSpec []byte
 
 //go:embed schemas/TransferOCIArtifact.schema.json
 var schemaTransferOCIArtifact []byte
@@ -129,14 +138,35 @@ var schemaTransferOCIArtifactOutput []byte
 //go:embed schemas/TransferOCIArtifactSpec.schema.json
 var schemaTransferOCIArtifactSpec []byte
 
-//go:embed schemas/TransferOCIArtifactToLocalBlob.schema.json
-var schemaTransferOCIArtifactToLocalBlob []byte
+//go:embed schemas/TransferOCIArtifactToCTFLocalBlob.schema.json
+var schemaTransferOCIArtifactToCTFLocalBlob []byte
 
-//go:embed schemas/TransferOCIArtifactToLocalBlobOutput.schema.json
-var schemaTransferOCIArtifactToLocalBlobOutput []byte
+//go:embed schemas/TransferOCIArtifactToCTFLocalBlobSpec.schema.json
+var schemaTransferOCIArtifactToCTFLocalBlobSpec []byte
 
-//go:embed schemas/TransferOCIArtifactToLocalBlobSpec.schema.json
-var schemaTransferOCIArtifactToLocalBlobSpec []byte
+//go:embed schemas/TransferOCIArtifactToOCILocalBlob.schema.json
+var schemaTransferOCIArtifactToOCILocalBlob []byte
+
+//go:embed schemas/TransferOCIArtifactToOCILocalBlobSpec.schema.json
+var schemaTransferOCIArtifactToOCILocalBlobSpec []byte
+
+//go:embed schemas/TransferOCILocalBlobToCTFLocalBlob.schema.json
+var schemaTransferOCILocalBlobToCTFLocalBlob []byte
+
+//go:embed schemas/TransferOCILocalBlobToCTFLocalBlobSpec.schema.json
+var schemaTransferOCILocalBlobToCTFLocalBlobSpec []byte
+
+//go:embed schemas/TransferOCILocalBlobToOCIArtifact.schema.json
+var schemaTransferOCILocalBlobToOCIArtifact []byte
+
+//go:embed schemas/TransferOCILocalBlobToOCIArtifactSpec.schema.json
+var schemaTransferOCILocalBlobToOCIArtifactSpec []byte
+
+//go:embed schemas/TransferOCILocalBlobToOCILocalBlob.schema.json
+var schemaTransferOCILocalBlobToOCILocalBlob []byte
+
+//go:embed schemas/TransferOCILocalBlobToOCILocalBlobSpec.schema.json
+var schemaTransferOCILocalBlobToOCILocalBlobSpec []byte
 
 // JSONSchema returns the JSON Schema for AddOCIArtifact.
 func (AddOCIArtifact) JSONSchema() []byte {
@@ -213,6 +243,11 @@ func (CTFGetLocalResourceSpec) JSONSchema() []byte {
 	return schemaCTFGetLocalResourceSpec
 }
 
+// JSONSchema returns the JSON Schema for CTFLocalBlobSource.
+func (CTFLocalBlobSource) JSONSchema() []byte {
+	return schemaCTFLocalBlobSource
+}
+
 // JSONSchema returns the JSON Schema for GetOCIArtifact.
 func (GetOCIArtifact) JSONSchema() []byte {
 	return schemaGetOCIArtifact
@@ -226,11 +261,6 @@ func (GetOCIArtifactOutput) JSONSchema() []byte {
 // JSONSchema returns the JSON Schema for GetOCIArtifactSpec.
 func (GetOCIArtifactSpec) JSONSchema() []byte {
 	return schemaGetOCIArtifactSpec
-}
-
-// JSONSchema returns the JSON Schema for LocalBlobSource.
-func (LocalBlobSource) JSONSchema() []byte {
-	return schemaLocalBlobSource
 }
 
 // JSONSchema returns the JSON Schema for OCIAddComponentVersion.
@@ -293,9 +323,39 @@ func (OCIGetLocalResourceSpec) JSONSchema() []byte {
 	return schemaOCIGetLocalResourceSpec
 }
 
-// JSONSchema returns the JSON Schema for TransferLocalBlob.
-func (TransferLocalBlob) JSONSchema() []byte {
-	return schemaTransferLocalBlob
+// JSONSchema returns the JSON Schema for OCILocalBlobSource.
+func (OCILocalBlobSource) JSONSchema() []byte {
+	return schemaOCILocalBlobSource
+}
+
+// JSONSchema returns the JSON Schema for TransferCTFLocalBlobToCTFLocalBlob.
+func (TransferCTFLocalBlobToCTFLocalBlob) JSONSchema() []byte {
+	return schemaTransferCTFLocalBlobToCTFLocalBlob
+}
+
+// JSONSchema returns the JSON Schema for TransferCTFLocalBlobToCTFLocalBlobSpec.
+func (TransferCTFLocalBlobToCTFLocalBlobSpec) JSONSchema() []byte {
+	return schemaTransferCTFLocalBlobToCTFLocalBlobSpec
+}
+
+// JSONSchema returns the JSON Schema for TransferCTFLocalBlobToOCIArtifact.
+func (TransferCTFLocalBlobToOCIArtifact) JSONSchema() []byte {
+	return schemaTransferCTFLocalBlobToOCIArtifact
+}
+
+// JSONSchema returns the JSON Schema for TransferCTFLocalBlobToOCIArtifactSpec.
+func (TransferCTFLocalBlobToOCIArtifactSpec) JSONSchema() []byte {
+	return schemaTransferCTFLocalBlobToOCIArtifactSpec
+}
+
+// JSONSchema returns the JSON Schema for TransferCTFLocalBlobToOCILocalBlob.
+func (TransferCTFLocalBlobToOCILocalBlob) JSONSchema() []byte {
+	return schemaTransferCTFLocalBlobToOCILocalBlob
+}
+
+// JSONSchema returns the JSON Schema for TransferCTFLocalBlobToOCILocalBlobSpec.
+func (TransferCTFLocalBlobToOCILocalBlobSpec) JSONSchema() []byte {
+	return schemaTransferCTFLocalBlobToOCILocalBlobSpec
 }
 
 // JSONSchema returns the JSON Schema for TransferLocalBlobOutput.
@@ -303,24 +363,9 @@ func (TransferLocalBlobOutput) JSONSchema() []byte {
 	return schemaTransferLocalBlobOutput
 }
 
-// JSONSchema returns the JSON Schema for TransferLocalBlobSpec.
-func (TransferLocalBlobSpec) JSONSchema() []byte {
-	return schemaTransferLocalBlobSpec
-}
-
-// JSONSchema returns the JSON Schema for TransferLocalBlobToOCIArtifact.
-func (TransferLocalBlobToOCIArtifact) JSONSchema() []byte {
-	return schemaTransferLocalBlobToOCIArtifact
-}
-
 // JSONSchema returns the JSON Schema for TransferLocalBlobToOCIArtifactOutput.
 func (TransferLocalBlobToOCIArtifactOutput) JSONSchema() []byte {
 	return schemaTransferLocalBlobToOCIArtifactOutput
-}
-
-// JSONSchema returns the JSON Schema for TransferLocalBlobToOCIArtifactSpec.
-func (TransferLocalBlobToOCIArtifactSpec) JSONSchema() []byte {
-	return schemaTransferLocalBlobToOCIArtifactSpec
 }
 
 // JSONSchema returns the JSON Schema for TransferOCIArtifact.
@@ -338,17 +383,52 @@ func (TransferOCIArtifactSpec) JSONSchema() []byte {
 	return schemaTransferOCIArtifactSpec
 }
 
-// JSONSchema returns the JSON Schema for TransferOCIArtifactToLocalBlob.
-func (TransferOCIArtifactToLocalBlob) JSONSchema() []byte {
-	return schemaTransferOCIArtifactToLocalBlob
+// JSONSchema returns the JSON Schema for TransferOCIArtifactToCTFLocalBlob.
+func (TransferOCIArtifactToCTFLocalBlob) JSONSchema() []byte {
+	return schemaTransferOCIArtifactToCTFLocalBlob
 }
 
-// JSONSchema returns the JSON Schema for TransferOCIArtifactToLocalBlobOutput.
-func (TransferOCIArtifactToLocalBlobOutput) JSONSchema() []byte {
-	return schemaTransferOCIArtifactToLocalBlobOutput
+// JSONSchema returns the JSON Schema for TransferOCIArtifactToCTFLocalBlobSpec.
+func (TransferOCIArtifactToCTFLocalBlobSpec) JSONSchema() []byte {
+	return schemaTransferOCIArtifactToCTFLocalBlobSpec
 }
 
-// JSONSchema returns the JSON Schema for TransferOCIArtifactToLocalBlobSpec.
-func (TransferOCIArtifactToLocalBlobSpec) JSONSchema() []byte {
-	return schemaTransferOCIArtifactToLocalBlobSpec
+// JSONSchema returns the JSON Schema for TransferOCIArtifactToOCILocalBlob.
+func (TransferOCIArtifactToOCILocalBlob) JSONSchema() []byte {
+	return schemaTransferOCIArtifactToOCILocalBlob
+}
+
+// JSONSchema returns the JSON Schema for TransferOCIArtifactToOCILocalBlobSpec.
+func (TransferOCIArtifactToOCILocalBlobSpec) JSONSchema() []byte {
+	return schemaTransferOCIArtifactToOCILocalBlobSpec
+}
+
+// JSONSchema returns the JSON Schema for TransferOCILocalBlobToCTFLocalBlob.
+func (TransferOCILocalBlobToCTFLocalBlob) JSONSchema() []byte {
+	return schemaTransferOCILocalBlobToCTFLocalBlob
+}
+
+// JSONSchema returns the JSON Schema for TransferOCILocalBlobToCTFLocalBlobSpec.
+func (TransferOCILocalBlobToCTFLocalBlobSpec) JSONSchema() []byte {
+	return schemaTransferOCILocalBlobToCTFLocalBlobSpec
+}
+
+// JSONSchema returns the JSON Schema for TransferOCILocalBlobToOCIArtifact.
+func (TransferOCILocalBlobToOCIArtifact) JSONSchema() []byte {
+	return schemaTransferOCILocalBlobToOCIArtifact
+}
+
+// JSONSchema returns the JSON Schema for TransferOCILocalBlobToOCIArtifactSpec.
+func (TransferOCILocalBlobToOCIArtifactSpec) JSONSchema() []byte {
+	return schemaTransferOCILocalBlobToOCIArtifactSpec
+}
+
+// JSONSchema returns the JSON Schema for TransferOCILocalBlobToOCILocalBlob.
+func (TransferOCILocalBlobToOCILocalBlob) JSONSchema() []byte {
+	return schemaTransferOCILocalBlobToOCILocalBlob
+}
+
+// JSONSchema returns the JSON Schema for TransferOCILocalBlobToOCILocalBlobSpec.
+func (TransferOCILocalBlobToOCILocalBlobSpec) JSONSchema() []byte {
+	return schemaTransferOCILocalBlobToOCILocalBlobSpec
 }

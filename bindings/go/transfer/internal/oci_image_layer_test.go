@@ -69,7 +69,7 @@ func TestProcessOCIImageLayer(t *testing.T) {
 
 	r.Len(tgd.Transformations, 1)
 	transfer := tgd.Transformations[0]
-	r.Equal(ociv1alpha1.TransferOCIArtifactToLocalBlobV1alpha1, transfer.Type)
+	r.Equal(ociv1alpha1.TransferOCIArtifactToOCILocalBlobV1alpha1, transfer.Type)
 	access := transfer.Spec.Data["targetResource"].(map[string]any)["access"].(map[string]any)
 	r.Equal(resource.Name, access["referenceName"])
 	r.Equal(transfer.ID, resourceTransformIDs[0])
@@ -104,7 +104,7 @@ func TestProcessResource_OCIImageLayer(t *testing.T) {
 			r.NoError(err)
 
 			r.Len(tgd.Transformations, 1, "layer must not be skipped")
-			r.Equal(ociv1alpha1.TransferOCIArtifactToLocalBlobV1alpha1, tgd.Transformations[0].Type)
+			r.Equal(ociv1alpha1.TransferOCIArtifactToOCILocalBlobV1alpha1, tgd.Transformations[0].Type)
 			// The layer is streamed: no temporary file to clean up.
 			r.Empty(files)
 		})
@@ -115,7 +115,7 @@ func TestProcessResource_OCIImageLayer(t *testing.T) {
 // layer is a blob, not an OCI artifact: the default local blob match copies it, the
 // default OCI match never selects it, and an OCI uploader that is made to select it fails.
 func TestBuildGraphDefinition_OCIImageLayerUploaders(t *testing.T) {
-	copiedLayerNodes := []runtime.Type{ociv1alpha1.TransferOCIArtifactToLocalBlobV1alpha1, ociv1alpha1.OCIAddComponentVersionV1alpha1}
+	copiedLayerNodes := []runtime.Type{ociv1alpha1.TransferOCIArtifactToOCILocalBlobV1alpha1, ociv1alpha1.OCIAddComponentVersionV1alpha1}
 	byReference := []runtime.Type{ociv1alpha1.OCIAddComponentVersionV1alpha1}
 
 	layer := descriptor.Resource{

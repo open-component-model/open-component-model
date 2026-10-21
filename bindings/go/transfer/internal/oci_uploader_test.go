@@ -23,7 +23,7 @@ import (
 )
 
 // specImageReference returns the target image reference a TransferOCIArtifact or
-// TransferLocalBlobToOCIArtifact (targetResource) or AddOCIArtifact (resource) transformation pushes to.
+// Transfer{OCI,CTF}LocalBlobToOCIArtifact (targetResource) or AddOCIArtifact (resource) transformation pushes to.
 func specImageReference(t *testing.T, tr transformv1alpha1.GenericTransformation) string {
 	t.Helper()
 	data, err := json.Marshal(tr.Spec.Data)
@@ -41,7 +41,8 @@ func specImageReference(t *testing.T, tr transformv1alpha1.GenericTransformation
 		} `json:"targetResource"`
 	}
 	require.NoError(t, json.Unmarshal(data, &spec))
-	if tr.Type == ociv1alpha1.TransferOCIArtifactV1alpha1 || tr.Type == ociv1alpha1.TransferLocalBlobToOCIArtifactV1alpha1 {
+	switch tr.Type {
+	case ociv1alpha1.TransferOCIArtifactV1alpha1, ociv1alpha1.TransferOCILocalBlobToOCIArtifactV1alpha1, ociv1alpha1.TransferCTFLocalBlobToOCIArtifactV1alpha1:
 		return spec.TargetResource.Access.ImageReference
 	}
 	return spec.Resource.Access.ImageReference
@@ -156,7 +157,7 @@ func TestBuildGraphDefinition_OCIUploader(t *testing.T) {
 			target:         testOCIRepo("ghcr.io/target"),
 			resource:       dockerManifestLocalBlobResource("my-image", "1.0.0"),
 			uploaders:      ociUploaders(),
-			wantTypes:      []runtime.Type{ociv1alpha1.TransferLocalBlobToOCIArtifactV1alpha1, ociv1alpha1.OCIAddComponentVersionV1alpha1},
+			wantTypes:      []runtime.Type{ociv1alpha1.TransferOCILocalBlobToOCIArtifactV1alpha1, ociv1alpha1.OCIAddComponentVersionV1alpha1},
 			wantImageRef:   "ghcr.io/target/ghcr.io/org/image:v1",
 			wantImageRefAt: 0,
 		},
@@ -165,7 +166,7 @@ func TestBuildGraphDefinition_OCIUploader(t *testing.T) {
 			target:         testOCIRepo("ghcr.io/target"),
 			resource:       manifestBlobWithRegistrylessName,
 			uploaders:      ociUploaders(),
-			wantTypes:      []runtime.Type{ociv1alpha1.TransferLocalBlobToOCIArtifactV1alpha1, ociv1alpha1.OCIAddComponentVersionV1alpha1},
+			wantTypes:      []runtime.Type{ociv1alpha1.TransferOCILocalBlobToOCIArtifactV1alpha1, ociv1alpha1.OCIAddComponentVersionV1alpha1},
 			wantImageRef:   "ghcr.io/target/stefanprodan/podinfo:6.5.0",
 			wantImageRefAt: 0,
 		},
@@ -174,7 +175,7 @@ func TestBuildGraphDefinition_OCIUploader(t *testing.T) {
 			target:         testOCIRepo("ghcr.io/target"),
 			resource:       manifestBlobWithDottedName,
 			uploaders:      ociUploaders(),
-			wantTypes:      []runtime.Type{ociv1alpha1.TransferLocalBlobToOCIArtifactV1alpha1, ociv1alpha1.OCIAddComponentVersionV1alpha1},
+			wantTypes:      []runtime.Type{ociv1alpha1.TransferOCILocalBlobToOCIArtifactV1alpha1, ociv1alpha1.OCIAddComponentVersionV1alpha1},
 			wantImageRef:   "ghcr.io/target/ocm.software/podinfo@sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
 			wantImageRefAt: 0,
 		},
@@ -183,7 +184,7 @@ func TestBuildGraphDefinition_OCIUploader(t *testing.T) {
 			target:         testOCIRepo("ghcr.io/target"),
 			resource:       relativeOCIReferenceResource("my-relative", "1.0.0", "ocm/value:v2.0"),
 			uploaders:      ociUploaders(),
-			wantTypes:      []runtime.Type{ociv1alpha1.TransferLocalBlobToOCIArtifactV1alpha1, ociv1alpha1.OCIAddComponentVersionV1alpha1},
+			wantTypes:      []runtime.Type{ociv1alpha1.TransferOCILocalBlobToOCIArtifactV1alpha1, ociv1alpha1.OCIAddComponentVersionV1alpha1},
 			wantImageRef:   "ghcr.io/target/ocm/value:v2.0",
 			wantImageRefAt: 0,
 		},
@@ -192,7 +193,7 @@ func TestBuildGraphDefinition_OCIUploader(t *testing.T) {
 			target:         &oci.Repository{Type: runtime.Type{Name: oci.Type, Version: "v1"}, BaseUrl: "ghcr.io/target", SubPath: "sub"},
 			resource:       relativeOCIReferenceResource("my-relative", "1.0.0", "ocm/value:v2.0"),
 			uploaders:      ociUploaders(),
-			wantTypes:      []runtime.Type{ociv1alpha1.TransferLocalBlobToOCIArtifactV1alpha1, ociv1alpha1.OCIAddComponentVersionV1alpha1},
+			wantTypes:      []runtime.Type{ociv1alpha1.TransferOCILocalBlobToOCIArtifactV1alpha1, ociv1alpha1.OCIAddComponentVersionV1alpha1},
 			wantImageRef:   "ghcr.io/target/sub/ocm/value:v2.0",
 			wantImageRefAt: 0,
 		},
@@ -204,7 +205,7 @@ func TestBuildGraphDefinition_OCIUploader(t *testing.T) {
 				Match:          `resource.access.isType("relativeOciReference")`,
 				ImageReference: `${"ghcr.io/mirror/" + resource.access.reference}`,
 			}},
-			wantTypes:      []runtime.Type{ociv1alpha1.TransferLocalBlobToOCIArtifactV1alpha1, ociv1alpha1.OCIAddComponentVersionV1alpha1},
+			wantTypes:      []runtime.Type{ociv1alpha1.TransferOCILocalBlobToOCIArtifactV1alpha1, ociv1alpha1.OCIAddComponentVersionV1alpha1},
 			wantImageRef:   "ghcr.io/mirror/ocm/value:v2.0",
 			wantImageRefAt: 0,
 		},
@@ -213,7 +214,7 @@ func TestBuildGraphDefinition_OCIUploader(t *testing.T) {
 			target:         testOCIRepo("ghcr.io/target"),
 			resource:       manifestBlobWithHostPortName,
 			uploaders:      ociUploaders(),
-			wantTypes:      []runtime.Type{ociv1alpha1.TransferLocalBlobToOCIArtifactV1alpha1, ociv1alpha1.OCIAddComponentVersionV1alpha1},
+			wantTypes:      []runtime.Type{ociv1alpha1.TransferOCILocalBlobToOCIArtifactV1alpha1, ociv1alpha1.OCIAddComponentVersionV1alpha1},
 			wantImageRef:   "ghcr.io/target/127.0.0.1:5000/org/image:v1",
 			wantImageRefAt: 0,
 		},
@@ -231,21 +232,21 @@ func TestBuildGraphDefinition_OCIUploader(t *testing.T) {
 			target:    testOCIRepo("ghcr.io/target"),
 			resource:  localBlobResource("my-resource", "1.0.0"),
 			uploaders: ociUploaders(),
-			wantTypes: []runtime.Type{ociv1alpha1.TransferLocalBlobV1alpha1, ociv1alpha1.OCIAddComponentVersionV1alpha1},
+			wantTypes: []runtime.Type{ociv1alpha1.TransferOCILocalBlobToOCILocalBlobV1alpha1, ociv1alpha1.OCIAddComponentVersionV1alpha1},
 		},
 		{
 			name:      "manifest local blob without reference name is not selected",
 			target:    testOCIRepo("ghcr.io/target"),
 			resource:  manifestBlobWithoutReferenceName,
 			uploaders: ociUploaders(),
-			wantTypes: []runtime.Type{ociv1alpha1.TransferLocalBlobV1alpha1, ociv1alpha1.OCIAddComponentVersionV1alpha1},
+			wantTypes: []runtime.Type{ociv1alpha1.TransferOCILocalBlobToOCILocalBlobV1alpha1, ociv1alpha1.OCIAddComponentVersionV1alpha1},
 		},
 		{
 			name:      "CTF target is not selected by the default match",
 			target:    testCTFRepo("/tmp/target"),
 			resource:  ociImageResource("my-image", "1.0.0", "oci://ghcr.io/org/image:v1"),
 			uploaders: withLocalBlobUploader(ociUploaders()...),
-			wantTypes: []runtime.Type{ociv1alpha1.TransferOCIArtifactToLocalBlobV1alpha1, ociv1alpha1.CTFAddComponentVersionV1alpha1},
+			wantTypes: []runtime.Type{ociv1alpha1.TransferOCIArtifactToCTFLocalBlobV1alpha1, ociv1alpha1.CTFAddComponentVersionV1alpha1},
 		},
 		{
 			name:     "CTF target with an absolute template streams to the templated reference",
@@ -288,7 +289,7 @@ func TestBuildGraphDefinition_OCIUploader(t *testing.T) {
 			uploaders: []transferv1alpha1.UploaderConfig{&transferv1alpha1.OCIUploaderConfig{
 				ImageReference: `${"ghcr.io/mirror/" + resource.access.toOCI().repository}`,
 			}},
-			wantTypes: []runtime.Type{ociv1alpha1.TransferLocalBlobV1alpha1, ociv1alpha1.OCIAddComponentVersionV1alpha1},
+			wantTypes: []runtime.Type{ociv1alpha1.TransferOCILocalBlobToOCILocalBlobV1alpha1, ociv1alpha1.OCIAddComponentVersionV1alpha1},
 		},
 		{
 			name:     "a template built from resource metadata uploads a selected local blob without reference name",
@@ -298,7 +299,7 @@ func TestBuildGraphDefinition_OCIUploader(t *testing.T) {
 				Match:          `resource.access.isType("LocalBlob") && has(resource.access.mediaType) && isOCIManifest(resource.access.mediaType)`,
 				ImageReference: `${target.baseUrl + (target.subPath == "" ? "" : "/" + target.subPath) + "/" + resource.name + ":" + resource.version}`,
 			}},
-			wantTypes:      []runtime.Type{ociv1alpha1.TransferLocalBlobToOCIArtifactV1alpha1, ociv1alpha1.OCIAddComponentVersionV1alpha1},
+			wantTypes:      []runtime.Type{ociv1alpha1.TransferOCILocalBlobToOCIArtifactV1alpha1, ociv1alpha1.OCIAddComponentVersionV1alpha1},
 			wantImageRef:   "ghcr.io/target/my-image:1.0.0",
 			wantImageRefAt: 0,
 		},
@@ -460,7 +461,7 @@ func TestBuildGraphDefinition_OCIUploader_ReferenceNameAsIs(t *testing.T) {
 
 			var got []string
 			for _, tr := range tgd.Transformations {
-				if tr.Type == ociv1alpha1.TransferLocalBlobToOCIArtifactV1alpha1 {
+				if tr.Type == ociv1alpha1.TransferOCILocalBlobToOCIArtifactV1alpha1 {
 					got = append(got, evaluateTemplate(t, tgd, specImageReference(t, tr)))
 				}
 			}

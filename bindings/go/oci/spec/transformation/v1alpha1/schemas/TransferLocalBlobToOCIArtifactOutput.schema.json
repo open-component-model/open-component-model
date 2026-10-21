@@ -4,7 +4,7 @@
   "$id": "ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1/schemas/TransferLocalBlobToOCIArtifactOutput.schema.json",
   "title": "TransferLocalBlobToOCIArtifactOutput",
   "type": "object",
-  "description": "TransferLocalBlobToOCIArtifactOutput is the output specification for the\nTransferLocalBlobToOCIArtifact transformation.",
+  "description": "TransferLocalBlobToOCIArtifactOutput is the output specification of the transformations\nthat stream a local resource out of a component version into a separate OCI artifact.",
   "properties": {
     "resource": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.descriptor.v2.Resource",

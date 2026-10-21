@@ -174,12 +174,12 @@ func Test_Integration_TransferOCIImageResource_LocalBlobUploader(t *testing.T) {
 	// Without the local blob uploader, an OCIImage resource would be kept by reference.
 	hasStreamedCopy := false
 	for _, tr := range tgd.Transformations {
-		if tr.Type.Name == "TransferOCIArtifactToLocalBlob" {
+		if tr.Type.Name == "TransferOCIArtifactToOCILocalBlob" {
 			hasStreamedCopy = true
 			break
 		}
 	}
-	r.True(hasStreamedCopy, "local blob uploader should generate TransferOCIArtifactToLocalBlob transformation for OCIImage resource")
+	r.True(hasStreamedCopy, "local blob uploader should generate TransferOCIArtifactToOCILocalBlob transformation for OCIImage resource")
 
 	// 5. Build and execute the graph.
 	ctx := t.Context()

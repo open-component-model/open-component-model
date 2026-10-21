@@ -222,7 +222,7 @@ func TestBuildGraphDefinition_LocalBlobResource(t *testing.T) {
 
 	// A local blob is streamed by one fused node: no file buffer and no cleanup node.
 	require.Len(t, tgd.Transformations, 2)
-	assert.Equal(t, ociv1alpha1.TransferLocalBlobV1alpha1, tgd.Transformations[0].Type)
+	assert.Equal(t, ociv1alpha1.TransferOCILocalBlobToOCILocalBlobV1alpha1, tgd.Transformations[0].Type)
 	assert.Contains(t, tgd.Transformations[1].ID, "Upload")
 	assert.Equal(t, fmt.Sprintf("${%s.output.resource}", tgd.Transformations[0].ID),
 		tgd.Transformations[1].Spec.Data["descriptor"].(map[string]any)["component"].(map[string]any)["resources"].([]any)[0])
@@ -285,7 +285,7 @@ func TestBuildGraphDefinition_OCIImageWithLocalBlobUploader(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Len(t, tgd.Transformations, 2)
-	assert.Equal(t, ociv1alpha1.TransferOCIArtifactToLocalBlobV1alpha1, tgd.Transformations[0].Type)
+	assert.Equal(t, ociv1alpha1.TransferOCIArtifactToOCILocalBlobV1alpha1, tgd.Transformations[0].Type)
 	assert.Nil(t, findCleanupTransformation(tgd), "a streamed OCI artifact buffers no file, so no FileCleanup node")
 }
 
@@ -373,7 +373,7 @@ func TestBuildGraphDefinition_CTFTarget(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Len(t, tgd.Transformations, 2)
-	assert.Equal(t, ociv1alpha1.TransferLocalBlobV1alpha1, tgd.Transformations[0].Type)
+	assert.Equal(t, ociv1alpha1.TransferOCILocalBlobToCTFLocalBlobV1alpha1, tgd.Transformations[0].Type)
 	assert.Equal(t, ociv1alpha1.CTFAddComponentVersionV1alpha1, tgd.Transformations[1].Type)
 }
 
@@ -1175,7 +1175,7 @@ func TestBuildGraphDefinition_DockerManifestLocalBlob_OCIUploader(t *testing.T) 
 	require.NoError(t, err)
 
 	require.Len(t, tgd.Transformations, 2)
-	assert.Equal(t, ociv1alpha1.TransferLocalBlobToOCIArtifactV1alpha1, tgd.Transformations[0].Type,
+	assert.Equal(t, ociv1alpha1.TransferOCILocalBlobToOCIArtifactV1alpha1, tgd.Transformations[0].Type,
 		"Docker manifest LocalBlob should be streamed as OCI artifact")
 }
 
@@ -1191,5 +1191,5 @@ func TestBuildGraphDefinition_DockerManifestLocalBlob_FallsBackToLocalBlobWithou
 	require.NoError(t, err)
 
 	require.Len(t, tgd.Transformations, 2)
-	assert.Equal(t, ociv1alpha1.TransferLocalBlobV1alpha1, tgd.Transformations[0].Type)
+	assert.Equal(t, ociv1alpha1.TransferOCILocalBlobToOCILocalBlobV1alpha1, tgd.Transformations[0].Type)
 }

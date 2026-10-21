@@ -208,9 +208,14 @@ func NewDefaultBuilder(
 		WithTransformer(&ociv1alpha1.GetOCIArtifact{}, ociGetOCIArtifact).
 		WithTransformer(&ociv1alpha1.AddOCIArtifact{}, ociAddOCIArtifact).
 		WithTransformer(&ociv1alpha1.TransferOCIArtifact{}, ociTransferOCIArtifact).
-		WithTransformer(&ociv1alpha1.TransferLocalBlob{}, transferLocalBlob).
-		WithTransformer(&ociv1alpha1.TransferOCIArtifactToLocalBlob{}, transferOCIArtifactToLocalBlob).
-		WithTransformer(&ociv1alpha1.TransferLocalBlobToOCIArtifact{}, transferLocalBlobToOCIArtifact).
+		WithTransformer(&ociv1alpha1.TransferOCILocalBlobToOCILocalBlob{}, transferLocalBlob).
+		WithTransformer(&ociv1alpha1.TransferOCILocalBlobToCTFLocalBlob{}, transferLocalBlob).
+		WithTransformer(&ociv1alpha1.TransferCTFLocalBlobToOCILocalBlob{}, transferLocalBlob).
+		WithTransformer(&ociv1alpha1.TransferCTFLocalBlobToCTFLocalBlob{}, transferLocalBlob).
+		WithTransformer(&ociv1alpha1.TransferOCILocalBlobToOCIArtifact{}, transferLocalBlobToOCIArtifact).
+		WithTransformer(&ociv1alpha1.TransferCTFLocalBlobToOCIArtifact{}, transferLocalBlobToOCIArtifact).
+		WithTransformer(&ociv1alpha1.TransferOCIArtifactToOCILocalBlob{}, transferOCIArtifactToLocalBlob).
+		WithTransformer(&ociv1alpha1.TransferOCIArtifactToCTFLocalBlob{}, transferOCIArtifactToLocalBlob).
 		WithTransformer(&helmv1alpha1.GetHelmChart{}, getHelmChart).
 		WithTransformer(&helmv1alpha1.ConvertHelmToOCI{}, convertHelmToOCI).
 		WithTransformer(&wgetv1alpha1.DownloadWgetResource{}, downloadWget).

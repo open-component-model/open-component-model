@@ -16,23 +16,21 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// TestTransferLocalBlob_CTFToCTF streams a local blob between two CTF archives and reads
-// it back from the target: the content arrives intact although the source blob can only
-// be read once, and the source access's referenceName is kept.
-func TestTransferLocalBlob_CTFToCTF(t *testing.T) {
+// TestTransferCTFLocalBlobToCTFLocalBlob streams a local blob between two CTF archives and
+// reads it back from the target: the content arrives intact although the source blob can
+// only be read once, and the source access's referenceName is kept.
+func TestTransferCTFLocalBlobToCTFLocalBlob(t *testing.T) {
 	r := require.New(t)
 	ctx := t.Context()
 	const component, version = "ocm.software/test", "1.0.0"
 	content := []byte("streamed local blob content")
 
-	ctfRepoSpec := func(path string) *runtime.Raw {
-		raw := &runtime.Raw{}
-		r.NoError(runtime.NewScheme(runtime.WithAllowUnknown()).Convert(&ctfspec.Repository{
+	ctfRepoSpec := func(path string) ctfspec.Repository {
+		return ctfspec.Repository{
 			Type:       runtime.NewVersionedType(ctfspec.Type, ctfspec.Version),
 			FilePath:   path,
 			AccessMode: ctfspec.AccessModeReadWrite + "|" + ctfspec.AccessModeCreate,
-		}, raw))
-		return raw
+		}
 	}
 	sourceSpec, targetSpec := ctfRepoSpec(t.TempDir()), ctfRepoSpec(t.TempDir())
 	repos := provider.NewComponentVersionRepositoryProvider()
@@ -44,7 +42,7 @@ func TestTransferLocalBlob_CTFToCTF(t *testing.T) {
 			Provider:      descriptor.Provider{Name: "test-provider"},
 		},
 	}
-	source, err := repos.GetComponentVersionRepository(ctx, sourceSpec, nil)
+	source, err := repos.GetComponentVersionRepository(ctx, &sourceSpec, nil)
 	r.NoError(err)
 	added, err := source.AddLocalResource(ctx, component, version, &descriptor.Resource{
 		ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "blob", Version: version}},
@@ -62,10 +60,10 @@ func TestTransferLocalBlob_CTFToCTF(t *testing.T) {
 
 	scheme := runtime.NewScheme()
 	scheme.MustRegisterScheme(v1alpha1.Scheme)
-	out, err := (&TransferLocalBlob{Scheme: scheme, RepoProvider: repos}).Transform(ctx, &v1alpha1.TransferLocalBlob{
-		Type: v1alpha1.TransferLocalBlobV1alpha1,
-		Spec: &v1alpha1.TransferLocalBlobSpec{
-			Source: v1alpha1.LocalBlobSource{
+	out, err := (&TransferLocalBlob{Scheme: scheme, RepoProvider: repos}).Transform(ctx, &v1alpha1.TransferCTFLocalBlobToCTFLocalBlob{
+		Type: v1alpha1.TransferCTFLocalBlobToCTFLocalBlobV1alpha1,
+		Spec: &v1alpha1.TransferCTFLocalBlobToCTFLocalBlobSpec{
+			Source: v1alpha1.CTFLocalBlobSource{
 				Repository:       sourceSpec,
 				Component:        component,
 				Version:          version,
@@ -75,12 +73,12 @@ func TestTransferLocalBlob_CTFToCTF(t *testing.T) {
 		},
 	})
 	r.NoError(err)
-	transferred := descriptor.ConvertFromV2Resource(out.(*v1alpha1.TransferLocalBlob).Output.Resource)
+	transferred := descriptor.ConvertFromV2Resource(out.(*v1alpha1.TransferCTFLocalBlobToCTFLocalBlob).Output.Resource)
 	var access v2.LocalBlob
 	r.NoError(v2.Scheme.Convert(transferred.Access, &access))
 	r.Equal("org/blob:v1", access.ReferenceName)
 
-	target, err := repos.GetComponentVersionRepository(ctx, targetSpec, nil)
+	target, err := repos.GetComponentVersionRepository(ctx, &targetSpec, nil)
 	r.NoError(err)
 	desc.Component.Resources = []descriptor.Resource{*transferred}
 	r.NoError(target.AddComponentVersion(ctx, desc))

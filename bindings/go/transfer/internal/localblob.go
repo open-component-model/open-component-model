@@ -5,7 +5,6 @@ import (
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
-	ociv1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1/meta"
@@ -54,8 +53,10 @@ func appendGetLocalResourceTransform(tgd *transformv1alpha1.TransformationGraphD
 
 // processLocalBlob streams a local blob from the source in a single fused transformation,
 // without buffering it in a file. With an empty ociImageReference it embeds the blob as a
-// local blob in the target (TransferLocalBlob); otherwise it pushes the blob (an OCI
-// manifest) as a separate OCI artifact to ociImageReference (TransferLocalBlobToOCIArtifact).
+// local blob in the target (Transfer{OCI,CTF}LocalBlobTo{OCI,CTF}LocalBlob); otherwise it
+// pushes the blob (an OCI manifest) as a separate OCI artifact to ociImageReference
+// (Transfer{OCI,CTF}LocalBlobToOCIArtifact). The concrete transformation type is chosen
+// from the source and target repository kinds.
 func processLocalBlob(resource descriptorv2.Resource, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int, ociImageReference string) error {
 	resourceIdentity := resource.ToIdentity()
 	transferID := fmt.Sprintf("%sTransfer%s", id, identityToTransformationID(resourceIdentity))
@@ -80,13 +81,17 @@ func processLocalBlob(resource descriptorv2.Resource, id string, val *discoveryV
 
 	var transform transformv1alpha1.GenericTransformation
 	if ociImageReference == "" {
+		transferType, err := chooseTransferLocalBlobType(val.SourceRepository, toSpec)
+		if err != nil {
+			return fmt.Errorf("choosing transfer local blob type: %w", err)
+		}
 		toRepo, err := asUnstructured(toSpec)
 		if err != nil {
 			return fmt.Errorf("cannot convert target spec to unstructured: %w", err)
 		}
 		transform = transformv1alpha1.GenericTransformation{
 			TransformationMeta: meta.TransformationMeta{
-				Type:  ociv1alpha1.TransferLocalBlobV1alpha1,
+				Type:  transferType,
 				ID:    transferID,
 				Label: transferLabel(&val.Descriptor.Component, resource.Name, "LocalBlob", toSpec),
 			},
@@ -96,16 +101,20 @@ func processLocalBlob(resource descriptorv2.Resource, id string, val *discoveryV
 			}},
 		}
 	} else {
+		transferType, err := chooseTransferLocalBlobToOCIArtifactType(val.SourceRepository)
+		if err != nil {
+			return fmt.Errorf("choosing transfer local blob to OCI artifact type: %w", err)
+		}
 		spec, err := runtime.UnstructuredFromMixedData(map[string]any{
 			"source":         source,
 			"targetResource": ociArtifactTargetResource(resource, ociImageReference),
 		})
 		if err != nil {
-			return fmt.Errorf("cannot create unstructured spec for TransferLocalBlobToOCIArtifact transformation: %w", err)
+			return fmt.Errorf("cannot create unstructured spec for %s transformation: %w", transferType, err)
 		}
 		transform = transformv1alpha1.GenericTransformation{
 			TransformationMeta: meta.TransformationMeta{
-				Type:  ociv1alpha1.TransferLocalBlobToOCIArtifactV1alpha1,
+				Type:  transferType,
 				ID:    transferID,
 				Label: transferLabel(&val.Descriptor.Component, resource.Name, "OCIArtifact", toSpec),
 			},
