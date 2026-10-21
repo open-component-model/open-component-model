@@ -85,7 +85,7 @@ Used when OCM accesses an OCI registry — pushing, pulling, or resolving compon
 | `type`     | Yes      | Must be `OCIRegistry`                                                                                                               |
 | `hostname` | Yes      | Registry hostname (e.g. `ghcr.io`, `registry.example.com`)                                                                          |
 | `path`     | No       | Repository path. Supports glob patterns (`*` matches one path segment). If omitted, matches any path on the hostname.               |
-| `scheme`   | No       | URL scheme (`https`, `http`, `oci`). If omitted, matches any scheme. If set, must match exactly.                                    |
+| `scheme`   | No       | URL scheme (`https`, `http`, `oci`). If omitted, matches any scheme. `oci` and `https` are treated as equivalent (both normalize to `https`). A request with no scheme matches any configured scheme. |
 | `port`     | No       | Port number as string. Default ports are applied when `scheme` is set: `https` and `oci` default to `443`, `http` defaults to `80`. |
 
 ### Credential Properties
@@ -106,7 +106,7 @@ Matching runs three chained checks — all must pass:
 1. **Path matcher** — compares `path` as a glob ([Path Patterns](#path-patterns)). `*` matches within one segment,
    `**` matches across `/`. If the configured entry has no `path`, any request path is accepted.
 2. **URL matcher** — compares `scheme`, `hostname`, and `port`. Applies default ports when a scheme is present (
-   `https` → `443`, `http` → `80`).
+   `https` → `443`, `http` → `80`, `oci` → `443` via normalization to `https`). A request with no scheme matches any configured scheme.
 3. **Equality matcher** — all remaining attributes (like `type`) must be exactly equal.
 
 For detailed matching examples and edge cases, see [Tutorial: Understand Credential Resolution]({{< relref "docs/concepts/credential-resolution.md" >}}).

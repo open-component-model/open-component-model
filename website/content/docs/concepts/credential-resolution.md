@@ -250,17 +250,15 @@ configurations:
 | `https://ghcr.io:443/repo` | ✅ `secure-user` | Explicit `443` equals the default `443` for `https` |
 | `https://ghcr.io:8443/repo` | ❌ No credentials | Port `8443` ≠ default `443` |
 | `http://ghcr.io/repo` | ❌ No credentials | Scheme `http` ≠ `https` |
-| `ghcr.io/repo` (no scheme) | ❌ No credentials | Empty scheme ≠ `https` — schemes must match |
+| `ghcr.io/repo` (no scheme) | ✅ `secure-user` | Empty scheme on request matches any configured scheme — port `443` is applied via `https` config default |
 | `myregistry.local:5000/repo` | ✅ `local-user` | Port `5000` matches; no scheme on either side |
 | `myregistry.local/repo` (no port) | ❌ No credentials | No scheme means no default port — empty ≠ `5000` |
 
-**Takeaway:** Port defaults only apply when a `scheme` is present. If you omit `scheme` from both the config and the request, ports are compared literally.
+**Takeaway:** Port defaults only apply when a `scheme` is present. A request with no scheme matches any configured scheme; the non-empty side's scheme is used for port defaulting.
 
 ### Example D: The `oci` Scheme
 
-Some OCI tools use `oci://` URLs instead of `https://`. When OCM builds a lookup identity from an `oci://` URL, it treats `oci` like `https` and explicitly sets **port 443**. However, the identity matcher only has built-in port defaults for `https` → `443` and `http` → `80` — the `oci` scheme has **no default port**.
-
-In practice this works because OCM sets port `443` explicitly on both sides for `oci://` URLs, so they match via literal comparison.
+`oci` and `https` are normalized to the same value inside the matcher, so a config with `scheme: oci` and one with `scheme: https` are interchangeable. `oci://` URLs also default to port `443` (via the same normalization).
 
 ```yaml
 type: generic.config.ocm.software/v1
@@ -271,7 +269,6 @@ configurations:
           - type: OCIRegistry
             hostname: registry.example.com
             scheme: oci
-            port: "443"
         credentials:
           - type: Credentials/v1
             properties:
@@ -281,16 +278,18 @@ configurations:
 
 | Request | Result | Why |
 | --- | --- | --- |
-| `oci://registry.example.com:443/repo` | ✅ `oci-user` | Same scheme, same explicit port |
-| `oci://registry.example.com/repo` (no port) | ❌ No credentials | `oci` has no default port in the matcher — empty ≠ `443` |
-| `https://registry.example.com:443/repo` | ❌ No credentials | Scheme `https` ≠ `oci` |
+| `oci://registry.example.com/repo` | ✅ `oci-user` | `oci` normalizes to `https`; no port on either side, both default to `443` |
+| `oci://registry.example.com:443/repo` | ✅ `oci-user` | Explicit `443` equals the normalized default `443` |
+| `https://registry.example.com/repo` | ✅ `oci-user` | `https` and `oci` both normalize to `https` — they are equivalent |
+| `https://registry.example.com:443/repo` | ✅ `oci-user` | Same normalization; explicit `443` matches default `443` |
 | `oci://registry.example.com:5000/repo` | ❌ No credentials | Port `5000` ≠ `443` |
+| `http://registry.example.com/repo` | ❌ No credentials | `http` normalizes to `http`, not `https` — scheme mismatch |
 
-{{< callout context="caution" >}}
-`oci` and `https` are **different schemes** — they are never interchangeable. If your config uses `scheme: oci`, only `oci://` requests will match. Always include an explicit `port` when using the `oci` scheme.
+{{< callout context="note" >}}
+`oci` and `https` are **equivalent schemes** in the OCM credential matcher — `normalizeScheme("oci")` returns `"https"`. You do not need separate consumer entries for `oci://` and `https://` URLs pointing to the same registry.
 {{< /callout >}}
 
-**Takeaway:** When using the `oci` scheme, always specify `port: "443"` explicitly in your config. Unlike `https`, the matcher does not infer a default port for `oci`.
+**Takeaway:** `scheme: oci` and `scheme: https` are interchangeable. Both default to port `443`. You never need to specify `port: "443"` explicitly for either; omitting `port` and relying on the default is sufficient.
 
 ### Example E: When Nothing Matches
 

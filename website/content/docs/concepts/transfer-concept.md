@@ -39,13 +39,13 @@ For details on CTF structure and how to create component versions in a CTF archi
 
 ## Resource Handling: References vs. Copies
 
-By default, `ocm transfer` copies only the component descriptor (metadata). Resource artifacts such as container images or Helm charts stay in their original location, and the component descriptor references them by their original access coordinates.
+By default, `ocm transfer` always copies local blobs — content that was embedded in the component version during `ocm add` or a prior transfer — by value. Resource artifacts that are external references (such as OCI images or Helm charts accessed by their original registry coordinates) stay at their original location; the component descriptor references them by their original access coordinates.
 
-With a local blob uploader configuration (a `localblob.uploader.transfer.config.ocm.software/v1alpha1` entry in your OCM configuration, for example `.ocmconfig` in the working directory), transfer creates a self-contained copy: all resource artifacts are downloaded from the source and uploaded to the target. This is essential for air-gapped scenarios where the target environment cannot reach the original artifact locations.
+With a local blob uploader configuration (a `localblob.uploader.transfer.config.ocm.software/v1alpha1` entry in your OCM configuration, for example `.ocmconfig` in the working directory), transfer also pulls external-reference resources and uploads them to the target, creating a fully self-contained copy. This is essential for air-gapped scenarios where the target environment cannot reach the original artifact locations.
 
 ```mermaid
 flowchart TB
-    subgraph metadataOnly["Metadata Only (default)"]
+    subgraph metadataOnly["External Refs by Reference (default)"]
         direction TB
         subgraph T1["Target Registry"]
             T1CD["Component Descriptor"]
