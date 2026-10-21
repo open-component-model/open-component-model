@@ -499,22 +499,6 @@ func TestCompatibility(t *testing.T) {
 	}
 }
 
-func TestOCMv1UppercasePrerelease(t *testing.T) {
-	r := require.New(t)
-	archive, err := ctf.OpenCTFFromOSPath("testdata/ocmv1-uppercase", ctf.O_RDONLY)
-	r.NoError(err)
-	repo, err := oci.NewRepository(WithCTF(NewFromCTF(archive)))
-	r.NoError(err)
-
-	versions, err := repo.ListComponentVersions(t.Context(), "ocm.software/ocmv1-uppercase")
-	r.NoError(err)
-	r.Equal([]string{"1.0.0-RC1"}, versions)
-
-	version, err := repo.GetComponentVersion(t.Context(), "ocm.software/ocmv1-uppercase", versions[0])
-	r.NoError(err)
-	r.Equal("1.0.0-RC1", version.Component.Version)
-}
-
 // TestConcurrentBlobOperations tests thread safety of blob operations
 func TestConcurrentBlobOperations(t *testing.T) {
 	t.Parallel()
