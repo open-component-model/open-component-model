@@ -8,8 +8,10 @@ aliases:
   - /docs/how-to/sign-and-verify/
   - /docs/getting-started/sign-component-versions/
   - /docs/how-to/sign-and-verify/sign-component-version/
+  - /docs/how-to/sign-and-verify/sign-component-versions/
   - /docs/reference/ocm-cli/verify/componentversions/
   - /docs/how-to/sign-and-verify/verify-component-version/
+  - /docs/how-to/sign-and-verify/verify-component-versions/
 sidebar:
   collapsed: true
 ---

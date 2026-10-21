@@ -6,6 +6,7 @@ weight: 3
 toc: true
 aliases:
   - /docs/tutorials/credential-resolution/
+  - /docs/tutorials/understand-credential-resolution/
 ---
 
 ## Overview

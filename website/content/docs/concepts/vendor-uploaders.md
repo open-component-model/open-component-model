@@ -81,10 +81,11 @@ metadata (`Chart.yaml`, `package.json`), not from the OCM resource name.
 
 The uploader verifies the resource's `genericBlobDigest/v1` SHA-256 or SHA-512 source
 digest, and content the server already stores is not uploaded again. Where the server
-can reject mismatching bytes on deploy (Artifactory, SHA-256) it does; otherwise
-(Nexus, and SHA-512 on Artifactory) the uploader verifies after the upload and fails,
-deleting a mismatching file. Content extracted from an OCI artifact is uploaded as a
-gzipped OCI layout tar and gets the SHA-256 of the uploaded bytes.
+can reject mismatching bytes on deploy (Artifactory, SHA-256) it does; otherwise the
+uploader verifies after the upload and fails on mismatch. On Artifactory the mismatching
+file is deleted automatically; on Nexus it is left in the repository and operators must
+remove it manually. Content extracted from an OCI artifact is uploaded as a gzipped OCI
+layout tar and gets the SHA-256 of the uploaded bytes.
 
 ### Existing files at the upload path
 
