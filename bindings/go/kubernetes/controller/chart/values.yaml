@@ -96,9 +96,14 @@ manager:
   # -- Pod-level security context
   podSecurityContext:
     runAsNonRoot: true
+    runAsUser: 65532
+    runAsGroup: 65532
+    seccompProfile:
+      type: RuntimeDefault
   # -- Container-level security context
   securityContext:
     allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
     capabilities:
       drop:
         - ALL
@@ -116,6 +121,14 @@ manager:
   nodeSelector: {}
   # -- Pod tolerations
   tolerations: []
+  ## Network policy for the controller manager pods
+  networkPolicy:
+    # -- Enable NetworkPolicy for the controller manager
+    enabled: false
+    # -- Extra ingress rules appended after the default rule, which admits the health-probe port and, if enabled, the metrics and webhook ports
+    ingress: []
+    # -- Egress rules replacing the defaults (DNS on 53, TCP 443 and 6443 to any destination). Set this to reach registries on other ports; it replaces all defaults, so include DNS. Leave empty to keep defaults
+    egress: []
 ## Helper RBAC roles for managing custom resources
 rbacHelpers:
   # -- Install convenience admin/editor/viewer roles for CRDs

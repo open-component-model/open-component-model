@@ -45,6 +45,14 @@
       ],
     },
     {
+      // Garden Linux FIPS base image (CLI + controller). Only follow the
+      // multi-arch `<major>.<patch>` tags, not the per-arch `amd64-*`/`arm64-*` ones.
+      matchDatasources: ['docker'],
+      matchPackageNames: ['ghcr.io/gardenlinux/gardenlinux/fips'],
+      allowedVersions: '/^\\d+\\.\\d+$/',
+      versioning: 'loose',
+    },
+    {
       matchUpdateTypes: ['minor','patch'],
       automerge: true,
     },
@@ -139,6 +147,10 @@
         'ghcr.io/open-component-model/cosign',
       ],
       versioning: 'regex:^v(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)[-+]ocm\\.(?<build>\\d+)$',
+      // Our own fork; releases are gated by its CI. The global 28-day age would
+      // hold every release back, so the run its release workflow dispatches
+      // would find nothing.
+      minimumReleaseAge: '0 days',
     },
     {
       // Keep the helm CLI pin (azure/setup-helm `version:` in the workflows,

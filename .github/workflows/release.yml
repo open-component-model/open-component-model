@@ -292,7 +292,7 @@ jobs:
     name: Trigger RC notification workflow
     needs: [prepare, tag_rc, release_rc, publish_components_rc]
     if: ${{ github.event.inputs.dry_run == 'false' && needs.tag_rc.outputs.pushed == 'true' }}
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     permissions:
       actions: write
     steps:
@@ -748,7 +748,7 @@ jobs:
     name: Trigger release notification workflow
     needs: [prepare, promote_and_release_final, publish_components_final]
     if: ${{ github.event.inputs.dry_run == 'false' }}
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     permissions:
       actions: write
     steps:
