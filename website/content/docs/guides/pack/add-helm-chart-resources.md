@@ -5,6 +5,7 @@ weight: 35
 toc: true
 aliases:
   - /docs/how-to/transfer-helm-charts/
+  - /docs/how-to/transfer-helm-charts-with-ocm/
 ---
 
 Package a Helm chart into an OCM component version as a `helmChart` resource. A

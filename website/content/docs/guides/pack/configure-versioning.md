@@ -5,6 +5,7 @@ weight: 90
 toc: true
 aliases:
   - /docs/tutorials/configure-versioning/
+  - /docs/tutorials/configure-a-versioning-scheme/
 ---
 
 By default OCM assumes semantic versioning. This tutorial shows how to configure a **calendar versioning** (CalVer)

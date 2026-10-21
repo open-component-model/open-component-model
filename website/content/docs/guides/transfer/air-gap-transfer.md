@@ -5,6 +5,7 @@ weight: 20
 toc: true
 aliases:
   - /docs/how-to/air-gap-transfer/
+  - /docs/how-to/transfer-components-across-an-air-gap/
 ---
 
 {{< callout context="note" title="Start from the base transfer guide" >}}

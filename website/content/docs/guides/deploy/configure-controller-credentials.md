@@ -5,6 +5,7 @@ weight: 10
 toc: true
 aliases:
   - /docs/how-to/configure-credentials-ocm-controllers/
+  - /docs/how-to/configure-credentials-for-ocm-controllers/
 ---
 
 ## Goal

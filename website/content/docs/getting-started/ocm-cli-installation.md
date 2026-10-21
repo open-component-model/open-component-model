@@ -7,6 +7,7 @@ toc: true
 aliases:
   - /docs/getting-started/run-cli-from-container-image/
   - /docs/how-to/container-image-usage/
+  - /docs/how-to/how-to-use-the-ocm-cli-container-image/
 ---
 
 The OCM CLI is the primary tool for creating, managing, and transferring component versions.

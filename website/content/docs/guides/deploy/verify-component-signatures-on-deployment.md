@@ -5,6 +5,7 @@ weight: 70
 toc: true
 aliases:
   - /docs/how-to/verify-component-version-controller/
+  - /docs/how-to/verify-component-versions-in-the-controller/
 ---
 
 ## Goal

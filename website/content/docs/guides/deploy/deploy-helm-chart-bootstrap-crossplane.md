@@ -5,6 +5,7 @@ weight: 55
 toc: true
 aliases:
   - /docs/tutorials/deploy-helm-chart-bootstrap-crossplane/
+  - /docs/tutorials/deploy-an-application-from-a-helm-chart-with-ocm-and-crossplane/
 ---
 
 ## What You'll Learn

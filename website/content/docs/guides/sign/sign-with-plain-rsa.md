@@ -5,6 +5,7 @@ weight: 50
 toc: true
 aliases:
   - /docs/tutorials/signing/plain/
+  - /docs/tutorials/signing/plain-signatures/
 ---
 
 In this tutorial, you'll sign a component version with a private key and verify it with the corresponding public key.

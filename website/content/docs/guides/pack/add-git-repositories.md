@@ -6,6 +6,7 @@ toc: true
 hasMermaid: true
 aliases:
   - /docs/tutorials/working-with-git/
+  - /docs/tutorials/working-with-git-repositories/
 ---
 
 OCM can add the files of a Git commit to a component version. This works with any Git server, such as GitHub, GitLab,

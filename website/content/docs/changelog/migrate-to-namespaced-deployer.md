@@ -6,6 +6,7 @@ weight: 40
 toc: true
 aliases:
   - /docs/guides/deploy/migrate-to-namespaced-deployer/
+  - /docs/how-to/migrate-a-deployer-to-a-namespaceddeployer/
 ---
 
 ## Goal

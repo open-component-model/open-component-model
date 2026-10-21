@@ -6,6 +6,8 @@ toc: true
 aliases:
   - /docs/tutorials/advanced-component-constructor/
   - /docs/how-to/model-products/
+  - /docs/how-to/model-software-products/
+  - /docs/tutorials/create-a-multi-component-product/
 ---
 
 ## Overview

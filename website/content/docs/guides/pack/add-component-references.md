@@ -6,6 +6,8 @@ toc: true
 aliases:
   - /docs/tutorials/configure-resolvers/
   - /docs/how-to/resolve-components-from-multiple-repositories/
+  - /docs/tutorials/working-with-resolvers/
+  - /docs/how-to/resolving-components-across-multiple-registries/
 ---
 
 ## Overview

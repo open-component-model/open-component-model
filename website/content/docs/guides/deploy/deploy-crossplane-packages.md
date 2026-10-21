@@ -8,6 +8,7 @@ toc: true
 hasMermaid: true
 aliases:
   - /docs/guides/pack/deploy-crossplane-packages/
+  - /docs/tutorials/deploy-crossplane-packages/
 ---
 
 In this tutorial, you package a Crossplane Configuration and the Function it depends on in an OCM component version,

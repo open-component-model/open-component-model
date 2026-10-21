@@ -5,6 +5,7 @@ weight: 70
 toc: true
 aliases:
   - /docs/tutorials/signing/gpg/
+  - /docs/tutorials/signing/gpg-signatures/
 ---
 
 In this tutorial, you'll sign a component version with a GPG private key and verify it with the corresponding public key.

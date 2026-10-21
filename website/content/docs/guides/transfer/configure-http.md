@@ -11,6 +11,11 @@ aliases:
   - /docs/how-to/configure-http/retry/
   - /docs/how-to/configure-http/timeouts/
   - /docs/how-to/configure-http/per-host/
+  - /docs/how-to/configure-http/per-host-overrides/
+  - /docs/how-to/configure-http/route-traffic-through-a-proxy/
+  - /docs/how-to/configure-http/http-retry-policy/
+  - /docs/how-to/configure-http/http-timeouts/
+  - /docs/how-to/configure-http/tls-and-custom-ca/
 ---
 
 Control the HTTP behaviour OCM uses when talking to OCI registries and Helm

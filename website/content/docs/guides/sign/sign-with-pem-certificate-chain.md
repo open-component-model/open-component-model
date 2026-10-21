@@ -5,6 +5,7 @@ weight: 60
 toc: true
 aliases:
   - /docs/tutorials/signing/pem/
+  - /docs/tutorials/signing/certificate-chains-pem/
 ---
 
 PEM signing embeds an X.509 certificate chain directly in the signature value, letting verifiers pin a root CA

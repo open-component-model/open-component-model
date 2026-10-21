@@ -6,6 +6,7 @@ toc: true
 hasMermaid: true
 aliases:
   - /docs/how-to/add-and-verify-ownership/
+  - /docs/how-to/add-and-verify-ownership-information/
 ---
 
 ## Goal

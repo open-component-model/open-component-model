@@ -7,6 +7,7 @@ toc: true
 hasMermaid: true
 aliases:
   - /docs/tutorials/configure-custom-uploads/
+  - /docs/tutorials/configure-custom-uploads-during-transfer/
 ---
 
 {{< callout context="note" title="Start from the base transfer guide" >}}

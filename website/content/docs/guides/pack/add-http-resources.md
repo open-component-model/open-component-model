@@ -6,6 +6,7 @@ toc: true
 aliases:
   - /docs/how-to/add-resources-from-http-urls/
   - /docs/tutorials/wget-http-resources/
+  - /docs/tutorials/working-with-http-resources/
 ---
 
 ## Goal

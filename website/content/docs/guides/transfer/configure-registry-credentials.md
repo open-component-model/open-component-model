@@ -6,6 +6,7 @@ weight: 5
 toc: true
 aliases:
   - /docs/how-to/configure-multiple-credentials/
+  - /docs/how-to/configure-credentials-for-multiple-registries/
 ---
 
 ## Goal

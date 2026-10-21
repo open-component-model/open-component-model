@@ -6,6 +6,7 @@ toc: true
 aliases:
   - /docs/tutorials/deploy-helm-chart-bootstrap/
   - /docs/tutorials/deploy-helm-charts-with-bootstrap-setup/
+  - /docs/tutorials/deploy-an-application-from-a-helm-chart-with-ocm-and-kro/
 ---
 
 ## What You'll Learn

@@ -6,6 +6,7 @@ toc: true
 hasMermaid: true
 aliases:
   - /docs/tutorials/signing/sigstore/
+  - /docs/tutorials/signing/sigstore-keyless/
 ---
 
 In this tutorial you'll sign a component version with [Sigstore](https://www.sigstore.dev/) and verify it again — without generating a key pair.

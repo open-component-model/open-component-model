@@ -5,6 +5,7 @@ weight: 40
 toc: true
 aliases:
   - /docs/tutorials/deploy-chained-rgds/
+  - /docs/tutorials/deploy-an-application-from-chained-rgds-with-ocm-and-kro/
 ---
 
 You have an application to run on Kubernetes. You want to ship it the same way every time:

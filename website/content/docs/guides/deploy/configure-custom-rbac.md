@@ -5,6 +5,7 @@ weight: 20
 toc: true
 aliases:
   - /docs/how-to/custom-rbac/
+  - /docs/how-to/configure-custom-rbac-for-deployers/
 ---
 
 The OCM Kubernetes Controller Toolkit ships with the minimum RBAC permissions needed to manage its own custom resources

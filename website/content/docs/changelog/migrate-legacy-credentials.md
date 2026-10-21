@@ -8,6 +8,7 @@ aliases:
   - /docs/how-to/legacy-credential-compatibility/
   - /docs/how-to/migrate-legacy-credentials/
   - /docs/guides/migrate/migrate-legacy-credentials/
+  - /docs/how-to/migration-guides/migrate-legacy-credentials/
 ---
 
 ## Goal
