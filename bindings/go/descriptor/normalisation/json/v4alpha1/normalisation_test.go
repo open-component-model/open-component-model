@@ -166,6 +166,27 @@ meta:
 	}
 }
 
+// TestVersionedLabelExcluded pins jsonNormalisation/v4alpha1 to its historical
+// bytes: a signed label's "version" must NOT appear in the normalised output.
+// The runtime<->v2 label conversion started preserving Label.Version for
+// jsonNormalisation/v1 (which signs it); v4alpha1 must stay byte-stable, or
+// existing signatures over versioned signing labels would fail verification.
+func TestVersionedLabelExcluded(t *testing.T) {
+	r := require.New(t)
+	d := &runtime.Descriptor{}
+	d.Component.Name = "acme.org/x"
+	d.Component.Version = "1.0.0"
+	d.Component.Provider.Name = "acme"
+	d.Component.Labels = []runtime.Label{{
+		Name: "k", Value: []byte(`"v"`), Signing: true, Version: "v1",
+	}}
+
+	got, err := normalisation.Normalise(d, v4alpha1.Algorithm)
+	r.NoError(err)
+	r.NotContains(string(got), `"version":"v1"`, "v4alpha1 must not emit the label version")
+	r.Contains(string(got), `"labels":[{"name":"k","signing":true,"value":"v"}]`)
+}
+
 func TestMapResourcesWithAccessType(t *testing.T) {
 	tests := []struct {
 		name     string

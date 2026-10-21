@@ -79,12 +79,19 @@ var ExclusionRules = jcs.MapExcludes{
 
 // LabelExcludes defines exclusion rules for label entries during normalization.
 // It excludes labels that don't have a valid signature.
+//
+// NOTE: version is intentionally NOT included. The runtime<->v2 label
+// conversion only began preserving Label.Version to support
+// jsonNormalisation/v1 (which signs it); v4alpha1 never emitted version before,
+// because the field was always empty across the conversion. Including it here
+// would silently change v4alpha1 digests and break existing signatures over
+// versioned signing labels. Keep v4alpha1 byte-stable; signing label version is
+// a deliberate, versioned change (see jsonNormalisation/v1 for that behaviour).
 var LabelExcludes = jcs.ExcludeEmpty{
 	TransformationRules: jcs.DynamicArrayExcludes{
 		ValueChecker: IgnoreLabelsWithoutSignature,
 		Continue: jcs.MapIncludes{
 			"name":    jcs.NoExcludes{},
-			"version": jcs.NoExcludes{},
 			"value":   jcs.NoExcludes{},
 			"signing": jcs.NoExcludes{},
 		},
