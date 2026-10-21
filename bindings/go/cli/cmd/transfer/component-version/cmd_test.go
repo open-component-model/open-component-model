@@ -453,7 +453,7 @@ func TestTransferComponentVersionRecursive(t *testing.T) {
 
 	// the graph construction phase must report one completed item per
 	// transformation node of the graph (the upload of parent and child)
-	for _, label := range []string{"parent-component@1.0.0 [Upload to CTF]", "child-component@0.0.1 [Upload to CTF]"} {
+	for _, label := range []string{"parent-component@1.0.0 [Upload to CTF " + toPath + "]", "child-component@0.0.1 [Upload to CTF " + toPath + "]"} {
 		require.Contains(t, completedOperationItems(logEntries, "Building transformation graph"), label,
 			"expected build progress for %s", label)
 	}

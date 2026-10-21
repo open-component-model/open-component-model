@@ -552,7 +552,7 @@ func (repo *Repository) uploadAndUpdateLocalArtifact(
 		BaseReference:      reference,
 		GlobalAccessPolicy: repo.globalAccessPolicy,
 	}
-	_, err = pack.ArtifactBlob(ctx, store, artifactBlob, packOptions)
+	_, err = pack.ArtifactBlob(slogcontext.With(ctx, slog.String("target", reference)), store, artifactBlob, packOptions)
 	if err != nil {
 		return fmt.Errorf("failed to pack resource blob: %w", err)
 	}
@@ -892,7 +892,7 @@ func (repo *Repository) uploadOCIImage(ctx context.Context, newAccess runtime.Ty
 		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("target access digest mismatch: expected %s, got %s", pinned, main.Digest)
 	}
 
-	if err := oras.ExtendedCopyGraph(ctx, ociStore, store, main, repo.extendedCopyGraphOptions()); err != nil {
+	if err := oras.ExtendedCopyGraph(slogcontext.With(ctx, slog.String("target", access.ImageReference)), ociStore, store, main, repo.extendedCopyGraphOptions()); err != nil {
 		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to upload resource via copy: %w", err)
 	}
 
@@ -1425,7 +1425,7 @@ func (repo *Repository) UploadResourceStream(ctx context.Context, res *descripto
 	// ExtendedCopyGraph copies the root together with its referrers, which a
 	// plain CopyGraph would miss because a referrer's subject edge points back
 	// at the root. The defaults walk every predecessor at unbounded depth.
-	if err := oras.ExtendedCopyGraph(ctx, rs, store, rs.Root(), repo.extendedCopyGraphOptions()); err != nil {
+	if err := oras.ExtendedCopyGraph(slogcontext.With(ctx, slog.String("target", access.ImageReference)), rs, store, rs.Root(), repo.extendedCopyGraphOptions()); err != nil {
 		return nil, fmt.Errorf("failed to stream resource via copy: %w", err)
 	}
 

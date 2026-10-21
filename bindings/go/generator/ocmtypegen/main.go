@@ -138,6 +138,7 @@ func findGoPackages(root string) ([]string, error) {
 	var packages []string
 
 	root = filepath.Clean(root)
+	//nolint:gosec // G703: build-time generator, root is a developer CLI arg, not attacker input
 	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 		if err != nil || !info.IsDir() {
 			return err
@@ -205,6 +206,7 @@ func getImportPath(folder string) (string, error) {
 	dir := absFolder
 	for {
 		goModPath := filepath.Clean(filepath.Join(dir, "go.mod"))
+		//nolint:gosec // G703: build-time generator, goModPath derives from a developer CLI arg
 		if _, err := os.Stat(goModPath); err == nil {
 			modulePath, err := readModulePath(goModPath)
 			if err != nil {
@@ -231,6 +233,7 @@ func getImportPath(folder string) (string, error) {
 
 // readModulePath reads the module path declared in a go.mod file.
 func readModulePath(goModPath string) (string, error) {
+	//nolint:gosec // G703: build-time generator, goModPath derives from a developer CLI arg
 	file, err := os.Open(filepath.Clean(goModPath))
 	if err != nil {
 		return "", err
@@ -250,6 +253,7 @@ func readModulePath(goModPath string) (string, error) {
 // generateCode creates a file with SetType and GetType methods for the provided types.
 func generateCode(folder, pkg string, types []string) error {
 	outputPath := filepath.Clean(filepath.Join(folder, generatedFile))
+	//nolint:gosec // G703: build-time generator, folder is a developer CLI arg, not attacker input
 	out, err := os.Create(outputPath)
 	if err != nil {
 		return err

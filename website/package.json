@@ -40,7 +40,7 @@
     "@thulite/seo": "^2.4.3",
     "mermaid": "^12.0.0",
     "preact": "^10.29.0",
-    "thulite": "^2.6.5"
+    "thulite": "^3.0.0"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
@@ -51,9 +51,9 @@
     "hugo-extended": "0.166.0",
     "jiti": "2.7.0",
     "js-yaml": "5.4.2",
-    "sass-embedded": "1.104.1",
+    "sass-embedded": "1.105.0",
     "shx": "0.4.0",
-    "typescript-eslint": "8.70.0"
+    "typescript-eslint": "8.70.1"
   },
   "overrides": {
     "adm-zip": "0.6.1",
@@ -70,5 +70,5 @@
     "node": "^26.0.0",
     "npm": ">=12.0.0"
   },
-  "packageManager": "npm@12.0.2"
+  "packageManager": "npm@12.1.0"
 }
