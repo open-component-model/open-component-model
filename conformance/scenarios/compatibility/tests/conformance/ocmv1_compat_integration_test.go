@@ -17,7 +17,7 @@ const (
 	ocmv1ComponentName       = "ocm.software/ocmv1-compat-signed-basic"
 	ocmv1AccessComponentName = "ocm.software/ocmv1-compat-access"
 	ocmv1InputComponentName  = "ocm.software/ocmv1-compat-input"
-	ocmv1Version             = "1.0.0"
+	ocmv1Version             = "1.0.0-RC1"
 )
 
 type ocmv1Descriptor struct {
@@ -65,6 +65,19 @@ configurations:
 	r.Equal(ocmv1ComponentName, signedDescriptor.Component.Name)
 	r.Equal(ocmv1Version, signedDescriptor.Component.Version)
 	r.Len(signedDescriptor.Signatures, 1)
+	runOCMv2Command(t, configPath, "verify", "cv", signedReference)
+
+	archivePath := filepath.Join(t.TempDir(), "signed.tgz")
+	runCompatibilityTool(t, os.Getenv("OCM_V1_BIN"), "--config", configPath,
+		"transfer", "ctf", "--type", "tgz", signedPath, archivePath)
+	archiveReference := "ctf::" + archivePath
+	r.Equal(signedDescriptor, readCompatDescriptor(t, configPath, archiveReference))
+	targetReference := "ctf::" + filepath.Join(t.TempDir(), "transferred")
+	runOCMv2Command(t, configPath, "transfer", "cv", archiveReference, targetReference)
+	signedReference = targetReference + "//" + ocmv1ComponentName + ":" + ocmv1Version
+	transferredDescriptor := readCompatDescriptor(t, configPath, signedReference)
+	r.Equal(signedDescriptor.Component, transferredDescriptor.Component)
+	r.Equal(signedDescriptor.Signatures, transferredDescriptor.Signatures)
 	runOCMv2Command(t, configPath, "verify", "cv", signedReference)
 	r.Len(signedDescriptor.Component.Resources, 1)
 	content := []byte("OCM v1 compatibility fixture")
