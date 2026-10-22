@@ -229,7 +229,7 @@ sign component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0 --s
       --force                   overwrite existing signatures under the same name
       --hash string             hash algorithm to use (SHA256, SHA512) (default &#34;SHA-256&#34;)
   -h, --help                    help for component-version
-      --normalisation string    normalisation algorithm to use (default jsonNormalisation/v4alpha1) (default &#34;jsonNormalisation/v4alpha1&#34;)
+      --normalisation string    normalisation algorithm to use (default jsonNormalisation/v4alpha1; jsonNormalisation/v1 is legacy and verify-only, it is rejected for signing) (default &#34;jsonNormalisation/v4alpha1&#34;)
   -o, --output enum             output format of the resulting signature
                                 (must be one of [json yaml]) (default yaml)
       --signature string        name of the signature to create or update. defaults to &#34;default&#34; (default &#34;default&#34;)
