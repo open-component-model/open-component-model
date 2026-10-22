@@ -14,13 +14,24 @@ import (
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation"
 	jsonv1 "ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v1"
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
+	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha2"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 )
 
 const (
+	// DefaultNormalisationAlgorithm is the normalisation used for new signatures
+	// when a caller does not specify one (e.g. the `ocm sign` --normalisation
+	// flag default). It is the single source of truth for that default.
+	DefaultNormalisationAlgorithm = v4alpha2.Algorithm
 	// LegacyNormalisationAlgo identifies the deprecated v3 JSON normalisation algorithm.
 	// It is replaced by v4alpha1.Algorithm. Calls using this value are transparently
 	// mapped to v4alpha1 with a warning.
+	//
+	// It maps to v4alpha1 specifically — NOT to DefaultNormalisationAlgorithm — and
+	// must never be re-pointed to v4alpha2. v4alpha1 reproduces legacy v3 bytes for
+	// reference labels (both emit non-signing reference labels), whereas v4alpha2
+	// filters them; remapping v3 to v4alpha2 would break verification of every
+	// existing v3 signature that carries reference labels.
 	LegacyNormalisationAlgo = "jsonNormalisation/v3"
 	// AccessTypeNone is the access type for resources without access.
 	// It is used to prevent meaningless digest claims.

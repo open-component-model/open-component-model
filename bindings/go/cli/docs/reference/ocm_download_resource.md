@@ -26,7 +26,7 @@ When --output is not provided, the output filename is the resource name.
 
 A reference can pin the component version with a digest: "{component}[:{version}]@sha256:<hex>" (OCI digest
 of the artifact the component version is stored as, which local resources are then read from) or
-"{component}:{version}@jsonNormalisation.v4alpha1+sha256:<hex>" (normalized: the digest signatures sign).
+"{component}:{version}@jsonNormalisation.v4alpha2+sha256:<hex>" (normalized: the digest signatures sign).
 See "ocm get cv --help" for when to use which. The resource content is then verified against its digest in the pinned descriptor.
 
 With --sbom, the Software Bills of Materials describing the resource are downloaded instead of the

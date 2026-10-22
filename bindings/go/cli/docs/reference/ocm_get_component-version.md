@@ -33,8 +33,8 @@ Two forms are accepted, each with sha256 or sha512:
   artifact instead of through the tag, like an OCI image pinned by digest. The digest covers the descriptor
   and all local blobs, so the version may be omitted; if given, the artifact must hold it. Only OCI
   registries and CTF archives support it, and it changes when the version is transferred or signed.
-- "@jsonNormalisation.v4alpha1+sha256:<hex>" (normalized) is the hash of the descriptor normalised with
-  jsonNormalisation/v4alpha1, the digest "ocm sign" signs and logs. It stays the same across transfer and
+- "@jsonNormalisation.v4alpha2+sha256:<hex>" (normalized) is the hash of the descriptor normalised with
+  jsonNormalisation/v4alpha2, the digest "ocm sign" signs and logs. It stays the same across transfer and
   signing, but does not cover access information or labels that are excluded from signing. A reference
   pinned to it must name the version.
 
@@ -54,7 +54,7 @@ get component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0
 get cv ./path/to/ctf//ocm.software/cli:0.12.0
 get cv ./path/to/ctf/component-descriptors/ocm.software/cli:0.12.0
 get cv ghcr.io/open-component-model//ocm.software/cli@sha256:<oci-digest>
-get cv ghcr.io/open-component-model//ocm.software/cli:0.12.0@jsonNormalisation.v4alpha1+sha256:<signed-digest>
+get cv ghcr.io/open-component-model//ocm.software/cli:0.12.0@jsonNormalisation.v4alpha2+sha256:<signed-digest>
 
 Listing many component versions:
 
