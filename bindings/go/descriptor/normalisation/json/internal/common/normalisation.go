@@ -17,8 +17,8 @@ import (
 
 // Constants for "none" access types.
 const (
-	NoneType       = "none"
-	NoneLegacyType = "None"
+	noneType       = "none"
+	noneLegacyType = "None"
 )
 
 // Normalise converts the descriptor to v2 format, applies default values, and
@@ -31,17 +31,14 @@ func Normalise(cd *descruntime.Descriptor, rules jcs.TransformationRules) ([]byt
 	if err != nil {
 		return nil, err
 	}
-	DefaultComponent(desc)
+	defaultComponent(desc)
 	return jcs.Normalise(desc, rules)
 }
 
-// DefaultComponent sets default values for various fields in the v2 descriptor
-// if they are not already set. This ensures consistent normalization output
-// regardless of whether optional fields are present in the input.
-//
-// Parameters:
-//   - d: The v2 descriptor to set defaults for
-func DefaultComponent(d *v2.Descriptor) {
+// defaultComponent sets default values for various fields in the v2 descriptor
+// if they are not already set, so normalisation output is consistent regardless
+// of whether optional fields were present in the input.
+func defaultComponent(d *v2.Descriptor) {
 	if d.Component.RepositoryContexts == nil {
 		d.Component.RepositoryContexts = make([]*runtime.Raw, 0)
 	}
@@ -56,10 +53,9 @@ func DefaultComponent(d *v2.Descriptor) {
 	}
 }
 
-// ProviderAsMap converts a provider string into a map structure if possible.
-// This function is used during normalization to handle provider information
-// in a standardized way.
-// ProviderAsMap tries to parse a JSON-encoded provider string into a map.
+// ProviderAsMap tries to parse a JSON-encoded provider string into a map,
+// falling back to a {"name": v} map. Used during normalisation to serialise the
+// provider consistently as a map.
 func ProviderAsMap(v any) any {
 	var provider map[string]any
 
@@ -125,5 +121,5 @@ func MapResourcesWithAccessType(test func(string) bool, mapper func(interface{})
 // IsNoneAccessKind checks if the given access type is "none".
 // Supports both current and legacy access type values.
 func IsNoneAccessKind(kind string) bool {
-	return kind == NoneType || kind == NoneLegacyType
+	return kind == noneType || kind == noneLegacyType
 }
