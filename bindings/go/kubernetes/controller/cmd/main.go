@@ -77,6 +77,12 @@ func main() {
 		deployerMaxResourceSize   string
 		resourceConcurrency       int
 		replicationConcurrency    int
+		resolverWorkerCount       int
+		resolverWorkerQueueLength int
+		resolverSubscriberBuffer  int
+		resolverCacheTTL          int
+		enableDeployer            bool
+		enableNamespacedDeployer  bool
 	)
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metric endpoint binds to. "+
@@ -99,6 +105,11 @@ func main() {
 		"The resource controller concurrency. This is the number of active resource controller workers that can be kept alive.")
 	flag.IntVar(&replicationConcurrency, "replication-controller-concurrency", 4, //nolint:mnd // no magic number
 		"The replication controller concurrency. This is the number of active replication controller workers that can be kept alive.")
+
+	flag.BoolVar(&enableDeployer, "enable-deployer", true,
+		"Run the controller for the cluster-scoped Deployer.")
+	flag.BoolVar(&enableNamespacedDeployer, "enable-namespaced-deployer", true,
+		"Run the controller for the NamespacedDeployer.")
 
 	opts := zap.Options{
 		Development: true,
@@ -259,21 +270,36 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = (&deployer.Reconciler{
-		BaseReconciler: &ocm.BaseReconciler{
-			Client:           mgr.GetClient(),
-			Scheme:           mgr.GetScheme(),
-			EventRecorder:    eventsRecorder,
-			NewPluginManager: newPluginManager,
-		},
-		DownloadCache: cache.NewMemoryDigestObjectCache[string, []*unstructured.Unstructured]("deployer_download_cache", deployerDownloadCacheSize, func(k string, v []*unstructured.Unstructured) {
-			setupLog.Info("evicting deployment objects from cache", "key", k, "count", len(v))
-		}),
-		Resolver:             resolver,
-		MaxResourceSizeBytes: maxResourceSizeBytes,
-	}).SetupWithManager(ctx, mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "Deployer")
-		os.Exit(1)
+	downloadCache := cache.NewMemoryDigestObjectCache[string, []*unstructured.Unstructured]("deployer_download_cache", deployerDownloadCacheSize, func(k string, v []*unstructured.Unstructured) {
+		setupLog.Info("evicting deployment objects from cache", "key", k, "count", len(v))
+	})
+	for _, d := range []struct {
+		kind       string
+		enabled    bool
+		namespaced bool
+	}{
+		{kind: v1alpha1.KindDeployer, enabled: enableDeployer},
+		{kind: v1alpha1.KindNamespacedDeployer, enabled: enableNamespacedDeployer, namespaced: true},
+	} {
+		if !d.enabled {
+			setupLog.Info("controller disabled", "controller", d.kind)
+			continue
+		}
+		if err = (&deployer.Reconciler{
+			BaseReconciler: &ocm.BaseReconciler{
+				Client:           mgr.GetClient(),
+				Scheme:           mgr.GetScheme(),
+				EventRecorder:    eventsRecorder,
+				NewPluginManager: newPluginManager,
+			},
+			Namespaced:           d.namespaced,
+			DownloadCache:        downloadCache,
+			Resolver:             resolver,
+			MaxResourceSizeBytes: maxResourceSizeBytes,
+		}).SetupWithManager(ctx, mgr); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", d.kind)
+			os.Exit(1)
+		}
 	}
 	if err = (&v1alpha1.Component{}).SetupWebhookWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create webhook", "webhook", "Component")
@@ -281,6 +307,10 @@ func main() {
 	}
 	if err = (&v1alpha1.Deployer{}).SetupWebhookWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create webhook", "webhook", "Deployer")
+		os.Exit(1)
+	}
+	if err = (&v1alpha1.NamespacedDeployer{}).SetupWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create webhook", "webhook", "NamespacedDeployer")
 		os.Exit(1)
 	}
 	if err = (&v1alpha1.Repository{}).SetupWebhookWithManager(mgr); err != nil {

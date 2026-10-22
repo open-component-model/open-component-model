@@ -1280,6 +1280,39 @@ func TestRepository_ListComponentVersions_PreservesNonSemver(t *testing.T) {
 		"semver versions must sort newest-first ahead of non-semver entries")
 }
 
+// TestRepository_ListComponentVersions_UppercaseVersion guards against the
+// regression where a CTF could store a version with upper-case letters (a valid
+// OCI tag) but failed to list it, because the bare tag was parsed as a
+// repository name, and repository names must be lower-case.
+func TestRepository_ListComponentVersions_UppercaseVersion(t *testing.T) {
+	r := require.New(t)
+	ctx := t.Context()
+
+	fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
+	r.NoError(err)
+	store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
+	repo := Repository(t, ocictf.WithCTF(store))
+
+	const componentName = "ocm.software/uppercase-component"
+	versionsToAdd := []string{"1.0.0-T0", "1.0.0"}
+	for _, version := range versionsToAdd {
+		desc := &descriptor.Descriptor{
+			Meta: descriptor.Meta{Version: "v2"},
+			Component: descriptor.Component{
+				Provider: descriptor.Provider{Name: "test-provider"},
+				ComponentMeta: descriptor.ComponentMeta{
+					ObjectMeta: descriptor.ObjectMeta{Name: componentName, Version: version},
+				},
+			},
+		}
+		r.NoError(repo.AddComponentVersion(ctx, desc))
+	}
+
+	versions, err := repo.ListComponentVersions(ctx, componentName)
+	r.NoError(err)
+	r.ElementsMatch(versionsToAdd, versions)
+}
+
 func setupLegacyComponentVersion(t *testing.T, store *ocictf.Store, ctx context.Context, content []byte, resource *descriptor.Resource) {
 	t.Helper()
 	r := require.New(t)
@@ -3766,6 +3799,105 @@ func TestRepository_AddOwnership_ResolveErrors(t *testing.T) {
 			r.ErrorContains(err, tt.wantErr)
 		})
 	}
+}
+
+// redeployDisabledResolver hands out stores that emulate an immutable OCI
+// repo (e.g. Nexus with "redeploy" disabled): once a reference carries a tag,
+// re-pointing it is rejected, even to identical content.
+type redeployDisabledResolver struct{ oci.Resolver }
+
+func (r redeployDisabledResolver) StoreForReference(ctx context.Context, reference string) (spec.Store, error) {
+	s, err := r.Resolver.StoreForReference(ctx, reference)
+	if err != nil {
+		return nil, err
+	}
+	return &redeployDisabledStore{Store: s}, nil
+}
+
+// redeployDisabledStore rejects a Tag write when the reference already resolves,
+// mirroring a write-once policy. Reads and digest-addressed pushes pass through.
+type redeployDisabledStore struct{ spec.Store }
+
+func (s *redeployDisabledStore) Tag(ctx context.Context, desc ociImageSpecV1.Descriptor, reference string) error {
+	if _, err := s.Resolve(ctx, reference); err == nil {
+		return fmt.Errorf("redeploy disabled: %q cannot be updated as asset already exists", reference)
+	}
+	return s.Store.Tag(ctx, desc, reference)
+}
+
+func TestRepository_AddComponentVersion_ImmutableRegistry(t *testing.T) {
+	newRepo := func(t *testing.T) *oci.Repository {
+		t.Helper()
+		fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
+		require.NoError(t, err)
+		store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
+		return Repository(t, oci.WithResolver(redeployDisabledResolver{Resolver: store}))
+	}
+
+	desc := func(provider string) *descriptor.Descriptor {
+		return &descriptor.Descriptor{
+			Meta: descriptor.Meta{Version: "v2"},
+			Component: descriptor.Component{
+				Provider: descriptor.Provider{Name: provider},
+				ComponentMeta: descriptor.ComponentMeta{
+					ObjectMeta: descriptor.ObjectMeta{Name: "ocm.software/test-component", Version: "1.0.0"},
+				},
+			},
+		}
+	}
+
+	// Unchanged content yields the same manifest digest, so the tag already
+	// points where we would write it: the redeploy rejection is a no-op.
+	t.Run("identical content re-add is idempotent", func(t *testing.T) {
+		r := require.New(t)
+		ctx := t.Context()
+		repo := newRepo(t)
+
+		r.NoError(repo.AddComponentVersion(ctx, desc("test-provider")))
+		r.NoError(repo.AddComponentVersion(ctx, desc("test-provider")),
+			"re-adding identical content must succeed despite redeploy being disabled")
+	})
+
+	// Changed content yields a different digest, so the tag points elsewhere: a
+	// genuine conflict that must surface rather than be skipped.
+	t.Run("changed content surfaces the conflict", func(t *testing.T) {
+		r := require.New(t)
+		ctx := t.Context()
+		repo := newRepo(t)
+
+		r.NoError(repo.AddComponentVersion(ctx, desc("test-provider")))
+		err := repo.AddComponentVersion(ctx, desc("other-provider"))
+		r.Error(err, "re-tagging different content on an immutable registry must fail")
+		r.ErrorContains(err, "failed to tag manifest")
+	})
+}
+
+// UploadResourceStream (the by-reference ociArtifact transfer path) must also
+// tolerate re-tagging an identical artifact on a redeploy-disabled registry.
+func TestRepository_UploadResourceStream_ImmutableRegistry(t *testing.T) {
+	r := require.New(t)
+	ctx := t.Context()
+
+	fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
+	r.NoError(err)
+	store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
+	repo := Repository(t, oci.WithResolver(redeployDisabledResolver{Resolver: store}), oci.WithScheme(testScheme))
+
+	memStore, root := buildTestManifestStream(t)
+	newStream := func() *ocistream.OCIResourceStream {
+		return &ocistream.OCIResourceStream{
+			ReadOnlyGraphStorage: memStore,
+			Descriptor:           root,
+			TempDir:              t.TempDir(),
+			Tags:                 []string{"test-image:1.0.0"},
+		}
+	}
+	res := &descriptor.Resource{Access: &v1.OCIImage{ImageReference: "test-image:1.0.0"}}
+
+	_, err = repo.UploadResourceStream(ctx, res, newStream())
+	r.NoError(err, "first upload must succeed")
+	_, err = repo.UploadResourceStream(ctx, res, newStream())
+	r.NoError(err, "identical re-upload must be idempotent despite redeploy being disabled")
 }
 
 // blobValidatingResolver wraps a resolver so the stores it hands out reject a

@@ -48,6 +48,14 @@ func WithOCICredentials(credentials *ocicredsv1.OCICredentials) Option {
 	}
 }
 
+// WithWorkingDirectory sets the directory against which a relative local chart path is resolved.
+// The chart path must not escape this directory. When empty, the path is used as given.
+func WithWorkingDirectory(dir string) Option {
+	return func(options *Options) {
+		options.WorkingDirectory = dir
+	}
+}
+
 // WithHTTPConfig sets the HTTP client configuration used for chart downloads and OCI registry access.
 // The download layer builds its internal client from cfg. When nil, the default Helm client is used.
 func WithHTTPConfig(cfg *httpv1alpha1.Config) Option {
@@ -57,9 +65,10 @@ func WithHTTPConfig(cfg *httpv1alpha1.Config) Option {
 }
 
 type Options struct {
-	Credentials    *helmcredsv1.HelmHTTPCredentials
-	OCICredentials *ocicredsv1.OCICredentials
-	HTTPConfig     *httpv1alpha1.Config
+	Credentials      *helmcredsv1.HelmHTTPCredentials
+	OCICredentials   *ocicredsv1.OCICredentials
+	HTTPConfig       *httpv1alpha1.Config
+	WorkingDirectory string
 }
 
 // GetV1HelmBlob creates a ReadOnlyBlob from a v1.Helm specification.
@@ -81,7 +90,13 @@ func GetV1HelmBlob(ctx context.Context, helmSpec v1.Helm, tmpDir string, opts ..
 
 	switch {
 	case helmSpec.Path != "":
-		chart, err = newReadOnlyChart(helmSpec.Path, tmpDir)
+		path := helmSpec.Path
+		if options.WorkingDirectory != "" {
+			if path, err = filesystem.EnsurePathInWorkingDirectory(path, options.WorkingDirectory); err != nil {
+				return nil, nil, fmt.Errorf("error resolving local helm chart path %q in working directory %q: %w", helmSpec.Path, options.WorkingDirectory, err)
+			}
+		}
+		chart, err = newReadOnlyChart(path, tmpDir)
 		if err != nil {
 			return nil, nil, fmt.Errorf("error loading local helm chart %q: %w", helmSpec.Path, err)
 		}

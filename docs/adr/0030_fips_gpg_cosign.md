@@ -4,7 +4,7 @@
 * **Deciders**: OCM Technical Steering Committee
 * **Date**: 2026-10-05
 
-Technical Story: [ocm-project#1327](https://github.com/open-component-model/ocm-project/issues/1327), part of the FIPS 140-3 epic [ocm-project#1197](https://github.com/open-component-model/ocm-project/issues/1197). User documentation: the [FIPS 140-3 reference](../../website/content/docs/reference/standards-and-regulations/fips.md). Implemented in [#3691](https://github.com/open-component-model/open-component-model/pull/3691) and [#3747](https://github.com/open-component-model/open-component-model/pull/3747).
+Technical Story: [ocm-project#1327](https://github.com/open-component-model/ocm-project/issues/1327), part of the FIPS 140-3 epic [ocm-project#1197](https://github.com/open-component-model/ocm-project/issues/1197). User documentation: the [FIPS 140-3 reference](../../website/content/docs/reference/standards-and-regulations/fips.md). Implemented in [#3691](https://github.com/open-component-model/open-component-model/pull/3691), [#3747](https://github.com/open-component-model/open-component-model/pull/3747) and [#3891](https://github.com/open-component-model/open-component-model/pull/3891) (OCM's FIPS `cosign`).
 
 ---
 
@@ -34,7 +34,7 @@ This ADR decides how OCM signing behaves in each mode, and where the FIPS bounda
 * Users who do not set anything keep today's behavior.
 * Users who need a hard guarantee get one, with a single, documented switch.
 * GPG users, including those with passphrase-protected keys, keep a FIPS-compliant path.
-* OCM does not take over the supply chain of third-party tools.
+* OCM takes over the supply chain of a third-party tool only where automation keeps the cost low and upstream fixes reach users quickly.
 * Few new dependencies.
 
 ## Considered Options
@@ -64,13 +64,13 @@ Helm provenance:
 
 ## Decision Outcome
 
-Chosen **E2**, **G1**, **C1** and **H1**.
+Chosen **E2**, **G1**, **C1** together with **C2**, and **H1**.
 
 Justification:
 
 * **E2:** FIPS mode is on in every release build by default. Enforcing whenever it is on (E1) would remove features from every user, for example the automatic `cosign` download, which contradicts "no surprise for existing users". E2 keeps the default permissive and gives regulated users an explicit opt-in.
 * **G1:** go-crypto runs RSA, NIST ECDSA, SHA-2 and RNG through the Go Cryptographic Module. Strict mode allows only unprotected v5 (LibrePGP) or v6 (RFC 9580) RSA/ECDSA-P keys and SHA-2 signatures. Everything else (v4 keys with SHA-1 fingerprints, EdDSA/Ed25519/Ed448 via circl, DSA, other curves, passphrase-protected keys, secret-key export from the GnuPG keyring) runs with a debug log by default and is rejected in strict mode. The GnuPG keyring stays usable as a key source (`keyringFingerprint`): gpg only exports keys; no signing or verification runs in gpg. Nothing has to ship in images or stay in lockstep with a libc base image.
-* **C1:** OCM cannot vouch for an arbitrary program, but it can tell whether `cosign` was built against a frozen Go Cryptographic Module. That is enough to report in the default mode and refuse in strict mode. C2 would make OCM responsible for building and shipping a third-party tool. C3 is not compliant, because the upstream build has no validated module to switch on.
+* **C1 + C2:** OCM cannot vouch for an arbitrary program, but it can tell whether `cosign` was built against a frozen Go Cryptographic Module. That is enough to report in the default mode and refuse in strict mode, and it stays the rule for every `cosign`, whether on `PATH`, downloaded or in an image. C1 alone left strict mode without a working `cosign` unless the operator built one, and the images had to compile `cosign` from source in every build. C2 removes both: [open-component-model/cosign](https://github.com/open-component-model/cosign) rebuilds upstream `cosign` unmodified with `GOFIPS140=certified`, fully automated (see [Sigstore](#sigstore)), so the cost that originally ruled C2 out is small. C3 is not compliant, because the upstream build has no validated module to switch on.
 * **H1:** treating Helm provenance like the other external cryptography keeps the rules uniform. H2 would mean rebuilding Helm's provenance check around GnuPG, which can follow if users need it.
 
 ### Runtime modes
@@ -85,7 +85,7 @@ OCM follows Go's three modes and attaches one rule to each:
 
 The steps covered by this rule:
 
-* a `cosign` that is not a FIPS build, or downloading the upstream `cosign`;
+* a `cosign` that is not a FIPS build, whether on `PATH` or downloaded;
 * GPG keys other than unprotected v5 (LibrePGP) or v6 (RFC 9580) keys using RSA with at least 2048 bits or ECDSA P-256/P-384/P-521, and exporting secret keys from the GnuPG keyring;
 * Helm chart provenance verification;
 * component digests that do not use SHA-256 or SHA-512, because a signature must not rest on a weak hash. In the other modes these are accepted with a warning, so existing component versions stay usable.
@@ -102,7 +102,16 @@ GPG signing and verification run in-process with the Go OpenPGP library (`github
 
 ### Sigstore
 
-OCM keeps using the external `cosign` program. When FIPS mode is on, OCM checks whether that `cosign` was built against a frozen Go Cryptographic Module and handles the result according to the runtime mode. Operators who need strict mode supply a FIPS `cosign`, either by building it themselves with the Go FIPS settings or from a vendor.
+OCM keeps using the external `cosign` program. When FIPS mode is on, OCM checks whether that `cosign` was built against a frozen Go Cryptographic Module and handles the result according to the runtime mode. Without `cosign` on `PATH`, OCM downloads OCM's FIPS `cosign`, in every mode; the CLI and controller images ship the same build.
+
+OCM's FIPS `cosign` ([open-component-model/cosign](https://github.com/open-component-model/cosign)):
+
+* **Ownership.** The repository is owned by the open-component-model GitHub organisation, alongside this repository; updates and releases run on the organisation's bot (`ocmbot`).
+* **Build.** Upstream sources are never modified. Each upstream stable release gets a maintenance branch `ocm/vX.Y.Z` with an overlay that replaces upstream's workflows; binaries are built with `GOFIPS140=certified` and `CGO_ENABLED=0` on the fork's pinned Go toolchain, for the same platforms as upstream, plus a multi-arch image `ghcr.io/open-component-model/cosign`.
+* **Following upstream.** Upstream stable tags are mirrored hourly. Go module and Go toolchain updates are applied daily and merged when CI passes. A release `vX.Y.Z+ocm.N` is cut daily from every maintenance branch that changed, so upstream security releases and fixed dependencies reach a release within a day without manual steps; release notes list the remaining govulncheck findings. In this repository, Renovate bumps the download pin and both image pins in one PR (group "OCM cosign").
+* **Signing and verification.** Releases carry `cosign_checksums.txt` and GitHub SLSA build provenance for the binaries and the image (`gh attestation verify --repo open-component-model/cosign`). OCM pins the release and the SHA-256 of its `cosign_checksums.txt` in `bindings/go/sigstore/signing/handler/internal/.env`, checks the downloaded checksums file against that pin and the binary against the checksums file, then applies the FIPS check. A replaced release asset therefore fails the download instead of being trusted. The images pin the image by digest; a unit test keeps image and download pins on the same release. OCM does not verify the provenance attestation at runtime, which would need a Sigstore verifier in OCM before `cosign` is available.
+
+Operators who do not want OCM to fetch an executable put a FIPS `cosign` on `PATH`, either OCM's build, their own built with the Go FIPS settings, or one from a vendor; OCM then never downloads.
 
 ### Where the boundary ends
 
@@ -192,22 +201,24 @@ Cons:
 
 Pros:
 
-* Small change; the default mode keeps the automatic download.
+* Small change; works with any FIPS `cosign` the operator provides.
 
 Cons:
 
-* Strict mode depends on the operator providing a FIPS `cosign`.
+* On its own, strict mode depends on the operator providing a FIPS `cosign`.
 * FIPS builds of `cosign` that use another validated library than the Go module are not recognised yet.
 
 ### [C2] OCM ships its own FIPS `cosign`
 
 Pros:
 
-* Strict mode works without operator effort.
+* Strict mode works without operator effort; the automatic download stays inside the FIPS boundary.
+* The images copy a prebuilt binary instead of compiling `cosign` in every build.
 
 Cons:
 
-* OCM becomes responsible for building, signing and updating a third-party tool.
+* OCM becomes responsible for building, signing and updating a third-party tool. Automation (hourly upstream sync, daily updates and releases) keeps this small, but a broken release pipeline delays upstream fixes until someone repairs it.
+* `ocm` and `cosign` can briefly run different certified module versions, because both resolve `GOFIPS140=certified` with their own Go toolchain.
 
 ### [C3] Run upstream `cosign` in FIPS mode
 
@@ -252,4 +263,4 @@ Open follow-ups:
 
 ## Conclusion
 
-OCM ships one artifact built against the certified Go Cryptographic Module. By default nothing changes for users, and steps that leave the FIPS boundary are reported. Users who need a guarantee switch to strict mode and get a clear error for every such step. GPG signing and verification run in-process with the Go OpenPGP library, with strict-mode rules for approved key types; the GnuPG keyring stays usable as a key source. Sigstore keeps the external `cosign` with a FIPS check, and Helm provenance is refused in strict mode.
+OCM ships one artifact built against the certified Go Cryptographic Module. By default nothing changes for users, and steps that leave the FIPS boundary are reported. Users who need a guarantee switch to strict mode and get a clear error for every such step. GPG signing and verification run in-process with the Go OpenPGP library, with strict-mode rules for approved key types; the GnuPG keyring stays usable as a key source. Sigstore keeps the external `cosign` with a FIPS check; OCM ships and downloads its own FIPS `cosign`, pinned by release and checksum. Helm provenance is refused in strict mode.

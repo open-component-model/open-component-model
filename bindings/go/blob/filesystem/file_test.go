@@ -1,15 +1,21 @@
 package filesystem_test
 
 import (
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 )
+
+type readerBlob struct{ io.Reader }
+
+func (b readerBlob) ReadCloser() (io.ReadCloser, error) { return io.NopCloser(b.Reader), nil }
 
 func TestCopyBlobToOSPath(t *testing.T) {
 	r := require.New(t)
@@ -52,4 +58,46 @@ func TestGetLocalBlobFromLocation(t *testing.T) {
 	data, err := io.ReadAll(reader)
 	r.NoError(err)
 	r.Equal("test data", string(data))
+}
+
+func TestCopyBlobToOSPathReplacesExistingFile(t *testing.T) {
+	r := require.New(t)
+	tempDir := t.TempDir()
+	src := filepath.Join(tempDir, "src.txt")
+	r.NoError(os.WriteFile(src, []byte("new"), 0o600))
+	b, err := filesystem.GetBlobFromOSPath(src)
+	r.NoError(err)
+
+	dst := filepath.Join(tempDir, "dst.txt")
+	r.NoError(os.WriteFile(dst, []byte("old"), 0o600))
+	r.NoError(filesystem.CopyBlobToOSPath(b, dst))
+
+	got, err := os.ReadFile(dst)
+	r.NoError(err)
+	r.Equal("new", string(got))
+}
+
+type closeErrBlob struct{ io.Reader }
+
+func (b closeErrBlob) ReadCloser() (io.ReadCloser, error) { return b, nil }
+func (closeErrBlob) Close() error                         { return errors.New("verification failed on close") }
+
+func TestCopyBlobToOSPathRemovesTargetWhenCloseFails(t *testing.T) {
+	r := require.New(t)
+	dst := filepath.Join(t.TempDir(), "dst.txt")
+	r.NoError(os.WriteFile(dst, []byte("old"), 0o600))
+
+	err := filesystem.CopyBlobToOSPath(closeErrBlob{strings.NewReader("new")}, dst)
+	r.ErrorContains(err, "verification failed on close")
+	r.NoFileExists(dst, "content that failed verification must not be left at the target path")
+}
+
+func TestCopyBlobToOSPathAcceptsLongFileName(t *testing.T) {
+	r := require.New(t)
+	dst := filepath.Join(t.TempDir(), strings.Repeat("a", 250))
+	r.NoError(filesystem.CopyBlobToOSPath(readerBlob{strings.NewReader("new")}, dst))
+
+	got, err := os.ReadFile(dst)
+	r.NoError(err)
+	r.Equal("new", string(got))
 }

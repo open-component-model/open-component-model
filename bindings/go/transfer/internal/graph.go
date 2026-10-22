@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"slices"
 
 	"ocm.software/open-component-model/bindings/go/dag"
 	dagsync "ocm.software/open-component-model/bindings/go/dag/sync"
@@ -18,6 +19,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	s3v2 "ocm.software/open-component-model/bindings/go/s3/spec/access/v2"
+	"ocm.software/open-component-model/bindings/go/signing"
 	uploadv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/transformation/spec/v1alpha1"
 	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
 	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
@@ -51,6 +53,10 @@ type TransferRoot struct {
 	// SourceResolver resolves this root's component version from its source repository.
 	// One resolver per component — see the struct doc for the design rationale.
 	SourceResolver resolvers.ComponentVersionRepositoryResolver
+	// ExpectedDigest optionally pins the root component version (see [repository.GetPinnedComponentVersion]):
+	// a normalized digest is verified against the normalised descriptor, an OCI digest selects the
+	// source artifact the descriptor and all local resources are read from.
+	ExpectedDigest *descruntime.Digest
 }
 
 // BuildGraphDefinition constructs a [transformv1alpha1.TransformationGraphDefinition] for
@@ -85,35 +91,42 @@ func BuildGraphDefinition(
 	targetMap := make(map[string][]runtime.Typed)
 	resolverMap := make(map[string]resolvers.ComponentVersionRepositoryResolver)
 	dagRoots := make([]string, 0, len(roots))
+	rootPins := make(map[string]descruntime.Digest)
 	for key, root := range roots {
 		dagRoots = append(dagRoots, key)
 		targetMap[key] = AppendUniqueRepositories(targetMap[key], root.Targets)
 		resolverMap[key] = root.SourceResolver
+		if root.ExpectedDigest != nil {
+			rootPins[key] = *root.ExpectedDigest
+		}
 	}
 
 	disc := &discoverer{
 		recursive:         cfg.Recursive,
-		discoveredDigests: make(map[string]descruntime.Digest),
+		discoveredDigests: make(map[string][]descruntime.Digest),
 		targetMap:         targetMap,
 		resolverMap:       resolverMap,
 	}
 	// The multiResolver delegates to per-component resolvers from resolverMap.
-	// The expectedDigest closure checks whether a recursively discovered child has
-	// a pinned digest from its parent's reference, enabling integrity verification.
+	// Root pins are kept apart from the digests parents' component references expect, so that
+	// neither can replace the other: a resolved component version is verified against both.
 	res := &multiResolver{
 		mu:          &disc.mu,
 		resolverMap: resolverMap,
-		expectedDigest: func(id runtime.Identity) *descruntime.Digest {
+		rootPin: func(key string) *descruntime.Digest {
+			// rootPins is not written after discovery starts.
+			if dig, ok := rootPins[key]; ok {
+				return &dig
+			}
+			return nil
+		},
+		expectedDigests: func(id runtime.Identity) []descruntime.Digest {
 			disc.mu.Lock()
 			defer disc.mu.Unlock()
 			if disc.recursive == 0 {
 				return nil
 			}
-			dig, ok := disc.discoveredDigests[id.String()]
-			if !ok {
-				return nil
-			}
-			return &dig
+			return slices.Clone(disc.discoveredDigests[id.String()])
 		},
 	}
 
@@ -132,6 +145,16 @@ func BuildGraphDefinition(
 
 	slog.DebugContext(ctx, "component discovery completed")
 
+	// Resolve checks only the digests recorded before a child is resolved; a parent
+	// discovered afterwards records its digest too late. Checking all of them once
+	// discovery is done makes the outcome independent of discovery order.
+	g := dr.Graph()
+	if err := g.WithReadLock(func(d *dag.DirectedAcyclicGraph[string]) error {
+		return verifyReferenceDigests(ctx, d, disc.discoveredDigests)
+	}); err != nil {
+		return nil, err
+	}
+
 	tgd := &transformv1alpha1.TransformationGraphDefinition{
 		Environment: &runtime.Unstructured{
 			Data: map[string]any{},
@@ -139,7 +162,6 @@ func BuildGraphDefinition(
 	}
 
 	// Phase 2: walk the discovered DAG and generate transformation nodes per (component, target) pair.
-	g := dr.Graph()
 	err := g.WithReadLock(func(d *dag.DirectedAcyclicGraph[string]) error {
 		return fillGraphDefinitionWithPrefetchedComponents(ctx, d, targetMap, tgd, uploaders)
 	})
@@ -148,6 +170,27 @@ func BuildGraphDefinition(
 	}
 
 	return tgd, nil
+}
+
+// verifyReferenceDigests verifies every digest a parent's component reference expects for a
+// discovered component version against its resolved descriptor. digests is keyed by the
+// string form of the component version identity.
+func verifyReferenceDigests(ctx context.Context, d *dag.DirectedAcyclicGraph[string], digests map[string][]descruntime.Digest) error {
+	for _, key := range d.GetVertices() {
+		val := d.Vertices[key].Attributes[dagsync.AttributeValue].(*discoveryValue)
+		id := runtime.Identity{
+			descruntime.IdentityAttributeName:    val.Descriptor.Component.Name,
+			descruntime.IdentityAttributeVersion: val.Descriptor.Component.Version,
+		}
+		for _, expected := range digests[id.String()] {
+			if err := signing.VerifyDigestMatchesDescriptor(
+				ctx, val.Descriptor, descruntime.Signature{Digest: expected}, slog.Default(),
+			); err != nil {
+				return fmt.Errorf("component version %s does not match the digest a component reference expects: %w", key, err)
+			}
+		}
+	}
+	return nil
 }
 
 // fillGraphDefinitionWithPrefetchedComponents iterates over all discovered components in the DAG
@@ -515,9 +558,9 @@ func buildDescriptorSpec(v2desc *descriptorv2.Descriptor, id string, resourceTra
 
 	setOptionalField(componentMap, "creationTime", id, v2desc.Component.CreationTime != "")
 	setOptionalField(componentMap, "labels", id, len(v2desc.Component.Labels) != 0)
-	setOptionalField(componentMap, "repositoryContexts", id, len(v2desc.Component.RepositoryContexts) != 0)
-	setOptionalField(componentMap, "sources", id, len(v2desc.Component.Sources) != 0)
-	setOptionalField(componentMap, "componentReferences", id, len(v2desc.Component.References) != 0)
+	setListField(componentMap, "repositoryContexts", id, v2desc.Component.RepositoryContexts)
+	setListField(componentMap, "sources", id, v2desc.Component.Sources)
+	setListField(componentMap, "componentReferences", id, v2desc.Component.References)
 
 	descSpecMap := map[string]any{
 		"meta":      fmt.Sprintf("${environment.%s.meta}", id),
@@ -538,5 +581,18 @@ func setOptionalField(componentMap map[string]any, field, id string, present boo
 		componentMap[field] = fmt.Sprintf("${environment.%s.component.%s}", id, field)
 	} else {
 		componentMap[field] = nil
+	}
+}
+
+// setListField is setOptionalField for list fields serialized without omitempty: an empty
+// list stays [] instead of becoming null.
+func setListField[T any](componentMap map[string]any, field, id string, list []T) {
+	switch {
+	case list == nil:
+		componentMap[field] = nil
+	case len(list) == 0:
+		componentMap[field] = []any{}
+	default:
+		componentMap[field] = fmt.Sprintf("${environment.%s.component.%s}", id, field)
 	}
 }

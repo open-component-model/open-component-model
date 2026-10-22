@@ -1,18 +1,18 @@
 ---
 title: "Set up Controller Environments"
-description: "Set up a local Kubernetes environment with the OCM Controllers, kro, and Flux for testing OCM deployments."
+description: "Set up a local Kubernetes environment with the OCM Controllers, an orchestrator (kro or Crossplane), and a deployer such as Flux or Argo CD."
 icon: "⚓"
 weight: 25
 toc: true
 ---
 
 This guide helps you set up a local Kubernetes environment for testing OCM controller-based deployments.
-You'll install the OCM Controllers, kro, and Flux to enable GitOps workflows with OCM component versions.
+You'll install the OCM Controllers, an orchestrator (kro or Crossplane), and a deployer (FluxCD or ArgoCD) to enable GitOps workflows with OCM component versions.
 
 {{< callout context="tip" title="Not all components are always required" icon="outline/info-circle" >}}
-Depending on your use case, you may not need the full setup. For example, if 
-you're only deploying raw k8s deployment from an ocm resource, you may be 
-able to skip kro and a deployer like FluxCD or ArgoCD. 
+Depending on your use case, you may not need the full setup. For example, if
+you're only deploying a raw k8s deployment from an ocm resource, you may be
+able to skip the orchestrator and a deployer like FluxCD or ArgoCD.
 
 Check the prerequisites of the tutorial or how-to you're following to see what's 
 actually needed. This guide installs everything so you're covered for any 
@@ -21,7 +21,7 @@ scenario.
 
 ## You'll end up with
 
-- A local or remote Kubernetes cluster with OCM Controllers, kro, and a deployer like FluxCD or ArgoCD installed
+- A local or remote Kubernetes cluster with OCM Controllers, an orchestrator (kro or Crossplane), and a deployer like FluxCD or ArgoCD installed
 
 ## Estimated time
 
@@ -103,7 +103,11 @@ helm install ocm-k8s-toolkit "oci://ghcr.io/open-component-model/kubernetes/cont
 ```
 
 {{<callout context="note" title="Resource names follow the release name" icon="outline/info-circle">}}
-The release name `ocm-k8s-toolkit` used above gives the controller's resources predictable names, such as the service account `ocm-k8s-toolkit-controller-manager`. If you install under a different release name — or via a GitOps tool such as Flux that alters the effective release name — add `--set fullnameOverride=ocm-k8s-toolkit` to keep these names stable. This matters when you [configure custom RBAC]({{< relref "/docs/how-to/custom-rbac.md" >}}), which binds to the service account by name.
+The release name `ocm-k8s-toolkit` used above gives the controller's resources predictable names, such as the service account `ocm-k8s-toolkit-controller-manager`. If you install under a different release name, or via a GitOps tool such as Flux that alters the effective release name, add `--set fullnameOverride=ocm-k8s-toolkit` to keep these names stable. This matters when you [configure custom RBAC]({{< relref "/docs/how-to/custom-rbac.md" >}}), which binds to the service account by name.
+{{</callout>}}
+
+{{<callout context="tip" title="Hardened installations" icon="outline/shield-check">}}
+The chart ships an opt-in NetworkPolicy for the controller. Add `--set manager.networkPolicy.enabled=true` to admit only the health-probe port (plus the metrics and conversion-webhook ports, if enabled) and allow egress only to DNS and TCP ports 443 and 6443 (HTTPS and the Kubernetes API). If the controller pulls from registries on other ports, such as `:5000` or plain HTTP, set `manager.networkPolicy.egress`; it replaces all default egress rules, so include DNS. It needs a CNI that enforces NetworkPolicy. For how the controller relates to FIPS 140-3 and other standards, see [Standards & Regulations]({{< relref "docs/reference/standards-and-regulations/_index.md" >}}).
 {{</callout>}}
 
 <details>
@@ -141,18 +145,27 @@ ocm-k8s-toolkit-controller-manager-79b7975755-vxtqt   1/1     Running   0       
 {{< /step >}}
 {{< step >}}
 
-### Install kro
+### Install an Orchestrator
+
+An orchestrator reconciles the deployment graph that an OCM component carries. Install the one the tutorial or how-to
+you're following asks for. [kro](https://kro.run) reconciles a `ResourceGraphDefinition`, generates a CRD from it, and
+reconciles the instances of that CRD. [Crossplane](https://crossplane.io) reconciles a `CompositeResourceDefinition`
+(XRD) plus a `Composition`, and reconciles the composite resources the XRD defines.
+
+{{< tabs "orchestrator-install" >}}
+{{< tab "kro" >}}
 
 Install [kro](https://kro.run) following the [official installation guide](https://kro.run/docs/getting-started/Installation). The easiest way is via Helm:
 
 ```shell
 helm install kro oci://registry.k8s.io/kro/charts/kro \
   --namespace kro-system \
-  --create-namespace
+  --create-namespace \
+  --set rbac.mode=aggregation
 ```
 
-{{< callout context="caution" title="Security consideration" icon="outline/alert-triangle" >}}
-This default installation grants kro cluster-wide access to all resources, which is suitable for local development but not recommended for production environments. See the [kro documentation](https://kro.run/next/docs/advanced/access-control) for guidance on configuring more restrictive RBAC.
+{{< callout context="note" title="kro access control" icon="outline/lock" >}}
+`rbac.mode=aggregation` limits kro to its own resources and to the resources that a labeled `ClusterRole` allows. See [Access Control](https://kro.run/docs/advanced/access-control) in the kro documentation. kro's default mode, `unrestricted`, is not recommended for production. The roles below are not production-hardened either: they grant all verbs so the guides work. For production, limit them to what your RGDs create.
 {{< /callout >}}
 <details>
 <summary>You should see this output</summary>
@@ -185,6 +198,85 @@ NAME                   READY   STATUS    RESTARTS   AGE
 kro-5644d5759f-82nsx   1/1     Running   0          2m22s
 ```
 </details>
+<br>
+
+Allow kro to manage OCM resources:
+
+```shell
+kubectl apply -f - << 'EOF'
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kro:controller:ocm
+  labels:
+    # kro picks up every ClusterRole with this label, see https://kro.run/docs/advanced/access-control
+    rbac.kro.run/aggregate-to-controller: "true"
+rules:
+  - apiGroups:
+      - delivery.ocm.software
+    resources:
+      - repositories
+      - components
+      - resources
+      - deployers
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+EOF
+```
+
+{{< /tab >}}
+{{< tab "Crossplane" >}}
+
+Install [Crossplane](https://crossplane.io) **v2** core via Helm, following the
+[official installation guide](https://docs.crossplane.io/latest/get-started/install/). The `2.x` range installs the
+latest Crossplane v2 release, which the bootstrap tutorial requires:
+
+```shell
+helm install crossplane crossplane \
+  --repo https://charts.crossplane.io/stable \
+  --version '2.x' \
+  --namespace crossplane-system \
+  --create-namespace
+```
+
+{{< callout context="caution" title="Security consideration" icon="outline/alert-triangle" >}}
+This installs Crossplane with cluster-wide permissions, which is suitable for local development but not recommended for production environments. See the [Crossplane documentation](https://docs.crossplane.io/latest/) for guidance on hardening RBAC.
+{{< /callout >}}
+
+Verify Crossplane is running:
+
+```shell
+kubectl get pods -n crossplane-system
+```
+
+Crossplane reconciles graphs through composition functions. For OCM bootstrap tutorials, install the
+[patch-and-transform function](https://github.com/crossplane-contrib/function-patch-and-transform), which the
+`Composition` runs as its pipeline step:
+
+```shell
+kubectl apply -f - << 'EOF'
+apiVersion: pkg.crossplane.io/v1
+kind: Function
+metadata:
+  name: function-patch-and-transform
+spec:
+  package: xpkg.crossplane.io/crossplane-contrib/function-patch-and-transform:v0.11.0
+EOF
+```
+
+{{< callout context="note" title="RBAC on a hardened cluster" icon="outline/info-circle" >}}
+Crossplane composes the OCM `Resource` and the deployer objects (Flux or Argo CD), so on a hardened cluster you must grant Crossplane's service
+account access to those composed kinds. See [Configure Custom RBAC for Deployers]({{< relref "/docs/how-to/custom-rbac.md" >}}).
+{{< /callout >}}
+
+{{< /tab >}}
+{{< /tabs >}}
 
 {{< /step >}}
 {{< step >}}
@@ -270,6 +362,46 @@ notification-controller-58ffd586f7-pr65t     1/1     Running     0              
 source-controller-6ff87cb475-2h2lv           1/1     Running     0               3h29m
 ```
 </details>
+<br>
+
+Allow kro to manage the Flux resources that the guides use. Add more kinds when your ResourceGraphDefinitions create them:
+
+```shell
+kubectl apply -f - << 'EOF'
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kro:controller:flux
+  labels:
+    # kro picks up every ClusterRole with this label, see https://kro.run/docs/advanced/access-control
+    rbac.kro.run/aggregate-to-controller: "true"
+rules:
+  - apiGroups:
+      - source.toolkit.fluxcd.io
+    resources:
+      - ocirepositories
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - helm.toolkit.fluxcd.io
+    resources:
+      - helmreleases
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+EOF
+```
 
 {{< /tab >}}
 {{< tab "Argo CD" >}}
@@ -294,7 +426,8 @@ helm upgrade --install argocd argo/argo-cd \
 Wait for all pods to become ready:
 
 ```shell
-kubectl wait --for=condition=Ready pods --all -n argocd --timeout=120s
+kubectl wait --for=condition=Ready pods --all -n argocd \
+  --field-selector='status.phase!=Succeeded' --timeout=120s
 ```
 
 <details>
@@ -334,6 +467,33 @@ argocd-server-765575f778-j8krk                      1/1     Running   0         
 </details>
 <br>
 
+Allow kro to manage the Argo CD resources that the guides use. Add more kinds when your ResourceGraphDefinitions create them:
+
+```shell
+kubectl apply -f - << 'EOF'
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kro:controller:argocd
+  labels:
+    # kro picks up every ClusterRole with this label, see https://kro.run/docs/advanced/access-control
+    rbac.kro.run/aggregate-to-controller: "true"
+rules:
+  - apiGroups:
+      - argoproj.io
+    resources:
+      - applications
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+EOF
+```
+
 {{< callout context="note" title="OCI registry credentials" icon="outline/info-circle" >}}
 To deploy Helm charts from a [private OCI registry](https://argo-cd.readthedocs.io/en/stable/operator-manual/declarative-setup/#helm) (e.g. `ghcr.io`), create an Argo CD repository Secret with `enableOCI: "true"`:
 
@@ -369,7 +529,7 @@ Public OCI registries require no configuration. *Read more about ArgoCD OCI Supp
 Check all components are running:
 
 ```shell
-kubectl get pods --all-namespaces | grep -E '(kro-system|flux-system|argocd|ocm-k8s-toolkit-system)'
+kubectl get pods --all-namespaces | grep -E '(kro-system|crossplane-system|flux-system|argocd|ocm-k8s-toolkit-system)'
 ```
 
 <details>
@@ -386,6 +546,9 @@ argocd-notifications-controller-8669567fb-47fcj                                1
 argocd-redis-5d9668fdff-v2pbp                                                  1/1     Running            0               24m
 argocd-repo-server-95465d997-mbmcp                                             1/1     Running            0               24m
 argocd-server-767b9d54cf-q7bbz                                                 1/1     Running            0               24m
+crossplane-system        crossplane-6b8c9d7f54-nq8rk                           1/1     Running            0               12m
+crossplane-system        crossplane-rbac-manager-7d9f6c84b5-2xk7p              1/1     Running            0               12m
+crossplane-system        function-patch-and-transform-9d4f2a1c7b-5f8d7c9b64-ltzqd  1/1   Running            0               10m
 flux-system              helm-controller-b6767d66-zbwws                        1/1     Running            0               3h39m
 flux-system              kustomize-controller-57c7ff5596-v6fvr                 1/1     Running            0               3h39m
 flux-system              notification-controller-58ffd586f7-pr65t              1/1     Running            0               3h39m
@@ -431,6 +594,7 @@ Deleted nodes: ["kind-control-plane"]
 
 - [How-to: Deploy Manifests with Deployer]({{< relref "/docs/how-to/deploy-manifests-with-deployer.md" >}}) - Deploy raw Kubernetes manifests without kro or Flux
 - [Tutorial: Deploy a Helm Chart]({{< relref "deploy-helm-chart.md" >}}) - Learn to deploy Helm charts using OCM Controllers with kro and Flux
+- [Tutorial: Deploy Crossplane Packages (xpkg) with OCM]({{< relref "/docs/tutorials/deploy-crossplane-packages.md" >}}) - Install Crossplane Configurations, Functions, and Providers from an OCM component version
 
 ## Related Documentation
 

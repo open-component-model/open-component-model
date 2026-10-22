@@ -502,13 +502,13 @@ func Test_Integration_HelmTransformer(t *testing.T) {
 
 		name, version := "ocm.software/helm-chart", "v1.0.0"
 		resourceName, resourceVersion := "mychart", "0.1.0"
-		constructorPath := filepath.Join(t.TempDir(), "constructor.yaml")
+		constructorDir := t.TempDir()
+		constructorPath := filepath.Join(constructorDir, "constructor.yaml")
 		transportArchivePath := filepath.Join(t.TempDir(), "transport-archive")
 
-		// The testing Helm chart should exist at the expected path, we reuse it for our test here
-		chartPath := filepath.Join(root, "bindings/go/helm/testdata/provenance/mychart-0.1.0.tgz")
-		_, err := os.Stat(chartPath)
-		r.NoError(err, "Helm chart should exist at %s", chartPath)
+		// Reuse the testing Helm chart, copied next to the constructor so it is inside the working directory
+		r.NoError(os.CopyFS(constructorDir, os.DirFS(filepath.Join(root, "bindings/go/helm/testdata/provenance"))))
+		chartPath := "mychart-0.1.0.tgz"
 
 		constructor := fmt.Sprintf(`components:
 - name: %[1]s

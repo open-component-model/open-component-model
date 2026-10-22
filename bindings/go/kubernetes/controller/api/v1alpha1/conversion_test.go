@@ -14,6 +14,7 @@ func TestTypesImplementHub(t *testing.T) {
 	}{
 		{name: "Component", obj: &Component{}},
 		{name: "Deployer", obj: &Deployer{}},
+		{name: "NamespacedDeployer", obj: &NamespacedDeployer{}},
 		{name: "Repository", obj: &Repository{}},
 		{name: "Resource", obj: &Resource{}},
 	}

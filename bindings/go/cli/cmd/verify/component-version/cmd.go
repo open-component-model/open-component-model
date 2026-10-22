@@ -1,9 +1,14 @@
 package componentversion
 
 import (
+	"context"
+	"crypto"
+	"crypto/x509"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 	"time"
 
@@ -22,6 +27,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/rsa/signing/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/signing"
+	"ocm.software/open-component-model/bindings/go/signing/tsa"
 	signingv1alpha1 "ocm.software/open-component-model/bindings/go/signing/v1alpha1/spec"
 )
 
@@ -29,6 +35,8 @@ const (
 	FlagConcurrencyLimit = "concurrency-limit"
 	FlagSignature        = "signature"
 	FlagVerifierSpec     = "verifier-spec"
+
+	FlagInsecureTrustLegacyTimestamps = "insecure-trust-legacy-timestamps"
 )
 
 // signingConfigType is the configuration entry that replaced FlagVerifierSpec.
@@ -45,10 +53,11 @@ func New() *cobra.Command {
 
 ## Reference Format
 
-	[type::]{repository}/[valid-prefix]/{component}[:version]
+	[type::]{repository}/[valid-prefix]/{component}[:version][@digest]
 
 - Prefixes: {%[1]s|none} (default: %[1]q)  
 - Repo types: {%[2]s} (short: {%[3]s})
+- Digest: optional pin (see "ocm get cv --help"), "@sha256:<hex>" (OCI digest of the artifact the component version is stored as; the version may be omitted) or "@jsonNormalisation.v4alpha1+sha256:<hex>" (normalized: the digest signatures sign); the command fails unless the component version matches it
 
 ## OCM Verification explained in simple steps
 
@@ -68,12 +77,23 @@ func New() *cobra.Command {
 - An entry with a "signature" field only applies to that signature, one without applies to all
 - The verifier is resolved per signature, so a component carrying several signatures can be verified with a different handler for each
 - --verifier-spec is no longer supported and fails with an error
+- In an OCI registry or CTF, the version tag is resolved once and the component version is read from the artifact it resolved to; on success the log field "reference" holds the reference pinned to that artifact's OCI digest. Passing it to a subsequent command (e.g. transfer, download resource) reads exactly the verified content, even if the tag moves in between
+
+## Timestamp Verification (RFC 3161 TSA)
+
+- If a signature carries an RFC 3161 timestamp, the verifier checks it automatically
+- Full certificate-chain verification of the timestamp token requires the TSA's root CA certificate, supplied via the credential graph under a TSA/v1alpha1 identity
+- Without TSA root certificates the token structure and imprint are still checked, but the certificate chain is not verified and a warning is logged
+- Only a timestamp validated against trusted TSA roots is used to validate an (RSA/PEM) signing certificate as of the signing time; a merely structural token never relaxes certificate validity
+- The TSA URL label (url.tsa.ocm.software/<signature>) selects a URL-specific TSA/v1alpha1 entry; an entry without URL attributes applies to any TSA
+- Timestamps created by the OCM v1 CLI are verified as well, but their time is not used to validate certificates unless --%[5]s is set: they cover only the descriptor digest, which is known before signing, so they do not prove the signature existed at that time
 
 Use to validate component versions before promotion, deployment, or further usage to ensure integrity and provenance.`,
 			compref.DefaultPrefix,
 			strings.Join([]string{ociv1.Type, ctfv1.Type}, "|"),
 			strings.Join([]string{ociv1.ShortType, ociv1.ShortType2, ctfv1.ShortType, ctfv1.ShortType2}, "|"),
 			signingConfigType,
+			FlagInsecureTrustLegacyTimestamps,
 		),
 		Example: strings.TrimSpace(`
 # Verify all component version signatures found in a component version
@@ -233,6 +253,22 @@ verify component-version ./repo//ocm.software/cli:0.12.0 --config ./sigstore-ver
 
 # Verify a specific signature
 verify component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0 --signature my-signature
+
+## Example Credential Config (TSA timestamp verification)
+# TSA/v1alpha1 identity supplying the TSA root CA for full timestamp chain verification
+# (see "Timestamp Verification (RFC 3161 TSA)" above):
+
+    type: generic.config.ocm.software/v1
+    configurations:
+    - type: credentials.config.ocm.software
+      consumers:
+      - identity:
+          type: TSA/v1alpha1
+          hostname: timestamp.digicert.com
+          scheme: http
+        credentials:
+        - type: TSACredentials/v1alpha1
+          rootCertsPEMFile: /path/to/digicert-tsa-root.pem
 `),
 		RunE:              VerifyComponentVersion,
 		DisableAutoGenTag: true,
@@ -240,6 +276,7 @@ verify component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0 -
 
 	cmd.Flags().Int(FlagConcurrencyLimit, 4, "maximum amount of parallel requests to the repository for resolving component versions")
 	cmd.Flags().String(FlagSignature, "", "name of the signature to verify. If not set, all signatures are verified.")
+	cmd.Flags().Bool(FlagInsecureTrustLegacyTimestamps, false, "use the time of trusted timestamps created by the OCM v1 CLI to validate expired signing certificates; these timestamps cover only the descriptor digest, so a signature made after the certificate expired can reuse one")
 	cmd.Flags().String(FlagVerifierSpec, "", fmt.Sprintf("DEPRECATED: no longer supported, configure the verifier in the OCM configuration instead (%s, field \"verifier\")", signingConfigType))
 
 	return cmd
@@ -286,6 +323,11 @@ func VerifyComponentVersion(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("getting signature name flag failed: %w", err)
 	}
 
+	trustLegacyTimestamps, err := cmd.Flags().GetBool(FlagInsecureTrustLegacyTimestamps)
+	if err != nil {
+		return fmt.Errorf("getting flag %q failed: %w", FlagInsecureTrustLegacyTimestamps, err)
+	}
+
 	concurrencyLimit, err := cmd.Flags().GetInt(FlagConcurrencyLimit)
 	if err != nil {
 		return fmt.Errorf("getting concurrency limit flag failed: %w", err)
@@ -308,7 +350,9 @@ func VerifyComponentVersion(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("could not access ocm repository: %w", err)
 	}
 
-	desc, err := repo.GetComponentVersion(ctx, ref.Component, ref.Version)
+	// Read from the artifact the version tag resolves to, so the pinned reference reported on
+	// success names exactly the verified content.
+	_, desc, pinnedRef, err := ocm.GetComponentVersionByArtifact(ctx, repo, ref)
 	if err != nil {
 		return fmt.Errorf("getting component reference and versions failed: %w", err)
 	}
@@ -384,7 +428,23 @@ func VerifyComponentVersion(cmd *cobra.Command, args []string) error {
 				logger.DebugContext(egctx, "using discovered credentials for verification", "type", creds.GetType())
 			}
 
-			return handler.Verify(egctx, signature, verifierSpec, creds)
+			// Verify an optional RFC 3161 timestamp attached to the signature.
+			verifyCtx := egctx
+			if signature.Timestamp != nil {
+				verifiedTime, trusted, err := verifyTSATimestamp(egctx, logger, credentialGraph, desc, signature, trustLegacyTimestamps)
+				if err != nil {
+					return err
+				}
+				// Only a timestamp validated against trusted TSA roots may relax
+				// certificate validity. A merely structural token proves nothing
+				// about the signing time, so it must never override the handler's
+				// current-time certificate validation.
+				if trusted {
+					verifyCtx = signing.WithTrustedSigningTime(egctx, verifiedTime)
+				}
+			}
+
+			return handler.Verify(verifyCtx, signature, verifierSpec, creds)
 		})
 	}
 
@@ -392,7 +452,12 @@ func VerifyComponentVersion(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("SIGNATURE VERIFICATION FAILED: %w", err)
 	}
 
-	logger.InfoContext(ctx, "SIGNATURE VERIFICATION SUCCESSFUL")
+	if pinnedRef == nil {
+		logger.InfoContext(ctx, "SIGNATURE VERIFICATION SUCCESSFUL")
+		return nil
+	}
+	// Feeding this reference to a subsequent command reads exactly the verified artifact.
+	logger.InfoContext(ctx, "SIGNATURE VERIFICATION SUCCESSFUL", "reference", pinnedRef.String())
 	return nil
 }
 
@@ -413,4 +478,124 @@ func loadVerifierConfig(config *genericv1.Config, signatureName string, logger *
 	logger.Info("no verifier configured, using default RSASSA-PSS", "signature", signatureName)
 	_, _ = v1alpha1.Scheme.DefaultType(spec)
 	return spec, nil
+}
+
+// verifyTSATimestamp verifies the timestamp attached to a signature. trusted is
+// true only when the token chained to TSA roots from the credential graph as of
+// GenTime; without roots only structural validity is checked.
+func verifyTSATimestamp(
+	ctx context.Context,
+	logger *slog.Logger,
+	credentialGraph credentials.Resolver,
+	desc *descruntime.Descriptor,
+	signature descruntime.Signature,
+	trustLegacy bool,
+) (time.Time, bool, error) {
+	var tsaURL string
+	labelName := tsa.TSAURLLabelPrefix + signature.Name
+	if idx := slices.IndexFunc(desc.Component.Labels, func(l descruntime.Label) bool { return l.Name == labelName }); idx >= 0 {
+		if err := desc.Component.Labels[idx].GetValue(&tsaURL); err != nil {
+			logger.WarnContext(ctx, "ignoring unparsable TSA URL label for credential lookup", "label", labelName, "error", err.Error())
+		}
+	}
+
+	tsaRootPool, err := tsaRootPoolFromGraph(ctx, logger, credentialGraph, tsaURL)
+	if err != nil {
+		return time.Time{}, false, err
+	}
+	if tsaRootPool != nil {
+		logger.DebugContext(ctx, "TSA root certificates resolved from credential graph", "name", signature.Name)
+	} else {
+		logger.WarnContext(ctx, "verifying TSA timestamp without root certificates; only structural validity is checked. Configure TSA root certs in the credential graph (type: TSA/v1alpha1) for full trust verification.", "name", signature.Name)
+	}
+	logger.InfoContext(ctx, "verifying TSA timestamp", "name", signature.Name)
+
+	tsaDER, hash, imprint, err := timestampTokenAndImprint(signature)
+	if err != nil {
+		return time.Time{}, false, err
+	}
+
+	verifiedTime, trusted, err := tsa.Verify(tsaDER, hash, imprint, tsaRootPool)
+	if err != nil {
+		return time.Time{}, false, fmt.Errorf("TSA timestamp verification failed: %w", err)
+	}
+
+	// A legacy token covers the descriptor digest, which exists before the
+	// signature, so its time does not prove when the signature was made.
+	if trusted && !trustLegacy && tsa.IsLegacyPEM([]byte(signature.Timestamp.Value)) {
+		logger.WarnContext(ctx, "not using the time of a legacy OCM timestamp for certificate validation; it covers only the descriptor digest", "name", signature.Name, "flag", "--"+FlagInsecureTrustLegacyTimestamps)
+		trusted = false
+	}
+
+	logger.InfoContext(ctx, "TSA timestamp verified", "name", signature.Name, "time", verifiedTime, "trusted", trusted)
+	return verifiedTime, trusted, nil
+}
+
+// timestampTokenAndImprint returns the DER timestamp token of a signature and
+// the imprint it must cover. Tokens from this CLI cover the signature value.
+// Tokens from the legacy OCM CLI ("TIMESTAMP INFO") cover the descriptor digest;
+// they are verified with that imprint so v1 data verifies as it did with v1.
+func timestampTokenAndImprint(signature descruntime.Signature) ([]byte, crypto.Hash, []byte, error) {
+	value := []byte(signature.Timestamp.Value)
+	if tsa.IsLegacyPEM(value) {
+		hash, err := signing.GetSupportedHash(signature.Digest.HashAlgorithm)
+		if err != nil {
+			return nil, 0, nil, fmt.Errorf("preparing TSA verification: %w", err)
+		}
+		der, err := tsa.FromLegacyPEM(value)
+		if err != nil {
+			return nil, 0, nil, fmt.Errorf("parsing legacy OCM timestamp failed: %w", err)
+		}
+		digest, err := hex.DecodeString(signature.Digest.Value)
+		if err != nil {
+			return nil, 0, nil, fmt.Errorf("decoding signature digest for legacy OCM timestamp failed: %w", err)
+		}
+		return der, hash, digest, nil
+	}
+	der, err := tsa.FromPEM(value)
+	if err != nil {
+		return nil, 0, nil, fmt.Errorf("parsing TSA timestamp PEM failed: %w", err)
+	}
+	hash, imprint, err := tsa.SignatureImprint(signature.Digest.HashAlgorithm, []byte(signature.Signature.Value))
+	if err != nil {
+		return nil, 0, nil, fmt.Errorf("preparing TSA verification: %w", err)
+	}
+	return der, hash, imprint, nil
+}
+
+// tsaRootPoolFromGraph resolves TSA root certificates from the credential graph.
+// The identity derived from the TSA URL label is tried first; the generic
+// TSA/v1alpha1 identity follows, so a consumer entry without URL attributes
+// matches any TSA. URL matching requires equal hostnames, so a type-only entry
+// never matches the URL-derived identity on its own. The label is not signed:
+// it only selects among roots the verifier configured, and a token is trusted
+// only when it chains to one of them.
+func tsaRootPoolFromGraph(ctx context.Context, logger *slog.Logger, credentialGraph credentials.Resolver, tsaURL string) (*x509.CertPool, error) {
+	candidates := []string{tsaURL}
+	if tsaURL != "" {
+		candidates = append(candidates, "")
+	}
+	for _, candidate := range candidates {
+		tsaID, err := tsa.TSAConsumerIdentity(candidate)
+		if err != nil {
+			logger.WarnContext(ctx, "ignoring unparsable TSA URL for credential lookup", "error", err.Error())
+			continue
+		}
+		tsaCreds, err := credentialGraph.Resolve(ctx, tsaID)
+		if err != nil {
+			if errors.Is(err, credentials.ErrNotFound) {
+				logger.DebugContext(ctx, "no TSA credentials for identity", "identity", tsaID.String())
+				continue
+			}
+			return nil, fmt.Errorf("resolving TSA credentials failed: %w", err)
+		}
+		pool, err := tsa.RootCertPoolFromCredentials(tsaCreds)
+		if err != nil {
+			return nil, fmt.Errorf("loading TSA root certificates from credential graph: %w", err)
+		}
+		if pool != nil {
+			return pool, nil
+		}
+	}
+	return nil, nil
 }

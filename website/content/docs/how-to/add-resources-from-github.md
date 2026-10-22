@@ -6,6 +6,13 @@ weight: 18
 toc: true
 ---
 
+{{< callout context="caution" >}}
+The `GitHub/v1` access type is **deprecated** and will be removed in a future release. For new
+component versions, use the `Git/v1` access type instead: it works with GitHub and every other
+Git server. Follow the [Working with Git Repositories]({{< relref "docs/tutorials/working-with-git.md" >}})
+tutorial. Keep this guide for resources that are already published with `GitHub/v1`.
+{{< /callout >}}
+
 ## Goal
 
 Add a [GitHub repository archive](https://docs.github.com/en/rest/repos/contents?apiVersion=2026-03-10#download-a-repository-archive-tar)

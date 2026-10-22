@@ -45,6 +45,14 @@
       ],
     },
     {
+      // Garden Linux FIPS base image (CLI + controller). Only follow the
+      // multi-arch `<major>.<patch>` tags, not the per-arch `amd64-*`/`arm64-*` ones.
+      matchDatasources: ['docker'],
+      matchPackageNames: ['ghcr.io/gardenlinux/gardenlinux/fips'],
+      allowedVersions: '/^\\d+\\.\\d+$/',
+      versioning: 'loose',
+    },
+    {
       matchUpdateTypes: ['minor','patch'],
       automerge: true,
     },
@@ -123,6 +131,26 @@
       matchPackageNames: [
         'ghcr.io/gardenlinux/gardenlinux/{/,}**',
       ],
+    },
+    {
+      // OCM's FIPS cosign build is pinned twice: the release (and the digest of
+      // its cosign_checksums.txt) in the sigstore handler's .env (auto-download,
+      // integration tests) and the image in the CLI Containerfile and controller
+      // Dockerfile. Bump all in one PR; pin_sync_test.go fails if they diverge.
+      // The release is tagged vX.Y.Z+ocm.N, the image vX.Y.Z-ocm.N (OCI tags
+      // allow no "+"). Regex versioning reads ocm.N as a build number in both,
+      // not a prerelease or docker compatibility suffix.
+      groupName: 'OCM cosign',
+      groupSlug: 'ocm-cosign',
+      matchPackageNames: [
+        'open-component-model/cosign',
+        'ghcr.io/open-component-model/cosign',
+      ],
+      versioning: 'regex:^v(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)[-+]ocm\\.(?<build>\\d+)$',
+      // Our own fork; releases are gated by its CI. The global 28-day age would
+      // hold every release back, so the run its release workflow dispatches
+      // would find nothing.
+      minimumReleaseAge: '0 days',
     },
     {
       // Keep the helm CLI pin (azure/setup-helm `version:` in the workflows,
@@ -333,9 +361,23 @@
         '/(^|/)\\.env(\\.local)?$/',
       ],
       matchStrings: [
-        '# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s+.*?_VERSION=v?(?<currentValue>\\d+\\.\\d+\\.\\d+)',
+        '# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s+.*?_VERSION=v?(?<currentValue>\\d+\\.\\d+\\.\\d+)(?:\\s|$)',
       ],
       versioningTemplate: 'semver',
+    },
+    {
+      // OCM cosign release pin (vX.Y.Z+ocm.N) plus the SHA256 of that release's
+      // cosign_checksums.txt. The generic .env manager above skips it (only plain
+      // semver), so the full tag is captured here for the "OCM cosign" group's
+      // regex versioning; github-release-attachments recomputes the digest from
+      // the new release's cosign_checksums.txt.
+      customType: 'regex',
+      managerFilePatterns: [
+        '/(^|/)\\.env(\\.local)?$/',
+      ],
+      matchStrings: [
+        '# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>open-component-model/cosign)\\s+COSIGN_VERSION=(?<currentValue>v\\d+\\.\\d+\\.\\d+\\+ocm\\.\\d+)\\s+COSIGN_CHECKSUMS_SHA256=(?<currentDigest>[0-9a-f]{64})',
+      ],
     },
     {
       // Automatic version bump for GO_VERSION, NPM_VERSION and NODE_VERSION in Netlify.

@@ -437,7 +437,7 @@ For the conceptual picture (how Fulcio, Rekor, and OIDC fit together), see [Iden
 - A browser on the same machine (signing opens a browser window to log you in)
 - An OIDC identity with a provider supported by your Sigstore stack — on public Sigstore that's Google, GitHub, or Microsoft
 - Network access to `*.sigstore.dev` (in particular `fulcio.sigstore.dev`, `oauth2.sigstore.dev`, `rekor.sigstore.dev`, `tuf-repo-cdn.sigstore.dev`) — corporate networks often block these
-- [cosign](https://github.com/sigstore/cosign) v3.0.4 or later on your PATH; if it isn't, OCM downloads and caches it under `~/.cache/ocm/cosign/...`. To keep Sigstore signing inside the [FIPS 140-3]({{< relref "docs/reference/standards-and-regulations/fips.md" >}}#sigstore-and-cosign) boundary, use a cosign built against the Go Cryptographic Module (`CGO_ENABLED=0 GOFIPS140=certified go install github.com/sigstore/cosign/v3/cmd/cosign@v3.1.3`); with `GODEBUG=fips140=only`, OCM requires one
+- [cosign](https://github.com/open-component-model/cosign) v3.0.4 or later on your PATH; if it isn't, OCM downloads [OCM's FIPS build of cosign](https://github.com/open-component-model/cosign/releases) and caches it under `~/.cache/ocm/cosign/...`. That build keeps Sigstore signing inside the [FIPS 140-3]({{< relref "docs/reference/standards-and-regulations/fips.md" >}}#sigstore-and-cosign) boundary; with `GODEBUG=fips140=only`, OCM rejects a cosign on PATH that is not a FIPS build
 - A component version in a CTF archive or OCI registry (we'll use `github.com/acme.org/helloworld:1.0.0` from the [getting started guide]({{< relref "create-component-version.md" >}}); any component you can write to works)
 
 {{< callout context="note" >}}
@@ -707,7 +707,7 @@ A successful run logs `signed successfully` and embeds the Sigstore bundle into 
 
 {{< details "Alternative: run `ocm` from the OCM CLI container image" >}}
 
-Skip the install step by invoking `ocm` from the official container image (`ghcr.io/open-component-model/cli`) directly with `docker run`. The image is `scratch` with `ocm`, a FIPS build of `cosign`, and CA certs, no shell — so it cannot be used as a GitHub Actions [`container:`]({{< relref "container-image-usage.md" >}}) job runtime. Because `cosign` is on `PATH`, OCM does not download it. The `-slim` tags (`cli:<version>-slim`) are the `FROM scratch` variant with only `ocm` and CA certs, without `cosign`; see the [FIPS reference]({{< relref "docs/reference/standards-and-regulations/fips.md" >}}#artifacts) for the contents of both. The `docker run` pattern below is the supported way to use the image in CI:
+Skip the install step by invoking `ocm` from the official container image (`ghcr.io/open-component-model/cli`) directly with `docker run`. The image runs as the non-root user `65532` and is `scratch` with `ocm`, a FIPS build of `cosign`, and CA certs, no shell — so it cannot be used as a GitHub Actions [`container:`]({{< relref "container-image-usage.md" >}}) job runtime. Because `cosign` is on `PATH`, OCM does not download it. The `-slim` tags (`cli:<version>-slim`) are the `FROM scratch` variant with only `ocm` and CA certs, without `cosign`; see the [FIPS reference]({{< relref "docs/reference/standards-and-regulations/fips.md" >}}#artifacts) for the contents of both. The `docker run` pattern below is the supported way to use the image in CI:
 
 ```yaml
 jobs:
@@ -801,6 +801,43 @@ OCM checks `SIGSTORE_ID_TOKEN` first, then `ACTIONS_ID_TOKEN_REQUEST_TOKEN`, the
 
 {{< /tab >}}
 {{< /tabs >}}
+
+## Optional: Add an RFC 3161 timestamp
+
+{{< callout context="note" title="Early access" >}}
+RFC 3161 timestamping is currently being rolled out and we are awaiting feedback. The interface may evolve.
+{{< /callout >}}
+
+A timestamp from a trusted Timestamping Authority (TSA) proves *when* a signature was created, so an RSA/PEM
+certificate-chain signature keeps verifying after its signing certificate expires. It is entirely optional. Plain
+signatures have no certificate, so they do not gain post-expiry verification. Sigstore signers are not supported:
+Sigstore timestamps its bundles with the TSAs from its own signing config.
+
+Add `--tsa` (uses the default public TSA, `http://timestamp.digicert.com`) or `--tsa-url <url>` (a specific TSA) to
+the sign command:
+
+```bash
+ocm sign cv --tsa-url http://timestamp.digicert.com \
+  /tmp/helloworld/transport-archive//github.com/acme.org/helloworld:1.0.0
+```
+
+OCM requests a timestamp token over the signature value, stores it in the signature's `timestamp` field, and records
+the TSA URL in the label `url.tsa.ocm.software/{signatureName}`. The label is not signing-relevant, so the component
+digest, references to it and other signatures stay valid. `--dry-run` skips the TSA request.
+
+For full certificate-chain verification of the token, verifiers need the TSA's root certificates in their credential
+graph; without them the token structure and imprint are still checked but the chain is not verified and the attested
+time is not used. See
+[How-To: Verify a Component Version]({{< relref "verify-component-version.md" >}}) and, for the trust model and
+the transport-vs-token certificate distinction,
+[Concept: RFC 3161 Timestamping]({{< relref "signing-and-verification-concept.md#rfc-3161-timestamping" >}}).
+
+{{< callout context="note" title="Reaching a private TSA over HTTPS" >}}
+If your TSA presents a certificate issued by an internal CA, add that CA to the
+[HTTP client configuration]({{< relref "docs/reference/http-client-configuration.md#tls-trust-custom-root-cas" >}})
+(`rootCAsPEM` / `rootCAsPEMFile`) so the signing-time request can establish TLS. This is separate from the TSA
+*token* roots that verifiers configure.
+{{< /callout >}}
 
 ## Next Steps
 
