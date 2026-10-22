@@ -30,7 +30,7 @@ permissions:
 jobs:
   vex:
     name: OpenVEX
-    uses: ./.github/workflows/govulncheck.yml
+    uses: $/.github/workflows/govulncheck.yml
     with:
       ref: ${{ inputs.ref }}
 

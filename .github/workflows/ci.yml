@@ -300,7 +300,7 @@ jobs:
     name: "govulncheck"
     needs: changes
     if: ${{ needs.changes.outputs.run_go == 'true' }}
-    uses: ./.github/workflows/govulncheck.yml
+    uses: $/.github/workflows/govulncheck.yml
 
   generate:
     runs-on: ubuntu-26.04-arm
