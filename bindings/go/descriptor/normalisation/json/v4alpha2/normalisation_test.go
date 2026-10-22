@@ -1,123 +1,107 @@
 package v4alpha2_test
 
 import (
-	"embed"
-	"path/filepath"
-	"strings"
+	"crypto/sha256"
+	"encoding/hex"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"sigs.k8s.io/yaml"
 
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation"
+	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha2"
-	"ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 )
 
-//go:embed testdata
-var testdata embed.FS
+// fromYAML loads a v2 YAML fixture into the runtime descriptor, mirroring the
+// signing flow (v2.Descriptor → ConvertFromV2).
+func fromYAML(t *testing.T, in string) *descruntime.Descriptor {
+	t.Helper()
+	r := require.New(t)
+	var desc descriptorv2.Descriptor
+	r.NoError(yaml.Unmarshal([]byte(in), &desc))
+	rt, err := descruntime.ConvertFromV2(&desc)
+	r.NoError(err)
+	return rt
+}
 
-// TestConformance pins v4alpha2 to real jsonNormalisation/v3 output. The fixture
-// is the actual `ocm hash cv --normalization jsonNormalisation/v3 -onorm` result
-// for a component without versioned or reference labels, where v4alpha2's two
-// deltas do not fire — so v4alpha2 must reproduce the legacy v3 bytes exactly.
-// This is the "re-converges with v3" guarantee.
-func TestConformance(t *testing.T) {
-	baseName := t.Name()
-	prefix := filepath.Join("testdata", "conformance")
+func normalise(t *testing.T, in, algo string) string {
+	t.Helper()
+	out, err := normalisation.Normalise(fromYAML(t, in), algo)
+	require.NoError(t, err)
+	return string(out)
+}
 
-	run := func(t *testing.T, folder string) {
-		t.Helper()
-		r := require.New(t)
-		desc, err := testdata.ReadFile(filepath.Join(prefix, folder, "README.md"))
-		r.NoError(err, "failed to read test README")
-		t.Log(string(desc))
-
-		input, err := testdata.ReadFile(filepath.Join(prefix, folder, "input.yaml"))
-		r.NoError(err, "failed to read test input")
-		expected, err := testdata.ReadFile(filepath.Join(prefix, folder, "expected.json"))
-		r.NoError(err, "failed to read test expected output")
-
-		var descriptor descriptorv2.Descriptor
-		if err := yaml.Unmarshal(input, &descriptor); err != nil {
-			t.Fatalf("failed to unmarshal YAML: %v", err)
-		}
-		runtimeDescriptor, err := runtime.ConvertFromV2(&descriptor)
-		r.NoError(err, "failed to convert descriptor")
-
-		normalizedBytes, err := normalisation.Normalise(runtimeDescriptor, v4alpha2.Algorithm)
-		r.NoError(err, "failed to normalise descriptor")
-
-		r.Equal(string(expected), string(normalizedBytes),
-			"normalized output does not match expected output from testcase",
-		)
+// TestReconvergesWithV3 is the byte-exact known-answer check against the
+// independent legacy jsonNormalisation/v3 oracle. Where v3 already behaved
+// correctly — no reference labels — v4alpha2 must reproduce its bytes and digest
+// exactly, including a signed label.version.
+func TestReconvergesWithV3(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		wantNorm string
+		wantHex  string
+	}{
+		{"delta-free", deltaFreeInput, deltaFreeV3Norm, deltaFreeV3Digest},
+		{"version-labels", versionLabelsInput, versionLabelsV3Norm, versionLabelsV3Digest},
 	}
-
-	t.Run(filepath.Join("legacy", "jsonNormalisation", "v3"), func(t *testing.T) {
-		prefix = filepath.Join(prefix, strings.TrimPrefix(t.Name(), baseName))
-		tests, err := testdata.ReadDir(prefix)
-		require.NoError(t, err, "failed to read conformance test directory")
-		for _, folder := range tests {
-			t.Run(folder.Name(), func(t *testing.T) {
-				run(t, folder.Name())
-			})
-		}
-	})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+			got := normalise(t, tt.input, v4alpha2.Algorithm)
+			r.Equal(tt.wantNorm, got, "v4alpha2 must reproduce the legacy v3 bytes")
+			sum := sha256.Sum256([]byte(got))
+			r.Equal(tt.wantHex, hex.EncodeToString(sum[:]), "v4alpha2 digest must match the v3 oracle digest")
+		})
+	}
 }
 
-// mkDescriptor builds a descriptor with a signing label (version ver) at the
-// component position and, on a reference, one signing and one non-signing label
-// (both version ver). It is the shared input for the two delta tests.
-func mkDescriptor(ver string) *runtime.Descriptor {
-	d := &runtime.Descriptor{}
-	d.Component.Name = "acme.org/x"
-	d.Component.Version = "1.0.0"
-	d.Component.Provider.Name = "acme"
-	d.Component.Labels = []runtime.Label{{Name: "k", Value: []byte(`"v"`), Signing: true, Version: ver}}
-	d.Component.References = []runtime.Reference{{
-		ElementMeta: runtime.ElementMeta{ObjectMeta: runtime.ObjectMeta{
-			Name: "ref", Version: "1.0.0",
-			Labels: []runtime.Label{
-				{Name: "sig", Value: []byte(`"v"`), Signing: true, Version: ver},
-				{Name: "nosig", Value: []byte(`"x"`), Signing: false, Version: ver},
-			},
-		}},
-		Component: "acme.org/child",
-	}}
-	return d
-}
-
-// TestVersionSigned is the counterpart to v4alpha1's TestVersionedLabelExcluded:
-// label.version IS part of the signed bytes, so it both appears in the output and
-// changes the bytes when present.
-func TestVersionSigned(t *testing.T) {
+// TestSameDigestAsV4alpha1 pins the "both yield the same digest" scenario: with
+// neither delta present, v4alpha1 and v4alpha2 produce identical bytes (and the
+// same bytes as the v3 oracle).
+func TestSameDigestAsV4alpha1(t *testing.T) {
 	r := require.New(t)
-
-	withVer, err := normalisation.Normalise(mkDescriptor("v1"), v4alpha2.Algorithm)
-	r.NoError(err)
-	noVer, err := normalisation.Normalise(mkDescriptor(""), v4alpha2.Algorithm)
-	r.NoError(err)
-
-	// version is signed: it shows up and its presence changes the bytes.
-	r.Contains(string(withVer), `"version":"v1"`)
-	r.NotEqual(string(noVer), string(withVer), "label version must change v4alpha2 bytes")
-	// Component label keeps name/signing/value/version (JCS orders keys).
-	r.Contains(string(withVer), `"labels":[{"name":"k","signing":true,"value":"v","version":"v1"}]`)
+	v1out := normalise(t, deltaFreeInput, v4alpha1.Algorithm)
+	v2out := normalise(t, deltaFreeInput, v4alpha2.Algorithm)
+	r.Equal(v1out, v2out, "delta-free input must normalise identically under v4alpha1 and v4alpha2")
+	r.Equal(deltaFreeV3Norm, v2out, "and identically to legacy v3")
 }
 
-// TestReferenceParity pins the reference-label fix: a reference label is filtered
-// exactly like a component label — the signing label is kept (with version) and
-// the non-signing label is dropped. v4alpha1 kept the non-signing reference label.
-func TestReferenceParity(t *testing.T) {
+// TestVersionSignedDivergesFromV4alpha1 proves fix #1: a signing label's version
+// is covered by v4alpha2 but not v4alpha1, so the bytes (and digest) differ and
+// the version appears only in the v4alpha2 output.
+func TestVersionSignedDivergesFromV4alpha1(t *testing.T) {
 	r := require.New(t)
+	v1out := normalise(t, versionLabelsInput, v4alpha1.Algorithm)
+	v2out := normalise(t, versionLabelsInput, v4alpha2.Algorithm)
 
-	out, err := normalisation.Normalise(mkDescriptor("v1"), v4alpha2.Algorithm)
-	r.NoError(err)
-	s := string(out)
+	r.NotEqual(v1out, v2out, "label version must change the signed bytes vs v4alpha1")
+	r.NotContains(v1out, `"version":"v1"`, "v4alpha1 must not sign label.version")
+	r.Contains(v2out, `"version":"v1"`, "v4alpha2 must sign component label.version")
+	r.Contains(v2out, `"version":"v3"`, "v4alpha2 must sign resource label.version")
+	r.Contains(v2out, `"version":"v4"`, "v4alpha2 must sign source label.version")
+}
 
-	// Only the signing reference label survives, carrying its version.
-	r.Contains(s, `"labels":[{"name":"sig","signing":true,"value":"v","version":"v1"}]`)
-	// The non-signing reference label is gone (v4alpha1 leak closed).
-	r.NotContains(s, `"name":"nosig"`)
+// TestReferenceFilteringDivergesFromV3 proves fix #2: reference labels are
+// filtered signing-only under the correct componentReferences key. The
+// non-signing reference label — which both legacy v3 AND v4alpha1 signed — is
+// dropped, so v4alpha2 diverges from both while keeping the signing label's
+// version.
+func TestReferenceFilteringDivergesFromV3(t *testing.T) {
+	r := require.New(t)
+	v2out := normalise(t, referenceLabelsInput, v4alpha2.Algorithm)
+	v1out := normalise(t, referenceLabelsInput, v4alpha1.Algorithm)
+
+	r.Equal(referenceLabelsV4alpha2Norm, v2out, "v4alpha2 reference labels must be filtered signing-only, version kept")
+	r.NotEqual(referenceLabelsV3Norm, v2out, "v4alpha2 must diverge from v3's unfiltered reference labels")
+	r.NotEqual(v1out, v2out, "v4alpha2 must diverge from v4alpha1's reference-label handling")
+
+	// The non-signing reference label leaks in both v3 and v4alpha1, and is gone
+	// in v4alpha2.
+	r.Contains(referenceLabelsV3Norm, `"name":"ref-nosig"`, "v3 leaks the non-signing reference label")
+	r.Contains(v1out, `"name":"ref-nosig"`, "v4alpha1 leaks the non-signing reference label")
+	r.NotContains(v2out, `"name":"ref-nosig"`, "v4alpha2 drops the non-signing reference label")
 }
