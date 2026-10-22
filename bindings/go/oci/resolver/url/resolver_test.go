@@ -9,12 +9,14 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"oras.land/oras-go/v2/content"
 	"oras.land/oras-go/v2/registry/remote"
 	"oras.land/oras-go/v2/registry/remote/auth"
 
 	"ocm.software/open-component-model/bindings/go/oci/cache"
 	"ocm.software/open-component-model/bindings/go/oci/internal/remotestore"
 	"ocm.software/open-component-model/bindings/go/oci/resolver/url"
+	"ocm.software/open-component-model/bindings/go/oci/spec"
 )
 
 // Custom transport to verify the custom client is being used
@@ -488,19 +490,24 @@ func TestURLPathResolver_DynamicCacheSwapping(t *testing.T) {
 
 	ref := "example.com/test-component:v1.0.0"
 
-	// 1. Initially, no caches are set. StoreForReference should return the base *remotestore.RemoteStore.
+	// 1. Initially, no caches are set. StoreForReference should return the
+	// base *remotestore.RemoteStore (Wrap's passthrough path).
 	store, err := resolver.StoreForReference(ctx, ref)
 	require.NoError(t, err)
 	assert.IsType(t, &remotestore.RemoteStore{}, store)
 
-	// 2. Set blob cache. StoreForReference for the same ref should return a wrapped *cache.Repository.
+	// Enabling blob caching must preserve chunked and streaming pushes.
 	dummyBlobCache := &cache.BlobCache{}
 	resolver.SetBlobCache(dummyBlobCache)
 
 	store, err = resolver.StoreForReference(ctx, ref)
 	require.NoError(t, err)
-	require.IsType(t, &cache.Repository{}, store)
-	wrapped := store.(*cache.Repository)
+	assert.Implements(t, (*spec.Store)(nil), store)
+	assert.Implements(t, (*remotestore.StreamingPusher)(nil), store)
+	_, isPlain := store.(*remotestore.RemoteStore)
+	assert.False(t, isPlain, "configured blob cache must wrap the backing store")
+	wrapped, ok := store.(*cache.CachedStore)
+	require.True(t, ok)
 	assert.Equal(t, dummyBlobCache, wrapped.BlobCache)
 	assert.Nil(t, wrapped.ReferenceCache)
 
@@ -510,16 +517,49 @@ func TestURLPathResolver_DynamicCacheSwapping(t *testing.T) {
 
 	store, err = resolver.StoreForReference(ctx, ref)
 	require.NoError(t, err)
-	require.IsType(t, &cache.Repository{}, store)
-	wrapped = store.(*cache.Repository)
+	assert.Implements(t, (*spec.Store)(nil), store)
+	assert.Implements(t, (*remotestore.StreamingPusher)(nil), store)
+	wrapped, ok = store.(*cache.CachedStore)
+	require.True(t, ok)
 	assert.Equal(t, dummyBlobCache, wrapped.BlobCache)
 	assert.Equal(t, dummyRefCache, wrapped.ReferenceCache)
 
-	// 4. Set both back to nil. StoreForReference should return the base *remotestore.RemoteStore again.
+	// 4. Set both back to nil. StoreForReference should return the base
+	// *remotestore.RemoteStore again.
 	resolver.SetBlobCache(nil)
 	resolver.SetReferenceCache(nil)
 
 	store, err = resolver.StoreForReference(ctx, ref)
 	require.NoError(t, err)
 	assert.IsType(t, &remotestore.RemoteStore{}, store)
+}
+
+// Regression: caching must preserve chunked/streaming pushes and an Unwrap chain to *remote.Repository for pack's global-store detection.
+func TestURLPathResolver_CachingPreservesStreamingPusher(t *testing.T) {
+	ctx := context.Background()
+	resolver, err := url.New(
+		url.WithBaseURL("http://example.com"),
+		url.WithChunkedPush(4<<20, 8<<20),
+	)
+	require.NoError(t, err)
+	resolver.SetBlobCache(&cache.BlobCache{})
+
+	store, err := resolver.StoreForReference(ctx, "example.com/test-component:v1.0.0")
+	require.NoError(t, err)
+
+	require.Implements(t, (*remotestore.StreamingPusher)(nil), store)
+
+	var reached *remote.Repository
+	for cur := content.Storage(store); cur != nil; {
+		if r, ok := cur.(*remote.Repository); ok {
+			reached = r
+			break
+		}
+		u, ok := cur.(interface{ Unwrap() content.Storage })
+		if !ok {
+			break
+		}
+		cur = u.Unwrap()
+	}
+	require.NotNil(t, reached, "Unwrap chain must reach *remote.Repository")
 }
