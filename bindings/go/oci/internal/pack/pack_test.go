@@ -1032,11 +1032,15 @@ func TestPackingRejectsInvalidOCILayoutDigest(t *testing.T) {
 
 type countingStorage struct {
 	content.Storage
-	pushes int
+	pushes  int
+	pushErr error
 }
 
 func (store *countingStorage) Push(ctx context.Context, desc ociImageSpecV1.Descriptor, reader io.Reader) error {
 	store.pushes++
+	if store.pushErr != nil {
+		return store.pushErr
+	}
 	return store.Storage.Push(ctx, desc, reader)
 }
 
@@ -1355,14 +1359,17 @@ func TestResourceLocalBlobOCILayer_SkipsExistingBlob(t *testing.T) {
 		for _, tc := range []struct {
 			name       string
 			preexists  bool
+			pushErr    error
 			wantPushes int
+			wantErr    string
 		}{
 			{name: "existing blob is not pushed", preexists: true, wantPushes: 0},
 			{name: "missing blob is pushed", preexists: false, wantPushes: 1},
+			{name: "push failure of missing blob is reported", preexists: false, pushErr: errors.New("registry unavailable"), wantPushes: 1, wantErr: "failed to push blob"},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				r := require.New(t)
-				store := &countingStorage{Storage: memory.New()}
+				store := &countingStorage{Storage: memory.New(), pushErr: tc.pushErr}
 				if tc.preexists {
 					r.NoError(store.Storage.Push(t.Context(), ociImageSpecV1.Descriptor{MediaType: mediaType, Digest: dig, Size: int64(len(content))}, bytes.NewReader(content)))
 				}
@@ -1371,9 +1378,14 @@ func TestResourceLocalBlobOCILayer_SkipsExistingBlob(t *testing.T) {
 				r.NoError(err)
 
 				desc, err := ResourceLocalBlobOCILayer(t.Context(), store, resourceBlob, &v2.LocalBlob{MediaType: mediaType}, newOpts())
+				r.Equal(tc.wantPushes, store.pushes)
+				if tc.wantErr != "" {
+					r.ErrorContains(err, tc.wantErr)
+					r.ErrorIs(err, tc.pushErr)
+					return
+				}
 				r.NoError(err)
 
-				r.Equal(tc.wantPushes, store.pushes)
 				r.Equal(dig, desc.Digest)
 				r.Equal(int64(len(content)), desc.Size)
 				localBlob, ok := resource.Access.(*v2.LocalBlob)
