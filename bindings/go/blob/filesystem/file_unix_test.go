@@ -6,61 +6,102 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
+	"syscall"
 	"testing"
-	"time"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/sys/unix"
 
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 )
 
-func TestCopyBlobToOSPath_NamedPipe_Blocking(t *testing.T) {
+func TestCopyBlobToOSPathWritesIntoNamedPipe(t *testing.T) {
 	r := require.New(t)
-	tempDir := t.TempDir()
-	pipePath := filepath.Join(tempDir, "pipe")
-	r.NoError(unix.Mkfifo(pipePath, 0o666))
+	pipe := filepath.Join(t.TempDir(), "pipe")
+	r.NoError(syscall.Mkfifo(pipe, 0o600))
 
-	testData := []byte("test data")
-
-	fsys, err := filesystem.NewFS(tempDir, os.O_RDWR)
-	r.NoError(err)
-	filePath := "testfile.txt"
-	b := filesystem.NewFileBlob(fsys, filePath)
-	writer, err := b.WriteCloser()
-	r.NoError(err)
-	_, err = writer.Write(testData)
-	r.NoError(err)
-	r.NoError(writer.Close())
-
-	data := make(chan []byte, 1)
-	defer close(data)
-
+	read := make(chan string, 1)
 	go func() {
-		f, err := os.OpenFile(pipePath, os.O_RDONLY, os.ModeNamedPipe)
-		assert.NoError(t, err)
-		defer func() {
-			assert.NoError(t, f.Close())
-		}()
-		all, err := io.ReadAll(f)
-		assert.NoError(t, err)
-		data <- all
+		f, err := os.Open(pipe)
+		if err != nil {
+			read <- "open: " + err.Error()
+			return
+		}
+		got, err := io.ReadAll(f)
+		if closeErr := f.Close(); err == nil {
+			err = closeErr
+		}
+		if err != nil {
+			read <- "read: " + err.Error()
+			return
+		}
+		read <- string(got)
 	}()
 
-	r.NoError(filesystem.CopyBlobToOSPath(b, pipePath))
+	r.NoError(filesystem.CopyBlobToOSPath(readerBlob{strings.NewReader("new")}, pipe))
 
+	// Checked before receiving: a replaced pipe never gets a writer, so the receive would block.
+	fi, err := os.Lstat(pipe)
+	r.NoError(err)
+	r.NotZero(fi.Mode()&os.ModeNamedPipe, "the pipe must not be replaced by a regular file")
+	r.Equal("new", <-read)
+}
+
+// A symlink at the target path is kept and the content is written to its target.
+func TestCopyBlobToOSPathWritesThroughSymlink(t *testing.T) {
+	r := require.New(t)
+	tempDir := t.TempDir()
+	target := filepath.Join(tempDir, "target.txt")
+	r.NoError(os.WriteFile(target, []byte("old"), 0o600))
+	link := filepath.Join(tempDir, "link.txt")
+	r.NoError(os.Symlink(target, link))
+
+	r.NoError(filesystem.CopyBlobToOSPath(readerBlob{strings.NewReader("new")}, link))
+
+	fi, err := os.Lstat(link)
+	r.NoError(err)
+	r.NotZero(fi.Mode()&os.ModeSymlink, "the link must not be replaced")
+	got, err := os.ReadFile(target)
+	r.NoError(err)
+	r.Equal("new", string(got))
+}
+
+// After a failed copy through a symlink the link is kept and its target holds no rejected content.
+func TestCopyBlobToOSPathEmptiesSymlinkTargetWhenCloseFails(t *testing.T) {
+	r := require.New(t)
+	tempDir := t.TempDir()
+	target := filepath.Join(tempDir, "target.txt")
+	r.NoError(os.WriteFile(target, []byte("old"), 0o600))
+	link := filepath.Join(tempDir, "link.txt")
+	r.NoError(os.Symlink(target, link))
+
+	err := filesystem.CopyBlobToOSPath(closeErrBlob{strings.NewReader("new")}, link)
+	r.ErrorContains(err, "verification failed on close")
+
+	fi, err := os.Lstat(link)
+	r.NoError(err)
+	r.NotZero(fi.Mode()&os.ModeSymlink, "the link must not be removed")
+	got, err := os.ReadFile(target)
+	r.NoError(err)
+	r.Empty(got)
+}
+
+func TestCopyBlobToOSPathKeepsPermissionsOfExistingFile(t *testing.T) {
+	r := require.New(t)
+	tempDir := t.TempDir()
+	src := filepath.Join(tempDir, "src.txt")
+	r.NoError(os.WriteFile(src, []byte("new"), 0o600))
+	b, err := filesystem.GetBlobFromOSPath(src)
 	r.NoError(err)
 
-	timer := time.NewTimer(1 * time.Second)
-	defer timer.Stop()
+	dst := filepath.Join(tempDir, "dst.txt")
+	r.NoError(os.WriteFile(dst, []byte("old"), 0o600))
+	r.NoError(os.Chmod(dst, 0o644))
+	r.NoError(filesystem.CopyBlobToOSPath(b, dst))
 
-	select {
-	case <-timer.C:
-		r.Fail("timeout waiting for data, it never arrived in the pipe")
-	case data := <-data:
-		r.Equal(testData, data)
-	}
+	fi, err := os.Stat(dst)
+	r.NoError(err)
+	r.Equal(os.FileMode(0o644), fi.Mode().Perm())
 }
 
 func Test_GetBlobInWorkingDirectory(t *testing.T) {

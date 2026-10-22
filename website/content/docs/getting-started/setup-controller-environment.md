@@ -106,6 +106,10 @@ helm install ocm-k8s-toolkit "oci://ghcr.io/open-component-model/kubernetes/cont
 The release name `ocm-k8s-toolkit` used above gives the controller's resources predictable names, such as the service account `ocm-k8s-toolkit-controller-manager`. If you install under a different release name, or via a GitOps tool such as Flux that alters the effective release name, add `--set fullnameOverride=ocm-k8s-toolkit` to keep these names stable. This matters when you [configure custom RBAC]({{< relref "/docs/how-to/custom-rbac.md" >}}), which binds to the service account by name.
 {{</callout>}}
 
+{{<callout context="tip" title="Hardened installations" icon="outline/shield-check">}}
+The chart ships an opt-in NetworkPolicy for the controller. Add `--set manager.networkPolicy.enabled=true` to admit only the health-probe port (plus the metrics and conversion-webhook ports, if enabled) and allow egress only to DNS and TCP ports 443 and 6443 (HTTPS and the Kubernetes API). If the controller pulls from registries on other ports, such as `:5000` or plain HTTP, set `manager.networkPolicy.egress`; it replaces all default egress rules, so include DNS. It needs a CNI that enforces NetworkPolicy. For how the controller relates to FIPS 140-3 and other standards, see [Standards & Regulations]({{< relref "docs/reference/standards-and-regulations/_index.md" >}}).
+{{</callout>}}
+
 <details>
 <summary>You should see this output</summary>
 
@@ -590,6 +594,7 @@ Deleted nodes: ["kind-control-plane"]
 
 - [How-to: Deploy Manifests with Deployer]({{< relref "/docs/how-to/deploy-manifests-with-deployer.md" >}}) - Deploy raw Kubernetes manifests without kro or Flux
 - [Tutorial: Deploy a Helm Chart]({{< relref "deploy-helm-chart.md" >}}) - Learn to deploy Helm charts using OCM Controllers with kro and Flux
+- [Tutorial: Deploy Crossplane Packages (xpkg) with OCM]({{< relref "/docs/tutorials/deploy-crossplane-packages.md" >}}) - Install Crossplane Configurations, Functions, and Providers from an OCM component version
 
 ## Related Documentation
 
