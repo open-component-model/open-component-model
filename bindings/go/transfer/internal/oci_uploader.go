@@ -95,7 +95,7 @@ func processOCIUploader(ctx context.Context, resource descriptorv2.Resource, acc
 	switch access.(type) {
 	case *ociv1.OCIImage:
 		// Streaming (TransferOCIArtifact) produces no temp file, so there is nothing to clean up.
-		if err := processOCIArtifactStreaming(resource, id, tgd, resourceTransformIDs, i, imageReference, transferLabel(&val.Descriptor.Component, resource.Name, toSpec)); err != nil {
+		if err := processOCIArtifactStreaming(resource, id, tgd, resourceTransformIDs, i, imageReference, transferLabel(&val.Descriptor.Component, resource.Name, "OCIArtifact", toSpec)); err != nil {
 			return nil, fmt.Errorf("cannot process OCI artifact resource: %w", err)
 		}
 		return nil, nil
@@ -105,9 +105,10 @@ func processOCIUploader(ctx context.Context, resource descriptorv2.Resource, acc
 		}
 		return helmFileExpressions(id, resourceID), nil
 	default: // *descriptorv2.LocalBlob holding an OCI manifest, or *ociv1.RelativeOCIReference
+		// Streamed (TransferLocalBlobToOCIArtifact): no file buffer to clean up.
 		if err := processLocalBlob(resource, id, val, tgd, toSpec, resourceTransformIDs, i, imageReference); err != nil {
 			return nil, fmt.Errorf("failed processing local blob resource: %w", err)
 		}
-		return []string{fmt.Sprintf("${%sAdd%s.spec.file}", id, resourceID)}, nil
+		return nil, nil
 	}
 }

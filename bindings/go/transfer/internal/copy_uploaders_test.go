@@ -14,8 +14,9 @@ import (
 // TestBuildGraphDefinition_LocalBlobAndReferenceUploaders covers the baseline (no uploader
 // selects a resource) and the local blob and reference uploaders that replace copyMode.
 func TestBuildGraphDefinition_LocalBlobAndReferenceUploaders(t *testing.T) {
-	localBlobNodes := []runtime.Type{ociv1alpha1.OCIGetLocalResourceV1alpha1, ociv1alpha1.OCIAddLocalResourceV1alpha1, ociv1alpha1.OCIAddComponentVersionV1alpha1, FileCleanupVersionedType}
-	copiedImageNodes := []runtime.Type{ociv1alpha1.GetOCIArtifactV1alpha1, ociv1alpha1.OCIAddLocalResourceV1alpha1, ociv1alpha1.OCIAddComponentVersionV1alpha1, FileCleanupVersionedType}
+	localBlobNodes := []runtime.Type{ociv1alpha1.TransferOCILocalBlobToOCILocalBlobV1alpha1, ociv1alpha1.OCIAddComponentVersionV1alpha1}
+	relativeNodes := []runtime.Type{ociv1alpha1.OCIGetLocalResourceV1alpha1, ociv1alpha1.OCIAddLocalResourceV1alpha1, ociv1alpha1.OCIAddComponentVersionV1alpha1, FileCleanupVersionedType}
+	copiedImageNodes := []runtime.Type{ociv1alpha1.TransferOCIArtifactToOCILocalBlobV1alpha1, ociv1alpha1.OCIAddComponentVersionV1alpha1}
 	byReference := []runtime.Type{ociv1alpha1.OCIAddComponentVersionV1alpha1}
 
 	image := ociImageResource("my-image", "1.0.0", "oci://ghcr.io/org/image:v1")
@@ -69,7 +70,7 @@ func TestBuildGraphDefinition_LocalBlobAndReferenceUploaders(t *testing.T) {
 		{
 			name:      "baseline copies a relative OCI reference by value",
 			resource:  relative,
-			wantTypes: localBlobNodes,
+			wantTypes: relativeNodes,
 		},
 		{
 			name:      "a relative OCI reference selected by a reference uploader fails the build",

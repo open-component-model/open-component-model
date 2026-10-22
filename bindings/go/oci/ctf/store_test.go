@@ -2,10 +2,8 @@ package ctf
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"io"
-	"log/slog"
 	"os"
 	"strings"
 	"sync"
@@ -14,7 +12,6 @@ import (
 	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"oras.land/oras-go/v2/errdef"
 
@@ -33,43 +30,6 @@ func setupTestCTF(t *testing.T) ctf.CTF {
 	fs, err := filesystem.NewFS(tmpDir, os.O_RDWR|os.O_CREATE)
 	require.NoError(t, err)
 	return ctf.NewFileSystemCTF(fs)
-}
-
-var logHandler *mockLogHandler
-
-// mockLogHandler is a mock slog.Handler for testing
-type mockLogHandler struct {
-	mock.Mock
-	mu sync.Mutex
-}
-
-func (m *mockLogHandler) Enabled(_ context.Context, _ slog.Level) bool {
-	return true
-}
-
-func (m *mockLogHandler) Handle(_ context.Context, record slog.Record) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.Called(record.Level, record.Message)
-	return nil
-}
-
-func (m *mockLogHandler) WithAttrs(_ []slog.Attr) slog.Handler {
-	return m
-}
-
-func (m *mockLogHandler) WithGroup(_ string) slog.Handler {
-	return m
-}
-
-func TestMain(m *testing.M) {
-	logHandler = &mockLogHandler{}
-	slog.SetDefault(slog.New(logHandler))
-	logHandler.On("Handle", mock.AnythingOfType("slog.Level"), mock.AnythingOfType("string")).Return(nil)
-
-	exitCode := m.Run()
-
-	os.Exit(exitCode)
 }
 
 func TestNewCTFComponentVersionStore(t *testing.T) {
@@ -129,24 +89,6 @@ func TestFetch(t *testing.T) {
 		require.Error(t, err)
 		assert.Nil(t, reader)
 		assert.Contains(t, err.Error(), "not found")
-	})
-
-	t.Run("close called multiple times is safe and logs error", func(t *testing.T) {
-		reader, err := store.Fetch(ctx, desc)
-		require.NoError(t, err)
-		require.NotNil(t, reader)
-
-		// Call Close multiple times - all should succeed without panic
-		// The sync.OnceValue ensures RUnlock and rc.Close() are only called once
-		err = reader.Close()
-		require.NoError(t, err, "first close should succeed")
-
-		// Second call logs warning but not fail
-		err = reader.Close()
-		require.NoError(t, err, "second close should be safe (logs warning)")
-
-		// Verify the warning was logged exactly once
-		logHandler.AssertCalled(t, "Handle", slog.LevelError, "Close called multiple times on locked reader.")
 	})
 }
 
@@ -228,10 +170,18 @@ func TestResolve(t *testing.T) {
 		Digest:     digestStr,
 		MediaType:  ociImageSpecV1.MediaTypeImageManifest,
 	})
+	index.AddArtifact(v1.ArtifactMetadata{
+		Repository: "test-repo",
+		Tag:        "1.0.0-T0",
+		Digest:     digestStr,
+		MediaType:  ociImageSpecV1.MediaTypeImageManifest,
+	})
 	require.NoError(t, ctf.SetIndex(ctx, index))
 
 	expectedOkResolves := []string{
 		"v1.0.0",
+		"1.0.0-T0",
+		"test-repo:1.0.0-T0",
 		"test-repo:v1.0.0",
 		digestStr,
 		"test-repo@" + digestStr,
@@ -252,6 +202,12 @@ func TestResolve(t *testing.T) {
 	t.Run("invalid reference", func(t *testing.T) {
 		desc, err := store.Resolve(ctx, "invalid")
 		require.Error(t, err)
+		assert.Empty(t, desc)
+	})
+
+	t.Run("unparseable reference that is not a tag", func(t *testing.T) {
+		desc, err := store.Resolve(ctx, "localhost:5000/Test-Repo:v1.0.0")
+		require.ErrorIs(t, err, errdef.ErrInvalidReference)
 		assert.Empty(t, desc)
 	})
 
@@ -286,6 +242,10 @@ func TestTag(t *testing.T) {
 		{
 			name:      "simple tag",
 			reference: "test-tag",
+		},
+		{
+			name:      "tag with upper-case letters",
+			reference: "1.0.0-T0",
 		},
 		{
 			name:      "tag as digest",

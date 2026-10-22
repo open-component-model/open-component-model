@@ -179,8 +179,15 @@ Critical fix needs to land on an older minor:
 git checkout releases/vX.Y
 git cherry-pick <commit-from-main>
 gh pr create --base releases/vX.Y \
-  --title "chore(releases-041): <original PR>"
+  --title "<original PR title, verbatim>" \
+  --body "Cherry-picks #<original PR number> onto releases/vX.Y."
 ```
+
+Keep the original type and scope in the title. The changelog groups by the leading
+type, so wrapping a `fix:` in `chore(releases-NNN):` files the entry under
+Miscellaneous Tasks instead of Bug Fixes, and a wrapped `feat(x)!:` loses its
+breaking marker entirely. Branch provenance belongs in the body: `--base` already
+names the release branch.
 
 After merge, run the Release workflow on that branch. On hot-fixes we do not wait for the entire promotion process.
 

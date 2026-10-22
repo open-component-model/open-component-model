@@ -13,6 +13,8 @@ import (
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"oras.land/oras-go/v2"
 	"oras.land/oras-go/v2/content"
+	"oras.land/oras-go/v2/errdef"
+	"oras.land/oras-go/v2/registry"
 	"oras.land/oras-go/v2/registry/remote"
 
 	"ocm.software/open-component-model/bindings/go/blob"
@@ -89,6 +91,16 @@ func ResourceLocalBlobOCILayer(ctx context.Context, storage content.Storage, b *
 		BlobDigest:    digest.Digest(access.LocalReference),
 	}
 
+	// Like oras.CopyGraph, skip blobs the target already holds: starting an
+	// upload session for an existing digest is not a no-op on every registry
+	// (Artifactory deletes the staged duplicate on finalize, which fails
+	// without delete permission).
+	if layer, exists, err := existingResourceLayer(ctx, storage, b, layerOpts); err != nil {
+		return ociImageSpecV1.Descriptor{}, err
+	} else if exists {
+		return finishResourceLayer(b, access, layer, opts, storage)
+	}
+
 	// Stream the blob directly when the storage supports streaming chunked
 	// upload and buffering would otherwise be required. Buffering happens
 	// (in PrepareArtifactBlobForOCI) whenever the size OR the digest is unknown,
@@ -116,6 +128,85 @@ func ResourceLocalBlobOCILayer(ctx context.Context, storage content.Storage, b *
 	return finishResourceLayer(ctx, b, access, layer, opts, storage)
 }
 
+// blobResolver is implemented by remote repositories, whose blob store can
+// resolve a digest to a descriptor (including its size) with a HEAD request.
+type blobResolver interface {
+	Blobs() registry.BlobStore
+}
+
+// layerDigestAndMediaType selects the digest and media type for a resource
+// layer. Values exposed by the blob take precedence over opts. The digest is
+// empty if neither source knows it; an unknown media type is an error.
+func layerDigestAndMediaType(b *ociblob.ArtifactBlob, opts ResourceBlobOCILayerOptions) (digest.Digest, string, error) {
+	mediaType, _ := b.MediaType()
+	if mediaType == "" {
+		mediaType = opts.BlobMediaType
+	}
+	if mediaType == "" {
+		return "", "", errors.New("blob media type is unknown and cannot be packed into an oci blob")
+	}
+
+	dig := opts.BlobDigest
+	if blobDig, ok := b.Digest(); ok {
+		dig = digest.Digest(blobDig)
+	}
+	if len(dig) > 0 {
+		if err := dig.Validate(); err != nil {
+			return "", "", fmt.Errorf("failed to validate blob digest: %w", err)
+		}
+	}
+	return dig, mediaType, nil
+}
+
+// existingResourceLayer reports whether the blob's layer is already present in
+// storage and, if so, returns its layer descriptor so the upload can be
+// skipped. Without a known digest the blob cannot be looked up and the result
+// is (zero, false, nil). Stores that resolve blobs (remote registries) report
+// the stored size: it fills an unknown size and must match a known one, since
+// their existence check ignores the size. Other stores are only asked for
+// existence, and only when the size is known.
+func existingResourceLayer(ctx context.Context, storage content.Storage, b *ociblob.ArtifactBlob, opts ResourceBlobOCILayerOptions) (ociImageSpecV1.Descriptor, bool, error) {
+	dig, mediaType, err := layerDigestAndMediaType(b, opts)
+	if err != nil {
+		return ociImageSpecV1.Descriptor{}, false, err
+	}
+	if len(dig) == 0 {
+		return ociImageSpecV1.Descriptor{}, false, nil
+	}
+
+	layer := ociImageSpecV1.Descriptor{MediaType: mediaType, Digest: dig, Size: b.Size()}
+	if resolver, ok := storage.(blobResolver); ok {
+		resolved, err := resolver.Blobs().Resolve(ctx, dig.String())
+		if errors.Is(err, errdef.ErrNotFound) {
+			return ociImageSpecV1.Descriptor{}, false, nil
+		}
+		if err != nil {
+			return ociImageSpecV1.Descriptor{}, false, fmt.Errorf("failed to resolve blob %s in target: %w", dig, err)
+		}
+		if layer.Size != blob.SizeUnknown && layer.Size != resolved.Size {
+			return ociImageSpecV1.Descriptor{}, false, fmt.Errorf("blob %s exists in target with size %d, but source blob reports size %d", dig, resolved.Size, layer.Size)
+		}
+		layer.Size = resolved.Size
+	} else {
+		if layer.Size == blob.SizeUnknown {
+			return ociImageSpecV1.Descriptor{}, false, nil
+		}
+		exists, err := storage.Exists(ctx, layer)
+		if err != nil {
+			return ociImageSpecV1.Descriptor{}, false, fmt.Errorf("failed to check existence of blob %s in target: %w", dig, err)
+		}
+		if !exists {
+			return ociImageSpecV1.Descriptor{}, false, nil
+		}
+	}
+
+	layer.Annotations = maps.Clone(opts.BlobLayerAnnotations)
+	if err := identity.Adopt(&layer, b.Artifact); err != nil {
+		return ociImageSpecV1.Descriptor{}, false, fmt.Errorf("failed to adopt descriptor based on resource: %w", err)
+	}
+	return layer, true, nil
+}
+
 // streamResourceLayer attempts a streaming chunked upload of b, computing (and
 // verifying, if already known) the digest and size during upload so the blob is
 // never buffered into memory. It returns (descriptor, true, nil) on success.
@@ -130,9 +221,9 @@ func ResourceLocalBlobOCILayer(ctx context.Context, storage content.Storage, b *
 // passed through and verified against the streamed bytes; an unknown digest is
 // computed from them.
 func streamResourceLayer(ctx context.Context, pusher remotestore.StreamingPusher, b *ociblob.ArtifactBlob, opts ResourceBlobOCILayerOptions) (ociImageSpecV1.Descriptor, bool, error) {
-	knownDigest := opts.BlobDigest
-	if blobDig, digKnown := b.Digest(); digKnown {
-		knownDigest = digest.Digest(blobDig)
+	knownDigest, mediaType, err := layerDigestAndMediaType(b, opts)
+	if err != nil {
+		return ociImageSpecV1.Descriptor{}, false, err
 	}
 	sizeKnown := b.Size() != blob.SizeUnknown
 
@@ -140,20 +231,6 @@ func streamResourceLayer(ctx context.Context, pusher remotestore.StreamingPusher
 	// it (RemoteStore.Push still chunks large blobs by the configured threshold).
 	if sizeKnown && len(knownDigest) > 0 {
 		return ociImageSpecV1.Descriptor{}, false, nil
-	}
-
-	if len(knownDigest) > 0 {
-		if err := knownDigest.Validate(); err != nil {
-			return ociImageSpecV1.Descriptor{}, false, fmt.Errorf("failed to validate blob digest: %w", err)
-		}
-	}
-
-	mediaType := opts.BlobMediaType
-	if mt, ok := b.MediaType(); ok && mt != "" {
-		mediaType = mt
-	}
-	if mediaType == "" {
-		return ociImageSpecV1.Descriptor{}, false, errors.New("blob media type is unknown and cannot be packed into an oci blob")
 	}
 
 	reader, err := b.ReadCloser()
@@ -316,31 +393,11 @@ type OCILayerConvertableBlob interface {
 func PrepareArtifactBlobForOCI(b *ociblob.ArtifactBlob, opts ResourceBlobOCILayerOptions) (*ociblob.ArtifactBlob, ociImageSpecV1.Descriptor, error) {
 	size := b.Size()
 
-	var mediaType string
-	if mediaTypeFromBlob, ok := b.MediaType(); ok {
-		mediaType = mediaTypeFromBlob
-	}
-	if mediaType == "" {
-		mediaType = opts.BlobMediaType
-	}
-	if mediaType == "" {
-		return nil, ociImageSpecV1.Descriptor{}, errors.New("blob media type is unknown and cannot be packed into an oci blob")
+	dig, mediaType, err := layerDigestAndMediaType(b, opts)
+	if err != nil {
+		return nil, ociImageSpecV1.Descriptor{}, err
 	}
 
-	var dig digest.Digest
-	if blobDigest, ok := b.Digest(); ok {
-		dig = digest.Digest(blobDigest)
-		if err := dig.Validate(); err != nil {
-			return nil, ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to validate blob digest: %w", err)
-		}
-	} else if len(opts.BlobDigest) > 0 {
-		dig = opts.BlobDigest
-		if err := dig.Validate(); err != nil {
-			return nil, ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to validate blob digest: %w", err)
-		}
-	}
-
-	var err error
 	if size == blob.SizeUnknown || len(dig) == 0 {
 		b, err = b.Buffer()
 		if err != nil {
