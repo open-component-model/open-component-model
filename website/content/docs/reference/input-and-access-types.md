@@ -5,6 +5,7 @@ weight: 3
 toc: true
 aliases:
   - /docs/guides/input_and_access/
+  - /docs/reference/input-and-access-types/
 ---
 
 ## Overview

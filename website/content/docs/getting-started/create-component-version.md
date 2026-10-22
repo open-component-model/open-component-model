@@ -4,6 +4,8 @@ description: "Learn how to create and store component versions using the OCM CLI
 icon: "📦"
 weight: 30
 toc: true
+aliases:
+  - /docs/getting-started/create-component-versions/
 ---
 
 Component versions bundle your software artifacts with metadata, making them portable and verifiable. This guide walks you through creating your first component version.

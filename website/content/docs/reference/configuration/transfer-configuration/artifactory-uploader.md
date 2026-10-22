@@ -5,6 +5,7 @@ weight: 6
 toc: true
 aliases:
   - /docs/reference/transfer-configuration/artifactory-uploader/
+  - /docs/reference/transfer-configuration/jfrog-artifactory-uploader/
 ---
 
 Uploads a matched resource into a local repository of a JFrog Artifactory server,

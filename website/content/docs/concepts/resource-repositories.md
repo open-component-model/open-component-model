@@ -4,6 +4,8 @@ description: "Why OCM separates resource storage from component version storage 
 weight: 11
 toc: true
 hasMermaid: true
+aliases:
+  - /docs/concepts/resource-repositories/
 ---
 
 A component version describes a set of resources (container images, Helm charts, configuration files) but it does not

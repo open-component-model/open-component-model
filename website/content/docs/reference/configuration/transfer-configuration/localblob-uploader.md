@@ -5,6 +5,7 @@ weight: 3
 toc: true
 aliases:
   - /docs/reference/transfer-configuration/localblob-uploader/
+  - /docs/reference/transfer-configuration/local-blob-uploader/
 ---
 
 Downloads a selected resource and embeds it in the target as a local blob. This

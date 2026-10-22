@@ -5,6 +5,8 @@ icon: "🔎"
 weight: 5
 toc: true
 hasMermaid: true
+aliases:
+  - /docs/concepts/kubernetes-component-discovery/
 ---
 
 The `Discovery` is a Kubernetes controller that publishes a filtered, 

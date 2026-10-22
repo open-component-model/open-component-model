@@ -3,6 +3,8 @@ title: Discovery
 description: "API reference for the Discovery custom resource in delivery.ocm.software/v1alpha1, which publishes a filtered view of a Component's reference graph."
 weight: 6
 toc: false
+aliases:
+  - /docs/reference/kubernetes-api/discovery/
 ---
 
 A **Discovery** publishes a filtered, optionally projected view of the transitive

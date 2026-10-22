@@ -4,6 +4,8 @@ description: "Understand how the OCM Deployer reconciles OCM resources into a Ku
 weight: 7
 toc: true
 hasMermaid: true
+aliases:
+  - /docs/concepts/kubernetes-deployer/
 ---
 
 The Deployer is a Kubernetes controller that takes an OCM resource, typically containing Kubernetes manifests such as a `ResourceGraphDefinition`, plain YAML, or other deployable content, downloads it from a `Resource`, and applies it to the cluster using server-side apply.

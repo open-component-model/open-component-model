@@ -5,6 +5,7 @@ weight: 7
 toc: true
 aliases:
   - /docs/reference/transfer-configuration/nexus-uploader/
+  - /docs/reference/transfer-configuration/sonatype-nexus-uploader/
 ---
 
 Uploads a matched resource into a hosted repository of a Sonatype Nexus

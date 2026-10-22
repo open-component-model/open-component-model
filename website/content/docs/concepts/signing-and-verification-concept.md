@@ -3,6 +3,8 @@ title: "Signing and Verification"
 description: "Understanding how OCM ensures component integrity and authenticity through cryptographic signatures."
 weight: 12
 toc: true
+aliases:
+  - /docs/concepts/signing-and-verification/
 ---
 
 OCM uses cryptographic signatures to guarantee that component versions are authentic (created by a trusted party) and have not been tampered with during storage or transfer.

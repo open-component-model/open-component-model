@@ -5,6 +5,8 @@ icon: "🏁"
 weight: 6
 toc: true
 hasMermaid: true
+aliases:
+  - /docs/concepts/kubernetes-controllers/
 ---
 
 The OCM controllers reconcile OCM component versions into a Kubernetes cluster. They form a chain of four custom resources, each depending on the previous one becoming `Ready`:

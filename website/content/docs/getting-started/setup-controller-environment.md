@@ -4,6 +4,8 @@ description: "Set up a local Kubernetes environment with the OCM Controllers, an
 icon: "⚓"
 weight: 40
 toc: true
+aliases:
+  - /docs/getting-started/set-up-controller-environments/
 ---
 
 This guide helps you set up a local Kubernetes environment for testing OCM controller-based deployments.

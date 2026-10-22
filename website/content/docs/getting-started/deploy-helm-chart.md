@@ -4,6 +4,8 @@ description: "Deploy a Helm chart from an OCM component version with OCM Control
 icon: "🚀"
 weight: 50
 toc: true
+aliases:
+  - /docs/getting-started/deploy-helm-charts/
 ---
 
 This tutorial walks you through deploying a Helm chart from an OCM component version to a Kubernetes cluster,

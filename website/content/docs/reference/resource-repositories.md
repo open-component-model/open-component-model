@@ -3,6 +3,8 @@ title: "Resource Repositories"
 description: "Technical reference for built-in resource repositories: supported access types, credential resolution, and capabilities."
 weight: 4
 toc: true
+aliases:
+  - /docs/reference/resource-repositories/
 ---
 
 This page is the technical reference for built-in resource repositories. For an introduction to what resource

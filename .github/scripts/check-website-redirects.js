@@ -150,8 +150,8 @@ export function baseTag(repoRoot) {
 }
 
 /**
- * List all non-`_index.md` Markdown files under `how-to/` and `tutorials/`
- * at the given git ref, relative to `website/content/docs/`.
+ * List all non-`_index.md` Markdown files under the entire `docs/` tree
+ * at the given git ref.
  *
  * @param {string} repoRoot
  * @param {string} ref  git ref (tag or commit)
@@ -159,9 +159,7 @@ export function baseTag(repoRoot) {
  */
 export function listBaseFiles(repoRoot, ref) {
   const out = execSync(
-    `git ls-tree -r --name-only "${ref}" -- ` +
-      `website/content/docs/how-to/ ` +
-      `website/content/docs/tutorials/`,
+    `git ls-tree -r --name-only "${ref}" -- website/content/docs/`,
     { cwd: repoRoot },
   ).toString();
   return out
@@ -236,7 +234,7 @@ if (
 
   if (missing.length === 0) {
     console.log(
-      `✓ All ${total} previously-live how-to/tutorials URLs are covered by redirect aliases.`,
+      `✓ All ${total} previously-live docs URLs are covered by redirect aliases.`,
     );
   } else {
     console.error(

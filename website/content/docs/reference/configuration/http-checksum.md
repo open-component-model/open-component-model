@@ -6,6 +6,7 @@ weight: 4
 toc: true
 aliases:
   - /docs/reference/checksum-http-configuration/
+  - /docs/reference/http-checksum-configuration/
 ---
 
 This page is the technical reference for OCM HTTP checksum verification — the
