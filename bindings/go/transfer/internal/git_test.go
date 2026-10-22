@@ -85,6 +85,25 @@ func TestProcessGit_RejectsUnpinnedAccess(t *testing.T) {
 	r.Empty(exprs)
 }
 
+func TestBuildGraphDefinition_GitResource_PinnedByURLFragment(t *testing.T) {
+	r := require.New(t)
+	res := gitResource("")
+	res.Access.(*gitv1.Git).Repository = "https://example.com/org/repo.git#commit=f58349914e3c775747dc1ee9af1bc83db4652266"
+	desc := testDescriptor("ocm.software/test", "1.0.0", []descriptor.Resource{res}, nil)
+	resolver := testResolverFor("ocm.software/test", "1.0.0", testOCIRepo("ghcr.io/source"), desc)
+	roots := testTransferRoots("ocm.software/test", "1.0.0", testOCIRepo("ghcr.io/target"), resolver)
+	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{}, withLocalBlobUploader(ociUploaders()...))
+	r.NoError(err, "a commit selected by the repository URL fragment pins the resource")
+	r.Equal(gitv1alpha1.GetGitResourceV1alpha1, tgd.Transformations[0].Type)
+}
+
+func TestGitOriginOf_URLFragment(t *testing.T) {
+	r := require.New(t)
+	origin, err := gitOriginOf(&gitv1.Git{Repository: "https://example.com/org/repo.git#branch=main"})
+	r.NoError(err)
+	r.Equal(gitOrigin{Repository: "org/repo.git", Ref: "refs/heads/main"}, origin)
+}
+
 func TestProcessGit_UnsupportedTargetDoesNotEmitNodes(t *testing.T) {
 	r := require.New(t)
 	res := gitResource("f58349914e3c775747dc1ee9af1bc83db4652266")

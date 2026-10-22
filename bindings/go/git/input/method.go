@@ -11,7 +11,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/constructor"
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	"ocm.software/open-component-model/bindings/go/git/internal/download"
-	accessv1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
 	gitcreds "ocm.software/open-component-model/bindings/go/git/spec/credentials"
 	credsv1 "ocm.software/open-component-model/bindings/go/git/spec/credentials/v1"
 	identityv1 "ocm.software/open-component-model/bindings/go/git/spec/identity/v1"
@@ -53,8 +52,12 @@ func (i *InputMethod) GetResourceCredentialConsumerIdentity(_ context.Context, r
 	if err != nil {
 		return nil, err
 	}
+	access, err := spec.ToAccess()
+	if err != nil {
+		return nil, err
+	}
 
-	return identityv1.IdentityFromURL(spec.Repository)
+	return identityv1.IdentityFromURL(access.Repository)
 }
 
 // ProcessResource returns the selected repository snapshot as a gzip-compressed tar.
@@ -84,15 +87,11 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 		opts.HTTPClient = httpclient.New(httpclient.WithConfig(i.HTTPConfig))
 	}
 
-	ref := spec.Ref
-	if ref == "" && spec.Commit == "" {
-		ref = "HEAD"
+	access, err := spec.ToAccess()
+	if err != nil {
+		return nil, fmt.Errorf("invalid git input spec: %w", err)
 	}
-	result, err := download.Download(ctx, &accessv1.Git{
-		Repository: spec.Repository,
-		Ref:        ref,
-		Commit:     spec.Commit,
-	}, creds, opts)
+	result, err := download.Download(ctx, access, creds, opts)
 	if err != nil {
 		return nil, fmt.Errorf("error downloading git input: %w", err)
 	}
