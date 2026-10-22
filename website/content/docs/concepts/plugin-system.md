@@ -4,8 +4,6 @@ description: "Learn about the Plugin System and how it can help you extend OCM's
 icon: "🔌"
 weight: 9
 toc: true
-aliases:
-  - /docs/concepts/plugin-system/
 ---
 
 The Open Component Model (OCM) plugin system allows you to extend OCM's basic capabilities. 

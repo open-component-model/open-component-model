@@ -196,7 +196,8 @@ export function gitShow(repoRoot, ref, filePath) {
 
 /**
  * Compute the expected live URLs from the base git tag and return those not
- * covered by an alias in the current branch.
+ * served by the current branch — either as a page's own URL or as a redirect
+ * alias.
  *
  * @param {string} repoRoot
  * @returns {{ missing: {url: string, sourceFile: string}[], total: number }}
@@ -207,13 +208,22 @@ export function checkRedirects(repoRoot) {
   const docsDir = join(repoRoot, "website/content/docs");
   const aliases = collectAliases(docsDir);
 
+  // Also collect every URL that the current branch serves natively (not just
+  // via alias). A page that kept the same title/slug needs no redirect.
+  const currentUrls = new Set();
+  for (const f of walkMd(docsDir)) {
+    const relPath = f.replace(docsDir + "/", "");
+    const fm = parseFrontMatter(readFileSync(f, "utf8"));
+    currentUrls.add(pageUrl(relPath, fm));
+  }
+
   const missing = [];
   for (const file of files) {
     const relPath = file.replace("website/content/docs/", "");
     const content = gitShow(repoRoot, ref, file);
     const fm = parseFrontMatter(content);
     const url = pageUrl(relPath, fm);
-    if (!aliases.has(url)) {
+    if (!aliases.has(url) && !currentUrls.has(url)) {
       missing.push({ url, sourceFile: file });
     }
   }

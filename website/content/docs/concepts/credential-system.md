@@ -4,8 +4,6 @@ description: "Why OCM manages credentials centrally and how its resolution model
 icon: "🔑"
 weight: 4
 toc: true
-aliases:
-  - /docs/concepts/credential-system/
 ---
 
 OCM operations frequently interact with protected services — OCI registries, private repositories, signing infrastructure. Rather than requiring credentials at every command invocation, OCM provides a central credential system that decouples *what needs authentication* from *how credentials are supplied*.

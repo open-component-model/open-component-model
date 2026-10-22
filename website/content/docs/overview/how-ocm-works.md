@@ -4,8 +4,6 @@ description: >
   An introduction to the Open Component Model — how it packages, secures,
   transports, and deploys software across any boundary.
 weight: 1
-aliases:
-  - /docs/overview/how-ocm-works/
 ---
 
 Modern software doesn't just run — it travels. From a developer's laptop to a CI pipeline,

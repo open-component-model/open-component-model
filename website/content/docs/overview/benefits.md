@@ -4,8 +4,6 @@ description: "Discover how OCM brings visibility, security, and adaptability to 
 icon: "✨"
 weight: 2
 toc: true
-aliases:
-  - /docs/overview/benefits-of-ocm/
 ---
 
 The Open Component Model (OCM) is an open-source toolset for secure software delivery.

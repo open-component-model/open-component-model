@@ -7,7 +7,6 @@ toc: true
 aliases:
   - /docs/getting-started/run-cli-from-container-image/
   - /docs/how-to/container-image-usage/
-  - /docs/getting-started/install-the-ocm-cli/
   - /docs/how-to/how-to-use-the-ocm-cli-container-image/
 ---
 

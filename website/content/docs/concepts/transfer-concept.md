@@ -4,8 +4,6 @@ description: "Understand how OCM moves component versions between repositories w
 weight: 14
 toc: true
 hasMermaid: true
-aliases:
-  - /docs/concepts/transfer-and-transport/
 ---
 
 Transfer is the mechanism that moves component versions from one OCM repository to another. During transfer, the component's identity, integrity, and signatures are preserved so that consumers can verify provenance at every stage of the delivery pipeline.

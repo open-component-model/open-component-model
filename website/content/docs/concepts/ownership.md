@@ -4,8 +4,6 @@ description: "How OCM traces a resource back to the component version that owns 
 weight: 8
 toc: true
 hasMermaid: true
-aliases:
-  - /docs/concepts/ownership/
 ---
 
 Ownership is about tracing a resource back to its owning component version. Find a resource in a registry and it

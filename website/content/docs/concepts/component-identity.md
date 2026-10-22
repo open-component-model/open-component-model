@@ -4,8 +4,6 @@ description: "How OCM identifies components, versions, and artifacts — from na
 icon: "🪪"
 weight: 2
 toc: true
-aliases:
-  - /docs/concepts/component-identity/
 ---
 
 ## Overview

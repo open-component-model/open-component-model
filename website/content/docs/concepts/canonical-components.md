@@ -4,8 +4,6 @@ description: "What canonical repositories are, why component references are loca
 weight: 1
 toc: true
 hasMermaid: true
-aliases:
-  - /docs/concepts/canonical-component-repositories/
 ---
 
 ## What Are Canonical Component Repositories?

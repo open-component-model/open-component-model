@@ -4,8 +4,6 @@ description: "What is an SBOM and its relevance to the OCM ecosystem."
 icon: "🧾"
 weight: 13
 toc: true
-aliases:
-  - /docs/concepts/software-bills-of-materials/
 ---
 
 A Software Bill of Materials is an inventory of what is inside an artifact: packages, libraries and versions. It is what

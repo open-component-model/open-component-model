@@ -4,8 +4,6 @@ description: "Understand the fundamental building blocks of the Open Component M
 icon: "🧩"
 weight: 13
 toc: true
-aliases:
-  - /docs/overview/the-ocm-core-model/
 ---
 
 ## The Problem: Software Delivery is Fragmented

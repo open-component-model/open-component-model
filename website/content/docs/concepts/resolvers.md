@@ -4,8 +4,6 @@ description: "Learn how OCM resolvers map component name patterns to repositorie
 icon: "🔍"
 weight: 10
 toc: true
-aliases:
-  - /docs/concepts/resolvers/
 ---
 
 ## Why Resolvers?
