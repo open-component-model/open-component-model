@@ -1,10 +1,9 @@
 name: Image scan
 
+# Reusable: pipeline.yml scans the CLI (default, slim) and controller images it
+# built, per architecture, with Trivy and govulncheck's OpenVEX. Findings warn;
+# a broken scan fails.
 on:
-  # Reusable scan of the CLI (default and slim) and controller images, invoked by
-  # the build & publish pipeline (pipeline.yml) with the image artifacts it built. Each
-  # architecture is scanned for vulnerabilities (Trivy, with that architecture's
-  # OpenVEX document from govulncheck; findings warn, they do not fail).
   workflow_call:
     inputs:
       ref:
@@ -27,6 +26,10 @@ on:
 permissions:
   contents: read
 
+defaults:
+  run:
+    shell: bash --noprofile --norc -euo pipefail {0}
+
 jobs:
   vex:
     name: OpenVEX
@@ -42,7 +45,6 @@ jobs:
       fail-fast: false
       matrix:
         image: [cli, cli-slim, controller]
-        # The scans only read the image's files, so amd64 is scanned on the arm64 runner.
         arch: [arm64, amd64]
         include:
           - image: cli
@@ -54,6 +56,9 @@ jobs:
           - image: controller
             artifact: ${{ inputs.controller_artifact }}
             oci_tar: controller.tar
+    env:
+      IMAGE: ${{ matrix.image }}
+      ARCH: ${{ matrix.arch }}
     steps:
       - name: Download image artifact
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
@@ -70,23 +75,13 @@ jobs:
       - name: Ensure skopeo is installed
         run: command -v skopeo || { sudo apt-get update -qq && sudo apt-get install -yqq skopeo; }
 
+      # Trivy ignores --platform for local OCI layouts, so the architecture is selected here.
       - name: Load image
         env:
           OCI_TAR: ${{ matrix.oci_tar }}
-          IMAGE: ${{ matrix.image }}
-          ARCH: ${{ matrix.arch }}
-        run: |
-          skopeo --override-arch "${ARCH}" --override-os linux copy \
-            "oci-archive:tmp/artifact/${OCI_TAR}" "docker-daemon:ocm-scan:${IMAGE}-${ARCH}"
-          mkdir -p "tmp/image-scan/${IMAGE}-${ARCH}"
+        run: skopeo --override-arch "${ARCH}" --override-os linux copy "oci-archive:tmp/artifact/${OCI_TAR}" "docker-daemon:ocm-scan:${IMAGE}-${ARCH}"
 
-      # Reports, but does not fail on, vulnerabilities this architecture's OpenVEX
-      # document does not mark as not_affected. Each statement applies to one binary: OCM's own
-      # (the entrypoint), from govulncheck, or cosign, from its release's attested
-      # VEX. What remains in OCM's binary is reachable per govulncheck. They show
-      # up as warning annotations and in the job summary.
-      # Nothing is uploaded to code scanning, so Dependabot alerts stay the only
-      # alert surface.
+      # Nothing goes to code scanning: Dependabot alerts stay the only alert surface.
       - name: Vulnerability scan
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         env:
@@ -96,50 +91,27 @@ jobs:
           scanners: vuln
           exit-code: '0'
           format: json
-          output: tmp/image-scan/${{ matrix.image }}-${{ matrix.arch }}/trivy.json
+          output: trivy.json
 
       - name: Vulnerability scan summary
         id: vulns
-        if: ${{ !cancelled() }}
-        env:
-          IMAGE: ${{ matrix.image }}
-          ARCH: ${{ matrix.arch }}
         run: |
-          set -euo pipefail
-          report="tmp/image-scan/${IMAGE}-${ARCH}/trivy.json"
-          [[ -s "$report" ]] || { echo "::error::Trivy wrote no report for ${IMAGE} (linux/${ARCH})"; exit 1; }
-          count="$(jq '[.Results[]?.Vulnerabilities[]?] | length' "$report")"
-          echo "count=${count}" >> "$GITHUB_OUTPUT"
-          {
-            echo "### 🔎 Vulnerability scan: ${IMAGE} (linux/${ARCH})"
-            echo
-            if [[ "$count" -eq 0 ]]; then
-              echo "No vulnerabilities beyond those the OpenVEX document marks as not_affected."
-            else
-              echo "⚠️ ${count} vulnerabilities (do not block publishing). Findings in OCM's own binary are reachable per govulncheck; findings in other binaries (cosign) are not ruled out by the OpenVEX their release attests:"
-              echo
-              echo "| Binary | ID | Severity | Package | Installed | Fixed | Title |"
-              echo "| --- | --- | --- | --- | --- | --- | --- |"
-              jq -r '.Results[]? | .Target as $t | .Vulnerabilities[]? | "| \($t) | \(.VulnerabilityID) | \(.Severity) | \(.PkgName) | \(.InstalledVersion) | \(.FixedVersion // "") | \(.Title // "" | gsub("\\|"; "\\|")) |"' "$report"
-            fi
-          } >> "$GITHUB_STEP_SUMMARY"
+          jq -r '"count=\([.Results[]?.Vulnerabilities[]?] | length)"' trivy.json >> "$GITHUB_OUTPUT"
+          jq -r '"### 🔎 Vulnerability scan: \($ENV.IMAGE) (linux/\($ENV.ARCH))\n",
+            if [.Results[]?.Vulnerabilities[]?] == [] then "No vulnerabilities beyond those the OpenVEX document marks as not_affected."
+            else "Findings in the OCM binary are reachable per govulncheck; in cosign, not ruled out by its attested OpenVEX.\n\n| Binary | ID | Severity | Package | Installed | Fixed | Title |\n| --- | --- | --- | --- | --- | --- | --- |",
+              (.Results[]? | .Target as $t | .Vulnerabilities[]? | "| \($t) | \(.VulnerabilityID) | \(.Severity) | \(.PkgName) | \(.InstalledVersion) | \(.FixedVersion // "") | \(.Title // "" | gsub("\\|"; "\\|")) |")
+            end' trivy.json >> "$GITHUB_STEP_SUMMARY"
 
-      # Fails visibly without failing the job, so findings do not block PRs or
-      # publishing. A broken scan still fails the job in the step above.
-      - name: No reachable vulnerabilities
-        if: ${{ !cancelled() && steps.vulns.outputs.count != '' }}
+      - name: No vulnerabilities (see job summary)
+        if: steps.vulns.outputs.count != '0'
         continue-on-error: true
-        env:
-          COUNT: ${{ steps.vulns.outputs.count }}
-        run: |
-          [[ "$COUNT" -eq 0 ]] && exit 0
-          echo "${COUNT} vulnerabilities, listed with their binary in the job summary."
-          exit 1
+        run: exit 1
 
-      - name: Upload reports
+      - name: Upload report
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: image-scan-${{ matrix.image }}-${{ matrix.arch }}
-          path: tmp/image-scan/${{ matrix.image }}-${{ matrix.arch }}
+          path: trivy.json
           if-no-files-found: ignore
