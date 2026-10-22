@@ -99,7 +99,7 @@ jobs:
           jq -r '"count=\([.Results[]?.Vulnerabilities[]?] | length)"' trivy.json >> "$GITHUB_OUTPUT"
           jq -r '"### 🔎 Vulnerability scan: \($ENV.IMAGE) (linux/\($ENV.ARCH))\n",
             if [.Results[]?.Vulnerabilities[]?] == [] then "No vulnerabilities beyond those the OpenVEX document marks as not_affected."
-            else "Findings in the OCM binary are reachable per govulncheck; in cosign, not ruled out by its attested OpenVEX.\n\n| Binary | ID | Severity | Package | Installed | Fixed | Title |\n| --- | --- | --- | --- | --- | --- | --- |",
+            else "Not ruled out by the OpenVEX document: for the OCM binary, govulncheck found the code reachable or does not know the advisory; for cosign, its attested OpenVEX does not cover it.\n\n| Binary | ID | Severity | Package | Installed | Fixed | Title |\n| --- | --- | --- | --- | --- | --- | --- |",
               (.Results[]? | .Target as $t | .Vulnerabilities[]? | "| \($t) | \(.VulnerabilityID) | \(.Severity) | \(.PkgName) | \(.InstalledVersion) | \(.FixedVersion // "") | \(.Title // "" | gsub("\\|"; "\\|")) |")
             end' trivy.json >> "$GITHUB_STEP_SUMMARY"
 
