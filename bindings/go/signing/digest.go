@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation"
+	jsonv1 "ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v1"
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 )
@@ -29,6 +30,25 @@ const (
 // ErrUnsupportedDigestHash is returned when a resource or component reference
 // digest uses a hash algorithm other than SHA-256 or SHA-512.
 var ErrUnsupportedDigestHash = errors.New("unsupported digest hash algorithm")
+
+// ErrSigningUnsupported is returned by EnsureSignable for a normalisation
+// algorithm this library supports for verification only. jsonNormalisation/v1
+// is the legacy gardener/cc-utils format: OCM v2 verifies existing signatures
+// that use it but must never mint new ones. Digest computation (GenerateDigest)
+// and verification are unrestricted — only the signing boundary calls
+// EnsureSignable.
+//
+// The reason is blast radius. Verify-only means OCM v2 never puts a v1 artifact
+// into the wild, so nothing is bound to the exact bytes we emit: if our v1
+// normalisation ever carries a regression or a latent incompatibility, we can
+// simply patch it. Allowing signing would instead create a third class of
+// persisted artifact (cc-utils-signed, plus OCM-v2-signed-correct and
+// -buggy variants) that could not be fixed without invalidating signatures
+// already out there. The known fidelity gap in the stored form (the store read
+// collapses an integral float 1.0 to 1 before normalisation) is one such
+// incompatibility signing would bake in, not the whole rationale. New
+// signatures must use the current algorithm (v4alpha1).
+var ErrSigningUnsupported = errors.New("normalisation algorithm is supported for verification only, not signing")
 
 // fipsEnforced reports whether the Go Cryptographic Module enforces FIPS 140-3
 // mode (GODEBUG=fips140=only). It is a variable so tests can exercise both modes.
@@ -86,6 +106,20 @@ func VerifyDigestMatchesDescriptor(
 
 	if !bytes.Equal(freshDigest, digestFromSignature) {
 		return fmt.Errorf("digest mismatch: descriptor %x vs signature %x", freshDigest, digestFromSignature)
+	}
+	return nil
+}
+
+// EnsureSignable is the signing boundary for the verify-only policy: it reports
+// whether a fresh signature may be minted with the given normalisation
+// algorithm. jsonNormalisation/v1 is rejected (see ErrSigningUnsupported);
+// everything else is allowed. Digest computation and verification do not call
+// this, so verifying existing v1 signatures, pins and reference digests keeps
+// working. Any signing entry point must call it before producing a signature.
+func EnsureSignable(normalisationAlgorithm string) error {
+	//nolint:staticcheck // intentionally references the deprecated verify-only v1 algorithm in order to reject it for signing
+	if normalisationAlgorithm == jsonv1.Algorithm {
+		return fmt.Errorf("%w: %q", ErrSigningUnsupported, normalisationAlgorithm)
 	}
 	return nil
 }

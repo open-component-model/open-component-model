@@ -405,10 +405,11 @@ func processResource(resource descriptorv2.Resource, access runtime.Typed, id st
 
 	switch acc := access.(type) {
 	case *descriptorv2.LocalBlob:
+		// Streamed (TransferLocalBlob): no file buffer to clean up.
 		if err := processLocalBlob(resource, id, val, tgd, toSpec, resourceTransformIDs, i, ""); err != nil {
 			return nil, fmt.Errorf("failed processing local blob resource: %w", err)
 		}
-		return []string{fmt.Sprintf("${%s.spec.file}", addResourceID)}, nil
+		return nil, nil
 	case *ociv1.RelativeOCIReference:
 		// A relativeOciReference is a local, repository-local access: copy by value as a
 		// local blob whose referenceName is the relative reference, so the relative type
@@ -419,16 +420,17 @@ func processResource(resource descriptorv2.Resource, access runtime.Typed, id st
 		}
 		return []string{fmt.Sprintf("${%s.spec.file}", addResourceID)}, nil
 	case *ociv1.OCIImage:
+		// Streamed (TransferOCIArtifactToLocalBlob): no file buffer to clean up.
 		if err := processOCIArtifact(resource, id, val, tgd, toSpec, resourceTransformIDs, i); err != nil {
 			return nil, fmt.Errorf("cannot process OCI artifact resource: %w", err)
 		}
-		return []string{fmt.Sprintf("${%s.spec.file}", addResourceID)}, nil
+		return nil, nil
 	case *ociv1.OCIImageLayer:
 		// A layer is a single blob, not an OCI artifact: it is always copied by value.
 		if err := processOCIImageLayer(resource, id, val, tgd, toSpec, resourceTransformIDs, i); err != nil {
 			return nil, fmt.Errorf("cannot process OCI image layer resource: %w", err)
 		}
-		return []string{fmt.Sprintf("${%s.spec.file}", addResourceID)}, nil
+		return nil, nil
 	case *helmv1.Helm:
 		if err := processHelm(resource, id, val, tgd, toSpec, resourceTransformIDs, i, ""); err != nil {
 			return nil, fmt.Errorf("cannot process Helm Chart resource: %w", err)

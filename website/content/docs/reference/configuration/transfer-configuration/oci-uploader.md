@@ -121,6 +121,7 @@ prefix) also works for CTF targets, because `TransferOCIArtifact`,
 `TransferOCILocalBlobToOCIArtifact`, `TransferCTFLocalBlobToOCIArtifact`, and
 `AddOCIArtifact` push to the templated image reference independently of the
 component target; its `match` must then select CTF targets (see E7 in the
+[selection examples]({{< relref "docs/reference/configuration/transfer-configuration/selection-examples.md" >}})).
 
 ## More examples
 

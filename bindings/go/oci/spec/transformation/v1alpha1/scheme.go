@@ -18,6 +18,15 @@ var (
 	CTFGetLocalResourceV1alpha1    = runtime.NewVersionedType(CTFGetLocalResourceType, Version)
 	AddOCIArtifactV1alpha1         = runtime.NewVersionedType(AddOCIArtifactType, Version)
 	TransferOCIArtifactV1alpha1    = runtime.NewVersionedType(TransferOCIArtifactType, Version)
+
+	TransferOCILocalBlobToOCILocalBlobV1alpha1 = runtime.NewVersionedType(TransferOCILocalBlobToOCILocalBlobType, Version)
+	TransferOCILocalBlobToCTFLocalBlobV1alpha1 = runtime.NewVersionedType(TransferOCILocalBlobToCTFLocalBlobType, Version)
+	TransferCTFLocalBlobToOCILocalBlobV1alpha1 = runtime.NewVersionedType(TransferCTFLocalBlobToOCILocalBlobType, Version)
+	TransferCTFLocalBlobToCTFLocalBlobV1alpha1 = runtime.NewVersionedType(TransferCTFLocalBlobToCTFLocalBlobType, Version)
+	TransferOCILocalBlobToOCIArtifactV1alpha1  = runtime.NewVersionedType(TransferOCILocalBlobToOCIArtifactType, Version)
+	TransferCTFLocalBlobToOCIArtifactV1alpha1  = runtime.NewVersionedType(TransferCTFLocalBlobToOCIArtifactType, Version)
+	TransferOCIArtifactToOCILocalBlobV1alpha1  = runtime.NewVersionedType(TransferOCIArtifactToOCILocalBlobType, Version)
+	TransferOCIArtifactToCTFLocalBlobV1alpha1  = runtime.NewVersionedType(TransferOCIArtifactToCTFLocalBlobType, Version)
 )
 
 func init() {
@@ -32,4 +41,12 @@ func init() {
 	Scheme.MustRegisterWithAlias(&CTFGetLocalResource{}, CTFGetLocalResourceV1alpha1)
 	Scheme.MustRegisterWithAlias(&AddOCIArtifact{}, AddOCIArtifactV1alpha1)
 	Scheme.MustRegisterWithAlias(&TransferOCIArtifact{}, TransferOCIArtifactV1alpha1)
+	Scheme.MustRegisterWithAlias(&TransferOCILocalBlobToOCILocalBlob{}, TransferOCILocalBlobToOCILocalBlobV1alpha1)
+	Scheme.MustRegisterWithAlias(&TransferOCILocalBlobToCTFLocalBlob{}, TransferOCILocalBlobToCTFLocalBlobV1alpha1)
+	Scheme.MustRegisterWithAlias(&TransferCTFLocalBlobToOCILocalBlob{}, TransferCTFLocalBlobToOCILocalBlobV1alpha1)
+	Scheme.MustRegisterWithAlias(&TransferCTFLocalBlobToCTFLocalBlob{}, TransferCTFLocalBlobToCTFLocalBlobV1alpha1)
+	Scheme.MustRegisterWithAlias(&TransferOCILocalBlobToOCIArtifact{}, TransferOCILocalBlobToOCIArtifactV1alpha1)
+	Scheme.MustRegisterWithAlias(&TransferCTFLocalBlobToOCIArtifact{}, TransferCTFLocalBlobToOCIArtifactV1alpha1)
+	Scheme.MustRegisterWithAlias(&TransferOCIArtifactToOCILocalBlob{}, TransferOCIArtifactToOCILocalBlobV1alpha1)
+	Scheme.MustRegisterWithAlias(&TransferOCIArtifactToCTFLocalBlob{}, TransferOCIArtifactToCTFLocalBlobV1alpha1)
 }
