@@ -33,7 +33,6 @@ on:
       - '.github/workflows/image-scan.yml'
       - '.github/workflows/pipeline.yml'
       - '.env'
-      - '.github/scripts/vex.js'
   workflow_call:
     inputs:
       ref:

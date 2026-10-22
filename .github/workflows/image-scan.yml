@@ -22,7 +22,7 @@ on:
     outputs:
       vex_artifact_prefix:
         description: "Prefix of the per-architecture OpenVEX artifacts <prefix>-<arch> (arm64, amd64), each with the ocm.openvex.json its images were scanned with."
-        value: ${{ jobs.vex.outputs.artifact_prefix }}
+        value: openvex
 
 permissions:
   contents: read
@@ -45,8 +45,6 @@ jobs:
       fail-fast: false
       matrix:
         arch: [arm64, amd64]
-    outputs:
-      artifact_prefix: ${{ steps.artifact.outputs.prefix }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -54,7 +52,6 @@ jobs:
           ref: ${{ inputs.ref }}
           sparse-checkout: |
             bindings/go
-            .github/scripts
             .env
           persist-credentials: false
 
@@ -86,48 +83,76 @@ jobs:
       # Same build settings as the ocm and manager binaries in the images
       # (bindings/go/cli/Taskfile.yml, controller Dockerfile). govulncheck is built
       # for the runner first: under `go run`, GOARCH would apply to it, too.
+      # OpenVEX output exits 0 with findings; its statements carry the reachability verdicts.
       - name: Run govulncheck
+        id: govulncheck
         env:
           ARCH: ${{ matrix.arch }}
         run: |
           set -euo pipefail
-          version="$(sed -n 's/^GOVULNCHECK_VERSION=//p' .env)"
-          [[ -n "$version" ]] || { echo "::error::GOVULNCHECK_VERSION not set in .env"; exit 1; }
-          fips="$(sed -n 's/^GOFIPS140=//p' .env)"
-          [[ -n "$fips" ]] || { echo "::error::GOFIPS140 not set in .env"; exit 1; }
-          GOBIN="${RUNNER_TEMP}/bin" go install "golang.org/x/vuln/cmd/govulncheck@${version}"
-          mkdir -p tmp/vex
-          # JSON output exits 0 with findings; the reachability verdicts go into the VEX.
-          (cd bindings/go && CGO_ENABLED=0 GOOS=linux GOARCH="${ARCH}" GOFIPS140="${fips}" \
-            "${RUNNER_TEMP}/bin/govulncheck" -format json ./...) > tmp/vex/govulncheck.json
+          source .env
+          GOBIN="${RUNNER_TEMP}/bin" go install "golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}"
+          # In the module directory, so the go command (and the stdlib version
+          # govulncheck checks) follows its toolchain directive.
+          cd bindings/go
+          CGO_ENABLED=0 GOOS=linux GOARCH="${ARCH}" GOFIPS140="${GOFIPS140}" \
+            "${RUNNER_TEMP}/bin/govulncheck" -format openvex ./... > "${GITHUB_WORKSPACE}/tmp/vex/govulncheck.openvex.json"
+          echo "main_module=$(go list -m)" >> "$GITHUB_OUTPUT"
 
+      # govulncheck names every product "Unknown Product" and path-escapes module
+      # purls (pkg:golang/golang.org%2Fx%2Fcrypto), so Trivy would match none of its
+      # statements. Each statement is scoped to the main module of the binary it is
+      # about (OCM's, analyzed here, or cosign's, from its attestation), with the
+      # vulnerable modules as subcomponents: Trivy sees the main module as the parent
+      # of its dependencies in a Go binary's build information, so a statement never
+      # covers the same module inside another binary of the image. Attested
+      # statements count only if their product names the pinned cosign image digest.
       - name: Build OpenVEX
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
-        env:
-          GOVULNCHECK_JSON: tmp/vex/govulncheck.json
-          VEX_OUTPUT: tmp/vex/ocm.openvex.json
-          VEX_PLATFORM: linux/${{ matrix.arch }}
-          ATTESTED_VEX: tmp/vex/cosign-attestation.json
-          # Main module of the cosign binary, as scanners see it in its build information.
-          ATTESTED_VEX_PRODUCT: pkg:golang/github.com/sigstore/cosign/v3
-          ATTESTED_VEX_SUBJECT: ${{ steps.cosign.outputs.ref }}
-        with:
-          script: |
-            const script = await import('${{ github.workspace }}/.github/scripts/vex.js');
-            await script.default({ core, context });
-
-      - name: Artifact name
-        id: artifact
         env:
           ARCH: ${{ matrix.arch }}
+          OCM_PRODUCT: pkg:golang/${{ steps.govulncheck.outputs.main_module }}
+          # Main module of the cosign binary, as scanners see it in its build information.
+          COSIGN_PRODUCT: pkg:golang/github.com/sigstore/cosign/v3
+          COSIGN_REF: ${{ steps.cosign.outputs.ref }}
         run: |
-          echo "prefix=openvex" >> "$GITHUB_OUTPUT"
-          echo "name=openvex-${ARCH}" >> "$GITHUB_OUTPUT"
+          set -euo pipefail
+          jq -n \
+            --slurpfile govulncheck tmp/vex/govulncheck.openvex.json \
+            --slurpfile attested tmp/vex/cosign-attestation.json \
+            --arg id "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/vex/linux/${ARCH}" \
+            --arg author "${GITHUB_REPOSITORY}" \
+            --arg ocm "${OCM_PRODUCT}" \
+            --arg cosign "${COSIGN_PRODUCT}" \
+            --arg ref "${COSIGN_REF}" '
+            def scope($product):
+              .products = [{"@id": $product, subcomponents: ([.products[].subcomponents[]? | {"@id": (."@id" | gsub("%2F"; "/"))}] | unique)}]
+              | if .status == "affected" then .action_statement //= "The vulnerable code is called; see the govulncheck report." end;
+            ($ref | split("@")[1]) as $digest
+            | $govulncheck[0] + {"@id": $id, author: $author}
+            | .statements |= map(scope($ocm))
+            | .statements += [$attested[][].verificationResult.statement.predicate.statements[]?
+                | .products |= map(select(."@id" | split("@")[1] // "" | split("?")[0] | sub("%3A"; ":") == $digest))
+                | select(any(.products[]; .subcomponents | length > 0))
+                | scope($cosign)
+                | .status_notes = "From the verified OpenVEX attestation of \($ref)."]
+          ' > tmp/vex/ocm.openvex.json
+          attested="$(jq '[.[].verificationResult.statement.predicate.statements[]?] | length' tmp/vex/cosign-attestation.json)"
+          imported="$(jq --arg p "${COSIGN_PRODUCT}" '[.statements[] | select(.products[0]."@id" == $p)] | length' tmp/vex/ocm.openvex.json)"
+          if [[ "$imported" -ne "$attested" ]]; then
+            echo "::warning::${COSIGN_REF}: imported ${imported} of ${attested} attested statements; the others name no module of this image digest"
+          fi
+          {
+            echo "### 📄 OpenVEX from govulncheck (linux/${ARCH})"
+            echo
+            echo "| Advisory | Status | Binary (main module) | Modules |"
+            echo "| --- | --- | --- | --- |"
+            jq -r '.statements[] | "| \([.vulnerability.name] + (.vulnerability.aliases // []) | join(", ")) | \(.status)\(if .justification then " (\(.justification))" else "" end) | \(.products[0]."@id") | \([.products[0].subcomponents[]."@id"] | join(", ")) |"' tmp/vex/ocm.openvex.json
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload OpenVEX
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
-          name: ${{ steps.artifact.outputs.name }}
+          name: openvex-${{ matrix.arch }}
           path: tmp/vex/
           if-no-files-found: error
 
@@ -141,20 +166,16 @@ jobs:
         image: [cli, cli-slim, controller]
         # The scans only read the image's files, so amd64 is scanned on the arm64 runner.
         arch: [arm64, amd64]
-        # executables: what the image may contain besides its entrypoint; the
-        # vulnerability summary attributes findings there to that binary's attested VEX.
         include:
           - image: cli
             artifact: ${{ inputs.cli_artifact }}
             oci_tar: oci/cli.tar
-            executables: /usr/local/bin/cosign
           - image: cli-slim
             artifact: ${{ inputs.cli_artifact }}
             oci_tar: oci/cli-slim.tar
           - image: controller
             artifact: ${{ inputs.controller_artifact }}
             oci_tar: controller.tar
-            executables: /usr/local/bin/cosign
     steps:
       - name: Download image artifact
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
@@ -165,7 +186,7 @@ jobs:
       - name: Download OpenVEX
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
-          name: ${{ needs.vex.outputs.artifact_prefix }}-${{ matrix.arch }}
+          name: openvex-${{ matrix.arch }}
           path: tmp/vex
 
       - name: Ensure skopeo is installed
@@ -205,16 +226,11 @@ jobs:
         env:
           IMAGE: ${{ matrix.image }}
           ARCH: ${{ matrix.arch }}
-          EXECUTABLES: ${{ matrix.executables }}
         run: |
           set -euo pipefail
           report="tmp/image-scan/${IMAGE}-${ARCH}/trivy.json"
           [[ -s "$report" ]] || { echo "::error::Trivy wrote no report for ${IMAGE} (linux/${ARCH})"; exit 1; }
-          vulns="$(jq -c --arg other "${EXECUTABLES:-}" '($other | split(" ") | map(select(. != ""))) as $other
-            | [.Results[]? | .Target as $t | .Vulnerabilities[]?
-            | {binary: $t, verdict: (if ($other | index("/" + $t)) then "not ruled out by its attested VEX" else "reachable (govulncheck)" end),
-               id: .VulnerabilityID, pkg: .PkgName, installed: .InstalledVersion, fixed: (.FixedVersion // ""), severity: .Severity, title: (.Title // "")}]' "$report")"
-          count="$(jq length <<< "$vulns")"
+          count="$(jq '[.Results[]?.Vulnerabilities[]?] | length' "$report")"
           echo "count=${count}" >> "$GITHUB_OUTPUT"
           {
             echo "### 🔎 Vulnerability scan: ${IMAGE} (linux/${ARCH})"
@@ -222,11 +238,11 @@ jobs:
             if [[ "$count" -eq 0 ]]; then
               echo "No vulnerabilities beyond those the OpenVEX document marks as not_affected."
             else
-              echo "⚠️ ${count} vulnerabilities (do not block publishing). Findings in OCM's own binary are reachable per govulncheck; findings in other binaries are not ruled out by the OpenVEX their release attests:"
+              echo "⚠️ ${count} vulnerabilities (do not block publishing). Findings in OCM's own binary are reachable per govulncheck; findings in other binaries (cosign) are not ruled out by the OpenVEX their release attests:"
               echo
-              echo "| Binary | Verdict | ID | Severity | Package | Installed | Fixed | Title |"
-              echo "| --- | --- | --- | --- | --- | --- | --- | --- |"
-              jq -r '.[] | "| \(.binary) | \(.verdict) | \(.id) | \(.severity) | \(.pkg) | \(.installed) | \(.fixed) | \(.title | gsub("\\|"; "\\\\|")) |"' <<< "$vulns"
+              echo "| Binary | ID | Severity | Package | Installed | Fixed | Title |"
+              echo "| --- | --- | --- | --- | --- | --- | --- |"
+              jq -r '.Results[]? | .Target as $t | .Vulnerabilities[]? | "| \($t) | \(.VulnerabilityID) | \(.Severity) | \(.PkgName) | \(.InstalledVersion) | \(.FixedVersion // "") | \(.Title // "" | gsub("\\|"; "\\|")) |"' "$report"
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
