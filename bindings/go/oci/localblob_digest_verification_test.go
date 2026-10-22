@@ -225,6 +225,103 @@ func TestLocalBlobDigest_AddLocalResource_V1ArtifactSet(t *testing.T) {
 	r.ErrorContains(err, "resource blob digest", "a wrong artifact-set root must be rejected")
 }
 
+// TestLocalBlobDigest_SwappedBlobUnderSignedDigest reproduces the signed-content swap
+// reported against the released CLI: access is excluded from jsonNormalisation/v4alpha1,
+// so a signature covers a resource's digest but not where its blob lies. An attacker can
+// therefore replace the blob, repoint localReference at the replacement so the storage
+// layer stays self-consistent, and leave the signed digest untouched. Nothing in the
+// stored content then contradicts itself, and only comparing the served bytes against the
+// signed digest catches it.
+//
+// This differs from the corrupted-digest cases, which tamper with the recorded digest and
+// leave the content alone. Here the recorded digest is the authentic signed one and the
+// content underneath it is swapped, so the read must re-hash what it serves rather than
+// trust localReference. It uses the generic blob resource, exactly the reported case.
+func TestLocalBlobDigest_SwappedBlobUnderSignedDigest(t *testing.T) {
+	r := require.New(t)
+	ctx := t.Context()
+	repo := newCTFRepository(t)
+
+	// The digest the signature covers, over the original content.
+	signedContent := []byte("the signed content")
+	signed := &descriptor.Digest{
+		HashAlgorithm:          "SHA-256",
+		NormalisationAlgorithm: "genericBlobDigest/v1",
+		Value:                  digest.FromBytes(signedContent).Encoded(),
+	}
+
+	// Add the attacker's content, so the blob and the localReference the access carries
+	// address it consistently, exactly as a rewritten CTF would, then restore the signed
+	// digest the signature covers. The blob stays swapped.
+	swapped := []byte("the attacker's content")
+	added := addAndCommit(t, repo, newLocalBlobResource("text/plain"), swapped, func(d *descriptor.Digest) {
+		*d = *signed
+	})
+	r.Equal(signed.Value, added.Digest.Value, "the resource must carry the signed digest, not the swapped content's")
+	r.NotEqual(signed.Value, digest.FromBytes(swapped).Encoded(), "the swap must actually change the content digest")
+
+	_, _, err := repo.GetLocalResource(ctx, "ocm.software/repro", "1.0.0",
+		map[string]string{"name": "repro", "version": "1.0.0"})
+	r.ErrorContains(err, "resource digest verification failed",
+		"content swapped under a signed digest must not be served")
+}
+
+// TestLocalBlobDigest_DownloadResource_SwappedBlobUnderSignedDigest is the download
+// counterpart: the resource carries the authentic signed digest while the blob its access
+// resolves to is different content. This is the path the reported exploit used
+// (DownloadResource served the swapped bytes). The raw-layer branch is exercised; the
+// access points at the swapped blob, so the storage layer is self-consistent and only
+// re-hashing the served bytes against the signed digest catches it.
+func TestLocalBlobDigest_DownloadResource_SwappedBlobUnderSignedDigest(t *testing.T) {
+	r := require.New(t)
+	ctx := t.Context()
+
+	fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
+	r.NoError(err)
+	store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
+	repo := Repository(t, ocictf.WithCTF(store))
+
+	// The signature covers the digest of the original content.
+	signedDigest := digest.FromBytes([]byte("the signed content"))
+
+	// The attacker's blob is stored under its own digest and the access resolves to it,
+	// so the layer is self-consistent; only the recorded digest still names the original.
+	swapped := []byte("the attacker's content")
+	swappedDigest := digest.FromBytes(swapped)
+	r.NotEqual(signedDigest, swappedDigest, "the swap must actually change the content digest")
+
+	layerStore, err := store.StoreForReference(ctx, "test-registry/swapped-layer")
+	r.NoError(err)
+	r.NoError(layerStore.Push(ctx, ociImageSpecV1.Descriptor{
+		MediaType: ociImageSpecV1.MediaTypeImageLayer,
+		Digest:    swappedDigest,
+		Size:      int64(len(swapped)),
+	}, bytes.NewReader(swapped)))
+
+	res := &descriptor.Resource{
+		ElementMeta: descriptor.ElementMeta{
+			ObjectMeta: descriptor.ObjectMeta{Name: "repro", Version: "1.0.0"},
+		},
+		Type: "test-type",
+		Access: &v1.OCIImageLayer{
+			Type:      runtime.NewVersionedType(v1.OCIImageLayerType, v1.Version),
+			Reference: "test-registry/swapped-layer@" + swappedDigest.String(),
+			MediaType: ociImageSpecV1.MediaTypeImageLayer,
+			Digest:    swappedDigest,
+			Size:      int64(len(swapped)),
+		},
+		Digest: &descriptor.Digest{
+			HashAlgorithm:          "SHA-256",
+			NormalisationAlgorithm: "genericBlobDigest/v1",
+			Value:                  signedDigest.Encoded(),
+		},
+	}
+
+	_, err = repo.DownloadResource(ctx, res)
+	r.ErrorContains(err, "resource digest verification failed",
+		"content swapped under a signed digest must not be served by DownloadResource")
+}
+
 // TestLocalBlobDigest_GetLocalResource covers local read-time verification. The
 // content stays addressed by its real localReference, so only res.Digest is
 // corrupted, exactly what a tampered or forged signed descriptor would carry.
