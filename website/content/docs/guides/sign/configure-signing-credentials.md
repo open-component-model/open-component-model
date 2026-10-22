@@ -5,6 +5,7 @@ weight: 20
 toc: true
 aliases:
   - /docs/how-to/sign-and-verify/configure-signing-credentials/
+  - /docs/how-to/sign-and-verify/configure-credentials-for-signing/
 ---
 
 Set up credential configuration so OCM can find your signing keys when signing or verifying component versions.
