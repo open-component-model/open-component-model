@@ -37,9 +37,21 @@
 // cc-utils' arbitrary-precision ints) and fractional values use Python's float
 // repr (1e-05, not Go's 0.00001). These spellings intentionally DIVERGE from
 // OCM v1, which routes every number through float64; cc-utils is the primary
-// compatibility target. The one value this cannot reproduce is an integral
-// float such as 1.0: the store read (sigs.k8s.io/yaml) collapses it to 1 before
-// normalisation runs, while cc-utils keeps 1.0.
+// compatibility target.
+//
+// # Storage-read limitations
+//
+// Two cc-utils cases cannot be reproduced, both because OCM always reads a
+// descriptor from storage through sigs.k8s.io/yaml, which rewrites it before
+// normalisation runs. There is no reachable OCM signing path that bypasses this
+// read, so the original bytes are already gone when normalisation starts — a
+// cc-utils signature exercising either case will not verify:
+//
+//   - An integral float such as 1.0 is collapsed to 1, while cc-utils keeps 1.0.
+//   - Object keys nested inside a list-valued signing label are sorted
+//     (e.g. [{"a2":1,"a10":2}] is read back as [{"a10":2,"a2":1}]), while
+//     cc-utils preserves source order. The storage read sorts keys everywhere,
+//     including inside arrays, so no order survives to be preserved here.
 //
 // # Compatibility: cc-utils vs OCM v1
 //
