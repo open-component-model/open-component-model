@@ -943,9 +943,7 @@ func (r *Reconciler) applyWithApplySet(ctx context.Context, resource *deliveryv1
 		return fmt.Errorf("failed to project ApplySet: %w", err)
 	}
 
-	// The update replaces the in-memory deployer with the server's copy, dropping status set earlier in this reconcile.
-	err = r.setApplySetMetadata(ctx, deployer, metadata)
-	if err != nil {
+	if err := r.setApplySetMetadata(ctx, deployer, metadata); err != nil {
 		return fmt.Errorf("failed to set ApplySet metadata on deployer: %w", err)
 	}
 

@@ -77,10 +77,6 @@ func main() {
 		deployerMaxResourceSize   string
 		resourceConcurrency       int
 		replicationConcurrency    int
-		resolverWorkerCount       int
-		resolverWorkerQueueLength int
-		resolverSubscriberBuffer  int
-		resolverCacheTTL          int
 		enableDeployer            bool
 		enableNamespacedDeployer  bool
 	)
