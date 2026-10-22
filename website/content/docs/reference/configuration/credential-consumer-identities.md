@@ -85,7 +85,7 @@ Used when OCM accesses an OCI registry — pushing, pulling, or resolving compon
 | `type`     | Yes      | Must be `OCIRegistry`                                                                                                               |
 | `hostname` | Yes      | Registry hostname (e.g. `ghcr.io`, `registry.example.com`)                                                                          |
 | `path`     | No       | Repository path. Supports glob patterns (`*` matches one path segment). If omitted, matches any path on the hostname.               |
-| `scheme`   | No       | URL scheme (`https`, `http`, `oci`). If omitted, matches any scheme. `oci` and `https` are treated as equivalent (both normalize to `https`). A request with no scheme matches any configured scheme. |
+| `scheme`   | No       | URL scheme (`https`, `http`, `oci`). `oci` and `https` are equivalent. If omitted or empty on the request side, matches any scheme. |
 | `port`     | No       | Port number as string. Default ports are applied when `scheme` is set: `https` and `oci` default to `443`, `http` defaults to `80`. |
 
 ### Credential Properties

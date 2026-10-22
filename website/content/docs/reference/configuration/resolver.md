@@ -102,9 +102,9 @@ Only components matching the pattern will be routed to that repository.
 **Supported glob patterns:**
 
 | Pattern                  | Matches                                                              |
-|--------------------------|--------------------------------------------------------------------- |
-| `example.com/services/*` | Any component whose name starts with `example.com/services/`        |
-| `example.com/core/**`    | Any component whose name starts with `example.com/core/`            |
+|--------------------------|----------------------------------------------------------------------|
+| `example.com/services/*` | Any component whose name starts with `example.com/services/`         |
+| `example.com/core/**`    | Any component whose name starts with `example.com/core/`             |
 | `*`                      | All components (wildcard catch-all)                                  |
 
 **Pattern syntax:**
