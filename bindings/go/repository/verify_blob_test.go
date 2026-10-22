@@ -132,8 +132,10 @@ func TestVerifyingBlob_CopyReportsMismatch(t *testing.T) {
 func TestVerifyingBlob_CopyBlobToOSPathReportsMismatch(t *testing.T) {
 	b := newVerifying(t, verifyTestContent, digest.FromString("what the descriptor promised"))
 
-	err := filesystem.CopyBlobToOSPath(b, filepath.Join(t.TempDir(), "out"))
+	out := filepath.Join(t.TempDir(), "out")
+	err := filesystem.CopyBlobToOSPath(b, out)
 	require.ErrorContains(t, err, "digest mismatch")
+	require.NoFileExists(t, out, "content that failed verification must not be left at the target path")
 }
 
 func TestVerifyingBlob_VerifiesContentOfUnknownSize(t *testing.T) {

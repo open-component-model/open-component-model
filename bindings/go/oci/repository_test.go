@@ -1280,6 +1280,39 @@ func TestRepository_ListComponentVersions_PreservesNonSemver(t *testing.T) {
 		"semver versions must sort newest-first ahead of non-semver entries")
 }
 
+// TestRepository_ListComponentVersions_UppercaseVersion guards against the
+// regression where a CTF could store a version with upper-case letters (a valid
+// OCI tag) but failed to list it, because the bare tag was parsed as a
+// repository name, and repository names must be lower-case.
+func TestRepository_ListComponentVersions_UppercaseVersion(t *testing.T) {
+	r := require.New(t)
+	ctx := t.Context()
+
+	fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
+	r.NoError(err)
+	store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
+	repo := Repository(t, ocictf.WithCTF(store))
+
+	const componentName = "ocm.software/uppercase-component"
+	versionsToAdd := []string{"1.0.0-T0", "1.0.0"}
+	for _, version := range versionsToAdd {
+		desc := &descriptor.Descriptor{
+			Meta: descriptor.Meta{Version: "v2"},
+			Component: descriptor.Component{
+				Provider: descriptor.Provider{Name: "test-provider"},
+				ComponentMeta: descriptor.ComponentMeta{
+					ObjectMeta: descriptor.ObjectMeta{Name: componentName, Version: version},
+				},
+			},
+		}
+		r.NoError(repo.AddComponentVersion(ctx, desc))
+	}
+
+	versions, err := repo.ListComponentVersions(ctx, componentName)
+	r.NoError(err)
+	r.ElementsMatch(versionsToAdd, versions)
+}
+
 func setupLegacyComponentVersion(t *testing.T, store *ocictf.Store, ctx context.Context, content []byte, resource *descriptor.Resource) {
 	t.Helper()
 	r := require.New(t)
