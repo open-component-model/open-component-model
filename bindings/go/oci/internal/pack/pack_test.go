@@ -1422,4 +1422,18 @@ func TestResourceLocalBlobOCILayer_SkipsExistingBlob(t *testing.T) {
 			})
 		}
 	})
+
+	// A registry existence check ignores the size, so a skipped upload must not
+	// record a source size that disagrees with the stored blob.
+	t.Run("known size mismatching registry is rejected", func(t *testing.T) {
+		r := require.New(t)
+		store := &resolvingStore{existing: map[digest.Digest]int64{dig: int64(len(content)) + 1}}
+		resourceBlob, err := resourceblob.NewArtifactBlob(&descriptor.Resource{}, &testBlob{content: content, mediaType: mediaType, digest: dig})
+		r.NoError(err)
+
+		_, err = ResourceLocalBlobOCILayer(t.Context(), store, resourceBlob, &v2.LocalBlob{MediaType: mediaType}, newOpts())
+		r.ErrorContains(err, "exists in target with size")
+		r.False(store.pushed)
+		r.False(store.streamed64)
+	})
 }
