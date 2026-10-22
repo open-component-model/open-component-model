@@ -72,14 +72,17 @@ jobs:
           name: ${{ needs.vex.outputs.vex_artifact_prefix }}-${{ matrix.arch }}
           path: tmp/vex
 
-      - name: Ensure skopeo is installed
-        run: command -v skopeo || { sudo apt-get update -qq && sudo apt-get install -yqq skopeo; }
-
-      # Trivy ignores --platform for local OCI layouts, so the architecture is selected here.
-      - name: Load image
+      # Trivy scans the first manifest of a layout and ignores --platform, so the
+      # layout's index is narrowed to this architecture.
+      - name: Extract image layout
         env:
           OCI_TAR: ${{ matrix.oci_tar }}
-        run: skopeo --override-arch "${ARCH}" --override-os linux copy "oci-archive:tmp/artifact/${OCI_TAR}" "docker-daemon:ocm-scan:${IMAGE}-${ARCH}"
+        run: |
+          mkdir -p tmp/layout
+          tar -xf "tmp/artifact/${OCI_TAR}" -C tmp/layout
+          jq --arg arch "$ARCH" '.manifests |= map(select(.platform.os == "linux" and .platform.architecture == $arch))' \
+            "tmp/layout/blobs/$(jq -r '.manifests[0].digest | sub(":"; "/")' tmp/layout/index.json)" > tmp/index.json
+          mv tmp/index.json tmp/layout/index.json
 
       # Nothing goes to code scanning: Dependabot alerts stay the only alert surface.
       - name: Vulnerability scan
@@ -87,7 +90,7 @@ jobs:
         env:
           TRIVY_VEX: tmp/vex/ocm.openvex.json
         with:
-          image-ref: ocm-scan:${{ matrix.image }}-${{ matrix.arch }}
+          input: tmp/layout
           scanners: vuln
           exit-code: '0'
           format: json
