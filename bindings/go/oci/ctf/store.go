@@ -47,10 +47,6 @@ func NewFromCTF(store ctf.CTF) *Store {
 	return &Store{archive: store}
 }
 
-type closerFunc func() error
-
-func (f closerFunc) Close() error { return f() }
-
 // Store implements an OCI Store interface backed by a CTF (Common Transport Format).
 // It provides functionality to:
 // - Resolve and Tag component version references using the CTF's index archive
@@ -105,42 +101,20 @@ type repository struct {
 
 // Fetch retrieves a blob from the CTF archive based on its descriptor.
 // Returns an io.ReadCloser for the blob content or an error if the blob cannot be found.
-// Uses LockedReader to maintain read lock during async streaming operations. The io.ReadCloser must be closed.
+// The io.ReadCloser must be closed.
+//
+// The read lock only covers opening the blob, not streaming it: blob writes are atomic
+// renames of verified content and never replace an existing blob, so an open blob stays
+// intact. Holding the lock until Close would deadlock a caller that writes to the same
+// archive while still reading from it, e.g. a transfer within one CTF.
 func (s *repository) Fetch(ctx context.Context, target ociImageSpecV1.Descriptor) (io.ReadCloser, error) {
 	s.mu.RLock()
+	defer s.mu.RUnlock()
 	b, err := s.archive.GetBlob(ctx, target.Digest.String())
 	if err != nil {
-		s.mu.RUnlock()
 		return nil, err
 	}
-	rc, err := b.ReadCloser()
-	if err != nil {
-		s.mu.RUnlock()
-		return nil, err
-	}
-	return s.asLockedReader(rc), nil
-}
-
-func (s *repository) asLockedReader(rc io.ReadCloser) io.ReadCloser {
-	isFirstCall := true
-	doClose := sync.OnceValue(func() error {
-		isFirstCall = false
-		defer s.mu.RUnlock()
-		return rc.Close()
-	})
-
-	return struct {
-		io.Reader
-		io.Closer
-	}{
-		Reader: rc,
-		Closer: closerFunc(func() error {
-			if !isFirstCall {
-				slog.Error("Close called multiple times on locked reader.")
-			}
-			return doClose()
-		}),
-	}
+	return b.ReadCloser()
 }
 
 // Exists checks if a blob exists in the CTF archive based on its descriptor.
@@ -163,27 +137,21 @@ func (s *repository) exists(ctx context.Context, target ociImageSpecV1.Descripto
 	return slices.Contains(blobs, target.Digest.String()), nil
 }
 
+// FetchReference resolves reference and opens its blob. Like [repository.Fetch], the
+// read lock only covers opening the blob.
 func (s *repository) FetchReference(ctx context.Context, reference string) (ociImageSpecV1.Descriptor, io.ReadCloser, error) {
 	s.mu.RLock()
+	defer s.mu.RUnlock()
 
 	idx, err := s.archive.GetIndex(ctx)
 	if err != nil {
-		s.mu.RUnlock()
 		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("unable to get index: %w", err)
 	}
-
-	desc, rc, err := s.fetchReference(ctx, idx, reference)
-	if err != nil {
-		s.mu.RUnlock()
-		return ociImageSpecV1.Descriptor{}, nil, err
-	}
-	return desc, s.asLockedReader(rc), nil
+	return s.fetchReference(ctx, idx, reference)
 }
 
 // fetchReference resolves reference against the provided artifact-index
-// snapshot and opens its blob. The returned io.ReadCloser is not lock-aware;
-// callers must either hold s.mu themselves or wrap it (see
-// [repository.FetchReference]).
+// snapshot and opens its blob. The caller must hold s.mu while calling it.
 func (s *repository) fetchReference(ctx context.Context, idx v1.Index, reference string) (ociImageSpecV1.Descriptor, io.ReadCloser, error) {
 	desc, err := s.resolve(ctx, idx, reference)
 	if err != nil {
