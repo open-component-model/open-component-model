@@ -243,8 +243,6 @@ func fillGraphDefinitionWithPrefetchedComponents(
 			return err
 		}
 
-		warnResourcesWithoutDigest(ctx, v2desc)
-
 		targets := targetMap[key]
 		slog.DebugContext(ctx, "processing component for transfer",
 			"component", component, "version", version,
@@ -309,6 +307,11 @@ func processResources(
 		}
 		if err := scheme.Convert(resource.Access, access); err != nil {
 			return nil, nil, fmt.Errorf("cannot convert resource access to typed object: %w", err)
+		}
+		if git, ok := access.(*gitv1.Git); ok {
+			if access, err = git.Normalize(); err != nil {
+				return nil, nil, fmt.Errorf("invalid git access of resource %v: %w", resource.ToIdentity(), err)
+			}
 		}
 
 		// Declaration order is significant: the first uploader whose match selects the
@@ -457,27 +460,6 @@ func processResource(resource descriptorv2.Resource, access runtime.Typed, id st
 		return []string{fmt.Sprintf("${%s.spec.file}", addResourceID)}, nil
 	default:
 		return nil, fmt.Errorf("local blob uploader cannot copy access type %s (adjust match)", resource.Access.Type)
-	}
-}
-
-// warnResourcesWithoutDigest logs once per resource that is transferred without a digest.
-// Transfer preserves that absence (it never injects a digest), so a signature covering the
-// component may not be verifiable. Resources with a "none" access legitimately carry no
-// digest (normalization strips it) and are skipped.
-func warnResourcesWithoutDigest(ctx context.Context, v2desc *descriptorv2.Descriptor) {
-	for _, res := range v2desc.Component.Resources {
-		if res.Digest != nil {
-			continue
-		}
-		if res.Access != nil {
-			if n := res.Access.GetType().Name; n == "none" || n == "None" {
-				continue
-			}
-		}
-		slog.WarnContext(ctx, "resource transferred without a digest; transfer preserves the absence and a signature covering this component may not be verifiable",
-			"component", v2desc.Component.Name,
-			"version", v2desc.Component.Version,
-			"resource", res.ToIdentity().String())
 	}
 }
 

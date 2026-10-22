@@ -33,6 +33,7 @@ on:
       - '.github/workflows/image-scan.yml'
       - '.github/workflows/govulncheck.yml'
       - '.github/workflows/pipeline.yml'
+      - 'Taskfile.yml'
       - '.env'
   workflow_call:
     inputs:
@@ -106,7 +107,11 @@ jobs:
     name: Conformance
     needs: [build_cli, build_controller]
     uses: $/.github/workflows/conformance.yml
+    permissions:
+      contents: read
+      actions: read
     with:
+      ref: ${{ needs.build_cli.outputs.source_sha }}
       cli_artifact: ${{ needs.build_cli.outputs.artifact_name }}
       cli_version: ${{ needs.build_cli.outputs.version }}
       toolkit_image_artifact: ${{ needs.build_controller.outputs.artifact_name }}

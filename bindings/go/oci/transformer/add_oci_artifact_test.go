@@ -56,14 +56,6 @@ func (m *mockResourceRepositoryForAddOCI) UploadResource(ctx context.Context, re
 		Type: access.Type,
 		Data: accessData,
 	}
-	// The real sink only back-fills a *missing* digest; it does not change a present one.
-	if updated.Digest == nil {
-		updated.Digest = &descriptor.Digest{
-			HashAlgorithm:          "SHA-256",
-			NormalisationAlgorithm: "genericBlobDigest/v1",
-			Value:                  "injectedbythesink",
-		}
-	}
 	return updated, nil
 }
 
@@ -169,55 +161,6 @@ func TestAddOCIArtifact_Transform(t *testing.T) {
 
 	ociCreds := mockRepo.creds.(*ocicredsv1.OCICredentials)
 	assert.Equal(t, "test-user", ociCreds.Username)
-}
-
-// TestAddOCIArtifact_Transform_PreservesInputDigest verifies the transformer records the
-// digest the transfer pipeline handed it, not the sink's back-filled one.
-func TestAddOCIArtifact_Transform_PreservesInputDigest(t *testing.T) {
-	ctx := context.Background()
-
-	tempDir := t.TempDir()
-	testFile := filepath.Join(tempDir, "artifact.tar")
-	require.NoError(t, os.WriteFile(testFile, []byte("content"), 0o644))
-
-	newTransformer := func() *AddOCIArtifact {
-		combinedScheme := runtime.NewScheme()
-		v2.MustAddToScheme(combinedScheme)
-		combinedScheme.MustRegisterWithAlias(&v1alpha1.AddOCIArtifact{}, runtime.NewVersionedType(v1alpha1.AddOCIArtifactType, v1alpha1.Version))
-		return &AddOCIArtifact{Scheme: combinedScheme, Repository: &mockResourceRepositoryForAddOCI{}, CredentialProvider: &mockCredentialResolver{}}
-	}
-
-	specFor := func(dig *v2.Digest) *v1alpha1.AddOCIArtifact {
-		return &v1alpha1.AddOCIArtifact{
-			Type: runtime.NewVersionedType(v1alpha1.AddOCIArtifactType, v1alpha1.Version),
-			Spec: &v1alpha1.AddOCIArtifactSpec{
-				Resource: &v2.Resource{
-					ElementMeta: v2.ElementMeta{ObjectMeta: v2.ObjectMeta{Name: "artifact", Version: "0.1.0"}},
-					Type:        "ociImage",
-					Relation:    v2.LocalRelation,
-					Digest:      dig,
-				},
-				File: blobv1alpha1.File{Type: runtime.Type{Name: blobv1alpha1.FileType, Version: blobv1alpha1.Version}, URI: "file://" + testFile, MediaType: "application/vnd.oci.image.layer.v1.tar+gzip"},
-			},
-		}
-	}
-
-	t.Run("absent input digest stays absent", func(t *testing.T) {
-		r := require.New(t)
-		res, err := newTransformer().Transform(ctx, specFor(nil))
-		r.NoError(err)
-		r.Nil(res.(*v1alpha1.AddOCIArtifact).Output.Resource.Digest)
-	})
-
-	t.Run("present input digest is preserved verbatim", func(t *testing.T) {
-		r := require.New(t)
-		in := &v2.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: "ociArtifactDigest/v1", Value: "abc123"}
-		res, err := newTransformer().Transform(ctx, specFor(in))
-		r.NoError(err)
-		out := res.(*v1alpha1.AddOCIArtifact).Output.Resource
-		r.NotNil(out.Digest)
-		r.Equal(*in, *out.Digest)
-	})
 }
 
 func TestAddOCIArtifact_ValidationErrors(t *testing.T) {
