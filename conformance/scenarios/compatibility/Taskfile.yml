@@ -1,0 +1,38 @@
+version: '3'
+
+vars:
+  OCM_V1_VERSION:
+    sh: sed -n 's/^OCM_V1_VERSION=//p' "$(git rev-parse --show-toplevel)/conformance/scenarios/compatibility/.env"
+  REPO_ROOT:
+    sh: git rev-parse --show-toplevel
+  TEST_FILES: '{{.REPO_ROOT}}/conformance/scenarios/compatibility/tests/conformance/ocmv1_compat_integration_test.go {{.REPO_ROOT}}/conformance/scenarios/compatibility/tests/conformance/ocmv1_compat_setup_test.go'
+
+tasks:
+  install:
+    desc: Download the pinned OCM v1 CLI and verify its release checksum
+    cmd: bash '{{.REPO_ROOT}}/conformance/scenarios/compatibility/install.sh' '{{.OCM_V1_VERSION}}'
+
+  run:
+    desc: Generate OCM v1 artifacts and verify them with the current OCM CLI
+    cmds:
+      - task: build
+      - task: test
+
+  build:
+    internal: true
+    cmd: task -t '{{.REPO_ROOT}}/Taskfile.yml' bindings/go/cli:build
+
+  test:
+    desc: Run the conformance scenario with a prebuilt OCM v2 CLI
+    deps: [install]
+    env:
+      OCM_V1_BIN: '{{.REPO_ROOT}}/conformance/scenarios/compatibility/tmp/ocmv1/{{.OCM_V1_VERSION}}/ocm'
+      OCM_V2_BIN: '{{.OCM_V2_BIN | default (printf "%s/bindings/go/cli/tmp/bin/ocm" .REPO_ROOT)}}'
+    # Reuse the binding module's pinned test dependencies without another module.
+    cmd: cd '{{.REPO_ROOT}}/bindings/go' && go test {{.TEST_FILES}} -count=1 -v
+
+  lint:
+    desc: Lint the scenario's Go tests using the repository configuration
+    cmds:
+      - task -t '{{.REPO_ROOT}}/Taskfile.yml' tools:golangci-lint/install
+      - "cd '{{.REPO_ROOT}}/bindings/go' && '{{.REPO_ROOT}}/tmp/bin/golangci-lint' run --config '{{.REPO_ROOT}}/golangci.yml' {{.TEST_FILES}}"
