@@ -104,9 +104,11 @@ A template that does not evaluate for a selected resource fails the transfer
 with <code>imageReference does not evaluate</code>, for example a default reference on a
 CTF target (it reads <code>target.baseUrl</code>), or <code>resource.access.toOCI()</code> on a Helm
 chart. A template that does not use <code>target</code> (for example an absolute registry
-prefix) also works for CTF targets, because <code>TransferOCIArtifact</code> and
-<code>AddOCIArtifact</code> push to the templated image reference independently of the
-component target; its <code>match</code> must then select CTF targets (see E7 in the
+prefix) also works for CTF targets, because <code>TransferOCIArtifact</code>,
+<code>TransferOCILocalBlobToOCIArtifact</code>, <code>TransferCTFLocalBlobToOCIArtifact</code>, and
+<code>AddOCIArtifact</code> push to the templated
+image reference independently of the component target; its <code>match</code> must then
+select CTF targets (see E7 in the
 <a href=/main/docs/reference/transfer-configuration/selection-examples/>selection examples</a>).</p><h2 id=more-examples>More examples<a href=#more-examples class=anchor aria-hidden=true>#</a></h2><p>Relocate local blobs under a mirror using <code>referenceName</code> directly. The
 default <code>match</code> also selects OCI images and Helm charts, which have no
 <code>referenceName</code>, so restrict the uploader to local blobs:</p><div class=expressive-code><figure class="frame not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-yaml data-lang=yaml><span class=line><span class=cl>- <span class=nt>type</span><span class=p>:</span><span class=w> </span><span class=l>oci.uploader.transfer.config.ocm.software/v1alpha1</span><span class=w>
