@@ -1,0 +1,840 @@
+<!doctype html><html lang=en-US data-bs-theme=auto><head><meta charset=utf-8><meta http-equiv=x-ua-compatible content="ie=edge"><meta name=viewport content="width=device-width,initial-scale=1"><link rel=preload href=https://ocm.software/fonts/vendor/jost/jost-v4-latin-regular.woff2 as=font type=font/woff2 crossorigin><link rel=preload href=https://ocm.software/fonts/vendor/jost/jost-v4-latin-500.woff2 as=font type=font/woff2 crossorigin><link rel=preload href=https://ocm.software/fonts/vendor/jost/jost-v4-latin-700.woff2 as=font type=font/woff2 crossorigin><script src=/js/color-mode.fd05c511a384da3eac9cca269480e1980c7c951352005e39c76a621b8d8a53ee.js integrity="sha256-/QXFEaOE2j6snMomlIDhmAx8lRNSAF45x2piG42KU+4="></script><link rel=stylesheet href=/scss/app.7784b7b67f4c0c21a9422c02c53e10d4676fa9f2615c656de5a82f9f5fa4be68.css integrity="sha256-d4S3tn9MDCGpQiwCxT4Q1GdvqfJhXGVt5agvn1+kvmg=" crossorigin=anonymous><noscript><style>img.lazyload{display:none}</style></noscript><base href=https://ocm.software/main/docs/guides/deploy/deploy-a-helm-chart-with-crossplane-and-gitops/><link rel=canonical href=https://ocm.software/main/docs/guides/deploy/deploy-a-helm-chart-with-crossplane-and-gitops/><title>Deploy a Helm Chart with Crossplane and GitOps | Open Component Model</title><meta name=description content="Bootstrap a Helm chart deployment with OCM and Crossplane, composing GitOps deployer objects (Flux or Argo CD) directly from an XRD and Composition for repeatable localized installs."><link rel=icon href=/favicon.ico sizes=32x32><link rel=icon href=/favicon.svg type=image/svg+xml><link rel=apple-touch-icon href=/apple-touch-icon.png sizes=180x180 type=image/png><link rel=icon href=/favicon-192x192.png sizes=192x192 type=image/png><link rel=icon href=/favicon-512x512.png sizes=512x512 type=image/png><link rel=manifest href=/manifest.webmanifest><meta property="og:url" content="https://ocm.software/main/docs/guides/deploy/deploy-a-helm-chart-with-crossplane-and-gitops/"><meta property="og:site_name" content="Open Component Model"><meta property="og:title" content="Deploy a Helm Chart with Crossplane and GitOps"><meta property="og:description" content="Bootstrap a Helm chart deployment with OCM and Crossplane, composing GitOps deployer objects (Flux or Argo CD) directly from an XRD and Composition for repeatable localized installs."><meta property="og:locale" content="en_US"><meta property="og:type" content="article"><meta property="article:section" content="docs"><meta name=twitter:card content="summary"><meta name=twitter:title content="Deploy a Helm Chart with Crossplane and GitOps"><meta name=twitter:description content="Bootstrap a Helm chart deployment with OCM and Crossplane, composing GitOps deployer objects (Flux or Argo CD) directly from an XRD and Composition for repeatable localized installs."><script type=application/ld+json>{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","item":"https://ocm.software/main/","name":"Open Component Model","position":1},{"@type":"ListItem","item":"https://ocm.software/main/docs/","name":"Documentation","position":2},{"@type":"ListItem","item":"https://ocm.software/main/docs/guides/","name":"Guides","position":3},{"@type":"ListItem","item":"https://ocm.software/main/docs/guides/deploy/","name":"Deploy","position":4},{"@type":"ListItem","name":"Deploy a Helm Chart With Crossplane and Git Ops","position":5}]}</script><link rel=alternate type=application/rss+xml title="OCM Blog" href=https://ocm.software/main/blog/index.xml><noscript><style>.nav-tabs{display:none}.tab-content>.tab-pane{display:block;opacity:1}.tab-pane>.tab-pane-label{display:block}</style></noscript></head><body data-bs-spy=scroll data-bs-target=#toc data-bs-root-margin="0px 0px -60%" data-bs-smooth-scroll=true tabindex=0><header class=header data-version-home=/main/><nav class="navbar navbar-expand-lg"><div class=container-fluid><a class=navbar-brand href=/main/><img src=/images/base.svg alt="Open Component Model Logo" width=48 height=48 class=d-inline-block>
+<span class="ms-2 fw-bold"><span class=word>Open</span>
+<span class=word>Component</span>
+<span class=word>Model</span>
+</span></a><button type=button id=searchToggleMobile class="btn btn-link nav-link p-0 d-lg-none ms-auto" aria-label=Search>
+<svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-search" width="24"
+                    height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path stroke="none" d="M0 0h24v24H0z" fill="none"></path>
+                    <path d="M10 10m-7 0a7 7 0 1 0 14 0a7 7 0 1 0 -14 0"></path>
+                    <path d="M21 21l-6 -6"></path>
+                </svg>
+</button>
+<button class=navbar-toggler type=button data-bs-toggle=offcanvas data-bs-target=#offcanvasNavbar aria-controls=offcanvasNavbar>
+<svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-menu-2" width="24"
+                    height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path stroke="none" d="M0 0h24v24H0z" fill="none"></path>
+                    <path d="M4 6l16 0"></path>
+                    <path d="M4 12l16 0"></path>
+                    <path d="M4 18l16 0"></path>
+                </svg></button><div class="offcanvas offcanvas-end" tabindex=-1 id=offcanvasNavbar aria-labelledby=offcanvasNavbarLabel><div class=offcanvas-header><h5 class=offcanvas-title id=offcanvasNavbarLabel><span class=word>Open</span>
+<span class=word>Component</span>
+<span class=word>Model</span></h5><button type=button class="btn-close text-reset" data-bs-dismiss=offcanvas aria-label=Close></button></div><div class=offcanvas-body><ul class="navbar-nav me-auto mb-2 mb-lg-0"><li class=nav-item><a class=nav-link href=/main/docs/>Docs</a></li><li class=nav-item><a class=nav-link href=/community/>Community</a></li><li class=nav-item><a class=nav-link href=/governance/>Governance</a></li><li class=nav-item><a class=nav-link href=https://github.com/orgs/open-component-model/projects/10/views/5>Roadmap</a></li><li class=nav-item><a class=nav-link href=/blog/>Blog</a></li></ul><div class=navbar-right><button type=button id=searchToggleDesktop class="btn btn-link nav-link p-0 me-3 d-none d-lg-flex" aria-label=Search>
+<svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-search"
+                                width="20" height="20" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"
+                                fill="none" stroke-linecap="round" stroke-linejoin="round">
+                                <path stroke="none" d="M0 0h24v24H0z" fill="none"></path>
+                                <path d="M10 10m-7 0a7 7 0 1 0 14 0a7 7 0 1 0 -14 0"></path>
+                                <path d="M21 21l-6 -6"></path>
+                            </svg>
+</button>
+<button id=buttonColorMode class="btn btn-link nav-link p-0 mode-toggle me-3 d-none d-lg-flex" type=button aria-label="Toggle theme">
+<svg data-bs-theme-value="dark" xmlns="http://www.w3.org/2000/svg"
+                                class="icon icon-tabler icon-tabler-moon" width="20" height="20" viewBox="0 0 24 24"
+                                stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round"
+                                stroke-linejoin="round">
+                                <path stroke="none" d="M0 0h24v24H0z" fill="none"></path>
+                                <path
+                                    d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z">
+                                </path>
+                            </svg>
+<svg data-bs-theme-value="light" xmlns="http://www.w3.org/2000/svg"
+                                class="icon icon-tabler icon-tabler-sun" width="20" height="20" viewBox="0 0 24 24"
+                                stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round"
+                                stroke-linejoin="round">
+                                <path stroke="none" d="M0 0h24v24H0z" fill="none"></path>
+                                <path d="M12 12m-4 0a4 4 0 1 0 8 0a4 4 0 1 0 -8 0"></path>
+                                <path
+                                    d="M3 12h1m8 -9v1m8 8h1m-9 8v1m-6.4 -15.4l.7 .7m12.1 -.7l-.7 .7m0 11.4l.7 .7m-12.1 -.7l-.7 .7">
+                                </path>
+                            </svg>
+</button>
+<a href=https://github.com/open-component-model target=_blank class="header-github-pill d-none d-lg-inline-flex" aria-label=GitHub><span class=icon><svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-brand-github" width="20" height="20" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"></path><path d="M9 19c-4.3 1.4 -4.3 -2.5 -6 -3m12 5v-3.5c0 -1 .1 -1.4 -.5 -2c2.8 -.3 5.5 -1.4 5.5 -6a4.6 4.6 0 0 0 -1.3 -3.2a4.2 4.2 0 0 0 -.1 -3.2s-1.1 -.3 -3.5 1.3a12.3 12.3 0 0 0 -6.2 0c-2.4 -1.6 -3.5 -1.3 -3.5 -1.3a4.2 4.2 0 0 0 -.1 3.2a4.6 4.6 0 0 0 -1.3 3.2c0 4.6 2.7 5.7 5.5 6c-.6 .6 -.6 1.2 -.5 2v3.5"></path></svg></span>
+</a><a href=https://kubernetes.slack.com/archives/C05UWBE8R1D target=_blank class="header-github-pill d-none d-lg-inline-flex" aria-label=Slack><span class=icon><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-brand-slack"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 12v-6a2 2 0 0 1 4 0v6m0 -2a2 2 0 1 1 2 2h-6" /><path d="M12 12h6a2 2 0 0 1 0 4h-6m2 0a2 2 0 1 1 -2 2v-6" /><path d="M12 12v6a2 2 0 0 1 -4 0v-6m0 2a2 2 0 1 1 -2 -2h6" /><path d="M12 12h-6a2 2 0 0 1 0 -4h6m-2 0a2 2 0 1 1 2 -2v6" /></svg></span></a><div class="dropdown me-3 d-none d-lg-flex"><button class="btn btn-link nav-link p-0 dropdown-toggle btn-dropdown" id=doks-versions data-bs-toggle=dropdown aria-expanded=false data-bs-display=static aria-label="Toggle version menu">
+main
+<span class=dropdown-caret><svg xmlns="http://www.w3.org/2000/svg"
+                                        class="icon icon-tabler icon-tabler-chevron-down" width="20" height="20"
+                                        viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" fill="none"
+                                        stroke-linecap="round" stroke-linejoin="round">
+                                        <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                                        <path d="M6 9l6 6l6 -6" />
+                                    </svg></span></button><ul class="dropdown-menu dropdown-menu-lg-end shadow rounded border-0" aria-labelledby=doks-versions><li><a class="dropdown-item current" aria-current=true href=/main/docs/guides/deploy/deploy-a-helm-chart-with-crossplane-and-gitops/>main</a></li><li><a class=dropdown-item href=/ title="This page is not available in 0.19; open that version's landing page">0.19 <span class=version-flag>(latest)</span></a></li><li><a class=dropdown-item href=/0.17/ title="This page is not available in 0.17; open that version's landing page">0.17</a></li><li><a class=dropdown-item href=/0.16/ title="This page is not available in 0.16; open that version's landing page">0.16</a></li><li><a class=dropdown-item href=/0.15/ title="This page is not available in 0.15; open that version's landing page">0.15</a></li><li><a class=dropdown-item href=/0.14/ title="This page is not available in 0.14; open that version's landing page">0.14</a></li><li><a class=dropdown-item href=/0.13/ title="This page is not available in 0.13; open that version's landing page">0.13</a></li><li><a class=dropdown-item href=/0.12/ title="This page is not available in 0.12; open that version's landing page">0.12</a></li><li><a class=dropdown-item href=/0.11/ title="This page is not available in 0.11; open that version's landing page">0.11</a></li><li><a class=dropdown-item href=/0.10/ title="This page is not available in 0.10; open that version's landing page">0.10</a></li><li><a class=dropdown-item href=/0.9/ title="This page is not available in 0.9; open that version's landing page">0.9</a></li><li><a class=dropdown-item href=/legacy/ title="This page is not available in legacy; open that version's landing page">legacy</a></li></ul></div><div class=version-droplet role=status aria-live=polite data-tooltip="You are viewing development documentation that tracks the main branch. Content here may change at any time and may not reflect released behavior."><span class=text>Dev</span></div></div></div></div></div></nav></header><div class=modal id=searchModal tabindex=-1 aria-labelledby=searchModalLabel aria-hidden=true><div class="modal-dialog modal-dialog-scrollable modal-fullscreen-md-down"><div class=modal-content><div class=modal-header><h2 class="modal-title fs-5 visually-hidden" id=searchModalLabel>Search</h2><button type=button class="btn-close visually-hidden" data-bs-dismiss=modal aria-label=Close></button><div class="search-input flex-grow-1 d-none"><form id=search-form class=search-form action=# method=post accept-charset=UTF-8 role=search><label for=query class=visually-hidden>Search</label><div class=d-flex><input type=search id=query name=query class="search-text form-control form-control-lg" placeholder=Search aria-label=Search maxlength=128 autocomplete=off>
+<button type=button class="btn btn-link text-decoration-none px-0 ms-3 d-md-none" data-bs-dismiss=modal aria-label=Close>Cancel</button></div></form></div></div><div class=modal-body><p class="search-loading status message d-none mt-3 text-center">Loading search index…</p><p class="search-no-recent message d-none mt-3 text-center">No recent searches</p><p class="search-no-results message d-none mt-3 text-center">No results for "<strong><span class=query-no-results>Query here</span></strong>"</p><div id=searchResults class=search-results></div><template><article class="search-result list-view"><div class="card my-3"><div class=card-body><header><h2 class="h5 title title-submitted mb-0"><a class="stretched-link text-decoration-none text-reset" href=#>Title here</a></h2><div class="submitted d-none"><time class=created-date datetime=1970-01-01T00:00:00+00:00>1970-01-01T00:00:00+00:00</time></div></header><div class=content>Summary here</div></div></div></article></template></div><div class=modal-footer><ul class="list-inline me-auto d-none d-md-block"><li class=list-inline-item><kbd class=me-2><svg width="15" height="15" aria-label="Enter key" role="img"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.2"><path d="M12 3.53088v3c0 1-1 2-2 2H4M7 11.53088l-3-3 3-3"></path></g></svg></kbd><span class=DocSearch-Label>to select</span></li><li class=list-inline-item><kbd class=me-2><svg width="15" height="15" aria-label="Arrow down" role="img"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.2"><path d="M7.5 3.5v8M10.5 8.5l-3 3-3-3"></path></g></svg></kbd><kbd class=me-2><svg width="15" height="15" aria-label="Arrow up" role="img"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.2"><path d="M7.5 11.5v-8M10.5 6.5l-3-3-3 3"></path></g></svg></kbd><span class=DocSearch-Label>to navigate</span></li><li class=list-inline-item><kbd class=me-2><svg width="15" height="15" aria-label="Escape key" role="img"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.2"><path d="M13.6167 8.936c-.1065.3583-.6883.962-1.4875.962-.7993 0-1.653-.9165-1.653-2.1258v-.5678c0-1.2548.7896-2.1016 1.653-2.1016.8634 0 1.3601.4778 1.4875 1.0724M9 6c-.1352-.4735-.7506-.9219-1.46-.8972-.7092.0246-1.344.57-1.344 1.2166s.4198.8812 1.3445.9805C8.465 7.3992 8.968 7.9337 9 8.5c.032.5663-.454 1.398-1.4595 1.398C6.6593 9.898 6 9 5.963 8.4851m-1.4748.5368c-.2635.5941-.8099.876-1.5443.876s-1.7073-.6248-1.7073-2.204v-.4603c0-1.0416.721-2.131 1.7073-2.131.9864 0 1.6425 1.031 1.5443 2.2492h-2.956"></path></g></svg></kbd><span class=DocSearch-Label>to close</span></li></ul><p class=d-md-none>Search by <a class=text-decoration-none href=https://github.com/nextapps-de/flexsearch>FlexSearch</a></p></div></div></div></div><div class='wrap container-fluid' role=document><div class=content><div class="row flex-xl-nowrap"><div class="col-lg-5 col-xl-4 docs-sidebar docs-sidebar-offset d-none d-lg-block"><nav class="section-nav docs-links"><ul class=list-unstyled><li><details><summary><a class=docs-link href=/main/docs/overview/>Overview</a></summary><ul class="list-unstyled list-nested"><li><a class=docs-link href=/main/docs/overview/how-ocm-works/>How OCM Works</a></li><li><a class=docs-link href=/main/docs/overview/benefits-of-ocm/>Benefits of OCM</a></li><li><a class=docs-link href=/main/docs/overview/the-ocm-core-model/>The OCM Core Model</a></li></ul></details></li><li><details><summary><a class=docs-link href=/main/docs/getting-started/>Getting Started</a></summary><ul class="list-unstyled list-nested"><li><a class=docs-link href=/main/docs/getting-started/install-the-ocm-cli/>Install the OCM CLI</a></li><li><a class=docs-link href=/main/docs/getting-started/create-component-versions/>Create Component Versions</a></li><li><a class=docs-link href=/main/docs/getting-started/set-up-controller-environments/>Set up Controller Environments</a></li><li><a class=docs-link href=/main/docs/getting-started/deploy-helm-charts/>Deploy Helm Charts</a></li></ul></details></li><li><details><summary><a class=docs-link href=/main/docs/concepts/>Concepts</a></summary><ul class="list-unstyled list-nested"><li><a class=docs-link href=/main/docs/concepts/canonical-component-repositories/>Canonical Component Repositories</a></li><li><a class=docs-link href=/main/docs/concepts/component-identity/>Component Identity</a></li><li><a class=docs-link href=/main/docs/concepts/credential-resolution/>Credential Resolution</a></li><li><a class=docs-link href=/main/docs/concepts/credential-system/>Credential System</a></li><li><a class=docs-link href=/main/docs/concepts/kubernetes-component-discovery/>Kubernetes Component Discovery</a></li><li><a class=docs-link href=/main/docs/concepts/kubernetes-controllers/>Kubernetes Controllers</a></li><li><a class=docs-link href=/main/docs/concepts/kubernetes-deployer/>Kubernetes Deployer</a></li><li><a class=docs-link href=/main/docs/concepts/ownership/>Ownership</a></li><li><a class=docs-link href=/main/docs/concepts/plugin-system/>Plugin System</a></li><li><a class=docs-link href=/main/docs/concepts/resolvers/>Resolvers</a></li><li><a class=docs-link href=/main/docs/concepts/resource-repositories/>Resource Repositories</a></li><li><a class=docs-link href=/main/docs/concepts/signing-and-verification/>Signing and Verification</a></li><li><a class=docs-link href=/main/docs/concepts/software-bills-of-materials/>Software Bills of Materials</a></li><li><a class=docs-link href=/main/docs/concepts/transfer-and-transport/>Transfer and Transport</a></li><li><a class=docs-link href=/main/docs/concepts/vendor-repository-uploaders/>Vendor Repository Uploaders</a></li></ul></details></li><li><details open><summary><a aria-current=true class=docs-link href=/main/docs/guides/>Guides</a></summary><ul class="list-unstyled list-nested"><li><details><summary><a class=docs-link href=/main/docs/guides/pack/>Pack</a></summary><ul class="list-unstyled list-nested"><li><a class=docs-link href=/main/docs/guides/pack/add-resources-from-github/>Add Resources from GitHub</a></li><li><a class=docs-link href=/main/docs/guides/pack/add-http-resources/>Add HTTP Resources</a></li><li><a class=docs-link href=/main/docs/guides/pack/add-oci-artifacts/>Add OCI Artifacts</a></li><li><a class=docs-link href=/main/docs/guides/pack/add-helm-chart-resources/>Add Helm Chart Resources</a></li><li><a class=docs-link href=/main/docs/guides/pack/add-component-references/>Add Component References</a></li><li><a class=docs-link href=/main/docs/guides/pack/add-sboms/>Add SBOMs</a></li><li><a class=docs-link href=/main/docs/guides/pack/add-git-repositories/>Add Git Repositories</a></li><li><a class=docs-link href=/main/docs/guides/pack/add-and-verify-ownership-information/>Add and Verify Ownership Information</a></li><li><a class=docs-link href=/main/docs/guides/pack/compose-a-multi-component-product/>Compose a Multi-Component Product</a></li><li><a class=docs-link href=/main/docs/guides/pack/configure-a-versioning-scheme/>Configure a Versioning Scheme</a></li></ul></details></li><li><details><summary><a class=docs-link href=/main/docs/guides/sign/>Sign</a></summary><ul class="list-unstyled list-nested"><li><a class=docs-link href=/main/docs/guides/sign/generate-signing-keys/>Generate Signing Keys</a></li><li><a class=docs-link href=/main/docs/guides/sign/configure-signing-credentials/>Configure Signing Credentials</a></li><li><a class=docs-link href=/main/docs/guides/sign/sign-with-plain-rsa/>Sign with Plain RSA</a></li><li><a class=docs-link href=/main/docs/guides/sign/sign-with-a-pem-certificate-chain/>Sign with a PEM Certificate Chain</a></li><li><a class=docs-link href=/main/docs/guides/sign/sign-with-gpg/>Sign with GPG</a></li><li><a class=docs-link href=/main/docs/guides/sign/sign-with-sigstore-keyless/>Sign with Sigstore (Keyless)</a></li><li><a class=docs-link href=/main/docs/guides/sign/verify-plain-rsa/>Verify Plain RSA</a></li><li><a class=docs-link href=/main/docs/guides/sign/verify-a-pem-certificate-chain/>Verify a PEM Certificate Chain</a></li><li><a class=docs-link href=/main/docs/guides/sign/verify-gpg/>Verify GPG</a></li><li><a class=docs-link href=/main/docs/guides/sign/verify-sigstore-keyless/>Verify Sigstore (Keyless)</a></li></ul></details></li><li><details><summary><a class=docs-link href=/main/docs/guides/transfer/>Transport</a></summary><ul class="list-unstyled list-nested"><li><a class=docs-link href=/main/docs/guides/transfer/configure-registry-credentials/>Configure Registry Credentials</a></li><li><a class=docs-link href=/main/docs/guides/transfer/transfer-component-versions/>Transfer Component Versions</a></li><li><a class=docs-link href=/main/docs/guides/transfer/transfer-components-across-an-air-gap/>Transfer Components across an Air Gap</a></li><li><a class=docs-link href=/main/docs/guides/transfer/replicate-component-versions/>Replicate Component Versions with the Controller</a></li><li><a class=docs-link href=/main/docs/guides/transfer/download-resources/>Download Resources</a></li><li><a class=docs-link href=/main/docs/guides/transfer/download-sboms/>Download SBOMs</a></li><li><a class=docs-link href=/main/docs/guides/transfer/pull-oci-artifacts-natively/>Pull OCI Artifacts Natively</a></li><li><a class=docs-link href=/main/docs/guides/transfer/configure-http-behaviour/>Configure HTTP Behaviour</a></li><li><a class=docs-link href=/main/docs/guides/transfer/upload-oci-images/>Upload OCI Images</a></li><li><a class=docs-link href=/main/docs/guides/transfer/upload-to-a-custom-target/>Upload to a Custom Target</a></li><li><a class=docs-link href=/main/docs/guides/transfer/upload-to-jfrog-artifactory/>Upload to JFrog Artifactory</a></li><li><a class=docs-link href=/main/docs/guides/transfer/upload-to-sonatype-nexus/>Upload to Sonatype Nexus</a></li></ul></details></li><li><details open><summary><a aria-current=true class=docs-link href=/main/docs/guides/deploy/>Deploy</a></summary><ul class="list-unstyled list-nested"><li><a class=docs-link href=/main/docs/guides/deploy/configure-controller-credentials/>Configure Controller Credentials</a></li><li><a class=docs-link href=/main/docs/guides/deploy/configure-custom-rbac/>Configure Custom RBAC</a></li><li><a class=docs-link href=/main/docs/guides/deploy/discover-component-graphs/>Discover Component Graphs</a></li><li><a class=docs-link href=/main/docs/guides/deploy/deploy-with-chained-kro-rgds/>Deploy with Chained kro RGDs</a></li><li><a class=docs-link href=/main/docs/guides/deploy/deploy-a-helm-chart-with-kro-and-gitops/>Deploy a Helm Chart with kro and GitOps</a></li><li class=active><a aria-current=page class="docs-link active" href=/main/docs/guides/deploy/deploy-a-helm-chart-with-crossplane-and-gitops/>Deploy a Helm Chart with Crossplane and GitOps</a></li><li><a class=docs-link href=/main/docs/guides/deploy/deploy-kubernetes-manifests-with-the-ocm-deployer/>Deploy Kubernetes Manifests with the OCM Deployer</a></li><li><a class=docs-link href=/main/docs/guides/deploy/deploy-crossplane-packages/>Deploy Crossplane Packages (xpkg) with OCM</a></li><li><a class=docs-link href=/main/docs/guides/deploy/verify-component-signatures-on-deployment/>Verify Component Signatures on Deployment</a></li></ul></details></li></ul></details></li><li><details><summary><a class=docs-link href=/main/docs/reference/>Reference</a></summary><ul class="list-unstyled list-nested"><li><a class=docs-link href=/main/docs/reference/component-constructor/>Component Constructor</a></li><li><a class=docs-link href=/main/docs/reference/component-descriptor/>Component Descriptor</a></li><li><a class=docs-link href=/main/docs/reference/input-and-access-types/>Input and Access Types</a></li><li><a class=docs-link href=/main/docs/reference/resource-repositories/>Resource Repositories</a></li><li><a class=docs-link href=/main/docs/reference/oci-resource-digests/>OCI Resource Digests</a></li><li><details><summary><a class=docs-link href=/main/docs/reference/configuration/>Configuration</a></summary><ul class="list-unstyled list-nested"><li><a class=docs-link href=/main/docs/reference/configuration/caching/>Caching</a></li><li><a class=docs-link href=/main/docs/reference/configuration/credential-consumer-identities/>Credential Consumer Identities</a></li><li><a class=docs-link href=/main/docs/reference/configuration/credential-types/>Credential Types</a></li><li><a class=docs-link href=/main/docs/reference/configuration/http-checksum/>HTTP Checksum</a></li><li><a class=docs-link href=/main/docs/reference/configuration/http-client/>HTTP Client</a></li><li><a class=docs-link href=/main/docs/reference/configuration/resolver/>Resolver</a></li><li><details><summary><a class=docs-link href=/main/docs/reference/configuration/transfer-configuration/>Transfer Configuration</a></summary><ul class="list-unstyled list-nested"><li><a class=docs-link href=/main/docs/reference/configuration/transfer-configuration/transfer-settings/>Transfer Settings</a></li><li><a class=docs-link href=/main/docs/reference/configuration/transfer-configuration/oci-uploader/>OCI Uploader</a></li><li><a class=docs-link href=/main/docs/reference/configuration/transfer-configuration/local-blob-uploader/>Local Blob Uploader</a></li><li><a class=docs-link href=/main/docs/reference/configuration/transfer-configuration/reference-uploader/>Reference Uploader</a></li><li><a class=docs-link href=/main/docs/reference/configuration/transfer-configuration/http-uploader/>HTTP Uploader</a></li><li><a class=docs-link href=/main/docs/reference/configuration/transfer-configuration/jfrog-artifactory-uploader/>JFrog Artifactory Uploader</a></li><li><a class=docs-link href=/main/docs/reference/configuration/transfer-configuration/sonatype-nexus-uploader/>Sonatype Nexus Uploader</a></li><li><a class=docs-link href=/main/docs/reference/configuration/transfer-configuration/cel-expressions/>CEL Expressions</a></li><li><a class=docs-link href=/main/docs/reference/configuration/transfer-configuration/git-uploader/>Git Uploader</a></li><li><a class=docs-link href=/main/docs/reference/configuration/transfer-configuration/selection-examples/>Selection Examples</a></li></ul></details></li><li><a class=docs-link href=/main/docs/reference/configuration/versioning/>Versioning</a></li></ul></details></li><li><details><summary><a class=docs-link href=/main/docs/reference/kubernetes-api/>Controller CRDs</a></summary><ul class="list-unstyled list-nested"><li><a class=docs-link href=/main/docs/reference/kubernetes-api/repository/>Repository</a></li><li><a class=docs-link href=/main/docs/reference/kubernetes-api/component/>Component</a></li><li><a class=docs-link href=/main/docs/reference/kubernetes-api/resource/>Resource</a></li><li><a class=docs-link href=/main/docs/reference/kubernetes-api/deployer/>Deployer</a></li><li><a class=docs-link href=/main/docs/reference/kubernetes-api/namespaceddeployer/>NamespacedDeployer</a></li><li><a class=docs-link href=/main/docs/reference/kubernetes-api/replication/>Replication</a></li><li><a class=docs-link href=/main/docs/reference/kubernetes-api/discovery/>Discovery</a></li></ul></details></li><li><details><summary><a class=docs-link href=/main/docs/reference/ocm-cli/>OCM CLI</a></summary><ul class="list-unstyled list-nested"><li><a class=docs-link href=/main/docs/reference/ocm-cli/ocm/>ocm</a></li><li><a class=docs-link href=/main/docs/reference/ocm-cli/ocm-add/>ocm add</a></li><li><a class=docs-link href=/main/docs/reference/ocm-cli/ocm-add-component-version/>ocm add component-version</a></li><li><a class=docs-link href=/main/docs/reference/ocm-cli/ocm-completion/>ocm completion</a></li><li><a class=docs-link href=/main/docs/reference/ocm-cli/ocm-completion-bash/>ocm completion bash</a></li><li><a class=docs-link href=/main/docs/reference/ocm-cli/ocm-completion-fish/>ocm completion fish</a></li><li><a class=docs-link href=/main/docs/reference/ocm-cli/ocm-completion-powershell/>ocm completion powershell</a></li><li><a class=docs-link href=/main/docs/reference/ocm-cli/ocm-completion-zsh/>ocm completion zsh</a></li><li><a class=docs-link href=/main/docs/reference/ocm-cli/ocm-describe/>ocm describe</a></li><li><a class=docs-link href=/main/docs/reference/ocm-cli/ocm-describe-types/>ocm describe types</a></li><li><a class=docs-link href=/main/docs/reference/ocm-cli/ocm-download/>ocm download</a></li><li><a class=docs-link href=/main/docs/reference/ocm-cli/ocm-download-plugin/>ocm download plugin</a></li><li><a class=docs-link href=/main/docs/reference/ocm-cli/ocm-download-resource/>ocm download resource</a></li><li><a class=docs-link href=/main/docs/reference/ocm-cli/ocm-generate/>ocm generate</a></li><li><a class=docs-link href=/main/docs/reference/ocm-cli/ocm-generate-docs/>ocm generate docs</a></li><li><a class=docs-link href=/main/docs/reference/ocm-cli/ocm-get/>ocm get</a></li><li><a class=docs-link href=/main/docs/reference/ocm-cli/ocm-get-component-version/>ocm get component-version</a></li><li><a class=docs-link href=/main/docs/reference/ocm-cli/ocm-get-config/>ocm get config</a></li><li><a class=docs-link href=/main/docs/reference/ocm-cli/ocm-get-types/>ocm get types</a></li><li><a class=docs-link href=/main/docs/reference/ocm-cli/ocm-plugin/>ocm plugin</a></li><li><a class=docs-link href=/main/docs/reference/ocm-cli/ocm-plugin-registry/>ocm plugin registry</a></li><li><a class=docs-link href=/main/docs/reference/ocm-cli/ocm-plugin-registry-get/>ocm plugin registry get</a></li><li><a class=docs-link href=/main/docs/reference/ocm-cli/ocm-plugin-registry-list/>ocm plugin registry list</a></li><li><a class=docs-link href=/main/docs/reference/ocm-cli/ocm-sign/>ocm sign</a></li><li><a class=docs-link href=/main/docs/reference/ocm-cli/ocm-sign-component-version/>ocm sign component-version</a></li><li><a class=docs-link href=/main/docs/reference/ocm-cli/ocm-transfer/>ocm transfer</a></li><li><a class=docs-link href=/main/docs/reference/ocm-cli/ocm-transfer-component-version/>ocm transfer component-version</a></li><li><a class=docs-link href=/main/docs/reference/ocm-cli/ocm-verify/>ocm verify</a></li><li><a class=docs-link href=/main/docs/reference/ocm-cli/ocm-verify-component-version/>ocm verify component-version</a></li><li><a class=docs-link href=/main/docs/reference/ocm-cli/ocm-version/>ocm version</a></li></ul></details></li><li><details><summary><a class=docs-link href=/main/docs/reference/standards-and-regulations/>Standards & Regulations</a></summary><ul class="list-unstyled list-nested"><li><a class=docs-link href=/main/docs/reference/standards-and-regulations/fips-140-3/>FIPS 140-3</a></li></ul></details></li></ul></details></li><li><details><summary><a class=docs-link href=/main/docs/changelog/>Changelog</a></summary><ul class="list-unstyled list-nested"><li><a class=docs-link href=/main/docs/changelog/migrate-legacy-resolvers/>Migrate Legacy Resolvers</a></li><li><a class=docs-link href=/main/docs/changelog/migrate-legacy-credentials/>Migrate Legacy Credentials</a></li><li><a class=docs-link href=/main/docs/changelog/migrate-from-upload-as/>Migrate --upload-as Flags</a></li><li><a class=docs-link href=/main/docs/changelog/migrate-a-deployer-to-a-namespaceddeployer/>Migrate a Deployer to a NamespacedDeployer</a></li></ul></details></li></ul></nav></div><div class="col container-fw d-lg-flex flex-lg-row justify-content-center mx-auto"><nav class="docs-toc docs-toc-offset d-none d-xl-block col-xl-3" aria-label="Secondary navigation"><div class=page-links><h3>On this page</h3><nav id=toc><ul><li><a href=#what-youll-learn>What You&rsquo;ll Learn</a></li><li><a href=#prerequisites>Prerequisites</a></li><li><a href=#environment-setup>Environment Setup</a></li><li><a href=#concepts>Concepts</a><ul><li><a href=#the-bootstrap-pattern>The Bootstrap Pattern</a></li><li><a href=#how-the-pieces-fit-together>How the Pieces Fit Together</a></li><li><a href=#localization>Localization</a></li></ul></li><li><a href=#create-and-publish-a-component-version>Create and Publish a Component Version</a></li><li><a href=#deploy-the-helm-chart>Deploy the Helm Chart</a></li><li><a href=#troubleshooting>Troubleshooting</a><ul><li><a href=#authentication-errors-401-unauthorized>Authentication Errors (401 Unauthorized)</a></li><li><a href=#xrd-or-composition-not-installing>XRD or Composition Not Installing</a></li><li><a href=#rbac-permission-errors>RBAC Permission Errors</a></li><li><a href=#composite-not-becoming-ready>Composite Not Becoming Ready</a></li><li><a href=#imagepullbackoff-errors>ImagePullBackOff Errors</a></li></ul></li><li><a href=#what-you-learned>What You Learned</a></li><li><a href=#next-steps>Next Steps</a></li><li><a href=#related-documentation>Related Documentation</a></li></ul></nav></div></nav><main class="docs-content col-lg-11 col-xl-9"><div class=version-warning-banner role=alert>You are viewing development documentation for the <strong>main</strong> branch.
+This version tracks the latest commit and may be unstable.
+For the current release, see the
+<a class=version-warning-link href=/>latest version (0.19)</a>.</div><h1>Deploy a Helm Chart with Crossplane and GitOps</h1><nav class="toc-mobile d-xl-none" aria-label="Quaternary navigation"><details><summary>On this page</summary><div class=page-links><nav id=TableOfContents><ul><li><a href=#what-youll-learn>What You&rsquo;ll Learn</a></li><li><a href=#prerequisites>Prerequisites</a></li><li><a href=#environment-setup>Environment Setup</a></li><li><a href=#concepts>Concepts</a><ul><li><a href=#the-bootstrap-pattern>The Bootstrap Pattern</a></li><li><a href=#how-the-pieces-fit-together>How the Pieces Fit Together</a></li><li><a href=#localization>Localization</a></li></ul></li><li><a href=#create-and-publish-a-component-version>Create and Publish a Component Version</a></li><li><a href=#deploy-the-helm-chart>Deploy the Helm Chart</a></li><li><a href=#troubleshooting>Troubleshooting</a><ul><li><a href=#authentication-errors-401-unauthorized>Authentication Errors (401 Unauthorized)</a></li><li><a href=#xrd-or-composition-not-installing>XRD or Composition Not Installing</a></li><li><a href=#rbac-permission-errors>RBAC Permission Errors</a></li><li><a href=#composite-not-becoming-ready>Composite Not Becoming Ready</a></li><li><a href=#imagepullbackoff-errors>ImagePullBackOff Errors</a></li></ul></li><li><a href=#what-you-learned>What You Learned</a></li><li><a href=#next-steps>Next Steps</a></li><li><a href=#related-documentation>Related Documentation</a></li></ul></nav></div></details></nav><div style=margin-bottom:2rem></div><h2 id=what-youll-learn>What You&rsquo;ll Learn<a href=#what-youll-learn class=anchor aria-hidden=true>#</a></h2><p>Your application ships as a Helm chart, and you want its delivery to be repeatable: one versioned OCM component that
+carries the chart, its container image, and the instructions to deploy it, with image references that localize
+themselves as the component moves between registries. This tutorial builds that deployment on <strong>Crossplane</strong>, using
+a <code>CompositeResourceDefinition</code> (XRD) plus a <code>Composition</code> to reconcile the deployment graph. The XRD registers the
+<code>Bootstrap</code> schema, and the <code>Composition</code> creates the OCM and GitOps deployer objects (Flux or Argo CD) directly. We
+will use <a href=https://github.com/stefanprodan/podinfo target=_blank rel=noopener>Podinfo</a> as the example application.</p><div class="callout callout-note d-flex flex-row mt-4 mb-4 pt-4 pe-4 pb-2 ps-3"><svg   xmlns="http://www.w3.org/2000/svg"   width="24"   height="24"   viewBox="0 0 24 24"   fill="none"   stroke="currentColor"   stroke-width="2"   stroke-linecap="round"   stroke-linejoin="round"    class="outline/info-circle svg-inline callout-icon me-2 mb-3" id="svg-info-circle" role="img">   <path stroke="none" d="M0 0h24v24H0z" fill="none" />   <path d="M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18 0" />   <path d="M12 9h.01" />   <path d="M11 12h1v4h1" /> </svg><div class=callout-content><div class=callout-title>Coming from the kro tutorial?</div><div class=callout-body><p>This tutorial reaches the same end state as <a href=/main/docs/guides/deploy/deploy-a-helm-chart-with-kro-and-gitops/>Deploy an Application from a Helm Chart with OCM and
+kro</a>, swapping kro&rsquo;s <code>ResourceGraphDefinition</code> for a Crossplane
+XRD + Composition. Reading the kro tutorial first is <strong>not</strong> required.</p></div></div></div><p>By the end, you&rsquo;ll have:</p><ul><li>An OCM component containing a Helm chart, an image reference, and a Crossplane XRD + Composition</li><li>A running Podinfo application deployed by applying the <code>Bootstrap</code> composite resource</li><li>Understanding of how localization keeps image references in sync after transfers</li></ul><h2 id=prerequisites>Prerequisites<a href=#prerequisites class=anchor aria-hidden=true>#</a></h2><div class="callout callout-note d-flex flex-row mt-4 mb-4 pt-4 pe-4 pb-2 ps-3"><svg   xmlns="http://www.w3.org/2000/svg"   width="24"   height="24"   viewBox="0 0 24 24"   fill="none"   stroke="currentColor"   stroke-width="2"   stroke-linecap="round"   stroke-linejoin="round"    class="outline/settings-check svg-inline callout-icon me-2 mb-3" id="svg-settings-check" role="img">   <path stroke="none" d="M0 0h24v24H0z" fill="none" />   <path d="M11.445 20.913a1.665 1.665 0 0 1 -1.12 -1.23a1.724 1.724 0 0 0 -2.573 -1.066c-1.543 .94 -3.31 -.826 -2.37 -2.37a1.724 1.724 0 0 0 -1.065 -2.572c-1.756 -.426 -1.756 -2.924 0 -3.35a1.724 1.724 0 0 0 1.066 -2.573c-.94 -1.543 .826 -3.31 2.37 -2.37c1 .608 2.296 .07 2.572 -1.065c.426 -1.756 2.924 -1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543 -.94 3.31 .826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.31 .318 1.643 1.79 .997 2.694" />   <path d="M15 19l2 2l4 -4" />   <path d="M9 12a3 3 0 1 0 6 0a3 3 0 0 0 -6 0" /> </svg><div class=callout-content><div class=callout-title>Set up your environment</div><div class=callout-body><p>Before starting, make sure you have set up your environment as described in the <a href=/main/docs/getting-started/set-up-controller-environments/>setup guide</a>.</p></div></div></div><ul><li><a href=/main/docs/getting-started/set-up-controller-environments/>Controller environment</a> with OCM Controllers installed</li><li><strong>Crossplane</strong> installed as the orchestrator, following <a href=/main/docs/getting-started/set-up-controller-environments/#install-an-orchestrator>Set up Controller Environments > Install an
+Orchestrator</a> (the Crossplane tab)</li><li>A <strong>GitOps deployer</strong> installed, either <strong>Flux</strong> or <strong>Argo CD</strong>, following <a href=/main/docs/getting-started/set-up-controller-environments/#install-a-deployer>Set up Controller Environments > Install a
+Deployer</a>. Crossplane composes that deployer&rsquo;s
+objects directly: the Flux <code>OCIRepository</code> and <code>HelmRelease</code>, or the Argo CD <code>Application</code>. The matching controllers
+must be running (Flux&rsquo;s <code>source-controller</code> and <code>helm-controller</code>, or Argo CD&rsquo;s <code>application-controller</code>). For Argo
+CD, apply the <code>Bootstrap</code> in the <code>argocd</code> namespace (via <code>BOOTSTRAP_NAMESPACE</code>, see Environment Setup), so no extra
+Argo CD configuration is needed: the composed <code>Application</code> lands where stock Argo CD already watches.</li><li><a href=/main/docs/guides/deploy/configure-custom-rbac/>Custom RBAC</a> with <strong>both</strong> Crossplane grants, which live in two separate places in
+that guide:<ul><li>The <strong>Crossplane</strong> tab under <a href=/main/docs/guides/deploy/configure-custom-rbac/#tabs-ocm-controller-rbac-1>Create a ClusterRole and ClusterRoleBinding</a>
+gives the OCM controller read access (<code>get</code>, <code>list</code>, <code>watch</code>) on <code>compositions</code> and <code>compositeresourcedefinitions</code>
+(<code>apiextensions.crossplane.io</code>) so it can check the deployed objects for drift. The <code>bootstrap-deployer</code> service
+account gets its own write access from the <code>ClusterRole</code> in <code>bootstrap.yaml</code> later in this tutorial.</li><li>The <a href=/main/docs/guides/deploy/configure-custom-rbac/#crossplane>Crossplane subsection under RBAC for the orchestrator&rsquo;s own service account</a>
+lets Crossplane&rsquo;s own service account compose the OCM <code>Resource</code> and the deployer objects (Flux or Argo CD).</li></ul></li><li>The <a href=https://github.com/crossplane-contrib/function-patch-and-transform target=_blank rel=noopener>Patch and Transform function</a>
+(<code>function-patch-and-transform</code>), which the <code>Composition</code> runs as its pipeline step. Install it via the Crossplane
+tab of <a href=/main/docs/getting-started/set-up-controller-environments/#install-an-orchestrator>Set up Controller Environments > Install an Orchestrator</a>.</li><li><a href=/main/docs/getting-started/install-the-ocm-cli/>OCM CLI</a> installed</li><li>Access to an OCI registry (e.g., <a href=https://docs.github.com/en/packages/learn-github-packages/introduction-to-github-packages target=_blank rel=noopener>ghcr.io</a>)</li><li><code>envsubst</code> installed (pre-installed on most Linux/macOS systems as part of <code>gettext</code>)</li></ul><div class="callout callout-note d-flex flex-row mt-4 mb-4 pt-4 pe-4 pb-2 ps-3"><svg   xmlns="http://www.w3.org/2000/svg"   width="24"   height="24"   viewBox="0 0 24 24"   fill="none"   stroke="currentColor"   stroke-width="2"   stroke-linecap="round"   stroke-linejoin="round"    class="outline/lock svg-inline callout-icon me-2 mb-3" id="svg-lock" role="img">   <path stroke="none" d="M0 0h24v24H0z" fill="none" />   <path d="M5 13a2 2 0 0 1 2 -2h10a2 2 0 0 1 2 2v6a2 2 0 0 1 -2 2h-10a2 2 0 0 1 -2 -2v-6" />   <path d="M11 16a1 1 0 1 0 2 0a1 1 0 0 0 -2 0" />   <path d="M8 11v-4a4 4 0 1 1 8 0v4" /> </svg><div class=callout-content><div class=callout-title>Private registries</div><div class=callout-body><p>If using a private registry, you&rsquo;ll need to configure credentials for both the OCM CLI and the controller resources. See <a href=/main/docs/guides/deploy/configure-controller-credentials/>Configure Credentials for Controllers</a> for details.</p></div></div></div><h2 id=environment-setup>Environment Setup<a href=#environment-setup class=anchor aria-hidden=true>#</a></h2><p>Set environment variables for your GitHub username, OCM repository, and the namespace the composite runs in. Use a
+lowercase GitHub username, OCI registries such as <code>ghcr.io</code> reject uppercase letters in the repository path:</p><div class=expressive-code><figure class="frame is-terminal not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-bash data-lang=bash><span class=line><span class=cl><span class=nb>export</span> <span class=nv>GITHUB_USERNAME</span><span class=o>=</span>&lt;your-github-username&gt;
+</span></span><span class=line><span class=cl><span class=nb>export</span> <span class=nv>OCM_REPO</span><span class=o>=</span>ghcr.io/<span class=nv>$GITHUB_USERNAME</span>/ocm-tutorial
+</span></span><span class=line><span class=cl><span class=c1># Namespace the Bootstrap composite and its composed objects run in.</span>
+</span></span><span class=line><span class=cl><span class=c1># Flux: default. Argo CD: argocd, so stock Argo CD watches the composed Application.</span>
+</span></span><span class=line><span class=cl><span class=nb>export</span> <span class=nv>BOOTSTRAP_NAMESPACE</span><span class=o>=</span>default   <span class=c1># set to argocd for the Argo CD deployer</span></span></span></code></pre></div></figure></div><h2 id=concepts>Concepts<a href=#concepts class=anchor aria-hidden=true>#</a></h2><h3 id=the-bootstrap-pattern>The Bootstrap Pattern<a href=#the-bootstrap-pattern class=anchor aria-hidden=true>#</a></h3><p>Instead of applying the deployment graph (the XRD + Composition) to the cluster by hand, the <strong>bootstrap pattern</strong>
+packages that graph as a resource <em>inside</em> the OCM component. The OCM Deployer controller then extracts the blob from
+the component and applies it for you. The deployment instructions travel with the component and stay versioned
+alongside the chart and image, so every environment installs the same graph. In this tutorial the packaged blob is a
+Crossplane XRD + Composition.</p><h3 id=how-the-pieces-fit-together>How the Pieces Fit Together<a href=#how-the-pieces-fit-together class=anchor aria-hidden=true>#</a></h3><p>The <strong>graph engine</strong> is what reconciles the deployment graph and creates the deployer objects. This tutorial ships a
+Crossplane <code>CompositeResourceDefinition</code> (XRD) plus a <code>Composition</code>. The XRD registers a <code>Bootstrap</code> composite
+kind. When you apply a <code>Bootstrap</code> resource, Crossplane resolves the chart and image through OCM <code>Resource</code> objects,
+then composes the deployer objects directly: for Flux an <code>OCIRepository</code> and a <code>HelmRelease</code>, for Argo CD a single
+<code>Application</code>. The deployer then renders the chart into the running workload.</p><p>The OCM <code>Resource</code> and the deployer objects are composed directly by the Composition, with no intermediate wrapper.</p><p>If you already know the kro variant, the building blocks map like this (otherwise skip the table):</p><table><thead><tr><th>kro</th><th>Crossplane</th></tr></thead><tbody><tr><td><code>ResourceGraphDefinition</code></td><td><code>CompositeResourceDefinition</code> (XRD) + <code>Composition</code></td></tr><tr><td>Schema <code>kind: Bootstrap</code> registered by kro</td><td>Composite <code>kind: Bootstrap</code> registered by the XRD</td></tr><tr><td>Instance of the <code>Bootstrap</code> CRD</td><td>A <code>Bootstrap</code> composite resource</td></tr><tr><td>kro reconciles the graph</td><td>Crossplane reconciles the composite, creating the composed resources</td></tr></tbody></table><p>The <code>Composition</code> runs in <strong>pipeline mode</strong> (<code>mode: Pipeline</code>). A single pipeline step invokes the <code>function-patch-and-transform</code> function, whose
+input holds the patch-and-transform resource list. The resolved chart and image OCI coordinates travel from the OCM
+<code>Resource</code> objects to the deployer objects through the composite&rsquo;s <code>status.atProvider</code> fields, since patch-and-transform
+wires values only between a composed resource and the composite, never directly between two composed resources.</p><h3 id=localization>Localization<a href=#localization class=anchor aria-hidden=true>#</a></h3><p><strong>Localization</strong> keeps image references in sync when a component moves between registries. Transferring the component
+rewrites the image references in its descriptor to point at the target registry. At deploy time the <strong>Composition</strong>
+reads the resolved OCM <code>Resource</code> status and injects the current image into the Helm values, so the workload always
+runs the image from the registry it was transferred to, not the original upstream location.</p><h2 id=create-and-publish-a-component-version>Create and Publish a Component Version<a href=#create-and-publish-a-component-version class=anchor aria-hidden=true>#</a></h2><p>First, create an OCM component version containing three resources:</p><ul><li><strong>helm-resource</strong>: The Podinfo Helm chart</li><li><strong>image-resource</strong>: The Podinfo container image (for localization)</li><li><strong>composition</strong>: Deployment instructions (the Crossplane XRD + Composition)</li></ul><ol role=list class=thulite-steps><li><h3 id=create-a-working-directory>Create a working directory<a href=#create-a-working-directory class=anchor aria-hidden=true>#</a></h3><div class=expressive-code><figure class="frame is-terminal not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-shell data-lang=shell><span class=line><span class=cl>mkdir /tmp/bootstrap-deploy-crossplane <span class=o>&amp;&amp;</span> <span class=nb>cd</span> /tmp/bootstrap-deploy-crossplane</span></span></code></pre></div></figure></div></li><li><h3 id=define-the-component>Define the component<a href=#define-the-component class=anchor aria-hidden=true>#</a></h3><p>Create a <code>component-constructor.yaml</code> file:</p><div class=expressive-code><figure class="frame is-terminal not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-shell data-lang=shell><span class=line><span class=cl>cat &gt; component-constructor.yaml <span class=s>&lt;&lt; &#39;EOF&#39;
+</span></span></span><span class=line><span class=cl><span class=s>components:
+</span></span></span><span class=line><span class=cl><span class=s>  - name: ocm.software/ocm-k8s-toolkit/bootstrap-crossplane
+</span></span></span><span class=line><span class=cl><span class=s>    version: &#34;1.0.0&#34;
+</span></span></span><span class=line><span class=cl><span class=s>    provider:
+</span></span></span><span class=line><span class=cl><span class=s>      name: ocm.software
+</span></span></span><span class=line><span class=cl><span class=s>    resources:
+</span></span></span><span class=line><span class=cl><span class=s>      - name: helm-resource
+</span></span></span><span class=line><span class=cl><span class=s>        type: helmChart
+</span></span></span><span class=line><span class=cl><span class=s>        version: &#34;1.0.0&#34;
+</span></span></span><span class=line><span class=cl><span class=s>        access:
+</span></span></span><span class=line><span class=cl><span class=s>          type: OCIImage/v1
+</span></span></span><span class=line><span class=cl><span class=s>          imageReference: &#34;ghcr.io/stefanprodan/charts/podinfo:6.11.1@sha256:a9b2804ec61795a7457b2303bf9efbc5fba51f856c3945f3bb0af68bf3b35afd&#34;
+</span></span></span><span class=line><span class=cl><span class=s>      - name: image-resource
+</span></span></span><span class=line><span class=cl><span class=s>        type: ociArtifact
+</span></span></span><span class=line><span class=cl><span class=s>        version: &#34;1.0.0&#34;
+</span></span></span><span class=line><span class=cl><span class=s>        access:
+</span></span></span><span class=line><span class=cl><span class=s>          type: OCIImage/v1
+</span></span></span><span class=line><span class=cl><span class=s>          imageReference: &#34;ghcr.io/stefanprodan/podinfo:6.11.1@sha256:8fa56908408de98f24aed2a162b1bb42c0b98df7abfcc5a76a14a8be510457c5&#34;
+</span></span></span><span class=line><span class=cl><span class=s>      - name: composition
+</span></span></span><span class=line><span class=cl><span class=s>        type: blob
+</span></span></span><span class=line><span class=cl><span class=s>        version: &#34;1.0.0&#34;
+</span></span></span><span class=line><span class=cl><span class=s>        input:
+</span></span></span><span class=line><span class=cl><span class=s>          type: File/v1
+</span></span></span><span class=line><span class=cl><span class=s>          path: ./composition.yaml
+</span></span></span><span class=line><span class=cl><span class=s>EOF</span></span></span></code></pre></div></figure></div><p>The resource <code>composition</code> is of type <code>blob</code> and points to a file <code>composition.yaml</code>. For
+this variant that file holds a Crossplane XRD + Composition. The XRD and the two OCM <code>Resource</code> objects are the same
+for both deployers. The Composition&rsquo;s last composed resources differ: Flux uses an <code>OCIRepository</code> plus a
+<code>HelmRelease</code>, Argo CD uses a single <code>Application</code>. Pick the deployer you installed and create <code>composition.yaml</code>
+before building the component version:</p><nav><div class="nav nav-tabs" id=tabs-composition-deployer-tablist role=tablist><button data-toggle-tab=flux class="nav-link active" id=tabs-composition-deployer-0-tab data-bs-toggle=tab data-bs-target=#tabs-composition-deployer-0 type=button role=tab aria-controls=tabs-composition-deployer-0 aria-selected=true>
+Flux</button>
+<button data-toggle-tab="argo cd" class=nav-link id=tabs-composition-deployer-1-tab data-bs-toggle=tab data-bs-target=#tabs-composition-deployer-1 type=button role=tab aria-controls=tabs-composition-deployer-1 aria-selected=false>
+Argo CD</button></div></nav><div class=tab-content id=tabs-composition-deployer-content><div data-pane=flux class="tab-pane fade show active" id=tabs-composition-deployer-0 role=tabpanel aria-labelledby=tabs-composition-deployer-0-tab tabindex=0><p class=tab-pane-label aria-hidden=true>Flux</p><details><summary>XRD + Composition (composition.yaml)</summary><p>The two OCM <code>Resource</code> objects (<code>ocm-resource-chart</code> and <code>ocm-resource-image</code>) resolve the chart and image through
+the OCM controllers, using <code>additionalStatusFields</code>/<code>toOCI()</code> to expose the registry, repository, and digest under
+<code>status.additional</code>. See <a href=/main/docs/concepts/kubernetes-controllers/#additional-status-fields>Concept: OCM Controllers</a>
+for how that mechanism works. <code>ToCompositeFieldPath</code> patches copy those resolved coordinates onto the composite
+status, where the composed Flux <code>OCIRepository</code> and <code>HelmRelease</code> read them.</p><div class=expressive-code><figure class="frame is-terminal not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-shell data-lang=shell><span class=line><span class=cl>cat &gt; composition.yaml <span class=s>&lt;&lt; &#39;EOF&#39;
+</span></span></span><span class=line><span class=cl><span class=s>apiVersion: apiextensions.crossplane.io/v2
+</span></span></span><span class=line><span class=cl><span class=s>kind: CompositeResourceDefinition
+</span></span></span><span class=line><span class=cl><span class=s>metadata:
+</span></span></span><span class=line><span class=cl><span class=s>  name: bootstraps.ocm.software
+</span></span></span><span class=line><span class=cl><span class=s>spec:
+</span></span></span><span class=line><span class=cl><span class=s>  group: ocm.software
+</span></span></span><span class=line><span class=cl><span class=s>  names:
+</span></span></span><span class=line><span class=cl><span class=s>    kind: Bootstrap
+</span></span></span><span class=line><span class=cl><span class=s>    plural: bootstraps
+</span></span></span><span class=line><span class=cl><span class=s>  # Namespaced is the recommended scope for app delivery. It keeps the composite
+</span></span></span><span class=line><span class=cl><span class=s>  # and its composed resources in one namespace, BOOTSTRAP_NAMESPACE (default for
+</span></span></span><span class=line><span class=cl><span class=s>  # Flux). Flux watches all namespaces, so the composed HelmRelease reconciles there.
+</span></span></span><span class=line><span class=cl><span class=s>  scope: Namespaced
+</span></span></span><span class=line><span class=cl><span class=s>  versions:
+</span></span></span><span class=line><span class=cl><span class=s>    - name: v1alpha1
+</span></span></span><span class=line><span class=cl><span class=s>      served: true
+</span></span></span><span class=line><span class=cl><span class=s>      referenceable: true
+</span></span></span><span class=line><span class=cl><span class=s>      schema:
+</span></span></span><span class=line><span class=cl><span class=s>        openAPIV3Schema:
+</span></span></span><span class=line><span class=cl><span class=s>          type: object
+</span></span></span><span class=line><span class=cl><span class=s>          properties:
+</span></span></span><span class=line><span class=cl><span class=s>            spec:
+</span></span></span><span class=line><span class=cl><span class=s>              type: object
+</span></span></span><span class=line><span class=cl><span class=s>              properties:
+</span></span></span><span class=line><span class=cl><span class=s>                # Name of the OCM Component CR created by the bootstrap resources below.
+</span></span></span><span class=line><span class=cl><span class=s>                ocmComponent:
+</span></span></span><span class=line><span class=cl><span class=s>                  type: string
+</span></span></span><span class=line><span class=cl><span class=s>                  default: bootstrap-component
+</span></span></span><span class=line><span class=cl><span class=s>            status:
+</span></span></span><span class=line><span class=cl><span class=s>              type: object
+</span></span></span><span class=line><span class=cl><span class=s>              properties:
+</span></span></span><span class=line><span class=cl><span class=s>                atProvider:
+</span></span></span><span class=line><span class=cl><span class=s>                  type: object
+</span></span></span><span class=line><span class=cl><span class=s>                  properties:
+</span></span></span><span class=line><span class=cl><span class=s>                    # Resolved chart OCI coordinates, written back by the chart Resource patches.
+</span></span></span><span class=line><span class=cl><span class=s>                    chartRegistry:
+</span></span></span><span class=line><span class=cl><span class=s>                      type: string
+</span></span></span><span class=line><span class=cl><span class=s>                    chartRepository:
+</span></span></span><span class=line><span class=cl><span class=s>                      type: string
+</span></span></span><span class=line><span class=cl><span class=s>                    chartDigest:
+</span></span></span><span class=line><span class=cl><span class=s>                      type: string
+</span></span></span><span class=line><span class=cl><span class=s>                    # Resolved image OCI coordinates, used for localization.
+</span></span></span><span class=line><span class=cl><span class=s>                    imageRegistry:
+</span></span></span><span class=line><span class=cl><span class=s>                      type: string
+</span></span></span><span class=line><span class=cl><span class=s>                    imageRepository:
+</span></span></span><span class=line><span class=cl><span class=s>                      type: string
+</span></span></span><span class=line><span class=cl><span class=s>                    imageDigest:
+</span></span></span><span class=line><span class=cl><span class=s>                      type: string
+</span></span></span><span class=line><span class=cl><span class=s>---
+</span></span></span><span class=line><span class=cl><span class=s>apiVersion: apiextensions.crossplane.io/v1
+</span></span></span><span class=line><span class=cl><span class=s>kind: Composition
+</span></span></span><span class=line><span class=cl><span class=s>metadata:
+</span></span></span><span class=line><span class=cl><span class=s>  name: bootstrap
+</span></span></span><span class=line><span class=cl><span class=s>  labels:
+</span></span></span><span class=line><span class=cl><span class=s>    crossplane.io/xrd: bootstraps.ocm.software
+</span></span></span><span class=line><span class=cl><span class=s>spec:
+</span></span></span><span class=line><span class=cl><span class=s>  compositeTypeRef:
+</span></span></span><span class=line><span class=cl><span class=s>    apiVersion: ocm.software/v1alpha1
+</span></span></span><span class=line><span class=cl><span class=s>    kind: Bootstrap
+</span></span></span><span class=line><span class=cl><span class=s>  mode: Pipeline
+</span></span></span><span class=line><span class=cl><span class=s>  pipeline:
+</span></span></span><span class=line><span class=cl><span class=s>    - step: patch-and-transform
+</span></span></span><span class=line><span class=cl><span class=s>      functionRef:
+</span></span></span><span class=line><span class=cl><span class=s>        name: function-patch-and-transform
+</span></span></span><span class=line><span class=cl><span class=s>      input:
+</span></span></span><span class=line><span class=cl><span class=s>        apiVersion: pt.fn.crossplane.io/v1beta1
+</span></span></span><span class=line><span class=cl><span class=s>        kind: Resources
+</span></span></span><span class=line><span class=cl><span class=s>        resources:
+</span></span></span><span class=line><span class=cl><span class=s>          # 1. OCM Resource (chart): resolve the Helm chart OCI reference. The
+</span></span></span><span class=line><span class=cl><span class=s>          #    composed OCM Resource inherits the composite&#39;s namespace.
+</span></span></span><span class=line><span class=cl><span class=s>          #    additionalStatusFields/toOCI() exposes registry, repository, and
+</span></span></span><span class=line><span class=cl><span class=s>          #    digest under status.additional.
+</span></span></span><span class=line><span class=cl><span class=s>          - name: ocm-resource-chart
+</span></span></span><span class=line><span class=cl><span class=s>            base:
+</span></span></span><span class=line><span class=cl><span class=s>              apiVersion: delivery.ocm.software/v1alpha1
+</span></span></span><span class=line><span class=cl><span class=s>              kind: Resource
+</span></span></span><span class=line><span class=cl><span class=s>              spec:
+</span></span></span><span class=line><span class=cl><span class=s>                resource:
+</span></span></span><span class=line><span class=cl><span class=s>                  byReference:
+</span></span></span><span class=line><span class=cl><span class=s>                    resource:
+</span></span></span><span class=line><span class=cl><span class=s>                      name: helm-resource
+</span></span></span><span class=line><span class=cl><span class=s>                additionalStatusFields:
+</span></span></span><span class=line><span class=cl><span class=s>                  oci: resource.access.toOCI()
+</span></span></span><span class=line><span class=cl><span class=s>            patches:
+</span></span></span><span class=line><span class=cl><span class=s>              - type: FromCompositeFieldPath
+</span></span></span><span class=line><span class=cl><span class=s>                fromFieldPath: spec.ocmComponent
+</span></span></span><span class=line><span class=cl><span class=s>                toFieldPath: spec.componentRef.name
+</span></span></span><span class=line><span class=cl><span class=s>              # Derive a composite-specific Resource name so parallel composites
+</span></span></span><span class=line><span class=cl><span class=s>              # never share one default/&lt;name&gt; OCM Resource.
+</span></span></span><span class=line><span class=cl><span class=s>              - type: FromCompositeFieldPath
+</span></span></span><span class=line><span class=cl><span class=s>                fromFieldPath: metadata.name
+</span></span></span><span class=line><span class=cl><span class=s>                toFieldPath: metadata.name
+</span></span></span><span class=line><span class=cl><span class=s>                transforms:
+</span></span></span><span class=line><span class=cl><span class=s>                  - type: string
+</span></span></span><span class=line><span class=cl><span class=s>                    string:
+</span></span></span><span class=line><span class=cl><span class=s>                      type: Format
+</span></span></span><span class=line><span class=cl><span class=s>                      fmt: &#34;%s-chart&#34;
+</span></span></span><span class=line><span class=cl><span class=s>              # Publish resolved chart coordinates onto composite status so the
+</span></span></span><span class=line><span class=cl><span class=s>              # OCIRepository below can consume them. patch-and-transform wires
+</span></span></span><span class=line><span class=cl><span class=s>              # values only between a composed resource and the composite, never
+</span></span></span><span class=line><span class=cl><span class=s>              # directly between two composed resources, so this round-trip stays.
+</span></span></span><span class=line><span class=cl><span class=s>              - type: ToCompositeFieldPath
+</span></span></span><span class=line><span class=cl><span class=s>                fromFieldPath: status.additional.oci.registry
+</span></span></span><span class=line><span class=cl><span class=s>                policy:
+</span></span></span><span class=line><span class=cl><span class=s>                  fromFieldPath: Optional
+</span></span></span><span class=line><span class=cl><span class=s>                toFieldPath: status.atProvider.chartRegistry
+</span></span></span><span class=line><span class=cl><span class=s>              - type: ToCompositeFieldPath
+</span></span></span><span class=line><span class=cl><span class=s>                fromFieldPath: status.additional.oci.repository
+</span></span></span><span class=line><span class=cl><span class=s>                policy:
+</span></span></span><span class=line><span class=cl><span class=s>                  fromFieldPath: Optional
+</span></span></span><span class=line><span class=cl><span class=s>                toFieldPath: status.atProvider.chartRepository
+</span></span></span><span class=line><span class=cl><span class=s>              - type: ToCompositeFieldPath
+</span></span></span><span class=line><span class=cl><span class=s>                fromFieldPath: status.additional.oci.digest
+</span></span></span><span class=line><span class=cl><span class=s>                policy:
+</span></span></span><span class=line><span class=cl><span class=s>                  fromFieldPath: Optional
+</span></span></span><span class=line><span class=cl><span class=s>                toFieldPath: status.atProvider.chartDigest
+</span></span></span><span class=line><span class=cl><span class=s>          # 2. OCM Resource (image): resolve the container image OCI reference for
+</span></span></span><span class=line><span class=cl><span class=s>          #    localization. Composed directly, same as the chart resource above.
+</span></span></span><span class=line><span class=cl><span class=s>          - name: ocm-resource-image
+</span></span></span><span class=line><span class=cl><span class=s>            base:
+</span></span></span><span class=line><span class=cl><span class=s>              apiVersion: delivery.ocm.software/v1alpha1
+</span></span></span><span class=line><span class=cl><span class=s>              kind: Resource
+</span></span></span><span class=line><span class=cl><span class=s>              spec:
+</span></span></span><span class=line><span class=cl><span class=s>                resource:
+</span></span></span><span class=line><span class=cl><span class=s>                  byReference:
+</span></span></span><span class=line><span class=cl><span class=s>                    resource:
+</span></span></span><span class=line><span class=cl><span class=s>                      name: image-resource
+</span></span></span><span class=line><span class=cl><span class=s>                additionalStatusFields:
+</span></span></span><span class=line><span class=cl><span class=s>                  oci: resource.access.toOCI()
+</span></span></span><span class=line><span class=cl><span class=s>            patches:
+</span></span></span><span class=line><span class=cl><span class=s>              - type: FromCompositeFieldPath
+</span></span></span><span class=line><span class=cl><span class=s>                fromFieldPath: spec.ocmComponent
+</span></span></span><span class=line><span class=cl><span class=s>                toFieldPath: spec.componentRef.name
+</span></span></span><span class=line><span class=cl><span class=s>              # Derive a composite-specific Resource name so parallel composites
+</span></span></span><span class=line><span class=cl><span class=s>              # never share one default/&lt;name&gt; OCM Resource.
+</span></span></span><span class=line><span class=cl><span class=s>              - type: FromCompositeFieldPath
+</span></span></span><span class=line><span class=cl><span class=s>                fromFieldPath: metadata.name
+</span></span></span><span class=line><span class=cl><span class=s>                toFieldPath: metadata.name
+</span></span></span><span class=line><span class=cl><span class=s>                transforms:
+</span></span></span><span class=line><span class=cl><span class=s>                  - type: string
+</span></span></span><span class=line><span class=cl><span class=s>                    string:
+</span></span></span><span class=line><span class=cl><span class=s>                      type: Format
+</span></span></span><span class=line><span class=cl><span class=s>                      fmt: &#34;%s-image&#34;
+</span></span></span><span class=line><span class=cl><span class=s>              - type: ToCompositeFieldPath
+</span></span></span><span class=line><span class=cl><span class=s>                fromFieldPath: status.additional.oci.registry
+</span></span></span><span class=line><span class=cl><span class=s>                policy:
+</span></span></span><span class=line><span class=cl><span class=s>                  fromFieldPath: Optional
+</span></span></span><span class=line><span class=cl><span class=s>                toFieldPath: status.atProvider.imageRegistry
+</span></span></span><span class=line><span class=cl><span class=s>              - type: ToCompositeFieldPath
+</span></span></span><span class=line><span class=cl><span class=s>                fromFieldPath: status.additional.oci.repository
+</span></span></span><span class=line><span class=cl><span class=s>                policy:
+</span></span></span><span class=line><span class=cl><span class=s>                  fromFieldPath: Optional
+</span></span></span><span class=line><span class=cl><span class=s>                toFieldPath: status.atProvider.imageRepository
+</span></span></span><span class=line><span class=cl><span class=s>              - type: ToCompositeFieldPath
+</span></span></span><span class=line><span class=cl><span class=s>                fromFieldPath: status.additional.oci.digest
+</span></span></span><span class=line><span class=cl><span class=s>                policy:
+</span></span></span><span class=line><span class=cl><span class=s>                  fromFieldPath: Optional
+</span></span></span><span class=line><span class=cl><span class=s>                toFieldPath: status.atProvider.imageDigest
+</span></span></span><span class=line><span class=cl><span class=s>          # 3. Flux OCIRepository, composed directly by Crossplane. The chart URL
+</span></span></span><span class=line><span class=cl><span class=s>          #    and digest come from the composite status populated in step 1. Those
+</span></span></span><span class=line><span class=cl><span class=s>          #    patches use policy.fromFieldPath: Required so Crossplane withholds this
+</span></span></span><span class=line><span class=cl><span class=s>          #    resource until the OCM Resource has resolved. Without it the OCIRepository
+</span></span></span><span class=line><span class=cl><span class=s>          #    would be created with the placeholder url and Flux would reject it.
+</span></span></span><span class=line><span class=cl><span class=s>          - name: ocirepository
+</span></span></span><span class=line><span class=cl><span class=s>            base:
+</span></span></span><span class=line><span class=cl><span class=s>              apiVersion: source.toolkit.fluxcd.io/v1
+</span></span></span><span class=line><span class=cl><span class=s>              kind: OCIRepository
+</span></span></span><span class=line><span class=cl><span class=s>              spec:
+</span></span></span><span class=line><span class=cl><span class=s>                interval: 1m0s
+</span></span></span><span class=line><span class=cl><span class=s>                layerSelector:
+</span></span></span><span class=line><span class=cl><span class=s>                  mediaType: &#34;application/vnd.cncf.helm.chart.content.v1.tar+gzip&#34;
+</span></span></span><span class=line><span class=cl><span class=s>                  operation: copy
+</span></span></span><span class=line><span class=cl><span class=s>                url: placeholder  # overwritten by patch below
+</span></span></span><span class=line><span class=cl><span class=s>                ref:
+</span></span></span><span class=line><span class=cl><span class=s>                  digest: placeholder  # overwritten by patch below
+</span></span></span><span class=line><span class=cl><span class=s>            patches:
+</span></span></span><span class=line><span class=cl><span class=s>              - type: FromCompositeFieldPath
+</span></span></span><span class=line><span class=cl><span class=s>                fromFieldPath: metadata.name
+</span></span></span><span class=line><span class=cl><span class=s>                toFieldPath: metadata.name
+</span></span></span><span class=line><span class=cl><span class=s>                transforms:
+</span></span></span><span class=line><span class=cl><span class=s>                  - type: string
+</span></span></span><span class=line><span class=cl><span class=s>                    string:
+</span></span></span><span class=line><span class=cl><span class=s>                      type: Format
+</span></span></span><span class=line><span class=cl><span class=s>                      fmt: &#34;%s-ocirepository&#34;
+</span></span></span><span class=line><span class=cl><span class=s>              - type: CombineFromComposite
+</span></span></span><span class=line><span class=cl><span class=s>                combine:
+</span></span></span><span class=line><span class=cl><span class=s>                  variables:
+</span></span></span><span class=line><span class=cl><span class=s>                    - fromFieldPath: status.atProvider.chartRegistry
+</span></span></span><span class=line><span class=cl><span class=s>                    - fromFieldPath: status.atProvider.chartRepository
+</span></span></span><span class=line><span class=cl><span class=s>                  strategy: string
+</span></span></span><span class=line><span class=cl><span class=s>                  string:
+</span></span></span><span class=line><span class=cl><span class=s>                    fmt: &#34;oci://%s/%s&#34;
+</span></span></span><span class=line><span class=cl><span class=s>                policy:
+</span></span></span><span class=line><span class=cl><span class=s>                  fromFieldPath: Required
+</span></span></span><span class=line><span class=cl><span class=s>                toFieldPath: spec.url
+</span></span></span><span class=line><span class=cl><span class=s>              - type: FromCompositeFieldPath
+</span></span></span><span class=line><span class=cl><span class=s>                fromFieldPath: status.atProvider.chartDigest
+</span></span></span><span class=line><span class=cl><span class=s>                policy:
+</span></span></span><span class=line><span class=cl><span class=s>                  fromFieldPath: Required
+</span></span></span><span class=line><span class=cl><span class=s>                toFieldPath: spec.ref.digest
+</span></span></span><span class=line><span class=cl><span class=s>          # 4. Flux HelmRelease, composed directly by Crossplane. Localization
+</span></span></span><span class=line><span class=cl><span class=s>          #    happens here: the image repository and a pseudo-tag+digest are
+</span></span></span><span class=line><span class=cl><span class=s>          #    injected into the chart values from composite status, exactly as the
+</span></span></span><span class=line><span class=cl><span class=s>          #    kro RGD&#39;s helmrelease resource does.
+</span></span></span><span class=line><span class=cl><span class=s>          - name: helmrelease
+</span></span></span><span class=line><span class=cl><span class=s>            base:
+</span></span></span><span class=line><span class=cl><span class=s>              apiVersion: helm.toolkit.fluxcd.io/v2
+</span></span></span><span class=line><span class=cl><span class=s>              kind: HelmRelease
+</span></span></span><span class=line><span class=cl><span class=s>              spec:
+</span></span></span><span class=line><span class=cl><span class=s>                releaseName: placeholder  # overwritten by patch below
+</span></span></span><span class=line><span class=cl><span class=s>                interval: 1m
+</span></span></span><span class=line><span class=cl><span class=s>                timeout: 5m
+</span></span></span><span class=line><span class=cl><span class=s>                # Deploy the workload into its own namespace, created by Flux.
+</span></span></span><span class=line><span class=cl><span class=s>                targetNamespace: podinfo
+</span></span></span><span class=line><span class=cl><span class=s>                install:
+</span></span></span><span class=line><span class=cl><span class=s>                  createNamespace: true
+</span></span></span><span class=line><span class=cl><span class=s>                chartRef:
+</span></span></span><span class=line><span class=cl><span class=s>                  kind: OCIRepository
+</span></span></span><span class=line><span class=cl><span class=s>                  name: placeholder  # overwritten by patch below
+</span></span></span><span class=line><span class=cl><span class=s>            patches:
+</span></span></span><span class=line><span class=cl><span class=s>              - type: FromCompositeFieldPath
+</span></span></span><span class=line><span class=cl><span class=s>                fromFieldPath: metadata.name
+</span></span></span><span class=line><span class=cl><span class=s>                toFieldPath: metadata.name
+</span></span></span><span class=line><span class=cl><span class=s>                transforms:
+</span></span></span><span class=line><span class=cl><span class=s>                  - type: string
+</span></span></span><span class=line><span class=cl><span class=s>                    string:
+</span></span></span><span class=line><span class=cl><span class=s>                      type: Format
+</span></span></span><span class=line><span class=cl><span class=s>                      fmt: &#34;%s-helmrelease&#34;
+</span></span></span><span class=line><span class=cl><span class=s>              # Derive a composite-specific, reader-deterministic Helm release name
+</span></span></span><span class=line><span class=cl><span class=s>              # from the composite name so parallel composites never share a release.
+</span></span></span><span class=line><span class=cl><span class=s>              - type: FromCompositeFieldPath
+</span></span></span><span class=line><span class=cl><span class=s>                fromFieldPath: metadata.name
+</span></span></span><span class=line><span class=cl><span class=s>                toFieldPath: spec.releaseName
+</span></span></span><span class=line><span class=cl><span class=s>                transforms:
+</span></span></span><span class=line><span class=cl><span class=s>                  - type: string
+</span></span></span><span class=line><span class=cl><span class=s>                    string:
+</span></span></span><span class=line><span class=cl><span class=s>                      type: Format
+</span></span></span><span class=line><span class=cl><span class=s>                      fmt: &#34;%s-release&#34;
+</span></span></span><span class=line><span class=cl><span class=s>              # Point the HelmRelease at the OCIRepository created in step 3.
+</span></span></span><span class=line><span class=cl><span class=s>              - type: FromCompositeFieldPath
+</span></span></span><span class=line><span class=cl><span class=s>                fromFieldPath: metadata.name
+</span></span></span><span class=line><span class=cl><span class=s>                toFieldPath: spec.chartRef.name
+</span></span></span><span class=line><span class=cl><span class=s>                transforms:
+</span></span></span><span class=line><span class=cl><span class=s>                  - type: string
+</span></span></span><span class=line><span class=cl><span class=s>                    string:
+</span></span></span><span class=line><span class=cl><span class=s>                      type: Format
+</span></span></span><span class=line><span class=cl><span class=s>                      fmt: &#34;%s-ocirepository&#34;
+</span></span></span><span class=line><span class=cl><span class=s>              # Localized image: registry/repository from the resolved image resource.
+</span></span></span><span class=line><span class=cl><span class=s>              - type: CombineFromComposite
+</span></span></span><span class=line><span class=cl><span class=s>                combine:
+</span></span></span><span class=line><span class=cl><span class=s>                  variables:
+</span></span></span><span class=line><span class=cl><span class=s>                    - fromFieldPath: status.atProvider.imageRegistry
+</span></span></span><span class=line><span class=cl><span class=s>                    - fromFieldPath: status.atProvider.imageRepository
+</span></span></span><span class=line><span class=cl><span class=s>                  strategy: string
+</span></span></span><span class=line><span class=cl><span class=s>                  string:
+</span></span></span><span class=line><span class=cl><span class=s>                    fmt: &#34;%s/%s&#34;
+</span></span></span><span class=line><span class=cl><span class=s>                policy:
+</span></span></span><span class=line><span class=cl><span class=s>                  fromFieldPath: Required
+</span></span></span><span class=line><span class=cl><span class=s>                toFieldPath: spec.values.image.repository
+</span></span></span><span class=line><span class=cl><span class=s>              # Pseudo-tag with @digest. Podinfo&#39;s chart builds repository:tag, and OCI
+</span></span></span><span class=line><span class=cl><span class=s>              # runtimes ignore the tag when a digest is present, so this pins by digest.
+</span></span></span><span class=line><span class=cl><span class=s>              - type: FromCompositeFieldPath
+</span></span></span><span class=line><span class=cl><span class=s>                fromFieldPath: status.atProvider.imageDigest
+</span></span></span><span class=line><span class=cl><span class=s>                policy:
+</span></span></span><span class=line><span class=cl><span class=s>                  fromFieldPath: Required
+</span></span></span><span class=line><span class=cl><span class=s>                toFieldPath: spec.values.image.tag
+</span></span></span><span class=line><span class=cl><span class=s>                transforms:
+</span></span></span><span class=line><span class=cl><span class=s>                  - type: string
+</span></span></span><span class=line><span class=cl><span class=s>                    string:
+</span></span></span><span class=line><span class=cl><span class=s>                      type: Format
+</span></span></span><span class=line><span class=cl><span class=s>                      fmt: &#34;latest@%s&#34;
+</span></span></span><span class=line><span class=cl><span class=s>EOF</span></span></span></code></pre></div></figure></div></details><div class="callout callout-note d-flex flex-row mt-4 mb-4 pt-4 pe-4 pb-2 ps-3"><svg   xmlns="http://www.w3.org/2000/svg"   width="24"   height="24"   viewBox="0 0 24 24"   fill="none"   stroke="currentColor"   stroke-width="2"   stroke-linecap="round"   stroke-linejoin="round"    class="outline/lock svg-inline callout-icon me-2 mb-3" id="svg-lock" role="img">   <path stroke="none" d="M0 0h24v24H0z" fill="none" />   <path d="M5 13a2 2 0 0 1 2 -2h10a2 2 0 0 1 2 2v6a2 2 0 0 1 -2 2h-10a2 2 0 0 1 -2 -2v-6" />   <path d="M11 16a1 1 0 1 0 2 0a1 1 0 0 0 -2 0" />   <path d="M8 11v-4a4 4 0 1 1 8 0v4" /> </svg><div class=callout-content><div class=callout-title>Private registries</div><div class=callout-body><p>If you want to keep the component private instead of making it public after transfer, configure credentials for the
+OCM Controllers and Flux before running <code>ocm add cv</code>. See
+<a href=/main/docs/guides/deploy/configure-controller-credentials/>Credentials for OCM Controllers</a>, and add a
+<code>secretRef</code> to the <code>OCIRepository</code> manifest in the Composition&rsquo;s <code>ocirepository</code> resource.</p></div></div></div></div><div data-pane="argo cd" class="tab-pane fade" id=tabs-composition-deployer-1 role=tabpanel aria-labelledby=tabs-composition-deployer-1-tab tabindex=0><p class=tab-pane-label aria-hidden=true>Argo CD</p><details><summary>XRD + Composition (composition.yaml)</summary><p>The XRD and the two OCM <code>Resource</code> objects (<code>ocm-resource-chart</code> and <code>ocm-resource-image</code>) are identical to the Flux
+variant. They resolve the chart and image through the OCM controllers and publish the registry, repository, and
+digest onto the composite status. The final composed resource is an Argo CD <code>Application</code> instead of Flux objects.
+Localization happens in <code>spec.source.helm.valuesObject</code>, where the resolved image coordinates are injected from
+composite status.</p><div class=expressive-code><figure class="frame is-terminal not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-shell data-lang=shell><span class=line><span class=cl>cat &gt; composition.yaml <span class=s>&lt;&lt; &#39;EOF&#39;
+</span></span></span><span class=line><span class=cl><span class=s>apiVersion: apiextensions.crossplane.io/v2
+</span></span></span><span class=line><span class=cl><span class=s>kind: CompositeResourceDefinition
+</span></span></span><span class=line><span class=cl><span class=s>metadata:
+</span></span></span><span class=line><span class=cl><span class=s>  name: bootstraps.ocm.software
+</span></span></span><span class=line><span class=cl><span class=s>spec:
+</span></span></span><span class=line><span class=cl><span class=s>  group: ocm.software
+</span></span></span><span class=line><span class=cl><span class=s>  names:
+</span></span></span><span class=line><span class=cl><span class=s>    kind: Bootstrap
+</span></span></span><span class=line><span class=cl><span class=s>    plural: bootstraps
+</span></span></span><span class=line><span class=cl><span class=s>  # Namespaced is the recommended scope for app delivery. It keeps the composite
+</span></span></span><span class=line><span class=cl><span class=s>  # and its composed resources in one namespace, BOOTSTRAP_NAMESPACE (argocd for
+</span></span></span><span class=line><span class=cl><span class=s>  # Argo CD) so the composed Application lands where stock Argo CD watches.
+</span></span></span><span class=line><span class=cl><span class=s>  scope: Namespaced
+</span></span></span><span class=line><span class=cl><span class=s>  versions:
+</span></span></span><span class=line><span class=cl><span class=s>    - name: v1alpha1
+</span></span></span><span class=line><span class=cl><span class=s>      served: true
+</span></span></span><span class=line><span class=cl><span class=s>      referenceable: true
+</span></span></span><span class=line><span class=cl><span class=s>      schema:
+</span></span></span><span class=line><span class=cl><span class=s>        openAPIV3Schema:
+</span></span></span><span class=line><span class=cl><span class=s>          type: object
+</span></span></span><span class=line><span class=cl><span class=s>          properties:
+</span></span></span><span class=line><span class=cl><span class=s>            spec:
+</span></span></span><span class=line><span class=cl><span class=s>              type: object
+</span></span></span><span class=line><span class=cl><span class=s>              properties:
+</span></span></span><span class=line><span class=cl><span class=s>                # Name of the OCM Component CR created by the bootstrap resources below.
+</span></span></span><span class=line><span class=cl><span class=s>                ocmComponent:
+</span></span></span><span class=line><span class=cl><span class=s>                  type: string
+</span></span></span><span class=line><span class=cl><span class=s>                  default: bootstrap-component
+</span></span></span><span class=line><span class=cl><span class=s>            status:
+</span></span></span><span class=line><span class=cl><span class=s>              type: object
+</span></span></span><span class=line><span class=cl><span class=s>              properties:
+</span></span></span><span class=line><span class=cl><span class=s>                atProvider:
+</span></span></span><span class=line><span class=cl><span class=s>                  type: object
+</span></span></span><span class=line><span class=cl><span class=s>                  properties:
+</span></span></span><span class=line><span class=cl><span class=s>                    # Resolved chart OCI coordinates, written back by the chart Resource patches.
+</span></span></span><span class=line><span class=cl><span class=s>                    chartRegistry:
+</span></span></span><span class=line><span class=cl><span class=s>                      type: string
+</span></span></span><span class=line><span class=cl><span class=s>                    chartRepository:
+</span></span></span><span class=line><span class=cl><span class=s>                      type: string
+</span></span></span><span class=line><span class=cl><span class=s>                    chartTag:
+</span></span></span><span class=line><span class=cl><span class=s>                      type: string
+</span></span></span><span class=line><span class=cl><span class=s>                    # Resolved image OCI coordinates, used for localization.
+</span></span></span><span class=line><span class=cl><span class=s>                    imageRegistry:
+</span></span></span><span class=line><span class=cl><span class=s>                      type: string
+</span></span></span><span class=line><span class=cl><span class=s>                    imageRepository:
+</span></span></span><span class=line><span class=cl><span class=s>                      type: string
+</span></span></span><span class=line><span class=cl><span class=s>                    imageDigest:
+</span></span></span><span class=line><span class=cl><span class=s>                      type: string
+</span></span></span><span class=line><span class=cl><span class=s>---
+</span></span></span><span class=line><span class=cl><span class=s>apiVersion: apiextensions.crossplane.io/v1
+</span></span></span><span class=line><span class=cl><span class=s>kind: Composition
+</span></span></span><span class=line><span class=cl><span class=s>metadata:
+</span></span></span><span class=line><span class=cl><span class=s>  name: bootstrap
+</span></span></span><span class=line><span class=cl><span class=s>  labels:
+</span></span></span><span class=line><span class=cl><span class=s>    crossplane.io/xrd: bootstraps.ocm.software
+</span></span></span><span class=line><span class=cl><span class=s>spec:
+</span></span></span><span class=line><span class=cl><span class=s>  compositeTypeRef:
+</span></span></span><span class=line><span class=cl><span class=s>    apiVersion: ocm.software/v1alpha1
+</span></span></span><span class=line><span class=cl><span class=s>    kind: Bootstrap
+</span></span></span><span class=line><span class=cl><span class=s>  mode: Pipeline
+</span></span></span><span class=line><span class=cl><span class=s>  pipeline:
+</span></span></span><span class=line><span class=cl><span class=s>    - step: patch-and-transform
+</span></span></span><span class=line><span class=cl><span class=s>      functionRef:
+</span></span></span><span class=line><span class=cl><span class=s>        name: function-patch-and-transform
+</span></span></span><span class=line><span class=cl><span class=s>      input:
+</span></span></span><span class=line><span class=cl><span class=s>        apiVersion: pt.fn.crossplane.io/v1beta1
+</span></span></span><span class=line><span class=cl><span class=s>        kind: Resources
+</span></span></span><span class=line><span class=cl><span class=s>        resources:
+</span></span></span><span class=line><span class=cl><span class=s>          # 1. OCM Resource (chart): resolve the Helm chart OCI reference. The
+</span></span></span><span class=line><span class=cl><span class=s>          #    composed OCM Resource inherits the composite&#39;s namespace.
+</span></span></span><span class=line><span class=cl><span class=s>          - name: ocm-resource-chart
+</span></span></span><span class=line><span class=cl><span class=s>            base:
+</span></span></span><span class=line><span class=cl><span class=s>              apiVersion: delivery.ocm.software/v1alpha1
+</span></span></span><span class=line><span class=cl><span class=s>              kind: Resource
+</span></span></span><span class=line><span class=cl><span class=s>              spec:
+</span></span></span><span class=line><span class=cl><span class=s>                resource:
+</span></span></span><span class=line><span class=cl><span class=s>                  byReference:
+</span></span></span><span class=line><span class=cl><span class=s>                    resource:
+</span></span></span><span class=line><span class=cl><span class=s>                      name: helm-resource
+</span></span></span><span class=line><span class=cl><span class=s>                additionalStatusFields:
+</span></span></span><span class=line><span class=cl><span class=s>                  oci: resource.access.toOCI()
+</span></span></span><span class=line><span class=cl><span class=s>            patches:
+</span></span></span><span class=line><span class=cl><span class=s>              - type: FromCompositeFieldPath
+</span></span></span><span class=line><span class=cl><span class=s>                fromFieldPath: spec.ocmComponent
+</span></span></span><span class=line><span class=cl><span class=s>                toFieldPath: spec.componentRef.name
+</span></span></span><span class=line><span class=cl><span class=s>              # Derive a composite-specific Resource name so parallel composites
+</span></span></span><span class=line><span class=cl><span class=s>              # never share one default/&lt;name&gt; OCM Resource.
+</span></span></span><span class=line><span class=cl><span class=s>              - type: FromCompositeFieldPath
+</span></span></span><span class=line><span class=cl><span class=s>                fromFieldPath: metadata.name
+</span></span></span><span class=line><span class=cl><span class=s>                toFieldPath: metadata.name
+</span></span></span><span class=line><span class=cl><span class=s>                transforms:
+</span></span></span><span class=line><span class=cl><span class=s>                  - type: string
+</span></span></span><span class=line><span class=cl><span class=s>                    string:
+</span></span></span><span class=line><span class=cl><span class=s>                      type: Format
+</span></span></span><span class=line><span class=cl><span class=s>                      fmt: &#34;%s-chart&#34;
+</span></span></span><span class=line><span class=cl><span class=s>              # Publish resolved chart coordinates onto composite status so the
+</span></span></span><span class=line><span class=cl><span class=s>              # Application below can consume them.
+</span></span></span><span class=line><span class=cl><span class=s>              - type: ToCompositeFieldPath
+</span></span></span><span class=line><span class=cl><span class=s>                fromFieldPath: status.additional.oci.registry
+</span></span></span><span class=line><span class=cl><span class=s>                policy:
+</span></span></span><span class=line><span class=cl><span class=s>                  fromFieldPath: Optional
+</span></span></span><span class=line><span class=cl><span class=s>                toFieldPath: status.atProvider.chartRegistry
+</span></span></span><span class=line><span class=cl><span class=s>              - type: ToCompositeFieldPath
+</span></span></span><span class=line><span class=cl><span class=s>                fromFieldPath: status.additional.oci.repository
+</span></span></span><span class=line><span class=cl><span class=s>                policy:
+</span></span></span><span class=line><span class=cl><span class=s>                  fromFieldPath: Optional
+</span></span></span><span class=line><span class=cl><span class=s>                toFieldPath: status.atProvider.chartRepository
+</span></span></span><span class=line><span class=cl><span class=s>              # Argo CD resolves the chart by tag, not digest, so publish the tag.
+</span></span></span><span class=line><span class=cl><span class=s>              - type: ToCompositeFieldPath
+</span></span></span><span class=line><span class=cl><span class=s>                fromFieldPath: status.additional.oci.tag
+</span></span></span><span class=line><span class=cl><span class=s>                policy:
+</span></span></span><span class=line><span class=cl><span class=s>                  fromFieldPath: Optional
+</span></span></span><span class=line><span class=cl><span class=s>                toFieldPath: status.atProvider.chartTag
+</span></span></span><span class=line><span class=cl><span class=s>          # 2. OCM Resource (image): resolve the container image OCI reference for
+</span></span></span><span class=line><span class=cl><span class=s>          #    localization. Composed directly, same as the chart resource above.
+</span></span></span><span class=line><span class=cl><span class=s>          - name: ocm-resource-image
+</span></span></span><span class=line><span class=cl><span class=s>            base:
+</span></span></span><span class=line><span class=cl><span class=s>              apiVersion: delivery.ocm.software/v1alpha1
+</span></span></span><span class=line><span class=cl><span class=s>              kind: Resource
+</span></span></span><span class=line><span class=cl><span class=s>              spec:
+</span></span></span><span class=line><span class=cl><span class=s>                resource:
+</span></span></span><span class=line><span class=cl><span class=s>                  byReference:
+</span></span></span><span class=line><span class=cl><span class=s>                    resource:
+</span></span></span><span class=line><span class=cl><span class=s>                      name: image-resource
+</span></span></span><span class=line><span class=cl><span class=s>                additionalStatusFields:
+</span></span></span><span class=line><span class=cl><span class=s>                  oci: resource.access.toOCI()
+</span></span></span><span class=line><span class=cl><span class=s>            patches:
+</span></span></span><span class=line><span class=cl><span class=s>              - type: FromCompositeFieldPath
+</span></span></span><span class=line><span class=cl><span class=s>                fromFieldPath: spec.ocmComponent
+</span></span></span><span class=line><span class=cl><span class=s>                toFieldPath: spec.componentRef.name
+</span></span></span><span class=line><span class=cl><span class=s>              - type: FromCompositeFieldPath
+</span></span></span><span class=line><span class=cl><span class=s>                fromFieldPath: metadata.name
+</span></span></span><span class=line><span class=cl><span class=s>                toFieldPath: metadata.name
+</span></span></span><span class=line><span class=cl><span class=s>                transforms:
+</span></span></span><span class=line><span class=cl><span class=s>                  - type: string
+</span></span></span><span class=line><span class=cl><span class=s>                    string:
+</span></span></span><span class=line><span class=cl><span class=s>                      type: Format
+</span></span></span><span class=line><span class=cl><span class=s>                      fmt: &#34;%s-image&#34;
+</span></span></span><span class=line><span class=cl><span class=s>              - type: ToCompositeFieldPath
+</span></span></span><span class=line><span class=cl><span class=s>                fromFieldPath: status.additional.oci.registry
+</span></span></span><span class=line><span class=cl><span class=s>                policy:
+</span></span></span><span class=line><span class=cl><span class=s>                  fromFieldPath: Optional
+</span></span></span><span class=line><span class=cl><span class=s>                toFieldPath: status.atProvider.imageRegistry
+</span></span></span><span class=line><span class=cl><span class=s>              - type: ToCompositeFieldPath
+</span></span></span><span class=line><span class=cl><span class=s>                fromFieldPath: status.additional.oci.repository
+</span></span></span><span class=line><span class=cl><span class=s>                policy:
+</span></span></span><span class=line><span class=cl><span class=s>                  fromFieldPath: Optional
+</span></span></span><span class=line><span class=cl><span class=s>                toFieldPath: status.atProvider.imageRepository
+</span></span></span><span class=line><span class=cl><span class=s>              - type: ToCompositeFieldPath
+</span></span></span><span class=line><span class=cl><span class=s>                fromFieldPath: status.additional.oci.digest
+</span></span></span><span class=line><span class=cl><span class=s>                policy:
+</span></span></span><span class=line><span class=cl><span class=s>                  fromFieldPath: Optional
+</span></span></span><span class=line><span class=cl><span class=s>                toFieldPath: status.atProvider.imageDigest
+</span></span></span><span class=line><span class=cl><span class=s>          # 3. Argo CD Application, composed directly by Crossplane. The chart
+</span></span></span><span class=line><span class=cl><span class=s>          #    repoURL/targetRevision and the localized image values are patched
+</span></span></span><span class=line><span class=cl><span class=s>          #    from the composite status populated above.
+</span></span></span><span class=line><span class=cl><span class=s>          - name: application
+</span></span></span><span class=line><span class=cl><span class=s>            base:
+</span></span></span><span class=line><span class=cl><span class=s>              apiVersion: argoproj.io/v1alpha1
+</span></span></span><span class=line><span class=cl><span class=s>              kind: Application
+</span></span></span><span class=line><span class=cl><span class=s>              metadata:
+</span></span></span><span class=line><span class=cl><span class=s>                # No namespace here: Crossplane composes the Application into the
+</span></span></span><span class=line><span class=cl><span class=s>                # composite&#39;s namespace. Apply the Bootstrap in argocd so stock
+</span></span></span><span class=line><span class=cl><span class=s>                # Argo CD watches it (see BOOTSTRAP_NAMESPACE in Environment Setup).
+</span></span></span><span class=line><span class=cl><span class=s>                finalizers:
+</span></span></span><span class=line><span class=cl><span class=s>                  - resources-finalizer.argocd.argoproj.io
+</span></span></span><span class=line><span class=cl><span class=s>              spec:
+</span></span></span><span class=line><span class=cl><span class=s>                project: default
+</span></span></span><span class=line><span class=cl><span class=s>                source:
+</span></span></span><span class=line><span class=cl><span class=s>                  chart: podinfo
+</span></span></span><span class=line><span class=cl><span class=s>                  repoURL: placeholder  # overwritten by patch below
+</span></span></span><span class=line><span class=cl><span class=s>                  targetRevision: placeholder  # overwritten by patch below
+</span></span></span><span class=line><span class=cl><span class=s>                  helm:
+</span></span></span><span class=line><span class=cl><span class=s>                    releaseName: placeholder  # overwritten by patch below
+</span></span></span><span class=line><span class=cl><span class=s>                destination:
+</span></span></span><span class=line><span class=cl><span class=s>                  server: https://kubernetes.default.svc
+</span></span></span><span class=line><span class=cl><span class=s>                  # Deploy the workload into its own namespace, created on sync
+</span></span></span><span class=line><span class=cl><span class=s>                  # by the CreateNamespace=true sync option below.
+</span></span></span><span class=line><span class=cl><span class=s>                  namespace: podinfo
+</span></span></span><span class=line><span class=cl><span class=s>                syncPolicy:
+</span></span></span><span class=line><span class=cl><span class=s>                  automated:
+</span></span></span><span class=line><span class=cl><span class=s>                    prune: true
+</span></span></span><span class=line><span class=cl><span class=s>                    selfHeal: true
+</span></span></span><span class=line><span class=cl><span class=s>                  syncOptions:
+</span></span></span><span class=line><span class=cl><span class=s>                    - CreateNamespace=true
+</span></span></span><span class=line><span class=cl><span class=s>            patches:
+</span></span></span><span class=line><span class=cl><span class=s>              - type: FromCompositeFieldPath
+</span></span></span><span class=line><span class=cl><span class=s>                fromFieldPath: metadata.name
+</span></span></span><span class=line><span class=cl><span class=s>                toFieldPath: metadata.name
+</span></span></span><span class=line><span class=cl><span class=s>                transforms:
+</span></span></span><span class=line><span class=cl><span class=s>                  - type: string
+</span></span></span><span class=line><span class=cl><span class=s>                    string:
+</span></span></span><span class=line><span class=cl><span class=s>                      type: Format
+</span></span></span><span class=line><span class=cl><span class=s>                      fmt: &#34;%s-application&#34;
+</span></span></span><span class=line><span class=cl><span class=s>              # Derive a composite-specific Helm release name from the composite
+</span></span></span><span class=line><span class=cl><span class=s>              # name so parallel composites never share a release.
+</span></span></span><span class=line><span class=cl><span class=s>              - type: FromCompositeFieldPath
+</span></span></span><span class=line><span class=cl><span class=s>                fromFieldPath: metadata.name
+</span></span></span><span class=line><span class=cl><span class=s>                toFieldPath: spec.source.helm.releaseName
+</span></span></span><span class=line><span class=cl><span class=s>                transforms:
+</span></span></span><span class=line><span class=cl><span class=s>                  - type: string
+</span></span></span><span class=line><span class=cl><span class=s>                    string:
+</span></span></span><span class=line><span class=cl><span class=s>                      type: Format
+</span></span></span><span class=line><span class=cl><span class=s>                      fmt: &#34;%s-release&#34;
+</span></span></span><span class=line><span class=cl><span class=s>              # Chart repoURL from the resolved chart coordinates.
+</span></span></span><span class=line><span class=cl><span class=s>              - type: CombineFromComposite
+</span></span></span><span class=line><span class=cl><span class=s>                combine:
+</span></span></span><span class=line><span class=cl><span class=s>                  variables:
+</span></span></span><span class=line><span class=cl><span class=s>                    - fromFieldPath: status.atProvider.chartRegistry
+</span></span></span><span class=line><span class=cl><span class=s>                    - fromFieldPath: status.atProvider.chartRepository
+</span></span></span><span class=line><span class=cl><span class=s>                  strategy: string
+</span></span></span><span class=line><span class=cl><span class=s>                  string:
+</span></span></span><span class=line><span class=cl><span class=s>                    fmt: &#34;oci://%s/%s&#34;
+</span></span></span><span class=line><span class=cl><span class=s>                policy:
+</span></span></span><span class=line><span class=cl><span class=s>                  fromFieldPath: Required
+</span></span></span><span class=line><span class=cl><span class=s>                toFieldPath: spec.source.repoURL
+</span></span></span><span class=line><span class=cl><span class=s>              - type: FromCompositeFieldPath
+</span></span></span><span class=line><span class=cl><span class=s>                fromFieldPath: status.atProvider.chartTag
+</span></span></span><span class=line><span class=cl><span class=s>                policy:
+</span></span></span><span class=line><span class=cl><span class=s>                  fromFieldPath: Required
+</span></span></span><span class=line><span class=cl><span class=s>                toFieldPath: spec.source.targetRevision
+</span></span></span><span class=line><span class=cl><span class=s>              # Localized image: registry/repository from the resolved image resource.
+</span></span></span><span class=line><span class=cl><span class=s>              - type: CombineFromComposite
+</span></span></span><span class=line><span class=cl><span class=s>                combine:
+</span></span></span><span class=line><span class=cl><span class=s>                  variables:
+</span></span></span><span class=line><span class=cl><span class=s>                    - fromFieldPath: status.atProvider.imageRegistry
+</span></span></span><span class=line><span class=cl><span class=s>                    - fromFieldPath: status.atProvider.imageRepository
+</span></span></span><span class=line><span class=cl><span class=s>                  strategy: string
+</span></span></span><span class=line><span class=cl><span class=s>                  string:
+</span></span></span><span class=line><span class=cl><span class=s>                    fmt: &#34;%s/%s&#34;
+</span></span></span><span class=line><span class=cl><span class=s>                policy:
+</span></span></span><span class=line><span class=cl><span class=s>                  fromFieldPath: Required
+</span></span></span><span class=line><span class=cl><span class=s>                toFieldPath: spec.source.helm.valuesObject.image.repository
+</span></span></span><span class=line><span class=cl><span class=s>              # Pseudo-tag with @digest. Podinfo&#39;s chart builds repository:tag, and OCI
+</span></span></span><span class=line><span class=cl><span class=s>              # runtimes ignore the tag when a digest is present, so this pins by digest.
+</span></span></span><span class=line><span class=cl><span class=s>              - type: FromCompositeFieldPath
+</span></span></span><span class=line><span class=cl><span class=s>                fromFieldPath: status.atProvider.imageDigest
+</span></span></span><span class=line><span class=cl><span class=s>                policy:
+</span></span></span><span class=line><span class=cl><span class=s>                  fromFieldPath: Required
+</span></span></span><span class=line><span class=cl><span class=s>                toFieldPath: spec.source.helm.valuesObject.image.tag
+</span></span></span><span class=line><span class=cl><span class=s>                transforms:
+</span></span></span><span class=line><span class=cl><span class=s>                  - type: string
+</span></span></span><span class=line><span class=cl><span class=s>                    string:
+</span></span></span><span class=line><span class=cl><span class=s>                      type: Format
+</span></span></span><span class=line><span class=cl><span class=s>                      fmt: &#34;latest@%s&#34;
+</span></span></span><span class=line><span class=cl><span class=s>            # Argo CD Application objects never set a standard Ready condition.
+</span></span></span><span class=line><span class=cl><span class=s>            # Without these checks Crossplane waits for status.conditions[Ready]
+</span></span></span><span class=line><span class=cl><span class=s>            # forever and the Bootstrap stays READY=False. Treat the Application
+</span></span></span><span class=line><span class=cl><span class=s>            # as ready only when Argo CD reports it Healthy and Synced.
+</span></span></span><span class=line><span class=cl><span class=s>            readinessChecks:
+</span></span></span><span class=line><span class=cl><span class=s>              - type: MatchString
+</span></span></span><span class=line><span class=cl><span class=s>                fieldPath: status.health.status
+</span></span></span><span class=line><span class=cl><span class=s>                matchString: Healthy
+</span></span></span><span class=line><span class=cl><span class=s>              - type: MatchString
+</span></span></span><span class=line><span class=cl><span class=s>                fieldPath: status.sync.status
+</span></span></span><span class=line><span class=cl><span class=s>                matchString: Synced
+</span></span></span><span class=line><span class=cl><span class=s>EOF</span></span></span></code></pre></div></figure></div></details><div class="callout callout-note d-flex flex-row mt-4 mb-4 pt-4 pe-4 pb-2 ps-3"><svg   xmlns="http://www.w3.org/2000/svg"   width="24"   height="24"   viewBox="0 0 24 24"   fill="none"   stroke="currentColor"   stroke-width="2"   stroke-linecap="round"   stroke-linejoin="round"    class="outline/lock svg-inline callout-icon me-2 mb-3" id="svg-lock" role="img">   <path stroke="none" d="M0 0h24v24H0z" fill="none" />   <path d="M5 13a2 2 0 0 1 2 -2h10a2 2 0 0 1 2 2v6a2 2 0 0 1 -2 2h-10a2 2 0 0 1 -2 -2v-6" />   <path d="M11 16a1 1 0 1 0 2 0a1 1 0 0 0 -2 0" />   <path d="M8 11v-4a4 4 0 1 1 8 0v4" /> </svg><div class=callout-content><div class=callout-title>Private registries</div><div class=callout-body><p>If you want to keep the component private instead of making it public after transfer, configure credentials for the
+OCM Controllers before running <code>ocm add cv</code>. See
+<a href=/main/docs/guides/deploy/configure-controller-credentials/>Credentials for OCM Controllers</a>. For Argo CD,
+pull credentials are configured on the Argo CD repository, not in the Composition. See the
+<a href=https://argo-cd.readthedocs.io/en/stable/operator-manual/declarative-setup/#repositories target=_blank rel=noopener>Argo CD private registry docs</a>.</p></div></div></div></div></div></li><li><h3 id=build-and-transfer-the-component>Build and transfer the component<a href=#build-and-transfer-the-component class=anchor aria-hidden=true>#</a></h3><p>Build the component version locally:</p><div class=expressive-code><figure class="frame is-terminal not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-bash data-lang=bash><span class=line><span class=cl>ocm add cv</span></span></code></pre></div></figure></div><p>Transfer to your registry with the OCI uploader to enable localization. An OCI uploader entry makes the Helm chart and image land as OCI artifacts in the target registry, keeping image references the Composition can rewrite. A local blob catch-all copies every other resource:</p><div class=expressive-code><figure class="frame not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-yaml data-lang=yaml><span class=line><span class=cl><span class=l>cat &gt; .ocmconfig &lt;&lt; &#39;EOF&#39;</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>type</span><span class=p>:</span><span class=w> </span><span class=l>generic.config.ocm.software/v1</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=nt>configurations</span><span class=p>:</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span>- <span class=nt>type</span><span class=p>:</span><span class=w> </span><span class=l>oci.uploader.transfer.config.ocm.software/v1alpha1</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>  </span>- <span class=nt>type</span><span class=p>:</span><span class=w> </span><span class=l>localblob.uploader.transfer.config.ocm.software/v1alpha1</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=l>EOF</span></span></span></code></pre></div></figure></div><blockquote><p><strong>Note:</strong> The CLI merges <code>.ocmconfig</code> from the current directory with your other OCM configuration (such as <code>$HOME/.ocmconfig</code>), so credentials and resolvers stay in effect.</p></blockquote><div class=expressive-code><figure class="frame is-terminal not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-bash data-lang=bash><span class=line><span class=cl>ocm transfer cv transport-archive//ocm.software/ocm-k8s-toolkit/bootstrap-crossplane:1.0.0 <span class=nv>$OCM_REPO</span></span></span></code></pre></div></figure></div><p>Now that the component is in your registry, make it public so the OCM Controllers and Flux can pull it without
+credentials: open the <code>component-descriptors/ocm.software/ocm-k8s-toolkit/bootstrap-crossplane</code> package in the GitHub
+<code>packages</code> tab and set its visibility to <code>public</code>. To keep it private instead, follow the private-registry note above.</p></li><li><h3 id=verify-the-transfer>Verify the transfer<a href=#verify-the-transfer class=anchor aria-hidden=true>#</a></h3><p>Check that the component was transferred and resources were localized:</p><div class=expressive-code><figure class="frame is-terminal not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-bash data-lang=bash><span class=line><span class=cl>ocm get cv <span class=nv>$OCM_REPO</span>//ocm.software/ocm-k8s-toolkit/bootstrap-crossplane:1.0.0 -o yaml <span class=p>|</span> grep imageReference</span></span></code></pre></div></figure></div><p>You should see image references pointing to <code>$OCM_REPO/...</code> instead of the original locations. This confirms localization worked.</p></li></ol><h2 id=deploy-the-helm-chart>Deploy the Helm Chart<a href=#deploy-the-helm-chart class=anchor aria-hidden=true>#</a></h2><p>Now create the bootstrap resources that fetch and apply the XRD + Composition from the component. This chain is
+identical to the kro variant. The <code>NamespacedDeployer</code> applies whatever blob the component carries with its own
+service account, so nothing here is Crossplane-specific.</p><ol role=list class=thulite-steps><li><h3 id=create-bootstrap-resources>Create bootstrap resources<a href=#create-bootstrap-resources class=anchor aria-hidden=true>#</a></h3><p>Create <code>bootstrap.yaml</code>:</p><div class="callout callout-note d-flex flex-row mt-4 mb-4 pt-4 pe-4 pb-2 ps-3"><svg   xmlns="http://www.w3.org/2000/svg"   width="24"   height="24"   viewBox="0 0 24 24"   fill="none"   stroke="currentColor"   stroke-width="2"   stroke-linecap="round"   stroke-linejoin="round"    class="outline/lock svg-inline callout-icon me-2 mb-3" id="svg-lock" role="img">   <path stroke="none" d="M0 0h24v24H0z" fill="none" />   <path d="M5 13a2 2 0 0 1 2 -2h10a2 2 0 0 1 2 2v6a2 2 0 0 1 -2 2h-10a2 2 0 0 1 -2 -2v-6" />   <path d="M11 16a1 1 0 1 0 2 0a1 1 0 0 0 -2 0" />   <path d="M8 11v-4a4 4 0 1 1 8 0v4" /> </svg><div class=callout-content><div class=callout-title>Private registries</div><div class=callout-body><p>If you chose to keep your package private, do not forget to add the secret to the repository&rsquo;s <code>ocmConfig</code>, as described in
+<a href=/main/docs/guides/deploy/configure-controller-credentials/>Credentials for OCM Controllers</a>.</p></div></div></div><details><summary>Bootstrap Resources (bootstrap.yaml)</summary><div class=expressive-code><figure class="frame is-terminal not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-shell data-lang=shell><span class=line><span class=cl>cat &gt; bootstrap.yaml <span class=s>&lt;&lt; &#39;EOF&#39;
+</span></span></span><span class=line><span class=cl><span class=s>apiVersion: delivery.ocm.software/v1alpha1
+</span></span></span><span class=line><span class=cl><span class=s>kind: Repository
+</span></span></span><span class=line><span class=cl><span class=s>metadata:
+</span></span></span><span class=line><span class=cl><span class=s>  name: bootstrap-repository
+</span></span></span><span class=line><span class=cl><span class=s>  # Resource.componentRef and Component.repositoryRef are same-namespace
+</span></span></span><span class=line><span class=cl><span class=s>  # references, so the whole OCM chain must share the composite&#39;s namespace.
+</span></span></span><span class=line><span class=cl><span class=s>  namespace: ${BOOTSTRAP_NAMESPACE}
+</span></span></span><span class=line><span class=cl><span class=s>spec:
+</span></span></span><span class=line><span class=cl><span class=s>  repositorySpec:
+</span></span></span><span class=line><span class=cl><span class=s>    baseUrl: $OCM_REPO
+</span></span></span><span class=line><span class=cl><span class=s>    type: OCIRegistry
+</span></span></span><span class=line><span class=cl><span class=s>  interval: 1m
+</span></span></span><span class=line><span class=cl><span class=s>  # ocmConfig is required, if the OCM repository requires credentials to access it.
+</span></span></span><span class=line><span class=cl><span class=s>  # ocmConfig:
+</span></span></span><span class=line><span class=cl><span class=s>---
+</span></span></span><span class=line><span class=cl><span class=s>apiVersion: delivery.ocm.software/v1alpha1
+</span></span></span><span class=line><span class=cl><span class=s>kind: Component
+</span></span></span><span class=line><span class=cl><span class=s>metadata:
+</span></span></span><span class=line><span class=cl><span class=s>  name: bootstrap-component
+</span></span></span><span class=line><span class=cl><span class=s>  namespace: ${BOOTSTRAP_NAMESPACE}
+</span></span></span><span class=line><span class=cl><span class=s>spec:
+</span></span></span><span class=line><span class=cl><span class=s>  component: ocm.software/ocm-k8s-toolkit/bootstrap-crossplane
+</span></span></span><span class=line><span class=cl><span class=s>  repositoryRef:
+</span></span></span><span class=line><span class=cl><span class=s>    name: bootstrap-repository
+</span></span></span><span class=line><span class=cl><span class=s>  semver: 1.0.0
+</span></span></span><span class=line><span class=cl><span class=s>  interval: 1m
+</span></span></span><span class=line><span class=cl><span class=s>  # ocmConfig is required, if the OCM repository requires credentials to access it.
+</span></span></span><span class=line><span class=cl><span class=s>  # ocmConfig:
+</span></span></span><span class=line><span class=cl><span class=s>---
+</span></span></span><span class=line><span class=cl><span class=s>apiVersion: delivery.ocm.software/v1alpha1
+</span></span></span><span class=line><span class=cl><span class=s>kind: Resource
+</span></span></span><span class=line><span class=cl><span class=s>metadata:
+</span></span></span><span class=line><span class=cl><span class=s>  name: bootstrap-composition
+</span></span></span><span class=line><span class=cl><span class=s>  namespace: ${BOOTSTRAP_NAMESPACE}
+</span></span></span><span class=line><span class=cl><span class=s>spec:
+</span></span></span><span class=line><span class=cl><span class=s>  componentRef:
+</span></span></span><span class=line><span class=cl><span class=s>    name: bootstrap-component
+</span></span></span><span class=line><span class=cl><span class=s>  resource:
+</span></span></span><span class=line><span class=cl><span class=s>    byReference:
+</span></span></span><span class=line><span class=cl><span class=s>      resource:
+</span></span></span><span class=line><span class=cl><span class=s>        name: composition
+</span></span></span><span class=line><span class=cl><span class=s>  # ocmConfig is required, if the OCM repository requires credentials to access it.
+</span></span></span><span class=line><span class=cl><span class=s>  # ocmConfig:
+</span></span></span><span class=line><span class=cl><span class=s>---
+</span></span></span><span class=line><span class=cl><span class=s>apiVersion: v1
+</span></span></span><span class=line><span class=cl><span class=s>kind: ServiceAccount
+</span></span></span><span class=line><span class=cl><span class=s>metadata:
+</span></span></span><span class=line><span class=cl><span class=s>  name: bootstrap-deployer
+</span></span></span><span class=line><span class=cl><span class=s>  namespace: ${BOOTSTRAP_NAMESPACE}
+</span></span></span><span class=line><span class=cl><span class=s>---
+</span></span></span><span class=line><span class=cl><span class=s>apiVersion: rbac.authorization.k8s.io/v1
+</span></span></span><span class=line><span class=cl><span class=s>kind: ClusterRole
+</span></span></span><span class=line><span class=cl><span class=s>metadata:
+</span></span></span><span class=line><span class=cl><span class=s>  name: bootstrap-deployer
+</span></span></span><span class=line><span class=cl><span class=s>rules:
+</span></span></span><span class=line><span class=cl><span class=s>  # The XRD and Composition are cluster-scoped, so the service account needs a
+</span></span></span><span class=line><span class=cl><span class=s>  # ClusterRole and ClusterRoleBinding rather than a namespaced Role.
+</span></span></span><span class=line><span class=cl><span class=s>  - apiGroups: [&#34;apiextensions.crossplane.io&#34;]
+</span></span></span><span class=line><span class=cl><span class=s>    resources: [&#34;compositeresourcedefinitions&#34;, &#34;compositions&#34;]
+</span></span></span><span class=line><span class=cl><span class=s>    verbs: [&#34;get&#34;, &#34;list&#34;, &#34;watch&#34;, &#34;create&#34;, &#34;update&#34;, &#34;patch&#34;, &#34;delete&#34;]
+</span></span></span><span class=line><span class=cl><span class=s>---
+</span></span></span><span class=line><span class=cl><span class=s>apiVersion: rbac.authorization.k8s.io/v1
+</span></span></span><span class=line><span class=cl><span class=s>kind: ClusterRoleBinding
+</span></span></span><span class=line><span class=cl><span class=s>metadata:
+</span></span></span><span class=line><span class=cl><span class=s>  name: bootstrap-deployer
+</span></span></span><span class=line><span class=cl><span class=s>roleRef:
+</span></span></span><span class=line><span class=cl><span class=s>  apiGroup: rbac.authorization.k8s.io
+</span></span></span><span class=line><span class=cl><span class=s>  kind: ClusterRole
+</span></span></span><span class=line><span class=cl><span class=s>  name: bootstrap-deployer
+</span></span></span><span class=line><span class=cl><span class=s>subjects:
+</span></span></span><span class=line><span class=cl><span class=s>  - kind: ServiceAccount
+</span></span></span><span class=line><span class=cl><span class=s>    name: bootstrap-deployer
+</span></span></span><span class=line><span class=cl><span class=s>    namespace: ${BOOTSTRAP_NAMESPACE}
+</span></span></span><span class=line><span class=cl><span class=s>---
+</span></span></span><span class=line><span class=cl><span class=s>apiVersion: delivery.ocm.software/v1alpha1
+</span></span></span><span class=line><span class=cl><span class=s>kind: NamespacedDeployer
+</span></span></span><span class=line><span class=cl><span class=s>metadata:
+</span></span></span><span class=line><span class=cl><span class=s>  name: bootstrap-deployer
+</span></span></span><span class=line><span class=cl><span class=s>  namespace: ${BOOTSTRAP_NAMESPACE}
+</span></span></span><span class=line><span class=cl><span class=s>spec:
+</span></span></span><span class=line><span class=cl><span class=s>  resourceRef:
+</span></span></span><span class=line><span class=cl><span class=s>    # Reference to the OCM resource that contains the XRD + Composition blob.
+</span></span></span><span class=line><span class=cl><span class=s>    # NamespacedDeployer is namespace-scoped, so this is a same-namespace reference.
+</span></span></span><span class=line><span class=cl><span class=s>    name: bootstrap-composition
+</span></span></span><span class=line><span class=cl><span class=s>  # The deployer applies the XRD + Composition with the permissions of this service account.
+</span></span></span><span class=line><span class=cl><span class=s>  serviceAccountName: bootstrap-deployer
+</span></span></span><span class=line><span class=cl><span class=s>  # ocmConfig is required, if the OCM repository requires credentials to access it.
+</span></span></span><span class=line><span class=cl><span class=s>  # ocmConfig:
+</span></span></span><span class=line><span class=cl><span class=s>EOF</span></span></span></code></pre></div></figure></div></details></li><li><h3 id=apply-the-bootstrap-resources>Apply the bootstrap resources<a href=#apply-the-bootstrap-resources class=anchor aria-hidden=true>#</a></h3><div class="callout callout-caution d-flex flex-row mt-4 mb-4 pt-4 pe-4 pb-2 ps-3"><svg   xmlns="http://www.w3.org/2000/svg"   width="24"   height="24"   viewBox="0 0 24 24"   fill="none"   stroke="currentColor"   stroke-width="2"   stroke-linecap="round"   stroke-linejoin="round"    class="outline/alert-triangle svg-inline callout-icon me-2 mb-3" id="svg-alert-triangle" role="img">   <path stroke="none" d="M0 0h24v24H0z" fill="none" />   <path d="M12 9v4" />   <path d="M10.363 3.591l-8.106 13.534a1.914 1.914 0 0 0 1.636 2.871h16.214a1.914 1.914 0 0 0 1.636 -2.87l-8.106 -13.536a1.914 1.914 0 0 0 -3.274 0" />   <path d="M12 16h.01" /> </svg><div class=callout-content><div class=callout-title>RBAC required before you apply</div><div class=callout-body><p>The <code>bootstrap-deployer</code> service account above gets write access from the <code>ClusterRole</code> in <code>bootstrap.yaml</code>. The controller also watches the deployed objects for drift with its own identity, so it still needs <code>get</code>, <code>list</code> and <code>watch</code> on the XRD and Composition. Follow <a href=/main/docs/guides/deploy/configure-custom-rbac/#grant-the-controller-read-access>Configure Custom RBAC for Deployers</a> to grant them before you apply.</p></div></div></div><div class=expressive-code><figure class="frame is-terminal not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-bash data-lang=bash><span class=line><span class=cl>envsubst &lt; bootstrap.yaml <span class=p>|</span> kubectl apply -f -</span></span></code></pre></div></figure></div><p>Wait for the XRD to be installed (this may take 30-60 seconds). <code>kubectl</code> rejects <code>-w</code> with more than one resource
+type, so watch the XRD on its own:</p><div class=expressive-code><figure class="frame is-terminal not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-bash data-lang=bash><span class=line><span class=cl>kubectl get xrd -w</span></span></code></pre></div></figure></div><p>Once the XRD is <code>ESTABLISHED</code>, check the Composition:</p><div class=expressive-code><figure class="frame is-terminal not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-bash data-lang=bash><span class=line><span class=cl>kubectl get composition</span></span></code></pre></div></figure></div><details><summary>You should see this output</summary><div class=expressive-code><figure class="frame not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-console data-lang=console><span class=line><span class=cl><span class=go>NAME                                                     ESTABLISHED   AGE
+</span></span></span><span class=line><span class=cl><span class=go>compositeresourcedefinition.../bootstraps.ocm.software   True          2m56s
+</span></span></span><span class=line><span class=cl><span class=err>
+</span></span></span><span class=line><span class=cl><span class=go>NAME                                    XR-KIND     XR-APIVERSION           AGE
+</span></span></span><span class=line><span class=cl><span class=go>composition.apiextensions.../bootstrap  Bootstrap   ocm.software/v1alpha1   2m56s
+</span></span></span></code></pre></div></figure></div></details><p>When the XRD is <code>ESTABLISHED</code>, the Deployer has applied the blob and Crossplane has registered the
+<code>Bootstrap</code> composite kind.</p></li><li><h3 id=create-the-bootstrap-resource>Create the Bootstrap resource<a href=#create-the-bootstrap-resource class=anchor aria-hidden=true>#</a></h3><p>Now create a <code>Bootstrap</code> composite resource to trigger the actual deployment. You apply the composite kind directly.
+The composite and its composed resources live in <code>$BOOTSTRAP_NAMESPACE</code> (<code>default</code> for Flux, <code>argocd</code> for Argo CD).
+<code>ocmComponent</code> selects the OCM <code>Component</code> CR created by the bootstrap resources
+(<code>bootstrap-component</code>), matching the XRD&rsquo;s default. Create <code>bootstrap-xr.yaml</code>:</p><div class=expressive-code><figure class="frame is-terminal not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-shell data-lang=shell><span class=line><span class=cl>cat &gt; bootstrap-xr.yaml <span class=s>&lt;&lt; &#39;EOF&#39;
+</span></span></span><span class=line><span class=cl><span class=s>apiVersion: ocm.software/v1alpha1
+</span></span></span><span class=line><span class=cl><span class=s>kind: Bootstrap
+</span></span></span><span class=line><span class=cl><span class=s>metadata:
+</span></span></span><span class=line><span class=cl><span class=s>  name: bootstrap
+</span></span></span><span class=line><span class=cl><span class=s>  namespace: ${BOOTSTRAP_NAMESPACE}
+</span></span></span><span class=line><span class=cl><span class=s>spec:
+</span></span></span><span class=line><span class=cl><span class=s>  ocmComponent: bootstrap-component
+</span></span></span><span class=line><span class=cl><span class=s>EOF</span></span></span></code></pre></div></figure></div></li><li><h3 id=deploy-the-application>Deploy the application<a href=#deploy-the-application class=anchor aria-hidden=true>#</a></h3><p>Apply the composite to the cluster:</p><div class=expressive-code><figure class="frame is-terminal not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-bash data-lang=bash><span class=line><span class=cl>envsubst &lt; bootstrap-xr.yaml <span class=p>|</span> kubectl apply -f -</span></span></code></pre></div></figure></div><details><summary>You should see this output</summary><div class=expressive-code><figure class="frame not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-console data-lang=console><span class=line><span class=cl><span class=go>bootstrap.ocm.software/bootstrap created
+</span></span></span></code></pre></div></figure></div></details><p>Wait for the composite and its composed resources to become ready:</p><div class=expressive-code><figure class="frame is-terminal not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-bash data-lang=bash><span class=line><span class=cl>kubectl get bootstrap.ocm.software -n <span class=s2>&#34;</span><span class=nv>$BOOTSTRAP_NAMESPACE</span><span class=s2>&#34;</span> -w</span></span></code></pre></div></figure></div><details><summary>You should see this output</summary><div class=expressive-code><figure class="frame not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-console data-lang=console><span class=line><span class=cl><span class=go>NAME        SYNCED   READY   COMPOSITION   AGE
+</span></span></span><span class=line><span class=cl><span class=go>bootstrap   True     True    bootstrap     3m23s
+</span></span></span></code></pre></div></figure></div></details><p>When <code>SYNCED</code> and <code>READY</code> are both <code>True</code>, Crossplane has resolved the OCM resources and composed the deployer objects
+directly (the Flux <code>OCIRepository</code> and <code>HelmRelease</code>, or the Argo CD <code>Application</code>), which the deployer then reconciles into the running workload.</p></li><li><h3 id=verify-localization>Verify localization<a href=#verify-localization class=anchor aria-hidden=true>#</a></h3><p>Check that the deployed pod uses the localized image from your registry (not the original <code>ghcr.io/stefanprodan/...</code>).
+The composite can report <code>READY</code> before the deployer has reconciled the chart into a running pod, so wait for the pod to
+appear first:</p><div class=expressive-code><figure class="frame is-terminal not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-bash data-lang=bash><span class=line><span class=cl>kubectl <span class=nb>wait</span> -n podinfo --for<span class=o>=</span><span class=nv>condition</span><span class=o>=</span>Ready pod -l app.kubernetes.io/name<span class=o>=</span>bootstrap-release-podinfo --timeout<span class=o>=</span>300s
+</span></span><span class=line><span class=cl>kubectl get pods -n podinfo -l app.kubernetes.io/name<span class=o>=</span>bootstrap-release-podinfo -o <span class=nv>jsonpath</span><span class=o>=</span><span class=s1>&#39;{.items[0].spec.containers[0].image}&#39;</span></span></span></code></pre></div></figure></div><details><summary>You should see this output</summary><div class=expressive-code><figure class="frame not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-console data-lang=console><span class=line><span class=cl><span class=go>ghcr.io/$GITHUB_USERNAME/ocm-tutorial/stefanprodan/podinfo:latest@sha256:8fa56908408de98f24aed2a162b1bb42c0b98df7abfcc5a76a14a8be510457c5
+</span></span></span></code></pre></div></figure></div></details><p>The image reference points to your registry with a digest. Localization worked!</p></li></ol><h2 id=troubleshooting>Troubleshooting<a href=#troubleshooting class=anchor aria-hidden=true>#</a></h2><h3 id=authentication-errors-401-unauthorized>Authentication Errors (401 Unauthorized)<a href=#authentication-errors-401-unauthorized class=anchor aria-hidden=true>#</a></h3><p>If you see <code>401: unauthorized</code> errors, your GitHub package is private. Either:</p><ul><li>Make the package public in GitHub Package settings</li><li>Configure credentials as described in the &ldquo;Define the component&rdquo; step</li></ul><h3 id=xrd-or-composition-not-installing>XRD or Composition Not Installing<a href=#xrd-or-composition-not-installing class=anchor aria-hidden=true>#</a></h3><p>Check controller logs:</p><div class=expressive-code><figure class="frame is-terminal not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-bash data-lang=bash><span class=line><span class=cl>kubectl logs -n ocm-k8s-toolkit-system deployment/ocm-k8s-toolkit-controller-manager</span></span></code></pre></div></figure></div><p>Common causes: missing component, wrong repository URL, credential issues, or an RBAC gap. The
+<code>bootstrap-deployer</code> service account needs write access to apply the XRD and Composition, and the controller needs
+read access to watch them for drift. See RBAC Permission Errors below.</p><h3 id=rbac-permission-errors>RBAC Permission Errors<a href=#rbac-permission-errors class=anchor aria-hidden=true>#</a></h3><p>The <code>NamespacedDeployer</code> applies the XRD and Composition as its <code>bootstrap-deployer</code> service account, while the
+controller only watches them with its own identity. A <code>forbidden</code> error can come from either side:</p><ul><li><p>If the deployer logs show <code>cannot create resource</code>, the <code>bootstrap-deployer</code> service account lacks write access.
+It gets that from the <code>bootstrap-deployer</code> <code>ClusterRole</code> and binding in <code>bootstrap.yaml</code>. Confirm the grant with:</p><div class=expressive-code><figure class="frame is-terminal not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-bash data-lang=bash><span class=line><span class=cl>kubectl auth can-i create compositions.apiextensions.crossplane.io <span class=se>\
+</span></span></span><span class=line><span class=cl>  --as<span class=o>=</span>system:serviceaccount:<span class=si>${</span><span class=nv>BOOTSTRAP_NAMESPACE</span><span class=si>}</span>:bootstrap-deployer</span></span></code></pre></div></figure></div></li><li><p>If the controller logs show it <code>cannot list</code> or <code>cannot watch</code> the XRD and Composition, the controller lacks read
+access. Apply the <code>ocm-controller-crossplane</code> <code>ClusterRole</code> and binding from
+<a href=/main/docs/guides/deploy/configure-custom-rbac/#grant-the-controller-read-access>Configure Custom RBAC for Deployers</a>
+(select the <strong>Crossplane</strong> tab), then confirm the grant with:</p><div class=expressive-code><figure class="frame is-terminal not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-bash data-lang=bash><span class=line><span class=cl>kubectl auth can-i watch compositions.apiextensions.crossplane.io <span class=se>\
+</span></span></span><span class=line><span class=cl>  --as<span class=o>=</span>system:serviceaccount:ocm-k8s-toolkit-system:ocm-k8s-toolkit-controller-manager</span></span></code></pre></div></figure></div></li></ul><p>Separately, if the composite&rsquo;s composed resources stay stuck (see <a href=#composite-not-becoming-ready>Composite Not Becoming
+Ready</a>), the fault is Crossplane&rsquo;s own service account. Crossplane composes the
+OCM <code>Resource</code> and the deployer objects directly, so Crossplane core must be granted access to those non-Crossplane kinds.
+See the next section.</p><h4 id=composed-resources-stay-forbidden>Composed resources stay forbidden<a href=#composed-resources-stay-forbidden class=anchor aria-hidden=true>#</a></h4><p>Crossplane&rsquo;s service account can create any resource installed by a provider or defined by an XRD, but it must be
+granted access to compose any other kind of resource (the OCM <code>Resource</code> and the deployer objects here). Without that
+grant the composite reports a <code>forbidden</code> error, for example</p><div class=expressive-code><figure class="frame not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-text data-lang=text><span class=line><span class=cl>cannot compose resources: ... resources.delivery.ocm.software &#34;&lt;xr&gt;-image&#34; is forbidden: User
+</span></span><span class=line><span class=cl>&#34;system:serviceaccount:crossplane-system:crossplane&#34; cannot create resource
+</span></span><span class=line><span class=cl>&#34;resources&#34; in API group &#34;delivery.ocm.software&#34; in the namespace &#34;default&#34;</span></span></code></pre></div></figure></div><p>Grant Crossplane&rsquo;s service account access to the composed kinds with an aggregated <code>ClusterRole</code>, as described in
+<a href=/main/docs/guides/deploy/configure-custom-rbac/#crossplane>Configure Custom RBAC for Deployers > Crossplane</a>.</p><h3 id=composite-not-becoming-ready>Composite Not Becoming Ready<a href=#composite-not-becoming-ready class=anchor aria-hidden=true>#</a></h3><p>If the <code>Bootstrap</code> composite stays <code>SYNCED=False</code> or <code>READY=False</code>:</p><div class=expressive-code><figure class="frame is-terminal not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-bash data-lang=bash><span class=line><span class=cl>kubectl describe bootstrap.ocm.software bootstrap -n <span class=s2>&#34;</span><span class=nv>$BOOTSTRAP_NAMESPACE</span><span class=s2>&#34;</span></span></span></code></pre></div></figure></div><p>Inspect the composed resources directly to see which one is stuck:</p><div class=expressive-code><figure class="frame is-terminal not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-bash data-lang=bash><span class=line><span class=cl><span class=c1># Flux deployer (composed into $BOOTSTRAP_NAMESPACE, default `default`)</span>
+</span></span><span class=line><span class=cl>kubectl get resource.delivery.ocm.software,ocirepository,helmrelease -n <span class=s2>&#34;</span><span class=nv>$BOOTSTRAP_NAMESPACE</span><span class=s2>&#34;</span>
+</span></span><span class=line><span class=cl>kubectl describe helmrelease bootstrap-helmrelease -n <span class=s2>&#34;</span><span class=nv>$BOOTSTRAP_NAMESPACE</span><span class=s2>&#34;</span>
+</span></span><span class=line><span class=cl><span class=c1># Argo CD deployer (composed into $BOOTSTRAP_NAMESPACE, default `argocd`)</span>
+</span></span><span class=line><span class=cl>kubectl describe application bootstrap-application -n <span class=s2>&#34;</span><span class=nv>$BOOTSTRAP_NAMESPACE</span><span class=s2>&#34;</span></span></span></code></pre></div></figure></div><p>Check the Events section and each composed resource&rsquo;s status for error messages. A common cause is Crossplane
+lacking RBAC for the composed OCM <code>Resource</code> or the deployer CRDs (see <a href=#composed-resources-stay-forbidden>Composed resources stay
+forbidden</a>).</p><h3 id=imagepullbackoff-errors>ImagePullBackOff Errors<a href=#imagepullbackoff-errors class=anchor aria-hidden=true>#</a></h3><p>If pods show <code>ImagePullBackOff</code> or <code>ErrImagePull</code> errors, the kubelet cannot pull the localized image from your private registry. Set <code>image.pullSecrets</code> (for example <code>image.pullSecrets: [{name: ghcr-secret}]</code>) in the chart values of the Composition&rsquo;s deployer resource: the Flux <code>helmrelease</code> <code>spec.values</code>, or the Argo CD <code>application</code> <code>spec.source.helm.valuesObject</code>. Podinfo reads pull secrets from <code>image.pullSecrets</code>, a top-level <code>imagePullSecrets</code> value is ignored.</p><h2 id=what-you-learned>What You Learned<a href=#what-you-learned class=anchor aria-hidden=true>#</a></h2><p>You&rsquo;ve successfully:</p><ul><li>Created an OCM component with an embedded Crossplane XRD + Composition</li><li>Configured an OCI uploader in <code>.ocmconfig</code> to enable localization during transfer</li><li>Deployed the component by applying a <code>Bootstrap</code> composite, letting Crossplane compose the deployer objects directly</li><li>Verified that localization kept image references in sync</li></ul><p>This pattern lets developers ship deployment instructions alongside their software while operators only apply a simple composite, with Crossplane, rather than kro, reconciling the graph.</p><h2 id=next-steps>Next Steps<a href=#next-steps class=anchor aria-hidden=true>#</a></h2><ul><li><a href=/main/docs/guides/deploy/deploy-a-helm-chart-with-kro-and-gitops/>Guides: Deploy a Helm Chart with kro and GitOps</a> - Drive the same delivery with kro and a Flux or Argo CD deployer</li><li><a href=/main/docs/guides/transfer/transfer-components-across-an-air-gap/>Guides: Transfer Components across an Air Gap</a> - Transfer components to disconnected environments</li><li><a href=/main/docs/guides/deploy/configure-controller-credentials/>Guides: Configure Credentials for OCM Controllers</a> - Set up private registry access</li></ul><h2 id=related-documentation>Related Documentation<a href=#related-documentation class=anchor aria-hidden=true>#</a></h2><ul><li><a href=/main/docs/concepts/kubernetes-controllers/>Concept: OCM Controllers</a> - Understand the controller architecture</li></ul><div class="page-footer-meta d-flex flex-column flex-md-row justify-content-between"></div><div class="page-nav d-flex flex-column flex-sm-row"><div class="card w-100"><div class="card-body d-flex"><div class="d-flex flex-column justify-content-center"><svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-arrow-left" width="20" height="20" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+						<path stroke="none" d="M0 0h24v24H0z" fill="none"></path>
+						<path d="M5 12l14 0"></path>
+						<path d="M5 12l6 6"></path>
+						<path d="M5 12l6 -6"></path>
+				 	</svg></div><div class="d-flex flex-column"><div class=text-body-secondary>Prev</div><a href=/main/docs/guides/sign/sign-with-plain-rsa/ class="stretched-link text-reset text-decoration-none">Sign with Plain RSA</a></div></div></div><div class=m-2></div><div class="card text-end w-100"><div class="card-body d-flex justify-content-end"><div class="d-flex flex-column"><div class=text-body-secondary>Next</div><a href=/main/docs/guides/pack/add-git-repositories/ class="stretched-link text-reset text-decoration-none">Add Git Repositories</a></div><div class="d-flex flex-column justify-content-center"><svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-arrow-right" width="20" height="20" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+						<path stroke="none" d="M0 0h24v24H0z" fill="none"></path>
+						<path d="M5 12l14 0"></path>
+						<path d="M13 18l6 -6"></path>
+						<path d="M13 6l6 6"></path>
+					</svg></div></div></div></div></main></div></div></div></div><script async src=/js/app.d56d590b9f25d4c1662af397b855e2fb8d71456eb9c475a0235c7aad76e0bc32.js integrity="sha256-1W1ZC58l1MFmKvOXuFXi+41xRW65xHWgI1x6rXbgvDI="></script><script async src=/js/flexsearch.dcf5d97079df94c2070b906f8ba8ec1248e7192ef8f62ad7390cae553e7ea363.js integrity="sha256-3PXZcHnflMIHC5Bvi6jsEkjnGS749irXOQyuVT5+o2M="></script><script async src=/js/search-modal.c79300d9b89f62c77ae87395aacda1f48b3df3725655ed3ea670b0bbd9777923.js integrity="sha256-x5MA2bifYsd66HOVqs2h9Is983JWVe0+pnCwu9l3eSM="></script></body></html>
