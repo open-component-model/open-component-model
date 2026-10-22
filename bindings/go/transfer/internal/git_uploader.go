@@ -106,10 +106,14 @@ func processGitUploader(ctx context.Context, resource descriptorv2.Resource, acc
 // ref at the commit. The uploader config must set a full ref; a short name does not say
 // whether it names a branch or a tag.
 func validateGitTarget(repository, ref, commit string) error {
-	target := &gitv1.Git{Repository: repository, Ref: ref, Commit: commit}
+	target, err := (&gitv1.Git{Repository: repository, Ref: ref, Commit: commit}).Normalize()
+	if err != nil {
+		return fmt.Errorf("invalid git upload target: %w", err)
+	}
 	if err := target.Validate(); err != nil {
 		return fmt.Errorf("invalid git upload target: %w", err)
 	}
+	ref = target.Ref
 	if strings.HasPrefix(ref, "refs/heads/") || strings.HasPrefix(ref, "refs/tags/") {
 		return nil
 	}

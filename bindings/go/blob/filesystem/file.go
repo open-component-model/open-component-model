@@ -26,45 +26,43 @@ var ioBufPool = sync.Pool{
 }
 
 // CopyBlobToOSPath copies the content of a blob.ReadOnlyBlob to a local path on the operating system's filesystem.
-// It opens the file in os.O_APPEND mode.
-// If the file does not exist, it will be created (os.O_CREATE).
-// The function also handles named pipes by setting the appropriate file mode (os.ModeNamedPipe).
+// The file is created with 0600 if it does not exist (os.O_CREATE) and truncated if it does (os.O_TRUNC).
+// If reading or closing the blob fails, for example on a digest mismatch that a verifying blob reports at EOF
+// or on Close, the written regular file is truncated to zero and path is removed if it is a regular file itself,
+// so no rejected content is left behind. A symlink at path is kept and its target is left empty.
+// Content already written to a named pipe or device cannot be retracted.
 // It uses a buffered I/O operation to improve performance, leveraing the internal ioBufPool.
-func CopyBlobToOSPath(blob blob.ReadOnlyBlob, path string) (err error) {
+func CopyBlobToOSPath(blob blob.ReadOnlyBlob, path string) error {
 	data, err := blob.ReadCloser()
 	if err != nil {
 		return fmt.Errorf("failed to get resource data: %w", err)
 	}
-	defer func() {
-		err = errors.Join(err, data.Close())
-	}()
-
-	var isNamedPipe bool
-	fi, err := os.Stat(path)
-	if err == nil {
-		isNamedPipe = fi.Mode()&os.ModeNamedPipe != 0
-	}
-
-	var mode os.FileMode
-	if isNamedPipe {
-		mode = os.ModeNamedPipe
-	} else {
-		mode = 0o600
-	}
-	file, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, mode)
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
-		return fmt.Errorf("failed to open target file %s: %w", path, err)
+		return errors.Join(fmt.Errorf("failed to open target file %s: %w", path, err), data.Close())
 	}
-	defer func() {
+	// Close data before checking for errors: verifying readers may report a mismatch only on Close.
+	if err := errors.Join(copyBuffered(file, data), data.Close()); err != nil {
+		fi, statErr := file.Stat()
+		regular := statErr == nil && fi.Mode().IsRegular()
+		if regular {
+			err = errors.Join(err, file.Truncate(0))
+		}
 		err = errors.Join(err, file.Close())
-	}()
+		if li, lstatErr := os.Lstat(path); regular && lstatErr == nil && li.Mode().IsRegular() {
+			err = errors.Join(err, os.Remove(path))
+		}
+		return err
+	}
+	return file.Close()
+}
 
+func copyBuffered(dst io.Writer, src io.Reader) error {
 	buf := ioBufPool.Get().(*[]byte)
 	defer ioBufPool.Put(buf)
-	if _, err := io.CopyBuffer(file, data, *buf); err != nil {
+	if _, err := io.CopyBuffer(dst, src, *buf); err != nil {
 		return fmt.Errorf("failed to copy resource data: %w", err)
 	}
-
 	return nil
 }
 

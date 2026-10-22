@@ -83,6 +83,31 @@ func TestUploadResourceRoundTrip(t *testing.T) {
 	}
 }
 
+func TestUploadResourceToURLFragmentTarget(t *testing.T) {
+	r := require.New(t)
+	fixture := newRepository(t)
+	targetPath := filepath.Join(t.TempDir(), "target.git")
+	_, err := git.PlainInit(targetPath, true)
+	r.NoError(err)
+	uploader := newUploader(t)
+
+	source, content := downloadResource(t, uploader, fixture.Path, "refs/heads/main", fixture.First)
+	uploaded, err := uploader.UploadResource(t.Context(), targetResource(source, targetPath+"#branch=release", ""), content, nil)
+	r.NoError(err)
+	r.Equal(&accessv1.Git{
+		Type:       runtime.NewVersionedType(accessv1.Type, accessv1.Version),
+		Repository: targetPath,
+		Ref:        "refs/heads/release",
+		Commit:     fixture.First.String(),
+	}, uploaded.Access, "the uploaded access carries the selector in Ref, not in the repository URL")
+
+	target, err := git.PlainOpen(targetPath)
+	r.NoError(err)
+	ref, err := target.Reference(plumbing.NewBranchReferenceName("release"), false)
+	r.NoError(err)
+	r.Equal(fixture.First, ref.Hash())
+}
+
 func TestUploadResourceToExistingAnnotatedTag(t *testing.T) {
 	fixture := newRepository(t)
 	uploader := newUploader(t)
