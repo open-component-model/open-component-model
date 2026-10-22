@@ -19,6 +19,8 @@ import (
 	"oras.land/oras-go/v2/content"
 	"oras.land/oras-go/v2/content/file"
 	"oras.land/oras-go/v2/content/memory"
+	"oras.land/oras-go/v2/errdef"
+	"oras.land/oras-go/v2/registry"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/compression"
@@ -827,24 +829,6 @@ func TestResourceLocalBlobOCISingleLayerArtifact(t *testing.T) {
 			},
 			expectedError: "failed to create resource layer based on blob",
 		},
-		{
-			name: "error on push blob failure",
-			blob: &testBlob{
-				content:   content,
-				mediaType: "application/vnd.test",
-				digest:    digest,
-			},
-			resource: &descriptor.Resource{},
-			access: &v2.LocalBlob{
-				MediaType:      "application/vnd.test",
-				LocalReference: digest.String(),
-			},
-			opts: Options{
-				AccessScheme:  runtime.NewScheme(),
-				BaseReference: "test-ref",
-			},
-			expectedError: "failed to push blob",
-		},
 	}
 
 	for _, tt := range tests {
@@ -1048,11 +1032,15 @@ func TestPackingRejectsInvalidOCILayoutDigest(t *testing.T) {
 
 type countingStorage struct {
 	content.Storage
-	pushes int
+	pushes  int
+	pushErr error
 }
 
 func (store *countingStorage) Push(ctx context.Context, desc ociImageSpecV1.Descriptor, reader io.Reader) error {
 	store.pushes++
+	if store.pushErr != nil {
+		return store.pushErr
+	}
 	return store.Storage.Push(ctx, desc, reader)
 }
 
@@ -1320,4 +1308,132 @@ func TestResourceLocalBlobOCILayer_ForwardsKnownSize(t *testing.T) {
 	r.True(store.streamed64, "expected PushStreaming to be used")
 	r.False(store.pushed, "monolithic Push must not be used")
 	r.Equal(int64(len(content)), store.partialSize, "known size must be forwarded to PushStreaming")
+}
+
+// resolvingStore is a streamingStore whose remote blob store resolves only the
+// digests in existing, like a registry answering HEAD /blobs/<digest>.
+type resolvingStore struct {
+	streamingStore
+	existing map[digest.Digest]int64
+}
+
+func (s *resolvingStore) Blobs() registry.BlobStore { return resolvingBlobStore{s} }
+
+type resolvingBlobStore struct {
+	*resolvingStore
+}
+
+func (s resolvingBlobStore) Resolve(_ context.Context, reference string) (ociImageSpecV1.Descriptor, error) {
+	size, ok := s.existing[digest.Digest(reference)]
+	if !ok {
+		return ociImageSpecV1.Descriptor{}, errdef.ErrNotFound
+	}
+	return ociImageSpecV1.Descriptor{Digest: digest.Digest(reference), Size: size}, nil
+}
+
+func (s resolvingBlobStore) FetchReference(context.Context, string) (ociImageSpecV1.Descriptor, io.ReadCloser, error) {
+	return ociImageSpecV1.Descriptor{}, nil, errors.New("not implemented")
+}
+
+func (s resolvingBlobStore) Delete(context.Context, ociImageSpecV1.Descriptor) error {
+	return errors.New("not implemented")
+}
+
+// TestResourceLocalBlobOCILayer_SkipsExistingBlob verifies that a blob already
+// present in the target is not uploaded again: registries such as Artifactory
+// fail to finalize a second upload session for an existing digest when the
+// pushing user lacks delete permission.
+func TestResourceLocalBlobOCILayer_SkipsExistingBlob(t *testing.T) {
+	content := []byte("same local blob in two component versions")
+	dig := digest.FromBytes(content)
+	const mediaType = "application/octet-stream"
+
+	newOpts := func() Options {
+		opts := Options{AccessScheme: runtime.NewScheme(), BaseReference: "test-ref"}
+		v2.MustAddToScheme(opts.AccessScheme)
+		oci.MustAddToScheme(opts.AccessScheme)
+		return opts
+	}
+
+	t.Run("known size and digest", func(t *testing.T) {
+		for _, tc := range []struct {
+			name       string
+			preexists  bool
+			pushErr    error
+			wantPushes int
+			wantErr    string
+		}{
+			{name: "existing blob is not pushed", preexists: true, wantPushes: 0},
+			{name: "missing blob is pushed", preexists: false, wantPushes: 1},
+			{name: "push failure of missing blob is reported", preexists: false, pushErr: errors.New("registry unavailable"), wantPushes: 1, wantErr: "failed to push blob"},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				r := require.New(t)
+				store := &countingStorage{Storage: memory.New(), pushErr: tc.pushErr}
+				if tc.preexists {
+					r.NoError(store.Storage.Push(t.Context(), ociImageSpecV1.Descriptor{MediaType: mediaType, Digest: dig, Size: int64(len(content))}, bytes.NewReader(content)))
+				}
+				resource := &descriptor.Resource{}
+				resourceBlob, err := resourceblob.NewArtifactBlob(resource, &testBlob{content: content, mediaType: mediaType, digest: dig})
+				r.NoError(err)
+
+				desc, err := ResourceLocalBlobOCILayer(t.Context(), store, resourceBlob, &v2.LocalBlob{MediaType: mediaType}, newOpts())
+				r.Equal(tc.wantPushes, store.pushes)
+				if tc.wantErr != "" {
+					r.ErrorContains(err, tc.wantErr)
+					r.ErrorIs(err, tc.pushErr)
+					return
+				}
+				r.NoError(err)
+
+				r.Equal(dig, desc.Digest)
+				r.Equal(int64(len(content)), desc.Size)
+				localBlob, ok := resource.Access.(*v2.LocalBlob)
+				r.True(ok)
+				r.Equal(dig.String(), localBlob.LocalReference)
+				r.Equal(dig.Encoded(), resource.Digest.Value)
+			})
+		}
+	})
+
+	t.Run("known digest unknown size", func(t *testing.T) {
+		for _, tc := range []struct {
+			name         string
+			existing     map[digest.Digest]int64
+			wantStreamed bool
+		}{
+			{name: "existing blob is not streamed", existing: map[digest.Digest]int64{dig: int64(len(content))}, wantStreamed: false},
+			{name: "missing blob is streamed", existing: nil, wantStreamed: true},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				r := require.New(t)
+				store := &resolvingStore{existing: tc.existing}
+				resource := &descriptor.Resource{}
+				resourceBlob, err := resourceblob.NewArtifactBlob(resource, &knownDigestUnknownSizeBlob{content: content, mediaType: mediaType})
+				r.NoError(err)
+
+				desc, err := ResourceLocalBlobOCILayer(t.Context(), store, resourceBlob, &v2.LocalBlob{MediaType: mediaType}, newOpts())
+				r.NoError(err)
+
+				r.Equal(tc.wantStreamed, store.streamed64)
+				r.False(store.pushed)
+				r.Equal(dig, desc.Digest)
+				r.Equal(int64(len(content)), desc.Size, "size must come from the registry when the upload is skipped")
+			})
+		}
+	})
+
+	// A registry existence check ignores the size, so a skipped upload must not
+	// record a source size that disagrees with the stored blob.
+	t.Run("known size mismatching registry is rejected", func(t *testing.T) {
+		r := require.New(t)
+		store := &resolvingStore{existing: map[digest.Digest]int64{dig: int64(len(content)) + 1}}
+		resourceBlob, err := resourceblob.NewArtifactBlob(&descriptor.Resource{}, &testBlob{content: content, mediaType: mediaType, digest: dig})
+		r.NoError(err)
+
+		_, err = ResourceLocalBlobOCILayer(t.Context(), store, resourceBlob, &v2.LocalBlob{MediaType: mediaType}, newOpts())
+		r.ErrorContains(err, "exists in target with size")
+		r.False(store.pushed)
+		r.False(store.streamed64)
+	})
 }

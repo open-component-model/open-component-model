@@ -36,6 +36,68 @@ import (
 	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
 )
 
+func Test_Integration_AddGitFragmentWithoutDigestProcessing(t *testing.T) {
+	for _, testCase := range []struct {
+		name, fragment, ref, commit string
+	}{
+		{name: "branch", fragment: "branch=refs/heads/main", ref: "refs/heads/main"},
+		{name: "tag", fragment: "tag=refs/tags/v1", ref: "refs/tags/v1"},
+		{name: "commit", fragment: "commit=" + strings.Repeat("a", 40), commit: strings.Repeat("a", 40)},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			r := require.New(t)
+			dir := t.TempDir()
+			constructorPath := filepath.Join(dir, "constructor.yaml")
+			configPath := filepath.Join(dir, "ocmconfig.yaml")
+			r.NoError(os.WriteFile(configPath, []byte("type: generic.config.ocm.software/v1\nconfigurations: []\n"), 0o600))
+			constructor := fmt.Sprintf(`components:
+- name: example.com/git-fragment
+  version: 1.0.0
+  provider:
+    name: example.com
+  resources:
+  - name: repo
+    version: 1.0.0
+    type: directoryTree
+    access:
+      type: Git/v1
+      repository: https://example.invalid/repo.git#%[1]s
+  sources:
+  - name: source
+    version: 1.0.0
+    type: directoryTree
+    access:
+      type: Git/v1
+      repository: https://example.invalid/repo.git#%[1]s
+`, testCase.fragment)
+			r.NoError(os.WriteFile(constructorPath, []byte(constructor), 0o600))
+			ctf := filepath.Join(dir, "ctf")
+			command := cmd.New()
+			command.SetArgs([]string{
+				"add", "component-version", "--repository", "ctf::" + ctf,
+				"--constructor", constructorPath, "--config", configPath, "--skip-reference-digest-processing",
+			})
+			r.NoError(command.ExecuteContext(t.Context()))
+			repo, err := provider.NewComponentVersionRepositoryProvider().GetComponentVersionRepository(t.Context(), &ctfv1.Repository{FilePath: ctf}, nil)
+			r.NoError(err)
+			desc, err := repo.GetComponentVersion(t.Context(), "example.com/git-fragment", "1.0.0")
+			r.NoError(err)
+			r.Len(desc.Component.Resources, 1)
+			resource := desc.Component.Resources[0]
+			r.Nil(resource.Digest)
+			var access gitv1.Git
+			r.NoError(gitaccess.Scheme.Convert(resource.Access, &access))
+			r.Equal("https://example.invalid/repo.git", access.Repository)
+			r.Equal(testCase.ref, access.Ref)
+			r.Equal(testCase.commit, access.Commit)
+			r.Len(desc.Component.Sources, 1)
+			var sourceAccess gitv1.Git
+			r.NoError(gitaccess.Scheme.Convert(desc.Component.Sources[0].Access, &sourceAccess))
+			r.Equal(access, sourceAccess)
+		})
+	}
+}
+
 // newGitFixture creates a local repository with two commits on main and returns its
 // path and the first commit. A local repository exercises real Git objects without
 // network access or host Git configuration deciding how fixture commits are signed.
