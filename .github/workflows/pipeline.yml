@@ -31,6 +31,7 @@ on:
       - '.github/workflows/conformance.yml'
       - '.github/workflows/e2e.yml'
       - '.github/workflows/image-scan.yml'
+      - '.github/workflows/govulncheck.yml'
       - '.github/workflows/pipeline.yml'
       - '.env'
   workflow_call:
