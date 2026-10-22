@@ -36,7 +36,8 @@ jobs:
               "refactor":["kind/chore"],
               "docs":["kind/chore","area/documentation"],
               "test":["kind/chore","area/quality"],
-              "perf":["kind/chore","area/quality"]
+              "perf":["kind/chore","area/quality"],
+              "revert":["kind/chore"]
             }
           SCOPE_TO_LABEL: |
             {

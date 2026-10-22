@@ -291,7 +291,7 @@ func (c *BlobCache) Fetch(ctx context.Context, upstream content.ReadOnlyStorage,
 		if res.Shared {
 			c.logger.DebugContext(ctx, "blobcache: singleflight: result shared across concurrent callers",
 				slog.String("digest", target.Digest.String()))
-			// The flight ran against another caller's upstream, so this caller has not proven access yet.
+			// if shared, we need to make sure that the caller has access
 			if c.opts.RemotePolicy == RemotePolicyAlways {
 				if err := c.verifyRemoteAccess(ctx, upstream, target); err != nil {
 					return nil, err
@@ -327,8 +327,7 @@ func (c *BlobCache) cached(ctx context.Context, upstream content.ReadOnlyStorage
 	return f, nil
 }
 
-// verifyRemoteAccess reports an error unless upstream confirms it holds
-// target and lets this caller access it.
+// verifyRemoteAccess checks whether upstream can access target.
 func (c *BlobCache) verifyRemoteAccess(ctx context.Context, upstream content.ReadOnlyStorage, target ociImageSpecV1.Descriptor) error {
 	ok, err := upstream.Exists(ctx, target)
 	if err != nil {

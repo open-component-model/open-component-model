@@ -263,7 +263,7 @@ func (c *ReferenceCache) Resolve(ctx context.Context, upstream Resolver, ref reg
 		}
 	}
 	if c.opts.RemotePolicy == RemotePolicyAlways {
-		// Sharing a flight would hand this caller a resolve made with another caller's credentials.
+		// make sure we aren't sharing credentials here
 		desc, err := upstream.Resolve(ctx, ref.Reference)
 		if err != nil {
 			return ociImageSpecV1.Descriptor{}, err

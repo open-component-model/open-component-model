@@ -142,6 +142,20 @@ func TestGetResourceCredentialConsumerIdentity(t *testing.T) {
 	r.Equal(before, resource)
 }
 
+func TestGetResourceCredentialConsumerIdentityIgnoresFragment(t *testing.T) {
+	r := require.New(t)
+	resource := &constructorruntime.Resource{Input: &inputv1.Git{
+		Type:       inputspec.V1VersionedType,
+		Repository: "git@example.com:org/repo.git#branch=main",
+	}}
+	want, err := identityv1.IdentityFromURL("git@example.com:org/repo.git")
+	r.NoError(err)
+
+	got, err := (&input.InputMethod{}).GetResourceCredentialConsumerIdentity(t.Context(), resource)
+	r.NoError(err)
+	r.Equal(want, got)
+}
+
 func TestInvalidResource(t *testing.T) {
 	r := require.New(t)
 	method := &input.InputMethod{TempFolder: t.TempDir()}

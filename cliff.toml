@@ -116,6 +116,7 @@ commit_parsers = [
     { message = "^fix\\(docs.*\\)", group = "<!-- 8 -->📚 Documentation" },
     { message = "^docs", group = "<!-- 8 -->📚 Documentation" },
     { message = "^fix", group = "<!-- 1 -->🐛 Bug Fixes" },
+    { message = "^revert", group = "<!-- 6 -->⏪ Reverts" },
     { message = "^chore|^ci|chore\\(ci.*\\)|fix\\(ci.*\\)", group = "<!-- 7 -->⚙️ Miscellaneous Tasks" },
 ]
 # Exclude commits that are not matched by any commit parser.

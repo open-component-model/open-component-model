@@ -68,7 +68,7 @@ Read a package's `doc.go` (if present) and `README.md` before changing it.
 ## Git & PR Workflow
 
 - **DCO sign-off mandatory**: commit with `-s`. Every commit ahead of the base must carry a `Signed-off-by:` trailer before push.
-- **Conventional Commits** (CI-enforced on PR titles). Types: `feat`, `fix`, `chore`, `docs`, `test`, `perf`. Breaking: `!`. Use `chore:`, never `ci:`.
+- **Conventional Commits** (CI-enforced on PR titles; allowlist = `TYPE_TO_LABEL` in `.github/workflows/pull-request.yaml`). Types: `feat`, `fix`, `chore`, `refactor`, `docs`, `test`, `perf`, `revert`. Breaking: `!`. Use `chore:`, never `ci:`. Reverts: `revert: <reverted title>` with `Refs: <sha>` in the body — rename GitHub's default `Revert "..."` title, it fails the check.
 
   ```text
   Good:  feat(cli): add component version command
