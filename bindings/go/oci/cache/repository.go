@@ -12,56 +12,42 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/spec"
 )
 
-// Repository decorates an oras [*remote.Repository] with optional [BlobCache]
-// and [ReferenceCache] layers while preserving chunked and streaming push.
+// Repository decorates an oras [*remote.Repository] with optional
+// [BlobCache] and [ReferenceCache] layers. The embedded
+// [*remote.Repository] is exposed via Go field promotion so type
+// assertions used elsewhere in the codebase
+// ([registry.TagLister], [registry.ReferrerLister],
+// `interface{ Blobs() registry.BlobStore }`) keep working unchanged.
 //
-// The embedded [*remote.Repository] keeps the promoted type assertions used
-// elsewhere ([registry.TagLister], [registry.ReferrerLister], Blobs()) working.
-// Push, PushStreaming and Untag go through the chunked store (see getStore).
-// Either cache may be nil, degrading that override to a passthrough.
+// Either cache may be nil; the corresponding override degrades to a
+// pure passthrough to the embedded *remote.Repository.
 type Repository struct {
 	*remote.Repository
-
-	// store holds the chunk config and is built once by [ProxyRepository].
-	// Unexported so the internal remotestore type stays out of the public API.
-	store *remotestore.RemoteStore
-
 	BlobCache      *BlobCache
 	ReferenceCache *ReferenceCache
 }
 
-// getStore returns the store backing Push, PushStreaming and Untag. A bare
-// struct literal leaves store nil, so it falls back to a monolithic store over
-// the embedded repository to avoid a panic.
-func (r *Repository) getStore() *remotestore.RemoteStore {
-	if r.store != nil {
-		return r.store
-	}
-	return &remotestore.RemoteStore{Repository: r.Repository}
-}
-
-// Push delegates to the chunked store; a zero chunk size falls back to a
-// monolithic push.
-func (r *Repository) Push(ctx context.Context, expected ociImageSpecV1.Descriptor, content io.Reader) error {
-	return r.getStore().Push(ctx, expected, content)
-}
-
-// PushStreaming exposes the chunked streaming push so pack's
-// [remotestore.StreamingPusher] assertion succeeds under caching.
-func (r *Repository) PushStreaming(ctx context.Context, partial ociImageSpecV1.Descriptor, content io.Reader) (ociImageSpecV1.Descriptor, error) {
-	return r.getStore().PushStreaming(ctx, partial, content)
-}
-
-// Fetch consults [Repository.BlobCache], then delegates to the embedded
-// repository. A nil BlobCache is a passthrough.
+// Fetch consults [Repository.BlobCache] before delegating to the
+// embedded [*remote.Repository]. See [BlobCache.Fetch] for the exact
+// semantics: cache hit returns the on-disk file directly; miss
+// performs the upstream fetch and tees into the cache. Layer blobs
+// and other non-manifest media types pass through transparently.
+//
+// When BlobCache is nil, this is a direct passthrough.
 func (r *Repository) Fetch(ctx context.Context, target ociImageSpecV1.Descriptor) (io.ReadCloser, error) {
 	return r.BlobCache.Fetch(ctx, r.Repository, target)
 }
 
-// Resolve consults [Repository.ReferenceCache], then delegates to the embedded
-// repository. The cache key is namespaced by registry/repository so a short
-// reference (e.g. "v1") cannot collide across repositories. A nil
-// ReferenceCache is a passthrough.
+// Resolve consults [Repository.ReferenceCache] before delegating to
+// the embedded [*remote.Repository]. See [ReferenceCache.Resolve] for
+// the exact semantics. Successful resolves are appended to the
+// snapshot so they survive a process restart against the same Dir.
+//
+// The cache key is namespaced by the embedded *remote.Repository's
+// registry/repository so two repositories that happen to share a
+// short reference (e.g. the tag "v1") cannot collide.
+//
+// When ReferenceCache is nil, this is a direct passthrough.
 func (r *Repository) Resolve(ctx context.Context, reference string) (ociImageSpecV1.Descriptor, error) {
 	if r.ReferenceCache == nil {
 		return r.Repository.Resolve(ctx, reference)
@@ -73,9 +59,9 @@ func (r *Repository) Resolve(ctx context.Context, reference string) (ociImageSpe
 	return r.ReferenceCache.Resolve(ctx, r.Repository, ref)
 }
 
-// Unwrap returns the embedded [*remote.Repository] so consumers that type-assert
-// on the raw store (e.g. global-store detection in internal/pack) see through
-// the decorator.
+// Unwrap returns the embedded [*remote.Repository] so consumers that
+// type-assert on the underlying store (e.g. global-store detection in
+// internal/pack) can see through the cache decorator.
 func (r *Repository) Unwrap() content.Storage {
 	return r.Repository
 }
@@ -91,10 +77,13 @@ func (r *Repository) Predecessors(ctx context.Context, desc ociImageSpecV1.Descr
 	return remotestore.Predecessors(ctx, r.Repository, desc)
 }
 
-// Untag delegates to the remote repository, then invalidates the reference cache
-// so a restart does not resurrect the stale tag→descriptor mapping.
+// Untag implements [content.Untagger] by delegating to the underlying
+// remote repository so alias deletion keeps working when the cache
+// decorator is in the store chain. On success it invalidates the
+// reference cache entry so a restart does not resurrect the stale
+// tag→descriptor mapping.
 func (r *Repository) Untag(ctx context.Context, reference string) error {
-	if err := r.getStore().Untag(ctx, reference); err != nil {
+	if err := (&remotestore.RemoteStore{Repository: r.Repository}).Untag(ctx, reference); err != nil {
 		return err
 	}
 	if r.ReferenceCache != nil {
@@ -107,9 +96,12 @@ func (r *Repository) Untag(ctx context.Context, reference string) error {
 	return nil
 }
 
-// Tag tags desc on the remote repository, then refreshes the reference cache so
-// the mutable tag resolves to the new descriptor instead of a stale digest. A
-// nil ReferenceCache is a passthrough.
+// Tag associates reference with desc on the underlying remote
+// repository and, on success, refreshes the reference cache so the
+// mutable tag now resolves to the newly tagged descriptor. Without
+// this the cache would keep serving a previously resolved digest for
+// the tag until TTL expiry (OCI tags are mutable). A nil
+// ReferenceCache degrades to a pure passthrough.
 func (r *Repository) Tag(ctx context.Context, desc ociImageSpecV1.Descriptor, reference string) error {
 	if err := r.Repository.Tag(ctx, desc, reference); err != nil {
 		return err
@@ -124,20 +116,13 @@ func (r *Repository) Tag(ctx context.Context, desc ociImageSpecV1.Descriptor, re
 	return nil
 }
 
-// ProxyRepository decorates repo with the configured caches, carrying the chunk
-// config so chunked and streaming push survive the cache (chunkSize bytes per
-// PATCH at or above chunkThreshold; a zero chunkSize is monolithic). With no
-// cache it returns the chunked store directly. It takes [*remote.Repository] to
-// keep the internal store type out of its signature.
-func ProxyRepository(repo *remote.Repository, blob *BlobCache, refs *ReferenceCache, chunkSize, chunkThreshold int64) spec.Store {
-	store := &remotestore.RemoteStore{Repository: repo, ChunkSize: chunkSize, ChunkThreshold: chunkThreshold}
+// ProxyRepository proxies the given repo with the configured caches
+// when at least one is non-nil; otherwise it returns repo unchanged
+// so the cache decorator only appears in the type chain when there
+// is something to cache.
+func ProxyRepository(repo *remote.Repository, blob *BlobCache, refs *ReferenceCache) spec.Store {
 	if blob == nil && refs == nil {
-		return store
+		return repo
 	}
-	return &Repository{
-		Repository:     repo,
-		store:          store,
-		BlobCache:      blob,
-		ReferenceCache: refs,
-	}
+	return &Repository{Repository: repo, BlobCache: blob, ReferenceCache: refs}
 }

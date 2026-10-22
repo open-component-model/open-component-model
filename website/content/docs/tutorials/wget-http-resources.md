@@ -2,7 +2,7 @@
 title: "Working with HTTP Resources"
 description: "Understand the Wget input and access types in depth: the input/access model, credentials, media types, digest pinning, download tuning, and migrating from OCM v1."
 icon: "🌐"
-weight: 62
+weight: 65
 toc: true
 ---
 

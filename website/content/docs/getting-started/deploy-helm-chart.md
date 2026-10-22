@@ -28,7 +28,6 @@ You define a ResourceGraphDefinition that tells kro how to orchestrate the OCM a
 ## Prerequisites
 
 - [Controller environment]({{< relref "setup-controller-environment.md" >}}) set up (OCM Controllers, kro, and a deployer (Flux or Argo CD) in a Kubernetes cluster)
-- [Custom RBAC]({{< relref "custom-rbac.md" >}}) configured to allow the controller to manage `ResourceGraphDefinitions`
 - [OCM CLI]({{< relref "ocm-cli-installation.md" >}}) installed
 - Access to an OCI registry (e.g., [ghcr.io](https://docs.github.com/en/packages/learn-github-packages/introduction-to-github-packages))
 - `envsubst` installed (pre-installed on most Linux/macOS systems; part of `gettext`)
@@ -641,10 +640,6 @@ If the component isn't found, verify:
 
 - The component was transferred successfully: `ocm get cv $OCM_REPO//ocm.software/ocm-k8s-toolkit/simple:1.0.0`
 - The `baseUrl` in the ResourceGraphDefinition matches your registry
-
-### RBAC Permission Errors
-
-If the controller logs show permission errors like `forbidden` or `cannot create resource`, the controller lacks RBAC permissions to manage `ResourceGraphDefinitions`. Follow the [Custom RBAC guide]({{< relref "custom-rbac.md" >}}) to grant the necessary permissions.
 
 ### ResourceGraphDefinition Stays Inactive
 

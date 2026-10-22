@@ -52,6 +52,7 @@ import (
 var (
 	_            ComponentVersionRepository          = (*Repository)(nil)
 	_            repository.OwnershipAwareRepository = (*Repository)(nil)
+	_            repository.DigestPinnableRepository = (*Repository)(nil)
 	versionRegex                                     = regexp.MustCompile(compref.VersionRegex)
 )
 
@@ -98,6 +99,10 @@ type Repository struct {
 	// globalAccessPolicy controls whether global access references are added to local blobs.
 	// Default (zero value) is Never, suppressing global access to discourage reliance on it.
 	globalAccessPolicy GlobalAccessPolicy
+
+	// pin, if set, serves reads of one component from a content-addressed artifact,
+	// see PinComponentVersion.
+	pin *componentVersionPin
 }
 
 // SetGlobalAccessPolicy overrides the global access policy for this repository.
@@ -125,6 +130,10 @@ func (repo *Repository) AddComponentVersion(ctx context.Context, descriptor *des
 		return err
 	}
 
+	if err := repo.checkPinnedTag(ctx, store, reference, component, version); err != nil {
+		return err
+	}
+
 	// Scan component descriptor for local blob references
 	localBlobs := scanLocalBlobs(descriptor)
 
@@ -146,11 +155,32 @@ func (repo *Repository) AddComponentVersion(ctx context.Context, descriptor *des
 		return fmt.Errorf("failed to add descriptor to store: %w", err)
 	}
 
-	if err := store.Tag(ctx, *manifest, reference); err != nil {
+	if err := tagIdempotent(ctx, store, *manifest, reference); err != nil {
 		return fmt.Errorf("failed to tag manifest: %w", err)
 	}
 
 	return nil
+}
+
+// tagIdempotent tags desc at reference, treating the write as a no-op success
+// when the reference already resolves to desc.Digest.
+//
+// Immutable/write-once registries (e.g. Nexus with "redeploy" disabled) reject
+// re-tagging even to identical content. Rather than classify the error (a 409
+// is not only a redeploy rejection), we check the post-condition: if the tag
+// already points at our digest the end state holds; else propagate. The Resolve
+// runs only on the error path.
+func tagIdempotent(ctx context.Context, store spec.Store, desc ociImageSpecV1.Descriptor, reference string) error {
+	err := store.Tag(ctx, desc, reference)
+	if err == nil {
+		return nil
+	}
+	if existing, rerr := store.Resolve(ctx, reference); rerr == nil && existing.Digest == desc.Digest {
+		slogcontext.Log(ctx, slog.LevelDebug, "tag already points at the intended digest; treating rejected re-tag as a no-op",
+			slog.String("reference", reference), slog.String("digest", desc.Digest.String()), slog.Any("error", err))
+		return nil
+	}
+	return err
 }
 
 func (repo *Repository) ListComponentVersions(ctx context.Context, component string) (_ []string, err error) {
@@ -215,16 +245,14 @@ func (repo *Repository) GetComponentVersion(ctx context.Context, component, vers
 		done(err)
 	}()
 
-	reference, store, err := repo.getStore(ctx, component, version)
+	cv, err := repo.readComponentVersion(ctx, component, version)
+	if errors.Is(err, errdef.ErrNotFound) {
+		return nil, errors.Join(repository.ErrNotFound, fmt.Errorf("component version %s/%s not found: %w", component, version, err))
+	}
 	if err != nil {
 		return nil, err
 	}
-
-	desc, _, _, err = getDescriptorFromStore(ctx, store, reference, repo.unmarshalDescriptorFunc)
-	if errors.Is(err, errdef.ErrNotFound) {
-		return desc, errors.Join(repository.ErrNotFound, fmt.Errorf("component version %s/%s not found: %w", component, version, err))
-	}
-	return desc, err
+	return cv.descriptor, nil
 }
 
 // AddLocalResource adds a local resource to the repository.
@@ -524,7 +552,7 @@ func (repo *Repository) uploadAndUpdateLocalArtifact(
 		BaseReference:      reference,
 		GlobalAccessPolicy: repo.globalAccessPolicy,
 	}
-	_, err = pack.ArtifactBlob(ctx, store, artifactBlob, packOptions)
+	_, err = pack.ArtifactBlob(slogcontext.With(ctx, slog.String("target", reference)), store, artifactBlob, packOptions)
 	if err != nil {
 		return fmt.Errorf("failed to pack resource blob: %w", err)
 	}
@@ -578,14 +606,11 @@ func (repo *Repository) GetLocalSource(ctx context.Context, component, version s
 }
 
 func (repo *Repository) localArtifact(ctx context.Context, component, version string, identity runtime.Identity, kind annotations.ArtifactKind) (fetch.LocalBlob, descriptor.Artifact, error) {
-	reference, store, err := repo.getStore(ctx, component, version)
-	if err != nil {
-		return nil, nil, err
-	}
-	desc, manifest, index, err := getDescriptorFromStore(ctx, store, reference, repo.unmarshalDescriptorFunc)
+	cv, err := repo.readComponentVersion(ctx, component, version)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get component version: %w", err)
 	}
+	desc, store := cv.descriptor, cv.store
 
 	var artifacts []descriptor.Artifact
 	switch kind {
@@ -622,12 +647,12 @@ func (repo *Repository) localArtifact(ctx context.Context, component, version st
 	switch typed := typed.(type) {
 	case *v2.LocalBlob:
 		b, err := repo.getLocalBlobFromIndexOrManifest(
-			ctx, store, index, manifest, typed.LocalReference,
+			ctx, store, cv.index, cv.manifest, typed.LocalReference,
 			artifact.GetElementMeta().Version,
 		)
 		return b, artifact, err
 	case *accessv1.RelativeOCIReference:
-		b, err := repo.getRelativeOCIReference(ctx, reference, typed)
+		b, err := repo.getRelativeOCIReference(ctx, cv.reference, typed)
 		return b, artifact, err
 	default:
 		return nil, nil, fmt.Errorf("unsupported resource access type: %T", typed)
@@ -645,8 +670,8 @@ func (repo *Repository) getRelativeOCIReference(ctx context.Context, reference s
 	if err := typed.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid relative OCI reference: %w", err)
 	}
-	// reference is already in scope from repo.getStore(...) above (= ComponentVersionReference);
-	// do not call the resolver a second time.
+	// reference is the reference the component version was resolved by (a tag or digest
+	// reference of the component repository); do not call the resolver a second time.
 	parsed, err := looseref.ParseReference(reference)
 	if err != nil {
 		return nil, fmt.Errorf("cannot derive registry for relative reference: %w", err)
@@ -818,12 +843,12 @@ func (repo *Repository) uploadOCIImage(ctx context.Context, newAccess runtime.Ty
 		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("target access digest mismatch: expected %s, got %s", pinned, main.Digest)
 	}
 
-	if err := oras.ExtendedCopyGraph(ctx, ociStore, store, main, repo.extendedCopyGraphOptions()); err != nil {
+	if err := oras.ExtendedCopyGraph(slogcontext.With(ctx, slog.String("target", access.ImageReference)), ociStore, store, main, repo.extendedCopyGraphOptions()); err != nil {
 		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to upload resource via copy: %w", err)
 	}
 
 	if ref.Tag != "" {
-		if err := store.Tag(ctx, main, ref.Tag); err != nil {
+		if err := tagIdempotent(ctx, store, main, ref.Tag); err != nil {
 			return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to tag main artifact with tag %q: %w", ref.Tag, err)
 		}
 	} else {
@@ -1041,7 +1066,8 @@ func (repo *Repository) targetOCIImageAccess(access runtime.Typed) (*accessv1.OC
 }
 
 // getDescriptorOCIImageManifest retrieves the manifest for a given reference from the store.
-// It handles both OCI image indexes and OCI image manifests.
+// It handles both OCI image indexes and OCI image manifests. Every node read is verified
+// against its digest, starting from the one reference resolves to.
 func getDescriptorOCIImageManifest(ctx context.Context, store spec.Store, reference string) (manifest ociImageSpecV1.Manifest, index *ociImageSpecV1.Index, err error) {
 	slogcontext.Log(ctx, slog.LevelDebug, "resolving descriptor", slog.String("reference", reference))
 	base, err := store.Resolve(ctx, reference)
@@ -1049,7 +1075,7 @@ func getDescriptorOCIImageManifest(ctx context.Context, store spec.Store, refere
 		return ociImageSpecV1.Manifest{}, nil, fmt.Errorf("failed to resolve reference %q: %w", reference, err)
 	}
 	slogcontext.Log(ctx, slog.LevelDebug, "fetching descriptor", log.DescriptorLogAttr(base))
-	manifestRaw, err := store.Fetch(ctx, ociImageSpecV1.Descriptor{
+	manifestRaw, err := fetchVerified(ctx, store, ociImageSpecV1.Descriptor{
 		MediaType: base.MediaType,
 		Digest:    base.Digest,
 		Size:      base.Size,
@@ -1057,13 +1083,10 @@ func getDescriptorOCIImageManifest(ctx context.Context, store spec.Store, refere
 	if err != nil {
 		return ociImageSpecV1.Manifest{}, nil, err
 	}
-	defer func() {
-		err = errors.Join(err, manifestRaw.Close())
-	}()
 
 	switch base.MediaType {
 	case ociImageSpecV1.MediaTypeImageIndex:
-		if err := json.NewDecoder(manifestRaw).Decode(&index); err != nil {
+		if err := json.Unmarshal(manifestRaw, &index); err != nil {
 			return ociImageSpecV1.Manifest{}, nil, err
 		}
 		if len(index.Manifests) == 0 {
@@ -1074,18 +1097,15 @@ func getDescriptorOCIImageManifest(ctx context.Context, store spec.Store, refere
 			return ociImageSpecV1.Manifest{}, nil, fmt.Errorf("index manifest is not an OCI image manifest")
 		}
 		slogcontext.Log(ctx, slog.LevelDebug, "fetching first manifest from index", log.DescriptorLogAttr(descriptorManifest))
-		indexManifestRaw, err := store.Fetch(ctx, descriptorManifest)
-		defer func() {
-			err = errors.Join(err, indexManifestRaw.Close())
-		}()
+		indexManifestRaw, err := fetchVerified(ctx, store, descriptorManifest)
 		if err != nil {
 			return ociImageSpecV1.Manifest{}, nil, fmt.Errorf("failed to fetch manifest: %w", err)
 		}
-		if err := json.NewDecoder(indexManifestRaw).Decode(&manifest); err != nil {
+		if err := json.Unmarshal(indexManifestRaw, &manifest); err != nil {
 			return ociImageSpecV1.Manifest{}, nil, err
 		}
 	case ociImageSpecV1.MediaTypeImageManifest:
-		if err := json.NewDecoder(manifestRaw).Decode(&manifest); err != nil {
+		if err := json.Unmarshal(manifestRaw, &manifest); err != nil {
 			return ociImageSpecV1.Manifest{}, nil, err
 		}
 	default:
@@ -1322,13 +1342,13 @@ func (repo *Repository) UploadResourceStream(ctx context.Context, res *descripto
 	// ExtendedCopyGraph copies the root together with its referrers, which a
 	// plain CopyGraph would miss because a referrer's subject edge points back
 	// at the root. The defaults walk every predecessor at unbounded depth.
-	if err := oras.ExtendedCopyGraph(ctx, rs, store, rs.Root(), repo.extendedCopyGraphOptions()); err != nil {
+	if err := oras.ExtendedCopyGraph(slogcontext.With(ctx, slog.String("target", access.ImageReference)), rs, store, rs.Root(), repo.extendedCopyGraphOptions()); err != nil {
 		return nil, fmt.Errorf("failed to stream resource via copy: %w", err)
 	}
 
 	if ref.Tag != "" {
 		// if we have a tag, we should also tag in the upload
-		if err := store.Tag(ctx, rs.Root(), ref.Tag); err != nil {
+		if err := tagIdempotent(ctx, store, rs.Root(), ref.Tag); err != nil {
 			return nil, fmt.Errorf("failed to tag artifact with tag %q: %w", ref.Tag, err)
 		}
 	} else {

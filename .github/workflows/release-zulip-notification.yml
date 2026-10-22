@@ -25,7 +25,7 @@ concurrency:
 jobs:
   notify_zulip:
     name: Notify Zulip
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     environment:
       name: zulip-notifications
       deployment: false
