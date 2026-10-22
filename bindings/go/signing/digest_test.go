@@ -36,6 +36,11 @@ func TestEnsureNormalisationAlgo(t *testing.T) {
 	in := "someAlgo"
 	got = ensureNormalisationAlgo(ctx, in, logger)
 	assert.Equal(t, in, got)
+
+	// jsonNormalisation/v1 is a real registered algorithm and must pass through
+	// unchanged (it must not be remapped to v4alpha1 like the v3 legacy value).
+	got = ensureNormalisationAlgo(ctx, "jsonNormalisation/v1", logger)
+	assert.Equal(t, "jsonNormalisation/v1", got)
 }
 
 func TestIsSafelyDigestible(t *testing.T) {

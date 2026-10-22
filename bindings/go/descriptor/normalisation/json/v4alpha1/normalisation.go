@@ -67,9 +67,23 @@ var ExclusionRules = jcs.MapExcludes{
 				"labels": LabelExcludes,
 			},
 		},
-		"references": jcs.ArrayExcludes{
+		// componentReferences carry labels too. Historically this rule was keyed
+		// "references" while the descriptor JSON key is "componentReferences", so it
+		// never matched and reference labels were emitted unfiltered. Their
+		// label.version nonetheless stayed absent because the runtime<->v2
+		// conversion dropped it. Now that the conversion preserves version (for
+		// jsonNormalisation/v1), exclude ONLY label.version here to keep v4alpha1
+		// byte-stable; do NOT apply the full LabelExcludes, which would also drop
+		// non-signing reference labels and change existing digests. Proper
+		// signing-only filtering for reference labels is a deliberate v4alpha1
+		// change deferred to v4alpha2.
+		"componentReferences": jcs.ArrayExcludes{
 			Continue: jcs.MapExcludes{
-				"labels": LabelExcludes,
+				"labels": jcs.ArrayExcludes{
+					Continue: jcs.MapExcludes{
+						"version": nil,
+					},
+				},
 			},
 		},
 	},
@@ -79,12 +93,19 @@ var ExclusionRules = jcs.MapExcludes{
 
 // LabelExcludes defines exclusion rules for label entries during normalization.
 // It excludes labels that don't have a valid signature.
+//
+// NOTE: version is intentionally NOT included. The runtime<->v2 label
+// conversion only began preserving Label.Version to support
+// jsonNormalisation/v1 (which signs it); v4alpha1 never emitted version before,
+// because the field was always empty across the conversion. Including it here
+// would silently change v4alpha1 digests and break existing signatures over
+// versioned signing labels. Keep v4alpha1 byte-stable; signing label version is
+// a deliberate, versioned change (see jsonNormalisation/v1 for that behaviour).
 var LabelExcludes = jcs.ExcludeEmpty{
 	TransformationRules: jcs.DynamicArrayExcludes{
 		ValueChecker: IgnoreLabelsWithoutSignature,
 		Continue: jcs.MapIncludes{
 			"name":    jcs.NoExcludes{},
-			"version": jcs.NoExcludes{},
 			"value":   jcs.NoExcludes{},
 			"signing": jcs.NoExcludes{},
 		},

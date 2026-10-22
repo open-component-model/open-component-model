@@ -2,7 +2,7 @@
 title: "Set up Controller Environments"
 description: "Set up a local Kubernetes environment with the OCM Controllers, an orchestrator (kro or Crossplane), and a deployer such as Flux or Argo CD."
 icon: "⚓"
-weight: 25
+weight: 40
 toc: true
 ---
 
@@ -103,7 +103,7 @@ helm install ocm-k8s-toolkit "oci://ghcr.io/open-component-model/kubernetes/cont
 ```
 
 {{<callout context="note" title="Resource names follow the release name" icon="outline/info-circle">}}
-The release name `ocm-k8s-toolkit` used above gives the controller's resources predictable names, such as the service account `ocm-k8s-toolkit-controller-manager`. If you install under a different release name, or via a GitOps tool such as Flux that alters the effective release name, add `--set fullnameOverride=ocm-k8s-toolkit` to keep these names stable. This matters when you [configure custom RBAC]({{< relref "/docs/how-to/custom-rbac.md" >}}), which binds to the service account by name.
+The release name `ocm-k8s-toolkit` used above gives the controller's resources predictable names, such as the service account `ocm-k8s-toolkit-controller-manager`. If you install under a different release name — or via a GitOps tool such as Flux that alters the effective release name — add `--set fullnameOverride=ocm-k8s-toolkit` to keep these names stable. This matters when you [configure custom RBAC]({{< relref "/docs/guides/deploy/configure-custom-rbac.md" >}}), which binds to the service account by name.
 {{</callout>}}
 
 {{<callout context="tip" title="Hardened installations" icon="outline/shield-check">}}
@@ -171,8 +171,8 @@ helm install kro oci://registry.k8s.io/kro/charts/kro \
 <summary>You should see this output</summary>
 
 ```text
-Pulled: registry.k8s.io/kro/charts/kro:0.8.5
-Digest: sha256:c9a9dc0133f43a25711f4bdbce1eeb4b6448015958f901c6fad61a049e54415e
+Pulled: registry.k8s.io/kro/charts/kro:0.9.4
+# digest omitted — varies by version
 NAME: kro
 LAST DEPLOYED: Wed Feb 25 12:02:15 2026
 NAMESPACE: kro-system
@@ -230,6 +230,70 @@ rules:
 EOF
 ```
 
+Allow kro to manage its own generated CRDs:
+
+```shell
+kubectl apply -f - << 'EOF'
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kro:controller:dynamic-crds
+  labels:
+    rbac.kro.run/aggregate-to-controller: "true"
+rules:
+  - apiGroups:
+      - kro.run
+    resources:
+      - "*"
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+EOF
+```
+
+Allow kro to manage workload resources (Deployments and Services):
+
+```shell
+kubectl apply -f - << 'EOF'
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kro:controller:workloads
+  labels:
+    rbac.kro.run/aggregate-to-controller: "true"
+rules:
+  - apiGroups:
+      - apps
+    resources:
+      - deployments
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - services
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+EOF
+```
+
 {{< /tab >}}
 {{< tab "Crossplane" >}}
 
@@ -272,7 +336,7 @@ EOF
 
 {{< callout context="note" title="RBAC on a hardened cluster" icon="outline/info-circle" >}}
 Crossplane composes the OCM `Resource` and the deployer objects (Flux or Argo CD), so on a hardened cluster you must grant Crossplane's service
-account access to those composed kinds. See [Configure Custom RBAC for Deployers]({{< relref "/docs/how-to/custom-rbac.md" >}}).
+account access to those composed kinds. See [Configure Custom RBAC for Deployers]({{< relref "/docs/guides/deploy/configure-custom-rbac.md" >}}).
 {{< /callout >}}
 
 {{< /tab >}}
@@ -570,7 +634,7 @@ We recommend using a publicly accessible registry like [ghcr.io](https://docs.gi
 Using a local registry requires additional configuration to ensure it's accessible both from your CLI and from within the cluster.
 {{< /callout >}}
 
-For private registries, you'll need to configure credentials. See [Configure Credentials for Private Registries]({{< relref "/docs/how-to/configure-multiple-credentials.md" >}}) for details.
+For private registries, you'll need to configure credentials. See [Configure Credentials for Private Registries]({{< relref "/docs/guides/transfer/configure-registry-credentials.md" >}}) for details.
 
 ## Cleanup
 
@@ -592,9 +656,9 @@ Deleted nodes: ["kind-control-plane"]
 
 ## Next Steps
 
-- [How-to: Deploy Manifests with Deployer]({{< relref "/docs/how-to/deploy-manifests-with-deployer.md" >}}) - Deploy raw Kubernetes manifests without kro or Flux
-- [Tutorial: Deploy a Helm Chart]({{< relref "deploy-helm-chart.md" >}}) - Learn to deploy Helm charts using OCM Controllers with kro and Flux
-- [Tutorial: Deploy Crossplane Packages (xpkg) with OCM]({{< relref "/docs/tutorials/deploy-crossplane-packages.md" >}}) - Install Crossplane Configurations, Functions, and Providers from an OCM component version
+- [Guides: Deploy Manifests with Deployer]({{< relref "/docs/guides/deploy/deploy-manifests-with-deployer.md" >}}) - Deploy raw Kubernetes manifests without kro or Flux
+- [Getting Started: Deploy a Helm Chart]({{< relref "deploy-helm-chart.md" >}}) - Learn to deploy Helm charts using OCM Controllers with kro and Flux
+- [Guides: Deploy Crossplane Packages (xpkg) with OCM]({{< relref "/docs/guides/deploy/deploy-crossplane-packages.md" >}}) - Install Crossplane Configurations, Functions, and Providers from an OCM component version
 
 ## Related Documentation
 

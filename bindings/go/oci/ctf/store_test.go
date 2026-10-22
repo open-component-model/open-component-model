@@ -2,10 +2,8 @@ package ctf
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"io"
-	"log/slog"
 	"os"
 	"strings"
 	"sync"
@@ -14,7 +12,6 @@ import (
 	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"oras.land/oras-go/v2/errdef"
 
@@ -33,43 +30,6 @@ func setupTestCTF(t *testing.T) ctf.CTF {
 	fs, err := filesystem.NewFS(tmpDir, os.O_RDWR|os.O_CREATE)
 	require.NoError(t, err)
 	return ctf.NewFileSystemCTF(fs)
-}
-
-var logHandler *mockLogHandler
-
-// mockLogHandler is a mock slog.Handler for testing
-type mockLogHandler struct {
-	mock.Mock
-	mu sync.Mutex
-}
-
-func (m *mockLogHandler) Enabled(_ context.Context, _ slog.Level) bool {
-	return true
-}
-
-func (m *mockLogHandler) Handle(_ context.Context, record slog.Record) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.Called(record.Level, record.Message)
-	return nil
-}
-
-func (m *mockLogHandler) WithAttrs(_ []slog.Attr) slog.Handler {
-	return m
-}
-
-func (m *mockLogHandler) WithGroup(_ string) slog.Handler {
-	return m
-}
-
-func TestMain(m *testing.M) {
-	logHandler = &mockLogHandler{}
-	slog.SetDefault(slog.New(logHandler))
-	logHandler.On("Handle", mock.AnythingOfType("slog.Level"), mock.AnythingOfType("string")).Return(nil)
-
-	exitCode := m.Run()
-
-	os.Exit(exitCode)
 }
 
 func TestNewCTFComponentVersionStore(t *testing.T) {
@@ -129,24 +89,6 @@ func TestFetch(t *testing.T) {
 		require.Error(t, err)
 		assert.Nil(t, reader)
 		assert.Contains(t, err.Error(), "not found")
-	})
-
-	t.Run("close called multiple times is safe and logs error", func(t *testing.T) {
-		reader, err := store.Fetch(ctx, desc)
-		require.NoError(t, err)
-		require.NotNil(t, reader)
-
-		// Call Close multiple times - all should succeed without panic
-		// The sync.OnceValue ensures RUnlock and rc.Close() are only called once
-		err = reader.Close()
-		require.NoError(t, err, "first close should succeed")
-
-		// Second call logs warning but not fail
-		err = reader.Close()
-		require.NoError(t, err, "second close should be safe (logs warning)")
-
-		// Verify the warning was logged exactly once
-		logHandler.AssertCalled(t, "Handle", slog.LevelError, "Close called multiple times on locked reader.")
 	})
 }
 

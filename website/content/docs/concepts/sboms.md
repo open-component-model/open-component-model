@@ -2,7 +2,7 @@
 title: "Software Bills of Materials"
 description: "What is an SBOM and its relevance to the OCM ecosystem."
 icon: "🧾"
-weight: 10
+weight: 13
 toc: true
 ---
 
@@ -33,18 +33,18 @@ all.
 
 OCM does not force you to normalize this up front. `ocm download resource --sbom` looks for a linked SBOM resource
 first and falls back to reading what is attached to the artifact. To understand how that works, please read our SBOM
-tutorial at [Working with SBOMs]({{< relref "docs/tutorials/working-with-sboms.md" >}}).
+tutorial at [Working with SBOMs]({{< relref "docs/guides/pack/add-sboms.md" >}}).
 
 ## What's Next?
 
-- [Tutorial: Working with SBOMs]({{< relref "docs/tutorials/working-with-sboms.md" >}}) — understand how SBOMs are 
+- [Guides: Working with SBOMs]({{< relref "docs/guides/pack/add-sboms.md" >}}) - understand how SBOMs are
   attached to component versions or discovered.
 
 ## Related Documentation
 
-- [Concept: Signing and Verification]({{< relref "docs/concepts/signing-and-verification-concept.md" >}}) — what makes
+- [Concept: Signing and Verification]({{< relref "docs/concepts/signing-and-verification-concept.md" >}}) - what makes
   a linked SBOM trustworthy.
-- [Concept: Transfer and Transport]({{< relref "docs/concepts/transfer-concept.md" >}}) — how component versions and
+- [Concept: Transfer and Transport]({{< relref "docs/concepts/transfer-concept.md" >}}) - how component versions and
   their resources move between repositories.
-- [Concept: Component Identity]({{< relref "docs/concepts/component-identity.md" >}}) — the identity an SBOM link
+- [Concept: Component Identity]({{< relref "docs/concepts/component-identity.md" >}}) - the identity an SBOM link
   points at.
