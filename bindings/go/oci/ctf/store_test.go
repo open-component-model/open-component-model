@@ -170,10 +170,18 @@ func TestResolve(t *testing.T) {
 		Digest:     digestStr,
 		MediaType:  ociImageSpecV1.MediaTypeImageManifest,
 	})
+	index.AddArtifact(v1.ArtifactMetadata{
+		Repository: "test-repo",
+		Tag:        "1.0.0-T0",
+		Digest:     digestStr,
+		MediaType:  ociImageSpecV1.MediaTypeImageManifest,
+	})
 	require.NoError(t, ctf.SetIndex(ctx, index))
 
 	expectedOkResolves := []string{
 		"v1.0.0",
+		"1.0.0-T0",
+		"test-repo:1.0.0-T0",
 		"test-repo:v1.0.0",
 		digestStr,
 		"test-repo@" + digestStr,
@@ -194,6 +202,12 @@ func TestResolve(t *testing.T) {
 	t.Run("invalid reference", func(t *testing.T) {
 		desc, err := store.Resolve(ctx, "invalid")
 		require.Error(t, err)
+		assert.Empty(t, desc)
+	})
+
+	t.Run("unparseable reference that is not a tag", func(t *testing.T) {
+		desc, err := store.Resolve(ctx, "localhost:5000/Test-Repo:v1.0.0")
+		require.ErrorIs(t, err, errdef.ErrInvalidReference)
 		assert.Empty(t, desc)
 	})
 
@@ -228,6 +242,10 @@ func TestTag(t *testing.T) {
 		{
 			name:      "simple tag",
 			reference: "test-tag",
+		},
+		{
+			name:      "tag with upper-case letters",
+			reference: "1.0.0-T0",
 		},
 		{
 			name:      "tag as digest",

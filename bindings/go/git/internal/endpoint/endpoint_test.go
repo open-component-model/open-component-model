@@ -63,6 +63,7 @@ func TestParseRejects(t *testing.T) {
 		{"https://example.com:99999/repo.git", "invalid git repository port"},
 		{"file://remote/srv/repo.git", "must refer to the local host"},
 		{"ftp://example.com/repo.git", "unsupported git transport"},
+		{"https://example.com/repo.git#branch=main", "fragment must be moved"},
 	} {
 		t.Run(tc.repository, func(t *testing.T) {
 			_, err := endpoint.Parse(tc.repository)
