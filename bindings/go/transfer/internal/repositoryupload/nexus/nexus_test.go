@@ -117,14 +117,13 @@ func TestTransform(t *testing.T) {
 		// wantAccess and wantDigest (genericBlobDigest/v1 value) describe the published resource.
 		wantAccess   access
 		wantDigest   string
-		wantNoDigest bool     // the published resource must carry no digest (source had none)
 		wantRequests []string // method and path, where the request order is the behavior
 		check        func(*require.Assertions, uploadRun)
 	}{
 		{
 			name:         "helm uploads to the repository root and publishes the chart nexus stores",
 			wantAccess:   access{helmChart: "mychart:0.1.0"},
-			wantNoDigest: true,
+			wantDigest:   chartDigest,
 			wantRequests: []string{detect, chartPut, search},
 		},
 		{
@@ -174,7 +173,7 @@ func TestTransform(t *testing.T) {
 			content:      hello,
 			mediaType:    "text/plain",
 			wantAccess:   access{url: repoPath + rawPath, mediaType: "text/plain"},
-			wantNoDigest: true,
+			wantDigest:   helloDigest,
 			wantRequests: []string{detect, "HEAD " + repoPath + rawPath, "PUT " + repoPath + rawPath},
 		},
 		{
@@ -369,14 +368,14 @@ func TestTransform(t *testing.T) {
 			},
 		},
 		{
-			name:         "npm uploads through the components API and publishes the stored tarball",
-			repoType:     "npm",
-			content:      npmTarball,
-			resource:     npmSource,
-			seed:         func(repo *nexustest.FakeRepository) { repo.SearchLag = 1 },
-			wantAccess:   access{url: repoPath + npmStored},
-			wantNoDigest: true,
-			check:        func(r *require.Assertions, u uploadRun) { r.Contains(u.requests(), components) },
+			name:       "npm uploads through the components API and publishes the stored tarball",
+			repoType:   "npm",
+			content:    npmTarball,
+			resource:   npmSource,
+			seed:       func(repo *nexustest.FakeRepository) { repo.SearchLag = 1 },
+			wantAccess: access{url: repoPath + npmStored},
+			wantDigest: npmDigest,
+			check:      func(r *require.Assertions, u uploadRun) { r.Contains(u.requests(), components) },
 		},
 		{
 			name:       "npm reuses a stored package with the same content",
@@ -501,9 +500,6 @@ func TestTransform(t *testing.T) {
 				}
 				if tc.wantDigest != "" {
 					r.Equal(&descriptorv2.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: "genericBlobDigest/v1", Value: tc.wantDigest}, published.Digest)
-				}
-				if tc.wantNoDigest {
-					r.Nil(published.Digest, "transfer must not synthesize a digest the source lacked")
 				}
 			}
 			if tc.wantRequests != nil {

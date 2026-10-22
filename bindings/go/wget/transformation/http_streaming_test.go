@@ -2,6 +2,8 @@ package transformation
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"io"
 	"net"
 	"net/http"
@@ -114,7 +116,7 @@ func runStreaming(t *testing.T, payload []byte, srcDigest *v2.Digest, recordedBo
 	return tr.Transform(context.Background(), step)
 }
 
-func TestHTTPStreamingTransformer_DoesNotInjectDigestWhenSourceHasNone(t *testing.T) {
+func TestHTTPStreamingTransformer_ComputesDigestDuringStream(t *testing.T) {
 	r := require.New(t)
 	payload := []byte("hello uploader world")
 	var body []byte
@@ -131,9 +133,10 @@ func TestHTTPStreamingTransformer_DoesNotInjectDigestWhenSourceHasNone(t *testin
 	result := out.(*v1alpha1.HTTPStreaming)
 	r.NotNil(result.Output)
 	r.NotNil(result.Output.Resource)
-	// The source carried no digest, so transfer must not persist one it computed while
-	// streaming; injecting it would break a signature that excluded this resource.
-	r.Nil(result.Output.Resource.Digest, "transfer must not inject a digest the source lacked")
+	r.NotNil(result.Output.Resource.Digest)
+
+	sum := sha256.Sum256(payload)
+	assert.Equal(t, hex.EncodeToString(sum[:]), result.Output.Resource.Digest.Value)
 
 	tw := wgetaccessv1.Wget{}
 	r.NoError(wgetaccess.Scheme.Convert(result.Output.Resource.Access, &tw))
