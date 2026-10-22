@@ -82,24 +82,16 @@ type closeErrBlob struct{ io.Reader }
 func (b closeErrBlob) ReadCloser() (io.ReadCloser, error) { return b, nil }
 func (closeErrBlob) Close() error                         { return errors.New("verification failed on close") }
 
-func TestCopyBlobToOSPathKeepsTargetWhenCloseFails(t *testing.T) {
+func TestCopyBlobToOSPathRemovesTargetWhenCloseFails(t *testing.T) {
 	r := require.New(t)
 	dst := filepath.Join(t.TempDir(), "dst.txt")
 	r.NoError(os.WriteFile(dst, []byte("old"), 0o600))
 
 	err := filesystem.CopyBlobToOSPath(closeErrBlob{strings.NewReader("new")}, dst)
 	r.ErrorContains(err, "verification failed on close")
-
-	got, err := os.ReadFile(dst)
-	r.NoError(err)
-	r.Equal("old", string(got))
-	entries, err := os.ReadDir(filepath.Dir(dst))
-	r.NoError(err)
-	r.Len(entries, 1, "temporary file must be removed")
+	r.NoFileExists(dst, "content that failed verification must not be left at the target path")
 }
 
-// The temporary file must not derive its name from the target, or a target name close to the
-// filesystem's limit fails with "file name too long".
 func TestCopyBlobToOSPathAcceptsLongFileName(t *testing.T) {
 	r := require.New(t)
 	dst := filepath.Join(t.TempDir(), strings.Repeat("a", 250))

@@ -47,8 +47,8 @@ func TestCopyBlobToOSPathWritesIntoNamedPipe(t *testing.T) {
 	r.Equal("new", <-read)
 }
 
-// A symlink at the target path is replaced by a regular file; its former target keeps its content.
-func TestCopyBlobToOSPathReplacesSymlink(t *testing.T) {
+// A symlink at the target path is kept and the content is written to its target.
+func TestCopyBlobToOSPathWritesThroughSymlink(t *testing.T) {
 	r := require.New(t)
 	tempDir := t.TempDir()
 	target := filepath.Join(tempDir, "target.txt")
@@ -60,13 +60,30 @@ func TestCopyBlobToOSPathReplacesSymlink(t *testing.T) {
 
 	fi, err := os.Lstat(link)
 	r.NoError(err)
-	r.True(fi.Mode().IsRegular(), "the link must be replaced by a regular file")
-	got, err := os.ReadFile(link)
+	r.NotZero(fi.Mode()&os.ModeSymlink, "the link must not be replaced")
+	got, err := os.ReadFile(target)
 	r.NoError(err)
 	r.Equal("new", string(got))
-	got, err = os.ReadFile(target)
+}
+
+// After a failed copy through a symlink the link is kept and its target holds no rejected content.
+func TestCopyBlobToOSPathEmptiesSymlinkTargetWhenCloseFails(t *testing.T) {
+	r := require.New(t)
+	tempDir := t.TempDir()
+	target := filepath.Join(tempDir, "target.txt")
+	r.NoError(os.WriteFile(target, []byte("old"), 0o600))
+	link := filepath.Join(tempDir, "link.txt")
+	r.NoError(os.Symlink(target, link))
+
+	err := filesystem.CopyBlobToOSPath(closeErrBlob{strings.NewReader("new")}, link)
+	r.ErrorContains(err, "verification failed on close")
+
+	fi, err := os.Lstat(link)
 	r.NoError(err)
-	r.Equal("old", string(got))
+	r.NotZero(fi.Mode()&os.ModeSymlink, "the link must not be removed")
+	got, err := os.ReadFile(target)
+	r.NoError(err)
+	r.Empty(got)
 }
 
 func TestCopyBlobToOSPathKeepsPermissionsOfExistingFile(t *testing.T) {
