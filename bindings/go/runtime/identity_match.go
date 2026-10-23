@@ -68,7 +68,8 @@ func IdentityMatchesURL(i, o Identity) bool {
 	if iScheme != "" && oScheme != "" && iScheme != oScheme {
 		return false
 	}
-	if iHost != oHost {
+	hostMatch, err := path.Match(oHost, iHost)
+	if err != nil || !hostMatch {
 		return false
 	}
 

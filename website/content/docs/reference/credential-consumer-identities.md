@@ -57,7 +57,7 @@ Used when OCM accesses an OCI registry — pushing, pulling, or resolving compon
 | Attribute  | Required | Description                                                                                                                         |
 |------------|----------|-------------------------------------------------------------------------------------------------------------------------------------|
 | `type`     | Yes      | Must be `OCIRegistry`                                                                                                               |
-| `hostname` | Yes      | Registry hostname (e.g. `ghcr.io`, `registry.example.com`)                                                                          |
+| `hostname` | Yes      | Registry hostname (e.g. `ghcr.io`, `registry.example.com`). Supports glob patterns: `*.example.com` matches any subdomain (including `a.b.example.com`), but not `example.com` itself. |
 | `path`     | No       | Repository path. Supports glob patterns (`*` matches one path segment). If omitted, matches any path on the hostname.               |
 | `scheme`   | No       | URL scheme (`https`, `http`, `oci`). If omitted, matches any scheme. If set, must match exactly.                                    |
 | `port`     | No       | Port number as string. Default ports are applied when `scheme` is set: `https` and `oci` default to `443`, `http` defaults to `80`. |
@@ -80,7 +80,8 @@ Matching runs three chained checks — all must pass:
 1. **Path matcher** — compares `path` using `path.Match` (glob). `*` matches one segment, not across `/`. If the
    configured entry has no `path`, any request path is accepted.
 2. **URL matcher** — compares `scheme`, `hostname`, and `port`. Applies default ports when a scheme is present (
-   `https` → `443`, `http` → `80`).
+   `https` → `443`, `http` → `80`). `hostname` supports glob patterns (`*.example.com` matches `sub.example.com`
+   and `a.b.example.com`, but not `example.com` itself).
 3. **Equality matcher** — all remaining attributes (like `type`) must be exactly equal.
 
 For detailed matching examples and edge cases, see [Tutorial: Understand Credential Resolution]({{< relref "docs/tutorials/credential-resolution.md" >}}).
@@ -112,6 +113,18 @@ For detailed matching examples and edge cases, see [Tutorial: Understand Credent
       password: ghp_org_token
 ```
 
+**Wildcard hostname** — matches all subdomains (including nested) of `example.com`:
+
+```yaml
+- identity:
+    type: OCIRegistry
+    hostname: "*.example.com"
+  credentials:
+    - type: OCICredentials/v1
+      username: my-user
+      password: my-token
+```
+
 **Hostname + scheme + port** — matches only HTTPS on a custom port:
 
 ```yaml
@@ -138,7 +151,7 @@ identity is derived from the Helm repository URL using the same URL-based attrib
 | Attribute  | Required | Description                                                                    |
 |------------|----------|--------------------------------------------------------------------------------|
 | `type`     | Yes      | Must be `HelmChartRepository`                                                  |
-| `hostname` | Yes      | Repository hostname (e.g. `charts.example.com`, `registry.example.com`)        |
+| `hostname` | Yes      | Repository hostname (e.g. `charts.example.com`). Supports glob patterns (e.g. `*.example.com`). |
 | `path`     | No       | Repository path (e.g. `stable`). If omitted, matches any path on the hostname. |
 | `scheme`   | No       | URL scheme (`https`, `http`, `oci`). If omitted, matches any scheme.           |
 | `port`     | No       | Port number as string. If omitted, matches any port.                           |
@@ -192,7 +205,7 @@ Used when OCM fetches a resource over plain HTTP or HTTPS through the
 | Attribute  | Required | Description                                                                                                                            |
 |------------|----------|----------------------------------------------------------------------------------------------------------------------------------------|
 | `type`     | Yes      | Must be `Wget`                                                                                                                         |
-| `hostname` | Yes      | Server hostname (e.g. `downloads.example.com`)                                                                                         |
+| `hostname` | Yes      | Server hostname (e.g. `downloads.example.com`). Supports glob patterns (e.g. `*.example.com`).                                         |
 | `path`     | No       | URL path without the leading `/`. Supports glob patterns (`*` matches one path segment). If omitted, matches any path on the hostname. |
 | `scheme`   | No       | URL scheme (`https`, `http`). If omitted, matches any scheme. If set, must match exactly.                                              |
 | `port`     | No       | Port number as string. During matching, default ports are applied when `scheme` is set: `https` defaults to `443`, `http` to `80`.     |
@@ -504,7 +517,7 @@ optional; see the note on anonymous access under
 | Attribute  | Required | Description                                                                                       |
 |------------|----------|---------------------------------------------------------------------------------------------------|
 | `type`     | Yes      | Must be `GitHubRepository`                                                                        |
-| `hostname` | Yes      | Repository hostname (e.g. `github.com`, a GitHub Enterprise host)                                 |
+| `hostname` | Yes      | Repository hostname (e.g. `github.com`, a GitHub Enterprise host). Supports glob patterns (e.g. `*.example.com`). |
 | `path`     | No       | Repository path (e.g. `open-component-model/open-component-model`). If omitted, matches any path. |
 | `scheme`   | No       | URL scheme (`https`, `http`). If omitted, matches any scheme.                                     |
 | `port`     | No       | Port number as string. If omitted, the scheme's default applies (`https` → `443`, `http` → `80`). |

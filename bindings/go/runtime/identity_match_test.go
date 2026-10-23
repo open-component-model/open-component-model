@@ -586,6 +586,66 @@ func TestIdentityMatchesURL(t *testing.T) {
 			},
 			true,
 		},
+		{
+			"wildcard hostname glob matches subdomain",
+			args{
+				a: runtime.Identity{
+					runtime.IdentityAttributeHostname: "sub.example.com",
+				},
+				b: runtime.Identity{
+					runtime.IdentityAttributeHostname: "*.example.com",
+				},
+			},
+			true,
+		},
+		{
+			"wildcard hostname glob does not match unrelated domain",
+			args{
+				a: runtime.Identity{
+					runtime.IdentityAttributeHostname: "sub.other.com",
+				},
+				b: runtime.Identity{
+					runtime.IdentityAttributeHostname: "*.example.com",
+				},
+			},
+			false,
+		},
+		{
+			"wildcard hostname glob matches sub-sub domain",
+			args{
+				a: runtime.Identity{
+					runtime.IdentityAttributeHostname: "a.b.example.com",
+				},
+				b: runtime.Identity{
+					runtime.IdentityAttributeHostname: "*.example.com",
+				},
+			},
+			true,
+		},
+		{
+			"wildcard hostname glob does not match apex domain",
+			args{
+				a: runtime.Identity{
+					runtime.IdentityAttributeHostname: "example.com",
+				},
+				b: runtime.Identity{
+					runtime.IdentityAttributeHostname: "*.example.com",
+				},
+			},
+			false,
+		},
+		{
+			"invalid hostname glob pattern never matches",
+			args{
+				a: runtime.Identity{
+					runtime.IdentityAttributeHostname: "sub.example.com",
+				},
+				b: runtime.Identity{
+					runtime.IdentityAttributeHostname: "*..example.com",
+				},
+			},
+			false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
