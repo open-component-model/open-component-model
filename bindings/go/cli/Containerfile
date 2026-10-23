@@ -23,6 +23,9 @@ USER 65532:65532
 WORKDIR /tmp
 WORKDIR /.cache
 WORKDIR /
+# Trust-root cache of a cosign mounted into or downloaded by slim; slim has no
+# /.sigstore under HOME=/.
+ENV TUF_ROOT=/tmp/.sigstore/root
 ENTRYPOINT ["/ocm"]
 
 # Static cosign linked against the Go Cryptographic Module (GOFIPS140=certified,

@@ -116,8 +116,9 @@ signing works in the image because `cosign` is on `PATH`. The slim image is buil
 `FROM scratch` and contains only `/ocm` and the CA bundle; use it when you
 don't sign with Sigstore, or bring your own `cosign`. Both CLI images run as
 user `65532` and have `/tmp` and `/.cache` directories owned by that user; the
-default image also has `/.sigstore` for cosign's trust root. When you run them
-as another user ID, mount writable volumes there.
+default image also has `/.sigstore` for cosign's trust root, while the slim
+image sets `TUF_ROOT=/tmp/.sigstore/root`. When you run them as another user
+ID, mount writable volumes there.
 
 The controller image is built `FROM scratch` with the static `/manager` binary
 (the entrypoint), the FIPS `cosign`, the CA bundle, and a `/tmp` owned by user
@@ -436,13 +437,11 @@ $ go version -m cosign | grep -E 'GOFIPS140|CGO_ENABLED|DefaultGODEBUG'
 - **Local `ocm` binary:** put that `cosign` on `PATH` before running `ocm`, or
   let OCM download it.
 - **Slim CLI image:** mount the `cosign` for the image's platform at
-  `/usr/local/bin/cosign`, which is on the default `PATH`. The slim image has
-  no `/.sigstore`, so point `HOME` at the writable `/tmp` for cosign's
-  trust-root cache:
+  `/usr/local/bin/cosign`, which is on the default `PATH`. cosign keeps its
+  trust-root cache under `/tmp`, as the image sets `TUF_ROOT`:
 
   ```shell
   docker run --rm \
-    -e HOME=/tmp \
     -v "$PWD/cosign:/usr/local/bin/cosign:ro" \
     -v "$PWD/.ocmconfig:/.ocmconfig:ro" \
     ghcr.io/open-component-model/cli:latest-slim \
