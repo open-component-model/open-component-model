@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sync"
+	"time"
 
 	"cel.dev/cel-go/cel"
 	"github.com/santhosh-tekuri/jsonschema/v6"
@@ -65,7 +67,51 @@ type Runtime struct {
 	Transformers map[runtime.Type]Transformer
 	Events       chan<- ProgressEvent
 
+	// Retry re-runs a transformer whose Transform failed with a retryable
+	// error. Nil disables retries.
+	Retry *RetryPolicy
+
 	mu sync.RWMutex
+}
+
+// RetryPolicy re-runs a failed Transform call. Transformers must be safe to
+// re-run with the same input for the policy to be used, which holds for
+// transformers that only read from or write content-addressed data to their
+// targets (e.g. OCM transfer nodes).
+type RetryPolicy struct {
+	// MaxAttempts bounds the total number of Transform calls per node,
+	// including the first. Values below 2 disable retries.
+	MaxAttempts int
+	// Backoff is the wait before the second attempt; it doubles per attempt.
+	Backoff time.Duration
+	// Retryable reports whether an error is worth another attempt.
+	Retryable func(error) bool
+}
+
+// transform runs transformer, retrying per b.Retry. Cancellation of ctx
+// always ends the loop with the last error.
+func (b *Runtime) transform(ctx context.Context, transformer Transformer, transformation graph.Transformation) (runtime.Typed, error) {
+	backoff := time.Duration(0)
+	if b.Retry != nil {
+		backoff = b.Retry.Backoff
+	}
+	for attempt := 1; ; attempt++ {
+		transformed, err := transformer.Transform(ctx, transformation.AsRaw())
+		if err == nil || b.Retry == nil || b.Retry.Retryable == nil ||
+			attempt >= b.Retry.MaxAttempts || ctx.Err() != nil || !b.Retry.Retryable(err) {
+			return transformed, err
+		}
+		slog.WarnContext(ctx, "retrying transformation after transient error",
+			"transformation", transformation.DisplayName(), "attempt", attempt, "maxAttempts", b.Retry.MaxAttempts, "error", err)
+		timer := time.NewTimer(backoff)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return nil, err
+		case <-timer.C:
+		}
+		backoff *= 2
+	}
 }
 
 func (b *Runtime) ProcessValue(ctx context.Context, transformation graph.Transformation) error {
@@ -150,7 +196,7 @@ func (b *Runtime) processTransformation(ctx context.Context, transformation grap
 		return fmt.Errorf("no transformer runtime registered for type %s", runtimeType)
 	}
 
-	transformed, err := transformer.Transform(ctx, transformation.AsRaw())
+	transformed, err := b.transform(ctx, transformer, transformation)
 	if err != nil {
 		return fmt.Errorf("failed to transform transformation %q: %w", transformation.DisplayName(), err)
 	}

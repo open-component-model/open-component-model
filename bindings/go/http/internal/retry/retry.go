@@ -19,11 +19,9 @@ limitations under the License.
 package retry
 
 import (
-	"errors"
 	"hash/maphash"
 	"math"
 	"math/rand/v2"
-	"net"
 	"net/http"
 	"strconv"
 	"time"
@@ -43,11 +41,13 @@ var DefaultGenericPolicy = GenericPolicy{
 	MaxRetry:  5,
 }
 
-// DefaultPredicate retries on 5xx errors, 429, 408, and network dial timeouts.
+// DefaultPredicate retries on 5xx errors, 429, 408, and transient network
+// failures (see IsTransientError): timeouts, connection resets, unexpected EOF
+// and HTTP/2 connection or stream loss. net/http retries a reset only on a
+// reused connection, so a reset on a fresh one has to be retried here.
 var DefaultPredicate Predicate = func(resp *http.Response, err error) (bool, error) {
 	if err != nil {
-		var netErr net.Error
-		if errors.As(err, &netErr) && netErr.Timeout() {
+		if IsTransientError(err) {
 			return true, nil
 		}
 		return false, err
