@@ -163,7 +163,7 @@ func BuildGraphDefinition(
 
 	// Phase 2: walk the discovered DAG and generate transformation nodes per (component, target) pair.
 	err := g.WithReadLock(func(d *dag.DirectedAcyclicGraph[string]) error {
-		return fillGraphDefinitionWithPrefetchedComponents(ctx, d, targetMap, tgd, uploaders)
+		return fillGraphDefinitionWithPrefetchedComponents(ctx, d, targetMap, tgd, uploaders, cfg.UnmatchedResourcePolicy.Normalize())
 	})
 	if err != nil {
 		return nil, err
@@ -212,6 +212,7 @@ func fillGraphDefinitionWithPrefetchedComponents(
 	targetMap map[string][]runtime.Typed,
 	tgd *transformv1alpha1.TransformationGraphDefinition,
 	uploaders []transferv1alpha1.UploaderConfig,
+	policy transferv1alpha1.UnmatchedResourcePolicy,
 ) error {
 	slog.DebugContext(ctx, "building transformations for discovered components",
 		"components", len(d.Vertices))
@@ -260,7 +261,7 @@ func fillGraphDefinitionWithPrefetchedComponents(
 				"targetIndex", targetIdx, "targetType", fmt.Sprintf("%T", target),
 				"transformID", id)
 
-			resourceTransformIDs, fileRefs, err := processResources(ctx, v2desc, baseID, id, val, tgd, target, uploaders, uploaderUsed)
+			resourceTransformIDs, fileRefs, err := processResources(ctx, v2desc, baseID, id, val, tgd, target, uploaders, uploaderUsed, policy)
 			if err != nil {
 				return err
 			}
@@ -281,7 +282,8 @@ func fillGraphDefinitionWithPrefetchedComponents(
 
 // processResources iterates over resources in a v2 descriptor and creates the appropriate
 // transformations: the first uploader whose match selects a resource handles it. A resource no uploader selects follows the baseline: a local blob
-// is copied as a local blob, anything else stays by reference (no transformation).
+// is copied as a local blob, anything else stays by reference (no transformation). policy
+// decides whether such a resource is only logged or fails the build (see reportUnmatchedResource).
 // It returns CEL spec-field expressions for all Get transformations that buffer content to disk.
 func processResources(
 	ctx context.Context,
@@ -293,6 +295,7 @@ func processResources(
 	toSpec runtime.Typed,
 	uploaders []transferv1alpha1.UploaderConfig,
 	uploaderUsed []bool,
+	policy transferv1alpha1.UnmatchedResourcePolicy,
 ) (map[int]string, []string, error) {
 	component := val.Descriptor.Component.Name
 	version := val.Descriptor.Component.Version
@@ -368,10 +371,11 @@ func processResources(
 		if handled {
 			continue
 		}
-		if !isLocalByValue(access) {
-			slog.DebugContext(ctx, "no uploader selects resource, keeping it by reference",
-				"component", component, "version", version,
-				"resource", resource.ToIdentity().String(), "accessType", resource.Access.Type.String())
+		byValue := isLocalByValue(access)
+		if err := reportUnmatchedResource(ctx, policy, len(uploaders) > 0, component, version, resource, toSpec, byValue); err != nil {
+			return nil, nil, err
+		}
+		if !byValue {
 			continue
 		}
 
@@ -478,6 +482,46 @@ func warnUnusedUploaders(ctx context.Context, uploaders []transferv1alpha1.Uploa
 			"index", idx,
 			"match", u.EffectiveMatch())
 	}
+}
+
+// reportUnmatchedResource applies policy to a resource no uploader selects for toSpec. Fail
+// returns an error regardless of whether uploaders are configured; Warn logs a warning only
+// when uploaders are configured, since without any every resource follows the baseline by
+// design. The target is reported because uploader matches can depend on it.
+func reportUnmatchedResource(
+	ctx context.Context,
+	policy transferv1alpha1.UnmatchedResourcePolicy,
+	uploadersConfigured bool,
+	component, version string,
+	resource descriptorv2.Resource,
+	toSpec runtime.Typed,
+	byValue bool,
+) error {
+	if policy == transferv1alpha1.UnmatchedResourcePolicyFail {
+		reason := "no uploader selects it"
+		if !uploadersConfigured {
+			reason = "no uploader is configured"
+		}
+		return fmt.Errorf("resource %s of component %s:%s (access type %s) is not handled by any uploader for target %s: %s (unmatchedResourcePolicy is %s)",
+			resource.ToIdentity(), component, version, resource.Access.Type, targetName(toSpec), reason, policy)
+	}
+
+	level := slog.LevelDebug
+	if policy == transferv1alpha1.UnmatchedResourcePolicyWarn && uploadersConfigured {
+		level = slog.LevelWarn
+	}
+	if !slog.Default().Enabled(ctx, level) {
+		return nil
+	}
+	baseline := "reference"
+	if byValue {
+		baseline = "localBlob"
+	}
+	slog.Log(ctx, level, "no uploader selects resource; falling back to the baseline",
+		"component", component, "version", version,
+		"resource", resource.ToIdentity().String(), "accessType", resource.Access.Type.String(),
+		"target", targetName(toSpec), "baseline", baseline)
+	return nil
 }
 
 // helmFileExpressions returns the CEL spec-field expressions of the file buffers a Helm
