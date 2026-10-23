@@ -52,28 +52,26 @@ FROM ghcr.io/open-component-model/cosign:v3.1.4-ocm.2@sha256:abc86b4330048abfaa2
 
 # Garden Linux FIPS image: source of the CA bundle for OCI/registry TLS, which
 # the final image copies by its path so nothing else from this image reaches
-# it. Only files are copied, so the stage runs on the build platform.
+# it.
 FROM --platform=${BUILDPLATFORM} ghcr.io/gardenlinux/gardenlinux/fips:1877.25@sha256:74ae1f81d0723434024f591d8c2872852201b99b9f18c0fbe10221b16e60e01d AS certs
-# The manager and cosign write temporary files under os.TempDir(); scratch has
-# no /tmp. Stage a world-writable one so the nonroot user can create them. A
-# directory COPY keeps its sticky bit; COPY --chmod does not.
-RUN mkdir -p -m 1777 /rootfs/tmp
 
 # manager and cosign are static (CGO_ENABLED=0), so the image needs no libc.
 FROM scratch
 # scratch defines no PATH; the sigstore signing handler looks up cosign on PATH.
 ENV PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-WORKDIR /
 COPY --from=certs /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
-COPY --from=certs /rootfs/ /
-COPY --from=builder /workspace/manager .
+COPY --from=builder /workspace/manager /manager
 # No GODEBUG needed: GOFIPS140 already makes fips140=on the default of both the
 # manager and cosign (DefaultGODEBUG in their build info).
 COPY --from=cosign /cosign /usr/local/bin/cosign
 # cosign caches the Sigstore TUF trust root under $HOME/.sigstore. scratch sets
 # no HOME, which resolves to / and is not writable by the nonroot user, so point
-# it at the world-writable /tmp staged above.
+# it at /tmp. The manager and cosign also write temporary files there
+# (os.TempDir()); scratch has no /tmp, and WORKDIR creates it owned by USER, so
+# only UID 65532 can write to it.
 ENV HOME=/tmp
 USER 65532:65532
+WORKDIR /tmp
+WORKDIR /
 
 ENTRYPOINT ["/manager"]
