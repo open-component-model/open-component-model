@@ -262,7 +262,11 @@ jobs:
       - name: Build and check for SEO description length warnings
         working-directory: website
         run: |
-          WARNINGS=$(npm run build 2>&1 | grep "^WARN.*Description too" || true)
+          if ! npm run build > build.log 2>&1; then
+            cat build.log
+            exit 1
+          fi
+          WARNINGS=$(grep "^WARN.*Description too" build.log || true)
           if [ -n "$WARNINGS" ]; then
             echo "SEO description length violations found:"
             echo "$WARNINGS"
