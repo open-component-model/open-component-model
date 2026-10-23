@@ -47,19 +47,25 @@ jobs:
       matrix:
         image: [cli, cli-slim, controller]
         arch: [arm64, amd64]
+        # containerfile: its digest-pinned "certs" stage is the expected source
+        # of the image's CA bundle.
         include:
           - image: cli
             artifact: ${{ inputs.cli_artifact }}
             oci_tar: oci/cli.tar
+            containerfile: bindings/go/cli/Containerfile
           - image: cli-slim
             artifact: ${{ inputs.cli_artifact }}
             oci_tar: oci/cli-slim.tar
+            containerfile: bindings/go/cli/Containerfile
           - image: controller
             artifact: ${{ inputs.controller_artifact }}
             oci_tar: controller.tar
+            containerfile: bindings/go/kubernetes/controller/Dockerfile
     env:
       IMAGE: ${{ matrix.image }}
       ARCH: ${{ matrix.arch }}
+      CONTAINERFILE: ${{ matrix.containerfile }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -68,6 +74,7 @@ jobs:
           sparse-checkout: |
             .github/stig
             .env
+            ${{ matrix.containerfile }}
           sparse-checkout-cone-mode: false
           persist-credentials: false
 
@@ -134,25 +141,56 @@ jobs:
         continue-on-error: true
         run: exit 1
 
-      # DISA GPOS SRG as tailored in .github/stig, evaluated offline on the
-      # image's exported root filesystem. Extracting it as root in the scanner
-      # keeps ownership and setuid/setgid bits. oscap fails on any failed rule.
+      # DISA GPOS SRG as tailored in .github/stig, plus OCM's supplement for the
+      # deselected rules, evaluated offline on the image's exported root
+      # filesystem. Extracting it as root in the scanner keeps ownership and
+      # setuid/setgid bits. Fails on any failed rule of either evaluation.
       - name: STIG scan (DISA GPOS SRG)
         if: ${{ !cancelled() }}
         run: |
           mkdir -p stig
           docker export "$(docker create "ocm-scan:${IMAGE}-${ARCH}" /x)" |
-            docker run --rm -i -u 0:0 -v "$PWD/.github/stig:/stig:ro" -v "$PWD/stig:/out" \
+            docker run --rm -i -u 0:0 -e IMAGE -v "$PWD/.github/stig:/stig:ro" -v "$PWD/stig:/out" \
               --entrypoint /bin/sh "$OPENSCAP_IMAGE" -euc '
                 mkdir /rootfs
                 tar -C /rootfs -xpf -
                 # Added to every container by docker create/export, not image content.
                 rm -rf /rootfs/.dockerenv /rootfs/etc/hosts /rootfs/etc/hostname \
                   /rootfs/etc/resolv.conf /rootfs/etc/mtab /rootfs/dev /rootfs/proc /rootfs/sys
-                OSCAP_PROBE_ROOT=/rootfs oscap xccdf eval \
+                export OSCAP_PROBE_ROOT=/rootfs
+                rc=0
+                oscap xccdf eval \
                   --tailoring-file /stig/tailoring.xml --profile xccdf_software.ocm_profile_gpos-container \
-                  --results /out/results.xml --report /out/report.html \
-                  /usr/share/xml/scap/ssg/content/ssg-chainguard-gpos-ds.xml'
+                  --results /out/gpos-results.xml --report /out/gpos-report.html \
+                  /usr/share/xml/scap/ssg/content/ssg-chainguard-gpos-ds.xml || rc=$?
+                oscap xccdf eval --profile "xccdf_software.ocm_profile_${IMAGE}" \
+                  --results /out/ocm-results.xml --report /out/ocm-report.html \
+                  /stig/ocm-supplement-xccdf.xml || rc=$?
+                exit "$rc"'
+
+      # The supplement's checks that OVAL cannot do: OVAL reads no binaries and
+      # no values from outside the scanned root filesystem.
+      - name: Image provenance (FIPS module, CA bundle)
+        if: ${{ !cancelled() }}
+        run: |
+          ref="ocm-scan:${IMAGE}-${ARCH}"
+          entrypoint="$(docker image inspect -f '{{index .Config.Entrypoint 0}}' "$ref")"
+          c="$(docker create "$ref" /x)"
+          docker cp -q "$c:$entrypoint" tmp/entrypoint
+          docker cp -q "$c:/etc/ssl/certs/ca-certificates.crt" tmp/ca.crt
+
+          # Go build information, as `go version -m` shows it.
+          grep -aqP '^build\tGOFIPS140=v\S+$' tmp/entrypoint ||
+            { echo "::error::$entrypoint is not built with GOFIPS140=v<version>"; exit 1; }
+          grep -aqP '^build\tDefaultGODEBUG=(.*,)?fips140=(on|only)(,|$)' tmp/entrypoint ||
+            { echo "::error::$entrypoint does not default to fips140=on"; exit 1; }
+
+          base="$(sed -nE 's/^FROM .* (ghcr\.io\/gardenlinux\/\S+@sha256:[0-9a-f]{64}) AS certs$/\1/p' "$CONTAINERFILE")"
+          [[ -n "$base" ]] || { echo "::error::no digest-pinned Garden Linux certs stage in $CONTAINERFILE"; exit 1; }
+          docker run --rm --platform "linux/$(docker version -f '{{.Server.Arch}}')" --entrypoint cat "$base" \
+            /etc/ssl/certs/ca-certificates.crt > tmp/base-ca.crt
+          cmp -s tmp/ca.crt tmp/base-ca.crt ||
+            { echo "::error::CA bundle differs from the one in $base"; exit 1; }
 
       # CIS Docker Benchmark section 4. Fails on WARN and FATAL; INFO (content
       # trust, HEALTHCHECK) and SKIP (no /etc/passwd in scratch) do not fail.
