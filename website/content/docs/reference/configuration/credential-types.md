@@ -1,6 +1,6 @@
 ---
 title: "Credential Types"
-description: "Reference for all built-in OCM credential types and their configuration fields."
+description: "Reference for all built-in OCM credential types, their configuration fields, and the repositories or services each type authenticates to."
 icon: "🔑"
 weight: 3
 toc: true

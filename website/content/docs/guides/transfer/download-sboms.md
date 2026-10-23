@@ -4,6 +4,8 @@ description: "Retrieve linked and attached SBOMs from a component version with o
 icon: "🧾"
 weight: 70
 toc: true
+seo:
+  description: "Retrieve linked and attached SBOMs from a component version, collect all SBOMs across a version, scan them, and confirm they survive a transfer."
 ---
 
 {{< callout context="caution" title="Complete the pack guide first" >}}

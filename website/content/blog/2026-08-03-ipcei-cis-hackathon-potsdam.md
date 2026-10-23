@@ -5,6 +5,8 @@ date: 2026-08-03T10:00:00+02:00
 contributors: []
 tags: ["ocm", "thalamus", "sbom", "neonephos"]
 draft: false
+seo:
+  description: "Recap of the IPCEI-CIS hackathon at SAP Innovation Center in Potsdam: what the OCM team built and learned during the collaborative sprint."
 ---
 
 ## Hackathon @ SAP Innovation Center Potsdam

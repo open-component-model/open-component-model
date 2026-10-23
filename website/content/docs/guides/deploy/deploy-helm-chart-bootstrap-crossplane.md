@@ -6,6 +6,8 @@ toc: true
 aliases:
   - /docs/tutorials/deploy-helm-chart-bootstrap-crossplane/
   - /docs/tutorials/deploy-an-application-from-a-helm-chart-with-ocm-and-crossplane/
+seo:
+  description: "Bootstrap a Helm chart deployment with OCM and Crossplane: compose GitOps deployer objects from an XRD and Composition for repeatable localized installs."
 ---
 
 ## What You'll Learn

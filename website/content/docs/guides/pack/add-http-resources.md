@@ -7,6 +7,8 @@ aliases:
   - /docs/how-to/add-resources-from-http-urls/
   - /docs/tutorials/wget-http-resources/
   - /docs/tutorials/working-with-http-resources/
+seo:
+  description: "Add a file served over HTTP or HTTPS to a component version with the Wget input or access type: media types, credentials, non-GET requests, and v1 migration."
 ---
 
 ## Goal

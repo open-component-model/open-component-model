@@ -1,6 +1,6 @@
 ---
 title: "Component Identity"
-description: "How OCM identifies components, versions, and artifacts — from naming to descriptors."
+description: "How OCM identifies components, versions, and artifacts, from naming conventions and repository references to component descriptors."
 icon: "🪪"
 weight: 2
 toc: true

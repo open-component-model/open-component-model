@@ -1,8 +1,6 @@
 ---
 title: "How We Work"
-description: >-
-  Meetings, rituals, project boards, and decision-making processes
-  in the Open Component Model project.
+description: "Meetings, rituals, project boards, and decision-making processes in the Open Component Model project and how the team stays coordinated."
 slug: "how-we-work"
 toc: true
 weight: 4

@@ -5,6 +5,8 @@ date: 2026-07-28T10:00:00+02:00
 contributors: []
 tags: ["supply-chain", "sbom", "security", "cli"]
 draft: false
+seo:
+  description: "A proof of concept for transporting SBOMs alongside OCM components: linking, discovering, and orchestrating them so a whole version can be scanned."
 ---
 
 ## The Problem

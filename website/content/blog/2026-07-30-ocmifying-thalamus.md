@@ -5,6 +5,8 @@ date: 2026-07-30T10:00:00+02:00
 contributors: []
 tags: ["ocm", "thalamus", "component"]
 draft: false
+seo:
+  description: "How to modernize a non-trivial application like Thalamus with OCM: localizing over 80 images and a deployment spanning more than 11 components."
 ---
 
 ## The Problem
