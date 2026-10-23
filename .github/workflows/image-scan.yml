@@ -47,24 +47,16 @@ jobs:
       matrix:
         image: [cli, cli-slim, controller]
         arch: [arm64, amd64]
-        # executables: what the image may contain besides its entrypoint. It
-        # comes from the Containerfile; the STIG scan fails on any other
-        # executable and on any shared library, so update it with the image.
         include:
           - image: cli
             artifact: ${{ inputs.cli_artifact }}
             oci_tar: oci/cli.tar
-            containerfile: bindings/go/cli/Containerfile
-            executables: /usr/local/bin/cosign
           - image: cli-slim
             artifact: ${{ inputs.cli_artifact }}
             oci_tar: oci/cli-slim.tar
-            containerfile: bindings/go/cli/Containerfile
           - image: controller
             artifact: ${{ inputs.controller_artifact }}
             oci_tar: controller.tar
-            containerfile: bindings/go/kubernetes/controller/Dockerfile
-            executables: /usr/local/bin/cosign
     env:
       IMAGE: ${{ matrix.image }}
       ARCH: ${{ matrix.arch }}
@@ -75,14 +67,13 @@ jobs:
           ref: ${{ inputs.ref }}
           sparse-checkout: |
             .github/stig
-            .github/scripts
             .env
-            ${{ matrix.containerfile }}
           sparse-checkout-cone-mode: false
           persist-credentials: false
 
       - name: Load .env
-        run: grep -E '^TRIVY_VERSION=' .env >> "$GITHUB_ENV"
+        run: grep -E '^(TRIVY_VERSION|OPENSCAP_IMAGE|DOCKLE_IMAGE)=' .env >> "$GITHUB_ENV"
+
       - name: Download image artifact
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
@@ -113,9 +104,7 @@ jobs:
       # The STIG scan and dockle read the image from the docker daemon. Neither
       # runs it, so amd64 is scanned on the arm64 runner too.
       - name: Load image
-        run: |
-          skopeo copy oci:tmp/layout "docker-daemon:ocm-scan:${IMAGE}-${ARCH}"
-          mkdir -p reports
+        run: skopeo copy oci:tmp/layout "docker-daemon:ocm-scan:${IMAGE}-${ARCH}"
 
       # Nothing goes to code scanning: Dependabot alerts stay the only alert surface.
       - name: Vulnerability scan
@@ -128,64 +117,57 @@ jobs:
           scanners: vuln
           exit-code: '0'
           format: json
-          output: reports/trivy.json
+          output: trivy.json
 
       - name: Vulnerability scan summary
         id: vulns
         run: |
-          jq -r '"count=\([.Results[]?.Vulnerabilities[]?] | length)"' reports/trivy.json >> "$GITHUB_OUTPUT"
+          jq -r '"count=\([.Results[]?.Vulnerabilities[]?] | length)"' trivy.json >> "$GITHUB_OUTPUT"
           jq -r '"### 🔎 Vulnerability scan: \($ENV.IMAGE) (linux/\($ENV.ARCH))\n",
             if [.Results[]?.Vulnerabilities[]?] == [] then "No vulnerabilities beyond those the OpenVEX document marks as not_affected."
             else "Not ruled out by the OpenVEX document: for the OCM binary, govulncheck found the code reachable or does not know the advisory; for cosign, its attested OpenVEX does not cover it.\n\n| Binary | ID | Severity | Package | Installed | Fixed | Title |\n| --- | --- | --- | --- | --- | --- | --- |",
               (.Results[]? | .Target as $t | .Vulnerabilities[]? | "| \($t) | \(.VulnerabilityID) | \(.Severity) | \(.PkgName) | \(.InstalledVersion) | \(.FixedVersion // "") | \(.Title // "" | gsub("\\|"; "\\|")) |")
-            end' reports/trivy.json >> "$GITHUB_STEP_SUMMARY"
+            end' trivy.json >> "$GITHUB_STEP_SUMMARY"
 
       - name: No vulnerabilities (see job summary)
         if: steps.vulns.outputs.count != '0'
         continue-on-error: true
         run: exit 1
 
-      # Scans, writes the job summary, and fails on any failed rule.
-      - name: STIG scan
+      # DISA GPOS SRG as tailored in .github/stig, evaluated offline on the
+      # image's exported root filesystem. Extracting it as root in the scanner
+      # keeps ownership and setuid/setgid bits. oscap fails on any failed rule.
+      - name: STIG scan (DISA GPOS SRG)
         if: ${{ !cancelled() }}
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
-        env:
-          IMAGE_REF: ocm-scan:${{ matrix.image }}-${{ matrix.arch }}
-          CONTAINERFILE: ${{ matrix.containerfile }}
-          RESULTS_DIR: reports/stig
-          SUMMARY_TITLE: ${{ matrix.image }} (linux/${{ matrix.arch }})
-          EXECUTABLES: ${{ matrix.executables }}
-        with:
-          script: |
-            const script = await import('${{ github.workspace }}/.github/scripts/stig-scan.js');
-            await script.default({ core });
+        run: |
+          mkdir -p stig
+          docker export "$(docker create "ocm-scan:${IMAGE}-${ARCH}" /x)" |
+            docker run --rm -i -u 0:0 -v "$PWD/.github/stig:/stig:ro" -v "$PWD/stig:/out" \
+              --entrypoint /bin/sh "$OPENSCAP_IMAGE" -euc '
+                mkdir /rootfs
+                tar -C /rootfs -xpf -
+                # Added to every container by docker create/export, not image content.
+                rm -rf /rootfs/.dockerenv /rootfs/etc/hosts /rootfs/etc/hostname \
+                  /rootfs/etc/resolv.conf /rootfs/etc/mtab /rootfs/dev /rootfs/proc /rootfs/sys
+                OSCAP_PROBE_ROOT=/rootfs oscap xccdf eval \
+                  --tailoring-file /stig/tailoring.xml --profile xccdf_software.ocm_profile_gpos-container \
+                  --results /out/results.xml --report /out/report.html \
+                  /usr/share/xml/scap/ssg/content/ssg-chainguard-gpos-ds.xml'
 
       # CIS Docker Benchmark section 4. Fails on WARN and FATAL; INFO (content
       # trust, HEALTHCHECK) and SKIP (no /etc/passwd in scratch) do not fail.
       - name: CIS Docker Benchmark (dockle)
         if: ${{ !cancelled() }}
         run: |
-          # +e lets the summary be written on findings.
-          set +e
-          dockle="$(sed -n 's/^DOCKLE_IMAGE=//p' .env)"
-          [[ -n "$dockle" ]] || { echo "::error::DOCKLE_IMAGE not set in .env"; exit 1; }
-          out=reports/dockle.json
-          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock "$dockle" \
-            --exit-code 1 --exit-level warn --format json "ocm-scan:${IMAGE}-${ARCH}" > "$out"
-          rc=$?
-          {
-            echo "### 🐳 CIS Docker Benchmark: ${IMAGE} (linux/${ARCH})"
-            echo
-            jq -r '"\(.summary.pass) pass, \(.summary.warn) warn, \(.summary.fatal) fatal, \(.summary.info) info, \(.summary.skip) skip\n",
-              "| Check | Level | Title |", "| --- | --- | --- |",
-              (.details[] | "| \(.code) | \(.level) | \(.title) |")' "$out" 2>/dev/null || echo "no report"
-          } >> "$GITHUB_STEP_SUMMARY"
-          exit "$rc"
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock "$DOCKLE_IMAGE" \
+            --exit-code 1 --exit-level warn "ocm-scan:${IMAGE}-${ARCH}"
 
       - name: Upload reports
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: image-scan-${{ matrix.image }}-${{ matrix.arch }}
-          path: reports/
+          path: |
+            trivy.json
+            stig/
           if-no-files-found: ignore
