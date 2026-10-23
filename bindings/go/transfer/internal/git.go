@@ -1,7 +1,9 @@
 package internal
 
 import (
+	"context"
 	"fmt"
+	"log/slog"
 	"reflect"
 
 	"cel.dev/cel-go/cel"
@@ -87,10 +89,17 @@ func bindToGit(val ref.Val) ref.Val {
 // blob (AddLocalResource) of [transferv1alpha1.GitLocalBlobMediaType] so it is recognizable
 // as a Git archive. The origin is not recorded and no referenceName is set: pushing such a
 // local blob with the Git uploader needs an explicit repository and ref.
-func processGit(resource descriptorv2.Resource, access *gitv1.Git, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int) error {
+func processGit(ctx context.Context, resource descriptorv2.Resource, access *gitv1.Git, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int) error {
 	resourceID := identityToTransformationID(resource.ToIdentity())
 	getResourceID := fmt.Sprintf("%sGet%s", id, resourceID)
 	addResourceID := fmt.Sprintf("%sAdd%s", id, resourceID)
+
+	// A pinned commit is authoritative; an access without one is still transferred, its ref
+	// resolved to the commit it points at now by the download step (which fails only if the
+	// ref cannot be resolved). That mirrors the input and digest paths, so a ref-only access
+	// no longer blocks transfer by value. Because a ref can move, the resolved archive may
+	// drift from the resource digest, so the unpinned case is called out with a warning.
+	warnUnpinnedGit(ctx, resource, access)
 
 	getTransform, err := getGitTransformation(resource, access, getResourceID, val)
 	if err != nil {
@@ -113,13 +122,22 @@ func processGit(resource descriptorv2.Resource, access *gitv1.Git, id string, va
 	return nil
 }
 
-// getGitTransformation returns the GetGitResource transformation that downloads the
-// archive of resource at its pinned commit. Transfer by value requires a pinned commit,
-// because a ref can move and the archive would no longer match the resource digest.
-func getGitTransformation(resource descriptorv2.Resource, access *gitv1.Git, getResourceID string, val *discoveryValue) (transformv1alpha1.GenericTransformation, error) {
-	if access.Commit == "" {
-		return transformv1alpha1.GenericTransformation{}, fmt.Errorf("git resource %q has no pinned commit: pin ref %q to a commit before transferring it by value", resource.Name, access.Ref)
+// warnUnpinnedGit notes that a Git access without a pinned commit is transferred at the ref
+// it points at now, which may drift from the resource digest if the ref moves. Pinning the
+// commit is the digest processor's job; like an OCI resource transferred by tag without a
+// digest, transfer itself tolerates an unpinned access and does not pin it.
+func warnUnpinnedGit(ctx context.Context, resource descriptorv2.Resource, access *gitv1.Git) {
+	if access.Commit != "" {
+		return
 	}
+	slog.WarnContext(ctx, "git resource is not pinned to a commit; transferring the archive at the ref it points at now, which may drift from the resource digest if the ref moves",
+		"resource", resource.Name, "ref", access.Ref)
+}
+
+// getGitTransformation returns the GetGitResource transformation that downloads the archive
+// of resource. It is a pure builder: the policy on an unpinned access (lenient for transfer
+// by value, strict for the git uploader) is decided by its callers.
+func getGitTransformation(resource descriptorv2.Resource, access *gitv1.Git, getResourceID string, val *discoveryValue) (transformv1alpha1.GenericTransformation, error) {
 	unstructured, err := runtime.UnstructuredFromMixedData(map[string]any{
 		"resource": resource,
 	})

@@ -36,6 +36,11 @@ func processGitUploader(ctx context.Context, resource descriptorv2.Resource, acc
 	var err error
 	switch acc := access.(type) {
 	case *gitv1.Git:
+		// An unpinned access is uploaded as-is, its ref resolved at download time, matching how
+		// an OCI resource transfers by tag without a digest. The target records the ref with
+		// whatever commit the source carries (none when unpinned); pinning is the digest
+		// processor's job, not the uploader's.
+		warnUnpinnedGit(ctx, resource, acc)
 		commit = acc.Commit
 		var getTransform transformv1alpha1.GenericTransformation
 		if getTransform, err = getGitTransformation(resource, acc, getResourceID, val); err != nil {
