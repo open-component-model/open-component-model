@@ -116,9 +116,37 @@ func ResourceLocalBlobOCILayer(ctx context.Context, storage content.Storage, b *
 		}
 	}
 
+	// PrepareArtifactBlobForOCI buffers b into memory whenever its size or digest
+	// is unknown, making it safely re-readable; otherwise b is returned unchanged
+	// and may be a single-consume stream the push below must be the only read of.
+	_, knownDigest, _ := layerDigestAndMediaType(b, layerOpts)
+	buffered := b.Size() == blob.SizeUnknown || len(knownDigest) == 0
+
 	b, layer, err := PrepareArtifactBlobForOCI(b, layerOpts)
 	if err != nil {
 		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to create resource layer based on blob: %w", err)
+	}
+
+	// A buffered b can be read again without disturbing the push below, so a
+	// mismatching recorded digest is rejected here, before pushing anything,
+	// rather than after. An unbuffered b may only be read once; its digest is
+	// still reconciled, but the v1 artifact-set fallback needs the archive back
+	// from storage and so only runs post-push, in finishResourceLayer.
+	if buffered {
+		if err := reconcileResourceDigest(b.Artifact, layer.Digest, internaldigest.GenericBlobDigestV1); err != nil {
+			resource, ok := b.Artifact.(*descriptor.Resource)
+			if !ok {
+				return ociImageSpecV1.Descriptor{}, err
+			}
+			want, wantOk := internaldigest.RecordedDigest(resource.Digest)
+			if !wantOk {
+				return ociImageSpecV1.Descriptor{}, err
+			}
+			found, ferr := tar.ArtifactSetContainsDigest(b, want)
+			if ferr != nil || !found {
+				return ociImageSpecV1.Descriptor{}, err
+			}
+		}
 	}
 
 	if err := Blob(ctx, storage, b, layer); err != nil {
