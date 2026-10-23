@@ -7,6 +7,7 @@ weight: 30
 toc: true
 aliases:
   - /docs/how-to/migrate-from-upload-as/
+  - /docs/how-to/migration-guides/migrate-from-upload-as/
   - /docs/guides/migrate/migrate-from-upload-as/
   - /docs/how-to/migration-guides/migrate-from-upload-as-to-uploader-configurations/
 ---
