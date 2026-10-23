@@ -3,6 +3,8 @@ title: Discovery
 description: "API reference for the Discovery custom resource in delivery.ocm.software/v1alpha1, which publishes a filtered view of a Component's reference graph."
 weight: 6
 toc: false
+aliases:
+  - /docs/reference/kubernetes-api/discovery/
 ---
 
 A **Discovery** publishes a filtered, optionally projected view of the transitive
@@ -15,7 +17,7 @@ Discovery is read-only: it creates no external resources, downloads no artifacts
 and provides no signature-verification guarantees for the descriptors it filters.
 See [Component Discovery]({{< relref "docs/concepts/component-discovery.md" >}})
 for selectors, extraction, and status semantics, and the
-[Discover Component Graphs]({{< relref "docs/how-to/discover-component-graphs.md" >}})
+[Discover Component Graphs]({{< relref "docs/guides/deploy/discover-component-graphs.md" >}})
 how-to guide for a worked example.
 
 ---

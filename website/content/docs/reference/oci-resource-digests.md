@@ -1,7 +1,7 @@
 ---
 title: "OCI Resource Digests"
 description: "How OCM records and verifies OCI manifest digests while preserving historical descriptors."
-weight: 10
+weight: 5
 toc: true
 ---
 

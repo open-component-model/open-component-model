@@ -1,0 +1,131 @@
+name: Image scan
+
+# Reusable: pipeline.yml scans the CLI (default, slim) and controller images it
+# built, per architecture, with Trivy and govulncheck's OpenVEX. Findings warn;
+# a broken scan fails.
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: "The ref to check out the scan configuration from. Defaults to the current ref."
+        type: string
+        required: false
+      cli_artifact:
+        description: "Artifact with the CLI OCI images (oci/cli.tar and oci/cli-slim.tar)."
+        type: string
+        required: true
+      controller_artifact:
+        description: "Artifact with the controller OCI image (controller.tar)."
+        type: string
+        required: true
+    outputs:
+      vex_artifact_prefix:
+        description: "Prefix of the per-architecture OpenVEX artifacts <prefix>-<arch> (arm64, amd64), each with the ocm.openvex.json its images were scanned with."
+        value: ${{ jobs.vex.outputs.vex_artifact_prefix }}
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash --noprofile --norc -euo pipefail {0}
+
+jobs:
+  vex:
+    name: OpenVEX
+    uses: $/.github/workflows/govulncheck.yml
+    with:
+      ref: ${{ inputs.ref }}
+
+  scan:
+    name: ${{ matrix.image }} (${{ matrix.arch }})
+    needs: vex
+    runs-on: ubuntu-26.04-arm
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [cli, cli-slim, controller]
+        arch: [arm64, amd64]
+        include:
+          - image: cli
+            artifact: ${{ inputs.cli_artifact }}
+            oci_tar: oci/cli.tar
+          - image: cli-slim
+            artifact: ${{ inputs.cli_artifact }}
+            oci_tar: oci/cli-slim.tar
+          - image: controller
+            artifact: ${{ inputs.controller_artifact }}
+            oci_tar: controller.tar
+    env:
+      IMAGE: ${{ matrix.image }}
+      ARCH: ${{ matrix.arch }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          sparse-checkout: .env
+          persist-credentials: false
+
+      - name: Load .env
+        run: grep -E '^TRIVY_VERSION=' .env >> "$GITHUB_ENV"
+
+      - name: Download image artifact
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: ${{ matrix.artifact }}
+          path: tmp/artifact
+
+      - name: Download OpenVEX
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: ${{ needs.vex.outputs.vex_artifact_prefix }}-${{ matrix.arch }}
+          path: tmp/vex
+
+      # Trivy scans the first manifest of a layout and ignores --platform, so the
+      # layout's index is narrowed to this architecture.
+      - name: Extract image layout
+        env:
+          OCI_TAR: ${{ matrix.oci_tar }}
+        run: |
+          mkdir -p tmp/layout
+          tar -xf "tmp/artifact/${OCI_TAR}" -C tmp/layout
+          jq --arg arch "$ARCH" '.manifests |= map(select(.platform.os == "linux" and .platform.architecture == $arch))' \
+            "tmp/layout/blobs/$(jq -r '.manifests[0].digest | sub(":"; "/")' tmp/layout/index.json)" > tmp/index.json
+          mv tmp/index.json tmp/layout/index.json
+
+      # Nothing goes to code scanning: Dependabot alerts stay the only alert surface.
+      - name: Vulnerability scan
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        env:
+          TRIVY_VEX: tmp/vex/ocm.openvex.json
+        with:
+          version: ${{ env.TRIVY_VERSION }}
+          input: tmp/layout
+          scanners: vuln
+          exit-code: '0'
+          format: json
+          output: trivy.json
+
+      - name: Vulnerability scan summary
+        id: vulns
+        run: |
+          jq -r '"count=\([.Results[]?.Vulnerabilities[]?] | length)"' trivy.json >> "$GITHUB_OUTPUT"
+          jq -r '"### 🔎 Vulnerability scan: \($ENV.IMAGE) (linux/\($ENV.ARCH))\n",
+            if [.Results[]?.Vulnerabilities[]?] == [] then "No vulnerabilities beyond those the OpenVEX document marks as not_affected."
+            else "Not ruled out by the OpenVEX document: for the OCM binary, govulncheck found the code reachable or does not know the advisory; for cosign, its attested OpenVEX does not cover it.\n\n| Binary | ID | Severity | Package | Installed | Fixed | Title |\n| --- | --- | --- | --- | --- | --- | --- |",
+              (.Results[]? | .Target as $t | .Vulnerabilities[]? | "| \($t) | \(.VulnerabilityID) | \(.Severity) | \(.PkgName) | \(.InstalledVersion) | \(.FixedVersion // "") | \(.Title // "" | gsub("\\|"; "\\|")) |")
+            end' trivy.json >> "$GITHUB_STEP_SUMMARY"
+
+      - name: No vulnerabilities (see job summary)
+        if: steps.vulns.outputs.count != '0'
+        continue-on-error: true
+        run: exit 1
+
+      - name: Upload report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: image-scan-${{ matrix.image }}-${{ matrix.arch }}
+          path: trivy.json
+          if-no-files-found: ignore

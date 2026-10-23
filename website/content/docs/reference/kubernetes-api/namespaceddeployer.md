@@ -1,7 +1,7 @@
 ---
 title: NamespacedDeployer
 description: "API reference for the NamespacedDeployer custom resource (delivery.ocm.software/v1alpha1)"
-weight: 4
+weight: 5
 toc: false
 ---
 

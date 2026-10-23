@@ -1,4 +1,5 @@
-{{- if .Values.manager.networkPolicy.enabled }}
+{{- /* dig: a helm upgrade --reuse-values from a release without this key must not fail */}}
+{{- if dig "networkPolicy" "enabled" false .Values.manager }}
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
