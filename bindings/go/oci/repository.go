@@ -355,15 +355,20 @@ func (repo *Repository) processOCIImageLayerDigest(ctx context.Context, res *des
 		return nil, fmt.Errorf("layer %q in %q has size %d, but the access declares %d", typed.Digest, typed.Reference, layer.Size, typed.Size)
 	}
 
-	if !internaldigest.IsComplete(res.Digest) {
+	switch {
+	case internaldigest.IsComplete(res.Digest):
+		if err := internaldigest.Verify(res.Digest, typed.Digest, internaldigest.GenericBlobDigestV1); err != nil {
+			return nil, fmt.Errorf("failed to verify digest of resource %q: %w", res.ToIdentity(), err)
+		}
+	case internaldigest.IsEmpty(res.Digest):
 		if res.Digest == nil {
 			res.Digest = &descriptor.Digest{}
 		}
-		if err := internaldigest.Complete(res.Digest, typed.Digest, internaldigest.GenericBlobDigestV1); err != nil {
-			return nil, fmt.Errorf("failed to complete digest of resource %q: %w", res.ToIdentity(), err)
+		if err := internaldigest.Apply(res.Digest, typed.Digest, internaldigest.GenericBlobDigestV1); err != nil {
+			return nil, fmt.Errorf("failed to compute digest of resource %q: %w", res.ToIdentity(), err)
 		}
-	} else if err := internaldigest.Verify(res.Digest, typed.Digest, internaldigest.GenericBlobDigestV1); err != nil {
-		return nil, fmt.Errorf("failed to verify digest of resource %q: %w", res.ToIdentity(), err)
+	default:
+		return nil, fmt.Errorf("incomplete digest of resource %q: a digest must be complete or absent", res.ToIdentity())
 	}
 
 	res.Access = typed
@@ -403,17 +408,22 @@ func (repo *Repository) processOCIImageDigest(ctx context.Context, res *descript
 		}
 	}
 
-	// A missing or incomplete digest is completed from the descriptor; fields that are
-	// already set must match it. A complete digest is verified against the descriptor.
-	if !internaldigest.IsComplete(res.Digest) {
+	// A complete digest is verified against the descriptor; an absent one is computed from
+	// it. A partially specified digest is rejected (a resource digest is complete or absent).
+	switch {
+	case internaldigest.IsComplete(res.Digest):
+		if err := internaldigest.VerifyOCIArtifact(res.Digest, desc.Digest); err != nil {
+			return nil, fmt.Errorf("failed to verify digest of resource %q: %w", res.ToIdentity(), err)
+		}
+	case internaldigest.IsEmpty(res.Digest):
 		if res.Digest == nil {
 			res.Digest = &descriptor.Digest{}
 		}
-		if err := internaldigest.Complete(res.Digest, desc.Digest, internaldigest.OCIArtifactDigestV1); err != nil {
-			return nil, fmt.Errorf("failed to complete digest of resource %q: %w", res.ToIdentity(), err)
+		if err := internaldigest.Apply(res.Digest, desc.Digest, internaldigest.OCIArtifactDigestV1); err != nil {
+			return nil, fmt.Errorf("failed to compute digest of resource %q: %w", res.ToIdentity(), err)
 		}
-	} else if err := internaldigest.VerifyOCIArtifact(res.Digest, desc.Digest); err != nil {
-		return nil, fmt.Errorf("failed to verify digest of resource %q: %w", res.ToIdentity(), err)
+	default:
+		return nil, fmt.Errorf("incomplete digest of resource %q: a digest must be complete or absent", res.ToIdentity())
 	}
 
 	if pinnedDigest != "" && pinnedDigest.String() != desc.Digest.String() {
@@ -823,15 +833,21 @@ func (repo *Repository) uploadOCIImage(ctx context.Context, newAccess runtime.Ty
 		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("expected exactly one main artifact in OCI layout, but got %d", len(mainArtifacts))
 	}
 	main := mainArtifacts[0]
-	// A nil digest denotes a source. Resources must validate or complete their
-	// digest before any destination writes, including the incomplete-digest case.
+	// A nil digest denotes a source. A resource digest is validated here before any
+	// destination write: a complete one is verified, an absent (empty) one computed, a
+	// partially specified one rejected (a digest must be complete or absent).
 	if resourceDigest != nil {
-		if !internaldigest.IsComplete(resourceDigest) {
-			if err := internaldigest.Complete(resourceDigest, main.Digest, internaldigest.OCIArtifactDigestV1); err != nil {
-				return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to complete resource digest: %w", err)
+		switch {
+		case internaldigest.IsComplete(resourceDigest):
+			if err := internaldigest.VerifyOCIArtifact(resourceDigest, main.Digest); err != nil {
+				return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to verify resource digest: %w", err)
 			}
-		} else if err := internaldigest.VerifyOCIArtifact(resourceDigest, main.Digest); err != nil {
-			return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to verify resource digest: %w", err)
+		case internaldigest.IsEmpty(resourceDigest):
+			if err := internaldigest.Apply(resourceDigest, main.Digest, internaldigest.OCIArtifactDigestV1); err != nil {
+				return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to compute resource digest: %w", err)
+			}
+		default:
+			return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("incomplete resource digest: a digest must be complete or absent")
 		}
 	}
 
@@ -1328,15 +1344,20 @@ func (repo *Repository) UploadResourceStream(ctx context.Context, res *descripto
 	}
 
 	res = res.DeepCopy()
-	if !internaldigest.IsComplete(res.Digest) {
+	switch {
+	case internaldigest.IsComplete(res.Digest):
+		if err := internaldigest.VerifyOCIArtifact(res.Digest, rs.Root().Digest); err != nil {
+			return nil, fmt.Errorf("failed to verify resource digest: %w", err)
+		}
+	case internaldigest.IsEmpty(res.Digest):
 		if res.Digest == nil {
 			res.Digest = &descriptor.Digest{}
 		}
-		if err := internaldigest.Complete(res.Digest, rs.Root().Digest, internaldigest.OCIArtifactDigestV1); err != nil {
-			return nil, fmt.Errorf("failed to complete resource digest: %w", err)
+		if err := internaldigest.Apply(res.Digest, rs.Root().Digest, internaldigest.OCIArtifactDigestV1); err != nil {
+			return nil, fmt.Errorf("failed to compute resource digest: %w", err)
 		}
-	} else if err := internaldigest.VerifyOCIArtifact(res.Digest, rs.Root().Digest); err != nil {
-		return nil, fmt.Errorf("failed to verify resource digest: %w", err)
+	default:
+		return nil, fmt.Errorf("incomplete resource digest for %q: a digest must be complete or absent", res.ToIdentity())
 	}
 
 	// ExtendedCopyGraph copies the root together with its referrers, which a

@@ -70,31 +70,12 @@ func IsComplete(target *runtime.Digest) bool {
 	return target != nil && target.HashAlgorithm != "" && target.NormalisationAlgorithm != "" && target.Value != ""
 }
 
-// Complete fills the missing fields of target from digest recorded with normalisation.
-// Hash algorithm and value that are already set must agree with digest, so incomplete
-// metadata is completed but never silently replaced. For OCI artifacts the historical
-// generic label is accepted, as in VerifyOCIArtifact, and corrected: incomplete
-// metadata cannot carry a signature that relabeling would invalidate.
-func Complete(target *runtime.Digest, digest digest.Digest, normalisation string) error {
-	if target == nil {
-		return fmt.Errorf("target digest is nil")
-	}
-	var generated runtime.Digest
-	if err := Apply(&generated, digest, normalisation); err != nil {
-		return err
-	}
-	if set := target.NormalisationAlgorithm; set != "" && set != normalisation &&
-		(normalisation != OCIArtifactDigestV1 || set != GenericBlobDigestV1) {
-		return fmt.Errorf("normalisation algorithm mismatch: expected %s, got %s", normalisation, set)
-	}
-	if target.HashAlgorithm != "" && !sameHashAlgorithm(target.HashAlgorithm, generated.HashAlgorithm) {
-		return fmt.Errorf("hash algorithm mismatch: expected %s, got %s", target.HashAlgorithm, generated.HashAlgorithm)
-	}
-	if target.Value != "" && target.Value != generated.Value {
-		return fmt.Errorf("digest value mismatch: expected %s, got %s", target.Value, generated.Value)
-	}
-	*target = generated
-	return nil
+// IsEmpty reports whether target carries no digest at all: it is nil or every field is unset.
+// A resource digest is valid only when it is empty (the resource is omitted from the
+// signature) or complete (see IsComplete); a partially specified digest is rejected by
+// callers rather than inferred.
+func IsEmpty(target *runtime.Digest) bool {
+	return target == nil || (target.HashAlgorithm == "" && target.NormalisationAlgorithm == "" && target.Value == "")
 }
 
 // sameHashAlgorithm accepts both the OCM ("SHA-256") and OCI ("sha256") spellings,
