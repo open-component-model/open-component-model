@@ -58,7 +58,7 @@ var ErrUnsupportedDigestHash = errors.New("unsupported digest hash algorithm")
 // already out there. The known fidelity gap in the stored form (the store read
 // collapses an integral float 1.0 to 1 before normalisation) is one such
 // incompatibility signing would bake in, not the whole rationale. New
-// signatures must use the current algorithm (v4alpha1).
+// signatures must use the current algorithm (v4alpha2).
 var ErrSigningUnsupported = errors.New("normalisation algorithm is supported for verification only, not signing")
 
 // fipsEnforced reports whether the Go Cryptographic Module enforces FIPS 140-3
