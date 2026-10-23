@@ -8,7 +8,7 @@ import (
 	"io"
 	"net/http"
 	"runtime"
-	"sync/atomic"
+	"sync"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 )
@@ -34,13 +34,15 @@ type Blob struct {
 	headers http.Header
 	// size is the content size known from the first response, or [blob.SizeUnknown].
 	// Every response is checked against it.
-	size      int64
-	mediaType atomic.Pointer[string]
+	size int64
+
+	mu        sync.Mutex
+	mediaType string
 	// precalculated is returned by [Blob.Digest] verbatim when set.
-	precalculated atomic.Pointer[string]
+	precalculated *string
 	// pending is the response the next reader takes, if any.
-	pending atomic.Pointer[pendingResponse]
-	closed  atomic.Bool
+	pending *pendingResponse
+	closed  bool
 }
 
 // pendingResponse is a response held by the blob, together with the cleanup
@@ -48,6 +50,25 @@ type Blob struct {
 type pendingResponse struct {
 	rep     representation
 	cleanup runtime.Cleanup
+}
+
+// representation is a response together with how its body maps to the content.
+type representation struct {
+	resp *http.Response
+	// size is the content size, or [blob.SizeUnknown].
+	size int64
+}
+
+// bodySize returns the number of bytes resp's body yields, or [blob.SizeUnknown].
+func bodySize(resp *http.Response) int64 {
+	switch {
+	case resp.Request != nil && resp.Request.Method == http.MethodHead:
+		return 0
+	case resp.ContentLength >= 0 && !resp.Uncompressed:
+		return resp.ContentLength
+	default:
+		return blob.SizeUnknown
+	}
 }
 
 var (
@@ -67,40 +88,39 @@ func newBlob(f *fetcher, rep representation, mediaType string, o *option) *Blob 
 		verify:     o.Verifier,
 		headers:    rep.resp.Header,
 		size:       rep.size,
+		mediaType:  mediaType,
 	}
-	b.SetMediaType(mediaType)
 	b.hold(rep)
 	return b
 }
 
 // hold makes rep the response the next reader takes. It reports false, leaving
-// rep to the caller, if the blob already holds a response.
+// rep to the caller, if the blob is closed or already holds a response.
 func (b *Blob) hold(rep representation) bool {
-	p := &pendingResponse{rep: rep}
-	// The cleanup takes the body rather than the blob: an argument that can reach
-	// the object the cleanup is attached to would keep it alive forever.
-	p.cleanup = runtime.AddCleanup(b, closeBody, io.Closer(rep.resp.Body))
-	if !b.pending.CompareAndSwap(nil, p) {
-		p.cleanup.Stop()
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.closed || b.pending != nil {
 		return false
 	}
-	// A concurrent Close may have looked for a held response before it was stored.
-	if b.closed.Load() {
-		if rep, ok := b.take(); ok {
-			_ = rep.resp.Body.Close()
-		}
-	}
+	// The cleanup takes the body rather than the blob: an argument that can reach
+	// the object the cleanup is attached to would keep it alive forever.
+	b.pending = &pendingResponse{rep: rep, cleanup: runtime.AddCleanup(b, closeBody, io.Closer(rep.resp.Body))}
 	return true
 }
 
-// take removes the held response, if any, and returns it to the caller.
-func (b *Blob) take() (representation, bool) {
-	p := b.pending.Swap(nil)
-	if p == nil {
-		return representation{}, false
+// take removes the held response, if any, and reports whether the blob was
+// already closed. With markClosed it also closes the blob.
+func (b *Blob) take(markClosed bool) (*pendingResponse, bool) {
+	b.mu.Lock()
+	wasClosed := b.closed
+	b.closed = wasClosed || markClosed
+	p := b.pending
+	b.pending = nil
+	b.mu.Unlock()
+	if p != nil {
+		p.cleanup.Stop()
 	}
-	p.cleanup.Stop()
-	return p.rep, true
+	return p, wasClosed
 }
 
 func closeBody(body io.Closer) {
@@ -120,42 +140,50 @@ func (b *Blob) Size() int64 {
 
 // MediaType returns the media type of the blob.
 func (b *Blob) MediaType() (string, bool) {
-	return *b.mediaType.Load(), true
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.mediaType, true
 }
 
 // SetMediaType overrides the media type of the blob.
 func (b *Blob) SetMediaType(mediaType string) {
-	b.mediaType.Store(&mediaType)
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.mediaType = mediaType
 }
 
 // Digest returns the precalculated digest when set. The content is never read to
 // compute a digest, so without one it reports false.
 func (b *Blob) Digest() (string, bool) {
-	if p := b.precalculated.Load(); p != nil {
-		return *p, true
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.precalculated == nil {
+		return "", false
 	}
-	return "", false
+	return *b.precalculated, true
 }
 
 // HasPrecalculatedDigest reports whether a precalculated digest was set.
 func (b *Blob) HasPrecalculatedDigest() bool {
-	return b.precalculated.Load() != nil
+	_, ok := b.Digest()
+	return ok
 }
 
 // SetPrecalculatedDigest sets the digest returned by [Blob.Digest]. Safe for
 // concurrent use. It is handed to the [Verifier] as [Computed.Pinned], which has
 // to check it against the content.
 func (b *Blob) SetPrecalculatedDigest(digest string) {
-	b.precalculated.Store(&digest)
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.precalculated = &digest
 }
 
 // Close releases the held response, if any. It is safe to call multiple times
 // and from multiple goroutines. Readers already returned stay usable; new ones
 // are refused.
 func (b *Blob) Close() error {
-	b.closed.Store(true)
-	if rep, ok := b.take(); ok {
-		return rep.resp.Body.Close()
+	if p, _ := b.take(true); p != nil {
+		return p.rep.resp.Body.Close()
 	}
 	return nil
 }
@@ -165,11 +193,14 @@ func (b *Blob) Close() error {
 // announced size and [Verifier] are checked when the reader reaches the end of
 // the body; a failure is returned from that Read and from Close.
 func (b *Blob) ReadCloser() (io.ReadCloser, error) {
-	if b.closed.Load() {
+	p, closed := b.take(false)
+	if closed {
 		return nil, fmt.Errorf("download of %s is closed", b.fetch.safeURL)
 	}
-	rep, ok := b.take()
-	if !ok {
+	var rep representation
+	if p != nil {
+		rep = p.rep
+	} else {
 		var err error
 		if rep, err = b.reread(); err != nil {
 			return nil, err
@@ -177,10 +208,9 @@ func (b *Blob) ReadCloser() (io.ReadCloser, error) {
 	}
 
 	return &bodyReader{
-		blob:     b,
-		rep:      rep,
-		expected: b.size,
-		hashers:  newHashers(b.algorithms),
+		blob:    b,
+		rep:     rep,
+		hashers: newHashers(b.algorithms),
 	}, nil
 }
 
@@ -219,12 +249,9 @@ type bodyReader struct {
 	blob *Blob
 	// rep is the response read; its size is the length the response announced,
 	// or [blob.SizeUnknown].
-	rep representation
-	// expected is the content size known from the first response, or
-	// [blob.SizeUnknown].
-	expected int64
-	hashers  map[string]hash.Hash
-	read     int64
+	rep     representation
+	hashers map[string]hash.Hash
+	read    int64
 	// err is the terminal error of the reader; once set, it is returned by every
 	// Read and by Close.
 	err    error
@@ -249,7 +276,7 @@ func (r *bodyReader) Read(p []byte) (int, error) {
 		r.err = r.blob.fetch.tooLarge()
 		return 0, r.err
 	}
-	if r.expected >= 0 && r.read > r.expected {
+	if r.blob.size >= 0 && r.read > r.blob.size {
 		r.err = r.sizeMismatch()
 		return 0, r.err
 	}
@@ -273,7 +300,7 @@ func (r *bodyReader) Read(p []byte) (int, error) {
 }
 
 func (r *bodyReader) finish() error {
-	if r.expected >= 0 && r.read != r.expected {
+	if r.blob.size >= 0 && r.read != r.blob.size {
 		return r.sizeMismatch()
 	}
 	if r.blob.verify == nil {
@@ -285,7 +312,7 @@ func (r *bodyReader) finish() error {
 }
 
 func (r *bodyReader) sizeMismatch() error {
-	return fmt.Errorf("response body from %s does not have the expected %d bytes", r.blob.fetch.safeURL, r.expected)
+	return fmt.Errorf("response body from %s does not have the expected %d bytes", r.blob.fetch.safeURL, r.blob.size)
 }
 
 func sums(hashers map[string]hash.Hash) map[string]string {
@@ -307,7 +334,7 @@ func (r *bodyReader) Close() error {
 	if r.closed {
 		return r.err
 	}
-	if !r.done && r.err == nil && r.expected >= 0 && r.read == r.expected {
+	if !r.done && r.err == nil && r.blob.size >= 0 && r.read == r.blob.size {
 		_, _ = r.Read(make([]byte, 1))
 	}
 	r.closed = true
