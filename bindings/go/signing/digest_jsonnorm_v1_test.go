@@ -1,6 +1,7 @@
 package signing
 
 import (
+	"bytes"
 	"crypto"
 	"encoding/hex"
 	"log/slog"
@@ -77,27 +78,49 @@ func TestSigningBoundary_JSONNormalisationV1(t *testing.T) {
 	r.NoError(VerifyDigestMatchesDescriptor(t.Context(), desc, sig, logger))
 }
 
-// TestEnsureSignable_VerifyOnlyPolicy locks the signing boundary: the legacy and
-// compatibility normalisations (jsonNormalisation/v1, v4alpha1, v4alpha2 and the
-// jsonNormalisation/v3 alias) are verify-only and must be refused for new
-// signatures, while the current default v4alpha3 is accepted. This enforces the
-// label.version / reference-label guarantees the PR introduces: v4alpha1 drops
-// label.version and v4alpha2 (= legacy v3) leaves reference labels unfiltered,
-// so minting with either would reintroduce the very gaps v4alpha3 closes.
-func TestEnsureSignable_VerifyOnlyPolicy(t *testing.T) {
+// TestEnsureSignable_OnlyV1Rejected locks the signing boundary policy: only
+// jsonNormalisation/v1 is verify-only and refused for new signatures. The v4
+// alphas — v4alpha1, v4alpha2 and the jsonNormalisation/v3 alias — stay signable
+// for backward compatibility (they are merely discouraged; see
+// WarnDiscouragedNormalisation), alongside the current default v4alpha3.
+func TestEnsureSignable_OnlyV1Rejected(t *testing.T) {
 	r := require.New(t)
 
+	r.ErrorIs(EnsureSignable(v1.Algorithm), ErrSigningUnsupported, "v1 must be verify-only")
+
 	for _, algo := range []string{
-		v1.Algorithm,
 		v4alpha1.Algorithm,
 		v4alpha2.Algorithm,
+		v4alpha3.Algorithm,
 		LegacyNormalisationAlgo,
 	} {
-		r.ErrorIs(EnsureSignable(algo), ErrSigningUnsupported, "%s must be verify-only", algo)
+		r.NoError(EnsureSignable(algo), "%s must remain signable", algo)
 	}
 
-	r.NoError(EnsureSignable(v4alpha3.Algorithm), "the current default must be signable")
 	r.Equal(v4alpha3.Algorithm, DefaultNormalisationAlgorithm, "the signing default must be v4alpha3")
+}
+
+// TestWarnDiscouragedNormalisation checks the signing boundary warns when a new
+// signature is minted with a non-default normalisation algorithm, and stays
+// silent for the default v4alpha3.
+func TestWarnDiscouragedNormalisation(t *testing.T) {
+	r := require.New(t)
+
+	warnFor := func(algo string) string {
+		var buf bytes.Buffer
+		logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn}))
+		WarnDiscouragedNormalisation(t.Context(), logger, algo)
+		return buf.String()
+	}
+
+	r.Empty(warnFor(v4alpha3.Algorithm), "the default must not warn")
+
+	for _, algo := range []string{v4alpha1.Algorithm, v4alpha2.Algorithm, LegacyNormalisationAlgo} {
+		out := warnFor(algo)
+		r.Contains(out, "level=WARN", "%s must warn", algo)
+		r.Contains(out, algo, "warning must name the chosen algorithm %s", algo)
+		r.Contains(out, v4alpha3.Algorithm, "warning must recommend v4alpha3")
+	}
 }
 
 // TestSentinelAccepted_JSONNormalisationV1 confirms a resource whose content is

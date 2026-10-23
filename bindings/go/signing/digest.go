@@ -11,9 +11,10 @@ import (
 	"log/slog"
 	"strings"
 
+	_ "ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
+
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation"
 	jsonv1 "ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v1"
-	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha2"
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha3"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
@@ -46,25 +47,28 @@ const (
 var ErrUnsupportedDigestHash = errors.New("unsupported digest hash algorithm")
 
 // ErrSigningUnsupported is returned by EnsureSignable for a normalisation
-// algorithm this library supports for verification only. The verify-only set is
-// jsonNormalisation/v1 (the legacy gardener/cc-utils format), v4alpha1 (drops
-// label.version) and v4alpha2 (plus its jsonNormalisation/v3 alias, which exist
-// only to reproduce legacy v3 byte-for-byte). OCM v2 verifies existing
-// signatures that use them but must never mint new ones; new signatures use the
-// current default (v4alpha3, see DefaultNormalisationAlgorithm). Digest
-// computation (GenerateDigest) and verification are unrestricted — only the
-// signing boundary calls EnsureSignable.
+// algorithm this library supports for verification only. jsonNormalisation/v1
+// is the legacy gardener/cc-utils format: OCM v2 verifies existing signatures
+// that use it but must never mint new ones. Digest computation (GenerateDigest)
+// and verification are unrestricted — only the signing boundary calls
+// EnsureSignable.
 //
-// The reason is blast radius. Verify-only means OCM v2 never puts such an
-// artifact into the wild, so nothing is bound to the exact bytes we emit: if a
-// verify-only normalisation ever carries a regression or a latent
-// incompatibility, we can simply patch it. Allowing signing would instead
-// persist new artifacts whose bytes could not be fixed without invalidating
-// signatures already out there. For v1 the known fidelity gap in the stored
-// form (the store read collapses an integral float 1.0 to 1 before
-// normalisation) is one such incompatibility; for v4alpha1/v4alpha2 signing
-// would reintroduce the very label.version and reference-label gaps v4alpha3
-// closes.
+// The reason is blast radius. Verify-only means OCM v2 never puts a v1 artifact
+// into the wild, so nothing is bound to the exact bytes we emit: if our v1
+// normalisation ever carries a regression or a latent incompatibility, we can
+// simply patch it. Allowing signing would instead create a third class of
+// persisted artifact (cc-utils-signed, plus OCM-v2-signed-correct and
+// -buggy variants) that could not be fixed without invalidating signatures
+// already out there. The known fidelity gap in the stored form (the store read
+// collapses an integral float 1.0 to 1 before normalisation) is one such
+// incompatibility signing would bake in, not the whole rationale.
+//
+// The v4 alphas (v4alpha1, v4alpha2 and the jsonNormalisation/v3 alias) are NOT
+// in this set: they remain signable for backward compatibility. They are
+// discouraged though — v4alpha1 drops label.version and v4alpha2 leaves
+// reference labels unfiltered — so signing with any non-default algorithm emits
+// a warning recommending the current default (v4alpha3, see
+// DefaultNormalisationAlgorithm).
 var ErrSigningUnsupported = errors.New("normalisation algorithm is supported for verification only, not signing")
 
 // fipsEnforced reports whether the Go Cryptographic Module enforces FIPS 140-3
@@ -129,19 +133,35 @@ func VerifyDigestMatchesDescriptor(
 
 // EnsureSignable is the signing boundary for the verify-only policy: it reports
 // whether a fresh signature may be minted with the given normalisation
-// algorithm. The verify-only algorithms — jsonNormalisation/v1, v4alpha1,
-// v4alpha2 and the jsonNormalisation/v3 alias (which resolves to v4alpha2) — are
-// rejected (see ErrSigningUnsupported); everything else, including the current
-// default v4alpha3, is allowed. Digest computation and verification do not call
-// this, so verifying existing signatures, pins and reference digests keeps
+// algorithm. jsonNormalisation/v1 is rejected (see ErrSigningUnsupported);
+// everything else is allowed, including the v4 alphas (they stay signable for
+// backward compatibility — callers should warn on non-default choices, see
+// WarnDiscouragedNormalisation). Digest computation and verification do not call
+// this, so verifying existing v1 signatures, pins and reference digests keeps
 // working. Any signing entry point must call it before producing a signature.
 func EnsureSignable(normalisationAlgorithm string) error {
-	switch normalisationAlgorithm {
 	//nolint:staticcheck // intentionally references the deprecated verify-only v1 algorithm in order to reject it for signing
-	case jsonv1.Algorithm, v4alpha1.Algorithm, v4alpha2.Algorithm, LegacyNormalisationAlgo:
+	if normalisationAlgorithm == jsonv1.Algorithm {
 		return fmt.Errorf("%w: %q", ErrSigningUnsupported, normalisationAlgorithm)
 	}
 	return nil
+}
+
+// WarnDiscouragedNormalisation logs a warning when a new signature is minted
+// with a normalisation algorithm other than the current default
+// (DefaultNormalisationAlgorithm, v4alpha3). The v4 alphas stay signable for
+// backward compatibility, but v4alpha1 does not cover label.version and
+// v4alpha2 (= legacy v3) leaves reference labels unfiltered, so v4alpha3 is
+// recommended for new signatures. It is a no-op for the default algorithm.
+func WarnDiscouragedNormalisation(ctx context.Context, logger *slog.Logger, normalisationAlgorithm string) {
+	if normalisationAlgorithm == DefaultNormalisationAlgorithm {
+		return
+	}
+	logger.WarnContext(ctx,
+		"signing with a non-default normalisation algorithm: v4alpha1 does not cover label.version and v4alpha2 (= legacy v3) leaves reference labels unfiltered; v4alpha3 is recommended for new signatures",
+		"algorithm", normalisationAlgorithm,
+		"recommended", DefaultNormalisationAlgorithm,
+	)
 }
 
 // GenerateDigest computes a new digest for a descriptor with the given

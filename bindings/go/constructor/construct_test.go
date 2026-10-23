@@ -16,6 +16,7 @@ import (
 	constructorv1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
 	"ocm.software/open-component-model/bindings/go/dag"
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
+	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha3"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	ocirepository "ocm.software/open-component-model/bindings/go/oci/repository"
@@ -701,6 +702,13 @@ components:
 		"parent-b must stamp leaf-b's digest into its reference")
 	assert.NotEqual(t, digestA.Value, digestB.Value,
 		"references to different components must not share a digest despite the same local reference name")
+
+	// Child reference digests must use the current default normalisation
+	// (v4alpha3) so a parent signed with the default covers the child's versioned
+	// signing labels; v4alpha1 (the previous hardcoded value) dropped
+	// label.version.
+	assert.Equal(t, v4alpha3.Algorithm, digestA.NormalisationAlgorithm,
+		"child reference digest must use the current default normalisation (v4alpha3)")
 }
 
 func TestConstructWithSourceBlobToCTF(t *testing.T) {

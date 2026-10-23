@@ -19,7 +19,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/dag"
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation"
-	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
+	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha3"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/repository"
@@ -754,14 +754,19 @@ func (c *DefaultConstructor) getComponentDigest(ctx context.Context, componentId
 }
 
 func calculateDigest(component *descriptor.Descriptor) (*descriptor.Digest, error) {
-	normalisedData, err := normalisation.Normalisations.Normalise(component, v4alpha1.Algorithm)
+	// Use the current default normalisation (v4alpha3) so a parent's
+	// component-reference digest covers the child's versioned signing labels;
+	// pinning to an older algorithm (e.g. v4alpha1) would drop label.version one
+	// level down. Kept in sync with signing.DefaultNormalisationAlgorithm, which
+	// the constructor cannot import directly (depguard).
+	normalisedData, err := normalisation.Normalisations.Normalise(component, v4alpha3.Algorithm)
 	if err != nil {
 		return nil, fmt.Errorf("error normalising descriptor %s: %w", component.Component.ToIdentity().String(), err)
 	}
 
 	return &descriptor.Digest{
 		HashAlgorithm:          crypto.SHA256.String(),
-		NormalisationAlgorithm: v4alpha1.Algorithm,
+		NormalisationAlgorithm: v4alpha3.Algorithm,
 		Value:                  digest.SHA256.FromBytes(normalisedData).Encoded(),
 	}, nil
 }
