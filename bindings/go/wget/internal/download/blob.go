@@ -326,16 +326,19 @@ func sums(hashers map[string]hash.Hash) map[string]string {
 // Close closes the response body. It also returns the terminal error of the
 // reader, so callers that drop the error of the last Read still see it.
 //
-// A consumer that knows the size may stop there without reading at all (empty
-// content) or without seeing the end of a response that announced no length, so
-// Close reads on to the end of the body and checks it. A reader that consumed
-// nothing hands its response back to the blob instead of closing it.
+// A consumer may stop before the end of the body: at the known size without
+// seeing EOF (including empty content), or earlier, like a tar reader at the
+// end-of-archive marker. Close then reads on to the end of the body so the size
+// check and the [Verifier] still run. Without a verifier, a partly read body is
+// closed unchecked. A reader that consumed nothing hands its response back to
+// the blob instead of closing it.
 func (r *bodyReader) Close() error {
 	if r.closed {
 		return r.err
 	}
-	if !r.done && r.err == nil && r.blob.size >= 0 && r.read == r.blob.size {
-		_, _ = r.Read(make([]byte, 1))
+	atKnownSize := r.blob.size >= 0 && r.read == r.blob.size
+	if !r.done && r.err == nil && (atKnownSize || (r.read > 0 && r.blob.verify != nil)) {
+		_, _ = io.Copy(io.Discard, r)
 	}
 	r.closed = true
 	if r.read == 0 && r.err == nil && r.blob.hold(r.rep) {
