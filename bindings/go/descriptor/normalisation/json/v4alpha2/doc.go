@@ -21,4 +21,13 @@
 // Because keeping label.version changes the signed bytes relative to v4alpha1,
 // v4alpha2 is a separate registered algorithm; v4alpha1 stays frozen so existing
 // signatures keep verifying.
+//
+// Known gap: the byte-exact-v3 guarantee covers labels as represented in the v2
+// descriptor. Legacy v3 also signs a label's merge attribute (copied unchanged,
+// including on reference labels), but neither v2.Label nor runtime.Label carries
+// a Merge field, so merge is dropped on decode before normalisation and never
+// reaches the signed bytes. This pre-exists this change — v4alpha1 is affected
+// identically — and is a descriptor-type limitation, not a normalisation-rule
+// one; closing it would mean adding merge to the label types and is tracked
+// separately.
 package v4alpha2
