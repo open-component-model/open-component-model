@@ -94,24 +94,40 @@ jobs:
           path: tmp/vex
 
       # Trivy scans the first manifest of a layout and ignores --platform, so the
-      # layout's index is narrowed to this architecture.
+      # layout's index is narrowed to this architecture. Nothing is loaded into
+      # the docker daemon and nothing runs the image, so amd64 is scanned on the
+      # arm64 runner too.
       - name: Extract image layout
         env:
           OCI_TAR: ${{ matrix.oci_tar }}
         run: |
+          blob() { echo "tmp/layout/blobs/${1/://}"; }
           mkdir -p tmp/layout
           tar -xf "tmp/artifact/${OCI_TAR}" -C tmp/layout
           jq --arg arch "$ARCH" '.manifests |= map(select(.platform.os == "linux" and .platform.architecture == $arch))' \
-            "tmp/layout/blobs/$(jq -r '.manifests[0].digest | sub(":"; "/")' tmp/layout/index.json)" > tmp/index.json
+            "$(blob "$(jq -r '.manifests[0].digest' tmp/layout/index.json)")" > tmp/index.json
           mv tmp/index.json tmp/layout/index.json
+          manifest="$(blob "$(jq -r '.manifests[0].digest' tmp/layout/index.json)")"
+          config="$(blob "$(jq -r '.config.digest' "$manifest")")"
+          echo "ENTRYPOINT=$(jq -r '.config.Entrypoint[0]' "$config")" >> "$GITHUB_ENV"
 
-      - name: Ensure skopeo is installed
-        run: command -v skopeo || { sudo apt-get update -qq && sudo apt-get install -yqq skopeo; }
+          # dockle reads only docker-archive tarballs: the layout plus a docker
+          # manifest.json pointing at the same blobs.
+          jq '[{Config: ("blobs/" + (.config.digest | sub(":"; "/"))), RepoTags: ["ocm-scan:\($ENV.IMAGE)-\($ENV.ARCH)"],
+            Layers: [.layers[].digest | "blobs/" + sub(":"; "/")]}]' "$manifest" > tmp/manifest.json
+          tar -C tmp/layout -cf tmp/image.tar .
+          tar -C tmp -rf tmp/image.tar manifest.json
 
-      # The STIG scan and dockle read the image from the docker daemon. Neither
-      # runs it, so amd64 is scanned on the arm64 runner too.
-      - name: Load image
-        run: skopeo copy oci:tmp/layout "docker-daemon:ocm-scan:${IMAGE}-${ARCH}"
+          # Root filesystem for the STIG scan and the provenance checks. Extracting
+          # as root keeps ownership and setuid/setgid bits. The images are scratch
+          # plus COPY, so their layers stack without whiteouts; fail if that changes.
+          mkdir -p tmp/rootfs
+          for layer in $(jq -r '.layers[].digest' "$manifest"); do
+            sudo tar -xpf "$(blob "$layer")" -C tmp/rootfs
+          done
+          if sudo find tmp/rootfs -name '.wh.*' | grep -q .; then
+            echo "::error::image has whiteout layers; extract them with a tool that applies them"; exit 1
+          fi
 
       # Nothing goes to code scanning: Dependabot alerts stay the only alert surface.
       - name: Vulnerability scan
@@ -142,54 +158,41 @@ jobs:
         run: exit 1
 
       # DISA GPOS SRG as tailored in .github/stig, plus OCM's supplement for the
-      # deselected rules, evaluated offline on the image's exported root
-      # filesystem. Extracting it as root in the scanner keeps ownership and
-      # setuid/setgid bits. Fails on any failed rule of either evaluation.
+      # deselected rules, evaluated offline on the image's root filesystem.
+      # Fails on any failed rule of either evaluation.
       - name: STIG scan (DISA GPOS SRG)
         if: ${{ !cancelled() }}
         run: |
           mkdir -p stig
-          docker export "$(docker create "ocm-scan:${IMAGE}-${ARCH}" /x)" |
-            docker run --rm -i -u 0:0 -e IMAGE -v "$PWD/.github/stig:/stig:ro" -v "$PWD/stig:/out" \
-              --entrypoint /bin/sh "$OPENSCAP_IMAGE" -euc '
-                mkdir /rootfs
-                tar -C /rootfs -xpf -
-                # Added to every container by docker create/export, not image content.
-                rm -rf /rootfs/.dockerenv /rootfs/etc/hosts /rootfs/etc/hostname \
-                  /rootfs/etc/resolv.conf /rootfs/etc/mtab /rootfs/dev /rootfs/proc /rootfs/sys
-                export OSCAP_PROBE_ROOT=/rootfs
-                rc=0
-                oscap xccdf eval \
-                  --tailoring-file /stig/tailoring.xml --profile xccdf_software.ocm_profile_gpos-container \
-                  --results /out/gpos-results.xml --report /out/gpos-report.html \
-                  /usr/share/xml/scap/ssg/content/ssg-chainguard-gpos-ds.xml || rc=$?
-                oscap xccdf eval --profile "xccdf_software.ocm_profile_${IMAGE}" \
-                  --results /out/ocm-results.xml --report /out/ocm-report.html \
-                  /stig/ocm-supplement-xccdf.xml || rc=$?
-                exit "$rc"'
+          docker run --rm -u 0:0 -e IMAGE -e OSCAP_PROBE_ROOT=/rootfs \
+            -v "$PWD/tmp/rootfs:/rootfs:ro" -v "$PWD/.github/stig:/stig:ro" -v "$PWD/stig:/out" \
+            --entrypoint /bin/sh "$OPENSCAP_IMAGE" -euc '
+              rc=0
+              oscap xccdf eval \
+                --tailoring-file /stig/tailoring.xml --profile xccdf_software.ocm_profile_gpos-container \
+                --results /out/gpos-results.xml --report /out/gpos-report.html \
+                /usr/share/xml/scap/ssg/content/ssg-chainguard-gpos-ds.xml || rc=$?
+              oscap xccdf eval --profile "xccdf_software.ocm_profile_${IMAGE}" \
+                --results /out/ocm-results.xml --report /out/ocm-report.html \
+                /stig/ocm-supplement-xccdf.xml || rc=$?
+              exit "$rc"'
 
       # The supplement's checks that OVAL cannot do: OVAL reads no binaries and
       # no values from outside the scanned root filesystem.
       - name: Image provenance (FIPS module, CA bundle)
         if: ${{ !cancelled() }}
         run: |
-          ref="ocm-scan:${IMAGE}-${ARCH}"
-          entrypoint="$(docker image inspect -f '{{index .Config.Entrypoint 0}}' "$ref")"
-          c="$(docker create "$ref" /x)"
-          docker cp -q "$c:$entrypoint" tmp/entrypoint
-          docker cp -q "$c:/etc/ssl/certs/ca-certificates.crt" tmp/ca.crt
-
           # Go build information, as `go version -m` shows it.
-          grep -aqP '^build\tGOFIPS140=v\S+$' tmp/entrypoint ||
-            { echo "::error::$entrypoint is not built with GOFIPS140=v<version>"; exit 1; }
-          grep -aqP '^build\tDefaultGODEBUG=(.*,)?fips140=(on|only)(,|$)' tmp/entrypoint ||
-            { echo "::error::$entrypoint does not default to fips140=on"; exit 1; }
+          grep -aqP '^build\tGOFIPS140=v\S+$' "tmp/rootfs${ENTRYPOINT}" ||
+            { echo "::error::$ENTRYPOINT is not built with GOFIPS140=v<version>"; exit 1; }
+          grep -aqP '^build\tDefaultGODEBUG=(.*,)?fips140=(on|only)(,|$)' "tmp/rootfs${ENTRYPOINT}" ||
+            { echo "::error::$ENTRYPOINT does not default to fips140=on"; exit 1; }
 
           base="$(sed -nE 's/^FROM .* (ghcr\.io\/gardenlinux\/\S+@sha256:[0-9a-f]{64}) AS certs$/\1/p' "$CONTAINERFILE")"
           [[ -n "$base" ]] || { echo "::error::no digest-pinned Garden Linux certs stage in $CONTAINERFILE"; exit 1; }
           docker run --rm --platform "linux/$(docker version -f '{{.Server.Arch}}')" --entrypoint cat "$base" \
             /etc/ssl/certs/ca-certificates.crt > tmp/base-ca.crt
-          cmp -s tmp/ca.crt tmp/base-ca.crt ||
+          cmp -s tmp/rootfs/etc/ssl/certs/ca-certificates.crt tmp/base-ca.crt ||
             { echo "::error::CA bundle differs from the one in $base"; exit 1; }
 
       # CIS Docker Benchmark section 4. Fails on WARN and FATAL; INFO (content
@@ -197,8 +200,8 @@ jobs:
       - name: CIS Docker Benchmark (dockle)
         if: ${{ !cancelled() }}
         run: |
-          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock "$DOCKLE_IMAGE" \
-            --exit-code 1 --exit-level warn "ocm-scan:${IMAGE}-${ARCH}"
+          docker run --rm -v "$PWD/tmp/image.tar:/image.tar:ro" "$DOCKLE_IMAGE" \
+            --exit-code 1 --exit-level warn --input /image.tar
 
       - name: Upload reports
         if: ${{ !cancelled() }}
