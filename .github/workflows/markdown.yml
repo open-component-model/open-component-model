@@ -259,10 +259,10 @@ jobs:
       - name: Install dependencies
         working-directory: website
         run: npm ci
-      - name: Build and check for description length warnings
+      - name: Build and check for SEO description length warnings
         working-directory: website
         run: |
-          WARNINGS=$(npm run build 2>&1 | grep "Description t" || true)
+          WARNINGS=$(npm run build 2>&1 | grep "^WARN.*Description too" || true)
           if [ -n "$WARNINGS" ]; then
             echo "SEO description length violations found:"
             echo "$WARNINGS"
