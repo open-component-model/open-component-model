@@ -116,7 +116,7 @@ add component-version --repository ./archive --constructor component-constructor
 ```
       --blob-cache-directory string                   path to the blob cache directory (default ".ocm/cache")
       --component-version-conflict-policy enum        policy to apply when a component version already exists in the repository
-                                                      (must be one of [abort-and-fail replace skip]) (default abort-and-fail)
+                                                      (must be one of [abort-and-fail replace skip]) (default replace) (DEPRECATED: existing versions are replaced by default; protect them with registry tag immutability. The flag will be removed)
       --concurrency-limit int                         maximum number of component versions that can be constructed concurrently. (default 4)
   -c, --constructor path                              path to the component constructor file (default component-constructor.yaml)
       --display-mode enum                             static: print the output once the complete component graph is discovered
