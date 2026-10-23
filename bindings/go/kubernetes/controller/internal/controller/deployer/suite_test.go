@@ -161,7 +161,7 @@ var _ = BeforeSuite(func() {
 			DownloadCache:        downloadCache,
 			Resolver:             resolver,
 			MaxResourceSizeBytes: 2 * 1024 * 1024,
-		}).SetupWithManager(ctx, k8sManager)).To(Succeed())
+		}).SetupWithManager(ctx, k8sManager, 1)).To(Succeed())
 	}
 
 	mgrDone := make(chan struct{})

@@ -155,7 +155,7 @@ var _ = BeforeSuite(func() {
 			NewPluginManager: test.StaticPluginManager(pm),
 		},
 		Resolver: resolver,
-	}).SetupWithManager(ctx, k8sManager)).To(Succeed())
+	}).SetupWithManager(ctx, k8sManager, 1)).To(Succeed())
 
 	mgrDone := make(chan struct{})
 	go func() {

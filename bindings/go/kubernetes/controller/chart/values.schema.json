@@ -41,6 +41,12 @@
                 "concurrency": {
                     "type": "object",
                     "properties": {
+                        "component": {
+                            "type": "integer"
+                        },
+                        "deployer": {
+                            "type": "integer"
+                        },
                         "resource": {
                             "type": "integer"
                         }

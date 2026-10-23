@@ -66,6 +66,8 @@ Kubernetes: `>=1.26.0-0`
 | manager.affinity | object | `{}` | Pod affinity rules |
 | manager.cache.deployerDownloadMaxResourceSize | string | `"2Mi"` | Maximum size of a single downloadable resource as a Kubernetes resource.Quantity (e.g. "2Mi", "512Ki"). "0" disables the limit. |
 | manager.cache.deployerDownloadSize | int | `1000` | Maximum size of the deployer download object LRU cache |
+| manager.concurrency.component | int | `4` | Number of active component controller workers |
+| manager.concurrency.deployer | int | `4` | Number of active workers per enabled deployer controller (Deployer and NamespacedDeployer) |
 | manager.concurrency.resource | int | `4` | Number of active resource controller workers |
 | manager.deployer.enabled | bool | `true` | Run the controller for the cluster-scoped Deployer. It applies with the permissions of the controller itself. Deprecated: Use NamespacedDeployer instead. |
 | manager.env | list | `[]` | Environment variables for the controller |

@@ -75,7 +75,9 @@ func main() {
 		enableHTTP2               bool
 		deployerDownloadCacheSize int
 		deployerMaxResourceSize   string
+		componentConcurrency      int
 		resourceConcurrency       int
+		deployerConcurrency       int
 		replicationConcurrency    int
 		enableDeployer            bool
 		enableNamespacedDeployer  bool
@@ -97,8 +99,13 @@ func main() {
 		"The maximum size of the deployer download object LRU cache.")
 	flag.StringVar(&deployerMaxResourceSize, "deployer-download-max-resource-size", defaultMaxResourceSize,
 		"Maximum size of a single downloadable resource as a Kubernetes resource.Quantity (e.g. \"2Mi\", \"512Ki\"). \"0\" disables the limit.")
+	flag.IntVar(&componentConcurrency, "component-controller-concurrency", 4, //nolint:mnd // no magic number
+		"The component controller concurrency. This is the number of active component controller workers that can be kept alive.")
 	flag.IntVar(&resourceConcurrency, "resource-controller-concurrency", 4, //nolint:mnd // no magic number
 		"The resource controller concurrency. This is the number of active resource controller workers that can be kept alive.")
+	flag.IntVar(&deployerConcurrency, "deployer-controller-concurrency", 4, //nolint:mnd // no magic number
+		"The deployer controller concurrency. This is the number of active workers per enabled deployer controller "+
+			"(Deployer and NamespacedDeployer each get their own).")
 	flag.IntVar(&replicationConcurrency, "replication-controller-concurrency", 4, //nolint:mnd // no magic number
 		"The replication controller concurrency. This is the number of active replication controller workers that can be kept alive.")
 
@@ -222,7 +229,7 @@ func main() {
 			NewPluginManager: newPluginManager,
 		},
 		Resolver: resolver,
-	}).SetupWithManager(ctx, mgr); err != nil {
+	}).SetupWithManager(ctx, mgr, componentConcurrency); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Component")
 		os.Exit(1)
 	}
@@ -292,7 +299,7 @@ func main() {
 			DownloadCache:        downloadCache,
 			Resolver:             resolver,
 			MaxResourceSizeBytes: maxResourceSizeBytes,
-		}).SetupWithManager(ctx, mgr); err != nil {
+		}).SetupWithManager(ctx, mgr, deployerConcurrency); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", d.kind)
 			os.Exit(1)
 		}

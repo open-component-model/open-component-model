@@ -26,8 +26,12 @@ manager:
     enabled: true
   ## Controller concurrency settings
   concurrency:
+    # -- Number of active component controller workers
+    component: 4
     # -- Number of active resource controller workers
     resource: 4
+    # -- Number of active workers per enabled deployer controller (Deployer and NamespacedDeployer)
+    deployer: 4
   ## Cache settings
   cache:
     # -- Maximum size of the deployer download object LRU cache

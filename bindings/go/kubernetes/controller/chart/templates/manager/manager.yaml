@@ -60,8 +60,14 @@ spec:
                     {{- end }}
                     {{- /* Concurrency */}}
                     {{- with .Values.manager.concurrency }}
+                    {{- if .component }}
+                    - --component-controller-concurrency={{ .component }}
+                    {{- end }}
                     {{- if .resource }}
                     - --resource-controller-concurrency={{ .resource }}
+                    {{- end }}
+                    {{- if .deployer }}
+                    - --deployer-controller-concurrency={{ .deployer }}
                     {{- end }}
                     {{- end }}
                     {{- /* Cache */}}
