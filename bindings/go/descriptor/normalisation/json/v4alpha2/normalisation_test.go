@@ -67,7 +67,7 @@ func TestSameDigestAsV4alpha1(t *testing.T) {
 	v1out := normalise(t, deltaFreeInput, v4alpha1.Algorithm)
 	v2out := normalise(t, deltaFreeInput, v4alpha2.Algorithm)
 	r.Equal(v1out, v2out, "delta-free input must normalise identically under v4alpha1 and v4alpha2")
-	r.Equal(deltaFreeV3Norm, v2out, "and identically to legacy v3")
+	r.Equal(deltaFreeV3Norm, v2out, "and identically to legacy v3") //nolint:testifylint // byte-exact comparison, JSONEq would mask encoding differences
 }
 
 // TestVersionSignedDivergesFromV4alpha1 proves fix #1: a signing label's version
@@ -95,7 +95,7 @@ func TestReferenceFilteringDivergesFromV3(t *testing.T) {
 	v2out := normalise(t, referenceLabelsInput, v4alpha2.Algorithm)
 	v1out := normalise(t, referenceLabelsInput, v4alpha1.Algorithm)
 
-	r.Equal(referenceLabelsV4alpha2Norm, v2out, "v4alpha2 reference labels must be filtered signing-only, version kept")
+	r.Equal(referenceLabelsV4alpha2Norm, v2out, "v4alpha2 reference labels must be filtered signing-only, version kept") //nolint:testifylint // byte-exact comparison, JSONEq would mask encoding differences
 	r.NotEqual(referenceLabelsV3Norm, v2out, "v4alpha2 must diverge from v3's unfiltered reference labels")
 	r.NotEqual(v1out, v2out, "v4alpha2 must diverge from v4alpha1's reference-label handling")
 
