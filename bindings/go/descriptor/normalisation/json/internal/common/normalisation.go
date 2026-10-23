@@ -1,9 +1,10 @@
 // Package common holds the version-agnostic primitives shared by the
-// jsonNormalisation v4 algorithm family (v4alpha1, v4alpha2). The per-version
-// difference lives entirely in the JCS exclusion rules each algorithm passes to
-// Normalise; everything here — field defaulting, provider/resource mapping and
-// the label signature check — is identical across versions. It is internal so
-// only the v4 algorithm packages depend on it; neither imports the other.
+// jsonNormalisation v4 algorithm family (v4alpha1, v4alpha2, v4alpha3). The
+// per-version difference lives entirely in the JCS exclusion rules each
+// algorithm passes to Normalise; everything here — field defaulting,
+// provider/resource mapping and the label signature check — is identical across
+// versions. It is internal so only the v4 algorithm packages depend on it; none
+// of them import the others.
 package common
 
 import (

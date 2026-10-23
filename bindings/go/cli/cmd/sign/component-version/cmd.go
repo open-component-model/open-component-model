@@ -78,7 +78,7 @@ func New() *cobra.Command {
 
 - Prefixes: {%[1]s|none} (default: %[1]q)  
 - Repo types: {%[2]s} (short: {%[3]s})  
-- Digest: optional pin (see "ocm get cv --help"), "@sha256:<hex>" (OCI digest of the artifact the component version is stored as; the version may be omitted) or "@jsonNormalisation.v4alpha2+sha256:<hex>" (normalized: the digest signatures sign); the command fails unless the component version matches it. The signed component version is written to its version tag; with an OCI digest pin, signing fails if the tag no longer resolves to the pinned artifact, rather than overwriting it
+- Digest: optional pin (see "ocm get cv --help"), "@sha256:<hex>" (OCI digest of the artifact the component version is stored as; the version may be omitted) or "@jsonNormalisation.v4alpha3+sha256:<hex>" (normalized: the digest signatures sign); the command fails unless the component version matches it. The signed component version is written to its version tag; with an OCI digest pin, signing fails if the tag no longer resolves to the pinned artifact, rather than overwriting it
 
 ## OCM Signing explained in simple steps
 

@@ -40,7 +40,7 @@ Reference: [ADR-0008](../adr/0008_signing_verification.md)
 
 Signing and verification are built on the `ComponentSignatureHandler` contract, which separates the concerns of normalization, digest computation, and cryptographic operations:
 
-1. **Normalization**: The component descriptor is normalized using a versioned algorithm (currently `jsonNormalisation/v4alpha1`, with transparent legacy v3 fallback in `bindings/go/signing/digest.go`).
+1. **Normalization**: The component descriptor is normalized using a versioned algorithm (currently `jsonNormalisation/v4alpha3`, with transparent legacy v3 fallback to `jsonNormalisation/v4alpha2` in `bindings/go/signing/digest.go`).
 2. **Digest computation**: The normalized bytes are hashed with a supported algorithm.
 3. **Signing**: The handler produces a signature envelope using credentials resolved through the credential graph.
 4. **Verification**: The handler recomputes the digest from the descriptor, then verifies the signature against the recomputed value.

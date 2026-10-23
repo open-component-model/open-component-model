@@ -67,7 +67,7 @@ var ExclusionRules = jcs.MapExcludes{
 		// byte-stable; do NOT apply the full LabelExcludes, which would also drop
 		// non-signing reference labels and change existing digests. Proper
 		// signing-only filtering for reference labels is a deliberate change
-		// shipped in jsonNormalisation/v4alpha2.
+		// shipped in jsonNormalisation/v4alpha3.
 		"componentReferences": jcs.ArrayExcludes{
 			Continue: jcs.MapExcludes{
 				"labels": jcs.ArrayExcludes{
@@ -92,7 +92,7 @@ var ExclusionRules = jcs.MapExcludes{
 // would silently change v4alpha1 digests and break existing signatures over
 // versioned signing labels. Keep v4alpha1 byte-stable; signing label version is
 // a deliberate, versioned change (see jsonNormalisation/v1 and
-// jsonNormalisation/v4alpha2 for that behaviour).
+// jsonNormalisation/v4alpha2 and v4alpha3 for that behaviour).
 var LabelExcludes = jcs.ExcludeEmpty{
 	TransformationRules: jcs.DynamicArrayExcludes{
 		ValueChecker: common.IgnoreLabelsWithoutSignature,

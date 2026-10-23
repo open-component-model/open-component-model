@@ -11,10 +11,12 @@ import (
 	"log/slog"
 	"strings"
 
+	_ "ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
+
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation"
 	jsonv1 "ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v1"
-	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha2"
+	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha3"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 )
 
@@ -22,16 +24,18 @@ const (
 	// DefaultNormalisationAlgorithm is the normalisation used for new signatures
 	// when a caller does not specify one (e.g. the `ocm sign` --normalisation
 	// flag default). It is the single source of truth for that default.
-	DefaultNormalisationAlgorithm = v4alpha2.Algorithm
-	// LegacyNormalisationAlgo identifies the deprecated v3 JSON normalisation algorithm.
-	// It is replaced by v4alpha1.Algorithm. Calls using this value are transparently
-	// mapped to v4alpha1 with a warning.
+	DefaultNormalisationAlgorithm = v4alpha3.Algorithm
+	// LegacyNormalisationAlgo identifies the deprecated v3 JSON normalisation
+	// algorithm. Calls using this value are transparently mapped to
+	// v4alpha2.Algorithm with a warning (see ensureNormalisationAlgo).
 	//
-	// It maps to v4alpha1 specifically — NOT to DefaultNormalisationAlgorithm — and
-	// must never be re-pointed to v4alpha2. v4alpha1 reproduces legacy v3 bytes for
-	// reference labels (both emit non-signing reference labels), whereas v4alpha2
-	// filters them; remapping v3 to v4alpha2 would break verification of every
-	// existing v3 signature that carries reference labels.
+	// It maps to v4alpha2 — NOT to DefaultNormalisationAlgorithm (v4alpha3).
+	// v4alpha2 is the faithful v3 re-implementation: it keeps label.version and
+	// emits reference labels unfiltered, so it reproduces legacy v3 bytes exactly.
+	// Mapping v3 to v4alpha1 (which drops label.version) breaks verification of v3
+	// signatures over versioned labels; mapping it to v4alpha3 (which filters
+	// reference labels signing-only) breaks verification of v3 signatures that
+	// carry reference labels. Only v4alpha2 is byte-compatible with v3.
 	LegacyNormalisationAlgo = "jsonNormalisation/v3"
 	// AccessTypeNone is the access type for resources without access.
 	// It is used to prevent meaningless digest claims.
@@ -58,7 +62,7 @@ var ErrUnsupportedDigestHash = errors.New("unsupported digest hash algorithm")
 // already out there. The known fidelity gap in the stored form (the store read
 // collapses an integral float 1.0 to 1 before normalisation) is one such
 // incompatibility signing would bake in, not the whole rationale. New
-// signatures must use the current algorithm (v4alpha2).
+// signatures must use the current algorithm (v4alpha3).
 var ErrSigningUnsupported = errors.New("normalisation algorithm is supported for verification only, not signing")
 
 // fipsEnforced reports whether the Go Cryptographic Module enforces FIPS 140-3
@@ -80,7 +84,7 @@ func DigestHashAlgorithmsEnforced() bool {
 // signature’s claimed digest.
 //
 // Steps:
-//  1. Resolve the normalisation algorithm (legacy → v4alpha1 if required).
+//  1. Resolve the normalisation algorithm (legacy → v4alpha2 if required).
 //  2. Normalise the descriptor with that algorithm.
 //  3. Select the hash algorithm from supported list (SHA256, SHA512).
 //  4. Hash the normalised descriptor.
@@ -139,7 +143,7 @@ func EnsureSignable(normalisationAlgorithm string) error {
 // normalisation and hashing algorithms.
 //
 // Steps:
-//  1. Resolve the normalisation algorithm (legacy → v4alpha1 if required).
+//  1. Resolve the normalisation algorithm (legacy → v4alpha2 if required).
 //  2. Normalise the descriptor.
 //  3. Select the requested hash algorithm.
 //  4. Hash the normalised descriptor.
@@ -284,16 +288,17 @@ func hasUsableAccess(res descruntime.Resource) bool {
 
 // ensureNormalisationAlgo resolves the effective normalisation algorithm.
 // If the provided value is the legacy v3 algorithm, it logs a warning and
-// returns v4alpha1.Algorithm instead. Otherwise, it returns the original value.
-// this is to ensure compatibility with old ocm v1 style signatures.
+// returns v4alpha2.Algorithm instead. Otherwise, it returns the original value.
+// v4alpha2 reproduces legacy jsonNormalisation/v3 byte-for-byte, so existing v3
+// (and old ocm v1 style) signatures keep verifying.
 func ensureNormalisationAlgo(ctx context.Context, algo string, logger *slog.Logger) string {
 	if algo == LegacyNormalisationAlgo {
 		logger.WarnContext(ctx,
-			"legacy normalisation algorithm detected, using v4alpha1",
+			"legacy normalisation algorithm detected, using v4alpha2",
 			"legacy", LegacyNormalisationAlgo,
-			"new", v4alpha1.Algorithm,
+			"new", v4alpha2.Algorithm,
 		)
-		return v4alpha1.Algorithm
+		return v4alpha2.Algorithm
 	}
 	return algo
 }

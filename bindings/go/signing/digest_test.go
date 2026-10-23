@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
+	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha2"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -28,9 +29,9 @@ func TestEnsureNormalisationAlgo(t *testing.T) {
 	logger := slog.New(slog.DiscardHandler)
 	ctx := context.Background()
 
-	// legacy should be translated to v4alpha1
+	// legacy v3 should be translated to v4alpha2 (its byte-exact re-implementation)
 	got := ensureNormalisationAlgo(ctx, LegacyNormalisationAlgo, logger)
-	assert.Equal(t, v4alpha1.Algorithm, got)
+	assert.Equal(t, v4alpha2.Algorithm, got)
 
 	// non-legacy should be returned unchanged
 	in := "someAlgo"
@@ -38,7 +39,7 @@ func TestEnsureNormalisationAlgo(t *testing.T) {
 	assert.Equal(t, in, got)
 
 	// jsonNormalisation/v1 is a real registered algorithm and must pass through
-	// unchanged (it must not be remapped to v4alpha1 like the v3 legacy value).
+	// unchanged (it must not be remapped to v4alpha2 like the v3 legacy value).
 	got = ensureNormalisationAlgo(ctx, "jsonNormalisation/v1", logger)
 	assert.Equal(t, "jsonNormalisation/v1", got)
 }
@@ -194,8 +195,8 @@ func TestGenerateDigest_LegacyNormalisation(t *testing.T) {
 	digest, err := GenerateDigest(ctx, d, logger, LegacyNormalisationAlgo, crypto.SHA256.String())
 	require.NoError(t, err)
 	require.NotNil(t, digest)
-	// ensure legacy was mapped to v4alpha1
-	assert.Equal(t, v4alpha1.Algorithm, digest.NormalisationAlgorithm)
+	// ensure legacy was mapped to v4alpha2
+	assert.Equal(t, v4alpha2.Algorithm, digest.NormalisationAlgorithm)
 }
 
 // Tests for VerifyDigestMatchesDescriptor

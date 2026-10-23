@@ -22,7 +22,7 @@ Resources can be accessed either locally or via a plugin that supports remote fe
 
 A reference can pin the component version with a digest: "{component}[:{version}]@sha256:<hex>" (OCI digest
 of the artifact the component version is stored as, which local resources are then read from) or
-"{component}:{version}@jsonNormalisation.v4alpha2+sha256:<hex>" (normalized: the digest signatures sign).
+"{component}:{version}@jsonNormalisation.v4alpha3+sha256:<hex>" (normalized: the digest signatures sign).
 See "ocm get cv --help" for when to use which. The plugin binary is then verified against its digest in the pinned descriptor.
 
 ```

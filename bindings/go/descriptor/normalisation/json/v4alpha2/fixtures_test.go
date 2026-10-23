@@ -7,13 +7,13 @@ package v4alpha2_test
 // jsonNormalisation/v3 for that same input — produced by
 // compdesc.Normalize(cd, compdesc.JsonNormalisationV3) in the ocm.software/ocm
 // module, an INDEPENDENT oracle. Do not recompute them with this normaliser;
-// that would be circular.
+// that would be circular. The digests are the SHA-256 of those oracle bytes.
 //
-// v4alpha2 re-converges with v3 wherever v3 already did the right thing (signing
-// label.version is signed; non-signing labels are filtered at component,
-// resource and source positions), and deliberately diverges only on component
-// references, which v3 left unfiltered because its rule was keyed "references"
-// while the JSON key is "componentReferences".
+// v4alpha2 is the faithful re-implementation of v3: it must reproduce every
+// oracle below byte-for-byte, including the unfiltered reference labels (v3
+// emitted reference labels unfiltered and kept label.version; v4alpha2 matches
+// both). v4alpha1 diverges wherever a label carries a version, because it drops
+// label.version.
 
 // deltaFree exercises neither delta: a signing label without a version plus a
 // non-signing label, no reference labels. v3, v4alpha1 and v4alpha2 must all
@@ -112,10 +112,10 @@ component:
 )
 
 // referenceLabels carries a component reference with one signing label (with a
-// version) and one non-signing label. v3 leaks BOTH labels unfiltered
-// (referenceLabelsV3Norm). v4alpha2 filters them signing-only, keeping the
-// version — exactly the v3 output minus the leaked non-signing label — so it
-// diverges from v3 here by design.
+// version) and one non-signing label. v3 keeps BOTH labels unfiltered and signs
+// the version. v4alpha2 reproduces that exactly (unfiltered, version kept),
+// which is the behaviour v4alpha1 broke by stripping label.version. v4alpha3
+// diverges here by filtering reference labels signing-only.
 const (
 	referenceLabelsInput = `
 meta:
@@ -143,6 +143,6 @@ component:
         - name: ref-nosig
           value: "rnv"
 `
-	referenceLabelsV3Norm       = `{"component":{"componentReferences":[{"componentName":"acme.org/child","digest":{"hashAlgorithm":"SHA-256","normalisationAlgorithm":"jsonNormalisation/v4alpha1","value":"deadbeef"},"labels":[{"name":"ref-sig","signing":true,"value":"rsv","version":"v5"},{"name":"ref-nosig","value":"rnv"}],"name":"ref","version":"1.0.0"}],"name":"acme.org/reference-labels","provider":{"name":"acme"},"resources":[],"sources":[],"version":"1.0.0"}}`
-	referenceLabelsV4alpha2Norm = `{"component":{"componentReferences":[{"componentName":"acme.org/child","digest":{"hashAlgorithm":"SHA-256","normalisationAlgorithm":"jsonNormalisation/v4alpha1","value":"deadbeef"},"labels":[{"name":"ref-sig","signing":true,"value":"rsv","version":"v5"}],"name":"ref","version":"1.0.0"}],"name":"acme.org/reference-labels","provider":{"name":"acme"},"resources":[],"sources":[],"version":"1.0.0"}}`
+	referenceLabelsV3Norm   = `{"component":{"componentReferences":[{"componentName":"acme.org/child","digest":{"hashAlgorithm":"SHA-256","normalisationAlgorithm":"jsonNormalisation/v4alpha1","value":"deadbeef"},"labels":[{"name":"ref-sig","signing":true,"value":"rsv","version":"v5"},{"name":"ref-nosig","value":"rnv"}],"name":"ref","version":"1.0.0"}],"name":"acme.org/reference-labels","provider":{"name":"acme"},"resources":[],"sources":[],"version":"1.0.0"}}`
+	referenceLabelsV3Digest = "7d783015ce912c74cfe541f943adec9c0b9651fce9a79ec8e49d0288d09d9a87"
 )

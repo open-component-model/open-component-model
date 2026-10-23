@@ -21,7 +21,7 @@ Creates or update cryptographic signatures on component descriptors.
 
 - Prefixes: {component-descriptors|none} (default: "component-descriptors")  
 - Repo types: {OCIRepository|CommonTransportFormat} (short: {OCI|oci|CTF|ctf})  
-- Digest: optional pin (see "ocm get cv --help"), "@sha256:<hex>" (OCI digest of the artifact the component version is stored as; the version may be omitted) or "@jsonNormalisation.v4alpha2+sha256:<hex>" (normalized: the digest signatures sign); the command fails unless the component version matches it. The signed component version is written to its version tag; with an OCI digest pin, signing fails if the tag no longer resolves to the pinned artifact, rather than overwriting it
+- Digest: optional pin (see "ocm get cv --help"), "@sha256:<hex>" (OCI digest of the artifact the component version is stored as; the version may be omitted) or "@jsonNormalisation.v4alpha3+sha256:<hex>" (normalized: the digest signatures sign); the command fails unless the component version matches it. The signed component version is written to its version tag; with an OCI digest pin, signing fails if the tag no longer resolves to the pinned artifact, rather than overwriting it
 
 ## OCM Signing explained in simple steps
 
@@ -220,7 +220,7 @@ sign component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0 --s
       --force                   overwrite existing signatures under the same name
       --hash string             hash algorithm to use (SHA256, SHA512) (default "SHA-256")
   -h, --help                    help for component-version
-      --normalisation string    normalisation algorithm to use for new signatures (default jsonNormalisation/v4alpha2; jsonNormalisation/v1 is legacy and verify-only, it is rejected for signing) (default "jsonNormalisation/v4alpha2")
+      --normalisation string    normalisation algorithm to use for new signatures (default jsonNormalisation/v4alpha3; jsonNormalisation/v1 is legacy and verify-only, it is rejected for signing) (default "jsonNormalisation/v4alpha3")
   -o, --output enum             output format of the resulting signature
                                 (must be one of [json yaml]) (default yaml)
       --signature string        name of the signature to create or update. defaults to "default" (default "default")

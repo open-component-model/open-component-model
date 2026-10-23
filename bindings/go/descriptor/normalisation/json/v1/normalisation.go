@@ -21,11 +21,11 @@ import (
 // precedes jsonNormalisation/v4alpha1. It is verify-only: existing v1
 // signatures, pins and reference digests are verified, but a new v1 signature
 // must never be minted (enforced at the signing boundary by
-// signing.EnsureSignable). Use jsonNormalisation/v4alpha2 for new signatures.
+// signing.EnsureSignable). Use jsonNormalisation/v4alpha3 for new signatures.
 //
 // Deprecated: jsonNormalisation/v1 is a legacy cc-utils compatibility format
 // kept for verification only; do not use it to produce new signatures (use
-// jsonNormalisation/v4alpha2). It stays registered so existing signatures and
+// jsonNormalisation/v4alpha3). It stays registered so existing signatures and
 // pins remain verifiable.
 const Algorithm = "jsonNormalisation/v1"
 

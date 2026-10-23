@@ -1836,10 +1836,10 @@ configurations:
 	)
 	r.NoError(err, "failed to sign component version")
 
-	// Signing without --normalisation must default to jsonNormalisation/v4alpha2:
+	// Signing without --normalisation must default to jsonNormalisation/v4alpha3:
 	// the printed signature pins its own normalisation algorithm.
-	r.Contains(logs.String(), "jsonNormalisation/v4alpha2",
-		"signing without --normalisation must default to v4alpha2")
+	r.Contains(logs.String(), "jsonNormalisation/v4alpha3",
+		"signing without --normalisation must default to v4alpha3")
 
 	_, err = test.OCM(t, test.WithArgs("verify", "component-version",
 		reference,

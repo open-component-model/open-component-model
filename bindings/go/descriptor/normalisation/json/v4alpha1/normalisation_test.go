@@ -176,7 +176,7 @@ meta:
 //
 // It also pins the deliberately-unchanged behaviour: non-signing reference
 // labels are still kept (v4alpha1 never filtered reference labels; proper
-// signing-only filtering is deferred to v4alpha2). Only label.version is
+// signing-only filtering is deferred to v4alpha3). Only label.version is
 // stripped from references.
 func TestVersionedLabelExcluded(t *testing.T) {
 	r := require.New(t)
@@ -211,7 +211,7 @@ func TestVersionedLabelExcluded(t *testing.T) {
 	// Component label: filtered to name/value/signing.
 	r.Contains(string(withVer), `"labels":[{"name":"k","signing":true,"value":"v"}]`)
 	// Reference labels: version stripped, but the non-signing label is still kept
-	// (pre-v1 behaviour; full filtering is a v4alpha2 change).
+	// (pre-v1 behaviour; full filtering is a v4alpha3 change).
 	r.Contains(string(withVer), `"labels":[{"name":"sig","signing":true,"value":"v"},{"name":"nosig","value":"x"}]`)
 }
 
