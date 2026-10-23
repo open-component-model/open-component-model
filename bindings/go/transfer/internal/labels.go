@@ -32,6 +32,20 @@ func targetKind(toSpec runtime.Typed) string {
 	return toSpec.GetType().GetName()
 }
 
+// targetDisplay renders the target repository as "<kind>::<location>", e.g. "CTF::./archive",
+// falling back to the kind alone when the location is unknown.
+func targetDisplay(toSpec runtime.Typed) string {
+	repo, err := convertToConcreteRepo(toSpec)
+	if err != nil {
+		return targetKind(toSpec)
+	}
+	location, ok := repo.(fmt.Stringer)
+	if !ok {
+		return targetKind(toSpec)
+	}
+	return targetKind(toSpec) + "::" + location.String()
+}
+
 // uploadLabel renders the label for an AddComponentVersion transformation. When a
 // component is transferred to more than one target, the target index (0-based)
 // disambiguates the labels, mirroring the T<idx> suffix on the transformation ID.

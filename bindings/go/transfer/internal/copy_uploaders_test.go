@@ -1,6 +1,8 @@
 package internal
 
 import (
+	"bytes"
+	"log/slog"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -36,10 +38,14 @@ func TestBuildGraphDefinition_LocalBlobAndReferenceUploaders(t *testing.T) {
 		Data: []byte(`{"type":"localBlob/v1","localReference":"sha256:abc123","referenceName":"org/image:v1"}`),
 	}
 	const always = "true"
+	fail := transferv1alpha1.Config{UnmatchedResourcePolicy: transferv1alpha1.UnmatchedResourcePolicyFail}
+	ignore := transferv1alpha1.Config{UnmatchedResourcePolicy: transferv1alpha1.UnmatchedResourcePolicyIgnore}
+	scopedToOther := []transferv1alpha1.UploaderConfig{&transferv1alpha1.LocalBlobUploaderConfig{Match: `resource.name == "other"`}}
 
 	for _, tc := range []struct {
 		name      string
 		resource  descriptor.Resource
+		cfg       transferv1alpha1.Config
 		uploaders []transferv1alpha1.UploaderConfig
 		wantTypes []runtime.Type
 		wantErr   string
@@ -134,6 +140,40 @@ func TestBuildGraphDefinition_LocalBlobAndReferenceUploaders(t *testing.T) {
 			uploaders: []transferv1alpha1.UploaderConfig{&transferv1alpha1.LocalBlobUploaderConfig{Match: always}},
 			wantErr:   "local blob uploader cannot copy access type Custom/v1",
 		},
+		{
+			name:      "Fail rejects a local blob no uploader selects",
+			resource:  blob,
+			cfg:       fail,
+			uploaders: scopedToOther,
+			wantErr:   "is not handled by any uploader for target OCI::ghcr.io/target: no uploader selects it",
+		},
+		{
+			name:     "Fail rejects a resource when no uploader is configured",
+			resource: image,
+			cfg:      fail,
+			wantErr:  "no uploader is configured",
+		},
+		{
+			name:      "Fail passes when every resource is selected",
+			resource:  blob,
+			cfg:       fail,
+			uploaders: withLocalBlobUploader(ociUploaders()...),
+			wantTypes: localBlobNodes,
+		},
+		{
+			name:      "Fail rejects s3/v1 the default local blob match does not select",
+			resource:  s3v1,
+			cfg:       fail,
+			uploaders: []transferv1alpha1.UploaderConfig{&transferv1alpha1.LocalBlobUploaderConfig{}},
+			wantErr:   "access type s3/v1",
+		},
+		{
+			name:      "Ignore falls back to the baseline for an unselected local blob",
+			resource:  blob,
+			cfg:       ignore,
+			uploaders: scopedToOther,
+			wantTypes: localBlobNodes,
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
@@ -141,13 +181,57 @@ func TestBuildGraphDefinition_LocalBlobAndReferenceUploaders(t *testing.T) {
 			resolver := testResolverFor("ocm.software/test", "1.0.0", testOCIRepo("ghcr.io/source"), desc)
 			roots := testTransferRoots("ocm.software/test", "1.0.0", testOCIRepo("ghcr.io/target"), resolver)
 
-			tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{}, tc.uploaders)
+			tgd, err := BuildGraphDefinition(t.Context(), roots, tc.cfg, tc.uploaders)
 			if tc.wantErr != "" {
 				r.ErrorContains(err, tc.wantErr)
 				return
 			}
 			r.NoError(err)
 			r.Equal(tc.wantTypes, transformationTypes(tgd))
+		})
+	}
+}
+
+// TestBuildGraphDefinition_UnmatchedResourceWarning checks that the default policy warns about
+// an unselected resource only when uploaders are configured, and that Ignore never warns.
+// It swaps the default logger, so it must not run in parallel.
+func TestBuildGraphDefinition_UnmatchedResourceWarning(t *testing.T) {
+	scopedToOther := []transferv1alpha1.UploaderConfig{&transferv1alpha1.LocalBlobUploaderConfig{Match: `resource.name == "other"`}}
+
+	for _, tc := range []struct {
+		name      string
+		policy    transferv1alpha1.UnmatchedResourcePolicy
+		uploaders []transferv1alpha1.UploaderConfig
+		wantWarn  bool
+	}{
+		{name: "default policy with uploaders warns", uploaders: scopedToOther, wantWarn: true},
+		{name: "default policy without uploaders stays silent"},
+		{name: "Ignore with uploaders stays silent", policy: transferv1alpha1.UnmatchedResourcePolicyIgnore, uploaders: scopedToOther},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			var buf bytes.Buffer
+			prev := slog.Default()
+			slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})))
+			t.Cleanup(func() { slog.SetDefault(prev) })
+
+			desc := testDescriptor("ocm.software/test", "1.0.0", []descriptor.Resource{localBlobResource("my-blob", "1.0.0")}, nil)
+			resolver := testResolverFor("ocm.software/test", "1.0.0", testOCIRepo("ghcr.io/source"), desc)
+			roots := testTransferRoots("ocm.software/test", "1.0.0", testOCIRepo("ghcr.io/target"), resolver)
+
+			_, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{UnmatchedResourcePolicy: tc.policy}, tc.uploaders)
+			r.NoError(err)
+
+			out := buf.String()
+			if !tc.wantWarn {
+				r.NotContains(out, "no uploader selects resource")
+				return
+			}
+			r.Contains(out, "level=WARN")
+			r.Contains(out, "no uploader selects resource; falling back to the baseline")
+			r.Contains(out, "my-blob")
+			r.Contains(out, "baseline=localBlob")
+			r.Contains(out, "target=OCI::ghcr.io/target")
 		})
 	}
 }
