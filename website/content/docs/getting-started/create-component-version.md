@@ -2,7 +2,7 @@
 title: "Create Component Versions"
 description: "Learn how to create and store component versions using the OCM CLI."
 icon: "📦"
-weight: 22
+weight: 30
 toc: true
 ---
 
@@ -431,11 +431,10 @@ ocm get cv ghcr.io/open-component-model//ocm.software/cli
 Output:
 
 ```text
- COMPONENT        │ VERSION     │ PROVIDER     
-──────────────────┼─────────────┼──────────────
- ocm.software/cli │ 0.13.0-rc.1 │ ocm.software 
-                  │ 0.12.0      │              
-                  │ 0.11.0      │              
+ NESTING  COMPONENT         VERSION      PROVIDER      IDENTITY
+ ├─       ocm.software/cli  0.21.0-rc.1  ocm.software  name=ocm.software/cli,version=0.21.0-rc.1
+ ├─       ocm.software/cli  0.20.0-rc.1  ocm.software  name=ocm.software/cli,version=0.20.0-rc.1
+ ├─       ocm.software/cli  0.19.1       ocm.software  name=ocm.software/cli,version=0.19.1
 ```
 
 #### Get a specific version
@@ -447,9 +446,8 @@ ocm get cv ghcr.io/open-component-model//ocm.software/cli:0.12.0
 Output:
 
 ```text
- COMPONENT        │ VERSION │ PROVIDER     
-──────────────────┼─────────┼──────────────
- ocm.software/cli │ 0.12.0  │ ocm.software 
+ NESTING  COMPONENT         VERSION  PROVIDER      IDENTITY
+ └─       ocm.software/cli  0.12.0   ocm.software  name=ocm.software/cli,version=0.12.0
 ```
 
 #### View the full component descriptor
@@ -479,7 +477,7 @@ ocm get cv ghcr.io/open-component-model//ocm.software/cli:0.12.0 --recursive -o 
 
 ## Next Steps
 
-- [How-to: Download Resources from OCM Components]({{< relref "../how-to/download-resources-from-component-versions.md" >}})  - How to extract resources from component versions
+- [Guides: Download Resources from OCM Components]({{< relref "docs/guides/transfer/download-resources.md" >}}) - How to extract resources from component versions
 
 ## Related Documentation
 

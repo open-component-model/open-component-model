@@ -1,7 +1,7 @@
 ---
 title: "Canonical Component Repositories"
 description: "What canonical repositories are, why component references are location-free, and how this design enables portable software delivery."
-weight: 6
+weight: 1
 toc: true
 hasMermaid: true
 ---
@@ -127,10 +127,10 @@ For example, if `app-a` resolves `shared-lib` from Registry A, and `app-b` resol
 
 ## Next Steps
 
-- [Working with Resolvers]({{< relref "docs/tutorials/configure-resolvers.md" >}}): Hands-on tutorial for configuring resolvers
-- [Transfer and Transport]({{< relref "docs/concepts/transfer-concept.md" >}}): How location-free references enable transport across boundaries
+- [Guides: Working with Resolvers]({{< relref "docs/guides/pack/add-component-references.md" >}}) - Hands-on tutorial for configuring resolvers
+- [Concept: Transfer and Transport]({{< relref "docs/concepts/transfer-concept.md" >}}) - How location-free references enable transport across boundaries
 
 ## Related Documentation
 
-- [Resolvers]({{< relref "docs/concepts/resolvers.md" >}}): The resolver concept and configuration overview
-- [Resolver Configuration Reference]({{< relref "docs/reference/resolver-configuration.md" >}}): Full schema, repository types, and pattern syntax
+- [Concept: Resolvers]({{< relref "docs/concepts/resolvers.md" >}}) - The resolver concept and configuration overview
+- [Reference: Resolver Configuration Reference]({{< relref "docs/reference/configuration/resolver.md" >}}) - Full schema, repository types, and pattern syntax

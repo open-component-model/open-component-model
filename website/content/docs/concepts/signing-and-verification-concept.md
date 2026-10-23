@@ -1,7 +1,7 @@
 ---
 title: "Signing and Verification"
 description: "Understanding how OCM ensures component integrity and authenticity through cryptographic signatures."
-weight: 3
+weight: 12
 toc: true
 ---
 
@@ -239,7 +239,7 @@ OCM's `signature.algorithm` field selects between two signing approaches: classi
 | RSA-PKCS#1 v1.5 | Asymmetric (RSA) | Public key or certificate chain | Deterministic, widely supported, compatible with legacy systems |
 | Sigstore (keyless, early access) | Asymmetric (ECDSA, ephemeral) | OIDC identity | Short-lived certificate from Fulcio bound to your OIDC identity, transparency-log entry in Rekor; no long-lived keys to manage |
 
-To override the default signing algorithm or encoding policy, add a `signing.config.ocm.software/v1alpha1` entry to your [`.ocmconfig`]({{< relref "configure-multiple-credentials.md" >}}) and put the signer under its `signer` field. See the [CLI reference]({{< relref "/docs/reference/ocm-cli/ocm_sign_component-version.md" >}}).
+To override the default signing algorithm or encoding policy, add a `signing.config.ocm.software/v1alpha1` entry to your [`.ocmconfig`]({{< relref "docs/guides/transfer/configure-registry-credentials.md" >}}) and put the signer under its `signer` field. See the [CLI reference]({{< relref "/docs/reference/ocm-cli/ocm_sign_component-version.md" >}}).
 The signer configures only the algorithm and encoding policy; credentials are always resolved separately from the credentials configuration.
 Give the entry a `signature` field to apply it to that one signature only, matching the `--signature` flag; without it the entry applies to every signature.
 The same entry carries the verification side under its `verifier` field, read by `ocm verify` (see the [CLI reference]({{< relref "/docs/reference/ocm-cli/ocm_verify_component-version.md" >}})).
@@ -401,7 +401,7 @@ The signer authenticates to an OIDC identity provider; Fulcio binds that identit
 | Audit trail | Build your own | Build your own | Built-in (Rekor) |
 | Recommended for | Simple setups, personal projects | Enterprise environments with existing PKI | Teams that want to skip key management entirely |
 
-For hands-on steps, see [Tutorial: Plain Signatures]({{< relref "docs/tutorials/signing/plain.md" >}}) and [Tutorial: Certificate Chains (PEM)]({{< relref "docs/tutorials/signing/pem.md" >}}).
+For hands-on steps, see [Tutorial: Plain Signatures]({{< relref "docs/guides/sign/sign-with-plain-rsa.md" >}}) and [Tutorial: Certificate Chains (PEM)]({{< relref "docs/guides/sign/sign-with-pem-certificate-chain.md" >}}).
 
 ## RFC 3161 Timestamping
 
@@ -452,7 +452,7 @@ flowchart TB
    The label is not signing-relevant, so the component digest stays the same and references to the component as well
    as other signatures remain valid.
 3. At verification, OCM reads the TSA URL from that label and resolves the TSA's root CA certificates from the
-   credential graph via a [`TSA/v1alpha1`]({{< relref "docs/reference/credential-consumer-identities.md#tsav1alpha1" >}})
+   credential graph via a [`TSA/v1alpha1`]({{< relref "docs/reference/configuration/credential-consumer-identities.md#tsav1alpha1" >}})
    consumer identity.
 4. The token's PKCS#7 chain is verified against those roots at its GenTime, its message imprint is checked against a
    hash of the signature value, and — only when the chain is trusted — the attested time is used to validate an RSA/PEM
@@ -480,7 +480,7 @@ Verification degrades gracefully across three levels:
 ### Configuring TSA Trust
 
 TSA root certificates are configured on the **verifier** side through the credential graph, using the typed
-[`TSACredentials/v1alpha1`]({{< relref "docs/reference/credential-types.md#tsacredentialsv1alpha1" >}}) credential:
+[`TSACredentials/v1alpha1`]({{< relref "docs/reference/configuration/credential-types.md#tsacredentialsv1alpha1" >}}) credential:
 
 ```yaml
 type: generic.config.ocm.software/v1
@@ -497,8 +497,8 @@ configurations:
 ```
 
 The signing side needs no TSA credentials; the TSA is chosen with the CLI flags. For the full attribute and field
-reference, see [Consumer Identities → TSA/v1alpha1]({{< relref "docs/reference/credential-consumer-identities.md#tsav1alpha1" >}})
-and [Credential Types → TSACredentials/v1alpha1]({{< relref "docs/reference/credential-types.md#tsacredentialsv1alpha1" >}}).
+reference, see [Consumer Identities → TSA/v1alpha1]({{< relref "docs/reference/configuration/credential-consumer-identities.md#tsav1alpha1" >}})
+and [Credential Types → TSACredentials/v1alpha1]({{< relref "docs/reference/configuration/credential-types.md#tsacredentialsv1alpha1" >}}).
 
 #### Two certificates, two mechanisms
 
@@ -507,8 +507,8 @@ by the same internal CA:
 
 | Certificate | Validated when | Trusted via |
 | ----------- | -------------- | ----------- |
-| The TSA's **token-signing** cert (PKCS#7 chain over the timestamp token) | Verifying | [`TSACredentials/v1alpha1`]({{< relref "docs/reference/credential-types.md#tsacredentialsv1alpha1" >}}) `rootCertsPEM` |
-| The TSA server's **HTTPS serving** cert (the TLS connection when requesting a timestamp) | Signing | [HTTP client config]({{< relref "docs/reference/http-client-configuration.md" >}}) `rootCAsPEM` (or `insecureSkipVerify` for dev) |
+| The TSA's **token-signing** cert (PKCS#7 chain over the timestamp token) | Verifying | [`TSACredentials/v1alpha1`]({{< relref "docs/reference/configuration/credential-types.md#tsacredentialsv1alpha1" >}}) `rootCertsPEM` |
+| The TSA server's **HTTPS serving** cert (the TLS connection when requesting a timestamp) | Signing | [HTTP client config]({{< relref "docs/reference/configuration/http-client.md" >}}) `rootCAsPEM` (or `insecureSkipVerify` for dev) |
 
 `TSACredentials` roots verify the *token*, not the *connection*. To make the signer trust a private TSA's HTTPS
 serving certificate, add its CA to the HTTP client configuration
@@ -521,10 +521,10 @@ For the complete trust analysis and design rationale, see ADR 0032 (RFC 3161 Tim
 
 ## Next Steps
 
-- [How-to: Generate Signing Keys]({{< relref "generate-signing-keys.md" >}}) - Step-by-step creating RSA key pairs.
-- [How-to: Configure Signing Credentials]({{< relref "configure-signing-credentials.md" >}}) - Set up OCM to use your keys for signing and verification
-- [How-to: Sign a Component Version]({{< relref "sign-component-version.md" >}}) - Step-by-step signing instructions
-- [How-to: Verify a Component Version]({{< relref "verify-component-version.md" >}}) - Step-by-step verification instructions
+- [Guides: Generate Signing Keys]({{< relref "generate-signing-keys.md" >}}) - Step-by-step creating RSA key pairs.
+- [Guides: Configure Signing Credentials]({{< relref "configure-signing-credentials.md" >}}) - Set up OCM to use your keys for signing and verification
+- [Guides: Sign a Component Version]({{< relref "docs/guides/sign/_index.md" >}}) - Step-by-step signing instructions
+- [Guides: Verify a Component Version]({{< relref "docs/guides/sign/_index.md#verify-a-signature" >}}) - Step-by-step verification instructions
 
 ## Related Documentation
 
