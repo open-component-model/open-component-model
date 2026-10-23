@@ -53,8 +53,9 @@ var (
 	}{}))
 )
 
-// unwrapNopClosers strips any number of io.NopCloser layers, the same way
-// net/http looks through a single one to detect its built-in body types.
+// unwrapNopClosers strips any number of io.NopCloser layers. io.NopCloser's
+// types are unexported, so reflection is the only way to see through them;
+// net/http (transfer.go unwrapNopCloser) and oras-go use the same technique.
 func unwrapNopClosers(r io.Reader) io.Reader {
 	for {
 		switch reflect.TypeOf(r) {
