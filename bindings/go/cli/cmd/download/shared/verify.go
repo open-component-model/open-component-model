@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	"ocm.software/open-component-model/bindings/go/ctf"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	ocilayout "ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	ocitar "ocm.software/open-component-model/bindings/go/oci/tar"
@@ -53,18 +54,33 @@ func VerifyResourceContent(ctx context.Context, res *descriptor.Resource, data b
 }
 
 func isOCILayout(data blob.ReadOnlyBlob) bool {
+	mediaType, ok := blobMediaType(data)
+	return ok && ocilayout.IsOCILayoutMediaType(mediaType)
+}
+
+func blobMediaType(data blob.ReadOnlyBlob) (string, bool) {
 	aware, ok := data.(blob.MediaTypeAware)
 	if !ok {
-		return false
+		return "", false
 	}
-	mediaType, ok := aware.MediaType()
-	return ok && ocilayout.IsOCILayoutMediaType(mediaType)
+	return aware.MediaType()
 }
 
 func verifyOCILayout(ctx context.Context, data blob.ReadOnlyBlob, expected *descriptor.Digest) (err error) {
 	want, err := repository.ParseDigest(expected)
 	if err != nil {
 		return err
+	}
+	// OCM v1 stores OCI artifacts in local blobs as artifact sets.
+	if mediaType, ok := blobMediaType(data); ok && ctf.IsArtifactSetMediaType(mediaType) {
+		main, err := ocitar.VerifyArtifactSet(ctx, data)
+		if err != nil {
+			return err
+		}
+		if main.Digest != want {
+			return fmt.Errorf("OCI artifact digest mismatch: expected %s, got %s", want, main.Digest)
+		}
+		return nil
 	}
 	store, err := ocitar.ReadOCILayout(ctx, data)
 	if err != nil {

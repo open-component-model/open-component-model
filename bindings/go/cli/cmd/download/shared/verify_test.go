@@ -114,7 +114,7 @@ func TestVerifyResourceContent_V1ArtifactSet(t *testing.T) {
 				ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "chart", Version: "1.0.0"}},
 				Digest:      &descriptor.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: "ociArtifactDigest/v1", Value: tc.value},
 			}
-			_, err := shared.VerifyResourceContent(t.Context(), res, inmemory.New(bytes.NewReader(data)))
+			_, err := shared.VerifyResourceContent(t.Context(), res, inmemory.New(bytes.NewReader(data), inmemory.WithMediaType("application/vnd.oci.image.manifest.v1+tar+gzip")))
 			if tc.wantErr != "" {
 				r.ErrorContains(err, tc.wantErr)
 				return

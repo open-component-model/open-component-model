@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"maps"
 
 	"github.com/opencontainers/go-digest"
@@ -93,37 +92,15 @@ func ResourceLocalBlob(ctx context.Context, storage content.Storage, b *ociblob.
 		if err != nil {
 			return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to buffer artifact set: %w", err)
 		}
-		root, err := artifactSetRoot(ctx, buffered)
+		// The resource digest describes the main artifact; the artifact set is packed as it is.
+		main, err := tar.VerifyArtifactSet(ctx, buffered)
 		if err != nil {
 			return ociImageSpecV1.Descriptor{}, err
 		}
-		return resourceLocalBlobOCILayer(ctx, storage, buffered, access, opts, root)
+		return resourceLocalBlobOCILayer(ctx, storage, buffered, access, opts, main.Digest)
 	}
 
 	return ResourceLocalBlobOCILayer(ctx, storage, b, access, opts)
-}
-
-// artifactSetRoot returns the main manifest of an OCM v1 artifact set, which its resource digest
-// describes, after checking every blob the manifest references. The artifact set itself is packed
-// as it is.
-func artifactSetRoot(ctx context.Context, b *ociblob.ArtifactBlob) (digest.Digest, error) {
-	store, err := tar.ReadOCILayout(ctx, b)
-	if err != nil {
-		return "", fmt.Errorf("failed to read artifact set: %w", err)
-	}
-	defer func() {
-		if err := store.Close(); err != nil {
-			slog.WarnContext(ctx, "failed to close artifact set", "err", err)
-		}
-	}()
-	mains := store.MainArtifacts(ctx)
-	if len(mains) != 1 {
-		return "", fmt.Errorf("expected exactly one main artifact in artifact set, got %d", len(mains))
-	}
-	if err := tar.VerifyGraph(ctx, store, mains[0]); err != nil {
-		return "", fmt.Errorf("failed to verify artifact set: %w", err)
-	}
-	return mains[0].Digest, nil
 }
 
 func ResourceLocalBlobOCILayer(ctx context.Context, storage content.Storage, b *ociblob.ArtifactBlob, access *v2.LocalBlob, opts Options) (ociImageSpecV1.Descriptor, error) {
