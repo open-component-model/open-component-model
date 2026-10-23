@@ -1,6 +1,6 @@
 ---
 title: Component Descriptor
-description: "Reference documentation for the OCM Component Descriptor format (v2, JSON Schema 2020-12)."
+description: "Reference documentation for the OCM Component Descriptor format (v2, JSON Schema 2020-12): all fields, types, and validation rules."
 weight: 2
 toc: false
 aliases:

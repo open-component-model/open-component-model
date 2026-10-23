@@ -1,6 +1,6 @@
 ---
 title: "Resolver"
-description: "Complete reference for OCM resolver configuration: schema, repository types, and component name patterns."
+description: "Complete reference for OCM resolver configuration: schema, supported repository types, and component name pattern-to-repository mappings."
 icon: "🔍"
 weight: 6
 toc: true

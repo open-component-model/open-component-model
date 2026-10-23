@@ -1,6 +1,6 @@
 ---
 title: "Add Resources from GitHub"
-description: "Add the source archive of a GitHub commit to a component version with the GitHub access type."
+description: "Add the source archive of a GitHub commit to a component version using the GitHub access type: credentials, tags, and commit references."
 weight: 10
 toc: true
 aliases:

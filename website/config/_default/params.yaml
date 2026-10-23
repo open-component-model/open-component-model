@@ -106,6 +106,16 @@ seo:
   title:
     separator: " | "
     suffix: ""
+  description:
+    # Suppress length warnings for pages in main that have no editable markdown source:
+    # - auto-generated taxonomy/term pages (tags, categories, contributors)
+    # - CLI reference (short descriptions are intentional: they feed cobra --help output)
+    # Frozen versioned snapshots are suppressed globally in layouts/_partials/seo/description.html.
+    lengthIgnores:
+      - "/tags"
+      - "/categories"
+      - "/contributors"
+      - "/docs/reference/ocm-cli"
   favicons:
     sizes: []
     icon: favicon.png # favicon.png (default)

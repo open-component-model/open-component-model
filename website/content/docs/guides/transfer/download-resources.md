@@ -1,6 +1,6 @@
 ---
 title: "Download Resources"
-description: "Extract resources from OCM component versions to your local filesystem."
+description: "Extract resources from OCM component versions to your local filesystem using the CLI: select by type, identity, and version constraints."
 icon: "📥"
 weight: 60
 toc: true

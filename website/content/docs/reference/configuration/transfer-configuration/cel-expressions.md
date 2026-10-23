@@ -1,6 +1,6 @@
 ---
 title: "CEL Expressions"
-description: "Reference for the CEL expressions in match, target URL, header, path and imageReference fields of uploaders."
+description: "Reference for CEL expressions used in uploader configurations: match, target URL, header, path, and imageReference fields explained."
 weight: 8
 toc: true
 aliases:
