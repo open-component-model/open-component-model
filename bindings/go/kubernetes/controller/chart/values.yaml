@@ -38,6 +38,13 @@ manager:
     subscriberBufferSize: 100
     # -- The time-to-live (TTL) for the resolver cache entries in minutes. Setting TTL to less than 30 minutes is discouraged in productive use as it can lead to unintended performance issues.
     cacheTTL: 30
+  ## Workqueue rate limiter, applied to every controller separately.
+  ## New objects pass through it once, and so do retries after an error.
+  rateLimiter:
+    # -- Requeues per second a controller admits once the burst is used up. Must be at least 1.
+    qps: 10 # @schema minimum:1
+    # -- Requeues a controller admits at once before qps applies. Must be at least 1.
+    burst: 100 # @schema minimum:1
   ## Cache settings
   cache:
     # -- Maximum size of the deployer download object LRU cache

@@ -8,14 +8,11 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
-	"time"
 
 	"github.com/go-logr/logr"
-	"golang.org/x/time/rate"
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -141,10 +138,7 @@ func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) err
 		Watches(&v1alpha1.Resource{}, handler.EnqueueRequestsFromMapFunc(r.mapToDeletingComponent)).
 		Watches(&v1alpha1.Discovery{}, handler.EnqueueRequestsFromMapFunc(r.mapToDeletingComponent)).
 		WithOptions(controller.Options{
-			RateLimiter: workqueue.NewTypedMaxOfRateLimiter(
-				workqueue.NewTypedItemExponentialFailureRateLimiter[reconcile.Request](5*time.Millisecond, 5*time.Minute),
-				&workqueue.TypedBucketRateLimiter[reconcile.Request]{Limiter: rate.NewLimiter(10, 100)},
-			),
+			RateLimiter: r.RateLimit.Limiter(),
 		}).
 		Complete(r)
 }

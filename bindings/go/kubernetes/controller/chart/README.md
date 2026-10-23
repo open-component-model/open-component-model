@@ -92,6 +92,8 @@ Kubernetes: `>=1.26.0-0`
 | manager.networkPolicy.ingress | list | `[]` | Extra ingress rules appended after the default rule, which admits the health-probe port and, if enabled, the metrics and webhook ports |
 | manager.nodeSelector | object | `{}` | Node selector for pod scheduling |
 | manager.podSecurityContext | object | `{"runAsGroup":65532,"runAsNonRoot":true,"runAsUser":65532,"seccompProfile":{"type":"RuntimeDefault"}}` | Pod-level security context |
+| manager.rateLimiter.burst | int | `100` | Requeues a controller admits at once before qps applies. Must be at least 1. |
+| manager.rateLimiter.qps | int | `10` | Requeues per second a controller admits once the burst is used up. Must be at least 1. |
 | manager.readinessProbe.initialDelaySeconds | int | `5` | Initial delay before starting readiness probes |
 | manager.readinessProbe.path | string | `"/readyz"` | Path for the readiness probe |
 | manager.readinessProbe.periodSeconds | int | `10` | Period between readiness probes |

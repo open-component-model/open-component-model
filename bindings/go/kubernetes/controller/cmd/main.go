@@ -84,6 +84,7 @@ func main() {
 		resolverWorkerQueueLength int
 		resolverSubscriberBuffer  int
 		resolverCacheTTL          int
+		rateLimit                 ocm.RateLimit
 		enableDeployer            bool
 		enableNamespacedDeployer  bool
 	)
@@ -117,6 +118,12 @@ func main() {
 			"Tune upward if the resolver_event_channel_drops_total metric is non-zero.")
 	flag.IntVar(&resolverCacheTTL, "resolver-cache-ttl", 30, //nolint:mnd // no magic number
 		"The time-to-live (TTL) for the resolver cache entries in minutes. Setting TTL to less than 30 minutes is discouraged in productive use as it can lead to unintended performance issues.")
+	flag.Float64Var(&rateLimit.QPS, "reconcile-rate-limit-qps", ocm.DefaultRateLimitQPS,
+		"Requeues per second each controller admits once the burst is used up. "+
+			"New objects pass through it once, and so do retries after an error, so a higher value also speeds up retries. "+
+			"Must be at least 1.")
+	flag.IntVar(&rateLimit.Burst, "reconcile-rate-limit-burst", ocm.DefaultRateLimitBurst,
+		"Requeues each controller admits at once before reconcile-rate-limit-qps applies.")
 
 	flag.BoolVar(&enableDeployer, "enable-deployer", true,
 		"Run the controller for the cluster-scoped Deployer.")
@@ -160,6 +167,13 @@ func main() {
 	}
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+
+	// A qps of 0 would stop a controller for good once its burst is used up.
+	if rateLimit.QPS < 1 || rateLimit.Burst < 1 {
+		setupLog.Error(nil, "invalid flag value", "reconcile-rate-limit-qps", rateLimit.QPS, "reconcile-rate-limit-burst", rateLimit.Burst,
+			"reason", "qps must be >= 1 and burst >= 1")
+		os.Exit(1)
+	}
 	setupLog.Info("FIPS 140-3 mode", "enabled", fips140.Enabled(), "module", fips140.Version())
 
 	ctx := context.Background()
@@ -259,6 +273,7 @@ func main() {
 			Scheme:           mgr.GetScheme(),
 			EventRecorder:    eventsRecorder,
 			NewPluginManager: newPluginManager,
+			RateLimit:        rateLimit,
 		},
 		Resolver: resolver,
 	}).SetupWithManager(ctx, mgr); err != nil {
@@ -271,6 +286,7 @@ func main() {
 			Scheme:           mgr.GetScheme(),
 			EventRecorder:    eventsRecorder,
 			NewPluginManager: newPluginManager,
+			RateLimit:        rateLimit,
 		},
 		Resolver: resolver,
 	}).SetupWithManager(ctx, mgr); err != nil {
@@ -284,6 +300,7 @@ func main() {
 			Scheme:           mgr.GetScheme(),
 			EventRecorder:    eventsRecorder,
 			NewPluginManager: newPluginManager,
+			RateLimit:        rateLimit,
 		},
 		Resolver: resolver,
 	}).SetupWithManager(ctx, mgr, resourceConcurrency); err != nil {
@@ -297,6 +314,7 @@ func main() {
 			Scheme:           mgr.GetScheme(),
 			EventRecorder:    eventsRecorder,
 			NewPluginManager: newPluginManager,
+			RateLimit:        rateLimit,
 		},
 		Resolver:         resolver,
 		RepositoryScheme: ocirepository.Scheme,
@@ -311,6 +329,7 @@ func main() {
 			Scheme:           mgr.GetScheme(),
 			EventRecorder:    eventsRecorder,
 			NewPluginManager: newPluginManager,
+			RateLimit:        rateLimit,
 		},
 	}).SetupWithManager(ctx, mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Discovery")
@@ -338,6 +357,7 @@ func main() {
 				Scheme:           mgr.GetScheme(),
 				EventRecorder:    eventsRecorder,
 				NewPluginManager: newPluginManager,
+				RateLimit:        rateLimit,
 			},
 			Namespaced:           d.namespaced,
 			DownloadCache:        downloadCache,

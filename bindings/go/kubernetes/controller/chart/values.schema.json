@@ -185,6 +185,19 @@
                         }
                     }
                 },
+                "rateLimiter": {
+                    "type": "object",
+                    "properties": {
+                        "burst": {
+                            "type": "integer",
+                            "minimum": 1
+                        },
+                        "qps": {
+                            "type": "integer",
+                            "minimum": 1
+                        }
+                    }
+                },
                 "readinessProbe": {
                     "type": "object",
                     "properties": {
