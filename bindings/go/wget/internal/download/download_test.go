@@ -500,6 +500,36 @@ func TestDownload_EmptyContentIsVerifiedOnClose(t *testing.T) {
 	r.ErrorContains(rc.Close(), "rejected")
 }
 
+// TestDownload_PartlyReadContentIsVerifiedOnClose asserts that a consumer
+// stopping before the end of the body cannot skip the verifier.
+func TestDownload_PartlyReadContentIsVerifiedOnClose(t *testing.T) {
+	t.Parallel()
+	content := []byte("partly read content")
+
+	for _, chunked := range []bool{false, true} {
+		t.Run(fmt.Sprintf("chunked=%t", chunked), func(t *testing.T) {
+			t.Parallel()
+			r := require.New(t)
+			var computed download.Computed
+			b, err := download.Download(t.Context(), download.Request{URL: serveBody(t, content, chunked).URL},
+				download.WithDigestAlgorithms(download.DigestAlgorithm{Name: "sha256", New: sha256.New}),
+				download.WithVerifier(func(_ http.Header, c download.Computed) error {
+					computed = c
+					return errors.New("rejected")
+				}))
+			r.NoError(err)
+
+			rc, err := b.ReadCloser()
+			r.NoError(err)
+			_, err = io.ReadFull(rc, make([]byte, 5))
+			r.NoError(err)
+			r.ErrorContains(rc.Close(), "rejected")
+			sum := sha256.Sum256(content)
+			r.Equal(hex.EncodeToString(sum[:]), computed.Content["sha256"], "the verifier must see the whole body")
+		})
+	}
+}
+
 func TestDownload_Size(t *testing.T) {
 	t.Parallel()
 	content := []byte("sized content")

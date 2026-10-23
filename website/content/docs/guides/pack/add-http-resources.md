@@ -479,6 +479,10 @@ configurations:
 See [HTTP Client Configuration]({{< relref "docs/reference/configuration/http-client.md" >}}) for the full schema,
 defaults, and how per-host settings are merged.
 
+Because the body is streamed, a per-host `timeout` on the source host covers reading the whole body, and that read runs
+for as long as the target takes to store or upload it. When you transfer a large file to a slow target, set the
+source host's `timeout` high enough for the entire transfer, not just the download.
+
 ## Verifying downloads against the source {#checksum-verification}
 
 A pinned resource `digest` protects consumers after the build, but the first
