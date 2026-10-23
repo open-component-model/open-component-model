@@ -1,6 +1,7 @@
 package signing
 
 import (
+	"bytes"
 	"crypto"
 	"encoding/hex"
 	"log/slog"
@@ -11,6 +12,8 @@ import (
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation"
 	v1 "ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v1"
 	v4alpha1 "ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
+	v4alpha2 "ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha2"
+	v4alpha3 "ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha3"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -50,8 +53,8 @@ func TestSigningBoundary_JSONNormalisationV1(t *testing.T) {
 
 	// Minting a new v1 signature is refused at the signing boundary.
 	r.ErrorIs(EnsureSignable(v1.Algorithm), ErrSigningUnsupported)
-	// A current algorithm is signable.
-	r.NoError(EnsureSignable(v4alpha1.Algorithm))
+	// The current default algorithm is signable.
+	r.NoError(EnsureSignable(v4alpha3.Algorithm))
 
 	// GenerateDigest is a neutral compute step shared with verification, so it
 	// must resolve v1 rather than block it.
@@ -73,6 +76,51 @@ func TestSigningBoundary_JSONNormalisationV1(t *testing.T) {
 		Value:                  gen.Value,
 	}}
 	r.NoError(VerifyDigestMatchesDescriptor(t.Context(), desc, sig, logger))
+}
+
+// TestEnsureSignable_OnlyV1Rejected locks the signing boundary policy: only
+// jsonNormalisation/v1 is verify-only and refused for new signatures. The v4
+// alphas — v4alpha1, v4alpha2 and the jsonNormalisation/v3 alias — stay signable
+// for backward compatibility (they are merely discouraged; see
+// WarnDiscouragedNormalisation), alongside the current default v4alpha3.
+func TestEnsureSignable_OnlyV1Rejected(t *testing.T) {
+	r := require.New(t)
+
+	r.ErrorIs(EnsureSignable(v1.Algorithm), ErrSigningUnsupported, "v1 must be verify-only")
+
+	for _, algo := range []string{
+		v4alpha1.Algorithm,
+		v4alpha2.Algorithm,
+		v4alpha3.Algorithm,
+		LegacyNormalisationAlgo,
+	} {
+		r.NoError(EnsureSignable(algo), "%s must remain signable", algo)
+	}
+
+	r.Equal(v4alpha3.Algorithm, DefaultNormalisationAlgorithm, "the signing default must be v4alpha3")
+}
+
+// TestWarnDiscouragedNormalisation checks the signing boundary warns when a new
+// signature is minted with a non-default normalisation algorithm, and stays
+// silent for the default v4alpha3.
+func TestWarnDiscouragedNormalisation(t *testing.T) {
+	r := require.New(t)
+
+	warnFor := func(algo string) string {
+		var buf bytes.Buffer
+		logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn}))
+		WarnDiscouragedNormalisation(t.Context(), logger, algo)
+		return buf.String()
+	}
+
+	r.Empty(warnFor(v4alpha3.Algorithm), "the default must not warn")
+
+	for _, algo := range []string{v4alpha1.Algorithm, v4alpha2.Algorithm, LegacyNormalisationAlgo} {
+		out := warnFor(algo)
+		r.Contains(out, "level=WARN", "%s must warn", algo)
+		r.Contains(out, algo, "warning must name the chosen algorithm %s", algo)
+		r.Contains(out, v4alpha3.Algorithm, "warning must recommend v4alpha3")
+	}
 }
 
 // TestSentinelAccepted_JSONNormalisationV1 confirms a resource whose content is

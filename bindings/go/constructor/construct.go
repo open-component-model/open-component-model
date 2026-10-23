@@ -19,7 +19,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/dag"
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation"
-	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
+	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha3"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/repository"
@@ -693,18 +693,31 @@ func (c *DefaultConstructor) processReference(ctx context.Context, reference *co
 	)
 	logger.Debug("processing reference")
 
-	referencedComponentDigest, err := c.getComponentDigest(ctx, reference.ToComponentIdentity().String(), referencedComponent)
+	// Choose the normalisation algorithm for the reference digest. A reference
+	// without a digest is minted with the current default (v4alpha3) so a parent
+	// signed with the default covers the child's versioned signing labels. A
+	// reference that already carries a digest keeps its recorded normalisation
+	// algorithm: we recompute under THAT algorithm only to verify the referenced
+	// component matches, and never rewrite an existing child's digest to the
+	// default.
+	normalisationAlgorithm := v4alpha3.Algorithm
+	if reference.Digest != nil {
+		if reference.Digest.HashAlgorithm == "" || reference.Digest.NormalisationAlgorithm == "" || reference.Digest.Value == "" {
+			return nil, fmt.Errorf("reference %q has an incomplete digest: all of hashAlgorithm, normalisationAlgorithm, and value must be set", reference.ToIdentity())
+		}
+		normalisationAlgorithm = reference.Digest.NormalisationAlgorithm
+	}
+
+	referencedComponentDigest, err := c.getComponentDigest(ctx, reference.ToComponentIdentity().String(), referencedComponent, normalisationAlgorithm)
 	if err != nil {
 		return nil, fmt.Errorf("error getting digest for referenced component %q: %w", reference.ToIdentity(), err)
 	}
 
 	ref := constructor.ConvertToDescriptorReference(reference)
 
-	// If digest is specified in the constructor reference, verify it matches the calculated digest
+	// If a digest is specified in the constructor reference, verify it matches
+	// the digest calculated under its own normalisation algorithm.
 	if reference.Digest != nil {
-		if reference.Digest.HashAlgorithm == "" || reference.Digest.NormalisationAlgorithm == "" || reference.Digest.Value == "" {
-			return nil, fmt.Errorf("reference %q has an incomplete digest: all of hashAlgorithm, normalisationAlgorithm, and value must be set", reference.ToIdentity())
-		}
 		if reference.Digest.HashAlgorithm != referencedComponentDigest.HashAlgorithm ||
 			reference.Digest.NormalisationAlgorithm != referencedComponentDigest.NormalisationAlgorithm ||
 			reference.Digest.Value != referencedComponentDigest.Value {
@@ -735,33 +748,37 @@ func (c *DefaultConstructor) processReference(ctx context.Context, reference *co
 // We want this operation to be atomar, to avoid concurrent calls for the
 // same component to have cache misses. That would lead to multiple
 // calculations of the same digest.
-func (c *DefaultConstructor) getComponentDigest(ctx context.Context, componentIdentity string, referencedComponent *descriptor.Descriptor) (*descriptor.Digest, error) {
+func (c *DefaultConstructor) getComponentDigest(ctx context.Context, componentIdentity string, referencedComponent *descriptor.Descriptor, normalisationAlgorithm string) (*descriptor.Digest, error) {
 	c.componentDigestCacheMu.Lock()
 	defer c.componentDigestCacheMu.Unlock()
 
-	if componentDigest, cached := c.componentDigestCache[componentIdentity]; cached {
-		slog.DebugContext(ctx, "component digest found in cache", "component", componentIdentity)
+	// The same component may be digested under different normalisation algorithms
+	// (e.g. one reference pins v4alpha1 while another mints the v4alpha3 default),
+	// so the cache key includes the algorithm.
+	cacheKey := componentIdentity + "@" + normalisationAlgorithm
+	if componentDigest, cached := c.componentDigestCache[cacheKey]; cached {
+		slog.DebugContext(ctx, "component digest found in cache", "component", componentIdentity, "normalisationAlgorithm", normalisationAlgorithm)
 		return componentDigest, nil
 	}
-	slog.DebugContext(ctx, "component digest not found in cache", "component", componentIdentity)
+	slog.DebugContext(ctx, "component digest not found in cache", "component", componentIdentity, "normalisationAlgorithm", normalisationAlgorithm)
 
-	componentDigest, err := calculateDigest(referencedComponent)
+	componentDigest, err := calculateDigest(referencedComponent, normalisationAlgorithm)
 	if err != nil {
 		return nil, fmt.Errorf("failed to calculate digest: %w", err)
 	}
-	c.componentDigestCache[componentIdentity] = componentDigest
+	c.componentDigestCache[cacheKey] = componentDigest
 	return componentDigest, nil
 }
 
-func calculateDigest(component *descriptor.Descriptor) (*descriptor.Digest, error) {
-	normalisedData, err := normalisation.Normalisations.Normalise(component, v4alpha1.Algorithm)
+func calculateDigest(component *descriptor.Descriptor, normalisationAlgorithm string) (*descriptor.Digest, error) {
+	normalisedData, err := normalisation.Normalisations.Normalise(component, normalisationAlgorithm)
 	if err != nil {
 		return nil, fmt.Errorf("error normalising descriptor %s: %w", component.Component.ToIdentity().String(), err)
 	}
 
 	return &descriptor.Digest{
 		HashAlgorithm:          crypto.SHA256.String(),
-		NormalisationAlgorithm: v4alpha1.Algorithm,
+		NormalisationAlgorithm: normalisationAlgorithm,
 		Value:                  digest.SHA256.FromBytes(normalisedData).Encoded(),
 	}, nil
 }

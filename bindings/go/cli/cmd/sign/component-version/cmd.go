@@ -20,7 +20,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/cli/internal/repository/ocm"
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
-	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	ocmhttp "ocm.software/open-component-model/bindings/go/http"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
@@ -79,7 +78,7 @@ func New() *cobra.Command {
 
 - Prefixes: {%[1]s|none} (default: %[1]q)  
 - Repo types: {%[2]s} (short: {%[3]s})  
-- Digest: optional pin (see "ocm get cv --help"), "@sha256:<hex>" (OCI digest of the artifact the component version is stored as; the version may be omitted) or "@jsonNormalisation.v4alpha1+sha256:<hex>" (normalized: the digest signatures sign); the command fails unless the component version matches it. The signed component version is written to its version tag; with an OCI digest pin, signing fails if the tag no longer resolves to the pinned artifact, rather than overwriting it
+- Digest: optional pin (see "ocm get cv --help"), "@sha256:<hex>" (OCI digest of the artifact the component version is stored as; the version may be omitted) or "@jsonNormalisation.v4alpha3+sha256:<hex>" (normalized: the digest signatures sign); the command fails unless the component version matches it. The signed component version is written to its version tag; with an OCI digest pin, signing fails if the tag no longer resolves to the pinned artifact, rather than overwriting it
 
 ## OCM Signing explained in simple steps
 
@@ -276,7 +275,7 @@ sign component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0 --s
 	cmd.Flags().String(FlagSignature, DefaultSignatureName, "name of the signature to create or update. defaults to \"default\"")
 	cmd.Flags().String(FlagSignerSpec, "", fmt.Sprintf("DEPRECATED: no longer supported, configure the signer in the OCM configuration instead (%s, field \"signer\")", signingConfigType))
 	cmd.Flags().Bool(FlagDryRun, false, "compute signature but do not persist it to the repository")
-	cmd.Flags().String(FlagNormalisationAlgorithm, v4alpha1.Algorithm, "normalisation algorithm to use (default jsonNormalisation/v4alpha1; jsonNormalisation/v1 is legacy and verify-only, it is rejected for signing)")
+	cmd.Flags().String(FlagNormalisationAlgorithm, signing.DefaultNormalisationAlgorithm, fmt.Sprintf("normalisation algorithm to use for new signatures (default %s, which signs label.version and filters reference labels signing-only; jsonNormalisation/v1 is legacy and verify-only, rejected for signing; v4alpha1 (drops label.version, reference labels unfiltered) and v4alpha2 (keeps label.version, reference labels unfiltered, = legacy v3) remain signable but are discouraged and warn)", signing.DefaultNormalisationAlgorithm))
 	cmd.Flags().String(FlagHashAlgorithm, crypto.SHA256.String(), "hash algorithm to use (SHA256, SHA512)")
 	cmd.Flags().Bool(FlagForce, false, "overwrite existing signatures under the same name")
 	cmd.Flags().Bool(FlagTSA, false, fmt.Sprintf("request an RFC 3161 timestamp from a TSA server (default: %s); not supported for Sigstore signers", DefaultTSAURL))
@@ -398,6 +397,7 @@ func SignComponentVersion(cmd *cobra.Command, args []string) error {
 	if err := signing.EnsureSignable(normalisationAlgorithm); err != nil {
 		return fmt.Errorf("cannot sign component version: %w", err)
 	}
+	signing.WarnDiscouragedNormalisation(ctx, logger, normalisationAlgorithm)
 	unsignedDigest, err := signing.GenerateDigest(
 		ctx, desc, logger,
 		normalisationAlgorithm,
