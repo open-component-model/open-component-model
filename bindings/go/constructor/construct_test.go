@@ -16,6 +16,7 @@ import (
 	constructorv1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
 	"ocm.software/open-component-model/bindings/go/dag"
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
+	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha3"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
@@ -688,7 +689,7 @@ components:
 		t.Helper()
 		referenced := descMap[referencedComponentName]
 		require.NotNil(t, referenced)
-		digest, err := calculateDigest(referenced)
+		digest, err := calculateDigest(referenced, v4alpha3.Algorithm)
 		require.NoError(t, err)
 		return *digest
 	}
@@ -952,4 +953,67 @@ components:
 
 	// The component version is added only after successful validation.
 	assert.Empty(t, repo.addedVersions, "no component version should be added when a resource version is invalid")
+}
+
+// TestProcessReference_DigestAlgorithmSelection pins the reference-digest
+// normalisation policy for `ocm add cv`: a reference without a digest is minted
+// with the current default (v4alpha3) so a parent signed with the default covers
+// the child's versioned signing labels, while a reference that already carries a
+// digest keeps its own recorded algorithm (we recompute under it only to verify,
+// never rewrite an existing child's digest to the default).
+func TestProcessReference_DigestAlgorithmSelection(t *testing.T) {
+	r := require.New(t)
+	c := &DefaultConstructor{componentDigestCache: make(map[string]*descriptor.Digest)}
+
+	child := &descriptor.Descriptor{
+		Component: descriptor.Component{
+			ComponentMeta: descriptor.ComponentMeta{
+				ObjectMeta: descriptor.ObjectMeta{
+					Name:    "ocm.software/child",
+					Version: "1.0.0",
+					// A versioned signing label makes v4alpha1 (drops version) and
+					// v4alpha3 (keeps version) produce different bytes, so the test
+					// proves the pinned algorithm is honoured rather than coinciding.
+					Labels: []descriptor.Label{{Name: "sig", Value: []byte(`"v"`), Signing: true, Version: "v1"}},
+				},
+			},
+			Provider: descriptor.Provider{Name: "ocm.software"},
+		},
+	}
+	mkRef := func(dig *constructorruntime.Digest) *constructorruntime.Reference {
+		return &constructorruntime.Reference{
+			ElementMeta: constructorruntime.ElementMeta{
+				ObjectMeta: constructorruntime.ObjectMeta{Name: "child", Version: "1.0.0"},
+			},
+			Component: "ocm.software/child",
+			Digest:    dig,
+		}
+	}
+
+	// No supplied digest -> minted with the default (v4alpha3).
+	got, err := c.processReference(t.Context(), mkRef(nil), child)
+	r.NoError(err)
+	r.Equal(v4alpha3.Algorithm, got.Digest.NormalisationAlgorithm)
+
+	// A reference pinned with a valid v4alpha1 digest is verified under v4alpha1
+	// and kept as v4alpha1 (not rewritten to the default).
+	v1dig, err := calculateDigest(child, v4alpha1.Algorithm)
+	r.NoError(err)
+	r.NotEqual(got.Digest.Value, v1dig.Value, "v4alpha1 and v4alpha3 must differ for this child or the test proves nothing")
+	gotPinned, err := c.processReference(t.Context(), mkRef(&constructorruntime.Digest{
+		HashAlgorithm:          v1dig.HashAlgorithm,
+		NormalisationAlgorithm: v4alpha1.Algorithm,
+		Value:                  v1dig.Value,
+	}), child)
+	r.NoError(err)
+	r.Equal(v4alpha1.Algorithm, gotPinned.Digest.NormalisationAlgorithm, "pinned v4alpha1 reference must keep its algorithm")
+	r.Equal(v1dig.Value, gotPinned.Digest.Value)
+
+	// A pinned digest whose value does not match the referenced component fails.
+	_, err = c.processReference(t.Context(), mkRef(&constructorruntime.Digest{
+		HashAlgorithm:          v1dig.HashAlgorithm,
+		NormalisationAlgorithm: v4alpha1.Algorithm,
+		Value:                  "deadbeef",
+	}), child)
+	r.ErrorIs(err, ErrDigestMismatch)
 }
