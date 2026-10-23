@@ -15,12 +15,11 @@ import { promisify } from "node:util";
  * container and no docker socket. The digest-pinned base image of the image's
  * "certs" build stage is the expected source of its CA bundle.
  *
- * The entrypoint is always an allowed executable. Further executables, and
- * whether the image ships shared libraries and a dynamic loader, are declared
- * per image (see the matrix in .github/workflows/image-scan.yml), so anything
- * else that ends up in an image fails the scan.
+ * The entrypoint is always an allowed executable. Further executables are
+ * declared per image (see the matrix in .github/workflows/image-scan.yml), so
+ * any other executable, and any shared library, fails the scan.
  *
- * Locally: [EXECUTABLES="<path> ..."] [SHARED_LIBRARIES=true] \
+ * Locally: [EXECUTABLES="<path> ..."] \
  *   node .github/scripts/stig-scan.js <image> <containerfile> <output-dir>
  */
 
@@ -154,9 +153,8 @@ echo "ocm $?" >>exit
  * @param {string} out - output directory
  * @param {object} [options]
  * @param {string[]} [options.executables] - executables the image may contain besides its entrypoint
- * @param {boolean} [options.sharedLibraries] - whether the image ships shared libraries and a dynamic loader
  */
-export async function scan(image, containerfile, out, { executables = [], sharedLibraries = false } = {}) {
+export async function scan(image, containerfile, out, { executables = [] } = {}) {
     const openscap = (await readFile(path.join(repo, ".env"), "utf8")).match(/^OPENSCAP_IMAGE=(\S+)$/m)?.[1];
     if (!openscap) throw new Error(`OPENSCAP_IMAGE not set in ${repo}/.env`);
     const base = (await readFile(containerfile, "utf8")).match(/^FROM .*\s(ghcr\.io\/gardenlinux\/\S+@sha256:[a-f0-9]{64})\s+AS\s+certs$/m)?.[1];
@@ -191,8 +189,6 @@ export async function scan(image, containerfile, out, { executables = [], shared
   <version time="${new Date().toISOString().slice(0, 19)}">1</version>
   <Profile id="xccdf_software.ocm_profile_supplement-values" extends="xccdf_software.ocm_profile_supplement">
     <title>OCM GPOS SRG supplement for ${xml(image)}</title>
-    <select idref="xccdf_software.ocm_rule_no_shared_libraries" selected="${!sharedLibraries}"/>
-    <select idref="xccdf_software.ocm_rule_shared_library_permissions" selected="${sharedLibraries}"/>
     <set-value idref="xccdf_software.ocm_value_executables">${xml(allowedExecutables)}</set-value>
     <set-value idref="xccdf_software.ocm_value_expected_ca_sha256">${caSha256}</set-value>
     <set-value idref="xccdf_software.ocm_value_gofips140">${xml(settings.GOFIPS140 ?? "")}</set-value>
@@ -255,8 +251,6 @@ export async function evaluate(out) {
  * - SUMMARY_TITLE: heading of the job summary; no summary is written without it
  * - EXECUTABLES: whitespace-separated absolute paths of the executables the
  *   image may contain besides its entrypoint (optional)
- * - SHARED_LIBRARIES: "true" if the image ships shared libraries and a dynamic
- *   loader (optional, default "false")
  *
  * @param {import('@actions/github-script').AsyncFunctionArguments} args
  */
@@ -266,17 +260,12 @@ export default async function stigScanAction({ core }) {
         core.setFailed("IMAGE_REF, CONTAINERFILE and RESULTS_DIR environment variables are required");
         return;
     }
-    const sharedLibraries = process.env.SHARED_LIBRARIES || "false";
-    if (sharedLibraries !== "true" && sharedLibraries !== "false") {
-        core.setFailed(`SHARED_LIBRARIES must be "true" or "false", got "${sharedLibraries}"`);
-        return;
-    }
     const executables = (process.env.EXECUTABLES ?? "").split(/\s+/).filter(Boolean);
 
     /** @type {string[]} */
     const errors = [];
     try {
-        await scan(image, containerfile, out, { executables, sharedLibraries: sharedLibraries === "true" });
+        await scan(image, containerfile, out, { executables });
     } catch (error) {
         errors.push(`scan failed: ${error instanceof Error ? error.message : error}`);
     }
@@ -322,7 +311,7 @@ export default async function stigScanAction({ core }) {
 if (import.meta.main) {
     const [image, containerfile, out] = process.argv.slice(2);
     if (!image || !containerfile || !out) {
-        console.error('usage: [EXECUTABLES="<path> ..."] [SHARED_LIBRARIES=true] node .github/scripts/stig-scan.js <image> <containerfile> <output-dir>');
+        console.error('usage: [EXECUTABLES="<path> ..."] node .github/scripts/stig-scan.js <image> <containerfile> <output-dir>');
         process.exit(2);
     }
     Object.assign(process.env, { IMAGE_REF: image, CONTAINERFILE: containerfile, RESULTS_DIR: out });

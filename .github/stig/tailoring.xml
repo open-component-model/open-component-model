@@ -21,8 +21,8 @@
     <!-- Wolfi CA bundle digests: the bundle comes from the pinned Garden Linux image (rule ocm_rule_ca_bundle). -->
     <select idref="xccdf_mil.disa.stig_rule_SV-263659r982563_rule" selected="false"/>
     <!-- Shared library permissions and user installation of software: checked against
-         what each image declares (rules ocm_rule_no_shared_libraries or
-         ocm_rule_shared_library_permissions, and ocm_rule_minimal_rootfs). -->
+         what each image contains (rules ocm_rule_no_shared_libraries and
+         ocm_rule_minimal_rootfs). -->
     <select idref="xccdf_mil.disa.stig_rule_SV-203675r991560_rule" selected="false"/>
     <select idref="xccdf_mil.disa.stig_rule_SV-203716r982210_rule" selected="false"/>
     <!-- /var/log permissions: logs go to stdout/stderr (rule ocm_rule_no_local_logs). -->

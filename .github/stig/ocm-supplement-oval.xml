@@ -38,7 +38,7 @@
     <definition class="compliance" id="oval:software.ocm:def:3" version="2">
       <metadata>
         <title>Minimal root filesystem</title>
-        <description>No package manager, no setuid/setgid files, no world-writable files or directories without the sticky bit, and no executable other than the allowed ones. Shared libraries are checked by def:5 or def:6.</description>
+        <description>No package manager, no setuid/setgid files, no world-writable files or directories without the sticky bit, and no executable other than the allowed ones. Shared libraries are ruled out by def:5.</description>
       </metadata>
       <criteria operator="AND">
         <criterion test_ref="oval:software.ocm:tst:6" comment="no package manager binaries"/>
@@ -57,16 +57,6 @@
       </metadata>
       <criteria>
         <criterion test_ref="oval:software.ocm:tst:5" comment="no shared libraries or dynamic loader"/>
-      </criteria>
-    </definition>
-    <definition class="compliance" id="oval:software.ocm:def:6" version="1">
-      <metadata>
-        <title>Shared library permissions</title>
-        <description>Shared libraries and dynamic loaders are owned by root and not writable by group or others. World-writable files are already ruled out by def:3.</description>
-      </metadata>
-      <criteria operator="AND">
-        <criterion test_ref="oval:software.ocm:tst:15" comment="no shared library owned by a user other than root"/>
-        <criterion test_ref="oval:software.ocm:tst:16" comment="no group-writable shared library"/>
       </criteria>
     </definition>
     <definition class="compliance" id="oval:software.ocm:def:4" version="1">
@@ -127,12 +117,6 @@
     <unix:file_test id="oval:software.ocm:tst:14" version="1" check="all" check_existence="none_exist" comment="log files">
       <unix:object object_ref="oval:software.ocm:obj:14"/>
     </unix:file_test>
-    <unix:file_test id="oval:software.ocm:tst:15" version="1" check="all" check_existence="none_exist" comment="shared libraries not owned by root">
-      <unix:object object_ref="oval:software.ocm:obj:15"/>
-    </unix:file_test>
-    <unix:file_test id="oval:software.ocm:tst:16" version="1" check="all" check_existence="none_exist" comment="group-writable shared libraries">
-      <unix:object object_ref="oval:software.ocm:obj:16"/>
-    </unix:file_test>
   </tests>
 
   <objects>
@@ -191,7 +175,7 @@
       <filter action="include">oval:software.ocm:ste:6</filter>
     </unix:file_object>
     <!-- Shared libraries are excluded: some are executable (the dynamic loader,
-         libc) and def:5 or def:6 checks them. -->
+         libc) and def:5 rules them out. -->
     <unix:file_object id="oval:software.ocm:obj:12" version="3" comment="executables other than the allowed ones">
       <unix:behaviors recurse_direction="down"/>
       <unix:path>/</unix:path>
@@ -209,18 +193,6 @@
       <unix:behaviors recurse_direction="down"/>
       <unix:path>/</unix:path>
       <unix:filename operation="pattern match">\.log$</unix:filename>
-    </unix:file_object>
-    <unix:file_object id="oval:software.ocm:obj:15" version="1" comment="shared libraries not owned by root">
-      <unix:behaviors recurse_direction="down"/>
-      <unix:path>/</unix:path>
-      <unix:filename operation="pattern match">\.so(\.[0-9]+)*$|^ld-(linux|musl)</unix:filename>
-      <filter action="include">oval:software.ocm:ste:12</filter>
-    </unix:file_object>
-    <unix:file_object id="oval:software.ocm:obj:16" version="1" comment="group-writable shared libraries">
-      <unix:behaviors recurse_direction="down"/>
-      <unix:path>/</unix:path>
-      <unix:filename operation="pattern match">\.so(\.[0-9]+)*$|^ld-(linux|musl)</unix:filename>
-      <filter action="include">oval:software.ocm:ste:13</filter>
     </unix:file_object>
   </objects>
 
@@ -262,14 +234,6 @@
     </ind:variable_state>
     <unix:file_state id="oval:software.ocm:ste:11" version="1" comment="shared library or dynamic loader">
       <unix:filename operation="pattern match">\.so(\.[0-9]+)*$|^ld-(linux|musl)</unix:filename>
-    </unix:file_state>
-    <unix:file_state id="oval:software.ocm:ste:12" version="1" comment="regular file not owned by root">
-      <unix:type>regular</unix:type>
-      <unix:user_id datatype="int" operation="not equal">0</unix:user_id>
-    </unix:file_state>
-    <unix:file_state id="oval:software.ocm:ste:13" version="1" comment="group-writable regular file">
-      <unix:type>regular</unix:type>
-      <unix:gwrite datatype="boolean">true</unix:gwrite>
     </unix:file_state>
     <unix:file_state id="oval:software.ocm:ste:14" version="1" comment="regular file">
       <unix:type>regular</unix:type>

@@ -47,10 +47,9 @@ jobs:
       matrix:
         image: [cli, cli-slim, controller]
         arch: [arm64, amd64]
-        # executables: what the image may contain besides its entrypoint.
-        # shared_libraries: whether it ships shared libraries and a dynamic
-        # loader. Both come from the Containerfile; the STIG scan fails on
-        # anything else, so update them together with the image.
+        # executables: what the image may contain besides its entrypoint. It
+        # comes from the Containerfile; the STIG scan fails on any other
+        # executable and on any shared library, so update it with the image.
         include:
           - image: cli
             artifact: ${{ inputs.cli_artifact }}
@@ -156,7 +155,6 @@ jobs:
           RESULTS_DIR: reports/stig
           SUMMARY_TITLE: ${{ matrix.image }} (linux/${{ matrix.arch }})
           EXECUTABLES: ${{ matrix.executables }}
-          SHARED_LIBRARIES: ${{ matrix.shared_libraries }}
         with:
           script: |
             const script = await import('${{ github.workspace }}/.github/scripts/stig-scan.js');
