@@ -18,12 +18,10 @@ COPY --from=certs /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certifica
 COPY tmp/bin/ocm-${TARGETOS}-${TARGETARCH} /ocm
 USER 65532:65532
 # WORKDIR creates missing directories owned by USER: /tmp and the default
-# cache directories under HOME=/ (Docker's HOME for a user without a passwd
-# entry): /.cache for OCM's caches and a downloaded cosign, /.sigstore for
-# cosign's trust root. Only UID 65532 can write to them.
+# cache directory under HOME=/ (Docker's HOME for a user without a passwd
+# entry), /.cache for OCM's caches. Only UID 65532 can write to them.
 WORKDIR /tmp
 WORKDIR /.cache
-WORKDIR /.sigstore
 WORKDIR /
 ENTRYPOINT ["/ocm"]
 
@@ -44,7 +42,7 @@ COPY --from=certs /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certifica
 # /ocm keeps the path of the previous scratch image for COPY --from users.
 COPY --from=slim /ocm /ocm
 USER 65532:65532
-# Writable directories as in slim.
+# Writable directories as in slim, plus /.sigstore for cosign's trust root.
 WORKDIR /tmp
 WORKDIR /.cache
 WORKDIR /.sigstore
