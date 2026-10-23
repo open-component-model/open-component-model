@@ -54,9 +54,8 @@ type CachingResolver struct {
 	cacheMu sync.RWMutex
 	cache   map[string]*remotestore.RemoteStore
 
-	// blobCache, when non-nil, is layered in front of every
-	// [*remote.Repository] this resolver hands out via
-	// [cache.Repository]. Configure via [WithBlobCache].
+	// blobCache is configured via [WithBlobCache] or
+	// [CachingResolver.SetBlobCache].
 	//
 	// Stored in an atomic.Pointer so [CachingResolver.SetBlobCache] can
 	// race with concurrent [CachingResolver.StoreForReference] calls
@@ -65,26 +64,20 @@ type CachingResolver struct {
 	// tearing is not tolerable.
 	blobCache atomic.Pointer[cache.BlobCache]
 
-	// referenceCache, when non-nil, short-circuits Resolve calls on
-	// every [*remote.Repository] this resolver hands out via
-	// [cache.Repository]. Configure via [WithReferenceCache]. Same
-	// concurrency contract as [CachingResolver.blobCache].
+	// referenceCache is configured via [WithReferenceCache] or
+	// [CachingResolver.SetReferenceCache], with the same concurrency
+	// contract as blobCache.
 	referenceCache atomic.Pointer[cache.ReferenceCache]
 }
 
-// SetBlobCache wires a manifest blob cache into the resolver. Stores
-// returned after this call (including those served from the resolver's
-// internal store cache) are wrapped with [cache.Repository] so their
-// Fetch consults the cache. Use [WithBlobCache] for the option-based
-// equivalent.
+// SetBlobCache configures manifest caching for subsequently returned stores,
+// including resolver-cache hits; see [WithBlobCache].
 func (resolver *CachingResolver) SetBlobCache(c *cache.BlobCache) {
 	resolver.blobCache.Store(c)
 }
 
-// SetReferenceCache wires a reference cache into the resolver. Stores
-// returned after this call are wrapped with [cache.Repository] so
-// their Resolve consults the cache. Use [WithReferenceCache] for the
-// option-based equivalent.
+// SetReferenceCache configures reference caching for subsequently returned
+// stores; see [WithReferenceCache].
 func (resolver *CachingResolver) SetReferenceCache(c *cache.ReferenceCache) {
 	resolver.referenceCache.Store(c)
 }
@@ -159,12 +152,7 @@ func (resolver *CachingResolver) StoreForReference(_ context.Context, reference 
 	}
 
 	if remoteStore, ok := resolver.getFromCache(key); ok {
-		blobCache := resolver.blobCache.Load()
-		refCache := resolver.referenceCache.Load()
-		if blobCache != nil || refCache != nil {
-			return cache.ProxyRepository(remoteStore.Repository, blobCache, refCache), nil
-		}
-		return remoteStore, nil
+		return cache.Wrap(remoteStore, resolver.blobCache.Load(), resolver.referenceCache.Load()), nil
 	}
 
 	repo := &remote.Repository{
@@ -194,12 +182,7 @@ func (resolver *CachingResolver) StoreForReference(_ context.Context, reference 
 	}
 	resolver.addToCache(key, store)
 
-	blobCache := resolver.blobCache.Load()
-	refCache := resolver.referenceCache.Load()
-	if blobCache != nil || refCache != nil {
-		return cache.ProxyRepository(repo, blobCache, refCache), nil
-	}
-	return store, nil
+	return cache.Wrap(store, resolver.blobCache.Load(), resolver.referenceCache.Load()), nil
 }
 
 func (resolver *CachingResolver) addToCache(reference string, store *remotestore.RemoteStore) {

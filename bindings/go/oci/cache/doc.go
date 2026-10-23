@@ -1,5 +1,5 @@
 // Package cache provides two disk-backed, TTL+LRU caches that layer
-// on top of an oras [*remote.Repository] via [Repository]:
+// on top of an oras [*remote.Repository] via [CachedStore] (see [Wrap]):
 //
 //   - [BlobCache] keys cached blobs by digest and stores each blob as
 //     a file under `<Options.Dir>/blobs/<algo>/<hex>`. Its primary
@@ -8,7 +8,7 @@
 //     reads from upstream and tees the bytes to disk; subsequent
 //     Fetches for the same digest serve the on-disk file. Push, Tag,
 //     Resolve, FetchReference, and Exists on the wrapping
-//     [Repository] are pure passthroughs.
+//     [CachedStore] are pure passthroughs.
 //
 //   - [ReferenceCache] keys cached resolves by (namespace, reference)
 //     so two repositories that happen to share a short reference
