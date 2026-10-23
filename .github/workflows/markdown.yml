@@ -6,6 +6,8 @@ on:
       - main
     paths:
       - '**/*.md'
+      - 'website/config/**'
+      - 'website/layouts/**'
       - '.github/workflows/markdown.yml'
       - '.github/config/linkspector-all.yaml'
       - '.github/config/linkspector-changed.yaml'
@@ -17,6 +19,8 @@ on:
       - website/**
     paths:
       - '**/*.md'
+      - 'website/config/**'
+      - 'website/layouts/**'
       - '.github/workflows/markdown.yml'
       - '.github/config/linkspector-all.yaml'
       - '.github/config/linkspector-changed.yaml'
@@ -241,3 +245,26 @@ jobs:
       - name: Check redirect aliases cover all previously-live URLs
         if: steps.changes.outputs.website == 'true'
         run: node .github/scripts/check-website-redirects.js
+
+  check-seo-descriptions:
+    name: Check SEO description lengths (website)
+    runs-on: ubuntu-26.04-arm
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version-file: website/package.json
+      - name: Install dependencies
+        working-directory: website
+        run: npm ci
+      - name: Build and check for description length warnings
+        working-directory: website
+        run: |
+          WARNINGS=$(npm run build 2>&1 | grep "Description t" || true)
+          if [ -n "$WARNINGS" ]; then
+            echo "SEO description length violations found:"
+            echo "$WARNINGS"
+            exit 1
+          fi
