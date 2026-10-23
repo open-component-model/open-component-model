@@ -1,12 +1,10 @@
 ---
 title: "We did a Hackathon!"
-description: "We recently partook in an adventure @ SAP Innovation Center in Potsdam where we got together and worked on several valuable project for the IPCEI-CIS initiative. Here is what we did."
+description: "Recap of the IPCEI-CIS hackathon at SAP Innovation Center in Potsdam: what the OCM team built and learned during the collaborative sprint."
 date: 2026-08-03T10:00:00+02:00
 contributors: []
 tags: ["ocm", "thalamus", "sbom", "neonephos"]
 draft: false
-seo:
-  description: "Recap of the IPCEI-CIS hackathon at SAP Innovation Center in Potsdam: what the OCM team built and learned during the collaborative sprint."
 ---
 
 ## Hackathon @ SAP Innovation Center Potsdam

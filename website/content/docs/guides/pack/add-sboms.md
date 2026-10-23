@@ -1,13 +1,11 @@
 ---
 title: "Add SBOMs"
-description: "Link an SBOM you produced to the resource it describes, and attach a component version that ships a binary and a third-party image, ready to retrieve SBOMs after transfer."
+description: "Link an SBOM to the resource it describes and attach it to a component version that ships a binary and a third-party image, ready for retrieval after transfer."
 weight: 50
 toc: true
 hasMermaid: true
 aliases:
   - /docs/tutorials/working-with-sboms/
-seo:
-  description: "Link an SBOM to the resource it describes and attach it to a component version that ships a binary and a third-party image, ready for retrieval after transfer."
 ---
 
 A component version tells you *which artifacts* you deliver. It does not tell you *what is inside* them. That answer

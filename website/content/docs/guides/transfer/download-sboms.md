@@ -1,11 +1,9 @@
 ---
 title: "Download SBOMs"
-description: "Retrieve linked and attached SBOMs from a component version with one command, collect a whole component version's SBOMs, scan them, and confirm they survive a transfer."
+description: "Retrieve linked and attached SBOMs from a component version, collect all SBOMs across a version, scan them, and confirm they survive a transfer."
 icon: "🧾"
 weight: 70
 toc: true
-seo:
-  description: "Retrieve linked and attached SBOMs from a component version, collect all SBOMs across a version, scan them, and confirm they survive a transfer."
 ---
 
 {{< callout context="caution" title="Complete the pack guide first" >}}
