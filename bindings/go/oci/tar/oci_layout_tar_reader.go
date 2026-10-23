@@ -31,7 +31,8 @@ func (s *CloseableReadOnlyStore) Close() error {
 	return nil
 }
 
-// ReadOCILayout reads an OCI layout from a tarball blob.
+// ReadOCILayout reads an OCI layout from a tarball blob. It also reads the artifact sets
+// OCM v1 stores OCI artifacts in (see artifactSetFS).
 // It detects if the blob is gzipped and decompresses it if necessary.
 // It returns a CloseableReadOnlyStore that can be used to access the OCI layout.
 // The caller is responsible for closing the store.
@@ -81,10 +82,11 @@ func ReadOCILayout(ctx context.Context, b blob.ReadOnlyBlob) (*CloseableReadOnly
 		reader = gzReader
 	}
 
-	tfs, err := tarfs.New(reader)
+	tarFS, err := tarfs.New(reader)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create tarfs: %w", err)
 	}
+	tfs := artifactSetFS{FS: tarFS}
 
 	store, err := oci.NewFromFS(ctx, tfs)
 	if err != nil {

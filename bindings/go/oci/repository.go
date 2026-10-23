@@ -360,7 +360,7 @@ func (repo *Repository) processOCIImageLayerDigest(ctx context.Context, res *des
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert digest of resource %q: %w", res.ToIdentity(), err)
 	}
-	result, err := ocmdigest.Check(res.Digest, computed, ocidigest.BlobRule, ocmdigest.Strict)
+	result, err := ocmdigest.Check(res.Digest, computed, ocidigest.BlobRule)
 	if err != nil {
 		return nil, fmt.Errorf("failed to verify digest of resource %q: %w", res.ToIdentity(), err)
 	}
@@ -427,7 +427,7 @@ func checkArtifactDigest(recorded *descriptor.Digest, root digest.Digest) (*desc
 	if err != nil {
 		return nil, err
 	}
-	result, err := ocmdigest.Check(recorded, computed, ocidigest.ArtifactRule, ocmdigest.Strict)
+	result, err := ocmdigest.Check(recorded, computed, ocidigest.ArtifactRule)
 	if errors.Is(err, ocmdigest.ErrNormalisationMismatch) {
 		return nil, fmt.Errorf("unsupported OCI artifact normalisation algorithm: %w", err)
 	}

@@ -937,6 +937,14 @@ func TestPackingPreservesResourceDigest(t *testing.T) {
 						},
 					}
 					packed, err := ArtifactBlob(t.Context(), store, b, Options{AccessScheme: scheme})
+					// A label the rule for the packed content does not know cannot be verified,
+					// so it is rejected and the recorded digest is left untouched.
+					if tc.normalization == "jsonNormalisation/v1" || (storageForm == "layer" && tc.normalization == "ociArtifactDigest/v1") {
+						r.ErrorContains(err, "normalisation algorithm mismatch")
+						r.Same(&original, resource.Digest)
+						r.Equal(before, *resource.Digest)
+						return
+					}
 					// hasDigest with no normalisation is a partially specified digest, which is
 					// rejected rather than inferred.
 					if tc.hasDigest && tc.normalization == "" {

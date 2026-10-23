@@ -38,7 +38,7 @@ func TestTransferKeepsSourceDigest(t *testing.T) {
 		wantErr string
 	}{
 		{name: "missing"},
-		{name: "partial", digest: &descriptor.Digest{HashAlgorithm: "sha256", Value: value}, wantErr: "a digest must be complete or absent"},
+		{name: "partial", digest: &descriptor.Digest{HashAlgorithm: "SHA-256", Value: value}, wantErr: "a digest must be complete or absent"},
 		{name: "complete", digest: &descriptor.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: "genericBlobDigest/v1", Value: value}},
 		{name: "excluded from the signature", digest: descriptor.NewExcludeFromSignatureDigest()},
 	} {

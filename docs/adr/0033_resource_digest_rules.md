@@ -2,9 +2,9 @@
 
 * **Status**: proposed
 * **Deciders**: Maintainers
-* **Date**: 2026-10-12
+* **Date**: 2026-10-14
 
-**Technical Story**: Resource digests are created, completed and verified separately in every binding, which led to OCI digests being relabelled on upload and breaking signatures; the fix is on main, and its review asked for one shared set of digest rules.
+**Technical Story**: Inconsistent digest handling across bindings can change signed descriptors. Shared rules are needed to preserve existing digests while allowing bindings to compute digests for different kinds of content.
 
 ## Context and Problem Statement
 
@@ -37,23 +37,22 @@ digest:
 
 Only the binding knows which of the two it computed. The OCI binding resolves a manifest, so it must compare against the manifest digest; hashing the OCI layout archive would give a different value. The wget binding hashes the bytes it downloaded.
 
-The OCI case has one more twist. Earlier v2 releases had a bug: they recorded the manifest digest of an OCI image with the `genericBlobDigest/v1` label. Component versions created with those releases are signed with that label, so the OCI binding must keep accepting it, verify it against the manifest digest, and never relabel it. This is why the rule is chosen from what the binding computed, not from the recorded label.
+The OCI case has one more twist. Earlier v2 releases had a bug, documented and fixed in [#3681](https://github.com/open-component-model/open-component-model/pull/3681): they recorded the manifest digest of an OCI image with the `genericBlobDigest/v1` label. Component versions created with those releases are signed with that label, so the OCI binding must keep accepting it, verify it against the manifest digest, and never relabel it. This is why the rule is chosen from what the binding computed, not from the recorded label.
 
 **Same fields, inconsistent handling.** The other bindings show the same pattern:
 
 * **One resource type, two kinds of content**: A Helm chart from an HTTP repository is a `.tgz` file and gets a digest of its bytes. The same chart from an `oci://` repository is an OCI artifact and gets the manifest digest. Only the Helm binding can tell which applies.
 * **Hash names spelled differently**: Recorded digests use `SHA-256` as well as `sha256`. Some bindings reject the lowercase form, and some rewrite a complete digest to their own spelling, which changes signed data.
-* **Excluded resources**: A resource marked `NO-DIGEST` is rejected or given a real digest by most bindings, although it must pass every path untouched.
+* **Excluded resources**: A resource marked `NO-DIGEST` is rejected or given a real digest by most bindings, although copying its content unchanged should preserve the marker.
 
 Each binding knows what it computed; the shared rules decide, the same way everywhere, what happens to the recorded digest.
 
 ## Decision Drivers
 
-* **Compatibility**: Every digest accepted today stays accepted, and no recorded digest is ever rewritten.
+* **Compatibility**: Preserve complete digests and exclusion markers exactly as recorded. Reject partial digests rather than infer fields that may already be covered by a signature or reference digest.
 * **Single source of truth**: One place decides which hash names and normalisations are valid.
-* **Layering**: Shared code has no OCI knowledge; each binding owns the meaning of what it computes.
-* **House style**: Plain string constants, small pure functions and sentinel errors, no new blob interfaces.
-* **Easy review**: Small PRs; only Go API breaks are marked as breaking.
+* **Layering**: Shared code knows no binding (OCI, Helm, Git, wget, ...); each binding owns the meaning of what it computes.
+* **Simplicity**: A small shared contract without a second registry or binding-specific dependencies.
 
 ## Considered Options
 
@@ -68,7 +67,7 @@ Modelling normalisations as typed runtime objects in a scheme was rejected up fr
 
 ## Decision Outcome
 
-Chosen **Option 1**: "Shared digest package with binding-supplied rules". Option 3 ships as its first step.
+Chosen **Option 1**: "Shared digest package with binding-supplied rules".
 
 **Justification**:
 
@@ -77,72 +76,65 @@ Chosen **Option 1**: "Shared digest package with binding-supplied rules". Option
 * **Safe dispatch**: The rule follows from what was computed, so the generic label that earlier v2 releases wrote on OCI artifacts by mistake cannot send them down the wrong path.
 * **No new registry**: Dispatch per access type already exists through the digest processor plugins.
 
-### Implementation Details
+### Shared Digest Rules
 
-A new package `bindings/go/digest` holds the vocabulary and the decision, and the OCI binding provides its own rules on top of it:
-
-```go
-type Rule struct { Normalisation string; Accepted []string }
-func Check(recorded *runtime.Digest, computed Computed, rule Rule, mode Mode) (Result, error)
-```
-
-`Check` takes three inputs. The **recorded digest** is what the component descriptor already contains, possibly nothing. The **computed digest** is what the binding just resolved or hashed: the manifest digest for an OCI image, the hash of the downloaded bytes for wget. The **rule** says which labels the binding accepts for that content. `Check` never writes anything itself; the binding applies the result:
+A shared package compares the **recorded digest** in the component descriptor with the **computed digest** supplied by the binding. Each binding supplies the rules for its content, such as an OCI manifest or downloaded file. There are four cases:
 
 ```mermaid
-flowchart TD
-    IN["Recorded digest + computed digest + rule"] --> B{"NO-DIGEST marker?"}
-    B -- yes --> X["Keep as is, hash nothing<br/><i>e.g. volatile resource excluded from signing</i>"]
-    B -- no --> C{"What is recorded?"}
-    C -- nothing --> G["Generate from computed digest<br/><i>e.g. new resource on add cv</i>"]
-    C -- some fields --> D{"Set fields match<br/>computed digest?"}
-    D -- yes --> P["Fill in missing fields<br/><i>e.g. value given, label missing</i>"]
-    D -- no --> R["Reject"]
-    C -- complete --> E{"Label accepted<br/>by the rule?"}
-    E -- yes --> F{"Hash and value match<br/>computed digest?"}
-    F -- yes --> K["Keep exactly as recorded<br/><i>e.g. image signed by an older v2 release</i>"]
-    F -- no --> R
-    E -- no --> M{"Strict or lenient?"}
-    M -- "strict: add cv, upload" --> R
-    M -- "lenient: packing local blobs" --> U["Keep unverified<br/><i>e.g. unknown label in an existing descriptor</i>"]
+flowchart LR
+    R["Recorded digest"] --> X["NO-DIGEST marker<br/>→ keep untouched, hash nothing"]
+    R --> N["Absent<br/>→ generate when adding,<br/>keep absent when transferring"]
+    R --> P["Partial<br/>→ reject"]
+    R --> C["Complete<br/>→ verify where supported,<br/>keep exactly as recorded"]
 ```
+
+* **NO-DIGEST marker**: The resource content is excluded from signing, but the marker itself is part of the signed descriptor. Preserve the marker without computing a content digest, also when a transfer converts the content.
+* **Absent**: Generate a digest when adding a component version, using the binding's normalisation and the spec spelling. A transfer keeps the digest absent.
+* **Partial**: Some fields are set and some are missing. The digest is rejected with "a digest must be complete or absent". Missing fields are never inferred: every digest field is part of the signed descriptor, so filling them in would change what a signature or a parent's reference digest covers.
+* **Complete**: The digest may be signed, so it is never rewritten. A mismatch is rejected. A label the rule does not know is rejected, because nothing can verify it. An operation that cannot keep the digest valid for the content it produces fails.
 
 #### Key Design Decisions
 
-1. **Shared package without OCI knowledge**: `bindings/go/digest` depends only on the runtime and descriptor packages, which a lint rule enforces. Normalisations stay plain strings. OCI rules live in the OCI binding.
-2. **Hash names in one place**: `ParseHashAlgorithm` accepts every spelling in use today, ignoring case and dashes. New and completed digests are written in the spec spelling (`SHA-256`, `SHA-512`).
+1. **Shared package without binding knowledge**: Shared code defines digest handling; each binding supplies the meaning of the content it computed. Adding a binding must not require adding binding-specific logic to the shared package.
+2. **Hash names in one place**: Accept existing spellings of supported hash algorithms, ignoring case and dashes. Generate new digests using the spec spelling (`SHA-256`, `SHA-512`).
 3. **The binding decides the kind**: A binding that resolved an OCI manifest uses the artifact rule; one that hashed bytes uses the blob rule. The recorded label is only validated against that rule and never chooses it.
-4. **Existing digests never break**: `Check` either generates a missing digest, completes an incomplete one, or verifies a complete one and keeps it exactly as recorded, including its label and spelling. The artifact rule keeps accepting the generic label that earlier v2 releases wrote on OCI artifacts by mistake, verified against the manifest, never against archive bytes.
-5. **Excluded resources are left alone**: A `NO-DIGEST` / `EXCLUDE-FROM-SIGNATURE` resource is detected first, exactly as signing does today. It is never hashed, completed or changed when adding (including the constructor, before any digest processor runs), getting or transferring a component version.
-6. **Strict and lenient modes**: Each entry point keeps today's handling of a complete digest with a foreign label. Processing and upload reject it (strict); packing local blobs keeps it unverified (lenient).
-7. **No entry point becomes stricter**: Changes only widen what is accepted, for example spelling variants and SHA-512 where only SHA-256 was accepted.
-8. **Behaviour specified by tests**: The detailed rules for each case are specified by table tests in the implementation PRs, and the tests from the earlier fix remain the regression suite.
+4. **Preserve complete digests**: Keep every accepted complete digest exactly as recorded, including its label and spelling. For OCI artifacts, accept the generic label written by earlier v2 releases and OCM v1's legacy spelling `ociArtefactDigest/v1`. Verify both against the manifest, never against archive bytes.
+5. **Excluded resources are left alone**: Detect `NO-DIGEST` / `EXCLUDE-FROM-SIGNATURE` before computing content digests. Preserve the marker whenever a component version is added, read or transferred, including transfers that convert the content, such as a Helm chart into an OCI artifact or an OCI artifact into a file on a non-OCI target.
+6. **One rule for every entry point**: Adding, uploading, packing local blobs and transferring apply the same rules. A complete digest whose label the binding's rule does not know is rejected.
+7. **Reject partial digests**: A digest must be complete or absent. Missing fields are never inferred.
+8. **Digests never change on transfer**: A transfer copies every digest unchanged into the target descriptor, including its absence and the exclusion marker, and rejects a partial one. A transfer whose target content would need a different digest, such as converting a Helm chart into an OCI artifact or an OCI artifact into a file on a non-OCI target, fails. The child descriptor therefore never changes, so a parent's reference digest stays valid.
+
+Packing verifies a blob digest against the packed bytes and an OCI artifact digest against the root manifest of the OCI layout or OCM v1 artifact set; the descriptor digests in that manifest cover every other blob in the archive, and each blob is checked against them. A digest with an unknown label can be verified neither when packing nor when downloading, so it is rejected rather than kept as an unverifiable claim or replaced, which would change signed metadata.
 
 #### Out of Scope
 
-* Verifying OCI downloads against the recorded digest.
-* The digest written when transferring OCI content to non-OCI targets, and by the Helm to OCI conversion. Both currently replace a `NO-DIGEST` marker with a real digest; keeping the marker there needs maintainer agreement.
+* Download verification. The CLI checks an OCI layout's main artifact against the recorded resource digest and verifies the blobs in its graph through `VerifyResourceContent` ([#3889](https://github.com/open-component-model/open-component-model/pull/3889)). This ADR leaves that download contract unchanged; it does not exempt downloads from verification.
 
 ## Pros and Cons of the Options
 
 ### Option 1: Shared Package with Binding-Supplied Rules (Chosen)
 
-* **Pros**: One tested decision with the never-rewrite guarantee in one place, one hash-name parser, no OCI knowledge in shared code, new rules (such as chunked blobs from ADR 0031) are plain values.
-* **Cons**: Touches about ten packages; strict and lenient modes coexist by design; external plugins still implement digest processing themselves.
+* **Pros**: One tested decision with the never-rewrite guarantee in one place, one hash-name parser, no binding knowledge in shared code, new rules (such as chunked blobs from ADR 0031) are plain values.
+* **Cons**: Requires coordinated adoption across bindings; descriptors with unknown digest labels are rejected everywhere; converting transfers of resources with a digest fail; external plugins must adopt the rules too.
 
 ### Option 2: v1-Style Digester Registry
 
 * **Pros**: Open to new normalisations, close to the spec's idea of a digest handler per media type.
-* **Cons**: Choosing by the recorded label would treat every existing v2 OCI resource as a blob and break its digest; adds a second registry with global state for only two cases.
+* **Cons**: Choosing by the recorded label alone would treat OCI resources affected by the earlier labelling bug as plain blobs; adds a second registry alongside existing binding dispatch.
 
 ### Option 3: Consolidate Hash Names Only
 
 * **Pros**: Small and low risk.
 * **Cons**: The copied decision logic and the repeated kind detection remain, so the main review concern is not addressed.
 
-## Next Steps
+## Discovery and Distribution
 
-* Add `bindings/go/digest` with the hash-name parser and formatter, and move signing, download verification, transfer and the per-binding constants to it.
-* Introduce `Check`, `Rule` and the modes, and adopt them in the OCI, Helm and transfer bindings.
-* Support excluded resources at every entry point, including the constructor.
-* Carry the digest kind on the OCI blob instead of rediscovering it (a breaking Go API change in the OCI blob package).
-* Agree with maintainers whether the two out-of-scope transfer outputs keep the `NO-DIGEST` marker.
+A separate proof of concept explores the shared rules and their adoption in selected bindings. It is not the production rollout. After this decision is accepted:
+
+* Review and productionise the shared contract, then adopt it consistently across bindings and entry points.
+* Verify compatibility with existing complete digests and exclusion markers, rejection of partial digests, and preservation of parent reference digests during transfer.
+* Document which digests are rejected (partial digests, unknown labels) and the guarantees for adding and transferring component versions.
+
+## Conclusion
+
+Bindings retain responsibility for computing the digest appropriate to their content. Shared rules make validation and preservation consistent, preventing content-preserving operations from silently changing signed descriptor fields.

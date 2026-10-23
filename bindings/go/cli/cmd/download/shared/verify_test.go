@@ -5,6 +5,9 @@ import (
 	"crypto/sha512"
 	"encoding/hex"
 	"io"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/opencontainers/go-digest"
@@ -87,4 +90,36 @@ func TestVerifyResourceContent_PrefixedOCIArtifactDigest(t *testing.T) {
 	res.Digest.Value = "sha512:" + manifest.Digest.Encoded()
 	_, err = shared.VerifyResourceContent(ctx, res, layout)
 	r.ErrorContains(err, "carries algorithm")
+}
+
+// A digest-pinned download of an OCI artifact that OCM v1 stored as an artifact set verifies its
+// main manifest and every blob it references, although the set stores its blobs flat.
+func TestVerifyResourceContent_V1ArtifactSet(t *testing.T) {
+	r := require.New(t)
+	data, err := os.ReadFile(filepath.Join("..", "..", "..", "..", "ctf", "testdata", "compatibility", "02", "with-resource", "blobs",
+		"sha256.e40e3a2f1ab1a98328dfd14539a79d27aff5c4d5c34cd16a85f0288bfa76490b"))
+	r.NoError(err)
+
+	for _, tc := range []struct {
+		name    string
+		value   string
+		wantErr string
+	}{
+		{name: "matching manifest digest", value: "62be4af3382a4493cb7f1dd4ec47bcb28f1863b615fc9e4a1dceefbe93898dd0"},
+		{name: "other manifest digest", value: strings.Repeat("ab", 32), wantErr: "OCI artifact digest mismatch"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			res := &descriptor.Resource{
+				ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "chart", Version: "1.0.0"}},
+				Digest:      &descriptor.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: "ociArtifactDigest/v1", Value: tc.value},
+			}
+			_, err := shared.VerifyResourceContent(t.Context(), res, inmemory.New(bytes.NewReader(data)))
+			if tc.wantErr != "" {
+				r.ErrorContains(err, tc.wantErr)
+				return
+			}
+			r.NoError(err)
+		})
+	}
 }

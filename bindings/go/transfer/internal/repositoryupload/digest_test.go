@@ -19,16 +19,12 @@ func TestUploadDigestExcludedFromSignature(t *testing.T) {
 	tests := []struct {
 		name    string
 		fromOCI bool
-		skip    string
 	}{
-		{name: "plain blob source", skip: "ADR 0032: transfer adoption is outside the proof of concept"},
-		{name: "OCI artifact source", fromOCI: true, skip: "ADR 0032: pending maintainer agreement"},
+		{name: "plain blob source"},
+		{name: "OCI artifact source", fromOCI: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if tt.skip != "" {
-				t.Skip(tt.skip)
-			}
 			r := require.New(t)
 			src := descriptor.NewExcludeFromSignatureDigest()
 
@@ -39,4 +35,14 @@ func TestUploadDigestExcludedFromSignature(t *testing.T) {
 			r.Equal(descriptor.NewExcludeFromSignatureDigest(), uploadedDigest(src, expected, digest.FromBytes(content)))
 		})
 	}
+}
+
+// Uploading an OCI artifact stores it in another byte representation, so a recorded digest
+// cannot be kept and the upload fails before any content is written.
+func TestUploadDigestFromOCIFails(t *testing.T) {
+	r := require.New(t)
+	src := &descriptor.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: "ociArtifactDigest/v1", Value: digest.FromString("manifest").Encoded()}
+
+	_, _, err := knownDigest(src, inmemory.New(bytes.NewReader([]byte("layout"))), true)
+	r.ErrorContains(err, "recorded ociArtifactDigest/v1 digest cannot be kept")
 }

@@ -400,19 +400,25 @@ func (f *fileBlob) ReadCloser() (io.ReadCloser, error) {
 }
 
 // A resource excluded from signing (ocm-spec: NO-DIGEST / EXCLUDE-FROM-SIGNATURE) keeps its
-// digest when its chart is converted to OCI, instead of taking the OCI manifest digest.
-func TestConvertHelmChartToOCI_ExcludedFromSignature(t *testing.T) {
+// digest when its chart is converted to OCI, instead of taking the OCI manifest digest. A
+// recorded digest describes the chart, not the OCI artifact, so the conversion fails.
+func TestConvertHelmChartToOCI_RecordedDigest(t *testing.T) {
 	tests := []struct {
-		name  string
-		chart string
+		name    string
+		digest  *descv2.Digest
+		wantErr string
 	}{
-		{name: "packaged chart", chart: "mychart-0.1.0.tgz"},
+		{name: "excluded from signing", digest: descv2.NewExcludeFromSignatureDigest()},
+		{
+			name:    "complete digest",
+			digest:  &descv2.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: "genericBlobDigest/v1", Value: strings.Repeat("ab", 32)},
+			wantErr: "recorded genericBlobDigest/v1 digest cannot be kept",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Skip("ADR 0032: pending maintainer agreement")
 			r := require.New(t)
-			chartPath, err := filepath.Abs(filepath.Join("..", "testdata", tt.chart))
+			chartPath, err := filepath.Abs(filepath.Join("..", "testdata", "mychart-0.1.0.tgz"))
 			r.NoError(err)
 
 			rawAccess := runtime.Raw{}
@@ -425,24 +431,28 @@ func TestConvertHelmChartToOCI_ExcludedFromSignature(t *testing.T) {
 
 			spec := &v1alpha1.ConvertHelmToOCI{
 				Type: runtime.NewVersionedType(v1alpha1.ConvertHelmToOCIType, v1alpha1.Version),
-				ID:   "convert-excluded",
+				ID:   "convert-recorded-digest",
 				Spec: &v1alpha1.ConvertHelmToOCISpec{
 					ChartFile: filev1alpha1.File{URI: "file://" + chartPath},
 					Resource: &descv2.Resource{
 						ElementMeta: descv2.ElementMeta{ObjectMeta: descv2.ObjectMeta{Name: "mychart", Version: "0.1.0"}},
 						Type:        "helmChart",
 						Access:      &rawAccess,
-						Digest:      descv2.NewExcludeFromSignatureDigest(),
+						Digest:      tt.digest,
 					},
 					OutputPath: t.TempDir(),
 				},
 			}
 
 			result, err := (&transformation.ConvertHelmChartToOCI{Scheme: newConvertTestScheme()}).Transform(t.Context(), spec)
+			if tt.wantErr != "" {
+				r.ErrorContains(err, tt.wantErr)
+				return
+			}
 			r.NoError(err)
 			output, ok := result.(*v1alpha1.ConvertHelmToOCI)
 			r.True(ok)
-			r.Equal(descv2.NewExcludeFromSignatureDigest(), output.Output.Resource.Digest)
+			r.Equal(tt.digest, output.Output.Resource.Digest)
 		})
 	}
 }

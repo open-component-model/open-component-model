@@ -128,7 +128,7 @@ func checkDigest(recorded *runtime.Digest, resolved godigest.Digest, rule ocmdig
 	if err != nil {
 		return nil, err
 	}
-	result, err := ocmdigest.Check(recorded, computed, rule, ocmdigest.Strict)
+	result, err := ocmdigest.Check(recorded, computed, rule)
 	if err != nil {
 		return nil, err
 	}

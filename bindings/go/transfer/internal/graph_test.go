@@ -224,8 +224,8 @@ func TestBuildGraphDefinition_LocalBlobResource(t *testing.T) {
 	require.Len(t, tgd.Transformations, 2)
 	assert.Equal(t, ociv1alpha1.TransferOCILocalBlobToOCILocalBlobV1alpha1, tgd.Transformations[0].Type)
 	assert.Contains(t, tgd.Transformations[1].ID, "Upload")
-	assert.Equal(t, fmt.Sprintf("${%s.output.resource}", tgd.Transformations[0].ID),
-		tgd.Transformations[1].Spec.Data["descriptor"].(map[string]any)["component"].(map[string]any)["resources"].([]any)[0])
+	assert.Contains(t, tgd.Transformations[1].Spec.Data["descriptor"].(map[string]any)["component"].(map[string]any)["resources"].([]any)[0],
+		fmt.Sprintf("${%s.output.resource.withSourceDigest(environment.", tgd.Transformations[0].ID))
 }
 
 // TestBuildGraphDefinition_RelativeOCIReference_CopiesAsLocalBlob proves the baseline copy
@@ -970,7 +970,7 @@ func TestBuildDescriptorSpec_CreationTime(t *testing.T) {
 				},
 			}
 
-			spec := buildDescriptorSpec(v2desc, "envID", map[int]string{0: "resourceAdd"}, nil)
+			spec := buildDescriptorSpec(v2desc, "envID", map[int]string{0: "resourceAdd"})
 			specMap, ok := spec.(map[string]any)
 			r.True(ok, "spec should be a map when resources are transformed")
 			componentMap, ok := specMap["component"].(map[string]any)
@@ -1003,7 +1003,7 @@ func TestBuildDescriptorSpec_LabelsIncluded(t *testing.T) {
 
 	// One resource so buildDescriptorSpec builds the composite map (resourceTransformIDs non-empty).
 	resourceTransformIDs := map[int]string{0: "someAddTransformID"}
-	spec := buildDescriptorSpec(v2desc, "envID", resourceTransformIDs, nil)
+	spec := buildDescriptorSpec(v2desc, "envID", resourceTransformIDs)
 
 	specMap, ok := spec.(map[string]any)
 	require.True(t, ok, "spec should be a map when resources are transformed")
@@ -1032,7 +1032,7 @@ func TestBuildDescriptorSpec_NoLabelsOmitted(t *testing.T) {
 	}
 
 	resourceTransformIDs := map[int]string{0: "someAddTransformID"}
-	spec := buildDescriptorSpec(v2desc, "envID", resourceTransformIDs, nil)
+	spec := buildDescriptorSpec(v2desc, "envID", resourceTransformIDs)
 
 	specMap, ok := spec.(map[string]any)
 	require.True(t, ok)
@@ -1071,7 +1071,7 @@ func TestBuildDescriptorSpec_SignaturesIncluded(t *testing.T) {
 	}
 
 	resourceTransformIDs := map[int]string{0: "someAddTransformID"}
-	spec := buildDescriptorSpec(v2desc, "envID", resourceTransformIDs, nil)
+	spec := buildDescriptorSpec(v2desc, "envID", resourceTransformIDs)
 
 	specMap, ok := spec.(map[string]any)
 	require.True(t, ok, "spec should be a map when resources are transformed")
@@ -1105,7 +1105,7 @@ func TestBuildDescriptorSpec_EmptyOptionalFields(t *testing.T) {
 	}
 
 	resourceTransformIDs := map[int]string{0: "someAddTransformID"}
-	spec := buildDescriptorSpec(v2desc, "envID", resourceTransformIDs, nil)
+	spec := buildDescriptorSpec(v2desc, "envID", resourceTransformIDs)
 
 	specMap, ok := spec.(map[string]any)
 	require.True(t, ok)
@@ -1134,7 +1134,7 @@ func TestBuildDescriptorSpec_NilListFieldsStayNil(t *testing.T) {
 		},
 	}
 
-	spec := buildDescriptorSpec(v2desc, "envID", map[int]string{0: "someAddTransformID"}, nil)
+	spec := buildDescriptorSpec(v2desc, "envID", map[int]string{0: "someAddTransformID"})
 
 	specMap, ok := spec.(map[string]any)
 	r.True(ok)

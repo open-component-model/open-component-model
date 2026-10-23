@@ -38,16 +38,6 @@ func (r Rule) accepts(normalisation string) bool {
 	return normalisation == r.Normalisation || slices.Contains(r.Accepted, normalisation)
 }
 
-// Mode selects how [Check] treats a complete recorded digest whose label the rule does not accept.
-type Mode int
-
-const (
-	// Strict rejects it, as processing and uploading resources do.
-	Strict Mode = iota
-	// Lenient keeps it unverified, as packing local blobs does.
-	Lenient
-)
-
 // Result is the outcome of [Check]. Digest is the digest the binding records; it is a copy
 // that never aliases the recorded digest. Generated reports whether an absent digest was
 // generated, allowing callers to preserve an existing digest object.
@@ -61,9 +51,10 @@ type Result struct {
 //
 // A recorded digest is either absent, and generated from computed, or complete, and kept
 // exactly as recorded, not even its label or hash spelling rewritten, because it may be signed.
-// A partial digest is rejected. An excluded resource is kept as is and
-// computed is not used, so callers may skip computing a digest when [IsExcluded] reports true.
-func Check(recorded *descriptor.Digest, computed Computed, rule Rule, mode Mode) (Result, error) {
+// A partial digest and a complete digest whose label the rule does not accept are rejected.
+// An excluded resource is kept as is and computed is not used, so callers may skip computing
+// a digest when [IsExcluded] reports true.
+func Check(recorded *descriptor.Digest, computed Computed, rule Rule) (Result, error) {
 	switch {
 	case IsExcluded(recorded):
 		return Result{Digest: recorded.DeepCopy()}, nil
@@ -78,9 +69,6 @@ func Check(recorded *descriptor.Digest, computed Computed, rule Rule, mode Mode)
 			errIncomplete, recorded.HashAlgorithm, recorded.NormalisationAlgorithm, recorded.Value)
 	default:
 		if !rule.accepts(recorded.NormalisationAlgorithm) {
-			if mode == Lenient {
-				return Result{Digest: recorded.DeepCopy()}, nil
-			}
 			return Result{}, fmt.Errorf("%w: expected %s, got %s", ErrNormalisationMismatch, rule.Normalisation, recorded.NormalisationAlgorithm)
 		}
 		if err := matchHash(recorded, computed); err != nil {

@@ -557,6 +557,7 @@ linters:
             - "ocm.software/open-component-model/bindings/go/descriptor/normalisation"
             - "ocm.software/open-component-model/bindings/go/descriptor/runtime"
             - "ocm.software/open-component-model/bindings/go/descriptor/v2"
+            - "ocm.software/open-component-model/bindings/go/digest"
             - "ocm.software/open-component-model/bindings/go/git"
             - "ocm.software/open-component-model/bindings/go/github"
             - "ocm.software/open-component-model/bindings/go/helm"

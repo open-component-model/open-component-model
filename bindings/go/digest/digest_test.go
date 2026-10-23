@@ -79,7 +79,6 @@ func TestCheck(t *testing.T) {
 		recorded  *descriptor.Digest
 		computed  *ocmdigest.Computed
 		rule      ocmdigest.Rule
-		mode      ocmdigest.Mode
 		want      *descriptor.Digest
 		generated bool
 		wantErr   string
@@ -121,7 +120,6 @@ func TestCheck(t *testing.T) {
 			name:     "value only is rejected",
 			recorded: &descriptor.Digest{Value: value},
 			rule:     blobRule,
-			mode:     ocmdigest.Lenient,
 			wantErr:  "a digest must be complete or absent",
 		},
 		{
@@ -158,7 +156,6 @@ func TestCheck(t *testing.T) {
 			name:     "complete digest with a mismatching value is rejected",
 			recorded: &descriptor.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: ocmdigest.GenericBlobDigestV1, Value: other},
 			rule:     blobRule,
-			mode:     ocmdigest.Lenient,
 			wantErr:  "digest value mismatch",
 		},
 		{
@@ -168,18 +165,16 @@ func TestCheck(t *testing.T) {
 			wantErr:  "hash algorithm mismatch",
 		},
 		{
-			name:     "complete digest with a foreign label is rejected in strict mode",
+			name:     "complete digest with an unknown label is rejected",
 			recorded: &descriptor.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: "jsonNormalisation/v1", Value: other},
 			rule:     artifactRule,
-			mode:     ocmdigest.Strict,
 			wantErr:  "normalisation algorithm mismatch",
 		},
 		{
-			name:     "complete digest with a foreign label is kept unverified in lenient mode",
+			name:     "complete digest with the label of another rule is rejected",
 			recorded: &descriptor.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: artifact, Value: other},
 			rule:     blobRule,
-			mode:     ocmdigest.Lenient,
-			want:     &descriptor.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: artifact, Value: other},
+			wantErr:  "normalisation algorithm mismatch",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -190,7 +185,7 @@ func TestCheck(t *testing.T) {
 			}
 			before := tc.recorded.DeepCopy()
 
-			got, err := ocmdigest.Check(tc.recorded, c, tc.rule, tc.mode)
+			got, err := ocmdigest.Check(tc.recorded, c, tc.rule)
 			r.Equal(before, tc.recorded, "Check must not write the recorded digest")
 			if tc.wantErr != "" {
 				r.ErrorContains(err, tc.wantErr)

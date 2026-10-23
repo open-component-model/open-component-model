@@ -47,13 +47,13 @@ func TestRules(t *testing.T) {
 
 	for _, label := range []string{ocmdigest.GenericBlobDigestV1, ocidigest.LegacyArtifactDigestV1} {
 		legacy := &descriptor.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: label, Value: computed.Value}
-		res, err := ocmdigest.Check(legacy, computed, ocidigest.ArtifactRule, ocmdigest.Strict)
+		res, err := ocmdigest.Check(legacy, computed, ocidigest.ArtifactRule)
 		r.NoError(err, label)
 		r.False(res.Generated, label)
 		r.Equal(legacy, res.Digest, label)
 	}
 
 	artifact := &descriptor.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: ocidigest.ArtifactDigestV1, Value: computed.Value}
-	_, err = ocmdigest.Check(artifact, computed, ocidigest.BlobRule, ocmdigest.Strict)
+	_, err = ocmdigest.Check(artifact, computed, ocidigest.BlobRule)
 	r.ErrorContains(err, "normalisation algorithm mismatch")
 }
