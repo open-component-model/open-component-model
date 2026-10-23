@@ -83,40 +83,39 @@ A shared package compares the **recorded digest** in the component descriptor wi
 ```mermaid
 flowchart LR
     R["Recorded digest"] --> X["NO-DIGEST marker<br/>→ keep untouched, hash nothing"]
-    R --> N["Absent<br/>→ generate when adding,<br/>preserve absence when copying"]
+    R --> N["Absent<br/>→ generate when adding,<br/>keep absent when transferring"]
     R --> P["Partial<br/>→ reject"]
     R --> C["Complete<br/>→ verify where supported,<br/>keep exactly as recorded"]
 ```
 
-* **NO-DIGEST marker**: The resource content is excluded from signing. Preserve the marker without computing a content digest. Content-converting transfers remain outside this decision.
-* **Absent**: Generate a digest when adding a component version, using the binding's normalisation and the spec spelling. A transfer that copies content unchanged preserves the absence of a digest.
+* **NO-DIGEST marker**: The resource content is excluded from signing, but the marker itself is part of the signed descriptor. Preserve the marker without computing a content digest, also when a transfer converts the content.
+* **Absent**: Generate a digest when adding a component version, using the binding's normalisation and the spec spelling. A transfer keeps the digest absent.
 * **Partial**: Some fields are set and some are missing. The digest is rejected with "a digest must be complete or absent". Missing fields are never inferred: every digest field is part of the signed descriptor, so filling them in would change what a signature or a parent's reference digest covers.
-* **Complete**: The digest may be signed, so it is never rewritten. A mismatch is rejected. A label the rule does not know is rejected on add and upload (strict), and kept unverified when packing local blobs (lenient), because existing descriptors may carry it.
+* **Complete**: The digest may be signed, so it is never rewritten. A mismatch is rejected. A label the rule does not know is rejected, because nothing can verify it. An operation that cannot keep the digest valid for the content it produces fails.
 
 #### Key Design Decisions
 
 1. **Shared package without binding knowledge**: Shared code defines digest handling; each binding supplies the meaning of the content it computed. Adding a binding must not require adding binding-specific logic to the shared package.
 2. **Hash names in one place**: Accept existing spellings of supported hash algorithms, ignoring case and dashes. Generate new digests using the spec spelling (`SHA-256`, `SHA-512`).
 3. **The binding decides the kind**: A binding that resolved an OCI manifest uses the artifact rule; one that hashed bytes uses the blob rule. The recorded label is only validated against that rule and never chooses it.
-4. **Preserve complete digests**: Keep every accepted complete digest exactly as recorded, including its label and spelling. For OCI artifacts, continue accepting the generic label written by earlier v2 releases and add support for OCM v1's legacy spelling `ociArtefactDigest/v1`. Verify both against the manifest, never against archive bytes.
-5. **Excluded resources are left alone**: Detect `NO-DIGEST` / `EXCLUDE-FROM-SIGNATURE` before computing content digests. Preserve the marker when adding, getting or transferring a component version, except for the content conversions listed under Out of Scope.
-6. **Strict and lenient modes**: Each entry point keeps today's handling of a complete digest with a foreign label. Processing and upload reject it (strict); packing local blobs keeps it unverified (lenient).
-7. **Reject partial digests**: A digest must be complete or absent. Rejecting partial digests instead of completing them is a deliberate compatibility change; the shared rules otherwise preserve existing acceptance of complete digests.
-8. **Preserve digests on content-preserving transfer**: Keep the source digest, including its absence, unchanged in the target descriptor. Reject partial digests. This prevents changes to a child's descriptor from invalidating a parent's reference digest.
+4. **Preserve complete digests**: Keep every accepted complete digest exactly as recorded, including its label and spelling. For OCI artifacts, accept the generic label written by earlier v2 releases and OCM v1's legacy spelling `ociArtefactDigest/v1`. Verify both against the manifest, never against archive bytes.
+5. **Excluded resources are left alone**: Detect `NO-DIGEST` / `EXCLUDE-FROM-SIGNATURE` before computing content digests. Preserve the marker whenever a component version is added, read or transferred, including transfers that convert the content, such as a Helm chart into an OCI artifact or an OCI artifact into a file on a non-OCI target.
+6. **One rule for every entry point**: Adding, uploading, packing local blobs and transferring apply the same rules. A complete digest whose label the binding's rule does not know is rejected.
+7. **Reject partial digests**: A digest must be complete or absent. Missing fields are never inferred.
+8. **Digests never change on transfer**: A transfer copies every digest unchanged into the target descriptor, including its absence and the exclusion marker, and rejects a partial one. A transfer whose target content would need a different digest, such as converting a Helm chart into an OCI artifact or an OCI artifact into a file on a non-OCI target, fails. The child descriptor therefore never changes, so a parent's reference digest stays valid.
 
-Lenient packing preserves compatibility with descriptors whose normalisation the packing layer cannot interpret. A checksum of the packed bytes cannot verify an arbitrary normalised resource digest: an OCI manifest digest, for example, differs from the checksum of its layout archive. Packing therefore preserves an unknown complete digest without claiming to verify it; replacing it with a byte checksum would change signed metadata. Known byte digests are still checked, and the strict processing and upload checks remain in place.
+Packing verifies a blob digest against the packed bytes and an OCI artifact digest against the root manifest of the layout; the descriptor digests in that manifest cover every other blob in the archive while it is copied. A digest with an unknown label can be verified neither when packing nor when downloading, so it is rejected rather than kept as an unverifiable claim or replaced, which would change signed metadata.
 
 #### Out of Scope
 
-* Changing download verification. The CLI already checks an OCI layout's main artifact against the recorded resource digest and verifies the blobs in its graph through `VerifyResourceContent` ([#3889](https://github.com/open-component-model/open-component-model/pull/3889)). This ADR leaves that download contract unchanged; it does not exempt downloads from verification.
-* The digest written when transferring OCI content to non-OCI targets, and by the Helm to OCI conversion. Both currently replace a `NO-DIGEST` marker with a real digest; keeping the marker there needs maintainer agreement.
+* Download verification. The CLI checks an OCI layout's main artifact against the recorded resource digest and verifies the blobs in its graph through `VerifyResourceContent` ([#3889](https://github.com/open-component-model/open-component-model/pull/3889)). This ADR leaves that download contract unchanged; it does not exempt downloads from verification.
 
 ## Pros and Cons of the Options
 
 ### Option 1: Shared Package with Binding-Supplied Rules (Chosen)
 
 * **Pros**: One tested decision with the never-rewrite guarantee in one place, one hash-name parser, no binding knowledge in shared code, new rules (such as chunked blobs from ADR 0031) are plain values.
-* **Cons**: Requires coordinated adoption across bindings; strict and lenient modes coexist by design; external plugins must adopt the rules too.
+* **Cons**: Requires coordinated adoption across bindings; descriptors with unknown digest labels are rejected everywhere; converting transfers of resources with a digest fail; external plugins must adopt the rules too.
 
 ### Option 2: v1-Style Digester Registry
 
@@ -134,8 +133,7 @@ A separate proof of concept explores the shared rules and their adoption in sele
 
 * Review and productionise the shared contract, then adopt it consistently across bindings and entry points.
 * Verify compatibility with existing complete digests and exclusion markers, rejection of partial digests, and preservation of parent reference digests during transfer.
-* Document the partial-digest compatibility change and the guarantees for adding and transferring component versions.
-* Decide separately how content-converting transfers handle exclusion markers.
+* Document which digests are rejected (partial digests, unknown labels) and the guarantees for adding and transferring component versions.
 
 ## Conclusion
 
