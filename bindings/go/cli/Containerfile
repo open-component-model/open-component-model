@@ -23,8 +23,8 @@ USER 65532:65532
 WORKDIR /tmp
 WORKDIR /.cache
 WORKDIR /
-# Trust-root cache of a cosign mounted into or downloaded by slim; slim has no
-# /.sigstore under HOME=/.
+# cosign's trust-root cache would go to /.sigstore under HOME=/, which the
+# user cannot create; keep it in the writable /tmp instead.
 ENV TUF_ROOT=/tmp/.sigstore/root
 ENTRYPOINT ["/ocm"]
 
@@ -45,9 +45,9 @@ COPY --from=certs /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certifica
 # /ocm keeps the path of the previous scratch image for COPY --from users.
 COPY --from=slim /ocm /ocm
 USER 65532:65532
-# Writable directories as in slim, plus /.sigstore for cosign's trust root.
+# Writable directories and cosign trust-root cache as in slim.
 WORKDIR /tmp
 WORKDIR /.cache
-WORKDIR /.sigstore
 WORKDIR /
+ENV TUF_ROOT=/tmp/.sigstore/root
 ENTRYPOINT ["/ocm"]

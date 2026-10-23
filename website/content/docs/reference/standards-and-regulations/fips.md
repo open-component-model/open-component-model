@@ -115,10 +115,9 @@ performs all GPG cryptography in-process with the Go OpenPGP library. Sigstore
 signing works in the image because `cosign` is on `PATH`. The slim image is built
 `FROM scratch` and contains only `/ocm` and the CA bundle; use it when you
 don't sign with Sigstore, or bring your own `cosign`. Both CLI images run as
-user `65532` and have `/tmp` and `/.cache` directories owned by that user; the
-default image also has `/.sigstore` for cosign's trust root, while the slim
-image sets `TUF_ROOT=/tmp/.sigstore/root`. When you run them as another user
-ID, mount writable volumes there.
+user `65532`, have `/tmp` and `/.cache` directories owned by that user, and set
+`TUF_ROOT=/tmp/.sigstore/root` for cosign's trust-root cache. When you run
+them as another user ID, mount writable volumes there.
 
 The controller image is built `FROM scratch` with the static `/manager` binary
 (the entrypoint), the FIPS `cosign`, the CA bundle, and a `/tmp` owned by user
