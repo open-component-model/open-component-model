@@ -98,7 +98,7 @@ func ResourceLocalBlobOCILayer(ctx context.Context, storage content.Storage, b *
 	if layer, exists, err := existingResourceLayer(ctx, storage, b, layerOpts); err != nil {
 		return ociImageSpecV1.Descriptor{}, err
 	} else if exists {
-		return finishResourceLayer(b, access, layer, opts, storage)
+		return finishResourceLayer(ctx, b, access, layer, opts, storage)
 	}
 
 	// Stream the blob directly when the storage supports streaming chunked
