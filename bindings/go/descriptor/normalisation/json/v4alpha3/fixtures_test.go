@@ -144,5 +144,5 @@ component:
           value: "rnv"
 `
 	referenceLabelsV3Norm       = `{"component":{"componentReferences":[{"componentName":"acme.org/child","digest":{"hashAlgorithm":"SHA-256","normalisationAlgorithm":"jsonNormalisation/v4alpha1","value":"deadbeef"},"labels":[{"name":"ref-sig","signing":true,"value":"rsv","version":"v5"},{"name":"ref-nosig","value":"rnv"}],"name":"ref","version":"1.0.0"}],"name":"acme.org/reference-labels","provider":{"name":"acme"},"resources":[],"sources":[],"version":"1.0.0"}}`
-	referenceLabelsV4alpha2Norm = `{"component":{"componentReferences":[{"componentName":"acme.org/child","digest":{"hashAlgorithm":"SHA-256","normalisationAlgorithm":"jsonNormalisation/v4alpha1","value":"deadbeef"},"labels":[{"name":"ref-sig","signing":true,"value":"rsv","version":"v5"}],"name":"ref","version":"1.0.0"}],"name":"acme.org/reference-labels","provider":{"name":"acme"},"resources":[],"sources":[],"version":"1.0.0"}}`
+	referenceLabelsV4alpha3Norm = `{"component":{"componentReferences":[{"componentName":"acme.org/child","digest":{"hashAlgorithm":"SHA-256","normalisationAlgorithm":"jsonNormalisation/v4alpha1","value":"deadbeef"},"labels":[{"name":"ref-sig","signing":true,"value":"rsv","version":"v5"}],"name":"ref","version":"1.0.0"}],"name":"acme.org/reference-labels","provider":{"name":"acme"},"resources":[],"sources":[],"version":"1.0.0"}}`
 )

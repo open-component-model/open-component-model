@@ -64,44 +64,43 @@ func TestReconvergesWithV3(t *testing.T) {
 // same bytes as the v3 oracle).
 func TestSameDigestAsV4alpha1(t *testing.T) {
 	r := require.New(t)
-	v1out := normalise(t, deltaFreeInput, v4alpha1.Algorithm)
-	v2out := normalise(t, deltaFreeInput, v4alpha3.Algorithm)
-	r.Equal(v1out, v2out, "delta-free input must normalise identically under v4alpha1 and v4alpha3")
-	r.Equal(deltaFreeV3Norm, v2out, "and identically to legacy v3") //nolint:testifylint // byte-exact comparison, JSONEq would mask encoding differences
+	a1out := normalise(t, deltaFreeInput, v4alpha1.Algorithm)
+	a3out := normalise(t, deltaFreeInput, v4alpha3.Algorithm)
+	r.Equal(a1out, a3out, "delta-free input must normalise identically under v4alpha1 and v4alpha3")
+	r.Equal(deltaFreeV3Norm, a3out, "and identically to legacy v3") //nolint:testifylint // byte-exact comparison, JSONEq would mask encoding differences
 }
 
-// TestVersionSignedDivergesFromV4alpha1 proves fix #1: a signing label's version
-// is covered by v4alpha3 but not v4alpha1, so the bytes (and digest) differ and
-// the version appears only in the v4alpha3 output.
+// TestVersionSignedDivergesFromV4alpha1 pins that a signing label's version is
+// covered by v4alpha3 but not v4alpha1, so the bytes (and digest) differ and the
+// version appears only in the v4alpha3 output.
 func TestVersionSignedDivergesFromV4alpha1(t *testing.T) {
 	r := require.New(t)
-	v1out := normalise(t, versionLabelsInput, v4alpha1.Algorithm)
-	v2out := normalise(t, versionLabelsInput, v4alpha3.Algorithm)
+	a1out := normalise(t, versionLabelsInput, v4alpha1.Algorithm)
+	a3out := normalise(t, versionLabelsInput, v4alpha3.Algorithm)
 
-	r.NotEqual(v1out, v2out, "label version must change the signed bytes vs v4alpha1")
-	r.NotContains(v1out, `"version":"v1"`, "v4alpha1 must not sign label.version")
-	r.Contains(v2out, `"version":"v1"`, "v4alpha3 must sign component label.version")
-	r.Contains(v2out, `"version":"v3"`, "v4alpha3 must sign resource label.version")
-	r.Contains(v2out, `"version":"v4"`, "v4alpha3 must sign source label.version")
+	r.NotEqual(a1out, a3out, "label version must change the signed bytes vs v4alpha1")
+	r.NotContains(a1out, `"version":"v1"`, "v4alpha1 must not sign label.version")
+	r.Contains(a3out, `"version":"v1"`, "v4alpha3 must sign component label.version")
+	r.Contains(a3out, `"version":"v3"`, "v4alpha3 must sign resource label.version")
+	r.Contains(a3out, `"version":"v4"`, "v4alpha3 must sign source label.version")
 }
 
-// TestReferenceFilteringDivergesFromV3 proves fix #2: reference labels are
-// filtered signing-only under the correct componentReferences key. The
-// non-signing reference label — which both legacy v3 AND v4alpha1 signed — is
-// dropped, so v4alpha3 diverges from both while keeping the signing label's
-// version.
+// TestReferenceFilteringDivergesFromV3 pins that reference labels are filtered
+// signing-only under the correct componentReferences key. The non-signing
+// reference label — which both legacy v3 AND v4alpha1 signed — is dropped, so
+// v4alpha3 diverges from both while keeping the signing label's version.
 func TestReferenceFilteringDivergesFromV3(t *testing.T) {
 	r := require.New(t)
-	v2out := normalise(t, referenceLabelsInput, v4alpha3.Algorithm)
-	v1out := normalise(t, referenceLabelsInput, v4alpha1.Algorithm)
+	a3out := normalise(t, referenceLabelsInput, v4alpha3.Algorithm)
+	a1out := normalise(t, referenceLabelsInput, v4alpha1.Algorithm)
 
-	r.Equal(referenceLabelsV4alpha2Norm, v2out, "v4alpha3 reference labels must be filtered signing-only, version kept") //nolint:testifylint // byte-exact comparison, JSONEq would mask encoding differences
-	r.NotEqual(referenceLabelsV3Norm, v2out, "v4alpha3 must diverge from v3's unfiltered reference labels")
-	r.NotEqual(v1out, v2out, "v4alpha3 must diverge from v4alpha1's reference-label handling")
+	r.Equal(referenceLabelsV4alpha3Norm, a3out, "v4alpha3 reference labels must be filtered signing-only, version kept") //nolint:testifylint // byte-exact comparison, JSONEq would mask encoding differences
+	r.NotEqual(referenceLabelsV3Norm, a3out, "v4alpha3 must diverge from v3's unfiltered reference labels")
+	r.NotEqual(a1out, a3out, "v4alpha3 must diverge from v4alpha1's reference-label handling")
 
 	// The non-signing reference label leaks in both v3 and v4alpha1, and is gone
 	// in v4alpha3.
 	r.Contains(referenceLabelsV3Norm, `"name":"ref-nosig"`, "v3 leaks the non-signing reference label")
-	r.Contains(v1out, `"name":"ref-nosig"`, "v4alpha1 leaks the non-signing reference label")
-	r.NotContains(v2out, `"name":"ref-nosig"`, "v4alpha3 drops the non-signing reference label")
+	r.Contains(a1out, `"name":"ref-nosig"`, "v4alpha1 leaks the non-signing reference label")
+	r.NotContains(a3out, `"name":"ref-nosig"`, "v4alpha3 drops the non-signing reference label")
 }

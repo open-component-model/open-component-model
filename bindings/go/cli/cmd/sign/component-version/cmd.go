@@ -275,7 +275,7 @@ sign component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0 --s
 	cmd.Flags().String(FlagSignature, DefaultSignatureName, "name of the signature to create or update. defaults to \"default\"")
 	cmd.Flags().String(FlagSignerSpec, "", fmt.Sprintf("DEPRECATED: no longer supported, configure the signer in the OCM configuration instead (%s, field \"signer\")", signingConfigType))
 	cmd.Flags().Bool(FlagDryRun, false, "compute signature but do not persist it to the repository")
-	cmd.Flags().String(FlagNormalisationAlgorithm, signing.DefaultNormalisationAlgorithm, fmt.Sprintf("normalisation algorithm to use for new signatures (default %s; jsonNormalisation/v1 is legacy and verify-only, it is rejected for signing)", signing.DefaultNormalisationAlgorithm))
+	cmd.Flags().String(FlagNormalisationAlgorithm, signing.DefaultNormalisationAlgorithm, fmt.Sprintf("normalisation algorithm to use for new signatures (default %s; jsonNormalisation/v1, v4alpha1, v4alpha2 and the v3 alias are legacy/compatibility algorithms, verify-only and rejected for signing)", signing.DefaultNormalisationAlgorithm))
 	cmd.Flags().String(FlagHashAlgorithm, crypto.SHA256.String(), "hash algorithm to use (SHA256, SHA512)")
 	cmd.Flags().Bool(FlagForce, false, "overwrite existing signatures under the same name")
 	cmd.Flags().Bool(FlagTSA, false, fmt.Sprintf("request an RFC 3161 timestamp from a TSA server (default: %s); not supported for Sigstore signers", DefaultTSAURL))
