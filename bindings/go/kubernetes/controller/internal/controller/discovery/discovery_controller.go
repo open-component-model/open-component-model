@@ -200,7 +200,7 @@ func (r *Reconciler) reconcile(ctx context.Context, discovery *v1alpha1.Discover
 		return ctrl.Result{}, nil
 	}
 
-	query, err := internaldiscovery.Compile(ctx, &discovery.Spec)
+	query, err := internaldiscovery.Compile(ctx, &discovery.Spec, internaldiscovery.WithComponentInfo(&info))
 	if err != nil {
 		status.MarkAsStalled(r.EventRecorder, discovery, v1alpha1.SelectorFailedReason, err.Error())
 
@@ -265,6 +265,18 @@ func (r *Reconciler) reconcile(ctx context.Context, discovery *v1alpha1.Discover
 		return ctrl.Result{}, fmt.Errorf("failed to resolve the transitive component graph: %w", err)
 	}
 	logger.V(1).Info("resolved transitive component graph", "components", len(graph.Descriptors))
+
+	// Anchor the fetched descriptors to the digest chain of the component the
+	// Discovery references: the root against the digest the Component resource
+	// reports (covered by its signature verification when configured), every
+	// pinned reference against its parent. Mirrors the reference-path rule of
+	// the resolution worker pool.
+	if err := internaldiscovery.VerifyIntegrity(ctx, graph,
+		internaldiscovery.ComponentKey{Name: info.Component, Version: info.Version}, info.Digest); err != nil {
+		status.MarkNotReady(r.EventRecorder, discovery, v1alpha1.ResolutionFailedReason, err.Error())
+
+		return ctrl.Result{}, fmt.Errorf("failed to verify the integrity of the component graph: %w", err)
+	}
 
 	filtered, err := query.Filter(ctx, *graph)
 	if err != nil {
