@@ -1030,6 +1030,90 @@ func TestPackingRejectsInvalidOCILayoutDigest(t *testing.T) {
 	}
 }
 
+// TestPackingVerifiesArtifactSetRootBeforeBufferedPush covers the v1 artifact-set
+// fallback in the buffering path of ResourceLocalBlobOCILayer. A v1 artifact set has a
+// non-layout media type, so it routes to ResourceLocalBlobOCILayer, and its recorded
+// ociArtifactDigest/v1 is the manifest root inside the archive, not the archive hash, so
+// the cheap reconcile fails. When the blob is buffered (unknown size), the fallback must
+// verify the recorded root against the in-memory archive before pushing: a wrong root is
+// rejected with no push, the real root packs. The archive carries no byte digest
+// (ociArtifactDigest is not a byte checksum), so Buffer does not pre-check it and the
+// fallback is genuinely exercised.
+func TestPackingVerifiesArtifactSetRootBeforeBufferedPush(t *testing.T) {
+	r := require.New(t)
+	ctx := t.Context()
+
+	payload := []byte("artifact payload")
+	layer := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageLayer, payload)
+	var archive bytes.Buffer
+	writer, err := tar.NewOCILayoutWriterWithTempFile(&archive, t.TempDir())
+	r.NoError(err)
+	r.NoError(writer.Push(ctx, layer, bytes.NewReader(payload)))
+	root, err := oras.PackManifest(ctx, writer, oras.PackManifestVersion1_1, "application/selected", oras.PackManifestOptions{
+		Layers: []ociImageSpecV1.Descriptor{layer},
+	})
+	r.NoError(err)
+	root.Annotations = map[string]string{annotations.OCMLayoutRoot: "true"}
+	r.NoError(writer.Tag(ctx, root, root.Digest.String()))
+	r.NoError(writer.Close())
+	r.NotEqual(root.Digest.String(), digest.FromBytes(archive.Bytes()).String(),
+		"precondition: archive hash must differ from the manifest root")
+
+	// A non-layout media type routes to ResourceLocalBlobOCILayer (not the layout path).
+	const artifactSetMediaType = "application/vnd.oci.image.manifest.v1+tar+gzip"
+
+	for _, tc := range []struct {
+		name       string
+		value      string
+		wantErr    bool
+		wantNoPush bool
+	}{
+		{name: "real root packs", value: root.Digest.Encoded()},
+		{name: "wrong root rejected before push", value: digest.FromString("not the root").Encoded(), wantErr: true, wantNoPush: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			// An unbuffered blob with unknown size forces PrepareArtifactBlobForOCI to
+			// buffer, which is the branch the pre-push fallback runs in.
+			source := &unknownSizeBlob{content: bytes.Clone(archive.Bytes()), mediaType: artifactSetMediaType}
+			resource := &descriptor.Resource{
+				Access: &v2.LocalBlob{MediaType: artifactSetMediaType},
+				Digest: &descriptor.Digest{
+					HashAlgorithm: "SHA-256", NormalisationAlgorithm: "ociArtifactDigest/v1", Value: tc.value,
+				},
+			}
+			artifact, err := resourceblob.NewArtifactBlob(resource, source)
+			r.NoError(err)
+			r.Equal(blob.SizeUnknown, artifact.Size(), "precondition: size must be unknown so the blob buffers")
+
+			store := &countingStorage{Storage: memory.New()}
+			_, err = ArtifactBlob(ctx, store, artifact, Options{AccessScheme: v2.Scheme})
+			if tc.wantErr {
+				r.Error(err)
+				if tc.wantNoPush {
+					r.Zero(store.pushes, "a wrong artifact-set root must be rejected before the blob is pushed")
+				}
+				return
+			}
+			r.NoError(err)
+		})
+	}
+}
+
+// unknownSizeBlob is a re-readable blob that reports an unknown size, so
+// PrepareArtifactBlobForOCI buffers it. Unlike compression.Compress it keeps the
+// content inspectable, which the artifact-set fallback needs.
+type unknownSizeBlob struct {
+	content   []byte
+	mediaType string
+}
+
+func (b *unknownSizeBlob) ReadCloser() (io.ReadCloser, error) {
+	return io.NopCloser(bytes.NewReader(b.content)), nil
+}
+func (b *unknownSizeBlob) Size() int64               { return blob.SizeUnknown }
+func (b *unknownSizeBlob) MediaType() (string, bool) { return b.mediaType, true }
+
 type countingStorage struct {
 	content.Storage
 	pushes  int

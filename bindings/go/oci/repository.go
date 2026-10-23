@@ -646,9 +646,14 @@ func (repo *Repository) localArtifact(ctx context.Context, component, version st
 
 	switch typed := typed.(type) {
 	case *v2.LocalBlob:
+		// A resource carries a recorded digest to verify against; a source does not.
+		var recorded *descriptor.Digest
+		if res, ok := artifact.(*descriptor.Resource); ok {
+			recorded = res.Digest
+		}
 		b, err := repo.getLocalBlobFromIndexOrManifest(
 			ctx, store, cv.index, cv.manifest, typed.LocalReference,
-			artifact.GetElementMeta().Version,
+			artifact.GetElementMeta().Version, recorded,
 		)
 		return b, artifact, err
 	case *accessv1.RelativeOCIReference:
@@ -703,6 +708,7 @@ func (repo *Repository) getLocalBlobFromIndexOrManifest(
 	index *ociImageSpecV1.Index,
 	manifest *ociImageSpecV1.Manifest,
 	ref, version string,
+	recorded *descriptor.Digest,
 ) (LocalBlob, error) {
 	descriptors := collectDescriptors(index, manifest)
 
@@ -711,8 +717,17 @@ func (repo *Repository) getLocalBlobFromIndexOrManifest(
 		return nil, fmt.Errorf("resolve artifact %q: %w", ref, err)
 	}
 
-	// Nested manifest: copy full OCI layout
+	// localReference is the stored content's digest. For a genericBlobDigest, and for a
+	// v2 OCI artifact stored as a graph, it equals the recorded value, so verify directly.
+	// A v1 OCI artifact set stores a tar archive whose localReference is the archive hash,
+	// not the recorded manifest root; that case is retried against the archive's blobs below.
+	cheapErr := internaldigest.VerifyRecorded(recorded, artifact.Digest)
+
+	// Nested manifest: v2 OCI artifact stored as a graph; its root is the localReference.
 	if index != nil && introspection.IsOCICompliantManifest(artifact) {
+		if cheapErr != nil {
+			return nil, fmt.Errorf("resource digest verification failed for %q: %w", ref, cheapErr)
+		}
 		graph, ok := store.(content.ReadOnlyGraphStorage)
 		if !ok {
 			return nil, fmt.Errorf("store %T does not support predecessor walks", store)
@@ -733,7 +748,41 @@ func (repo *Repository) getLocalBlobFromIndexOrManifest(
 	if actual, _ := b.Digest(); actual != artifact.Digest.String() {
 		return nil, fmt.Errorf("digest mismatch: expected %q, got %q", artifact.Digest, actual)
 	}
+
+	if cheapErr != nil {
+		// v1 OCI artifact set: verify the recorded manifest root against the blobs the archive
+		// carries, rather than against the archive hash the localReference carries.
+		if err := verifyArtifactSetRoot(ctx, store, artifact, recorded); err != nil {
+			// Ownership of data transfers to the returned blob only on success; close it here.
+			_ = data.Close()
+			return nil, fmt.Errorf("resource digest verification failed for %q: %w", ref, errors.Join(cheapErr, err))
+		}
+	}
 	return b, nil
+}
+
+// verifyArtifactSetRoot verifies a recorded digest against an OCI artifact set stored as
+// a local blob. The blob's localReference is the archive hash, not the recorded manifest
+// root, so the archive is re-fetched (rather than reusing the returned blob, leaving the
+// caller's stream unaffected) and checked for a blob whose bytes hash to the recorded
+// digest.
+func verifyArtifactSetRoot(ctx context.Context, store spec.Store, artifact ociImageSpecV1.Descriptor, recorded *descriptor.Digest) error {
+	want, ok := internaldigest.RecordedDigest(recorded)
+	if !ok {
+		return fmt.Errorf("recorded digest is incomplete or uses an unknown hash algorithm")
+	}
+	data, err := store.Fetch(ctx, artifact)
+	if err != nil {
+		return fmt.Errorf("fetch artifact set: %w", err)
+	}
+	found, err := tar.ArtifactSetContainsDigest(ociblob.NewDescriptorBlob(data, artifact), want)
+	if err != nil {
+		return err
+	}
+	if !found {
+		return fmt.Errorf("artifact set carries no blob matching recorded digest %s", want)
+	}
+	return nil
 }
 
 func (repo *Repository) getStore(ctx context.Context, component string, version string) (ref string, store spec.Store, err error) {
@@ -991,7 +1040,7 @@ func (repo *Repository) DownloadResource(ctx context.Context, res *descriptor.Re
 	if res.Access.GetType().IsEmpty() {
 		return nil, fmt.Errorf("resource access type is empty")
 	}
-	return repo.download(ctx, res.Access)
+	return repo.download(ctx, res.Access, res.Digest)
 }
 
 // DownloadSource downloads a [*descriptor.Source] from the repository.
@@ -1005,13 +1054,13 @@ func (repo *Repository) DownloadSource(ctx context.Context, src *descriptor.Sour
 	if src.Access.GetType().IsEmpty() {
 		return nil, fmt.Errorf("source access type is empty")
 	}
-	return repo.download(ctx, src.Access)
+	return repo.download(ctx, src.Access, nil)
 }
 
 // download downloads an artifact specified by an access from the repository into a blob.ReadOnlyBlob.
 // An OCI image layer is fetched as raw content. Everything else delegates to downloadStream
 // and materializes the result into a tar-based OCI layout blob.
-func (repo *Repository) download(ctx context.Context, access runtime.Typed) (data blob.ReadOnlyBlob, err error) {
+func (repo *Repository) download(ctx context.Context, access runtime.Typed, recorded *descriptor.Digest) (data blob.ReadOnlyBlob, err error) {
 	typed, err := repo.scheme.NewObject(access.GetType())
 	if err != nil {
 		return nil, fmt.Errorf("error creating resource access: %w", err)
@@ -1020,11 +1069,45 @@ func (repo *Repository) download(ctx context.Context, access runtime.Typed) (dat
 		return nil, fmt.Errorf("error converting resource access: %w", err)
 	}
 	if layer, ok := typed.(*accessv1.OCIImageLayer); ok {
-		return repo.downloadLayer(ctx, layer)
+		b, err := repo.downloadLayer(ctx, layer)
+		if err != nil {
+			return nil, err
+		}
+		// A recorded digest must be verified; a layer blob that cannot report its own
+		// digest is a failure, not a reason to skip the check.
+		if recorded != nil {
+			da, ok := b.(blob.DigestAware)
+			if !ok {
+				return nil, fmt.Errorf("cannot verify resource digest: downloaded layer does not expose its digest")
+			}
+			actual, known := da.Digest()
+			if !known {
+				return nil, fmt.Errorf("cannot verify resource digest: downloaded layer digest unknown")
+			}
+			if err := internaldigest.VerifyRecorded(recorded, digest.Digest(actual)); err != nil {
+				// A v1 OCI artifact set reached here through its OCIImageLayer global access:
+				// the layer is the tar archive, whose hash is not the recorded manifest root.
+				// Verify the archive carries a blob hashing to the recorded root instead.
+				want, ok := internaldigest.RecordedDigest(recorded)
+				if !ok {
+					return nil, fmt.Errorf("resource digest verification failed: %w", err)
+				}
+				found, ferr := tar.ArtifactSetContainsDigest(b, want)
+				if ferr != nil || !found {
+					return nil, fmt.Errorf("resource digest verification failed: %w", err)
+				}
+			}
+		}
+		return b, nil
 	}
 	stream, err := repo.downloadStream(ctx, typed)
 	if err != nil {
 		return nil, err
+	}
+	// The downloaded root digest is the content's actual digest; reject a tampered
+	// recorded resource digest before materialising the stream.
+	if err := internaldigest.VerifyRecorded(recorded, stream.Root().Digest); err != nil {
+		return nil, fmt.Errorf("resource digest verification failed: %w", err)
 	}
 	return stream.Materialize(ctx)
 }

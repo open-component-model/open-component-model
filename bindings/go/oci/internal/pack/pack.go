@@ -98,7 +98,7 @@ func ResourceLocalBlobOCILayer(ctx context.Context, storage content.Storage, b *
 	if layer, exists, err := existingResourceLayer(ctx, storage, b, layerOpts); err != nil {
 		return ociImageSpecV1.Descriptor{}, err
 	} else if exists {
-		return finishResourceLayer(b, access, layer, opts, storage)
+		return finishResourceLayer(ctx, b, access, layer, opts, storage)
 	}
 
 	// Stream the blob directly when the storage supports streaming chunked
@@ -112,20 +112,48 @@ func ResourceLocalBlobOCILayer(ctx context.Context, storage content.Storage, b *
 		if layer, streamed, err := streamResourceLayer(ctx, pusher, b, layerOpts); err != nil {
 			return ociImageSpecV1.Descriptor{}, err
 		} else if streamed {
-			return finishResourceLayer(b, access, layer, opts, storage)
+			return finishResourceLayer(ctx, b, access, layer, opts, storage)
 		}
 	}
+
+	// PrepareArtifactBlobForOCI buffers b into memory whenever its size or digest
+	// is unknown, making it safely re-readable; otherwise b is returned unchanged
+	// and may be a single-consume stream the push below must be the only read of.
+	_, knownDigest, _ := layerDigestAndMediaType(b, layerOpts)
+	buffered := b.Size() == blob.SizeUnknown || len(knownDigest) == 0
 
 	b, layer, err := PrepareArtifactBlobForOCI(b, layerOpts)
 	if err != nil {
 		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to create resource layer based on blob: %w", err)
 	}
 
+	// A buffered b can be read again without disturbing the push below, so a
+	// mismatching recorded digest is rejected here, before pushing anything,
+	// rather than after. An unbuffered b may only be read once; its digest is
+	// still reconciled, but the v1 artifact-set fallback needs the archive back
+	// from storage and so only runs post-push, in finishResourceLayer.
+	if buffered {
+		if err := reconcileResourceDigest(b.Artifact, layer.Digest, internaldigest.GenericBlobDigestV1); err != nil {
+			resource, ok := b.Artifact.(*descriptor.Resource)
+			if !ok {
+				return ociImageSpecV1.Descriptor{}, err
+			}
+			want, wantOk := internaldigest.RecordedDigest(resource.Digest)
+			if !wantOk {
+				return ociImageSpecV1.Descriptor{}, err
+			}
+			found, ferr := tar.ArtifactSetContainsDigest(b, want)
+			if ferr != nil || !found {
+				return ociImageSpecV1.Descriptor{}, err
+			}
+		}
+	}
+
 	if err := Blob(ctx, storage, b, layer); err != nil {
 		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to push blob: %w", err)
 	}
 
-	return finishResourceLayer(b, access, layer, opts, storage)
+	return finishResourceLayer(ctx, b, access, layer, opts, storage)
 }
 
 // blobResolver is implemented by remote repositories, whose blob store can
@@ -267,19 +295,25 @@ func streamResourceLayer(ctx context.Context, pusher remotestore.StreamingPusher
 
 // finishResourceLayer applies manifest annotations and updates the artifact
 // access for a pushed resource layer.
-func finishResourceLayer(b *ociblob.ArtifactBlob, access *v2.LocalBlob, layer ociImageSpecV1.Descriptor, opts Options, storage content.Storage) (ociImageSpecV1.Descriptor, error) {
+func finishResourceLayer(ctx context.Context, b *ociblob.ArtifactBlob, access *v2.LocalBlob, layer ociImageSpecV1.Descriptor, opts Options, storage content.Storage) (ociImageSpecV1.Descriptor, error) {
 	annotations := maps.Clone(layer.Annotations)
 	maps.Copy(annotations, opts.ManifestAnnotations)
 
-	if resource, ok := b.Artifact.(*descriptor.Resource); ok && internaldigest.IsComplete(resource.Digest) && resource.Digest.NormalisationAlgorithm == internaldigest.GenericBlobDigestV1 {
-		if err := internaldigest.Verify(resource.Digest, layer.Digest, internaldigest.GenericBlobDigestV1); err != nil {
-			return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to verify resource blob digest: %w", err)
+	// The packed layer's digest is the content digest to reconcile against.
+	if err := reconcileResourceDigest(b.Artifact, layer.Digest, internaldigest.GenericBlobDigestV1); err != nil {
+		// A v1 OCI artifact set packs here (its media type is not a layout type): the
+		// layer digest is the tar archive hash, but the recorded digest is the artifact's
+		// manifest root. Accept when the archive carries a blob hashing to the recorded root;
+		// a plain blob that merely claims an ociArtifactDigest carries no such blob and stays rejected.
+		resource, ok := b.Artifact.(*descriptor.Resource)
+		if !ok || !matchesArtifactSetRoot(ctx, storage, layer, resource.Digest) {
+			return ociImageSpecV1.Descriptor{}, err
 		}
 	}
 	global := resolveGlobalAccess(opts.GlobalAccessPolicy, storage)
 
 	if err := updateArtifactAccess(b.Artifact, access, layer, updateAccessOptions{
-		Options: opts, BackedByGlobalStore: global, NormalisationAlgorithm: internaldigest.GenericBlobDigestV1,
+		Options: opts, BackedByGlobalStore: global,
 	}); err != nil {
 		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to update resource access: %w", err)
 	}
@@ -293,11 +327,10 @@ func ResourceLocalBlobOCILayout(ctx context.Context, storage content.Storage, b 
 			CopyGraphOptions: opts.CopyGraphOptions,
 		},
 		MutateParentFunc: func(idx *ociImageSpecV1.Descriptor) error {
-			// Verify the selected root, not the archive checksum, before any graph writes.
-			if resource, ok := b.Artifact.(*descriptor.Resource); ok {
-				if err := verifyLayoutRootDigest(resource.Digest, idx.Digest); err != nil {
-					return fmt.Errorf("failed to verify resource OCI artifact digest: %w", err)
-				}
+			// Reconcile against the selected root, not the archive checksum, before any
+			// graph writes, so a mismatching digest fails before anything is stored.
+			if err := reconcileResourceDigest(b.Artifact, idx.Digest, internaldigest.OCIArtifactDigestV1); err != nil {
+				return err
 			}
 			return identity.Adopt(idx, b.Artifact)
 		},
@@ -307,29 +340,62 @@ func ResourceLocalBlobOCILayout(ctx context.Context, storage content.Storage, b 
 	}
 	global := resolveGlobalAccess(opts.GlobalAccessPolicy, storage)
 	if err := updateArtifactAccess(b.Artifact, access, index, updateAccessOptions{
-		Options: opts, BackedByGlobalStore: global, NormalisationAlgorithm: internaldigest.OCIArtifactDigestV1,
+		Options: opts, BackedByGlobalStore: global,
 	}); err != nil {
 		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to update resource access: %w", err)
 	}
 	return index, nil
 }
 
-// verifyLayoutRootDigest checks a resource digest against the selected layout root without
-// modifying it. Incomplete digests must be completable from the root; complete digests with
-// another normalisation are preserved unverified.
-func verifyLayoutRootDigest(d *descriptor.Digest, root digest.Digest) error {
-	if !internaldigest.IsComplete(d) {
-		var completed descriptor.Digest
-		if d != nil {
-			completed = *d
-		}
-		return internaldigest.Complete(&completed, root, internaldigest.OCIArtifactDigestV1)
+// reconcileResourceDigest reconciles a resource's recorded digest with the digest
+// of the content just packed. A complete digest is verified and kept byte-for-byte,
+// because it may be covered by a signature and rewriting any field would break it;
+// an absent or incomplete digest is completed from the packed content, filling only
+// the missing fields and rejecting any already-set field that disagrees. Sources
+// carry no digest and are skipped.
+//
+// Acceptance is decided by the value, not the normalisation label: a plain blob
+// and a single OCI manifest both pack as a layer whose digest is the recorded
+// value (a manifest's layer digest is its manifest digest), so genericBlobDigest/v1
+// and ociArtifactDigest/v1 both verify against the packed layer. A digest in any
+// other normalisation (e.g. jsonNormalisation/v1) or the NO-DIGEST sentinel cannot
+// be recomputed from the layer and is kept unverified.
+func reconcileResourceDigest(artifact descriptor.Artifact, packed digest.Digest, normalisation string) error {
+	resource, ok := artifact.(*descriptor.Resource)
+	if !ok {
+		return nil
 	}
-	switch d.NormalisationAlgorithm {
-	case internaldigest.OCIArtifactDigestV1, internaldigest.GenericBlobDigestV1:
-		return internaldigest.VerifyOCIArtifact(d, root)
+	if internaldigest.IsComplete(resource.Digest) {
+		if err := internaldigest.VerifyRecorded(resource.Digest, packed); err != nil {
+			return fmt.Errorf("failed to verify resource blob digest: %w", err)
+		}
+		return nil
+	}
+	if resource.Digest == nil {
+		resource.Digest = &descriptor.Digest{}
+	}
+	if err := internaldigest.Complete(resource.Digest, packed, normalisation); err != nil {
+		return fmt.Errorf("failed to complete resource digest: %w", err)
 	}
 	return nil
+}
+
+// matchesArtifactSetRoot reports whether an OCI artifact set already pushed to storage
+// under layer carries a blob whose bytes hash to recorded. A v1 artifact set packs
+// through the generic path, so its layer digest is the tar archive hash, not the recorded
+// manifest root; the content is re-read from storage (never the original blob) and only
+// the blob named by recorded is hashed, leaving the pushed blob untouched.
+func matchesArtifactSetRoot(ctx context.Context, storage content.Storage, layer ociImageSpecV1.Descriptor, recorded *descriptor.Digest) bool {
+	want, ok := internaldigest.RecordedDigest(recorded)
+	if !ok {
+		return false
+	}
+	data, err := storage.Fetch(ctx, layer)
+	if err != nil {
+		return false
+	}
+	found, err := tar.ArtifactSetContainsDigest(ociblob.NewDescriptorBlob(data, layer), want)
+	return err == nil && found
 }
 
 // ResourceBlobOCILayerOptions defines the configuration options for pushing a blob as a resource.
@@ -407,8 +473,7 @@ type updateAccessOptions struct {
 	Options
 	// BackedByGlobalStore indicates if the resource is backed by a global store.
 	// This is used to determine if the resource access should be updated with a global reference.
-	BackedByGlobalStore    bool
-	NormalisationAlgorithm string
+	BackedByGlobalStore bool
 }
 
 // updateArtifactAccess updates the resource access with the new layer information.
@@ -443,22 +508,7 @@ func updateArtifactAccess(artifact descriptor.Artifact, access *v2.LocalBlob, de
 		return fmt.Errorf("failed to convert access to local blob: %w", err)
 	}
 
-	switch typed := artifact.(type) {
-	case *descriptor.Source:
-		typed.Access = access
-	case *descriptor.Resource:
-		typed.Access = access
-		// Preserve complete signed digest metadata; complete missing fields only
-		// when the fields already set match the packed content.
-		if !internaldigest.IsComplete(typed.Digest) {
-			if typed.Digest == nil {
-				typed.Digest = &descriptor.Digest{}
-			}
-			if err := internaldigest.Complete(typed.Digest, desc.Digest, opts.NormalisationAlgorithm); err != nil {
-				return fmt.Errorf("failed to complete artifact digest: %w", err)
-			}
-		}
-	}
+	artifact.SetAccess(access)
 
 	return nil
 }
