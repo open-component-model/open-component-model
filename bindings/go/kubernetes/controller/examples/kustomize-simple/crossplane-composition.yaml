@@ -1,0 +1,219 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: CompositeResourceDefinition
+metadata:
+  name: kustomizesimplecrossplanes.examples.ocm.software
+spec:
+  group: examples.ocm.software
+  names:
+    kind: KustomizeSimpleCrossplane
+    plural: kustomizesimplecrossplanes
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                prefix:
+                  type: string
+                  default: kustomize-simple-crossplane
+            status:
+              type: object
+              properties:
+                gitRepoURL:
+                  type: string
+                gitCommit:
+                  type: string
+---
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: kustomize-simple-crossplane
+spec:
+  compositeTypeRef:
+    apiVersion: examples.ocm.software/v1alpha1
+    kind: KustomizeSimpleCrossplane
+  mode: Pipeline
+  pipeline:
+    - step: patch-and-transform
+      functionRef:
+        name: crossplane-contrib-function-patch-and-transform
+      input:
+        apiVersion: pt.fn.crossplane.io/v1beta1
+        kind: Resources
+        resources:
+          - name: resourceKustomization
+            base:
+              apiVersion: delivery.ocm.software/v1alpha1
+              kind: Resource
+              metadata:
+                namespace: default
+              spec:
+                componentRef:
+                  name: kustomize-simple-component
+                resource:
+                  byReference:
+                    resource:
+                      name: kustomize-resource
+                additionalStatusFields:
+                  gitRepoURL: resource.access.repoUrl
+                  gitCommit: resource.access.commit
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.prefix
+                toFieldPath: metadata.name
+                transforms:
+                  - type: string
+                    string:
+                      type: Format
+                      fmt: "%s-resource-kustomization"
+              - type: ToCompositeFieldPath
+                fromFieldPath: status.additional.gitRepoURL
+                toFieldPath: status.gitRepoURL
+              - type: ToCompositeFieldPath
+                fromFieldPath: status.additional.gitCommit
+                toFieldPath: status.gitCommit
+          # FluxCD delivery via Kustomization from a Git source
+          - name: gitrepository
+            base:
+              apiVersion: source.toolkit.fluxcd.io/v1
+              kind: GitRepository
+              metadata:
+                namespace: default
+              spec:
+                interval: 5m
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.prefix
+                toFieldPath: metadata.name
+                transforms:
+                  - type: string
+                    string:
+                      type: Format
+                      fmt: "%s-git-repository"
+              - type: FromCompositeFieldPath
+                fromFieldPath: status.gitRepoURL
+                toFieldPath: spec.url
+              - type: FromCompositeFieldPath
+                fromFieldPath: status.gitCommit
+                toFieldPath: spec.ref.commit
+          - name: kustomization
+            base:
+              apiVersion: kustomize.toolkit.fluxcd.io/v1
+              kind: Kustomization
+              metadata:
+                namespace: default
+              spec:
+                targetNamespace: default
+                interval: 1m
+                prune: true
+                path: "kustomize"
+                sourceRef:
+                  kind: GitRepository
+                patches:
+                  # e2e-test related patch to validate deployment
+                  - patch: |
+                      - op: replace
+                        path: /metadata/name
+                        value: kustomize-simple-crossplane-podinfo
+                      - op: add
+                        path: /spec/template/metadata/labels/app.kubernetes.io~1name
+                        value: kustomize-simple-crossplane-podinfo
+                    target:
+                      kind: Deployment
+                      name: .*
+                  # Drop podinfo's HPA: the e2e cluster has no metrics-server, so the HPA can never
+                  # become healthy and only adds noise to the deployment validation.
+                  - patch: |
+                      apiVersion: autoscaling/v2
+                      kind: HorizontalPodAutoscaler
+                      metadata:
+                        name: podinfo
+                      $patch: delete
+                    target:
+                      kind: HorizontalPodAutoscaler
+                      name: .*
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.prefix
+                toFieldPath: metadata.name
+                transforms:
+                  - type: string
+                    string:
+                      type: Format
+                      fmt: "%s-kustomization"
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.prefix
+                toFieldPath: spec.sourceRef.name
+                transforms:
+                  - type: string
+                    string:
+                      type: Format
+                      fmt: "%s-git-repository"
+          # ArgoCD delivery via Application from a Git source
+          - name: argocdApplication
+            base:
+              apiVersion: argoproj.io/v1alpha1
+              kind: Application
+              metadata:
+                namespace: argocd
+                finalizers:
+                  - resources-finalizer.argocd.argoproj.io
+              spec:
+                project: default
+                source:
+                  path: "kustomize"
+                  kustomize:
+                    patches:
+                      # e2e-test related patch to validate deployment
+                      - patch: |
+                          - op: replace
+                            path: /metadata/name
+                            value: kustomize-simple-crossplane-podinfo
+                          - op: add
+                            path: /spec/template/metadata/labels/app.kubernetes.io~1name
+                            value: kustomize-simple-crossplane-podinfo
+                        target:
+                          kind: Deployment
+                          name: podinfo
+                      # Drop podinfo's HPA: the e2e cluster has no metrics-server, so the HPA reports
+                      # ScalingActive=False and ArgoCD (>= v3.5.0) marks the Application Degraded.
+                      - patch: |
+                          apiVersion: autoscaling/v2
+                          kind: HorizontalPodAutoscaler
+                          metadata:
+                            name: podinfo
+                          $patch: delete
+                        target:
+                          kind: HorizontalPodAutoscaler
+                          name: podinfo
+                destination:
+                  server: https://kubernetes.default.svc
+                  namespace: default-argocd
+                syncPolicy:
+                  automated:
+                    prune: true
+                    selfHeal: true
+                  syncOptions:
+                    - CreateNamespace=true
+            readinessChecks:
+              - type: MatchString
+                fieldPath: status.health.status
+                matchString: Healthy
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.prefix
+                toFieldPath: metadata.name
+              - type: FromCompositeFieldPath
+                fromFieldPath: status.gitRepoURL
+                toFieldPath: spec.source.repoURL
+              - type: FromCompositeFieldPath
+                fromFieldPath: status.gitCommit
+                toFieldPath: spec.source.targetRevision
+    - step: auto-ready
+      functionRef:
+        name: crossplane-contrib-function-auto-ready

@@ -10,6 +10,12 @@ components:
         access:
            type: ociArtifact
            imageReference: "ghcr.io/stefanprodan/charts/podinfo:6.9.1@sha256:565d310746f1fa4be7f93ba7965bb393153a2d57a15cfe5befc909b790a73f8a"
+      - name: crossplane-xrd
+        type: blob
+        version: "1.0.0"
+        input:
+          type: file
+          path: ./crossplane-composition.yaml
       - name: kro-rgd
         type: blob
         version: "1.0.0"

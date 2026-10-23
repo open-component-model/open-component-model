@@ -86,10 +86,17 @@ func DeployResource(ctx context.Context, manifestFilePath string) error {
 		return err
 	}
 	DeferCleanup(func(ctx SpecContext) error {
-		cmd = exec.CommandContext(ctx, "kubectl", "delete", "-f", manifestFilePath)
+		// No --timeout: the OCM finalizer teardown is a dependency cascade
+		// (Deployer -> Resource -> Component -> Repository) whose controllers
+		// return errors on the transient "still referenced" condition, so
+		// controller-runtime's exponential backoff can stretch a brief ordering
+		// conflict into several minutes. Let the Ginkgo spec deadline bound the
+		// wait instead of a fixed timeout that flakes on slow teardowns (observed
+		// exceeding 180s on the cross-namespace Repository finalizer).
+		cmd = exec.CommandContext(ctx, "kubectl", "delete", "--ignore-not-found", "--wait=true", "-f", manifestFilePath)
 		_, err := Run(cmd)
 		if err != nil {
-			GinkgoLogr.V(3).Info("WARNING: failed to delete resource", "manifest", manifestFilePath)
+			GinkgoLogr.V(3).Info("WARNING: cleanup failed", "manifest", manifestFilePath)
 		}
 
 		return err
