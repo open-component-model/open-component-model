@@ -1,18 +1,19 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   Tailors the Chainguard GPOS SRG profile (shipped in the digest-pinned
-  cgr.dev/chainguard/openscap image) for OCM's static scratch images. The
+  cgr.dev/chainguard/openscap image) for OCM's static scratch images. Most
   deselected rules check Wolfi-specific files; ocm-supplement-xccdf.xml and
   the image provenance step in image-scan.yml check the same SRG requirements
-  against OCM's images. Rule IDs carry the SRG revision, so an SRG update in a
-  new openscap image fails the scan until this list is updated.
+  against OCM's images. Two check the scanning host's kernel instead of the
+  image. Rule IDs carry the SRG revision, so an SRG update in a new openscap
+  image fails the scan until this list is updated.
 -->
 <Tailoring xmlns="http://checklists.nist.gov/xccdf/1.2" id="xccdf_software.ocm_tailoring_gpos-container">
   <benchmark href="/usr/share/xml/scap/ssg/content/ssg-chainguard-gpos-ds.xml"/>
   <version time="2026-10-03T00:00:00">1</version>
   <Profile id="xccdf_software.ocm_profile_gpos-container" extends="xccdf_basic_profile_.check">
     <title>GPOS SRG for OCM images</title>
-    <description>Chainguard GPOS SRG profile without the rules that check Wolfi-specific files. Those requirements are checked by ocm-supplement-xccdf.xml and image-scan.yml.</description>
+    <description>Chainguard GPOS SRG profile without the rules that check Wolfi-specific files, which ocm-supplement-xccdf.xml and image-scan.yml check against OCM's images, and without the rules that check the scanning host's kernel.</description>
     <!-- OpenSSL FIPS provider: OCM uses the Go Cryptographic Module (image provenance step in image-scan.yml). -->
     <select idref="xccdf_mil.disa.stig_rule_SV-203649r971535_rule" selected="false"/>
     <select idref="xccdf_mil.disa.stig_rule_SV-203739r987791_rule" selected="false"/>
@@ -30,5 +31,10 @@
     <select idref="xccdf_mil.disa.stig_rule_SV-203616r958434_rule" selected="false"/>
     <select idref="xccdf_mil.disa.stig_rule_SV-203617r958436_rule" selected="false"/>
     <select idref="xccdf_mil.disa.stig_rule_SV-203664r958566_rule" selected="false"/>
+    <!-- Non-executable data and ASLR (kernel.randomize_va_space): SCE scripts that
+         read the scanning host's kernel, not the image, and pass even for an empty
+         root filesystem. They are requirements on the host that runs the image. -->
+    <select idref="xccdf_mil.disa.stig_rule_SV-203753r958928_rule" selected="false"/>
+    <select idref="xccdf_mil.disa.stig_rule_SV-203754r958928_rule" selected="false"/>
   </Profile>
 </Tailoring>
