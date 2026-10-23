@@ -108,8 +108,6 @@ jobs:
             "$(blob "$(jq -r '.manifests[0].digest' tmp/layout/index.json)")" > tmp/index.json
           mv tmp/index.json tmp/layout/index.json
           manifest="$(blob "$(jq -r '.manifests[0].digest' tmp/layout/index.json)")"
-          config="$(blob "$(jq -r '.config.digest' "$manifest")")"
-          echo "ENTRYPOINT=$(jq -r '.config.Entrypoint[0]' "$config")" >> "$GITHUB_ENV"
 
           # dockle reads only docker-archive tarballs: the layout plus a docker
           # manifest.json pointing at the same blobs.
@@ -182,18 +180,26 @@ jobs:
       - name: Image provenance (FIPS module, CA bundle)
         if: ${{ !cancelled() }}
         run: |
-          # Go build information, as `go version -m` shows it.
-          grep -aqP '^build\tGOFIPS140=v\S+$' "tmp/rootfs${ENTRYPOINT}" ||
-            { echo "::error::$ENTRYPOINT is not built with GOFIPS140=v<version>"; exit 1; }
-          grep -aqP '^build\tDefaultGODEBUG=(.*,)?fips140=(on|only)(,|$)' "tmp/rootfs${ENTRYPOINT}" ||
-            { echo "::error::$ENTRYPOINT does not default to fips140=on"; exit 1; }
+          fail=0
+          # Every executable in the image (the supplement limits them to the
+          # declared ones), by its Go build information as `go version -m` shows it.
+          bins="$(sudo find tmp/rootfs -type f -perm /111)"
+          [[ -n "$bins" ]] || { echo "::error::image contains no executable"; exit 1; }
+          while IFS= read -r bin; do
+            path="${bin#tmp/rootfs}"
+            grep -aqP '^build\tGOFIPS140=v\S+$' "$bin" ||
+              { echo "::error::$path is not built with GOFIPS140=v<version>"; fail=1; }
+            grep -aqP '^build\tDefaultGODEBUG=(.*,)?fips140=(on|only)(,|$)' "$bin" ||
+              { echo "::error::$path does not default to fips140=on"; fail=1; }
+          done <<< "$bins"
 
           base="$(sed -nE 's/^FROM .* (ghcr\.io\/gardenlinux\/\S+@sha256:[0-9a-f]{64}) AS certs$/\1/p' "$CONTAINERFILE")"
           [[ -n "$base" ]] || { echo "::error::no digest-pinned Garden Linux certs stage in $CONTAINERFILE"; exit 1; }
           docker run --rm --platform "linux/$(docker version -f '{{.Server.Arch}}')" --entrypoint cat "$base" \
             /etc/ssl/certs/ca-certificates.crt > tmp/base-ca.crt
           cmp -s tmp/rootfs/etc/ssl/certs/ca-certificates.crt tmp/base-ca.crt ||
-            { echo "::error::CA bundle differs from the one in $base"; exit 1; }
+            { echo "::error::CA bundle differs from the one in $base"; fail=1; }
+          exit "$fail"
 
       # CIS Docker Benchmark section 4. Fails on WARN and FATAL; INFO (content
       # trust, HEALTHCHECK) and SKIP (no /etc/passwd in scratch) do not fail.

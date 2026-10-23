@@ -9,7 +9,7 @@
 
   OVAL cannot read binaries or a value from outside the scanned root
   filesystem, so image-scan.yml checks two parts of these requirements itself:
-  the entrypoint's Go FIPS build settings (SV-203649, SV-203739, SV-203750,
+  every executable's Go FIPS build settings (SV-203649, SV-203739, SV-203750,
   SV-203751, SV-203776) and that the CA bundle is byte-identical to the one in
   the digest-pinned Garden Linux base image (SV-263659).
 -->
