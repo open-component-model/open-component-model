@@ -2,14 +2,16 @@ package repository
 
 import (
 	"context"
+	"encoding/hex"
+	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"strings"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	checksumhttpv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/checksum/http/v1alpha1/spec"
-	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	ocmhttp "ocm.software/open-component-model/bindings/go/http"
 	"ocm.software/open-component-model/bindings/go/repository"
@@ -36,20 +38,15 @@ var _ repository.ResourceRepository = (*ResourceRepository)(nil)
 // ResourceRepository implements repository.ResourceRepository for wget access
 // types.
 type ResourceRepository struct {
-	client           *http.Client
-	maxDownloadSize  int64
-	filesystemConfig *filesystemv1alpha1.Config
+	client          *http.Client
+	maxDownloadSize int64
 	// checksumConfig steers the digest processor's [checksumhttpv1alpha1.ChecksumMode].
 	// Nil means "compute from stream without external verification".
 	checksumConfig *checksumhttpv1alpha1.Config
 }
 
-// NewResourceRepository builds a wget resource repository. filesystemConfig's
-// TempFolder, when set, is used for downloaded body files.
-func NewResourceRepository(filesystemConfig *filesystemv1alpha1.Config, opts ...Option) *ResourceRepository {
-	if filesystemConfig == nil {
-		filesystemConfig = &filesystemv1alpha1.Config{}
-	}
+// NewResourceRepository builds a wget resource repository.
+func NewResourceRepository(opts ...Option) *ResourceRepository {
 	options := &Options{}
 	for _, opt := range opts {
 		opt(options)
@@ -65,10 +62,9 @@ func NewResourceRepository(filesystemConfig *filesystemv1alpha1.Config, opts ...
 		maxSize = DefaultMaxDownloadSize
 	}
 	return &ResourceRepository{
-		client:           client,
-		maxDownloadSize:  maxSize,
-		filesystemConfig: filesystemConfig,
-		checksumConfig:   options.ChecksumConfig,
+		client:          client,
+		maxDownloadSize: maxSize,
+		checksumConfig:  options.ChecksumConfig,
 	}
 }
 
@@ -101,19 +97,29 @@ func (r *ResourceRepository) GetResourceCredentialConsumerIdentity(ctx context.C
 	return identity, nil
 }
 
-// DownloadResource downloads the resource and enforces the configured checksum
-// policy over the transferred bytes. This is the by-value transfer path
-// (access → local blob), so it re-runs the source-side verification rules:
-// under Require the advertised checksum must verify (and must exist), under
-// Prefer it verifies when advertised, and Skip performs no verification. The
-// returned blob owns a temp file callers should close; unclosed blobs have
-// their file removed on GC.
+// DownloadResource returns a blob streaming the resource and enforces the
+// configured checksum policy over the transferred bytes. This is the by-value
+// transfer path (access → local blob), so it re-runs the source-side
+// verification rules: under Require the advertised checksum must verify (and
+// must exist), under Prefer it verifies when advertised, and Skip performs no
+// verification. Require with nothing advertised fails here; a checksum mismatch
+// fails the blob's reader at the end of the body (its last Read and its Close).
+// Callers that do not read the blob should close it to release the response.
 func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) (blob.ReadOnlyBlob, error) {
-	policy, hasPolicy := httpverify.PolicyForMode(r.checksumConfig.ModeForURL(policyURL(resource)))
+	url := policyURL(resource)
+	policy, hasPolicy := httpverify.PolicyForMode(r.checksumConfig.ModeForURL(url))
 
 	var extra []download.Option
 	if hasPolicy {
-		extra = append(extra, download.WithDigestAlgorithms(httpverify.DigestAlgorithms(policy)...))
+		extra = append(extra,
+			download.WithDigestAlgorithms(httpverify.DigestAlgorithms(policy)...),
+			download.WithVerifier(func(header http.Header, computed download.Computed) error {
+				if err := httpverify.Verify(ctx, url, policy, header, computed); err != nil {
+					return fmt.Errorf("checksum verification failed for wget access %q: %w", url, err)
+				}
+				return nil
+			}),
+		)
 	}
 	b, wget, err := r.download(ctx, resource, credentials, extra...)
 	if err != nil {
@@ -121,7 +127,7 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 	}
 
 	if hasPolicy {
-		if err := httpverify.Verify(ctx, r.client, credentials, wget.URL, policy, b); err != nil {
+		if _, _, err := checksum.Expect(ctx, policy, checksum.Input{URL: wget.URL, Headers: b.Headers()}, nil); err != nil {
 			_ = b.Close()
 			return nil, fmt.Errorf("checksum verification failed for wget access %q: %w", wget.URL, err)
 		}
@@ -130,10 +136,10 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 	return repository.VerifyDownload(ctx, resource, b)
 }
 
-// download streams the resource body into the temp folder and returns the
-// file-backed blob plus the decoded access spec. Extra options are appended
-// after the repository defaults so callers (notably [ProcessResourceDigest])
-// can hash the stream inline via [download.WithDigestAlgorithms].
+// download opens the resource and returns the streaming blob plus the decoded
+// access spec. Extra options are appended after the repository defaults so
+// callers can hash and verify the stream via [download.WithDigestAlgorithms]
+// and [download.WithVerifier].
 func (r *ResourceRepository) download(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed, extra ...download.Option) (*download.Blob, *v1.Wget, error) {
 	if resource == nil {
 		return nil, nil, fmt.Errorf("resource is required")
@@ -147,16 +153,10 @@ func (r *ResourceRepository) download(ctx context.Context, resource *descriptor.
 		return nil, nil, fmt.Errorf("error converting resource access spec: %w", err)
 	}
 
-	var tempDir string
-	if r.filesystemConfig.TempFolder != nil {
-		tempDir = *r.filesystemConfig.TempFolder
-	}
-
 	opts := append([]download.Option{
 		download.WithClient(r.client),
 		download.WithMaxDownloadSize(r.maxDownloadSize),
 		download.WithCredentials(credentials),
-		download.WithTempDir(tempDir),
 	}, extra...)
 
 	b, err := download.Download(ctx, download.Request{
@@ -211,26 +211,26 @@ func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, resource
 	}
 
 	// Download-and-hash path (Skip, or Prefer that found nothing advertised).
-	// SHA-256 is the only algorithm required here.
-	data, wget, err := r.download(ctx, resource, credentials,
-		download.WithDigestAlgorithms(download.DigestAlgorithm{
-			Name: checksum.StorageAlgorithm.OCMName,
-			New:  checksum.StorageAlgorithm.New,
-		}),
-	)
+	data, wget, err := r.download(ctx, resource, credentials)
 	if err != nil {
 		return nil, fmt.Errorf("error downloading resource for digest processing: %w", err)
 	}
 	defer func() {
 		if closeErr := data.Close(); closeErr != nil {
-			slog.WarnContext(ctx, "failed to remove temporary file after digest processing", "err", closeErr)
+			slog.WarnContext(ctx, "failed to release wget download after digest processing", "err", closeErr)
 		}
 	}()
 
-	sha := data.Digests()[checksum.StorageAlgorithm.OCMName]
-	if sha == "" {
-		return nil, fmt.Errorf("no computed %s digest available for wget access %q", checksum.StorageAlgorithm.OCMName, wget.URL)
+	rc, err := data.ReadCloser()
+	if err != nil {
+		return nil, fmt.Errorf("error reading resource for digest processing: %w", err)
 	}
+	h := checksum.StorageAlgorithm.New()
+	_, copyErr := io.Copy(h, rc)
+	if err := errors.Join(copyErr, rc.Close()); err != nil {
+		return nil, fmt.Errorf("error reading resource for digest processing: %w", err)
+	}
+	sha := hex.EncodeToString(h.Sum(nil))
 
 	resource = resource.DeepCopy()
 	if resource.Digest == nil {

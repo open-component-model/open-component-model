@@ -6,18 +6,20 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/hex"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"io"
 	"math/big"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
-	"runtime"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -86,17 +88,16 @@ func TestDownload_HappyPath(t *testing.T) {
 }
 
 // TestDownload_StoredGzipIsNotDecoded asserts that a body served with
-// Content-Encoding: gzip is returned as stored when no client is supplied, so the
-// bytes do not depend on whether a digest is computed.
+// Content-Encoding: gzip is returned as stored, also with an injected client that
+// would transparently decompress, so sizes and checksums match the served bytes.
 func TestDownload_StoredGzipIsNotDecoded(t *testing.T) {
 	t.Parallel()
-	r := require.New(t)
 
 	var buf bytes.Buffer
 	zw := gzip.NewWriter(&buf)
 	_, err := zw.Write([]byte("hello world, stored gzipped"))
-	r.NoError(err)
-	r.NoError(zw.Close())
+	require.NoError(t, err)
+	require.NoError(t, zw.Close())
 	stored := buf.Bytes()
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -105,10 +106,19 @@ func TestDownload_StoredGzipIsNotDecoded(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	b, err := download.Download(t.Context(), download.Request{URL: srv.URL + "/stored.gz"}, download.WithTempDir(t.TempDir()))
-	r.NoError(err)
-	t.Cleanup(func() { _ = b.Close() })
-	r.Equal(stored, readBlob(t, b))
+	for name, opts := range map[string][]download.Option{
+		"default client":       nil,
+		"decompressing client": {download.WithClient(&http.Client{Transport: http.DefaultTransport.(*http.Transport).Clone()})},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			r := require.New(t)
+			b, err := download.Download(t.Context(), download.Request{URL: srv.URL + "/stored.gz"}, opts...)
+			r.NoError(err)
+			t.Cleanup(func() { _ = b.Close() })
+			r.Equal(stored, readBlob(t, b))
+		})
+	}
 }
 
 func TestDownload_Credentials(t *testing.T) {
@@ -304,116 +314,392 @@ func serveBody(t *testing.T, content []byte, chunked bool) *httptest.Server {
 	return srv
 }
 
-// TestDownload_StreamsIntoTempDir asserts that the body lands in the directory given
-// by WithTempDir, which is what lets callers place downloads on a configured volume.
-func TestDownload_StreamsIntoTempDir(t *testing.T) {
-	tempDir := t.TempDir()
-	content := []byte("streamed to disk")
+// TestDownload_StreamsBeforeBodyCompletes asserts that the blob is handed out while
+// the server is still sending the body, so nothing is buffered before it is exposed.
+func TestDownload_StreamsBeforeBodyCompletes(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
 
-	b, err := download.Download(t.Context(), download.Request{URL: serveBody(t, content, false).URL},
-		download.WithTempDir(tempDir))
-	require.NoError(t, err)
+	release := make(chan struct{})
+	var once sync.Once
+	unblock := func() { once.Do(func() { close(release) }) }
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		_, _ = w.Write([]byte("first"))
+		w.(http.Flusher).Flush()
+		select {
+		case <-release:
+		case <-req.Context().Done():
+			return
+		}
+		_, _ = w.Write([]byte("second"))
+	}))
+	t.Cleanup(srv.Close)
+	// Registered after srv.Close so it runs first: the handler must not block Close.
+	t.Cleanup(unblock)
 
-	entries, err := os.ReadDir(tempDir)
-	require.NoError(t, err)
-	require.Len(t, entries, 1, "the body must be streamed into the configured directory")
+	b, err := download.Download(t.Context(), download.Request{URL: srv.URL}, download.WithClient(srv.Client()))
+	r.NoError(err)
+	rc, err := b.ReadCloser()
+	r.NoError(err)
+	defer func() { _ = rc.Close() }()
 
-	onDisk, err := os.ReadFile(filepath.Join(tempDir, entries[0].Name()))
-	require.NoError(t, err)
-	assert.Equal(t, content, onDisk)
-	assert.Equal(t, content, readBlob(t, b))
+	first := make([]byte, len("first"))
+	_, err = io.ReadFull(rc, first)
+	r.NoError(err)
+	r.Equal("first", string(first), "the first bytes must be readable before the server finishes")
+
+	unblock()
+	rest, err := io.ReadAll(rc)
+	r.NoError(err)
+	r.Equal("second", string(rest))
 }
 
-// TestDownload_CloseRemovesTempFile asserts that closing the returned blob reclaims
-// the temporary file, so a caller that is done with a download leaves nothing behind.
-func TestDownload_CloseRemovesTempFile(t *testing.T) {
-	tempDir := t.TempDir()
+// TestDownload_ReRead asserts that the first read uses the response Download
+// opened, that a later read of a GET sends the request, including its headers,
+// again, and that a request with side effects is never sent twice.
+func TestDownload_ReRead(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name       string
+		verb       string
+		wantReread bool
+	}{
+		{name: "GET is sent again", verb: http.MethodGet, wantReread: true},
+		{name: "POST is not sent again", verb: http.MethodPost},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			r := require.New(t)
 
-	b, err := download.Download(t.Context(), download.Request{URL: serveBody(t, []byte("payload"), false).URL},
-		download.WithTempDir(tempDir))
-	require.NoError(t, err)
+			var hits atomic.Int32
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+				hits.Add(1)
+				_, _ = io.WriteString(w, req.Header.Get("X-Echo"))
+			}))
+			t.Cleanup(srv.Close)
 
-	entries, err := os.ReadDir(tempDir)
-	require.NoError(t, err)
-	require.Len(t, entries, 1)
+			b, err := download.Download(t.Context(), download.Request{
+				URL: srv.URL, Verb: tt.verb, Header: map[string][]string{"X-Echo": {"echoed header"}},
+			}, download.WithClient(srv.Client()))
+			r.NoError(err)
+			r.Equal(int32(1), hits.Load())
 
-	require.NoError(t, b.Close())
-	entries, err = os.ReadDir(tempDir)
-	require.NoError(t, err)
-	assert.Empty(t, entries, "closing the blob must remove the temporary file")
+			r.Equal("echoed header", string(readBlob(t, b)))
+			r.Equal(int32(1), hits.Load(), "the first read must use the response Download opened")
 
-	assert.NoError(t, b.Close(), "closing twice must not fail")
+			if !tt.wantReread {
+				_, err := b.ReadCloser()
+				r.ErrorContains(err, "cannot be read again")
+				r.Equal(int32(1), hits.Load(), "the request must not be sent again")
+				return
+			}
+			r.Equal("echoed header", string(readBlob(t, b)))
+			r.Equal(int32(2), hits.Load(), "a second read must send the request again")
+		})
+	}
 }
 
-// TestDownload_AbandonedBlobIsReclaimed asserts that a blob dropped without being
-// closed still has its temporary file removed, so callers that cannot close it do
-// not accumulate downloads for the lifetime of the process.
-func TestDownload_AbandonedBlobIsReclaimed(t *testing.T) {
-	tempDir := t.TempDir()
-	srv := serveBody(t, []byte("payload"), false)
+// TestDownload_UnconsumedReaderHandsBackResponse asserts that a reader closed
+// before it consumed any content leaves its response to the next reader, so a
+// caller that gives up before reading (such as a push falling back to another
+// path) can read a POST download again without sending it twice.
+func TestDownload_UnconsumedReaderHandsBackResponse(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
 
-	func() {
-		b, err := download.Download(t.Context(), download.Request{URL: srv.URL},
-			download.WithTempDir(tempDir))
-		require.NoError(t, err)
-		require.NotNil(t, b)
+	var hits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hits.Add(1)
+		_, _ = io.WriteString(w, "posted")
+	}))
+	t.Cleanup(srv.Close)
 
-		entries, err := os.ReadDir(tempDir)
-		require.NoError(t, err)
-		require.Len(t, entries, 1)
-	}()
+	b, err := download.Download(t.Context(), download.Request{URL: srv.URL, Verb: http.MethodPost},
+		download.WithClient(srv.Client()))
+	r.NoError(err)
 
-	// The cleanup runs asynchronously once the blob is unreachable, so collect and poll.
-	require.Eventually(t, func() bool {
-		runtime.GC()
-		entries, err := os.ReadDir(tempDir)
-		return err == nil && len(entries) == 0
-	}, 10*time.Second, 20*time.Millisecond, "an abandoned download must not leave its temporary file behind")
+	rc, err := b.ReadCloser()
+	r.NoError(err)
+	r.NoError(rc.Close())
+	_, err = rc.Read(make([]byte, 1))
+	r.ErrorContains(err, "after close", "a closed reader must not read the handed back response")
+
+	r.Equal("posted", string(readBlob(t, b)))
+	r.Equal(int32(1), hits.Load(), "the request must not be sent again")
+
+	_, err = b.ReadCloser()
+	r.ErrorContains(err, "cannot be read again", "a consumed response is not handed back")
 }
 
-// TestDownload_MaxDownloadSize covers both rejection paths: a response that announces
-// its length is rejected before transfer, a chunked one only while streaming.
-func TestDownload_MaxDownloadSize(t *testing.T) {
-	content := []byte("0123456789") // 10 bytes
+// TestDownload_RereadWithoutLengthIsCheckedAgainstKnownSize asserts that a
+// re-read whose response announces no length is read to its end and checked
+// against the size of the first response, instead of being cut at that size.
+func TestDownload_RereadWithoutLengthIsCheckedAgainstKnownSize(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name    string
+		reread  string
+		wantErr bool
+	}{
+		{name: "same length is accepted", reread: "xyz"},
+		{name: "longer body is rejected", reread: "xyzdef", wantErr: true},
+		{name: "shorter body is rejected", reread: "x", wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			r := require.New(t)
+
+			var hits atomic.Int32
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				if hits.Add(1) == 1 {
+					_, _ = io.WriteString(w, "abc")
+					return
+				}
+				w.(http.Flusher).Flush()
+				_, _ = io.WriteString(w, tt.reread)
+			}))
+			t.Cleanup(srv.Close)
+
+			b, err := download.Download(t.Context(), download.Request{URL: srv.URL}, download.WithClient(srv.Client()))
+			r.NoError(err)
+			r.Equal(int64(3), b.Size())
+			r.Equal("abc", string(readBlob(t, b)))
+
+			// Stop at the known size like a consumer copying exactly Size bytes.
+			rc, err := b.ReadCloser()
+			r.NoError(err)
+			got := make([]byte, 3)
+			n, readErr := io.ReadFull(rc, got)
+			closeErr := rc.Close()
+			if !tt.wantErr {
+				r.NoError(readErr)
+				r.NoError(closeErr)
+				r.Equal(tt.reread, string(got[:n]))
+				return
+			}
+			r.ErrorContains(errors.Join(readErr, closeErr), "does not have the expected 3 bytes")
+		})
+	}
+}
+
+// TestDownload_EmptyContentIsVerifiedOnClose asserts that empty content is
+// verified even when the consumer, knowing the size is zero, never reads.
+func TestDownload_EmptyContentIsVerifiedOnClose(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
+
+	b, err := download.Download(t.Context(), download.Request{URL: serveBody(t, nil, false).URL},
+		download.WithVerifier(func(http.Header, download.Computed) error { return errors.New("rejected") }))
+	r.NoError(err)
+	r.Equal(int64(0), b.Size())
+
+	rc, err := b.ReadCloser()
+	r.NoError(err)
+	r.ErrorContains(rc.Close(), "rejected")
+}
+
+// TestDownload_PartlyReadContentIsVerifiedOnClose asserts that a consumer
+// stopping before the end of the body cannot skip the verifier.
+func TestDownload_PartlyReadContentIsVerifiedOnClose(t *testing.T) {
+	t.Parallel()
+	content := []byte("partly read content")
+
+	for _, chunked := range []bool{false, true} {
+		t.Run(fmt.Sprintf("chunked=%t", chunked), func(t *testing.T) {
+			t.Parallel()
+			r := require.New(t)
+			var computed download.Computed
+			b, err := download.Download(t.Context(), download.Request{URL: serveBody(t, content, chunked).URL},
+				download.WithDigestAlgorithms(download.DigestAlgorithm{Name: "sha256", New: sha256.New}),
+				download.WithVerifier(func(_ http.Header, c download.Computed) error {
+					computed = c
+					return errors.New("rejected")
+				}))
+			r.NoError(err)
+
+			rc, err := b.ReadCloser()
+			r.NoError(err)
+			_, err = io.ReadFull(rc, make([]byte, 5))
+			r.NoError(err)
+			r.ErrorContains(rc.Close(), "rejected")
+			sum := sha256.Sum256(content)
+			r.Equal(hex.EncodeToString(sum[:]), computed.Content["sha256"], "the verifier must see the whole body")
+		})
+	}
+}
+
+func TestDownload_Size(t *testing.T) {
+	t.Parallel()
+	content := []byte("sized content")
 
 	tests := []struct {
 		name    string
-		maxSize int64
-		unset   bool
 		chunked bool
-		wantErr bool
+		want    int64
+	}{
+		{name: "announced length is the size", want: int64(len(content))},
+		{name: "chunked body has unknown size", chunked: true, want: blob.SizeUnknown},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			r := require.New(t)
+			b, err := download.Download(t.Context(), download.Request{URL: serveBody(t, content, tt.chunked).URL})
+			r.NoError(err)
+			r.Equal(tt.want, b.Size())
+			r.Equal(content, readBlob(t, b))
+		})
+	}
+}
+
+// TestDownload_Verifier asserts that the verifier sees the response header and the
+// digests of the bytes read, and that its rejection fails the reader.
+func TestDownload_Verifier(t *testing.T) {
+	t.Parallel()
+	content := []byte("verified content")
+	sum := sha256.Sum256(content)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("X-Test", "v")
+		_, _ = w.Write(content)
+	}))
+	t.Cleanup(srv.Close)
+
+	readToEOF := func(rc io.Reader) error {
+		_, err := io.ReadAll(rc)
+		return err
+	}
+	// io.ReadFull drops an error that arrives with the last requested byte.
+	readKnownSize := func(rc io.Reader) error {
+		_, err := io.ReadFull(rc, make([]byte, len(content)))
+		return err
+	}
+
+	tests := []struct {
+		name         string
+		pinned       string
+		reject       bool
+		consume      func(io.Reader) error
+		wantReadErr  bool
+		wantCloseErr bool
+	}{
+		{name: "accepted body reads without error", consume: readToEOF},
+		{name: "the pinned digest is handed to the verifier", pinned: "sha256:" + hex.EncodeToString(sum[:]), consume: readToEOF},
+		{name: "rejection fails the last read and close", reject: true, consume: readToEOF, wantReadErr: true, wantCloseErr: true},
+		{name: "rejection at the known size fails close without EOF", reject: true, consume: readKnownSize, wantCloseErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			r := require.New(t)
+
+			var gotHeader http.Header
+			var gotComputed download.Computed
+			verifier := func(header http.Header, computed download.Computed) error {
+				gotHeader, gotComputed = header, computed
+				if tt.reject {
+					return errors.New("rejected")
+				}
+				return nil
+			}
+			b, err := download.Download(t.Context(), download.Request{URL: srv.URL},
+				download.WithClient(srv.Client()),
+				download.WithDigestAlgorithms(download.DigestAlgorithm{Name: "sha256", New: sha256.New}),
+				download.WithVerifier(verifier))
+			r.NoError(err)
+			if tt.pinned != "" {
+				b.SetPrecalculatedDigest(tt.pinned)
+			}
+
+			rc, err := b.ReadCloser()
+			r.NoError(err)
+			readErr := tt.consume(rc)
+			closeErr := rc.Close()
+
+			if tt.wantReadErr {
+				r.ErrorContains(readErr, "rejected")
+			} else {
+				r.NoError(readErr)
+			}
+			if tt.wantCloseErr {
+				r.ErrorContains(closeErr, "rejected")
+			} else {
+				r.NoError(closeErr)
+			}
+			r.Equal("v", gotHeader.Get("X-Test"))
+			r.Equal(hex.EncodeToString(sum[:]), gotComputed.Content["sha256"])
+			r.Equal(tt.pinned, gotComputed.Pinned)
+		})
+	}
+}
+
+func TestDownload_ClosedBlobRefusesReads(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
+
+	b, err := download.Download(t.Context(), download.Request{URL: serveBody(t, []byte("payload"), false).URL})
+	r.NoError(err)
+	r.NoError(b.Close())
+
+	_, err = b.ReadCloser()
+	r.ErrorContains(err, "is closed")
+	r.NoError(b.Close(), "closing twice must not fail")
+}
+
+// TestDownload_MaxDownloadSize covers both rejection paths: a response that announces
+// its length is rejected by Download, a chunked one only while it is read.
+func TestDownload_MaxDownloadSize(t *testing.T) {
+	t.Parallel()
+	content := []byte("0123456789") // 10 bytes
+
+	tests := []struct {
+		name            string
+		maxSize         int64
+		unset           bool
+		chunked         bool
+		wantDownloadErr bool
+		wantReadErr     bool
 	}{
 		{name: "body below the limit", maxSize: 100},
 		{name: "body exactly at the limit", maxSize: 10},
-		{name: "body one byte over the limit", maxSize: 9, wantErr: true},
+		{name: "body one byte over the limit", maxSize: 9, wantDownloadErr: true},
 		{name: "zero disables the limit", maxSize: 0},
 		{name: "negative disables the limit", maxSize: -1},
 		{name: "unset means unlimited", unset: true},
-		{name: "oversized chunked body is caught while streaming", maxSize: 9, chunked: true, wantErr: true},
+		{name: "oversized chunked body is caught while streaming", maxSize: 9, chunked: true, wantReadErr: true},
 		{name: "chunked body below the limit", maxSize: 100, chunked: true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tempDir := t.TempDir()
+			t.Parallel()
+			r := require.New(t)
 
-			opts := []download.Option{download.WithTempDir(tempDir)}
+			var opts []download.Option
 			if !tt.unset {
 				opts = append(opts, download.WithMaxDownloadSize(tt.maxSize))
 			}
 
 			b, err := download.Download(t.Context(), download.Request{URL: serveBody(t, content, tt.chunked).URL}, opts...)
-			if tt.wantErr {
-				require.Error(t, err)
-				assert.Contains(t, err.Error(), "exceeds maximum allowed size")
-
-				entries, err := os.ReadDir(tempDir)
-				require.NoError(t, err)
-				assert.Empty(t, entries, "a rejected download must not leave a partial file behind")
+			if tt.wantDownloadErr {
+				r.ErrorContains(err, "exceeds maximum allowed size")
 				return
 			}
-			require.NoError(t, err)
-			assert.Equal(t, content, readBlob(t, b))
+			r.NoError(err)
+
+			rc, err := b.ReadCloser()
+			r.NoError(err)
+			data, readErr := io.ReadAll(rc)
+			closeErr := rc.Close()
+			if tt.wantReadErr {
+				r.ErrorContains(readErr, "exceeds maximum allowed size")
+				r.ErrorContains(closeErr, "exceeds maximum allowed size")
+				return
+			}
+			r.NoError(readErr)
+			r.NoError(closeErr)
+			r.Equal(content, data)
 		})
 	}
 }
