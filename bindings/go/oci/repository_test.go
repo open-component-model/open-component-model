@@ -2897,10 +2897,10 @@ func testRepositoryResourceDigest(t *testing.T, operation string) {
 					if normalization == "unexpected/v1" {
 						wantErr = "unsupported OCI artifact normalisation algorithm"
 					}
-					// An empty normalization is completed, but set fields must still match.
-					// Incomplete metadata copied from OCI descriptors uses the OCI spelling (Helm does).
-					if normalization == "" && mismatch != "algorithm" {
-						candidate.HashAlgorithm = "sha256"
+					// A digest without a normalisation algorithm is partially specified and
+					// rejected rather than inferred (a digest is complete or absent).
+					if normalization == "" {
+						wantErr = "a digest must be complete or absent"
 					}
 					tests = append(tests, testCase{
 						name:   fmt.Sprintf("normalization=%s/mismatch=%s", normalization, mismatch),
@@ -2912,12 +2912,8 @@ func testRepositoryResourceDigest(t *testing.T, operation string) {
 			for _, missing := range []string{"hash", "value", "hash and value"} {
 				for _, mismatch := range []bool{false, true} {
 					candidate := correct.DeepCopy()
-					var wantErr string
 					if mismatch {
 						candidate.Value = digest.FromString("different content").Encoded()
-						if missing == "hash" {
-							wantErr = "digest value mismatch"
-						}
 					}
 					if missing == "hash" || missing == "hash and value" {
 						candidate.HashAlgorithm = ""
@@ -2925,10 +2921,11 @@ func testRepositoryResourceDigest(t *testing.T, operation string) {
 					if missing == "value" || missing == "hash and value" {
 						candidate.Value = ""
 					}
+					// A digest missing any field is partially specified and rejected.
 					tests = append(tests, testCase{
 						name:   fmt.Sprintf("missing=%s/mismatch=%t", missing, mismatch),
 						digest: candidate,
-						err:    wantErr,
+						err:    "a digest must be complete or absent",
 					})
 				}
 			}
@@ -2995,10 +2992,10 @@ func testRepositoryResourceDigest(t *testing.T, operation string) {
 					}
 					r.NoError(err)
 					r.NotNil(result)
-					if tt.digest == nil || tt.digest.HashAlgorithm == "" || tt.digest.NormalisationAlgorithm == "" || tt.digest.Value == "" {
-						r.Equal(&correct, result.Digest, "new and incomplete digests must use OCI normalization and the root hash")
+					if tt.digest == nil {
+						r.Equal(&correct, result.Digest, "an absent digest is computed with OCI normalization and the root hash")
 					} else {
-						r.Equal(tt.digest, result.Digest, "existing digest triples must be preserved")
+						r.Equal(tt.digest, result.Digest, "an existing complete digest is preserved")
 					}
 					copiedRoot, err := targetStore.Resolve(ctx, "1.0.0")
 					r.NoError(err)
@@ -3025,7 +3022,7 @@ func TestRepository_UploadDigestControls(t *testing.T) {
 	}
 	var tests []testCase
 	for _, method := range []string{"resource", "stream", "source"} {
-		states := []string{"absent", "incomplete", "correct"}
+		states := []string{"absent", "correct"}
 		if method == "source" {
 			states = states[:1] // sources carry no digest
 		}
@@ -3077,9 +3074,6 @@ func TestRepository_UploadDigestControls(t *testing.T) {
 			resource := &descriptor.Resource{Access: targetAccess}
 			if tt.state != "absent" {
 				resource.Digest = wantDigest.DeepCopy()
-				if tt.state == "incomplete" {
-					resource.Digest.NormalisationAlgorithm = ""
-				}
 			}
 			original := resource.DeepCopy() // the source shares targetAccess, so this also guards it
 			var result *descriptor.Resource
@@ -4196,6 +4190,145 @@ func TestRepository_UploadResource_DigestOnlyAccess(t *testing.T) {
 		r.NoError(err)
 		r.Equal(manifest.Digest, resolved.Digest, "the tag must point at the pushed root")
 	})
+}
+
+const (
+	excludedComponent = "ocm.software/excluded-digest"
+	excludedVersion   = "1.0.0"
+)
+
+func excludedResource(access runtime.Typed) *descriptor.Resource {
+	return &descriptor.Resource{
+		ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "excluded", Version: excludedVersion}},
+		Type:        "blob",
+		Relation:    descriptor.LocalRelation,
+		Access:      access,
+		Digest:      descriptor.NewExcludeFromSignatureDigest(),
+	}
+}
+
+// A resource excluded from signing (ocm-spec: NO-DIGEST / EXCLUDE-FROM-SIGNATURE) keeps its
+// digest unchanged on every path that adds or transfers it into an OCI repository.
+func TestRepository_ExcludedFromSignatureDigest(t *testing.T) {
+	plain := []byte("plain blob content")
+	layoutData, _ := createSingleLayerOCIImage(t, []byte("layout content"), "test-image:latest")
+
+	tests := []struct {
+		name string
+		run  func(t *testing.T, repo *oci.Repository, store *ocictf.Store) (*descriptor.Resource, error)
+	}{
+		{
+			name: "AddLocalResource plain blob",
+			run: func(t *testing.T, repo *oci.Repository, _ *ocictf.Store) (*descriptor.Resource, error) {
+				t.Helper()
+				res := excludedResource(&v2.LocalBlob{LocalReference: digest.FromBytes(plain).String(), MediaType: "application/octet-stream"})
+				return repo.AddLocalResource(t.Context(), excludedComponent, excludedVersion, res, inmemory.New(bytes.NewReader(plain)))
+			},
+		},
+		{
+			name: "AddLocalResource OCI layout",
+			run: func(t *testing.T, repo *oci.Repository, _ *ocictf.Store) (*descriptor.Resource, error) {
+				t.Helper()
+				res := excludedResource(&v2.LocalBlob{LocalReference: digest.FromBytes(layoutData).String(), MediaType: layout.MediaTypeOCIImageLayoutV1 + "+tar"})
+				return repo.AddLocalResource(t.Context(), excludedComponent, excludedVersion, res, inmemory.New(bytes.NewReader(layoutData)))
+			},
+		},
+		{
+			name: "ProcessResourceDigest OCI image",
+			run: func(t *testing.T, repo *oci.Repository, store *ocictf.Store) (*descriptor.Resource, error) {
+				t.Helper()
+				memStore, root := buildTestManifestStream(t)
+				target, err := store.StoreForReference(t.Context(), "test-repo:1.0.0")
+				require.NoError(t, err)
+				require.NoError(t, oras.CopyGraph(t.Context(), memStore, target, root, oras.DefaultCopyGraphOptions))
+				require.NoError(t, target.Tag(t.Context(), root, "1.0.0"))
+				return repo.ProcessResourceDigest(t.Context(), excludedResource(&v1.OCIImage{ImageReference: "test-repo:1.0.0"}))
+			},
+		},
+		{
+			name: "UploadResource",
+			run: func(t *testing.T, repo *oci.Repository, _ *ocictf.Store) (*descriptor.Resource, error) {
+				t.Helper()
+				memStore, root := buildTestManifestStream(t)
+				stream := &ocistream.OCIResourceStream{ReadOnlyGraphStorage: memStore, Descriptor: root, TempDir: t.TempDir(), Tags: []string{"test-repo:1.0.0"}}
+				b, err := stream.Materialize(t.Context())
+				require.NoError(t, err)
+				return repo.UploadResource(t.Context(), excludedResource(&v1.OCIImage{ImageReference: "test-repo:1.0.0"}), b)
+			},
+		},
+		{
+			name: "UploadResourceStream",
+			run: func(t *testing.T, repo *oci.Repository, _ *ocictf.Store) (*descriptor.Resource, error) {
+				t.Helper()
+				memStore, root := buildTestManifestStream(t)
+				stream := &ocistream.OCIResourceStream{ReadOnlyGraphStorage: memStore, Descriptor: root, TempDir: t.TempDir(), Tags: []string{"test-repo:1.0.0"}}
+				return repo.UploadResourceStream(t.Context(), excludedResource(&v1.OCIImage{ImageReference: "test-repo:1.0.0"}), stream)
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+			fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
+			r.NoError(err)
+			store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
+			repo := Repository(t, ocictf.WithCTF(store), oci.WithScheme(testScheme))
+
+			res, err := tt.run(t, repo, store)
+			r.NoError(err)
+			r.Equal(descriptor.NewExcludeFromSignatureDigest(), res.Digest)
+		})
+	}
+}
+
+// A stored descriptor carrying the exclude triple reads back unchanged, also through v2.
+func TestRepository_GetComponentVersion_ExcludedFromSignatureDigest(t *testing.T) {
+	tests := []struct {
+		name     string
+		resource func(t *testing.T, repo *oci.Repository) descriptor.Resource
+	}{
+		{name: "local blob", resource: func(t *testing.T, repo *oci.Repository) descriptor.Resource {
+			t.Helper()
+			data := []byte("local blob content")
+			res := excludedResource(&v2.LocalBlob{LocalReference: digest.FromBytes(data).String(), MediaType: "application/octet-stream"})
+			added, err := repo.AddLocalResource(t.Context(), excludedComponent, excludedVersion, res, inmemory.New(bytes.NewReader(data)))
+			require.NoError(t, err)
+			return *added
+		}},
+		{name: "oci image", resource: func(*testing.T, *oci.Repository) descriptor.Resource {
+			return *excludedResource(&v1.OCIImage{Type: runtime.NewVersionedType(v1.OCIImageType, v1.Version), ImageReference: "test-image:1.0.0"})
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+			fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
+			r.NoError(err)
+			repo := Repository(t, ocictf.WithCTF(ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))), oci.WithScheme(testScheme))
+
+			desc := &descriptor.Descriptor{
+				Meta: descriptor.Meta{Version: "v2"},
+				Component: descriptor.Component{
+					ComponentMeta: descriptor.ComponentMeta{ObjectMeta: descriptor.ObjectMeta{Name: excludedComponent, Version: excludedVersion}},
+					Provider:      descriptor.Provider{Name: "test-provider"},
+					Resources:     []descriptor.Resource{tt.resource(t, repo)},
+				},
+			}
+			r.NoError(repo.AddComponentVersion(t.Context(), desc))
+
+			got, err := repo.GetComponentVersion(t.Context(), excludedComponent, excludedVersion)
+			r.NoError(err)
+			r.Len(got.Component.Resources, 1)
+			r.Equal(descriptor.NewExcludeFromSignatureDigest(), got.Component.Resources[0].Digest)
+
+			asV2, err := descriptor.ConvertToV2(testScheme, got)
+			r.NoError(err)
+			r.Equal(v2.NewExcludeFromSignatureDigest(), asV2.Component.Resources[0].Digest)
+			back, err := descriptor.ConvertFromV2(asV2)
+			r.NoError(err)
+			r.Equal(descriptor.NewExcludeFromSignatureDigest(), back.Component.Resources[0].Digest)
+		})
+	}
 }
 
 // TestRepository_AddOwnership_OCIImageLayerSubjectRejected asserts that ownership cannot

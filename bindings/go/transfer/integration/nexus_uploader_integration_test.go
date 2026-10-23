@@ -115,7 +115,7 @@ func Test_Integration_NexusUploader(t *testing.T) {
 		r.NoError(helmaccess.Scheme.Convert(gotResource.Access, &typedHelm))
 		r.Equal(helmRepo, typedHelm.HelmRepository)
 		r.Equal("mychart:0.1.0", typedHelm.HelmChart, "helmChart is the chart name and version nexus records")
-		r.Equal(&descriptor.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: "genericBlobDigest/v1", Value: digestOf(chartTgzBytes).Encoded()}, gotResource.Digest)
+		r.Nil(gotResource.Digest, "transfer must not inject a digest the source resource lacked")
 
 		// Nexus stores the chart under the path it derives from Chart.yaml and indexes it.
 		r.Equal(chartTgzBytes, nexusGet(t, helmRepo+"/mychart-0.1.0.tgz", adminPassword))

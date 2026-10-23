@@ -4,14 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"strings"
 
-	"github.com/opencontainers/go-digest"
-	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
-	"oras.land/oras-go/v2/content"
-
 	"ocm.software/open-component-model/bindings/go/blob"
+	"ocm.software/open-component-model/bindings/go/ctf"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	ocilayout "ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	ocitar "ocm.software/open-component-model/bindings/go/oci/tar"
@@ -58,18 +54,33 @@ func VerifyResourceContent(ctx context.Context, res *descriptor.Resource, data b
 }
 
 func isOCILayout(data blob.ReadOnlyBlob) bool {
+	mediaType, ok := blobMediaType(data)
+	return ok && ocilayout.IsOCILayoutMediaType(mediaType)
+}
+
+func blobMediaType(data blob.ReadOnlyBlob) (string, bool) {
 	aware, ok := data.(blob.MediaTypeAware)
 	if !ok {
-		return false
+		return "", false
 	}
-	mediaType, ok := aware.MediaType()
-	return ok && ocilayout.IsOCILayoutMediaType(mediaType)
+	return aware.MediaType()
 }
 
 func verifyOCILayout(ctx context.Context, data blob.ReadOnlyBlob, expected *descriptor.Digest) (err error) {
 	want, err := repository.ParseDigest(expected)
 	if err != nil {
 		return err
+	}
+	// OCM v1 stores OCI artifacts in local blobs as artifact sets.
+	if mediaType, ok := blobMediaType(data); ok && ctf.IsArtifactSetMediaType(mediaType) {
+		main, err := ocitar.VerifyArtifactSet(ctx, data)
+		if err != nil {
+			return err
+		}
+		if main.Digest != want {
+			return fmt.Errorf("OCI artifact digest mismatch: expected %s, got %s", want, main.Digest)
+		}
+		return nil
 	}
 	store, err := ocitar.ReadOCILayout(ctx, data)
 	if err != nil {
@@ -86,38 +97,5 @@ func verifyOCILayout(ctx context.Context, data blob.ReadOnlyBlob, expected *desc
 	if mains[0].Digest != want {
 		return fmt.Errorf("OCI artifact digest mismatch: expected %s, got %s", want, mains[0].Digest)
 	}
-	return verifyGraph(ctx, store, mains[0], map[digest.Digest]struct{}{})
-}
-
-// verifyGraph reads every node reachable from desc and checks it against its digest,
-// so a matching root cannot vouch for substituted layers.
-func verifyGraph(ctx context.Context, fetcher content.Fetcher, desc ociImageSpecV1.Descriptor, seen map[digest.Digest]struct{}) error {
-	if _, ok := seen[desc.Digest]; ok {
-		return nil
-	}
-	seen[desc.Digest] = struct{}{}
-
-	rc, err := fetcher.Fetch(ctx, desc)
-	if err != nil {
-		return fmt.Errorf("fetching %s failed: %w", desc.Digest, err)
-	}
-	vr := content.NewVerifyReader(rc, desc)
-	_, err = io.Copy(io.Discard, vr)
-	if err == nil {
-		err = vr.Verify()
-	}
-	if err = errors.Join(err, rc.Close()); err != nil {
-		return fmt.Errorf("verifying %s failed: %w", desc.Digest, err)
-	}
-
-	successors, err := content.Successors(ctx, fetcher, desc)
-	if err != nil {
-		return fmt.Errorf("reading successors of %s failed: %w", desc.Digest, err)
-	}
-	for _, successor := range successors {
-		if err := verifyGraph(ctx, fetcher, successor, seen); err != nil {
-			return err
-		}
-	}
-	return nil
+	return ocitar.VerifyGraph(ctx, store, mains[0])
 }
