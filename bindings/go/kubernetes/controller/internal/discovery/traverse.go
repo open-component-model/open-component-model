@@ -17,6 +17,7 @@ import (
 // produced by runtime.Identity.String (name=...,version=...).
 type resolverAndDiscoverer struct {
 	resolver resolvers.ComponentVersionRepositoryResolver
+	depth    int
 }
 
 // Resolve selects the repository for the given component identity via the
@@ -50,6 +51,12 @@ func (rd *resolverAndDiscoverer) Resolve(ctx context.Context, key string) (*desc
 // the DAG (syncdag resolves each vertex once, dag.AddEdge accepts repeated
 // edges); the descriptor reference entries themselves remain untouched.
 func (rd *resolverAndDiscoverer) Discover(_ context.Context, parent *descriptor.Descriptor) ([]string, error) {
+	// Depth gating mirrors the ocm CLI (`get cv --recursive`): 0 stops at the
+	// root, -1 walks the whole graph. Bounded positive depths need per-vertex
+	// depth tracking in the DAG discovery library (ocm-project#706).
+	if rd.depth == 0 {
+		return nil, nil
+	}
 	neighbors := make([]string, 0, len(parent.Component.References))
 	for i := range parent.Component.References {
 		neighbors = append(neighbors, parent.Component.References[i].ToComponentIdentity().String())
@@ -92,11 +99,21 @@ func (g Graph) DigestsComplete() bool {
 // identity. The graph is only consumed after the entire traversal succeeded;
 // on error no partial graph is returned.
 //
+// depth bounds the walk: 0 resolves only root, -1 resolves the complete
+// transitive graph. Positive depths are not yet supported by the DAG
+// discovery library (ocm-project#706).
+//
 // Cycle detection is not implemented here; it belongs to the shared DAG
 // package (open-component-model/ocm-project#705).
-func Traverse(ctx context.Context, root ComponentKey, resolver resolvers.ComponentVersionRepositoryResolver) (*Graph, error) {
+func Traverse(ctx context.Context, root ComponentKey, resolver resolvers.ComponentVersionRepositoryResolver, depth int) (*Graph, error) {
 	if resolver == nil {
 		return nil, fmt.Errorf("component version repository resolver must not be nil")
+	}
+	switch {
+	case depth < -1:
+		return nil, fmt.Errorf("invalid recursion depth %d: must be -1 (unlimited) or >= 0", depth)
+	case depth > 0:
+		return nil, fmt.Errorf("recursion depth > 0 not yet supported")
 	}
 
 	rootKey := runtime.Identity{
@@ -104,7 +121,7 @@ func Traverse(ctx context.Context, root ComponentKey, resolver resolvers.Compone
 		descriptor.IdentityAttributeVersion: root.Version,
 	}.String()
 
-	rd := &resolverAndDiscoverer{resolver: resolver}
+	rd := &resolverAndDiscoverer{resolver: resolver, depth: depth}
 	discoverer := syncdag.NewGraphDiscoverer(&syncdag.GraphDiscovererOptions[string, *descriptor.Descriptor]{
 		Roots:      []string{rootKey},
 		Resolver:   syncdag.ResolverFunc[string, *descriptor.Descriptor](rd.Resolve),
