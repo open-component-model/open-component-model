@@ -6,8 +6,8 @@
 #   3. OCM Resources to resolve helm charts and images
 #   4. FluxCD OCIRepositories and HelmReleases for deployment
 #
-# The product's own Component/Resource/Deployer must be bootstrapped
-# externally (see deploy/components.yaml) since this RGD is delivered
+# The product's own Component/Resource/NamespacedDeployer must be bootstrapped
+# externally (see deploy/bootstrap.yaml) since this RGD is delivered
 # through that pipeline.
 apiVersion: kro.run/v1alpha1
 kind: ResourceGraphDefinition
@@ -114,13 +114,14 @@ spec:
         - ${rgdDeployer.status.conditions.exists(c, c.type == "Ready" && c.status == "True")}
       template:
         apiVersion: delivery.ocm.software/v1alpha1
-        kind: Deployer
+        kind: NamespacedDeployer
         metadata:
           name: sovereign-product-deployer
+          namespace: ${productNamespace.metadata.name}
         spec:
+          serviceAccountName: sovereign-product-deployer
           resourceRef:
             name: ${rgdResource.metadata.name}
-            namespace: ${productNamespace.metadata.name}
     # ==========================================================
     # Application Configuration
     # ==========================================================
