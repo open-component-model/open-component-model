@@ -93,6 +93,13 @@ func NewBlobCache(opts Options) (*BlobCache, error) {
 	return c, nil
 }
 
+// Close stops the background expiry goroutine. Cached files stay on disk and are
+// reseeded by the next [NewBlobCache] over the same Dir. A closed cache no longer
+// expires entries, so it must not be used afterwards.
+func (c *BlobCache) Close() {
+	c.lru.Close()
+}
+
 // Accept reports whether desc should be cached, per [Options.Accept].
 // The full descriptor is fed to the admission filter (not just the
 // media type) so future extensions can key on annotations, size, or
@@ -195,7 +202,10 @@ func (c *BlobCache) populate(ctx context.Context, dgst digest.Digest, size int64
 //
 // Concurrent Fetches for the same digest are collapsed via
 // singleflight into a single upstream.Fetch; every caller receives an
-// independent reader over identical bytes.
+// independent reader over identical bytes. Under [RemotePolicyAlways]
+// each caller that received a shared result still checks its own
+// upstream via Exists, so callers with different credentials cannot
+// borrow each other's access.
 func (c *BlobCache) Fetch(ctx context.Context, upstream content.ReadOnlyStorage, target ociImageSpecV1.Descriptor) (io.ReadCloser, error) {
 	if c == nil || !c.Accept(target) {
 		return upstream.Fetch(ctx, target)
@@ -281,6 +291,12 @@ func (c *BlobCache) Fetch(ctx context.Context, upstream content.ReadOnlyStorage,
 		if res.Shared {
 			c.logger.DebugContext(ctx, "blobcache: singleflight: result shared across concurrent callers",
 				slog.String("digest", target.Digest.String()))
+			// if shared, we need to make sure that the caller has access
+			if c.opts.RemotePolicy == RemotePolicyAlways {
+				if err := c.verifyRemoteAccess(ctx, upstream, target); err != nil {
+					return nil, err
+				}
+			}
 		}
 		return io.NopCloser(bytes.NewReader(res.Val.([]byte))), nil
 	}
@@ -301,19 +317,26 @@ func (c *BlobCache) cached(ctx context.Context, upstream content.ReadOnlyStorage
 		return nil, nil
 	}
 	if c.opts.RemotePolicy == RemotePolicyAlways {
-		ok, err := upstream.Exists(ctx, target)
-		if err != nil {
+		if err := c.verifyRemoteAccess(ctx, upstream, target); err != nil {
 			_ = f.Close()
-			return nil, fmt.Errorf("blobcache: verify remote access: %w", err)
-		}
-		if !ok {
-			_ = f.Close()
-			return nil, fmt.Errorf("blobcache: remote does not contain or allow access to %s", target.Digest)
+			return nil, err
 		}
 	}
 	c.logger.DebugContext(ctx, "blobcache: hit",
 		slog.String("digest", target.Digest.String()), slog.Int64("size", target.Size))
 	return f, nil
+}
+
+// verifyRemoteAccess checks whether upstream can access target.
+func (c *BlobCache) verifyRemoteAccess(ctx context.Context, upstream content.ReadOnlyStorage, target ociImageSpecV1.Descriptor) error {
+	ok, err := upstream.Exists(ctx, target)
+	if err != nil {
+		return fmt.Errorf("blobcache: verify remote access: %w", err)
+	}
+	if !ok {
+		return fmt.Errorf("blobcache: remote does not contain or allow access to %s", target.Digest)
+	}
+	return nil
 }
 
 // onEvict is the LRU's eviction callback. It removes the on-disk file

@@ -28,6 +28,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/resolution"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/status"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/pkg/configuration"
+	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -197,17 +198,28 @@ func (r *Reconciler) validate(ctx context.Context, repoSpec runtime.Typed, confi
 		return fmt.Errorf("failed to create plugin manager: %w", err)
 	}
 
-	cacheBackedRepo, err := r.Resolver.NewCacheBackedRepository(ctx, &resolution.RepositoryOptions{
+	repoResolver, err := r.Resolver.RepositoryResolver(ctx, &resolution.Options{
 		RepositorySpec: repoSpec,
 		Configuration:  cfg,
 		PluginManager:  pm,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to create repository: %w", err)
+		return fmt.Errorf("failed to create repository resolver: %w", err)
 	}
 
-	// Perform health check on the repository
-	if err := cacheBackedRepo.CheckHealth(ctx); err != nil {
+	repo, err := repoResolver.GetComponentVersionRepositoryForSpecification(ctx, repoSpec)
+	if err != nil {
+		return fmt.Errorf("failed to get repository for health check: %w", err)
+	}
+
+	checkable, ok := repo.(repository.HealthCheckable)
+	if !ok {
+		log.FromContext(ctx).V(1).Info("repository is not health-checkable")
+
+		return nil
+	}
+
+	if err := checkable.CheckHealth(ctx); err != nil {
 		return fmt.Errorf("health check failed: %w", err)
 	}
 

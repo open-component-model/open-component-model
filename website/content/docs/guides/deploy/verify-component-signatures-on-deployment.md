@@ -172,6 +172,12 @@ The Secret is looked up in the `Component`'s own namespace unless the reference 
 this `Component` inherits it and verifies the same signature.
 {{< /callout >}}
 
+{{< callout context="caution" title="Own ocmConfig replaces the inherited one" icon="outline/alert-triangle" >}}
+An object inherits the configuration of its parent only when it sets no `ocmConfig` itself.
+As soon as it lists any entry, for example a credentials Secret, the inherited configuration is dropped,
+including the verification settings. To keep them, also reference the parent object in `ocmConfig`.
+{{< /callout >}}
+
 {{< /step >}}
 
 {{< step >}}

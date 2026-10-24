@@ -171,6 +171,13 @@ func NewReferenceCache(opts Options) (*ReferenceCache, error) {
 	return c, nil
 }
 
+// Close stops the background expiry goroutine. Snapshots stay on disk and are
+// reloaded by the next [NewReferenceCache] over the same Dir. A closed cache no
+// longer expires entries, so it must not be used afterwards.
+func (c *ReferenceCache) Close() {
+	c.lru.Close()
+}
+
 // Add stores a (namespace, reference) → descriptor mapping in the
 // in-memory LRU and persists the namespace's snapshot file so a
 // future run pointing at the same Dir reseeds the mapping.
@@ -233,7 +240,9 @@ func (c *ReferenceCache) Lookup(ref registry.Reference) (ociImageSpecV1.Descript
 // Resolve consults the reference cache before delegating to upstream.
 // On miss it calls upstream.Resolve and, on success, records the
 // (namespace, reference) → descriptor mapping (in-memory + on disk).
-// Errors are returned unchanged and not cached.
+// Errors are returned unchanged and not cached. Under
+// [RemotePolicyAlways] concurrent calls are not collapsed: every caller
+// resolves against its own upstream.
 //
 // See [ReferenceCache.Add] for the namespace contract. A nil receiver
 // is supported: the call falls straight through to upstream so
@@ -252,6 +261,15 @@ func (c *ReferenceCache) Resolve(ctx context.Context, upstream Resolver, ref reg
 				slog.String("digest", v.Descriptor.Digest.String()))
 			return v.Descriptor, nil
 		}
+	}
+	if c.opts.RemotePolicy == RemotePolicyAlways {
+		// make sure we aren't sharing credentials here
+		desc, err := upstream.Resolve(ctx, ref.Reference)
+		if err != nil {
+			return ociImageSpecV1.Descriptor{}, err
+		}
+		c.Add(ref, desc)
+		return desc, nil
 	}
 	// Collapse concurrent misses (or calls that must reach upstream) for
 	// the same key into one upstream round-trip.

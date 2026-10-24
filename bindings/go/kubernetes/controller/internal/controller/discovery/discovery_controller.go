@@ -42,11 +42,10 @@ import (
 // compiled selector/extraction query against it, and atomically publishes the
 // resulting payload and conditions into the Discovery status.
 //
-// The reconciler is synchronous: contrary to BaseReconciler.PluginManagerFor,
-// the request-scoped plugin manager is built with the reconcile context so
-// cancellation propagates into plugin calls. It does not use the resolution
-// worker pool; repository access happens through a request-scoped resolver
-// rooted at the referenced Component's repository spec.
+// The request-scoped plugin manager is built with the reconcile context so
+// cancellation propagates into plugin calls. Repository access happens
+// through a request-scoped resolver rooted at the referenced Component's
+// repository spec.
 type Reconciler struct {
 	*ocm.BaseReconciler
 }
