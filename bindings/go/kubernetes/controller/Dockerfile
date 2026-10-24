@@ -48,7 +48,7 @@ RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked \
 # bindings/go/sigstore/signing/handler/internal/.env (Renovate group "OCM cosign";
 # pin_sync_test.go there fails if they diverge). The sigstore signing handler in
 # bindings/go/sigstore shells out to this binary.
-FROM ghcr.io/open-component-model/cosign:v3.1.4-ocm.2@sha256:abc86b4330048abfaa2b92578ce384e14667eb3e5f2e75bbd244ae940362f541 AS cosign
+FROM ghcr.io/open-component-model/cosign:v3.1.4-ocm.3@sha256:20ffc0983902ba10a273986430963b60c94f5d3b06a1fa46fceef56eba796fcc AS cosign
 
 # Garden Linux FIPS image: source of the CA bundle for OCI/registry TLS, which
 # the final image copies by its path so nothing else from this image reaches
