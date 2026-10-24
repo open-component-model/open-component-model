@@ -35,7 +35,7 @@ Override variables on the command line (e.g., `VERSION=2.0.0 task run`):
 | `REGISTRY_NAME`    | `registry`                                                     | Local registry container name                                    |
 | `REGISTRY_PORT`    | `5001`                                                         | Local registry host port                                         |
 | `PLATFORMS`        | `linux/<host arch>` (auto-detected)                            | Docker buildx target platform                                    |
-| `KRO_VERSION`      | `0.9.0`                                                        | kro Helm chart version                                           |
+| `KRO_VERSION`      | `0.9.4`                                                        | kro Helm chart version                                           |
 | `CLI_IMAGE`        | `ghcr.io/open-component-model/cli:main`                        | OCM CLI container image                                          |
 | `TOOLKIT_IMAGE`    | `ghcr.io/open-component-model/kubernetes/controller/chart:...` | OCM toolkit Helm chart OCI reference                             |
 
@@ -91,8 +91,8 @@ Transfers components from the air-gap CTF archive into the in-cluster registry (
 1. Applies RBAC rules (`deploy/rbac.yaml`)
 2. Creates the `sovereign-product` namespace (`deploy/namespace.yaml`)
 3. Creates a Kubernetes secret with the public signing key
-4. Applies OCM bootstrap resources — Repository, Component, Resource, and Deployer CRs (`deploy/bootstrap.yaml`)
-5. Waits for the Deployer and ResourceGraphDefinition to become Ready
+4. Applies OCM bootstrap resources — Repository, Component, Resource, and NamespacedDeployer CRs (`deploy/bootstrap.yaml`)
+5. Waits for the NamespacedDeployer and ResourceGraphDefinition to become Ready
 6. Applies the SovereignProduct custom resource (`deploy/sample-product-1.0.0.yaml`)
 7. Waits for the SovereignProduct to become Ready
 
@@ -169,7 +169,7 @@ task status
 task status
 ```
 
-Dumps all OCM custom resources (Repositories, Components, Resources, Deployers) and a full cluster-info dump of the `sovereign-product` namespace.
+Dumps all OCM custom resources (Repositories, Components, Resources, NamespacedDeployers) and a full cluster-info dump of the `sovereign-product` namespace.
 
 ### Test application connectivity
 

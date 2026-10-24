@@ -1,12 +1,17 @@
-# RBAC for the sovereign scenario. Two controllers need permissions
+# RBAC for the sovereign scenario. Three identities need permissions
 # beyond what their Helm charts ship:
 #
-# 1. The OCM controller. Its Deployer uses server-side apply (ApplySet)
-#    to push the product ResourceGraphDefinition into the cluster. The
-#    default manager-role does not include kro.run permissions.
+# 1. The service account impersonated by the NamespacedDeployer needs
+#    permission to apply the product ResourceGraphDefinition into the cluster.
+#    The controller chart grants impersonation; this role bounds what this
+#    scenario's deployer service account may apply.
+#
+# 2. The OCM controller itself. It applies nothing with its own identity, but
+#    it watches the objects the NamespacedDeployer deployed to know when they
+#    are synced, so it needs read-only access to kro.run resourcegraphdefinitions.
 #    See https://ocm.software/docs/how-to/configure-custom-rbac-for-deployers/
 #
-# 2. kro. The scenario installs kro with rbac.mode=aggregation, so kro
+# 3. kro. The scenario installs kro with rbac.mode=aggregation, so kro
 #    can only manage the kinds a labeled ClusterRole grants. The role
 #    below lists exactly what the product RGD creates. No binding is
 #    needed: kro aggregates every ClusterRole labeled
@@ -16,7 +21,7 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: ocm-controller-sovereign-scenario
+  name: sovereign-product-deployer
 rules:
   - apiGroups:
       - kro.run
@@ -29,6 +34,33 @@ rules:
       - list
       - patch
       - update
+      - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: sovereign-product-deployer
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: sovereign-product-deployer
+subjects:
+  - kind: ServiceAccount
+    name: sovereign-product-deployer
+    namespace: sovereign-product
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ocm-controller-sovereign-scenario
+rules:
+  - apiGroups:
+      - kro.run
+    resources:
+      - resourcegraphdefinitions
+    verbs:
+      - get
+      - list
       - watch
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -95,7 +127,7 @@ rules:
       - repositories
       - components
       - resources
-      - deployers
+      - namespaceddeployers
     verbs:
       - create
       - delete

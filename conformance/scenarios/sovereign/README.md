@@ -45,7 +45,7 @@ flowchart LR
 
 ### Bootstrap and Self-Management Lifecycle
 
-The system has a two-phase lifecycle. In Phase 1, `kubectl apply bootstrap.yaml` creates the OCM CR chain (Repository, Component, Resource, Deployer) which delivers the ResourceGraphDefinition into the cluster. In Phase 2, a user creates a `SovereignProduct` CR. kro processes it via the RGD, which regenerates the same bootstrap CRs (idempotently) plus application resources. The system is now self-managing — changing `spec.version` triggers the full reconciliation chain automatically.
+The system has a two-phase lifecycle. In Phase 1, `kubectl apply bootstrap.yaml` creates the OCM CR chain (Repository, Component, Resource, NamespacedDeployer) which delivers the ResourceGraphDefinition into the cluster with a bounded service account. In Phase 2, a user creates a `SovereignProduct` CR. kro processes it via the RGD, which regenerates the same bootstrap CRs (idempotently) plus application resources. The system is now self-managing — changing `spec.version` triggers the full reconciliation chain automatically.
 
 ```mermaid
 flowchart TD
@@ -54,14 +54,14 @@ flowchart TD
         apply --> repo["Repository\nsovereign-repo"]
         repo --> comp["Component\nsovereign-product-component\n(verify signature)"]
         comp --> res["Resource\nsovereign-product-resource-rgd\n(extract RGD blob)"]
-        res --> deployer["Deployer\nsovereign-product-deployer\n(apply RGD to cluster)"]
+        res --> deployer["NamespacedDeployer\nsovereign-product-deployer\n(apply RGD via service account)"]
     end
 
     deployer --> rgd["ResourceGraphDefinition\n(installed in cluster)"]
 
     subgraph phase2["Phase 2: Self-Management (automatic)"]
         sp["SovereignProduct CR\nspec.version: 1.0.0"] --> rgd
-        rgd --> bootstrap_crs["Repository → Component →\nResource → Deployer\n(same CRs, idempotent)"]
+        rgd --> bootstrap_crs["Repository → Component →\nResource → NamespacedDeployer\n(same CRs, idempotent)"]
         rgd --> pg_chain["postgres:\nResource CRs → OCIRepository → HelmRelease"]
         rgd --> notes_chain["notes:\nResource CRs → OCIRepository → HelmRelease"]
         rgd --> config["ConfigMap + Secret\n(app configuration)"]
@@ -76,10 +76,11 @@ This scenario uses kro because it solves four problems at once:
 
 - **Single configuration surface.** Operators create one `SovereignProduct` CR instead of applying 15 individual resources. The RGD schema exposes only the knobs that matter (version, replicas, DB credentials, resource limits).
 - **Dependency ordering.** kro evaluates `readyWhen` CEL expressions to gate resource creation — Repository must be Ready before Component, Component before Resource, and so on — so resources are never created before their dependencies exist.
-- **Self-management.** The RGD includes the same Repository / Component / Resource / Deployer CRs that delivered it. After bootstrap, kro reconciles these idempotently, so the system manages its own delivery pipeline.
+- **Self-management.** The RGD includes the same Repository / Component / Resource / NamespacedDeployer CRs that delivered it. After bootstrap, kro reconciles these idempotently, so the system manages its own delivery pipeline.
+- **Bounded deployment permissions.** The OCM NamespacedDeployer impersonates the `sovereign-product-deployer` service account instead of using controller-wide permissions.
 - **Bridge between controllers.** kro translates OCM Resource status fields (registry, repository, digest) into FluxCD inputs (OCIRepository URLs, HelmRelease chart refs, image tags) via CEL expressions. Neither the OCM Controller nor FluxCD needs to know about the other.
 
-In practice, the flow works like this: the OCM Deployer CR installs the RGD into the cluster. kro registers the `SovereignProduct` CRD. When a `SovereignProduct` CR is created, kro creates all 15 resources in dependency order, interpolating CEL expressions like `${postgresChartResource.status.additional.oci.registry}` to wire OCM outputs into FluxCD inputs.
+In practice, the flow works like this: the OCM NamespacedDeployer CR installs the RGD into the cluster. kro registers the `SovereignProduct` CRD. When a `SovereignProduct` CR is created, kro creates all 15 resources in dependency order, interpolating CEL expressions like `${postgresChartResource.status.additional.oci.registry}` to wire OCM outputs into FluxCD inputs.
 
 ### Controller Reconciliation Chain
 
@@ -92,7 +93,7 @@ flowchart LR
         component --> res_rgd["Resource\n(product-rgd)"]
         component --> res_chart["Resource\n(helm-chart)"]
         component --> res_image["Resource\n(image)"]
-        res_rgd --> deployer["Deployer"]
+        res_rgd --> deployer["NamespacedDeployer"]
     end
 
     subgraph kro["kro"]
