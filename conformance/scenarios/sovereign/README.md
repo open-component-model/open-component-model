@@ -120,8 +120,7 @@ task run
 # Or run each stage independently — see USAGE.md for details
 task check && task clean && task prepare
 task cluster:setup
-task build:product
-task transfer:airgap
+task airgap          # build + sign + transfer; skipped if the air-gap CTF already has VERSION
 task cluster:import
 task cluster:bootstrap
 task verify:deployment

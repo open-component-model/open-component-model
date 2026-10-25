@@ -484,12 +484,11 @@ sequenceDiagram
 
 The actual `task upgrade` implementation:
 
-1. Delete old archives (`rm -rf` CTF and airgap)
-2. `build:product` with `VERSION=1.1.0`
-3. `transfer:airgap` with `VERSION=1.1.0`
-4. `cluster:import` with `VERSION=1.1.0`
-5. `kubectl apply -f deploy/sample-product-1.1.0.yaml`
-6. Wait for `SovereignProduct` to be Ready
+1. `airgap` with `VERSION=1.1.0`: skipped if the air-gap CTF already holds `1.1.0`, otherwise
+   `build:product` and `transfer:airgap` (the air-gap CTF keeps `1.0.0` next to it)
+2. `cluster:import` with `VERSION=1.1.0`
+3. `kubectl apply -f deploy/sample-product-1.1.0.yaml`
+4. Wait for `SovereignProduct` to be Ready
 
 ---
 
@@ -551,7 +550,7 @@ task upgrade
 task verify:deployment
 
 # Clean up
-task clean
+task clean          # task clean:cluster keeps tmp/ (CTF archives, keys) for a faster re-run
 ```
 
 ### 11.2 Testing Strategy

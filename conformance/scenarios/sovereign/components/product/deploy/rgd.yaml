@@ -339,6 +339,10 @@ spec:
             name: ${notesOciRepository.metadata.name}
           values:
             replicaCount: ${schema.spec.notes.replicas}
+            # Reachable from the host on localhost:8080 via the kind port mapping (see Taskfile cluster:create).
+            service:
+              type: NodePort
+              nodePort: 30080
             image:
               repository: ${notesImageResource.status.additional.oci.registry}/${notesImageResource.status.additional.oci.repository}
               digest: ${notesImageResource.status.additional.oci.digest}
