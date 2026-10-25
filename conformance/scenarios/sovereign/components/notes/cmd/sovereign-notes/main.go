@@ -19,6 +19,7 @@ import (
 	_ "github.com/lib/pq"
 
 	"github.com/gorilla/mux"
+	"github.com/open-component-model/open-component-model/conformance/scenarios/sovereign/components/notes/internal/dbwait"
 )
 
 // Note represents a note in the system
@@ -60,8 +61,8 @@ func main() {
 		log.Fatal("Failed to connect to database:", err)
 	}
 
-	// Test database connection
-	if err := db.PingContext(context.Background()); err != nil {
+	// Wait for the database: on first start PostgreSQL is deployed alongside and not reachable yet
+	if err := dbwait.Ping(context.Background(), db, 5*time.Minute, 2*time.Second); err != nil {
 		log.Fatal("Failed to ping database:", err)
 	}
 

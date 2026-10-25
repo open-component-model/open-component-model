@@ -40,6 +40,15 @@ env:
 
 # Liveness and readiness probe configuration
 probes:
+  # The service waits up to 5 minutes for PostgreSQL before serving; liveness only starts once this succeeds.
+  startup:
+    httpGet:
+      path: /healthz
+      port: 8080
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 60
+
   liveness:
     httpGet:
       path: /healthz

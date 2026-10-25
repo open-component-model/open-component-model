@@ -69,6 +69,8 @@ spec:
                   key: database.name
             - name: DATABASE_URL
               value: "postgresql://$(DB_USER):$(DB_PASSWORD)@$(DB_HOST):$(DB_PORT)/$(DB_NAME)?sslmode=disable"
+          startupProbe:
+            {{- toYaml .Values.probes.startup | nindent 12 }}
           livenessProbe:
             {{- toYaml .Values.probes.liveness | nindent 12 }}
           readinessProbe:

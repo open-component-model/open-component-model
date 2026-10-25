@@ -19,6 +19,7 @@ import (
 	_ "github.com/lib/pq"
 
 	"github.com/gorilla/mux"
+	"github.com/open-component-model/open-component-model/conformance/scenarios/sovereign/components/notes/internal/dbwait"
 )
 
 // Note represents a note in the system (v1.0.0 — no title field).
@@ -57,7 +58,7 @@ func main() {
 		log.Fatal("Failed to connect to database:", err)
 	}
 
-	if err := db.PingContext(context.Background()); err != nil {
+	if err := dbwait.Ping(context.Background(), db, 5*time.Minute, 2*time.Second); err != nil {
 		log.Fatal("Failed to ping database:", err)
 	}
 
