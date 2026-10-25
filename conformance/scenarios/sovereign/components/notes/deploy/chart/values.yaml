@@ -38,6 +38,10 @@ databaseSecretRef: "db-credentials"
 env:
   PORT: "8080"
 
+# Seconds a terminating pod keeps serving before it receives SIGTERM, so it is removed from the
+# Service endpoints first. The app then drains in-flight requests (up to 10s) within the default 30s grace period.
+preStopSleepSeconds: 5
+
 # Liveness and readiness probe configuration
 probes:
   # The service waits up to 5 minutes for PostgreSQL before serving; liveness only starts once this succeeds.
