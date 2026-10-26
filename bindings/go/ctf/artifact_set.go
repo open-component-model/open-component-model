@@ -155,22 +155,20 @@ func NewArtifactSetFromBlob(b blob.ReadOnlyBlob) (*ArtifactSet, error) {
 		return nil, fmt.Errorf("unable to open blob: %w", err)
 	}
 
-	// Read the first 512 bytes (Tar header size)
-	buf := make([]byte, 512)
-	n, err := raw.Read(buf)
-	if err != nil {
-		return nil, err
+	// Read the first two bytes for gzip detection and replay them afterwards.
+	var header [2]byte
+	n, err := io.ReadFull(raw, header[:])
+	if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrUnexpectedEOF) {
+		return nil, errors.Join(fmt.Errorf("unable to read blob: %w", err), raw.Close())
 	}
-
-	var reader io.Reader = raw
+	var reader io.Reader = io.MultiReader(bytes.NewReader(header[:n]), raw)
 
 	closeFn := raw.Close
 	// Check for Gzip magic number (0x1F, 0x8B)
-	if n >= 2 && buf[0] == 0x1F && buf[1] == 0x8B {
-		multiReader := io.MultiReader(bytes.NewReader(buf), raw)
-		gzipReader, err := gzip.NewReader(multiReader)
+	if n == 2 && header[0] == 0x1F && header[1] == 0x8B {
+		gzipReader, err := gzip.NewReader(reader)
 		if err != nil {
-			return nil, fmt.Errorf("failed to create gzip reader: %w", err)
+			return nil, errors.Join(fmt.Errorf("failed to create gzip reader: %w", err), raw.Close())
 		}
 		closeFn = func() error {
 			return errors.Join(gzipReader.Close(), raw.Close())
@@ -180,13 +178,13 @@ func NewArtifactSetFromBlob(b blob.ReadOnlyBlob) (*ArtifactSet, error) {
 
 	fs, err := tarfs.New(reader)
 	if err != nil {
-		return nil, fmt.Errorf("unable to create tarfs: %w", err)
+		return nil, errors.Join(fmt.Errorf("unable to create tarfs: %w", err), closeFn())
 	}
 	fileSystem := fs.(fileSystem)
 
 	idx, err := NewArtifactSetIndex(fs)
 	if err != nil {
-		return nil, fmt.Errorf("unable to read index.json: %w", err)
+		return nil, errors.Join(fmt.Errorf("unable to read index.json: %w", err), closeFn())
 	}
 
 	return &ArtifactSet{
