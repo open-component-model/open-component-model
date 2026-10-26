@@ -19,7 +19,7 @@ A **component** is a logical unit of software — a frontend, a database, an aut
 Each component version is an immutable snapshot that contains:
 
 - **Resources**: the deliverables (OCI images, Helm charts, binaries, configuration files).
-- **Sources**: the inputs from which resources were built (git repositories, source archives).
+- **Sources** (deprecated): the inputs from which resources were built (git repositories, source archives). Sources carry no digest, so neither the component version digest nor a signature covers their content. Declare such content as resources instead; see [Migrate from Sources to Resources]({{< relref "docs/changelog/migrate-from-sources.md" >}}).
 - **References**: dependencies on other component versions.
 
 A component version is always described by a [component descriptor](#the-component-descriptor) — a YAML document that lists every element and how to access it.
@@ -122,7 +122,7 @@ The general pattern is:
 
 ## The Component Descriptor
 
-The component descriptor is a YAML document that fully describes a component version. It is the central data structure in OCM. It lists three kinds of elements — **resources** (deliverables like images and charts), **sources** (inputs like git repos), and **references** (dependencies on other component versions). Each element carries identity fields (`name`, optional `extraIdentity`), a type, and an access specification. Labels can be attached to the component or any element as extensible key-value metadata.
+The component descriptor is a YAML document that fully describes a component version. It is the central data structure in OCM. It lists three kinds of elements — **resources** (deliverables like images and charts), **sources** (inputs like git repos; deprecated, because they carry no digest — use resources instead, see [Migrate from Sources to Resources]({{< relref "docs/changelog/migrate-from-sources.md" >}})), and **references** (dependencies on other component versions). Each element carries identity fields (`name`, optional `extraIdentity`), a type, and an access specification. Labels can be attached to the component or any element as extensible key-value metadata.
 
 For the full structure and field reference, see [Component Descriptor Reference]({{< relref "docs/reference/component-descriptor.md" >}}).
 

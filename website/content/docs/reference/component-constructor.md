@@ -18,6 +18,12 @@ The constructor schema accepts two formats:
 - **Variant 2** -- A single component defined directly at the top level with `name`,
   `version`, `provider`, and its associated `resources`, `sources`, and `componentReferences`.
 
+{{< callout context="caution" title="Sources are deprecated" icon="outline/alert-triangle" >}}
+The `sources` field is deprecated. Sources carry no digest, so neither the component version digest nor a signature
+covers their content. Declare this content as `resources` instead. `ocm add cv` prints a warning when a constructor
+declares sources. See [Migrate from Sources to Resources]({{< relref "docs/changelog/migrate-from-sources.md" >}}).
+{{< /callout >}}
+
 The schema below defines the full structure as specified by
 [JSON Schema 2020-12](https://json-schema.org/draft/2020-12/schema).
 

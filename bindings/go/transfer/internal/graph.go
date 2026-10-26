@@ -248,6 +248,21 @@ func fillGraphDefinitionWithPrefetchedComponents(
 			"component", component, "version", version,
 			"targets", len(targets),
 			"resources", len(v2desc.Component.Resources))
+		localSources, referencedSources := classifySources(v2desc.Component.Sources)
+		if len(referencedSources) > 0 {
+			// Sources are copied by reference only: without a digest their content
+			// cannot be verified, so transfer never fetches or re-uploads it.
+			slog.WarnContext(ctx, "sources are unsafe and cannot be transferred as they lack a digest; copying their references as is",
+				"component", component, "version", version,
+				"sources", sourceNames(v2desc.Component.Sources, referencedSources))
+		}
+		if len(localSources) > 0 {
+			// Local blob sources live in the component version itself, so their reference
+			// is meaningless without the blob: their content is copied, unverified.
+			slog.WarnContext(ctx, "local blob sources are deprecated and heavily discouraged: their content is copied but has no digest, so it cannot be verified; declare it as resources instead",
+				"component", component, "version", version,
+				"sources", sourceNames(v2desc.Component.Sources, localSources))
+		}
 
 		for targetIdx, target := range targets {
 			id := baseID
@@ -266,7 +281,12 @@ func fillGraphDefinitionWithPrefetchedComponents(
 			}
 			allFileRefs = append(allFileRefs, fileRefs...)
 
-			if err := addUploadTransformation(v2desc, id, baseID, target, tgd, resourceTransformIDs,
+			sourceTransformIDs, err := processLocalSources(v2desc, localSources, id, val, tgd, target)
+			if err != nil {
+				return err
+			}
+
+			if err := addUploadTransformation(v2desc, id, baseID, target, tgd, resourceTransformIDs, sourceTransformIDs,
 				uploadLabel(&val.Descriptor.Component, target, targetIdx, len(targets))); err != nil {
 				return err
 			}
@@ -506,10 +526,11 @@ func addDescriptorToEnvironment(v2desc *descriptorv2.Descriptor, id string, tgd 
 }
 
 // addUploadTransformation creates the final upload (AddComponentVersion) transformation
-// for a component, reconstructing the descriptor with CEL references to modified resources.
+// for a component, reconstructing the descriptor with CEL references to modified resources
+// and sources.
 // envID is the base ID used to reference the descriptor in the environment (without target suffix).
-func addUploadTransformation(v2desc *descriptorv2.Descriptor, id string, envID string, toSpec runtime.Typed, tgd *transformv1alpha1.TransformationGraphDefinition, resourceTransformIDs map[int]string, label string) error {
-	descriptorSpec := buildDescriptorSpec(v2desc, envID, resourceTransformIDs)
+func addUploadTransformation(v2desc *descriptorv2.Descriptor, id string, envID string, toSpec runtime.Typed, tgd *transformv1alpha1.TransformationGraphDefinition, resourceTransformIDs, sourceTransformIDs map[int]string, label string) error {
+	descriptorSpec := buildDescriptorSpec(v2desc, envID, resourceTransformIDs, sourceTransformIDs)
 
 	addType, err := chooseAddType(toSpec)
 	if err != nil {
@@ -538,35 +559,26 @@ func addUploadTransformation(v2desc *descriptorv2.Descriptor, id string, envID s
 }
 
 // buildDescriptorSpec constructs the descriptor specification for the upload transformation.
-// If no resources were modified (no resource transformations), it returns a CEL reference to
+// If no resources or sources were modified (no transformations), it returns a CEL reference to
 // the original descriptor in the environment. Otherwise, it builds a composite descriptor where
-// each modified resource is referenced via its Add transformation's output, and unmodified
-// resources reference the original environment data.
-func buildDescriptorSpec(v2desc *descriptorv2.Descriptor, id string, resourceTransformIDs map[int]string) any {
-	if len(resourceTransformIDs) == 0 {
+// each modified resource or source is referenced via its transformation's output, and
+// unmodified ones reference the original environment data.
+func buildDescriptorSpec(v2desc *descriptorv2.Descriptor, id string, resourceTransformIDs, sourceTransformIDs map[int]string) any {
+	if len(resourceTransformIDs) == 0 && len(sourceTransformIDs) == 0 {
 		return fmt.Sprintf("${environment.%s}", id)
 	}
 
-	resourcesArray := make([]any, len(v2desc.Component.Resources))
-	for i := range v2desc.Component.Resources {
-		if addID, ok := resourceTransformIDs[i]; ok {
-			resourcesArray[i] = fmt.Sprintf("${%s.output.resource}", addID)
-		} else {
-			resourcesArray[i] = fmt.Sprintf("${environment.%s.component.resources[%d]}", id, i)
-		}
-	}
-
 	componentMap := map[string]any{
-		"name":      fmt.Sprintf("${environment.%s.component.name}", id),
-		"version":   fmt.Sprintf("${environment.%s.component.version}", id),
-		"provider":  fmt.Sprintf("${environment.%s.component.provider}", id),
-		"resources": resourcesArray,
+		"name":     fmt.Sprintf("${environment.%s.component.name}", id),
+		"version":  fmt.Sprintf("${environment.%s.component.version}", id),
+		"provider": fmt.Sprintf("${environment.%s.component.provider}", id),
 	}
 
+	setTransformedListField(componentMap, "resources", "resource", id, v2desc.Component.Resources, resourceTransformIDs)
+	setTransformedListField(componentMap, "sources", "source", id, v2desc.Component.Sources, sourceTransformIDs)
 	setOptionalField(componentMap, "creationTime", id, v2desc.Component.CreationTime != "")
 	setOptionalField(componentMap, "labels", id, len(v2desc.Component.Labels) != 0)
 	setListField(componentMap, "repositoryContexts", id, v2desc.Component.RepositoryContexts)
-	setListField(componentMap, "sources", id, v2desc.Component.Sources)
 	setListField(componentMap, "componentReferences", id, v2desc.Component.References)
 
 	descSpecMap := map[string]any{
@@ -602,4 +614,47 @@ func setListField[T any](componentMap map[string]any, field, id string, list []T
 	default:
 		componentMap[field] = fmt.Sprintf("${environment.%s.component.%s}", id, field)
 	}
+}
+
+// setTransformedListField sets a list field whose elements may be replaced by transformations.
+// Without transformations it is setListField. Otherwise each element at index i with an
+// entry in transformIDs references that transformation's output.<outputField>; all other
+// elements reference the environment.
+func setTransformedListField[T any](componentMap map[string]any, field, outputField, id string, list []T, transformIDs map[int]string) {
+	if len(transformIDs) == 0 {
+		setListField(componentMap, field, id, list)
+		return
+	}
+	elements := make([]any, len(list))
+	for i := range list {
+		if transformID, ok := transformIDs[i]; ok {
+			elements[i] = fmt.Sprintf("${%s.output.%s}", transformID, outputField)
+		} else {
+			elements[i] = fmt.Sprintf("${environment.%s.component.%s[%d]}", id, field, i)
+		}
+	}
+	componentMap[field] = elements
+}
+
+// classifySources splits the indices of sources into those whose access is a local blob,
+// whose content transfer copies into the target, and all others, which transfer copies
+// by reference only.
+func classifySources(sources []descriptorv2.Source) (local, referenced []int) {
+	for i, source := range sources {
+		if source.Access != nil && descriptorv2.IsLocalBlob(source.Access) {
+			local = append(local, i)
+		} else {
+			referenced = append(referenced, i)
+		}
+	}
+	return local, referenced
+}
+
+// sourceNames returns the identities of the sources at indices, for logging.
+func sourceNames(sources []descriptorv2.Source, indices []int) []string {
+	names := make([]string, len(indices))
+	for i, idx := range indices {
+		names[i] = sources[idx].ToIdentity().String()
+	}
+	return names
 }

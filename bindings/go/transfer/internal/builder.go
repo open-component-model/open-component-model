@@ -80,6 +80,11 @@ func NewDefaultBuilder(
 		RepoProvider:       repoProvider,
 		CredentialProvider: credentialProvider,
 	}
+	transferLocalSource := &ocitransformer.TransferLocalSource{
+		Scheme:             transformerScheme,
+		RepoProvider:       repoProvider,
+		CredentialProvider: credentialProvider,
+	}
 	transferLocalBlobToOCIArtifact := &ocitransformer.TransferLocalBlobToOCIArtifact{
 		Scheme:             transformerScheme,
 		RepoProvider:       repoProvider,
@@ -212,6 +217,10 @@ func NewDefaultBuilder(
 		WithTransformer(&ociv1alpha1.TransferOCILocalBlobToCTFLocalBlob{}, transferLocalBlob).
 		WithTransformer(&ociv1alpha1.TransferCTFLocalBlobToOCILocalBlob{}, transferLocalBlob).
 		WithTransformer(&ociv1alpha1.TransferCTFLocalBlobToCTFLocalBlob{}, transferLocalBlob).
+		WithTransformer(&ociv1alpha1.TransferOCILocalSourceToOCILocalSource{}, transferLocalSource).
+		WithTransformer(&ociv1alpha1.TransferOCILocalSourceToCTFLocalSource{}, transferLocalSource).
+		WithTransformer(&ociv1alpha1.TransferCTFLocalSourceToOCILocalSource{}, transferLocalSource).
+		WithTransformer(&ociv1alpha1.TransferCTFLocalSourceToCTFLocalSource{}, transferLocalSource).
 		WithTransformer(&ociv1alpha1.TransferOCILocalBlobToOCIArtifact{}, transferLocalBlobToOCIArtifact).
 		WithTransformer(&ociv1alpha1.TransferCTFLocalBlobToOCIArtifact{}, transferLocalBlobToOCIArtifact).
 		WithTransformer(&ociv1alpha1.TransferOCIArtifactToOCILocalBlob{}, transferOCIArtifactToLocalBlob).

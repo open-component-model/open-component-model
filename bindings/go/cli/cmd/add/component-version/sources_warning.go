@@ -43,7 +43,8 @@ func renderSourcesWarning(w io.Writer, components []string) {
 	lines = append(lines,
 		"Sources have NO DIGEST: their content is not covered by the component",
 		"version digest or any signature and can be replaced without detection.",
-		"Declare this content as resources instead.",
+		"Declare this content as resources instead, see the migration guide:",
+		"https://ocm.software/docs/changelog/migrate-from-sources/",
 		banner,
 	)
 	_, _ = fmt.Fprintln(w)
