@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 
 	"github.com/opencontainers/go-digest"
+	slogcontext "github.com/veqryn/slog-context"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/direct"
@@ -32,6 +34,13 @@ func (repo *Repository) convertArtifactSetToOCILayout(ctx context.Context, b blo
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to read artifact set: %w", err)
 	}
+
+	var mediaType string
+	if mediaTypeAware, ok := b.(blob.MediaTypeAware); ok {
+		mediaType, _ = mediaTypeAware.MediaType()
+	}
+	slogcontext.Info(ctx, "converting legacy artifact set to OCI layout for upload",
+		slog.String("mediaType", mediaType), slog.String("format", artifactSet.Format().String()))
 
 	file, err := os.CreateTemp(repo.tempDir, "ocm-artifact-set-*.tar")
 	if err != nil {

@@ -51,6 +51,19 @@ const (
 	ArtifactSetFormatOCI
 )
 
+func (f ArtifactSetFormat) String() string {
+	switch f {
+	case ArtifactSetFormatLegacyOCI:
+		return "LegacyOCI"
+	case ArtifactSetFormatOCM:
+		return "OCM"
+	case ArtifactSetFormatOCI:
+		return "OCI"
+	default:
+		return fmt.Sprintf("ArtifactSetFormat(%d)", int(f))
+	}
+}
+
 // ArtifactSetDescriptorFileName is the file name for artifact index if the artifact set is created
 // with ArtifactSetFormatOCM.
 const ArtifactSetDescriptorFileName = "artifact-descriptor.json"

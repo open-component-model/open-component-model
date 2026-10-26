@@ -812,7 +812,7 @@ func (repo *Repository) uploadOCIImage(ctx context.Context, newAccess runtime.Ty
 
 	converted := b
 	if isArtifactSetBlob(b) {
-		layout, cleanup, err := repo.convertArtifactSetToOCILayout(ctx, b)
+		layout, cleanup, err := repo.convertArtifactSetToOCILayout(slogcontext.With(ctx, slog.String("target", access.ImageReference)), b)
 		if err != nil {
 			return ociImageSpecV1.Descriptor{}, nil, err
 		}
