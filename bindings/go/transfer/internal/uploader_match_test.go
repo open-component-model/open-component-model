@@ -7,7 +7,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
 	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
 )
 
@@ -24,6 +26,58 @@ func matchEnv(t *testing.T, resource descriptor.Resource) (*uploaderEnv, map[str
 	aliases, err := uploaderAliases(env, 0, testOCIRepo("ghcr.io/target"))
 	r.NoError(err)
 	return env, aliases
+}
+
+func TestDefaultOCIUploaderMatchesLegacyOCIArtifactSet(t *testing.T) {
+	r := require.New(t)
+	resource := localBlobResource("image", "1.0.0")
+	access := resource.Access.(*descriptorv2.LocalBlob)
+	access.MediaType = "application/vnd.oci.image.index.v1+tar+gzip"
+	access.ReferenceName = "org/image:v1"
+	env, aliases := matchEnv(t, resource)
+
+	matched, err := matches(t.Context(), transferv1alpha1.DefaultOCIUploaderMatch, aliases, env)
+	r.NoError(err)
+	r.True(matched)
+}
+
+func TestIsArtifactSetMediaType(t *testing.T) {
+	env, aliases := matchEnv(t, localBlobResource("image", "1.0.0"))
+
+	tests := []struct {
+		name       string
+		expression string
+		want       bool
+	}{
+		{
+			name:       "OCI index artifact set",
+			expression: `isArtifactSetMediaType("application/vnd.oci.image.index.v1+tar+gzip")`,
+			want:       true,
+		},
+		{
+			name:       "OCI manifest artifact set",
+			expression: `isArtifactSetMediaType("application/vnd.oci.image.manifest.v1+tar+gzip")`,
+			want:       true,
+		},
+		{
+			name:       "OCI index descriptor",
+			expression: `isArtifactSetMediaType("application/vnd.oci.image.index.v1+json")`,
+			want:       false,
+		},
+		{
+			name:       "unsupported tar archive",
+			expression: `isArtifactSetMediaType("application/vnd.oci.image.index.v1+tar")`,
+			want:       false,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			got, err := matches(t.Context(), tc.expression, aliases, env)
+			r.NoError(err)
+			r.Equal(tc.want, got)
+		})
+	}
 }
 
 // TestMatchesCostLimit covers that a match expression from user configuration cannot

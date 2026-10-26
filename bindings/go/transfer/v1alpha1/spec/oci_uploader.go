@@ -31,8 +31,9 @@ const (
     ? ":" + resource.access.version
     : (resource.access.helmChart.contains(":") ? ":" + resource.access.helmChart.split(":")[1] : ""))}`
 
-	// DefaultOCIImageReferenceLocalBlob names a local blob holding an OCI manifest by its
-	// referenceName, verbatim: org/image:v1 becomes <target>/org/image:v1.
+	// DefaultOCIImageReferenceLocalBlob names a local blob holding an OCI manifest or
+	// artifact set by its referenceName, verbatim: org/image:v1 becomes
+	// <target>/org/image:v1.
 	DefaultOCIImageReferenceLocalBlob = "${" + ociTargetPrefix + ` + resource.access.referenceName}`
 
 	// DefaultOCIImageReferenceRelative names a relativeOciReference by its registry-relative
@@ -43,13 +44,15 @@ const (
 
 // DefaultOCIUploaderMatch is the match an [OCIUploaderConfig] uses when none is set: OCI
 // registry targets only; OCI images, Helm charts, and local blobs that hold an OCI
-// manifest and have a referenceName.
+// manifest or legacy artifact set and have a referenceName.
 //
 // Writing it explicitly into a config is equivalent to omitting match.
 const DefaultOCIUploaderMatch = `target.type == "OCIRepository"
   && (resource.access.isType(["OCIImage", "Helm", "relativeOciReference"])
     || (resource.access.isType("LocalBlob")
-      && has(resource.access.mediaType) && isOCIManifest(resource.access.mediaType)
+      && has(resource.access.mediaType)
+      && (isOCIManifest(resource.access.mediaType)
+        || isArtifactSetMediaType(resource.access.mediaType))
       && has(resource.access.referenceName)))`
 
 func init() {
@@ -70,7 +73,7 @@ func init() {
 // for the access type of the selected resource is used ([DefaultOCIImageReferenceOCIImage],
 // [DefaultOCIImageReferenceHelm], [DefaultOCIImageReferenceLocalBlob]). The template is
 // evaluated for each selected resource while the transfer graph is built. A selected resource the uploader cannot
-// upload (an access type other than OCI image, Helm chart or OCI-manifest local blob),
+// upload (an access type other than OCI image, Helm chart or supported OCI local blob),
 // or whose ImageReference does not evaluate, fails the transfer.
 //
 //	type: generic.config.ocm.software/v1
