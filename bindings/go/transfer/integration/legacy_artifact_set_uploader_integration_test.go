@@ -31,11 +31,23 @@ import (
 
 func Test_Integration_TransferLegacyOCIIndexArtifactSet_CTFToOCI(t *testing.T) {
 	t.Parallel()
+	t.Run("complete index entry", func(t *testing.T) {
+		t.Parallel()
+		testTransferLegacyOCIIndexArtifactSet(t, true)
+	})
+	// The legacy OCM library did not always record mediaType and size in the artifact set index.
+	t.Run("index entry without media type and size", func(t *testing.T) {
+		t.Parallel()
+		testTransferLegacyOCIIndexArtifactSet(t, false)
+	})
+}
+
+func testTransferLegacyOCIIndexArtifactSet(t *testing.T, completeIndex bool) {
 	r := require.New(t)
 	ctx := t.Context()
 
 	registryAddr, user, password := startRegistry(t)
-	archive, root := legacyOCIIndexArtifactSet(t)
+	archive, root := legacyOCIIndexArtifactSet(t, completeIndex)
 
 	const (
 		componentName    = "github.com/openmcp-project/landscaper"
@@ -144,7 +156,7 @@ func Test_Integration_TransferLegacyOCIIndexArtifactSet_CTFToOCI(t *testing.T) {
 	r.Equal(root.Digest, artifacts[0].Digest)
 }
 
-func legacyOCIIndexArtifactSet(t *testing.T) ([]byte, ocispecv1.Descriptor) {
+func legacyOCIIndexArtifactSet(t *testing.T, completeIndex bool) ([]byte, ocispecv1.Descriptor) {
 	t.Helper()
 	r := require.New(t)
 
@@ -170,10 +182,14 @@ func legacyOCIIndexArtifactSet(t *testing.T) ([]byte, ocispecv1.Descriptor) {
 	root := content.NewDescriptorFromBytes(ocispecv1.MediaTypeImageIndex, indexData)
 	root.Annotations = map[string]string{ocispecv1.AnnotationRefName: "v1.0.5"}
 
+	entry := root
+	if !completeIndex {
+		entry = ocispecv1.Descriptor{Digest: root.Digest, Annotations: root.Annotations}
+	}
 	artifactSetIndex, err := json.Marshal(ocispecv1.Index{
 		Versioned: specs.Versioned{SchemaVersion: 2},
 		MediaType: ocispecv1.MediaTypeImageIndex,
-		Manifests: []ocispecv1.Descriptor{root},
+		Manifests: []ocispecv1.Descriptor{entry},
 	})
 	r.NoError(err)
 

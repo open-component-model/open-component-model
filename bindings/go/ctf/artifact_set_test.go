@@ -8,6 +8,7 @@ import (
 	"io"
 	"testing"
 
+	"github.com/opencontainers/go-digest"
 	"github.com/opencontainers/image-spec/specs-go"
 	ociimagespecv1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/require"
@@ -81,6 +82,23 @@ func artifactSetArchive(t *testing.T, format ctf.ArtifactSetFormat) ([]byte, art
 	})
 	r.NoError(err)
 
+	data := map[string][]byte{}
+	for _, entry := range []struct {
+		desc ociimagespecv1.Descriptor
+		data []byte
+	}{{layer, layerData}, {config, configData}, {manifest, manifestData}} {
+		data[entry.desc.Digest.String()] = entry.data
+	}
+
+	return writeArtifactSet(t, format, indexData, data), artifactSetFixture{manifest: manifest, config: config, layer: layer, data: data}
+}
+
+// writeArtifactSet writes a gzipped artifact set with the given index and blobs
+// (keyed by digest), laid out according to format.
+func writeArtifactSet(t *testing.T, format ctf.ArtifactSetFormat, indexData []byte, blobs map[string][]byte) []byte {
+	t.Helper()
+	r := require.New(t)
+
 	var archive bytes.Buffer
 	gz := gzip.NewWriter(&archive)
 	tw := tar.NewWriter(gz)
@@ -100,22 +118,18 @@ func artifactSetArchive(t *testing.T, format ctf.ArtifactSetFormat) ([]byte, art
 		write(ociimagespecv1.ImageIndexFile, indexData)
 	}
 
-	data := map[string][]byte{}
-	for _, entry := range []struct {
-		desc ociimagespecv1.Descriptor
-		data []byte
-	}{{layer, layerData}, {config, configData}, {manifest, manifestData}} {
-		data[entry.desc.Digest.String()] = entry.data
+	for dig, data := range blobs {
 		if format == ctf.ArtifactSetFormatOCI {
-			write("blobs/"+entry.desc.Digest.Algorithm().String()+"/"+entry.desc.Digest.Encoded(), entry.data)
+			d := digest.Digest(dig)
+			write("blobs/"+d.Algorithm().String()+"/"+d.Encoded(), data)
 			continue
 		}
-		name, err := ctf.ToBlobFileName(entry.desc.Digest.String())
+		name, err := ctf.ToBlobFileName(dig)
 		r.NoError(err)
-		write("blobs/"+name, entry.data)
+		write("blobs/"+name, data)
 	}
 	r.NoError(tw.Close())
 	r.NoError(gz.Close())
 
-	return archive.Bytes(), artifactSetFixture{manifest: manifest, config: config, layer: layer, data: data}
+	return archive.Bytes()
 }

@@ -369,17 +369,9 @@ var (
 )
 
 func newArtifactBlob(fs fileSystem, dig string, format ArtifactSetFormat) (blob.ReadOnlyBlob, error) {
-	var name string
-	switch format {
-	case ArtifactSetFormatOCM, ArtifactSetFormatLegacyOCI:
-		file, err := ToBlobFileName(dig)
-		if err != nil {
-			return nil, err
-		}
-		name = filepath.Join(BlobsDirectoryName, file)
-	case ArtifactSetFormatOCI:
-		dig := digest.Digest(dig)
-		name = filepath.Join(BlobsDirectoryName, dig.Algorithm().String(), dig.Encoded())
+	name, err := artifactSetBlobPath(dig, format)
+	if err != nil {
+		return nil, err
 	}
 
 	f, err := fs.Stat(name)
@@ -413,6 +405,8 @@ type ArtifactSetIndex struct {
 	Format ArtifactSetFormat
 }
 
+// NewArtifactSetIndex reads the index of an artifact set and determines its format.
+// Index entries missing a media type or size are completed from the referenced blobs.
 func NewArtifactSetIndex(filesystem fs.FS) (*ArtifactSetIndex, error) {
 	var format ArtifactSetFormat
 	base, err := decodeIndexFromFS(filesystem, ociimagespec.ImageIndexFile)
@@ -426,6 +420,12 @@ func NewArtifactSetIndex(filesystem fs.FS) (*ArtifactSetIndex, error) {
 		format = ArtifactSetFormatOCM
 	} else {
 		format = determineArtifactSetOCIFormat(filesystem)
+	}
+
+	for i := range base.Manifests {
+		if err := completeIndexDescriptor(filesystem, format, &base.Manifests[i]); err != nil {
+			return nil, err
+		}
 	}
 
 	return &ArtifactSetIndex{
