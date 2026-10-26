@@ -9,14 +9,16 @@
 // followed.
 //
 // [ocm.software/open-component-model/bindings/go/wget/repository.ResourceRepository]
-// is the entry point. It resolves the access spec of a resource, performs the
-// request (following redirects unless the spec disables them in the access), and
-// returns a blob streaming the response body. Nothing is buffered in memory or
-// on disk. Reading the blob a second time sends the request again, which is only
+// is the entry point. It resolves the access spec of a resource and returns a
+// blob streaming the response body. Nothing is buffered in memory or on disk.
+// The request (following redirects unless the spec disables them in the access)
+// is sent when the blob is read, and every read sends it again, which is only
 // done for GET and HEAD requests: other methods may have side effects. A reader
-// closed before it read any content does not count as a read. The blob is
-// readable only while the context passed to the download is alive. There is no
-// size limit by default; [repository.WithMaxDownloadSize] adds one:
+// closed before its first Read sends nothing. Size, media type and an advertised
+// digest are learned from a single HEAD request when they are asked for before
+// the first read. The blob is readable only while the context passed to the
+// download is alive. There is no size limit by default;
+// [repository.WithMaxDownloadSize] adds one:
 //
 //	repo := repository.NewResourceRepository(
 //	    repository.WithMaxDownloadSize(50 * 1024 * 1024),
@@ -25,12 +27,16 @@
 //	if err != nil {
 //	    return err
 //	}
-//	defer b.(io.Closer).Close()
+//	rc, err := b.ReadCloser()
+//	if err != nil {
+//	    return err
+//	}
+//	defer rc.Close()
 //
 // Checks over the content (size limit, checksum policy, pinned digest) run as the
 // blob is read: a failure is returned by the reader's last Read and by its Close.
-// Until it is read, the blob holds the open response. Closing it releases the
-// response; a blob that is dropped unread releases it once it becomes unreachable.
+// A non-2xx status or a checksum policy that rejects the response headers fails
+// the reader's first Read.
 //
 // Credentials are optional. When supplied as
 // [ocm.software/open-component-model/bindings/go/wget/spec/credentials/v1.WgetCredentials]

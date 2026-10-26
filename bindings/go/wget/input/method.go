@@ -141,6 +141,27 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 			}),
 		)
 	}
+	if hasPolicy {
+		opts = append(opts,
+			download.WithHeaderCheck(func(header nethttp.Header) error {
+				if _, _, err := checksum.Expect(ctx, policy, checksum.Input{URL: wget.URL, Headers: header}, nil); err != nil {
+					return fmt.Errorf("checksum verification failed for wget input from %q: %w", wget.URL, err)
+				}
+				return nil
+			}),
+			// Report an advertised SHA-256 as the blob's digest; the verifier checks
+			// it against the bytes even when the policy verified another algorithm.
+			download.WithAdvertisedDigest(func(header nethttp.Header) (string, bool) {
+				exp, ok, err := checksum.ResolveAdvertised(ctx, policy,
+					checksum.Input{URL: wget.URL, Headers: header},
+					[]checksum.Algorithm{checksum.StorageAlgorithm})
+				if err != nil || !ok {
+					return "", false
+				}
+				return "sha256:" + exp.Value, true
+			}),
+		)
+	}
 
 	data, err := download.Download(ctx, download.Request{
 		URL:        wget.URL,
@@ -153,30 +174,9 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 	if err != nil {
 		return nil, fmt.Errorf("error downloading wget input from %q: %w", wget.URL, err)
 	}
-
-	if hasPolicy {
-		if _, _, err := checksum.Expect(ctx, policy, checksum.Input{URL: wget.URL, Headers: data.Headers()}, nil); err != nil {
-			_ = data.Close()
-			return nil, fmt.Errorf("checksum verification failed for wget input from %q: %w", wget.URL, err)
-		}
-	}
-
-	// Pin SHA-256 when it is known before reading; the verifier checks it against
-	// the bytes even when the policy verified another algorithm.
-	switch {
-	case providedHex != "":
+	// A provided digest takes precedence over an advertised one.
+	if providedHex != "" {
 		data.SetPrecalculatedDigest("sha256:" + providedHex)
-	case hasPolicy:
-		exp, ok, err := checksum.ResolveAdvertised(ctx, policy,
-			checksum.Input{URL: wget.URL, Headers: data.Headers()},
-			[]checksum.Algorithm{checksum.StorageAlgorithm})
-		if err != nil {
-			_ = data.Close()
-			return nil, fmt.Errorf("checksum verification failed for wget input from %q: %w", wget.URL, err)
-		}
-		if ok {
-			data.SetPrecalculatedDigest("sha256:" + exp.Value)
-		}
 	}
 
 	return &constructor.ResourceInputMethodResult{

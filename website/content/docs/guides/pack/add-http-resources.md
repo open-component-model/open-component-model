@@ -459,7 +459,10 @@ default. If you set `noRedirect: true`, the request fails.
 
 **Downloads are streamed, not held in memory or on disk.** The response body flows straight to wherever OCM stores or
 uploads it, so memory use stays flat no matter how big the file is. There is no size limit by default. Checksum and
-digest checks run while the body is read, so a mismatch fails that read.
+digest checks run while the body is read, so a mismatch fails that read. The request is sent only when the body is
+read. When OCM needs the size, media type, or advertised checksum before reading, for example to pack the resource
+into an OCI layer, a `GET` download sends a single `HEAD` request first. If the server refuses `HEAD`, these stay
+unknown until the body is read.
 
 **Timeouts, retries, and per-host settings** come from the `http.config.ocm.software/v1alpha1` configuration and apply
 to every Wget request:

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
 
@@ -69,15 +68,6 @@ func (t *DownloadWgetResource) Transform(ctx context.Context, step runtime.Typed
 	if err != nil {
 		return nil, fmt.Errorf("error downloading wget resource: %w", err)
 	}
-	// The downloaded blob streams the response. Its content is copied to outputPath
-	// below; closing it afterwards releases the response if the copy never read it.
-	defer func() {
-		if closer, ok := downloadedBlob.(io.Closer); ok {
-			if closeErr := closer.Close(); closeErr != nil {
-				slog.WarnContext(ctx, "failed to release wget download", "err", closeErr)
-			}
-		}
-	}()
 
 	fileSpec, err := filesystem.BlobToSpec(downloadedBlob, outputPath)
 	if err != nil {

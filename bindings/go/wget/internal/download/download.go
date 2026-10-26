@@ -51,17 +51,15 @@ type Request struct {
 	NoRedirect bool
 }
 
-// Download sends the HTTP request described by req and returns a blob streaming
-// the response body. The body is not read here: the first [Blob.ReadCloser]
-// reads the already open response, and every later one sends the request again.
+// Download prepares the HTTP request described by req and returns a blob
+// streaming the response body. No request is sent here: every reader of the
+// blob sends it, and the blob's metadata is learned as described on [Blob].
 //
-// The status code and an announced Content-Length above the maximum download size
-// are checked before returning. A body that exceeds the limit while streaming, a
-// body shorter than announced and a failing [Verifier] fail the reader instead.
-//
-// The returned [Blob] holds the open response until it is read: callers that do
-// not read it should [Blob.Close] it, and an abandoned unread blob releases the
-// response once it becomes unreachable.
+// Before a reader hands out the body, the status code, an announced
+// Content-Length above the maximum download size and the [HeaderCheck] are
+// checked; a failure is returned from the reader's first Read. A body that
+// exceeds the limit while streaming, a body of another size than announced and a
+// failing [Verifier] fail the reader at the end of the body.
 //
 // The HTTP client, credentials and maximum download size are supplied via options;
 // see [WithClient], [WithCredentials] and [WithMaxDownloadSize].
@@ -81,26 +79,13 @@ func Download(ctx context.Context, req Request, opts ...Option) (*Blob, error) {
 	if err != nil {
 		return nil, err
 	}
-	rep, err := f.send(f.request)
-	if err != nil {
-		return nil, err
-	}
-
-	mediaType := req.MediaType
-	if mediaType == "" {
-		mediaType = rep.resp.Header.Get("Content-Type")
-	}
-	if mediaType == "" {
-		mediaType = "application/octet-stream"
-	}
-
-	return newBlob(f, rep, mediaType, o), nil
+	return newBlob(f, req.MediaType, o), nil
 }
 
 // fetcher sends the request of a download.
 type fetcher struct {
 	client *http.Client
-	// request is the authenticated request; it is sent again for every re-read.
+	// request is the authenticated request; every request sends a clone of it.
 	request *http.Request
 	// safeURL is the request URL without userinfo, query and fragment, for use
 	// in errors and logs.
@@ -174,6 +159,12 @@ func newFetcher(ctx context.Context, req Request, o *option, maxSize int64) (*fe
 		safeURL: safeURL.String(),
 		maxSize: maxSize,
 	}, nil
+}
+
+// repeatable reports whether the request may be sent more than once: methods
+// other than GET and HEAD may have side effects.
+func (f *fetcher) repeatable() bool {
+	return f.request.Method == http.MethodGet || f.request.Method == http.MethodHead
 }
 
 // clone returns a copy of the request that can be sent again.

@@ -102,9 +102,9 @@ func (r *ResourceRepository) GetResourceCredentialConsumerIdentity(ctx context.C
 // transfer path (access → local blob), so it re-runs the source-side
 // verification rules: under Require the advertised checksum must verify (and
 // must exist), under Prefer it verifies when advertised, and Skip performs no
-// verification. Require with nothing advertised fails here; a checksum mismatch
-// fails the blob's reader at the end of the body (its last Read and its Close).
-// Callers that do not read the blob should close it to release the response.
+// verification. No request is sent here: Require with nothing advertised fails
+// the blob's reader before the body is read, and a checksum mismatch fails it at
+// the end of the body (its last Read and its Close).
 func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) (blob.ReadOnlyBlob, error) {
 	url := policyURL(resource)
 	policy, hasPolicy := httpverify.PolicyForMode(r.checksumConfig.ModeForURL(url))
@@ -112,6 +112,12 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 	var extra []download.Option
 	if hasPolicy {
 		extra = append(extra,
+			download.WithHeaderCheck(func(header http.Header) error {
+				if _, _, err := checksum.Expect(ctx, policy, checksum.Input{URL: url, Headers: header}, nil); err != nil {
+					return fmt.Errorf("checksum verification failed for wget access %q: %w", url, err)
+				}
+				return nil
+			}),
 			download.WithDigestAlgorithms(httpverify.DigestAlgorithms(policy)...),
 			download.WithVerifier(func(header http.Header, computed download.Computed) error {
 				if err := httpverify.Verify(ctx, url, policy, header, computed); err != nil {
@@ -121,25 +127,18 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 			}),
 		)
 	}
-	b, wget, err := r.download(ctx, resource, credentials, extra...)
+	b, _, err := r.download(ctx, resource, credentials, extra...)
 	if err != nil {
 		return nil, err
 	}
-
-	if hasPolicy {
-		if _, _, err := checksum.Expect(ctx, policy, checksum.Input{URL: wget.URL, Headers: b.Headers()}, nil); err != nil {
-			_ = b.Close()
-			return nil, fmt.Errorf("checksum verification failed for wget access %q: %w", wget.URL, err)
-		}
-	}
-
 	return repository.VerifyDownload(ctx, resource, b)
 }
 
-// download opens the resource and returns the streaming blob plus the decoded
-// access spec. Extra options are appended after the repository defaults so
-// callers can hash and verify the stream via [download.WithDigestAlgorithms]
-// and [download.WithVerifier].
+// download prepares the resource download and returns the streaming blob plus
+// the decoded access spec. Extra options are appended after the repository
+// defaults so callers can check and verify the stream via
+// [download.WithHeaderCheck], [download.WithDigestAlgorithms] and
+// [download.WithVerifier].
 func (r *ResourceRepository) download(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed, extra ...download.Option) (*download.Blob, *v1.Wget, error) {
 	if resource == nil {
 		return nil, nil, fmt.Errorf("resource is required")
@@ -215,11 +214,6 @@ func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, resource
 	if err != nil {
 		return nil, fmt.Errorf("error downloading resource for digest processing: %w", err)
 	}
-	defer func() {
-		if closeErr := data.Close(); closeErr != nil {
-			slog.WarnContext(ctx, "failed to release wget download after digest processing", "err", closeErr)
-		}
-	}()
 
 	rc, err := data.ReadCloser()
 	if err != nil {

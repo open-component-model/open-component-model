@@ -18,6 +18,7 @@ import (
 	"math/big"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -115,7 +116,6 @@ func TestDownload_StoredGzipIsNotDecoded(t *testing.T) {
 			r := require.New(t)
 			b, err := download.Download(t.Context(), download.Request{URL: srv.URL + "/stored.gz"}, opts...)
 			r.NoError(err)
-			t.Cleanup(func() { _ = b.Close() })
 			r.Equal(stored, readBlob(t, b))
 		})
 	}
@@ -190,10 +190,13 @@ func TestDownload_Redirect(t *testing.T) {
 	t.Run("NoRedirect surfaces the redirect status instead of following", func(t *testing.T) {
 		t.Parallel()
 		srv := newRedirectServer(t)
-		_, err := download.Download(t.Context(), download.Request{URL: srv.URL + "/redirect", NoRedirect: true},
+		b, err := download.Download(t.Context(), download.Request{URL: srv.URL + "/redirect", NoRedirect: true},
 			download.WithClient(srv.Client()))
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "status 302")
+		require.NoError(t, err)
+		rc, err := b.ReadCloser()
+		require.NoError(t, err)
+		_, err = io.ReadAll(rc)
+		require.ErrorContains(t, err, "status 302")
 	})
 }
 
@@ -301,12 +304,15 @@ func TestDownload_MTLS(t *testing.T) {
 // serveBody serves content over HTTP. When chunked is set, the response is flushed
 // before the body is written, so it is sent with chunked transfer encoding and the
 // client sees no Content-Length — which is what forces the size limit to be enforced
-// while streaming rather than up front.
+// while streaming rather than up front. Otherwise the length is announced, also
+// for HEAD requests.
 func serveBody(t *testing.T, content []byte, chunked bool) *httptest.Server {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if chunked {
 			w.(http.Flusher).Flush()
+		} else {
+			w.Header().Set("Content-Length", strconv.Itoa(len(content)))
 		}
 		_, _ = w.Write(content)
 	}))
@@ -354,9 +360,9 @@ func TestDownload_StreamsBeforeBodyCompletes(t *testing.T) {
 	r.Equal("second", string(rest))
 }
 
-// TestDownload_ReRead asserts that the first read uses the response Download
-// opened, that a later read of a GET sends the request, including its headers,
-// again, and that a request with side effects is never sent twice.
+// TestDownload_ReRead asserts that Download sends nothing, that every read of a
+// GET sends the request, including its headers, and that a request with side
+// effects is never sent twice.
 func TestDownload_ReRead(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -383,14 +389,17 @@ func TestDownload_ReRead(t *testing.T) {
 				URL: srv.URL, Verb: tt.verb, Header: map[string][]string{"X-Echo": {"echoed header"}},
 			}, download.WithClient(srv.Client()))
 			r.NoError(err)
-			r.Equal(int32(1), hits.Load())
+			r.Equal(int32(0), hits.Load(), "Download must not send the request")
 
 			r.Equal("echoed header", string(readBlob(t, b)))
-			r.Equal(int32(1), hits.Load(), "the first read must use the response Download opened")
+			r.Equal(int32(1), hits.Load())
 
 			if !tt.wantReread {
-				_, err := b.ReadCloser()
+				rc, err := b.ReadCloser()
+				r.NoError(err)
+				_, err = io.ReadAll(rc)
 				r.ErrorContains(err, "cannot be read again")
+				r.NoError(rc.Close())
 				r.Equal(int32(1), hits.Load(), "the request must not be sent again")
 				return
 			}
@@ -400,11 +409,10 @@ func TestDownload_ReRead(t *testing.T) {
 	}
 }
 
-// TestDownload_UnconsumedReaderHandsBackResponse asserts that a reader closed
-// before it consumed any content leaves its response to the next reader, so a
-// caller that gives up before reading (such as a push falling back to another
-// path) can read a POST download again without sending it twice.
-func TestDownload_UnconsumedReaderHandsBackResponse(t *testing.T) {
+// TestDownload_UnreadReaderSendsNothing asserts that a reader closed before its
+// first Read sends no request, so a caller that gives up before reading (such as
+// a push falling back to another path) can still read a POST download once.
+func TestDownload_UnreadReaderSendsNothing(t *testing.T) {
 	t.Parallel()
 	r := require.New(t)
 
@@ -422,19 +430,166 @@ func TestDownload_UnconsumedReaderHandsBackResponse(t *testing.T) {
 	rc, err := b.ReadCloser()
 	r.NoError(err)
 	r.NoError(rc.Close())
-	_, err = rc.Read(make([]byte, 1))
-	r.ErrorContains(err, "after close", "a closed reader must not read the handed back response")
+	r.Equal(int32(0), hits.Load(), "an unread reader must not send the request")
 
 	r.Equal("posted", string(readBlob(t, b)))
-	r.Equal(int32(1), hits.Load(), "the request must not be sent again")
+	r.Equal(int32(1), hits.Load())
+}
 
-	_, err = b.ReadCloser()
-	r.ErrorContains(err, "cannot be read again", "a consumed response is not handed back")
+// TestDownload_Metadata asserts that size, media type and advertised digest are
+// learned once, from a HEAD request when asked for before any read, or from the
+// first response, and that requests with side effects are not probed.
+func TestDownload_Metadata(t *testing.T) {
+	t.Parallel()
+	content := []byte("metadata content")
+	advertised := download.WithAdvertisedDigest(func(header http.Header) (string, bool) {
+		d := header.Get("X-Digest")
+		return d, d != ""
+	})
+	newServer := func(t *testing.T, heads, gets *atomic.Int32) *httptest.Server {
+		t.Helper()
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			if req.Method == http.MethodHead {
+				heads.Add(1)
+			} else {
+				gets.Add(1)
+			}
+			w.Header().Set("Content-Type", "text/plain")
+			w.Header().Set("X-Digest", "sha256:advertised")
+			_, _ = w.Write(content)
+		}))
+		t.Cleanup(srv.Close)
+		return srv
+	}
+	requireMetadata := func(r *require.Assertions, b *download.Blob) {
+		r.Equal(int64(len(content)), b.Size())
+		mediaType, _ := b.MediaType()
+		r.Equal("text/plain", mediaType)
+		dig, ok := b.Digest()
+		r.True(ok)
+		r.Equal("sha256:advertised", dig)
+	}
+
+	t.Run("asked before reading", func(t *testing.T) {
+		t.Parallel()
+		r := require.New(t)
+		var heads, gets atomic.Int32
+		srv := newServer(t, &heads, &gets)
+		var pinned string
+		b, err := download.Download(t.Context(), download.Request{URL: srv.URL}, download.WithClient(srv.Client()), advertised,
+			download.WithVerifier(func(_ http.Header, c download.Computed) error {
+				pinned = c.Pinned
+				return nil
+			}))
+		r.NoError(err)
+
+		requireMetadata(r, b)
+		requireMetadata(r, b)
+		r.Equal(int32(1), heads.Load(), "metadata must be requested once")
+		r.Equal(int32(0), gets.Load(), "metadata must not send the request")
+
+		r.Equal(content, readBlob(t, b))
+		r.Equal("sha256:advertised", pinned, "the reported digest must be verified")
+		r.Equal(int32(1), heads.Load())
+	})
+
+	t.Run("learned from the first response", func(t *testing.T) {
+		t.Parallel()
+		r := require.New(t)
+		var heads, gets atomic.Int32
+		srv := newServer(t, &heads, &gets)
+		b, err := download.Download(t.Context(), download.Request{URL: srv.URL}, download.WithClient(srv.Client()), advertised)
+		r.NoError(err)
+
+		r.Equal(content, readBlob(t, b))
+		requireMetadata(r, b)
+		r.Equal(int32(0), heads.Load(), "a read response must make the HEAD request unnecessary")
+	})
+
+	t.Run("request with side effects is not probed", func(t *testing.T) {
+		t.Parallel()
+		r := require.New(t)
+		var heads, gets atomic.Int32
+		srv := newServer(t, &heads, &gets)
+		b, err := download.Download(t.Context(), download.Request{URL: srv.URL, Verb: http.MethodPost}, download.WithClient(srv.Client()), advertised)
+		r.NoError(err)
+
+		r.Equal(blob.SizeUnknown, b.Size())
+		_, ok := b.Digest()
+		r.False(ok)
+		r.Equal(int32(0), heads.Load()+gets.Load(), "no request may be sent")
+		r.Equal(content, readBlob(t, b))
+	})
+
+	t.Run("failing HEAD leaves metadata unknown", func(t *testing.T) {
+		t.Parallel()
+		r := require.New(t)
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			if req.Method == http.MethodHead {
+				w.WriteHeader(http.StatusForbidden)
+				return
+			}
+			_, _ = w.Write(content)
+		}))
+		t.Cleanup(srv.Close)
+		b, err := download.Download(t.Context(), download.Request{URL: srv.URL}, download.WithClient(srv.Client()))
+		r.NoError(err)
+
+		r.Equal(blob.SizeUnknown, b.Size())
+		r.Equal(content, readBlob(t, b))
+		r.Equal(blob.SizeUnknown, b.Size(), "metadata must not change once learned")
+	})
+
+	t.Run("response of another size than announced by HEAD is rejected", func(t *testing.T) {
+		t.Parallel()
+		r := require.New(t)
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			if req.Method == http.MethodHead {
+				w.Header().Set("Content-Length", "3")
+				return
+			}
+			_, _ = w.Write(content)
+		}))
+		t.Cleanup(srv.Close)
+		b, err := download.Download(t.Context(), download.Request{URL: srv.URL}, download.WithClient(srv.Client()))
+		r.NoError(err)
+
+		r.Equal(int64(3), b.Size())
+		rc, err := b.ReadCloser()
+		r.NoError(err)
+		_, err = io.ReadAll(rc)
+		r.ErrorContains(err, "expected 3")
+		r.NoError(rc.Close())
+	})
+}
+
+// TestDownload_HeaderCheck asserts that a rejected response header fails the
+// reader before the body is read.
+func TestDownload_HeaderCheck(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
+
+	var verified bool
+	b, err := download.Download(t.Context(), download.Request{URL: serveBody(t, []byte("payload"), false).URL},
+		download.WithHeaderCheck(func(http.Header) error { return errors.New("header rejected") }),
+		download.WithVerifier(func(http.Header, download.Computed) error {
+			verified = true
+			return nil
+		}))
+	r.NoError(err)
+
+	rc, err := b.ReadCloser()
+	r.NoError(err)
+	n, err := rc.Read(make([]byte, 16))
+	r.ErrorContains(err, "header rejected")
+	r.Zero(n)
+	r.NoError(rc.Close())
+	r.False(verified, "the body must not be read")
 }
 
 // TestDownload_RereadWithoutLengthIsCheckedAgainstKnownSize asserts that a
 // re-read whose response announces no length is read to its end and checked
-// against the size of the first response, instead of being cut at that size.
+// against the learned size, instead of being cut at that size.
 func TestDownload_RereadWithoutLengthIsCheckedAgainstKnownSize(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -451,9 +606,9 @@ func TestDownload_RereadWithoutLengthIsCheckedAgainstKnownSize(t *testing.T) {
 			t.Parallel()
 			r := require.New(t)
 
-			var hits atomic.Int32
-			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-				if hits.Add(1) == 1 {
+			var gets atomic.Int32
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+				if req.Method == http.MethodHead || gets.Add(1) == 1 {
 					_, _ = io.WriteString(w, "abc")
 					return
 				}
@@ -634,40 +789,28 @@ func TestDownload_Verifier(t *testing.T) {
 	}
 }
 
-func TestDownload_ClosedBlobRefusesReads(t *testing.T) {
-	t.Parallel()
-	r := require.New(t)
-
-	b, err := download.Download(t.Context(), download.Request{URL: serveBody(t, []byte("payload"), false).URL})
-	r.NoError(err)
-	r.NoError(b.Close())
-
-	_, err = b.ReadCloser()
-	r.ErrorContains(err, "is closed")
-	r.NoError(b.Close(), "closing twice must not fail")
-}
-
-// TestDownload_MaxDownloadSize covers both rejection paths: a response that announces
-// its length is rejected by Download, a chunked one only while it is read.
+// TestDownload_MaxDownloadSize covers both rejection paths: a response that
+// announces its length is rejected before its body is read, a chunked one while
+// it is read.
 func TestDownload_MaxDownloadSize(t *testing.T) {
 	t.Parallel()
 	content := []byte("0123456789") // 10 bytes
 
 	tests := []struct {
-		name            string
-		maxSize         int64
-		unset           bool
-		chunked         bool
-		wantDownloadErr bool
-		wantReadErr     bool
+		name         string
+		maxSize      int64
+		unset        bool
+		chunked      bool
+		wantReadErr  bool
+		wantCloseErr bool
 	}{
 		{name: "body below the limit", maxSize: 100},
 		{name: "body exactly at the limit", maxSize: 10},
-		{name: "body one byte over the limit", maxSize: 9, wantDownloadErr: true},
+		{name: "body one byte over the limit", maxSize: 9, wantReadErr: true},
 		{name: "zero disables the limit", maxSize: 0},
 		{name: "negative disables the limit", maxSize: -1},
 		{name: "unset means unlimited", unset: true},
-		{name: "oversized chunked body is caught while streaming", maxSize: 9, chunked: true, wantReadErr: true},
+		{name: "oversized chunked body is caught while streaming", maxSize: 9, chunked: true, wantReadErr: true, wantCloseErr: true},
 		{name: "chunked body below the limit", maxSize: 100, chunked: true},
 	}
 
@@ -682,23 +825,22 @@ func TestDownload_MaxDownloadSize(t *testing.T) {
 			}
 
 			b, err := download.Download(t.Context(), download.Request{URL: serveBody(t, content, tt.chunked).URL}, opts...)
-			if tt.wantDownloadErr {
-				r.ErrorContains(err, "exceeds maximum allowed size")
-				return
-			}
 			r.NoError(err)
 
 			rc, err := b.ReadCloser()
 			r.NoError(err)
 			data, readErr := io.ReadAll(rc)
 			closeErr := rc.Close()
+			if tt.wantCloseErr {
+				r.ErrorContains(closeErr, "exceeds maximum allowed size")
+			} else {
+				r.NoError(closeErr)
+			}
 			if tt.wantReadErr {
 				r.ErrorContains(readErr, "exceeds maximum allowed size")
-				r.ErrorContains(closeErr, "exceeds maximum allowed size")
 				return
 			}
 			r.NoError(readErr)
-			r.NoError(closeErr)
 			r.Equal(content, data)
 		})
 	}

@@ -32,6 +32,13 @@ type option struct {
 
 	// Verifier checks every fully read response body.
 	Verifier Verifier
+
+	// HeaderCheck checks the header of every response before its body is read.
+	HeaderCheck HeaderCheck
+
+	// AdvertisedDigest resolves the digest the blob reports from the headers of
+	// the learned metadata.
+	AdvertisedDigest AdvertisedDigest
 }
 
 // Option configures the behavior of [Download].
@@ -73,6 +80,32 @@ func WithDigestAlgorithms(algs ...DigestAlgorithm) Option {
 func WithVerifier(v Verifier) Option {
 	return func(o *option) {
 		o.Verifier = v
+	}
+}
+
+// HeaderCheck checks a response header before the body is read. An error
+// fails the reader's first Read without reading the body.
+type HeaderCheck func(header http.Header) error
+
+// WithHeaderCheck runs check on the header of every response before its body
+// is handed to a reader.
+func WithHeaderCheck(check HeaderCheck) Option {
+	return func(o *option) {
+		o.HeaderCheck = check
+	}
+}
+
+// AdvertisedDigest returns the digest a response header advertises for the
+// content, in the form reported by [Blob.Digest], or false if it advertises none.
+type AdvertisedDigest func(header http.Header) (string, bool)
+
+// WithAdvertisedDigest makes [Blob.Digest] report the digest advertised by the
+// headers the blob's metadata is learned from, unless a precalculated digest is
+// set. Like a precalculated digest, it is handed to the [Verifier] as
+// [Computed.Pinned].
+func WithAdvertisedDigest(advertised AdvertisedDigest) Option {
+	return func(o *option) {
+		o.AdvertisedDigest = advertised
 	}
 }
 

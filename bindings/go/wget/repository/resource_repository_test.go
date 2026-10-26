@@ -4,6 +4,7 @@ import (
 	"crypto"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -22,7 +23,7 @@ import (
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/wget/repository"
-	"ocm.software/open-component-model/bindings/go/wget/spec/access/v1"
+	v1 "ocm.software/open-component-model/bindings/go/wget/spec/access/v1"
 	credv1 "ocm.software/open-component-model/bindings/go/wget/spec/credentials/v1"
 )
 
@@ -117,9 +118,9 @@ func TestDownloadResource(t *testing.T) {
 			"url": server.URL + "/resource",
 		})
 
-		_, err := repo.DownloadResource(t.Context(), resource, nil)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "exceeds maximum allowed size")
+		b, err := repo.DownloadResource(t.Context(), resource, nil)
+		require.NoError(t, err)
+		assert.ErrorContains(t, readError(t, b), "exceeds maximum allowed size")
 	})
 
 	t.Run("returns error for nil resource", func(t *testing.T) {
@@ -286,6 +287,16 @@ func readBlob(t *testing.T, b blob.ReadOnlyBlob) []byte {
 	data, err := io.ReadAll(rc)
 	require.NoError(t, err)
 	return data
+}
+
+// readError fully reads b and returns the error of the read and of closing the
+// reader: the download sends its request only when it is read.
+func readError(t *testing.T, b blob.ReadOnlyBlob) error {
+	t.Helper()
+	rc, err := b.ReadCloser()
+	require.NoError(t, err)
+	_, readErr := io.ReadAll(rc)
+	return errors.Join(readErr, rc.Close())
 }
 
 func TestProcessResourceDigest(t *testing.T) {
@@ -728,10 +739,17 @@ func TestDownloadResource_ChecksumPolicy(t *testing.T) {
 
 		repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()),
 			repository.WithChecksumConfig(&checksumhttpv1alpha1.Config{Mode: checksumhttpv1alpha1.ChecksumModeRequire}))
-		_, err := repo.DownloadResource(t.Context(),
+		b, err := repo.DownloadResource(t.Context(),
 			wgetResource(t, server.URL, map[string]any{"url": server.URL + "/resource"}), nil)
+		require.NoError(t, err)
+
+		rc, err := b.ReadCloser()
+		require.NoError(t, err)
+		n, err := rc.Read(make([]byte, len(content)))
 		require.Error(t, err, "Require must not transfer bytes with no source-advertised checksum")
 		assert.Contains(t, err.Error(), "checksum verification failed")
+		assert.Zero(t, n)
+		require.NoError(t, rc.Close())
 	})
 
 	t.Run("Skip performs no verification", func(t *testing.T) {
