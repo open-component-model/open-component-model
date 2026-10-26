@@ -70,6 +70,8 @@ type Component struct {
 	// Resources defines all resources that are created by the component and by a third party.
 	Resources []Resource `json:"resources"`
 	// Sources defines sources that produced the component.
+	// Sources are deprecated: they carry no digest, so neither the component
+	// version digest nor a signature binds their content. Use resources instead.
 	Sources []Source `json:"sources"`
 	// References component dependencies that can be resolved in the current context.
 	References []Reference `json:"componentReferences"`

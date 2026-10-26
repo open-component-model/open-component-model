@@ -567,7 +567,8 @@
           ]
         },
         "sources": {
-          "description": "Sources that produced the component. DISCOURAGED: sources carry no digest, so their content is not covered by the component version digest or any signature and can be replaced without detection. Declare the content as resources instead.",
+          "description": "Sources that produced the component. DEPRECATED: sources carry no digest, so their content is not covered by the component version digest or any signature and can be replaced without detection. Declare the content as resources instead.",
+          "deprecated": true,
           "anyOf": [
             {
               "type": "array",

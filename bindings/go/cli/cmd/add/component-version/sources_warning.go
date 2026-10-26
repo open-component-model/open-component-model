@@ -34,7 +34,7 @@ func renderSourcesWarning(w io.Writer, components []string) {
 	banner := strings.Repeat("!", 78)
 	lines := []string{
 		banner,
-		"WARNING: SOURCES ARE UNSAFE",
+		"WARNING: SOURCES ARE DEPRECATED AND UNSAFE",
 		"The following component versions declare sources:",
 	}
 	for _, c := range components {

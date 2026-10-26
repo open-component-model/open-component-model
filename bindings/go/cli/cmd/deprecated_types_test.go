@@ -104,7 +104,7 @@ provider:
 // Sources carry no digest, so add cv must warn loudly when a constructor
 // declares any, and stay silent when it only declares resources.
 func TestAddComponentVersionWarnsAboutSources(t *testing.T) {
-	const header = "WARNING: SOURCES ARE UNSAFE"
+	const header = "WARNING: SOURCES ARE DEPRECATED AND UNSAFE"
 	t.Run("sources warn", func(t *testing.T) {
 		r := require.New(t)
 		notice := addComponentVersionNotice(t, `
