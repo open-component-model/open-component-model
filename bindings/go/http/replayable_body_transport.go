@@ -6,6 +6,8 @@ import (
 	nethttp "net/http"
 	"reflect"
 	"sync"
+
+	"ocm.software/open-component-model/bindings/go/http/internal/retry"
 )
 
 // replayableBodyTransport sets Request.GetBody for requests whose body can be
@@ -19,11 +21,23 @@ import (
 // would fail the whole upload on a routine connection recycle. Following the
 // net/http convention, a body is replayable if it is seekable once io.NopCloser
 // wrappers are removed; non-seekable bodies pass through unchanged.
+//
+// Read errors of the response body are wrapped in retry.BodyReadError, so
+// IsTransientError can tell a connection cut mid-body from corrupt local data.
 type replayableBodyTransport struct {
 	base nethttp.RoundTripper
 }
 
 func (t *replayableBodyTransport) RoundTrip(req *nethttp.Request) (*nethttp.Response, error) {
+	resp, err := t.roundTrip(req)
+	if resp != nil && resp.Body != nil && resp.Body != nethttp.NoBody &&
+		resp.StatusCode != nethttp.StatusSwitchingProtocols {
+		resp.Body = &taggedBody{ReadCloser: resp.Body}
+	}
+	return resp, err
+}
+
+func (t *replayableBodyTransport) roundTrip(req *nethttp.Request) (*nethttp.Response, error) {
 	if req.Body == nil || req.Body == nethttp.NoBody || req.GetBody != nil {
 		return t.base.RoundTrip(req)
 	}
@@ -41,8 +55,21 @@ func (t *replayableBodyTransport) RoundTrip(req *nethttp.Request) (*nethttp.Resp
 	replayable.Body = src.firstAttempt()
 	replayable.GetBody = src.nextAttempt
 	resp, err := t.base.RoundTrip(replayable)
-	src.roundTripDone()
+	src.roundTripDone(err)
 	return resp, err
+}
+
+// taggedBody wraps response body read errors in retry.BodyReadError.
+type taggedBody struct {
+	io.ReadCloser
+}
+
+func (b *taggedBody) Read(p []byte) (int, error) {
+	n, err := b.ReadCloser.Read(p)
+	if err != nil && err != io.EOF {
+		err = &retry.BodyReadError{Err: err}
+	}
+	return n, err
 }
 
 var (
@@ -71,9 +98,12 @@ var errStaleBody = errors.New("request body was superseded by a replay")
 
 // rewindableBody hands out one body per attempt over a shared seekable source.
 // Only the latest attempt may read: a failed attempt whose write loop is still
-// draining must not race the replay's Seek. The original body is closed once,
-// after the round trip returned and the transport closed the final attempt,
-// preserving the RoundTripper contract that the transport closes req.Body.
+// draining must not race the replay's Seek. On success the original body is
+// closed once the transport closed the final attempt, preserving the
+// RoundTripper contract that the transport closes req.Body. On failure it is
+// closed when the round trip returns: a retrying base may have fetched a next
+// attempt via GetBody and then given up (context canceled, retries exhausted)
+// without ever handing it to a transport that would close it.
 type rewindableBody struct {
 	mu    sync.Mutex
 	rs    io.ReadSeeker
@@ -105,10 +135,14 @@ func (b *rewindableBody) nextAttempt() (io.ReadCloser, error) {
 	return &bodyAttempt{src: b, generation: b.generation}, nil
 }
 
-func (b *rewindableBody) roundTripDone() {
+func (b *rewindableBody) roundTripDone(err error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.returned = true
+	if err != nil {
+		// Any attempt still draining sees released and stops reading.
+		b.latestDone = true
+	}
 	b.releaseLocked()
 }
 

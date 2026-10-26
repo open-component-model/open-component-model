@@ -47,7 +47,7 @@ var DefaultGenericPolicy = GenericPolicy{
 // reused connection, so a reset on a fresh one has to be retried here.
 var DefaultPredicate Predicate = func(resp *http.Response, err error) (bool, error) {
 	if err != nil {
-		if IsTransientError(err) {
+		if isTransientRoundTripError(err) {
 			return true, nil
 		}
 		return false, err

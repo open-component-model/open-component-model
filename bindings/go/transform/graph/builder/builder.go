@@ -36,7 +36,11 @@ func (b *Builder) WithConcurrency(concurrency int) *Builder {
 }
 
 // WithRetry re-runs transformations whose Transform fails with an error the
-// policy deems retryable. All registered transformers must be safe to re-run.
+// policy deems retryable. All registered transformers must be safe to re-run:
+// a Transform call must acquire everything it reads (including source streams)
+// itself instead of consuming state a failed attempt may have used up. Fused
+// streaming transformers satisfy this because each call opens its own source
+// and target, so a retry restarts the stream from the beginning.
 func (b *Builder) WithRetry(policy *graphRuntime.RetryPolicy) *Builder {
 	b.retry = policy
 	return b

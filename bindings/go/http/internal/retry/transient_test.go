@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"sync/atomic"
 	"syscall"
 	"testing"
@@ -56,9 +57,15 @@ func TestIsTransientError(t *testing.T) {
 		{errors.New("boom"), false},
 		{context.Canceled, false},
 		{fmt.Errorf("wrapped: %w", context.Canceled), false},
+		// A retry starts with the same exhausted budget, so it would time out again.
+		{fmt.Errorf("wrapped: %w", context.DeadlineExceeded), false},
 		{fmt.Errorf("read: %w", syscall.ECONNRESET), true},
 		{fmt.Errorf("write: %w", syscall.EPIPE), true},
-		{fmt.Errorf("copy: %w", io.ErrUnexpectedEOF), true},
+		// Unexpected EOF is a network failure only when it came off the wire;
+		// from a local file or archive it means corrupt content.
+		{fmt.Errorf("untar: %w", io.ErrUnexpectedEOF), false},
+		{fmt.Errorf("copy: %w", &BodyReadError{Err: io.ErrUnexpectedEOF}), true},
+		{&url.Error{Op: "Put", URL: "https://r/v2/", Err: io.ErrUnexpectedEOF}, true},
 		{&net.OpError{Op: "dial", Err: timeoutError{}}, true},
 		// net/http's HTTP/2 errors are unexported; they are matched by message,
 		// also when an intermediate layer flattened the chain with %v.
@@ -73,6 +80,30 @@ func TestIsTransientError(t *testing.T) {
 			require.Equal(t, tc.transient, IsTransientError(tc.err))
 		})
 	}
+}
+
+// TestIsTransientError_ClientTimeout checks that http.Client.Timeout firing on
+// a slow server is not retried: every retry would get the same budget and fail.
+func TestIsTransientError_ClientTimeout(t *testing.T) {
+	r := require.New(t)
+	release := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.(http.Flusher).Flush()
+		<-release
+	}))
+	t.Cleanup(srv.Close)
+	t.Cleanup(func() { close(release) })
+
+	client := &http.Client{Timeout: 50 * time.Millisecond}
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL, nil)
+	r.NoError(err)
+	resp, err := client.Do(req)
+	r.NoError(err)
+	defer resp.Body.Close()
+	_, err = io.ReadAll(resp.Body)
+	r.Error(err)
+	r.False(IsTransientError(err), "client timeout must not be transient: %v", err)
 }
 
 type timeoutError struct{}

@@ -40,7 +40,7 @@ func TestRewindableBody_OnlyLatestAttemptReads(t *testing.T) {
 
 	r.NoError(second.Close())
 	r.Zero(owner.closed.Load(), "the original body stays open until the round trip returned")
-	src.roundTripDone()
+	src.roundTripDone(nil)
 	r.Equal(int32(1), owner.closed.Load())
 
 	_, err = src.nextAttempt()
@@ -56,12 +56,34 @@ func TestRewindableBody_ReleasesWhenTransportClosesAfterReturn(t *testing.T) {
 	body := src.firstAttempt()
 
 	// net/http may close the body asynchronously after RoundTrip returned.
-	src.roundTripDone()
+	src.roundTripDone(nil)
 	r.Zero(owner.closed.Load())
 	r.NoError(body.Close())
 	r.Equal(int32(1), owner.closed.Load())
 	r.NoError(body.Close())
 	r.Equal(int32(1), owner.closed.Load(), "the original body is closed exactly once")
+}
+
+// TestReplayableBodyTransport_ReleasesOnFailedRoundTrip mimics retry.Transport
+// giving up (context canceled, retries exhausted) after it fetched the next
+// attempt via GetBody: no transport ever closes that attempt, so the original
+// body must be closed when the round trip fails.
+func TestReplayableBodyTransport_ReleasesOnFailedRoundTrip(t *testing.T) {
+	r := require.New(t)
+	owner := &closeCounter{ReadSeeker: strings.NewReader("abc")}
+	req, err := nethttp.NewRequestWithContext(t.Context(), nethttp.MethodPut, "http://example.invalid", owner)
+	r.NoError(err)
+	giveUp := errors.New("retries exhausted")
+	rt := &replayableBodyTransport{base: roundTripFunc(func(got *nethttp.Request) (*nethttp.Response, error) {
+		r.NoError(got.Body.Close())
+		if _, err := got.GetBody(); err != nil {
+			return nil, err
+		}
+		return nil, giveUp
+	})}
+	_, err = rt.RoundTrip(req)
+	r.ErrorIs(err, giveUp)
+	r.Equal(int32(1), owner.closed.Load(), "the original body must not leak when the round trip fails")
 }
 
 type failingSeeker struct{ io.Reader }

@@ -238,8 +238,9 @@ func NewDefaultBuilder(
 // network error. The HTTP transport only replays requests whose body can be
 // rewound and only up to the response headers; a connection lost while a blob
 // streams between registries surfaces here instead. Transfer nodes are safe to
-// re-run: they write content-addressed data, and buffering a blob to a file
-// removes the partial file when the copy fails.
+// re-run: they write content-addressed data, streaming transformers reopen the
+// source on every call, and buffering a blob to a file removes the partial
+// file when the copy fails. Timeouts are not retried (see IsTransientError).
 func transientRetryPolicy() *graphRuntime.RetryPolicy {
 	return &graphRuntime.RetryPolicy{
 		MaxAttempts: 3,
