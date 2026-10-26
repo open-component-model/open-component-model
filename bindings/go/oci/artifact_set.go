@@ -13,18 +13,21 @@ import (
 	"ocm.software/open-component-model/bindings/go/ctf"
 )
 
-// convertArtifactSetToOCILayout converts legacy OCM artifact sets before the normal OCI
-// layout upload path. Non-artifact-set blobs pass through unchanged.
-func (repo *Repository) convertArtifactSetToOCILayout(ctx context.Context, b blob.ReadOnlyBlob) (blob.ReadOnlyBlob, func() error, error) {
+// isArtifactSetBlob reports whether b is a legacy OCM artifact set that must be
+// converted to an OCI layout (see convertArtifactSetToOCILayout) before upload.
+func isArtifactSetBlob(b blob.ReadOnlyBlob) bool {
 	mediaTypeAware, ok := b.(blob.MediaTypeAware)
 	if !ok {
-		return b, nil, nil
+		return false
 	}
 	mediaType, known := mediaTypeAware.MediaType()
-	if !known || !ctf.IsArtifactSetMediaType(mediaType) {
-		return b, nil, nil
-	}
+	return known && ctf.IsArtifactSetMediaType(mediaType)
+}
 
+// convertArtifactSetToOCILayout converts a legacy OCM artifact set to an OCI layout
+// for the normal upload path. The caller must ensure b is an artifact set (see
+// isArtifactSetBlob); the returned cleanup removes the temporary layout.
+func (repo *Repository) convertArtifactSetToOCILayout(ctx context.Context, b blob.ReadOnlyBlob) (blob.ReadOnlyBlob, func() error, error) {
 	artifactSet, err := ctf.NewArtifactSetFromBlob(b)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to read artifact set: %w", err)
