@@ -24,19 +24,10 @@ const (
 	scenarioCold scenario = "cold"
 	// scenarioShared points every Component at the same component version.
 	scenarioShared scenario = "shared"
-	// scenarioPipeline runs Repository -> Component -> Resource -> Deployer per object.
-	scenarioPipeline scenario = "pipeline"
-	// scenarioUpdate moves every pipeline from initialVersion to updatedVersion.
+	// scenarioUpdate moves every Repository -> Component -> Resource -> Deployer
+	// pipeline from initialVersion to updatedVersion.
 	scenarioUpdate scenario = "update"
-	// scenarioVersions makes every Component pick the latest of many versions
-	// through a semver constraint.
-	scenarioVersions scenario = "versions"
-	// scenarioNested resolves each Resource through a chain of component references.
-	scenarioNested scenario = "nested"
-	// scenarioRepositories gives every Component its own Repository, each a
-	// different sub-path of the one registry.
-	scenarioRepositories scenario = "repositories"
-	// scenarioComplex combines the others: pipelines over a few Repositories,
+	// scenarioComplex runs a signed pipeline per object over a few Repositories,
 	// with large descriptors, several versions and a reference chain each.
 	scenarioComplex scenario = "complex"
 	// scenarioFanout points many Resources at each Component, one per entry
@@ -44,27 +35,23 @@ const (
 	scenarioFanout scenario = "fanout"
 )
 
-var allScenarios = []scenario{
-	scenarioCold, scenarioShared, scenarioPipeline, scenarioUpdate,
-	scenarioVersions, scenarioNested, scenarioRepositories, scenarioComplex, scenarioFanout,
-}
+var allScenarios = []scenario{scenarioCold, scenarioShared, scenarioUpdate, scenarioComplex, scenarioFanout}
 
 const (
 	initialVersion = "1.0.0"
 	updatedVersion = "1.1.0"
 	// A constraint, unlike an exact version, makes the controller list versions.
-	versionConstraint = ">=" + initialVersion
-	defaultVersions   = 100
-	defaultDepth      = 5
-	defaultResources  = 100
-	defaultFanout     = 20
-	// Fixed shape of scenarioComplex; only its descriptor size and chain length are flags.
-	complexVersions     = 5
-	complexRepositories = 10
+	versionConstraint   = ">=" + initialVersion
+	defaultVersions     = 5
+	defaultDepth        = 5
+	defaultResources    = 100
+	defaultFanout       = 20
+	defaultRepositories = 10
 	imagePoolSize       = 10
 	repositoryName      = "registry"
 	referenceName       = "child"
 	runLabel            = "perf.ocm.software/run"
+	signingSecretName   = "perf-signing"
 	// The benchmark measures one burst of reconciles; a long interval keeps
 	// periodic requeues out of the measurement window.
 	reconcileInterval = 30 * time.Minute
@@ -84,14 +71,20 @@ type workload struct {
 	runID       string
 	namespace   string
 	registryURL string
-	// versions is the number of versions per component in scenarioVersions.
+	// versions is the number of versions per root component in scenarioComplex.
 	versions int
-	// depth is the length of the reference chain in scenarioNested and scenarioComplex.
+	// depth is the length of the reference chain in scenarioComplex; 0 puts the manifest into the root.
 	depth int
 	// resources is the number of resources per root component in scenarioComplex and scenarioFanout.
 	resources int
 	// fanout is the number of Resource objects per Component in scenarioFanout.
 	fanout int
+	// repositoryCount caps the Repository objects in scenarioComplex.
+	repositoryCount int
+	// sign makes scenarioComplex sign every component version and verify the roots.
+	sign bool
+	// publicKeyPEM is the key the controller verifies signatures with; set when sign is.
+	publicKeyPEM string
 }
 
 func newWorkload(s scenario, objects int, runID, registryURL string) workload {
@@ -105,16 +98,19 @@ func newWorkload(s scenario, objects int, runID, registryURL string) workload {
 		depth:       defaultDepth,
 		resources:   defaultResources,
 		fanout:      defaultFanout,
+		// The repository count and signing only shape scenarioComplex.
+		repositoryCount: defaultRepositories,
+		sign:            true,
 	}
 }
 
 // sharesComponent reports whether every object resolves the same component.
 func (w workload) sharesComponent() bool {
-	return w.scenario == scenarioShared || w.scenario == scenarioVersions
+	return w.scenario == scenarioShared
 }
 
 func (w workload) hasResources() bool {
-	return w.hasDeployers() || w.scenario == scenarioNested || w.scenario == scenarioFanout
+	return w.hasDeployers() || w.scenario == scenarioFanout
 }
 
 // hasImages reports whether descriptors list OCI images from the image pool.
@@ -139,30 +135,31 @@ func (w workload) targets() int {
 }
 
 func (w workload) hasDeployers() bool {
-	return w.scenario == scenarioPipeline || w.scenario == scenarioUpdate || w.scenario == scenarioComplex
+	return w.scenario == scenarioUpdate || w.scenario == scenarioComplex
 }
 
 // hasReferenceChain reports whether the resource sits depth references below
 // the component a Component object points at.
 func (w workload) hasReferenceChain() bool {
-	return w.scenario == scenarioNested || w.scenario == scenarioComplex
+	return w.scenario == scenarioComplex
 }
 
 // usesConstraint reports whether Components select their version by constraint.
 func (w workload) usesConstraint() bool {
-	return w.scenario == scenarioVersions || w.scenario == scenarioComplex
+	return w.scenario == scenarioComplex
+}
+
+// signed reports whether component versions carry signatures the controller verifies.
+func (w workload) signed() bool {
+	return w.scenario == scenarioComplex && w.sign
 }
 
 // repositories is the number of Repository objects, one registry sub-path each.
 func (w workload) repositories() int {
-	switch w.scenario {
-	case scenarioRepositories:
-		return w.objects
-	case scenarioComplex:
-		return min(w.objects, complexRepositories)
-	default:
-		return 1
+	if w.scenario == scenarioComplex {
+		return min(w.objects, w.repositoryCount)
 	}
+	return 1
 }
 
 func (w workload) componentName(i int) string {
@@ -217,8 +214,6 @@ func (w workload) imagePool() []image {
 
 func (w workload) componentVersions() ([]componentVersion, error) {
 	switch w.scenario {
-	case scenarioNested:
-		return w.nestedComponentVersions()
 	case scenarioComplex:
 		return w.complexComponentVersions()
 	case scenarioFanout:
@@ -231,15 +226,8 @@ func (w workload) componentVersions() ([]componentVersion, error) {
 		unique = 1
 	}
 	versions := []string{initialVersion}
-	switch w.scenario {
-	case scenarioUpdate:
+	if w.scenario == scenarioUpdate {
 		versions = append(versions, updatedVersion)
-	case scenarioVersions:
-		versions = make([]string, w.versions)
-		for patch := range versions {
-			versions[patch] = fmt.Sprintf("1.0.%d", patch)
-		}
-	default:
 	}
 
 	cvs := make([]componentVersion, 0, unique*len(versions))
@@ -260,39 +248,37 @@ func (w workload) componentVersions() ([]componentVersion, error) {
 	return cvs, nil
 }
 
-// nestedComponentVersions builds one chain per object: depth components that
-// only reference the next one, and a leaf that carries the resource.
-func (w workload) nestedComponentVersions() ([]componentVersion, error) {
-	cvs := make([]componentVersion, 0, w.objects*(w.depth+1))
-	for i := range w.objects {
-		chain, err := w.chain(i, 0)
-		if err != nil {
-			return nil, err
-		}
-		cvs = append(cvs, chain...)
-	}
-	return cvs, nil
-}
-
 // complexComponentVersions gives every object a root component with several
 // versions and a large descriptor, on top of the reference chain to the leaf.
+// With a depth of 0 the root carries the manifest itself.
 func (w workload) complexComponentVersions() ([]componentVersion, error) {
 	pool := w.imagePool()
-	cvs := make([]componentVersion, 0, w.objects*(complexVersions+w.depth))
+	cvs := make([]componentVersion, 0, w.objects*(w.versions+w.depth))
 	for i := range w.objects {
 		resources := w.imageResources(i, pool)
-		for patch := range complexVersions {
+		var references []reference
+		var chain []componentVersion
+		if w.depth == 0 {
+			m, err := w.manifest(i, initialVersion)
+			if err != nil {
+				return nil, err
+			}
+			resources = append(resources, resource{Name: resourceName, Blob: m})
+		} else {
+			references = []reference{w.childReference(i, 0)}
+			var err error
+			if chain, err = w.chain(i, 1); err != nil {
+				return nil, err
+			}
+		}
+		for patch := range w.versions {
 			cvs = append(cvs, componentVersion{
 				Name:       w.nestedComponentName(i, 0),
 				Version:    fmt.Sprintf("1.0.%d", patch),
 				SubPath:    w.subPath(i),
 				Resources:  resources,
-				References: []reference{w.childReference(i, 0)},
+				References: references,
 			})
-		}
-		chain, err := w.chain(i, 1)
-		if err != nil {
-			return nil, err
 		}
 		cvs = append(cvs, chain...)
 	}
@@ -395,7 +381,7 @@ func (w workload) component(i int) *v1alpha1.Component {
 	if w.usesConstraint() {
 		semver = versionConstraint
 	}
-	return &v1alpha1.Component{
+	c := &v1alpha1.Component{
 		ObjectMeta: w.meta(fmt.Sprintf("c-%04d", i)),
 		Spec: v1alpha1.ComponentSpec{
 			RepositoryRef: corev1.LocalObjectReference{Name: w.repositoryName(i)},
@@ -404,6 +390,29 @@ func (w workload) component(i int) *v1alpha1.Component {
 			Interval:      metav1.Duration{Duration: reconcileInterval},
 		},
 	}
+	if w.signed() {
+		// Propagated, so the Resource and Deployer verify the root as well.
+		c.Spec.OCMConfig = []v1alpha1.OCMConfiguration{{
+			NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
+				APIVersion: "v1", Kind: "Secret", Name: signingSecretName,
+			},
+			Policy: v1alpha1.ConfigurationPolicyPropagate,
+		}}
+	}
+	return c
+}
+
+// signingSecret holds the OCM config that makes the controller verify the
+// signatures named signatureName with the run's public key.
+func (w workload) signingSecret() (*corev1.Secret, error) {
+	cfg, err := verificationConfig(w.publicKeyPEM)
+	if err != nil {
+		return nil, err
+	}
+	return &corev1.Secret{
+		ObjectMeta: w.meta(signingSecretName),
+		StringData: map[string]string{v1alpha1.OCMConfigKey: cfg},
+	}, nil
 }
 
 func (w workload) resource(i int) *v1alpha1.Resource {
@@ -449,9 +458,16 @@ func (w workload) deployer(i int) *v1alpha1.Deployer {
 	}
 }
 
-// objectsToCreate returns everything the run applies, Repositories first.
+// objectsToCreate returns everything the run applies, the signing Secret and Repositories first.
 func (w workload) objectsToCreate() ([]client.Object, error) {
-	objs := make([]client.Object, 0, w.repositories()+(2+w.resourcesPerComponent())*w.objects)
+	objs := make([]client.Object, 0, 1+w.repositories()+(2+w.resourcesPerComponent())*w.objects)
+	if w.signed() {
+		secret, err := w.signingSecret()
+		if err != nil {
+			return nil, err
+		}
+		objs = append(objs, secret)
+	}
 	for i := range w.repositories() {
 		repo, err := w.repository(i)
 		if err != nil {
@@ -484,11 +500,11 @@ func (w workload) meta(name string) metav1.ObjectMeta {
 // that decides readiness.
 func (w workload) target() (schema.GroupVersionKind, func(*unstructured.Unstructured) objectState) {
 	switch w.scenario {
-	case scenarioPipeline, scenarioComplex:
+	case scenarioComplex:
 		return deployerGVK, readyState
 	case scenarioUpdate:
 		return configMapGVK, configMapVersionState(updatedVersion)
-	case scenarioNested, scenarioFanout:
+	case scenarioFanout:
 		return resourceGVK, readyState
 	default:
 		return componentGVK, readyState

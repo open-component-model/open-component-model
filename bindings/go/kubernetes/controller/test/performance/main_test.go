@@ -30,6 +30,8 @@ func TestParseFlags(t *testing.T) {
 				r.Equal(defaultDepth, o.depth)
 				r.Equal(defaultResources, o.resources)
 				r.Equal(defaultFanout, o.fanout)
+				r.Equal(defaultRepositories, o.repositories)
+				r.True(o.sign)
 			},
 		},
 		{
@@ -45,8 +47,10 @@ func TestParseFlags(t *testing.T) {
 		{name: "unknown scenario", args: []string{"--scenarios=warm"}, wantErr: `unknown scenario "warm"`},
 		{name: "invalid size", args: []string{"--objects=100,0"}, wantErr: `invalid object count "0"`},
 		{name: "invalid repeats", args: []string{"--repeats=0"}, wantErr: "repeats must be at least 1"},
-		{name: "invalid depth", args: []string{"--depth=0"}, wantErr: "versions, depth, resources and fanout must be at least 1"},
-		{name: "invalid fanout", args: []string{"--fanout=0"}, wantErr: "versions, depth, resources and fanout must be at least 1"},
+		{name: "depth 0 is allowed", args: []string{"--depth=0"}, want: func(r *require.Assertions, o options) { r.Zero(o.depth) }},
+		{name: "invalid depth", args: []string{"--depth=-1"}, wantErr: "depth must not be negative"},
+		{name: "invalid fanout", args: []string{"--fanout=0"}, wantErr: "versions, resources, fanout and repositories must be at least 1"},
+		{name: "invalid repositories", args: []string{"--repositories=0"}, wantErr: "versions, resources, fanout and repositories must be at least 1"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

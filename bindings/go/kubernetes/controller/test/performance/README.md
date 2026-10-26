@@ -13,7 +13,7 @@ Requires `docker`, `kind`, `kubectl` and `helm`. All commands run from `bindings
 
 ```bash
 task test/performance/setup/local      # Kind cluster + registry, builds and loads the controller from the working tree
-task test/performance                  # installs the chart, then the full matrix: 9 scenarios x 100/500/1000 objects x 3 repeats
+task test/performance                  # installs the chart, then the full matrix: 5 scenarios x 100/500/1000 objects x 3 repeats
 task test/performance -- --scenarios=cold --objects=100 --repeats=1   # a subset
 task test/performance/setup/teardown
 task test/performance/fresh            # teardown, setup and run in one go
@@ -32,6 +32,7 @@ The benchmark is a standalone Go program, run with `go run`. It builds and measu
 | `main.go`                | Flags and the matrix loop: scenarios x object counts x repeats            |
 | `workload.go`            | Per scenario: the component versions to publish and the objects to create |
 | `publish.go`, `image.go` | Push component versions and a small image pool to the registry            |
+| `signing.go`             | Per-run RSA key, signatures, and the controller's verification config     |
 | `cluster.go`             | Kubernetes client, controller restart, metric scrapes, cleanup            |
 | `tracker.go`             | A watch that records when each target object first becomes ready          |
 | `sampler.go`             | Polls gauges, CPU and memory every `--sample-interval`                    |
@@ -61,39 +62,52 @@ Deployer controllers run with controller-runtime's default of one worker.
 
 `N` is the `--objects` value.
 
-| Scenario       | Objects created                                                                                                        | Measured until                                                                       |
-|----------------|------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------|
-| `cold`         | 1 Repository, N Components with N unique component versions                                                            | every Component is `Ready` for its current generation                                |
-| `shared`       | 1 Repository, N Components that all resolve the same component version                                                 | every Component is `Ready`                                                           |
-| `pipeline`     | 1 Repository, N each of Component, Resource and Deployer                                                               | every Deployer is `Ready`                                                            |
-| `update`       | the `pipeline` objects, already rolled out at `1.0.0` (not measured)                                                   | every deployed ConfigMap carries `1.1.0` after all Components are patched to `1.1.0` |
-| `versions`     | 1 Repository, N Components with the constraint `>=1.0.0` on one component that has `--versions` versions (default 100) | every Component is `Ready`                                                           |
-| `nested`       | 1 Repository, N Components, N Resources that each walk a `--depth` long reference path (default 5)                     | every Resource is `Ready`                                                            |
-| `repositories` | N Repositories, each a different `subPath` of the one registry, and N Components                                       | every Component is `Ready`                                                           |
-| `complex`      | 10 Repositories on different `subPath`s, N each of Component, Resource and Deployer                                    | every Deployer is `Ready`                                                            |
-| `fanout`       | 1 Repository, N Components, `--fanout` Resources per Component (default 20)                                            | every Resource is `Ready`                                                            |
+| Scenario  | Objects created                                                                                        | Measured until                                                                       |
+|-----------|--------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------|
+| `cold`    | 1 Repository, N Components with N unique component versions                                            | every Component is `Ready` for its current generation                                |
+| `shared`  | 1 Repository, N Components that all resolve the same component version                                 | every Component is `Ready`                                                           |
+| `update`  | 1 Repository, N each of Component, Resource and Deployer, already rolled out at `1.0.0` (not measured) | every deployed ConfigMap carries `1.1.0` after all Components are patched to `1.1.0` |
+| `complex` | up to `--repositories` Repositories (default 10), N each of Component, Resource and Deployer, signed   | every Deployer is `Ready`                                                            |
+| `fanout`  | 1 Repository, N Components, `--fanout` Resources per Component (default 20)                            | every Resource is `Ready`                                                            |
 
-What the last five add over the first four:
+What each one isolates:
 
-- `versions`: an exact version skips the version listing, a constraint does not.
-- `nested`: every hop of a reference path is one more component version to resolve. Each object has its own
-  chain of `--depth` referencing components and one leaf that holds the resource.
-- `repositories`: the controller caches repositories per repository spec, so N sub-paths give N cache entries
-  and N resolvers without measuring more than one registry.
-- `complex`: all of the above in one pipeline, shaped like a product delivery. Every object has a root
-  component with 5 versions, selected by constraint, whose descriptor lists `--resources` OCI images
-  (default 100) from a small pool pushed to the registry. The root reaches the deployed manifest through a
-  `--depth` long reference path.
+- `cold`: the baseline. Every Component misses the resolver cache once.
+- `shared`: the opposite. One cache miss, then N - 1 hits on the same component version.
+- `update`: re-resolving and redeploying a version change, not a first install.
+- `complex`: a product delivery in one pipeline. Every object has a root component with `--versions`
+  versions (default 5), selected by the constraint `>=1.0.0`, whose descriptor lists `--resources` OCI
+  images (default 100) from a small pool pushed to the registry. The root reaches the deployed manifest
+  through a `--depth` long reference path (default 5). The objects share up to `--repositories`
+  Repositories, each a different `subPath` of the one registry, so the controller holds that many
+  repository cache entries.
 - `fanout`: load on the Resource controller, the only one of the three with more than one worker. Every
   Component has one component version whose descriptor lists `--resources` OCI images, and each of its
   Resources selects a different one. There are no Deployers, so the single Deployer worker does not bound
   the run. `Objects` in the results is N; the outcome counts all N x `--fanout` Resources.
 
+`complex` replaces scenarios that each covered one of its knobs. To find which knob a `complex` regression
+comes from, rerun it with that knob turned down: `--depth=0` puts the manifest into the root, `--versions=1`
+skips choosing between versions, `--repositories=1` shares one Repository, `--sign=false` drops signing.
+
+### Signing
+
+`complex` signs every component version with RSASSA-PSS under the signature name `perf`, with a key
+generated for the run. The Components reference a Secret that holds only the public key and a
+`signing.config.ocm.software` entry for `perf`, with the `Propagate` policy, so the Resources and Deployers
+verify the root as well. The controller verifies the root by signature and every component version below it
+against the digest its parent records for it.
+
+The controller accepts a descriptor that misses a resource or reference digest without verifying it at all.
+The benchmark therefore writes every image and reference digest, and refuses to sign a component version
+that is not safely digestible, the same check `ocm sign cv` makes. Component versions are published level
+by level, leaves first, because a reference digest needs the referenced component version.
+
 The Deployers apply one ConfigMap each. The ConfigMap's data holds the component version, so the update scenario
 reads the rollout from the cluster itself, not from a status field.
 
-Objects are created in parallel, the Repository first, the way a GitOps tool applies a directory. A watch
-records when each object first becomes ready.
+Objects are created in parallel, the Repositories and the signing Secret first, the way a GitOps tool
+applies a directory. A watch records when each object first becomes ready.
 
 The benchmark's own client is limited to 200 requests per second. A scenario that creates objects for longer
 than the controller needs to reconcile them is bound by that limit, not by the controller.

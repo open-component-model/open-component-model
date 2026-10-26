@@ -31,6 +31,8 @@ type options struct {
 	depth               int
 	resources           int
 	fanout              int
+	repositories        int
+	sign                bool
 	registryURL         string
 	clusterRegistryURL  string
 	registryMetricsURL  string
@@ -121,8 +123,10 @@ func parseFlags(args []string) (options, error) {
 	fs.StringVar(&opts.kubeContext, "context", "kind-ocm-perf",
 		"Kubeconfig context. Defaults to the benchmark cluster so a run never lands on a real cluster by accident.")
 	fs.StringVar(&scenarios, "scenarios", joinScenarios(allScenarios), "Comma-separated scenarios. See README.md for what each one creates.")
-	fs.IntVar(&opts.versions, "versions", defaultVersions, "Versions of the component in the versions scenario.")
-	fs.IntVar(&opts.depth, "depth", defaultDepth, "Length of the reference chain in the nested and complex scenarios.")
+	fs.IntVar(&opts.versions, "versions", defaultVersions, "Versions of every root component in the complex scenario, selected by constraint.")
+	fs.IntVar(&opts.depth, "depth", defaultDepth, "Length of the reference chain in the complex scenario; 0 puts the manifest into the root component.")
+	fs.IntVar(&opts.repositories, "repositories", defaultRepositories, "Maximum number of Repositories in the complex scenario, each on its own registry sub-path.")
+	fs.BoolVar(&opts.sign, "sign", true, "Sign the complex scenario's component versions and have the controller verify them.")
 	fs.IntVar(&opts.resources, "resources", defaultResources, "Resources per root component in the complex and fanout scenarios.")
 	fs.IntVar(&opts.fanout, "fanout", defaultFanout, "Resource objects per Component in the fanout scenario.")
 	fs.StringVar(&sizes, "objects", "100,500,1000", "Comma-separated object counts per run.")
@@ -154,9 +158,12 @@ func parseFlags(args []string) (options, error) {
 	if opts.repeats < 1 {
 		return opts, fmt.Errorf("repeats must be at least 1, got %d", opts.repeats)
 	}
-	if opts.versions < 1 || opts.depth < 1 || opts.resources < 1 || opts.fanout < 1 {
-		return opts, fmt.Errorf("versions, depth, resources and fanout must be at least 1, got %d, %d, %d and %d",
-			opts.versions, opts.depth, opts.resources, opts.fanout)
+	if opts.versions < 1 || opts.resources < 1 || opts.fanout < 1 || opts.repositories < 1 {
+		return opts, fmt.Errorf("versions, resources, fanout and repositories must be at least 1, got %d, %d, %d and %d",
+			opts.versions, opts.resources, opts.fanout, opts.repositories)
+	}
+	if opts.depth < 0 {
+		return opts, fmt.Errorf("depth must not be negative, got %d", opts.depth)
 	}
 	return opts, nil
 }

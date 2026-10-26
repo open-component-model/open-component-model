@@ -14,23 +14,24 @@ import (
 	"oras.land/oras-go/v2/registry/remote"
 )
 
-// pushImage pushes a minimal but valid single-layer image. The layer content
-// derives from the repository name, so every image has its own digest.
-func pushImage(ctx context.Context, client remote.Client, host string, plainHTTP bool, repository, tag string) error {
+// pushImage pushes a minimal but valid single-layer image and returns its
+// manifest digest. The layer content derives from the repository name, so
+// every image has its own digest.
+func pushImage(ctx context.Context, client remote.Client, host string, plainHTTP bool, repository, tag string) (digest.Digest, error) {
 	repo, err := remote.NewRepository(host + "/" + repository)
 	if err != nil {
-		return err
+		return "", err
 	}
 	repo.PlainHTTP = plainHTTP
 	repo.Client = client
 
 	layer, diffID, err := imageLayer(repository)
 	if err != nil {
-		return fmt.Errorf("building layer: %w", err)
+		return "", fmt.Errorf("building layer: %w", err)
 	}
 	layerDesc, err := oras.PushBytes(ctx, repo, ocispec.MediaTypeImageLayerGzip, layer)
 	if err != nil {
-		return fmt.Errorf("pushing layer: %w", err)
+		return "", fmt.Errorf("pushing layer: %w", err)
 	}
 
 	config, err := json.Marshal(ocispec.Image{
@@ -38,11 +39,11 @@ func pushImage(ctx context.Context, client remote.Client, host string, plainHTTP
 		RootFS:   ocispec.RootFS{Type: "layers", DiffIDs: []digest.Digest{diffID}},
 	})
 	if err != nil {
-		return err
+		return "", err
 	}
 	configDesc, err := oras.PushBytes(ctx, repo, ocispec.MediaTypeImageConfig, config)
 	if err != nil {
-		return fmt.Errorf("pushing config: %w", err)
+		return "", fmt.Errorf("pushing config: %w", err)
 	}
 
 	manifest, err := oras.PackManifest(ctx, repo, oras.PackManifestVersion1_1, "", oras.PackManifestOptions{
@@ -50,9 +51,12 @@ func pushImage(ctx context.Context, client remote.Client, host string, plainHTTP
 		Layers:           []ocispec.Descriptor{layerDesc},
 	})
 	if err != nil {
-		return fmt.Errorf("pushing manifest: %w", err)
+		return "", fmt.Errorf("pushing manifest: %w", err)
 	}
-	return repo.Tag(ctx, manifest, tag)
+	if err := repo.Tag(ctx, manifest, tag); err != nil {
+		return "", err
+	}
+	return manifest.Digest, nil
 }
 
 // imageLayer returns a gzipped tar with one file, and the digest of the

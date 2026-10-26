@@ -53,6 +53,7 @@ func (r *runner) runOnce(ctx context.Context, s scenario, objects, repeat int) (
 	runID := fmt.Sprintf("%s-%d-r%d-%s", s, objects, repeat, randomSuffix())
 	w := newWorkload(s, objects, runID, r.opts.clusterRegistryURL)
 	w.versions, w.depth, w.resources, w.fanout = r.opts.versions, r.opts.depth, r.opts.resources, r.opts.fanout
+	w.repositoryCount, w.sign = r.opts.repositories, r.opts.sign
 	dir := filepath.Join(r.outDir, runID)
 	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return nil, err
@@ -60,15 +61,21 @@ func (r *runner) runOnce(ctx context.Context, s scenario, objects, repeat int) (
 	log := slog.With("run", runID)
 	res := &result{Scenario: s, Objects: objects, Repeat: repeat, RunID: runID, StartedAt: time.Now().UTC()}
 	switch s {
-	case scenarioVersions:
-		res.Versions = w.versions
-	case scenarioNested:
-		res.Depth = w.depth
 	case scenarioComplex:
-		res.Versions, res.Depth, res.Resources = complexVersions, w.depth, w.resources
+		res.Versions, res.Depth, res.Resources = w.versions, &w.depth, w.resources
+		res.Repositories, res.Signed = w.repositories(), w.signed()
 	case scenarioFanout:
 		res.Resources, res.Fanout = w.resources, w.fanout
 	default:
+	}
+
+	var sgn *signer
+	if w.signed() {
+		var err error
+		if sgn, err = newSigner(); err != nil {
+			return nil, err
+		}
+		w.publicKeyPEM = sgn.publicKeyPEM
 	}
 
 	if r.opts.restartController {
@@ -89,7 +96,7 @@ func (r *runner) runOnce(ctx context.Context, s scenario, objects, repeat int) (
 	}
 	log.Info("publishing component versions", "count", len(cvs))
 	publishStart := time.Now()
-	if err := r.publish(ctx, w.imagePool(), cvs); err != nil {
+	if err := r.publish(ctx, sgn, w.imagePool(), cvs); err != nil {
 		return nil, err
 	}
 	res.Durations.Publish = time.Since(publishStart).Seconds()
@@ -232,18 +239,19 @@ func (r *runner) prepareUpdate(ctx context.Context, w workload, objs []client.Ob
 	return nil
 }
 
-// create applies the Repositories first, then everything else in parallel,
-// the way a GitOps tool would apply a directory.
+// create applies the Repositories and the signing Secret first, then
+// everything else in parallel, the way a GitOps tool would apply a directory.
 func (r *runner) create(ctx context.Context, objs []client.Object) error {
-	var repositories, rest []client.Object
+	var first, rest []client.Object
 	for _, obj := range objs {
-		if _, ok := obj.(*v1alpha1.Repository); ok {
-			repositories = append(repositories, obj)
-		} else {
+		switch obj.(type) {
+		case *v1alpha1.Repository, *corev1.Secret:
+			first = append(first, obj)
+		default:
 			rest = append(rest, obj)
 		}
 	}
-	for _, batch := range [][]client.Object{repositories, rest} {
+	for _, batch := range [][]client.Object{first, rest} {
 		g, gctx := errgroup.WithContext(ctx)
 		g.SetLimit(createWorkers)
 		for _, obj := range batch {
@@ -352,13 +360,13 @@ func (r *runner) environment(pod *corev1.Pod) environment {
 	return env
 }
 
-func (r *runner) publish(ctx context.Context, images []image, cvs []componentVersion) error {
+func (r *runner) publish(ctx context.Context, sgn *signer, images []image, cvs []componentVersion) error {
 	tmp, err := os.MkdirTemp("", "ocm-perf-")
 	if err != nil {
 		return err
 	}
 	defer os.RemoveAll(tmp)
-	p, err := newPublisher(r.opts.registryURL, tmp)
+	p, err := newPublisher(r.opts.registryURL, tmp, sgn)
 	if err != nil {
 		return err
 	}

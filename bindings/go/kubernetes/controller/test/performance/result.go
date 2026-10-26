@@ -16,17 +16,20 @@ type result struct {
 	Scenario scenario `json:"scenario"`
 	Objects  int      `json:"objects"`
 	Repeat   int      `json:"repeat"`
-	// Versions, Depth, Resources and Fanout are set for the scenarios they shape.
-	Versions    int         `json:"versions,omitempty"`
-	Depth       int         `json:"depth,omitempty"`
-	Resources   int         `json:"resources,omitempty"`
-	Fanout      int         `json:"fanout,omitempty"`
-	RunID       string      `json:"runID"`
-	StartedAt   time.Time   `json:"startedAt"`
-	Environment environment `json:"environment"`
-	Durations   durations   `json:"durations"`
-	Outcome     outcome     `json:"outcome"`
-	Usage       usage       `json:"usage"`
+	// Versions, Depth, Resources, Fanout, Repositories and Signed are set for the scenarios they shape.
+	// Depth is a pointer because 0 is a valid chain length.
+	Versions     int         `json:"versions,omitempty"`
+	Depth        *int        `json:"depth,omitempty"`
+	Resources    int         `json:"resources,omitempty"`
+	Fanout       int         `json:"fanout,omitempty"`
+	Repositories int         `json:"repositories,omitempty"`
+	Signed       bool        `json:"signed,omitempty"`
+	RunID        string      `json:"runID"`
+	StartedAt    time.Time   `json:"startedAt"`
+	Environment  environment `json:"environment"`
+	Durations    durations   `json:"durations"`
+	Outcome      outcome     `json:"outcome"`
+	Usage        usage       `json:"usage"`
 	// ControllerCounters are end-minus-start deltas over the measurement window.
 	ControllerCounters map[string]float64 `json:"controllerCounters"`
 	// ControllerGaugePeaks are the maxima of the sampled gauges.

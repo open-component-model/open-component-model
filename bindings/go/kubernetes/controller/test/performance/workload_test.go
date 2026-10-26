@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/yaml"
 
@@ -19,12 +20,8 @@ func TestWorkloadComponentVersions(t *testing.T) {
 	}{
 		{scenario: scenarioCold, wantVersions: 5, wantUniqueCVs: 5},
 		{scenario: scenarioShared, wantVersions: 1, wantUniqueCVs: 1},
-		{scenario: scenarioPipeline, wantVersions: 5, wantUniqueCVs: 5},
 		{scenario: scenarioUpdate, wantVersions: 10, wantUniqueCVs: 5},
-		{scenario: scenarioVersions, wantVersions: defaultVersions, wantUniqueCVs: 1},
-		{scenario: scenarioNested, wantVersions: 5 * (defaultDepth + 1), wantUniqueCVs: 5 * (defaultDepth + 1)},
-		{scenario: scenarioRepositories, wantVersions: 5, wantUniqueCVs: 5},
-		{scenario: scenarioComplex, wantVersions: 5 * (complexVersions + defaultDepth), wantUniqueCVs: 5 * (defaultDepth + 1)},
+		{scenario: scenarioComplex, wantVersions: 5 * (defaultVersions + defaultDepth), wantUniqueCVs: 5 * (defaultDepth + 1)},
 		{scenario: scenarioFanout, wantVersions: 5, wantUniqueCVs: 5},
 	}
 	for _, tt := range tests {
@@ -52,12 +49,8 @@ func TestWorkloadObjectsToCreate(t *testing.T) {
 	}{
 		{scenario: scenarioCold, want: 1 + 3},
 		{scenario: scenarioShared, want: 1 + 3},
-		{scenario: scenarioPipeline, want: 1 + 3*3},
 		{scenario: scenarioUpdate, want: 1 + 3*3},
-		{scenario: scenarioVersions, want: 1 + 3},
-		{scenario: scenarioNested, want: 1 + 3*2},
-		{scenario: scenarioRepositories, want: 3 + 3},
-		{scenario: scenarioComplex, want: 3 + 3*3},
+		{scenario: scenarioComplex, want: 1 + 3 + 3*3},
 		{scenario: scenarioFanout, want: 1 + 3*(1+defaultFanout)},
 	}
 	for _, tt := range tests {
@@ -68,7 +61,6 @@ func TestWorkloadObjectsToCreate(t *testing.T) {
 			objs, err := w.objectsToCreate()
 			r.NoError(err)
 			r.Len(objs, tt.want)
-			r.IsType(&v1alpha1.Repository{}, objs[0], "the Repository must be created first")
 			for _, o := range objs {
 				r.Equal("run", o.GetLabels()[runLabel])
 				if _, ok := o.(*v1alpha1.Deployer); ok {
@@ -84,8 +76,8 @@ func TestWorkloadObjectsToCreate(t *testing.T) {
 
 func TestWorkloadComplex(t *testing.T) {
 	r := require.New(t)
-	w := newWorkload(scenarioComplex, complexRepositories+2, "run", "http://registry:5000")
-	w.depth, w.resources = 2, 7
+	w := newWorkload(scenarioComplex, defaultRepositories+2, "run", "http://registry:5000")
+	w.depth, w.resources, w.versions = 2, 7, 3
 
 	cvs, err := w.componentVersions()
 	r.NoError(err)
@@ -100,13 +92,22 @@ func TestWorkloadComplex(t *testing.T) {
 
 	objs, err := w.objectsToCreate()
 	r.NoError(err)
-	r.IsType(&v1alpha1.Repository{}, objs[complexRepositories-1])
-	r.IsType(&v1alpha1.Component{}, objs[complexRepositories], "objects share a fixed number of Repositories")
+	r.IsType(&corev1.Secret{}, objs[0], "the signing Secret must exist before the Components that verify with it")
+	r.IsType(&v1alpha1.Repository{}, objs[defaultRepositories])
+	r.IsType(&v1alpha1.Component{}, objs[defaultRepositories+1], "objects share a capped number of Repositories")
 
 	// The last object wraps around onto the second Repository.
-	i := complexRepositories + 1
+	i := defaultRepositories + 1
 	r.Equal(w.repositoryName(1), w.component(i).Spec.RepositoryRef.Name)
 	r.Equal(versionConstraint, w.component(i).Spec.Semver)
+	r.Equal(signingSecretName, w.component(i).Spec.OCMConfig[0].Name)
+	r.Equal(v1alpha1.ConfigurationPolicyPropagate, w.component(i).Spec.OCMConfig[0].Policy,
+		"the Resource and Deployer inherit the verification config")
+
+	repo, err := w.repository(i)
+	r.NoError(err)
+	r.JSONEq(`{"type":"OCIRegistry","baseUrl":"http://registry:5000","subPath":"`+w.subPath(1)+`"}`,
+		string(repo.Spec.RepositorySpec.Raw), "the Repository must point at the sub-path its component versions were published to")
 
 	root := byName[w.component(i).Spec.Component]
 	r.Equal(w.subPath(1), root.SubPath)
@@ -161,63 +162,41 @@ func TestWorkloadFanout(t *testing.T) {
 	r.Equal(map[string]int{cvs[1].Resources[0].Name: 2, cvs[1].Resources[1].Name: 2, cvs[1].Resources[2].Name: 1}, selected)
 }
 
-func TestWorkloadNested(t *testing.T) {
+func TestWorkloadComplexWithoutChain(t *testing.T) {
 	r := require.New(t)
-	w := newWorkload(scenarioNested, 2, "run", "http://registry:5000")
-	w.depth = 3
+	w := newWorkload(scenarioComplex, 2, "run", "http://registry:5000")
+	w.depth, w.resources, w.versions = 0, 3, 4
 
 	cvs, err := w.componentVersions()
 	r.NoError(err)
-	byName := map[string]componentVersion{}
+	r.Len(cvs, 2*4, "only the root versions, no chain")
+	versions := map[string]bool{}
 	for _, cv := range cvs {
-		byName[cv.Name] = cv
+		versions[cv.Version] = true
+		r.Empty(cv.References)
+		r.Len(cv.Resources, 3+1, "the images plus the manifest")
+		r.Equal(resourceName, cv.Resources[3].Name)
 	}
-
-	// Walking the Resource's reference path from the root must end at the leaf.
-	res := w.resource(1)
-	r.Len(res.Spec.Resource.ByReference.ReferencePath, 3)
-	cv := byName[w.component(1).Spec.Component]
-	for _, step := range res.Spec.Resource.ByReference.ReferencePath {
-		r.Empty(cv.Resources)
-		r.Len(cv.References, 1)
-		r.Equal(step["name"], cv.References[0].Name)
-		cv = byName[cv.References[0].Component]
-	}
-	r.Len(cv.Resources, 1)
-	r.Equal(res.Spec.Resource.ByReference.Resource["name"], cv.Resources[0].Name)
+	r.Equal(map[string]bool{"1.0.0": true, "1.0.1": true, "1.0.2": true, "1.0.3": true}, versions)
+	r.Empty(w.resource(1).Spec.Resource.ByReference.ReferencePath)
 }
 
-func TestWorkloadVersions(t *testing.T) {
+func TestWorkloadUnsigned(t *testing.T) {
 	r := require.New(t)
-	w := newWorkload(scenarioVersions, 3, "run", "http://registry:5000")
-	w.versions = 4
+	w := newWorkload(scenarioComplex, 2, "run", "http://registry:5000")
+	w.sign = false
 
-	cvs, err := w.componentVersions()
+	objs, err := w.objectsToCreate()
 	r.NoError(err)
-	versions := make([]string, len(cvs))
-	for i, cv := range cvs {
-		versions[i] = cv.Version
+	for _, o := range objs {
+		r.NotEqual(signingSecretName, o.GetName())
+		if c, ok := o.(*v1alpha1.Component); ok {
+			r.Empty(c.Spec.OCMConfig)
+		}
 	}
-	r.Equal([]string{"1.0.0", "1.0.1", "1.0.2", "1.0.3"}, versions)
-	r.Equal(versionConstraint, w.component(2).Spec.Semver)
-	r.Equal(initialVersion, newWorkload(scenarioCold, 3, "run", "").component(2).Spec.Semver)
-}
 
-func TestWorkloadRepositories(t *testing.T) {
-	r := require.New(t)
-	w := newWorkload(scenarioRepositories, 2, "run", "http://registry:5000")
-
-	cvs, err := w.componentVersions()
-	r.NoError(err)
-	for i, cv := range cvs {
-		repo, err := w.repository(i)
-		r.NoError(err)
-		r.Equal(repo.Name, w.component(i).Spec.RepositoryRef.Name)
-		// The Repository must point at the sub-path its component version was published to.
-		r.JSONEq(`{"type":"OCIRegistry","baseUrl":"http://registry:5000","subPath":"`+cv.SubPath+`"}`,
-			string(repo.Spec.RepositorySpec.Raw))
-	}
-	r.NotEqual(cvs[0].SubPath, cvs[1].SubPath)
+	// Signing only shapes the complex scenario.
+	r.False(newWorkload(scenarioCold, 2, "run", "").signed())
 
 	single, err := newWorkload(scenarioCold, 2, "run", "http://registry:5000").repository(0)
 	r.NoError(err)
@@ -235,7 +214,7 @@ func TestWorkloadSharedComponentName(t *testing.T) {
 
 func TestWorkloadManifest(t *testing.T) {
 	r := require.New(t)
-	w := newWorkload(scenarioPipeline, 3, "run", "http://registry:5000")
+	w := newWorkload(scenarioUpdate, 3, "run", "http://registry:5000")
 
 	raw, err := w.manifest(2, updatedVersion)
 	r.NoError(err)
