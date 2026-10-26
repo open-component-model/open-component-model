@@ -13,7 +13,9 @@ func TestCheckSources(t *testing.T) {
 	source := func(name, access string) descriptorv2.Source {
 		src := descriptorv2.Source{Type: "blob"}
 		src.Name, src.Version = name, "1.0.0"
-		src.Access = &runtime.Raw{Type: runtime.NewUnversionedType(access), Data: []byte(`{"type":"` + access + `"}`)}
+		typ, err := runtime.TypeFromString(access)
+		require.NoError(t, err)
+		src.Access = &runtime.Raw{Type: typ, Data: []byte(`{"type":"` + access + `"}`)}
 		return src
 	}
 	desc := func(sources ...descriptorv2.Source) *descriptorv2.Descriptor {
