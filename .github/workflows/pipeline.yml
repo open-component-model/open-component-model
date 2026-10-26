@@ -35,6 +35,7 @@ on:
       - '.github/workflows/pipeline.yml'
       - 'Taskfile.yml'
       - '.env'
+      - '.github/stig/**'
   workflow_call:
     inputs:
       ref:
@@ -137,7 +138,8 @@ jobs:
   # === end ===
 
   # Image scan of the CLI and controller images built above, per architecture:
-  # vulnerabilities (Trivy with govulncheck's OpenVEX). Gates publish.
+  # vulnerabilities (Trivy with govulncheck's OpenVEX), the DISA GPOS SRG as
+  # tailored in .github/stig, and the CIS Docker Benchmark. Gates publish.
   image_scan:
     name: Image scan
     needs: [build_cli, build_controller]

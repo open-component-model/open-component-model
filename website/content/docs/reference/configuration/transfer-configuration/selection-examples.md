@@ -73,7 +73,9 @@ configurations:
     match: >-
       target.type == "OCIRepository"
       && resource.access.isType("LocalBlob")
-      && has(resource.access.mediaType) && isOCIManifest(resource.access.mediaType)
+      && has(resource.access.mediaType)
+      && (isOCIManifest(resource.access.mediaType)
+        || isArtifactSetMediaType(resource.access.mediaType))
       && has(resource.access.referenceName)
     imageReference: '${target.baseUrl + (target.subPath == "" ? "" : "/" + target.subPath) + "/" + resource.access.referenceName}'
 ```
@@ -95,7 +97,7 @@ configurations:
 | `app`, `nginx`, `docs` | by reference                                  |
 | `bundle`, `notes`      | local blob                                    |
 
-## E4 — OCI-manifest local blobs only
+## E4 — OCI-manifest and artifact-set local blobs only
 
 ```yaml
 type: generic.config.ocm.software/v1
@@ -104,7 +106,9 @@ configurations:
     match: >-
       target.type == "OCIRepository"
       && resource.access.isType("LocalBlob")
-      && has(resource.access.mediaType) && isOCIManifest(resource.access.mediaType)
+      && has(resource.access.mediaType)
+      && (isOCIManifest(resource.access.mediaType)
+        || isArtifactSetMediaType(resource.access.mediaType))
       && has(resource.access.referenceName)
 ```
 
@@ -202,7 +206,7 @@ Each case transfers a component with only the named resource.
 | Config entry                                                               | Resource / target              | Error contains                                                                                                     |
 | -------------------------------------------------------------------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
 | OCI, `match: resource.access.isType("Wget")`                               | `docs`                         | `oci uploader cannot upload access type Wget/v1`                                                                   |
-| OCI, `match: resource.access.isType("LocalBlob")`                          | `notes`                        | `not an OCI manifest`                                                                                              |
+| OCI, `match: resource.access.isType("LocalBlob")`                          | `notes`                        | `not an OCI manifest or artifact set`                                                                              |
 | OCI, `match: resource.access.isType(`                                      | `app`                          | `invalid match`                                                                                                    |
 | OCI, `match: '"yes"'`                                                      | `app`                          | `must evaluate to a bool`                                                                                          |
 | OCI, `match: resource.access.isType("OCIImage")`, default `imageReference` | `app`, target `ctf::./archive` | `imageReference does not evaluate` (the default template reads `target.baseUrl`, which a CTF target does not have) |
