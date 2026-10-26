@@ -89,6 +89,31 @@ func TestNewArtifactSetFromBlob_IncompleteIndexEntry(t *testing.T) {
 	}
 }
 
+// oversizedBlob declares size bytes but its reader yields more, like a source
+// whose stream continues past the blob.
+type oversizedBlob struct {
+	data []byte
+	size int64
+}
+
+func (b *oversizedBlob) ReadCloser() (io.ReadCloser, error) {
+	return io.NopCloser(bytes.NewReader(b.data)), nil
+}
+func (b *oversizedBlob) Size() int64               { return b.size }
+func (b *oversizedBlob) MediaType() (string, bool) { return artifactSetMediaType, true }
+
+func TestNewArtifactSetFromBlob_LimitsToBlobSize(t *testing.T) {
+	r := require.New(t)
+	archive, _ := artifactSetArchive(t, ctf.ArtifactSetFormatLegacyOCI)
+
+	as, err := ctf.NewArtifactSetFromBlob(&oversizedBlob{
+		data: append(bytes.Clone(archive), []byte("trailing bytes beyond the blob")...),
+		size: int64(len(archive)),
+	})
+	r.NoError(err)
+	r.NoError(as.Close())
+}
+
 type artifactSetFixture struct {
 	manifest, config, layer ociimagespecv1.Descriptor
 	data                    map[string][]byte
