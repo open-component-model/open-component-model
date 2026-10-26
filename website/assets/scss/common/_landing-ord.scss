@@ -133,6 +133,62 @@
         margin-top: 40px;
     }
 
+    /* Quick start: the one install command and a first read-only command */
+    .container--quickstart {
+        margin-top: 40px;
+    }
+
+    .quickstart {
+        width: 100%;
+        min-width: 0;
+        max-width: 960px;
+        margin: 0 auto;
+        text-align: left;
+
+        .section-title {
+            font-family: 'Inter Variable', 'Inter', system-ui, sans-serif;
+            font-weight: 700;
+        }
+    }
+
+    .quickstart-lead,
+    .quickstart-more {
+        color: var(--ocm-card-desc-color);
+        text-align: center;
+    }
+
+    .quickstart-lead {
+        font-size: 18px;
+        margin: 8px 0 24px;
+    }
+
+    .quickstart-more {
+        margin: 24px 0 0;
+    }
+
+    .quickstart-steps {
+        counter-reset: quickstart-step;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr); /* long commands scroll inside the code block instead of widening the page */
+        gap: 16px;
+        list-style: none;
+        margin: 0;
+        padding: 0;
+    }
+
+    .quickstart-step {
+        counter-increment: quickstart-step;
+    }
+
+    .quickstart-step-title {
+        font-weight: 600;
+        margin: 0 0 8px;
+
+        &::before {
+            content: counter(quickstart-step) ". ";
+        }
+    }
+
     .hero-button {
         display: inline-block;
         border: 1px solid transparent;
