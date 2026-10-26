@@ -12,7 +12,7 @@ manager:
     # -- Controller image repository
     repository: ghcr.io/open-component-model/kubernetes/controller
     # -- Controller image tag
-    tag: latest@sha256:c82d83be136dba208d287dfd8bd1bdd5d380de61f1b1a2c6e9f3d3f50e90a4db
+    tag: latest@sha256:31080f0528b5893778d598e9d605189858a4d5d3463a5b938127a5563638478f
     # -- Image pull policy
     pullPolicy: IfNotPresent
   ## Cluster-scoped Deployer
