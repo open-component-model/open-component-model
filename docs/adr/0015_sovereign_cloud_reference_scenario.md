@@ -86,7 +86,7 @@ Both are packaged as OCM components, signed, transferred through an air-gap via 
 | Integration                           | Role                                                        | Status                                 |
 |---------------------------------------|-------------------------------------------------------------|----------------------------------------|
 | **OCM CLI**                           | Build, sign, verify, transfer components                    | Implemented (containerized via Docker) |
-| **OCM Kubernetes Controller Toolkit** | Reconcile Repository/Component/Resource/Deployer CRs        | Implemented                            |
+| **OCM Kubernetes Controller Toolkit** | Reconcile Repository/Component/Resource/NamespacedDeployer CRs | Implemented                            |
 | **kro**                               | ResourceGraphDefinition controller                          | Implemented                            |
 | **FluxCD**                            | Helm chart deployment (source-controller + helm-controller) | Implemented                            |
 | **kind**                              | Local air-gapped Kubernetes cluster                         | Implemented                            |
@@ -124,7 +124,7 @@ flowchart LR
         REG[Local Registry]
         REPO[Repository CR] --> COMP[Component CR]
         COMP --> RES_RGD[Resource CR<br/>product-rgd]
-        RES_RGD --> DEPLOYER[Deployer CR]
+        RES_RGD --> DEPLOYER[NamespacedDeployer CR]
         DEPLOYER --> RGD[ResourceGraphDefinition]
         RGD --> INSTANCE[SovereignProduct CR]
         INSTANCE --> PG_HR[HelmRelease<br/>postgres]
@@ -143,8 +143,8 @@ The flow is entirely local — there is no push to any remote registry (e.g. ghc
 flowchart TD
     REPO[Repository<br/>sovereign-repo] --> COMP[Component<br/>sovereign-product-component]
     COMP --> RGD_RES[Resource<br/>sovereign-product-resource-rgd]
-    RGD_RES --> DEPLOYER[Deployer<br/>sovereign-product-deployer]
-    DEPLOYER -->|installs| RGD[ResourceGraphDefinition<br/>sovereign-product]
+    RGD_RES --> DEPLOYER[NamespacedDeployer<br/>sovereign-product-deployer]
+    DEPLOYER -->|installs via service account| RGD[ResourceGraphDefinition<br/>sovereign-product]
 
     RGD -->|creates via kro| PG_CHART_RES[Resource<br/>sovereign-postgres-resource-chart]
     RGD -->|creates via kro| PG_IMG_RES[Resource<br/>sovereign-postgres-resource-image]
@@ -160,7 +160,7 @@ flowchart TD
     NOTES_OCI --> NOTES_HR
 ```
 
-The bootstrap pipeline (Repository → Component → Resource → Deployer) is applied manually. Everything below the Deployer — the RGD and all resources it creates — is managed declaratively by the controllers.
+The bootstrap pipeline (Repository → Component → Resource → NamespacedDeployer) is applied manually. Everything below the NamespacedDeployer — the RGD and all resources it creates — is managed declaratively by the controllers.
 
 ---
 
@@ -334,7 +334,7 @@ The RGD defines a `SovereignProduct` CRD with this schema:
 
 The RGD's `resources` array creates these objects in dependency order:
 
-1. **Bootstrap (self-managed)** — Namespace, Repository, Component, Resource (product-rgd), Deployer. These duplicate the bootstrap manifests; kro reconciles idempotently so the RGD takes over management.
+1. **Bootstrap (self-managed)** — Namespace, Repository, Component, Resource (product-rgd), NamespacedDeployer. These duplicate the bootstrap manifests; kro reconciles idempotently so the RGD takes over management.
 2. **Application config** — ConfigMap and Secret with database connection details.
 3. **PostgreSQL pipeline** — Resource CRs for chart + image (via `referencePath: [{name: postgres}]`) → FluxCD OCIRepository → HelmRelease.
 4. **Notes pipeline** — Same pattern as postgres, using `referencePath: [{name: notes}]`.
@@ -417,25 +417,25 @@ The cluster-side deployment uses a minimal bootstrap pattern. Only four files ar
 | File                                                                            | Purpose                                                        |
 |---------------------------------------------------------------------------------|----------------------------------------------------------------|
 | [`namespace.yaml`](../../conformance/scenarios/sovereign/deploy/namespace.yaml) | Creates the `sovereign-product` namespace                      |
-| [`bootstrap.yaml`](../../conformance/scenarios/sovereign/deploy/bootstrap.yaml) | Minimal pipeline: Repository → Component → Resource → Deployer |
+| [`bootstrap.yaml`](../../conformance/scenarios/sovereign/deploy/bootstrap.yaml) | Minimal pipeline: Repository → Component → Resource → NamespacedDeployer |
 
 ### 8.1 Bootstrap Pattern
 
 The bootstrap creates the absolute minimum needed to deliver the product RGD into the cluster. The `task cluster:bootstrap` command runs these steps (see the [Taskfile](../../conformance/scenarios/sovereign/Taskfile.yml) for implementation):
 
 ```bash
-kubectl apply -f deploy/rbac.yaml                      # RBAC for cross-namespace access
-kubectl apply -f deploy/namespace.yaml                  # Create namespace
+kubectl apply -f deploy/namespace.yaml                  # Create namespace and deployer service account
+kubectl apply -f deploy/rbac.yaml                       # RBAC for NamespacedDeployer + kro
 kubectl create secret generic acme-signing-key -n sovereign-product \
   --from-file=default=tmp/keys/acme-public.pem          # Public signing key for verification
-kubectl apply -f deploy/bootstrap.yaml                  # Repository + Component + Resource + Deployer
-kubectl wait --for=condition=Ready deployer/...          # RGD is now installed by the Deployer
+kubectl apply -f deploy/bootstrap.yaml                  # Repository + Component + Resource + NamespacedDeployer
+kubectl wait --for=condition=Ready namespaceddeployer/... # RGD is now installed by the NamespacedDeployer
 kubectl wait --for=condition=Ready ResourceGraphDefinition/...
 kubectl apply -f deploy/sample-product-1.0.0.yaml       # Create SovereignProduct instance
 kubectl wait --for=condition=Ready sovereignproduct/...  # Wait for full deployment
 ```
 
-Once the Deployer installs the RGD, the RGD takes over: it recreates the same Repository/Component/Resource/Deployer objects (kro reconciles idempotently) and adds all the sub-component pipelines, config, and HelmReleases.
+Once the NamespacedDeployer installs the RGD, the RGD takes over: it recreates the same Repository/Component/Resource/NamespacedDeployer objects (kro reconciles idempotently) and adds all the sub-component pipelines, config, and HelmReleases.
 
 ### 8.2 Bootstrap Resources
 
@@ -444,7 +444,7 @@ The [`bootstrap.yaml`](../../conformance/scenarios/sovereign/deploy/bootstrap.ya
 1. **Repository** (`sovereign-repo`) — points to the local registry at `http://registry:5000`
 2. **Component** (`sovereign-product-component`) — references `acme.org/sovereign/product`, semver `1.0.0`, with signature verification via the `acme-signing-key` Secret
 3. **Resource** (`sovereign-product-resource-rgd`) — extracts the `product-rgd` resource from the component
-4. **Deployer** (`sovereign-product-deployer`) — deploys the RGD resource as a kro ResourceGraphDefinition
+4. **NamespacedDeployer** (`sovereign-product-deployer`) — deploys the RGD resource as a kro ResourceGraphDefinition with the `sovereign-product-deployer` service account
 
 All resources live in the `sovereign-product` namespace.
 
@@ -484,12 +484,11 @@ sequenceDiagram
 
 The actual `task upgrade` implementation:
 
-1. Delete old archives (`rm -rf` CTF and airgap)
-2. `build:product` with `VERSION=1.1.0`
-3. `transfer:airgap` with `VERSION=1.1.0`
-4. `cluster:import` with `VERSION=1.1.0`
-5. `kubectl apply -f deploy/sample-product-1.1.0.yaml`
-6. Wait for `SovereignProduct` to be Ready
+1. `airgap` with `VERSION=1.1.0`: skipped if the air-gap CTF already holds `1.1.0`, otherwise
+   `build:product` and `transfer:airgap` (the air-gap CTF keeps `1.0.0` next to it)
+2. `cluster:import` with `VERSION=1.1.0`
+3. `kubectl apply -f deploy/sample-product-1.1.0.yaml`
+4. Wait for `SovereignProduct` to be Ready
 
 ---
 
@@ -522,7 +521,7 @@ conformance/scenarios/sovereign/
 │           └── rgd.yaml                  # Unified product ResourceGraphDefinition
 ├── deploy/
 │   ├── namespace.yaml                    # sovereign-product namespace
-│   ├── bootstrap.yaml                    # Repository + Component + Resource + Deployer
+│   ├── bootstrap.yaml                    # Repository + Component + Resource + NamespacedDeployer
 │   ├── sample-product-1.0.0.yaml         # SovereignProduct instance (initial)
 │   └── sample-product-1.1.0.yaml         # SovereignProduct instance (upgrade)
 └── tmp/                                  # Generated at runtime (not committed)
@@ -551,7 +550,7 @@ task upgrade
 task verify:deployment
 
 # Clean up
-task clean
+task clean          # task clean:cluster keeps tmp/ (CTF archives, keys) for a faster re-run
 ```
 
 ### 11.2 Testing Strategy
@@ -579,7 +578,7 @@ The current implementation uses **FluxCD** (source-controller + helm-controller)
 | ArgoCD | Theoretical | Would replace FluxCD HelmRelease with ArgoCD Application |
 | Raw manifests | Theoretical | Would use kustomize or plain YAML instead of Helm |
 
-The OCM layer (Repository → Component → Resource → Deployer) is deployer-agnostic. Only the RGD's HelmRelease/OCIRepository resources are FluxCD-specific.
+The OCM layer (Repository → Component → Resource → NamespacedDeployer) is deployer-agnostic. Only the RGD's HelmRelease/OCIRepository resources are FluxCD-specific.
 
 ---
 
