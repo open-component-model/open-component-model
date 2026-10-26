@@ -43,6 +43,7 @@ func Test_Integration_TransferLegacyOCIIndexArtifactSet_CTFToOCI(t *testing.T) {
 }
 
 func testTransferLegacyOCIIndexArtifactSet(t *testing.T, completeIndex bool) {
+	t.Helper()
 	r := require.New(t)
 	ctx := t.Context()
 
