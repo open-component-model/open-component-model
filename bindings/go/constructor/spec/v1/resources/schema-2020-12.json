@@ -438,7 +438,7 @@
               "type": "null"
             },
             {
-              "description": "Sources that produced the component",
+              "description": "Sources that produced the component. DISCOURAGED: sources carry no digest, so their content is not covered by the component version digest or any signature and can be replaced without detection. Declare the content as resources instead.",
               "type": "array",
               "items": {
                 "$ref": "#/$defs/sourceDefinition"
