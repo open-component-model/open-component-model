@@ -133,59 +133,58 @@
         margin-top: 40px;
     }
 
-    /* Quick start: the one install command and a first read-only command */
-    .container--quickstart {
-        margin-top: 40px;
+    /* Quick start under the hero buttons: install command plus a first read-only command */
+    .main {
+        min-width: 0; /* let long commands scroll inside their code block instead of widening the hero */
     }
 
-    .quickstart {
-        width: 100%;
-        min-width: 0;
-        max-width: 960px;
-        margin: 0 auto;
+    .hero-quickstart {
+        margin: 32px auto 0;
+        max-width: 720px;
         text-align: left;
-
-        .section-title {
-            font-family: 'Inter Variable', 'Inter', system-ui, sans-serif;
-            font-weight: 700;
-        }
     }
 
-    .quickstart-lead,
-    .quickstart-more {
+    .hero-quickstart-title,
+    .hero-quickstart-more {
         color: var(--ocm-card-desc-color);
-        text-align: center;
+        font-size: 14px;
     }
 
-    .quickstart-lead {
-        font-size: 18px;
-        margin: 8px 0 24px;
+    .hero-quickstart-title {
+        font-weight: 600;
+        margin: 0 0 8px;
     }
 
-    .quickstart-more {
-        margin: 24px 0 0;
+    .hero-quickstart-more {
+        margin: 8px 0 0;
     }
 
-    .quickstart-steps {
-        counter-reset: quickstart-step;
+    .hero-quickstart-steps {
         display: grid;
-        grid-template-columns: minmax(0, 1fr); /* long commands scroll inside the code block instead of widening the page */
-        gap: 16px;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 8px;
         list-style: none;
         margin: 0;
         padding: 0;
     }
 
-    .quickstart-step {
-        counter-increment: quickstart-step;
+    .hero-quickstart-label {
+        color: var(--ocm-card-desc-color);
+        display: block;
+        font-size: 12px;
+        margin-bottom: 4px;
     }
 
-    .quickstart-step-title {
-        font-weight: 600;
-        margin: 0 0 8px;
+    /* Docs-style code frame minus the terminal title bar, to keep the hero compact */
+    .hero-quickstart-step .expressive-code {
+        margin: 0;
 
-        &::before {
-            content: counter(quickstart-step) ". ";
+        .frame.is-terminal {
+            --button-spacing: 0.4rem; /* the copy button otherwise sits below the hidden title bar */
+        }
+
+        .frame.is-terminal .header {
+            display: none;
         }
     }
 
@@ -329,6 +328,10 @@
 
         .tagline {
             margin: 0 0 32px;
+        }
+
+        .hero-quickstart {
+            margin-left: 0;
         }
 
         .hero-actions {
