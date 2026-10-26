@@ -224,8 +224,8 @@ func TestBuildGraphDefinition_LocalBlobResource(t *testing.T) {
 	require.Len(t, tgd.Transformations, 2)
 	assert.Equal(t, ociv1alpha1.TransferOCILocalBlobToOCILocalBlobV1alpha1, tgd.Transformations[0].Type)
 	assert.Contains(t, tgd.Transformations[1].ID, "Upload")
-	assert.Equal(t, fmt.Sprintf("${%s.output.resource}", tgd.Transformations[0].ID),
-		tgd.Transformations[1].Spec.Data["descriptor"].(map[string]any)["component"].(map[string]any)["resources"].([]any)[0])
+	assert.Contains(t, tgd.Transformations[1].Spec.Data["descriptor"].(map[string]any)["component"].(map[string]any)["resources"].([]any)[0],
+		fmt.Sprintf("${%s.output.resource.withSourceDigest(environment.", tgd.Transformations[0].ID))
 }
 
 // TestBuildGraphDefinition_RelativeOCIReference_CopiesAsLocalBlob proves the baseline copy
@@ -977,7 +977,7 @@ func TestBuildDescriptorSpec_CreationTime(t *testing.T) {
 			r.True(ok)
 			r.Contains(componentMap, "creationTime")
 			r.Equal(tt.want, componentMap["creationTime"])
-			r.Equal([]any{"${resourceAdd.output.resource}"}, componentMap["resources"])
+			r.Equal([]any{"${resourceAdd.output.resource.withSourceDigest(environment.envID.component.resources[0])}"}, componentMap["resources"])
 		})
 	}
 }

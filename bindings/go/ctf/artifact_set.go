@@ -55,6 +55,10 @@ const (
 // with ArtifactSetFormatOCM.
 const ArtifactSetDescriptorFileName = "artifact-descriptor.json"
 
+// ArtifactSetMainAnnotation is the index annotation holding the digest of the main artifact of
+// an ArtifactSet.
+const ArtifactSetMainAnnotation = "software.ocm/main"
+
 // SynthesizedBlobFormatSuffix is the suffix for the synthesized blob format.
 // This is the format to distinguish between artifact sets and regular manifests.
 const SynthesizedBlobFormatSuffix = "+tar+gzip"
@@ -144,18 +148,18 @@ func NewArtifactSetFromBlob(b blob.ReadOnlyBlob) (*ArtifactSet, error) {
 
 	// Read the first 512 bytes (Tar header size)
 	buf := make([]byte, 512)
-	n, err := raw.Read(buf)
-	if err != nil {
+	n, err := io.ReadFull(raw, buf)
+	if err != nil && !errors.Is(err, io.ErrUnexpectedEOF) {
 		return nil, err
 	}
 
-	var reader io.Reader = raw
+	// The bytes read for detection belong to the archive.
+	reader := io.MultiReader(bytes.NewReader(buf[:n]), raw)
 
 	closeFn := raw.Close
 	// Check for Gzip magic number (0x1F, 0x8B)
 	if n >= 2 && buf[0] == 0x1F && buf[1] == 0x8B {
-		multiReader := io.MultiReader(bytes.NewReader(buf), raw)
-		gzipReader, err := gzip.NewReader(multiReader)
+		gzipReader, err := gzip.NewReader(reader)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create gzip reader: %w", err)
 		}
@@ -333,6 +337,16 @@ func (a *ArtifactSet) ListBlobs(ctx context.Context) (digests []string, err erro
 
 func (a *ArtifactSet) GetBlob(ctx context.Context, digest string) (blob.ReadOnlyBlob, error) {
 	return newArtifactBlob(a.fs, digest, a.idx.Format)
+}
+
+// Fetch returns the content of the blob desc describes, so the artifacts in the set can be read
+// with functions that take an OCI content fetcher.
+func (a *ArtifactSet) Fetch(ctx context.Context, desc ociimagespec.Descriptor) (io.ReadCloser, error) {
+	b, err := a.GetBlob(ctx, desc.Digest.String())
+	if err != nil {
+		return nil, err
+	}
+	return b.ReadCloser()
 }
 
 func (a *ArtifactSet) Close() error {

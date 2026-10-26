@@ -541,7 +541,8 @@ func addUploadTransformation(v2desc *descriptorv2.Descriptor, id string, envID s
 // If no resources were modified (no resource transformations), it returns a CEL reference to
 // the original descriptor in the environment. Otherwise, it builds a composite descriptor where
 // each modified resource is referenced via its Add transformation's output, and unmodified
-// resources reference the original environment data.
+// resources reference the original environment data. A modified resource keeps the digest
+// recorded in the source (see withSourceDigestFunction).
 func buildDescriptorSpec(v2desc *descriptorv2.Descriptor, id string, resourceTransformIDs map[int]string) any {
 	if len(resourceTransformIDs) == 0 {
 		return fmt.Sprintf("${environment.%s}", id)
@@ -550,7 +551,8 @@ func buildDescriptorSpec(v2desc *descriptorv2.Descriptor, id string, resourceTra
 	resourcesArray := make([]any, len(v2desc.Component.Resources))
 	for i := range v2desc.Component.Resources {
 		if addID, ok := resourceTransformIDs[i]; ok {
-			resourcesArray[i] = fmt.Sprintf("${%s.output.resource}", addID)
+			resourcesArray[i] = fmt.Sprintf("${%s.output.resource.%s(environment.%s.component.resources[%d])}",
+				addID, withSourceDigestFunctionName, id, i)
 		} else {
 			resourcesArray[i] = fmt.Sprintf("${environment.%s.component.resources[%d]}", id, i)
 		}

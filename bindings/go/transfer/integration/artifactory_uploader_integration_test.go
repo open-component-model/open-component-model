@@ -30,8 +30,9 @@ import (
 // LocalBlob/v1 resource containing a Helm chart is correctly streamed to the fake Artifactory
 // endpoint by the Artifactory helm uploader. Two media types are tested:
 //   - packaged chart: the blob is the chart .tgz itself, uploaded unchanged.
-//   - OCI layout: the blob is an OCI image layout (as produced by the helm input), and only
-//     the chart layer is extracted and uploaded.
+//   - OCI layout: the blob is an OCI image layout (as produced by the helm input). Only its
+//     chart layer could be uploaded, which the recorded OCI artifact digest does not describe,
+//     so the transfer fails before uploading anything.
 func Test_Integration_TransferLocalBlobHelmResource_ArtifactoryHelmUploaderDeploysChart(t *testing.T) {
 	t.Parallel()
 
@@ -57,9 +58,9 @@ func Test_Integration_TransferLocalBlobHelmResource_ArtifactoryHelmUploaderDeplo
 		name      string
 		mediaType string
 		blobData  []byte
-		// wantBody is what the PUT body should equal. For a packaged chart it is the chart
-		// tgz; for an OCI layout it is the chart layer (which equals the chart tgz).
+		// wantBody is what the PUT body should equal.
 		wantBody []byte
+		wantErr  string
 	}{
 		{
 			name:      "packaged chart",
@@ -71,7 +72,7 @@ func Test_Integration_TransferLocalBlobHelmResource_ArtifactoryHelmUploaderDeplo
 			name:      "OCI layout",
 			mediaType: "application/vnd.ocm.software.oci.layout.v1+tar+gzip",
 			blobData:  ociLayoutBytes,
-			wantBody:  chartTgzBytes,
+			wantErr:   "recorded ociArtifactDigest/v1 digest cannot be kept",
 		},
 	}
 
@@ -154,7 +155,7 @@ func Test_Integration_TransferLocalBlobHelmResource_ArtifactoryHelmUploaderDeplo
 			b := transfer.NewDefaultBuilder(repoProvider, resourceRepo, nil)
 			graph, err := b.BuildAndCheck(tgd)
 			r.NoError(err)
-			r.NoError(graph.Process(ctx))
+			err = graph.Process(ctx)
 
 			// The target server must have received the chart under the component version path.
 			expectedPath := "/artifactory/helm-local/ocm.software/jfrog-helm-local-blob-test/1.0.0/mychart-0.1.0.tgz"
@@ -164,6 +165,12 @@ func Test_Integration_TransferLocalBlobHelmResource_ArtifactoryHelmUploaderDeplo
 					put = &req
 				}
 			}
+			if tt.wantErr != "" {
+				r.ErrorContains(err, tt.wantErr)
+				r.Nil(put, "nothing may be uploaded when the recorded digest cannot be kept")
+				return
+			}
+			r.NoError(err)
 			r.NotNil(put, "target server should have received a PUT at %s", expectedPath)
 			r.Equal(tt.wantBody, put.Body, "uploaded bytes must equal the chart .tgz")
 			r.Equal("application/gzip", put.ContentType, "Content-Type must be application/gzip")
