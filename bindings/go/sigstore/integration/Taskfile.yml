@@ -87,6 +87,14 @@ tasks:
           fi
       - |
         curl -fLo /tmp/setup-kind.sh "{{.SCAFFOLDING_URL}}/setup-kind.sh"
+        # Patch setup-kind.sh: it patches configmap/config-network (validated by the Knative
+        # webhook) before waiting for the knative-serving rollout, so on a slow cluster the
+        # webhook call fails with "connection refused". Wait for the webhook first.
+        # Remove once upstream fixes the script.
+        tmp=$(mktemp) && sed \
+          -e 's@^kubectl patch configmap/config-network@kubectl rollout status --timeout 5m --namespace knative-serving deploy/webhook; kubectl patch configmap/config-network@' \
+          /tmp/setup-kind.sh > "$tmp" && mv "$tmp" /tmp/setup-kind.sh
+        grep -q 'deploy/webhook; kubectl patch configmap/config-network' /tmp/setup-kind.sh || { echo "setup-kind.sh webhook-wait patch did not apply; upstream script changed" >&2; exit 1; }
         chmod u+x /tmp/setup-kind.sh
         cd /tmp && ./setup-kind.sh
       - |
