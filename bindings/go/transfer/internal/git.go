@@ -84,11 +84,12 @@ func bindToGit(val ref.Val) ref.Val {
 	})
 }
 
-// processGit emits the transformation nodes for a Git resource copied by value. The
-// snapshot at the pinned commit is downloaded (GetGitResource), then embedded as a local
-// blob (AddLocalResource) of [transferv1alpha1.GitLocalBlobMediaType] so it is recognizable
-// as a Git archive. The origin is not recorded and no referenceName is set: pushing such a
-// local blob with the Git uploader needs an explicit repository and ref.
+// processGit emits the transformation nodes for a Git resource copied by value. The archive
+// is downloaded (GetGitResource) at the pinned commit, or at the commit the ref resolves to
+// when the access is unpinned, then embedded as a local blob (AddLocalResource) of
+// [transferv1alpha1.GitLocalBlobMediaType] so it is recognizable as a Git archive. The origin
+// is not recorded and no referenceName is set: pushing such a local blob with the Git
+// uploader needs an explicit repository and ref.
 func processGit(ctx context.Context, resource descriptorv2.Resource, access *gitv1.Git, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int) error {
 	resourceID := identityToTransformationID(resource.ToIdentity())
 	getResourceID := fmt.Sprintf("%sGet%s", id, resourceID)
@@ -135,8 +136,8 @@ func warnUnpinnedGit(ctx context.Context, resource descriptorv2.Resource, access
 }
 
 // getGitTransformation returns the GetGitResource transformation that downloads the archive
-// of resource. It is a pure builder: the policy on an unpinned access (lenient for transfer
-// by value, strict for the git uploader) is decided by its callers.
+// of resource. It is a pure builder: both callers (transfer by value and the git uploader)
+// tolerate an unpinned access and warn via warnUnpinnedGit before building the node.
 func getGitTransformation(resource descriptorv2.Resource, access *gitv1.Git, getResourceID string, val *discoveryValue) (transformv1alpha1.GenericTransformation, error) {
 	unstructured, err := runtime.UnstructuredFromMixedData(map[string]any{
 		"resource": resource,
