@@ -67,6 +67,8 @@ func TestIsTransientError(t *testing.T) {
 		{fmt.Errorf("copy: %w", &BodyReadError{Err: io.ErrUnexpectedEOF}), true},
 		{&url.Error{Op: "Put", URL: "https://r/v2/", Err: io.ErrUnexpectedEOF}, true},
 		{&net.OpError{Op: "dial", Err: timeoutError{}}, true},
+		// http.Client.Timeout surfaces without a *net.OpError and stays final.
+		{&url.Error{Op: "Get", URL: "https://r/", Err: fmt.Errorf("%w (Client.Timeout exceeded)", context.DeadlineExceeded)}, false},
 		// net/http's HTTP/2 errors are unexported; they are matched by message,
 		// also when an intermediate layer flattened the chain with %v.
 		{errors.New("Put \"https://r/v2/\": http2: client connection lost"), true},
@@ -104,6 +106,27 @@ func TestIsTransientError_ClientTimeout(t *testing.T) {
 	_, err = io.ReadAll(resp.Body)
 	r.Error(err)
 	r.False(IsTransientError(err), "client timeout must not be transient: %v", err)
+}
+
+// TestIsTransientError_DialTimeout checks that a connect that hit
+// Dialer.Timeout stays transient although its error matches
+// context.DeadlineExceeded: a retry dials with a fresh budget.
+func TestIsTransientError_DialTimeout(t *testing.T) {
+	r := require.New(t)
+	ln, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
+	r.NoError(err)
+	t.Cleanup(func() { _ = ln.Close() })
+
+	dialer := &net.Dialer{Timeout: time.Nanosecond}
+	client := &http.Client{Transport: &http.Transport{DialContext: dialer.DialContext}}
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "http://"+ln.Addr().String(), nil)
+	r.NoError(err)
+	resp, err := client.Do(req)
+	if resp != nil {
+		_ = resp.Body.Close()
+	}
+	r.ErrorIs(err, context.DeadlineExceeded)
+	r.True(IsTransientError(err), "dial timeout must be transient: %v", err)
 }
 
 type timeoutError struct{}

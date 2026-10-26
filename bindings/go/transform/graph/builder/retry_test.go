@@ -49,6 +49,7 @@ func TestGraph_Process_RetriesTransientTransformErrors(t *testing.T) {
 		{name: "transient failure is retried until success", failures: 2, err: errTransient, policy: policy, wantCalls: 3},
 		{name: "attempts are bounded", failures: 5, err: errTransient, policy: policy, wantErr: errTransient, wantCalls: 3},
 		{name: "non-transient failure is not retried", failures: 1, err: errPermanent, policy: policy, wantErr: errPermanent, wantCalls: 1},
+		{name: "permanent-marked transient failure is not retried", failures: 1, err: graphRuntime.Permanent(errTransient), policy: policy, wantErr: errTransient, wantCalls: 1},
 		{name: "no policy means no retry", failures: 1, err: errTransient, wantErr: errTransient, wantCalls: 1},
 	}
 	for _, tc := range cases {

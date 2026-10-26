@@ -56,8 +56,15 @@ func isTransientRoundTripError(err error) bool {
 }
 
 func isTransient(err error, fromRoundTrip bool) bool {
-	if err == nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+	if err == nil || errors.Is(err, context.Canceled) {
 		return false
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		// A dial that hit Dialer.Timeout gets a fresh budget on retry; an
+		// expired caller context is caught by the retry loops before retrying.
+		// http.Client.Timeout errors carry no *net.OpError, so they stay final.
+		var opErr *net.OpError
+		return errors.As(err, &opErr) && opErr.Op == "dial" && opErr.Timeout()
 	}
 	if errors.Is(err, syscall.ECONNRESET) ||
 		errors.Is(err, syscall.ECONNABORTED) ||

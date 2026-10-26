@@ -88,6 +88,35 @@ type RetryPolicy struct {
 	Retryable func(error) bool
 }
 
+// PermanentError is implemented by errors that must never be retried,
+// whatever RetryPolicy.Retryable says: failures where a re-run could repeat a
+// side effect, such as a non-idempotent request the server may already have
+// processed. It is matched anywhere in the error chain, so transformers can
+// declare their own error types without importing this package.
+type PermanentError interface {
+	error
+	Permanent() bool
+}
+
+// Permanent wraps err in a PermanentError.
+func Permanent(err error) error {
+	if err == nil {
+		return nil
+	}
+	return &permanentError{err: err}
+}
+
+type permanentError struct{ err error }
+
+func (e *permanentError) Error() string   { return e.err.Error() }
+func (e *permanentError) Unwrap() error   { return e.err }
+func (e *permanentError) Permanent() bool { return true }
+
+func isPermanent(err error) bool {
+	var p PermanentError
+	return errors.As(err, &p) && p.Permanent()
+}
+
 // transform runs transformer, retrying per b.Retry. Cancellation of ctx
 // always ends the loop with the last error.
 func (b *Runtime) transform(ctx context.Context, transformer Transformer, transformation graph.Transformation) (runtime.Typed, error) {
@@ -98,7 +127,8 @@ func (b *Runtime) transform(ctx context.Context, transformer Transformer, transf
 	for attempt := 1; ; attempt++ {
 		transformed, err := transformer.Transform(ctx, transformation.AsRaw())
 		if err == nil || b.Retry == nil || b.Retry.Retryable == nil ||
-			attempt >= b.Retry.MaxAttempts || ctx.Err() != nil || !b.Retry.Retryable(err) {
+			attempt >= b.Retry.MaxAttempts || ctx.Err() != nil ||
+			isPermanent(err) || !b.Retry.Retryable(err) {
 			return transformed, err
 		}
 		slog.WarnContext(ctx, "retrying transformation after transient error",
