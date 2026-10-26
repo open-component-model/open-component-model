@@ -322,12 +322,14 @@ tasks:
     desc: "Install the Helm chart into a namespace that enforces the restricted Pod Security Standard. VALUES and KUBE_CONTEXT override the values file and the target context."
     vars:
       VALUES: '{{.VALUES | default "chart/test-values.yaml"}}'
+      # kubectl and Helm must target the same cluster, or the namespace lands on the current context.
+      KUBECTL_CONTEXT: '{{if .KUBE_CONTEXT}}--context {{.KUBE_CONTEXT}}{{end}}'
     cmds:
       # Enforcing "restricted" makes the install fail if the chart's pod spec
       # regresses on the hardening baseline (non-root, seccomp, no privilege
       # escalation, dropped capabilities).
-      - kubectl create namespace ocm-k8s-toolkit-system --dry-run=client -o yaml | kubectl apply -f -
-      - kubectl label namespace ocm-k8s-toolkit-system --overwrite pod-security.kubernetes.io/enforce=restricted pod-security.kubernetes.io/enforce-version=latest
+      - kubectl create namespace ocm-k8s-toolkit-system --dry-run=client -o yaml | kubectl {{.KUBECTL_CONTEXT}} apply -f -
+      - kubectl {{.KUBECTL_CONTEXT}} label namespace ocm-k8s-toolkit-system --overwrite pod-security.kubernetes.io/enforce=restricted pod-security.kubernetes.io/enforce-version=latest
       - |
         helm upgrade --install ocm-k8s-toolkit chart/ \
           {{if .KUBE_CONTEXT}}--kube-context {{.KUBE_CONTEXT}} {{end}}-f {{.VALUES}} \
