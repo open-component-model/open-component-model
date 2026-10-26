@@ -115,7 +115,7 @@ Coupled files — editing one without the other breaks CI or behavior:
 
 - Renovate manages updates. Manual add: `go get <module>@<version> && task tidy`.
 - CI selects work by path filter (`dorny/paths-filter`), not module discovery: unit + integration tests run when `bindings/go`, the shared task plumbing, or `ci.yml` changes; lint runs for the changed module, or all modules when `golangci.yml` / `.env` / `ci.yml` changes. Full suite on `main`. PR title must be a valid Conventional Commit. Multi-arch builds: CLI for linux/darwin/windows, controller for linux, each amd64/arm64.
-- Unit tests run on Linux and natively on Windows (`run_unit_tests` matrix in `ci.yml`, same `task bindings/go:test`; on Windows the controller is excluded: Linux-only, and envtest doesn't compile for windows). Write OS-neutral code and tests: `filepath` for OS paths, `path` for tar/fs.FS/embed names, `filesystem.URIFromFilePath`/`FilePathFromURI` for `file://` URIs, and close every file/blob before its directory is removed (Windows can't delete open files).
+- Unit tests run on Linux, and natively on Windows on pushes to `main` only — not on PRs; check locally with `task bindings/go:test/wine` (`run_unit_tests` matrix in `ci.yml`, same `task bindings/go:test`; on Windows the controller is excluded: Linux-only, and envtest doesn't compile for windows). Write OS-neutral code and tests: `filepath` for OS paths, `path` for tar/fs.FS/embed names, `filesystem.URIFromFilePath`/`FilePathFromURI` for `file://` URIs, and close every file/blob before its directory is removed (Windows can't delete open files).
 
 ## Debugging
 
