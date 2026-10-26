@@ -63,8 +63,12 @@ tasks:
         fi
       # Keep wineserver and its services up before tests start: services spawned
       # by the first test binary would inherit its stdout and stall `go test`.
+      # wineserver sits next to wine in upstream builds; Debian/Ubuntu ship it under
+      # /usr/lib/<triplet>/wine instead. Override with WINESERVER=<path>.
       - |
-        wineserver="$(dirname "$(command -v {{.WINE}})")/wineserver"
+        wineserver="${WINESERVER:-$(dirname "$(command -v {{.WINE}})")/wineserver}"
+        [ -x "$wineserver" ] || wineserver="$(command -v wineserver || ls /usr/lib/*/wine/wineserver 2>/dev/null | head -n1)"
+        [ -x "$wineserver" ] || { echo "wineserver not found; set WINESERVER=<path>" >&2; exit 1; }
         "$wineserver" -k 2>/dev/null || true
         "$wineserver" -w
         "$wineserver" -p
