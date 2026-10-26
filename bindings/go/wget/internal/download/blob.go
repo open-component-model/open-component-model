@@ -211,6 +211,10 @@ func (b *Blob) Digest() (string, bool) {
 	if d, ok := b.precalculatedDigest(); ok {
 		return d, true
 	}
+	// Without an advertised-digest resolver a HEAD request cannot yield a digest.
+	if b.advertised == nil {
+		return "", false
+	}
 	if d := b.metadata().digest; d != "" {
 		return d, true
 	}
@@ -399,21 +403,34 @@ func sums(hashers map[string]hash.Hash) map[string]string {
 	return out
 }
 
+// maxCloseDrain is how many unread bytes Close reads on to reach the end of a
+// partly read body. It covers tails such as tar padding after the
+// end-of-archive marker, without downloading the rest of a body the consumer
+// abandoned.
+const maxCloseDrain = 1 << 20
+
 // Close closes the response body. It also returns the terminal error of the
 // reader, so callers that drop the error of the last Read still see it.
 //
 // A consumer may stop before the end of the body: at the known size without
 // seeing EOF (including empty content), or earlier, like a tar reader at the
-// end-of-archive marker. Close then reads on to the end of the body so the size
-// check and the [Verifier] still run. Without a verifier, a partly read body is
-// closed unchecked.
+// end-of-archive marker. Close then reads up to [maxCloseDrain] more bytes so the
+// size check and the [Verifier] still run. A body with a verifier that does not
+// end within that budget fails Close as not verified. Without a verifier, a
+// partly read body is closed unchecked.
 func (r *bodyReader) Close() error {
 	if r.closed {
 		return r.err
 	}
 	atKnownSize := r.expected >= 0 && r.read == r.expected
 	if !r.done && r.err == nil && (atKnownSize || (r.read > 0 && r.blob.verify != nil)) {
-		_, _ = io.Copy(io.Discard, r)
+		// One byte past the budget, so a tail of exactly the budget still sees EOF.
+		if r.expected < 0 || r.expected-r.read <= maxCloseDrain {
+			_, _ = io.CopyN(io.Discard, r, maxCloseDrain+1)
+		}
+		if !r.done && r.err == nil {
+			r.err = fmt.Errorf("response body from %s closed after %d bytes, before its end: content not verified", r.blob.fetch.safeURL, r.read)
+		}
 	}
 	r.closed = true
 	return errors.Join(r.err, r.rep.resp.Body.Close())

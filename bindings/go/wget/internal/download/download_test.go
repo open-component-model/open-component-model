@@ -685,6 +685,35 @@ func TestDownload_PartlyReadContentIsVerifiedOnClose(t *testing.T) {
 	}
 }
 
+// TestDownload_AbandonedLargeBodyIsNotDrainedOnClose asserts that Close does not
+// download a large unread rest of the body to verify it, but reports the content
+// as not verified instead.
+func TestDownload_AbandonedLargeBodyIsNotDrainedOnClose(t *testing.T) {
+	t.Parallel()
+	content := bytes.Repeat([]byte("x"), 4<<20)
+
+	for _, chunked := range []bool{false, true} {
+		t.Run(fmt.Sprintf("chunked=%t", chunked), func(t *testing.T) {
+			t.Parallel()
+			r := require.New(t)
+			var verified bool
+			b, err := download.Download(t.Context(), download.Request{URL: serveBody(t, content, chunked).URL},
+				download.WithVerifier(func(http.Header, download.Computed) error {
+					verified = true
+					return nil
+				}))
+			r.NoError(err)
+
+			rc, err := b.ReadCloser()
+			r.NoError(err)
+			_, err = io.ReadFull(rc, make([]byte, 5))
+			r.NoError(err)
+			r.ErrorContains(rc.Close(), "content not verified")
+			r.False(verified, "the rest of the body must not be read")
+		})
+	}
+}
+
 func TestDownload_Size(t *testing.T) {
 	t.Parallel()
 	content := []byte("sized content")
