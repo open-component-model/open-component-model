@@ -13,21 +13,8 @@
     "posturePolicies": [{ "controlID": "C-0015" }]
   },
   {
-    "name": "controller-leader-election-configmaps",
-    "reason": "controller-runtime leader election writes a ConfigMap in the release namespace. The Role is namespace-scoped to the release namespace and used only for leader election.",
-    "policyType": "postureExceptionPolicy",
-    "actions": ["alertOnly"],
-    "resources": [
-      {
-        "designatorType": "Attributes",
-        "attributes": { "kind": "ServiceAccount", "name": "ocm-k8s-toolkit-controller-manager", "namespace": "ocm-k8s-toolkit-system" }
-      }
-    ],
-    "posturePolicies": [{ "controlID": "C-0037" }]
-  },
-  {
     "name": "controller-needs-api-access",
-    "reason": "The controller authenticates to the Kubernetes API with its projected service account token. Disabling the token mount would break any controller-runtime operator; this is an accepted trade-off.",
+    "reason": "The controller authenticates to the Kubernetes API with its service account token, so the token is mounted (C-0034) and the service account has RBAC bindings (C-0053 reports every bound service account). Mounting the token explicitly with automount disabled only moves the finding to Trivy KSV-0036.",
     "policyType": "postureExceptionPolicy",
     "actions": ["alertOnly"],
     "resources": [

@@ -7,8 +7,8 @@ name: Image scan
 # The controller chart, rendered with its opt-in NetworkPolicy, is checked
 # against the CIS Kubernetes Benchmark (Trivy config) and NSA/CISA and MITRE
 # (Kubescape); the image build files get Trivy's Dockerfile checks. OCM's own
-# Trivy checks are in .github/trivy-checks, accepted findings in
-# .github/benchmarks. Benchmark findings fail.
+# Trivy checks are in .github/trivy-checks, accepted findings and check
+# settings in .github/benchmarks. Benchmark findings fail.
 on:
   workflow_call:
     inputs:
@@ -207,7 +207,7 @@ jobs:
           exit "$fail"
 
       # CIS Docker Benchmark section 4. Fails on WARN and FATAL; INFO (content
-      # trust, HEALTHCHECK) and SKIP (no /etc/passwd in scratch) do not fail.
+      # trust) and SKIP (no /etc/passwd in scratch) do not fail.
       - name: CIS Docker Benchmark (dockle)
         if: ${{ !cancelled() }}
         run: |
@@ -271,6 +271,8 @@ jobs:
           # OCM's own checks (OCM-*) for what no built-in check covers.
           TRIVY_CONFIG_CHECK: .github/trivy-checks
           TRIVY_CHECK_NAMESPACES: user
+          # Settings of built-in checks (KSV-0125 trusted registries).
+          TRIVY_CONFIG_DATA: .github/benchmarks/trivy-data
         with:
           version: ${{ env.TRIVY_VERSION }}
           scan-type: config

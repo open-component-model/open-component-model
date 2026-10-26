@@ -1,0 +1,7 @@
+# Registries KSV-0125 trusts (data.ksv0125.trusted_registries, matched as a
+# suffix of the image's registry host). Replaces Trivy's built-in list, which
+# only names cloud-provider registries. The chart's default images come from
+# ghcr.io/open-component-model.
+ksv0125:
+  trusted_registries:
+    - ghcr.io

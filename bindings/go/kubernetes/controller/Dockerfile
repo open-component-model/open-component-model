@@ -74,4 +74,8 @@ USER 65532:65532
 WORKDIR /tmp
 WORKDIR /
 
+# scratch has nothing a health check could run; the chart defines Kubernetes
+# liveness and readiness probes, and Kubernetes ignores HEALTHCHECK.
+HEALTHCHECK NONE
+
 ENTRYPOINT ["/manager"]
