@@ -80,10 +80,24 @@ on the overview page.
 - `resource.access.isType(string)` — true when the access type matches.
 - `resource.access.isType(list(string))` — true when any element matches.
 
+### `isArtifactSetMediaType`
+
+`isArtifactSetMediaType(string)` returns true for the two legacy OCM artifact-set
+media types:
+
+- `application/vnd.oci.image.manifest.v1+tar+gzip`
+- `application/vnd.oci.image.index.v1+tar+gzip`
+
 ### `isOCIManifest`
 
-`isOCIManifest(string)` returns true for OCI image manifest and index, and
-Docker manifest and manifest list media types.
+`isOCIManifest(string)` returns true for these descriptor media types:
+
+- `application/vnd.oci.image.manifest.v1+json`
+- `application/vnd.oci.image.index.v1+json`
+- `application/vnd.docker.distribution.manifest.v2+json`
+- `application/vnd.docker.distribution.manifest.list.v2+json`
+
+No archive media types are accepted.
 
 ### `toOCI`
 
