@@ -33,9 +33,9 @@ func (t *TransferLocalSource) Transform(ctx context.Context, step runtime.Typed)
 	}
 
 	var (
-		src    localSource
-		dst    localBlobTarget
-		output **v1alpha1.TransferLocalSourceOutput
+		src       localSource
+		dst       localBlobTarget
+		setOutput func(*v1alpha1.TransferLocalSourceOutput)
 	)
 	switch tr := transformation.(type) {
 	case *v1alpha1.TransferOCILocalSourceToOCILocalSource:
@@ -44,28 +44,28 @@ func (t *TransferLocalSource) Transform(ctx context.Context, step runtime.Typed)
 		}
 		src = ociLocalSource(&tr.Spec.Source)
 		dst = localBlobTarget{repository: &tr.Spec.Repository, globalAccessPolicy: tr.Spec.GlobalAccessPolicy}
-		output = &tr.Output
+		setOutput = func(o *v1alpha1.TransferLocalSourceOutput) { tr.Output = o }
 	case *v1alpha1.TransferOCILocalSourceToCTFLocalSource:
 		if tr.Spec == nil {
 			return nil, fmt.Errorf("spec is required for %s transformation", tr.Type)
 		}
 		src = ociLocalSource(&tr.Spec.Source)
 		dst = localBlobTarget{repository: &tr.Spec.Repository}
-		output = &tr.Output
+		setOutput = func(o *v1alpha1.TransferLocalSourceOutput) { tr.Output = o }
 	case *v1alpha1.TransferCTFLocalSourceToOCILocalSource:
 		if tr.Spec == nil {
 			return nil, fmt.Errorf("spec is required for %s transformation", tr.Type)
 		}
 		src = ctfLocalSource(&tr.Spec.Source)
 		dst = localBlobTarget{repository: &tr.Spec.Repository, globalAccessPolicy: tr.Spec.GlobalAccessPolicy}
-		output = &tr.Output
+		setOutput = func(o *v1alpha1.TransferLocalSourceOutput) { tr.Output = o }
 	case *v1alpha1.TransferCTFLocalSourceToCTFLocalSource:
 		if tr.Spec == nil {
 			return nil, fmt.Errorf("spec is required for %s transformation", tr.Type)
 		}
 		src = ctfLocalSource(&tr.Spec.Source)
 		dst = localBlobTarget{repository: &tr.Spec.Repository}
-		output = &tr.Output
+		setOutput = func(o *v1alpha1.TransferLocalSourceOutput) { tr.Output = o }
 	default:
 		return nil, fmt.Errorf("unexpected transformation type: %T", transformation)
 	}
@@ -90,7 +90,7 @@ func (t *TransferLocalSource) Transform(ctx context.Context, step runtime.Typed)
 	if err != nil {
 		return nil, fmt.Errorf("failed converting source to v2 format: %w", err)
 	}
-	*output = &v1alpha1.TransferLocalSourceOutput{Source: &v2Sources[0]}
+	setOutput(&v1alpha1.TransferLocalSourceOutput{Source: &v2Sources[0]})
 	return transformation, nil
 }
 
