@@ -262,12 +262,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, fmt.Errorf("failed to get effective config: %w", err)
 	}
 
-	// Set effective config immediately so the deferred patch persists it
-	// even if a subsequent step fails.
-	if !equality.Semantic.DeepEqual(component.Status.EffectiveOCMConfig, configs) {
-		component.Status.EffectiveOCMConfig = configs
-		return ctrl.Result{}, fmt.Errorf("effective ocm config changed")
-	}
+	// The deferred status patch persists it, even if a later step fails.
+	component.Status.EffectiveOCMConfig = configs
 
 	repoSpec := &runtime.Raw{}
 	if err := runtime.NewScheme(runtime.WithAllowUnknown()).Decode(bytes.NewReader(repo.Spec.RepositorySpec.Raw), repoSpec); err != nil {
