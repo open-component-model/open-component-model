@@ -5,8 +5,6 @@ import (
 	"io"
 	"strings"
 
-	"github.com/jedib0t/go-pretty/v6/text"
-
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 )
 
@@ -49,6 +47,6 @@ func renderSourcesWarning(w io.Writer, components []string) {
 	)
 	_, _ = fmt.Fprintln(w)
 	for _, l := range lines {
-		_, _ = fmt.Fprintln(w, text.Colors{text.FgRed, text.Bold}.Sprint(l))
+		_, _ = fmt.Fprintln(w, l)
 	}
 }
