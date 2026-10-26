@@ -36,6 +36,9 @@ var schemaRecursive []byte
 //go:embed schemas/ReferenceUploaderConfig.schema.json
 var schemaReferenceUploaderConfig []byte
 
+//go:embed schemas/UnmatchedResourcePolicy.schema.json
+var schemaUnmatchedResourcePolicy []byte
+
 // JSONSchema returns the JSON Schema for ArtifactoryUploaderConfig.
 func (ArtifactoryUploaderConfig) JSONSchema() []byte {
 	return schemaArtifactoryUploaderConfig
@@ -79,4 +82,9 @@ func (Recursive) JSONSchema() []byte {
 // JSONSchema returns the JSON Schema for ReferenceUploaderConfig.
 func (ReferenceUploaderConfig) JSONSchema() []byte {
 	return schemaReferenceUploaderConfig
+}
+
+// JSONSchema returns the JSON Schema for UnmatchedResourcePolicy.
+func (UnmatchedResourcePolicy) JSONSchema() []byte {
+	return schemaUnmatchedResourcePolicy
 }
