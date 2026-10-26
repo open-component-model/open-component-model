@@ -34,7 +34,7 @@ ENTRYPOINT ["/ocm"]
 # https://github.com/open-component-model/cosign. Same release as COSIGN_VERSION in
 # bindings/go/sigstore/signing/handler/internal/.env (Renovate group "OCM cosign";
 # pin_sync_test.go there fails if they diverge).
-FROM ghcr.io/open-component-model/cosign:v3.1.4-ocm.2@sha256:abc86b4330048abfaa2b92578ce384e14667eb3e5f2e75bbd244ae940362f541 AS cosign
+FROM ghcr.io/open-component-model/cosign:v3.1.4-ocm.5@sha256:b9e74695c0c83c2ea951a84e29c90e5ece1b31b4da6d63255aa26d4e1500dcb5 AS cosign
 
 FROM scratch AS full
 # scratch defines no PATH; ocm looks up cosign on PATH.
