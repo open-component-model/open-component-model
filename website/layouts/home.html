@@ -54,7 +54,7 @@
   </div>
 
   {{- $installCmd := printf "curl -sfL https://ocm.software/install-cli.sh | %sbash" (partial "main/site-version.html" (dict "page" . "format" "env")) -}}
-  {{- $getCmd := printf "ocm get cv ghcr.io/open-component-model//ocm.software/cli:%s -o widetree" (partial "main/site-version.html" (dict "page" . "format" "semver")) }}
+  {{- $getCmd := printf "ocm get cv ghcr.io/open-component-model//ocm.software/cli --latest --constraint '%s' -o widetree" (partial "main/site-version.html" (dict "page" . "format" "constraint")) }}
   <div class="container container--quickstart">
     <section class="quickstart" aria-labelledby="quickstart-title">
       <h2 id="quickstart-title" class="section-title">Try OCM in one minute</h2>
