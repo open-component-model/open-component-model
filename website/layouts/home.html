@@ -53,6 +53,30 @@
     </div>
   </div>
 
+  {{- $installCmd := printf "curl -sfL https://ocm.software/install-cli.sh | %sbash" (partial "main/site-version.html" (dict "page" . "format" "env")) -}}
+  {{- $getCmd := printf "ocm get cv ghcr.io/open-component-model//ocm.software/cli:%s -o widetree" (partial "main/site-version.html" (dict "page" . "format" "semver")) }}
+  <div class="container container--quickstart">
+    <section class="quickstart" aria-labelledby="quickstart-title">
+      <h2 id="quickstart-title" class="section-title">Try OCM in one minute</h2>
+      <p class="quickstart-lead">Install the OCM CLI and inspect a real, public component version. No account or credentials needed.</p>
+      <ol class="quickstart-steps">
+        <li class="quickstart-step">
+          <p class="quickstart-step-title">Install the CLI (Linux, macOS)</p>
+          {{ printf "```shell\n%s\n```" $installCmd | $.RenderString (dict "display" "block") }}
+        </li>
+        <li class="quickstart-step">
+          <p class="quickstart-step-title">Inspect the component version that ships the OCM CLI itself</p>
+          {{ printf "```shell\n%s\n```" $getCmd | $.RenderString (dict "display" "block") }}
+        </li>
+      </ol>
+      <p class="quickstart-more">
+        Windows, containers, version pinning, and binary verification:
+        <a href='{{ relref . "docs/getting-started/ocm-cli-installation.md" }}'>Install the OCM CLI</a>.
+        Next, <a href='{{ relref . "docs/getting-started/create-component-version.md" }}'>create your own component version</a>.
+      </p>
+    </section>
+  </div>
+
   <div class="container">
     <hr class="section-divider" />
   </div>
