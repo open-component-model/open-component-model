@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	celparser "ocm.software/open-component-model/bindings/go/cel/expression/parser"
+	"ocm.software/open-component-model/bindings/go/ctf"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	helmv1 "ocm.software/open-component-model/bindings/go/helm/spec/access/v1"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
@@ -78,8 +79,8 @@ func processOCIUploader(ctx context.Context, resource descriptorv2.Resource, acc
 	case *helmv1.Helm:
 		defaultImageReference = transferv1alpha1.DefaultOCIImageReferenceHelm
 	case *descriptorv2.LocalBlob:
-		if !isOCICompliantManifest(acc.MediaType) {
-			return nil, fmt.Errorf("oci uploader cannot upload local blob with media type %q: not an OCI manifest (adjust match)", acc.MediaType)
+		if !isOCICompliantManifest(acc.MediaType) && !ctf.IsArtifactSetMediaType(acc.MediaType) {
+			return nil, fmt.Errorf("oci uploader cannot upload local blob with media type %q: not an OCI manifest or artifact set (adjust match)", acc.MediaType)
 		}
 		defaultImageReference = transferv1alpha1.DefaultOCIImageReferenceLocalBlob
 	default:
@@ -104,7 +105,7 @@ func processOCIUploader(ctx context.Context, resource descriptorv2.Resource, acc
 			return nil, fmt.Errorf("cannot process Helm Chart resource: %w", err)
 		}
 		return helmFileExpressions(id, resourceID), nil
-	default: // *descriptorv2.LocalBlob holding an OCI manifest, or *ociv1.RelativeOCIReference
+	default: // *descriptorv2.LocalBlob holding an OCI manifest or artifact set, or *ociv1.RelativeOCIReference
 		// Streamed (TransferLocalBlobToOCIArtifact): no file buffer to clean up.
 		if err := processLocalBlob(resource, id, val, tgd, toSpec, resourceTransformIDs, i, imageReference); err != nil {
 			return nil, fmt.Errorf("failed processing local blob resource: %w", err)
