@@ -167,7 +167,7 @@ The signature therefore verifies on the target with no re-signing. If copying th
 
 The target layout is chosen in this order:
 
-1. the `componentVersionLayout` field of the [transfer configuration]({{< relref "docs/reference/transfer-configuration/transfer-settings.md" >}}), which `ocm transfer component-version --layout` also sets;
+1. the `componentVersionLayout` field of the [transfer configuration]({{< relref "docs/reference/configuration/transfer-configuration/transfer-settings.md" >}}), which `ocm transfer component-version --layout` also sets;
 2. the `componentVersionLayout` field of the target repository specification;
 3. the layout of the source component version, so a normalized component version stays normalized.
 
