@@ -1,7 +1,7 @@
 # Cosign Normalized Layout Scenario
 
 Checks that a component version published in the normalized OCI layout
-([ADR 0032](../../../docs/adr/0032_normalized_oci_layout.md)) can be signed with
+([ADR 0033](../../../docs/adr/0033_normalized_oci_layout.md)) can be signed with
 plain `cosign` like an image, and that the signature stays valid through
 `ocm sign` and `ocm transfer` without re-signing. `ocm` and `cosign` both come
 from the full OCM CLI image.
