@@ -23,7 +23,7 @@ This guide covers participation in the SIG itself. For contributing **code** to 
 ## Before You Start
 
 1. Read the [SIG Handbook](./SIG-Handbook.md) for governance and lifecycle rules.
-2. Browse [`sigs.yaml`](./sigs.yaml) and pick the SIG whose scope matches your interest. Each SIG has its own folder with a charter and meeting notes.
+2. Browse [`sigs.yaml`](./sigs.yaml) and pick the SIG whose scope matches your interest. Each SIG has its own folder with its charter.
 3. Skim the [SIG Runtime Overview](Runtime/SIG-Runtime-OVERVIEW.md) so you know what is in scope and what is not.
 4. Join the SIG's channels (listed in the charter) and read the [OCM Code of Conduct](https://github.com/open-component-model/.github/blob/main/CODE_OF_CONDUCT.md).
 
@@ -43,7 +43,7 @@ There is no single ladder. These are the SIG-specific entry points; for the gene
 - **Project-wide channels:** [ocm.software/community](https://ocm.software/community).
 - **OCM Community Call and TSC meeting:** [How We Work](https://ocm.software/community/how-we-work/).
 
-Meeting notes go into the SIG's `meeting-notes/` subfolder. Public, dated, one file per meeting.
+SIG Runtime meets inside the OCM Community Call. Recordings and transcripts are listed in the [Community Call History](../README.md#community-call-history).
 
 ## Becoming a Maintainer or Voting Member
 
