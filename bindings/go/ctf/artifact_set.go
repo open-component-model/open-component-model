@@ -11,7 +11,6 @@ import (
 	"io"
 	"io/fs"
 	"path"
-	"path/filepath"
 
 	"github.com/nlepage/go-tarfs"
 	"github.com/opencontainers/go-digest"
@@ -292,7 +291,7 @@ func ConvertToOCIImageLayout(ctx context.Context, as *ArtifactSet, writer io.Wri
 		}
 
 		if err := tw.WriteHeader(&tar.Header{
-			Name: filepath.Join(BlobsDirectoryName, dig.Algorithm().String(), dig.Encoded()),
+			Name: path.Join(BlobsDirectoryName, dig.Algorithm().String(), dig.Encoded()),
 			Size: bsizeAware.Size(),
 		}); err != nil {
 			return fmt.Errorf("unable to write header for blob %s: %w", b, err)
@@ -341,11 +340,11 @@ func (a *ArtifactSet) ListBlobs(ctx context.Context) (digests []string, err erro
 	case ArtifactSetFormatOCI:
 		for _, entry := range dir {
 			if entry.IsDir() {
-				algoDir, err := a.fs.ReadDir(filepath.Join(BlobsDirectoryName, entry.Name()))
+				algoDir, err := a.fs.ReadDir(path.Join(BlobsDirectoryName, entry.Name()))
 				if err != nil {
 					return nil, fmt.Errorf("unable to list blobs: %w", err)
 				}
-				algo := filepath.Base(entry.Name())
+				algo := path.Base(entry.Name())
 				for _, entry := range algoDir {
 					if entry.Type().IsRegular() {
 						digests = append(digests, algo+":"+entry.Name())
@@ -479,7 +478,7 @@ func determineArtifactSetOCIFormat(filesystem fs.FS) ArtifactSetFormat {
 	} {
 		// the subdirectory for algos is unique to new generation blob directories and we can deduce the
 		// new OCI artifact set format from that.
-		if algoDir, err := filesystem.Open(filepath.Join(BlobsDirectoryName, algo.String())); err == nil {
+		if algoDir, err := filesystem.Open(path.Join(BlobsDirectoryName, algo.String())); err == nil {
 			_ = algoDir.Close()
 			return ArtifactSetFormatOCI
 		}
