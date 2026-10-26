@@ -58,12 +58,17 @@ jobs:
       # Two passes: relative links are checked across the whole repo, while
       # external (http/https) links are only checked for changed files —
       # repo-wide external checks are slow and prone to flaky failures.
+      # filter_mode nofilter: reviewdog's default "added" drops findings on
+      # lines the PR did not touch (a dead link elsewhere in an edited file, a
+      # link broken by a moved target), but on push it ignores the filter, so
+      # those findings would only fail on main after merge.
       - name: Verify relative links (repo-wide)
         uses: umbrelladocs/action-linkspector@568ec8d29fa92b31fd9ea5381e155c51e922af83 # v1
         with:
           github_token: ${{ secrets.github_token }}
           reporter: github-pr-check
           fail_level: any
+          filter_mode: nofilter
           config_file: .github/config/linkspector-all.yaml
           show_stats: true
       - name: Verify external links (changed files)
@@ -72,6 +77,7 @@ jobs:
           github_token: ${{ secrets.github_token }}
           reporter: github-pr-check
           fail_level: any
+          filter_mode: nofilter
           config_file: .github/config/linkspector-changed.yaml
           show_stats: true
 
