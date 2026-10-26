@@ -17,7 +17,9 @@ import (
 )
 
 func TestReadOCILayout_ArtifactSet(t *testing.T) {
+	r := require.New(t)
 	archive, manifest, layer := legacyArtifactSet(t)
+	r.NotEmpty(archive)
 
 	t.Run("artifact set media type is read as OCI layout", func(t *testing.T) {
 		r := require.New(t)
@@ -44,8 +46,9 @@ func TestReadOCILayout_ArtifactSet(t *testing.T) {
 	})
 
 	t.Run("without artifact set media type it is not an OCI layout", func(t *testing.T) {
+		r := require.New(t)
 		_, err := ReadOCILayout(t.Context(), inmemory.New(bytes.NewReader(archive)))
-		require.Error(t, err)
+		r.Error(err)
 	})
 }
 

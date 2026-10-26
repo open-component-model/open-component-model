@@ -21,11 +21,12 @@ import (
 const artifactSetMediaType = "application/vnd.oci.image.manifest.v1" + ctf.SynthesizedBlobFormatSuffix
 
 func TestNewArtifactSetFromBlob_Compression(t *testing.T) {
+	r := require.New(t)
 	compressed, fixture := artifactSetArchive(t, ctf.ArtifactSetFormatLegacyOCI)
 	gz, err := gzip.NewReader(bytes.NewReader(compressed))
-	require.NoError(t, err)
+	r.NoError(err)
 	uncompressed, err := io.ReadAll(gz)
-	require.NoError(t, err)
+	r.NoError(err)
 
 	for name, archive := range map[string][]byte{
 		// smaller than a tar header, so the gzip sniffing must not pad it
@@ -50,6 +51,7 @@ func TestNewArtifactSetFromBlob_Compression(t *testing.T) {
 }
 
 func TestNewArtifactSetFromBlob_IncompleteIndexEntry(t *testing.T) {
+	r := require.New(t)
 	manifestData := []byte(`{"schemaVersion":2,"config":{},"layers":[]}`)
 	dig := digest.FromBytes(manifestData)
 
@@ -73,7 +75,7 @@ func TestNewArtifactSetFromBlob_IncompleteIndexEntry(t *testing.T) {
 			Versioned: specs.Versioned{SchemaVersion: 2},
 			Manifests: []ociimagespecv1.Descriptor{tc.entry},
 		})
-		require.NoError(t, err)
+		r.NoError(err)
 
 		for _, format := range []ctf.ArtifactSetFormat{
 			ctf.ArtifactSetFormatLegacyOCI,
@@ -81,9 +83,10 @@ func TestNewArtifactSetFromBlob_IncompleteIndexEntry(t *testing.T) {
 			ctf.ArtifactSetFormatOCI,
 		} {
 			t.Run(tc.name+"/"+format.String(), func(t *testing.T) {
+				r := require.New(t)
 				archive := writeArtifactSet(t, format, indexData, map[string][]byte{dig.String(): manifestData})
 				_, err := ctf.NewArtifactSetFromBlob(inmemory.New(bytes.NewReader(archive), inmemory.WithMediaType(artifactSetMediaType)))
-				require.ErrorContains(t, err, tc.wantErr)
+				r.ErrorContains(err, tc.wantErr)
 			})
 		}
 	}
