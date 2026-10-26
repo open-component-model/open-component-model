@@ -186,6 +186,15 @@
         .frame.is-terminal .header {
             display: none;
         }
+
+        /* Wrap instead of scrolling so the whole command is readable; copy still yields one line.
+           Right padding keeps text clear of the copy button. */
+        pre > code {
+            white-space: pre-wrap;
+            overflow-wrap: anywhere;
+            padding-inline-end: 3rem;
+            box-sizing: border-box;
+        }
     }
 
     .hero-button {
@@ -332,6 +341,7 @@
 
         .hero-quickstart {
             margin-left: 0;
+            max-width: none; /* full text column so the get cv command fits on one line on wide screens */
         }
 
         .hero-actions {
