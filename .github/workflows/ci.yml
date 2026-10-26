@@ -268,7 +268,7 @@ jobs:
       matrix:
         # The CLI ships windows binaries that cli.yml only cross-compiles, so
         # OS-specific paths (file paths, plugin processes, sockets) need a native run.
-        # Windows runners are slow, so that run is limited to pushes to main.
+        # Windows runners are billed at a premium, so that run is limited to pushes to main.
         include: ${{ fromJSON(github.event_name == 'push' && '[{"runner":"ubuntu-26.04-arm","goos":"linux","goarch":"arm64"},{"runner":"windows-latest","goos":"windows","goarch":"amd64","exe":".exe"}]' || '[{"runner":"ubuntu-26.04-arm","goos":"linux","goarch":"arm64"}]') }}
     defaults:
       run:
