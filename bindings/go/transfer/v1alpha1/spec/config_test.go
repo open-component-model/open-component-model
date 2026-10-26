@@ -73,6 +73,10 @@ func TestConfig_Validate(t *testing.T) {
 		{"valid recursive none", spec.Config{Recursive: spec.RecursiveNone}, ""},
 		{"recursive depth not implemented", spec.Config{Recursive: 3}, "not implemented"},
 		{"invalid recursive below -1", spec.Config{Recursive: -5}, "invalid recursive"},
+		{"valid policy Ignore", spec.Config{UnmatchedResourcePolicy: spec.UnmatchedResourcePolicyIgnore}, ""},
+		{"valid policy Warn", spec.Config{UnmatchedResourcePolicy: spec.UnmatchedResourcePolicyWarn}, ""},
+		{"valid policy Fail", spec.Config{UnmatchedResourcePolicy: spec.UnmatchedResourcePolicyFail}, ""},
+		{"unknown policy", spec.Config{UnmatchedResourcePolicy: "Strict"}, "invalid unmatchedResourcePolicy"},
 	}
 
 	for _, tc := range tests {
@@ -107,6 +111,24 @@ func TestMerge(t *testing.T) {
 		merged := spec.Merge(nil, a, nil)
 
 		assert.Equal(t, spec.RecursiveInfinite, merged.Recursive)
+	})
+
+	t.Run("empty policy keeps earlier policy", func(t *testing.T) {
+		merged := spec.Merge(
+			&spec.Config{UnmatchedResourcePolicy: spec.UnmatchedResourcePolicyFail},
+			&spec.Config{},
+		)
+
+		assert.Equal(t, spec.UnmatchedResourcePolicyFail, merged.UnmatchedResourcePolicy)
+	})
+
+	t.Run("later policy wins", func(t *testing.T) {
+		merged := spec.Merge(
+			&spec.Config{UnmatchedResourcePolicy: spec.UnmatchedResourcePolicyFail},
+			&spec.Config{UnmatchedResourcePolicy: spec.UnmatchedResourcePolicyIgnore},
+		)
+
+		assert.Equal(t, spec.UnmatchedResourcePolicyIgnore, merged.UnmatchedResourcePolicy)
 	})
 }
 
@@ -187,5 +209,29 @@ configurations:
 `)
 		_, err := spec.LookupConfig(generic)
 		require.ErrorContains(t, err, `unknown field "uploadType"`)
+	})
+
+	t.Run("unmatchedResourcePolicy is decoded", func(t *testing.T) {
+		generic := decode(t, `
+type: generic.config.ocm.software/v1
+configurations:
+  - type: transfer.config.ocm.software/v1alpha1
+    unmatchedResourcePolicy: Fail
+`)
+		cfg, err := spec.LookupConfig(generic)
+		require.NoError(t, err)
+		require.NotNil(t, cfg)
+		assert.Equal(t, spec.UnmatchedResourcePolicyFail, cfg.UnmatchedResourcePolicy)
+	})
+
+	t.Run("unknown unmatchedResourcePolicy is rejected", func(t *testing.T) {
+		generic := decode(t, `
+type: generic.config.ocm.software/v1
+configurations:
+  - type: transfer.config.ocm.software/v1alpha1
+    unmatchedResourcePolicy: strict
+`)
+		_, err := spec.LookupConfig(generic)
+		require.ErrorContains(t, err, "invalid unmatchedResourcePolicy")
 	})
 }
