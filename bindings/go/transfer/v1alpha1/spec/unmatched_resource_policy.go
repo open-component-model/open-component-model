@@ -14,8 +14,8 @@ const (
 	// UnmatchedResourcePolicyWarn applies the baseline and logs a warning per resource
 	// when at least one uploader is configured. This is the default.
 	UnmatchedResourcePolicyWarn UnmatchedResourcePolicy = "Warn"
-	// UnmatchedResourcePolicyFail fails the transfer for the first resource no uploader
-	// selects, also when no uploader is configured at all.
+	// UnmatchedResourcePolicyFail fails the transfer, naming every resource of a component
+	// version no uploader selects, also when no uploader is configured at all.
 	UnmatchedResourcePolicyFail UnmatchedResourcePolicy = "Fail"
 )
 

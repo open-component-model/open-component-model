@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
+	"strings"
 
 	"ocm.software/open-component-model/bindings/go/dag"
 	dagsync "ocm.software/open-component-model/bindings/go/dag/sync"
@@ -283,7 +284,7 @@ func fillGraphDefinitionWithPrefetchedComponents(
 // processResources iterates over resources in a v2 descriptor and creates the appropriate
 // transformations: the first uploader whose match selects a resource handles it. A resource no uploader selects follows the baseline: a local blob
 // is copied as a local blob, anything else stays by reference (no transformation). policy
-// decides whether such a resource is only logged or fails the build (see reportUnmatchedResource).
+// decides whether such resources are only logged or fail the build (see unmatchedResources.report).
 // It returns CEL spec-field expressions for all Get transformations that buffer content to disk.
 func processResources(
 	ctx context.Context,
@@ -297,8 +298,13 @@ func processResources(
 	uploaderUsed []bool,
 	policy transferv1alpha1.UnmatchedResourcePolicy,
 ) (map[int]string, []string, error) {
-	component := val.Descriptor.Component.Name
-	version := val.Descriptor.Component.Version
+	unmatched := unmatchedResources{
+		policy:              policy,
+		uploadersConfigured: len(uploaders) > 0,
+		component:           val.Descriptor.Component.Name,
+		version:             val.Descriptor.Component.Version,
+		target:              targetName(toSpec),
+	}
 	resourceTransformIDs := make(map[int]string)
 	var fileExpressions []string
 	env := &uploaderEnv{baseID: baseID, node: tgd.Environment.Data[baseID]}
@@ -372,9 +378,7 @@ func processResources(
 			continue
 		}
 		byValue := isLocalByValue(access)
-		if err := reportUnmatchedResource(ctx, policy, len(uploaders) > 0, component, version, resource, toSpec, byValue); err != nil {
-			return nil, nil, err
-		}
+		unmatched.add(resource, byValue)
 		if !byValue {
 			continue
 		}
@@ -384,6 +388,9 @@ func processResources(
 			return nil, nil, err
 		}
 		fileExpressions = append(fileExpressions, exprs...)
+	}
+	if err := unmatched.report(ctx); err != nil {
+		return nil, nil, err
 	}
 	return resourceTransformIDs, fileExpressions, nil
 }
@@ -484,43 +491,66 @@ func warnUnusedUploaders(ctx context.Context, uploaders []transferv1alpha1.Uploa
 	}
 }
 
-// reportUnmatchedResource applies policy to a resource no uploader selects for toSpec. Fail
-// returns an error regardless of whether uploaders are configured; Warn logs a warning only
-// when uploaders are configured, since without any every resource follows the baseline by
-// design. The target is reported because uploader matches can depend on it.
-func reportUnmatchedResource(
-	ctx context.Context,
-	policy transferv1alpha1.UnmatchedResourcePolicy,
-	uploadersConfigured bool,
-	component, version string,
-	resource descriptorv2.Resource,
-	toSpec runtime.Typed,
-	byValue bool,
-) error {
-	if policy == transferv1alpha1.UnmatchedResourcePolicyFail {
-		reason := "no uploader selects it"
-		if !uploadersConfigured {
+// unmatchedResource is a resource no uploader selects; byValue tells whether its baseline
+// copies it as a local blob or keeps it by reference.
+type unmatchedResource struct {
+	resource descriptorv2.Resource
+	byValue  bool
+}
+
+// unmatchedResources collects the resources of one component version that no uploader
+// selects for a target, so policy is applied once to all of them instead of per resource.
+type unmatchedResources struct {
+	policy              transferv1alpha1.UnmatchedResourcePolicy
+	uploadersConfigured bool
+	component, version  string
+	// target is reported because uploader matches can depend on it.
+	target    string
+	resources []unmatchedResource
+}
+
+func (u *unmatchedResources) add(resource descriptorv2.Resource, byValue bool) {
+	u.resources = append(u.resources, unmatchedResource{resource: resource, byValue: byValue})
+}
+
+// report applies policy to the collected resources. Fail returns one error naming every
+// resource, regardless of whether uploaders are configured; Warn logs a warning per resource
+// only when uploaders are configured, since without any every resource follows the baseline
+// by design.
+func (u *unmatchedResources) report(ctx context.Context) error {
+	if len(u.resources) == 0 {
+		return nil
+	}
+	if u.policy == transferv1alpha1.UnmatchedResourcePolicyFail {
+		reason := "no uploader selects them"
+		if !u.uploadersConfigured {
 			reason = "no uploader is configured"
 		}
-		return fmt.Errorf("resource %s of component %s:%s (access type %s) is not handled by any uploader for target %s: %s (unmatchedResourcePolicy is %s)",
-			resource.ToIdentity(), component, version, resource.Access.Type, targetName(toSpec), reason, policy)
+		descs := make([]string, len(u.resources))
+		for i, r := range u.resources {
+			descs[i] = fmt.Sprintf("%s (access type %s)", r.resource.ToIdentity(), r.resource.Access.Type)
+		}
+		return fmt.Errorf("resources of component %s:%s are not handled by any uploader for target %s: %s (unmatchedResourcePolicy is %s): %s",
+			u.component, u.version, u.target, reason, u.policy, strings.Join(descs, ", "))
 	}
 
 	level := slog.LevelDebug
-	if policy == transferv1alpha1.UnmatchedResourcePolicyWarn && uploadersConfigured {
+	if u.policy == transferv1alpha1.UnmatchedResourcePolicyWarn && u.uploadersConfigured {
 		level = slog.LevelWarn
 	}
 	if !slog.Default().Enabled(ctx, level) {
 		return nil
 	}
-	baseline := "reference"
-	if byValue {
-		baseline = "localBlob"
+	for _, r := range u.resources {
+		baseline := "reference"
+		if r.byValue {
+			baseline = "localBlob"
+		}
+		slog.Log(ctx, level, "no uploader selects resource; falling back to the baseline",
+			"component", u.component, "version", u.version,
+			"resource", r.resource.ToIdentity().String(), "accessType", r.resource.Access.Type.String(),
+			"target", u.target, "baseline", baseline)
 	}
-	slog.Log(ctx, level, "no uploader selects resource; falling back to the baseline",
-		"component", component, "version", version,
-		"resource", resource.ToIdentity().String(), "accessType", resource.Access.Type.String(),
-		"target", targetName(toSpec), "baseline", baseline)
 	return nil
 }
 

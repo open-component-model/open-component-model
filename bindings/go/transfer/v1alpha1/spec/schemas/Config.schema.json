@@ -65,7 +65,7 @@
           "const": "Warn"
         },
         {
-          "description": "UnmatchedResourcePolicyFail fails the transfer for the first resource no uploader\nselects, also when no uploader is configured at all.",
+          "description": "UnmatchedResourcePolicyFail fails the transfer, naming every resource of a component\nversion no uploader selects, also when no uploader is configured at all.",
           "const": "Fail"
         }
       ]

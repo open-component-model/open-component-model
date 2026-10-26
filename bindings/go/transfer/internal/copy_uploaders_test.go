@@ -46,6 +46,7 @@ func TestBuildGraphDefinition_LocalBlobAndReferenceUploaders(t *testing.T) {
 	for _, tc := range []struct {
 		name      string
 		resource  descriptor.Resource
+		extra     []descriptor.Resource
 		cfg       transferv1alpha1.Config
 		uploaders []transferv1alpha1.UploaderConfig
 		wantTypes []runtime.Type
@@ -146,7 +147,7 @@ func TestBuildGraphDefinition_LocalBlobAndReferenceUploaders(t *testing.T) {
 			resource:  blob,
 			cfg:       fail,
 			uploaders: scopedToOther,
-			wantErr:   "is not handled by any uploader for target OCI ghcr.io/target: no uploader selects it",
+			wantErr:   "are not handled by any uploader for target OCI ghcr.io/target: no uploader selects them",
 		},
 		{
 			name:     "Fail rejects a resource when no uploader is configured",
@@ -169,6 +170,14 @@ func TestBuildGraphDefinition_LocalBlobAndReferenceUploaders(t *testing.T) {
 			wantErr:   "access type s3/v1",
 		},
 		{
+			name:      "Fail names every resource no uploader selects",
+			resource:  blob,
+			extra:     []descriptor.Resource{image},
+			cfg:       fail,
+			uploaders: scopedToOther,
+			wantErr:   "name=my-blob,version=1.0.0 (access type LocalBlob/v1), name=my-image,version=1.0.0 (access type ociArtifact/v1)",
+		},
+		{
 			name:      "Ignore falls back to the baseline for an unselected local blob",
 			resource:  blob,
 			cfg:       ignore,
@@ -178,7 +187,7 @@ func TestBuildGraphDefinition_LocalBlobAndReferenceUploaders(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
-			desc := testDescriptor("ocm.software/test", "1.0.0", []descriptor.Resource{tc.resource}, nil)
+			desc := testDescriptor("ocm.software/test", "1.0.0", append([]descriptor.Resource{tc.resource}, tc.extra...), nil)
 			resolver := testResolverFor("ocm.software/test", "1.0.0", testOCIRepo("ghcr.io/source"), desc)
 			roots := testTransferRoots("ocm.software/test", "1.0.0", testOCIRepo("ghcr.io/target"), resolver)
 
