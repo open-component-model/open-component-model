@@ -353,7 +353,7 @@ func processResources(
 				case *transferv1alpha1.GitUploaderConfig:
 					exprs, err = processGitUploader(ctx, resource, access, cfg, aliases, env, id, val, tgd, resourceTransformIDs, i)
 				case *transferv1alpha1.LocalBlobUploaderConfig:
-					exprs, err = processResource(resource, access, id, val, tgd, toSpec, resourceTransformIDs, i)
+					exprs, err = processResource(ctx, resource, access, id, val, tgd, toSpec, resourceTransformIDs, i)
 				case *transferv1alpha1.ArtifactoryUploaderConfig:
 					err = processRepositoryUploader(resource, access, uploadv1alpha1.ArtifactoryUploadV1alpha1, cfg.URL, cfg.Repository, cfg.Path, baseID, id, val, tgd, resourceTransformIDs, i)
 				case *transferv1alpha1.NexusUploaderConfig:
@@ -383,7 +383,7 @@ func processResources(
 			continue
 		}
 
-		exprs, err := processResource(resource, access, id, val, tgd, toSpec, resourceTransformIDs, i)
+		exprs, err := processResource(ctx, resource, access, id, val, tgd, toSpec, resourceTransformIDs, i)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -409,7 +409,7 @@ func isLocalByValue(access runtime.Typed) bool {
 // the baseline (local blobs) and a selected local blob uploader.
 // It returns CEL spec-field expressions for the file buffers produced, referencing consumer spec
 // fields (not producer outputs) so the DAG edge points from consumer to the cleanup node.
-func processResource(resource descriptorv2.Resource, access runtime.Typed, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int) ([]string, error) {
+func processResource(ctx context.Context, resource descriptorv2.Resource, access runtime.Typed, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int) ([]string, error) {
 	resourceIdentity := resource.ToIdentity()
 	resourceID := identityToTransformationID(resourceIdentity)
 	addResourceID := fmt.Sprintf("%sAdd%s", id, resourceID)
@@ -462,7 +462,7 @@ func processResource(resource descriptorv2.Resource, access runtime.Typed, id st
 		}
 		return []string{fmt.Sprintf("${%s.spec.file}", addResourceID)}, nil
 	case *gitv1.Git:
-		if err := processGit(resource, acc, id, val, tgd, toSpec, resourceTransformIDs, i); err != nil {
+		if err := processGit(ctx, resource, acc, id, val, tgd, toSpec, resourceTransformIDs, i); err != nil {
 			return nil, fmt.Errorf("cannot process Git resource: %w", err)
 		}
 		return []string{fmt.Sprintf("${%s.spec.file}", addResourceID)}, nil

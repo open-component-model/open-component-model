@@ -1,6 +1,7 @@
 package v1alpha1_test
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -879,6 +880,43 @@ func TestMerge_TLS(t *testing.T) {
 		merged := httpspec.Merge(a, b)
 		require.NotNil(t, merged.InsecureSkipVerify)
 		assert.False(t, *merged.InsecureSkipVerify)
+	})
+}
+
+func TestMerge_ProtocolConfig(t *testing.T) {
+	tr := true
+	fa := false
+
+	t.Run("later layer overrides earlier, nil keeps earlier", func(t *testing.T) {
+		a := &httpspec.Config{ProtocolConfig: httpspec.ProtocolConfig{DisableHTTP2: &tr}}
+		b := &httpspec.Config{}
+		merged := httpspec.Merge(a, b)
+		require.NotNil(t, merged.DisableHTTP2)
+		assert.True(t, *merged.DisableHTTP2)
+
+		merged = httpspec.Merge(a, &httpspec.Config{ProtocolConfig: httpspec.ProtocolConfig{DisableHTTP2: &fa}})
+		require.NotNil(t, merged.DisableHTTP2)
+		assert.False(t, *merged.DisableHTTP2)
+	})
+
+	t.Run("host entry overrides global in ResolveHost", func(t *testing.T) {
+		cfg := &httpspec.Config{
+			ProtocolConfig: httpspec.ProtocolConfig{DisableHTTP2: &tr},
+			Hosts: map[string]*httpspec.HostConfig{
+				"ghcr.io": {ProtocolConfig: httpspec.ProtocolConfig{DisableHTTP2: &fa}},
+				"quay.io": {},
+			},
+		}
+		require.False(t, *cfg.ResolveHost("ghcr.io").DisableHTTP2)
+		require.True(t, *cfg.ResolveHost("quay.io").DisableHTTP2, "host entry without the field inherits the global value")
+		require.True(t, *cfg.ResolveHost("other.io").DisableHTTP2)
+	})
+
+	t.Run("round-trips through JSON", func(t *testing.T) {
+		var cfg httpspec.Config
+		require.NoError(t, json.Unmarshal([]byte(`{"type":"http.config.ocm.software/v1alpha1","disableHTTP2":true,"hosts":{"ghcr.io":{"disableHTTP2":false}}}`), &cfg))
+		require.True(t, *cfg.DisableHTTP2)
+		require.False(t, *cfg.Hosts["ghcr.io"].DisableHTTP2)
 	})
 }
 
