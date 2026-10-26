@@ -126,63 +126,6 @@ func processLocalBlob(resource descriptorv2.Resource, id string, val *discoveryV
 	return nil
 }
 
-// processLocalSources streams every source at the indices in localSources (sources whose
-// access is a local blob) from the source into the target in a single fused
-// Transfer{OCI,CTF}LocalSourceTo{OCI,CTF}LocalSource transformation each. It returns the
-// transformation ID per source index, for the upload descriptor to reference.
-func processLocalSources(v2desc *descriptorv2.Descriptor, localSources []int, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed) (map[int]string, error) {
-	if len(localSources) == 0 {
-		return nil, nil
-	}
-	transferType, err := chooseTransferLocalSourceType(val.SourceRepository, toSpec)
-	if err != nil {
-		return nil, fmt.Errorf("choosing transfer local source type: %w", err)
-	}
-	sourceRepo, err := asUnstructured(val.SourceRepository)
-	if err != nil {
-		return nil, fmt.Errorf("cannot convert source repository spec to unstructured: %w", err)
-	}
-	toRepo, err := asUnstructured(toSpec)
-	if err != nil {
-		return nil, fmt.Errorf("cannot convert target spec to unstructured: %w", err)
-	}
-
-	transformIDs := make(map[int]string, len(localSources))
-	for _, i := range localSources {
-		source := v2desc.Component.Sources[i]
-		sourceIdentity := source.ToIdentity()
-		transferID := fmt.Sprintf("%sTransferSource%s", id, identityToTransformationID(sourceIdentity))
-
-		identity := make(map[string]any, len(sourceIdentity))
-		for k, v := range sourceIdentity {
-			identity[k] = v
-		}
-		from := map[string]any{
-			"repository":     sourceRepo.Data,
-			"component":      val.Descriptor.Component.Name,
-			"version":        val.Descriptor.Component.Version,
-			"sourceIdentity": identity,
-		}
-		if val.Pin != "" {
-			from["digest"] = val.Pin
-		}
-
-		tgd.Transformations = append(tgd.Transformations, transformv1alpha1.GenericTransformation{
-			TransformationMeta: meta.TransformationMeta{
-				Type:  transferType,
-				ID:    transferID,
-				Label: transferLabel(&val.Descriptor.Component, "source "+source.Name, "LocalBlob", toSpec),
-			},
-			Spec: &runtime.Unstructured{Data: map[string]any{
-				"source":     from,
-				"repository": toRepo.Data,
-			}},
-		})
-		transformIDs[i] = transferID
-	}
-	return transformIDs, nil
-}
-
 // processRelativeOCIReference fetches a relativeOciReference from the source (which needs
 // component context, like a local blob) and embeds it in the target as a local blob whose
 // referenceName is the relative reference verbatim. Unlike processLocalBlob's by-value path,

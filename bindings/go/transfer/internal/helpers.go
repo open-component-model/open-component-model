@@ -136,29 +136,6 @@ func chooseTransferLocalBlobType(from, to runtime.Typed) (runtime.Type, error) {
 	}
 }
 
-// chooseTransferLocalSourceType returns the transformation that streams a local source from
-// a component version in the from repository into the to repository.
-func chooseTransferLocalSourceType(from, to runtime.Typed) (runtime.Type, error) {
-	fromOCI, err := isOCIRepository(from)
-	if err != nil {
-		return runtime.Type{}, fmt.Errorf("source repository: %w", err)
-	}
-	toOCI, err := isOCIRepository(to)
-	if err != nil {
-		return runtime.Type{}, fmt.Errorf("target repository: %w", err)
-	}
-	switch {
-	case fromOCI && toOCI:
-		return ociv1alpha1.TransferOCILocalSourceToOCILocalSourceV1alpha1, nil
-	case fromOCI:
-		return ociv1alpha1.TransferOCILocalSourceToCTFLocalSourceV1alpha1, nil
-	case toOCI:
-		return ociv1alpha1.TransferCTFLocalSourceToOCILocalSourceV1alpha1, nil
-	default:
-		return ociv1alpha1.TransferCTFLocalSourceToCTFLocalSourceV1alpha1, nil
-	}
-}
-
 // chooseTransferLocalBlobToOCIArtifactType returns the transformation that streams a local
 // blob from a component version in the from repository into a separate OCI artifact.
 func chooseTransferLocalBlobToOCIArtifactType(from runtime.Typed) (runtime.Type, error) {

@@ -15,7 +15,7 @@ standardized `ocm.software/artifact-references` label.
 {{< callout context="caution" >}}
 Component `sources` are deprecated. They still work, but `ocm add cv` prints a warning for every component version
 that declares them. `ocm transfer cv` copies sources that refer to external content by reference only and logs that
-they cannot be transferred. Sources stored as local blobs are still copied, but this is heavily discouraged.
+they cannot be transferred. A component version with sources stored as local blobs cannot be transferred at all.
 {{< /callout >}}
 
 ## Why Migrate?
@@ -23,8 +23,8 @@ they cannot be transferred. Sources stored as local blobs are still copied, but 
 A source carries no digest. Neither the component version digest nor a signature covers its content, so whoever
 controls the source location can replace that content without anyone noticing. Transfer cannot copy an external
 source either: without a digest there is nothing to verify the copy against, so only the reference travels and the
-target keeps depending on the original location. A source stored as a local blob is copied, but its content is just
-as unverifiable after the copy as before.
+target keeps depending on the original location. A source stored as a local blob is not copied either, so transfer
+refuses component versions that have one.
 
 A resource gets a digest when the component version is built. The digest is part of the component version digest and
 of every signature, and transfer can copy the content and check it. The `ocm.software/artifact-references` label,

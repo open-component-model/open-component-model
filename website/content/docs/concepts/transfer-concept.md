@@ -93,8 +93,8 @@ Component sources are deprecated. They carry no digest, so their content cannot 
 
 - A source that refers to external content (for example a `Git/v1` access) is never transferred. Transfer copies its
   descriptor entry as is and logs a warning; the content stays at the original location.
-- A source stored as a local blob (built from an `input`) is still copied to the target, but this is heavily
-  discouraged and transfer logs a warning: the copied content cannot be checked against anything.
+- A source stored as a local blob (built from an `input`) cannot be transferred. Transfer fails before uploading
+  anything, because the target would reference a blob it does not have.
 
 See [Migrate from Sources to Resources]({{< relref "docs/changelog/migrate-from-sources.md" >}}).
 
