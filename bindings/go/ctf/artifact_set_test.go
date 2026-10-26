@@ -49,6 +49,29 @@ func TestNewArtifactSetFromBlob_Compression(t *testing.T) {
 	}
 }
 
+func TestNewArtifactSetFromBlob_IndexEntryWithoutMediaType(t *testing.T) {
+	r := require.New(t)
+	manifestData := []byte(`{"schemaVersion":2,"config":{},"layers":[]}`)
+	dig := digest.FromBytes(manifestData)
+	indexData, err := json.Marshal(ociimagespecv1.Index{
+		Versioned: specs.Versioned{SchemaVersion: 2},
+		Manifests: []ociimagespecv1.Descriptor{{Digest: dig, Size: int64(len(manifestData))}},
+	})
+	r.NoError(err)
+
+	for _, format := range []ctf.ArtifactSetFormat{
+		ctf.ArtifactSetFormatLegacyOCI,
+		ctf.ArtifactSetFormatOCM,
+		ctf.ArtifactSetFormatOCI,
+	} {
+		t.Run(format.String(), func(t *testing.T) {
+			archive := writeArtifactSet(t, format, indexData, map[string][]byte{dig.String(): manifestData})
+			_, err := ctf.NewArtifactSetFromBlob(inmemory.New(bytes.NewReader(archive), inmemory.WithMediaType(artifactSetMediaType)))
+			require.ErrorContains(t, err, "artifact set index entry "+dig.String()+" has no media type")
+		})
+	}
+}
+
 type artifactSetFixture struct {
 	manifest, config, layer ociimagespecv1.Descriptor
 	data                    map[string][]byte

@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"path"
 	"path/filepath"
 
 	"github.com/nlepage/go-tarfs"
@@ -20,34 +21,41 @@ import (
 )
 
 // ArtifactSetFormat is the format of an ArtifactSet.
-// It describes the layout and characteristics of the artifact set, as in old OCM there can be multiple
-// versions stored.
+// The OCM library (https://github.com/open-component-model/ocm, package
+// api/oci/extensions/repositories/artifactset) writes artifact sets in one of three
+// structure formats, all of which are supported for reading. In every format, each
+// index entry carries the mediaType and size of the referenced manifest or index;
+// NewArtifactSetIndex rejects entries without a media type.
 type ArtifactSetFormat int
 
 const (
-	// ArtifactSetFormatLegacyOCI is the previous OCI format adopted by the legacy OCM library.
+	// ArtifactSetFormatLegacyOCI corresponds to the OCM library format "oci/v1",
+	// the default since OCM library v0.1.0. Every artifact set the OCM library
+	// synthesizes for local blobs (e.g. from ociArtifact, dockermulti or docker
+	// inputs, or OCI resources transferred by value) has this format.
 	// Characteristics:
-	// - index stored as [ociimagespec.ImageIndexFile], but with schemaVersion 2 and optional mediaTypes
+	// - index stored as [ociimagespec.ImageIndexFile]
+	// - [ociimagespec.ImageLayoutFile] present
 	// - blobs stored as flat files in the blobs directory (blobs/algo.encoded)
-	// - can have encoded OCI Image Layout
 	ArtifactSetFormatLegacyOCI ArtifactSetFormat = iota
-	// ArtifactSetFormatOCM is the old OCM format adopted by the OCM library.
+	// ArtifactSetFormatOCM corresponds to the OCM library format "ocm/v1", the only
+	// format written before OCM library v0.1.0. Later versions only write it on request.
 	// Characteristics:
-	// - index stored as ArtifactSetDescriptorFileName, but with schemaVersion 2 and without mediaTypes
+	// - index stored as ArtifactSetDescriptorFileName
+	// - no [ociimagespec.ImageLayoutFile]
 	// - blobs stored as flat files in the blobs directory (blobs/algo.encoded)
 	ArtifactSetFormatOCM
 
-	// ArtifactSetFormatOCI is a new OCI format adopted by the OCM library after the reference library rework.
+	// ArtifactSetFormatOCI corresponds to the OCM library format "oci/v1+compliant",
+	// added in OCM library v0.36 and only written by downloads with --oci-layout. It
+	// reaches a component version only if such a download is added as a local blob
+	// with an artifact set media type.
 	// Characteristics:
-	// - index stored as [ociimagespec.ImageIndexFile], with schemaVersion 2 and mediaTypes
+	// - index stored as [ociimagespec.ImageIndexFile]
+	// - [ociimagespec.ImageLayoutFile] present
 	// - blobs stored as files in the blobs directory by algorithm (blobs/algo/encoded)
-	// - must include an OCI Image Layout file.
 	//
-	// This is effectively the same format as a distribution spec OCI Image Layout.
-	// If one must use an artifact set, it is recommended that it be stored in this format.
-	//
-	// Note that when working with ocm CLI / library < 0.35, you will likely encounter either
-	// ArtifactSetFormatOCM, or ArtifactSetFormatLegacyOCI.
+	// This is effectively an OCI Image Layout.
 	ArtifactSetFormatOCI
 )
 
@@ -386,6 +394,23 @@ func newArtifactBlob(fs fileSystem, dig string, format ArtifactSetFormat) (blob.
 	}, nil
 }
 
+// artifactSetBlobPath returns the path of the blob with the given digest within
+// an artifact set of the given format.
+func artifactSetBlobPath(dig string, format ArtifactSetFormat) (string, error) {
+	if format == ArtifactSetFormatOCI {
+		d, err := digest.Parse(dig)
+		if err != nil {
+			return "", fmt.Errorf("invalid digest %q: %w", dig, err)
+		}
+		return path.Join(BlobsDirectoryName, d.Algorithm().String(), d.Encoded()), nil
+	}
+	file, err := ToBlobFileName(dig)
+	if err != nil {
+		return "", err
+	}
+	return path.Join(BlobsDirectoryName, file), nil
+}
+
 func (a *ArtifactBlob) Size() (size int64) {
 	return a.size
 }
@@ -406,7 +431,7 @@ type ArtifactSetIndex struct {
 }
 
 // NewArtifactSetIndex reads the index of an artifact set and determines its format.
-// Index entries missing a media type or size are completed from the referenced blobs.
+// It fails if an index entry has no media type.
 func NewArtifactSetIndex(filesystem fs.FS) (*ArtifactSetIndex, error) {
 	var format ArtifactSetFormat
 	base, err := decodeIndexFromFS(filesystem, ociimagespec.ImageIndexFile)
@@ -422,9 +447,11 @@ func NewArtifactSetIndex(filesystem fs.FS) (*ArtifactSetIndex, error) {
 		format = determineArtifactSetOCIFormat(filesystem)
 	}
 
-	for i := range base.Manifests {
-		if err := completeIndexDescriptor(filesystem, format, &base.Manifests[i]); err != nil {
-			return nil, err
+	// Without a media type, OCI tooling cannot walk the graph below the entry.
+	// Every OCM library version records it, so a missing one means a corrupt set.
+	for _, manifest := range base.Manifests {
+		if manifest.MediaType == "" {
+			return nil, fmt.Errorf("artifact set index entry %s has no media type", manifest.Digest)
 		}
 	}
 
