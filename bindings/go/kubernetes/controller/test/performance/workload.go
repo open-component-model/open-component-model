@@ -6,6 +6,7 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -52,6 +53,7 @@ const (
 	referenceName       = "child"
 	runLabel            = "perf.ocm.software/run"
 	signingSecretName   = "perf-signing"
+	deployerAccount     = "perf-deployer"
 	// The benchmark measures one burst of reconciles; a long interval keeps
 	// periodic requeues out of the measurement window.
 	reconcileInterval = 30 * time.Minute
@@ -60,7 +62,7 @@ const (
 var (
 	componentGVK = v1alpha1.GroupVersion.WithKind("Component")
 	resourceGVK  = v1alpha1.GroupVersion.WithKind("Resource")
-	deployerGVK  = v1alpha1.GroupVersion.WithKind("Deployer")
+	deployerGVK  = v1alpha1.GroupVersion.WithKind(v1alpha1.KindNamespacedDeployer)
 	configMapGVK = schema.GroupVersionKind{Version: "v1", Kind: "ConfigMap"}
 )
 
@@ -445,28 +447,48 @@ func (w workload) fanoutResource(i, j int) *v1alpha1.Resource {
 	}
 }
 
-// deployer is cluster-scoped, so its name carries the run ID and namespace
-// deletion does not remove it; see cluster.deleteDeployers.
-func (w workload) deployer(i int) *v1alpha1.Deployer {
-	meta := w.meta(fmt.Sprintf("%s-d-%04d", w.runID, i))
-	meta.Namespace = ""
-	return &v1alpha1.Deployer{
-		ObjectMeta: meta,
-		Spec: v1alpha1.DeployerSpec{
-			ResourceRef: v1alpha1.ObjectKey{Namespace: w.namespace, Name: fmt.Sprintf("r-%04d", i)},
+func (w workload) deployer(i int) *v1alpha1.NamespacedDeployer {
+	return &v1alpha1.NamespacedDeployer{
+		ObjectMeta: w.meta(fmt.Sprintf("d-%04d", i)),
+		Spec: v1alpha1.NamespacedDeployerSpec{
+			ResourceRef:        corev1.LocalObjectReference{Name: fmt.Sprintf("r-%04d", i)},
+			ServiceAccountName: deployerAccount,
 		},
 	}
 }
 
-// objectsToCreate returns everything the run applies, the signing Secret and Repositories first.
+// deployerRBAC is the service account the NamespacedDeployers apply the ConfigMaps as.
+func (w workload) deployerRBAC() []client.Object {
+	return []client.Object{
+		&corev1.ServiceAccount{ObjectMeta: w.meta(deployerAccount)},
+		&rbacv1.Role{
+			ObjectMeta: w.meta(deployerAccount),
+			Rules: []rbacv1.PolicyRule{{
+				APIGroups: []string{""},
+				Resources: []string{"configmaps"},
+				Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+			}},
+		},
+		&rbacv1.RoleBinding{
+			ObjectMeta: w.meta(deployerAccount),
+			RoleRef:    rbacv1.RoleRef{APIGroup: rbacv1.GroupName, Kind: "Role", Name: deployerAccount},
+			Subjects:   []rbacv1.Subject{{Kind: rbacv1.ServiceAccountKind, Name: deployerAccount, Namespace: w.namespace}},
+		},
+	}
+}
+
+// objectsToCreate returns everything the run applies, the signing Secret, deployer RBAC and Repositories first.
 func (w workload) objectsToCreate() ([]client.Object, error) {
-	objs := make([]client.Object, 0, 1+w.repositories()+(2+w.resourcesPerComponent())*w.objects)
+	objs := make([]client.Object, 0, 4+w.repositories()+(2+w.resourcesPerComponent())*w.objects)
 	if w.signed() {
 		secret, err := w.signingSecret()
 		if err != nil {
 			return nil, err
 		}
 		objs = append(objs, secret)
+	}
+	if w.hasDeployers() {
+		objs = append(objs, w.deployerRBAC()...)
 	}
 	for i := range w.repositories() {
 		repo, err := w.repository(i)

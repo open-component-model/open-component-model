@@ -39,7 +39,7 @@ The benchmark is a standalone Go program, run with `go run`. It builds and measu
 | `metrics.go`             | Prometheus parsing, counter deltas, gauge values                          |
 | `run.go`                 | One run from start to finish                                              |
 | `result.go`              | `result.json` and `summary.md`                                            |
-| `hacks/`                 | Cluster and registry setup, benchmark RBAC, Helm values                   |
+| `hacks/`                 | Cluster and registry setup, Helm values                                   |
 
 One run restarts the controller, publishes fresh component names, scrapes the metrics, creates the objects,
 waits until they are ready and the controller queues are drained, scrapes again and cleans up.
@@ -56,19 +56,19 @@ The controller restarts before every run, so each run starts with empty in-memor
 fresh component names to the registry, so no run sees another run's component versions.
 
 Of the benchmarked controllers only the Resource controller has a concurrency flag. The Component and
-Deployer controllers run with controller-runtime's default of one worker.
+NamespacedDeployer controllers run with controller-runtime's default of one worker.
 
 ## Scenarios
 
 `N` is the `--objects` value.
 
-| Scenario  | Objects created                                                                                        | Measured until                                                                       |
-|-----------|--------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------|
-| `cold`    | 1 Repository, N Components with N unique component versions                                            | every Component is `Ready` for its current generation                                |
-| `shared`  | 1 Repository, N Components that all resolve the same component version                                 | every Component is `Ready`                                                           |
-| `update`  | 1 Repository, N each of Component, Resource and Deployer, already rolled out at `1.0.0` (not measured) | every deployed ConfigMap carries `1.1.0` after all Components are patched to `1.1.0` |
-| `complex` | up to `--repositories` Repositories (default 10), N each of Component, Resource and Deployer, signed   | every Deployer is `Ready`                                                            |
-| `fanout`  | 1 Repository, N Components, `--fanout` Resources per Component (default 20)                            | every Resource is `Ready`                                                            |
+| Scenario  | Objects created                                                                                                  | Measured until                                                                       |
+|-----------|------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------|
+| `cold`    | 1 Repository, N Components with N unique component versions                                                      | every Component is `Ready` for its current generation                                |
+| `shared`  | 1 Repository, N Components that all resolve the same component version                                           | every Component is `Ready`                                                           |
+| `update`  | 1 Repository, N each of Component, Resource and NamespacedDeployer, already rolled out at `1.0.0` (not measured) | every deployed ConfigMap carries `1.1.0` after all Components are patched to `1.1.0` |
+| `complex` | up to `--repositories` Repositories (default 10), N each of Component, Resource and NamespacedDeployer, signed   | every NamespacedDeployer is `Ready`                                                  |
+| `fanout`  | 1 Repository, N Components, `--fanout` Resources per Component (default 20)                                      | every Resource is `Ready`                                                            |
 
 What each one isolates:
 
@@ -103,10 +103,11 @@ The benchmark therefore writes every image and reference digest, and refuses to 
 that is not safely digestible, the same check `ocm sign cv` makes. Component versions are published level
 by level, leaves first, because a reference digest needs the referenced component version.
 
-The Deployers apply one ConfigMap each. The ConfigMap's data holds the component version, so the update scenario
+The NamespacedDeployers apply one ConfigMap each as the `perf-deployer` service account, which a Role in the run
+namespace allows to write ConfigMaps. The ConfigMap's data holds the component version, so the update scenario
 reads the rollout from the cluster itself, not from a status field.
 
-Objects are created in parallel, the Repositories and the signing Secret first, the way a GitOps tool
+Objects are created in parallel, the Repositories, the signing Secret and the deployer RBAC first, the way a GitOps tool
 applies a directory. A watch records when each object first becomes ready.
 
 The benchmark's own client is limited to 200 requests per second. A scenario that creates objects for longer

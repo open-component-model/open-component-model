@@ -59,6 +59,4 @@ if [ "$(docker inspect -f='{{json .NetworkSettings.Networks.kind}}' "${reg_name}
   docker network connect "kind" "${reg_name}"
 fi
 
-kubectl --context "kind-${cluster_name}" apply -f "$(dirname "$0")/rbac.yaml"
-
 echo "Cluster '${cluster_name}' and registry '${reg_name}' are ready."

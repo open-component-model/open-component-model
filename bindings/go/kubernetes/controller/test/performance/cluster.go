@@ -184,20 +184,6 @@ func (c *cluster) deleteNamespace(ctx context.Context, name string, timeout time
 	})
 }
 
-func (c *cluster) deleteDeployers(ctx context.Context, runID string, timeout time.Duration) error {
-	selector := client.MatchingLabels{runLabel: runID}
-	if err := c.client.DeleteAllOf(ctx, &v1alpha1.Deployer{}, selector); err != nil {
-		return err
-	}
-	return wait.PollUntilContextTimeout(ctx, 2*pollInterval, timeout, true, func(ctx context.Context) (bool, error) {
-		var list v1alpha1.DeployerList
-		if err := c.client.List(ctx, &list, selector); err != nil {
-			return false, err
-		}
-		return len(list.Items) == 0, nil
-	})
-}
-
 func (c *cluster) serverVersion() string {
 	v, err := c.clientset.Discovery().ServerVersion()
 	if err != nil {

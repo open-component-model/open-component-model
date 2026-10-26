@@ -49,8 +49,8 @@ func TestWorkloadObjectsToCreate(t *testing.T) {
 	}{
 		{scenario: scenarioCold, want: 1 + 3},
 		{scenario: scenarioShared, want: 1 + 3},
-		{scenario: scenarioUpdate, want: 1 + 3*3},
-		{scenario: scenarioComplex, want: 1 + 3 + 3*3},
+		{scenario: scenarioUpdate, want: 3 + 1 + 3*3},
+		{scenario: scenarioComplex, want: 1 + 3 + 3 + 3*3},
 		{scenario: scenarioFanout, want: 1 + 3*(1+defaultFanout)},
 	}
 	for _, tt := range tests {
@@ -63,12 +63,10 @@ func TestWorkloadObjectsToCreate(t *testing.T) {
 			r.Len(objs, tt.want)
 			for _, o := range objs {
 				r.Equal("run", o.GetLabels()[runLabel])
-				if _, ok := o.(*v1alpha1.Deployer); ok {
-					r.Empty(o.GetNamespace(), "Deployer is cluster-scoped")
-					r.Contains(o.GetName(), "run", "cluster-scoped names must be unique per run")
-					continue
+				r.Equal(w.namespace, o.GetNamespace(), "namespace deletion must clean up every object")
+				if d, ok := o.(*v1alpha1.NamespacedDeployer); ok {
+					r.Equal(deployerAccount, d.Spec.ServiceAccountName)
 				}
-				r.Equal(w.namespace, o.GetNamespace())
 			}
 		})
 	}
@@ -93,8 +91,9 @@ func TestWorkloadComplex(t *testing.T) {
 	objs, err := w.objectsToCreate()
 	r.NoError(err)
 	r.IsType(&corev1.Secret{}, objs[0], "the signing Secret must exist before the Components that verify with it")
-	r.IsType(&v1alpha1.Repository{}, objs[defaultRepositories])
-	r.IsType(&v1alpha1.Component{}, objs[defaultRepositories+1], "objects share a capped number of Repositories")
+	r.IsType(&corev1.ServiceAccount{}, objs[1], "the deployer account must exist before the Deployers impersonate it")
+	r.IsType(&v1alpha1.Repository{}, objs[3+defaultRepositories])
+	r.IsType(&v1alpha1.Component{}, objs[3+defaultRepositories+1], "objects share a capped number of Repositories")
 
 	// The last object wraps around onto the second Repository.
 	i := defaultRepositories + 1
@@ -148,7 +147,11 @@ func TestWorkloadFanout(t *testing.T) {
 	for _, o := range objs {
 		res, ok := o.(*v1alpha1.Resource)
 		if !ok {
-			r.NotContains(o.GetName(), "-d-", "the fanout scenario creates no Deployers")
+			switch o.(type) {
+			case *v1alpha1.Repository, *v1alpha1.Component:
+			default:
+				r.Failf("unexpected object", "the fanout scenario creates no %T", o)
+			}
 			continue
 		}
 		names[res.Name] = true

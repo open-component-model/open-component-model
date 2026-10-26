@@ -14,6 +14,7 @@ import (
 
 	"golang.org/x/sync/errgroup"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -108,11 +109,6 @@ func (r *runner) runOnce(ctx context.Context, s scenario, objects, repeat int) (
 		defer func() {
 			log.Info("cleaning up")
 			cctx := context.WithoutCancel(ctx)
-			// Resources refuse deletion while a Deployer references them, so
-			// the cluster-scoped Deployers have to go first.
-			if err := r.c.deleteDeployers(cctx, runID, r.opts.timeout); err != nil {
-				log.Error("deleting deployers", "error", err)
-			}
 			if err := r.c.deleteNamespace(cctx, w.namespace, r.opts.timeout); err != nil {
 				log.Error("deleting namespace", "error", err)
 			}
@@ -239,13 +235,13 @@ func (r *runner) prepareUpdate(ctx context.Context, w workload, objs []client.Ob
 	return nil
 }
 
-// create applies the Repositories and the signing Secret first, then
+// create applies the Repositories, the signing Secret and the deployer RBAC first, then
 // everything else in parallel, the way a GitOps tool would apply a directory.
 func (r *runner) create(ctx context.Context, objs []client.Object) error {
 	var first, rest []client.Object
 	for _, obj := range objs {
 		switch obj.(type) {
-		case *v1alpha1.Repository, *corev1.Secret:
+		case *v1alpha1.Repository, *corev1.Secret, *corev1.ServiceAccount, *rbacv1.Role, *rbacv1.RoleBinding:
 			first = append(first, obj)
 		default:
 			rest = append(rest, obj)
