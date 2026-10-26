@@ -127,7 +127,7 @@ func readArtifactSet(ctx context.Context, b blob.ReadOnlyBlob, mediaType string)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read artifact set: %w", err)
 	}
-	slogcontext.Info(ctx, "reading legacy artifact set as OCI layout",
+	slogcontext.Warn(ctx, "reading legacy artifact set as OCI layout",
 		slog.String("mediaType", mediaType), slog.String("format", artifactSet.Format().String()))
 
 	store, err := oci.NewFromFS(ctx, artifactSet.OCILayoutFS())
