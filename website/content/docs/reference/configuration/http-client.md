@@ -54,6 +54,7 @@ All fields are optional. When omitted, OCM applies these defaults:
 | `retry.maxWait`          | `3s`                                 |
 | All other timeout fields | No limit (OS default for TCP fields) |
 | `insecureSkipVerify`     | `false`                              |
+| `disableHTTP2`           | `false` (HTTP/2 negotiated via ALPN) |
 
 {{< callout context="caution" title="No overall timeout by default" >}}
 With `timeout` omitted or set to `0s` (the default), OCM does not bound response-body duration. A stalled peer can therefore leave an operation waiting indefinitely. Set a positive `timeout` when bounded completion is more important than allowing arbitrarily long transfers.
@@ -86,6 +87,31 @@ enough to cover the worst-case retry chain:
 | `0`             | Infinite retries                            |
 | `-1`            | Disable retries entirely                    |
 | positive        | That many retries after the initial attempt |
+
+Retries cover 5xx, `429`, `408`, network timeouts, connection resets,
+unexpected EOF, and lost HTTP/2 connections or streams. A request with a body is
+retried only when the body can be rewound; seekable bodies such as file-backed
+blobs are rewound automatically. A failure after the response started streaming
+cannot be retried by the client; `ocm transfer` retries the whole affected step
+up to three times instead.
+
+### HTTP/2
+
+OCM negotiates HTTP/2 with TLS servers that offer it. HTTP/2 multiplexes every
+concurrent request to a host over a single connection, which OCM health-checks
+with pings (after 30s without frames, closed if unanswered within 15s). A lost
+connection therefore fails every transfer in flight to that host at once. Set
+`disableHTTP2: true`, globally or per host, to use HTTP/1.1, where each
+concurrent request has its own connection:
+
+```yaml
+type: generic.config.ocm.software/v1
+configurations:
+  - type: http.config.ocm.software/v1alpha1
+    hosts:
+      ghcr.io:
+        disableHTTP2: true
+```
 
 ### Per-Host Merge Semantics
 
