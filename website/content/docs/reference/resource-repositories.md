@@ -1,8 +1,10 @@
 ---
 title: "Resource Repositories"
 description: "Technical reference for built-in resource repositories: supported access types, credential resolution, and capabilities."
-weight: 6
+weight: 4
 toc: true
+aliases:
+  - /docs/reference/resource-repositories/
 ---
 
 This page is the technical reference for built-in resource repositories. For an introduction to what resource
@@ -178,7 +180,7 @@ there is no size limit by default. The media type of the blob is taken from `med
 `Content-Type` and then to `application/octet-stream`.
 
 Request timeouts, retries, and per-host settings come from the
-[HTTP client configuration]({{< relref "http-client-configuration.md" >}}).
+[HTTP client configuration]({{< relref "http-client.md" >}}).
 
 ### Digest Processing
 
@@ -190,7 +192,7 @@ changes will not verify against a previously recorded digest.
 A resource can carry a digest before it has ever been fetched: setting the optional `digest` field on the resource in
 `component-constructor.yaml` turns the recorded value into an assertion, so `ocm add cv` fails rather than recording
 whatever the server returned. See
-[Tutorial: Work with HTTP Resources]({{< relref "docs/tutorials/wget-http-resources.md#pin-a-digest" >}}).
+[Tutorial: Work with HTTP Resources]({{< relref "docs/guides/pack/add-http-resources.md#pin-a-digest" >}}).
 
 ---
 
@@ -249,7 +251,7 @@ limit by default. The media type of the blob comes from `mediaType`. If `mediaTy
 `Content-Type` of the object, and then `application/octet-stream`.
 
 Requests go through the shared OCM HTTP client, so timeouts, TLS settings and per-host overrides come from the
-[HTTP client configuration]({{< relref "http-client-configuration.md" >}}). The AWS SDK does the retries. It retries
+[HTTP client configuration]({{< relref "http-client.md" >}}). The AWS SDK does the retries. It retries
 the whole operation and signs each attempt again. The configured `retry.maxRetries` sets its attempt count. The SDK
 resolves the request host for AWS, so a per-host retry entry takes effect only for a custom `endpoint`. For AWS, the
 global setting applies.
@@ -438,11 +440,11 @@ plugins.
 
 ## Related Documentation
 
-- [Concept: Resource Repositories]({{< relref "docs/concepts/resource-repositories.md" >}}): why resource repositories
+- [Concept: Resource Repositories]({{< relref "docs/concepts/resource-repositories.md" >}}) - why resource repositories
   exist and how they fit into OCM
-- [Reference: Input and Access Types]({{< relref "input-and-access-types.md" >}}): access type specifications handled by
+- [Reference: Input and Access Types]({{< relref "input-and-access-types.md" >}}) - access type specifications handled by
   resource repositories
-- [Reference: Credential Consumer Identities]({{< relref "credential-consumer-identities.md" >}}): identity types and
+- [Reference: Credential Consumer Identities]({{< relref "credential-consumer-identities.md" >}}) - identity types and
   matching rules for credential resolution
-- [Concept: Transfer and Transport]({{< relref "docs/concepts/transfer-concept.md" >}}): how resource repositories
+- [Concept: Transfer and Transport]({{< relref "docs/concepts/transfer-concept.md" >}}) - how resource repositories
   enable artifact transfer

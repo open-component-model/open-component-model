@@ -10,6 +10,7 @@ on:
       - '.github/config/linkspector-all.yaml'
       - '.github/config/linkspector-changed.yaml'
       - '.github/scripts/check-adr-numbers.js'
+      - '.github/scripts/check-website-redirects.js'
   pull_request:
     branches:
       - main
@@ -20,6 +21,7 @@ on:
       - '.github/config/linkspector-all.yaml'
       - '.github/config/linkspector-changed.yaml'
       - '.github/scripts/check-adr-numbers.js'
+      - '.github/scripts/check-website-redirects.js'
 
 permissions:
   contents: read
@@ -202,3 +204,41 @@ jobs:
         run: npx "markdownlint-cli2@${MARKDOWNLINT_VERSION}" --config .github/config/.markdownlint-cli2.yaml "**/*.md"
       - name: Check ADR numbers are unique
         run: node .github/scripts/check-adr-numbers.js docs/adr
+
+  verify-redirects:
+    name: Verify website redirect aliases
+    runs-on: ubuntu-26.04-arm
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # fetch-depth: 0 required — the base tag (website/v<version>.<patch>)
+          # points to a commit on the releases branch, not main. A shallow clone
+          # fetches the tag ref but not the tree objects; git ls-tree and git show
+          # would fail without the full history. The full tag list is also needed
+          # to resolve the highest patch for the configured defaultContentVersion.
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Detect website changes
+        id: changes
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          if git diff --name-only "origin/${BASE_REF}...HEAD" | grep -q '^website/'; then
+            echo "website=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "website=false" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        if: steps.changes.outputs.website == 'true'
+        with:
+          node-version-file: .github/scripts/package.json
+      - name: Install script dependencies
+        if: steps.changes.outputs.website == 'true'
+        working-directory: .github/scripts
+        run: npm ci
+      - name: Check redirect aliases cover all previously-live URLs
+        if: steps.changes.outputs.website == 'true'
+        run: node .github/scripts/check-website-redirects.js

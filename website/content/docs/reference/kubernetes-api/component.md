@@ -3,6 +3,8 @@ title: Component
 description: "API reference for the Component custom resource (delivery.ocm.software/v1alpha1)"
 weight: 2
 toc: false
+aliases:
+  - /docs/reference/kubernetes-api/component/
 ---
 
 A **Component** represents an OCM component version to be tracked by the controller.
