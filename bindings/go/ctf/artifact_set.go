@@ -161,7 +161,7 @@ func NewArtifactSetFromBlob(b blob.ReadOnlyBlob) (*ArtifactSet, error) {
 	if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrUnexpectedEOF) {
 		return nil, errors.Join(fmt.Errorf("unable to read blob: %w", err), raw.Close())
 	}
-	var reader io.Reader = io.MultiReader(bytes.NewReader(header[:n]), raw)
+	reader := io.MultiReader(bytes.NewReader(header[:n]), raw)
 
 	closeFn := raw.Close
 	// Check for Gzip magic number (0x1F, 0x8B)
