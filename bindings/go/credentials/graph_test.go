@@ -139,6 +139,32 @@ consumers:
           password: abc
 `
 
+const singleWildcardHostnameGlobYAML = `
+type: credentials.config.ocm.software
+consumers:
+  - identity:
+      type: OCIRegistry
+      hostname: "*.example.com"
+    credentials:
+      - type: Credentials/v1
+        properties:
+          username: wildcard-user
+          password: wildcard-pass
+`
+
+const doubleWildcardHostnameGlobYAML = `
+type: credentials.config.ocm.software
+consumers:
+  - identity:
+      type: OCIRegistry
+      hostname: "**.example.com"
+    credentials:
+      - type: Credentials/v1
+        properties:
+          username: double-wildcard-user
+          password: double-wildcard-pass
+`
+
 const invalidRecursionYAML = testYAML + `
   - identity:
       type: AWSSecretsManager
@@ -471,6 +497,43 @@ func TestResolveCredentials(t *testing.T) {
 			func(t require.TestingT, err error, i ...interface{}) {
 				require.Error(t, err)
 				require.ErrorIs(t, err, credentials.ErrUnknown)
+			},
+		},
+		{
+			"wildcard hostname glob matches subdomain",
+			singleWildcardHostnameGlobYAML,
+			runtime.Identity{"type": "OCIRegistry", "hostname": "repo.example.com"},
+			map[string]string{"username": "wildcard-user", "password": "wildcard-pass"},
+			require.NoError,
+		},
+		{
+			"wildcard hostname glob does not match apex domain",
+			singleWildcardHostnameGlobYAML,
+			runtime.Identity{"type": "OCIRegistry", "hostname": "example.com"},
+			nil,
+			func(t require.TestingT, err error, i ...interface{}) {
+				require.Error(t, err)
+				require.ErrorIs(t, err, credentials.ErrNotFound)
+			},
+		},
+		{
+			"wildcard hostname glob does not match sub-sub domain",
+			singleWildcardHostnameGlobYAML,
+			runtime.Identity{"type": "OCIRegistry", "hostname": "a.b.example.com"},
+			nil,
+			func(t require.TestingT, err error, i ...interface{}) {
+				require.Error(t, err)
+				require.ErrorIs(t, err, credentials.ErrNotFound)
+			},
+		},
+		{
+			"rejected double wildcard hostname glob does not match any host",
+			doubleWildcardHostnameGlobYAML,
+			runtime.Identity{"type": "OCIRegistry", "hostname": "a.b.example.com"},
+			nil,
+			func(t require.TestingT, err error, i ...interface{}) {
+				require.Error(t, err)
+				require.ErrorIs(t, err, credentials.ErrNotFound)
 			},
 		},
 	} {

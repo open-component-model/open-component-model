@@ -72,6 +72,26 @@ OCM v1 scoped entries with a `pathprefix` attribute instead. OCM still accepts `
 `path: "{<prefix>,<prefix>/**}"`, and logs a warning. If an entry sets both, `path` wins. See
 [Migrate Legacy Credentials]({{< relref "docs/changelog/migrate-legacy-credentials.md" >}}).
 
+### Hostname Patterns {#hostname-patterns}
+
+The `hostname` attribute supports exact matches and one wildcard form. Matching is case-sensitive.
+
+The **only** permitted wildcard form is `*.suffix.tld`, where:
+
+- `*` is the entire first label (a single literal asterisk, not `**` or `***`)
+- The suffix contains no wildcards and has **at least two** dot-separated labels
+
+| Pattern                | Matches                 | Does not match                                    |
+|------------------------|-------------------------|---------------------------------------------------|
+| `registry.example.com` | `registry.example.com`  | anything else                                     |
+| `*.example.com`        | `sub.example.com`       | `example.com`, `a.b.example.com`, `sub.other.com` |
+| `*.prod.example.com`   | `api.prod.example.com`  | `prod.example.com`, `a.b.prod.example.com`        |
+
+Any other pattern — `**`, `*.*`, `*.com`, `example.*`, `1.2.*.4` — is matched literally and
+will not match any real hostname unless the request hostname is exactly that string.
+
+Quote patterns that start with `*` in YAML, for example `hostname: "*.example.com"`.
+
 ---
 
 ## OCIRegistry
@@ -83,7 +103,7 @@ Used when OCM accesses an OCI registry — pushing, pulling, or resolving compon
 | Attribute  | Required | Description                                                                                                                         |
 |------------|----------|-------------------------------------------------------------------------------------------------------------------------------------|
 | `type`     | Yes      | Must be `OCIRegistry`                                                                                                               |
-| `hostname` | Yes      | Registry hostname (e.g. `ghcr.io`, `registry.example.com`)                                                                          |
+| `hostname` | Yes      | Registry hostname (e.g. `ghcr.io`, `registry.example.com`). Supports `*.suffix.tld` wildcard (see [Hostname Patterns](#hostname-patterns)). If omitted, matches only requests with no hostname. |
 | `path`     | No       | Repository path. Supports glob patterns (`*` matches one path segment). If omitted, matches any path on the hostname.               |
 | `scheme`   | No       | URL scheme (`https`, `http`, `oci`). `oci` and `https` are equivalent. If omitted or empty on the request side, matches any scheme. |
 | `port`     | No       | Port number as string. Default ports are applied when `scheme` is set: `https` and `oci` default to `443`, `http` defaults to `80`. |
@@ -106,7 +126,9 @@ Matching runs three chained checks — all must pass:
 1. **Path matcher** — compares `path` as a glob ([Path Patterns](#path-patterns)). `*` matches within one segment,
    `**` matches across `/`. If the configured entry has no `path`, any request path is accepted.
 2. **URL matcher** — compares `scheme`, `hostname`, and `port`. Applies default ports when a scheme is present (
-   `https` → `443`, `http` → `80`, `oci` → `443` via normalization to `https`). A request with no scheme matches any configured scheme.
+   `https` → `443`, `http` → `80`, `oci` → `443` via normalization to `https`). `hostname` supports glob patterns
+   (see [Hostname Patterns](#hostname-patterns)). A request with
+   no scheme matches any configured scheme.
 3. **Equality matcher** — all remaining attributes (like `type`) must be exactly equal.
 
 For detailed matching examples and edge cases, see [Tutorial: Understand Credential Resolution]({{< relref "docs/concepts/credential-resolution.md" >}}).
@@ -138,6 +160,18 @@ For detailed matching examples and edge cases, see [Tutorial: Understand Credent
       password: ghp_org_token
 ```
 
+**Wildcard hostname** — matches any direct subdomain of `example.com` (one label only):
+
+```yaml
+- identity:
+    type: OCIRegistry
+    hostname: "*.example.com"
+  credentials:
+    - type: OCICredentials/v1
+      username: my-user
+      password: my-token
+```
+
 **Hostname + scheme + port** — matches only HTTPS on a custom port:
 
 ```yaml
@@ -164,7 +198,7 @@ identity is derived from the Helm repository URL using the same URL-based attrib
 | Attribute  | Required | Description                                                                    |
 |------------|----------|--------------------------------------------------------------------------------|
 | `type`     | Yes      | Must be `HelmChartRepository`                                                  |
-| `hostname` | Yes      | Repository hostname (e.g. `charts.example.com`, `registry.example.com`)        |
+| `hostname` | Yes      | Repository hostname (e.g. `charts.example.com`). Supports `*.suffix.tld` wildcard (see [Hostname Patterns](#hostname-patterns)). If omitted, matches only requests with no hostname. |
 | `path`     | No       | Repository path (e.g. `stable`). If omitted, matches any path on the hostname. |
 | `scheme`   | No       | URL scheme (`https`, `http`, `oci`). If omitted, matches any scheme.           |
 | `port`     | No       | Port number as string. If omitted, matches any port.                           |
@@ -219,7 +253,7 @@ Both identity type and access type names allow using the `HTTP` alias.
 | Attribute  | Required | Description                                                                                                                            |
 |------------|----------|----------------------------------------------------------------------------------------------------------------------------------------|
 | `type`     | Yes      | `Wget` (recommended); also accepts `Wget/v1`, `HTTP`, `HTTP/v1`, `http`, and `http/v1`                                                 |
-| `hostname` | Yes      | Server hostname (e.g. `downloads.example.com`)                                                                                         |
+| `hostname` | Yes      | Server hostname (e.g. `downloads.example.com`). Supports `*.suffix.tld` wildcard (see [Hostname Patterns](#hostname-patterns)). If omitted, matches only requests with no hostname. |
 | `path`     | No       | URL path without the leading `/`. Supports glob patterns (`*` matches one path segment). If omitted, matches any path on the hostname. |
 | `scheme`   | No       | URL scheme (`https`, `http`). If omitted, matches any scheme. If set, must match exactly.                                              |
 | `port`     | No       | Port number as string. During matching, default ports are applied when `scheme` is set: `https` defaults to `443`, `http` to `80`.     |
@@ -532,7 +566,7 @@ optional; see the note on anonymous access under
 | Attribute  | Required | Description                                                                                       |
 |------------|----------|---------------------------------------------------------------------------------------------------|
 | `type`     | Yes      | Must be `GitHubRepository`                                                                        |
-| `hostname` | Yes      | Repository hostname (e.g. `github.com`, a GitHub Enterprise host)                                 |
+| `hostname` | Yes      | Repository hostname (e.g. `github.com`, a GitHub Enterprise host). Supports `*.suffix.tld` wildcard (see [Hostname Patterns](#hostname-patterns)). If omitted, matches only requests with no hostname. |
 | `path`     | No       | Repository path (e.g. `open-component-model/open-component-model`). If omitted, matches any path. |
 | `scheme`   | No       | URL scheme (`https`, `http`). If omitted, matches any scheme.                                     |
 | `port`     | No       | Port number as string. If omitted, the scheme's default applies (`https` → `443`, `http` → `80`). |

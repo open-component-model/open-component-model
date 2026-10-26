@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"log/slog"
 	"maps"
 	"strings"
 
@@ -42,6 +43,7 @@ func IdentityMatchesPath(i, o Identity) bool {
 	}
 	pattern, err := glob.Compile(negateClassesAsGlob(op), '/')
 	if err != nil {
+		slog.Warn("invalid glob pattern in path consumer identity, credential will never match", "pattern", op, "err", err)
 		return false
 	}
 	return pattern.Match(ip)
@@ -87,15 +89,15 @@ func IdentityMatchesURL(i, o Identity) bool {
 		delete(m, IdentityAttributePort)
 	}
 
-	// Scheme: fail only if both non-empty and different (after normalization)
 	if iScheme != "" && oScheme != "" && iScheme != oScheme {
 		return false
 	}
-	if iHost != oHost {
+	// Absent key returns "" via bare map lookup above, so absent == explicit-empty for both sides.
+	// A non-empty consumer pattern requires a non-empty request hostname to match against.
+	if oHost != iHost && (oHost == "" || iHost == "" || !matchHostnamePattern(oHost, iHost)) {
 		return false
 	}
 
-	// Use effective scheme for port defaulting: if one is empty, use the other
 	effectiveScheme := iScheme
 	if effectiveScheme == "" {
 		effectiveScheme = oScheme
@@ -115,6 +117,27 @@ func IdentityMatchesURL(i, o Identity) bool {
 	}
 
 	return defaultPort(effectiveScheme, iPort) == defaultPort(effectiveScheme, oPort)
+}
+
+// matchHostnamePattern reports whether host matches pattern (case-sensitive).
+// Patterns of the form "*.suffix.tld" (e.g. "*.example.com") match exactly one DNS label
+// followed by the literal suffix; "*" does not cross ".". All other patterns match literally.
+func matchHostnamePattern(pattern, host string) bool {
+	if strings.HasPrefix(pattern, "*.") && !strings.HasPrefix(host, ".") {
+		suffix := pattern[2:]
+		if strings.Contains(suffix, ".") {
+			g, err := glob.Compile("*."+glob.QuoteMeta(suffix), '.')
+			if err != nil {
+				slog.Warn("hostname consumer pattern failed to compile", "pattern", pattern, "err", err)
+				return false
+			}
+			return g.Match(host)
+		}
+	}
+	if strings.Contains(pattern, "*") && pattern != host {
+		slog.Info("hostname consumer pattern contains '*' but is not of the form '*.suffix.tld' — matched literally", "pattern", pattern)
+	}
+	return pattern == host
 }
 
 // normalizeScheme maps OCI-specific scheme aliases to their standard equivalents.
