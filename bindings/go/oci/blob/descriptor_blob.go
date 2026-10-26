@@ -1,10 +1,10 @@
 package blob
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
-	"sync"
 
 	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
@@ -14,16 +14,22 @@ import (
 )
 
 // NewDescriptorBlob creates a new DescriptorBlob.
-// This is a blob that is backed by a reader (with the content) as well as an OCI descriptor.
+// This is a blob whose content is opened on demand and described by an OCI descriptor.
 // The descriptor is used to report data such as a precalculated digest and size without having to introspect the data.
-// At the same time the data that is given is verified against the descriptor.
-// The blob owns data: closing the blob or a reader returned by ReadCloser closes it.
-func NewDescriptorBlob(data io.ReadCloser, descriptor ociImageSpecV1.Descriptor) *DescriptorBlob {
+// Every call to ReadCloser calls open for a fresh stream and verifies it against the descriptor
+// when the reader is closed. Nothing is held open between reads, so the blob needs no Close.
+func NewDescriptorBlob(open func() (io.ReadCloser, error), descriptor ociImageSpecV1.Descriptor) *DescriptorBlob {
 	return &DescriptorBlob{
-		content:    data,
-		close:      sync.OnceValue(data.Close),
+		open:       open,
 		descriptor: descriptor,
 	}
+}
+
+// NewDescriptorBlobFromBytes creates a DescriptorBlob over data held in memory.
+func NewDescriptorBlobFromBytes(data []byte, descriptor ociImageSpecV1.Descriptor) *DescriptorBlob {
+	return NewDescriptorBlob(func() (io.ReadCloser, error) {
+		return io.NopCloser(bytes.NewReader(data)), nil
+	}, descriptor)
 }
 
 var (
@@ -31,20 +37,11 @@ var (
 	_ blob.SizeAware      = (*DescriptorBlob)(nil)
 	_ blob.DigestAware    = (*DescriptorBlob)(nil)
 	_ blob.MediaTypeAware = (*DescriptorBlob)(nil)
-	_ io.Closer           = (*DescriptorBlob)(nil)
 )
 
 type DescriptorBlob struct {
-	content io.ReadCloser
-	// close closes content at most once, whether through the blob or its reader.
-	close      func() error
+	open       func() (io.ReadCloser, error)
 	descriptor ociImageSpecV1.Descriptor
-}
-
-// Close releases the underlying content, so an owner can release a blob that was never
-// (fully) read. The content is closed only once; later calls return the first result.
-func (c *DescriptorBlob) Close() error {
-	return c.close()
 }
 
 // MediaType returns the media type of the blob by returning the descriptor's media type.
@@ -82,9 +79,14 @@ func (c *DescriptorBlob) SetPrecalculatedSize(size int64) {
 	c.descriptor.Size = size
 }
 
-// ReadCloser returns the data behind the content.
+// ReadCloser opens the content and returns a reader that verifies it against the
+// descriptor when closed.
 func (c *DescriptorBlob) ReadCloser() (io.ReadCloser, error) {
-	return newCloseableVerifyReader(c.content, c.close, c.descriptor), nil
+	data, err := c.open()
+	if err != nil {
+		return nil, fmt.Errorf("failed to open descriptor blob content: %w", err)
+	}
+	return newCloseableVerifyReader(data, data.Close, c.descriptor), nil
 }
 
 // closeableVerifyReader is a wrapper around content.VerifyReader that allows closing the underlying reader.

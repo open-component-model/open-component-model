@@ -150,15 +150,19 @@ func (p *staticRepositoryProvider) GetComponentVersionRepository(context.Context
 	return p.repo, nil
 }
 
-// TestTransferLocalBlob_ReleasesSourceOnTargetFailure checks that the open source stream is
-// closed when the target fails before consuming it.
+// TestTransferLocalBlob_ReleasesSourceOnTargetFailure checks that no source stream is left
+// open when the target fails before consuming it.
 func TestTransferLocalBlob_ReleasesSourceOnTargetFailure(t *testing.T) {
 	r := require.New(t)
 	data := []byte("source body")
-	source := &trackingReader{Reader: bytes.NewReader(data)}
+	var source *trackingReader
+	open := func() (io.ReadCloser, error) {
+		source = &trackingReader{Reader: bytes.NewReader(data)}
+		return source, nil
+	}
 	d := digest.FromBytes(data)
 	repo := &failingTargetRepository{
-		content: ociblob.NewDescriptorBlob(source, ocispec.Descriptor{Digest: d, Size: int64(len(data)), MediaType: "text/plain"}),
+		content: ociblob.NewDescriptorBlob(open, ocispec.Descriptor{Digest: d, Size: int64(len(data)), MediaType: "text/plain"}),
 		resource: &descriptor.Resource{
 			ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "payload", Version: "1.0.0"}},
 			Type:        "plainText",
@@ -187,5 +191,5 @@ func TestTransferLocalBlob_ReleasesSourceOnTargetFailure(t *testing.T) {
 		},
 	})
 	r.ErrorContains(err, "target unavailable")
-	r.True(source.closed, "source stream must be closed when the target fails before reading it")
+	r.True(source == nil || source.closed, "a source stream opened for a target that fails before reading it must be closed")
 }

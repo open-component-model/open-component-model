@@ -1,7 +1,6 @@
 package ctf
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -177,7 +176,8 @@ func (s *repository) Push(ctx context.Context, expected ociImageSpecV1.Descripto
 	defer s.mu.Unlock()
 
 	if !introspection.IsOCICompliantMediaType(expected.MediaType) {
-		if err := s.archive.SaveBlob(ctx, ociblob.NewDescriptorBlob(io.NopCloser(data), expected)); err != nil {
+		// data can be read only once; SaveBlob reads the blob exactly once.
+		if err := s.archive.SaveBlob(ctx, ociblob.NewDescriptorBlob(func() (io.ReadCloser, error) { return io.NopCloser(data), nil }, expected)); err != nil {
 			return fmt.Errorf("unable to save blob for descriptor %v: %w", expected, err)
 		}
 		return nil
@@ -197,7 +197,7 @@ func (s *repository) pushManifest(ctx context.Context, expected ociImageSpecV1.D
 	if err != nil {
 		return fmt.Errorf("unable to read manifest content for descriptor %v: %w", expected, err)
 	}
-	if err := s.archive.SaveBlob(ctx, ociblob.NewDescriptorBlob(io.NopCloser(bytes.NewReader(manifestJSON)), expected)); err != nil {
+	if err := s.archive.SaveBlob(ctx, ociblob.NewDescriptorBlobFromBytes(manifestJSON, expected)); err != nil {
 		return fmt.Errorf("unable to save blob for descriptor %v: %w", expected, err)
 	}
 
