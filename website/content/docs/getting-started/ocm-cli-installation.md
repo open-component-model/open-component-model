@@ -267,7 +267,7 @@ profile store.
 Inspect the public component version that ships the OCM CLI itself. No credentials are needed:
 
 ```shell
-ocm get cv ghcr.io/open-component-model//ocm.software/cli:{{< site-version "semver" >}} -o widetree
+ocm get cv ghcr.io/open-component-model//ocm.software/cli --latest --constraint '{{< site-version "constraint" >}}' -o widetree
 ```
 
 The tree lists the component version and its resources: the `cli` executable for every
