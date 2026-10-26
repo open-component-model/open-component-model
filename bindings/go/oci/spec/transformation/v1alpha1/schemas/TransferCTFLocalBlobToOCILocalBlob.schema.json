@@ -266,6 +266,18 @@
           "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.oci.spec.repository.v1.ctf.AccessMode",
           "description": "AccessMode can be set to request readonly access or creation\nThe format of the path is determined by the access mode bitmask aggregated with |.\nIf not specified, the AccessMode will be interpreted as AccessModeReadOnly for read-based operations\nand as AccessModeReadWrite for write-based operations."
         },
+        "componentVersionLayout": {
+          "type": "string",
+          "description": "ComponentVersionLayout selects the storage layout used when adding component versions\nto this repository. Empty keeps the layout of an already stored version and defaults to\n\"v2\" (the access-bearing descriptor manifest as the tag target); \"normalized\" stores a\nstable, access-free descriptor manifest as the tag target that cosign can sign.",
+          "oneOf": [
+            {
+              "const": "v2"
+            },
+            {
+              "const": "normalized"
+            }
+          ]
+        },
         "filePath": {
           "type": "string",
           "description": "Path is the path of the CTF Archive on the filesystem.\n\nExamples\n- ./relative/path/to/archive.tgz\n- relative/path/to/archive.tar\n- /absolute/path/to/archive-folder"
@@ -330,6 +342,18 @@
         "baseUrl": {
           "type": "string",
           "description": "BaseURL is the base url of the OCI registry (host + optional port).\nShould not include repository paths - use SubPath for that.\n\nExamples:\n- \"https://registry.example.com\"\n- \"https://registry.example.com:5000\"\n- \"oci://registry.example.com:5000\"\n- \"docker.io\"\n- \"ghcr.io\"\n\nIf BaseUrl contains a path (e.g., \"ghcr.io/org/repo\"),\nthe path will be auto-extracted and used as SubPath."
+        },
+        "componentVersionLayout": {
+          "type": "string",
+          "description": "ComponentVersionLayout selects the storage layout used when adding component versions\nto this repository. Empty keeps the layout of an already stored version and defaults to\n\"v2\" (the access-bearing descriptor manifest as the tag target); \"normalized\" stores a\nstable, access-free descriptor manifest as the tag target that cosign can sign.",
+          "oneOf": [
+            {
+              "const": "v2"
+            },
+            {
+              "const": "normalized"
+            }
+          ]
         },
         "subPath": {
           "type": "string",

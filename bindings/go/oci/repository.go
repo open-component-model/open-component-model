@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"log/slog"
 	"regexp"
+	"strings"
 
 	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
@@ -50,10 +51,12 @@ import (
 )
 
 var (
-	_            ComponentVersionRepository          = (*Repository)(nil)
-	_            repository.OwnershipAwareRepository = (*Repository)(nil)
-	_            repository.DigestPinnableRepository = (*Repository)(nil)
-	versionRegex                                     = regexp.MustCompile(compref.VersionRegex)
+	_            ComponentVersionRepository                = (*Repository)(nil)
+	_            repository.OwnershipAwareRepository       = (*Repository)(nil)
+	_            repository.DigestPinnableRepository       = (*Repository)(nil)
+	_            repository.ComponentSignatureCarrier      = (*Repository)(nil)
+	_            repository.ComponentVersionLayoutDetector = (*Repository)(nil)
+	versionRegex                                           = regexp.MustCompile(compref.VersionRegex)
 )
 
 // Repository implements the ComponentVersionRepository interface using OCI registries.
@@ -103,6 +106,8 @@ type Repository struct {
 	// pin, if set, serves reads of one component from a content-addressed artifact,
 	// see PinComponentVersion.
 	pin *componentVersionPin
+	// layout selects the OCI storage layout used when adding component versions.
+	layout Layout
 }
 
 // SetGlobalAccessPolicy overrides the global access policy for this repository.
@@ -143,6 +148,11 @@ func (repo *Repository) AddComponentVersion(ctx context.Context, descriptor *des
 		return fmt.Errorf("failed to validate local blobs: %w", err)
 	}
 
+	layout, err := repo.layoutForAdd(ctx, store, reference)
+	if err != nil {
+		return err
+	}
+
 	manifest, err := AddDescriptorToStore(ctx, store, descriptor, AddDescriptorOptions{
 		Scheme:                        repo.scheme,
 		Author:                        repo.creatorAnnotation,
@@ -150,6 +160,7 @@ func (repo *Repository) AddComponentVersion(ctx context.Context, descriptor *des
 		AdditionalLayers:              additionalLayers,
 		ReferrerTrackingPolicy:        repo.referrerTrackingPolicy,
 		DescriptorEncodingMediaType:   repo.descriptorEncodingMediaType,
+		Layout:                        layout,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to add descriptor to store: %w", err)
@@ -183,6 +194,41 @@ func tagIdempotent(ctx context.Context, store spec.Store, desc ociImageSpecV1.De
 	return err
 }
 
+// layoutForAdd returns the layout a component version is added in. LayoutAuto keeps the layout of
+// the version already tagged with reference, so that rewriting a normalized version (e.g. when
+// persisting an OCM signature) does not move its tag off the cosign-signed normalized manifest.
+func (repo *Repository) layoutForAdd(ctx context.Context, store spec.Store, reference string) (Layout, error) {
+	if repo.layout != LayoutAuto {
+		return repo.layout, nil
+	}
+	layout, err := getStoredLayout(ctx, store, reference)
+	if errors.Is(err, errdef.ErrNotFound) {
+		return LayoutV2, nil
+	}
+	if err != nil {
+		return LayoutAuto, fmt.Errorf("failed to detect layout of existing component version %q: %w", reference, err)
+	}
+	return layout, nil
+}
+
+// GetComponentVersionLayout reports the storage layout of a stored component version as
+// "v2" or "normalized" (see speclayout.ComponentVersionLayout).
+func (repo *Repository) GetComponentVersionLayout(ctx context.Context, component, version string) (string, error) {
+	ctx = slogcontext.NewCtx(ctx, repo.logger)
+	reference, store, err := repo.getStore(ctx, component, version)
+	if err != nil {
+		return "", err
+	}
+	layout, err := getStoredLayout(ctx, store, reference)
+	if errors.Is(err, errdef.ErrNotFound) {
+		return "", errors.Join(repository.ErrNotFound, fmt.Errorf("component version %s/%s not found: %w", component, version, err))
+	}
+	if err != nil {
+		return "", err
+	}
+	return layout.String(), nil
+}
+
 func (repo *Repository) ListComponentVersions(ctx context.Context, component string) (_ []string, err error) {
 	ctx = slogcontext.NewCtx(ctx, repo.logger)
 	done := log.Operation(ctx, "list component versions",
@@ -214,7 +260,7 @@ func (repo *Repository) ListComponentVersions(ctx context.Context, component str
 			VersionResolver: complister.ReferenceTagVersionResolver(component, store),
 		},
 		ReferrerListerOptions: lister.ReferrerListerOptions{
-			ArtifactType:    descriptor2.MediaTypeComponentDescriptorV2,
+			ArtifactTypes:   []string{descriptor2.MediaTypeComponentDescriptorV2, descriptor2.ArtifactTypeNormalizedDescriptor},
 			Subject:         indexv1.Descriptor,
 			VersionResolver: complister.ReferrerAnnotationVersionResolver(component),
 		},
@@ -610,7 +656,7 @@ func (repo *Repository) localArtifact(ctx context.Context, component, version st
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get component version: %w", err)
 	}
-	desc, store := cv.descriptor, cv.store
+	desc, store, reference := cv.descriptor, cv.store, cv.reference
 
 	var artifacts []descriptor.Artifact
 	switch kind {
@@ -644,15 +690,18 @@ func (repo *Repository) localArtifact(ctx context.Context, component, version st
 		return nil, nil, fmt.Errorf("error converting resource access: %w", err)
 	}
 
+	var verifyAgainst *descriptor.Resource
+	if res, ok := artifact.(*descriptor.Resource); ok && cv.layout == LayoutNormalized {
+		// The normalized manifest binds resource content only through the resource digest, while
+		// the access referrer that locates the content is not signed.
+		verifyAgainst = res
+	}
 	switch typed := typed.(type) {
 	case *v2.LocalBlob:
-		b, err := repo.getLocalBlobFromIndexOrManifest(
-			ctx, store, cv.index, cv.manifest, typed.LocalReference,
-			artifact.GetElementMeta().Version,
-		)
+		b, err := repo.getLocalBlobFromIndexOrManifest(ctx, store, cv.index, cv.manifest, typed.LocalReference, meta.Version, verifyAgainst)
 		return b, artifact, err
 	case *accessv1.RelativeOCIReference:
-		b, err := repo.getRelativeOCIReference(ctx, cv.reference, typed)
+		b, err := repo.getRelativeOCIReference(ctx, reference, typed, verifyAgainst)
 		return b, artifact, err
 	default:
 		return nil, nil, fmt.Errorf("unsupported resource access type: %T", typed)
@@ -665,8 +714,9 @@ func (repo *Repository) localArtifact(ctx context.Context, component, version st
 // reference to form an absolute OCI image reference, which the existing OCIImage download
 // path resolves/credentials/streams via the same resolver. The materialised blob is the
 // OCI-layout tar, identical to the nested-manifest LocalBlob branch. The resolution base is
-// the registry root, never the OCM subPath.
-func (repo *Repository) getRelativeOCIReference(ctx context.Context, reference string, typed *accessv1.RelativeOCIReference) (fetch.LocalBlob, error) {
+// the registry root, never the OCM subPath. If verifyAgainst is set, the resolved artifact must
+// match its digest.
+func (repo *Repository) getRelativeOCIReference(ctx context.Context, reference string, typed *accessv1.RelativeOCIReference, verifyAgainst *descriptor.Resource) (fetch.LocalBlob, error) {
 	if err := typed.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid relative OCI reference: %w", err)
 	}
@@ -684,6 +734,11 @@ func (repo *Repository) getRelativeOCIReference(ctx context.Context, reference s
 	if err != nil {
 		return nil, err
 	}
+	if verifyAgainst != nil && signsContent(verifyAgainst.Digest) {
+		if err := internaldigest.VerifyOCIArtifact(verifyAgainst.Digest, stream.Root().Digest); err != nil {
+			return nil, fmt.Errorf("artifact %s does not match the digest of resource %q: %w", stream.Root().Digest, verifyAgainst.Name, err)
+		}
+	}
 	b, err := stream.Materialize(ctx)
 	if err != nil {
 		return nil, err
@@ -696,13 +751,14 @@ func (repo *Repository) getRelativeOCIReference(ctx context.Context, reference s
 }
 
 // getLocalBlobFromIndexOrManifest resolves and fetches a blob from either an
-// OCI index or a manifest.
+// OCI index or a manifest. If verifyAgainst is set, the content must match its digest.
 func (repo *Repository) getLocalBlobFromIndexOrManifest(
 	ctx context.Context,
 	store spec.Store,
 	index *ociImageSpecV1.Index,
 	manifest *ociImageSpecV1.Manifest,
 	ref, version string,
+	verifyAgainst *descriptor.Resource,
 ) (LocalBlob, error) {
 	descriptors := collectDescriptors(index, manifest)
 
@@ -713,6 +769,13 @@ func (repo *Repository) getLocalBlobFromIndexOrManifest(
 
 	// Nested manifest: copy full OCI layout
 	if index != nil && introspection.IsOCICompliantManifest(artifact) {
+		if verifyAgainst != nil && signsContent(verifyAgainst.Digest) {
+			// Copying the graph verifies every node against its digest, so checking the root
+			// digest binds the whole artifact.
+			if err := internaldigest.VerifyOCIArtifact(verifyAgainst.Digest, artifact.Digest); err != nil {
+				return nil, fmt.Errorf("local blob %s does not match the digest of resource %q: %w", artifact.Digest, verifyAgainst.Name, err)
+			}
+		}
 		graph, ok := store.(content.ReadOnlyGraphStorage)
 		if !ok {
 			return nil, fmt.Errorf("store %T does not support predecessor walks", store)
@@ -724,6 +787,12 @@ func (repo *Repository) getLocalBlobFromIndexOrManifest(
 		})
 	}
 
+	if verifyAgainst != nil && signsContent(verifyAgainst.Digest) {
+		if err := verifyLayerDigest(verifyAgainst, artifact); err != nil {
+			return nil, err
+		}
+	}
+
 	data, err := store.Fetch(ctx, artifact)
 	if err != nil {
 		return nil, fmt.Errorf("fetch layer: %w", err)
@@ -733,7 +802,40 @@ func (repo *Repository) getLocalBlobFromIndexOrManifest(
 	if actual, _ := b.Digest(); actual != artifact.Digest.String() {
 		return nil, fmt.Errorf("digest mismatch: expected %q, got %q", artifact.Digest, actual)
 	}
-	return b, nil
+	if verifyAgainst == nil {
+		return b, nil
+	}
+	verified, err := repository.VerifyDownload(ctx, verifyAgainst, b)
+	if err != nil {
+		return nil, err
+	}
+	local, ok := verified.(LocalBlob)
+	if !ok {
+		return nil, fmt.Errorf("verified blob %T does not satisfy LocalBlob", verified)
+	}
+	return local, nil
+}
+
+// signsContent reports whether d binds content, i.e. is set and not the exclusion marker.
+func signsContent(d *descriptor.Digest) bool {
+	return d != nil &&
+		!strings.EqualFold(d.HashAlgorithm, descriptor.NoDigest) &&
+		!strings.EqualFold(d.NormalisationAlgorithm, descriptor.ExcludeFromSignature)
+}
+
+// verifyLayerDigest rejects a plain local blob layer whose digest contradicts the resource digest
+// before any content is fetched; the content itself is verified while it is read.
+func verifyLayerDigest(res *descriptor.Resource, layer ociImageSpecV1.Descriptor) error {
+	if res.Digest.NormalisationAlgorithm != internaldigest.GenericBlobDigestV1 {
+		return fmt.Errorf("resource %q has digest normalisation %q, which cannot match plain local blob %s", res.Name, res.Digest.NormalisationAlgorithm, layer.Digest)
+	}
+	if layer.Digest.Algorithm() != digest.SHA256 || !strings.EqualFold(strings.ReplaceAll(res.Digest.HashAlgorithm, "-", ""), "sha256") {
+		return nil
+	}
+	if err := internaldigest.Verify(res.Digest, layer.Digest, internaldigest.GenericBlobDigestV1); err != nil {
+		return fmt.Errorf("local blob %s does not match the digest of resource %q: %w", layer.Digest, res.Name, err)
+	}
+	return nil
 }
 
 func (repo *Repository) getStore(ctx context.Context, component string, version string) (ref string, store spec.Store, err error) {
@@ -749,6 +851,85 @@ func (repo *Repository) getStore(ctx context.Context, component string, version 
 		return "", nil, fmt.Errorf("failed to get store for reference: %w", err)
 	}
 	return reference, store, nil
+}
+
+// CarryComponentSignatures copies the referrers of a normalized component version manifest
+// (e.g. cosign signatures and attestations) from source into this repository, except the access
+// referrers OCM regenerates per repository. It does nothing (and logs why) if source is not an
+// OCI repository or the source version does not use the normalized layout. Otherwise the target
+// version must resolve to the same normalized manifest digest, since the copied referrers sign
+// that digest; a mismatch, a failed referrer discovery or a failed copy is an error.
+func (repo *Repository) CarryComponentSignatures(ctx context.Context, source repository.ComponentVersionRepository, component, version string) (err error) {
+	ctx = slogcontext.NewCtx(ctx, repo.logger)
+	done := log.Operation(ctx, "carry component signatures",
+		slog.String("component", component),
+		slog.String("version", version))
+	defer func() {
+		done(err)
+	}()
+
+	src, ok := source.(*Repository)
+	if !ok {
+		slogcontext.Info(ctx, "source is not an OCI repository, no component signatures to carry", slog.String("source", fmt.Sprintf("%T", source)))
+		return nil
+	}
+	srcRef, srcStore, err := src.getStore(ctx, component, version)
+	if err != nil {
+		return fmt.Errorf("open source store: %w", err)
+	}
+	srcDesc, err := srcStore.Resolve(ctx, srcRef)
+	if err != nil {
+		return fmt.Errorf("resolve source component manifest: %w", err)
+	}
+	srcManifest, srcIndex, err := getDescriptorOCIImageManifest(ctx, srcStore, srcDesc)
+	if err != nil {
+		return fmt.Errorf("fetch source component manifest: %w", err)
+	}
+	if layoutOf(&srcManifest, srcIndex) != LayoutNormalized {
+		slogcontext.Info(ctx, "source component version does not use the normalized layout, no component signatures to carry")
+		return nil
+	}
+
+	dstRef, dstStore, err := repo.getStore(ctx, component, version)
+	if err != nil {
+		return fmt.Errorf("open target store: %w", err)
+	}
+	dstDesc, err := dstStore.Resolve(ctx, dstRef)
+	if err != nil {
+		return fmt.Errorf("resolve target component manifest: %w", err)
+	}
+	if srcDesc.Digest != dstDesc.Digest {
+		return fmt.Errorf("target component manifest %s differs from normalized source manifest %s, so its signatures cannot be carried (the target must use the normalized layout and the same referrer tracking policy)", dstDesc.Digest, srcDesc.Digest)
+	}
+
+	srcDesc.ArtifactType = descriptor2.ArtifactTypeNormalizedDescriptor
+	predecessors, err := srcStore.Predecessors(ctx, srcDesc)
+	if err != nil {
+		return fmt.Errorf("discover referrers of source component manifest %s: %w", srcDesc.Digest, err)
+	}
+	for _, p := range predecessors {
+		// Registries do not reliably report the artifactType in referrer descriptors.
+		at, err := peekArtifactType(ctx, srcStore, p)
+		if err != nil {
+			return fmt.Errorf("inspect referrer %s: %w", p.Digest, err)
+		}
+		if at == descriptor2.ArtifactTypeAccessDescriptor {
+			continue
+		}
+		exists, err := dstStore.Exists(ctx, p)
+		if err != nil {
+			return fmt.Errorf("check referrer %s in target: %w", p.Digest, err)
+		}
+		if exists {
+			continue
+		}
+		// The subject already exists on the target, so only the referrer's own graph is copied.
+		if err := oras.CopyGraph(ctx, srcStore, dstStore, p, repo.resourceCopyOptions.CopyGraphOptions); err != nil {
+			return fmt.Errorf("failed to carry component referrer %s: %w", p.Digest, err)
+		}
+		slogcontext.Info(ctx, "carried component referrer", slog.String("digest", p.Digest.String()), slog.String("artifactType", at))
+	}
+	return nil
 }
 
 // UploadResource uploads a [*descriptor.Resource] to the repository.
@@ -1077,15 +1258,9 @@ func (repo *Repository) targetOCIImageAccess(access runtime.Typed) (*accessv1.OC
 	return image, nil
 }
 
-// getDescriptorOCIImageManifest retrieves the manifest for a given reference from the store.
-// It handles both OCI image indexes and OCI image manifests. Every node read is verified
-// against its digest, starting from the one reference resolves to.
-func getDescriptorOCIImageManifest(ctx context.Context, store spec.Store, reference string) (manifest ociImageSpecV1.Manifest, index *ociImageSpecV1.Index, err error) {
-	slogcontext.Log(ctx, slog.LevelDebug, "resolving descriptor", slog.String("reference", reference))
-	base, err := store.Resolve(ctx, reference)
-	if err != nil {
-		return ociImageSpecV1.Manifest{}, nil, fmt.Errorf("failed to resolve reference %q: %w", reference, err)
-	}
+// getDescriptorOCIImageManifest fetches the manifest for an already resolved component version
+// descriptor from the store. It handles both OCI image indexes and OCI image manifests.
+func getDescriptorOCIImageManifest(ctx context.Context, store spec.Store, base ociImageSpecV1.Descriptor) (manifest ociImageSpecV1.Manifest, index *ociImageSpecV1.Index, err error) {
 	slogcontext.Log(ctx, slog.LevelDebug, "fetching descriptor", log.DescriptorLogAttr(base))
 	manifestRaw, err := fetchVerified(ctx, store, ociImageSpecV1.Descriptor{
 		MediaType: base.MediaType,

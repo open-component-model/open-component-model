@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"ocm.software/open-component-model/bindings/go/ctf"
+	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -43,6 +44,13 @@ type Repository struct {
 	// If not specified, the AccessMode will be interpreted as AccessModeReadOnly for read-based operations
 	// and as AccessModeReadWrite for write-based operations.
 	AccessMode AccessMode `json:"accessMode,omitempty"`
+
+	// ComponentVersionLayout selects the storage layout used when adding component versions
+	// to this repository. Empty keeps the layout of an already stored version and defaults to
+	// "v2" (the access-bearing descriptor manifest as the tag target); "normalized" stores a
+	// stable, access-free descriptor manifest as the tag target that cosign can sign.
+	// +ocm:jsonschema-gen:enum=v2,normalized
+	ComponentVersionLayout layout.ComponentVersionLayout `json:"componentVersionLayout,omitempty"`
 }
 
 func (spec *Repository) String() string {

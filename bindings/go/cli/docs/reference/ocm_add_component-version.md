@@ -125,6 +125,8 @@ add component-version --repository ./archive --constructor component-constructor
       --external-component-version-copy-policy enum   policy to apply when a component reference to a component version outside of the constructor or target repository is encountered
                                                       (must be one of [copy-or-fail skip]) (default skip)
   -h, --help                                          help for component-version
+      --layout enum                                   component version storage layout: v2 (manifest with the full descriptor) or normalized (manifest with the normalized descriptor as its only layer; the manifest digest is stable across registries and can be signed with cosign). When not set, a version that already exists keeps its layout and a new version uses v2
+                                                      (must be one of [normalized v2])
   -o, --output enum                                   output format of the component descriptors
                                                       (must be one of [json ndjson table tree yaml]) (default table)
   -r, --repository string                             repository ref (default "transport-archive")
