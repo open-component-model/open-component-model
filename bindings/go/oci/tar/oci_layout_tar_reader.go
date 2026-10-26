@@ -42,7 +42,7 @@ func (s *CloseableReadOnlyStore) Close() error {
 //
 // Blobs with a legacy artifact set media type (see ctf.IsArtifactSetMediaType) are
 // read through ctf.ArtifactSet.OCILayoutFS instead of being converted.
-func ReadOCILayout(ctx context.Context, b blob.ReadOnlyBlob) (*CloseableReadOnlyStore, error) {
+func ReadOCILayout(ctx context.Context, b blob.ReadOnlyBlob) (_ *CloseableReadOnlyStore, err error) {
 	if mediaTypeAware, ok := b.(blob.MediaTypeAware); ok {
 		if mediaType, known := mediaTypeAware.MediaType(); known && ctf.IsArtifactSetMediaType(mediaType) {
 			return readArtifactSet(ctx, b, mediaType)
@@ -58,6 +58,11 @@ func ReadOCILayout(ctx context.Context, b blob.ReadOnlyBlob) (*CloseableReadOnly
 		return nil, fmt.Errorf("failed to create reader: %w", err)
 	}
 	closer = src.Close
+	defer func() {
+		if err != nil {
+			err = errors.Join(err, closer())
+		}
+	}()
 
 	size := blob.SizeUnknown
 	if srcSizeAware, ok := src.(blob.SizeAware); ok {
