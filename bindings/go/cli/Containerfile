@@ -7,21 +7,26 @@
 # binary. To build full around an already published slim image instead, pass
 #   --build-context slim=docker-image://ghcr.io/open-component-model/cli:<version>-slim
 
-# CA bundle from the Garden Linux FIPS image, plus world-writable /tmp and the
-# default cache directories under HOME=/ (Docker's HOME for a user without a
-# passwd entry): /.cache for OCM's caches and a downloaded cosign, /.sigstore
-# for cosign's trust root. Files only, so this runs on the build platform.
+# Garden Linux FIPS image: source of the CA bundle, which the images copy by
+# its path so nothing else from this image reaches them. Files only, so this
+# runs on the build platform.
 FROM --platform=$BUILDPLATFORM ghcr.io/gardenlinux/gardenlinux/fips:1877.25@sha256:74ae1f81d0723434024f591d8c2872852201b99b9f18c0fbe10221b16e60e01d AS certs
-RUN mkdir -p /out/etc/ssl/certs \
- && cp /etc/ssl/certs/ca-certificates.crt /out/etc/ssl/certs/ \
- && mkdir -m 1777 /out/tmp /out/.cache /out/.sigstore
+# /tmp and the default cache directory under HOME=/ (Docker's HOME for a user
+# without a passwd entry), /.cache for OCM's caches, world-writable with the
+# sticky bit so any user ID can use them (docker run -u, runAsUser, OpenShift).
+# COPY keeps the sticky bit only when it copies a directory.
+RUN mkdir -p -m 1777 /dirs/tmp /dirs/.cache
 
 FROM scratch AS slim
 ARG TARGETOS
 ARG TARGETARCH
-COPY --from=certs /out /
+COPY --from=certs /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+COPY --from=certs /dirs /
 COPY tmp/bin/ocm-${TARGETOS}-${TARGETARCH} /ocm
 USER 65532:65532
+# cosign's trust-root cache would go to /.sigstore under HOME=/, which the
+# user cannot create; keep it in the writable /tmp instead.
+ENV TUF_ROOT=/tmp/.sigstore/root
 ENTRYPOINT ["/ocm"]
 
 # Static cosign linked against the Go Cryptographic Module (GOFIPS140=certified,
@@ -37,8 +42,11 @@ ENV PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 # No GODEBUG needed: GOFIPS140 already makes fips140=on the default of both
 # ocm and cosign (DefaultGODEBUG in their build info).
 COPY --from=cosign /cosign /usr/local/bin/cosign
-COPY --from=certs /out /
+COPY --from=certs /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+COPY --from=certs /dirs /
 # /ocm keeps the path of the previous scratch image for COPY --from users.
 COPY --from=slim /ocm /ocm
 USER 65532:65532
+# Cosign trust-root cache as in slim.
+ENV TUF_ROOT=/tmp/.sigstore/root
 ENTRYPOINT ["/ocm"]
