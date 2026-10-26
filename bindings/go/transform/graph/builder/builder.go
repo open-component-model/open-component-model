@@ -22,6 +22,7 @@ type Builder struct {
 	events       chan graphRuntime.ProgressEvent
 	buildEvents  chan graphRuntime.ProgressEvent
 	concurrency  int
+	retry        *graphRuntime.RetryPolicy
 	envOptions   []cel.EnvOption
 }
 
@@ -31,6 +32,17 @@ func NewBuilder(scheme *runtime.Scheme) *Builder {
 
 func (b *Builder) WithConcurrency(concurrency int) *Builder {
 	b.concurrency = concurrency
+	return b
+}
+
+// WithRetry re-runs transformations whose Transform fails with an error the
+// policy deems retryable. All registered transformers must be safe to re-run:
+// a Transform call must acquire everything it reads (including source streams)
+// itself instead of consuming state a failed attempt may have used up. Fused
+// streaming transformers satisfy this because each call opens its own source
+// and target, so a retry restarts the stream from the beginning.
+func (b *Builder) WithRetry(policy *graphRuntime.RetryPolicy) *Builder {
+	b.retry = policy
 	return b
 }
 
@@ -115,6 +127,7 @@ func (b *Builder) BuildAndCheck(original *v1alpha1.TransformationGraphDefinition
 		transformers: b.transformers,
 		events:       b.events,
 		concurrency:  concurrency,
+		retry:        b.retry,
 	}, nil
 }
 
@@ -143,6 +156,7 @@ type Graph struct {
 	transformers map[runtime.Type]graphRuntime.Transformer
 	events       chan graphRuntime.ProgressEvent
 	concurrency  int
+	retry        *graphRuntime.RetryPolicy
 }
 
 func (g *Graph) Process(ctx context.Context) error {
@@ -154,6 +168,7 @@ func (g *Graph) Process(ctx context.Context) error {
 			EvaluatedExpressionCache: make(map[string]any),
 			EvaluatedTransformations: make(map[string]any),
 			Events:                   g.events,
+			Retry:                    g.retry,
 		},
 		Concurrency: g.concurrency,
 	})
