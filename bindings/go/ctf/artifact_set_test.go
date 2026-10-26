@@ -49,26 +49,43 @@ func TestNewArtifactSetFromBlob_Compression(t *testing.T) {
 	}
 }
 
-func TestNewArtifactSetFromBlob_IndexEntryWithoutMediaType(t *testing.T) {
-	r := require.New(t)
+func TestNewArtifactSetFromBlob_IncompleteIndexEntry(t *testing.T) {
 	manifestData := []byte(`{"schemaVersion":2,"config":{},"layers":[]}`)
 	dig := digest.FromBytes(manifestData)
-	indexData, err := json.Marshal(ociimagespecv1.Index{
-		Versioned: specs.Versioned{SchemaVersion: 2},
-		Manifests: []ociimagespecv1.Descriptor{{Digest: dig, Size: int64(len(manifestData))}},
-	})
-	r.NoError(err)
 
-	for _, format := range []ctf.ArtifactSetFormat{
-		ctf.ArtifactSetFormatLegacyOCI,
-		ctf.ArtifactSetFormatOCM,
-		ctf.ArtifactSetFormatOCI,
+	for _, tc := range []struct {
+		name    string
+		entry   ociimagespecv1.Descriptor
+		wantErr string
+	}{
+		{
+			name:    "without media type",
+			entry:   ociimagespecv1.Descriptor{Digest: dig, Size: int64(len(manifestData))},
+			wantErr: "artifact set index entry " + dig.String() + " has no media type",
+		},
+		{
+			name:    "without size",
+			entry:   ociimagespecv1.Descriptor{MediaType: ociimagespecv1.MediaTypeImageManifest, Digest: dig},
+			wantErr: "artifact set index entry " + dig.String() + " has no size",
+		},
 	} {
-		t.Run(format.String(), func(t *testing.T) {
-			archive := writeArtifactSet(t, format, indexData, map[string][]byte{dig.String(): manifestData})
-			_, err := ctf.NewArtifactSetFromBlob(inmemory.New(bytes.NewReader(archive), inmemory.WithMediaType(artifactSetMediaType)))
-			require.ErrorContains(t, err, "artifact set index entry "+dig.String()+" has no media type")
+		indexData, err := json.Marshal(ociimagespecv1.Index{
+			Versioned: specs.Versioned{SchemaVersion: 2},
+			Manifests: []ociimagespecv1.Descriptor{tc.entry},
 		})
+		require.NoError(t, err)
+
+		for _, format := range []ctf.ArtifactSetFormat{
+			ctf.ArtifactSetFormatLegacyOCI,
+			ctf.ArtifactSetFormatOCM,
+			ctf.ArtifactSetFormatOCI,
+		} {
+			t.Run(tc.name+"/"+format.String(), func(t *testing.T) {
+				archive := writeArtifactSet(t, format, indexData, map[string][]byte{dig.String(): manifestData})
+				_, err := ctf.NewArtifactSetFromBlob(inmemory.New(bytes.NewReader(archive), inmemory.WithMediaType(artifactSetMediaType)))
+				require.ErrorContains(t, err, tc.wantErr)
+			})
+		}
 	}
 }
 

@@ -25,7 +25,7 @@ import (
 // api/oci/extensions/repositories/artifactset) writes artifact sets in one of three
 // structure formats, all of which are supported for reading. In every format, each
 // index entry carries the mediaType and size of the referenced manifest or index;
-// NewArtifactSetIndex rejects entries without a media type.
+// NewArtifactSetIndex rejects entries without either.
 type ArtifactSetFormat int
 
 const (
@@ -38,8 +38,10 @@ const (
 	// - [ociimagespec.ImageLayoutFile] present
 	// - blobs stored as flat files in the blobs directory (blobs/algo.encoded)
 	ArtifactSetFormatLegacyOCI ArtifactSetFormat = iota
-	// ArtifactSetFormatOCM corresponds to the OCM library format "ocm/v1", the only
-	// format written before OCM library v0.1.0. Later versions only write it on request.
+	// ArtifactSetFormatOCM corresponds to the OCM library format "ocm/v1". It was never
+	// the default; the OCM library only writes it on request. Pre-release versions (up to
+	// late 2022, including v0.0.0) wrote the same layout with the index named
+	// "artefact-descriptor.json", which is not supported.
 	// Characteristics:
 	// - index stored as ArtifactSetDescriptorFileName
 	// - no [ociimagespec.ImageLayoutFile]
@@ -431,7 +433,7 @@ type ArtifactSetIndex struct {
 }
 
 // NewArtifactSetIndex reads the index of an artifact set and determines its format.
-// It fails if an index entry has no media type.
+// It fails if an index entry has no media type or size.
 func NewArtifactSetIndex(filesystem fs.FS) (*ArtifactSetIndex, error) {
 	var format ArtifactSetFormat
 	base, err := decodeIndexFromFS(filesystem, ociimagespec.ImageIndexFile)
@@ -447,11 +449,15 @@ func NewArtifactSetIndex(filesystem fs.FS) (*ArtifactSetIndex, error) {
 		format = determineArtifactSetOCIFormat(filesystem)
 	}
 
-	// Without a media type, OCI tooling cannot walk the graph below the entry.
-	// Every OCM library version records it, so a missing one means a corrupt set.
+	// Without a media type, OCI tooling cannot walk the graph below the entry, and
+	// without a size it cannot verify the entry. Every OCM library version records
+	// both, so a missing one means a corrupt set.
 	for _, manifest := range base.Manifests {
 		if manifest.MediaType == "" {
 			return nil, fmt.Errorf("artifact set index entry %s has no media type", manifest.Digest)
+		}
+		if manifest.Size <= 0 {
+			return nil, fmt.Errorf("artifact set index entry %s has no size", manifest.Digest)
 		}
 	}
 
