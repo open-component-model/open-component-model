@@ -90,7 +90,9 @@ still work: they are translated into uploader entries appended after the configu
 the &ldquo;Migrate from &ndash;upload-as to Uploader Configurations&rdquo; guide on ocm.software). &ndash;recursive walks the
 component&rsquo;s references and transfers them too.</p><p>Driving defaults from the OCM configuration:
 A transfer.config.ocm.software/v1alpha1 entry inside the central OCM configuration
-(passed via &ndash;config) sets defaults for &ndash;recursive.
+(passed via &ndash;config) sets defaults for &ndash;recursive. Its unmatchedResourcePolicy (Ignore, Warn,
+Fail; default Warn) decides whether a resource no uploader selects is silently given the
+baseline, logged as a warning, or fails the transfer.
 Explicit command-line flags always override the values from the configuration.</p><p>Two-step workflow (generate, review, replay):
 &ndash;dry-run builds and validates the graph without executing it, and with -o yaml|json prints
 the resulting TransformationGraphDefinition. &ndash;transfer-spec then replays a saved definition
