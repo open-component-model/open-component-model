@@ -82,7 +82,10 @@ func TestWriteSummary(t *testing.T) {
 	dir := t.TempDir()
 	requests := 42.0
 	results := []*result{
-		{Scenario: scenarioCold, Usage: usage{RegistryRequests: &requests}},
+		{
+			Scenario: scenarioComplex, Signed: true, Usage: usage{RegistryRequests: &requests},
+			Environment: environment{ControllerImageID: "docker.io/library/import-2026-10-26@sha256:18bb5d7f6bba0123456789"},
+		},
 		{Scenario: scenarioCold, Outcome: outcome{TimedOut: true}, ControllerRestarted: true},
 	}
 
@@ -92,7 +95,9 @@ func TestWriteSummary(t *testing.T) {
 	r.NoError(err)
 	rows := strings.Split(strings.TrimSpace(string(raw)), "\n")
 	r.Len(rows, 4)
+	r.Contains(rows[2], "| complex | 0 | 0 | 18bb5d7f6bba | yes |")
 	r.Contains(rows[2], "| 42 |  |")
+	r.Contains(rows[3], "| cold | 0 | 0 | n/a | no |")
 	r.Contains(rows[3], "| n/a | timed out, controller restarted |")
 }
 

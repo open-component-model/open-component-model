@@ -123,17 +123,36 @@ func writeJSON(path string, v any) error {
 // invocation. result.json files remain the source of truth.
 func writeSummary(dir string, results []*result) error {
 	var b strings.Builder
-	b.WriteString("| Scenario | Objects | Repeat | Ready | Failed | Pending | Total (s) | Settled (s) | p50 (s) | p90 (s) | CPU (s) | Avg cores | Peak cores | Peak WS (MiB) | Registry reqs | Notes |\n")
-	b.WriteString("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n")
+	b.WriteString("| Scenario | Objects | Repeat | Image | Signed | Ready | Failed | Pending | Total (s) | Settled (s) | p50 (s) | p90 (s) | CPU (s) | Avg cores | Peak cores | Peak WS (MiB) | Registry reqs | Notes |\n")
+	b.WriteString("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n")
 	for _, r := range results {
 		requests := "n/a"
 		if r.Usage.RegistryRequests != nil {
 			requests = fmt.Sprintf("%.0f", *r.Usage.RegistryRequests)
 		}
-		fmt.Fprintf(&b, "| %s | %d | %d | %d | %d | %d | %.1f | %.1f | %.1f | %.1f | %.1f | %.2f | %.2f | %.0f | %s | %s |\n",
-			r.Scenario, r.Objects, r.Repeat, r.Outcome.Ready, r.Outcome.Failed, r.Outcome.Pending,
+		signed := "no"
+		if r.Signed {
+			signed = "yes"
+		}
+		fmt.Fprintf(&b, "| %s | %d | %d | %s | %s | %d | %d | %d | %.1f | %.1f | %.1f | %.1f | %.1f | %.2f | %.2f | %.0f | %s | %s |\n",
+			r.Scenario, r.Objects, r.Repeat, shortImageID(r.Environment.ControllerImageID), signed, r.Outcome.Ready, r.Outcome.Failed, r.Outcome.Pending,
 			r.Durations.Total, r.Durations.Settled, r.Durations.P50, r.Durations.P90, r.Usage.CPUSeconds, r.Usage.AvgCores, r.Usage.PeakCores,
 			r.Usage.PeakWorkingSetBytes/(1<<20), requests, strings.Join(r.notes(), ", "))
 	}
 	return os.WriteFile(filepath.Join(dir, "summary.md"), []byte(b.String()), 0o600)
+}
+
+// shortImageID keeps the first 12 hex digits of the digest, as docker does.
+// Runs are only comparable on the same image, and the tag alone does not tell.
+func shortImageID(id string) string {
+	if i := strings.LastIndex(id, "sha256:"); i >= 0 {
+		id = id[i+len("sha256:"):]
+	}
+	if len(id) > 12 {
+		id = id[:12]
+	}
+	if id == "" {
+		return "n/a"
+	}
+	return id
 }

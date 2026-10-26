@@ -117,8 +117,9 @@ than the controller needs to reconcile them is bound by that limit, not by the c
 
 Each invocation writes `test/performance/results/<timestamp>/`, which is git-ignored:
 
-- `summary.md`: one row per run. The Notes column flags runs that timed out, did not drain or lost the controller; the
-  benchmark exits non-zero when any run is flagged.
+- `summary.md`: one row per run. Image (short digest) and Signed show at a glance whether two runs are comparable.
+  The Notes column flags runs that timed out, did not drain or lost the controller; the benchmark exits non-zero when
+  any run is flagged.
 - `<run>/result.json`: the full result. It records environment (image digest, controller args and
   resources, Kubernetes version), durations (total, settled, first ready, p50/p90/p99, publish, create),
   outcome (ready, failed, pending, failure reasons), usage, counter deltas and sampled gauge peaks.
