@@ -159,12 +159,7 @@ func (resolver *CachingResolver) StoreForReference(_ context.Context, reference 
 	}
 
 	if remoteStore, ok := resolver.getFromCache(key); ok {
-		blobCache := resolver.blobCache.Load()
-		refCache := resolver.referenceCache.Load()
-		if blobCache != nil || refCache != nil {
-			return cache.ProxyRepository(remoteStore.Repository, blobCache, refCache), nil
-		}
-		return remoteStore, nil
+		return cache.ProxyRepository(remoteStore, resolver.blobCache.Load(), resolver.referenceCache.Load()), nil
 	}
 
 	repo := &remote.Repository{
@@ -194,12 +189,7 @@ func (resolver *CachingResolver) StoreForReference(_ context.Context, reference 
 	}
 	resolver.addToCache(key, store)
 
-	blobCache := resolver.blobCache.Load()
-	refCache := resolver.referenceCache.Load()
-	if blobCache != nil || refCache != nil {
-		return cache.ProxyRepository(repo, blobCache, refCache), nil
-	}
-	return store, nil
+	return cache.ProxyRepository(store, resolver.blobCache.Load(), resolver.referenceCache.Load()), nil
 }
 
 func (resolver *CachingResolver) addToCache(reference string, store *remotestore.RemoteStore) {

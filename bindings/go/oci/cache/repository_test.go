@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 
 	"github.com/opencontainers/go-digest"
@@ -13,6 +14,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"oras.land/oras-go/v2/registry"
 	"oras.land/oras-go/v2/registry/remote"
+
+	"ocm.software/open-component-model/bindings/go/oci/internal/remotestore"
 )
 
 func TestRepository_Fetch_DelegatesToBlobCache(t *testing.T) {
@@ -28,7 +31,7 @@ func TestRepository_Fetch_DelegatesToBlobCache(t *testing.T) {
 
 	// Cache hit serves the file; the embedded *remote.Repository is
 	// never reached, so an empty value is fine.
-	repo := &Repository{Repository: &remote.Repository{}, BlobCache: c}
+	repo := &Repository{RemoteStore: &remotestore.RemoteStore{Repository: &remote.Repository{}}, BlobCache: c}
 	rc, err := repo.Fetch(t.Context(), desc)
 	require.NoError(t, err)
 	defer rc.Close()
@@ -55,7 +58,7 @@ func TestRepository_Resolve_DelegatesToReferenceCache(t *testing.T) {
 	ref := desc.Digest.String()
 	rc.Add(registry.Reference{Registry: "ghcr.io", Repository: "owner/repo", Reference: ref}, desc)
 
-	repo := &Repository{Repository: inner, ReferenceCache: rc}
+	repo := &Repository{RemoteStore: &remotestore.RemoteStore{Repository: inner}, ReferenceCache: rc}
 	got, err := repo.Resolve(t.Context(), ref)
 	require.NoError(t, err)
 	assert.Equal(t, desc, got)
@@ -71,7 +74,7 @@ func TestRepository_Resolve_WithFullReferenceAndNormalization(t *testing.T) {
 	inner := &remote.Repository{
 		Reference: registry.Reference{Registry: "ghcr.io", Repository: "owner/repo"},
 	}
-	repo := &Repository{Repository: inner, ReferenceCache: rc}
+	repo := &Repository{RemoteStore: &remotestore.RemoteStore{Repository: inner}, ReferenceCache: rc}
 
 	// 1. Add as normalized digest reference to cache
 	rc.Add(registry.Reference{
@@ -87,47 +90,47 @@ func TestRepository_Resolve_WithFullReferenceAndNormalization(t *testing.T) {
 }
 
 func TestRepository_Unwrap_ReturnsEmbedded(t *testing.T) {
-	inner := &remote.Repository{}
-	repo := &Repository{Repository: inner, BlobCache: newTestCache(t, Options{})}
+	inner := &remotestore.RemoteStore{Repository: &remote.Repository{}}
+	repo := &Repository{RemoteStore: inner, BlobCache: newTestCache(t, Options{})}
 	assert.Same(t, inner, repo.Unwrap())
 }
 
 func TestProxyRepository_NilCachesReturnBase(t *testing.T) {
-	inner := &remote.Repository{}
+	inner := &remotestore.RemoteStore{Repository: &remote.Repository{}}
 	got := ProxyRepository(inner, nil, nil)
 	assert.Same(t, inner, got)
 }
 
 func TestProxyRepository_BlobCacheOnlyWraps(t *testing.T) {
-	inner := &remote.Repository{}
+	inner := &remotestore.RemoteStore{Repository: &remote.Repository{}}
 	c := newTestCache(t, Options{})
 	got := ProxyRepository(inner, c, nil)
 	wrapped, ok := got.(*Repository)
 	require.True(t, ok)
-	assert.Same(t, inner, wrapped.Repository)
+	assert.Same(t, inner, wrapped.RemoteStore)
 	assert.Same(t, c, wrapped.BlobCache)
 	assert.Nil(t, wrapped.ReferenceCache)
 }
 
 func TestProxyRepository_ReferenceCacheOnlyWraps(t *testing.T) {
-	inner := &remote.Repository{}
+	inner := &remotestore.RemoteStore{Repository: &remote.Repository{}}
 	rc := newTestRefCache(t, Options{})
 	got := ProxyRepository(inner, nil, rc)
 	wrapped, ok := got.(*Repository)
 	require.True(t, ok)
-	assert.Same(t, inner, wrapped.Repository)
+	assert.Same(t, inner, wrapped.RemoteStore)
 	assert.Nil(t, wrapped.BlobCache)
 	assert.Same(t, rc, wrapped.ReferenceCache)
 }
 
 func TestProxyRepository_BothCachesWrap(t *testing.T) {
-	inner := &remote.Repository{}
+	inner := &remotestore.RemoteStore{Repository: &remote.Repository{}}
 	c := newTestCache(t, Options{})
 	rc := newTestRefCache(t, Options{})
 	got := ProxyRepository(inner, c, rc)
 	wrapped, ok := got.(*Repository)
 	require.True(t, ok)
-	assert.Same(t, inner, wrapped.Repository)
+	assert.Same(t, inner, wrapped.RemoteStore)
 	assert.Same(t, c, wrapped.BlobCache)
 	assert.Same(t, rc, wrapped.ReferenceCache)
 }
@@ -143,6 +146,40 @@ func plainHTTPRepo(t *testing.T, srv *httptest.Server) *remote.Repository {
 	return repo
 }
 
+func TestProxyRepository_KeepsStreamingChunkedPush(t *testing.T) {
+	r := require.New(t)
+
+	var mu sync.Mutex
+	var methods []string
+	var uploaded []byte
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		body, _ := io.ReadAll(req.Body)
+		mu.Lock()
+		methods = append(methods, req.Method)
+		uploaded = append(uploaded, body...)
+		mu.Unlock()
+		w.Header().Set("Location", "/v2/test-repo/blobs/uploads/session")
+		if req.Method == http.MethodPut {
+			w.WriteHeader(http.StatusCreated)
+			return
+		}
+		w.WriteHeader(http.StatusAccepted)
+	}))
+	t.Cleanup(srv.Close)
+
+	store := ProxyRepository(&remotestore.RemoteStore{Repository: plainHTTPRepo(t, srv), ChunkSize: 4}, newTestCache(t, Options{}), nil)
+	pusher, ok := store.(remotestore.StreamingPusher)
+	r.True(ok, "the cache decorator must keep streaming push")
+
+	data := []byte("streamed-blob")
+	desc, err := pusher.PushStreaming(t.Context(), ociImageSpecV1.Descriptor{MediaType: "application/octet-stream"}, bytes.NewReader(data))
+	r.NoError(err)
+	r.Equal(digest.FromBytes(data), desc.Digest)
+	r.Equal(int64(len(data)), desc.Size)
+	r.Equal([]string{http.MethodPost, http.MethodPatch, http.MethodPatch, http.MethodPatch, http.MethodPatch, http.MethodPut}, methods)
+	r.Equal(data, uploaded)
+}
+
 func TestRepository_Untag_SuccessInvalidatesCache(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusAccepted)
@@ -151,7 +188,7 @@ func TestRepository_Untag_SuccessInvalidatesCache(t *testing.T) {
 
 	inner := plainHTTPRepo(t, srv)
 	rc := newTestRefCache(t, Options{})
-	repo := &Repository{Repository: inner, ReferenceCache: rc}
+	repo := &Repository{RemoteStore: &remotestore.RemoteStore{Repository: inner}, ReferenceCache: rc}
 
 	ref := registry.Reference{
 		Registry:   inner.Reference.Registry,
@@ -177,7 +214,7 @@ func TestRepository_Untag_FailureKeepsCache(t *testing.T) {
 
 	inner := plainHTTPRepo(t, srv)
 	rc := newTestRefCache(t, Options{})
-	repo := &Repository{Repository: inner, ReferenceCache: rc}
+	repo := &Repository{RemoteStore: &remotestore.RemoteStore{Repository: inner}, ReferenceCache: rc}
 
 	ref := registry.Reference{
 		Registry:   inner.Reference.Registry,
@@ -199,7 +236,7 @@ func TestRepository_Untag_NilReferenceCache(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	repo := &Repository{Repository: plainHTTPRepo(t, srv)}
+	repo := &Repository{RemoteStore: &remotestore.RemoteStore{Repository: plainHTTPRepo(t, srv)}}
 	require.NoError(t, repo.Untag(t.Context(), "latest"))
 }
 
@@ -228,7 +265,7 @@ func TestRepository_Tag_SuccessRefreshesCache(t *testing.T) {
 
 	inner := plainHTTPRepo(t, srv)
 	rc := newTestRefCache(t, Options{})
-	repo := &Repository{Repository: inner, ReferenceCache: rc}
+	repo := &Repository{RemoteStore: &remotestore.RemoteStore{Repository: inner}, ReferenceCache: rc}
 
 	ref := registry.Reference{
 		Registry:   inner.Reference.Registry,
@@ -250,7 +287,7 @@ func TestRepository_Tag_FailureLeavesCacheEmpty(t *testing.T) {
 
 	inner := plainHTTPRepo(t, srv)
 	rc := newTestRefCache(t, Options{})
-	repo := &Repository{Repository: inner, ReferenceCache: rc}
+	repo := &Repository{RemoteStore: &remotestore.RemoteStore{Repository: inner}, ReferenceCache: rc}
 
 	ref := registry.Reference{
 		Registry:   inner.Reference.Registry,

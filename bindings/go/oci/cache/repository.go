@@ -6,23 +6,22 @@ import (
 
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"oras.land/oras-go/v2/content"
-	"oras.land/oras-go/v2/registry/remote"
 
 	"ocm.software/open-component-model/bindings/go/oci/internal/remotestore"
 	"ocm.software/open-component-model/bindings/go/oci/spec"
 )
 
-// Repository decorates an oras [*remote.Repository] with optional
-// [BlobCache] and [ReferenceCache] layers. The embedded
-// [*remote.Repository] is exposed via Go field promotion so type
-// assertions used elsewhere in the codebase
-// ([registry.TagLister], [registry.ReferrerLister],
+// Repository decorates a [remotestore.RemoteStore] with optional
+// [BlobCache] and [ReferenceCache] layers. The embedded store keeps its
+// chunked Push and PushStreaming, and the [*remote.Repository] inside it
+// is exposed via Go field promotion so type assertions used elsewhere in
+// the codebase ([registry.TagLister], [registry.ReferrerLister],
 // `interface{ Blobs() registry.BlobStore }`) keep working unchanged.
 //
 // Either cache may be nil; the corresponding override degrades to a
-// pure passthrough to the embedded *remote.Repository.
+// pure passthrough to the embedded store.
 type Repository struct {
-	*remote.Repository
+	*remotestore.RemoteStore
 	BlobCache      *BlobCache
 	ReferenceCache *ReferenceCache
 }
@@ -59,22 +58,11 @@ func (r *Repository) Resolve(ctx context.Context, reference string) (ociImageSpe
 	return r.ReferenceCache.Resolve(ctx, r.Repository, ref)
 }
 
-// Unwrap returns the embedded [*remote.Repository] so consumers that
+// Unwrap returns the embedded [remotestore.RemoteStore] so consumers that
 // type-assert on the underlying store (e.g. global-store detection in
 // internal/pack) can see through the cache decorator.
 func (r *Repository) Unwrap() content.Storage {
-	return r.Repository
-}
-
-// Referrers delegates to [remotestore.Referrers], which falls back to the
-// referrers tag schema when the registry answers the API with NAME_UNKNOWN.
-func (r *Repository) Referrers(ctx context.Context, desc ociImageSpecV1.Descriptor, artifactType string, onReferrers func(referrers []ociImageSpecV1.Descriptor) error) error {
-	return remotestore.Referrers(ctx, r.Repository, desc, artifactType, onReferrers)
-}
-
-// Predecessors delegates to [remotestore.Predecessors]; see [Repository.Referrers].
-func (r *Repository) Predecessors(ctx context.Context, desc ociImageSpecV1.Descriptor) ([]ociImageSpecV1.Descriptor, error) {
-	return remotestore.Predecessors(ctx, r.Repository, desc)
+	return r.RemoteStore
 }
 
 // Untag implements [content.Untagger] by delegating to the underlying
@@ -83,7 +71,7 @@ func (r *Repository) Predecessors(ctx context.Context, desc ociImageSpecV1.Descr
 // reference cache entry so a restart does not resurrect the stale
 // tag→descriptor mapping.
 func (r *Repository) Untag(ctx context.Context, reference string) error {
-	if err := (&remotestore.RemoteStore{Repository: r.Repository}).Untag(ctx, reference); err != nil {
+	if err := r.RemoteStore.Untag(ctx, reference); err != nil {
 		return err
 	}
 	if r.ReferenceCache != nil {
@@ -116,13 +104,13 @@ func (r *Repository) Tag(ctx context.Context, desc ociImageSpecV1.Descriptor, re
 	return nil
 }
 
-// ProxyRepository proxies the given repo with the configured caches
-// when at least one is non-nil; otherwise it returns repo unchanged
+// ProxyRepository proxies the given store with the configured caches
+// when at least one is non-nil; otherwise it returns store unchanged
 // so the cache decorator only appears in the type chain when there
 // is something to cache.
-func ProxyRepository(repo *remote.Repository, blob *BlobCache, refs *ReferenceCache) spec.Store {
+func ProxyRepository(store *remotestore.RemoteStore, blob *BlobCache, refs *ReferenceCache) spec.Store {
 	if blob == nil && refs == nil {
-		return repo
+		return store
 	}
-	return &Repository{Repository: repo, BlobCache: blob, ReferenceCache: refs}
+	return &Repository{RemoteStore: store, BlobCache: blob, ReferenceCache: refs}
 }
