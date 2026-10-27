@@ -181,15 +181,12 @@ spec:
                     initialDelaySeconds: {{ .Values.manager.livenessProbe.initialDelaySeconds }}
                     periodSeconds: {{ .Values.manager.livenessProbe.periodSeconds }}
                   name: manager
+                  {{- if .Values.webhook.enable }}
                   ports:
-                    - containerPort: 9090
-                      name: http
-                      protocol: TCP
-                    {{- if .Values.webhook.enable }}
                     - containerPort: 9443
                       name: webhook-server
                       protocol: TCP
-                    {{- end }}
+                  {{- end }}
                   readinessProbe:
                     httpGet:
                         path: {{ .Values.manager.readinessProbe.path }}

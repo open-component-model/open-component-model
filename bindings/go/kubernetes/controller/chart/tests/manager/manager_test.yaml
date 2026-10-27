@@ -70,7 +70,8 @@ tests:
           path: spec.template.spec.serviceAccountName
           value: foo-custom-controller-manager
 
-  - it: runs a single manager container with the fixed entrypoint and port
+  - it: runs a single manager container with the fixed entrypoint and no ports by default
+    # Health probes bind on 8081 without a declared port; metrics are off and the webhook is disabled.
     asserts:
       - lengthEqual:
           path: spec.template.spec.containers
@@ -82,12 +83,8 @@ tests:
           path: spec.template.spec.containers[0].command
           value:
             - /manager
-      - equal:
+      - notExists:
           path: spec.template.spec.containers[0].ports
-          value:
-            - containerPort: 9090
-              name: http
-              protocol: TCP
 
   - it: builds the image reference from repository and tag
     set:
@@ -583,12 +580,12 @@ tests:
     set:
       webhook.enable: true
     asserts:
-      - contains:
+      - equal:
           path: spec.template.spec.containers[0].ports
-          content:
-            containerPort: 9443
-            name: webhook-server
-            protocol: TCP
+          value:
+            - containerPort: 9443
+              name: webhook-server
+              protocol: TCP
       - contains:
           path: spec.template.spec.containers[0].volumeMounts
           content:
