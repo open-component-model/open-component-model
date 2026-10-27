@@ -92,8 +92,20 @@ Kubernetes: `>=1.26.0-0`
 | manager.networkPolicy.ingress | list | `[]` | Extra ingress rules appended after the default rule, which admits the health-probe port and, if enabled, the metrics and webhook ports |
 | manager.nodeSelector | object | `{}` | Node selector for pod scheduling |
 | manager.podSecurityContext | object | `{"runAsGroup":65532,"runAsNonRoot":true,"runAsUser":65532,"seccompProfile":{"type":"RuntimeDefault"}}` | Pod-level security context |
-| manager.rateLimiter.burst | int | `100` | Requeues a controller admits at once before qps applies. Must be at least 1. |
-| manager.rateLimiter.qps | int | `10` | Requeues per second a controller admits once the burst is used up. Must be at least 1. |
+| manager.rateLimiter.component.burst | int | `100` | Requeues the Component controller admits at once before qps applies. Must be at least 1. |
+| manager.rateLimiter.component.qps | float | `10` | Requeues per second the Component controller admits once its burst is used up. A float greater than 0, e.g. 0.1. |
+| manager.rateLimiter.deployer.burst | int | `100` | Requeues the Deployer controller admits at once before qps applies. Must be at least 1. |
+| manager.rateLimiter.deployer.qps | float | `10` | Requeues per second the Deployer controller admits once its burst is used up. A float greater than 0, e.g. 0.1. |
+| manager.rateLimiter.discovery.burst | int | `100` | Requeues the Discovery controller admits at once before qps applies. Must be at least 1. |
+| manager.rateLimiter.discovery.qps | float | `10` | Requeues per second the Discovery controller admits once its burst is used up. A float greater than 0, e.g. 0.1. |
+| manager.rateLimiter.namespacedDeployer.burst | int | `100` | Requeues the NamespacedDeployer controller admits at once before qps applies. Must be at least 1. |
+| manager.rateLimiter.namespacedDeployer.qps | float | `10` | Requeues per second the NamespacedDeployer controller admits once its burst is used up. A float greater than 0, e.g. 0.1. |
+| manager.rateLimiter.replication.burst | int | `100` | Requeues the Replication controller admits at once before qps applies. Must be at least 1. |
+| manager.rateLimiter.replication.qps | float | `10` | Requeues per second the Replication controller admits once its burst is used up. A float greater than 0, e.g. 0.1. |
+| manager.rateLimiter.repository.burst | int | `100` | Requeues the Repository controller admits at once before qps applies. Must be at least 1. |
+| manager.rateLimiter.repository.qps | float | `10` | Requeues per second the Repository controller admits once its burst is used up. A float greater than 0, e.g. 0.1. |
+| manager.rateLimiter.resource.burst | int | `100` | Requeues the Resource controller admits at once before qps applies. Must be at least 1. |
+| manager.rateLimiter.resource.qps | float | `10` | Requeues per second the Resource controller admits once its burst is used up. A float greater than 0, e.g. 0.1. |
 | manager.readinessProbe.initialDelaySeconds | int | `5` | Initial delay before starting readiness probes |
 | manager.readinessProbe.path | string | `"/readyz"` | Path for the readiness probe |
 | manager.readinessProbe.periodSeconds | int | `10` | Period between readiness probes |

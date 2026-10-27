@@ -15,8 +15,13 @@ manager:
   # Every new object is requeued once through this bucket. The chart default of 10/s
   # would bound every run by object count instead of by what the controller can do.
   rateLimiter:
-    qps: 10000
-    burst: 10000
+    repository: {qps: 10000, burst: 10000}
+    component: {qps: 10000, burst: 10000}
+    resource: {qps: 10000, burst: 10000}
+    replication: {qps: 10000, burst: 10000}
+    discovery: {qps: 10000, burst: 10000}
+    deployer: {qps: 10000, burst: 10000}
+    namespacedDeployer: {qps: 10000, burst: 10000}
   resolver:
     workerCount: 10
     workerQueueLength: 1000
