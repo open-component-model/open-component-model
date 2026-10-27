@@ -45,67 +45,53 @@ owner, and any customisation applied to each logo.
 use to indicate OCM adoption. If any owner objects, files will be removed
 immediately.
 
+Logos are used as downloaded. A few of the initial 12 assets below carry a
+"Notes" line describing a one-off adjustment (e.g. a recoloured dark variant)
+because the source only shipped one theme. This is the exception, not the
+process: new logos should come in ready for both themes or as a single
+universal file, without edits.
+
 ### How to add a new adopter
 
-The marquee renders every logo at a uniform **44 px height**; the width follows
-each asset's intrinsic aspect ratio (capped at **280 px**). Spacing between logos
-is handled by the track's `gap`, so adjacent logos keep identical optical distance
-regardless of how wide each one is.
+Logos are used **as-is**, straight from the organisation's website or brand
+page. Do not edit, crop, recolour, or normalise the files. If a file looks
+wrong in the marquee, pick a different source file rather than patching this
+one.
 
-For this to "just work" when you drop in a new logo, follow these steps:
+1. **Get the logo.** Download the official SVG (preferred) or PNG, usually from
+   the adopter's press/brand page or their GitHub org's artwork repository.
 
-1. **File naming.** Drop a light-theme SVG/PNG into this folder, named
-   `<org>-light.svg` (or `<org>-color.svg` if one asset serves both themes).
-   Add `<org>-dark.svg` only when the light variant is unreadable on dark
-   backgrounds.
+2. **Dark mode check.** Many logos work in both light and dark theme as a single
+   file (any logo with strong colour and no near-black or near-white text does).
+   If the logo only works on one theme, get the official variant for the other
+   theme from the same source. Put light-only assets as `<org>-light.svg`,
+   dark-only assets as `<org>-dark.svg`, and universally usable ones as
+   `<org>-color.svg`.
 
-2. **Normalise the SVG root.** The `<svg>` element MUST declare both
-   `width` and `height` attributes matching the `viewBox`, with the `viewBox`
-   cropped to the visible artwork (no extra padding). Reason: when the root
-   lacks `width`/`height`, browsers fall back to a 300×150 intrinsic size and
-   the marquee layout becomes unpredictable.
+3. **Register in `website/content/_index.md`.** Example:
 
-   Required pattern:
-
-   ```svg
-   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 W H" width="W" height="H">
-     …
-   </svg>
+   ```yaml
+   adopters:
+     - name: "Example Corp"
+       logo_light: "images/adopters/example-color.svg"
+       logo_dark:  "images/adopters/example-color.svg"
+       url: "https://example.com"
    ```
 
-   Where `W` and `H` are the same numbers as the `viewBox`. Example (T-Systems):
+   One file for both themes: point `logo_light` and `logo_dark` at the same
+   file. Two variants: point each at its own file. No size or spacing keys
+   exist; the CSS handles sizing (uniform height, width by aspect ratio) and
+   spacing (fixed gap) by itself.
 
-   ```svg
-   <svg viewBox="0 0 1530.99 314.14" width="1530.99" height="314.14" …>
-   ```
+4. **Record provenance.** Append a section `### <Organisation>` at the bottom
+   of this file with: File, Source URL, Fetched (date), Licence, Trademark
+   owner. If the file needed any adjustment beyond a plain download (should be
+   rare), note it there.
 
-   For a PNG, the natural pixel size serves as intrinsic size — no edit needed.
-   Confirm with an `<img>` test: open the file in a browser tab and check that
-   "Image size" matches the expected aspect ratio.
-
-3. **Crop the viewBox to the artwork.** If the SVG ships with branding padding
-   inside the viewBox (common for exports from Figma or Illustrator), trim it.
-   Tools: `svgo` will not remove padding, so use Inkscape
-   (*Edit → Resize Page to Selection*), Adobe Illustrator, or a free online
-   SVG viewer/editor. The goal: the `viewBox` x/y/w/h describe exactly the
-   visible pixels of the logo.
-
-4. **Register the adopter.** In `website/content/_index.md`, add to
-   `adopters:` the keys `name`, `logo_light`, `logo_dark`, `url`. Do NOT add
-   `width` or any other size override; the CSS doesn't read them.
-
-5. **Update this README.** Append a section `### <Organisation>` at the bottom
-   with the provenance table: File, Source, Fetched (date), Licence, Trademark
-   owner, and Notes on any customisation you applied.
-
-6. **Verify.** Start the dev server (`npm run dev`) and check
-   <http://localhost:1313/main/>:
-   - Every logo renders at exactly **44 px tall** (DevTools inspect).
-   - Spacing between adjacent logos is consistent (the track provides it via `gap`).
-   - The marquee does not overflow horizontally on a ~390 px wide viewport.
-   - Light and dark theme both render.
-
-If any of these fail, fix the SVG (step 2 and 3), not the CSS.
+5. **Verify.** Run `npm run dev` and open <http://localhost:1313/main/>. Toggle
+   light/dark theme in the header and check the logo shows up at the same
+   height as the others with even spacing on both themes, plus on a narrow
+   (~390 px) viewport.
 
 ---
 

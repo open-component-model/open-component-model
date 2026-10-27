@@ -47,7 +47,9 @@ component's references and transfers them too.
 
 Driving defaults from the OCM configuration:
   A transfer.config.ocm.software/v1alpha1 entry inside the central OCM configuration
-  (passed via --config) sets defaults for --recursive.
+  (passed via --config) sets defaults for --recursive. Its unmatchedResourcePolicy (Ignore, Warn,
+  Fail; default Warn) decides whether a resource no uploader selects is silently given the
+  baseline, logged as a warning, or fails the transfer.
   Explicit command-line flags always override the values from the configuration.
 
 Two-step workflow (generate, review, replay):

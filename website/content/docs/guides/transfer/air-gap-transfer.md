@@ -1,6 +1,6 @@
 ---
 title: "Transfer Components across an Air Gap"
-description: "Transfer a signed OCM component version into an air-gapped registry via a CTF archive."
+description: "Transfer a signed OCM component version into an air-gapped registry via a CTF archive: export, move, import, and preserve signatures."
 weight: 20
 toc: true
 aliases:
