@@ -9,6 +9,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory/cache"
+	"ocm.software/open-component-model/bindings/go/blob/verified"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	internaldigest "ocm.software/open-component-model/bindings/go/oci/internal/digest"
@@ -166,6 +167,12 @@ func (r *ArtifactBlob) HasPrecalculatedDigest() bool {
 	}
 	if precalculated, ok := r.ReadOnlyBlob.(blob.DigestPrecalculatable); ok && precalculated.HasPrecalculatedDigest() {
 		return true
+	}
+	// A verified blob's digest is fixed metadata, so asking for it reads nothing.
+	if v, ok := r.ReadOnlyBlob.(*verified.Blob); ok {
+		if _, known := v.Digest(); known {
+			return true
+		}
 	}
 	_, ok, err := r.resourceByteDigest()
 	return ok && err == nil
