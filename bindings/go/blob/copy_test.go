@@ -12,18 +12,32 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob"
 )
 
+// readSizeRecorder records the largest buffer passed to Read.
+type readSizeRecorder struct {
+	io.Reader
+	maxRead int
+}
+
+func (r *readSizeRecorder) Read(p []byte) (int, error) {
+	r.maxRead = max(r.maxRead, len(p))
+	return r.Reader.Read(p)
+}
+
 func TestCopyReader(t *testing.T) {
 	data := strings.Repeat("0123456789abcdef", 64*1024) // 1 MiB
 
-	t.Run("into file from non-file reader", func(t *testing.T) {
+	t.Run("into file from non-file reader uses the copy buffer", func(t *testing.T) {
 		r := require.New(t)
 		f, err := os.CreateTemp(t.TempDir(), "")
 		r.NoError(err)
 		t.Cleanup(func() { r.NoError(f.Close()) })
 
-		n, err := blob.CopyReader(f, struct{ io.Reader }{strings.NewReader(data)})
+		src := &readSizeRecorder{Reader: strings.NewReader(data)}
+		n, err := blob.CopyReader(f, src)
 		r.NoError(err)
 		r.Equal(int64(len(data)), n)
+		// *os.File.ReadFrom's generic fallback would read through its own 32 KiB buffer instead.
+		r.Equal(blob.DefaultArchiveBlobBufferSize, src.maxRead)
 		got, err := os.ReadFile(f.Name())
 		r.NoError(err)
 		r.Equal(data, string(got))
@@ -80,5 +94,24 @@ func TestCopyReaderN(t *testing.T) {
 			r.NoError(err)
 			r.Equal(tt.wantRest, string(rest))
 		})
+	}
+}
+
+func BenchmarkCopyReaderIntoFile(b *testing.B) {
+	data := strings.Repeat("0123456789abcdef", 64*1024) // 1 MiB
+	f, err := os.CreateTemp(b.TempDir(), "")
+	if err != nil {
+		b.Fatal(err)
+	}
+	b.Cleanup(func() { _ = f.Close() })
+	b.SetBytes(int64(len(data)))
+	b.ReportAllocs()
+	for b.Loop() {
+		if _, err := f.Seek(0, io.SeekStart); err != nil {
+			b.Fatal(err)
+		}
+		if _, err := blob.CopyReader(f, struct{ io.Reader }{strings.NewReader(data)}); err != nil {
+			b.Fatal(err)
+		}
 	}
 }
